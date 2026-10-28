@@ -191,6 +191,17 @@ function MessageComponent({
       .map(([name, cnt]) => (cnt > 1 ? `${name}×${cnt}` : name))
       .join(' · ');
   }, [canGroupToolCalls, toolCalls]);
+  // R113: 折叠组头的归属去重集（与逐卡 R111 同源同名单）——
+  // 折叠态下也能一眼看出组内涉及的插件；按首次出现排序。
+  const toolGroupOwners = useMemo(() => {
+    if (!canGroupToolCalls) return [] as string[];
+    const owners = new Set<string>();
+    for (const tc of toolCalls) {
+      const owner = findPluginToolOwner(tc.name, pluginNames);
+      if (owner) owners.add(owner);
+    }
+    return [...owners];
+  }, [canGroupToolCalls, toolCalls, pluginNames]);
   const memoryRefs = message.memory_refs ?? [];
   const ragCitations = message.rag_citations ?? [];
   const toolSources = message.sources ?? [];
@@ -307,6 +318,14 @@ function MessageComponent({
                 <span className="text-text-tertiary truncate font-mono text-ui-2xs">
                   ({toolGroupSummary})
                 </span>
+                {toolGroupOwners.length > 0 && (
+                  <span
+                    className="text-text-tertiary shrink-0"
+                    data-testid="tool-calls-group-plugin-owners"
+                  >
+                    {t('permission.from_plugin')}: {toolGroupOwners.join('、')}
+                  </span>
+                )}
                 <span className="ml-auto inline-flex items-center gap-0.5 text-ui-2xs text-primary shrink-0">
                   {toolGroupExpanded ? '收起明细' : '展开明细'}
                   <ChevronDown

@@ -12,6 +12,9 @@
 // R110: 弹层打开时取一次生命周期名单，给审计逐条标注所属插件
 // （权威名结构化归属，读不到整体不标）；会话规则复用共享遮蔽
 // 派生标注被同列表更高优先级规则覆盖的行。两者只读、不进导出。
+// R112: 名单改由共享缓存 hook usePluginNames 供数（与转录
+// R111 同源同缓存，遵循其 TTL）；导出格式化纯函数下沉
+// permissionInsights，本文件只导出组件。
 
 import { ChevronDown, ShieldAlert, ShieldCheck, ShieldHalf, Zap } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -25,9 +28,13 @@ import {
   type PermissionPreset,
   type PermissionRuleItem,
 } from '../../shared/api/permissionApi';
-import { pluginClient } from '../../shared/api/pluginClient';
+import { usePluginNames } from '../../shared/lib/hooks/usePluginNames';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
-import { findPluginToolOwner, findShadowedRules } from '../../shared/lib/permissionInsights';
+import {
+  findPluginToolOwner,
+  findShadowedRules,
+  formatPermissionAuditTime,
+} from '../../shared/lib/permissionInsights';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 const PRESET_ICON = {
@@ -39,56 +46,6 @@ const PRESET_ICON = {
 interface PermissionModeSwitchProps {
   sessionId: string | null;
   placement?: 'top' | 'bottom';
-}
-
-function formatTime(ts: number): string {
-  if (!ts) return '';
-  const d = new Date(ts * 1000);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
-}
-
-export function formatPermissionModeMarkdown(params: {
-  sessionId: string | null;
-  preset: PermissionPreset;
-  custom: boolean;
-  count: number;
-  items: ReadonlyArray<AutoApprovalRecord>;
-}): string {
-  const lines = [
-    '# 会话权限模式与自动放行审计 (Permission Mode Summary)',
-    '',
-    `- **会话 ID**: ${params.sessionId ? `\`${params.sessionId}\`` : '全局'}`,
-    `- **当前权限预设**: \`${params.preset}\`${params.custom ? ' (自定义)' : ''}`,
-    `- **自动放行次数**: ${params.count}`,
-  ];
-  if (params.items.length === 0) {
-    lines.push('', '_暂无自动放行审计记录_');
-  } else {
-    lines.push('', '## 自动放行审计明细');
-    for (const it of params.items) {
-      lines.push(
-        `- **${it.tool_name}** (\`${it.capability}\`, ${formatTime(it.created_at)}): ${it.summary || '-'}`,
-      );
-    }
-  }
-  return lines.join('\n');
-}
-
-export function formatPermissionModeJson(params: {
-  sessionId: string | null;
-  preset: PermissionPreset;
-  custom: boolean;
-  count: number;
-  items: ReadonlyArray<AutoApprovalRecord>;
-}): string {
-  return JSON.stringify(
-    {
-      exportedAt: new Date().toISOString(),
-      ...params,
-    },
-    null,
-    2,
-  );
 }
 
 export function PermissionModeSwitch({ sessionId, placement = 'top' }: PermissionModeSwitchProps) {
@@ -103,7 +60,6 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
   const [sessionRules, setSessionRules] = useState<PermissionRuleItem[]>([]);
   const [sessionRulesFailed, setSessionRulesFailed] = useState(false);
   const [sessionRulesBusy, setSessionRulesBusy] = useState(false);
-  const [pluginNames, setPluginNames] = useState<string[] | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const streamingMessageId = useChatStreamStore((s) =>
@@ -159,23 +115,10 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
     return () => window.clearInterval(timer);
   }, [sessionId, loadAudit, loadSessionRules]);
 
-  // R110: 审计归属的数据源——只在弹层打开时取一次生命周期名单
-  // （不进轮询节奏）；失败置 null 整体不标（读不到≠无归属）。
-  useEffect(() => {
-    if (!auditOpen) return;
-    let cancelled = false;
-    pluginClient
-      .list()
-      .then((records) => {
-        if (!cancelled) setPluginNames(records.map((record) => record.name));
-      })
-      .catch(() => {
-        if (!cancelled) setPluginNames(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [auditOpen]);
+  // R110 审计归属名单，R112 起经共享缓存 hook 供数：仅弹层打
+  // 开时启用，与转录（R111）合并取数；读不到为 null 整体不标
+  // （读不到≠无归属）。
+  const pluginNames = usePluginNames(auditOpen);
 
   // R110: 会话规则遮蔽（与持久侧 R109 同源）与审计归属派生。
   const shadowedSessionRules = findShadowedRules(sessionRules);
@@ -432,7 +375,9 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
                         {t('permission.from_plugin')}: {auditPluginOwners.get(it.seq)}
                       </span>
                     ) : null}
-                    <span className="ml-auto text-ui-xs text-text-secondary">{formatTime(it.created_at)}</span>
+                    <span className="ml-auto text-ui-xs text-text-secondary">
+                      {formatPermissionAuditTime(it.created_at)}
+                    </span>
                   </div>
                   {it.summary && (
                     <p className="text-text-secondary truncate" title={it.summary}>

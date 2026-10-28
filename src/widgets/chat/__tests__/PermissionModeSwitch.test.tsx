@@ -5,7 +5,11 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { PermissionModeSwitch, formatPermissionModeJson, formatPermissionModeMarkdown } from '../PermissionModeSwitch';
+import {
+  formatPermissionModeJson,
+  formatPermissionModeMarkdown,
+} from '../../../shared/lib/permissionInsights';
+import { PermissionModeSwitch } from '../PermissionModeSwitch';
 
 const getPreset = vi.fn();
 const setPreset = vi.fn();
@@ -14,7 +18,7 @@ const listSessionRememberedRules = vi.fn();
 const deleteSessionRememberedRule = vi.fn();
 const clearSessionRememberedRules = vi.fn();
 const confirmDialogMock = vi.fn();
-const pluginListMock = vi.fn();
+const usePluginNamesMock = vi.fn();
 const toastSuccess = vi.fn();
 const toastError = vi.fn();
 
@@ -39,10 +43,10 @@ vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
   confirmDialog: (...a: unknown[]) => confirmDialogMock(...a),
 }));
 
-vi.mock('../../../shared/api/pluginClient', () => ({
-  pluginClient: {
-    list: (...a: unknown[]) => pluginListMock(...a),
-  },
+// R112: 名单供数经共享缓存 hook（次数/失败回 null 的契约在
+// hook 自有套件）；这里以返回值驱动归属两分支。
+vi.mock('../../../shared/lib/hooks/usePluginNames', () => ({
+  usePluginNames: (...a: unknown[]) => usePluginNamesMock(...a),
 }));
 
 vi.mock('sonner', () => ({
@@ -68,7 +72,7 @@ beforeEach(() => {
   deleteSessionRememberedRule.mockReset().mockResolvedValue([]);
   clearSessionRememberedRules.mockReset().mockResolvedValue([]);
   confirmDialogMock.mockReset().mockResolvedValue(true);
-  pluginListMock.mockReset().mockResolvedValue([]);
+  usePluginNamesMock.mockReset().mockReturnValue([]);
   toastSuccess.mockReset();
   toastError.mockReset();
   getSessionAutoApprovals.mockReset().mockResolvedValue({
@@ -261,7 +265,7 @@ describe('PermissionModeSwitch', () => {
       total: 1,
       items: [PLUGIN_AUDIT_ITEM],
     });
-    pluginListMock.mockResolvedValue([{ name: 'demo' }]);
+    usePluginNamesMock.mockReturnValue(['demo']);
     renderSwitch('s1');
     const badge = await screen.findByTestId('auto-approval-badge');
     await act(async () => {
@@ -269,7 +273,7 @@ describe('PermissionModeSwitch', () => {
     });
     const owner = await screen.findByTestId('auto-approval-plugin-7');
     expect(owner).toHaveTextContent('所属插件: demo');
-    expect(pluginListMock).toHaveBeenCalledTimes(1);
+    expect(usePluginNamesMock).toHaveBeenCalledWith(true);
   });
 
   it('shows no attribution when the plugin list cannot be loaded (R110)', async () => {
@@ -279,7 +283,7 @@ describe('PermissionModeSwitch', () => {
       total: 1,
       items: [PLUGIN_AUDIT_ITEM],
     });
-    pluginListMock.mockRejectedValue(new Error('backend down'));
+    usePluginNamesMock.mockReturnValue(null);
     renderSwitch('s1');
     const badge = await screen.findByTestId('auto-approval-badge');
     await act(async () => {
