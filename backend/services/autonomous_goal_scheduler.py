@@ -14,7 +14,10 @@ import logging
 from typing import Optional
 
 from backend.domain.autonomous_goals import GoalStatus
+from backend.domain.execution_conditions import TriggerMode
+from backend.services.condition_evaluator import ConditionEvaluator
 from backend.services.goal_service import GoalService
+from backend.services.idle_detector import IdleDetector, get_idle_detector
 from backend.services.time_window_manager import TimeWindowManager
 
 logger = logging.getLogger(__name__)
@@ -33,13 +36,26 @@ class AutonomousGoalScheduler:
         self,
         goal_service: Optional[GoalService] = None,
         time_window_manager: Optional[TimeWindowManager] = None,
+        idle_detector: Optional[IdleDetector] = None,
+        condition_evaluator: Optional[ConditionEvaluator] = None,
     ) -> None:
         self.goal_service = goal_service or GoalService()
         self.time_window_mgr = time_window_manager or TimeWindowManager()
+        self.idle_detector = idle_detector or get_idle_detector()
+        # ConditionEvaluator 延迟构建（需要 goal_service 引用）
+        self.condition_evaluator = condition_evaluator or ConditionEvaluator(
+            idle_detector=self.idle_detector,
+            time_window_manager=self.time_window_mgr,
+            goal_service=self.goal_service,
+        )
 
     async def check_and_start_pending_goals(self) -> int:
         """
         检查并启动所有符合条件的 pending 目标
+
+        逻辑：
+        - IMMEDIATE 模式：检查时间窗口（现有行为）
+        - CONDITIONAL 模式：评估 execution_conditions（AND 语义）
 
         返回：本次启动的目标数量
         """
@@ -56,17 +72,33 @@ class AutonomousGoalScheduler:
 
         for goal in pending_goals:
             try:
-                # 检查是否应该在当前时间执行
-                if self.time_window_mgr.should_execute_now(goal):
+                should_start = False
+                reason = ""
+
+                if goal.trigger_mode == TriggerMode.CONDITIONAL:
+                    # 条件模式：评估 execution_conditions
+                    if self.condition_evaluator.evaluate_all(goal.execution_conditions):
+                        should_start = True
+                        reason = "all conditions satisfied"
+                    else:
+                        reason = "conditions not met"
+                else:
+                    # 立即模式：检查时间窗口（现有行为）
+                    if self.time_window_mgr.should_execute_now(goal):
+                        should_start = True
+                        reason = "within time window"
+                    else:
+                        reason = "not in time window"
+
+                if should_start:
                     logger.info(
-                        f"Auto-starting goal {goal.id} ({goal.name}): "
-                        "within time window"
+                        f"Auto-starting goal {goal.id} ({goal.name}): {reason}"
                     )
                     await self.goal_service.start_execution(goal.id)
                     started_count += 1
                 else:
                     logger.debug(
-                        f"Goal {goal.id} ({goal.name}): not in time window, skipping"
+                        f"Goal {goal.id} ({goal.name}): {reason}, skipping"
                     )
             except Exception as e:
                 logger.error(f"Failed to auto-start goal {goal.id}: {e}")

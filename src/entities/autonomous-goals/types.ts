@@ -12,6 +12,19 @@ export type DegradationLevel = 'none' | 'model_downgrade' | 'task_simplify' | 's
 
 export type CheckpointType = 'file' | 'command' | 'code' | 'custom';
 
+// ---------- 闲时延迟执行 ----------
+
+export type TriggerMode = 'immediate' | 'conditional';
+
+export type ConditionType = 'idle' | 'time_window' | 'resource' | 'no_active' | 'manual';
+
+export interface ExecutionCondition {
+  type: ConditionType;
+  params: Record<string, unknown>;
+  // 示例: { type: 'idle', params: { min_idle_minutes: 15 } }
+  // 示例: { type: 'time_window', params: { start: '02:00', end: '06:00' } }
+}
+
 // ---------- 值对象 ----------
 
 export interface TimeWindow {
@@ -59,6 +72,8 @@ export interface Goal {
   completion_percentage: number;
   degradation_level: DegradationLevel;
   last_error: string | null;
+  trigger_mode: TriggerMode;
+  execution_conditions: ExecutionCondition[];
 }
 
 export interface GoalListResponse {
@@ -98,6 +113,8 @@ export interface CreateGoalInput {
   time_window?: Partial<TimeWindow>;
   budget?: Partial<ExecutionBudget>;
   auto_generate_checkpoints?: boolean;
+  trigger_mode?: TriggerMode;
+  execution_conditions?: ExecutionCondition[];
 }
 
 export interface UpdateGoalInput {

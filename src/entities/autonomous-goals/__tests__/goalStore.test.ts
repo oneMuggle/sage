@@ -59,6 +59,8 @@ const sampleGoal: Goal = {
   completion_percentage: 0,
   degradation_level: 'none',
   last_error: null,
+  trigger_mode: 'immediate',
+  execution_conditions: [],
 };
 
 describe('useGoalStore', () => {
