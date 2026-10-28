@@ -162,6 +162,12 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
             _llm_retry_field_errors.append(
                 f"llmTotalTimeoutS 必须是 0 到 86400 之间的整数（0=不限），收到: {v!r}"
             )
+    if "llmProxyTimeoutS" in updates:
+        v = updates["llmProxyTimeoutS"]
+        if isinstance(v, bool) or not isinstance(v, int) or not 5 <= v <= 1800:
+            _llm_retry_field_errors.append(
+                f"llmProxyTimeoutS 必须是 5 到 1800 之间的整数（秒），收到: {v!r}"
+            )
     # 跨字段一致性：baseDelayS 不能大于 maxDelayS
     if (
         "llmRetryBaseDelayS" in updates

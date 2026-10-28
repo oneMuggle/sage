@@ -157,6 +157,10 @@ class SettingsPayload(BaseModel):
     # 模型 id 字符串；留空表示回退到聊天模型。后端 title_generator 读取。
     titleModelId: Optional[str] = None  # noqa: N815
 
+    # ----- LLM 代理上游超时 (2026-10-28) -----
+    # 秒；代理转发上游模型时的 httpx read 超时。有效范围 5–1800，默认 60。
+    llmProxyTimeoutS: Optional[int] = None  # noqa: N815
+
     # ----- Legacy fields (兼容旧客户端, 不写入存储) -----
     api_base_url: Optional[str] = None
     api_key: Optional[str] = None  # noqa: S105 — 字段名占位; 不存储
@@ -216,6 +220,10 @@ class LegacySettingsPayload(BaseModel):
     # ----- 会话标题专用模型 (2026-10-27) -----
     # 模型 id 字符串；留空表示回退到聊天模型。后端 title_generator 读取。
     titleModelId: Optional[str] = None  # noqa: N815
+
+    # ----- LLM 代理上游超时 (2026-10-28) -----
+    # 秒；代理转发上游模型时的 httpx read 超时。有效范围 5–1800，默认 60。
+    llmProxyTimeoutS: Optional[int] = None  # noqa: N815
 
     # ----- Legacy fields (deprecated, 兼容旧客户端, 不写入存储) -----
     api_base_url: Optional[str] = None

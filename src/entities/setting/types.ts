@@ -289,6 +289,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // 2026-10-22: 整轮任务 wall-clock 默认上限（秒）= 2 × subagentTaskTimeoutS 默认 900s。
   llmTotalTimeoutS: 1800,
 
+  // 2026-10-28: LLM 代理上游超时默认 60s（保持历史行为，与后端
+  // PROXY_TIMEOUT_SECONDS 一致）。
+  llmProxyTimeoutS: 60,
+
   // 2026-10-27: 会话标题专用模型默认留空 —— 回退到聊天模型。
   titleModelId: '',
 
