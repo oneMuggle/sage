@@ -1,3 +1,6 @@
+/**
+ * Multi-agent orchestration lanes, run lifecycle, steering & board IPC commands.
+ */
 import type { CommandRoute } from '../commands';
 
 export const orchestrationRoutes: Record<string, CommandRoute> = {
@@ -89,7 +92,6 @@ export const orchestrationRoutes: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/cancel`,
   },
   // R55 (round55): 单 run 详情 —— 含 RT24/RT26 的 used_tokens/duration_ms/retry_of。
-  // Wave 4 曾连同 list_runs/resume_run 一起移除，R55 只补回详情读端点。
   orchestration_get_run: {
     method: 'GET',
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}`,

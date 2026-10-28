@@ -50,7 +50,7 @@ function getEmergencyLogPath(): string {
   return emergencyLogPath;
 }
 
-export function emergencyLog(label: string, payload: unknown): void {
+function emergencyLog(label: string, payload: unknown): void {
   try {
     const path = getEmergencyLogPath();
     appendFileSync(path, `[${new Date().toISOString()}] ${label} ${safeStringify(payload)}\n`);
