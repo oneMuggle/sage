@@ -23,7 +23,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tuple, Union
@@ -31,6 +33,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tupl
 from sage_core import SkillResult, SkillSpec
 from sage_core.repositories import SkillPort  # noqa: F401  (structural typing target)
 
+from backend.skills.notifications import get_notification_hub
 from backend.skills.registry import SkillRegistry as _SkillRegistry
 from backend.tools.bash_validation import validate_bash
 from backend.tools.permissions import (
@@ -42,6 +45,28 @@ from backend.tools.permissions import (
 # Client-facing skill responses use a logical placeholder instead of exposing
 # filesystem locations. Internal loaders and file operations retain real paths.
 _SAFE_SKILL_PATH = "."
+
+
+def normalize_skill_content(content: Any) -> str:
+    """把技能返回的 content 统一成 str。
+
+    技能实现的 content 可能是 dict / list / 数字 / None —— 直接透传给
+    前端会让渲染端拿到非字符串。统一序列化成可读文本:
+      - str → 原样返回
+      - None → ""
+      - dict / list / tuple → JSON (ensure_ascii=False, indent=2, default=str)
+      - 其他 → str()
+    """
+    if isinstance(content, str):
+        return content
+    if content is None:
+        return ""
+    if isinstance(content, (dict, list, tuple)):
+        try:
+            return json.dumps(content, ensure_ascii=False, indent=2, default=str)
+        except (TypeError, ValueError):
+            return str(content)
+    return str(content)
 
 if TYPE_CHECKING:
     from backend.skills.skill_md.auto_activation import AutoActivationResult
@@ -81,6 +106,11 @@ class InprocSkillAdapter:
         self._enforcer_factory = enforcer_factory or load_enforcer_from_settings
         # v1: SKILL.md 适配层 (guarded 调用, 失败不破坏 adapter 构造)
         self._script_runner = None
+        self._settings_repo = None  # requires.config 门控注入点 (Task 1)
+        self._skill_md_loader = None  # 持久持有 loader (缺口 #12): rescan 复用哈希缓存
+        # rescan 在 FastAPI threadpool 中运行; 串行化共享可变状态 (_dirs / _gating_ctx /
+        # loader.skipped / loader._loaded_this_scan) 的读写, 避免并发 rescan 互相污染返回值。
+        self._scan_lock = threading.Lock()
         skill_dirs = []
         try:
             from backend.adapters.out.skill_script.cli_confirmation import (
@@ -90,6 +120,7 @@ class InprocSkillAdapter:
                 SubprocessSandboxAdapter,
             )
             from backend.skills.skill_md.loader import (
+                SkillMdHotLoader,
                 _discover_shipped_dir,
                 build_gating_context_for_dirs,
                 discover_skill_md_dirs,
@@ -102,7 +133,9 @@ class InprocSkillAdapter:
                 confirmer=ConfiguredScriptConfirmationAdapter.from_environment(),
                 allowed_roots=list(skill_dirs),
             )
-            from backend.skills import register_skill_md_skills
+            from backend.skills import (
+                register_skill_md_skills,  # noqa: F401  (kept for other callers)
+            )
 
             # Build registration dirs = user roots + shipped fallback (dedup by resolved path).
             # Shipped is registered (so e.g. academic-search becomes visible) but MUST NOT
@@ -116,12 +149,29 @@ class InprocSkillAdapter:
                     registration_dirs.append(shipped)
                     seen.add(shipped_resolved)
 
-            register_skill_md_skills(
+            # requires.config 门控需要 settings 快照 (缺口 #11)。
+            # DB 不可用时降级为"无配置" —— 技能被跳过, 不影响 adapter 构造。
+            try:
+                from backend.data.settings_repo import SettingsRepository
+
+                self._settings_repo = SettingsRepository()
+            except Exception as exc:  # noqa: BLE001 — adapter 构造必须容错
+                logging.getLogger(__name__).warning(
+                    "SkillMd settings repo unavailable: %s", exc
+                )
+
+            # 持久持有 loader (缺口 #12): rescan 时复用同一 loader 实例,
+            # 使 _file_hashes / _loaded_paths 跨调用保留, 才能真正触发 hot_reload。
+            self._skill_md_loader = SkillMdHotLoader(
                 self._registry,
-                dirs=[str(p) for p in registration_dirs],
-                gating_ctx=build_gating_context_for_dirs(registration_dirs),
+                dirs=[Path(p) for p in registration_dirs],
+                gating_ctx=build_gating_context_for_dirs(
+                    registration_dirs, settings_repo=self._settings_repo
+                ),
                 script_runner=self._script_runner,
             )
+            with self._scan_lock:
+                self._skill_md_loader.scan_and_load()
         except Exception as exc:  # noqa: BLE001 — adapter 构造必须容错
             import logging
 
@@ -240,7 +290,7 @@ class InprocSkillAdapter:
         # (success / content / metadata / error),直接构造 domain 版本
         return SkillResult(
             success=raw.success,
-            content=raw.content,
+            content=normalize_skill_content(raw.content),
             metadata=dict(raw.metadata),
             error=raw.error,
         )
@@ -567,7 +617,7 @@ class InprocSkillAdapter:
         # 路由层需要的是 backend.domain.skill.SkillResult,字段同构,直接构造
         return SkillResult(
             success=result.success,
-            content=result.content,
+            content=normalize_skill_content(result.content),
             metadata=dict(result.metadata),
             error=result.error,
         )
@@ -675,12 +725,15 @@ class InprocSkillAdapter:
         safe_result = dict(result)
         if "base_dir" in safe_result:
             safe_result["base_dir"] = _SAFE_SKILL_PATH
+        # 删除成功后广播通知 (缺口 #6a)。此处无 _scan_lock 持有, publish 只
+        # 追加到有界 buffer + notify, 非阻塞, 不会与扫描互锁。
+        get_notification_hub().publish({"kind": "skill_deleted", "name": name})
         return safe_result
 
     # ========== PR-C: Skills load-new (rescan + import) ==========
 
     def rescan_skill_mds(self) -> Dict[str, Any]:
-        """重扫 SAGE_SKILLS_DIR / ~/.sage/skills / ./skills, 增量加载新 SKILL.md。
+        """重扫 SAGE_SKILLS_DIR / ~/.sage/skills / ./skills, 增量加载/刷新 SKILL.md。
 
         Returns:
             {
@@ -689,40 +742,72 @@ class InprocSkillAdapter:
                 "total_loaded": int,
             }
         """
-
-        if self._skill_importer is None:  # init-time import failed
+        if self._skill_md_loader is None:  # init-time loader 构造失败
             return {"loaded": [], "skipped": [], "total_loaded": 0}
         from backend.skills.skill_md.loader import (
-            SkillMdHotLoader,
+            _discover_shipped_dir,
             build_gating_context_for_dirs,
             discover_skill_md_dirs,
         )
 
-        # 目录可能在 adapter 初始化后才由审批/导入流程创建；每次重扫都
-        # 重新发现根目录，避免永久使用初始化时的快照。
-        skill_dirs = discover_skill_md_dirs()
-        self._skill_dirs = list(skill_dirs)
-        if self._script_runner is not None:
-            # 与扫描使用同一份已发现根目录，保持脚本路径校验的安全边界同步。
-            self._script_runner._allowed_roots = list(skill_dirs)
+        with self._scan_lock:
+            # 目录可能在 adapter 初始化后才由审批/导入流程创建;每次重扫都
+            # 重新发现根目录, 避免永久使用初始化时的快照。
+            skill_dirs = discover_skill_md_dirs()
+            self._skill_dirs = list(skill_dirs)
+            if self._script_runner is not None:
+                self._script_runner._allowed_roots = list(skill_dirs)
 
-        loader = SkillMdHotLoader(
-            self._registry,
-            dirs=list(skill_dirs),
-            gating_ctx=build_gating_context_for_dirs(list(skill_dirs)),
-            script_runner=self._script_runner,
+            # 重建 registration_dirs = user + shipped (与 __init__ 同逻辑)
+            registration_dirs = list(skill_dirs)
+            seen = {p.resolve() for p in registration_dirs}
+            shipped = _discover_shipped_dir()
+            if shipped is not None:
+                shipped_resolved = shipped.resolve()
+                if shipped_resolved not in seen:
+                    registration_dirs.append(shipped)
+                    seen.add(shipped_resolved)
+
+            # 永远复用 persistent loader, 原地更新目录 + 门控快照。
+            # 绝不能重建 loader: 重建会丢掉 _loaded_paths / _file_hashes,
+            # 使 registry 中已加载的 SkillMdSkill 在下次 scan 时因
+            # existing_path is None 被误判为 duplicate_skillmd, 从此再也不
+            # 触发 hot_reload (评审 HIGH)。
+            self._skill_md_loader._dirs = [Path(p) for p in registration_dirs]
+            self._skill_md_loader._gating_ctx = build_gating_context_for_dirs(
+                registration_dirs, settings_repo=self._settings_repo
+            )
+
+            self._skill_md_loader.scan_and_load()
+            self._rebuild_slash_registry()
+            # 返回本次 scan 中**新加载 + 刷新**的名字 (来自 _loaded_this_scan)。
+            # total_loaded 保持"本次 scan 加载数"这一既有 REST/IPC 契约:
+            # 前端 Skills.tsx 用 ``total_loaded > 0`` 决定是否弹出"已加载 N 个技能"
+            # 提示, 幂等 rescan 必须为 0 才不打扰用户。持久 loader 的 _loaded_paths
+            # 是累计集合, 不能直接当 total 用 (会把初始化时自动加载的技能重复计入)。
+            loaded_names = list(self._skill_md_loader._loaded_this_scan)
+            total_loaded = len(loaded_names)
+            skipped = list(self._skill_md_loader.skipped)
+            result = {
+                "loaded": [
+                    {"name": name, "source": "skillmd", "path": _SAFE_SKILL_PATH}
+                    for name in loaded_names
+                ],
+                "skipped": skipped,
+                "total_loaded": total_loaded,
+            }
+
+        # 扫描锁已释放后再广播 (缺口 #6a)。publish 只追加有界 buffer + notify,
+        # 不获取 _scan_lock, 因此与非重入扫描锁不会互锁。
+        get_notification_hub().publish(
+            {
+                "kind": "skills_rescanned",
+                "loaded_count": total_loaded,
+                "skipped_count": len(skipped),
+                "total_loaded": total_loaded,
+            }
         )
-        loaded_count, _ = loader.scan_and_load()
-        self._rebuild_slash_registry()
-        # Fresh loader per call: _loaded_paths only contains THIS call's loads.
-        return {
-            "loaded": [
-                {"name": name, "source": "skillmd", "path": _SAFE_SKILL_PATH}
-                for name in loader._loaded_paths
-            ],
-            "skipped": loader.skipped,
-            "total_loaded": loaded_count,
-        }
+        return result
 
     async def import_skill_mds(self, files: List[Any]) -> Dict[str, List[Dict[str, str]]]:
         """异步包装 SkillMdImporter.import_files()。"""
@@ -740,6 +825,14 @@ class InprocSkillAdapter:
             {**item, "path": _SAFE_SKILL_PATH} if "path" in item else dict(item)
             for item in result.get("imported", [])
         ]
+        # 导入成功后广播通知 (缺口 #6a)。此处不持有 _scan_lock, publish 非阻塞。
+        get_notification_hub().publish(
+            {
+                "kind": "skills_imported",
+                "imported_count": len(safe_result.get("imported", [])),
+                "skipped_count": len(safe_result.get("skipped", [])),
+            }
+        )
         return safe_result
 
     async def import_skill_directory(
@@ -762,6 +855,14 @@ class InprocSkillAdapter:
             {**item, "path": _SAFE_SKILL_PATH} if "path" in item else dict(item)
             for item in result.get("imported", [])
         ]
+        # 目录导入成功后广播通知 (缺口 #6a)。此处不持有 _scan_lock, publish 非阻塞。
+        get_notification_hub().publish(
+            {
+                "kind": "skills_directory_imported",
+                "imported_count": len(safe_result.get("imported", [])),
+                "skipped_count": len(safe_result.get("skipped", [])),
+            }
+        )
         return safe_result
 
     # ========== 扩展序列化 (PR-8 SKILL.md 适配层) ==========

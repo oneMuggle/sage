@@ -283,3 +283,55 @@ export async function relayOrchEventsStream(
     signal,
   );
 }
+
+/**
+ * Subscribe to skill change notifications and forward to renderer.
+ *
+ * Flow:
+ *   1. renderer calls listen('skills:notify', handler)
+ *   2. main process opens GET /api/v1/skills/notifications (NDJSON stream)
+ *   3. Each NDJSON line → webContents.send('sage:event:skills:notify', event)
+ *   4. renderer re-fetches skillsApi.list() on receipt
+ *
+ * Gap #6a/6b: single broadcast channel for rescan/import/delete notifications.
+ */
+export async function relaySkillNotifications(
+  webContents: WebContentsLike,
+  eventName: string,
+  backendUrl: string,
+  signal: AbortSignal,
+  authToken?: string,
+): Promise<void> {
+  let res: import('node-fetch').Response;
+  try {
+    res = await fetch(`${backendUrl}/api/v1/skills/notifications`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/x-ndjson',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      signal,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') return;
+    // 网络错误静默吞掉, 不要把 main 进程炸了
+    return;
+  }
+
+  if (!res.ok) {
+    // 非 2xx (如 401/500) 静默返回, renderer 侧会收到流结束信号
+    return;
+  }
+
+  await parseNdjsonStream(
+    res.body,
+    (event) => {
+      // 心跳空行 → 跳过 (iter_ndjson 偶发 yield "{}\n")
+      if (typeof event === 'object' && event !== null && Object.keys(event as object).length === 0) {
+        return;
+      }
+      if (canSend(webContents)) webContents.send(`sage:event:${eventName}`, event);
+    },
+    signal,
+  );
+}

@@ -1,5 +1,5 @@
 import { AlertTriangle, Info } from 'lucide-react';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useInRouterContext, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -14,6 +14,7 @@ import { useSettings } from '../../features/manage-settings/useSettings';
 import { importOfficeReference } from '../../features/office/importOfficeReference';
 import type { DeliveryMode } from '../../features/send-message/deliveryMode';
 import { knowledgeApi, promptApi, skillsApi } from '../../shared/api';
+import { listen as desktopListen } from '../../shared/api/desktopEvent';
 import { type AtFileSelection } from '../../shared/api/fileSearchClient';
 import type { ChatOfficeRef } from '../../shared/api/types';
 import { worktreeApi } from '../../shared/api/worktreeApi';
@@ -226,16 +227,26 @@ function ChatInputInner({
   const entityRef = parseEntityRefQuery(atQuery.query);
   const navigate = useOptionalNavigate();
 
-  // Fetch SKILL.md skills on mount. Filter to user-invocable ones for slash menu.
-  // The full `description` from the SKILL.md frontmatter is passed through so the
-  // menu can display meaningful descriptions (not just "Skill: <name>").
-  // List is loaded once; re-mount or restart app to pick up new SKILL.md.
+  // 首次挂载拉 skills 列表 + 订阅 skills:notify 事件触发刷新。
+  // 旧实现 (gap #6c): mount-only, 新装/删除/重扫 SKILL.md 后 slash 菜单不更新,
+  // 需重启 app。新实现: 订阅后端技能变更中枢推送, 收到事件后重新拉 list()。
+  //
+  // T6-R2: mountedRef 守门 setDynamicSlashCommands, 防止 unmount 后 setState。
+  const mountedRef = useRef(true);
   useEffect(() => {
-    let disposed = false;
+    // 重新置 true: StrictMode 双挂载时 cleanup 会把 mountedRef 置 false,
+    // 第二次挂载必须复位, 否则 slash 菜单永远为空。
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const reloadSkills = useCallback(() => {
     skillsApi
       .list()
       .then((skills) => {
-        if (disposed) return;
+        if (!mountedRef.current) return;
         const dynamic = skills
           .filter((s) => s.dispatch?.user_invocable === true)
           .map((s) => ({
@@ -245,12 +256,34 @@ function ChatInputInner({
         setDynamicSlashCommands(dynamic);
       })
       .catch(() => {
-        if (!disposed) setDynamicSlashCommands([]);
+        if (!mountedRef.current) return;
+        setDynamicSlashCommands([]);
+      });
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    reloadSkills();
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    desktopListen('skills:notify', () => {
+      if (disposed) return;
+      reloadSkills();
+    })
+      .then((fn) => {
+        if (disposed) fn?.();
+        else unlisten = fn;
+      })
+      .catch(() => {
+        // 浏览器 / 纯 Web 环境没有 preload 注入的 electronAPI,
+        // desktopEvent.listen 会 reject —— 忽略即可, 不影响斜杠菜单首次加载。
       });
     return () => {
       disposed = true;
+      mountedRef.current = false;
+      unlisten?.();
     };
-  }, []);
+  }, [reloadSkills]);
 
   // R27-A: 载入用户 Prompt 模板（失败静默降级为无模板）。返回 reload 供
   // /prompt-save 保存成功后刷新列表。
