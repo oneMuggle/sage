@@ -36,6 +36,8 @@ const item: CandidateModel = {
 };
 
 const effective: EffectiveModel = {
+  model_key: { provider: 'openai', model_id: 'gpt-4o' },
+  tier: 'balanced',
   limits: { native: 128000, service: 64000 },
   price: { input_per_million: '0.15', output_per_million: '0.6', currency: 'USD' },
   provenance: {

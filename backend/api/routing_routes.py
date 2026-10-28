@@ -26,6 +26,7 @@ class RoutingRequest(BaseModel):
     context_length: int = Field(ge=0)
     required_capabilities: List[str]
     user_preference: Optional[RoutingPreference] = None
+    endpoint_id: Optional[str] = None
 
 
 class RoutingResponse(BaseModel):
@@ -66,6 +67,7 @@ def build_router(catalog_repository=None) -> APIRouter:
                 context_length=payload.context_length,
                 required_capabilities=payload.required_capabilities,
                 user_preference=payload.user_preference,
+                endpoint_id=payload.endpoint_id,
             )
         except ValueError as exc:
             # No model can satisfy the requested constraints: a client-actionable

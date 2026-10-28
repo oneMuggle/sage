@@ -143,6 +143,49 @@ class TestRoutingApi:
         for alt in data["alternatives"]:
             assert alt["model_key"]["model_id"] != selected_id
 
+    def test_route_scoped_to_endpoint_stays_within_it(self, client):
+        """Scoping to an endpoint without the preferred tier falls back inside it."""
+        response = client.post(
+            "/api/v1/routing/route",
+            json={
+                "task_type": "simple_chat",
+                "context_length": 8000,
+                "required_capabilities": ["chat"],
+                "endpoint_id": "ep-claude-3-opus",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["selected_model"]["model_key"]["model_id"] == "claude-3-opus"
+
+    def test_route_unscoped_same_request_picks_fast_tier(self, client):
+        """Without endpoint_id the fast-tier model is selectable (proves scope matters)."""
+        response = client.post(
+            "/api/v1/routing/route",
+            json={
+                "task_type": "simple_chat",
+                "context_length": 8000,
+                "required_capabilities": ["chat"],
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["selected_model"]["model_key"]["model_id"] == "gpt-4o-mini"
+
+    def test_route_scoped_to_unknown_endpoint_returns_422(self, client):
+        """An endpoint with no bound models is a client error, not a 500."""
+        response = client.post(
+            "/api/v1/routing/route",
+            json={
+                "task_type": "simple_chat",
+                "context_length": 8000,
+                "required_capabilities": [],
+                "endpoint_id": "ep-missing",
+            },
+        )
+
+        assert response.status_code == 422
+
     def test_route_422_on_missing_fields(self, client):
         """Missing required fields returns 422."""
         response = client.post(
