@@ -54,7 +54,7 @@ export class BackendNotReadyError extends Error {
  * - 数组里 string 元素不动(只递归对象元素)
  * - null / undefined / 非 plain object 直接返回
  */
-export function camelToSnakeKeys(value: unknown): unknown {
+function camelToSnakeKeys(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => camelToSnakeKeys(item));
   }
@@ -101,7 +101,9 @@ export async function invokeBackend(
     const text = await res.text().catch(() => '');
     // 安全错误信息:不把完整 URL 拼入异常,避免用户查询等敏感 path 参数
     // 泄漏到主进程日志。用 cmd 作为标识,运维可根据 cmd 反查路由。
-    const err = new Error(`Backend ${route.method} cmd=${cmd} → ${res.status}: ${text}`) as Error & {
+    const err = new Error(
+      `Backend ${route.method} cmd=${cmd} → ${res.status}: ${text}`,
+    ) as Error & {
       status_code?: number;
     };
     // §13.7: 附加状态码（进程内契约；main 进程 sage:invoke 会用 new Error(msg)
