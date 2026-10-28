@@ -100,8 +100,10 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
   const modelStats = usage.latency_by_model && usage.latency_by_model.length > 0;
   const modelStatsText = modelStats
     ? '\n\n按模型统计:\n' +
-      usage.latency_by_model!
-        .map((m) => `  ${m.model}: ${(m.avg_latency_ms / 1000).toFixed(1)}s (${m.count}次)`)
+      usage
+        .latency_by_model!.map(
+          (m) => `  ${m.model}: ${(m.avg_latency_ms / 1000).toFixed(1)}s (${m.count}次)`,
+        )
         .join('\n')
     : '';
 
