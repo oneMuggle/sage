@@ -19,6 +19,7 @@ import logging
 from typing import List, Optional, Set
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, StrictBool
 
 from backend.api.settings_models import LegacySettingsPayload
@@ -377,6 +378,30 @@ def rescan_skills():
     """
     adapter = _get_skill_adapter()
     return adapter.rescan_skill_mds()
+
+
+@router.get("/skills/notifications")
+def skill_notifications(after: int = 0):
+    """技能变更通知流 (缺口 #6a)。
+
+    - 200 + NDJSON 流, Content-Type: application/x-ndjson
+    - 每行: ``{"seq": int, "event": {...}, "ts": float}``
+    - 客户端断连时, 生成器被 FastAPI 销毁, 线程退出
+
+    客户端典型用法:
+      EventSource 或 fetch(stream: true) → 收到事件后重新拉 skillsApi.list()
+
+    注意: 本端点**不**套 ``@with_db_lock`` —— 流式连接会长时间持有生成器,
+    若占用全局 SQLite 锁会阻塞其他请求。
+    """
+    from backend.skills.notifications import get_notification_hub, iter_ndjson
+
+    hub = get_notification_hub()
+    return StreamingResponse(
+        iter_ndjson(hub, after=after),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/skills/import")

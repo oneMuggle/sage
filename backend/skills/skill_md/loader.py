@@ -31,6 +31,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 import yaml
 
 if TYPE_CHECKING:
+    from backend.data.settings_repo import SettingsRepository
+
     from .script_runner import ScriptRunner
 
 from ..registry import SkillRegistry
@@ -264,9 +266,15 @@ def collect_required_bins(dirs: List[Path]) -> List[str]:
     return sorted(required)
 
 
-def build_gating_context_for_dirs(dirs: List[Path]) -> GatingContext:
+def build_gating_context_for_dirs(
+    dirs: List[Path],
+    settings_repo: Optional[SettingsRepository] = None,
+) -> GatingContext:
     """Build a gating snapshot from binaries declared by discovered skills."""
-    return build_gating_context(bin_whitelist=collect_required_bins(dirs))
+    return build_gating_context(
+        bin_whitelist=collect_required_bins(dirs),
+        settings_repo=settings_repo,
+    )
 
 
 class SkillMdHotLoader:
@@ -294,6 +302,8 @@ class SkillMdHotLoader:
         self._script_runner = script_runner
         self.skipped: List[Dict[str, str]] = []
         self._last_skip: Optional[Dict[str, str]] = None
+        # 本次 scan_and_load 调用中新加载/刷新的名字 (供 rescan API 返回增量列表)
+        self._loaded_this_scan: List[str] = []
 
     # ===== scan / load =====
 
@@ -315,6 +325,7 @@ class SkillMdHotLoader:
         loaded = 0
         skipped = 0
         self.skipped = []
+        self._loaded_this_scan = []
         for d in self._dirs:
             if not d.is_dir():
                 continue
@@ -330,9 +341,11 @@ class SkillMdHotLoader:
                 if not skill_md.is_file() or _has_symlink_component(skill_md):
                     continue
                 try:
+                    before = len(self.skipped)
                     if self._load_from_path(skill_md):
                         loaded += 1
-                    else:
+                    elif len(self.skipped) > before:
+                        # 只有真正记录了 skip 才计数; 内容未变的静默跳过不计
                         skipped += 1
                 except Exception as exc:  # noqa: BLE001 - 防御性兜底
                     logger.warning(
@@ -348,9 +361,10 @@ class SkillMdHotLoader:
             root_skill_md = d / "SKILL.md"
             if root_skill_md.is_file() and not _has_symlink_component(root_skill_md):
                 try:
+                    before = len(self.skipped)
                     if self._load_from_path(root_skill_md):
                         loaded += 1
-                    else:
+                    elif len(self.skipped) > before:
                         skipped += 1
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
@@ -367,7 +381,7 @@ class SkillMdHotLoader:
                 logger.info("SkillMd scan: %d loaded, %d skipped", loaded, skipped)
         return loaded, skipped
 
-    def _load_from_path(
+    def _load_from_path(  # noqa: PLR0911 - 多分支早返回，可读性优于嵌套
         self, path: Path, *, allow_existing: bool = False
     ) -> bool:
         """从单个 SKILL.md 路径加载, 返回 True 表示成功注册, False 表示跳过。"""
@@ -387,6 +401,25 @@ class SkillMdHotLoader:
             return False
         name = meta["name"]
         if self._registry.exists(name) and not allow_existing:
+            existing = self._registry.get(name)
+            if isinstance(existing, SkillMdSkill):
+                existing_path = self._loaded_paths.get(name)
+                if existing_path is not None and existing_path == str(path):
+                    # 同路径 → 比对哈希, 有变更才 hot_reload
+                    new_hash = self._compute_hash(path)
+                    old_hash = self._file_hashes.get(str(path))
+                    if old_hash == new_hash:
+                        # 内容未变 → 静默 skip (不进 skipped 列表, 不进 _loaded_this_scan)
+                        return False
+                    if self.hot_reload(name):
+                        self._loaded_this_scan.append(name)
+                        return True
+                    self._record_skip(name, "reload_failed")
+                    return False
+                # 不同路径的同名 SkillMdSkill → 高优先级目录胜
+                self._record_skip(name, "duplicate_skillmd")
+                return False
+            # builtin 冲突: builtin 永远胜
             logger.warning(
                 "SkillMd name collision: '%s' already in registry (builtin wins), skipping %s",
                 name,
@@ -506,6 +539,7 @@ class SkillMdHotLoader:
         self._registry.register(skill)
         self._loaded_paths[name] = str(path)
         self._file_hashes[str(path)] = file_hash
+        self._loaded_this_scan.append(name)
         logger.info(
             "SkillMd loaded: %s (version=%s) from %s",
             name,
