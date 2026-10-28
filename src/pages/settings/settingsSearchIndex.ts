@@ -281,6 +281,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'autocontext 上下文 自动推断 catalog',
   },
   {
+    key: 'max_output_tokens',
+    tab: 'models',
+    label: '最大输出长度',
+    labelEn: 'Max output tokens',
+    keywords: 'maxoutputtokens 输出 output 长度 截断 token max_tokens',
+  },
+  {
     key: 'temperature',
     tab: 'models',
     label: 'Temperature',

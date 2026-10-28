@@ -107,7 +107,65 @@ def load_llm_config_from_settings() -> Optional[Dict[str, Any]]:
     ep_id = endpoint.get("id")
     if isinstance(ep_id, str) and ep_id.strip():
         result["endpoint_id"] = ep_id
+    # 2026-10-28: 输出长度 — 读全局设置 maxOutputTokens，覆盖 LLMConfig 默认 4096。
+    # 缺失/非法时不写入，留 LLMConfig 默认值；有效范围 512–32768，越界夹紧。
+    max_output = _clamp_max_output_tokens(settings.get("maxOutputTokens"))
+    if max_output is not None:
+        result["max_tokens"] = max_output
     return result
+
+
+#: 单次回答的最大输出 token 上限区间（与前端 ModelsTab 输入框一致）
+MIN_MAX_OUTPUT_TOKENS = 512
+MAX_MAX_OUTPUT_TOKENS = 32768
+
+#: ``profile.model_config.max_tokens`` 的种子默认值 —— 与 ``AgentModelConfig``
+#: 默认一致，无法区分「用户有意设置」与「建号默认」，统一视为未设置。
+_PROFILE_MAX_TOKENS_PLACEHOLDER = 4096
+
+
+def _clamp_max_output_tokens(value: Any) -> Optional[int]:
+    """把候选输出上限夹紧到 [512, 32768]；非正整数 / 非 int 返回 None。"""
+    # bool 是 int 子类，显式排除 True/False
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return max(MIN_MAX_OUTPUT_TOKENS, min(value, MAX_MAX_OUTPUT_TOKENS))
+
+
+def load_max_output_tokens_from_settings() -> Optional[int]:
+    """读取全局设置 ``maxOutputTokens``；缺失 / 非法 / DB 不可用 → None。
+
+    None 表示调用方沿用 ``LLMConfig.max_tokens`` 默认值（4096）。
+    """
+    try:
+        from backend.data.settings_canonicalizer import to_camel
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get_json("app_settings")
+    except Exception as exc:  # DB unavailable / corrupted — degrade
+        logger.warning("llm_factory: failed to read maxOutputTokens: %s", exc)
+        return None
+    if not isinstance(raw, dict):
+        return None
+    return _clamp_max_output_tokens(to_camel(raw).get("maxOutputTokens"))
+
+
+def resolve_max_output_tokens(
+    profile_max_tokens: Optional[int] = None,
+    request_max_tokens: Optional[int] = None,
+) -> Optional[int]:
+    """解析聊天链路的输出上限，优先级：request > profile > 全局设置。
+
+    ``profile_max_tokens`` 等于占位默认 4096 时视为未设置，让全局设置生效。
+    返回 None 表示三者都未提供，调用方沿用 LLMConfig 默认 4096。
+    """
+    resolved = _clamp_max_output_tokens(request_max_tokens)
+    if resolved is not None:
+        return resolved
+    profile_value = _clamp_max_output_tokens(profile_max_tokens)
+    if profile_value is not None and profile_value != _PROFILE_MAX_TOKENS_PLACEHOLDER:
+        return profile_value
+    return load_max_output_tokens_from_settings()
 
 
 def _endpoint_has_required_api_key(
@@ -273,16 +331,27 @@ def resolve_chat_model(
 def load_llm_config_for_chat(
     session_id: Optional[str] = None,
     profile_model: Optional[str] = None,
+    profile_max_tokens: Optional[int] = None,
 ) -> Optional[Dict[str, Any]]:
     """全局端点配置 + 会话/profile 模型覆盖 → LLMConfig 兼容 dict。
 
     端点（api_key/base_url/provider）恒取全局选择 —— 会话级只覆盖模型名，
     不换端点（换端点属全局设置页职责）。无可用端点 → None（调用方降级）。
+
+    2026-10-28: 新增 ``profile_max_tokens`` 兜底 —— 当 agent profile 显式设置了
+    ``model_config.max_tokens``（且非默认 4096）时，用它覆盖全局设置值。优先级：
+    ChatRequest.max_tokens（调用方单独合并）> profile_max_tokens > maxOutputTokens > 4096。
     """
     base = load_llm_config_from_settings()
     if base is None:
         return None
+    merged = dict(base)
     override = resolve_chat_model(session_id, profile_model)
     if override:
-        return {**base, "model": override}
-    return base
+        merged["model"] = override
+    # profile max_tokens 作为次高优先级（在 ChatRequest 之上、全局设置之下）。
+    # base 已带全局 maxOutputTokens，仅在 profile 有「非占位」显式值时覆盖。
+    profile_value = _clamp_max_output_tokens(profile_max_tokens)
+    if profile_value is not None and profile_value != _PROFILE_MAX_TOKENS_PLACEHOLDER:
+        merged["max_tokens"] = profile_value
+    return merged
