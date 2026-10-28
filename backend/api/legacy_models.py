@@ -111,6 +111,13 @@ class ChatRequest(BaseModel):
     plan_override: Optional[List[Dict[str, Any]]] = None
     run_id: Optional[str] = None
 
+    # Phase 3 (2026-10-28): 步骤级确认开关 —— 对计划条目跑 confirm_marker
+    # 规则引擎，命中破坏性/不可逆步骤标记 auto_confirm，dispatcher 派发前
+    # 弹 StepConfirmDialog 等用户 continue/skip/abort。
+    # 三态：None（缺省）= 自动 —— 仅 complexity=complex 的任务启用；
+    # True / False = 调用方显式覆盖（设置项 / 测试）。
+    step_confirm: Optional[bool] = None
+
     # Task 4 (2026-09-17): 上下文重置标记。True 时 chat_stream_create 在持久化
     # 当前消息前调用 MessageRepository.advance_segment(session_id)，开启新 segment；
     # 历史加载改用 get_active_segment 只取当前段。

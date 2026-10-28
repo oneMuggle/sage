@@ -174,6 +174,8 @@ describe('applyOrchestrationEventToBoard — R35', () => {
       queued: 1,
       failed: 0,
       cancelled: 0,
+      // Phase 3 (2026-10-28): 进度 6 元组新增 skipped。
+      skipped: 0,
     });
   });
 
@@ -380,6 +382,138 @@ describe('applyOrchestrationEventToBoard — orch_preflight (Round 3)', () => {
     const handled = applyOrchestrationEventToBoard(evt({ state: 'orch_preflight' }), SID);
     expect(handled).toBe(false);
     expect(slots().preflightPhase).toBeNull();
+  });
+});
+
+// ============================================================================
+// 2026-10-28 (Plan Mode 增强): plan_execution_mode → 执行模式推荐槽位
+// ============================================================================
+
+describe('applyOrchestrationEventToBoard — plan_execution_mode', () => {
+  // 既有 beforeEach 不清 executionModeRecommendation（新槽位）—— 每个测试前显式重置。
+  beforeEach(() => {
+    useChatStreamStore.getState().setExecutionModeRecommendation(SID, null);
+  });
+
+  it('合法 mode=single → 写入 store 并返回 true', () => {
+    const handled = applyOrchestrationEventToBoard(
+      evt({
+        state: 'plan_execution_mode',
+        execution_mode: 'single',
+        execution_mode_confidence: 0.85,
+        execution_mode_reasoning: '步骤少，串行即可',
+      }),
+      SID,
+    );
+    expect(handled).toBe(true);
+    expect(slots().executionModeRecommendation).toEqual({
+      mode: 'single',
+      confidence: 0.85,
+      reasoning: '步骤少，串行即可',
+    });
+  });
+
+  it('合法 mode=ask_user → 写入 store（PlanApprovalBar 展示选择对话框）', () => {
+    applyOrchestrationEventToBoard(
+      evt({
+        state: 'plan_execution_mode',
+        execution_mode: 'ask_user',
+        execution_mode_confidence: 0.3,
+        execution_mode_reasoning: '无法判断',
+      }),
+      SID,
+    );
+    expect(slots().executionModeRecommendation?.mode).toBe('ask_user');
+    expect(slots().executionModeRecommendation?.confidence).toBe(0.3);
+  });
+
+  it('非法 mode → 不消费（return false），store 不变', () => {
+    const handled = applyOrchestrationEventToBoard(
+      evt({ state: 'plan_execution_mode', execution_mode: 'bogus' as never }),
+      SID,
+    );
+    expect(handled).toBe(false);
+    expect(slots().executionModeRecommendation).toBeNull();
+  });
+
+  it('缺 execution_mode → 不消费', () => {
+    const handled = applyOrchestrationEventToBoard(evt({ state: 'plan_execution_mode' }), SID);
+    expect(handled).toBe(false);
+  });
+
+  it('confidence 缺失 → 降级 0', () => {
+    applyOrchestrationEventToBoard(
+      evt({ state: 'plan_execution_mode', execution_mode: 'single' }),
+      SID,
+    );
+    expect(slots().executionModeRecommendation?.confidence).toBe(0);
+  });
+
+  it('reasoning 缺失 → 降级空字符串', () => {
+    applyOrchestrationEventToBoard(
+      evt({
+        state: 'plan_execution_mode',
+        execution_mode: 'single',
+        execution_mode_confidence: 0.5,
+      }),
+      SID,
+    );
+    expect(slots().executionModeRecommendation?.reasoning).toBe('');
+  });
+});
+
+// ============================================================================
+// 2026-10-28 (Plan Mode 增强 Phase 3): awaiting_step_confirm → 步骤确认槽位
+// ============================================================================
+
+describe('applyOrchestrationEventToBoard — awaiting_step_confirm (Phase 3)', () => {
+  beforeEach(() => {
+    useChatStreamStore.getState().setStepConfirm(SID, null);
+  });
+
+  it('合法事件 → 写入 stepConfirm 槽位并返回 true', () => {
+    const stepConfirmData = {
+      goal: '删除临时文件',
+      stepId: 'step-42',
+      impact: '将删除 3 个文件',
+      categories: ['file_delete'],
+      previousOutput: '已找到 3 个临时文件',
+      nextStepPreview: '接下来将提交更改',
+    };
+    const handled = applyOrchestrationEventToBoard(
+      evt({
+        state: 'awaiting_step_confirm',
+        step_confirm: stepConfirmData,
+      }),
+      SID,
+    );
+    expect(handled).toBe(true);
+    expect(slots().stepConfirm).toEqual(stepConfirmData);
+  });
+
+  it('缺 step_confirm 载荷 → 不消费（return false）', () => {
+    const handled = applyOrchestrationEventToBoard(
+      evt({ state: 'awaiting_step_confirm' }),
+      SID,
+    );
+    expect(handled).toBe(false);
+    expect(slots().stepConfirm).toBeNull();
+  });
+
+  it('最小载荷（仅 goal + stepId）→ 正常消费', () => {
+    const handled = applyOrchestrationEventToBoard(
+      evt({
+        state: 'awaiting_step_confirm',
+        step_confirm: {
+          goal: '执行危险操作',
+          stepId: 'step-1',
+        },
+      }),
+      SID,
+    );
+    expect(handled).toBe(true);
+    expect(slots().stepConfirm?.goal).toBe('执行危险操作');
+    expect(slots().stepConfirm?.stepId).toBe('step-1');
   });
 });
 

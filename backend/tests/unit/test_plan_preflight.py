@@ -143,7 +143,11 @@ _CLARIFY_JSON = json.dumps(
 @pytest.mark.asyncio()
 async def test_clarify_full_loop_collects_answer(monkeypatch):
     """need_clarify → ask_user_question 事件 → gate 应答 → 结论注入 context。"""
-    client = FakeLLM(_CLARIFY_JSON)
+    # 2026-10-28: FakeLLM 需要提供两个响应（复杂度分类 + 澄清）
+    complexity_response = json.dumps(
+        {"complexity": "medium", "research_needed": False, "reasoning": "test"}
+    )
+    client = FakeLLM(complexity_response, _CLARIFY_JSON)
     _enable(monkeypatch, client=client, plan_scout_enabled=False)
     gate = UserQuestionGate()
 
@@ -171,8 +175,12 @@ async def test_clarify_full_loop_collects_answer(monkeypatch):
     assert "Markdown 文档" in clarifications[0]
 
     states = [e["state"] for e in events]
+    # 2026-10-28: 新增复杂度分类事件在澄清之前
     assert states[0] == "orch_preflight"
-    assert events[0]["phase"] == "clarify"
+    assert events[0]["phase"] == "complexity_classify"
+    # 找到 clarify 事件
+    clarify_events = [e for e in events if e.get("phase") == "clarify"]
+    assert len(clarify_events) == 1
     ask_events = [e for e in events if e["state"] == "ask_user_question"]
     assert len(ask_events) == 1
     assert ask_events[0]["user_question"]["question"] == "最终交付什么格式？"
@@ -190,20 +198,23 @@ async def test_clarify_not_needed_skips_questions(monkeypatch):
     result = await plan_preflight.run_plan_preflight(
         "目标明确", emit=await _collect_emit(events)
     )
-    assert result is None
+    # 2026-10-28: 新增复杂度分类，result 可能包含 complexity 字段
+    assert result is None or "clarifications" not in result
     assert not [e for e in events if e["state"] == "ask_user_question"]
 
 
 @pytest.mark.asyncio()
 async def test_clarify_malformed_llm_output_degrades(monkeypatch):
-    """畸形输出（非 JSON）→ 无提问、整体 None，绝不抛错。"""
+    """畸形输出（非 JSON）→ 无提问、无澄清/侦察，绝不抛错。"""
     client = FakeLLM("这不是 JSON，，，")
     _enable(monkeypatch, client=client, plan_scout_enabled=False)
     monkeypatch.setattr(
         plan_preflight, "get_question_gate", lambda: UserQuestionGate()
     )
     result = await plan_preflight.run_plan_preflight("目标", emit=None)
-    assert result is None
+    # 2026-10-28: 新增复杂度分类，result 可能包含 complexity 字段
+    # 但不应包含 clarifications（澄清失败）和 scout_facts（scout 禁用）
+    assert result is None or "clarifications" not in result
 
 
 @pytest.mark.asyncio()
@@ -220,24 +231,35 @@ async def test_clarify_llm_failure_degrades(monkeypatch):
         plan_preflight, "get_question_gate", lambda: UserQuestionGate()
     )
     result = await plan_preflight.run_plan_preflight("目标", emit=None)
-    assert result is None
+    # 2026-10-28: 新增复杂度分类，result 可能包含 complexity 字段
+    assert result is None or "clarifications" not in result
 
 
 @pytest.mark.asyncio()
 async def test_clarify_gate_missing_skips(monkeypatch):
     """gate 未装配 → 在 LLM 判定调用之前就跳过（省一次无谓往返），不挂起。"""
-    client = FakeLLM(_CLARIFY_JSON)
+    # 2026-10-28: FakeLLM 需要提供复杂度分类响应
+    complexity_response = json.dumps(
+        {"complexity": "medium", "research_needed": False, "reasoning": "test"}
+    )
+    client = FakeLLM(complexity_response, _CLARIFY_JSON)
     _enable(monkeypatch, client=client, plan_scout_enabled=False)
     monkeypatch.setattr(plan_preflight, "get_question_gate", lambda: None)
     result = await plan_preflight.run_plan_preflight("目标", emit=None)
-    assert result is None
-    assert client.prompts == []  # gate 缺失 → 连判定调用都不发
+    # 2026-10-28: 新增复杂度分类，result 可能包含 complexity 字段
+    assert result is None or "clarifications" not in result
+    # 2026-10-28: 复杂度分类用了 1 次调用，gate 缺失后澄清不再调用
+    assert len(client.prompts) == 1  # 只有复杂度分类调用
 
 
 @pytest.mark.asyncio()
 async def test_clarify_timeout_writes_assumption(monkeypatch):
     """提问超时 → fail-open：注入"按合理默认执行并写明假设"结论。"""
-    client = FakeLLM(_CLARIFY_JSON)
+    # 2026-10-28: FakeLLM 需要提供复杂度分类响应
+    complexity_response = json.dumps(
+        {"complexity": "medium", "research_needed": False, "reasoning": "test"}
+    )
+    client = FakeLLM(complexity_response, _CLARIFY_JSON)
     _enable(monkeypatch, client=client, plan_scout_enabled=False)
     monkeypatch.setenv("SAGE_ORCH_CLARIFY_TIMEOUT", "0.05")
     monkeypatch.setattr(
@@ -245,6 +267,8 @@ async def test_clarify_timeout_writes_assumption(monkeypatch):
     )
     result = await plan_preflight.run_plan_preflight("目标", emit=None)
     assert result is not None
+    # 2026-10-28: 确保 clarifications 存在
+    assert "clarifications" in result
     assert any("合理默认值" in c for c in result["clarifications"])
 
 
@@ -267,7 +291,8 @@ async def test_clarify_invalid_questions_filtered(monkeypatch):
         plan_preflight, "get_question_gate", lambda: UserQuestionGate()
     )
     result = await plan_preflight.run_plan_preflight("目标", emit=None)
-    assert result is None
+    # 2026-10-28: 新增复杂度分类，result 可能包含 complexity 字段
+    assert result is None or "clarifications" not in result
 
 
 # ---------------------------------------------------------------------------
@@ -308,7 +333,8 @@ async def test_scout_disabled_by_settings(monkeypatch):
 
     monkeypatch.setattr(plan_preflight, "_run_scout_agent", _fail)
     result = await plan_preflight.run_plan_preflight("目标", emit=None)
-    assert result is None
+    # 2026-10-28: 新增复杂度分类，result 可能包含 complexity 字段
+    assert result is None or "scout_facts" not in result
 
 
 @pytest.mark.asyncio()
@@ -327,7 +353,8 @@ async def test_scout_timeout_degrades(monkeypatch):
 
     monkeypatch.setattr(plan_preflight, "_run_scout_agent", slow_scout)
     result = await plan_preflight.run_plan_preflight("目标", emit=None)
-    assert result is None
+    # 2026-10-28: 新增复杂度分类，result 可能包含 complexity 字段
+    assert result is None or "scout_facts" not in result
 
 
 @pytest.mark.asyncio()
@@ -343,7 +370,8 @@ async def test_scout_failure_degrades(monkeypatch):
 
     monkeypatch.setattr(plan_preflight, "_run_scout_agent", broken_scout)
     result = await plan_preflight.run_plan_preflight("目标", emit=None)
-    assert result is None
+    # 2026-10-28: 新增复杂度分类，result 可能包含 complexity 字段
+    assert result is None or "scout_facts" not in result
 
 
 @pytest.mark.asyncio()
@@ -441,7 +469,10 @@ async def test_max_scout_iterations_from_settings_flows_to_scout(monkeypatch):
 
     result = await plan_preflight.run_plan_preflight("目标", emit=None)
     assert captured["max_iterations"] == 9
-    assert result == {"scout_facts": "facts"}
+    # 2026-10-28: result 现在包含 complexity 字段
+    assert "scout_facts" in result
+    assert result["scout_facts"] == "facts"
+    assert "complexity" in result
 
 
 # ---------------------------------------------------------------------------
@@ -483,3 +514,96 @@ def test_decomposition_prompt_without_preflight_context():
     assert "Context:\nNone" in prompt
     assert "侦察发现" not in prompt
     assert "用户澄清结论" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# scout_deep 复杂任务路径（Phase 2: 2026-10-28）
+# ---------------------------------------------------------------------------
+
+
+_COMPLEX_RESPONSE = json.dumps(
+    {"complexity": "complex", "research_needed": True, "reasoning": "需要深度调研"}
+)
+_NO_CLARIFY_JSON = json.dumps({"need_clarify": False, "questions": []})
+
+
+@pytest.mark.asyncio()
+async def test_complex_empty_scout_deep_falls_back_to_scout_lite(monkeypatch):
+    """scout_deep 空报告（confidence=0）→ 不推 research_complete，回落 scout_lite。
+
+    code review HIGH: 无搜索 key 时 scout_deep 恒返回空报告，此前仍会推
+    research_complete 让前端弹空卡片；修复后应静默回落轻量侦察。
+    """
+    from backend.orchestration import scout_deep
+    from backend.orchestration.research_report import ResearchReport
+
+    client = FakeLLM(_COMPLEX_RESPONSE, _NO_CLARIFY_JSON)
+    _enable(monkeypatch, client=client)
+    monkeypatch.setattr(
+        plan_preflight, "_resolve_preflight_workspace", lambda _sid: MagicMock()
+    )
+
+    async def _empty_research(**_kwargs):
+        return ResearchReport(topic="设计认证系统", confidence=0, estimated_effort="中")
+
+    monkeypatch.setattr(scout_deep, "research", _empty_research)
+    scout_calls = {"n": 0}
+
+    async def _fake_scout_agent(_client, _goal, max_iterations=4):
+        scout_calls["n"] += 1
+        return "1. 工作区含 backend/auth 目录"
+
+    monkeypatch.setattr(plan_preflight, "_run_scout_agent", _fake_scout_agent)
+
+    events: list = []
+    result = await plan_preflight.run_plan_preflight(
+        "设计认证系统", emit=await _collect_emit(events), session_id="s1"
+    )
+
+    assert result is not None
+    assert "research_report" not in result
+    assert result.get("scout_facts") == "1. 工作区含 backend/auth 目录"
+    assert scout_calls["n"] == 1
+    assert not any(e.get("state") == "research_complete" for e in events)
+
+
+@pytest.mark.asyncio()
+async def test_complex_nonempty_scout_deep_emits_research_complete(monkeypatch):
+    """scout_deep 有结果 → 推 research_complete 且不跑 scout_lite。"""
+    from backend.orchestration import scout_deep
+    from backend.orchestration.research_report import ResearchFinding, ResearchReport
+
+    client = FakeLLM(_COMPLEX_RESPONSE, _NO_CLARIFY_JSON)
+    _enable(monkeypatch, client=client)
+    monkeypatch.setattr(
+        plan_preflight, "_resolve_preflight_workspace", lambda _sid: MagicMock()
+    )
+
+    report = ResearchReport(
+        topic="设计认证系统",
+        findings=[
+            ResearchFinding(title="OAuth2 最佳实践", summary="用 PKCE", relevance="high")
+        ],
+        confidence=0.8,
+        estimated_effort="中",
+    )
+
+    async def _ok_research(**_kwargs):
+        return report
+
+    monkeypatch.setattr(scout_deep, "research", _ok_research)
+
+    async def _fail_scout_agent(*_args, **_kwargs):
+        raise AssertionError("scout_lite 不应在 scout_deep 有结果时运行")
+
+    monkeypatch.setattr(plan_preflight, "_run_scout_agent", _fail_scout_agent)
+
+    events: list = []
+    result = await plan_preflight.run_plan_preflight(
+        "设计认证系统", emit=await _collect_emit(events), session_id="s1"
+    )
+
+    assert result is not None
+    assert result["research_report"]["confidence"] == 0.8
+    assert "OAuth2" in result["scout_facts"]
+    assert any(e.get("state") == "research_complete" for e in events)

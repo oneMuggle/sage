@@ -45,6 +45,12 @@ class AgentState(str, Enum):
     # legacy_routes 收到后把当前累加的 reasoning/tool_calls/content 快照成
     # 一条 assistant 消息,并重置累加器准备下一步。
     STEP_DONE = "step_done"
+    # 2026-10-28 Plan Mode 增强 Phase 3: 自动确认点。
+    # dispatcher 在 auto_confirm 步骤派发前推一个 AWAITING_STEP_CONFIRM 事件,
+    # 前端渲染 StepConfirmDialog 并 POST /api/v1/orch/runs/{run_id}/step-confirm
+    # （body: run_id / task_id / action: continue|skip|abort）。
+    # 携带 step_confirm 字段（StepConfirmInfo 形态）。
+    AWAITING_STEP_CONFIRM = "awaiting_step_confirm"
     DONE = "done"
     FAILED = "failed"
 
@@ -119,6 +125,10 @@ class AgentEvent:
     # error_type / error_message / delay），前端据此渲染"重试中 (2/3) | 原因:
     # 请求超时 | 等待 2秒"。其他状态为 None。
     retry_info: Optional[Dict[str, Any]] = None
+    # 2026-10-28 Plan Mode 增强 Phase 3: state=AWAITING_STEP_CONFIRM 时携带
+    # 步骤确认信息（StepConfirmInfo 形态），供前端 StepConfirmDialog 渲染。
+    # 包含 goal / stepId / impact / categories / previousOutput / nextStepPreview。
+    step_confirm: Optional[Dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         # finish_reason 只接受字符串: 测试替身 (MagicMock 响应) 等非 str 值归一为
@@ -180,4 +190,6 @@ class AgentEvent:
             d["generation_stats"] = self.generation_stats
         if self.retry_info is not None:
             d["retry_info"] = self.retry_info
+        if self.step_confirm is not None:
+            d["step_confirm"] = self.step_confirm
         return d

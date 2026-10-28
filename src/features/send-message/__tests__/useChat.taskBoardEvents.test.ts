@@ -388,6 +388,7 @@ describe('useChat taskBoard', () => {
       queued: 0,
       failed: 0,
       cancelled: 0,
+      skipped: 0,
     });
   });
 
@@ -602,6 +603,8 @@ describe('useChat taskBoard', () => {
       queued: 0,
       failed: 0,
       cancelled: 0,
+      // Phase 3 (2026-10-28): 无条件推进度 6 元组（task_status 聚合）新增 skipped。
+      skipped: 0,
     });
   });
 });

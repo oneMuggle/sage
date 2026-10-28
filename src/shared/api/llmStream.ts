@@ -50,7 +50,13 @@ export interface TaskPlanEvent {
   reasoning?: string;
 }
 
-export type TaskStatusValue = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+export type TaskStatusValue =
+  | 'queued'
+  | 'running'
+  | 'done'
+  | 'failed'
+  | 'cancelled'
+  | 'skipped';
 
 export interface TaskStatusEvent {
   state: 'task_status';
