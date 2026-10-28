@@ -48,6 +48,7 @@ def _build_orchestration_dispatcher(
     total_tasks: Optional[int],
     workspace_root: Optional[str],
     session_id: Optional[str] = None,
+    step_confirm: bool = False,
 ) -> ChatDispatcher:
     """构造 ChatDispatcher；非法 run_id 的 ValueError 重抛为前端可读文案。
 
@@ -67,6 +68,7 @@ def _build_orchestration_dispatcher(
             settings=load_orch_settings(),
             workspace_root=workspace_root,
             session_id=session_id,
+            step_confirm=step_confirm,
         )
     except ValueError as exc:
         raise ValueError(

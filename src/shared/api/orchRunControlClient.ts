@@ -14,7 +14,13 @@ import type { RunSnapshot } from './orchEvents';
 export interface SteerTaskParams {
   run_id: string;
   task_id: string;
-  message_type: 'constraint' | 'clarification' | 'additional_context' | 'correction' | 'priority_update' | 'reference';
+  message_type:
+    | 'constraint'
+    | 'clarification'
+    | 'additional_context'
+    | 'correction'
+    | 'priority_update'
+    | 'reference';
   content: string;
   apply_mode?: 'next_boundary' | 'new_followup';
   expected_task_revision?: number;
@@ -46,6 +52,19 @@ export interface SetApprovalModeResponse {
   ok: boolean;
   run_id: string;
   mode: 'ask' | 'auto';
+}
+
+export interface StepConfirmParams {
+  run_id: string;
+  task_id: string;
+  action: 'continue' | 'skip' | 'abort';
+}
+
+export interface StepConfirmResponse {
+  ok: boolean;
+  run_id: string;
+  task_id: string;
+  action: string;
 }
 
 export const orchRunControlClient = {
@@ -86,6 +105,17 @@ export const orchRunControlClient = {
    */
   async setApprovalMode(params: SetApprovalModeParams): Promise<SetApprovalModeResponse> {
     return invoke<SetApprovalModeResponse>('orchestration_set_approval_mode', { ...params });
+  },
+
+  /**
+   * POST /orch/runs/{runId}/step-confirm
+   *
+   * Phase 3 (2026-10-28): 步骤确认 —— 用户在 StepConfirmDialog 选择
+   * continue / skip / abort。dispatcher 据此推进或中止当前 run。
+   * 返回 409 表示无 pending 确认；404 表示 run 不在进程内。
+   */
+  async confirmStep(params: StepConfirmParams): Promise<StepConfirmResponse> {
+    return invoke<StepConfirmResponse>('orchestration_step_confirm', { ...params });
   },
 };
 

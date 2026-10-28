@@ -153,3 +153,48 @@ async def test_skip_cascades_to_downstream(tmp_path, monkeypatch):
     assert status_by_task["t1"]["status"] == "cancelled"
     assert status_by_task["t2"]["status"] == "failed"
     assert status_by_task["t2"]["error"].startswith("blocked_by_failed:")
+
+
+async def _wait_for_state_event(queue, state_name: str, timeout: float = 5.0):
+    """轮询 entry_queue 直到出现指定 state 的事件（不消费其他事件断言）。"""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        try:
+            event = queue.get_nowait()
+        except asyncio.QueueEmpty:
+            await asyncio.sleep(0.01)
+            continue
+        if isinstance(event, dict) and event.get("state") == state_name:
+            return event
+    raise AssertionError(f"未在 {timeout}s 内等到 {state_name} 事件")
+
+
+@pytest.mark.asyncio()
+async def test_skip_during_step_confirm_short_circuits(tmp_path, monkeypatch):
+    """等待步骤确认期间单任务跳过 → 立即收口 skipped，不等 600s 超时。
+
+    code review #15: ``_await_step_confirm`` 原先只竞速 run 级取消与用户应答，
+    单任务跳过（cancel_task）要到 STEP_CONFIRM_TIMEOUT_SECONDS 才收口 ——
+    用户点了"跳过任务"却看着对话框挂 10 分钟。
+    """
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-skip-confirm",
+        step_confirm=True,
+    )
+    _inject_plan(d, [("t1", "删除旧文件", "r", [])])
+
+    dispatched = asyncio.ensure_future(
+        d.dispatch([{"task_id": "t1", "agent_id": "r", "goal": "删除旧文件"}])
+    )
+    await _wait_for_state_event(queue, "awaiting_step_confirm")
+    assert d.cancel_task("t1") is True
+
+    # 5s 远小于 STEP_CONFIRM_TIMEOUT_SECONDS（600s）：修复前此处必然超时。
+    await asyncio.wait_for(dispatched, timeout=5)
+    assert d._states["t1"].status == "skipped"
+    assert d._states["t1"].error == "skipped at step confirmation"

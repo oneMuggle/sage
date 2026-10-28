@@ -266,7 +266,17 @@ export type AgentState =
   | 'workspace_changed'
   // R81: 统一参考来源 —— 检索类工具命中（web/wiki/MCP）在 done 前
   // 一次性推送, 载荷见 AgentEvent.sources。
-  | 'sources_used';
+  | 'sources_used'
+  // 2026-10-28 (Plan Mode 增强): 计划模式收尾时的执行模式推荐 ——
+  // 在 DONE 之前推送，载荷见 AgentEvent.execution_mode。
+  | 'plan_execution_mode'
+  // 2026-10-28 (Plan Mode 增强 Phase 2): 复杂任务深度调研结果 ——
+  // scout_deep 完成后推送，载荷见 AgentEvent.research_report。
+  | 'research_complete'
+  // 2026-10-28 (Plan Mode 增强 Phase 3): 步骤确认卡点 ——
+  // plan 执行到标记为 auto_confirm 的步骤时推送，载荷见 AgentEvent.step_confirm。
+  // 前端弹出 StepConfirmDialog 等待用户操作（continue/skip/abort）。
+  | 'awaiting_step_confirm';
 
 /**
  * TM2 (DSH 对标 R11): 上下文水位计量快照 —— 随 `state: 'context_pressure'`
@@ -385,6 +395,9 @@ export interface TaskPlanItem {
   depends_on?: string[];
   parent_task_id?: string | null;
   depth?: number;
+  // 2026-10-28 (Plan Mode 增强 Phase 3): 自动确认标记。
+  // confirm_marker 规则引擎扫描 goal 后写入；true 表示执行前弹 StepConfirmDialog。
+  auto_confirm?: boolean;
 }
 
 export interface TaskPlanEvent {
@@ -397,7 +410,15 @@ export interface TaskPlanEvent {
   reasoning?: string;
 }
 
-export type TaskStatusValue = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+// 2026-10-28 (Plan Mode 增强 Phase 3): skipped —— 用户在步骤确认对话框
+// 选择"跳过此步"，dispatcher 不派发该步直接进入下一任务。
+export type TaskStatusValue =
+  | 'queued'
+  | 'running'
+  | 'done'
+  | 'failed'
+  | 'cancelled'
+  | 'skipped';
 
 export interface TaskStatusEvent {
   state: 'task_status';
@@ -492,6 +513,8 @@ export interface TaskProgressEvent {
   queued: number;
   failed: number;
   cancelled: number;
+  // Phase 3 (2026-10-28): 步骤确认跳过数；旧后端不携带时为 undefined。
+  skipped?: number;
 }
 
 /** Wave 2 (2026-08-14): reviewer 复核结论事件（spec §5.2）。
@@ -576,7 +599,20 @@ export interface AgentEvent {
   subtype?: string;
   title?: string;
   // Round 3 (2026-09-19): state === 'orch_preflight' 时的阶段载荷。
-  preflight_phase?: 'clarify' | 'scout';
+  preflight_phase?: 'clarify' | 'scout' | 'complexity_classify' | 'execution_mode_classify';
+  // 2026-10-28: Plan Mode 增强 — 复杂度分类结果。
+  complexity?: 'simple' | 'medium' | 'complex';
+  // 2026-10-28: Plan Mode 增强 — 执行模式分类结果。
+  execution_mode?: 'single' | 'multi' | 'ask_user';
+  execution_mode_confidence?: number;
+  /** 2026-10-28: Plan Mode 增强 — 分类器判断依据（ask_user 时展示给用户） */
+  execution_mode_reasoning?: string;
+  // 2026-10-28: Plan Mode 增强 Phase 2 — 复杂任务深度调研结果。
+  // state === 'research_complete' 时携带的调研报告。
+  research_report?: import('./planModeTypes').ResearchReport;
+  // 2026-10-28: Plan Mode 增强 Phase 3 — 步骤确认卡点。
+  // state === 'awaiting_step_confirm' 时携带的步骤信息。
+  step_confirm?: import('./planModeTypes').StepConfirmInfo;
   // Multi-Agent Orchestration (2026-08-11): 宽松字段（与 llmStream.ts AgentEvent 同步）
   run_id?: string;
   plan?: TaskPlanItem[];
