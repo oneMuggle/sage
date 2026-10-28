@@ -47,6 +47,7 @@
 | 2026-08-20 | [Win7 Memory Manager Initialization and SSL Fix](./2026-08-20-win7-memory-manager-init-design.md) | memory tool 注入、Win7 certifi 打包与 SSL CA bootstrap |
 | 2026-08-23 | [Win7 与主分支平台能力修复](./2026-08-23-win7-parity-platform-fixes-design.md) | 修复记忆、流式 UI、LM Studio、工具、Office、知识库、摘要、时区与工作区设置 |
 | 2026-09-02 | [内网 Web 访问设计](./2026-09-02-intranet-web-access-design.md) | 网络模式门禁（online/intranet/offline）+ 域名白名单 + HTML 正文抽取 + 流式下载工具 |
+| 2026-10-27 | [Skill 智能沉淀与技能体系全栈优化设计](./2026-10-27-skill-intelligent-consolidation-design.md) | 主动提示 + 语义匹配 + 执行链路统一 + 编辑器 + 市场 + 门控可视化，覆盖 14 个技能体系缺口 |
 
 ## 与其他目录关系
 

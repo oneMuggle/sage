@@ -91,6 +91,7 @@ import {
   relayChatStream,
   relayNdjsonToEvent,
   relayOrchEventsStream,
+  relaySkillNotifications,
   WIKI_STREAM_ERROR,
 } from './relay';
 import { streamControllers } from './commands';
@@ -1324,6 +1325,25 @@ async function registerIpcHandlers(): Promise<void> {
                 message: e.message,
               });
             }
+          }
+        });
+        return { ok: true, event };
+      }
+
+      // 技能变更通知 (gap #6b): renderer 订阅后由 backend NDJSON 推送,
+      // 前端收到事件后重新拉 skillsApi.list() 刷新 slash 菜单。
+      if (event === 'skills:notify') {
+        const abort = new AbortController();
+        eventSubscriptions.set(event, abort);
+        relaySkillNotifications(
+          senderWebContents,
+          event,
+          BACKEND_URL,
+          abort.signal,
+          backendAuthToken ?? undefined,
+        ).catch((e) => {
+          if (e instanceof Error && e.name !== 'AbortError') {
+            logger.error('ipc: skill notify relay error', { err: e.message });
           }
         });
         return { ok: true, event };
