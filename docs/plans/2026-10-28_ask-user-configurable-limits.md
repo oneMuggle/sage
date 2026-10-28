@@ -100,7 +100,7 @@ Sage 自身的 AI agent 缺少与用户交互的工具，导致 LLM 推理过程
 - [x] **步骤 11**：编写测试（3 个后端新文件 + `OrchestrationTab.test.tsx` 7 例）
 - [x] **步骤 12**：code review（`everything-claude-code:code-reviewer`）→ 3 HIGH / 2 MEDIUM / 3 LOW，全部 HIGH + MEDIUM 已修
 - [x] **步骤 13**：本地验证（pytest + vitest + tsc + ruff）—— 目标测试 188 例全绿，ruff 干净，tsc 无错
-- [ ] **步骤 14**：提交 + PR
+- [x] **步骤 14**：提交 + PR（[#2622](https://github.com/oneMuggle/sage/pull/2622)）
 
 ### 4.1 code review 修复记录（2026-10-28）
 
