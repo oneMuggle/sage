@@ -27,7 +27,6 @@ from __future__ import annotations
 import dataclasses
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
 import pytest
 
@@ -97,7 +96,7 @@ def _make_doc(
     *,
     doc_id: str,
     workspace_path: str,
-    archived_at: Optional[int] = None,
+    archived_at: int | None = None,
 ) -> OfficeDocumentSummary:
     """Helper: build an OfficeDocumentSummary for save_document."""
     return OfficeDocumentSummary(

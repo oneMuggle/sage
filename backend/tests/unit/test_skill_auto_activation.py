@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
 
 import pytest
 from sage_core import Message, Role
@@ -466,10 +465,10 @@ class _FakeActivationResult:
 class _FakeSkillPort:
     """带 auto_activate 扩展的假 skills port。"""
 
-    def __init__(self, block: str = "", raise_exc: Optional[Exception] = None) -> None:
+    def __init__(self, block: str = "", raise_exc: Exception | None = None) -> None:
         self._block = block
         self._raise = raise_exc
-        self.calls: List[str] = []
+        self.calls: list[str] = []
 
     def list_skills(self):
         return []
