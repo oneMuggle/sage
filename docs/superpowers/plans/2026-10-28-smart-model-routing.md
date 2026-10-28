@@ -715,156 +715,196 @@ git commit -m "feat(api): add routing API endpoint
 
 ---
 
-### Task 5：集成路由到 LLM Factory
+### Task 5：路由助手集成到 LLM Factory（已按裁定重写）
+
+> **原计划的本节假设了一个 `LLMFactory` 类与 `create_client(task_type, ..., auto_mode, explicit_model)` 方法，
+> 以及 `EffectiveModel(provider=..., model_id=..., native_context_window=...)` 形状。两者都不存在。**
+> 实际文件是函数模块，`EffectiveModel` 是扁平结构（`model_key` / `limits.native` / `capabilities`）。
+> 本节按裁定 R10–R12 重写，并已实现、审查通过。完整 brief 见
+> `.superpowers/sdd/2026-10-28-smart-model-routing/task-5-brief-ruled.md`。
 
 **Files:**
-- Modify: `backend/orchestration/llm_factory.py`
+- Modify: `backend/model_catalog/repository.py` — `list_effective_models(endpoint_id: Optional[str] = None)` 前置 SQL 过滤
+- Modify: `backend/routing/routing_engine.py` — `route()` / `_get_available_models()` 增加可选 `endpoint_id`（默认 None 行为不变）
+- Modify: `backend/orchestration/llm_factory.py` — 新增 `resolve_routed_chat_model(...) -> Optional[str]`
 - Test: `backend/tests/unit/test_llm_factory_routing.py`
 
-**Interfaces:**
-- Consumes: `RoutingEngine`, `RoutingResult`
-- Produces: 修改 `LLMFactory.create_client()` 支持自动路由
-
-- [ ] **Step 1: 读取现有 LLMFactory 实现**
-
-```bash
-cat backend/orchestration/llm_factory.py | head -100
-```
-
-- [ ] **Step 2: 编写集成测试**
-
-创建 `backend/tests/unit/test_llm_factory_routing.py`：
-
+**接口（实际形状）:**
 ```python
-import pytest
-from unittest.mock import Mock, patch
-from backend.orchestration.llm_factory import LLMFactory
-from backend.routing.routing_engine import RoutingResult
-from backend.model_catalog.schemas import EffectiveModel
-
-def test_llm_factory_uses_routing_when_auto_mode():
-    """When auto_mode=True, factory should use routing engine."""
-    mock_engine = Mock()
-    mock_engine.route.return_value = RoutingResult(
-        selected_model=EffectiveModel(
-            provider="openai",
-            model_id="gpt-4o",
-            tier="balanced",
-            native_context_window=128000,
-        ),
-        reason="已为 code_generation 选择 balanced 模型",
-        alternatives=[],
-    )
-    
-    factory = LLMFactory(routing_engine=mock_engine)
-    client = factory.create_client(
-        task_type="code_generation",
-        context_length=8000,
-        auto_mode=True,
-    )
-    
-    mock_engine.route.assert_called_once()
-    assert client is not None
-
-def test_llm_factory_uses_explicit_model_when_specified():
-    """When explicit model is specified, factory should not use routing."""
-    mock_engine = Mock()
-    factory = LLMFactory(routing_engine=mock_engine)
-    
-    client = factory.create_client(
-        task_type="code_generation",
-        context_length=8000,
-        explicit_model="gpt-4o-mini",
-        auto_mode=False,
-    )
-    
-    mock_engine.route.assert_not_called()
+def resolve_routed_chat_model(
+    task_type: str,
+    context_length: int = 4096,
+    required_capabilities: Optional[List[str]] = None,
+    endpoint_id: Optional[str] = None,
+    catalog_repository: Optional[Any] = None,
+) -> Optional[str]: ...   # selected model_key.model_id，失败/无匹配返回 None
 ```
 
-- [ ] **Step 3: 运行测试验证失败**
+**关键约束（已由审查验证）:**
+- 端点作用域是正确性要求：工厂把一个模型 id 与**单个**端点的 `api_key`/`base_url` 配对
+- 纯增量、默认保持：不重连任何现有调用方，`endpoint_id=None` 时与 Task 3 行为逐字节一致
+- fail-safe：任何 catalog/路由异常返回 None，仅 debug 日志，绝不抛错、不记录凭据
 
-```bash
-/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_llm_factory_routing.py -v
-```
-
-Expected: FAIL（LLMFactory 不支持 routing_engine 参数）
-
-- [ ] **Step 4: 修改 LLMFactory 集成路由**
-
-编辑 `backend/orchestration/llm_factory.py`：
-
-```python
-from backend.routing.routing_engine import RoutingEngine, RoutingPreference
-
-class LLMFactory:
-    def __init__(self, routing_engine: Optional[RoutingEngine] = None):
-        self.routing_engine = routing_engine
-    
-    def create_client(
-        self,
-        task_type: Optional[str] = None,
-        context_length: int = 4096,
-        auto_mode: bool = True,
-        explicit_model: Optional[str] = None,
-        ...
-    ):
-        # If auto_mode and no explicit model, use routing
-        if auto_mode and not explicit_model and task_type:
-            result = self.routing_engine.route(
-                task_type=task_type,
-                context_length=context_length,
-                required_capabilities=["chat"],
-            )
-            # Use result.selected_model
-            model_to_use = result.selected_model
-        else:
-            # Use explicit model or fallback logic
-            model_to_use = explicit_model
-        
-        # ... rest of the logic
-```
-
-- [ ] **Step 5: 运行测试验证通过**
-
-```bash
-/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_llm_factory_routing.py -v
-```
-
-Expected: PASS
-
-- [ ] **Step 6: 提交**
-
-```bash
-git add backend/orchestration/llm_factory.py backend/tests/unit/test_llm_factory_routing.py
-git commit -m "feat(llm-factory): integrate routing engine for auto model selection
-
-- LLMFactory accepts routing_engine parameter
-- When auto_mode=True and no explicit model, uses routing engine
-- Backward compatible: explicit model overrides routing
-- Unit tests cover integration scenarios"
-```
+**状态：** 已完成（`03bbd17ad` + fix round），审查 Approved，无 Critical/Important。
 
 ---
 
-## Phase 2-6（后续任务）
+## Phase 2-6（已细化，2026-10-28）
 
-由于计划篇幅限制，Phase 2-6 的详细任务将在实施过程中逐步补充。每个 Phase 遵循相同的 TDD 流程：
+> Phase 1 的 Task 1-5 已完成并逐任务审查。以下任务在分派前由 controller 写入
+> `.superpowers/sdd/2026-10-28-smart-model-routing/task-<N>-brief*.md` 的详细 brief；
+> 本节锁定范围、接口与验收，避免分派时重新设计。前端真实代码位置、行号与数据源
+> 现状见同目录 `frontend-map.md`。
 
-1. 编写失败测试
-2. 运行测试验证失败
-3. 实现最小代码
-4. 运行测试验证通过
-5. 提交
+### 影响 Phase 2-6 的设计裁定
 
-**Phase 2：前端模型选择器** - 重构 SessionModelPicker 和 ModelPicker，支持自动选择和 tier 分组显示
+- **R16 — 任务类型由调用方显式传入，不做运行时内容分类器。** spec §3.3 只定义
+  `TASK_TYPE_TO_TIER` 映射，从未定义"如何推断任务类型"。自动模式的选择器提供
+  任务类型选择器（默认 `chat`），随 `/chat` 请求下发，后端据此路由。
+  理由：内容启发式分类无法稳定验收；显式输入可测试、可撤销；将来若加分类器，
+  只是改变默认值，纯增量。代价：用户需选择任务类型。
+- **R17 — 自动模式不写 session override。** 自动模式 = 后端按请求路由；用户显式
+  选模型 = 手动模式并写 override。避免"前端算一次 + 后端再算一次"的双实现。
+- **R18 — 卡片视图先展示 candidate tier。** `listModels` 已是批量接口；逐模型
+  调 `getEffective` 会 N+1。卡片展示 candidate `tier`（null 显示"未知"），
+  `ModelDetails` 仍读 effective。
+- **R19 — 自定义任务映射延后。** spec §3.4.3 的"任务类型映射"在 Phase 4 以只读表
+  呈现后端常量；用户自定义映射需要新的 settings 键与 6 处同步，留作后续任务。
 
-**Phase 3：前端模型目录** - 实现 CatalogCards 组件，重构 ModelCatalog 页面支持双视图
+### Task 6：路由 API endpoint 作用域 + 前端 routing 客户端
 
-**Phase 4：前端设置页面** - 重构 ModelsTab 支持自动选择模式
+**Files:**
+- Modify: `backend/api/routing_routes.py` — `RoutingRequest` 增 `endpoint_id: Optional[str] = None`，透传 `engine.route(..., endpoint_id=payload.endpoint_id)`
+- Modify: `backend/tests/integration/test_routing_api.py` — scoped 用例
+- Modify: `src/entities/model-catalog/types.ts` — `EffectiveModel` 同步后端（补 `model_key`、`tier`、`capabilities`）；`CandidateModel` 补 `tier?: string | null`
+- Create: `src/entities/routing/types.ts`
+- Create: `src/entities/routing/api.ts`
+- Create: `src/entities/routing/__tests__/api.test.ts`
 
-**Phase 5：数据流统一** - 端点发现自动创建 catalog entry，前端读取 catalog effective 数据
+**接口:**
+```ts
+export type Tier = 'fast' | 'balanced' | 'powerful';
+export interface RoutingPreference {
+  preferred_tier?: Tier | null;
+  locked_model?: string | null;
+}
+export interface RouteRequest {
+  task_type: string;
+  context_length: number;
+  required_capabilities: string[];
+  user_preference?: RoutingPreference | null;
+  endpoint_id?: string | null;
+}
+export interface RouteResponse {
+  selected_model: EffectiveModel;
+  reason: string;
+  alternatives: EffectiveModel[];
+}
+export async function routeModel(req: RouteRequest): Promise<RouteResponse>;
+```
 
-**Phase 6：离线数据丰富** - 编写 update_builtin_models.py 脚本，扩展 builtin.json 到 100 模型
+**验收:**
+- 带 `endpoint_id` 的请求只返回该端点绑定的模型；该端点无匹配 → 422（不是 500）
+- `routeModel` 走 `backendRequest` 漏斗（与 `model-catalog/api.ts` 一致），401/422 原样抛出
+- 前端 `EffectiveModel` 与后端字段一一对应，`model_key.provider` / `model_key.model_id` 可用
+- py38 gates + ruff + `npx tsc --noEmit` + 相关 vitest 全绿
+
+### Task 7：SessionModelPicker 自动模式 + tier 分组
+
+**Files:**
+- Modify: `src/widgets/chat/SessionModelPicker.tsx`
+- Test: `src/widgets/chat/__tests__/SessionModelPicker.test.tsx`
+
+**行为:**
+- 数据源：`listModels({ endpointId })` 取 tier 与价格；请求失败（离线）回退
+  `settings.endpoints[].discoveredModels`，平铺显示、无 tier 分组
+- **自动模式（默认）**：不写 override；展开面板显示 `routeModel(...)` 的结果
+  （模型名 + tier + reason）与任务类型选择器（默认 `chat`，存 localStorage
+  `routingTaskType`，参照 `welcomeModelId` 先例）
+- **手动模式**：现行为不变（`sessionApi.setModelOverride`），清空仍传 `""`
+- `endpointId` 取全局 chat 模型所属端点（`modelSelections.chatModel.endpointId`）
+- 展开列表按 tier 分组（fast / balanced / powerful / 未分类，固定顺序），每项显示 context / price
+
+**验收:** 自动模式不发 `setModelOverride`；手动模式发；离线回退仍可手动选择；
+tier 分组顺序稳定；现有 6 个用例保持绿
+
+### Task 8：Welcome ModelPicker 对齐
+
+**Files:** `src/widgets/welcome/ModelPicker.tsx`、`src/pages/Welcome.tsx`、
+`src/widgets/welcome/__tests__/ModelPicker.test.tsx`
+
+**行为:** 与 Task 7 相同的 tier 分组 + 自动选项；自动模式提交时不写
+`welcomeModelId` 覆盖，手动仍写；`global` 哨兵保留
+
+### Task 9：后端自动路由激活（settings + /chat）
+
+**Files:**
+- Modify: `backend/api/settings_models.py`、`backend/data/settings_canonicalizer.py`
+- Modify: `backend/orchestration/llm_factory.py` — `load_llm_config_for_chat(..., task_type=None)` 增加 auto 覆盖
+- Modify: `backend/api/legacy_chat_routes.py` — `ChatRequest` 增 `task_type: Optional[str] = None`，传给 `load_llm_config_for_chat`
+- Modify: `src/entities/setting/types.ts`、`src/entities/setting/storage.ts`（`TOP_KEYS`）
+- Modify: `src/pages/settings/settingsSearchIndex.ts`
+- Modify: `backend/tests/contract/test_settings_schema_parity.py` + 后端/前端单测
+
+**新增设置键（必须 6 处同步）:**
+```ts
+routing: { mode: 'auto' | 'manual' }   // 默认 'manual'，保证现行为不变
+```
+
+**行为:** `mode === 'auto'` 时，`load_llm_config_for_chat` 调
+`resolve_routed_chat_model(task_type=task_type or 'chat', context_length=settings.maxContext or 4096, endpoint_id=cfg['endpoint_id'])`；
+返回值非 None 则覆盖 `cfg['model']`。任何失败保持 settings 模型（Task 5 fail-safe）。
+
+**验收:** `manual` 下 `test_llm_factory` / `test_session_model_override` 全部不变；
+`auto` 下只在同一端点内路由、不跨端点泄漏；catalog 为空不抛错；settings 契约 parity 绿
+
+### Task 10：模型目录卡片视图（Phase 3）
+
+**Files:** Create `src/widgets/model-catalog/CatalogCards.tsx`；Modify
+`src/pages/ModelCatalog.tsx`、`src/widgets/model-catalog/index.ts`；
+Test 扩充 `src/pages/__tests__/ModelCatalog.test.tsx`
+
+**行为:** 表格/卡片视图切换（默认卡片，localStorage `modelCatalogView`）；卡片显示
+模型名、tier、capabilities 图标、native context、price；过滤（tier / provider /
+capability）与排序（context / price）纯前端；导入 / 同步 / override 折叠进"高级"
+
+**验收:** 视图切换持久化；无新增 API；`ModelDetails` 仍走 effective；
+现有 287 行测试不回归
+
+### Task 11：ModelsTab 路由模式 UI（Phase 4）
+
+**Files:** Modify `src/pages/settings/ModelsTab.tsx`、
+`src/pages/settings/__tests__/ModelsTab.test.tsx`
+
+**行为:** `routing.mode` 单选（自动 / 手动）；自动模式显示默认 tier 选择器 +
+**只读**任务类型映射表（R19）；手动模式保留六个 `ModelSelector`；
+`autoContext` / `temperature` / `titleModelId` 折叠进"高级"
+
+**验收:** 切换写 `routing.mode`；手动模式行为不变；radio group 有 label/描述；
+i18n zh/en 同步
+
+### Task 12：数据流统一（Phase 5）
+
+**Files:** 端点发现后端 handler、catalog 幂等迁移钩子、前端读取顺序
+
+**行为:** 端点发现成功后，对每个 discovered 模型 upsert catalog entry（已存在跳过；
+只填未知字段，**不覆盖** `user_override`）；前端优先读 catalog、回退
+`discoveredModels`（Task 7 已实现回退）；启动时一次性幂等迁移 settings 里的
+`discoveredModels` → catalog
+
+**验收:** 迁移幂等；不覆盖 `user_override`；离线仍可用；`discoveredModels`
+标记 deprecated 并注明移除期限（2027-01-28）
+
+### Task 13：离线数据丰富（Phase 6）
+
+**Files:** Create `scripts/update_builtin_models.py`；Modify `backend/builtin.json`；
+Test `backend/tests/unit/test_builtin_models.py`
+
+**行为:** 脚本从 OpenRouter `/models` 拉取、按名字启发式分配 tier、与现有条目去重合并、
+稳定排序；提供 `--dry-run` 与 `--check`（校验结构 / 无重复）。
+**网络不可用（内网）时跳过本任务**，保留现有 55 模型，不阻塞 Phase 1-5
+
+**验收:** `--check` 在现有 `builtin.json` 上通过；无网络不阻塞其他任务
 
 ---
 
