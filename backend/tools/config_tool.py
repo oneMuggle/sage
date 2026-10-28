@@ -57,6 +57,9 @@ _ALLOWED_GENERAL_FIELDS = {
     "llmRetryBaseDelayS",
     "llmRetryMaxDelayS",
     "llmTotalTimeoutS",
+    # 2026-10-28: LLM 代理上游超时（秒）—— 企业网关卡顿 / 关闭流式输出时的长回复
+    # 需要它配合调大，否则 60s 硬编码会中断整段生成。
+    "llmProxyTimeoutS",
     # 2026-10-27: 会话标题生成专用模型 id —— 空串表示回退到聊天模型。
     "titleModelId",
 }

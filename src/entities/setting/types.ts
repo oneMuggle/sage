@@ -178,6 +178,10 @@ export interface AppSettings {
   // 与后端 SettingsPayload.llmTotalTimeoutS 对齐；后端函数式读取，改后立即生效。
   llmTotalTimeoutS: number; // 1800
 
+  // 2026-10-28: LLM 代理上游超时（秒）。后端 llm_proxy_routes._proxy_timeout_seconds()
+  // 函数式读取，改后下一次上游请求即生效。范围 5–1800，见 config_tool 校验。
+  llmProxyTimeoutS: number; // 60
+
   // 2026-10-27: 会话标题生成专用模型 id（顶层扁平键，与 chatModel 同风格）。
   // 留空表示回退到聊天模型；后端 title_generator.load_title_llm_config 读取。
   titleModelId: string;
