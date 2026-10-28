@@ -44,7 +44,8 @@
 | R112 | PermissionModeSwitch 供数与导出收口（共享名单 hook + format 下沉，纯前端） | ✅ #2585 |
 | R113 | 转录工具组折叠头插件归属（纯前端） | ✅ #2589 |
 | R114 | 编排任务树实时行（等待审批徽章+事件行）插件归属（纯前端） | ✅ #2614 |
-| R115 | Hook 执行历史行插件归属（纯前端） | 🔄 #2618 |
+| R115 | Hook 执行历史行插件归属（纯前端） | ✅ #2618 |
+| R116 | PluginsTab 纯数据/纯函数抽离 pluginsTabModel（纯重构） | 🔄 #2621 |
 
 ## 2. 交付总账
 
@@ -82,7 +83,8 @@
 | R112 | 弹层改用 usePluginNames + formatPermissionMode* 下沉 permissionInsights 与测试/文档 | #2585 | 待对齐 | ✅ 已交付 |
 | R113 | Message 工具组组头归属后缀与测试/文档 | #2589 | 待对齐 | ✅ 已交付 |
 | R114 | TaskTreeSection 归属后缀（门控供数）与测试/文档 | #2614 | 待对齐 | ✅ 已交付 |
-| R115 | HookHistoryPanel 归属后缀（门控供数）与测试/文档 | #2618 | 待对齐 | 🔄 |
+| R115 | HookHistoryPanel 归属后缀（门控供数）与测试/文档 | #2618 | 待对齐 | ✅ 已交付 |
+| R116 | pluginsTabModel 新模块 + PluginsTab 改导入与文档 | #2621 | 待对齐 | 🔄 |
 
 ## 3. R78 交付边界
 
@@ -748,7 +750,7 @@
   diff-check、diagnostics 全绿，manifest 仍
   274，后端零改动。
 
-## 35. R115 交付边界（PR #2618 待合并）
+## 35. R115 交付边界（已合并）
 
 > spec：`2026-10-28_hook-history-plugin-owner-r115.md`。
 > R115 是本插件账轮次号，与其它账本的同号计划无关。
@@ -762,5 +764,20 @@
   ESLint（0/0）、architecture、diff-check、
   diagnostics 全绿，manifest 284（他人推进，
   本轮后端零改动）。
+
+## 36. R116 交付边界（PR #2621 待合并）
+
+> spec：`2026-10-28_plugins-tab-model-r116.md`。
+> R116 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **为后续让路**：PluginsTab 自 R111 起顶格多次挡下
+  插件面候选；本轮纯机械抽离文案/常量/纯函数约 140
+  行到同目录模型模块，行为逐字不变，行数预算回到可
+  维护区间（基线不 tighten）。
+- **本地证据**：settings 全目录 59 文件 365 例通过
+  （PluginsTab 14 例原样）；搬移逐字性经字符串字面
+  量多重集机械校验（126 个全等）；PluginsTab
+  819 → 686 行；tsc、ESLint（0/0）、architecture、
+  diff-check、diagnostics 全绿，后端零改动。
 
 —— 本账本由插件化循环维护，随轮次追加。
