@@ -3,7 +3,7 @@
 覆盖：
 1. 无配置时默认 60s（保持历史行为）
 2. app_settings 值生效
-3. 环境变量 SAGE_LLM_PROXY_TIMEOUT_S 覆盖设置值（调试/测试用）
+3. 环境变量 SAGE_LLM_PROXY_TIMEOUT_S 仅在设置缺失/非法时作为回退生效
 4. 非法值（非数字、过小、过大、bool）回退默认
 5. 读取设置抛异常时不冒泡，回退默认
 """
@@ -52,9 +52,15 @@ def test_settings_value_is_used(monkeypatch: pytest.MonkeyPatch) -> None:
         assert routes._proxy_timeout_seconds() == 300.0
 
 
-def test_env_overrides_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_settings_take_priority_over_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SAGE_LLM_PROXY_TIMEOUT_S", "120")
     with _with_settings({"llmProxyTimeoutS": 300}):
+        assert routes._proxy_timeout_seconds() == 300.0
+
+
+def test_env_used_when_settings_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SAGE_LLM_PROXY_TIMEOUT_S", "120")
+    with _with_settings({}):
         assert routes._proxy_timeout_seconds() == 120.0
 
 

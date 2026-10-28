@@ -128,6 +128,23 @@ export function BasicTab() {
   const { settings, updateSettings } = useSettings();
   const [copiedAudit, setCopiedAudit] = useState(false);
   const [inputHistorySize, setInputHistorySizeState] = useState(getInputHistorySize());
+  const [proxyTimeoutDraft, setProxyTimeoutDraft] = useState(
+    String(settings.llmProxyTimeoutS),
+  );
+
+  useEffect(() => {
+    setProxyTimeoutDraft(String(settings.llmProxyTimeoutS));
+  }, [settings.llmProxyTimeoutS]);
+
+  // 失焦提交：逐键 clamp 会把 300 改成 500，且无法清空重输。
+  const commitProxyTimeout = (): void => {
+    const raw = parseInt(proxyTimeoutDraft, 10);
+    const v = Number.isFinite(raw)
+      ? Math.max(5, Math.min(1800, raw))
+      : settings.llmProxyTimeoutS;
+    setProxyTimeoutDraft(String(v));
+    if (v !== settings.llmProxyTimeoutS) updateSettings({ llmProxyTimeoutS: v });
+  };
 
   /* v8 ignore start */
   const handleCopyAudit = async () => {
@@ -299,12 +316,9 @@ export function BasicTab() {
             min={5}
             max={1800}
             step={5}
-            value={settings.llmProxyTimeoutS}
-            onChange={(e) => {
-              const raw = parseInt(e.target.value, 10);
-              const v = Number.isFinite(raw) ? Math.max(5, Math.min(1800, raw)) : 60;
-              updateSettings({ llmProxyTimeoutS: v });
-            }}
+            value={proxyTimeoutDraft}
+            onChange={(e) => setProxyTimeoutDraft(e.target.value)}
+            onBlur={commitProxyTimeout}
             className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
           />
         </SettingRow>
