@@ -1,4 +1,4 @@
-# ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容
+# ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容
 """R188 contract unit tests for SessionRepository, SessionEventRepository & SettingsRepository."""
 
 from __future__ import annotations
