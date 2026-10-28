@@ -81,9 +81,7 @@ export function CreateGoalModal({ isOpen, onClose }: CreateGoalModalProps) {
 
   const updateConditionParams = (index: number, key: string, value: unknown) => {
     setConditions((prev) =>
-      prev.map((c, i) =>
-        i === index ? { ...c, params: { ...c.params, [key]: value } } : c,
-      ),
+      prev.map((c, i) => (i === index ? { ...c, params: { ...c.params, [key]: value } } : c)),
     );
   };
 

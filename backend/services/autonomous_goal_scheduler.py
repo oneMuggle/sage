@@ -82,13 +82,11 @@ class AutonomousGoalScheduler:
                         reason = "all conditions satisfied"
                     else:
                         reason = "conditions not met"
+                elif self.time_window_mgr.should_execute_now(goal):
+                    should_start = True
+                    reason = "within time window"
                 else:
-                    # 立即模式：检查时间窗口（现有行为）
-                    if self.time_window_mgr.should_execute_now(goal):
-                        should_start = True
-                        reason = "within time window"
-                    else:
-                        reason = "not in time window"
+                    reason = "not in time window"
 
                 if should_start:
                     logger.info(

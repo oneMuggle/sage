@@ -79,7 +79,7 @@ class ExecutionConditionPayload(BaseModel):
     )
     params: Dict[str, Any] = Field(
         default_factory=dict,
-        description="条件参数，如 {\"min_idle_minutes\": 15}",
+        description='条件参数，如 {"min_idle_minutes": 15}',
     )
 
     class Config:

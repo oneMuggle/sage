@@ -182,12 +182,8 @@ class ConditionEvaluator:
         当前无 psutil 依赖，使用乐观默认（返回 True）。
         未来可接入 psutil.cpu_percent() / psutil.virtual_memory()。
         """
-        # 乐观默认：假设资源充足
-        # 未来实现:
-        #   import psutil
-        #   max_cpu = params.get("max_cpu_pct", 30)
-        #   max_mem = params.get("max_memory_pct", 50)
-        #   return psutil.cpu_percent() < max_cpu and psutil.virtual_memory().percent < max_mem
+        # 乐观默认：假设资源充足。接入 psutil 后改为读取
+        # cpu_percent() / virtual_memory().percent 并与 params 阈值比较。
         return True
 
     def _evaluate_no_active_tasks(self) -> bool:
@@ -227,18 +223,22 @@ class ConditionEvaluator:
             return "资源检查（当前乐观默认）"
 
         elif ct == ConditionType.NO_ACTIVE_TASKS:
-            if self._goal_service is None:
-                return "未配置 goal_service（乐观默认）"
-            try:
-                running = len([
-                    g for g in self._goal_service.list_goals()
-                    if g.status.value == "running"
-                ])
-                return f"运行中目标数: {running}"
-            except Exception:
-                return "检查失败（乐观默认）"
+            return self._describe_active_tasks()
 
         elif ct == ConditionType.MANUAL:
             return "需用户手动触发"
 
         return "未知条件"
+
+    def _describe_active_tasks(self) -> str:
+        """描述当前运行中目标数量"""
+        if self._goal_service is None:
+            return "未配置 goal_service（乐观默认）"
+        try:
+            running = len([
+                g for g in self._goal_service.list_goals()
+                if g.status.value == "running"
+            ])
+            return f"运行中目标数: {running}"
+        except Exception:
+            return "检查失败（乐观默认）"

@@ -24,9 +24,8 @@ from backend.domain.execution_conditions import (
     resource_condition,
     time_window_condition,
 )
-from backend.services.idle_detector import IdleDetector
 from backend.services.condition_evaluator import ConditionEvaluator
-
+from backend.services.idle_detector import IdleDetector
 
 # ─── execution_conditions.py ─────────────────────────────────────────
 
