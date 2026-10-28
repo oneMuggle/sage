@@ -99,6 +99,12 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
     ? `平均: ${avgLatencySec}s · P95: ${(usage.p95_latency_ms! / 1000).toFixed(1)}s · 最慢: ${(usage.max_latency_ms! / 1000).toFixed(1)}s`
     : '';
 
+  // 2026-10-28: 慢请求警告 — 平均响应时间 > 10s 时使用警告色
+  const isSlowRequest = hasLatency && usage.avg_latency_ms! > 10000;
+  const latencyTone = isSlowRequest
+    ? 'text-warning'
+    : 'text-text-muted';
+
   /* v8 ignore start */
 
   /* v8 ignore stop */
@@ -122,7 +128,7 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
       )}
       {hasLatency && (
         <span
-          className="ml-1 text-text-muted"
+          className={`ml-1 ${latencyTone}`}
           data-testid="session-avg-latency"
           title={latencyTooltip}
         >
