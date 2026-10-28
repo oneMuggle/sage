@@ -128,6 +128,15 @@ export interface SessionUsage {
   p95_latency_ms: number | null;
   /** 2026-10-28: 性能统计 - 最大响应时间（毫秒） */
   max_latency_ms: number | null;
+  /** 2026-10-28: 性能统计 - 按模型分组的平均响应时间 */
+  latency_by_model?: ModelLatencyStat[];
+}
+
+/** 2026-10-28: 按模型分组的响应时间统计 */
+export interface ModelLatencyStat {
+  model: string;
+  avg_latency_ms: number;
+  count: number;
 }
 
 /** 一次请求的上下文分类明细快照 */

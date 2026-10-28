@@ -95,15 +95,23 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
   // 2026-10-28: 性能统计 - 平均响应时间徽章
   const hasLatency = usage.avg_latency_ms !== null && usage.avg_latency_ms !== undefined;
   const avgLatencySec = hasLatency ? (usage.avg_latency_ms! / 1000).toFixed(1) : null;
+
+  // 2026-10-28: 按模型统计详情（tooltip 展示）
+  const modelStats = usage.latency_by_model && usage.latency_by_model.length > 0;
+  const modelStatsText = modelStats
+    ? '\n\n按模型统计:\n' +
+      usage.latency_by_model!
+        .map((m) => `  ${m.model}: ${(m.avg_latency_ms / 1000).toFixed(1)}s (${m.count}次)`)
+        .join('\n')
+    : '';
+
   const latencyTooltip = hasLatency
-    ? `平均: ${avgLatencySec}s · P95: ${(usage.p95_latency_ms! / 1000).toFixed(1)}s · 最慢: ${(usage.max_latency_ms! / 1000).toFixed(1)}s`
+    ? `平均: ${avgLatencySec}s · P95: ${(usage.p95_latency_ms! / 1000).toFixed(1)}s · 最慢: ${(usage.max_latency_ms! / 1000).toFixed(1)}s${modelStatsText}`
     : '';
 
   // 2026-10-28: 慢请求警告 — 平均响应时间 > 10s 时使用警告色
   const isSlowRequest = hasLatency && usage.avg_latency_ms! > 10000;
-  const latencyTone = isSlowRequest
-    ? 'text-warning'
-    : 'text-text-muted';
+  const latencyTone = isSlowRequest ? 'text-warning' : 'text-text-muted';
 
   /* v8 ignore start */
 
