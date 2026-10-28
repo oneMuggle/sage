@@ -9,7 +9,6 @@ remember + remember_duration=session → 只写进程内会话
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
 
 import pytest
 
@@ -52,8 +51,8 @@ def _clean_session_rules():
 
 def _pending_request(
     tool_name: str = "bash",
-    plugin_name: Optional[str] = None,
-    session_id: Optional[str] = "sess-r105",
+    plugin_name: str | None = None,
+    session_id: str | None = "sess-r105",
 ) -> ApprovalRequest:
     """在指定会话上下文下创建待审批请求（模拟 agent 循环建请求）。"""
     if session_id is None:
