@@ -392,26 +392,24 @@ class TestBuildPrompt:
 class TestExtract:
     @pytest.mark.asyncio()
     async def test_extract_calls_llm(self, extractor, mock_llm):
-        with (
-            patch.object(
+        with patch.object(
                 extractor, "_load_project", return_value=MagicMock(
                     project_type="coding",
                     description="test",
                     path="/tmp/test",
                 )
-            ),
-            patch.object(
-                extractor, "_load_messages",
-                return_value=[{"id": "m1", "role": "user", "content": "hi"}],
-            ),
-            patch.object(
-                extractor, "_get_existing_profile_entries", return_value=[]
-            ),
-        ):
-            result = await extractor.extract(
-                project_id="proj-1",
-                session_id="session-1",
-            )
+            ):
+            with patch.object(
+                    extractor, "_load_messages",
+                    return_value=[{"id": "m1", "role": "user", "content": "hi"}],
+                ):
+                with patch.object(
+                        extractor, "_get_existing_profile_entries", return_value=[]
+                    ):
+                    result = await extractor.extract(
+                        project_id="proj-1",
+                        session_id="session-1",
+                    )
 
         mock_llm.complete.assert_called_once()
         assert len(result.entries) > 0
@@ -419,22 +417,20 @@ class TestExtract:
 
     @pytest.mark.asyncio()
     async def test_extract_empty_messages(self, extractor):
-        with (
-            patch.object(
+        with patch.object(
                 extractor, "_load_project", return_value=MagicMock(
                     project_type="coding",
                     description="test",
                     path="/tmp/test",
                 )
-            ),
-            patch.object(
-                extractor, "_load_messages", return_value=[]
-            ),
-        ):
-            result = await extractor.extract(
-                project_id="proj-1",
-                session_id="session-1",
-            )
+            ):
+            with patch.object(
+                    extractor, "_load_messages", return_value=[]
+                ):
+                result = await extractor.extract(
+                    project_id="proj-1",
+                    session_id="session-1",
+                )
 
         assert result.entries == []
         assert "没有可分析的消息" in result.reasoning
@@ -454,24 +450,22 @@ class TestExtract:
         extractor._llm.complete = AsyncMock(
             side_effect=Exception("LLM timeout")
         )
-        with (  # noqa: SIM117
-            patch.object(
+        with patch.object(
                 extractor, "_load_project", return_value=MagicMock(
                     project_type="coding",
                     description="test",
                     path="/tmp/test",
                 )
-            ),
-            patch.object(
-                extractor, "_load_messages",
-                return_value=[{"id": "m1", "role": "user", "content": "hi"}],
-            ),
-            patch.object(
-                extractor, "_get_existing_profile_entries", return_value=[]
-            ),
-        ):
-            with pytest.raises(RuntimeError, match="LLM 调用失败"):
-                await extractor.extract(
-                    project_id="proj-1",
-                    session_id="session-1",
-                )
+            ):
+            with patch.object(
+                    extractor, "_load_messages",
+                    return_value=[{"id": "m1", "role": "user", "content": "hi"}],
+                ):
+                with patch.object(
+                        extractor, "_get_existing_profile_entries", return_value=[]
+                    ):
+                    with pytest.raises(RuntimeError, match="LLM 调用失败"):
+                        await extractor.extract(
+                            project_id="proj-1",
+                            session_id="session-1",
+                        )
