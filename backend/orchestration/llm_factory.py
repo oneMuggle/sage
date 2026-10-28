@@ -26,12 +26,12 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
+from backend.routing.routing_engine import RoutingEngine
+
 logger = logging.getLogger(__name__)
 
 # Default model when an endpoint has no discovered models recorded.
 DEFAULT_MODEL = "gpt-3.5-turbo"
-
-from backend.routing.routing_engine import RoutingEngine  # noqa: E402
 
 
 def load_llm_config_from_settings() -> Optional[Dict[str, Any]]:

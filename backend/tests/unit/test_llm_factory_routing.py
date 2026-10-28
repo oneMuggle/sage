@@ -128,6 +128,41 @@ class TestResolveRoutedChatModel:
         )
         assert model_id is None
 
+    def test_endpoint_scope_changes_selection(self, two_endpoint_repo):
+        """ep-a owns no balanced model, so scoping must fall back to its fast
+        tier instead of selecting ep-b's balanced model."""
+        scoped = resolve_routed_chat_model(
+            task_type="code_generation",
+            context_length=8000,
+            endpoint_id="ep-a",
+            catalog_repository=two_endpoint_repo,
+        )
+        assert scoped == "gpt-4o-mini"
+
+        unscoped = resolve_routed_chat_model(
+            task_type="code_generation",
+            context_length=8000,
+            catalog_repository=two_endpoint_repo,
+        )
+        assert unscoped == "claude-3-sonnet"
+
+    def test_default_repository_path_uses_get_database(
+        self, two_endpoint_repo, monkeypatch
+    ):
+        """The production path (no injected repo) builds a CatalogRepository
+        over the process-wide database."""
+        import backend.data.database as database_module
+
+        monkeypatch.setattr(
+            database_module, "get_database", lambda: two_endpoint_repo.db
+        )
+        model_id = resolve_routed_chat_model(
+            task_type="code_generation",
+            context_length=8000,
+            endpoint_id="ep-b",
+        )
+        assert model_id == "claude-3-sonnet"
+
     def test_returns_none_when_repository_raises(self):
         class BrokenRepo:
             def list_effective_models(self, endpoint_id=None):
