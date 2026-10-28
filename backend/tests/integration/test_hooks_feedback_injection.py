@@ -46,6 +46,13 @@ def _make_agent(tool_call_name: str, tool_call_args: str, final_text: str) -> Sa
             LLMResponse(content=final_text, tool_calls=[]),
         ]
     )
+    # Mock 工具执行：阻止真实执行（bash/calc 等），返回模拟结果
+    # 集成测试只验证钩子反馈注入，不验证工具实际执行
+    tool = agent.tool_registry.get(tool_call_name)
+    if tool is not None:
+        def _mock_execute(**kwargs):
+            return f"[mocked] {tool_call_name} executed"
+        tool.execute = _mock_execute
     return agent
 
 
@@ -70,9 +77,9 @@ async def test_post_hook_feedback_injected_as_system_message(tmp_path):
     agent = _make_agent("bash", '{"command": "echo hi"}', "处理完毕")
     events, messages = await _collect(agent)
 
-    assert any(e.state == AgentState.DONE for e in events) or any(
+    assert AgentState.DONE in events or any(
         e.state == AgentState.STEP_DONE for e in events
-    ), "agent loop should reach done"
+    ), "agent loop should reach step_done or done"
 
     system_msgs = [m for m in messages if m.get("role") == "system" and "钩子反馈" in m.get("content", "")]
     assert len(system_msgs) >= 1, f"expected system feedback message; got {messages}"
