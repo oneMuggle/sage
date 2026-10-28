@@ -625,6 +625,16 @@ class UsageTracker:
                     "ORDER BY latency_ms ASC",
                     (session_id,),
                 ).fetchall()
+
+                # 2026-10-28: 按模型分组的平均延迟
+                model_latency_rows = conn.execute(
+                    "SELECT model, AVG(latency_ms) as avg_latency_ms, COUNT(*) as count"
+                    " FROM usage_events "
+                    "WHERE session_id = ? AND latency_ms IS NOT NULL "
+                    "GROUP BY model "
+                    "ORDER BY count DESC",
+                    (session_id,),
+                ).fetchall()
         except Exception as exc:  # noqa: BLE001
             logger.debug("session_summary 读取失败: %s", exc)
             summary = {
@@ -640,6 +650,7 @@ class UsageTracker:
             }
             last = None
             latency_stats = {"avg_latency_ms": None, "p95_latency_ms": None, "max_latency_ms": None}
+            model_latency_stats = []
         else:
             cache_read = int(row["cache_read_tokens"]) if row else 0
             cache_creation = int(row["cache_creation_tokens"]) if row else 0
@@ -683,6 +694,19 @@ class UsageTracker:
                 }
             else:
                 latency_stats = {"avg_latency_ms": None, "p95_latency_ms": None, "max_latency_ms": None}
+
+            # 2026-10-28: 按模型分组的平均延迟
+            if model_latency_rows:
+                model_latency_stats = [
+                    {
+                        "model": r["model"],
+                        "avg_latency_ms": int(r["avg_latency_ms"]),
+                        "count": int(r["count"]),
+                    }
+                    for r in model_latency_rows
+                ]
+            else:
+                model_latency_stats = []
         # Task 5: resolve effective context window for the last used model.
         # 复用 legacy_routes 的完整解析级联——尊重用户的 autoContext 开关与
         # 手动 maxContext 钉值;此前此处硬写 automatic=True,手动模式用户的
@@ -716,6 +740,7 @@ class UsageTracker:
                 "avg_latency_ms": latency_stats["avg_latency_ms"],
                 "p95_latency_ms": latency_stats["p95_latency_ms"],
                 "max_latency_ms": latency_stats["max_latency_ms"],
+                "latency_by_model": model_latency_stats,
             }
         )
         return summary
