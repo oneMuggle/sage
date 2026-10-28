@@ -29,6 +29,11 @@ from backend.domain.autonomous_goals import (
     GoalStatus,
     TimeWindow,
 )
+from backend.domain.execution_conditions import (
+    ConditionType,
+    ExecutionCondition,
+    TriggerMode,
+)
 from backend.services.checkpoint_manager import CheckpointManager
 from backend.services.goal_service import GoalService
 
@@ -66,6 +71,21 @@ class BudgetPayload(BaseModel):
         extra = "forbid"
 
 
+class ExecutionConditionPayload(BaseModel):
+    """执行条件配置"""
+
+    type: str = Field(
+        description="条件类型: idle / time_window / resource / no_active / manual"
+    )
+    params: Dict[str, Any] = Field(
+        default_factory=dict,
+        description='条件参数，如 {"min_idle_minutes": 15}',
+    )
+
+    class Config:
+        extra = "forbid"
+
+
 class CreateGoalIn(BaseModel):
     """创建目标请求"""
 
@@ -76,6 +96,15 @@ class CreateGoalIn(BaseModel):
     budget: Optional[BudgetPayload] = None
     auto_generate_checkpoints: bool = Field(
         default=False, description="创建时自动生成检查点"
+    )
+    trigger_mode: str = Field(
+        default="immediate",
+        pattern="^(immediate|conditional)$",
+        description="触发模式: immediate（立即）/ conditional（条件）",
+    )
+    execution_conditions: List[ExecutionConditionPayload] = Field(
+        default_factory=list,
+        description="执行条件列表（trigger_mode=conditional 时使用）",
     )
 
     class Config:
@@ -141,6 +170,10 @@ class GoalOut(BaseModel):
     completion_percentage: float
     degradation_level: str
     last_error: Optional[str] = None
+    trigger_mode: str = Field(default="immediate", description="触发模式")
+    execution_conditions: List[Dict[str, Any]] = Field(
+        default_factory=list, description="执行条件列表"
+    )
 
     @classmethod
     def from_goal(cls, goal: Goal) -> GoalOut:
@@ -161,6 +194,8 @@ class GoalOut(BaseModel):
             completion_percentage=goal.completion_percentage,
             degradation_level=goal.degradation_level.value,
             last_error=goal.last_error,
+            trigger_mode=goal.trigger_mode.value,
+            execution_conditions=[c.to_dict() for c in goal.execution_conditions],
         )
 
 
@@ -275,12 +310,24 @@ async def create_goal(payload: CreateGoalIn) -> GoalOut:
             stop_on_failure=b.stop_on_failure,
         )
 
+    # 转换执行条件
+    execution_conditions = []
+    for cond_payload in payload.execution_conditions:
+        execution_conditions.append(
+            ExecutionCondition(
+                type=ConditionType(cond_payload.type),
+                params=cond_payload.params,
+            )
+        )
+
     goal = await service.create_goal(
         name=payload.name,
         description=payload.description,
         time_window=time_window,
         budget=budget,
         session_id=payload.session_id,
+        trigger_mode=TriggerMode(payload.trigger_mode),
+        execution_conditions=execution_conditions,
     )
 
     # 自动生成检查点
@@ -451,3 +498,44 @@ async def generate_checkpoints(goal_id: str) -> GenerateCheckpointsOut:
         generated_count=len(checkpoints),
         checkpoints=[CheckpointOut.from_checkpoint(c) for c in checkpoints],
     )
+
+
+# ─── Idle 端点 ──────────────────────────────────────────────────────
+
+idle_router = APIRouter(prefix="/idle", tags=["idle"])
+
+
+class IdleActivityIn(BaseModel):
+    """用户活动上报"""
+
+    source: str = Field(default="electron", description="上报来源: electron / web")
+
+
+class IdleStatusOut(BaseModel):
+    """空闲状态输出"""
+
+    idle_level: str
+    idle_seconds: float
+    idle_minutes: float
+    last_activity_epoch: float
+    short_idle_threshold: int
+    deep_idle_threshold: int
+
+
+@idle_router.post("/activity", status_code=status.HTTP_204_NO_CONTENT)
+async def report_idle_activity(payload: IdleActivityIn) -> Response:
+    """上报用户活动（Electron IPC 转发）"""
+    from backend.services.idle_detector import get_idle_detector
+
+    detector = get_idle_detector()
+    detector.report_activity()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@idle_router.get("/status", response_model=IdleStatusOut)
+async def get_idle_status() -> IdleStatusOut:
+    """获取当前空闲状态"""
+    from backend.services.idle_detector import get_idle_detector
+
+    detector = get_idle_detector()
+    return IdleStatusOut(**detector.get_status())
