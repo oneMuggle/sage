@@ -99,9 +99,7 @@ describe('CatalogCards', () => {
   });
 
   it('选中卡片设置 aria-selected', () => {
-    render(
-      <CatalogCards items={[item]} selectedKey={catalogItemKey(item)} onSelect={vi.fn()} />,
-    );
+    render(<CatalogCards items={[item]} selectedKey={catalogItemKey(item)} onSelect={vi.fn()} />);
 
     const card = screen.getByTestId(`catalog-card-${catalogItemKey(item)}`);
     expect(card).toHaveAttribute('aria-selected', 'true');

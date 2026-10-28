@@ -472,9 +472,7 @@ export default function ModelCatalog() {
             </div>
 
             <details className="mb-3" data-testid="model-catalog-advanced">
-              <summary className="text-xs text-text-muted cursor-pointer select-none">
-                高级
-              </summary>
+              <summary className="text-xs text-text-muted cursor-pointer select-none">高级</summary>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
