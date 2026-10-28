@@ -431,4 +431,75 @@ describe('ModelCatalog page', () => {
       within(screen.getByTestId('model-catalog-header')).queryByTestId('model-catalog-sync'),
     ).not.toBeInTheDocument();
   });
+
+  it('能力过滤只保留具备该能力的模型', async () => {
+    mockCatalogList();
+    await renderCatalogPage();
+    await screen.findByTestId('catalog-cards');
+
+    fireEvent.change(screen.getByTestId('model-catalog-capability-filter'), {
+      target: { value: 'vision' },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('openai/gpt-4o-mini')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('openrouter/anthropic/claude-3.5-sonnet')).toBeInTheDocument();
+  });
+
+  it('价格升序按输入价排列, 无价格条目排最后', async () => {
+    mocks.listModels.mockResolvedValue({
+      items: [
+        ...catalogItems(),
+        {
+          model_key: { provider: 'local', model_id: 'ollama-unknown' },
+          tier: 'fast',
+          native: null,
+          price: { input_per_million: null, output_per_million: null, currency: 'USD' },
+          capabilities: null,
+          source: 'builtin',
+          pricing_scope: 'base',
+        },
+      ],
+      total: 3,
+      limit: 50,
+      offset: 0,
+    });
+    mocks.listSnapshots.mockResolvedValue([]);
+    mocks.getEffective.mockResolvedValue(null);
+
+    await renderCatalogPage();
+    await screen.findByTestId('catalog-cards');
+
+    fireEvent.change(screen.getByTestId('model-catalog-sort'), {
+      target: { value: 'price_asc' },
+    });
+
+    const cards = within(screen.getByTestId('catalog-cards')).getAllByRole('listitem');
+    expect(cards[0]).toHaveTextContent('gpt-4o-mini');
+    expect(cards[1]).toHaveTextContent('anthropic/claude-3.5-sonnet');
+    expect(cards[2]).toHaveTextContent('local/ollama-unknown');
+  });
+
+  it('过滤把已选模型筛掉后右侧详情回到空态', async () => {
+    mockCatalogList();
+    await renderCatalogPage();
+
+    const card = await screen.findByTestId(
+      'catalog-card-openrouter/anthropic%2Fclaude-3.5-sonnet/openrouter/base',
+    );
+    fireEvent.click(card);
+    expect(card).toHaveAttribute('aria-selected', 'true');
+
+    fireEvent.change(screen.getByTestId('model-catalog-tier-filter'), {
+      target: { value: 'fast' },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId('catalog-card-openrouter/anthropic%2Fclaude-3.5-sonnet/openrouter/base'),
+      ).toBeNull();
+    });
+    expect(screen.getByTestId('model-details-empty')).toBeInTheDocument();
+  });
 });

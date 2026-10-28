@@ -219,6 +219,16 @@ export default function ModelCatalog() {
 
   const selectedKey = useMemo(() => (selected ? catalogItemKey(selected) : null), [selected]);
 
+  // 过滤条件变化后，已选模型可能已不在列表里：清掉选择，避免右侧详情
+  // 继续展示/允许覆盖一个用户以为已被筛掉的模型。
+  useEffect(() => {
+    if (!selected) return;
+    const key = catalogItemKey(selected);
+    if (!filteredItems.some((item) => catalogItemKey(item) === key)) {
+      setSelected(null);
+    }
+  }, [filteredItems, selected]);
+
   async function handleSync(): Promise<void> {
     setBusyAction('sync');
     setPageError(null);
