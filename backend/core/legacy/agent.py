@@ -254,6 +254,26 @@ class QueryCache:
         return removed
 
 
+def _streaming_enabled_from_settings() -> bool:
+    """读 ``app_settings.streaming``（设置页「流式输出」）。缺省 / 读失败 → True。
+
+    2026-10-28 修复：此前该字段只被持久化与展示，没有任何代码消费，
+    用户关闭「流式输出」后上游仍收到 ``stream: true``。读取失败必须回退
+    为开启，避免配置库异常把整条聊天链路降级成非流式。
+    """
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get_json("app_settings") or {}
+        if isinstance(raw, dict):
+            value = raw.get("streaming")
+            if isinstance(value, bool):
+                return value
+    except (ImportError, OSError, ValueError, TypeError):
+        pass
+    return True
+
+
 class SageAgent:
     """
     Sage 对话引擎
@@ -1389,12 +1409,16 @@ class SageAgent:
         """是否尝试流式 LLM 调用（L2 真流式开关）。
 
         - env ``SAGE_LLM_STREAMING`` 设为 0/false/off/no 时全局关闭；
+        - 设置页「流式输出」``app_settings.streaming`` 为 false 时关闭
+          （2026-10-28 修复: 此前该开关无任何消费者, 用户关掉后上游仍收 stream:true）；
         - 该 client 实例流式已失败过一次（``stream_unsupported``）则跳过,
           避免每次迭代都白打一个失败请求；
         - 其余情况默认开启（失败自动回退非流式,不影响可用性）。
         """
         raw = os.environ.get("SAGE_LLM_STREAMING", "").strip().lower()
         if raw in {"0", "false", "off", "no"}:
+            return False
+        if not _streaming_enabled_from_settings():
             return False
         return not getattr(llm_client, "stream_unsupported", False)
 

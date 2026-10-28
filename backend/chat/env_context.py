@@ -141,6 +141,8 @@ def build_configuration_summary_block() -> str:
         "logTimezone",
         "maxContext",
         "autoContext",
+        # 2026-10-28: 代理上游超时（秒）—— 让 LLM 知道当前链路容忍度。
+        "llmProxyTimeoutS",
     )
     general = {k: raw.get(k) for k in _GENERAL_KEYS if k in raw}
 
