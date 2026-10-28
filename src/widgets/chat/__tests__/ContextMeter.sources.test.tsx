@@ -36,6 +36,10 @@ function usageFixture(sources: ContextSource[]): SessionUsage {
       calibrated: true,
       sources,
     },
+    // 2026-10-28: 性能统计字段
+    avg_latency_ms: null,
+    p95_latency_ms: null,
+    max_latency_ms: null,
   };
 }
 

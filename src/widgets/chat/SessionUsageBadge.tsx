@@ -92,6 +92,13 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
         ? 'text-text-secondary'
         : 'text-text-muted';
 
+  // 2026-10-28: 性能统计 - 平均响应时间徽章
+  const hasLatency = usage.avg_latency_ms !== null && usage.avg_latency_ms !== undefined;
+  const avgLatencySec = hasLatency ? (usage.avg_latency_ms! / 1000).toFixed(1) : null;
+  const latencyTooltip = hasLatency
+    ? `平均: ${avgLatencySec}s · P95: ${(usage.p95_latency_ms! / 1000).toFixed(1)}s · 最慢: ${(usage.max_latency_ms! / 1000).toFixed(1)}s`
+    : '';
+
   /* v8 ignore start */
 
   /* v8 ignore stop */
@@ -99,7 +106,7 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
   return (
     <span
       className="flex items-center gap-1 text-ui-2xs text-text-secondary shrink-0"
-      title="本会话累计用量 (token / 估算成本 / 缓存命中率)"
+      title="本会话累计用量 (token / 估算成本 / 缓存命中率 / 响应时间)"
       data-testid="session-usage-badge"
     >
       <Coins className="w-3 h-3" />
@@ -111,6 +118,15 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
           title={`${t('settings.usage.cacheRead')}: ${usage.cache_read_tokens.toLocaleString()} · ${t('settings.usage.cacheCreation')}: ${usage.cache_creation_tokens.toLocaleString()}`}
         >
           · 🎯 {hitRatePct}%
+        </span>
+      )}
+      {hasLatency && (
+        <span
+          className="ml-1 text-text-muted"
+          data-testid="session-avg-latency"
+          title={latencyTooltip}
+        >
+          · ⚡ {avgLatencySec}s
         </span>
       )}
     </span>

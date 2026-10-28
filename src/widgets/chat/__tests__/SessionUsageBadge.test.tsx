@@ -31,6 +31,10 @@ function usageFixture(overrides: Partial<SessionUsage>): SessionUsage {
     last_cached_tokens: null,
     last_at_ms: null,
     effective_context_window: null,
+    // 2026-10-28: 性能统计字段
+    avg_latency_ms: null,
+    p95_latency_ms: null,
+    max_latency_ms: null,
     ...overrides,
   };
 }

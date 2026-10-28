@@ -597,6 +597,8 @@ class UsageTracker:
         L8 PR-A (2026-09-09): 补 ``cache_read_tokens`` /
         ``cache_creation_tokens`` 列聚合，并派生 ``cache_hit_rate`` —
         cache_read 在所有可缓存 token 中的占比，反映 prompt cache 利用率。
+
+        2026-10-28 (performance-stats): 追加延迟统计 —— avg/p95/max latency_ms。
         """
         try:
             from backend.data.database import _SQLITE_LOCK, get_database
@@ -615,6 +617,14 @@ class UsageTracker:
                     " FROM usage_events WHERE session_id = ?",
                     (session_id,),
                 ).fetchone()
+
+                # 2026-10-28: 延迟统计（avg/p95/max）
+                latency_rows = conn.execute(
+                    "SELECT latency_ms FROM usage_events "
+                    "WHERE session_id = ? AND latency_ms IS NOT NULL "
+                    "ORDER BY latency_ms ASC",
+                    (session_id,),
+                ).fetchall()
         except Exception as exc:  # noqa: BLE001
             logger.debug("session_summary 读取失败: %s", exc)
             summary = {
@@ -629,6 +639,7 @@ class UsageTracker:
                 "estimated_cost_usd": 0.0,
             }
             last = None
+            latency_stats = {"avg_latency_ms": None, "p95_latency_ms": None, "max_latency_ms": None}
         else:
             cache_read = int(row["cache_read_tokens"]) if row else 0
             cache_creation = int(row["cache_creation_tokens"]) if row else 0
@@ -655,6 +666,23 @@ class UsageTracker:
                 "estimated_cost_usd": float(row["estimated_cost_usd"]) if row else 0.0,
             }
             last = self.last_request(session_id)
+
+            # 2026-10-28: 计算延迟统计（avg/p95/max）
+            if latency_rows:
+                latencies = [int(r["latency_ms"]) for r in latency_rows]
+                n = len(latencies)
+                avg_latency = sum(latencies) / n
+                # P95: 第95百分位（向上取整索引）
+                p95_index = min(int(n * 0.95), n - 1)
+                p95_latency = latencies[p95_index]
+                max_latency = latencies[-1]
+                latency_stats = {
+                    "avg_latency_ms": int(avg_latency),
+                    "p95_latency_ms": p95_latency,
+                    "max_latency_ms": max_latency,
+                }
+            else:
+                latency_stats = {"avg_latency_ms": None, "p95_latency_ms": None, "max_latency_ms": None}
         # Task 5: resolve effective context window for the last used model.
         # 复用 legacy_routes 的完整解析级联——尊重用户的 autoContext 开关与
         # 手动 maxContext 钉值;此前此处硬写 automatic=True,手动模式用户的
@@ -684,6 +712,10 @@ class UsageTracker:
                 "last_at_ms": last["at_ms"] if last else None,
                 "last_context_breakdown": (last or {}).get("context_breakdown"),
                 "effective_context_window": eff_window,
+                # 2026-10-28: 延迟统计
+                "avg_latency_ms": latency_stats["avg_latency_ms"],
+                "p95_latency_ms": latency_stats["p95_latency_ms"],
+                "max_latency_ms": latency_stats["max_latency_ms"],
             }
         )
         return summary

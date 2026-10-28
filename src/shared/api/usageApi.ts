@@ -122,6 +122,12 @@ export interface SessionUsage {
   /** 上下文分类明细 (backend/chat/context_breakdown.py): 最近一次请求的
    *  prompt 构成估算 + provider 实报校准;旧记录/未采集时为 null。 */
   last_context_breakdown?: ContextBreakdown | null;
+  /** 2026-10-28: 性能统计 - 平均响应时间（毫秒） */
+  avg_latency_ms: number | null;
+  /** 2026-10-28: 性能统计 - P95响应时间（毫秒） */
+  p95_latency_ms: number | null;
+  /** 2026-10-28: 性能统计 - 最大响应时间（毫秒） */
+  max_latency_ms: number | null;
 }
 
 /** 一次请求的上下文分类明细快照 */
