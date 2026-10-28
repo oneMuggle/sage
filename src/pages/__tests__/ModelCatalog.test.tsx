@@ -12,7 +12,7 @@
  * - mock ``src/entities/model-catalog/api`` 模块, 不打后端。
  * - 用 jsdom + electronAPI 桩化 IPC, 走的是 ``backendRequest`` 漏斗。
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -52,6 +52,10 @@ vi.mock('../../entities/model-catalog/api', () => ({
   exportSnapshot: mocks.exportSnapshot,
   deleteOverride: mocks.deleteOverride,
 }));
+
+beforeEach(() => {
+  window.localStorage.clear();
+});
 
 beforeEach(() => {
   useSettingsStore.setState({
@@ -283,5 +287,148 @@ describe('ModelCatalog page', () => {
         </I18nProvider>
       </MemoryRouter>,
     );
+  });
+
+  // ---- Task 10（只增不改）: 卡片视图 / 过滤 / 排序 / 高级折叠 ----
+
+  function catalogItems() {
+    return [
+      {
+        model_key: { provider: 'openrouter', model_id: 'anthropic/claude-3.5-sonnet' },
+        tier: 'powerful',
+        native: 200000,
+        price: { input_per_million: '3.0', output_per_million: '15.0', currency: 'USD' },
+        capabilities: { vision: true },
+        source: 'openrouter',
+        pricing_scope: 'base',
+      },
+      {
+        model_key: { provider: 'openai', model_id: 'gpt-4o-mini' },
+        tier: null,
+        native: 128000,
+        price: { input_per_million: '0.15', output_per_million: '0.6', currency: 'USD' },
+        capabilities: { tool_use: true },
+        source: 'openrouter',
+        pricing_scope: 'base',
+      },
+    ];
+  }
+
+  function mockCatalogList(): void {
+    mocks.listModels.mockResolvedValue({
+      items: catalogItems(),
+      total: 2,
+      limit: 50,
+      offset: 0,
+    });
+    mocks.listSnapshots.mockResolvedValue([]);
+    mocks.getEffective.mockResolvedValue(null);
+  }
+
+  async function renderCatalogPage() {
+    const Page = (await import('../ModelCatalog')).default;
+    return render(
+      <MemoryRouter initialEntries={['/model-catalog']}>
+        <I18nProvider defaultLocale="zh">
+          <Page />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it('默认卡片视图, 切换到表格后持久化到 localStorage', async () => {
+    mockCatalogList();
+    const first = await renderCatalogPage();
+
+    expect(await screen.findByTestId('catalog-cards')).toBeInTheDocument();
+    expect(window.localStorage.getItem('modelCatalogView')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('model-catalog-view-table'));
+
+    expect(await screen.findByTestId('catalog-table')).toBeInTheDocument();
+    expect(window.localStorage.getItem('modelCatalogView')).toBe('table');
+
+    first.unmount();
+
+    await renderCatalogPage();
+    expect(await screen.findByTestId('catalog-table')).toBeInTheDocument();
+    expect(screen.queryByTestId('catalog-cards')).not.toBeInTheDocument();
+  });
+
+  it('卡片展示 tier 中文徽标, 未分类显示未知', async () => {
+    mockCatalogList();
+    await renderCatalogPage();
+
+    const badges = await screen.findAllByTestId('catalog-card-tier');
+    expect(badges.map((badge) => badge.textContent)).toEqual(['强力', '未知']);
+  });
+
+  it('tier 过滤在卡片与表格视图均生效', async () => {
+    mockCatalogList();
+    await renderCatalogPage();
+    await screen.findByTestId('catalog-cards');
+
+    fireEvent.change(screen.getByTestId('model-catalog-tier-filter'), {
+      target: { value: 'powerful' },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('openai/gpt-4o-mini')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('openrouter/anthropic/claude-3.5-sonnet')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('model-catalog-view-table'));
+    const table = await screen.findByTestId('catalog-table');
+    expect(within(table).getByText('openrouter/anthropic/claude-3.5-sonnet')).toBeInTheDocument();
+    expect(within(table).queryByText('openai/gpt-4o-mini')).not.toBeInTheDocument();
+  });
+
+  it('provider 过滤后其他 provider 的模型消失', async () => {
+    mockCatalogList();
+    await renderCatalogPage();
+
+    expect(await screen.findByText('openrouter/anthropic/claude-3.5-sonnet')).toBeInTheDocument();
+    expect(screen.getByText('openai/gpt-4o-mini')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('model-catalog-provider-filter'), {
+      target: { value: 'openai' },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('openrouter/anthropic/claude-3.5-sonnet')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('openai/gpt-4o-mini')).toBeInTheDocument();
+  });
+
+  it('默认 context 降序, 切换升序后首卡顺序反转', async () => {
+    mockCatalogList();
+    await renderCatalogPage();
+
+    const cards = await screen.findByTestId('catalog-cards');
+    expect(within(cards).getAllByRole('listitem')[0]).toHaveTextContent(
+      'anthropic/claude-3.5-sonnet',
+    );
+
+    fireEvent.change(screen.getByTestId('model-catalog-sort'), {
+      target: { value: 'context_asc' },
+    });
+
+    expect(within(screen.getByTestId('catalog-cards')).getAllByRole('listitem')[0]).toHaveTextContent(
+      'gpt-4o-mini',
+    );
+  });
+
+  it('高级折叠包含同步 / 导入 / 导出三个按钮', async () => {
+    mockCatalogList();
+    await renderCatalogPage();
+
+    const advanced = await screen.findByTestId('model-catalog-advanced');
+    expect(advanced.tagName).toBe('DETAILS');
+    expect(within(advanced).getByTestId('model-catalog-sync')).toBeInTheDocument();
+    expect(within(advanced).getByTestId('model-catalog-import')).toBeInTheDocument();
+    expect(within(advanced).getByTestId('model-catalog-export')).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('model-catalog-header')).queryByTestId('model-catalog-sync'),
+    ).not.toBeInTheDocument();
   });
 });
