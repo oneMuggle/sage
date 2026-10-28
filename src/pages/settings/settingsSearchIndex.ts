@@ -295,6 +295,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'autocontext 上下文 自动推断 catalog',
   },
   {
+    key: 'max_output_tokens',
+    tab: 'models',
+    label: '最大输出长度',
+    labelEn: 'Max output tokens',
+    keywords: 'maxoutputtokens 输出 output 长度 截断 token max_tokens',
+  },
+  {
     key: 'temperature',
     tab: 'models',
     label: 'Temperature',
@@ -421,6 +428,42 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: 'Scratch 根目录名',
     labelEn: 'Scratch root',
     keywords: 'orch 编排 scratch 目录 scratchroot',
+  },
+  {
+    key: 'orch.maxConsecutiveUnansweredQuestions',
+    tab: 'orchestration',
+    label: '连续未应答提问上限',
+    labelEn: 'Max consecutive unanswered questions',
+    keywords:
+      'orch 编排 提问 澄清 未应答 上限 骚扰 ask_user_question maxconsecutiveunansweredquestions',
+  },
+  {
+    key: 'orch.minOptionsPerQuestion',
+    tab: 'orchestration',
+    label: '每题最少选项数',
+    labelEn: 'Min options per question',
+    keywords: 'orch 编排 提问 选项 最少 minoptionsperquestion',
+  },
+  {
+    key: 'orch.maxOptionsPerQuestion',
+    tab: 'orchestration',
+    label: '每题最多选项数',
+    labelEn: 'Max options per question',
+    keywords: 'orch 编排 提问 选项 最多 maxoptionsperquestion',
+  },
+  {
+    key: 'orch.maxClarifyQuestionsInPrompt',
+    tab: 'orchestration',
+    label: '提示词中澄清问题数引导',
+    labelEn: 'Max clarify questions in prompt',
+    keywords: 'orch 编排 提示词 澄清 问题数 引导 maxclarifyquestionsinprompt',
+  },
+  {
+    key: 'orch.maxClarifyQuestionsPerRound',
+    tab: 'orchestration',
+    label: '计划前置每轮澄清提问数',
+    labelEn: 'Max clarify questions per round',
+    keywords: 'orch 编排 计划前置 澄清 每轮 maxclarifyquestionsperround',
   },
 
   // ── 记忆 ──

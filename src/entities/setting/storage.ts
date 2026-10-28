@@ -36,6 +36,8 @@ const TOP_KEYS: ReadonlySet<keyof AppSettings> = new Set([
   'modelSelections',
   'maxContext',
   'autoContext',
+  // 2026-10-28: 输出长度上限 — 漏了会被 sanitizeForBackend 静默丢弃。
+  'maxOutputTokens',
   'temperature',
   'timezone',
   // 日志时区 (2026-09-17): 控制日志时间戳使用的时区, 与 IANA 时区分开.

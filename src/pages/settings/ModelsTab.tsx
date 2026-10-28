@@ -251,6 +251,22 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
           </label>
         </SettingRow>
         <SettingRow
+          anchor="max_output_tokens"
+          label="最大输出长度"
+          desc="单次回答允许生成的最大 token 数；调大可减少长回答被截断，但会占用更多上下文窗口"
+        >
+          <input
+            type="number"
+            data-testid="settings-max-output-tokens"
+            min={512}
+            max={32768}
+            step={512}
+            value={settings.maxOutputTokens}
+            onChange={(e) => updateSettings({ maxOutputTokens: Number(e.target.value) })}
+            className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
+          />
+        </SettingRow>
+        <SettingRow
           anchor="temperature"
           label="Temperature"
           desc="控制输出的随机性：数值越高越随机；0 最稳定，2 最随机。实际效果取决于模型实现"

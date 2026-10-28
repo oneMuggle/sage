@@ -313,3 +313,121 @@ describe('OrchestrationTab — 计划前置旋钮 (Round 3)', () => {
     expect(mocks.updateSettings).not.toHaveBeenCalled();
   });
 });
+
+// ============================================================================
+// 2026-10-28: ask_user_question 提问限制五旋钮
+// ============================================================================
+
+describe('OrchestrationTab — 提问限制 (2026-10-28)', () => {
+  it('五个提问限制输入框默认渲染', () => {
+    renderTab();
+    expect(screen.getByTestId('orch-max-consecutive-unanswered')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-min-options-per-question')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-max-options-per-question')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-max-clarify-questions-in-prompt')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-max-clarify-questions-per-round')).toBeInTheDocument();
+  });
+
+  it('默认值与后端 OrchSettings 对齐', () => {
+    renderTab();
+    expect(
+      (screen.getByTestId('orch-max-consecutive-unanswered') as HTMLInputElement).value,
+    ).toBe('3');
+    expect((screen.getByTestId('orch-min-options-per-question') as HTMLInputElement).value).toBe(
+      '2',
+    );
+    expect((screen.getByTestId('orch-max-options-per-question') as HTMLInputElement).value).toBe(
+      '4',
+    );
+    expect(
+      (screen.getByTestId('orch-max-clarify-questions-in-prompt') as HTMLInputElement).value,
+    ).toBe('2');
+    expect(
+      (screen.getByTestId('orch-max-clarify-questions-per-round') as HTMLInputElement).value,
+    ).toBe('3');
+  });
+
+  it('连续未应答上限修改走部分更新契约', () => {
+    renderTab();
+
+    fireEvent.change(screen.getByTestId('orch-max-consecutive-unanswered'), {
+      target: { value: '5' },
+    });
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({
+        maxConsecutiveUnansweredQuestions: 5,
+        minOptionsPerQuestion: 2, // 保留其余键
+        maxOptionsPerQuestion: 4,
+      }),
+    });
+  });
+
+  it('每题选项数上下限修改走部分更新契约', () => {
+    renderTab();
+
+    fireEvent.change(screen.getByTestId('orch-min-options-per-question'), {
+      target: { value: '3' },
+    });
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({ minOptionsPerQuestion: 3 }),
+    });
+
+    fireEvent.change(screen.getByTestId('orch-max-options-per-question'), {
+      target: { value: '6' },
+    });
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({ maxOptionsPerQuestion: 6 }),
+    });
+  });
+
+  it('拒绝 0 —— 这些限制的 0 值无意义', () => {
+    renderTab();
+
+    fireEvent.change(screen.getByTestId('orch-max-consecutive-unanswered'), {
+      target: { value: '0' },
+    });
+    expect(mocks.updateSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId('orch-min-options-per-question'), {
+      target: { value: '0' },
+    });
+    expect(mocks.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('最多选项数不得小于最少选项数 — UI 侧跨字段约束', () => {
+    mockSettings({ minOptionsPerQuestion: 5, maxOptionsPerQuestion: 8 });
+    renderTab();
+
+    // 4 < min(5) → 拒绝
+    fireEvent.change(screen.getByTestId('orch-max-options-per-question'), {
+      target: { value: '4' },
+    });
+    expect(mocks.updateSettings).not.toHaveBeenCalled();
+
+    // 6 >= min(5) → 放行
+    fireEvent.change(screen.getByTestId('orch-max-options-per-question'), {
+      target: { value: '6' },
+    });
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({ maxOptionsPerQuestion: 6 }),
+    });
+  });
+
+  it('澄清提问数两个旋钮走部分更新契约', () => {
+    renderTab();
+
+    fireEvent.change(screen.getByTestId('orch-max-clarify-questions-in-prompt'), {
+      target: { value: '4' },
+    });
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({ maxClarifyQuestionsInPrompt: 4 }),
+    });
+
+    fireEvent.change(screen.getByTestId('orch-max-clarify-questions-per-round'), {
+      target: { value: '6' },
+    });
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({ maxClarifyQuestionsPerRound: 6 }),
+    });
+  });
+});

@@ -28,6 +28,8 @@ ALIASES: Dict[str, str] = {
     "model_selections": "modelSelections",
     "max_context": "maxContext",
     "auto_context": "autoContext",
+    # 2026-10-28: 输出长度上限（单次回答最大生成 token 数）
+    "max_output_tokens": "maxOutputTokens",
     "auto_memory": "autoMemory",
     "confirm_delete": "confirmDelete",
     # modelSelections 子层
@@ -102,6 +104,12 @@ ALIASES: Dict[str, str] = {
     # 2026-10-28: LLM 代理上游超时（秒）— 前端「LLM 代理超时」设置。
     # 缺别名时 relay 的 camelToSnake 往返后翻不回 camel，保存 400 被静默吞掉。
     "llm_proxy_timeout_s": "llmProxyTimeoutS",
+    # 2026-10-28: ask_user_question 工具的可配置限制。
+    "max_consecutive_unanswered_questions": "maxConsecutiveUnansweredQuestions",
+    "min_options_per_question": "minOptionsPerQuestion",
+    "max_options_per_question": "maxOptionsPerQuestion",
+    "max_clarify_questions_in_prompt": "maxClarifyQuestionsInPrompt",
+    "max_clarify_questions_per_round": "maxClarifyQuestionsPerRound",
 }
 
 # AppSettings (src/entities/setting/types.ts) 锁死的白名单
@@ -115,6 +123,9 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         "maxContext",
         # Task 5 (2026-09-15): auto context window toggle.
         "autoContext",
+        # 2026-10-28: 输出长度上限（单次回答最大生成 token 数）— 前端默认 4096,
+        # 透传后端覆盖 LLMConfig.max_tokens 默认值。
+        "maxOutputTokens",
         "temperature",
         # Task 1 (2026-08-23): IANA timezone, 默认 Asia/Shanghai, 后端 zoneinfo 校验
         "timezone",
@@ -228,6 +239,12 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "maxToolCallsPerRun",
         "maxScoutIterations",
         "maxPlannerIterations",
+        # 2026-10-28: ask_user_question 工具的可配置限制。
+        "maxConsecutiveUnansweredQuestions",
+        "minOptionsPerQuestion",
+        "maxOptionsPerQuestion",
+        "maxClarifyQuestionsInPrompt",
+        "maxClarifyQuestionsPerRound",
     }
 )
 

@@ -341,6 +341,59 @@ export function OrchestrationTab() {
         />
       </section>
       <section>
+        <h3 className="text-sm font-semibold text-text mb-3">提问限制</h3>
+        <p className="text-xs text-muted leading-relaxed mb-3">
+          控制 agent 通过 ask_user_question 向你提问的频率与规模。连续未应答达到上限后 agent
+          会停止提问并按合理默认值继续推进任务。
+        </p>
+        <NumberField
+          anchor="orch.maxConsecutiveUnansweredQuestions"
+          label="连续未应答提问上限（次）"
+          desc="同一轮会话内连续提问未获应答达到该次数后，agent 停止提问并直接推进任务，防止反复骚扰"
+          dataTestId="orch-max-consecutive-unanswered"
+          value={settings.orch.maxConsecutiveUnansweredQuestions}
+          onChange={(v) => setOrch({ maxConsecutiveUnansweredQuestions: v })}
+          min={1}
+        />
+        <NumberField
+          anchor="orch.minOptionsPerQuestion"
+          label="每题最少选项数"
+          desc="agent 提问时至少要给出这么多个选项；不得大于「每题最多选项数」"
+          dataTestId="orch-min-options-per-question"
+          value={settings.orch.minOptionsPerQuestion}
+          onChange={(v) => setOrch({ minOptionsPerQuestion: v })}
+          min={1}
+          max={settings.orch.maxOptionsPerQuestion}
+        />
+        <NumberField
+          anchor="orch.maxOptionsPerQuestion"
+          label="每题最多选项数"
+          desc="agent 提问时最多给出这么多个选项；不得小于「每题最少选项数」"
+          dataTestId="orch-max-options-per-question"
+          value={settings.orch.maxOptionsPerQuestion}
+          onChange={(v) => setOrch({ maxOptionsPerQuestion: v })}
+          min={settings.orch.minOptionsPerQuestion}
+        />
+        <NumberField
+          anchor="orch.maxClarifyQuestionsInPrompt"
+          label="提示词中澄清问题数引导"
+          desc="系统提示里告诉 agent 最多澄清几个问题的软限制"
+          dataTestId="orch-max-clarify-questions-in-prompt"
+          value={settings.orch.maxClarifyQuestionsInPrompt}
+          onChange={(v) => setOrch({ maxClarifyQuestionsInPrompt: v })}
+          min={1}
+        />
+        <NumberField
+          anchor="orch.maxClarifyQuestionsPerRound"
+          label="计划前置每轮澄清提问数"
+          desc="复杂任务拆解前的澄清阶段，每轮最多提问数"
+          dataTestId="orch-max-clarify-questions-per-round"
+          value={settings.orch.maxClarifyQuestionsPerRound}
+          onChange={(v) => setOrch({ maxClarifyQuestionsPerRound: v })}
+          min={1}
+        />
+      </section>
+      <section>
         <h3 className="text-sm font-semibold text-text mb-3">隔离与审批</h3>
         <SettingRow
           anchor="orch.subagentApprovalMode"
