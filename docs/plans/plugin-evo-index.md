@@ -43,7 +43,8 @@
 | R111 | 聊天历史工具调用插件归属标注（转录通用卡片，纯前端） | ✅ #2576 |
 | R112 | PermissionModeSwitch 供数与导出收口（共享名单 hook + format 下沉，纯前端） | ✅ #2585 |
 | R113 | 转录工具组折叠头插件归属（纯前端） | ✅ #2589 |
-| R114 | 编排任务树实时行（等待审批徽章+事件行）插件归属（纯前端） | 🔄 #2614 |
+| R114 | 编排任务树实时行（等待审批徽章+事件行）插件归属（纯前端） | ✅ #2614 |
+| R115 | Hook 执行历史行插件归属（纯前端） | 🔄 #2618 |
 
 ## 2. 交付总账
 
@@ -80,7 +81,8 @@
 | R111 | usePluginNames 共享名单缓存 + Message 通用卡片归属后缀与测试/文档 | #2576 | 待对齐 | ✅ 已交付 |
 | R112 | 弹层改用 usePluginNames + formatPermissionMode* 下沉 permissionInsights 与测试/文档 | #2585 | 待对齐 | ✅ 已交付 |
 | R113 | Message 工具组组头归属后缀与测试/文档 | #2589 | 待对齐 | ✅ 已交付 |
-| R114 | TaskTreeSection 归属后缀（门控供数）与测试/文档 | #2614 | 待对齐 | 🔄 |
+| R114 | TaskTreeSection 归属后缀（门控供数）与测试/文档 | #2614 | 待对齐 | ✅ 已交付 |
+| R115 | HookHistoryPanel 归属后缀（门控供数）与测试/文档 | #2618 | 待对齐 | 🔄 |
 
 ## 3. R78 交付边界
 
@@ -729,7 +731,7 @@
   787/800）、diff-check、diagnostics 全绿，
   manifest 仍 274，后端零改动。
 
-## 34. R114 交付边界（PR #2614 待合并）
+## 34. R114 交付边界（已合并）
 
 > spec：`2026-10-27_tasktree-plugin-owner-r114.md`。
 > R114 是本插件账轮次号，与其它账本的同号计划无关。
@@ -745,5 +747,20 @@
   影响）；tsc、ESLint（0/0）、architecture、
   diff-check、diagnostics 全绿，manifest 仍
   274，后端零改动。
+
+## 35. R115 交付边界（PR #2618 待合并）
+
+> spec：`2026-10-28_hook-history-plugin-owner-r115.md`。
+> R115 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **展示面收官**：Hook 历史补齐后，R113 扫描到的全
+  部策展工具名界面（规则/白名单/审批/审计/转录逐
+  卡与组头/编排实时行/Hook 历史）均带同一口径归
+  属；仅剩通用载荷镜像与远程渠道在边界外。
+- **本地证据**：pluginOwner 新套件与 settings
+  Hook 相关套件等共 11 文件 59 例通过；tsc、
+  ESLint（0/0）、architecture、diff-check、
+  diagnostics 全绿，manifest 284（他人推进，
+  本轮后端零改动）。
 
 —— 本账本由插件化循环维护，随轮次追加。
