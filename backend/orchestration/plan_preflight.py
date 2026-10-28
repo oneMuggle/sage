@@ -59,20 +59,39 @@ SCOUT_FACTS_MAX_CHARS = 4000
 
 #: 单轮澄清最多提问数（防骚扰上限；全局防骚扰由 run_loop 的
 #: MAX_CONSECUTIVE_UNANSWERED_QUESTIONS 管辖，这里管单轮生成量）。
+#: 注意：2026-10-28 起实际值由 OrchSettings 动态配置驱动，此常量仅作为 fail-safe 默认。
 MAX_CLARIFY_QUESTIONS = 3
+
+
+def _load_max_clarify_questions_per_round() -> int:
+    """从 OrchSettings 加载单轮澄清最多提问数。
+
+    Fail-safe：读取失败回落硬编码常量 MAX_CLARIFY_QUESTIONS。
+    """
+    try:
+        from backend.orchestration.orch_settings import load_orch_settings
+
+        orch = load_orch_settings()
+        return orch.max_clarify_questions_per_round
+    except Exception:  # noqa: BLE001 — 读配置失败回落硬编码默认
+        logger.debug("max_clarify_questions_per_round 读取失败，回落默认值", exc_info=True)
+        return MAX_CLARIFY_QUESTIONS
 
 # Matches ```json ... ``` / ``` ... ``` fences some models emit anyway.
 _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
 #: 歧义判定 + 问题生成合并为单次 LLM 调用（省一次往返）。str.replace 注入
 #: （非 .format()），与 _classify_orchestration_prompt 同款防大括号炸裂。
+#: 2026-10-28：选项数区间改为动态（与 ask_user_question 工具 schema 一致），
+#: 否则用户把 minOptionsPerQuestion 调到 3，这里还写「2-4 个选项」，LLM 按
+#: 2 选项产出会被运行期校验拒掉，整轮澄清静默失败。
 _CLARIFY_PROMPT = """你是需求澄清助手。判断以下目标在拆解执行前是否存在会显著影响执行方案的歧义（范围不清/交付格式不明/验收标准缺失/关键约束冲突）。
 
 目标: {message}
 
 规则:
 - 只在歧义"显著影响执行方案"时才提问；常识可默认的细节不要问。
-- 最多 {max_q} 个问题；每个问题 2-4 个选项，选项要具体、可直接点选。
+- 最多 {max_q} 个问题；每个问题 {min_opts}-{max_opts} 个选项，选项要具体、可直接点选。
 
 只返回 JSON（无 markdown 围栏、无多余文本）:
 {{"need_clarify": true, "questions": [{{"question": "完整问题文本", "header": "短标签", "multi_select": false, "options": [{{"label": "选项", "description": "说明"}}]}}]}}
@@ -196,8 +215,17 @@ async def _clarify(
 
     await _emit(emit, {"state": "orch_preflight", "phase": "clarify"})
 
+    # 动态加载单轮澄清提问数上限
+    max_clarify = _load_max_clarify_questions_per_round()
+    # 动态加载选项数区间（与 ask_user_question 工具 schema 一致）
+    from backend.tools.ask_user_tool import _load_ask_user_limits
+    limits = _load_ask_user_limits()
     prompt = _CLARIFY_PROMPT.replace("{message}", message).replace(
-        "{max_q}", str(MAX_CLARIFY_QUESTIONS)
+        "{max_q}", str(max_clarify)
+    ).replace(
+        "{min_opts}", str(limits["min_options_per_question"])
+    ).replace(
+        "{max_opts}", str(limits["max_options_per_question"])
     )
     try:
         raw = await client.complete(prompt)
@@ -211,7 +239,9 @@ async def _clarify(
 
     conclusions: List[str] = []
     timed_out = False
-    for args in questions[:MAX_CLARIFY_QUESTIONS]:
+    # 切片用与 prompt 同一次读取的值 —— 保证「prompt 说最多 N 个」与实际
+    # 提问数一致（LLM 调用期间用户改设置也不影响本轮）。
+    for args in questions[:max_clarify]:
         req = QuestionRequest.create(
             question=args["question"],
             options=args["options"],

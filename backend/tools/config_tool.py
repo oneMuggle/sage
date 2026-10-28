@@ -31,6 +31,12 @@ _ALLOWED_ORCH_FIELDS = {
     "maxSubagentIterations",
     "runTokenBudget",
     "subagentApprovalMode",
+    # 2026-10-28: ask_user_question 工具的可配置限制。
+    "maxConsecutiveUnansweredQuestions",
+    "minOptionsPerQuestion",
+    "maxOptionsPerQuestion",
+    "maxClarifyQuestionsInPrompt",
+    "maxClarifyQuestionsPerRound",
 }
 
 _ALLOWED_AGENT_FIELDS = {
@@ -84,6 +90,12 @@ _ORCH_INTEGER_RANGES = {
     "maxLaneIterations": (1, 100),
     "maxSubagentIterations": (1, 100),
     "runTokenBudget": (0, 100_000_000),
+    # 2026-10-28: ask_user_question 限制的上界。
+    "maxConsecutiveUnansweredQuestions": (1, 20),
+    "minOptionsPerQuestion": (1, 10),
+    "maxOptionsPerQuestion": (1, 10),
+    "maxClarifyQuestionsInPrompt": (1, 10),
+    "maxClarifyQuestionsPerRound": (1, 20),
 }
 
 
@@ -102,6 +114,9 @@ def _prepare_settings_update(
         if not isinstance(orch, dict):
             return None, "当前 orch 配置不是有效的对象"
         candidate["orch"] = {**orch, **updates}
+        cross_error = _validate_ask_user_cross_fields(candidate["orch"])
+        if cross_error:
+            return None, cross_error
     else:
         candidate.update(updates)
 
@@ -122,6 +137,32 @@ def _validate_orch_updates(updates: Dict[str, Any]) -> Optional[str]:
                 return f"{key} 必须在 {lower} 到 {upper} 之间，收到: {value!r}"
         elif key == "subagentApprovalMode" and value not in {"ask", "auto"}:
             return "subagentApprovalMode 必须是 'ask' 或 'auto'"
+    return None
+
+
+def _validate_ask_user_cross_fields(orch: Dict[str, Any]) -> Optional[str]:
+    """ask_user_question 跨字段约束：最小选项数不得大于最大选项数。
+
+    2026-10-28: 校验的是**合并后**的 orch 值 —— 只改其中一个键时，另一个
+    键的已持久化值同样参与比较。
+    2026-10-28 review: 缺键回落 OrchSettings 默认值（2 / 4），否则 agent
+    第一次只提交 min=5 → 缺 max → 校验跳过 → 落库后与默认 max=4 自相矛盾。
+    """
+    from backend.orchestration.orch_settings import OrchSettings
+
+    defaults = OrchSettings()
+    min_opts = orch.get("minOptionsPerQuestion")
+    max_opts = orch.get("maxOptionsPerQuestion")
+    # 缺键回落到 dataclass 默认值；非 int 仍跳过（交由 _validate_orch_updates 处理）
+    if not isinstance(min_opts, int) or isinstance(min_opts, bool):
+        min_opts = defaults.min_options_per_question
+    if not isinstance(max_opts, int) or isinstance(max_opts, bool):
+        max_opts = defaults.max_options_per_question
+    if min_opts > max_opts:
+        return (
+            f"minOptionsPerQuestion ({min_opts}) 不得大于 "
+            f"maxOptionsPerQuestion ({max_opts})"
+        )
     return None
 
 

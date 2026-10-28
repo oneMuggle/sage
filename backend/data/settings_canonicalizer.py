@@ -91,6 +91,12 @@ ALIASES: Dict[str, str] = {
     "llm_retry_base_delay_s": "llmRetryBaseDelayS",
     "llm_retry_max_delay_s": "llmRetryMaxDelayS",
     "llm_total_timeout_s": "llmTotalTimeoutS",
+    # 2026-10-28: ask_user_question 工具的可配置限制。
+    "max_consecutive_unanswered_questions": "maxConsecutiveUnansweredQuestions",
+    "min_options_per_question": "minOptionsPerQuestion",
+    "max_options_per_question": "maxOptionsPerQuestion",
+    "max_clarify_questions_in_prompt": "maxClarifyQuestionsInPrompt",
+    "max_clarify_questions_per_round": "maxClarifyQuestionsPerRound",
 }
 
 # AppSettings (src/entities/setting/types.ts) 锁死的白名单
@@ -204,6 +210,12 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "maxToolCallsPerRun",
         "maxScoutIterations",
         "maxPlannerIterations",
+        # 2026-10-28: ask_user_question 工具的可配置限制。
+        "maxConsecutiveUnansweredQuestions",
+        "minOptionsPerQuestion",
+        "maxOptionsPerQuestion",
+        "maxClarifyQuestionsInPrompt",
+        "maxClarifyQuestionsPerRound",
     }
 )
 
