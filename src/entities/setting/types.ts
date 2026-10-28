@@ -133,6 +133,22 @@ export interface OrchSettings {
   // 阶段 2.1 接入 ReAct 工具循环后消费。与后端
   // ``OrchSettings.max_planner_iterations`` camelCase 对齐。
   maxPlannerIterations: number; // 8
+  // 2026-10-28: ask_user_question 工具的可配置限制。
+  // 连续未应答提问上限 —— 超过后 agent 停止提问直接推进任务。与后端
+  // ``OrchSettings.max_consecutive_unanswered_questions`` camelCase 对齐。
+  maxConsecutiveUnansweredQuestions: number; // 3
+  // 每次提问的最小选项数。与后端
+  // ``OrchSettings.min_options_per_question`` camelCase 对齐。
+  minOptionsPerQuestion: number; // 2
+  // 每次提问的最大选项数。必须 ≥ minOptionsPerQuestion。与后端
+  // ``OrchSettings.max_options_per_question`` camelCase 对齐。
+  maxOptionsPerQuestion: number; // 4
+  // 系统提示中的澄清问题数引导（软限制）。与后端
+  // ``OrchSettings.max_clarify_questions_in_prompt`` camelCase 对齐。
+  maxClarifyQuestionsInPrompt: number; // 2
+  // 计划前置澄清步骤每轮最多提问数。与后端
+  // ``OrchSettings.max_clarify_questions_per_round`` camelCase 对齐。
+  maxClarifyQuestionsPerRound: number; // 3
 }
 
 /** All application settings */
@@ -246,6 +262,12 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   planScoutEnabled: true,
   maxScoutIterations: 4, // 2026-10-27: 侦察 ReAct 预算（立即生效）
   maxPlannerIterations: 8, // 2026-10-27: Planner ReAct 预算（预配置）
+  // 2026-10-28: ask_user_question 工具的可配置限制
+  maxConsecutiveUnansweredQuestions: 3,
+  minOptionsPerQuestion: 2,
+  maxOptionsPerQuestion: 4,
+  maxClarifyQuestionsInPrompt: 2,
+  maxClarifyQuestionsPerRound: 3,
 };
 
 /** 系统 IANA 时区探测；不可用 / 返回空时回退 'Asia/Shanghai'（历史默认）。 */

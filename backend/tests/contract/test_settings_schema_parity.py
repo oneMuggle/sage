@@ -140,7 +140,10 @@ def test_legal_orch_keys_is_stable() -> None:
     planPreflightEnabled / planScoutEnabled。2026-10-27 补 maxToolCallsPerRun
     (同款回归: UI/OrchSettings 已有, 白名单漏加) 与 Scout/Planner 迭代预算
     maxScoutIterations / maxPlannerIterations。新增 orch 键时此处与
-    canonicalizer 必须同改。
+    canonicalizer 必须同改。2026-10-28 补 ask_user_question 限制五键
+    (maxConsecutiveUnansweredQuestions / minOptionsPerQuestion /
+    maxOptionsPerQuestion / maxClarifyQuestionsInPrompt /
+    maxClarifyQuestionsPerRound)。
     """
     assert frozenset(
         {
@@ -170,6 +173,12 @@ def test_legal_orch_keys_is_stable() -> None:
             "maxToolCallsPerRun",
             "maxScoutIterations",
             "maxPlannerIterations",
+            # 2026-10-28 ask_user_question 工具的可配置限制
+            "maxConsecutiveUnansweredQuestions",
+            "minOptionsPerQuestion",
+            "maxOptionsPerQuestion",
+            "maxClarifyQuestionsInPrompt",
+            "maxClarifyQuestionsPerRound",
         }
     ) == LEGAL_ORCH_KEYS
 

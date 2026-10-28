@@ -1,7 +1,7 @@
 {
   "version": 1,
   "files": {
-    "backend/agents/profiles.py": 1045,
+    "backend/agents/profiles.py": 1067,
     "backend/api/legacy_routes.py": 2524,
     "backend/api/llm_proxy_routes.py": 1217,
     "backend/api/orchestration_router.py": 807,
@@ -12,7 +12,7 @@
     "backend/core/legacy/llm_client.py": 1274,
     "backend/data/database.py": 2138,
     "backend/data/session_repo.py": 1104,
-    "backend/data/settings_canonicalizer.py": 840,
+    "backend/data/settings_canonicalizer.py": 852,
     "backend/main.py": 1694,
     "backend/memory/manager.py": 852,
     "backend/mcp/pool.py": 915,
@@ -70,6 +70,6 @@
     "backend/adapters/out/skill/inproc.py": 949,
     "backend/api/project_routes.py": 957,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
-    "backend/tools/config_tool.py": 942
+    "backend/tools/config_tool.py": 983
   }
 }
