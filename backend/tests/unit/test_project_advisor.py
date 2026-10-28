@@ -117,34 +117,36 @@ class TestAnalyze:
     @pytest.mark.asyncio()
     async def test_analyze_cache_miss(self, advisor, mock_llm):
         """cache miss 时应调用 LLM。"""
-        with patch(
-            "backend.services.project_advisor.ProjectAdvisor._collect_data",
-            return_value={
-                "project": {
-                    "name": "Test Project",
-                    "type": "coding",
-                    "stage": "development",
-                    "description": "A test project",
-                },
-                "milestones": {
-                    "total": 1,
-                    "by_status": {
-                        "pending": 0,
-                        "in_progress": 1,
-                        "completed": 0,
-                        "blocked": 0,
+        with (
+            patch(
+                "backend.services.project_advisor.ProjectAdvisor._collect_data",
+                return_value={
+                    "project": {
+                        "name": "Test Project",
+                        "type": "coding",
+                        "stage": "development",
+                        "description": "A test project",
                     },
-                    "overdue": [
-                        {
-                            "title": "Milestone A",
-                            "due_date": "2026-10-01",
-                            "status": "in_progress",
-                            "days_overdue": 11,
-                        }
-                    ],
+                    "milestones": {
+                        "total": 1,
+                        "by_status": {
+                            "pending": 0,
+                            "in_progress": 1,
+                            "completed": 0,
+                            "blocked": 0,
+                        },
+                        "overdue": [
+                            {
+                                "title": "Milestone A",
+                                "due_date": "2026-10-01",
+                                "status": "in_progress",
+                                "days_overdue": 11,
+                            }
+                        ],
+                    },
+                    "profile_entry_count": 5,
                 },
-                "profile_entry_count": 5,
-            },
+            ),
         ):
             result = await advisor.analyze(project_id="proj-123")
 
@@ -186,22 +188,24 @@ class TestAnalyze:
         cached_result = AdviceResult(health_score=80, summary="cached")
         advisor._set_cached("proj-123", cached_result)
 
-        with patch(
-            "backend.services.project_advisor.ProjectAdvisor._collect_data",
-            return_value={
-                "project": {
-                    "name": "Test Project",
-                    "type": "coding",
-                    "stage": "development",
-                    "description": "",
+        with (
+            patch(
+                "backend.services.project_advisor.ProjectAdvisor._collect_data",
+                return_value={
+                    "project": {
+                        "name": "Test Project",
+                        "type": "coding",
+                        "stage": "development",
+                        "description": "",
+                    },
+                    "milestones": {
+                        "total": 0,
+                        "by_status": {},
+                        "overdue": [],
+                    },
+                    "profile_entry_count": 0,
                 },
-                "milestones": {
-                    "total": 0,
-                    "by_status": {},
-                    "overdue": [],
-                },
-                "profile_entry_count": 0,
-            },
+            ),
         ):
             result = await advisor.analyze(
                 project_id="proj-123", force_refresh=True
