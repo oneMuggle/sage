@@ -102,6 +102,19 @@ class TestApplyAutoRoutingOverlay:
         )
         assert apply_auto_routing_overlay(CFG) is CFG
 
+    def test_unscoped_endpoint_skips_routing(self, monkeypatch):
+        """R11: routing without an endpoint id could borrow foreign credentials."""
+        _settings(monkeypatch, {"routing": {"mode": "auto"}})
+        called = []
+        monkeypatch.setattr(
+            "backend.orchestration.llm_factory.resolve_routed_chat_model",
+            lambda **kw: called.append(kw) or "routed-model",
+        )
+        unscoped = {k: v for k, v in CFG.items() if k != "endpoint_id"}
+        for cfg in (unscoped, {**CFG, "endpoint_id": None}, {**CFG, "endpoint_id": "   "}):
+            assert apply_auto_routing_overlay(cfg, task_type="chat") is cfg
+        assert called == []
+
     def test_explicit_session_override_wins(self, monkeypatch):
         """R23: a user pick beats automation."""
         _settings(monkeypatch, {"routing": {"mode": "auto"}})

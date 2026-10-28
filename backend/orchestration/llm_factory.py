@@ -384,10 +384,17 @@ def apply_auto_routing_overlay(
         return cfg
     if resolve_chat_model(session_id, profile_model):
         return cfg
+    # Endpoint coupling: the model must come from the endpoint whose api_key /
+    # base_url this cfg carries. Without a resolved endpoint id the engine would
+    # search the whole catalog and could pair a foreign model with these
+    # credentials — skip routing instead (R11).
+    endpoint_id = cfg.get("endpoint_id")
+    if not isinstance(endpoint_id, str) or not endpoint_id.strip():
+        return cfg
     routed = resolve_routed_chat_model(
         task_type=(task_type or "chat"),
         context_length=context_length,
-        endpoint_id=cfg.get("endpoint_id"),
+        endpoint_id=endpoint_id,
     )
     if not routed:
         return cfg
