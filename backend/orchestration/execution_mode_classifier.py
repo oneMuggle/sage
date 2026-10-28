@@ -222,7 +222,8 @@ class ExecutionModeClassifier:
             )
 
         # 校验 confidence（允许缺失，默认 0.5）
-        if not isinstance(confidence, (int, float)):
+        # noqa UP038: py38 LTS 无法在运行期求值 PEP 604，必须保留 tuple 形式
+        if not isinstance(confidence, (int, float)):  # noqa: UP038
             confidence = 0.5
         else:
             confidence = float(confidence)

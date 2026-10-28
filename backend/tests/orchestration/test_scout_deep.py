@@ -48,9 +48,13 @@ async def test_research_returns_empty_report_when_llm_config_missing() -> None:
 async def test_research_returns_empty_report_when_make_llm_context_fails() -> None:
     """make_llm_context 抛异常 → 空报告。"""
     fake_cfg = {"base_url": "http://localhost:8080", "api_key": "key", "model": "gpt-4"}
-    with patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg):
-        with patch("backend.orchestration.scout_deep.make_llm_context", side_effect=RuntimeError("bad config")):
-            report = await research(topic="认证系统", project_path=PROJECT_PATH)
+    p_cfg = patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg)
+    p_ctx = patch(
+        "backend.orchestration.scout_deep.make_llm_context",
+        side_effect=RuntimeError("bad config"),
+    )
+    with p_cfg, p_ctx:
+        report = await research(topic="认证系统", project_path=PROJECT_PATH)
 
     assert report.confidence == 0
     assert report.topic == "认证系统"
@@ -64,13 +68,14 @@ async def test_research_returns_empty_report_when_deep_research_raises() -> None
     """deep_research 抛异常（网络超时等）→ 空报告。"""
     fake_cfg = {"base_url": "", "api_key": "", "model": ""}
     fake_ctx = SimpleNamespace(llm_call=AsyncMock())
-    with patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg):
-        with patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx):
-            with patch(
-                    "backend.orchestration.scout_deep.deep_research",
-                    side_effect=TimeoutError("LLM 超时"),
-                ):
-                report = await research(topic="认证系统", project_path=PROJECT_PATH)
+    p_cfg = patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg)
+    p_ctx = patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx)
+    p_deep = patch(
+        "backend.orchestration.scout_deep.deep_research",
+        side_effect=TimeoutError("LLM 超时"),
+    )
+    with p_cfg, p_ctx, p_deep:
+        report = await research(topic="认证系统", project_path=PROJECT_PATH)
 
     assert report.confidence == 0
     assert report.findings == []
@@ -91,10 +96,11 @@ async def test_research_returns_empty_report_when_task_status_is_error() -> None
         web_results=[],
         queries=[],
     )
-    with patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg):
-        with patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx):
-            with patch("backend.orchestration.scout_deep.deep_research", return_value=error_task):
-                report = await research(topic="认证系统", project_path=PROJECT_PATH)
+    p_cfg = patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg)
+    p_ctx = patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx)
+    p_deep = patch("backend.orchestration.scout_deep.deep_research", return_value=error_task)
+    with p_cfg, p_ctx, p_deep:
+        report = await research(topic="认证系统", project_path=PROJECT_PATH)
 
     assert report.confidence == 0
 
@@ -114,10 +120,11 @@ async def test_research_returns_empty_report_when_synthesis_is_empty() -> None:
         web_results=[],
         queries=[],
     )
-    with patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg):
-        with patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx):
-            with patch("backend.orchestration.scout_deep.deep_research", return_value=empty_task):
-                report = await research(topic="认证系统", project_path=PROJECT_PATH)
+    p_cfg = patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg)
+    p_ctx = patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx)
+    p_deep = patch("backend.orchestration.scout_deep.deep_research", return_value=empty_task)
+    with p_cfg, p_ctx, p_deep:
+        report = await research(topic="认证系统", project_path=PROJECT_PATH)
 
     assert report.confidence == 0
 
@@ -137,14 +144,15 @@ async def test_research_returns_empty_report_when_build_report_fails() -> None:
         web_results=[],
         queries=["oauth 2.0 best practices"],
     )
-    with patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg):
-        with patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx):
-            with patch("backend.orchestration.scout_deep.deep_research", return_value=good_task):
-                with patch(
-                        "backend.orchestration.scout_deep.build_report_from_research_task",
-                        side_effect=ValueError("解析失败"),
-                    ):
-                    report = await research(topic="认证系统", project_path=PROJECT_PATH)
+    p_cfg = patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg)
+    p_ctx = patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx)
+    p_deep = patch("backend.orchestration.scout_deep.deep_research", return_value=good_task)
+    p_build = patch(
+        "backend.orchestration.scout_deep.build_report_from_research_task",
+        side_effect=ValueError("解析失败"),
+    )
+    with p_cfg, p_ctx, p_deep, p_build:
+        report = await research(topic="认证系统", project_path=PROJECT_PATH)
 
     assert report.confidence == 0
     assert report.topic == "认证系统"
@@ -168,10 +176,11 @@ async def test_research_happy_path_returns_structured_report() -> None:
         ],
         queries=["oauth 2.0", "认证系统设计"],
     )
-    with patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg):
-        with patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx):
-            with patch("backend.orchestration.scout_deep.deep_research", return_value=good_task):
-                report = await research(topic="认证系统", project_path=PROJECT_PATH)
+    p_cfg = patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg)
+    p_ctx = patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx)
+    p_deep = patch("backend.orchestration.scout_deep.deep_research", return_value=good_task)
+    with p_cfg, p_ctx, p_deep:
+        report = await research(topic="认证系统", project_path=PROJECT_PATH)
 
     assert report.confidence > 0
     assert report.topic == "认证系统"
@@ -200,10 +209,11 @@ async def test_research_passes_search_config_from_settings() -> None:
         search_provider="tavily",
     )
     mock_deep_research = AsyncMock(return_value=good_task)
-    with patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg):
-        with patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx):
-            with patch("backend.orchestration.scout_deep.deep_research", mock_deep_research):
-                report = await research(topic="T", project_path=PROJECT_PATH, settings=settings)
+    p_cfg = patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg)
+    p_ctx = patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx)
+    p_deep = patch("backend.orchestration.scout_deep.deep_research", mock_deep_research)
+    with p_cfg, p_ctx, p_deep:
+        report = await research(topic="T", project_path=PROJECT_PATH, settings=settings)
 
     assert report.confidence > 0
     # 验证 deep_research 被调用时传入了正确的 search_api_key
@@ -228,10 +238,11 @@ async def test_research_works_with_settings_none() -> None:
         web_results=[],
         queries=[],
     )
-    with patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg):
-        with patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx):
-            with patch("backend.orchestration.scout_deep.deep_research", return_value=good_task):
-                report = await research(topic="T", project_path=PROJECT_PATH, settings=None)
+    p_cfg = patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg)
+    p_ctx = patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx)
+    p_deep = patch("backend.orchestration.scout_deep.deep_research", return_value=good_task)
+    with p_cfg, p_ctx, p_deep:
+        report = await research(topic="T", project_path=PROJECT_PATH, settings=None)
 
     assert report.confidence > 0
 
@@ -251,9 +262,10 @@ async def test_research_handles_none_synthesis_gracefully() -> None:
         web_results=[],
         queries=[],
     )
-    with patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg):
-        with patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx):
-            with patch("backend.orchestration.scout_deep.deep_research", return_value=none_task):
-                report = await research(topic="T", project_path=PROJECT_PATH)
+    p_cfg = patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg)
+    p_ctx = patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx)
+    p_deep = patch("backend.orchestration.scout_deep.deep_research", return_value=none_task)
+    with p_cfg, p_ctx, p_deep:
+        report = await research(topic="T", project_path=PROJECT_PATH)
 
     assert report.confidence == 0
