@@ -285,6 +285,28 @@ async def update_settings(
                 "field": field,
             },
         ) from exc
+    # 2026-10-28 review: ask_user 跨字段约束（min ≤ max）后端 PUT 路径防御。
+    # UI NumberField 的 min/max 已双向卡死；但 API 直写（如 agent 经 config_tool
+    # 自改）需要独立护栏。失败返回 422 并在 detail.field 指明具体冲突字段。
+    orch_merged = camel_merged.get("orch")
+    if isinstance(orch_merged, dict):
+        from backend.tools.config_tool import _validate_ask_user_cross_fields
+
+        cross_err = _validate_ask_user_cross_fields(orch_merged)
+        if cross_err is not None:
+            logger.warning(
+                "[HEX REQ %s] /settings rejected: error_type=invalid_orch_cross field=min/maxOptionsPerQuestion msg=%s",
+                request_id,
+                cross_err,
+            )
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "type": "invalid_settings_payload",
+                    "message": cross_err,
+                    "field": "orch.minOptionsPerQuestion",
+                },
+            )
     repo.set_json("app_settings", camel_merged, category="general")
 
     # 审计：仅记录字段名，不记录值；api_key 永不进 audit payload (但进 changed_fields 占位)

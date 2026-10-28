@@ -7,8 +7,8 @@
   兜底）全部由 ``backend.core.legacy.agent.run_loop`` 负责——和 M1 审批流
   "循环拥有 gate" 的职责划分一致。
 - run_loop 在分发前特判工具名 ``ask_user_question``：先
-  ``validate_ask_user_args()`` 校验参数（question 非空、options 2-4 项且
-  每项有 label），再发 ASK_USER_QUESTION 事件、await UserQuestionGate，
+  ``validate_ask_user_args()`` 校验参数（question 非空、options 数量在配置的
+  上下限内且每项有 label），再发 ASK_USER_QUESTION 事件、await UserQuestionGate，
   最后以 ``answers`` / ``custom`` 注入的方式调用本工具。
 - 超时未应答 → 循环注入空应答，本工具渲染"用户未回答"软结果；agent
   带着该结果继续跑（永不挂起）。
@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 #: 工具名常量（run_loop 特判 / 测试共用）
 ASK_USER_QUESTION_TOOL_NAME = "ask_user_question"
 
-#: Claude AskUserQuestion 约束: 2-4 个选项
+#: fail-safe 默认值 —— 设置读取失败时回落（运行时值与 schema 均由
+#: ``_load_ask_user_limits()`` 动态提供，见 OrchSettings）。
 MIN_OPTIONS = 2
 MAX_OPTIONS = 4
 
@@ -36,12 +37,43 @@ MAX_OPTIONS = 4
 UNANSWERED_RESULT_TEXT = "用户未回答，请自行决定合理默认值"
 
 
+def _load_ask_user_limits() -> Dict[str, int]:
+    """从 OrchSettings 加载 ask_user_question 的动态限制。
+
+    Fail-safe：任一读取失败回落硬编码默认值，绝不抛穿。返回 dict 方便
+    _validate_options 直接索引（避免重复读取）。
+
+    Returns:
+        Dict with keys: min_options_per_question, max_options_per_question
+    """
+    try:
+        from backend.orchestration.orch_settings import load_orch_settings
+
+        orch = load_orch_settings()
+        return {
+            "min_options_per_question": orch.min_options_per_question,
+            "max_options_per_question": orch.max_options_per_question,
+        }
+    except Exception:  # noqa: BLE001 — 读配置失败回落硬编码默认
+        logger.debug("ask_user_question 限制读取失败，回落默认值", exc_info=True)
+        return {
+            "min_options_per_question": MIN_OPTIONS,
+            "max_options_per_question": MAX_OPTIONS,
+        }
+
+
 def _validate_options(options: Any) -> Optional[str]:  # noqa: PLR0911 — 级联校验早退可读性优先
-    """校验 options 列表（2-4 项，每项含非空唯一 label）；合法返回 None。"""
+    """校验 options 列表（动态限制，每项含非空唯一 label）；合法返回 None。"""
     if not isinstance(options, list):
         return "options 必须是列表"
-    if not MIN_OPTIONS <= len(options) <= MAX_OPTIONS:
-        return f"options 数量必须在 {MIN_OPTIONS}-{MAX_OPTIONS} 之间，实际 {len(options)}"
+
+    # 动态加载限制
+    limits = _load_ask_user_limits()
+    min_opts = limits["min_options_per_question"]
+    max_opts = limits["max_options_per_question"]
+
+    if not min_opts <= len(options) <= max_opts:
+        return f"options 数量必须在 {min_opts}-{max_opts} 之间，实际 {len(options)}"
     seen_labels = set()
     for idx, opt in enumerate(options):
         if not isinstance(opt, dict):
@@ -65,7 +97,8 @@ def validate_ask_user_args(args: Dict[str, Any]) -> Optional[str]:
     约束（镜像 Claude AskUserQuestion）:
     - ``question``: 非空字符串
     - ``header``:   可选字符串
-    - ``options``:  2-4 项的列表，每项是含非空 ``label`` 的对象，
+    - ``options``:  数量在 ``minOptionsPerQuestion``–``maxOptionsPerQuestion``
+                    范围内的列表，每项是含非空 ``label`` 的对象，
                     可选 ``description``
     - ``multi_select``: 可选布尔
     """
@@ -115,12 +148,17 @@ class AskUserQuestionTool(BaseTool):
     """ask_user_question —— 把用户应答渲染为工具结果（纯渲染器）。"""
 
     def _build_schema(self) -> ToolSchema:
+        # 动态读取当前配置的选项数上下限 —— schema 与运行期校验保持一致，
+        # 避免「schema 写 2-4、运行期要求 3-6」这种会让 LLM 反复被拒的矛盾。
+        limits = _load_ask_user_limits()
+        min_opts = limits["min_options_per_question"]
+        max_opts = limits["max_options_per_question"]
         return ToolSchema(
             name=ASK_USER_QUESTION_TOOL_NAME,
             description=(
                 "向用户提一个结构化问题并等待回答。当你需要用户在几个明确选项间做决定时使用"
-                "（如输出格式、实现方案、是/否确认）。提供 2-4 个选项，每个选项带 label"
-                "和可选 description；multi_select=true 时允许多选。"
+                f"（如输出格式、实现方案、是/否确认）。提供 {min_opts}-{max_opts} 个选项，"
+                "每个选项带 label 和可选 description；multi_select=true 时允许多选。"
             ),
             parameters={
                 "type": "object",
@@ -135,7 +173,7 @@ class AskUserQuestionTool(BaseTool):
                     },
                     "options": {
                         "type": "array",
-                        "description": f"{MIN_OPTIONS}-{MAX_OPTIONS} 个选项",
+                        "description": f"{min_opts}-{max_opts} 个选项",
                         "items": {
                             "type": "object",
                             "properties": {
@@ -150,8 +188,8 @@ class AskUserQuestionTool(BaseTool):
                             },
                             "required": ["label"],
                         },
-                        "minItems": MIN_OPTIONS,
-                        "maxItems": MAX_OPTIONS,
+                        "minItems": min_opts,
+                        "maxItems": max_opts,
                     },
                     "multi_select": {
                         "type": "boolean",
