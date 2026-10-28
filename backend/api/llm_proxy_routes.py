@@ -276,15 +276,14 @@ def _proxy_timeout_seconds() -> float:
         from backend.data.settings_repo import SettingsRepository
 
         raw = SettingsRepository().get_json("app_settings") or {}
-        if isinstance(raw, dict):
-            value = raw.get("llmProxyTimeoutS")
-            # bool 是 int 子类，必须先排除；py3.8 不支持 int | float 联合语法。
-            if (
-                not isinstance(value, bool)
-                and isinstance(value, (int, float))  # noqa: UP038 — 保持 Py3.8 兼容
-                and value >= PROXY_TIMEOUT_MIN_SECONDS
-            ):
-                timeout = min(float(value), PROXY_TIMEOUT_MAX_SECONDS)
+        value = raw.get("llmProxyTimeoutS") if isinstance(raw, dict) else None
+        # bool 是 int 子类，必须先排除；py3.8 不支持 int | float 联合语法。
+        if (
+            not isinstance(value, bool)
+            and isinstance(value, (int, float))  # noqa: UP038 — 保持 Py3.8 兼容
+            and value >= PROXY_TIMEOUT_MIN_SECONDS
+        ):
+            timeout = min(float(value), PROXY_TIMEOUT_MAX_SECONDS)
     except (ImportError, OSError, ValueError, TypeError):
         pass  # 读配置失败回退 env/默认
 
