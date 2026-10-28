@@ -83,6 +83,7 @@
 | 102  | [全局规则 UI（~/.sage/SAGE.md）](./102-global-rules.md) | G1/P0：设置页读写全局规则文件 / 路径硬编码 + 原子写 + 符号链接拒写 / 扫描 level=all 护栏 / 8000 字符截断 + 64KB 保存上限 / win7 零适配 |
 | 104  | [Zotero → LLM 集成](./104-zotero-llm-integration.md) | 四层可见性阻断修复（白名单/路径/prompt/索引）/ ZoteroIngestor 向量索引 + 语义检索降级 / wiki 沉淀与零改动图谱 / 设置页同步面板 |
 | 107  | [会话标题生成机制](./107-session-title-generation.md) | 标题 LLM 生成流程 / `title_attempts` 计数器 / 启动回补调度器 / 专用标题模型配置 |
+| 108  | [Plan Mode 增强](./108-plan-mode-enhancement.md) | 复杂度分类（simple/medium/complex）/ 执行模式推荐（single/multi/ask_user）/ scout_deep 深度调研 + ResearchSummaryCard / confirm_marker 规则引擎 + 步骤级确认（continue/skip/abort） |
 
 ---
 

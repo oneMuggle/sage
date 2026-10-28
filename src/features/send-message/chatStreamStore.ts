@@ -38,6 +38,7 @@ import type {
   TodoItem,
 } from '../../shared/api';
 import type { AttachmentEmbedConfig } from '../../shared/api/attachmentRagConfig';
+import type { ResearchReport, StepConfirmInfo } from '../../shared/api/types/planModeTypes';
 import type { Message, ToolCall } from '../../shared/lib/store';
 
 import type { DeliveryMode } from './deliveryMode';
@@ -132,6 +133,8 @@ export interface TaskBoardState {
     queued: number;
     failed: number;
     cancelled: number;
+    // Phase 3 (2026-10-28): 步骤确认跳过的任务数（可选，旧事件无此字段）。
+    skipped?: number;
   };
   dispatchedAt?: number | null;
   // RD20 (round43): 历史 run 恢复时的终态时刻 —— BU16 时长在恢复态显示
@@ -180,6 +183,16 @@ export function mergeLiveEvent(
   return next;
 }
 
+/**
+ * 2026-10-28 (Plan Mode 增强): 执行模式推荐（后端分类器产物）。
+ * mode: single / multi / ask_user；confidence: 0-1；reasoning: 一句话判断依据。
+ */
+export interface ExecutionModeRecommendation {
+  mode: 'single' | 'multi' | 'ask_user';
+  confidence: number;
+  reasoning: string;
+}
+
 /** 单个会话的流式槽位（S2 键控） */
 export interface SessionStreamSlots {
   streaming: StreamingState | null;
@@ -210,7 +223,26 @@ export interface SessionStreamSlots {
    * 先于 task_plan 到达时任务板还不存在，故独立于 TaskBoardState 存槽位；
    * task_plan 初始化 / finishStream 兜底时清空。
    */
-  preflightPhase: 'clarify' | 'scout' | null;
+  preflightPhase: 'clarify' | 'scout' | 'complexity_classify' | 'execution_mode_classify' | null;
+  /**
+   * 2026-10-28 (Plan Mode 增强): 计划模式收尾时后端分类器给出的执行模式推荐。
+   * 在 DONE 之前随 `plan_execution_mode` 事件到达，供 PlanApprovalBar 做
+   * "推荐 + 可覆盖"。null = 尚未收到推荐（分类降级或非计划模式）。
+   */
+  executionModeRecommendation: ExecutionModeRecommendation | null;
+  /**
+   * 2026-10-28 (Plan Mode 增强 Phase 2): 复杂任务深度调研结果。
+   * 在 scout_deep 完成后随 `research_complete` 事件到达，供 ResearchSummaryCard 渲染。
+   * null = 尚未收到调研报告（非 complex 任务或调研失败降级）。
+   */
+  researchReport: ResearchReport | null;
+  /**
+   * 2026-10-28 (Plan Mode 增强 Phase 3): 自动确认点（步骤确认对话框信息）。
+   * 当 plan 执行到标记为 auto_confirm 的步骤时，后端发 awaiting_step_confirm 事件，
+   * 前端写入此槽位供 StepConfirmDialog 渲染。用户操作后由 clearStepConfirm 清空。
+   * null = 未等待确认（常规步骤或用户已响应）。
+   */
+  stepConfirm: StepConfirmInfo | null;
   /**
    * U5 队列（2026-09-18 从 useChat 的 component-local ref 迁入）：
    * 会话忙时用户继续发送的消息在此排队，当前 run 自然结束后 flush。
@@ -233,6 +265,9 @@ const EMPTY_SLOTS: SessionStreamSlots = {
   completedSteps: [],
   shiftInfo: null,
   preflightPhase: null,
+  executionModeRecommendation: null,
+  researchReport: null,
+  stepConfirm: null,
   pendingQueue: [],
   queuePaused: false,
 };
@@ -301,7 +336,29 @@ interface ChatStreamStoreState {
   // —— 任务板 ——
   setTaskBoard: (sessionId: string, board: TaskBoardState | null) => void;
   /** Round 3 (2026-09-19): 写入/清空编排拆解前置阶段指示。 */
-  setPreflightPhase: (sessionId: string, phase: 'clarify' | 'scout' | null) => void;
+  setPreflightPhase: (
+    sessionId: string,
+    phase: 'clarify' | 'scout' | 'complexity_classify' | 'execution_mode_classify' | null,
+  ) => void;
+  /**
+   * 2026-10-28 (Plan Mode 增强): 写入/清空计划模式的执行模式推荐。
+   * 由 `plan_execution_mode` 事件驱动（该事件在 DONE 之前到达）。
+   */
+  setExecutionModeRecommendation: (
+    sessionId: string,
+    recommendation: ExecutionModeRecommendation | null,
+  ) => void;
+  /**
+   * 2026-10-28 (Plan Mode 增强 Phase 2): 写入/清空复杂任务深度调研结果。
+   * 由 `research_complete` 事件驱动（scout_deep 完成后到达）。
+   */
+  setResearchReport: (sessionId: string, report: ResearchReport | null) => void;
+  /**
+   * 2026-10-28 (Plan Mode 增强 Phase 3): 写入/清空步骤确认对话框信息。
+   * 由 `awaiting_step_confirm` 事件驱动（auto_confirm 步骤到达时）。
+   * 用户响应后传 null 清空。
+   */
+  setStepConfirm: (sessionId: string, info: StepConfirmInfo | null) => void;
   updateTaskBoard: (
     sessionId: string,
     runId: string,
@@ -392,6 +449,16 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
         completedSteps: [],
         // Task 11 (2026-09-17): 新一轮流式清掉 topic_shifted 横幅态
         shiftInfo: null,
+        // 2026-10-28 (Plan Mode 增强): 新一轮清掉上一轮的执行模式推荐
+        // —— 推荐在 plan_execution_mode 事件里到达（DONE 之前），必须留到
+        // 本轮 plan 审阅用，不能在 finishStream 里清。
+        executionModeRecommendation: null,
+        // 2026-10-28 (Plan Mode 增强 Phase 2): 新一轮清掉调研报告
+        // —— 避免上一轮的 researchReport 在新 run 开始时残留（review #12）。
+        researchReport: null,
+        // 2026-10-28 (Plan Mode 增强 Phase 3): 新一轮清掉步骤确认对话框态
+        // —— 避免上一轮的确认信息在新 run 开始时残留。
+        stepConfirm: null,
       }),
     })),
 
@@ -551,6 +618,27 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
 
   setPreflightPhase: (sessionId, phase) =>
     set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { preflightPhase: phase }) })),
+
+  setExecutionModeRecommendation: (sessionId, recommendation) =>
+    set((prev) => ({
+      sessions: writeSlots(prev.sessions, sessionId, {
+        executionModeRecommendation: recommendation,
+      }),
+    })),
+
+  setResearchReport: (sessionId, report) =>
+    set((prev) => ({
+      sessions: writeSlots(prev.sessions, sessionId, {
+        researchReport: report,
+      }),
+    })),
+
+  setStepConfirm: (sessionId, info) =>
+    set((prev) => ({
+      sessions: writeSlots(prev.sessions, sessionId, {
+        stepConfirm: info,
+      }),
+    })),
 
   setTodos: (sessionId, todos) =>
     set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { todos }) })),

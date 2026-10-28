@@ -71,6 +71,7 @@ export function RunSummaryPanel({ sessionId, onRerunFailed }: RunSummaryPanelPro
             共 {progress.total} 个子任务 · 完成 {progress.done}
             {progress.failed > 0 ? ` · 失败 ${progress.failed}` : ''}
             {progress.cancelled > 0 ? ` · 取消 ${progress.cancelled}` : ''}
+            {(progress.skipped ?? 0) > 0 ? ` · 跳过 ${progress.skipped}` : ''}
           </span>
         ) : null}
         <div className="ml-auto flex items-center gap-1">

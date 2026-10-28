@@ -18,6 +18,8 @@ const ORCH_GLYPH: Record<TaskStatusValue, string> = {
   done: '☑',
   failed: '✗',
   cancelled: '⊘',
+  // Phase 3 (2026-10-28): 步骤确认后用户选择跳过。
+  skipped: '↷',
 };
 
 const ORCH_LABEL: Record<TaskStatusValue, string> = {
@@ -26,6 +28,7 @@ const ORCH_LABEL: Record<TaskStatusValue, string> = {
   done: '已完成',
   failed: '失败',
   cancelled: '已取消',
+  skipped: '已跳过',
 };
 
 /** 编排状态 → 字形/中文标签。 */

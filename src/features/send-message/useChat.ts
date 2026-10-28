@@ -128,6 +128,7 @@ export function useChat() {
     taskBoard,
     completedSteps,
     preflightPhase,
+    executionModeRecommendation,
     pendingQueue,
     queuePaused,
   } = useChatStreamStore((s) => selectSessionSlots(s, currentSessionId));
@@ -977,6 +978,8 @@ export function useChat() {
     planApprovalFor,
     /** Round 3 (2026-09-19): 编排拆解前置阶段（澄清/侦察指示） */
     preflightPhase,
+    /** 2026-10-28 (Plan Mode 增强): 计划模式执行模式推荐（single/multi/ask_user） */
+    executionModeRecommendation,
     /** PM2: 清除计划批准状态（批准执行或忽略时调用） */
     clearPlanApproval: useCallback(() => setPlanApprovalFor(null), []),
     /** U5: 当前会话的待发送队列（可见 + 可操作） */

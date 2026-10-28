@@ -94,6 +94,25 @@ def _event_repo():
     return SessionEventRepository()
 
 
+def _resolve_step_confirm_flag(
+    requested: Optional[bool], complexity: Optional[str]
+) -> bool:
+    """Phase 3 (2026-10-28): 解析步骤级确认开关。
+
+    三态语义（与 ``ChatStreamRequest.step_confirm`` 对齐）：
+
+    - ``None``（请求未指定）→ 自动模式：仅 ``complexity == "complex"`` 启用
+      （计划文档风险表："步骤确认频繁 → 仅 complex 任务启用"）。
+    - ``True`` / ``False`` → 调用方显式覆盖。
+
+    复杂度来自 preflight 分类；preflight 关闭/无 LLM 时为 None → 不启用，
+    等价于既有行为（不弹确认）。
+    """
+    if requested is None:
+        return complexity == "complex"
+    return bool(requested)
+
+
 # §1.2 修复（PR #294）配套：全局 SQLite 串行化锁。
 #
 # Why: 34 个 `async def` handler 降级为 `def` 后，FastAPI 自动把它们 dispatch 到 anyio
@@ -299,6 +318,59 @@ from backend.api.legacy_chat_routes import (  # noqa: F401 — include 挂载 + 
 )
 
 router.include_router(legacy_chat_routes_router)
+
+
+#: 计划模式执行模式分类的墙钟上限（秒）—— 分类是增强不是门槛，超时即降级
+#: ask_user，绝不拖住计划收尾（DONE 事件）。
+_EXECUTION_MODE_CLASSIFY_TIMEOUT_S = 20.0
+
+
+async def _emit_execution_mode_recommendation(
+    entry: StreamEntry,
+    session_id: str,
+    plan_text: str,
+) -> None:
+    """计划模式收尾时判定执行模式（single/multi/ask_user）并推事件。
+
+    2026-10-28 (Plan Mode 增强)：读计划原文经 LLM 分类器判定最佳执行模式，
+    随 ``plan_execution_mode`` 事件下发给前端 PlanApprovalBar 做"推荐 +
+    可覆盖"。事件必须在 DONE 之前推 —— DONE 之后前端流即收尾。
+
+    降级铁律：分类是增强不是门槛 —— 无 LLM 配置 / 超时 / 任何异常一律降级
+    ``ask_user``（让用户自己选），绝不阻塞计划收尾，也绝不抛错。
+    """
+    try:
+        from backend.orchestration.execution_mode_classifier import (
+            ExecutionModeClassification,
+            classify_execution_mode,
+        )
+
+        try:
+            classification = await asyncio.wait_for(
+                classify_execution_mode(plan_text),
+                timeout=_EXECUTION_MODE_CLASSIFY_TIMEOUT_S,
+            )
+        except asyncio.TimeoutError:  # noqa: UP041 — py38 LTS 的 asyncio.TimeoutError 与内置 TimeoutError 不同类
+            logger.warning(
+                "计划模式执行模式分类超时（%ss），降级 ask_user",
+                _EXECUTION_MODE_CLASSIFY_TIMEOUT_S,
+            )
+            classification = ExecutionModeClassification(
+                mode="ask_user",
+                confidence=0.0,
+                reasoning="执行模式分类超时，降级为 ask_user",
+            )
+        await entry.queue.put(
+            {
+                "state": "plan_execution_mode",
+                "session_id": session_id,
+                "execution_mode": classification.mode,
+                "execution_mode_confidence": classification.confidence,
+                "execution_mode_reasoning": classification.reasoning,
+            }
+        )
+    except Exception:  # noqa: BLE001 — 分类绝不阻塞计划收尾
+        logger.warning("计划模式执行模式分类失败（已忽略）", exc_info=True)
 
 
 @router.post("/chat/stream")
@@ -716,6 +788,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     DispatchSubagentsTool,
                 )
 
+                # Phase 3 (2026-10-28): preflight 复杂度决策步骤级确认的自动开关
+                # （complex → 弹确认；preflight 关闭/override 路径 → None → 不弹）。
+                preflight_complexity: Optional[str] = None
                 if data.plan_override:
                     # A10 (2026-08-14): override 路径 —— items 自带 task_id，
                     # 直接透传，不重枚举；run_id 复用 resume 返回的 new_run_id。
@@ -747,8 +822,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             )
 
                             preflight_context = await run_plan_preflight(
-                                data.message, emit=entry.queue.put
+                                data.message,
+                                emit=entry.queue.put,
+                                # scout_deep 需要会话工作区定位 .llm-wiki；
+                                # 未绑定时内部回落 cwd。
+                                session_id=data.session_id,
                             )
+                            if isinstance(preflight_context, dict):
+                                _complexity_info = preflight_context.get("complexity")
+                                if isinstance(_complexity_info, dict):
+                                    _level = _complexity_info.get("complexity")
+                                    if isinstance(_level, str):
+                                        preflight_complexity = _level
                             plan = await Planner(
                                 task_registry=TaskRegistry(),
                                 team_registry=TeamRegistry(),
@@ -831,6 +916,34 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             for item in plan_items
                         ]
 
+                    # Phase 3 (2026-10-28): 步骤级确认 —— 开启时对计划条目跑
+                    # confirm_marker 规则引擎（零 LLM/零网络），命中破坏性/不可逆
+                    # 步骤写 auto_confirm + confirm_categories；dispatcher 派发前弹
+                    # StepConfirmDialog 等用户 continue/skip/abort。
+                    # 缺省按复杂度自动决策（complex 才开），显式值可覆盖。
+                    step_confirm_enabled = _resolve_step_confirm_flag(
+                        getattr(data, "step_confirm", None), preflight_complexity
+                    )
+                    if step_confirm_enabled:
+                        try:
+                            from backend.orchestration.confirm_marker import (
+                                mark,
+                                matched_categories,
+                            )
+
+                            plan_items = [
+                                {
+                                    **item,
+                                    "auto_confirm": mark(item),
+                                    "confirm_categories": matched_categories(item),
+                                }
+                                for item in plan_items
+                            ]
+                        except Exception as marker_err:  # noqa: BLE001 — 降级铁律
+                            logger.warning(
+                                "步骤确认标记失败，跳过 auto_confirm: %s", marker_err
+                            )
+
                     dispatcher_workspace_root = None
                     try:
                         from backend.office.session_workspace import get_workspace_binding
@@ -854,6 +967,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         workspace_root=dispatcher_workspace_root,
                         # O3 (2026-09-08): 会话归因 —— 子代理用量计入本会话。
                         session_id=data.session_id,
+                        # Phase 3 (2026-10-28): 步骤级确认开关传给 dispatcher，
+                        # 派发前对计划条目跑 confirm_marker 判定是否暂停。
+                        step_confirm=step_confirm_enabled,
                     )
                     # P2-9 (2026-08-14): 进程内注册表登记 —— 长连接期间 run 级
                     # cancel 端点能定位到本 dispatcher 并置位取消事件。
@@ -2257,6 +2373,20 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         logger.debug(
                             f"[REQ {request_id}] sources_used event push failed, ignored"
                         )
+                # 2026-10-28 (Plan Mode 增强): 计划模式执行模式推荐 ——
+                # 分类器读计划原文判定 single/multi/ask_user，随 DONE 之前推给
+                # 前端 PlanApprovalBar 做"推荐 + 可覆盖"。必须在 DONE 之前推：
+                # DONE 之后前端流即收尾，事件会丢。
+                # 降级铁律: 分类是增强不是门槛 —— 无 LLM 配置/超时/异常一律降级
+                # ask_user(让用户自己选)，绝不阻塞计划收尾。
+                if data.plan_mode and done_content:
+                    # 2026-10-28 修复 #11 → #17 (code review): fire-and-forget
+                    # 会让 LLM 分类（最长 20s）与 DONE 推送竞争 —— 分类还没完成
+                    # 时 DONE 已经入队,SENTINEL 关闭流后前端已退订,事件丢失。
+                    # 改为 await 内联,函数自带 try/except+timeout 不抛错不阻塞。
+                    await _emit_execution_mode_recommendation(
+                        entry, data.session_id, done_content
+                    )
                 if done_event:
                     done_payload = done_event.to_dict()
                     # client_message_id (2026-09): DONE 附带 assistant 消息的

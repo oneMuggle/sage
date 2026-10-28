@@ -108,6 +108,15 @@ _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 #: 生产值来自 LLM 计划（``t1``..``tN``）或自分配计数器，格式严格可控。
 _TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 
+#: Phase 3 (2026-10-28): auto_confirm 步骤等待用户应答的上限秒数。
+#: 超时按 abort 收口 —— 避免用户离开后 run 永久挂起。
+STEP_CONFIRM_TIMEOUT_SECONDS = 600
+
+#: Phase 3 (2026-10-28): 终态集合 —— ``in_flight`` 计算、级联取消、
+#: ``task_status`` 终态分支统一引用。``skipped``（用户跳过 auto_confirm 步骤）
+#: 必须与 done/failed/cancelled 同属终态，否则 dispatcher 会误判"仍在并行运行"。
+_TERMINAL_STATUSES: frozenset = frozenset({"done", "failed", "cancelled", "skipped"})
+
 
 async def _classify_orchestration_mode(
     message: str,
@@ -260,6 +269,7 @@ class ChatDispatcher:
         workspace_root: Optional[str] = None,
         event_hub: Optional[Any] = None,
         session_id: Optional[str] = None,
+        step_confirm: bool = False,
     ) -> None:
         # 安全修复波 (2026-08-23): 白名单校验必须在任何副作用（DB 连接、
         # worktree 清扫）之前 —— 非法 run_id 直接拒绝构造。
@@ -360,6 +370,16 @@ class ChatDispatcher:
         self.approval_mode: str = getattr(self.settings, "subagent_approval_mode", "ask")
         # live-events P1: 待决审批表 request_id → task_id，供 answer 路由回填。
         self._pending_approvals: Dict[str, str] = {}
+        # Phase 3 (2026-10-28): 待决步骤确认 —— task_id → (Future[str], loop)。
+        # auto_confirm 步骤派发前创建，/runs/{run_id}/step-confirm 端点回填
+        # continue/skip/abort；用户超时或取消则 abort。
+        # 同步保存创建 Future 的 loop —— resolve 端点由 FastAPI 线程池调用
+        # （sync def endpoint），必须用 ``loop.call_soon_threadsafe`` 唤醒 awaiter，
+        # 否则 ``Future.set_result`` 不会触发 loop wakeup，awaiter 将卡到超时。
+        self._pending_step_confirms: Dict[str, Tuple[asyncio.Future, asyncio.AbstractEventLoop]] = {}
+        # Phase 3: 是否启用步骤级确认。开启后由 confirm_marker 规则引擎在
+        # 派发前对每个计划条目的 goal 重新求值（计划被编辑后仍准确）。
+        self._step_confirm_enabled = bool(step_confirm)
         # M1 终审 (2026-08-23): 崩溃残留机会性清扫 —— 同 run_id 重派时清掉上次
         # 进程崩溃遗留的孤儿 worktree 目录。必须在任何子任务创建 worktree 之前
         # 执行（构造期即完成）；失败全吞降级，绝不阻塞派发。
@@ -495,6 +515,14 @@ class ChatDispatcher:
                 self.run_id,
             )
             self._pending_approvals.clear()
+        # Phase 3: 唤醒并清空待决步骤确认 —— 等待中的任务以 abort 收口。
+        if self._pending_step_confirms:
+            logger.debug(
+                "cancel: 清理 %d 条待决步骤确认 run=%s",
+                len(self._pending_step_confirms),
+                self.run_id,
+            )
+            self._resolve_all_step_confirms("abort")
         return True
 
     def cancel_task(self, task_id: str) -> bool:
@@ -513,7 +541,7 @@ class ChatDispatcher:
         if skip is None or skip.is_set():
             return False
         state = self._states.get(task_id)
-        if state is None or state.status in ("done", "failed", "cancelled"):
+        if state is None or state.status in _TERMINAL_STATUSES:
             return False
         skip.set()
         return True
@@ -635,7 +663,7 @@ class ChatDispatcher:
             return {"success": False, "error": f"任务 {task_id} 已是取消状态"}
         state = self._states.get(task_id)
         if state is not None:
-            if state.status in ("done", "failed", "cancelled"):
+            if state.status in _TERMINAL_STATUSES:
                 return {
                     "success": False,
                     "error": f"任务 {task_id} 已终态（{state.status}），无法取消",
@@ -1165,6 +1193,21 @@ class ChatDispatcher:
                         state.error = "skipped by user"
                     self._emit_task_status(state)
                     return
+                # Phase 3 (2026-10-28): auto_confirm 步骤在执行前暂停，
+                # 等待用户 continue/skip/abort。取消/单任务跳过/超时统一收口。
+                _confirm_action = await self._await_step_confirm(state, task_skip)
+                if _confirm_action == "abort":
+                    state.status = "cancelled"
+                    state.error = "aborted at step confirmation"
+                    state.finished_at = time.time()
+                    self._emit_task_status(state)
+                    return
+                if _confirm_action == "skip":
+                    state.status = "skipped"
+                    state.error = "skipped at step confirmation"
+                    state.finished_at = time.time()
+                    self._emit_task_status(state)
+                    return
                 state.status = "running"
                 state.started_at = time.time()
                 self._emit_task_status(state)
@@ -1304,7 +1347,7 @@ class ChatDispatcher:
                 downstream = by_id.get(tid)
                 if downstream is None:
                     continue
-                if downstream.status in ("failed", "cancelled", "done"):
+                if downstream.status in _TERMINAL_STATUSES:
                     continue
                 culprits = [
                     d for d in deps_by_id.get(tid, []) if d in cumulative_failed
@@ -1753,7 +1796,7 @@ class ChatDispatcher:
         # 预算关闭也可见（对标 Claude Code per-task token 始终展示）；
         # queued/running 不查询（进行中用量意义有限，减少 DB 次数）。
         if (
-            state.status in ("done", "failed", "cancelled")
+            state.status in _TERMINAL_STATUSES
             and self.session_id
             and self._first_dispatch_at
         ):
@@ -1798,6 +1841,7 @@ class ChatDispatcher:
         "done": "task.succeeded",
         "failed": "task.failed",
         "cancelled": "task.cancelled",
+        "skipped": "task.skipped",  # Phase 3: 用户跳过的 auto_confirm 步骤
     }
 
     def _publish_task_lifecycle(self, state: ChatTaskState) -> None:
@@ -1910,6 +1954,119 @@ class ChatDispatcher:
             await sink.emit_approval_resolved(request_id, approved)
         return True
 
+    # ------------------------------------------------------------------
+    # Phase 3 (2026-10-28): 步骤级确认 —— auto_confirm 步骤派发前暂停
+    # ------------------------------------------------------------------
+
+    def _plan_item_auto_confirm(self, task_id: str) -> bool:
+        """计划条目是否需要派发前确认。
+
+        仅当本 run 启用 step_confirm 时才求值；用 confirm_marker 规则引擎
+        对当前 goal 重新评估（计划经 update_plan 编辑后仍以最新文本为准）。
+        引擎异常/缺 goal → 放行。
+        """
+        if not self._step_confirm_enabled:
+            return False
+        item = self._plan_by_id.get(task_id)
+        if not item:
+            return False
+        try:
+            from backend.orchestration.confirm_marker import mark
+
+            return mark(item)
+        except Exception as exc:  # noqa: BLE001 — 规则引擎故障不阻塞派发
+            logger.debug("confirm_marker 求值失败 task=%s: %s", task_id, exc)
+            return False
+
+    def _resolve_all_step_confirms(self, action: str) -> None:
+        """以统一动作唤醒并清空全部待决步骤确认（取消/中途收口用）。
+
+        唤醒必须经 ``loop.call_soon_threadsafe`` —— 该方法可能在 FastAPI
+        线程池调用方（cancel 端点）或 run 协程自身两种上下文被调用，前者
+        跨线程，后者同线程但 ``Future.set_result`` 不会主动 wake 等待协程。
+        ``call_soon_threadsafe`` 两条路径都安全。
+        """
+        pending, self._pending_step_confirms = self._pending_step_confirms, {}
+        for fut, loop in pending.values():
+            if not fut.done():
+                loop.call_soon_threadsafe(fut.set_result, action)
+
+    def resolve_step_confirm(self, task_id: str, action: str) -> bool:
+        """用户应答步骤确认 —— 回填对应 Future。
+
+        由 ``/orch/runs/{run_id}/step-confirm`` 端点调用。返回是否命中待决
+        确认（未命中 → 端点转 409）。非法动作按 abort 处理。
+        """
+        if action not in ("continue", "skip", "abort"):
+            action = "abort"
+        entry = self._pending_step_confirms.pop(task_id, None)
+        if entry is None:
+            return False
+        fut, loop = entry
+        if fut.done():
+            return False
+        loop.call_soon_threadsafe(fut.set_result, action)
+        return True
+
+    async def _await_step_confirm(
+        self,
+        state: ChatTaskState,
+        task_skip: Optional[asyncio.Event] = None,
+    ) -> str:
+        """发出 awaiting_step_confirm 并按用户应答返回动作。
+
+        仅计划条目带 ``auto_confirm`` 的任务弹确认；其余直接 continue。
+        取消/超时 → abort；单任务跳过（``cancel_task`` 置位的 ``task_skip``）
+        → skip —— 否则对话框会挂到 600s 超时才收口（code review #15）。
+        返回值：continue / skip / abort。
+        """
+        if not self._plan_item_auto_confirm(state.task_id):
+            return "continue"
+        if self._cancelled.is_set():
+            return "abort"
+        if task_skip is not None and task_skip.is_set():
+            return "skip"
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future = loop.create_future()
+        self._pending_step_confirms[state.task_id] = (fut, loop)
+        plan_item = self._plan_by_id.get(state.task_id) or {}
+        self._emit_chat_event(
+            {
+                "state": "awaiting_step_confirm",
+                "run_id": self.run_id,
+                "task_id": state.task_id,
+                "step_confirm": {
+                    "goal": state.goal,
+                    "stepId": state.task_id,
+                    "categories": list(plan_item.get("confirm_categories") or []),
+                },
+            }
+        )
+        # 取消 / 单任务跳过 / 用户应答三方竞速 —— 任一先到即收口，避免无应答时挂死。
+        cancel_wait = asyncio.ensure_future(self._cancelled.wait())
+        skip_wait = (
+            asyncio.ensure_future(task_skip.wait()) if task_skip is not None else None
+        )
+        waiters = {fut, cancel_wait}
+        if skip_wait is not None:
+            waiters.add(skip_wait)
+        try:
+            done, _pending = await asyncio.wait(
+                waiters,
+                timeout=STEP_CONFIRM_TIMEOUT_SECONDS,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+        finally:
+            cancel_wait.cancel()
+            if skip_wait is not None:
+                skip_wait.cancel()
+            self._pending_step_confirms.pop(state.task_id, None)
+        if fut in done and not fut.cancelled():
+            return fut.result()
+        if skip_wait is not None and skip_wait in done:
+            return "skip"
+        return "abort"  # 取消或超时
+
     def init_orch_run(self, session_id: str, plan_json: str, original_request: str = "") -> None:
         """由 caller (legacy_routes) 在第一次 dispatch 前调一次。失败降级。
 
@@ -1946,7 +2103,7 @@ class ChatDispatcher:
         try:
             # RT24 (round32): 终态携带任务级用量/时长（BU17 memo 查询 +
             # started/finished 差），run 历史回看有量化数据。非终态不传。
-            _terminal = state.status in ("done", "failed", "cancelled")
+            _terminal = state.status in _TERMINAL_STATUSES
             self._orch_task_repo.upsert_state(
                 task_id=state.task_id,
                 run_id=self.run_id,
@@ -1994,7 +2151,8 @@ class ChatDispatcher:
         done = sum(1 for s in states if s.status == "done")
         failed = sum(1 for s in states if s.status == "failed")
         cancelled = sum(1 for s in states if s.status == "cancelled")
-        in_flight = total - done - failed - cancelled
+        skipped = sum(1 for s in states if s.status == "skipped")
+        in_flight = total - done - failed - cancelled - skipped
 
         if in_flight > 0:
             header = (
@@ -2002,6 +2160,7 @@ class ChatDispatcher:
                 f"- 已收到 {done}/{total} 子任务结果"
                 + (f"（{failed} 失败）" if failed else "")
                 + (f"（{cancelled} 已取消）" if cancelled else "")
+                + (f"（{skipped} 已跳过）" if skipped else "")
                 + f",{in_flight} 个仍在并行运行。\n"
                 f"- 提醒：在剩余 {in_flight} 个子任务未完成前，"
                 f"本次回答只能基于当前结果。"
@@ -2013,6 +2172,7 @@ class ChatDispatcher:
                 f"- 已收到 {done}/{total} 子任务结果"
                 + (f"（{failed} 失败）" if failed else "")
                 + (f"（{cancelled} 已取消）" if cancelled else "")
+                + (f"（{skipped} 已跳过）" if skipped else "")
                 + "。\n\n"
             )
         # BU3 (round11): 预算触顶提示 —— 让 conductor 知道取消原因是预算
@@ -2128,7 +2288,7 @@ class ChatDispatcher:
             # N>0 才显（preset 回放 0 / 查询失败不显）。
             # BU20 (round36): 并排追加任务级耗时（state 起止差，秒级）——
             # conductor 判断"哪个子任务拖慢整体"的直接输入。
-            _terminal = state.status in ("done", "failed", "cancelled")
+            _terminal = state.status in _TERMINAL_STATUSES
             _used = (
                 self._task_tokens_used(state.task_id) if _terminal else None
             )

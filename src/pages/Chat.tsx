@@ -3,12 +3,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { StepConfirmDialog } from '../components/StepConfirmDialog';
+import type { StepConfirmAction } from '../components/StepConfirmDialog';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStore';
 import { useSessionMemoryPause } from '../features/chat/useSessionMemoryPause';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useRightPanelStore } from '../features/right-panel/rightPanelStore';
 import {
+  selectSessionSlots,
   useChatStreamStore,
   type QueuedChatMessage,
 } from '../features/send-message/chatStreamStore';
@@ -19,6 +22,7 @@ import { useTerminalPanelStore } from '../features/terminal-panel/terminalPanelS
 import { type ChatOfficeRef } from '../shared/api';
 import { maybeIndexAttachment } from '../shared/api/attachmentAutoIndex';
 import { loadAttachmentRagConfig } from '../shared/api/attachmentRagConfig';
+import { orchRunControlClient } from '../shared/api/orchRunControlClient';
 // RD20 (round43): 历史 run → 任务板恢复映射。
 import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
 import { useStore } from '../shared/lib/store';
@@ -75,6 +79,7 @@ export function Chat() {
     clearTaskBoard, // Wave 3: 取消执行后清空任务板
     planApprovalFor, // PM2 (round8): 计划模式待批准的会话 ID
     preflightPhase, // Round 3 (2026-09-19): 编排拆解前置阶段（澄清/侦察指示）
+    executionModeRecommendation, // 2026-10-28 (Plan Mode 增强): 执行模式推荐
     clearPlanApproval, // PM2: 清除批准状态
     pendingQueue, // U5 (2026-09-18): 本会话待发送队列
     queuePaused, // U5: 队列是否因上一轮异常收尾而暂停
@@ -157,6 +162,43 @@ export function Chat() {
     useChatStreamStore.getState().setShiftInfo(currentSessionId, null);
     await loadMessages(currentSessionId);
   }, [currentSessionId, loadMessages]);
+
+  // Phase 3 (2026-10-28): 步骤确认 —— 后端推 awaiting_step_confirm 事件后
+  // 写入 store 的 stepConfirm 槽位。渲染 StepConfirmDialog 等用户选择；
+  // 用户响应后调后端 /runs/{runId}/step-confirm 唤醒 dispatcher 并清空槽位。
+  const stepConfirm = useChatStreamStore((s) =>
+    currentSessionId != null ? selectSessionSlots(s, currentSessionId).stepConfirm : null,
+  );
+  const stepConfirmRunId = useChatStreamStore((s) =>
+    currentSessionId != null ? selectSessionSlots(s, currentSessionId).taskBoard?.runId : null,
+  );
+  const handleStepConfirm = useCallback(
+    async (action: StepConfirmAction) => {
+      if (!currentSessionId || !stepConfirm) return;
+      // code review #14: 槽位有 pending 确认但拿不到 runId 时不能静默 return —
+      // 对话框按钮点了没反应，用户只能刷新页面。报错并清空本地槽位，
+      // dispatcher 端 600s 超时会以 abort 收口。
+      if (!stepConfirmRunId) {
+        toast.error('步骤确认缺少 run 信息，已跳过此步确认');
+        useChatStreamStore.getState().setStepConfirm(currentSessionId, null);
+        return;
+      }
+      try {
+        await orchRunControlClient.confirmStep({
+          run_id: stepConfirmRunId,
+          task_id: stepConfirm.stepId,
+          action,
+        });
+      } catch (err) {
+        // 失败仍清空本地槽位，避免对话框卡死；dispatcher 端 600s 超时会以 abort 收口。
+        const message = err instanceof Error ? err.message : String(err);
+        toast.error(`步骤确认提交失败：${message}`);
+      } finally {
+        useChatStreamStore.getState().setStepConfirm(currentSessionId, null);
+      }
+    },
+    [currentSessionId, stepConfirm, stepConfirmRunId],
+  );
   const showTopicShiftBanner = currentSessionId != null && shiftInfo != null && !isLoading;
   const isTempChat = currentSessionId != null && tempChatSessions.has(currentSessionId);
   const { settings, isLoading: settingsLoading } = useSettings();
@@ -563,8 +605,14 @@ export function Chat() {
               preflightPhase={preflightPhase}
               taskBoard={taskBoard ?? null}
               onCancelRun={handleCancelRun}
+              recommendedExecutionMode={executionModeRecommendation?.mode ?? null}
+              executionModeReasoning={executionModeRecommendation?.reasoning}
             />
           </div>
+
+          {/* Phase 3 (2026-10-28): 步骤确认对话框 —— auto_confirm 步骤执行前
+              弹出，等用户 continue/skip/abort。固定浮层，覆盖全屏。 */}
+          {stepConfirm && <StepConfirmDialog step={stepConfirm} onConfirm={handleStepConfirm} />}
 
           {/* 阶段 4 + P2: 流式处理时显示当前活跃 agent + 迭代轮次 + 阶段 */}
           <ActiveAgentIndicator

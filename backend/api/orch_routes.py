@@ -492,6 +492,53 @@ def confirm_run(run_id: str) -> ConfirmRunResponse:
 
 
 # ---------------------------------------------------------------------------
+# Phase 3 (2026-10-28): auto_confirm 步骤确认端点 —— 前端 StepConfirmDialog 应答。
+# dispatcher 在 auto_confirm 步骤派发前发 awaiting_step_confirm 事件并等待
+# Future；本端点回填 continue/skip/abort 唤醒执行。
+# ---------------------------------------------------------------------------
+
+
+class StepConfirmRequest(BaseModel):
+    task_id: str
+    action: str
+
+
+class StepConfirmResponse(BaseModel):
+    ok: bool
+    run_id: str
+    task_id: str
+    action: str
+
+
+@router.post("/runs/{run_id}/step-confirm", response_model=StepConfirmResponse)
+async def step_confirm(run_id: str, body: StepConfirmRequest) -> StepConfirmResponse:
+    """用户应答 auto_confirm 步骤确认。
+
+    前置条件: run 仍有活动 dispatcher 且该 task 有待决确认。
+    未命中 → 404/409；非法动作 → 422。
+
+    async def（非 sync def）: dispatcher 内部 Future 的 ``set_result`` 现
+    经 ``call_soon_threadsafe`` 唤醒已线程安全,但 endpoint 运行在 loop 线程
+    可免去 thread-pool 跳转,与 FastAPI async 路由规范一致。
+    """
+    from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
+
+    dispatcher = _ACTIVE_DISPATCHERS.get(run_id)
+    if dispatcher is None:
+        raise HTTPException(status_code=404, detail="active run not found")
+    if body.action not in ("continue", "skip", "abort"):
+        raise HTTPException(status_code=422, detail=f"invalid action: {body.action}")
+    if not dispatcher.resolve_step_confirm(body.task_id, body.action):
+        raise HTTPException(
+            status_code=409,
+            detail=f"no pending step confirmation for task: {body.task_id}",
+        )
+    return StepConfirmResponse(
+        ok=True, run_id=run_id, task_id=body.task_id, action=body.action
+    )
+
+
+# ---------------------------------------------------------------------------
 # Round 2 (2026-09-19): 计划模式 × 编排打通 —— 已批准计划文本 → 结构化任务项
 # （docs/plans/2026-09-19_orch-plan-preflight-round2-plan.md）。前端批准条
 # "按计划执行（编排）" → 本端点 → plan_override 通道派发（复用恢复流管道）。

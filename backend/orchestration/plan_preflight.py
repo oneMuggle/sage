@@ -28,6 +28,7 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from backend.orchestration.orch_settings import load_orch_settings
@@ -119,6 +120,27 @@ def _scout_timeout_s() -> float:
     return DEFAULT_SCOUT_TIMEOUT_S
 
 
+def _resolve_preflight_workspace(session_id: Optional[str]) -> Path:
+    """解析 scout_deep 的项目根目录。
+
+    优先会话工作区绑定（与 dispatcher 的 ``workspace_root`` 同源），
+    无绑定 / 读取失败回落 ``Path.cwd()`` —— 调研定位错误不应阻断 preflight。
+    """
+    if session_id:
+        try:
+            from backend.data.database import get_database
+            from backend.office.session_workspace import get_workspace_binding
+
+            binding = get_workspace_binding(
+                get_database().get_connection(), session_id
+            )
+            if binding is not None and binding.workspace_path:
+                return Path(binding.workspace_path)
+        except Exception as exc:  # noqa: BLE001 — 工作区解析失败回落 cwd
+            logger.debug("plan_preflight: workspace 绑定读取失败，回落 cwd: %s", exc)
+    return Path.cwd()
+
+
 async def _emit(emit: Optional[Callable[[Dict[str, Any]], Awaitable[None]]], event: Dict[str, Any]) -> None:
     """向 producer 队列推事件；emit 缺失/队列异常一律吞掉（透明度事件不阻塞主流程）。"""
     if emit is None:
@@ -132,16 +154,24 @@ async def _emit(emit: Optional[Callable[[Dict[str, Any]], Awaitable[None]]], eve
 async def run_plan_preflight(
     message: str,
     emit: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
+    session_id: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """编排拆解前置：澄清 + 侦察，返回 planner context 增量（或 None）。
+    """编排拆解前置：复杂度分类 + 澄清 + 侦察，返回 planner context 增量（或 None）。
 
-    本函数**永不抛错**：任何一层失败都降级为跳过该步；两步皆无产出时
+    本函数**永不抛错**：任何一层失败都降级为跳过该步；所有步骤皆无产出时
     返回 None（调用方等价于现状 ``decompose_request(message)``）。
+
+    流程：
+    1. 复杂度分类（complexity_classifier）→ 决定调研深度
+    2. 需求澄清（clarify）→ 消除歧义
+    3. 事实侦察（scout）→ 根据复杂度选择 scout_lite / scout_deep
 
     Args:
         message: 用户原始目标。
         emit: 事件推送协程（producer 传 ``entry.queue.put``）——推
             ``orch_preflight`` 进度事件与 ``ask_user_question`` 提问事件。
+        session_id: 会话 id（可选）。用于解析会话工作区绑定，scout_deep
+            需要项目根目录定位 ``.llm-wiki``；缺省或读取失败回落 cwd。
     """
     try:
         if not message.strip():
@@ -157,25 +187,117 @@ async def run_plan_preflight(
 
         client = build_llm_client_from_settings()
         if client is None:
-            logger.info("plan_preflight: 无 LLM 配置，跳过澄清/侦察")
+            logger.info("plan_preflight: 无 LLM 配置，跳过复杂度分类/澄清/侦察")
             return None
 
         result: Dict[str, Any] = {}
+
+        # === 复杂度分类（2026-10-28 新增） ===
+        from backend.orchestration.complexity_classifier import classify_complexity
+
+        classification = await classify_complexity(message)
+        result["complexity"] = classification.to_dict()
+        await _emit(
+            emit,
+            {
+                "state": "orch_preflight",
+                "phase": "complexity_classify",
+                "complexity": classification.complexity,
+            },
+        )
 
         clarifications = await _clarify(client, message, emit)
         if clarifications:
             result["clarifications"] = clarifications
 
+        # === 根据复杂度决定 scout 策略 ===
         if settings.plan_scout_enabled:
-            facts = await _scout(
-                client,
-                message,
-                emit,
-                clarifications,
-                max_iterations=settings.max_scout_iterations,
-            )
-            if facts:
-                result["scout_facts"] = facts
+            if classification.complexity == "simple":
+                # simple → 跳过 scout
+                logger.info("plan_preflight: complexity=simple，跳过 scout")
+            elif classification.complexity == "complex":
+                # complex → scout_deep（Phase 2: 2026-10-28）
+                from backend.orchestration import scout_deep
+
+                logger.info("plan_preflight: complexity=complex，调用 scout_deep")
+                await _emit(
+                    emit,
+                    {"state": "orch_preflight", "phase": "scout_deep"},
+                )
+
+                async def _fallback_scout_lite() -> None:
+                    """scout_deep 不可用 → 回落轻量侦察（保留既有行为）。"""
+                    facts = await _scout(
+                        client,
+                        message,
+                        emit,
+                        clarifications,
+                        max_iterations=settings.max_scout_iterations,
+                    )
+                    if facts:
+                        result["scout_facts"] = facts
+
+                report = None
+                try:
+                    report = await asyncio.wait_for(
+                        scout_deep.research(
+                            topic=message,
+                            project_path=_resolve_preflight_workspace(session_id),
+                            settings=settings,
+                        ),
+                        # 深度调研（3-5 次搜索 + 综合）远超 scout_lite 墙钟，
+                        # 用 scout_deep 自己的预算而非 _scout_timeout_s()。
+                        timeout=scout_deep.SCOUT_DEEP_TIMEOUT_S,
+                    )
+                except TIMEOUT_ERRORS:
+                    logger.warning(
+                        "plan_preflight: scout_deep 超时（%ss），降级为 scout_lite",
+                        scout_deep.SCOUT_DEEP_TIMEOUT_S,
+                    )
+                except Exception as exc:  # noqa: BLE001 — scout_deep 失败降级
+                    logger.warning(
+                        "plan_preflight: scout_deep 失败，降级为 scout_lite: %s",
+                        exc,
+                    )
+
+                # 空报告（confidence=0 / findings 空）等同失败：不推
+                # research_complete（避免前端弹空 ResearchSummaryCard），
+                # 回落 scout_lite 保证 planner 仍有事实注入。
+                if report is not None and report.confidence > 0 and report.findings:
+                    await _emit(
+                        emit,
+                        {
+                            "state": "research_complete",
+                            "research_report": report.to_dict(),
+                        },
+                    )
+                    result["research_report"] = report.to_dict()
+                    planner_ctx = report.to_planner_context(SCOUT_FACTS_MAX_CHARS)
+                    if planner_ctx:
+                        result["scout_facts"] = planner_ctx
+                    logger.info(
+                        "plan_preflight: scout_deep 完成 confidence=%.2f findings=%d",
+                        report.confidence,
+                        len(report.findings),
+                    )
+                else:
+                    if report is not None:
+                        logger.warning(
+                            "plan_preflight: scout_deep 空报告（confidence=0），"
+                            "降级为 scout_lite"
+                        )
+                    await _fallback_scout_lite()
+            else:
+                # medium → scout_lite（现有逻辑）
+                facts = await _scout(
+                    client,
+                    message,
+                    emit,
+                    clarifications,
+                    max_iterations=settings.max_scout_iterations,
+                )
+                if facts:
+                    result["scout_facts"] = facts
 
         return result or None
     except Exception:  # noqa: BLE001 — preflight 永不阻塞编排

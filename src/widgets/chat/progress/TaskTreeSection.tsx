@@ -40,6 +40,8 @@ const STATUS_ICON: Record<TaskStatusValue, string> = {
   // P0-8 (2026-08-20): cancelled 状态渲染 —— 之前未覆盖 cancel 子任务，图标
   // 退化为 undefined，TaskTreeSection 视觉上与 running 难以区分。
   cancelled: '⊘',
+  // Phase 3 (2026-10-28): 用户在步骤确认对话框选择"跳过此步"。
+  skipped: '↷',
 };
 
 const STATUS_TITLE: Record<TaskStatusValue, string> = {
@@ -48,6 +50,7 @@ const STATUS_TITLE: Record<TaskStatusValue, string> = {
   done: 'done',
   failed: 'failed',
   cancelled: 'cancelled',
+  skipped: 'skipped',
 };
 
 interface TaskTreeSectionProps {
