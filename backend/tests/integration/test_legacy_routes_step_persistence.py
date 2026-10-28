@@ -10,7 +10,9 @@ N 步 run 产生 N+1 条 assistant 行。同时验证 message_count 增量 = N+2
   - 3 步 run (2 STEP_DONE + 1 final):1 user + 2 steps + 1 final = 4 messages
   - STEP_DONE 事件被 NDJSON 队列转发,前端可 snapshot 气泡
 
-win7 适配: 自 main cherry-pick,断言与后端 step-by-step 落库实现保持一致。
+Plan quote (glowing-cooking-gadget.md §Verification):
+    "backend/tests/test_legacy_routes_step_persistence.py:断言 N 步 run 产生 N+1 条 assistant 行,
+    message_count += N+1"
 """
 
 from __future__ import annotations

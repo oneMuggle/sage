@@ -42,7 +42,9 @@ def test_parse_json_empty_raises() -> None:
 
 
 def test_parse_json_unparseable_raises() -> None:
-    with pytest.raises(ValueError, match="could not parse JSON object"):
+    with pytest.raises(
+        ValueError, match="could not parse JSON object from LLM response"
+    ):
         parse_json("just plain text, no JSON here")
 
 
@@ -58,5 +60,5 @@ def test_strip_code_fences_no_fences() -> None:
 
 
 def test_extract_json_object_no_braces() -> None:
-    with pytest.raises(ValueError, match="no balanced JSON object"):
+    with pytest.raises(ValueError, match="no balanced JSON object found"):
         extract_json_object("no braces here")

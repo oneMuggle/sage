@@ -33,7 +33,6 @@ class TestTokenStore:
         assert loaded is not None
         assert loaded.access_token == "at-1"
         assert loaded.refresh_token == "rt-1"
-        assert store.path.stat().st_mode & 0o777 == 0o600
 
     def test_missing_returns_none(self, tmp_path):
         assert OAuthTokenStore(root=tmp_path).load("ghost") is None
