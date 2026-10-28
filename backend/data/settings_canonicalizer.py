@@ -99,6 +99,9 @@ ALIASES: Dict[str, str] = {
     "max_options_per_question": "maxOptionsPerQuestion",
     "max_clarify_questions_in_prompt": "maxClarifyQuestionsInPrompt",
     "max_clarify_questions_per_round": "maxClarifyQuestionsPerRound",
+    # 2026-10-28: LLM 代理上游超时（秒）— 前端「LLM 代理超时」设置。
+    # 缺别名时 relay 的 camelToSnake 往返后翻不回 camel，保存 400 被静默吞掉。
+    "llm_proxy_timeout_s": "llmProxyTimeoutS",
 }
 
 # AppSettings (src/entities/setting/types.ts) 锁死的白名单
@@ -132,6 +135,9 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         # 2026-10-22: 整轮任务 wall-clock 上限（秒）— 0 = 不限；函数式读取
         # 立即生效，无须重启后端。前端 DEFAULT_SETTINGS = 1800。
         "llmTotalTimeoutS",
+        # 2026-10-28: LLM 代理上游超时（秒）。backend/api/llm_proxy_routes.py
+        # 函数式读取，改后下一个请求即生效。
+        "llmProxyTimeoutS",
     }
 )
 LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
