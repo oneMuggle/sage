@@ -279,11 +279,12 @@ def _proxy_timeout_seconds() -> float:
         if isinstance(raw, dict):
             value = raw.get("llmProxyTimeoutS")
             # bool 是 int 子类，必须先排除；py3.8 不支持 int | float 联合语法。
-            if not isinstance(value, bool) and isinstance(
-                value, (int, float)  # noqa: UP038 — 保持 Py3.8 兼容
+            if (
+                not isinstance(value, bool)
+                and isinstance(value, (int, float))  # noqa: UP038 — 保持 Py3.8 兼容
+                and value >= PROXY_TIMEOUT_MIN_SECONDS
             ):
-                if value >= PROXY_TIMEOUT_MIN_SECONDS:
-                    timeout = min(float(value), PROXY_TIMEOUT_MAX_SECONDS)
+                timeout = min(float(value), PROXY_TIMEOUT_MAX_SECONDS)
     except (ImportError, OSError, ValueError, TypeError):
         pass  # 读配置失败回退 env/默认
 
