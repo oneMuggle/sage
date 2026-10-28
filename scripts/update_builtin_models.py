@@ -21,8 +21,10 @@ Python 3.8 compatible: intentionally no PEP 604 / PEP 585 annotations.
 """
 
 import argparse
+import http.client
 import json
 import math
+import os
 import re
 import sys
 import urllib.request
@@ -96,6 +98,11 @@ def parse_openrouter(payload, now):
     Accepts either the raw response object ({"data": [...]}) or a bare list of
     entries. Invalid entries (non-string/blank id, non-positive integer
     context_length) are skipped rather than raising.
+
+    Split rule mirrors backend/model_catalog/sources.py::_split_model_id so the
+    merge key (provider, model_id) matches the rows already in builtin.json:
+    ``openai/gpt-4o`` -> provider ``openai``, model_id ``gpt-4o``. A slashless
+    id falls back to provider ``openrouter`` with the raw id as model_id.
     """
     if isinstance(payload, dict):
         entries = payload.get("data")
@@ -108,8 +115,8 @@ def parse_openrouter(payload, now):
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        model_id = entry.get("id")
-        if not isinstance(model_id, str) or not model_id.strip():
+        raw_id = entry.get("id")
+        if not isinstance(raw_id, str) or not raw_id.strip():
             continue
         context_length = entry.get("context_length")
         if isinstance(context_length, bool) or not isinstance(context_length, int):
@@ -122,11 +129,13 @@ def parse_openrouter(payload, now):
             pricing = {}
         input_price = _per_million(pricing.get("prompt"))
         output_price = _per_million(pricing.get("completion"))
+        provider, model_id = _split_openrouter_id(raw_id)
 
         model = {
-            "provider": model_id.split("/", 1)[0],
+            "provider": provider,
             "model_id": model_id,
-            "tier": heuristic_tier(model_id, input_price, output_price),
+            # 启发式看完整 id: 'opus'/'70b' 这类词元可能只出现在 vendor 前缀之后。
+            "tier": heuristic_tier(raw_id, input_price, output_price),
             "native": context_length,
         }
         if input_price is not None and output_price is not None:
@@ -290,11 +299,11 @@ def _run_check():
 
 
 def _run_refresh(dry_run):
-    now = _utc_now()
-    # URLError and socket.timeout are OSError; JSONDecodeError is ValueError.
+    # URLError/socket.timeout → OSError; JSONDecodeError → ValueError;
+    # IncompleteRead 等 → HTTPException。三者都只告警、不改盘（R33e）。
     try:
         payload = fetch_openrouter()
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, http.client.HTTPException) as exc:
         print(
             f"warning: OpenRouter fetch failed ({exc}); builtin.json unchanged",
             file=sys.stderr,
@@ -312,16 +321,20 @@ def _run_refresh(dry_run):
         print(f"error: {BUILTIN_PATH} has no 'models' list", file=sys.stderr)
         return 1
 
+    now = _utc_now()
     fetched = parse_openrouter(payload, now)
     merged, stats = merge_models(existing, fetched)
     print(f"added: {stats['added']}, kept: {stats['kept']}")
 
-    if dry_run:
-        print(f"would write {len(merged)} models")
-        return 0
-
     candidate = dict(data)
     candidate["models"] = sorted(merged, key=_model_sort_key)
+    if stats["added"] > 0:
+        candidate["generated_at"] = now
+        bumped = _bump_minor(data.get("version"))
+        if bumped is not None:
+            candidate["version"] = bumped
+
+    # --dry-run 也走同一道校验：否则它会报告一个真实写盘会拒绝的结果。
     errors = validate(candidate)
     if errors:
         for error in errors:
@@ -332,18 +345,53 @@ def _run_refresh(dry_run):
         print("unchanged")
         return 0
 
-    candidate["generated_at"] = now
-    candidate["version"] = _bump_minor(data.get("version"))
-    with BUILTIN_PATH.open("w", encoding="utf-8", newline="\n") as handle:
-        json.dump(candidate, handle, indent=2, ensure_ascii=False)
-        handle.write("\n")
+    if dry_run:
+        print(f"would write {len(candidate['models'])} models")
+        return 0
+
+    _atomic_write_json(BUILTIN_PATH, candidate)
     print(f"wrote {len(candidate['models'])} models")
     return 0
+
+
+def _atomic_write_json(path, payload):
+    """写临时文件 → fsync → 原子替换。
+
+    builtin.json 是路由的离线事实源；直接 truncate 后写盘若中途失败，会让
+    seed_if_empty 静默种出空目录。os.replace 保证读者只会看到旧文件或新文件。
+    """
+    tmp_path = path.with_name(path.name + ".tmp")
+    try:
+        with tmp_path.open("w", encoding="utf-8", newline="\n") as handle:
+            json.dump(payload, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(str(tmp_path), str(path))
+    except BaseException:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def _read_builtin():
     with BUILTIN_PATH.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def _split_openrouter_id(raw_id):
+    """Mirror backend/model_catalog/sources.py::_split_model_id.
+
+    ``openai/gpt-4o`` → ('openai', 'gpt-4o'); a slashless id → ('openrouter', raw).
+    Keeping the bare slug is what makes the (provider, model_id) merge key line up
+    with the rows already in builtin.json.
+    """
+    if "/" in raw_id:
+        provider, _, model_id = raw_id.partition("/")
+        return provider or "openrouter", model_id or raw_id
+    return "openrouter", raw_id
 
 
 def _tokenize(model_id):
@@ -406,6 +454,10 @@ def _utc_now():
 
 
 def _bump_minor(version):
+    """``2.0.0`` → ``2.1.0``; anything unparseable → None (keep the original).
+
+    不硬编码 fallback:遇到 ``3.x`` 这类意外文档时写死 2.1.0 会把版本改小。
+    """
     if isinstance(version, str):
         parts = version.split(".")
         if len(parts) >= 2:
@@ -413,10 +465,9 @@ def _bump_minor(version):
                 major = int(parts[0])
                 minor = int(parts[1])
             except ValueError:
-                pass
-            else:
-                return f"{major}.{minor + 1}.0"
-    return "2.1.0"
+                return None
+            return f"{major}.{minor + 1}.0"
+    return None
 
 
 if __name__ == "__main__":
