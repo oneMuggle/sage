@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { listModels } from '../entities/model-catalog/api';
+import type { CandidateModel } from '../entities/model-catalog/types';
 import { isEndpointConfigured } from '../entities/setting/endpointReadiness';
 import {
   defaultRecommendations,
@@ -21,7 +23,7 @@ import { worktreeApi, type BranchEntry, type SessionWorktree } from '../shared/a
 import { useI18n, type TranslationKey } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import { AssistantRecommendations } from '../widgets/welcome/AssistantRecommendations';
-import type { ModelOption } from '../widgets/welcome/ModelPicker';
+import { AUTO_MODEL_ID, type ModelOption } from '../widgets/welcome/ModelPicker';
 import type { ProjectOption } from '../widgets/welcome/ProjectPicker';
 import { QuickActionBar, type QuickAction } from '../widgets/welcome/QuickActionBar';
 import { WelcomeHero } from '../widgets/welcome/WelcomeHero';
@@ -56,6 +58,14 @@ const STORAGE_KEY_MODEL = 'welcomeModelId';
 const STORAGE_KEY_WORKTREE_MODE = 'welcomeWorktreeMode';
 const STORAGE_KEY_WORKTREE_BRANCH = 'welcomeWorktreeBranch';
 const STORAGE_KEY_WORKTREE_ID = 'welcomeWorktreeId';
+
+/** catalog 价格：input/output 都已知时才展示 `${input}/${output} USD/M`。 */
+function buildPriceLabel(price: CandidateModel['price'] | undefined): string | null {
+  const input = price?.input_per_million;
+  const output = price?.output_per_million;
+  if (!input || !output) return null;
+  return `${input}/${output} USD/M`;
+}
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatWelcomePageMarkdown(params: {
@@ -117,7 +127,9 @@ export function Welcome() {
     return localStorage.getItem(STORAGE_KEY_PROJECT);
   });
   const [modelId, setModelId] = useState<string | null>(() => {
-    return localStorage.getItem(STORAGE_KEY_MODEL);
+    const stored = localStorage.getItem(STORAGE_KEY_MODEL);
+    // R29: 自动哨兵不是模型 id；模式切回手动后不得残留
+    return stored === AUTO_MODEL_ID ? null : stored;
   });
   const [worktreeMode, setWorktreeMode] = useState<WorktreeModeType>(() => {
     return (localStorage.getItem(STORAGE_KEY_WORKTREE_MODE) as WorktreeModeType) || 'none';
@@ -133,22 +145,49 @@ export function Welcome() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [branches, setBranches] = useState<BranchEntry[]>([]);
   const [worktrees, setWorktrees] = useState<SessionWorktree[]>([]);
+  // R27: catalog 富化数据（tier / context / price）；离线时保持空 Map → 平铺。
+  const [tierLookup, setTierLookup] = useState<Map<string, CandidateModel>>(() => new Map());
 
-  // Derive models from settings.endpoints
+  // R27 数据源：挂载后拉一次 catalog。失败静默保持平铺（不 toast、不抛错）。
+  const hasConfiguredEndpoint = useMemo(
+    () => settings.endpoints.some((endpoint) => Boolean(endpoint.baseUrl)),
+    [settings.endpoints],
+  );
+  useEffect(() => {
+    if (!hasConfiguredEndpoint) return;
+    let cancelled = false;
+    listModels({ limit: 1000, offset: 0 })
+      .then((res) => {
+        if (cancelled) return;
+        setTierLookup(new Map(res.items.map((m) => [m.model_key.model_id, m])));
+      })
+      .catch(() => {
+        // 离线 / 后端不可用：保持无 tier，平铺列表（R27）。
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasConfiguredEndpoint]);
+
+  // Derive models from settings.endpoints, enriched by catalog when available.
   const models: ModelOption[] = useMemo(() => {
     const result: ModelOption[] = [];
     for (const endpoint of settings.endpoints) {
       if (endpoint.discoveredModels) {
         for (const model of endpoint.discoveredModels) {
+          const catalogModel = tierLookup.get(model.id);
           result.push({
             modelId: model.id,
             endpointName: endpoint.name,
+            tier: catalogModel?.tier ?? null,
+            contextTokens: catalogModel?.native ?? null,
+            priceLabel: buildPriceLabel(catalogModel?.price),
           });
         }
       }
     }
     return result;
-  }, [settings.endpoints]);
+  }, [settings.endpoints, tierLookup]);
 
   const globalModelId = settings.modelSelections.chatModel.modelId;
 
@@ -196,7 +235,8 @@ export function Welcome() {
   }, [projectId]);
 
   useEffect(() => {
-    if (modelId) {
+    // R29: 自动哨兵绝不写入 localStorage，避免日后切回手动模式继承非法模型 id
+    if (modelId && modelId !== AUTO_MODEL_ID) {
       localStorage.setItem(STORAGE_KEY_MODEL, modelId);
     } else {
       localStorage.removeItem(STORAGE_KEY_MODEL);
@@ -344,7 +384,8 @@ export function Welcome() {
         }
 
         // 3. Set model override if selected
-        if (effectiveModelId) {
+        // R29: 自动路由不写会话覆盖，交由后端按 task_type 选择
+        if (effectiveModelId && effectiveModelId !== AUTO_MODEL_ID) {
           await sessionApi.setModelOverride(sessionId, effectiveModelId);
         }
 
@@ -426,6 +467,7 @@ export function Welcome() {
               onModelChange={setModelId}
               models={models}
               globalModelId={globalModelId}
+              autoAvailable={settings.routing?.mode === 'auto'}
               worktreeMode={worktreeMode}
               worktreeBranch={worktreeBranch}
               worktreeId={worktreeId}
