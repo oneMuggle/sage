@@ -29,14 +29,16 @@ Sage 在 2026-06-23 PR 引入 v3 架构 (AppSettings → 后端 PUT/GET), 但后
 | `validate_settings_shape(settings) -> None` | AppSettings 白名单校验; 不在白名单 → raise `ValueError` |
 | `detect_legacy_snake_pollution(settings, path="") -> List[str]` | 递归检测 snake_case 字段路径 (调试用, 默认不 log) |
 
-**`ALIASES` 字段映射表** (16 条 snake↔camel):
-- 顶层 8 个: `model_selections`, `max_context`, `proxy_mode`, `proxy_url`, `tls_version`, `auto_memory`, `confirm_delete`, `compact_mode`
-- modelSelections 子层 3 个: `chat_model`, `vision_model`, `embedding_model`
-- EndpointConfig 子层 4 个: `base_url`, `api_key`, `discovered_models`, `last_discovered_at`
+**`ALIASES` 字段映射表** (44 条 snake↔camel):
+- 顶层 6 个: `model_selections`, `max_context`, `auto_context`, `max_output_tokens`, `auto_memory`, `confirm_delete`
+- modelSelections 子层 6 个: `chat_model`, `vision_model`, `embedding_model`, `tts_model`, `asr_model`, `image_gen_model`
+- EndpointConfig 子层 5 个: `base_url`, `api_key`, `discovered_models`, `last_discovered_at`, `local_model_path`
 - ModelSelection 子层 2 个: `endpoint_id`, `model_id`
+- orch 子层 19 个: 并发/重试/迭代/预算/审批/worktree/计划前置等编排旋钮
+- 其余 6 个: `log_timezone`、`use_folder_picker` 及 4 条 LLM 重试/超时键
 
 **白名单** (5 个 `FrozenSet[str]`):
-- `LEGAL_TOP_KEYS` — 13 个 AppSettings 顶层字段 (含 streaming, endpoints, modelSelections, wiki 等)
+- `LEGAL_TOP_KEYS` — 18 个 AppSettings 顶层字段 (含 streaming, endpoints, modelSelections, maxOutputTokens, wiki 等)
 - `LEGAL_ENDPOINT_KEYS` — 6 个 (id, name, baseUrl, apiKey, discoveredModels, lastDiscoveredAt)
 - `LEGAL_MODEL_SELECTION_KEYS` — 2 个 (endpointId, modelId)
 - `LEGAL_DISCOVERED_MODEL_KEYS` — 3 个 (id, capabilities, endpointId)
@@ -45,6 +47,17 @@ Sage 在 2026-06-23 PR 引入 v3 架构 (AppSettings → 后端 PUT/GET), 但后
 **路由接入** (legacy + hex 对称):
 - **GET**: `repo.get_json()` → `isinstance(dict)` guard → `detect_legacy_snake_pollution` (gate-controlled log) → `to_camel` → 返回
 - **PUT**: `repo.get_json()` (existing) → `isinstance(dict)` guard (否则 empty dict) → `req.model_dump(exclude_none=True)` → 剥离 legacy 3 字段 (api_base_url/api_key/model 仅审计, 不进 DB) → `{**existing, **payload}` → `to_camel` → `validate_settings_shape` (400 on ValueError) → `repo.set_json`
+
+### 字段：`maxOutputTokens`（2026-10-28）
+
+单次回答允许生成的最大 token 数，默认 `4096`，有效范围 `512–32768`（超出自动夹紧，非整数/布尔/非正值视为未设置）。运行时解析优先级（高 → 低）：
+
+1. `ChatRequest.max_tokens`（前端显式传入）
+2. agent `profile.model_config.max_tokens`（`4096` 视为占位默认值，跳过）
+3. `app_settings.maxOutputTokens`
+4. `LLMConfig.max_tokens` 默认 `4096`
+
+解析入口为 `backend/orchestration/llm_factory.py` 的 `resolve_max_output_tokens` / `load_max_output_tokens_from_settings`，`/chat` 与 `/chat/stream` 两条链路共用。`context_window` 已知时额外 clamp 为 `min(max_tokens, window − 512)`，避免上游 `prompt + max_tokens > max_model_len` 的 400；`measure_request_reserve` 的输出预算同步取该值。
 
 ### 前端
 
