@@ -19,8 +19,9 @@
 | `pages/Memory.tsx` | 取 main | 列表容器改由 `MemoryBrowser` 承载，win7 的 Tabs/Card 结构（+28/−350）整体退场 |
 | `widgets/memory/{MemoryCard,MemoryTabs}.tsx` | 删除 | 上一条的配套件，取 main 后无消费方 |
 | `widgets/memory/__tests__/{MemoryCard,MemorySSE}.spec.tsx` | 删除 | 随被测组件一起退场（190 行） |
+| `pages/__tests__/Memory.spec.tsx` | 删除 | win7 专属用例，7 条断言全部针对 Tabs/Card 版 UI（`所有记忆` / `按类型筛选` 等），取 main 后无对应实现 |
 | `widgets/command/CommandPalette.test.tsx` | 取 main | main 侧 439 行；`buildCommandPaletteAuditSnapshot` 仅存于 win7 测试内，组件两侧 696 行同内容 |
-| `widgets/wiki/MarkdownPreview.tsx` | 取 main | win7 只多 `remarkMath` 插件一行与注释，KaTeX 能力由 `BtwOverlay` 侧承载，不受影响 |
+| `widgets/wiki/MarkdownPreview.tsx` | **保留 win7** | win7 侧是 `remark-math` + `rehype-katex` 两件套，`MarkdownPreview.latex.test.tsx` 断言 `$E=mc^2$` 走 KaTeX；取 main 会让该用例红（见 §4.1） |
 | `features/{diagnostic,journal,office}/index.ts` | 取 main | 所删导出均只被 barrel 自身引用（见 §3） |
 | `shared/ui/{DropdownMenu,Select,Switch}/index.ts` | 删除 | 全仓无任何 `import … from 'shared/ui/<X>'`；组件自身 `.tsx` 路径保持可用 |
 | `widgets/evolution/index.ts` | 删除 | 同上，`git grep` 零命中 |
@@ -61,6 +62,20 @@ win7 独有的「浏览器环境自检」在 main 侧从未存在，且**全仓�
 BrowserEnvironmentSection` 在删除后零命中；`browser_env` 在 6 个 locale 文件零残留。
 该判定已在动笔前经用户确认（保留未完成特性 vs **直接删除**），历史可从本 PR 反向恢复。
 
+## 4.1 第一轮 CI 反馈与修正
+
+PR 首轮 CI（run `40491508255`）：Lint ✅、Type check ✅、**Test with coverage ❌**、Build 跳过。
+本机复跑全量 `vitest run --coverage` 复现：5369 用例中 9 条红，集中在两个 win7 专属测试文件：
+
+| 测试文件 | 失败 | 根因 |
+|---|---|---|
+| `pages/__tests__/Memory.spec.tsx` | 7/7 | 断言 win7 的 Tabs/Card 版 UI（`所有记忆`、`按类型筛选`、`用户档案`…），取 main 的 `Memory.tsx` 后该 UI 不存在 |
+| `widgets/wiki/__tests__/MarkdownPreview.latex.test.tsx` | 2/3 | 断言 `$E=mc^2$` 被 KaTeX 渲染；main 版 `MarkdownPreview` 只有 `remark-gfm`，缺 `remark-math` + `rehype-katex` |
+
+修正：`Memory.spec.tsx` 随 win7 UI 一并删除；`MarkdownPreview.tsx` **回退为 win7 版**（保留 KaTeX）。
+教训：判「取 main」时不能只看组件本体，必须同时枚举两侧 `__tests__` 下的全部用例
+（这两个文件名不在先前按 `Memory.test.tsx` / `Memory.p171.test.ts` 的探测清单里）。
+
 ## 5. i18n
 
 | 指标 | 结果 |
@@ -84,8 +99,10 @@ BrowserEnvironmentSection` 在删除后零命中；`browser_env` 在 6 个 local
 | `node scripts/architecture-check.mjs` | rc 0（67 baselined，slack 393 行 / 7 条） |
 | `node scripts/check-font-scale.mjs --max-slack=0` | rc 0（6 baselined，slack 0） |
 | `eslint`（改动 ts/tsx） | 0 error（`Message.tsx` 2 条 `react-refresh` warning 来自 main，非本批引入） |
+| 全量 `vitest run --coverage`（修正后） | **5362 用例 / 2746 套件，0 failed，退出码 0** |
+| 覆盖率（与 CI 同口径） | lines/stmts **79.13%**（阈值 67）、branches **81.56%**（79）、functions **73.17%**（65） |
 
-规模：**26 文件，+324 / −1190**。
+规模：**27 文件，+324 / −1190**（含修正提交：`Memory.spec.tsx` −101 行、`MarkdownPreview.tsx` 回退）。
 
 ## 7. `src/` 域收尾状态
 
