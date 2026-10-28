@@ -166,3 +166,34 @@ class TestRoutingApi:
         detail = response.json()["detail"]
         assert isinstance(detail, str)
         assert detail
+
+
+class TestAuthorization:
+    def test_route_rejects_wrong_token(self, seeded_repo):
+        """The handler enforces local auth itself (a bare app has no middleware)."""
+        from backend.api.routing_routes import build_router
+
+        app = FastAPI()
+        app.include_router(build_router(seeded_repo))
+        wrong_token_client = TestClient(
+            app, headers={"Authorization": "Bearer wrong-token"}
+        )
+
+        response = wrong_token_client.post(
+            "/api/v1/routing/route",
+            json={
+                "task_type": "code_generation",
+                "context_length": 8000,
+                "required_capabilities": [],
+            },
+        )
+
+        assert response.status_code == 401
+
+
+def test_routing_route_registered_on_app():
+    """The routing endpoint is wired into the production app."""
+    from backend.main import app
+
+    paths = {(r.path, m) for r in app.routes for m in getattr(r, "methods", set())}
+    assert ("/api/v1/routing/route", "POST") in paths
