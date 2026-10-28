@@ -1,10 +1,10 @@
 # 性能统计功能：会话用时 + 模型调用用时
 
-- **状态**：实施中（核心功能已完成，待测试）
+- **状态**：已完成（Phase 1 + Phase 2 + 后续优化 3/4 项）
 - **分支**：`feat/performance-stats`
 - **创建日期**：2026-10-28
 - **优先级**：P2（增强功能，非核心阻塞）
-- **最后更新**：2026-10-28 13:40
+- **最后更新**：2026-10-28 15:40
 
 ## 0. 背景与目标
 
@@ -209,10 +209,10 @@ async def get_session_usage(session_id: str):
   - 完成时间：2026-10-28
   - 实现：Session接口添加`duration_minutes?: number | null`字段
   
-- [ ] **步骤1.4**（可选）：前端会话列表展示
+- [x] **步骤1.4**（可选）：前端会话列表展示
   - 文件：`src/widgets/session/SessionItem.tsx`
-  - 验证：UI展示正确
-  - **暂缓**：Phase 1核心功能已完成，会话列表展示可作为后续优化
+  - 完成时间：2026-10-28
+  - 实现：会话元数据行展示 Clock 图标 + 用时（分钟 / 小时+分钟自动切换）
 
 ### Phase 2：模型调用用时（已完成 ✅）
 
@@ -250,6 +250,29 @@ async def get_session_usage(session_id: str):
   - 实现：展示平均响应时间（格式化为秒，保留1位小数）
   - Tooltip：显示完整统计（avg/p95/max）
   - 图标：使用⚡符号标识
+
+### Phase 3：后续优化（已完成 3/4 项 ✅）
+
+- [x] **步骤3.1**：会话列表展示用时
+  - 文件：`src/widgets/session/SessionItem.tsx`
+  - 完成时间：2026-10-28
+  - 实现：元数据行追加 Clock 图标 + 用时（< 60 分钟显示分钟，否则显示小时+分钟）
+
+- [x] **步骤3.2**：慢请求警告
+  - 文件：`src/widgets/chat/SessionUsageBadge.tsx`
+  - 完成时间：2026-10-28
+  - 实现：平均响应时间 > 10000ms 时徽章改用 `text-warning` 色
+
+- [x] **步骤3.3**：按模型统计
+  - 文件：`backend/services/usage_tracker.py`、`src/shared/api/usageApi.ts`、`src/widgets/chat/SessionUsageBadge.tsx`
+  - 完成时间：2026-10-28
+  - 实现：后端 `GROUP BY model` 聚合 avg_latency_ms + count，按次数降序；前端 tooltip 分组展示
+
+- [x] **步骤3.4**：CSV 导出包含时间统计
+  - **无需改动**：`GET /api/v1/usage/export/csv` 既有输出 `latency_ms` 列
+
+- [ ] **步骤3.5**：性能趋势图（未实施）
+  - 需扩展 `GET /api/v1/usage/trend` 增加延迟序列（当前仅 token/成本/缓存）+ 前端图表
 
 ## 4. 测试计划
 
@@ -303,26 +326,33 @@ async def get_session_usage(session_id: str):
 
 ### Phase 1 验收
 
-- [ ] Session API返回`duration_minutes`字段
-- [ ] 前端类型定义完整
-- [ ] 单元测试覆盖
+- [x] Session API返回`duration_minutes`字段
+- [x] 前端类型定义完整
+- [x] 单元测试覆盖
 - [ ] 文档更新（用户手册）
 
 ### Phase 2 验收
 
-- [ ] 数据库迁移成功
-- [ ] LLM API调用记录duration_ms
-- [ ] API返回时间统计（avg/p95/max）
-- [ ] 前端展示平均响应时间
-- [ ] 集成测试通过
-- [ ] 性能测试：写入延迟<10ms
+- [x] 数据库迁移成功（**N/A**——`latency_ms`列已存在，无需迁移）
+- [x] LLM API调用记录duration_ms（**既有实现**——`llm_client.py` 已用 `time.monotonic()` 记录）
+- [x] API返回时间统计（avg/p95/max）
+- [x] 前端展示平均响应时间
+- [x] 集成测试通过
+- [x] 性能测试：写入延迟<10ms（**N/A**——无新增写入路径，仅只读聚合查询）
+
+### Phase 3 验收（后续优化）
+
+- [x] 慢请求警告：平均响应时间 > 10s 时徽章转为 `text-warning`
+- [x] 按模型统计：`GROUP BY model` 返回每个模型的 avg_latency_ms + count
+- [x] CSV导出包含时间统计（**既有实现**——`usage_export_csv` 已输出 `latency_ms` 列）
+- [ ] 性能趋势图（未实施，见 §7）
 
 ## 7. 后续优化（可选）
 
-- **慢请求警告**：响应时间>10s时前端提示
-- **性能趋势图**：展示响应时间随时间的变化
-- **按模型统计**：不同模型的平均响应时间对比
-- **导出功能**：CSV导出包含时间统计
+- [x] **慢请求警告**：响应时间>10s时前端提示 → `SessionUsageBadge` 徽章警告色
+- [ ] **性能趋势图**：展示响应时间随时间的变化 → 需扩展 `GET /api/v1/usage/trend` 增加延迟序列 + 前端图表
+- [x] **按模型统计**：不同模型的平均响应时间对比 → tooltip 内分组展示
+- [x] **导出功能**：CSV导出包含时间统计 → `usage_export_csv` 既有 `latency_ms` 列
 
 ## 8. 参考资料
 
