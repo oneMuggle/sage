@@ -67,11 +67,13 @@ def _parse_builtin_json(raw: str) -> List[CandidateModel]:
             if isinstance(per_model_ts, str) and per_model_ts
             else (timestamp if isinstance(timestamp, str) else None)
         )
+        tier = model.get("tier")
         records.append(
             CandidateModel(
                 model_key=ModelKey(
                     provider=str(provider), model_id=str(model_id)
                 ),
+                tier=str(tier) if tier else None,
                 native=native,
                 price=Price(
                     input_per_million=price_data.get("input_per_million"),
