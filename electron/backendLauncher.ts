@@ -67,18 +67,6 @@ export interface ResolveOpts {
   userDataPath?: string;
 }
 
-export interface DoctorLaunchPlan {
-  command: string;
-  args: string[];
-  cwd: string;
-  env: Record<string, string>;
-  reason:
-    | 'dev-conda'
-    | 'dev-conda-overridden'
-    | 'packaged-win32-bundled'
-    | 'packaged-linux-bundled';
-}
-
 export type BackendLaunchPlan =
   | {
       kind: 'spawn';
@@ -105,6 +93,28 @@ export type BackendLaunchPlan =
         | 'packaged-unknown-platform'
         | 'packaged-no-resources-path';
     };
+
+/**
+ * Doctor argv derivation (2026-08-26).
+ *
+ * Returns a flat spawn-ready argv (command + args) + cwd + merged env for
+ * the `python -m backend.cli.doctor --json` pre-launch self-check. Returns
+ * `undefined` when the supervisor itself can't spawn (broken-installer) —
+ * the caller falls back to a bare `python` invocation so doctor still
+ * runs in CI / lightweight smoke paths even when packaged bundles are
+ * missing.
+ */
+export interface DoctorLaunchPlan {
+  command: string;
+  args: string[];
+  cwd: string;
+  env: Record<string, string>;
+  reason:
+    | 'dev-conda'
+    | 'dev-conda-overridden'
+    | 'packaged-win32-bundled'
+    | 'packaged-linux-bundled';
+}
 
 const PYTHONPATH_SEP_WIN = ';';
 const PYTHONPATH_SEP_UNIX = ':';
@@ -373,40 +383,39 @@ function packagedEnv(
 }
 
 /**
- * Resolve the launch command for the pre-launch ``python -m backend.cli.doctor
- * --json`` subprocess, derived from the supervisor plan returned by
- * ``resolveBackendLaunchCommand``.
+ * Derive doctor argv/env from the same ResolveOpts the supervisor uses.
  *
- * Design (alpha.12-win7):
- *   - Forks the supervisor plan and replaces the trailing ``-m backend.main``
- *     with ``-m backend.cli.doctor --json``. Conda- and packaged-launched
- *     Python both consume ``-m <module>`` identically, so the swap is safe
- *     across all four spawn reasons (dev-conda, dev-conda-overridden,
- *     packaged-win32-bundled, packaged-linux-bundled).
- *   - Merges ``plan.env + plan.extraEnv`` so the doctor subprocess sees the
- *     same SAGE_DB_PATH / SAGE_USER_DATA_DIR / PYTHON_BACKEND_PORT the
- *     backend supervisor will set on the real spawn. Without the merge the
- *     doctor would probe against host defaults and miss the user-data-dir /
- *     port / db-path the production backend uses.
- *   - Returns ``undefined`` for broken-installer (caller falls back to a
- *     bare ``python`` invocation so doctor remains fail-open in CI).
+ * Behaviour:
+ *   - Wraps `resolveBackendLaunchCommand(opts)` so the launch decision
+ *     tree (dev-conda / SAGE_PYTHON override / packaged bundles) stays
+ *     in one place.
+ *   - Replaces the trailing `-m backend.main` argv entry with
+ *     `-m backend.cli.doctor --json`. Conda- and packaged-launched Python
+ *     both consume `-m <module>` identically, so the swap is safe across
+ *     all four spawn reasons.
+ *   - Merges `plan.env` + `plan.extraEnv` so the doctor subprocess sees
+ *     the same SAGE_DB_PATH / SAGE_USER_DATA_DIR / PYTHON_BACKEND_PORT
+ *     the backend supervisor will set on the real spawn. Without the
+ *     merge the doctor would probe against host defaults and miss the
+ *     user-data-dir / port / db-path the production backend uses.
+ *   - Returns `undefined` for broken-installer (caller falls back to a
+ *     bare `python` invocation so doctor remains fail-open in CI).
  *
- * Critical regression (alpha.11-win7):
- *   Previously main.ts passed ``pythonBin=supervisorPlan.command`` and
- *   ``args=supervisorPlan.args`` (which is ``["-m", "backend.main"]`` in
- *   packaged-win32 mode) to ``runDoctorCheck``. ``doctor.ts`` then spawned
- *   ``python.exe -m backend.main`` — i.e. a full uvicorn server — instead
- *   of the doctor CLI. SIGTERM at the 5s timeout didn't propagate to the
- *   orphaned uvicorn child, which kept listening on 8765 and blocked
- *   subsequent ``spawnBackend()`` from binding the port, leaving the
- *   desktop stuck in the "30s 无响应" loop.
+ * Critical regression (2026-08-26):
+ *   Previously main.ts passed `pythonBin=doctorPlan.command` to
+ *   `runDoctorCheck`, which then hard-coded `['-m', 'backend.cli.doctor',
+ *   '--json']`. When `doctorPlan.command === 'conda'` (the dev-conda
+ *   branch) this produced the invalid `conda -m backend.cli.doctor
+ *   --json` invocation — conda has no `-m` subcommand. This helper
+ *   threads the full argv through so conda runs as
+ *   `conda run -n sage-backend python -m backend.cli.doctor --json`.
  */
 export function resolveDoctorLaunchCommand(opts: ResolveOpts): DoctorLaunchPlan | undefined {
   const plan = resolveBackendLaunchCommand(opts);
   if (plan.kind === 'broken-installer') return undefined;
 
   // Swap the trailing `-m backend.main` for the doctor entry. All four
-  // spawn reasons end with `-m backend.main`; replacing the last token
+  // spawn reasons end with `-m <module>`; replacing the last token
   // preserves any conda/argv prefix verbatim.
   const args = [...plan.args];
   const mainIdx = args.lastIndexOf('backend.main');

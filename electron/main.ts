@@ -132,7 +132,6 @@ import {
   initDiagnosticExport,
   runDiagnosticExport,
   runDiagnosticPreview,
-  runBrowserCheck,
 } from './diagnosticExport';
 import {
   collectAndWriteDiagnostic,
@@ -2017,14 +2016,6 @@ async function registerIpcHandlers(): Promise<void> {
       return runDiagnosticExport(opts);
     },
   );
-
-  // diagnostic:browser-check → GET /api/v1/diagnostic/browser-check
-  // Returns browser environment health checks (executable discovery,
-  // Win7 SP1/KB4474419, VC++ 2019, data dir writable, CDP handshake).
-  ipcMain.handle('diagnostic:browser-check', async (evt) => {
-    if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
-    return runBrowserCheck();
-  });
 
   // ─── Phase 3 (2026-09-25): 终端面板 PTY IPC handlers ─────────────────────
   // 在 Electron 主进程管理 node-pty 实例，renderer 通过 IPC 发送输入/接收输出。

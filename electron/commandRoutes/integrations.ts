@@ -1,3 +1,6 @@
+/**
+ * MCP servers, remote MCP workspace admin & Zotero library IPC commands.
+ */
 import type { CommandRoute } from '../commands';
 
 export const integrationRoutes: Record<string, CommandRoute> = {
@@ -39,7 +42,7 @@ export const integrationRoutes: Record<string, CommandRoute> = {
   },
 
   // Workspace MCP Server admin (M4). Backend: backend/remote_mcp/admin_routes.py.
-  // Tunnel / emergency stop / copy-url are Electron IPC (electron/remoteMcpIpc.ts — batch 5).
+  // Tunnel / emergency stop / copy-url are Electron IPC (electron/remoteMcpIpc.ts).
   remote_mcp_state: { method: 'GET', path: () => '/api/v1/remote-mcp/state' },
   remote_mcp_listener_start: {
     method: 'POST',

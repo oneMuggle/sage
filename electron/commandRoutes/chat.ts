@@ -1,7 +1,9 @@
+/**
+ * Chat, agents, messages & attachment RAG IPC commands.
+ */
 import type { CommandRoute } from '../commands';
 
 export const chatRoutes: Record<string, CommandRoute> = {
-
   // chat
   // I2: create + attach split — POST 立即返回 {streamId} 启动后台 LLM 调用,
   // GET attach 到同一 stream 拉取 NDJSON 事件。LLM 只跑一次。
@@ -40,11 +42,12 @@ export const chatRoutes: Record<string, CommandRoute> = {
   // RT5 (round7): 单 agent steering —— 运行中注入用户补充消息（body 经
   // relay camelToSnakeKeys 转成 { stream_id, content }）。
   chat_steer: { method: 'POST', path: () => '/api/v1/chat/steer' },
+
+  // R25-D4: 查询会话活跃 chat 流（renderer 重载后 reattach）。null = 无活跃流。
   chat_stream_active: {
     method: 'GET',
     path: (a) => `/api/v1/chat/stream/active?session_id=${encodeURIComponent(String(a.sessionId))}`,
   },
-
   // F12 (对标增强第五轮批次 B): 跨会话消息全文搜索（侧栏搜索框数据源）
   search_messages: {
     method: 'GET',
@@ -72,8 +75,8 @@ export const chatRoutes: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/messages/${encodeURIComponent(String(a.id))}/delete`,
   },
 
-  // Batch 4 (2026-10-23): attachment RAG commands.
-  // Backend: backend/api/chat_attachment_routes.py
+  // r59: 附件向量索引三端点透传（backend/api/chat_attachment_routes.py r58）。
+  // embed 配置 / query_vector 由调用方构造，body 原样透传（键已 snake）。
   attachment_rag_index: {
     method: 'POST',
     path: (a) => `/api/v1/chat/attachments/${encodeURIComponent(String(a.mediaId))}/index`,
