@@ -242,15 +242,6 @@ class TestEphemeralDirLocation:
         monkeypatch.setattr(browser_cdp.tempfile, "mkdtemp", fake_mkdtemp)
         monkeypatch.setattr(browser_cdp.subprocess, "Popen", FakePopen)
         monkeypatch.setattr(browser_cdp, "discover_browser_executable", lambda: "fake-browser.exe")
-        if hasattr(browser_cdp, "discover_and_select"):  # win7 线：launcher 抽象
-            fake_launcher = SimpleNamespace(
-                build_command=lambda exe, headless, udd, proxy: [exe, udd],
-                wait_for_cdp=lambda proc, udd, timeout=None: (9222, "/devtools/browser/fake"),
-            )
-            fake_cap = SimpleNamespace(
-                browser_type=browser_cdp.BrowserType.CHROME, launcher=fake_launcher
-            )
-            monkeypatch.setattr(browser_cdp, "discover_and_select", lambda: fake_cap)
         from backend.tools import http_factory
 
         monkeypatch.setattr(http_factory, "browser_proxy_flag", lambda: "")
