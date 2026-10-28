@@ -1,13 +1,18 @@
 /**
  * 创建自主目标弹窗
  *
- * 表单字段：名称、描述、闲时窗口、执行预算。
+ * 表单字段：名称、描述、触发模式（立即/条件）、执行条件配置、闲时窗口、执行预算。
  * 提交后通过 goalStore.create() 创建目标并关闭弹窗。
  */
 import { useState } from 'react';
 
 import { useGoalStore } from '../../entities/autonomous-goals/goalStore';
-import type { CreateGoalInput } from '../../entities/autonomous-goals/types';
+import type {
+  ConditionType,
+  CreateGoalInput,
+  ExecutionCondition,
+  TriggerMode,
+} from '../../entities/autonomous-goals/types';
 import { Button } from '../../shared/ui/Button';
 import { Input } from '../../shared/ui/Input';
 import { Modal } from '../../shared/ui/Modal';
@@ -17,11 +22,36 @@ interface CreateGoalModalProps {
   onClose: () => void;
 }
 
+// 条件类型选项
+const CONDITION_OPTIONS: { value: ConditionType; label: string; description: string }[] = [
+  { value: 'idle', label: '空闲', description: '用户空闲 N 分钟后执行' },
+  { value: 'time_window', label: '时间段', description: '在指定时间段内执行' },
+  { value: 'no_active', label: '无活动任务', description: '无其他运行中目标时执行' },
+  { value: 'manual', label: '手动触发', description: '不自动触发，需用户手动启动' },
+];
+
+function defaultCondition(type: ConditionType): ExecutionCondition {
+  switch (type) {
+    case 'idle':
+      return { type, params: { min_idle_minutes: 15 } };
+    case 'time_window':
+      return { type, params: { start: '22:00', end: '06:00' } };
+    case 'no_active':
+      return { type, params: {} };
+    case 'manual':
+      return { type, params: {} };
+    default:
+      return { type, params: {} };
+  }
+}
+
 export function CreateGoalModal({ isOpen, onClose }: CreateGoalModalProps) {
   const create = useGoalStore((s) => s.create);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [triggerMode, setTriggerMode] = useState<TriggerMode>('immediate');
+  const [conditions, setConditions] = useState<ExecutionCondition[]>([]);
   const [offPeakStart, setOffPeakStart] = useState('22:00');
   const [offPeakEnd, setOffPeakEnd] = useState('06:00');
   const [maxRounds, setMaxRounds] = useState(10);
@@ -32,11 +62,29 @@ export function CreateGoalModal({ isOpen, onClose }: CreateGoalModalProps) {
   const resetForm = () => {
     setName('');
     setDescription('');
+    setTriggerMode('immediate');
+    setConditions([]);
     setOffPeakStart('22:00');
     setOffPeakEnd('06:00');
     setMaxRounds(10);
     setMaxHours(8);
     setError(null);
+  };
+
+  const addCondition = (type: ConditionType) => {
+    setConditions((prev) => [...prev, defaultCondition(type)]);
+  };
+
+  const removeCondition = (index: number) => {
+    setConditions((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateConditionParams = (index: number, key: string, value: unknown) => {
+    setConditions((prev) =>
+      prev.map((c, i) =>
+        i === index ? { ...c, params: { ...c.params, [key]: value } } : c,
+      ),
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,6 +105,8 @@ export function CreateGoalModal({ isOpen, onClose }: CreateGoalModalProps) {
           max_rounds: maxRounds,
           max_hours: maxHours,
         },
+        trigger_mode: triggerMode,
+        execution_conditions: triggerMode === 'conditional' ? conditions : [],
       };
       await create(input);
       resetForm();
@@ -127,6 +177,127 @@ export function CreateGoalModal({ isOpen, onClose }: CreateGoalModalProps) {
             className="w-full border border-border rounded-md px-3 py-2 text-sm bg-surface focus:outline-none focus:border-primary resize-none"
           />
         </div>
+
+        {/* 触发模式选择 */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-text">触发模式</label>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="triggerMode"
+                value="immediate"
+                checked={triggerMode === 'immediate'}
+                onChange={() => setTriggerMode('immediate')}
+                className="text-primary"
+              />
+              <span className="text-sm text-text">立即执行</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="triggerMode"
+                value="conditional"
+                checked={triggerMode === 'conditional'}
+                onChange={() => setTriggerMode('conditional')}
+                className="text-primary"
+              />
+              <span className="text-sm text-text">闲时执行</span>
+            </label>
+          </div>
+          <p className="text-xs text-text-muted">
+            {triggerMode === 'immediate'
+              ? '立即开始执行，受闲时时间窗口约束'
+              : '等待条件满足后自动执行（空闲、资源充足等）'}
+          </p>
+        </div>
+
+        {/* 条件配置面板（仅 CONDITIONAL 模式显示） */}
+        {triggerMode === 'conditional' && (
+          <div className="space-y-3 p-3 bg-surface-secondary rounded-lg border border-border">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-text">执行条件</label>
+              <select
+                className="text-xs border border-border rounded px-2 py-1 bg-surface"
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    addCondition(e.target.value as ConditionType);
+                    e.target.value = '';
+                  }
+                }}
+              >
+                <option value="" disabled>
+                  + 添加条件
+                </option>
+                {CONDITION_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {conditions.length === 0 && (
+              <p className="text-xs text-text-muted">
+                未添加条件，将使用默认条件（空闲 15 分钟 + 闲时时间窗口）
+              </p>
+            )}
+
+            {conditions.map((cond, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-2 p-2 bg-surface rounded border border-border"
+              >
+                <span className="text-xs font-medium text-text min-w-[60px]">
+                  {CONDITION_OPTIONS.find((o) => o.value === cond.type)?.label ?? cond.type}
+                </span>
+
+                {cond.type === 'idle' && (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={120}
+                      value={(cond.params.min_idle_minutes as number) ?? 15}
+                      onChange={(e) =>
+                        updateConditionParams(idx, 'min_idle_minutes', Number(e.target.value))
+                      }
+                      className="w-16 text-xs"
+                    />
+                    <span className="text-xs text-text-muted">分钟</span>
+                  </div>
+                )}
+
+                {cond.type === 'time_window' && (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="time"
+                      value={(cond.params.start as string) ?? '22:00'}
+                      onChange={(e) => updateConditionParams(idx, 'start', e.target.value)}
+                      className="w-24 text-xs"
+                    />
+                    <span className="text-xs text-text-muted">至</span>
+                    <Input
+                      type="time"
+                      value={(cond.params.end as string) ?? '06:00'}
+                      onChange={(e) => updateConditionParams(idx, 'end', e.target.value)}
+                      className="w-24 text-xs"
+                    />
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => removeCondition(idx)}
+                  className="ml-auto text-xs text-destructive hover:text-destructive/80"
+                >
+                  移除
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
