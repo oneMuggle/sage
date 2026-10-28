@@ -397,6 +397,29 @@ async def lifespan(app: FastAPI):
         seed_count = seed_if_empty(app.state.catalog_repo)
         if seed_count:
             logger.info("Loaded %d builtin seed records", seed_count)
+
+        # Task 12 (2026-10-28): reconcile endpoint-discovered models into
+        # catalog bindings so RoutingEngine has candidates. Idempotent and
+        # fail-safe — a bad settings blob or DB hiccup must never block startup.
+        try:
+            from backend.data.settings_repo import SettingsRepository
+            from backend.model_catalog.discovery_ingest import (
+                reconcile_endpoint_bindings,
+            )
+
+            ingest = reconcile_endpoint_bindings(
+                app.state.catalog_repo,
+                SettingsRepository(db).get_json("app_settings") or {},
+            )
+            logger.info(
+                "catalog discovery ingest: bound=%s skipped=%s",
+                ingest["bound"],
+                ingest["skipped"],
+            )
+        except Exception:
+            logger.warning(
+                "catalog discovery ingest failed (ignored)", exc_info=True
+            )
     except Exception:
         logger.exception("builtin seed failed (ignored)")
         # A3: 同上,显式 rollback 防止事务锁污染

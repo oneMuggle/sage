@@ -24,6 +24,7 @@ from backend.api.upstream_security import (
     resolve_and_validate_upstream_host,
 )
 from backend.data.settings_repo import SettingsRepository
+from backend.model_catalog.discovery_ingest import reconcile_endpoint_bindings
 from backend.model_catalog.repository import CatalogRepository
 from backend.model_catalog.schemas import CandidateModel, EndpointKey
 from backend.model_catalog.snapshots import CatalogConflict, CatalogNotFoundError
@@ -184,6 +185,28 @@ def build_router(repo: Optional[CatalogRepository] = None) -> APIRouter:
         source = records[0].source if records else "custom_json"
         snapshot_id = repository.stage(records, source)
         return {"snapshot_id": snapshot_id, "count": len(records)}
+
+    # ---- POST /bind-discovered -----------------------------------------
+
+    class BindDiscoveredRequest(BaseModel):
+        endpoint_id: Optional[str] = None
+
+    @router.post("/bind-discovered")
+    async def bind_discovered(request: Request):
+        """Reconcile discovered endpoint models into catalog bindings.
+
+        Idempotent: ``CatalogRepository.bind()`` upserts on
+        ``(endpoint_id, model_id)``.  ``endpoint_id`` is optional; omitting it
+        processes every endpoint in settings (the startup hook's behaviour).
+        """
+        require_local_auth(request)
+        repository = _repo(request)
+        try:
+            body = BindDiscoveredRequest.model_validate(await request.json())
+        except (ValidationError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        settings = SettingsRepository(repository.db).get_json("app_settings") or {}
+        return reconcile_endpoint_bindings(repository, settings, body.endpoint_id)
 
     # ---- GET /snapshots ------------------------------------------------
 

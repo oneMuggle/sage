@@ -558,6 +558,72 @@ class TestPostSnapshotsImport:
 
 
 # ---------------------------------------------------------------------------
+# POST /bind-discovered
+# ---------------------------------------------------------------------------
+
+
+class TestPostBindDiscovered:
+    def test_bind_discovered_returns_counts(self, client, repo):
+        from backend.data.settings_repo import SettingsRepository
+
+        _publish(
+            repo,
+            _candidate(model_key={"provider": "vendor", "model_id": "gpt-4o"}),
+        )
+        SettingsRepository(repo.db).set_json(
+            "app_settings",
+            {
+                "endpoints": [
+                    {
+                        "id": "ep-1",
+                        "discoveredModels": [
+                            {"id": "gpt-4o", "capabilities": ["chat"], "endpointId": "ep-1"}
+                        ],
+                    }
+                ]
+            },
+        )
+
+        resp = client.post("/api/v1/model-catalog/bind-discovered", json={})
+
+        assert resp.status_code == 200
+        assert resp.json() == {"bound": 1, "skipped": 0}
+
+    def test_bind_discovered_scopes_to_endpoint(self, client, repo):
+        from backend.data.settings_repo import SettingsRepository
+
+        _publish(
+            repo,
+            _candidate(model_key={"provider": "vendor", "model_id": "first"}),
+        )
+        _publish(
+            repo,
+            _candidate(model_key={"provider": "vendor", "model_id": "second"}),
+        )
+        SettingsRepository(repo.db).set_json(
+            "app_settings",
+            {
+                "endpoints": [
+                    {"id": "ep-a", "discoveredModels": [{"id": "first"}]},
+                    {"id": "ep-b", "discoveredModels": [{"id": "second"}]},
+                ]
+            },
+        )
+
+        resp = client.post(
+            "/api/v1/model-catalog/bind-discovered",
+            json={"endpoint_id": "ep-a"},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json() == {"bound": 1, "skipped": 0}
+        rows = repo.db.get_connection().execute(
+            "SELECT endpoint_id, model_id FROM model_catalog_bindings"
+        ).fetchall()
+        assert [tuple(row) for row in rows] == [("ep-a", "first")]
+
+
+# ---------------------------------------------------------------------------
 # GET /snapshots
 # ---------------------------------------------------------------------------
 

@@ -162,6 +162,8 @@ LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
         "protocol",
         "modelId",
         "localModelPath",
+        # DEPRECATED 2027-01-28: discoveredModels 仅作离线回退；
+        # catalog-first 读取方应改用 model-catalog (Task 12)，本键仍留在白名单以兼容旧数据.
         "discoveredModels",
         "lastDiscoveredAt",
     }

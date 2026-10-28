@@ -7,7 +7,11 @@ export const SETTINGS_STORAGE_KEY = 'sage-settings';
 /** Model capability types */
 export type ModelCapability = 'chat' | 'vision' | 'embedding' | 'tts' | 'asr' | 'image_gen';
 
-/** A model discovered from an endpoint's /v1/models */
+/**
+ * A model discovered from an endpoint's /v1/models.
+ *
+ * @deprecated 2027-01-28 前移除：读取方应改用 model-catalog（catalog-first；本字段仅作离线回退）。
+ */
 export interface DiscoveredModel {
   id: string;
   capabilities: ModelCapability[];

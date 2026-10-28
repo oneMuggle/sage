@@ -11,6 +11,7 @@
 import { Check, ChevronRight, Loader2, X } from 'lucide-react';
 import { useState } from 'react';
 
+import { bindDiscoveredModels } from '../../entities/model-catalog/api';
 import {
   DEFAULT_ENDPOINT,
   type EndpointConfig,
@@ -148,6 +149,9 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
           chatModel: { endpointId: endpoint.id, modelId: selectedModel.trim() || null },
         },
       });
+      // Task 12 (2026-10-28): 让路由引擎拿到新端点的候选模型。
+      // fire-and-forget — 离线 / 旧后端不得打断向导流程, 也不弹 toast。
+      void bindDiscoveredModels({ endpointId: endpoint.id }).catch(() => {});
       setSaved(true);
       setStep(3);
     } catch {
