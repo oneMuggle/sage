@@ -321,28 +321,34 @@ describe('BasicTab — LLM 代理超时 section', () => {
     expect(screen.getByText(/两次收到字节之间的最大等待时间/)).toBeTruthy();
   });
 
-  it('修改超时后触发 updateSettings', async () => {
+  it('修改超时后失焦触发 updateSettings', async () => {
     renderTab();
 
-    fireEvent.change(screen.getByTestId('settings-llm-proxy-timeout'), {
-      target: { value: '300' },
-    });
+    const input = screen.getByTestId('settings-llm-proxy-timeout');
+    fireEvent.change(input, { target: { value: '300' } });
 
+    // 输入过程中不提交：逐键 clamp 会把 "3" 改成 5，最终得到 500 而非 300
+    expect((input as HTMLInputElement).value).toBe('300');
+    expect(mocks.updateSettings).not.toHaveBeenCalled();
+
+    fireEvent.blur(input);
     await waitFor(() => {
       expect(mocks.updateSettings).toHaveBeenCalledWith({ llmProxyTimeoutS: 300 });
     });
   });
 
-  it('越界输入被 clamp 到 5–1800', async () => {
+  it('越界输入在失焦时被 clamp 到 5–1800', async () => {
     renderTab();
 
     const input = screen.getByTestId('settings-llm-proxy-timeout');
     fireEvent.change(input, { target: { value: '99999' } });
+    fireEvent.blur(input);
     await waitFor(() => {
       expect(mocks.updateSettings).toHaveBeenCalledWith({ llmProxyTimeoutS: 1800 });
     });
 
     fireEvent.change(input, { target: { value: '1' } });
+    fireEvent.blur(input);
     await waitFor(() => {
       expect(mocks.updateSettings).toHaveBeenCalledWith({ llmProxyTimeoutS: 5 });
     });

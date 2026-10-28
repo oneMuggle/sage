@@ -270,8 +270,6 @@ def _proxy_timeout_seconds() -> float:
 
     任何解析失败都回退上一级，永不抛错——超时配置不能成为请求失败的原因。
     """
-    timeout = PROXY_TIMEOUT_SECONDS
-
     try:
         from backend.data.settings_repo import SettingsRepository
 
@@ -283,7 +281,8 @@ def _proxy_timeout_seconds() -> float:
             and isinstance(value, (int, float))  # noqa: UP038 — 保持 Py3.8 兼容
             and value >= PROXY_TIMEOUT_MIN_SECONDS
         ):
-            timeout = min(float(value), PROXY_TIMEOUT_MAX_SECONDS)
+            # 设置值优先于环境变量，命中即返回（与 llm_total_timeout 一致）。
+            return min(float(value), PROXY_TIMEOUT_MAX_SECONDS)
     except (ImportError, OSError, ValueError, TypeError):
         pass  # 读配置失败回退 env/默认
 
@@ -295,9 +294,9 @@ def _proxy_timeout_seconds() -> float:
             logger.warning("env SAGE_LLM_PROXY_TIMEOUT_S=%r 非法,忽略", raw_env)
         else:
             if value >= PROXY_TIMEOUT_MIN_SECONDS:
-                timeout = min(value, PROXY_TIMEOUT_MAX_SECONDS)
+                return min(value, PROXY_TIMEOUT_MAX_SECONDS)
 
-    return timeout
+    return PROXY_TIMEOUT_SECONDS
 
 
 def _client_for_resolved_address(address: str) -> httpx.AsyncClient:
