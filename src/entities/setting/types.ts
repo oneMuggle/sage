@@ -151,6 +151,15 @@ export interface OrchSettings {
   maxClarifyQuestionsPerRound: number; // 3
 }
 
+/**
+ * 智能模型路由模式 (Task 9, 2026-10-28).
+ * - ``manual``: 用户手动选模型（现状行为，默认值）。
+ * - ``auto``: 后端按 ``task_type`` 在同端点上挑模型；前端不写会话覆盖。
+ */
+export interface RoutingSettings {
+  mode: 'auto' | 'manual';
+}
+
 /** All application settings */
 export interface AppSettings {
   // General
@@ -201,6 +210,9 @@ export interface AppSettings {
   // 2026-10-28: LLM 代理上游超时（秒）。后端 llm_proxy_routes._proxy_timeout_seconds()
   // 函数式读取，改后下一次上游请求即生效。范围 5–1800，见 config_tool 校验。
   llmProxyTimeoutS: number; // 60
+
+  // Task 9 (2026-10-28) 智能路由模式。缺省 = manual（保持现有行为不变）。
+  routing: RoutingSettings;
 
   // 演示模式开关 (2026-08-27): 启用后 Electron main 进程跳过 Python 后端
   // spawn, 前端可走 /demo 路由录屏. 关闭时回到正常 LLM 调用路径.
@@ -321,6 +333,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // 2026-10-28: LLM 代理上游超时默认 60s（保持历史行为，与后端
   // PROXY_TIMEOUT_SECONDS 一致）。
   llmProxyTimeoutS: 60,
+
+  // Task 9 (2026-10-28) 智能路由模式。默认 manual（保持与引入前行为一致）。
+  routing: { mode: 'manual' },
 
   // 演示模式: 默认关闭. 开启后 main 进程跳过 Python 后端启动.
   demoMode: false,

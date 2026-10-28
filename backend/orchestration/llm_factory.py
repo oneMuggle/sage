@@ -24,7 +24,7 @@ missing keys, snake_case residue) yields ``None`` rather than raising.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.routing.routing_engine import RoutingEngine
 
@@ -330,10 +330,75 @@ def resolve_chat_model(
     return None
 
 
+# ---------------------------------------------------------------------------
+# Task 9: auto-routing activation (settings key ``routing.mode``)
+# ---------------------------------------------------------------------------
+
+_ROUTING_AUTO = "auto"
+_DEFAULT_CHAT_CONTEXT = 4096
+
+
+def load_routing_config() -> Tuple[str, int]:
+    """Return ``(mode, context_length)`` from app_settings.
+
+    Fail-safe: any read error, non-dict payload, or unknown mode yields
+    ``("manual", 4096)`` so callers keep the settings-derived model.
+    """
+    try:
+        from backend.data.settings_canonicalizer import to_camel
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get_json("app_settings")
+        if not isinstance(raw, dict):
+            return "manual", _DEFAULT_CHAT_CONTEXT
+        settings = to_camel(raw)
+        routing = settings.get("routing")
+        mode = routing.get("mode") if isinstance(routing, dict) else None
+        mode = _ROUTING_AUTO if mode == _ROUTING_AUTO else "manual"
+        max_context = settings.get("maxContext")
+        if isinstance(max_context, bool) or not isinstance(max_context, int) or max_context <= 0:
+            max_context = _DEFAULT_CHAT_CONTEXT
+        return mode, max_context
+    except Exception as exc:  # fail-safe: routing is optional
+        logger.debug("llm_factory: routing config unavailable (%s); manual", exc)
+        return "manual", _DEFAULT_CHAT_CONTEXT
+
+
+def apply_auto_routing_overlay(
+    cfg: Optional[Dict[str, Any]],
+    task_type: Optional[str] = None,
+    session_id: Optional[str] = None,
+    profile_model: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """In auto mode, replace ``cfg['model']`` with the catalog-routed model.
+
+    Returns ``cfg`` unchanged when: not a dict, mode is manual, the user made an
+    explicit pick (session override / profile model — R23), or routing yields
+    nothing. Selection is scoped to ``cfg['endpoint_id']`` so the model keeps
+    that endpoint's credentials (Task 5 rationale).
+    """
+    if not isinstance(cfg, dict):
+        return cfg
+    mode, context_length = load_routing_config()
+    if mode != _ROUTING_AUTO:
+        return cfg
+    if resolve_chat_model(session_id, profile_model):
+        return cfg
+    routed = resolve_routed_chat_model(
+        task_type=(task_type or "chat"),
+        context_length=context_length,
+        endpoint_id=cfg.get("endpoint_id"),
+    )
+    if not routed:
+        return cfg
+    return {**cfg, "model": routed}
+
+
 def load_llm_config_for_chat(
     session_id: Optional[str] = None,
     profile_model: Optional[str] = None,
     profile_max_tokens: Optional[int] = None,
+    task_type: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """全局端点配置 + 会话/profile 模型覆盖 → LLMConfig 兼容 dict。
 
@@ -343,6 +408,7 @@ def load_llm_config_for_chat(
     2026-10-28: 新增 ``profile_max_tokens`` 兜底 —— 当 agent profile 显式设置了
     ``model_config.max_tokens``（且非默认 4096）时，用它覆盖全局设置值。优先级：
     ChatRequest.max_tokens（调用方单独合并）> profile_max_tokens > maxOutputTokens > 4096。
+    任务 9：``routing.mode == "auto"`` 时再叠加目录路由（显式选择优先）。
     """
     base = load_llm_config_from_settings()
     if base is None:
@@ -356,7 +422,9 @@ def load_llm_config_for_chat(
     profile_value = _clamp_max_output_tokens(profile_max_tokens)
     if profile_value is not None and profile_value != _PROFILE_MAX_TOKENS_PLACEHOLDER:
         merged["max_tokens"] = profile_value
-    return merged
+    return apply_auto_routing_overlay(
+        merged, task_type=task_type, session_id=session_id, profile_model=profile_model
+    )
 
 
 # ---------------------------------------------------------------------------

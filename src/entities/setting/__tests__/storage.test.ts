@@ -198,6 +198,19 @@ describe('mergeWithDefaults (orch 嵌套 merge)', () => {
   });
 });
 
+// Task 9 (2026-10-28): routing 段嵌套 merge —— 同 orch 的 bug 防护。
+describe('mergeWithDefaults (routing 嵌套 merge)', () => {
+  it('mergeWithDefaults merges routing nested, not replaces', () => {
+    const merged = mergeWithDefaults({
+      routing: { mode: 'auto' },
+    } as Partial<AppSettings>);
+    expect(merged.routing.mode).toBe('auto');
+    // 缺省路由段保持 DEFAULT_SETTINGS.routing
+    const defaultRouted = mergeWithDefaults({} as Partial<AppSettings>);
+    expect(defaultRouted.routing).toEqual({ mode: 'manual' });
+  });
+});
+
 describe('mergeWithDefaults (endpoints / modelSelections deepMerge)', () => {
   it('endpoints 缺省时返回 DEFAULT_SETTINGS.endpoints', () => {
     const merged = mergeWithDefaults({} as Partial<AppSettings>);

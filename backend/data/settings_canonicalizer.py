@@ -138,6 +138,13 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         # 2026-10-28: LLM 代理上游超时（秒）。backend/api/llm_proxy_routes.py
         # 函数式读取，改后下一个请求即生效。
         "llmProxyTimeoutS",
+        # 2026-10-27: 会话标题生成专用模型 id（顶层扁平键，与 chatModel 同风格）。
+        # 值为模型 id 字符串；留空表示回退到聊天模型。后端
+        # title_generator.load_title_llm_config() 读取此键。
+        "titleModelId",
+        # Task 9 (2026-10-28): 智能路由模式 {'mode': 'auto' | 'manual'}。
+        # 缺省 = manual（现行为）。llm_factory.load_routing_config() 读取。
+        "routing",
     }
 )
 LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
@@ -229,6 +236,11 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "maxClarifyQuestionsPerRound",
     }
 )
+
+# routing 段 (RoutingSettings). 2026-10-28 智能路由: 目前只有 ``mode``
+# (``auto`` | ``manual``). 白名单必须与前端 ``RoutingSettings``
+# (src/entities/setting/types.ts) 同步 —— 漏加会让设置页保存 400。
+LEGAL_ROUTING_KEYS: FrozenSet[str] = frozenset({"mode"})
 
 # snake_case 必须含至少一个下划线 (否则只是普通单词, 不是 snake_case)
 _SNAKE_RE = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)+$")
@@ -334,6 +346,17 @@ def validate_settings_shape(settings: dict) -> None:
     if bad_orch:
         raise ValueError(
             f"unknown orch field {bad_orch[0]!r}; " f"allowed: {sorted(LEGAL_ORCH_KEYS)}"
+        )
+
+    routing = settings.get("routing")
+    if routing is not None and not isinstance(routing, dict):
+        raise ValueError("routing is not a dict")
+    routing = routing or {}
+    bad_routing = [k for k in routing if k not in LEGAL_ROUTING_KEYS]
+    if bad_routing:
+        raise ValueError(
+            f"unknown routing field {bad_routing[0]!r}; "
+            f"allowed: {sorted(LEGAL_ROUTING_KEYS)}"
         )
 
 
@@ -487,7 +510,7 @@ def strip_unknown_fields(settings: Any) -> Any:
     - 顶层 ``LEGAL_TOP_KEYS``
     - endpoints: ``LEGAL_ENDPOINT_KEYS`` + discoveredModels: ``LEGAL_DISCOVERED_MODEL_KEYS``
     - modelSelections: ``LEGAL_MODEL_SELECTIONS_KEYS`` + 子 ``LEGAL_MODEL_SELECTION_KEYS``
-    - wiki: ``LEGAL_WIKI_KEYS`` / orch: ``LEGAL_ORCH_KEYS``
+    - wiki: ``LEGAL_WIKI_KEYS`` / orch: ``LEGAL_ORCH_KEYS`` / routing: ``LEGAL_ROUTING_KEYS``
     """
     if not isinstance(settings, dict):
         return settings
@@ -539,6 +562,10 @@ def strip_unknown_fields(settings: Any) -> Any:
     orch = out.get("orch")
     if isinstance(orch, dict):
         out["orch"] = {k: v for k, v in orch.items() if k in LEGAL_ORCH_KEYS}
+
+    routing = out.get("routing")
+    if isinstance(routing, dict):
+        out["routing"] = {k: v for k, v in routing.items() if k in LEGAL_ROUTING_KEYS}
 
     return out
 

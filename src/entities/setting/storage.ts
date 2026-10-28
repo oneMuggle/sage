@@ -54,6 +54,12 @@ const TOP_KEYS: ReadonlySet<keyof AppSettings> = new Set([
   'llmTotalTimeoutS',
   // 2026-10-28: LLM 代理上游超时（秒）— 漏了后端永远用 60s 硬编码。
   'llmProxyTimeoutS',
+  // 2026-10-27: 会话标题专用模型 id — 同样会被 sanitizeForBackend 静默丢弃，
+  // 漏了后端 title_generator 永远读不到配置。
+  'titleModelId',
+  // Task 9 (2026-10-28) 智能路由模式 —— 漏了会被 sanitizeForBackend 丢弃，
+  // 后端 llm_factory.load_routing_config 永远读不到配置。
+  'routing',
   // 'memoryServerSync' 不在此白名单内 — 后端已下线该字段, 前端发出去会 400.
 ]);
 const ENDPOINT_KEYS: ReadonlySet<keyof EndpointConfig> = new Set([
@@ -285,6 +291,11 @@ export function mergeWithDefaults(partial: Partial<AppSettings>): AppSettings {
     logTimezone: partial.logTimezone ?? DEFAULT_SETTINGS.logTimezone,
     // 嵌套 merge：部分 orch 更新不丢其余键（同 endpoints 的既有 bug 防护）。
     orch: { ...DEFAULT_ORCH_SETTINGS, ...(partial.orch ?? {}) },
+    // Task 9 (2026-10-28) 嵌套 merge：routing 段同理，避免 legacy 数据里 routing
+    // 完全缺失时返回的 AppSettings 里 routing 变成 undefined —— 下游
+    // ``settings.routing?.mode`` 的可选链仍能正确回退 'manual'，但显式补 DEFAULT
+    // 让 ``mergeWithDefaults({...})`` 的契约（返回完整 AppSettings）一致。
+    routing: { ...DEFAULT_SETTINGS.routing, ...(partial.routing ?? {}) },
     version: partial.version ?? SETTINGS_VERSION,
   };
 }

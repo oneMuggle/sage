@@ -308,6 +308,14 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     labelEn: 'Model catalog',
     keywords: 'catalog 模型目录 管理',
   },
+  // Task 9 (2026-10-28) 智能路由模式 —— Task 11 (ModelsTab) 实际控件在此 Tab。
+  {
+    key: 'routing.mode',
+    tab: 'models',
+    label: '智能模型路由',
+    labelEn: 'Smart model routing',
+    keywords: 'routing 智能路由 模型 自动 task_type 按任务选 model auto manual',
+  },
 
   // ── 编排 ──
   {
