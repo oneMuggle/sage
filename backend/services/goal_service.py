@@ -21,6 +21,10 @@ from backend.domain.autonomous_goals import (
     GoalStatus,
     TimeWindow,
 )
+from backend.domain.execution_conditions import (
+    ExecutionCondition,
+    TriggerMode,
+)
 from backend.services.checkpoint_manager import CheckpointManager, CheckpointReport
 from backend.services.time_window_manager import TimeWindowManager
 
@@ -49,8 +53,20 @@ class GoalService:
         time_window: Optional[TimeWindow] = None,
         budget: Optional[ExecutionBudget] = None,
         session_id: Optional[str] = None,
+        trigger_mode: TriggerMode = TriggerMode.IMMEDIATE,
+        execution_conditions: Optional[List[ExecutionCondition]] = None,
     ) -> Goal:
-        """创建新目标"""
+        """创建新目标
+
+        Args:
+            name: 目标名称
+            description: 目标描述
+            time_window: 时间窗口配置
+            budget: 执行预算
+            session_id: 关联会话 ID
+            trigger_mode: 触发模式（立即 / 条件）
+            execution_conditions: 执行条件列表（CONDITIONAL 模式使用）
+        """
         goal = Goal(
             id=f"goal_{uuid.uuid4().hex[:12]}",
             name=name,
@@ -59,6 +75,8 @@ class GoalService:
             session_id=session_id,
             time_window=time_window or TimeWindow(),
             budget=budget or ExecutionBudget(),
+            trigger_mode=trigger_mode,
+            execution_conditions=execution_conditions or [],
         )
 
         created = self.goal_repo.create(goal)

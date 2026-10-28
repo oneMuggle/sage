@@ -159,6 +159,13 @@ function App() {
   // U18 (round4): 快捷键帮助覆盖层（非输入焦点下按 ? 打开）
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
 
+  // 闲时活动上报：启动时初始化，节流上报用户活动到后端 IdleDetector
+  useEffect(() => {
+    import('./entities/autonomous-goals/idleReporter').then(({ initIdleReporter }) => {
+      initIdleReporter();
+    });
+  }, []);
+
   // R40: Ctrl+N 新建会话 —— 全局快捷键（仅无 modifier 冲突时触发）
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {

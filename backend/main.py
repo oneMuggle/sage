@@ -744,6 +744,14 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("daily backup job registration failed (ignored)")
 
+    # 闲时检测器：初始化全局 IdleDetector 单例
+    try:
+        from backend.services.idle_detector import init_idle_detector
+
+        init_idle_detector()
+    except Exception:
+        logger.exception("idle detector initialization failed (ignored)")
+
     # 闲时自主目标调度器：每 5 分钟扫描 pending 目标，符合条件则自动启动
     try:
         from backend.services.autonomous_goal_scheduler import get_autonomous_scheduler
@@ -1467,6 +1475,10 @@ app.include_router(prompt_router, prefix="/api/v1")
 app.include_router(artifact_router, prefix="/api/v1")
 # Harness 自进化: /api/v1/harness/* (组件注册表 + effectiveness 可观测性)
 app.include_router(harness_router, prefix="/api/v1")
+# 闲时延迟执行: /api/v1/idle/activity + /idle/status
+from backend.api.autonomous_goals_router import idle_router
+
+app.include_router(idle_router, prefix="/api/v1")
 
 # 闲时自主目标执行系统: /api/v1/goals/*
 from backend.api.autonomous_goals_router import router as autonomous_goals_router

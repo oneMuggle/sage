@@ -13,7 +13,7 @@
     "backend/data/database.py": 2138,
     "backend/data/session_repo.py": 1090,
     "backend/data/settings_canonicalizer.py": 829,
-    "backend/main.py": 1682,
+    "backend/main.py": 1694,
     "backend/memory/manager.py": 852,
     "backend/mcp/pool.py": 915,
     "backend/office/edit.py": 1297,
