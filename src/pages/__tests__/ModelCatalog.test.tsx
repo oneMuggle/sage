@@ -413,9 +413,9 @@ describe('ModelCatalog page', () => {
       target: { value: 'context_asc' },
     });
 
-    expect(within(screen.getByTestId('catalog-cards')).getAllByRole('listitem')[0]).toHaveTextContent(
-      'gpt-4o-mini',
-    );
+    expect(
+      within(screen.getByTestId('catalog-cards')).getAllByRole('listitem')[0],
+    ).toHaveTextContent('gpt-4o-mini');
   });
 
   it('高级折叠包含同步 / 导入 / 导出三个按钮', async () => {
@@ -497,7 +497,9 @@ describe('ModelCatalog page', () => {
 
     await waitFor(() => {
       expect(
-        screen.queryByTestId('catalog-card-openrouter/anthropic%2Fclaude-3.5-sonnet/openrouter/base'),
+        screen.queryByTestId(
+          'catalog-card-openrouter/anthropic%2Fclaude-3.5-sonnet/openrouter/base',
+        ),
       ).toBeNull();
     });
     expect(screen.getByTestId('model-details-empty')).toBeInTheDocument();
