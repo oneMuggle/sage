@@ -171,56 +171,6 @@ return min(base_delay * (2 ** (attempt - 1)), max_delay)
 
 即指数退避 `base × 2^(attempt-1)`，单次封顶 `max_delay`。
 
-## 代理上游超时与流式开关
-
-> 2026-10-28 补充：此前代理上游读超时硬编码 60s，且「流式输出」开关无消费者。
-
-### 代理超时可配置
-
-`backend/api/llm_proxy_routes.py` 的 `_proxy_timeout_seconds()` 决定
-`httpx.Timeout(read=...)` 的值，每次上游请求实时读取（next-request）：
-
-```
-app_settings.llmProxyTimeoutS > env SAGE_LLM_PROXY_TIMEOUT_S > 默认 60s
-```
-
-| 设置项 | 键名 | 后端默认值 | UI 默认值 | 有效范围 |
-| --- | --- | --- | --- | --- |
-| LLM 代理超时（秒） | `llmProxyTimeoutS` | 60 | 60 | UI 5–1800；`config_tool` 校验 [5, 1800] |
-
-语义提醒：`httpx.Timeout` 的 read 段是**两次收到字节之间的最大间隔**——
-流式响应只要字节持续流动就不会触发（实测成功请求 207s / 238s 均属正常）；
-非流式响应必须等完整生成结束才返回首字节，因此该值必须大于预期生成耗时。
-
-解析失败一律回退上一级，永不抛错——超时配置不能成为请求失败的原因。
-
-### 流式开关修复
-
-此前 `app_settings.streaming` 只被前端持久化与展示，没有任何代码消费。
-`agent._should_stream()` 现在读取该字段：
-
-```
-env SAGE_LLM_STREAMING ∈ {0,false,off,no}  → 禁用（调试/测试用，最高优先级）
-app_settings.streaming === false           → 禁用
-llm_client.stream_unsupported === True     → 禁用（失败后自动回退，保持不变）
-其余                                       → 启用
-```
-
-关闭后走 `LLMClient.chat()`（非流式），`agent.run_loop` 在结束时 yield
-`DONE` + 完整 content。前端渲染路径无需改动——`useChat` 的 `content_delta`
-与最终 `DONE.content` 两条路径都已存在。
-
-### 超时与流式的耦合
-
-关闭「流式输出」后，非流式请求在完整响应返回前没有任何字节，
-代理超时必须大于整段生成耗时。UI 文案已明确提示：关闭流式后建议
-把代理超时调到 300 秒以上。
-
-| 流式开关 | 代理超时建议 |
-| --- | --- |
-| 开启（默认） | 60s 即可；字节持续流动不会触发 |
-| 关闭 | ≥ 300s；等待完整生成结束 |
-
 ## 前端可见性
 
 重试发生时，`llm_client` 通过 `retry_callback` / 流式 `"retry"` 事件推送
