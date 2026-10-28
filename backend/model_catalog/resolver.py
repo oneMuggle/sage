@@ -38,6 +38,7 @@ def resolve_layers(layers: List[LayerValues]) -> EffectiveModel:
         0,
     )
     return EffectiveModel(
+        tier="balanced",  # TODO(smart-routing): derive from model catalog tier
         limits=ContextLimits(native=values.get("native"), service=values.get("service")),
         price=Price(
             input_per_million=values.get("input_per_million"),

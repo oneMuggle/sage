@@ -73,7 +73,8 @@ class CandidateModel(CatalogValue):
     """Source-only candidate; endpoint credentials are deliberately not accepted."""
 
     model_key: ModelKey
-    native: Optional[PositiveInteger] = None
+    tier: Optional[str] = None  # 'fast' | 'balanced' | 'powerful' — for smart routing
+    native: Optional[PositiveInteger] = Field(None, strict=True, gt=0)
     price: Price = Field(default_factory=Price)
     capabilities: Optional[Dict[str, bool]] = None
     architecture: Optional[NonblankString] = None
@@ -81,6 +82,33 @@ class CandidateModel(CatalogValue):
     source: NonblankString
     source_updated_at: Optional[UtcTimestamp] = None
     pricing_scope: NonblankString
+
+    @field_validator("source", "pricing_scope")
+    @classmethod
+    def _nonblank(cls, v: str) -> str:
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError("value must not be blank")
+        return v
+
+    @field_validator("architecture", "quantization", "tier")
+    @classmethod
+    def _nonblank_optional(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and (not isinstance(v, str) or not v.strip()):
+            raise ValueError("value must not be blank")
+        return v
+
+    @field_validator("source_updated_at")
+    @classmethod
+    def _validate_timestamp(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            return _validate_utc_timestamp(v)
+        return v
+
+    @field_validator("native", mode="before")
+    @classmethod
+    def _no_bool_native(cls, v: object) -> object:
+        return _reject_bool_and_float(v)
+
 
 
 class EndpointPatch(CatalogValue):
@@ -118,7 +146,20 @@ class SnapshotDiff(CatalogValue):
 
 
 class EffectiveModel(CatalogValue):
+    tier: str  # required — resolved model always has a tier
     limits: ContextLimits
     price: Price
     provenance: Dict[str, str]
-    revision: NonnegativeInteger = 0
+    revision: NonnegativeInteger = Field(0, strict=True, ge=0)
+
+    @field_validator("tier")
+    @classmethod
+    def _nonblank_tier(cls, v: str) -> str:
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError("tier must not be blank")
+        return v
+
+    @field_validator("revision", mode="before")
+    @classmethod
+    def _no_bool_revision(cls, v: object) -> object:
+        return _reject_bool_and_float(v)
