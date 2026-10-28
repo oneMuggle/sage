@@ -203,8 +203,8 @@ async def test_environment_fact_routed_to_profile_with_dedup_inputs():
     )
     assert stored == 2
     assert port.profiles[0]["category"] == "environment"
-    # 防御：extractor 新分类 user_pref / project_fact 等经 remap 后
-    # 统一路由到画像库（避免画像库长期饥饿）。
+    # 防御：LLM 输出 category="fact" 时 remap 为 "preference"，路由到画像库
+    # 而非 episodic memory（避免画像库长期饥饿）。
     assert port.profiles[1]["content"] == "普通事实"
     assert port.profiles[1]["category"] == "preference"
     # existing_facts 修复：不再是恒空

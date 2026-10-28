@@ -378,21 +378,23 @@ class TestDecompose:
     @pytest.mark.asyncio()
     async def test_decompose_calls_llm(self, decomposer, mock_llm):
         with patch.object(
-            decomposer, "_load_project", return_value=MagicMock(
-                project_type="coding",
-                project_stage="dev",
-                description="test",
-                detected_type=None,
-            )
-        ), patch.object(
-            decomposer, "_get_existing_milestone_titles", return_value=[]
-        ), patch.object(
-            decomposer, "_get_stage_enum", return_value=None
-        ):
-            result = await decomposer.decompose(
-                project_id="proj-1",
-                requirement="添加认证系统",
-            )
+                decomposer, "_load_project", return_value=MagicMock(
+                    project_type="coding",
+                    project_stage="dev",
+                    description="test",
+                    detected_type=None,
+                )
+            ):
+            with patch.object(
+                    decomposer, "_get_existing_milestone_titles", return_value=[]
+                ):
+                with patch.object(
+                        decomposer, "_get_stage_enum", return_value=None
+                    ):
+                    result = await decomposer.decompose(
+                        project_id="proj-1",
+                        requirement="添加认证系统",
+                    )
 
         mock_llm.complete.assert_called_once()
         assert len(result.milestones) > 0
@@ -413,20 +415,22 @@ class TestDecompose:
         decomposer._llm.complete = AsyncMock(
             side_effect=Exception("LLM timeout")
         )
-        with patch.object(  # noqa: SIM117
-            decomposer, "_load_project", return_value=MagicMock(
-                project_type="coding",
-                project_stage="dev",
-                description="test",
-                detected_type=None,
-            )
-        ), patch.object(
-            decomposer, "_get_existing_milestone_titles", return_value=[]
-        ), patch.object(
-            decomposer, "_get_stage_enum", return_value=None
-        ):
-            with pytest.raises(RuntimeError, match="LLM 调用失败"):
-                await decomposer.decompose(
-                    project_id="proj-1",
-                    requirement="test",
+        with patch.object(
+                decomposer, "_load_project", return_value=MagicMock(
+                    project_type="coding",
+                    project_stage="dev",
+                    description="test",
+                    detected_type=None,
                 )
+            ):
+            with patch.object(
+                    decomposer, "_get_existing_milestone_titles", return_value=[]
+                ):
+                with patch.object(
+                        decomposer, "_get_stage_enum", return_value=None
+                    ):
+                    with pytest.raises(RuntimeError, match="LLM 调用失败"):
+                        await decomposer.decompose(
+                            project_id="proj-1",
+                            requirement="test",
+                        )
