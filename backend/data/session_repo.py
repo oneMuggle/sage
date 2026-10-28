@@ -69,6 +69,18 @@ class Session:
     # 2026-10-27: 标题生成尝试次数（达到上限后不再重试）
     title_attempts: int = 0
 
+    @property
+    def duration_minutes(self) -> Optional[int]:
+        """会话总用时（分钟），从创建到最后一次消息。
+
+        Phase 1 of performance-stats feature (2026-10-28).
+        Returns None if last_message_at or created_at is missing.
+        """
+        if not self.last_message_at or not self.created_at:
+            return None
+        duration_ms = self.last_message_at - self.created_at
+        return int(duration_ms / 60000)
+
     @classmethod
     def from_row(cls, row) -> Session:
         return cls(
@@ -113,6 +125,8 @@ class Session:
             "last_run_at": self.last_run_at,
             # 2026-10-27: 标题生成重试计数
             "title_attempts": self.title_attempts,
+            # 2026-10-28: 性能统计 - 会话用时（分钟）
+            "duration_minutes": self.duration_minutes,
         }
 
 

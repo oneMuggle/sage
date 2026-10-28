@@ -39,6 +39,8 @@ export interface Session {
   last_message_preview?: string | null;
   /** 标题生成尝试次数 (后端 `sessions.title_attempts`)；用于侧栏显示"生成标题中…"过渡态 */
   title_attempts?: number;
+  /** 2026-10-28: 性能统计 - 会话总用时（分钟），从创建到最后一次消息 */
+  duration_minutes?: number | null;
 }
 
 // 工具调用结构（与后端 AgentEvent 保持一致）
