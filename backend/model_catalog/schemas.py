@@ -57,6 +57,9 @@ class LayerValues(CatalogValue):
     price: Price
     source: NonblankString
     revision: NonnegativeInteger
+    # Routing tier carried by this layer.  None means "this layer says nothing
+    # about the tier", so the next layer in the stack may supply it.
+    tier: Optional[NonblankString] = None
 
 
 def _utc_timestamp(value: str) -> str:
@@ -73,8 +76,8 @@ class CandidateModel(CatalogValue):
     """Source-only candidate; endpoint credentials are deliberately not accepted."""
 
     model_key: ModelKey
-    tier: Optional[str] = None  # 'fast' | 'balanced' | 'powerful' — for smart routing
-    native: Optional[PositiveInteger] = Field(None, strict=True, gt=0)
+    tier: Optional[NonblankString] = None  # 'fast' | 'balanced' | 'powerful'
+    native: Optional[PositiveInteger] = None
     price: Price = Field(default_factory=Price)
     capabilities: Optional[Dict[str, bool]] = None
     architecture: Optional[NonblankString] = None
@@ -82,33 +85,6 @@ class CandidateModel(CatalogValue):
     source: NonblankString
     source_updated_at: Optional[UtcTimestamp] = None
     pricing_scope: NonblankString
-
-    @field_validator("source", "pricing_scope")
-    @classmethod
-    def _nonblank(cls, v: str) -> str:
-        if not isinstance(v, str) or not v.strip():
-            raise ValueError("value must not be blank")
-        return v
-
-    @field_validator("architecture", "quantization", "tier")
-    @classmethod
-    def _nonblank_optional(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and (not isinstance(v, str) or not v.strip()):
-            raise ValueError("value must not be blank")
-        return v
-
-    @field_validator("source_updated_at")
-    @classmethod
-    def _validate_timestamp(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None:
-            return _validate_utc_timestamp(v)
-        return v
-
-    @field_validator("native", mode="before")
-    @classmethod
-    def _no_bool_native(cls, v: object) -> object:
-        return _reject_bool_and_float(v)
-
 
 
 class EndpointPatch(CatalogValue):
@@ -146,20 +122,14 @@ class SnapshotDiff(CatalogValue):
 
 
 class EffectiveModel(CatalogValue):
-    tier: str  # required — resolved model always has a tier
+    tier: NonblankString  # required — resolved model always has a tier
+    # Identity of the resolved model.  Optional: an endpoint with no catalog
+    # binding still resolves, it just cannot be identified.
+    model_key: Optional[ModelKey] = None
+    # Capability metadata as {capability: supported}.  Optional: None means
+    # "unknown", which routing treats as permissive.
+    capabilities: Optional[Dict[str, bool]] = None
     limits: ContextLimits
     price: Price
     provenance: Dict[str, str]
-    revision: NonnegativeInteger = Field(0, strict=True, ge=0)
-
-    @field_validator("tier")
-    @classmethod
-    def _nonblank_tier(cls, v: str) -> str:
-        if not isinstance(v, str) or not v.strip():
-            raise ValueError("tier must not be blank")
-        return v
-
-    @field_validator("revision", mode="before")
-    @classmethod
-    def _no_bool_revision(cls, v: object) -> object:
-        return _reject_bool_and_float(v)
+    revision: NonnegativeInteger = 0

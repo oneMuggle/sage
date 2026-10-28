@@ -37,8 +37,12 @@ def resolve_layers(layers: List[LayerValues]) -> EffectiveModel:
         (layer.revision for layer in layers if layer.source == "user_override"),
         0,
     )
+    # Tier follows the same first-wins rule as the other fields: the first
+    # layer that carries a tier supplies it.  When no layer carries one the
+    # model is treated as "balanced" so downstream routing stays usable.
+    tier = next((layer.tier for layer in layers if layer.tier is not None), "balanced")
     return EffectiveModel(
-        tier="balanced",  # TODO(smart-routing): derive from model catalog tier
+        tier=tier,
         limits=ContextLimits(native=values.get("native"), service=values.get("service")),
         price=Price(
             input_per_million=values.get("input_per_million"),
