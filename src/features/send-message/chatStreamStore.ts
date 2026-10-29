@@ -29,6 +29,7 @@ import type {
   AgentEvent,
   ChatConfig,
   ChatOfficeRef,
+  MessageDisplayMeta,
   RetryInfo,
   SubagentLiveEvent,
   SubagentLiveState,
@@ -73,6 +74,11 @@ export interface QueuedSendOptions {
   delivery?: DeliveryMode;
   /** 重新生成：被替换的 assistant 消息 id（后端用此回滚该轮次） */
   regenerateOf?: string;
+  /**
+   * 用户消息展示元数据 —— 忙时入队的消息 flush 后仍要在气泡上回显
+   * 附件 / @ 文件引用 / office 引用，因此随队列条目一起保存。
+   */
+  displayMeta?: MessageDisplayMeta;
 }
 
 /** 一条待发送消息（会话忙时入队，当前 run 自然结束后 flush） */

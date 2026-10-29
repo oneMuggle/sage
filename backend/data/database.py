@@ -366,9 +366,12 @@ class Database:
         if self._connection is None:
             self._connection = sqlite3.connect(self.db_path, check_same_thread=False)
             self._connection.row_factory = sqlite3.Row
+            # fix/pr-2639-ci-flake: 先设 busy_timeout 再开 WAL，避免 xdist 多 worker
+            # 并发创建 data/sage.db 时 WAL pragma 立即报 "database is locked"。
+            # busy_timeout=5000 让后续连接等待最多 5 秒而非立即失败。
+            self._connection.execute("PRAGMA busy_timeout=5000")
             # 启用 WAL 模式提高并发性能
             self._connection.execute("PRAGMA journal_mode=WAL")
-            self._connection.execute("PRAGMA busy_timeout=5000")
             # fix/security-perf-quickwins (2026-08-09): 启用外键约束。否则
             # session_workspace_bindings 等表的 ON DELETE CASCADE 是 silent no-op,
             # 删会话后留下悬挂行 (见 docs/technical/33-office-m1-m2-completion.md §6-2).
@@ -521,6 +524,9 @@ class Database:
                 sources TEXT,
                 -- 第二轮 C1: 终稿生成统计 JSON（输入 / 输出 tokens、首字延迟、总耗时）
                 generation_stats TEXT,
+                -- 2026-10-28: 用户消息展示元数据（附件 / @ 文件引用 / office 引用）。
+                -- JSON-in-TEXT，只用于气泡回显，不参与 LLM 上下文。
+                client_meta TEXT,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
         """)
@@ -575,6 +581,13 @@ class Database:
         if "generation_stats" not in columns:
             try:
                 cursor.execute("ALTER TABLE messages ADD COLUMN generation_stats TEXT")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
+        # 2026-10-28: 用户消息展示元数据（附件 / @ 文件引用 / office 引用）。
+        if "client_meta" not in columns:
+            try:
+                cursor.execute("ALTER TABLE messages ADD COLUMN client_meta TEXT")
                 conn.commit()
             except sqlite3.OperationalError:
                 pass

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -99,6 +99,20 @@ describe('Welcome page', () => {
     // Wait for the async createSession promise
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(createSessionMock).toHaveBeenCalled();
+  });
+
+  it('creates one draft session when the @ menu is activated', async () => {
+    renderWelcome();
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: '@' } });
+    fireEvent.change(textarea, { target: { value: '@a' } });
+
+    await waitFor(() => expect(createSessionMock).toHaveBeenCalled());
+    // 查询激活期间只懒创建一次草稿会话（draft promise 守卫）
+    expect(createSessionMock).toHaveBeenCalledTimes(1);
+    expect(setCurrentSessionIdMock).toHaveBeenCalledWith('new-session-id');
+    // 无工作区时 @ 菜单仍要给出可诊断空态，而不是静默无响应
+    expect(screen.getByText('当前会话未绑定工作区，无法搜索文件')).toBeInTheDocument();
   });
 
   it('shows toast.error on createSession failure', async () => {

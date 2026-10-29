@@ -89,6 +89,57 @@ async def test_streaming_chat_persists_user_and_assistant_messages(client):
 
 
 @pytest.mark.asyncio()
+async def test_streaming_chat_persists_user_message_meta(client):
+    """message_meta（附件/@文件引用/office 引用）随 user 行落库，重载可回显。"""
+    session = SessionRepository().create(title="client_meta persist")
+    meta = {
+        "file_refs": [{"path": "src/App.tsx", "name": "App.tsx"}],
+        "attachments": [{"name": "a.pdf", "size": 1024, "type": "application/pdf"}],
+        "office_refs": [{"doc_id": "doc-1", "doc_type": "pdf", "filename": "q3.pdf"}],
+    }
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="ok")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        MockAgent.return_value.run_loop = mock_run_loop
+        MockAgent.return_value.memory_manager = None
+
+        await _run_stream_and_wait(
+            client, session.id, "看看 @src/App.tsx", message_meta=meta
+        )
+
+    persisted = MessageRepository().get_by_session(session.id)
+    user_msg = next((m for m in persisted if m.role == "user"), None)
+    assert user_msg is not None
+    assert user_msg.to_dict()["client_meta"] == meta
+
+
+@pytest.mark.asyncio()
+async def test_streaming_chat_drops_oversized_user_message_meta(client):
+    """message_meta 超过 32 KiB 时丢弃展示元数据，消息本身仍正常落库。"""
+    session = SessionRepository().create(title="client_meta oversized")
+    huge_meta = {
+        "file_refs": [{"path": "a/" + "x" * 40000 + ".py", "name": "huge.py"}],
+    }
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="ok")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        MockAgent.return_value.run_loop = mock_run_loop
+        MockAgent.return_value.memory_manager = None
+
+        await _run_stream_and_wait(client, session.id, "hi", message_meta=huge_meta)
+
+    persisted = MessageRepository().get_by_session(session.id)
+    user_msg = next((m for m in persisted if m.role == "user"), None)
+    assert user_msg is not None
+    assert user_msg.content == "hi"
+    assert user_msg.to_dict()["client_meta"] is None
+
+
+@pytest.mark.asyncio()
 async def test_streaming_chat_updates_session_metadata(client):
     """chat 完成后 session.last_message_at 应当被更新, message_count 应为 2。"""
     session = SessionRepository().create(title="PR-7 session update")

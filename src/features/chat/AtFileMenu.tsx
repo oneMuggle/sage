@@ -267,8 +267,7 @@ export function AtFileMenu({ query, onSelect, onClose }: AtFileMenuProps) {
         zIndex: 1000,
       }}
     >
-      <div className="flex items-center justify-end gap-1.5 px-2.5 py-1 border-b border-border text-ui-2xs">
-      </div>
+      <div className="flex items-center justify-end gap-1.5 px-2.5 py-1 border-b border-border text-ui-2xs"></div>
       {isLoading && <div className="at-file-menu__loading">{t('chat.atFile.searching')}</div>}
 
       {error === 'timeout' && (
@@ -284,7 +283,11 @@ export function AtFileMenu({ query, onSelect, onClose }: AtFileMenuProps) {
         <div className="at-file-menu__error">{t('chat.atFile.error')}</div>
       )}
 
-      {!isLoading && !error && results.length === 0 && (
+      {!isLoading && !error && !sessionId && (
+        <div className="at-file-menu__empty">{t('chat.atFile.noWorkspace')}</div>
+      )}
+
+      {!isLoading && !error && sessionId && results.length === 0 && (
         <div className="at-file-menu__empty">{t('chat.atFile.empty')}</div>
       )}
 

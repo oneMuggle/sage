@@ -4,18 +4,15 @@ import { useInRouterContext, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { resolveEndpoint } from '../../entities/setting/types';
-import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
+import { useBtwCommand } from '../../features/chat';
 // 对标 S3: 直接从源文件导入（而非 barrel），既有 Chat 页面测试整体 mock 了
 // '../../features/chat'，走 barrel 会拿到 undefined。
-import { AtEntityMenu } from '../../features/chat/AtEntityMenu';
-import { parseEntityRefQuery } from '../../features/chat/entityRefs';
 import { appendQuoteToDraft } from '../../features/chat/selectionQuote';
+import { useAtFileMenu } from '../../features/chat/useAtFileMenu';
 import { useSettings } from '../../features/manage-settings/useSettings';
-import { importOfficeReference } from '../../features/office/importOfficeReference';
 import type { DeliveryMode } from '../../features/send-message/deliveryMode';
 import { knowledgeApi, promptApi, skillsApi } from '../../shared/api';
 import { listen as desktopListen } from '../../shared/api/desktopEvent';
-import { type AtFileSelection } from '../../shared/api/fileSearchClient';
 import type { ChatOfficeRef } from '../../shared/api/types';
 import { worktreeApi } from '../../shared/api/worktreeApi';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
@@ -221,10 +218,6 @@ function ChatInputInner({
 
   // Phase 6: @文件提及 + /btw 补充消息
   const btw = useBtwCommand();
-  const atQuery = useAtFileQuery(value, cursorPos);
-  // 对标 S3: `@memory:xx` 等实体引用 —— 已进入实体模式时不再触发文件搜索，
-  // 由后端在发送时解析注入（backend/chat/entity_refs.py）。
-  const entityRef = parseEntityRefQuery(atQuery.query);
   const navigate = useOptionalNavigate();
 
   // 首次挂载拉 skills 列表 + 订阅 skills:notify 事件触发刷新。
@@ -319,29 +312,6 @@ function ChatInputInner({
     isDragOver,
   } = useFileUpload();
 
-  /** Insert a plain `@<path> ` into the textarea, replacing the @-query. */
-  const insertAtFilePath = useCallback(
-    (filePath: string) => {
-      if (atQuery.query === null) return;
-      const newValue =
-        value.slice(0, atQuery.startIdx) + '@' + filePath + ' ' + value.slice(atQuery.endIdx);
-      setValue(newValue);
-      setCursorPos(atQuery.startIdx + 1 + filePath.length + 1);
-    },
-    [value, atQuery, setValue],
-  );
-
-  /** 对标 S3: 把 `@kind:` 前缀写入输入框（光标停在冒号后，等待用户输入查询）。 */
-  const insertEntityToken = useCallback(
-    (token: string) => {
-      if (atQuery.query === null) return;
-      const newValue = value.slice(0, atQuery.startIdx) + token + value.slice(atQuery.endIdx);
-      setValue(newValue);
-      setCursorPos(atQuery.startIdx + token.length);
-    },
-    [value, atQuery, setValue],
-  );
-
   /** Add a managed office ref. Dedupe by `docId` — adding the same docId twice is a no-op (immutable update). */
   const addOfficeRef = useCallback((ref: ChatOfficeRef) => {
     setOfficeRefs((prev) => {
@@ -355,41 +325,15 @@ function ChatInputInner({
     setOfficeRefs((prev) => prev.filter((r) => r.docId !== docId));
   }, []);
 
-  /** Handle the @-menu selection. Routes by discriminated-union kind: - 'file' → insert `@<path>` into the textarea (existing behavior) - 'office' → add the ChatOfficeRef to officeRefs - 'office-import' → call importOfficeReference then add the ref */
-  const handleAtFileSelect = useCallback(
-    async (selection: AtFileSelection) => {
-      if (selection.kind === 'file') {
-        insertAtFilePath(selection.path);
-        return;
-      }
-      if (selection.kind === 'office') {
-        addOfficeRef(selection.ref);
-        return;
-      }
-      // kind === 'office-import'
-      if (!effectiveWorkspacePath) {
-        // No workspace bound — surface a friendly error rather than calling
-        // the gateway. Chat.tsx renders the WorkspaceBindModal entry point;
-        // we still close the @ menu so the user isn't stuck.
-        console.warn('[ChatInput] Office import requires a bound workspace');
-        return;
-      }
-      try {
-        const ref = await importOfficeReference(effectiveWorkspacePath, selection.result);
-        addOfficeRef(ref);
-      } catch (e) {
-        console.error('[ChatInput] Office import failed', e);
-      }
-    },
-    [effectiveWorkspacePath, insertAtFilePath, addOfficeRef],
-  );
-
-  const handleAtFileClose = useCallback(() => {
-    if (atQuery.query === null) return;
-    const newValue = value.slice(0, atQuery.startIdx) + value.slice(atQuery.endIdx);
-    setValue(newValue);
-    setCursorPos(atQuery.startIdx);
-  }, [value, atQuery, setValue]);
+  // @ 文件/实体菜单（与 WelcomeInputCard 共用同一实现）。
+  const { atFileMenu } = useAtFileMenu({
+    value,
+    cursorPos,
+    onChange: setValue,
+    onCursorChange: setCursorPos,
+    workspacePath: effectiveWorkspacePath,
+    addOfficeRef,
+  });
 
   const handleSend = (mode?: DeliveryMode) => {
     // RT5 (round7): 运行中允许发送 —— onSend（useChat.sendMessage）按会话
@@ -826,21 +770,7 @@ function ChatInputInner({
         onSlashClose={() => setSlashMenuOpen(false)}
         focusRequest={focusRequest}
         inputHistory={inputHistory}
-        atFileMenu={
-          atQuery.query !== null &&
-          entityRef === null && (
-            <>
-              <AtEntityMenu query={atQuery.query} onSelect={(s) => insertEntityToken(s.token)} />
-              <AtFileMenu
-                query={atQuery.query}
-                onSelect={(selection) => {
-                  void handleAtFileSelect(selection);
-                }}
-                onClose={handleAtFileClose}
-              />
-            </>
-          )
-        }
+        atFileMenu={atFileMenu}
         orchModeBar={
           hideOrchModeBar ? undefined : (
             <div className="flex items-center gap-2 px-2 py-1 mb-2 border-b border-border">
