@@ -163,6 +163,7 @@ class TestResolveEffectiveWindow:
         from backend.model_catalog.schemas import EffectiveModel, Price
 
         effective = EffectiveModel(
+            tier="balanced",
             limits=catalog_limits,
             price=Price(),
             provenance={},

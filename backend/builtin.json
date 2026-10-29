@@ -1,155 +1,481 @@
 {
-  "version": "1.0.0",
+  "version": "2.0.0",
   "source": "builtin",
-  "generated_at": "2026-09-15T00:00:00.000000Z",
-  "description": "Verified model metadata seed. No network access required. Prices from official sources as of date.",
+  "generated_at": "2026-10-28T00:00:00.000000Z",
+  "description": "Verified model metadata seed with tier classification for smart routing. No network access required. Prices from official sources as of date.",
   "models": [
     {
       "provider": "openai",
       "model_id": "gpt-4o",
+      "tier": "balanced",
       "native": 128000,
       "price": {"input_per_million": "2.50", "output_per_million": "10.00"},
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "openai"
     },
     {
       "provider": "openai",
       "model_id": "gpt-4o-mini",
+      "tier": "fast",
       "native": 128000,
       "price": {"input_per_million": "0.15", "output_per_million": "0.60"},
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "openai"
     },
     {
       "provider": "openai",
       "model_id": "gpt-4-turbo",
+      "tier": "balanced",
       "native": 128000,
       "price": {"input_per_million": "10.00", "output_per_million": "30.00"},
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "openai"
+    },
+    {
+      "provider": "openai",
+      "model_id": "gpt-3.5-turbo",
+      "tier": "fast",
+      "native": 16385,
+      "price": {"input_per_million": "0.50", "output_per_million": "1.50"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "openai"
+    },
+    {
+      "provider": "openai",
+      "model_id": "o1",
+      "tier": "powerful",
+      "native": 200000,
+      "price": {"input_per_million": "15.00", "output_per_million": "60.00"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "openai"
     },
     {
       "provider": "openai",
       "model_id": "o1-preview",
+      "tier": "powerful",
       "native": 128000,
       "price": {"input_per_million": "15.00", "output_per_million": "60.00"},
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "openai"
     },
     {
       "provider": "openai",
       "model_id": "o1-mini",
+      "tier": "powerful",
       "native": 128000,
       "price": {"input_per_million": "3.00", "output_per_million": "12.00"},
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "openai"
+    },
+    {
+      "provider": "openai",
+      "model_id": "o3-mini",
+      "tier": "powerful",
+      "native": 200000,
+      "price": {"input_per_million": "1.10", "output_per_million": "4.40"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "openai"
     },
     {
       "provider": "anthropic",
       "model_id": "claude-sonnet-4-20250514",
+      "tier": "balanced",
       "native": 200000,
       "price": {"input_per_million": "3.00", "output_per_million": "15.00"},
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "anthropic"
     },
     {
       "provider": "anthropic",
       "model_id": "claude-3-5-sonnet-20241022",
+      "tier": "balanced",
       "native": 200000,
       "price": {"input_per_million": "3.00", "output_per_million": "15.00"},
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "anthropic"
     },
     {
       "provider": "anthropic",
       "model_id": "claude-3-5-haiku-20241022",
+      "tier": "fast",
       "native": 200000,
       "price": {"input_per_million": "0.80", "output_per_million": "4.00"},
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "anthropic"
     },
     {
       "provider": "anthropic",
       "model_id": "claude-3-opus-20240229",
+      "tier": "powerful",
       "native": 200000,
       "price": {"input_per_million": "15.00", "output_per_million": "75.00"},
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "anthropic"
+    },
+    {
+      "provider": "anthropic",
+      "model_id": "claude-opus-4-20250514",
+      "tier": "powerful",
+      "native": 200000,
+      "price": {"input_per_million": "15.00", "output_per_million": "75.00"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "anthropic"
+    },
+    {
+      "provider": "anthropic",
+      "model_id": "claude-3-sonnet-20240229",
+      "tier": "balanced",
+      "native": 200000,
+      "price": {"input_per_million": "3.00", "output_per_million": "15.00"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "anthropic"
+    },
+    {
+      "provider": "anthropic",
+      "model_id": "claude-3-haiku-20240307",
+      "tier": "fast",
+      "native": 200000,
+      "price": {"input_per_million": "0.25", "output_per_million": "1.25"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "anthropic"
     },
     {
       "provider": "google",
       "model_id": "gemini-2.0-flash",
+      "tier": "fast",
       "native": 1048576,
       "price": {"input_per_million": "0.10", "output_per_million": "0.40"},
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "google"
     },
     {
       "provider": "google",
       "model_id": "gemini-1.5-pro",
+      "tier": "balanced",
       "native": 2097152,
       "price": {"input_per_million": "1.25", "output_per_million": "5.00"},
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "google"
     },
     {
       "provider": "google",
       "model_id": "gemini-1.5-flash",
+      "tier": "fast",
       "native": 1048576,
       "price": {"input_per_million": "0.075", "output_per_million": "0.30"},
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "google"
+    },
+    {
+      "provider": "google",
+      "model_id": "gemini-2.0-pro",
+      "tier": "balanced",
+      "native": 2097152,
+      "price": {"input_per_million": "1.25", "output_per_million": "5.00"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "google"
+    },
+    {
+      "provider": "google",
+      "model_id": "gemini-ultra",
+      "tier": "powerful",
+      "native": 131072,
+      "price": {"input_per_million": "7.00", "output_per_million": "21.00"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "google"
+    },
+    {
+      "provider": "google",
+      "model_id": "gemma-2-9b",
+      "tier": "fast",
+      "native": 8192,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
     },
     {
       "provider": "meta-llama",
       "model_id": "llama-3.1-405b-instruct",
+      "tier": "powerful",
       "native": 128000,
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "self-hosted"
     },
     {
       "provider": "meta-llama",
       "model_id": "llama-3.1-70b-instruct",
+      "tier": "balanced",
       "native": 128000,
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "self-hosted"
     },
     {
       "provider": "meta-llama",
       "model_id": "llama-3.1-8b-instruct",
+      "tier": "fast",
       "native": 128000,
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "meta-llama",
+      "model_id": "llama-3-70b-instruct",
+      "tier": "balanced",
+      "native": 8192,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "meta-llama",
+      "model_id": "llama-3-8b-instruct",
+      "tier": "fast",
+      "native": 8192,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "self-hosted"
     },
     {
       "provider": "mistral",
       "model_id": "mistral-large-2411",
+      "tier": "balanced",
       "native": 128000,
       "price": {"input_per_million": "2.00", "output_per_million": "6.00"},
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "mistral"
     },
     {
       "provider": "mistral",
       "model_id": "mistral-small-2409",
+      "tier": "fast",
       "native": 32000,
       "price": {"input_per_million": "0.20", "output_per_million": "0.60"},
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "mistral"
+    },
+    {
+      "provider": "mistral",
+      "model_id": "mistral-7b-instruct-v0.3",
+      "tier": "fast",
+      "native": 32000,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "mistral",
+      "model_id": "mixtral-8x7b-instruct-v0.1",
+      "tier": "balanced",
+      "native": 32000,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
     },
     {
       "provider": "qwen",
       "model_id": "qwen2.5-72b-instruct",
+      "tier": "balanced",
       "native": 128000,
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "self-hosted"
     },
     {
       "provider": "qwen",
       "model_id": "qwen2.5-7b-instruct",
+      "tier": "fast",
       "native": 128000,
-      "source_updated_at": "2026-09-01T00:00:00.000000Z",
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
       "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "qwen",
+      "model_id": "qwen2-72b-instruct",
+      "tier": "balanced",
+      "native": 128000,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "qwen",
+      "model_id": "qwen2-7b-instruct",
+      "tier": "fast",
+      "native": 128000,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "qwen",
+      "model_id": "qwen2.5-110b-instruct",
+      "tier": "powerful",
+      "native": 128000,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "deepseek",
+      "model_id": "deepseek-chat",
+      "tier": "fast",
+      "native": 64000,
+      "price": {"input_per_million": "0.14", "output_per_million": "0.28"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "deepseek"
+    },
+    {
+      "provider": "deepseek",
+      "model_id": "deepseek-coder",
+      "tier": "fast",
+      "native": 64000,
+      "price": {"input_per_million": "0.14", "output_per_million": "0.28"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "deepseek"
+    },
+    {
+      "provider": "deepseek",
+      "model_id": "deepseek-v2",
+      "tier": "balanced",
+      "native": 128000,
+      "price": {"input_per_million": "0.14", "output_per_million": "0.28"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "deepseek"
+    },
+    {
+      "provider": "deepseek",
+      "model_id": "deepseek-v3",
+      "tier": "balanced",
+      "native": 128000,
+      "price": {"input_per_million": "0.27", "output_per_million": "1.10"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "deepseek"
+    },
+    {
+      "provider": "deepseek",
+      "model_id": "deepseek-r1",
+      "tier": "powerful",
+      "native": 128000,
+      "price": {"input_per_million": "0.55", "output_per_million": "2.19"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "deepseek"
+    },
+    {
+      "provider": "microsoft",
+      "model_id": "phi-3-mini-4k",
+      "tier": "fast",
+      "native": 4096,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "microsoft",
+      "model_id": "phi-3-small-8k",
+      "tier": "fast",
+      "native": 8192,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "01-ai",
+      "model_id": "yi-1.5-6b-chat",
+      "tier": "fast",
+      "native": 4096,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "01-ai",
+      "model_id": "yi-1.5-34b-chat",
+      "tier": "balanced",
+      "native": 4096,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "01-ai",
+      "model_id": "yi-1.5-200b-chat",
+      "tier": "powerful",
+      "native": 4096,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "cohere",
+      "model_id": "command-r-plus",
+      "tier": "balanced",
+      "native": 128000,
+      "price": {"input_per_million": "3.00", "output_per_million": "15.00"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "cohere"
+    },
+    {
+      "provider": "databricks",
+      "model_id": "dbrx-instruct",
+      "tier": "balanced",
+      "native": 32768,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "ai21",
+      "model_id": "jamba-1.5-large",
+      "tier": "balanced",
+      "native": 256000,
+      "price": {"input_per_million": "2.00", "output_per_million": "8.00"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "ai21"
+    },
+    {
+      "provider": "xai",
+      "model_id": "grok-2",
+      "tier": "balanced",
+      "native": 128000,
+      "price": {"input_per_million": "5.00", "output_per_million": "15.00"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "xai"
+    },
+    {
+      "provider": "xai",
+      "model_id": "grok-3",
+      "tier": "powerful",
+      "native": 128000,
+      "price": {"input_per_million": "10.00", "output_per_million": "30.00"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "xai"
+    },
+    {
+      "provider": "meta-llama",
+      "model_id": "llama-3.3-70b-instruct",
+      "tier": "balanced",
+      "native": 128000,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "google",
+      "model_id": "gemma-2-27b",
+      "tier": "balanced",
+      "native": 8192,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "microsoft",
+      "model_id": "phi-3-medium-4k",
+      "tier": "balanced",
+      "native": 4096,
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "self-hosted"
+    },
+    {
+      "provider": "amazon",
+      "model_id": "nova-pro",
+      "tier": "balanced",
+      "native": 300000,
+      "price": {"input_per_million": "0.80", "output_per_million": "3.20"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "amazon"
+    },
+    {
+      "provider": "amazon",
+      "model_id": "nova-lite",
+      "tier": "fast",
+      "native": 300000,
+      "price": {"input_per_million": "0.06", "output_per_million": "0.24"},
+      "source_updated_at": "2026-10-28T00:00:00.000000Z",
+      "pricing_scope": "amazon"
     }
   ]
 }

@@ -24,7 +24,9 @@ missing keys, snake_case residue) yields ``None`` rather than raising.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+from backend.routing.routing_engine import RoutingEngine
 
 logger = logging.getLogger(__name__)
 
@@ -328,10 +330,82 @@ def resolve_chat_model(
     return None
 
 
+# ---------------------------------------------------------------------------
+# Task 9: auto-routing activation (settings key ``routing.mode``)
+# ---------------------------------------------------------------------------
+
+_ROUTING_AUTO = "auto"
+_DEFAULT_CHAT_CONTEXT = 4096
+
+
+def load_routing_config() -> Tuple[str, int]:
+    """Return ``(mode, context_length)`` from app_settings.
+
+    Fail-safe: any read error, non-dict payload, or unknown mode yields
+    ``("manual", 4096)`` so callers keep the settings-derived model.
+    """
+    try:
+        from backend.data.settings_canonicalizer import to_camel
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get_json("app_settings")
+        if not isinstance(raw, dict):
+            return "manual", _DEFAULT_CHAT_CONTEXT
+        settings = to_camel(raw)
+        routing = settings.get("routing")
+        mode = routing.get("mode") if isinstance(routing, dict) else None
+        mode = _ROUTING_AUTO if mode == _ROUTING_AUTO else "manual"
+        max_context = settings.get("maxContext")
+        if isinstance(max_context, bool) or not isinstance(max_context, int) or max_context <= 0:
+            max_context = _DEFAULT_CHAT_CONTEXT
+        return mode, max_context
+    except Exception as exc:  # fail-safe: routing is optional
+        logger.debug("llm_factory: routing config unavailable (%s); manual", exc)
+        return "manual", _DEFAULT_CHAT_CONTEXT
+
+
+def apply_auto_routing_overlay(
+    cfg: Optional[Dict[str, Any]],
+    task_type: Optional[str] = None,
+    session_id: Optional[str] = None,
+    profile_model: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """In auto mode, replace ``cfg['model']`` with the catalog-routed model.
+
+    Returns ``cfg`` unchanged when: not a dict, mode is manual, the user made an
+    explicit pick (session override / profile model — R23), or routing yields
+    nothing. Selection is scoped to ``cfg['endpoint_id']`` so the model keeps
+    that endpoint's credentials (Task 5 rationale).
+    """
+    if not isinstance(cfg, dict):
+        return cfg
+    mode, context_length = load_routing_config()
+    if mode != _ROUTING_AUTO:
+        return cfg
+    if resolve_chat_model(session_id, profile_model):
+        return cfg
+    # Endpoint coupling: the model must come from the endpoint whose api_key /
+    # base_url this cfg carries. Without a resolved endpoint id the engine would
+    # search the whole catalog and could pair a foreign model with these
+    # credentials — skip routing instead (R11).
+    endpoint_id = cfg.get("endpoint_id")
+    if not isinstance(endpoint_id, str) or not endpoint_id.strip():
+        return cfg
+    routed = resolve_routed_chat_model(
+        task_type=(task_type or "chat"),
+        context_length=context_length,
+        endpoint_id=endpoint_id,
+    )
+    if not routed:
+        return cfg
+    return {**cfg, "model": routed}
+
+
 def load_llm_config_for_chat(
     session_id: Optional[str] = None,
     profile_model: Optional[str] = None,
     profile_max_tokens: Optional[int] = None,
+    task_type: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """全局端点配置 + 会话/profile 模型覆盖 → LLMConfig 兼容 dict。
 
@@ -341,6 +415,7 @@ def load_llm_config_for_chat(
     2026-10-28: 新增 ``profile_max_tokens`` 兜底 —— 当 agent profile 显式设置了
     ``model_config.max_tokens``（且非默认 4096）时，用它覆盖全局设置值。优先级：
     ChatRequest.max_tokens（调用方单独合并）> profile_max_tokens > maxOutputTokens > 4096。
+    任务 9：``routing.mode == "auto"`` 时再叠加目录路由（显式选择优先）。
     """
     base = load_llm_config_from_settings()
     if base is None:
@@ -354,4 +429,52 @@ def load_llm_config_for_chat(
     profile_value = _clamp_max_output_tokens(profile_max_tokens)
     if profile_value is not None and profile_value != _PROFILE_MAX_TOKENS_PLACEHOLDER:
         merged["max_tokens"] = profile_value
-    return merged
+    return apply_auto_routing_overlay(
+        merged, task_type=task_type, session_id=session_id, profile_model=profile_model
+    )
+
+
+# ---------------------------------------------------------------------------
+# Task 5: endpoint-scoped advisory routing helper
+# ---------------------------------------------------------------------------
+
+def resolve_routed_chat_model(
+    task_type: str,
+    context_length: int = 4096,
+    required_capabilities: Optional[List[str]] = None,
+    endpoint_id: Optional[str] = None,
+    catalog_repository: Optional[Any] = None,
+) -> Optional[str]:
+    """Return the catalog-selected model id for *task_type*, or ``None``.
+
+    Advisory overlay on top of the settings-derived model: callers keep their
+    existing model whenever this returns ``None``.
+
+    ``endpoint_id`` scopes selection to one endpoint. This matters because the
+    factory pairs a model id with exactly one endpoint's credentials; a model
+    bound to a different endpoint would be sent to the wrong host with the
+    wrong key. Callers that already resolved an endpoint (e.g. via
+    ``load_llm_config_from_settings()["endpoint_id"]``) should pass it.
+
+    Fail-safe: any catalog/routing failure returns ``None`` instead of raising.
+    """
+    try:
+        repo = catalog_repository
+        if repo is None:
+            from backend.data.database import get_database
+            from backend.model_catalog.repository import CatalogRepository
+
+            repo = CatalogRepository(get_database())
+        result = RoutingEngine(repo).route(
+            task_type=task_type,
+            context_length=context_length,
+            required_capabilities=required_capabilities,
+            endpoint_id=endpoint_id,
+        )
+    except Exception as exc:  # fail-safe by design: routing is optional
+        logger.debug(
+            "llm_factory: routing unavailable (%s); keeping settings model", exc
+        )
+        return None
+    model_key = result.selected_model.model_key
+    return model_key.model_id if model_key is not None else None
