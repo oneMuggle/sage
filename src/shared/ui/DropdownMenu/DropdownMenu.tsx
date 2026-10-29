@@ -149,9 +149,7 @@ export const DropdownMenuContent = forwardRef<
             /* v8 ignore start */
             e.stopPropagation();
             setCopiedJson(true);
-            void navigator.clipboard?.writeText(
-              formatDropdownMenuAuditJson({ align, sideOffset }),
-            );
+            void navigator.clipboard?.writeText(formatDropdownMenuAuditJson({ align, sideOffset }));
             /* v8 ignore stop */
           }}
         >

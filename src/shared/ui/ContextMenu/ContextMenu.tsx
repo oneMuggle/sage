@@ -48,11 +48,7 @@ export function ContextMenu({ items, children, enabled = true, onOpenChange }: C
   );
 }
 
-function EnabledContextMenu({
-  items,
-  children,
-  onOpenChange,
-}: Omit<ContextMenuProps, 'enabled'>) {
+function EnabledContextMenu({ items, children, onOpenChange }: Omit<ContextMenuProps, 'enabled'>) {
   const [open, setOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<ContextMenuItemSpec[]>([]);
   const openRef = useRef(false);

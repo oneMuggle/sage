@@ -74,9 +74,7 @@ describe('ContextMenu', () => {
 
   it('renders checkbox items with aria-checked and toggles through callback', async () => {
     const onCheckedChange = vi.fn();
-    renderMenu([
-      { id: 'pin', kind: 'checkbox', label: '置顶', checked: true, onCheckedChange },
-    ]);
+    renderMenu([{ id: 'pin', kind: 'checkbox', label: '置顶', checked: true, onCheckedChange }]);
 
     openMenu();
     const item = await screen.findByRole('menuitemcheckbox', { name: '置顶' });

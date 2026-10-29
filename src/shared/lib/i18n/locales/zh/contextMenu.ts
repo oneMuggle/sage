@@ -29,8 +29,7 @@ export const zhContextMenu = {
   'contextMenu.session.viewForkTree': '查看分叉树',
   'contextMenu.session.delete': '删除会话…',
   'contextMenu.session.deleteTitle': '删除会话',
-  'contextMenu.session.deleteMessage':
-    '将永久删除会话「{title}」及其全部消息，此操作不可撤销。',
+  'contextMenu.session.deleteMessage': '将永久删除会话「{title}」及其全部消息，此操作不可撤销。',
 
   'contextMenu.message.quote': '引用到输入框',
   'contextMenu.message.copyMarkdown': '复制为 Markdown',
