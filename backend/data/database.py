@@ -1976,10 +1976,11 @@ class Database:
 
         # N2: journal 元数据表（office_journal_specs + office_journal_generations）。
         # 通过延迟导入避免 backend.data ↔ backend.office.journal 包级循环。
-        # ensure_journal_tables 内部使用 get_database() → 复用同一加锁代理 + WAL 连接。
+        # 显式传 self：避免 ensure_journal_tables 内部 get_database() 打开全局
+        # 默认库（data/sage.db），导致 xdist 多 worker 并发创建时 WAL 排他锁竞态。
         from backend.office.journal.persistence import ensure_journal_tables
 
-        ensure_journal_tables()
+        ensure_journal_tables(self)
 
         # Todos table
         cursor.execute("""

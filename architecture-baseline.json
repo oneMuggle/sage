@@ -10,7 +10,7 @@
     "backend/application/services/chat_service.py": 1263,
     "backend/core/legacy/agent.py": 3136,
     "backend/core/legacy/llm_client.py": 1274,
-    "backend/data/database.py": 2151,
+    "backend/data/database.py": 2152,
     "backend/data/session_repo.py": 1113,
     "backend/data/settings_canonicalizer.py": 852,
     "backend/main.py": 1694,
