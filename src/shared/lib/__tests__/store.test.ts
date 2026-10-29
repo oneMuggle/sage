@@ -15,7 +15,7 @@ vi.mock('../../api/desktopInvoke', () => ({
 }));
 
 import { clientLogger } from '../../log/client';
-import { type Message, useStore } from '../store';
+import { type Message, type Session, useStore } from '../store';
 
 describe('useStore currentSessionId async', () => {
   beforeEach(() => {
@@ -260,5 +260,51 @@ describe('addMessage beforeId 锚点插入（插话回显落位）', () => {
       );
 
     expect(useStore.getState().messages.map((m) => m.id)).toEqual(['u1']);
+  });
+});
+
+describe('session list pagination', () => {
+  const session = (id: string): Session => ({
+    id,
+    title: id,
+    created_at: 1,
+    updated_at: 1,
+    last_message_at: null,
+    message_count: 0,
+    is_pinned: false,
+  });
+
+  beforeEach(() => {
+    mockInvoke.mockReset();
+    useStore.setState({ sessions: [], sessionsHasMore: false, sessionsLoadingMore: false });
+  });
+
+  it('loadSessions requests the first page', async () => {
+    mockInvoke.mockResolvedValueOnce([session('s1')]);
+    await useStore.getState().loadSessions();
+    expect(mockInvoke).toHaveBeenCalledWith('list_sessions', { limit: 100, offset: 0 });
+    expect(useStore.getState().sessions.map((s) => s.id)).toEqual(['s1']);
+    expect(useStore.getState().sessionsHasMore).toBe(false);
+  });
+
+  it('loadSessions refresh keeps the already-loaded page size', async () => {
+    useStore.setState({ sessions: Array.from({ length: 150 }, (_, i) => session(`s${i}`)) });
+    mockInvoke.mockResolvedValueOnce([]);
+    await useStore.getState().loadSessions();
+    expect(mockInvoke).toHaveBeenCalledWith('list_sessions', { limit: 150, offset: 0 });
+  });
+
+  it('loadMoreSessions appends the next page and de-duplicates ids', async () => {
+    useStore.setState({ sessions: [session('s1')], sessionsHasMore: true });
+    mockInvoke.mockResolvedValueOnce([session('s1'), session('s2')]);
+    await useStore.getState().loadMoreSessions();
+    expect(mockInvoke).toHaveBeenCalledWith('list_sessions', { limit: 100, offset: 1 });
+    expect(useStore.getState().sessions.map((s) => s.id)).toEqual(['s1', 's2']);
+  });
+
+  it('loadMoreSessions is a no-op when no more pages', async () => {
+    useStore.setState({ sessions: [session('s1')], sessionsHasMore: false });
+    await useStore.getState().loadMoreSessions();
+    expect(mockInvoke).not.toHaveBeenCalled();
   });
 });
