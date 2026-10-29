@@ -65,8 +65,8 @@ export function ModelPicker({
   autoAvailable = false,
 }: ModelPickerProps) {
   const selectedModel = models.find((m) => m.modelId === value);
-  // R27: 至少一个候选项带 tier 才分组；否则保持平铺（现有用例走这条路径）。
-  const hasTierData = models.some((model) => model.tier != null);
+  // R27: 至少一个候选项带可识别的 tier 才分组；否则保持平铺（现有用例走这条路径）。
+  const hasTierData = models.some((model) => normalizeTier(model.tier) != null);
 
   const renderModelItem = (model: ModelOption, grouped: boolean) => (
     <SelectItem key={`${model.endpointName}/${model.modelId}`} value={model.modelId}>
@@ -87,7 +87,7 @@ export function ModelPicker({
     >
       <SelectTrigger aria-label="选择模型" className="w-56">
         <SelectValue placeholder="选择模型">
-          {value === AUTO_MODEL_ID
+          {autoAvailable && value === AUTO_MODEL_ID
             ? AUTO_MODEL_LABEL
             : selectedModel
               ? `${selectedModel.modelId} · ${selectedModel.endpointName}`

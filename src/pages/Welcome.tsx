@@ -33,6 +33,7 @@ import type {
   WorktreeMode as WorktreeModeType,
   WorktreePickerValue,
 } from '../widgets/welcome/WorktreePicker';
+import { buildCatalogEnricher, type CatalogEnricher } from '../widgets/welcome/catalogEnrichment';
 
 const PLACEHOLDER_PHRASES_ZH = [
   '根据资料写一份可交付的报告…',
@@ -145,8 +146,8 @@ export function Welcome() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [branches, setBranches] = useState<BranchEntry[]>([]);
   const [worktrees, setWorktrees] = useState<SessionWorktree[]>([]);
-  // R27: catalog 富化数据（tier / context / price）；离线时保持空 Map → 平铺。
-  const [tierLookup, setTierLookup] = useState<Map<string, CandidateModel>>(() => new Map());
+  // R27: catalog 富化数据（tier / context / price）；离线时保持空解析器 → 平铺。
+  const [enrich, setEnrich] = useState<CatalogEnricher>(() => () => null);
 
   // R27 数据源：挂载后拉一次 catalog。失败静默保持平铺（不 toast、不抛错）。
   const hasConfiguredEndpoint = useMemo(
@@ -159,7 +160,7 @@ export function Welcome() {
     listModels({ limit: 1000, offset: 0 })
       .then((res) => {
         if (cancelled) return;
-        setTierLookup(new Map(res.items.map((m) => [m.model_key.model_id, m])));
+        setEnrich(() => buildCatalogEnricher(res.items));
       })
       .catch(() => {
         // 离线 / 后端不可用：保持无 tier，平铺列表（R27）。
@@ -175,7 +176,7 @@ export function Welcome() {
     for (const endpoint of settings.endpoints) {
       if (endpoint.discoveredModels) {
         for (const model of endpoint.discoveredModels) {
-          const catalogModel = tierLookup.get(model.id);
+          const catalogModel = enrich(model.id);
           result.push({
             modelId: model.id,
             endpointName: endpoint.name,
@@ -187,7 +188,15 @@ export function Welcome() {
       }
     }
     return result;
-  }, [settings.endpoints, tierLookup]);
+  }, [settings.endpoints, enrich]);
+
+  const autoAvailable = settings.routing?.mode === 'auto';
+
+  // R29: 模式切回手动后 'auto' 哨兵必须当场失效。Welcome 挂着不动而全局设置
+  // 可以被别处改写, 否则选择器会显示一个下拉里已经不存在、也提交不了的选项。
+  useEffect(() => {
+    if (!autoAvailable && modelId === AUTO_MODEL_ID) setModelId(null);
+  }, [autoAvailable, modelId]);
 
   const globalModelId = settings.modelSelections.chatModel.modelId;
 
@@ -467,7 +476,7 @@ export function Welcome() {
               onModelChange={setModelId}
               models={models}
               globalModelId={globalModelId}
-              autoAvailable={settings.routing?.mode === 'auto'}
+              autoAvailable={autoAvailable}
               worktreeMode={worktreeMode}
               worktreeBranch={worktreeBranch}
               worktreeId={worktreeId}
