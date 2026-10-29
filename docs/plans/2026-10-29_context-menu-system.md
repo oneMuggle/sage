@@ -1,7 +1,7 @@
 # 右键上下文菜单体系优化方案
 
 > 日期：2026-10-29
-> 状态：**待评审**（方案确认前不进入实施）
+> 状态：**已实施**（2026-10-29，见文末「实施记录」；技术文档已归档至 `docs/technical/111-context-menu.md`）
 > 适用分支：`main` 与 `release/win7` 双方同步（纯前端 + Electron 主进程改动，无 Python 3.8 适配面）
 > 参考基线：ChatGPT / Claude / Cherry Studio / Chatbox / Cursor (VS Code) / Notion AI
 
@@ -45,42 +45,42 @@
 
 ### 2.2 Electron 侧
 
-| 位置 | 内容 |
-|---|---|
-| `electron/menu.ts:16-64` | 应用菜单：文件（退出/关闭）、帮助（打开日志目录、复制日志路径） |
-| `electron/tray.ts:62-96` | 托盘右键原生菜单：显示 Sage / 导出诊断包… / 退出 |
-| `electron/main.ts:1110-1119` | 主窗口 `webPreferences`（contextIsolation、sandbox、preload） |
+| 位置                         | 内容                                                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `electron/menu.ts:16-64`     | 应用菜单：文件（退出/关闭）、帮助（打开日志目录、复制日志路径）                                                           |
+| `electron/tray.ts:62-96`     | 托盘右键原生菜单：显示 Sage / 导出诊断包… / 退出                                                                          |
+| `electron/main.ts:1110-1119` | 主窗口 `webPreferences`（contextIsolation、sandbox、preload）                                                             |
 | `electron/main.ts:1148-1246` | webContents 事件仅 will-navigate / console-message / did-finish-load / did-fail-load / render-process-gone / unresponsive |
 
 **没有** `webContents.on('context-menu')`、**没有** `Menu.popup()`、**没有** 开发者"检查元素"右键项。`electron/preload.ts` 只暴露 `sage:invoke` / `sage:event:*` / 窗口控制，无菜单 IPC。
 
 ### 2.3 可复用基础设施
 
-| 能力 | 位置 | 说明 |
-|---|---|---|
-| Radix DropdownMenu 封装 | `src/shared/ui/DropdownMenu/DropdownMenu.tsx` | Item/Separator/Shortcut/Checkbox/Radio/Sub 样式齐备，但仅 1 个消费方（`DeliverySendGroup.tsx`）；未从 `src/shared/ui/index.ts` 导出 |
-| Radix Popover / Select / Dialog / Tooltip | `src/shared/ui/*` | 均已有封装 |
-| Promise 化确认框 | `src/shared/ui/ConfirmDialog/confirmService.ts` + `ConfirmDialogHost.tsx` | 危险动作统一入口 |
-| 两步删除按钮 | `src/widgets/sidebar/TwoStepDelete.tsx` | 会话/消息/技能三处复用 |
-| Toast | `src/app/providers/ToastProvider.tsx`（sonner），54 处使用 | 结果反馈统一 |
-| 划词引用 | `src/features/chat/selectionQuote.ts:78-96` + `SelectionQuoteButton.tsx` | 已有选区定位与"引用到输入框"链路 |
-| i18n | `src/shared/lib/i18n/`（zh/en，分域词典） | 大量组件仍是硬编码中文，新菜单应走词典 |
-| 剪贴板 | 无统一工具 | 各处直接 `navigator.clipboard.writeText` |
+| 能力                                      | 位置                                                                      | 说明                                                                                                                                |
+| ----------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Radix DropdownMenu 封装                   | `src/shared/ui/DropdownMenu/DropdownMenu.tsx`                             | Item/Separator/Shortcut/Checkbox/Radio/Sub 样式齐备，但仅 1 个消费方（`DeliverySendGroup.tsx`）；未从 `src/shared/ui/index.ts` 导出 |
+| Radix Popover / Select / Dialog / Tooltip | `src/shared/ui/*`                                                         | 均已有封装                                                                                                                          |
+| Promise 化确认框                          | `src/shared/ui/ConfirmDialog/confirmService.ts` + `ConfirmDialogHost.tsx` | 危险动作统一入口                                                                                                                    |
+| 两步删除按钮                              | `src/widgets/sidebar/TwoStepDelete.tsx`                                   | 会话/消息/技能三处复用                                                                                                              |
+| Toast                                     | `src/app/providers/ToastProvider.tsx`（sonner），54 处使用                | 结果反馈统一                                                                                                                        |
+| 划词引用                                  | `src/features/chat/selectionQuote.ts:78-96` + `SelectionQuoteButton.tsx`  | 已有选区定位与"引用到输入框"链路                                                                                                    |
+| i18n                                      | `src/shared/lib/i18n/`（zh/en，分域词典）                                 | 大量组件仍是硬编码中文，新菜单应走词典                                                                                              |
+| 剪贴板                                    | 无统一工具                                                                | 各处直接 `navigator.clipboard.writeText`                                                                                            |
 
 ### 2.4 动作来源清单（右键菜单的直接复用对象）
 
-| 界面对象 | 组件 | 已有动作 |
-|---|---|---|
-| 聊天消息 | `src/widgets/chat/MessageActionBar.tsx`、`src/pages/chat/useChatMessageActions.ts` | 复制、朗读、反馈、重新生成、编辑重发、引用到输入框；分叉、回滚、存记忆、两步删除 |
-| 会话列表项 | `src/widgets/session/SessionItem.tsx:411-460` | 导出 HTML、导出 Markdown、置顶、两步删除；双击 inline 重命名（`:245-262`） |
-| 代码块 | `src/widgets/chat/ShikiCodeBlock.tsx` | 复制、自动换行、折叠 |
-| 表格 | `src/widgets/chat/MessageMarkdownParts.tsx`（MarkdownTable） | 复制表格（TSV） |
-| 文件变更卡 | `src/widgets/chat/changes/FileChangeCard.tsx` | 接受、回退、切换 diff、在编辑器打开、在面板打开 |
-| 产物 | `src/widgets/chat/artifacts/ArtifactRow.tsx`、`ArtifactViewer.tsx` | 打开、在文件管理器显示（`revealArtifact`）、复制路径、版本历史 |
-| Office 文档行 | `src/features/office/OfficeDocumentList.tsx`、`useOfficeDocuments.ts` | 归档、恢复、快照、另存为、打开、在文件夹中显示（`office:show-in-folder`） |
-| 技能卡 | `src/widgets/skills/SkillCard.tsx` | 钉住、归档、历史、两步删除 |
-| 项目行 | `src/widgets/sidebar/sections/WorkbenchProjectList.tsx:306-420` | 项目设置、里程碑、项目规则、初始化目录、复制路径、移除 |
-| Todo 行 | `src/pages/todo/TodoRowEditor.tsx`、`src/widgets/todo/TodoItem.tsx` | 完成、inline 编辑、优先级、截止日期、删除 |
+| 界面对象      | 组件                                                                               | 已有动作                                                                         |
+| ------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 聊天消息      | `src/widgets/chat/MessageActionBar.tsx`、`src/pages/chat/useChatMessageActions.ts` | 复制、朗读、反馈、重新生成、编辑重发、引用到输入框；分叉、回滚、存记忆、两步删除 |
+| 会话列表项    | `src/widgets/session/SessionItem.tsx:411-460`                                      | 导出 HTML、导出 Markdown、置顶、两步删除；双击 inline 重命名（`:245-262`）       |
+| 代码块        | `src/widgets/chat/ShikiCodeBlock.tsx`                                              | 复制、自动换行、折叠                                                             |
+| 表格          | `src/widgets/chat/MessageMarkdownParts.tsx`（MarkdownTable）                       | 复制表格（TSV）                                                                  |
+| 文件变更卡    | `src/widgets/chat/changes/FileChangeCard.tsx`                                      | 接受、回退、切换 diff、在编辑器打开、在面板打开                                  |
+| 产物          | `src/widgets/chat/artifacts/ArtifactRow.tsx`、`ArtifactViewer.tsx`                 | 打开、在文件管理器显示（`revealArtifact`）、复制路径、版本历史                   |
+| Office 文档行 | `src/features/office/OfficeDocumentList.tsx`、`useOfficeDocuments.ts`              | 归档、恢复、快照、另存为、打开、在文件夹中显示（`office:show-in-folder`）        |
+| 技能卡        | `src/widgets/skills/SkillCard.tsx`                                                 | 钉住、归档、历史、两步删除                                                       |
+| 项目行        | `src/widgets/sidebar/sections/WorkbenchProjectList.tsx:306-420`                    | 项目设置、里程碑、项目规则、初始化目录、复制路径、移除                           |
+| Todo 行       | `src/pages/todo/TodoRowEditor.tsx`、`src/widgets/todo/TodoItem.tsx`                | 完成、inline 编辑、优先级、截止日期、删除                                        |
 
 ### 2.5 文档与实现不一致（实施后需对齐）
 
@@ -93,14 +93,14 @@
 
 ## 3. 主流 AI 应用参考
 
-| 应用 | 会话列表 | 消息 | 代码块 | 选区 | 备注 |
-|---|---|---|---|---|---|
-| **ChatGPT** | ⋯ 菜单：重命名 / 置顶 / 归档 / 删除（+共享、移动到项目） | 无右键（hover 动作按钮） | 复制 | — | 侧栏支持排序、筛选、固定 |
-| **Claude** | 重命名 / 收藏 / 加入项目 / 删除 | hover 复制 / 重试 | 复制 | — | |
-| **Cherry Studio** | 重命名 / 置顶 / 删除 / 导出 / 复制 | **支持**：复制 / 引用 / 编辑 / 重新生成 / 删除 / 分支 | 复制 / 下载 | 复制 / 引用（**无选区时禁用而非隐藏**） | 选区感知右键菜单，发现性最佳实践 |
-| **Chatbox** | 重命名 / 删除 / 导出 | 复制 / 删除 / 重新生成 | — | — | |
-| **Cursor / VS Code** | 资源管理器完整菜单：新建 / 重命名 / 删除 / 复制路径 / 在文件夹中显示 | 复制 | 复制 | "Add to Chat" / Explain | 桌面端右键重度使用 |
-| **Notion AI** | — | — | — | "Ask AI" / 块级转换 | 块级右键 |
+| 应用                 | 会话列表                                                             | 消息                                                  | 代码块      | 选区                                    | 备注                             |
+| -------------------- | -------------------------------------------------------------------- | ----------------------------------------------------- | ----------- | --------------------------------------- | -------------------------------- |
+| **ChatGPT**          | ⋯ 菜单：重命名 / 置顶 / 归档 / 删除（+共享、移动到项目）             | 无右键（hover 动作按钮）                              | 复制        | —                                       | 侧栏支持排序、筛选、固定         |
+| **Claude**           | 重命名 / 收藏 / 加入项目 / 删除                                      | hover 复制 / 重试                                     | 复制        | —                                       |                                  |
+| **Cherry Studio**    | 重命名 / 置顶 / 删除 / 导出 / 复制                                   | **支持**：复制 / 引用 / 编辑 / 重新生成 / 删除 / 分支 | 复制 / 下载 | 复制 / 引用（**无选区时禁用而非隐藏**） | 选区感知右键菜单，发现性最佳实践 |
+| **Chatbox**          | 重命名 / 删除 / 导出                                                 | 复制 / 删除 / 重新生成                                | —           | —                                       |                                  |
+| **Cursor / VS Code** | 资源管理器完整菜单：新建 / 重命名 / 删除 / 复制路径 / 在文件夹中显示 | 复制                                                  | 复制        | "Add to Chat" / Explain                 | 桌面端右键重度使用               |
+| **Notion AI**        | —                                                                    | —                                                     | —           | "Ask AI" / 块级转换                     | 块级右键                         |
 
 **归纳**：
 
@@ -184,15 +184,20 @@ export type ContextMenuItemSpec =
       id: string;
       label: string;
       icon?: LucideIcon;
-      shortcut?: string;            // 仅显示真实绑定，避免假提示
+      shortcut?: string; // 仅显示真实绑定，避免假提示
       destructive?: boolean;
       disabled?: boolean;
       hidden?: boolean;
       onSelect: () => void | Promise<void>;
       submenu?: ContextMenuItemSpec[];
     }
-  | { kind: 'checkbox'; id: string; label: string; checked: boolean;
-      onCheckedChange: (next: boolean) => void }
+  | {
+      kind: 'checkbox';
+      id: string;
+      label: string;
+      checked: boolean;
+      onCheckedChange: (next: boolean) => void;
+    }
   | { kind: 'separator'; id: string }
   | { kind: 'label'; id: string; label: string };
 ```
@@ -224,10 +229,15 @@ export type ContextMenuItemSpec =
 ```ts
 // electron/contextMenu.ts（新）
 webContents.on('context-menu', (_event, params) => {
-  if (!params.isEditable) return;          // 非可编辑 → 由渲染层自绘菜单处理
+  if (!params.isEditable) return; // 非可编辑 → 由渲染层自绘菜单处理
   Menu.buildFromTemplate([
-    { role: 'undo' }, { role: 'redo' }, { type: 'separator' },
-    { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
+    { role: 'undo' },
+    { role: 'redo' },
+    { type: 'separator' },
+    { role: 'cut' },
+    { role: 'copy' },
+    { role: 'paste' },
+    { role: 'selectAll' },
   ]).popup({ window: BrowserWindow.fromWebContents(webContents) ?? undefined });
 });
 ```
@@ -256,17 +266,17 @@ webContents.on('context-menu', (_event, params) => {
 
 触发：`SessionItem` 行内任意空白处右键（按钮区域除外）。
 
-| 菜单项 | 来源 | 条件 |
-|---|---|---|
-| 打开 | 既有 onOpen | 始终 |
-| 重命名 | 触发既有 inline 编辑（`:245-262`） | 始终 |
-| 置顶 / 取消置顶 | 既有 pin handler | 文案随状态 |
-| 复制标题 | 新（clipboard util） | 始终 |
-| 导出 Markdown | 既有 | 始终 |
-| 导出 HTML | 既有 | 始终 |
-| 查看分叉树 | 既有 ForkTreeModal | 仅 fork 徽标存在时 |
-| ──── | separator | |
-| 删除… | 既有删除 + confirmDialog（红色） | 始终 |
+| 菜单项          | 来源                               | 条件               |
+| --------------- | ---------------------------------- | ------------------ |
+| 打开            | 既有 onOpen                        | 始终               |
+| 重命名          | 触发既有 inline 编辑（`:245-262`） | 始终               |
+| 置顶 / 取消置顶 | 既有 pin handler                   | 文案随状态         |
+| 复制标题        | 新（clipboard util）               | 始终               |
+| 导出 Markdown   | 既有                               | 始终               |
+| 导出 HTML       | 既有                               | 始终               |
+| 查看分叉树      | 既有 ForkTreeModal                 | 仅 fork 徽标存在时 |
+| ────            | separator                          |                    |
+| 删除…           | 既有删除 + confirmDialog（红色）   | 始终               |
 
 参考：ChatGPT ⋯ 菜单、Cherry Studio 会话菜单。
 
@@ -274,21 +284,21 @@ webContents.on('context-menu', (_event, params) => {
 
 触发：`Message` 气泡（含 `data-quote-scope="message-body"` 区域）。
 
-| 菜单项 | 用户消息 | 助手消息 | 流式中 |
-|---|---|---|---|
-| 复制选区 / 引用选区到输入框 | 有选区时启用，无选区禁用 | 同左 | 同左 |
-| 复制 | ✅ | ✅ | ✅（已生成部分） |
-| 复制为 Markdown | ✅ | ✅ | ✅ |
-| 引用到输入框 | ✅ | ✅ | 禁用 |
-| 编辑并重新发送 | ✅ | — | 禁用 |
-| 朗读 | — | ✅ | 禁用 |
-| 重新生成 | — | ✅ | 禁用 |
-| 有帮助 / 没帮助（check 态） | — | ✅ | 禁用 |
-| 从此处分叉 | — | ✅ | 禁用 |
-| 回滚到此 | — | ✅ | 禁用 |
-| 保存到记忆 | — | ✅ | 禁用 |
-| ──── | | | |
-| 删除…（红色） | ✅ | ✅ | 禁用 |
+| 菜单项                      | 用户消息                 | 助手消息 | 流式中           |
+| --------------------------- | ------------------------ | -------- | ---------------- |
+| 复制选区 / 引用选区到输入框 | 有选区时启用，无选区禁用 | 同左     | 同左             |
+| 复制                        | ✅                       | ✅       | ✅（已生成部分） |
+| 复制为 Markdown             | ✅                       | ✅       | ✅               |
+| 引用到输入框                | ✅                       | ✅       | 禁用             |
+| 编辑并重新发送              | ✅                       | —        | 禁用             |
+| 朗读                        | —                        | ✅       | 禁用             |
+| 重新生成                    | —                        | ✅       | 禁用             |
+| 有帮助 / 没帮助（check 态） | —                        | ✅       | 禁用             |
+| 从此处分叉                  | —                        | ✅       | 禁用             |
+| 回滚到此                    | —                        | ✅       | 禁用             |
+| 保存到记忆                  | —                        | ✅       | 禁用             |
+| ────                        |                          |          |                  |
+| 删除…（红色）               | ✅                       | ✅       | 禁用             |
 
 动作全部来自 `MessageActionBar` / `useChatMessageActions`，不新写逻辑。
 
@@ -308,25 +318,25 @@ webContents.on('context-menu', (_event, params) => {
 
 对象：`MessageClientMeta` 的 `file_refs` / `office_refs` / `knowledge_refs`；`InputCard` 的文件/图片/音频 chip；`FileAttachment`、`KnowledgeChip`。
 
-| 菜单项 | 说明 |
-|---|---|
-| 打开 | Office 走 `office:open`；Wiki 走 `/wiki/read` + 页面跳转；普通文件需泛化 IPC（见风险 R6） |
-| 在文件夹中显示 | 已有 `office:show-in-folder`（office 已覆盖管理文件）；工作区文件需新增泛化 reveal IPC + 路径白名单校验 |
-| 复制路径 | `copyToClipboard` |
-| 复制文件名 | 同上 |
-| 移除（仅输入侧 chip） | 既有 remove handler |
+| 菜单项                | 说明                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------- |
+| 打开                  | Office 走 `office:open`；Wiki 走 `/wiki/read` + 页面跳转；普通文件需泛化 IPC（见风险 R6）               |
+| 在文件夹中显示        | 已有 `office:show-in-folder`（office 已覆盖管理文件）；工作区文件需新增泛化 reveal IPC + 路径白名单校验 |
+| 复制路径              | `copyToClipboard`                                                                                       |
+| 复制文件名            | 同上                                                                                                    |
+| 移除（仅输入侧 chip） | 既有 remove handler                                                                                     |
 
 ### 7.6 Wiki 文件树（P1）
 
 对象：`WikiFileTree`（`src/widgets/wiki/WikiFileTree.tsx`）。后端与前端 API 均已具备写能力：`/wiki/write`、`/wiki/rename`、`/wiki/delete`（`backend/api/wiki_routes.py:531,554,624`；前端 `src/shared/api-client/wiki.ts:111,115,140`）。
 
-| 菜单项 | 说明 |
-|---|---|
-| 打开 | 既有选中/打开逻辑 |
-| 新建文件 / 新建文件夹（目录节点） | `/wiki/write` |
-| 重命名 | `/wiki/rename`（inline 弹框或复用现有对话框模式） |
-| 删除…（红色） | `/wiki/delete` + confirmDialog |
-| 复制路径 / 复制文件名 | clipboard util |
+| 菜单项                            | 说明                                              |
+| --------------------------------- | ------------------------------------------------- |
+| 打开                              | 既有选中/打开逻辑                                 |
+| 新建文件 / 新建文件夹（目录节点） | `/wiki/write`                                     |
+| 重命名                            | `/wiki/rename`（inline 弹框或复用现有对话框模式） |
+| 删除…（红色）                     | `/wiki/delete` + confirmDialog                    |
+| 复制路径 / 复制文件名             | clipboard util                                    |
 
 与 `docs/user-manual/03-wiki.md:55` 宣称的能力对齐。
 
@@ -352,37 +362,37 @@ webContents.on('context-menu', (_event, params) => {
 
 ### 8.1 新增
 
-| 文件 | 用途 |
-|---|---|
-| `src/shared/ui/ContextMenu/ContextMenu.tsx` | Radix 封装 + 样式原子 |
-| `src/shared/ui/ContextMenu/ContextMenuItems.tsx` | 声明式 spec 渲染器（子菜单/check/radio/分隔/禁用） |
-| `src/shared/ui/ContextMenu/types.ts` | `ContextMenuItemSpec` |
-| `src/shared/ui/ContextMenu/menuClasses.ts` | 与 DropdownMenu 共享的样式（从 `DropdownMenu.tsx` 抽取） |
-| `src/shared/ui/ContextMenu/__tests__/*` | 基座单测 |
-| `src/shared/lib/clipboard.ts` | `copyToClipboard`（含兜底与 toast） |
-| `src/shared/lib/i18n/locales/{zh,en}/contextMenu.ts` | 菜单文案词典 |
-| `electron/contextMenu.ts` | 可编辑控件原生菜单 + dev inspect |
+| 文件                                                 | 用途                                                     |
+| ---------------------------------------------------- | -------------------------------------------------------- |
+| `src/shared/ui/ContextMenu/ContextMenu.tsx`          | Radix 封装 + 样式原子                                    |
+| `src/shared/ui/ContextMenu/ContextMenuItems.tsx`     | 声明式 spec 渲染器（子菜单/check/radio/分隔/禁用）       |
+| `src/shared/ui/ContextMenu/types.ts`                 | `ContextMenuItemSpec`                                    |
+| `src/shared/ui/ContextMenu/menuClasses.ts`           | 与 DropdownMenu 共享的样式（从 `DropdownMenu.tsx` 抽取） |
+| `src/shared/ui/ContextMenu/__tests__/*`              | 基座单测                                                 |
+| `src/shared/lib/clipboard.ts`                        | `copyToClipboard`（含兜底与 toast）                      |
+| `src/shared/lib/i18n/locales/{zh,en}/contextMenu.ts` | 菜单文案词典                                             |
+| `electron/contextMenu.ts`                            | 可编辑控件原生菜单 + dev inspect                         |
 
 ### 8.2 修改
 
-| 文件 | 改动 |
-|---|---|
-| `package.json` + lockfile | `@radix-ui/react-context-menu`（双分支同步） |
-| `src/shared/lib/i18n/zh.ts` / `en.ts` | 聚合 contextMenu 词典 |
-| `src/shared/ui/DropdownMenu/DropdownMenu.tsx` | 样式原子迁至 `menuClasses.ts`（顺带清理其内部 `dropdown-menu-copy-snapshot` 审计占位 span，如确认无测试依赖） |
-| `electron/main.ts` | 注册 `contextMenu.ts`；新增 `devtools:inspect` IPC（dev-only） |
-| `electron/preload.ts` | 暴露 inspect（若走 IPC）；泛化 reveal 通道（若采纳） |
-| `src/widgets/session/SessionItem.tsx`（+ `VirtualSessionList` 验证） | 包 Trigger，接入会话菜单 |
-| `src/widgets/chat/Message.tsx` | 包 Trigger，接入消息菜单 |
-| `src/widgets/chat/MessageActionBar.tsx`（可选） | "更多"内联展开可改为复用同一 spec，减少两套动作列表 |
-| `src/widgets/chat/ShikiCodeBlock.tsx` | 代码块菜单 |
-| `src/widgets/chat/MessageMarkdownParts.tsx` | 表格/图片菜单 |
-| `src/widgets/chat/MessageClientMeta.tsx`、`InputCard.tsx`、`FileAttachment.tsx`、`KnowledgeChip.tsx` | 引用/附件 chip 菜单 |
-| `src/widgets/wiki/WikiFileTree.tsx` | Wiki 文件树菜单（接入 `/wiki/*` 写 API） |
-| `src/widgets/chat/changes/FileChangeCard.tsx`、`artifacts/ArtifactRow.tsx`、`ArtifactViewer.tsx` | 右栏菜单 |
-| P2：`TodoRowEditor.tsx`、`PromptTemplatesTab.tsx`、`SkillCard.tsx`、`WorkbenchProjectList.tsx` | 按需 |
-| `docs/technical/110-context-menu.md`（新章节） | 完成后归档技术文档 |
-| `src/content/help/*.md`、`docs/user-manual/*.md` | 校对右键相关表述，消除文档漂移 |
+| 文件                                                                                                 | 改动                                                                                                          |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `package.json` + lockfile                                                                            | `@radix-ui/react-context-menu`（双分支同步）                                                                  |
+| `src/shared/lib/i18n/zh.ts` / `en.ts`                                                                | 聚合 contextMenu 词典                                                                                         |
+| `src/shared/ui/DropdownMenu/DropdownMenu.tsx`                                                        | 样式原子迁至 `menuClasses.ts`（顺带清理其内部 `dropdown-menu-copy-snapshot` 审计占位 span，如确认无测试依赖） |
+| `electron/main.ts`                                                                                   | 注册 `contextMenu.ts`；新增 `devtools:inspect` IPC（dev-only）                                                |
+| `electron/preload.ts`                                                                                | 暴露 inspect（若走 IPC）；泛化 reveal 通道（若采纳）                                                          |
+| `src/widgets/session/SessionItem.tsx`（+ `VirtualSessionList` 验证）                                 | 包 Trigger，接入会话菜单                                                                                      |
+| `src/widgets/chat/Message.tsx`                                                                       | 包 Trigger，接入消息菜单                                                                                      |
+| `src/widgets/chat/MessageActionBar.tsx`（可选）                                                      | "更多"内联展开可改为复用同一 spec，减少两套动作列表                                                           |
+| `src/widgets/chat/ShikiCodeBlock.tsx`                                                                | 代码块菜单                                                                                                    |
+| `src/widgets/chat/MessageMarkdownParts.tsx`                                                          | 表格/图片菜单                                                                                                 |
+| `src/widgets/chat/MessageClientMeta.tsx`、`InputCard.tsx`、`FileAttachment.tsx`、`KnowledgeChip.tsx` | 引用/附件 chip 菜单                                                                                           |
+| `src/widgets/wiki/WikiFileTree.tsx`                                                                  | Wiki 文件树菜单（接入 `/wiki/*` 写 API）                                                                      |
+| `src/widgets/chat/changes/FileChangeCard.tsx`、`artifacts/ArtifactRow.tsx`、`ArtifactViewer.tsx`     | 右栏菜单                                                                                                      |
+| P2：`TodoRowEditor.tsx`、`PromptTemplatesTab.tsx`、`SkillCard.tsx`、`WorkbenchProjectList.tsx`       | 按需                                                                                                          |
+| `docs/technical/111-context-menu.md`（新章节）                                                       | 完成后归档技术文档                                                                                            |
+| `src/content/help/*.md`、`docs/user-manual/*.md`                                                     | 校对右键相关表述，消除文档漂移                                                                                |
 
 ---
 
@@ -419,7 +429,7 @@ webContents.on('context-menu', (_event, params) => {
   - 文件变更卡、产物、Todo/提示词/技能/项目行逐个接入；每接入一处复用同一 spec 模式。
 
 - [ ] **M7 文档对齐与归档（0.5 天）**
-  - 新增 `docs/technical/110-context-menu.md`；修正 `src/content/help/*`、`docs/user-manual/*` 中与实现不符的右键描述；本计划文档按规范删除（并入技术文档后不保留历史版本）。
+  - 新增 `docs/technical/111-context-menu.md`；修正 `src/content/help/*`、`docs/user-manual/*` 中与实现不符的右键描述；本计划文档按规范删除（并入技术文档后不保留历史版本）。
 
 ---
 
@@ -436,18 +446,18 @@ webContents.on('context-menu', (_event, params) => {
 
 ## 11. 风险评估与依赖
 
-| # | 风险 | 影响 | 缓解 |
-|---|---|---|---|
-| R1 | 右键清除文本选区 / 与 `SelectionQuoteButton` 浮层叠加 | 选区动作失效或双浮层 | 打开时捕获选区；菜单打开时隐藏引用按钮；回归测试锁定 |
-| R2 | 虚拟列表（>120 会话）中 Trigger 成本或行卸载导致菜单悬挂 | 性能/交互异常 | 打开时惰性构建 spec；删除等动作先关菜单再执行；滚动即关闭 |
-| R3 | 流式消息高频重渲染导致 spec 重复计算 | 卡顿 | `items` 仅在 open 时求值；菜单内容独立于消息渲染树 |
-| R4 | 渲染层自绘菜单与主进程原生菜单重复弹出 | 双菜单 | 约定：可编辑区域不注册 Trigger；启动前实测 Electron 21 `preventDefault` 行为，必要时用 `isEditable` + 显式 IPC 标志互斥 |
-| R5 | Electron 21 / Chromium 106 / Win7 兼容性 | 菜单不显示/样式异常 | 仅使用 Radix（已验证同栈在用）；避免 popover API、`:has()`、新 CSS 特性；Win7 实机冒烟 |
-| R6 | 泛化 reveal/open IPC 的路径穿越 | 安全 | 仅允许工作区根目录与 Office 托管目录白名单内路径；规范化 + 前缀校验；合并前过 security-reviewer |
-| R7 | 双分支依赖漂移 | win7 无菜单或构建失败 | `package.json` + lockfile 与代码同一 cherry-pick；win7 CI 必跑 |
-| R8 | 文档仍有不实描述（如 Wiki 若只交付部分能力） | 用户预期落差 | M7 逐条核对；未实现项改文案或删除 |
-| R9 | 快捷键提示与实际绑定不一致 | 误导 | 只显示真实绑定的快捷键，否则不显示 |
-| R10 | 菜单项与"更多"内联展开出现两套动作清单 | 维护分叉 | M2 可选将"更多"改为复用同一 spec |
+| #   | 风险                                                     | 影响                  | 缓解                                                                                                                    |
+| --- | -------------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| R1  | 右键清除文本选区 / 与 `SelectionQuoteButton` 浮层叠加    | 选区动作失效或双浮层  | 打开时捕获选区；菜单打开时隐藏引用按钮；回归测试锁定                                                                    |
+| R2  | 虚拟列表（>120 会话）中 Trigger 成本或行卸载导致菜单悬挂 | 性能/交互异常         | 打开时惰性构建 spec；删除等动作先关菜单再执行；滚动即关闭                                                               |
+| R3  | 流式消息高频重渲染导致 spec 重复计算                     | 卡顿                  | `items` 仅在 open 时求值；菜单内容独立于消息渲染树                                                                      |
+| R4  | 渲染层自绘菜单与主进程原生菜单重复弹出                   | 双菜单                | 约定：可编辑区域不注册 Trigger；启动前实测 Electron 21 `preventDefault` 行为，必要时用 `isEditable` + 显式 IPC 标志互斥 |
+| R5  | Electron 21 / Chromium 106 / Win7 兼容性                 | 菜单不显示/样式异常   | 仅使用 Radix（已验证同栈在用）；避免 popover API、`:has()`、新 CSS 特性；Win7 实机冒烟                                  |
+| R6  | 泛化 reveal/open IPC 的路径穿越                          | 安全                  | 仅允许工作区根目录与 Office 托管目录白名单内路径；规范化 + 前缀校验；合并前过 security-reviewer                         |
+| R7  | 双分支依赖漂移                                           | win7 无菜单或构建失败 | `package.json` + lockfile 与代码同一 cherry-pick；win7 CI 必跑                                                          |
+| R8  | 文档仍有不实描述（如 Wiki 若只交付部分能力）             | 用户预期落差          | M7 逐条核对；未实现项改文案或删除                                                                                       |
+| R9  | 快捷键提示与实际绑定不一致                               | 误导                  | 只显示真实绑定的快捷键，否则不显示                                                                                      |
+| R10 | 菜单项与"更多"内联展开出现两套动作清单                   | 维护分叉              | M2 可选将"更多"改为复用同一 spec                                                                                        |
 
 依赖：
 
@@ -472,3 +482,27 @@ webContents.on('context-menu', (_event, params) => {
 
 - 调研证据：`src/shared/ui/DropdownMenu/DropdownMenu.tsx`、`src/widgets/chat/MessageActionBar.tsx`、`src/widgets/session/SessionItem.tsx`、`electron/menu.ts`、`electron/tray.ts`、`electron/main.ts`、`backend/api/wiki_routes.py`、`src/shared/api-client/wiki.ts`。
 - 主流应用对照来源见第 3 节链接。
+
+---
+
+## 14. 实施记录（2026-10-29）
+
+决策确认：方案 A（Radix ContextMenu）、首轮 P0+P1、消息“更多”后续可复用同一 spec、泛化 reveal/open 按安全降级处理。
+
+已完成里程碑：
+
+- [x] **M0 基础设施**：`@radix-ui/react-context-menu` + `src/shared/ui/ContextMenu/*`（声明式 spec、样式原子、全局打开态）+ `clipboard.ts` + `formatTemplate.ts` + `contextMenu.*` 中英词典；DropdownMenu 共享样式原子。
+- [x] **M1 会话列表**：打开/重命名/置顶/复制标题/导出 MD/HTML/分叉树/确认删除；行内重命名时禁用菜单。
+- [x] **M2 消息与富内容**：用户/助手/流式三态菜单；选区感知（复制选区/引用选区）；代码块（复制/复制围栏）、表格（TSV）、图片（查看大图）；划词引用按钮与菜单互斥；`onQuoteSelection` 经 MessageList → TurnGroup 透传。
+- [x] **M3 Electron 原生菜单**：可编辑控件撤销/重做/剪切/复制/粘贴/全选；开发期「检查元素」（渲染层菜单经 IPC + 主进程打包门禁）。
+- [x] **M4 引用/附件 chips**：共享 `OfficeRefChip`（打开/在文件夹中显示/复制文件名/移除）；文件引用（复制路径/文件名）；知识库与附件（复制名称/移除；图片附件查看大图）。普通工作区文件的 open/reveal 按决策 4 降级。
+- [x] **M5 Wiki 文件树**：文件打开/重命名/复制/删除（确认）；目录新建文件（自动补 `.md`）与递归删除确认；store 新增 `createFile/renameFile` 并修复删除目录后的选中态清理。
+- [x] **M6 右栏 P1**：文件变更卡（展开/接受/回滚/切换视图/编辑器/右栏/复制路径）；产物行（打开/文件管理器/交付台/复制路径）。P2 列表未做。
+- [x] **M7 文档**：新增 `docs/technical/111-context-menu.md`；修正 `src/content/help/chat.md`、`getting-started.md`、`docs/user-manual/03-wiki.md` 中与实现不符的右键描述。
+
+实施中的范围调整（相对原方案）：
+
+- Wiki「新建文件夹」未提供：后端无 mkdir API（`secure_write_file` 会自动建父目录）；「目录重命名」受后端 `secure_rename_path` 仅支持 regular 文件的限制。
+- 消息「朗读」未入菜单（ReadAloudButton 为内嵌组件，无独立 handler）；图片「复制图片」、代码块「下载为文件」依赖保存/剪贴板图片加工，暂缓。
+- 进展区 Todo 行为 agent 只读快照，无用户动作，未接菜单。
+- 既有测试因组件新增 `useI18n` 依赖补充 `I18nProvider` 包裹（断言未变）。
