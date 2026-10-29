@@ -24,6 +24,7 @@ import { HarnessDashboard } from '../../widgets/harness/HarnessDashboard';
 import { BasicTab } from './BasicTab';
 import { EffectiveSettingsSummary } from './EffectiveSettingsSummary';
 import { EndpointsTab } from './EndpointsTab';
+import { FeedbackTab } from './FeedbackTab';
 import { GeneralTab } from './GeneralTab';
 import { GlobalRulesTab } from './GlobalRulesTab';
 import { McpTab } from './McpTab';
@@ -124,6 +125,7 @@ export function Settings() {
     { key: 'evolution', label: t('settings.tab.evolution') },
     { key: 'harness', label: t('settings.tab.harness') },
     { key: 'updates', label: t('settings.tab.updates') },
+    { key: 'feedback', label: t('settings.tab.feedback') },
     { key: 'usage-stats', label: t('settings.tab.usage-stats' as TranslationKey) },
   ];
   if (ENABLE_UPDATE_PROVIDERS_UI()) {
@@ -357,6 +359,7 @@ export function Settings() {
             {activeTab === 'providers' && ENABLE_UPDATE_PROVIDERS_UI() && <ProvidersManager />}
             {activeTab === 'skills' && <SkillsTab />}
             {activeTab === 'global-rules' && <GlobalRulesTab />}
+            {activeTab === 'feedback' && <FeedbackTab />}
           </div>
         </div>
       </div>

@@ -22,6 +22,8 @@ const visibleTabs: readonly SettingsTabKey[] = [
   'skills',
   // G1 (2026-10-27): 全局规则 Tab（~/.sage/SAGE.md 读写）
   'global-rules',
+  // 2026-10-29: 用户反馈 Tab（管理员转发 + 双向会话）
+  'feedback',
 ];
 
 /** Keep old settings bookmarks, never render an unknown/hidden initial tab. */

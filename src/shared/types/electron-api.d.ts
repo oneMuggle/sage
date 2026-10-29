@@ -331,6 +331,42 @@ export interface UpdateElectronApiBridge {
 }
 
 /**
+ * 用户反馈系统 IPC 桥 (2026-10-29)。
+ *
+ * 设计见 docs/plans/2026-10-29_direct-feedback-channel.md §4。
+ * main 侧注册：electron/feedback/feedbackIpc.ts（registerFeedbackIpc）。
+ * preload 暴露：electron/preload.ts → window.electronAPI.feedback。
+ *
+ * - getConfig: 读当前反馈配置（URL + 是否已配密钥 + installationUuid）
+ * - setConfig: 更新 URL / 共享密钥（sharedSecret 走 safeStorage 加密）
+ *              undefined = 不改动；空串 = 清空
+ * - syncNow: 手动触发一次 syncer（返回本轮提交/接收/错误计数）
+ * - uploadAttachment: 上传截图等附件（base64 编码，main 侧落 MediaStore）
+ */
+export interface FeedbackElectronApiBridge {
+  getConfig: () => Promise<{
+    managerUrl: string;
+    hasSecret: boolean;
+    installationUuid: string;
+    configured: boolean;
+  }>;
+  setConfig: (patch: { managerUrl?: string; sharedSecret?: string }) => Promise<{
+    ok: true;
+    managerUrl: string;
+    hasSecret: boolean;
+    installationUuid: string;
+    configured: boolean;
+  }>;
+  syncNow: () => Promise<{ submitted: number; received: number; errors: number }>;
+  uploadAttachment: (payload: {
+    conversationId: string;
+    filename: string;
+    mimeType: string;
+    dataBase64: string;
+  }) => Promise<{ id: string; conversation_id: string }>;
+}
+
+/**
  * Phase 3 (2026-09-25): 终端面板 PTY IPC 桥。
  *
  * 管理 Electron 主进程中的 node-pty 子进程。renderer 通过此桥：
@@ -410,6 +446,11 @@ export interface ElectronAPI {
   journal: JournalElectronApiBridge;
   updates: UpdateElectronApiBridge;
   providers: ProvidersElectronApiBridge;
+  /**
+   * 用户反馈系统 (2026-10-29):管理员转发 URL + 共享密钥 + 双向会话。
+   * 仅桌面端可用；Web 端 `window.electronAPI.feedback` 为 undefined。
+   */
+  feedback?: FeedbackElectronApiBridge;
   /**
    * Task 10 (2026-09-11): Diagnostic export bridge for LLM trace bundles.
    * Two methods — exportBundle (native save dialog → zip) and preview

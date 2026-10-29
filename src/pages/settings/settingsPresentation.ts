@@ -35,6 +35,12 @@ const GROUPS = [
     en: 'Diagnostics, usage and updates',
     keys: ['runtime', 'usage-stats', 'updates', 'providers'],
   },
+  {
+    id: 'feedback',
+    zh: '反馈',
+    en: 'Feedback',
+    keys: ['feedback'],
+  },
 ] as const;
 
 export function settingsGroups(available: readonly SettingsTabKey[], locale = 'zh') {

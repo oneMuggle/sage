@@ -287,6 +287,7 @@ export const enChatAndSider = {
   'settings.tab.remote-workspaces': 'Remote workspaces',
   'settings.tab.mcp': 'MCP',
   'settings.tab.plugins': 'Plugins',
+  'settings.tab.feedback': 'Feedback',
   'settings.tab.zotero': 'Library',
   'settings.tab.runtime': 'Dev Environment',
   'settings.tab.providers': 'Update Sources',
@@ -395,6 +396,32 @@ export const enChatAndSider = {
   'settings.tab.usage-stats': 'Usage Stats',
   'settings.tab.skills': 'Skills',
   'settings.tab.global-rules': 'Global rules',
+  // ─── Settings · Feedback Hub ───────
+  'settings.feedback.title': 'User feedback',
+  'settings.feedback.desc':
+    'Send feedback directly to the admin. Replies come back into the app as a conversation. Forwarding URL and shared secret are stored only on this machine (safeStorage-encrypted).',
+  'settings.feedback.manager_url.label': 'Admin forwarding URL',
+  'settings.feedback.manager_url.placeholder': 'https://admin.example.com/feedback',
+  'settings.feedback.manager_url.desc':
+    'HTTP endpoint the admin listens on. Leave empty to disable forwarding.',
+  'settings.feedback.shared_secret.label': 'Shared secret',
+  'settings.feedback.shared_secret.placeholder': 'Paste the secret from your admin',
+  'settings.feedback.shared_secret.desc':
+    'Stored encrypted via the OS keychain (safeStorage). Leave unchanged, or clear the box to delete.',
+  'settings.feedback.installation_uuid': 'Installation ID',
+  'settings.feedback.installation_uuid.desc':
+    'The admin uses this ID to identify your client. Share it when filing tickets.',
+  'settings.feedback.configured': 'Configured',
+  'settings.feedback.unconfigured': 'Not configured',
+  'settings.feedback.sync_now': 'Sync now',
+  'settings.feedback.syncing': 'Syncing…',
+  'settings.feedback.synced':
+    'Sync done: submitted {submitted} / received {received} / errors {errors}',
+  'settings.feedback.copy_uuid': 'Copy ID',
+  'settings.feedback.copied': 'Copied',
+  'settings.feedback.save': 'Save',
+  'settings.feedback.saved': 'Feedback settings saved',
+  'settings.feedback.cleared': 'Feedback settings cleared',
   'settings.section.theme': 'Theme',
   'settings.section.appearance': 'Appearance',
   'settings.section.chat': 'Chat',

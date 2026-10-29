@@ -22,6 +22,7 @@ import type {
   ArenaTokenElectronApiBridge,
   ArenaTokenStatus,
   DiagnosticElectronApiBridge,
+  FeedbackElectronApiBridge,
   FileElectronApiBridge,
   ImportResult,
   ImportedOfficeFile,
@@ -384,6 +385,50 @@ const electronAPI = {
       return () => ipcRenderer.off('update:state-changed', listener);
     },
   } satisfies UpdateElectronApiBridge,
+
+  /**
+   * 用户反馈系统 (2026-10-29): 管理员转发 URL + 共享密钥 + 双向会话。
+   *
+   * 通道在 electron/feedback/feedbackIpc.ts 注册（registerFeedbackIpc）：
+   *   feedback:config:get / feedback:config:set / feedback:sync-now /
+   *   feedback:attachment:upload
+   *
+   * 共享密钥由 main 侧 safeStorage 加密后落 electron-store，renderer
+   * 永远拿不到明文回读（getConfig 只返回 hasSecret 布尔）。
+   */
+  feedback: {
+    getConfig: () =>
+      ipcRenderer.invoke('feedback:config:get') as Promise<{
+        managerUrl: string;
+        hasSecret: boolean;
+        installationUuid: string;
+        configured: boolean;
+      }>,
+    setConfig: (patch: { managerUrl?: string; sharedSecret?: string }) =>
+      ipcRenderer.invoke('feedback:config:set', patch) as Promise<{
+        ok: true;
+        managerUrl: string;
+        hasSecret: boolean;
+        installationUuid: string;
+        configured: boolean;
+      }>,
+    syncNow: () =>
+      ipcRenderer.invoke('feedback:sync-now') as Promise<{
+        submitted: number;
+        received: number;
+        errors: number;
+      }>,
+    uploadAttachment: (payload: {
+      conversationId: string;
+      filename: string;
+      mimeType: string;
+      dataBase64: string;
+    }) =>
+      ipcRenderer.invoke('feedback:attachment:upload', payload) as Promise<{
+        id: string;
+        conversation_id: string;
+      }>,
+  } satisfies FeedbackElectronApiBridge,
 
   /**
    * Phase 2 (2026-09-10): Provider management bridge for the Settings UI.
