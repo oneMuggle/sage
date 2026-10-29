@@ -1,7 +1,7 @@
 # 2026-10-29 会话 UX 四项修复
 
-> 状态：**完成**（所有代码 + 测试 + review 修复已就绪，待合 PR）
-> 分支：`fix/session-ux-four-issues`（基于 `origin/main`）
+> 状态：**完成**（PR #2646 CI 全绿，等待人工合并）
+> 分支：`fix/session-ux-four-issues`（已 rebase 到 `origin/main` e5f164677）
 > 触发：用户在实际使用过程中发现 4 个 UX 问题，集中在会话失败后的可见性、折叠机制、轮次计数和滚动按钮位置。
 
 ## 1. 背景与目标
@@ -112,6 +112,7 @@ useEffect(() => {
   - LOW：`formatSessionFailedMarkdown` / `formatSessionFailedJson` 无调用方 → 删
   - LOW：error retry 的 sendMessage 没传 sessionId → 统一传
 - [x] **步骤 12**：tsc / tests 全绿（widgets/chat 134/664 + send-message 30/200 + pages 38/144）；提交、push、开 PR
+- [x] **步骤 13**：PR #2646 首次 CI 因 merge 冲突不触发 → rebase 到 `origin/main`（解决 architecture-baseline.json 冲突：取 HEAD 的 PluginsTab 687，保留我方 chatStreamStore 847）；rebase 后 main 侧增长使该文件达 853 行 → baseline 棘轮到 853；lint 修复 2 个新测试文件的 import/order（3 errors）；CI 14 项全绿，`mergeStateStatus=CLEAN`
 
 ## 5. 风险评估与依赖
 
