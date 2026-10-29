@@ -35,6 +35,17 @@ const REQUEST_TIMEOUT_MS = 30_000;
 /** 单轮 sync 拉取的本地会话数上限（避免启动时把 SQLite 锁住太久）。 */
 const CONVERSATIONS_PER_TICK_LIMIT = 50;
 
+/** 管理员新回复落库后的通知载荷。一次 tick 内同一会话只回调一次。 */
+export interface ReplyNotification {
+  conversationId: string;
+  /** 会话标题，通知标题用。 */
+  title: string;
+  /** 本轮新写入的回复条数。 */
+  count: number;
+  /** 最后一条回复正文，通知正文用。 */
+  lastBody: string;
+}
+
 export interface SyncerDeps {
   /** 本地 backend 基址，如 "http://127.0.0.1:8765"。 */
   getBackendUrl: () => string;
@@ -46,6 +57,8 @@ export interface SyncerDeps {
   scheduleTimeout?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
   /** 注入的 fetch（测试用，prod 用 fetchCompat）。 */
   fetchImpl?: typeof fetchCompat;
+  /** 管理员回复写进本地库后回调；main 侧据此弹托盘/OS 通知。默认 no-op。 */
+  onRepliesReceived?: (info: ReplyNotification) => void;
 }
 
 interface LocalConversationDto {
@@ -90,6 +103,7 @@ export class FeedbackSyncer {
       getAuthToken: deps.getAuthToken,
       scheduleTimeout: deps.scheduleTimeout ?? ((fn, ms) => setTimeout(fn, ms)),
       fetchImpl: deps.fetchImpl ?? fetchCompat,
+      onRepliesReceived: deps.onRepliesReceived ?? (() => {}),
     };
     this.config = deps.config ?? getFeedbackConfig();
   }
@@ -188,7 +202,7 @@ export class FeedbackSyncer {
       }
       stats.submitted += submitResult;
 
-      const received = await this.pollReplies(conv.id);
+      const received = await this.pollReplies(conv);
       if (received < 0) {
         stats.errors += 1;
       } else {
@@ -241,7 +255,8 @@ export class FeedbackSyncer {
   }
 
   /** 从远端拉取管理员回复并写入本地；返回新写入条数；失败返回 -1。 */
-  private async pollReplies(conversationId: string): Promise<number> {
+  private async pollReplies(conv: LocalConversationDto): Promise<number> {
+    const conversationId = conv.id;
     // 拿本地会话详情以计算"最新 admin 消息时间戳"作为 since 参数
     const detail = await this.localGet<{
       conversation: LocalConversationDto;
@@ -276,6 +291,15 @@ export class FeedbackSyncer {
         });
         return -1;
       }
+    }
+    if (newReplies.length > 0) {
+      const last = newReplies[newReplies.length - 1];
+      this.deps.onRepliesReceived({
+        conversationId,
+        title: conv.title,
+        count: newReplies.length,
+        lastBody: last.body,
+      });
     }
     return newReplies.length;
   }

@@ -286,7 +286,7 @@ Response 200: { "status": "ok" }
 
 ### Phase 3：增强
 
-- [ ] 3.1 消息通知（管理员回复时客户端托盘气泡）
+- [x] 3.1 消息通知（管理员回复时客户端托盘气泡）—— `FeedbackSyncer.pollReplies` 发现新回复后回调 `onRepliesReceived`，`electron/main.ts` 弹原生 Notification，点击聚焦窗口并跳 `/feedback`。只在新回复<b>成功落本地库</b>后触发；`Notification.isSupported()` 不可用时静默降级（Win7）。
 - [ ] 3.2 消息搜索
 - [ ] 3.3 会话标签（bug / feature / other）
 - [ ] 3.4 自动附加诊断信息开关

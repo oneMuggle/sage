@@ -1805,6 +1805,25 @@ async function registerIpcHandlers(): Promise<void> {
   initGlobalFeedbackSyncer({
     getBackendUrl: () => BACKEND_URL,
     getAuthToken: () => backendAuthToken ?? undefined,
+    // Phase 3.1：管理员回复已落本地库 → 弹 OS 通知；点击聚焦窗口并跳到反馈页。
+    // Win7/老系统 Notification 不可用时静默降级（isSupported 守卫）。
+    onRepliesReceived: (info) => {
+      if (!Notification.isSupported()) return;
+      const notification = new Notification({
+        title: `管理员回复了你的反馈 · ${info.title}`,
+        body: info.lastBody.slice(0, 160),
+        silent: false,
+      });
+      notification.on('click', () => {
+        const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
+        if (!win) return;
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
+        win.webContents.send('sage:event:open-feedback');
+      });
+      notification.show();
+    },
   });
   registerFeedbackIpc(
     (channel, handler) => {

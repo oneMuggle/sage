@@ -11,7 +11,7 @@ const loggerMocks = vi.hoisted(() => ({
 vi.mock('../logger', () => ({ logger: loggerMocks }));
 
 import type { FeedbackConfig } from '../feedback/feedbackConfig';
-import { FeedbackSyncer } from '../feedback/feedbackSyncer';
+import { FeedbackSyncer, type ReplyNotification } from '../feedback/feedbackSyncer';
 import type { fetchCompat } from '../fetchCompat';
 
 type FetchFn = typeof fetchCompat;
@@ -148,7 +148,13 @@ function makeConfig(
   } as unknown as FeedbackConfig;
 }
 
-function makeSyncer(opts: { router?: Router; config?: FeedbackConfig } = {}) {
+function makeSyncer(
+  opts: {
+    router?: Router;
+    config?: FeedbackConfig;
+    onRepliesReceived?: (info: ReplyNotification) => void;
+  } = {},
+) {
   const { fn, calls } = makeFetch(opts.router ?? defaultRouter());
   const scheduled: Array<{ fn: () => void; ms: number }> = [];
   const syncer = new FeedbackSyncer({
@@ -156,6 +162,7 @@ function makeSyncer(opts: { router?: Router; config?: FeedbackConfig } = {}) {
     getAuthToken: () => 'local-token',
     config: opts.config ?? makeConfig(),
     fetchImpl: fn,
+    onRepliesReceived: opts.onRepliesReceived,
     scheduleTimeout: (cb, ms) => {
       scheduled.push({ fn: cb, ms });
       return 0 as unknown as ReturnType<typeof setTimeout>;
@@ -236,6 +243,40 @@ describe('FeedbackSyncer.syncOnce', () => {
     await syncer.syncOnce();
     const poll = calls.find((c) => c.method === 'GET' && c.url.includes('/messages?since='));
     expect(poll?.url).toBe(`${MANAGER}/api/v1/feedback/conversations/c-1/messages?since=4000`);
+  });
+
+  it('管理员新回复落库后触发一次通知回调', async () => {
+    const onRepliesReceived = vi.fn();
+    const { syncer } = makeSyncer({ onRepliesReceived });
+
+    await syncer.syncOnce();
+
+    expect(onRepliesReceived).toHaveBeenCalledTimes(1);
+    expect(onRepliesReceived).toHaveBeenCalledWith({
+      conversationId: 'c-1',
+      title: '导出乱码',
+      count: 1,
+      lastBody: '修好了',
+    });
+  });
+
+  it('没有新回复时不触发通知回调', async () => {
+    const onRepliesReceived = vi.fn();
+    const base = defaultRouter();
+    const { syncer } = makeSyncer({
+      onRepliesReceived,
+      router: (call) =>
+        call.method === 'GET' && call.url.includes('/messages?since=')
+          ? {
+              status: 200,
+              body: [{ id: 'm-1', role: 'user', body: '导出后中文变乱码', created_at: 2000 }],
+            }
+          : base(call),
+    });
+
+    await syncer.syncOnce();
+
+    expect(onRepliesReceived).not.toHaveBeenCalled();
   });
 
   it('非 open 会话跳过提交与拉取', async () => {
