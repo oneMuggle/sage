@@ -3,9 +3,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useOptionalI18n } from '../../lib/i18n';
 
-import { markContextMenuOpen } from './contextMenuEvents';
 import { ContextMenuItems } from './ContextMenuItems';
 import { ContextMenuContent, ContextMenuRoot, ContextMenuTrigger } from './ContextMenuPrimitives';
+import { markContextMenuOpen } from './contextMenuEvents';
 import type { ContextMenuItemSpec } from './types';
 
 /**
@@ -85,6 +85,7 @@ function EnabledContextMenu({ items, children, onOpenChange }: Omit<ContextMenuP
   const openRef = useRef(false);
   const pointerRef = useRef({ x: 0, y: 0 });
   const i18n = useOptionalI18n();
+  const translate = i18n?.t;
 
   // 组件在菜单打开期间被卸载（如虚拟列表回收、会话删除）时，
   // Radix 不再触发 onOpenChange(false) —— 手动归还全局打开计数。
@@ -106,12 +107,12 @@ function EnabledContextMenu({ items, children, onOpenChange }: Omit<ContextMenuP
       }
       if (next) {
         const base = typeof items === 'function' ? items() : items;
-        setSnapshot(buildMenuSnapshot(base, pointerRef.current, i18n?.t));
+        setSnapshot(buildMenuSnapshot(base, pointerRef.current, translate));
       }
       setOpen(next);
       onOpenChange?.(next);
     },
-    [items, onOpenChange],
+    [items, onOpenChange, translate],
   );
 
   return (

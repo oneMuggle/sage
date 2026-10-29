@@ -13,8 +13,8 @@ import { Maximize2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { fetchMediaBlobUrl, revokeMediaBlobUrl } from '../../shared/api/mediaApi';
-import { buildLocalImageSrc } from '../../shared/lib/localImageSrc';
 import { useI18n } from '../../shared/lib/i18n';
+import { buildLocalImageSrc } from '../../shared/lib/localImageSrc';
 import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 import { Lightbox } from '../../shared/ui';
 import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';

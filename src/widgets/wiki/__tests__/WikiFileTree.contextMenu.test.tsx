@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useWikiStore } from '../../../entities/wiki/store';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import type { FileNode } from '../../../shared/types/wiki';
-import { useWikiStore } from '../../../entities/wiki/store';
 import { WikiFileTree } from '../WikiFileTree';
 
 const api = vi.hoisted(() => ({

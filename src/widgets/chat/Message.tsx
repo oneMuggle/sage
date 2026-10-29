@@ -19,7 +19,6 @@ import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
 
 import { BlockedCard } from './BlockedCard';
 import { CompactBanner } from './CompactBanner';
-import { buildMessageContextMenuItems } from './messageContextMenu';
 import { MessageActionBar } from './MessageActionBar';
 import { MessageClientMeta } from './MessageClientMeta';
 import {
@@ -34,6 +33,7 @@ import {
 import { RetryBanner } from './RetryBanner';
 import { TruncationNotice } from './TruncationNotice';
 import { FileChangeCards } from './changes/FileChangeCard';
+import { buildMessageContextMenuItems } from './messageContextMenu';
 import { resolveToolRenderer } from './toolRenderers';
 
 interface MessageProps {
