@@ -96,6 +96,8 @@ describe('chatApi.chatStream (PR-6)', () => {
       context_reset: false,
       // Vision model fallback (2026-10-15): 前端传入的 chatModel 能力, 缺省 null
       capabilities: null,
+      // 2026-10-28: 用户消息展示元数据（附件 / @ 文件引用 / office 引用）, 缺省 null
+      message_meta: null,
     });
     // 2) listen 订阅 chat-stream-{id} (从 {streamId} 对象解构得到)
     expect(listenMock).toHaveBeenCalledWith(`chat-stream-${streamId}`, expect.any(Function));

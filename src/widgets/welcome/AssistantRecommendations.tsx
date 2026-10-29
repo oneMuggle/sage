@@ -63,7 +63,7 @@ export function AssistantRecommendations({
         </h2>
         <div className="flex items-center gap-1 text-ui-2xs"></div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="flex flex-wrap gap-2">
         {recommendations.map((rec) => {
           const Icon = lucideIconMap[rec.icon];
           // Cast: rec.id is a constrained string union from defaultRecommendations;
@@ -71,24 +71,20 @@ export function AssistantRecommendations({
           const titleKey = `welcome.rec.${rec.id}.title` as TranslationKey;
           const descKey = `welcome.rec.${rec.id}.desc` as TranslationKey;
           const labels = rec.labels?.[locale === 'en' ? 'en' : 'zh'];
+          const title = labels?.title ?? t(titleKey);
+          const desc = labels?.desc ?? t(descKey);
           return (
             <button
               key={rec.id}
               type="button"
-              data-testid="recommendation-card"
+              data-testid="recommendation-chip"
               onClick={() => onSelect(rec)}
-              className="group text-left p-4 rounded-radius-md border border-border bg-surface hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30"
-              aria-label={labels?.title ?? t(titleKey)}
+              title={desc}
+              className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-surface hover:border-primary/50 hover:bg-bg-subtle transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30"
+              aria-label={title}
             >
-              <div
-                className={`w-10 h-10 rounded-radius-sm flex items-center justify-center text-primary mb-2 ${rec.gradient}`}
-              >
-                {Icon ? <Icon className="w-5 h-5" /> : null}
-              </div>
-              <div className="text-sm font-medium text-text">{labels?.title ?? t(titleKey)}</div>
-              <div className="text-xs text-text-tertiary mt-0.5 line-clamp-2">
-                {labels?.desc ?? t(descKey)}
-              </div>
+              {Icon ? <Icon className="w-4 h-4 text-primary" /> : null}
+              <span className="text-sm text-text">{title}</span>
             </button>
           );
         })}

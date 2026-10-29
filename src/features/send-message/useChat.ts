@@ -392,6 +392,7 @@ export function useChat() {
         role: 'user',
         content,
         created_at: Date.now(),
+        client_meta: opts?.displayMeta,
       };
       // 第二轮 C2: 原位重新生成时锚点 user 消息已在列表里，不再追加
       if (!opts?.regenerateOf) addMessage(userMessage);
@@ -814,6 +815,7 @@ export function useChat() {
           opts?.attachmentMediaIds,
           opts?.attachmentRag,
           clientMessageId,
+          opts?.displayMeta,
         );
         // Never let a late subscription overwrite a newer run's handle.
         if (finished || activeStreamRegistry.get(sid) !== streamHandle) {

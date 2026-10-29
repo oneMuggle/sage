@@ -142,6 +142,11 @@ export interface InputCardProps {
 
   // At file menu (for @mentions)
   atFileMenu?: React.ReactNode;
+  /**
+   * 是否在「+」菜单里展示「命令与技能」入口。新会话页没有 slash 菜单实现，
+   * 传 false 避免出现点了没有反应的入口。
+   */
+  enableCommandItem?: boolean;
 
   // Wave 3 C6: 编排模式条（ChatInput 提供 select，渲染在输入卡顶部）
   orchModeBar?: React.ReactNode;
@@ -205,6 +210,7 @@ function InputCardInner({
   onSlashHighlight,
   onSlashClose,
   atFileMenu,
+  enableCommandItem = true,
   orchModeBar,
   composerControls,
   hint,
@@ -281,17 +287,21 @@ function InputCardInner({
         focusInputEnd();
       },
     },
-    {
-      key: 'command',
-      label: value === '' ? '命令与技能' : '命令与技能（清空输入后可用）',
-      icon: <Slash className="w-4 h-4" />,
-      hint: '/',
-      disabled: value !== '',
-      onSelect: () => {
-        onChange('/');
-        focusInputEnd();
-      },
-    },
+    ...(enableCommandItem
+      ? [
+          {
+            key: 'command',
+            label: value === '' ? '命令与技能' : '命令与技能（清空输入后可用）',
+            icon: <Slash className="w-4 h-4" />,
+            hint: '/',
+            disabled: value !== '',
+            onSelect: () => {
+              onChange('/');
+              focusInputEnd();
+            },
+          },
+        ]
+      : []),
     ...(onSchedule
       ? [
           {
@@ -543,7 +553,7 @@ function InputCardInner({
         </div>
       )}
 
-      <div className="flex items-end gap-2">
+      <div className="flex items-center gap-2">
         <div className="flex-1 relative">
           {showSlashMenu && slashCommands.length > 0 && onSlashSelect && (
             <SlashCommandMenu
@@ -553,7 +563,7 @@ function InputCardInner({
             />
           )}
           {atFileMenu}
-          <div className="border border-border focus-within:border-primary/60 rounded-radius-md px-3 py-2 bg-bg flex items-end gap-2 transition-colors">
+          <div className="border border-border focus-within:border-primary/60 rounded-radius-md px-3 py-2 bg-bg flex items-center gap-2 transition-colors">
             <ComposerPlusMenu items={plusItems} disabled={disabled} />
             <textarea
               ref={emacsRef}
@@ -569,7 +579,7 @@ function InputCardInner({
               disabled={disabled}
               autoFocus={autoFocus}
               data-testid="chat-input"
-              className="flex-1 resize-none border-none bg-transparent outline-none text-sm text-text disabled:opacity-50 max-h-[200px] overflow-y-auto placeholder:text-muted"
+              className="flex-1 resize-none border-none bg-transparent outline-none text-sm leading-9 min-h-9 text-text disabled:opacity-50 max-h-[200px] overflow-y-auto placeholder:text-muted"
               aria-label="message input"
             />
 

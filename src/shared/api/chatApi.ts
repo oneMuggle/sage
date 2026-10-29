@@ -10,7 +10,7 @@ import type { AttachmentEmbedConfig } from './attachmentRagConfig';
 import { isDemoMode } from './demoFlag';
 import { listen, type UnlistenFn } from './desktopEvent';
 import { invoke } from './desktopInvoke';
-import type { AgentEvent, ChatConfig, ChatOfficeRef } from './types';
+import type { AgentEvent, ChatConfig, ChatOfficeRef, MessageDisplayMeta } from './types';
 import { ApiException, isValidSessionId } from './utils';
 
 /** demo 聊天脚本按需加载 (R2): 仅演示模式才拉取 demo 数据模块。 */
@@ -91,6 +91,8 @@ export const chatApi = {
     attachmentRag?: { embed: AttachmentEmbedConfig; top_k: number } | null,
     /** client_message_id (2026-09): 乐观 user 消息与服务端落库 id 对齐的根方案 */
     clientMessageId?: string,
+    /** 用户消息展示元数据（附件 / @ 文件引用 / office 引用），随 user 行落库 */
+    messageMeta?: MessageDisplayMeta,
   ): Promise<{ streamId: string; cancel: () => void }> {
     // 消息原文直传,理由同 chat()。
     if (!handlers || typeof handlers.onEvent !== 'function') {
@@ -152,6 +154,8 @@ export const chatApi = {
       attachment_media_ids: attachmentMediaIds ?? [],
       // r67: 附件检索注入（键已 snake，桥接原样透传）
       attachment_rag: attachmentRag ?? null,
+      // 用户消息展示元数据（附件 / @ 文件引用 / office 引用）；桥接原样透传
+      message_meta: messageMeta ?? null,
       // 第二轮 C2: 原位重新生成的锚点 user 消息 id（桥接转为 regenerate_of；普通发送不带）
       ...(config?.regenerateOf ? { regenerateOf: config.regenerateOf } : {}),
     });

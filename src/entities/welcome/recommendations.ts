@@ -33,7 +33,7 @@ export const defaultRecommendations: AssistantRecommendation[] = [
     title: 'report',
     prompt: '根据指定资料生成一份可交付的报告',
     icon: 'FileText',
-    gradient: 'bg-ui-surface',
+    gradient: 'bg-bg-subtle',
     labels: {
       zh: { title: '写报告', desc: '明确受众、资料、格式和检查要求' },
       en: {
@@ -47,7 +47,7 @@ export const defaultRecommendations: AssistantRecommendation[] = [
     title: 'organize',
     prompt: '整理指定资料并给出可追溯的摘要',
     icon: 'FolderSearch',
-    gradient: 'bg-ui-surface',
+    gradient: 'bg-bg-subtle',
     labels: {
       zh: { title: '整理资料', desc: '按来源梳理要点，标明缺失与未核验项' },
       en: { title: 'Organize sources', desc: 'Trace summaries to sources and identify unknowns' },
@@ -58,7 +58,7 @@ export const defaultRecommendations: AssistantRecommendation[] = [
     title: 'data',
     prompt: '分析指定表格并交付检查过的数据结果',
     icon: 'FileSpreadsheet',
-    gradient: 'bg-ui-surface',
+    gradient: 'bg-bg-subtle',
     labels: {
       zh: { title: '分析表格', desc: '明确计算口径、数据范围和交付形式' },
       en: { title: 'Analyze a spreadsheet', desc: 'Define scope, calculations and deliverables' },
@@ -69,7 +69,7 @@ export const defaultRecommendations: AssistantRecommendation[] = [
     title: 'slides',
     prompt: '根据指定资料制作可编辑的演示文稿',
     icon: 'Presentation',
-    gradient: 'bg-ui-surface',
+    gradient: 'bg-bg-subtle',
     labels: {
       zh: { title: '制作演示', desc: '先确认大纲，再生成和验收演示文稿' },
       en: { title: 'Create a presentation', desc: 'Agree on an outline, then generate and review' },
@@ -80,7 +80,7 @@ export const defaultRecommendations: AssistantRecommendation[] = [
     title: 'coding',
     prompt: '在绑定的工作目录内修改代码并通过检查',
     icon: 'Code2',
-    gradient: 'bg-ui-surface',
+    gradient: 'bg-bg-subtle',
     labels: {
       zh: { title: '写代码 / 改代码', desc: '在绑定目录内修改，遵守审批与检查' },
       en: {
@@ -90,6 +90,16 @@ export const defaultRecommendations: AssistantRecommendation[] = [
     },
   },
 ];
+
+/**
+ * 首屏 chip 列表 —— 只展示高频场景。
+ *
+ * `slides` 仍留在 defaultRecommendations 里：已保存的任务配方按
+ * `brief.scenario` 回查该表，删掉会让旧配方命中不到。
+ */
+export const chipRecommendations: AssistantRecommendation[] = defaultRecommendations.filter(
+  (item) => item.id !== 'slides',
+);
 
 export interface RecommendationsAuditSnapshot {
   recommendationCount: number;
