@@ -1357,7 +1357,8 @@ async function registerIpcHandlers(): Promise<void> {
 
       // S8: 主进程自主产生的事件（OS 通知点击回发）。无需后端 relay,
       // renderer 侧 listen() 注册的 ipcRenderer.on 直接收 webContents.send。
-      if (event === 'session-notify-click') {
+      // 反馈入口（Phase 1.11 帮助菜单）同理。
+      if (event === 'session-notify-click' || event === 'open-feedback') {
         return { ok: true, event };
       }
 

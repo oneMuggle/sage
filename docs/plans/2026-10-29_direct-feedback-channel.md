@@ -245,7 +245,7 @@ Response 200: { "status": "ok" }
 - [x] 1.8 Electron：IPC 路由 `commandRoutes/feedback.ts`
 - [x] 1.9 前端：`<FeedbackHub>` 组件（会话列表 + 消息流）
 - [x] 1.10 前端：全局 store `feedbackStore.ts`（Zustand）
-- [ ] 1.11 前端：菜单 IPC 监听 + "帮助"菜单加"反馈问题..."
+- [x] 1.11 前端：菜单 IPC 监听 + "帮助"菜单加"反馈问题..."
 - [x] 1.12 前端：设置页 "反馈" Tab（管理员 URL + 密钥配置）
 - [x] 1.13 i18n（zh + en）
 - [x] 1.14 测试：后端 repo + 路由（37 passed）；store 单测 14 passed；`<FeedbackHub>` 组件测试 5 passed；syncer 测试待补

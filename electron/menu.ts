@@ -15,6 +15,7 @@
 import { Menu, shell, clipboard, app } from 'electron';
 import { getLogDir } from './logPaths';
 import { logger } from './logger';
+import { mainWindow } from './mainWindow';
 
 export function buildApplicationMenu(): void {
   const isMac = process.platform === 'darwin';
@@ -40,6 +41,14 @@ export function buildApplicationMenu(): void {
     {
       label: '帮助',
       submenu: [
+        {
+          label: '反馈问题...',
+          click: () => {
+            logger.info('main: user opened feedback hub via menu');
+            mainWindow?.webContents.send('sage:event:open-feedback', {});
+          },
+        },
+        { type: 'separator' },
         {
           label: '打开日志目录',
           click: () => {

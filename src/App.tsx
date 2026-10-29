@@ -13,6 +13,7 @@ import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { useTheme } from './app/providers/useTheme';
 import { UpdateDialog } from './components/UpdateDialog';
 import { loadCurrentSessionId } from './entities/session/storage';
+import { onOpenFeedbackRequest } from './features/feedback/feedbackMenu';
 import { useSettingsStore } from './features/manage-settings/settingsStore';
 import { onSessionNotifyClick } from './features/send-message/sessionNotify';
 import { Chat } from './pages/Chat';
@@ -158,6 +159,19 @@ function SessionNotifyBridge() {
   return null;
 }
 
+// 2026-10-29 (Phase 1.11): 帮助菜单「反馈问题...」→ 主进程回发事件 →
+// 跳转 /feedback。与 SessionNotifyBridge 同构。
+function FeedbackMenuBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const unlisten = onOpenFeedbackRequest(() => navigate('/feedback'));
+    return () => {
+      void unlisten?.then((fn) => fn?.());
+    };
+  }, [navigate]);
+  return null;
+}
+
 function App() {
   const [commandOpen, setCommandOpen] = useState(false);
   // U18 (round4): 快捷键帮助覆盖层（非输入焦点下按 ? 打开）
@@ -219,6 +233,7 @@ function App() {
         <AppStartupRestore />
         <AppStartupSettings />
         <SessionNotifyBridge />
+        <FeedbackMenuBridge />
         <Routes>
           <Route
             path="/"
