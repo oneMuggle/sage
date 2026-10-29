@@ -26,7 +26,7 @@
 import { useEffect, useState } from 'react';
 
 import { permissionApi, type PermissionRuleItem } from '../../shared/api/permissionApi';
-import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { useI18n } from '../../shared/lib/i18n';
 import { findShadowedRules } from '../../shared/lib/permissionInsights';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
@@ -105,8 +105,7 @@ export function PermissionRulesManager() {
   const orphanCount = rules.filter((rule) => rule.plugin_status === 'missing').length;
   // R109 遮蔽派生：被同列表内更高优先级规则覆盖的行恒不生效。
   const shadowedRules = findShadowedRules(rules);
-  const busy =
-    deletingIndex !== null || clearing || deletingPlugin !== null || deletingOrphans;
+  const busy = deletingIndex !== null || clearing || deletingPlugin !== null || deletingOrphans;
 
   const handleDeleteByPlugin = async (pluginName: string): Promise<void> => {
     const ok = await confirmDialog({
@@ -181,7 +180,7 @@ export function PermissionRulesManager() {
             >
               <code className="flex-1 break-all">{rule.tool_pattern}</code>
               <span className="text-muted">
-                {t(`settings.permission.rules.decision.${rule.decision}` as TranslationKey)}
+                {t(`settings.permission.rules.decision.${rule.decision}`)}
               </span>
               {(rule.plugin_status === 'uninstalled' || rule.plugin_status === 'missing') && (
                 <span
@@ -278,10 +277,7 @@ export function PermissionRulesManager() {
         </p>
       )}
       {orphanDeleteFailed && (
-        <p
-          className="text-xs text-error mt-1"
-          data-testid="permission-rules-delete-orphans-failed"
-        >
+        <p className="text-xs text-error mt-1" data-testid="permission-rules-delete-orphans-failed">
           {t('settings.permission.rules.delete_orphans_failed')}
         </p>
       )}

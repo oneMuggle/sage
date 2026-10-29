@@ -10,6 +10,7 @@
  */
 
 import { useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
+import { useI18n } from '../../shared/lib/i18n';
 
 import { SettingRow, Toggle } from './components';
 
@@ -26,13 +27,11 @@ export function formatArenaAccountsToggleAuditJson(opts: { enabled?: boolean }):
 }
 
 export function ArenaAccountsToggle() {
+  const { t } = useI18n();
   const [enabled, setEnabled] = useFeatureUnlock('arena-accounts');
 
   return (
-    <SettingRow
-      label="Arena 自动化"
-      desc="启用后侧边栏显示「Arena」入口（/arena 控制台）。用于多账号批量自动化评测，普通用户无需开启。"
-    >
+    <SettingRow label={t('settings.arena.auto.label')} desc={t('settings.arena.auto.desc')}>
       <Toggle value={enabled} onChange={setEnabled} testId="toggle-arena-accounts" />
     </SettingRow>
   );

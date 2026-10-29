@@ -17,15 +17,16 @@ import {
   type UsageSummary,
   type UsageTrend,
 } from '../../shared/api/usageApi';
+import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { Card } from '../../shared/ui';
 import { UsageRequestsTable } from '../../widgets/settings/UsageRequestsTable';
 import { monotoneAreaPath } from '../../widgets/settings/chartUtils';
 
-const RANGE_OPTIONS: { value: UsageRange; label: string }[] = [
-  { value: 'today', label: '今天' },
-  { value: '7d', label: '近 7 天' },
-  { value: '30d', label: '近 30 天' },
-  { value: 'total', label: '全部' },
+const RANGE_OPTIONS: { value: UsageRange; labelKey: TranslationKey }[] = [
+  { value: 'today', labelKey: 'settings.usage.range.today' },
+  { value: '7d', labelKey: 'settings.usage.range.7d' },
+  { value: '30d', labelKey: 'settings.usage.range.30d' },
+  { value: 'total', labelKey: 'settings.usage.range.total' },
 ];
 
 const COLORS = {
@@ -51,6 +52,7 @@ function formatPct(rate: number): string {
 }
 
 export function UsageStatsTab() {
+  const { t } = useI18n();
   const [range, setRange] = useState<UsageRange>('7d');
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [trend, setTrend] = useState<UsageTrend | null>(null);
@@ -95,12 +97,18 @@ export function UsageStatsTab() {
   }, [range]);
 
   if (loading && !summary) {
-    return <div className="flex items-center justify-center h-64 text-text-muted">加载中…</div>;
+    return (
+      <div className="flex items-center justify-center h-64 text-text-muted">
+        {t('settings.usage.loading')}
+      </div>
+    );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64 text-red-500">加载失败: {error}</div>
+      <div className="flex items-center justify-center h-64 text-red-500">
+        {t('settings.usage.load_failed').replace('{error}', error)}
+      </div>
     );
   }
 
@@ -108,7 +116,7 @@ export function UsageStatsTab() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-text">使用统计</h3>
+        <h3 className="text-lg font-semibold text-text">{t('settings.usage.title')}</h3>
         <div className="flex items-center gap-2">
           {/* Range selector */}
           <div className="flex rounded-md border border-border overflow-hidden">
@@ -123,7 +131,7 @@ export function UsageStatsTab() {
                     : 'text-text-muted hover:bg-bg-hover'
                 }`}
               >
-                {opt.label}
+                {t(opt.labelKey)}
               </button>
             ))}
           </div>
@@ -134,7 +142,7 @@ export function UsageStatsTab() {
             className="flex items-center gap-1 px-3 py-1 text-xs border border-border rounded-md text-text-muted hover:bg-bg-hover transition-colors disabled:opacity-50"
           >
             <Download className="w-3 h-3" />
-            {exporting ? '导出中…' : 'CSV'}
+            {exporting ? t('settings.usage.exporting') : 'CSV'}
           </button>
         </div>
       </div>
@@ -150,7 +158,7 @@ export function UsageStatsTab() {
 
       {/* 请求明细（原「通用」tab 的 UsagePanel 二级面板，2026-10-28 迁入） */}
       <section className="space-y-3">
-        <h4 className="text-sm font-semibold text-text">请求明细</h4>
+        <h4 className="text-sm font-semibold text-text">{t('settings.usage.requests_detail')}</h4>
         <UsageRequestsTable />
       </section>
     </div>
@@ -159,28 +167,39 @@ export function UsageStatsTab() {
 
 // ---- Summary Cards ----
 function SummaryCards({ summary }: { summary: UsageSummary }) {
+  const { t } = useI18n();
   const bucket = summary.totals;
-  const cards = [
-    { label: '总请求', value: formatNumber(bucket.requests), icon: '📊' },
-    { label: '输入 token', value: formatNumber(bucket.prompt_tokens), color: COLORS.prompt },
+  const cards: { labelKey: TranslationKey; value: string; color?: string; subtitle?: string }[] = [
+    { labelKey: 'settings.usage.card.total_requests', value: formatNumber(bucket.requests) },
     {
-      label: '输出 token',
+      labelKey: 'settings.usage.card.prompt_tokens',
+      value: formatNumber(bucket.prompt_tokens),
+      color: COLORS.prompt,
+    },
+    {
+      labelKey: 'settings.usage.card.completion_tokens',
       value: formatNumber(bucket.completion_tokens),
       color: COLORS.completion,
     },
-    { label: '缓存命中率', value: formatPct(summary.cache_hit_rate), color: COLORS.cached },
     {
-      label: '估算成本',
+      labelKey: 'settings.usage.card.cache_hit_rate',
+      value: formatPct(summary.cache_hit_rate),
+      color: COLORS.cached,
+    },
+    {
+      labelKey: 'settings.usage.card.est_cost',
       value: formatCost(bucket.estimated_cost_usd),
-      subtitle: summary.has_partial_estimates ? '部分估算' : undefined,
+      subtitle: summary.has_partial_estimates
+        ? t('settings.usage.card.partial_estimate')
+        : undefined,
     },
   ];
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
       {cards.map((c) => (
-        <Card key={c.label} className="p-3">
-          <div className="text-xs text-text-muted mb-1">{c.label}</div>
+        <Card key={c.labelKey} className="p-3">
+          <div className="text-xs text-text-muted mb-1">{t(c.labelKey)}</div>
           <div
             className="text-xl font-semibold text-text"
             style={c.color ? { color: c.color } : undefined}
@@ -196,6 +215,7 @@ function SummaryCards({ summary }: { summary: UsageSummary }) {
 
 // ---- Trend Chart (pure SVG area chart) ----
 function TrendChart({ trend }: { trend: UsageTrend }) {
+  const { t } = useI18n();
   const { series } = trend;
   const maxTokens = useMemo(
     () => Math.max(1, ...series.map((p) => p.prompt_tokens + p.completion_tokens)),
@@ -233,15 +253,15 @@ function TrendChart({ trend }: { trend: UsageTrend }) {
     <Card className="p-4">
       <div className="flex items-center gap-2 mb-3">
         <TrendingUp className="w-4 h-4 text-primary" />
-        <h4 className="text-sm font-medium text-text">Token 消耗趋势</h4>
+        <h4 className="text-sm font-medium text-text">{t('settings.usage.trend_title')}</h4>
         <div className="ml-auto flex items-center gap-3 text-ui-xs">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full" style={{ background: COLORS.prompt }} />
-            输入
+            {t('settings.usage.legend_input')}
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full" style={{ background: COLORS.completion }} />
-            输出
+            {t('settings.usage.legend_output')}
           </span>
         </div>
       </div>
@@ -314,6 +334,7 @@ function ModelBreakdown({
     estimated_cost_usd: number | null;
   }[];
 }) {
+  const { t } = useI18n();
   const sorted = useMemo(
     () =>
       [...byModel].sort(
@@ -325,7 +346,7 @@ function ModelBreakdown({
 
   return (
     <Card className="p-4">
-      <h4 className="text-sm font-medium text-text mb-3">按模型分布</h4>
+      <h4 className="text-sm font-medium text-text mb-3">{t('settings.usage.by_model')}</h4>
       <div className="space-y-2">
         {sorted.map((m) => {
           const total = m.prompt_tokens + m.completion_tokens;
@@ -338,7 +359,7 @@ function ModelBreakdown({
                   {m.model}
                 </span>
                 <span className="text-text-muted flex-shrink-0">
-                  {formatNumber(total)} tokens · {m.requests} 次
+                  {formatNumber(total)} tokens · {m.requests} {t('settings.usage.times_suffix')}
                   {m.estimated_cost_usd != null && ` · ${formatCost(m.estimated_cost_usd)}`}
                 </span>
               </div>

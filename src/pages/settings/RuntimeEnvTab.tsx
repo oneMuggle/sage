@@ -23,6 +23,7 @@ import type {
   RuntimeInfo,
   ToolCallEnvelope,
 } from '../../shared/api/runtimeTypes';
+import { useI18n } from '../../shared/lib/i18n';
 import { DiagnosticsCard } from '../../widgets/settings/DiagnosticsCard';
 
 import { SettingRow } from './components';
@@ -111,6 +112,7 @@ function toView(r: ExecutionResult): ExecResultView {
 }
 
 export function RuntimeEnvTab() {
+  const { t } = useI18n();
   const [probe, setProbe] = useState<ProbeState>({ kind: 'idle' });
   const [diagnose, setDiagnose] = useState<DiagnoseState>({ kind: 'idle' });
   const [exec, setExec] = useState<ExecState>({ kind: 'idle' });
@@ -128,15 +130,16 @@ export function RuntimeEnvTab() {
           setSelectedRuntime(env.output.recommended);
         }
       } else {
-        setProbe({ kind: 'error', message: env.error ?? '探测失败' });
+        setProbe({ kind: 'error', message: env.error ?? t('settings.runtime.probe_failed') });
       }
     } catch (error) {
       setProbe({
         kind: 'error',
-        message: error instanceof Error ? error.message : '探测请求失败',
+        message:
+          error instanceof Error ? error.message : t('settings.runtime.probe_request_failed'),
       });
     }
-  }, [selectedRuntime]);
+  }, [selectedRuntime, t]);
 
   const runDiagnose = useCallback(async () => {
     setDiagnose({ kind: 'loading' });
@@ -145,22 +148,23 @@ export function RuntimeEnvTab() {
       if (env.success && env.output) {
         setDiagnose({ kind: 'ok', data: env.output });
       } else {
-        setDiagnose({ kind: 'error', message: env.error ?? '诊断失败' });
+        setDiagnose({ kind: 'error', message: env.error ?? t('settings.runtime.diagnose_failed') });
       }
     } catch (error) {
       setDiagnose({
         kind: 'error',
-        message: error instanceof Error ? error.message : '诊断请求失败',
+        message:
+          error instanceof Error ? error.message : t('settings.runtime.diagnose_request_failed'),
       });
     }
-  }, []);
+  }, [t]);
 
   const runExec = useCallback(async () => {
     if (!selectedRuntime) return;
     setExec({ kind: 'running' });
     const env = await runtimeApi.probe();
     if (!env.success || !env.output) {
-      setExec({ kind: 'error', message: env.error ?? '无法确定语言' });
+      setExec({ kind: 'error', message: env.error ?? t('settings.runtime.language_unknown') });
       return;
     }
     // 找到匹配的运行时的语言
@@ -176,10 +180,10 @@ export function RuntimeEnvTab() {
     } catch (error) {
       setExec({
         kind: 'error',
-        message: error instanceof Error ? error.message : '执行请求失败',
+        message: error instanceof Error ? error.message : t('settings.runtime.exec_request_failed'),
       });
     }
-  }, [selectedRuntime, code]);
+  }, [selectedRuntime, code, t]);
 
   function handleExecResult(result: ToolCallEnvelope<ExecutionResult>) {
     if (result.success && result.output) {
@@ -187,7 +191,7 @@ export function RuntimeEnvTab() {
       return;
     }
     // 权限拒绝 vs 其他失败
-    const err = result.error ?? '执行失败';
+    const err = result.error ?? t('settings.runtime.exec_failed');
     if (err.includes('权限') || err.includes('Permission') || err.includes('denied')) {
       setExec({ kind: 'denied', message: err });
       return;
@@ -209,28 +213,28 @@ export function RuntimeEnvTab() {
     <div className="space-y-6">
       <section>
         <div className="mb-3">
-          <h3 className="text-ui-md font-semibold text-ink">本机运行时</h3>
-          <p className="text-xs text-muted mt-1">
-            自动发现 Python、Node.js 等运行时。仅只读探测，不触发执行。
-          </p>
+          <h3 className="text-ui-md font-semibold text-ink">
+            {t('settings.runtime.section.local_title')}
+          </h3>
+          <p className="text-xs text-muted mt-1">{t('settings.runtime.section.local_desc')}</p>
         </div>
         <ProbePanel state={probe} onRetry={runProbe} />
       </section>
 
       <section>
         <div className="mb-3">
-          <h3 className="text-ui-md font-semibold text-ink">项目诊断</h3>
-          <p className="text-xs text-muted mt-1">
-            根据工作区推断项目类型，比对所需运行时是否齐备。
-          </p>
+          <h3 className="text-ui-md font-semibold text-ink">
+            {t('settings.runtime.section.project_title')}
+          </h3>
+          <p className="text-xs text-muted mt-1">{t('settings.runtime.section.project_desc')}</p>
         </div>
         <DiagnosePanel state={diagnose} onRetry={runDiagnose} />
       </section>
 
       <section>
         <SettingRow
-          label="试跑代码片段"
-          desc="在选定的运行时里执行一段代码。需要用户批准（与 Bash 工具同样的审批闸口）。"
+          label={t('settings.runtime.try_run_label')}
+          desc={t('settings.runtime.try_run_desc')}
         >
           <ExecPanel
             state={exec}
@@ -246,11 +250,15 @@ export function RuntimeEnvTab() {
 
       {/* 原「通用」tab 的诊断区块（2026-10-28 迁入） */}
       <section>
-        <h3 className="text-ui-md font-semibold text-ink mb-3">日志</h3>
+        <h3 className="text-ui-md font-semibold text-ink mb-3">
+          {t('settings.runtime.section.logs')}
+        </h3>
         <DiagnosticsCard />
       </section>
       <section>
-        <h3 className="text-ui-md font-semibold text-ink mb-3">LLM 诊断预览</h3>
+        <h3 className="text-ui-md font-semibold text-ink mb-3">
+          {t('settings.runtime.section.llm_preview')}
+        </h3>
         <DiagnosticCard />
       </section>
     </div>
@@ -258,31 +266,36 @@ export function RuntimeEnvTab() {
 }
 
 function ProbePanel({ state, onRetry }: { state: ProbeState; onRetry: () => void }) {
+  const { t } = useI18n();
   if (state.kind === 'loading') {
-    return <div className="text-sm text-muted">正在探测…</div>;
+    return <div className="text-sm text-muted">{t('settings.runtime.probing')}</div>;
   }
   if (state.kind === 'error') {
     return (
       <div className="space-y-2">
-        <div className="text-sm text-error">探测失败: {state.message}</div>
+        <div className="text-sm text-error">
+          {t('settings.runtime.probe_failed')}: {state.message}
+        </div>
         <button
           type="button"
           className="px-3 py-1 text-xs bg-primary text-text-inverse rounded"
           onClick={onRetry}
         >
-          重试
+          {t('settings.runtime.retry')}
         </button>
       </div>
     );
   }
   if (state.kind === 'idle') {
-    return <div className="text-sm text-muted">等待探测…</div>;
+    return <div className="text-sm text-muted">{t('settings.runtime.waiting_probe')}</div>;
   }
   const { data } = state;
   if (data.runtimes.length === 0) {
     return (
       <div className="text-sm text-muted">
-        未探测到任何运行时。{data.errors.length > 0 && `错误: ${data.errors.join(', ')}`}
+        {t('settings.runtime.no_runtimes')}
+        {data.errors.length > 0 &&
+          `${t('settings.runtime.errors_label')} ${data.errors.join(', ')}`}
       </div>
     );
   }
@@ -300,12 +313,12 @@ function ProbePanel({ state, onRetry }: { state: ProbeState; onRetry: () => void
             {items.map((rt) => (
               <li key={rt.path} className="flex items-baseline gap-2 text-sm text-ink">
                 <span className={rt.is_default ? 'font-semibold text-primary' : 'text-muted'}>
-                  {rt.version ?? '(未知版本)'}
+                  {rt.version ?? t('settings.runtime.unknown_version')}
                 </span>
                 <span className="text-xs text-muted font-mono">{rt.path}</span>
                 {rt.is_default && (
                   <span className="text-ui-xs px-1 py-0.5 rounded bg-primary/10 text-primary">
-                    推荐
+                    {t('settings.runtime.recommended')}
                   </span>
                 )}
                 <span className="text-ui-xs text-muted">{rt.source}</span>
@@ -315,44 +328,49 @@ function ProbePanel({ state, onRetry }: { state: ProbeState; onRetry: () => void
         </li>
       ))}
       {data.errors.length > 0 && (
-        <li className="text-xs text-warning">警告: {data.errors.join('; ')}</li>
+        <li className="text-xs text-warning">
+          {t('settings.runtime.warning_label')} {data.errors.join('; ')}
+        </li>
       )}
     </ul>
   );
 }
 
 function DiagnosePanel({ state, onRetry }: { state: DiagnoseState; onRetry: () => void }) {
+  const { t } = useI18n();
   if (state.kind === 'loading') {
-    return <div className="text-sm text-muted">正在诊断…</div>;
+    return <div className="text-sm text-muted">{t('settings.runtime.diagnosing')}</div>;
   }
   if (state.kind === 'error') {
     return (
       <div className="space-y-2">
-        <div className="text-sm text-error">诊断失败: {state.message}</div>
+        <div className="text-sm text-error">
+          {t('settings.runtime.diagnose_failed')}: {state.message}
+        </div>
         <button
           type="button"
           className="px-3 py-1 text-xs bg-primary text-text-inverse rounded"
           onClick={onRetry}
         >
-          重试
+          {t('settings.runtime.retry')}
         </button>
       </div>
     );
   }
   if (state.kind === 'idle') {
-    return <div className="text-sm text-muted">等待诊断…</div>;
+    return <div className="text-sm text-muted">{t('settings.runtime.waiting_diagnose')}</div>;
   }
   const { data } = state;
   const manifests = Array.isArray(data.manifests) ? data.manifests : [];
   const diagnostics = Array.isArray(data.diagnostics) ? data.diagnostics : [];
   const probeErrors = Array.isArray(data.probe_errors) ? data.probe_errors : [];
   const requiredLanguages = [...new Set(manifests.map((manifest) => manifest.language))];
-  const levelLabel =
-    {
-      satisfied: '✓ 全部满足',
-      partial: '⚠ 部分满足',
-      unsatisfied: '✕ 未满足',
-    }[data.level] ?? '未知等级';
+  const levelLabels: Record<string, string> = {
+    satisfied: t('settings.runtime.level_satisfied'),
+    partial: t('settings.runtime.level_partial'),
+    unsatisfied: t('settings.runtime.level_unsatisfied'),
+  };
+  const levelLabel = levelLabels[data.level] ?? t('settings.runtime.level_unknown');
   const levelClassName =
     {
       satisfied: 'text-success',
@@ -362,18 +380,22 @@ function DiagnosePanel({ state, onRetry }: { state: DiagnoseState; onRetry: () =
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-sm">
-        <span className="text-muted">项目清单:</span>
+        <span className="text-muted">{t('settings.runtime.manifests_label')}</span>
         <span className="font-mono">
-          {manifests.length > 0 ? requiredLanguages.join(', ') : '未识别'}
+          {manifests.length > 0 ? requiredLanguages.join(', ') : t('settings.runtime.unidentified')}
         </span>
-        <span className="text-muted ml-4">满足度:</span>
+        <span className="text-muted ml-4">{t('settings.runtime.satisfaction_label')}</span>
         <span className={`${levelClassName} font-semibold`}>{levelLabel}</span>
       </div>
       {data.recommended_runtime && (
-        <div className="text-xs text-muted">推荐运行时: {data.recommended_runtime}</div>
+        <div className="text-xs text-muted">
+          {t('settings.runtime.recommended_runtime_label')} {data.recommended_runtime}
+        </div>
       )}
       {requiredLanguages.length > 0 && (
-        <div className="text-xs text-muted">需要的语言: {requiredLanguages.join(', ')}</div>
+        <div className="text-xs text-muted">
+          {t('settings.runtime.required_languages_label')} {requiredLanguages.join(', ')}
+        </div>
       )}
       {diagnostics.length > 0 && (
         <ul className="space-y-1">
@@ -388,7 +410,9 @@ function DiagnosePanel({ state, onRetry }: { state: DiagnoseState; onRetry: () =
         </ul>
       )}
       {probeErrors.length > 0 && (
-        <div className="text-xs text-warning">探测警告: {probeErrors.join('; ')}</div>
+        <div className="text-xs text-warning">
+          {t('settings.runtime.probe_warnings_label')} {probeErrors.join('; ')}
+        </div>
       )}
     </div>
   );
@@ -431,17 +455,20 @@ function ExecPanel({
   onChangeCode,
   onRun,
 }: ExecPanelProps) {
+  const { t } = useI18n();
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <label className="text-xs text-muted">运行时:</label>
+        <label className="text-xs text-muted">{t('settings.runtime.runtime_label')}</label>
         <select
           value={selectedRuntime ?? ''}
           onChange={(e) => onSelectRuntime(e.target.value)}
           className="flex-1 text-sm px-2 py-1 border border-line rounded bg-bg"
         >
           <option value="" disabled>
-            {runtimes.length === 0 ? '先运行探测' : '选择运行时…'}
+            {runtimes.length === 0
+              ? t('settings.runtime.probe_first')
+              : t('settings.runtime.select_runtime')}
           </option>
           {runtimes.map((rt) => (
             <option key={rt.path} value={rt.path}>
@@ -455,14 +482,16 @@ function ExecPanel({
           disabled={!selectedRuntime || state.kind === 'running'}
           onClick={onRun}
         >
-          {state.kind === 'running' ? '执行中…' : '执行'}
+          {state.kind === 'running'
+            ? t('settings.runtime.executing')
+            : t('settings.runtime.execute')}
         </button>
       </div>
       <textarea
         value={code}
         onChange={(e) => onChangeCode(e.target.value)}
         className="w-full h-28 text-xs font-mono px-2 py-1 border border-line rounded bg-bg"
-        placeholder="输入要执行的代码…"
+        placeholder={t('settings.runtime.code_placeholder')}
         spellCheck={false}
       />
       <ExecOutput state={state} />
@@ -471,14 +500,15 @@ function ExecPanel({
 }
 
 function ExecOutput({ state }: { state: ExecState }) {
+  const { t } = useI18n();
   if (state.kind === 'idle') return null;
   if (state.kind === 'running') {
-    return <div className="text-sm text-muted">等待用户批准…</div>;
+    return <div className="text-sm text-muted">{t('settings.runtime.waiting_approval')}</div>;
   }
   if (state.kind === 'denied') {
     return (
       <div className="text-sm text-warning bg-warning/10 px-3 py-2 rounded">
-        权限被拒绝: {state.message}
+        {t('settings.runtime.permission_denied_label')} {state.message}
       </div>
     );
   }
@@ -486,7 +516,7 @@ function ExecOutput({ state }: { state: ExecState }) {
     return (
       <div className="space-y-2">
         <div className="text-sm text-error bg-error/10 px-3 py-2 rounded">
-          执行失败: {state.message}
+          {t('settings.runtime.exec_failed')}: {state.message}
         </div>
         {state.result && <ExecResultBody result={state.result} tone="error" />}
       </div>
@@ -501,32 +531,34 @@ function ExecOutput({ state }: { state: ExecState }) {
 }
 
 function ExecResultBody({ result, tone }: { result: ExecResultView; tone: 'success' | 'error' }) {
+  const { t } = useI18n();
   // 退出码 / 超时 / 截断 / 耗时 —— 成功与失败路径共用。
   // 超时和信号杀死时 exitCode 为 null，分别显示为「执行超时」和「被信号终止」。
   const exitLabel = result.timedOut
-    ? '执行超时（进程已被终止）'
+    ? t('settings.runtime.exit_timeout')
     : result.exitCode === null
-      ? '无退出码（进程被信号终止或未启动）'
-      : `退出码 ${result.exitCode}`;
+      ? t('settings.runtime.exit_no_code')
+      : t('settings.runtime.exit_code_label').replace('{code}', String(result.exitCode));
   return (
     <>
       <div className="text-xs text-muted">
         <span className={tone === 'error' ? 'text-error' : undefined}>{exitLabel}</span>
-        {' · '}耗时 {result.duration.toFixed(2)}s
+        {' · '}
+        {t('settings.runtime.duration_label')} {result.duration.toFixed(2)}s
         {result.outputTruncated && (
-          <span className="ml-2 text-warning" title="单个流（stdout / stderr）超过 64 KiB 被截断">
-            ⚠ 输出已截断
+          <span className="ml-2 text-warning" title={t('settings.runtime.truncated_title')}>
+            {t('settings.runtime.truncated_badge')}
           </span>
         )}
       </div>
       {result.error && (
-        <div className="text-sm text-error" title="子进程报告的致命错误（如 spawn 失败、超时）">
-          错误: {result.error}
+        <div className="text-sm text-error" title={t('settings.runtime.error_detail_title')}>
+          {t('settings.runtime.error_label')} {result.error}
         </div>
       )}
       {result.command && result.command.length > 0 && tone === 'error' && (
         <div className="text-ui-2xs text-muted font-mono truncate" title={result.command.join(' ')}>
-          命令: {result.command.join(' ')}
+          {t('settings.runtime.command_label')} {result.command.join(' ')}
         </div>
       )}
       {result.stdout && (

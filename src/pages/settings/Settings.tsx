@@ -21,10 +21,15 @@ import { useI18n } from '../../shared/lib/i18n';
 import { EffectiveSettingsSummary } from './EffectiveSettingsSummary';
 import { initialSettingsTab } from './settingsNavigation';
 import { focusSettingsEntry, settingsGroups } from './settingsPresentation';
+import { loadSettingsRecents, pushSettingsRecent, saveSettingsRecents } from './settingsRecents';
 import { searchSettings, type SettingsSearchEntry } from './settingsSearchIndex';
 import { SETTINGS_TABS, findSettingsTab, type SettingsTabKey } from './settingsTabs';
 
 export type SettingsTab = SettingsTabKey;
+
+/** Cmd/Ctrl+K 的提示标签 —— 按平台显示，Windows/Linux 上不该出现 ⌘。 */
+const SEARCH_SHORTCUT_LABEL =
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘K' : 'Ctrl+K';
 
 export function Settings() {
   // R45: 记住上次访问的 tab —— localStorage 持久化，重开设置页恢复
@@ -39,8 +44,15 @@ export function Settings() {
     }
     return 'basic';
   });
+  // P3: 最近访问的 tab —— 顶部固定几条，省去在 17 个 tab 里来回找。
+  const [recents, setRecents] = useState<SettingsTabKey[]>(loadSettingsRecents);
+  useEffect(() => {
+    saveSettingsRecents(recents);
+  }, [recents]);
+
   const setActiveTab = useCallback((tab: SettingsTab) => {
     setActiveTabState(tab);
+    setRecents((current) => pushSettingsRecent(current, tab));
     try {
       localStorage.setItem('sage:settings-tab', tab);
     } catch {
@@ -48,7 +60,21 @@ export function Settings() {
     }
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // P3: Cmd/Ctrl+K 聚焦搜索并全选 —— 直接覆盖上一次查询，不用先手动清空。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return;
+      event.preventDefault();
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   // 上游 P1-4：待定位的设置项锚点。点击搜索结果时写入，在目标 tab 渲染完成后
   // 消费一次。用 ref 而非 state —— 它不是渲染输入，只是一条「下一帧要做的事」。
   const pendingAnchorRef = useRef<{ key: string; entry: SettingsSearchEntry } | null>(null);
@@ -73,6 +99,10 @@ export function Settings() {
   const filteredTabs = query
     ? tabs.filter((tab) => matchingTabs.has(tab.key) || tab.label.toLowerCase().includes(query))
     : tabs;
+
+  // 当前 tab 不在「最近访问」里重复出现 —— 它在下方分组中已经高亮。
+  const filteredKeys = new Set(filteredTabs.map((tab) => tab.key));
+  const visibleRecents = recents.filter((key) => key !== activeTab && filteredKeys.has(key));
 
   const jumpToItem = (item: SettingsSearchEntry): void => {
     setActiveTab(item.tab);
@@ -165,22 +195,36 @@ export function Settings() {
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
             <input
+              ref={searchInputRef}
               data-testid="settings-search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
               placeholder={t('settings.search.placeholder')}
               className="w-full pl-7 pr-6 py-1.5 text-ui-sm rounded-md border border-border bg-bg text-text placeholder:text-muted"
             />
-            {searchQuery && (
+            {searchQuery ? (
               <button
                 type="button"
                 data-testid="settings-search-clear"
-                aria-label="清空搜索"
+                aria-label={t('settings.search.clear')}
                 onClick={() => setSearchQuery('')}
                 className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted hover:text-text hover:bg-bg-hover"
               >
                 <X className="w-3 h-3" />
               </button>
+            ) : (
+              !searchFocused && (
+                // 快捷键提示只在未聚焦且无查询时出现，避免与清空按钮抢位置。
+                <kbd
+                  data-testid="settings-search-shortcut"
+                  title={t('settings.search.shortcut')}
+                  className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 rounded border border-border px-1 text-ui-2xs text-muted"
+                >
+                  {SEARCH_SHORTCUT_LABEL}
+                </kbd>
+              )
             )}
           </div>
         </div>
@@ -211,6 +255,26 @@ export function Settings() {
           </div>
         )}
         <nav className="flex-1 overflow-y-auto p-2 space-y-3">
+          {visibleRecents.length > 0 && (
+            <section data-testid="settings-recent-tabs">
+              <div className="px-3 py-1 text-ui-2xs font-medium text-muted uppercase tracking-wide">
+                {t('settings.nav.recent')}
+              </div>
+              <div className="mt-0.5 space-y-0.5">
+                {visibleRecents.map((key) => (
+                  <button
+                    key={`recent-${key}`}
+                    type="button"
+                    data-testid={`settings-recent-${key}`}
+                    onClick={() => setActiveTab(key)}
+                    className="w-full px-3 py-1.5 text-ui-sm rounded text-left text-text-secondary hover:bg-bg-hover transition-colors"
+                  >
+                    {tabs.find((tab) => tab.key === key)?.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
           {groups.map((group) => (
             <section key={group.id}>
               <div
@@ -250,7 +314,7 @@ export function Settings() {
               <p role="status" className="text-ui-sm text-warning mb-2">
                 {locale === 'en'
                   ? 'The section is open, but the exact setting is unavailable or hidden by an advanced option.'
-                  : '已打开所属分组；该设置可能尚未加载或需展开高级选项，未伪造定位结果。'}
+                  : t('settings.search.focus_missing')}
               </p>
             )}
             {activeTabDef?.render()}

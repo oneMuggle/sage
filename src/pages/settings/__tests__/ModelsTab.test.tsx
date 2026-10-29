@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SETTINGS, type ModelCapability } from '../../../entities/setting/types';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { formatModelsTabAuditJson, formatModelsTabAuditSnapshot, ModelsTab } from '../ModelsTab';
 
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
@@ -37,15 +38,23 @@ const settings = {
   temperature: 0.7,
 };
 
+function renderTab(updateSettings = vi.fn()) {
+  return render(
+    <I18nProvider defaultLocale="zh">
+      <ModelsTab settings={settings} updateSettings={updateSettings} />
+    </I18nProvider>,
+  );
+}
+
 describe('ModelsTab context controls', () => {
   it('disables the fixed context input in automatic mode', () => {
-    render(<ModelsTab settings={settings} updateSettings={vi.fn()} />);
+    renderTab();
     expect(screen.getByTestId('settings-max-context')).toBeDisabled();
   });
 
   it('renders max output tokens and writes it back on change', () => {
     const updateSettings = vi.fn();
-    render(<ModelsTab settings={settings} updateSettings={updateSettings} />);
+    renderTab(updateSettings);
 
     const input = screen.getByTestId('settings-max-output-tokens');
     expect(input).toHaveValue(4096);
@@ -57,7 +66,7 @@ describe('ModelsTab context controls', () => {
   });
 
   it('uses the corrected Temperature description', () => {
-    render(<ModelsTab settings={settings} updateSettings={vi.fn()} />);
+    renderTab();
     expect(screen.getByText(/0 最稳定，2 最随机/)).toBeInTheDocument();
   });
 

@@ -22,6 +22,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { bindDiscoveredModels } from '../../../entities/model-catalog/api';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../entities/setting/types';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import {
   testEndpointConnection,
   type ConnectionTestResult,
@@ -83,6 +84,14 @@ function makeProps(overrides: Partial<AppSettings> = {}): EndpointsTabProps {
   return { settings, updateSettings } as EndpointsTabProps;
 }
 
+function renderTab(props: EndpointsTabProps) {
+  return render(
+    <I18nProvider defaultLocale="zh">
+      <EndpointsTab {...props} />
+    </I18nProvider>,
+  );
+}
+
 describe('EndpointsTab (2026-08-26 cleanup)', () => {
   it('does NOT render a 本地模型路径 input in the regular endpoint edit form', () => {
     // Regression guard: Task 1 (2026-08-23) added this input together
@@ -91,7 +100,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     // backward-compat reads, but the user must not be prompted to type
     // a local .gguf path any more.
     const props = makeProps();
-    render(<EndpointsTab {...props} />);
+    renderTab(props);
 
     // Open the inline editor for the seeded endpoint.
     const editButton = screen.getByRole('button', { name: '编辑' });
@@ -109,7 +118,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     // must see at least one of these names in the dropdown so they don't
     // think this option is reserved for the OpenAI cloud API.
     const props = makeProps();
-    render(<EndpointsTab {...props} />);
+    renderTab(props);
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
 
     const select = screen.getByTestId('endpoint-protocol-select');
@@ -128,7 +137,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     // users on those endpoints lose the ability to switch protocols
     // from this tab.
     const props = makeProps();
-    render(<EndpointsTab {...props} />);
+    renderTab(props);
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
 
     const select = screen.getByTestId('endpoint-protocol-select');
@@ -145,7 +154,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     // openai-compatible and ollama show "本地/内网代理可留空",
     // other protocols show "sk-...".
     const props = makeProps();
-    render(<EndpointsTab {...props} />);
+    renderTab(props);
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
 
     const apiKeyInput = screen.getByPlaceholderText(/本地\/内网代理可留空/);
@@ -159,7 +168,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     // + modelSelections is the normal selection path — if this input
     // disappears it breaks the fallback flow.
     const props = makeProps();
-    render(<EndpointsTab {...props} />);
+    renderTab(props);
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
 
     expect(screen.getByPlaceholderText('留空走 ModelsTab 选择')).toBeInTheDocument();

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { settingsClient } from '../../shared/api/settingsClient';
+import { useI18n } from '../../shared/lib/i18n';
 
 export function EffectiveSettingsSummary(): JSX.Element {
+  const { t } = useI18n();
   const { settings } = useSettings();
   const [networkMode, setNetworkMode] = useState('online');
   const [permissionMode, setPermissionMode] = useState('workspace_write');
@@ -38,21 +40,28 @@ export function EffectiveSettingsSummary(): JSX.Element {
     };
   }, []);
 
-  const selectedChatModel = settings.modelSelections.chatModel.modelId ?? '未选择';
-  const context = settings.autoContext ? '自动' : `${settings.maxContext} tokens`;
+  const selectedChatModel =
+    settings.modelSelections.chatModel.modelId ?? t('settings.summary.none');
+  const context = settings.autoContext
+    ? t('settings.summary.auto')
+    : t('settings.summary.context_value').replace('{value}', String(settings.maxContext));
 
   return (
     <section
       data-testid="effective-settings-summary"
       className="mb-6 border border-border rounded-radius-sm bg-surface px-4 py-3"
     >
-      <h3 className="text-sm font-semibold text-text mb-2">当前有效配置</h3>
+      <h3 className="text-sm font-semibold text-text mb-2">{t('settings.summary.title')}</h3>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted md:grid-cols-5">
-        <span>模型：{selectedChatModel}</span>
-        <span>上下文：{context}</span>
-        <span>网络：{networkMode}</span>
-        <span>权限：{permissionMode}</span>
-        <span>流式：{settings.streaming ? '开启' : '关闭'}</span>
+        <span>{t('settings.summary.model').replace('{value}', selectedChatModel)}</span>
+        <span>{t('settings.summary.context').replace('{value}', context)}</span>
+        <span>{t('settings.summary.network').replace('{value}', networkMode)}</span>
+        <span>{t('settings.summary.permission').replace('{value}', permissionMode)}</span>
+        <span>
+          {settings.streaming
+            ? t('settings.summary.streaming_on')
+            : t('settings.summary.streaming_off')}
+        </span>
       </div>
     </section>
   );

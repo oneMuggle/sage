@@ -204,3 +204,59 @@ describe('记忆 tab 合并 (P1-5)', () => {
     expect(link.getAttribute('href')).toBe('/memory');
   });
 });
+
+describe('导航快捷键与最近访问 (P3)', () => {
+  it('Cmd/Ctrl+K 聚焦搜索框', () => {
+    renderSettings();
+    const input = screen.getByTestId('settings-search');
+    expect(input).not.toHaveFocus();
+    act(() => {
+      fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    });
+    expect(input).toHaveFocus();
+  });
+
+  it('不带修饰键的 k 不抢焦点（否则在输入框里打字就会被劫持）', () => {
+    renderSettings();
+    act(() => {
+      fireEvent.keyDown(window, { key: 'k' });
+    });
+    expect(screen.getByTestId('settings-search')).not.toHaveFocus();
+  });
+
+  it('未聚焦且无查询时显示平台快捷键提示', () => {
+    renderSettings();
+    expect(screen.getByTestId('settings-search-shortcut')).toHaveTextContent('Ctrl+K');
+  });
+
+  it('把最近访问的 tab 固定在导航顶部并持久化', async () => {
+    renderSettings();
+    // 初始落在 basic（不进 recents）；依次访问网络 → 记忆。
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '网络' }));
+    });
+    // 访问网络后它成为当前 tab，不在「最近访问」里重复出现。
+    expect(screen.queryByTestId('settings-recent-tabs')).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '记忆' }));
+    });
+    expect(screen.getByTestId('settings-recent-network')).toBeInTheDocument();
+    expect(localStorage.getItem('sage:settings-recent-tabs')).toBe('["memory","network"]');
+  });
+
+  it('点击最近访问项即切回该 tab，且该项前移', async () => {
+    renderSettings();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '网络' }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '记忆' }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('settings-recent-network'));
+    });
+    expect(screen.getByTestId('tab-network')).toBeInTheDocument();
+    // network 成为当前 tab，记忆顶替它进入「最近访问」。
+    expect(screen.getByTestId('settings-recent-memory')).toBeInTheDocument();
+  });
+});

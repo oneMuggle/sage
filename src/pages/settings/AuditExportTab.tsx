@@ -46,17 +46,18 @@ function useCopyFeedback(timeoutMs = 1500) {
 
 /** 单 section 的状态徽章：idle / loading / ready / error 各一种视觉。 */
 function StatusBadge({ status }: { status: AuditSectionStatus }) {
+  const { t } = useI18n();
   switch (status.kind) {
     case 'loading':
       return (
         <span className="px-1.5 py-0.5 text-ui-2xs rounded bg-primary/10 text-primary">
-          加载中
+          {t('settings.audit.loading')}
         </span>
       );
     case 'ready':
       return (
         <span className="px-1.5 py-0.5 text-ui-2xs rounded bg-success/10 text-success">
-          就绪
+          {t('settings.audit.ready')}
         </span>
       );
     case 'error':
@@ -65,13 +66,13 @@ function StatusBadge({ status }: { status: AuditSectionStatus }) {
           className="px-1.5 py-0.5 text-ui-2xs rounded bg-danger/10 text-danger"
           title={status.message}
         >
-          出错
+          {t('settings.audit.error')}
         </span>
       );
     default:
       return (
         <span className="px-1.5 py-0.5 text-ui-2xs rounded bg-bg-hover text-muted">
-          待加载
+          {t('settings.audit.idle')}
         </span>
       );
   }
@@ -102,9 +103,7 @@ function SectionRow({
     >
       <div className="flex items-center gap-3 min-w-0">
         <StatusBadge status={status} />
-        <span className="text-ui-sm text-text truncate">
-          {t(section.labelKey)}
-        </span>
+        <span className="text-ui-sm text-text truncate">{t(section.labelKey)}</span>
         {status.kind === 'error' && (
           <span className="text-ui-2xs text-danger truncate" title={status.message}>
             {status.message}
@@ -166,9 +165,7 @@ export function AuditExportTab() {
     [t],
   );
 
-  const readyCount = SETTINGS_AUDIT_SECTIONS.filter(
-    (s) => get(s.id).kind === 'ready',
-  ).length;
+  const readyCount = SETTINGS_AUDIT_SECTIONS.filter((s) => get(s.id).kind === 'ready').length;
   const totalCount = SETTINGS_AUDIT_SECTIONS.length;
 
   const handleCopyAllSnapshot = useCallback(async () => {
@@ -182,12 +179,7 @@ export function AuditExportTab() {
   }, [get, allCopySnapshot, t]);
 
   const handleCopyAllJson = useCallback(async () => {
-    const text = combineAuditOutputs(
-      SETTINGS_AUDIT_SECTIONS,
-      get,
-      'json',
-      '{}',
-    );
+    const text = combineAuditOutputs(SETTINGS_AUDIT_SECTIONS, get, 'json', '{}');
     await allCopyJson.copy(text);
   }, [get, allCopyJson]);
 
@@ -196,12 +188,8 @@ export function AuditExportTab() {
       <section>
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
-            <h2 className="text-ui-lg font-semibold text-text">
-              {t('settings.audit.title')}
-            </h2>
-            <p className="text-ui-sm text-text-secondary mt-1">
-              {t('settings.audit.desc')}
-            </p>
+            <h2 className="text-ui-lg font-semibold text-text">{t('settings.audit.title')}</h2>
+            <p className="text-ui-sm text-text-secondary mt-1">{t('settings.audit.desc')}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <span className="text-ui-2xs text-muted">
@@ -240,9 +228,7 @@ export function AuditExportTab() {
                 onClick={() => void handleCopyAllJson()}
                 className="px-2 py-1 text-ui-2xs rounded border border-border text-text-secondary hover:text-text hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {allCopyJson.copied
-                  ? t('settings.audit.copied')
-                  : t('settings.audit.copyAllJson')}
+                {allCopyJson.copied ? t('settings.audit.copied') : t('settings.audit.copyAllJson')}
               </button>
             </div>
           </div>

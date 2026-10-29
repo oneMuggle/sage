@@ -150,8 +150,7 @@ export function UpdatesTab() {
       <section>
         <div className="flex items-center justify-between gap-2 mb-3">
           <h3 className="text-sm font-semibold text-text">{t('updates.strategy')}</h3>
-          <div className="flex items-center gap-1.5 text-ui-2xs">
-          </div>
+          <div className="flex items-center gap-1.5 text-ui-2xs"></div>
         </div>
         <fieldset className="space-y-2">
           <legend className="sr-only">{t('updates.strategy')}</legend>
@@ -206,11 +205,15 @@ export function UpdatesTab() {
       </section>
 
       <AdvancedSection
-        title="高级更新设置"
-        description="这些设置会立即保存并由更新管理器使用；更新服务器必须是 HTTPS。"
+        title={t('updates.advanced.title')}
+        description={t('updates.advanced.description')}
       >
         <div className="space-y-1">
-          <SettingRow label="回滚窗口（天）" desc="安装后允许自动回滚的时间窗口">
+          <SettingRow
+            anchor="updates.rollbackWindowDays"
+            label={t('updates.advanced.rollback_window.label')}
+            desc={t('updates.advanced.rollback_window.desc')}
+          >
             <input
               type="number"
               min={1}
@@ -224,7 +227,11 @@ export function UpdatesTab() {
               className="w-24 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text"
             />
           </SettingRow>
-          <SettingRow label="自动回滚触发次数" desc="启动失败多少次后自动回滚">
+          <SettingRow
+            anchor="updates.autoRollbackThreshold"
+            label={t('updates.advanced.auto_rollback.label')}
+            desc={t('updates.advanced.auto_rollback.desc')}
+          >
             <input
               type="number"
               min={1}
@@ -238,7 +245,10 @@ export function UpdatesTab() {
               className="w-24 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text"
             />
           </SettingRow>
-          <SettingRow label="自动检查周期（小时）">
+          <SettingRow
+            anchor="updates.checkIntervalHours"
+            label={t('updates.advanced.check_interval.label')}
+          >
             <input
               type="number"
               min={1}
@@ -252,7 +262,11 @@ export function UpdatesTab() {
               className="w-24 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text"
             />
           </SettingRow>
-          <SettingRow label="更新服务器地址" desc="必须使用 HTTPS，且不能包含用户名、密码或路径">
+          <SettingRow
+            anchor="updates.updateServerUrl"
+            label={t('updates.advanced.server_url.label')}
+            desc={t('updates.advanced.server_url.desc')}
+          >
             <input
               type="url"
               data-testid="updates-server-url"
@@ -264,7 +278,11 @@ export function UpdatesTab() {
               className="w-64 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text font-mono"
             />
           </SettingRow>
-          <SettingRow label="启用更新遥测" desc="发送更新相关遥测数据">
+          <SettingRow
+            anchor="updates.enableTelemetry"
+            label={t('updates.advanced.telemetry.label')}
+            desc={t('updates.advanced.telemetry.desc')}
+          >
             <input
               type="checkbox"
               data-testid="updates-telemetry"
@@ -275,7 +293,10 @@ export function UpdatesTab() {
               }
             />
           </SettingRow>
-          <SettingRow label="缓存保留天数">
+          <SettingRow
+            anchor="updates.cacheRetentionDays"
+            label={t('updates.advanced.cache_retention.label')}
+          >
             <input
               type="number"
               min={1}

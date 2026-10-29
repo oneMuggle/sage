@@ -9,6 +9,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { I18nProvider } from '../../../shared/lib/i18n';
 import {
   PromptTemplatesTab,
   formatPromptTemplatesTabAuditJson,
@@ -33,7 +34,12 @@ vi.mock('../../../shared/api/promptApi', () => ({
   },
 }));
 
-const renderTab = () => render(<PromptTemplatesTab />);
+const renderTab = () =>
+  render(
+    <I18nProvider defaultLocale="zh">
+      <PromptTemplatesTab />
+    </I18nProvider>,
+  );
 
 describe('PromptTemplatesTab — R27-B', () => {
   beforeEach(() => {
@@ -82,9 +88,7 @@ describe('PromptTemplatesTab — R27-B', () => {
     });
     fireEvent.click(screen.getByTestId('prompts-form-save'));
 
-    await waitFor(() =>
-      expect(createMock).toHaveBeenCalledWith('新模板', '内容 {{变量}}', '描述'),
-    );
+    await waitFor(() => expect(createMock).toHaveBeenCalledWith('新模板', '内容 {{变量}}', '描述'));
   });
 
   it('编辑：回填表单 → update 调用', async () => {
@@ -199,15 +203,13 @@ describe('PromptTemplatesTab — R27-B', () => {
     uploadEnvelope(envelope);
 
     // 面板列出全部冲突，默认全选
-    await waitFor(() =>
-      expect(screen.getByTestId('prompts-conflict-panel')).toBeInTheDocument(),
+    await waitFor(() => expect(screen.getByTestId('prompts-conflict-panel')).toBeInTheDocument());
+    expect((screen.getByTestId('prompts-conflict-check-alpha') as HTMLInputElement).checked).toBe(
+      true,
     );
-    expect(
-      (screen.getByTestId('prompts-conflict-check-alpha') as HTMLInputElement).checked,
-    ).toBe(true);
-    expect(
-      (screen.getByTestId('prompts-conflict-check-beta') as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByTestId('prompts-conflict-check-beta') as HTMLInputElement).checked).toBe(
+      true,
+    );
 
     // 取消勾选 beta → 只覆盖 alpha
     fireEvent.click(screen.getByTestId('prompts-conflict-check-beta'));
@@ -236,9 +238,7 @@ describe('PromptTemplatesTab — R27-B', () => {
     window.alert = vi.fn();
     uploadEnvelope({ version: 1, templates: [{ name: 'alpha', content: 'x' }] });
 
-    await waitFor(() =>
-      expect(screen.getByTestId('prompts-conflict-panel')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByTestId('prompts-conflict-panel')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('prompts-conflict-skip'));
 
     await waitFor(() =>

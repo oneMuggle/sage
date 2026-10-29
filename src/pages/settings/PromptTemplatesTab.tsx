@@ -16,10 +16,8 @@ import {
   type PromptTemplate,
   type PromptTemplateEnvelope,
 } from '../../shared/api/promptApi';
-import {
-  listTplMemoryEntries,
-  tplStorageKey,
-} from '../../widgets/chat/TemplateFillDialog';
+import { useI18n } from '../../shared/lib/i18n';
+import { listTplMemoryEntries, tplStorageKey } from '../../widgets/chat/TemplateFillDialog';
 
 const MAX_NAME_LEN = 60;
 const MAX_CONTENT_LEN = 8000;
@@ -67,6 +65,7 @@ export function formatPromptTemplatesTabAuditJson(input: {
 }
 
 export function PromptTemplatesTab() {
+  const { t } = useI18n();
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<FormState | null>(null); // null = 列表态
@@ -86,20 +85,26 @@ export function PromptTemplatesTab() {
   };
   const handleDrop = async () => {
     if (dragIndex === null || dropIndex === null || dragIndex === dropIndex) {
-      setDragIndex(null); setDropIndex(null); return;
+      setDragIndex(null);
+      setDropIndex(null);
+      return;
     }
     const reordered = [...templates];
     const [moved] = reordered.splice(dragIndex, 1);
     reordered.splice(dropIndex, 0, moved);
     setTemplates(reordered);
-    setDragIndex(null); setDropIndex(null);
+    setDragIndex(null);
+    setDropIndex(null);
     try {
-      await promptApi.reorder(reordered.map((t) => t.id));
+      await promptApi.reorder(reordered.map((tpl) => tpl.id));
     } catch {
       await load(); // 排序失败回滚
     }
   };
-  const handleDragEnd = () => { setDragIndex(null); setDropIndex(null); };
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setDropIndex(null);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -166,7 +171,7 @@ export function PromptTemplatesTab() {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
       })
-      .catch(() => setError('导出失败'));
+      .catch(() => setError(t('settings.templates.export_failed')));
   };
 
   // R30: 模板导入（文件选择 → JSON 解析 → 报告）
@@ -181,7 +186,10 @@ export function PromptTemplatesTab() {
   const [conflictSelection, setConflictSelection] = useState<Set<string>>(new Set());
 
   const reportImport = (r: { imported: number; skipped: number; failed: number }) =>
-    `导入完成：新增 ${r.imported} 条，跳过 ${r.skipped} 条，失败 ${r.failed} 条`;
+    t('settings.templates.import_done')
+      .replace('{imported}', String(r.imported))
+      .replace('{skipped}', String(r.skipped))
+      .replace('{failed}', String(r.failed));
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -200,7 +208,7 @@ export function PromptTemplatesTab() {
       toast.success(reportImport(first));
       await load();
     } catch {
-      setError('导入失败：文件需为 Sage 导出的模板 JSON');
+      setError(t('settings.templates.import_failed'));
     } finally {
       setImporting(false);
     }
@@ -214,10 +222,10 @@ export function PromptTemplatesTab() {
       const subset = {
         ...pendingImport.envelope,
         templates: (pendingImport.envelope.templates ?? []).filter(
-          (t) =>
-            !!t &&
-            typeof t === 'object' &&
-            conflictSelection.has(String((t as { name?: unknown }).name ?? '')),
+          (tpl) =>
+            !!tpl &&
+            typeof tpl === 'object' &&
+            conflictSelection.has(String((tpl as { name?: unknown }).name ?? '')),
         ),
       } as PromptTemplateEnvelope;
       const second = await promptApi.importTemplates(subset, 'overwrite');
@@ -225,7 +233,7 @@ export function PromptTemplatesTab() {
       setPendingImport(null);
       await load();
     } catch {
-      setError('覆盖导入失败');
+      setError(t('settings.templates.overwrite_failed'));
     } finally {
       setImporting(false);
     }
@@ -240,10 +248,11 @@ export function PromptTemplatesTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-text">提示词模板</h3>
+          <h3 className="text-sm font-semibold text-text">{t('settings.templates.title')}</h3>
           <p className="text-xs text-text-secondary mt-0.5">
-            在聊天输入框输入 <code className="font-mono">/tpl-</code> 即可套用；也可用{' '}
-            <code className="font-mono">/prompt-save</code> 把输入框内容直接存为模板。
+            {t('settings.templates.hint_prefix')} <code className="font-mono">/tpl-</code>{' '}
+            {t('settings.templates.hint_middle')} <code className="font-mono">/prompt-save</code>{' '}
+            {t('settings.templates.hint_suffix')}
           </p>
         </div>
         <div className="flex gap-2">
@@ -253,16 +262,16 @@ export function PromptTemplatesTab() {
               data-testid="prompts-search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索模板…"
+              placeholder={t('settings.templates.search_placeholder')}
               className="w-full pl-7 pr-2 py-1.5 text-xs rounded-radius-sm border border-border bg-bg text-text"
             />
           </div>
-                    <button
+          <button
             type="button"
             data-testid="prompts-refresh"
             onClick={() => void load()}
             className="p-1.5 rounded hover:bg-bg-hover text-muted"
-            title="刷新"
+            title={t('settings.templates.refresh')}
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -271,7 +280,7 @@ export function PromptTemplatesTab() {
             data-testid="prompts-export"
             onClick={handleExport}
             className="p-1.5 rounded hover:bg-bg-hover text-muted"
-            title="导出模板 (JSON)"
+            title={t('settings.templates.export_title')}
           >
             <Download className="w-4 h-4" />
           </button>
@@ -281,7 +290,7 @@ export function PromptTemplatesTab() {
             disabled={importing}
             onClick={() => importInputRef.current?.click()}
             className="p-1.5 rounded hover:bg-bg-hover text-muted disabled:opacity-50"
-            title="导入模板 (JSON)"
+            title={t('settings.templates.import_title')}
           >
             <Upload className="w-4 h-4" />
           </button>
@@ -299,7 +308,7 @@ export function PromptTemplatesTab() {
             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover"
           >
             <Plus className="w-3.5 h-3.5" />
-            新建模板
+            {t('settings.templates.new')}
           </button>
         </div>
       </div>
@@ -316,8 +325,10 @@ export function PromptTemplatesTab() {
           data-testid="prompts-conflict-panel"
         >
           <p className="text-xs text-text">
-            发现 {pendingImport.conflicts.length} 条同名模板。勾选要用导入内容覆盖的条目，
-            未勾选的保留现有版本：
+            {t('settings.templates.conflict_notice').replace(
+              '{count}',
+              String(pendingImport.conflicts.length),
+            )}
           </p>
           <ul className="space-y-1">
             {pendingImport.conflicts.map((name) => (
@@ -345,7 +356,10 @@ export function PromptTemplatesTab() {
               onClick={() => void handleConflictOverwrite()}
               className="px-2.5 py-1 text-xs rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover disabled:opacity-50"
             >
-              覆盖选中项（{conflictSelection.size}）
+              {t('settings.templates.overwrite_selected').replace(
+                '{count}',
+                String(conflictSelection.size),
+              )}
             </button>
             <button
               type="button"
@@ -353,19 +367,22 @@ export function PromptTemplatesTab() {
               onClick={handleConflictSkip}
               className="px-2.5 py-1 text-xs rounded-radius-sm border border-border text-muted hover:text-text"
             >
-              保留现有
+              {t('settings.templates.keep_existing')}
             </button>
           </div>
         </div>
       )}
 
       {form && (
-        <div className="p-3 rounded-radius-sm border border-border space-y-2" data-testid="prompts-form">
+        <div
+          className="p-3 rounded-radius-sm border border-border space-y-2"
+          data-testid="prompts-form"
+        >
           <input
             data-testid="prompts-form-name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="模板名称（必填）"
+            placeholder={t('settings.templates.form.name_placeholder')}
             maxLength={MAX_NAME_LEN}
             className="w-full px-2 py-1.5 text-xs rounded-radius-sm border border-border bg-bg text-text"
           />
@@ -373,7 +390,7 @@ export function PromptTemplatesTab() {
             data-testid="prompts-form-desc"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
-            placeholder="描述（可选，斜杠菜单中显示）"
+            placeholder={t('settings.templates.form.desc_placeholder')}
             maxLength={300}
             className="w-full px-2 py-1.5 text-xs rounded-radius-sm border border-border bg-bg text-text"
           />
@@ -381,7 +398,7 @@ export function PromptTemplatesTab() {
             data-testid="prompts-form-content"
             value={form.content}
             onChange={(e) => setForm({ ...form, content: e.target.value })}
-            placeholder="模板内容（支持 {{变量}} 占位）"
+            placeholder={t('settings.templates.form.content_placeholder')}
             rows={6}
             maxLength={MAX_CONTENT_LEN}
             className="w-full px-2 py-1.5 text-xs rounded-radius-sm border border-border bg-bg text-text font-mono"
@@ -392,7 +409,7 @@ export function PromptTemplatesTab() {
               onClick={() => setForm(null)}
               className="px-2.5 py-1 text-xs rounded-radius-sm border border-border hover:bg-bg-hover"
             >
-              取消
+              {t('settings.templates.cancel')}
             </button>
             <button
               type="button"
@@ -401,17 +418,17 @@ export function PromptTemplatesTab() {
               onClick={() => void handleSave()}
               className="px-2.5 py-1 text-xs rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover disabled:opacity-50"
             >
-              {saving ? '保存中…' : '保存'}
+              {saving ? t('settings.templates.saving') : t('settings.templates.save')}
             </button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <p className="text-xs text-text-secondary">加载中…</p>
+        <p className="text-xs text-text-secondary">{t('settings.templates.loading')}</p>
       ) : templates.length === 0 ? (
         <p className="text-xs text-text-secondary" data-testid="prompts-empty">
-          暂无模板 —— 点击"新建模板"创建，或在聊天输入框用 /prompt-save 保存。
+          {t('settings.templates.empty')}
         </p>
       ) : (
         <ul className="space-y-2" data-testid="prompts-list">
@@ -419,89 +436,99 @@ export function PromptTemplatesTab() {
             .filter((tpl) => {
               if (!searchQuery.trim()) return true;
               const q = searchQuery.toLowerCase();
-              return tpl.name.toLowerCase().includes(q) || (tpl.description ?? '').toLowerCase().includes(q) || tpl.content.toLowerCase().includes(q);
+              return (
+                tpl.name.toLowerCase().includes(q) ||
+                (tpl.description ?? '').toLowerCase().includes(q) ||
+                tpl.content.toLowerCase().includes(q)
+              );
             })
             .map((tpl, idx) => (
-            <li
-              key={tpl.id}
-              draggable
-              onDragStart={() => handleDragStart(idx)}
-              onDragOver={(e) => { e.preventDefault(); handleDragOver(idx); }}
-              onDrop={() => void handleDrop()}
-              onDragEnd={handleDragEnd}
-              className={`p-3 rounded-radius-sm border ${dropIndex === idx ? 'border-primary' : 'border-border'} ${dragIndex === idx ? 'opacity-50' : ''} cursor-grab active:cursor-grabbing`}
-              data-testid="prompts-item"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium text-text">{tpl.name}</div>
-                  {tpl.description && (
-                    <div className="text-ui-2xs text-text-secondary">{tpl.description}</div>
-                  )}
-                  <div className="text-ui-2xs text-text-secondary font-mono mt-1 line-clamp-2">
-                    {tpl.content.length > 120 ? `${tpl.content.slice(0, 120)}…` : tpl.content}
+              <li
+                key={tpl.id}
+                draggable
+                onDragStart={() => handleDragStart(idx)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  handleDragOver(idx);
+                }}
+                onDrop={() => void handleDrop()}
+                onDragEnd={handleDragEnd}
+                className={`p-3 rounded-radius-sm border ${dropIndex === idx ? 'border-primary' : 'border-border'} ${dragIndex === idx ? 'opacity-50' : ''} cursor-grab active:cursor-grabbing`}
+                data-testid="prompts-item"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-medium text-text">{tpl.name}</div>
+                    {tpl.description && (
+                      <div className="text-ui-2xs text-text-secondary">{tpl.description}</div>
+                    )}
+                    <div className="text-ui-2xs text-text-secondary font-mono mt-1 line-clamp-2">
+                      {tpl.content.length > 120 ? `${tpl.content.slice(0, 120)}…` : tpl.content}
+                    </div>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    {(() => {
+                      // R38: 变量记忆展示/清除 —— 与填充对话框同键口径
+                      try {
+                        const raw = window.localStorage.getItem(tplStorageKey(tpl.content));
+                        const mem = raw ? (JSON.parse(raw) as Record<string, string>) : null;
+                        const entries = mem ? Object.entries(mem) : [];
+                        if (entries.length === 0) return null;
+                        return (
+                          <span
+                            className="text-ui-2xs text-text-secondary mr-1"
+                            data-testid={`prompts-memory-${tpl.id}`}
+                          >
+                            {t('settings.templates.memory_count').replace(
+                              '{count}',
+                              String(entries.length),
+                            )}
+                            <button
+                              type="button"
+                              data-testid={`prompts-memory-clear-${tpl.id}`}
+                              onClick={() => {
+                                localStorage.removeItem(tplStorageKey(tpl.content));
+                                setMemoryTick((n) => n + 1);
+                              }}
+                              className="ml-1 text-error hover:underline"
+                            >
+                              {t('settings.templates.clear')}
+                            </button>
+                          </span>
+                        );
+                      } catch {
+                        return null;
+                      }
+                    })()}
+                    <button
+                      type="button"
+                      data-testid={`prompts-edit-${tpl.id}`}
+                      onClick={() =>
+                        setForm({
+                          id: tpl.id,
+                          name: tpl.name,
+                          description: tpl.description,
+                          content: tpl.content,
+                        })
+                      }
+                      className="p-1 rounded hover:bg-bg-hover text-muted"
+                      title={t('settings.templates.edit')}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`prompts-delete-${tpl.id}`}
+                      onClick={() => void handleDelete(tpl.id)}
+                      className="p-1 rounded hover:bg-error/10 text-muted hover:text-error"
+                      title={t('settings.templates.delete')}
+                    >
+                      <span className="text-ui-2xs">{t('settings.templates.delete')}</span>
+                    </button>
                   </div>
                 </div>
-                <div className="flex gap-1 shrink-0">
-                  {(() => {
-                    // R38: 变量记忆展示/清除 —— 与填充对话框同键口径
-                    try {
-                      const raw = window.localStorage.getItem(tplStorageKey(tpl.content));
-                      const mem = raw ? (JSON.parse(raw) as Record<string, string>) : null;
-                      const entries = mem ? Object.entries(mem) : [];
-                      if (entries.length === 0) return null;
-                      return (
-                        <span
-                          className="text-ui-2xs text-text-secondary mr-1"
-                          data-testid={`prompts-memory-${tpl.id}`}
-                        >
-                          记忆 {entries.length} 项
-                          <button
-                            type="button"
-                            data-testid={`prompts-memory-clear-${tpl.id}`}
-                            onClick={() => {
-                              localStorage.removeItem(tplStorageKey(tpl.content));
-                              setMemoryTick((n) => n + 1);
-                            }}
-                            className="ml-1 text-error hover:underline"
-                          >
-                            清除
-                          </button>
-                        </span>
-                      );
-                    } catch {
-                      return null;
-                    }
-                  })()}
-                  <button
-                    type="button"
-                    data-testid={`prompts-edit-${tpl.id}`}
-                    onClick={() =>
-                      setForm({
-                        id: tpl.id,
-                        name: tpl.name,
-                        description: tpl.description,
-                        content: tpl.content,
-                      })
-                    }
-                    className="p-1 rounded hover:bg-bg-hover text-muted"
-                    title="编辑"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`prompts-delete-${tpl.id}`}
-                    onClick={() => void handleDelete(tpl.id)}
-                    className="p-1 rounded hover:bg-error/10 text-muted hover:text-error"
-                    title="删除"
-                  >
-                    <span className="text-ui-2xs">删除</span>
-                  </button>
-                </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            ))}
         </ul>
       )}
 
@@ -526,7 +553,7 @@ export function PromptTemplatesTab() {
           >
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-text">
-                失联变量记忆（{orphans.length} 条）—— 对应模板已修改或删除，记忆不再被使用
+                {t('settings.templates.orphans_heading').replace('{count}', String(orphans.length))}
               </p>
               <button
                 type="button"
@@ -536,7 +563,7 @@ export function PromptTemplatesTab() {
                 }}
                 className="px-2 py-0.5 text-ui-2xs rounded-radius-sm border border-border text-muted hover:text-error shrink-0"
               >
-                全部清除
+                {t('settings.templates.clear_all')}
               </button>
             </div>
             <ul className="space-y-1">
@@ -545,9 +572,9 @@ export function PromptTemplatesTab() {
                   e.values !== null
                     ? Object.entries(e.values)
                         .map(([k, v]) => `${k}=${v}`)
-                        .join('，')
+                        .join(t('settings.templates.value_separator'))
                         .slice(0, 120)
-                    : e.rawPreview || '(值损坏)';
+                    : e.rawPreview || t('settings.templates.corrupted_value');
                 return (
                   <li key={e.key} className="flex items-start justify-between gap-2">
                     <span className="min-w-0 text-ui-2xs">
@@ -562,7 +589,7 @@ export function PromptTemplatesTab() {
                       onClick={() => remove(e.key)}
                       className="text-ui-2xs text-error hover:underline shrink-0"
                     >
-                      删除
+                      {t('settings.templates.delete')}
                     </button>
                   </li>
                 );

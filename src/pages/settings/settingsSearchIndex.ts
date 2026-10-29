@@ -266,7 +266,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   },
   {
     key: 'title_model',
-    tab: 'models',
+    tab: 'models-services',
     label: '会话标题模型',
     labelEn: 'Session title model',
     keywords: 'titlemodelid 标题 会话标题 专用模型 title session name',
@@ -309,7 +309,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // Task 9 (2026-10-28) 智能路由模式 —— Task 11 (ModelsTab) 实际控件在此 Tab。
   {
     key: 'routing.mode',
-    tab: 'models',
+    tab: 'models-services',
     label: '智能模型路由',
     labelEn: 'Smart model routing',
     keywords: 'routing 智能路由 模型 自动 task_type 按任务选 model auto manual',
@@ -607,6 +607,48 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: '更新策略与通道',
     labelEn: 'Updates',
     keywords: 'update 更新 策略 通道 stable beta 检查更新',
+  },
+  {
+    key: 'updates.rollbackWindowDays',
+    tab: 'updates',
+    label: '回滚窗口天数',
+    labelEn: 'Rollback window',
+    keywords: 'updates.rollbackwindowdays rollback 回滚 窗口 天数 window',
+  },
+  {
+    key: 'updates.autoRollbackThreshold',
+    tab: 'updates',
+    label: '自动回滚触发次数',
+    labelEn: 'Auto rollback threshold',
+    keywords: 'updates.autorollbackthreshold rollback 自动回滚 阈值 次数 threshold',
+  },
+  {
+    key: 'updates.checkIntervalHours',
+    tab: 'updates',
+    label: '自动检查周期',
+    labelEn: 'Check interval',
+    keywords: 'updates.checkintervalhours 检查周期 interval 小时 hours',
+  },
+  {
+    key: 'updates.updateServerUrl',
+    tab: 'updates',
+    label: '更新服务器地址',
+    labelEn: 'Update server URL',
+    keywords: 'updates.updateserverurl 服务器 地址 server url https',
+  },
+  {
+    key: 'updates.enableTelemetry',
+    tab: 'updates',
+    label: '启用更新遥测',
+    labelEn: 'Update telemetry',
+    keywords: 'updates.enabletelemetry 遥测 telemetry 上报',
+  },
+  {
+    key: 'updates.cacheRetentionDays',
+    tab: 'updates',
+    label: '缓存保留天数',
+    labelEn: 'Cache retention',
+    keywords: 'updates.cacheretentiondays 缓存 cache 保留 天数 retention',
   },
   {
     key: 'providers',

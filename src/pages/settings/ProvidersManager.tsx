@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { useI18n } from '../../shared/lib/i18n';
 import type { ProviderConfigSummary } from '../../shared/types/electron-api';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import {
@@ -22,9 +23,7 @@ import {
 } from '../../shared/ui/Dialog/Dialog';
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function formatProvidersListMarkdown(
-  list: ReadonlyArray<ProviderConfigSummary>,
-): string {
+export function formatProvidersListMarkdown(list: ReadonlyArray<ProviderConfigSummary>): string {
   const defaultItem = list.find((p) => p.isDefault);
   const lines = [
     '# 更新源配置清单 (Update Providers Summary)',
@@ -46,9 +45,7 @@ export function formatProvidersListMarkdown(
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function formatProvidersListJson(
-  list: ReadonlyArray<ProviderConfigSummary>,
-): string {
+export function formatProvidersListJson(list: ReadonlyArray<ProviderConfigSummary>): string {
   return JSON.stringify(
     {
       exportedAt: new Date().toISOString(),
@@ -68,6 +65,7 @@ export function formatProvidersListJson(
 }
 
 export function ProvidersManager(): JSX.Element {
+  const { t } = useI18n();
   const [list, setList] = useState<ProviderConfigSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -109,7 +107,7 @@ export function ProvidersManager(): JSX.Element {
   if (loading) {
     return (
       <div data-testid="providers-loading" className="text-sm text-text-secondary py-4">
-        加载中...
+        {t('settings.providers.loading')}
       </div>
     );
   }
@@ -129,9 +127,9 @@ export function ProvidersManager(): JSX.Element {
     try {
       const r = await window.electronAPI?.providers.test(id);
       if (r?.ok) {
-        toast.success(`连接 OK（${r.latencyMs}ms）`);
+        toast.success(t('settings.providers.test_ok').replace('{ms}', String(r.latencyMs)));
       } else {
-        toast.error(`失败：${r?.error ?? 'unknown'}`);
+        toast.error(t('settings.providers.test_failed').replace('{error}', r?.error ?? 'unknown'));
       }
     } finally {
       setBusyId(null);
@@ -139,16 +137,16 @@ export function ProvidersManager(): JSX.Element {
   };
 
   const onRemove = async (id: string): Promise<void> => {
-    const ok = await confirmDialog({ title: '确定删除？', danger: true });
+    const ok = await confirmDialog({ title: t('settings.providers.confirm_delete'), danger: true });
     if (!ok) return;
     setBusyId(id);
     try {
       await window.electronAPI?.providers.remove(id);
       await refresh();
-      toast.success('已删除更新源');
+      toast.success(t('settings.providers.deleted'));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`删除失败：${msg}`);
+      toast.error(t('settings.providers.delete_failed').replace('{error}', msg));
     } finally {
       setBusyId(null);
     }
@@ -185,10 +183,10 @@ export function ProvidersManager(): JSX.Element {
       await refresh();
       setAddOpen(false);
       resetAddForm();
-      toast.success('已添加更新源');
+      toast.success(t('settings.providers.added'));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`添加失败：${msg}`);
+      toast.error(t('settings.providers.add_failed').replace('{error}', msg));
     } finally {
       setBusyId(null);
     }
@@ -198,10 +196,10 @@ export function ProvidersManager(): JSX.Element {
     <div className="providers-manager space-y-4" data-testid="providers-manager">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-text">更新源管理</h2>
+          <h2 className="text-sm font-semibold text-text">{t('settings.providers.title')}</h2>
           <p data-testid="providers-current-default" className="text-xs text-text-secondary mt-0.5">
-            当前默认：
-            {list.find((p) => p.isDefault)?.displayName ?? '（无，使用内置）'}
+            {t('settings.providers.current_default')}
+            {list.find((p) => p.isDefault)?.displayName ?? t('settings.providers.none_builtin')}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -215,7 +213,7 @@ export function ProvidersManager(): JSX.Element {
             disabled={busyId !== null}
             className="px-3 py-1.5 text-xs font-medium rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover disabled:opacity-50 transition-colors"
           >
-            + 添加更新源
+            {t('settings.providers.add')}
           </button>
         </div>
       </div>
@@ -224,10 +222,12 @@ export function ProvidersManager(): JSX.Element {
         <table className="w-full text-xs text-left border-collapse">
           <thead className="bg-bg-subtle border-b border-border text-text-secondary">
             <tr>
-              <th className="px-3 py-2 font-medium">名称</th>
-              <th className="px-3 py-2 font-medium">类型</th>
-              <th className="px-3 py-2 font-medium">状态</th>
-              <th className="px-3 py-2 font-medium text-right">操作</th>
+              <th className="px-3 py-2 font-medium">{t('settings.providers.col.name')}</th>
+              <th className="px-3 py-2 font-medium">{t('settings.providers.col.type')}</th>
+              <th className="px-3 py-2 font-medium">{t('settings.providers.col.status')}</th>
+              <th className="px-3 py-2 font-medium text-right">
+                {t('settings.providers.col.actions')}
+              </th>
             </tr>
           </thead>
           <tbody data-testid="providers-list-body" className="divide-y divide-border">
@@ -245,7 +245,11 @@ export function ProvidersManager(): JSX.Element {
                           : 'bg-bg-subtle text-text-tertiary'
                     }`}
                   >
-                    {p.isDefault ? '默认' : p.enabled ? '启用' : '禁用'}
+                    {p.isDefault
+                      ? t('settings.providers.status.default')
+                      : p.enabled
+                        ? t('settings.providers.status.enabled')
+                        : t('settings.providers.status.disabled')}
                   </span>
                 </td>
                 <td className="px-3 py-2 text-right space-x-1.5">
@@ -257,7 +261,7 @@ export function ProvidersManager(): JSX.Element {
                       disabled={busyId !== null}
                       className="px-2 py-1 rounded border border-border text-text-secondary hover:bg-bg-hover hover:text-text disabled:opacity-50 transition-colors"
                     >
-                      设为默认
+                      {t('settings.providers.set_default')}
                     </button>
                   )}
                   <button
@@ -267,7 +271,7 @@ export function ProvidersManager(): JSX.Element {
                     disabled={busyId !== null}
                     className="px-2 py-1 rounded border border-border text-text-secondary hover:bg-bg-hover hover:text-text disabled:opacity-50 transition-colors"
                   >
-                    测试连接
+                    {t('settings.providers.test_connection')}
                   </button>
                   <button
                     type="button"
@@ -276,7 +280,7 @@ export function ProvidersManager(): JSX.Element {
                     disabled={busyId !== null || p.isDefault}
                     className="px-2 py-1 rounded border border-error/40 text-error hover:bg-error/10 disabled:opacity-40 transition-colors"
                   >
-                    删除
+                    {t('settings.providers.delete')}
                   </button>
                 </td>
               </tr>
@@ -288,16 +292,14 @@ export function ProvidersManager(): JSX.Element {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent data-testid="providers-add-dialog">
           <DialogHeader>
-            <DialogTitle>添加更新源</DialogTitle>
-            <DialogDescription>
-              配置 GitHub / Gitee / GitLab 或通用 HTTP 更新源（访问令牌将加密掩码存储）。
-            </DialogDescription>
+            <DialogTitle>{t('settings.providers.dialog.title')}</DialogTitle>
+            <DialogDescription>{t('settings.providers.dialog.description')}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 text-xs">
             <div>
               <label htmlFor="provider-type-select" className="block text-text-secondary mb-1">
-                更新源类型
+                {t('settings.providers.field.type')}
               </label>
               <select
                 id="provider-type-select"
@@ -315,7 +317,7 @@ export function ProvidersManager(): JSX.Element {
 
             <div>
               <label htmlFor="provider-display-name" className="block text-text-secondary mb-1">
-                显示名称
+                {t('settings.providers.field.display_name')}
               </label>
               <input
                 id="provider-display-name"
@@ -323,7 +325,7 @@ export function ProvidersManager(): JSX.Element {
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="例如：内网镜像源"
+                placeholder={t('settings.providers.field.display_name_placeholder')}
                 className="w-full px-2.5 py-1.5 rounded-radius-sm border border-border bg-surface text-text"
               />
             </div>
@@ -332,7 +334,7 @@ export function ProvidersManager(): JSX.Element {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label htmlFor="provider-owner" className="block text-text-secondary mb-1">
-                    Owner / 组织
+                    {t('settings.providers.field.owner')}
                   </label>
                   <input
                     id="provider-owner"
@@ -346,7 +348,7 @@ export function ProvidersManager(): JSX.Element {
                 </div>
                 <div>
                   <label htmlFor="provider-repo" className="block text-text-secondary mb-1">
-                    仓库名 (Repo)
+                    {t('settings.providers.field.repo')}
                   </label>
                   <input
                     id="provider-repo"
@@ -365,7 +367,7 @@ export function ProvidersManager(): JSX.Element {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label htmlFor="provider-base-url" className="block text-text-secondary mb-1">
-                    GitLab 地址
+                    {t('settings.providers.field.gitlab_url')}
                   </label>
                   <input
                     id="provider-base-url"
@@ -395,7 +397,7 @@ export function ProvidersManager(): JSX.Element {
             {providerType !== 'generic-http' && (
               <div>
                 <label htmlFor="provider-token" className="block text-text-secondary mb-1">
-                  访问令牌 (Token，公开仓库可留空)
+                  {t('settings.providers.field.token')}
                 </label>
                 <input
                   id="provider-token"
@@ -426,7 +428,7 @@ export function ProvidersManager(): JSX.Element {
                 </div>
                 <div>
                   <label htmlFor="provider-public-key" className="block text-text-secondary mb-1">
-                    RSA 公钥 (PEM)
+                    {t('settings.providers.field.public_key')}
                   </label>
                   <textarea
                     id="provider-public-key"
@@ -447,7 +449,7 @@ export function ProvidersManager(): JSX.Element {
               onClick={() => setAddOpen(false)}
               className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text-secondary hover:bg-bg-hover"
             >
-              取消
+              {t('settings.providers.cancel')}
             </button>
             <button
               type="button"
@@ -456,7 +458,7 @@ export function ProvidersManager(): JSX.Element {
               onClick={() => void handleSubmitAdd()}
               className="px-3 py-1.5 text-xs font-medium rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover disabled:opacity-50"
             >
-              保存更新源
+              {t('settings.providers.submit')}
             </button>
           </DialogFooter>
         </DialogContent>

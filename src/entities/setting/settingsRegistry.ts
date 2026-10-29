@@ -466,6 +466,57 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     25,
     0,
   ),
+  'orch.maxScoutIterations': orchNumber(
+    'orch.maxScoutIterations',
+    '侦察 ReAct 预算',
+    '拆解前事实侦察的 ReAct 迭代上限',
+    4,
+    1,
+    50,
+  ),
+  'orch.maxPlannerIterations': orchNumber(
+    'orch.maxPlannerIterations',
+    'Planner ReAct 预算',
+    'Planner 的 ReAct 迭代上限（预配置，暂未生效）',
+    8,
+    1,
+    50,
+  ),
+  'orch.maxConsecutiveUnansweredQuestions': orchNumber(
+    'orch.maxConsecutiveUnansweredQuestions',
+    '连续未回答提问上限',
+    '连续多少次提问未获回答后停止追问',
+    3,
+    1,
+  ),
+  'orch.minOptionsPerQuestion': orchNumber(
+    'orch.minOptionsPerQuestion',
+    '每题最少选项数',
+    'ask_user_question 每次提问的最少选项数',
+    2,
+    1,
+  ),
+  'orch.maxOptionsPerQuestion': orchNumber(
+    'orch.maxOptionsPerQuestion',
+    '每题最多选项数',
+    'ask_user_question 每次提问的最多选项数，需不小于最少选项数',
+    4,
+    1,
+  ),
+  'orch.maxClarifyQuestionsInPrompt': orchNumber(
+    'orch.maxClarifyQuestionsInPrompt',
+    '单轮提问上限',
+    '单条提示中最多出现的澄清问题数',
+    2,
+    1,
+  ),
+  'orch.maxClarifyQuestionsPerRound': orchNumber(
+    'orch.maxClarifyQuestionsPerRound',
+    '每轮提问上限',
+    '每轮澄清最多提出的问题数',
+    3,
+    1,
+  ),
   'orch.subagentApprovalMode': enumSetting(
     'orch.subagentApprovalMode',
     '子代理自动批准',
@@ -666,8 +717,7 @@ export function auditSettingsRegistryGovernance(
   healthy: boolean;
 } {
   const registeredKeyCount =
-    typeof state.registeredKeyCount === 'number' &&
-    Number.isFinite(state.registeredKeyCount)
+    typeof state.registeredKeyCount === 'number' && Number.isFinite(state.registeredKeyCount)
       ? Math.max(0, Math.trunc(state.registeredKeyCount))
       : getAllSettingKeys().length;
   return {

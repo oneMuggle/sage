@@ -32,11 +32,19 @@ vi.mock('../../../features/diagnostic', () => ({
   DiagnosticCard: () => <div data-testid="diagnostic-preview-stub" />,
 }));
 
+import { I18nProvider } from '../../../shared/lib/i18n';
 import {
   formatRuntimeEnvTabAuditJson,
   formatRuntimeEnvTabAuditSnapshot,
   RuntimeEnvTab,
 } from '../RuntimeEnvTab';
+
+const renderTab = () =>
+  render(
+    <I18nProvider defaultLocale="zh">
+      <RuntimeEnvTab />
+    </I18nProvider>,
+  );
 
 const RUNTIME = {
   language: 'python',
@@ -95,12 +103,12 @@ beforeEach(() => {
 describe('RuntimeEnvTab 探测面板', () => {
   it('加载中显示正在探测', () => {
     probeMock.mockReturnValue(new Promise(() => {}));
-    render(<RuntimeEnvTab />);
+    renderTab();
     expect(screen.getByText('正在探测…')).toBeInTheDocument();
   });
 
   it('探测成功列出运行时并自动选中推荐项', async () => {
-    render(<RuntimeEnvTab />);
+    renderTab();
     // effect 重跑会让面板短暂回 loading——全部用 waitFor 重查询，禁用
     // findBy-then-assert 模式（findBy 抓到的元素可能在断言前被重挂卸载）
     await waitFor(() => expect(screen.getByText('3.11.5')).toBeInTheDocument(), { timeout: 30000 });
@@ -122,7 +130,7 @@ describe('RuntimeEnvTab 探测面板', () => {
       success: true,
       output: { runtimes: [], recommended: null, errors: ['py launcher missing'] },
     });
-    render(<RuntimeEnvTab />);
+    renderTab();
     expect(
       await screen.findByText(/未探测到任何运行时/, {}, { timeout: 30000 }),
     ).toBeInTheDocument();
@@ -131,7 +139,7 @@ describe('RuntimeEnvTab 探测面板', () => {
 
   it('探测异常显示失败信息与重试按钮', async () => {
     probeMock.mockRejectedValue(new Error('ipc down'));
-    render(<RuntimeEnvTab />);
+    renderTab();
     expect(
       await screen.findByText('探测失败: ipc down', {}, { timeout: 30000 }),
     ).toBeInTheDocument();
@@ -141,7 +149,7 @@ describe('RuntimeEnvTab 探测面板', () => {
 
 describe('RuntimeEnvTab 诊断面板', () => {
   it('诊断成功显示满足度与诊断项', async () => {
-    render(<RuntimeEnvTab />);
+    renderTab();
     await waitFor(() => expect(screen.getByText('✓ 全部满足')).toBeInTheDocument(), {
       timeout: 30000,
     });
@@ -155,7 +163,7 @@ describe('RuntimeEnvTab 诊断面板', () => {
     // probe 保持 pending，避免 selectedRuntime 变化触发 useEffect 重跑
     probeMock.mockReturnValue(new Promise(() => {}));
     diagnoseMock.mockRejectedValue(new Error('diagnose down'));
-    render(<RuntimeEnvTab />);
+    renderTab();
     expect(
       await screen.findByText('诊断失败: diagnose down', {}, { timeout: 30000 }),
     ).toBeInTheDocument();
@@ -164,13 +172,13 @@ describe('RuntimeEnvTab 诊断面板', () => {
 
 describe('RuntimeEnvTab 试跑', () => {
   it('探测成功后执行按钮可用', async () => {
-    render(<RuntimeEnvTab />);
+    renderTab();
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
   });
 
   it('执行成功展示退出码与 stdout', async () => {
-    render(<RuntimeEnvTab />);
+    renderTab();
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
@@ -180,7 +188,7 @@ describe('RuntimeEnvTab 试跑', () => {
 
   it('执行进入 running 态显示等待批准', async () => {
     execMock.mockReturnValue(new Promise(() => {}));
-    render(<RuntimeEnvTab />);
+    renderTab();
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
@@ -189,7 +197,7 @@ describe('RuntimeEnvTab 试跑', () => {
 
   it('权限拒绝显示拒绝文案', async () => {
     execMock.mockResolvedValue({ success: false, error: '权限拒绝: 需要 exec 审批' });
-    render(<RuntimeEnvTab />);
+    renderTab();
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
@@ -198,7 +206,7 @@ describe('RuntimeEnvTab 试跑', () => {
   });
 
   it('exec 透传语言与运行时路径', async () => {
-    render(<RuntimeEnvTab />);
+    renderTab();
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);

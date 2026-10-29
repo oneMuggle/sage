@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { useSettings } from '../../../features/manage-settings/useSettings';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import {
   formatOrchestrationTabAuditJson,
   formatOrchestrationTabAuditSnapshot,
@@ -39,7 +40,11 @@ function mockSettings(orchOverride?: Partial<(typeof DEFAULT_SETTINGS)['orch']>)
 }
 
 function renderTab(): void {
-  render(<OrchestrationTab />);
+  render(
+    <I18nProvider defaultLocale="zh">
+      <OrchestrationTab />
+    </I18nProvider>,
+  );
 }
 
 beforeEach(() => {
@@ -327,9 +332,9 @@ describe('OrchestrationTab — 提问限制 (2026-10-28)', () => {
 
   it('默认值与后端 OrchSettings 对齐', () => {
     renderTab();
-    expect(
-      (screen.getByTestId('orch-max-consecutive-unanswered') as HTMLInputElement).value,
-    ).toBe('3');
+    expect((screen.getByTestId('orch-max-consecutive-unanswered') as HTMLInputElement).value).toBe(
+      '3',
+    );
     expect((screen.getByTestId('orch-min-options-per-question') as HTMLInputElement).value).toBe(
       '2',
     );

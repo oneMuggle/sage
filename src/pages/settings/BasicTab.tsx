@@ -68,16 +68,16 @@ export function formatBasicTabAuditJson(input: BasicTabAuditInput): string {
 
 /** U10: 界面语言切换 — useI18n.setLocale + localStorage 持久化 */
 function LanguageSelect(): JSX.Element {
-  const { locale, setLocale } = useI18n();
+  const { locale, setLocale, t } = useI18n();
   return (
     <select
       data-testid="settings-language-select"
       value={locale}
       onChange={(e) => setLocale(e.target.value as 'zh' | 'en')}
       className="text-xs border border-border rounded-radius-sm px-2 py-1 bg-surface text-text"
-      aria-label="界面语言"
+      aria-label={t('settings.basic.language_aria_label')}
     >
-      <option value="zh">中文</option>
+      <option value="zh">{t('settings.basic.lang_chinese')}</option>
       <option value="en">English</option>
     </select>
   );
@@ -88,6 +88,7 @@ function LanguageSelect(): JSX.Element {
  * （JSON 文件，close 事件拦截），因此走 window.electronAPI IPC。
  */
 function CloseToTrayCard(): JSX.Element {
+  const { t } = useI18n();
   const [enabled, setEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -112,11 +113,11 @@ function CloseToTrayCard(): JSX.Element {
 
   return (
     <section data-testid="close-to-tray-section">
-      <h3 className="text-sm font-semibold text-text mb-3">托盘</h3>
+      <h3 className="text-sm font-semibold text-text mb-3">{t('settings.basic.tray')}</h3>
       <SettingRow
         anchor="close_to_tray"
-        label="关闭时隐藏到托盘"
-        desc="点关闭按钮时隐藏到系统托盘而非退出；从托盘图标或 Alt+Shift+S 恢复"
+        label={t('settings.basic.close_to_tray_label')}
+        desc={t('settings.basic.close_to_tray_desc')}
       >
         {enabled === null ? (
           <span className="text-xs text-muted">…</span>
@@ -129,6 +130,7 @@ function CloseToTrayCard(): JSX.Element {
 }
 
 export function BasicTab() {
+  const { t } = useI18n();
   const { settings, updateSettings } = useSettings();
   const [inputHistorySize, setInputHistorySizeState] = useState(getInputHistorySize());
   const [proxyTimeoutDraft, setProxyTimeoutDraft] = useState(String(settings.llmProxyTimeoutS));
@@ -148,36 +150,44 @@ export function BasicTab() {
   return (
     <div className="space-y-6">
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">主题</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.basic.theme')}</h3>
         <ThemeSelector />
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">语言 / Language</h3>
-        <SettingRow anchor="locale" label="界面语言" desc="界面显示语言 (U10, 本地持久化)">
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.basic.language_heading')}
+        </h3>
+        <SettingRow
+          anchor="locale"
+          label={t('settings.basic.language_label')}
+          desc={t('settings.basic.language_desc')}
+        >
           <LanguageSelect />
         </SettingRow>
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">外观</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.basic.appearance')}</h3>
         <FontSettingsSection />
         <SettingRow
           anchor="streaming"
-          label="流式输出"
-          desc="开启时逐字显示 AI 回复。关闭后改为等待完整回复一次性返回；此时上游要整段生成完毕才回包，请同步调大下方「LLM 代理超时」，否则长回复会被超时中断。"
+          label={t('settings.basic.streaming_label')}
+          desc={t('settings.basic.streaming_desc')}
         >
           <Toggle value={settings.streaming} onChange={(v) => updateSettings({ streaming: v })} />
         </SettingRow>
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">对话</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.basic.conversation')}</h3>
         <ContextTurnLimitSelect />
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">输入历史</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.basic.input_history')}
+        </h3>
         <SettingRow
           anchor="inputHistorySize"
-          label="历史条数上限"
-          desc="输入框按上下键可调出的最近发送记录数量（每会话独立，1–200）"
+          label={t('settings.basic.history_size_label')}
+          desc={t('settings.basic.history_size_desc')}
         >
           <input
             type="number"
@@ -196,11 +206,11 @@ export function BasicTab() {
         </SettingRow>
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">LLM 重试</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.basic.llm_retry')}</h3>
         <SettingRow
           anchor="llmRetryMaxAttempts"
-          label="最大重试次数"
-          desc="LLM 请求失败后自动重试的次数上限。设为 0 表示禁用自动重试。"
+          label={t('settings.basic.retry_max_label')}
+          desc={t('settings.basic.retry_max_desc')}
         >
           <input
             type="number"
@@ -215,11 +225,14 @@ export function BasicTab() {
             className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
           />
         </SettingRow>
-        <AdvancedSection title="高级选项" description="退避策略参数（通常无需修改）">
+        <AdvancedSection
+          title={t('settings.basic.advanced_title')}
+          description={t('settings.basic.advanced_desc')}
+        >
           <SettingRow
             anchor="llmRetryBaseDelayS"
-            label="退避基数（秒）"
-            desc="首次重试等待时间，后续按指数递增（base × 2^(attempt-1)）"
+            label={t('settings.basic.retry_base_label')}
+            desc={t('settings.basic.retry_base_desc')}
           >
             <input
               type="number"
@@ -236,8 +249,8 @@ export function BasicTab() {
           </SettingRow>
           <SettingRow
             anchor="llmRetryMaxDelayS"
-            label="最大退避（秒）"
-            desc="单次重试等待时间上限，防止指数退避过长"
+            label={t('settings.basic.llm_retry.max_delay.label')}
+            desc={t('settings.basic.llm_retry.max_delay.desc')}
           >
             <input
               type="number"
@@ -255,11 +268,13 @@ export function BasicTab() {
         </AdvancedSection>
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">LLM 任务上限</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.basic.section.llm_total_limit')}
+        </h3>
         <SettingRow
           anchor="llmTotalTimeoutS"
-          label="整轮任务总耗时上限（秒）"
-          desc="单次任务（LLM 调用 + 工具执行 + 子代理）的总耗时上限，超出即终止。0 = 不限上限；设后优先于环境变量 SAGE_LLM_TOTAL_TIMEOUT_S"
+          label={t('settings.basic.llm_total_limit.label')}
+          desc={t('settings.basic.llm_total_limit.desc')}
         >
           <input
             type="number"
@@ -276,11 +291,13 @@ export function BasicTab() {
         </SettingRow>
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">LLM 代理超时</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.basic.section.llm_proxy_timeout')}
+        </h3>
         <SettingRow
           anchor="llmProxyTimeoutS"
-          label="上游读超时（秒）"
-          desc="代理转发到模型端点时，两次收到字节之间的最大等待时间。企业网关偶发卡顿超过该值会触发「LLM 连接中断」；关闭流式输出后应设为大于整段生成耗时（建议 300 以上）。范围 5–1800，改后下一次请求生效。"
+          label={t('settings.basic.llm_proxy_timeout.label')}
+          desc={t('settings.basic.llm_proxy_timeout.desc')}
         >
           <input
             type="number"
@@ -296,11 +313,13 @@ export function BasicTab() {
         </SettingRow>
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">时区</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.basic.section.timezone')}
+        </h3>
         <SettingRow
           anchor="timezone"
-          label="IANA 时区"
-          desc="后端 zoneinfo 校验；非法值会被拒绝 (422)。默认取系统时区（探测失败回退 Asia/Shanghai）"
+          label={t('settings.basic.timezone.label')}
+          desc={t('settings.basic.timezone.desc')}
         >
           <input
             type="text"
@@ -313,8 +332,8 @@ export function BasicTab() {
         </SettingRow>
         <SettingRow
           anchor="logTimezone"
-          label="日志时区"
-          desc="日志时间戳时区. UTC (历史默认) | 本地系统时区 | IANA 时区 (如 Asia/Shanghai). 切换立即生效."
+          label={t('settings.basic.log_timezone.label')}
+          desc={t('settings.basic.log_timezone.desc')}
         >
           <select
             data-testid="settings-log-timezone-select"
@@ -326,8 +345,8 @@ export function BasicTab() {
             }}
             className="w-48 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary font-mono"
           >
-            <option value="UTC">UTC (历史默认)</option>
-            <option value="local">本地系统时区</option>
+            <option value="UTC">{t('settings.basic.log_timezone.utc')}</option>
+            <option value="local">{t('settings.basic.log_timezone.local')}</option>
             <option value="Asia/Shanghai">Asia/Shanghai (+08:00)</option>
             <option value="Asia/Tokyo">Asia/Tokyo (+09:00)</option>
             <option value="Europe/London">Europe/London</option>
@@ -338,12 +357,12 @@ export function BasicTab() {
       </section>
       <CloseToTrayCard />
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">演示</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.basic.section.demo')}</h3>
         <DemoModeSection />
       </section>
       <AttachmentRagCard />
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">数据</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.basic.section.data')}</h3>
         <ResetDefaultsSection />
       </section>
     </div>
