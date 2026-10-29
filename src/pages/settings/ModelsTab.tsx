@@ -14,6 +14,7 @@ import {
 } from '../../entities/routing/taskTypeTierMap';
 import type { DiscoveredModel, ModelSelection } from '../../entities/setting/types';
 
+import { ArenaAccountsToggle } from './ArenaAccountsToggle';
 import type { EndpointsTabProps } from './components';
 import { SettingRow } from './components';
 
@@ -323,6 +324,12 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
       ) : (
         modelsBody
       )}
+
+      {/* 原「通用」tab 的高级区块（2026-10-28 迁入）：Arena 账号池开关。 */}
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">Arena 账号池</h3>
+        <ArenaAccountsToggle />
+      </section>
     </div>
   );
 }

@@ -11,16 +11,15 @@ import { Settings } from '../Settings';
 vi.mock('../useSettings', () => ({
   useSettings: () => ({ settings: {}, updateSettings: vi.fn(), resetSettings: vi.fn() }),
 }));
-vi.mock('../BasicTab', () => ({ BasicTab: () => <div data-testid="tab-basic" /> }));
-vi.mock('../EffectiveSettingsSummary', () => ({ EffectiveSettingsSummary: () => <div /> }));
-vi.mock('../EndpointsTab', () => ({ EndpointsTab: () => <div data-testid="tab-endpoints" /> }));
-vi.mock('../GeneralTab', () => ({
-  GeneralTab: () => (
-    <div data-testid="tab-general">
+vi.mock('../BasicTab', () => ({
+  BasicTab: () => (
+    <div data-testid="tab-basic">
       <div data-settings-anchor="reset_settings">重置全部设置</div>
     </div>
   ),
 }));
+vi.mock('../EffectiveSettingsSummary', () => ({ EffectiveSettingsSummary: () => <div /> }));
+vi.mock('../EndpointsTab', () => ({ EndpointsTab: () => <div data-testid="tab-endpoints" /> }));
 vi.mock('../McpTab', () => ({ McpTab: () => <div data-testid="tab-mcp" /> }));
 vi.mock('../MemorySettingsTab', () => ({
   MemorySettingsTab: () => (
@@ -111,7 +110,7 @@ beforeEach(() => {
 describe('设置搜索锚点定位 (P1-4)', () => {
   it('switches to the owning tab and highlights the anchored row', async () => {
     renderSettings();
-    // 默认落在 general tab；搜索「重置全部设置」应跳到 general 并高亮该行。
+    // 默认落在 basic tab；搜索「重置全部设置」应跳到 basic 并高亮该行。
     // 注意这条同时守住了「命中项就在当前 tab」的场景 —— 此时 activeTab 不变，
     // 定位不能被依赖 activeTab 的 effect 静默吞掉。
     await clickSearchResult('reset_settings');

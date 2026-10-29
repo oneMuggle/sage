@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { DiagnosticCard } from '../../features/diagnostic';
 import { runtimeApi } from '../../shared/api/runtimeApi';
 import type {
   Diagnostic,
@@ -22,6 +23,7 @@ import type {
   RuntimeInfo,
   ToolCallEnvelope,
 } from '../../shared/api/runtimeTypes';
+import { DiagnosticsCard } from '../../widgets/settings/DiagnosticsCard';
 
 import { SettingRow } from './components';
 
@@ -270,6 +272,16 @@ export function RuntimeEnvTab() {
             onRun={runExec}
           />
         </SettingRow>
+      </section>
+
+      {/* 原「通用」tab 的诊断区块（2026-10-28 迁入） */}
+      <section>
+        <h3 className="text-ui-md font-semibold text-ink mb-3">日志</h3>
+        <DiagnosticsCard />
+      </section>
+      <section>
+        <h3 className="text-ui-md font-semibold text-ink mb-3">LLM 诊断预览</h3>
+        <DiagnosticCard />
       </section>
     </div>
   );

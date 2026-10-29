@@ -16,7 +16,6 @@ function filterTabs(tabs: TabEntry[], query: string): TabEntry[] {
 }
 
 const TABS: TabEntry[] = [
-  { key: 'general', label: '通用' },
   { key: 'endpoints', label: '端点' },
   { key: 'models', label: '模型' },
   { key: 'memory', label: '记忆' },

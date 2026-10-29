@@ -18,6 +18,7 @@ import {
   type UsageTrend,
 } from '../../shared/api/usageApi';
 import { Card } from '../../shared/ui';
+import { UsageRequestsTable } from '../../widgets/settings/UsageRequestsTable';
 import { monotoneAreaPath } from '../../widgets/settings/chartUtils';
 
 const RANGE_OPTIONS: { value: UsageRange; label: string }[] = [
@@ -146,6 +147,12 @@ export function UsageStatsTab() {
 
       {/* Model breakdown */}
       {summary && summary.by_model.length > 0 && <ModelBreakdown byModel={summary.by_model} />}
+
+      {/* 请求明细（原「通用」tab 的 UsagePanel 二级面板，2026-10-28 迁入） */}
+      <section className="space-y-3">
+        <h4 className="text-sm font-semibold text-text">请求明细</h4>
+        <UsageRequestsTable />
+      </section>
     </div>
   );
 }

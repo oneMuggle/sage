@@ -7,7 +7,6 @@
  */
 
 export type SettingsTabKey =
-  | 'general'
   | 'basic'
   | 'tools-connections'
   | 'endpoints'
@@ -231,7 +230,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   },
   {
     key: 'spend_limit',
-    tab: 'basic',
+    tab: 'memory',
     label: '每日花费限额',
     labelEn: 'Daily spend limit',
     keywords: 'spend limit 花费 限额 usd 预算',
@@ -645,7 +644,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // （权限/降级/消费上限/自动快照/托盘）索引中已存在，无需重复登记。
   {
     key: 'reset_settings',
-    tab: 'general',
+    tab: 'basic',
     label: '重置全部设置',
     labelEn: 'Reset all settings',
     keywords: 'reset 重置 恢复默认 清除配置 clear defaults',

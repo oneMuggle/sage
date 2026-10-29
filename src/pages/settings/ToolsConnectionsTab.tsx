@@ -14,12 +14,13 @@ import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { GatewaySection } from '../../widgets/settings/GatewaySection';
 import { HooksCard } from '../../widgets/settings/HooksCard';
 
+import { PermissionRulesManager } from './PermissionRulesManager';
 import { SettingRow, Toggle } from './components';
 
 export const PERMISSION_MODES = ['read_only', 'workspace_write', 'prompt', 'full_access'] as const;
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
 
-function PermissionModeSelector() {
+export function PermissionModeSelector() {
   const { t } = useI18n();
   const preference = useConfirmedPreference<PermissionMode>({
     key: 'permission_mode',
@@ -243,6 +244,7 @@ export function ToolsConnectionsTab() {
           {t('settings.section.permission')}
         </h3>
         <PermissionModeSelector />
+        <PermissionRulesManager />
       </section>
       <section>
         <h3 className="text-ui-base font-semibold text-text mb-3">模型降级</h3>

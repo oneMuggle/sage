@@ -11,7 +11,11 @@ import { useSettings } from '../../features/manage-settings/useSettings';
 import { getInputHistorySize, setInputHistorySize } from '../../shared/lib/hooks/useInputHistory';
 import { useI18n } from '../../shared/lib/i18n';
 
+import { AttachmentRagCard } from './AttachmentRagCard';
+import { ContextTurnLimitSelect } from './ContextTurnLimitSelect';
+import { DemoModeSection } from './DemoModeSection';
 import { FontSettingsSection } from './FontSettingsSection';
+import { ResetDefaultsSection } from './ResetDefaultsSection';
 import { ThemeSelector } from './ThemeSelector';
 import { AdvancedSection, SettingRow, Toggle } from './components';
 
@@ -201,6 +205,10 @@ export function BasicTab() {
         </SettingRow>
       </section>
       <section>
+        <h3 className="text-sm font-semibold text-text mb-3">对话</h3>
+        <ContextTurnLimitSelect />
+      </section>
+      <section>
         <h3 className="text-sm font-semibold text-text mb-3">输入历史</h3>
         <SettingRow
           anchor="inputHistorySize"
@@ -386,23 +394,12 @@ export function BasicTab() {
       <CloseToTrayCard />
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">演示</h3>
-        <SettingRow
-          anchor="demoMode"
-          label="演示模式"
-          desc="开启后下次启动跳过后端，各功能页面展示内置示例数据。注意：下次启动生效。"
-        >
-          <Toggle
-            value={settings.demoMode}
-            onChange={(v) => {
-              void updateSettings({ demoMode: v });
-              void window.electronAPI?.setDemoMode?.(v);
-            }}
-          />
-        </SettingRow>
+        <DemoModeSection />
       </section>
+      <AttachmentRagCard />
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">数据</h3>
-        <p className="text-xs text-muted">基础设置已保存至本地存储和后端。</p>
+        <ResetDefaultsSection />
       </section>
     </div>
   );
