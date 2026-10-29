@@ -443,6 +443,27 @@ export const zhWorkspaceAndTools = {
   'git.more_actions': '更多操作',
   'git.copy_all_paths': '复制全部路径',
   'git.copy_markdown': '复制 Markdown 清单',
+  // 工作区切换器 (2026-10-29, P2)
+  'workspace.switcher.source.project': '项目',
+  'workspace.switcher.source.sessionBinding': '会话绑定',
+  'workspace.switcher.source.userPreference': '用户偏好',
+  'workspace.switcher.source.detected': '自动检测',
+  'workspace.switcher.source.scratch': '草稿目录',
+  'workspace.switcher.health.healthy': '正常',
+  'workspace.switcher.health.readOnly': '只读',
+  'workspace.switcher.health.missing': '目录已丢失',
+  'workspace.switcher.health.notADirectory': '不是目录',
+  'workspace.switcher.health.inaccessible': '无法访问',
+  'workspace.switcher.health.unknown': '状态未知',
+  'workspace.switcher.switchTo': '切换到',
+  'workspace.switcher.switching': '切换中…',
+  'workspace.switcher.switched': '已切换工作区',
+  'workspace.switcher.failed': '切换工作区失败',
+  'workspace.switcher.noProjects': '暂无已登记的项目',
+  'workspace.switcher.copyPath': '复制工作区路径',
+  'workspace.switcher.workbench': '工作台',
+  'workspace.switcher.unusable': '当前工作区不可用',
+  'workspace.switcher.scratchHint': '当前使用的是草稿目录，文件不会保存到你的项目里',
 } as const;
 
 export function formatZhWorkspaceAndToolsSummary(): string {

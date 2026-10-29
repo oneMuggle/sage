@@ -18,6 +18,9 @@ from backend.office.chat_refs import ChatOfficeRef
 class SessionCreate(BaseModel):
     title: str = "新对话"
     parent_id: Optional[str] = None
+    # 2026-10-29 (feat/workspace-optimization): Electron 启动时从 cwd 嗅探到的
+    # 项目根。仅作为决策链的低优先级参考输入（低于用户显式偏好），不会被记住。
+    detected_root: Optional[str] = None
 
 
 class SessionUpdate(BaseModel):

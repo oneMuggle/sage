@@ -43,10 +43,12 @@ from backend.data.session_repo import (
     SessionRepository,
     fork_session as fork_session_core,
 )
+from backend.office.session_workspace import bind_session_workspace
 from backend.orchestration.llm_factory import (
     SESSION_MODEL_OVERRIDES_KEY,
     load_session_model_overrides,
 )
+from backend.services.default_workspace import DefaultWorkspaceResolver
 
 # S7-3/L1 (P8): 本模块自持 with_db_lock 绑定 —— make_with_db_lock 会把
 # wrapper.__globals__ 重绑到调用方模块, FastAPI 在该命名空间解析 body 模型
@@ -88,11 +90,39 @@ class SessionModelOverride(BaseModel):
 @router.post("/sessions", response_model=dict)
 @with_db_lock
 def create_session(data: SessionCreate, repo: SessionRepository = Depends(get_session_repo)):
-    """创建新会话"""
+    """创建新会话并绑定默认工作区。
+
+    工作区解析顺序（详见 backend/services/default_workspace.py）：
+    project_path → session_binding → user_preference → detected_root → scratch → None。
+    解析失败（连 scratch 都不可用）时响应里 ``workspace_binding`` 为 null，
+    前端据此渲染"选择文件夹"引导，不会阻塞会话创建。
+    """
     session = repo.create(title=data.title, parent_id=data.parent_id)
+
+    workspace_binding: Optional[Dict[str, Any]] = None
+    try:
+        resolver = DefaultWorkspaceResolver()
+        resolution = resolver.resolve_default_workspace(detected_root=data.detected_root)
+        if resolution is not None:
+            conn = get_database().get_connection()
+            bind_session_workspace(conn, session.id, resolution.path)
+            workspace_binding = {
+                "path": resolution.path,
+                "source": resolution.source.value,
+                "is_fallback": resolution.is_fallback,
+            }
+    except Exception as exc:  # noqa: BLE001 — 工作区解析失败不能阻塞会话创建
+        logger.warning(
+            "create_session: workspace resolution/bind failed (fail-open)",
+            extra={"session_id": session.id, "reason": str(exc)},
+        )
+
     # Phase 2: session_start 生命周期钩子 (observe-only, fail-open)
     _fire_session_hook("session_start", session.id, title=session.title)
-    return session.to_dict()
+
+    result = session.to_dict()
+    result["workspace_binding"] = workspace_binding
+    return result
 
 
 @router.get("/sessions", response_model=List[dict])

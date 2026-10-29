@@ -13,7 +13,7 @@
     "backend/data/database.py": 2152,
     "backend/data/session_repo.py": 1113,
     "backend/data/settings_canonicalizer.py": 877,
-    "backend/main.py": 1722,
+    "backend/main.py": 1725,
     "backend/memory/manager.py": 852,
     "backend/mcp/pool.py": 915,
     "backend/office/edit.py": 1297,
@@ -49,7 +49,7 @@
     "backend/wiki/files.py": 927,
     "backend/zotero/client.py": 1171,
     "electron/__tests__/commands.test.ts": 1191,
-    "electron/main.ts": 2938,
+    "electron/main.ts": 2942,
     "electron/tests/updateIntegration.test.ts": 869,
     "electron/tests/updateManager.test.ts": 1813,
     "electron/updateManager.ts": 1498,
@@ -68,11 +68,11 @@
     "src/pages/settings/PluginsTab.tsx": 820,
     "backend/tests/unit/test_design_routes.py": 975,
     "backend/adapters/out/skill/inproc.py": 949,
-    "backend/api/project_routes.py": 957,
+    "backend/api/project_routes.py": 981,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
     "backend/tools/config_tool.py": 983,
     "backend/scheduler/evolution.py": 1739,
     "src/pages/Chat.tsx": 831,
-    "src/shared/api/types/chatAndEventTypes.ts": 830
+    "src/shared/api/types/chatAndEventTypes.ts": 843
   }
 }

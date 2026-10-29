@@ -128,6 +128,14 @@ vi.mock('../../shared/api/workspaceApi', () => ({
     bind: vi.fn().mockResolvedValue({ binding: null }),
     get: (...args: unknown[]) => mockGet(...args),
     revoke: vi.fn().mockResolvedValue({ revoked: true, generation: 1 }),
+    // 2026-10-29 (feat/workspace-optimization): ChatHeaderBar 挂载的
+    // WorkspaceSwitcher 会读取默认解析与健康状态。
+    setPreference: vi.fn().mockResolvedValue({ path: '/tmp', stored: true }),
+    forgetPreference: vi.fn().mockResolvedValue({ cleared: true }),
+    getDefault: vi.fn().mockResolvedValue({ path: null, source: 'scratch', isFallback: true }),
+    getHealth: vi
+      .fn()
+      .mockResolvedValue({ path: '/tmp', health: 'healthy', detail: null, writable: true, isUsable: true }),
   },
 }));
 

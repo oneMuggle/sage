@@ -109,6 +109,20 @@ export interface WorkspaceCheckpointCreated {
   bytes: number;
 }
 
+/**
+ * 工作区健康状态（2026-10-29, P2）。
+ *
+ * `health` 与后端 `backend/services/workspace_health.py` 的枚举取值一致：
+ * `healthy` / `missing` / `not_a_directory` / `inaccessible` / `read_only`。
+ */
+export interface WorkspaceHealthStatus {
+  path: string | null;
+  health: string | null;
+  detail: string | null;
+  writable: boolean;
+  isUsable: boolean;
+}
+
 interface WorkspaceRevertWire {
   reverted: string[];
   errors: Array<{ path: string; error: string }>;
@@ -351,6 +365,79 @@ export const workspaceApi = {
         { sessionId, checkpointId },
       );
       return { restored: response.restored };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  // ===== 默认工作区决策链 (2026-10-29, P1) =====
+  // 后端成为工作区决策的单一来源；前端不再自行推导。
+
+  /** 解析默认工作区（只读，不绑定）。用于 UI 预览 / 诊断。 */
+  async getDefault(options?: {
+    sessionId?: string;
+    detectedRoot?: string;
+  }): Promise<{ path: string | null; source: string | null; isFallback: boolean }> {
+    try {
+      const response = await invoke<{
+        path: string | null;
+        source: string | null;
+        is_fallback: boolean;
+      }>('workspace_default', {
+        sessionId: options?.sessionId,
+        detectedRoot: options?.detectedRoot,
+      });
+      return {
+        path: response.path,
+        source: response.source,
+        isFallback: response.is_fallback,
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 把用户显式选择的目录写入 ``preferences``（最高优先级输入）。 */
+  async setPreference(path: string): Promise<{ path: string | null; stored: boolean }> {
+    try {
+      const response = await invoke<{ path: string | null; stored: boolean }>(
+        'workspace_set_preference',
+        { path },
+      );
+      return response;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 清除用户偏好，下一次 resolve 走 detected/scratch 兜底。 */
+  async forgetPreference(): Promise<{ path: string | null; stored: boolean }> {
+    try {
+      return await invoke<{ path: string | null; stored: boolean }>(
+        'workspace_forget_preference',
+      );
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 工作区健康状态（只读探测目录是否仍可用）。 */
+  async getHealth(path: string): Promise<WorkspaceHealthStatus> {
+    try {
+      const response = await invoke<{
+        path: string | null;
+        health: string | null;
+        detail: string | null;
+        writable: boolean;
+        is_usable: boolean;
+      }>('workspace_health', { path });
+      return {
+        path: response.path,
+        health: response.health,
+        detail: response.detail,
+        writable: response.writable,
+        isUsable: response.is_usable,
+      };
     } catch (error) {
       throw handleApiError(error);
     }
