@@ -15,7 +15,7 @@ import type { TranslationKey } from '../../shared/lib/i18n';
 import type { Message } from '../../shared/lib/store';
 import type { ContextMenuItemSpec } from '../../shared/ui/ContextMenu/types';
 
-export type MessageMenuMessage = Pick<Message, 'id' | 'role' | 'content'>;
+type MessageMenuMessage = Pick<Message, 'id' | 'role' | 'content'>;
 
 export interface MessageContextMenuParams {
   message: MessageMenuMessage;

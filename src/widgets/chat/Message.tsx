@@ -227,17 +227,15 @@ function MessageComponent({
   const webOffset = wikiOffset + wikiSources.length;
   const toolOffset = webOffset + webSources.length;
 
-  // 右键菜单 spec 在打开时求值：选区与流式状态取点击当下的值。
-  // spec 构建与消息渲染树解耦，不会在流式 token 更新路径上重复执行。
+  // 右键菜单 spec 打开时求值（选区/流式状态取当下值），与渲染树解耦避免 token 路径重算。
   const buildContextMenuItems = () => {
     const quotable = getQuotableSelection(window.getSelection(), bubbleRef.current);
     const selectionText = quotable?.text ?? null;
-    const copy = (text: string) => {
+    const copy = (text: string) =>
       void copyToClipboard(text, {
         successMessage: t('contextMenu.common.copied'),
         errorMessage: t('contextMenu.common.copyFailed'),
       });
-    };
     return buildMessageContextMenuItems({
       message,
       t,

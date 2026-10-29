@@ -8,7 +8,7 @@
 export const MENU_CONTENT_CLASS =
   'z-50 min-w-[10rem] max-w-[22rem] overflow-hidden rounded-lg border border-line bg-bg p-1 shadow-lg animate-fade-enter';
 
-export const MENU_ITEM_BASE_CLASS =
+const MENU_ITEM_BASE_CLASS =
   'relative flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50';
 
 export const MENU_ITEM_CLASS = `${MENU_ITEM_BASE_CLASS} text-ink data-[highlighted]:bg-bg-hover`;

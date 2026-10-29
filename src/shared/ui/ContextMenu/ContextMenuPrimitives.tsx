@@ -1,6 +1,6 @@
 import * as ContextMenuPrimitive from '@radix-ui/react-context-menu';
 import clsx from 'clsx';
-import { Check, ChevronRight, Circle } from 'lucide-react';
+import { Check, ChevronRight } from 'lucide-react';
 import type { ComponentPropsWithoutRef, ElementRef } from 'react';
 import { forwardRef } from 'react';
 
@@ -23,10 +23,7 @@ import {
  */
 
 export const ContextMenuRoot = ContextMenuPrimitive.Root;
-export const ContextMenuGroup = ContextMenuPrimitive.Group;
-export const ContextMenuPortal = ContextMenuPrimitive.Portal;
 export const ContextMenuSub = ContextMenuPrimitive.Sub;
-export const ContextMenuRadioGroup = ContextMenuPrimitive.RadioGroup;
 export const ContextMenuTrigger = ContextMenuPrimitive.Trigger;
 
 export const ContextMenuSubTrigger = forwardRef<
@@ -108,25 +105,6 @@ export const ContextMenuCheckboxItem = forwardRef<
   </ContextMenuPrimitive.CheckboxItem>
 ));
 ContextMenuCheckboxItem.displayName = ContextMenuPrimitive.CheckboxItem.displayName;
-
-export const ContextMenuRadioItem = forwardRef<
-  ElementRef<typeof ContextMenuPrimitive.RadioItem>,
-  ComponentPropsWithoutRef<typeof ContextMenuPrimitive.RadioItem>
->(({ className, children, ...props }, ref) => (
-  <ContextMenuPrimitive.RadioItem
-    ref={ref}
-    className={clsx(MENU_CHECK_ITEM_CLASS, className)}
-    {...props}
-  >
-    <span className="absolute left-2 flex h-4 w-4 items-center justify-center">
-      <ContextMenuPrimitive.ItemIndicator>
-        <Circle aria-hidden className="h-2 w-2 fill-current" />
-      </ContextMenuPrimitive.ItemIndicator>
-    </span>
-    {children}
-  </ContextMenuPrimitive.RadioItem>
-));
-ContextMenuRadioItem.displayName = ContextMenuPrimitive.RadioItem.displayName;
 
 export const ContextMenuLabel = forwardRef<
   ElementRef<typeof ContextMenuPrimitive.Label>,

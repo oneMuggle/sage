@@ -7,7 +7,7 @@ import type { OfficeDocType, OfficeManagedRef } from '../../shared/types/electro
 import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
 import type { ContextMenuItemSpec } from '../../shared/ui/ContextMenu/types';
 
-export interface OfficeRefChipData {
+interface OfficeRefChipData {
   docId: string;
   docType: OfficeDocType;
   filename: string;

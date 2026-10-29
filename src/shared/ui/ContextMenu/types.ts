@@ -23,7 +23,7 @@ export interface ContextMenuActionItem {
   onSelect: () => void | Promise<void>;
 }
 
-export interface ContextMenuCheckboxItemSpec {
+interface ContextMenuCheckboxItemSpec {
   kind: 'checkbox';
   id: string;
   label: string;
@@ -33,13 +33,13 @@ export interface ContextMenuCheckboxItemSpec {
   onCheckedChange: (next: boolean) => void;
 }
 
-export interface ContextMenuSeparatorSpec {
+interface ContextMenuSeparatorSpec {
   kind: 'separator';
   id: string;
   hidden?: boolean;
 }
 
-export interface ContextMenuLabelSpec {
+interface ContextMenuLabelSpec {
   kind: 'label';
   id: string;
   label: string;
@@ -51,8 +51,3 @@ export type ContextMenuItemSpec =
   | ContextMenuCheckboxItemSpec
   | ContextMenuSeparatorSpec
   | ContextMenuLabelSpec;
-
-/** 过滤 hidden 项。 */
-export function visibleMenuItems(items: readonly ContextMenuItemSpec[]): ContextMenuItemSpec[] {
-  return items.filter((item) => !item.hidden);
-}

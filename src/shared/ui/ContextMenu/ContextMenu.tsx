@@ -37,9 +37,6 @@ function buildMenuSnapshot(
   ];
 }
 
-export * from './ContextMenuPrimitives';
-export type { ContextMenuItemSpec } from './types';
-
 /**
  * 右键上下文菜单 —— 声明式包装（Radix ContextMenu）。
  *

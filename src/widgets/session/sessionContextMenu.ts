@@ -14,7 +14,7 @@ import type { TranslationKey } from '../../shared/lib/i18n';
 import type { Session } from '../../shared/lib/store';
 import type { ContextMenuItemSpec } from '../../shared/ui/ContextMenu/types';
 
-export type SessionMenuSession = Pick<Session, 'id' | 'title' | 'is_pinned' | 'fork_root'>;
+type SessionMenuSession = Pick<Session, 'id' | 'title' | 'is_pinned' | 'fork_root'>;
 
 export interface SessionContextMenuParams {
   session: SessionMenuSession;
