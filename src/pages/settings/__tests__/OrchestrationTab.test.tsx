@@ -221,10 +221,7 @@ describe('OrchestrationTab — 计划前置旋钮 (Round 3)', () => {
     });
   });
 
-  it('exports OrchestrationTab audit snapshot and JSON helpers and renders copy controls', () => {
-    renderTab();
-    expect(screen.getByTestId('orchestration-tab-copy-audit')).toBeInTheDocument();
-
+  it('exports OrchestrationTab audit snapshot and JSON helpers; copy controls moved to the audit export tab (P3)', () => {
     const snapshot = formatOrchestrationTabAuditSnapshot({
       planPreflightEnabled: true,
       planScoutEnabled: true,

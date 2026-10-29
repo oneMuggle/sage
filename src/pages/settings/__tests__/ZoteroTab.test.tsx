@@ -189,11 +189,7 @@ describe('ZoteroTab 搜索', () => {
     expect(screen.getByText(/批注 \(\d\)/)).toBeInTheDocument();
   });
 
-  it('exports ZoteroTab audit snapshot and JSON helpers and renders copy controls', async () => {
-    renderTab();
-    await waitFor(() => expect(screen.getByText('已连接')).toBeInTheDocument());
-    expect(screen.getByTestId('zotero-tab-copy-audit')).toBeInTheDocument();
-
+  it('exports ZoteroTab audit snapshot and JSON helpers; copy controls moved to the audit export tab (P3)', async () => {
     const snapshot = formatZoteroTabAuditSnapshot({
       connected: true,
       statusLoading: false,

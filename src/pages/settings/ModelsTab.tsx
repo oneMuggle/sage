@@ -3,7 +3,6 @@
  */
 
 import { clsx } from 'clsx';
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { ROUTING_TASK_TYPES } from '../../entities/routing/taskType';
@@ -71,7 +70,6 @@ interface GroupedModel {
 export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
   // Task 6 (2026-09-15): 跳转到 /model-catalog 管理页
   const navigate = useNavigate();
-  const [copiedAudit, setCopiedAudit] = useState(false);
   // 防御性检查: 旧数据/绕过 mergeWithDefaults 的代码路径可能让 discoveredModels 为 null
   //   (data layer mergeWithDefaults 已用 DEFAULT_ENDPOINT 兜底, 此处为 belt-and-suspenders).
   const endpointsWithModels = settings.endpoints.filter(
@@ -112,43 +110,13 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
     0,
   );
 
-  /* v8 ignore start */
-  const handleCopyAudit = async () => {
-    const text = formatModelsTabAuditSnapshot({
-      endpointCount: endpointsWithModels.length,
-      discoveredModelCount,
-      chatModel: chatModel.modelId,
-      visionModel: visionModel.modelId,
-      embeddingModel: embeddingModel.modelId,
-      maxContext: settings.maxContext,
-      autoContext: settings.autoContext,
-      temperature: settings.temperature,
-    });
-    setCopiedAudit(true);
-    await navigator.clipboard?.writeText(text);
-  };
-
-  /* v8 ignore stop */
-
   const modelsBody = (
     <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-text">模型选择</h3>
-          <p className="text-xs text-muted mt-0.5">
-            {endpointsWithModels.length} 个端点，共 {discoveredModelCount} 个模型
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span
-            data-testid="models-tab-copy-audit"
-            onClick={() => void handleCopyAudit()}
-            title="复制模型选择审计快照"
-            className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
-          >
-            {copiedAudit ? '已复制快照' : '复制快照'}
-          </span>
-        </div>
+      <div>
+        <h3 className="text-sm font-semibold text-text">模型选择</h3>
+        <p className="text-xs text-muted mt-0.5">
+          {endpointsWithModels.length} 个端点，共 {discoveredModelCount} 个模型
+        </p>
       </div>
 
       {/* R31b: 自动模式只藏「对话模型」——路由只重选对话模型，其余能力

@@ -23,6 +23,7 @@ import { LearnedPreferences } from '../../widgets/evolution/LearnedPreferences';
 import { RecallMetrics } from '../../widgets/evolution/RecallMetrics';
 import { HarnessDashboard } from '../../widgets/harness/HarnessDashboard';
 
+import { AuditExportTab } from './AuditExportTab';
 import { BasicTab } from './BasicTab';
 import { FeedbackTab } from './FeedbackTab';
 import { GlobalRulesTab } from './GlobalRulesTab';
@@ -57,7 +58,8 @@ export type SettingsTabKey =
   | 'evolution'
   | 'harness'
   // 2026-10-29: 用户反馈 Tab（管理员转发 + 双向会话，上游 #2654）
-  | 'feedback';
+  | 'feedback'
+  | 'audit-export';
 
 export type SettingsGroupId =
   | 'basic'
@@ -210,6 +212,13 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
     labelKey: 'settings.tab.harness',
     group: 'advanced',
     render: () => <HarnessDashboard />,
+  },
+  {
+    key: 'audit-export',
+    labelKey: 'settings.tab.audit-export',
+    group: 'advanced',
+    // P3: 11 个 tab 的 17 个「复制摘要 / JSON」按钮集中在此。
+    render: () => <AuditExportTab />,
   },
   {
     key: 'feedback',

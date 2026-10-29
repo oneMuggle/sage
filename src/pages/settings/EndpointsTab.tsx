@@ -59,38 +59,6 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
   const [probeResults, setProbeResults] = useState<Record<string, ProbeResult>>({});
   // A2: 从 providerRegistry 读取协议选项（替代原硬编码常量）
   const PROTOCOL_OPTIONS = useMemo(() => getProtocolOptions(), []);
-  const [copiedSummary, setCopiedSummary] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
-
-  /* v8 ignore start */
-  const handleCopySummary = async () => {
-    const text = formatEndpointsTabAuditSnapshot({
-      endpointCount: settings.endpoints.length,
-      editingId,
-      testingId,
-    });
-    setCopiedSummary(true);
-    try {
-      await navigator.clipboard?.writeText(text);
-    } catch {
-      // Clipboard may be unavailable in headless environments
-    }
-  };
-
-  const handleCopyJson = async () => {
-    const text = formatEndpointsTabAuditJson({
-      endpointCount: settings.endpoints.length,
-      editingId,
-      testingId,
-    });
-    setCopiedJson(true);
-    try {
-      await navigator.clipboard?.writeText(text);
-    } catch {
-      // Clipboard may be unavailable in headless environments
-    }
-  };
-  /* v8 ignore stop */
 
   const handleAdd = () => {
     const newEndpoint: EndpointConfig = {
@@ -188,25 +156,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-text">端点配置</h3>
-          <span
-            onClick={() => void handleCopySummary()}
-            data-testid="endpoints-tab-copy-summary"
-            title="复制端点配置审计摘要"
-            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
-          >
-            {copiedSummary ? '已复制' : '复制摘要'}
-          </span>
-          <span
-            onClick={() => void handleCopyJson()}
-            data-testid="endpoints-tab-copy-json"
-            title="复制端点配置审计 JSON"
-            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
-          >
-            {copiedJson ? '已复制' : 'JSON'}
-          </span>
-        </div>
+        <h3 className="text-sm font-semibold text-text">端点配置</h3>
         <button
           onClick={handleAdd}
           className="px-3 py-1.5 text-xs bg-primary text-text-inverse rounded-radius-sm hover:bg-primary-hover transition-colors"

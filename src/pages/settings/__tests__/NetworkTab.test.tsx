@@ -464,7 +464,7 @@ describe('NetworkTab render events metrics (R25)', () => {
     });
   });
 
-  it('formats and copies network tab audit snapshot and JSON', async () => {
+  it('formats network tab audit snapshot and JSON; copy controls moved to the audit export tab (P3)', async () => {
     expect(
       formatNetworkTabAuditSnapshot({
         mode: 'intranet',
@@ -492,12 +492,6 @@ describe('NetworkTab render events metrics (R25)', () => {
       primaryEngine: 'duckduckgo',
     });
 
-    renderTab();
-    const summaryBtn = await screen.findByTestId('network-tab-copy-summary');
-    const jsonBtn = screen.getByTestId('network-tab-copy-json');
-    fireEvent.click(summaryBtn);
-    expect(summaryBtn.textContent).toBe('已复制');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn.textContent).toBe('已复制');
+    // P3: 页内「复制快照/JSON」按钮已收敛到「审计导出」tab —— NetworkTab 不再渲染这两枚按钮。
   });
 });

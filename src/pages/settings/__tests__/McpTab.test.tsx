@@ -432,7 +432,7 @@ describe('McpTab', () => {
     },
   );
 
-  it('formats and copies MCP tab audit snapshot and JSON', async () => {
+  it('formats MCP tab audit snapshot and JSON; copy controls moved to the audit export tab (P3)', async () => {
     expect(
       formatMcpTabAuditSnapshot({
         serverCount: 3,
@@ -457,13 +457,6 @@ describe('McpTab', () => {
       hasError: true,
     });
 
-    render(<McpTab />);
-    await waitFor(() => expect(mocks.status).toHaveBeenCalled());
-    const summaryBtn = screen.getByTestId('mcp-tab-copy-summary');
-    const jsonBtn = screen.getByTestId('mcp-tab-copy-json');
-    fireEvent.click(summaryBtn);
-    expect(summaryBtn.textContent).toBe('已复制');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn.textContent).toBe('已复制');
+    // P3: 页内「复制快照/JSON」按钮已收敛到「审计导出」tab —— McpTab 不再渲染这两枚按钮。
   });
 });

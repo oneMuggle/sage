@@ -730,6 +730,14 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords:
       'feedback_include_diagnostics 诊断 日志 自动 附带 diagnostics log attach 反馈 feedback',
   },
+  // ── 诊断与实验 ──
+  {
+    key: 'audit-export',
+    tab: 'audit-export',
+    label: '审计导出',
+    labelEn: 'Audit export',
+    keywords: 'audit export 审计 导出 复制 摘要 json 诊断',
+  },
 ];
 
 export function searchSettings(query: string): SettingsSearchEntry[] {

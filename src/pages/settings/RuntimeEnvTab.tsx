@@ -116,7 +116,6 @@ export function RuntimeEnvTab() {
   const [exec, setExec] = useState<ExecState>({ kind: 'idle' });
   const [selectedRuntime, setSelectedRuntime] = useState<string | null>(null);
   const [code, setCode] = useState('print("hello from Sage runtime assistant")');
-  const [copiedAudit, setCopiedAudit] = useState(false);
 
   const runProbe = useCallback(async () => {
     setProbe({ kind: 'loading' });
@@ -206,43 +205,14 @@ export function RuntimeEnvTab() {
     runDiagnose();
   }, [runProbe, runDiagnose]);
 
-  const runtimeCount = probe.kind === 'ok' ? probe.data.runtimes.length : 0;
-
-  /* v8 ignore start */
-  const handleCopyAudit = async () => {
-    const text = formatRuntimeEnvTabAuditSnapshot({
-      probeKind: probe.kind,
-      runtimeCount,
-      selectedRuntime,
-      diagnoseKind: diagnose.kind,
-      execKind: exec.kind,
-    });
-    setCopiedAudit(true);
-    await navigator.clipboard?.writeText(text);
-  };
-
-  /* v8 ignore stop */
-
   return (
     <div className="space-y-6">
       <section>
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div>
-            <h3 className="text-ui-md font-semibold text-ink">本机运行时</h3>
-            <p className="text-xs text-muted mt-1">
-              自动发现 Python、Node.js 等运行时。仅只读探测，不触发执行。
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span
-              data-testid="runtime-env-tab-copy-audit"
-              onClick={() => void handleCopyAudit()}
-              title="复制运行环境与诊断审计快照"
-              className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-ink cursor-pointer select-none"
-            >
-              {copiedAudit ? '已复制快照' : '复制快照'}
-            </span>
-          </div>
+        <div className="mb-3">
+          <h3 className="text-ui-md font-semibold text-ink">本机运行时</h3>
+          <p className="text-xs text-muted mt-1">
+            自动发现 Python、Node.js 等运行时。仅只读探测，不触发执行。
+          </p>
         </div>
         <ProbePanel state={probe} onRetry={runProbe} />
       </section>

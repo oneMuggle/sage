@@ -55,8 +55,6 @@ export function MemoryTab() {
     semantic: boolean;
   } | null>(null);
   const [selecting, setSelecting] = useState(false);
-  const [copiedSummary, setCopiedSummary] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   // R17-B: 记忆固化手动触发
   const [consolidating, setConsolidating] = useState(false);
   const [consolidationResult, setConsolidationResult] = useState<{
@@ -267,49 +265,7 @@ export function MemoryTab() {
   return (
     <div className="space-y-6">
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-text">语义嵌入 (检索增强)</h3>
-          <div className="flex items-center gap-1.5">
-            <span
-              onClick={() => {
-                /* v8 ignore start */
-                const text = formatMemoryTabAuditSnapshot({
-                  embedderType: embedderStatus?.type,
-                  semantic: embedderStatus?.semantic,
-                  modelReady: embedderStatus?.model_ready,
-                  backupCount: backups.length,
-                });
-                setCopiedSummary(true);
-                void navigator.clipboard?.writeText(text).catch(() => {});
-                /* v8 ignore stop */
-              }}
-              data-testid="memory-tab-copy-summary"
-              title="复制记忆管理审计摘要"
-              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
-            >
-              {copiedSummary ? '已复制' : '复制摘要'}
-            </span>
-            <span
-              onClick={() => {
-                /* v8 ignore start */
-                const text = formatMemoryTabAuditJson({
-                  embedderType: embedderStatus?.type,
-                  semantic: embedderStatus?.semantic,
-                  modelReady: embedderStatus?.model_ready,
-                  backupCount: backups.length,
-                });
-                setCopiedJson(true);
-                void navigator.clipboard?.writeText(text).catch(() => {});
-                /* v8 ignore stop */
-              }}
-              data-testid="memory-tab-copy-json"
-              title="复制记忆管理审计 JSON"
-              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
-            >
-              {copiedJson ? '已复制' : 'JSON'}
-            </span>
-          </div>
-        </div>
+        <h3 className="text-sm font-semibold text-text mb-3">语义嵌入 (检索增强)</h3>
         {embedderStatus ? (
           <div className="space-y-2 text-xs text-text-secondary">
             <p>
