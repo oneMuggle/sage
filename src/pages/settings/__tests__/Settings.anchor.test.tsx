@@ -35,7 +35,12 @@ vi.mock('../MemorySettingsTab', () => ({
 vi.mock('../ModelsTab', () => ({
   ModelsTab: () => (
     <div data-testid="tab-models">
-      <div data-settings-anchor="temperature">Temperature</div>
+      {/* 真实 ModelsTab 把温度/上下文参数收进默认闭合的「高级」折叠；
+          这里复刻该结构，覆盖「跳转时先展开闭合 details」路径。 */}
+      <details>
+        <summary>高级</summary>
+        <div data-settings-anchor="temperature">Temperature</div>
+      </details>
     </div>
   ),
 }));
@@ -133,6 +138,17 @@ describe('设置搜索锚点定位 (P1-4)', () => {
     await clickSearchResult('orch.runTokenBudget');
     expect(screen.getByTestId('tab-orchestration')).toBeInTheDocument();
     await waitForFlash('orch.runTokenBudget');
+  });
+
+  it('opens a closed <details> ancestor before highlighting the anchored row (R31c)', async () => {
+    // 「高级」折叠内的锚点（Temperature / max_context 等）在闭合 details 中
+    // 不会被渲染出来：跳转必须先展开祖先 details，再滚动 + 高亮。
+    renderSettings();
+    await clickSearchResult('temperature');
+    await waitForFlash('temperature');
+    const details = document.querySelector('details');
+    expect(details).not.toBeNull();
+    expect(details?.open).toBe(true);
   });
 
   it('falls back to plain tab switching when the entry has no anchor', async () => {
