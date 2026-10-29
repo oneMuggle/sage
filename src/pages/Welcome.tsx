@@ -7,6 +7,7 @@ import { listModels } from '../entities/model-catalog/api';
 import type { CandidateModel } from '../entities/model-catalog/types';
 import { isEndpointConfigured } from '../entities/setting/endpointReadiness';
 import {
+  chipRecommendations,
   defaultRecommendations,
   type AssistantRecommendation,
 } from '../entities/welcome/recommendations';
@@ -115,6 +116,7 @@ export function Welcome() {
   const [briefRecommendation, setBriefRecommendation] = useState<AssistantRecommendation | null>(
     null,
   );
+  const [recommendationDraft, setRecommendationDraft] = useState<{ text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [reusedBrief, setReusedBrief] = useState<TaskBrief | undefined>();
 
@@ -282,9 +284,11 @@ export function Welcome() {
     setWorktreeId(value.worktreeId);
   }, []);
 
+  // 首屏 chip 只回填输入框，不自动发送 —— 用户往往还要先挂上自己的资料再发。
   const handleRecommendationSelect = useCallback((rec: AssistantRecommendation) => {
     setReusedBrief(undefined);
-    setBriefRecommendation(rec);
+    setBriefRecommendation(null);
+    setRecommendationDraft({ text: rec.prompt });
   }, []);
 
   // 新会话页的草稿会话：用户在新会话页输入 `@` 时需要 sessionId 才能搜索
@@ -467,6 +471,7 @@ export function Welcome() {
           onSend={handleWelcomeSend}
           onAtQueryActive={handleAtQueryActive}
           disabled={submitting}
+          draft={recommendationDraft}
           toolbar={
             <WelcomeToolbar
               projectId={projectId}
@@ -493,20 +498,20 @@ export function Welcome() {
           <button
             type="button"
             onClick={() => navigate('/projects')}
-            className="px-3 py-2 rounded border border-ui-border"
+            className="px-3 py-2 rounded border border-border"
           >
             {locale === 'en' ? 'Project workbench' : '项目工作台'}
           </button>
           <button
             type="button"
             onClick={() => navigate('/office')}
-            className="px-3 py-2 rounded border border-ui-border"
+            className="px-3 py-2 rounded border border-border"
           >
             {locale === 'en' ? 'Documents and review' : '文档与验收'}
           </button>
         </div>
         <AssistantRecommendations
-          recommendations={defaultRecommendations}
+          recommendations={chipRecommendations}
           onSelect={handleRecommendationSelect}
         />
 

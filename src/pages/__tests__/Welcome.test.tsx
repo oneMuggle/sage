@@ -64,7 +64,7 @@ describe('Welcome page', () => {
     renderWelcome();
     expect(screen.getByText(/你好，我是 Sage/)).toBeInTheDocument();
     expect(screen.getByTestId('welcome-input-card')).toBeInTheDocument();
-    expect(screen.getAllByTestId('recommendation-card')).toHaveLength(5);
+    expect(screen.getAllByTestId('recommendation-chip')).toHaveLength(4);
     expect(screen.getByRole('toolbar', { name: /quick actions/ })).toBeInTheDocument();
   });
 
@@ -80,14 +80,14 @@ describe('Welcome page', () => {
     expect(textarea.getAttribute('placeholder')?.length).toBeGreaterThan(0);
   });
 
-  it('opens a deliverable brief instead of dropping a bare prompt into the input', () => {
+  it('fills the input with the starter prompt instead of opening a brief dialog', () => {
     renderWelcome();
-    const reportCard = screen.getAllByTestId('recommendation-card')[0]!;
-    fireEvent.click(reportCard);
-    const goal = screen.getByTestId('task-brief-goal') as HTMLTextAreaElement;
-    expect(goal.value).toContain('报告');
-    // 未配置对话模型时不承诺可以启动任务
-    expect(screen.getByTestId('task-brief-submit')).toBeDisabled();
+    const reportChip = screen.getAllByTestId('recommendation-chip')[0]!;
+    fireEvent.click(reportChip);
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(textarea.value).toContain('报告');
+    // 首屏 chip 只回填输入框，不弹结构化简报表单
+    expect(screen.queryByTestId('task-brief-goal')).not.toBeInTheDocument();
   });
 
   it('creates a session when submitting from the input card', async () => {
