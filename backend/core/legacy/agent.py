@@ -1504,24 +1504,37 @@ class SageAgent:
         # 2. OrchSettings.max_iterations（UI 可配置，2026-10-20 新增）
         # 3. AgentProfile.max_iterations（profile 硬编码默认值）
         # 4. DEFAULT_MAX_ITERATIONS（兜底值 10）
+        #
+        # ``_limit_source`` 记录本次上限来自哪一层，随 FAILED 事件下发给前端，
+        # 让用户知道该改哪个配置而不是只看到一个数字。
+        _profile_id = ""
+        if isinstance(self.profile, dict):
+            _profile_id = str(self.profile.get("id") or "")
         if max_iterations is not None:
             effective_max_iterations = max_iterations
+            _limit_source = "explicit"
         else:
             try:
                 from backend.orchestration.orch_settings import load_orch_settings
                 orch_settings_max = load_orch_settings().max_iterations
                 if orch_settings_max > 0:
                     effective_max_iterations = orch_settings_max
+                    _limit_source = "orch.global"
                 elif self.profile:
                     effective_max_iterations = self.profile.get("max_iterations", DEFAULT_MAX_ITERATIONS)
+                    _limit_source = "profile"
                 else:
                     effective_max_iterations = DEFAULT_MAX_ITERATIONS
+                    _limit_source = "default"
             except Exception:  # noqa: BLE001 — settings 读取失败回落 profile 默认
                 effective_max_iterations = (
                     self.profile.get("max_iterations", DEFAULT_MAX_ITERATIONS)
                     if self.profile
                     else DEFAULT_MAX_ITERATIONS
                 )
+                _limit_source = "profile" if self.profile else "default"
+        # 无 profile 时退到 agent_id，保证错误文本里始终能指出是哪个 agent。
+        _limit_agent_id = _profile_id or str(self.agent_id or "")
 
         # 如果传入了动态 LLM 配置,临时覆盖
         original_llm_client = self.llm_client
@@ -1687,13 +1700,23 @@ class SageAgent:
                                 with contextlib.suppress(AttributeError):  # 测试替身可能没有该属性
                                     self.llm_client.stream_unsupported = True
                                 response = None
-                            if response is not None and stream_reasoning_parts:
-                                yield AgentEvent(
-                                    state=AgentState.REASONING,
-                                    iteration=i,
-                                    reasoning="".join(stream_reasoning_parts),
-                                    agent_id=self.agent_id,
+                            if response is not None:
+                                # 优先用流式 reasoning_delta 汇总；provider 只在
+                                # response.reasoning_content 里回传 reasoning（不发
+                                # delta 事件）时兜底补发，否则流式路径会把思考过程
+                                # 整段丢掉——非流式路径本来就有这个兜底。
+                                _stream_reasoning = (
+                                    "".join(stream_reasoning_parts)
+                                    if stream_reasoning_parts
+                                    else (getattr(response, "reasoning_content", None) or "")
                                 )
+                                if _stream_reasoning:
+                                    yield AgentEvent(
+                                        state=AgentState.REASONING,
+                                        iteration=i,
+                                        reasoning=_stream_reasoning,
+                                        agent_id=self.agent_id,
+                                    )
                         if response is None:
                             # 非流式回退路径：chat() 是单次 await，回调里无法
                             # yield（会打断协程），因此先把重试事件暂存，调用
@@ -2460,12 +2483,19 @@ class SageAgent:
                     agent_id=self.agent_id,
                 )
 
+            # agent= 只在能识别出 agent 时下发；空值会渲染成 "agent=, source=…"
+            # 这种畸形装饰，前端解析器虽能容忍，但日志里很难看。
+            _limit_agent_part = f", agent={_limit_agent_id}" if _limit_agent_id else ""
             yield AgentEvent(
                 state=AgentState.FAILED,
                 iteration=effective_max_iterations,
                 # 上限值随错误码一并下发，前端据此提示用户
                 # "该调到多少"，而不是只说"超上限了"。
-                error=f"max_iterations_exceeded (limit={effective_max_iterations})",
+                # agent= / source= 让前端能指出是哪个 Agent 打的哪个配置。
+                error=(
+                    f"max_iterations_exceeded (limit={effective_max_iterations}"
+                    f"{_limit_agent_part}, source={_limit_source})"
+                ),
                 agent_id=self.agent_id,
             )
         finally:

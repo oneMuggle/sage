@@ -476,9 +476,23 @@ export function useChat() {
         watchdogSilenceMs: (settings.llmTotalTimeoutS || 1800) * 1000,
       };
 
+      // 2026-10-29: 本轮气泡是否已有真实正文 (content_delta / done.content)。
+      // 中间态占位符(思考/调工具/观察结果)此前无条件 replace 气泡正文 ——
+      // 一旦 LLM 已流式产出文字,下一个 acting/observing 事件就把这些字擦掉。
+      // 迭代上限失败(无 DONE 收尾)时用户最终只看到一句占位符,完全看不到
+      // 模型已经写出的内容。step_done 切新气泡时重置。
+      let hasRealContent = false;
+
       const appendContent = (next: string): void => {
         // I5: 流式逐字 — appendContent 通过 store 累加 (跨路由切换保留)
-        useChatStreamStore.getState().appendContent(sid, assistantId, next);
+        const store = useChatStreamStore.getState();
+        if (hasRealContent) {
+          store.appendContent(sid, assistantId, next);
+        } else {
+          // 首个真实 token:替换占位符,而不是接在 "🤔 思考中…" 后面
+          store.replaceContent(sid, assistantId, next);
+        }
+        hasRealContent = true;
       };
 
       // S8 (round4): 后台会话注意力通知 —— 目标会话非当前查看 / 窗口不可见
@@ -496,6 +510,8 @@ export function useChat() {
       // appendContent 用于累积真实回答 (content_delta / done.content)，
       // replaceContent 用于切换中间态占位符。
       const replaceContent = (next: string): void => {
+        // 已有真实正文时,中间态占位符不得覆盖正文(见 hasRealContent 注释)
+        if (hasRealContent) return;
         useChatStreamStore.getState().replaceContent(sid, assistantId, next);
       };
 
@@ -558,7 +574,11 @@ export function useChat() {
         const streamSnapshot = streamSlots.streaming;
         // 优先用 done 事件自带的完整 content (避免混入 thinking 占位符)
         // 退回到 store streaming.content (向后兼容旧的非流式 done 事件)
-        let finalContent = lastDoneContent ?? streamSnapshot?.content ?? '';
+        // 2026-10-29: 从未产出真实正文时,streaming.content 只是中间态占位符
+        // ('🤔 思考中…' / '🔧 调工具 …' / '👀 观察结果…')。把它当正文写回
+        // 消息会让失败的气泡永远显示一句占位文案,所以这里清空。
+        const streamedContent = hasRealContent ? (streamSnapshot?.content ?? '') : '';
+        let finalContent = lastDoneContent ?? streamedContent;
         const finalReasoning = streamSnapshot?.reasoning ?? '';
         const finalToolCalls = streamSlots.streamingToolCalls;
         // 2026-10-25: 多步 run 的最后一步无 content_delta 时,streaming.content
@@ -694,6 +714,7 @@ export function useChat() {
                 assistantId = nextAssistantId;
                 // 下一步有独立的 done.content;重置避免上一步的值污染
                 lastDoneContent = null;
+                hasRealContent = false; // 新气泡从占位符开始
                 return;
               }
 
@@ -772,8 +793,12 @@ export function useChat() {
                   state: evt.state,
                 });
               } else if (typeof evt.content === 'string' && evt.content.length > 0) {
-                appendContent(evt.content);
-                if (evt.state === 'done') {
+                // DONE.content 是本轮完整回答,流式路径下同样文字已由 content_delta
+                // 推过一遍 —— 已流式过就不再 append,否则文字重复。非流式回退
+                // (producer 不发 delta) 时 !hasRealContent 命中 fallback 分支。
+                const isDone = evt.state === 'done';
+                if (!isDone || !hasRealContent) appendContent(evt.content);
+                if (isDone) {
                   lastDoneContent = evt.content;
                   if (evt.message_id) lastDoneMessageId = evt.message_id;
                   lastDoneTitlePending = evt.title_pending === true;

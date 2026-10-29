@@ -136,6 +136,80 @@ describe('mapAgentErrorToText — limit rendering', () => {
   });
 });
 
+describe('parseAgentErrorLimit — agent/source fields (2026-10-29)', () => {
+  it('parses the new comma-separated wire format', () => {
+    const parsed = parseAgentErrorLimit(
+      'max_iterations_exceeded (limit=10, agent=writer, source=profile)',
+    );
+    expect(parsed?.code).toBe('max_iterations_exceeded');
+    expect(parsed?.value).toBe(10);
+    expect(parsed?.agent).toBe('writer');
+    expect(parsed?.source).toBe('profile');
+  });
+
+  it('remains compatible with the old format (no agent/source)', () => {
+    const parsed = parseAgentErrorLimit('max_iterations_exceeded (limit=25)');
+    expect(parsed?.code).toBe('max_iterations_exceeded');
+    expect(parsed?.value).toBe(25);
+    expect(parsed?.agent).toBeUndefined();
+    expect(parsed?.source).toBeUndefined();
+  });
+
+  it('ignores unknown fields in the decoration (forward-compat)', () => {
+    const parsed = parseAgentErrorLimit(
+      'max_iterations_exceeded (limit=10, agent=coder, source=orch.global, extra=foo)',
+    );
+    expect(parsed?.agent).toBe('coder');
+    expect(parsed?.source).toBe('orch.global');
+  });
+
+  it('keeps decimal precision when new fields present', () => {
+    const parsed = parseAgentErrorLimit(
+      'spend_limit_exceeded (limit=50.00, agent=primary)',
+    );
+    expect(parsed?.value).toBe(50);
+    expect(parsed?.text).toBe('50.00');
+    expect(parsed?.agent).toBe('primary');
+  });
+});
+
+describe('mapAgentErrorToText — differentiated agent/source messaging', () => {
+  it('names the agent and the profile source in the rendered message', () => {
+    const text = mapAgentErrorToText(
+      'max_iterations_exceeded (limit=10, agent=writer, source=profile)',
+    );
+    expect(text).toContain('「写作助手」');
+    expect(text).toContain('Agent 默认配置');
+    expect(text).toContain('Agent 编辑面板');
+    expect(text).not.toContain('max_iterations_exceeded');
+  });
+
+  it('points to orchestration settings when source=orch.global', () => {
+    const text = mapAgentErrorToText(
+      'max_iterations_exceeded (limit=25, agent=researcher, source=orch.global)',
+    );
+    expect(text).toContain('「研究员」');
+    expect(text).toContain('编排全局设置');
+    expect(text).toContain('设置 → 编排');
+  });
+
+  it('falls back to generic subject when agent missing but source present', () => {
+    const text = mapAgentErrorToText('max_iterations_exceeded (limit=25, source=default)');
+    expect(text).toContain('本次任务');
+    expect(text).toContain('25');
+    expect(text).toContain('系统默认值');
+  });
+
+  it('falls back to generic subject+hint for bare codes', () => {
+    const text = mapAgentErrorToText('max_iterations_exceeded');
+    expect(text).toContain('本次任务');
+    expect(text).not.toContain('{subject}');
+    expect(text).not.toContain('{limit}');
+    expect(text).not.toContain('{source}');
+    expect(text).not.toContain('{hint}');
+  });
+});
+
 describe('mapLLMErrorToText (regression — agent codes must not leak in)', () => {
   const err = (over: Partial<LLMErrorResponse> = {}): LLMErrorResponse => ({
     type: 'auth_failed',
