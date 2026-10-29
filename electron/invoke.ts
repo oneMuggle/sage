@@ -73,6 +73,39 @@ function camelToSnakeKeys(value: unknown): unknown {
   return value;
 }
 
+/**
+ * 2026-10-29: 从后端错误响应体中提取可读文案与错误码。
+ *
+ * FastAPI 的 HTTPException(detail={"code","message"}) 此前被整段 JSON 拼进
+ * IPC 错误消息，renderer 无法按 code 分支、用户只能看到原始信封。
+ * 解析失败时返回空对象，调用方回退到「cmd + status + 原文」格式。
+ */
+function parseBackendErrorDetail(text: string): { message?: string; code?: string } {
+  try {
+    const body = JSON.parse(text) as {
+      detail?: unknown;
+      message?: unknown;
+    };
+    const detail = body?.detail;
+    if (typeof detail === 'string' && detail.trim()) {
+      return { message: detail };
+    }
+    if (detail && typeof detail === 'object') {
+      const record = detail as { code?: unknown; message?: unknown };
+      return {
+        message: typeof record.message === 'string' ? record.message : undefined,
+        code: typeof record.code === 'string' ? record.code : undefined,
+      };
+    }
+    if (typeof body?.message === 'string' && body.message.trim()) {
+      return { message: body.message };
+    }
+  } catch {
+    // 非 JSON 响应体（纯文本/HTML）—— 保持原来的可读错误格式
+  }
+  return {};
+}
+
 export async function invokeBackend(
   cmd: string,
   args: Record<string, unknown> = {},
@@ -101,14 +134,22 @@ export async function invokeBackend(
     const text = await res.text().catch(() => '');
     // 安全错误信息:不把完整 URL 拼入异常,避免用户查询等敏感 path 参数
     // 泄漏到主进程日志。用 cmd 作为标识,运维可根据 cmd 反查路由。
+    // 2026-10-29: 后端 detail.message 可直接读时优先使用（例如「当前会话
+    // 尚未绑定工作区」），同时保留 ``（HTTP <status>）`` 标记 —— renderer
+    // 的 desktopInvoke 依赖该标记恢复 status_code（IPC 会剥离自定义属性）。
+    const detail = parseBackendErrorDetail(text);
     const err = new Error(
-      `Backend ${route.method} cmd=${cmd} → ${res.status}: ${text}`,
+      detail.message
+        ? `${detail.message}（HTTP ${res.status}）`
+        : `Backend ${route.method} cmd=${cmd} → ${res.status}: ${text}`,
     ) as Error & {
       status_code?: number;
+      code?: string;
     };
     // §13.7: 附加状态码（进程内契约；main 进程 sage:invoke 会用 new Error(msg)
     // 重包装剥掉自定义属性，renderer 侧由 desktopInvoke 从 message 解析兜底）。
     err.status_code = res.status;
+    if (detail.code) err.code = detail.code;
     throw err;
   }
   return res.json();

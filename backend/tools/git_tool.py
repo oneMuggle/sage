@@ -87,6 +87,54 @@ def _run_git(
     return completed.stdout.decode("utf-8", errors="replace"), None
 
 
+def git_repo_status(root: str) -> Optional[bool]:
+    """``root`` 是否位于 git 工作树内；无法判定（git 缺失/超时）返回 None。
+
+    ``rev-parse`` 在非仓库目录会非零退出（错误文案随 locale 变化），不能
+    用错误文本判断；git 可用性由 ``shutil.which`` 单独判定。
+    """
+    import shutil
+
+    if shutil.which(GIT_BINARY) is None:
+        return None
+    stdout, error = _run_git(["rev-parse", "--is-inside-work-tree"], root)
+    if error is not None:
+        if "超时" in error or "启动失败" in error:
+            return None
+        return False
+    return (stdout or "").strip() == "true"
+
+
+def git_repo_root(root: str) -> Optional[str]:
+    """仓库根（``rev-parse --show-toplevel``）；失败返回 None。"""
+    stdout, error = _run_git(["rev-parse", "--show-toplevel"], root)
+    if error is not None:
+        return None
+    value = (stdout or "").strip()
+    return os.path.normpath(value) if value else None
+
+
+def to_workspace_relative_path(
+    root: str, repo_root: str, repo_rel: str
+) -> Optional[str]:
+    """仓库根相对路径 → 工作区相对路径；工作区外的路径返回 None。
+
+    绑定工作区是仓库子目录时，porcelain/numstat 输出均相对仓库根；变更
+    面板与 diff/预览/撤销全部以工作区为基准，需要在边界处统一转换。
+    """
+    if not repo_rel:
+        return None
+    abs_path = os.path.abspath(os.path.join(repo_root, repo_rel))
+    root_abs = os.path.abspath(root)
+    try:
+        if os.path.commonpath([abs_path, root_abs]) != root_abs:
+            return None
+    except ValueError:  # Windows 跨盘符
+        return None
+    rel = os.path.relpath(abs_path, root_abs)
+    return rel.replace(os.sep, "/")
+
+
 class GitToolBase(BaseTool):
     """git 工具公共基座：仓库根解析 + 路径守卫。"""
 
@@ -123,8 +171,22 @@ def _count_file_lines(file_path: str) -> Optional[int]:
     return lines
 
 
+def _numstat_new_path(path_field: str) -> str:
+    """numstat rename 字段 → 新路径（兼容 ``old => new`` 与 ``dir/{old => new}``）。"""
+    if "=>" not in path_field:
+        return path_field
+    if "{" in path_field and "}" in path_field:
+        prefix, rest = path_field.split("{", 1)
+        inner, suffix = rest.split("}", 1)
+        _old, new = inner.split("=>", 1)
+        return prefix + new.strip() + suffix
+    return path_field.rsplit("=>", 1)[-1].strip()
+
+
 def collect_change_stats(
-    root: str, changes: List[Dict[str, str]]
+    root: str,
+    changes: List[Dict[str, str]],
+    repo_root: Optional[str] = None,
 ) -> Dict[str, Dict[str, Optional[int]]]:
     """变更清单 → 每文件插入/删除行数（GET /changes 的 +/- 徽章数据源）。
 
@@ -132,10 +194,16 @@ def collect_change_stats(
     合并口径，单次调用）；未跟踪文件（worktree_status='?'，numstat 看不到）
     退化为读文件行数，deletions 恒 0；二进制 / 超限 / 读取失败对应字段
     为 None。输出以 status 条目的 path 字符串为键，调用方按原样合并。
+
+    ``repo_root``：工作区是仓库子目录时，numstat/status 路径相对仓库根，
+    读未跟踪文件需以仓库根拼接；缺省等于 ``root``。
     """
     stats: Dict[str, Dict[str, Optional[int]]] = {}
+    file_base = repo_root or root
 
-    stdout, error = _run_git(["diff", "HEAD", "--numstat"], root)
+    stdout, error = _run_git(
+        ["-c", "core.quotepath=false", "diff", "HEAD", "--numstat"], root
+    )
     if error is None and stdout:
         for line in stdout.splitlines()[:GIT_NUMSTAT_MAX_ENTRIES]:
             parts = line.split("\t")
@@ -148,10 +216,10 @@ def collect_change_stats(
             }
             stats[path_field] = entry
             if "=>" in path_field:
-                # rename 行（"{old => new}" 或 "old => new"）按新旧两个形态各
-                # 映射一份，status 侧 "old -> new" 的新段即可命中
-                new_part = path_field.rsplit("=>", 1)[-1].strip("{} ")
-                if new_part:
+                # rename 行（"{old => new}" 或 "old => new"）按新路径映射，
+                # 使 status 侧的 ``path`` 命中 +/- 徽章
+                new_part = _numstat_new_path(path_field)
+                if new_part and new_part != path_field:
                     stats[new_part] = entry
 
     for change in changes:
@@ -160,7 +228,7 @@ def collect_change_stats(
         rel = change.get("path", "")
         if not rel or rel in stats:
             continue
-        stats[rel] = {"insertions": _count_file_lines(os.path.join(root, rel)), "deletions": 0}
+        stats[rel] = {"insertions": _count_file_lines(os.path.join(file_base, rel)), "deletions": 0}
     return stats
 
 
@@ -172,10 +240,13 @@ def untracked_file_diff(root: str, path: str) -> Optional[Tuple[str, bool]]:
     仅当 path 确为未跟踪文件时生成；不存在 / 目录 / 二进制返回 None，
     超 64KiB 截断并置 truncated（口径同 GitDiffTool）。
     """
-    stdout, error = _run_git(["status", "--porcelain=v1", "--", path], root)
+    stdout, error = _run_git(
+        ["-c", "core.quotepath=false", "status", "--porcelain=v1", "-z", "--", path],
+        root,
+    )
     if error is not None:
         return None
-    status_lines = [ln for ln in stdout.splitlines() if ln.strip()]
+    status_lines = [ln for ln in stdout.split("\0") if ln.strip()]
     if not status_lines or not status_lines[0].startswith("??"):
         return None
 
@@ -235,19 +306,29 @@ class GitStatusTool(GitToolBase):
         if rejection is not None:
             return rejection
 
-        stdout, error = _run_git(["status", "--porcelain=v1", "-b"], root)
+        # ``-z``：NUL 分隔 + 原始字节，避免 core.quotepath 把中文转成
+        # 八进制 C-quote，也避免含空格路径被引号包裹（v1 非 -z 无法消除）。
+        stdout, error = _run_git(
+            ["-c", "core.quotepath=false", "status", "--porcelain=v1", "-z", "-b"],
+            root,
+        )
         if error is not None:
             return ToolResult(success=False, error=error)
 
-        lines = stdout.splitlines()
+        records = stdout.split("\0")
         entries: List[Dict[str, str]] = []
         branch = ""
         upstream = ""
         ahead = 0
         behind = 0
-        for line in lines:
-            if line.startswith("##"):
-                match = _BRANCH_RE.match(line)
+        index = 0
+        while index < len(records):
+            record = records[index]
+            index += 1
+            if not record:
+                continue
+            if record.startswith("##"):
+                match = _BRANCH_RE.match(record)
                 if match:
                     branch = match.group("branch") or ""
                     upstream = match.group("upstream") or ""
@@ -257,16 +338,22 @@ class GitStatusTool(GitToolBase):
                     ahead = int(ahead_match.group(1)) if ahead_match else 0
                     behind = int(behind_match.group(1)) if behind_match else 0
                 continue
-            if not line.strip():
-                continue
-            # porcelain v1: XY <path>；重命名行是 "R  old -> new"，保留原文
-            entries.append(
-                {
-                    "index_status": line[:1].strip(),
-                    "worktree_status": line[1:2].strip(),
-                    "path": line[3:],
-                }
-            )
+            # porcelain v1 -z: "XY <path>"；rename/copy 的下一段是旧路径
+            index_status = record[:1].strip()
+            worktree_status = record[1:2].strip()
+            entry: Dict[str, str] = {
+                "index_status": index_status,
+                "worktree_status": worktree_status,
+                "path": record[3:],
+            }
+            if (
+                (index_status in ("R", "C") or worktree_status in ("R", "C"))
+                and index < len(records)
+                and records[index]
+            ):
+                entry["old_path"] = records[index]
+                index += 1
+            entries.append(entry)
         return ToolResult(
             success=True,
             content={
@@ -739,5 +826,8 @@ __all__ = [
     "GitStatusTool",
     "_valid_ref",
     "collect_change_stats",
+    "git_repo_root",
+    "git_repo_status",
+    "to_workspace_relative_path",
     "untracked_file_diff",
 ]

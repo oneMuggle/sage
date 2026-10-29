@@ -153,6 +153,51 @@ def test_update_by_doc_id_edits_file_and_marks_edited(tmp_path: Path):
     assert row["status"] == OfficeDocStatus.EDITED.value
 
 
+def test_update_managed_refreshes_existing_artifact(tmp_path: Path, monkeypatch):
+    """受管 update 不新增重复产物行，只刷新已有 artifact 的 size。"""
+    from backend.data import artifact_repo, database as database_module
+
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    monkeypatch.setattr(database_module, "_db", db)
+    conn = db.get_connection()
+    _seed_session(conn, "sess-1")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-1", str(work), now_ms=1)
+    from docx import Document
+
+    doc_file = work / "office" / "word" / "doc-a"
+    doc_file.mkdir(parents=True)
+    d = Document()
+    d.add_paragraph("旧文本")
+    d.save(str(doc_file / "doc-a.docx"))
+    save_document(conn, _make_doc(doc_id="doc-a", workspace_path=binding.workspace_path))
+    target = doc_file / "doc-a.docx"
+    artifact_repo.record_artifact(
+        session_id="sess-1",
+        path=str(target),
+        name=target.name,
+        kind="docx",
+        size=target.stat().st_size,
+    )
+
+    with patch("backend.tools.office_update_tool.get_database", return_value=db):
+        token = set_tool_context(_ctx("sess-1", binding.generation))
+        try:
+            result = _tool().execute(
+                doc_id="doc-a",
+                ops=[{"op": "replace_text", "find": "旧文本", "replace": "新文本内容更长"}],
+            )
+        finally:
+            reset_tool_context(token)
+
+    assert result.success is True
+    artifacts = artifact_repo.list_artifacts("sess-1")
+    assert len(artifacts) == 1
+    assert artifacts[0].size == target.stat().st_size
+
+
 def test_update_unknown_doc_is_indistinguishable_not_found(tmp_path: Path):
     db = Database(db_path=str(tmp_path / "t.db"))
     db.init_db()

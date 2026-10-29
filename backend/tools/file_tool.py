@@ -22,7 +22,7 @@ M1 工具安全加固（移植 claw-code file_ops.rs 的边界/限额设计）:
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from backend.data import artifact_repo, workspace_events
 from backend.domain.risk import RiskClass
@@ -149,6 +149,7 @@ def _record_artifact_safely(
     *,
     session_id: Optional[str] = None,
     tool_call_id: Optional[str] = None,
+    conn: Any = None,
 ) -> None:
     """写入成功后记录产物;任何失败都静默,不影响写入结果。"""
     try:
@@ -166,6 +167,7 @@ def _record_artifact_safely(
             tool_call_id=tool_call_id,
             workspace_path=workspace_path,
             format_spec=format_spec,
+            conn=conn,
         )
     except Exception:  # noqa: BLE001 — 记录产物失败绝不阻断写入
         logger.debug("write_file: 记录产物失败", exc_info=True)

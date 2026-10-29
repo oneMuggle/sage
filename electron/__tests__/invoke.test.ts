@@ -184,6 +184,23 @@ describe('invokeBackend', () => {
     expect((err as Error).message).toMatch(/500/);
   });
 
+  it('surfaces backend detail message/code instead of the raw JSON envelope', async () => {
+    mockedFetch.mockResolvedValueOnce(
+      mockJsonResponse(
+        { detail: { code: 'not_a_git_repo', message: '当前工作区不是 Git 仓库' } },
+        { ok: false, status: 409 },
+      ),
+    );
+    const err = (await invokeBackend(
+      'workspace_get_changes',
+      { sessionId: 's1' },
+      'http://x',
+    ).catch((e: unknown) => e)) as Error & { status_code?: number; code?: string };
+    expect(err.message).toBe('当前工作区不是 Git 仓库（HTTP 409）');
+    expect(err.code).toBe('not_a_git_repo');
+    expect(err.status_code).toBe(409);
+  });
+
   it('GET /api/v1/sessions/:id url-encodes ids with special characters', async () => {
     mockedFetch.mockResolvedValueOnce(mockJsonResponse({ id: 's/1' }));
     await invokeBackend('get_session', { id: 's/1' }, 'http://x');
