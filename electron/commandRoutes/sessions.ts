@@ -22,7 +22,10 @@ export const sessionRoutes: Record<string, CommandRoute> = {
     path: (a) => {
       const limit = (a?.limit as number) ?? 100;
       const offset = (a?.offset as number) ?? 0;
-      return `/api/v1/sessions?limit=${limit}&offset=${offset}`;
+      // 侧栏归档视图：archived=true 只列已归档会话；缺省保持既有行为。
+      const archived = a?.archived as boolean | undefined | null;
+      const archivedQuery = archived == null ? '' : `&archived=${archived}`;
+      return `/api/v1/sessions?limit=${limit}&offset=${offset}${archivedQuery}`;
     },
   },
   create_session: { method: 'POST', path: () => '/api/v1/sessions' },
@@ -213,6 +216,8 @@ export const sessionRoutes: Record<string, CommandRoute> = {
       const body: Record<string, unknown> = {};
       // R18-B: is_pinned 置顶开关（后端 SessionUpdateIn.is_pinned 已支持）
       if (a.isPinned != null) body.is_pinned = a.isPinned;
+      // 手动归档/恢复：后端 SessionUpdate.is_archived 已支持
+      if (a.isArchived != null) body.is_archived = a.isArchived;
       // title 缺省不下发 —— PATCH 只更新显式传入的字段
       if (a.title != null) body.title = a.title;
       return body;
