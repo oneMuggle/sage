@@ -107,6 +107,9 @@ import { registerLogIpc } from './ipc/logIpc';
 import { registerModelDownloadIpc } from './modelDownloadIpc';
 import { registerArenaTokenWindow } from './arenaTokenWindow';
 import { registerUpdateIpc } from './updateIpc';
+import { registerFeedbackIpc } from './feedback/feedbackIpc';
+import { getFeedbackConfig } from './feedback/feedbackConfig';
+import { getGlobalSyncer, initGlobalFeedbackSyncer } from './feedback/feedbackSyncer';
 import { UpdateManager } from './updateManager';
 import { ProviderStore } from './update/providerStore';
 import { ProviderRegistry } from './update/providers/registry';
@@ -769,6 +772,9 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
           return false;
         }
         backendLifecycle = 'ready';
+        // 用户反馈 syncer 需要 backend 已就绪才能拉取/提交消息；
+        // 未配置转发目标时 start() 内部会直接空转不跑。
+        getGlobalSyncer()?.start();
         // Task 0 review round 1, finding #6: tell the renderer the backend
         // is ready so BackendStatusBanner can clear the "starting…" state
         // (or never show it, if the spawn-to-ready window was sub-frame).
@@ -1791,6 +1797,35 @@ async function registerIpcHandlers(): Promise<void> {
     getAuthToken: () => backendAuthToken ?? undefined,
   });
 
+  // 用户反馈系统 —— 配置 / 手动同步 / 附件上传走 main 侧 IPC：
+  //   - sharedSecret 需要 Electron safeStorage 加密，不能落到 backend SQLite
+  //   - 附件是 raw binary，CommandRoute 只支持 JSON body
+  // 会话与消息 CRUD 则走 electron/commandRoutes/feedback.ts 的 backend HTTP 映射。
+  initGlobalFeedbackSyncer({
+    getBackendUrl: () => BACKEND_URL,
+    getAuthToken: () => backendAuthToken ?? undefined,
+  });
+  registerFeedbackIpc(
+    (channel, handler) => {
+      ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+        if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+        if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+        return handler(evt, ...args);
+      });
+    },
+    {
+      getBackendUrl: () => BACKEND_URL,
+      getAuthToken: () => backendAuthToken ?? undefined,
+      config: getFeedbackConfig(),
+      getSyncer: () => getGlobalSyncer(),
+      restartSyncer: () => {
+        const syncer = getGlobalSyncer();
+        syncer?.stop();
+        syncer?.start();
+      },
+    },
+  );
+
   // Lazy-init UpdateManager inside registerIpcHandlers (after app.whenReady)
   // to avoid constructing managers before the app is ready.
   // Task 1.9: wire pluggable provider system (ProviderStore + Registry + IPC).
@@ -2733,6 +2768,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   appIsQuitting = true;
   globalShortcut.unregister(REMOTE_MCP_HOTKEY);
+  getGlobalSyncer()?.stop();
   remoteMcp?.dispose();
   remoteMcp = null;
   cleanupUpdateIpc?.();
