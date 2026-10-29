@@ -130,13 +130,15 @@ class SessionService:
         *,
         title: Optional[str] = None,
         is_pinned: Optional[bool] = None,
+        is_archived: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """局部更新会话字段;全 ``None`` 等于 no-op(返当前快照)。
 
         Args:
-            session_id: 目标会话 ID
-            title:      新标题;``None`` 表示不更新
-            is_pinned:  置顶标志;``None`` 表示不更新
+            session_id:  目标会话 ID
+            title:       新标题;``None`` 表示不更新
+            is_pinned:   置顶标志;``None`` 表示不更新
+            is_archived: 归档标志;``None`` 表示不更新
 
         Returns:
             更新后(或当前)的会话字典
@@ -155,6 +157,8 @@ class SessionService:
             fields["title"] = title
         if is_pinned is not None:
             fields["is_pinned"] = is_pinned
+        if is_archived is not None:
+            fields["is_archived"] = is_archived
 
         if fields:
             await self.storage.update_session(session_id, **fields)

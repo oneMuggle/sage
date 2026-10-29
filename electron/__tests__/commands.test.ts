@@ -303,9 +303,7 @@ describe('skills IPC (PR-C)', () => {
 
     const handler = registeredHandlers.get('skills:import-directory')!;
     // Pass a DIFFERENT path → must fail before reaching the network
-    await expect(handler({}, '/tmp/other-dir')).rejects.toThrow(
-      /directory selection changed/,
-    );
+    await expect(handler({}, '/tmp/other-dir')).rejects.toThrow(/directory selection changed/);
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -478,6 +476,29 @@ describe('COMMAND_ROUTES', () => {
   it('builds list_sessions URL with limit/offset query params', () => {
     const path = COMMAND_ROUTES.list_sessions.path({ limit: 50, offset: 10 });
     expect(path).toBe('/api/v1/sessions?limit=50&offset=10');
+  });
+
+  it('builds list_sessions URL with archived filter', () => {
+    expect(COMMAND_ROUTES.list_sessions.path({ limit: 100, offset: 0, archived: true })).toBe(
+      '/api/v1/sessions?limit=100&offset=0&archived=true',
+    );
+    expect(COMMAND_ROUTES.list_sessions.path({ archived: false })).toBe(
+      '/api/v1/sessions?limit=100&offset=0&archived=false',
+    );
+    // 缺省（null/undefined）不下发 archived，保持既有行为
+    expect(COMMAND_ROUTES.list_sessions.path({})).toBe('/api/v1/sessions?limit=100&offset=0');
+  });
+
+  it('session_update passes is_archived through PATCH body', () => {
+    expect(COMMAND_ROUTES.session_update.body?.({ sessionId: 's1', isArchived: true })).toEqual({
+      is_archived: true,
+    });
+    expect(COMMAND_ROUTES.session_update.body?.({ sessionId: 's1', isArchived: false })).toEqual({
+      is_archived: false,
+    });
+    expect(COMMAND_ROUTES.session_update.body?.({ sessionId: 's1', title: 't' })).toEqual({
+      title: 't',
+    });
   });
 
   // 项目模块 P1 (2026-09-13): 最近项目注册表 + 项目内会话
@@ -933,15 +954,13 @@ describe('permission IPC routes (M1 tool security hardening)', () => {
         reason: 'not this plugin',
         tool_pattern: '*',
       }),
-    ).toEqual(
-      {
-        approved: false,
-        remember: true,
-        remember_scope: 'plugin',
-        remember_duration: 'session',
-        reason: 'not this plugin',
-      },
-    );
+    ).toEqual({
+      approved: false,
+      remember: true,
+      remember_scope: 'plugin',
+      remember_duration: 'session',
+      reason: 'not this plugin',
+    });
   });
 
   it('permission routes use /api/v1 prefix (防 404 guard)', () => {

@@ -111,6 +111,8 @@ class Session:
             "last_message_at": self.last_message_at,
             "message_count": self.message_count,
             "is_pinned": self.is_pinned,
+            # 侧栏归档视图依赖：默认列表过滤未归档，归档列表需要该字段做状态展示
+            "is_archived": self.is_archived,
             "metadata": json.loads(self.metadata) if self.metadata else None,
             # M4: 侧栏 fork 徽标依赖这两个字段（list_sessions 序列化必须带上）
             "fork_root": self.fork_root,
@@ -168,21 +170,27 @@ class SessionRepository:
             return Session.from_row(row)
         return None
 
-    def list(self, limit: int = 100, offset: int = 0) -> List[Session]:
-        """获取会话列表"""
+    def list(
+        self, limit: int = 100, offset: int = 0, archived: Optional[bool] = None
+    ) -> List[Session]:
+        """获取会话列表。
+
+        ``archived``: None/False → 仅未归档（默认，保持既有调用方行为）；
+        True → 仅已归档（侧栏归档视图）。
+        """
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
         cursor.execute(
             """
             SELECT * FROM sessions
-            WHERE is_archived = 0
+            WHERE is_archived = ?
             ORDER BY is_pinned DESC,
                      CASE WHEN run_status IN ('running', 'suspended') THEN 1 ELSE 0 END DESC,
                      updated_at DESC
             LIMIT ? OFFSET ?
         """,
-            (limit, offset),
+            (1 if archived else 0, limit, offset),
         )
 
         return [Session.from_row(row) for row in cursor.fetchall()]

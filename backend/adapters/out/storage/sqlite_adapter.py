@@ -255,6 +255,8 @@ class SqliteStorageAdapter:
             kwargs["title"] = fields["title"]
         if "is_pinned" in fields and fields["is_pinned"] is not None:
             kwargs["is_pinned"] = 1 if fields["is_pinned"] else 0
+        if "is_archived" in fields and fields["is_archived"] is not None:
+            kwargs["is_archived"] = 1 if fields["is_archived"] else 0
         with _SQLITE_LOCK:
             if not kwargs:
                 # 没有任何字段要更新:走一遍 get 让调用方拿到当前快照,但返 1
