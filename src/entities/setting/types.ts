@@ -7,7 +7,11 @@ export const SETTINGS_STORAGE_KEY = 'sage-settings';
 /** Model capability types */
 export type ModelCapability = 'chat' | 'vision' | 'embedding' | 'tts' | 'asr' | 'image_gen';
 
-/** A model discovered from an endpoint's /v1/models */
+/**
+ * A model discovered from an endpoint's /v1/models.
+ *
+ * @deprecated 2027-01-28 前移除：读取方应改用 model-catalog（catalog-first；本字段仅作离线回退）。
+ */
 export interface DiscoveredModel {
   id: string;
   capabilities: ModelCapability[];
@@ -151,6 +155,15 @@ export interface OrchSettings {
   maxClarifyQuestionsPerRound: number; // 3
 }
 
+/**
+ * 智能模型路由模式 (Task 9, 2026-10-28).
+ * - ``manual``: 用户手动选模型（现状行为，默认值）。
+ * - ``auto``: 后端按 ``task_type`` 在同端点上挑模型；前端不写会话覆盖。
+ */
+export interface RoutingSettings {
+  mode: 'auto' | 'manual';
+}
+
 /** All application settings */
 export interface AppSettings {
   // General
@@ -205,6 +218,8 @@ export interface AppSettings {
   // 2026-10-27: 会话标题生成专用模型 id（顶层扁平键，与 chatModel 同风格）。
   // 留空表示回退到聊天模型；后端 title_generator.load_title_llm_config 读取。
   titleModelId: string;
+  // Task 9 (2026-10-28) 智能路由模式。缺省 = manual（保持现有行为不变）。
+  routing: RoutingSettings;
 
   // 演示模式开关 (2026-08-27): 启用后 Electron main 进程跳过 Python 后端
   // spawn, 前端可走 /demo 路由录屏. 关闭时回到正常 LLM 调用路径.
@@ -328,6 +343,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   // 2026-10-27: 会话标题专用模型默认留空 —— 回退到聊天模型。
   titleModelId: '',
+  // Task 9 (2026-10-28) 智能路由模式。默认 manual（保持与引入前行为一致）。
+  routing: { mode: 'manual' },
 
   // 演示模式: 默认关闭. 开启后 main 进程跳过 Python 后端启动.
   demoMode: false,

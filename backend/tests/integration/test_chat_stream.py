@@ -312,6 +312,62 @@ async def test_producer_passes_llm_config_to_run_loop_when_api_key_and_url_provi
 
 
 @pytest.mark.asyncio()
+async def test_stream_applies_auto_routing_overlay_with_task_type():
+    """Task 9: /chat/stream builds llm_config inline (never through
+    load_llm_config_for_chat), so the auto-routing overlay must be applied at
+    this call site or auto mode never reaches the primary UI path.
+
+    The overlay itself is faked here — this test only pins the wiring: it must be
+    called with the request's task_type and its result must be what run_loop
+    receives. Guard/engine behavior is unit-tested in
+    test_llm_factory_auto_routing.py.
+    """
+    from backend.api.chat_stream_registry import StreamRegistry
+
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        app.state.streams = StreamRegistry()
+
+    captured_kwargs: dict = {}
+    overlay_calls: list = []
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        captured_kwargs.update(kwargs)
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="ok")
+
+    def fake_overlay(cfg, task_type=None, session_id=None, profile_model=None):
+        overlay_calls.append({"task_type": task_type, "session_id": session_id})
+        return {**cfg, "model": "routed-model"}
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent, patch(
+        "backend.orchestration.llm_factory.apply_auto_routing_overlay",
+        fake_overlay,
+    ):
+        MockAgent.return_value.run_loop = mock_run_loop
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            create_resp = await ac.post(
+                CHAT_STREAM_PATH,
+                json={
+                    "session_id": "s",
+                    "message": "hi",
+                    "api_key": "sk-test-123",
+                    "api_url": "https://example.com/v1",
+                    "model": "test-model",
+                    "task_type": "code_review",
+                },
+            )
+            assert create_resp.status_code == 200
+            stream_id = create_resp.json()["streamId"]
+            attach_resp = await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+            assert attach_resp.status_code == 200
+
+    assert overlay_calls, "producer 没有调用 apply_auto_routing_overlay"
+    assert overlay_calls[0]["task_type"] == "code_review"
+    assert captured_kwargs["llm_config"]["model"] == "routed-model"
+
+
+@pytest.mark.asyncio()
 async def test_producer_passes_no_llm_config_when_request_omits_api_key():
     """请求不带 api_key/api_url → producer 不传 llm_config(走默认 agent client)。"""
     from backend.api.chat_stream_registry import StreamRegistry

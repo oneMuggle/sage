@@ -24,6 +24,7 @@ from backend.data.settings_canonicalizer import (
     LEGAL_MODEL_SELECTION_KEYS,
     LEGAL_MODEL_SELECTIONS_KEYS,
     LEGAL_ORCH_KEYS,
+    LEGAL_ROUTING_KEYS,
     LEGAL_TOP_KEYS,
     LEGAL_WIKI_KEYS,
     from_camel,
@@ -60,6 +61,8 @@ EXPECTED_TOP_KEYS = frozenset(
         "titleModelId",
         # 2026-10-28: LLM 代理上游超时（秒）— 替代 llm_proxy_routes 硬编码 60s。
         "llmProxyTimeoutS",
+        # 2026-10-28: 智能路由模式 {"mode": "auto"|"manual"}
+        "routing",
     }
 )
 
@@ -183,6 +186,15 @@ def test_legal_orch_keys_is_stable() -> None:
     ) == LEGAL_ORCH_KEYS
 
 
+def test_legal_routing_keys_is_stable() -> None:
+    """LEGAL_ROUTING_KEYS 是 RoutingSettings 1 字段 (mode).
+
+    Task 9 (2026-10-28) 引入. 漏加会让 ``{"routing": {"mode": "auto"}}``
+    在 canonicalizer.validate_settings_shape 被拒为 400, 与 orch 历史同款回归.
+    """
+    assert frozenset({"mode"}) == LEGAL_ROUTING_KEYS
+
+
 def test_aliases_camel_side_subset_of_legal_keys() -> None:
     """ALIASES 翻译后的每个 camelCase 字段必须出现在某个 LEGAL_*_KEYS 里.
 
@@ -198,6 +210,8 @@ def test_aliases_camel_side_subset_of_legal_keys() -> None:
         # 2026-09 修复: orch 子层键进入 ALIASES (worktree_isolation 等),
         # 并集必须包含 LEGAL_ORCH_KEYS, 否则合法翻译被判为非法。
         | LEGAL_ORCH_KEYS
+        # 2026-10-28: 智能路由子层键 (mode); 同理必须纳入并集
+        | LEGAL_ROUTING_KEYS
     )
     aliases_camel_side = frozenset(ALIASES.values())
     missing = aliases_camel_side - all_legal_camel
@@ -230,6 +244,7 @@ def test_legal_keys_survive_relay_snake_roundtrip() -> None:
         LEGAL_DISCOVERED_MODEL_KEYS,
         LEGAL_WIKI_KEYS,
         LEGAL_ORCH_KEYS,
+        LEGAL_ROUTING_KEYS,
     ):
         missing = {k for k in legal if snake(k) != k and snake(k) not in ALIASES}
         assert not missing, f"缺 snake 别名（relay 往返后 400）: {sorted(missing)}"

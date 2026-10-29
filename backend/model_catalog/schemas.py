@@ -126,6 +126,9 @@ class LayerValues(CatalogValue):
     price: Price
     source: NonblankString
     revision: NonnegativeInteger = Field(..., strict=True, ge=0)
+    # Routing tier carried by this layer.  None means "this layer says nothing
+    # about the tier", so the next layer in the stack may supply it.
+    tier: Optional[NonblankString] = None
 
     @field_validator("source")
     @classmethod
@@ -139,6 +142,13 @@ class LayerValues(CatalogValue):
     def _no_bool_revision(cls, v: object) -> object:
         return _reject_bool_and_float(v)
 
+    @field_validator("tier")
+    @classmethod
+    def _nonblank_tier(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and (not isinstance(v, str) or not v.strip()):
+            raise ValueError("value must not be blank")
+        return v
+
 
 def _validate_utc_timestamp(value: str) -> str:
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z", value):
@@ -151,6 +161,7 @@ class CandidateModel(CatalogValue):
     """Source-only candidate; endpoint credentials are deliberately not accepted."""
 
     model_key: ModelKey
+    tier: Optional[NonblankString] = None  # 'fast' | 'balanced' | 'powerful'
     native: Optional[PositiveInteger] = Field(None, strict=True, gt=0)
     price: Price = Field(default_factory=Price)
     capabilities: Optional[Dict[str, bool]] = None
@@ -167,7 +178,7 @@ class CandidateModel(CatalogValue):
             raise ValueError("value must not be blank")
         return v
 
-    @field_validator("architecture", "quantization")
+    @field_validator("architecture", "quantization", "tier")
     @classmethod
     def _nonblank_optional(cls, v: Optional[str]) -> Optional[str]:
         if v is not None and (not isinstance(v, str) or not v.strip()):
@@ -258,6 +269,13 @@ class SnapshotDiff(CatalogValue):
 
 
 class EffectiveModel(CatalogValue):
+    tier: NonblankString  # required — resolved model always has a tier
+    # Identity of the resolved model.  Optional: an endpoint with no catalog
+    # binding still resolves, it just cannot be identified.
+    model_key: Optional[ModelKey] = None
+    # Capability metadata as {capability: supported}.  Optional: None means
+    # "unknown", which routing treats as permissive.
+    capabilities: Optional[Dict[str, bool]] = None
     limits: ContextLimits
     price: Price
     provenance: Dict[str, str]
@@ -267,3 +285,10 @@ class EffectiveModel(CatalogValue):
     @classmethod
     def _no_bool_revision(cls, v: object) -> object:
         return _reject_bool_and_float(v)
+
+    @field_validator("tier")
+    @classmethod
+    def _nonblank_tier(cls, v: str) -> str:
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError("value must not be blank")
+        return v

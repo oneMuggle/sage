@@ -17,10 +17,15 @@
  * regresses, this file will not catch it — that's covered by ModelsTab's
  * own tests.
  */
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { bindDiscoveredModels } from '../../../entities/model-catalog/api';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../entities/setting/types';
+import {
+  testEndpointConnection,
+  type ConnectionTestResult,
+} from '../../../features/manage-endpoints/api';
 import {
   EndpointsTab,
   formatEndpointsTabAuditJson,
@@ -40,6 +45,18 @@ vi.mock('../../../features/manage-endpoints/api', () => ({
     discoveredModels: [],
   })),
 }));
+
+// Task 12 (2026-10-28): handleTest fire-and-forgets the catalog reconciliation.
+// Stub it so the unit test can assert the call without the Electron IPC bridge.
+vi.mock('../../../entities/model-catalog/api', async () => {
+  const actual = await vi.importActual<typeof import('../../../entities/model-catalog/api')>(
+    '../../../entities/model-catalog/api',
+  );
+  return {
+    ...actual,
+    bindDiscoveredModels: vi.fn(async () => ({ bound: 1, skipped: 0 })),
+  };
+});
 
 function makeProps(overrides: Partial<AppSettings> = {}): EndpointsTabProps {
   const updateSettings = vi.fn();
@@ -178,5 +195,98 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     expect(summaryBtn.textContent).toBe('已复制');
     fireEvent.click(jsonBtn);
     expect(jsonBtn.textContent).toBe('已复制');
+  });
+
+  it('reconciles discovered models into the catalog without breaking discovery on failure', async () => {
+    // Task 12 (2026-10-28): a successful discovery must fire-and-forget the
+    // catalog binding reconcile so auto-routing gets candidates. A rejected
+    // call (offline / older backend) must not break the discovery flow or
+    // surface a toast.
+    const props = makeProps({
+      endpoints: [
+        {
+          id: 'ep-1',
+          name: 'LM Studio',
+          baseUrl: 'http://127.0.0.1:1234/v1',
+          apiKey: '',
+          protocol: 'openai-compatible',
+          modelId: 'qwen2.5-7b-instruct',
+          localModelPath: '',
+          discoveredModels: [],
+          lastDiscoveredAt: 0,
+        },
+      ],
+    });
+    const discovered: ConnectionTestResult = {
+      success: true,
+      message: 'mocked',
+      latency: 0,
+      discoveredModels: [{ id: 'gpt-4o', capabilities: ['chat'], endpointId: 'ep-1' }],
+    };
+    vi.mocked(testEndpointConnection).mockResolvedValueOnce(discovered);
+    render(<EndpointsTab {...props} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '测试连接' }));
+
+    await waitFor(() =>
+      expect(vi.mocked(bindDiscoveredModels)).toHaveBeenCalledWith({ endpointId: 'ep-1' }),
+    );
+    expect(props.updateSettings).toHaveBeenCalled();
+
+    // Second run: bind rejects → discovery still completes, no error toast.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '测试连接' })).not.toBeDisabled(),
+    );
+    vi.mocked(testEndpointConnection).mockResolvedValueOnce(discovered);
+    vi.mocked(bindDiscoveredModels).mockRejectedValueOnce(new Error('backend offline'));
+    fireEvent.click(screen.getByRole('button', { name: '测试连接' }));
+
+    await waitFor(() => expect(props.updateSettings).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/backend offline/)).toBeNull();
+  });
+
+  it('waits for settings to persist before reconciling discovered models', async () => {
+    // 后端是按已落盘的 discoveredModels 对账的: 提前调用只能读到上一轮列表,
+    // 首次发现时一条都没有。用可控 Promise 钉住「先保存、后对账」的顺序。
+    vi.mocked(bindDiscoveredModels).mockClear();
+    let releaseSave: (() => void) | undefined;
+    const saved = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    const props: EndpointsTabProps = {
+      ...makeProps({
+        endpoints: [
+          {
+            id: 'ep-1',
+            name: 'LM Studio',
+            baseUrl: 'http://127.0.0.1:1234/v1',
+            apiKey: '',
+            protocol: 'openai-compatible',
+            modelId: 'qwen2.5-7b-instruct',
+            localModelPath: '',
+            discoveredModels: [],
+            lastDiscoveredAt: 0,
+          },
+        ],
+      }),
+      updateSettings: vi.fn(() => saved),
+    };
+    vi.mocked(testEndpointConnection).mockResolvedValueOnce({
+      success: true,
+      message: 'mocked',
+      latency: 0,
+      discoveredModels: [{ id: 'gpt-4o', capabilities: ['chat'], endpointId: 'ep-1' }],
+    });
+    render(<EndpointsTab {...props} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '测试连接' }));
+
+    await waitFor(() => expect(vi.mocked(props.updateSettings)).toHaveBeenCalled());
+    expect(vi.mocked(bindDiscoveredModels)).not.toHaveBeenCalled();
+
+    releaseSave?.();
+    await waitFor(() =>
+      expect(vi.mocked(bindDiscoveredModels)).toHaveBeenCalledWith({ endpointId: 'ep-1' }),
+    );
   });
 });

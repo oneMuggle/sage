@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 
 import { usePermissionState } from '../../entities/permission/permissionState';
 import { useQuestionState } from '../../entities/question/questionState';
+import { getRoutingTaskType } from '../../entities/routing/taskType';
 import { resolveEndpoint } from '../../entities/setting/types';
 import { ApiException, type ChatConfig, type ChatOfficeRef } from '../../shared/api';
 import type { GenerationStats } from '../../shared/api/types';
@@ -443,6 +444,9 @@ export function useChat() {
         apiKey: chatEndpoint.apiKey,
         apiUrl: chatEndpoint.baseUrl,
         model: settings.modelSelections.chatModel.modelId ?? undefined,
+        // Task 7 (2026-10-28): 自动路由的任务类型。手动模式下不发送，
+        // 保持既有 invoke body 逐字节不变。
+        taskType: settings.routing?.mode === 'auto' ? getRoutingTaskType() : undefined,
         capabilities: chatModelCapabilities,
         // Task 5 (2026-09-15): send raw maxContext + autoContext to backend.
         // Backend resolves effective window from catalog and computes history budget.

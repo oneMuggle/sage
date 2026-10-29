@@ -15,6 +15,8 @@ export interface WelcomeToolbarProps {
   onModelChange: (modelId: string | null) => void;
   models: ModelOption[];
   globalModelId: string | null;
+  /** Task 8: 仅当全局 routing.mode === 'auto' 时透传，渲染「自动路由」选项。 */
+  autoAvailable?: boolean;
 
   // Worktree
   worktreeMode: WorktreeMode;
@@ -33,6 +35,7 @@ export function WelcomeToolbar({
   onModelChange,
   models,
   globalModelId,
+  autoAvailable = false,
   worktreeMode,
   worktreeBranch,
   worktreeId,
@@ -48,6 +51,7 @@ export function WelcomeToolbar({
         onChange={onModelChange}
         models={models}
         globalModelId={globalModelId}
+        autoAvailable={autoAvailable}
       />
       <WorktreePicker
         mode={worktreeMode}

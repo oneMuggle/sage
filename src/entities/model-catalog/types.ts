@@ -21,6 +21,8 @@ export interface Price {
 
 export interface CandidateModel {
   model_key: ModelKey;
+  /** 模型分层: fast / balanced / powerful; null = 未分类 */
+  tier?: string | null;
   /** 模型原生上下文窗口 (tokens); null = 未知 */
   native: number | null;
   /** 服务端报告的窗口, 与 native 可能不同 (例如 Ollama 加载模型大小) */
@@ -47,6 +49,12 @@ export interface ContextLimits {
 }
 
 export interface EffectiveModel {
+  /** 解析后的模型标识; null = 端点无 catalog 绑定 */
+  model_key: ModelKey | null;
+  /** 模型分层: fast / balanced / powerful (后端总是返回) */
+  tier: string;
+  /** 能力映射 {capability: supported}; null = 未知 */
+  capabilities?: Record<string, boolean> | null;
   limits: ContextLimits;
   price: Price;
   /** 每个字段的来源: user_override > service_probe > imported_snapshot > builtin > unknown */

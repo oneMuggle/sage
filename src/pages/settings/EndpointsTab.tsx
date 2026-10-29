@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { useMemo, useState } from 'react';
 
 import { getProtocolOptions } from '../../entities/endpoint/providerRegistry';
+import { bindDiscoveredModels } from '../../entities/model-catalog/api';
 import {
   DEFAULT_ENDPOINT,
   type EndpointConfig,
@@ -152,7 +153,12 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
           ? { ...e, discoveredModels: modelsWithEndpoint, lastDiscoveredAt: Date.now() }
           : e,
       );
-      updateSettings({ endpoints: updated });
+      await updateSettings({ endpoints: updated });
+      // Task 12 (2026-10-28): 让路由引擎拿到该端点的候选模型。
+      // 必须等 settings 落盘后再触发 —— 后端是按存储的 discoveredModels 对账的,
+      // 提前调用只能读到上一轮列表 (首次发现时一条都没有)。
+      // fire-and-forget — 离线 / 旧后端不得打断发现流程, 也不弹 toast。
+      void bindDiscoveredModels({ endpointId: ep.id }).catch(() => {});
     }
   };
 
