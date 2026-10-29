@@ -9,6 +9,8 @@ interface ActiveAgentIndicatorProps {
   agentId: string | null;
   /** P2: 当前 ReAct 迭代轮次 */
   iteration?: number;
+  /** Issue 3: 跨 run 累加的轮次偏移（与 iteration 相加显示） */
+  iterationOffset?: number;
   /** P2: 当前流式状态 */
   streamingState?: AgentEvent['state'] | null;
 }
@@ -36,6 +38,7 @@ const PHASE_ICON: Record<PhaseIconName, React.ComponentType<{ className?: string
 export function ActiveAgentIndicator({
   agentId,
   iteration = 0,
+  iterationOffset = 0,
   streamingState = null,
 }: ActiveAgentIndicatorProps) {
   const [visible, setVisible] = useState(false);
@@ -95,7 +98,9 @@ export function ActiveAgentIndicator({
 
   // LOW-2: 单轮 LLM 调用显示 '第 1 轮' 是噪音,只在有 ReAct 循环(iteration > 0)
   // 或多轮的情况下才显示迭代轮次
-  const showIteration = iteration > 0;
+  // Issue 3: 显示值 = offset + 当前 run 的 iteration（跨 run 累加）
+  const displayIteration = iterationOffset + iteration;
+  const showIteration = displayIteration > 0;
 
   // 淡出动画结束后不再占位 —— 归还 24px 给消息滚动区
   if (!mounted) return null;
@@ -111,7 +116,7 @@ export function ActiveAgentIndicator({
       {(displayedAgentId || streamingState) && (
         <span className="text-muted flex items-center gap-1.5">
           {streamingState && showIteration && (
-            <span className="text-primary font-medium">第 {iteration} 轮</span>
+            <span className="text-primary font-medium">第 {displayIteration} 轮</span>
           )}
           {displayedAgentId && (
             <>
