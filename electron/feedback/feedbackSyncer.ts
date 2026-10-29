@@ -150,19 +150,19 @@ export class FeedbackSyncer {
       this.running = false;
       return;
     }
+    let ok = true;
     try {
       const stats = await this.runTick();
-      if (stats.errors === 0) {
-        this.backoffIndex = INITIAL_BACKOFF_INDEX; // 成功重置退避
-      } else {
-        this.bumpBackoff();
-      }
+      ok = stats.errors === 0;
     } catch (err) {
       logger.warn(`${LOG_TAG} tick failed`, { err: String(err) });
-      this.bumpBackoff();
+      ok = false;
     }
+    if (ok) this.backoffIndex = INITIAL_BACKOFF_INDEX; // 成功重置退避
     if (this.running) {
+      // 按当前档位排下一轮，再升档：首次失败等 5min（而非直接跳到 15min）。
       this.scheduleTick(this.currentBackoffMs());
+      if (!ok) this.bumpBackoff();
     }
   }
 

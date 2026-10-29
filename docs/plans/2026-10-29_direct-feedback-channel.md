@@ -248,7 +248,7 @@ Response 200: { "status": "ok" }
 - [x] 1.11 前端：菜单 IPC 监听 + "帮助"菜单加"反馈问题..."
 - [x] 1.12 前端：设置页 "反馈" Tab（管理员 URL + 密钥配置）
 - [x] 1.13 i18n（zh + en）
-- [x] 1.14 测试：后端 repo + 路由（37 passed）；store 单测 14 passed；`<FeedbackHub>` 组件测试 5 passed；syncer 测试待补
+- [x] 1.14 测试：后端 repo + 路由（37 passed）；store 单测 14 passed；`<FeedbackHub>` 组件测试 5 passed；`FeedbackSyncer` 单测 9 passed（顺带修正首档退避：失败后先等 5min 再升档）
 
 ### Phase 2：转发脚本（管理员侧）
 
