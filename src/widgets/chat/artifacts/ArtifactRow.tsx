@@ -1,7 +1,24 @@
 // src/widgets/chat/artifacts/ArtifactRow.tsx
-import { FileText, FileCode, FileImage, FileSpreadsheet, File, ShieldCheck } from 'lucide-react';
+import {
+  Copy,
+  File,
+  FileCode,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
+  FolderOpen,
+  ShieldCheck,
+} from 'lucide-react';
 
-import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
+import {
+  revealArtifact,
+  type Artifact,
+  type ArtifactKind,
+} from '../../../features/artifacts/artifactApi';
+import { copyToClipboard } from '../../../shared/lib/clipboard';
+import { useI18n } from '../../../shared/lib/i18n';
+import { ContextMenu } from '../../../shared/ui/ContextMenu/ContextMenu';
+import type { ContextMenuItemSpec } from '../../../shared/ui/ContextMenu/types';
 
 interface ArtifactRowProps {
   artifact: Artifact;
@@ -37,41 +54,82 @@ export function ArtifactRow({
   onDoubleClick,
   onOpenDelivery,
 }: ArtifactRowProps) {
+  const { t } = useI18n();
   const Icon = KIND_ICONS[artifact.kind] ?? File;
   const canOpenDelivery = Boolean(onOpenDelivery && OFFICE_DELIVERY_KINDS.has(artifact.kind));
+
+  const menuItems = (): ContextMenuItemSpec[] => [
+    {
+      id: 'artifact-open',
+      label: t('contextMenu.artifact.open'),
+      icon: FileText,
+      onSelect: () => onSelect(artifact),
+    },
+    {
+      id: 'artifact-reveal',
+      label: t('contextMenu.artifact.reveal'),
+      icon: FolderOpen,
+      onSelect: () => {
+        void revealArtifact(artifact.session_id, artifact.id).catch(() => undefined);
+      },
+    },
+    ...(canOpenDelivery
+      ? [
+          {
+            id: 'artifact-open-delivery',
+            label: t('contextMenu.artifact.openDelivery'),
+            icon: ShieldCheck,
+            onSelect: () => onOpenDelivery?.(artifact),
+          },
+        ]
+      : []),
+    { id: 'artifact-sep-copy', kind: 'separator' as const },
+    {
+      id: 'artifact-copy-path',
+      label: t('contextMenu.common.copyPath'),
+      icon: Copy,
+      onSelect: () =>
+        void copyToClipboard(artifact.path, {
+          successMessage: t('contextMenu.common.copied'),
+          errorMessage: t('contextMenu.common.copyFailed'),
+        }),
+    },
+  ];
 
   /* v8 ignore start */
   /* v8 ignore stop */
 
   return (
-    <div className="w-full flex items-center gap-1 px-3 py-2 hover:bg-bg-hover rounded transition-colors">
-      <button
-        type="button"
-        className="flex-1 min-w-0 flex items-center gap-2 text-left"
-        onClick={() => onSelect(artifact)}
-        onDoubleClick={() => onDoubleClick?.(artifact)}
-      >
-        <Icon className="w-4 h-4 text-text-secondary shrink-0" />
-        <div className="flex-1 min-w-0">
-          <div className="text-sm text-text truncate">{artifact.name}</div>
-          <div className="text-xs text-muted">{formatSize(artifact.size)}</div>
-        </div>
-      </button>
-      {canOpenDelivery && (
+    <ContextMenu items={menuItems}>
+      <div className="w-full flex items-center gap-1 px-3 py-2 hover:bg-bg-hover rounded transition-colors">
         <button
           type="button"
-          className="p-1.5 rounded hover:bg-bg-tertiary text-text-secondary hover:text-primary shrink-0 transition-colors"
-          title="打开交付工作台（格式质检 / 排版修复 / 前后对比）"
-          aria-label={`打开 ${artifact.name} 交付工作台`}
-          data-testid={`artifact-open-delivery-${artifact.id}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenDelivery?.(artifact);
-          }}
+          className="flex-1 min-w-0 flex items-center gap-2 text-left"
+          onClick={() => onSelect(artifact)}
+          onDoubleClick={() => onDoubleClick?.(artifact)}
         >
-          <ShieldCheck className="w-4 h-4" />
+          <Icon className="w-4 h-4 text-text-secondary shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm text-text truncate">{artifact.name}</div>
+            <div className="text-xs text-muted">{formatSize(artifact.size)}</div>
+          </div>
         </button>
-      )}
-    </div>
+        {canOpenDelivery && (
+          <button
+            type="button"
+            className="p-1.5 rounded hover:bg-bg-tertiary text-text-secondary hover:text-primary shrink-0 transition-colors"
+            title="打开交付工作台（格式质检 / 排版修复 / 前后对比）"
+            aria-label={`打开 ${artifact.name} 交付工作台`}
+            data-testid={`artifact-open-delivery-${artifact.id}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenDelivery?.(artifact);
+            }}
+          >
+            <ShieldCheck className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </ContextMenu>
   );
 }
