@@ -521,6 +521,9 @@ class Database:
                 sources TEXT,
                 -- 第二轮 C1: 终稿生成统计 JSON（输入 / 输出 tokens、首字延迟、总耗时）
                 generation_stats TEXT,
+                -- 2026-10-28: 用户消息展示元数据（附件 / @ 文件引用 / office 引用）。
+                -- JSON-in-TEXT，只用于气泡回显，不参与 LLM 上下文。
+                client_meta TEXT,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
         """)
@@ -575,6 +578,13 @@ class Database:
         if "generation_stats" not in columns:
             try:
                 cursor.execute("ALTER TABLE messages ADD COLUMN generation_stats TEXT")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
+        # 2026-10-28: 用户消息展示元数据（附件 / @ 文件引用 / office 引用）。
+        if "client_meta" not in columns:
+            try:
+                cursor.execute("ALTER TABLE messages ADD COLUMN client_meta TEXT")
                 conn.commit()
             except sqlite3.OperationalError:
                 pass

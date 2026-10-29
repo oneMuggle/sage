@@ -1,5 +1,5 @@
 import { Star } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -10,6 +10,7 @@ import {
 } from '../entities/welcome/recommendations';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { OnboardingWizard } from '../features/onboarding/OnboardingWizard';
+import type { PendingComposerOptions } from '../features/send-message/pendingComposerOptions';
 import { SavedTaskRecipes } from '../features/task-brief/SavedTaskRecipes';
 import { TaskBriefDialog } from '../features/task-brief/TaskBriefDialog';
 import type { TaskBrief } from '../features/task-brief/taskBrief';
@@ -237,11 +238,72 @@ export function Welcome() {
     setBriefRecommendation(rec);
   }, []);
 
+  // 新会话页的草稿会话：用户在新会话页输入 `@` 时需要 sessionId 才能搜索
+  // 工作区文件（AtFileMenu → fileSearchClient → workspace_search_files）。
+  // 因此 `@` 菜单激活时懒创建一个会话并绑定项目/最近工作区；提交时复用，
+  // 避免为同一条消息创建两个会话。
+  const draftSessionRef = useRef<{ projectId: string | null; sessionId: string } | null>(null);
+  const draftPromiseRef = useRef<Promise<string | null> | null>(null);
+  // 2026-10-29 修复: 用 generation 计数器取消「换项目后仍在飞行中」的旧创建请求,
+  // 避免旧 promise resolve 时覆盖 `setCurrentSessionId(null)` 把 UI 指到错误项目。
+  const draftGenerationRef = useRef(0);
+
+  const ensureDraftSession = useCallback(async (): Promise<string | null> => {
+    const existing = draftSessionRef.current;
+    if (existing && existing.projectId === projectId) return existing.sessionId;
+    if (draftPromiseRef.current) return draftPromiseRef.current;
+    const generation = ++draftGenerationRef.current;
+    const creation = (async () => {
+      try {
+        const sessionId = projectId
+          ? (await projectApi.createSession(projectId)).session.id
+          : await createSession();
+        // 创建期间用户已切换项目 → 丢弃本次结果, 让新项目的 ensureDraftSession 重新创建。
+        if (draftGenerationRef.current !== generation) return null;
+        draftSessionRef.current = { projectId, sessionId };
+        setCurrentSessionId(sessionId);
+        return sessionId;
+      } catch (error) {
+        if (draftGenerationRef.current !== generation) return null;
+        const message = error instanceof Error ? error.message : String(error);
+        toast.error(`创建会话失败: ${message}`);
+        return null;
+      } finally {
+        if (draftGenerationRef.current === generation) {
+          draftPromiseRef.current = null;
+        }
+      }
+    })();
+    draftPromiseRef.current = creation;
+    return creation;
+  }, [projectId, createSession, setCurrentSessionId]);
+
+  const handleAtQueryActive = useCallback(() => {
+    void ensureDraftSession();
+  }, [ensureDraftSession]);
+
+  const handleProjectChange = useCallback(
+    (id: string | null) => {
+      setProjectId(id);
+      // 草稿会话与旧项目绑定 —— 换项目后清掉，下一次 `@` 或提交时重新创建。
+      const draft = draftSessionRef.current;
+      if (draft && draft.projectId !== id) {
+        draftSessionRef.current = null;
+        draftPromiseRef.current = null;
+        // 2026-10-29: bump generation 使任何在飞行的旧创建请求 resolve 时不覆盖状态。
+        draftGenerationRef.current += 1;
+        setCurrentSessionId(null);
+      }
+    },
+    [setCurrentSessionId],
+  );
+
   const handleSubmit = useCallback(
     async (
       value: string,
       dialogProjectId?: string | null,
       dialogModelId?: string,
+      options?: PendingComposerOptions,
     ): Promise<boolean> => {
       setSubmitting(true);
       try {
@@ -249,10 +311,19 @@ export function Welcome() {
         const effectiveProjectId = dialogProjectId ?? projectId;
         const effectiveModelId = dialogModelId ?? modelId;
 
-        // 1. Create session (with project binding if selected)
-        const sessionId = effectiveProjectId
-          ? (await projectApi.createSession(effectiveProjectId)).session.id
-          : await createSession();
+        // 1. Reuse the draft session created on `@` activation when it matches
+        //    the target project; otherwise create a fresh one (with project
+        //    binding if selected).
+        const draft = draftSessionRef.current;
+        let sessionId: string;
+        if (draft && draft.projectId === (effectiveProjectId ?? null)) {
+          sessionId = draft.sessionId;
+        } else {
+          sessionId = effectiveProjectId
+            ? (await projectApi.createSession(effectiveProjectId)).session.id
+            : await createSession();
+        }
+        draftSessionRef.current = null;
 
         // 2. Create worktree if selected
         if (worktreeMode === 'new' && worktreeBranch) {
@@ -278,7 +349,9 @@ export function Welcome() {
         }
 
         setCurrentSessionId(sessionId);
-        navigate('/chat', { state: { pendingMessage: value } });
+        navigate('/chat', {
+          state: { pendingMessage: value, pendingOptions: options },
+        });
         return true;
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
@@ -297,6 +370,15 @@ export function Welcome() {
       worktreeBranch,
       worktreeId,
     ],
+  );
+
+  // WelcomeInputCard 的 onSend 只带 (value, options)；项目/模型的显式覆盖
+  // 仅由 TaskBriefDialog 使用，这里把位置参数补齐。
+  const handleWelcomeSend = useCallback(
+    (value: string, options?: PendingComposerOptions) => {
+      void handleSubmit(value, undefined, undefined, options);
+    },
+    [handleSubmit],
   );
 
   const quickActions: QuickAction[] = [
@@ -332,12 +414,13 @@ export function Welcome() {
 
         <WelcomeInputCard
           placeholder={placeholder}
-          onSend={handleSubmit}
+          onSend={handleWelcomeSend}
+          onAtQueryActive={handleAtQueryActive}
           disabled={submitting}
           toolbar={
             <WelcomeToolbar
               projectId={projectId}
-              onProjectChange={setProjectId}
+              onProjectChange={handleProjectChange}
               projects={projects}
               modelId={modelId}
               onModelChange={setModelId}

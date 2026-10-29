@@ -126,6 +126,50 @@ export interface ChatOfficeRef {
   filename: string;
 }
 
+/**
+ * 用户消息的展示元数据（client_meta）—— 只用于会话气泡回显，不参与
+ * LLM 上下文。后端 messages.client_meta 以 JSON-in-TEXT 持久化。
+ */
+export interface MessageDisplayAttachment {
+  name: string;
+  size: number;
+  type: string;
+  /**
+   * 仅本地乐观展示（拖拽/粘贴后的缩略图）；发送前由 buildMessageDisplayMeta
+   * 剥离，绝不落库。
+   */
+  dataUrl?: string;
+}
+
+export interface MessageDisplayFileRef {
+  path: string;
+  name: string;
+}
+
+/**
+ * 落库形态的 Office 引用（snake_case）—— Electron relay 的
+ * camelToSnakeKeys 会把 docId/docType 转成 doc_id/doc_type，后端原样存入
+ * messages.client_meta，回读时也是 snake_case。
+ */
+export interface MessageDisplayOfficeRef {
+  doc_id: string;
+  doc_type: 'ppt' | 'word' | 'excel' | 'pdf';
+  filename: string;
+}
+
+export interface MessageDisplayMeta {
+  /** 随消息上传的文档附件（名称/大小/类型，不含 dataUrl） */
+  attachments?: MessageDisplayAttachment[];
+  /** 聊天图片（同上，不含 dataUrl） */
+  images?: MessageDisplayAttachment[];
+  /** 从消息正文提取的 `@path` 文件引用 */
+  file_refs?: MessageDisplayFileRef[];
+  /** `@` 菜单选择的 Office 文档 */
+  office_refs?: MessageDisplayOfficeRef[];
+  /** 知识库引用（当前仅展示） */
+  knowledge_refs?: { id: string; title: string }[];
+}
+
 export interface WorkspaceRevokeResponse {
   revoked: boolean;
   generation: number;
@@ -155,6 +199,8 @@ export interface Message {
   rag_citations?: RagCitation[] | null;
   /** R81: 工具命中来源（web/wiki/MCP），终稿 assistant 行落库回读。 */
   sources?: MessageSource[] | null;
+  /** 用户消息展示元数据（附件/文件引用/office 引用）；刷新后回读。 */
+  client_meta?: MessageDisplayMeta | null;
 }
 
 /** R81: 统一参考来源条目 —— backend/chat/sources_extractor.py 的提取产物。 */

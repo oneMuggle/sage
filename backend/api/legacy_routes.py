@@ -1896,6 +1896,21 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 else None
             )
             r81_sources_json: Optional[str] = None
+            # 2026-10-28: 用户消息展示元数据（附件 / @ 文件引用 / office 引用）。
+            # 只用于气泡回显，不参与 LLM 上下文；序列化失败或超 32 KiB 时
+            # 丢弃展示元数据，但不影响消息本身落库。
+            user_client_meta_json: Optional[str] = None
+            if data.message_meta:
+                try:
+                    serialized_meta = json.dumps(data.message_meta, ensure_ascii=False)
+                    if len(serialized_meta.encode("utf-8")) <= 32768:
+                        user_client_meta_json = serialized_meta
+                    else:
+                        logger.warning(
+                            f"[REQ {request_id}] message_meta 超过 32 KiB，已丢弃展示元数据"
+                        )
+                except (TypeError, ValueError):
+                    user_client_meta_json = None
             user_now = int(time.time() * 1000)
             try:
                 # client_message_id (2026-09): 确定性 user id —— 前端乐观消息
@@ -1935,6 +1950,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             role="user",
                             content=data.message,
                             activated_skills=r38_activated_skills_json,
+                            client_meta=user_client_meta_json,
                             created_at=user_now,
                         )
                     )

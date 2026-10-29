@@ -16,6 +16,7 @@ import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
 import { BlockedCard } from './BlockedCard';
 import { CompactBanner } from './CompactBanner';
 import { MessageActionBar } from './MessageActionBar';
+import { MessageClientMeta } from './MessageClientMeta';
 import {
   fileChangePaths,
   MarkdownChunk,
@@ -266,41 +267,15 @@ function MessageComponent({
             重试期间气泡内仍是占位符，横幅承担"系统正在自动恢复"的告知职责。 */}
         {isAssistant && retryInfo && <RetryBanner info={retryInfo} />}
 
-        {/* Knowledge references */}
-        {knowledgeRefs && knowledgeRefs.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-1">
-            {knowledgeRefs.map((ref) => (
-              <span
-                key={ref.id}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs bg-primary/10 text-primary"
-              >
-                <BookOpen className="w-2.5 h-2.5" />
-                {ref.title}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* File attachments */}
-        {attachments && attachments.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {attachments.map((file, idx) => (
-              <span
-                key={idx}
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded text-ui-sm border ${
-                  isUser
-                    ? 'bg-text-inverse/15 border-text-inverse/20 text-text-inverse'
-                    : 'bg-bg-subtle border-border text-text-secondary'
-                }`}
-              >
-                {file.type.startsWith('image/') && file.dataUrl ? (
-                  <img src={file.dataUrl} alt="" className="w-4 h-4 rounded object-cover" />
-                ) : null}
-                <span className="truncate max-w-24">{file.name}</span>
-              </span>
-            ))}
-          </div>
-        )}
+        {/* 用户消息引用信息（附件 / @ 文件 / office 文档 / 知识库）——
+            优先使用消息自带的 client_meta（刷新后由 get_messages 回读），
+            兼容旧调用方通过 props 传入的映射。 */}
+        <MessageClientMeta
+          message={message}
+          isUser={isUser}
+          knowledgeRefs={knowledgeRefs}
+          attachments={attachments}
+        />
 
         {/* 工具调用展示（ReAct 模式）— 在消息内容之前，因为工具调用先于最终回答 */}
         {toolCalls.length > 0 && (

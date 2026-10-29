@@ -16,7 +16,9 @@ import {
   type QueuedChatMessage,
 } from '../features/send-message/chatStreamStore';
 import type { DeliveryMode } from '../features/send-message/deliveryMode';
+import { buildMessageDisplayMeta } from '../features/send-message/messageDisplayMeta';
 import { restoreRunToBoard } from '../features/send-message/orchestrationEvents';
+import type { PendingComposerOptions } from '../features/send-message/pendingComposerOptions';
 import { useChat } from '../features/send-message/useChat';
 import { useTerminalPanelStore } from '../features/terminal-panel/terminalPanelStore';
 import { type ChatOfficeRef } from '../shared/api';
@@ -230,34 +232,12 @@ export function Chat() {
     }
   }, [currentSessionId, loadMessages]);
 
-  // Auto-send pending message passed from Welcome page via router state
+  // Auto-send pending message passed from Welcome page via router state.
+  // The effect lives below `handleSendMessage` so the first message reuses the
+  // same upload path (attachments / images / office refs) as in-chat sends.
   const pendingMessage = (location.state as { pendingMessage?: string } | null)?.pendingMessage;
-  useEffect(() => {
-    if (
-      pendingMessage &&
-      currentSessionId &&
-      !pendingSentRef.current &&
-      !settingsLoading &&
-      !storeLoading
-    ) {
-      pendingSentRef.current = true;
-      sendMessage(pendingMessage, currentSessionId);
-      // Clear location state so refresh doesn't re-send.
-      // 2026-09 修复: 裸 replaceState({}, '') 会把 react-router 存在
-      // history.state 里的 {idx, key} 一并抹掉, 破坏后退导航 —— 改走
-      // router API 只清业务 state。
-      navigate(location.pathname + location.search, { replace: true, state: null });
-    }
-  }, [
-    pendingMessage,
-    currentSessionId,
-    sendMessage,
-    settingsLoading,
-    storeLoading,
-    location.pathname,
-    location.search,
-    navigate,
-  ]);
+  const pendingOptions = (location.state as { pendingOptions?: PendingComposerOptions } | null)
+    ?.pendingOptions;
 
   const handleNewSession = async () => {
     // 与 Sidebar 的 "+ 新对话" 行为对齐:跳到欢迎页由用户输入后再创建会话。
@@ -343,6 +323,21 @@ export function Chat() {
       const r67Rag = loadAttachmentRagConfig();
       const attachmentRag = r67Rag.enabled ? { embed: r67Rag.embed, top_k: r67Rag.top_k } : null;
 
+      // 用户消息展示元数据：气泡上回显附件 / @ 文件引用 / office 引用。
+      // 只保留真正随消息上传的文档附件（不支持的扩展名已在上层提示丢弃），
+      // 且不含 dataUrl —— 避免 base64 落库。
+      const displayMeta = buildMessageDisplayMeta({
+        content,
+        attachments: (options?.attachments ?? []).filter((att) => {
+          if (!att.dataUrl) return false;
+          const ext = att.name.split('.').pop()?.toLowerCase() ?? '';
+          return CHAT_DOCUMENT_EXTENSIONS.has(ext);
+        }),
+        images: options?.images,
+        officeRefs,
+        knowledgeRefs: options?.knowledgeRefs,
+      });
+
       if (!currentSessionId) {
         const sessionId = await createSession();
         await sendMessage(content, sessionId, officeRefs, orchestrationMode, {
@@ -352,6 +347,7 @@ export function Chat() {
           attachmentMediaIds,
           attachmentRag,
           contextReset: options?.contextReset,
+          displayMeta,
         });
       } else {
         await sendMessage(content, undefined, officeRefs, orchestrationMode, {
@@ -363,11 +359,56 @@ export function Chat() {
           contextReset: options?.contextReset,
           // P2-a: 会话忙时的投递通道（插话 / 排队 / 打断并发送）
           delivery: options?.delivery,
+          displayMeta,
         });
       }
     },
     [clearError, currentSessionId, createSession, sendMessage, tempChatSessions],
   );
+
+  // Auto-send the message composed on the Welcome page. Runs after mount and
+  // as soon as the session/config are ready; `handleSendMessage` performs the
+  // same attachment/image upload as an in-chat send so drag-and-drop files
+  // referenced on the Welcome page are not lost.
+  // 2026-10-29 修复: 仅附件/引用、无正文时 pendingMessage 为空字符串,
+  // 旧守卫 `pendingMessage &&` 会把整条消息丢弃 —— 改为「有正文或有选项」
+  // 任一成立即触发。
+  const hasPendingContent = Boolean(
+    pendingMessage ||
+    (pendingOptions &&
+      ((pendingOptions.attachments && pendingOptions.attachments.length > 0) ||
+        (pendingOptions.images && pendingOptions.images.length > 0) ||
+        (pendingOptions.officeRefs && pendingOptions.officeRefs.length > 0) ||
+        (pendingOptions.knowledgeRefs && pendingOptions.knowledgeRefs.length > 0))),
+  );
+  useEffect(() => {
+    if (
+      hasPendingContent &&
+      currentSessionId &&
+      !pendingSentRef.current &&
+      !settingsLoading &&
+      !storeLoading
+    ) {
+      pendingSentRef.current = true;
+      void handleSendMessage(pendingMessage ?? '', pendingOptions);
+      // Clear location state so refresh doesn't re-send.
+      // 2026-09 修复: 裸 replaceState({}, '') 会把 react-router 存在
+      // history.state 里的 {idx, key} 一并抹掉, 破坏后退导航 —— 改走
+      // router API 只清业务 state。
+      navigate(location.pathname + location.search, { replace: true, state: null });
+    }
+  }, [
+    hasPendingContent,
+    pendingMessage,
+    pendingOptions,
+    currentSessionId,
+    handleSendMessage,
+    settingsLoading,
+    storeLoading,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
 
   const {
     handleCompact,

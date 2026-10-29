@@ -122,6 +122,7 @@ export type {
   LaneFreshnessInfo,
   Memory,
   Message,
+  MessageDisplayMeta,
   OfficeDeleteResponse,
   OfficeDocStatus,
   OfficeDocType,
