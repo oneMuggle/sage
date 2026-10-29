@@ -59,33 +59,11 @@ export function formatSettingRowAuditJson(input: SettingRowAuditInput): string {
 // ==================== 共用组件 ====================
 
 export function SettingRow({ label, desc, children, anchor }: SettingRowProps) {
-  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
-  const auditInput: SettingRowAuditInput = {
+  const auditSnapshot = formatSettingRowAuditSnapshot({
     label,
     hasDesc: Boolean(desc),
     anchor: anchor ?? null,
-  };
-  const auditSnapshot = formatSettingRowAuditSnapshot(auditInput);
-  const auditJson = formatSettingRowAuditJson(auditInput);
-  /* v8 ignore start */
-  const handleCopySnapshot = async () => {
-    setCopiedSnapshot(true);
-    try {
-      await navigator.clipboard?.writeText(auditSnapshot);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
-  const handleCopyJson = async () => {
-    setCopiedJson(true);
-    try {
-      await navigator.clipboard?.writeText(auditJson);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
-  /* v8 ignore stop */
+  });
 
   return (
     <div
@@ -98,40 +76,6 @@ export function SettingRow({ label, desc, children, anchor }: SettingRowProps) {
       <div>
         <div className="text-sm text-text">{label}</div>
         {desc ? <div className="text-xs text-muted mt-0.5">{desc}</div> : null}
-        <span className="sr-only">
-          <span
-            role="status"
-            tabIndex={0}
-            data-testid="setting-row-audit-copy"
-            data-setting-row-audit={auditSnapshot}
-            aria-label="复制设置项审计快照"
-            onClick={() => void handleCopySnapshot()}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                void handleCopySnapshot();
-              }
-            }}
-          >
-            {copiedSnapshot ? '已复制' : '快照'}
-          </span>
-          <span
-            role="status"
-            tabIndex={0}
-            data-testid="setting-row-audit-copy-json"
-            data-setting-row-audit-json={auditJson}
-            aria-label="复制设置项审计 JSON"
-            onClick={() => void handleCopyJson()}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                void handleCopyJson();
-              }
-            }}
-          >
-            {copiedJson ? '已复制 JSON' : 'JSON'}
-          </span>
-        </span>
       </div>
       <div>{children}</div>
     </div>

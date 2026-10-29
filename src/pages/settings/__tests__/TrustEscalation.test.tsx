@@ -9,6 +9,12 @@ vi.mock('../../../shared/api/permissionApi', () => ({
   permissionApi: {
     getTrustPolicy: () => getTrustPolicy(),
     setTrustPolicy: (enabled: boolean, threshold?: number) => setTrustPolicy(enabled, threshold),
+    // ToolsConnectionsTab 现在同时挂载 PermissionRulesManager（2026-10-28 设置页整理）。
+    listRules: vi.fn(async () => []),
+    deleteRule: vi.fn(async () => []),
+    clearRules: vi.fn(async () => []),
+    deleteRulesByPlugin: vi.fn(async () => []),
+    deleteOrphanRules: vi.fn(async () => []),
   },
 }));
 

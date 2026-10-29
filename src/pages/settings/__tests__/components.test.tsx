@@ -83,7 +83,7 @@ describe('SettingRow 搜索锚点 (P1-4)', () => {
     expect(container.querySelector('[data-settings-anchor]')).toBeNull();
   });
 
-  it('formats SettingRow audit snapshot/JSON and supports copy controls (P103)', () => {
+  it('formats SettingRow audit snapshot/JSON (P103) without hidden copy controls', () => {
     expect(
       formatSettingRowAuditSnapshot({
         label: '流式输出',
@@ -105,16 +105,13 @@ describe('SettingRow 搜索锚点 (P1-4)', () => {
       anchor: null,
     });
 
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
+    // 2026-10-28：SettingRow 不再渲染 sr-only 的可聚焦审计按钮（键盘/读屏噪音）。
     render(
       <SettingRow label="流式输出" desc="开启流式" anchor="streaming">
         <Toggle value onChange={() => {}} />
       </SettingRow>,
     );
-    fireEvent.click(screen.getByTestId('setting-row-audit-copy'));
-    expect(writeText).toHaveBeenCalledWith('label=流式输出|desc=1|anchor=streaming');
-    fireEvent.click(screen.getByTestId('setting-row-audit-copy-json'));
-    expect(writeText).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId('setting-row-audit-copy')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('setting-row-audit-copy-json')).not.toBeInTheDocument();
   });
 });

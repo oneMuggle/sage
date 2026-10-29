@@ -23,6 +23,15 @@ vi.mock('../../../shared/api/runtimeApi', () => ({
   },
 }));
 
+// 2026-10-28 设置页整理：原「通用」tab 的日志/LLM 诊断卡片迁入本 tab；
+// 该用例只关心运行时状态机，诊断子树用桩隔离。
+vi.mock('../../../widgets/settings/DiagnosticsCard', () => ({
+  DiagnosticsCard: () => <div data-testid="diagnostics-stub" />,
+}));
+vi.mock('../../../features/diagnostic', () => ({
+  DiagnosticCard: () => <div data-testid="diagnostic-preview-stub" />,
+}));
+
 import { formatRuntimeEnvTabAuditJson, formatRuntimeEnvTabAuditSnapshot, RuntimeEnvTab } from '../RuntimeEnvTab';
 
 const RUNTIME = {

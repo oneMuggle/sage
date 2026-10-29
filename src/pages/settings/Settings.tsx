@@ -25,7 +25,6 @@ import { BasicTab } from './BasicTab';
 import { EffectiveSettingsSummary } from './EffectiveSettingsSummary';
 import { EndpointsTab } from './EndpointsTab';
 import { FeedbackTab } from './FeedbackTab';
-import { GeneralTab } from './GeneralTab';
 import { GlobalRulesTab } from './GlobalRulesTab';
 import { McpTab } from './McpTab';
 import { MemorySettingsTab } from './MemorySettingsTab';
@@ -100,14 +99,12 @@ export function Settings() {
   // 两条路都定不到就如实提示，不伪造跳转。
   const [fallbackEntry, setFallbackEntry] = useState<SettingsSearchEntry | null>(null);
   const [focusMissing, setFocusMissing] = useState(false);
-  const { settings, updateSettings, resetSettings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const { t, locale } = useI18n();
 
   const tabs: { key: SettingsTab; label: string }[] = [
-    // P0-5: 'general' 此前不在此列表（却作为默认 activeTab + 承载破坏性
-    // 「重置全部设置」），导致默认落地页在左侧导航无高亮项、切走后无法
-    // 返回。SettingsTabKey 与 i18n 均已有该 key，属单纯的数组漏项。
-    { key: 'general', label: t('settings.tab.general') },
+    // 2026-10-28 设置页整理 P0：「通用」tab 已下线，内容并入「基础」。
+    // 老用户 localStorage 里的 'general' 仍由 migrateTab 迁到 basic。
     { key: 'basic', label: t('settings.tab.basic') },
     { key: 'tools-connections', label: t('settings.tab.tools-connections') },
     { key: 'endpoints', label: t('settings.tab.endpoints') },
@@ -326,7 +323,6 @@ export function Settings() {
                   : '已打开所属分组；该设置可能尚未加载或需展开高级选项，未伪造定位结果。'}
               </p>
             )}
-            {activeTab === 'general' && <GeneralTab resetSettings={resetSettings} />}
             {activeTab === 'basic' && <BasicTab />}
             {activeTab === 'tools-connections' && <ToolsConnectionsTab />}
             {activeTab === 'endpoints' && (

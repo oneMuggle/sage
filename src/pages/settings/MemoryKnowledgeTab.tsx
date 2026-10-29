@@ -199,7 +199,7 @@ function ClearAllMemoriesSection() {
  *
  * 走后端 preferences KV（auto_checkpoint），producer 在 run 开始前读取。
  */
-function AutoCheckpointCard() {
+export function AutoCheckpointCard() {
   const preference = useConfirmedPreference({
     key: 'auto_checkpoint',
     initial: true,
