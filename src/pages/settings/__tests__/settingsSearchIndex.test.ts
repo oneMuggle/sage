@@ -29,21 +29,19 @@ describe('SETTINGS_SEARCH_INDEX 不变量', () => {
     const knownTabs = new Set([
       'basic',
       'tools-connections',
-      'endpoints',
-      'models',
+      'models-services',
       'orchestration',
       'memory',
       'network',
       'mcp',
-      'plugins',
+      'plugins-skills',
       'remote-workspaces',
       'zotero',
       'runtime',
       'evolution',
       'updates',
-      'providers',
       'usage-stats',
-      'skills',
+      'harness',
       'global-rules',
       'feedback',
     ]);
@@ -57,6 +55,15 @@ describe('SETTINGS_SEARCH_INDEX 不变量', () => {
     // 一个没有内容面板的 tab —— 静默失败，用户只看到空白设置页。
     for (const e of SETTINGS_SEARCH_INDEX) {
       expect(e.tab, `tab of ${e.key}`).not.toBe('memory-knowledge');
+    }
+  });
+
+  it('P1-b：不存在已合并的旧 tab key（endpoints/models/plugins/skills/providers）', () => {
+    // P1-b 合并：端点+模型+更新源→models-services；插件+技能→plugins-skills。
+    // 索引里若还留着这些旧 key，搜索命中会跳到一个没有内容面板的 tab。
+    const offlineKeys = ['endpoints', 'models', 'plugins', 'skills', 'providers'];
+    for (const e of SETTINGS_SEARCH_INDEX) {
+      expect(offlineKeys, `tab of ${e.key} 应为合并后的 key`).not.toContain(e.tab);
     }
   });
 

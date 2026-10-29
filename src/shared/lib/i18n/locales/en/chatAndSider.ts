@@ -281,6 +281,8 @@ export const enChatAndSider = {
   'settings.tab.tools-connections': 'Permissions & Tools',
   'settings.tab.endpoints': 'Endpoints',
   'settings.tab.models': 'Models',
+  'settings.tab.models-services': 'Models and services',
+  'settings.tab.plugins-skills': 'Plugins and skills',
   'settings.tab.orchestration': 'Orchestration',
   'settings.tab.memory': 'Memory',
   'settings.tab.network': 'Network',
