@@ -20,7 +20,6 @@ from backend.services.default_workspace import (
     WorkspaceSource,
 )
 
-
 # ----------------------------------------------------------------------
 # fixtures
 # ----------------------------------------------------------------------
@@ -195,7 +194,8 @@ def test_scratch_workspace_is_idempotent(resolver):
     """Two consecutive resolutions must return the same scratch path."""
     a = resolver.resolve_default_workspace()
     b = resolver.resolve_default_workspace()
-    assert a is not None and b is not None
+    assert a is not None
+    assert b is not None
     assert a.path == b.path
 
 
