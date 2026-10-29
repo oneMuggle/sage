@@ -1,44 +1,30 @@
-import type { SettingsTabKey } from './settingsSearchIndex';
+import { SETTINGS_TAB_ALIASES, SETTINGS_TAB_KEYS, type SettingsTabKey } from './settingsTabs';
 
-const visibleTabs: readonly SettingsTabKey[] = [
-  'basic',
-  'tools-connections',
-  'models-services',
-  'orchestration',
-  'memory',
-  'network',
-  'mcp',
-  'plugins-skills',
-  'remote-workspaces',
-  'zotero',
-  'runtime',
-  'evolution',
-  'harness',
-  'updates',
-  'usage-stats',
-  // G1 (2026-10-27): 全局规则 Tab（~/.sage/SAGE.md 读写）
-  'global-rules',
-  // 2026-10-29: 用户反馈 Tab（管理员转发 + 双向会话）
-  'feedback',
-];
-
-/** Keep old settings bookmarks, never render an unknown/hidden initial tab. */
-export function initialSettingsTab(value: string | null, _providersEnabled = false): SettingsTabKey {
-  if (value === 'general') return 'basic';
-  // 上游把「记忆与知识」tab 重命名为 memory；旧书签按别名迁回，不落到 basic。
-  if (value === 'memory-knowledge') return 'memory';
-  // P1-b: 端点/模型/更新源合并为 models-services；旧书签迁到默认 models 子 tab。
-  if (value === 'endpoints' || value === 'models' || value === 'providers') return 'models-services';
-  // P1-b: 插件/技能合并为 plugins-skills；旧书签迁到默认 plugins 子 tab。
-  if (value === 'plugins' || value === 'skills') return 'plugins-skills';
-  return visibleTabs.includes(value as SettingsTabKey) ? (value as SettingsTabKey) : 'basic';
+/**
+ * Keep old settings bookmarks, never render an unknown initial tab.
+ *
+ * P2 (2026-10-28): 合法 tab 列表与别名迁移表都从 `settingsTabs.tsx` 注册表派生。
+ * 此前本文件自带一份 `visibleTabs`、外加三行硬编码别名分支，与 `Settings.tsx`
+ * 的 tabs 数组、`settingsPresentation` 的 GROUPS 各写一份 —— 改一处忘另一处
+ * 就会漂移（合并 tab 时 `visibleTabs` 与别名分支就不同步过一次）。
+ *
+ * 注：`providers` 不再是独立 tab（P1-b 合并进 `models-services` 的子 tab），
+ * 因此这里不再有 providers 开关的可见性门控。
+ */
+export function initialSettingsTab(value: string | null): SettingsTabKey {
+  if (!value) return 'basic';
+  const aliased = SETTINGS_TAB_ALIASES.get(value);
+  if (aliased) return aliased;
+  return SETTINGS_TAB_KEYS.includes(value as SettingsTabKey)
+    ? (value as SettingsTabKey)
+    : 'basic';
 }
 
 export function formatSettingsNavigationSummary(
   rawValue: string | null,
   providersEnabled = false,
 ): string {
-  const resolved = initialSettingsTab(rawValue, providersEnabled);
+  const resolved = initialSettingsTab(rawValue);
   return `${rawValue ?? 'null'} -> ${resolved} · providers=${providersEnabled}`;
 }
 
@@ -49,7 +35,7 @@ export function formatSettingsNavigationJson(
   return JSON.stringify(
     {
       requested: rawValue,
-      resolved: initialSettingsTab(rawValue, providersEnabled),
+      resolved: initialSettingsTab(rawValue),
       providersEnabled,
     },
     null,
@@ -61,16 +47,22 @@ export function auditSettingsNavigationGovernance(): {
   module: 'src/pages/settings/settingsNavigation.ts';
   phase: 'P174';
   domain: 'settings';
-  legacyAliases: readonly ['general->basic', 'memory-knowledge->memory'];
+  legacyAliases: readonly string[];
   compliant: boolean;
 } {
+  // 别名表从注册表派生，避免审计元数据与实际迁移行为漂移。
+  const legacyAliases = Array.from(SETTINGS_TAB_ALIASES.entries()).map(
+    ([alias, key]) => `${alias}->${key}`,
+  );
   return {
     module: 'src/pages/settings/settingsNavigation.ts',
     phase: 'P174',
     domain: 'settings',
-    legacyAliases: ['general->basic', 'memory-knowledge->memory'],
+    legacyAliases,
     compliant:
-      initialSettingsTab('general') === 'basic' &&
-      initialSettingsTab('memory-knowledge') === 'memory',
+      legacyAliases.length > 0 &&
+      Array.from(SETTINGS_TAB_ALIASES.entries()).every(
+        ([alias, key]) => initialSettingsTab(alias) === key,
+      ),
   };
 }

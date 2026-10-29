@@ -1,57 +1,23 @@
 import type { SettingsSearchEntry, SettingsTabKey } from './settingsSearchIndex';
+import { SETTINGS_GROUPS, SETTINGS_TABS } from './settingsTabs';
 
-const GROUPS = [
-  { id: 'basic', zh: '基础', en: 'Basics', keys: ['basic'] },
-  { id: 'models', zh: '模型与服务', en: 'Models and services', keys: ['models-services'] },
-  {
-    id: 'agent',
-    zh: '智能体',
-    en: 'Agent',
-    keys: [
-      'orchestration',
-      'tools-connections',
-      'mcp',
-      'plugins-skills',
-      'global-rules',
-    ],
-  },
-  {
-    id: 'knowledge',
-    zh: '记忆与知识',
-    en: 'Memory and knowledge',
-    keys: ['memory', 'zotero'],
-  },
-  {
-    id: 'network',
-    zh: '网络与远程',
-    en: 'Network and remote',
-    keys: ['network', 'remote-workspaces'],
-  },
-  {
-    id: 'maintenance',
-    zh: '使用与维护',
-    en: 'Usage and maintenance',
-    keys: ['usage-stats', 'updates'],
-  },
-  {
-    id: 'advanced',
-    zh: '诊断与实验',
-    en: 'Diagnostics and experiments',
-    keys: ['runtime', 'evolution', 'harness'],
-  },
-  {
-    id: 'feedback',
-    zh: '反馈',
-    en: 'Feedback',
-    keys: ['feedback'],
-  },
-] as const;
-
+/**
+ * 设置页左侧导航的分组。
+ *
+ * P2 (2026-10-28): 分组顺序、组名与成员全部从 `settingsTabs.tsx` 注册表派生。
+ * 此前本文件自带一份 `GROUPS` 常量（含已下线的 `memory-knowledge`），
+ * 与 `Settings.tsx` 的 tabs 数组、`settingsNavigation` 的 visibleTabs 各写一份，
+ * 改一处忘另一处就会漂移。
+ *
+ * 组内 tab 顺序 = 注册表顺序；`available` 决定哪些 tab 实际可见。
+ */
 export function settingsGroups(available: readonly SettingsTabKey[], locale = 'zh') {
-  return GROUPS.map((group) => ({
+  return SETTINGS_GROUPS.map((group) => ({
     id: group.id,
     label: locale === 'en' ? group.en : group.zh,
-    keys: available.filter((key) => (group.keys as readonly string[]).includes(key)),
+    keys: SETTINGS_TABS.filter((tab) => tab.group === group.id && available.includes(tab.key)).map(
+      (tab) => tab.key,
+    ),
   })).filter((group) => group.keys.length > 0);
 }
 

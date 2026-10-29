@@ -6,77 +6,34 @@
  * - 搜索升级为设置项级：命中具体设置项（settingsSearchIndex），
  *   点击结果跳转到所属 tab；无查询时按 tab 名过滤左侧导航；
  * - 编排 13 项从「通用」拆出为独立「编排」tab。
+ *
+ * P2 (2026-10-28)：tab 元数据（key / label / 分组 / 别名 / 内容面板）
+ * 全部收进 `settingsTabs.tsx` 注册表，本文件只负责搜索、锚点定位与渲染。
+ * 新增 tab 只改注册表 1 处。
  */
 
 import { clsx } from 'clsx';
 import { Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
-import { ENABLE_UPDATE_PROVIDERS_UI } from '../../shared/updateFeatureFlag';
-import { EvolutionLog } from '../../widgets/evolution/EvolutionLog';
-import { EvolutionPanel } from '../../widgets/evolution/EvolutionPanel';
-import { LearnedPreferences } from '../../widgets/evolution/LearnedPreferences';
-import { RecallMetrics } from '../../widgets/evolution/RecallMetrics';
-import { HarnessDashboard } from '../../widgets/harness/HarnessDashboard';
+import { useI18n } from '../../shared/lib/i18n';
 
-import { BasicTab } from './BasicTab';
 import { EffectiveSettingsSummary } from './EffectiveSettingsSummary';
-import { FeedbackTab } from './FeedbackTab';
-import { GlobalRulesTab } from './GlobalRulesTab';
-import { McpTab } from './McpTab';
-import { MemorySettingsTab } from './MemorySettingsTab';
-import { ModelsServicesTab } from './ModelsServicesTab';
-import { NetworkTab } from './NetworkTab';
-import { OrchestrationTab } from './OrchestrationTab';
-import { PluginsSkillsTab } from './PluginsSkillsTab';
-import { RemoteWorkspacesTab } from './RemoteWorkspacesTab';
-import { RuntimeEnvTab } from './RuntimeEnvTab';
-import { ToolsConnectionsTab } from './ToolsConnectionsTab';
-import { UpdatesTab } from './UpdatesTab';
-import { UsageStatsTab } from './UsageStatsTab';
-import { ZoteroTab } from './ZoteroTab';
 import { initialSettingsTab } from './settingsNavigation';
 import { focusSettingsEntry, settingsGroups } from './settingsPresentation';
-import {
-  searchSettings,
-  type SettingsSearchEntry,
-  type SettingsTabKey,
-} from './settingsSearchIndex';
+import { searchSettings, type SettingsSearchEntry } from './settingsSearchIndex';
+import { SETTINGS_TABS, findSettingsTab, type SettingsTabKey } from './settingsTabs';
 
 export type SettingsTab = SettingsTabKey;
-
-/**
- * 历史持久化 tab 值 → 当前 tab 的迁移表。
- *
- * - `general`：P0-5 之前 'general' 不在 tabs 列表里却承载默认落地页，迁到 basic。
- * - `memory-knowledge`：P1-5 把两个「记忆」tab 合并成一个，该 key 已下线，
- *   迁到 memory。老用户 localStorage 里还留着旧值，不迁移就会落进
- *   “无 tab 内容”的空白页。
- */
-const LEGACY_TAB_ALIASES: Record<string, SettingsTab> = {
-  general: 'basic',
-  'memory-knowledge': 'memory',
-  // P1-b: 合并 tab 的旧 key 迁移
-  endpoints: 'models-services',
-  models: 'models-services',
-  providers: 'models-services',
-  plugins: 'plugins-skills',
-  skills: 'plugins-skills',
-};
-
-function migrateTab(saved: string): SettingsTab {
-  return (LEGACY_TAB_ALIASES[saved] ?? saved) as SettingsTab;
-}
 
 export function Settings() {
   // R45: 记住上次访问的 tab —— localStorage 持久化，重开设置页恢复
   const [activeTab, setActiveTabState] = useState<SettingsTab>(() => {
     try {
       const saved = localStorage.getItem('sage:settings-tab');
-      // 上游把「记忆与知识」tab 重命名为 memory：旧书签先按上游别名迁移，
-      // 再走 initialSettingsTab 的合法性与可见性校验（providers 开关、未知值回退 basic）。
-      return initialSettingsTab(saved ? migrateTab(saved) : null, ENABLE_UPDATE_PROVIDERS_UI());
+      // 历史 localStorage 值（旧 tab key、已下线 tab）由 initialSettingsTab
+      // 统一做别名迁移 + 合法性校验，未知值回退 basic。
+      return initialSettingsTab(saved);
     } catch {
       /* ignore */
     }
@@ -103,27 +60,11 @@ export function Settings() {
   const [focusMissing, setFocusMissing] = useState(false);
   const { t, locale } = useI18n();
 
-  const tabs: { key: SettingsTab; label: string }[] = [
-    { key: 'basic', label: t('settings.tab.basic') },
-    // P1-b: 端点/模型/更新源合并为「模型与服务」
-    { key: 'models-services', label: t('settings.tab.models-services') },
-    { key: 'orchestration', label: t('settings.tab.orchestration') },
-    { key: 'tools-connections', label: t('settings.tab.tools-connections') },
-    { key: 'mcp', label: t('settings.tab.mcp') },
-    // P1-b: 插件/技能合并为「插件与技能」
-    { key: 'plugins-skills', label: t('settings.tab.plugins-skills') },
-    { key: 'global-rules', label: t('settings.tab.global-rules' as TranslationKey) },
-    { key: 'memory', label: t('settings.tab.memory') },
-    { key: 'zotero', label: t('settings.tab.zotero') },
-    { key: 'network', label: t('settings.tab.network') },
-    { key: 'remote-workspaces', label: t('settings.tab.remote-workspaces') },
-    { key: 'usage-stats', label: t('settings.tab.usage-stats' as TranslationKey) },
-    { key: 'updates', label: t('settings.tab.updates') },
-    { key: 'runtime', label: t('settings.tab.runtime') },
-    { key: 'evolution', label: t('settings.tab.evolution') },
-    { key: 'harness', label: t('settings.tab.harness') },
-    { key: 'feedback', label: t('settings.tab.feedback') },
-  ];
+  // 左侧导航与搜索结果里的 tab 名都来自注册表。
+  const tabs = useMemo(
+    () => SETTINGS_TABS.map((tab) => ({ key: tab.key, label: t(tab.labelKey) })),
+    [t],
+  );
 
   // 设置项级搜索：命中项列表 + 其所属 tab（导航区仍按 tab 名过滤）
   const matchedItems = useMemo(() => searchSettings(searchQuery), [searchQuery]);
@@ -209,6 +150,9 @@ export function Settings() {
     filteredTabs.map((tab) => tab.key),
     locale,
   );
+
+  // 内容面板由注册表决定 —— render 返回 JSX 元素，React 正常挂载组件。
+  const activeTabDef = useMemo(() => findSettingsTab(activeTab), [activeTab]);
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -309,32 +253,7 @@ export function Settings() {
                   : '已打开所属分组；该设置可能尚未加载或需展开高级选项，未伪造定位结果。'}
               </p>
             )}
-            {activeTab === 'basic' && <BasicTab />}
-            {activeTab === 'tools-connections' && <ToolsConnectionsTab />}
-            // P1-b: 端点/模型/更新源合并为「模型与服务」
-            {activeTab === 'models-services' && <ModelsServicesTab />}
-            {activeTab === 'orchestration' && <OrchestrationTab />}
-            {activeTab === 'memory' && <MemorySettingsTab />}
-            {activeTab === 'network' && <NetworkTab />}
-            {activeTab === 'remote-workspaces' && <RemoteWorkspacesTab />}
-            {activeTab === 'mcp' && <McpTab />}
-            // P1-b: 插件/技能合并为「插件与技能」
-            {activeTab === 'plugins-skills' && <PluginsSkillsTab />}
-            {activeTab === 'zotero' && <ZoteroTab />}
-            {activeTab === 'runtime' && <RuntimeEnvTab />}
-            {activeTab === 'evolution' && (
-              <div className="space-y-6">
-                <EvolutionPanel />
-                <LearnedPreferences />
-                <RecallMetrics />
-                <EvolutionLog />
-              </div>
-            )}
-            {activeTab === 'harness' && <HarnessDashboard />}
-            {activeTab === 'updates' && <UpdatesTab />}
-            {activeTab === 'usage-stats' && <UsageStatsTab />}
-            {activeTab === 'global-rules' && <GlobalRulesTab />}
-            {activeTab === 'feedback' && <FeedbackTab />}
+            {activeTabDef?.render()}
           </div>
         </div>
       </div>

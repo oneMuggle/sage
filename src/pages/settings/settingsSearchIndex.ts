@@ -4,28 +4,15 @@
  * 每个条目对应设置页一个可见控件/分组，keywords 为小写搜索词
  * (中英混排，命中时任一子串包含即可)。新增设置项时在此登记一行，
  * 设置页搜索即可发现它。
+ *
+ * P2 (2026-10-28): `SettingsTabKey` 迁到 `settingsTabs.tsx` 注册表 —— 用
+ * `import type` 引入，编译期擦除，本模块不因此拖入 tab 组件
+ * （`CommandPalette` 直接 import 本模块，不能因此把整个设置页打进包里）。
  */
 
-export type SettingsTabKey =
-  | 'basic'
-  | 'tools-connections'
-  | 'models-services'
-  | 'orchestration'
-  | 'memory'
-  | 'network'
-  | 'mcp'
-  | 'plugins-skills'
-  | 'remote-workspaces'
-  | 'zotero'
-  | 'runtime'
-  | 'evolution'
-  | 'harness'
-  | 'updates'
-  | 'usage-stats'
-  // G1 (2026-10-27): 全局规则 Tab（~/.sage/SAGE.md 读写）
-  | 'global-rules'
-  // 2026-10-29: 用户反馈 Tab（管理员转发 + 双向会话）
-  | 'feedback';
+import type { SettingsTabKey } from './settingsTabs';
+
+export type { SettingsTabKey } from './settingsTabs';
 
 export interface SettingsSearchEntry {
   /** 条目稳定标识 */
@@ -90,6 +77,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: '流式输出',
     labelEn: 'Streaming',
     keywords: 'streaming 流式 逐字 输出',
+  },
+  {
+    key: 'inputHistorySize',
+    tab: 'basic',
+    label: '输入历史条数',
+    labelEn: 'Input history size',
+    keywords: 'input history size 输入 历史 条数 上限',
   },
   {
     key: 'llmRetryMaxAttempts',
@@ -335,6 +329,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: '拆解前事实侦察',
     labelEn: 'Pre-plan scout',
     keywords: 'orch 编排 侦察 事实 计划前置 planscoutenabled',
+  },
+  {
+    key: 'orch.maxIterations',
+    tab: 'orchestration',
+    label: 'Agent 迭代次数上限',
+    labelEn: 'Agent iterations limit',
+    keywords: 'orch 编排 agent 迭代 上限 maxiterations',
   },
   {
     key: 'orch.maxConcurrentSubagents',
@@ -588,6 +589,15 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: '进化面板与日志',
     labelEn: 'Evolution',
     keywords: 'evolution 进化 日志',
+  },
+
+  // ── Harness ──
+  {
+    key: 'harness',
+    tab: 'harness',
+    label: 'Harness 评估面板',
+    labelEn: 'Harness dashboard',
+    keywords: 'harness 评估 面板 测试 实验 dashboard',
   },
 
   // ── 更新 ──

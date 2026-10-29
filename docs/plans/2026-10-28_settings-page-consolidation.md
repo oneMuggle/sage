@@ -1,7 +1,7 @@
 # 设置页信息架构整理（Settings IA Consolidation）
 
 - 日期：2026-10-28
-- 状态：待评审（未开始实施）
+- 状态：实施中（P0 / P1 / P2 已完成，P3 待做）
 - 范围：`src/pages/settings/` 及其导航 / 搜索索引 / 相关测试；不涉及后端接口
 
 ## 1. 背景与目标
@@ -245,10 +245,32 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [ ... ];
 
 ### P2 — 单一数据源（1–2 PR）
 
-- [ ] 新建 `settingsTabs.tsx` registry，派生导航 / 分组 / 别名 / 类型
-- [ ] `EndpointsTab` / `ModelsTab` 改用 `useSettings()`
-- [ ] 搜索索引守卫测试（§4.2 四条）
-- [ ] 验收：新增 tab 只改 registry 1 处；新增设置项漏登记搜索时测试失败
+- [x] 新建 `settingsTabs.tsx` registry，派生导航 / 分组 / 别名 / 类型
+- [x] `EndpointsTab` / `ModelsTab` 改用 `useSettings()`（P1-b 合并后已被 `ModelsServicesTab`
+      取代 —— 注册表渲染的是合并后的 tab，内部的 props 透传保留给既有组件测试）
+- [x] 搜索索引守卫测试（§4.2 四条）
+- [x] 验收：新增 tab 只改 registry 1 处；新增设置项漏登记搜索时测试失败
+
+实施备注（P2 落地时发现）：
+
+- 注册表落在 `settingsTabs.tsx`（`.tsx` 而非 `.ts`），因为 `render` 要返回 JSX。
+  `render` 必须返回**元素**（`() => <BasicTab />`），不能是 `() => BasicTab()` ——
+  后者在 render 期间直接调用组件函数，违反 hooks 规则。
+- `settingsSearchIndex.ts` 用 `import type` 引入 `SettingsTabKey`（编译期擦除），
+  因此 `CommandPalette` 不会因为注册表把整个设置页拖进它的 chunk。
+- `settingsNavigation.ts` / `settingsPresentation.ts` 改为从注册表派生：
+  `initialSettingsTab` 只剩「别名迁移 + 未知值回退 basic」；
+  `settingsGroups` 的分组顺序/组名/成员全部来自 `SETTINGS_GROUPS` + `SETTINGS_TABS`。
+  `Settings.tsx` 里的 `LEGACY_TAB_ALIASES` / `migrateTab` 已删除（迁移逻辑只剩一份）。
+- `providers` / `endpoints` / `models` / `plugins` / `skills` 不再是独立 tab，
+  `initialSettingsTab` 的 `providersEnabled` 形参随之删除。
+- 守卫测试（`__tests__/settingsTabs.guards.test.ts`）落地 3 条自动化断言：
+  源码里的 `anchor="..."` 字面量必须已登记搜索索引、索引条目的 `tab` 必须是注册表
+  key、每个可见 tab 至少有一条搜索条目。守卫当场抓出 3 处历史漏登记：
+  `orch.maxIterations`、`inputHistorySize`、`harness`（整个 tab 无搜索条目）。
+- §4.2 第 4 条（开发模式 `console.warn` 提示缺 anchor）**未做**：动态锚点
+  （`anchor={variable}`）大量存在，逐行 warn 会变成噪音；静态守卫已覆盖
+  可静态检测的那部分。
 
 ### P3 — 体验与降噪（1–2 PR）
 
