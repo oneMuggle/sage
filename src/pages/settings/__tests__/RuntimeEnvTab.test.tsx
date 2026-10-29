@@ -200,7 +200,7 @@ describe('RuntimeEnvTab 试跑', () => {
       diagnoseKind: 'ok',
       execKind: 'idle',
     });
-    expect(snapshot).toContain('# 开发环境审计快照');
+    expect(snapshot).toContain('# 运行环境与诊断审计快照');
     expect(snapshot).toContain('可用运行时数: 1');
     expect(snapshot).toContain('当前选中运行时: C:/py/python.exe');
 

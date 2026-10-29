@@ -1,5 +1,5 @@
 /**
- * Settings 页面 - 开发环境 Tab
+ * Settings 页面 - 运行环境与诊断 Tab
  *
  * 展示本机可用运行时 + 当前项目诊断结果，并提供一个"试跑"输入框让用户
  * 通过 runtime_exec 验证选定的运行时确实可用。
@@ -38,7 +38,7 @@ export interface RuntimeEnvTabAuditInput {
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatRuntimeEnvTabAuditSnapshot(input: RuntimeEnvTabAuditInput): string {
   return [
-    `# 开发环境审计快照`,
+    `# 运行环境与诊断审计快照`,
     `- 探测状态: ${input.probeKind}`,
     `- 可用运行时数: ${input.runtimeCount}`,
     `- 当前选中运行时: ${input.selectedRuntime || '未选择'}`,
@@ -237,7 +237,7 @@ export function RuntimeEnvTab() {
             <span
               data-testid="runtime-env-tab-copy-audit"
               onClick={() => void handleCopyAudit()}
-              title="复制开发环境审计快照"
+              title="复制运行环境与诊断审计快照"
               className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-ink cursor-pointer select-none"
             >
               {copiedAudit ? '已复制快照' : '复制快照'}

@@ -1,27 +1,26 @@
 import type { SettingsSearchEntry, SettingsTabKey } from './settingsSearchIndex';
 
 const GROUPS = [
-  { id: 'basic', zh: '基础与外观', en: 'Basics and appearance', keys: ['basic'] },
+  { id: 'basic', zh: '基础', en: 'Basics', keys: ['basic'] },
   { id: 'models', zh: '模型与服务', en: 'Models and services', keys: ['endpoints', 'models'] },
   {
-    id: 'knowledge',
-    zh: '记忆与资料',
-    en: 'Memory and sources',
-    keys: ['memory', 'zotero'],
-  },
-  {
-    id: 'tools',
-    zh: '工具与安全',
-    en: 'Tools and safety',
+    id: 'agent',
+    zh: '智能体',
+    en: 'Agent',
     keys: [
+      'orchestration',
       'tools-connections',
       'mcp',
       'plugins',
-      'orchestration',
-      'evolution',
       'skills',
       'global-rules',
     ],
+  },
+  {
+    id: 'knowledge',
+    zh: '记忆与知识',
+    en: 'Memory and knowledge',
+    keys: ['memory', 'zotero'],
   },
   {
     id: 'network',
@@ -30,10 +29,16 @@ const GROUPS = [
     keys: ['network', 'remote-workspaces'],
   },
   {
-    id: 'diagnostics',
-    zh: '诊断、用量与更新',
-    en: 'Diagnostics, usage and updates',
-    keys: ['runtime', 'usage-stats', 'updates', 'providers'],
+    id: 'maintenance',
+    zh: '使用与维护',
+    en: 'Usage and maintenance',
+    keys: ['usage-stats', 'updates'],
+  },
+  {
+    id: 'advanced',
+    zh: '诊断与实验',
+    en: 'Diagnostics and experiments',
+    keys: ['runtime', 'evolution', 'harness', 'providers'],
   },
   {
     id: 'feedback',

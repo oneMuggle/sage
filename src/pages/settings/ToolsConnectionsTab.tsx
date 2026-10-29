@@ -1,5 +1,5 @@
 /**
- * Settings 页面 - 工具与连接 Tab
+ * Settings 页面 - 权限与工具 Tab
  *
  * 包含权限模式、Hooks、网关、降级模型等设置。
  * 从原 GeneralTab 拆分而来（2026-09-19 设置治理 Phase 2）。
