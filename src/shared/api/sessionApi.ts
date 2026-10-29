@@ -35,11 +35,15 @@ export const sessionApi = {
   async list(opts?: { limit?: number; offset?: number; archived?: boolean }): Promise<Session[]> {
     return withRetry(async () => {
       try {
-        return await invoke<Session[]>('list_sessions', {
-          limit: opts?.limit,
-          offset: opts?.offset,
-          archived: opts?.archived,
-        });
+        // 只下发显式参数；无参调用保持 invoke('list_sessions') 的既有形状。
+        const args: Record<string, unknown> = {};
+        if (opts?.limit != null) args.limit = opts.limit;
+        if (opts?.offset != null) args.offset = opts.offset;
+        if (opts?.archived != null) args.archived = opts.archived;
+        if (Object.keys(args).length === 0) {
+          return await invoke<Session[]>('list_sessions');
+        }
+        return await invoke<Session[]>('list_sessions', args);
       } catch (error) {
         throw handleApiError(error);
       }
