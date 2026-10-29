@@ -606,6 +606,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"model={_safe_log_field(llm_config['model'])}"
                 )
 
+            # Task 9 (2026-10-28): 智能路由 —— 仅 routing.mode == "auto" 且会话
+            # 未锁定模型时，在同 endpoint 上按 task_type 重选模型。默认 manual,
+            # 未改动时此调用立即原样返回 llm_config。
+            if llm_config:
+                from backend.orchestration.llm_factory import apply_auto_routing_overlay
+
+                llm_config = apply_auto_routing_overlay(
+                    llm_config,
+                    task_type=data.task_type,
+                    session_id=data.session_id,
+                )
+
             # ===== L11 user_prompt_submit 钩子 BEGIN (批次 C-2) =====
             # 用户自定义钩子可在消息进入 agent 循环前检查/拦截 (deny)。
             # fail-open: 钩子故障视为放行。deny → failed 事件, 不消耗 LLM。

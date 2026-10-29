@@ -103,3 +103,62 @@ describe('ModelsTab context controls', () => {
     });
   });
 });
+
+describe('ModelsTab routing mode (Task 11)', () => {
+  const autoSettings = { ...settings, routing: { mode: 'auto' as const } };
+
+  it('defaults to manual mode and renders no read-only routing table', () => {
+    render(<ModelsTab settings={settings} updateSettings={vi.fn()} />);
+
+    expect(screen.getByTestId('settings-routing-mode-manual')).toBeChecked();
+    expect(screen.getByTestId('settings-routing-mode-auto')).not.toBeChecked();
+    expect(screen.queryByTestId('settings-routing-table')).toBeNull();
+  });
+
+  it('writes routing.mode when the auto radio is selected', () => {
+    const updateSettings = vi.fn();
+    render(<ModelsTab settings={settings} updateSettings={updateSettings} />);
+
+    fireEvent.click(screen.getByTestId('settings-routing-mode-auto'));
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ routing: expect.objectContaining({ mode: 'auto' }) }),
+    );
+  });
+
+  it('auto mode shows the mapping table + chat endpoint row and hides the chat picker', () => {
+    render(<ModelsTab settings={autoSettings} updateSettings={vi.fn()} />);
+
+    const table = screen.getByTestId('settings-routing-table');
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+    expect(rows).toHaveLength(9);
+    const codeReviewRow = rows.find((row) => row.textContent?.includes('代码审查'));
+    expect(codeReviewRow?.textContent).toContain('强力');
+    expect(screen.getByTestId('settings-routing-endpoint')).toHaveTextContent('Test');
+    expect(screen.queryByText('用于文本对话（必填）')).toBeNull();
+  });
+
+  it('auto mode keeps the other capability selectors (win7: 6 + title)', () => {
+    // win7 比 main 多一个 TitleModelSelector (PR #2604, 会话标题模型)。
+    // 手动模式: chat/vision/embedding/tts/asr/image_gen/title = 7
+    // 自动模式: 隐藏 chat, 剩 6 个。无其它 <select> 干扰, 直接全量计数。
+    const capabilitySelects = (container: HTMLElement) =>
+      container.querySelectorAll('select');
+
+    const manual = render(<ModelsTab settings={settings} updateSettings={vi.fn()} />);
+    expect(capabilitySelects(manual.container)).toHaveLength(7);
+    manual.unmount();
+
+    const auto = render(<ModelsTab settings={autoSettings} updateSettings={vi.fn()} />);
+    expect(capabilitySelects(auto.container)).toHaveLength(6);
+  });
+
+  it('keeps the routing switch reachable when no endpoint has models (R31a)', () => {
+    const emptySettings = { ...settings, endpoints: [] };
+    render(<ModelsTab settings={emptySettings} updateSettings={vi.fn()} />);
+
+    expect(screen.getByTestId('settings-routing-mode-auto')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-routing-mode-manual')).toBeChecked();
+    expect(screen.getByText(/请先在/)).toBeInTheDocument();
+  });
+});

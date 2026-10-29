@@ -750,6 +750,11 @@ export interface ChatConfig {
   apiKey?: string;
   apiUrl?: string;
   model?: string;
+  /**
+   * Task 7 (2026-10-28) 智能路由：调用方声明的任务类型，仅在 routing.mode=auto
+   * 时由 useChat 写入；后端 ChatRequest.task_type 消费。未设置 = 后端按 "chat"。
+   */
+  taskType?: string;
   /** 前端推断的模型能力(chat / vision / embedding 等),供后端决策图片处理路径 */
   capabilities?: string[];
   maxContext?: number;
