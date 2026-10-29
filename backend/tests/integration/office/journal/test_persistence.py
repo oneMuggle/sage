@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.data.database import Database
 from backend.office.journal.errors import JournalSpecNotFoundError
 from backend.office.journal.models import (
     CitationStyle,
@@ -144,3 +145,41 @@ def test_save_spec_atomic_cleanup_on_sqlite_failure(workspace, monkeypatch):
     # JSON 文件应被清理
     json_path = workspace / "office" / "journal" / "specs" / "spec_atomic_test.json"
     assert not json_path.exists()
+
+
+def test_ensure_journal_tables_uses_passed_db_not_global(tmp_path, monkeypatch):
+    """回归：ensure_journal_tables(db) 必须操作传入的 db，不能打开全局单例。
+
+    旧行为：init_db() 调用 ensure_journal_tables() → get_database() → 初始化
+    全局 _db（指向默认 data/sage.db）。xdist 多 worker 并发时全员争抢该文件
+    的 WAL 排他锁，导致大面积 "database is locked"。
+
+    新行为：init_db() 传 self，ensure_journal_tables(self) 只操作传入实例。
+    """
+    import backend.data.database as db_mod
+
+    # 确保全局 _db 在测试前为 None，以便检测 ensure_journal_tables 是否触发初始化
+    monkeypatch.setattr(db_mod, "_db", None)
+
+    temp_db_path = tmp_path / "test_journal.db"
+    temp_db = Database(db_path=str(temp_db_path))
+
+    # 调用时传入 temp_db
+    ensure_journal_tables(temp_db)
+
+    # 验证：表已建在 temp_db 里
+    conn = temp_db.get_connection()
+    rows = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN "
+        "('office_journal_specs', 'office_journal_generations')"
+    ).fetchall()
+    table_names = {r[0] for r in rows}
+    assert table_names == {"office_journal_specs", "office_journal_generations"}
+
+    # 验证：全局 _db 仍为 None（未被隐式初始化）
+    assert db_mod._db is None, (
+        "ensure_journal_tables(db) 不应触发 get_database() 初始化全局单例"
+    )
+
+    temp_db.close()
+
