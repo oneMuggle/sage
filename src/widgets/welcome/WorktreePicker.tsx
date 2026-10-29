@@ -68,7 +68,7 @@ export function WorktreePicker({
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 shrink-0">
       <Select value={mode} onValueChange={handleModeChange}>
         <SelectTrigger aria-label="Worktree 选项" className="w-40">
           <SelectValue placeholder="Worktree 选项" />

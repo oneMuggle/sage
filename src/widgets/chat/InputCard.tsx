@@ -543,7 +543,7 @@ function InputCardInner({
         </div>
       )}
 
-      <div className="flex items-end gap-2">
+      <div className="flex items-center gap-2">
         <div className="flex-1 relative">
           {showSlashMenu && slashCommands.length > 0 && onSlashSelect && (
             <SlashCommandMenu
@@ -553,7 +553,7 @@ function InputCardInner({
             />
           )}
           {atFileMenu}
-          <div className="border border-border focus-within:border-primary/60 rounded-radius-md px-3 py-2 bg-bg flex items-end gap-2 transition-colors">
+          <div className="border border-border focus-within:border-primary/60 rounded-radius-md px-3 py-2 bg-bg flex items-center gap-2 transition-colors">
             <ComposerPlusMenu items={plusItems} disabled={disabled} />
             <textarea
               ref={emacsRef}
@@ -569,7 +569,7 @@ function InputCardInner({
               disabled={disabled}
               autoFocus={autoFocus}
               data-testid="chat-input"
-              className="flex-1 resize-none border-none bg-transparent outline-none text-sm text-text disabled:opacity-50 max-h-[200px] overflow-y-auto placeholder:text-muted"
+              className="flex-1 resize-none border-none bg-transparent outline-none text-sm leading-9 min-h-9 text-text disabled:opacity-50 max-h-[200px] overflow-y-auto placeholder:text-muted"
               aria-label="message input"
             />
 

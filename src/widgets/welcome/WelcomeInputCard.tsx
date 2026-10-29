@@ -10,6 +10,11 @@ interface WelcomeInputCardProps {
   disabled?: boolean;
   initialValue?: string;
   toolbar?: React.ReactNode;
+  /**
+   * 外部回填的草稿（例如用户点击首屏 prompt chip）。
+   * 传入新的对象实例即视为一次新的回填请求 —— 同一个 chip 连点两次也会重新填充。
+   */
+  draft?: { text: string } | null;
 }
 
 export function formatWelcomeInputMarkdown(params: {
@@ -52,14 +57,24 @@ export function WelcomeInputCard({
   disabled = false,
   initialValue = '',
   toolbar,
+  draft = null,
 }: WelcomeInputCardProps) {
   const [value, setValue] = useState(initialValue);
+  const [focusSeq, setFocusSeq] = useState(0);
 
   const { current: typewriterText } = useTypewriterPlaceholder(typewriterPhrases ?? ['']);
 
   useEffect(() => {
     setValue(initialValue);
   }, [initialValue]);
+
+  // 外部草稿回填：以对象引用变化作为触发信号，同一个 chip 连点两次也会重新填充。
+  // 先写值再让 InputCard 聚焦（focusRequest 变化），保证光标落在新文本末尾。
+  useEffect(() => {
+    if (!draft) return;
+    setValue(draft.text);
+    setFocusSeq((seq) => seq + 1);
+  }, [draft]);
 
   const handleChange = (newValue: string) => {
     setValue(newValue);
@@ -89,6 +104,7 @@ export function WelcomeInputCard({
           placeholder={effectivePlaceholder}
           disabled={disabled}
           autoFocus
+          focusRequest={focusSeq}
         />
       </div>
       {toolbar && <div className="mt-1">{toolbar}</div>}

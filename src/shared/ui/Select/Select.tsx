@@ -70,7 +70,7 @@ export const SelectTrigger = forwardRef<
       <SelectPrimitive.Trigger
         ref={ref}
         className={clsx(
-          'flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2 text-sm text-ink shadow-sm transition-colors',
+          'flex h-10 items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2 text-sm text-ink shadow-sm transition-colors',
           'hover:border-line-strong',
           'focus:outline-none focus:ring-2 focus:ring-primary/50',
           'disabled:cursor-not-allowed disabled:opacity-50',
@@ -166,7 +166,7 @@ export const SelectContent = forwardRef<
         className={clsx(
           'p-1',
           position === 'popper' &&
-            'h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-content-available-width)]',
+            'h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]',
         )}
       >
         {children}
