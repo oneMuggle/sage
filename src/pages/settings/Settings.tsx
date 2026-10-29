@@ -274,40 +274,34 @@ export function Settings() {
             )}
           </div>
         )}
-        <nav className="flex-1 overflow-y-auto p-2 space-y-1">
-          {groups.map((group) => {
-            const selected = group.keys.includes(activeTab);
-            return (
-              <section key={group.id}>
-                <button
-                  type="button"
-                  data-testid={`settings-group-${group.id}`}
-                  aria-expanded={selected}
-                  onClick={() => setActiveTab(group.keys[0])}
-                  className={`w-full px-3 py-2 text-ui-base rounded text-left ${selected ? 'bg-primary/10 text-primary font-medium' : 'text-muted hover:bg-bg-hover'}`}
-                >
-                  {group.label}
-                </button>
-                {(selected || query) &&
-                  group.keys.length > 1 &&
-                  group.keys.map((key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setActiveTab(key)}
-                      className={clsx(
-                        'w-full pl-5 pr-2 py-1.5 text-ui-sm rounded-r text-left transition-colors',
-                        activeTab === key
-                          ? 'border-l-2 border-primary bg-primary/5 text-primary font-medium'
-                          : 'text-muted hover:bg-bg-hover',
-                      )}
-                    >
-                      {tabs.find((tab) => tab.key === key)?.label}
-                    </button>
-                  ))}
-              </section>
-            );
-          })}
+        <nav className="flex-1 overflow-y-auto p-2 space-y-3">
+          {groups.map((group) => (
+            <section key={group.id}>
+              <div
+                data-testid={`settings-group-${group.id}`}
+                className="px-3 py-1 text-ui-2xs font-medium text-muted uppercase tracking-wide"
+              >
+                {group.label}
+              </div>
+              <div className="mt-0.5 space-y-0.5">
+                {group.keys.map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setActiveTab(key)}
+                    className={clsx(
+                      'w-full px-3 py-1.5 text-ui-sm rounded text-left transition-colors',
+                      activeTab === key
+                        ? 'bg-primary/10 text-primary font-medium'
+                        : 'text-text-secondary hover:bg-bg-hover',
+                    )}
+                  >
+                    {tabs.find((tab) => tab.key === key)?.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
         </nav>
       </div>
 

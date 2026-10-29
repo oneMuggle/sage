@@ -47,7 +47,7 @@ describe('formatSettingsGroupsSummary / formatSettingsGroupsJson', () => {
       groupCount: 4,
       tabCount: 4,
       locale: 'en',
-      groupIds: ['basic', 'models', 'network', 'diagnostics'],
+      groupIds: ['basic', 'models', 'network', 'maintenance'],
     });
   });
 });

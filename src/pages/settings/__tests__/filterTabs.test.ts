@@ -22,7 +22,7 @@ const TABS: TabEntry[] = [
   { key: 'network', label: '网络' },
   { key: 'prompts', label: '提示词' },
   { key: 'mcp', label: 'MCP' },
-  { key: 'runtime', label: '开发环境' },
+  { key: 'runtime', label: '运行环境与诊断' },
   { key: 'evolution', label: '进化' },
   { key: 'updates', label: '更新' },
 ];
