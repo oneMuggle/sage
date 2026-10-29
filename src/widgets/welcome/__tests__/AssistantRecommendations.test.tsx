@@ -22,12 +22,12 @@ describe('AssistantRecommendations', () => {
     expect(screen.getByRole('button', { name: /写代码/ })).toBeInTheDocument();
   });
 
-  it('renders a card for each recommendation (count matches)', () => {
+  it('renders a chip for each recommendation (count matches)', () => {
     renderWithI18n(
       <AssistantRecommendations recommendations={defaultRecommendations} onSelect={vi.fn()} />,
     );
-    const cards = screen.getAllByTestId('recommendation-card');
-    expect(cards).toHaveLength(5);
+    const chips = screen.getAllByTestId('recommendation-chip');
+    expect(chips).toHaveLength(5);
   });
 
   it('calls onSelect with the clicked recommendation', () => {
@@ -35,15 +35,25 @@ describe('AssistantRecommendations', () => {
     renderWithI18n(
       <AssistantRecommendations recommendations={defaultRecommendations} onSelect={onSelect} />,
     );
-    const reportCard = screen.getAllByTestId('recommendation-card')[0]!;
-    fireEvent.click(reportCard);
+    const reportChip = screen.getAllByTestId('recommendation-chip')[0]!;
+    fireEvent.click(reportChip);
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'report' }));
   });
 
   it('renders nothing when recommendations is empty', () => {
     renderWithI18n(<AssistantRecommendations recommendations={[]} onSelect={vi.fn()} />);
-    expect(screen.queryByTestId('recommendation-card')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('recommendation-chip')).not.toBeInTheDocument();
+  });
+
+  it('exposes the scenario description as a tooltip', () => {
+    renderWithI18n(
+      <AssistantRecommendations recommendations={defaultRecommendations} onSelect={vi.fn()} />,
+    );
+    expect(screen.getByRole('button', { name: '写报告' })).toHaveAttribute(
+      'title',
+      '明确受众、资料、格式和检查要求',
+    );
   });
 
   it('falls back gracefully when icon name is missing from map', () => {
