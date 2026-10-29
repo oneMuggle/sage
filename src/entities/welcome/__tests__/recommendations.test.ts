@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  chipRecommendations,
   defaultRecommendations,
   lucideIconMap,
   buildRecommendationsAuditJson,
@@ -46,6 +47,17 @@ describe('recommendations data', () => {
   it('gradient is a background class string', () => {
     defaultRecommendations.forEach((rec) => {
       expect(rec.gradient).toMatch(/^bg-[a-z0-9-]+$/);
+    });
+  });
+
+  it('exposes a shorter chip list that drops the slides scenario', () => {
+    expect(chipRecommendations).toHaveLength(4);
+    const ids = chipRecommendations.map((r) => r.id);
+    expect(ids).not.toContain('slides');
+    expect(ids).toEqual(['report', 'organize', 'data', 'coding']);
+    // chips 必须是 defaultRecommendations 的子集，配方回查仍能命中
+    chipRecommendations.forEach((chip) => {
+      expect(defaultRecommendations).toContainEqual(chip);
     });
   });
 });

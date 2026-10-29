@@ -114,7 +114,7 @@ export function TaskBriefDialog({
     }
   };
   const inputClass =
-    'w-full mt-1 px-3 py-2 text-ui-base rounded border border-ui-border bg-ui-surface text-ui-foreground';
+    'w-full mt-1 px-3 py-2 text-ui-base rounded border border-border bg-bg-subtle text-text';
 
   /* v8 ignore start */
 
@@ -130,7 +130,7 @@ export function TaskBriefDialog({
     >
       <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-ui-border bg-ui-bg p-4 shadow-lg">
+        <Dialog.Panel className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-surface-elevated dark:bg-surface p-4 shadow-lg">
           <Dialog.Title className="text-ui-xl font-semibold">
             {en ? 'Describe the deliverable' : '明确这次交付'}
           </Dialog.Title>
@@ -266,7 +266,7 @@ export function TaskBriefDialog({
                 }
               }}
               disabled={submitting || !brief.goal.trim()}
-              className="px-3 py-2 rounded border border-ui-border text-ui-base"
+              className="px-3 py-2 rounded border border-border text-ui-base"
             >
               {en ? 'Save draft recipe' : '保存配方草稿'}
             </button>
@@ -274,7 +274,7 @@ export function TaskBriefDialog({
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="px-3 py-2 rounded border border-ui-border text-ui-base"
+              className="px-3 py-2 rounded border border-border text-ui-base"
             >
               {en ? 'Cancel' : '取消'}
             </button>

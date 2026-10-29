@@ -26,7 +26,7 @@ export function SavedTaskRecipes({ onUse }: { onUse: (recipe: TaskRecipe) => voi
   if (!recipes.length && !error) return null;
   return (
     <section
-      className="w-full max-w-2xl rounded border border-ui-border p-3"
+      className="w-full max-w-2xl rounded border border-border p-3"
       data-testid="saved-task-recipes"
     >
       <h2 className="text-ui-base font-semibold">
@@ -47,7 +47,7 @@ export function SavedTaskRecipes({ onUse }: { onUse: (recipe: TaskRecipe) => voi
       {recipes.map((recipe) => (
         <div
           key={recipe.id}
-          className="flex flex-wrap items-center gap-2 py-2 border-b border-ui-border"
+          className="flex flex-wrap items-center gap-2 py-2 border-b border-border"
         >
           <span className="flex-1 min-w-0 text-ui-base truncate">{recipe.name}</span>
           <span className="text-ui-sm text-text-secondary">
@@ -84,7 +84,7 @@ export function SavedTaskRecipes({ onUse }: { onUse: (recipe: TaskRecipe) => voi
           )}
           <button
             type="button"
-            className="text-ui-sm px-2 py-1 rounded border border-ui-border"
+            className="text-ui-sm px-2 py-1 rounded border border-border"
             onClick={() => onUse(recipe)}
           >
             {en ? 'Review inputs and reuse' : '确认参数后复用'}
