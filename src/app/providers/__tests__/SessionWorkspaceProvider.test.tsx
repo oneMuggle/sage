@@ -26,12 +26,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockBind = vi.fn();
 const mockGet = vi.fn();
 const mockRevoke = vi.fn();
+const mockSetPreference = vi.fn().mockResolvedValue(undefined);
+const mockForgetPreference = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../../shared/api/workspaceApi', () => ({
   workspaceApi: {
     bind: (...args: unknown[]) => mockBind(...args),
     get: (...args: unknown[]) => mockGet(...args),
     revoke: (...args: unknown[]) => mockRevoke(...args),
+    setPreference: (...args: unknown[]) => mockSetPreference(...args),
+    forgetPreference: (...args: unknown[]) => mockForgetPreference(...args),
   },
 }));
 
@@ -69,6 +73,8 @@ beforeEach(() => {
   mockBind.mockReset();
   mockGet.mockReset();
   mockRevoke.mockReset();
+  mockSetPreference.mockReset().mockResolvedValue(undefined);
+  mockForgetPreference.mockReset().mockResolvedValue(undefined);
   mockGet.mockResolvedValue({ binding: null });
   useStore.setState({ currentSessionId: null, sessions: [], messages: [] });
 });
@@ -223,6 +229,38 @@ describe('SessionWorkspaceProvider — revoke()', () => {
     expect(mockRevoke).toHaveBeenCalledWith('session-a');
     expect(result.current.binding).toBeNull();
     expect(result.current.status).toBe('ready');
+  });
+});
+
+describe('SessionWorkspaceProvider — preference write ordering', () => {
+  it('defers forgetPreference until a pending setPreference settles', async () => {
+    mockGet.mockResolvedValue({ binding: BINDING_A });
+    mockBind.mockResolvedValue({ binding: BINDING_A });
+    mockRevoke.mockResolvedValue({ revoked: true, generation: 2 } satisfies WorkspaceRevokeResponse);
+
+    const pendingSet = deferred<void>();
+    mockSetPreference.mockReturnValueOnce(pendingSet.promise);
+
+    const { result } = renderHook(() => useWorkspaceContext(), {
+      wrapper: makeWrapper('session-a'),
+    });
+    await waitFor(() => expect(result.current.binding).toEqual(BINDING_A));
+
+    await act(async () => {
+      await result.current.bind('/tmp/ws-a');
+      await result.current.revoke();
+    });
+
+    expect(mockSetPreference).toHaveBeenCalledWith('/tmp/ws-a');
+    // Serialised: the revoke's clear must not overtake the bind's write,
+    // otherwise the remembered path survives a revoke.
+    expect(mockForgetPreference).not.toHaveBeenCalled();
+
+    await act(async () => {
+      pendingSet.resolve();
+      await pendingSet.promise;
+    });
+    await waitFor(() => expect(mockForgetPreference).toHaveBeenCalledTimes(1));
   });
 });
 

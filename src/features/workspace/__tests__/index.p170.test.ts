@@ -8,7 +8,11 @@ describe('auditWorkspaceIndexGovernance (P170)', () => {
     expect(report.module).toBe('src/features/workspace/index.ts');
     expect(report.phase).toBe('P170');
     expect(report.domain).toBe('workspace');
-    expect(report.exportedComponents).toEqual(['WorkspaceBindModal', 'WorkspaceEmptyGuard']);
+    expect(report.exportedComponents).toEqual([
+      'WorkspaceBindModal',
+      'WorkspaceEmptyGuard',
+      'WorkspaceSwitcher',
+    ]);
     expect(report.compliant).toBe(true);
   });
 });
