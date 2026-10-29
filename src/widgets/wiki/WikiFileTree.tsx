@@ -1,9 +1,25 @@
 // Wiki File Tree - recursive tree view of wiki files
-import { ChevronRight, ChevronDown, FileText, Folder } from 'lucide-react';
-import { useState } from 'react';
+import {
+  ChevronRight,
+  ChevronDown,
+  Copy,
+  FileText,
+  Folder,
+  Pencil,
+  Plus,
+  Trash2,
+} from 'lucide-react';
+import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { useWikiStore } from '../../entities/wiki/store';
+import { copyToClipboard } from '../../shared/lib/clipboard';
+import { fillTemplate } from '../../shared/lib/formatTemplate';
+import { useI18n } from '../../shared/lib/i18n';
 import type { FileNode } from '../../shared/types/wiki';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
+import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
+import type { ContextMenuItemSpec } from '../../shared/ui/ContextMenu/types';
 
 export function WikiFileTree() {
   const fileTree = useWikiStore((s) => s.fileTree);
@@ -34,6 +50,8 @@ export function WikiFileTree() {
   );
 }
 
+type EditMode = 'idle' | 'rename' | 'create';
+
 function TreeNode({
   node,
   depth,
@@ -45,7 +63,17 @@ function TreeNode({
   selectedFile: string | null;
   onFileClick: (path: string) => void;
 }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(depth === 0);
+  const [mode, setMode] = useState<EditMode>('idle');
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const submittingRef = useRef(false);
+  const cancelledRef = useRef(false);
+  const createFile = useWikiStore((s) => s.createFile);
+  const renameFile = useWikiStore((s) => s.renameFile);
+  const deleteFile = useWikiStore((s) => s.deleteFile);
+  const openFile = useWikiStore((s) => s.openFile);
   const isSelected = selectedFile === node.path;
 
   const handleClick = () => {
@@ -56,45 +84,233 @@ function TreeNode({
     }
   };
 
+  const beginEdit = (next: Exclude<EditMode, 'idle'>) => {
+    cancelledRef.current = false;
+    setDraft(next === 'rename' ? node.name : '');
+    setMode(next);
+    if (next === 'create') setExpanded(true);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+  };
+
+  const cancelEdit = () => {
+    cancelledRef.current = true;
+    setMode('idle');
+  };
+
+  const submitEdit = async () => {
+    if (mode === 'idle' || submittingRef.current) return;
+    if (cancelledRef.current) {
+      cancelledRef.current = false;
+      return;
+    }
+    submittingRef.current = true;
+    const currentMode = mode;
+    const value = draft.trim();
+    setMode('idle');
+    try {
+      if (!value) return;
+      if (value.includes('/') || value.includes('..')) {
+        toast.error(t('contextMenu.wiki.nameInvalid'));
+        return;
+      }
+      if (currentMode === 'rename') {
+        if (value === node.name) return;
+        await renameFile(node.path, value);
+      } else {
+        const fileName = /\.\w+$/.test(value) ? value : `${value}.md`;
+        await createFile(node.path, fileName);
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      toast.error(
+        fillTemplate(
+          t(
+            currentMode === 'rename'
+              ? 'contextMenu.wiki.renameFailed'
+              : 'contextMenu.wiki.createFailed',
+          ),
+          { message },
+        ),
+      );
+    } finally {
+      submittingRef.current = false;
+    }
+  };
+
+  const confirmDelete = async () => {
+    const confirmed = await confirmDialog({
+      title: t('contextMenu.wiki.deleteTitle'),
+      message: fillTemplate(t('contextMenu.wiki.deleteMessage'), { path: node.path }),
+      confirmLabel: t('common.delete'),
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      await deleteFile(node.path);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      toast.error(fillTemplate(t('contextMenu.wiki.deleteFailed'), { message }));
+    }
+  };
+
+  const copy = (text: string) =>
+    void copyToClipboard(text, {
+      successMessage: t('contextMenu.common.copied'),
+      errorMessage: t('contextMenu.common.copyFailed'),
+    });
+
+  const menuItems = (): ContextMenuItemSpec[] => {
+    const items: ContextMenuItemSpec[] = [];
+    if (node.is_dir) {
+      items.push({
+        id: 'wiki-new-file',
+        label: t('contextMenu.wiki.newFile'),
+        icon: Plus,
+        onSelect: () => beginEdit('create'),
+      });
+    } else {
+      items.push(
+        {
+          id: 'wiki-open',
+          label: t('contextMenu.common.open'),
+          icon: FileText,
+          onSelect: () => openFile(node.path),
+        },
+        {
+          id: 'wiki-rename',
+          label: t('contextMenu.common.rename'),
+          icon: Pencil,
+          onSelect: () => beginEdit('rename'),
+        },
+      );
+    }
+    items.push(
+      { id: 'wiki-sep-copy', kind: 'separator' },
+      {
+        id: 'wiki-copy-path',
+        label: t('contextMenu.common.copyPath'),
+        icon: Copy,
+        onSelect: () => copy(node.path),
+      },
+      {
+        id: 'wiki-copy-name',
+        label: t('contextMenu.common.copyName'),
+        icon: Copy,
+        onSelect: () => copy(node.name),
+      },
+      { id: 'wiki-sep-delete', kind: 'separator' },
+      {
+        id: 'wiki-delete',
+        label: t('contextMenu.common.delete'),
+        icon: Trash2,
+        destructive: true,
+        onSelect: confirmDelete,
+      },
+    );
+    return items;
+  };
+
   const paddingLeft = depth * 12 + 8;
 
   return (
     <div>
-      <button
-        onClick={handleClick}
-        className={`flex w-full items-center gap-1.5 py-1 pr-2 text-left text-sm hover:bg-bg-muted transition-colors ${
-          isSelected ? 'bg-primary/10 text-primary' : 'text-text-secondary'
-        }`}
-        style={{ paddingLeft: `${paddingLeft}px` }}
-      >
-        {node.is_dir ? (
-          <>
-            {expanded ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted" />
-            )}
-            <Folder className="h-3.5 w-3.5 shrink-0 text-muted" />
-          </>
-        ) : (
-          <>
-            <span className="w-3.5 shrink-0" />
-            <FileText className="h-3.5 w-3.5 shrink-0 text-muted" />
-          </>
-        )}
-        <span className="truncate">{node.name}</span>
-      </button>
-      {node.is_dir && expanded && node.children && (
-        <div>
-          {node.children.map((child) => (
-            <TreeNode
-              key={child.path}
-              node={child}
-              depth={depth + 1}
-              selectedFile={selectedFile}
-              onFileClick={onFileClick}
+      <ContextMenu items={menuItems} enabled={mode === 'idle'}>
+        <button
+          onClick={handleClick}
+          data-testid={node.is_dir ? 'wiki-dir-node' : 'wiki-file-node'}
+          data-path={node.path}
+          className={`flex w-full items-center gap-1.5 py-1 pr-2 text-left text-sm hover:bg-bg-muted transition-colors ${
+            isSelected ? 'bg-primary/10 text-primary' : 'text-text-secondary'
+          }`}
+          style={{ paddingLeft: `${paddingLeft}px` }}
+        >
+          {node.is_dir ? (
+            <>
+              {expanded ? (
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted" />
+              )}
+              <Folder className="h-3.5 w-3.5 shrink-0 text-muted" />
+            </>
+          ) : (
+            <>
+              <span className="w-3.5 shrink-0" />
+              <FileText className="h-3.5 w-3.5 shrink-0 text-muted" />
+            </>
+          )}
+          {mode === 'rename' ? (
+            <input
+              ref={inputRef}
+              value={draft}
+              data-testid="wiki-rename-input"
+              aria-label={t('contextMenu.wiki.nameLabel')}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  inputRef.current?.blur();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelEdit();
+                }
+              }}
+              onBlur={() => void submitEdit()}
+              className="min-w-0 flex-1 rounded border border-primary bg-bg-hover px-1 py-0 text-sm focus:outline-none"
             />
-          ))}
+          ) : (
+            <span className="truncate">{node.name}</span>
+          )}
+        </button>
+      </ContextMenu>
+      {node.is_dir && expanded && (
+        <div>
+          {mode === 'create' && (
+            <div
+              className="flex items-center gap-1.5 py-1 pr-2"
+              style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}
+            >
+              <FileText className="h-3.5 w-3.5 shrink-0 text-muted" />
+              <input
+                ref={inputRef}
+                value={draft}
+                placeholder="name.md"
+                data-testid="wiki-new-file-input"
+                aria-label={t('contextMenu.wiki.nameLabel')}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    inputRef.current?.blur();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelEdit();
+                  }
+                }}
+                onBlur={() => void submitEdit()}
+                className="min-w-0 flex-1 rounded border border-primary bg-bg-hover px-1 py-0 text-sm focus:outline-none"
+              />
+            </div>
+          )}
+          {node.children && (
+            <div>
+              {node.children.map((child) => (
+                <TreeNode
+                  key={child.path}
+                  node={child}
+                  depth={depth + 1}
+                  selectedFile={selectedFile}
+                  onFileClick={onFileClick}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -124,8 +340,7 @@ export function evaluateWikiFileTreeGovernanceAudit(
     issueCodes.push('WIKI_FILE_TREE_PAGE_COUNT_NEGATIVE');
   }
   const trimmedSelected = input.selectedPagePath.trim();
-  const hasValidSelectedPath =
-    trimmedSelected.length === 0 || !trimmedSelected.includes('..');
+  const hasValidSelectedPath = trimmedSelected.length === 0 || !trimmedSelected.includes('..');
   if (!hasValidSelectedPath) {
     issueCodes.push('WIKI_FILE_TREE_SELECTED_PATH_TRAVERSAL');
   }
