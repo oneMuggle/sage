@@ -38,15 +38,12 @@ import {
   RunSummaryPanel,
   SubagentLivePanel,
 } from '../widgets/chat';
-import { ChatInlineError } from '../widgets/chat/ChatInlineError';
-import { CHAT_NOTICE_PRIORITY, ChatNoticeStack } from '../widgets/chat/ChatNoticeStack';
-import { INTERRUPTED_RUN_ERROR, InterruptedRunBanner } from '../widgets/chat/InterruptedRunBanner';
+import { ChatSessionNotices } from '../widgets/chat/ChatSessionNotices';
 import { KeyboardShortcutsHelp } from '../widgets/chat/KeyboardShortcutsHelp';
 import { MemoryWriteHints } from '../widgets/chat/MemoryWriteHints';
 import { PendingQueuePanel } from '../widgets/chat/PendingQueuePanel';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { TerminalPanel } from '../widgets/chat/TerminalPanel';
-import { TopicShiftBanner } from '../widgets/chat/TopicShiftBanner';
 import { RewindDialog } from '../widgets/chat/rewind/RewindDialog';
 import { ArchivesModal } from '../widgets/session';
 
@@ -119,22 +116,8 @@ export function Chat() {
   // L16 (round4 批次 A): run 级崩溃恢复横幅 —— 后端启动时把滞留 running
   // 的会话统一标记 failed(INTERRUPTED_RUN_ERROR);聊天页识别该终态后给出
   // "重发最后一条消息"的恢复入口,而不是让用户对着侧栏灰点猜。
+  // Issue 1 (2026-10-29): 横幅组装与"已忽略"状态已下沉到 ChatSessionNotices。
   const currentSession = sessions.find((s) => s.id === currentSessionId);
-  const interruptedRun =
-    currentSession?.run_status === 'failed' && currentSession?.last_error === INTERRUPTED_RUN_ERROR;
-  const [dismissedInterrupts, setDismissedInterrupts] = useState<Set<string>>(new Set());
-  const showInterruptBanner =
-    currentSessionId != null && interruptedRun && !dismissedInterrupts.has(currentSessionId);
-
-  const retryInterruptedRun = useCallback(() => {
-    if (!currentSessionId) return;
-    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-    if (!lastUser) {
-      toast.error('找不到可重发的消息');
-      return;
-    }
-    void sendMessage(lastUser.content, currentSessionId);
-  }, [currentSessionId, messages, sendMessage]);
 
   // 仅在当前会话命中时显示,避免后台会话触发的事件串台。`handleRetreat`
   // 由 TopicShiftBanner 在用户点"恢复完整上下文"后调用,组件已先调
@@ -174,6 +157,13 @@ export function Chat() {
   const stepConfirmRunId = useChatStreamStore((s) =>
     currentSessionId != null ? selectSessionSlots(s, currentSessionId).taskBoard?.runId : null,
   );
+  // Issue 3: 跨 run 累加的轮次偏移。后端 ReAct 的 iteration 是每次 run 的局部
+  // 计数器（for i in range(max_iterations)），失败后"继续"会从 0 重新开始。
+  // 前端在 clearStream 时把上一轮已达轮次累加进 iterationOffset，
+  // 显示时用 offset + 当前 run 的 iteration，实现"接着上次继续"。
+  const iterationOffset = useChatStreamStore((s) =>
+    currentSessionId != null ? selectSessionSlots(s, currentSessionId).iterationOffset : 0,
+  );
   const handleStepConfirm = useCallback(
     async (action: StepConfirmAction) => {
       if (!currentSessionId || !stepConfirm) return;
@@ -201,7 +191,6 @@ export function Chat() {
     },
     [currentSessionId, stepConfirm, stepConfirmRunId],
   );
-  const showTopicShiftBanner = currentSessionId != null && shiftInfo != null && !isLoading;
   const isTempChat = currentSessionId != null && tempChatSessions.has(currentSessionId);
   const { settings, isLoading: settingsLoading } = useSettings();
   const navigate = useNavigate();
@@ -562,52 +551,21 @@ export function Chat() {
           right-panel R1 批次 D: relative 供面板最大化时 absolute 覆盖。 */}
       <div className="flex-1 flex min-h-0 overflow-hidden relative">
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
-          {/* UX-IA R1 批次 B: 会话级提示按优先级合并（错误 > 中断 > 话题切换），
+          {/* UX-IA R1 批次 B: 会话级提示按优先级合并（错误 > 会话失败 > 中断 > 话题切换），
               同一时刻只展示最重要的一条，其余折叠为「另有 N 条提示」。
-              R17-D 语义不变：只渲染归属当前会话的错误，"重试"作用于出错会话本身。 */}
-          <ChatNoticeStack
-            notices={[
-              error != null &&
-                error !== '' &&
-                errorSessionId === currentSessionId && {
-                  key: 'error',
-                  priority: CHAT_NOTICE_PRIORITY.error,
-                  node: (
-                    <ChatInlineError
-                      error={error}
-                      onRetry={() => {
-                        clearError();
-                        const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-                        if (lastUser) void sendMessage(lastUser.content);
-                      }}
-                      onClose={clearError}
-                    />
-                  ),
-                },
-              showInterruptBanner && {
-                key: 'interrupted',
-                priority: CHAT_NOTICE_PRIORITY.interrupted,
-                node: (
-                  <InterruptedRunBanner
-                    onRetry={retryInterruptedRun}
-                    onDismiss={() =>
-                      setDismissedInterrupts((prev) => new Set(prev).add(currentSessionId ?? ''))
-                    }
-                  />
-                ),
-              },
-              showTopicShiftBanner && {
-                key: 'topic-shift',
-                priority: CHAT_NOTICE_PRIORITY.topicShift,
-                node: (
-                  <TopicShiftBanner
-                    sessionId={currentSessionId!}
-                    reason={shiftInfo.reason}
-                    onRetreat={() => void handleRetreat()}
-                  />
-                ),
-              },
-            ]}
+              R17-D 语义不变：只渲染归属当前会话的错误，"重试"作用于出错会话本身。
+              Issue 1 (2026-10-29): 通知组装逻辑下沉到 ChatSessionNotices。 */}
+          <ChatSessionNotices
+            currentSessionId={currentSessionId}
+            currentSession={currentSession}
+            error={error}
+            errorSessionId={errorSessionId}
+            messages={messages}
+            shiftInfo={shiftInfo}
+            isLoading={isLoading}
+            onClearError={clearError}
+            onSendMessage={sendMessage}
+            onRetreat={() => void handleRetreat()}
           />
 
           <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto relative">
@@ -649,6 +607,20 @@ export function Chat() {
               recommendedExecutionMode={executionModeRecommendation?.mode ?? null}
               executionModeReasoning={executionModeRecommendation?.reasoning}
             />
+            {/* Issue 4: 滚动到底部按钮 — 从文档流迁移到滚动容器内，sticky 悬浮在底部。
+                pointer-events-none 让容器背景不拦点击，仅按钮可点。 */}
+            {showScrollToBottom && (
+              <div className="sticky bottom-2 flex justify-center py-2 pointer-events-none">
+                <button
+                  type="button"
+                  onClick={scrollToLatest}
+                  aria-label="滚动到最新消息"
+                  className="pointer-events-auto flex items-center justify-center w-9 h-9 rounded-full bg-bg-elevated border border-border shadow-lg hover:bg-bg-hover transition-colors"
+                >
+                  <ChevronDown className="w-4 h-4 text-text-secondary" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Phase 3 (2026-10-28): 步骤确认对话框 —— auto_confirm 步骤执行前
@@ -659,6 +631,7 @@ export function Chat() {
           <ActiveAgentIndicator
             agentId={currentAgentId}
             iteration={iteration}
+            iterationOffset={iterationOffset}
             streamingState={streamingState}
           />
 
@@ -709,19 +682,6 @@ export function Chat() {
             onClear={handleClearQueue}
             onResume={handleResumeQueue}
           />
-          {/* 滚动到底部按钮：居中显示在输入框上方，用户离开底部时显示 */}
-          {showScrollToBottom && (
-            <div className="flex justify-center py-1">
-              <button
-                type="button"
-                onClick={scrollToLatest}
-                aria-label="滚动到最新消息"
-                className="flex items-center justify-center w-8 h-8 rounded-full bg-bg-elevated border border-border shadow-md hover:bg-bg-hover transition-colors"
-              >
-                <ChevronDown className="w-4 h-4 text-text-secondary" />
-              </button>
-            </div>
-          )}
           <ChatInput
             onSend={handleSendMessageWithEditResend}
             onInterrupt={interrupt}

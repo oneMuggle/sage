@@ -261,6 +261,14 @@ export interface SessionStreamSlots {
    * 用户没打算重发的消息推进同一个故障里。UI 显示"已暂停"并等用户恢复。
    */
   queuePaused: boolean;
+  /**
+   * Issue 3: ReAct 轮次累加偏移（跨 run 累积）。
+   * 后端 `run_loop` 的 iteration 是局部计数器（for i in range(max_iterations)），
+   * 每次新 run 都从 0 开始。前端在 clearStream 时把本次达到的最大轮次 +1 累加到此处，
+   * ActiveAgentIndicator 显示 `iterationOffset + streaming.iteration`，
+   * 让用户在"继续"后看到的轮次是接续上次的进度而非重置。
+   */
+  iterationOffset: number;
 }
 
 const EMPTY_SLOTS: SessionStreamSlots = {
@@ -276,6 +284,7 @@ const EMPTY_SLOTS: SessionStreamSlots = {
   stepConfirm: null,
   pendingQueue: [],
   queuePaused: false,
+  iterationOffset: 0,
 };
 
 /** 空槽位工厂：构造/打桩槽位时用它展开，新增字段不会再漏（浅拷贝即可，
@@ -604,7 +613,16 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
       if (slots.streaming._retryHideTimer) {
         clearTimeout(slots.streaming._retryHideTimer);
       }
-      return { sessions: writeSlots(prev.sessions, sessionId, { streaming: null }) };
+      // Issue 3: 累加本轮达到的最大轮次到 iterationOffset。
+      // iteration 是本次 run 最后一次 setStreamingMeta 写入的值（= 后端 for 循环当前 i）。
+      // +1 因为步骤 0..i 共 i+1 步，下一次 run 显示要从 i+1 开始。
+      const nextOffset = slots.iterationOffset + slots.streaming.iteration + 1;
+      return {
+        sessions: writeSlots(prev.sessions, sessionId, {
+          streaming: null,
+          iterationOffset: nextOffset,
+        }),
+      };
     }),
 
   resetToolCalls: (sessionId) =>

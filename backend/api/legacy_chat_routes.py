@@ -112,6 +112,7 @@ async def chat(
                 profile_model=profile_model,
                 # 2026-10-28: profile 显式 max_tokens 作为输出长度次高优先级
                 profile_max_tokens=_profile_model_config.get("max_tokens"),
+                task_type=data.task_type,
             )
         else:
             # 2026-10-28: 请求自带端点配置时不经过 load_llm_config_for_chat，

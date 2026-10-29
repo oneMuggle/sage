@@ -20,6 +20,11 @@ interface WelcomeInputCardProps {
    * 会话绑定的工作区（AtFileMenu 依赖 sessionId 查询后端）。
    */
   onAtQueryActive?: () => void;
+  /**
+   * 外部回填的草稿（例如用户点击首屏 prompt chip）。
+   * 传入新的对象实例即视为一次新的回填请求 —— 同一个 chip 连点两次也会重新填充。
+   */
+  draft?: { text: string } | null;
 }
 
 export function formatWelcomeInputMarkdown(params: {
@@ -63,10 +68,12 @@ export function WelcomeInputCard({
   initialValue = '',
   toolbar,
   onAtQueryActive,
+  draft = null,
 }: WelcomeInputCardProps) {
   const [value, setValue] = useState(initialValue);
   const [cursorPos, setCursorPos] = useState(initialValue.length);
   const [officeRefs, setOfficeRefs] = useState<readonly ChatOfficeRef[]>([]);
+  const [focusSeq, setFocusSeq] = useState(0);
 
   const {
     files,
@@ -112,6 +119,15 @@ export function WelcomeInputCard({
     setValue(initialValue);
     setCursorPos(initialValue.length);
   }, [initialValue]);
+
+  // 外部草稿回填：以对象引用变化作为触发信号，同一个 chip 连点两次也会重新填充。
+  // 先写值再让 InputCard 聚焦（focusRequest 变化），保证光标落在新文本末尾。
+  useEffect(() => {
+    if (!draft) return;
+    setValue(draft.text);
+    setCursorPos(draft.text.length);
+    setFocusSeq((seq) => seq + 1);
+  }, [draft]);
 
   const handleChange = (newValue: string) => {
     setValue(newValue);
@@ -184,6 +200,7 @@ export function WelcomeInputCard({
           atFileMenu={atFileMenu}
           enableCommandItem={false}
           autoFocus
+          focusRequest={focusSeq}
         />
       </div>
       {toolbar && <div className="mt-1">{toolbar}</div>}

@@ -66,6 +66,13 @@ class ChatRequest(BaseModel):
     # Takes priority over persisted settings when resolving context window / usage attribution.
     endpoint_id: Optional[str] = None
 
+    # Task 9 (2026-10-28) 智能模型路由: 调用方声明的任务类型
+    # (simple_chat / chat / code_generation / code_review / analysis / writing /
+    # summarization / translation)。仅当 app_settings.routing.mode == "auto" 时
+    # 由 llm_factory.apply_auto_routing_overlay 消费；缺省 = "chat"（快档）。
+    # 未传该字段时行为与引入前完全一致。
+    task_type: Optional[str] = None
+
     temperature: Optional[float] = None
 
     # 透传字段:provider 让后端不再硬写,reasoning_effort/thinking_budget

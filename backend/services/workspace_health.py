@@ -90,38 +90,7 @@ class WorkspaceHealthChecker:
             )
 
         try:
-            if not path.exists():
-                return WorkspaceHealthStatus(
-                    path=str(path),
-                    health=WorkspaceHealth.MISSING,
-                    detail="directory does not exist",
-                    writable=False,
-                )
-
-            if not path.is_dir():
-                return WorkspaceHealthStatus(
-                    path=str(path),
-                    health=WorkspaceHealth.NOT_A_DIRECTORY,
-                    detail="path is not a directory",
-                    writable=False,
-                )
-
-            if not os.access(path, os.R_OK | os.X_OK):
-                return WorkspaceHealthStatus(
-                    path=str(path),
-                    health=WorkspaceHealth.INACCESSIBLE,
-                    detail="directory is not readable",
-                    writable=False,
-                )
-
-            writable = os.access(path, os.W_OK)
-            if not writable:
-                return WorkspaceHealthStatus(
-                    path=str(path),
-                    health=WorkspaceHealth.READ_ONLY,
-                    detail="directory is read-only",
-                    writable=False,
-                )
+            return self._probe(path)
         except OSError as exc:
             logger.warning(
                 "workspace_health: check failed",
@@ -131,6 +100,41 @@ class WorkspaceHealthChecker:
                 path=str(path),
                 health=WorkspaceHealth.INACCESSIBLE,
                 detail=str(exc),
+                writable=False,
+            )
+
+    @staticmethod
+    def _probe(path: Path) -> WorkspaceHealthStatus:
+        """Classify a well-formed path; may raise ``OSError``."""
+        if not path.exists():
+            return WorkspaceHealthStatus(
+                path=str(path),
+                health=WorkspaceHealth.MISSING,
+                detail="directory does not exist",
+                writable=False,
+            )
+
+        if not path.is_dir():
+            return WorkspaceHealthStatus(
+                path=str(path),
+                health=WorkspaceHealth.NOT_A_DIRECTORY,
+                detail="path is not a directory",
+                writable=False,
+            )
+
+        if not os.access(path, os.R_OK | os.X_OK):
+            return WorkspaceHealthStatus(
+                path=str(path),
+                health=WorkspaceHealth.INACCESSIBLE,
+                detail="directory is not readable",
+                writable=False,
+            )
+
+        if not os.access(path, os.W_OK):
+            return WorkspaceHealthStatus(
+                path=str(path),
+                health=WorkspaceHealth.READ_ONLY,
+                detail="directory is read-only",
                 writable=False,
             )
 

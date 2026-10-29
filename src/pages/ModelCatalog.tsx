@@ -1,11 +1,13 @@
 /**
- * ModelCatalog 页面 (Task 6, 2026-09-15)
+ * ModelCatalog 页面 (Task 6, 2026-09-15; 卡片视图 + 过滤排序 Task 10, 2026-10-28)
  *
  * 路由: /model-catalog
  *
- * 三栏布局:
- * - 顶部工具栏: 搜索框 + 端点选择 + 同步/导入/导出按钮 + 快照列表下拉
- * - 左: CatalogTable (catalog 源视图, 支持过滤)
+ * 布局:
+ * - 顶部工具栏: 搜索框 + 端点选择 + 视图切换 + status 提示
+ * - 主体工具栏: 分档 / provider / capability 过滤 + 排序 (两种视图共用)
+ * - 「高级」折叠: 同步 OpenRouter / 导入快照 / 导出当前快照
+ * - 左: CatalogCards (默认) 或 CatalogTable, 共用同一份 filteredItems
  * - 右: ModelDetails (选中行的 effective + override + 探测)
  * - 底部抽屉: SnapshotReview (快照审核, 通过 /review?snapshot=<id> 激活)
  */
@@ -23,9 +25,12 @@ import type { CandidateModel, SnapshotMeta } from '../entities/model-catalog/typ
 import { useSettings } from '../features/manage-settings/useSettings';
 import { PageHeader } from '../shared/ui';
 import {
+  CAPABILITY_LABELS,
+  CatalogCards,
   CatalogTable,
   ModelDetails,
   SnapshotReview,
+  TIER_LABELS,
   catalogItemKey,
 } from '../widgets/model-catalog';
 
@@ -71,16 +76,78 @@ export function formatModelCatalogPageJson(params: {
   );
 }
 
+type CatalogView = 'cards' | 'table';
+type TierBucket = 'fast' | 'balanced' | 'powerful' | 'unknown';
+type TierFilter = '' | TierBucket;
+type CapabilityFilter = '' | 'vision' | 'tool_use' | 'json' | 'reasoning';
+type SortMode = 'context_desc' | 'context_asc' | 'price_asc';
+
+const VIEW_STORAGE_KEY = 'modelCatalogView';
+const TIER_FILTER_VALUES: Exclude<TierFilter, ''>[] = ['fast', 'balanced', 'powerful', 'unknown'];
+const CAPABILITY_FILTER_VALUES: Exclude<CapabilityFilter, ''>[] = [
+  'vision',
+  'tool_use',
+  'json',
+  'reasoning',
+];
+
+/** 默认卡片视图 (R30a); 读取失败或非法值一律回落到 cards。 */
+function readInitialView(): CatalogView {
+  try {
+    const stored = localStorage.getItem(VIEW_STORAGE_KEY);
+    return stored === 'table' ? 'table' : 'cards';
+  } catch {
+    return 'cards';
+  }
+}
+
+function normalizeTier(tier: string | null | undefined): TierBucket {
+  return tier === 'fast' || tier === 'balanced' || tier === 'powerful' ? tier : 'unknown';
+}
+
+function toFinitePrice(value: string | null): number | null {
+  if (value === null) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** null 一律排最后; direction=-1 表示降序。 */
+function compareNullable(a: number | null, b: number | null, direction: 1 | -1): number {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return (a - b) * direction;
+}
+
+function sortItems(items: CandidateModel[], mode: SortMode): CandidateModel[] {
+  const sorted = [...items];
+  sorted.sort((a, b) => {
+    if (mode === 'price_asc') {
+      return compareNullable(
+        toFinitePrice(a.price.input_per_million),
+        toFinitePrice(b.price.input_per_million),
+        1,
+      );
+    }
+    return compareNullable(a.native, b.native, mode === 'context_desc' ? -1 : 1);
+  });
+  return sorted;
+}
+
 export default function ModelCatalog() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSnapshot = searchParams.get('snapshot');
 
   const [allItems, setAllItems] = useState<CandidateModel[]>([]);
-  const [filteredItems, setFilteredItems] = useState<CandidateModel[]>([]);
   const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([]);
   const { settings } = useSettings();
   const [searchTerm, setSearchTerm] = useState('');
   const [endpointId, setEndpointId] = useState('');
+  const [view, setView] = useState<CatalogView>(readInitialView);
+  const [tierFilter, setTierFilter] = useState<TierFilter>('');
+  const [providerFilter, setProviderFilter] = useState('');
+  const [capabilityFilter, setCapabilityFilter] = useState<CapabilityFilter>('');
+  const [sortMode, setSortMode] = useState<SortMode>('context_desc');
   const [selected, setSelected] = useState<CandidateModel | null>(null);
   const [loading, setLoading] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -127,22 +194,40 @@ export default function ModelCatalog() {
     void reload();
   }, [reload]);
 
-  // 客户端过滤 — 大小写不敏感, 匹配 model_id / provider
-  useEffect(() => {
+  // provider 下拉选项: 由全量数据去重排序生成, 不受当前过滤影响
+  const providerOptions = useMemo(
+    () => Array.from(new Set(allItems.map((item) => item.model_key.provider))).sort(),
+    [allItems],
+  );
+
+  // 过滤管线 (R30b): 搜索 + 分档 + provider + capability 为 AND, 再统一排序。
+  // 两种视图共用这一份 filteredItems, 避免状态分裂。
+  const filteredItems = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
-    if (!q) {
-      setFilteredItems(allItems);
-      return;
-    }
-    setFilteredItems(
-      allItems.filter((item) => {
+    const filtered = allItems.filter((item) => {
+      if (q) {
         const id = `${item.model_key.provider}/${item.model_key.model_id}`.toLowerCase();
-        return id.includes(q);
-      }),
-    );
-  }, [searchTerm, allItems]);
+        if (!id.includes(q)) return false;
+      }
+      if (tierFilter !== '' && normalizeTier(item.tier) !== tierFilter) return false;
+      if (providerFilter !== '' && item.model_key.provider !== providerFilter) return false;
+      if (capabilityFilter !== '' && item.capabilities?.[capabilityFilter] !== true) return false;
+      return true;
+    });
+    return sortItems(filtered, sortMode);
+  }, [allItems, searchTerm, tierFilter, providerFilter, capabilityFilter, sortMode]);
 
   const selectedKey = useMemo(() => (selected ? catalogItemKey(selected) : null), [selected]);
+
+  // 过滤条件变化后，已选模型可能已不在列表里：清掉选择，避免右侧详情
+  // 继续展示/允许覆盖一个用户以为已被筛掉的模型。
+  useEffect(() => {
+    if (!selected) return;
+    const key = catalogItemKey(selected);
+    if (!filteredItems.some((item) => catalogItemKey(item) === key)) {
+      setSelected(null);
+    }
+  }, [filteredItems, selected]);
 
   async function handleSync(): Promise<void> {
     setBusyAction('sync');
@@ -223,6 +308,15 @@ export default function ModelCatalog() {
     void reload();
   }
 
+  function changeView(next: CatalogView): void {
+    setView(next);
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      // 持久化失败不影响当前会话的视图切换
+    }
+  }
+
   /* v8 ignore start */
 
   /* v8 ignore stop */
@@ -235,70 +329,67 @@ export default function ModelCatalog() {
           testId="model-catalog-header"
           actions={
             <>
-          <input
-            type="search"
-            placeholder="搜索模型 (按 model_id / provider)"
-            data-testid="model-catalog-search"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="ml-4 px-2 py-1 text-xs border border-border rounded bg-bg w-64"
-          />
-          <label className="text-xs text-text-muted">
-            端点:
-            <select
-              data-testid="model-catalog-endpoint"
-              value={endpointId}
-              onChange={(e) => {
-                setEndpointId(e.target.value);
-                setSelected(null);
-              }}
-              className="ml-1 px-2 py-1 text-xs border border-border rounded bg-bg"
-            >
-              <option value="">全部</option>
-              {settings.endpoints.map((endpoint) => (
-                <option key={endpoint.id} value={endpoint.id}>
-                  {endpoint.name || endpoint.id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            data-testid="model-catalog-sync"
-            onClick={() => void handleSync()}
-            disabled={busyAction !== null}
-            className="px-2 py-1 text-xs border border-border rounded hover:bg-bg-hover disabled:opacity-50"
-          >
-            {busyAction === 'sync' ? '同步中…' : '同步 OpenRouter'}
-          </button>
-          <button
-            type="button"
-            data-testid="model-catalog-import"
-            onClick={() => void handleImport()}
-            disabled={busyAction !== null}
-            className="px-2 py-1 text-xs border border-border rounded hover:bg-bg-hover disabled:opacity-50"
-          >
-            导入快照
-          </button>
-          <button
-            type="button"
-            data-testid="model-catalog-export"
-            onClick={() => void handleExport()}
-            disabled={busyAction !== null || !activeSnapshot}
-            className="px-2 py-1 text-xs border border-border rounded hover:bg-bg-hover disabled:opacity-50"
-          >
-            {busyAction === 'export' ? '导出中…' : '导出当前快照'}
-          </button>
-          {pageStatus && (
-            <span
-              className="text-xs text-text-muted"
-              data-testid="model-catalog-status"
-              role="status"
-              aria-live="polite"
-            >
-              <span aria-hidden="true">ℹ️</span> {pageStatus}
-            </span>
-          )}
+              <input
+                type="search"
+                placeholder="搜索模型 (按 model_id / provider)"
+                data-testid="model-catalog-search"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="ml-4 px-2 py-1 text-xs border border-border rounded bg-bg w-64"
+              />
+              <label className="text-xs text-text-muted">
+                端点:
+                <select
+                  data-testid="model-catalog-endpoint"
+                  value={endpointId}
+                  onChange={(e) => {
+                    setEndpointId(e.target.value);
+                    setSelected(null);
+                  }}
+                  className="ml-1 px-2 py-1 text-xs border border-border rounded bg-bg"
+                >
+                  <option value="">全部</option>
+                  {settings.endpoints.map((endpoint) => (
+                    <option key={endpoint.id} value={endpoint.id}>
+                      {endpoint.name || endpoint.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex items-center gap-1" role="group" aria-label="视图切换">
+                <button
+                  type="button"
+                  data-testid="model-catalog-view-cards"
+                  aria-pressed={view === 'cards'}
+                  onClick={() => changeView('cards')}
+                  className={`px-2 py-1 text-xs border border-border rounded ${
+                    view === 'cards' ? 'bg-accent-soft' : 'hover:bg-bg-hover'
+                  }`}
+                >
+                  卡片
+                </button>
+                <button
+                  type="button"
+                  data-testid="model-catalog-view-table"
+                  aria-pressed={view === 'table'}
+                  onClick={() => changeView('table')}
+                  className={`px-2 py-1 text-xs border border-border rounded ${
+                    view === 'table' ? 'bg-accent-soft' : 'hover:bg-bg-hover'
+                  }`}
+                >
+                  表格
+                </button>
+              </div>
+              {pageStatus && (
+                <span
+                  className="text-xs text-text-muted"
+                  data-testid="model-catalog-status"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span aria-hidden="true">ℹ️</span> {pageStatus}
+                </span>
+              )}
             </>
           }
         />
@@ -316,14 +407,122 @@ export default function ModelCatalog() {
 
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 p-5 overflow-auto">
-            <CatalogTable
-              items={filteredItems}
-              selectedKey={selectedKey}
-              onSelect={(item) => {
-                setSelected(item);
-              }}
-              loading={loading}
-            />
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <label className="text-xs text-text-muted">
+                分档:
+                <select
+                  data-testid="model-catalog-tier-filter"
+                  value={tierFilter}
+                  onChange={(e) => setTierFilter(e.target.value as TierFilter)}
+                  className="ml-1 px-2 py-1 text-xs border border-border rounded bg-bg"
+                >
+                  <option value="">全部分档</option>
+                  {TIER_FILTER_VALUES.map((tier) => (
+                    <option key={tier} value={tier}>
+                      {TIER_LABELS[tier]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-text-muted">
+                Provider:
+                <select
+                  data-testid="model-catalog-provider-filter"
+                  value={providerFilter}
+                  onChange={(e) => setProviderFilter(e.target.value)}
+                  className="ml-1 px-2 py-1 text-xs border border-border rounded bg-bg"
+                >
+                  <option value="">全部 Provider</option>
+                  {providerOptions.map((provider) => (
+                    <option key={provider} value={provider}>
+                      {provider}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-text-muted">
+                能力:
+                <select
+                  data-testid="model-catalog-capability-filter"
+                  value={capabilityFilter}
+                  onChange={(e) => setCapabilityFilter(e.target.value as CapabilityFilter)}
+                  className="ml-1 px-2 py-1 text-xs border border-border rounded bg-bg"
+                >
+                  <option value="">全部能力</option>
+                  {CAPABILITY_FILTER_VALUES.map((capability) => (
+                    <option key={capability} value={capability}>
+                      {CAPABILITY_LABELS[capability]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-text-muted">
+                排序:
+                <select
+                  data-testid="model-catalog-sort"
+                  value={sortMode}
+                  onChange={(e) => setSortMode(e.target.value as SortMode)}
+                  className="ml-1 px-2 py-1 text-xs border border-border rounded bg-bg"
+                >
+                  <option value="context_desc">上下文降序</option>
+                  <option value="context_asc">上下文升序</option>
+                  <option value="price_asc">价格升序</option>
+                </select>
+              </label>
+            </div>
+
+            <details className="mb-3" data-testid="model-catalog-advanced">
+              <summary className="text-xs text-text-muted cursor-pointer select-none">高级</summary>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="model-catalog-sync"
+                  onClick={() => void handleSync()}
+                  disabled={busyAction !== null}
+                  className="px-2 py-1 text-xs border border-border rounded hover:bg-bg-hover disabled:opacity-50"
+                >
+                  {busyAction === 'sync' ? '同步中…' : '同步 OpenRouter'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="model-catalog-import"
+                  onClick={() => void handleImport()}
+                  disabled={busyAction !== null}
+                  className="px-2 py-1 text-xs border border-border rounded hover:bg-bg-hover disabled:opacity-50"
+                >
+                  导入快照
+                </button>
+                <button
+                  type="button"
+                  data-testid="model-catalog-export"
+                  onClick={() => void handleExport()}
+                  disabled={busyAction !== null || !activeSnapshot}
+                  className="px-2 py-1 text-xs border border-border rounded hover:bg-bg-hover disabled:opacity-50"
+                >
+                  {busyAction === 'export' ? '导出中…' : '导出当前快照'}
+                </button>
+              </div>
+            </details>
+
+            {view === 'table' ? (
+              <CatalogTable
+                items={filteredItems}
+                selectedKey={selectedKey}
+                onSelect={(item) => {
+                  setSelected(item);
+                }}
+                loading={loading}
+              />
+            ) : (
+              <CatalogCards
+                items={filteredItems}
+                selectedKey={selectedKey}
+                onSelect={(item) => {
+                  setSelected(item);
+                }}
+                loading={loading}
+              />
+            )}
           </div>
           <div className="w-96 border-l border-border p-4 overflow-auto bg-surface">
             <ModelDetails

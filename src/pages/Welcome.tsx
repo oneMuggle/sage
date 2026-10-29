@@ -3,8 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { listModels } from '../entities/model-catalog/api';
+import type { CandidateModel } from '../entities/model-catalog/types';
 import { isEndpointConfigured } from '../entities/setting/endpointReadiness';
 import {
+  chipRecommendations,
   defaultRecommendations,
   type AssistantRecommendation,
 } from '../entities/welcome/recommendations';
@@ -21,7 +24,7 @@ import { worktreeApi, type BranchEntry, type SessionWorktree } from '../shared/a
 import { useI18n, type TranslationKey } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import { AssistantRecommendations } from '../widgets/welcome/AssistantRecommendations';
-import type { ModelOption } from '../widgets/welcome/ModelPicker';
+import { AUTO_MODEL_ID, type ModelOption } from '../widgets/welcome/ModelPicker';
 import type { ProjectOption } from '../widgets/welcome/ProjectPicker';
 import { QuickActionBar, type QuickAction } from '../widgets/welcome/QuickActionBar';
 import { WelcomeHero } from '../widgets/welcome/WelcomeHero';
@@ -31,6 +34,7 @@ import type {
   WorktreeMode as WorktreeModeType,
   WorktreePickerValue,
 } from '../widgets/welcome/WorktreePicker';
+import { buildCatalogEnricher, type CatalogEnricher } from '../widgets/welcome/catalogEnrichment';
 
 const PLACEHOLDER_PHRASES_ZH = [
   '根据资料写一份可交付的报告…',
@@ -56,6 +60,14 @@ const STORAGE_KEY_MODEL = 'welcomeModelId';
 const STORAGE_KEY_WORKTREE_MODE = 'welcomeWorktreeMode';
 const STORAGE_KEY_WORKTREE_BRANCH = 'welcomeWorktreeBranch';
 const STORAGE_KEY_WORKTREE_ID = 'welcomeWorktreeId';
+
+/** catalog 价格：input/output 都已知时才展示 `${input}/${output} USD/M`。 */
+function buildPriceLabel(price: CandidateModel['price'] | undefined): string | null {
+  const input = price?.input_per_million;
+  const output = price?.output_per_million;
+  if (!input || !output) return null;
+  return `${input}/${output} USD/M`;
+}
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatWelcomePageMarkdown(params: {
@@ -104,6 +116,7 @@ export function Welcome() {
   const [briefRecommendation, setBriefRecommendation] = useState<AssistantRecommendation | null>(
     null,
   );
+  const [recommendationDraft, setRecommendationDraft] = useState<{ text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [reusedBrief, setReusedBrief] = useState<TaskBrief | undefined>();
 
@@ -117,7 +130,9 @@ export function Welcome() {
     return localStorage.getItem(STORAGE_KEY_PROJECT);
   });
   const [modelId, setModelId] = useState<string | null>(() => {
-    return localStorage.getItem(STORAGE_KEY_MODEL);
+    const stored = localStorage.getItem(STORAGE_KEY_MODEL);
+    // R29: 自动哨兵不是模型 id；模式切回手动后不得残留
+    return stored === AUTO_MODEL_ID ? null : stored;
   });
   const [worktreeMode, setWorktreeMode] = useState<WorktreeModeType>(() => {
     return (localStorage.getItem(STORAGE_KEY_WORKTREE_MODE) as WorktreeModeType) || 'none';
@@ -133,22 +148,57 @@ export function Welcome() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [branches, setBranches] = useState<BranchEntry[]>([]);
   const [worktrees, setWorktrees] = useState<SessionWorktree[]>([]);
+  // R27: catalog 富化数据（tier / context / price）；离线时保持空解析器 → 平铺。
+  const [enrich, setEnrich] = useState<CatalogEnricher>(() => () => null);
 
-  // Derive models from settings.endpoints
+  // R27 数据源：挂载后拉一次 catalog。失败静默保持平铺（不 toast、不抛错）。
+  const hasConfiguredEndpoint = useMemo(
+    () => settings.endpoints.some((endpoint) => Boolean(endpoint.baseUrl)),
+    [settings.endpoints],
+  );
+  useEffect(() => {
+    if (!hasConfiguredEndpoint) return;
+    let cancelled = false;
+    listModels({ limit: 1000, offset: 0 })
+      .then((res) => {
+        if (cancelled) return;
+        setEnrich(() => buildCatalogEnricher(res.items));
+      })
+      .catch(() => {
+        // 离线 / 后端不可用：保持无 tier，平铺列表（R27）。
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasConfiguredEndpoint]);
+
+  // Derive models from settings.endpoints, enriched by catalog when available.
   const models: ModelOption[] = useMemo(() => {
     const result: ModelOption[] = [];
     for (const endpoint of settings.endpoints) {
       if (endpoint.discoveredModels) {
         for (const model of endpoint.discoveredModels) {
+          const catalogModel = enrich(model.id);
           result.push({
             modelId: model.id,
             endpointName: endpoint.name,
+            tier: catalogModel?.tier ?? null,
+            contextTokens: catalogModel?.native ?? null,
+            priceLabel: buildPriceLabel(catalogModel?.price),
           });
         }
       }
     }
     return result;
-  }, [settings.endpoints]);
+  }, [settings.endpoints, enrich]);
+
+  const autoAvailable = settings.routing?.mode === 'auto';
+
+  // R29: 模式切回手动后 'auto' 哨兵必须当场失效。Welcome 挂着不动而全局设置
+  // 可以被别处改写, 否则选择器会显示一个下拉里已经不存在、也提交不了的选项。
+  useEffect(() => {
+    if (!autoAvailable && modelId === AUTO_MODEL_ID) setModelId(null);
+  }, [autoAvailable, modelId]);
 
   const globalModelId = settings.modelSelections.chatModel.modelId;
 
@@ -196,7 +246,8 @@ export function Welcome() {
   }, [projectId]);
 
   useEffect(() => {
-    if (modelId) {
+    // R29: 自动哨兵绝不写入 localStorage，避免日后切回手动模式继承非法模型 id
+    if (modelId && modelId !== AUTO_MODEL_ID) {
       localStorage.setItem(STORAGE_KEY_MODEL, modelId);
     } else {
       localStorage.removeItem(STORAGE_KEY_MODEL);
@@ -233,9 +284,11 @@ export function Welcome() {
     setWorktreeId(value.worktreeId);
   }, []);
 
+  // 首屏 chip 只回填输入框，不自动发送 —— 用户往往还要先挂上自己的资料再发。
   const handleRecommendationSelect = useCallback((rec: AssistantRecommendation) => {
     setReusedBrief(undefined);
-    setBriefRecommendation(rec);
+    setBriefRecommendation(null);
+    setRecommendationDraft({ text: rec.prompt });
   }, []);
 
   // 新会话页的草稿会话：用户在新会话页输入 `@` 时需要 sessionId 才能搜索
@@ -344,7 +397,8 @@ export function Welcome() {
         }
 
         // 3. Set model override if selected
-        if (effectiveModelId) {
+        // R29: 自动路由不写会话覆盖，交由后端按 task_type 选择
+        if (effectiveModelId && effectiveModelId !== AUTO_MODEL_ID) {
           await sessionApi.setModelOverride(sessionId, effectiveModelId);
         }
 
@@ -417,6 +471,7 @@ export function Welcome() {
           onSend={handleWelcomeSend}
           onAtQueryActive={handleAtQueryActive}
           disabled={submitting}
+          draft={recommendationDraft}
           toolbar={
             <WelcomeToolbar
               projectId={projectId}
@@ -426,6 +481,7 @@ export function Welcome() {
               onModelChange={setModelId}
               models={models}
               globalModelId={globalModelId}
+              autoAvailable={autoAvailable}
               worktreeMode={worktreeMode}
               worktreeBranch={worktreeBranch}
               worktreeId={worktreeId}
@@ -442,20 +498,20 @@ export function Welcome() {
           <button
             type="button"
             onClick={() => navigate('/projects')}
-            className="px-3 py-2 rounded border border-ui-border"
+            className="px-3 py-2 rounded border border-border"
           >
             {locale === 'en' ? 'Project workbench' : '项目工作台'}
           </button>
           <button
             type="button"
             onClick={() => navigate('/office')}
-            className="px-3 py-2 rounded border border-ui-border"
+            className="px-3 py-2 rounded border border-border"
           >
             {locale === 'en' ? 'Documents and review' : '文档与验收'}
           </button>
         </div>
         <AssistantRecommendations
-          recommendations={defaultRecommendations}
+          recommendations={chipRecommendations}
           onSelect={handleRecommendationSelect}
         />
 

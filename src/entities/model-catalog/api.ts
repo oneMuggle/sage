@@ -85,6 +85,28 @@ export async function probeModel(endpointId: string, modelId: string): Promise<P
 }
 
 /**
+ * 端点发现成功后把模型对账进 catalog bindings
+ * (POST /api/v1/model-catalog/bind-discovered, Task 12 2026-10-28).
+ *
+ * 幂等：后端按 (endpoint_id, model_id) upsert，重复调用不增行。
+ * ``endpointId`` 缺省时后端处理全部端点（启动钩子同语义）。
+ */
+export interface BindDiscoveredResult {
+  bound: number;
+  skipped: number;
+}
+
+export async function bindDiscoveredModels(
+  params: { endpointId?: string } = {},
+): Promise<BindDiscoveredResult> {
+  return backendRequest<BindDiscoveredResult>({
+    path: `${BASE}/bind-discovered`,
+    method: 'POST',
+    body: params.endpointId ? { endpoint_id: params.endpointId } : {},
+  });
+}
+
+/**
  * 写入用户 override (PUT /api/v1/model-catalog/overrides).
  *
  * 后端按 expected_revision 校验乐观锁, 不匹配抛 409 (调用方捕获后

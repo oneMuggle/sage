@@ -12,19 +12,23 @@ SQLite 表 office_journal_specs 与 office_journal_generations 存元数据
 - PEP 604/585 全部禁用（X | None / List[int]）；
 - workspace 路径安全：所有落盘路径经 backend.office.path_safety.resolve_within；
 - SQLite 通过 backend.data.database.get_database().get_connection() 走统一加锁代理；
-- ensure_journal_tables() 由 init_db 末尾调用，幂等。
+- ensure_journal_tables(db) 由 init_db 末尾调用，幂等；显式传入 Database 实例
+  避免测试 fixture 初始化时打开全局单例默认库（xdist 并发竞态）。
 """
 from __future__ import annotations
 
 import json
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from backend.data.database import get_database
 from backend.office.journal.errors import JournalSpecNotFoundError
 from backend.office.journal.models import JournalGenerationRecord, JournalSpec
 from backend.office.path_safety import is_within
+
+if TYPE_CHECKING:
+    from backend.data.database import Database
 
 _LAYOUT_ROOT = Path("office") / "journal"
 
@@ -199,10 +203,16 @@ def list_generations(
     ]
 
 
-def ensure_journal_tables() -> None:
-    """CREATE TABLE IF NOT EXISTS office_journal_specs / office_journal_generations。幂等。"""
-    db = get_database()
-    conn = db.get_connection()
+def ensure_journal_tables(db: Optional[Database] = None) -> None:
+    """CREATE TABLE IF NOT EXISTS office_journal_specs / office_journal_generations。幂等。
+
+    Args:
+        db: 显式传入的 Database 实例。缺省回退到全局 ``get_database()``。
+            init_db() 必须传 self，避免测试 fixture 初始化时打开默认库
+            （xdist 多 worker 并发创建 data/sage.db 触发 WAL 排他锁竞态）。
+    """
+    resolved = db if db is not None else get_database()
+    conn = resolved.get_connection()
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS office_journal_specs (

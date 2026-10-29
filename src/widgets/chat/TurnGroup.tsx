@@ -1,5 +1,5 @@
 import { ChevronRight, MessageSquare, Wrench } from 'lucide-react';
-import { memo, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import type { BlockedAction, Message } from '../../shared/lib/store';
@@ -55,6 +55,16 @@ function TurnGroupComponent({
 }: TurnGroupProps) {
   const collapsible = isTurnCollapsible(messages);
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
+
+  // Issue 2: 会话从 running → completed/failed 时，defaultExpanded 从 false 变为 true，
+  // 但 useState 只捕获初始值，不会自动同步。用 useRef 追踪前值，只在"false → true 翻转"
+  // 时同步一次。expanded 不入依赖，避免用户手动折叠后被立即撤销。
+  const prevDefaultExpanded = useRef(defaultExpanded);
+  useEffect(() => {
+    const wasFalse = !prevDefaultExpanded.current;
+    prevDefaultExpanded.current = defaultExpanded;
+    if (wasFalse && defaultExpanded) setExpanded(true);
+  }, [defaultExpanded]);
 
   // 流式消息始终展开
   const isStreaming = messages.some((m) => m.id === streamingMessageId);
