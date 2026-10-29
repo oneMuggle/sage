@@ -93,6 +93,7 @@ from backend.data.project_repo import (
 from backend.data.session_repo import MessageRepository
 from backend.office.errors import OfficePathError
 from backend.office.session_workspace import get_workspace_binding
+from backend.services.default_workspace import DefaultWorkspaceResolver
 from backend.services.git_integration import GitIntegration
 from backend.services.project_archetype_scaffold import execute_project_scaffold
 from backend.services.project_type_detector import (
@@ -455,13 +456,19 @@ def remove_project(project_id: str) -> ProjectMutationResponse:
 @router.post("/{project_id}/open", response_model=ProjectOpenResponse)
 @with_db_lock
 def open_project_route(project_id: str) -> ProjectOpenResponse:
-    """打开项目：最近活跃会话优先，否则新建会话并绑定项目目录。"""
+    """打开项目：最近活跃会话优先，否则新建会话并绑定项目目录。
+
+    成功打开后把项目目录写入 ``preferences``（``last_workspace_path``），
+    作为后续 ``create_session`` 决策链的最高优先级输入。写入失败不阻塞主流程
+    （fail-open）—— 项目能打开比"记住偏好"更重要。
+    """
     try:
         project, session, created = open_project(project_id)
     except ProjectNotFoundError as exc:
         raise _error(404, "project_not_found", "项目不存在") from exc
     except ProjectPathMissingError as exc:
         raise _error(410, "project_path_missing", "项目目录不存在或已被移动") from exc
+    _remember_workspace_fail_open(project.path)
     stats = ProjectRepository().session_stats()
     return ProjectOpenResponse(
         project=_with_stats(project, stats),
@@ -480,12 +487,29 @@ def create_project_session_route(project_id: str) -> ProjectOpenResponse:
         raise _error(404, "project_not_found", "项目不存在") from exc
     except ProjectPathMissingError as exc:
         raise _error(410, "project_path_missing", "项目目录不存在或已被移动") from exc
+    _remember_workspace_fail_open(project.path)
     stats = ProjectRepository().session_stats()
     return ProjectOpenResponse(
         project=_with_stats(project, stats),
         session=session.to_dict(),
         created=True,
     )
+
+
+def _remember_workspace_fail_open(workspace_path: str) -> None:
+    """Persist ``workspace_path`` as the user's remembered default.
+
+    Fail-open: any exception (path validation, database error) is logged and
+    swallowed — a broken preference write must never prevent the user from
+    opening a project they explicitly chose.
+    """
+    try:
+        DefaultWorkspaceResolver().remember_workspace(workspace_path)
+    except Exception as exc:  # noqa: BLE001 — 显式目录写入失败不能阻塞打开流程
+        logger.warning(
+            "project_routes: remember_workspace failed (fail-open)",
+            extra={"path": workspace_path, "reason": str(exc)},
+        )
 
 
 @router.get("/{project_id}/sessions", response_model=ProjectSessionsResponse)

@@ -122,6 +122,7 @@ from backend.api.usage_routes import router as usage_router
 from backend.api.v1 import updates as updates_router_module
 from backend.api.web_access_routes import router as web_access_router
 from backend.api.wiki_routes import router as wiki_router
+from backend.api.workspace_default_routes import router as workspace_default_router
 from backend.api.workspace_routes import router as workspace_router
 from backend.api.worktree_routes import router as worktree_router
 from backend.api.zotero_routes import router as zotero_router
@@ -1173,6 +1174,8 @@ from backend.api.gateway_routes import router as gateway_router
 app.include_router(gateway_router, prefix="/api/v1")
 register_office_exception_handlers(app)
 app.include_router(workspace_router, prefix="/api/v1")
+# 默认工作区决策链 (2026-10-29): /api/v1/workspace/{default,preference,migrate}
+app.include_router(workspace_default_router, prefix="/api/v1")
 # ZCode-inspired: /api/v1/git/status?path=<workspace> 侧边栏 Git 状态面板
 app.include_router(git_status_router, prefix="/api/v1")
 # 会话级 worktree 模式 (2026-09-18): /api/v1/sessions/{id}/worktree[...]

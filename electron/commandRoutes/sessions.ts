@@ -232,4 +232,44 @@ export const sessionRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: () => '/api/v1/sessions/purge-archived',
   },
+
+  // ===== 默认工作区决策链 (2026-10-29, P1) =====
+  // 后端成为工作区决策的单一来源；前端不再自行推导。
+  workspace_default: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      if (a?.sessionId) params.set('session_id', String(a.sessionId));
+      if (a?.detectedRoot) params.set('detected_root', String(a.detectedRoot));
+      const qs = params.toString();
+      return `/api/v1/workspace/default${qs ? `?${qs}` : ''}`;
+    },
+  },
+  workspace_set_preference: {
+    method: 'POST',
+    path: () => '/api/v1/workspace/preference',
+    body: (a) => ({ path: a.path }),
+  },
+  workspace_forget_preference: {
+    method: 'DELETE',
+    path: () => '/api/v1/workspace/preference',
+  },
+  workspace_migrate_preference: {
+    method: 'POST',
+    path: () => '/api/v1/workspace/migrate',
+    body: (a) => ({ path: a.path ?? null }),
+  },
+
+  // 工作区健康检查（2026-10-29, P2）——只读探测目录是否仍可用。
+  // GET 查询参数不会被 invoke 的 camelToSnakeKeys 处理（仅覆盖 body），
+  // 因此必须在这里手工拼 query string。
+  workspace_health: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      if (a?.path) params.set('path', String(a.path));
+      const qs = params.toString();
+      return `/api/v1/workspace/health${qs ? `?${qs}` : ''}`;
+    },
+  },
 };

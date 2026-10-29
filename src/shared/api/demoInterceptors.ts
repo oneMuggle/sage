@@ -65,6 +65,10 @@ let demoScheduled: ScheduledTask[] = [...DEMO_SCHEDULED_TASKS];
 
 const demoPreferences = new Map<string, string>();
 
+// 2026-10-29 (feat/workspace-optimization): 演示模式下的"用户工作区偏好"。
+// null = 用户还没显式选择过 → 决策链回落到 detected。
+let demoWorkspacePreference: string | null = null;
+
 // ─────────────────────────────────────────────────────────────────────────
 // 通道注册表
 //
@@ -106,6 +110,13 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
       last_message_at: null,
       message_count: 0,
       is_pinned: false,
+      // 2026-10-29 (feat/workspace-optimization): 演示模式下后端不跑，后端
+      // 在 create_session 里返回的 workspace_binding 由前端模拟。
+      workspace_binding: {
+        path: demoWorkspacePreference ?? DEMO_WORKSPACE_PATH,
+        source: demoWorkspacePreference ? 'user_preference' : 'detected',
+        is_fallback: false,
+      },
     };
     demoSessions.unshift(session);
     demoMessages.set(session.id, []);
@@ -473,6 +484,49 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
   }),
 
   workspace_revoke: () => ({ revoked: true, generation: 5 }),
+
+  // ── 默认工作区决策链 (2026-10-29, P1) ──
+  workspace_default: () => ({
+    path: demoWorkspacePreference ?? DEMO_WORKSPACE_PATH,
+    source: demoWorkspacePreference ? 'user_preference' : 'detected',
+    is_fallback: false,
+  }),
+
+  workspace_set_preference: (args) => {
+    const path = asStr(args.path);
+    demoWorkspacePreference = path || null;
+    return { path: demoWorkspacePreference, stored: Boolean(demoWorkspacePreference) };
+  },
+
+  workspace_forget_preference: () => {
+    demoWorkspacePreference = null;
+    return { path: null, stored: false };
+  },
+
+  workspace_migrate_preference: (args) => {
+    const path = asStr(args.path);
+    if (!path) return { outcome: 'empty', path: null, reason: null };
+    if (demoWorkspacePreference) {
+      return {
+        outcome: 'already_present',
+        path: demoWorkspacePreference,
+        reason: null,
+      };
+    }
+    demoWorkspacePreference = path;
+    return { outcome: 'migrated', path, reason: null };
+  },
+
+  workspace_health: (args) => {
+    const path = asStr(args.path) || demoWorkspacePreference || DEMO_WORKSPACE_PATH;
+    return {
+      path,
+      health: 'healthy',
+      detail: null,
+      writable: true,
+      is_usable: true,
+    };
+  },
 
   workspace_search_files: () => ({
     results: [

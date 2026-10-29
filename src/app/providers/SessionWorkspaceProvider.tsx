@@ -34,9 +34,10 @@ import {
 
 import type { SessionWorkspaceBinding } from '../../shared/api/types';
 import { workspaceApi } from '../../shared/api/workspaceApi';
-import { clearLastWorkspacePath, setLastWorkspacePath } from '../../shared/lib/lastWorkspace';
+import { migrateLastWorkspaceToBackend } from '../../shared/lib/lastWorkspace';
 import { useStore } from '../../shared/lib/store';
 import { WorkspaceContext } from '../../shared/lib/workspaceContext';
+import { clientLogger } from '../../shared/log/client';
 
 export type WorkspaceStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -88,6 +89,20 @@ function errorMessage(err: unknown): string {
   return String(err);
 }
 
+// Preference writes are fire-and-forget, but their *order* matters: a revoke
+// fired right after a bind must not land before the bind's setPreference,
+// otherwise the remembered path survives the revoke. Chaining every write on
+// one promise serialises them in call order.
+let preferenceWriteChain: Promise<unknown> = Promise.resolve();
+
+function queuePreferenceWrite(op: () => Promise<unknown>, context: string): void {
+  preferenceWriteChain = preferenceWriteChain.then(op).catch((err: unknown) => {
+    clientLogger.warn(`${context}: preference write failed`, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
+}
+
 /**
  * Provider that owns session-bound workspace state. Place once near the
  * top of the tree (above any consumer of `useWorkspaceContext` /
@@ -107,6 +122,25 @@ export function SessionWorkspaceProvider({ children }: SessionWorkspaceProviderP
   // P17: 追踪最近一次登记到 sage-file 注册表的工作区路径，
   // 绑定变更时注销旧根（最小权限原则）。
   const lastRegisteredRoot = useRef<string | null>(null);
+  // 2026-10-29 (feat/workspace-optimization): legacy localStorage → 后端
+  // preferences 的一次性迁移守卫。StrictMode 下 effect 会双跑，用 ref 拦住。
+  const migrationStartedRef = useRef(false);
+
+  // 2026-10-29 (feat/workspace-optimization): 启动时把 legacy localStorage 里
+  // 记住的工作区路径迁入后端 ``preferences`` 表。后端是决策链的单一来源，
+  // 前端不再自行推导。迁移失败不阻塞渲染——下次启动会重试。
+  useEffect(() => {
+    if (migrationStartedRef.current) return;
+    migrationStartedRef.current = true;
+    void migrateLastWorkspaceToBackend().then((result) => {
+      if (result.outcome === 'empty') return;
+      clientLogger.info('SessionWorkspaceProvider: workspace preference migration', {
+        outcome: result.outcome,
+        path: result.path,
+        reason: result.reason,
+      });
+    });
+  }, []);
 
   // Replace state with a fresh immutable snapshot. Caller is responsible
   // for ensuring `myRequestId === requestIdRef.current`.
@@ -188,9 +222,10 @@ export function SessionWorkspaceProvider({ children }: SessionWorkspaceProviderP
       try {
         const res = await workspaceApi.bind(sessionId, workspacePath);
         applyReady(myRequestId, res.binding);
-        // P1 (2026-10-19): remember the last bound workspace so new
-        // sessions can auto-bind to it instead of starting unbound.
-        setLastWorkspacePath(workspacePath);
+        // 2026-10-29 (feat/workspace-optimization): 把显式选择的工作区同步写入
+        // ``preferences``（最高优先级输入）。失败不阻塞 bind 主流程——会话绑定
+        // 成功比"记住偏好"更重要，下次启动时用户重新选择即可。
+        queuePreferenceWrite(() => workspaceApi.setPreference(workspacePath), 'SessionWorkspaceProvider.bind');
       } catch (err: unknown) {
         applyError(myRequestId, errorMessage(err));
         throw err;
@@ -207,9 +242,12 @@ export function SessionWorkspaceProvider({ children }: SessionWorkspaceProviderP
     try {
       await workspaceApi.revoke(sessionId);
       applyReady(myRequestId, null);
-      // P1 (2026-10-19): clear the remembered workspace when the user
-      // explicitly revokes — next session starts fresh.
-      clearLastWorkspacePath();
+      // 2026-10-29 (feat/workspace-optimization): 用户显式撤销 → 同时清 preferences。
+      // 失败不阻塞 revoke 主流程——会话解绑成功比"清理偏好"更重要。
+      queuePreferenceWrite(
+        () => workspaceApi.forgetPreference(),
+        'SessionWorkspaceProvider.revoke',
+      );
     } catch (err: unknown) {
       applyError(myRequestId, errorMessage(err));
       throw err;

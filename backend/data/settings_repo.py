@@ -97,6 +97,11 @@ class SettingsRepository:
             # T-4a: 自定义技能目录绝对路径（缺省 = ~/.sage/skills）。
             # 读取口径见 backend/skills/skill_md/importer.py:_resolve_skills_dir
             "skills_dir",
+            # 2026-10-29 feat/workspace-optimization: 用户上次显式绑定的
+            # 工作区目录（绝对路径）。持久化在服务端而非 localStorage，
+            # 这样重装/换机后仍能恢复上次的工作目录。
+            # 写入口径见 backend/services/default_workspace.py:remember_workspace
+            "last_workspace_path",
         }
     )
 
