@@ -54,6 +54,13 @@ vi.mock('../OrchestrationTab', () => ({
 vi.mock('../ProvidersManager', () => ({
   ProvidersManager: () => <div data-testid="tab-providers" />,
 }));
+// P1-b: 合并后的包装 tab —— 锚点测试直接 mock，避免依赖真实子 tab 切换逻辑
+vi.mock('../ModelsServicesTab', () => ({
+  ModelsServicesTab: () => <div data-testid="tab-models-services" />,
+}));
+vi.mock('../PluginsSkillsTab', () => ({
+  PluginsSkillsTab: () => <div data-testid="tab-plugins-skills" />,
+}));
 vi.mock('../RemoteWorkspacesTab', () => ({
   RemoteWorkspacesTab: () => <div data-testid="tab-remote-workspaces" />,
 }));
@@ -153,9 +160,10 @@ describe('设置搜索锚点定位 (P1-4)', () => {
   it('falls back to plain tab switching when the entry has no anchor', async () => {
     // 整 tab 级条目（端点管理、MCP…）本身没有对应行 —— 必须静默降级为
     // 「只切 tab」，不报错、不空手。
+    // P1-b: endpoints 现在是 models-services 的子 tab，搜索命中仍切到父 tab。
     renderSettings();
     await clickSearchResult('endpoints');
-    expect(screen.getByTestId('tab-endpoints')).toBeInTheDocument();
+    expect(screen.getByTestId('tab-models-services')).toBeInTheDocument();
   });
 
   it('clears the search box after jumping', async () => {

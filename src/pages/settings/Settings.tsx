@@ -12,7 +12,6 @@ import { clsx } from 'clsx';
 import { Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useSettings } from '../../features/manage-settings/useSettings';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { ENABLE_UPDATE_PROVIDERS_UI } from '../../shared/updateFeatureFlag';
 import { EvolutionLog } from '../../widgets/evolution/EvolutionLog';
@@ -23,19 +22,16 @@ import { HarnessDashboard } from '../../widgets/harness/HarnessDashboard';
 
 import { BasicTab } from './BasicTab';
 import { EffectiveSettingsSummary } from './EffectiveSettingsSummary';
-import { EndpointsTab } from './EndpointsTab';
 import { FeedbackTab } from './FeedbackTab';
 import { GlobalRulesTab } from './GlobalRulesTab';
 import { McpTab } from './McpTab';
 import { MemorySettingsTab } from './MemorySettingsTab';
-import { ModelsTab } from './ModelsTab';
+import { ModelsServicesTab } from './ModelsServicesTab';
 import { NetworkTab } from './NetworkTab';
 import { OrchestrationTab } from './OrchestrationTab';
-import { PluginsTab } from './PluginsTab';
-import { ProvidersManager } from './ProvidersManager';
+import { PluginsSkillsTab } from './PluginsSkillsTab';
 import { RemoteWorkspacesTab } from './RemoteWorkspacesTab';
 import { RuntimeEnvTab } from './RuntimeEnvTab';
-import { SkillsTab } from './SkillsTab';
 import { ToolsConnectionsTab } from './ToolsConnectionsTab';
 import { UpdatesTab } from './UpdatesTab';
 import { UsageStatsTab } from './UsageStatsTab';
@@ -61,6 +57,12 @@ export type SettingsTab = SettingsTabKey;
 const LEGACY_TAB_ALIASES: Record<string, SettingsTab> = {
   general: 'basic',
   'memory-knowledge': 'memory',
+  // P1-b: 合并 tab 的旧 key 迁移
+  endpoints: 'models-services',
+  models: 'models-services',
+  providers: 'models-services',
+  plugins: 'plugins-skills',
+  skills: 'plugins-skills',
 };
 
 function migrateTab(saved: string): SettingsTab {
@@ -99,39 +101,29 @@ export function Settings() {
   // 两条路都定不到就如实提示，不伪造跳转。
   const [fallbackEntry, setFallbackEntry] = useState<SettingsSearchEntry | null>(null);
   const [focusMissing, setFocusMissing] = useState(false);
-  const { settings, updateSettings } = useSettings();
   const { t, locale } = useI18n();
 
   const tabs: { key: SettingsTab; label: string }[] = [
-    // 2026-10-28 设置页整理 P0：「通用」tab 已下线，内容并入「基础」。
-    // 老用户 localStorage 里的 'general' 仍由 migrateTab 迁到 basic。
     { key: 'basic', label: t('settings.tab.basic') },
-    { key: 'tools-connections', label: t('settings.tab.tools-connections') },
-    { key: 'endpoints', label: t('settings.tab.endpoints') },
-    { key: 'models', label: t('settings.tab.models') },
+    // P1-b: 端点/模型/更新源合并为「模型与服务」
+    { key: 'models-services', label: t('settings.tab.models-services') },
     { key: 'orchestration', label: t('settings.tab.orchestration') },
-    // P1-5: 「记忆与知识」tab 已下线并入这里 —— 它里面没有任何知识库设置，
-    // 却让用户以为记忆与知识是绑定的，徒增记忆能力的入口数量。
-    { key: 'memory', label: t('settings.tab.memory') },
-    { key: 'network', label: t('settings.tab.network') },
+    { key: 'tools-connections', label: t('settings.tab.tools-connections') },
     { key: 'mcp', label: t('settings.tab.mcp') },
-    { key: 'plugins', label: t('settings.tab.plugins') },
-    { key: 'remote-workspaces', label: t('settings.tab.remote-workspaces') },
+    // P1-b: 插件/技能合并为「插件与技能」
+    { key: 'plugins-skills', label: t('settings.tab.plugins-skills') },
+    { key: 'global-rules', label: t('settings.tab.global-rules' as TranslationKey) },
+    { key: 'memory', label: t('settings.tab.memory') },
     { key: 'zotero', label: t('settings.tab.zotero') },
+    { key: 'network', label: t('settings.tab.network') },
+    { key: 'remote-workspaces', label: t('settings.tab.remote-workspaces') },
+    { key: 'usage-stats', label: t('settings.tab.usage-stats' as TranslationKey) },
+    { key: 'updates', label: t('settings.tab.updates') },
     { key: 'runtime', label: t('settings.tab.runtime') },
     { key: 'evolution', label: t('settings.tab.evolution') },
     { key: 'harness', label: t('settings.tab.harness') },
-    { key: 'updates', label: t('settings.tab.updates') },
     { key: 'feedback', label: t('settings.tab.feedback') },
-    { key: 'usage-stats', label: t('settings.tab.usage-stats' as TranslationKey) },
   ];
-  if (ENABLE_UPDATE_PROVIDERS_UI()) {
-    tabs.push({ key: 'providers', label: t('settings.tab.providers' as TranslationKey) });
-  }
-  // T-3/T-4: 技能设置 Tab（脚本执行开关 + 技能目录）
-  tabs.push({ key: 'skills', label: t('settings.tab.skills' as TranslationKey) });
-  // G1 (2026-10-27): 全局规则 Tab（~/.sage/SAGE.md 读写）
-  tabs.push({ key: 'global-rules', label: t('settings.tab.global-rules' as TranslationKey) });
 
   // 设置项级搜索：命中项列表 + 其所属 tab（导航区仍按 tab 名过滤）
   const matchedItems = useMemo(() => searchSettings(searchQuery), [searchQuery]);
@@ -319,20 +311,15 @@ export function Settings() {
             )}
             {activeTab === 'basic' && <BasicTab />}
             {activeTab === 'tools-connections' && <ToolsConnectionsTab />}
-            {activeTab === 'endpoints' && (
-              <EndpointsTab settings={settings} updateSettings={updateSettings} />
-            )}
-            {activeTab === 'models' && (
-              <ModelsTab settings={settings} updateSettings={updateSettings} />
-            )}
+            // P1-b: 端点/模型/更新源合并为「模型与服务」
+            {activeTab === 'models-services' && <ModelsServicesTab />}
             {activeTab === 'orchestration' && <OrchestrationTab />}
-            {/* P1-5: 记忆设置合并为单 tab（日常开关 + 记忆引擎），顶部指向
-                唯一的记忆工作台 /memory —— 设置页不再自成第三个记忆入口。 */}
             {activeTab === 'memory' && <MemorySettingsTab />}
             {activeTab === 'network' && <NetworkTab />}
             {activeTab === 'remote-workspaces' && <RemoteWorkspacesTab />}
             {activeTab === 'mcp' && <McpTab />}
-            {activeTab === 'plugins' && <PluginsTab />}
+            // P1-b: 插件/技能合并为「插件与技能」
+            {activeTab === 'plugins-skills' && <PluginsSkillsTab />}
             {activeTab === 'zotero' && <ZoteroTab />}
             {activeTab === 'runtime' && <RuntimeEnvTab />}
             {activeTab === 'evolution' && (
@@ -346,8 +333,6 @@ export function Settings() {
             {activeTab === 'harness' && <HarnessDashboard />}
             {activeTab === 'updates' && <UpdatesTab />}
             {activeTab === 'usage-stats' && <UsageStatsTab />}
-            {activeTab === 'providers' && ENABLE_UPDATE_PROVIDERS_UI() && <ProvidersManager />}
-            {activeTab === 'skills' && <SkillsTab />}
             {activeTab === 'global-rules' && <GlobalRulesTab />}
             {activeTab === 'feedback' && <FeedbackTab />}
           </div>

@@ -2,7 +2,7 @@ import type { SettingsSearchEntry, SettingsTabKey } from './settingsSearchIndex'
 
 const GROUPS = [
   { id: 'basic', zh: '基础', en: 'Basics', keys: ['basic'] },
-  { id: 'models', zh: '模型与服务', en: 'Models and services', keys: ['endpoints', 'models'] },
+  { id: 'models', zh: '模型与服务', en: 'Models and services', keys: ['models-services'] },
   {
     id: 'agent',
     zh: '智能体',
@@ -11,8 +11,7 @@ const GROUPS = [
       'orchestration',
       'tools-connections',
       'mcp',
-      'plugins',
-      'skills',
+      'plugins-skills',
       'global-rules',
     ],
   },
@@ -38,7 +37,7 @@ const GROUPS = [
     id: 'advanced',
     zh: '诊断与实验',
     en: 'Diagnostics and experiments',
-    keys: ['runtime', 'evolution', 'harness', 'providers'],
+    keys: ['runtime', 'evolution', 'harness'],
   },
   {
     id: 'feedback',
@@ -105,7 +104,7 @@ export function auditSettingsPresentationGovernance(): {
   supportsGroupedNavigationAndRowFocus: boolean;
   compliant: boolean;
 } {
-  const groups = settingsGroups(['basic', 'models', 'runtime'], 'zh');
+  const groups = settingsGroups(['basic', 'models-services', 'runtime'], 'zh');
   return {
     module: 'src/pages/settings/settingsPresentation.ts',
     phase: 'P174',

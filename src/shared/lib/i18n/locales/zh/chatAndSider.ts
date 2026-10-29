@@ -273,6 +273,8 @@ export const zhChatAndSider = {
   'settings.tab.tools-connections': '权限与工具',
   'settings.tab.endpoints': '端点',
   'settings.tab.models': '模型',
+  'settings.tab.models-services': '模型与服务',
+  'settings.tab.plugins-skills': '插件与技能',
   'settings.tab.orchestration': '编排',
   'settings.tab.memory': '记忆',
   'settings.tab.network': '网络',

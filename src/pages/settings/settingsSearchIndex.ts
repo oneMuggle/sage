@@ -9,13 +9,12 @@
 export type SettingsTabKey =
   | 'basic'
   | 'tools-connections'
-  | 'endpoints'
-  | 'models'
+  | 'models-services'
   | 'orchestration'
   | 'memory'
   | 'network'
   | 'mcp'
-  | 'plugins'
+  | 'plugins-skills'
   | 'remote-workspaces'
   | 'zotero'
   | 'runtime'
@@ -23,9 +22,6 @@ export type SettingsTabKey =
   | 'harness'
   | 'updates'
   | 'usage-stats'
-  | 'providers'
-  // T-3/T-4: 技能设置 Tab（脚本执行开关 + 技能目录）
-  | 'skills'
   // G1 (2026-10-27): 全局规则 Tab（~/.sage/SAGE.md 读写）
   | 'global-rules'
   // 2026-10-29: 用户反馈 Tab（管理员转发 + 双向会话）
@@ -267,7 +263,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // ── 端点 ──
   {
     key: 'endpoints',
-    tab: 'endpoints',
+    tab: 'models-services',
     label: '端点管理',
     labelEn: 'Endpoints',
     keywords: 'endpoint base url api key 端点 协议 模型探测',
@@ -276,42 +272,42 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // ── 模型 ──
   {
     key: 'model_selections',
-    tab: 'models',
+    tab: 'models-services',
     label: '模型选择',
     labelEn: 'Model selection',
     keywords: 'model chat vision embedding tts asr image 模型选择',
   },
   {
     key: 'max_context',
-    tab: 'models',
+    tab: 'models-services',
     label: '最大上下文长度',
     labelEn: 'Max context',
     keywords: 'maxcontext 上下文 context window 长度',
   },
   {
     key: 'auto_context',
-    tab: 'models',
+    tab: 'models-services',
     label: '自动推断上下文窗口',
     labelEn: 'Auto context',
     keywords: 'autocontext 上下文 自动推断 catalog',
   },
   {
     key: 'max_output_tokens',
-    tab: 'models',
+    tab: 'models-services',
     label: '最大输出长度',
     labelEn: 'Max output tokens',
     keywords: 'maxoutputtokens 输出 output 长度 截断 token max_tokens',
   },
   {
     key: 'temperature',
-    tab: 'models',
+    tab: 'models-services',
     label: 'Temperature',
     labelEn: 'Temperature',
     keywords: 'temperature 温度 随机性 采样',
   },
   {
     key: 'model_catalog',
-    tab: 'models',
+    tab: 'models-services',
     label: '模型目录管理',
     labelEn: 'Model catalog',
     keywords: 'catalog 模型目录 管理',
@@ -561,7 +557,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // ── 插件 ──
   {
     key: 'plugins',
-    tab: 'plugins',
+    tab: 'plugins-skills',
     label: '插件生命周期',
     labelEn: 'Plugin lifecycle',
     keywords: 'plugin plugins manifest 插件 安装 权限 生命周期 日志',
@@ -604,7 +600,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   },
   {
     key: 'providers',
-    tab: 'providers',
+    tab: 'models-services',
     label: '更新源管理',
     labelEn: 'Update sources',
     keywords: 'provider 更新源 镜像 源管理',
@@ -653,21 +649,21 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // ── 技能 (T-3/T-4) ──
   {
     key: 'skills',
-    tab: 'skills',
+    tab: 'plugins-skills',
     label: '技能',
     labelEn: 'Skills',
     keywords: 'skill 技能 skill.md 脚本 目录',
   },
   {
     key: 'allow_skill_scripts',
-    tab: 'skills',
+    tab: 'plugins-skills',
     label: '允许执行技能脚本',
     labelEn: 'Allow skill script execution',
     keywords: 'allow_skill_scripts 技能 脚本 执行 开关 bash powershell',
   },
   {
     key: 'skills_dir',
-    tab: 'skills',
+    tab: 'plugins-skills',
     label: '技能目录',
     labelEn: 'Skills directory',
     keywords: 'skills_dir 技能 目录 路径 skill.md',
