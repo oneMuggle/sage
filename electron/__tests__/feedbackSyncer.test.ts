@@ -203,7 +203,8 @@ describe('FeedbackSyncer.syncOnce', () => {
     expect(stats).toEqual({ submitted: 1, received: 1, errors: 0 });
 
     const remotePost = calls.find(
-      (c) => c.method === 'POST' && c.url === `${MANAGER}/api/v1/feedback/conversations/c-1/messages`,
+      (c) =>
+        c.method === 'POST' && c.url === `${MANAGER}/api/v1/feedback/conversations/c-1/messages`,
     );
     expect(remotePost?.body).toMatchObject({
       id: 'm-1',
@@ -219,7 +220,8 @@ describe('FeedbackSyncer.syncOnce', () => {
     expect(markSynced?.headers.Authorization).toBe('Bearer local-token');
 
     const adminWrite = calls.find(
-      (c) => c.method === 'POST' && c.url === `${BACKEND}/api/v1/feedback/conversations/c-1/messages`,
+      (c) =>
+        c.method === 'POST' && c.url === `${BACKEND}/api/v1/feedback/conversations/c-1/messages`,
     );
     expect(adminWrite?.body).toMatchObject({
       id: 'a-2',

@@ -216,6 +216,11 @@ export class FeedbackSyncer {
           body: msg.body,
           media_ids: msg.media_ids,
           created_at: msg.created_at,
+          // 会话元数据：转发脚本首次见到该会话时用它建工单；已存在时忽略。
+          title: conv.title,
+          app_version: conv.app_version,
+          os_info: conv.os_info,
+          conversation_created_at: conv.created_at,
         },
       );
       if (!ok) return -1;
