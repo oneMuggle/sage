@@ -1,20 +1,25 @@
 import { BookOpen, Wrench, ChevronDown, FileText, Zap } from 'lucide-react';
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useRef, useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { MediaAttachment } from '../../features/chat/MediaAttachment';
+import { getQuotableSelection } from '../../features/chat/selectionQuote';
 import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { useChatStreamStore } from '../../features/send-message/chatStreamStore';
 import { THINKING_PLACEHOLDER } from '../../features/send-message/thinkingPlaceholder';
+import { copyToClipboard } from '../../shared/lib/clipboard';
 import { usePluginNames } from '../../shared/lib/hooks/usePluginNames';
 import { useI18n } from '../../shared/lib/i18n';
 import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownChunks';
 import { findPluginToolOwner } from '../../shared/lib/permissionInsights';
 import type { BlockedAction, Message as MessageType, ToolCall } from '../../shared/lib/store';
 import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
+import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
 
 import { BlockedCard } from './BlockedCard';
 import { CompactBanner } from './CompactBanner';
+import { buildMessageContextMenuItems } from './messageContextMenu';
 import { MessageActionBar } from './MessageActionBar';
 import { MessageClientMeta } from './MessageClientMeta';
 import {
@@ -50,6 +55,8 @@ interface MessageProps {
   onDelete?: (messageId: string) => void;
   /** P0-1: 引用此条消息到输入框 */
   onQuote?: (message: MessageType) => void;
+  /** 对话阅读导航 A4: 划词引用回调（右键菜单「引用选区」复用同一链路） */
+  onQuoteSelection?: (text: string) => void;
   /** P0-1: 将此条消息内容保存到长期记忆 */
   onSaveToMemory?: (message: MessageType) => void;
   /** P0-6: 打开记忆浏览器并定位到该条记忆（来源可回溯） */
@@ -80,6 +87,7 @@ function MessageComponent({
   onRegenerate,
   onDelete,
   onQuote,
+  onQuoteSelection,
   onSaveToMemory,
   onOpenMemory,
   onContinue,
@@ -88,6 +96,7 @@ function MessageComponent({
   onBlockedAction,
 }: MessageProps) {
   const { t } = useI18n();
+  const bubbleRef = useRef<HTMLDivElement | null>(null);
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
   const isSystem = message.role === 'system';
@@ -217,6 +226,51 @@ function MessageComponent({
   const wikiOffset = ragOffset + ragCitations.length;
   const webOffset = wikiOffset + wikiSources.length;
   const toolOffset = webOffset + webSources.length;
+
+  // 右键菜单 spec 在打开时求值：选区与流式状态取点击当下的值。
+  // spec 构建与消息渲染树解耦，不会在流式 token 更新路径上重复执行。
+  const buildContextMenuItems = () => {
+    const quotable = getQuotableSelection(window.getSelection(), bubbleRef.current);
+    const selectionText = quotable?.text ?? null;
+    const copy = (text: string) => {
+      void copyToClipboard(text, {
+        successMessage: t('contextMenu.common.copied'),
+        errorMessage: t('contextMenu.common.copyFailed'),
+      });
+    };
+    return buildMessageContextMenuItems({
+      message,
+      t,
+      isStreaming,
+      selectionText,
+      onCopySelection: () => {
+        if (selectionText) copy(selectionText);
+      },
+      onQuoteSelection: () => {
+        if (selectionText) onQuoteSelection?.(selectionText);
+      },
+      onCopy: () => copy(message.content),
+      onCopyMarkdown: () => copy(message.content),
+      onQuote: onQuote ? () => onQuote(message) : undefined,
+      onEditResend: onEditResend ? () => onEditResend(message.id) : undefined,
+      onRegenerate: onRegenerate ? () => onRegenerate(message.id) : undefined,
+      onFeedback: onFeedback ? (feedback) => onFeedback(message.id, feedback) : undefined,
+      onFork: onFork ? () => onFork(message.id) : undefined,
+      onRewind: onRewind ? () => onRewind(message.id) : undefined,
+      onSaveToMemory: onSaveToMemory ? () => onSaveToMemory(message) : undefined,
+      onDelete: onDelete
+        ? async () => {
+            const confirmed = await confirmDialog({
+              title: t('contextMenu.message.deleteTitle'),
+              message: t('contextMenu.message.deleteBody'),
+              confirmLabel: t('common.delete'),
+              danger: true,
+            });
+            if (confirmed) onDelete(message.id);
+          }
+        : undefined,
+    });
+  };
 
   // R38: 系统消息（如压缩通知）居中渲染，无头像/气泡
   // 必须在所有 Hooks 之后 return，否则违反 React Hooks 规则
@@ -428,43 +482,46 @@ function MessageComponent({
             2026-10-21: 重试期间内容仍是哨兵占位时跳过气泡,
             否则哨兵会被当 markdown 静态文本渲染(与 P0 修复冲突)。 */}
         {showBubble && !showRetryBannerOnly && (
-          <div
-            data-error={isError ? 'true' : undefined}
-            data-quote-scope="message-body"
-            className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-ui-caption leading-relaxed ${
-              isUser
-                ? 'bg-primary text-text-inverse'
-                : isError
-                  ? 'bg-error/10 border border-error/40 text-error'
-                  : 'bg-surface border border-border'
-            }`}
-          >
-            {/* Message content with Markdown */}
-            {isAssistant ? (
-              isThinkingPlaceholder ? (
-                <ThinkingShimmer startTime={streamingStartTime} />
-              ) : (
-                <div className="max-w-none max-w-3xl mx-auto w-full">
-                  {/* P2: 阅读宽度约束 48rem 居中（对标主流 AI 应用），宽屏下
+          <ContextMenu items={buildContextMenuItems}>
+            <div
+              ref={bubbleRef}
+              data-error={isError ? 'true' : undefined}
+              data-quote-scope="message-body"
+              className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-ui-caption leading-relaxed ${
+                isUser
+                  ? 'bg-primary text-text-inverse'
+                  : isError
+                    ? 'bg-error/10 border border-error/40 text-error'
+                    : 'bg-surface border border-border'
+              }`}
+            >
+              {/* Message content with Markdown */}
+              {isAssistant ? (
+                isThinkingPlaceholder ? (
+                  <ThinkingShimmer startTime={streamingStartTime} />
+                ) : (
+                  <div className="max-w-none max-w-3xl mx-auto w-full">
+                    {/* P2: 阅读宽度约束 48rem 居中（对标主流 AI 应用），宽屏下
                     长文不再一行拉满；表格/代码块仍在容器内滚动 */}
-                  {chunks.stable.map((md, i) => (
-                    <MarkdownChunk key={i} md={md} />
-                  ))}
-                  <MarkdownChunk md={chunks.live} plainFences={unclosedFence || undefined} />
-                  {/* 流式生成光标 — 跟随内容尾部闪烁（reduced-motion 全局关闭） */}
-                  {isStreaming && (
-                    <span
-                      className="stream-cursor"
-                      aria-hidden="true"
-                      data-testid="stream-cursor"
-                    />
-                  )}
-                </div>
-              )
-            ) : (
-              <p className="whitespace-pre-wrap">{renderTextWithLinks(message.content)}</p>
-            )}
-          </div>
+                    {chunks.stable.map((md, i) => (
+                      <MarkdownChunk key={i} md={md} />
+                    ))}
+                    <MarkdownChunk md={chunks.live} plainFences={unclosedFence || undefined} />
+                    {/* 流式生成光标 — 跟随内容尾部闪烁（reduced-motion 全局关闭） */}
+                    {isStreaming && (
+                      <span
+                        className="stream-cursor"
+                        aria-hidden="true"
+                        data-testid="stream-cursor"
+                      />
+                    )}
+                  </div>
+                )
+              ) : (
+                <p className="whitespace-pre-wrap">{renderTextWithLinks(message.content)}</p>
+              )}
+            </div>
+          </ContextMenu>
         )}
 
         {/* 底部信息 */}
@@ -736,6 +793,7 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.onRegenerate === next.onRegenerate &&
     prev.onDelete === next.onDelete &&
     prev.onQuote === next.onQuote &&
+    prev.onQuoteSelection === next.onQuoteSelection &&
     prev.onSaveToMemory === next.onSaveToMemory &&
     prev.artifactsByToolCall === next.artifactsByToolCall &&
     prev.onBlockedAction === next.onBlockedAction

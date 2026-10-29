@@ -9,12 +9,15 @@
 //   走 fetchMediaBlobUrl（IPC relay 注入 token）换 blob: URL（与
 //   MediaAttachment 同一通道）；浏览器 dev 无 bridge 时回退直连。
 
+import { Maximize2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { fetchMediaBlobUrl, revokeMediaBlobUrl } from '../../shared/api/mediaApi';
 import { buildLocalImageSrc } from '../../shared/lib/localImageSrc';
+import { useI18n } from '../../shared/lib/i18n';
 import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 import { Lightbox } from '../../shared/ui';
+import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
 
 type LoadStatus = 'loading' | 'loaded' | 'error';
 
@@ -47,6 +50,7 @@ export function formatMarkdownImageAuditJson(opts: {
 }
 
 export function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
+  const { t } = useI18n();
   const [status, setStatus] = useState<LoadStatus>('loading');
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
@@ -84,88 +88,100 @@ export function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
   // P9: 本地路径转 sage-file:// URL（主进程校验工作区包含 + 扩展名白名单）
   const resolved = buildLocalImageSrc(blobUrl ?? src, workspacePath) || src;
 
+  const menuItems = () => [
+    {
+      id: 'view-image',
+      label: t('contextMenu.image.view'),
+      icon: Maximize2,
+      disabled: status !== 'loaded',
+      onSelect: () => setLightboxOpen(true),
+    },
+  ];
+
   return (
-    <span className="relative inline-block align-top my-1">
-      {status === 'loading' && (
-        <span
-          data-testid="markdown-image-skeleton"
-          className="flex w-64 h-40 rounded bg-bg-subtle border border-border animate-pulse items-center justify-center text-xs text-muted"
-        >
-          加载图片…
-        </span>
-      )}
-      {status === 'error' ? (
-        <span
-          data-testid="markdown-image-error"
-          className="flex w-64 h-24 rounded bg-bg-subtle border border-border items-center justify-center gap-2 text-xs text-muted"
-        >
-          图片加载失败
-          <button
-            type="button"
-            data-testid="markdown-image-retry"
-            onClick={() => setStatus('loading')}
-            className="px-2 py-0.5 rounded border border-border text-ui-2xs text-primary hover:bg-primary/10 transition-colors"
+    <ContextMenu items={menuItems}>
+      <span className="relative inline-block align-top my-1">
+        {status === 'loading' && (
+          <span
+            data-testid="markdown-image-skeleton"
+            className="flex w-64 h-40 rounded bg-bg-subtle border border-border animate-pulse items-center justify-center text-xs text-muted"
           >
-            重试
-          </button>
+            加载图片…
+          </span>
+        )}
+        {status === 'error' ? (
+          <span
+            data-testid="markdown-image-error"
+            className="flex w-64 h-24 rounded bg-bg-subtle border border-border items-center justify-center gap-2 text-xs text-muted"
+          >
+            图片加载失败
+            <button
+              type="button"
+              data-testid="markdown-image-retry"
+              onClick={() => setStatus('loading')}
+              className="px-2 py-0.5 rounded border border-border text-ui-2xs text-primary hover:bg-primary/10 transition-colors"
+            >
+              重试
+            </button>
+          </span>
+        ) : (
+          <img
+            src={resolved}
+            alt={alt ?? ''}
+            draggable={false}
+            data-testid="markdown-image"
+            onLoad={() => setStatus('loaded')}
+            onError={() => setStatus('error')}
+            // 未加载完成时绝对定位叠在骨架上（透明），加载后渐入并撑开布局
+            className={`max-w-full rounded border border-border cursor-zoom-in transition-opacity duration-300 ${
+              status === 'loaded' ? 'opacity-100' : 'absolute inset-0 opacity-0'
+            }`}
+            onClick={() => setLightboxOpen(true)}
+          />
+        )}
+        {lightboxOpen && status === 'loaded' && (
+          <Lightbox src={resolved} alt={alt} onClose={() => setLightboxOpen(false)} />
+        )}
+        <span
+          data-testid="markdown-image-copy-snapshot"
+          onClick={() => {
+            /* v8 ignore start */
+            setCopiedSnapshot(true);
+            void navigator.clipboard?.writeText(
+              formatMarkdownImageAuditSnapshot({
+                src,
+                alt,
+                status,
+                isLocalMedia,
+                lightboxOpen,
+              }),
+            );
+            /* v8 ignore stop */
+          }}
+        >
+          {copiedSnapshot ? '已复制快照' : ''}
         </span>
-      ) : (
-        <img
-          src={resolved}
-          alt={alt ?? ''}
-          draggable={false}
-          data-testid="markdown-image"
-          onLoad={() => setStatus('loaded')}
-          onError={() => setStatus('error')}
-          // 未加载完成时绝对定位叠在骨架上（透明），加载后渐入并撑开布局
-          className={`max-w-full rounded border border-border cursor-zoom-in transition-opacity duration-300 ${
-            status === 'loaded' ? 'opacity-100' : 'absolute inset-0 opacity-0'
-          }`}
-          onClick={() => setLightboxOpen(true)}
-        />
-      )}
-      {lightboxOpen && status === 'loaded' && (
-        <Lightbox src={resolved} alt={alt} onClose={() => setLightboxOpen(false)} />
-      )}
-      <span
-        data-testid="markdown-image-copy-snapshot"
-        onClick={() => {
-          /* v8 ignore start */
-          setCopiedSnapshot(true);
-          void navigator.clipboard?.writeText(
-            formatMarkdownImageAuditSnapshot({
-              src,
-              alt,
-              status,
-              isLocalMedia,
-              lightboxOpen,
-            }),
-          );
-          /* v8 ignore stop */
-        }}
-      >
-        {copiedSnapshot ? '已复制快照' : ''}
+        <span
+          data-testid="markdown-image-copy-json"
+          onClick={() => {
+            /* v8 ignore start */
+            setCopiedJson(true);
+            void navigator.clipboard?.writeText(
+              formatMarkdownImageAuditJson({
+                src,
+                alt,
+                status,
+                isLocalMedia,
+                lightboxOpen,
+              }),
+            );
+            /* v8 ignore stop */
+          }}
+        >
+          {copiedJson ? '已复制JSON' : ''}
+        </span>
       </span>
-      <span
-        data-testid="markdown-image-copy-json"
-        onClick={() => {
-          /* v8 ignore start */
-          setCopiedJson(true);
-          void navigator.clipboard?.writeText(
-            formatMarkdownImageAuditJson({
-              src,
-              alt,
-              status,
-              isLocalMedia,
-              lightboxOpen,
-            }),
-          );
-          /* v8 ignore stop */
-        }}
-      >
-        {copiedJson ? '已复制JSON' : ''}
-      </span>
-    </span>
+    </ContextMenu>
   );
 }
 

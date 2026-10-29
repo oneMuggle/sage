@@ -4,15 +4,20 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
+import { I18nProvider } from '../../../shared/lib/i18n';
 import {
   MarkdownImage,
   formatMarkdownImageAuditJson,
   formatMarkdownImageAuditSnapshot,
 } from '../MarkdownImage';
 
+function renderImage(ui: React.ReactElement) {
+  return render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
+}
+
 describe('MarkdownImage', () => {
   it('加载中显示骨架，onLoad 后渐入', async () => {
-    render(<MarkdownImage src="https://example.com/a.png" alt="示例" />);
+    renderImage(<MarkdownImage src="https://example.com/a.png" alt="示例" />);
     expect(screen.getByTestId('markdown-image-skeleton')).toBeInTheDocument();
 
     fireEvent.load(screen.getByTestId('markdown-image'));
@@ -22,13 +27,13 @@ describe('MarkdownImage', () => {
   });
 
   it('加载失败显示失败占位', () => {
-    render(<MarkdownImage src="https://example.com/broken.png" />);
+    renderImage(<MarkdownImage src="https://example.com/broken.png" />);
     fireEvent.error(screen.getByTestId('markdown-image'));
     expect(screen.getByTestId('markdown-image-error')).toBeInTheDocument();
   });
 
   it('点击图片打开 Lightbox', () => {
-    render(<MarkdownImage src="https://example.com/a.png" />);
+    renderImage(<MarkdownImage src="https://example.com/a.png" />);
     const img = screen.getByTestId('markdown-image');
     fireEvent.load(img);
     fireEvent.click(img);
@@ -36,7 +41,7 @@ describe('MarkdownImage', () => {
   });
 
   it('src 缺失时不渲染', () => {
-    const { container } = render(<MarkdownImage />);
+    const { container } = renderImage(<MarkdownImage />);
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -49,9 +54,7 @@ describe('MarkdownImage', () => {
         isLocalMedia: false,
         lightboxOpen: true,
       }),
-    ).toBe(
-      'markdownImage|src=https://example.com/a.png|alt=demo|status=loaded|local=0|lightbox=1',
-    );
+    ).toBe('markdownImage|src=https://example.com/a.png|alt=demo|status=loaded|local=0|lightbox=1');
     expect(formatMarkdownImageAuditSnapshot({})).toBe(
       'markdownImage|src=none|alt=none|status=loading|local=0|lightbox=0',
     );
@@ -73,7 +76,7 @@ describe('MarkdownImage', () => {
       lightboxOpen: false,
     });
 
-    render(<MarkdownImage src="https://example.com/a.png" alt="示例" />);
+    renderImage(<MarkdownImage src="https://example.com/a.png" alt="示例" />);
     const snapBtn = screen.getByTestId('markdown-image-copy-snapshot');
     const jsonBtn = screen.getByTestId('markdown-image-copy-json');
     fireEvent.click(snapBtn);
