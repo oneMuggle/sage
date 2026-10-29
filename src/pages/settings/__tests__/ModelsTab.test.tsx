@@ -139,10 +139,10 @@ describe('ModelsTab routing mode (Task 11)', () => {
   });
 
   it('auto mode keeps the other five capability selectors', () => {
-    // 第 7 个 <select> 是「高级」里的标题模型选择器（settings-title-model），
-    // 不参与能力选择器计数；只数六个能力选择器 → 手动 6 / 自动 5。
+    // 6 个能力选择器 (手动: chat/vision/embedding/tts/asr/image_gen) → 自动模式
+    // 隐藏 chat 选择器剩 5 个。无其它 <select> 干扰, 直接全量计数。
     const capabilitySelects = (container: HTMLElement) =>
-      container.querySelectorAll('select:not([data-testid="settings-title-model"])');
+      container.querySelectorAll('select');
 
     const manual = render(<ModelsTab settings={settings} updateSettings={vi.fn()} />);
     expect(capabilitySelects(manual.container)).toHaveLength(6);

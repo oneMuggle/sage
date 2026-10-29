@@ -102,8 +102,6 @@ ALIASES: Dict[str, str] = {
     # 2026-10-28: LLM 代理上游超时（秒）— 前端「LLM 代理超时」设置。
     # 缺别名时 relay 的 camelToSnake 往返后翻不回 camel，保存 400 被静默吞掉。
     "llm_proxy_timeout_s": "llmProxyTimeoutS",
-    # 2026-10-27: 会话标题专用模型 id — 同上，缺别名 relay 往返后 400。
-    "title_model_id": "titleModelId",
 }
 
 # AppSettings (src/entities/setting/types.ts) 锁死的白名单
@@ -140,10 +138,6 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         # 2026-10-28: LLM 代理上游超时（秒）。backend/api/llm_proxy_routes.py
         # 函数式读取，改后下一个请求即生效。
         "llmProxyTimeoutS",
-        # 2026-10-27: 会话标题生成专用模型 id（顶层扁平键，与 chatModel 同风格）。
-        # 值为模型 id 字符串；留空表示回退到聊天模型。后端
-        # title_generator.load_title_llm_config() 读取此键。
-        "titleModelId",
         # Task 9 (2026-10-28): 智能路由模式 {'mode': 'auto' | 'manual'}。
         # 缺省 = manual（现行为）。llm_factory.load_routing_config() 读取。
         "routing",

@@ -42,7 +42,7 @@ def test_effective_model_requires_tier():
 
 
 def test_effective_model_without_tier_raises():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"Field required|tier"):
         EffectiveModel(
             limits=ContextLimits(native=128000, service=128000),
             price=Price(),

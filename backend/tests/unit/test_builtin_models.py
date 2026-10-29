@@ -16,7 +16,7 @@ _BUILTIN_JSON_PATH = Path(__file__).parent.parent.parent / "builtin.json"
 _VALID_TIERS = {"fast", "balanced", "powerful"}
 
 
-@pytest.fixture
+@pytest.fixture()
 def builtin_models():
     """Load models from builtin.json."""
     with open(_BUILTIN_JSON_PATH) as f:
@@ -40,7 +40,8 @@ class TestBuiltinJsonStructure:
             assert "provider" in model, (
                 f"Model entry missing 'provider': {model}"
             )
-            assert isinstance(model["provider"], str) and model["provider"].strip(), (
+            assert isinstance(model["provider"], str)
+            assert model["provider"].strip(), (
                 f"Model provider must be a non-blank string: {model}"
             )
 
@@ -49,7 +50,8 @@ class TestBuiltinJsonStructure:
             assert "model_id" in model, (
                 f"Model entry missing 'model_id': {model}"
             )
-            assert isinstance(model["model_id"], str) and model["model_id"].strip(), (
+            assert isinstance(model["model_id"], str)
+            assert model["model_id"].strip(), (
                 f"Model model_id must be a non-blank string: {model}"
             )
 

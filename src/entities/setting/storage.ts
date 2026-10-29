@@ -54,9 +54,6 @@ const TOP_KEYS: ReadonlySet<keyof AppSettings> = new Set([
   'llmTotalTimeoutS',
   // 2026-10-28: LLM 代理上游超时（秒）— 漏了后端永远用 60s 硬编码。
   'llmProxyTimeoutS',
-  // 2026-10-27: 会话标题专用模型 id — 同样会被 sanitizeForBackend 静默丢弃，
-  // 漏了后端 title_generator 永远读不到配置。
-  'titleModelId',
   // Task 9 (2026-10-28) 智能路由模式 —— 漏了会被 sanitizeForBackend 丢弃，
   // 后端 llm_factory.load_routing_config 永远读不到配置。
   'routing',

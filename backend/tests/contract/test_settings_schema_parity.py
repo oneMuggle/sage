@@ -59,8 +59,6 @@ EXPECTED_TOP_KEYS = frozenset(
         "llmTotalTimeoutS",
         # 2026-10-28: LLM 代理上游超时（秒）— 替代 llm_proxy_routes 硬编码 60s。
         "llmProxyTimeoutS",
-        # 2026-10-27: 会话标题生成专用模型 id（顶层扁平键）
-        "titleModelId",
         # 2026-10-28: 智能路由模式 {"mode": "auto"|"manual"}
         "routing",
     }
