@@ -232,3 +232,81 @@ Widget `MessageList.tsx` 无需改,只显示 `messages[].content` 即可看到
 `runId` 参数当前未在 store 内部读取(updater 闭包已做匹配),会触发
 `tsc --noEmit` 的 `TS6133 noUnusedParameters` 一行警告;属"无功能影响"
 已知缺陷,已记录待后续 session 清理。
+
+## 10. 迭代上限错误定位 + 思考/正文可见性(2026-10-29, PR #2650)
+
+用户反馈两类同源问题:主 SSE 路径下只看到工具调用气泡、看不到思考过程与最终回答;
+失败时只抛出一句"任务复杂度超出迭代上限 10 次",既误导(用户以为是
+`complexity_classifier` 的分类结果)又无用(不知道是哪个 agent、该调哪个设置)。
+
+### 10.1 迭代上限事件携带 agent / source
+
+`SageAgent.run_loop` 计算 `effective_max_iterations` 的优先级链保持不变:
+
+```
+显式参数 max_iterations  >  orch_settings.max_iterations  >  profile.max_iterations  >  DEFAULT_MAX_ITERATIONS(10)
+```
+
+新增的是**记录来源**:同一分支里记下 `_limit_source`,并连同 agent id 一并写进
+FAILED 事件字符串(见 `backend/core/legacy/agent.py` 的 `_limit_source` /
+`_limit_agent_part`):
+
+```
+max_iterations_exceeded (limit=10, agent=writer, source=profile)
+```
+
+| `source` 取值 | 含义 | 用户该去哪调 |
+| --- | --- | --- |
+| `explicit` | 调用方硬覆盖(如父 agent 委派时按任务复杂度给定) | 调用方代码;用户侧只能拆分任务 |
+| `orch.global` | 编排全局设置 | 设置 → 编排 → Agent 迭代次数上限 |
+| `profile` | 该 agent profile 的 `max_iterations` | Agent 编辑面板里该 agent 的最大迭代次数 |
+| `default` | 兜底值 10(无 profile 且全局为 0) | 设置 → 编排 → Agent 迭代次数上限 |
+
+`agent=` 段在 profile id 与 `agent_id` 都为空时**整段省略**(不会出现
+`agent=, source=…` 的畸形串),前端此时回落为「本次任务」措辞。
+
+前端 `src/shared/lib/errorMapping.ts` 的 `parseAgentErrorLimit` 扩展解析
+`agent` / `source` 两个可选字段,`buildIterationLimitMessage` 据此渲染:
+
+```
+「写作助手」达到迭代上限 10 次（上限来源：Agent 默认配置）。
+可在 Agent 编辑面板调整该 Agent 的最大迭代次数后重试，或拆分任务减少往返。
+```
+
+旧格式(仅 `limit=`)仍然兼容,解析不到 `agent` / `source` 时回落通用文案。
+
+### 10.2 思考过程(reasoning)可见性
+
+排查结论:**前端主 SSE 路径的 reasoning 累积本就存在**——`useChat` 的 onEvent
+先调 `applyTransparencyAndToolEvents`(`chatStreamRuntime.ts:231`),由它按
+`reasoning_delta` / `reasoning` append、`reasoning_final` replace 写入
+`useChatStreamStore`,主路径与 reattach 路径共用同一处。真正的缺口在后端:
+
+- **流式分支**只看 provider 的增量 `reasoning_delta`;当 provider 把整段思考塞进
+  `response.reasoning_content` 而不发增量时,整段思考被丢弃(非流式路径本来就有
+  `response.reasoning_content` 兜底)。
+- 修复:`agent.py` 流式分支在 `stream_reasoning_parts` 为空时回退
+  `response.reasoning_content`,补发一条 `REASONING` 事件,与非流式路径口径对齐。
+
+### 10.3 中间态占位符不得吞掉已流式正文
+
+第二条"只看到工具气泡"的路径在 `useChat.ts`,比 reasoning 更致命:
+
+| 现象 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 已流式产出正文后又来一个工具事件 | `thinking` / `acting` / `observing` 占位文案**无条件** `replaceContent`,正文被擦掉 | `hasRealContent` 为真时占位符不写回 |
+| 迭代上限失败(无 DONE 收尾) | `finishStream` 把残留占位符 `🤔 思考中…` 当正文写回消息 | 从未产出正文时清空占位符,不写回 |
+| DONE 事件再次携带全文 | 与已流式内容重复 | `hasRealContent` 为真时不再 append |
+| `step_done` 切换新气泡 | 标记残留,新步骤被误判为"已有正文" | 重置 `hasRealContent = false` |
+
+首个真实 token 仍替换占位符(用户不会同时看到 `🤔 思考中…` 和正文),之后 token
+追加。相关回归用例:
+
+- `src/features/send-message/__tests__/useChat.streamingAndGates.test.ts` —
+  `intermediate placeholders do not overwrite already-streamed content`、
+  `done event does not duplicate already-streamed content`
+- `backend/tests/unit/test_agent_run_loop.py` —
+  `test_run_loop_failed_event_names_agent_and_source`
+- `backend/tests/unit/test_agent_streaming.py` —
+  `test_run_loop_streaming_emits_reasoning_from_response_fallback`
+- `src/shared/lib/errorMapping.test.ts` — agent/source 解析与差异化文案(共 29 例)
