@@ -398,6 +398,9 @@ class Message:
     finish_reason: Optional[str] = None
     # C1 (对话阅读体验第二轮): 终稿生成统计 JSON-in-TEXT (tokens / 首字延迟 / 耗时)。
     generation_stats: Optional[str] = None
+    # 2026-10-28: 用户消息展示元数据 JSON-in-TEXT（附件 / @ 文件引用 / office 引用）。
+    # 只用于气泡回显，不参与 LLM 上下文；写入端 json.dumps，读端解析为 dict。
+    client_meta: Optional[str] = None
 
     @classmethod
     def from_row(cls, row) -> Message:
@@ -429,6 +432,7 @@ class Message:
             generation_stats=(
                 row["generation_stats"] if "generation_stats" in row_keys else None
             ),
+            client_meta=row["client_meta"] if "client_meta" in row_keys else None,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -455,6 +459,8 @@ class Message:
             "sources": _parse_json_column(self.sources, list),
             "finish_reason": self.finish_reason,
             "generation_stats": _parse_json_column(self.generation_stats, dict),
+            # 2026-10-28: 用户消息展示元数据（畸形值降级 None，前端视为无引用）。
+            "client_meta": _parse_json_column(self.client_meta, dict),
         }
 
 
@@ -494,8 +500,8 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
     new_message_id = f"msg-{uuid.uuid4().hex[:12]}"  # 新 id，避免与源消息主键冲突
     cursor.execute(
         """
-        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, finish_reason, generation_stats, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, finish_reason, generation_stats, client_meta, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
             new_message_id,
@@ -516,6 +522,7 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
             src_msg.sources,
             src_msg.finish_reason,  # B2: 截断标记随 fork 复制
             src_msg.generation_stats,  # C1: 生成统计随 fork 复制
+            src_msg.client_meta,  # 2026-10-28: 用户消息引用信息随 fork 复制
             src_msg.created_at,  # 保留原时间戳 → ORDER BY created_at ASC 保序
         ),
     )
@@ -696,8 +703,8 @@ class MessageRepository:
 
         cursor.execute(
             """
-            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, created_at, segment_id, subtype, finish_reason, generation_stats)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, created_at, segment_id, subtype, finish_reason, generation_stats, client_meta)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 message.id,
@@ -720,6 +727,7 @@ class MessageRepository:
                 message.subtype,
                 message.finish_reason,
                 message.generation_stats,
+                message.client_meta,
             ),
         )
 
@@ -808,8 +816,8 @@ class MessageRepository:
                 cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
             cursor.execute(
                 """
-                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, created_at, segment_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, created_at, segment_id, client_meta)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     continuation_message.id,
@@ -829,6 +837,7 @@ class MessageRepository:
                     continuation_message.sources,
                     continuation_message.created_at,
                     getattr(continuation_message, "segment_id", 0) or 0,
+                    getattr(continuation_message, "client_meta", None),
                 ),
             )
             cursor.execute(

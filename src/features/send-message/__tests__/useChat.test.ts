@@ -205,6 +205,34 @@ describe('useChat', () => {
     );
   });
 
+  it('attaches display meta to the optimistic user message and forwards message_meta', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-meta' });
+    listenMock.mockImplementationOnce(createFakeStream([done('ok', 1)]).listen);
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    const displayMeta = {
+      file_refs: [{ path: 'src/App.tsx', name: 'App.tsx' }],
+      attachments: [{ name: 'a.pdf', size: 1024, type: 'application/pdf' }],
+    };
+
+    await act(async () => {
+      await result.current.sendMessage('看看 @src/App.tsx', undefined, undefined, undefined, {
+        displayMeta,
+      });
+    });
+
+    await waitFor(() => expect(result.current.messages.length).toBeGreaterThan(0));
+    const user = result.current.messages.find((m) => m.role === 'user');
+    expect(user?.client_meta).toEqual(displayMeta);
+    expect(invokeMock).toHaveBeenCalledWith(
+      'agent_chat_stream',
+      expect.objectContaining({ message_meta: displayMeta }),
+    );
+  });
+
   // PR-7a: useChat 根据 baseUrl 推导 provider 并透传到 IPC,
   // 这样后端 LLMConfig 不再被硬写成 'custom'。
   it('infers provider from Gemini baseUrl and forwards to invoke', async () => {

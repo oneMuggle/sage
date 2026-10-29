@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 import { saveCurrentSessionId } from '../../entities/session/storage';
 import { invoke } from '../api/desktopInvoke';
-import type { GenerationStats, MessageSource, RagCitation } from '../api/types';
+import type { GenerationStats, MessageDisplayMeta, MessageSource, RagCitation } from '../api/types';
 import { workspaceApi } from '../api/workspaceApi';
 import { clientLogger } from '../log/client';
 
@@ -117,6 +117,8 @@ export interface Message {
   finish_reason?: string | null;
   /** 第二轮 C1: 终稿生成统计（DONE 事件 / get_messages 回读） */
   generation_stats?: GenerationStats | null;
+  /** 用户消息展示元数据（附件 @文件引用 / office 引用）；落库后回读。 */
+  client_meta?: MessageDisplayMeta | null;
 }
 
 // 状态接口
