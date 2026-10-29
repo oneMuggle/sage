@@ -7,6 +7,7 @@
 import { useState } from 'react';
 
 import { useI18n } from '../../shared/lib/i18n';
+
 import { PluginsTab } from './PluginsTab';
 import { SkillsTab } from './SkillsTab';
 
