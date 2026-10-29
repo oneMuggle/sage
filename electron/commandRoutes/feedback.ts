@@ -36,7 +36,7 @@ export const feedbackRoutes: Record<string, CommandRoute> = {
         body: a.body,
       };
       if (a.id !== undefined) body.id = a.id; // 幂等创建（syncer 用）
-      if (a.media_ids !== undefined) body.media_ids = a.media_ids;
+      if (a.mediaIds !== undefined) body.media_ids = a.mediaIds;
       return body;
     },
   },
@@ -52,7 +52,7 @@ export const feedbackRoutes: Record<string, CommandRoute> = {
         body: a.body,
       };
       if (a.id !== undefined) body.id = a.id; // 显式 id → add_message 幂等去重
-      if (a.media_ids !== undefined) body.media_ids = a.media_ids;
+      if (a.mediaIds !== undefined) body.media_ids = a.mediaIds;
       return body;
     },
   },
