@@ -4,8 +4,10 @@
  * Walks up from a start directory (max 5 levels) looking for project root
  * markers: `.git`, `package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod`.
  *
- * Used at Electron startup to detect whether the app was launched from inside
- * a project directory, so new sessions can auto-bind to it.
+ * 2026-10-29 (feat/workspace-optimization): 降级为决策链的**最低优先级**输入。
+ * 嗅探结果只作为 `detected_root` 参考值传给后端 `DefaultWorkspaceResolver`，
+ * 优先级低于「用户显式偏好」和「已打开项目」，也不会被记住为用户偏好。
+ * 后端是工作区决策的单一来源 —— 本模块不再触发任何 auto-bind。
  */
 
 import { existsSync } from 'fs';

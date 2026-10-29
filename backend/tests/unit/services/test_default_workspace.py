@@ -155,8 +155,8 @@ def test_user_preference_hits(resolver, project_dir):
     assert result.source == WorkspaceSource.USER_PREFERENCE
 
 
-def test_stale_preference_dropped(resolver, tmp_path):
-    """A remembered path that no longer exists is removed from preferences."""
+def test_stale_preference_retained(resolver, tmp_path):
+    """A transiently unusable remembered path is kept, not silently forgotten."""
     dead = tmp_path / "gone"
     dead.mkdir()
     resolver.remember_workspace(str(dead))
@@ -166,10 +166,11 @@ def test_stale_preference_dropped(resolver, tmp_path):
 
     result = resolver.resolve_default_workspace()
 
-    # Falls to scratch, and the stale preference is cleared.
+    # Falls to scratch, but resolution must not mutate the stored preference:
+    # an unmounted drive can come back, and only an explicit forget clears it.
     assert result is not None
     assert result.source == WorkspaceSource.SCRATCH
-    assert resolver.settings.get(LAST_WORKSPACE_KEY) is None
+    assert resolver.settings.get(LAST_WORKSPACE_KEY) is not None
 
 
 # ----------------------------------------------------------------------

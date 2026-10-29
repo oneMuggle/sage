@@ -24,6 +24,19 @@ export interface Session {
   last_message_preview?: string | null;
   /** 2026-10-28: 性能统计 - 会话总用时（分钟），从创建到最后一次消息 */
   duration_minutes?: number | null;
+  /** 2026-10-29 (feat/workspace-optimization): create_session 响应里附带的工作区绑定信息。
+   *  后端在创建会话时同步解析默认工作区并绑定，前端不再自行推导。null = 连 scratch 都失败。 */
+  workspace_binding?: SessionWorkspaceInfo | null;
+}
+
+/** 2026-10-29 (feat/workspace-optimization): create_session 响应里的工作区信息。 */
+export interface SessionWorkspaceInfo {
+  /** 解析后的绝对路径 */
+  path: string;
+  /** 决策链命中的来源：project | session_binding | user_preference | detected | scratch */
+  source: string;
+  /** 是否走了 scratch 兜底（UI 可据此提示用户"当前在临时工作区"） */
+  is_fallback: boolean;
 }
 
 /** M4: POST /sessions/{id}/compact 响应 */

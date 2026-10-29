@@ -13,8 +13,9 @@ This module replaces that with one ordered chain:
     1. explicit project path — the caller already knows (project.open_project)
     2. session binding       — an existing session's live binding
     3. user preference       — ``preferences`` table; survives reinstall
-    4. scratch workspace     — ``<userData>/workspaces/default``, created lazily
-    5. ``None``              — the caller renders the "pick a folder" guide
+    4. detected root         — Electron's cwd sniffing, a hint only
+    5. scratch workspace     — ``<userData>/workspaces/default``, created lazily
+    6. ``None``              — the caller renders the "pick a folder" guide
 
 Step 4 mirrors how mainstream desktop AI tools stay usable without a project
 (Cursor falls back to ``$HOME``, Cline to ``~/Desktop``) but keeps the files
@@ -61,6 +62,7 @@ class WorkspaceSource(str, Enum):
     PROJECT = "project"
     SESSION_BINDING = "session_binding"
     USER_PREFERENCE = "user_preference"
+    DETECTED = "detected"
     SCRATCH = "scratch"
 
 
@@ -106,6 +108,7 @@ class DefaultWorkspaceResolver:
         self,
         project_path: Optional[str] = None,
         session_id: Optional[str] = None,
+        detected_root: Optional[str] = None,
     ) -> Optional[WorkspaceResolution]:
         """Walk the priority chain and return the first usable directory.
 
@@ -114,6 +117,10 @@ class DefaultWorkspaceResolver:
                 (e.g. from ``project.open_project``). Takes top priority.
             session_id: An existing session whose live binding should be
                 reused, if it still points at a directory that exists.
+            detected_root: A project root sniffed by Electron from the
+                launch directory. Treated as a *hint*: it only applies when
+                the user never bound a workspace themselves, and it is never
+                remembered as the user's preference.
 
         Returns:
             The resolved workspace, or ``None`` when every candidate was
@@ -139,11 +146,22 @@ class DefaultWorkspaceResolver:
             resolution = self._validate(preferred, WorkspaceSource.USER_PREFERENCE)
             if resolution is not None:
                 return resolution
-            # The remembered directory is gone (deleted folder, unplugged
-            # drive). Drop it so we stop probing a dead path on every new
-            # session.
-            logger.info("default_workspace: dropping stale remembered workspace")
-            self.settings.delete(LAST_WORKSPACE_KEY)
+            # The remembered directory is unusable right now. Do *not* delete
+            # the preference here: this is a read-only resolution path and the
+            # cause is often transient (unmounted drive, offline share,
+            # permission blip). Only an explicit forget_workspace() or a new
+            # user choice may clear it.
+            logger.info(
+                "default_workspace: remembered workspace unusable, falling through"
+            )
+
+        if detected_root:
+            resolution = self._validate(detected_root, WorkspaceSource.DETECTED)
+            if resolution is not None:
+                return resolution
+            logger.info(
+                "default_workspace: detected project root is unusable, falling through"
+            )
 
         scratch = self._ensure_scratch_workspace()
         if scratch is not None:

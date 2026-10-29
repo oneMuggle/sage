@@ -28,6 +28,14 @@ vi.mock('../../shared/api/workspaceApi', () => ({
     bind: (...args: unknown[]) => mockBind(...args),
     get: (...args: unknown[]) => mockGet(...args),
     revoke: (...args: unknown[]) => mockRevoke(...args),
+    // 2026-10-29 (feat/workspace-optimization): provider 现在把显式选择同步写入
+    // 后端 preferences；工作区卡片（WorkspaceSwitcher）读取默认解析与健康状态。
+    setPreference: vi.fn().mockResolvedValue({ path: '/tmp', stored: true }),
+    forgetPreference: vi.fn().mockResolvedValue({ cleared: true }),
+    getDefault: vi.fn().mockResolvedValue({ path: null, source: 'scratch', isFallback: true }),
+    getHealth: vi
+      .fn()
+      .mockResolvedValue({ path: '/tmp', health: 'healthy', detail: null, writable: true, isUsable: true }),
   },
 }));
 

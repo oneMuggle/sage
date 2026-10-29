@@ -272,34 +272,35 @@ def migrate_last_workspace_from_local_storage(frontend_ipc) -> str | None:
   - [ ] 新建会话时自动绑定决策结果
   - [ ] 跨会话决策一致性
 
-### 里程碑 M2：P1 决策链整合（2 天）
+### 里程碑 M2：P1 决策链整合（2 天） ✅ 2026-10-29 完成
 
-- [ ] 修改 `backend/api/session_routes.py`
-  - [ ] `create_session` 返回 `workspace_binding`
-- [ ] 修改 `backend/data/project_repo.py`
-  - [ ] `open_project` 写入 `preferences`
-- [ ] 修改 `electron/projectDetector.ts`
-  - [ ] `detectProjectRoot` 降为最低优先级
-  - [ ] 失败时记录日志 + 返回 null
-- [ ] 修改 `src/shared/lib/store.ts`
-  - [ ] 删除 auto-bind 逻辑（252-283 行）
-  - [ ] 改用后端返回的 `workspace_binding`
-- [ ] localStorage 迁移
-  - [ ] 新建 `backend/services/workspace_migration.py`
-  - [ ] 后端启动时一次性迁移
-  - [ ] 迁移后删除 localStorage key
+- [x] 修改 `backend/api/legacy_session_routes.py`（`create_session` 返回 `workspace_binding`）
+  - [x] `create_session` 返回 `workspace_binding`
+- [x] 修改 `backend/api/project_routes.py`
+  - [x] `open_project` 写入 `preferences`
+- [x] 修改 `electron/projectDetector.ts`
+  - [x] `detectProjectRoot` 降为最低优先级
+  - [x] 失败时记录日志 + 返回 null
+- [x] 修改 `src/shared/lib/store.ts`
+  - [x] 删除 auto-bind 逻辑（252-283 行）
+  - [x] 改用后端返回的 `workspace_binding`（`SessionWorkspaceProvider` 承载）
+- [x] localStorage 迁移
+  - [x] 新建 `backend/services/workspace_migration.py`
+  - [x] 后端启动时一次性迁移（IPC `workspace_migrate_preference`）
+  - [x] 迁移后删除 localStorage key
 
-### 里程碑 M3：P2 UI 增强（3-4 天）
+### 里程碑 M3：P2 UI 增强（3-4 天） ✅ 2026-10-29 完成
 
-- [ ] 新建 `src/features/workspace/WorkspaceSwitcher.tsx`
-  - [ ] 下拉菜单 UI
-  - [ ] 来源标签展示
-  - [ ] 草稿状态轻提示
-- [ ] 替换 `src/widgets/chat/ProjectBadge.tsx`
-- [ ] 工作区健康检查
-  - [ ] 新建 `backend/services/workspace_health.py`
-  - [ ] UI 展示健康状态（颜色/图标）
-- [ ] per-project 默认工作区（可选）
+- [x] 新建 `src/features/workspace/WorkspaceSwitcher.tsx`
+  - [x] 下拉菜单 UI
+  - [x] 来源标签展示
+  - [x] 草稿状态轻提示
+- [x] 替换 `src/widgets/chat/ProjectBadge.tsx`（组件 + 2 个测试文件已删除）
+- [x] 工作区健康检查
+  - [x] 新建 `backend/services/workspace_health.py`
+  - [x] `GET /workspace/health` 路由 + Electron IPC `workspace_health`
+  - [x] UI 展示健康状态（颜色/图标）
+- [ ] per-project 默认工作区（可选，本迭代不实现）
   - [ ] `Project` 模型增加字段
   - [ ] UI 设置入口
 
@@ -361,11 +362,11 @@ def migrate_last_workspace_from_local_storage(frontend_ipc) -> str | None:
 
 ### 8.1 功能验收
 
-- [ ] 新建会话时自动绑定到决策结果（项目 / 偏好 / 草稿）
-- [ ] 通过 `project.open_project` 打开项目时同步写入 `preferences`
-- [ ] 未绑定会话降级到草稿工作区（非"无工作区"）
-- [ ] `WorkspaceSwitcher` 可切换工作区
-- [ ] 工作区健康状态在 UI 可见
+- [x] 新建会话时自动绑定到决策结果（项目 / 偏好 / 草稿）
+- [x] 通过 `project.open_project` 打开项目时同步写入 `preferences`
+- [x] 未绑定会话降级到草稿工作区（非"无工作区"）
+- [x] `WorkspaceSwitcher` 可切换工作区
+- [x] 工作区健康状态在 UI 可见
 
 ### 8.2 性能验收
 

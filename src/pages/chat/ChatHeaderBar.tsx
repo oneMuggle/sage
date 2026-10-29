@@ -1,8 +1,8 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { WorkspaceSwitcher } from '../../features/workspace';
 import { useI18n } from '../../shared/lib/i18n';
-import { ProjectBadge } from '../../widgets/chat/ProjectBadge';
 import { RightPanelToggle } from '../../widgets/chat/RightPanelToggle';
 import { SessionIdBadge } from '../../widgets/chat/SessionIdBadge';
 import { SessionModelPicker } from '../../widgets/chat/SessionModelPicker';
@@ -54,7 +54,7 @@ export function ChatHeaderBar({
     >
       <div className="flex items-center gap-2 min-w-0 flex-wrap">
         <h2 className="text-ui-sm font-semibold text-text shrink-0">对话</h2>
-        <ProjectBadge workspacePath={workspacePath} onOpenWorkbench={() => navigate('/projects')} />
+        <WorkspaceSwitcher workspacePath={workspacePath} sessionId={currentSessionId} onOpenWorkbench={() => navigate('/projects')} />
         <WorkspaceBranchPicker sessionId={currentSessionId} />
         <SessionUsageBadge sessionId={currentSessionId} />
         <SessionIdBadge sessionId={currentSessionId} />
