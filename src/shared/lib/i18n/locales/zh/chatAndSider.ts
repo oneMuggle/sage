@@ -387,8 +387,7 @@ export const zhChatAndSider = {
     '把反馈直接送达管理员，管理员的回复会在应用内以会话形式回灌。转发目标与共享密钥仅保存在本机（safeStorage 加密）。',
   'settings.feedback.manager_url.label': '管理员转发地址',
   'settings.feedback.manager_url.placeholder': 'https://admin.example.com/feedback',
-  'settings.feedback.manager_url.desc':
-    '管理员侧接收反馈的 HTTP 地址。留空表示暂不启用反馈转发。',
+  'settings.feedback.manager_url.desc': '管理员侧接收反馈的 HTTP 地址。留空表示暂不启用反馈转发。',
   'settings.feedback.shared_secret.label': '共享密钥',
   'settings.feedback.shared_secret.placeholder': '粘贴管理员提供的密钥',
   'settings.feedback.shared_secret.desc':

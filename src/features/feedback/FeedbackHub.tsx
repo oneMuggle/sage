@@ -95,9 +95,7 @@ export function FeedbackHub() {
       setBody('');
       setCreating(false);
     } else {
-      setLocalError(
-        useFeedbackStore.getState().errors.submit ?? t('feedback.hub.create_failed'),
-      );
+      setLocalError(useFeedbackStore.getState().errors.submit ?? t('feedback.hub.create_failed'));
     }
   };
 
@@ -114,9 +112,7 @@ export function FeedbackHub() {
       setDraft('');
       setPendingMediaIds([]);
     } else {
-      setLocalError(
-        useFeedbackStore.getState().errors.submit ?? t('feedback.hub.send_failed'),
-      );
+      setLocalError(useFeedbackStore.getState().errors.submit ?? t('feedback.hub.send_failed'));
     }
   };
 
@@ -158,9 +154,7 @@ export function FeedbackHub() {
     setLocalError(null);
     const ok = await setStatus(detail.conversation.id, next);
     if (!ok) {
-      setLocalError(
-        useFeedbackStore.getState().errors.submit ?? t('feedback.hub.send_failed'),
-      );
+      setLocalError(useFeedbackStore.getState().errors.submit ?? t('feedback.hub.send_failed'));
     }
   };
 
@@ -185,9 +179,7 @@ export function FeedbackHub() {
       {/* ───────── 左栏：会话列表 ───────── */}
       <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-surface">
         <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-          <h1 className="truncate text-ui-sm font-semibold text-ink">
-            {t('feedback.hub.title')}
-          </h1>
+          <h1 className="truncate text-ui-sm font-semibold text-ink">{t('feedback.hub.title')}</h1>
           <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
@@ -420,9 +412,7 @@ export function FeedbackHub() {
                         )}
                         {isUser && (
                           <p className="mt-1 text-ui-2xs opacity-70">
-                            {m.synced_at
-                              ? t('feedback.hub.delivered')
-                              : t('feedback.hub.pending')}
+                            {m.synced_at ? t('feedback.hub.delivered') : t('feedback.hub.pending')}
                           </p>
                         )}
                       </div>

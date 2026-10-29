@@ -16,10 +16,7 @@ vi.mock('../../../shared/api/feedbackApi', () => ({
 }));
 
 import * as feedbackApi from '../../../shared/api/feedbackApi';
-import {
-  buildFeedbackStoreAuditSnapshot,
-  useFeedbackStore,
-} from '../feedbackStore';
+import { buildFeedbackStoreAuditSnapshot, useFeedbackStore } from '../feedbackStore';
 
 const mockList = vi.mocked(feedbackApi.listConversations);
 const mockGet = vi.mocked(feedbackApi.getConversation);
@@ -182,9 +179,7 @@ describe('feedbackStore.setStatus', () => {
     const ok = await useFeedbackStore.getState().setStatus('c-0001', 'resolved');
     expect(ok).toBe(true);
     expect(useFeedbackStore.getState().conversations[0].status).toBe('resolved');
-    expect(useFeedbackStore.getState().detailById['c-0001'].conversation.status).toBe(
-      'resolved',
-    );
+    expect(useFeedbackStore.getState().detailById['c-0001'].conversation.status).toBe('resolved');
   });
 });
 

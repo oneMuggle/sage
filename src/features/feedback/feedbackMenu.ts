@@ -11,7 +11,5 @@ export function onOpenFeedbackRequest(
 ): Promise<UnlistenFn | undefined> | undefined {
   const api = typeof window !== 'undefined' ? window.electronAPI : undefined;
   if (!api?.listen) return undefined;
-  return listen<Record<string, never>>('open-feedback', () => handler()).catch(
-    () => undefined,
-  );
+  return listen<Record<string, never>>('open-feedback', () => handler()).catch(() => undefined);
 }

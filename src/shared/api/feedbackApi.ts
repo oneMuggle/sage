@@ -86,15 +86,11 @@ export interface UpdateStatusArgs {
 
 // ──────────── 命令封装 ────────────
 
-export async function listConversations(
-  limit: number = 50,
-): Promise<FeedbackConversationDto[]> {
+export async function listConversations(limit: number = 50): Promise<FeedbackConversationDto[]> {
   return invoke<FeedbackConversationDto[]>('feedback_conversations', { limit });
 }
 
-export async function getConversation(
-  id: string,
-): Promise<ConversationDetailDto> {
+export async function getConversation(id: string): Promise<ConversationDetailDto> {
   return invoke<ConversationDetailDto>('feedback_conversation_get', { id });
 }
 
@@ -107,27 +103,21 @@ export async function createConversation(
   );
 }
 
-export async function appendMessage(
-  args: AppendMessageArgs,
-): Promise<AppendMessageResponseDto> {
+export async function appendMessage(args: AppendMessageArgs): Promise<AppendMessageResponseDto> {
   return invoke<AppendMessageResponseDto>(
     'feedback_message_append',
     args as unknown as Record<string, unknown>,
   );
 }
 
-export async function updateConversationStatus(
-  args: UpdateStatusArgs,
-): Promise<void> {
+export async function updateConversationStatus(args: UpdateStatusArgs): Promise<void> {
   await invoke<void>(
     'feedback_conversation_status_update',
     args as unknown as Record<string, unknown>,
   );
 }
 
-export async function fetchLogTail(
-  maxLines: number = 200,
-): Promise<LogTailDto> {
+export async function fetchLogTail(maxLines: number = 200): Promise<LogTailDto> {
   return invoke<LogTailDto>('feedback_log_tail', { maxLines });
 }
 

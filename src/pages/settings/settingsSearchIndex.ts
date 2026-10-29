@@ -695,24 +695,21 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     tab: 'feedback',
     label: '管理员转发地址',
     labelEn: 'Admin forwarding URL',
-    keywords:
-      'feedback_manager_url 管理员 转发 地址 url 反馈 feedback admin forwarding',
+    keywords: 'feedback_manager_url 管理员 转发 地址 url 反馈 feedback admin forwarding',
   },
   {
     key: 'feedback_shared_secret',
     tab: 'feedback',
     label: '共享密钥',
     labelEn: 'Shared secret',
-    keywords:
-      'feedback_shared_secret 共享 密钥 secret 鉴权 反馈 feedback auth',
+    keywords: 'feedback_shared_secret 共享 密钥 secret 鉴权 反馈 feedback auth',
   },
   {
     key: 'feedback_installation_uuid',
     tab: 'feedback',
     label: '本机 ID',
     labelEn: 'Installation ID',
-    keywords:
-      'feedback_installation_uuid 本机 id 安装 uuid 客户端标识 反馈 feedback installation',
+    keywords: 'feedback_installation_uuid 本机 id 安装 uuid 客户端标识 反馈 feedback installation',
   },
   {
     key: 'feedback_sync_now',

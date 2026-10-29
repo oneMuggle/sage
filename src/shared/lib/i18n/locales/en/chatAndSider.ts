@@ -610,8 +610,7 @@ export const enChatAndSider = {
   'settings.zotero.sync.busy': 'A sync is already running, please retry later',
   'settings.zotero.sync.error_count': 'Errors',
   'settings.zotero.wiki_tag.label': 'Wiki sinking tag',
-  'settings.zotero.wiki_tag.hint':
-    'Only Zotero items carrying this tag are sunk into wiki pages.',
+  'settings.zotero.wiki_tag.hint': 'Only Zotero items carrying this tag are sunk into wiki pages.',
   'settings.zotero.wiki_tag.save': 'Save tag',
   'settings.zotero.wiki_tag.saved': 'Tag saved',
 };

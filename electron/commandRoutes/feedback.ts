@@ -60,8 +60,7 @@ export const feedbackRoutes: Record<string, CommandRoute> = {
   // 状态更新（open / resolved / closed）
   feedback_conversation_status_update: {
     method: 'PATCH',
-    path: (a) =>
-      `/api/v1/feedback/conversations/${encodeURIComponent(String(a.id))}/status`,
+    path: (a) => `/api/v1/feedback/conversations/${encodeURIComponent(String(a.id))}/status`,
     body: (a) => ({ status: a.status }),
   },
 
