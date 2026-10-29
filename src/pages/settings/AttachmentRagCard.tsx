@@ -5,6 +5,7 @@
  * 发送时由 Chat.tsx 读取并随请求携带。
  */
 
+import { clsx } from 'clsx';
 import { useState } from 'react';
 
 import {
@@ -12,12 +13,20 @@ import {
   saveAttachmentRagConfig,
   type AttachmentRagConfig,
 } from '../../shared/api/attachmentRagConfig';
+import { useI18n } from '../../shared/lib/i18n';
 
 import { SettingRow, Toggle } from './components';
 
 export function AttachmentRagCard() {
+  const { t } = useI18n();
   const [config, setConfig] = useState<AttachmentRagConfig>(() => loadAttachmentRagConfig());
+  // 最近一次落盘的配置：dirty = 当前草稿与之不同。用户的改动只在点「保存」后
+  // 才进入 localStorage，切走 tab 会丢草稿 —— 未保存提示必须常显，不能一闪而过。
+  const [savedConfig, setSavedConfig] = useState<AttachmentRagConfig>(config);
   const [saved, setSaved] = useState(false);
+
+  // 结构固定、键序稳定（改值走浅合并，不重排键），因此序列化比较足够。
+  const dirty = JSON.stringify(config) !== JSON.stringify(savedConfig);
 
   const update = (patch: Partial<AttachmentRagConfig>) => {
     setSaved(false);
@@ -26,6 +35,7 @@ export function AttachmentRagCard() {
 
   const handleSave = () => {
     saveAttachmentRagConfig(config);
+    setSavedConfig(config);
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2000);
   };
@@ -35,11 +45,11 @@ export function AttachmentRagCard() {
 
   return (
     <section data-testid="attachment-rag-section">
-      <h3 className="text-sm font-semibold text-text mb-3">超长文档检索注入（实验）</h3>
+      <h3 className="text-sm font-semibold text-text mb-3">{t('settings.rag.title')}</h3>
       <SettingRow
         anchor="attachment_rag"
-        label="启用附件检索"
-        desc="文档超过 10 万字符时不再整段截断，改为嵌入问题并注入最相关的片段（需在下方填写嵌入端点）"
+        label={t('settings.rag.enable.label')}
+        desc={t('settings.rag.enable.desc')}
       >
         <Toggle value={config.enabled} onChange={(v) => update({ enabled: v })} />
       </SettingRow>
@@ -66,7 +76,7 @@ export function AttachmentRagCard() {
             />
           </label>
           <label className="text-xs text-muted space-y-1">
-            <span>模型</span>
+            <span>{t('settings.rag.model.label')}</span>
             <input
               data-testid="attachment-rag-model"
               value={config.embed.model}
@@ -76,7 +86,7 @@ export function AttachmentRagCard() {
             />
           </label>
           <label className="text-xs text-muted space-y-1">
-            <span>维度</span>
+            <span>{t('settings.rag.dim.label')}</span>
             <input
               data-testid="attachment-rag-dim"
               type="number"
@@ -86,7 +96,7 @@ export function AttachmentRagCard() {
             />
           </label>
           <label className="text-xs text-muted space-y-1">
-            <span>注入片段数 top_k</span>
+            <span>{t('settings.rag.top_k.label')}</span>
             <input
               data-testid="attachment-rag-top-k"
               type="number"
@@ -102,13 +112,24 @@ export function AttachmentRagCard() {
           type="button"
           data-testid="attachment-rag-save"
           onClick={handleSave}
-          className="px-3 py-1 text-xs bg-primary text-text-inverse rounded-radius-sm hover:bg-primary-hover"
+          disabled={!dirty}
+          className={clsx(
+            'px-3 py-1 text-xs rounded-radius-sm transition-colors',
+            dirty
+              ? 'bg-primary text-text-inverse hover:bg-primary-hover'
+              : 'bg-bg-muted text-muted cursor-not-allowed',
+          )}
         >
-          保存
+          {t('settings.common.save')}
         </button>
-        {saved && (
+        {dirty && (
+          <span data-testid="attachment-rag-unsaved" className="text-xs text-muted">
+            {t('settings.common.unsaved')}
+          </span>
+        )}
+        {saved && !dirty && (
           <span data-testid="attachment-rag-saved" className="text-xs text-green-500">
-            已保存
+            {t('settings.rag.saved')}
           </span>
         )}
       </div>

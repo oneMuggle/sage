@@ -3,7 +3,10 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FEATURE_DISABLE_STORAGE_KEY, FEATURE_UNLOCK_STORAGE_KEY } from '../../../shared/lib/hooks/useFeatureUnlock';
+import {
+  FEATURE_DISABLE_STORAGE_KEY,
+  FEATURE_UNLOCK_STORAGE_KEY,
+} from '../../../shared/lib/hooks/useFeatureUnlock';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { useStore } from '../../../shared/lib/store';
 import { Sidebar } from '../../../widgets/layout/Sidebar';
@@ -59,9 +62,17 @@ function renderBoth(initialPath = '/chat') {
   );
 }
 
+function renderToggle() {
+  return render(
+    <I18nProvider defaultLocale="zh">
+      <ArenaAccountsToggle />
+    </I18nProvider>,
+  );
+}
+
 describe('ArenaAccountsToggle — unit', () => {
   it('renders off by default and shows the description', () => {
-    render(<ArenaAccountsToggle />);
+    renderToggle();
     expect(screen.getByText('Arena 自动化')).toBeInTheDocument();
     expect(screen.getByText(/侧边栏显示「Arena」入口/)).toBeInTheDocument();
     expect(screen.getByTestId('toggle-arena-accounts')).toHaveClass('bg-line-strong');
@@ -69,12 +80,12 @@ describe('ArenaAccountsToggle — unit', () => {
 
   it('hydrates the on state from localStorage', () => {
     localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['arena-accounts']));
-    render(<ArenaAccountsToggle />);
+    renderToggle();
     expect(screen.getByTestId('toggle-arena-accounts')).toHaveClass('bg-primary');
   });
 
   it('clicking the toggle persists arena-accounts to localStorage', () => {
-    render(<ArenaAccountsToggle />);
+    renderToggle();
     const toggle = screen.getByTestId('toggle-arena-accounts');
     fireEvent.click(toggle);
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
@@ -83,7 +94,7 @@ describe('ArenaAccountsToggle — unit', () => {
   });
 
   it('clicking twice (on then off) removes the key from localStorage', () => {
-    render(<ArenaAccountsToggle />);
+    renderToggle();
     const toggle = screen.getByTestId('toggle-arena-accounts');
     fireEvent.click(toggle); // off → on
     fireEvent.click(toggle); // on → off
@@ -155,7 +166,7 @@ describe('ArenaAccountsToggle — Sidebar integration', () => {
     });
 
     // P3: 页内复制按钮已收敛到「审计导出」tab —— 开关行上不应再有隐形点击靶。
-    render(<ArenaAccountsToggle />);
+    renderToggle();
     expect(screen.getByTestId('toggle-arena-accounts')).toBeInTheDocument();
     expect(screen.queryByTestId('arena-accounts-toggle-copy-snapshot')).toBeNull();
     expect(screen.queryByTestId('arena-accounts-toggle-copy-json')).toBeNull();

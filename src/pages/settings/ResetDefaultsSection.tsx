@@ -9,10 +9,12 @@
 import { useState } from 'react';
 
 import { useSettings } from '../../features/manage-settings/useSettings';
+import { useI18n } from '../../shared/lib/i18n';
 
 import { SettingRow } from './components';
 
 export function ResetDefaultsSection() {
+  const { t } = useI18n();
   const { resetSettings } = useSettings();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,8 +39,8 @@ export function ResetDefaultsSection() {
       <>
         <SettingRow
           anchor="reset_settings"
-          label="恢复默认设置"
-          desc="将外观 / 模型上下文 / 编排 / 权限模式 / 网络 / 钩子 / 花费限额等全部设置项恢复默认"
+          label={t('settings.reset.label')}
+          desc={t('settings.reset.desc')}
         >
           <button
             type="button"
@@ -49,17 +51,17 @@ export function ResetDefaultsSection() {
             }}
             className="px-3 py-1.5 text-xs border border-border rounded-radius-sm text-text hover:bg-bg-muted transition-colors"
           >
-            恢复默认设置
+            {t('settings.reset.button')}
           </button>
         </SettingRow>
         {message === 'done' && (
           <div data-testid="settings-reset-done" className="text-xs text-success mt-1">
-            已恢复默认设置
+            {t('settings.reset.done')}
           </div>
         )}
         {message === 'error' && (
           <div data-testid="settings-reset-error" className="text-xs text-error mt-1">
-            恢复失败，请重试
+            {t('settings.reset.error')}
           </div>
         )}
       </>
@@ -71,11 +73,8 @@ export function ResetDefaultsSection() {
       data-testid="settings-reset-confirm"
       className="p-3 border border-border rounded-radius-sm bg-surface space-y-2"
     >
-      <div className="text-sm text-text">确认恢复所有设置为默认值？</div>
-      <p className="text-xs text-muted leading-relaxed">
-        端点与模型选择、界面外观、权限模式、网络 / 代理 / 搜索、钩子、花费限额都会回到默认。
-        已保存的站点登录凭据、工具审批规则与当前会话不受影响。部分面板需切换标签页后刷新。
-      </p>
+      <div className="text-sm text-text">{t('settings.reset.confirm_title')}</div>
+      <p className="text-xs text-muted leading-relaxed">{t('settings.reset.confirm_desc')}</p>
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -86,7 +85,7 @@ export function ResetDefaultsSection() {
           }}
           className="px-3 py-1 text-xs bg-error text-text-inverse rounded-radius-sm hover:opacity-90 disabled:opacity-50"
         >
-          {busy ? '恢复中…' : '确认恢复'}
+          {busy ? t('settings.reset.resetting') : t('settings.reset.confirm')}
         </button>
         <button
           type="button"
@@ -95,7 +94,7 @@ export function ResetDefaultsSection() {
           onClick={() => setConfirming(false)}
           className="px-3 py-1 text-xs border border-border rounded-radius-sm text-text hover:bg-bg-muted"
         >
-          取消
+          {t('settings.common.cancel')}
         </button>
       </div>
     </div>

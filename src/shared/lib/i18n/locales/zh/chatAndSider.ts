@@ -289,6 +289,8 @@ export const zhChatAndSider = {
   'settings.search.placeholder': '搜索设置…',
   'settings.search.hits': '匹配 {count} 项',
   'settings.search.empty': '没有匹配的设置项',
+  'settings.search.shortcut': '聚焦搜索',
+  'settings.nav.recent': '最近访问',
   'settings.audit.title': '审计导出',
   'settings.audit.desc':
     '把每个区块的当前生效配置一次性导出为摘要或 JSON，便于提交 issue 或存档。集中在这里，而不是散落在各个 tab 内。',

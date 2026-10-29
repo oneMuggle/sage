@@ -11,10 +11,12 @@ import { useState } from 'react';
 
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { getDemoModeOverride, setDemoModeOverride } from '../../shared/api/demoRuntime';
+import { useI18n } from '../../shared/lib/i18n';
 
 import { SettingRow, Toggle } from './components';
 
 export function DemoModeSection() {
+  const { t } = useI18n();
   const { settings, updateSettings } = useSettings();
   const [persisting, setPersisting] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
@@ -27,11 +29,11 @@ export function DemoModeSection() {
       await updateSettings({ demoMode: next });
       const result = await window.electronAPI?.setDemoMode?.(next);
       if (result && result.ok === false) {
-        throw new Error('无法保存演示模式设置');
+        throw new Error(t('settings.demo.save_failed'));
       }
       if (!wasDemoProcess) setDemoModeOverride(next);
     } catch (err) {
-      setPersistError(err instanceof Error ? err.message : '无法保存演示模式设置');
+      setPersistError(err instanceof Error ? err.message : t('settings.demo.save_failed'));
       try {
         await updateSettings({ demoMode: !next });
         setDemoModeOverride(wasDemoProcess);
@@ -45,11 +47,7 @@ export function DemoModeSection() {
 
   return (
     <div data-testid="demo-mode-section">
-      <SettingRow
-        anchor="demoMode"
-        label="演示模式"
-        desc="开启后下次启动跳过后端，各功能页面展示内置示例数据"
-      >
+      <SettingRow anchor="demoMode" label={t('settings.demo.label')} desc={t('settings.demo.desc')}>
         <Toggle
           value={settings.demoMode}
           disabled={persisting}
@@ -58,15 +56,13 @@ export function DemoModeSection() {
           }}
         />
       </SettingRow>
-      {persisting && <div className="text-xs text-muted mt-1">正在保存…</div>}
+      {persisting && <div className="text-xs text-muted mt-1">{t('settings.demo.saving')}</div>}
       {persistError && (
         <div className="text-xs text-error mt-1" data-testid="demo-mode-error">
-          保存失败：{persistError}
+          {t('settings.demo.save_failed_with_error').replace('{error}', persistError)}
         </div>
       )}
-      <p className="text-ui-xs text-muted mt-2 leading-relaxed">
-        注意：「跳过后端」在下次启动 Electron 时生效；页面数据切换即时生效。
-      </p>
+      <p className="text-ui-xs text-muted mt-2 leading-relaxed">{t('settings.demo.note')}</p>
     </div>
   );
 }

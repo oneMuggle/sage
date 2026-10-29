@@ -41,7 +41,12 @@ vi.mock('../../../shared/api/promptApi', () => ({
   },
 }));
 
-const renderTab = () => render(<PromptTemplatesTab />);
+const renderTab = () =>
+  render(
+    <I18nProvider defaultLocale="zh">
+      <PromptTemplatesTab />
+    </I18nProvider>,
+  );
 
 describe('PromptTemplatesTab — R27-B', () => {
   beforeEach(() => {

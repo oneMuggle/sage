@@ -18,6 +18,7 @@ import {
   probeModel,
   testEndpointConnection,
 } from '../../features/manage-endpoints/api';
+import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
 import type { EndpointsTabProps } from './components';
 
@@ -50,7 +51,20 @@ export function formatEndpointsTabAuditJson(input: {
   });
 }
 
+/** 编辑表单是否偏离已保存的端点 —— 决定「保存」可点性与切走提示。 */
+function endpointFormDirty(form: Partial<EndpointConfig>, ep: EndpointConfig): boolean {
+  return (
+    (form.name ?? ep.name) !== ep.name ||
+    (form.baseUrl ?? ep.baseUrl) !== ep.baseUrl ||
+    (form.apiKey ?? ep.apiKey) !== ep.apiKey ||
+    (form.protocol ?? ep.protocol ?? 'openai-compatible') !==
+      (ep.protocol ?? 'openai-compatible') ||
+    (form.modelId ?? ep.modelId ?? '') !== (ep.modelId ?? '')
+  );
+}
+
 export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
+  const { t } = useI18n();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<EndpointConfig>>({});
   const [testResult, setTestResult] = useState<Record<string, ConnectionTestResult>>({});
@@ -60,16 +74,23 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
   // A2: 从 providerRegistry 读取协议选项（替代原硬编码常量）
   const PROTOCOL_OPTIONS = useMemo(() => getProtocolOptions(), []);
 
+  // 当前正在编辑的端点是否有未落盘改动 —— 切到另一个端点前先提示，否则草稿静默丢失。
+  const editingDirty = (() => {
+    if (!editingId) return false;
+    const target = settings.endpoints.find((ep) => ep.id === editingId);
+    return target ? endpointFormDirty(editForm, target) : false;
+  })();
+
   const handleAdd = () => {
     const newEndpoint: EndpointConfig = {
       ...DEFAULT_ENDPOINT,
       id: crypto.randomUUID(),
-      name: '新端点',
+      name: t('settings.endpoints.new_name'),
     };
     updateSettings({ endpoints: [...settings.endpoints, newEndpoint] });
     setEditingId(newEndpoint.id);
     setEditForm({
-      name: '新端点',
+      name: t('settings.endpoints.new_name'),
       baseUrl: '',
       apiKey: '',
       protocol: 'openai-compatible',
@@ -98,7 +119,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
     setTestingId(ep.id);
     setTestResult((prev) => ({
       ...prev,
-      [ep.id]: { success: false, message: '测试中...', latency: 0 },
+      [ep.id]: { success: false, message: t('settings.endpoints.testing'), latency: 0 },
     }));
     const result = await testEndpointConnection(
       ep.baseUrl,
@@ -146,7 +167,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
           status: 'error',
           adapter: 'unknown',
           data: null,
-          error: '探测请求失败',
+          error: t('settings.endpoints.probe_request_failed'),
         },
       }));
     }
@@ -156,18 +177,18 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-text">端点配置</h3>
+        <h3 className="text-sm font-semibold text-text">{t('settings.endpoints.title')}</h3>
         <button
           onClick={handleAdd}
           className="px-3 py-1.5 text-xs bg-primary text-text-inverse rounded-radius-sm hover:bg-primary-hover transition-colors"
         >
-          + 添加端点
+          {t('settings.endpoints.add')}
         </button>
       </div>
 
       {settings.endpoints.length === 0 && (
         <div className="text-center text-muted py-8 text-sm">
-          暂无端点配置，点击"添加端点"开始配置
+          {t('settings.endpoints.empty_hint')}
         </div>
       )}
 
@@ -184,6 +205,8 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
         // 防御性检查: discoveredModels 可能在旧数据中缺失
         const discoveredModels = ep.discoveredModels ?? [];
         const probeModelId = ep.modelId || discoveredModels[0]?.id;
+        // 与全局 editingDirty 同义，但按当前这一行算，用于该行「保存」按钮的可用性。
+        const editDirty = isEditing && endpointFormDirty(editForm, ep);
 
         return (
           <div key={ep.id} className="p-4 border rounded-radius-sm bg-surface">
@@ -191,13 +214,27 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-text">{name}</span>
                 {discoveredModels.length > 0 && (
-                  <span className="text-[11px] text-muted">{discoveredModels.length} 个模型</span>
+                  <span className="text-[11px] text-muted">
+                    {t('settings.endpoints.model_count').replace(
+                      '{n}',
+                      String(discoveredModels.length),
+                    )}
+                  </span>
                 )}
               </div>
               <div className="flex items-center gap-1.5">
                 {!isEditing && (
                   <button
                     onClick={() => {
+                      // 切到另一个端点会覆盖当前草稿 —— 有改动时先征得确认。
+                      if (
+                        editingId !== null &&
+                        editingId !== ep.id &&
+                        editingDirty &&
+                        !window.confirm(t('settings.common.discard_confirm'))
+                      ) {
+                        return;
+                      }
                       setEditingId(ep.id);
                       setEditForm({
                         name: ep.name,
@@ -209,14 +246,14 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                     }}
                     className="text-xs text-muted hover:text-text transition-colors"
                   >
-                    编辑
+                    {t('settings.endpoints.edit')}
                   </button>
                 )}
                 <button
                   onClick={() => handleDelete(ep.id)}
                   className="text-xs text-error hover:text-red-700 transition-colors"
                 >
-                  删除
+                  {t('settings.endpoints.delete')}
                 </button>
               </div>
             </div>
@@ -224,7 +261,9 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
             {isEditing ? (
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs text-muted block mb-1">名称</label>
+                  <label className="text-xs text-muted block mb-1">
+                    {t('settings.endpoints.field.name')}
+                  </label>
                   <input
                     type="text"
                     value={name}
@@ -250,19 +289,21 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                     onChange={(e) => setEditForm({ ...form, apiKey: e.target.value })}
                     placeholder={
                       protocol === 'ollama' || protocol === 'openai-compatible'
-                        ? '本地/内网代理可留空'
+                        ? t('settings.endpoints.api_key_placeholder_local')
                         : 'sk-...'
                     }
                     className="w-full px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
                   />
                   {(protocol === 'ollama' || protocol === 'openai-compatible') && (
                     <p className="text-ui-xs text-muted/70 mt-0.5">
-                      OpenAI-compatible 和 Ollama 协议允许留空（适用于本地服务或无需密钥的内网代理）
+                      {t('settings.endpoints.api_key_hint')}
                     </p>
                   )}
                 </div>
                 <div>
-                  <label className="text-xs text-muted block mb-1">协议</label>
+                  <label className="text-xs text-muted block mb-1">
+                    {t('settings.endpoints.field.protocol')}
+                  </label>
                   <select
                     data-testid="endpoint-protocol-select"
                     value={protocol}
@@ -280,17 +321,17 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                 </div>
                 <div className="opacity-75">
                   <label className="text-[11px] text-muted/80 block mb-1">
-                    模型 ID（高级，可选）
+                    {t('settings.endpoints.field.model_id')}
                   </label>
                   <input
                     type="text"
                     value={modelId}
                     onChange={(e) => setEditForm({ ...form, modelId: e.target.value })}
-                    placeholder="留空走 ModelsTab 选择"
+                    placeholder={t('settings.endpoints.model_id_placeholder')}
                     className="w-full px-2 py-1 border border-border rounded-radius-sm text-[11px] font-mono bg-surface text-text"
                   />
                   <p className="text-[10px] text-muted/70 mt-0.5">
-                    仅作 OpenAI 兼容服务的兜底；正常选择走"模型"页。
+                    {t('settings.endpoints.model_id_hint')}
                   </p>
                 </div>
                 {/* 2026-08-26: localModelPath 输入已移除. 该字段在 EndpointConfig
@@ -301,10 +342,21 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleSave(ep.id)}
-                    className="px-3 py-1.5 text-xs bg-primary text-text-inverse rounded-radius-sm hover:bg-primary-hover transition-colors"
+                    disabled={!editDirty}
+                    className={clsx(
+                      'px-3 py-1.5 text-xs rounded-radius-sm transition-colors',
+                      editDirty
+                        ? 'bg-primary text-text-inverse hover:bg-primary-hover'
+                        : 'bg-bg-muted text-muted cursor-not-allowed',
+                    )}
                   >
-                    保存
+                    {t('settings.endpoints.save')}
                   </button>
+                  {editDirty && (
+                    <span data-testid={`endpoint-unsaved-${ep.id}`} className="text-xs text-muted">
+                      {t('settings.common.unsaved')}
+                    </span>
+                  )}
                   <button
                     onClick={() => {
                       setEditingId(null);
@@ -312,7 +364,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                     }}
                     className="px-3 py-1.5 text-xs border border-border rounded-radius-sm text-text hover:bg-bg-muted transition-colors"
                   >
-                    取消
+                    {t('settings.endpoints.cancel')}
                   </button>
                   {baseUrl && (
                     <button
@@ -325,7 +377,9 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                           : 'border-primary text-primary hover:bg-primary/5',
                       )}
                     >
-                      {testingId === ep.id ? '测试中...' : '测试连接'}
+                      {testingId === ep.id
+                        ? t('settings.endpoints.testing')
+                        : t('settings.endpoints.test_connection')}
                     </button>
                   )}
                   {baseUrl && probeModelId && (
@@ -338,9 +392,11 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                           ? 'border-border text-muted cursor-wait'
                           : 'border-purple-400 text-purple-500 hover:bg-purple-50',
                       )}
-                      title="探测模型元数据（上下文窗口、架构、量化等）"
+                      title={t('settings.endpoints.probe_title')}
                     >
-                      {probingId === ep.id ? '探测中...' : '探测模型'}
+                      {probingId === ep.id
+                        ? t('settings.endpoints.probing')
+                        : t('settings.endpoints.probe')}
                     </button>
                   )}
                 </div>
@@ -361,7 +417,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-mono text-muted truncate">
-                    {ep.baseUrl || '未配置'}
+                    {ep.baseUrl || t('settings.endpoints.not_configured')}
                   </span>
                   {ep.baseUrl && (
                     <button
@@ -374,7 +430,9 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                           : 'border-primary text-primary hover:bg-primary/5',
                       )}
                     >
-                      {testingId === ep.id ? '测试中...' : '测试连接'}
+                      {testingId === ep.id
+                        ? t('settings.endpoints.testing')
+                        : t('settings.endpoints.test_connection')}
                     </button>
                   )}
                   {ep.baseUrl && probeModelId && (
@@ -387,9 +445,11 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                           ? 'border-border text-muted cursor-wait'
                           : 'border-purple-400 text-purple-500 hover:bg-purple-50',
                       )}
-                      title="探测模型元数据"
+                      title={t('settings.endpoints.probe_title_short')}
                     >
-                      {probingId === ep.id ? '探测中...' : '探测模型'}
+                      {probingId === ep.id
+                        ? t('settings.endpoints.probing')
+                        : t('settings.endpoints.probe')}
                     </button>
                   )}
                   {result && (
@@ -404,8 +464,14 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                   )}
                 </div>
                 <div className="flex items-center gap-3 text-[10px] text-muted/70">
-                  <span>协议: {ep.protocol}</span>
-                  {ep.modelId && <span>模型(高级): {ep.modelId}</span>}
+                  <span>
+                    {t('settings.endpoints.result.protocol')}: {ep.protocol}
+                  </span>
+                  {ep.modelId && (
+                    <span>
+                      {t('settings.endpoints.result.model')}: {ep.modelId}
+                    </span>
+                  )}
                 </div>
                 {probeResult && <ProbeStatusDisplay result={probeResult} />}
               </div>
@@ -426,30 +492,61 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
  * - error message when probe failed
  */
 function ProbeStatusDisplay({ result }: { result: ProbeResult }) {
-  const statusConfig = {
-    success: { label: '探测成功', color: 'text-green-600', bg: 'bg-green-50' },
-    unsupported: { label: '不支持探测', color: 'text-yellow-600', bg: 'bg-yellow-50' },
-    error: { label: '探测失败', color: 'text-red-600', bg: 'bg-red-50' },
-  } as const;
+  const { t } = useI18n();
+  const statusConfig: Record<
+    ProbeResult['status'],
+    { labelKey: TranslationKey; color: string; bg: string }
+  > = {
+    success: {
+      labelKey: 'settings.endpoints.probe_status.success',
+      color: 'text-green-600',
+      bg: 'bg-green-50',
+    },
+    unsupported: {
+      labelKey: 'settings.endpoints.probe_status.unsupported',
+      color: 'text-yellow-600',
+      bg: 'bg-yellow-50',
+    },
+    error: {
+      labelKey: 'settings.endpoints.probe_status.error',
+      color: 'text-red-600',
+      bg: 'bg-red-50',
+    },
+  };
 
   const config = statusConfig[result.status];
 
   return (
     <div className={clsx('mt-2 px-2 py-1.5 rounded-radius-sm text-[11px]', config.bg)}>
-      <span className={clsx('font-medium', config.color)}>{config.label}</span>
+      <span className={clsx('font-medium', config.color)}>{t(config.labelKey)}</span>
       {result.adapter !== 'unknown' && (
-        <span className="text-muted ml-2">适配器: {result.adapter}</span>
+        <span className="text-muted ml-2">
+          {t('settings.endpoints.result.adapter')}: {result.adapter}
+        </span>
       )}
       {result.status === 'success' && result.data && (
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-muted">
           {result.data.native != null && (
-            <span>上下文(native): {result.data.native.toLocaleString()}</span>
+            <span>
+              {t('settings.endpoints.result.context_native')}: {result.data.native.toLocaleString()}
+            </span>
           )}
           {result.data.service != null && (
-            <span>上下文(service): {result.data.service.toLocaleString()}</span>
+            <span>
+              {t('settings.endpoints.result.context_service')}:{' '}
+              {result.data.service.toLocaleString()}
+            </span>
           )}
-          {result.data.architecture && <span>架构: {result.data.architecture}</span>}
-          {result.data.quantization && <span>量化: {result.data.quantization}</span>}
+          {result.data.architecture && (
+            <span>
+              {t('settings.endpoints.result.architecture')}: {result.data.architecture}
+            </span>
+          )}
+          {result.data.quantization && (
+            <span>
+              {t('settings.endpoints.result.quantization')}: {result.data.quantization}
+            </span>
+          )}
         </div>
       )}
       {result.status === 'error' && result.error && (

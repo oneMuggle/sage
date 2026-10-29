@@ -8,6 +8,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { MemoryTab } from '../MemoryTab';
 
 const runConsolidationMock = vi.fn();
@@ -32,6 +33,14 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
+function renderTab() {
+  return render(
+    <I18nProvider defaultLocale="zh">
+      <MemoryTab />
+    </I18nProvider>,
+  );
+}
+
 describe('MemoryTab 记忆固化卡 (R17-B)', () => {
   beforeEach(() => {
     runConsolidationMock.mockReset();
@@ -42,7 +51,7 @@ describe('MemoryTab 记忆固化卡 (R17-B)', () => {
   it('runs consolidation and shows the result summary', async () => {
     runConsolidationMock.mockResolvedValue({ promoted: 2, decayed: 5, total: 7 });
 
-    render(<MemoryTab />);
+    renderTab();
     fireEvent.click(screen.getByTestId('memory-consolidation-run'));
 
     await waitFor(() =>
@@ -56,7 +65,7 @@ describe('MemoryTab 记忆固化卡 (R17-B)', () => {
   it('shows an error toast when consolidation fails', async () => {
     runConsolidationMock.mockRejectedValue(new Error('后端 503'));
 
-    render(<MemoryTab />);
+    renderTab();
     fireEvent.click(screen.getByTestId('memory-consolidation-run'));
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('固化失败: 后端 503'));
@@ -71,7 +80,7 @@ describe('MemoryTab 记忆固化卡 (R17-B)', () => {
       }),
     );
 
-    render(<MemoryTab />);
+    renderTab();
     const button = screen.getByTestId('memory-consolidation-run');
     fireEvent.click(button);
 

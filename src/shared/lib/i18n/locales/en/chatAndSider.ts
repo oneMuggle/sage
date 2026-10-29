@@ -297,6 +297,8 @@ export const enChatAndSider = {
   'settings.search.placeholder': 'Search settings…',
   'settings.search.hits': '{count} matches',
   'settings.search.empty': 'No matching settings',
+  'settings.search.shortcut': 'Focus search',
+  'settings.nav.recent': 'Recent',
   'settings.audit.title': 'Audit export',
   'settings.audit.desc':
     'Export the current effective configuration of each section as a summary or JSON — for filing issues or archiving. Centralised here rather than scattered across tabs.',

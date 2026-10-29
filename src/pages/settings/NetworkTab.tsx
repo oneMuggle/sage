@@ -413,12 +413,12 @@ export function NetworkTab() {
     <div className="space-y-6">
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">
-            {t('settings.section.network.access')}
-          </h3>
+          {t('settings.section.network.access')}
+        </h3>
         <SettingRow
           anchor="network_policy"
           label={t('settings.network.mode')}
-          desc={t(`settings.network.mode.${policy.mode}.desc` as TranslationKey)}
+          desc={t(`settings.network.mode.${policy.mode}.desc`)}
         >
           <select
             data-testid="network-mode-select"
@@ -429,7 +429,7 @@ export function NetworkTab() {
           >
             {NETWORK_MODES.map((mode) => (
               <option key={mode} value={mode}>
-                {t(`settings.network.mode.${mode}` as TranslationKey)}
+                {t(`settings.network.mode.${mode}`)}
               </option>
             ))}
           </select>
@@ -519,7 +519,7 @@ export function NetworkTab() {
             >
               {SEARCH_ENGINES.map((engine) => (
                 <option key={engine} value={engine}>
-                  {t(`settings.network.search.engine.${engine}` as TranslationKey)}
+                  {t(`settings.network.search.engine.${engine}`)}
                 </option>
               ))}
             </select>
