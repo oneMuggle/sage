@@ -1,10 +1,41 @@
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useOptionalI18n } from '../../lib/i18n';
+
 import { markContextMenuOpen } from './contextMenuEvents';
 import { ContextMenuItems } from './ContextMenuItems';
 import { ContextMenuContent, ContextMenuRoot, ContextMenuTrigger } from './ContextMenuPrimitives';
 import type { ContextMenuItemSpec } from './types';
+
+/**
+ * 开发环境「检查元素」：渲染层自绘菜单无法交给 Chromium 默认处理，
+ * 通过主进程 IPC 按坐标 inspect。生产构建中 `import.meta.env.DEV`
+ * 为 false，整段逻辑会被 tree-shake 掉。
+ */
+function getDevInspectApi(): ((x: number, y: number) => void) | null {
+  if (!import.meta.env.DEV) return null;
+  const api = typeof window !== 'undefined' ? window.electronAPI?.devtools : undefined;
+  return api?.inspectAt ? (x, y) => api.inspectAt(x, y) : null;
+}
+
+function buildMenuSnapshot(
+  items: ContextMenuItemSpec[],
+  pointer: { x: number; y: number },
+  t?: (key: 'contextMenu.common.inspect') => string,
+): ContextMenuItemSpec[] {
+  const inspect = getDevInspectApi();
+  if (!inspect) return items;
+  return [
+    ...items,
+    { id: 'dev-inspect-separator', kind: 'separator' },
+    {
+      id: 'dev-inspect',
+      label: t?.('contextMenu.common.inspect') ?? '检查元素',
+      onSelect: () => inspect(pointer.x, pointer.y),
+    },
+  ];
+}
 
 export * from './ContextMenuPrimitives';
 export type { ContextMenuItemSpec } from './types';
@@ -52,6 +83,8 @@ function EnabledContextMenu({ items, children, onOpenChange }: Omit<ContextMenuP
   const [open, setOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<ContextMenuItemSpec[]>([]);
   const openRef = useRef(false);
+  const pointerRef = useRef({ x: 0, y: 0 });
+  const i18n = useOptionalI18n();
 
   // 组件在菜单打开期间被卸载（如虚拟列表回收、会话删除）时，
   // Radix 不再触发 onOpenChange(false) —— 手动归还全局打开计数。
@@ -72,7 +105,8 @@ function EnabledContextMenu({ items, children, onOpenChange }: Omit<ContextMenuP
         markContextMenuOpen(next);
       }
       if (next) {
-        setSnapshot(typeof items === 'function' ? items() : items);
+        const base = typeof items === 'function' ? items() : items;
+        setSnapshot(buildMenuSnapshot(base, pointerRef.current, i18n?.t));
       }
       setOpen(next);
       onOpenChange?.(next);
@@ -82,7 +116,13 @@ function EnabledContextMenu({ items, children, onOpenChange }: Omit<ContextMenuP
 
   return (
     <ContextMenuRoot open={open} onOpenChange={handleOpenChange}>
-      <ContextMenuTrigger asChild onContextMenu={(e) => e.stopPropagation()}>
+      <ContextMenuTrigger
+        asChild
+        onContextMenu={(e) => {
+          pointerRef.current = { x: e.clientX, y: e.clientY };
+          e.stopPropagation();
+        }}
+      >
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent>
