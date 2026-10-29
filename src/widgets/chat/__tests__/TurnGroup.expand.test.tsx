@@ -14,7 +14,6 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Message } from '../../../shared/lib/store';
-
 import { TurnGroup } from '../TurnGroup';
 
 // 本用例只关心 TurnGroup 自身的展开/折叠状态机，Message 内部渲染与断言无关

@@ -4,9 +4,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { Message } from '../../../shared/lib/store';
-
-import { INTERRUPTED_RUN_ERROR } from '../InterruptedRunBanner';
 import { ChatSessionNotices } from '../ChatSessionNotices';
+import { INTERRUPTED_RUN_ERROR } from '../InterruptedRunBanner';
 
 // sonner toast 在 retryLastUserMessage 找不到最后一条 user 消息时会弹，
 // 测试里 mock 掉避免副作用。
