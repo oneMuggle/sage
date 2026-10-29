@@ -184,6 +184,7 @@ describe('invokeBackend', () => {
     expect((err as Error).message).toMatch(/500/);
   });
 
+<<<<<<< HEAD
   it('surfaces backend detail message/code instead of the raw JSON envelope', async () => {
     mockedFetch.mockResolvedValueOnce(
       mockJsonResponse(
@@ -201,6 +202,8 @@ describe('invokeBackend', () => {
     expect(err.status_code).toBe(409);
   });
 
+=======
+>>>>>>> origin/main
   it('GET /api/v1/sessions/:id url-encodes ids with special characters', async () => {
     mockedFetch.mockResolvedValueOnce(mockJsonResponse({ id: 's/1' }));
     await invokeBackend('get_session', { id: 's/1' }, 'http://x');

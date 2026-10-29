@@ -191,8 +191,21 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useI18n();
+<<<<<<< HEAD
   const { sessions, currentSessionId, setCurrentSessionId, loadSessions, updateSession } =
     useStore();
+=======
+  const {
+    sessions,
+    currentSessionId,
+    setCurrentSessionId,
+    loadSessions,
+    loadMoreSessions,
+    sessionsHasMore,
+    sessionsLoadingMore,
+    updateSession,
+  } = useStore();
+>>>>>>> origin/main
   const { settings } = useSettings();
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
   const [connectionStatus, setConnectionStatus] = useState<
@@ -350,6 +363,31 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
   };
 
   /**
+<<<<<<< HEAD
+=======
+   * 手动归档 / 恢复归档。
+   * - 归档：原地标记 is_archived，默认视图立即移除该条目；
+   * - 恢复：重新拉取列表让会话回到默认视图。
+   * 失败时 toast 并向上抛，调用方据此决定是否回滚本地归档视图。
+   */
+  const handleArchiveSession = async (sessionId: string, archived: boolean) => {
+    try {
+      await sessionApi.setArchived(sessionId, archived);
+      if (archived) {
+        updateSession(sessionId, { is_archived: true });
+      } else {
+        await loadSessions();
+      }
+      toast.success(t(archived ? 'session.archived_toast' : 'session.unarchived_toast'));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(t('session.archive_failed').replace('{message}', message));
+      throw error;
+    }
+  };
+
+  /**
+>>>>>>> origin/main
    * 渐进披露门控（P1-7）。
    * @returns 'hidden' 用户显式关掉了；'locked' 从未用过（灰态可见）；'open' 正常。
    */
@@ -386,6 +424,14 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
             onNewSession={handleNewSession}
             onRename={handleRenameSession}
             onRefreshSessions={loadSessions}
+<<<<<<< HEAD
+=======
+            onArchiveSession={(id) => handleArchiveSession(id, true)}
+            onUnarchiveSession={(id) => handleArchiveSession(id, false)}
+            onLoadMoreSessions={() => void loadMoreSessions()}
+            sessionsHasMore={sessionsHasMore}
+            sessionsLoadingMore={sessionsLoadingMore}
+>>>>>>> origin/main
           />
         );
       case 'git':
@@ -578,10 +624,31 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
             </Tooltip>
           </div>
 
+<<<<<<< HEAD
           {/* 唯一滚动容器：此前 nav 自身滚动 + 各 section 内部再滚（3 层嵌套） */}
           <nav className="flex-1 min-h-0 py-2 px-2 overflow-y-auto" data-testid="sidebar-scroll">
             {sectionOrder.map((key) => (
               <div key={key}>{renderSection(key)}</div>
+=======
+          {/* 内容列不再整列滚动：会话分区填充剩余高度并内部滚动（方案 B），
+              项目分区保留 30vh 上限 + 内层滚动；其他分区天然高度。
+              overflow-y-auto 仅作为极端小窗口下的最后防线。 */}
+          <nav
+            className="flex-1 min-h-0 py-2 px-2 flex flex-col overflow-y-auto"
+            data-testid="sidebar-scroll"
+          >
+            {sectionOrder.map((key) => (
+              <div
+                key={key}
+                className={
+                  key === 'conversations' && !collapsedSections.has(key)
+                    ? 'flex-1 min-h-[120px] flex flex-col'
+                    : undefined
+                }
+              >
+                {renderSection(key)}
+              </div>
+>>>>>>> origin/main
             ))}
           </nav>
 

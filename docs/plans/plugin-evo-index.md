@@ -35,7 +35,22 @@
 | R103 | 已卸载插件孤儿规则在插件页提示并可就地清理（纯前端复用 R101/R102） | ✅ #2500 |
 | R104 | 无归属（missing）孤儿规则整组清理（标注矩阵补完） | ✅ #2504 |
 | R105 | 仅本次会话记住（session 级 remember，会话规则存储 + gate 会话捕获） | ✅ #2511 |
+<<<<<<< HEAD
 | R106 | 会话级规则查看与撤销（聊天顶栏就地管理） | 🔄 #2530 |
+=======
+| R106 | 会话级规则查看与撤销（聊天顶栏就地管理） | ✅ #2530 |
+| R107 | Agent 白名单未发布插件条目标注与就地移除（纯前端） | ✅ #2545 |
+| R108 | 审批弹窗插件归属可见化（决策时刻横幅 + OS 通知归属，纯前端） | ✅ #2552 |
+| R109 | 已保存权限规则遮蔽标注（被更高优先级规则覆盖的行可见化，纯前端） | ✅ #2557 |
+| R110 | 聊天顶栏弹层标注补齐（审计插件归属 + 会话规则遮蔽，纯前端） | ✅ #2566 |
+| R111 | 聊天历史工具调用插件归属标注（转录通用卡片，纯前端） | ✅ #2576 |
+| R112 | PermissionModeSwitch 供数与导出收口（共享名单 hook + format 下沉，纯前端） | ✅ #2585 |
+| R113 | 转录工具组折叠头插件归属（纯前端） | ✅ #2589 |
+| R114 | 编排任务树实时行（等待审批徽章+事件行）插件归属（纯前端） | ✅ #2614 |
+| R115 | Hook 执行历史行插件归属（纯前端） | ✅ #2618 |
+| R116 | PluginsTab 纯数据/纯函数抽离 pluginsTabModel（纯重构） | ✅ #2621 |
+| R117 | Message 审计辅助抽离 messageAudit（纯重构，清 react-refresh 警告） | 🔄 #2623 |
+>>>>>>> origin/main
 
 ## 2. 交付总账
 
@@ -64,7 +79,22 @@
 | R103 | 插件页已卸载卡片的孤儿规则计数提示 + 就地按归属清理按钮（纯前端）与测试/文档 | #2500 | 待对齐 | ✅ 已交付 |
 | R104 | `POST /permissions/rules/delete-orphans`（服务端按 missing 类选集）+ Electron 命令 + 管理器孤儿清理行与测试/文档 | #2504 | 待对齐 | ✅ 已交付 |
 | R105 | 会话规则存储（进程内）+ enforcer 合并求值 + 应答 `remember_duration` + 对话框时长选择与测试/文档 | #2511 | 待对齐 | ✅ 已交付 |
+<<<<<<< HEAD
 | R106 | 会话规则按会话读/删/清端点 + 顶栏徽记与审计弹层会话规则区与测试/文档 | #2530 | 待对齐 | 🔄 |
+=======
+| R106 | 会话规则按会话读/删/清端点 + 顶栏徽记与审计弹层会话规则区与测试/文档 | #2530 | 待对齐 | ✅ 已交付 |
+| R107 | EditAgentForm 未发布插件条目分类标注（发布快照+生命周期名单前端镜像 R101）+ 就地移除与测试/文档 | #2545 | 待对齐 | ✅ 已交付 |
+| R108 | ApprovalDialog 所属插件横幅 + OS 通知归属后缀（复用 R95 权威 plugin_name）与测试/文档 | #2552 | 待对齐 | ✅ 已交付 |
+| R109 | PermissionRulesManager 遮蔽派生（等值/插件通配覆盖）+ 徽标与测试/文档 | #2557 | 待对齐 | ✅ 已交付 |
+| R110 | permissionInsights 共享派生下沉 + PermissionModeSwitch 审计归属后缀/会话规则遮蔽徽标与测试/文档 | #2566 | 待对齐 | ✅ 已交付 |
+| R111 | usePluginNames 共享名单缓存 + Message 通用卡片归属后缀与测试/文档 | #2576 | 待对齐 | ✅ 已交付 |
+| R112 | 弹层改用 usePluginNames + formatPermissionMode* 下沉 permissionInsights 与测试/文档 | #2585 | 待对齐 | ✅ 已交付 |
+| R113 | Message 工具组组头归属后缀与测试/文档 | #2589 | 待对齐 | ✅ 已交付 |
+| R114 | TaskTreeSection 归属后缀（门控供数）与测试/文档 | #2614 | 待对齐 | ✅ 已交付 |
+| R115 | HookHistoryPanel 归属后缀（门控供数）与测试/文档 | #2618 | 待对齐 | ✅ 已交付 |
+| R116 | pluginsTabModel 新模块 + PluginsTab 改导入与文档 | #2621 | 待对齐 | ✅ 已交付 |
+| R117 | messageAudit 新模块 + Message 删尾与测试改导入、文档 | #2623 | 待对齐 | 🔄 |
+>>>>>>> origin/main
 
 ## 3. R78 交付边界
 
@@ -559,7 +589,11 @@
   architecture、silent-exceptions、diff-check、
   diagnostics 全绿，manifest 仍 266。
 
+<<<<<<< HEAD
 ## 26. R106 交付边界（PR #2530 待合并）
+=======
+## 26. R106 交付边界（已合并）
+>>>>>>> origin/main
 
 > spec：`2026-10-26_session-rules-manage-r106.md`。
 > R106 是本插件账轮次号，与其它账本的同号计划无关。
@@ -579,4 +613,204 @@
   permission_routes.py（855 行）按 ratchet 登记
   baseline。
 
+<<<<<<< HEAD
+=======
+## 27. R107 交付边界（已合并）
+
+> spec：`2026-10-26_profile-stale-plugin-entries-r107.md`。
+> R107 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **白名单孤儿可见化**：EditAgentForm 标注当前未发
+  布的插件形条目（已卸载/无记录/当前未发布三类，
+  口径镜像 R101），可逐条就地移除（草稿级、仍需保
+  存）；profile 侧至此与规则管理矩阵对齐。
+- **纯前端零新面**：复用发布快照与生命周期名单两
+  处权威数据，不新增端点/命令（manifest 仍
+  269），不改存储与后端匹配；名单读不到整体不标
+  注，与 R101 降级一致。
+- **本地证据**：前端新增 9 例（分类 6 + 组件 3），
+  与 agents 及 Agents 页/PluginsTab/pluginClient 相
+  邻套件共 10 文件 53 例通过；tsc、ESLint、
+  architecture、diff-check、diagnostics 全绿，
+  manifest 仍 269，后端零改动。
+
+## 28. R108 交付边界（已合并）
+
+> spec：`2026-10-26_approval-plugin-badge-r108.md`。
+> R108 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **决策时刻归属可见**：ApprovalDialog 工具行下
+  新增「所属插件」横幅、OS 通知 body 追加插件归
+  属后缀，均只读后端注入的权威 `plugin_name`
+  （R95）；归属可见化弧（事后规则 R101/插件页
+  R103/白名单 R107）至决策时刻闭合。
+- **纯展示零语义**：不切分工具名猜插件、非插件
+  工具逐字不变；应答/记住/远程渠道零改动，
+  无新端点/命令（manifest 仍 269）。
+- **本地证据**：前端新增 4 例（横幅 2 + 通知 2），
+  与 permission 及 permissionState/permissionApi/
+  i18n 相邻套件共 21 文件 94 例通过；tsc、ESLint、
+  architecture、diff-check、diagnostics 全绿，
+  manifest 仍 269，后端零改动。
+
+## 29. R109 交付边界（已合并）
+
+> spec：`2026-10-26_rule-shadowed-annotation-r109.md`。
+> R109 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **生效性可见化**：管理器在同列表内派生「被更高
+  优先级规则覆盖」的行并徽标提示（裁决恒为
+  deny > allow > ask，「明明放行却不生效」自此有解
+  读）；继归属（R101）之后补规则治理的第二只读维度。
+- **保守可证**：只判等值与插件通配两族覆盖，归属
+  只认 R101 权威标注；一般 fnmatch 包含不判，永不
+  误报。纯前端只读，不改存储/求值/写面（manifest
+  仍 274）。
+- **本地证据**：前端新增 8 例（纯函数 6 + 组件 2），
+  与 GeneralTab 既有回归及
+  permissionApi/i18n/PluginsTab 相邻套件共 18 文件
+  101 例通过；tsc、ESLint、architecture、diff-check、
+  diagnostics 全绿，manifest 仍 274，后端零改动。
+
+## 30. R110 交付边界（已合并）
+
+> spec：`2026-10-27_perm-popover-annotations-r110.md`。
+> R110 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **最后一张未标注表**：顶栏弹层的自动放行审计逐
+  条标注所属插件（生命周期权威名结构化归属）、
+  会话规则复用 R109 遮蔽派生；权限 UX 全部列表
+  （规则/审计/会话规则/审批/白名单）的归属与生效
+  性标注至此齐备。
+- **导出与节奏不变**：审计台账格式与 Markdown/
+  JSON 导出逐字不动（R106 口径），名单只在弹层打
+  开时取、失败降级不标；派生下沉 shared/lib 两侧
+  同源。无新端点/命令（manifest 仍 274）。
+- **本地证据**：前端新增 8 例（owner 5 + widget 3），
+  与定向回归及 permissionApi/permissionState/
+  ApprovalDialog 相邻套件共 120 例通过；tsc、
+  ESLint（0 errors，存量 warnings 不变）、
+  architecture、diff-check、diagnostics 全绿，
+  manifest 仍 274，后端零改动。
+
+## 31. R111 交付边界（已合并）
+
+> spec：`2026-10-27_transcript-plugin-owner-r111.md`。
+> R111 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **历史可见化收官**：聊天转录通用卡片标注插件工
+  具的所属插件，口径与审计（R110）/审批
+  （R108）同一权威归属；至此用户能看到工具名字
+  的全部界面都带归属。
+- **热路径收敛**：名单经模块级缓存 hook 供数（在
+  途合并 + TTL + 内容未变不换引用），只动通用卡
+  标题行；memo 比较、专用渲染器、导出串零改动，
+  后端零改动（manifest 仍 274）。
+- **本地证据**：新 hook 套件、Message.pluginOwner
+  与 Message 既有全组及 permissionInsights/
+  PermissionModeSwitch 共 14 文件 74 例通过；
+  tsc、ESLint（0 errors，存量 warnings 不变）、
+  architecture（Message 768/800）、diff-check、
+  diagnostics 全绿，manifest 仍 274，后端零改动。
+
+## 32. R112 交付边界（已合并）
+
+> spec：`2026-10-27_perm-switch-consolidation-r112.md`。
+> R112 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **供数单一事实源**：生命周期名单的读取实现自此只剩
+  共享缓存 hook 一处（转录 R111 + 顶栏审计 R110 两
+  个消费面），弹层打开即出归属、与转录同开合并取数；
+  EditAgentForm 因需完整 records 且随显式刷新取证保
+  留自取。
+- **纯函数归位**：弹层导出格式化随派生函数同置共享
+  层，组件文件只导出组件；导出文本逐字不变，后端零
+  改动（manifest 仍 274）。
+- **本地证据**：PermissionModeSwitch/insights/hook/
+  pluginOwner 与 shadowed+GeneralTab 共 6 文件
+  60 例通过；tsc、ESLint（0/0，弹层文件存量
+  warnings 清零，450→393 行）、architecture、
+  diff-check、diagnostics 全绿，manifest 仍 274，
+  后端零改动。
+
+## 33. R113 交付边界（已合并）
+
+> spec：`2026-10-27_tool-group-plugin-owners-r113.md`。
+> R113 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **转录可见性收官**：折叠组头补上去重归属后，转录的
+  折叠态与展开态都能一眼看出插件参与，与审批
+  （R108）/审计（R110）/逐卡（R111）口径一致。
+- **零新增取数**：复用 R111 已在 Message 作用域内的
+  名单与归属派生；后端零改动（manifest 仍 274）。
+- **本地证据**：Message 全组 12 文件 62 例与定
+  向三套件 20 例通过；tsc、ESLint（0 errors，存
+  量 warnings 不变）、architecture（Message
+  787/800）、diff-check、diagnostics 全绿，
+  manifest 仍 274，后端零改动。
+
+## 34. R114 交付边界（已合并）
+
+> spec：`2026-10-27_tasktree-plugin-owner-r114.md`。
+> R114 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **编排面补齐**：多智能体运行中「哪个插件的工具在
+  等审批/在执行」在任务行与实时动态里可见，口径与
+  转录（R111/R113）同一名单派生；事件协议与编排逻
+  辑零改动。
+- **门控与文件风格**：无实时工具事件不取数；后缀跟
+  随本文件硬编码中文，不为一处文案引入 i18n 依赖。
+- **本地证据**：pluginOwner 新套件与既有七套件
+  共 8 文件 60 例通过（无 live 夹具门控关、零
+  影响）；tsc、ESLint（0/0）、architecture、
+  diff-check、diagnostics 全绿，manifest 仍
+  274，后端零改动。
+
+## 35. R115 交付边界（已合并）
+
+> spec：`2026-10-28_hook-history-plugin-owner-r115.md`。
+> R115 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **展示面收官**：Hook 历史补齐后，R113 扫描到的全
+  部策展工具名界面（规则/白名单/审批/审计/转录逐
+  卡与组头/编排实时行/Hook 历史）均带同一口径归
+  属；仅剩通用载荷镜像与远程渠道在边界外。
+- **本地证据**：pluginOwner 新套件与 settings
+  Hook 相关套件等共 11 文件 59 例通过；tsc、
+  ESLint（0/0）、architecture、diff-check、
+  diagnostics 全绿，manifest 284（他人推进，
+  本轮后端零改动）。
+
+## 36. R116 交付边界（已合并）
+
+> spec：`2026-10-28_plugins-tab-model-r116.md`。
+> R116 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **为后续让路**：PluginsTab 自 R111 起顶格多次挡下
+  插件面候选；本轮纯机械抽离文案/常量/纯函数约 140
+  行到同目录模型模块，行为逐字不变，行数预算回到可
+  维护区间（基线不 tighten）。
+- **本地证据**：settings 全目录 59 文件 365 例通过
+  （PluginsTab 14 例原样）；搬移逐字性经字符串字面
+  量多重集机械校验（126 个全等）；PluginsTab
+  819 → 686 行；tsc、ESLint（0/0）、architecture、
+  diff-check、diagnostics 全绿，后端零改动。
+
+## 37. R117 交付边界（PR #2623 待合并）
+
+> spec：`2026-10-28_message-audit-extract-r117.md`。
+> R117 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **卫生续轮**：继 R116 把审计格式化纯函数自转录组
+  件尾部抽离至同目录模块，组件文件回到单一导出并清
+  除其仅有的 react-refresh 存量警告；归属标注语义
+  与渲染行为逐字不变。
+- **本地证据**：基线 ESLint 实测 Message.tsx 恰 2
+  条 react-refresh 警告（769/774 行），抽离后 0/0；
+  两函数 19 行逐字节全等；chat 全目录 131 文件
+  647 例通过；Message.tsx 787 → 768 行；tsc、
+  architecture、diff-check、diagnostics 全绿，后
+  端零改动。
+
+>>>>>>> origin/main
 —— 本账本由插件化循环维护，随轮次追加。

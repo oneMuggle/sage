@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { backendRequest } from '../../shared/api/backendRequest';
+<<<<<<< HEAD
+=======
+import { usePluginNames } from '../../shared/lib/hooks/usePluginNames';
+import { findPluginToolOwner } from '../../shared/lib/permissionInsights';
+>>>>>>> origin/main
 
 interface HookHistoryRecord {
   id: string;
@@ -30,6 +35,18 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
 
+<<<<<<< HEAD
+=======
+  // R115: 历史行插件归属后缀供数（与转录 R111 同一名单派生）；
+  // 仅当已加载记录里存在带工具名的行时启用，空历史不取数。
+  // 文案跟随本文件硬编码中文（未接 i18n，与 R114 先例一致）。
+  const pluginNames = usePluginNames(records.some((record) => Boolean(record.tool_name)));
+  const pluginOwnerSuffix = (toolName: string): string => {
+    const owner = toolName ? findPluginToolOwner(toolName, pluginNames) : null;
+    return owner ? `（所属插件: ${owner}）` : '';
+  };
+
+>>>>>>> origin/main
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -102,6 +119,10 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
               </span>
               <span className="flex-1 min-w-0 truncate" title={record.reason ?? undefined}>
                 {record.hook_id} → {record.tool_name || '*'}
+<<<<<<< HEAD
+=======
+                {pluginOwnerSuffix(record.tool_name)}
+>>>>>>> origin/main
                 {record.reason ? `: ${record.reason}` : ''}
               </span>
               <span className="text-muted flex-shrink-0">{Math.round(record.duration_ms)}ms</span>

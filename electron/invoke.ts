@@ -134,6 +134,7 @@ export async function invokeBackend(
     const text = await res.text().catch(() => '');
     // 安全错误信息:不把完整 URL 拼入异常,避免用户查询等敏感 path 参数
     // 泄漏到主进程日志。用 cmd 作为标识,运维可根据 cmd 反查路由。
+<<<<<<< HEAD
     // 2026-10-29: 后端 detail.message 可直接读时优先使用（例如「当前会话
     // 尚未绑定工作区」），同时保留 ``（HTTP <status>）`` 标记 —— renderer
     // 的 desktopInvoke 依赖该标记恢复 status_code（IPC 会剥离自定义属性）。
@@ -142,6 +143,10 @@ export async function invokeBackend(
       detail.message
         ? `${detail.message}（HTTP ${res.status}）`
         : `Backend ${route.method} cmd=${cmd} → ${res.status}: ${text}`,
+=======
+    const err = new Error(
+      `Backend ${route.method} cmd=${cmd} → ${res.status}: ${text}`,
+>>>>>>> origin/main
     ) as Error & {
       status_code?: number;
       code?: string;

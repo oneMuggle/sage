@@ -17,7 +17,11 @@ import logging
 import os
 import re
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Any, Dict, List, Optional, Union
+=======
+from typing import Any, List, Optional, Union
+>>>>>>> origin/main
 
 from pydantic import BaseModel, Field
 
@@ -80,7 +84,11 @@ class SkillDiscoveryService:
             self._skills_dir = self._get_default_skills_dir()
 
         # Cache for discovered skills
+<<<<<<< HEAD
         self._cache: Dict[str, SkillMetadata] = {}
+=======
+        self._cache: dict[str, SkillMetadata] = {}
+>>>>>>> origin/main
         self._cache_valid = False
 
     def _get_default_skills_dir(self) -> Path:
@@ -98,7 +106,11 @@ class SkillDiscoveryService:
         """Get the skills directory."""
         return self._skills_dir
 
+<<<<<<< HEAD
     def discover_all(self, use_cache: bool = True) -> List[SkillMetadata]:
+=======
+    def discover_all(self, use_cache: bool = True) -> list[SkillMetadata]:
+>>>>>>> origin/main
         """
         Discover all skills in the skills directory.
 
@@ -223,7 +235,11 @@ class SkillDiscoveryService:
             priority=int(frontmatter.get("priority", 0)),
         )
 
+<<<<<<< HEAD
     def _extract_frontmatter(self, content: str) -> Dict[str, Any]:
+=======
+    def _extract_frontmatter(self, content: str) -> dict[str, Any]:
+>>>>>>> origin/main
         """
         Extract YAML frontmatter from SKILL.md content.
 
@@ -312,7 +328,11 @@ class SkillDiscoveryService:
         self._cache_valid = False
         logger.debug("技能发现缓存已失效")
 
+<<<<<<< HEAD
     def list_skill_names(self) -> List[str]:
+=======
+    def list_skill_names(self) -> list[str]:
+>>>>>>> origin/main
         """
         List all discovered skill names.
 

@@ -11,6 +11,13 @@ interface SessionListProps {
   onRename?: (sessionId: string, title: string) => Promise<void>;
   /** F12: 消息内容命中计数(会话 id → 命中条数;缺省不显示徽标) */
   messageHitsBySession?: Map<string, number>;
+<<<<<<< HEAD
+=======
+  /** 手动归档（缺省时不渲染入口） */
+  onArchive?: (sessionId: string) => void;
+  /** 恢复归档（缺省时不渲染入口） */
+  onUnarchive?: (sessionId: string) => void;
+>>>>>>> origin/main
 }
 
 export function formatSessionListMarkdown(
@@ -67,6 +74,11 @@ export function SessionList({
   onDelete,
   onRename,
   messageHitsBySession,
+<<<<<<< HEAD
+=======
+  onArchive,
+  onUnarchive,
+>>>>>>> origin/main
 }: SessionListProps) {
   if (sessions.length === 0) {
     return <div className="px-3 py-4 text-xs text-text-muted text-center">暂无对话记录</div>;
@@ -88,6 +100,11 @@ export function SessionList({
           onDelete={() => onDelete(session.id)}
           onRename={onRename}
           messageHits={messageHitsBySession?.get(session.id)}
+<<<<<<< HEAD
+=======
+          onArchive={onArchive ? () => onArchive(session.id) : undefined}
+          onUnarchive={onUnarchive ? () => onUnarchive(session.id) : undefined}
+>>>>>>> origin/main
         />
       ))}
     </ul>

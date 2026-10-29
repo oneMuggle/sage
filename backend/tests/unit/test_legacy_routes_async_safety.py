@@ -141,7 +141,11 @@ def test_keep_async_handlers_actually_async():
 
 
 def test_async_handler_count_matches_design():
+<<<<<<< HEAD
     """legacy 路由族应有 10 个 async def handler（win7: main 7 + memory SSE/by-turn/summary 3 个）。
+=======
+    """legacy 路由族应有 7 个 async def handler（C1b：3 个技能端点迁至 legacy_skills_routes）。
+>>>>>>> origin/main
 
     Round 5 (+1): scan_skill_consolidation —— LLM 巡检端点,
     async 因为需要 await LLM provider.complete()。
@@ -164,12 +168,17 @@ def test_async_handler_count_matches_design():
     # C1b 后 = 4：execute_skill/execute_slash_command/import_skills 迁至 legacy_skills_routes。
     # compact_session 已拆至 legacy_session_routes (L1, P8), 在那里由
     # test_keep_async_handlers_actually_async 的合并扫描覆盖。
+<<<<<<< HEAD
     # 10 个（win7：main 7 + memory SSE/by-turn/summary 3 个）
     # C1b 后 = 4：execute_skill/execute_slash_command/import_skills 迁至 legacy_skills_routes。
     # compact_session 已拆至 legacy_session_routes (L1, P8), 在那里由
     # test_keep_async_handlers_actually_async 的合并扫描覆盖。
     assert len(async_endpoints) == 10, (
         f"legacy 路由族应有 10 个 async def handler,实际 {len(async_endpoints)}:\n",
+=======
+    assert len(async_endpoints) == 7, (
+        f"legacy 路由族应有 7 个 async def handler,实际 {len(async_endpoints)}:\n"
+>>>>>>> origin/main
         + "\n".join(f"  {f.name} (line {f.lineno})" for f in async_endpoints)
     )
 

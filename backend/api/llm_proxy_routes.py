@@ -560,7 +560,7 @@ def _is_local_capability_authorization(value: str, local_token: str) -> bool:
 
 
 def _filter_request_headers(
-    request: Request, local_token: Optional[str] = None
+    request: Request, local_token: str | None = None
 ) -> Dict[str, str]:
     """Copy request headers, excluding proxy internals and the local capability."""
     capability = local_token if local_token is not None else get_local_auth_token()
@@ -928,7 +928,11 @@ async def _proxy_streaming(
     trace_id: str = "",
     trace_start_monotonic: float = 0.0,
     trace_endpoint: str = "",
+<<<<<<< HEAD
     trace_req_headers: Optional[Dict[str, str]] = None,
+=======
+    trace_req_headers: Dict[str, str] | None = None,
+>>>>>>> origin/main
     trace_req_body: bytes = b"",
 ) -> StreamingResponse:
     """v2: SSE/chunked 流式透传。

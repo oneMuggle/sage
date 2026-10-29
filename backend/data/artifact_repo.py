@@ -93,6 +93,7 @@ def record_artifact(
     tool_call_id: Optional[str] = None,
     workspace_path: Optional[str] = None,
     format_spec: Optional[str] = None,
+<<<<<<< HEAD
     conn: Any = None,
 ) -> str:
     """记录一个新产物,返回 artifact id。落库成功后广播 artifact_created 事件（S7）。
@@ -100,6 +101,10 @@ def record_artifact(
     ``conn`` 可选：工具层已持有会话 DB 连接时传入，避免另开全局连接
     （单测里全局库可能是真实 data/sage.db）。
     """
+=======
+) -> str:
+    """记录一个新产物,返回 artifact id。落库成功后广播 artifact_created 事件（S7）。"""
+>>>>>>> origin/main
     artifact_id = f"art_{uuid.uuid4().hex[:12]}"
     created_at = int(time.time() * 1000)
     if conn is None:

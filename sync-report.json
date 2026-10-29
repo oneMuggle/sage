@@ -1,0 +1,850 @@
+{
+  "timestamp": "2026-10-29T23:29:55",
+  "source": "origin/main",
+  "target": "origin/release/win7",
+  "branch": "sync/win7-main-20261029",
+  "status": "CONFLICT（207 个文件需人工处理）",
+  "conflicts": [
+    {
+      "path": ".github/dependency-audit-policy.json",
+      "cls": "A"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "cls": "A"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "cls": "A"
+    },
+    {
+      "path": ".github/workflows/win7-sync.yml",
+      "cls": "A"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "cls": "A"
+    },
+    {
+      "path": "architecture-baseline.json",
+      "cls": "A"
+    },
+    {
+      "path": "backend/adapters/out/memory/adapter.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/adapters/out/skill/inproc.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/adapters/out/storage/memory_adapter.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/adapters/out/tool/inproc_adapter.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/agents/profiles.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/api/chat_attachment_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/chat_session_lifecycle.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/chat_stream_support.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/diagnostic_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/git_status_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/hooks_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/legacy_memory_list_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/legacy_memory_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/legacy_models.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/legacy_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/llm_proxy_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/office_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/permission_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/project_ai_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/settings_models.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/wiki_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/workspace_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/worktree_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/zotero_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/application/kernel/events.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/application/services/chat_service.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/chat/topic_detection.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/cli/doctor.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/core/legacy/agent.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/core/legacy/llm_total_timeout.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/data/agent_repo.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/data/artifact_reader.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/data/artifact_repo.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/data/database.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/data/design_repo.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/data/migrations/runner.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/data/session_event_backfill.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/data/session_repo.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/data/settings_canonicalizer.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/design/design_studio.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/design/standalone_bundler.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/design/systems.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/design/templates.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/hooks/runner.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/main.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/mcp/discovery.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/mcp/oauth.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/mcp/oauth_loopback.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/mcp/oauth_store.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/mcp/servers/zotero/server.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/mcp/workspace_scope.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/memory/async_extractor.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/memory/episodic.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/memory/extractor.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/memory/manager.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/model_catalog/pricing.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/model_catalog/probes.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/model_catalog/repository.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/model_catalog/resolver.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/model_catalog/schemas.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/model_catalog/snapshots.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/model_catalog/sources.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/model_catalog/transfer.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/office/models.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/office/ppt_template.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/office/toc_refresh.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/orchestration/orch_settings.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/plugins/lifecycle.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/plugins/manifest.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/plugins/registry.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/remote_mcp/listener.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/remote_mcp/protocol.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/remote_mcp/tools.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/scheduler/evolution.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/services/arena_accounts.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/services/backup_service.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/services/permission_gate.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/services/project_wiki_generator.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/services/trust_escalation.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/services/usage_tracker.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/services/workspace_info.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/skills/discovery.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/skills/enhanced_registry.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/skills/skill_md/script_runner.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/skills/skill_md/skills_dir_policy.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/skills/skill_md/validation.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/contract/test_settings_schema_parity.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/integration/test_evolution_scheduler_runs.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/integration/test_web_access_journey.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/api/test_search_routes.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_adapter_tag_graph.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_browser_tool.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_credential_vault.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_hooks_builtin.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_hooks_feedback.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_hooks_lifecycle.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_inproc_tool_adapter.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_legacy_routes_async_safety.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_mcp_oauth.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_mcp_oauth_loopback.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_memory_adapter.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_orch_settings.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_project_advisor.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_project_knowledge_extractor.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_project_task_decomposer.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_py38_compat_gate.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_remote_mcp_server.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_safe_writer.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_session_archive_sweep.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_shell_resolver.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_tool_policy.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_vision_ingest_security.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_web_cache.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_web_tool.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/tools/test_office_create_tool.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/tools/test_python_adapter.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/tools/test_runtime_tool_contract.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/agent_tool.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/browser_cdp.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/config_tool.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/credential_vault.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/executor.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/file_tool.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/git_tool.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/office_update_tool.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/registry.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/shell_resolver.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/web_render.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/utils/py_compat.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/wiki/chat.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/wiki/literature_aggregator.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/wiki/meetings_extractor.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/wiki/review.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/zotero/client.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/zotero/exceptions.py",
+      "cls": "A"
+    },
+    {
+      "path": "docs/plans/2026-10-26_session-rules-manage-r106.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/plans/2026-10-27_planner-scout-iteration-knobs.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/plans/2026-10-28_performance-stats.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/plans/2026-10-29_welcome-page-ux-improvements.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/plans/plugin-evo-index.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/technical/15-quality-gates.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/technical/97-plugin-manifest.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/technical/README.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/user-manual/20-settings.md",
+      "cls": "A"
+    },
+    {
+      "path": "electron/__tests__/commands.test.ts",
+      "cls": "A"
+    },
+    {
+      "path": "electron/__tests__/invoke.test.ts",
+      "cls": "A"
+    },
+    {
+      "path": "electron/commandRoutes/chat.ts",
+      "cls": "A"
+    },
+    {
+      "path": "electron/commandRoutes/sessions.ts",
+      "cls": "A"
+    },
+    {
+      "path": "electron/invoke.ts",
+      "cls": "A"
+    },
+    {
+      "path": "electron/ipc-manifest.json",
+      "cls": "A"
+    },
+    {
+      "path": "electron/main.ts",
+      "cls": "A"
+    },
+    {
+      "path": "electron/preload.ts",
+      "cls": "A"
+    },
+    {
+      "path": "electron/runtime-check.ts",
+      "cls": "A"
+    },
+    {
+      "path": "electron/update/providers/genericHttp.ts",
+      "cls": "A"
+    },
+    {
+      "path": "electron/update/providers/gitee.ts",
+      "cls": "A"
+    },
+    {
+      "path": "electron/update/providers/github.ts",
+      "cls": "A"
+    },
+    {
+      "path": "electron/update/providers/gitlab.ts",
+      "cls": "A"
+    },
+    {
+      "path": "scripts/architecture-check.mjs",
+      "cls": "A"
+    },
+    {
+      "path": "scripts/check_dependency_audit.py",
+      "cls": "A"
+    },
+    {
+      "path": "scripts/silent-exceptions-baseline.json",
+      "cls": "A"
+    },
+    {
+      "path": "scripts/tests/test_check_dependency_audit.py",
+      "cls": "A"
+    },
+    {
+      "path": "src/entities/setting/storage.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/entities/setting/types.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/features/changes/__tests__/changesListStore.test.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/features/changes/changesListStore.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/features/office/DocxNativePreview.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/features/send-message/__tests__/useChat.taskBoardEvents.test.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/pages/settings/ModelsTab.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/pages/settings/PluginsTab.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/pages/settings/__tests__/ModelsTab.test.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/pages/settings/settingsSearchIndex.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/shared/api/__tests__/desktopInvoke.test.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/shared/api/__tests__/sessionApi.test.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/shared/api/desktopInvoke.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/shared/api/types.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/shared/api/types/chatAndEventTypes.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/shared/api/workspaceApi.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/shared/lib/__tests__/store.test.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/shared/lib/i18n/locales/en/settingsAndModels.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/shared/lib/i18n/locales/en/workspaceAndTools.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/shared/lib/i18n/locales/zh/settingsAndModels.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/shared/lib/i18n/locales/zh/workspaceAndTools.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/shared/lib/store.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/shared/types/electron-api.d.ts",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/chat/WorkspaceBranchPicker.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/chat/__tests__/ArtifactViewer.test.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/chat/__tests__/ChangesSection.test.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/chat/__tests__/Message.test.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/chat/artifacts/ArtifactViewer.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/chat/changes/ChangesSection.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/chat/progress/TaskTreeSection.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/layout/Sidebar.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/layout/__tests__/Sidebar.two-stage.test.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/session/SessionItem.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/session/SessionList.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/session/VirtualSessionList.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/settings/HookHistoryPanel.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/sidebar/SiderSection.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/sidebar/sections/ConversationsSection.test.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/sidebar/sections/ConversationsSection.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/widgets/welcome/WelcomeInputCard.tsx",
+      "cls": "A"
+    }
+  ],
+  "auto_resolved": [
+    ".github/workflows/release-win7.yml",
+    "backend/requirements-optional.txt",
+    "backend/requirements-py38.txt",
+    "backend/requirements.txt",
+    "package-lock.json",
+    "package.json",
+    "scripts/bundle-python.ps1",
+    "scripts/check_py38_compat.py"
+  ],
+  "source_sha": "c9c05c1c",
+  "target_sha": "d74c73a4",
+  "commits_behind": 995
+}

@@ -53,7 +53,11 @@ def _has_symlink_component(path: Path) -> bool:
 def _is_relative_to(path: Path, parent: Path) -> bool:
     """兼容 Python 3.8 的 Path.is_relative_to。"""
     try:
+<<<<<<< HEAD
         return path.is_relative_to(parent)  # py38: guarded py38-ok AttributeError 守卫 + relative_to 降级已覆盖
+=======
+        return path.is_relative_to(parent)  # py38-ok except AttributeError 守卫 + relative_to 降级
+>>>>>>> origin/main
     except AttributeError:
         try:
             path.relative_to(parent)

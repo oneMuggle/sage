@@ -364,6 +364,17 @@ export const enWorkspaceAndTools = {
   'session.export_md': 'Export as Markdown',
   'session.pin': 'Pin session',
   'session.unpin': 'Unpin session',
+<<<<<<< HEAD
+=======
+  // ─── Manual archive / restore (sidebar session item) ──────
+  'session.archive': 'Archive session',
+  'session.unarchive': 'Restore from archive',
+  'session.archive_failed': 'Archive action failed: {message}',
+  'session.archived_toast': 'Session archived',
+  'session.unarchived_toast': 'Session restored',
+  'session.archive_disabled_running': 'Cannot archive a running or suspended session',
+  'session.auto_archived': 'Auto-archived {count} session(s)',
+>>>>>>> origin/main
   'chat.regenerate': 'Regenerate',
   'chat.regenerate_forked': 'Forked from the original question and regenerated',
   'session.export_html_exporting': 'Exporting…',
@@ -403,7 +414,10 @@ export const enWorkspaceAndTools = {
   // ─── U4' Session management closure (parity round 5 batch A) ─────
   'session.rename': 'Rename session',
   'session.rename_failed': 'Rename failed: {message}',
+<<<<<<< HEAD
   'session.title_generating': '✨ Generating title…',
+=======
+>>>>>>> origin/main
   'sidebar.search_sessions': 'Search sessions',
   'sidebar.no_match': 'No matching sessions',
 

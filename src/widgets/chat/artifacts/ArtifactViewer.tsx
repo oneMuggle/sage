@@ -11,7 +11,11 @@ import {
   Save,
   X,
 } from 'lucide-react';
+<<<<<<< HEAD
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+=======
+import { lazy, Suspense, useCallback, useState } from 'react';
+>>>>>>> origin/main
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
@@ -25,9 +29,12 @@ import { useArtifactContent } from '../../../features/artifacts/useArtifactConte
 // 后端 read_office 现在随 html 一起返回 structured（read_* 的 JSON 序列
 // 化）；缺失时回退旧的受控 HTML 路径。
 import { ExcelPreview, PptPreview, WordPreview } from '../../../features/office';
+<<<<<<< HEAD
 // 2026-10-29: Word 产物默认走 docx-preview 原生渲染（与 /office 页同一条
 // 渲染+消毒链路），结构化段落视图保留为切换/降级项。
 import { DocxBlobPreview } from '../../../features/office/DocxBlobPreview';
+=======
+>>>>>>> origin/main
 import type {
   OfficeExcelReadResult,
   OfficePptReadResult,
@@ -194,6 +201,7 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
   // right-panel R2 批次 A: markdown 渲染/源码切换（默认渲染）+ HTML 预览刷新
   const [mdRendered, setMdRendered] = useState(true);
   const [htmlReloadKey, setHtmlReloadKey] = useState(0);
+<<<<<<< HEAD
   // 2026-10-29: docx 默认 Word 版式（docx-preview）；渲染失败或用户切换时
   // 回退到结构化段落视图。
   const [docxFidelity, setDocxFidelity] = useState(true);
@@ -203,6 +211,8 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
     setDocxFidelity(true);
     setDocxFidelityFailed(false);
   }, [artifact.id]);
+=======
+>>>>>>> origin/main
 
   const isEditable =
     content?.ok && content.kind && EDITABLE_KINDS.has(content.kind as ArtifactKind);
@@ -277,6 +287,7 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             <RefreshCw className="w-4 h-4" />
           </button>
         )}
+<<<<<<< HEAD
         {content?.ok && content.kind === 'docx' && content.data_url && (
           <button
             className="p-1.5 rounded hover:bg-bg-hover text-text-secondary hover:text-text transition-colors"
@@ -300,6 +311,8 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             )}
           </button>
         )}
+=======
+>>>>>>> origin/main
         {isEditable && !editMode && (
           <button className="p-1.5 rounded hover:bg-bg-hover" title="编辑" onClick={enterEditMode}>
             <Pencil className="w-4 h-4" />
@@ -500,6 +513,12 @@ export function evaluateArtifactViewerAudit(
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
+<<<<<<< HEAD
 export function exportArtifactViewerAuditJson(input: ArtifactViewerAuditInput): string {
+=======
+export function exportArtifactViewerAuditJson(
+  input: ArtifactViewerAuditInput,
+): string {
+>>>>>>> origin/main
   return JSON.stringify(evaluateArtifactViewerAudit(input));
 }

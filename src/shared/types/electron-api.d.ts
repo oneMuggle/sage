@@ -34,8 +34,11 @@ export interface MemoryElectronApiBridge {
   delete: (args: Record<string, unknown>) => Promise<unknown>;
   getProfile: () => Promise<unknown>;
   diagnostics: () => Promise<unknown>;
+<<<<<<< HEAD
   /** win7: 记忆事件订阅（SSE 桥）—— 主进程 memoryEvents 通道 */
   subscribe: (handler: (event: unknown) => void) => Promise<UnlistenFn | null>;
+=======
+>>>>>>> origin/main
   createProfile: (args: Record<string, unknown>) => Promise<unknown>;
   updateProfile: (args: Record<string, unknown>) => Promise<unknown>;
   deleteProfile: (args: Record<string, unknown>) => Promise<unknown>;

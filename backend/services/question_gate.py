@@ -86,7 +86,7 @@ class QuestionRequest:
         cls,
         question: str,
         options: Sequence[Dict[str, Any]],
-        header: Optional[str] = None,
+        header: str | None = None,
         multi_select: bool = False,
     ) -> QuestionRequest:
         """工厂：生成 UUID + 时间戳，规范化选项。
@@ -147,7 +147,7 @@ class UserQuestionGate:
         self,
         request_id: str,
         answers: Sequence[str],
-        custom: Optional[str] = None,
+        custom: str | None = None,
     ) -> bool:
         """解析一个挂起的请求。
 
@@ -173,7 +173,7 @@ class UserQuestionGate:
         """当前所有挂起请求（快照，按注册顺序）。"""
         return [req for req, future in self._pending.values() if not future.done()]
 
-    def get_request(self, request_id: str) -> Optional[QuestionRequest]:
+    def get_request(self, request_id: str) -> QuestionRequest | None:
         """按 id 查挂起请求；未知返回 None。"""
         entry = self._pending.get(request_id)
         return entry[0] if entry is not None else None
@@ -197,7 +197,7 @@ def init_question_gate() -> UserQuestionGate:
     return _global_gate
 
 
-def get_question_gate() -> Optional[UserQuestionGate]:
+def get_question_gate() -> UserQuestionGate | None:
     """取全局 gate；未初始化返回 None（调用方按"无人应答"处理）。"""
     return _global_gate
 

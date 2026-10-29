@@ -13,10 +13,15 @@ import {
 } from './ConversationsSection';
 
 const searchMessagesMock = vi.fn();
+<<<<<<< HEAD
+=======
+const listMock = vi.fn();
+>>>>>>> origin/main
 const archiveStaleMock = vi.fn(async (..._args: unknown[]) => ({ archived: 0 }));
 const purgeArchivedMock = vi.fn(async (..._args: unknown[]) => ({ purged: 0 }));
 vi.mock('../../../shared/api/sessionApi', () => ({
   sessionApi: {
+    list: (...args: unknown[]) => listMock(...args),
     searchMessages: (...args: unknown[]) => searchMessagesMock(...args),
     archiveStale: (...args: unknown[]) => archiveStaleMock(...args),
     purgeArchived: (...args: unknown[]) => purgeArchivedMock(...args),
@@ -60,6 +65,11 @@ const baseProps = {
 describe('ConversationsSection', () => {
   beforeEach(() => {
     searchMessagesMock.mockReset();
+<<<<<<< HEAD
+=======
+    listMock.mockReset();
+    listMock.mockResolvedValue([]);
+>>>>>>> origin/main
     useMessageJumpStore.setState({ pending: null });
   });
 
@@ -116,11 +126,21 @@ describe('ConversationsSection', () => {
     it('清空全部归档：确认后调用 purge 并刷新列表', async () => {
       const confirmSpy = vi.spyOn(confirmService, 'confirmDialog').mockResolvedValue(true);
       const refresh = vi.fn();
+<<<<<<< HEAD
       const archived: Session[] = sessions.map((s) => ({ ...s, is_archived: true }));
       renderWithI18n(
         <ConversationsSection {...baseProps} sessions={archived} onRefreshSessions={refresh} />,
       );
       fireEvent.click(screen.getByTestId('toggle-archived'));
+=======
+      listMock.mockResolvedValue(sessions.map((s) => ({ ...s, is_archived: true })));
+      renderWithI18n(<ConversationsSection {...baseProps} onRefreshSessions={refresh} />);
+      fireEvent.click(screen.getByTestId('toggle-archived'));
+      await waitFor(() =>
+        expect(listMock).toHaveBeenCalledWith({ archived: true, limit: 100, offset: 0 }),
+      );
+      await screen.findAllByTestId('unarchive-session');
+>>>>>>> origin/main
       fireEvent.click(screen.getByTestId('purge-archived'));
       await waitFor(() => expect(purgeArchivedMock).toHaveBeenCalledTimes(1));
       expect(refresh).toHaveBeenCalled();
@@ -129,16 +149,128 @@ describe('ConversationsSection', () => {
 
     it('清空全部归档：取消确认则不调用 purge', async () => {
       const confirmSpy = vi.spyOn(confirmService, 'confirmDialog').mockResolvedValue(false);
+<<<<<<< HEAD
       const refresh = vi.fn();
       const archived: Session[] = sessions.map((s) => ({ ...s, is_archived: true }));
       renderWithI18n(
         <ConversationsSection {...baseProps} sessions={archived} onRefreshSessions={refresh} />,
       );
       fireEvent.click(screen.getByTestId('toggle-archived'));
+=======
+      listMock.mockResolvedValue(sessions.map((s) => ({ ...s, is_archived: true })));
+      renderWithI18n(<ConversationsSection {...baseProps} />);
+      fireEvent.click(screen.getByTestId('toggle-archived'));
+      await screen.findAllByTestId('unarchive-session');
+>>>>>>> origin/main
       fireEvent.click(screen.getByTestId('purge-archived'));
       expect(purgeArchivedMock).not.toHaveBeenCalled();
       confirmSpy.mockRestore();
     });
+<<<<<<< HEAD
+=======
+
+    it('归档视图按需拉取归档列表并显示恢复入口', async () => {
+      const archivedSessions: Session[] = [
+        { ...sessions[0], id: 'arch-1', title: '归档一', is_archived: true },
+      ];
+      listMock.mockResolvedValue(archivedSessions);
+      renderWithI18n(<ConversationsSection {...baseProps} />);
+
+      fireEvent.click(screen.getByTestId('toggle-archived'));
+
+      await waitFor(() =>
+        expect(listMock).toHaveBeenCalledWith({ archived: true, limit: 100, offset: 0 }),
+      );
+      expect(await screen.findByText('归档一')).toBeInTheDocument();
+      expect(screen.getByTestId('unarchive-session')).toBeInTheDocument();
+    });
+
+    it('恢复归档：调用 onUnarchiveSession 并从归档视图移除', async () => {
+      const archivedSessions: Session[] = [
+        { ...sessions[0], id: 'arch-1', title: '归档一', is_archived: true },
+      ];
+      listMock.mockResolvedValue(archivedSessions);
+      const onUnarchiveSession = vi.fn().mockResolvedValue(undefined);
+      renderWithI18n(
+        <ConversationsSection {...baseProps} onUnarchiveSession={onUnarchiveSession} />,
+      );
+
+      fireEvent.click(screen.getByTestId('toggle-archived'));
+      await screen.findByText('归档一');
+      fireEvent.click(screen.getByTestId('unarchive-session'));
+
+      await waitFor(() => expect(onUnarchiveSession).toHaveBeenCalledWith('arch-1'));
+      await waitFor(() => expect(screen.queryByText('归档一')).not.toBeInTheDocument());
+    });
+
+    it('归档视图删除会话后本地列表同步移除', async () => {
+      const archivedSessions: Session[] = [
+        { ...sessions[0], id: 'arch-1', title: '归档一', is_archived: true },
+      ];
+      listMock.mockResolvedValue(archivedSessions);
+      const onDelete = vi.fn();
+      renderWithI18n(<ConversationsSection {...baseProps} onDelete={onDelete} />);
+
+      fireEvent.click(screen.getByTestId('toggle-archived'));
+      await screen.findByText('归档一');
+
+      const del = screen.getByTestId('delete-session');
+      fireEvent.click(del);
+      fireEvent.click(del);
+
+      expect(onDelete).toHaveBeenCalledWith('arch-1');
+      await waitFor(() => expect(screen.queryByText('归档一')).not.toBeInTheDocument());
+    });
+  });
+
+  describe('手动归档与分页加载', () => {
+    it('默认视图归档按钮调用 onArchiveSession', async () => {
+      const onArchiveSession = vi.fn().mockResolvedValue(undefined);
+      renderWithI18n(<ConversationsSection {...baseProps} onArchiveSession={onArchiveSession} />);
+
+      fireEvent.click(screen.getAllByTestId('archive-session')[0]);
+
+      await waitFor(() => expect(onArchiveSession).toHaveBeenCalledWith('s1'));
+    });
+
+    it('滚动接近底部时请求下一页', () => {
+      const onLoadMoreSessions = vi.fn();
+      renderWithI18n(
+        <ConversationsSection
+          {...baseProps}
+          onLoadMoreSessions={onLoadMoreSessions}
+          sessionsHasMore
+        />,
+      );
+      const pane = screen.getByTestId('session-list-scroll');
+      Object.defineProperty(pane, 'scrollHeight', { value: 1000, configurable: true });
+      Object.defineProperty(pane, 'clientHeight', { value: 300, configurable: true });
+      Object.defineProperty(pane, 'scrollTop', { value: 800, configurable: true });
+
+      fireEvent.scroll(pane);
+
+      expect(onLoadMoreSessions).toHaveBeenCalledTimes(1);
+    });
+
+    it('未滚动到底部时不请求下一页', () => {
+      const onLoadMoreSessions = vi.fn();
+      renderWithI18n(
+        <ConversationsSection
+          {...baseProps}
+          onLoadMoreSessions={onLoadMoreSessions}
+          sessionsHasMore
+        />,
+      );
+      const pane = screen.getByTestId('session-list-scroll');
+      Object.defineProperty(pane, 'scrollHeight', { value: 1000, configurable: true });
+      Object.defineProperty(pane, 'clientHeight', { value: 300, configurable: true });
+      Object.defineProperty(pane, 'scrollTop', { value: 100, configurable: true });
+
+      fireEvent.scroll(pane);
+
+      expect(onLoadMoreSessions).not.toHaveBeenCalled();
+    });
+>>>>>>> origin/main
   });
 
   it("U4': filters sessions by title (case-insensitive) and shows no-match", () => {

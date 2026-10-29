@@ -153,7 +153,7 @@ def _resolve_knowledge_scope(raw: str) -> Any:
 
 
 def _search_knowledge(
-    query: str, limit: int, project_path: Optional[Any] = None
+    query: str, limit: int, project_path: Any | None = None
 ) -> List[Dict[str, Any]]:
     """知识库文档搜索（复用 wiki search_wiki）。无活跃项目时返回空。
 

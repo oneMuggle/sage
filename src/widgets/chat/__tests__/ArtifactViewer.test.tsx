@@ -13,6 +13,7 @@ vi.mock('../ShikiCodeBlock', () => ({
     <pre data-testid="shiki-block">{children}</pre>
   ),
 }));
+<<<<<<< HEAD
 // 2026-10-29: docx-preview 动态 import 在 jsdom 下不执行真实解析——用桩
 // 组件断言"默认 Word 版式 + 可切换文本视图"的接线。
 vi.mock('../../../features/office/DocxBlobPreview', () => ({
@@ -20,6 +21,8 @@ vi.mock('../../../features/office/DocxBlobPreview', () => ({
     <div data-testid="docx-blob-preview" data-src={dataUrl} />
   ),
 }));
+=======
+>>>>>>> origin/main
 
 import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
 import { useArtifactContent } from '../../../features/artifacts/useArtifactContent';
@@ -191,6 +194,7 @@ describe('ArtifactViewer — right-panel R2 批次 A: 预览升级', () => {
     fireEvent.click(screen.getByTestId('artifact-csv-copy'));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('a,b\r\n1,2\r\n');
   });
+<<<<<<< HEAD
 
   it('docx 默认渲染 Word 版式，可切换为文本视图', () => {
     vi.mocked(useArtifactContent).mockReturnValue({
@@ -253,4 +257,6 @@ describe('ArtifactViewer — right-panel R2 批次 A: 预览升级', () => {
     expect(screen.queryByTestId('docx-blob-preview')).not.toBeInTheDocument();
     expect(screen.queryByTestId('artifact-docx-view-toggle')).not.toBeInTheDocument();
   });
+=======
+>>>>>>> origin/main
 });

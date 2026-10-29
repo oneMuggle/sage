@@ -140,8 +140,11 @@ class BrowserSession:
     persistent: bool = False
     #: 持久 profile 目录名（persistent=True 时记录；AU3 自动刷新按名复用）
     profile_name: str = ""
+<<<<<<< HEAD
     #: 浏览器类型（Chrome/Edge/Chromium/Firefox）
     browser_type: BrowserType = BrowserType.CHROME
+=======
+>>>>>>> origin/main
 
     def is_alive(self) -> bool:
         return self.process.poll() is None
@@ -521,6 +524,7 @@ def launch_browser(
             _remove_dir_with_retry(user_data_dir)
         raise BrowserCDPError(f"浏览器启动失败: {exc}")
 
+<<<<<<< HEAD
     try:
         port, ws_path = launcher.wait_for_cdp(process, user_data_dir, timeout=LAUNCH_TIMEOUT_SECONDS)
         session = BrowserSession(
@@ -534,6 +538,44 @@ def launch_browser(
             persistent=persistent,
             profile_name=str(profile_name or "") if persistent else "",
             browser_type=cap.browser_type,
+=======
+    deadline = time.monotonic() + LAUNCH_TIMEOUT_SECONDS
+    port_file = Path(user_data_dir) / "DevToolsActivePort"
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            if not persistent:
+                _kill_process_tree(process)
+                _remove_dir_with_retry(user_data_dir)
+            raise BrowserCDPError(
+                f"浏览器进程提前退出（退出码 {process.returncode}）——可尝试 headless=false 排查"
+            )
+        if port_file.is_file():
+            try:
+                lines = port_file.read_text(encoding="ascii").splitlines()
+                port, ws_path = int(lines[0]), lines[1].strip()
+            except (OSError, ValueError, IndexError):
+                time.sleep(_LAUNCH_POLL_INTERVAL)
+                continue
+            if port > 0 and ws_path.startswith("/devtools/"):
+                session = BrowserSession(
+                    browser_id=browser_id or uuid.uuid4().hex[:12],
+                    executable=executable,
+                    headless=headless,
+                    user_data_dir=user_data_dir,
+                    process=process,
+                    port=port,
+                    ws_path=ws_path,
+                    persistent=persistent,
+                    profile_name=str(profile_name or "") if persistent else "",
+                )
+                get_browser_manager().register(session)
+                return session
+        time.sleep(_LAUNCH_POLL_INTERVAL)
+
+    _terminate_session(
+        BrowserSession(
+            "", executable, headless, user_data_dir, process, 0, "", persistent=persistent
+>>>>>>> origin/main
         )
         get_browser_manager().register(session)
         return session
@@ -970,12 +1012,18 @@ __all__ = [
     "BrowserLauncher",
     "BrowserSession",
     "BrowserSessionManager",
+<<<<<<< HEAD
     "BrowserType",
     "CdpEventPump",
     "CDP_TIMEOUT_SECONDS",
     "ChromeLauncher",
     "EPHEMERAL_PREFIX",
     "FirefoxLauncher",
+=======
+    "CdpEventPump",
+    "CDP_TIMEOUT_SECONDS",
+    "EPHEMERAL_PREFIX",
+>>>>>>> origin/main
     "LAUNCH_TIMEOUT_SECONDS",
     "MAX_BROWSER_SESSIONS",
     "RESERVED_BROWSER_ID",
@@ -984,10 +1032,18 @@ __all__ = [
     "apply_stealth",
     "browser_downloads_root",
     "cdp_command",
+<<<<<<< HEAD
     "discover_and_select",
+=======
+    "cdp_persistent_session",
+>>>>>>> origin/main
     "discover_browser_executable",
     "ensure_page_target",
     "get_browser_manager",
     "launch_browser",
+<<<<<<< HEAD
+=======
+    "PersistentCDPSession",
+>>>>>>> origin/main
     "sweep_stale_browser_dirs",
 ]

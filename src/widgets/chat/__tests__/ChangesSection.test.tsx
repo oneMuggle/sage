@@ -3,20 +3,30 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+<<<<<<< HEAD
 import type {
   WorkspaceChanges,
   WorkspaceCheckpoint,
   WorkspaceDiff,
   WorkspaceFileContent,
 } from '../../../shared/api/workspaceApi';
+=======
+import type { WorkspaceChanges, WorkspaceCheckpoint, WorkspaceDiff, WorkspaceFileContent } from '../../../shared/api/workspaceApi';
+>>>>>>> origin/main
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
 import { ChangesSection } from '../changes/ChangesSection';
 
 const mockGetChanges = vi.fn<() => Promise<WorkspaceChanges>>();
 const mockGetChangeDiff = vi.fn<(path?: string, staged?: boolean) => Promise<WorkspaceDiff>>();
+<<<<<<< HEAD
 const mockGetChangeFile =
   vi.fn<(sessionId: string, path: string) => Promise<WorkspaceFileContent>>();
+=======
+const mockGetChangeFile = vi.fn<
+  (sessionId: string, path: string) => Promise<WorkspaceFileContent>
+>();
+>>>>>>> origin/main
 const mockRevertChanges =
   vi.fn<
     (
@@ -146,6 +156,7 @@ describe('ChangesSection', () => {
     });
   });
 
+<<<<<<< HEAD
   it('非 git 工作区渲染专用空态（不显示干净态/报错）', async () => {
     mockGetChanges.mockResolvedValue({
       branch: '',
@@ -169,6 +180,8 @@ describe('ChangesSection', () => {
     expect(screen.queryByTestId('review-all-button')).not.toBeInTheDocument();
   });
 
+=======
+>>>>>>> origin/main
   it('right-panel R5: 渲染 +/- 行数徽章（0/null 不渲染）', async () => {
     mockGetChanges.mockResolvedValue(sampleChanges);
     render(

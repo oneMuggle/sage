@@ -149,7 +149,10 @@ def _record_artifact_safely(
     *,
     session_id: Optional[str] = None,
     tool_call_id: Optional[str] = None,
+<<<<<<< HEAD
     conn: Any = None,
+=======
+>>>>>>> origin/main
 ) -> None:
     """写入成功后记录产物;任何失败都静默,不影响写入结果。"""
     try:
@@ -167,7 +170,10 @@ def _record_artifact_safely(
             tool_call_id=tool_call_id,
             workspace_path=workspace_path,
             format_spec=format_spec,
+<<<<<<< HEAD
             conn=conn,
+=======
+>>>>>>> origin/main
         )
     except Exception:  # noqa: BLE001 — 记录产物失败绝不阻断写入
         logger.debug("write_file: 记录产物失败", exc_info=True)

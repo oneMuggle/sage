@@ -7,11 +7,17 @@
 
 from __future__ import annotations
 
+<<<<<<< HEAD
 import contextlib
 import json
 import logging
 import os
 import tempfile
+=======
+import json
+import logging
+import os
+>>>>>>> origin/main
 import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -108,6 +114,7 @@ class OAuthTokenStore:
 
     def _write_all(self, records: Dict[str, dict]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+<<<<<<< HEAD
         fd, temp_path = tempfile.mkstemp(prefix=".mcp_oauth_tokens_", dir=str(self.path.parent))
         try:
             Path(temp_path).chmod(0o600)
@@ -122,6 +129,11 @@ class OAuthTokenStore:
             with contextlib.suppress(OSError):
                 os.unlink(temp_path)
             raise
+=======
+        self.path.write_text(
+            json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+>>>>>>> origin/main
 
     def load(self, server_name: str) -> Optional[TokenRecord]:
         return TokenRecord.from_dict(self._read_all().get(server_name))

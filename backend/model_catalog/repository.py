@@ -1,7 +1,16 @@
+<<<<<<< HEAD
 """SQLite catalog storage using the application's connection and shared RLock."""
 import json
 from contextlib import contextmanager
 from typing import List, Optional
+=======
+from typing import List, Optional
+
+"""SQLite catalog storage using the application's connection and shared RLock."""
+
+import json
+from contextlib import contextmanager
+>>>>>>> origin/main
 from uuid import uuid4
 
 from backend.data.database import _SQLITE_LOCK, Database

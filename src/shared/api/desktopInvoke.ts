@@ -90,7 +90,14 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
   }
 }
 
+<<<<<<< HEAD
 export function formatDesktopInvokeSummary(cmd: string, args?: Record<string, unknown>): string {
+=======
+export function formatDesktopInvokeSummary(
+  cmd: string,
+  args?: Record<string, unknown>,
+): string {
+>>>>>>> origin/main
   /* v8 ignore start */
   const safeCmd = cmd.trim() || 'unknown';
   const argCount = args ? Object.keys(args).length : 0;
@@ -99,7 +106,14 @@ export function formatDesktopInvokeSummary(cmd: string, args?: Record<string, un
   return `desktop-invoke: ${safeCmd} · ${argCount} args · mode=${mode}`;
 }
 
+<<<<<<< HEAD
 export function formatDesktopInvokeJson(cmd: string, args?: Record<string, unknown>): string {
+=======
+export function formatDesktopInvokeJson(
+  cmd: string,
+  args?: Record<string, unknown>,
+): string {
+>>>>>>> origin/main
   /* v8 ignore start */
   const safeCmd = cmd.trim() || 'unknown';
   const argKeys = args ? Object.keys(args).sort() : [];
@@ -130,9 +144,13 @@ export function auditDesktopInvokeGovernance(): {
     module: 'src/shared/api/desktopInvoke.ts',
     phase: 'P175',
     domain: 'shared-api',
+<<<<<<< HEAD
     supportsReadinessGateAndConnectionNormalization: summary.includes(
       'desktop-invoke: get_sessions',
     ),
+=======
+    supportsReadinessGateAndConnectionNormalization: summary.includes('desktop-invoke: get_sessions'),
+>>>>>>> origin/main
     compliant: summary.includes('1 args'),
   };
 }

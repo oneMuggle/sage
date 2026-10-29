@@ -56,6 +56,7 @@ describe('changesListStore', () => {
     );
   });
 
+<<<<<<< HEAD
   it('非 git 仓库错误转为友好文案（旧后端兜底）', async () => {
     mockGetChanges.mockRejectedValue(
       new Error('Backend GET cmd=workspace_get_changes → 502: fatal: not a git repository'),
@@ -76,6 +77,8 @@ describe('changesListStore', () => {
     expect(useChangesListStore.getState().errors['s1']).toBe('未找到 git，变更追踪不可用');
   });
 
+=======
+>>>>>>> origin/main
   it('clear 移除指定会话', async () => {
     mockGetChanges.mockResolvedValue(sample);
     await useChangesListStore.getState().fetch('s1');

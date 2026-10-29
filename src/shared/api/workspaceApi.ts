@@ -53,8 +53,11 @@ interface WorkspaceChangesWire {
     index_status: string;
     worktree_status: string;
     path: string;
+<<<<<<< HEAD
     /** 2026-10-29: rename/copy 旧路径（porcelain -z 第二段） */
     old_path?: string | null;
+=======
+>>>>>>> origin/main
     /** right-panel R5: +/- 行数；二进制/统计失败为 null（旧宿主可能缺省） */
     insertions?: number | null;
     deletions?: number | null;
@@ -74,8 +77,11 @@ export interface WorkspaceChanges {
     indexStatus: string;
     worktreeStatus: string;
     path: string;
+<<<<<<< HEAD
     /** 2026-10-29: rename/copy 旧路径（仅展示用） */
     oldPath?: string | null;
+=======
+>>>>>>> origin/main
     /** right-panel R5: +/- 行数（numstat）；二进制/统计失败为 null */
     insertions: number | null;
     deletions: number | null;
@@ -252,7 +258,10 @@ export const workspaceApi = {
           indexStatus: entry.index_status,
           worktreeStatus: entry.worktree_status,
           path: entry.path,
+<<<<<<< HEAD
           oldPath: entry.old_path ?? null,
+=======
+>>>>>>> origin/main
           insertions: entry.insertions ?? null,
           deletions: entry.deletions ?? null,
         })),

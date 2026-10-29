@@ -88,6 +88,7 @@ from backend.tools.memory_tool import MemorySearchTool
 from backend.tools.network_config import load_network_policy
 from backend.tools.registry import ToolRegistry
 from backend.tools.web_tool import WebFetchTool, WebSearchTool
+from backend.utils.py_compat import TIMEOUT_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +191,11 @@ def _cleanup_subagent_workspace(root: Optional[Path]) -> None:
         logger.warning("Failed to clean sub-agent workspace %s", root, exc_info=True)
 
 
+<<<<<<< HEAD
 def _subagent_policy(policy: Optional[ToolPolicy]) -> Tuple[ToolPolicy, Optional[Path]]:
+=======
+def _subagent_policy(policy: Optional[ToolPolicy]) -> Tuple[ToolPolicy, Path | None]:
+>>>>>>> origin/main
     parent = policy or ToolPolicy()
     owned_root = None if parent.workspace_root else _new_subagent_workspace()
     root = parent.workspace_root or str(owned_root)
@@ -556,7 +561,11 @@ class AgentTool(BaseTool):
                 ),
                 timeout=SUBAGENT_TIMEOUT_S,
             )
+<<<<<<< HEAD
         except (TimeoutError, asyncio.TimeoutError):  # noqa: UP041 — py3.8/3.10: asyncio.TimeoutError 不等于 builtin TimeoutError; 3.11+ 同一类
+=======
+        except TIMEOUT_ERRORS:  # py38: wait_for 抛 asyncio.TimeoutError（与本型不同类）
+>>>>>>> origin/main
             # wait_for 已取消内层协程 —— 子 run_loop 在取消点收口,
             # 不存在遗弃线程（异步通路的 L12 根修）。
             logger.warning(

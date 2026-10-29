@@ -559,6 +559,7 @@ def test_refresh_toc_managed_path_attaches_summary_without_path_leak(
     assert result.success is True
     assert result.content["toc_refresh"] == {"ok": True, "toc_count": 2}
     assert "path" not in result.content  # 不回显受管绝对路径
+<<<<<<< HEAD
 
 
 def test_managed_create_records_artifact(bound_db):
@@ -588,3 +589,5 @@ def test_managed_create_records_artifact(bound_db):
     assert artifact.workspace_path == str(workspace)
     assert "numbering" in (artifact.format_spec or "")
     assert Path(artifact.path).is_file()
+=======
+>>>>>>> origin/main

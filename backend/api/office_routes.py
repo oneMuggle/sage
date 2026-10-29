@@ -20,7 +20,11 @@ from __future__ import annotations
 import base64
 import logging
 from pathlib import Path
+<<<<<<< HEAD
 from typing import TYPE_CHECKING, Optional
+=======
+from typing import TYPE_CHECKING
+>>>>>>> origin/main
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -225,7 +229,7 @@ def _persist_read_summary(
     *,
     file_path: Path,
     canonical_workspace: str,
-    original_filename: Optional[str],
+    original_filename: str | None,
 ) -> None:
     """Persist a read result's summary into the office_documents table.
 

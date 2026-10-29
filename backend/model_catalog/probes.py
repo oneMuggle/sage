@@ -119,14 +119,22 @@ def _parse_ollama(response: dict) -> ProbeValues:
     )
 
 
+<<<<<<< HEAD
 def _positive_int(value) -> Optional[int]:
+=======
+def _positive_int(value) -> int | None:
+>>>>>>> origin/main
     """Return value if it is a strict positive int, else None."""
     if not isinstance(value, int) or isinstance(value, bool):
         return None
     return value if value > 0 else None
 
 
+<<<<<<< HEAD
 def _nonblank_str(value) -> Optional[str]:
+=======
+def _nonblank_str(value) -> str | None:
+>>>>>>> origin/main
     """Return value if it is a non-blank string, else None."""
     if not isinstance(value, str) or not value.strip():
         return None
@@ -224,7 +232,11 @@ async def _probe_ollama(
         await client.aclose()
 
 
+<<<<<<< HEAD
 def load_endpoint_config(endpoint_id: str) -> Optional[dict]:
+=======
+def load_endpoint_config(endpoint_id: str) -> dict | None:
+>>>>>>> origin/main
     """Read endpoint configuration from settings storage.
 
     Returns the endpoint dict or None if not found.

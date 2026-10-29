@@ -45,6 +45,7 @@ export interface DocxNativePreviewProps {
   revision?: string | null;
 }
 
+<<<<<<< HEAD
 /**
  * 2026-10-29: 共享渲染入口 —— docx 原文 data URL → Word 版式 DOM。
  *
@@ -76,6 +77,8 @@ export async function renderDocxDataUrl(container: HTMLElement, dataUrl: string)
   sanitizeRenderedDocx(container);
 }
 
+=======
+>>>>>>> origin/main
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatDocxPreviewMetaMarkdown(params: {
   workspacePath: string;
@@ -134,10 +137,37 @@ export function DocxNativePreview({
         if (!res.ok || !res.data_url) {
           throw new Error(res.error ?? 'docx data unavailable');
         }
+<<<<<<< HEAD
         if (cancelled) return;
         const container = containerRef.current;
         if (!container) return;
         await renderDocxDataUrl(container, res.data_url);
+=======
+        const [{ renderAsync }, dompurifyModule] = await Promise.all([
+          import('docx-preview'),
+          import('dompurify'),
+        ]);
+        const dompurify = dompurifyModule.default;
+        if (cancelled) return;
+        const response = await fetch(res.data_url);
+        const blob = await response.blob();
+        const container = containerRef.current;
+        if (!container) return;
+        container.innerHTML = '';
+        await renderAsync(blob, container, undefined, {
+          inWrapper: false,
+          ignoreLastRenderedPageBreak: false,
+          experimental: false,
+        });
+        // 渲染树消毒：docx-preview 产出受信度有限的 DOM，过一道白名单级
+        // 清理再上屏（去脚本/iframe/javascript: 链接/内联事件）。
+        container.innerHTML = dompurify.sanitize(container.innerHTML, {
+          ADD_ATTR: ['target'],
+          FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'link', 'meta'],
+          FORBID_ATTR: ['srcset'],
+        });
+        sanitizeRenderedDocx(container);
+>>>>>>> origin/main
         if (!cancelled) setState('ok');
       } catch {
         if (!cancelled) setState('error');
@@ -162,7 +192,12 @@ export function DocxNativePreview({
 
   return (
     <div className="relative bg-white" data-testid="docx-native-preview" data-state={state}>
+<<<<<<< HEAD
       <div className="flex items-center justify-end gap-1 px-3 pt-2 text-ui-2xs"></div>
+=======
+      <div className="flex items-center justify-end gap-1 px-3 pt-2 text-ui-2xs">
+      </div>
+>>>>>>> origin/main
       {state === 'loading' && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/80">
           <span

@@ -24,11 +24,19 @@ from backend.hooks.runner import (
     run_event_hooks_sync,
 )
 
+<<<<<<< HEAD
 pytestmark = pytest.mark.unit
+=======
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(sys.platform == "win32", reason="hooks shell 引用在 Windows cmd.exe 下不兼容（产品缺口）"),
+]
+>>>>>>> origin/main
 
 PY = sys.executable
 
 
+<<<<<<< HEAD
 def _hook_code(code: str) -> str:
     """把一段 Python 代码包成跨平台的 hook 命令。
 
@@ -50,6 +58,8 @@ def _hook_json(payload: dict) -> str:
     lit = repr(payload)
     return _hook_code(f"import json; print(json.dumps({lit}))")
 
+=======
+>>>>>>> origin/main
 def _cfg(command: str, event: str, matcher: str = "*", timeout: float = 5.0) -> HookConfig:
     return HookConfig(event=event, command=command, matcher=matcher, timeout_seconds=timeout)
 
@@ -137,7 +147,13 @@ def test_build_error_payload_attempt_count_only_when_retried():
 
 def test_sync_bridge_runs_hook_without_running_loop():
     """无运行中的事件循环 → 同步桥接正常执行钩子。"""
+<<<<<<< HEAD
     deny_cmd = _hook_json({"decision": "deny", "reason": "blocked"})
+=======
+    deny_cmd = (
+        f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny", "reason": "blocked"}}))'"""
+    )
+>>>>>>> origin/main
     hooks = [_cfg(deny_cmd, "session_start")]
     payload = build_session_payload("session_start", "s1")
     outcome = run_event_hooks_sync(hooks, "session_start", "", payload)
@@ -154,7 +170,11 @@ def test_sync_bridge_is_noop_inside_running_loop():
     """已有运行中的循环 → 不阻塞, 降级 no-op (fail-open)。"""
 
     async def _inner():
+<<<<<<< HEAD
         deny_cmd = _hook_json({"decision": "deny"})
+=======
+        deny_cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny"}}))'"""
+>>>>>>> origin/main
         hooks = [_cfg(deny_cmd, "session_start")]
         return run_event_hooks_sync(
             hooks, "session_start", "", build_session_payload("session_start", "s")
@@ -171,7 +191,11 @@ def test_sync_bridge_is_noop_inside_running_loop():
 @pytest.mark.asyncio()
 async def test_lifecycle_hook_does_not_fire_for_tool_events():
     """session_start 钩子不应对 pre_tool_use 生效 (事件名精确匹配)。"""
+<<<<<<< HEAD
     deny_cmd = _hook_json({"decision": "deny"})
+=======
+    deny_cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny"}}))'"""
+>>>>>>> origin/main
     hooks = [_cfg(deny_cmd, "session_start")]
     outcome = await run_event_hooks(
         hooks, "pre_tool_use", "bash", {"hook_event_name": "pre_tool_use"}
@@ -182,7 +206,11 @@ async def test_lifecycle_hook_does_not_fire_for_tool_events():
 @pytest.mark.asyncio()
 async def test_error_hook_matches_tool_name():
     """error_occurred 钩子的 matcher 可针对特定工具。"""
+<<<<<<< HEAD
     deny_cmd = _hook_json({"decision": "deny"})
+=======
+    deny_cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny"}}))'"""
+>>>>>>> origin/main
     hooks = [_cfg(deny_cmd, "error_occurred", matcher="bash")]
     matched = await run_event_hooks(hooks, "error_occurred", "bash", {})
     assert matched.denied
@@ -199,7 +227,11 @@ async def test_agent_error_hook_skipped_when_not_error():
     from backend.core.legacy.agent import SageAgent
 
     agent = SageAgent(bare=True)
+<<<<<<< HEAD
     deny_cmd = _hook_json({"decision": "deny"})
+=======
+    deny_cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny"}}))'"""
+>>>>>>> origin/main
     hooks = [_cfg(deny_cmd, "error_occurred")]
     # 不抛异常即通过 —— 内部不触发钩子
     await agent._maybe_fire_error_hook(hooks, "bash", "ok output", False)

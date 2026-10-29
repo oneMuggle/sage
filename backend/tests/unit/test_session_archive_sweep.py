@@ -71,6 +71,49 @@ class TestArchiveStale:
         assert repo.get(sid).is_archived is False
 
 
+<<<<<<< HEAD
+=======
+class TestListNodeFilter:
+    """``SessionRepository.list(archived=...)`` —— 侧栏默认视图/归档视图。"""
+
+    def test_default_excludes_archived(self, repo, setup_test_db):
+        active_id = ensure_session(repo.db, "s-active", "活跃会话")
+        archived_id = ensure_session(repo.db, "s-archived", "归档会话")
+        repo.archive(archived_id)
+
+        ids = [s.id for s in repo.list()]
+        assert active_id in ids
+        assert archived_id not in ids
+
+    def test_archived_true_returns_only_archived(self, repo, setup_test_db):
+        active_id = ensure_session(repo.db, "s-active2", "活跃会话")
+        archived_id = ensure_session(repo.db, "s-archived2", "归档会话")
+        repo.archive(archived_id)
+
+        ids = [s.id for s in repo.list(archived=True)]
+        assert ids == [archived_id]
+        assert active_id not in ids
+
+    def test_archived_false_keeps_default_behavior(self, repo, setup_test_db):
+        active_id = ensure_session(repo.db, "s-active3", "活跃会话")
+        archived_id = ensure_session(repo.db, "s-archived3", "归档会话")
+        repo.archive(archived_id)
+
+        assert [s.id for s in repo.list(archived=False)] == [active_id]
+
+    def test_archived_list_paginates(self, repo, setup_test_db):
+        ids = [ensure_session(repo.db, f"s-arch-page-{i}", f"归档-{i}") for i in range(3)]
+        for sid in ids:
+            repo.archive(sid)
+
+        first = repo.list(limit=2, offset=0, archived=True)
+        second = repo.list(limit=2, offset=2, archived=True)
+        assert len(first) == 2
+        assert len(second) == 1
+        assert {s.id for s in first}.isdisjoint({s.id for s in second})
+
+
+>>>>>>> origin/main
 class TestPurgeArchived:
     def test_purges_archived_sessions_with_messages(self, repo, setup_test_db):
         msg_repo = MessageRepository()

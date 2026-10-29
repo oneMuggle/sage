@@ -219,6 +219,7 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
         <div className="space-y-3 px-3 pb-3">
           <h3 className="text-sm font-semibold text-text">模型参数</h3>
           <SettingRow
+<<<<<<< HEAD
             anchor="title_model"
             label="会话标题模型"
             desc="生成会话标题时使用的模型（选填）。留空则沿用对话模型；专用小模型通常更快更省"
@@ -231,6 +232,8 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
             />
           </SettingRow>
           <SettingRow
+=======
+>>>>>>> origin/main
             anchor="max_context"
             label="最大上下文长度"
             desc="单次对话发送给模型的最大 token 数；自动模式下此值不生效"
@@ -440,6 +443,7 @@ function ChatEndpointReadOnly({ endpointName }: ChatEndpointReadOnlyProps) {
   );
 }
 
+<<<<<<< HEAD
 interface TitleModelSelectorProps {
   groupedModels: GroupedModel[];
   chatEndpointId: string | null;
@@ -487,6 +491,8 @@ function TitleModelSelector({
   );
 }
 
+=======
+>>>>>>> origin/main
 interface ModelSelectorProps {
   label: string;
   desc: string;

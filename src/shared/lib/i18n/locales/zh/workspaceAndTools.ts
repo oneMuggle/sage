@@ -353,6 +353,17 @@ export const zhWorkspaceAndTools = {
   'session.export_md': '导出为 Markdown',
   'session.pin': '置顶会话',
   'session.unpin': '取消置顶',
+<<<<<<< HEAD
+=======
+  // ─── 手动归档 / 恢复（侧栏会话条目） ──────
+  'session.archive': '归档会话',
+  'session.unarchive': '恢复归档',
+  'session.archive_failed': '归档操作失败：{message}',
+  'session.archived_toast': '会话已归档',
+  'session.unarchived_toast': '会话已恢复',
+  'session.archive_disabled_running': '运行中或挂起的会话不能归档',
+  'session.auto_archived': '已自动归档 {count} 个会话',
+>>>>>>> origin/main
   'chat.regenerate': '重新生成',
   'chat.regenerate_forked': '已从原问题分叉新会话并重新生成',
   'session.export_html_exporting': '正在导出…',
@@ -392,7 +403,10 @@ export const zhWorkspaceAndTools = {
   // ─── U4' 会话管理收尾 (对标增强第五轮批次 A) ─────
   'session.rename': '重命名会话',
   'session.rename_failed': '重命名失败：{message}',
+<<<<<<< HEAD
   'session.title_generating': '✨ 生成标题中…',
+=======
+>>>>>>> origin/main
   'sidebar.search_sessions': '搜索会话',
   'sidebar.no_match': '无匹配会话',
 

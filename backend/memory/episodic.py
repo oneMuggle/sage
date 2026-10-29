@@ -169,10 +169,13 @@ class EpisodicMemory:
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
         memory_type: str = "conversation",
+<<<<<<< HEAD
         source_turn_id: Optional[str] = None,
         source_message_id: Optional[str] = None,
         memory_category: Optional[str] = None,
         summary: Optional[str] = None,
+=======
+>>>>>>> origin/main
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
         supersedes_id: Optional[str] = None,
@@ -186,6 +189,7 @@ class EpisodicMemory:
             metadata: 额外元数据
             session_id: 关联的会话 ID
             memory_type: 记忆类型
+<<<<<<< HEAD
             source_turn_id: 该事实来源的 turn ID（Task 4 / Gap A 可追溯性）
             source_message_id: 该事实来源的 message ID（Task 4 / Gap A）
             memory_category: 事实分类（user_pref / project_fact / task_summary /
@@ -193,6 +197,8 @@ class EpisodicMemory:
             summary: 可选的摘要覆盖；省略时由 content 自动生成（向后兼容）。
                 ConsolidationPipeline.save_compressed 传入真实摘要，避免把
                 "对话摘要: ..." 前缀再包一层。
+=======
+>>>>>>> origin/main
             scope: 作用域 ('user'|'project'|'global')，None → 按会话
                 workspace 绑定自动判定（见 backend.memory.scope）
             project_key: 项目目录（scope='project' 时生效）
@@ -210,6 +216,16 @@ class EpisodicMemory:
         scope, project_key = memory_scope.finalize_scope(
             self.db, scope, project_key, session_id
         )
+<<<<<<< HEAD
+=======
+
+        # 处理标签：显式标签优先；缺省时从内容自动派生（缓解标签稀疏，
+        # 否则 TagCooccurrenceGraph 的共现矩阵几乎没有边）
+        tag_list = normalize_tags(metadata.get("tags") if metadata else None)
+        if not tag_list:
+            tag_list = derive_tags(content)
+        tags = json.dumps(tag_list, ensure_ascii=False)
+>>>>>>> origin/main
 
         # 处理标签：显式标签优先；缺省时从内容自动派生（缓解标签稀疏，
         # 否则 TagCooccurrenceGraph 的共现矩阵几乎没有边）
@@ -226,9 +242,14 @@ class EpisodicMemory:
             """
             INSERT INTO memories_episodic
             (id, content, summary, session_id, memory_type, importance, tags,
+<<<<<<< HEAD
              created_at, is_valid, scope, project_key, supersedes_id,
              source_turn_id, source_message_id, memory_category)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+=======
+             created_at, is_valid, scope, project_key, supersedes_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+>>>>>>> origin/main
         """,
             (
                 memory_id,
@@ -242,9 +263,12 @@ class EpisodicMemory:
                 scope,
                 project_key,
                 supersedes_id,
+<<<<<<< HEAD
                 source_turn_id,
                 source_message_id,
                 memory_category,
+=======
+>>>>>>> origin/main
             ),
         )
 

@@ -26,10 +26,24 @@ export const sessionApi = {
     });
   },
 
-  async list(): Promise<Session[]> {
+  /**
+   * 会话列表（分页）。
+   *
+   * - 缺省参数保持既有行为：第一页 100 条、只含未归档；
+   * - `archived: true` 只返回已归档会话（侧栏归档视图）。
+   */
+  async list(opts?: { limit?: number; offset?: number; archived?: boolean }): Promise<Session[]> {
     return withRetry(async () => {
       try {
-        return await invoke<Session[]>('list_sessions');
+        // 只下发显式参数；无参调用保持 invoke('list_sessions') 的既有形状。
+        const args: Record<string, unknown> = {};
+        if (opts?.limit != null) args.limit = opts.limit;
+        if (opts?.offset != null) args.offset = opts.offset;
+        if (opts?.archived != null) args.archived = opts.archived;
+        if (Object.keys(args).length === 0) {
+          return await invoke<Session[]>('list_sessions');
+        }
+        return await invoke<Session[]>('list_sessions', args);
       } catch (error) {
         throw handleApiError(error);
       }

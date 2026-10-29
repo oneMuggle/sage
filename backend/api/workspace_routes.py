@@ -82,8 +82,11 @@ class WorkspaceChangeEntryModel(BaseModel):
     index_status: str
     worktree_status: str
     path: str
+<<<<<<< HEAD
     #: 2026-10-29: rename/copy 的旧路径（porcelain -z 第二段；仅展示用）
     old_path: Optional[str] = None
+=======
+>>>>>>> origin/main
     # right-panel R5: 每文件 +/- 行数（numstat / 未跟踪文件行数统计）；
     # 二进制 / 统计失败为 None，前端不渲染徽章
     insertions: Optional[int] = None
@@ -349,6 +352,7 @@ def get_workspace_changes(session_id: str) -> WorkspaceChangesResponse:
     （``is_git_repo=False``）；git 命令异常仍 → 502。
     """
     from backend.domain.tool_policy import ToolPolicy
+<<<<<<< HEAD
     from backend.tools.git_tool import (
         GitStatusTool,
         collect_change_stats,
@@ -356,6 +360,9 @@ def get_workspace_changes(session_id: str) -> WorkspaceChangesResponse:
         git_repo_status,
         to_workspace_relative_path,
     )
+=======
+    from backend.tools.git_tool import GitStatusTool, collect_change_stats
+>>>>>>> origin/main
 
     root = _bound_workspace_or_raise(_connection(), session_id)
     repo_state = git_repo_status(root)
@@ -376,6 +383,7 @@ def get_workspace_changes(session_id: str) -> WorkspaceChangesResponse:
         raise _error(502, "git_error", result.error or "git 命令失败")
     content = result.content if isinstance(result.content, dict) else {}
     raw_changes = [entry for entry in content.get("changes", []) if isinstance(entry, dict)]
+<<<<<<< HEAD
     # 2026-10-29: 工作区可能是仓库子目录 —— porcelain/numstat 路径相对仓库
     # 根，这里统一转成工作区相对路径，并过滤工作区外的变更。
     repo_root = git_repo_root(root) or root
@@ -402,21 +410,45 @@ def get_workspace_changes(session_id: str) -> WorkspaceChangesResponse:
                 **_stats_for_path(change_stats, repo_path),
             )
         )
+=======
+    # right-panel R5: 每文件 +/- 行数（失败降级为 None，不影响清单本身）
+    change_stats = collect_change_stats(root, raw_changes)
+>>>>>>> origin/main
     return WorkspaceChangesResponse(
         branch=str(content.get("branch", "")),
         upstream=str(content.get("upstream", "")),
         ahead=int(content.get("ahead", 0)),
         behind=int(content.get("behind", 0)),
+<<<<<<< HEAD
         # 过滤工作区外变更后，清单为空即视为干净（子目录工作区场景）
         clean=not model_entries,
         changes=model_entries,
         is_git_repo=True,
+=======
+        clean=bool(content.get("clean", False)),
+        changes=[
+            WorkspaceChangeEntryModel(
+                index_status=str(entry.get("index_status", "")),
+                worktree_status=str(entry.get("worktree_status", "")),
+                path=str(entry.get("path", "")),
+                **_stats_for_path(change_stats, str(entry.get("path", ""))),
+            )
+            for entry in raw_changes
+        ],
+>>>>>>> origin/main
     )
 
 
 def _stats_for_path(change_stats: dict, path: str) -> dict:
+<<<<<<< HEAD
     """按 status path 取 +/- 行数（rename 已由 numstat 解析器映射到新路径）。"""
     stats = change_stats.get(path)
+=======
+    """按 status path 取 +/- 行数；重命名条目（"old -> new"）回落匹配新段。"""
+    stats = change_stats.get(path)
+    if stats is None and " -> " in path:
+        stats = change_stats.get(path.split(" -> ")[-1])
+>>>>>>> origin/main
     if stats is None:
         return {}
     return {"insertions": stats.get("insertions"), "deletions": stats.get("deletions")}

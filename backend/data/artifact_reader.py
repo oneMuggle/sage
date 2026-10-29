@@ -22,9 +22,12 @@ MAX_OFFICE_BYTES = 20_000_000
 MAX_SHEET_PREVIEW_ROWS = 300
 #: docx 预览段落数截断（与 /office 页 PARAGRAPH_RENDER_CAP 对齐）
 MAX_DOCX_PREVIEW_PARAGRAPHS = 300
+<<<<<<< HEAD
 
 #: 2026-10-29: docx 原文 data URL 的 MIME（聊天产物走 docx-preview 原生渲染）
 _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+=======
+>>>>>>> origin/main
 
 _IMAGE_MIME = {
     ".png": "image/png",
@@ -243,6 +246,7 @@ def read_office(artifact_id: str, kind: str, max_bytes: int = 0) -> dict:
         return {"ok": False, "error": f"文件解析失败: {exc}"}
 
     result = {"ok": True, "kind": kind, "html": html}
+<<<<<<< HEAD
     if kind == "docx":
         # 2026-10-29: 原文 data URL —— 前端 docx-preview 直接解析二进制，
         # 呈现 Word 版式（页宽/字体/表格/图片），而不是段落 HTML 的阅读视图。
@@ -252,6 +256,8 @@ def read_office(artifact_id: str, kind: str, max_bytes: int = 0) -> dict:
         except OSError:
             # 读盘失败不阻断结构化/HTML 降级路径
             pass
+=======
+>>>>>>> origin/main
     if structured is not None:
         result["structured"] = structured
     return result

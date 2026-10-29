@@ -409,6 +409,7 @@ class TestAuthorizeOrchestration:
                 wait_for_callback=evil_callback,
             )
         assert not [p for p in calls["post"] if p[0].endswith("/token")]
+<<<<<<< HEAD
 
 
 class TestEndpointUrlValidation:
@@ -538,3 +539,5 @@ class TestResourceParameterConsistency:
         )
         assert self._resource_of_authorization_url(calls["auth_url"]) == "https://mcp.example.com/mcp"
         assert self._resource_of_form_body(calls["token_body"]) == "https://mcp.example.com/mcp"
+=======
+>>>>>>> origin/main

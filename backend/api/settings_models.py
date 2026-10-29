@@ -158,10 +158,13 @@ class SettingsPayload(BaseModel):
     # 0 = 不限；正值单位秒；UI 改后立即生效（函数式读取）
     llmTotalTimeoutS: Optional[int] = None  # noqa: N815
 
+<<<<<<< HEAD
     # ----- 会话标题专用模型 (2026-10-27) -----
     # 模型 id 字符串；留空表示回退到聊天模型。后端 title_generator 读取。
     titleModelId: Optional[str] = None  # noqa: N815
 
+=======
+>>>>>>> origin/main
     # ----- LLM 代理上游超时 (2026-10-28) -----
     # 秒；代理转发上游模型时的 httpx read 超时。有效范围 5–1800，默认 60。
     llmProxyTimeoutS: Optional[int] = None  # noqa: N815
@@ -230,10 +233,13 @@ class LegacySettingsPayload(BaseModel):
     # 0 = 不限；正值单位秒；UI 改后立即生效（函数式读取）
     llmTotalTimeoutS: Optional[int] = None  # noqa: N815
 
+<<<<<<< HEAD
     # ----- 会话标题专用模型 (2026-10-27) -----
     # 模型 id 字符串；留空表示回退到聊天模型。后端 title_generator 读取。
     titleModelId: Optional[str] = None  # noqa: N815
 
+=======
+>>>>>>> origin/main
     # ----- LLM 代理上游超时 (2026-10-28) -----
     # 秒；代理转发上游模型时的 httpx read 超时。有效范围 5–1800，默认 60。
     llmProxyTimeoutS: Optional[int] = None  # noqa: N815

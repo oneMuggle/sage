@@ -92,6 +92,7 @@ describe('Sidebar — 两段式布局', () => {
     expect(screen.getAllByRole('link', { name: '设置' })).toHaveLength(1);
   });
 
+<<<<<<< HEAD
   it('内容列是唯一滚动容器（nav 上只有一个 overflow-y-auto）', () => {
     const { container } = renderSidebar();
     const scrollables = Array.from(container.querySelectorAll('.overflow-y-auto')).filter(
@@ -99,6 +100,30 @@ describe('Sidebar — 两段式布局', () => {
     );
     expect(scrollables).toHaveLength(1);
     expect(scrollables[0]).toBe(screen.getByTestId('sidebar-scroll'));
+=======
+  it('滚动结构：会话列表独立滚动面板，nav 仅作兜底', () => {
+    useStore.setState({
+      sessions: [
+        {
+          id: 's1',
+          title: '会话一',
+          created_at: 1,
+          updated_at: 1,
+          last_message_at: null,
+          message_count: 0,
+          is_pinned: false,
+        },
+      ],
+    });
+    const { container } = renderSidebar();
+
+    // 方案 B：会话分区自己滚动；nav 不再是「唯一」滚动容器，只作极小窗口兜底
+    expect(screen.getByTestId('sidebar-scroll').className).toContain('overflow-y-auto');
+    expect(screen.getByTestId('session-list-scroll').className).toContain('overflow-y-auto');
+
+    // 项目分区保留 30vh 上限 + 内层滚动（此前只钳高度不滚动会把列表裁掉）
+    expect(container.querySelector('[data-section-key="project"] .overflow-y-auto')).not.toBeNull();
+>>>>>>> origin/main
   });
 
   it('rail 入口带 sr-only 文本标签（图标按钮也可被文本查询命中）', () => {

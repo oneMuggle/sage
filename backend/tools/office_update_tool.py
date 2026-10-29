@@ -286,6 +286,7 @@ class OfficeUpdateTool(BaseTool):
                     self_check.get("summary"),
                     conn=conn,
                 )
+<<<<<<< HEAD
         # 2026-10-29: 受管 update 刷新已有 artifact（首次编辑才新建）——
         # 使产物面板的大小/时间跟随文档编辑，且不产生重复行。
         if isinstance(edited_id, str):
@@ -306,6 +307,8 @@ class OfficeUpdateTool(BaseTool):
                         session_id=ctx.session_id,
                         conn=conn,
                     )
+=======
+>>>>>>> origin/main
         if do_refresh and doc_type_value == "word":
             doc_info = self._managed_doc_info(ctx, str(edited_id))
             if doc_info is not None:

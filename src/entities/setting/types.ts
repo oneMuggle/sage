@@ -215,9 +215,12 @@ export interface AppSettings {
   // 函数式读取，改后下一次上游请求即生效。范围 5–1800，见 config_tool 校验。
   llmProxyTimeoutS: number; // 60
 
+<<<<<<< HEAD
   // 2026-10-27: 会话标题生成专用模型 id（顶层扁平键，与 chatModel 同风格）。
   // 留空表示回退到聊天模型；后端 title_generator.load_title_llm_config 读取。
   titleModelId: string;
+=======
+>>>>>>> origin/main
   // Task 9 (2026-10-28) 智能路由模式。缺省 = manual（保持现有行为不变）。
   routing: RoutingSettings;
 
@@ -341,8 +344,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // PROXY_TIMEOUT_SECONDS 一致）。
   llmProxyTimeoutS: 60,
 
+<<<<<<< HEAD
   // 2026-10-27: 会话标题专用模型默认留空 —— 回退到聊天模型。
   titleModelId: '',
+=======
+>>>>>>> origin/main
   // Task 9 (2026-10-28) 智能路由模式。默认 manual（保持与引入前行为一致）。
   routing: { mode: 'manual' },
 

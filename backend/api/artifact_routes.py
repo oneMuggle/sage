@@ -30,6 +30,7 @@ def list_artifacts(session_id: str) -> dict:
 
 
 @router.get("/{artifact_id}/content")
+@with_db_lock
 def get_artifact_content(session_id: str, artifact_id: str) -> dict:
     """读取产物内容:文本返回 content,图片/PDF 返回 data_url,office 返回 HTML。
 

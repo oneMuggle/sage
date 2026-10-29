@@ -80,6 +80,7 @@ describe('invoke 错误漏斗', () => {
     expect(err.message).toContain('404: Not Found');
   });
 
+<<<<<<< HEAD
   it('message 含 "（HTTP 409）" 时同样恢复 status_code', async () => {
     stubApi(() => Promise.reject(new Error('当前工作区不是 Git 仓库（HTTP 409）')));
     const err = (await invoke('cmd_a').catch((e) => e)) as Error & {
@@ -89,6 +90,8 @@ describe('invoke 错误漏斗', () => {
     expect(err.message).toContain('当前工作区不是 Git 仓库');
   });
 
+=======
+>>>>>>> origin/main
   it('后端未就绪标记原样透传（不被断网文案改写）', async () => {
     const msg = '后端服务尚未就绪，正在启动…';
     stubApi(() => Promise.reject(new Error(msg)));

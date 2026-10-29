@@ -78,6 +78,9 @@ from backend.tools.executor import (
 if TYPE_CHECKING:  # 仅类型标注用，避免 core → ports 的运行期导入边
     from backend.ports.llm import ModelCapabilities
 
+if TYPE_CHECKING:  # 仅类型标注用，避免 core → ports 的运行期导入边
+    from backend.ports.llm import ModelCapabilities
+
 #: M2b 审查加固: 连续未应答提问上限。超时软结果使循环继续, 若无此限,
 #: 被操纵/犯错的 LLM 可循环提问持续骚扰用户。超限后直接返回错误结果。
 #: 注意：实际值由 OrchSettings 动态配置驱动，此常量仅作为 fail-safe 默认。
@@ -1893,6 +1896,7 @@ class SageAgent:
                                 tool_p = self.tool_registry.get(tc.name)
                                 if tool_p is None:
                                     return f"[错误] 工具不存在: {tc.name}", True
+<<<<<<< HEAD
                                 # alpha.36 (Bug #1): 并发池分发前先过 required 校验
                                 # （与 hex InprocToolAdapter / 串行路径同 helper——共用
                                 # backend.tools.executor.validate_required_args），
@@ -1901,6 +1905,8 @@ class SageAgent:
                                 required_error = validate_required_args(tool_p, args_p)
                                 if required_error is not None:
                                     return required_error, True
+=======
+>>>>>>> origin/main
                                 result_p = tool_p.execute(**args_p)
                                 if hasattr(result_p, "success") and hasattr(result_p, "content"):
                                     if result_p.success:
@@ -2919,6 +2925,7 @@ class SageAgent:
         LLM 拿到的是 Python 异常堆栈而非友好错误。现在分发前校验
         required 字段,缺失则返回明确错误消息。
 
+<<<<<<< HEAD
         alpha.36 (Bug #1)：实现下沉到 ``backend.tools.executor.validate_required_args``
         公共 helper（hex InprocToolAdapter 与并行只读批次同样用），避免两份
         校验逻辑漂移。SageAgent 内部调用路径（execute_tool / _await_tool_execution）
@@ -2928,6 +2935,28 @@ class SageAgent:
             None 表示通过;否则返回错误消息字符串(调用方应直接返回失败)。
         """
         return validate_required_args(tool, dict(parameters))
+=======
+        Returns:
+            None 表示通过;否则返回错误消息字符串(调用方应直接返回失败)。
+        """
+        schema = getattr(tool, "schema", None)
+        if schema is None:
+            return None
+        params_schema = getattr(schema, "parameters", None)
+        if not isinstance(params_schema, dict):
+            return None
+        required = params_schema.get("required")
+        if not required:
+            return None
+        # required 应该是字符串列表
+        if not isinstance(required, (list, tuple)):  # noqa: UP038 — py38 运行时 isinstance 不支持 PEP604 union
+            return None
+        missing = [name for name in required if name not in parameters]
+        if not missing:
+            return None
+        names = ", ".join(missing)
+        return f"工具 {tool.name} 缺少必需参数: {names}"
+>>>>>>> origin/main
 
     def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """

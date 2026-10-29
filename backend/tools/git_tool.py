@@ -171,6 +171,7 @@ def _count_file_lines(file_path: str) -> Optional[int]:
     return lines
 
 
+<<<<<<< HEAD
 def _numstat_new_path(path_field: str) -> str:
     """numstat rename 字段 → 新路径（兼容 ``old => new`` 与 ``dir/{old => new}``）。"""
     if "=>" not in path_field:
@@ -187,6 +188,10 @@ def collect_change_stats(
     root: str,
     changes: List[Dict[str, str]],
     repo_root: Optional[str] = None,
+=======
+def collect_change_stats(
+    root: str, changes: List[Dict[str, str]]
+>>>>>>> origin/main
 ) -> Dict[str, Dict[str, Optional[int]]]:
     """变更清单 → 每文件插入/删除行数（GET /changes 的 +/- 徽章数据源）。
 
@@ -194,6 +199,7 @@ def collect_change_stats(
     合并口径，单次调用）；未跟踪文件（worktree_status='?'，numstat 看不到）
     退化为读文件行数，deletions 恒 0；二进制 / 超限 / 读取失败对应字段
     为 None。输出以 status 条目的 path 字符串为键，调用方按原样合并。
+<<<<<<< HEAD
 
     ``repo_root``：工作区是仓库子目录时，numstat/status 路径相对仓库根，
     读未跟踪文件需以仓库根拼接；缺省等于 ``root``。
@@ -204,6 +210,12 @@ def collect_change_stats(
     stdout, error = _run_git(
         ["-c", "core.quotepath=false", "diff", "HEAD", "--numstat"], root
     )
+=======
+    """
+    stats: Dict[str, Dict[str, Optional[int]]] = {}
+
+    stdout, error = _run_git(["diff", "HEAD", "--numstat"], root)
+>>>>>>> origin/main
     if error is None and stdout:
         for line in stdout.splitlines()[:GIT_NUMSTAT_MAX_ENTRIES]:
             parts = line.split("\t")
@@ -216,10 +228,17 @@ def collect_change_stats(
             }
             stats[path_field] = entry
             if "=>" in path_field:
+<<<<<<< HEAD
                 # rename 行（"{old => new}" 或 "old => new"）按新路径映射，
                 # 使 status 侧的 ``path`` 命中 +/- 徽章
                 new_part = _numstat_new_path(path_field)
                 if new_part and new_part != path_field:
+=======
+                # rename 行（"{old => new}" 或 "old => new"）按新旧两个形态各
+                # 映射一份，status 侧 "old -> new" 的新段即可命中
+                new_part = path_field.rsplit("=>", 1)[-1].strip("{} ")
+                if new_part:
+>>>>>>> origin/main
                     stats[new_part] = entry
 
     for change in changes:
@@ -228,7 +247,11 @@ def collect_change_stats(
         rel = change.get("path", "")
         if not rel or rel in stats:
             continue
+<<<<<<< HEAD
         stats[rel] = {"insertions": _count_file_lines(os.path.join(file_base, rel)), "deletions": 0}
+=======
+        stats[rel] = {"insertions": _count_file_lines(os.path.join(root, rel)), "deletions": 0}
+>>>>>>> origin/main
     return stats
 
 
@@ -240,6 +263,7 @@ def untracked_file_diff(root: str, path: str) -> Optional[Tuple[str, bool]]:
     仅当 path 确为未跟踪文件时生成；不存在 / 目录 / 二进制返回 None，
     超 64KiB 截断并置 truncated（口径同 GitDiffTool）。
     """
+<<<<<<< HEAD
     stdout, error = _run_git(
         ["-c", "core.quotepath=false", "status", "--porcelain=v1", "-z", "--", path],
         root,
@@ -247,6 +271,12 @@ def untracked_file_diff(root: str, path: str) -> Optional[Tuple[str, bool]]:
     if error is not None:
         return None
     status_lines = [ln for ln in stdout.split("\0") if ln.strip()]
+=======
+    stdout, error = _run_git(["status", "--porcelain=v1", "--", path], root)
+    if error is not None:
+        return None
+    status_lines = [ln for ln in stdout.splitlines() if ln.strip()]
+>>>>>>> origin/main
     if not status_lines or not status_lines[0].startswith("??"):
         return None
 
@@ -826,8 +856,11 @@ __all__ = [
     "GitStatusTool",
     "_valid_ref",
     "collect_change_stats",
+<<<<<<< HEAD
     "git_repo_root",
     "git_repo_status",
     "to_workspace_relative_path",
+=======
+>>>>>>> origin/main
     "untracked_file_diff",
 ]

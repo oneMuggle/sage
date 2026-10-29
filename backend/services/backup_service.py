@@ -19,7 +19,11 @@ import re
 import sqlite3
 import time
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Any, Dict, List, Optional, Tuple
+=======
+from typing import Any, Dict, List, Tuple
+>>>>>>> origin/main
 
 from backend.data.database import Database
 
