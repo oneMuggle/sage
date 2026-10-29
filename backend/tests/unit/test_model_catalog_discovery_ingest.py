@@ -135,6 +135,37 @@ def test_prefixed_catalog_id_matches_suffix_form(repo):
     ]
 
 
+def test_ambiguous_exact_is_not_rescued_by_suffix(repo):
+    """Bare id on two providers must stay unbound even if a prefixed twin exists.
+
+    回归: 精确层判定歧义后若继续落到后缀层, 会因「恰好多出一条 */gpt-4o」而
+    把一个明确歧义的 id 绑成自信的错误结果 (R34b: 歧义即跳过)。
+    """
+    _publish(repo, provider="openai", model_id="gpt-4o", pricing_scope="openai")
+    _publish(repo, provider="azure", model_id="gpt-4o", pricing_scope="azure")
+    _publish(repo, provider="openrouter", model_id="openrouter/gpt-4o", pricing_scope="openrouter")
+
+    stats = reconcile_endpoint_bindings(
+        repo, _settings({"id": "ep-1", "discoveredModels": _discovered("gpt-4o")})
+    )
+
+    assert stats == {"bound": 0, "skipped": 1}
+    assert _bindings(repo) == []
+
+
+def test_ambiguous_suffix_is_skipped(repo):
+    """Two prefixed catalog ids sharing a suffix must not be guessed either."""
+    _publish(repo, provider="meta-llama", model_id="meta-llama/llama-x", pricing_scope="a")
+    _publish(repo, provider="together", model_id="together/llama-x", pricing_scope="b")
+
+    stats = reconcile_endpoint_bindings(
+        repo, _settings({"id": "ep-1", "discoveredModels": _discovered("llama-x")})
+    )
+
+    assert stats == {"bound": 0, "skipped": 1}
+    assert _bindings(repo) == []
+
+
 def test_reconcile_is_idempotent_on_row_count(repo):
     """Running twice must not add binding rows (R34c acceptance is row count)."""
     _publish(repo)

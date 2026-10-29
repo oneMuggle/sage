@@ -244,4 +244,49 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     await waitFor(() => expect(props.updateSettings).toHaveBeenCalledTimes(2));
     expect(screen.queryByText(/backend offline/)).toBeNull();
   });
+
+  it('waits for settings to persist before reconciling discovered models', async () => {
+    // 后端是按已落盘的 discoveredModels 对账的: 提前调用只能读到上一轮列表,
+    // 首次发现时一条都没有。用可控 Promise 钉住「先保存、后对账」的顺序。
+    vi.mocked(bindDiscoveredModels).mockClear();
+    let releaseSave: (() => void) | undefined;
+    const saved = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    const props: EndpointsTabProps = {
+      ...makeProps({
+        endpoints: [
+          {
+            id: 'ep-1',
+            name: 'LM Studio',
+            baseUrl: 'http://127.0.0.1:1234/v1',
+            apiKey: '',
+            protocol: 'openai-compatible',
+            modelId: 'qwen2.5-7b-instruct',
+            localModelPath: '',
+            discoveredModels: [],
+            lastDiscoveredAt: 0,
+          },
+        ],
+      }),
+      updateSettings: vi.fn(() => saved),
+    };
+    vi.mocked(testEndpointConnection).mockResolvedValueOnce({
+      success: true,
+      message: 'mocked',
+      latency: 0,
+      discoveredModels: [{ id: 'gpt-4o', capabilities: ['chat'], endpointId: 'ep-1' }],
+    });
+    render(<EndpointsTab {...props} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '测试连接' }));
+
+    await waitFor(() => expect(vi.mocked(props.updateSettings)).toHaveBeenCalled());
+    expect(vi.mocked(bindDiscoveredModels)).not.toHaveBeenCalled();
+
+    releaseSave?.();
+    await waitFor(() =>
+      expect(vi.mocked(bindDiscoveredModels)).toHaveBeenCalledWith({ endpointId: 'ep-1' }),
+    );
+  });
 });

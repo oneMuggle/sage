@@ -41,8 +41,9 @@ class _CatalogIndex:
     def resolve(self, discovered_id: str) -> Optional[BindingTarget]:
         """Resolve a discovered id to exactly one catalog target, or ``None``.
 
-        Rule 1 (R34b): exact ``model_id == discovered_id`` with exactly one
-        distinct ``(provider, pricing_scope)`` pair.
+        Rule 1 (R34b): exact ``model_id == discovered_id``. It must resolve to
+        exactly one distinct ``(provider, pricing_scope)`` pair; an ambiguous
+        exact match is unbound outright and does not fall through to rule 2.
         Rule 2 (R34b): suffix form ``model_id`` ending with
         ``"/" + discovered_id`` with exactly one distinct
         ``(provider, pricing_scope, model_id)`` triple.
@@ -50,7 +51,11 @@ class _CatalogIndex:
         guessed from the endpoint id.
         """
         exact = self._exact.get(discovered_id)
-        if exact is not None and len(exact) == 1:
+        if exact is not None:
+            if len(exact) != 1:
+                # 精确层已判定歧义: 不能再到后缀层碰运气, 那会把一个明确
+                # 有多个 provider 的裸 id 绑到最后「恰好多出一条」的前缀条目上。
+                return None
             provider, pricing_scope = next(iter(exact))
             return (provider, discovered_id, pricing_scope)
 
