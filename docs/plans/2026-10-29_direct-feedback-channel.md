@@ -127,7 +127,12 @@ CREATE INDEX idx_fb_conv_remote ON feedback_conversations(remote_ticket_id);
 
 ### 4.1 客户端 → 转发脚本
 
-**Endpoint A：创建/更新会话**
+**Endpoint A：创建/更新会话 —— ⚠️ 最终未实现，已被 Endpoint B 吸收**
+
+> 实际实现里没有这个端点。客户端只调 Endpoint B，并在首条消息里附带
+> `title / app_version / os_info / conversation_created_at`；转发脚本首次见到某会话时
+> 用这些字段 `upsert_conversation` 并建工单，之后忽略。保留此段仅作为设计沿革记录。
+
 ```
 POST {managerUrl}/api/v1/feedback/conversations
 Authorization: Bearer {shared-secret}
@@ -166,27 +171,34 @@ Content-Type: application/json
   "role": "user",
   "body": "版本是 0.2.0，附截图",
   "media_ids": ["m-789"],
-  "created_at": 1730214100000
+  "created_at": 1730214100000,
+  "title": "导出 PDF 乱码",
+  "app_version": "0.2.0",
+  "os_info": "Windows 10",
+  "conversation_created_at": 1730214000000
 }
 
-Response 200: { "id": "msg-uuid-2", "received": true }
+Response 200: { "received": true }            # 新消息
+Response 200: { "received": true, "duplicate": true }   # 重发（按 id 幂等）
+```
+
+> 后四个字段是**会话元数据**：转发脚本首次见到该 `id` 时用它建会话与工单，已存在时忽略。
 ```
 
 **Endpoint C：拉取管理员回复**
 ```
 GET {managerUrl}/api/v1/feedback/conversations/{id}/messages?since=<epoch-ms>
 Authorization: Bearer {shared-secret}
+X-Client-Id: {installation-uuid}
 
-Response 200: {
-  "messages": [
-    {
-      "id": "admin-msg-1",
-      "role": "admin",
-      "body": "已复现，下周修复",
-      "created_at": 1730300000000
-    }
-  ]
-}
+Response 200: [                 # ← 裸 JSON 数组，不能包 {"messages": [...]}
+  {
+    "id": "admin-msg-1",
+    "role": "admin",
+    "body": "已复现，下周修复",
+    "created_at": 1730300000000
+  }
+]
 ```
 
 **Endpoint D：附件上传（raw binary）**
@@ -254,13 +266,23 @@ Response 200: { "status": "ok" }
 
 **目标**：管理员能一键启动转发脚本，反馈自动进 Jira/GitLab，回复自动回流客户端。
 
-- [ ] 2.1 `scripts/feedback_receiver.py`（单文件，零第三方依赖）
-- [ ] 2.2 SQLite 中继 + 附件目录
-- [ ] 2.3 Jira webhook 转发（解析 comment → role='admin'）
-- [ ] 2.4 GitLab webhook 转发
-- [ ] 2.5 SMTP 转发（邮件附件带截图）
-- [ ] 2.6 管理页：简单的 HTML 列表 + 详情（零依赖，Python 内置 jinja2 模板）
-- [ ] 2.7 部署文档（systemd / Windows 服务）
+- [x] 2.1 `scripts/feedback_receiver.py`（单文件，零第三方依赖）
+- [x] 2.2 SQLite 中继 + 附件目录（`conversations` / `messages` / `attachments` 三表 + `attachments/<media_id>`）
+- [x] 2.3 Jira 转发：出站建工单 / 追加评论；入站 `POST /api/v1/webhooks/jira` 解析 `comment_created` → `role='admin'`
+- [x] 2.4 GitLab 转发：出站建 issue / 追加 note；入站 `POST /api/v1/webhooks/gitlab` 解析 `object_kind=note`
+- [x] 2.5 SMTP 转发（`EmailMessage`，截图作为邮件附件；注意 `FEEDBACK_SMTP_TLS=1` 走 `SMTP_SSL` 而非 STARTTLS）
+- [x] 2.6 管理页：HTML 列表 + 详情 + 回复表单（零依赖，手写字符串拼装，未引入 jinja2）
+- [x] 2.7 部署文档：[`docs/technical/109-feedback-relay-deployment.md`](../technical/109-feedback-relay-deployment.md)（systemd / Windows 计划任务 / NSSM）
+- [x] 2.8 测试：`scripts/tests/test_feedback_receiver.py` 46 passed（含真 HTTP 闭环、webhook 回流、鉴权矩阵、路径穿越与 XSS 断言；CI 不跑 `scripts/tests`，需手动执行）
+
+**实现偏差（以代码为准）**
+
+| §4 设计 | 实际实现 | 原因 |
+|---|---|---|
+| Endpoint A `POST /conversations` 单独建会话 | **已取消**，改由 Endpoint B 首次收到消息时 `upsert_conversation` 建会话 | 客户端只调 B（`feedbackSyncer.ts:211` 把 `title/app_version/os_info/conversation_created_at` 随消息一起带上）；多一个端点等于多一套重试与幂等逻辑 |
+| Endpoint C 返回 `{"messages": [...]}` | **返回裸 JSON 数组** `[{...}]` | 客户端声明 `remoteGet<RemoteMessage[]>` 并直接 `.filter(...)`，包一层会运行时炸 |
+| 先转发再回 200 | **先落库再回 200**，转发在 daemon 线程 | 客户端 30s 超时；Jira/SMTP 慢会拖垮客户端重试循环 |
+| 附件随消息一起推 | 附件走独立 `POST .../attachments/{media_id}` | 与后端 `MediaStore` 的上传时序对齐，避免大 body 撑爆消息请求 |
 
 ### Phase 3：增强
 
@@ -287,4 +309,4 @@ Response 200: { "status": "ok" }
 | Phase 2（转发脚本） | 1-2 天 | 需管理员配合 |
 | Phase 3（增强） | 1 天 | 可选 |
 
-本会话目标：完成 Phase 1 核心骨架（建表 + 路由 + 前端 UI + 本地流转），Phase 2/3 留到下个会话。
+已完成：Phase 1（建表 + 路由 + 前端 UI + 本地流转）+ Phase 2（管理员侧转发脚本 + Jira/GitLab/SMTP 转发 + webhook 回流 + 管理页 + 部署文档）。Phase 3 增强项留待后续按需推进。
