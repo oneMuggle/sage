@@ -36,6 +36,14 @@ function friendlyError(errMsg: string): string | null {
   if (errMsg.includes('workspace_not_bound') || errMsg.includes('尚未绑定工作区')) {
     return '当前会话尚未绑定工作区，无法查看变更';
   }
+  // 2026-10-29: 非 git 仓库 / git 缺失兜底（新后端走 isGitRepo 空态，
+  // 这里覆盖旧后端与 git 二进制不可用场景，避免 IPC 原始报错直达 UI）
+  if (/not a git repository|not_a_git_repo/i.test(errMsg)) {
+    return '当前工作区不是 Git 仓库，无法追踪变更';
+  }
+  if (errMsg.includes('git 可执行文件不可用')) {
+    return '未找到 git，变更追踪不可用';
+  }
   return errMsg;
 }
 

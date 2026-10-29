@@ -13,9 +13,17 @@ vi.mock('../ShikiCodeBlock', () => ({
     <pre data-testid="shiki-block">{children}</pre>
   ),
 }));
+// 2026-10-29: docx-preview 动态 import 在 jsdom 下不执行真实解析——用桩
+// 组件断言"默认 Word 版式 + 可切换文本视图"的接线。
+vi.mock('../../../features/office/DocxBlobPreview', () => ({
+  DocxBlobPreview: ({ dataUrl }: { dataUrl: string }) => (
+    <div data-testid="docx-blob-preview" data-src={dataUrl} />
+  ),
+}));
 
 import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
 import { useArtifactContent } from '../../../features/artifacts/useArtifactContent';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { ArtifactViewer } from '../artifacts/ArtifactViewer';
 
 const sample: Artifact = {
@@ -182,5 +190,67 @@ describe('ArtifactViewer — right-panel R2 批次 A: 预览升级', () => {
     );
     fireEvent.click(screen.getByTestId('artifact-csv-copy'));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('a,b\r\n1,2\r\n');
+  });
+
+  it('docx 默认渲染 Word 版式，可切换为文本视图', () => {
+    vi.mocked(useArtifactContent).mockReturnValue({
+      content: {
+        ok: true,
+        kind: 'docx',
+        data_url:
+          'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,xxx',
+        structured: {
+          paragraphs: [{ text: '正文段落', style: 'Normal', level: 0 }],
+          tables: [],
+          images: 0,
+        } as never,
+      },
+      loading: false,
+      ...baseReturn,
+    });
+    render(
+      <I18nProvider>
+        <ArtifactViewer
+          artifact={{ ...sample, kind: 'docx', name: 'report.docx' }}
+          sessionId="sess_001"
+          onBack={() => {}}
+        />
+      </I18nProvider>,
+    );
+    expect(screen.getByTestId('docx-blob-preview')).toHaveAttribute(
+      'data-src',
+      expect.stringContaining('application/vnd.openxmlformats-officedocument'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /切换为文本视图/ }));
+    expect(screen.getByTestId('office-structured-preview')).toBeInTheDocument();
+    expect(screen.queryByTestId('docx-blob-preview')).not.toBeInTheDocument();
+  });
+
+  it('docx 无 data_url 时直接渲染结构化视图（旧后端降级）', () => {
+    vi.mocked(useArtifactContent).mockReturnValue({
+      content: {
+        ok: true,
+        kind: 'docx',
+        structured: {
+          paragraphs: [{ text: '正文段落', style: 'Normal', level: 0 }],
+          tables: [],
+          images: 0,
+        } as never,
+      },
+      loading: false,
+      ...baseReturn,
+    });
+    render(
+      <I18nProvider>
+        <ArtifactViewer
+          artifact={{ ...sample, kind: 'docx', name: 'legacy.docx' }}
+          sessionId="sess_001"
+          onBack={() => {}}
+        />
+      </I18nProvider>,
+    );
+    expect(screen.getByTestId('office-structured-preview')).toBeInTheDocument();
+    expect(screen.queryByTestId('docx-blob-preview')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('artifact-docx-view-toggle')).not.toBeInTheDocument();
   });
 });

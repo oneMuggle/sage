@@ -48,7 +48,7 @@ from backend.office.storage import document_path
 from backend.office.tool_service import OfficeToolService
 from backend.office.word import generate_docx, read_docx
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
-from backend.tools.context import current_tool_context
+from backend.tools.context import ToolExecutionContext, current_tool_context
 from backend.tools.file_tool import _record_artifact_safely
 
 #: doc_type 参数合法取值（与 models.OfficeDocType 对齐）
@@ -1386,6 +1386,9 @@ class OfficeCreateTool(BaseTool):
         if binding is None:
             return None
 
+        # 保留原始请求载荷 —— 下方 ``content`` 会被结果字典覆盖，
+        # format_spec 只能从这里读取。
+        request_content = content
         service = OfficeToolService()
         result = service.create(
             conn,
@@ -1422,7 +1425,49 @@ class OfficeCreateTool(BaseTool):
                     self_check.get("summary"),
                     conn=conn,
                 )
+            # 2026-10-29: 受管路径此前完全不落 artifact —— 绑定工作区的会话
+            # 生成文档后产物面板永远为空。落库不向 LLM 回显绝对路径。
+            OfficeCreateTool._record_managed_artifact(
+                conn, ctx, binding, doc_id, content_input=request_content
+            )
         return ToolResult(success=True, content=content)
+
+    @staticmethod
+    def _record_managed_artifact(
+        conn: sqlite3.Connection,
+        ctx: ToolExecutionContext,
+        binding: Any,
+        doc_id: str,
+        *,
+        content_input: Any,
+    ) -> None:
+        """受管文档落 artifact 记录（best-effort；路径不回显给 LLM）。"""
+        try:
+            doc = get_document_in_workspace(conn, doc_id, binding.workspace_path)
+            if doc is None:
+                return
+            path = document_path(doc)
+            try:
+                size = path.stat().st_size
+            except OSError:
+                size = 0
+        except Exception:  # noqa: BLE001 — 记录失败绝不阻断生成结果
+            return
+        spec = None
+        # 受管服务只对 dict 形态透传 format_spec（字符串 content 被当作
+        # 单段落文本），因此这里只记录 dict 形态，避免记下未生效的版式。
+        if isinstance(content_input, dict) and isinstance(
+            content_input.get("format_spec"), dict
+        ):
+            spec = _json.dumps(content_input["format_spec"], ensure_ascii=False)
+        _record_artifact_safely(
+            str(path),
+            size,
+            binding.workspace_path,
+            spec,
+            session_id=ctx.session_id,
+            conn=conn,
+        )
 
     @staticmethod
     def _normalize_content(

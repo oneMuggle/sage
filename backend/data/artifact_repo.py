@@ -93,12 +93,18 @@ def record_artifact(
     tool_call_id: Optional[str] = None,
     workspace_path: Optional[str] = None,
     format_spec: Optional[str] = None,
+    conn: Any = None,
 ) -> str:
-    """记录一个新产物,返回 artifact id。落库成功后广播 artifact_created 事件（S7）。"""
+    """记录一个新产物,返回 artifact id。落库成功后广播 artifact_created 事件（S7）。
+
+    ``conn`` 可选：工具层已持有会话 DB 连接时传入，避免另开全局连接
+    （单测里全局库可能是真实 data/sage.db）。
+    """
     artifact_id = f"art_{uuid.uuid4().hex[:12]}"
     created_at = int(time.time() * 1000)
-    db = get_database()
-    conn = db.get_connection()
+    if conn is None:
+        db = get_database()
+        conn = db.get_connection()
     conn.execute(
         """
         INSERT INTO artifacts (
@@ -138,6 +144,56 @@ def record_artifact(
         }
     )
     return artifact_id
+
+
+def refresh_artifact(
+    session_id: str,
+    path: str,
+    size: int,
+    format_spec: Optional[str] = None,
+    conn: Any = None,
+) -> bool:
+    """刷新已有产物的大小/时间（受管 office_update 不新增重复行）。
+
+    按 ``(session_id, path)`` 取最近一条 artifact；命中则更新，未命中返回
+    False（调用方回退 ``record_artifact`` 新建）。刷新后广播
+    ``artifact_created``，前端沿用同一事件刷新列表。
+    """
+    if conn is None:
+        db = get_database()
+        conn = db.get_connection()
+    row = conn.execute(
+        "SELECT * FROM artifacts WHERE session_id = ? AND path = ? "
+        "ORDER BY created_at DESC, rowid DESC LIMIT 1",
+        (session_id, path),
+    ).fetchone()
+    if row is None:
+        return False
+    artifact = Artifact.from_row(row)
+    created_at = int(time.time() * 1000)
+    conn.execute(
+        "UPDATE artifacts SET size = ?, created_at = ?, "
+        "format_spec = COALESCE(?, format_spec) WHERE id = ?",
+        (size, created_at, format_spec, artifact.id),
+    )
+    conn.commit()
+    _emit_artifact_event(
+        {
+            "state": "artifact_created",
+            "session_id": session_id,
+            "artifact": {
+                "id": artifact.id,
+                "path": artifact.path,
+                "name": artifact.name,
+                "kind": artifact.kind,
+                "size": size,
+                "created_at": created_at,
+                "workspace_path": artifact.workspace_path,
+                "format_spec": format_spec or artifact.format_spec,
+            },
+        }
+    )
+    return True
 
 
 def list_artifacts(session_id: str) -> List[Artifact]:

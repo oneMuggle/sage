@@ -39,6 +39,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from backend.data import artifact_repo
 from backend.data.database import get_database
 from backend.domain.risk import RiskClass
 from backend.office.diff_preview import preview_update
@@ -54,6 +55,7 @@ from backend.office.storage import document_path
 from backend.office.tool_service import OfficeToolService
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.context import ToolExecutionContext, current_tool_context
+from backend.tools.file_tool import _record_artifact_safely
 from backend.tools.office_create_tool import build_self_check, managed_self_check
 
 #: file_path 模式允许的扩展名 → doc_type（防误把非 Office 文件喂给编辑器）
@@ -284,6 +286,26 @@ class OfficeUpdateTool(BaseTool):
                     self_check.get("summary"),
                     conn=conn,
                 )
+        # 2026-10-29: 受管 update 刷新已有 artifact（首次编辑才新建）——
+        # 使产物面板的大小/时间跟随文档编辑，且不产生重复行。
+        if isinstance(edited_id, str):
+            doc_info = self._managed_doc_info(ctx, edited_id)
+            if doc_info is not None:
+                managed_path, managed_ws, _dtype = doc_info
+                try:
+                    size = managed_path.stat().st_size
+                except OSError:
+                    size = 0
+                if not artifact_repo.refresh_artifact(
+                    ctx.session_id, str(managed_path), size, conn=conn
+                ):
+                    _record_artifact_safely(
+                        str(managed_path),
+                        size,
+                        str(managed_ws),
+                        session_id=ctx.session_id,
+                        conn=conn,
+                    )
         if do_refresh and doc_type_value == "word":
             doc_info = self._managed_doc_info(ctx, str(edited_id))
             if doc_info is not None:
