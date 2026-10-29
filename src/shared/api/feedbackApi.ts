@@ -56,6 +56,15 @@ export interface LogTailDto {
   lines: string[];
 }
 
+export interface FeedbackSearchHitDto {
+  conversation_id: string;
+  conversation_title: string;
+  message_id: string;
+  role: string;
+  body: string;
+  created_at: number;
+}
+
 export interface SyncStatsDto {
   submitted: number;
   received: number;
@@ -119,6 +128,14 @@ export async function updateConversationStatus(args: UpdateStatusArgs): Promise<
 
 export async function fetchLogTail(maxLines: number = 200): Promise<LogTailDto> {
   return invoke<LogTailDto>('feedback_log_tail', { maxLines });
+}
+
+/** 按关键词搜索消息正文。空查询由 backend 直接返回空数组。 */
+export async function searchMessages(
+  query: string,
+  limit: number = 50,
+): Promise<FeedbackSearchHitDto[]> {
+  return invoke<FeedbackSearchHitDto[]>('feedback_search', { q: query, limit });
 }
 
 /**

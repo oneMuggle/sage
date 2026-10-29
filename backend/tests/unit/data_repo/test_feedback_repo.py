@@ -194,3 +194,76 @@ def test_delete_conversation_cascades_messages(repo: FeedbackRepo) -> None:
     repo._conn.commit()
 
     assert repo.list_messages(conv.id) == []
+
+
+def test_search_messages_returns_hit_with_conversation_title(
+    repo: FeedbackRepo,
+) -> None:
+    conv = repo.create_conversation(title="导出 PDF 乱码")
+    msg = repo.add_message(conv.id, role="user", body="导出后中文变乱码，见截图")
+
+    hits = repo.search_messages("乱码")
+
+    assert len(hits) == 1
+    assert hits[0].conversation_id == conv.id
+    assert hits[0].conversation_title == "导出 PDF 乱码"
+    assert hits[0].message_id == msg.id
+    assert hits[0].role == "user"
+    assert hits[0].body == "导出后中文变乱码，见截图"
+    assert hits[0].created_at == msg.created_at
+
+
+def test_search_messages_is_ascii_case_insensitive(repo: FeedbackRepo) -> None:
+    conv = repo.create_conversation(title="大小写")
+    repo.add_message(conv.id, role="user", body="Export failed with PDFERR")
+
+    assert [h.body for h in repo.search_messages("pdferr")] == [
+        "Export failed with PDFERR"
+    ]
+
+
+def test_search_messages_no_match_returns_empty(repo: FeedbackRepo) -> None:
+    conv = repo.create_conversation(title="无命中")
+    repo.add_message(conv.id, role="user", body="完全无关的内容")
+
+    assert repo.search_messages("乱码") == []
+
+
+def test_search_messages_treats_percent_as_literal(repo: FeedbackRepo) -> None:
+    conv = repo.create_conversation(title="百分号")
+    repo.add_message(conv.id, role="user", body="进度 100% 完成")
+    repo.add_message(conv.id, role="user", body="没有百分号的正文")
+
+    assert [h.body for h in repo.search_messages("%")] == ["进度 100% 完成"]
+    assert [h.body for h in repo.search_messages("100%")] == ["进度 100% 完成"]
+
+
+def test_search_messages_treats_underscore_as_literal(repo: FeedbackRepo) -> None:
+    conv = repo.create_conversation(title="下划线")
+    repo.add_message(conv.id, role="user", body="a_b")
+    repo.add_message(conv.id, role="user", body="axb")
+
+    assert [h.body for h in repo.search_messages("a_b")] == ["a_b"]
+
+
+def test_search_messages_blank_query_returns_empty(repo: FeedbackRepo) -> None:
+    conv = repo.create_conversation(title="空查询")
+    repo.add_message(conv.id, role="user", body="任意内容")
+
+    assert repo.search_messages("") == []
+    assert repo.search_messages("   ") == []
+
+
+def test_search_messages_newest_first_and_limit(repo: FeedbackRepo) -> None:
+    conv = repo.create_conversation(title="排序")
+    repo.add_message(conv.id, role="user", body="needle 1")
+    repo.add_message(conv.id, role="user", body="needle 2")
+    repo.add_message(conv.id, role="user", body="needle 3")
+
+    assert [h.body for h in repo.search_messages("needle")] == [
+        "needle 3",
+        "needle 2",
+        "needle 1",
+    ]
+    limited = repo.search_messages("needle", limit=2)
+    assert [h.body for h in limited] == ["needle 3", "needle 2"]

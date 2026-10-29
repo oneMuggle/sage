@@ -226,3 +226,46 @@ def test_mark_message_synced_missing_404(routed) -> None:
     with pytest.raises(HTTPException) as ei:
         fr.mark_message_synced("ghost-message")
     assert ei.value.status_code == 404
+
+
+def test_search_returns_matches(routed) -> None:
+    conv = fr.create_conversation(
+        fr.CreateConversationRequest(title="导出 PDF 乱码", body="导出后中文变乱码")
+    )
+
+    hits = fr.search_messages(q="乱码")
+
+    assert len(hits) == 1
+    assert hits[0].conversation_id == conv.id
+    assert hits[0].conversation_title == "导出 PDF 乱码"
+    assert hits[0].body == "导出后中文变乱码"
+    assert hits[0].created_at > 0
+
+
+def test_search_blank_query_returns_empty(routed) -> None:
+    fr.create_conversation(fr.CreateConversationRequest(title="会话", body="内容"))
+
+    assert fr.search_messages(q="") == []
+    assert fr.search_messages(q="   ") == []
+
+
+def test_search_no_match_returns_empty(routed) -> None:
+    fr.create_conversation(fr.CreateConversationRequest(title="会话", body="无关内容"))
+
+    assert fr.search_messages(q="乱码") == []
+
+
+def test_search_rejects_overlong_query(routed) -> None:
+    with pytest.raises(HTTPException) as ei:
+        fr.search_messages(q="x" * (fr.MAX_SEARCH_QUERY_CHARS + 1))
+    assert ei.value.status_code == 422
+
+
+def test_search_clamps_limit(routed) -> None:
+    conv = fr.create_conversation(
+        fr.CreateConversationRequest(title="多条", body="needle one")
+    )
+    fr.append_message(conv.id, fr.AppendMessageRequest(body="needle two"))
+
+    assert len(fr.search_messages(q="needle", limit=0)) == 1
+    assert len(fr.search_messages(q="needle", limit=9999)) == 2

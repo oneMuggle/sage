@@ -31,6 +31,7 @@
     "feedback_conversations": { "method": "GET", "path": "/api/v1/feedback/conversations" },
     "feedback_log_tail": { "method": "GET", "path": "/api/v1/feedback/log-tail" },
     "feedback_message_append": { "method": "POST", "path": "/api/v1/feedback/conversations/{conversationId}/messages" },
+    "feedback_search": { "method": "GET", "path": "/api/v1/feedback/search" },
     "get_agent": { "method": "GET", "path": "/api/v1/agents/{id}" },
     "get_evolution_logs": { "method": "GET", "path": "/api/v1/evolution/logs" },
     "get_learned_preferences": { "method": "GET", "path": "/api/v1/memory/preferences/learned" },

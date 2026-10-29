@@ -61,6 +61,18 @@ class FeedbackAttachment:
     message_id: Optional[str] = None
 
 
+@dataclass
+class FeedbackSearchHit:
+    """One message matched by a full-text search, with its conversation title."""
+
+    conversation_id: str
+    conversation_title: str
+    message_id: str
+    role: str
+    body: str
+    created_at: int  # epoch ms
+
+
 def _conversation_from_row(row: sqlite3.Row) -> FeedbackConversation:
     return FeedbackConversation(
         id=row["id"],
@@ -101,6 +113,13 @@ def _attachment_from_row(row: sqlite3.Row) -> FeedbackAttachment:
         filename=row["filename"],
         mime_type=row["mime_type"],
         size_bytes=row["size_bytes"],
+    )
+
+
+def _escape_like(value: str) -> str:
+    """Escape ``\\``, ``%`` and ``_`` so a LIKE pattern matches them literally."""
+    return (
+        value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     )
 
 
@@ -307,6 +326,38 @@ class FeedbackRepo:
             (conversation_id,),
         )
         return [_message_from_row(r) for r in cursor.fetchall()]
+
+    def search_messages(self, query: str, limit: int = 50) -> List[FeedbackSearchHit]:
+        """Substring search over message bodies, newest match first.
+
+        LIKE metacharacters in ``query`` are escaped, so a ``%`` in the user's
+        search term matches a literal percent sign instead of "anything".
+        SQLite LIKE is ASCII case-insensitive; CJK terms match byte-for-byte.
+        """
+        needle = query.strip()
+        if not needle:
+            return []
+        pattern = f"%{_escape_like(needle)}%"
+        cursor = self._conn.execute(
+            "SELECT m.id AS message_id, m.conversation_id, m.role, m.body, "
+            "m.created_at, c.title AS conversation_title "
+            "FROM feedback_messages m "
+            "JOIN feedback_conversations c ON c.id = m.conversation_id "
+            "WHERE m.body LIKE ? ESCAPE '\\' "
+            "ORDER BY m.created_at DESC, m.rowid DESC LIMIT ?",
+            (pattern, limit),
+        )
+        return [
+            FeedbackSearchHit(
+                conversation_id=r["conversation_id"],
+                conversation_title=r["conversation_title"],
+                message_id=r["message_id"],
+                role=r["role"],
+                body=r["body"],
+                created_at=r["created_at"],
+            )
+            for r in cursor.fetchall()
+        ]
 
     # ==================== Attachments ====================
 

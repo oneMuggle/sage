@@ -13,6 +13,7 @@ vi.mock('../../../shared/api/feedbackApi', () => ({
   appendMessage: vi.fn(),
   updateConversationStatus: vi.fn(),
   fetchLogTail: vi.fn(),
+  searchMessages: vi.fn(),
   syncNow: vi.fn(),
   uploadAttachment: vi.fn(),
 }));
@@ -26,6 +27,7 @@ const mockList = vi.mocked(feedbackApi.listConversations);
 const mockGet = vi.mocked(feedbackApi.getConversation);
 const mockCreate = vi.mocked(feedbackApi.createConversation);
 const mockAppend = vi.mocked(feedbackApi.appendMessage);
+const mockSearch = vi.mocked(feedbackApi.searchMessages);
 const mockUpload = vi.mocked(feedbackApi.uploadAttachment);
 
 const conversation = {
@@ -65,6 +67,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   useFeedbackStore.getState().reset();
   mockList.mockResolvedValue([]);
+  mockSearch.mockResolvedValue([]);
 });
 
 describe('FeedbackHub', () => {
@@ -148,5 +151,37 @@ describe('FeedbackHub', () => {
 
     expect(await screen.findByText('截图不能超过 5MB')).toBeInTheDocument();
     expect(mockUpload).not.toHaveBeenCalled();
+  });
+
+  it('搜索命中后点击结果打开对应会话', async () => {
+    mockList.mockResolvedValue([conversation]);
+    mockGet.mockResolvedValue(detail);
+    mockSearch.mockResolvedValue([
+      {
+        conversation_id: 'c-0001',
+        conversation_title: '导出 PDF 乱码',
+        message_id: 'm-0001',
+        role: 'user',
+        body: '导出后中文变乱码',
+        created_at: 1730214000000,
+      },
+    ]);
+    renderHub();
+
+    fireEvent.change(screen.getByTestId('feedback-search'), { target: { value: '乱码' } });
+
+    fireEvent.click(await screen.findByTestId('feedback-search-hit-m-0001'));
+
+    expect(await screen.findByText('导出后中文变乱码')).toBeInTheDocument();
+    expect(mockSearch).toHaveBeenCalledWith('乱码');
+    expect(mockGet).toHaveBeenCalledWith('c-0001');
+  });
+
+  it('搜索无命中时显示空文案', async () => {
+    renderHub();
+
+    fireEvent.change(screen.getByTestId('feedback-search'), { target: { value: '找不到的词' } });
+
+    expect(await screen.findByText('没有匹配的消息')).toBeInTheDocument();
   });
 });

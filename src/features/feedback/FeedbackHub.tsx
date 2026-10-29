@@ -9,11 +9,16 @@
 import { clsx } from 'clsx';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 
-import { uploadAttachment } from '../../shared/api/feedbackApi';
+import {
+  searchMessages,
+  uploadAttachment,
+  type FeedbackSearchHitDto,
+} from '../../shared/api/feedbackApi';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { collectDiagnosticsSuffix } from './diagnosticsSuffix';
 import { useFeedbackStore } from './feedbackStore';
+import { buildSearchSnippet } from './searchSnippet';
 
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
@@ -88,6 +93,9 @@ export function FeedbackHub() {
   const [uploading, setUploading] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchHits, setSearchHits] = useState<FeedbackSearchHitDto[]>([]);
+  const [searching, setSearching] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<HTMLDivElement>(null);
 
@@ -95,10 +103,39 @@ export function FeedbackHub() {
     void refreshList();
   }, [refreshList]);
 
+  // 输入停顿 250ms 再查，避免每个按键打一次 backend。
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchHits([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void searchMessages(query)
+        .then((hits) => {
+          if (!cancelled) setSearchHits(hits);
+        })
+        .catch(() => {
+          if (!cancelled) setSearchHits([]);
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
   const detail = currentId ? detailById[currentId] : undefined;
   const messages = detail?.messages ?? [];
   const detailLoading = currentId ? loading.detail[currentId] : false;
   const detailError = currentId ? errors.detail[currentId] : null;
+  const searchActive = searchQuery.trim().length > 0;
 
   useEffect(() => {
     const el = streamRef.current;
@@ -226,39 +263,83 @@ export function FeedbackHub() {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {conversations.length === 0 ? (
-            <p className="px-3 py-3 text-ui-xs text-muted">
-              {loading.list ? t('feedback.hub.loading') : t('feedback.hub.list.empty')}
-            </p>
-          ) : (
-            conversations.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                data-testid={`feedback-conversation-${c.id}`}
-                onClick={() => {
-                  setCreating(false);
-                  void openConversation(c.id);
-                }}
-                className={clsx(
-                  'block w-full border-b border-border/60 px-3 py-2 text-left hover:bg-bg-hover',
-                  c.id === currentId && 'bg-bg-hover',
-                )}
-              >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="truncate text-ui-sm text-text">{c.title}</span>
-                  <span className="shrink-0 text-ui-2xs text-muted">
-                    {t(statusLabelKey(c.status))}
-                  </span>
-                </span>
-                <span className="mt-0.5 block text-ui-2xs text-muted">
-                  {formatTimestamp(c.last_activity_at)}
-                </span>
-              </button>
-            ))
-          )}
+        <div className="border-b border-border px-3 py-2">
+          <input
+            type="search"
+            data-testid="feedback-search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t('feedback.hub.search.placeholder')}
+            className="w-full rounded-md border border-border bg-bg px-2 py-1 text-ui-xs text-text placeholder:text-muted"
+          />
         </div>
+
+        {searchActive ? (
+          <div className="min-h-0 flex-1 overflow-y-auto" data-testid="feedback-search-results">
+            {searching ? (
+              <p className="px-3 py-3 text-ui-xs text-muted">
+                {t('feedback.hub.search.searching')}
+              </p>
+            ) : searchHits.length === 0 ? (
+              <p className="px-3 py-3 text-ui-xs text-muted">{t('feedback.hub.search.empty')}</p>
+            ) : (
+              searchHits.map((hit) => (
+                <button
+                  key={hit.message_id}
+                  type="button"
+                  data-testid={`feedback-search-hit-${hit.message_id}`}
+                  onClick={() => {
+                    setCreating(false);
+                    setSearchQuery('');
+                    void openConversation(hit.conversation_id);
+                  }}
+                  className="block w-full border-b border-border/60 px-3 py-2 text-left hover:bg-bg-hover"
+                >
+                  <span className="block truncate text-ui-sm text-text">
+                    {hit.conversation_title}
+                  </span>
+                  <span className="mt-0.5 block break-words text-ui-2xs text-muted">
+                    {buildSearchSnippet(hit.body, searchQuery)}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {conversations.length === 0 ? (
+              <p className="px-3 py-3 text-ui-xs text-muted">
+                {loading.list ? t('feedback.hub.loading') : t('feedback.hub.list.empty')}
+              </p>
+            ) : (
+              conversations.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  data-testid={`feedback-conversation-${c.id}`}
+                  onClick={() => {
+                    setCreating(false);
+                    void openConversation(c.id);
+                  }}
+                  className={clsx(
+                    'block w-full border-b border-border/60 px-3 py-2 text-left hover:bg-bg-hover',
+                    c.id === currentId && 'bg-bg-hover',
+                  )}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="truncate text-ui-sm text-text">{c.title}</span>
+                    <span className="shrink-0 text-ui-2xs text-muted">
+                      {t(statusLabelKey(c.status))}
+                    </span>
+                  </span>
+                  <span className="mt-0.5 block text-ui-2xs text-muted">
+                    {formatTimestamp(c.last_activity_at)}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
 
         {(errors.list || syncSummary) && (
           <p

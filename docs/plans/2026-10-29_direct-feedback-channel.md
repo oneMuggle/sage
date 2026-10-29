@@ -287,7 +287,7 @@ Response 200: { "status": "ok" }
 ### Phase 3：增强
 
 - [x] 3.1 消息通知（管理员回复时客户端托盘气泡）—— `FeedbackSyncer.pollReplies` 发现新回复后回调 `onRepliesReceived`，`electron/main.ts` 弹原生 Notification，点击聚焦窗口并跳 `/feedback`。只在新回复<b>成功落本地库</b>后触发；`Notification.isSupported()` 不可用时静默降级（Win7）。
-- [ ] 3.2 消息搜索
+- [x] 3.2 消息搜索 —— 后端新增 `GET /feedback/search`（`LIKE ... ESCAPE '\'` 子串匹配，转义 `%` / `_` / `\`，ASCII 大小写不敏感、CJK 逐字匹配；空查询返回空数组，查询词 ≤200 字，`limit` 夹在 1..200）。`FeedbackHub` 左栏新增搜索框，250ms 防抖，命中列表显示会话标题 + 摘要片段（`buildSearchSnippet` 把命中位置压进 80 字窗口），点击直达会话。
 - [ ] 3.3 会话标签（bug / feature / other）
 - [x] 3.4 自动附加诊断信息开关 —— 设置页新增「自动附带诊断日志」复选框（存在 `feedback.includeDiagnostics`，默认关），`FeedbackHub` 建会话时若开启则把最近 80 行日志（≤4000 字符）以代码块附在首条消息末尾；取日志失败静默降级为不附带。
 

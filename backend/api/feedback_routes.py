@@ -8,6 +8,7 @@
 - POST   /feedback/conversations/{id}/attachments 上传截图(raw bytes)
 - PATCH  /feedback/conversations/{id}/status     更新会话状态
 - POST   /feedback/messages/{id}/synced          标记消息已转发
+- GET    /feedback/search                        按关键词搜索消息正文
 - GET    /feedback/log-tail                      采集脱敏后的日志尾部
 
 受 LocalAuthMiddleware 保护(仅监听 127.0.0.1 + SAGE_LOCAL_AUTH_TOKEN)。
@@ -28,7 +29,12 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from backend.data.database import get_database
-from backend.data.feedback_repo import FeedbackConversation, FeedbackMessage, FeedbackRepo
+from backend.data.feedback_repo import (
+    FeedbackConversation,
+    FeedbackMessage,
+    FeedbackRepo,
+    FeedbackSearchHit,
+)
 from backend.services.feedback_log_tail import collect_log_tail
 from backend.services.multimodal.media_store import MEDIA_ROOT, MediaKind, MediaStore
 
@@ -38,6 +44,7 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 MAX_TITLE_CHARS = 200
 MAX_BODY_CHARS = 20000
+MAX_SEARCH_QUERY_CHARS = 200
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 VALID_ROLES = ("user", "admin")
 VALID_STATUSES = ("open", "resolved", "closed")
@@ -119,6 +126,15 @@ class MarkSyncedResponse(BaseModel):
     synced_at: int
 
 
+class FeedbackSearchHitDto(BaseModel):
+    conversation_id: str
+    conversation_title: str
+    message_id: str
+    role: str
+    body: str
+    created_at: int
+
+
 # ==================== Helpers ====================
 
 
@@ -163,6 +179,17 @@ def _to_message_dto(msg: FeedbackMessage) -> FeedbackMessageDto:
         media_ids=list(msg.media_ids),
         created_at=msg.created_at,
         synced_at=msg.synced_at,
+    )
+
+
+def _to_search_hit_dto(hit: FeedbackSearchHit) -> FeedbackSearchHitDto:
+    return FeedbackSearchHitDto(
+        conversation_id=hit.conversation_id,
+        conversation_title=hit.conversation_title,
+        message_id=hit.message_id,
+        role=hit.role,
+        body=hit.body,
+        created_at=hit.created_at,
     )
 
 
@@ -216,6 +243,20 @@ def list_conversations(limit: int = 50) -> List[FeedbackConversationDto]:
     """列出最近的反馈会话(按最后活动时间降序)。"""
     limit = max(1, min(limit, 200))
     return [_to_conversation_dto(c) for c in _repo().list_conversations(limit=limit)]
+
+
+@router.get("/search", response_model=List[FeedbackSearchHitDto])
+def search_messages(q: str = "", limit: int = 50) -> List[FeedbackSearchHitDto]:
+    """按关键词搜索消息正文(空查询返回空列表,不报错)。"""
+    query = q.strip()
+    if not query:
+        return []
+    if len(query) > MAX_SEARCH_QUERY_CHARS:
+        raise HTTPException(
+            status_code=422, detail=f"搜索词超过 {MAX_SEARCH_QUERY_CHARS} 字上限"
+        )
+    limit = max(1, min(limit, 200))
+    return [_to_search_hit_dto(hit) for hit in _repo().search_messages(query, limit=limit)]
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationDetailDto)

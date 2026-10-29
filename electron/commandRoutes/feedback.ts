@@ -64,6 +64,18 @@ export const feedbackRoutes: Record<string, CommandRoute> = {
     body: (a) => ({ status: a.status }),
   },
 
+  // 消息全文搜索（正文子串匹配，返回命中消息及其所属会话标题）
+  feedback_search: {
+    method: 'GET',
+    path: (a) => {
+      const q = String(a.q ?? '');
+      const limit = a.limit ?? 50;
+      return `/api/v1/feedback/search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(
+        String(limit),
+      )}`;
+    },
+  },
+
   // 日志尾部（诊断信息，附在反馈里方便管理员看）
   feedback_log_tail: {
     method: 'GET',
