@@ -242,12 +242,17 @@ class CatalogRepository:
             return ProbeRecord.model_validate_json(row[0]) if row else None
 
     @staticmethod
-    def _layer(patch, source, revision=0, price=None):
+    def _layer(patch, source, revision=0, price=None, tier=None):
+        # ``patch`` is an EndpointPatch (override/probe layers) or a
+        # CandidateModel (catalog layer).  Only CandidateModel carries a tier.
+        if tier is None:
+            tier = getattr(patch, "tier", None)
         return LayerValues(
             limits=ContextLimits(native=patch.native, service=getattr(patch, "service", None)),
             price=patch.price if price is None else price,
             source=source,
             revision=revision,
+            tier=tier,
         )
 
     def resolve(self, endpoint: EndpointKey) -> EffectiveModel:
@@ -266,7 +271,13 @@ class CatalogRepository:
                 "SELECT * FROM model_catalog_bindings " "WHERE endpoint_id=? AND model_id=?",
                 (endpoint.endpoint_id, endpoint.model_id),
             ).fetchone()
+            model_key = None
+            capabilities = None
             if binding:
+                model_key = ModelKey(
+                    provider=binding["provider"],
+                    model_id=binding["catalog_model_id"],
+                )
                 rows = conn.execute(
                     "SELECT * FROM model_catalog_entries WHERE provider=? AND model_id=? "
                     "ORDER BY (source='builtin') ASC, updated_at DESC, source, pricing_scope",
@@ -280,7 +291,50 @@ class CatalogRepository:
                         else Price()
                     )
                     layers.append(self._layer(record, record.source, row["revision"], price))
-            return resolve_layers(layers)
+                    # First catalog record carrying capability metadata wins,
+                    # mirroring the first-wins rule used for the other fields.
+                    if capabilities is None and record.capabilities is not None:
+                        capabilities = record.capabilities
+            effective = resolve_layers(layers)
+            return effective.model_copy(
+                update={"model_key": model_key, "capabilities": capabilities}
+            )
+
+    def list_effective_models(self, endpoint_id: Optional[str] = None) -> List[EffectiveModel]:
+        """Resolve bound endpoints into EffectiveModel instances.
+
+        Each distinct ``(endpoint_id, model_id)`` in ``model_catalog_bindings``
+        is resolved through :meth:`resolve`.  Results are de-duplicated by
+        ``model_key`` so a model bound to several endpoints appears once.
+
+        When *endpoint_id* is provided, only bindings for that endpoint are
+        considered; unscoped calls (``None``) return every bound model.
+        """
+        with _SQLITE_LOCK:
+            conn = self.db.get_connection()
+            if endpoint_id is None:
+                rows = conn.execute(
+                    "SELECT DISTINCT endpoint_id, model_id FROM model_catalog_bindings"
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT DISTINCT endpoint_id, model_id FROM model_catalog_bindings "
+                    "WHERE endpoint_id = ?",
+                    (endpoint_id,),
+                ).fetchall()
+        models: List[EffectiveModel] = []
+        seen = set()
+        for row in rows:
+            endpoint = EndpointKey(
+                endpoint_id=row["endpoint_id"], model_id=row["model_id"]
+            )
+            model = self.resolve(endpoint)
+            identity = model.model_key or (endpoint.endpoint_id, endpoint.model_id)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            models.append(model)
+        return models
 
     def stage(self, records: List[CandidateModel], source: str) -> str:
         records = [CandidateModel.model_validate(r) for r in records]
