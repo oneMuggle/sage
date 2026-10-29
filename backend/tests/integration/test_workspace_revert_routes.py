@@ -133,6 +133,101 @@ async def test_revert_untracked_requires_flag(
 
 
 @pytest.mark.asyncio()
+async def test_revert_unicode_paths(
+    client: httpx.AsyncClient, bound_session: str, git_workspace: Path
+) -> None:
+    """中文/空格路径：撤销必须命中真实文件（porcelain -z 回归）。"""
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=git_workspace, check=True, capture_output=True)
+
+    tracked = git_workspace / "报告 文件.md"
+    tracked.write_text("v1\n", encoding="utf-8")
+    git("add", "报告 文件.md")
+    git("commit", "-m", "add unicode")
+    tracked.write_text("v2\n", encoding="utf-8")
+
+    response = await client.post(
+        f"/api/v1/sessions/{bound_session}/workspace/changes/revert",
+        json={"paths": ["报告 文件.md"]},
+    )
+    assert response.status_code == 200
+    assert response.json()["reverted"] == ["报告 文件.md"]
+    assert tracked.read_text(encoding="utf-8") == "v1\n"
+
+    untracked = git_workspace / "02_编制说明.txt"
+    untracked.write_text("x\n", encoding="utf-8")
+    response = await client.post(
+        f"/api/v1/sessions/{bound_session}/workspace/changes/revert",
+        json={"paths": ["02_编制说明.txt"], "delete_untracked": True},
+    )
+    assert response.status_code == 200
+    assert response.json()["reverted"] == ["02_编制说明.txt"]
+    assert not untracked.exists()
+
+
+@pytest.mark.asyncio()
+async def test_revert_non_git_workspace_returns_409(
+    client: httpx.AsyncClient,
+    conn: sqlite3.Connection,
+    session_id: str,
+    tmp_path: Path,
+) -> None:
+    plain = tmp_path / "plain-ws"
+    plain.mkdir()
+    bind_session_workspace(conn, session_id, str(plain))
+    response = await client.post(
+        f"/api/v1/sessions/{session_id}/workspace/changes/revert",
+        json={"paths": ["a.py"]},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "not_a_git_repo"
+
+
+@pytest.mark.asyncio()
+async def test_revert_subdir_workspace(
+    client: httpx.AsyncClient,
+    conn: sqlite3.Connection,
+    session_id: str,
+    tmp_path: Path,
+) -> None:
+    """工作区是仓库子目录时，撤销使用工作区相对路径而非仓库根相对路径。"""
+    repo = tmp_path / "repo"
+    sub = repo / "pkg"
+    sub.mkdir(parents=True)
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+    git("init")
+    git("config", "user.email", "test@sage.local")
+    git("config", "user.name", "Sage Test")
+    target = sub / "inside.py"
+    target.write_text("v1\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-m", "init")
+    target.write_text("v2\n", encoding="utf-8")
+    bind_session_workspace(conn, session_id, str(sub))
+
+    response = await client.post(
+        f"/api/v1/sessions/{session_id}/workspace/changes/revert",
+        json={"paths": ["inside.py"]},
+    )
+    assert response.status_code == 200
+    assert response.json()["reverted"] == ["inside.py"]
+    assert target.read_text(encoding="utf-8") == "v1\n"
+
+    untracked = sub / "new.txt"
+    untracked.write_text("n\n", encoding="utf-8")
+    response = await client.post(
+        f"/api/v1/sessions/{session_id}/workspace/changes/revert",
+        json={"paths": ["new.txt"], "delete_untracked": True},
+    )
+    assert response.json()["reverted"] == ["new.txt"]
+    assert not untracked.exists()
+
+
+@pytest.mark.asyncio()
 async def test_revert_path_escape_rejected(
     client: httpx.AsyncClient, bound_session: str
 ) -> None:

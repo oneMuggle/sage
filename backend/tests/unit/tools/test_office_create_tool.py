@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from backend.data import artifact_repo, database as database_module
+from backend.data.database import Database
 from backend.domain.tool_policy import ToolPolicy
 from backend.office.excel import read_xlsx
 from backend.office.models import OfficeDocType
+from backend.office.session_workspace import bind_session_workspace
 from backend.office.word import read_docx
-from backend.tools.context import ToolExecutionContext
+from backend.tools.context import (
+    ToolExecutionContext,
+    reset_tool_context,
+    set_tool_context,
+)
 from backend.tools.office_create_tool import OfficeCreateTool
 
 pytestmark = pytest.mark.unit
@@ -16,6 +25,23 @@ pytestmark = pytest.mark.unit
 
 def _tool(**policy_kwargs) -> OfficeCreateTool:
     return OfficeCreateTool(policy=ToolPolicy(**policy_kwargs))
+
+
+@pytest.fixture()
+def bound_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """会话绑定工作区 + 全局 DB 指向内存库（受管 office_create 前置条件）。"""
+    test_db = Database(":memory:")
+    test_db.init_db()
+    monkeypatch.setattr(database_module, "_db", test_db)
+    conn = test_db.get_connection()
+    conn.execute(
+        "INSERT INTO sessions (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+        ("sess-managed-create", "office", 1, 1),
+    )
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    bind_session_workspace(conn, "sess-managed-create", str(workspace))
+    return conn, workspace
 
 
 def _word_args(output_dir: str) -> dict:
@@ -533,3 +559,32 @@ def test_refresh_toc_managed_path_attaches_summary_without_path_leak(
     assert result.success is True
     assert result.content["toc_refresh"] == {"ok": True, "toc_count": 2}
     assert "path" not in result.content  # 不回显受管绝对路径
+
+
+def test_managed_create_records_artifact(bound_db):
+    """绑定工作区时走 OfficeToolService 受管路径，产物仍须落 artifacts 表。"""
+    _conn, workspace = bound_db
+    args = _word_args(str(workspace))
+    args["content"]["format_spec"] = {"numbering": True}
+    token = set_tool_context(
+        ToolExecutionContext(
+            session_id="sess-managed-create",
+            stream_id="stream-1",
+            binding_generation=1,
+            office_doc_scope=frozenset(),
+        )
+    )
+    try:
+        result = _tool(workspace_root=str(workspace)).execute(**args)
+    finally:
+        reset_tool_context(token)
+
+    assert result.success is True
+    assert result.content.get("document_id")
+    artifacts = artifact_repo.list_artifacts("sess-managed-create")
+    assert len(artifacts) == 1
+    artifact = artifacts[0]
+    assert artifact.kind == "docx"
+    assert artifact.workspace_path == str(workspace)
+    assert "numbering" in (artifact.format_spec or "")
+    assert Path(artifact.path).is_file()

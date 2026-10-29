@@ -657,6 +657,15 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
         {notBound ? (
           // P0 (2026-10-19): 未绑定工作区时渲染引导组件而非 403 报错文案
           <WorkspaceEmptyGuard feature="changes" />
+        ) : changes?.isGitRepo === false ? (
+          // 2026-10-29: 非 git 工作区不是错误 —— 后端返回 is_git_repo=false，
+          // 这里渲染可操作空态，不再透出 IPC/502 原始报错。
+          <div className="p-3 text-sm text-muted" data-testid="changes-non-git">
+            当前工作区不是 Git 仓库，无法追踪变更
+            <div className="mt-1 text-xs text-muted/80">
+              在该目录初始化 Git 仓库后，这里会列出可审查/可回滚的变更
+            </div>
+          </div>
         ) : error ? (
           <div className="p-3 text-sm text-error">{error}</div>
         ) : loading && !changes ? (

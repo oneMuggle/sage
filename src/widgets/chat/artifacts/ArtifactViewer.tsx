@@ -11,7 +11,7 @@ import {
   Save,
   X,
 } from 'lucide-react';
-import { lazy, Suspense, useCallback, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
@@ -25,6 +25,9 @@ import { useArtifactContent } from '../../../features/artifacts/useArtifactConte
 // 后端 read_office 现在随 html 一起返回 structured（read_* 的 JSON 序列
 // 化）；缺失时回退旧的受控 HTML 路径。
 import { ExcelPreview, PptPreview, WordPreview } from '../../../features/office';
+// 2026-10-29: Word 产物默认走 docx-preview 原生渲染（与 /office 页同一条
+// 渲染+消毒链路），结构化段落视图保留为切换/降级项。
+import { DocxBlobPreview } from '../../../features/office/DocxBlobPreview';
 import type {
   OfficeExcelReadResult,
   OfficePptReadResult,
@@ -191,6 +194,15 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
   // right-panel R2 批次 A: markdown 渲染/源码切换（默认渲染）+ HTML 预览刷新
   const [mdRendered, setMdRendered] = useState(true);
   const [htmlReloadKey, setHtmlReloadKey] = useState(0);
+  // 2026-10-29: docx 默认 Word 版式（docx-preview）；渲染失败或用户切换时
+  // 回退到结构化段落视图。
+  const [docxFidelity, setDocxFidelity] = useState(true);
+  const [docxFidelityFailed, setDocxFidelityFailed] = useState(false);
+
+  useEffect(() => {
+    setDocxFidelity(true);
+    setDocxFidelityFailed(false);
+  }, [artifact.id]);
 
   const isEditable =
     content?.ok && content.kind && EDITABLE_KINDS.has(content.kind as ArtifactKind);
@@ -263,6 +275,29 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             onClick={() => setHtmlReloadKey((k) => k + 1)}
           >
             <RefreshCw className="w-4 h-4" />
+          </button>
+        )}
+        {content?.ok && content.kind === 'docx' && content.data_url && (
+          <button
+            className="p-1.5 rounded hover:bg-bg-hover text-text-secondary hover:text-text transition-colors"
+            title={docxFidelity && !docxFidelityFailed ? '切换为文本视图' : '切换为 Word 版式'}
+            aria-label={docxFidelity && !docxFidelityFailed ? '切换为文本视图' : '切换为 Word 版式'}
+            data-testid="artifact-docx-view-toggle"
+            onClick={() => {
+              // 失败态下点击 = 重试 Word 版式；正常态下在两种视图间切换
+              if (docxFidelityFailed) {
+                setDocxFidelityFailed(false);
+                setDocxFidelity(true);
+                return;
+              }
+              setDocxFidelity((v) => !v);
+            }}
+          >
+            {docxFidelity && !docxFidelityFailed ? (
+              <FileCode className="w-4 h-4" />
+            ) : (
+              <Eye className="w-4 h-4" />
+            )}
           </button>
         )}
         {isEditable && !editMode && (
@@ -362,6 +397,10 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             className="w-full h-full min-h-[24rem] rounded border border-border bg-white"
             data-testid="html-artifact-preview"
           />
+        ) : content.kind === 'docx' && content.data_url && docxFidelity && !docxFidelityFailed ? (
+          // 2026-10-29: Word 版式 —— docx-preview 直接解析原文二进制
+          // （页宽/字体/表格/图片），失败自动回退结构化视图。
+          <DocxBlobPreview dataUrl={content.data_url} onError={() => setDocxFidelityFailed(true)} />
         ) : content.kind === 'docx' || content.kind === 'xlsx' || content.kind === 'pptx' ? (
           content.structured ? (
             // Round B P3: 结构化路径 —— 与 Office 页同一组件渲染
@@ -461,8 +500,6 @@ export function evaluateArtifactViewerAudit(
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function exportArtifactViewerAuditJson(
-  input: ArtifactViewerAuditInput,
-): string {
+export function exportArtifactViewerAuditJson(input: ArtifactViewerAuditInput): string {
   return JSON.stringify(evaluateArtifactViewerAudit(input));
 }

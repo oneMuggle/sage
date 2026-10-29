@@ -82,6 +82,8 @@ class WorkspaceChangeEntryModel(BaseModel):
     index_status: str
     worktree_status: str
     path: str
+    #: 2026-10-29: rename/copy 的旧路径（porcelain -z 第二段；仅展示用）
+    old_path: Optional[str] = None
     # right-panel R5: 每文件 +/- 行数（numstat / 未跟踪文件行数统计）；
     # 二进制 / 统计失败为 None，前端不渲染徽章
     insertions: Optional[int] = None
@@ -96,6 +98,8 @@ class WorkspaceChangesResponse(BaseModel):
     behind: int
     clean: bool
     changes: List[WorkspaceChangeEntryModel]
+    #: 2026-10-29: 非 git 工作区不是错误 —— 前端据此渲染「不是 Git 仓库」空态
+    is_git_repo: bool = True
 
 
 class WorkspaceDiffResponse(BaseModel):
@@ -325,47 +329,94 @@ def _bound_workspace_or_raise(conn: sqlite3.Connection, session_id: str) -> str:
     return binding.workspace_path
 
 
+def _require_git_repo(root: str) -> None:
+    """变更操作（diff/撤销）要求 git 仓库；非仓库 → 409，git 异常 → 502。"""
+    from backend.tools.git_tool import git_repo_status
+
+    state = git_repo_status(root)
+    if state is None:
+        raise _error(502, "git_error", "git 命令失败")
+    if not state:
+        raise _error(409, "not_a_git_repo", "当前工作区不是 Git 仓库")
+
+
 @router.get("/changes", response_model=WorkspaceChangesResponse)
 def get_workspace_changes(session_id: str) -> WorkspaceChangesResponse:
     """会话工作区的 git 变更清单（U1 变更面板数据源，只读）。
 
-    复用 LLM 工具面 ``git_status`` 的实现口径：porcelain v1 输出结构化
-    解析、30s 超时、utf-8 replace 解码。非 git 仓库 / git 不可用 → 502。
+    复用 LLM 工具面 ``git_status`` 的实现口径：porcelain v1 ``-z`` 结构化
+    解析、30s 超时、utf-8 replace 解码。非 git 仓库 → 200 空态
+    （``is_git_repo=False``）；git 命令异常仍 → 502。
     """
     from backend.domain.tool_policy import ToolPolicy
-    from backend.tools.git_tool import GitStatusTool, collect_change_stats
+    from backend.tools.git_tool import (
+        GitStatusTool,
+        collect_change_stats,
+        git_repo_root,
+        git_repo_status,
+        to_workspace_relative_path,
+    )
 
     root = _bound_workspace_or_raise(_connection(), session_id)
+    repo_state = git_repo_status(root)
+    if repo_state is None:
+        raise _error(502, "git_error", "git 命令失败")
+    if not repo_state:
+        return WorkspaceChangesResponse(
+            branch="",
+            upstream="",
+            ahead=0,
+            behind=0,
+            clean=True,
+            changes=[],
+            is_git_repo=False,
+        )
     result = GitStatusTool(ToolPolicy(workspace_root=root)).execute()
     if not result.success:
         raise _error(502, "git_error", result.error or "git 命令失败")
     content = result.content if isinstance(result.content, dict) else {}
     raw_changes = [entry for entry in content.get("changes", []) if isinstance(entry, dict)]
+    # 2026-10-29: 工作区可能是仓库子目录 —— porcelain/numstat 路径相对仓库
+    # 根，这里统一转成工作区相对路径，并过滤工作区外的变更。
+    repo_root = git_repo_root(root) or root
     # right-panel R5: 每文件 +/- 行数（失败降级为 None，不影响清单本身）
-    change_stats = collect_change_stats(root, raw_changes)
+    change_stats = collect_change_stats(root, raw_changes, repo_root=repo_root)
+    model_entries: List[WorkspaceChangeEntryModel] = []
+    for entry in raw_changes:
+        repo_path = str(entry.get("path", ""))
+        workspace_path = to_workspace_relative_path(root, repo_root, repo_path)
+        if workspace_path is None:
+            continue
+        old_repo_path = entry.get("old_path")
+        old_path = (
+            to_workspace_relative_path(root, repo_root, str(old_repo_path))
+            if old_repo_path
+            else None
+        )
+        model_entries.append(
+            WorkspaceChangeEntryModel(
+                index_status=str(entry.get("index_status", "")),
+                worktree_status=str(entry.get("worktree_status", "")),
+                path=workspace_path,
+                old_path=old_path,
+                **_stats_for_path(change_stats, repo_path),
+            )
+        )
     return WorkspaceChangesResponse(
         branch=str(content.get("branch", "")),
         upstream=str(content.get("upstream", "")),
         ahead=int(content.get("ahead", 0)),
         behind=int(content.get("behind", 0)),
-        clean=bool(content.get("clean", False)),
-        changes=[
-            WorkspaceChangeEntryModel(
-                index_status=str(entry.get("index_status", "")),
-                worktree_status=str(entry.get("worktree_status", "")),
-                path=str(entry.get("path", "")),
-                **_stats_for_path(change_stats, str(entry.get("path", ""))),
-            )
-            for entry in raw_changes
-        ],
+        # 过滤工作区外变更后，清单为空即视为干净（子目录工作区场景）
+        clean=not model_entries,
+        changes=model_entries,
+        is_git_repo=True,
     )
 
 
 def _stats_for_path(change_stats: dict, path: str) -> dict:
-    """按 status path 取 +/- 行数；重命名条目（"old -> new"）回落匹配新段。"""
+    """按 status path 取 +/- 行数（rename 已由 numstat 解析器映射到新路径）。"""
     stats = change_stats.get(path)
-    if stats is None and " -> " in path:
-        stats = change_stats.get(path.split(" -> ")[-1])
     if stats is None:
         return {}
     return {"insertions": stats.get("insertions"), "deletions": stats.get("deletions")}
@@ -386,6 +437,7 @@ def get_workspace_change_diff(
     from backend.tools.git_tool import GitDiffTool, untracked_file_diff
 
     root = _bound_workspace_or_raise(_connection(), session_id)
+    _require_git_repo(root)
     result = GitDiffTool(ToolPolicy(workspace_root=root)).execute(
         staged=staged, path=path
     )
@@ -636,6 +688,7 @@ def revert_workspace_changes(
     from backend.office.workspace_revert import revert_files
 
     root = _bound_workspace_or_raise(_connection(), session_id)
+    _require_git_repo(root)
     reverted, errors = revert_files(root, request.paths, request.delete_untracked)
     return WorkspaceRevertResponse(
         reverted=reverted,
@@ -655,6 +708,7 @@ def revert_workspace_change_hunks(
     from backend.office.workspace_revert import guard_rel_path, revert_hunks
 
     root = _bound_workspace_or_raise(_connection(), session_id)
+    _require_git_repo(root)
     error = guard_rel_path(root, request.path)
     if error is not None:
         raise _error(400, "invalid_path", error)
