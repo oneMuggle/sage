@@ -18,12 +18,14 @@ interface FeedbackConfigSchema {
   'feedback.managerUrl': string;
   'feedback.sharedSecretEncrypted': string;
   'feedback.installationUuid': string;
+  'feedback.includeDiagnostics': boolean;
 }
 
 const STORE_NAME = 'sage-feedback';
 const KEY_URL = 'feedback.managerUrl';
 const KEY_SECRET = 'feedback.sharedSecretEncrypted';
 const KEY_UUID = 'feedback.installationUuid';
+const KEY_INCLUDE_DIAGNOSTICS = 'feedback.includeDiagnostics';
 
 /** Spec §6 风险缓解：safeStorage 不可用时明文 + 0600 + 启动期 warn 一次。 */
 let _degradationWarned = false;
@@ -88,6 +90,18 @@ export class FeedbackConfig {
   /** 每个安装实例的稳定 UUID（首次调用时生成并固化，之后只读）。 */
   getInstallationUuid(): string {
     return this.ensureInstallationUuid();
+  }
+
+  /**
+   * 新建反馈会话时是否自动附带最近日志（隐私敏感，默认关闭）。
+   * 只影响 renderer 组装首条消息，不参与 syncer 的启动判断。
+   */
+  getIncludeDiagnostics(): boolean {
+    return this.store.get(KEY_INCLUDE_DIAGNOSTICS, false);
+  }
+
+  setIncludeDiagnostics(enabled: boolean): void {
+    this.store.set(KEY_INCLUDE_DIAGNOSTICS, Boolean(enabled));
   }
 
   /** 清空全部反馈配置（用户登出 / 重置设置时使用）。 */

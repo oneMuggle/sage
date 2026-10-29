@@ -392,6 +392,10 @@ export const zhChatAndSider = {
   'settings.feedback.shared_secret.placeholder': '粘贴管理员提供的密钥',
   'settings.feedback.shared_secret.desc':
     '用本机 safeStorage 加密保存。留空表示不改动；清空输入框表示删除。',
+  'settings.feedback.include_diagnostics.label': '自动附带诊断日志',
+  'settings.feedback.include_diagnostics.desc':
+    '开启后，新建反馈会话会自动把最近 80 行运行日志附在第一句话末尾，方便排查。日志已脱敏。',
+  'settings.feedback.include_diagnostics.on': '新建反馈时附带日志',
   'settings.feedback.installation_uuid': '本机 ID',
   'settings.feedback.installation_uuid.desc':
     '管理员通过此 ID 识别你的客户端。复制给管理员以便关联工单。',
@@ -436,6 +440,7 @@ export const zhChatAndSider = {
   'feedback.hub.pending': '待送达',
   'feedback.hub.diagnostics': '诊断日志',
   'feedback.hub.diagnostics.show': '查看日志尾部',
+  'feedback.hub.diagnostics_suffix_header': '—— 自动附带的诊断日志 ——',
   'feedback.hub.role.admin': '管理员',
   'feedback.hub.role.user': '我',
   'feedback.hub.create_failed': '创建反馈失败',

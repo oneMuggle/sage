@@ -408,6 +408,10 @@ export const enChatAndSider = {
   'settings.feedback.shared_secret.placeholder': 'Paste the secret from your admin',
   'settings.feedback.shared_secret.desc':
     'Stored encrypted via the OS keychain (safeStorage). Leave unchanged, or clear the box to delete.',
+  'settings.feedback.include_diagnostics.label': 'Attach diagnostics automatically',
+  'settings.feedback.include_diagnostics.desc':
+    'When on, each new feedback conversation gets the last 80 lines of the runtime log appended to its first message. Logs are already redacted.',
+  'settings.feedback.include_diagnostics.on': 'Attach log when creating feedback',
   'settings.feedback.installation_uuid': 'Installation ID',
   'settings.feedback.installation_uuid.desc':
     'The admin uses this ID to identify your client. Share it when filing tickets.',
@@ -453,6 +457,7 @@ export const enChatAndSider = {
   'feedback.hub.pending': 'Pending',
   'feedback.hub.diagnostics': 'Diagnostics',
   'feedback.hub.diagnostics.show': 'Show log tail',
+  'feedback.hub.diagnostics_suffix_header': '--- auto-attached diagnostics ---',
   'feedback.hub.role.admin': 'Admin',
   'feedback.hub.role.user': 'Me',
   'feedback.hub.create_failed': 'Failed to create feedback',

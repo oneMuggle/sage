@@ -9,6 +9,7 @@ interface FeedbackConfigState {
   hasSecret: boolean;
   installationUuid: string;
   configured: boolean;
+  includeDiagnostics: boolean;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -72,6 +73,17 @@ export function FeedbackTab() {
       if (next) setConfig(next);
       setManagerUrl('');
       setSharedSecret('');
+    } catch (err) {
+      setSaveError(getErrorMessage(err));
+    }
+  };
+
+  const handleToggleDiagnostics = async (enabled: boolean): Promise<void> => {
+    setSaveError(null);
+    setSaved(false);
+    try {
+      const next = await window.electronAPI?.feedback?.setConfig({ includeDiagnostics: enabled });
+      if (next) setConfig(next);
     } catch (err) {
       setSaveError(getErrorMessage(err));
     }
@@ -172,6 +184,23 @@ export function FeedbackTab() {
             {copied ? t('settings.feedback.copied') : t('settings.feedback.copy_uuid')}
           </button>
         </div>
+      </SettingRow>
+
+      <SettingRow
+        label={t('settings.feedback.include_diagnostics.label')}
+        desc={t('settings.feedback.include_diagnostics.desc')}
+        anchor="feedback_include_diagnostics"
+      >
+        <label className="flex items-center gap-2 text-ui-sm text-text">
+          <input
+            data-testid="feedback-include-diagnostics"
+            type="checkbox"
+            checked={config?.includeDiagnostics ?? false}
+            onChange={(e) => void handleToggleDiagnostics(e.target.checked)}
+            className="h-4 w-4"
+          />
+          <span>{t('settings.feedback.include_diagnostics.on')}</span>
+        </label>
       </SettingRow>
 
       <SettingRow

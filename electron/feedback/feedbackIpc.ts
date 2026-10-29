@@ -40,6 +40,8 @@ export interface FeedbackConfigView {
   hasSecret: boolean;
   installationUuid: string;
   configured: boolean;
+  /** 新建反馈会话时自动附带最近日志（用户可关）。 */
+  includeDiagnostics: boolean;
 }
 
 export interface FeedbackSyncStats {
@@ -70,33 +72,42 @@ function configView(config: FeedbackConfig): FeedbackConfigView {
     hasSecret: Boolean(config.getSharedSecret()),
     installationUuid: config.getInstallationUuid(),
     configured: config.isConfigured(),
+    includeDiagnostics: config.getIncludeDiagnostics(),
   };
 }
 
-export function registerFeedbackIpc(
-  register: RegisterIpcHandler,
-  deps: FeedbackIpcDeps,
-): void {
+export function registerFeedbackIpc(register: RegisterIpcHandler, deps: FeedbackIpcDeps): void {
   register('feedback:config:get', () => configView(deps.config));
 
   register('feedback:config:set', (...args: unknown[]) => {
     const payload = (args[0] ?? {}) as {
       managerUrl?: string;
       sharedSecret?: string;
+      includeDiagnostics?: boolean;
     };
 
+    // 只有连接参数变化才需要重启 syncer；诊断开关只影响 renderer 组装消息
+    let connectionChanged = false;
     if (typeof payload.managerUrl === 'string') {
       deps.config.setManagerUrl(payload.managerUrl);
+      connectionChanged = true;
     }
     // sharedSecret 传 undefined 表示"不改动"；传空串表示"清空"
     if (typeof payload.sharedSecret === 'string') {
       deps.config.setSharedSecret(payload.sharedSecret);
+      connectionChanged = true;
+    }
+    if (typeof payload.includeDiagnostics === 'boolean') {
+      deps.config.setIncludeDiagnostics(payload.includeDiagnostics);
     }
 
-    deps.restartSyncer();
+    if (connectionChanged) {
+      deps.restartSyncer();
+    }
     logger.info(`${LOG_TAG} config updated`, {
       managerUrl: deps.config.getManagerUrl(),
       hasSecret: Boolean(deps.config.getSharedSecret()),
+      includeDiagnostics: deps.config.getIncludeDiagnostics(),
     });
     return { ok: true, ...configView(deps.config) };
   });

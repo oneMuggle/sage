@@ -12,6 +12,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { uploadAttachment } from '../../shared/api/feedbackApi';
 import { useI18n } from '../../shared/lib/i18n';
 
+import { collectDiagnosticsSuffix } from './diagnosticsSuffix';
 import { useFeedbackStore } from './feedbackStore';
 
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
@@ -36,6 +37,24 @@ type FeedbackStatusKey =
   | 'feedback.hub.status.open'
   | 'feedback.hub.status.resolved'
   | 'feedback.hub.status.closed';
+
+/**
+ * 组装会话首条消息正文：开关打开时在用户正文后追加最近日志。
+ * 读配置或取日志失败都不影响建会话。
+ */
+async function buildInitialBody(body: string, header: string): Promise<string> {
+  let includeDiagnostics = false;
+  try {
+    const config = await window.electronAPI?.feedback?.getConfig();
+    includeDiagnostics = Boolean(config?.includeDiagnostics);
+  } catch {
+    return body;
+  }
+  if (!includeDiagnostics) return body;
+  const suffix = await collectDiagnosticsSuffix(header);
+  if (!suffix) return body;
+  return body ? `${body}\n\n${suffix}` : suffix;
+}
 
 function statusLabelKey(status: string): FeedbackStatusKey {
   if (status === 'resolved') return 'feedback.hub.status.resolved';
@@ -89,7 +108,10 @@ export function FeedbackHub() {
   const handleCreate = async (): Promise<void> => {
     if (!title.trim() || loading.create) return;
     setLocalError(null);
-    const id = await createAndOpen({ title: title.trim(), body: body.trim() });
+    const id = await createAndOpen({
+      title: title.trim(),
+      body: await buildInitialBody(body.trim(), t('feedback.hub.diagnostics_suffix_header')),
+    });
     if (id) {
       setTitle('');
       setBody('');

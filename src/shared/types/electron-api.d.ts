@@ -349,13 +349,19 @@ export interface FeedbackElectronApiBridge {
     hasSecret: boolean;
     installationUuid: string;
     configured: boolean;
+    includeDiagnostics: boolean;
   }>;
-  setConfig: (patch: { managerUrl?: string; sharedSecret?: string }) => Promise<{
+  setConfig: (patch: {
+    managerUrl?: string;
+    sharedSecret?: string;
+    includeDiagnostics?: boolean;
+  }) => Promise<{
     ok: true;
     managerUrl: string;
     hasSecret: boolean;
     installationUuid: string;
     configured: boolean;
+    includeDiagnostics: boolean;
   }>;
   syncNow: () => Promise<{ submitted: number; received: number; errors: number }>;
   uploadAttachment: (payload: {

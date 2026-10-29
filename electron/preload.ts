@@ -403,14 +403,20 @@ const electronAPI = {
         hasSecret: boolean;
         installationUuid: string;
         configured: boolean;
+        includeDiagnostics: boolean;
       }>,
-    setConfig: (patch: { managerUrl?: string; sharedSecret?: string }) =>
+    setConfig: (patch: {
+      managerUrl?: string;
+      sharedSecret?: string;
+      includeDiagnostics?: boolean;
+    }) =>
       ipcRenderer.invoke('feedback:config:set', patch) as Promise<{
         ok: true;
         managerUrl: string;
         hasSecret: boolean;
         installationUuid: string;
         configured: boolean;
+        includeDiagnostics: boolean;
       }>,
     syncNow: () =>
       ipcRenderer.invoke('feedback:sync-now') as Promise<{

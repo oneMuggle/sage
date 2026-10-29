@@ -718,6 +718,14 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     labelEn: 'Sync now',
     keywords: 'feedback_sync_now 立即 同步 反馈 feedback sync',
   },
+  {
+    key: 'feedback_include_diagnostics',
+    tab: 'feedback',
+    label: '自动附带诊断日志',
+    labelEn: 'Attach diagnostics automatically',
+    keywords:
+      'feedback_include_diagnostics 诊断 日志 自动 附带 diagnostics log attach 反馈 feedback',
+  },
 ];
 
 export function searchSettings(query: string): SettingsSearchEntry[] {
