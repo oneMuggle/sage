@@ -4,6 +4,17 @@ import { Check, ChevronRight, Circle } from 'lucide-react';
 import type { ComponentPropsWithoutRef, ElementRef } from 'react';
 import { forwardRef, useState } from 'react';
 
+import {
+  MENU_CHECK_ITEM_CLASS,
+  MENU_CONTENT_CLASS,
+  MENU_ITEM_CLASS,
+  MENU_ITEM_DESTRUCTIVE_CLASS,
+  MENU_LABEL_CLASS,
+  MENU_SEPARATOR_CLASS,
+  MENU_SHORTCUT_CLASS,
+  MENU_SUB_TRIGGER_CLASS,
+} from '../ContextMenu/menuClasses';
+
 /**
  * DropdownMenu component built on Radix UI (U4 from OpenWorker).
  *
@@ -78,14 +89,7 @@ export const DropdownMenuSubTrigger = forwardRef<
 >(({ className, inset, children, ...props }, ref) => (
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
-    className={clsx(
-      'flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm text-ink outline-none transition-colors',
-      'data-[highlighted]:bg-bg-hover',
-      'data-[state=open]:bg-bg-hover',
-      'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-      inset && 'pl-8',
-      className,
-    )}
+    className={clsx(MENU_SUB_TRIGGER_CLASS, inset && 'pl-8', className)}
     {...props}
   >
     {children}
@@ -102,11 +106,7 @@ export const DropdownMenuSubContent = forwardRef<
     <DropdownMenuPrimitive.SubContent
       ref={ref}
       sideOffset={sideOffset}
-      className={clsx(
-        'z-50 min-w-[10rem] overflow-hidden rounded-lg border border-line bg-bg p-1 shadow-lg',
-        'animate-fade-enter',
-        className,
-      )}
+      className={clsx(MENU_CONTENT_CLASS, className)}
       {...props}
     />
   </DropdownMenuPrimitive.Portal>
@@ -125,11 +125,7 @@ export const DropdownMenuContent = forwardRef<
         ref={ref}
         sideOffset={sideOffset}
         align={align}
-        className={clsx(
-          'z-50 min-w-[10rem] overflow-hidden rounded-lg border border-line bg-bg p-1 shadow-lg',
-          'animate-fade-enter',
-          className,
-        )}
+        className={clsx(MENU_CONTENT_CLASS, className)}
         {...props}
       >
         {children}
@@ -179,11 +175,7 @@ export const DropdownMenuItem = forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={clsx(
-      'relative flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none transition-colors',
-      variant === 'destructive'
-        ? 'text-error data-[highlighted]:bg-error/10'
-        : 'text-ink data-[highlighted]:bg-bg-hover',
-      'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      variant === 'destructive' ? MENU_ITEM_DESTRUCTIVE_CLASS : MENU_ITEM_CLASS,
       inset && 'pl-8',
       className,
     )}
@@ -198,12 +190,7 @@ export const DropdownMenuCheckboxItem = forwardRef<
 >(({ className, children, checked, ...props }, ref) => (
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
-    className={clsx(
-      'relative flex cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-sm text-ink outline-none transition-colors',
-      'data-[highlighted]:bg-bg-hover',
-      'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-      className,
-    )}
+    className={clsx(MENU_CHECK_ITEM_CLASS, className)}
     checked={checked}
     {...props}
   >
@@ -223,12 +210,7 @@ export const DropdownMenuRadioItem = forwardRef<
 >(({ className, children, ...props }, ref) => (
   <DropdownMenuPrimitive.RadioItem
     ref={ref}
-    className={clsx(
-      'relative flex cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-sm text-ink outline-none transition-colors',
-      'data-[highlighted]:bg-bg-hover',
-      'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-      className,
-    )}
+    className={clsx(MENU_CHECK_ITEM_CLASS, className)}
     {...props}
   >
     <span className="absolute left-2 flex h-4 w-4 items-center justify-center">
@@ -250,7 +232,7 @@ export const DropdownMenuLabel = forwardRef<
 >(({ className, inset, ...props }, ref) => (
   <DropdownMenuPrimitive.Label
     ref={ref}
-    className={clsx('px-2 py-1.5 text-xs font-medium text-faint', inset && 'pl-8', className)}
+    className={clsx(MENU_LABEL_CLASS, inset && 'pl-8', className)}
     {...props}
   />
 ));
@@ -262,7 +244,7 @@ export const DropdownMenuSeparator = forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.Separator
     ref={ref}
-    className={clsx('-mx-1 my-1 h-px bg-line', className)}
+    className={clsx(MENU_SEPARATOR_CLASS, className)}
     {...props}
   />
 ));
@@ -276,13 +258,7 @@ export function DropdownMenuShortcut({
   className,
   ...props
 }: React.HTMLAttributes<HTMLSpanElement>) {
-  return (
-    <span
-      aria-hidden
-      className={clsx('ml-auto text-xs tracking-widest text-faint', className)}
-      {...props}
-    />
-  );
+  return <span aria-hidden className={clsx(MENU_SHORTCUT_CLASS, className)} {...props} />;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

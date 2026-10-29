@@ -1,0 +1,77 @@
+/**
+ * 右键菜单词典（中文）。
+ * 键前缀 contextMenu.*，按对象域分组；与 en/contextMenu.ts 一一对应。
+ */
+export const zhContextMenu = {
+  'contextMenu.common.open': '打开',
+  'contextMenu.common.copy': '复制',
+  'contextMenu.common.copyMarkdown': '复制为 Markdown',
+  'contextMenu.common.copyPath': '复制路径',
+  'contextMenu.common.copyName': '复制文件名',
+  'contextMenu.common.revealInFolder': '在文件夹中显示',
+  'contextMenu.common.remove': '移除',
+  'contextMenu.common.rename': '重命名',
+  'contextMenu.common.delete': '删除…',
+  'contextMenu.common.copied': '已复制',
+  'contextMenu.common.copyFailed': '复制失败',
+  'contextMenu.common.selectionCopy': '复制选区',
+  'contextMenu.common.selectionQuote': '引用选区到输入框',
+  'contextMenu.common.inspect': '检查元素',
+  'contextMenu.common.cancel': '取消',
+  'contextMenu.common.confirm': '确定',
+
+  'contextMenu.session.open': '打开会话',
+  'contextMenu.session.pin': '置顶会话',
+  'contextMenu.session.unpin': '取消置顶',
+  'contextMenu.session.copyTitle': '复制标题',
+  'contextMenu.session.exportMarkdown': '导出 Markdown',
+  'contextMenu.session.exportHtml': '导出 HTML',
+  'contextMenu.session.viewForkTree': '查看分叉树',
+  'contextMenu.session.delete': '删除会话…',
+  'contextMenu.session.deleteTitle': '删除会话',
+  'contextMenu.session.deleteMessage':
+    '将永久删除会话「{title}」及其全部消息，此操作不可撤销。',
+
+  'contextMenu.message.quote': '引用到输入框',
+  'contextMenu.message.copyMarkdown': '复制为 Markdown',
+  'contextMenu.message.editResend': '编辑并重新发送',
+  'contextMenu.message.regenerate': '重新生成',
+  'contextMenu.message.feedbackUp': '有帮助',
+  'contextMenu.message.feedbackDown': '没帮助',
+  'contextMenu.message.fork': '从此处分叉',
+  'contextMenu.message.rewind': '回滚到此',
+  'contextMenu.message.saveToMemory': '保存到记忆',
+  'contextMenu.message.delete': '删除消息…',
+  'contextMenu.message.deleteTitle': '删除消息',
+  'contextMenu.message.deleteBody': '将永久删除这条消息，此操作不可撤销。',
+
+  'contextMenu.codeBlock.copy': '复制代码',
+  'contextMenu.codeBlock.copyFence': '复制为 Markdown 围栏',
+  'contextMenu.table.copy': '复制表格（TSV）',
+  'contextMenu.image.view': '查看大图',
+  'contextMenu.image.copy': '复制图片',
+  'contextMenu.image.copyFailed': '复制图片失败',
+
+  'contextMenu.wiki.newFile': '新建文件',
+  'contextMenu.wiki.nameLabel': '名称',
+  'contextMenu.wiki.deleteTitle': '删除 Wiki 条目',
+  'contextMenu.wiki.deleteMessage':
+    '将删除「{path}」；若为目录会递归删除其中全部文件，此操作不可撤销。',
+  'contextMenu.wiki.nameRequired': '名称不能为空',
+  'contextMenu.wiki.nameInvalid': '名称不能包含 / 或 ..',
+  'contextMenu.wiki.createFailed': '新建失败：{message}',
+  'contextMenu.wiki.renameFailed': '重命名失败：{message}',
+  'contextMenu.wiki.deleteFailed': '删除失败：{message}',
+
+  'contextMenu.change.expand': '展开 diff',
+  'contextMenu.change.collapse': '收起 diff',
+  'contextMenu.change.accept': '接受此变更',
+  'contextMenu.change.revert': '回滚此变更…',
+  'contextMenu.change.toggleView': '切换 diff 视图',
+  'contextMenu.change.openInEditor': '在编辑器中打开',
+  'contextMenu.change.openInPanel': '在右侧面板查看',
+
+  'contextMenu.artifact.open': '打开产物',
+  'contextMenu.artifact.reveal': '在文件管理器中显示',
+  'contextMenu.artifact.openDelivery': '打开交付工作台',
+} as const;
