@@ -43,6 +43,10 @@ const ScheduledTasks = lazy(() =>
 );
 const Skills = lazy(() => import('./pages/Skills').then((m) => ({ default: m.default })));
 const Help = lazy(() => import('./pages/Help').then((m) => ({ default: m.Help })));
+// Phase 1.9 (2026-10-29): 用户反馈双向会话页
+const FeedbackHub = lazy(() =>
+  import('./features/feedback/FeedbackHub').then((m) => ({ default: m.FeedbackHub })),
+);
 // Task 6 (2026-09-15): 模型目录管理页面
 const ModelCatalog = lazy(() =>
   import('./pages/ModelCatalog').then((m) => ({ default: m.default })),
@@ -238,6 +242,8 @@ function App() {
             <Route path="scheduled" element={<ScheduledTasks />} />
             <Route path="orchestration" element={<Orchestration />} />
             <Route path="help" element={<Help />} />
+            {/* 2026-10-29: 用户反馈双向会话页（帮助菜单"反馈问题..."入口） */}
+            <Route path="feedback" element={<FeedbackHub />} />
             {/* Task 6 (2026-09-15): 模型目录管理 */}
             <Route path="model-catalog" element={<ModelCatalog />} />
             {/* 2026-09-19: Arena 账号池 + 注册辅助 + 模型观测（P5 起并入 /arena） */}
