@@ -256,3 +256,42 @@ async def test_run_loop_reusable_across_iterations():
     # messages2 末尾被追加了 assistant 消息(就地修改的预期行为)
     assert msgs2[-1]["role"] == "assistant"
     assert msgs2[-1]["content"] == "reply"
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_streaming_emits_reasoning_from_response_fallback():
+    """provider 不发 reasoning_delta、只在 response.reasoning_content 回传时,
+    流式路径仍应补发一条 REASONING 事件。
+
+    2026-10-29: 此前流式路径只看 stream_reasoning_parts。provider 走
+    "非增量 reasoning"(整段塞进 response.reasoning_content)时思考过程
+    整段丢失 —— 非流式路径本来有兜底,流式路径没有。
+    """
+    agent = SageAgent()
+    mock_client = MagicMock()
+    # MagicMock 的隐式属性是 truthy,必须显式置 False,否则 _should_stream
+    # 会把 client 判定为"流式不可用"直接跳过整段测试目标。
+    mock_client.stream_unsupported = False
+
+    async def _stream_events(messages, tools=None):
+        yield ("content_delta", "答案是 4")
+        yield (
+            "response",
+            LLMResponse(
+                content="答案是 4",
+                reasoning_content="先心算 2+2",
+                tool_calls=[],
+            ),
+        )
+
+    mock_client.chat_stream_events = _stream_events
+    agent.llm_client = mock_client
+
+    events = [evt async for evt in agent.run_loop([{"role": "user", "content": "2+2?"}])]
+
+    reasoning_events = [e for e in events if e.state.value == "reasoning"]
+    assert len(reasoning_events) == 1
+    assert reasoning_events[0].reasoning == "先心算 2+2"
+    # 流式正文仍完整走 CONTENT_DELTA + DONE
+    assert events[-1].state.value == "done"
+    assert events[-1].content == "答案是 4"
