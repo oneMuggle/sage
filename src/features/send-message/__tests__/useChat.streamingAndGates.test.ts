@@ -113,14 +113,9 @@ describe('useChat streaming deltas & gates', () => {
     seedActiveEndpoint();
     invokeMock.mockResolvedValueOnce({ streamId: 'stream-chunks' });
 
-    let capturedCb:
-      | ((e: { payload: { state: string; iteration: number; content?: string } }) => void)
-      | null = null;
+    let capturedCb: ((e: { payload: Record<string, unknown> }) => void) | null = null;
     listenMock.mockImplementationOnce(
-      async (
-        _name: string,
-        cb: (e: { payload: { state: string; iteration: number; content?: string } }) => void,
-      ) => {
+      async (_name: string, cb: (e: { payload: Record<string, unknown> }) => void) => {
         capturedCb = cb;
         return vi.fn();
       },
@@ -250,11 +245,13 @@ describe('useChat streaming deltas & gates', () => {
     act(() => {
       capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: ' 2' } });
     });
-    // chunks 期间 uiText 占位保留作为视觉上下文(让用户看到 "刚才在观察,现在答案出来")
+    // 2026-10-29: 首个 content_delta 必须替换占位符而非接在后面 ——
+    // 旧行为 '👀 观察结果…答案是 2' 是 bug,用户看到 "占位符 + 真实正文" 拼接
+    // 在迭代上限失败时尤其糟糕(只看到一句占位符,真实内容被吞)。
     const afterChunks = result.current.messages.find((m) => m.role === 'assistant');
-    expect(afterChunks?.content).toBe('👀 观察结果…答案是 2');
+    expect(afterChunks?.content).toBe('答案是 2');
 
-    // done 事件触发 finishStream, lastDoneContent 覆盖 store content → 清掉占位
+    // done 事件触发 finishStream, lastDoneContent 覆盖 store content → 与流式累计一致
     act(() => {
       capturedCb!({ payload: { state: 'done', iteration: 1, content: '答案是 2' } });
     });
@@ -266,6 +263,122 @@ describe('useChat streaming deltas & gates', () => {
     const final = result.current.messages.find((m) => m.role === 'assistant');
     expect(final?.content).toBe('答案是 2');
     expect(result.current.isLoading).toBe(false);
+  });
+
+  // 2026-10-29 回归保护: content_delta 已流式产出文字后,acting/observing
+  // 的占位符不得覆盖正文 —— 否则迭代上限失败(无 DONE 收尾)时用户只看到
+  // 一句占位符。
+  it('intermediate placeholders do not overwrite already-streamed content', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-no-overwrite' });
+
+    let capturedCb: ((e: { payload: Record<string, unknown> }) => void) | null = null;
+    listenMock.mockImplementationOnce(
+      async (_name: string, cb: (e: { payload: Record<string, unknown> }) => void) => {
+        capturedCb = cb;
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('写一段') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(capturedCb).not.toBeNull();
+
+    // 第一个真实 token 应替换占位符(不接在 "🤔 思考中…" 后面)
+    act(() => {
+      capturedCb!({ payload: { state: 'thinking', iteration: 0 } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: '正文' } });
+    });
+    const afterFirstToken = result.current.messages.find((m) => m.role === 'assistant');
+    expect(afterFirstToken?.content).toBe('正文');
+
+    // 后续的 observing 事件不得覆盖已流式的正文
+    act(() => {
+      capturedCb!({ payload: { state: 'observing', iteration: 1 } });
+    });
+    const afterObs = result.current.messages.find((m) => m.role === 'assistant');
+    expect(afterObs?.content).toBe('正文');
+
+    // 后续 acting 事件同样不得覆盖
+    act(() => {
+      capturedCb!({
+        payload: {
+          state: 'acting',
+          iteration: 1,
+          tool_call: { function: { name: 'read_file' } },
+        },
+      });
+    });
+    const afterAct = result.current.messages.find((m) => m.role === 'assistant');
+    expect(afterAct?.content).toBe('正文');
+
+    // 流以错误收尾(无 DONE),模拟迭代上限 —— 必须保留已流式的正文
+    act(() => {
+      capturedCb!({
+        payload: {
+          state: 'failed',
+          iteration: 2,
+          error: 'max_iterations_exceeded (limit=2, agent=writer, source=profile)',
+        },
+      });
+    });
+    await act(async () => {
+      await sendPromise!;
+    });
+    const failed = result.current.messages.find((m) => m.role === 'assistant');
+    expect(failed?.content).toBe('正文');
+  });
+
+  // 2026-10-29: DONE 事件的内容已经由 content_delta 推过一遍,再 append 会重复。
+  // 回归保护: 已有流式内容时 'done' 事件不得再 append 一次。
+  it('done event does not duplicate already-streamed content', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-no-dup' });
+
+    let capturedCb: ((e: { payload: Record<string, unknown> }) => void) | null = null;
+    listenMock.mockImplementationOnce(
+      async (_name: string, cb: (e: { payload: Record<string, unknown> }) => void) => {
+        capturedCb = cb;
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('你好') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    act(() => {
+      capturedCb!({ payload: { state: 'thinking', iteration: 0 } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: '你好' } });
+    });
+    act(() => {
+      capturedCb!({
+        payload: { state: 'done', iteration: 1, content: '你好' },
+      });
+    });
+    await act(async () => {
+      await sendPromise!;
+    });
+    // DONE 后 final content 不得出现 '你好你好' 重复
+    const finalMsg = result.current.messages.find((m) => m.role === 'assistant');
+    expect(finalMsg?.content).toBe('你好');
   });
 });
 

@@ -110,7 +110,9 @@ async def test_run_loop_respects_max_iterations():
     failed = [e for e in events if e.state == AgentState.FAILED]
     assert len(failed) == 1
     # 2026-10-22: 错误串携带生效上限，前端据此提示用户该调到多少
-    assert failed[0].error == "max_iterations_exceeded (limit=2)"
+    # 2026-10-29: 追加 source=，让前端能指出该去哪个设置项调；
+    #             无 profile 且无 agent_id 时省略 agent= 字段
+    assert failed[0].error == "max_iterations_exceeded (limit=2, source=explicit)"
 
 
 @pytest.mark.asyncio()
@@ -178,6 +180,39 @@ async def test_run_loop_uses_orch_settings_max_iterations():
     assert len(failed) == 1
     assert failed[0].iteration == 7
     assert agent.llm_client.chat.await_count == 7
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_failed_event_names_agent_and_source():
+    """profile 路径下 FAILED 错误串应带 agent=<id> + source=profile。
+
+    2026-10-29: 用户看到「达到迭代上限 10 次」时不知道是哪个 Agent 的哪个
+    配置打满的 —— 带上 agent/source 后前端才能渲染
+    「「写作助手」（上限来源：Agent 默认配置）」并指向 Agent 编辑面板。
+    """
+    tool_call = LLMToolCall(id="c", name="loop", arguments="{}")
+    agent = SageAgent()
+    agent.profile = {"id": "writer", "max_iterations": 2}
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(return_value=_make_response(tool_calls=[tool_call]))
+
+    mock_tool = MagicMock()
+    mock_tool.execute = MagicMock(return_value=MagicMock(success=True, content={}, error=None))
+    agent.tool_registry.get = MagicMock(return_value=mock_tool)
+
+    # orch.global = 0 → 优先级链落到 profile 分支
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=SimpleNamespace(max_iterations=0),
+    ):
+        events = [evt async for evt in agent.run_loop([{"role": "user", "content": "x"}])]
+
+    failed = [e for e in events if e.state == AgentState.FAILED]
+    assert len(failed) == 1
+    assert (
+        failed[0].error
+        == "max_iterations_exceeded (limit=2, agent=writer, source=profile)"
+    )
 
 
 # =============================================================================
@@ -439,7 +474,7 @@ async def test_run_loop_max_iterations_exceeded_yields_failed_event():
     states = [e.state for e in events]
     assert AgentState.FAILED in states
     failed = next(e for e in events if e.state == AgentState.FAILED)
-    assert failed.error == "max_iterations_exceeded (limit=1)"
+    assert failed.error == "max_iterations_exceeded (limit=1, source=explicit)"
     # FAILED 后不应有 DONE
     failed_idx = states.index(AgentState.FAILED)
     assert AgentState.DONE not in states[failed_idx + 1 :]

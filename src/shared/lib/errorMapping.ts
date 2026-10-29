@@ -51,8 +51,10 @@ export function mapLLMErrorToText(err: LLMErrorResponse): string {
  * "数值 + 单位"；裸码（无上限装饰）时该占位符会被移除。
  */
 export const AGENT_RUNTIME_MESSAGES: Record<string, string> = {
-  max_iterations_exceeded:
-    '任务复杂度超出迭代上限{limit}，可在「设置 → 编排 → Agent 迭代次数上限」调高后重试',
+  // {subject} / {limit} / {source} / {hint} 由 buildIterationLimitMessage 渲染：
+  // 有 agent / source 上下文时给出"哪个 agent、哪个上限来源、去哪调"，
+  // 裸码时回落成通用文案。
+  max_iterations_exceeded: '{subject}达到迭代上限{limit}{source}。{hint}',
   tool_budget_exceeded:
     '工具调用次数超出单轮预算{limit}，可在「设置 → 编排 → 工具调用预算」调高或拆分任务后重试',
   prompt_blocked_by_hook: '消息被用户自定义钩子拦截（可在 设置 → 通用 → 钩子 管理）',
@@ -68,6 +70,45 @@ export const AGENT_RUNTIME_MESSAGES: Record<string, string> = {
 };
 
 /**
+ * agent profile id → 中文显示名。
+ *
+ * 后端下发的 agent=<id> 是内部 profile id（如 `ppt-maker`），直接透给用户
+ * 不友好；未收录的 id 回落成原 id，保证信息不丢。
+ */
+const AGENT_DISPLAY_NAMES: Record<string, string> = {
+  primary: '主助手',
+  researcher: '研究员',
+  coder: '编码助手',
+  writer: '写作助手',
+  reviewer: '审查助手',
+  memory_manager: '记忆助手',
+  'ppt-maker': 'PPT 助手',
+};
+
+/** 上限来源层级 → 中文标签（与后端 agent.py 的 _limit_source 对齐）。 */
+const ITERATION_LIMIT_SOURCE_LABELS: Record<string, string> = {
+  explicit: '调用方指定',
+  'orch.global': '编排全局设置',
+  profile: 'Agent 默认配置',
+  default: '系统默认值',
+};
+
+/** 上限来源层级 → 用户该去哪调。 */
+const ITERATION_LIMIT_HINTS: Record<string, string> = {
+  'orch.global':
+    '可在「设置 → 编排 → Agent 迭代次数上限」调高后重试，或拆分任务减少往返。',
+  profile:
+    '可在 Agent 编辑面板调整该 Agent 的最大迭代次数后重试，或拆分任务减少往返。',
+  explicit: '该上限由本次调用指定，可拆分任务减少往返后重试。',
+  default:
+    '可在「设置 → 编排 → Agent 迭代次数上限」调高后重试，或拆分任务减少往返。',
+};
+
+const DEFAULT_ITERATION_HINT =
+  '可在「设置 → 编排 → Agent 迭代次数上限」调高后重试，或拆分任务减少往返。';
+
+
+/**
  * 上限值的中文单位。按错误码区分，裸码路径不查此表。
  */
 const AGENT_RUNTIME_LIMIT_UNITS: Record<string, string> = {
@@ -79,12 +120,15 @@ const AGENT_RUNTIME_LIMIT_UNITS: Record<string, string> = {
 };
 
 /**
- * 后端下发的错误串格式：``<code> (limit=<数值>)``。
+ * 后端下发的错误串格式：``<code> (limit=<数值>[, agent=<id>[, source=<src>]])``。
  *
  * 后缀追加在末尾而非替换错误码，保证 ``<code>`` 仍是前缀，
  * 任何按前缀/startsWith 判断的消费方都保持兼容。
+ *
+ * ``agent=`` / ``source=`` 是 2026-10-29 新增的可选字段，用于告诉用户
+ * "是哪个 agent 打的哪个上限"。旧格式（只有 limit=）继续可解析。
  */
-const AGENT_ERROR_LIMIT_RE = /^([a-z][a-z0-9_]*)\s*\(limit=(\d+(?:\.\d+)?)\)$/;
+const AGENT_ERROR_DECORATION_RE = /^([a-z][a-z0-9_]*)\s*\(([^()]*)\)$/;
 
 export interface AgentErrorLimit {
   /** 不含上限装饰的错误码 */
@@ -93,6 +137,10 @@ export interface AgentErrorLimit {
   value: number;
   /** 上限原始文本（保留 "50.00" 的精度，避免金额被截成 50） */
   text: string;
+  /** 触发上限的 agent（后端 profile id / agent_id），旧格式没有 */
+  agent?: string;
+  /** 上限来源层级：explicit / orch.global / profile / default，旧格式没有 */
+  source?: string;
 }
 
 /**
@@ -103,10 +151,59 @@ export interface AgentErrorLimit {
  */
 export function parseAgentErrorLimit(raw: string): AgentErrorLimit | null {
   if (typeof raw !== 'string' || !raw) return null;
-  const matched = AGENT_ERROR_LIMIT_RE.exec(raw);
+  const matched = AGENT_ERROR_DECORATION_RE.exec(raw);
   if (!matched) return null;
-  const text = matched[2];
-  return { code: matched[1], value: Number(text), text };
+
+  // 用 Map 而非普通对象：装饰段来自网络输入，避免 __proto__ 之类的键污染原型链。
+  const fields = new Map<string, string>();
+  for (const part of matched[2].split(',')) {
+    const eq = part.indexOf('=');
+    if (eq <= 0) continue;
+    const key = part.slice(0, eq).trim();
+    const value = part.slice(eq + 1).trim();
+    if (!key || !value) continue;
+    fields.set(key, value);
+  }
+
+  const limitText = fields.get('limit');
+  if (limitText === undefined || !/^\d+(?:\.\d+)?$/.test(limitText)) return null;
+
+  const parsed: AgentErrorLimit = {
+    code: matched[1],
+    value: Number(limitText),
+    text: limitText,
+  };
+  const agent = fields.get('agent');
+  if (agent) parsed.agent = agent;
+  const source = fields.get('source');
+  if (source) parsed.source = source;
+  return parsed;
+}
+
+/**
+ * 迭代上限错误的专属文案。
+ *
+ * 与其他错误码不同，这里要同时回答三件事：哪个 agent、哪个上限来源、
+ * 去哪里调。裸码（无 agent / source）时回落成通用文案。
+ */
+function buildIterationLimitMessage(parsed: AgentErrorLimit | null): string {
+  const template = AGENT_RUNTIME_MESSAGES.max_iterations_exceeded;
+  const agentId = parsed?.agent ?? '';
+  const agentName = agentId ? (AGENT_DISPLAY_NAMES[agentId] ?? agentId) : '';
+  const source = parsed?.source ?? '';
+
+  const subject = agentName ? `「${agentName}」` : '本次任务';
+  const unit = AGENT_RUNTIME_LIMIT_UNITS.max_iterations_exceeded;
+  const limit = parsed ? ` ${parsed.text} ${unit}` : '';
+  const sourceLabel = ITERATION_LIMIT_SOURCE_LABELS[source];
+  const sourcePart = sourceLabel ? `（上限来源：${sourceLabel}）` : '';
+  const hint = ITERATION_LIMIT_HINTS[source] ?? DEFAULT_ITERATION_HINT;
+
+  return template
+    .replace('{subject}', subject)
+    .replace('{limit}', limit)
+    .replace('{source}', sourcePart)
+    .replace('{hint}', hint);
 }
 
 /**
@@ -126,6 +223,8 @@ export function mapAgentErrorToText(code: string): string | null {
 
   // hasOwnProperty 防御原型链：'constructor'/'toString' 不是合法错误码
   if (!Object.prototype.hasOwnProperty.call(AGENT_RUNTIME_MESSAGES, bare)) return null;
+
+  if (bare === 'max_iterations_exceeded') return buildIterationLimitMessage(parsed);
 
   const template = AGENT_RUNTIME_MESSAGES[bare];
 
