@@ -191,6 +191,56 @@ def test_r38_save_roundtrips_json_columns(setup_test_db):
     ]
 
 
+def test_client_meta_save_roundtrips(setup_test_db):
+    """2026-10-28: 用户消息展示元数据 save → to_dict 原样往返。"""
+    import json
+
+    from backend.data.session_repo import Message, MessageRepository, SessionRepository
+
+    session = SessionRepository().create(title="client-meta")
+    meta = {
+        "file_refs": [{"path": "src/App.tsx", "name": "App.tsx"}],
+        "attachments": [{"name": "a.pdf", "size": 1024, "type": "application/pdf"}],
+    }
+    repo = MessageRepository()
+    repo.save(
+        Message(
+            id="msg-meta-1",
+            session_id=session.id,
+            role="user",
+            content="看看 @src/App.tsx",
+            created_at=1,
+            client_meta=json.dumps(meta, ensure_ascii=False),
+        )
+    )
+
+    rows = repo.get_by_session(session.id)
+    assert len(rows) == 1
+    assert rows[0].to_dict()["client_meta"] == meta
+
+
+def test_client_meta_defaults_to_none_and_degrades_on_bad_json(setup_test_db):
+    """缺省/畸形 client_meta: 默认 None, to_dict 降级 None 而不是抛错。"""
+    from backend.data.session_repo import Message, MessageRepository, SessionRepository
+
+    session = SessionRepository().create(title="client-meta-bad")
+    repo = MessageRepository()
+    repo.save(
+        Message(
+            id="msg-meta-2",
+            session_id=session.id,
+            role="user",
+            content="hi",
+            created_at=1,
+            client_meta="{not-json",
+        )
+    )
+
+    rows = repo.get_by_session(session.id)
+    assert rows[0].client_meta == "{not-json"
+    assert rows[0].to_dict()["client_meta"] is None
+
+
 def test_r38_compact_info_survives_prefix_replacement(setup_test_db):
     """压缩续接行落盘后, compact_info 可从 DB 读回 (重载渲染横幅的依据)。"""
     import json
@@ -243,7 +293,7 @@ def test_r38_migration_adds_columns_to_legacy_db(setup_test_db):
     conn = db.get_connection()
     cursor = conn.cursor()
     cols = [r["name"] for r in cursor.execute("PRAGMA table_info(messages)").fetchall()]
-    for col in ("activated_skills", "compact_info", "memory_refs"):
+    for col in ("activated_skills", "compact_info", "memory_refs", "client_meta"):
         assert col in cols
 
     # 幂等: 再跑一次迁移不抛错（TOCTOU 兜底）

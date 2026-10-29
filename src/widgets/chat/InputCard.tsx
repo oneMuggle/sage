@@ -142,6 +142,11 @@ export interface InputCardProps {
 
   // At file menu (for @mentions)
   atFileMenu?: React.ReactNode;
+  /**
+   * 是否在「+」菜单里展示「命令与技能」入口。新会话页没有 slash 菜单实现，
+   * 传 false 避免出现点了没有反应的入口。
+   */
+  enableCommandItem?: boolean;
 
   // Wave 3 C6: 编排模式条（ChatInput 提供 select，渲染在输入卡顶部）
   orchModeBar?: React.ReactNode;
@@ -205,6 +210,7 @@ function InputCardInner({
   onSlashHighlight,
   onSlashClose,
   atFileMenu,
+  enableCommandItem = true,
   orchModeBar,
   composerControls,
   hint,
@@ -281,17 +287,21 @@ function InputCardInner({
         focusInputEnd();
       },
     },
-    {
-      key: 'command',
-      label: value === '' ? '命令与技能' : '命令与技能（清空输入后可用）',
-      icon: <Slash className="w-4 h-4" />,
-      hint: '/',
-      disabled: value !== '',
-      onSelect: () => {
-        onChange('/');
-        focusInputEnd();
-      },
-    },
+    ...(enableCommandItem
+      ? [
+          {
+            key: 'command',
+            label: value === '' ? '命令与技能' : '命令与技能（清空输入后可用）',
+            icon: <Slash className="w-4 h-4" />,
+            hint: '/',
+            disabled: value !== '',
+            onSelect: () => {
+              onChange('/');
+              focusInputEnd();
+            },
+          },
+        ]
+      : []),
     ...(onSchedule
       ? [
           {

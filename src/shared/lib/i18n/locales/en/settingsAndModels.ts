@@ -166,6 +166,7 @@ export const enSettingsAndModels = {
   // ─── @File mention ────────────────
   'chat.atFile.searching': 'Searching…',
   'chat.atFile.empty': 'No files found',
+  'chat.atFile.noWorkspace': 'No workspace bound to this session — cannot search files',
   'chat.atFile.timeout': 'Search timeout',
   'chat.atFile.error': 'Search failed',
   'chat.atFile.retry': 'Retry',
@@ -370,8 +371,7 @@ export const enSettingsAndModels = {
     'Delete all rules with no plugin record?',
   'settings.permission.rules.delete_orphans_confirm_message':
     'Every remembered rule whose plugin has no lifecycle record will be deleted. Rules owned by known plugins and built-in tools are unaffected. This cannot be undone.',
-  'settings.permission.rules.delete_orphans_failed':
-    'Failed to delete orphan rules, please retry',
+  'settings.permission.rules.delete_orphans_failed': 'Failed to delete orphan rules, please retry',
 
   // ─── M6 生态扩展: 用量/成本面板 ─────
   'settings.section.usage': 'Usage',

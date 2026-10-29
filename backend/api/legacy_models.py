@@ -98,6 +98,11 @@ class ChatRequest(BaseModel):
     # 上限 4 张 / 单张 5MiB（解码后字节计）—— 防上下文爆炸。
     images: List[str] = Field(default_factory=list)
 
+    # 2026-10-28: 用户消息展示元数据（附件 / @ 文件引用 / office 引用）。
+    # 仅用于会话气泡回显，落库 messages.client_meta（JSON-in-TEXT），
+    # 不参与 LLM 上下文。前端保证不含 dataUrl；服务端再做 32 KiB 上限保护。
+    message_meta: Optional[Dict[str, Any]] = None
+
     # Multi-Agent Orchestration (spec 2026-08-11): 编排模式开关。
     # auto（默认）—— 轻量 LLM 二分类决定；force_multi / force_single ——
     # 用户斜杠命令 /orchestrate / /single 覆盖，跳过语义判定。
