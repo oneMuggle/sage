@@ -63,7 +63,7 @@
     "src/shared/api/projectApiTypes.ts": 1387,
     "src/widgets/chat/ChatInput.tsx": 816,
     "src/features/send-message/__tests__/useChat.streamingAndGates.test.ts": 957,
-    "src/features/send-message/chatStreamStore.ts": 835,
+    "src/features/send-message/chatStreamStore.ts": 853,
     "src/features/send-message/useChat.ts": 1037,
     "src/pages/settings/PluginsTab.tsx": 820,
     "backend/tests/unit/test_design_routes.py": 975,
