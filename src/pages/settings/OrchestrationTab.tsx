@@ -9,8 +9,6 @@
  * 部分更新，必须保留其余 orch 键。
  */
 
-import { useState } from 'react';
-
 import { useSettings } from '../../features/manage-settings/useSettings';
 
 import { SettingRow, Toggle } from './components';
@@ -153,49 +151,15 @@ function TextField({
 
 export function OrchestrationTab() {
   const { settings, updateSettings } = useSettings();
-  const [copiedAudit, setCopiedAudit] = useState(false);
   const setOrch = (patch: Partial<typeof settings.orch>) =>
     updateSettings({ orch: { ...settings.orch, ...patch } });
 
-  /* v8 ignore start */
-  const handleCopyAudit = async () => {
-    const text = formatOrchestrationTabAuditSnapshot({
-      planPreflightEnabled: settings.orch.planPreflightEnabled,
-      planScoutEnabled: settings.orch.planScoutEnabled,
-      maxScoutIterations: settings.orch.maxScoutIterations,
-      maxPlannerIterations: settings.orch.maxPlannerIterations,
-      maxConcurrentSubagents: settings.orch.maxConcurrentSubagents,
-      maxRetries: settings.orch.maxRetries,
-      maxLaneIterations: settings.orch.maxLaneIterations,
-      maxSubagentIterations: settings.orch.maxSubagentIterations,
-      subagentApprovalMode: settings.orch.subagentApprovalMode,
-      worktreeIsolation: settings.orch.worktreeIsolation,
-      scratchRoot: settings.orch.scratchRoot,
-    });
-    setCopiedAudit(true);
-    await navigator.clipboard?.writeText(text);
-  };
-
-  /* v8 ignore stop */
-
   return (
     <div className="space-y-6" data-testid="orch-settings-section">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-xs text-muted leading-relaxed">
-          编排器派发子代理的执行参数（orch 段）。修改即保存并生效于新发起的 run；预算与守门项设 0
-          表示不限制，请谨慎放开。
-        </p>
-        <div className="flex items-center gap-2 shrink-0">
-          <span
-            data-testid="orchestration-tab-copy-audit"
-            onClick={() => void handleCopyAudit()}
-            title="复制编排设置审计快照"
-            className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
-          >
-            {copiedAudit ? '已复制快照' : '复制快照'}
-          </span>
-        </div>
-      </div>
+      <p className="text-xs text-muted leading-relaxed">
+        编排器派发子代理的执行参数（orch 段）。修改即保存并生效于新发起的 run；预算与守门项设 0
+        表示不限制，请谨慎放开。
+      </p>
       <section>
         {/* Round 1/3 (2026-09-19) 计划前置旋钮 —— 管线级开关排最前。
             关闭后 multi 拆解行为与 2026-09-19 之前完全一致。 */}

@@ -61,10 +61,7 @@ describe('ModelsTab context controls', () => {
     expect(screen.getByText(/0 最稳定，2 最随机/)).toBeInTheDocument();
   });
 
-  it('exports ModelsTab audit snapshot and JSON helpers and renders copy controls', () => {
-    render(<ModelsTab settings={settings} updateSettings={vi.fn()} />);
-    expect(screen.getByTestId('models-tab-copy-audit')).toBeInTheDocument();
-
+  it('exports ModelsTab audit snapshot and JSON helpers; copy controls moved to the audit export tab (P3)', () => {
     const snapshot = formatModelsTabAuditSnapshot({
       endpointCount: 1,
       discoveredModelCount: 3,

@@ -165,7 +165,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     expect(screen.getByPlaceholderText('留空走 ModelsTab 选择')).toBeInTheDocument();
   });
 
-  it('formats and copies endpoints tab audit snapshot and JSON', () => {
+  it('formats endpoints tab audit snapshot and JSON; copy controls moved to the audit export tab (P3)', () => {
     expect(
       formatEndpointsTabAuditSnapshot({
         endpointCount: 2,
@@ -187,14 +187,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
       testingId: 'ep2',
     });
 
-    const props = makeProps();
-    render(<EndpointsTab {...props} />);
-    const summaryBtn = screen.getByTestId('endpoints-tab-copy-summary');
-    const jsonBtn = screen.getByTestId('endpoints-tab-copy-json');
-    fireEvent.click(summaryBtn);
-    expect(summaryBtn.textContent).toBe('已复制');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn.textContent).toBe('已复制');
+    // P3: 页内「复制快照/JSON」按钮已收敛到「审计导出」tab —— EndpointsTab 不再渲染这两枚按钮。
   });
 
   it('reconciles discovered models into the catalog without breaking discovery on failure', async () => {

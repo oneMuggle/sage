@@ -274,7 +274,7 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [ ... ];
 
 ### P3 — 体验与降噪（1–2 PR）
 
-- [ ] 新增「审计导出」tab，移除 21 处页面内复制按钮
+- [x] 新增「审计导出」tab，移除 21 处页面内复制按钮
 - [ ] i18n 清理 + CJK 守卫测试
 - [ ] 保存反馈统一；显式保存卡片补 dirty 提示
 - [ ] `Cmd/Ctrl+K` 聚焦搜索；最近访问排序

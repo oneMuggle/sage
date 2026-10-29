@@ -130,7 +130,6 @@ function CloseToTrayCard(): JSX.Element {
 
 export function BasicTab() {
   const { settings, updateSettings } = useSettings();
-  const [copiedAudit, setCopiedAudit] = useState(false);
   const [inputHistorySize, setInputHistorySizeState] = useState(getInputHistorySize());
   const [proxyTimeoutDraft, setProxyTimeoutDraft] = useState(String(settings.llmProxyTimeoutS));
 
@@ -146,41 +145,10 @@ export function BasicTab() {
     if (v !== settings.llmProxyTimeoutS) updateSettings({ llmProxyTimeoutS: v });
   };
 
-  /* v8 ignore start */
-  const handleCopyAudit = async () => {
-    const text = formatBasicTabAuditSnapshot({
-      streaming: settings.streaming,
-      llmRetryMaxAttempts: settings.llmRetryMaxAttempts,
-      llmRetryBaseDelayS: settings.llmRetryBaseDelayS,
-      llmRetryMaxDelayS: settings.llmRetryMaxDelayS,
-      llmTotalTimeoutS: settings.llmTotalTimeoutS,
-      llmProxyTimeoutS: settings.llmProxyTimeoutS,
-      timezone: settings.timezone,
-      logTimezone: settings.logTimezone,
-      demoMode: settings.demoMode,
-    });
-    setCopiedAudit(true);
-    await navigator.clipboard?.writeText(text);
-  };
-
-  /* v8 ignore stop */
-
   return (
     <div className="space-y-6">
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-text">主题</h3>
-          <div className="flex items-center gap-2">
-            <span
-              data-testid="basic-tab-copy-audit"
-              onClick={() => void handleCopyAudit()}
-              title="复制基础设置审计快照"
-              className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
-            >
-              {copiedAudit ? '已复制快照' : '复制快照'}
-            </span>
-          </div>
-        </div>
+        <h3 className="text-sm font-semibold text-text mb-3">主题</h3>
         <ThemeSelector />
       </section>
       <section>

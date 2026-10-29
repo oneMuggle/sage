@@ -53,9 +53,7 @@ describe('settings tab registry guards', () => {
   it('every search-index entry points to a registered tab key', () => {
     const registered = new Set<string>(SETTINGS_TAB_KEYS);
     const stale = SETTINGS_SEARCH_INDEX.filter((entry) => !registered.has(entry.tab));
-    expect(
-      stale.map((entry) => ({ key: entry.key, tab: entry.tab })),
-    ).toEqual([]);
+    expect(stale.map((entry) => ({ key: entry.key, tab: entry.tab }))).toEqual([]);
   });
 
   it('every visible tab has at least one search-index entry', () => {
@@ -65,7 +63,7 @@ describe('settings tab registry guards', () => {
   });
 
   it('the registry contains the expected tab count', () => {
-    // win7 比 main 多一个 feedback tab（上游 #2669 用户反馈），故为 17。
-    expect(SETTINGS_TABS.length).toBe(17);
+    // 16（main 基线）+ 1 feedback（win7 上游 #2669）+ 1 audit-export（P3）= 18
+    expect(SETTINGS_TABS.length).toBe(18);
   });
 });

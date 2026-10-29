@@ -313,8 +313,6 @@ export function NetworkTab() {
   const [proxy, setProxy] = useState<ProxyPayload>(DEFAULT_PROXY);
   const [proxyError, setProxyError] = useState<TranslationKey | null>(null);
   const [searchConfig, setSearchConfig] = useState<SearchConfigPayload>(DEFAULT_SEARCH_CONFIG);
-  const [copiedSummary, setCopiedSummary] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -414,53 +412,9 @@ export function NetworkTab() {
   return (
     <div className="space-y-6">
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-text">
+        <h3 className="text-sm font-semibold text-text mb-3">
             {t('settings.section.network.access')}
           </h3>
-          <div className="flex items-center gap-1.5">
-            <span
-              onClick={() => {
-                /* v8 ignore start */
-                const text = formatNetworkTabAuditSnapshot({
-                  mode: policy.mode,
-                  allowedCount: policy.allowed_hosts.length,
-                  insecureTlsCount: policy.insecure_tls_hosts.length,
-                  hasProxy: Boolean(proxy.http || proxy.https),
-                  primaryEngine: searchConfig.order[0],
-                });
-                setCopiedSummary(true);
-                void navigator.clipboard?.writeText(text).catch(() => {});
-                /* v8 ignore stop */
-              }}
-              data-testid="network-tab-copy-summary"
-              title="复制网络策略审计摘要"
-              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
-            >
-              {copiedSummary ? '已复制' : '复制摘要'}
-            </span>
-            <span
-              onClick={() => {
-                /* v8 ignore start */
-                const text = formatNetworkTabAuditJson({
-                  mode: policy.mode,
-                  allowedCount: policy.allowed_hosts.length,
-                  insecureTlsCount: policy.insecure_tls_hosts.length,
-                  hasProxy: Boolean(proxy.http || proxy.https),
-                  primaryEngine: searchConfig.order[0],
-                });
-                setCopiedJson(true);
-                void navigator.clipboard?.writeText(text).catch(() => {});
-                /* v8 ignore stop */
-              }}
-              data-testid="network-tab-copy-json"
-              title="复制网络策略审计 JSON"
-              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
-            >
-              {copiedJson ? '已复制' : 'JSON'}
-            </span>
-          </div>
-        </div>
         <SettingRow
           anchor="network_policy"
           label={t('settings.network.mode')}

@@ -145,7 +145,7 @@ describe('ArenaAccountsToggle — Sidebar integration', () => {
     expect(screen.getByTestId('toggle-arena-accounts')).toHaveClass('bg-primary');
   });
 
-  it('formats audit snapshot and JSON and supports copy controls (Phase P100)', () => {
+  it('formats audit snapshot and JSON; copy controls moved to the audit export tab (P3)', () => {
     expect(formatArenaAccountsToggleAuditSnapshot({ enabled: true })).toBe(
       'arenaAccountsToggle|enabled=1',
     );
@@ -154,12 +154,10 @@ describe('ArenaAccountsToggle — Sidebar integration', () => {
       enabled: true,
     });
 
+    // P3: 页内复制按钮已收敛到「审计导出」tab —— 开关行上不应再有隐形点击靶。
     render(<ArenaAccountsToggle />);
-    const snapBtn = screen.getByTestId('arena-accounts-toggle-copy-snapshot');
-    const jsonBtn = screen.getByTestId('arena-accounts-toggle-copy-json');
-    fireEvent.click(snapBtn);
-    expect(snapBtn).toHaveTextContent('已复制快照');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn).toHaveTextContent('已复制JSON');
+    expect(screen.getByTestId('toggle-arena-accounts')).toBeInTheDocument();
+    expect(screen.queryByTestId('arena-accounts-toggle-copy-snapshot')).toBeNull();
+    expect(screen.queryByTestId('arena-accounts-toggle-copy-json')).toBeNull();
   });
 });

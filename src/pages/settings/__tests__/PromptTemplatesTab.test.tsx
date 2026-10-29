@@ -272,13 +272,6 @@ describe('PromptTemplatesTab — R27-B', () => {
       hasConflict: true,
     });
 
-    renderTab();
-    await waitFor(() => expect(screen.getByTestId('prompts-empty')).toBeInTheDocument());
-    const summaryBtn = screen.getByTestId('prompt-templates-tab-copy-summary');
-    const jsonBtn = screen.getByTestId('prompt-templates-tab-copy-json');
-    fireEvent.click(summaryBtn);
-    expect(summaryBtn.textContent).toBe('已复制');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn.textContent).toBe('已复制');
+    // P3: 页内「复制快照/JSON」按钮已收敛到「审计导出」tab —— PromptTemplatesTab 不再渲染这两枚按钮。
   });
 });
