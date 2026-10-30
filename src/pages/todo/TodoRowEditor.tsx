@@ -8,10 +8,26 @@
  * - Checkbox on left for batch selection
  * - Status indicators: complete button, ✓ completed, ✗ cancelled
  */
-import { Calendar, Check, X } from 'lucide-react';
+import {
+  Calendar,
+  Check,
+  CheckCircle2,
+  Copy,
+  Flag,
+  Pencil,
+  Trash2,
+  X,
+  XCircle,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Todo, TodoPriority, UpdateTodoInput } from '../../shared/api/types';
+import { copyToClipboard } from '../../shared/lib/clipboard';
+import { fillTemplate } from '../../shared/lib/formatTemplate';
+import { useI18n } from '../../shared/lib/i18n';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
+import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
+import type { ContextMenuItemSpec } from '../../shared/ui/ContextMenu/types';
 import { TwoStepDelete } from '../../widgets/sidebar/TwoStepDelete';
 
 import { toLocalDatetimeValue, toIsoString } from './todoDateUtils';
@@ -73,6 +89,7 @@ export function TodoRowEditor({
   onCancel,
   onDelete,
 }: TodoRowEditorProps) {
+  const { t } = useI18n();
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(todo.title);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -141,160 +158,242 @@ export function TodoRowEditor({
 
   const priorityConf = PRIORITY_DISPLAY[todo.priority];
 
+  const menuItems = (): ContextMenuItemSpec[] => {
+    const items: ContextMenuItemSpec[] = [];
+    if (!isInactive) {
+      items.push(
+        {
+          id: 'todo-edit-title',
+          label: t('contextMenu.todo.editTitle'),
+          icon: Pencil,
+          onSelect: () => {
+            setTitleDraft(todo.title);
+            setEditingTitle(true);
+          },
+        },
+        {
+          id: 'todo-complete',
+          label: t('contextMenu.todo.complete'),
+          icon: CheckCircle2,
+          onSelect: () => void onComplete(todo.id),
+        },
+        {
+          id: 'todo-cancel',
+          label: t('contextMenu.todo.cancel'),
+          icon: XCircle,
+          onSelect: () => void onCancel(todo.id),
+        },
+        {
+          id: 'todo-priority',
+          label: t('contextMenu.todo.priority'),
+          icon: Flag,
+          submenu: [
+            {
+              id: 'todo-priority-high',
+              label: t('contextMenu.todo.priorityHigh'),
+              onSelect: () => void onUpdate(todo.id, { priority: 'high' }),
+            },
+            {
+              id: 'todo-priority-medium',
+              label: t('contextMenu.todo.priorityMedium'),
+              onSelect: () => void onUpdate(todo.id, { priority: 'medium' }),
+            },
+            {
+              id: 'todo-priority-low',
+              label: t('contextMenu.todo.priorityLow'),
+              onSelect: () => void onUpdate(todo.id, { priority: 'low' }),
+            },
+          ],
+        },
+      );
+    }
+    items.push(
+      {
+        id: 'todo-copy-title',
+        label: t('contextMenu.todo.copyTitle'),
+        icon: Copy,
+        onSelect: () =>
+          void copyToClipboard(todo.title, {
+            successMessage: t('contextMenu.common.copied'),
+            errorMessage: t('contextMenu.common.copyFailed'),
+          }),
+      },
+      { id: 'todo-sep-delete', kind: 'separator' },
+      {
+        id: 'todo-delete',
+        label: t('contextMenu.todo.delete'),
+        icon: Trash2,
+        destructive: true,
+        onSelect: async () => {
+          const confirmed = await confirmDialog({
+            title: t('contextMenu.todo.deleteTitle'),
+            message: fillTemplate(t('contextMenu.todo.deleteBody'), { title: todo.title }),
+            confirmLabel: t('common.delete'),
+            danger: true,
+          });
+          if (confirmed) await onDelete(todo.id);
+        },
+      },
+    );
+    return items;
+  };
+
   return (
-    <li
-      className={`flex items-center gap-2 px-3 py-2 border border-border rounded-radius-sm group transition-colors ${
-        isInactive ? 'bg-bg-muted/20' : 'bg-surface hover:bg-bg-hover/30'
-      } ${selected ? 'ring-1 ring-primary/30' : ''}`}
-    >
-      {/* Checkbox */}
-      <input
-        type="checkbox"
-        checked={selected}
-        onChange={(e) => onSelect(todo.id, e.target.checked)}
-        className="w-3.5 h-3.5 rounded border-border accent-primary cursor-pointer flex-shrink-0"
-        aria-label={`选择 ${todo.title}`}
-      />
+    <ContextMenu items={menuItems} enabled={!editingTitle && !showDatePicker}>
+      <li
+        className={`flex items-center gap-2 px-3 py-2 border border-border rounded-radius-sm group transition-colors ${
+          isInactive ? 'bg-bg-muted/20' : 'bg-surface hover:bg-bg-hover/30'
+        } ${selected ? 'ring-1 ring-primary/30' : ''}`}
+      >
+        {/* Checkbox */}
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={(e) => onSelect(todo.id, e.target.checked)}
+          className="w-3.5 h-3.5 rounded border-border accent-primary cursor-pointer flex-shrink-0"
+          aria-label={`选择 ${todo.title}`}
+        />
 
-      {/* Status toggle */}
-      {!isInactive && (
-        <button
-          type="button"
-          onClick={() => void onComplete(todo.id)}
-          title="标记完成"
-          aria-label={`完成 ${todo.title}`}
-          className="w-5 h-5 flex items-center justify-center rounded-full border border-border hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 text-text-muted hover:text-green-600 flex-shrink-0"
-        >
-          <Check className="w-3 h-3 opacity-0 group-hover:opacity-100" />
-        </button>
-      )}
-      {isDone && (
-        <span className="w-5 h-5 flex items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 flex-shrink-0">
-          <Check className="w-3 h-3" />
-        </span>
-      )}
-      {isCancelled && (
-        <span className="w-5 h-5 flex items-center justify-center rounded-full bg-bg-muted text-text-muted flex-shrink-0">
-          <X className="w-3 h-3" />
-        </span>
-      )}
-
-      {/* Title (inline editable) */}
-      <div className="flex-1 min-w-0">
-        {editingTitle ? (
-          <input
-            ref={titleInputRef}
-            type="text"
-            value={titleDraft}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={commitTitle}
-            onKeyDown={handleTitleKeyDown}
-            className="w-full text-sm px-1 py-0.5 border border-primary rounded bg-background focus:outline-none"
-            data-testid="todo-title-edit-input"
-          />
-        ) : (
+        {/* Status toggle */}
+        {!isInactive && (
           <button
             type="button"
-            onClick={() => {
-              if (!isInactive) {
-                setTitleDraft(todo.title);
-                setEditingTitle(true);
-              }
-            }}
-            className={`text-sm text-left truncate w-full ${
-              isInactive ? 'line-through text-text-muted' : 'text-text'
-            } hover:text-primary cursor-text`}
-            title="点击编辑标题"
+            onClick={() => void onComplete(todo.id)}
+            title="标记完成"
+            aria-label={`完成 ${todo.title}`}
+            className="w-5 h-5 flex items-center justify-center rounded-full border border-border hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 text-text-muted hover:text-green-600 flex-shrink-0"
           >
-            {todo.title}
+            <Check className="w-3 h-3 opacity-0 group-hover:opacity-100" />
           </button>
         )}
-      </div>
+        {isDone && (
+          <span className="w-5 h-5 flex items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 flex-shrink-0">
+            <Check className="w-3 h-3" />
+          </span>
+        )}
+        {isCancelled && (
+          <span className="w-5 h-5 flex items-center justify-center rounded-full bg-bg-muted text-text-muted flex-shrink-0">
+            <X className="w-3 h-3" />
+          </span>
+        )}
 
-      {/* Description indicator */}
-      {todo.description && !editingTitle && (
-        <span className="text-ui-xs text-text-muted px-1" title={todo.description}>
-          📝
-        </span>
-      )}
-
-      {/* Priority badge (clickable to cycle) */}
-      <button
-        type="button"
-        onClick={cyclePriority}
-        title={`优先级：${priorityConf.label}（点击切换）`}
-        aria-label={`优先级 ${priorityConf.label}，点击切换`}
-        className={`flex items-center gap-0.5 px-1.5 py-0.5 text-ui-xs rounded-full ${priorityConf.bg} ${priorityConf.color} hover:opacity-80 flex-shrink-0`}
-      >
-        {priorityConf.label}
-      </button>
-
-      {/* Due date (clickable to edit) */}
-      {todo.due_at && (
-        <div className="relative flex-shrink-0" ref={datePickerRef}>
-          <button
-            type="button"
-            onClick={() => setShowDatePicker(!showDatePicker)}
-            title="修改截止日期"
-            className={`flex items-center gap-1 px-1.5 py-0.5 text-ui-xs rounded-full border ${
-              new Date(todo.due_at) < new Date() && !isInactive
-                ? 'border-red-300 bg-red-50 dark:bg-red-900/20 text-red-600'
-                : 'border-border text-text-muted hover:border-primary'
-            }`}
-          >
-            <Calendar className="w-3 h-3" />
-            {formatDueDate(todo.due_at)}
-          </button>
-
-          {showDatePicker && (
-            <div className="absolute right-0 top-full mt-1 z-50 p-2 bg-surface border border-border rounded-radius-sm shadow-lg">
-              <input
-                type="datetime-local"
-                value={toLocalDatetimeValue(todo.due_at)}
-                onChange={(e) => handleDueDateChange(e.target.value)}
-                className="px-2 py-1 text-xs border border-border rounded bg-background focus:outline-none focus:border-primary"
-                autoFocus
-              />
-              <button
-                type="button"
-                onClick={clearDueDate}
-                className="mt-1 w-full text-ui-xs text-text-muted hover:text-red-600 py-0.5"
-              >
-                清除日期
-              </button>
-            </div>
+        {/* Title (inline editable) */}
+        <div className="flex-1 min-w-0">
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              type="text"
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={handleTitleKeyDown}
+              className="w-full text-sm px-1 py-0.5 border border-primary rounded bg-background focus:outline-none"
+              data-testid="todo-title-edit-input"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                if (!isInactive) {
+                  setTitleDraft(todo.title);
+                  setEditingTitle(true);
+                }
+              }}
+              className={`text-sm text-left truncate w-full ${
+                isInactive ? 'line-through text-text-muted' : 'text-text'
+              } hover:text-primary cursor-text`}
+              title="点击编辑标题"
+            >
+              {todo.title}
+            </button>
           )}
         </div>
-      )}
 
-      {/* Project tag */}
-      {todo.project_tag && (
-        <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-ui-xs rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 flex-shrink-0">
-          {todo.project_tag}
-        </span>
-      )}
+        {/* Description indicator */}
+        {todo.description && !editingTitle && (
+          <span className="text-ui-xs text-text-muted px-1" title={todo.description}>
+            📝
+          </span>
+        )}
 
-      {/* Cancel button (for active items) */}
-      {!isDone && !isCancelled && (
+        {/* Priority badge (clickable to cycle) */}
         <button
           type="button"
-          onClick={() => void onCancel(todo.id)}
-          title="取消待办"
-          aria-label={`取消 ${todo.title}`}
-          className="w-6 h-6 flex items-center justify-center text-text-muted hover:text-orange-600 hover:bg-bg-hover rounded opacity-0 group-hover:opacity-100 flex-shrink-0"
+          onClick={cyclePriority}
+          title={`优先级：${priorityConf.label}（点击切换）`}
+          aria-label={`优先级 ${priorityConf.label}，点击切换`}
+          className={`flex items-center gap-0.5 px-1.5 py-0.5 text-ui-xs rounded-full ${priorityConf.bg} ${priorityConf.color} hover:opacity-80 flex-shrink-0`}
         >
-          <X className="w-3.5 h-3.5" />
+          {priorityConf.label}
         </button>
-      )}
 
-      {/* Delete (two-step) */}
-      <TwoStepDelete
-        onConfirm={() => void onDelete(todo.id)}
-        label={`删除 ${todo.title}`}
-        armedLabel="确认删除?"
-        data-testid={`todo-delete-${todo.id}`}
-        className="w-6 h-6 justify-center opacity-0 group-hover:opacity-100 flex-shrink-0"
-      />
-    </li>
+        {/* Due date (clickable to edit) */}
+        {todo.due_at && (
+          <div className="relative flex-shrink-0" ref={datePickerRef}>
+            <button
+              type="button"
+              onClick={() => setShowDatePicker(!showDatePicker)}
+              title="修改截止日期"
+              className={`flex items-center gap-1 px-1.5 py-0.5 text-ui-xs rounded-full border ${
+                new Date(todo.due_at) < new Date() && !isInactive
+                  ? 'border-red-300 bg-red-50 dark:bg-red-900/20 text-red-600'
+                  : 'border-border text-text-muted hover:border-primary'
+              }`}
+            >
+              <Calendar className="w-3 h-3" />
+              {formatDueDate(todo.due_at)}
+            </button>
+
+            {showDatePicker && (
+              <div className="absolute right-0 top-full mt-1 z-50 p-2 bg-surface border border-border rounded-radius-sm shadow-lg">
+                <input
+                  type="datetime-local"
+                  value={toLocalDatetimeValue(todo.due_at)}
+                  onChange={(e) => handleDueDateChange(e.target.value)}
+                  className="px-2 py-1 text-xs border border-border rounded bg-background focus:outline-none focus:border-primary"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={clearDueDate}
+                  className="mt-1 w-full text-ui-xs text-text-muted hover:text-red-600 py-0.5"
+                >
+                  清除日期
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Project tag */}
+        {todo.project_tag && (
+          <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-ui-xs rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 flex-shrink-0">
+            {todo.project_tag}
+          </span>
+        )}
+
+        {/* Cancel button (for active items) */}
+        {!isDone && !isCancelled && (
+          <button
+            type="button"
+            onClick={() => void onCancel(todo.id)}
+            title="取消待办"
+            aria-label={`取消 ${todo.title}`}
+            className="w-6 h-6 flex items-center justify-center text-text-muted hover:text-orange-600 hover:bg-bg-hover rounded opacity-0 group-hover:opacity-100 flex-shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {/* Delete (two-step) */}
+        <TwoStepDelete
+          onConfirm={() => void onDelete(todo.id)}
+          label={`删除 ${todo.title}`}
+          armedLabel="确认删除?"
+          data-testid={`todo-delete-${todo.id}`}
+          className="w-6 h-6 justify-center opacity-0 group-hover:opacity-100 flex-shrink-0"
+        />
+      </li>
+    </ContextMenu>
   );
 }

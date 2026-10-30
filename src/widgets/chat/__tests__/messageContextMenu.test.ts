@@ -143,10 +143,10 @@ describe('buildMessageContextMenuItems', () => {
       onQuote: vi.fn(),
     });
 
-    item(items, 'feedback-up').onSelect();
-    item(items, 'feedback-down').onSelect();
-    item(items, 'copy-selection').onSelect();
-    item(items, 'quote-selection').onSelect();
+    item(items, 'feedback-up').onSelect?.();
+    item(items, 'feedback-down').onSelect?.();
+    item(items, 'copy-selection').onSelect?.();
+    item(items, 'quote-selection').onSelect?.();
 
     expect(onFeedback).toHaveBeenNthCalledWith(1, 'up');
     expect(onFeedback).toHaveBeenNthCalledWith(2, 'down');

@@ -123,7 +123,7 @@ describe('buildSessionContextMenuItems', () => {
       ['delete', handlers.onDelete],
     ] as const) {
       const spec = item(items, id);
-      spec.onSelect();
+      spec.onSelect?.();
       expect(handler).toHaveBeenCalledTimes(1);
     }
   });

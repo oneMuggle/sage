@@ -58,21 +58,26 @@ src/shared/ui/ContextMenu/
 
 ## 3. 接入矩阵（P0 / P1 已实现）
 
-| 界面             | 组件                                                            | 菜单动作                                                                                                                                                                             |
-| ---------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 会话列表         | `src/widgets/session/SessionItem.tsx` + `sessionContextMenu.ts` | 打开 / 重命名 / 置顶·取消置顶 / 归档·恢复（有入口时）/ 复制标题 / 导出 Markdown / 导出 HTML /（分叉树）/ 删除…（确认框）                                                             |
-| 聊天消息         | `src/widgets/chat/Message.tsx` + `messageContextMenu.ts`        | 复制选区·引用选区\* / 复制（渲染后纯文本） / 复制为 Markdown（源文本） / 引用到输入框 / 编辑重发（用户） / 重新生成（助手） / 有帮助·没帮助 / 分叉 / 回滚 / 存记忆 / 删除…（确认框） |
-| 代码块           | `ShikiCodeBlock.tsx`                                            | 复制代码 / 复制为 Markdown 围栏                                                                                                                                                      |
-| 表格             | `MessageMarkdownParts.tsx`（MarkdownTable）                     | 复制表格（TSV）                                                                                                                                                                      |
-| 图片             | `MarkdownImage.tsx`                                             | 查看大图                                                                                                                                                                             |
-| 文件引用 chip    | `MessageClientMeta.tsx`                                         | 复制路径 / 复制文件名                                                                                                                                                                |
-| Office 引用 chip | `OfficeRefChip.tsx`（输入区与消息共用）                         | 打开 / 在文件夹中显示 / 复制文件名 /（输入区）移除；历史消息按 `client_meta.office_refs[].workspace_path` 定位原工作区文档                                                           |
-| 知识库 chip      | `KnowledgeChip.tsx`、`MessageClientMeta.tsx`                    | 复制名称 /（输入区）移除                                                                                                                                                             |
-| 附件 chip        | `FileAttachment.tsx`、`MessageClientMeta.tsx`                   | 复制文件名 /（图片）查看大图 /（输入区）移除                                                                                                                                         |
-| Wiki 文件树      | `src/widgets/wiki/WikiFileTree.tsx`                             | 文件：打开/重命名/复制路径/复制文件名/删除…；目录：新建文件/复制路径/复制文件名/删除…（目录递归确认）                                                                                |
-| 文件变更卡       | `FileChangeCard.tsx`                                            | 展开·收起 / 接受 / 回滚…（确认）/ 切换 diff 视图 / 在编辑器打开 / 在右栏查看 / 复制路径                                                                                              |
-| 产物行           | `ArtifactRow.tsx`                                               | 打开产物 / 在文件管理器显示 /（Office）交付工作台 / 复制路径                                                                                                                         |
-| 可编辑控件       | `electron/contextMenu.ts`                                       | 原生撤销/重做/剪切/复制/粘贴/全选；开发期检查元素                                                                                                                                    |
+| 界面             | 组件                                                                      | 菜单动作                                                                                                                                                                             |
+| ---------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 会话列表         | `src/widgets/session/SessionItem.tsx` + `sessionContextMenu.ts`           | 打开 / 重命名 / 置顶·取消置顶 / 归档·恢复（有入口时）/ 复制标题 / 导出 Markdown / 导出 HTML /（分叉树）/ 删除…（确认框）                                                             |
+| 聊天消息         | `src/widgets/chat/Message.tsx` + `messageContextMenu.ts`                  | 复制选区·引用选区\* / 复制（渲染后纯文本） / 复制为 Markdown（源文本） / 引用到输入框 / 编辑重发（用户） / 重新生成（助手） / 有帮助·没帮助 / 分叉 / 回滚 / 存记忆 / 删除…（确认框） |
+| 代码块           | `ShikiCodeBlock.tsx`                                                      | 复制代码 / 复制为 Markdown 围栏                                                                                                                                                      |
+| 表格             | `MessageMarkdownParts.tsx`（MarkdownTable）                               | 复制表格（TSV）                                                                                                                                                                      |
+| 图片             | `MarkdownImage.tsx`                                                       | 查看大图                                                                                                                                                                             |
+| 文件引用 chip    | `MessageClientMeta.tsx`                                                   | 复制路径 / 复制文件名                                                                                                                                                                |
+| Office 引用 chip | `OfficeRefChip.tsx`（输入区与消息共用）                                   | 打开 / 在文件夹中显示 / 复制文件名 /（输入区）移除；历史消息按 `client_meta.office_refs[].workspace_path` 定位原工作区文档                                                           |
+| 知识库 chip      | `KnowledgeChip.tsx`、`MessageClientMeta.tsx`                              | 复制名称 /（输入区）移除                                                                                                                                                             |
+| 附件 chip        | `FileAttachment.tsx`、`MessageClientMeta.tsx`                             | 复制文件名 /（图片）查看大图 /（输入区）移除                                                                                                                                         |
+| Wiki 文件树      | `src/widgets/wiki/WikiFileTree.tsx`                                       | 文件：打开/重命名/复制路径/复制文件名/删除…；目录：新建文件/复制路径/复制文件名/删除…（目录递归确认）                                                                                |
+| 文件变更卡       | `FileChangeCard.tsx`                                                      | 展开·收起 / 接受 / 回滚…（确认）/ 切换 diff 视图 / 在编辑器打开 / 在右栏查看 / 复制路径                                                                                              |
+| 产物行           | `ArtifactRow.tsx`                                                         | 打开产物 / 在文件管理器显示 /（Office）交付工作台 / 复制路径                                                                                                                         |
+| Todo 页          | `pages/todo/TodoRowEditor.tsx`                                            | 编辑标题 / 标记完成 / 取消待办 / 优先级子菜单（高·中·低）/ 复制标题 / 删除…（确认）                                                                                                  |
+| Todo 组件        | `widgets/todo/TodoItem.tsx`                                               | 标记完成 / 复制标题 / 删除…（确认）                                                                                                                                                  |
+| 提示词模板       | `pages/settings/PromptTemplatesTab.tsx`                                   | 编辑模板 / 复制模板内容 / 复制文件名 / 删除…（确认）                                                                                                                                 |
+| 技能卡           | `widgets/skills/SkillCard.tsx`                                            | 钉住·取消钉住 / 归档·取消归档 / 变更历史 / 复制技能名·提示词模板 / 删除…（确认）                                                                                                     |
+| Git 变更行       | `widgets/sidebar/sections/GitStatusSection.tsx` + `gitFileContextMenu.ts` | 查看 diff / 复制路径 / 复制文件名                                                                                                                                                    |
+| 可编辑控件       | `electron/contextMenu.ts`                                                 | 原生撤销/重做/剪切/复制/粘贴/全选；开发期检查元素                                                                                                                                    |
 
 \* 选区项仅在存在文字选区时出现。
 
@@ -87,7 +92,7 @@ src/shared/ui/ContextMenu/
 
 - 基座：`src/shared/ui/ContextMenu/__tests__/ContextMenu.test.tsx`（打开/键盘/禁用/checkbox/隐藏/延迟求值/全局打开态/嵌套 stopPropagation）。
 - 构建器：`sessionContextMenu.test.ts`、`messageContextMenu.test.ts`（菜单项集合、禁用态、状态文案）。
-- 界面接入：`SessionItem.contextMenu.test.tsx`、`Message.contextMenu.test.tsx`、`ShikiCodeBlock.contextMenu.test.tsx`、`MarkdownImage.contextMenu.test.tsx`、`OfficeRefChip.test.tsx`、`AttachmentChips.contextMenu.test.tsx`、`MessageClientMeta.contextMenu.test.tsx`、`WikiFileTree.contextMenu.test.tsx`、`FileChangeCard.contextMenu.test.tsx`、`ArtifactRow.contextMenu.test.tsx`。
+- 界面接入：`SessionItem.contextMenu.test.tsx`、`Message.contextMenu.test.tsx`、`ShikiCodeBlock.contextMenu.test.tsx`、`MarkdownImage.contextMenu.test.tsx`、`OfficeRefChip.test.tsx`、`AttachmentChips.contextMenu.test.tsx`、`MessageClientMeta.contextMenu.test.tsx`、`WikiFileTree.contextMenu.test.tsx`、`FileChangeCard.contextMenu.test.tsx`、`ArtifactRow.contextMenu.test.tsx`、`TodoRowEditor.contextMenu.test.tsx`、`TodoItem.contextMenu.test.tsx`、`PromptTemplatesTab.contextMenu.test.tsx`、`SkillCard.contextMenu.test.tsx`、`gitFileContextMenu.test.ts`。
 - Electron：`electron/__tests__/contextMenu.test.ts`（editable 门禁、角色映射、dev inspect 坐标）。
 - 既有组件测试因新增 `useI18n` 依赖补包 `I18nProvider`（断言未变）。
 
@@ -107,8 +112,8 @@ src/shared/ui/ContextMenu/
 
 ## 8. 已知边界（未纳入本期）
 
-- P2 列表（Todo 页、提示词模板、技能卡、项目行、Git 变更行）仍走既有 hover/"..." 按钮，未接右键。
 - 消息操作栏"更多"仍为内联展开（与菜单动作同源，但未合并为同一 spec）。
 - Wiki 目录不支持重命名（后端 `secure_rename_path` 仅正则文件）；不提供"新建文件夹"（无 mkdir API，新建文件会自动创建父目录）。
 - 进展区 Todo 行是 agent 只读快照，无用户动作，未提供菜单。
 - 图片 `复制图片`、代码块 `下载为文件` 需要保存/剪贴板图片加工，暂未提供。
+- 项目行右键菜单由 #2667 的 `widgets/project/ProjectContextMenu.tsx` 独立实现（先于本基座落地），后续可迁移到统一基座；行为已具备，不重复建设。

@@ -74,4 +74,36 @@ export const enContextMenu: Record<keyof typeof zhContextMenu, string> = {
   'contextMenu.artifact.open': 'Open Artifact',
   'contextMenu.artifact.reveal': 'Show in File Manager',
   'contextMenu.artifact.openDelivery': 'Open Delivery Workspace',
+
+  'contextMenu.todo.editTitle': 'Edit Title',
+  'contextMenu.todo.complete': 'Mark Complete',
+  'contextMenu.todo.cancel': 'Cancel Todo',
+  'contextMenu.todo.priority': 'Priority',
+  'contextMenu.todo.priorityHigh': 'High Priority',
+  'contextMenu.todo.priorityMedium': 'Medium Priority',
+  'contextMenu.todo.priorityLow': 'Low Priority',
+  'contextMenu.todo.copyTitle': 'Copy Title',
+  'contextMenu.todo.delete': 'Delete Todo…',
+  'contextMenu.todo.deleteTitle': 'Delete Todo',
+  'contextMenu.todo.deleteBody': 'This permanently deletes "{title}". This cannot be undone.',
+
+  'contextMenu.prompt.edit': 'Edit Template',
+  'contextMenu.prompt.copyContent': 'Copy Template Content',
+  'contextMenu.prompt.delete': 'Delete Template…',
+  'contextMenu.prompt.deleteTitle': 'Delete Prompt Template',
+  'contextMenu.prompt.deleteBody':
+    'This permanently deletes the template "{name}". This cannot be undone.',
+
+  'contextMenu.skill.pin': 'Pin Skill',
+  'contextMenu.skill.unpin': 'Unpin Skill',
+  'contextMenu.skill.archive': 'Archive Skill',
+  'contextMenu.skill.unarchive': 'Unarchive Skill',
+  'contextMenu.skill.history': 'Change History',
+  'contextMenu.skill.copyBody': 'Copy Prompt Template',
+  'contextMenu.skill.delete': 'Delete Skill…',
+  'contextMenu.skill.deleteTitle': 'Delete Skill',
+  'contextMenu.skill.deleteBody':
+    'This permanently deletes the skill "{name}". This cannot be undone.',
+
+  'contextMenu.git.viewDiff': 'View Diff',
 };
