@@ -12,6 +12,7 @@ import {
   Pencil,
   Pin,
   PinOff,
+  RefreshCw,
   Download,
   Search,
 } from 'lucide-react';
@@ -97,7 +98,19 @@ export function SessionItem({
   );
 
   const isLive = slots.streaming != null;
+  // 2026-10-30: 重试中 —— 流槽位已携带 retryInfo（LLM 退避重试期间），
+  // 用琥珀色徽章与普通"运行中"区分，侧栏也能感知 504/超时重试。
+  const retryInfo = slots.streaming?.retryInfo ?? null;
+  const isRetrying = isLive && retryInfo !== null;
+  const retryTitle = retryInfo
+    ? `${t('session.status_retrying')
+        .replace('{attempt}', String(retryInfo.attempt))
+        .replace('{max}', String(retryInfo.max_attempts))}: ${retryInfo.error_message}`
+    : '';
   const dbStatus = session.run_status ?? 'idle';
+  // 刷新页面/多窗口/调度器运行：DB 仍是 running 但本地没有流槽位，
+  // 旧实现不渲染任何运行标志，用户以为会话空闲。
+  const backendRunning = !isLive && dbStatus === 'running';
   // 保鲜的 completed ✓：刚完成 60s 内显示，之后回归 idle 观感
   const completedFresh = !isLive && dbStatus === 'completed' && hasFreshRunAt(session.last_run_at);
   const showCompletedTick = useExpireAfter(completedFresh, session.last_run_at, COMPLETED_FRESH_MS);
@@ -325,12 +338,32 @@ export function SessionItem({
                 className="inline-flex flex-shrink-0 w-2 h-2 rounded-full bg-warning animate-pulse"
               />
             )}
-            {isLive && (
+            {isRetrying && (
+              <span
+                data-testid="session-retrying"
+                aria-label={retryTitle}
+                title={retryTitle}
+                className="inline-flex flex-shrink-0 text-warning"
+              >
+                <RefreshCw className="w-3 h-3 animate-spin" />
+              </span>
+            )}
+            {isLive && !isRetrying && (
               <span
                 data-testid="session-running"
                 aria-label={t('session.status_running')}
                 title={t('session.status_running')}
                 className="inline-flex flex-shrink-0 text-primary"
+              >
+                <Loader2 className="w-3 h-3 animate-spin" />
+              </span>
+            )}
+            {backendRunning && (
+              <span
+                data-testid="session-running-background"
+                aria-label={t('session.status_running_background')}
+                title={t('session.status_running_background')}
+                className="inline-flex flex-shrink-0 text-muted"
               >
                 <Loader2 className="w-3 h-3 animate-spin" />
               </span>
