@@ -5,7 +5,7 @@
 // 翻译 body 输出）。附件上传走 raw-binary IPC，不经 invoke —— 通过 preload 暴露的
 // `window.electronAPI.feedback.uploadAttachment` 通道。
 //
-// 设计见 docs/plans/2026-10-29_direct-feedback-channel.md §4。
+// 设计见 docs/technical/111-feedback-relay-deployment.md §11.2。
 
 import { invoke } from './desktopInvoke';
 

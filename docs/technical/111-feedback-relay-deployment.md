@@ -239,15 +239,96 @@ curl -s http://127.0.0.1:8900/api/v1/feedback/health
 # {"status": "ok", "conversations": 3}
 ```
 
-## 11. 已知边界
+## 11. 客户端侧设计（桌面端）
+
+中继只是链路的一端。另一端由桌面端三层组成：**本地 SQLite（真源）→ 本地 FastAPI 路由 →
+Electron 同步器 / 渲染进程**。渲染进程从不直接访问管理员地址，所有出网都由主进程的
+`FeedbackSyncer` 发起。
+
+### 11.1 本地数据模型
+
+本地库与中继的三张表同名，但**不是同一份数据**，字段也不一样（本地多了 `tag`、`synced_at`）：
+
+- `feedback_conversations(id, title, status ∈ {open,resolved,closed}, tag ∈ {bug,feature,other},
+  remote_ticket_id, remote_ticket_url, app_version, os_info, last_activity_at, created_at, updated_at)`
+- `feedback_messages(id, conversation_id, role ∈ {user,admin}, body, media_ids(JSON), created_at, synced_at)`
+- `feedback_attachments(id, conversation_id, message_id, filename, mime_type, size_bytes)`
+
+`conversation_id` 是客户端生成的 UUID v4，全程不变，也是中继侧的主键。
+`tag` 由迁移 **v10** 加入（老库历史会话落 `'other'`）。
+`synced_at IS NULL` 表示消息还在 outbox，UI 显示「待送达」；转发成功后由
+`POST /messages/{id}/synced` 打上时间戳。
+
+### 11.2 本地后端 API 契约
+
+前缀 `/api/v1/feedback`（`backend/api/feedback_routes.py`）：
+
+| 方法 | 路径 | 用途 |
+|---|---|---|
+| POST | `/conversations` | 新建会话（客户端生成 UUID） |
+| GET | `/conversations?limit=` | 会话列表（默认 50） |
+| GET | `/conversations/{id}` | 详情 + 消息 |
+| GET | `/conversations/{id}/pending` | outbox：尚未转发给管理员的消息 |
+| POST | `/conversations/{id}/messages` | 追加消息（`role` 只能是 user / admin） |
+| POST | `/conversations/{id}/attachments` | 上传截图（请求体是原始二进制） |
+| PATCH | `/conversations/{id}/status` | open / resolved / closed |
+| POST | `/messages/{id}/synced` | 标记已成功转发到管理员侧 |
+| GET | `/search?q=&limit=` | 搜消息正文 |
+| GET | `/log-tail?max_lines=` | 日志尾部（诊断附带用，已脱敏） |
+
+对**管理员侧**，同步器只用两个端点：
+
+- `POST /api/v1/feedback/conversations/{id}/messages` —— 携带
+  `{id, role, body, media_ids, created_at, title, app_version, os_info, conversation_created_at}`。
+  中继首次见到该 id 时用这些元数据建工单，之后忽略。
+- `GET /api/v1/feedback/conversations/{id}/messages?since=<毫秒>` —— 必须返回**裸 JSON 数组**，
+  客户端直接 `.filter(...)`，包一层对象会崩。
+
+### 11.3 同步节奏与退避
+
+没有固定短轮询：**每轮结束后按当前退避档排下一轮**。
+
+- 成功 → 退避档重置为 0，下一轮 **5 分钟**后
+- 失败 → 逐档升：`5min → 15min → 1h → 4h → 24h`，之后定格在 24h
+- 单轮最多处理 `CONVERSATIONS_PER_TICK_LIMIT = 50` 个本地会话（避免长时间锁库）
+- 单请求超时 `REQUEST_TIMEOUT_MS = 30_000`
+- 只有 `status = open` 的会话参与提交与拉取
+- 配置被清空时循环自行 `running = false`，等设置页重新启用再 `start()`
+
+「立即同步」按钮和设置页的同名按钮都直接调 `syncOnce()`，不受退避影响。
+
+### 11.4 代码地图
+
+| 文件 | 职责 |
+|---|---|
+| `backend/api/feedback_routes.py` | 本地 HTTP 路由（§11.2） |
+| `backend/data/feedback_repo.py` | 仓储层：会话 / 消息 / 附件的读写 |
+| `backend/data/database.py` | 三张本地表的 DDL（建表在 `_init_schema` 内） |
+| `backend/data/migrations/runner.py` | 迁移 v10：`feedback_conversations.tag` |
+| `electron/feedback/feedbackConfig.ts` | 地址 / 密钥 / 本机 ID / 诊断开关（safeStorage 加密） |
+| `electron/feedback/feedbackSyncer.ts` | 周期循环：提交 outbox + 拉取回复 + 退避 |
+| `electron/feedback/feedbackIpc.ts` | 渲染进程 ↔ 主进程的配置与手动同步 IPC |
+| `electron/commandRoutes/feedback.ts` | 会话/消息 CRUD 到本地后端的 HTTP 映射 |
+| `src/features/feedback/FeedbackHub.tsx` | `/feedback` 页面：列表、消息流、输入框、截图 |
+| `src/features/feedback/feedbackStore.ts` | 渲染层状态（zustand） |
+| `src/features/feedback/diagnosticsSuffix.ts` | 诊断日志附带（最近 80 行 / ≤4000 字符） |
+| `src/shared/api/feedbackApi.ts` | 渲染进程调本地后端的封装 |
+
+---
+
+## 12. 已知边界
 
 - 桌面端只对 `status = open` 的会话提交/拉取，本地标记 resolved/closed 后不再同步（已有消息不回删）。
 - 附件目前只做**存储**，不会自动追加到 Jira/GitLab 评论；SMTP 会作为邮件附件带上。
-- 没有内置的会话关闭/标签能力；状态变更请直接用 SQLite 或后续管理页增强。
+- 会话的**状态与标签由桌面端提供**（`PATCH /conversations/{id}/status` 与迁移 v10 的 `tag` 列）；
+  管理页只展示状态，不提供改状态/打标签的入口，需要时直接用 SQLite。
 - 单进程 + SQLite 足够支撑小型团队；不要用 gunicorn 多 worker 并发写同一个 db 文件。
 
-## 12. 相关文档
+## 13. 相关文档
 
-- 功能设计与实施计划：[`docs/plans/2026-10-29_direct-feedback-channel.md`](../plans/2026-10-29_direct-feedback-channel.md)
+- 用户手册：[`docs/user-manual/25-user-feedback.md`](../user-manual/25-user-feedback.md)
+- 客户端侧设计（本地表 / 本地 API / 同步节奏 / 代码地图）：本文 §11
 - 客户端同步器：`electron/feedback/feedbackSyncer.ts`（退避 `[5min, 15min, 1h, 4h, 24h]`，单次请求超时 30s）
+- 本地路由 / 仓储：`backend/api/feedback_routes.py`、`backend/data/feedback_repo.py`
+- 渲染层：`src/features/feedback/FeedbackHub.tsx`
 - 测试：`scripts/tests/test_feedback_receiver.py`（46 个用例，含真 HTTP 闭环；CI 不跑 `scripts/tests`，需手动执行）
