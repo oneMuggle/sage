@@ -488,6 +488,9 @@ class TestDataclasses:
             "action": "Do something",
             "reason": "Because",
             "priority": "high",
+            "evidence": [],
+            "action_type": "",
+            "action_payload": {},
         }
 
     def test_advisor_suggestion_defaults(self):

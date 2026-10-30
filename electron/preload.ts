@@ -64,8 +64,7 @@ const memoryBridge = {
   getProfile: () => invokeMemory('get_user_profile'),
   diagnostics: () => invokeMemory('get_memory_diagnostics'),
   /** win7: 记忆事件订阅（SSE 桥）—— 主进程 memoryEvents 通道 */
-  subscribe: (handler: (event: unknown) => void) =>
-    electronAPI.listen('memory-events', handler),
+  subscribe: (handler: (event: unknown) => void) => electronAPI.listen('memory-events', handler),
   createProfile: (args: Record<string, unknown>) => invokeMemory('create_user_profile', args),
   updateProfile: (args: Record<string, unknown>) => invokeMemory('update_user_profile', args),
   deleteProfile: (args: Record<string, unknown>) => invokeMemory('delete_user_profile', args),
@@ -197,6 +196,20 @@ const electronAPI = {
    */
   selectDirectory: (opts: { intent: 'create' | 'open'; defaultPath?: string }) =>
     ipcRenderer.invoke('sage:dialog:select-directory', opts) as Promise<string | null>,
+
+  /**
+   * 2026-10-29: 项目目录操作 —— 渲染层只传 projectId，主进程从后端解析路径。
+   */
+  project: {
+    openFolder: (projectId: string) =>
+      ipcRenderer.invoke('project:open-folder', { projectId }) as Promise<
+        { success: true } | { error: string }
+      >,
+    revealFolder: (projectId: string) =>
+      ipcRenderer.invoke('project:reveal-folder', { projectId }) as Promise<
+        { success: true } | { error: string }
+      >,
+  },
 
   /**
    * live-events P1 附带 (2026-09-07): 审批等待 OS 通知。main 进程经

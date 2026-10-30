@@ -251,266 +251,273 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
             >
               拆解当前阶段
             </button>
-            <button
-              type="button"
-              data-testid="overview-save-stage-profile-btn"
-              onClick={async () => {
-                if (savedStageProfile) return;
-                setSavedStageProfile(true);
-                if (typeof projectApi?.confirmKnowledge === 'function') {
-                  try {
-                    await projectApi.confirmKnowledge(project.id, {
-                      entries: [
-                        {
-                          category: 'note',
-                          content: `项目阶段快照 [${project.name}]：形态=${blueprint.label}，当前阶段=${stageLabel}，L1宪章=${hasSageMd ? '已就绪' : '待初始化'}，快照数=${checkpointCount}`,
-                          importance: 7,
-                          sourceMessageIds: [],
-                          reasoning: '概览阶段状态沉淀至 L3 画像',
-                        },
-                      ],
-                    });
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-            >
-              {savedStageProfile ? '已存阶段至 L3' : '沉淀阶段至 L3'}
-            </button>
-            <button
-              type="button"
-              data-testid="overview-save-l4-btn"
-              onClick={async () => {
-                if (savedOverviewL4) return;
-                setSavedOverviewL4(true);
-                if (typeof projectApi?.addMaterial === 'function') {
-                  try {
-                    await projectApi.addMaterial(project.id, {
-                      content: `# 项目治理概览快照：${project.name}\n- 形态：${blueprint.label}\n- 当前阶段：${stageLabel}\n- L1 宪章：${hasSageMd ? '已就绪' : '待初始化'}\n- 快照数：${checkpointCount}`,
-                    });
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-            >
-              {savedOverviewL4 ? '已存概览 L4' : '存概览至 L4'}
-            </button>
-            <button
-              type="button"
-              data-testid="overview-stage-to-milestone-btn"
-              onClick={async () => {
-                if (createdStageMilestone) return;
-                setCreatedStageMilestone(true);
-                if (typeof projectApi?.createMilestone === 'function') {
-                  try {
-                    await projectApi.createMilestone(project.id, {
-                      title: `[阶段目标] 完成「${stageLabel}」核心交付物`,
-                      description: `${blueprint.label} · 阶段 ${stageLabel} 关键节点`,
-                      stage: activeStageId ?? undefined,
-                      status: 'in_progress',
-                    });
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-            >
-              {createdStageMilestone ? '已建阶段里程碑' : '当前阶段建里程碑'}
-            </button>
-            <button
-              type="button"
-              data-testid="overview-stage-to-constraint-btn"
-              onClick={async () => {
-                if (createdStageConstraint) return;
-                setCreatedStageConstraint(true);
-                if (typeof projectApi?.createConstraint === 'function') {
-                  try {
-                    await projectApi.createConstraint(project.id, {
-                      category: 'stage_gate',
-                      content: `阶段准出红线 [${stageLabel}]：完成阶段必选交付物并通过校核后方可推进`,
-                      priority: 8,
-                    });
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-            >
-              {createdStageConstraint ? '已设阶段约束' : '当前阶段设 L2 约束'}
-            </button>
-            <button
-              type="button"
-              data-testid="overview-seed-stage-milestones-btn"
-              onClick={async () => {
-                if (seededStageMilestones) return;
-                setSeededStageMilestones(true);
-                const matched = blueprint.recommendedMilestones.filter(
-                  (m) => m.stage === activeStageId,
-                );
-                const list =
-                  matched.length > 0 ? matched : blueprint.recommendedMilestones.slice(0, 2);
-                if (typeof projectApi?.createMilestone === 'function') {
-                  for (const item of list) {
-                    try {
-                      await projectApi.createMilestone(project.id, {
-                        title: item.title,
-                        description: item.description,
-                        stage: item.stage,
-                        status: 'pending',
-                      });
-                    } catch {
-                      // ignore in test/offline mode
+            <details className="w-full">
+              <summary className="cursor-pointer text-ui-2xs text-muted-foreground hover:text-foreground">
+                高级转换操作
+              </summary>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="overview-save-stage-profile-btn"
+                  onClick={async () => {
+                    if (savedStageProfile) return;
+                    setSavedStageProfile(true);
+                    if (typeof projectApi?.confirmKnowledge === 'function') {
+                      try {
+                        await projectApi.confirmKnowledge(project.id, {
+                          entries: [
+                            {
+                              category: 'note',
+                              content: `项目阶段快照 [${project.name}]：形态=${blueprint.label}，当前阶段=${stageLabel}，L1宪章=${hasSageMd ? '已就绪' : '待初始化'}，快照数=${checkpointCount}`,
+                              importance: 7,
+                              sourceMessageIds: [],
+                              reasoning: '概览阶段状态沉淀至 L3 画像',
+                            },
+                          ],
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
                     }
-                  }
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-            >
-              {seededStageMilestones ? '已导入阶段里程碑' : '导入阶段推荐里程碑'}
-            </button>
-            <button
-              type="button"
-              data-testid="overview-scaffold-dirs-btn"
-              onClick={async () => {
-                if (scaffoldedOverviewDirs) return;
-                setScaffoldedOverviewDirs(true);
-                if (typeof projectApi?.scaffold === 'function') {
-                  try {
-                    await projectApi.scaffold(project.id, {
-                      projectType: blueprint.type,
-                      createDirectories: true,
-                      createSageMd: false,
-                      importDefaultConstraints: false,
-                      seedDefaultMilestones: false,
-                    });
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
-            >
-              {scaffoldedOverviewDirs ? '已补齐目录' : '补齐标准目录'}
-            </button>
-            <button
-              type="button"
-              data-testid="overview-seed-constraints-btn"
-              onClick={async () => {
-                if (seededStageConstraints) return;
-                setSeededStageConstraints(true);
-                if (typeof projectApi?.importConstraints === 'function') {
-                  try {
-                    await projectApi.importConstraints(
-                      project.id,
-                      blueprint.subTemplates[0]?.key || blueprint.type,
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                >
+                  {savedStageProfile ? '已存阶段至 L3' : '沉淀阶段至 L3'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="overview-save-l4-btn"
+                  onClick={async () => {
+                    if (savedOverviewL4) return;
+                    setSavedOverviewL4(true);
+                    if (typeof projectApi?.addMaterial === 'function') {
+                      try {
+                        await projectApi.addMaterial(project.id, {
+                          content: `# 项目治理概览快照：${project.name}\n- 形态：${blueprint.label}\n- 当前阶段：${stageLabel}\n- L1 宪章：${hasSageMd ? '已就绪' : '待初始化'}\n- 快照数：${checkpointCount}`,
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                >
+                  {savedOverviewL4 ? '已存概览 L4' : '存概览至 L4'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="overview-stage-to-milestone-btn"
+                  onClick={async () => {
+                    if (createdStageMilestone) return;
+                    setCreatedStageMilestone(true);
+                    if (typeof projectApi?.createMilestone === 'function') {
+                      try {
+                        await projectApi.createMilestone(project.id, {
+                          title: `[阶段目标] 完成「${stageLabel}」核心交付物`,
+                          description: `${blueprint.label} · 阶段 ${stageLabel} 关键节点`,
+                          stage: activeStageId ?? undefined,
+                          status: 'in_progress',
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                >
+                  {createdStageMilestone ? '已建阶段里程碑' : '当前阶段建里程碑'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="overview-stage-to-constraint-btn"
+                  onClick={async () => {
+                    if (createdStageConstraint) return;
+                    setCreatedStageConstraint(true);
+                    if (typeof projectApi?.createConstraint === 'function') {
+                      try {
+                        await projectApi.createConstraint(project.id, {
+                          category: 'stage_gate',
+                          content: `阶段准出红线 [${stageLabel}]：完成阶段必选交付物并通过校核后方可推进`,
+                          priority: 8,
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                >
+                  {createdStageConstraint ? '已设阶段约束' : '当前阶段设 L2 约束'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="overview-seed-stage-milestones-btn"
+                  onClick={async () => {
+                    if (seededStageMilestones) return;
+                    setSeededStageMilestones(true);
+                    const matched = blueprint.recommendedMilestones.filter(
+                      (m) => m.stage === activeStageId,
                     );
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-            >
-              {seededStageConstraints ? '已导入默认约束' : '导入形态默认约束'}
-            </button>
-            <button
-              type="button"
-              data-testid="overview-pillars-to-l2-btn"
-              onClick={async () => {
-                if (convertedPillarsL2) return;
-                setConvertedPillarsL2(true);
-                if (typeof projectApi?.createConstraint === 'function') {
-                  for (const pillar of blueprint.contextPillars) {
-                    try {
-                      await projectApi.createConstraint(project.id, {
-                        category: 'context_pillar',
-                        content: pillar,
-                        priority: 8,
-                      });
-                    } catch {
-                      // ignore in test/offline mode
+                    const list =
+                      matched.length > 0 ? matched : blueprint.recommendedMilestones.slice(0, 2);
+                    if (typeof projectApi?.createMilestone === 'function') {
+                      for (const item of list) {
+                        try {
+                          await projectApi.createMilestone(project.id, {
+                            title: item.title,
+                            description: item.description,
+                            stage: item.stage,
+                            status: 'pending',
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
                     }
-                  }
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-            >
-              {convertedPillarsL2 ? '已转支柱L2' : '支柱转 L2 约束'}
-            </button>
-            <button
-              type="button"
-              data-testid="overview-pillars-to-l3-btn"
-              onClick={async () => {
-                if (savedPillarsL3) return;
-                setSavedPillarsL3(true);
-                if (typeof projectApi?.confirmKnowledge === 'function') {
-                  try {
-                    await projectApi.confirmKnowledge(project.id, {
-                      entries: blueprint.contextPillars.map((pillar) => ({
-                        category: 'convention',
-                        content: pillar,
-                        importance: 8,
-                        sourceMessageIds: [],
-                        reasoning: '概览组件护栏支柱一键沉淀至 L3 画像',
-                      })),
-                    });
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-            >
-              {savedPillarsL3 ? '已存支柱L3' : '支柱存 L3 画像'}
-            </button>
-            <button
-              type="button"
-              data-testid="overview-pillars-to-l4-btn"
-              onClick={async () => {
-                if (savedPillarsL4) return;
-                setSavedPillarsL4(true);
-                if (typeof projectApi?.addMaterial === 'function') {
-                  try {
-                    await projectApi.addMaterial(project.id, {
-                      content: `# ${blueprint.label} · 上下文护栏支柱 (${project.name})\n${blueprint.contextPillars.map((p) => `- ${p}`).join('\n')}`,
-                    });
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-            >
-              {savedPillarsL4 ? '已存支柱L4' : '支柱存 L4 资料'}
-            </button>
-            <button
-              type="button"
-              data-testid="overview-pillars-to-milestone-btn"
-              onClick={async () => {
-                if (convertedPillarsMilestone) return;
-                setConvertedPillarsMilestone(true);
-                if (typeof projectApi?.createMilestone === 'function') {
-                  try {
-                    await projectApi.createMilestone(project.id, {
-                      title: `[${blueprint.label}护栏验收] ${blueprint.contextPillars.length} 项上下文支柱核查`,
-                      description: blueprint.contextPillars.join('；'),
-                      status: 'pending',
-                    });
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-            >
-              {convertedPillarsMilestone ? '已转支柱里程碑' : '支柱转里程碑'}
-            </button>
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                >
+                  {seededStageMilestones ? '已导入阶段里程碑' : '导入阶段推荐里程碑'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="overview-scaffold-dirs-btn"
+                  onClick={async () => {
+                    if (scaffoldedOverviewDirs) return;
+                    setScaffoldedOverviewDirs(true);
+                    if (typeof projectApi?.scaffold === 'function') {
+                      try {
+                        await projectApi.scaffold(project.id, {
+                          projectType: blueprint.type,
+                          createDirectories: true,
+                          createSageMd: false,
+                          importDefaultConstraints: false,
+                          seedDefaultMilestones: false,
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+                >
+                  {scaffoldedOverviewDirs ? '已补齐目录' : '补齐标准目录'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="overview-seed-constraints-btn"
+                  onClick={async () => {
+                    if (seededStageConstraints) return;
+                    setSeededStageConstraints(true);
+                    if (typeof projectApi?.importConstraints === 'function') {
+                      try {
+                        await projectApi.importConstraints(
+                          project.id,
+                          blueprint.subTemplates[0]?.key || blueprint.type,
+                        );
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                >
+                  {seededStageConstraints ? '已导入默认约束' : '导入形态默认约束'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="overview-pillars-to-l2-btn"
+                  onClick={async () => {
+                    if (convertedPillarsL2) return;
+                    setConvertedPillarsL2(true);
+                    if (typeof projectApi?.createConstraint === 'function') {
+                      for (const pillar of blueprint.contextPillars) {
+                        try {
+                          await projectApi.createConstraint(project.id, {
+                            category: 'context_pillar',
+                            content: pillar,
+                            priority: 8,
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                >
+                  {convertedPillarsL2 ? '已转支柱L2' : '支柱转 L2 约束'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="overview-pillars-to-l3-btn"
+                  onClick={async () => {
+                    if (savedPillarsL3) return;
+                    setSavedPillarsL3(true);
+                    if (typeof projectApi?.confirmKnowledge === 'function') {
+                      try {
+                        await projectApi.confirmKnowledge(project.id, {
+                          entries: blueprint.contextPillars.map((pillar) => ({
+                            category: 'convention',
+                            content: pillar,
+                            importance: 8,
+                            sourceMessageIds: [],
+                            reasoning: '概览组件护栏支柱一键沉淀至 L3 画像',
+                          })),
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                >
+                  {savedPillarsL3 ? '已存支柱L3' : '支柱存 L3 画像'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="overview-pillars-to-l4-btn"
+                  onClick={async () => {
+                    if (savedPillarsL4) return;
+                    setSavedPillarsL4(true);
+                    if (typeof projectApi?.addMaterial === 'function') {
+                      try {
+                        await projectApi.addMaterial(project.id, {
+                          content: `# ${blueprint.label} · 上下文护栏支柱 (${project.name})\n${blueprint.contextPillars.map((p) => `- ${p}`).join('\n')}`,
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                >
+                  {savedPillarsL4 ? '已存支柱L4' : '支柱存 L4 资料'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="overview-pillars-to-milestone-btn"
+                  onClick={async () => {
+                    if (convertedPillarsMilestone) return;
+                    setConvertedPillarsMilestone(true);
+                    if (typeof projectApi?.createMilestone === 'function') {
+                      try {
+                        await projectApi.createMilestone(project.id, {
+                          title: `[${blueprint.label}护栏验收] ${blueprint.contextPillars.length} 项上下文支柱核查`,
+                          description: blueprint.contextPillars.join('；'),
+                          status: 'pending',
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                >
+                  {convertedPillarsMilestone ? '已转支柱里程碑' : '支柱转里程碑'}
+                </button>
+              </div>
+            </details>
             <button
               type="button"
               onClick={() => void loadOverviewMeta()}
@@ -523,133 +530,138 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
           </div>
         </div>
 
-        {/* Phase P32: 生命周期阶段快捷切换胶囊 */}
-        <div
-          className="flex flex-wrap items-center gap-1 pt-1 border-t border-border/60"
-          data-testid="overview-stage-switcher"
-        >
-          <span className="text-ui-2xs text-muted-foreground">阶段切换：</span>
-          {blueprint.stages.map((st) => {
-            const isCurrent = st.id === activeStageId;
-            return (
-              <button
-                key={st.id}
-                type="button"
-                data-testid={`overview-stage-pill-${st.id}`}
-                onClick={() => void handleSelectStage(st.id)}
-                className={`rounded px-1.5 py-0.5 text-ui-2xs transition-colors ${
-                  isCurrent
-                    ? 'bg-primary text-primary-foreground font-medium'
-                    : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
-                }`}
-              >
-                {st.label}
-              </button>
-            );
-          })}
-          <button
-            type="button"
-            data-testid="overview-stages-to-l3-btn"
-            onClick={async () => {
-              if (savedStagesL3) return;
-              setSavedStagesL3(true);
-              if (typeof projectApi?.confirmKnowledge === 'function') {
-                try {
-                  await projectApi.confirmKnowledge(project.id, {
-                    entries: [
-                      {
-                        category: 'architecture',
-                        content: `${blueprint.label} 阶段管线 (${project.name})：${blueprint.stages.map((s) => (s.id === activeStageId ? `[${s.label}*]` : s.label)).join(' → ')}`,
-                        importance: 7,
-                        sourceMessageIds: [],
-                        reasoning: '项目概览阶段推进管线一键沉淀至 L3 画像',
-                      },
-                    ],
-                  });
-                } catch {
-                  // ignore in test/offline mode
-                }
-              }
-            }}
-            className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+        {/* Phase P32: 生命周期阶段快捷切换胶囊（默认折叠） */}
+        <details className="pt-1 border-t border-border/60">
+          <summary className="cursor-pointer text-ui-2xs text-muted-foreground hover:text-foreground">
+            项目阶段与推进（高级）
+          </summary>
+          <div
+            className="flex flex-wrap items-center gap-1 pt-1"
+            data-testid="overview-stage-switcher"
           >
-            {savedStagesL3 ? '已存管线L3' : '阶段管线存L3'}
-          </button>
-          <button
-            type="button"
-            data-testid="overview-stages-to-l4-btn"
-            onClick={async () => {
-              if (savedStagesL4) return;
-              setSavedStagesL4(true);
-              if (typeof projectApi?.addMaterial === 'function') {
-                try {
-                  await projectApi.addMaterial(project.id, {
-                    content: `# ${blueprint.label} · 生命周期阶段管线 (${project.name})\n${blueprint.stages.map((s, i) => `${i + 1}. ${s.label} (${s.id})${s.id === activeStageId ? ' [当前阶段]' : ''} — ${s.hint}`).join('\n')}`,
-                  });
-                } catch {
-                  // ignore in test/offline mode
+            <span className="text-ui-2xs text-muted-foreground">阶段切换：</span>
+            {blueprint.stages.map((st) => {
+              const isCurrent = st.id === activeStageId;
+              return (
+                <button
+                  key={st.id}
+                  type="button"
+                  data-testid={`overview-stage-pill-${st.id}`}
+                  onClick={() => void handleSelectStage(st.id)}
+                  className={`rounded px-1.5 py-0.5 text-ui-2xs transition-colors ${
+                    isCurrent
+                      ? 'bg-primary text-primary-foreground font-medium'
+                      : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                  }`}
+                >
+                  {st.label}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              data-testid="overview-stages-to-l3-btn"
+              onClick={async () => {
+                if (savedStagesL3) return;
+                setSavedStagesL3(true);
+                if (typeof projectApi?.confirmKnowledge === 'function') {
+                  try {
+                    await projectApi.confirmKnowledge(project.id, {
+                      entries: [
+                        {
+                          category: 'architecture',
+                          content: `${blueprint.label} 阶段管线 (${project.name})：${blueprint.stages.map((s) => (s.id === activeStageId ? `[${s.label}*]` : s.label)).join(' → ')}`,
+                          importance: 7,
+                          sourceMessageIds: [],
+                          reasoning: '项目概览阶段推进管线一键沉淀至 L3 画像',
+                        },
+                      ],
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
                 }
-              }
-            }}
-            className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            {savedStagesL4 ? '已存管线L4' : '阶段管线存L4'}
-          </button>
-          <button
-            type="button"
-            data-testid="overview-stages-to-constraint-btn"
-            onClick={async () => {
-              if (convertedStagesL2) return;
-              setConvertedStagesL2(true);
-              if (typeof projectApi?.createConstraint === 'function') {
-                try {
-                  await projectApi.createConstraint(project.id, {
-                    category: 'stage_pipeline',
-                    content: `[${blueprint.label}阶段管线护栏] 严格按 ${blueprint.stages.map((s) => s.label).join(' → ')} 顺序推进项目交付`,
-                    triggerPattern: 'always',
-                    priority: 8,
-                  });
-                } catch {
-                  // ignore in test/offline mode
+              }}
+              className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {savedStagesL3 ? '已存管线L3' : '阶段管线存L3'}
+            </button>
+            <button
+              type="button"
+              data-testid="overview-stages-to-l4-btn"
+              onClick={async () => {
+                if (savedStagesL4) return;
+                setSavedStagesL4(true);
+                if (typeof projectApi?.addMaterial === 'function') {
+                  try {
+                    await projectApi.addMaterial(project.id, {
+                      content: `# ${blueprint.label} · 生命周期阶段管线 (${project.name})\n${blueprint.stages.map((s, i) => `${i + 1}. ${s.label} (${s.id})${s.id === activeStageId ? ' [当前阶段]' : ''} — ${s.hint}`).join('\n')}`,
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
                 }
-              }
-            }}
-            className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            {convertedStagesL2 ? '已转管线L2' : '阶段管线转L2'}
-          </button>
-          {(() => {
-            const idx = blueprint.stages.findIndex((s) => s.id === activeStageId);
-            const prevStage = idx > 0 ? blueprint.stages[idx - 1] : null;
-            const nextStage =
-              idx >= 0 && idx + 1 < blueprint.stages.length ? blueprint.stages[idx + 1] : null;
-            if (!prevStage && !nextStage) return null;
-            return (
-              <div className="ml-auto flex items-center gap-1">
-                {prevStage && (
-                  <button
-                    type="button"
-                    data-testid="overview-prev-stage-btn"
-                    onClick={() => void handleSelectStage(prevStage.id)}
-                    className="rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    ← 回退：{prevStage.label}
-                  </button>
-                )}
-                {nextStage && (
-                  <button
-                    type="button"
-                    data-testid="overview-next-stage-btn"
-                    onClick={() => void handleSelectStage(nextStage.id)}
-                    className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/20"
-                  >
-                    推进至：{nextStage.label} →
-                  </button>
-                )}
-              </div>
-            );
-          })()}
-        </div>
+              }}
+              className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {savedStagesL4 ? '已存管线L4' : '阶段管线存L4'}
+            </button>
+            <button
+              type="button"
+              data-testid="overview-stages-to-constraint-btn"
+              onClick={async () => {
+                if (convertedStagesL2) return;
+                setConvertedStagesL2(true);
+                if (typeof projectApi?.createConstraint === 'function') {
+                  try {
+                    await projectApi.createConstraint(project.id, {
+                      category: 'stage_pipeline',
+                      content: `[${blueprint.label}阶段管线护栏] 严格按 ${blueprint.stages.map((s) => s.label).join(' → ')} 顺序推进项目交付`,
+                      triggerPattern: 'always',
+                      priority: 8,
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {convertedStagesL2 ? '已转管线L2' : '阶段管线转L2'}
+            </button>
+            {(() => {
+              const idx = blueprint.stages.findIndex((s) => s.id === activeStageId);
+              const prevStage = idx > 0 ? blueprint.stages[idx - 1] : null;
+              const nextStage =
+                idx >= 0 && idx + 1 < blueprint.stages.length ? blueprint.stages[idx + 1] : null;
+              if (!prevStage && !nextStage) return null;
+              return (
+                <div className="ml-auto flex items-center gap-1">
+                  {prevStage && (
+                    <button
+                      type="button"
+                      data-testid="overview-prev-stage-btn"
+                      onClick={() => void handleSelectStage(prevStage.id)}
+                      className="rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      ← 回退：{prevStage.label}
+                    </button>
+                  )}
+                  {nextStage && (
+                    <button
+                      type="button"
+                      data-testid="overview-next-stage-btn"
+                      onClick={() => void handleSelectStage(nextStage.id)}
+                      className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/20"
+                    >
+                      推进至：{nextStage.label} →
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </details>
       </div>
 
       {/* M3: AI 项目健康顾问卡片（支持一键将改进建议转入 M1 任务分解） */}

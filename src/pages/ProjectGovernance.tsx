@@ -15,6 +15,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   MilestoneManager,
   PolymorphicArchetypeCards,
+  ProjectBootstrapPanel,
   ProjectOverviewWidgets,
   ProjectTypeBadge,
   GovernanceRulesPanel,
@@ -42,7 +43,8 @@ import { useI18n } from '../shared/lib/i18n';
 import { Button } from '../shared/ui/Button';
 import { Card } from '../shared/ui/Card';
 
-type GovernanceTab = 'overview' | 'charter' | 'materials' | 'rules' | 'milestones' | 'profile';
+type GovernanceTab = 'overview' | 'knowledge' | 'settings';
+type KnowledgeTab = 'rules' | 'materials' | 'profile';
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatProjectGovernanceAuditSnapshot(opts: {
@@ -85,6 +87,7 @@ export function ProjectGovernance() {
 
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [activeTab, setActiveTab] = useState<GovernanceTab>('overview');
+  const [knowledgeTab, setKnowledgeTab] = useState<KnowledgeTab>('rules');
   const [scaffolding, setScaffolding] = useState(false);
   const [scaffoldResult, setScaffoldResult] = useState<ProjectScaffoldResult | null>(null);
   const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
@@ -365,121 +368,6 @@ export function ProjectGovernance() {
             </span>
           )}
         </div>
-
-        {/* Quick type/stage/VCS controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={activeProjectType}
-            onChange={(e) => void handleChangeProjectType(e.target.value as ProjectType)}
-            aria-label="切换项目形态"
-            className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
-          >
-            {ARCHETYPE_ORDER.map((t) => (
-              <option key={t} value={t}>
-                形态：{ARCHETYPE_BLUEPRINTS[t].label}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={project.projectStage ?? ''}
-            onChange={(e) => void handleChangeProjectStage(e.target.value)}
-            aria-label="切换项目阶段"
-            className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
-          >
-            <option value="">阶段：未设置</option>
-            {activeBlueprint.stages.map((st) => (
-              <option key={st.id} value={st.id}>
-                阶段：{st.label}
-              </option>
-            ))}
-          </select>
-
-          {(() => {
-            const stages = activeBlueprint.stages;
-            const curIdx = stages.findIndex((s) => s.id === project.projectStage);
-            const nextStage =
-              curIdx === -1 ? stages[0] : curIdx + 1 < stages.length ? stages[curIdx + 1] : null;
-            if (!nextStage) return null;
-            return (
-              <button
-                type="button"
-                onClick={() => void handleChangeProjectStage(nextStage.id)}
-                data-testid="studio-advance-stage-btn"
-                title={`推进至下一阶段：${nextStage.label}`}
-                className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/15"
-              >
-                推进至「{nextStage.label}」→
-              </button>
-            );
-          })()}
-
-          <select
-            value={project.vcsMode === 'git' ? 'git' : 'builtin'}
-            onChange={(e) => void handleChangeVcsMode(e.target.value as 'git' | 'builtin')}
-            aria-label="切换版本控制模式"
-            data-testid="studio-vcs-mode-select"
-            className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
-          >
-            <option value="git">VCS：Git 仓库</option>
-            <option value="builtin">VCS：内置快照</option>
-          </select>
-
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => void handleScaffold()}
-            disabled={scaffolding}
-            data-testid="studio-scaffold-btn"
-          >
-            <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" />
-            {scaffolding ? '初始化中...' : '一键初始化目录与规范'}
-          </Button>
-          <span
-            data-testid="project-governance-copy-snapshot"
-            onClick={() => {
-              /* v8 ignore start */
-              setCopiedSnapshot(true);
-              void navigator.clipboard?.writeText(
-                formatProjectGovernanceAuditSnapshot({
-                  projectId: project.id,
-                  projectType: activeProjectType,
-                  activeTab,
-                  milestonesCount: milestones.length,
-                  profileCount: profileEntries.length,
-                  allowedPathsCount: project.allowedPaths?.length ?? 0,
-                  scaffolding,
-                }),
-              );
-              /* v8 ignore stop */
-            }}
-            className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground"
-          >
-            {copiedSnapshot ? '已复制快照' : '复制治理快照'}
-          </span>
-          <span
-            data-testid="project-governance-copy-json"
-            onClick={() => {
-              /* v8 ignore start */
-              setCopiedJson(true);
-              void navigator.clipboard?.writeText(
-                formatProjectGovernanceAuditJson({
-                  projectId: project.id,
-                  projectType: activeProjectType,
-                  activeTab,
-                  milestonesCount: milestones.length,
-                  profileCount: profileEntries.length,
-                  allowedPathsCount: project.allowedPaths?.length ?? 0,
-                  scaffolding,
-                }),
-              );
-              /* v8 ignore stop */
-            }}
-            className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground"
-          >
-            {copiedJson ? '已复制JSON' : '导出治理JSON'}
-          </span>
-        </div>
       </div>
 
       {/* Scaffold feedback */}
@@ -503,23 +391,14 @@ export function ProjectGovernance() {
       <div className="flex flex-wrap items-center gap-2 px-4 pt-3">
         {[
           { id: 'overview' as GovernanceTab, label: locale === 'en' ? 'Overview' : '概览' },
-          { id: 'charter' as GovernanceTab, label: locale === 'en' ? 'Basic info' : '基本信息' },
-          { id: 'materials' as GovernanceTab, label: locale === 'en' ? 'Materials' : '项目资料' },
           {
-            id: 'rules' as GovernanceTab,
+            id: 'knowledge' as GovernanceTab,
             label:
               locale === 'en'
-                ? `Rules (${project.allowedPaths?.length ?? 0})`
-                : `规则与约束 (${project.allowedPaths?.length ?? 0})`,
+                ? `Project knowledge (${profileEntries.length})`
+                : `项目知识（${project.allowedPaths?.length ?? 0} 条规则 · ${profileEntries.length} 条记忆）`,
           },
-          { id: 'milestones' as GovernanceTab, label: locale === 'en' ? 'Milestones' : '里程碑' },
-          {
-            id: 'profile' as GovernanceTab,
-            label:
-              locale === 'en'
-                ? `AI context (${profileEntries.length})`
-                : `AI 认知 (${profileEntries.length})`,
-          },
+          { id: 'settings' as GovernanceTab, label: locale === 'en' ? 'Settings' : '设置' },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -542,69 +421,237 @@ export function ProjectGovernance() {
         <Card className="p-4 space-y-4">
           {activeTab === 'overview' && (
             <div className="space-y-4">
+              <ProjectBootstrapPanel projectId={project.id} />
               <PolymorphicArchetypeCards project={project} projectType={activeProjectType} />
               <ProjectOverviewWidgets project={project} />
+              <details className="rounded-lg border border-border bg-card/50">
+                <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+                  里程碑（可选）
+                </summary>
+                <div className="px-3 pb-3">
+                  <MilestoneManager projectId={project.id} projectType={activeProjectType} />
+                </div>
+              </details>
             </div>
           )}
 
-          {activeTab === 'rules' && (
-            <GovernanceRulesPanel
-              projectId={project.id}
-              projectPath={project.path}
-              projectType={activeProjectType}
-              allowedPaths={project.allowedPaths ?? []}
-              newAllowedPath={newAllowedPath}
-              onNewAllowedPathChange={setNewAllowedPath}
-              savingPaths={savingPaths}
-              onAddAllowedPath={handleAddAllowedPath}
-              onQuickAddPresetPath={handleQuickAddPresetPath}
-              onRemoveAllowedPath={handleRemoveAllowedPath}
-            />
+          {activeTab === 'knowledge' && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-1.5" role="tablist">
+                {[
+                  {
+                    id: 'rules' as KnowledgeTab,
+                    label: `规则与约束 (${project.allowedPaths?.length ?? 0})`,
+                  },
+                  { id: 'materials' as KnowledgeTab, label: '项目资料' },
+                  {
+                    id: 'profile' as KnowledgeTab,
+                    label: `AI 记忆 (${profileEntries.length})`,
+                  },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={knowledgeTab === tab.id}
+                    onClick={() => setKnowledgeTab(tab.id)}
+                    data-testid={`governance-knowledge-${tab.id}`}
+                    className={`rounded-md px-2.5 py-1 text-ui-2xs font-medium transition-colors ${
+                      knowledgeTab === tab.id
+                        ? 'bg-primary/15 text-primary'
+                        : 'bg-muted text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {knowledgeTab === 'rules' && (
+                <GovernanceRulesPanel
+                  projectId={project.id}
+                  projectPath={project.path}
+                  projectType={activeProjectType}
+                  allowedPaths={project.allowedPaths ?? []}
+                  newAllowedPath={newAllowedPath}
+                  onNewAllowedPathChange={setNewAllowedPath}
+                  savingPaths={savingPaths}
+                  onAddAllowedPath={handleAddAllowedPath}
+                  onQuickAddPresetPath={handleQuickAddPresetPath}
+                  onRemoveAllowedPath={handleRemoveAllowedPath}
+                />
+              )}
+
+              {knowledgeTab === 'materials' && (
+                <StudioMaterialsTabPanel
+                  projectId={project.id}
+                  projectPath={project.path}
+                  projectType={activeProjectType}
+                />
+              )}
+
+              {knowledgeTab === 'profile' && (
+                <StudioProfileTabPanel
+                  projectPath={project.path}
+                  projectType={activeProjectType}
+                  projectId={project.id}
+                  profileEntries={profileEntries}
+                  profileCategory={profileCategory}
+                  onCategoryChange={setProfileCategory}
+                  profileDraft={profileDraft}
+                  onDraftChange={setProfileDraft}
+                  savingProfile={savingProfile}
+                  onAddEntry={handleAddProfileEntry}
+                  onDeleteEntry={handleDeleteProfileEntry}
+                  onRefreshProfile={() => void loadActiveProfile(project.path)}
+                />
+              )}
+            </div>
           )}
 
-          {activeTab === 'milestones' && (
-            <MilestoneManager projectId={project.id} projectType={activeProjectType} />
-          )}
+          {activeTab === 'settings' && (
+            <div className="space-y-4">
+              <StudioCharterTabPanel
+                projectId={project.id}
+                projectPath={project.path}
+                projectType={activeProjectType}
+                initialDescription={project.description}
+                initialInstructions={project.instructions}
+                onMetadataUpdated={(patch: {
+                  description: string | null;
+                  instructions: string | null;
+                }) => {
+                  setProject((prev) => (prev ? { ...prev, ...patch } : prev));
+                }}
+              />
 
-          {activeTab === 'materials' && (
-            <StudioMaterialsTabPanel
-              projectId={project.id}
-              projectPath={project.path}
-              projectType={activeProjectType}
-            />
-          )}
+              <div
+                className="space-y-3 rounded-lg border border-border p-3"
+                data-testid="governance-settings-controls"
+              >
+                <div className="text-xs font-medium text-foreground">项目类型与版本控制</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={activeProjectType}
+                    onChange={(e) => void handleChangeProjectType(e.target.value as ProjectType)}
+                    aria-label="切换项目形态"
+                    className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
+                  >
+                    {ARCHETYPE_ORDER.map((t) => (
+                      <option key={t} value={t}>
+                        形态：{ARCHETYPE_BLUEPRINTS[t].label}
+                      </option>
+                    ))}
+                  </select>
 
-          {activeTab === 'profile' && (
-            <StudioProfileTabPanel
-              projectPath={project.path}
-              projectType={activeProjectType}
-              projectId={project.id}
-              profileEntries={profileEntries}
-              profileCategory={profileCategory}
-              onCategoryChange={setProfileCategory}
-              profileDraft={profileDraft}
-              onDraftChange={setProfileDraft}
-              savingProfile={savingProfile}
-              onAddEntry={handleAddProfileEntry}
-              onDeleteEntry={handleDeleteProfileEntry}
-              onRefreshProfile={() => void loadActiveProfile(project.path)}
-            />
-          )}
+                  <select
+                    value={project.projectStage ?? ''}
+                    onChange={(e) => void handleChangeProjectStage(e.target.value)}
+                    aria-label="切换项目阶段"
+                    className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
+                  >
+                    <option value="">阶段：未设置</option>
+                    {activeBlueprint.stages.map((st) => (
+                      <option key={st.id} value={st.id}>
+                        阶段：{st.label}
+                      </option>
+                    ))}
+                  </select>
 
-          {activeTab === 'charter' && (
-            <StudioCharterTabPanel
-              projectId={project.id}
-              projectPath={project.path}
-              projectType={activeProjectType}
-              initialDescription={project.description}
-              initialInstructions={project.instructions}
-              onMetadataUpdated={(patch: {
-                description: string | null;
-                instructions: string | null;
-              }) => {
-                setProject((prev) => (prev ? { ...prev, ...patch } : prev));
-              }}
-            />
+                  {(() => {
+                    const stages = activeBlueprint.stages;
+                    const curIdx = stages.findIndex((s) => s.id === project.projectStage);
+                    const nextStage =
+                      curIdx === -1
+                        ? stages[0]
+                        : curIdx + 1 < stages.length
+                          ? stages[curIdx + 1]
+                          : null;
+                    if (!nextStage) return null;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => void handleChangeProjectStage(nextStage.id)}
+                        data-testid="studio-advance-stage-btn"
+                        title={`推进至下一阶段：${nextStage.label}`}
+                        className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/15"
+                      >
+                        推进至「{nextStage.label}」→
+                      </button>
+                    );
+                  })()}
+
+                  <select
+                    value={project.vcsMode === 'git' ? 'git' : 'builtin'}
+                    onChange={(e) => void handleChangeVcsMode(e.target.value as 'git' | 'builtin')}
+                    aria-label="切换版本控制模式"
+                    data-testid="studio-vcs-mode-select"
+                    className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
+                  >
+                    <option value="git">VCS：Git 仓库</option>
+                    <option value="builtin">VCS：内置快照</option>
+                  </select>
+
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handleScaffold()}
+                    disabled={scaffolding}
+                    data-testid="studio-scaffold-btn"
+                  >
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" />
+                    {scaffolding ? '初始化中...' : '一键初始化目录与规范'}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  data-testid="project-governance-copy-snapshot"
+                  onClick={() => {
+                    /* v8 ignore start */
+                    setCopiedSnapshot(true);
+                    void navigator.clipboard?.writeText(
+                      formatProjectGovernanceAuditSnapshot({
+                        projectId: project.id,
+                        projectType: activeProjectType,
+                        activeTab,
+                        milestonesCount: milestones.length,
+                        profileCount: profileEntries.length,
+                        allowedPathsCount: project.allowedPaths?.length ?? 0,
+                        scaffolding,
+                      }),
+                    );
+                    /* v8 ignore stop */
+                  }}
+                  className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground"
+                >
+                  {copiedSnapshot ? '已复制快照' : '复制治理快照'}
+                </span>
+                <span
+                  data-testid="project-governance-copy-json"
+                  onClick={() => {
+                    /* v8 ignore start */
+                    setCopiedJson(true);
+                    void navigator.clipboard?.writeText(
+                      formatProjectGovernanceAuditJson({
+                        projectId: project.id,
+                        projectType: activeProjectType,
+                        activeTab,
+                        milestonesCount: milestones.length,
+                        profileCount: profileEntries.length,
+                        allowedPathsCount: project.allowedPaths?.length ?? 0,
+                        scaffolding,
+                      }),
+                    );
+                    /* v8 ignore stop */
+                  }}
+                  className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground"
+                >
+                  {copiedJson ? '已复制JSON' : '导出治理JSON'}
+                </span>
+              </div>
+            </div>
           )}
         </Card>
       </div>
@@ -619,14 +666,14 @@ export function auditProjectGovernancePageGovernance(): {
   module: 'src/pages/ProjectGovernance.tsx';
   phase: 'P173';
   domain: 'pages';
-  tabs: readonly ['paths', 'milestones', 'materials', 'profile', 'charter'];
+  tabs: readonly ['overview', 'knowledge', 'settings'];
   compliant: boolean;
 } {
   return {
     module: 'src/pages/ProjectGovernance.tsx',
     phase: 'P173',
     domain: 'pages',
-    tabs: ['paths', 'milestones', 'materials', 'profile', 'charter'],
+    tabs: ['overview', 'knowledge', 'settings'],
     compliant: true,
   };
 }

@@ -604,7 +604,7 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                       className="rounded border border-border bg-background px-1.5 py-1 text-ui-2xs text-primary hover:bg-primary/10"
                       title="将该里程碑转化为 L2 交付约束"
                     >
-                      {constraintMilestoneIds.has(milestone.id) ? '已转L2' : '+L2 约束'}
+                      {constraintMilestoneIds.has(milestone.id) ? '已保存' : '+L2 约束'}
                     </button>
                     <button
                       type="button"

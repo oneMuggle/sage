@@ -35,8 +35,19 @@ class ProjectModel(BaseModel):
     project_stage: Optional[str] = None
     vcs_mode: str = "builtin"
     detected_type: Optional[str] = None
+    project_sub_type: Optional[str] = None
+    bootstrap_state: Optional[str] = None
     session_count: int = 0
     last_session_id: Optional[str] = None
+
+
+class ProjectLocationResponse(BaseModel):
+    """GET /projects/{id}/location 的响应：已校验的项目目录绝对路径。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    path: str
 
 
 class ProjectUpdateRequest(BaseModel):
@@ -48,6 +59,7 @@ class ProjectUpdateRequest(BaseModel):
         pattern="^(coding|research|business|personal)$",
     )
     project_stage: Optional[str] = Field(default=None, max_length=64)
+    project_sub_type: Optional[str] = Field(default=None, max_length=64)
     vcs_mode: Optional[str] = Field(
         default=None,
         pattern="^(git|builtin)$",
@@ -597,3 +609,108 @@ class SubTypesResponse(BaseModel):
 
     level1_types: List[str]
     sub_types: Dict[str, List[Dict[str, Any]]]
+
+
+# ── AI bootstrap (2026-10-29) ───────────────────────────────────────────────
+
+
+class BootstrapPreviewRequest(BaseModel):
+    """POST /projects/{id}/bootstrap/preview 的请求体。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    use_llm: bool = True
+
+
+class BootstrapPreviewResponse(BaseModel):
+    """POST /projects/{id}/bootstrap/preview 的响应。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project: ProjectModel
+    scan: Dict[str, Any]
+    suggestions: Dict[str, Any]
+    llm_available: bool
+
+
+class BootstrapMetadataInput(BaseModel):
+    """bootstrap apply 中可选的元数据更新。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    description: Optional[str] = Field(default=None, max_length=4000)
+    instructions: Optional[str] = Field(default=None, max_length=16000)
+    project_type: Optional[str] = Field(
+        default=None, pattern="^(coding|research|business|personal)$"
+    )
+    project_sub_type: Optional[str] = Field(default=None, max_length=64)
+
+
+class BootstrapRuleInput(BaseModel):
+    """bootstrap apply 中的一条规则草稿。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    category: str = Field(min_length=1, max_length=64)
+    content: str = Field(min_length=1, max_length=20000)
+    trigger_pattern: Optional[str] = Field(default=None, max_length=256)
+    priority: int = Field(default=5, ge=1, le=10)
+
+
+class BootstrapMilestoneInput(BaseModel):
+    """bootstrap apply 中的一个里程碑草稿。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=4000)
+    stage: Optional[str] = Field(default=None, max_length=64)
+    estimated_days: Optional[float] = Field(default=None, ge=0, le=3650)
+
+
+class BootstrapApplyRequest(BaseModel):
+    """POST /projects/{id}/bootstrap/apply 的请求体。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    metadata: Optional[BootstrapMetadataInput] = None
+    sage_md: bool = False
+    sage_md_content: Optional[str] = Field(default=None, max_length=32000)
+    overwrite_sage_md: bool = False
+    rules: List[BootstrapRuleInput] = Field(default_factory=list)
+    milestones: List[BootstrapMilestoneInput] = Field(default_factory=list)
+    allowed_paths: Optional[_constrained_list(str, max_length=50)] = Field(default=None)
+    git_init: bool = False
+    initial_checkpoint: bool = False
+
+
+class BootstrapErrorModel(BaseModel):
+    """bootstrap apply 中单个失败项。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item: str
+    message: str
+
+
+class BootstrapApplyResponse(BaseModel):
+    """POST /projects/{id}/bootstrap/apply 的响应。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project: ProjectModel
+    applied: List[str] = Field(default_factory=list)
+    skipped: List[str] = Field(default_factory=list)
+    errors: List[BootstrapErrorModel] = Field(default_factory=list)
+    git: Optional[Dict[str, Any]] = None
+
+
+class GitInitResponse(BaseModel):
+    """POST /projects/{id}/git/init 的响应。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    initialized: bool
+    already_repo: bool = False
+    git_available: bool = True
+    error: Optional[str] = None

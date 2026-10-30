@@ -175,6 +175,9 @@ class AdvisorSuggestionResponse(BaseModel):
     action: str
     reason: Optional[str] = None
     priority: str
+    evidence: List[str] = Field(default_factory=list)
+    action_type: str = ""
+    action_payload: Dict[str, Any] = Field(default_factory=dict)
 
 
 class AdviceResponse(BaseModel):
@@ -699,12 +702,6 @@ async def generate_wiki(
         raise _error(404, "project_not_found", "项目不存在")
 
     generator = ProjectWikiGenerator()
-    if not generator.available:
-        raise _error(
-            503,
-            "llm_unavailable",
-            "LLM 客户端不可用，请在设置中配置 AI 端点",
-        )
 
     try:
         result = await generator.generate(
@@ -743,7 +740,7 @@ async def scan_project_files(
     if project is None:
         raise _error(404, "project_not_found", "项目不存在")
 
-    lang_set = set(languages.split(",")) if languages else {"python"}
+    lang_set = set(languages.split(",")) if languages else None
 
     generator = ProjectWikiGenerator()
     files = generator.scan_files(
