@@ -98,6 +98,8 @@ ALIASES: Dict[str, str] = {
     "llm_retry_max_attempts": "llmRetryMaxAttempts",
     "llm_retry_base_delay_s": "llmRetryBaseDelayS",
     "llm_retry_max_delay_s": "llmRetryMaxDelayS",
+    # 2026-10-30: 自动重试总时长预算（秒，0 = 不限）。
+    "llm_retry_total_budget_s": "llmRetryTotalBudgetS",
     "llm_total_timeout_s": "llmTotalTimeoutS",
     # 2026-10-27: 会话标题专用模型 id — 与后端 title_generator.load_title_llm_config 对齐。
     "title_model_id": "titleModelId",
@@ -140,6 +142,9 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         "llmRetryMaxAttempts",
         "llmRetryBaseDelayS",
         "llmRetryMaxDelayS",
+        # 2026-10-30: 自动重试总时长预算（秒）— 0 = 不限；UI 可配置，
+        # _retry_settings() 函数式读取，改后下一次 LLM 请求即生效。
+        "llmRetryTotalBudgetS",
         # 2026-10-22: 整轮任务 wall-clock 上限（秒）— 0 = 不限；函数式读取
         # 立即生效，无须重启后端。前端 DEFAULT_SETTINGS = 1800。
         "llmTotalTimeoutS",

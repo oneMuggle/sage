@@ -24,6 +24,7 @@ export interface BasicTabAuditInput {
   llmRetryMaxAttempts: number;
   llmRetryBaseDelayS: number;
   llmRetryMaxDelayS: number;
+  llmRetryTotalBudgetS: number;
   llmTotalTimeoutS: number;
   llmProxyTimeoutS: number;
   timezone: string;
@@ -39,6 +40,7 @@ export function formatBasicTabAuditSnapshot(input: BasicTabAuditInput): string {
     `- LLM 最大重试次数: ${input.llmRetryMaxAttempts}`,
     `- 退避基数(秒): ${input.llmRetryBaseDelayS}`,
     `- 最大退避(秒): ${input.llmRetryMaxDelayS}`,
+    `- 重试总时长预算(秒): ${input.llmRetryTotalBudgetS === 0 ? '不限' : input.llmRetryTotalBudgetS}`,
     `- LLM 任务上限(秒): ${input.llmTotalTimeoutS === 0 ? '不限' : input.llmTotalTimeoutS}`,
     `- LLM 代理超时(秒): ${input.llmProxyTimeoutS}`,
     `- IANA 时区: ${input.timezone || '默认'}`,
@@ -55,6 +57,7 @@ export function formatBasicTabAuditJson(input: BasicTabAuditInput): string {
       llmRetryMaxAttempts: input.llmRetryMaxAttempts,
       llmRetryBaseDelayS: input.llmRetryBaseDelayS,
       llmRetryMaxDelayS: input.llmRetryMaxDelayS,
+      llmRetryTotalBudgetS: input.llmRetryTotalBudgetS,
       llmTotalTimeoutS: input.llmTotalTimeoutS,
       llmProxyTimeoutS: input.llmProxyTimeoutS,
       timezone: input.timezone || 'Asia/Shanghai',
@@ -221,6 +224,25 @@ export function BasicTab() {
             onChange={(e) => {
               const v = Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0));
               updateSettings({ llmRetryMaxAttempts: v });
+            }}
+            className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+          />
+        </SettingRow>
+        <SettingRow
+          anchor="llmRetryTotalBudgetS"
+          label={t('settings.basic.retry_total_budget_label')}
+          desc={t('settings.basic.retry_total_budget_desc')}
+        >
+          <input
+            type="number"
+            data-testid="settings-llm-retry-total-budget"
+            min={0}
+            max={1800}
+            step={10}
+            value={settings.llmRetryTotalBudgetS}
+            onChange={(e) => {
+              const v = Math.max(0, Math.min(1800, parseInt(e.target.value, 10) || 0));
+              updateSettings({ llmRetryTotalBudgetS: v });
             }}
             className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
           />

@@ -55,6 +55,8 @@ EXPECTED_TOP_KEYS = frozenset(
         "llmRetryMaxAttempts",
         "llmRetryBaseDelayS",
         "llmRetryMaxDelayS",
+        # 2026-10-30: 自动重试总时长预算（秒）— 0 = 不限；UI 可配置。
+        "llmRetryTotalBudgetS",
         # 2026-10-22: 整轮任务 wall-clock 上限（秒）— 0 = 不限；函数式读取
         "llmTotalTimeoutS",
         # 2026-10-27: 会话标题生成专用模型 id（顶层扁平键）

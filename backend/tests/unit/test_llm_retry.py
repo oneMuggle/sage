@@ -327,3 +327,32 @@ async def test_stream_retry_total_budget_stops_retries(monkeypatch):
 
     assert "预算" in exc_info.value.message
     assert mock_http.stream.call_count == 2
+
+
+@pytest.mark.parametrize(
+    ("app_value", "env_value", "expected"),
+    [
+        (42, None, 42.0),  # app_settings 生效
+        (42, "100", 100.0),  # env 覆盖 app_settings（调试/测试用，与其他参数一致）
+        (0, None, 0.0),  # 0 = 不限
+        (-1, None, 180.0),  # 非法值回退默认
+    ],
+)
+def test_retry_settings_total_budget_sources(
+    monkeypatch, app_value, env_value, expected
+):
+    """env > app_settings > 默认；非法值回退 180。"""
+    monkeypatch.delenv("SAGE_LLM_RETRY_TOTAL_BUDGET_S", raising=False)
+    if env_value is not None:
+        monkeypatch.setenv("SAGE_LLM_RETRY_TOTAL_BUDGET_S", env_value)
+
+    def fake_get_json(self, key):
+        return {"llmRetryTotalBudgetS": app_value} if key == "app_settings" else None
+
+    monkeypatch.setattr(
+        "backend.data.settings_repo.SettingsRepository.get_json", fake_get_json
+    )
+
+    from backend.core.legacy.llm_client import _retry_settings
+
+    assert _retry_settings()[3] == expected
