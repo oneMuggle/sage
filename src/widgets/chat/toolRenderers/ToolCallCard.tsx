@@ -63,11 +63,19 @@ export function ToolCallCard({
       className="rounded border border-border bg-bg-subtle text-ui-sm overflow-hidden"
       data-testid="tool-call-card"
     >
-      {/* Header — 可点击折叠 */}
-      <button
-        type="button"
+      {/* Header — 可点击折叠；用 div[role=button] 以允许标题内含独立按钮
+          （文件工具卡的文件名需单独点击打开预览，嵌套 <button> 是非法 DOM） */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setCollapsed((prev) => !prev)}
-        className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left hover:bg-bg-hover transition-colors"
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setCollapsed((prev) => !prev);
+          }
+        }}
+        className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left hover:bg-bg-hover transition-colors cursor-pointer"
         aria-expanded={!collapsed}
       >
         {collapsed ? (
@@ -80,7 +88,7 @@ export function ToolCallCard({
         />
         <span className="flex-1 min-w-0">{title}</span>
         {summary && <span className="text-text-muted shrink-0">{summary}</span>}
-      </button>
+      </div>
 
       {/* Body — 折叠时隐藏 */}
       {!collapsed && <div className="px-2 pb-1.5">{children}</div>}
@@ -105,9 +113,7 @@ export interface ToolCallCardAuditReport {
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function evaluateToolCallCardAudit(
-  input: ToolCallCardAuditInput,
-): ToolCallCardAuditReport {
+export function evaluateToolCallCardAudit(input: ToolCallCardAuditInput): ToolCallCardAuditReport {
   const toolName = input.toolName.trim();
   const callId = input.callId.trim();
   const durationMs = Math.max(0, Math.trunc(input.durationMs));
@@ -134,8 +140,6 @@ export function evaluateToolCallCardAudit(
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function exportToolCallCardAuditJson(
-  input: ToolCallCardAuditInput,
-): string {
+export function exportToolCallCardAuditJson(input: ToolCallCardAuditInput): string {
   return JSON.stringify(evaluateToolCallCardAudit(input));
 }

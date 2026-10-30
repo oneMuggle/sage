@@ -24,6 +24,7 @@ function resetAll() {
     tab: 'progress',
     maximized: false,
     selectedArtifactId: null,
+    selectedFilePath: null,
     seenArtifactCount: {},
   });
   useArtifactEventsStore.setState({ counts: {} });
@@ -69,6 +70,39 @@ describe('rightPanelStore — selectArtifact（内联卡片入口）', () => {
     expect(s.selectedArtifactId).toBeNull();
     expect(s.open).toBe(true);
     expect(s.tab).toBe('artifacts');
+  });
+});
+
+describe('rightPanelStore — 文件预览（消息内文件引用）', () => {
+  it('openFilePreview 开面板并记录路径', () => {
+    useRightPanelStore.getState().openFilePreview('src/App.tsx');
+    const s = useRightPanelStore.getState();
+    expect(s.open).toBe(true);
+    expect(s.selectedFilePath).toBe('src/App.tsx');
+  });
+
+  it('openFilePreview 与产物选中互斥', () => {
+    useRightPanelStore.getState().selectArtifact('art-1');
+    useRightPanelStore.getState().openFilePreview('src/App.tsx');
+    const s = useRightPanelStore.getState();
+    expect(s.selectedArtifactId).toBeNull();
+    expect(s.selectedFilePath).toBe('src/App.tsx');
+  });
+
+  it('selectArtifact 清掉文件预览选中', () => {
+    useRightPanelStore.getState().openFilePreview('src/App.tsx');
+    useRightPanelStore.getState().selectArtifact('art-1');
+    const s = useRightPanelStore.getState();
+    expect(s.selectedFilePath).toBeNull();
+    expect(s.selectedArtifactId).toBe('art-1');
+  });
+
+  it('clearFilePreview 只清路径不动开合', () => {
+    useRightPanelStore.getState().openFilePreview('src/App.tsx');
+    useRightPanelStore.getState().clearFilePreview();
+    const s = useRightPanelStore.getState();
+    expect(s.selectedFilePath).toBeNull();
+    expect(s.open).toBe(true);
   });
 });
 

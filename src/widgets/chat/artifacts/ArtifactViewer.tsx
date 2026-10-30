@@ -1,7 +1,6 @@
 // src/widgets/chat/artifacts/ArtifactViewer.tsx
 import {
   ArrowLeft,
-  ClipboardCopy,
   Copy,
   Eye,
   FileCode,
@@ -12,29 +11,11 @@ import {
   X,
 } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import rehypeKatex from 'rehype-katex';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 
 import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
 import { revealArtifact, updateArtifactContent } from '../../../features/artifacts/artifactApi';
 import { useArtifactContent } from '../../../features/artifacts/useArtifactContent';
-// Round B P3（统一预览组件）: chat 端 office 产物复用 Office 页的结构化
-// 预览组件——公式视图/表头样式/渲染上限全部继承，两端视觉同源。
-// 后端 read_office 现在随 html 一起返回 structured（read_* 的 JSON 序列
-// 化）；缺失时回退旧的受控 HTML 路径。
-import { ExcelPreview, PptPreview, WordPreview } from '../../../features/office';
-// 2026-10-29: Word 产物默认走 docx-preview 原生渲染（与 /office 页同一条
-// 渲染+消毒链路），结构化段落视图保留为切换/降级项。
-import { DocxBlobPreview } from '../../../features/office/DocxBlobPreview';
-import type {
-  OfficeExcelReadResult,
-  OfficePptReadResult,
-  OfficeWordReadResult,
-} from '../../../shared/api/types';
-import { langFromPath } from '../../../shared/lib/fileLang';
-import { ShikiCodeBlock } from '../ShikiCodeBlock';
+import { FileContentRenderer } from '../preview/FileContentRenderer';
 
 import { VersionHistory } from './VersionHistory';
 
@@ -60,124 +41,8 @@ const EDITABLE_KINDS: ReadonlySet<ArtifactKind> = new Set([
   'csv',
 ]);
 
-// right-panel R2 批次 A: 常用扩展名 → Shiki 语言（未识别回落纯文本 pre）
-// R6: 映射表上抬至 shared/lib/fileLang（变更面板预览共用），此处仅引用
-function langFromName(name: string): string | undefined {
-  return langFromPath(name);
-}
-
-/** R2 批次 A: markdown 产物渲染视图 —— 与消息流同口径（gfm + math + Shiki 代码块） */
-const MD_REMARK = [remarkGfm, remarkMath];
-
-function MarkdownRendered({ text }: { text: string }) {
-  return (
-    <div className="text-sm leading-relaxed" data-testid="artifact-md-rendered">
-      <ReactMarkdown
-        remarkPlugins={MD_REMARK}
-        rehypePlugins={[rehypeKatex]}
-        components={{
-          code({ className, children }) {
-            const match = /language-(\w+)/.exec(className || '');
-            const content = String(children).replace(/\n$/, '');
-            if (!match && !content.includes('\n')) {
-              return (
-                <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">
-                  {content}
-                </code>
-              );
-            }
-            return <ShikiCodeBlock language={match?.[1]}>{content}</ShikiCodeBlock>;
-          },
-        }}
-      >
-        {text}
-      </ReactMarkdown>
-    </div>
-  );
-}
-
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = '';
-  let quoted = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (quoted) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') {
-          cell += '"';
-          i++;
-        } else quoted = false;
-      } else cell += ch;
-    } else if (ch === '"') quoted = true;
-    else if (ch === ',') {
-      row.push(cell);
-      cell = '';
-    } else if (ch === '\n' || ch === '\r') {
-      if (ch === '\r' && text[i + 1] === '\n') i++;
-      row.push(cell);
-      rows.push(row);
-      row = [];
-      cell = '';
-    } else cell += ch;
-  }
-  if (cell !== '' || row.length) {
-    row.push(cell);
-    rows.push(row);
-  }
-  return rows.filter((r) => r.some((c) => c !== ''));
-}
-
-function CsvPreview({ text }: { text: string }) {
-  const rows = parseCsv(text);
-  const [copied, setCopied] = useState(false);
-  if (rows.length === 0) return <div className="text-sm text-muted">空文件</div>;
-  const [head, ...body] = rows;
-  return (
-    <div className="overflow-auto">
-      <div className="flex justify-end mb-1">
-        <button
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs text-text-secondary hover:text-text hover:bg-bg-hover rounded transition-colors"
-          title="复制 CSV 全文"
-          aria-label="复制 CSV 全文"
-          data-testid="artifact-csv-copy"
-          onClick={() => {
-            void navigator.clipboard?.writeText(text)?.catch(() => {});
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          }}
-        >
-          <ClipboardCopy className="w-3.5 h-3.5" />
-          {copied ? '已复制' : '复制全文'}
-        </button>
-      </div>
-      <table className="text-xs border-collapse">
-        <thead>
-          <tr>
-            {head.map((c, i) => (
-              <th key={i} className="border px-2 py-1 bg-bg-hover">
-                {c}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {body.slice(0, 500).map((r, i) => (
-            <tr key={i}>
-              {r.map((c, j) => (
-                <td key={j} className="border px-2 py-1">
-                  {c}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {body.length > 500 && <div className="text-xs text-muted mt-2">仅显示前 500 行</div>}
-    </div>
-  );
-}
+// right-panel R2 批次 A: markdown 渲染 / CSV 表格 / 各类型内容分发已上移至
+// shared 预览组件 FileContentRenderer（消息内文件预览共用，feat/file-reference-preview）
 
 export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerProps) {
   const { content, loading, refresh } = useArtifactContent(sessionId, artifact.id);
@@ -373,74 +238,17 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
           </div>
         ) : loading ? (
           <div className="text-sm text-muted">加载中...</div>
-        ) : !content || !content.ok ? (
-          <div className="text-sm text-error">{content?.error ?? '加载失败'}</div>
-        ) : content.kind === 'image' ? (
-          <img src={content.data_url} alt={artifact.name} className="max-w-full" />
-        ) : content.kind === 'pdf' ? (
-          // F11 (round4 批次 D): Chromium 内置 PDF viewer 内嵌渲染,零依赖
-          <iframe
-            src={content.data_url}
-            title={artifact.name}
-            className="w-full h-full min-h-[24rem] rounded border border-border"
+        ) : content ? (
+          <FileContentRenderer
+            content={content}
+            name={artifact.name}
+            mdRendered={mdRendered}
+            htmlReloadKey={htmlReloadKey}
+            docxFidelity={docxFidelity && !docxFidelityFailed}
+            onDocxFidelityError={() => setDocxFidelityFailed(true)}
           />
-        ) : content.kind === 'html' ? (
-          // P1-3.5 (UI 优化方案 2026-09-13): HTML 产物沙盒 iframe 渲染。
-          // sandbox="allow-scripts" 允许 JS 执行但阻止跨域/顶层导航/表单提交。
-          // right-panel R2 批次 A: key 随刷新计数重挂载 —— agent 迭代产物后
-          // 点刷新立即看到新画面（srcDoc 同值不会触发 iframe 重载）。
-          <iframe
-            key={htmlReloadKey}
-            srcDoc={content.content ?? ''}
-            sandbox="allow-scripts"
-            title={artifact.name}
-            className="w-full h-full min-h-[24rem] rounded border border-border bg-white"
-            data-testid="html-artifact-preview"
-          />
-        ) : content.kind === 'docx' && content.data_url && docxFidelity && !docxFidelityFailed ? (
-          // 2026-10-29: Word 版式 —— docx-preview 直接解析原文二进制
-          // （页宽/字体/表格/图片），失败自动回退结构化视图。
-          <DocxBlobPreview dataUrl={content.data_url} onError={() => setDocxFidelityFailed(true)} />
-        ) : content.kind === 'docx' || content.kind === 'xlsx' || content.kind === 'pptx' ? (
-          content.structured ? (
-            // Round B P3: 结构化路径 —— 与 Office 页同一组件渲染
-            <div data-testid="office-structured-preview">
-              {content.kind === 'docx' && (
-                <WordPreview data={content.structured as OfficeWordReadResult} />
-              )}
-              {content.kind === 'xlsx' && (
-                <ExcelPreview data={content.structured as OfficeExcelReadResult} />
-              )}
-              {content.kind === 'pptx' && (
-                <PptPreview data={content.structured as OfficePptReadResult} />
-              )}
-            </div>
-          ) : (
-            // 降级路径（旧后端 / structured 序列化失败）：受控 HTML —— 后端
-            // 已 html.escape 全转义；白底容器保证 dark 模式下文字可读
-            <div
-              data-testid="office-preview"
-              className="office-preview bg-white text-black text-sm rounded border border-border p-3 [&_h2]:text-base [&_h2]:font-bold [&_h2]:my-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:my-2 [&_p]:my-1 [&_table]:border-collapse [&_table]:w-full [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-0.5 [&_th]:bg-gray-50 [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-0.5 [&_td]:align-top"
-              dangerouslySetInnerHTML={{ __html: content.html ?? '' }}
-            />
-          )
-        ) : content.kind === 'code' || content.kind === 'json' ? (
-          // right-panel R2 批次 A: Shiki 语法高亮（消息流同源）；语言按扩展名
-          // 推断，json kind 直接映射 json；未识别回落纯文本
-          <ShikiCodeBlock language={content.kind === 'json' ? 'json' : langFromName(artifact.name)}>
-            {content.content ?? ''}
-          </ShikiCodeBlock>
-        ) : content.kind === 'markdown' ? (
-          // right-panel R2 批次 A: 默认渲染视图，header 可切源码（编辑态除外）
-          mdRendered ? (
-            <MarkdownRendered text={content.content ?? ''} />
-          ) : (
-            <ShikiCodeBlock language="markdown">{content.content ?? ''}</ShikiCodeBlock>
-          )
-        ) : content.kind === 'csv' ? (
-          <CsvPreview text={content.content ?? ''} />
         ) : (
-          <pre className="whitespace-pre-wrap text-sm">{content.content}</pre>
+          <div className="text-sm text-error">加载失败</div>
         )}
       </div>
 
