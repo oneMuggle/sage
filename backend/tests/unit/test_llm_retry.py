@@ -135,6 +135,7 @@ def _sse_ctx(chunks: list):
     lines = [f"data: {json.dumps(c)}" if isinstance(c, dict) else c for c in chunks]
     body = "\n\n".join(lines) + "\n\n"
     response = MagicMock()
+    response.status_code = 200
     response.raise_for_status = MagicMock()
 
     async def aiter_lines():
@@ -200,6 +201,8 @@ async def test_stream_no_retry_after_first_delta():
     client = _make_client()
 
     class _BrokenCtx:
+        status_code = 200
+
         async def __aenter__(self):
             return self
 

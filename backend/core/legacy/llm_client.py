@@ -560,6 +560,21 @@ class LLMClient:
                     LLMErrorType.RATE_LIMITED, "请求过于频繁，请稍后再试", retry_after=retry_after
                 )
             if 500 <= status < 600:
+                # Sage 自己的 LLM 代理在等待上游超时时回 504，并在 detail.type
+                # 标注 upstream_timeout。识别它 → 给出可操作提示（代理超时可配）。
+                body_text = ""
+                try:
+                    body_text = exc.response.text or ""
+                except Exception:  # noqa: BLE001 — 流式/未读取响应体，按空处理
+                    body_text = ""
+                if status == 504 and "upstream_timeout" in body_text:
+                    raise LLMError(
+                        LLMErrorType.TIMEOUT,
+                        "LLM 代理超时：上游长时间未返回任何数据。"
+                        "可在「设置 → 基础 → LLM 代理超时」中调大超时时间，"
+                        "或检查上游服务与网络。",
+                        status_code=504,
+                    )
                 raise LLMError(
                     LLMErrorType.SERVER_ERROR, f"LLM 服务端错误 (HTTP {status})", status_code=status
                 )
@@ -1069,6 +1084,10 @@ class LLMClient:
                 async with client.stream(
                     "POST", "/v1/chat/completions", json=body
                 ) as response:
+                    if response.status_code >= 400:
+                        # 预读错误体：代理的 upstream_timeout 标记在 body 里；
+                        # 流式响应不预读则 .text 抛 ResponseNotRead，分类拿不到标记。
+                        await response.aread()
                     response.raise_for_status()
 
                     async for line in response.aiter_lines():
