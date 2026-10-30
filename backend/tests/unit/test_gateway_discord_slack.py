@@ -550,3 +550,63 @@ class TestPlatformBindsRoutes:
 
         removed = client.delete("/gateway/discord/binds/111").json()
         assert removed == {"chat_id": "111", "unbound": True}
+
+
+class TestUnconfiguredPlatformConfig:
+    """Discord / Slack 在缺少配置或缺少白名单 key 时 config 必须返回 200。
+
+    回归：`node.get("allowed_channel_ids")` 返回 None 后被列表推导迭代，
+    触发 `TypeError: 'NoneType' object is not iterable`。
+    """
+
+    @pytest.mark.parametrize(
+        ("platform", "env_name"),
+        [("discord", "DISCORD_BOT_TOKEN"), ("slack", "SLACK_BOT_TOKEN")],
+    )
+    def test_config_200_when_no_settings_node(self, monkeypatch, client, tmp_db, platform, env_name):
+        monkeypatch.delenv(env_name, raising=False)
+        monkeypatch.delenv(f"{platform.upper()}_ALLOWED_CHANNEL_IDS", raising=False)
+        _seed_settings(monkeypatch, platform, None)
+        resp = client.get(f"/gateway/{platform}/config")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["configured"] is False
+        assert data["source"] == "none"
+        assert data["allowed_channel_ids"] == []
+
+    @pytest.mark.parametrize(
+        ("platform", "env_name"),
+        [("discord", "DISCORD_BOT_TOKEN"), ("slack", "SLACK_BOT_TOKEN")],
+    )
+    def test_config_200_when_node_missing_ids(
+        self, monkeypatch, client, tmp_db, platform, env_name
+    ):
+        monkeypatch.delenv(env_name, raising=False)
+        _seed_settings(monkeypatch, platform, {"bot_token": "tok", "enabled": True})
+        resp = client.get(f"/gateway/{platform}/config")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["configured"] is True
+        assert data["allowed_channel_ids"] == []
+
+
+class TestPlatformRuntimeApply:
+    @pytest.mark.parametrize("platform", ["discord", "slack"])
+    def test_put_config_applies_without_restart(self, monkeypatch, client, tmp_db, platform):
+        class FakeSupervisor:
+            def __init__(self):
+                self.applied = []
+
+            def apply(self, name):
+                self.applied.append(name)
+
+        supervisor = FakeSupervisor()
+        client.app.state.gateway_supervisor = supervisor
+        _seed_settings(monkeypatch, platform, None)
+        resp = client.put(
+            f"/gateway/{platform}/config",
+            json={"bot_token": "new-tok", "allowed_channel_ids": ["C7"], "enabled": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"saved": True, "restart_required": False}
+        assert supervisor.applied == [platform]

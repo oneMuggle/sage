@@ -133,3 +133,51 @@ class TestConfigEndpoints:
         assert resp.status_code == 200
         key, value = repo.saved
         assert value["telegram"]["enabled"] is False
+
+
+class TestUnconfiguredConfig:
+    """缺少配置 / 缺少白名单 key 时 config 必须返回 200 而不是 500。
+
+    回归：`node.get("allowed_chat_ids")` 返回 None 后被列表推导迭代，
+    触发 `TypeError: 'NoneType' object is not iterable`。
+    """
+
+    def test_config_200_when_no_settings_node(self, monkeypatch, client, tmp_db):
+        monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+        _seed_settings(monkeypatch, None)
+        resp = client.get("/gateway/telegram/config")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["configured"] is False
+        assert data["source"] == "none"
+        assert data["allowed_chat_ids"] == []
+
+    def test_config_200_when_node_missing_ids(self, monkeypatch, client, tmp_db):
+        monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+        _seed_settings(monkeypatch, {"bot_token": "tok", "enabled": True})
+        resp = client.get("/gateway/telegram/config")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["configured"] is True
+        assert data["allowed_chat_ids"] == []
+
+
+class TestRuntimeApply:
+    def test_put_config_applies_without_restart(self, monkeypatch, client, tmp_db):
+        class FakeSupervisor:
+            def __init__(self):
+                self.applied = []
+
+            def apply(self, platform):
+                self.applied.append(platform)
+
+        supervisor = FakeSupervisor()
+        client.app.state.gateway_supervisor = supervisor
+        _seed_settings(monkeypatch, None)
+        resp = client.put(
+            "/gateway/telegram/config",
+            json={"bot_token": "new-tok", "allowed_chat_ids": ["7"], "enabled": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"saved": True, "restart_required": False}
+        assert supervisor.applied == ["telegram"]

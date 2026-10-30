@@ -8,12 +8,14 @@
 
 from __future__ import annotations
 
+import logging
 from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/gateway/telegram/status")
@@ -122,6 +124,22 @@ def _mask_token(token: str) -> str:
     return "****" + token[-4:]
 
 
+def _normalize_ids(raw: object, env_value: object = None) -> List[str]:
+    """归一化白名单：None / 非列表 / 逗号字符串 → ``list[str]``。
+
+    配置缺失（settings 节点无对应 key）时 ``node.get(...)`` 返回 None，
+    直接迭代会抛 ``TypeError`` 并让 ``GET /config`` 变成 500。
+    ``env_value`` 非 None 时以环境变量为准（保持 env 覆盖 settings 的语义）。
+    """
+    if env_value is not None:
+        raw = env_value
+    if isinstance(raw, str):
+        raw = raw.split(",")
+    if not isinstance(raw, (list, tuple)):  # noqa: UP038 — 双分支 py3.8/py3.10 兼容写法
+        return []
+    return [str(c).strip() for c in raw if str(c).strip()]
+
+
 def _read_telegram_settings() -> dict:
     from backend.data.settings_repo import SettingsRepository
 
@@ -154,18 +172,13 @@ def get_telegram_config():
         source = "none"
         token = settings_token or env_token
         enabled = False
-    raw_ids = node.get("allowed_chat_ids")
-    if env_token:
-        raw_ids = os.getenv("TELEGRAM_ALLOWED_CHAT_IDS") or []
-        raw_ids = raw_ids.split(",") if raw_ids else []
-    if isinstance(raw_ids, str):
-        raw_ids = raw_ids.split(",")
+    env_ids = (os.getenv("TELEGRAM_ALLOWED_CHAT_IDS") or "") if env_token else None
     return {
         "configured": bool(token),
         "enabled": enabled,
         "source": source,
         "bot_token_masked": _mask_token(token),
-        "allowed_chat_ids": [str(c).strip() for c in raw_ids if str(c).strip()],
+        "allowed_chat_ids": _normalize_ids(node.get("allowed_chat_ids"), env_ids),
     }
 
 
@@ -192,14 +205,27 @@ def _resolve_saved_token(incoming: str, stored_node: dict) -> str:
     return token
 
 
+def _apply_runtime(request: Request, platform: str) -> bool:
+    """保存配置后立即启停网关；没有 supervisor（测试/嵌入式）时返回 False。"""
+    supervisor = getattr(request.app.state, "gateway_supervisor", None)
+    if supervisor is None:
+        return False
+    try:
+        supervisor.apply(platform)
+        return True
+    except Exception as exc:  # noqa: BLE001 — 配置已落库，运行时失败不回滚
+        logger.warning("网关运行时应用失败 (%s): %s", platform, exc)
+        return False
+
+
 @router.put("/gateway/telegram/config")
-def update_telegram_config(data: TelegramConfigUpdate):
+def update_telegram_config(data: TelegramConfigUpdate, request: Request):
     """保存网关配置到 app_settings.telegram（settings 持久化）。
 
     ``bot_token`` 语义：新值=更新；``****`` 打码回传=保留已存；空串=清除。
-    - 200 + ``{"saved": true, "restart_required": true}``
-      （轮询线程在 lifespan 启动时创建，改配置后需重启后端生效——
-      restart_required 提示前端）
+    - 200 + ``{"saved": true, "restart_required": bool}``
+      （后端有 supervisor 时立即启停，restart_required=false；
+      测试/嵌入式无 supervisor 时才需要重启）
     """
     from backend.data.settings_repo import SettingsRepository
 
@@ -215,7 +241,8 @@ def update_telegram_config(data: TelegramConfigUpdate):
         "enabled": bool(data.enabled),
     }
     repo.set_json("app_settings", app_settings)
-    return {"saved": True, "restart_required": True}
+    applied = _apply_runtime(request, "telegram")
+    return {"saved": True, "restart_required": not applied}
 
 
 # ---------------------------------------------------------------------------
@@ -269,18 +296,13 @@ def _platform_config(platform: str, token_env: str, ids_env: str) -> dict:
         source = "none"
         token = settings_token or env_token
         enabled = False
-    raw_ids = node.get("allowed_channel_ids")
-    if env_token:
-        raw_env = (os.getenv(ids_env) or "").strip()
-        raw_ids = raw_env.split(",") if raw_env else []
-    if isinstance(raw_ids, str):
-        raw_ids = raw_ids.split(",")
+    env_ids = (os.getenv(ids_env) or "") if env_token else None
     return {
         "configured": bool(token),
         "enabled": enabled,
         "source": source,
         "bot_token_masked": _mask_token(token),
-        "allowed_channel_ids": [str(c).strip() for c in raw_ids if str(c).strip()],
+        "allowed_channel_ids": _normalize_ids(node.get("allowed_channel_ids"), env_ids),
     }
 
 
@@ -328,9 +350,9 @@ def get_discord_config():
 
 
 @router.put("/gateway/discord/config")
-def update_discord_config(data: PlatformGatewayConfigUpdate):
+def update_discord_config(data: PlatformGatewayConfigUpdate, request: Request):
     _save_platform_config("discord", data.bot_token, data.allowed_channel_ids, data.enabled)
-    return {"saved": True, "restart_required": True}
+    return {"saved": True, "restart_required": not _apply_runtime(request, "discord")}
 
 
 @router.get("/gateway/slack/status")
@@ -347,9 +369,9 @@ def get_slack_config():
 
 
 @router.put("/gateway/slack/config")
-def update_slack_config(data: PlatformGatewayConfigUpdate):
+def update_slack_config(data: PlatformGatewayConfigUpdate, request: Request):
     _save_platform_config("slack", data.bot_token, data.allowed_channel_ids, data.enabled)
-    return {"saved": True, "restart_required": True}
+    return {"saved": True, "restart_required": not _apply_runtime(request, "slack")}
 
 
 def _list_platform_binds(getter, table: str, platform_label: str) -> dict:

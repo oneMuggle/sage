@@ -3,7 +3,7 @@
 // Round 16b: 平台参数化（Telegram / Discord / Slack 三卡）。
 
 import { RefreshCw, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   gatewayAllowedIds,
@@ -80,7 +80,10 @@ export function formatGatewayCardJson(
 }
 
 export function GatewayCard({ platform }: { platform: GatewayPlatform }): JSX.Element | null {
-  const api = gatewayApiFor(platform);
+  // gatewayApiFor() 每次调用返回新对象；必须按 platform 记忆化，否则
+  // reload 的 useCallback 依赖每次渲染都变化 → effect 每次渲染都执行 →
+  // setState 触发重渲染 → 无限请求循环（3 秒可打出上百次 /config）。
+  const api = useMemo(() => gatewayApiFor(platform), [platform]);
   const label = gatewayPlatformLabel[platform];
   const [config, setConfig] = useState<GatewayConfigView | null>(null);
   const [status, setStatus] = useState<GatewayStatus | null>(null);
@@ -91,8 +94,11 @@ export function GatewayCard({ platform }: { platform: GatewayPlatform }): JSX.El
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string>('');
   const [loadError, setLoadError] = useState<string>('');
+  const inFlightRef = useRef(false);
 
   const reload = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setLoadError('');
     try {
       const [cfg, st, bd] = await Promise.all([
@@ -108,6 +114,8 @@ export function GatewayCard({ platform }: { platform: GatewayPlatform }): JSX.El
       setEnabled(cfg.enabled);
     } catch (exc) {
       setLoadError(String(exc));
+    } finally {
+      inFlightRef.current = false;
     }
   }, [api]);
 
@@ -134,7 +142,7 @@ export function GatewayCard({ platform }: { platform: GatewayPlatform }): JSX.El
       setNotice(
         result.restart_required
           ? '已保存。重启 Sage 后端后网关按新配置启动。'
-          : '已保存。'
+          : '已保存，网关已按新配置启动或停止。',
       );
       await reload();
     } catch (exc) {
@@ -203,7 +211,9 @@ export function GatewayCard({ platform }: { platform: GatewayPlatform }): JSX.El
         </label>
         <label className="block text-xs">
           <span className="text-text-secondary">
-            {platform === 'telegram' ? '允许的 Chat ID（逗号分隔白名单）' : '允许的频道 ID（逗号分隔白名单）'}
+            {platform === 'telegram'
+              ? '允许的 Chat ID（逗号分隔白名单）'
+              : '允许的频道 ID（逗号分隔白名单）'}
           </span>
           <input
             type="text"
@@ -214,11 +224,7 @@ export function GatewayCard({ platform }: { platform: GatewayPlatform }): JSX.El
           />
         </label>
         <label className="flex items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
-          />
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
           启用网关
         </label>
       </div>

@@ -11,7 +11,7 @@ import { PreferenceSaveStatus } from '../../features/manage-settings/PreferenceS
 import { useConfirmedPreference } from '../../features/manage-settings/useConfirmedPreference';
 import { permissionApi } from '../../shared/api/permissionApi';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
-import { GatewayCard } from '../../widgets/settings/GatewayCard';
+import { GatewaySection } from '../../widgets/settings/GatewaySection';
 import { HooksCard } from '../../widgets/settings/HooksCard';
 
 import { SettingRow, Toggle } from './components';
@@ -252,12 +252,7 @@ export function ToolsConnectionsTab() {
         <h3 className="text-ui-base font-semibold text-text mb-3">钩子 (Hooks)</h3>
         <HooksCard />
       </section>
-      <section>
-        <h3 className="text-ui-base font-semibold text-text mb-3">诊断</h3>
-        <GatewayCard platform="telegram" />
-        <GatewayCard platform="discord" />
-        <GatewayCard platform="slack" />
-      </section>
+      <GatewaySection />
     </div>
   );
 }
