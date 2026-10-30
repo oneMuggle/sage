@@ -90,6 +90,7 @@ from backend.api.chat_stream_registry import StreamRegistry
 from backend.api.diagnostic_routes import router as diagnostic_router
 from backend.api.embedder_routes import router as embedder_router
 from backend.api.export_routes import router as export_router
+from backend.api.feedback_routes import router as feedback_router
 from backend.api.git_status_routes import router as git_status_router
 from backend.api.harness_routes import router as harness_router
 from backend.api.hex_routes import router as hex_router
@@ -1565,6 +1566,9 @@ app.include_router(zotero_sync_router, prefix="/api/v1/zotero")
 
 # LLM trace diagnostic preview (settings page card)
 app.include_router(diagnostic_router, prefix="/api/v1")
+
+# 用户反馈系统：双向会话(用户发起 + 管理员回复)
+app.include_router(feedback_router, prefix="/api/v1")
 
 # Multimodal: media file serving + chat attachment upload
 app.include_router(media_router, prefix="/api/v1")

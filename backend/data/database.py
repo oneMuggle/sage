@@ -2126,6 +2126,65 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_harness_improvements_component "
             "ON harness_improvements(component_id, status)"
         )
+
+        # ==================== 用户反馈系统（Phase 1: 本地会话） ====================
+        # 双向会话：用户发起 + 管理员通过 Jira/GitLab/SMTP 回复，回复经转发脚本中继，
+        # 客户端定期 GET 拉取。conversation_id 为客户端生成 UUID v4，全程不变。
+        # 详见 docs/plans/2026-10-29_direct-feedback-channel.md §3.1
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS feedback_conversations (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'open'
+                    CHECK(status IN ('open', 'resolved', 'closed')),
+                tag TEXT NOT NULL DEFAULT 'other',
+                remote_ticket_id TEXT,
+                remote_ticket_url TEXT,
+                app_version TEXT NOT NULL,
+                os_info TEXT NOT NULL,
+                last_activity_at INTEGER NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS feedback_messages (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('user', 'admin')),
+                body TEXT NOT NULL,
+                media_ids TEXT,
+                created_at INTEGER NOT NULL,
+                synced_at INTEGER,
+                FOREIGN KEY(conversation_id) REFERENCES feedback_conversations(id)
+                    ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS feedback_attachments (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                message_id TEXT,
+                filename TEXT NOT NULL,
+                mime_type TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                FOREIGN KEY(conversation_id) REFERENCES feedback_conversations(id)
+                    ON DELETE CASCADE
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_fb_msg_conv "
+            "ON feedback_messages(conversation_id, created_at)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_fb_conv_last "
+            "ON feedback_conversations(last_activity_at DESC)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_fb_conv_remote "
+            "ON feedback_conversations(remote_ticket_id)"
+        )
+
         conn.commit()
 
         # C3 (DSH 对标 R9): schema 版本化迁移 —— 幂等应用所有未执行迁移。

@@ -46,6 +46,7 @@ describe('SETTINGS_SEARCH_INDEX 不变量', () => {
       'usage-stats',
       'skills',
       'global-rules',
+      'feedback',
     ]);
     for (const e of SETTINGS_SEARCH_INDEX) {
       expect(knownTabs.has(e.tab), `tab of ${e.key}`).toBe(true);
