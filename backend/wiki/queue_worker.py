@@ -12,11 +12,15 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from backend.orchestration._lazy_lock import LazyLock
 from backend.wiki.ingest import IngestConfig, ingest_source
 from backend.wiki.ingest_queue import IngestQueue
 from backend.wiki.llm_context import make_llm_context
 
 logger = logging.getLogger(__name__)
+
+# 队列处理是长跑 + LLM 计费操作：API 手动触发与后台 daemon 共用此锁。
+queue_process_lock = LazyLock()
 
 
 def _load_llm_config() -> Optional[Dict[str, Any]]:
