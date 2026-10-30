@@ -4,11 +4,19 @@
  * - 切换某 skill 开关调 onToggle(name, enabled)
  * - 空数组显示 "暂无技能" 占位
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Skill } from '../../../shared/api';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import SkillList, { formatSkillListJson, formatSkillListMarkdown } from '../SkillList';
+
+function I18nWrapper({ children }: { children: React.ReactNode }) {
+  return <I18nProvider defaultLocale="zh">{children}</I18nProvider>;
+}
+
+const render = (ui: React.ReactElement, options?: Parameters<typeof rtlRender>[1]) =>
+  rtlRender(ui, { wrapper: I18nWrapper, ...options });
 
 const SAMPLE_SKILLS: Skill[] = [
   {

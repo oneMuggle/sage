@@ -7,7 +7,7 @@
  * r55: 导入同名冲突从"全量覆盖与否"升级为条目级勾选覆盖。
  */
 
-import { Download, Pencil, Plus, RefreshCw, Search, Upload } from 'lucide-react';
+import { Copy, Download, Pencil, Plus, RefreshCw, Search, Trash2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -16,10 +16,13 @@ import {
   type PromptTemplate,
   type PromptTemplateEnvelope,
 } from '../../shared/api/promptApi';
-import {
-  listTplMemoryEntries,
-  tplStorageKey,
-} from '../../widgets/chat/TemplateFillDialog';
+import { copyToClipboard } from '../../shared/lib/clipboard';
+import { fillTemplate } from '../../shared/lib/formatTemplate';
+import { useI18n } from '../../shared/lib/i18n';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
+import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
+import type { ContextMenuItemSpec } from '../../shared/ui/ContextMenu/types';
+import { listTplMemoryEntries, tplStorageKey } from '../../widgets/chat/TemplateFillDialog';
 
 const MAX_NAME_LEN = 60;
 const MAX_CONTENT_LEN = 8000;
@@ -67,6 +70,7 @@ export function formatPromptTemplatesTabAuditJson(input: {
 }
 
 export function PromptTemplatesTab() {
+  const { t } = useI18n();
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<FormState | null>(null); // null = 列表态
@@ -88,20 +92,26 @@ export function PromptTemplatesTab() {
   };
   const handleDrop = async () => {
     if (dragIndex === null || dropIndex === null || dragIndex === dropIndex) {
-      setDragIndex(null); setDropIndex(null); return;
+      setDragIndex(null);
+      setDropIndex(null);
+      return;
     }
     const reordered = [...templates];
     const [moved] = reordered.splice(dragIndex, 1);
     reordered.splice(dropIndex, 0, moved);
     setTemplates(reordered);
-    setDragIndex(null); setDropIndex(null);
+    setDragIndex(null);
+    setDropIndex(null);
     try {
       await promptApi.reorder(reordered.map((t) => t.id));
     } catch {
       await load(); // 排序失败回滚
     }
   };
-  const handleDragEnd = () => { setDragIndex(null); setDropIndex(null); };
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setDropIndex(null);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -150,6 +160,57 @@ export function PromptTemplatesTab() {
       setError(e instanceof Error ? e.message : String(e));
     }
   };
+
+  const promptMenuItems = (tpl: PromptTemplate): ContextMenuItemSpec[] => [
+    {
+      id: 'prompt-edit',
+      label: t('contextMenu.prompt.edit'),
+      icon: Pencil,
+      onSelect: () =>
+        setForm({
+          id: tpl.id,
+          name: tpl.name,
+          description: tpl.description,
+          content: tpl.content,
+        }),
+    },
+    {
+      id: 'prompt-copy-content',
+      label: t('contextMenu.prompt.copyContent'),
+      icon: Copy,
+      onSelect: () =>
+        void copyToClipboard(tpl.content, {
+          successMessage: t('contextMenu.common.copied'),
+          errorMessage: t('contextMenu.common.copyFailed'),
+        }),
+    },
+    {
+      id: 'prompt-copy-name',
+      label: t('contextMenu.common.copyName'),
+      icon: Copy,
+      onSelect: () =>
+        void copyToClipboard(tpl.name, {
+          successMessage: t('contextMenu.common.copied'),
+          errorMessage: t('contextMenu.common.copyFailed'),
+        }),
+    },
+    { id: 'prompt-sep-delete', kind: 'separator' },
+    {
+      id: 'prompt-delete',
+      label: t('contextMenu.prompt.delete'),
+      icon: Trash2,
+      destructive: true,
+      onSelect: async () => {
+        const confirmed = await confirmDialog({
+          title: t('contextMenu.prompt.deleteTitle'),
+          message: fillTemplate(t('contextMenu.prompt.deleteBody'), { name: tpl.name }),
+          confirmLabel: t('common.delete'),
+          danger: true,
+        });
+        if (confirmed) await handleDelete(tpl.id);
+      },
+    },
+  ];
 
   // R30: 模板导出（JSON 下载）
   const handleExport = () => {
@@ -297,7 +358,7 @@ export function PromptTemplatesTab() {
               className="w-full pl-7 pr-2 py-1.5 text-xs rounded-radius-sm border border-border bg-bg text-text"
             />
           </div>
-                    <button
+          <button
             type="button"
             data-testid="prompts-refresh"
             onClick={() => void load()}
@@ -400,7 +461,10 @@ export function PromptTemplatesTab() {
       )}
 
       {form && (
-        <div className="p-3 rounded-radius-sm border border-border space-y-2" data-testid="prompts-form">
+        <div
+          className="p-3 rounded-radius-sm border border-border space-y-2"
+          data-testid="prompts-form"
+        >
           <input
             data-testid="prompts-form-name"
             value={form.name}
@@ -459,89 +523,97 @@ export function PromptTemplatesTab() {
             .filter((tpl) => {
               if (!searchQuery.trim()) return true;
               const q = searchQuery.toLowerCase();
-              return tpl.name.toLowerCase().includes(q) || (tpl.description ?? '').toLowerCase().includes(q) || tpl.content.toLowerCase().includes(q);
+              return (
+                tpl.name.toLowerCase().includes(q) ||
+                (tpl.description ?? '').toLowerCase().includes(q) ||
+                tpl.content.toLowerCase().includes(q)
+              );
             })
             .map((tpl, idx) => (
-            <li
-              key={tpl.id}
-              draggable
-              onDragStart={() => handleDragStart(idx)}
-              onDragOver={(e) => { e.preventDefault(); handleDragOver(idx); }}
-              onDrop={() => void handleDrop()}
-              onDragEnd={handleDragEnd}
-              className={`p-3 rounded-radius-sm border ${dropIndex === idx ? 'border-primary' : 'border-border'} ${dragIndex === idx ? 'opacity-50' : ''} cursor-grab active:cursor-grabbing`}
-              data-testid="prompts-item"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium text-text">{tpl.name}</div>
-                  {tpl.description && (
-                    <div className="text-ui-2xs text-text-secondary">{tpl.description}</div>
-                  )}
-                  <div className="text-ui-2xs text-text-secondary font-mono mt-1 line-clamp-2">
-                    {tpl.content.length > 120 ? `${tpl.content.slice(0, 120)}…` : tpl.content}
+              <ContextMenu key={tpl.id} items={() => promptMenuItems(tpl)}>
+                <li
+                  draggable
+                  onDragStart={() => handleDragStart(idx)}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    handleDragOver(idx);
+                  }}
+                  onDrop={() => void handleDrop()}
+                  onDragEnd={handleDragEnd}
+                  className={`p-3 rounded-radius-sm border ${dropIndex === idx ? 'border-primary' : 'border-border'} ${dragIndex === idx ? 'opacity-50' : ''} cursor-grab active:cursor-grabbing`}
+                  data-testid="prompts-item"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-medium text-text">{tpl.name}</div>
+                      {tpl.description && (
+                        <div className="text-ui-2xs text-text-secondary">{tpl.description}</div>
+                      )}
+                      <div className="text-ui-2xs text-text-secondary font-mono mt-1 line-clamp-2">
+                        {tpl.content.length > 120 ? `${tpl.content.slice(0, 120)}…` : tpl.content}
+                      </div>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      {(() => {
+                        // R38: 变量记忆展示/清除 —— 与填充对话框同键口径
+                        try {
+                          const raw = window.localStorage.getItem(tplStorageKey(tpl.content));
+                          const mem = raw ? (JSON.parse(raw) as Record<string, string>) : null;
+                          const entries = mem ? Object.entries(mem) : [];
+                          if (entries.length === 0) return null;
+                          return (
+                            <span
+                              className="text-ui-2xs text-text-secondary mr-1"
+                              data-testid={`prompts-memory-${tpl.id}`}
+                            >
+                              记忆 {entries.length} 项
+                              <button
+                                type="button"
+                                data-testid={`prompts-memory-clear-${tpl.id}`}
+                                onClick={() => {
+                                  localStorage.removeItem(tplStorageKey(tpl.content));
+                                  setMemoryTick((n) => n + 1);
+                                }}
+                                className="ml-1 text-error hover:underline"
+                              >
+                                清除
+                              </button>
+                            </span>
+                          );
+                        } catch {
+                          return null;
+                        }
+                      })()}
+                      <button
+                        type="button"
+                        data-testid={`prompts-edit-${tpl.id}`}
+                        onClick={() =>
+                          setForm({
+                            id: tpl.id,
+                            name: tpl.name,
+                            description: tpl.description,
+                            content: tpl.content,
+                          })
+                        }
+                        className="p-1 rounded hover:bg-bg-hover text-muted"
+                        title="编辑"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`prompts-delete-${tpl.id}`}
+                        onClick={() => void handleDelete(tpl.id)}
+                        className="p-1 rounded hover:bg-error/10 text-muted hover:text-error"
+                        title="删除"
+                      >
+                        <span className="text-ui-2xs">删除</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="flex gap-1 shrink-0">
-                  {(() => {
-                    // R38: 变量记忆展示/清除 —— 与填充对话框同键口径
-                    try {
-                      const raw = window.localStorage.getItem(tplStorageKey(tpl.content));
-                      const mem = raw ? (JSON.parse(raw) as Record<string, string>) : null;
-                      const entries = mem ? Object.entries(mem) : [];
-                      if (entries.length === 0) return null;
-                      return (
-                        <span
-                          className="text-ui-2xs text-text-secondary mr-1"
-                          data-testid={`prompts-memory-${tpl.id}`}
-                        >
-                          记忆 {entries.length} 项
-                          <button
-                            type="button"
-                            data-testid={`prompts-memory-clear-${tpl.id}`}
-                            onClick={() => {
-                              localStorage.removeItem(tplStorageKey(tpl.content));
-                              setMemoryTick((n) => n + 1);
-                            }}
-                            className="ml-1 text-error hover:underline"
-                          >
-                            清除
-                          </button>
-                        </span>
-                      );
-                    } catch {
-                      return null;
-                    }
-                  })()}
-                  <button
-                    type="button"
-                    data-testid={`prompts-edit-${tpl.id}`}
-                    onClick={() =>
-                      setForm({
-                        id: tpl.id,
-                        name: tpl.name,
-                        description: tpl.description,
-                        content: tpl.content,
-                      })
-                    }
-                    className="p-1 rounded hover:bg-bg-hover text-muted"
-                    title="编辑"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`prompts-delete-${tpl.id}`}
-                    onClick={() => void handleDelete(tpl.id)}
-                    className="p-1 rounded hover:bg-error/10 text-muted hover:text-error"
-                    title="删除"
-                  >
-                    <span className="text-ui-2xs">删除</span>
-                  </button>
-                </div>
-              </div>
-            </li>
-          ))}
+                </li>
+              </ContextMenu>
+            ))}
         </ul>
       )}
 
