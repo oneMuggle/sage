@@ -8,7 +8,7 @@
 //   - 附件上传是 raw binary，CommandRoute 只支持 JSON body
 //   - 手动触发 syncer 属于 main 进程内部行为
 //
-// 设计见 docs/plans/2026-10-29_direct-feedback-channel.md §4。
+// 设计见 docs/technical/109-feedback-relay-deployment.md §11.2。
 
 import { fetchCompat } from '../fetchCompat';
 import { logger } from '../logger';
