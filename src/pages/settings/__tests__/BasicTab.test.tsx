@@ -197,10 +197,7 @@ describe('BasicTab — LLM 重试 section', () => {
     });
   });
 
-  it('exports BasicTab audit snapshot and JSON helpers and renders copy controls', () => {
-    renderTab();
-    expect(screen.getByTestId('basic-tab-copy-audit')).toBeTruthy();
-
+  it('exports BasicTab audit snapshot and JSON helpers; copy controls moved to the audit export tab (P3)', () => {
     const snapshot = formatBasicTabAuditSnapshot({
       streaming: true,
       llmRetryMaxAttempts: 3,

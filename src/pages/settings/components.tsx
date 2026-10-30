@@ -5,7 +5,9 @@
 import { useState } from 'react';
 
 import { APPLY_MODE_LABELS, type ApplyMode } from '../../entities/setting/metadata';
+import { getSettingMetadata } from '../../entities/setting/settingsRegistry';
 import type { useSettings } from '../../features/manage-settings/useSettings';
+import { useI18n } from '../../shared/lib/i18n';
 
 // ==================== 共用类型 ====================
 
@@ -26,6 +28,13 @@ export interface SettingRowProps {
    * 为「只切 tab」，保持既有行为。
    */
   anchor?: string;
+  /**
+   * 该行当前值。与 `anchor` 在 `settingsRegistry` 里的 `defaultValue` 不一致
+   * 且提供了 `onReset` 时，渲染「恢复默认」。不传则不渲染，既有行行为不变。
+   */
+  value?: unknown;
+  /** 恢复默认：调用方负责把 registry 的 `defaultValue` 写回。 */
+  onReset?: () => void;
 }
 
 export interface ToggleProps {
@@ -58,34 +67,33 @@ export function formatSettingRowAuditJson(input: SettingRowAuditInput): string {
 
 // ==================== 共用组件 ====================
 
-export function SettingRow({ label, desc, children, anchor }: SettingRowProps) {
-  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
-  const auditInput: SettingRowAuditInput = {
+/**
+ * registry 默认值比较：原始值直接比，对象/数组按序列化比（键序稳定，见各
+ * 设置的构造方式）。序列化失败（环）时保守地视为「已修改」。
+ */
+function isDefaultValue(value: unknown, defaultValue: unknown): boolean {
+  if (value === defaultValue) return true;
+  try {
+    return JSON.stringify(value) === JSON.stringify(defaultValue);
+  } catch {
+    return false;
+  }
+}
+
+export function SettingRow({ label, desc, children, anchor, value, onReset }: SettingRowProps) {
+  const { t } = useI18n();
+  const auditSnapshot = formatSettingRowAuditSnapshot({
     label,
     hasDesc: Boolean(desc),
     anchor: anchor ?? null,
-  };
-  const auditSnapshot = formatSettingRowAuditSnapshot(auditInput);
-  const auditJson = formatSettingRowAuditJson(auditInput);
-  /* v8 ignore start */
-  const handleCopySnapshot = async () => {
-    setCopiedSnapshot(true);
-    try {
-      await navigator.clipboard?.writeText(auditSnapshot);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
-  const handleCopyJson = async () => {
-    setCopiedJson(true);
-    try {
-      await navigator.clipboard?.writeText(auditJson);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
-  /* v8 ignore stop */
+  });
+
+  const metadata = anchor === undefined ? undefined : getSettingMetadata(anchor);
+  const showReset =
+    onReset !== undefined &&
+    value !== undefined &&
+    metadata !== undefined &&
+    !isDefaultValue(value, metadata.defaultValue);
 
   return (
     <div
@@ -98,42 +106,20 @@ export function SettingRow({ label, desc, children, anchor }: SettingRowProps) {
       <div>
         <div className="text-sm text-text">{label}</div>
         {desc ? <div className="text-xs text-muted mt-0.5">{desc}</div> : null}
-        <span className="sr-only">
-          <span
-            role="status"
-            tabIndex={0}
-            data-testid="setting-row-audit-copy"
-            data-setting-row-audit={auditSnapshot}
-            aria-label="复制设置项审计快照"
-            onClick={() => void handleCopySnapshot()}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                void handleCopySnapshot();
-              }
-            }}
-          >
-            {copiedSnapshot ? '已复制' : '快照'}
-          </span>
-          <span
-            role="status"
-            tabIndex={0}
-            data-testid="setting-row-audit-copy-json"
-            data-setting-row-audit-json={auditJson}
-            aria-label="复制设置项审计 JSON"
-            onClick={() => void handleCopyJson()}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                void handleCopyJson();
-              }
-            }}
-          >
-            {copiedJson ? '已复制 JSON' : 'JSON'}
-          </span>
-        </span>
       </div>
-      <div>{children}</div>
+      <div className="flex items-center gap-2">
+        {showReset && (
+          <button
+            type="button"
+            data-testid={anchor ? `setting-reset-${anchor}` : undefined}
+            onClick={onReset}
+            className="text-xs text-muted hover:text-primary transition-colors"
+          >
+            {t('settings.common.reset_default')}
+          </button>
+        )}
+        {children}
+      </div>
     </div>
   );
 }
@@ -161,6 +147,7 @@ export function Toggle({ value, onChange, disabled = false, testId }: ToggleProp
 }
 
 export function ApplyModeBadge({ mode, compact = false }: { mode: ApplyMode; compact?: boolean }) {
+  const { t, locale } = useI18n();
   const label = APPLY_MODE_LABELS[mode];
   return (
     <span
@@ -176,7 +163,7 @@ export function ApplyModeBadge({ mode, compact = false }: { mode: ApplyMode; com
               : 'bg-primary/10 text-primary'
       }`}
     >
-      {compact ? label.zh : `保存后：${label.zh}`}
+      {compact ? label[locale] : t('settings.common.apply_after').replace('{label}', label[locale])}
     </span>
   );
 }
@@ -195,6 +182,7 @@ export function AdvancedSection({
   children,
 }: AdvancedSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
+  const { t } = useI18n();
   const contentId = `advanced-settings-${title.replace(/[^a-zA-Z0-9一-鿿]+/g, '-')}`;
 
   return (
@@ -208,7 +196,7 @@ export function AdvancedSection({
       >
         <span>{title}</span>
         <span aria-hidden="true" className="text-xs text-muted">
-          {open ? '收起' : '展开'}
+          {open ? t('settings.common.collapse') : t('settings.common.expand')}
         </span>
       </button>
       {description ? <p className="mt-1 text-xs text-muted">{description}</p> : null}

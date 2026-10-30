@@ -16,14 +16,13 @@ function filterTabs(tabs: TabEntry[], query: string): TabEntry[] {
 }
 
 const TABS: TabEntry[] = [
-  { key: 'general', label: '通用' },
   { key: 'endpoints', label: '端点' },
   { key: 'models', label: '模型' },
   { key: 'memory', label: '记忆' },
   { key: 'network', label: '网络' },
   { key: 'prompts', label: '提示词' },
   { key: 'mcp', label: 'MCP' },
-  { key: 'runtime', label: '开发环境' },
+  { key: 'runtime', label: '运行环境与诊断' },
   { key: 'evolution', label: '进化' },
   { key: 'updates', label: '更新' },
 ];

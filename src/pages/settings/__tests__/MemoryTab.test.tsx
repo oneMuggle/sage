@@ -4,19 +4,24 @@
  * - "同步到内部服务器" 死开关 (memoryServerSync, 后端已下线) 不得回流 UI。
  * - 不得硬编码展示 %APPDATA%\Sage\memory.db 路径。
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  MemoryTab,
-  formatMemoryTabAuditJson,
-  formatMemoryTabAuditSnapshot,
-} from '../MemoryTab';
+import { I18nProvider } from '../../../shared/lib/i18n';
+import { MemoryTab, formatMemoryTabAuditJson, formatMemoryTabAuditSnapshot } from '../MemoryTab';
 
 const invokeMock = vi.fn();
 vi.mock('../../../shared/api/desktopInvoke', () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
+
+function renderTab() {
+  return render(
+    <I18nProvider defaultLocale="zh">
+      <MemoryTab />
+    </I18nProvider>,
+  );
+}
 
 describe('MemoryTab', () => {
   beforeEach(() => {
@@ -25,12 +30,12 @@ describe('MemoryTab', () => {
   });
 
   it('does not render the retired 同步到内部服务器 toggle', () => {
-    render(<MemoryTab />);
+    renderTab();
     expect(screen.queryByText('同步到内部服务器')).toBeNull();
   });
 
   it('does NOT hardcode the %APPDATA%\\Sage\\memory.db path display', () => {
-    const { container } = render(<MemoryTab />);
+    const { container } = renderTab();
 
     expect(container.textContent).not.toContain('%APPDATA%');
     expect(container.textContent).not.toContain('Sage\\memory.db');
@@ -45,7 +50,7 @@ describe('MemoryTab', () => {
     }
   });
 
-  it('formats and copies memory tab audit snapshot and JSON', () => {
+  it('formats memory tab audit snapshot and JSON; copy controls moved to the audit export tab (P3)', () => {
     expect(
       formatMemoryTabAuditSnapshot({
         embedderType: 'onnx',
@@ -70,12 +75,6 @@ describe('MemoryTab', () => {
       backupCount: 0,
     });
 
-    render(<MemoryTab />);
-    const summaryBtn = screen.getByTestId('memory-tab-copy-summary');
-    const jsonBtn = screen.getByTestId('memory-tab-copy-json');
-    fireEvent.click(summaryBtn);
-    expect(summaryBtn.textContent).toBe('已复制');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn.textContent).toBe('已复制');
+    // P3: 页内「复制快照/JSON」按钮已收敛到「审计导出」tab —— MemoryTab 不再渲染这两枚按钮。
   });
 });

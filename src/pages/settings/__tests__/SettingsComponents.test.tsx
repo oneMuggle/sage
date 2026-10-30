@@ -1,30 +1,34 @@
 // @vitest-environment jsdom
 /**
- * GeneralTab — M1 权限模式选择器测试。
+ * 设置页组件级测试（原 GeneralTab.test.tsx，2026-10-28 设置页整理 P0）。
  *
- * 只验证 PermissionModeSelector 行为；ThemeSelector / DiagnosticsCard /
- * useSettings 全部桩化（与 ThemeSelector.test.tsx 同思路），避免主题/诊断
- * 子树的 IPC 依赖干扰。
+ * 「通用」tab 下线后，各区块归入：
+ * - 字体 / 演示 / 恢复默认 → BasicTab（组件各自拆分）
+ * - 权限模式 / 已记住规则 → ToolsConnectionsTab
+ * - 自动快照 → MemoryKnowledgeTab
  *
- * 持久化契约: get_preference / set_preference key='permission_mode'
- * （KV 存储 — 后端 SettingsRepository.KEYS 白名单；见 GeneralTab.tsx 注释）。
+ * 本文件直接渲染这些组件，避免依赖整个 tab 的无关子树。
+ * 持久化契约: get_preference / set_preference key='permission_mode'（KV 存储）。
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FontProvider } from '../../../entities/font/useFontSettings';
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  GeneralTab,
-  formatGeneralTabAuditJson,
-  formatGeneralTabAuditSnapshot,
-} from '../GeneralTab';
+import { DemoModeSection } from '../DemoModeSection';
+import { FontSettingsSection } from '../FontSettingsSection';
+import { AutoCheckpointCard } from '../MemoryKnowledgeTab';
+import { PermissionRulesManager } from '../PermissionRulesManager';
+import { ResetDefaultsSection } from '../ResetDefaultsSection';
+import { ToolsConnectionsTab } from '../ToolsConnectionsTab';
 
 const mocks = vi.hoisted(() => ({
   getPreference: vi.fn(),
   setPreference: vi.fn(),
   updateSettings: vi.fn(),
+  resetSettings: vi.fn(),
   listRules: vi.fn(),
   deleteRule: vi.fn(),
   clearRules: vi.fn(),
@@ -40,6 +44,8 @@ vi.mock('../../../shared/api/settingsClient', () => ({
     setSettings: vi.fn().mockResolvedValue(undefined),
     getPreference: (...args: unknown[]) => mocks.getPreference(...args),
     setPreference: (...args: unknown[]) => mocks.setPreference(...args),
+    getPreferenceStrict: (...args: unknown[]) => mocks.getPreference(...args),
+    setPreferenceStrict: (...args: unknown[]) => mocks.setPreference(...args),
     getContextTurnLimit: vi.fn().mockResolvedValue(null),
     setContextTurnLimit: vi.fn().mockResolvedValue(undefined),
   },
@@ -85,16 +91,16 @@ vi.mock('../../../features/manage-settings/useSettings', () => ({
     settings: DEFAULT_SETTINGS,
     isLoading: false,
     updateSettings: mocks.updateSettings,
-    resetSettings: vi.fn(),
+    resetSettings: (...args: unknown[]) => mocks.resetSettings(...args),
   }),
 }));
 
-vi.mock('../../../widgets/settings/DiagnosticsCard', () => ({
-  DiagnosticsCard: () => <div data-testid="diagnostics-stub" />,
+vi.mock('../../../widgets/settings/HooksCard', () => ({
+  HooksCard: () => <div data-testid="hooks-stub" />,
 }));
 
-vi.mock('../ThemeSelector', () => ({
-  ThemeSelector: () => <div data-testid="theme-selector-stub" />,
+vi.mock('../../../widgets/settings/GatewayCard', () => ({
+  GatewayCard: () => <div data-testid="gateway-stub" />,
 }));
 
 vi.mock('../../../entities/font/fontStorage', () => ({
@@ -107,14 +113,37 @@ vi.mock('../../../entities/font/fontStorage', () => ({
   saveFontSettings: async () => undefined,
 }));
 
-function renderTab(resetSettings = vi.fn()): void {
+function renderWithProviders(node: ReactNode): void {
   render(
     <I18nProvider>
-      <FontProvider>
-        <GeneralTab resetSettings={resetSettings} />
-      </FontProvider>
+      <FontProvider>{node}</FontProvider>
     </I18nProvider>,
   );
+}
+
+/** 已记住规则管理器的默认渲染入口（本文件用例最多的一类）。 */
+function renderTab(): void {
+  renderWithProviders(<PermissionRulesManager />);
+}
+
+function renderFontSection(): void {
+  renderWithProviders(<FontSettingsSection />);
+}
+
+function renderToolsTab(): void {
+  renderWithProviders(<ToolsConnectionsTab />);
+}
+
+function renderDemo(): void {
+  renderWithProviders(<DemoModeSection />);
+}
+
+function renderReset(): void {
+  renderWithProviders(<ResetDefaultsSection />);
+}
+
+function renderCheckpoint(): void {
+  renderWithProviders(<AutoCheckpointCard />);
 }
 
 beforeEach(() => {
@@ -122,6 +151,8 @@ beforeEach(() => {
   mocks.setPreference.mockReset();
   mocks.getPreference.mockResolvedValue(null);
   mocks.setPreference.mockResolvedValue(undefined);
+  mocks.resetSettings.mockReset();
+  mocks.resetSettings.mockResolvedValue(undefined);
   mocks.listRules.mockReset();
   mocks.deleteRule.mockReset();
   mocks.clearRules.mockReset();
@@ -136,9 +167,9 @@ beforeEach(() => {
   mocks.confirmDialog.mockResolvedValue(true);
 });
 
-describe('GeneralTab font controls', () => {
+describe('FontSettingsSection 字体设置', () => {
   it('labels controls, enforces integer bounds and updates UI/code independently', async () => {
-    renderTab();
+    renderFontSection();
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '恢复默认字体' })).not.toBeDisabled();
     });
@@ -179,9 +210,9 @@ describe('GeneralTab font controls', () => {
   });
 });
 
-describe('GeneralTab permission mode selector (M1)', () => {
+describe('PermissionModeSelector (M1)', () => {
   it('renders the permission section with 4 mode options', async () => {
-    renderTab();
+    renderToolsTab();
 
     expect(screen.getByText('工具权限')).toBeInTheDocument();
     const select = screen.getByTestId('permission-mode-select') as HTMLSelectElement;
@@ -197,7 +228,7 @@ describe('GeneralTab permission mode selector (M1)', () => {
 
   it('loads persisted mode from get_preference', async () => {
     mocks.getPreference.mockResolvedValue('full_access');
-    renderTab();
+    renderToolsTab();
 
     const select = screen.getByTestId('permission-mode-select') as HTMLSelectElement;
     await waitFor(() => {
@@ -207,7 +238,7 @@ describe('GeneralTab permission mode selector (M1)', () => {
 
   it('falls back to workspace_write on unknown persisted value', async () => {
     mocks.getPreference.mockResolvedValue('not_a_mode');
-    renderTab();
+    renderToolsTab();
 
     const select = screen.getByTestId('permission-mode-select') as HTMLSelectElement;
     await waitFor(() => {
@@ -217,19 +248,21 @@ describe('GeneralTab permission mode selector (M1)', () => {
   });
 
   it('changing the select persists via set_preference(permission_mode)', async () => {
-    renderTab();
+    renderToolsTab();
 
     const select = screen.getByTestId('permission-mode-select');
     fireEvent.change(select, { target: { value: 'prompt' } });
 
-    expect(mocks.setPreference).toHaveBeenCalledWith('permission_mode', 'prompt', 'permissions');
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('permission_mode', 'prompt', 'permissions'),
+    );
     expect((select as HTMLSelectElement).value).toBe('prompt');
     // 模式描述文案随选择更新
     expect(screen.getByText('所有写入与执行操作都需要手动批准')).toBeInTheDocument();
   });
 
   it('shows the remembered-rules hint and empty state', async () => {
-    renderTab();
+    renderToolsTab();
     expect(screen.getByText(/已记住的规则可在下方查看并逐条删除/)).toBeInTheDocument();
     expect(screen.getByText('已记住的规则')).toBeInTheDocument();
     await waitFor(() => {
@@ -238,7 +271,7 @@ describe('GeneralTab permission mode selector (M1)', () => {
   });
 });
 
-describe('GeneralTab remembered rules manager (R97)', () => {
+describe('PermissionRulesManager (R97)', () => {
   it('renders saved rules with decision labels', async () => {
     mocks.listRules.mockResolvedValue([
       { tool_pattern: 'bash', decision: 'deny' },
@@ -281,13 +314,9 @@ describe('GeneralTab remembered rules manager (R97)', () => {
     renderTab();
 
     await waitFor(() => {
-      expect(screen.getByTestId('permission-rule-plugin-status-0')).toHaveTextContent(
-        '插件已卸载',
-      );
+      expect(screen.getByTestId('permission-rule-plugin-status-0')).toHaveTextContent('插件已卸载');
     });
-    expect(screen.getByTestId('permission-rule-plugin-status-1')).toHaveTextContent(
-      '插件无记录',
-    );
+    expect(screen.getByTestId('permission-rule-plugin-status-1')).toHaveTextContent('插件无记录');
     expect(screen.queryByTestId('permission-rule-plugin-status-2')).not.toBeInTheDocument();
     expect(screen.queryByTestId('permission-rule-plugin-status-3')).not.toBeInTheDocument();
   });
@@ -327,9 +356,7 @@ describe('GeneralTab remembered rules manager (R97)', () => {
     await waitFor(() => {
       expect(screen.queryByText('plugin__demo__*')).not.toBeInTheDocument();
     });
-    expect(
-      screen.queryByTestId('permission-rules-delete-by-plugin-demo'),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId('permission-rules-delete-by-plugin-demo')).not.toBeInTheDocument();
   });
 
   it('shows an orphan cleanup row and deletes orphans after confirmation', async () => {
@@ -359,9 +386,7 @@ describe('GeneralTab remembered rules manager (R97)', () => {
     fireEvent.click(screen.getByTestId('permission-rules-delete-orphans'));
 
     await waitFor(() => {
-      expect(mocks.confirmDialog).toHaveBeenCalledWith(
-        expect.objectContaining({ danger: true }),
-      );
+      expect(mocks.confirmDialog).toHaveBeenCalledWith(expect.objectContaining({ danger: true }));
       expect(mocks.deleteOrphanRules).toHaveBeenCalledWith();
     });
     await waitFor(() => {
@@ -459,9 +484,9 @@ describe('GeneralTab remembered rules manager (R97)', () => {
     fireEvent.click(screen.getByTestId('permission-rules-delete-by-plugin-demo'));
 
     await waitFor(() => {
-      expect(
-        screen.getByTestId('permission-rules-delete-by-plugin-failed'),
-      ).toHaveTextContent('按插件删除规则失败');
+      expect(screen.getByTestId('permission-rules-delete-by-plugin-failed')).toHaveTextContent(
+        '按插件删除规则失败',
+      );
     });
     expect(screen.getByText('plugin__demo__*')).toBeInTheDocument();
   });
@@ -540,9 +565,7 @@ describe('GeneralTab remembered rules manager (R97)', () => {
     fireEvent.click(screen.getByTestId('permission-rules-clear'));
 
     await waitFor(() => {
-      expect(mocks.confirmDialog).toHaveBeenCalledWith(
-        expect.objectContaining({ danger: true }),
-      );
+      expect(mocks.confirmDialog).toHaveBeenCalledWith(expect.objectContaining({ danger: true }));
       expect(mocks.clearRules).toHaveBeenCalled();
     });
     await waitFor(() => {
@@ -579,15 +602,13 @@ describe('GeneralTab remembered rules manager (R97)', () => {
     fireEvent.click(screen.getByTestId('permission-rules-clear'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('permission-rules-clear-failed')).toHaveTextContent(
-        '全部删除失败',
-      );
+      expect(screen.getByTestId('permission-rules-clear-failed')).toHaveTextContent('全部删除失败');
     });
     expect(screen.getByText('bash')).toBeInTheDocument();
   });
 });
 
-describe('GeneralTab demo mode', () => {
+describe('DemoModeSection 演示模式', () => {
   beforeEach(() => {
     delete (window as unknown as { electronAPI?: unknown }).electronAPI;
     mocks.updateSettings.mockReset();
@@ -599,7 +620,7 @@ describe('GeneralTab demo mode', () => {
     (window as unknown as { electronAPI: { setDemoMode: typeof setDemoMode } }).electronAPI = {
       setDemoMode,
     };
-    renderTab();
+    renderDemo();
 
     const toggle = screen.getByTestId('demo-mode-section').querySelector('button')!;
     fireEvent.click(toggle);
@@ -613,7 +634,7 @@ describe('GeneralTab demo mode', () => {
     (window as unknown as { electronAPI: { setDemoMode: typeof setDemoMode } }).electronAPI = {
       setDemoMode,
     };
-    renderTab();
+    renderDemo();
 
     fireEvent.click(screen.getByTestId('demo-mode-section').querySelector('button')!);
 
@@ -627,7 +648,7 @@ describe('GeneralTab demo mode', () => {
 
   it('handles updateSettings rejection and clears the persistence state', async () => {
     mocks.updateSettings.mockRejectedValue(new Error('storage unavailable'));
-    renderTab();
+    renderDemo();
 
     fireEvent.click(screen.getByTestId('demo-mode-section').querySelector('button')!);
 
@@ -638,28 +659,27 @@ describe('GeneralTab demo mode', () => {
   });
 });
 
-describe('GeneralTab reset-to-defaults confirmation', () => {
+describe('ResetDefaultsSection 恢复默认设置', () => {
   it('requires explicit confirmation before resetting', async () => {
-    const resetSettings = vi.fn().mockResolvedValue(undefined);
-    renderTab(resetSettings);
+    renderReset();
 
     fireEvent.click(screen.getByTestId('settings-reset-button'));
     expect(screen.getByTestId('settings-reset-confirm')).toBeInTheDocument();
-    expect(resetSettings).not.toHaveBeenCalled();
+    expect(mocks.resetSettings).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByTestId('settings-reset-confirm-no'));
     expect(screen.queryByTestId('settings-reset-confirm')).toBeNull();
-    expect(resetSettings).not.toHaveBeenCalled();
+    expect(mocks.resetSettings).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByTestId('settings-reset-button'));
     fireEvent.click(screen.getByTestId('settings-reset-confirm-yes'));
-    await waitFor(() => expect(resetSettings).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.resetSettings).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId('settings-reset-done')).toBeInTheDocument();
   });
 
   it('surfaces a failure instead of claiming success', async () => {
-    const resetSettings = vi.fn().mockRejectedValue(new Error('backend down'));
-    renderTab(resetSettings);
+    mocks.resetSettings.mockRejectedValue(new Error('backend down'));
+    renderReset();
 
     fireEvent.click(screen.getByTestId('settings-reset-button'));
     fireEvent.click(screen.getByTestId('settings-reset-confirm-yes'));
@@ -669,12 +689,12 @@ describe('GeneralTab reset-to-defaults confirmation', () => {
   });
 });
 
-describe('GeneralTab auto checkpoint (B-2, 默认开)', () => {
+describe('AutoCheckpointCard 自动快照 (B-2, 默认开)', () => {
   const toggle = () =>
-    screen.getByTestId('auto-checkpoint-section').querySelector('button') as HTMLButtonElement;
+    screen.getByTestId('auto-checkpoint-section').querySelector('[role="switch"]') as HTMLElement;
 
   it('missing preference = on (safe-by-default)', async () => {
-    renderTab();
+    renderCheckpoint();
     await waitFor(() => {
       expect(mocks.getPreference).toHaveBeenCalledWith('auto_checkpoint');
     });
@@ -687,46 +707,9 @@ describe('GeneralTab auto checkpoint (B-2, 默认开)', () => {
     mocks.getPreference.mockImplementation(async (key: string) =>
       key === 'auto_checkpoint' ? '0' : null,
     );
-    renderTab();
+    renderCheckpoint();
     await waitFor(() => {
       expect(toggle().className).toContain('bg-line-strong');
     });
-  });
-
-  it('formats and copies general tab audit snapshot and JSON', () => {
-    expect(
-      formatGeneralTabAuditSnapshot({
-        streaming: true,
-        timezone: 'Asia/Shanghai',
-        logTimezone: 'UTC',
-        autoMemory: true,
-        confirmDelete: false,
-      }),
-    ).toBe('通用设置 · 流式:开 · 时区:Asia/Shanghai · 日志:UTC · 自动记忆:开 · 删前确认:关');
-    expect(
-      JSON.parse(
-        formatGeneralTabAuditJson({
-          streaming: false,
-          timezone: ' ',
-          logTimezone: ' ',
-          autoMemory: false,
-          confirmDelete: true,
-        }),
-      ),
-    ).toEqual({
-      streaming: false,
-      timezone: 'Asia/Shanghai',
-      logTimezone: 'UTC',
-      autoMemory: false,
-      confirmDelete: true,
-    });
-
-    renderTab();
-    const summaryBtn = screen.getByTestId('general-tab-copy-summary');
-    const jsonBtn = screen.getByTestId('general-tab-copy-json');
-    fireEvent.click(summaryBtn);
-    expect(summaryBtn.textContent).toBe('已复制');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn.textContent).toBe('已复制');
   });
 });

@@ -3,6 +3,7 @@
  */
 import { zhChatAndSider } from './locales/zh/chatAndSider';
 import { zhSettingsAndModels } from './locales/zh/settingsAndModels';
+import { zhSettingsUi } from './locales/zh/settingsUi';
 import { zhWorkspaceAndTools } from './locales/zh/workspaceAndTools';
 import { pausedMemoryZh } from './pausedMemory';
 import { retryBannerZh } from './retryBanner';
@@ -10,6 +11,7 @@ import { retryBannerZh } from './retryBanner';
 export const zh = {
   ...zhChatAndSider,
   ...zhSettingsAndModels,
+  ...zhSettingsUi,
   ...zhWorkspaceAndTools,
   ...pausedMemoryZh,
   ...retryBannerZh,

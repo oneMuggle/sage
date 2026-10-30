@@ -23,8 +23,6 @@ import { SettingRow, Toggle } from './components';
 const CLEAR_ALL_PAGE_SIZE = 200;
 /** 删除请求之间的间隔，避免瞬间打满 IPC 通道。 */
 const CLEAR_ALL_BATCH_GAP_MS = 30;
-/** 二次确认需原样输入的短语（对标 Claude Reset 的不可逆防护）。 */
-const CLEAR_ALL_CONFIRM_PHRASE = '清除全部记忆';
 
 type ClearPhase = 'idle' | 'counting' | 'confirm' | 'clearing' | 'done';
 
@@ -38,6 +36,8 @@ type ClearPhase = 'idle' | 'counting' | 'confirm' | 'clearing' | 'done';
  * UI 上说清楚，否则用户会误以为"关了就没了"。
  */
 function ClearAllMemoriesSection() {
+  const { t } = useI18n();
+  const CLEAR_ALL_CONFIRM_PHRASE = t('settings.knowledge.confirm_phrase');
   const [phase, setPhase] = useState<ClearPhase>('idle');
   const [total, setTotal] = useState<number | null>(null);
   const [typed, setTyped] = useState('');
@@ -58,7 +58,7 @@ function ClearAllMemoriesSection() {
       setPhase('confirm');
     } catch (e) {
       setPhase('idle');
-      toast.error('统计记忆数量失败', {
+      toast.error(t('settings.knowledge.count_failed'), {
         description: e instanceof Error ? e.message : String(e),
       });
     }
@@ -93,15 +93,20 @@ function ClearAllMemoriesSection() {
       setProgress({ done, failed });
       setPhase('done');
       if (failed === 0) {
-        toast.success(`已清除 ${done} 条记忆`);
+        toast.success(t('settings.knowledge.cleared').replace('{count}', String(done)));
       } else {
-        toast.warning(`已清除 ${done} 条，${failed} 条失败`, {
-          description: '失败项可能仍保留在记忆库中，请重试或逐条删除。',
-        });
+        toast.warning(
+          t('settings.knowledge.cleared_partial')
+            .replace('{done}', String(done))
+            .replace('{failed}', String(failed)),
+          {
+            description: t('settings.knowledge.cleared_partial_desc'),
+          },
+        );
       }
     } catch (e) {
       setPhase('idle');
-      toast.error('清除记忆失败', {
+      toast.error(t('settings.knowledge.clear_failed'), {
         description: e instanceof Error ? e.message : String(e),
       });
     }
@@ -109,11 +114,10 @@ function ClearAllMemoriesSection() {
 
   return (
     <section data-testid="clear-all-memories">
-      <h3 className="text-sm font-semibold text-text mb-3">数据清除</h3>
-      <p className="text-xs text-muted mb-2">
-        永久删除记忆库中的全部条目。此操作不可撤销，也无法通过「自动记忆提取」开关恢复 ——
-        关闭那个开关只是停止新增。
-      </p>
+      <h3 className="text-sm font-semibold text-text mb-3">
+        {t('settings.knowledge.data_clearing')}
+      </h3>
+      <p className="text-xs text-muted mb-2">{t('settings.knowledge.data_clearing_desc')}</p>
 
       {phase === 'idle' && (
         <button
@@ -122,21 +126,25 @@ function ClearAllMemoriesSection() {
           onClick={() => void handleCount()}
           className="text-sm px-3 py-1.5 rounded border border-error text-error hover:bg-error/5 transition-colors"
         >
-          清除全部记忆…
+          {t('settings.knowledge.clear_all')}
         </button>
       )}
 
       {phase === 'counting' && (
         <span className="text-xs text-muted" data-testid="clear-all-counting">
-          正在统计…
+          {t('settings.common.loading')}
         </span>
       )}
 
       {phase === 'confirm' && (
         <div className="space-y-2" data-testid="clear-all-confirm">
           <p className="text-xs text-text">
-            将永久删除 <span className="font-semibold text-error">{total ?? 0}</span> 条记忆。
-            请输入 <code className="font-mono text-error">{CLEAR_ALL_CONFIRM_PHRASE}</code> 以确认。
+            {t('settings.knowledge.confirm_delete_prefix')}{' '}
+            <span className="font-semibold text-error">{total ?? 0}</span>{' '}
+            {t('settings.knowledge.confirm_delete_suffix')}
+            {t('settings.knowledge.confirm_type_prompt')}{' '}
+            <code className="font-mono text-error">{CLEAR_ALL_CONFIRM_PHRASE}</code>
+            {t('settings.knowledge.confirm_to_confirm')}
           </p>
           <input
             type="text"
@@ -154,7 +162,7 @@ function ClearAllMemoriesSection() {
               onClick={() => void handleClear()}
               className="text-sm px-3 py-1.5 rounded border border-error bg-error/10 text-error disabled:opacity-40 transition-colors"
             >
-              永久删除
+              {t('settings.knowledge.permanently_delete')}
             </button>
             <button
               type="button"
@@ -162,7 +170,7 @@ function ClearAllMemoriesSection() {
               onClick={reset}
               className="text-sm px-3 py-1.5 rounded border border-border text-text-secondary hover:bg-bg-hover transition-colors"
             >
-              取消
+              {t('settings.common.cancel')}
             </button>
           </div>
         </div>
@@ -170,15 +178,22 @@ function ClearAllMemoriesSection() {
 
       {phase === 'clearing' && (
         <span className="text-xs text-muted" data-testid="clear-all-progress">
-          正在清除… {progress.done} 条成功
-          {progress.failed > 0 ? ` / ${progress.failed} 条失败` : ''}
+          {progress.failed > 0
+            ? t('settings.knowledge.clearing_progress_with_failed')
+                .replace('{done}', String(progress.done))
+                .replace('{failed}', String(progress.failed))
+            : t('settings.knowledge.clearing_progress').replace('{done}', String(progress.done))}
         </span>
       )}
 
       {phase === 'done' && (
         <div className="flex items-center gap-2" data-testid="clear-all-done">
           <span className="text-xs text-success">
-            已删除 {progress.done} 条{progress.failed > 0 ? `（${progress.failed} 条失败）` : ''}
+            {progress.failed > 0
+              ? t('settings.knowledge.deleted_with_failed')
+                  .replace('{done}', String(progress.done))
+                  .replace('{failed}', String(progress.failed))
+              : t('settings.knowledge.deleted').replace('{done}', String(progress.done))}
           </span>
           <button
             type="button"
@@ -186,7 +201,7 @@ function ClearAllMemoriesSection() {
             onClick={reset}
             className="text-xs px-2 py-1 rounded border border-border text-text-secondary hover:bg-bg-hover"
           >
-            知道了
+            {t('settings.common.gotIt')}
           </button>
         </div>
       )}
@@ -199,7 +214,8 @@ function ClearAllMemoriesSection() {
  *
  * 走后端 preferences KV（auto_checkpoint），producer 在 run 开始前读取。
  */
-function AutoCheckpointCard() {
+export function AutoCheckpointCard() {
+  const { t } = useI18n();
   const preference = useConfirmedPreference({
     key: 'auto_checkpoint',
     initial: true,
@@ -208,11 +224,11 @@ function AutoCheckpointCard() {
   });
   return (
     <section data-testid="auto-checkpoint-section">
-      <h3 className="text-sm font-semibold text-text mb-3">安全网</h3>
+      <h3 className="text-sm font-semibold text-text mb-3">{t('settings.knowledge.safety_net')}</h3>
       <SettingRow
         anchor="auto_checkpoint"
-        label="发送前自动快照"
-        desc="每轮对话开始前为绑定的工作区创建检查点，可在变更面板一键回滚（默认开）。只有保存确认后生效。"
+        label={t('settings.knowledge.auto_checkpoint_label')}
+        desc={t('settings.knowledge.auto_checkpoint_desc')}
       >
         {preference.loaded ? (
           <Toggle
@@ -231,6 +247,7 @@ function AutoCheckpointCard() {
 }
 
 function SpendLimitInput() {
+  const { t } = useI18n();
   const preference = useConfirmedPreference({
     key: 'spend_limit_usd',
     initial: '',
@@ -243,8 +260,8 @@ function SpendLimitInput() {
     <>
       <SettingRow
         anchor="spend_limit"
-        label="每日花费限额 (USD)"
-        desc="按估算成本拦截当日请求；0 或留空 = 不限。只有保存确认后生效。"
+        label={t('settings.knowledge.spend_limit_label')}
+        desc={t('settings.knowledge.spend_limit_desc')}
       >
         <input
           type="number"
@@ -269,7 +286,7 @@ function SpendLimitInput() {
 
 export function MemoryKnowledgeTab() {
   const { settings, updateSettingsStrict } = useSettings();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [saving, setSaving] = useState(false);
   const [unconfirmed, setUnconfirmed] = useState(false);
   const saveMemory = async (partial: Parameters<typeof updateSettingsStrict>[0]) => {
@@ -287,11 +304,13 @@ export function MemoryKnowledgeTab() {
   return (
     <div className="space-y-6">
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">记忆管理</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.knowledge.memory_management')}
+        </h3>
         <SettingRow
           anchor="autoMemory"
-          label="自动记忆提取"
-          desc="对话中自动识别并保存关键信息到记忆库。关闭只停止新增，已记住的内容仍保留——彻底清除请用下方「清除全部记忆」。"
+          label={t('settings.knowledge.auto_memory_label')}
+          desc={t('settings.knowledge.auto_memory_desc')}
         >
           <Toggle
             value={settings.autoMemory}
@@ -302,8 +321,8 @@ export function MemoryKnowledgeTab() {
         </SettingRow>
         <SettingRow
           anchor="confirmDelete"
-          label="确认后再删除记忆"
-          desc="删除记忆前弹出确认对话框。"
+          label={t('settings.knowledge.confirm_delete_label')}
+          desc={t('settings.knowledge.confirm_delete_short_desc')}
         >
           <Toggle
             value={settings.confirmDelete}
@@ -327,9 +346,11 @@ export function MemoryKnowledgeTab() {
       <ClearAllMemoriesSection />
       <AutoCheckpointCard />
       <section>
-        <h3 className="text-ui-base font-semibold text-text mb-3">用量控制</h3>
+        <h3 className="text-ui-base font-semibold text-text mb-3">
+          {t('settings.knowledge.usage_control')}
+        </h3>
         <SpendLimitInput />
-        <p className="text-ui-sm text-muted mt-2">详细用量可在主界面查看。</p>
+        <p className="text-ui-sm text-muted mt-2">{t('settings.knowledge.usage_details_hint')}</p>
       </section>
     </div>
   );

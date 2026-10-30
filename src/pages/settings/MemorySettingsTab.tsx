@@ -19,10 +19,13 @@
 
 import { Link } from 'react-router-dom';
 
+import { useI18n } from '../../shared/lib/i18n';
+
 import { MemoryKnowledgeTab } from './MemoryKnowledgeTab';
 import { MemoryTab } from './MemoryTab';
 
 export function MemorySettingsTab() {
+  const { t } = useI18n();
   return (
     <div className="space-y-8">
       {/* IA1 收敛点：设置页不再自成第三个记忆入口，明确指到唯一工作台。 */}
@@ -31,15 +34,18 @@ export function MemorySettingsTab() {
         className="flex flex-wrap items-center gap-2 rounded-radius-sm border border-border bg-bg-subtle px-3 py-2"
       >
         <span className="text-xs text-text-secondary">
-          这里配置记忆的<strong className="font-medium text-text">行为与引擎</strong>；
-          已记住的内容请到记忆页面浏览、删除和导出。
+          {t('settings.memsettings.behavior_engine_prefix')}
+          <strong className="font-medium text-text">
+            {t('settings.memsettings.behavior_engine_emphasis')}
+          </strong>
+          {t('settings.memsettings.behavior_engine_suffix')}
         </span>
         <Link
           to="/memory"
           data-testid="memory-workspace-link"
           className="ml-auto shrink-0 rounded-radius-sm border border-primary px-2 py-1 text-xs text-primary hover:bg-primary/10"
         >
-          打开记忆页面
+          {t('settings.memsettings.open_memory_page')}
         </Link>
       </div>
 

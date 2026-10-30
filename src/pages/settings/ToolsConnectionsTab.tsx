@@ -1,5 +1,5 @@
 /**
- * Settings 页面 - 工具与连接 Tab
+ * Settings 页面 - 权限与工具 Tab
  *
  * 包含权限模式、Hooks、网关、降级模型等设置。
  * 从原 GeneralTab 拆分而来（2026-09-19 设置治理 Phase 2）。
@@ -10,16 +10,17 @@ import { useEffect, useState } from 'react';
 import { PreferenceSaveStatus } from '../../features/manage-settings/PreferenceSaveStatus';
 import { useConfirmedPreference } from '../../features/manage-settings/useConfirmedPreference';
 import { permissionApi } from '../../shared/api/permissionApi';
-import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { useI18n } from '../../shared/lib/i18n';
 import { GatewayCard } from '../../widgets/settings/GatewayCard';
 import { HooksCard } from '../../widgets/settings/HooksCard';
 
+import { PermissionRulesManager } from './PermissionRulesManager';
 import { SettingRow, Toggle } from './components';
 
 export const PERMISSION_MODES = ['read_only', 'workspace_write', 'prompt', 'full_access'] as const;
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
 
-function PermissionModeSelector() {
+export function PermissionModeSelector() {
   const { t } = useI18n();
   const preference = useConfirmedPreference<PermissionMode>({
     key: 'permission_mode',
@@ -37,7 +38,7 @@ function PermissionModeSelector() {
       <SettingRow
         anchor="permission_mode"
         label={t('settings.permission.mode')}
-        desc={t(`settings.permission.mode.${preference.value}.desc` as TranslationKey)}
+        desc={t(`settings.permission.mode.${preference.value}.desc`)}
       >
         <select
           data-testid="permission-mode-select"
@@ -49,7 +50,7 @@ function PermissionModeSelector() {
         >
           {PERMISSION_MODES.map((mode) => (
             <option key={mode} value={mode}>
-              {t(`settings.permission.mode.${mode}` as TranslationKey)}
+              {t(`settings.permission.mode.${mode}`)}
             </option>
           ))}
         </select>
@@ -75,6 +76,7 @@ function PermissionModeSelector() {
  *   与「系统放行的」。
  */
 function TrustEscalationSection(): JSX.Element {
+  const { t } = useI18n();
   const [enabled, setEnabled] = useState(false);
   const [threshold, setThreshold] = useState(3);
   const [loaded, setLoaded] = useState(false);
@@ -93,7 +95,8 @@ function TrustEscalationSection(): JSX.Element {
         setConsecutive(state.consecutive);
       })
       .catch((e: unknown) => {
-        if (mounted) setError(e instanceof Error ? e.message : '读取渐进式授权策略失败');
+        if (mounted)
+          setError(e instanceof Error ? e.message : t('settings.tools.trust.load_failed'));
       })
       .finally(() => {
         if (mounted) setLoaded(true);
@@ -101,7 +104,7 @@ function TrustEscalationSection(): JSX.Element {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [t]);
 
   const persist = (nextEnabled: boolean, nextThreshold: number) => {
     setSaving(true);
@@ -116,7 +119,7 @@ function TrustEscalationSection(): JSX.Element {
       .then((state) => setConsecutive(state.consecutive))
       .catch((e: unknown) => {
         // 写失败必须回滚 UI 状态 —— 开关显示「开」但后端没开是最坏的撒谎
-        setError(e instanceof Error ? e.message : '保存失败');
+        setError(e instanceof Error ? e.message : t('settings.tools.trust.save_failed'));
         permissionApi
           .getTrustPolicy()
           .then((state) => {
@@ -136,8 +139,8 @@ function TrustEscalationSection(): JSX.Element {
     <div className="mt-4 border-t border-border pt-3" data-testid="trust-escalation-section">
       <SettingRow
         anchor="trust_escalation"
-        label="渐进式授权（连续批准后自动放行）"
-        desc={`你对某个常规操作连续手动批准 ${threshold} 次后，之后同类调用不再逐次弹窗。破坏性命令、写出工作区、无法静态评估的工具仍会逐次询问。`}
+        label={t('settings.tools.trust.label')}
+        desc={t('settings.tools.trust.desc').replace('{threshold}', String(threshold))}
       >
         <Toggle
           value={enabled}
@@ -150,8 +153,8 @@ function TrustEscalationSection(): JSX.Element {
       </SettingRow>
       {enabled ? (
         <SettingRow
-          label="触发次数"
-          desc="越高越保守。连续批准期间只要拒绝过一次，计数立即归零重来。"
+          label={t('settings.tools.trust.threshold_label')}
+          desc={t('settings.tools.trust.threshold_desc')}
         >
           <input
             type="number"
@@ -176,7 +179,7 @@ function TrustEscalationSection(): JSX.Element {
       ) : null}
       {enabled && trustEntries.length > 0 ? (
         <div className="mt-2" data-testid="trust-escalation-trust-list">
-          <p className="text-xs text-muted">已积累的信任（连续手动批准次数）：</p>
+          <p className="text-xs text-muted">{t('settings.tools.trust.list_heading')}</p>
           <ul className="mt-1 flex flex-wrap gap-1.5">
             {trustEntries.map(([key, n]) => {
               const tool = key.split('|').slice(1).join('|') || key;
@@ -186,7 +189,7 @@ function TrustEscalationSection(): JSX.Element {
                   className="rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary"
                 >
                   {tool} · {n}
-                  {n >= threshold ? ' · 已达阈值' : ''}
+                  {n >= threshold ? ` · ${t('settings.tools.trust.threshold_reached')}` : ''}
                 </li>
               );
             })}
@@ -205,6 +208,7 @@ function TrustEscalationSection(): JSX.Element {
  * 当成成功，界面显示“保存中 / 已确认 / 未确认”。
  */
 function FallbackModelInput(): JSX.Element {
+  const { t } = useI18n();
   const preference = useConfirmedPreference({
     key: 'fallback_model',
     initial: '',
@@ -216,8 +220,8 @@ function FallbackModelInput(): JSX.Element {
     <>
       <SettingRow
         anchor="fallback_model"
-        label="降级模型 (fallback)"
-        desc="主模型重试耗尽（限流/服务端错误/超时）后自动切换到此模型；留空 = 不降级。只有保存确认后生效。"
+        label={t('settings.tools.fallback.label')}
+        desc={t('settings.tools.fallback.desc')}
       >
         <input
           type="text"
@@ -225,7 +229,7 @@ function FallbackModelInput(): JSX.Element {
           disabled={!preference.loaded}
           value={preference.value}
           onChange={(event) => preference.update(event.target.value)}
-          placeholder="例如 gpt-4o-mini"
+          placeholder={t('settings.tools.fallback.placeholder')}
           className="w-44 text-xs border border-border rounded-radius-sm px-2 py-1 bg-surface text-text font-mono"
         />
       </SettingRow>
@@ -243,17 +247,24 @@ export function ToolsConnectionsTab() {
           {t('settings.section.permission')}
         </h3>
         <PermissionModeSelector />
+        <PermissionRulesManager />
       </section>
       <section>
-        <h3 className="text-ui-base font-semibold text-text mb-3">模型降级</h3>
+        <h3 className="text-ui-base font-semibold text-text mb-3">
+          {t('settings.tools.section.fallback_model')}
+        </h3>
         <FallbackModelInput />
       </section>
       <section>
-        <h3 className="text-ui-base font-semibold text-text mb-3">钩子 (Hooks)</h3>
+        <h3 className="text-ui-base font-semibold text-text mb-3">
+          {t('settings.tools.section.hooks')}
+        </h3>
         <HooksCard />
       </section>
       <section>
-        <h3 className="text-ui-base font-semibold text-text mb-3">诊断</h3>
+        <h3 className="text-ui-base font-semibold text-text mb-3">
+          {t('settings.tools.section.gateway')}
+        </h3>
         <GatewayCard platform="telegram" />
         <GatewayCard platform="discord" />
         <GatewayCard platform="slack" />

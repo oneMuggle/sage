@@ -8,8 +8,17 @@ vi.mock('node-fetch', async () => {
 });
 
 import { PromptTemplatesTab } from '../../../src/pages/settings/PromptTemplatesTab';
+import { I18nProvider } from '../../../src/shared/lib/i18n';
 
 import { received, releaseBackend, strictBody, useBackend } from './harness';
+
+function renderTab() {
+  return render(
+    <I18nProvider defaultLocale="zh">
+      <PromptTemplatesTab />
+    </I18nProvider>,
+  );
+}
 
 const tpl = (id: string, name: string) => ({
   id,
@@ -63,7 +72,7 @@ describe('Settings > Prompt templates: drag-to-sort over the real bridge (#857 d
       },
     ]);
 
-    render(<PromptTemplatesTab />);
+    renderTab();
     await screen.findAllByTestId('prompts-item');
     expect(order()).toEqual(['Alpha', 'Beta', 'Gamma']);
 
@@ -84,7 +93,7 @@ describe('Settings > Prompt templates: drag-to-sort over the real bridge (#857 d
       { method: 'PUT', path: REORDER, reply: () => ({ status: 500, json: { detail: 'boom' } }) },
     ]);
 
-    render(<PromptTemplatesTab />);
+    renderTab();
     await screen.findAllByTestId('prompts-item');
 
     dragFirstOntoLast();

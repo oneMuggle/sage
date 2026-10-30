@@ -3,7 +3,6 @@
  */
 
 import { clsx } from 'clsx';
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { ROUTING_TASK_TYPES } from '../../entities/routing/taskType';
@@ -13,7 +12,9 @@ import {
   TIER_LABELS,
 } from '../../entities/routing/taskTypeTierMap';
 import type { DiscoveredModel, ModelSelection } from '../../entities/setting/types';
+import { useI18n } from '../../shared/lib/i18n';
 
+import { ArenaAccountsToggle } from './ArenaAccountsToggle';
 import type { EndpointsTabProps } from './components';
 import { SettingRow } from './components';
 
@@ -68,9 +69,9 @@ interface GroupedModel {
 }
 
 export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
+  const { t } = useI18n();
   // Task 6 (2026-09-15): 跳转到 /model-catalog 管理页
   const navigate = useNavigate();
-  const [copiedAudit, setCopiedAudit] = useState(false);
   // 防御性检查: 旧数据/绕过 mergeWithDefaults 的代码路径可能让 discoveredModels 为 null
   //   (data layer mergeWithDefaults 已用 DEFAULT_ENDPOINT 兜底, 此处为 belt-and-suspenders).
   const endpointsWithModels = settings.endpoints.filter(
@@ -111,51 +112,23 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
     0,
   );
 
-  /* v8 ignore start */
-  const handleCopyAudit = async () => {
-    const text = formatModelsTabAuditSnapshot({
-      endpointCount: endpointsWithModels.length,
-      discoveredModelCount,
-      chatModel: chatModel.modelId,
-      visionModel: visionModel.modelId,
-      embeddingModel: embeddingModel.modelId,
-      maxContext: settings.maxContext,
-      autoContext: settings.autoContext,
-      temperature: settings.temperature,
-    });
-    setCopiedAudit(true);
-    await navigator.clipboard?.writeText(text);
-  };
-
-  /* v8 ignore stop */
-
   const modelsBody = (
     <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-text">模型选择</h3>
-          <p className="text-xs text-muted mt-0.5">
-            {endpointsWithModels.length} 个端点，共 {discoveredModelCount} 个模型
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span
-            data-testid="models-tab-copy-audit"
-            onClick={() => void handleCopyAudit()}
-            title="复制模型选择审计快照"
-            className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
-          >
-            {copiedAudit ? '已复制快照' : '复制快照'}
-          </span>
-        </div>
+      <div>
+        <h3 className="text-sm font-semibold text-text">{t('settings.models.model_selection')}</h3>
+        <p className="text-xs text-muted mt-0.5">
+          {t('settings.models.endpoints_models_count')
+            .replace('{endpoints}', String(endpointsWithModels.length))
+            .replace('{models}', String(discoveredModelCount))}
+        </p>
       </div>
 
       {/* R31b: 自动模式只藏「对话模型」——路由只重选对话模型，其余能力
           走各自独立路径，仍按下方手动配置渲染。 */}
       {routingMode === 'manual' ? (
         <ModelSelector
-          label="对话模型"
-          desc="用于文本对话（必填）"
+          label={t('settings.models.chat_model')}
+          desc={t('settings.models.chat_model_desc')}
           required
           groupedModels={chatModels}
           value={chatModel}
@@ -167,8 +140,8 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
         <ChatEndpointReadOnly endpointName={chatEndpointName} />
       )}
       <ModelSelector
-        label="视觉理解模型"
-        desc="选填。当对话模型不支持视觉识别时，自动使用此模型生成图片描述"
+        label={t('settings.models.vision_model')}
+        desc={t('settings.models.vision_model_desc')}
         groupedModels={visionModels}
         value={visionModel}
         onChange={(v) =>
@@ -176,8 +149,8 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
         }
       />
       <ModelSelector
-        label="向量/嵌入模型"
-        desc="用于向量化和语义搜索（选填）"
+        label={t('settings.models.embedding_model')}
+        desc={t('settings.models.embedding_model_desc')}
         groupedModels={embeddingModels}
         value={embeddingModel}
         onChange={(v) =>
@@ -185,8 +158,8 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
         }
       />
       <ModelSelector
-        label="语音合成 (TTS)"
-        desc="用于文本转语音（选填）"
+        label={t('settings.models.tts_model')}
+        desc={t('settings.models.tts_model_desc')}
         groupedModels={ttsModels}
         value={ttsModel}
         onChange={(v) =>
@@ -194,8 +167,8 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
         }
       />
       <ModelSelector
-        label="语音识别 (ASR)"
-        desc="用于语音转文字（选填）"
+        label={t('settings.models.asr_model')}
+        desc={t('settings.models.asr_model_desc')}
         groupedModels={asrModels}
         value={asrModel}
         onChange={(v) =>
@@ -203,8 +176,8 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
         }
       />
       <ModelSelector
-        label="图像生成"
-        desc="用于文本生成图像（选填）"
+        label={t('settings.models.image_gen_model')}
+        desc={t('settings.models.image_gen_model_desc')}
         groupedModels={imageGenModels}
         value={imageGenModel}
         onChange={(v) =>
@@ -215,13 +188,17 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
       {/* R31c: 低频参数收进「高级」折叠；设置搜索命中其内部锚点时，由
           Settings 的跳转 effect 先展开闭合祖先再滚动。 */}
       <details data-testid="settings-models-advanced" className="rounded border border-border">
-        <summary className="cursor-pointer px-3 py-2 text-xs text-muted">高级</summary>
+        <summary className="cursor-pointer px-3 py-2 text-xs text-muted">
+          {t('settings.models.advanced')}
+        </summary>
         <div className="space-y-3 px-3 pb-3">
-          <h3 className="text-sm font-semibold text-text">模型参数</h3>
+          <h3 className="text-sm font-semibold text-text">
+            {t('settings.models.model_parameters')}
+          </h3>
           <SettingRow
             anchor="title_model"
-            label="会话标题模型"
-            desc="生成会话标题时使用的模型（选填）。留空则沿用对话模型；专用小模型通常更快更省"
+            label={t('settings.models.title_model')}
+            desc={t('settings.models.title_model_desc')}
           >
             <TitleModelSelector
               groupedModels={chatModels}
@@ -232,8 +209,8 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
           </SettingRow>
           <SettingRow
             anchor="max_context"
-            label="最大上下文长度"
-            desc="单次对话发送给模型的最大 token 数；自动模式下此值不生效"
+            label={t('settings.models.max_context')}
+            desc={t('settings.models.max_context_desc')}
           >
             <input
               type="number"
@@ -249,8 +226,8 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
           {/* Task 6 (2026-09-15): 自动上下文开关 — 保留固定值 / 未知显示未知 */}
           <SettingRow
             anchor="auto_context"
-            label="自动推断上下文窗口"
-            desc="开启时根据模型目录自动选择; 关闭时使用上方的固定值 (catalog 已知时取最小值)"
+            label={t('settings.models.auto_context')}
+            desc={t('settings.models.auto_context_desc')}
           >
             <label className="text-xs flex items-center gap-2">
               <input
@@ -260,14 +237,16 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
                 onChange={(e) => updateSettings({ autoContext: e.target.checked })}
               />
               <span className="text-text">
-                {settings.autoContext ? '自动 (目录优先)' : '固定 (使用上方值)'}
+                {settings.autoContext
+                  ? t('settings.models.auto_catalog')
+                  : t('settings.models.fixed_use_above')}
               </span>
             </label>
           </SettingRow>
           <SettingRow
             anchor="max_output_tokens"
-            label="最大输出长度"
-            desc="单次回答允许生成的最大 token 数；调大可减少长回答被截断，但会占用更多上下文窗口"
+            label={t('settings.models.max_output')}
+            desc={t('settings.models.max_output_desc')}
           >
             <input
               type="number"
@@ -283,7 +262,7 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
           <SettingRow
             anchor="temperature"
             label="Temperature"
-            desc="控制输出的随机性：数值越高越随机；0 最稳定，2 最随机。实际效果取决于模型实现"
+            desc={t('settings.models.temperature_desc')}
           >
             <input
               type="number"
@@ -300,11 +279,13 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
 
       {/* Task 6 (2026-09-15): 跳转到模型目录管理 */}
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-text">模型目录管理</h3>
+        <h3 className="text-sm font-semibold text-text">
+          {t('settings.models.model_catalog_mgmt')}
+        </h3>
         <SettingRow
           anchor="model_catalog"
-          label="模型目录 (catalog)"
-          desc="管理跨端点的模型价格/上下文窗口/能力标签 — 用户覆盖、快照审核、OpenRouter 同步"
+          label={t('settings.models.model_catalog')}
+          desc={t('settings.models.model_catalog_desc')}
         >
           <button
             type="button"
@@ -312,10 +293,16 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
             onClick={() => navigate('/model-catalog')}
             className="px-3 py-1.5 text-xs border border-border rounded-radius-sm bg-primary text-text-inverse hover:opacity-90"
           >
-            打开模型目录
+            {t('settings.models.open_catalog')}
           </button>
         </SettingRow>
       </div>
+
+      {/* 原「通用」tab 的高级区块（2026-10-28 迁入）：Arena 账号池开关。 */}
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.models.arena_pool')}</h3>
+        <ArenaAccountsToggle />
+      </section>
     </>
   );
 
@@ -330,7 +317,7 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
       />
       {endpointsWithModels.length === 0 ? (
         <div className="text-center text-muted py-12 text-sm">
-          请先在"端点"标签页中添加端点并测试连接
+          {t('settings.models.add_endpoint_hint')}
         </div>
       ) : (
         modelsBody
@@ -352,14 +339,19 @@ interface RoutingModeSectionProps {
  * 颜色/描述区分）；写入用展开合并，避免未来 `routing` 加键时被覆盖清空。
  */
 function RoutingModeSection({ settings, updateSettings, routingMode }: RoutingModeSectionProps) {
+  const { t } = useI18n();
   return (
     <>
       <SettingRow
         anchor="routing.mode"
-        label="智能模型路由"
-        desc="自动：每条消息按任务类型在同一端点内选择模型；手动：始终使用下方选择的对话模型"
+        label={t('settings.models.routing_mode')}
+        desc={t('settings.models.routing_mode_desc')}
       >
-        <div role="radiogroup" aria-label="智能模型路由模式" data-testid="settings-routing-mode">
+        <div
+          role="radiogroup"
+          aria-label={t('settings.models.routing_mode_aria')}
+          data-testid="settings-routing-mode"
+        >
           <label className="flex items-center gap-2 text-xs text-text">
             <input
               type="radio"
@@ -369,7 +361,7 @@ function RoutingModeSection({ settings, updateSettings, routingMode }: RoutingMo
               checked={routingMode === 'manual'}
               onChange={() => updateSettings({ routing: { ...settings.routing, mode: 'manual' } })}
             />
-            手动选择模型
+            {t('settings.models.routing_manual')}
           </label>
           <label className="flex items-center gap-2 text-xs text-text">
             <input
@@ -380,14 +372,14 @@ function RoutingModeSection({ settings, updateSettings, routingMode }: RoutingMo
               checked={routingMode === 'auto'}
               onChange={() => updateSettings({ routing: { ...settings.routing, mode: 'auto' } })}
             />
-            自动路由（按任务选择）
+            {t('settings.models.routing_auto')}
           </label>
         </div>
       </SettingRow>
       {routingMode === 'auto' && (
         <div className="space-y-2">
           <p data-testid="settings-routing-mode-hint" className="text-xs text-muted">
-            自动模式在「对话端点」内按任务类型选择模型；视觉/嵌入/语音等仍按下方配置
+            {t('settings.models.routing_auto_hint')}
           </p>
           <table
             data-testid="settings-routing-table"
@@ -395,8 +387,12 @@ function RoutingModeSection({ settings, updateSettings, routingMode }: RoutingMo
           >
             <thead>
               <tr className="text-muted">
-                <th className="text-left px-2 py-1 font-medium">任务类型</th>
-                <th className="text-left px-2 py-1 font-medium">分档</th>
+                <th className="text-left px-2 py-1 font-medium">
+                  {t('settings.models.routing_task_type')}
+                </th>
+                <th className="text-left px-2 py-1 font-medium">
+                  {t('settings.models.routing_tier')}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -410,7 +406,7 @@ function RoutingModeSection({ settings, updateSettings, routingMode }: RoutingMo
               ))}
             </tbody>
           </table>
-          <p className="text-ui-xs text-muted">分档映射由后端 RoutingEngine 决定；本表为只读说明</p>
+          <p className="text-ui-xs text-muted">{t('settings.models.routing_table_note')}</p>
         </div>
       )}
     </>
@@ -428,13 +424,14 @@ interface ChatEndpointReadOnlyProps {
  * 状态；切换端点请切回手动模式完成。
  */
 function ChatEndpointReadOnly({ endpointName }: ChatEndpointReadOnlyProps) {
+  const { t } = useI18n();
   return (
     <SettingRow
-      label="对话模型"
-      desc="自动模式下由路由引擎在所选端点内按任务选择；要固定模型请切回手动"
+      label={t('settings.models.chat_model')}
+      desc={t('settings.models.chat_endpoint_readonly_desc')}
     >
       <div data-testid="settings-routing-endpoint" className="text-xs font-mono">
-        {endpointName ?? '未配置（请先切回手动模式选择对话端点）'}
+        {endpointName ?? t('settings.models.chat_endpoint_unconfigured')}
       </div>
     </SettingRow>
   );
@@ -463,6 +460,7 @@ function TitleModelSelector({
   value,
   onChange,
 }: TitleModelSelectorProps) {
+  const { t } = useI18n();
   const candidates = groupedModels.filter((gm) => gm.endpointId === chatEndpointId);
   const known = candidates.some((gm) => gm.model.id === value);
   // 用户可能通过 config_tool 写入了一个未在端点发现列表里的模型 id ——
@@ -476,7 +474,7 @@ function TitleModelSelector({
       onChange={(e) => onChange(e.target.value)}
       className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
     >
-      <option value="">-- 沿用对话模型 --</option>
+      <option value="">{t('settings.models.title_model_inherit')}</option>
       {orphan && <option value={orphan}>{orphan}</option>}
       {candidates.map((gm) => (
         <option key={gm.model.id} value={gm.model.id}>
@@ -504,6 +502,7 @@ function ModelSelector({
   value,
   onChange,
 }: ModelSelectorProps) {
+  const { t } = useI18n();
   // Group by endpointId for optgroup rendering
   const groups = new Map<string, { name: string; models: DiscoveredModel[] }>();
   for (const gm of groupedModels) {
@@ -538,7 +537,9 @@ function ModelSelector({
             required && !hasValue ? 'border-error' : 'border-border',
           )}
         >
-          <option value="">{required ? '-- 请选择 --' : '-- 不使用 --'}</option>
+          <option value="">
+            {required ? t('settings.models.please_select') : t('settings.models.not_used')}
+          </option>
           {Array.from(groups.entries()).map(([endpointId, { name, models }]) => (
             <optgroup key={endpointId} label={name}>
               {models.map((m) => (
@@ -549,7 +550,9 @@ function ModelSelector({
             </optgroup>
           ))}
         </select>
-        {required && !hasValue && <span className="text-ui-2xs text-error">必填</span>}
+        {required && !hasValue && (
+          <span className="text-ui-2xs text-error">{t('settings.common.required')}</span>
+        )}
       </div>
     </SettingRow>
   );
