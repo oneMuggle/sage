@@ -41,6 +41,7 @@ def _wire_stream(client: LLMClient, chunks: list) -> None:
     lines = [c if isinstance(c, str) else f"data: {json.dumps(c)}" for c in chunks]
 
     response = MagicMock()
+    response.status_code = 200
     response.raise_for_status = MagicMock()
 
     async def aiter_lines():

@@ -33,7 +33,7 @@ from backend.core.legacy.context_first_aid import (
     run_ctx_budget_tokens,
 )
 from backend.core.legacy.context_microcompact import micro_compact
-from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
+from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse, RetryEvent
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
 from backend.domain.scheduler import SchedulerServicePort
@@ -284,6 +284,27 @@ def _streaming_enabled_from_settings() -> bool:
     except (ImportError, OSError, ValueError, TypeError):
         pass
     return True
+
+
+def _retry_events_to_agent_events(
+    retry_events: List[RetryEvent], iteration: int, agent_id: str
+) -> List[AgentEvent]:
+    """把 LLMClient 的 RetryEvent 转成 AgentEvent(RETRY) 列表。"""
+    return [
+        AgentEvent(
+            state=AgentState.RETRY,
+            iteration=iteration,
+            retry_info={
+                "attempt": ev.attempt,
+                "max_attempts": ev.max_attempts,
+                "error_type": ev.error_type,
+                "error_message": ev.error_message,
+                "delay": ev.delay,
+            },
+            agent_id=agent_id,
+        )
+        for ev in retry_events
+    ]
 
 
 class SageAgent:
@@ -1715,27 +1736,26 @@ class SageAgent:
                                     )
                         if response is None:
                             # 非流式回退路径：chat() 是单次 await，回调里无法
-                            # yield（会打断协程），因此先把重试事件暂存，调用
-                            # 返回后按发生顺序补发。流式路径才是实时的。
-                            pending_retries: List[Any] = []
-                            response = await self.llm_client.chat(
-                                messages,
-                                tools=available_tools or None,
-                                retry_callback=pending_retries.append,
-                            )
-                            for retry_event in pending_retries:
-                                yield AgentEvent(
-                                    state=AgentState.RETRY,
-                                    iteration=i,
-                                    retry_info={
-                                        "attempt": retry_event.attempt,
-                                        "max_attempts": retry_event.max_attempts,
-                                        "error_type": retry_event.error_type,
-                                        "error_message": retry_event.error_message,
-                                        "delay": retry_event.delay,
-                                    },
-                                    agent_id=self.agent_id,
+                            # yield（会打断协程），因此先把重试事件暂存；无论
+                            # 成功还是最终失败，都要在返回/抛出前补发——否则
+                            # "重试耗尽后失败"的会话完全看不到重试发生过。
+                            pending_retries: List[RetryEvent] = []
+                            try:
+                                response = await self.llm_client.chat(
+                                    messages,
+                                    tools=available_tools or None,
+                                    retry_callback=pending_retries.append,
                                 )
+                            except LLMError:
+                                for retry_evt in _retry_events_to_agent_events(
+                                    pending_retries, i, self.agent_id
+                                ):
+                                    yield retry_evt
+                                raise
+                            for retry_evt in _retry_events_to_agent_events(
+                                pending_retries, i, self.agent_id
+                            ):
+                                yield retry_evt
                             # 如果 LLM 返回了 reasoning_content，yield REASONING 事件
                             # 这允许前端展示 LLM 的思考/推理过程
                             if response.reasoning_content:

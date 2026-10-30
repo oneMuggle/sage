@@ -146,6 +146,7 @@ class _StreamCM:
     def __init__(self, lines=None, raise_exc=None):
         self._lines = lines or []
         self._raise_exc = raise_exc
+        self.status_code = 200
 
     async def __aenter__(self):
         return self

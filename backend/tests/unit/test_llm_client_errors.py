@@ -264,3 +264,46 @@ async def test_bad_request_without_overflow_markers_stays_unknown(client):
         with pytest.raises(LLMError) as exc_info:
             await client.chat([{"role": "user", "content": "hi"}])
         assert exc_info.value.type == LLMErrorType.UNKNOWN
+
+
+@pytest.mark.asyncio()
+async def test_proxy_upstream_timeout_504_classified_as_timeout(client):
+    """Sage 代理的 upstream_timeout 504 → TIMEOUT + 可操作提示。"""
+    mock_response = _http_error_response(
+        504, '{"detail":{"type":"upstream_timeout","message":"upstream timed out"}}'
+    )
+    mock_response.raise_for_status = Mock(
+        side_effect=httpx.HTTPStatusError(
+            "504", request=AsyncMock(), response=mock_response
+        )
+    )
+    with patch.object(client, "_get_client") as mock_get_client:
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(return_value=mock_response)
+        mock_get_client.return_value = mock_http
+
+        with pytest.raises(LLMError) as exc_info:
+            await client.chat([{"role": "user", "content": "hi"}])
+        assert exc_info.value.type == LLMErrorType.TIMEOUT
+        assert "LLM 代理超时" in exc_info.value.message
+        assert "设置" in exc_info.value.message
+        assert exc_info.value.status_code == 504
+
+
+@pytest.mark.asyncio()
+async def test_plain_504_remains_server_error(client):
+    """普通 504（无 upstream_timeout 标记）仍归 SERVER_ERROR。"""
+    mock_response = _http_error_response(504, "<html>gateway timeout</html>")
+    mock_response.raise_for_status = Mock(
+        side_effect=httpx.HTTPStatusError(
+            "504", request=AsyncMock(), response=mock_response
+        )
+    )
+    with patch.object(client, "_get_client") as mock_get_client:
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(return_value=mock_response)
+        mock_get_client.return_value = mock_http
+
+        with pytest.raises(LLMError) as exc_info:
+            await client.chat([{"role": "user", "content": "hi"}])
+        assert exc_info.value.type == LLMErrorType.SERVER_ERROR

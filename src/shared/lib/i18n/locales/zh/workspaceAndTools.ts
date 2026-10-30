@@ -367,6 +367,8 @@ export const zhWorkspaceAndTools = {
 
   // ─── 会话状态徽章 (S4/S5/S7/S9 多会话并行) ──────
   'session.status_running': '运行中',
+  'session.status_retrying': '重试中（{attempt}/{max}）',
+  'session.status_running_background': '运行中（后台）',
   'session.status_completed': '已完成',
   'session.status_failed': '运行失败',
   'session.status_suspended': '已挂起，等待唤醒',
