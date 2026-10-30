@@ -95,6 +95,30 @@ export interface WorkspaceFileContent {
   truncated: boolean;
 }
 
+/** 消息内文件引用 → 右栏预览内容（与 artifact content 同形状） */
+export interface WorkspacePreviewContent {
+  ok: boolean;
+  error?: string;
+  kind?: string;
+  content?: string;
+  data_url?: string;
+  /** docx/xlsx/pptx 后端转义 HTML（structured 缺失时的降级路径） */
+  html?: string;
+  /** read_* 结果的结构化 JSON（Office 结构化预览组件消费） */
+  structured?: unknown;
+  truncated?: boolean;
+}
+
+export interface WorkspaceResolveEntry {
+  path: string;
+  exists: boolean;
+  kind: string | null;
+}
+
+export interface WorkspaceResolveResult {
+  results: WorkspaceResolveEntry[];
+}
+
 /** U19 逐文件撤销结果 */
 export interface WorkspaceRevertResult {
   reverted: string[];
@@ -285,6 +309,30 @@ export const workspaceApi = {
       return await invoke<WorkspaceFileContent>('workspace_get_change_file', {
         sessionId,
         path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 消息内文件引用 → 右栏预览（只读；工作区边界由后端校验，越界报错）。 */
+  async previewFile(sessionId: string, path: string): Promise<WorkspacePreviewContent> {
+    try {
+      return await invoke<WorkspacePreviewContent>('workspace_preview_file', {
+        sessionId,
+        path,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 批量判定路径是否为工作区内存在的文件（消息文本兜底识别，≤50 条）。 */
+  async resolveFiles(sessionId: string, paths: string[]): Promise<WorkspaceResolveResult> {
+    try {
+      return await invoke<WorkspaceResolveResult>('workspace_resolve_files', {
+        sessionId,
+        paths,
       });
     } catch (error) {
       throw handleApiError(error);

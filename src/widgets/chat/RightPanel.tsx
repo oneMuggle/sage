@@ -1,6 +1,6 @@
 // src/widgets/chat/RightPanel.tsx
 import { Bell, BellOff, Maximize2, Minimize2, SlidersHorizontal, X } from 'lucide-react';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
@@ -30,6 +30,13 @@ import { ArtifactViewer } from './artifacts/ArtifactViewer';
 import { ArtifactsSection } from './artifacts/ArtifactsSection';
 import { ChangesSection } from './changes/ChangesSection';
 import { ProgressSection } from './progress/ProgressSection';
+// feat/file-reference-preview: 文件预览面板按需加载——避免把预览器静态拖进
+// index 主 chunk 触发包体积门禁（1.6MB 预算）。
+const FilePreviewPanel = lazy(() =>
+  import('./preview/FilePreviewPanel').then((module) => ({
+    default: module.FilePreviewPanel,
+  })),
+);
 
 interface RightPanelProps {
   iteration: number;
@@ -364,6 +371,7 @@ function RightPanelInner({
   const tab = useRightPanelStore((s) => s.tab);
   const maximized = useRightPanelStore((s) => s.maximized);
   const selectedArtifactId = useRightPanelStore((s) => s.selectedArtifactId);
+  const selectedFilePath = useRightPanelStore((s) => s.selectedFilePath);
   const setTab = useRightPanelStore((s) => s.setTab);
   const setMaximized = useRightPanelStore((s) => s.setMaximized);
   const { artifacts, loading, refresh } = useArtifacts(sessionId);
@@ -419,6 +427,7 @@ function RightPanelInner({
   // 批次 C: 切会话清掉上一会话的选中产物，避免详情页跨会话串台。
   useEffect(() => {
     useRightPanelStore.getState().clearSelectedArtifact();
+    useRightPanelStore.getState().clearFilePreview();
   }, [sessionId]);
 
   // R4 批次 B: 会话切换即预取变更列表 —— 徽标计数即时可用，切到变更 Tab
@@ -465,6 +474,7 @@ function RightPanelInner({
   const handleTabChange = useCallback(
     (next: RightPanelTab) => {
       useRightPanelStore.getState().clearSelectedArtifact();
+      useRightPanelStore.getState().clearFilePreview();
       setTab(next);
     },
     [setTab],
@@ -512,7 +522,15 @@ function RightPanelInner({
       />
 
       <div className="h-[calc(100%-2.5rem)] overflow-y-auto min-h-0">
-        {selected && sessionId ? (
+        {selectedFilePath && sessionId ? (
+          <Suspense fallback={<div className="p-3 text-sm text-muted">加载中...</div>}>
+            <FilePreviewPanel
+              sessionId={sessionId}
+              path={selectedFilePath}
+              onBack={() => useRightPanelStore.getState().clearFilePreview()}
+            />
+          </Suspense>
+        ) : selected && sessionId ? (
           <ArtifactViewer
             artifact={selected}
             sessionId={sessionId}

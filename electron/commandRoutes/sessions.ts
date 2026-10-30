@@ -129,6 +129,20 @@ export const sessionRoutes: Record<string, CommandRoute> = {
       return `/api/v1/sessions/${sessionId}/workspace/changes/file?path=${path}`;
     },
   },
+  // 消息内文件引用 → 右栏预览 / 文本路径批量解析（feat/file-reference-preview）
+  workspace_preview_file: {
+    method: 'GET',
+    path: (a) => {
+      const sessionId = encodeURIComponent(String(a.sessionId));
+      const path = encodeURIComponent(String(a.path ?? ''));
+      return `/api/v1/sessions/${sessionId}/workspace/preview?path=${path}`;
+    },
+  },
+  workspace_resolve_files: {
+    method: 'POST',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/resolve`,
+    body: (a) => ({ paths: a.paths }),
+  },
   // U19 变更面板可操作化 (对标增强第四轮批次 B): 逐文件/逐 hunk 撤销
   workspace_revert_changes: {
     method: 'POST',

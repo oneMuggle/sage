@@ -4,9 +4,10 @@
 // 优先读取消息自带的 client_meta（刷新后由 get_messages 回读），兼容旧调用
 // 方通过 MessageList props 传入的 knowledgeRefs / attachments 映射。
 // 每个 chip 提供右键菜单（复制路径/文件名、Office 打开与定位、查看大图）。
-import { BookOpen, Copy, FileText, Maximize2 } from 'lucide-react';
+import { BookOpen, Copy, Eye, FileText, Maximize2 } from 'lucide-react';
 import { useState } from 'react';
 
+import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import type { MessageDisplayFileRef, MessageDisplayMeta } from '../../shared/api/types';
 import { copyToClipboard } from '../../shared/lib/clipboard';
 import { useI18n } from '../../shared/lib/i18n';
@@ -63,6 +64,12 @@ export function MessageClientMeta({
 
   const fileRefMenu = (ref: MessageDisplayFileRef): ContextMenuItemSpec[] => [
     {
+      id: 'preview-file',
+      label: '预览文件',
+      icon: Eye,
+      onSelect: () => useRightPanelStore.getState().openFilePreview(ref.path),
+    },
+    {
       id: 'copy-path',
       label: t('contextMenu.common.copyPath'),
       icon: Copy,
@@ -115,14 +122,16 @@ export function MessageClientMeta({
     >
       {fileRefs.map((ref) => (
         <ContextMenu key={`file-${ref.path}`} items={() => fileRefMenu(ref)}>
-          <span
+          <button
+            type="button"
             data-testid="message-file-ref"
-            title={ref.path}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-ui-2xs border border-border bg-bg-subtle text-text-secondary"
+            title={`${ref.path}（点击预览）`}
+            onClick={() => useRightPanelStore.getState().openFilePreview(ref.path)}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-ui-2xs border border-border bg-bg-subtle text-text-secondary hover:text-text hover:border-primary/40 hover:bg-bg-hover transition-colors cursor-pointer"
           >
             <FileText className="w-3 h-3 shrink-0" />
             <span className="truncate max-w-48">{ref.path}</span>
-          </span>
+          </button>
         </ContextMenu>
       ))}
       {officeRefs.map((ref) => (

@@ -7,6 +7,7 @@
 
 import { FileEdit, FilePlus } from 'lucide-react';
 
+import { useRightPanelStore } from '../../../features/right-panel/rightPanelStore';
 import type { ToolCall } from '../../../shared/lib/store';
 
 import { ToolCallCard } from './ToolCallCard';
@@ -32,9 +33,26 @@ export function FileWriteToolRenderer({ tc }: { tc: ToolCall }) {
         <span className="flex items-center gap-1.5">
           <Icon className="w-3.5 h-3.5 text-primary shrink-0" />
           <span className="font-medium">{verb}</span>
-          <code className="text-text truncate max-w-[200px]" title={filePath}>
-            {fileName}
-          </code>
+          {filePath ? (
+            <button
+              type="button"
+              className="text-text truncate max-w-[200px] hover:text-primary hover:underline cursor-pointer"
+              title={`${filePath}（点击预览）`}
+              data-testid="file-write-path"
+              onClick={(event) => {
+                event.stopPropagation();
+                useRightPanelStore.getState().openFilePreview(filePath);
+              }}
+              onKeyDown={(event) => {
+                // 键盘激活不应触发外层 Header 的折叠（Enter/Space 冒泡）
+                event.stopPropagation();
+              }}
+            >
+              {fileName}
+            </button>
+          ) : (
+            <code className="text-text truncate max-w-[200px]">{fileName}</code>
+          )}
         </span>
       }
       summary={

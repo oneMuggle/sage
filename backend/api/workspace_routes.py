@@ -11,6 +11,7 @@ from typing import List, Optional, Set
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.api.workspace_preview_routes import router as workspace_preview_router
 from backend.data.database import get_database
 from backend.office.errors import OfficePathError
 from backend.office.models import OfficeDocType
@@ -31,6 +32,8 @@ from backend.office.workspace_search import WorkspaceSearchResult, search_worksp
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions/{session_id}/workspace", tags=["workspace"])
+# feat/file-reference-preview: 预览/解析子路由独立成模块（避免主文件超 800 行架构上限）
+router.include_router(workspace_preview_router)
 
 
 class WorkspaceBindingModel(BaseModel):
