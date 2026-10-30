@@ -23,7 +23,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
 from backend.domain.risk import RiskClass
@@ -52,6 +52,9 @@ logger = logging.getLogger(__name__)
 
 #: 页面文本快照上限（字节，超出截断）
 SNAPSHOT_TEXT_CAP = 30 * 1024
+
+#: localStorage 快照 JSON 上限（字节；超限视为异常页面，不保存）
+LOCAL_STORAGE_CAP = 512 * 1024
 
 #: 允许的 URL scheme（file:// 可读本地文件 → 坚决拒绝；javascript: 注入面）
 _ALLOWED_SCHEMES = frozenset({"http", "https", "about", "data"})
@@ -931,8 +934,22 @@ class BrowserCookiesTool(BaseTool):
                 success=False, error="no_cookies: 当前页面没有可导出的 cookie（先登录？）"
             )
         # 当前页 cookie 按 domain 分组存档（一个页面可能带多 domain 的 cookie）
-        from .credential_vault import save_credential
+        from .credential_vault import (
+            cookie_domain_matches,
+            save_credential,
+            save_storage_state,
+        )
 
+        pages = _http_page_infos(session)
+        page_target = pages[0][0] if pages else ""
+        page_hosts: List[str] = []
+        for _, page_url in pages:
+            try:
+                host = (urlsplit(page_url).hostname or "").lower()
+            except ValueError:
+                host = ""
+            if host:
+                page_hosts.append(host)
         by_domain: Dict[str, list] = {}
         now = time.time()
         for item in raw_cookies:
@@ -941,14 +958,38 @@ class BrowserCookiesTool(BaseTool):
             cookie_domain = str(item.get("domain") or "").lower()
             if not cookie_domain:
                 continue
+            # 有页面上下文时只导出归属这些页面的 cookie（数据最小化）
+            if page_hosts and not any(
+                cookie_domain_matches(host, cookie_domain) for host in page_hosts
+            ):
+                continue
             by_domain.setdefault(cookie_domain, []).append(item)
+        if not by_domain and page_hosts:
+            return ToolResult(
+                success=False,
+                error=(
+                    "no_cookies_for_page: 未找到归属当前页面的 cookie。"
+                    "请先切换到要导出登录态的目标站点标签页再重试。"
+                ),
+            )
+        origins = _capture_local_storage(session, page_target)
+        origin_hosts = []
+        for origin_item in origins:
+            try:
+                origin_hosts.append(urlsplit(origin_item["origin"]).hostname or "")
+            except ValueError:
+                origin_hosts.append("")
         saved = []
         for cookie_domain, cookies in sorted(by_domain.items()):
-            save_credential(
-                cookie_domain,
-                cookies,
-                source_profile=str(getattr(session, "profile_name", "") or ""),
-            )
+            profile_name = str(getattr(session, "profile_name", "") or "")
+            if origins and any(
+                _storage_domain_matches(cookie_domain, host) for host in origin_hosts
+            ):
+                save_storage_state(
+                    cookie_domain, cookies, origins, source_profile=profile_name
+                )
+            else:
+                save_credential(cookie_domain, cookies, source_profile=profile_name)
             # AU1：告知最短剩余时效，模型 / 用户可预知失效
             expiries = [
                 int(c["expires"] - now)
@@ -985,8 +1026,7 @@ _LOGIN_POLL_INTERVAL = 2.0
 _LOGIN_DEFAULT_TIMEOUT = 300
 
 #: 页面内注入的 Sage 登录辅助悬浮条（Shadow DOM 隔离）
-_LOGIN_BANNER_JS = """
-(function() {
+_LOGIN_BANNER_JS = """(function() {
   if (window.__sage_login_confirmed) {
     return { confirmed: true, url: location.href, hasPassword: false };
   }
@@ -1060,6 +1100,86 @@ _LOGIN_SUCCESS_JS = """
 """
 
 
+_LOGIN_STORAGE_JS = (
+    "(function(){try{var out={};var ls=window.localStorage;"
+    "for(var i=0;i<ls.length;i++){var k=ls.key(i);out[k]=ls.getItem(k);}"
+    "return JSON.stringify({origin:location.origin,localStorage:out});}"
+    "catch(e){return ''}})()"
+)
+
+
+def _capture_local_storage(  # noqa: PLR0911 — 各失败路径独立 return，扁平更直读
+    session: BrowserSession, target_id: str = ""
+) -> List[Dict[str, Any]]:
+    """读取目标页面的 localStorage（按 origin 打包）；失败 / 空 / 超限返回空列表。"""
+    if not target_id:
+        return []
+    try:
+        result = cdp_command(
+            session,
+            "Runtime.evaluate",
+            {"expression": _LOGIN_STORAGE_JS, "returnByValue": True},
+            target_id=target_id,
+        )
+    except BrowserCDPError:
+        return []
+    value = (result.get("result") or {}).get("value")
+    if not isinstance(value, str) or not value or len(value) > LOCAL_STORAGE_CAP:
+        return []
+    try:
+        parsed = json.loads(value)
+    except ValueError:
+        return []
+    if not isinstance(parsed, dict):
+        return []
+    origin = str(parsed.get("origin") or "")
+    storage = parsed.get("localStorage")
+    if not origin.startswith(("http://", "https://")) or not isinstance(storage, dict):
+        return []
+    cleaned = {
+        str(key): str(val)
+        for key, val in storage.items()
+        if isinstance(key, str) and isinstance(val, str) and val != ""
+    }
+    if not cleaned:
+        return []
+    return [{"origin": origin, "localStorage": cleaned}]
+
+
+def _storage_domain_matches(domain: str, host: str) -> bool:
+    """cookie domain（可能带前导点）是否覆盖页面 host。"""
+    bare = domain.strip().lower().lstrip(".")
+    host = (host or "").strip().lower()
+    return bool(bare) and (host == bare or host.endswith("." + bare))
+
+
+def _http_page_infos(session: BrowserSession) -> List[Tuple[str, str]]:
+    """当前会话所有 http(s) 页面 (targetId, url)；按 CDP 返回顺序。"""
+    try:
+        result = cdp_command(session, "Target.getTargets", {})
+    except BrowserCDPError:
+        return []
+    pages: List[Tuple[str, str]] = []
+    for info in result.get("targetInfos") or []:
+        if not isinstance(info, dict) or info.get("type") != "page":
+            continue
+        url = str(info.get("url") or "")
+        if url.startswith(("http://", "https://")) and info.get("targetId"):
+            pages.append((str(info["targetId"]), url))
+    return pages
+
+
+def _first_page_info(session: BrowserSession) -> Tuple[str, str]:
+    """当前会话中第一个 http(s) 页面 (targetId, url)；无则 ("", "")。"""
+    pages = _http_page_infos(session)
+    return pages[0] if pages else ("", "")
+
+
+def _first_page_target(session: BrowserSession) -> str:
+    """当前会话中第一个 http(s) 页面 target（用于尽力捕获 localStorage）。"""
+    return _first_page_info(session)[0]
+
+
 class BrowserLoginTool(BaseTool):
     """一键登录站点：打开可见浏览器 → 用户登录 → 自动保存 cookie。
 
@@ -1122,6 +1242,11 @@ class BrowserLoginTool(BaseTool):
             return ToolResult(success=False, error="url 不能为空")
         if not url.startswith(("http://", "https://")):
             return ToolResult(success=False, error="url 必须以 http:// 或 https:// 开头")
+        # 门禁二次校验：REST 登录任务直接调用本工具时也必须遵守
+        # 离线 / 内网白名单模式（与 browser_navigate 同口径）
+        rejection = load_network_policy().check_host(url)
+        if rejection:
+            return ToolResult(success=False, error=rejection)
 
         # 提取目标域名用于后续 cookie 匹配
         parsed = urlsplit(url)
@@ -1191,8 +1316,8 @@ class BrowserLoginTool(BaseTool):
                 except BrowserCDPError:
                     pass
 
-            # 导出并保存 cookie
-            saved_domains = self._export_cookies(session, target_host)
+            # 导出并保存 cookie（同域 localStorage 一并保存）
+            saved_domains = self._export_cookies(session, target_host, target_id or "")
 
             if saved_domains:
                 return ToolResult(
@@ -1223,7 +1348,7 @@ class BrowserLoginTool(BaseTool):
         except BrowserCDPError as exc:
             # 容错：若用户手动关闭了窗口/标签页，尝试检查是否已有保存的 cookies
             try:
-                saved_domains = self._export_cookies(session, target_host)
+                saved_domains = self._export_cookies(session, target_host, target_id or "")
                 if saved_domains:
                     return ToolResult(
                         success=True,
@@ -1253,10 +1378,17 @@ class BrowserLoginTool(BaseTool):
                     cdp_command(session, "Target.closeTarget", {"targetId": target_id})
 
     def _export_cookies(
-        self, session: BrowserSession, target_host: str
+        self, session: BrowserSession, target_host: str, target_id: str = ""
     ) -> list:
-        """从浏览器获取 cookie 并按 domain 分组保存。返回已保存的 domain 列表。"""
-        from .credential_vault import save_credential
+        """从浏览器获取 cookie 并按 domain 分组保存。返回已保存的 domain 列表。
+
+        同域 localStorage 一并保存为 storage_state（知网等双 token 站点）。
+        """
+        from .credential_vault import (
+            cookie_domain_matches,
+            save_credential,
+            save_storage_state,
+        )
 
         try:
             result = cdp_command(session, "Network.getCookies", {})
@@ -1267,13 +1399,32 @@ class BrowserLoginTool(BaseTool):
         if not raw_cookies:
             return []
 
-        # 按 domain 分组
+        origins = _capture_local_storage(session, target_id)
+        page_hosts: List[str] = []
+        for origin_item in origins:
+            try:
+                host = (urlsplit(origin_item["origin"]).hostname or "").lower()
+            except ValueError:
+                host = ""
+            if host:
+                page_hosts.append(host)
+        allowed_hosts = [target_host] + [h for h in page_hosts if h]
+
+        def _allowed(cookie_domain: str) -> bool:
+            return any(
+                cookie_domain_matches(host, cookie_domain)
+                for host in allowed_hosts
+                if host
+            )
+
+        # 按 domain 分组（只保留归属目标站的 cookie，避免把持久 profile 里
+        # 其他站点的登录态一并导出）
         by_domain: Dict[str, list] = {}
         for item in raw_cookies:
             if not isinstance(item, dict) or not item.get("name"):
                 continue
             cookie_domain = str(item.get("domain") or "").lower()
-            if not cookie_domain:
+            if not cookie_domain or not _allowed(cookie_domain):
                 continue
             by_domain.setdefault(cookie_domain, []).append(item)
 
@@ -1281,11 +1432,21 @@ class BrowserLoginTool(BaseTool):
         profile_name = getattr(session, "profile_name", "") or ""
         for cookie_domain, cookies in sorted(by_domain.items()):
             try:
-                save_credential(
-                    cookie_domain,
-                    cookies,
-                    source_profile=str(profile_name),
-                )
+                if origins and any(
+                    _storage_domain_matches(cookie_domain, host) for host in allowed_hosts
+                ):
+                    save_storage_state(
+                        cookie_domain,
+                        cookies,
+                        origins,
+                        source_profile=str(profile_name),
+                    )
+                else:
+                    save_credential(
+                        cookie_domain,
+                        cookies,
+                        source_profile=str(profile_name),
+                    )
                 saved.append(cookie_domain)
             except Exception:
                 # 单个 domain 保存失败不影响其他

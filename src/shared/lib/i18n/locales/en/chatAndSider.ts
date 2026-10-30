@@ -91,6 +91,11 @@ export const enChatAndSider = {
   'chat.blocked.action.configure_credentials': 'Configure credentials',
   'chat.blocked.action.configure_proxy': 'Configure proxy',
   'chat.blocked.action.view_docs': 'View docs',
+  'chat.blocked.tech_details': 'Technical details',
+  'chat.blocked.login.starting': 'Opening the sign-in window. Please complete sign-in in your browser…',
+  'chat.blocked.login.continue':
+    'Signed in to {host}. Please continue the request that was blocked: {url}, and summarize the result.',
+  'chat.blocked.login.failed': 'Sign-in was not completed: {error}',
   'chat.loading': 'Loading conversation...',
   'chat.welcome': 'Welcome to Sage',
   'chat.welcome_sub': 'Start a new conversation',
@@ -370,11 +375,11 @@ export const enChatAndSider = {
   'settings.audit.section.runtime': 'Runtime',
   'settings.section.network.access': 'Access control',
   'settings.section.network.fetch': 'Fetching & search',
-  'settings.network.creds': 'Site credentials',
+  'settings.network.creds': 'Site credentials (manual import)',
   'settings.network.creds.hint':
-    'Login state exported via browser_cookies (encrypted, never echoed). Shared by static fetch, JS render and browser channels.',
+    'Only for services that cannot be signed in via the browser: paste a cookie or an API header. For everyday use, sign in under "Signed-in websites" above.',
   'settings.network.creds.empty':
-    'No credentials yet. Ask the assistant to log in and run browser_cookies export.',
+    'No manual credentials yet. Sign in under "Signed-in websites" first.',
   'settings.network.creds.delete': 'Delete',
   'settings.network.creds.expired': 'expired',
   'settings.network.creds.browser': 'Browser',
@@ -420,6 +425,35 @@ export const enChatAndSider = {
   'settings.network.creds.auto_refresh': 'Auto-refresh login state',
   'settings.network.creds.auto_refresh.desc':
     'Silently re-export credentials from the source profile when they expire',
+  'settings.network.sites': 'Signed-in websites',
+  'settings.network.sites.hint':
+    'Manage websites that require sign-in. After signing in once, Sage reuses the session and prompts you when it expires.',
+  'settings.network.sites.empty':
+    'No websites signed in yet. Sage will prompt you when a site needs sign-in, or you can add one above.',
+  'settings.network.sites.add': 'Add website',
+  'settings.network.sites.url_placeholder': 'Enter a website URL, e.g. https://kns.cnki.net',
+  'settings.network.sites.template': 'Choose a common website (optional)',
+  'settings.network.sites.template.placeholder': 'Choose a website…',
+  'settings.network.sites.login_button': 'Sign in to website',
+  'settings.network.sites.waiting':
+    'Complete sign-in in the browser window. It will be saved automatically…',
+  'settings.network.sites.success': 'Signed in. Login state saved.',
+  'settings.network.sites.failed': 'Sign-in failed: {error}',
+  'settings.network.sites.login_in_progress':
+    'A sign-in window is already waiting. Finish or close it in the browser first.',
+  'settings.network.sites.invalid_url': 'Enter a URL starting with http:// or https://',
+  'settings.network.sites.status.logged_in': 'Signed in',
+  'settings.network.sites.status.expired': 'Expired',
+  'settings.network.sites.storage': 'Browser session',
+  'settings.network.sites.relogin': 'Sign in again',
+  'settings.network.sites.disconnect': 'Disconnect',
+  'settings.network.sites.disconnect.confirm':
+    'Sage will lose access to signed-in content on this website. Disconnect?',
+  'settings.network.sites.saved_hours': '{hours}h',
+  'settings.network.sites.saved_just_now': 'just now',
+  'settings.network.advanced': 'Advanced: manual import & diagnostics',
+  'settings.network.advanced.hint':
+    'For advanced users and developers. Normal use does not require changing anything here.',
   'settings.network.mode': 'Network mode',
   'settings.network.mode.online': 'Online (default)',
   'settings.network.mode.online.desc': 'Search available, any address reachable',
