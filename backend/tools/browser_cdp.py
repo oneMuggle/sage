@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from .browser_launcher import (
+    EMBEDDED_EXECUTABLE,
     BrowserCapability,
     BrowserLauncher,
     BrowserType,
@@ -232,25 +233,19 @@ def _terminate_session(session: BrowserSession) -> None:
     保留的前提；启动失败路径同样经由本函数，持久目录即使启动失败也不删
     （里面可能有用户既有登录态）。
 
-    Embedded 会话的生命周期归 Electron 主进程：这里关闭其全部窗口后返回。
+    Embedded 会话的生命周期归 Electron 主进程：这里关闭本会话的目标后返回。
     """
     if getattr(session, "browser_type", None) == BrowserType.EMBEDDED:
-        for headless_mode in (True, False):
-            try:
-                targets = _embedded_command(
-                    session, "Target.getTargets", {}, headless_override=headless_mode
-                )
-                for info in targets.get("targetInfos") or []:
-                    target_id = str(info.get("targetId") or "")
-                    if target_id:
-                        _embedded_command(
-                            session,
-                            "Target.closeTarget",
-                            {"targetId": target_id},
-                            headless_override=headless_mode,
-                        )
-            except Exception:  # noqa: BLE001 — 关闭失败不阻断会话回收
-                logger.debug("关闭内置浏览器目标失败", exc_info=True)
+        try:
+            targets = _embedded_command(session, "Target.getTargets", {})
+            for info in targets.get("targetInfos") or []:
+                target_id = str(info.get("targetId") or "")
+                if target_id:
+                    _embedded_command(
+                        session, "Target.closeTarget", {"targetId": target_id}
+                    )
+        except Exception:  # noqa: BLE001 — 关闭失败不阻断会话回收
+            logger.debug("关闭内置浏览器目标失败", exc_info=True)
         return
     # SN3：先停事件通道（常驻 WS 线程），再杀进程
     try:
@@ -535,7 +530,7 @@ def launch_browser(
     if cap.browser_type == BrowserType.EMBEDDED:
         session = BrowserSession(
             browser_id=browser_id or uuid.uuid4().hex[:12],
-            executable="(embedded)",
+            executable=EMBEDDED_EXECUTABLE,
             headless=headless,
             user_data_dir="",
             process=_EmbeddedProcess(),
@@ -697,6 +692,7 @@ def _embedded_command(
             "method": method,
             "params": params or {},
             "targetId": target_id or "",
+            "session": session.browser_id,
             "headless": (
                 bool(headless_override)
                 if headless_override is not None

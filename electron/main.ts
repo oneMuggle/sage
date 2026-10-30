@@ -1150,6 +1150,15 @@ function createMainWindow(): void {
   });
   setMainWindow(win);
 
+  // 主窗口关闭时一并回收内置浏览器窗口：否则残留的可见/隐藏窗口会让
+  // window-all-closed 永不触发，进程在无 UI 状态下继续存活。
+  win.on('closed', () => {
+    if (agentBrowserHandle) {
+      void agentBrowserHandle.close();
+      agentBrowserHandle = null;
+    }
+  });
+
   // 2026-09-13: ready-to-show（首帧就绪）后再显示主窗口并关闭启动屏，
   // 消除「窗口已出现但页面尚未绘制」的白屏闪烁。
   let mainWinShown = false;

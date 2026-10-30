@@ -329,6 +329,11 @@ def attach_observation(body: Optional[AttachObservationRequest] = None) -> dict:
             )
         except BrowserCDPError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
+        if getattr(session, "browser_type", "") == "embedded":
+            raise HTTPException(
+                status_code=409,
+                detail="Sage 内置浏览器不支持 CDP 事件观测（无 WebSocket 事件通道）",
+            )
         worker = ModelProbeWorker(
             backend=_config.probe_backend if _config is not None else "python"
         )

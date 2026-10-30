@@ -134,6 +134,7 @@ def test_embedded_command_posts_to_bridge(monkeypatch):
         "method": "Runtime.evaluate",
         "params": {"expression": "1"},
         "targetId": "t1",
+        "session": "emb",
         "headless": True,
     }
 
@@ -151,6 +152,30 @@ def test_embedded_command_maps_bridge_error(monkeypatch):
 def test_render_pool_skips_event_channel_for_embedded():
     session = SimpleNamespace(browser_id="emb", browser_type=BrowserType.EMBEDDED)
     assert web_render._ensure_pool_channel(session) is False
+
+
+def test_browser_launch_tool_embedded_skips_tracker(monkeypatch, tmp_path):
+    """回归：embedded 会话不得引用未赋值的 tracker（曾导致 UnboundLocalError）。"""
+    from backend.tools import browser_tool
+
+    session = _embedded_session(headless=False)
+    monkeypatch.setattr(browser_tool, "launch_browser", lambda **kw: session)
+    monkeypatch.setattr(
+        browser_tool,
+        "get_browser_manager",
+        lambda: SimpleNamespace(get=lambda _: session),
+    )
+    monkeypatch.setattr(browser_tool, "cdp_command", lambda *a, **kw: {})
+    monkeypatch.setattr(
+        browser_tool,
+        "start_download_tracking",
+        lambda *a, **kw: (_ for _ in ()).throw(AssertionError("embedded must skip tracker")),
+    )
+
+    result = browser_tool.BrowserLaunchTool().execute(headless=False)
+    assert result.success is True
+    assert result.content["download_tracking"] is False
+    assert result.content["browser_id"] == "emb"
 
 
 def test_browser_health_reports_embedded(monkeypatch):

@@ -50,8 +50,8 @@ Sage 会自动保存；之后静态抓取、JS 渲染与浏览器通道都能沿
 
 ### Win7 内置浏览器
 
-Win7 上如果系统里没有可用的 Chrome / Edge，Sage 会自动使用**内置浏览器**
-（Electron 自带的 Chromium 106）完成登录与网页交互：
+Win7 上 Sage **优先使用内置浏览器**（Electron 自带的 Chromium 106）完成登录与网页交互；
+如需改用系统安装的 Chrome，可用 `SAGE_BROWSER_PATH` 显式指定。
 
 - 登录窗口就是 Sage 自己的浏览器窗口，与渲染通道共享同一持久分区——
   登录一次后，抓取/渲染也能直接用上登录态；

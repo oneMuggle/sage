@@ -73,6 +73,8 @@ export interface BridgeRequest {
   params?: Record<string, unknown>;
   targetId?: string;
   headless?: boolean;
+  /** 后端 BrowserSession.browser_id；目标表按它隔离（渲染池/登录/交互互不串页）。 */
+  session?: string;
 }
 
 interface TargetEntry {
@@ -86,7 +88,7 @@ type Mode = 'headless' | 'visible';
 const PROTOCOL_VERSION = '1.3';
 
 /** 允许透传到 webContents.debugger 的域；写入类 Storage 命令被单独拦截。 */
-const DEBUGGER_PREFIXES = ['Page.', 'Runtime.', 'Network.'];
+const DEBUGGER_PREFIXES = ['Page.', 'Runtime.', 'Network.', 'Input.'];
 
 function modeOf(request: BridgeRequest): Mode {
   return request.headless ? 'headless' : 'visible';
@@ -150,11 +152,19 @@ function toElectronCookie(cookie: Record<string, unknown>): Record<string, unkno
 }
 
 export class AgentBrowserBridge {
-  private readonly targets = new Map<Mode, Map<string, TargetEntry>>();
+  /** key = `${mode}|${session}`；session 由后端 browser_id 提供。 */
+  private readonly targets = new Map<string, Map<string, TargetEntry>>();
 
-  constructor(private readonly deps: BridgeDeps) {
-    this.targets.set('headless', new Map());
-    this.targets.set('visible', new Map());
+  constructor(private readonly deps: BridgeDeps) {}
+
+  private scope(mode: Mode, session: string): Map<string, TargetEntry> {
+    const key = `${mode}|${session || 'default'}`;
+    let map = this.targets.get(key);
+    if (!map) {
+      map = new Map();
+      this.targets.set(key, map);
+    }
+    return map;
   }
 
   async dispatch(request: BridgeRequest): Promise<unknown> {
@@ -162,16 +172,18 @@ export class AgentBrowserBridge {
     if (!method) throw new Error('missing method');
     const mode = modeOf(request);
     const params = request.params ?? {};
+    const scope = this.scope(mode, String(request.session || 'default'));
 
     switch (method) {
       case 'Target.getTargets':
-        return this.getTargets(mode);
+        return this.getTargets(scope);
       case 'Target.createTarget':
-        return this.createTarget(mode, String(params.url || 'about:blank'));
+        return this.createTarget(scope, mode, String(params.url || 'about:blank'));
       case 'Target.closeTarget':
-        return this.closeTarget(mode, String(params.targetId || ''));
+        return this.closeTarget(scope, String(params.targetId || ''));
       case 'Target.attachToTarget': {
-        const entry = await this.resolveTarget(mode, request.targetId, false);
+        const targetId = String(params.targetId ?? request.targetId ?? '');
+        const entry = await this.resolveTarget(scope, mode, targetId, false);
         return { sessionId: `sage-${entry.id}` };
       }
       case 'Browser.getVersion':
@@ -202,7 +214,7 @@ export class AgentBrowserBridge {
         return {};
       }
       case 'Page.captureScreenshot': {
-        const entry = await this.resolveTarget(mode, request.targetId, false);
+        const entry = await this.resolveTarget(scope, mode, request.targetId,false);
         const image = await entry.win.webContents.capturePage();
         return { data: Buffer.from(image.toPNG()).toString('base64') };
       }
@@ -213,12 +225,12 @@ export class AgentBrowserBridge {
       case 'Page.getNavigationHistory':
       case 'Runtime.evaluate':
       case 'Runtime.enable': {
-        const entry = await this.resolveTarget(mode, request.targetId, true);
+        const entry = await this.resolveTarget(scope, mode, request.targetId,true);
         return this.sendToDebugger(entry, method, params);
       }
       default:
         if (DEBUGGER_PREFIXES.some((prefix) => method.startsWith(prefix))) {
-          const entry = await this.resolveTarget(mode, request.targetId, true);
+          const entry = await this.resolveTarget(scope, mode, request.targetId,true);
           return this.sendToDebugger(entry, method, params);
         }
         throw new Error(`unsupported method: ${method}`);
@@ -239,9 +251,11 @@ export class AgentBrowserBridge {
     }
   }
 
-  private getTargets(mode: Mode): { targetInfos: Array<Record<string, unknown>> } {
+  private getTargets(scope: Map<string, TargetEntry>): {
+    targetInfos: Array<Record<string, unknown>>;
+  } {
     const infos: Array<Record<string, unknown>> = [];
-    for (const entry of this.targets.get(mode)?.values() ?? []) {
+    for (const entry of scope.values()) {
       if (entry.win.isDestroyed()) continue;
       infos.push({
         targetId: entry.id,
@@ -253,20 +267,42 @@ export class AgentBrowserBridge {
     return { targetInfos: infos };
   }
 
-  private async createTarget(mode: Mode, url: string): Promise<{ targetId: string }> {
+  private async createTarget(
+    scope: Map<string, TargetEntry>,
+    mode: Mode,
+    url: string,
+  ): Promise<{ targetId: string }> {
+    const targetUrl = url || 'about:blank';
+    if (!/^(https?:\/\/|about:blank)/i.test(targetUrl)) {
+      throw new Error(`unsupported url scheme: ${targetUrl.slice(0, 32)}`);
+    }
     const id = this.deps.randomId();
     const win = await this.deps.createWindow(mode === 'visible');
-    await win.webContents.loadURL(url || 'about:blank');
-    this.targets.get(mode)?.set(id, { id, win, attached: false });
+    const entry: TargetEntry = { id, win, attached: false };
+    // 先登记再加载：加载失败/超时也必须能按 targetId 回收窗口
+    scope.set(id, entry);
+    try {
+      await win.webContents.loadURL(targetUrl);
+    } catch (error) {
+      scope.delete(id);
+      try {
+        if (!win.isDestroyed()) win.close();
+      } catch {
+        /* best effort */
+      }
+      throw error;
+    }
     this.deps.log?.(`agent-browser: created ${mode} target ${id}`);
     return { targetId: id };
   }
 
-  private closeTarget(mode: Mode, targetId: string): Record<string, unknown> {
-    const map = this.targets.get(mode);
-    const entry = map?.get(targetId);
+  private closeTarget(
+    scope: Map<string, TargetEntry>,
+    targetId: string,
+  ): Record<string, unknown> {
+    const entry = scope.get(targetId);
     if (!entry) throw new Error(`unknown targetId: ${targetId}`);
-    map?.delete(targetId);
+    scope.delete(targetId);
     try {
       if (!entry.win.isDestroyed()) entry.win.close();
     } catch {
@@ -276,23 +312,22 @@ export class AgentBrowserBridge {
   }
 
   private async resolveTarget(
+    scope: Map<string, TargetEntry>,
     mode: Mode,
     targetId: string | undefined,
     createIfMissing: boolean,
   ): Promise<TargetEntry> {
-    const map = this.targets.get(mode);
-    if (!map) throw new Error(`unknown mode: ${mode}`);
     if (targetId) {
-      const entry = map.get(targetId);
+      const entry = scope.get(targetId);
       if (!entry) throw new Error(`unknown targetId: ${targetId}`);
       return entry;
     }
-    for (const entry of map.values()) {
+    for (const entry of scope.values()) {
       if (!entry.win.isDestroyed()) return entry;
     }
     if (!createIfMissing) throw new Error('no page target');
-    const created = await this.createTarget(mode, 'about:blank');
-    const entry = map.get(created.targetId);
+    const created = await this.createTarget(scope, mode, 'about:blank');
+    const entry = scope.get(created.targetId);
     if (!entry) throw new Error('failed to create target');
     return entry;
   }
@@ -312,7 +347,17 @@ export class AgentBrowserBridge {
       }
       entry.attached = true;
     }
-    return entry.win.webContents.debugger.sendCommand(method, params);
+    try {
+      return await entry.win.webContents.debugger.sendCommand(method, params);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/not attached|not connected/i.test(message)) throw error;
+      // renderer 重启 / DevTools 抢占后 debugger 被 detach：重连一次
+      entry.attached = false;
+      entry.win.webContents.debugger.attach(PROTOCOL_VERSION);
+      entry.attached = true;
+      return entry.win.webContents.debugger.sendCommand(method, params);
+    }
   }
 }
 
@@ -387,9 +432,11 @@ export function startAgentBrowserBridge(
           });
         }
       } catch (error) {
-        sendJson(res, 400, {
-          error: { message: error instanceof Error ? error.message : String(error) },
-        });
+        if (!res.writableEnded && !res.destroyed) {
+          sendJson(res, 400, {
+            error: { message: error instanceof Error ? error.message : String(error) },
+          });
+        }
       }
     })();
   });

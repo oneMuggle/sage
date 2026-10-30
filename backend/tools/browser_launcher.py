@@ -36,6 +36,10 @@ CHROME_POLL_INTERVAL = 0.2
 FIREFOX_POLL_INTERVAL = 0.5
 
 
+#: 内置浏览器的占位可执行文件名（无真实文件；仅用于诊断/日志展示）
+EMBEDDED_EXECUTABLE = "(embedded)"
+
+
 class BrowserType(str, Enum):
     """支持的浏览器类型枚举。"""
 
@@ -324,7 +328,7 @@ def _discover_embedded() -> Optional[BrowserCapability]:
         return None
     return BrowserCapability(
         browser_type=BrowserType.EMBEDDED,
-        executable="(embedded)",
+        executable=EMBEDDED_EXECUTABLE,
         version=None,
         cdp_port=port,
         cdp_endpoint_strategy="embedded",

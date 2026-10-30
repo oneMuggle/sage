@@ -48,7 +48,7 @@ function makeWindow(visible: boolean): FakeWindow {
   return state;
 }
 
-function makeDeps(cookieStore: Record<string, unknown>[] = []) {
+function makeDeps(cookieStore: Record<string, unknown>[] = [], failLoad = false) {
   const windows: FakeWindow[] = [];
   let counter = 0;
   const deps: BridgeDeps & { windows: FakeWindow[]; cookieStore: Record<string, unknown>[] } = {
@@ -56,6 +56,11 @@ function makeDeps(cookieStore: Record<string, unknown>[] = []) {
     cookieStore,
     createWindow: (visible: boolean) => {
       const win = makeWindow(visible);
+      if (failLoad) {
+        win.webContents.loadURL = vi.fn(async () => {
+          throw new Error('ERR_NAME_NOT_RESOLVED');
+        });
+      }
       windows.push(win);
       return win;
     },
@@ -217,6 +222,96 @@ describe('AgentBrowserBridge', () => {
     await expect(
       bridge.dispatch({ method: 'Browser.crashEverything', headless: false }),
     ).rejects.toThrow('unsupported method');
+  });
+
+  it('isolates targets by backend session id', async () => {
+    const deps = makeDeps();
+    const bridge = new AgentBrowserBridge(deps);
+    const a = (await bridge.dispatch({
+      method: 'Target.createTarget',
+      params: { url: 'https://a.example/' },
+      headless: false,
+      session: 'session-a',
+    })) as { targetId: string };
+    await bridge.dispatch({
+      method: 'Target.createTarget',
+      params: { url: 'https://b.example/' },
+      headless: false,
+      session: 'session-b',
+    });
+
+    const aTargets = (await bridge.dispatch({
+      method: 'Target.getTargets',
+      headless: false,
+      session: 'session-a',
+    })) as { targetInfos: Array<{ url: string }> };
+    expect(aTargets.targetInfos.map((info) => info.url)).toEqual(['https://a.example/']);
+
+    await expect(
+      bridge.dispatch({
+        method: 'Target.attachToTarget',
+        params: { targetId: a.targetId },
+        headless: false,
+        session: 'session-b',
+      }),
+    ).rejects.toThrow('unknown targetId');
+  });
+
+  it('attaches the target specified in params, not the first one', async () => {
+    const deps = makeDeps();
+    const bridge = new AgentBrowserBridge(deps);
+    const first = (await bridge.dispatch({
+      method: 'Target.createTarget',
+      params: { url: 'https://first.example/' },
+      headless: true,
+      session: 's1',
+    })) as { targetId: string };
+    const second = (await bridge.dispatch({
+      method: 'Target.createTarget',
+      params: { url: 'https://second.example/' },
+      headless: true,
+      session: 's1',
+    })) as { targetId: string };
+
+    const attached = (await bridge.dispatch({
+      method: 'Target.attachToTarget',
+      params: { targetId: second.targetId },
+      headless: true,
+      session: 's1',
+    })) as { sessionId: string };
+    expect(attached.sessionId).toContain(second.targetId);
+    expect(attached.sessionId).not.toContain(first.targetId);
+  });
+
+  it('recycles the window when the initial navigation fails', async () => {
+    const deps = makeDeps([], true);
+    const bridge = new AgentBrowserBridge(deps);
+    await expect(
+      bridge.dispatch({
+        method: 'Target.createTarget',
+        params: { url: 'https://unreachable.example/' },
+        headless: true,
+        session: 's1',
+      }),
+    ).rejects.toThrow('ERR_NAME_NOT_RESOLVED');
+    expect(deps.windows[0].destroyed).toBe(true);
+    const list = (await bridge.dispatch({
+      method: 'Target.getTargets',
+      headless: true,
+      session: 's1',
+    })) as { targetInfos: unknown[] };
+    expect(list.targetInfos).toHaveLength(0);
+  });
+
+  it('rejects non-http(s) target urls', async () => {
+    const bridge = new AgentBrowserBridge(makeDeps());
+    await expect(
+      bridge.dispatch({
+        method: 'Target.createTarget',
+        params: { url: 'file:///etc/passwd' },
+        headless: true,
+      }),
+    ).rejects.toThrow('unsupported url scheme');
   });
 });
 
