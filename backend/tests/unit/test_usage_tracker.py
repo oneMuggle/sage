@@ -346,13 +346,17 @@ def test_today_bucket_aggregates_cache_split():
 # ==================== L8 PR-B (2026-09-09): 时间范围 + 请求列表 ====================
 
 
-def test_summary_with_range_today_returns_memory_state():
-    """range=today 等同 summary() 内存态, range 字段回写。"""
+def test_summary_with_range_today_reads_persisted_events(monkeypatch: pytest.MonkeyPatch):
+    """range=today 从 usage_events 聚合, 新 tracker 实例(重启)也能读到。"""
+    _patch_memory_db(monkeypatch)
     tracker = UsageTracker()
     tracker.record("gpt-4o", 100, 10, cache_read_tokens=20)
-    data = tracker.summary_with_range("today")
+
+    restarted = UsageTracker()
+    data = restarted.summary_with_range("today")
     assert data["range"] == "today"
     assert data["today"]["requests"] == 1
+    assert data["totals"]["prompt_tokens"] == 100
     assert data["cache_hit_rate"] == pytest.approx(20 / 100)
 
 
@@ -572,10 +576,11 @@ def test_get_usage_trend_groups_by_hour(monkeypatch: pytest.MonkeyPatch):
     assert data["range"] == "today"
     assert data["bucket"] == "hour"
     assert isinstance(data["series"], list)
-    assert len(data["series"]) >= 1
-    point = data["series"][-1]
-    assert point["requests"] >= 2
+    # today 固定 24 个小时槽（空槽补零），hover 可定位任意时段
+    assert len(data["series"]) == 24
+    point = next(p for p in data["series"] if p["requests"] >= 2)
     assert point["prompt_tokens"] >= 300
+    assert point["total_tokens"] >= 330
     # ts 形如 2026-09-09T07:00:00 (本地 ISO, 无 Z 后缀)
     assert point["ts"].endswith(":00:00")
     # cache_hit_rate: prompt=300, creation=0, read=60 → 60/300 = 0.2

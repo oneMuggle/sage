@@ -100,6 +100,64 @@ def test_tracker_fail_open_on_db_error(monkeypatch):
     assert tracker.summary()["totals"]["prompt_tokens"] == 10
 
 
+def test_today_summary_survives_restart(tracker_with_db: UsageTracker):
+    """range=today 必须读 usage_events 持久聚合——重启后当天用量不丢。"""
+    tracker_with_db.record("gpt-4o", 100, 50, session_id="s1")
+    tracker_with_db.record("claude-haiku", 20, 10, session_id="s2")
+
+    restarted = UsageTracker()  # 模拟重启: 新实例, 内存态为空
+    data = restarted.summary_with_range("today")
+
+    assert data["range"] == "today"
+    assert data["totals"]["requests"] == 2
+    assert data["totals"]["prompt_tokens"] == 120
+    assert data["totals"]["completion_tokens"] == 60
+    assert data["today"]["requests"] == 2
+    assert {m["model"] for m in data["by_model"]} == {"gpt-4o", "claude-haiku"}
+    assert data["known_requests"] == 2
+    assert data["unknown_requests"] == 0
+    assert data["has_partial_estimates"] is False
+
+
+def test_today_summary_persists_cache_metrics(tracker_with_db: UsageTracker):
+    """重启后 today 视图仍能给出缓存命中明细与命中率。"""
+    tracker_with_db.record(
+        "claude-sonnet-4",
+        100,
+        10,
+        session_id="s1",
+        cache_read_tokens=60,
+        cache_creation_tokens=20,
+    )
+
+    restarted = UsageTracker()
+    data = restarted.summary_with_range("today")
+
+    assert data["totals"]["cache_read_tokens"] == 60
+    assert data["totals"]["cache_creation_tokens"] == 20
+    assert data["cache_hit_rate"] == pytest.approx(60 / 120)
+
+
+def test_today_summary_excludes_yesterday(tracker_with_db: UsageTracker):
+    """today 的边界是本地日界, 不应把昨天的记录算进来。"""
+    import time
+
+    from backend.data.database import get_database
+
+    tracker_with_db.record("gpt-4o", 100, 50, session_id="s1")
+    yesterday_ms = int((time.time() - 36 * 3600) * 1000)
+    get_database().get_connection().execute(
+        "UPDATE usage_events SET created_at = ?", (yesterday_ms,)
+    )
+    get_database().get_connection().commit()
+
+    restarted = UsageTracker()
+    data = restarted.summary_with_range("today")
+
+    assert data["totals"]["requests"] == 0
+    assert data["today"]["requests"] == 0
+
+
 @pytest.mark.asyncio()
 async def test_run_loop_session_attribution():
     from backend.core.legacy.agent import SageAgent
