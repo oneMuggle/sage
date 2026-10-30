@@ -17,11 +17,17 @@ const mocks = vi.hoisted(() => ({
   app: { name: 'Sage' },
 }));
 
+const windowMocks = vi.hoisted(() => ({ send: vi.fn() }));
+
 vi.mock('electron', () => ({
   Menu: mocks.Menu,
   shell: mocks.shell,
   clipboard: mocks.clipboard,
   app: mocks.app,
+}));
+
+vi.mock('../mainWindow', () => ({
+  mainWindow: { webContents: { send: windowMocks.send } },
 }));
 
 let tmpDir: string;
@@ -71,6 +77,21 @@ describe('buildApplicationMenu', () => {
     expect(copyItem).toBeDefined();
     copyItem!.click!();
     expect(mocks.clipboard.writeText).toHaveBeenCalledWith(expectedLogDir);
+  });
+
+  it('includes 反馈问题... item that asks renderer to open the hub', async () => {
+    const { buildApplicationMenu } = await import('../menu');
+    buildApplicationMenu();
+    const template = mocks.Menu.buildFromTemplate.mock.calls[0][0] as Array<{
+      label?: string;
+      submenu?: Array<{ label: string; click?: () => void }>;
+    }>;
+    const helpMenu = template.find((m) => m.label === '帮助');
+    const feedbackItem = helpMenu!.submenu!.find((i) => i.label === '反馈问题...');
+
+    expect(feedbackItem).toBeDefined();
+    feedbackItem!.click!();
+    expect(windowMocks.send).toHaveBeenCalledWith('sage:event:open-feedback', {});
   });
 
   it('calls Menu.setApplicationMenu', async () => {

@@ -28,7 +28,9 @@ export type SettingsTabKey =
   // T-3/T-4: 技能设置 Tab（脚本执行开关 + 技能目录）
   | 'skills'
   // G1 (2026-10-27): 全局规则 Tab（~/.sage/SAGE.md 读写）
-  | 'global-rules';
+  | 'global-rules'
+  // 2026-10-29: 用户反馈 Tab（管理员转发 + 双向会话）
+  | 'feedback';
 
 export interface SettingsSearchEntry {
   /** 条目稳定标识 */
@@ -686,6 +688,43 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: '全局规则模板',
     labelEn: 'Global rules templates',
     keywords: 'global_rules_templates 模板 套用 中文 安全',
+  },
+  // ── 用户反馈 (Feedback Hub / 2026-10-29) ──
+  {
+    key: 'feedback_manager_url',
+    tab: 'feedback',
+    label: '管理员转发地址',
+    labelEn: 'Admin forwarding URL',
+    keywords: 'feedback_manager_url 管理员 转发 地址 url 反馈 feedback admin forwarding',
+  },
+  {
+    key: 'feedback_shared_secret',
+    tab: 'feedback',
+    label: '共享密钥',
+    labelEn: 'Shared secret',
+    keywords: 'feedback_shared_secret 共享 密钥 secret 鉴权 反馈 feedback auth',
+  },
+  {
+    key: 'feedback_installation_uuid',
+    tab: 'feedback',
+    label: '本机 ID',
+    labelEn: 'Installation ID',
+    keywords: 'feedback_installation_uuid 本机 id 安装 uuid 客户端标识 反馈 feedback installation',
+  },
+  {
+    key: 'feedback_sync_now',
+    tab: 'feedback',
+    label: '立即同步',
+    labelEn: 'Sync now',
+    keywords: 'feedback_sync_now 立即 同步 反馈 feedback sync',
+  },
+  {
+    key: 'feedback_include_diagnostics',
+    tab: 'feedback',
+    label: '自动附带诊断日志',
+    labelEn: 'Attach diagnostics automatically',
+    keywords:
+      'feedback_include_diagnostics 诊断 日志 自动 附带 diagnostics log attach 反馈 feedback',
   },
 ];
 

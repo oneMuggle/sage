@@ -14,6 +14,7 @@
  */
 import type { CommandRoute } from '../commands';
 import { chatRoutes } from './chat';
+import { feedbackRoutes } from './feedback';
 import { integrationRoutes } from './integrations';
 import { memoryRoutes } from './memory';
 import { officeRoutes } from './office';
@@ -35,4 +36,5 @@ export const DOMAIN_ROUTES: Record<string, CommandRoute> = {
   ...projectRoutes,
   ...promptRoutes,
   ...integrationRoutes,
+  ...feedbackRoutes,
 };

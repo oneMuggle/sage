@@ -344,6 +344,26 @@ def _v9_add_autonomous_goals_tables(conn: Any) -> None:
 register_migration(9, "add_autonomous_goals_tables", _v9_add_autonomous_goals_tables)
 
 
+def _v10_feedback_conversations_tag(conn: Any) -> None:
+    """v10：feedback_conversations 表新增 tag 列（bug / feature / other）。
+
+    会话标签供用户自行归类反馈，客户端据此在列表里显示徽标并做筛选。
+    老库里的历史会话一律落到 ``'other'``，不改变既有行为。
+    幂等：PRAGMA 检查列存在性，已存在则跳过。
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(feedback_conversations)")
+    columns = {row["name"] for row in cursor.fetchall()}
+    if columns and "tag" not in columns:
+        cursor.execute(
+            "ALTER TABLE feedback_conversations ADD COLUMN tag TEXT NOT NULL DEFAULT 'other'"
+        )
+        conn.commit()
+
+
+register_migration(10, "feedback_conversations_tag", _v10_feedback_conversations_tag)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(

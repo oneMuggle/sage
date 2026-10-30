@@ -13,6 +13,7 @@ import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { useTheme } from './app/providers/useTheme';
 import { UpdateDialog } from './components/UpdateDialog';
 import { loadCurrentSessionId } from './entities/session/storage';
+import { onOpenFeedbackRequest } from './features/feedback/feedbackMenu';
 import { useSettingsStore } from './features/manage-settings/settingsStore';
 import { onSessionNotifyClick } from './features/send-message/sessionNotify';
 import { Chat } from './pages/Chat';
@@ -43,6 +44,10 @@ const ScheduledTasks = lazy(() =>
 );
 const Skills = lazy(() => import('./pages/Skills').then((m) => ({ default: m.default })));
 const Help = lazy(() => import('./pages/Help').then((m) => ({ default: m.Help })));
+// Phase 1.9 (2026-10-29): 用户反馈双向会话页
+const FeedbackHub = lazy(() =>
+  import('./features/feedback/FeedbackHub').then((m) => ({ default: m.FeedbackHub })),
+);
 // Task 6 (2026-09-15): 模型目录管理页面
 const ModelCatalog = lazy(() =>
   import('./pages/ModelCatalog').then((m) => ({ default: m.default })),
@@ -154,6 +159,19 @@ function SessionNotifyBridge() {
   return null;
 }
 
+// 2026-10-29 (Phase 1.11): 帮助菜单「反馈问题...」→ 主进程回发事件 →
+// 跳转 /feedback。与 SessionNotifyBridge 同构。
+function FeedbackMenuBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const unlisten = onOpenFeedbackRequest(() => navigate('/feedback'));
+    return () => {
+      void unlisten?.then((fn) => fn?.());
+    };
+  }, [navigate]);
+  return null;
+}
+
 function App() {
   const [commandOpen, setCommandOpen] = useState(false);
   // U18 (round4): 快捷键帮助覆盖层（非输入焦点下按 ? 打开）
@@ -215,6 +233,7 @@ function App() {
         <AppStartupRestore />
         <AppStartupSettings />
         <SessionNotifyBridge />
+        <FeedbackMenuBridge />
         <Routes>
           <Route
             path="/"
@@ -238,6 +257,8 @@ function App() {
             <Route path="scheduled" element={<ScheduledTasks />} />
             <Route path="orchestration" element={<Orchestration />} />
             <Route path="help" element={<Help />} />
+            {/* 2026-10-29: 用户反馈双向会话页（帮助菜单"反馈问题..."入口） */}
+            <Route path="feedback" element={<FeedbackHub />} />
             {/* Task 6 (2026-09-15): 模型目录管理 */}
             <Route path="model-catalog" element={<ModelCatalog />} />
             {/* 2026-09-19: Arena 账号池 + 注册辅助 + 模型观测（P5 起并入 /arena） */}

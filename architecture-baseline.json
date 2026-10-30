@@ -10,10 +10,10 @@
     "backend/application/services/chat_service.py": 1142,
     "backend/core/legacy/agent.py": 3093,
     "backend/core/legacy/llm_client.py": 1274,
-    "backend/data/database.py": 2114,
+    "backend/data/database.py": 2173,
     "backend/data/session_repo.py": 1087,
     "backend/data/settings_canonicalizer.py": 859,
-    "backend/main.py": 1381,
+    "backend/main.py": 1385,
     "backend/mcp/pool.py": 915,
     "backend/office/edit.py": 1297,
     "backend/office/excel.py": 1003,
@@ -50,7 +50,7 @@
     "backend/wiki/files.py": 927,
     "backend/zotero/client.py": 1171,
     "electron/__tests__/commands.test.ts": 1210,
-    "electron/main.ts": 2757,
+    "electron/main.ts": 2813,
     "electron/tests/updateIntegration.test.ts": 865,
     "electron/tests/updateManager.test.ts": 1776,
     "electron/updateManager.ts": 1493,
@@ -73,6 +73,7 @@
     "backend/adapters/out/skill/inproc.py": 949,
     "backend/api/project_routes.py": 981,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
-    "backend/tools/config_tool.py": 968
+    "backend/tools/config_tool.py": 968,
+    "scripts/feedback_receiver.py": 1154
   }
 }
