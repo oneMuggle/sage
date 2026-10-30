@@ -10,9 +10,11 @@ import { clsx } from 'clsx';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 
 import {
+  FEEDBACK_TAGS,
   searchMessages,
   uploadAttachment,
   type FeedbackSearchHitDto,
+  type FeedbackTag,
 } from '../../shared/api/feedbackApi';
 import { useI18n } from '../../shared/lib/i18n';
 
@@ -21,6 +23,8 @@ import { useFeedbackStore } from './feedbackStore';
 import { buildSearchSnippet } from './searchSnippet';
 
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+
+const TAG_FILTERS: readonly (FeedbackTag | 'all')[] = ['all', ...FEEDBACK_TAGS];
 
 function formatTimestamp(ms: number): string {
   const d = new Date(ms);
@@ -67,6 +71,17 @@ function statusLabelKey(status: string): FeedbackStatusKey {
   return 'feedback.hub.status.open';
 }
 
+type FeedbackTagKey =
+  | 'feedback.hub.tag.bug'
+  | 'feedback.hub.tag.feature'
+  | 'feedback.hub.tag.other';
+
+function tagLabelKey(tag: string): FeedbackTagKey {
+  if (tag === 'bug') return 'feedback.hub.tag.bug';
+  if (tag === 'feature') return 'feedback.hub.tag.feature';
+  return 'feedback.hub.tag.other';
+}
+
 export function FeedbackHub() {
   const { t } = useI18n();
   const conversations = useFeedbackStore((s) => s.conversations);
@@ -88,6 +103,8 @@ export function FeedbackHub() {
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [tag, setTag] = useState<FeedbackTag>('other');
+  const [tagFilter, setTagFilter] = useState<FeedbackTag | 'all'>('all');
   const [draft, setDraft] = useState('');
   const [pendingMediaIds, setPendingMediaIds] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -136,6 +153,10 @@ export function FeedbackHub() {
   const detailLoading = currentId ? loading.detail[currentId] : false;
   const detailError = currentId ? errors.detail[currentId] : null;
   const searchActive = searchQuery.trim().length > 0;
+  const filteredConversations =
+    tagFilter === 'all'
+      ? conversations
+      : conversations.filter((c) => (c.tag || 'other') === tagFilter);
 
   useEffect(() => {
     const el = streamRef.current;
@@ -147,11 +168,13 @@ export function FeedbackHub() {
     setLocalError(null);
     const id = await createAndOpen({
       title: title.trim(),
+      tag,
       body: await buildInitialBody(body.trim(), t('feedback.hub.diagnostics_suffix_header')),
     });
     if (id) {
       setTitle('');
       setBody('');
+      setTag('other');
       setCreating(false);
     } else {
       setLocalError(useFeedbackStore.getState().errors.submit ?? t('feedback.hub.create_failed'));
@@ -306,39 +329,69 @@ export function FeedbackHub() {
             )}
           </div>
         ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {conversations.length === 0 ? (
-              <p className="px-3 py-3 text-ui-xs text-muted">
-                {loading.list ? t('feedback.hub.loading') : t('feedback.hub.list.empty')}
-              </p>
-            ) : (
-              conversations.map((c) => (
+          <>
+            <div
+              className="flex flex-wrap gap-1 border-b border-border px-3 py-2"
+              data-testid="feedback-tag-filter"
+            >
+              {TAG_FILTERS.map((value) => (
                 <button
-                  key={c.id}
+                  key={value}
                   type="button"
-                  data-testid={`feedback-conversation-${c.id}`}
-                  onClick={() => {
-                    setCreating(false);
-                    void openConversation(c.id);
-                  }}
+                  data-testid={`feedback-tag-filter-${value}`}
+                  aria-pressed={tagFilter === value}
+                  onClick={() => setTagFilter(value)}
                   className={clsx(
-                    'block w-full border-b border-border/60 px-3 py-2 text-left hover:bg-bg-hover',
-                    c.id === currentId && 'bg-bg-hover',
+                    'rounded-full border px-2 py-0.5 text-ui-2xs',
+                    tagFilter === value
+                      ? 'border-primary bg-primary text-white'
+                      : 'border-border text-muted hover:bg-bg-hover',
                   )}
                 >
-                  <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-ui-sm text-text">{c.title}</span>
-                    <span className="shrink-0 text-ui-2xs text-muted">
-                      {t(statusLabelKey(c.status))}
-                    </span>
-                  </span>
-                  <span className="mt-0.5 block text-ui-2xs text-muted">
-                    {formatTimestamp(c.last_activity_at)}
-                  </span>
+                  {value === 'all' ? t('feedback.hub.filter.all') : t(tagLabelKey(value))}
                 </button>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {filteredConversations.length === 0 ? (
+                <p className="px-3 py-3 text-ui-xs text-muted">
+                  {loading.list ? t('feedback.hub.loading') : t('feedback.hub.list.empty')}
+                </p>
+              ) : (
+                filteredConversations.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    data-testid={`feedback-conversation-${c.id}`}
+                    onClick={() => {
+                      setCreating(false);
+                      void openConversation(c.id);
+                    }}
+                    className={clsx(
+                      'block w-full border-b border-border/60 px-3 py-2 text-left hover:bg-bg-hover',
+                      c.id === currentId && 'bg-bg-hover',
+                    )}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="truncate text-ui-sm text-text">{c.title}</span>
+                      <span className="shrink-0 text-ui-2xs text-muted">
+                        {t(statusLabelKey(c.status))}
+                      </span>
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-2 text-ui-2xs text-muted">
+                      <span
+                        data-testid={`feedback-conversation-tag-${c.id}`}
+                        className="rounded-full border border-border px-1.5 py-px"
+                      >
+                        {t(tagLabelKey(c.tag))}
+                      </span>
+                      <span>{formatTimestamp(c.last_activity_at)}</span>
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </>
         )}
 
         {(errors.list || syncSummary) && (
@@ -359,6 +412,28 @@ export function FeedbackHub() {
         {creating ? (
           <div className="flex-1 space-y-4 overflow-y-auto p-4" data-testid="feedback-new-form">
             <h2 className="text-ui-lg font-semibold text-ink">{t('feedback.hub.new')}</h2>
+            <div className="space-y-1">
+              <span className="text-ui-sm text-muted">{t('feedback.hub.tag.label')}</span>
+              <div className="flex gap-2">
+                {FEEDBACK_TAGS.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    data-testid={`feedback-new-tag-${value}`}
+                    aria-pressed={tag === value}
+                    onClick={() => setTag(value)}
+                    className={clsx(
+                      'rounded-md border px-3 py-1 text-ui-xs',
+                      tag === value
+                        ? 'border-primary bg-primary text-white'
+                        : 'border-border text-text hover:bg-bg-hover',
+                    )}
+                  >
+                    {t(tagLabelKey(value))}
+                  </button>
+                ))}
+              </div>
+            </div>
             <label className="block space-y-1">
               <span className="text-ui-sm text-muted">{t('feedback.hub.new.title_label')}</span>
               <input
@@ -402,6 +477,7 @@ export function FeedbackHub() {
                   setCreating(false);
                   setTitle('');
                   setBody('');
+                  setTag('other');
                 }}
                 className="rounded-md border border-border px-3 py-1.5 text-ui-sm text-text hover:bg-bg-hover"
               >
@@ -433,7 +509,8 @@ export function FeedbackHub() {
                 </h2>
                 <p className="text-ui-2xs text-muted">
                   {formatTimestamp(detail.conversation.created_at)} ·{' '}
-                  {t(statusLabelKey(detail.conversation.status))}
+                  {t(statusLabelKey(detail.conversation.status))} ·{' '}
+                  {t(tagLabelKey(detail.conversation.tag))}
                 </p>
               </div>
               <button

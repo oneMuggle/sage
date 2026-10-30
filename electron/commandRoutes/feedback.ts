@@ -34,6 +34,7 @@ export const feedbackRoutes: Record<string, CommandRoute> = {
       const body: Record<string, unknown> = {
         title: a.title,
         body: a.body,
+        tag: a.tag ?? 'other',
       };
       if (a.id !== undefined) body.id = a.id; // 幂等创建（syncer 用）
       if (a.mediaIds !== undefined) body.media_ids = a.mediaIds;

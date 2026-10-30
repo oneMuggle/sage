@@ -30,6 +30,7 @@ const conversation = {
   id: 'c-0001',
   title: '导出 PDF 乱码',
   status: 'open',
+  tag: 'other',
   app_version: '0.4.9',
   os_info: 'Windows 10',
   remote_ticket_id: null,

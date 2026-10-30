@@ -29,6 +29,7 @@ class FeedbackConversation:
     status: str  # 'open' | 'resolved' | 'closed'
     app_version: str
     os_info: str
+    tag: str = "other"  # 'bug' | 'feature' | 'other'
     remote_ticket_id: Optional[str] = None
     remote_ticket_url: Optional[str] = None
     last_activity_at: int = 0  # epoch ms
@@ -80,6 +81,7 @@ def _conversation_from_row(row: sqlite3.Row) -> FeedbackConversation:
         status=row["status"],
         app_version=row["app_version"],
         os_info=row["os_info"],
+        tag=row["tag"],
         remote_ticket_id=row["remote_ticket_id"],
         remote_ticket_url=row["remote_ticket_url"],
         last_activity_at=row["last_activity_at"],
@@ -154,16 +156,17 @@ class FeedbackRepo:
         title: str = "",
         app_version: str = "unknown",
         os_info: str = "unknown",
+        tag: str = "other",
     ) -> FeedbackConversation:
         """插入新会话。显式 id 时幂等 —— 已存在则保留原记录并返回它。"""
         now = int(time.time() * 1000)
         conv_id = id or str(uuid.uuid4())
         self._conn.execute(
             """INSERT OR IGNORE INTO feedback_conversations
-               (id, title, status, app_version, os_info,
+               (id, title, status, tag, app_version, os_info,
                 last_activity_at, created_at, updated_at)
-               VALUES (?, ?, 'open', ?, ?, ?, ?, ?)""",
-            (conv_id, title, app_version, os_info, now, now, now),
+               VALUES (?, ?, 'open', ?, ?, ?, ?, ?, ?)""",
+            (conv_id, title, tag, app_version, os_info, now, now, now),
         )
         self._conn.commit()
         existing = self.get_conversation(conv_id)
@@ -175,6 +178,7 @@ class FeedbackRepo:
             status="open",
             app_version=app_version,
             os_info=os_info,
+            tag=tag,
             last_activity_at=now,
             created_at=now,
             updated_at=now,

@@ -269,3 +269,22 @@ def test_search_clamps_limit(routed) -> None:
 
     assert len(fr.search_messages(q="needle", limit=0)) == 1
     assert len(fr.search_messages(q="needle", limit=9999)) == 2
+
+
+def test_create_conversation_with_tag(routed) -> None:
+    dto = fr.create_conversation(fr.CreateConversationRequest(title="崩溃", tag="bug"))
+
+    assert dto.tag == "bug"
+    assert fr.get_conversation(dto.id).conversation.tag == "bug"
+
+
+def test_create_conversation_defaults_to_other_tag(routed) -> None:
+    dto = fr.create_conversation(fr.CreateConversationRequest(title="随手一说"))
+
+    assert dto.tag == "other"
+
+
+def test_create_conversation_rejects_invalid_tag(routed) -> None:
+    with pytest.raises(HTTPException) as ei:
+        fr.create_conversation(fr.CreateConversationRequest(title="会话", tag="urgent"))
+    assert ei.value.status_code == 422

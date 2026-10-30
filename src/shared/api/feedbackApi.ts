@@ -21,10 +21,15 @@ export interface FeedbackMessageDto {
   synced_at: number | null;
 }
 
+export type FeedbackTag = 'bug' | 'feature' | 'other';
+
+export const FEEDBACK_TAGS: readonly FeedbackTag[] = ['bug', 'feature', 'other'];
+
 export interface FeedbackConversationDto {
   id: string;
   title: string;
   status: string;
+  tag: string;
   app_version: string;
   os_info: string;
   remote_ticket_id: string | null;
@@ -76,6 +81,7 @@ export interface SyncStatsDto {
 export interface CreateConversationArgs {
   title: string;
   body: string;
+  tag?: FeedbackTag;
   id?: string;
   mediaIds?: string[];
 }

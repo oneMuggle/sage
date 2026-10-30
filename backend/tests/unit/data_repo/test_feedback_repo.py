@@ -267,3 +267,18 @@ def test_search_messages_newest_first_and_limit(repo: FeedbackRepo) -> None:
     ]
     limited = repo.search_messages("needle", limit=2)
     assert [h.body for h in limited] == ["needle 3", "needle 2"]
+
+
+def test_create_conversation_defaults_to_other_tag(repo: FeedbackRepo) -> None:
+    conv = repo.create_conversation(title="无标签")
+
+    assert conv.tag == "other"
+    assert repo.get_conversation(conv.id).tag == "other"
+
+
+def test_create_conversation_keeps_explicit_tag(repo: FeedbackRepo) -> None:
+    conv = repo.create_conversation(id="tagged", title="标签", tag="feature")
+
+    assert conv.tag == "feature"
+    assert repo.get_conversation("tagged").tag == "feature"
+    assert [c.tag for c in repo.list_conversations()] == ["feature"]

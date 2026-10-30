@@ -48,6 +48,7 @@ MAX_SEARCH_QUERY_CHARS = 200
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 VALID_ROLES = ("user", "admin")
 VALID_STATUSES = ("open", "resolved", "closed")
+VALID_TAGS = ("bug", "feature", "other")
 
 
 # ==================== Models ====================
@@ -67,6 +68,7 @@ class FeedbackConversationDto(BaseModel):
     id: str
     title: str
     status: str
+    tag: str = "other"
     app_version: str
     os_info: str
     remote_ticket_id: Optional[str] = None
@@ -84,6 +86,7 @@ class ConversationDetailDto(BaseModel):
 class CreateConversationRequest(BaseModel):
     id: Optional[str] = None
     title: str
+    tag: str = "other"
     app_version: Optional[str] = None
     os_info: Optional[str] = None
     body: str = ""
@@ -160,6 +163,7 @@ def _to_conversation_dto(conv: FeedbackConversation) -> FeedbackConversationDto:
         id=conv.id,
         title=conv.title,
         status=conv.status,
+        tag=conv.tag,
         app_version=conv.app_version,
         os_info=conv.os_info,
         remote_ticket_id=conv.remote_ticket_id,
@@ -214,6 +218,11 @@ def create_conversation(payload: CreateConversationRequest) -> FeedbackConversat
     body = payload.body.strip()
     if len(body) > MAX_BODY_CHARS:
         raise HTTPException(status_code=422, detail=f"正文超过 {MAX_BODY_CHARS} 字上限")
+    tag = payload.tag.strip().lower()
+    if tag not in VALID_TAGS:
+        raise HTTPException(
+            status_code=422, detail=f"tag 必须是 {'/'.join(VALID_TAGS)} 之一"
+        )
 
     repo = _repo()
     if payload.id:
@@ -226,6 +235,7 @@ def create_conversation(payload: CreateConversationRequest) -> FeedbackConversat
         title=title,
         app_version=payload.app_version or _default_app_version(),
         os_info=payload.os_info or _default_os_info(),
+        tag=tag,
     )
     if body or payload.media_ids:
         repo.add_message(

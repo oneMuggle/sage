@@ -7,6 +7,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../shared/api/feedbackApi', () => ({
+  FEEDBACK_TAGS: ['bug', 'feature', 'other'],
   listConversations: vi.fn(),
   getConversation: vi.fn(),
   createConversation: vi.fn(),
@@ -34,6 +35,7 @@ const conversation = {
   id: 'c-0001',
   title: '导出 PDF 乱码',
   status: 'open',
+  tag: 'bug',
   app_version: '0.4.9',
   os_info: 'Windows 10',
   remote_ticket_id: null,
@@ -41,6 +43,13 @@ const conversation = {
   last_activity_at: 1730214000000,
   created_at: 1730214000000,
   updated_at: 1730214000000,
+};
+
+const featureConversation = {
+  ...conversation,
+  id: 'c-0002',
+  title: '希望支持批量导出',
+  tag: 'feature',
 };
 
 const message = {
@@ -108,6 +117,53 @@ describe('FeedbackHub', () => {
       ),
     );
     expect(await screen.findByTestId('feedback-message-stream')).toBeInTheDocument();
+  });
+
+  it('新建反馈默认按「其他」提交标签', async () => {
+    mockCreate.mockResolvedValue(conversation);
+    mockGet.mockResolvedValue(detail);
+    renderHub();
+
+    fireEvent.click(screen.getByTestId('feedback-new'));
+    fireEvent.change(screen.getByTestId('feedback-new-title'), {
+      target: { value: '随手一说' },
+    });
+    fireEvent.click(screen.getByTestId('feedback-new-submit'));
+
+    await waitFor(() =>
+      expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ tag: 'other' })),
+    );
+  });
+
+  it('选择「需求」后提交携带 feature 标签', async () => {
+    mockCreate.mockResolvedValue(conversation);
+    mockGet.mockResolvedValue(detail);
+    renderHub();
+
+    fireEvent.click(screen.getByTestId('feedback-new'));
+    fireEvent.click(screen.getByTestId('feedback-new-tag-feature'));
+    fireEvent.change(screen.getByTestId('feedback-new-title'), {
+      target: { value: '希望支持批量导出' },
+    });
+    fireEvent.click(screen.getByTestId('feedback-new-submit'));
+
+    await waitFor(() =>
+      expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ tag: 'feature' })),
+    );
+  });
+
+  it('会话行显示标签徽标，按标签筛选只留对应会话', async () => {
+    mockList.mockResolvedValue([conversation, featureConversation]);
+    renderHub();
+
+    const bugRow = await screen.findByTestId('feedback-conversation-c-0001');
+    expect(bugRow).toBeInTheDocument();
+    expect(screen.getByTestId('feedback-conversation-tag-c-0001')).toHaveTextContent('问题');
+
+    fireEvent.click(screen.getByTestId('feedback-tag-filter-feature'));
+
+    await waitFor(() => expect(screen.queryByTestId('feedback-conversation-c-0001')).toBeNull());
+    expect(screen.getByTestId('feedback-conversation-c-0002')).toBeInTheDocument();
   });
 
   it('输入框发送消息后追加到消息流', async () => {

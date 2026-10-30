@@ -2094,6 +2094,7 @@ class Database:
                 title TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'open'
                     CHECK(status IN ('open', 'resolved', 'closed')),
+                tag TEXT NOT NULL DEFAULT 'other',
                 remote_ticket_id TEXT,
                 remote_ticket_url TEXT,
                 app_version TEXT NOT NULL,
