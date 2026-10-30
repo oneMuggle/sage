@@ -20,7 +20,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, List, Optional
 
 from backend.zotero.exceptions import (
     ZoteroCollectionNotFoundError,
@@ -1042,13 +1042,13 @@ class ZoteroClient:
             "dateModified": row["dateModified"],
         }
 
-    def _fulltext_item_ids(self, item_id: int) -> list[int]:
+    def _fulltext_item_ids(self, item_id: int) -> List[int]:
         """Parent item + its attachment itemIDs, attachments first.
 
         Real Zotero indexes PDF full text under the attachment itemID; older
         databases (and tests) may still have text indexed on the parent.
         """
-        ids: list[int] = []
+        ids: List[int] = []
         try:
             rows = self._execute(
                 "SELECT itemID FROM itemAttachments WHERE parentItemID = ? ORDER BY itemID",
