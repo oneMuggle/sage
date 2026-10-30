@@ -85,6 +85,7 @@
 | 107  | [会话标题生成机制](./107-session-title-generation.md) | 标题 LLM 生成流程 / `title_attempts` 计数器 / 启动回补调度器 / 专用标题模型配置 |
 | 108  | [Plan Mode 增强](./108-plan-mode-enhancement.md) | 复杂度分类（simple/medium/complex）/ 执行模式推荐（single/multi/ask_user）/ scout_deep 深度调研 + ResearchSummaryCard / confirm_marker 规则引擎 + 步骤级确认（continue/skip/abort） |
 | 109  | [文件引用输入（新会话页拖拽 / @ 菜单 / 会话内回显）](./109-file-reference-composer.md) | 共享 useAtFileMenu / 草稿会话懒创建 / Welcome→Chat 首条消息附件透传 / messages.client_meta 持久化与消息 chips（main #2639 同步，win7 编号 109 避开 104=Zotero） |
+| 110  | [会话列表滚动、分页与归档](./110-session-list-scroll-archive.md) | 侧栏独立滚动面板 + 触底分页 + 手动/自动归档闭环；legacy/hex 双路径 `archived` 过滤（main #2655 / win7 #2662） |
 
 ---
 

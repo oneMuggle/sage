@@ -44,6 +44,18 @@ async def test_list_sessions_empty() -> None:
     assert sessions == []
 
 
+async def test_list_sessions_filters_archived() -> None:
+    storage = MemoryStorageAdapter()
+    active = await storage.create_session(title="active")
+    archived = await storage.create_session(title="archived")
+    assert await storage.update_session(archived, is_archived=True) == 1
+
+    assert [s["id"] for s in await storage.list_sessions()] == [active]
+    assert [s["id"] for s in await storage.list_sessions(archived=False)] == [active]
+    assert [s["id"] for s in await storage.list_sessions(archived=True)] == [archived]
+    assert (await storage.get_session(archived))["is_archived"] is True
+
+
 async def test_delete_session_removes_from_list() -> None:
     storage = MemoryStorageAdapter()
     sid = await storage.create_session(title="to-delete")
@@ -398,3 +410,20 @@ async def test_memory_adapter_offloads_to_worker_no_lock():
         f"有 task 跑在主线程: {observed_thread_ids}"
     )
     # 注:无锁设计,执行区间可重叠,本断言不约束并发序列化
+
+
+@pytest.mark.asyncio()
+async def test_sqlite_adapter_lists_archived_sessions():
+    """SqliteStorageAdapter 的 archived 过滤与 is_archived 序列化。"""
+    adapter = SqliteStorageAdapter()
+    active = await adapter.create_session(title="active-adapter")
+    archived = await adapter.create_session(title="archived-adapter")
+    assert await adapter.update_session(archived, is_archived=True) == 1
+
+    active_ids = {s["id"] for s in await adapter.list_sessions()}
+    archived_rows = await adapter.list_sessions(archived=True)
+
+    assert active in active_ids
+    assert archived not in active_ids
+    assert [s["id"] for s in archived_rows] == [archived]
+    assert archived_rows[0]["is_archived"] is True

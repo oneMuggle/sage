@@ -39,6 +39,7 @@ class _SessionState:
 
     title: str = ""
     title_attempts: int = 0
+    archived: bool = False
     messages: List[Message] = field(default_factory=list)
 
 
@@ -63,12 +64,15 @@ class MemoryStorageAdapter:
         self._sessions[session_id] = _SessionState(title=title)
         return session_id
 
-    async def list_sessions(self) -> List[Dict[str, Any]]:
-        return await to_thread(self._sync_list_sessions)
+    async def list_sessions(self, archived: Optional[bool] = None) -> List[Dict[str, Any]]:
+        return await to_thread(self._sync_list_sessions, archived)
 
-    def _sync_list_sessions(self) -> List[Dict[str, Any]]:
+    def _sync_list_sessions(self, archived: Optional[bool] = None) -> List[Dict[str, Any]]:
+        want_archived = bool(archived)
         result = []
         for sid, state in self._sessions.items():
+            if state.archived != want_archived:
+                continue
             # P0-4 (UI 优化方案 2026-09-13): 取最后一条 user/assistant 消息预览(截断 40 字符)
             preview = None
             for msg in reversed(state.messages):
@@ -80,6 +84,7 @@ class MemoryStorageAdapter:
                     "id": sid,
                     "title": state.title,
                     "message_count": len(state.messages),
+                    "is_archived": state.archived,
                     "last_message_preview": preview,
                 }
             )
@@ -97,6 +102,7 @@ class MemoryStorageAdapter:
             "title": state.title,
             "title_attempts": state.title_attempts,
             "message_count": len(state.messages),
+            "is_archived": state.archived,
         }
 
     async def update_session(self, session_id: str, **fields: Any) -> int:
@@ -110,6 +116,8 @@ class MemoryStorageAdapter:
             state.title = fields["title"]
         if "title_attempts" in fields and fields["title_attempts"] is not None:
             state.title_attempts = int(fields["title_attempts"])
+        if "is_archived" in fields and fields["is_archived"] is not None:
+            state.archived = bool(fields["is_archived"])
         return 1
 
     async def delete_session(self, session_id: str) -> int:
