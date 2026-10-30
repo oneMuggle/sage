@@ -196,6 +196,7 @@ export const zhSettingsUi = {
   'settings.memsettings.behavior_engine_suffix': '；已记住的内容请到记忆页面浏览、删除和导出。',
   'settings.memsettings.open_memory_page': '打开记忆页面',
   'settings.models.add_endpoint_hint': '请先在"端点"标签页中添加端点并测试连接',
+  'settings.models.advanced': '高级',
   'settings.models.arena_pool': 'Arena 账号池',
   'settings.models.asr_model': '语音识别 (ASR)',
   'settings.models.asr_model_desc': '用于语音转文字（选填）',
@@ -203,6 +204,9 @@ export const zhSettingsUi = {
   'settings.models.auto_context': '自动推断上下文窗口',
   'settings.models.auto_context_desc':
     '开启时根据模型目录自动选择; 关闭时使用上方的固定值 (catalog 已知时取最小值)',
+  'settings.models.chat_endpoint_readonly_desc':
+    '自动模式下由路由引擎在所选端点内按任务选择；要固定模型请切回手动',
+  'settings.models.chat_endpoint_unconfigured': '未配置（请先切回手动模式选择对话端点）',
   'settings.models.chat_model': '对话模型',
   'settings.models.chat_model_desc': '用于文本对话（必填）',
   'settings.models.embedding_model': '向量/嵌入模型',
@@ -225,6 +229,17 @@ export const zhSettingsUi = {
   'settings.models.not_used': '-- 不使用 --',
   'settings.models.open_catalog': '打开模型目录',
   'settings.models.please_select': '-- 请选择 --',
+  'settings.models.routing_auto': '自动路由（按任务选择）',
+  'settings.models.routing_auto_hint':
+    '自动模式在「对话端点」内按任务类型选择模型；视觉/嵌入/语音等仍按下方配置',
+  'settings.models.routing_manual': '手动选择模型',
+  'settings.models.routing_mode': '智能模型路由',
+  'settings.models.routing_mode_aria': '智能模型路由模式',
+  'settings.models.routing_mode_desc':
+    '自动：每条消息按任务类型在同一端点内选择模型；手动：始终使用下方选择的对话模型',
+  'settings.models.routing_table_note': '分档映射由后端 RoutingEngine 决定；本表为只读说明',
+  'settings.models.routing_task_type': '任务类型',
+  'settings.models.routing_tier': '分档',
   'settings.models.temperature_desc':
     '控制输出的随机性：数值越高越随机；0 最稳定，2 最随机。实际效果取决于模型实现',
   'settings.models.title_model': '会话标题模型',
