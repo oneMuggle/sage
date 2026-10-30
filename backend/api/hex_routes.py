@@ -511,10 +511,14 @@ async def create_session(
 async def list_sessions(
     limit: int = 100,
     offset: int = 0,
+    archived: Optional[bool] = None,
     svc: SessionService = Depends(get_session_service),
 ) -> List[dict]:
-    """Hex 路径 GET /sessions:分页列出(底层 storage 不支持分页,service 层切片)。"""
-    return await svc.list_sessions(limit=limit, offset=offset)
+    """Hex 路径 GET /sessions:分页列出(底层 storage 不支持分页,service 层切片)。
+
+    ``archived=true`` 时只返回已归档会话（侧栏归档视图）。
+    """
+    return await svc.list_sessions(limit=limit, offset=offset, archived=archived)
 
 
 @router.get("/sessions/{session_id}", response_model=dict)

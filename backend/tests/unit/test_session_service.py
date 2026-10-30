@@ -100,6 +100,15 @@ class TestListSessions:
         result = await svc.list_sessions(limit=2, offset=1)
         assert len(result) == 2
 
+    async def test_archived_filter_passes_through_storage(self, svc, storage):
+        active = await svc.create_session(title="active")
+        archived = await svc.create_session(title="archived")
+        await storage.update_session(archived, is_archived=True)
+
+        assert [s["id"] for s in await svc.list_sessions()] == [active]
+        assert [s["id"] for s in await svc.list_sessions(archived=True)] == [archived]
+        assert [s["id"] for s in await svc.list_sessions(archived=False)] == [active]
+
 
 # --------------------------------------------------------------------------- #
 # get_session
