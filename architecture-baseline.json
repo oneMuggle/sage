@@ -24,7 +24,7 @@
     "backend/office/word.py": 1591,
     "backend/orchestration/chat_dispatcher.py": 2418,
     "backend/scheduler/evolution.py": 1693,
-    "backend/services/usage_tracker.py": 959,
+    "backend/services/usage_tracker.py": 1057,
     "backend/tests/api/test_permission_routes.py": 831,
     "backend/tests/integration/test_llm_proxy_routes.py": 1154,
     "backend/tests/unit/test_chat_dispatcher_budget.py": 969,

@@ -42,13 +42,15 @@ claw 风格：pre/post tool use，allow / deny / modify 三种决策。配置存
 - **L8 PR-A (2026-09-09)**：拆 `cache_read_tokens` / `cache_creation_tokens`，派生
   `cache_hit_rate = cache_read / (prompt + cache_creation)`（取 0..1）
 - **L8 PR-B (2026-09-09)**：DB 落库 `usage_events` 表，扩 `created_at_ms / session_id`
-  索引 + 幂等 `ALTER TABLE`；range 维度 `today | 7d | 30d | total`，today 走内存
-  桶（hour），其余走 SQL `GROUP BY strftime('%Y-%m-%d', created_at_ms, 'unixepoch')`
+  索引 + 幂等 `ALTER TABLE`；range 维度 `today | 7d | 30d | total`
+- **2026-10-30 持久化修复**：`today` 不再读进程内存态，改为从 `usage_events` 按
+  本地日界（当天 00:00）聚合，重启后当天用量不丢；DB 异常仍降级内存态
 - **L8 PR-C (2026-09-09)**：`record()` 新增 `first_token_ms` / `latency_ms` 落库，
   `_norm_latency` 校验 None / bool 排除 / int>=0 / str 数字；新增
   `/trend` 时间桶序列 + `/export.csv` 文本导出（UTF-8 BOM）
 
-**重启行为**：M6 内存态已替换为 DB 落库 + 内存 today 桶双轨，重启后历史保留。
+**重启行为**：所有 range（含 today）均从 SQLite 持久表聚合；重启后用量与成本完整保留，
+内存态仅作为 DB 故障时的降级兜底。
 
 ### REST 契约
 
@@ -57,7 +59,7 @@ claw 风格：pre/post tool use，allow / deny / modify 三种决策。配置存
 | `/api/v1/usage` | GET | `range=today\|7d\|30d\|total` | `{totals, by_model, today, cache_hit_rate}` |
 | `/api/v1/usage/session/{id}` | GET | — | 单会话累计 + `cache_hit_rate` |
 | `/api/v1/usage/requests` | GET | `range`, `limit`, `offset`, `session_id?` | `{items, total, limit, offset}` |
-| `/api/v1/usage/trend` | GET | `range=today\|7d\|30d\|total` | `{range, bucket: hour\|day, series: [{ts, requests, cost_usd, cache_hit_rate, ...}]}` |
+| `/api/v1/usage/trend` | GET | `range=today\|7d\|30d\|total` | `{range, bucket: hour\|day, series: [{ts, requests, prompt_tokens, completion_tokens, total_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, cache_hit_rate, known_requests, unknown_requests}]}`；today 固定 24 槽，7d/30d/total 固定 7/30/90 槽，空槽补零 |
 | `/api/v1/usage/export.csv` | GET | `range`, `session_id?` | text/csv + UTF-8 BOM，列：id, session_id, model, prompt, completion, total, cache_read, cache_creation, cost, first_token_ms, latency_ms, created_at_iso |
 
 未知模型成本返回 `None`，前端渲染 `—` 占位。
@@ -66,12 +68,15 @@ claw 风格：pre/post tool use，allow / deny / modify 三种决策。配置存
 
 - `electron/commands.ts` — `usage_summary` / `usage_list_requests` / `usage_trend` /
   `usage_export_csv` / `usage_get_session` 共 5 个 IPC 路由
-- `src/widgets/settings/UsagePanel.tsx` — 顶部汇总（请求/Token/成本）+ cache 三列
-  （读/写/命中率）+ 4 个 range tab + by-model 表格
+- `src/pages/settings/UsageStatsTab.tsx` — 使用统计 Tab：顶部 5 张汇总卡片 + 4 个
+  range tab + by-model 分布 + CSV 导出
+- `src/widgets/settings/UsagePanel.tsx` — 历史组件（设置页 IA 重构后已无挂载点）；
+  本 PR 未删除文件，后续清理
 - `src/widgets/settings/UsageRequestsTable.tsx` — 分页请求明细（6 列 + 翻页）
-- `src/widgets/settings/UsageTrendChart.tsx` — **自绘 SVG 双线图**（requests +
-  cost_usd，600×180 viewBox，3 Y-grid，day bucket X 中点留空避免拥挤）；不引入
-  Recharts（~95KB gzipped 不划算）
+- `src/widgets/settings/UsageTrendChart.tsx` — **自绘 SVG 堆叠柱图**（输入/输出 + 成本虚线，
+  600×200 viewBox）；hover/点击/键盘（←/→/Home/End/Esc）打开时段详情卡，展示请求数、
+  输入/输出/总 token、缓存读/写、命中率、成本与未定价请求徽标；不引入 Recharts
+  （~95KB gzipped 不划算）
 - `src/widgets/chat/SessionUsageBadge.tsx` — 单会话徽章，含 🎯 命中率（≥50% 高亮 /
   ≥20% 中性 / 其他灰）
 - CSV 导出：浏览器侧 `Blob + UTF-8 BOM + ObjectURL`，文件名
@@ -83,8 +88,8 @@ claw 风格：pre/post tool use，allow / deny / modify 三种决策。配置存
 
 | 层 | 文件 | 数量 |
 | --- | --- | --- |
-| 单元 | `backend/tests/unit/test_usage_tracker.py` | 36 |
-| 前端 | `UsagePanel.test.tsx` + `UsageRequestsTable.test.tsx` + `UsageTrendChart.test.tsx` + `SessionUsageBadge.test.tsx` + commands guard | 21+ |
+| 单元 | `test_usage_tracker.py` + `test_usage_persistence.py` + `unit/api/test_usage_routes.py` + `api/test_usage_routes.py` | 70 |
+| 前端 | `UsageTrendChart.test.tsx`（hover/键盘/空态/范围切换）+ `UsagePanel.test.tsx` + `UsageRequestsTable.test.tsx` + `SessionUsageBadge.test.tsx` + usageApi/commands guard | 20+ |
 
 ## 3. 项目上下文发现（SAGE.md / CLAUDE.md）
 
@@ -121,6 +126,7 @@ claw 风格：pre/post tool use，allow / deny / modify 三种决策。配置存
 - **L8 PR-A (2026-09-09) 用量面板**：5 键（`settings.usage.cache.read/creation/cacheHitRate`、`settings.usage.range.today/total`）
 - **L8 PR-B (2026-09-09) 用量面板**：11 键（`settings.usage.range.7d/30d` ×2 + `requestsTable.*` ×9）
 - **L8 PR-C (2026-09-09) 用量面板**：7 键（`settings.usage.trend.*` ×6 + `settings.usage.exportCsv`）
+- **2026-10-30 用量时段详情**：`settings.usage.tooltip.*` 11 键 + `settings.usage.trend.hint`
 
 合计 +106 键（zh + en 同步）。`TranslationKey` 类型自动从 `zh.ts` 派生（`keyof typeof zh`），
 新增键时**必须 zh + en 同步**，否则 tsc 报 `[2353]`。

@@ -810,11 +810,79 @@ class UsageTracker:
             "unknown_requests_today": unknown_today,
         }
 
+    @staticmethod
+    def _local_day_start_ms() -> int:
+        """当天本地 00:00 的 epoch 毫秒 (today 视图边界)。"""
+        day_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        return int(day_start.timestamp() * 1000)
+
+    def _aggregate_events_since(
+        self, start_ms: int
+    ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+        """从 usage_events 聚合 start_ms 之后的用量 (today 视图的持久数据源)。
+
+        与内存态 ``summary()`` 返回同构的 (totals, by_model)。DB 异常向上抛，
+        由调用方决定是否降级到内存态。成本按 null 语义保留：范围内全为
+        未知定价时 ``estimated_cost_usd`` 保持 None 而非 0。
+        """
+        from backend.data.database import _SQLITE_LOCK, get_database
+
+        with _SQLITE_LOCK:
+            rows = get_database().get_connection().execute(
+                "SELECT model,"
+                " COUNT(*) AS requests,"
+                " COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,"
+                " COALESCE(SUM(completion_tokens), 0) AS completion_tokens,"
+                " COALESCE(SUM(cached_tokens), 0) AS cached_tokens,"
+                " COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,"
+                " COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,"
+                " SUM(CASE WHEN estimated_cost_usd IS NULL THEN 0 ELSE 1 END)"
+                " AS known_requests,"
+                " SUM(CASE WHEN estimated_cost_usd IS NULL THEN 1 ELSE 0 END)"
+                " AS unknown_requests,"
+                " SUM(estimated_cost_usd) AS estimated_cost_usd"
+                " FROM usage_events WHERE created_at >= ?"
+                " GROUP BY model ORDER BY requests DESC, prompt_tokens DESC, model ASC",
+                (int(start_ms),),
+            ).fetchall()
+        agg = _empty_bucket()
+        agg["known_requests"] = 0
+        agg["unknown_requests"] = 0
+        by_model: List[Dict[str, Any]] = []
+        for row in rows:
+            cost = row["estimated_cost_usd"]
+            bucket = {
+                "model": str(row["model"] or ""),
+                "requests": int(row["requests"] or 0),
+                "prompt_tokens": int(row["prompt_tokens"] or 0),
+                "completion_tokens": int(row["completion_tokens"] or 0),
+                "cached_tokens": int(row["cached_tokens"] or 0),
+                "cache_read_tokens": int(row["cache_read_tokens"] or 0),
+                "cache_creation_tokens": int(row["cache_creation_tokens"] or 0),
+                "estimated_cost_usd": None if cost is None else float(cost),
+                "known_requests": int(row["known_requests"] or 0),
+                "unknown_requests": int(row["unknown_requests"] or 0),
+            }
+            by_model.append(bucket)
+            agg["requests"] += bucket["requests"]
+            agg["prompt_tokens"] += bucket["prompt_tokens"]
+            agg["completion_tokens"] += bucket["completion_tokens"]
+            agg["cached_tokens"] += bucket["cached_tokens"]
+            agg["cache_read_tokens"] += bucket["cache_read_tokens"]
+            agg["cache_creation_tokens"] += bucket["cache_creation_tokens"]
+            agg["known_requests"] += bucket["known_requests"]
+            agg["unknown_requests"] += bucket["unknown_requests"]
+            if cost is not None:
+                agg["estimated_cost_usd"] = round(
+                    float(agg["estimated_cost_usd"] or 0.0) + float(cost), 8
+                )
+        return agg, by_model
+
     def summary_with_range(self, range_: str) -> Dict[str, Any]:
         """L8 PR-B (2026-09-09): 按时间范围返回 summary。
 
         ``range_`` 取值:
-        - ``today``: 当前内存态 summary (来自 ``summary()``, 重启即失)
+        - ``today``: 从 usage_events 聚合本地当日记录（重启不丢）
         - ``7d`` / ``30d``: 从 usage_daily_rollups 取最近 N 天 SUM 聚合
         - ``total``: 从 usage_daily_rollups 全表 SUM 聚合
 
@@ -822,12 +890,42 @@ class UsageTracker:
 
         Task 5 (2026-09-15): 追加 ``known_requests`` / ``unknown_requests``
         / ``has_partial_estimates`` — 让前端能标出"部分估算"。所有 range
-        都从 rollup 聚合或内存态直接产出这三个字段，不再有路径差异。
+        都从 rollup 聚合或 usage_events 直接产出这三个字段，不再有路径差异。
         """
         if range_ == "today":
-            data = dict(self.summary())
-            data["range"] = "today"
-            return data
+            try:
+                agg, by_model = self._aggregate_events_since(self._local_day_start_ms())
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "summary_with_range(today) DB 异常, 降级到内存态: %s", exc
+                )
+                data = dict(self.summary())
+                data["range"] = "today"
+                return data
+            prompt_total = int(agg["prompt_tokens"] or 0)
+            cache_read = int(agg["cache_read_tokens"] or 0)
+            cache_creation = int(agg["cache_creation_tokens"] or 0)
+            eligible = prompt_total + cache_creation
+            hit_rate = round(cache_read / eligible, 6) if eligible > 0 else 0.0
+            if cache_read == 0 and cache_creation == 0:
+                # 兼容: 旧记录只有 cached_tokens 时按 cache_read 口径处理
+                cached_legacy = int(agg["cached_tokens"] or 0)
+                if cached_legacy and prompt_total:
+                    hit_rate = round(cached_legacy / prompt_total, 6)
+            known_total = int(agg["known_requests"] or 0)
+            unknown_total = int(agg["unknown_requests"] or 0)
+            return {
+                "totals": agg,
+                "by_model": by_model,
+                "today": dict(agg),
+                "cache_hit_rate": hit_rate,
+                "range": "today",
+                "known_requests": known_total,
+                "unknown_requests": unknown_total,
+                "has_partial_estimates": known_total > 0 and unknown_total > 0,
+                "known_requests_today": known_total,
+                "unknown_requests_today": unknown_total,
+            }
         try:
             days = {"7d": 7, "30d": 30}.get(range_)
             from backend.data.database import _SQLITE_LOCK, get_database

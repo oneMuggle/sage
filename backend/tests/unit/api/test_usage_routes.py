@@ -258,13 +258,20 @@ async def test_trend_day_bucket_and_hit_rate(monkeypatch):
     out = await ur.get_usage_trend(range="7d", session_id=None)
     assert out["range"] == "7d"
     assert out["bucket"] == "day"
-    assert len(out["series"]) == 1
-    point = out["series"][0]
+    # 7d 固定 7 个自然日槽（含今天），空槽补零
+    assert len(out["series"]) == 7
+    assert sum(p["requests"] for p in out["series"]) == 1
+    point = next(p for p in out["series"] if p["requests"] == 1)
     assert point["ts"].endswith("T00:00:00")
-    assert point["requests"] == 1
     assert point["prompt_tokens"] == 100
     assert point["completion_tokens"] == 50
+    assert point["total_tokens"] == 150
+    assert point["cached_tokens"] == 0
+    assert point["cache_read_tokens"] == 40
+    assert point["cache_creation_tokens"] == 10
     assert point["cost_usd"] == 0.25
+    assert point["known_requests"] == 1
+    assert point["unknown_requests"] == 0
     # eligible = prompt + cache_creation = 110; read = 40
     assert point["cache_hit_rate"] == round(40 / 110, 4)
 
@@ -278,7 +285,9 @@ async def test_trend_zero_eligible_hit_rate(monkeypatch):
     )
     out = await ur.get_usage_trend(range="today", session_id=None)
     assert out["bucket"] == "hour"
-    assert out["series"][0]["cache_hit_rate"] == 0.0
+    assert len(out["series"]) == 24
+    point = next(p for p in out["series"] if p["requests"] == 1)
+    assert point["cache_hit_rate"] == 0.0
 
 
 @pytest.mark.asyncio()
@@ -288,8 +297,54 @@ async def test_trend_session_filter_excludes(monkeypatch):
         [_seed_row(id=1), _seed_row(id=2, session_id="sess-other")],
     )
     out = await ur.get_usage_trend(range="7d", session_id="sess-other")
-    assert len(out["series"]) == 1
+    assert len(out["series"]) == 7
+    non_empty = [p for p in out["series"] if p["requests"] > 0]
+    assert len(non_empty) == 1
+    assert non_empty[0]["requests"] == 1
+
+
+@pytest.mark.asyncio()
+async def test_trend_today_uses_local_midnight(monkeypatch):
+    from datetime import datetime
+
+    midnight_ms = int(
+        datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        * 1000
+    )
+    _install_db(
+        monkeypatch,
+        [
+            _seed_row(id=1, created_at=midnight_ms - 60_000),  # 昨天 23:59
+            _seed_row(id=2, created_at=midnight_ms + 60_000),  # 今天 00:01
+        ],
+    )
+    out = await ur.get_usage_trend(range="today", session_id=None)
+    assert len(out["series"]) == 24
+    assert sum(p["requests"] for p in out["series"]) == 1
     assert out["series"][0]["requests"] == 1
+
+
+@pytest.mark.asyncio()
+async def test_trend_fills_empty_buckets_and_flags_unknown_cost(monkeypatch):
+    _install_db(monkeypatch, [_seed_row(id=1, estimated_cost_usd=None)])
+    out = await ur.get_usage_trend(range="7d", session_id=None)
+    assert len(out["series"]) == 7
+    point = next(p for p in out["series"] if p["requests"] == 1)
+    assert point["cost_usd"] == 0.0
+    assert point["known_requests"] == 0
+    assert point["unknown_requests"] == 1
+    empty = [p for p in out["series"] if p["requests"] == 0]
+    assert len(empty) == 6
+    assert all(p["total_tokens"] == 0 for p in empty)
+
+
+@pytest.mark.asyncio()
+async def test_trend_total_has_90_day_slots(monkeypatch):
+    _install_db(monkeypatch, [])
+    out = await ur.get_usage_trend(range="total", session_id=None)
+    assert out["range"] == "total"
+    assert len(out["series"]) == 90
+    assert out["series"][-1]["ts"].endswith("T00:00:00")
 
 
 @pytest.mark.asyncio()

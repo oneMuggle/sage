@@ -392,6 +392,7 @@ export const zhSettingsAndModels = {
   'settings.usage.trend.empty': '所选时间范围内暂无趋势数据',
   'settings.usage.trend.legendRequests': '请求数',
   'settings.usage.trend.legendCost': '成本',
+  'settings.usage.trend.hint': '悬停或聚焦图表查看时段详情',
   'settings.usage.trend.loadFailed': '趋势数据加载失败',
   'settings.usage.exportCsv': '导出 CSV',
   // Task 6 (2026-09-15): cost 未知 vs 0, 部分估算脚注
