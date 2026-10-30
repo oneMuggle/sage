@@ -357,3 +357,12 @@ function mapBackendItem(raw: ReviewItemRaw): ReviewItem {
 - **已知剩余**：后台守护进程式队列执行、PDF FTS itemID 修正、
   `literature_aggregator` 目录收敛仍未做（P2）。
 
+## 2026-10-30 P2 收尾
+
+- **队列**：`backend/wiki/queue_daemon.py` 每 60s 消费项目 pending 队列，与手动入口共享进程锁；main lifespan 启停。
+- **文献聚合**：`literature_aggregator` 接入 `wiki/zotero/items`，同步后生成 `wiki/literature/index.md`，并新增 `POST /wiki/literature/review`。
+- **图谱**：新增 Adamic-Adar 第 4 信号，前后端同步。
+- **向量库**：`SAGE_WIKI_VECTOR_BACKEND=hnsw` 可选启用 HNSW，缺依赖自动回退 JSON。
+- **PDF 全文**：Zotero FTS 改为附件 itemID 优先，父条目 legacy fallback。
+- **剩余观察项**：真实 Zotero 库手工验证、Win7 实机 reparse/HNSW 验证。
+

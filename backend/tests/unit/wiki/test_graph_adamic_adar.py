@@ -44,3 +44,18 @@ def test_no_adamic_adar_without_common_neighbors(tmp_path):
     graph = build_graph(tmp_path)
 
     assert all(edge.signal is not GraphSignal.AdamicAdar for edge in graph.edges)
+
+
+def test_adamic_adar_edges_are_capped_per_node(tmp_path):
+    for i in range(10):
+        _write_page(tmp_path, f"leaf{i}.md", f"Leaf{i}", "[[Hub]]")
+    _write_page(tmp_path, "hub.md", "Hub", "no links")
+
+    graph = build_graph(tmp_path)
+    outdegree = {}
+    for edge in graph.edges:
+        if edge.signal is GraphSignal.AdamicAdar:
+            outdegree[edge.source] = outdegree.get(edge.source, 0) + 1
+
+    assert outdegree
+    assert max(outdegree.values()) <= 5

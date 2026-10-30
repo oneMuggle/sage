@@ -161,6 +161,7 @@ def build_graph(project_root: Path) -> GraphData:
         neighbours[edge.source].add(edge.target)
         neighbours[edge.target].add(edge.source)
 
+    aa_candidates: Dict[str, List[Tuple[float, str]]] = defaultdict(list)
     for i, node_a in enumerate(nodes):
         for node_b in nodes[i + 1 :]:
             common = neighbours[node_a.id] & neighbours[node_b.id]
@@ -170,19 +171,25 @@ def build_graph(project_root: Path) -> GraphData:
                 1.0 / math.log(max(len(neighbours[neighbour]), 2))
                 for neighbour in common
             )
-            weight = score * ADAMIC_ADAR_WEIGHT
-            for source, target in [(node_a, node_b), (node_b, node_a)]:
-                edge_key = (source.id, target.id, GraphSignal.AdamicAdar)
-                if edge_key not in edge_set:
-                    edges.append(
-                        GraphEdge(
-                            source=source.id,
-                            target=target.id,
-                            signal=GraphSignal.AdamicAdar,
-                            weight=weight,
-                        )
-                    )
-                    edge_set.add(edge_key)
+            aa_candidates[node_a.id].append((score, node_b.id))
+            aa_candidates[node_b.id].append((score, node_a.id))
+
+    # Keep only the strongest 5 AA neighbours per node so large wikis do not
+    # produce an O(n²) edge set (the reference implementation scores on demand).
+    for source_id, candidates in aa_candidates.items():
+        for score, target_id in sorted(candidates, reverse=True)[:5]:
+            edge_key = (source_id, target_id, GraphSignal.AdamicAdar)
+            if edge_key in edge_set:
+                continue
+            edges.append(
+                GraphEdge(
+                    source=source_id,
+                    target=target_id,
+                    signal=GraphSignal.AdamicAdar,
+                    weight=score * ADAMIC_ADAR_WEIGHT,
+                )
+            )
+            edge_set.add(edge_key)
 
     return GraphData(nodes=nodes, edges=edges)
 
