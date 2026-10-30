@@ -224,6 +224,35 @@ async def copy_to_raw(
     return _copy_to_raw_windows(project_root, filename, payload, dest_path, source_content_provided)
 
 
+async def import_source_into_raw(
+    project_root: Path,
+    external_path: Path,
+    max_bytes: int = MAX_FILE_BYTES,
+) -> Path:
+    """把项目外部的普通文件导入 ``raw/sources/``。
+
+    外部路径必须是绝对路径、存在的普通文件（symlink fail-closed）；
+    读取量受 ``max_bytes`` 限制，随后复用 :func:`copy_to_raw` 的
+    O_EXCL/no-follow 落盘与内容一致性检查。
+    """
+    path = external_path.expanduser()
+    if not path.is_absolute():
+        raise ValueError("源文件必须是绝对路径")
+    try:
+        mode = os.lstat(path).st_mode
+    except OSError as exc:
+        raise ValueError("源文件不存在") from exc
+    if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+        raise ValueError("仅支持普通文件")
+    payload = secure_read_file_bounded(path.parent, path, max_bytes)
+    return await copy_to_raw(
+        project_root,
+        path,
+        logical_filename=path.name,
+        source_content=payload,
+    )
+
+
 def _directory_flags() -> int:
     return os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
 

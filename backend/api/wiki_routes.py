@@ -621,6 +621,31 @@ async def delete_source(source_path: str, project_path: str) -> dict:
         raise HTTPException(status_code=500, detail="级联删除失败") from e
 
 
+class SourceImportRequest(BaseModel):
+    """外部文件导入请求。"""
+
+    source_path: str
+    project_path: str
+
+
+@router.post("/source/import")
+async def import_source(req: SourceImportRequest) -> dict:
+    """把项目外部文件导入 ``raw/sources/``，返回项目内相对路径。"""
+    from backend.wiki.ingest import import_source_into_raw
+
+    authorize_registered_project(req.project_path)
+    project_root = _canonical_project_root(req.project_path)
+    try:
+        dest = await import_source_into_raw(project_root, Path(req.source_path))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        logger.warning("source import failed: error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=400, detail="文件导入失败") from exc
+    relative = str(dest.relative_to(project_root)).replace("\\", "/")
+    return {"relative_path": relative, "name": dest.name}
+
+
 @router.post("/rename")
 async def rename_file(old_path: str, new_path: str, project_path: str) -> dict:
     """重命名文件。

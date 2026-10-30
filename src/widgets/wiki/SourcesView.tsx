@@ -1,96 +1,169 @@
-// Sources View - 源文件管理视图
-import { FolderPlus, Upload } from 'lucide-react';
-import { useEffect, useState } from 'react';
+// Sources View - 源文件管理视图（真实后端数据）
+import { RefreshCw, Upload } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { resolveEndpoint } from '../../entities/setting/types';
-import { mockSourcesTree } from '../../entities/wiki/mock-data';
 import { useWikiStore } from '../../entities/wiki/store';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { useWikiIngest } from '../../features/wiki/useWikiIngest';
-import { wikiIngestStream } from '../../shared/api-client/wiki';
+import {
+  wikiDeleteSource,
+  wikiImportSource,
+  wikiIngestStream,
+  wikiListDirectory,
+  wikiReadFile,
+} from '../../shared/api-client/wiki';
+import type { FileNode } from '../../shared/types/wiki';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 import { SourcesTree } from './SourcesTree';
 import { WikiIngestProgress } from './WikiIngestProgress';
 
+const TEXT_PREVIEW_EXTENSIONS = new Set(['md', 'markdown', 'txt']);
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function fileExtension(path: string): string {
+  return path.split('.').pop()?.toLowerCase() ?? '';
+}
+
 export function SourcesView() {
+  const [nodes, setNodes] = useState<FileNode[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [ingestId, setIngestId] = useState<string | null>(null);
   const project = useWikiStore((s) => s.project);
 
-  // PR-3 Task 4: `useWikiIngest(ingestId)` is the existing hook that
-  // subscribes to `wiki-ingest-{id}-progress` and exposes
-  // {progress, done, error}. Setting `ingestId` triggers the listener;
-  // clearing it (via `reset`) hides the bar. We feed the hook output
-  // straight into <WikiIngestProgress> for the live STAGE_LABELS bar.
   const ingest = useWikiIngest(ingestId);
+  const settings = useSettings();
 
-  // PR-3 follow-up: auto-dismiss the progress bar 4s after a terminal
-  // state (done / error). User can still see the final state for a moment
-  // before the bar disappears; new ingests reset the timer.
   useEffect(() => {
     if (!ingest.done && !ingest.error) return;
     const t = setTimeout(() => setIngestId(null), 4000);
     return () => clearTimeout(t);
   }, [ingest.done, ingest.error]);
 
-  // PR-3 Task 4: replace the previous `alert(\`模拟导入: ${path}\`)` mock
-  // with a real stream invocation. `wikiIngestStream` is invoke-only — it
-  // returns the server-allocated streamId immediately; the backend relay
-  // publishes `sage:event:wiki-ingest-{streamId}-progress` events which
-  // the existing `useWikiIngest` hook subscribes to.
-  //
-  // LLM config is resolved from `useSettings()` (same pattern as
-  // WikiChat.tsx). If the user hasn't configured a chat endpoint +
-  // chatModel, the import button is disabled and the user sees no
-  // progress event. This is the same gate WikiChat uses for send.
-  const settings = useSettings();
-  const ingestEndpoint = settings ? resolveEndpoint(settings.settings.modelSelections.chatModel, settings.settings.endpoints) : undefined;
-  const ingestModelId = settings?.settings.modelSelections.chatModel.modelId ?? '';
-
-  const handleIngest = async (path: string) => {
-    if (!project) {
-      // Reset hook state so the user can retry after opening a project.
-      ingest.reset();
+  const loadSources = useCallback(async () => {
+    if (!project?.path) {
+      setNodes([]);
       return;
     }
-    if (!ingestEndpoint || !ingestModelId) {
-      // No LLM endpoint configured — silently no-op (button should also
-      // be disabled, but this is a defensive guard).
+    setLoading(true);
+    try {
+      const listing = await wikiListDirectory('raw/sources', project.path);
+      setNodes(listing[0]?.children ?? []);
+    } catch {
+      // raw/sources 可能尚未创建：空态比报错更符合首次使用体验。
+      setNodes([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [project?.path]);
+
+  useEffect(() => {
+    void loadSources();
+  }, [loadSources]);
+
+  const handleIngest = async (path: string) => {
+    if (!project) return;
+    const endpoint = settings
+      ? resolveEndpoint(
+          settings.settings.modelSelections.chatModel,
+          settings.settings.endpoints,
+        )
+      : undefined;
+    const modelId = settings?.settings.modelSelections.chatModel.modelId ?? '';
+    if (!endpoint || !modelId) {
+      toast.error('请先在设置中配置聊天模型');
       return;
     }
     try {
       const { streamId } = await wikiIngestStream({
         sourceFile: path,
         projectPath: project.path,
-        llmBaseUrl: ingestEndpoint.baseUrl,
-        llmApiKey: ingestEndpoint.apiKey,
-        llmModel: ingestModelId,
-        // Reuse the chat endpoint as the embed endpoint (MVP).
-        embedBaseUrl: ingestEndpoint.baseUrl,
-        embedApiKey: ingestEndpoint.apiKey,
-        embedModel: ingestModelId,  // same model used for both chat + embed (MVP)
+        llmBaseUrl: endpoint.baseUrl,
+        llmApiKey: endpoint.apiKey,
+        llmModel: modelId,
+        embedBaseUrl: endpoint.baseUrl,
+        embedApiKey: endpoint.apiKey,
+        embedModel: modelId,
       });
       setIngestId(streamId);
-    } catch {
-      // Invoke-only failure (IPC dispatch error). Swallow silently —
-      // the main process IPC layer logs this kind of error, and the
-      // user sees no progress UI change (the failed stream never
-      // produced a streamId so `useWikiIngest` stays idle).
+    } catch (error) {
+      toast.error(`导入失败: ${errorMessage(error)}`);
     }
   };
 
-  const handleDelete = (path: string) => {
-    void confirmDialog({
-      title: '删除源文件',
-      message: `确定删除 ${path}?`,
-      danger: true,
-    }).then((ok) => {
-      if (ok) {
-        toast.info(`模拟删除: ${path}`);
-      }
+  const handleImport = async () => {
+    if (!project) return;
+    const picker = window.electronAPI?.selectFile;
+    if (!picker) {
+      toast.error('当前环境不支持文件选择器');
+      return;
+    }
+    const picked = await picker({
+      title: '选择要导入的文件',
+      filters: [
+        {
+          name: '文档',
+          extensions: ['md', 'markdown', 'txt', 'pdf', 'docx', 'pptx', 'xlsx', 'html', 'csv'],
+        },
+      ],
     });
+    if (!picked) return;
+
+    setImporting(true);
+    try {
+      const result = await wikiImportSource(picked, project.path);
+      toast.success(`已导入 ${result.name}`);
+      await loadSources();
+      await handleIngest(result.relative_path);
+    } catch (error) {
+      toast.error(`导入失败: ${errorMessage(error)}`);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleSelectFile = async (path: string) => {
+    setSelectedFile(path);
+    setPreviewContent(null);
+    if (!project?.path || !TEXT_PREVIEW_EXTENSIONS.has(fileExtension(path))) return;
+    setPreviewLoading(true);
+    try {
+      setPreviewContent(await wikiReadFile(path, project.path));
+    } catch (error) {
+      toast.error(`预览失败: ${errorMessage(error)}`);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleDelete = async (path: string) => {
+    if (!project) return;
+    const ok = await confirmDialog({
+      title: '删除源文件',
+      message: `确定删除 ${path}？关联的 Wiki 页面与向量也会被清理。`,
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await wikiDeleteSource(path, project.path);
+      toast.success('源文件已删除');
+      if (selectedFile === path) {
+        setSelectedFile(null);
+        setPreviewContent(null);
+      }
+      await loadSources();
+    } catch (error) {
+      toast.error(`删除失败: ${errorMessage(error)}`);
+    }
   };
 
   return (
@@ -102,20 +175,27 @@ export function SourcesView() {
           <p className="text-xs text-muted mt-0.5">管理原始资料文档，支持导入到 Wiki</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-muted transition-colors">
-            <FolderPlus className="h-3 w-3" />
-            新建文件夹
+          <button
+            type="button"
+            className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-muted transition-colors disabled:opacity-50"
+            disabled={loading}
+            onClick={() => void loadSources()}
+          >
+            <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+            刷新
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-primary text-text-inverse rounded-md hover:bg-primary-hover transition-colors">
+          <button
+            type="button"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-text-inverse rounded-md hover:bg-primary-hover transition-colors disabled:opacity-50"
+            disabled={!project || importing}
+            onClick={() => void handleImport()}
+          >
             <Upload className="h-4 w-4" />
-            导入文件
+            {importing ? '导入中…' : '导入文件'}
           </button>
         </div>
       </div>
 
-      {/* PR-3 Task 4: render live ingest progress when a stream is active.
-          Component reads `progress`, `done`, `error` and renders the
-          STAGE_LABELS-driven bar; collapses to null when none are set. */}
       {(ingest.progress || ingest.done || ingest.error) && (
         <div className="border-b border-border px-4 py-3 bg-surface" data-testid="ingest-progress">
           <WikiIngestProgress progress={ingest.progress} done={ingest.done} error={ingest.error} />
@@ -131,12 +211,20 @@ export function SourcesView() {
               raw/sources
             </span>
           </div>
-          <SourcesTree
-            nodes={mockSourcesTree}
-            onFileClick={setSelectedFile}
-            onIngest={handleIngest}
-            onDelete={handleDelete}
-          />
+          {loading && nodes.length === 0 ? (
+            <p className="px-3 py-4 text-xs text-muted">加载中…</p>
+          ) : nodes.length === 0 ? (
+            <p className="px-3 py-4 text-xs text-muted">
+              暂无来源文件。点击「导入文件」添加第一份资料。
+            </p>
+          ) : (
+            <SourcesTree
+              nodes={nodes}
+              onFileClick={(path) => void handleSelectFile(path)}
+              onIngest={(path) => void handleIngest(path)}
+              onDelete={(path) => void handleDelete(path)}
+            />
+          )}
         </div>
 
         {/* Preview/Info panel */}
@@ -148,34 +236,22 @@ export function SourcesView() {
               </h3>
               <p className="text-xs text-muted mb-4">{selectedFile}</p>
 
-              <div className="rounded-lg border border-border bg-surface p-4 mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-medium text-text">文件信息</h4>
-                </div>
-                <dl className="space-y-1 text-xs">
-                  <div className="flex justify-between">
-                    <dt className="text-muted">路径:</dt>
-                    <dd className="text-text">{selectedFile}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted">大小:</dt>
-                    <dd className="text-text">2.3 MB</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted">修改时间:</dt>
-                    <dd className="text-text">2024-01-20 14:30</dd>
-                  </div>
-                </dl>
-              </div>
-
               <div className="rounded-lg border border-border bg-surface p-4">
                 <h4 className="text-sm font-medium text-text mb-2">预览</h4>
-                <p className="text-xs text-muted italic">（文件预览功能待实现）</p>
+                {previewLoading ? (
+                  <p className="text-xs text-muted">读取中…</p>
+                ) : previewContent !== null ? (
+                  <pre className="whitespace-pre-wrap break-words text-xs text-text bg-bg-muted p-3 rounded max-h-[60vh] overflow-y-auto">
+                    {previewContent}
+                  </pre>
+                ) : (
+                  <p className="text-xs text-muted italic">该类型文件不支持文本预览</p>
+                )}
               </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-muted">
-              <FolderPlus className="h-12 w-12 mb-2 opacity-30" />
+              <Upload className="h-12 w-12 opacity-30 mb-2" />
               <p className="text-sm">选择左侧文件查看详情</p>
               <p className="text-xs mt-1">或导入新文件到 Wiki</p>
             </div>

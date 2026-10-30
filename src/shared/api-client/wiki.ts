@@ -127,7 +127,24 @@ export async function wikiDeleteSource(
   sourcePath: string,
   projectPath: string,
 ): Promise<CascadeDeleteResult> {
-  return httpDelete<CascadeDeleteResult>(`/wiki/source/${sourcePath}`, {
+  const encoded = sourcePath.split('/').map(encodeURIComponent).join('/');
+  return httpDelete<CascadeDeleteResult>(`/wiki/source/${encoded}`, {
+    project_path: projectPath,
+  });
+}
+
+/**
+ * 把项目外部的普通文件导入 `raw/sources/`。
+ *
+ * 后端只接受绝对路径、普通文件、且大小不超过 ingest 上限；
+ * 返回项目内相对路径，可直接传给 `wikiIngestStream`。
+ */
+export async function wikiImportSource(
+  sourcePath: string,
+  projectPath: string,
+): Promise<{ relative_path: string; name: string }> {
+  return httpPost('/wiki/source/import', {
+    source_path: sourcePath,
     project_path: projectPath,
   });
 }
