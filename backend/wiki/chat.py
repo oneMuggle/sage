@@ -47,7 +47,11 @@ class ChatConfig:
     embed_model: str
     embed_dim: int = DEFAULT_EMBED_DIM
     max_tokens: int = 4096
+<<<<<<< HEAD
     selected_paths: Optional[List[str]] = None
+=======
+    selected_paths: List[str] | None = None
+>>>>>>> origin/main
 
 
 async def chat_with_wiki(

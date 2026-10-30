@@ -238,6 +238,7 @@ def _clean_cookie(item: Dict[str, Any], default_domain: str) -> Optional[Dict[st
     return cleaned
 
 
+<<<<<<< HEAD
 def normalize_cookie_for_cdp(cookie: Dict[str, Any]) -> Dict[str, Any]:
     """归一化 cookie 字段以兼容 Chrome/Firefox CDP ``Storage.setCookies``。
 
@@ -265,6 +266,8 @@ def normalize_cookie_for_cdp(cookie: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @_vault_write
+=======
+>>>>>>> origin/main
 def save_credential(
     domain: str,
     cookies: List[Dict[str, Any]],
@@ -298,12 +301,15 @@ def save_credential(
     source_profile = (source_profile or "").strip()
     if source_profile:
         entry["source_profile"] = source_profile
+<<<<<<< HEAD
     # cookie 续期（save_credential）不能顺带清掉已保存的 localStorage 快照
     old_entry = vault.get(domain)
     if isinstance(old_entry, dict) and old_entry.get("origins_enc"):
         entry["origins_enc"] = old_entry["origins_enc"]
         if old_entry.get("storage_saved_at"):
             entry["storage_saved_at"] = old_entry["storage_saved_at"]
+=======
+>>>>>>> origin/main
     vault[domain] = entry
     _save_vault(store, vault)
     if current_scheme() == "none":
@@ -674,7 +680,10 @@ class CredentialResolution:
         "kind",
         "headers",
         "cookies",
+<<<<<<< HEAD
         "origins",
+=======
+>>>>>>> origin/main
         "expired_names",
         "expires_in",
         "domain",
@@ -686,7 +695,10 @@ class CredentialResolution:
         kind: Optional[str] = None,
         headers: Optional[Dict[str, str]] = None,
         cookies: Optional[List[Dict[str, Any]]] = None,
+<<<<<<< HEAD
         origins: Optional[List[Dict[str, Any]]] = None,
+=======
+>>>>>>> origin/main
         expired_names: Optional[List[str]] = None,
         expires_in: Optional[int] = None,
         domain: str = "",
@@ -695,7 +707,10 @@ class CredentialResolution:
         self.kind = kind
         self.headers = headers or {}
         self.cookies = cookies or []
+<<<<<<< HEAD
         self.origins = origins or []
+=======
+>>>>>>> origin/main
         self.expired_names = expired_names or []
         self.expires_in = expires_in
         self.domain = domain
@@ -768,7 +783,10 @@ def resolve_credential(  # noqa: PLR0911 — 各状态独立 return，扁平更�
         kind=kind,
         headers=headers,
         cookies=usable,
+<<<<<<< HEAD
         origins=_origins_for_url(entry, url, domain),
+=======
+>>>>>>> origin/main
         expired_names=expired_names,
         expires_in=expires_in,
         domain=domain,
@@ -938,7 +956,10 @@ def merge_set_cookies(
 # --------------------------------------------------------------------------- misc
 
 
+<<<<<<< HEAD
 @_vault_write
+=======
+>>>>>>> origin/main
 def merge_cdp_cookies(
     domain: str,
     cookies: List[Dict[str, Any]],
@@ -1022,12 +1043,17 @@ def merge_cdp_cookies(
             cleaned_input["secure"] = True
         if item.get("httpOnly"):
             cleaned_input["httpOnly"] = True
+<<<<<<< HEAD
         same_site = item.get("sameSite")
         if same_site:
             cleaned_input["sameSite"] = str(same_site)
         else:
             # Firefox CDP 可能省略 sameSite，默认为 "Lax"（RFC 6265bis 默认值）
             cleaned_input["sameSite"] = "Lax"
+=======
+        if item.get("sameSite"):
+            cleaned_input["sameSite"] = str(item.get("sameSite"))
+>>>>>>> origin/main
         cleaned = _clean_cookie(cleaned_input, domain)
         if cleaned is None:
             continue
@@ -1061,7 +1087,10 @@ def get_source_profile(domain: str, repo: Optional[Any] = None) -> Optional[str]
     return str(source) if source else None
 
 
+<<<<<<< HEAD
 @_vault_write
+=======
+>>>>>>> origin/main
 def delete_credential(domain: str, repo: Optional[Any] = None) -> bool:
     """删除某 domain 档案；返回是否确有删除。"""
     domain = (domain or "").strip().lower()
@@ -1074,6 +1103,50 @@ def delete_credential(domain: str, repo: Optional[Any] = None) -> bool:
     del vault[domain]
     _save_vault(store, vault)
     return True
+
+
+def find_credential_for_host(hostname: str, repo: Optional[Any] = None) -> Optional[str]:
+    """为给定 hostname 查找最匹配的凭据档案 domain。
+
+    遍历所有档案，用 ``cookie_domain_matches()`` 判定匹配；多候选时取域名最长者
+    （最具体匹配）。跳过已过期档案。无匹配返回 ``None``。
+
+    供 ``web_fetch`` 在未显式传 ``credential_domain`` 时自动推断使用。
+    """
+    hostname = (hostname or "").strip().lower()
+    if not hostname:
+        return None
+    store = _get_repo(repo)
+    vault = _load_vault(store)
+    now = time.time()
+
+    best_match: Optional[str] = None
+    best_len = -1
+
+    for domain, entry in vault.items():
+        if not cookie_domain_matches(hostname, domain):
+            continue
+        # 检查是否过期
+        kind = _entry_kind(entry)
+        if kind == KIND_HEADER:
+            expires_at = entry.get("expires_at") if isinstance(entry, dict) else None
+            if isinstance(expires_at, (int, float)) and expires_at > 0 and expires_at / 1000 <= now:
+                continue  # 已过期
+        else:
+            cookies = _decrypt_cookies(entry, domain) if isinstance(entry, dict) else None
+            if not cookies:
+                continue
+            usable, _ = _split_cookies(cookies, None, now)
+            if not usable:
+                continue  # 全部过期
+
+        # 取最具体匹配（域名最长）
+        domain_clean = domain.lstrip(".").rstrip(".")
+        if len(domain_clean) > best_len:
+            best_len = len(domain_clean)
+            best_match = domain
+
+    return best_match
 
 
 def list_credentials(repo: Optional[Any] = None) -> List[Dict[str, Any]]:
@@ -1192,7 +1265,10 @@ __all__ = [
     "looks_like_login_url",
     "merge_set_cookies",
     "merge_cdp_cookies",
+<<<<<<< HEAD
     "merge_storage_origins",
+=======
+>>>>>>> origin/main
     "parse_set_cookie",
     "resolve_credential",
     "save_credential",

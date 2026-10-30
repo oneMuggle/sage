@@ -861,6 +861,7 @@ class WebFetchTool(BaseTool):
                 elapsed_ms,
                 escalated=bool(content.get("escalated")),
             )
+<<<<<<< HEAD
             if storage_forced_render:
                 storage_note = (
                     "该站点使用浏览器会话（localStorage），已自动改用渲染通道。"
@@ -872,6 +873,8 @@ class WebFetchTool(BaseTool):
                     if not content.get("note")
                     else f"{content['note']}；{storage_note}"
                 )
+=======
+>>>>>>> origin/main
             content["content"] = str(content.get("content", ""))[:max_length]
             return ToolResult(success=True, content=content)
         except httpx.HTTPStatusError as e:

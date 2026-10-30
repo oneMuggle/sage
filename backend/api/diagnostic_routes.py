@@ -218,6 +218,7 @@ def _probe_chrome_major_safe() -> Optional[int]:
         return _probe_chrome_major()
     except Exception:  # noqa: BLE001
         return None
+<<<<<<< HEAD
 
 
 # ==================== 浏览器环境诊断（Phase D） ====================
@@ -244,3 +245,5 @@ def browser_check() -> dict:
     from backend.tools.browser_diagnostics import run_all_checks
 
     return run_all_checks()
+=======
+>>>>>>> origin/main

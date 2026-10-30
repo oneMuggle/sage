@@ -59,8 +59,11 @@ EXPECTED_TOP_KEYS = frozenset(
         "llmRetryTotalBudgetS",
         # 2026-10-22: 整轮任务 wall-clock 上限（秒）— 0 = 不限；函数式读取
         "llmTotalTimeoutS",
+<<<<<<< HEAD
         # 2026-10-27: 会话标题生成专用模型 id（顶层扁平键）
         "titleModelId",
+=======
+>>>>>>> origin/main
         # 2026-10-28: LLM 代理上游超时（秒）— 替代 llm_proxy_routes 硬编码 60s。
         "llmProxyTimeoutS",
         # 2026-10-28: 智能路由模式 {"mode": "auto"|"manual"}
@@ -136,7 +139,11 @@ def test_legal_model_selections_obj_keys_is_stable() -> None:
 
 
 def test_legal_orch_keys_is_stable() -> None:
+<<<<<<< HEAD
     """LEGAL_ORCH_KEYS 必须与前端 OrchSettings interface 23 键逐字同步.
+=======
+    """LEGAL_ORCH_KEYS 必须与前端 OrchSettings interface 19 键逐字同步.
+>>>>>>> origin/main
 
     历史事故两次: 2026-09 漏 worktreeIsolation / subagentApprovalMode /
     runTokenBudget, RD15 后又漏 runWallClockLimitMinutes /
@@ -167,12 +174,16 @@ def test_legal_orch_keys_is_stable() -> None:
             "runWallClockLimitMinutes",
             "subagentTaskTimeoutS",
             "maxRetryOfChains",
+<<<<<<< HEAD
             # win7 专属: profile 迭代上限四键已在 OrchSettings, 必须白名单同步
             "maxPrimaryIterations",
             "maxCoderIterations",
             "maxReviewerIterations",
             "maxWriterIterations",
             # 2026-10-20 全局迭代上限 (Win7 适配: 0=按各 agent 分别设置)
+=======
+            # 2026-10-20 全局迭代上限 (0=按各 agent 分别设置)
+>>>>>>> origin/main
             "maxIterations",
             # 2026-10-27 工具预算 + 计划前置/Planner 迭代预算
             "maxToolCallsPerRun",

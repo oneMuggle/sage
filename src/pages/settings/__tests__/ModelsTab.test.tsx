@@ -38,10 +38,17 @@ const settings = {
   temperature: 0.7,
 };
 
+<<<<<<< HEAD
 function renderTab(updateSettings = vi.fn(), override = settings) {
   return render(
     <I18nProvider defaultLocale="zh">
       <ModelsTab settings={override} updateSettings={updateSettings} />
+=======
+function renderTab(updateSettings = vi.fn(), settingsOverride: typeof settings = settings) {
+  return render(
+    <I18nProvider defaultLocale="zh">
+      <ModelsTab settings={settingsOverride} updateSettings={updateSettings} />
+>>>>>>> origin/main
     </I18nProvider>,
   );
 }
@@ -144,6 +151,7 @@ describe('ModelsTab routing mode (Task 11)', () => {
     expect(screen.queryByText('用于文本对话（必填）')).toBeNull();
   });
 
+<<<<<<< HEAD
   it('auto mode keeps the other capability selectors (win7: 6 + title)', () => {
     // win7 比 main 多一个 TitleModelSelector (PR #2604, 会话标题模型)。
     // 手动模式: chat/vision/embedding/tts/asr/image_gen/title = 7
@@ -156,6 +164,19 @@ describe('ModelsTab routing mode (Task 11)', () => {
 
     const auto = renderTab(vi.fn(), autoSettings);
     expect(capabilitySelects(auto.container)).toHaveLength(6);
+=======
+  it('auto mode keeps the other five capability selectors', () => {
+    // 6 个能力选择器 (手动: chat/vision/embedding/tts/asr/image_gen) → 自动模式
+    // 隐藏 chat 选择器剩 5 个。无其它 <select> 干扰, 直接全量计数。
+    const capabilitySelects = (container: HTMLElement) => container.querySelectorAll('select');
+
+    const manual = renderTab();
+    expect(capabilitySelects(manual.container)).toHaveLength(6);
+    manual.unmount();
+
+    const auto = renderTab(vi.fn(), autoSettings);
+    expect(capabilitySelects(auto.container)).toHaveLength(5);
+>>>>>>> origin/main
   });
 
   it('keeps the routing switch reachable when no endpoint has models (R31a)', () => {

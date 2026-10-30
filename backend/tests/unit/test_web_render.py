@@ -295,7 +295,10 @@ def _install_au5_render(
     page_json: str,
     storage_cookies: List[Dict[str, Any]] = None,
     fail_method: str = "",
+<<<<<<< HEAD
     storage_snapshot: str = "",
+=======
+>>>>>>> origin/main
 ) -> tuple:
     """AU5 假体：标准渲染链 + Storage.* 支持，返回 (调用记录, repo)。"""
     storage_cookies = storage_cookies if storage_cookies is not None else []
@@ -316,8 +319,11 @@ def _install_au5_render(
             return {"count": len(params.get("cookies") or [])}
         if method == "Storage.getCookies":
             return {"cookies": storage_cookies}
+<<<<<<< HEAD
         if method == "Runtime.evaluate":
             return {"result": {"value": storage_snapshot}}
+=======
+>>>>>>> origin/main
         if method in (
             "Page.navigate",
             "Target.closeTarget",
@@ -436,6 +442,7 @@ def test_render_page_writeback_merges_refreshed_cookies(monkeypatch):
     assert load_credential(".spa.example", repo=repo)[0]["value"] == "v2"
 
 
+<<<<<<< HEAD
 def _seed_storage(repo, domain=".spa.example", origin="https://spa.example", token="v1"):
     from backend.tools.credential_vault import save_storage_state
 
@@ -538,6 +545,8 @@ def test_render_page_without_storage_skips_local_storage_hooks(monkeypatch):
     assert "credential_storage_refreshed" not in result
 
 
+=======
+>>>>>>> origin/main
 def test_render_page_writeback_failure_is_silent(monkeypatch):
     page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
     calls, repo = _install_au5_render(monkeypatch, page_json, fail_method="Storage.getCookies")

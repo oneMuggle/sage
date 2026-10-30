@@ -652,7 +652,11 @@ def test_browser_login_execute_success_returns_instruction(monkeypatch):
     monkeypatch.setattr(browser_tool, "_wait_for_page_load", lambda *a, **kw: None)
     monkeypatch.setattr(browser_tool, "_check_login_status", lambda *a, **kw: "logged_in")
     monkeypatch.setattr(browser_tool, "cdp_command", lambda *a, **kw: {"targetId": "t-1"})
+<<<<<<< HEAD
     monkeypatch.setattr(tool, "_export_cookies", lambda sess, host, target_id="": ["example.com"])
+=======
+    monkeypatch.setattr(tool, "_export_cookies", lambda sess, host: ["example.com"])
+>>>>>>> origin/main
 
     result = tool.execute(url="https://example.com/settings")
     assert result.success is True
@@ -661,6 +665,7 @@ def test_browser_login_execute_success_returns_instruction(monkeypatch):
     assert "web_fetch" in result.content["instruction"]
     assert "https://example.com/settings" in result.content["instruction"]
 
+<<<<<<< HEAD
 
 # ---------------------------------------------------------------------------
 # storage_state：登录 / 导出时捕获 localStorage
@@ -792,3 +797,5 @@ def test_browser_login_respects_network_policy(monkeypatch):
     assert result.success is False
     assert "offline" in result.error
 
+=======
+>>>>>>> origin/main

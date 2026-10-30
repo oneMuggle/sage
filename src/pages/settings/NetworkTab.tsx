@@ -4,7 +4,11 @@ import { useEffect, useState } from 'react';
 import { settingsClient } from '../../shared/api/settingsClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
+<<<<<<< HEAD
 import { SiteSessionsSection } from './SiteSessionsSection';
+=======
+import { CredentialsSection } from './NetworkCredentialsSection';
+>>>>>>> origin/main
 import { SettingRow } from './components';
 
 /** 与后端 NetworkMode 枚举值一致（backend/domain/network_policy.py） */
@@ -539,8 +543,13 @@ export function NetworkTab() {
         </SettingRow>
       </section>
 
+<<<<<<< HEAD
       {/* P0 登录体验：默认只展示「已登录的网站」，技术配置折叠进高级 */}
       <SiteSessionsSection />
+=======
+      {/* Round 12：网站凭据（browser_cookies 档案 + web_access_config 开关） */}
+      <CredentialsSection />
+>>>>>>> origin/main
     </div>
   );
 }

@@ -500,6 +500,7 @@ def _writeback_render_cookies(
     return sorted(set(changed)) or None
 
 
+<<<<<<< HEAD
 #: 渲染页面内读取 localStorage（按 origin 打包）；失败返回空串
 _LOCAL_STORAGE_JS = (
     "(function(){try{var out={};var ls=window.localStorage;"
@@ -592,6 +593,8 @@ def _writeback_render_storage(  # noqa: PLR0911 — 各失败路径独立 return
         return False
 
 
+=======
+>>>>>>> origin/main
 def refresh_credentials(  # noqa: PLR0911 — 各失败路径独立 return，扁平更直读
     credential_domain: str,
     url: str,
@@ -642,10 +645,14 @@ def refresh_credentials(  # noqa: PLR0911 — 各失败路径独立 return，扁
         if not target_id:
             return False, []
         if inject:
+<<<<<<< HEAD
             from .credential_vault import normalize_cookie_for_cdp
 
             normalized_inject = [normalize_cookie_for_cdp(c) for c in inject]
             cdp_command(session, "Storage.setCookies", {"cookies": normalized_inject})
+=======
+            cdp_command(session, "Storage.setCookies", {"cookies": inject})
+>>>>>>> origin/main
         apply_stealth(session, target_id, command=cdp_command)
         result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)
         if result.get("errorText"):
@@ -732,7 +739,10 @@ def render_page(
 
     credential_domain = (credential_domain or "").strip().lower()
     credential_cookies: List[Dict[str, Any]] = []
+<<<<<<< HEAD
     credential_origins: List[Dict[str, Any]] = []
+=======
+>>>>>>> origin/main
     if credential_domain:
         from .credential_vault import (
             KIND_COOKIE,
@@ -743,14 +753,20 @@ def render_page(
         resolution = resolve_credential(credential_domain, url=url, repo=repo)
         if resolution.ok and resolution.kind == KIND_COOKIE:
             credential_cookies = list(resolution.cookies or [])
+<<<<<<< HEAD
             credential_origins = list(resolution.origins or [])
+=======
+>>>>>>> origin/main
 
     session = _pool.acquire()
     channel_ok = _ensure_pool_channel(session)
     target_id: Optional[str] = None
     net_session: Optional[str] = None
     refreshed: Optional[List[str]] = None
+<<<<<<< HEAD
     storage_refreshed = False
+=======
+>>>>>>> origin/main
     try:
         created = cdp_command(session, "Target.createTarget", {"url": "about:blank"})
         target_id = created.get("targetId")
@@ -768,6 +784,7 @@ def render_page(
         # 重定向自动按域携带）。注入失败走 RenderError——显式带凭据渲染却
         # 拿到未登录正文会误导调用方。
         if credential_cookies:
+<<<<<<< HEAD
             from .credential_vault import normalize_cookie_for_cdp
 
             normalized_cookies = [
@@ -777,6 +794,9 @@ def render_page(
         # storage_state：localStorage 必须在文档创建前注入（SPA 首次脚本执行前）
         if credential_origins:
             _inject_local_storage(session, target_id, credential_origins)
+=======
+            cdp_command(session, "Storage.setCookies", {"cookies": credential_cookies})
+>>>>>>> origin/main
         # AB4：文档创建前注入 stealth（失败不阻断渲染）
         apply_stealth(session, target_id, command=cdp_command)
         result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)
@@ -803,10 +823,13 @@ def render_page(
         # 任何失败静默——与 AU2"回写失败不影响本次请求"同口径）。
         if credential_cookies:
             refreshed = _writeback_render_cookies(session, credential_domain, url, repo=repo)
+<<<<<<< HEAD
         if (credential_cookies or credential_origins) and target_id:
             storage_refreshed = _writeback_render_storage(
                 session, target_id, credential_domain, repo=repo
             )
+=======
+>>>>>>> origin/main
     except BrowserCDPError as exc:
         raise RenderError(
             f"JS 渲染失败: {exc}"
@@ -869,11 +892,17 @@ def render_page(
         rendered["wait_for_satisfied"] = bool(wait_for_satisfied)
     if refreshed:
         rendered["credential_refreshed"] = refreshed
+<<<<<<< HEAD
     if storage_refreshed:
         rendered["credential_storage_refreshed"] = True
     # AU7：带凭据渲染却落在密码框页（正文极短）→ 登录墙标记
     if (
         (credential_cookies or credential_origins)
+=======
+    # AU7：带凭据渲染却落在密码框页（正文极短）→ 登录墙标记
+    if (
+        credential_cookies
+>>>>>>> origin/main
         and looks_like_login_html(html)
         and len(content_text.strip()) < 500
     ):

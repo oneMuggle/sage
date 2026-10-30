@@ -55,6 +55,12 @@ httpx==0.26.0
 cryptography==47.0.0
 python-multipart==0.0.9  # required for FastAPI File() / Form() in legacy_routes.py
 
+# Crypto (Arena account pool — Fernet symmetric encryption for passwords)
+# cryptography 50.0.1 ships cp311 win_amd64 wheels for the bundled Python
+# 3.11 embeddable. Matches requirements.txt (main). requirements-py38.txt
+# carries 47.0.0 instead — the last release with cp38 wheels.
+cryptography==50.0.1
+
 # Observability
 prometheus-client==0.25.0
 
@@ -105,7 +111,7 @@ openpyxl==3.1.5
 # fast. Matches the LTS strategy used in release/win7 (which has had these
 # three since 2026-09-05 and bundles them into the Win7 installer).
 docxtpl>=0.20.0       # Word template fill with {{variable}} placeholders, ~0.5MB wheel
-PyMuPDF>=1.25.0       # PDF read + form fill (C extension, cp311 win_amd64 wheel), ~15MB wheel
+PyMuPDF>=1.25.0,<2.0.0  # PDF read + form fill (C extension, cp311 win_amd64 wheel, <2.0 avoids pymupdf-layout==2.0 breaking find_tables/flatten), ~15MB wheel
 reportlab>=4.0.0      # PDF generation from structured data, ~3MB wheel
 
 # certifi: provides Mozilla CA bundle for httpx / requests / curl SSL verification

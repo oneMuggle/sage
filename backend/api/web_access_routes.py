@@ -28,7 +28,10 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any, Dict, List, Optional
+<<<<<<< HEAD
 from urllib.parse import urlsplit
+=======
+>>>>>>> origin/main
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -37,12 +40,15 @@ from pydantic import BaseModel, Extra
 from backend.api.permission_routes import forbidden_origin_response
 from backend.api.settings_models import model_dump_compat
 from backend.data.settings_repo import SettingsRepository
+<<<<<<< HEAD
 from backend.services.site_login_jobs import site_login_jobs
 from backend.services.site_login_templates import (
     SITE_LOGIN_TEMPLATES,
     display_name_for_host,
     login_url_for_host,
 )
+=======
+>>>>>>> origin/main
 from backend.tools.credential_vault import (
     delete_credential,
     list_credentials,
@@ -92,6 +98,7 @@ class CookieCredentialBody(BaseModel):
         extra = Extra.forbid
 
 
+<<<<<<< HEAD
 class SiteLoginBody(BaseModel):
     """POST /web-access/sites/login：用户选定的登录入口 URL。"""
 
@@ -101,6 +108,8 @@ class SiteLoginBody(BaseModel):
         extra = Extra.forbid
 
 
+=======
+>>>>>>> origin/main
 def _origin_guard(request: Request) -> Optional[JSONResponse]:
     return forbidden_origin_response(request)
 
@@ -202,10 +211,13 @@ async def create_cookie_credential(
     guard = _origin_guard(request)
     if guard:
         return guard
+<<<<<<< HEAD
     if len(body.cookies) > 500:
         return JSONResponse(
             status_code=422, content={"ok": False, "error": "too_many_cookies"}
         )
+=======
+>>>>>>> origin/main
     try:
         save_credential(body.domain.strip().lower(), body.cookies)
     except ValueError:
@@ -216,6 +228,7 @@ async def create_cookie_credential(
     return {"ok": True}
 
 
+<<<<<<< HEAD
 @router.get("/web-access/site-templates")
 async def get_site_login_templates(request: Request) -> Dict[str, Any]:
     """常见站点登录模板（展示名 / 登录入口 / 登录方式提示）。"""
@@ -314,6 +327,8 @@ async def delete_site_session(request: Request, domain: str) -> Dict[str, Any]:
     return {"ok": True}
 
 
+=======
+>>>>>>> origin/main
 @router.get("/web-access/metrics")
 async def get_web_metrics(request: Request) -> Dict[str, Any]:
     """Per-host 出网指标（Round 15 X2 延伸；进程内存态，重启清零）。"""

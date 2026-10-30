@@ -628,7 +628,11 @@ def clear_session_remembered_rules(session_id: str, request: Request):
     return {"ok": True, "session_id": session_id, "rules": []}
 
 
+<<<<<<< HEAD
 def forbidden_origin_response(request: Request) -> Optional[JSONResponse]:
+=======
+def forbidden_origin_response(request: Request) -> JSONResponse | None:
+>>>>>>> origin/main
     """Origin 守卫：带 Origin 头且不在白名单 → 403 响应；否则 None（放行）。
 
     无 ``Origin`` 头视为同源 / 非浏览器客户端（curl、python、Electron

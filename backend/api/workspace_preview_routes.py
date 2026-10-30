@@ -16,10 +16,15 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
+<<<<<<< HEAD
 from pydantic import BaseModel
 
 # win7 LTS py38 环境钉 pydantic 1.10.13，ConfigDict 是 v2 专有 → 走兼容垫片。
 from backend.compat.win7.pydantic_compat import ConfigDict
+=======
+from pydantic import BaseModel, ConfigDict
+
+>>>>>>> origin/main
 from backend.data import artifact_reader, artifact_repo
 from backend.data.database import get_database
 from backend.office.models import _constrained_list

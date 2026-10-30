@@ -1,6 +1,10 @@
 // src/widgets/chat/RightPanel.tsx
 import { Bell, BellOff, Maximize2, Minimize2, SlidersHorizontal, X } from 'lucide-react';
+<<<<<<< HEAD
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+=======
+import { lazy, memo, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+>>>>>>> origin/main
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
@@ -31,6 +35,13 @@ import { ArtifactsSection } from './artifacts/ArtifactsSection';
 import { ChangesSection } from './changes/ChangesSection';
 import { FilePreviewPanel } from './preview/FilePreviewPanel';
 import { ProgressSection } from './progress/ProgressSection';
+// feat/file-reference-preview: 文件预览面板按需加载——避免把预览器静态拖进
+// index 主 chunk 触发包体积门禁（1.6MB 预算）。
+const FilePreviewPanel = lazy(() =>
+  import('./preview/FilePreviewPanel').then((module) => ({
+    default: module.FilePreviewPanel,
+  })),
+);
 
 interface RightPanelProps {
   iteration: number;
@@ -517,11 +528,21 @@ function RightPanelInner({
 
       <div className="h-[calc(100%-2.5rem)] overflow-y-auto min-h-0">
         {selectedFilePath && sessionId ? (
+<<<<<<< HEAD
           <FilePreviewPanel
             sessionId={sessionId}
             path={selectedFilePath}
             onBack={() => useRightPanelStore.getState().clearFilePreview()}
           />
+=======
+          <Suspense fallback={<div className="p-3 text-sm text-muted">加载中...</div>}>
+            <FilePreviewPanel
+              sessionId={sessionId}
+              path={selectedFilePath}
+              onBack={() => useRightPanelStore.getState().clearFilePreview()}
+            />
+          </Suspense>
+>>>>>>> origin/main
         ) : selected && sessionId ? (
           <ArtifactViewer
             artifact={selected}

@@ -91,11 +91,14 @@ export const enChatAndSider = {
   'chat.blocked.action.configure_credentials': 'Configure credentials',
   'chat.blocked.action.configure_proxy': 'Configure proxy',
   'chat.blocked.action.view_docs': 'View docs',
+<<<<<<< HEAD
   'chat.blocked.tech_details': 'Technical details',
   'chat.blocked.login.starting': 'Opening the sign-in window. Please complete sign-in in your browser…',
   'chat.blocked.login.continue':
     'Signed in to {host}. Please continue the request that was blocked: {url}, and summarize the result.',
   'chat.blocked.login.failed': 'Sign-in was not completed: {error}',
+=======
+>>>>>>> origin/main
   'chat.loading': 'Loading conversation...',
   'chat.welcome': 'Welcome to Sage',
   'chat.welcome_sub': 'Start a new conversation',
@@ -334,11 +337,19 @@ export const enChatAndSider = {
   'settings.audit.section.runtime': 'Runtime',
   'settings.section.network.access': 'Access control',
   'settings.section.network.fetch': 'Fetching & search',
+<<<<<<< HEAD
   'settings.network.creds': 'Site credentials (manual import)',
   'settings.network.creds.hint':
     'Only for services that cannot be signed in via the browser: paste a cookie or an API header. For everyday use, sign in under "Signed-in websites" above.',
   'settings.network.creds.empty':
     'No manual credentials yet. Sign in under "Signed-in websites" first.',
+=======
+  'settings.network.creds': 'Site credentials',
+  'settings.network.creds.hint':
+    'Login state exported via browser_cookies (encrypted, never echoed). Shared by static fetch, JS render and browser channels.',
+  'settings.network.creds.empty':
+    'No credentials yet. Ask the assistant to log in and run browser_cookies export.',
+>>>>>>> origin/main
   'settings.network.creds.delete': 'Delete',
   'settings.network.creds.expired': 'expired',
   'settings.network.creds.browser': 'Browser',
@@ -384,6 +395,7 @@ export const enChatAndSider = {
   'settings.network.creds.auto_refresh': 'Auto-refresh login state',
   'settings.network.creds.auto_refresh.desc':
     'Silently re-export credentials from the source profile when they expire',
+<<<<<<< HEAD
   'settings.network.sites': 'Signed-in websites',
   'settings.network.sites.hint':
     'Manage websites that require sign-in. After signing in once, Sage reuses the session and prompts you when it expires.',
@@ -413,6 +425,8 @@ export const enChatAndSider = {
   'settings.network.advanced': 'Advanced: manual import & diagnostics',
   'settings.network.advanced.hint':
     'For advanced users and developers. Normal use does not require changing anything here.',
+=======
+>>>>>>> origin/main
   'settings.network.mode': 'Network mode',
   'settings.network.mode.online': 'Online (default)',
   'settings.network.mode.online.desc': 'Search available, any address reachable',

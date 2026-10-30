@@ -318,7 +318,10 @@ export const enSettingsAndModels = {
   'settings.font.saveError':
     'Font preferences could not be saved. Changes are visible now; retry or reopen the app later to sync.',
   'settings.font.loadError': 'Font preferences could not be loaded. Using defaults for now.',
+<<<<<<< HEAD
   'settings.density.label': 'Information Density',
+=======
+>>>>>>> origin/main
   'font.option.inter': 'Inter',
   'font.option.system': 'System Default',
   'font.option.noto-sans-sc': 'Noto Sans SC',

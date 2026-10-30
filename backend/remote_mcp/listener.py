@@ -11,14 +11,22 @@ import logging
 import socket
 import threading
 import time
+<<<<<<< HEAD
 from typing import Dict, Optional
+=======
+from typing import Optional
+>>>>>>> origin/main
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from . import DEFAULT_PORT, SERVER_VERSION
+<<<<<<< HEAD
 from .protocol import MAX_BODY_BYTES, RemoteMcpService
+=======
+from .protocol import RemoteMcpService
+>>>>>>> origin/main
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +46,7 @@ def create_app(service: RemoteMcpService) -> FastAPI:
 
     @app.api_route("/mcp/{token}", methods=["GET", "POST", "DELETE"])
     async def mcp_endpoint(token: str, request: Request) -> Response:
+<<<<<<< HEAD
         headers = {k.lower(): v for k, v in request.headers.items()}
         error = _request_rejection(service, token, headers)
         if error is not None:
@@ -57,6 +66,10 @@ def create_app(service: RemoteMcpService) -> FastAPI:
                 return JSONResponse({"error": "BODY_TOO_LARGE"}, status_code=413)
             body_parts.append(part)
         body = b"".join(body_parts)
+=======
+        body = await request.body()
+        headers = {k.lower(): v for k, v in request.headers.items()}
+>>>>>>> origin/main
         status, extra, payload = await run_in_threadpool(
             service.handle, request.method, token, headers, body
         )
@@ -67,6 +80,7 @@ def create_app(service: RemoteMcpService) -> FastAPI:
     return app
 
 
+<<<<<<< HEAD
 def _request_rejection(
     service: RemoteMcpService, token: str, headers: Dict[str, str]
 ) -> Optional[JSONResponse]:
@@ -79,6 +93,8 @@ def _request_rejection(
     return None
 
 
+=======
+>>>>>>> origin/main
 class Listener:
     """在后台线程里运行 uvicorn；``start`` / ``stop`` 可重复调用。"""
 

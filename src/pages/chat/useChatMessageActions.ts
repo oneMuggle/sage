@@ -6,12 +6,15 @@ import { regenerateInPlace } from '../../features/chat/answerVersions';
 import { useQuoteDraft } from '../../features/chat/useQuoteDraft';
 import { sessionApi, learnApi, messageApi, memoryApi } from '../../shared/api';
 import { orchRunClient } from '../../shared/api/orchRunClient';
+<<<<<<< HEAD
 import {
   isHttpUrl,
   isLoginInProgressError,
   startSiteLogin,
   waitForSiteLogin,
 } from '../../shared/api/webAccessClient';
+=======
+>>>>>>> origin/main
 import { useI18n } from '../../shared/lib/i18n';
 import type { BlockedAction, Message as MessageType } from '../../shared/lib/store';
 
@@ -286,6 +289,7 @@ export function useChatMessageActions({
     [navigate],
   );
 
+<<<<<<< HEAD
   /** 单飞保护：同一 URL 的登录轮询只允许一个（双击/重复点击不重复发消息）。 */
   const siteLoginInFlight = useRef<string | null>(null);
 
@@ -324,12 +328,21 @@ export function useChatMessageActions({
     [sendMessage, t],
   );
 
+=======
+>>>>>>> origin/main
   const handleBlockedAction = useCallback(
     (action: BlockedAction) => {
       const url = typeof action.params?.url === 'string' ? action.params.url : undefined;
       switch (action.action) {
         case 'login_to_site':
+<<<<<<< HEAD
           if (url) void runSiteLogin(url);
+=======
+          if (url)
+            void sendMessage(
+              `请用 browser_login 工具登录 ${url}，完成登录态保存后重新访问该页面。`,
+            );
+>>>>>>> origin/main
           break;
         case 'open_browser':
           if (url) void sendMessage(`请用 browser_navigate 工具打开 ${url} 并提取正文。`);
@@ -350,7 +363,11 @@ export function useChatMessageActions({
           break;
       }
     },
+<<<<<<< HEAD
     [sendMessage, navigate, runSiteLogin],
+=======
+    [sendMessage, navigate],
+>>>>>>> origin/main
   );
 
   const handleCancelRun = useCallback(

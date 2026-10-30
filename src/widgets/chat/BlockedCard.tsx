@@ -75,8 +75,13 @@ export function BlockedCard({
       <div className="flex items-center gap-2 px-3 py-2 bg-warning/10 border-b border-warning/30">
         <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
         <span className="text-ui-caption font-medium text-warning">{t('chat.blocked.title')}</span>
+<<<<<<< HEAD
         <span className="ml-auto text-ui-2xs px-1.5 py-0.5 rounded bg-warning/15 text-warning/80">
           {reasonLabel}
+=======
+        <span className="ml-auto text-ui-2xs px-1.5 py-0.5 rounded bg-warning/15 text-warning/80 font-mono">
+          {blockReason}
+>>>>>>> origin/main
         </span>
       </div>
 
@@ -92,6 +97,7 @@ export function BlockedCard({
           </div>
         )}
 
+<<<<<<< HEAD
         {/* 技术详情：原始枚举与错误信息折叠，避免把内部术语直接抛给用户 */}
         <details className="text-ui-2xs text-muted" data-testid="blocked-tech-details">
           <summary className="cursor-pointer select-none">
@@ -104,6 +110,17 @@ export function BlockedCard({
             )}
           </div>
         </details>
+=======
+        {/* 原因说明 */}
+        <div className="text-ui-sm text-text-secondary leading-relaxed">{reasonLabel}</div>
+
+        {/* 后端给出的错误详情（可选） */}
+        {errorMessage && (
+          <div className="text-ui-2xs text-muted font-mono bg-bg-subtle/60 rounded px-2 py-1 break-all">
+            {errorMessage}
+          </div>
+        )}
+>>>>>>> origin/main
 
         {/* 建议动作按钮 */}
         {suggestedActions && suggestedActions.length > 0 && (

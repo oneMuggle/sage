@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import copy
 import logging
+<<<<<<< HEAD
 from typing import Any, Dict, List, Optional, Tuple
+=======
+from typing import Any, Dict, List, Optional
+>>>>>>> origin/main
 
 from backend.data.agent_repo import AgentRepository
 from backend.data.settings_canonicalizer import validate_settings_payload
@@ -68,8 +72,11 @@ _ALLOWED_GENERAL_FIELDS = {
     # 2026-10-28: LLM 代理上游超时（秒）—— 企业网关卡顿 / 关闭流式输出时的长回复
     # 需要它配合调大，否则 60s 硬编码会中断整段生成。
     "llmProxyTimeoutS",
+<<<<<<< HEAD
     # 2026-10-27: 会话标题生成专用模型 id —— 空串表示回退到聊天模型。
     "titleModelId",
+=======
+>>>>>>> origin/main
 }
 
 # 2026-10-28: endpoint CRUD 白名单（与 settings_canonicalizer.LEGAL_ENDPOINT_KEYS 对齐）
@@ -110,7 +117,11 @@ def _prepare_settings_update(
     current_settings: Any,
     updates: Dict[str, Any],
     target: str,
+<<<<<<< HEAD
 ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+=======
+) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+>>>>>>> origin/main
     """Return a validated copy of settings before persisting an update."""
     if not isinstance(current_settings, dict):
         return None, "当前 app_settings 不是有效的对象"
@@ -188,7 +199,11 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 10_000_000:
             return f"{key} 必须是 1 到 10000000 之间的整数，收到: {value!r}"
     # P119 Config Advisor (Phase 1.2): LLM 重试 / 超时字段类型与范围校验
+<<<<<<< HEAD
     _llm_retry_field_errors: List[str] = []
+=======
+    _llm_retry_field_errors: list[str] = []
+>>>>>>> origin/main
     if "llmRetryMaxAttempts" in updates:
         v = updates["llmRetryMaxAttempts"]
         if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 20:
@@ -231,6 +246,7 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
         )
     if _llm_retry_field_errors:
         return "; ".join(_llm_retry_field_errors)
+<<<<<<< HEAD
     return _validate_title_model_id(updates)
 
 
@@ -243,6 +259,8 @@ def _validate_title_model_id(updates: Dict[str, Any]) -> Optional[str]:
         return f"titleModelId 必须是字符串，收到: {v!r}"
     if len(v) > 200:
         return f"titleModelId 长度不能超过 200，收到: {len(v)}"
+=======
+>>>>>>> origin/main
     return None
 
 
@@ -491,7 +509,10 @@ class UpdateSageConfigTool(BaseTool):
                             "- target='orch' 时允许: maxLaneIterations, maxSubagentIterations, maxConcurrentSubagents, maxRetries 等\n"
                             "- target='agent' 时允许: max_iterations (1~50), temperature, system_prompt, description 等\n"
                             "- target='general' 时允许: temperature, streaming, autoMemory, confirmDelete 等\n"
+<<<<<<< HEAD
                             "- target='general' 时允许: titleModelId (会话标题专用模型 id，空串=回退聊天模型)\n"
+=======
+>>>>>>> origin/main
                             "- target='endpoint' 且 action='create/update' 时允许: name, baseUrl, apiKey, protocol, modelId 等\n"
                             "- target='model_selection' 时允许: endpointId, modelId"
                         ),

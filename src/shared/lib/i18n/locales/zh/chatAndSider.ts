@@ -91,11 +91,14 @@ export const zhChatAndSider = {
   'chat.blocked.action.configure_credentials': '配置登录凭据',
   'chat.blocked.action.configure_proxy': '配置代理',
   'chat.blocked.action.view_docs': '查看文档',
+<<<<<<< HEAD
   'chat.blocked.tech_details': '技术详情',
   'chat.blocked.login.starting': '正在打开登录窗口，请在浏览器中完成登录…',
   'chat.blocked.login.continue':
     '已完成 {host} 的登录。请继续完成刚才失败的请求：{url}，并总结结果。',
   'chat.blocked.login.failed': '登录未完成：{error}',
+=======
+>>>>>>> origin/main
   'chat.loading': '正在加载对话...',
   'chat.welcome': '欢迎使用 Sage',
   'chat.welcome_sub': '开始一段新对话吧',
@@ -356,10 +359,17 @@ export const zhChatAndSider = {
   'settings.network.proxy.https': 'HTTPS 代理',
   'settings.network.proxy.placeholder': 'http://127.0.0.1:7890（留空 = 不启用）',
   'settings.network.proxy.error.scheme': '代理地址需以 http://、https:// 或 socks5:// 开头',
+<<<<<<< HEAD
   'settings.network.creds': '网站凭据（手动导入）',
   'settings.network.creds.hint':
     '仅在无法通过浏览器登录时使用：手动粘贴 cookie 或 API 访问头。日常使用请在上方「已登录的网站」完成登录。',
   'settings.network.creds.empty': '暂无手动导入的凭据。通常在上方「已登录的网站」完成登录即可。',
+=======
+  'settings.network.creds': '网站凭据',
+  'settings.network.creds.hint':
+    'browser_cookies 导出的登录态（加密存储，不回显内容）。供静态抓取、JS 渲染与浏览器通道共用。',
+  'settings.network.creds.empty': '暂无凭据。让助手在浏览器里登录后执行 browser_cookies 导出。',
+>>>>>>> origin/main
   'settings.network.creds.delete': '删除',
   'settings.network.creds.expired': '已过期',
   'settings.network.creds.browser': '浏览器',
@@ -402,6 +412,7 @@ export const zhChatAndSider = {
     '登录后的 SPA 页面经渲染通道直接可读（登录态跨会话保留）',
   'settings.network.creds.auto_refresh': '登录态自动刷新',
   'settings.network.creds.auto_refresh.desc': '凭据失效时用来源 profile 静默重导并重放一次',
+<<<<<<< HEAD
   'settings.network.sites': '已登录的网站',
   'settings.network.sites.hint':
     '在这里管理需要登录的网站。登录一次后，Sage 会自动沿用登录状态，并在过期时提醒你重新登录。',
@@ -429,6 +440,8 @@ export const zhChatAndSider = {
   'settings.network.advanced': '高级：手动导入与诊断',
   'settings.network.advanced.hint':
     '面向高级用户与开发者。普通使用不需要修改这里的任何选项。',
+=======
+>>>>>>> origin/main
   'settings.network.search': '搜索引擎',
   'settings.network.search.hint':
     '按顺序尝试：首选引擎无结果时自动回退后续引擎。API 引擎未填 key 时自动跳过。',

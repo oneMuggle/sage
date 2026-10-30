@@ -244,12 +244,21 @@ class TestDownloadCredential:
 
     def test_cookie_attached_on_download(self, tmp_path, repo):
         save_credential(".example.com", _COOKIES, repo=repo)
+<<<<<<< HEAD
         with patch_vault_repo(repo):
             with respx.mock(base_url="https://www.example.com") as mock:
                 route = mock.get("/a.pdf").mock(return_value=Response(200, content=b"%PDF-1.4 fake"))
                 result = self._tool(tmp_path).execute(
                     url="https://www.example.com/a.pdf", credential_domain=".example.com"
                 )
+=======
+        with patch_vault_repo(repo):  # noqa: SIM117 — py38 不支持括号多上下文 with
+            with respx.mock(base_url="https://www.example.com") as mock:
+                route = mock.get("/a.pdf").mock(return_value=Response(200, content=b"%PDF-1.4 fake"))
+                result = self._tool(tmp_path).execute(
+                url="https://www.example.com/a.pdf", credential_domain=".example.com"
+            )
+>>>>>>> origin/main
 
         assert result.success is True
         assert route.calls.last.request.headers["Cookie"] == "SID=s3cret; AUTH=token1"
@@ -1397,6 +1406,7 @@ class TestFindCredentialForHost:
         from backend.tools.credential_vault import find_credential_for_host
 
         assert find_credential_for_host("example.com", repo=repo) is None
+<<<<<<< HEAD
 
 
 class TestStorageState:
@@ -1503,3 +1513,5 @@ class TestStorageState:
         ]
         merge_storage_origins(".example.com", many, repo=repo)
         assert len(load_storage_origins(".example.com", repo=repo)) <= 50
+=======
+>>>>>>> origin/main

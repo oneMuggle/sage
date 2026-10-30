@@ -981,6 +981,7 @@ class BrowserCookiesTool(BaseTool):
                 origin_hosts.append("")
         saved = []
         for cookie_domain, cookies in sorted(by_domain.items()):
+<<<<<<< HEAD
             profile_name = str(getattr(session, "profile_name", "") or "")
             if origins and any(
                 _storage_domain_matches(cookie_domain, host) for host in origin_hosts
@@ -990,6 +991,13 @@ class BrowserCookiesTool(BaseTool):
                 )
             else:
                 save_credential(cookie_domain, cookies, source_profile=profile_name)
+=======
+            save_credential(
+                cookie_domain,
+                cookies,
+                source_profile=str(getattr(session, "profile_name", "") or ""),
+            )
+>>>>>>> origin/main
             # AU1：告知最短剩余时效，模型 / 用户可预知失效
             expiries = [
                 int(c["expires"] - now)
@@ -1026,7 +1034,12 @@ _LOGIN_POLL_INTERVAL = 2.0
 _LOGIN_DEFAULT_TIMEOUT = 300
 
 #: 页面内注入的 Sage 登录辅助悬浮条（Shadow DOM 隔离）
+<<<<<<< HEAD
 _LOGIN_BANNER_JS = """(function() {
+=======
+_LOGIN_BANNER_JS = """
+(function() {
+>>>>>>> origin/main
   if (window.__sage_login_confirmed) {
     return { confirmed: true, url: location.href, hasPassword: false };
   }
@@ -1100,6 +1113,7 @@ _LOGIN_SUCCESS_JS = """
 """
 
 
+<<<<<<< HEAD
 _LOGIN_STORAGE_JS = (
     "(function(){try{var out={};var ls=window.localStorage;"
     "for(var i=0;i<ls.length;i++){var k=ls.key(i);out[k]=ls.getItem(k);}"
@@ -1180,6 +1194,8 @@ def _first_page_target(session: BrowserSession) -> str:
     return _first_page_info(session)[0]
 
 
+=======
+>>>>>>> origin/main
 class BrowserLoginTool(BaseTool):
     """一键登录站点：打开可见浏览器 → 用户登录 → 自动保存 cookie。
 
@@ -1242,11 +1258,14 @@ class BrowserLoginTool(BaseTool):
             return ToolResult(success=False, error="url 不能为空")
         if not url.startswith(("http://", "https://")):
             return ToolResult(success=False, error="url 必须以 http:// 或 https:// 开头")
+<<<<<<< HEAD
         # 门禁二次校验：REST 登录任务直接调用本工具时也必须遵守
         # 离线 / 内网白名单模式（与 browser_navigate 同口径）
         rejection = load_network_policy().check_host(url)
         if rejection:
             return ToolResult(success=False, error=rejection)
+=======
+>>>>>>> origin/main
 
         # 提取目标域名用于后续 cookie 匹配
         parsed = urlsplit(url)
@@ -1316,8 +1335,13 @@ class BrowserLoginTool(BaseTool):
                 except BrowserCDPError:
                     pass
 
+<<<<<<< HEAD
             # 导出并保存 cookie（同域 localStorage 一并保存）
             saved_domains = self._export_cookies(session, target_host, target_id or "")
+=======
+            # 导出并保存 cookie
+            saved_domains = self._export_cookies(session, target_host)
+>>>>>>> origin/main
 
             if saved_domains:
                 return ToolResult(
@@ -1348,7 +1372,11 @@ class BrowserLoginTool(BaseTool):
         except BrowserCDPError as exc:
             # 容错：若用户手动关闭了窗口/标签页，尝试检查是否已有保存的 cookies
             try:
+<<<<<<< HEAD
                 saved_domains = self._export_cookies(session, target_host, target_id or "")
+=======
+                saved_domains = self._export_cookies(session, target_host)
+>>>>>>> origin/main
                 if saved_domains:
                     return ToolResult(
                         success=True,
@@ -1378,6 +1406,7 @@ class BrowserLoginTool(BaseTool):
                     cdp_command(session, "Target.closeTarget", {"targetId": target_id})
 
     def _export_cookies(
+<<<<<<< HEAD
         self, session: BrowserSession, target_host: str, target_id: str = ""
     ) -> list:
         """从浏览器获取 cookie 并按 domain 分组保存。返回已保存的 domain 列表。
@@ -1389,6 +1418,12 @@ class BrowserLoginTool(BaseTool):
             save_credential,
             save_storage_state,
         )
+=======
+        self, session: BrowserSession, target_host: str
+    ) -> list:
+        """从浏览器获取 cookie 并按 domain 分组保存。返回已保存的 domain 列表。"""
+        from .credential_vault import save_credential
+>>>>>>> origin/main
 
         try:
             result = cdp_command(session, "Network.getCookies", {})
@@ -1399,6 +1434,7 @@ class BrowserLoginTool(BaseTool):
         if not raw_cookies:
             return []
 
+<<<<<<< HEAD
         origins = _capture_local_storage(session, target_id)
         page_hosts: List[str] = []
         for origin_item in origins:
@@ -1419,12 +1455,19 @@ class BrowserLoginTool(BaseTool):
 
         # 按 domain 分组（只保留归属目标站的 cookie，避免把持久 profile 里
         # 其他站点的登录态一并导出）
+=======
+        # 按 domain 分组
+>>>>>>> origin/main
         by_domain: Dict[str, list] = {}
         for item in raw_cookies:
             if not isinstance(item, dict) or not item.get("name"):
                 continue
             cookie_domain = str(item.get("domain") or "").lower()
+<<<<<<< HEAD
             if not cookie_domain or not _allowed(cookie_domain):
+=======
+            if not cookie_domain:
+>>>>>>> origin/main
                 continue
             by_domain.setdefault(cookie_domain, []).append(item)
 
@@ -1432,6 +1475,7 @@ class BrowserLoginTool(BaseTool):
         profile_name = getattr(session, "profile_name", "") or ""
         for cookie_domain, cookies in sorted(by_domain.items()):
             try:
+<<<<<<< HEAD
                 if origins and any(
                     _storage_domain_matches(cookie_domain, host) for host in allowed_hosts
                 ):
@@ -1447,6 +1491,13 @@ class BrowserLoginTool(BaseTool):
                         cookies,
                         source_profile=str(profile_name),
                     )
+=======
+                save_credential(
+                    cookie_domain,
+                    cookies,
+                    source_profile=str(profile_name),
+                )
+>>>>>>> origin/main
                 saved.append(cookie_domain)
             except Exception:
                 # 单个 domain 保存失败不影响其他
