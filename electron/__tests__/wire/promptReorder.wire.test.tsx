@@ -27,6 +27,9 @@ function I18nWrapper({ children }: { children: React.ReactNode }) {
 const render = (ui: React.ReactElement, options?: Parameters<typeof rtlRender>[1]) =>
   rtlRender(ui, { wrapper: I18nWrapper, ...options });
 
+function renderTab() {
+  return render(<PromptTemplatesTab />);
+}
 const tpl = (id: string, name: string) => ({
   id,
   name,
@@ -79,7 +82,7 @@ describe('Settings > Prompt templates: drag-to-sort over the real bridge (#857 d
       },
     ]);
 
-    render(<PromptTemplatesTab />);
+    renderTab();
     await screen.findAllByTestId('prompts-item');
     expect(order()).toEqual(['Alpha', 'Beta', 'Gamma']);
 
@@ -100,7 +103,7 @@ describe('Settings > Prompt templates: drag-to-sort over the real bridge (#857 d
       { method: 'PUT', path: REORDER, reply: () => ({ status: 500, json: { detail: 'boom' } }) },
     ]);
 
-    render(<PromptTemplatesTab />);
+    renderTab();
     await screen.findAllByTestId('prompts-item');
 
     dragFirstOntoLast();
