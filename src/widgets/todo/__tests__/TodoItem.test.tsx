@@ -1,9 +1,17 @@
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { useTodoStore } from '../../../entities/todo/todoStore';
 import type { Todo } from '../../../shared/api/types';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { TodoItem } from '../TodoItem';
+
+function I18nWrapper({ children }: { children: React.ReactNode }) {
+  return <I18nProvider defaultLocale="zh">{children}</I18nProvider>;
+}
+
+const render = (ui: React.ReactElement, options?: Parameters<typeof rtlRender>[1]) =>
+  rtlRender(ui, { wrapper: I18nWrapper, ...options });
 
 vi.mock('../../../entities/todo/todoStore', () => ({
   useTodoStore: vi.fn((selector) =>

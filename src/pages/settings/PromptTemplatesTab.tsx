@@ -16,7 +16,12 @@ import {
   type PromptTemplate,
   type PromptTemplateEnvelope,
 } from '../../shared/api/promptApi';
+import { copyToClipboard } from '../../shared/lib/clipboard';
+import { fillTemplate } from '../../shared/lib/formatTemplate';
 import { useI18n } from '../../shared/lib/i18n';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
+import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
+import type { ContextMenuItemSpec } from '../../shared/ui/ContextMenu/types';
 import { listTplMemoryEntries, tplStorageKey } from '../../widgets/chat/TemplateFillDialog';
 
 const MAX_NAME_LEN = 60;
@@ -153,6 +158,57 @@ export function PromptTemplatesTab() {
       setError(e instanceof Error ? e.message : String(e));
     }
   };
+
+  const promptMenuItems = (tpl: PromptTemplate): ContextMenuItemSpec[] => [
+    {
+      id: 'prompt-edit',
+      label: t('contextMenu.prompt.edit'),
+      icon: Pencil,
+      onSelect: () =>
+        setForm({
+          id: tpl.id,
+          name: tpl.name,
+          description: tpl.description,
+          content: tpl.content,
+        }),
+    },
+    {
+      id: 'prompt-copy-content',
+      label: t('contextMenu.prompt.copyContent'),
+      icon: Copy,
+      onSelect: () =>
+        void copyToClipboard(tpl.content, {
+          successMessage: t('contextMenu.common.copied'),
+          errorMessage: t('contextMenu.common.copyFailed'),
+        }),
+    },
+    {
+      id: 'prompt-copy-name',
+      label: t('contextMenu.common.copyName'),
+      icon: Copy,
+      onSelect: () =>
+        void copyToClipboard(tpl.name, {
+          successMessage: t('contextMenu.common.copied'),
+          errorMessage: t('contextMenu.common.copyFailed'),
+        }),
+    },
+    { id: 'prompt-sep-delete', kind: 'separator' },
+    {
+      id: 'prompt-delete',
+      label: t('contextMenu.prompt.delete'),
+      icon: Trash2,
+      destructive: true,
+      onSelect: async () => {
+        const confirmed = await confirmDialog({
+          title: t('contextMenu.prompt.deleteTitle'),
+          message: fillTemplate(t('contextMenu.prompt.deleteBody'), { name: tpl.name }),
+          confirmLabel: t('common.delete'),
+          danger: true,
+        });
+        if (confirmed) await handleDelete(tpl.id);
+      },
+    },
+  ];
 
   // R30: 模板导出（JSON 下载）
   const handleExport = () => {
@@ -443,8 +499,8 @@ export function PromptTemplatesTab() {
               );
             })
             .map((tpl, idx) => (
+              <ContextMenu key={tpl.id} items={() => promptMenuItems(tpl)}>
               <li
-                key={tpl.id}
                 draggable
                 onDragStart={() => handleDragStart(idx)}
                 onDragOver={(e) => {
@@ -528,6 +584,7 @@ export function PromptTemplatesTab() {
                   </div>
                 </div>
               </li>
+              </ContextMenu>
             ))}
         </ul>
       )}

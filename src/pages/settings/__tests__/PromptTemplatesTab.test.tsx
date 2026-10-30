@@ -6,7 +6,7 @@
  * - 编辑：回填 → update 调用
  * - 删除：remove 调用
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
@@ -15,6 +15,13 @@ import {
   formatPromptTemplatesTabAuditJson,
   formatPromptTemplatesTabAuditSnapshot,
 } from '../PromptTemplatesTab';
+
+function I18nWrapper({ children }: { children: React.ReactNode }) {
+  return <I18nProvider defaultLocale="zh">{children}</I18nProvider>;
+}
+
+const render = (ui: React.ReactElement, options?: Parameters<typeof rtlRender>[1]) =>
+  rtlRender(ui, { wrapper: I18nWrapper, ...options });
 
 const listMock = vi.fn();
 const createMock = vi.fn();

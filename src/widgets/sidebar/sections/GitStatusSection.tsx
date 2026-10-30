@@ -16,10 +16,13 @@ import {
   type GitStatusResponse,
 } from '../../../shared/api/gitStatusApi';
 import { projectApi, type ProjectSummary } from '../../../shared/api/projectApi';
+import { copyToClipboard } from '../../../shared/lib/clipboard';
 import { type TranslationKey, useI18n } from '../../../shared/lib/i18n';
+import { ContextMenu } from '../../../shared/ui/ContextMenu/ContextMenu';
 import { SiderSection } from '../SiderSection';
 
 import { GitDiffDrawer } from './GitDiffDrawer';
+import { buildGitFileContextMenuItems } from './gitFileContextMenu';
 
 interface GitStatusSectionProps {
   collapsed: boolean;
@@ -357,27 +360,47 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
               {/* File list */}
               <ul className="flex flex-col" data-testid="git-status-list">
                 {filteredFiles.map((file) => (
-                  <li
+                  <ContextMenu
                     key={`${file.status}-${file.path}`}
-                    className="group flex items-center gap-1.5 px-2 py-1 rounded-radius-sm hover:bg-bg-hover cursor-pointer"
-                    title={file.path}
-                    onClick={() => setDiffTarget({ path: file.path, status: file.status })}
+                    items={() =>
+                      buildGitFileContextMenuItems({
+                        file,
+                        t,
+                        onViewDiff: () => setDiffTarget({ path: file.path, status: file.status }),
+                        onCopyPath: () =>
+                          void copyToClipboard(file.path, {
+                            successMessage: t('contextMenu.common.copied'),
+                            errorMessage: t('contextMenu.common.copyFailed'),
+                          }),
+                        onCopyName: () =>
+                          void copyToClipboard(file.path.split('/').pop() ?? file.path, {
+                            successMessage: t('contextMenu.common.copied'),
+                            errorMessage: t('contextMenu.common.copyFailed'),
+                          }),
+                      })
+                    }
                   >
-                    <span
-                      className={`text-ui-xs font-mono w-3 text-center flex-shrink-0 ${statusColor(file.status)}`}
+                    <li
+                      className="group flex items-center gap-1.5 px-2 py-1 rounded-radius-sm hover:bg-bg-hover cursor-pointer"
+                      title={file.path}
+                      onClick={() => setDiffTarget({ path: file.path, status: file.status })}
                     >
-                      {statusBadge(file.status)}
-                    </span>
-                    <span className="text-ui-xs text-text truncate flex-1">{file.path}</span>
-                    <button
-                      type="button"
-                      onClick={(e) => handleCopyPath(e, file.path)}
-                      className="shrink-0 opacity-0 group-hover:opacity-100 rounded px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text transition-opacity"
-                      title={t('git.copy_path')}
-                    >
-                      {copiedFilePath === file.path ? t('git.copied') : t('git.copy_path')}
-                    </button>
-                  </li>
+                      <span
+                        className={`text-ui-xs font-mono w-3 text-center flex-shrink-0 ${statusColor(file.status)}`}
+                      >
+                        {statusBadge(file.status)}
+                      </span>
+                      <span className="text-ui-xs text-text truncate flex-1">{file.path}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleCopyPath(e, file.path)}
+                        className="shrink-0 opacity-0 group-hover:opacity-100 rounded px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text transition-opacity"
+                        title={t('git.copy_path')}
+                      >
+                        {copiedFilePath === file.path ? t('git.copied') : t('git.copy_path')}
+                      </button>
+                    </li>
+                  </ContextMenu>
                 ))}
               </ul>
             </div>

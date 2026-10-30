@@ -20,7 +20,8 @@ export interface ContextMenuActionItem {
   hidden?: boolean;
   /** 子菜单项；存在时该项渲染为可展开子菜单。 */
   submenu?: ContextMenuItemSpec[];
-  onSelect: () => void | Promise<void>;
+  /** 叶子项的执行回调；仅含子菜单的父项可省略。 */
+  onSelect?: () => void | Promise<void>;
 }
 
 interface ContextMenuCheckboxItemSpec {
