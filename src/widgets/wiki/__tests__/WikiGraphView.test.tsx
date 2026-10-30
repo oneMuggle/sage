@@ -159,7 +159,7 @@ describe('buildGraph with backend wire signals', () => {
         { id: 'a', label: 'A', sources: [], wikilinks: [] },
         { id: 'b', label: 'B', sources: [], wikilinks: [] },
       ],
-      edges: [{ source: 'a', target: 'b', signal: 'mystery', weight: 1 }],
+      edges: [{ source: 'a', target: 'b', signal: 'mystery' as never, weight: 1 }],
     };
 
     const { edges } = buildGraph(data);
