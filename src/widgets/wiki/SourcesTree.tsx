@@ -8,6 +8,7 @@ interface SourcesTreeProps {
   nodes: FileNode[];
   onFileClick?: (path: string) => void;
   onIngest?: (path: string) => void;
+  onQueue?: (path: string) => void;
   onDelete?: (path: string) => void;
 }
 
@@ -16,12 +17,14 @@ function TreeNode({
   level,
   onFileClick,
   onIngest,
+  onQueue,
   onDelete,
 }: {
   node: FileNode;
   level: number;
   onFileClick?: (path: string) => void;
   onIngest?: (path: string) => void;
+  onQueue?: (path: string) => void;
   onDelete?: (path: string) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -78,6 +81,17 @@ function TreeNode({
               导入到 Wiki
             </button>
           )}
+          {onQueue && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onQueue(node.path);
+              }}
+              className="px-2 py-0.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-muted transition-colors"
+            >
+              加入队列
+            </button>
+          )}
           {onDelete && (
             <button
               onClick={(e) => {
@@ -102,6 +116,7 @@ function TreeNode({
               level={level + 1}
               onFileClick={onFileClick}
               onIngest={onIngest}
+              onQueue={onQueue}
               onDelete={onDelete}
             />
           ))}
@@ -111,7 +126,7 @@ function TreeNode({
   );
 }
 
-export function SourcesTree({ nodes, onFileClick, onIngest, onDelete }: SourcesTreeProps) {
+export function SourcesTree({ nodes, onFileClick, onIngest, onQueue, onDelete }: SourcesTreeProps) {
   return (
     <div className="py-2">
       {nodes.map((node) => (
@@ -121,6 +136,7 @@ export function SourcesTree({ nodes, onFileClick, onIngest, onDelete }: SourcesT
           level={0}
           onFileClick={onFileClick}
           onIngest={onIngest}
+          onQueue={onQueue}
           onDelete={onDelete}
         />
       ))}

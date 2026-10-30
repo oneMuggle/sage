@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { resolveEndpoint } from '../../entities/setting/types';
+import { useQueueStore } from '../../entities/wiki/queue-store';
 import { useWikiStore } from '../../entities/wiki/store';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { useWikiIngest } from '../../features/wiki/useWikiIngest';
@@ -166,6 +167,14 @@ export function SourcesView() {
     }
   };
 
+  const handleQueue = async (path: string) => {
+    if (!project) return;
+    const taskId = await useQueueStore.getState().addTask(project.path, path);
+    if (taskId) {
+      toast.success(`已加入队列（${taskId}）`);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
@@ -222,6 +231,7 @@ export function SourcesView() {
               nodes={nodes}
               onFileClick={(path) => void handleSelectFile(path)}
               onIngest={(path) => void handleIngest(path)}
+              onQueue={(path) => void handleQueue(path)}
               onDelete={(path) => void handleDelete(path)}
             />
           )}

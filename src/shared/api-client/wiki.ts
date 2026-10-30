@@ -558,6 +558,30 @@ export async function queueClearTasks(
   });
 }
 
+export interface QueueProcessedTask {
+  task_id: string;
+  status: 'completed' | 'failed';
+  wiki_page_path?: string;
+  error?: string;
+}
+
+export interface QueueProcessResult {
+  processed: QueueProcessedTask[];
+  remaining: QueueStatusSummary;
+  error?: string;
+}
+
+/** 按 FIFO 处理最多 `limit` 个 pending 任务（后端逐任务真实 ingest）。 */
+export async function queueProcess(
+  projectPath: string,
+  limit = 1,
+): Promise<QueueProcessResult> {
+  return httpPost<QueueProcessResult>('/wiki/ingest/queue/process', {
+    project_path: projectPath,
+    limit,
+  });
+}
+
 export const WIKI_API_BASE = API_BASE;
 
 export function formatWikiApiClientSummary(

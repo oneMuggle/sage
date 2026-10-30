@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from backend.wiki.ingest import import_source_into_raw
@@ -9,7 +11,7 @@ from backend.wiki.ingest import import_source_into_raw
 pytestmark = pytest.mark.unit
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_imports_regular_file_into_raw_sources(tmp_path):
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -24,7 +26,7 @@ async def test_imports_regular_file_into_raw_sources(tmp_path):
     assert dest.read_text(encoding="utf-8") == "# hi"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_rejects_symlink(tmp_path):
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -35,20 +37,20 @@ async def test_rejects_symlink(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="仅支持普通文件"):
         await import_source_into_raw(project, link)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_rejects_relative_path(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
 
-    with pytest.raises(ValueError):
-        await import_source_into_raw(project, project / "relative.md")
+    with pytest.raises(ValueError, match="绝对路径"):
+        await import_source_into_raw(project, Path("relative.md"))
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_rejects_oversized_file(tmp_path):
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -57,5 +59,5 @@ async def test_rejects_oversized_file(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="file exceeds configured read limit"):
         await import_source_into_raw(project, big, max_bytes=16)

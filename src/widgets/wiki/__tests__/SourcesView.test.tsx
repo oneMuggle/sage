@@ -10,11 +10,15 @@ const mocks = vi.hoisted(() => ({
   deleteSource: vi.fn(),
   readFile: vi.fn(),
   ingestStream: vi.fn(),
+  addTask: vi.fn(),
   confirm: vi.fn(),
 }));
 
 vi.mock('../../../entities/wiki/store', () => ({
   useWikiStore: (select: (s: typeof mocks.state) => unknown) => select(mocks.state),
+}));
+vi.mock('../../../entities/wiki/queue-store', () => ({
+  useQueueStore: { getState: () => ({ addTask: mocks.addTask }) },
 }));
 vi.mock('../../../features/manage-settings/useSettings', () => ({
   useSettings: () => ({
@@ -59,6 +63,7 @@ beforeEach(() => {
   });
   mocks.readFile.mockResolvedValue('# hello');
   mocks.ingestStream.mockResolvedValue({ streamId: 's1' });
+  mocks.addTask.mockResolvedValue('task-1');
   mocks.confirm.mockResolvedValue(true);
 });
 
@@ -98,4 +103,16 @@ it('deletes through the cascade endpoint and refreshes', async () => {
     expect(mocks.deleteSource).toHaveBeenCalledWith('raw/sources/a.md', '/proj');
   });
   expect(mocks.list).toHaveBeenCalledTimes(2);
+});
+
+it('enqueues a source file without starting an immediate ingest', async () => {
+  render(<SourcesView />);
+  await screen.findByText('a.md');
+
+  fireEvent.click(screen.getByRole('button', { name: '加入队列' }));
+
+  await waitFor(() => {
+    expect(mocks.addTask).toHaveBeenCalledWith('/proj', 'raw/sources/a.md');
+  });
+  expect(mocks.ingestStream).not.toHaveBeenCalled();
 });

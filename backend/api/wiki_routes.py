@@ -878,8 +878,10 @@ async def queue_add(req: QueueAddRequest):
     project_root = _canonical_project_root(req.project_path)
     authorize_registered_project(req.project_path)
 
+    _, resolved = _resolve_source_file(req.project_path, req.source_path)
+    source_path = str(resolved.relative_to(project_root)).replace("\\", "/")
     queue = IngestQueue(project_root)
-    task_id = queue.add(req.source_path, max_retries=req.max_retries)
+    task_id = queue.add(source_path, max_retries=req.max_retries)
 
     return {"task_id": task_id, "status": "pending"}
 
@@ -1023,6 +1025,29 @@ async def queue_clear(project_path: str, completed_only: bool = False):
     count = queue.clear_completed() if completed_only else queue.clear_all()
 
     return {"cleared": count}
+
+
+class QueueProcessRequest(BaseModel):
+    """队列处理请求。"""
+
+    project_path: str
+    limit: int = 1
+
+
+@router.post("/ingest/queue/process")
+async def queue_process(req: QueueProcessRequest) -> dict:
+    """按 FIFO 顺序处理 pending 任务（每个任务真实调用 ingest 管线）。
+
+    LLM/embedding 配置从 app_settings 解析；未配置时返回 ``error`` 且
+    任务保持 pending。单任务失败会标记 failed 并继续下一个。
+    """
+    from backend.wiki.queue_worker import process_pending
+
+    project_root = _canonical_project_root(req.project_path)
+    authorize_registered_project(req.project_path)
+
+    limit = max(1, min(int(req.limit), 20))
+    return await process_pending(project_root, limit=limit)
 
 
 # ============================================================================
