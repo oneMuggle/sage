@@ -264,3 +264,26 @@ async def test_stream_success_yields_content_chunks(client):
         assert chunks == ["Hello", " world"]
     finally:
         patcher.stop()
+
+
+@pytest.mark.asyncio()
+async def test_stream_proxy_upstream_timeout_classified_as_timeout(client, monkeypatch):
+    """流式 504 代理超时：分类为 TIMEOUT，且错误体已预读。"""
+    monkeypatch.setenv("SAGE_LLM_RETRY_MAX_ATTEMPTS", "1")
+    monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "0")
+    response = _status_response(504)
+    response.text = '{"detail":{"type":"upstream_timeout","message":"x"}}'
+    patcher = _patch_stream(client, response=response)
+
+    async def _consume_events():
+        async for _kind, _payload in client.chat_stream_events(_MESSAGES):
+            pass
+
+    try:
+        with pytest.raises(LLMError) as exc_info:
+            await _consume_events()
+        assert exc_info.value.type == LLMErrorType.TIMEOUT
+        assert "LLM 代理超时" in exc_info.value.message
+        response.aread.assert_awaited()
+    finally:
+        patcher.stop()

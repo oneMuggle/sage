@@ -378,6 +378,8 @@ export const enWorkspaceAndTools = {
 
   // ─── Session status badges (S4/S5/S7/S9 multi-session parallel) ──────
   'session.status_running': 'Running',
+  'session.status_retrying': 'Retrying ({attempt}/{max})',
+  'session.status_running_background': 'Running in background',
   'session.status_completed': 'Completed',
   'session.status_failed': 'Failed',
   'session.status_suspended': 'Suspended, waiting for wake',
