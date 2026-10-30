@@ -11,7 +11,7 @@ import { PreferenceSaveStatus } from '../../features/manage-settings/PreferenceS
 import { useConfirmedPreference } from '../../features/manage-settings/useConfirmedPreference';
 import { permissionApi } from '../../shared/api/permissionApi';
 import { useI18n } from '../../shared/lib/i18n';
-import { GatewayCard } from '../../widgets/settings/GatewayCard';
+import { GatewaySection } from '../../widgets/settings/GatewaySection';
 import { HooksCard } from '../../widgets/settings/HooksCard';
 
 import { PermissionRulesManager } from './PermissionRulesManager';
@@ -261,14 +261,7 @@ export function ToolsConnectionsTab() {
         </h3>
         <HooksCard />
       </section>
-      <section>
-        <h3 className="text-ui-base font-semibold text-text mb-3">
-          {t('settings.tools.section.gateway')}
-        </h3>
-        <GatewayCard platform="telegram" />
-        <GatewayCard platform="discord" />
-        <GatewayCard platform="slack" />
-      </section>
+      <GatewaySection title={t('settings.tools.section.gateway')} />
     </div>
   );
 }
