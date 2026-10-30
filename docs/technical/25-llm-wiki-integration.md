@@ -967,6 +967,11 @@ _🎉 PR-8 完成。本文档随 Phase 实施滚动更新,最终更新于 Phase 
   任务，LLM/embedding 配置从 `app_settings` 解析；单任务失败标记 failed
   并继续。`queue_add` 现在校验源文件必须位于项目内。前端
   `WikiQueuePanel` 增加「处理队列」，`SourcesTree` 增加「加入队列」。
+- **P2 收尾（2026-10-30）**：
+  - 图谱新增 **Adamic-Adar** 第 4 信号（共同邻居 `sum(1/log(max(degree,2))) × 1.5`，双向边），前后端类型/配色同步。
+  - `literature_aggregator` 改为消费 `wiki/zotero/items/*.md` + `wiki/literature/*.md`，输出 `wiki/literature/index.md`；Zotero 同步成功后自动刷新，另提供 `POST /wiki/literature/review`。
+  - 新增 `backend/wiki/queue_daemon.py`：每 60s 扫描项目注册表/最近项目中的 pending 队列，与手动入口共享 `queue_worker.queue_process_lock`；main lifespan 启动并在 shutdown 取消。
+  - 向量库新增工厂 `vectorstore_factory.open_vector_store`：默认 JSON；`SAGE_WIKI_VECTOR_BACKEND=hnsw` 且 hnswlib 可用时使用 HNSW，否则回退 JSON。
 - **评审加固（同日）**：导入端点只接受文档后缀白名单（`.md/.pdf/.docx/...`）
   以收紧任意文件读取；队列处理加进程级 409 互斥锁，取消/崩溃时任务回滚为
   pending，队列 JSON 改为同目录临时文件 + 原子替换，并在每次读改写前重新

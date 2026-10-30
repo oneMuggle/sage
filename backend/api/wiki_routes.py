@@ -18,7 +18,6 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from backend.orchestration._lazy_lock import LazyLock
 from backend.wiki import (
     ChatConfig,
     GraphData,
@@ -58,9 +57,6 @@ from backend.wiki.project_authorization import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/wiki", tags=["wiki"])
-
-# 队列处理是长跑 + LLM 计费操作：进程内同一时刻只允许一个处理请求。
-_queue_process_lock = LazyLock()
 
 
 def _cleanup_temp_paths(*paths: Path | None, project_root: Path | None = None) -> None:
@@ -759,6 +755,26 @@ async def review(project_path: str) -> dict:
 
 
 # ============================================================================
+# Literature review index
+# ============================================================================
+
+
+@router.post("/literature/review")
+async def literature_review(project_path: str) -> dict:
+    """聚合 ``wiki/zotero/items`` 与 ``wiki/literature`` 生成综述索引。"""
+    from backend.wiki.literature_aggregator import (
+        generate_literature_review,
+        scan_literature_directory,
+    )
+
+    project_root = authorize_registered_project(project_path)
+    path = generate_literature_review(project_root)
+    count = len(scan_literature_directory(project_root))
+    relative = str(path.relative_to(project_root)).replace("\\", "/") if path else None
+    return {"path": relative, "count": count}
+
+
+# ============================================================================
 # Ingest
 # ============================================================================
 
@@ -1045,16 +1061,16 @@ async def queue_process(req: QueueProcessRequest) -> dict:
     LLM/embedding 配置从 app_settings 解析；未配置时返回 ``error`` 且
     任务保持 pending。单任务失败会标记 failed 并继续下一个。
     """
-    from backend.wiki.queue_worker import process_pending
+    from backend.wiki.queue_worker import process_pending, queue_process_lock
 
     project_root = _canonical_project_root(req.project_path)
     authorize_registered_project(req.project_path)
 
-    if _queue_process_lock.locked():
+    if queue_process_lock.locked():
         raise HTTPException(status_code=409, detail="wiki queue already processing")
 
     limit = max(1, min(int(req.limit), 20))
-    async with _queue_process_lock:
+    async with queue_process_lock:
         return await process_pending(project_root, limit=limit)
 
 

@@ -40,7 +40,7 @@ from .files import (
 )
 from .llm_context import LLMContext
 from .models import Analysis, AnalysisConcept, AnalysisEntity, IngestProgress, IngestResult
-from .vectorstore import VectorStore
+from .vectorstore_factory import open_vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -590,7 +590,7 @@ async def embed_pages(
     embed_response = await http_post(embed_req.url, embed_req.headers, embed_req.body)
     vectors = parse_embed_response(embed_response, config.embed_dim)
 
-    vector_store = VectorStore.open(project_root, config.embed_dim)
+    vector_store = open_vector_store(project_root, config.embed_dim)
     vector_store.upsert_chunks(
         wiki_page_path,
         [(idx, chunk, vec) for idx, (chunk, vec) in enumerate(zip(chunks, vectors))],  # noqa: B905 — strict keyword is unavailable on Python 3.8

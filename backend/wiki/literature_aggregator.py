@@ -1,16 +1,12 @@
 """Research 项目文献综述聚合 (2026-09-25)
 
-项目类型分类系统 - Phase 9.5.3
-从 wiki/literature/ 目录聚合文献条目，生成文献综述摘要。
-
-功能：
-- 扫描 literature 目录下的 Markdown 文件
-- 提取标题、作者、年份、引用信息
-- 生成文献综述索引页
+从 ``wiki/zotero/items/`` 与 ``wiki/literature/`` 聚合文献条目，生成
+``wiki/literature/index.md``（graph 会跳过 index.md）。
 """
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -85,6 +81,29 @@ def extract_literature_entry(file_path: Path) -> Optional[LiteratureEntry]:
 
             content = content_body
 
+    # Zotero wiki 页面正文：**Authors**: A, B. / Year: 2017 | Type: ...
+    if not authors:
+        authors_match = re.search(r"^\*\*Authors\*\*:\s*(.+)$", content, re.MULTILINE)
+        if authors_match:
+            raw = authors_match.group(1).strip()
+            if ";" in raw:
+                authors = [part.strip() for part in raw.split(";") if part.strip()]
+            else:
+                authors = [part.strip() for part in raw.split(",") if part.strip()]
+
+    if year is None:
+        year_match = re.search(r"\bYear:\s*((?:19|20)\d{2})\b", content)
+        if year_match:
+            year = int(year_match.group(1))
+
+    abstract_match = re.search(
+        r"^##\s+Abstract\s*\n+(.+?)(?=\n##\s|\Z)",
+        content,
+        re.MULTILINE | re.DOTALL,
+    )
+    if abstract_match:
+        summary = abstract_match.group(1).strip()[:200]
+
     # 从第一行 H1 提取标题（如果 front matter 没有）
     if not title:
         lines = content.split("\n")
@@ -94,13 +113,14 @@ def extract_literature_entry(file_path: Path) -> Optional[LiteratureEntry]:
                 title = stripped[2:].strip()
                 break
 
-    # 提取摘要（第一段非标题文本）
-    lines = content.split("\n")
-    for line in lines:
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#") and not stripped.startswith("---"):
-            summary = stripped[:200]  # 截取前 200 字符
-            break
+    # 提取摘要（第一段非标题文本；Abstract 小节优先）
+    if not summary:
+        lines = content.split("\n")
+        for line in lines:
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#") and not stripped.startswith("---"):
+                summary = stripped[:200]  # 截取前 200 字符
+                break
 
     # 从文件名回退
     if not title:
@@ -123,27 +143,40 @@ def extract_literature_entry(file_path: Path) -> Optional[LiteratureEntry]:
 
 
 def scan_literature_directory(project_root: Path) -> List[LiteratureEntry]:
-    """扫描文献目录，提取所有条目。
+    """扫描 Zotero 文献页与 legacy literature 目录，提取所有条目。
 
     Args:
         project_root: 项目根目录
 
     Returns:
-        文献条目列表
+        文献条目列表（按标题去重）
     """
-    literature_dir = project_root / "wiki" / "literature"
-    if not literature_dir.exists():
-        return []
+    sources = [
+        project_root / "wiki" / "zotero" / "items",
+        project_root / "wiki" / "literature",
+    ]
 
     entries: List[LiteratureEntry] = []
-    for md_file in literature_dir.glob("*.md"):
-        entry = extract_literature_entry(md_file)
-        if entry:
+    seen_titles: set[str] = set()
+    for source_dir in sources:
+        if not source_dir.exists():
+            continue
+        for md_file in sorted(source_dir.glob("*.md")):
+            if md_file.name in ("index.md", "_index.md"):
+                continue
+            entry = extract_literature_entry(md_file)
+            if entry is None or entry.title in seen_titles:
+                continue
+            seen_titles.add(entry.title)
             entries.append(entry)
 
     # 按年份降序排列（无年份的排最后）
     entries.sort(key=lambda e: (e.year is None, -(e.year or 0)))
     return entries
+
+
+def _relative_link(source_file: str, wiki_dir: Path) -> str:
+    return Path(os.path.relpath(source_file, wiki_dir)).as_posix()
 
 
 def generate_literature_review(
@@ -192,7 +225,7 @@ def generate_literature_review(
                 lines.append(f"**标签**: {', '.join(entry.tags)}\n")
             if entry.summary:
                 lines.append(f"\n{entry.summary}\n")
-            rel_path = Path(entry.source_file).relative_to(wiki_dir)
+            rel_path = _relative_link(entry.source_file, wiki_dir)
             lines.append(f"[查看原文]({rel_path})\n")
 
     # 输出无年份的
@@ -206,9 +239,9 @@ def generate_literature_review(
                 lines.append(f"**标签**: {', '.join(entry.tags)}\n")
             if entry.summary:
                 lines.append(f"\n{entry.summary}\n")
-            rel_path = Path(entry.source_file).relative_to(wiki_dir)
+            rel_path = _relative_link(entry.source_file, wiki_dir)
             lines.append(f"[查看原文]({rel_path})\n")
 
-    index_file = wiki_dir / "_index.md"
+    index_file = wiki_dir / "index.md"
     index_file.write_text("\n".join(lines), encoding="utf-8")
     return index_file

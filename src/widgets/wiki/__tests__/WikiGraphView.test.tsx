@@ -112,6 +112,7 @@ describe('normalizeGraphSignal', () => {
     expect(normalizeGraphSignal('direct_link')).toBe('DirectLink');
     expect(normalizeGraphSignal('source_overlap')).toBe('SourceOverlap');
     expect(normalizeGraphSignal('type_affinity')).toBe('TypeAffinity');
+    expect(normalizeGraphSignal('adamic_adar')).toBe('AdamicAdar');
   });
 
   it('accepts canonical values and returns null for unknown', () => {
@@ -150,6 +151,22 @@ describe('buildGraph with backend wire signals', () => {
 
     expect(edges[0].label).toBe('SourceOverlap');
     expect((edges[0].style as { stroke: string }).stroke).toBe('#a855f7');
+    expect(edges[0].animated).toBe(false);
+  });
+
+  it('maps adamic_adar to its palette color without animation', () => {
+    const data: GraphData = {
+      nodes: [
+        { id: 'a', label: 'A', sources: [], wikilinks: [] },
+        { id: 'b', label: 'B', sources: [], wikilinks: [] },
+      ],
+      edges: [{ source: 'a', target: 'b', signal: 'adamic_adar', weight: 1.5 }],
+    };
+
+    const { edges } = buildGraph(data);
+
+    expect(edges[0].label).toBe('AdamicAdar');
+    expect((edges[0].style as { stroke: string }).stroke).toBe('#f59e0b');
     expect(edges[0].animated).toBe(false);
   });
 

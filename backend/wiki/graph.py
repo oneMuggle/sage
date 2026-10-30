@@ -1,11 +1,13 @@
 """4 信号知识图谱。
 
-实现 4 信号图谱构建：DirectLink、SourceOverlap、TypeAffinity，以及 2-hop 相关性传播。
+实现 4 信号图谱构建：DirectLink、SourceOverlap、TypeAffinity、AdamicAdar，
+以及 2-hop 相关性传播。
 """
 
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -19,6 +21,7 @@ from .models import GraphData, GraphEdge, GraphNode, GraphSignal
 DIRECT_LINK_WEIGHT = 3.0
 SOURCE_OVERLAP_WEIGHT = 4.0
 TYPE_AFFINITY_WEIGHT = 1.0
+ADAMIC_ADAR_WEIGHT = 1.5
 DECAY = 0.5
 K_HOPS = 2
 
@@ -151,6 +154,42 @@ def build_graph(project_root: Path) -> GraphData:
                             )
                         )
                         edge_set.add(edge_key)
+
+    # Signal 4: Adamic-Adar (common neighbours weighted by 1/log(degree))
+    neighbours: Dict[str, set] = defaultdict(set)
+    for edge in edges:
+        neighbours[edge.source].add(edge.target)
+        neighbours[edge.target].add(edge.source)
+
+    aa_candidates: Dict[str, List[Tuple[float, str]]] = defaultdict(list)
+    for i, node_a in enumerate(nodes):
+        for node_b in nodes[i + 1 :]:
+            common = neighbours[node_a.id] & neighbours[node_b.id]
+            if not common:
+                continue
+            score = sum(
+                1.0 / math.log(max(len(neighbours[neighbour]), 2))
+                for neighbour in common
+            )
+            aa_candidates[node_a.id].append((score, node_b.id))
+            aa_candidates[node_b.id].append((score, node_a.id))
+
+    # Keep only the strongest 5 AA neighbours per node so large wikis do not
+    # produce an O(n²) edge set (the reference implementation scores on demand).
+    for source_id, candidates in aa_candidates.items():
+        for score, target_id in sorted(candidates, reverse=True)[:5]:
+            edge_key = (source_id, target_id, GraphSignal.AdamicAdar)
+            if edge_key in edge_set:
+                continue
+            edges.append(
+                GraphEdge(
+                    source=source_id,
+                    target=target_id,
+                    signal=GraphSignal.AdamicAdar,
+                    weight=score * ADAMIC_ADAR_WEIGHT,
+                )
+            )
+            edge_set.add(edge_key)
 
     return GraphData(nodes=nodes, edges=edges)
 

@@ -178,9 +178,16 @@ def _build_zotero_db(db_path: Path, storage_dir: Path, abs_pdf: Path) -> None:
         ],
     )
     conn.execute("INSERT INTO itemNotes VALUES (50, 1, '<p>note text</p>', 'My Note')")
-    # 条目 1 的全文索引：deep learning
-    conn.executemany("INSERT INTO fulltextWords VALUES (?, ?)", [(1, "deep"), (2, "learning")])
-    conn.executemany("INSERT INTO fulltextItemWords VALUES (?, ?)", [(1, 1), (1, 2)])
+    # 条目 1 的全文索引挂在附件 20 上（真实 Zotero 行为）；
+    # 条目 2 保留父条目自索引，覆盖 legacy fallback。
+    conn.executemany(
+        "INSERT INTO fulltextWords VALUES (?, ?)",
+        [(1, "deep"), (2, "learning"), (3, "legacy"), (4, "parent")],
+    )
+    conn.executemany(
+        "INSERT INTO fulltextItemWords VALUES (?, ?)",
+        [(20, 1), (20, 2), (2, 3), (2, 4)],
+    )
     conn.commit()
     conn.close()
 
@@ -402,6 +409,12 @@ def test_read_pdf_fulltext_from_index(client: ZoteroClient) -> None:
     assert out["chunk_text"] == "deep learning"
     assert out["total_chars"] == 13
     assert out["has_more"] is False
+
+
+def test_read_pdf_fulltext_legacy_parent_index(client: ZoteroClient) -> None:
+    out = client.read_pdf_fulltext("BOOK2")
+    assert out["source"] == "index"
+    assert out["chunk_text"] == "legacy parent"
 
 
 def test_read_pdf_fulltext_chunking(client: ZoteroClient) -> None:
