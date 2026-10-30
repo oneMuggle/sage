@@ -24,6 +24,8 @@ interface TurnGroupProps {
   onRegenerate?: (messageId: string) => void;
   onDelete?: (messageId: string) => void;
   onQuote?: (message: Message) => void;
+  /** 对话阅读导航 A4: 划词引用（消息右键菜单「引用选区」） */
+  onQuoteSelection?: (text: string) => void;
   onSaveToMemory?: (message: Message) => void;
   /** P0-6: 打开记忆浏览器并定位到该条记忆 */
   onOpenMemory?: (memoryId: string) => void;
@@ -46,6 +48,7 @@ function TurnGroupComponent({
   onRegenerate,
   onDelete,
   onQuote,
+  onQuoteSelection,
   onSaveToMemory,
   onOpenMemory,
   onBlockedAction,
@@ -145,8 +148,9 @@ function TurnGroupComponent({
             onRegenerate={onRegenerate}
             onDelete={onDelete}
             onQuote={onQuote}
+            onQuoteSelection={onQuoteSelection}
             onSaveToMemory={onSaveToMemory}
-  onOpenMemory={onOpenMemory}
+            onOpenMemory={onOpenMemory}
             artifactsByToolCall={artifactsByToolCall}
             onBlockedAction={onBlockedAction}
             onContinue={idx === lastAssistantIdx ? onContinue : undefined}
@@ -159,7 +163,8 @@ function TurnGroupComponent({
 }
 
 /** 对话阅读导航 A1: 定位命中后的短暂高亮（与 MessageList 中 JUMP_FLASH_CLASS 同步） */
-const TURN_JUMP_FLASH_CLASS = 'rounded-radius-sm ring-2 ring-primary/50 bg-primary/5 transition-shadow';
+const TURN_JUMP_FLASH_CLASS =
+  'rounded-radius-sm ring-2 ring-primary/50 bg-primary/5 transition-shadow';
 
 function formatTurnTime(ts: number): string {
   if (!ts) return '';
@@ -193,9 +198,7 @@ export interface TurnGroupAuditReport {
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function evaluateTurnGroupAudit(
-  input: TurnGroupAuditInput,
-): TurnGroupAuditReport {
+export function evaluateTurnGroupAudit(input: TurnGroupAuditInput): TurnGroupAuditReport {
   const turnId = input.turnId.trim();
   const messageCount = Math.max(0, Math.trunc(input.messageCount));
   const toolCallCount = Math.max(0, Math.trunc(input.toolCallCount));
@@ -219,8 +222,6 @@ export function evaluateTurnGroupAudit(
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function exportTurnGroupAuditJson(
-  input: TurnGroupAuditInput,
-): string {
+export function exportTurnGroupAuditJson(input: TurnGroupAuditInput): string {
   return JSON.stringify(evaluateTurnGroupAudit(input));
 }

@@ -6,6 +6,7 @@ import {
   wikiReadFile,
   wikiWriteFile,
   wikiDeleteFile,
+  wikiRenameFile,
   getWikiGraph,
 } from '../../shared/api-client/wiki';
 import type { WikiProject, FileNode, WikiView, GraphData } from '../../shared/types/wiki';
@@ -26,6 +27,10 @@ interface WikiStoreState {
   openFile: (path: string) => Promise<void>;
   saveFile: (path: string, content: string) => Promise<void>;
   deleteFile: (path: string) => Promise<void>;
+  /** 在目录下新建 Markdown 文件（目录为空串表示根目录）。 */
+  createFile: (dirPath: string, name: string) => Promise<void>;
+  /** 重命名文件（同目录内改名，保留扩展名由调用方决定）。 */
+  renameFile: (path: string, newName: string) => Promise<void>;
   setSelectedFile: (path: string | null) => void;
   setFileContent: (content: string) => void;
   setActiveView: (view: WikiView) => void;
@@ -90,12 +95,53 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
     if (!project) return;
     try {
       await wikiDeleteFile(path, project.path);
-      if (get().selectedFile === path) {
+      const selected = get().selectedFile;
+      if (selected === path || (selected?.startsWith(`${path}/`) ?? false)) {
         set({ selectedFile: null, fileContent: '' });
       }
       await get().loadFileTree();
     } catch (e) {
       set({ error: `删除文件失败: ${e}` });
+      throw e;
+    }
+  },
+
+  createFile: async (dirPath, name) => {
+    const { project } = get();
+    if (!project) return;
+    const normalized = name.trim();
+    if (!normalized) throw new Error('name required');
+    const path = dirPath ? `${dirPath}/${normalized}` : normalized;
+    set({ isLoading: true });
+    try {
+      const title = normalized.replace(/\.md$/i, '');
+      await wikiWriteFile(path, `# ${title}\n\n`, project.path);
+      set({ isLoading: false });
+      await get().loadFileTree();
+    } catch (e) {
+      set({ error: `新建文件失败: ${e}`, isLoading: false });
+      throw e;
+    }
+  },
+
+  renameFile: async (path, newName) => {
+    const { project } = get();
+    if (!project) return;
+    const normalized = newName.trim();
+    if (!normalized) throw new Error('name required');
+    const separator = path.lastIndexOf('/');
+    const dir = separator >= 0 ? path.slice(0, separator) : '';
+    const nextPath = dir ? `${dir}/${normalized}` : normalized;
+    if (nextPath === path) return;
+    set({ isLoading: true });
+    try {
+      await wikiRenameFile(path, nextPath, project.path);
+      if (get().selectedFile === path) set({ selectedFile: nextPath });
+      set({ isLoading: false });
+      await get().loadFileTree();
+    } catch (e) {
+      set({ error: `重命名失败: ${e}`, isLoading: false });
+      throw e;
     }
   },
 
@@ -146,9 +192,7 @@ export interface WikiStoreAuditInput {
   hasError?: boolean;
 }
 
-export function buildWikiStoreAuditSnapshot(
-  input: WikiStoreAuditInput = {},
-): string {
+export function buildWikiStoreAuditSnapshot(input: WikiStoreAuditInput = {}): string {
   const hasProject = Boolean(input.hasProject);
   const fileTreeCount = Math.max(0, input.fileTreeCount ?? 0);
   const selectedFile = (input.selectedFile ?? '').trim() || 'none';
@@ -158,9 +202,7 @@ export function buildWikiStoreAuditSnapshot(
   return `project:${hasProject ? 'yes' : 'no'}|tree:${fileTreeCount}|file:${selectedFile}|view:${activeView}|loading:${isLoading ? 'yes' : 'no'}|err:${hasError ? 'yes' : 'no'}`;
 }
 
-export function buildWikiStoreAuditJson(
-  input: WikiStoreAuditInput = {},
-): string {
+export function buildWikiStoreAuditJson(input: WikiStoreAuditInput = {}): string {
   const hasProject = Boolean(input.hasProject);
   const fileTreeCount = Math.max(0, input.fileTreeCount ?? 0);
   const selectedFile = (input.selectedFile ?? '').trim() || 'none';

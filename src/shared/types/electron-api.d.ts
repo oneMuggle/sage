@@ -424,6 +424,13 @@ export interface ElectronAPI {
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
   invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T>;
   /**
+   * 开发期右键「检查元素」桥（渲染层自绘菜单按坐标请求 inspect）。
+   * 主进程在打包环境（app.isPackaged）下会忽略该请求。
+   */
+  devtools?: {
+    inspectAt: (x: number, y: number) => void;
+  };
+  /**
    * P8 (2026-09-14): 嵌入模型下载桥 —— models:embedder:download / cancel
    * 原生 IPC；进度经 api.listen('models:embedder:progress') 订阅。
    * payload 缺省时 main 使用内置 EMBEDDER_MODEL_MANIFEST。

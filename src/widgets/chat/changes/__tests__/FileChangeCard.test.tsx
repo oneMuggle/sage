@@ -9,12 +9,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useChangesListStore } from '../../../../features/changes/changesListStore';
 import { useRightPanelStore } from '../../../../features/right-panel/rightPanelStore';
 import type { WorkspaceChanges, WorkspaceDiff } from '../../../../shared/api/workspaceApi';
+import { I18nProvider } from '../../../../shared/lib/i18n';
 import {
   buildFileChangeCardAuditJson,
   buildFileChangeCardAuditSnapshot,
   FileChangeCard,
   FileChangeCards,
 } from '../FileChangeCard';
+
+const renderWithI18n = (ui: React.ReactElement) =>
+  render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
 
 const mockGetChangeDiff = vi.fn<(sessionId: string, path: string) => Promise<WorkspaceDiff>>();
 const mockGetChanges = vi.fn<(sessionId: string) => Promise<WorkspaceChanges>>();
@@ -56,7 +60,7 @@ describe('FileChangeCard', () => {
 
   it('渲染路径与 +/- 行数徽章（缓存命中时不重复拉列表）', () => {
     useChangesListStore.setState({ bySession: { s1: SAMPLE_CHANGES } });
-    render(<FileChangeCard sessionId="s1" path="src/app.ts" />);
+    renderWithI18n(<FileChangeCard sessionId="s1" path="src/app.ts" />);
 
     expect(screen.getByText('src/app.ts')).toBeInTheDocument();
     expect(screen.getByText('+12')).toBeInTheDocument();
@@ -66,7 +70,7 @@ describe('FileChangeCard', () => {
 
   it('缓存未命中时拉一次变更列表（多卡片共享 inflight 去重）', async () => {
     mockGetChanges.mockResolvedValue(SAMPLE_CHANGES);
-    render(<FileChangeCard sessionId="s1" path="src/app.ts" />);
+    renderWithI18n(<FileChangeCard sessionId="s1" path="src/app.ts" />);
 
     await waitFor(() => {
       expect(mockGetChanges).toHaveBeenCalledWith('s1');
@@ -81,7 +85,7 @@ describe('FileChangeCard', () => {
       diff: 'diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n-old\n+new',
       truncated: false,
     });
-    render(<FileChangeCard sessionId="s1" path="src/app.ts" />);
+    renderWithI18n(<FileChangeCard sessionId="s1" path="src/app.ts" />);
 
     fireEvent.click(screen.getByTestId('file-change-toggle'));
     await waitFor(() => {
@@ -100,7 +104,7 @@ describe('FileChangeCard', () => {
 
   it('diff 加载失败就地显示错误', async () => {
     mockGetChangeDiff.mockRejectedValue(new Error('git 不可用'));
-    render(<FileChangeCard sessionId="s1" path="src/app.ts" />);
+    renderWithI18n(<FileChangeCard sessionId="s1" path="src/app.ts" />);
 
     fireEvent.click(screen.getByTestId('file-change-toggle'));
     await waitFor(() => {
@@ -110,7 +114,7 @@ describe('FileChangeCard', () => {
 
   it('面板按钮经 selectChange 直达右侧变更 Tab', () => {
     useChangesListStore.setState({ bySession: { s1: SAMPLE_CHANGES } });
-    render(<FileChangeCard sessionId="s1" path="src/app.ts" />);
+    renderWithI18n(<FileChangeCard sessionId="s1" path="src/app.ts" />);
 
     fireEvent.click(screen.getByTestId('file-change-open-panel'));
     const state = useRightPanelStore.getState();
@@ -127,7 +131,7 @@ describe('FileChangeCards — ≥3 文件折叠汇总条 (right-panel R6)', () =
   });
 
   it('少于阈值平铺逐文件卡片', () => {
-    render(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts']} />);
+    renderWithI18n(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts']} />);
     expect(screen.getByText('a.ts')).toBeInTheDocument();
     expect(screen.getByText('b.ts')).toBeInTheDocument();
     expect(screen.queryByTestId('file-change-group')).not.toBeInTheDocument();
@@ -146,7 +150,7 @@ describe('FileChangeCards — ≥3 文件折叠汇总条 (right-panel R6)', () =
         },
       },
     });
-    render(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts', 'c.ts']} />);
+    renderWithI18n(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts', 'c.ts']} />);
 
     // 折叠态:汇总条 + 合计 +10/−3,卡片不渲染
     expect(screen.getByTestId('file-change-group')).toBeInTheDocument();
@@ -198,7 +202,7 @@ describe('FileChangeCards — ≥3 文件折叠汇总条 (right-panel R6)', () =
     });
 
     useChangesListStore.setState({ bySession: { s1: SAMPLE_CHANGES } });
-    render(<FileChangeCard sessionId="s1" path="src/app.ts" />);
+    renderWithI18n(<FileChangeCard sessionId="s1" path="src/app.ts" />);
     const copyAudit = screen.getByTestId('file-change-card-copy-audit');
     const copyJson = screen.getByTestId('file-change-card-copy-audit-json');
     fireEvent.click(copyAudit);

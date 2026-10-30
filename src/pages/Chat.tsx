@@ -325,6 +325,7 @@ export function Chat() {
         images: options?.images,
         officeRefs,
         knowledgeRefs: options?.knowledgeRefs,
+        workspacePath,
       });
 
       if (!currentSessionId) {
