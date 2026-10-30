@@ -47,10 +47,14 @@ interface WorkspaceChangesWire {
   ahead: number;
   behind: number;
   clean: boolean;
+  /** 2026-10-29: 非 git 工作区 → false（旧后端缺省时按 true 处理） */
+  is_git_repo?: boolean;
   changes: Array<{
     index_status: string;
     worktree_status: string;
     path: string;
+    /** 2026-10-29: rename/copy 旧路径（porcelain -z 第二段） */
+    old_path?: string | null;
     /** right-panel R5: +/- 行数；二进制/统计失败为 null（旧宿主可能缺省） */
     insertions?: number | null;
     deletions?: number | null;
@@ -64,10 +68,14 @@ export interface WorkspaceChanges {
   ahead: number;
   behind: number;
   clean: boolean;
+  /** 2026-10-29: false = 工作区不是 git 仓库（渲染空态而非报错） */
+  isGitRepo?: boolean;
   changes: Array<{
     indexStatus: string;
     worktreeStatus: string;
     path: string;
+    /** 2026-10-29: rename/copy 旧路径（仅展示用） */
+    oldPath?: string | null;
     /** right-panel R5: +/- 行数（numstat）；二进制/统计失败为 null */
     insertions: number | null;
     deletions: number | null;
@@ -107,6 +115,20 @@ export interface WorkspaceCheckpointCreated {
   files: number;
   skipped: string[];
   bytes: number;
+}
+
+/**
+ * 工作区健康状态（2026-10-29, P2）。
+ *
+ * `health` 与后端 `backend/services/workspace_health.py` 的枚举取值一致：
+ * `healthy` / `missing` / `not_a_directory` / `inaccessible` / `read_only`。
+ */
+export interface WorkspaceHealthStatus {
+  path: string | null;
+  health: string | null;
+  detail: string | null;
+  writable: boolean;
+  isUsable: boolean;
 }
 
 interface WorkspaceRevertWire {
@@ -224,10 +246,13 @@ export const workspaceApi = {
         ahead: response.ahead,
         behind: response.behind,
         clean: response.clean,
+        // 2026-10-29: 旧后端不返回该字段 → 按 git 仓库处理（保持原行为）
+        isGitRepo: response.is_git_repo ?? true,
         changes: response.changes.map((entry) => ({
           indexStatus: entry.index_status,
           worktreeStatus: entry.worktree_status,
           path: entry.path,
+          oldPath: entry.old_path ?? null,
           insertions: entry.insertions ?? null,
           deletions: entry.deletions ?? null,
         })),
@@ -351,6 +376,79 @@ export const workspaceApi = {
         { sessionId, checkpointId },
       );
       return { restored: response.restored };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  // ===== 默认工作区决策链 (2026-10-29, P1) =====
+  // 后端成为工作区决策的单一来源；前端不再自行推导。
+
+  /** 解析默认工作区（只读，不绑定）。用于 UI 预览 / 诊断。 */
+  async getDefault(options?: {
+    sessionId?: string;
+    detectedRoot?: string;
+  }): Promise<{ path: string | null; source: string | null; isFallback: boolean }> {
+    try {
+      const response = await invoke<{
+        path: string | null;
+        source: string | null;
+        is_fallback: boolean;
+      }>('workspace_default', {
+        sessionId: options?.sessionId,
+        detectedRoot: options?.detectedRoot,
+      });
+      return {
+        path: response.path,
+        source: response.source,
+        isFallback: response.is_fallback,
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 把用户显式选择的目录写入 ``preferences``（最高优先级输入）。 */
+  async setPreference(path: string): Promise<{ path: string | null; stored: boolean }> {
+    try {
+      const response = await invoke<{ path: string | null; stored: boolean }>(
+        'workspace_set_preference',
+        { path },
+      );
+      return response;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 清除用户偏好，下一次 resolve 走 detected/scratch 兜底。 */
+  async forgetPreference(): Promise<{ path: string | null; stored: boolean }> {
+    try {
+      return await invoke<{ path: string | null; stored: boolean }>(
+        'workspace_forget_preference',
+      );
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 工作区健康状态（只读探测目录是否仍可用）。 */
+  async getHealth(path: string): Promise<WorkspaceHealthStatus> {
+    try {
+      const response = await invoke<{
+        path: string | null;
+        health: string | null;
+        detail: string | null;
+        writable: boolean;
+        is_usable: boolean;
+      }>('workspace_health', { path });
+      return {
+        path: response.path,
+        health: response.health,
+        detail: response.detail,
+        writable: response.writable,
+        isUsable: response.is_usable,
+      };
     } catch (error) {
       throw handleApiError(error);
     }

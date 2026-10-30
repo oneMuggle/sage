@@ -12,8 +12,16 @@ interface SiderSectionProps {
   onToggleCollapsed: () => void;
   trailing?: ReactNode;
   render: () => ReactNode;
-  /** 内容区最大高度，超出后滚动。用于限制长列表（如会话）占据空间 */
+  /**
+   * 内容区最大高度，超出后内部滚动。用于限制长列表（如项目）占据空间。
+   * 注意：必须与内层 `overflow-y-auto` 配对，只钳高度不滚动会把内容裁掉。
+   */
   maxHeight?: string;
+  /**
+   * 填充父级剩余高度并在内部滚动（会话分区）。
+   * fill 分区不播放展开/收起高度动画 —— flex 子项与 `height: auto` 动画冲突。
+   */
+  fill?: boolean;
 }
 
 export function formatSiderSectionAuditSnapshot(opts: {
@@ -51,6 +59,7 @@ export function SiderSection({
   trailing,
   render,
   maxHeight,
+  fill = false,
 }: SiderSectionProps) {
   const { t } = useI18n();
   const Chevron = collapsed ? ChevronRight : ChevronDown;
@@ -92,8 +101,11 @@ export function SiderSection({
   /* v8 ignore stop */
 
   return (
-    <section data-section-key={sectionKey} className="mt-1">
-      <header className="flex items-center gap-1 px-3 py-1.5 group">
+    <section
+      data-section-key={sectionKey}
+      className={fill ? 'mt-1 flex-1 min-h-0 flex flex-col' : 'mt-1'}
+    >
+      <header className="flex items-center gap-1 px-3 py-1.5 group flex-shrink-0">
         <button
           type="button"
           onClick={onToggleCollapsed}
@@ -106,47 +118,37 @@ export function SiderSection({
           <span>{label}</span>
         </button>
         {trailing && <div className="ml-auto">{trailing}</div>}
-        <span
-          data-testid="sider-section-copy-snapshot"
-          onClick={() => void handleCopySnapshot()}
-        >
+        <span data-testid="sider-section-copy-snapshot" onClick={() => void handleCopySnapshot()}>
           {copiedSnapshot ? '已复制快照' : ''}
         </span>
-        <span
-          data-testid="sider-section-copy-json"
-          onClick={() => void handleCopyJson()}
-        >
+        <span data-testid="sider-section-copy-json" onClick={() => void handleCopyJson()}>
           {copiedJson ? '已复制JSON' : ''}
         </span>
       </header>
-      {/* 2026-09-13 P0: 分区展开/收起高度动画 — 此前是条件渲染硬切。
-          Chromium 106 (Electron 21) 不支持 grid-template-rows 0fr↔1fr 插值
-          (107+ 才有)，用 motion 的 JS 测高实现 height:auto 动画；
-          AnimatePresence initial={false} 保证首次挂载不播动画。 */}
-      <AnimatePresence initial={false}>
-        {!collapsed && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="overflow-hidden"
-          >
-            <div
-              className="px-1"
-              // UX-IA R3 批次 B-3：此前这里挂 `overflowY: auto` + maxHeight，
-              // 与外层 nav 的滚动构成**嵌套滚动区**（nav 滚 → 分组标题到边界
-              // 才轮到外层）。两段式布局下内容列已是唯一滚动容器，分组内再滚
-              // 只会让「滚到哪儿了」变得难以预期，故只保留高度上限、不再自带滚动。
-              // 调用方（ConversationsSection / SidebarProjectList）仍可传 maxHeight
-              // 作为"该分组最多占多高"的软约束，由外层容器统一消化溢出。
-              style={maxHeight ? { maxHeight } : undefined}
+      {fill ? (
+        !collapsed && <div className="px-1 flex-1 min-h-0 min-w-0 flex flex-col">{render()}</div>
+      ) : (
+        <AnimatePresence initial={false}>
+          {!collapsed && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              className="overflow-hidden"
             >
-              {render()}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              {/* 高度上限必须与内层滚动配对：UX-IA R3 曾只保留 maxHeight 而移除
+                  overflow-y-auto，导致超出上限的列表被 overflow-hidden 直接裁掉。 */}
+              <div
+                className={maxHeight ? 'px-1 overflow-y-auto' : 'px-1'}
+                style={maxHeight ? { maxHeight } : undefined}
+              >
+                {render()}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
     </section>
   );
 }

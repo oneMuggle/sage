@@ -3,10 +3,7 @@ import { create } from 'zustand';
 import { saveCurrentSessionId } from '../../entities/session/storage';
 import { invoke } from '../api/desktopInvoke';
 import type { GenerationStats, MessageDisplayMeta, MessageSource, RagCitation } from '../api/types';
-import { workspaceApi } from '../api/workspaceApi';
 import { clientLogger } from '../log/client';
-
-import { getLastWorkspacePath } from './lastWorkspace';
 
 // Re-export API modules for convenience
 export { sessionApi, messageApi, chatApi, memoryApi } from '../api';
@@ -39,6 +36,13 @@ export interface Session {
   last_message_preview?: string | null;
   /** 2026-10-28: 性能统计 - 会话总用时（分钟），从创建到最后一次消息 */
   duration_minutes?: number | null;
+  /** 2026-10-29 (feat/workspace-optimization): create_session 响应里附带的工作区信息。
+   *  后端在创建会话时同步解析默认工作区并绑定。null = 连 scratch 都失败。 */
+  workspace_binding?: {
+    path: string;
+    source: string;
+    is_fallback: boolean;
+  } | null;
 }
 
 // 工具调用结构（与后端 AgentEvent 保持一致）
@@ -148,6 +152,11 @@ interface StoreState {
 
   // 操作方法
   loadSessions: () => Promise<void>;
+  /** 会话列表是否还有下一页（侧栏滚动触底时追加加载） */
+  sessionsHasMore: boolean;
+  /** 正在追加加载下一页（单飞行锁） */
+  sessionsLoadingMore: boolean;
+  loadMoreSessions: () => Promise<void>;
   setCurrentSessionId: (id: string | null) => void;
   createSession: () => Promise<string>;
   deleteSession: (id: string) => Promise<void>;
@@ -174,6 +183,9 @@ interface StoreState {
 
 const messageLoadGenerations = new Map<string, number>();
 let latestMessageLoadToken = 0;
+
+/** 会话列表分页大小（与后端/Electron 默认 limit 对齐）。 */
+const SESSIONS_PAGE_SIZE = 100;
 
 export function mergeLoadedMessages(
   loadedMessages: Message[],
@@ -227,14 +239,45 @@ export const useStore = create<StoreState>((set, _get) => ({
   contextPressure: null,
   setContextPressure: (cp) => set({ contextPressure: cp }),
   isLoading: false,
+  sessionsHasMore: false,
+  sessionsLoadingMore: false,
 
-  // 加载会话列表
+  // 加载会话列表（首页；已加载过多页时按已加载条数刷新，避免滚动位置被重置）
   loadSessions: async () => {
     try {
-      const sessions = await invoke<Session[]>('list_sessions');
-      set({ sessions });
+      const limit = Math.max(SESSIONS_PAGE_SIZE, _get().sessions.length);
+      const sessions = await invoke<Session[]>('list_sessions', { limit, offset: 0 });
+      set({
+        sessions,
+        sessionsHasMore: sessions.length >= limit,
+        sessionsLoadingMore: false,
+      });
     } catch (error) {
       clientLogger.error('store.loadSessions failed', { error: String(error) });
+    }
+  },
+
+  // 追加下一页（单飞行锁；按 id 去重，容忍并发变更导致的 offset 漂移）
+  loadMoreSessions: async () => {
+    const state = _get();
+    if (state.sessionsLoadingMore || !state.sessionsHasMore) return;
+    set({ sessionsLoadingMore: true });
+    try {
+      const page = await invoke<Session[]>('list_sessions', {
+        limit: SESSIONS_PAGE_SIZE,
+        offset: state.sessions.length,
+      });
+      const current = _get().sessions;
+      const seen = new Set(current.map((s) => s.id));
+      const merged = [...current, ...page.filter((s) => !seen.has(s.id))];
+      set({
+        sessions: merged,
+        sessionsHasMore: page.length === SESSIONS_PAGE_SIZE,
+        sessionsLoadingMore: false,
+      });
+    } catch (error) {
+      set({ sessionsLoadingMore: false });
+      clientLogger.error('store.loadMoreSessions failed', { error: String(error) });
     }
   },
 
@@ -251,31 +294,25 @@ export const useStore = create<StoreState>((set, _get) => ({
   // 创建会话
   createSession: async () => {
     try {
-      const session = await invoke<Session>('create_session', { title: '新对话' });
+      // 2026-10-29 (feat/workspace-optimization): 把 Electron 嗅探到的 cwd 项目根
+      // 作为决策链的低优先级参考输入传给后端；后端统一走 DefaultWorkspaceResolver，
+      // 前端不再自行推导或 auto-bind。
+      let detectedRoot: string | null = null;
+      try {
+        detectedRoot = (await window.electronAPI?.getDetectedProjectRoot?.()) ?? null;
+      } catch (err: unknown) {
+        clientLogger.warn('store.createSession: getDetectedProjectRoot failed', {
+          error: String(err),
+        });
+      }
+      const session = await invoke<Session>('create_session', {
+        title: '新对话',
+        detectedRoot,
+      });
       set((state) => ({
         sessions: [session, ...state.sessions],
         currentSessionId: session.id,
       }));
-      // P1+P2 (2026-10-19): auto-bind new session using priority fallback:
-      //   1. lastWorkspacePath (localStorage) — user's most recent explicit bind
-      //   2. detectedProjectRoot (IPC) — project root detected at Electron startup
-      //   3. null — session starts unbound
-      // Failure is non-fatal — the session still works without a binding.
-      let autoBindTarget = getLastWorkspacePath();
-      if (!autoBindTarget) {
-        try {
-          autoBindTarget = (await window.electronAPI?.getDetectedProjectRoot?.()) ?? null;
-        } catch (err: unknown) {
-          clientLogger.warn('store.createSession: getDetectedProjectRoot failed', {
-            error: String(err),
-          });
-        }
-      }
-      if (autoBindTarget) {
-        workspaceApi.bind(session.id, autoBindTarget).catch((err: unknown) => {
-          clientLogger.warn('store.createSession: auto-bind failed', { error: String(err) });
-        });
-      }
       return session.id;
     } catch (error) {
       clientLogger.error('store.createSession failed', { error: String(error) });

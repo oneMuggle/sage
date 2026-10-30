@@ -1,5 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, type RefObject } from 'react';
 
 import type { Session } from '../../shared/lib/store';
 
@@ -36,11 +36,21 @@ interface VirtualSessionListProps {
   currentSessionId: string | null;
   onSelect: (sessionId: string) => void;
   onDelete: (sessionId: string) => void;
+  /** 独立使用时的滚动容器高度上限（提供 scrollElementRef 时不生效） */
   maxHeight?: string;
+  /**
+   * 外部滚动容器（会话分区面板）。提供时虚拟列表不再自建滚动容器，
+   * 直接渲染为面板内容的顶层子元素（列表位于滚动内容顶部，无需 scrollMargin）。
+   */
+  scrollElementRef?: RefObject<HTMLDivElement | null>;
   /** P1: 重命名回调(与 SessionList 参数对齐,虚拟化分支功能不缩水) */
   onRename?: (sessionId: string, title: string) => Promise<void>;
   /** P1: F12 消息内容命中计数(会话 id → 命中条数;缺省不显示徽标) */
   messageHitsBySession?: Map<string, number>;
+  /** 手动归档（缺省时不渲染入口） */
+  onArchive?: (sessionId: string) => void;
+  /** 恢复归档（缺省时不渲染入口） */
+  onUnarchive?: (sessionId: string) => void;
 }
 
 /**
@@ -53,10 +63,14 @@ export function VirtualSessionList({
   onSelect,
   onDelete,
   maxHeight = 'calc(100vh - 320px)',
+  scrollElementRef,
   onRename,
   messageHitsBySession,
+  onArchive,
+  onUnarchive,
 }: VirtualSessionListProps) {
-  const parentRef = useRef<HTMLDivElement>(null);
+  const localScrollRef = useRef<HTMLDivElement>(null);
+  const scrollElement = scrollElementRef ?? localScrollRef;
 
   // 直接使用后端返回的顺序；二次排序（pin/时间）已在 SQL 层完成。
   const sorted = useMemo(() => sessions, [sessions]);
@@ -77,7 +91,7 @@ export function VirtualSessionList({
 
   const virtualizer = useVirtualizer({
     count: items.length,
-    getScrollElement: () => parentRef.current,
+    getScrollElement: () => scrollElement.current,
     estimateSize: (index) => (items[index].type === 'group' ? 28 : 52),
     overscan: 5,
   });
@@ -86,39 +100,22 @@ export function VirtualSessionList({
     return <div className="px-3 py-4 text-xs text-text-muted text-center">暂无对话记录</div>;
   }
 
-  return (
-    <div ref={parentRef} className="overflow-y-auto" style={{ maxHeight, minHeight: 0 }}>
-      <div
-        style={{
-          height: `${virtualizer.getTotalSize()}px`,
-          width: '100%',
-          position: 'relative',
-        }}
-      >
-        {virtualizer.getVirtualItems().map((virtualRow) => {
-          const item = items[virtualRow.index];
+  const body = (
+    <div
+      style={{
+        height: `${virtualizer.getTotalSize()}px`,
+        width: '100%',
+        position: 'relative',
+      }}
+    >
+      {virtualizer.getVirtualItems().map((virtualRow) => {
+        const item = items[virtualRow.index];
 
-          if (item.type === 'group') {
-            return (
-              <div
-                key={`group-${item.label}`}
-                className="text-ui-2xs font-semibold uppercase tracking-wide text-muted px-3 py-1 sticky top-0 bg-surface"
-                style={{
-                  position: 'absolute',
-                  top: virtualRow.start,
-                  left: 0,
-                  width: '100%',
-                  height: `${virtualRow.size}px`,
-                }}
-              >
-                {item.label}
-              </div>
-            );
-          }
-
+        if (item.type === 'group') {
           return (
             <div
-              key={item.session.id}
+              key={`group-${item.label}`}
+              className="text-ui-2xs font-semibold uppercase tracking-wide text-muted px-3 py-1 bg-surface"
               style={{
                 position: 'absolute',
                 top: virtualRow.start,
@@ -127,18 +124,47 @@ export function VirtualSessionList({
                 height: `${virtualRow.size}px`,
               }}
             >
-              <SessionItem
-                session={item.session}
-                isActive={item.session.id === currentSessionId}
-                onSelect={() => onSelect(item.session.id)}
-                onDelete={() => onDelete(item.session.id)}
-                onRename={onRename}
-                messageHits={messageHitsBySession?.get(item.session.id)}
-              />
+              {item.label}
             </div>
           );
-        })}
-      </div>
+        }
+
+        return (
+          <div
+            key={item.session.id}
+            style={{
+              position: 'absolute',
+              top: virtualRow.start,
+              left: 0,
+              width: '100%',
+              height: `${virtualRow.size}px`,
+            }}
+          >
+            <SessionItem
+              session={item.session}
+              isActive={item.session.id === currentSessionId}
+              onSelect={() => onSelect(item.session.id)}
+              onDelete={() => onDelete(item.session.id)}
+              onRename={onRename}
+              messageHits={messageHitsBySession?.get(item.session.id)}
+              onArchive={onArchive ? () => onArchive(item.session.id) : undefined}
+              onUnarchive={onUnarchive ? () => onUnarchive(item.session.id) : undefined}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // 外部提供滚动容器（会话分区面板）时，列表直接作为面板内容渲染；
+  // 独立使用时保留自建滚动容器（maxHeight 生效）。
+  if (scrollElementRef) {
+    return body;
+  }
+
+  return (
+    <div ref={localScrollRef} className="overflow-y-auto" style={{ maxHeight, minHeight: 0 }}>
+      {body}
     </div>
   );
 }
@@ -171,7 +197,10 @@ export function evaluateVirtualSessionListGovernanceAudit(
   if (input.overscanCount < 0 || input.overscanCount > 50) {
     issueCodes.push('VIRTUAL_SESSION_LIST_OVERSCAN_OUT_OF_RANGE');
   }
-  if (totalSessionCount > 0 && renderedRowCount > totalSessionCount + Math.max(0, input.overscanCount) * 2) {
+  if (
+    totalSessionCount > 0 &&
+    renderedRowCount > totalSessionCount + Math.max(0, input.overscanCount) * 2
+  ) {
     issueCodes.push('VIRTUAL_SESSION_LIST_RENDER_OVERFLOW');
   }
   const virtualizationRatio =

@@ -40,6 +40,16 @@ describe('sessionApi', () => {
     expect(r).toEqual([SESSION]);
   });
 
+  it('list() forwards pagination and archived filter', async () => {
+    mockInvoke.mockResolvedValueOnce([SESSION]);
+    await sessionApi.list({ limit: 50, offset: 10, archived: true });
+    expect(mockInvoke).toHaveBeenCalledWith('list_sessions', {
+      limit: 50,
+      offset: 10,
+      archived: true,
+    });
+  });
+
   it('get() passes id', async () => {
     mockInvoke.mockResolvedValueOnce(SESSION);
     await sessionApi.get(SID);

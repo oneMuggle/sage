@@ -184,6 +184,9 @@ async def test_fork_inherits_active_workspace_binding(client, tmp_path):
         json={"workspace_path": str(workspace)},
     )
     assert bound.status_code == 200
+    # 建会话时已自动绑定默认工作区(generation=1),本次 PUT 是重绑 → 2。
+    source_generation = bound.json()["binding"]["generation"]
+    assert source_generation == 2
 
     forked = (
         await client.post(
@@ -203,15 +206,23 @@ async def test_fork_inherits_active_workspace_binding(client, tmp_path):
     source_got = await client.get(f"{PREFIX}/sessions/{source_id}/workspace")
     source_binding = source_got.json()["binding"]
     assert source_binding["session_id"] == source_id
-    assert source_binding["generation"] == 1
+    assert source_binding["generation"] == source_generation
 
 
 @pytest.mark.asyncio()
 async def test_fork_without_binding_leaves_fork_unbound(client):
-    """B1 边界: 源会话无绑定 → fork 会话同样无绑定(binding 为 null)。"""
+    """B1 边界: 源会话无活跃绑定 → fork 会话同样无绑定(binding 为 null)。
+
+    建会话会自动绑定默认工作区,这里先显式撤销,构造"无绑定"前置状态。
+    """
     create = await client.post(f"{PREFIX}/sessions", json={"title": "无绑定"})
     source_id = create.json()["id"]
     _seed_messages(source_id, n=2)
+
+    revoked = await client.delete(f"{PREFIX}/sessions/{source_id}/workspace")
+    assert revoked.status_code == 200
+    source_binding = (await client.get(f"{PREFIX}/sessions/{source_id}/workspace")).json()
+    assert source_binding["binding"] is None
 
     forked = (await client.post(f"{PREFIX}/sessions/{source_id}/fork", json={})).json()
     got = await client.get(f"{PREFIX}/sessions/{forked['id']}/workspace")

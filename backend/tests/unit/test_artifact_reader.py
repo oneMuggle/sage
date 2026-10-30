@@ -120,6 +120,10 @@ def test_read_office_docx_roundtrip(tmp_path):
     # 用户数据必须被转义（script 标签不得原样出现）
     assert "<script>" not in result["html"]
     assert "&lt;script&gt;" in result["html"]
+    # 2026-10-29: docx 额外返回原文 data URL（聊天产物默认 Word 版式渲染）
+    assert result["data_url"].startswith(
+        "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,"
+    )
 
 
 def test_read_office_docx_paragraph_cap(tmp_path, monkeypatch):

@@ -45,6 +45,37 @@ export interface DocxNativePreviewProps {
   revision?: string | null;
 }
 
+/**
+ * 2026-10-29: 共享渲染入口 —— docx 原文 data URL → Word 版式 DOM。
+ *
+ * ``/office`` 页与聊天产物面板复用同一条渲染+消毒链路：docx-preview
+ * 解析二进制，DOMPurify + ``sanitizeRenderedDocx`` 白名单清理后上屏。
+ * 失败直接抛出，由调用方决定回退结构化视图。
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- 与消毒器同文件便于内聚
+export async function renderDocxDataUrl(container: HTMLElement, dataUrl: string): Promise<void> {
+  const [{ renderAsync }, dompurifyModule] = await Promise.all([
+    import('docx-preview'),
+    import('dompurify'),
+  ]);
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  container.innerHTML = '';
+  await renderAsync(blob, container, undefined, {
+    inWrapper: false,
+    ignoreLastRenderedPageBreak: false,
+    experimental: false,
+  });
+  // 渲染树消毒：docx-preview 产出受信度有限的 DOM，过一道白名单级
+  // 清理再上屏（去脚本/iframe/javascript: 链接/内联事件）。
+  container.innerHTML = dompurifyModule.default.sanitize(container.innerHTML, {
+    ADD_ATTR: ['target'],
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'link', 'meta'],
+    FORBID_ATTR: ['srcset'],
+  });
+  sanitizeRenderedDocx(container);
+}
+
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatDocxPreviewMetaMarkdown(params: {
   workspacePath: string;
@@ -103,30 +134,10 @@ export function DocxNativePreview({
         if (!res.ok || !res.data_url) {
           throw new Error(res.error ?? 'docx data unavailable');
         }
-        const [{ renderAsync }, dompurifyModule] = await Promise.all([
-          import('docx-preview'),
-          import('dompurify'),
-        ]);
-        const dompurify = dompurifyModule.default;
         if (cancelled) return;
-        const response = await fetch(res.data_url);
-        const blob = await response.blob();
         const container = containerRef.current;
         if (!container) return;
-        container.innerHTML = '';
-        await renderAsync(blob, container, undefined, {
-          inWrapper: false,
-          ignoreLastRenderedPageBreak: false,
-          experimental: false,
-        });
-        // 渲染树消毒：docx-preview 产出受信度有限的 DOM，过一道白名单级
-        // 清理再上屏（去脚本/iframe/javascript: 链接/内联事件）。
-        container.innerHTML = dompurify.sanitize(container.innerHTML, {
-          ADD_ATTR: ['target'],
-          FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'link', 'meta'],
-          FORBID_ATTR: ['srcset'],
-        });
-        sanitizeRenderedDocx(container);
+        await renderDocxDataUrl(container, res.data_url);
         if (!cancelled) setState('ok');
       } catch {
         if (!cancelled) setState('error');
@@ -151,8 +162,7 @@ export function DocxNativePreview({
 
   return (
     <div className="relative bg-white" data-testid="docx-native-preview" data-state={state}>
-      <div className="flex items-center justify-end gap-1 px-3 pt-2 text-ui-2xs">
-      </div>
+      <div className="flex items-center justify-end gap-1 px-3 pt-2 text-ui-2xs"></div>
       {state === 'loading' && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/80">
           <span

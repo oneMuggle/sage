@@ -56,6 +56,26 @@ describe('changesListStore', () => {
     );
   });
 
+  it('非 git 仓库错误转为友好文案（旧后端兜底）', async () => {
+    mockGetChanges.mockRejectedValue(
+      new Error('Backend GET cmd=workspace_get_changes → 502: fatal: not a git repository'),
+    );
+    await useChangesListStore.getState().fetch('s1');
+    expect(useChangesListStore.getState().errors['s1']).toBe(
+      '当前工作区不是 Git 仓库，无法追踪变更',
+    );
+  });
+
+  it('git 可执行文件缺失错误转为友好文案', async () => {
+    mockGetChanges.mockRejectedValue(
+      new Error(
+        'Backend GET cmd=workspace_get_changes → 502: git 可执行文件不可用：请确认 git 已安装并在 PATH 中',
+      ),
+    );
+    await useChangesListStore.getState().fetch('s1');
+    expect(useChangesListStore.getState().errors['s1']).toBe('未找到 git，变更追踪不可用');
+  });
+
   it('clear 移除指定会话', async () => {
     mockGetChanges.mockResolvedValue(sample);
     await useChangesListStore.getState().fetch('s1');

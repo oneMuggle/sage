@@ -2580,10 +2580,16 @@ app
       }
     }
 
-    // P2 (2026-10-19): detect project root from cwd for auto-bind fallback.
+    // 2026-10-29 (feat/workspace-optimization): 嗅探 cwd 项目根，仅作为后端
+    // DefaultWorkspaceResolver 的最低优先级参考输入（detected_root）。不再
+    // 触发任何 auto-bind，也不写入用户偏好。
     detectedProjectRoot = detectProjectRoot(process.cwd());
     if (detectedProjectRoot) {
-      logger.info(`main: detected project root at ${detectedProjectRoot}`);
+      logger.info(
+        `main: detected project root at ${detectedProjectRoot} (low-priority hint only)`,
+      );
+    } else {
+      logger.info('main: no project root detected (decision chain will fall back)');
     }
 
     await registerIpcHandlers();
