@@ -36,6 +36,9 @@
  */
 import { app, BrowserWindow, session } from 'electron';
 import { fetchCompat } from './fetchCompat';
+import { plainChromeUa } from './plainChromeUa';
+
+export { plainChromeUa };
 
 const ARENA_TOKEN_PARTITION = 'persist:arena-token';
 
@@ -125,12 +128,6 @@ export interface ArenaTokenControllerOptions {
  * arena.ai create-chat 403 "recaptcha validation failed"）。归一为等价
  * 纯 Chrome UA；已在 P4 真实冒烟中验证有效（同 IP + 干净 UA 呈现）。
  */
-export function plainChromeUa(ua: string): string {
-  return ua
-    .replace(/\s+\S+\/\S+(?=\s+Chrome\/)/, '') // 宿主 app name/version token
-    .replace(/\s+Electron\/\S+/, ''); // Electron token
-}
-
 export function defaultCreateWindow(): WindowLike {
   const win = new BrowserWindow({
     show: false,

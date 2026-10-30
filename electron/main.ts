@@ -46,6 +46,7 @@ import {
 } from 'electron';
 import './crashGuard';
 import { logger } from './logger';
+import { release as osRelease } from 'node:os';
 import { registerEditableContextMenu } from './contextMenu';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
@@ -111,6 +112,8 @@ import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
 import { registerModelDownloadIpc } from './modelDownloadIpc';
 import { registerArenaTokenWindow } from './arenaTokenWindow';
+import type { AgentBrowserBridgeHandle } from './agentBrowserBridge';
+import { startAgentBrowserHost } from './agentBrowserHost';
 import { registerUpdateIpc } from './updateIpc';
 import { registerFeedbackIpc } from './feedback/feedbackIpc';
 import { getFeedbackConfig } from './feedback/feedbackConfig';
@@ -335,6 +338,12 @@ let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 // captured by the in-app logger; no diagnostic needed).
 let startedSuccessfully = false;
 let backendAuthToken: string | null = null;
+
+/**
+ * 内置 Agent 浏览器桥（P1）。仅 Win7 / SAGE_FORCE_EMBEDDED_BROWSER=1 时启动；
+ * 端口与 token 通过 env 传给后端，后端 browser_* 工具据此使用 Sage 自带 Chromium。
+ */
+let agentBrowserHandle: AgentBrowserBridgeHandle | null = null;
 let updateManager: UpdateManager | null = null;
 // Workspace MCP Server (M4): cloudflared tunnel emergency-stop hotkey + controller.
 const REMOTE_MCP_HOTKEY = 'Control+Alt+Escape';
@@ -590,6 +599,13 @@ function spawnBackend(): ChildProcess {
       SAGE_BACKEND_GENERATION: String(generation),
       SAGE_BACKEND_OWNERSHIP_TOKEN: ownershipToken,
       SAGE_LOCAL_AUTH_TOKEN: backendAuthToken,
+      ...(agentBrowserHandle
+        ? {
+            SAGE_EMBEDDED_BROWSER: '1',
+            SAGE_EMBEDDED_BROWSER_PORT: String(agentBrowserHandle.port),
+            SAGE_EMBEDDED_BROWSER_TOKEN: agentBrowserHandle.token,
+          }
+        : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -2888,6 +2904,14 @@ app.whenReady().then(async () => {
     buildApplicationMenu();
     return;
   }
+  // P1: Win7 无系统浏览器时使用 Sage 自带 Chromium（SAGE_FORCE_EMBEDDED_BROWSER=1 便于非 Win7 验证）。
+  const embeddedBrowserEnabled =
+    process.env.SAGE_FORCE_EMBEDDED_BROWSER === '1' ||
+    (process.platform === 'win32' && osRelease().startsWith('6.1'));
+  if (embeddedBrowserEnabled) {
+    updateSplashStage('正在准备内置浏览器…');
+    agentBrowserHandle = await startAgentBrowserHost();
+  }
   updateSplashStage('正在启动后端服务…');
   try {
     backendProc = spawnBackend();
@@ -3050,6 +3074,10 @@ app.on('before-quit', () => {
   cleanupUpdateIpc = null;
   cleanupProviderIpc?.();
   cleanupProviderIpc = null;
+  if (agentBrowserHandle) {
+    void agentBrowserHandle.close();
+    agentBrowserHandle = null;
+  }
   void shutdownBackend();
 });
 
