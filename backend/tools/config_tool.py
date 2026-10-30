@@ -62,6 +62,8 @@ _ALLOWED_GENERAL_FIELDS = {
     "llmRetryMaxAttempts",
     "llmRetryBaseDelayS",
     "llmRetryMaxDelayS",
+    # 2026-10-30: 自动重试总时长预算（秒，0 = 不限）—— 与 UI「重试总时长预算」同源。
+    "llmRetryTotalBudgetS",
     "llmTotalTimeoutS",
     # 2026-10-28: LLM 代理上游超时（秒）—— 企业网关卡顿 / 关闭流式输出时的长回复
     # 需要它配合调大，否则 60s 硬编码会中断整段生成。
@@ -198,6 +200,12 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
                 _llm_retry_field_errors.append(
                     f"{k} 必须是大于 0 且不超过 600 的数字，收到: {v!r}"
                 )
+    if "llmRetryTotalBudgetS" in updates:
+        v = updates["llmRetryTotalBudgetS"]
+        if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 1800:
+            _llm_retry_field_errors.append(
+                f"llmRetryTotalBudgetS 必须是 0 到 1800 之间的整数（0=不限），收到: {v!r}"
+            )
     if "llmTotalTimeoutS" in updates:
         v = updates["llmTotalTimeoutS"]
         if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 86400:

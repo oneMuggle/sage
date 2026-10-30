@@ -142,6 +142,7 @@ if not nothing_yielded:
 | 最大重试次数 | `llmRetryMaxAttempts` | 3 | 3 | UI 0–10；`config_tool` 校验 0–20 的整数 |
 | 退避基数（秒） | `llmRetryBaseDelayS` | 1.0 | 1.0 | UI ≥ 0.1；`config_tool` 校验 (0, 600] |
 | 最大退避（秒） | `llmRetryMaxDelayS` | 15.0 | 30.0 | UI ≥ 1；`config_tool` 校验 (0, 600] |
+| 重试总时长预算（秒） | `llmRetryTotalBudgetS` | 180 | 180 | UI 0–1800；0 = 不限；`config_tool` 校验 0–1800 |
 
 几点语义说明：
 
@@ -289,7 +290,8 @@ Sage 自己的 LLM 代理在等待上游超时时返回 504，响应体为
 | 项 | 值 |
 | --- | --- |
 | 默认预算 | 180 秒 |
-| 环境变量 | `SAGE_LLM_RETRY_TOTAL_BUDGET_S`（0 = 不限，非法值回退默认） |
+| 配置入口 | 设置 → 基础 → LLM 重试 → 重试总时长预算（`app_settings.llmRetryTotalBudgetS`，0–1800，0 = 不限） |
+| 环境变量 | `SAGE_LLM_RETRY_TOTAL_BUDGET_S`（app_settings 缺省时生效；0 = 不限，非法值回退默认） |
 | 作用范围 | 非流式 + 流式两条重试循环 |
 
 原因：代理超时类 504 每次尝试本身就要等满代理超时（默认 60s），

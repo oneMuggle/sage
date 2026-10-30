@@ -118,6 +118,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'llm retry max delay 最大 退避 上限 秒',
   },
   {
+    key: 'llmRetryTotalBudgetS',
+    tab: 'basic',
+    label: '重试总时长预算（秒）',
+    labelEn: 'Total retry budget (s)',
+    keywords: 'llm retry total budget 重试 总时长 预算 上限 秒 不限',
+  },
+  {
     key: 'llmTotalTimeoutS',
     tab: 'basic',
     label: '整轮任务总耗时上限（秒）',

@@ -143,6 +143,8 @@ def build_configuration_summary_block() -> str:
         "autoContext",
         # 2026-10-28: 代理上游超时（秒）—— 让 LLM 知道当前链路容忍度。
         "llmProxyTimeoutS",
+        # 2026-10-30: 自动重试总时长预算（秒，0 = 不限）—— 让 LLM 知道重试收口阈值。
+        "llmRetryTotalBudgetS",
     )
     general = {k: raw.get(k) for k in _GENERAL_KEYS if k in raw}
 

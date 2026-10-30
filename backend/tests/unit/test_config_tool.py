@@ -441,3 +441,13 @@ def test_build_diagnosis_summary_with_data():
     assert "平均 0.50/任务" in summary
     assert "平均 800ms" in summary
     assert "2000/任务" in summary
+
+
+def test_update_general_rejects_invalid_retry_total_budget(monkeypatch):
+    tool = UpdateSageConfigTool()
+    FakeRepo, _ = _fake_repo_for_general_updates()
+    monkeypatch.setattr("backend.tools.config_tool.SettingsRepository", FakeRepo)
+
+    res = tool.execute(target="general", updates={"llmRetryTotalBudgetS": -1})
+    assert res.success is False
+    assert "llmRetryTotalBudgetS" in res.error

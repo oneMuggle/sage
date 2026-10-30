@@ -132,6 +132,28 @@ describe('BasicTab — LLM 重试 section', () => {
     });
   });
 
+  it('修改重试总时长预算触发 updateSettings', async () => {
+    renderTab();
+
+    const input = screen.getByTestId('settings-llm-retry-total-budget');
+    fireEvent.change(input, { target: { value: '300' } });
+
+    await waitFor(() => {
+      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryTotalBudgetS: 300 });
+    });
+  });
+
+  it('重试总时长预算超过 1800 被 clamp 到 1800', async () => {
+    renderTab();
+
+    const input = screen.getByTestId('settings-llm-retry-total-budget');
+    fireEvent.change(input, { target: { value: '9999' } });
+
+    await waitFor(() => {
+      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryTotalBudgetS: 1800 });
+    });
+  });
+
   it('AdvancedSection 默认折叠，高级参数不可见', () => {
     renderTab();
 
@@ -206,6 +228,7 @@ describe('BasicTab — LLM 重试 section', () => {
       llmRetryMaxAttempts: 3,
       llmRetryBaseDelayS: 1,
       llmRetryMaxDelayS: 30,
+      llmRetryTotalBudgetS: 180,
       llmTotalTimeoutS: 1800,
       llmProxyTimeoutS: 60,
       timezone: 'Asia/Shanghai',
@@ -223,6 +246,7 @@ describe('BasicTab — LLM 重试 section', () => {
         llmRetryMaxAttempts: 0,
         llmRetryBaseDelayS: 2,
         llmRetryMaxDelayS: 60,
+        llmRetryTotalBudgetS: 180,
         llmTotalTimeoutS: 0,
         llmProxyTimeoutS: 300,
         timezone: '',
@@ -235,6 +259,7 @@ describe('BasicTab — LLM 重试 section', () => {
       llmRetryMaxAttempts: 0,
       llmRetryBaseDelayS: 2,
       llmRetryMaxDelayS: 60,
+      llmRetryTotalBudgetS: 180,
       llmTotalTimeoutS: 0,
       llmProxyTimeoutS: 300,
       timezone: 'Asia/Shanghai',
@@ -298,6 +323,7 @@ describe('BasicTab — LLM 任务上限 section', () => {
       llmRetryMaxAttempts: 3,
       llmRetryBaseDelayS: 1,
       llmRetryMaxDelayS: 30,
+      llmRetryTotalBudgetS: 180,
       llmTotalTimeoutS: 0,
       llmProxyTimeoutS: 300,
       timezone: 'Asia/Shanghai',
