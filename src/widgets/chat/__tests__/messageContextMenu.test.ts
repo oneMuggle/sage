@@ -115,8 +115,20 @@ describe('buildMessageContextMenuItems', () => {
   });
 
   it('disables quote-selection when no quote handler is available', () => {
-    const items = build({ selectionText: '选中' });
+    const items = build({ selectionText: '选中', onQuoteSelection: undefined });
     expect(item(items, 'quote-selection').disabled).toBe(true);
+  });
+
+  it('gates quote-selection on the selection handler, not the whole-message handler', () => {
+    const onlyWhole = build({
+      selectionText: '选中',
+      onQuote: vi.fn(),
+      onQuoteSelection: undefined,
+    });
+    expect(item(onlyWhole, 'quote-selection').disabled).toBe(true);
+
+    const withSelection = build({ selectionText: '选中', onQuoteSelection: vi.fn() });
+    expect(item(withSelection, 'quote-selection').disabled).toBe(false);
   });
 
   it('wires feedback directions and selection handlers', () => {

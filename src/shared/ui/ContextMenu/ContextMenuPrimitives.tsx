@@ -48,7 +48,7 @@ export const ContextMenuSubContent = forwardRef<
   <ContextMenuPrimitive.Portal>
     <ContextMenuPrimitive.SubContent
       ref={ref}
-      className={clsx(MENU_CONTENT_CLASS, className)}
+      className={clsx(MENU_CONTENT_CLASS, 'max-w-[22rem]', className)}
       {...props}
     />
   </ContextMenuPrimitive.Portal>
@@ -63,7 +63,7 @@ export const ContextMenuContent = forwardRef<
     <ContextMenuPrimitive.Content
       ref={ref}
       data-testid="context-menu-content"
-      className={clsx(MENU_CONTENT_CLASS, className)}
+      className={clsx(MENU_CONTENT_CLASS, 'max-w-[22rem]', className)}
       {...props}
     />
   </ContextMenuPrimitive.Portal>

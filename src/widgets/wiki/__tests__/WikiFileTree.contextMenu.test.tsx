@@ -1,10 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useWikiStore } from '../../../entities/wiki/store';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import type { FileNode } from '../../../shared/types/wiki';
 import { WikiFileTree } from '../WikiFileTree';
+
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 const api = vi.hoisted(() => ({
   listDirectory: vi.fn(),
@@ -113,6 +118,33 @@ describe('WikiFileTree — context menu', () => {
     await waitFor(() =>
       expect(api.renameFile).toHaveBeenCalledWith('index.md', 'home.md', '/tmp/wiki'),
     );
+  });
+
+  it('renames a file inline and appends .md when the extension is omitted', async () => {
+    api.renameFile.mockResolvedValueOnce(undefined);
+    renderTree();
+
+    fireEvent.contextMenu(node('index.md'), { clientX: 4, clientY: 4 });
+    fireEvent.click(await screen.findByRole('menuitem', { name: '重命名' }));
+
+    const input = screen.getByTestId('wiki-rename-input');
+    fireEvent.change(input, { target: { value: 'home' } });
+    fireEvent.blur(input);
+
+    await waitFor(() =>
+      expect(api.renameFile).toHaveBeenCalledWith('index.md', 'home.md', '/tmp/wiki'),
+    );
+  });
+
+  it('rejects empty names with a toast instead of silently closing', async () => {
+    renderTree();
+
+    fireEvent.contextMenu(node('guide'), { clientX: 4, clientY: 4 });
+    fireEvent.click(await screen.findByRole('menuitem', { name: '新建文件' }));
+    fireEvent.blur(screen.getByTestId('wiki-new-file-input'));
+
+    expect(toast.error).toHaveBeenCalledWith('名称不能为空');
+    expect(api.writeFile).not.toHaveBeenCalled();
   });
 
   it('deletes only after the confirmation dialog resolves true', async () => {

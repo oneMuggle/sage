@@ -247,7 +247,7 @@ function MessageComponent({
       onQuoteSelection: () => {
         if (selectionText) onQuoteSelection?.(selectionText);
       },
-      onCopy: () => copy(message.content),
+      onCopy: () => copy(bubbleRef.current?.textContent ?? message.content),
       onCopyMarkdown: () => copy(message.content),
       onQuote: onQuote ? () => onQuote(message) : undefined,
       onEditResend: onEditResend ? () => onEditResend(message.id) : undefined,

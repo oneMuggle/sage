@@ -128,7 +128,12 @@ export function MessageClientMeta({
       {officeRefs.map((ref) => (
         <OfficeRefChip
           key={`office-${ref.doc_id}`}
-          chip={{ docId: ref.doc_id, docType: ref.doc_type, filename: ref.filename }}
+          chip={{
+            docId: ref.doc_id,
+            docType: ref.doc_type,
+            filename: ref.filename,
+            workspacePath: ref.workspace_path,
+          }}
           variant="message"
         />
       ))}

@@ -24,7 +24,7 @@ export interface MessageContextMenuParams {
   /** 右键打开菜单时落在气泡内的选中文本（无选区为 null）。 */
   selectionText?: string | null;
   onCopySelection: () => void | Promise<void>;
-  onQuoteSelection: () => void;
+  onQuoteSelection?: () => void;
   onCopy: () => void | Promise<void>;
   onCopyMarkdown: () => void | Promise<void>;
   onQuote?: () => void;
@@ -81,8 +81,8 @@ export function buildMessageContextMenuItems({
         id: 'quote-selection',
         label: t('contextMenu.common.selectionQuote'),
         icon: Quote,
-        disabled: isStreaming || !onQuote,
-        onSelect: onQuoteSelection,
+        disabled: isStreaming || !onQuoteSelection,
+        onSelect: () => onQuoteSelection?.(),
       },
       { id: 'sep-selection', kind: 'separator' },
     );

@@ -1,8 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { OfficeRefChip } from '../OfficeRefChip';
+
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 const mocks = vi.hoisted(() => ({
   copyToClipboard: vi.fn(() => Promise.resolve(true)),
@@ -88,6 +93,34 @@ describe('OfficeRefChip — context menu', () => {
     fireEvent.contextMenu(screen.getByTestId('office-ref-chip'), { clientX: 4, clientY: 4 });
     fireEvent.click(await screen.findByRole('menuitem', { name: '移除' }));
     expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the workspace recorded on the ref across workspace switches', async () => {
+    setOfficeApi(true);
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeRefChip chip={{ ...chip, workspacePath: '/old/ws' }} />
+      </I18nProvider>,
+    );
+
+    fireEvent.contextMenu(screen.getByTestId('office-ref-chip'), { clientX: 4, clientY: 4 });
+    fireEvent.click(await screen.findByRole('menuitem', { name: '打开' }));
+
+    await waitFor(() =>
+      expect(mocks.openOfficeDocument).toHaveBeenCalledWith(
+        expect.objectContaining({ workspacePath: '/old/ws' }),
+      ),
+    );
+  });
+
+  it('surfaces office IPC failures through a toast instead of failing silently', async () => {
+    mocks.openOfficeDocument.mockRejectedValueOnce(new Error('boom'));
+    renderChip();
+
+    fireEvent.contextMenu(screen.getByTestId('office-ref-chip'), { clientX: 4, clientY: 4 });
+    fireEvent.click(await screen.findByRole('menuitem', { name: '打开' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('操作失败：boom'));
   });
 
   it('disables open/reveal when the desktop bridge is unavailable', async () => {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
@@ -7,6 +7,7 @@ import { MessageClientMeta } from '../MessageClientMeta';
 
 const mocks = vi.hoisted(() => ({
   copyToClipboard: vi.fn(() => Promise.resolve(true)),
+  openOfficeDocument: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('../../../shared/lib/clipboard', () => ({
@@ -49,6 +50,46 @@ describe('MessageClientMeta — context menu', () => {
     fireEvent.contextMenu(screen.getByTestId('message-file-ref'), { clientX: 3, clientY: 3 });
     fireEvent.click(await screen.findByRole('menuitem', { name: '复制文件名' }));
     expect(mocks.copyToClipboard).toHaveBeenCalledWith('main.ts', expect.any(Object));
+  });
+
+  it('opens office refs with the workspace recorded on the historical message', async () => {
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      value: { office: { openOfficeDocument: mocks.openOfficeDocument } },
+    });
+    renderWithI18n(
+      <MessageClientMeta
+        message={message({
+          client_meta: {
+            file_refs: [],
+            office_refs: [
+              {
+                doc_id: 'doc-1',
+                doc_type: 'word',
+                filename: '方案.docx',
+                workspace_path: '/old/workspace',
+              },
+            ],
+            knowledge_refs: [],
+            attachments: [],
+            images: [],
+          },
+        })}
+        isUser
+      />,
+    );
+
+    fireEvent.contextMenu(screen.getByTestId('message-office-ref'), {
+      clientX: 3,
+      clientY: 3,
+    });
+    fireEvent.click(await screen.findByRole('menuitem', { name: '打开' }));
+
+    await waitFor(() =>
+      expect(mocks.openOfficeDocument).toHaveBeenCalledWith(
+        expect.objectContaining({ workspacePath: '/old/workspace', documentId: 'doc-1' }),
+      ),
+    );
   });
 
   it('opens image attachments in the lightbox from the menu', async () => {

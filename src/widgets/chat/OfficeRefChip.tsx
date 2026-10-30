@@ -1,6 +1,8 @@
 import { Copy, ExternalLink, FolderOpen, X } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { copyToClipboard } from '../../shared/lib/clipboard';
+import { fillTemplate } from '../../shared/lib/formatTemplate';
 import { useI18n } from '../../shared/lib/i18n';
 import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 import type { OfficeDocType, OfficeManagedRef } from '../../shared/types/electron-api';
@@ -11,6 +13,8 @@ interface OfficeRefChipData {
   docId: string;
   docType: OfficeDocType;
   filename: string;
+  /** 历史消息里记录的发送时工作区；缺省回退到当前工作区。 */
+  workspacePath?: string;
 }
 
 interface OfficeRefChipProps {
@@ -38,9 +42,10 @@ function buildManagedRef(
   chip: OfficeRefChipData,
   workspacePath: string | undefined,
 ): OfficeManagedRef | null {
-  if (!workspacePath) return null;
+  const effectiveWorkspace = chip.workspacePath ?? workspacePath;
+  if (!effectiveWorkspace) return null;
   return {
-    workspacePath,
+    workspacePath: effectiveWorkspace,
     docType: chip.docType,
     documentId: chip.docId,
     filename: chip.filename,
@@ -68,8 +73,9 @@ export function OfficeRefChip({
       if (!managedRef) return;
       try {
         await action(managedRef);
-      } catch {
-        // office IPC 失败由调用方 toast（此处静默，避免重复提示）
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        toast.error(fillTemplate(t('contextMenu.common.actionFailed'), { message }));
       }
     };
     return [

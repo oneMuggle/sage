@@ -7,7 +7,6 @@ import { zhContextMenu } from '../zh/contextMenu';
 export const enContextMenu: Record<keyof typeof zhContextMenu, string> = {
   'contextMenu.common.open': 'Open',
   'contextMenu.common.copy': 'Copy',
-  'contextMenu.common.copyMarkdown': 'Copy as Markdown',
   'contextMenu.common.copyPath': 'Copy Path',
   'contextMenu.common.copyName': 'Copy File Name',
   'contextMenu.common.revealInFolder': 'Show in Folder',
@@ -19,8 +18,7 @@ export const enContextMenu: Record<keyof typeof zhContextMenu, string> = {
   'contextMenu.common.selectionCopy': 'Copy Selection',
   'contextMenu.common.selectionQuote': 'Quote Selection',
   'contextMenu.common.inspect': 'Inspect Element',
-  'contextMenu.common.cancel': 'Cancel',
-  'contextMenu.common.confirm': 'Confirm',
+  'contextMenu.common.actionFailed': 'Action failed: {message}',
 
   'contextMenu.session.open': 'Open Session',
   'contextMenu.session.pin': 'Pin Session',
@@ -51,8 +49,6 @@ export const enContextMenu: Record<keyof typeof zhContextMenu, string> = {
   'contextMenu.codeBlock.copyFence': 'Copy as Markdown Fence',
   'contextMenu.table.copy': 'Copy Table (TSV)',
   'contextMenu.image.view': 'View Image',
-  'contextMenu.image.copy': 'Copy Image',
-  'contextMenu.image.copyFailed': 'Failed to copy image',
 
   'contextMenu.wiki.newFile': 'New File',
   'contextMenu.wiki.nameLabel': 'Name',

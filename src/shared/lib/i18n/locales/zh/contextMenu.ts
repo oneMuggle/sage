@@ -5,7 +5,6 @@
 export const zhContextMenu = {
   'contextMenu.common.open': '打开',
   'contextMenu.common.copy': '复制',
-  'contextMenu.common.copyMarkdown': '复制为 Markdown',
   'contextMenu.common.copyPath': '复制路径',
   'contextMenu.common.copyName': '复制文件名',
   'contextMenu.common.revealInFolder': '在文件夹中显示',
@@ -17,8 +16,7 @@ export const zhContextMenu = {
   'contextMenu.common.selectionCopy': '复制选区',
   'contextMenu.common.selectionQuote': '引用选区到输入框',
   'contextMenu.common.inspect': '检查元素',
-  'contextMenu.common.cancel': '取消',
-  'contextMenu.common.confirm': '确定',
+  'contextMenu.common.actionFailed': '操作失败：{message}',
 
   'contextMenu.session.open': '打开会话',
   'contextMenu.session.pin': '置顶会话',
@@ -48,8 +46,6 @@ export const zhContextMenu = {
   'contextMenu.codeBlock.copyFence': '复制为 Markdown 围栏',
   'contextMenu.table.copy': '复制表格（TSV）',
   'contextMenu.image.view': '查看大图',
-  'contextMenu.image.copy': '复制图片',
-  'contextMenu.image.copyFailed': '复制图片失败',
 
   'contextMenu.wiki.newFile': '新建文件',
   'contextMenu.wiki.nameLabel': '名称',

@@ -111,16 +111,19 @@ function TreeNode({
     const value = draft.trim();
     setMode('idle');
     try {
-      if (!value) return;
+      if (!value) {
+        toast.error(t('contextMenu.wiki.nameRequired'));
+        return;
+      }
       if (value.includes('/') || value.includes('..')) {
         toast.error(t('contextMenu.wiki.nameInvalid'));
         return;
       }
+      const fileName = /\.\w+$/.test(value) ? value : `${value}.md`;
       if (currentMode === 'rename') {
-        if (value === node.name) return;
-        await renameFile(node.path, value);
+        if (fileName === node.name) return;
+        await renameFile(node.path, fileName);
       } else {
-        const fileName = /\.\w+$/.test(value) ? value : `${value}.md`;
         await createFile(node.path, fileName);
       }
     } catch (e) {
