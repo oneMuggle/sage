@@ -55,23 +55,11 @@ import {
   formatArenaAccountsToggleAuditJson,
   formatArenaAccountsToggleAuditSnapshot,
 } from './ArenaAccountsToggle';
-import {
-  formatBasicTabAuditJson,
-  formatBasicTabAuditSnapshot,
-} from './BasicTab';
-import {
-  formatEndpointsTabAuditJson,
-  formatEndpointsTabAuditSnapshot,
-} from './EndpointsTab';
+import { formatBasicTabAuditJson, formatBasicTabAuditSnapshot } from './BasicTab';
+import { formatEndpointsTabAuditJson, formatEndpointsTabAuditSnapshot } from './EndpointsTab';
 import { formatMcpTabAuditJson, formatMcpTabAuditSnapshot } from './McpTab';
-import {
-  formatMemoryTabAuditJson,
-  formatMemoryTabAuditSnapshot,
-} from './MemoryTab';
-import {
-  formatModelsTabAuditJson,
-  formatModelsTabAuditSnapshot,
-} from './ModelsTab';
+import { formatMemoryTabAuditJson, formatMemoryTabAuditSnapshot } from './MemoryTab';
+import { formatModelsTabAuditJson, formatModelsTabAuditSnapshot } from './ModelsTab';
 import {
   formatNetworkTabAuditJson,
   formatNetworkTabAuditSnapshot,
@@ -85,18 +73,9 @@ import {
   formatPromptTemplatesTabAuditJson,
   formatPromptTemplatesTabAuditSnapshot,
 } from './PromptTemplatesTab';
-import {
-  formatRuntimeEnvTabAuditJson,
-  formatRuntimeEnvTabAuditSnapshot,
-} from './RuntimeEnvTab';
-import {
-  formatSkillsTabAuditJson,
-  formatSkillsTabAuditSnapshot,
-} from './SkillsTab';
-import {
-  formatZoteroTabAuditJson,
-  formatZoteroTabAuditSnapshot,
-} from './ZoteroTab';
+import { formatRuntimeEnvTabAuditJson, formatRuntimeEnvTabAuditSnapshot } from './RuntimeEnvTab';
+import { formatSkillsTabAuditJson, formatSkillsTabAuditSnapshot } from './SkillsTab';
+import { formatZoteroTabAuditJson, formatZoteroTabAuditSnapshot } from './ZoteroTab';
 import type { SettingsTabKey } from './settingsTabs';
 
 /** 单节审计的两种格式输出。 */
@@ -476,7 +455,5 @@ export function combineAuditOutputs(
     );
     return JSON.stringify(combined, null, 2);
   }
-  return ready
-    .map(({ status }) => status.payload.snapshot)
-    .join('\n\n---\n\n');
+  return ready.map(({ status }) => status.payload.snapshot).join('\n\n---\n\n');
 }
