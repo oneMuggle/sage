@@ -10,7 +10,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 
 @dataclass
@@ -157,7 +157,7 @@ def scan_literature_directory(project_root: Path) -> List[LiteratureEntry]:
     ]
 
     entries: List[LiteratureEntry] = []
-    seen_titles: set[str] = set()
+    seen_titles: Set[str] = set()
     for source_dir in sources:
         if not source_dir.exists():
             continue
