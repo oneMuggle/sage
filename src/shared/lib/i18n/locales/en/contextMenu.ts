@@ -23,6 +23,8 @@ export const enContextMenu: Record<keyof typeof zhContextMenu, string> = {
   'contextMenu.session.open': 'Open Session',
   'contextMenu.session.pin': 'Pin Session',
   'contextMenu.session.unpin': 'Unpin Session',
+  'contextMenu.session.archive': 'Archive Session',
+  'contextMenu.session.unarchive': 'Unarchive Session',
   'contextMenu.session.copyTitle': 'Copy Title',
   'contextMenu.session.exportMarkdown': 'Export Markdown',
   'contextMenu.session.exportHtml': 'Export HTML',

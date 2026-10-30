@@ -77,6 +77,17 @@ describe('buildSessionContextMenuItems', () => {
     ).toContain('fork-tree');
   });
 
+  it('adds archive/unarchive entries only when their handlers exist', () => {
+    expect(ids(build())).not.toContain('archive');
+    expect(ids(build())).not.toContain('unarchive');
+
+    const archiveItems = build({ onArchive: vi.fn(), archiveDisabled: true });
+    expect(item(archiveItems, 'archive').disabled).toBe(true);
+
+    const unarchiveItems = build({ onUnarchive: vi.fn() });
+    expect(ids(unarchiveItems)).toContain('unarchive');
+  });
+
   it('disables pin/export items while their operations are running', () => {
     const items = build({ pinning: true, exportingHtml: true, exportingMarkdown: true });
 

@@ -60,7 +60,7 @@ src/shared/ui/ContextMenu/
 
 | 界面             | 组件                                                            | 菜单动作                                                                                                                                                                             |
 | ---------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 会话列表         | `src/widgets/session/SessionItem.tsx` + `sessionContextMenu.ts` | 打开 / 重命名 / 置顶·取消置顶 / 复制标题 / 导出 Markdown / 导出 HTML /（分叉树）/ 删除…（确认框）                                                                                    |
+| 会话列表         | `src/widgets/session/SessionItem.tsx` + `sessionContextMenu.ts` | 打开 / 重命名 / 置顶·取消置顶 / 归档·恢复（有入口时）/ 复制标题 / 导出 Markdown / 导出 HTML /（分叉树）/ 删除…（确认框）                                                             |
 | 聊天消息         | `src/widgets/chat/Message.tsx` + `messageContextMenu.ts`        | 复制选区·引用选区\* / 复制（渲染后纯文本） / 复制为 Markdown（源文本） / 引用到输入框 / 编辑重发（用户） / 重新生成（助手） / 有帮助·没帮助 / 分叉 / 回滚 / 存记忆 / 删除…（确认框） |
 | 代码块           | `ShikiCodeBlock.tsx`                                            | 复制代码 / 复制为 Markdown 围栏                                                                                                                                                      |
 | 表格             | `MessageMarkdownParts.tsx`（MarkdownTable）                     | 复制表格（TSV）                                                                                                                                                                      |

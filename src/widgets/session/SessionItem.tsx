@@ -220,11 +220,14 @@ export function SessionItem({
       exportingHtml: exporting,
       exportingMarkdown: exportingMd,
       pinning,
+      archiveDisabled,
       onOpen: onSelect,
       onRename: () => startRename(),
       onTogglePin: () => {
         void handleTogglePin();
       },
+      onArchive,
+      onUnarchive,
       onCopyTitle: () =>
         void copyToClipboard(session.title, { successMessage: t('contextMenu.common.copied') }),
       onExportHtml: () => {
@@ -458,99 +461,99 @@ export function SessionItem({
         </div>
 
         {/* 操作按钮 */}
-      <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-        {onUnarchive && (
+        <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          {onUnarchive && (
+            <button
+              data-testid="unarchive-session"
+              onClick={(e) => {
+                e.stopPropagation();
+                onUnarchive();
+              }}
+              className="p-1 rounded hover:bg-primary/10 text-muted hover:text-primary"
+              title={t('session.unarchive')}
+              aria-label={t('session.unarchive')}
+            >
+              <ArchiveRestore className="w-4 h-4" />
+            </button>
+          )}
+          {onArchive && (
+            <button
+              data-testid="archive-session"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (archiveDisabled) return;
+                onArchive();
+              }}
+              disabled={archiveDisabled}
+              className="p-1 rounded hover:bg-primary/10 text-muted hover:text-primary disabled:opacity-40 disabled:hover:text-muted"
+              title={archiveDisabled ? t('session.archive_disabled_running') : t('session.archive')}
+              aria-label={t('session.archive')}
+            >
+              <Archive className="w-4 h-4" />
+            </button>
+          )}
+          {session.is_pinned && <Pin className="w-4 h-4 text-primary" />}
+          {/* U18: 导出完整会话为自包含 HTML */}
           <button
-            data-testid="unarchive-session"
-            onClick={(e) => {
-              e.stopPropagation();
-              onUnarchive();
+            data-testid="export-session"
+            onClick={handleExport}
+            disabled={exporting}
+            className="p-1 rounded hover:bg-primary/10 text-muted hover:text-primary disabled:opacity-50"
+            title={exporting ? t('session.export_html_exporting') : t('session.export_html')}
+            aria-label={t('session.export_html')}
+          >
+            <Download className="w-4 h-4" />
+          </button>
+          {/* R18-C: Markdown 导出 —— 轻量文本,便于归档与版本管理 */}
+          <button
+            data-testid="export-session-md"
+            onClick={handleExportMarkdown}
+            disabled={exportingMd}
+            className="p-1 rounded hover:bg-primary/10 text-muted hover:text-primary disabled:opacity-50"
+            title={t('session.export_md')}
+            aria-label={t('session.export_md')}
+          >
+            <FileText className="w-4 h-4" />
+          </button>
+          {/* R18-B: 置顶切换 —— 置顶会话在侧栏置顶组中始终排在最前 */}
+          {!session.is_archived && (
+            <button
+              data-testid="toggle-pin"
+              onClick={handleTogglePin}
+              disabled={pinning}
+              className={`p-1 rounded disabled:opacity-50 ${
+                session.is_pinned
+                  ? 'text-primary hover:bg-primary/10'
+                  : 'text-muted hover:bg-bg-hover hover:text-primary'
+              }`}
+              title={session.is_pinned ? t('session.unpin') : t('session.pin')}
+              aria-label={session.is_pinned ? t('session.unpin') : t('session.pin')}
+            >
+              {session.is_pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+            </button>
+          )}
+          {/* U12: 两步式确认删除 — 不弹 modal，armed 后二次点击生效 */}
+          <TwoStepDelete
+            data-testid="delete-session"
+            onConfirm={onDelete}
+            label={t('common.delete')}
+            armedLabel={t('common.delete_confirm')}
+            className="p-1"
+          />
+        </div>
+        {forkTreeOpen && (
+          <ForkTreeModal
+            isOpen
+            session={session}
+            activeSessionId={session.id}
+            onClose={() => setForkTreeOpen(false)}
+            onSwitch={(id) => {
+              setCurrentSessionId(id);
+              setForkTreeOpen(false);
             }}
-            className="p-1 rounded hover:bg-primary/10 text-muted hover:text-primary"
-            title={t('session.unarchive')}
-            aria-label={t('session.unarchive')}
-          >
-            <ArchiveRestore className="w-4 h-4" />
-          </button>
+          />
         )}
-        {onArchive && (
-          <button
-            data-testid="archive-session"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (archiveDisabled) return;
-              onArchive();
-            }}
-            disabled={archiveDisabled}
-            className="p-1 rounded hover:bg-primary/10 text-muted hover:text-primary disabled:opacity-40 disabled:hover:text-muted"
-            title={archiveDisabled ? t('session.archive_disabled_running') : t('session.archive')}
-            aria-label={t('session.archive')}
-          >
-            <Archive className="w-4 h-4" />
-          </button>
-        )}
-        {session.is_pinned && <Pin className="w-4 h-4 text-primary" />}
-        {/* U18: 导出完整会话为自包含 HTML */}
-        <button
-          data-testid="export-session"
-          onClick={handleExport}
-          disabled={exporting}
-          className="p-1 rounded hover:bg-primary/10 text-muted hover:text-primary disabled:opacity-50"
-          title={exporting ? t('session.export_html_exporting') : t('session.export_html')}
-          aria-label={t('session.export_html')}
-        >
-          <Download className="w-4 h-4" />
-        </button>
-        {/* R18-C: Markdown 导出 —— 轻量文本,便于归档与版本管理 */}
-        <button
-          data-testid="export-session-md"
-          onClick={handleExportMarkdown}
-          disabled={exportingMd}
-          className="p-1 rounded hover:bg-primary/10 text-muted hover:text-primary disabled:opacity-50"
-          title={t('session.export_md')}
-          aria-label={t('session.export_md')}
-        >
-          <FileText className="w-4 h-4" />
-        </button>
-        {/* R18-B: 置顶切换 —— 置顶会话在侧栏置顶组中始终排在最前 */}
-        {!session.is_archived && (
-          <button
-            data-testid="toggle-pin"
-            onClick={handleTogglePin}
-            disabled={pinning}
-            className={`p-1 rounded disabled:opacity-50 ${
-              session.is_pinned
-                ? 'text-primary hover:bg-primary/10'
-                : 'text-muted hover:bg-bg-hover hover:text-primary'
-            }`}
-            title={session.is_pinned ? t('session.unpin') : t('session.pin')}
-            aria-label={session.is_pinned ? t('session.unpin') : t('session.pin')}
-          >
-            {session.is_pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
-          </button>
-        )}
-        {/* U12: 两步式确认删除 — 不弹 modal，armed 后二次点击生效 */}
-        <TwoStepDelete
-          data-testid="delete-session"
-          onConfirm={onDelete}
-          label={t('common.delete')}
-          armedLabel={t('common.delete_confirm')}
-          className="p-1"
-        />
       </div>
-      {forkTreeOpen && (
-        <ForkTreeModal
-          isOpen
-          session={session}
-          activeSessionId={session.id}
-          onClose={() => setForkTreeOpen(false)}
-          onSwitch={(id) => {
-            setCurrentSessionId(id);
-            setForkTreeOpen(false);
-          }}
-        />
-      )}
-    </div>
     </ContextMenu>
   );
 }

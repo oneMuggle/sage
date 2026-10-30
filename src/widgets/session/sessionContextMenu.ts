@@ -1,4 +1,6 @@
 import {
+  Archive,
+  ArchiveRestore,
   Copy,
   Download,
   FileText,
@@ -22,9 +24,14 @@ export interface SessionContextMenuParams {
   exportingHtml?: boolean;
   exportingMarkdown?: boolean;
   pinning?: boolean;
+  archiveDisabled?: boolean;
   onOpen: () => void;
   onRename: () => void;
   onTogglePin: () => void;
+  /** 归档当前会话（缺省不显示入口）。 */
+  onArchive?: () => void;
+  /** 恢复已归档会话（归档视图使用）。 */
+  onUnarchive?: () => void;
   onCopyTitle: () => void | Promise<void>;
   onExportHtml: () => void | Promise<void>;
   onExportMarkdown: () => void | Promise<void>;
@@ -44,9 +51,12 @@ export function buildSessionContextMenuItems({
   exportingHtml = false,
   exportingMarkdown = false,
   pinning = false,
+  archiveDisabled = false,
   onOpen,
   onRename,
   onTogglePin,
+  onArchive,
+  onUnarchive,
   onCopyTitle,
   onExportHtml,
   onExportMarkdown,
@@ -74,6 +84,27 @@ export function buildSessionContextMenuItems({
       disabled: pinning,
       onSelect: onTogglePin,
     },
+    ...(onArchive
+      ? [
+          {
+            id: 'archive',
+            label: t('contextMenu.session.archive'),
+            icon: Archive,
+            disabled: archiveDisabled,
+            onSelect: onArchive,
+          },
+        ]
+      : []),
+    ...(onUnarchive
+      ? [
+          {
+            id: 'unarchive',
+            label: t('contextMenu.session.unarchive'),
+            icon: ArchiveRestore,
+            onSelect: onUnarchive,
+          },
+        ]
+      : []),
     {
       id: 'copy-title',
       label: t('contextMenu.session.copyTitle'),

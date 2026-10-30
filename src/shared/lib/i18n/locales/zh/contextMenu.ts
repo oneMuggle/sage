@@ -21,6 +21,8 @@ export const zhContextMenu = {
   'contextMenu.session.open': '打开会话',
   'contextMenu.session.pin': '置顶会话',
   'contextMenu.session.unpin': '取消置顶',
+  'contextMenu.session.archive': '归档会话',
+  'contextMenu.session.unarchive': '恢复会话',
   'contextMenu.session.copyTitle': '复制标题',
   'contextMenu.session.exportMarkdown': '导出 Markdown',
   'contextMenu.session.exportHtml': '导出 HTML',
