@@ -76,8 +76,8 @@ def _retry_settings() -> Tuple[int, float, float, float]:
     """读重试配置：app_settings > env > 默认。任何解析失败回退默认，永不抛错。
 
     优先级：
-    1. app_settings.llmRetryMaxAttempts/BaseDelayS/MaxDelayS
-    2. 环境变量 SAGE_LLM_RETRY_MAX_ATTEMPTS/BASE_DELAY_S
+    1. 环境变量 SAGE_LLM_RETRY_MAX_ATTEMPTS/BASE_DELAY_S/TOTAL_BUDGET_S（调试/测试覆盖）
+    2. app_settings.llmRetryMaxAttempts/BaseDelayS/MaxDelayS/TotalBudgetS
     3. 硬编码默认值
 
     Returns:
@@ -105,6 +105,11 @@ def _retry_settings() -> Tuple[int, float, float, float]:
             retry_max_delay = raw.get("llmRetryMaxDelayS")
             if isinstance(retry_max_delay, (int, float)) and retry_max_delay >= 1.0:  # noqa: UP038
                 max_delay = float(retry_max_delay)
+
+            # 2026-10-30: 自动重试总时长预算（秒），0 = 不限；UI 可配置。
+            retry_total_budget = raw.get("llmRetryTotalBudgetS")
+            if isinstance(retry_total_budget, (int, float)) and retry_total_budget >= 0:  # noqa: UP038
+                total_budget = float(retry_total_budget)
     except (ImportError, OSError, ValueError, TypeError):
         pass  # 读配置失败回退 env/默认
 

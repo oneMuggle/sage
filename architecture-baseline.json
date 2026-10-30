@@ -9,10 +9,10 @@
     "backend/api/wiki_routes.py": 1656,
     "backend/application/services/chat_service.py": 1142,
     "backend/core/legacy/agent.py": 3113,
-    "backend/core/legacy/llm_client.py": 1337,
+    "backend/core/legacy/llm_client.py": 1342,
     "backend/data/database.py": 2178,
     "backend/data/session_repo.py": 1087,
-    "backend/data/settings_canonicalizer.py": 859,
+    "backend/data/settings_canonicalizer.py": 864,
     "backend/main.py": 1385,
     "backend/mcp/pool.py": 915,
     "backend/office/edit.py": 1297,
@@ -74,7 +74,7 @@
     "backend/api/project_routes.py": 1061,
     "backend/services/project_wiki_generator.py": 902,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
-    "backend/tools/config_tool.py": 968,
+    "backend/tools/config_tool.py": 976,
     "scripts/feedback_receiver.py": 1154
   }
 }
