@@ -198,6 +198,18 @@ export interface UsageTrendPoint {
   completion_tokens: number;
   cost_usd: number;
   cache_hit_rate: number;
+  /** 2026-10-30: 总 token (后端 SUM(total_tokens); 旧数据/旧 mock 缺省时按输入+输出回退). */
+  total_tokens?: number;
+  /** 2026-10-30: 历史合并缓存字段 (read + creation). */
+  cached_tokens?: number;
+  /** 2026-10-30: 该时段从缓存读取的 token. */
+  cache_read_tokens?: number;
+  /** 2026-10-30: 该时段创建缓存条目的 token. */
+  cache_creation_tokens?: number;
+  /** 2026-10-30: 该时段已知定价请求数 (成本估算有效). */
+  known_requests?: number;
+  /** 2026-10-30: 该时段未知定价请求数 (tooltip 标记部分估算). */
+  unknown_requests?: number;
 }
 
 export interface UsageTrend {
