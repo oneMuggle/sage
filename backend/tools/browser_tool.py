@@ -306,13 +306,16 @@ class BrowserLaunchTool(BaseTool):
             logger.warning("setDownloadBehavior 失败（不影响启动）: %s", exc)
 
         # SN3：常驻事件通道跟踪下载（downloadWillBegin / downloadProgress）
-        tracker = start_download_tracking(
-            session.browser_id, session.port, session.ws_path, str(download_dir)
-        )
-        if not tracker.connected:
-            logger.warning(
-                "下载事件通道未建立（browser_downloads 将退化为目录列举）: %s", tracker.error
+        # Embedded（Electron 内置浏览器）无 WS 通道：browser_downloads 走目录列举。
+        if getattr(session, "browser_type", "") != "embedded":
+            tracker = start_download_tracking(
+                session.browser_id, session.port, session.ws_path, str(download_dir)
             )
+            if not tracker.connected:
+                logger.warning(
+                    "下载事件通道未建立（browser_downloads 将退化为目录列举）: %s",
+                    tracker.error,
+                )
 
         return ToolResult(
             success=True,
