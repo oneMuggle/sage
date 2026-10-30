@@ -114,10 +114,43 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
 
     db = Database(db_path=str(tmp_path / "fresh.db"))
     try:
-        db.init_db()  # v1-v9 自动注册（runner.py 模块级）
+        db.init_db()  # v1-v10 自动注册（runner.py 模块级）
         versions = applied_versions(db.get_connection())
-        # v1 基线 + v2-v9 迁移（runner.py 模块级注册，含 v9 自主目标表）
-        assert versions == {1, 2, 3, 4, 5, 6, 7, 8, 9}
+        # v1 基线 + v2-v10 迁移（runner.py 模块级注册，含 v10 反馈会话标签）
+        assert versions == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
         # schema_version 表已建（账本就绪）
     finally:
         db.close()
+
+
+def test_v10_adds_tag_column_to_legacy_feedback_table() -> None:
+    """v10：老库 feedback_conversations 缺 tag 列时补上，历史行落 'other'；重复执行幂等。"""
+    import sqlite3
+
+    from backend.data.migrations.runner import _v10_feedback_conversations_tag
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute(
+            "CREATE TABLE feedback_conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL)"
+        )
+        conn.execute(
+            "INSERT INTO feedback_conversations (id, title) VALUES ('c1', '老会话')"
+        )
+        conn.commit()
+
+        _v10_feedback_conversations_tag(conn)
+        columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(feedback_conversations)")
+        }
+        assert "tag" in columns
+        row = conn.execute(
+            "SELECT tag FROM feedback_conversations WHERE id = 'c1'"
+        ).fetchone()
+        assert row["tag"] == "other"
+
+        _v10_feedback_conversations_tag(conn)  # 幂等：不重复 ALTER
+        assert conn.execute("SELECT tag FROM feedback_conversations").fetchone()["tag"] == "other"
+    finally:
+        conn.close()

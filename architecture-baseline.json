@@ -10,10 +10,10 @@
     "backend/application/services/chat_service.py": 1263,
     "backend/core/legacy/agent.py": 3094,
     "backend/core/legacy/llm_client.py": 1274,
-    "backend/data/database.py": 2157,
+    "backend/data/database.py": 2216,
     "backend/data/session_repo.py": 1121,
     "backend/data/settings_canonicalizer.py": 877,
-    "backend/main.py": 1725,
+    "backend/main.py": 1729,
     "backend/memory/manager.py": 852,
     "backend/mcp/pool.py": 915,
     "backend/office/edit.py": 1297,
@@ -50,7 +50,7 @@
     "backend/wiki/files.py": 927,
     "backend/zotero/client.py": 1171,
     "electron/__tests__/commands.test.ts": 1210,
-    "electron/main.ts": 2962,
+    "electron/main.ts": 3018,
     "electron/tests/updateIntegration.test.ts": 869,
     "electron/tests/updateManager.test.ts": 1813,
     "electron/updateManager.ts": 1498,
@@ -75,6 +75,7 @@
     "backend/tools/config_tool.py": 983,
     "backend/scheduler/evolution.py": 1739,
     "src/pages/Chat.tsx": 831,
-    "src/shared/api/types/chatAndEventTypes.ts": 843
+    "src/shared/api/types/chatAndEventTypes.ts": 843,
+    "scripts/feedback_receiver.py": 1154
   }
 }

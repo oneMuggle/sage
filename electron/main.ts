@@ -109,6 +109,9 @@ import { registerLogIpc } from './ipc/logIpc';
 import { registerModelDownloadIpc } from './modelDownloadIpc';
 import { registerArenaTokenWindow } from './arenaTokenWindow';
 import { registerUpdateIpc } from './updateIpc';
+import { registerFeedbackIpc } from './feedback/feedbackIpc';
+import { getFeedbackConfig } from './feedback/feedbackConfig';
+import { getGlobalSyncer, initGlobalFeedbackSyncer } from './feedback/feedbackSyncer';
 import { UpdateManager } from './updateManager';
 import { ProviderStore } from './update/providerStore';
 import { ProviderRegistry } from './update/providers/registry';
@@ -913,6 +916,9 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
         // demo mode do NOT flip this flag — there's no real backend to
         // crash, so any exit from those branches is a non-event.
         startedSuccessfully = true;
+        // 用户反馈 syncer 需要 backend 已就绪才能拉取/提交消息；
+        // 未配置转发目标时 start() 内部会直接空转不跑。
+        getGlobalSyncer()?.start();
         // Task 0 review round 1, finding #6: tell the renderer the backend
         // is ready so BackendStatusBanner can clear the "starting…" state
         // (or never show it, if the spawn-to-ready window was sub-frame).
@@ -1500,7 +1506,8 @@ async function registerIpcHandlers(): Promise<void> {
 
       // S8: 主进程自主产生的事件（OS 通知点击回发）。无需后端 relay,
       // renderer 侧 listen() 注册的 ipcRenderer.on 直接收 webContents.send。
-      if (event === 'session-notify-click') {
+      // 反馈入口（Phase 1.11 帮助菜单）同理。
+      if (event === 'session-notify-click' || event === 'open-feedback') {
         return { ok: true, event };
       }
 
@@ -1939,6 +1946,54 @@ async function registerIpcHandlers(): Promise<void> {
     getBackendUrl: () => BACKEND_URL,
     getAuthToken: () => backendAuthToken ?? undefined,
   });
+
+  // 用户反馈系统 —— 配置 / 手动同步 / 附件上传走 main 侧 IPC：
+  //   - sharedSecret 需要 Electron safeStorage 加密，不能落到 backend SQLite
+  //   - 附件是 raw binary，CommandRoute 只支持 JSON body
+  // 会话与消息 CRUD 则走 electron/commandRoutes/feedback.ts 的 backend HTTP 映射。
+  initGlobalFeedbackSyncer({
+    getBackendUrl: () => BACKEND_URL,
+    getAuthToken: () => backendAuthToken ?? undefined,
+    // Phase 3.1：管理员回复已落本地库 → 弹 OS 通知；点击聚焦窗口并跳到反馈页。
+    // Win7/老系统 Notification 不可用时静默降级（isSupported 守卫）。
+    onRepliesReceived: (info) => {
+      if (!Notification.isSupported()) return;
+      const notification = new Notification({
+        title: `管理员回复了你的反馈 · ${info.title}`,
+        body: info.lastBody.slice(0, 160),
+        silent: false,
+      });
+      notification.on('click', () => {
+        const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
+        if (!win) return;
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
+        win.webContents.send('sage:event:open-feedback');
+      });
+      notification.show();
+    },
+  });
+  registerFeedbackIpc(
+    (channel, handler) => {
+      ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+        if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+        if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+        return handler(evt, ...args);
+      });
+    },
+    {
+      getBackendUrl: () => BACKEND_URL,
+      getAuthToken: () => backendAuthToken ?? undefined,
+      config: getFeedbackConfig(),
+      getSyncer: () => getGlobalSyncer(),
+      restartSyncer: () => {
+        const syncer = getGlobalSyncer();
+        syncer?.stop();
+        syncer?.start();
+      },
+    },
+  );
 
   // Lazy-init UpdateManager inside registerIpcHandlers (after app.whenReady)
   // to avoid constructing managers before the app is ready.
@@ -2944,6 +2999,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   appIsQuitting = true;
   globalShortcut.unregister(REMOTE_MCP_HOTKEY);
+  getGlobalSyncer()?.stop();
   remoteMcp?.dispose();
   remoteMcp = null;
   cleanupUpdateIpc?.();
