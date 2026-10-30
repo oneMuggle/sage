@@ -7,7 +7,7 @@
  * r55: 导入同名冲突从"全量覆盖与否"升级为条目级勾选覆盖。
  */
 
-import { Download, Pencil, Plus, RefreshCw, Search, Upload } from 'lucide-react';
+import { Copy, Download, Pencil, Plus, RefreshCw, Search, Trash2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -500,90 +500,90 @@ export function PromptTemplatesTab() {
             })
             .map((tpl, idx) => (
               <ContextMenu key={tpl.id} items={() => promptMenuItems(tpl)}>
-              <li
-                draggable
-                onDragStart={() => handleDragStart(idx)}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  handleDragOver(idx);
-                }}
-                onDrop={() => void handleDrop()}
-                onDragEnd={handleDragEnd}
-                className={`p-3 rounded-radius-sm border ${dropIndex === idx ? 'border-primary' : 'border-border'} ${dragIndex === idx ? 'opacity-50' : ''} cursor-grab active:cursor-grabbing`}
-                data-testid="prompts-item"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-medium text-text">{tpl.name}</div>
-                    {tpl.description && (
-                      <div className="text-ui-2xs text-text-secondary">{tpl.description}</div>
-                    )}
-                    <div className="text-ui-2xs text-text-secondary font-mono mt-1 line-clamp-2">
-                      {tpl.content.length > 120 ? `${tpl.content.slice(0, 120)}…` : tpl.content}
+                <li
+                  draggable
+                  onDragStart={() => handleDragStart(idx)}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    handleDragOver(idx);
+                  }}
+                  onDrop={() => void handleDrop()}
+                  onDragEnd={handleDragEnd}
+                  className={`p-3 rounded-radius-sm border ${dropIndex === idx ? 'border-primary' : 'border-border'} ${dragIndex === idx ? 'opacity-50' : ''} cursor-grab active:cursor-grabbing`}
+                  data-testid="prompts-item"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-medium text-text">{tpl.name}</div>
+                      {tpl.description && (
+                        <div className="text-ui-2xs text-text-secondary">{tpl.description}</div>
+                      )}
+                      <div className="text-ui-2xs text-text-secondary font-mono mt-1 line-clamp-2">
+                        {tpl.content.length > 120 ? `${tpl.content.slice(0, 120)}…` : tpl.content}
+                      </div>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      {(() => {
+                        // R38: 变量记忆展示/清除 —— 与填充对话框同键口径
+                        try {
+                          const raw = window.localStorage.getItem(tplStorageKey(tpl.content));
+                          const mem = raw ? (JSON.parse(raw) as Record<string, string>) : null;
+                          const entries = mem ? Object.entries(mem) : [];
+                          if (entries.length === 0) return null;
+                          return (
+                            <span
+                              className="text-ui-2xs text-text-secondary mr-1"
+                              data-testid={`prompts-memory-${tpl.id}`}
+                            >
+                              {t('settings.templates.memory_count').replace(
+                                '{count}',
+                                String(entries.length),
+                              )}
+                              <button
+                                type="button"
+                                data-testid={`prompts-memory-clear-${tpl.id}`}
+                                onClick={() => {
+                                  localStorage.removeItem(tplStorageKey(tpl.content));
+                                  setMemoryTick((n) => n + 1);
+                                }}
+                                className="ml-1 text-error hover:underline"
+                              >
+                                {t('settings.templates.clear')}
+                              </button>
+                            </span>
+                          );
+                        } catch {
+                          return null;
+                        }
+                      })()}
+                      <button
+                        type="button"
+                        data-testid={`prompts-edit-${tpl.id}`}
+                        onClick={() =>
+                          setForm({
+                            id: tpl.id,
+                            name: tpl.name,
+                            description: tpl.description,
+                            content: tpl.content,
+                          })
+                        }
+                        className="p-1 rounded hover:bg-bg-hover text-muted"
+                        title={t('settings.templates.edit')}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`prompts-delete-${tpl.id}`}
+                        onClick={() => void handleDelete(tpl.id)}
+                        className="p-1 rounded hover:bg-error/10 text-muted hover:text-error"
+                        title={t('settings.templates.delete')}
+                      >
+                        <span className="text-ui-2xs">{t('settings.templates.delete')}</span>
+                      </button>
                     </div>
                   </div>
-                  <div className="flex gap-1 shrink-0">
-                    {(() => {
-                      // R38: 变量记忆展示/清除 —— 与填充对话框同键口径
-                      try {
-                        const raw = window.localStorage.getItem(tplStorageKey(tpl.content));
-                        const mem = raw ? (JSON.parse(raw) as Record<string, string>) : null;
-                        const entries = mem ? Object.entries(mem) : [];
-                        if (entries.length === 0) return null;
-                        return (
-                          <span
-                            className="text-ui-2xs text-text-secondary mr-1"
-                            data-testid={`prompts-memory-${tpl.id}`}
-                          >
-                            {t('settings.templates.memory_count').replace(
-                              '{count}',
-                              String(entries.length),
-                            )}
-                            <button
-                              type="button"
-                              data-testid={`prompts-memory-clear-${tpl.id}`}
-                              onClick={() => {
-                                localStorage.removeItem(tplStorageKey(tpl.content));
-                                setMemoryTick((n) => n + 1);
-                              }}
-                              className="ml-1 text-error hover:underline"
-                            >
-                              {t('settings.templates.clear')}
-                            </button>
-                          </span>
-                        );
-                      } catch {
-                        return null;
-                      }
-                    })()}
-                    <button
-                      type="button"
-                      data-testid={`prompts-edit-${tpl.id}`}
-                      onClick={() =>
-                        setForm({
-                          id: tpl.id,
-                          name: tpl.name,
-                          description: tpl.description,
-                          content: tpl.content,
-                        })
-                      }
-                      className="p-1 rounded hover:bg-bg-hover text-muted"
-                      title={t('settings.templates.edit')}
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      data-testid={`prompts-delete-${tpl.id}`}
-                      onClick={() => void handleDelete(tpl.id)}
-                      className="p-1 rounded hover:bg-error/10 text-muted hover:text-error"
-                      title={t('settings.templates.delete')}
-                    >
-                      <span className="text-ui-2xs">{t('settings.templates.delete')}</span>
-                    </button>
-                  </div>
-                </div>
-              </li>
+                </li>
               </ContextMenu>
             ))}
         </ul>
