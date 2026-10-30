@@ -31,18 +31,7 @@ vi.mock('../MemorySettingsTab', () => ({
     </div>
   ),
 }));
-vi.mock('../ModelsTab', () => ({
-  ModelsTab: () => (
-    <div data-testid="tab-models">
-      {/* 真实 ModelsTab 把温度/上下文参数收进默认闭合的「高级」折叠；
-          这里复刻该结构，覆盖「跳转时先展开闭合 details」路径。 */}
-      <details>
-        <summary>高级</summary>
-        <div data-settings-anchor="temperature">Temperature</div>
-      </details>
-    </div>
-  ),
-}));
+vi.mock('../ModelsTab', () => ({ ModelsTab: () => <div data-testid="tab-models" /> }));
 vi.mock('../NetworkTab', () => ({ NetworkTab: () => <div data-testid="tab-network" /> }));
 vi.mock('../OrchestrationTab', () => ({
   OrchestrationTab: () => (
@@ -54,9 +43,18 @@ vi.mock('../OrchestrationTab', () => ({
 vi.mock('../ProvidersManager', () => ({
   ProvidersManager: () => <div data-testid="tab-providers" />,
 }));
-// P1-b: 合并后的包装 tab —— 锚点测试直接 mock，避免依赖真实子 tab 切换逻辑
+// P1-b: 合并后的包装 tab —— 锚点测试直接 mock，避免依赖真实子 tab 切换逻辑。
+// 真实的 ModelsServicesTab 内嵌 ModelsTab，后者把温度/上下文参数收进默认闭合
+// 的「高级」折叠；这里复刻该嵌套结构，覆盖 R31c「跳转时先展开闭合 details」。
 vi.mock('../ModelsServicesTab', () => ({
-  ModelsServicesTab: () => <div data-testid="tab-models-services" />,
+  ModelsServicesTab: () => (
+    <div data-testid="tab-models-services">
+      <details>
+        <summary>高级</summary>
+        <div data-settings-anchor="temperature">Temperature</div>
+      </details>
+    </div>
+  ),
 }));
 vi.mock('../PluginsSkillsTab', () => ({
   PluginsSkillsTab: () => <div data-testid="tab-plugins-skills" />,

@@ -114,7 +114,7 @@ describe('ModelsTab routing mode (Task 11)', () => {
   const autoSettings = { ...settings, routing: { mode: 'auto' as const } };
 
   it('defaults to manual mode and renders no read-only routing table', () => {
-    render(<ModelsTab settings={settings} updateSettings={vi.fn()} />);
+    renderTab();
 
     expect(screen.getByTestId('settings-routing-mode-manual')).toBeChecked();
     expect(screen.getByTestId('settings-routing-mode-auto')).not.toBeChecked();
@@ -123,7 +123,7 @@ describe('ModelsTab routing mode (Task 11)', () => {
 
   it('writes routing.mode when the auto radio is selected', () => {
     const updateSettings = vi.fn();
-    render(<ModelsTab settings={settings} updateSettings={updateSettings} />);
+    renderTab(updateSettings);
 
     fireEvent.click(screen.getByTestId('settings-routing-mode-auto'));
 
@@ -133,7 +133,7 @@ describe('ModelsTab routing mode (Task 11)', () => {
   });
 
   it('auto mode shows the mapping table + chat endpoint row and hides the chat picker', () => {
-    render(<ModelsTab settings={autoSettings} updateSettings={vi.fn()} />);
+    renderTab(vi.fn(), autoSettings);
 
     const table = screen.getByTestId('settings-routing-table');
     const rows = Array.from(table.querySelectorAll('tbody tr'));
@@ -149,17 +149,17 @@ describe('ModelsTab routing mode (Task 11)', () => {
     // 隐藏 chat 选择器剩 5 个。无其它 <select> 干扰, 直接全量计数。
     const capabilitySelects = (container: HTMLElement) => container.querySelectorAll('select');
 
-    const manual = render(<ModelsTab settings={settings} updateSettings={vi.fn()} />);
+    const manual = renderTab();
     expect(capabilitySelects(manual.container)).toHaveLength(6);
     manual.unmount();
 
-    const auto = render(<ModelsTab settings={autoSettings} updateSettings={vi.fn()} />);
+    const auto = renderTab(vi.fn(), autoSettings);
     expect(capabilitySelects(auto.container)).toHaveLength(5);
   });
 
   it('keeps the routing switch reachable when no endpoint has models (R31a)', () => {
     const emptySettings = { ...settings, endpoints: [] };
-    render(<ModelsTab settings={emptySettings} updateSettings={vi.fn()} />);
+    renderTab(vi.fn(), emptySettings);
 
     expect(screen.getByTestId('settings-routing-mode-auto')).toBeInTheDocument();
     expect(screen.getByTestId('settings-routing-mode-manual')).toBeChecked();

@@ -226,7 +226,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
       discoveredModels: [{ id: 'gpt-4o', capabilities: ['chat'], endpointId: 'ep-1' }],
     };
     vi.mocked(testEndpointConnection).mockResolvedValueOnce(discovered);
-    render(<EndpointsTab {...props} />);
+    renderTab(props);
 
     fireEvent.click(screen.getByRole('button', { name: '测试连接' }));
 
@@ -279,7 +279,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
       latency: 0,
       discoveredModels: [{ id: 'gpt-4o', capabilities: ['chat'], endpointId: 'ep-1' }],
     });
-    render(<EndpointsTab {...props} />);
+    renderTab(props);
 
     fireEvent.click(screen.getByRole('button', { name: '测试连接' }));
 

@@ -258,6 +258,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
 
   // ── 模型 ──
   {
+    key: 'routing.mode',
+    tab: 'models-services',
+    label: '智能模型路由',
+    labelEn: 'Smart model routing',
+    keywords: 'routing 路由 自动 手动 auto manual 任务类型 分档',
+  },
+  {
     key: 'model_selections',
     tab: 'models-services',
     label: '模型选择',

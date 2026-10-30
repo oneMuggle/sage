@@ -214,6 +214,7 @@ export const enSettingsUi = {
   'settings.memsettings.open_memory_page': 'Open Memory page',
   'settings.models.add_endpoint_hint':
     'Add an endpoint and test the connection on the "Endpoints" tab first',
+  'settings.models.advanced': 'Advanced',
   'settings.models.arena_pool': 'Arena account pool',
   'settings.models.asr_model': 'Speech recognition (ASR)',
   'settings.models.asr_model_desc': 'Used for speech-to-text (optional)',
@@ -221,6 +222,10 @@ export const enSettingsUi = {
   'settings.models.auto_context': 'Infer context window automatically',
   'settings.models.auto_context_desc':
     'When enabled, the context window is chosen from the model catalog; when disabled, the fixed value above is used (minimum when the catalog is known)',
+  'settings.models.chat_endpoint_readonly_desc':
+    'In auto mode the routing engine picks a model within the selected endpoint per task; switch back to manual to pin one',
+  'settings.models.chat_endpoint_unconfigured':
+    'Not configured (switch back to manual to choose a chat endpoint)',
   'settings.models.chat_model': 'Chat model',
   'settings.models.chat_model_desc': 'Used for text conversations (required)',
   'settings.models.embedding_model': 'Embedding model',
@@ -244,6 +249,18 @@ export const enSettingsUi = {
   'settings.models.not_used': '-- Not used --',
   'settings.models.open_catalog': 'Open model catalog',
   'settings.models.please_select': '-- Select --',
+  'settings.models.routing_auto': 'Auto routing (pick by task)',
+  'settings.models.routing_auto_hint':
+    'Auto mode picks a model by task type within the "chat endpoint"; vision/embedding/speech still follow the config below',
+  'settings.models.routing_manual': 'Choose model manually',
+  'settings.models.routing_mode': 'Smart model routing',
+  'settings.models.routing_mode_aria': 'Smart model routing mode',
+  'settings.models.routing_mode_desc':
+    'Auto: each message picks a model by task type within the same endpoint; Manual: always use the chat model selected below',
+  'settings.models.routing_table_note':
+    'Tier mapping is determined by the backend RoutingEngine; this table is read-only',
+  'settings.models.routing_task_type': 'Task type',
+  'settings.models.routing_tier': 'Tier',
   'settings.models.temperature_desc':
     'Controls output randomness: higher is more random; 0 is most stable, 2 most random. Actual behavior depends on the model implementation',
   'settings.models.tts_model': 'Speech synthesis (TTS)',

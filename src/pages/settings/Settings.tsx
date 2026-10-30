@@ -122,22 +122,37 @@ export function Settings() {
     const pending = pendingAnchorRef.current;
     if (!pending) return;
     pendingAnchorRef.current = null;
+    // 展开细节后滚动句柄：下一帧布局才稳定，且清理函数需要能取消它。
+    let scrollHandle: number | undefined;
     const handle = window.setTimeout(() => {
       const selector = `[data-settings-anchor="${CSS.escape(pending.key)}"]`;
       const target = document.querySelector(selector);
       if (target) {
-        // scrollIntoView 在 jsdom 中未实现 —— 必须守卫，否则测试环境直接抛错。
-        if (typeof target.scrollIntoView === 'function') {
-          target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        // R31c: 锚点可能位于「高级」类折叠区内：闭合的 <details> 里
+        // scrollIntoView 不会显示内容。先展开所有闭合祖先，再滚动。
+        let detailsEl = target.closest('details');
+        while (detailsEl) {
+          if (!detailsEl.open) detailsEl.open = true;
+          detailsEl = detailsEl.parentElement?.closest('details') ?? null;
         }
-        target.classList.add('settings-anchor-flash');
-        window.setTimeout(() => target.classList.remove('settings-anchor-flash'), 2000);
+        // 展开后下一帧布局才稳定 —— 把滚动/高亮再推迟一个 tick。
+        scrollHandle = window.setTimeout(() => {
+          // scrollIntoView 在 jsdom 中未实现 —— 必须守卫，否则测试环境直接抛错。
+          if (typeof target.scrollIntoView === 'function') {
+            target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          }
+          target.classList.add('settings-anchor-flash');
+          window.setTimeout(() => target.classList.remove('settings-anchor-flash'), 2000);
+        }, 0);
         return;
       }
       // 未登记锚点 → 退回本分支的「按标签文本定位」兜底，仍定不到再如实提示。
       setFallbackEntry(pending.entry);
     }, 0);
-    return () => window.clearTimeout(handle);
+    return () => {
+      window.clearTimeout(handle);
+      if (scrollHandle !== undefined) window.clearTimeout(scrollHandle);
+    };
   }, [jumpToken]);
 
   useEffect(() => {

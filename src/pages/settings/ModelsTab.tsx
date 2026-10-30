@@ -188,7 +188,9 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
       {/* R31c: 低频参数收进「高级」折叠；设置搜索命中其内部锚点时，由
           Settings 的跳转 effect 先展开闭合祖先再滚动。 */}
       <details data-testid="settings-models-advanced" className="rounded border border-border">
-        <summary className="cursor-pointer px-3 py-2 text-xs text-muted">高级</summary>
+        <summary className="cursor-pointer px-3 py-2 text-xs text-muted">
+          {t('settings.models.advanced')}
+        </summary>
         <div className="space-y-3 px-3 pb-3">
           <h3 className="text-sm font-semibold text-text">
             {t('settings.models.model_parameters')}
@@ -325,14 +327,19 @@ interface RoutingModeSectionProps {
  * 颜色/描述区分）；写入用展开合并，避免未来 `routing` 加键时被覆盖清空。
  */
 function RoutingModeSection({ settings, updateSettings, routingMode }: RoutingModeSectionProps) {
+  const { t } = useI18n();
   return (
     <>
       <SettingRow
         anchor="routing.mode"
-        label="智能模型路由"
-        desc="自动：每条消息按任务类型在同一端点内选择模型；手动：始终使用下方选择的对话模型"
+        label={t('settings.models.routing_mode')}
+        desc={t('settings.models.routing_mode_desc')}
       >
-        <div role="radiogroup" aria-label="智能模型路由模式" data-testid="settings-routing-mode">
+        <div
+          role="radiogroup"
+          aria-label={t('settings.models.routing_mode_aria')}
+          data-testid="settings-routing-mode"
+        >
           <label className="flex items-center gap-2 text-xs text-text">
             <input
               type="radio"
@@ -342,7 +349,7 @@ function RoutingModeSection({ settings, updateSettings, routingMode }: RoutingMo
               checked={routingMode === 'manual'}
               onChange={() => updateSettings({ routing: { ...settings.routing, mode: 'manual' } })}
             />
-            手动选择模型
+            {t('settings.models.routing_manual')}
           </label>
           <label className="flex items-center gap-2 text-xs text-text">
             <input
@@ -353,14 +360,14 @@ function RoutingModeSection({ settings, updateSettings, routingMode }: RoutingMo
               checked={routingMode === 'auto'}
               onChange={() => updateSettings({ routing: { ...settings.routing, mode: 'auto' } })}
             />
-            自动路由（按任务选择）
+            {t('settings.models.routing_auto')}
           </label>
         </div>
       </SettingRow>
       {routingMode === 'auto' && (
         <div className="space-y-2">
           <p data-testid="settings-routing-mode-hint" className="text-xs text-muted">
-            自动模式在「对话端点」内按任务类型选择模型；视觉/嵌入/语音等仍按下方配置
+            {t('settings.models.routing_auto_hint')}
           </p>
           <table
             data-testid="settings-routing-table"
@@ -368,8 +375,12 @@ function RoutingModeSection({ settings, updateSettings, routingMode }: RoutingMo
           >
             <thead>
               <tr className="text-muted">
-                <th className="text-left px-2 py-1 font-medium">任务类型</th>
-                <th className="text-left px-2 py-1 font-medium">分档</th>
+                <th className="text-left px-2 py-1 font-medium">
+                  {t('settings.models.routing_task_type')}
+                </th>
+                <th className="text-left px-2 py-1 font-medium">
+                  {t('settings.models.routing_tier')}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -383,7 +394,7 @@ function RoutingModeSection({ settings, updateSettings, routingMode }: RoutingMo
               ))}
             </tbody>
           </table>
-          <p className="text-ui-xs text-muted">分档映射由后端 RoutingEngine 决定；本表为只读说明</p>
+          <p className="text-ui-xs text-muted">{t('settings.models.routing_table_note')}</p>
         </div>
       )}
     </>
@@ -401,13 +412,14 @@ interface ChatEndpointReadOnlyProps {
  * 状态；切换端点请切回手动模式完成。
  */
 function ChatEndpointReadOnly({ endpointName }: ChatEndpointReadOnlyProps) {
+  const { t } = useI18n();
   return (
     <SettingRow
-      label="对话模型"
-      desc="自动模式下由路由引擎在所选端点内按任务选择；要固定模型请切回手动"
+      label={t('settings.models.chat_model')}
+      desc={t('settings.models.chat_endpoint_readonly_desc')}
     >
       <div data-testid="settings-routing-endpoint" className="text-xs font-mono">
-        {endpointName ?? '未配置（请先切回手动模式选择对话端点）'}
+        {endpointName ?? t('settings.models.chat_endpoint_unconfigured')}
       </div>
     </SettingRow>
   );
