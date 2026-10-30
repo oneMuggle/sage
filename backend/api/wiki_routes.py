@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
+from backend.orchestration._lazy_lock import LazyLock
 from backend.wiki import (
     ChatConfig,
     GraphData,
@@ -57,6 +58,9 @@ from backend.wiki.project_authorization import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/wiki", tags=["wiki"])
+
+# 队列处理是长跑 + LLM 计费操作：进程内同一时刻只允许一个处理请求。
+_queue_process_lock = LazyLock()
 
 
 def _cleanup_temp_paths(*paths: Optional[Path], project_root: Optional[Path] = None) -> None:
@@ -1046,8 +1050,12 @@ async def queue_process(req: QueueProcessRequest) -> dict:
     project_root = _canonical_project_root(req.project_path)
     authorize_registered_project(req.project_path)
 
+    if _queue_process_lock.locked():
+        raise HTTPException(status_code=409, detail="wiki queue already processing")
+
     limit = max(1, min(int(req.limit), 20))
-    return await process_pending(project_root, limit=limit)
+    async with _queue_process_lock:
+        return await process_pending(project_root, limit=limit)
 
 
 # ============================================================================

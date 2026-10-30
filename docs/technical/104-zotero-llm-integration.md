@@ -216,4 +216,8 @@ inotify 实时监听、Collection/Tag 图谱节点、独立导入对话框（标
   到绑定值；启动期后台增量同步在绑定存在时也会把带 Wiki 标签的文献
   沉淀到该项目的 `wiki/zotero/`。`GET /zotero/sync-status` 返回
   `wiki_project_path` 供 UI 显示。
+- **评审加固（同日）**：导出前校验绑定为绝对路径且包含 `wiki/` 目录，
+  拒绝向普通目录写入；`wiki_export` 改用 `secure_atomic_write_file`
+  （no-follow + 原子替换），残留清理跳过符号链接，避免通过预置 symlink
+  写到项目外。同步页只在「保存绑定」后生效，避免未保存输入与后台行为不一致。
 

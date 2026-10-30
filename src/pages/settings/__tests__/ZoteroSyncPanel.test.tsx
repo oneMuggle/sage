@@ -194,6 +194,9 @@ describe('ZoteroSyncPanel 同步动作', () => {
     syncMock.mockResolvedValue(makeResult());
     renderPanel();
     await screen.findByTestId('zotero-sync-status-line');
+    await waitFor(() =>
+      expect(screen.getByTestId('zotero-wiki-project-input')).toHaveValue('/bound/proj'),
+    );
     fireEvent.click(screen.getByTestId('zotero-sync-now'));
     await waitFor(() =>
       expect(syncMock).toHaveBeenCalledWith({ force: false, projectPath: '/bound/proj' }),

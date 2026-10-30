@@ -224,6 +224,26 @@ async def copy_to_raw(
     return _copy_to_raw_windows(project_root, filename, payload, dest_path, source_content_provided)
 
 
+_IMPORTABLE_SUFFIXES = frozenset(
+    {
+        ".md",
+        ".markdown",
+        ".txt",
+        ".pdf",
+        ".doc",
+        ".docx",
+        ".ppt",
+        ".pptx",
+        ".xls",
+        ".xlsx",
+        ".csv",
+        ".html",
+        ".htm",
+        ".epub",
+    }
+)
+
+
 async def import_source_into_raw(
     project_root: Path,
     external_path: Path,
@@ -231,13 +251,16 @@ async def import_source_into_raw(
 ) -> Path:
     """把项目外部的普通文件导入 ``raw/sources/``。
 
-    外部路径必须是绝对路径、存在的普通文件（symlink fail-closed）；
-    读取量受 ``max_bytes`` 限制，随后复用 :func:`copy_to_raw` 的
-    O_EXCL/no-follow 落盘与内容一致性检查。
+    外部路径必须是绝对路径、存在的普通文件（symlink fail-closed），
+    后缀必须在 ``_IMPORTABLE_SUFFIXES`` 白名单内；读取量受 ``max_bytes``
+    限制，随后复用 :func:`copy_to_raw` 的 O_EXCL/no-follow 落盘与内容
+    一致性检查。
     """
     path = external_path.expanduser()
     if not path.is_absolute():
         raise ValueError("源文件必须是绝对路径")
+    if path.suffix.lower() not in _IMPORTABLE_SUFFIXES:
+        raise ValueError("不支持的文件类型")
     try:
         mode = os.lstat(path).st_mode
     except OSError as exc:
@@ -343,29 +366,30 @@ def _copy_to_raw_windows(
     dest_path: Path,
     source_content_provided: bool = False,
 ) -> Path:
-    """Best-effort Windows leaf protection; reject unsupported no-follow APIs."""
-    nofollow = getattr(os, "O_NOFOLLOW", 0)
-    if not nofollow:
-        # O_EXCL protects creation races, but cannot protect a directory junction
-        # replacement. Never silently claim this is equivalent to POSIX safety.
-        raise OSError("Windows 安全 ingest 不支持可靠的 no-follow 目录打开")
+    """Windows reparse-safe 落盘（CREATE_NEW + 句柄复核）。"""
     raw_sources_dir = project_root / "raw" / "sources"
     for directory in (project_root, project_root / "raw", raw_sources_dir):
         mode = os.lstat(directory).st_mode if directory.exists() else None
         if mode is not None and stat.S_ISLNK(mode):
             raise OSError(f"Refusing ingest directory symlink: {directory}")
     raw_sources_dir.mkdir(parents=True, exist_ok=True)
+
+    from backend.tools.win_reparse_io import (
+        read_file_reparse_safe,
+        write_file_reparse_safe,
+    )
+
     try:
-        fd = os.open(
-            str(dest_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow, 0o600
-        )
+        write_file_reparse_safe(str(dest_path), payload, overwrite=False)
     except FileExistsError:
         mode = os.lstat(dest_path).st_mode
         if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
             raise OSError(f"Refusing non-file ingest target: {dest_path}")
+        if source_content_provided:
+            existing = read_file_reparse_safe(str(dest_path))
+            if existing != payload:
+                raise ValueError("已有源文件内容与本次 ingest 输入不一致")
         return dest_path
-    with os.fdopen(fd, "wb") as stream:
-        stream.write(payload)
     return dest_path
 
 

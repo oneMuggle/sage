@@ -309,3 +309,18 @@ async def test_background_sync_exports_wiki_when_bound(monkeypatch):
 
     await zotero_sync_routes.run_background_sync()
     assert seen["path"] == "/bound/project"
+
+
+def test_run_wiki_export_rejects_non_wiki_directory(tmp_path, monkeypatch):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    calls = []
+    monkeypatch.setattr(
+        "backend.zotero.wiki_export.export_wiki",
+        lambda client, root: calls.append(root),
+    )
+
+    result = zotero_sync_routes._run_wiki_export(object(), str(plain))
+
+    assert "not a wiki project" in result["error"]
+    assert calls == []

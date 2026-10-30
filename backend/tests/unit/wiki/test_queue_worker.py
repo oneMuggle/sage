@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from backend.wiki import queue_worker as qw
@@ -99,3 +101,59 @@ async def test_process_pending_rejects_source_outside_project(tmp_path, monkeypa
 
     assert out["processed"][0]["status"] == "failed"
     assert IngestQueue(tmp_path).get(task_id).status is QueueStatus.FAILED
+
+
+@pytest.mark.asyncio()
+async def test_cancellation_returns_task_to_pending(tmp_path, monkeypatch):
+    task_id = _seed_task(tmp_path)
+    _configure(monkeypatch)
+
+    async def cancelled_ingest(*args, **kwargs):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(qw, "ingest_source", cancelled_ingest)
+
+    with pytest.raises(asyncio.CancelledError):
+        await qw.process_pending(tmp_path, limit=1)
+
+    task = IngestQueue(tmp_path).get(task_id)
+    assert task.status is QueueStatus.PENDING
+    assert task.retry_count == 0
+
+
+@pytest.mark.asyncio()
+async def test_stale_processing_is_recovered(tmp_path, monkeypatch):
+    task_id = _seed_task(tmp_path)
+    queue = IngestQueue(tmp_path)
+    queue.mark_processing(task_id)
+    _configure(monkeypatch)
+
+    async def fake_ingest(*args, **kwargs):
+        return _Result()
+
+    monkeypatch.setattr(qw, "ingest_source", fake_ingest)
+
+    out = await qw.process_pending(tmp_path, limit=1)
+
+    assert out["processed"][0]["status"] == "completed"
+    assert IngestQueue(tmp_path).get(task_id).status is QueueStatus.COMPLETED
+
+
+@pytest.mark.asyncio()
+async def test_concurrent_enqueue_is_not_lost(tmp_path, monkeypatch):
+    _seed_task(tmp_path)
+    _configure(monkeypatch)
+
+    async def fake_ingest(*args, **kwargs):
+        # 模拟处理期间 UI 另一个实例入队
+        IngestQueue(tmp_path).add("raw/sources/a.md")
+        return _Result()
+
+    monkeypatch.setattr(qw, "ingest_source", fake_ingest)
+
+    await qw.process_pending(tmp_path, limit=1)
+
+    tasks = IngestQueue(tmp_path).get_all()
+    assert len(tasks) == 2
+    assert sum(1 for task in tasks if task.status is QueueStatus.COMPLETED) == 1
+    assert sum(1 for task in tasks if task.status is QueueStatus.PENDING) == 1

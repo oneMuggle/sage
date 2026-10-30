@@ -5,6 +5,7 @@
 import json
 import logging
 import uuid
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -119,16 +120,25 @@ class IngestQueue:
             self._tasks = {}
 
     def _save(self) -> None:
-        """持久化队列到文件。"""
+        """持久化队列到文件（同目录临时文件 + 原子替换）。"""
         self.queue_file.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "version": 1,
             "tasks": [t.to_dict() for t in self._tasks.values()],
         }
-        self.queue_file.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False),
-            encoding="utf-8"
+        tmp_path = self.queue_file.with_name(
+            f"{self.queue_file.name}.{uuid.uuid4().hex}.tmp"
         )
+        try:
+            tmp_path.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            tmp_path.replace(self.queue_file)
+        finally:
+            if tmp_path.exists():
+                with suppress(OSError):
+                    tmp_path.unlink()
 
     def add(self, source_path: str, max_retries: int = 3) -> str:
         """添加入任务到队列。
@@ -141,6 +151,7 @@ class IngestQueue:
             task_id: 任务 ID
         """
         task_id = str(uuid.uuid4())[:8]
+        self._load()  # 合并其他实例（如 UI 取消/入队）的写入
         task = IngestTask(
             task_id=task_id,
             source_path=source_path,
@@ -166,15 +177,45 @@ class IngestQueue:
         return self._tasks.get(task_id)
 
     def get_next_pending(self) -> Optional[IngestTask]:
-        """获取下一个待处理任务。
+        """获取下一个待处理任务（先重新读盘，合并并发写入）。
 
         Returns:
             待处理任务，如果队列为空则返回 None
         """
+        self._load()
         for task in self._tasks.values():
             if task.status == QueueStatus.PENDING:
                 return task
         return None
+
+    def recover_stale_processing(self, error_message: str = "处理被中断，已重新排队") -> int:
+        """把 PROCESSING 任务重置为 PENDING（进程崩溃后的恢复入口）。"""
+        self._load()
+        recovered = 0
+        for task in self._tasks.values():
+            if task.status == QueueStatus.PROCESSING:
+                task.status = QueueStatus.PENDING
+                task.started_at = None
+                task.error_message = error_message
+                recovered += 1
+        if recovered:
+            self._save()
+            logger.warning("Recovered %d stale processing ingest tasks", recovered)
+        return recovered
+
+    def mark_pending(self, task_id: str, error_message: Optional[str] = None) -> bool:
+        """把中断/取消的处理中任务放回 PENDING（不计入重试次数）。"""
+        self._load()
+        task = self._tasks.get(task_id)
+        if not task:
+            return False
+        if task.status not in (QueueStatus.PROCESSING, QueueStatus.PENDING):
+            return False
+        task.status = QueueStatus.PENDING
+        task.started_at = None
+        task.error_message = error_message
+        self._save()
+        return True
 
     def mark_processing(self, task_id: str) -> bool:
         """标记任务为处理中。
@@ -185,6 +226,7 @@ class IngestQueue:
         Returns:
             是否成功标记
         """
+        self._load()
         task = self._tasks.get(task_id)
         if not task:
             logger.warning(f"Task {task_id} not found")
@@ -210,6 +252,7 @@ class IngestQueue:
         Returns:
             是否成功标记
         """
+        self._load()
         task = self._tasks.get(task_id)
         if not task:
             logger.warning(f"Task {task_id} not found")
@@ -236,6 +279,7 @@ class IngestQueue:
         Returns:
             是否成功标记
         """
+        self._load()
         task = self._tasks.get(task_id)
         if not task:
             logger.warning(f"Task {task_id} not found")
@@ -259,6 +303,7 @@ class IngestQueue:
         Returns:
             是否成功取消
         """
+        self._load()
         task = self._tasks.get(task_id)
         if not task:
             logger.warning(f"Task {task_id} not found")
@@ -287,6 +332,7 @@ class IngestQueue:
         Returns:
             是否成功重试
         """
+        self._load()
         task = self._tasks.get(task_id)
         if not task:
             logger.warning(f"Task {task_id} not found")
@@ -347,6 +393,7 @@ class IngestQueue:
         Returns:
             清除的任务数量
         """
+        self._load()
         completed_ids = [
             tid for tid, t in self._tasks.items()
             if t.status == QueueStatus.COMPLETED
@@ -366,6 +413,7 @@ class IngestQueue:
         Returns:
             清除的任务数量
         """
+        self._load()
         count = len(self._tasks)
         self._tasks.clear()
         self._save()

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -44,6 +45,7 @@ def _resolve_task_source(project_root: Path, source_path: str) -> Path:
 async def process_pending(project_root: Path, limit: int = 1) -> Dict[str, Any]:
     """Process up to ``limit`` pending tasks in FIFO order."""
     queue = IngestQueue(project_root)
+    queue.recover_stale_processing()
     llm = _load_llm_config()
     embedding = _load_embedding_config()
     if llm is None or embedding is None:
@@ -93,6 +95,10 @@ async def process_pending(project_root: Path, limit: int = 1) -> Dict[str, Any]:
                     "wiki_page_path": result.wiki_page_path,
                 }
             )
+        except asyncio.CancelledError:
+            # 请求取消/进程关闭：放回 pending，下次启动可继续（不计重试次数）。
+            queue.mark_pending(task.task_id, "处理被中断，已重新排队")
+            raise
         except Exception as exc:  # noqa: BLE001 - 单任务失败不中断队列
             message = str(exc)[:500] or type(exc).__name__
             queue.mark_failed(task.task_id, message)

@@ -241,7 +241,7 @@ def _item_to_detail(row: Dict[str, Any]) -> Dict[str, Any]:
         "collections": _collection_names(row.get("collections")),
         "tags": _tag_names(row.get("tags")),
         "date_added": row.get("date_added"),
-        "date_modified": row.get("date_modified"),
+        "date_modified": row.get("date_modified") or row.get("dateModified"),
         "extra": row.get("extra"),
         "doi": row.get("doi"),
         "url": row.get("url"),

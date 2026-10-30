@@ -10,10 +10,12 @@ from fastapi import HTTPException
 from backend.api import wiki_routes
 from backend.api.wiki_routes import (
     QueueAddRequest,
+    QueueProcessRequest,
     queue_add,
     queue_cancel,
     queue_clear,
     queue_next,
+    queue_process,
     queue_retry,
     queue_status,
     queue_tasks,
@@ -84,6 +86,21 @@ class TestQueueAddEndpoint:
         with pytest.raises(HTTPException) as excinfo:
             await queue_add(req)
         assert excinfo.value.status_code == 400
+
+
+class TestQueueProcessEndpoint:
+    """POST /ingest/queue/process 的并发保护。"""
+
+    async def test_rejects_when_already_processing(self, project_root: Path, monkeypatch):
+        class _HeldLock:
+            def locked(self) -> bool:
+                return True
+
+        monkeypatch.setattr(wiki_routes, "_queue_process_lock", _HeldLock())
+
+        with pytest.raises(HTTPException) as excinfo:
+            await queue_process(QueueProcessRequest(project_path=str(project_root)))
+        assert excinfo.value.status_code == 409
 
 
 class TestQueueStatusEndpoint:

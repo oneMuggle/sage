@@ -83,6 +83,7 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
   const [wikiTagSaved, setWikiTagSaved] = useState(false);
 
   const [wikiProjectPath, setWikiProjectPath] = useState('');
+  const [savedWikiProjectPath, setSavedWikiProjectPath] = useState('');
   const [wikiProjectSaving, setWikiProjectSaving] = useState(false);
   const [wikiProjectSaved, setWikiProjectSaved] = useState(false);
 
@@ -124,7 +125,10 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
     void zoteroClient
       .getWikiProjectPath()
       .then((path) => {
-        if (!cancelled) setWikiProjectPath(path);
+        if (!cancelled) {
+          setWikiProjectPath(path);
+          setSavedWikiProjectPath(path);
+        }
       })
       .catch(() => {
         // 未绑定是正常状态
@@ -140,7 +144,7 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
     setLastError(null);
     setLastResult(null);
     try {
-      const projectPath = await resolveProjectPath(wikiProjectPath);
+      const projectPath = await resolveProjectPath(savedWikiProjectPath);
       const result = await zoteroClient.sync({ force, projectPath });
       if (!mountedRef.current) return;
       setLastResult(result);
@@ -186,6 +190,7 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
       await zoteroClient.setWikiProjectPath(wikiProjectPath);
       if (!mountedRef.current) return;
       setWikiProjectPath(wikiProjectPath.trim());
+      setSavedWikiProjectPath(wikiProjectPath.trim());
       setWikiProjectSaved(true);
       setLastError(null);
       await loadStatus();

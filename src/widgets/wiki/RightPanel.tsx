@@ -1,6 +1,6 @@
 // Right Panel - 右侧面板（文件预览 + 研究面板）
 import { X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { resolveEndpoint } from '../../entities/setting/types';
 import { useResearchStore } from '../../entities/wiki/research-store';
@@ -20,20 +20,21 @@ export function RightPanel() {
   const settings = useSettings();
   const [tavilyKey, setTavilyKey] = useState('');
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadSearchKey = useCallback(() => {
     void settingsClient
       .getPreference('search_config')
-      .then((raw) => {
-        if (!cancelled) setTavilyKey(parseTavilyKey(raw));
-      })
+      .then((raw) => setTavilyKey(parseTavilyKey(raw)))
       .catch(() => {
         // 读不到搜索配置时保持空值，面板会提示去设置。
       });
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  useEffect(() => {
+    loadSearchKey();
+    // 用户在设置页填完 Key 返回窗口时自动刷新，无需重挂载面板。
+    window.addEventListener('focus', loadSearchKey);
+    return () => window.removeEventListener('focus', loadSearchKey);
+  }, [loadSearchKey]);
 
   const endpoint = settings
     ? resolveEndpoint(settings.settings.modelSelections.chatModel, settings.settings.endpoints)

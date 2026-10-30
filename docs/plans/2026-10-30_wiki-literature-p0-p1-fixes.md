@@ -1,6 +1,7 @@
 # Wiki × 文献库 P0/P1 修复实施计划
 
 > **状态：** 2026-10-30 已实施完成（Task 1-6 + 回归 + 技术文档更新）。分支 `fix/wiki-literature-p0-p1`，待 PR 合并与 main cherry-pick。
+> **评审修复：** 导入后缀白名单、队列 409 互斥锁 + 取消/崩溃回滚 + 原子持久化、Zotero 导出目录校验与 no-follow 写、Windows reparse-safe 落盘。
 
 > **For agentic workers:** 按任务顺序执行，每个任务独立测试、独立提交。步骤使用 `- [ ]` 跟踪。
 

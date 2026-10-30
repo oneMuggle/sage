@@ -61,3 +61,16 @@ async def test_rejects_oversized_file(tmp_path):
 
     with pytest.raises(ValueError, match="file exceeds configured read limit"):
         await import_source_into_raw(project, big, max_bytes=16)
+
+
+@pytest.mark.asyncio()
+async def test_rejects_unsupported_suffix(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = outside / "id_rsa"
+    secret.write_text("PRIVATE KEY", encoding="utf-8")
+    project = tmp_path / "project"
+    project.mkdir()
+
+    with pytest.raises(ValueError, match="不支持的文件类型"):
+        await import_source_into_raw(project, secret)

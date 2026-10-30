@@ -29,6 +29,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from backend.wiki.files import (
+    secure_atomic_write_file,
+    secure_delete_path,
+    secure_read_text,
+)
 from backend.wiki.frontmatter import Frontmatter, ParsedDoc, serialize
 
 logger = logging.getLogger(__name__)
@@ -267,12 +272,21 @@ def render_author_page(
 # ---------------------------------------------------------------------------
 
 
-def _write_if_changed(path: Path, content: str) -> bool:
-    """内容未变则不写，保持幂等。返回 ``True`` 表示内容未变或成功写入。"""
+def _write_if_changed(root: Path, path: Path, content: str) -> bool:
+    """内容未变则不写，保持幂等。返回 ``True`` 表示内容未变或成功写入。
+
+    写入使用 ``secure_atomic_write_file``（临时文件 + rename + no-follow），
+    避免跟随 ``wiki/zotero`` 中预置的符号链接写到项目外。
+    """
     try:
-        if path.exists() and path.read_text(encoding="utf-8") == content:
-            return True
-        path.write_text(content, encoding="utf-8")
+        if path.exists():
+            try:
+                if secure_read_text(root, path) == content:
+                    return True
+            except (OSError, UnicodeError):
+                # 既有路径不是可读普通文件（如 symlink）→ 让安全写覆盖链接本身。
+                pass
+        secure_atomic_write_file(root, path, content)
         return True
     except OSError as exc:  # pragma: no cover - 磁盘异常不应中断整批
         logger.warning("wiki write failed for %s: %s", path, exc)
@@ -307,6 +321,9 @@ def export_wiki(
     except OSError as exc:
         result.errors.append(f"mkdir failed: {exc}")
         return result
+    if any(d.is_symlink() for d in (base, items_dir, authors_dir)):
+        result.errors.append("refusing symlinked wiki/zotero directory")
+        return result
 
     try:
         tagged = list(client.items_by_tag(tag))
@@ -329,7 +346,7 @@ def export_wiki(
             result.errors.append(f"item {key}: {exc}")
             continue
 
-        if _write_if_changed(items_dir / f"{key}.md", render_item_page(full, annotations)):
+        if _write_if_changed(root, items_dir / f"{key}.md", render_item_page(full, annotations)):
             result.items_exported += 1
             exported_item_keys.add(key)
         else:
@@ -345,6 +362,7 @@ def export_wiki(
     exported_author_slugs: set = set()
     for slug, payload in author_index.items():
         if _write_if_changed(
+            root,
             authors_dir / f"{slug}.md",
             render_author_page(payload["author"], payload["items"]),
         ):
@@ -354,20 +372,24 @@ def export_wiki(
             result.errors.append(f"author {slug}: write failed")
 
     # 清理残留页面：用户移除 wiki tag 后，旧页面应被删除，避免图谱边持续存在
-    _cleanup_stale_pages(items_dir, exported_item_keys, result)
-    _cleanup_stale_pages(authors_dir, exported_author_slugs, result)
+    _cleanup_stale_pages(root, items_dir, exported_item_keys, result)
+    _cleanup_stale_pages(root, authors_dir, exported_author_slugs, result)
 
     return result
 
 
-def _cleanup_stale_pages(directory: Path, keep: set, result: WikiExportResult) -> None:
-    """删除目录中不在 ``keep`` 集合内的 .md 文件；失败只记 errors。"""
+def _cleanup_stale_pages(
+    root: Path, directory: Path, keep: set, result: WikiExportResult
+) -> None:
+    """删除目录中不在 ``keep`` 集合内的 .md 文件；跳过符号链接。"""
     try:
         for path in directory.glob("*.md"):
+            if path.is_symlink():
+                continue
             stem = path.stem
             if stem not in keep:
                 try:
-                    path.unlink()
+                    secure_delete_path(root, path)
                     logger.info("removed stale wiki page: %s", path)
                 except OSError as exc:
                     result.errors.append(f"stale cleanup {path.name}: {exc}")
