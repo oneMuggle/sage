@@ -333,7 +333,7 @@ export interface UpdateElectronApiBridge {
 /**
  * 用户反馈系统 IPC 桥 (2026-10-29)。
  *
- * 设计见 docs/plans/2026-10-29_direct-feedback-channel.md §4。
+ * 设计见 docs/technical/109-feedback-relay-deployment.md §11.2。
  * main 侧注册：electron/feedback/feedbackIpc.ts（registerFeedbackIpc）。
  * preload 暴露：electron/preload.ts → window.electronAPI.feedback。
  *

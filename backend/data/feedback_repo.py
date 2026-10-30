@@ -1,6 +1,6 @@
 """SQLite repository for user feedback conversations and messages.
 
-Phase 1 of the direct-feedback-channel design (docs/plans/2026-10-29_direct-feedback-channel.md §3).
+See docs/technical/109-feedback-relay-deployment.md §11.1 (local schema) and §11.2 (local API).
 Supports bidirectional conversations: users create conversations and send messages,
 admins reply via Jira/GitLab/SMTP forwarding script, clients poll for new admin messages.
 

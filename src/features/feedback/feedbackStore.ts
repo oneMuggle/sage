@@ -3,7 +3,7 @@
 // 用户反馈系统的 renderer 全局状态。Zustand module-singleton —— FeedbackHub、
 // 菜单入口、同步徽标共享同一份 state，避免列表与详情重复拉取。
 //
-// 设计见 docs/plans/2026-10-29_direct-feedback-channel.md §4。
+// 设计见 docs/technical/109-feedback-relay-deployment.md §11.2。
 
 import { create } from 'zustand';
 
