@@ -1107,8 +1107,8 @@ class LLMClient:
         max_attempts, base_delay, max_delay, total_budget = _retry_settings()
         attempt = 0
         fallback_used = False
-        retry_started = _retry_now()
         # 第二轮 C1: 首字延迟 / 总耗时计时（含重试等待，即用户实际等待的时间）
+        # 重试预算复用 stream_started —— 不额外取时钟，避免干扰调用方对时钟采样次数的假设。
         stream_started = time.monotonic()
         first_token_at: Optional[float] = None
         while True:
@@ -1207,7 +1207,7 @@ class LLMClient:
                     delay = _retry_backoff_seconds(llm_err, attempt, base_delay, max_delay)
                     if (
                         total_budget > 0
-                        and (_retry_now() - retry_started) + delay > total_budget
+                        and (_retry_now() - stream_started) + delay > total_budget
                     ):
                         raise LLMError(
                             llm_err.type,

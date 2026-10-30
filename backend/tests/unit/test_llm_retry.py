@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import json
+import time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -292,7 +294,12 @@ async def test_stream_retry_total_budget_stops_retries(monkeypatch):
     )
 
     clock = {"t": 0.0}
-    monkeypatch.setattr("backend.core.legacy.llm_client._retry_now", lambda: clock["t"])
+    # 流式路径的预算起点复用 stream_started，因此整体替换模块 time 命名空间
+    # （与 test_generation_stats 的 _fake_clock 同法），而非只 patch _retry_now。
+    monkeypatch.setattr(
+        "backend.core.legacy.llm_client.time",
+        SimpleNamespace(monotonic=lambda: clock["t"], time=time.time),
+    )
 
     async def fake_sleep(delay: float) -> None:
         clock["t"] += delay

@@ -28,6 +28,7 @@ def _sse_response(lines: List[str]):
             yield ln
 
     response = MagicMock()
+    response.status_code = 200
     response.aiter_lines = aiter_lines
     response.raise_for_status = MagicMock()
     return response
