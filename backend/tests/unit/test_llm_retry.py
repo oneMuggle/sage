@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import json
+import time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -135,6 +137,7 @@ def _sse_ctx(chunks: list):
     lines = [f"data: {json.dumps(c)}" if isinstance(c, dict) else c for c in chunks]
     body = "\n\n".join(lines) + "\n\n"
     response = MagicMock()
+    response.status_code = 200
     response.raise_for_status = MagicMock()
 
     async def aiter_lines():
@@ -200,6 +203,8 @@ async def test_stream_no_retry_after_first_delta():
     client = _make_client()
 
     class _BrokenCtx:
+        status_code = 200
+
         async def __aenter__(self):
             return self
 
@@ -230,3 +235,95 @@ async def test_stream_no_retry_after_first_delta():
         await drain()
 
     assert collected == ["content_delta"]  # 已产出的增量不重放,直接失败
+
+
+@pytest.mark.asyncio()
+async def test_retry_total_budget_stops_retries(monkeypatch):
+    """退避累计超过总时长预算 → 停止重试并用最后一次错误类型抛出。"""
+    monkeypatch.setenv("SAGE_LLM_RETRY_MAX_ATTEMPTS", "10")
+    monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "60")
+    monkeypatch.setenv("SAGE_LLM_RETRY_TOTAL_BUDGET_S", "100")
+    # 单次退避上限只在 app_settings 里可配（无 env），测试直接压模块常量。
+    monkeypatch.setattr(
+        "backend.core.legacy.llm_client._LLM_RETRY_MAX_DELAY_S", 60.0
+    )
+
+    clock = {"t": 0.0}
+    monkeypatch.setattr("backend.core.legacy.llm_client._retry_now", lambda: clock["t"])
+
+    async def fake_sleep(delay: float) -> None:
+        clock["t"] += delay
+
+    monkeypatch.setattr("backend.core.legacy.llm_client.asyncio.sleep", fake_sleep)
+
+    client = _make_client()
+    mock_http = _wire_post(client, [_http_status_error(504)] * 10)
+
+    with pytest.raises(LLMError) as exc_info:
+        await client.chat([{"role": "user", "content": "hi"}])
+
+    # 第 1 次失败后 0+60 <= 100 → 重试；第 2 次失败后 60+60 > 100 → 停止
+    assert mock_http.post.await_count == 2
+    assert exc_info.value.type == LLMErrorType.SERVER_ERROR
+    assert "预算" in exc_info.value.message
+
+
+@pytest.mark.asyncio()
+async def test_retry_total_budget_disabled_when_zero(monkeypatch):
+    """预算 0 = 不限，按 max_attempts 正常耗尽。"""
+    monkeypatch.setenv("SAGE_LLM_RETRY_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "0")
+    monkeypatch.setenv("SAGE_LLM_RETRY_TOTAL_BUDGET_S", "0")
+    client = _make_client()
+    mock_http = _wire_post(client, [_http_status_error(500)] * 3)
+
+    with pytest.raises(LLMError):
+        await client.chat([{"role": "user", "content": "hi"}])
+
+    assert mock_http.post.await_count == 3
+
+
+@pytest.mark.asyncio()
+async def test_stream_retry_total_budget_stops_retries(monkeypatch):
+    """流式路径同样受总时长预算约束（与非流式对称）。"""
+    monkeypatch.setenv("SAGE_LLM_RETRY_MAX_ATTEMPTS", "10")
+    monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "60")
+    monkeypatch.setenv("SAGE_LLM_RETRY_TOTAL_BUDGET_S", "100")
+    monkeypatch.setattr(
+        "backend.core.legacy.llm_client._LLM_RETRY_MAX_DELAY_S", 60.0
+    )
+
+    clock = {"t": 0.0}
+    # 流式路径的预算起点复用 stream_started，因此整体替换模块 time 命名空间
+    # （与 test_generation_stats 的 _fake_clock 同法），而非只 patch _retry_now。
+    monkeypatch.setattr(
+        "backend.core.legacy.llm_client.time",
+        SimpleNamespace(monotonic=lambda: clock["t"], time=time.time),
+    )
+
+    async def fake_sleep(delay: float) -> None:
+        clock["t"] += delay
+
+    monkeypatch.setattr("backend.core.legacy.llm_client.asyncio.sleep", fake_sleep)
+
+    client = _make_client()
+    fail_ctx = _sse_ctx([])
+    fail_response = fail_ctx.__aenter__.return_value
+
+    def raise_500():
+        raise _http_status_error(500)
+
+    fail_response.raise_for_status = MagicMock(side_effect=raise_500)
+    mock_http = _wire_stream(client, [fail_ctx] * 10)
+
+    async def drain():
+        async for _kind, _payload in client.chat_stream_events(
+            [{"role": "user", "content": "x"}]
+        ):
+            pass
+
+    with pytest.raises(LLMError) as exc_info:
+        await drain()
+
+    assert "预算" in exc_info.value.message
+    assert mock_http.stream.call_count == 2

@@ -89,6 +89,7 @@
 | 111  | [用户反馈转发脚本部署](./111-feedback-relay-deployment.md) | 管理员侧单文件中继（纯标准库）：先落库再转发 + 消息 id 幂等 + GET 裸数组契约 / Jira·GitLab·SMTP 三选一 + webhook 回流 / 内置 BASIC 鉴权管理页 / systemd 与 Win7 计划任务部署 |
 | 112  | [设置页信息架构整理](./112-settings-ia-consolidation.md) | 单一 tab registry 派生导航/分组/别名/类型 + 平铺分组 + 搜索索引守卫（anchor/归属/tab 数）+ 审计导出集中 + `AdvancedSection` 折叠边界与每行「恢复默认」+ i18n/CJK 守卫 |
 | 113  | [右键上下文菜单体系](./113-context-menu.md) | Radix ContextMenu 基座 + 声明式菜单 spec（打开时求值）/ 会话·消息·代码块·引用 chip·Wiki 树·变更卡·产物 接入 / Electron 原生编辑菜单 + 开发期检查元素 / 选区联动与危险动作统一确认 |
+| 114  | [会话状态徽章](./114-session-status-badges.md) | 侧栏徽章优先级 / 重试中与后台运行中 / run_status 写入链路与已知限制 |
 
 ---
 

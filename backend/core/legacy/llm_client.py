@@ -32,6 +32,9 @@ _LLM_RETRY_MAX_ATTEMPTS = 3
 _LLM_RETRY_BASE_DELAY_S = 1.0
 #: 单次退避上限
 _LLM_RETRY_MAX_DELAY_S = 15.0
+#: 自动重试的总时长预算（秒）：从首次尝试起算，退避前的累计耗时超预算即停止。
+#: 0 表示不限制；env ``SAGE_LLM_RETRY_TOTAL_BUDGET_S`` 覆盖（调试/测试用）。
+_LLM_RETRY_TOTAL_BUDGET_S = 180.0
 #: 可重试的错误类型：限流 / 服务端错误 / 超时 / 网络不可达
 _RETRYABLE_ERROR_TYPES = frozenset(
     {
@@ -69,7 +72,7 @@ def _is_context_overflow_text(text: str) -> bool:
     return any(marker in lowered for marker in _CONTEXT_OVERFLOW_MARKERS)
 
 
-def _retry_settings() -> Tuple[int, float, float]:
+def _retry_settings() -> Tuple[int, float, float, float]:
     """读重试配置：app_settings > env > 默认。任何解析失败回退默认，永不抛错。
 
     优先级：
@@ -78,11 +81,12 @@ def _retry_settings() -> Tuple[int, float, float]:
     3. 硬编码默认值
 
     Returns:
-        (max_attempts, base_delay, max_delay) 元组
+        (max_attempts, base_delay, max_delay, total_budget) 元组
     """
     max_attempts = _LLM_RETRY_MAX_ATTEMPTS
     base_delay = _LLM_RETRY_BASE_DELAY_S
     max_delay = _LLM_RETRY_MAX_DELAY_S
+    total_budget = _LLM_RETRY_TOTAL_BUDGET_S
 
     # 优先从 app_settings 读取
     try:
@@ -123,7 +127,23 @@ def _retry_settings() -> Tuple[int, float, float]:
         except ValueError:
             logger.warning("env SAGE_LLM_RETRY_BASE_DELAY_S=%r 非法,回退默认", raw_delay)
 
-    return max_attempts, base_delay, max_delay
+    raw_budget = os.environ.get("SAGE_LLM_RETRY_TOTAL_BUDGET_S", "").strip()
+    if raw_budget:
+        try:
+            value = float(raw_budget)
+            if value >= 0:
+                total_budget = value
+        except ValueError:
+            logger.warning(
+                "env SAGE_LLM_RETRY_TOTAL_BUDGET_S=%r 非法,回退默认", raw_budget
+            )
+
+    return max_attempts, base_delay, max_delay, total_budget
+
+
+def _retry_now() -> float:
+    """单调时钟（独立函数以便测试 monkeypatch 预算判定）。"""
+    return time.monotonic()
 
 
 def _retry_backoff_seconds(err: LLMError, attempt: int, base_delay: float, max_delay: float) -> float:
@@ -560,6 +580,21 @@ class LLMClient:
                     LLMErrorType.RATE_LIMITED, "请求过于频繁，请稍后再试", retry_after=retry_after
                 )
             if 500 <= status < 600:
+                # Sage 自己的 LLM 代理在等待上游超时时回 504，并在 detail.type
+                # 标注 upstream_timeout。识别它 → 给出可操作提示（代理超时可配）。
+                body_text = ""
+                try:
+                    body_text = exc.response.text or ""
+                except Exception:  # noqa: BLE001 — 流式/未读取响应体，按空处理
+                    body_text = ""
+                if status == 504 and "upstream_timeout" in body_text:
+                    raise LLMError(
+                        LLMErrorType.TIMEOUT,
+                        "LLM 代理超时：上游长时间未返回任何数据。"
+                        "可在「设置 → 基础 → LLM 代理超时」中调大超时时间，"
+                        "或检查上游服务与网络。",
+                        status_code=504,
+                    )
                 raise LLMError(
                     LLMErrorType.SERVER_ERROR, f"LLM 服务端错误 (HTTP {status})", status_code=status
                 )
@@ -724,9 +759,10 @@ class LLMClient:
 
         # L3 重试退避: 限流/服务端错误/超时/网络失败按指数退避重试
         # （尊重 retry-after）。请求整体重放安全——非流式,无部分产出。
-        max_attempts, base_delay, max_delay = _retry_settings()
+        max_attempts, base_delay, max_delay, total_budget = _retry_settings()
         attempt = 0
         fallback_used = False
+        retry_started = _retry_now()
         while True:
             attempt += 1
             try:
@@ -762,6 +798,17 @@ class LLMClient:
                             continue
                         raise
                     delay = _retry_backoff_seconds(llm_err, attempt, base_delay, max_delay)
+                    if (
+                        total_budget > 0
+                        and (_retry_now() - retry_started) + delay > total_budget
+                    ):
+                        raise LLMError(
+                            llm_err.type,
+                            f"{llm_err.message}（自动重试累计超过 "
+                            f"{total_budget:.0f}s 总时长预算，已停止）",
+                            status_code=llm_err.status_code,
+                            retry_after=llm_err.retry_after,
+                        )
                     logger.warning(
                         "LLM 请求失败(%s/%s): %s — %.1fs 后重试",
                         attempt,
@@ -1057,10 +1104,11 @@ class LLMClient:
         # L3 重试退避（流式版）: 仅在"尚未产出任何增量"时重试——此时重放
         # 安全（调用方没收到过任何事件）;已有增量后失败无法安全重放,按原
         # 错误面终止（调用方语义见 run_loop）。
-        max_attempts, base_delay, max_delay = _retry_settings()
+        max_attempts, base_delay, max_delay, total_budget = _retry_settings()
         attempt = 0
         fallback_used = False
         # 第二轮 C1: 首字延迟 / 总耗时计时（含重试等待，即用户实际等待的时间）
+        # 重试预算复用 stream_started —— 不额外取时钟，避免干扰调用方对时钟采样次数的假设。
         stream_started = time.monotonic()
         first_token_at: Optional[float] = None
         while True:
@@ -1069,6 +1117,10 @@ class LLMClient:
                 async with client.stream(
                     "POST", "/v1/chat/completions", json=body
                 ) as response:
+                    if response.status_code >= 400:
+                        # 预读错误体：代理的 upstream_timeout 标记在 body 里；
+                        # 流式响应不预读则 .text 抛 ResponseNotRead，分类拿不到标记。
+                        await response.aread()
                     response.raise_for_status()
 
                     async for line in response.aiter_lines():
@@ -1153,6 +1205,17 @@ class LLMClient:
                             continue
                         raise
                     delay = _retry_backoff_seconds(llm_err, attempt, base_delay, max_delay)
+                    if (
+                        total_budget > 0
+                        and (_retry_now() - stream_started) + delay > total_budget
+                    ):
+                        raise LLMError(
+                            llm_err.type,
+                            f"{llm_err.message}（自动重试累计超过 "
+                            f"{total_budget:.0f}s 总时长预算，已停止）",
+                            status_code=llm_err.status_code,
+                            retry_after=llm_err.retry_after,
+                        )
                     logger.warning(
                         "LLM 流式请求失败(%s/%s): %s — %.1fs 后重试",
                         attempt,
