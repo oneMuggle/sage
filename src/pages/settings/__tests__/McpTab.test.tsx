@@ -2,11 +2,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  McpTab,
-  formatMcpTabAuditJson,
-  formatMcpTabAuditSnapshot,
-} from '../McpTab';
+import { McpTab, formatMcpTabAuditJson, formatMcpTabAuditSnapshot } from '../McpTab';
 
 const mocks = vi.hoisted(() => ({
   status: vi.fn(),
@@ -304,7 +300,14 @@ describe('McpTab', () => {
     mocks.status.mockResolvedValue({
       ...STATUS,
       servers: [
-        { name: 'remote', state: 'ready', tool_count: 1, last_error: null, since: 1, required: false },
+        {
+          name: 'remote',
+          state: 'ready',
+          tool_count: 1,
+          last_error: null,
+          since: 1,
+          required: false,
+        },
       ],
     });
     mocks.authorizeServer.mockResolvedValue({
@@ -317,9 +320,7 @@ describe('McpTab', () => {
     await waitFor(() => expect(screen.getByTestId('mcp-authorize-remote')).toBeTruthy());
 
     fireEvent.click(screen.getByTestId('mcp-authorize-remote'));
-    await waitFor(() =>
-      expect(mocks.authorizeServer).toHaveBeenCalledWith('remote'),
-    );
+    await waitFor(() => expect(mocks.authorizeServer).toHaveBeenCalledWith('remote'));
     await waitFor(() =>
       expect(screen.getByTestId('mcp-authorize-message').textContent).toBe(
         'settings.mcp.authorize.success',
@@ -432,7 +433,7 @@ describe('McpTab', () => {
     },
   );
 
-  it('formats and copies MCP tab audit snapshot and JSON', async () => {
+  it('formats MCP tab audit snapshot and JSON; copy controls moved to the audit export tab (P3)', async () => {
     expect(
       formatMcpTabAuditSnapshot({
         serverCount: 3,
@@ -457,13 +458,6 @@ describe('McpTab', () => {
       hasError: true,
     });
 
-    render(<McpTab />);
-    await waitFor(() => expect(mocks.status).toHaveBeenCalled());
-    const summaryBtn = screen.getByTestId('mcp-tab-copy-summary');
-    const jsonBtn = screen.getByTestId('mcp-tab-copy-json');
-    fireEvent.click(summaryBtn);
-    expect(summaryBtn.textContent).toBe('已复制');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn.textContent).toBe('已复制');
+    // P3: 页内「复制快照/JSON」按钮已收敛到「审计导出」tab —— McpTab 不再渲染这两枚按钮。
   });
 });

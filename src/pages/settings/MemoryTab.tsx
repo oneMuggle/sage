@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 
 import { memoryApi } from '../../shared/api';
 import { invoke } from '../../shared/api/desktopInvoke';
+import { useI18n } from '../../shared/lib/i18n';
 
 import { SettingRow } from './components';
 
@@ -46,6 +47,7 @@ export function formatMemoryTabAuditJson(input: {
 }
 
 export function MemoryTab() {
+  const { t } = useI18n();
   const [embedderStatus, setEmbedderStatus] = useState<{
     type: string;
     dimensions: number;
@@ -55,8 +57,6 @@ export function MemoryTab() {
     semantic: boolean;
   } | null>(null);
   const [selecting, setSelecting] = useState(false);
-  const [copiedSummary, setCopiedSummary] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   // R17-B: 记忆固化手动触发
   const [consolidating, setConsolidating] = useState(false);
   const [consolidationResult, setConsolidationResult] = useState<{
@@ -95,9 +95,7 @@ export function MemoryTab() {
 
   // P8 (2026-09-14): 语义模型下载 —— 订阅 models:embedder:progress
   // （#755 已修 sage:event: 前缀），完成/失败即刷新嵌入器状态。
-  const [modelDownload, setModelDownload] = useState<{ stage: string; file?: string } | null>(
-    null,
-  );
+  const [modelDownload, setModelDownload] = useState<{ stage: string; file?: string } | null>(null);
   const [downloadingModel, setDownloadingModel] = useState(false);
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -143,24 +141,34 @@ export function MemoryTab() {
   const handleDownloadModel = useCallback(async () => {
     const api = window.electronAPI?.modelDownload;
     if (!api) {
-      toast.error('当前环境不支持模型下载');
+      toast.error(t('settings.memory.download_unsupported'));
       return;
     }
     setDownloadingModel(true);
     try {
       const res = await api.download();
       if (res.ok) {
-        toast.success('语义模型下载完成，可启用语义嵌入');
+        toast.success(t('settings.memory.download_complete'));
         await loadEmbedderStatus();
       } else {
-        toast.error(`模型下载失败: ${res.error ?? '未知错误'}`);
+        toast.error(
+          t('settings.memory.download_failed').replace(
+            '{error}',
+            String(res.error ?? t('settings.memory.unknown_error')),
+          ),
+        );
       }
     } catch (err) {
-      toast.error(`模型下载失败: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(
+        t('settings.memory.download_failed').replace(
+          '{error}',
+          String(err instanceof Error ? err.message : String(err)),
+        ),
+      );
     } finally {
       setDownloadingModel(false);
     }
-  }, [loadEmbedderStatus]);
+  }, [loadEmbedderStatus, t]);
 
   // R19: 数据安全 —— 备份清单/手动备份/记忆导出
   const [backups, setBackups] = useState<
@@ -171,9 +179,9 @@ export function MemoryTab() {
 
   const loadBackups = useCallback(async () => {
     try {
-      const res = await invoke<{ backups: { name: string; size_bytes: number; created_at: number }[] }>(
-        'system_backups_list',
-      );
+      const res = await invoke<{
+        backups: { name: string; size_bytes: number; created_at: number }[];
+      }>('system_backups_list');
       setBackups(res.backups ?? []);
     } catch {
       setBackups([]);
@@ -209,38 +217,46 @@ export function MemoryTab() {
       setRestoringName(name);
       try {
         await invoke('system_backup_restore', { name });
-        toast.success('恢复已安排：将在下次启动应用（已自动做恢复前安全备份）');
+        toast.success(t('settings.memory.restore_scheduled'));
       } catch {
-        toast.error('恢复失败，详见服务端日志');
+        toast.error(t('settings.memory.restore_failed'));
       } finally {
         setRestoringName(null);
       }
     },
-    [restoreArmed],
+    [restoreArmed, t],
   );
 
   // R21-B: 导入记忆 JSON
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importingMemory, setImportingMemory] = useState(false);
-  const handleImportMemoryFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    setImportingMemory(true);
-    try {
-      const text = await file.text();
-      const payload = JSON.parse(text);
-      const res = await invoke<{ imported: number; skipped: number; failed: number }>(
-        'memory_import',
-        { payload },
-      );
-      toast.success(`导入完成：新增 ${res.imported} 条，跳过重复 ${res.skipped} 条，失败 ${res.failed} 条`);
-    } catch {
-      toast.error('导入失败：文件格式需为 Sage 导出的记忆 JSON');
-    } finally {
-      setImportingMemory(false);
-    }
-  }, []);
+  const handleImportMemoryFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      setImportingMemory(true);
+      try {
+        const text = await file.text();
+        const payload = JSON.parse(text);
+        const res = await invoke<{ imported: number; skipped: number; failed: number }>(
+          'memory_import',
+          { payload },
+        );
+        toast.success(
+          t('settings.memory.import_complete')
+            .replace('{imported}', String(res.imported))
+            .replace('{skipped}', String(res.skipped))
+            .replace('{failed}', String(res.failed)),
+        );
+      } catch {
+        toast.error(t('settings.memory.import_failed'));
+      } finally {
+        setImportingMemory(false);
+      }
+    },
+    [t],
+  );
 
   const handleExportMemory = useCallback(async () => {
     setExportingMemory(true);
@@ -267,59 +283,29 @@ export function MemoryTab() {
   return (
     <div className="space-y-6">
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-text">语义嵌入 (检索增强)</h3>
-          <div className="flex items-center gap-1.5">
-            <span
-              onClick={() => {
-                /* v8 ignore start */
-                const text = formatMemoryTabAuditSnapshot({
-                  embedderType: embedderStatus?.type,
-                  semantic: embedderStatus?.semantic,
-                  modelReady: embedderStatus?.model_ready,
-                  backupCount: backups.length,
-                });
-                setCopiedSummary(true);
-                void navigator.clipboard?.writeText(text).catch(() => {});
-                /* v8 ignore stop */
-              }}
-              data-testid="memory-tab-copy-summary"
-              title="复制记忆管理审计摘要"
-              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
-            >
-              {copiedSummary ? '已复制' : '复制摘要'}
-            </span>
-            <span
-              onClick={() => {
-                /* v8 ignore start */
-                const text = formatMemoryTabAuditJson({
-                  embedderType: embedderStatus?.type,
-                  semantic: embedderStatus?.semantic,
-                  modelReady: embedderStatus?.model_ready,
-                  backupCount: backups.length,
-                });
-                setCopiedJson(true);
-                void navigator.clipboard?.writeText(text).catch(() => {});
-                /* v8 ignore stop */
-              }}
-              data-testid="memory-tab-copy-json"
-              title="复制记忆管理审计 JSON"
-              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
-            >
-              {copiedJson ? '已复制' : 'JSON'}
-            </span>
-          </div>
-        </div>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.memory.semantic_embed')}
+        </h3>
         {embedderStatus ? (
           <div className="space-y-2 text-xs text-text-secondary">
             <p>
-              当前嵌入器: {embedderStatus.type} · {embedderStatus.dimensions} 维 ·{' '}
-              {embedderStatus.semantic ? '语义匹配' : '字面匹配'} · 表{' '}
-              {embedderStatus.table ?? '-'}
+              {t('settings.memory.embedder_status')
+                .replace('{type}', embedderStatus.type)
+                .replace('{dimensions}', String(embedderStatus.dimensions))
+                .replace(
+                  '{mode}',
+                  embedderStatus.semantic
+                    ? t('settings.memory.match_semantic')
+                    : t('settings.memory.match_literal'),
+                )
+                .replace('{table}', String(embedderStatus.table ?? '-'))}
             </p>
             <p>
-              模型目录: {embedderStatus.model_dir} · 模型文件:
-              {embedderStatus.model_ready ? '已就绪' : '未就绪'}
+              {t('settings.memory.model_dir_label')} {embedderStatus.model_dir} ·{' '}
+              {t('settings.memory.model_file')}
+              {embedderStatus.model_ready
+                ? t('settings.memory.model_ready')
+                : t('settings.memory.model_not_ready')}
             </p>
             {/* P8: ONNX 模型未就绪时提供一键下载（内置清单，sha256 校验） */}
             {embedderStatus.model_ready === false && (
@@ -331,7 +317,9 @@ export function MemoryTab() {
                   onClick={() => void handleDownloadModel()}
                   className="px-3 py-1.5 rounded-radius-sm bg-primary text-text-inverse text-xs font-medium hover:bg-primary-hover disabled:opacity-50"
                 >
-                  {downloadingModel ? '下载中…' : '下载语义模型（约 90 MB）'}
+                  {downloadingModel
+                    ? t('settings.common.loading')
+                    : t('settings.memory.download_model')}
                 </button>
                 {downloadingModel && modelDownload?.file && (
                   <span className="text-ui-xs text-muted tabular-nums">{modelDownload.file}</span>
@@ -347,14 +335,14 @@ export function MemoryTab() {
                     }}
                     className="text-ui-xs text-muted hover:text-text underline"
                   >
-                    取消
+                    {t('settings.common.cancel')}
                   </button>
                 )}
               </div>
             )}
           </div>
         ) : (
-          <p className="text-xs text-text-secondary">嵌入器状态加载中…</p>
+          <p className="text-xs text-text-secondary">{t('settings.memory.embedder_loading')}</p>
         )}
         <div className="flex gap-2 mt-3">
           <button
@@ -363,7 +351,7 @@ export function MemoryTab() {
             onClick={() => void selectEmbedder('onnx')}
             className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
           >
-            启用语义嵌入
+            {t('settings.memory.enable_semantic')}
           </button>
           <button
             type="button"
@@ -371,19 +359,21 @@ export function MemoryTab() {
             onClick={() => void selectEmbedder('hash')}
             className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
           >
-            切回字面匹配
+            {t('settings.memory.switch_to_literal')}
           </button>
         </div>
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">记忆固化</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.memory.consolidation')}
+        </h3>
         <p className="text-xs text-text-secondary mb-2">
-          每周日 04:30 自动执行：把访问频繁的短期记忆晋升为语义记忆，并衰减长期未访问的记忆。也可手动立即执行。
+          {t('settings.memory.consolidation_desc')}
         </p>
         <SettingRow
           anchor="memory_consolidation"
-          label="手动固化"
-          desc="立即运行一次记忆固化任务（通常无需手动触发）"
+          label={t('settings.memory.manual_consolidation')}
+          desc={t('settings.memory.manual_consolidation_desc')}
         >
           <button
             type="button"
@@ -397,11 +387,20 @@ export function MemoryTab() {
                 .then((result) => {
                   if (!mountedRef.current) return;
                   setConsolidationResult(result);
-                  toast.success(`固化完成：晋升 ${result.promoted} 条，衰减 ${result.decayed} 条`);
+                  toast.success(
+                    t('settings.memory.consolidation_complete')
+                      .replace('{promoted}', String(result.promoted))
+                      .replace('{decayed}', String(result.decayed)),
+                  );
                 })
                 .catch((err: unknown) => {
                   if (!mountedRef.current) return;
-                  toast.error(`固化失败: ${err instanceof Error ? err.message : String(err)}`);
+                  toast.error(
+                    t('settings.memory.consolidation_failed').replace(
+                      '{error}',
+                      String(err instanceof Error ? err.message : String(err)),
+                    ),
+                  );
                 })
                 .finally(() => {
                   if (mountedRef.current) setConsolidating(false);
@@ -409,13 +408,15 @@ export function MemoryTab() {
             }}
             className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
           >
-            {consolidating ? '固化中...' : '立即固化'}
+            {consolidating ? t('settings.memory.consolidating') : t('settings.memory.run_now')}
           </button>
         </SettingRow>
         {consolidationResult && (
           <p className="text-xs text-text-secondary mt-2" data-testid="memory-consolidation-result">
-            上次手动固化：晋升 {consolidationResult.promoted} 条 · 衰减 {consolidationResult.decayed}{' '}
-            条 · 处理 {consolidationResult.total} 条
+            {t('settings.memory.last_consolidation')
+              .replace('{promoted}', String(consolidationResult.promoted))
+              .replace('{decayed}', String(consolidationResult.decayed))
+              .replace('{total}', String(consolidationResult.total))}
           </p>
         )}
       </section>
@@ -423,21 +424,25 @@ export function MemoryTab() {
         {/* P1-5: 合并两个记忆 tab 后此处原本与 MemoryKnowledgeTab 的「记忆管理」
             同名，会在同一页出现两个同名小节。改为「存储位置」——它讲的就是
             数据存在哪，与「记忆管理」不是一回事。 */}
-        <h3 className="text-sm font-semibold text-text mb-3">存储位置</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.memory.storage_location')}
+        </h3>
         <SettingRow
           anchor="memory_backup"
-          label="本地存储"
-          desc="记忆数据存储在本地 SQLite 数据库中，具体路径由 SAGE_DB_PATH 环境变量与运行模式决定"
+          label={t('settings.memory.local_storage')}
+          desc={t('settings.memory.local_storage_desc')}
         >
           <span className="px-2 py-1 text-xs text-text-secondary font-mono">
-            本地 SQLite 数据库
+            {t('settings.memory.local_sqlite')}
           </span>
         </SettingRow>
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">数据安全</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.memory.data_security')}
+        </h3>
         <p className="text-xs text-text-secondary mb-2">
-          应用每日自动备份数据库（保留最近 7 份），也可手动立即备份；记忆支持导出为 JSON 文件。
+          {t('settings.memory.data_security_desc')}
         </p>
         <div className="flex gap-2 mb-3">
           <button
@@ -447,7 +452,7 @@ export function MemoryTab() {
             onClick={() => void handleBackupNow()}
             className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
           >
-            {backingUp ? '备份中…' : '立即备份'}
+            {backingUp ? t('settings.common.loading') : t('settings.memory.backup_now')}
           </button>
           <button
             type="button"
@@ -456,7 +461,7 @@ export function MemoryTab() {
             onClick={() => void handleExportMemory()}
             className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
           >
-            {exportingMemory ? '导出中…' : '导出记忆 (JSON)'}
+            {exportingMemory ? t('settings.common.loading') : t('settings.memory.export_json')}
           </button>
         </div>
         {backups.length > 0 && (
@@ -479,10 +484,10 @@ export function MemoryTab() {
                   }`}
                 >
                   {restoreArmed === b.name
-                    ? '确认恢复（下次启动生效）'
+                    ? t('settings.memory.confirm_restore')
                     : restoringName === b.name
-                      ? '恢复中…'
-                      : '恢复'}
+                      ? t('settings.common.loading')
+                      : t('settings.memory.restore')}
                 </button>
               </li>
             ))}
@@ -496,7 +501,7 @@ export function MemoryTab() {
             onClick={() => importInputRef.current?.click()}
             className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
           >
-            {importingMemory ? '导入中…' : '导入记忆 (JSON)'}
+            {importingMemory ? t('settings.common.loading') : t('settings.memory.import_json')}
           </button>
           <input
             ref={importInputRef}

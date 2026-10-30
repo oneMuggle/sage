@@ -4,6 +4,7 @@
 import { enChatAndSider } from './locales/en/chatAndSider';
 import { enContextMenu } from './locales/en/contextMenu';
 import { enSettingsAndModels } from './locales/en/settingsAndModels';
+import { enSettingsUi } from './locales/en/settingsUi';
 import { enWorkspaceAndTools } from './locales/en/workspaceAndTools';
 import { pausedMemoryEn } from './pausedMemory';
 import { retryBannerEn } from './retryBanner';
@@ -13,6 +14,7 @@ export const en: Record<TranslationKey, string> = {
   ...enChatAndSider,
   ...enContextMenu,
   ...enSettingsAndModels,
+  ...enSettingsUi,
   ...enWorkspaceAndTools,
   ...pausedMemoryEn,
   ...retryBannerEn,

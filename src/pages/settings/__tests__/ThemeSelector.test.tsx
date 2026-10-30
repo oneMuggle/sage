@@ -2,7 +2,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ThemeSelector, formatThemeSelectorJson, formatThemeSelectorMarkdown } from '../ThemeSelector';
+import { zh } from '../../../shared/lib/i18n/zh';
+import {
+  ThemeSelector,
+  formatThemeSelectorJson,
+  formatThemeSelectorMarkdown,
+} from '../ThemeSelector';
 
 // Mock useTheme
 const mockUseTheme = vi.fn();
@@ -39,14 +44,7 @@ vi.mock('../../../features/theme/ThemeGallery', () => ({
 // Mock useI18n
 vi.mock('../../../shared/lib/i18n', () => ({
   useI18n: () => ({
-    t: (key: string) => {
-      const translations: Record<string, string> = {
-        'settings.section.theme': '主题',
-        'theme.gallery.section_basic': '基础主题',
-        'theme.gallery.section_decorative': '装饰主题',
-      };
-      return translations[key] ?? key;
-    },
+    t: (key: string) => (zh as Record<string, string>)[key] ?? key,
   }),
 }));
 

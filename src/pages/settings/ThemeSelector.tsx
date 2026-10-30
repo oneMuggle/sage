@@ -70,7 +70,11 @@ export function ThemeSelector() {
   }
 
   async function handleDeleteTheme(theme: ThemeCssPayload) {
-    const ok = await confirmDialog({ title: '删除自定义主题', message: `确定要删除主题 "${theme.name}" 吗？`, danger: true });
+    const ok = await confirmDialog({
+      title: t('settings.theme.delete_title'),
+      message: t('settings.theme.delete_message').replace('{name}', theme.name),
+      danger: true,
+    });
     if (!ok) return;
 
     try {
@@ -102,7 +106,9 @@ export function ThemeSelector() {
       {/* CSS 自定义主题 */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-text-secondary">自定义 CSS 主题</h3>
+          <h3 className="text-sm font-medium text-text-secondary">
+            {t('settings.theme.css_title')}
+          </h3>
           <div className="flex items-center gap-1.5">
             <button
               type="button"
@@ -110,14 +116,14 @@ export function ThemeSelector() {
               className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 rounded-radius-md transition-colors"
             >
               <Plus size={14} />
-              新建自定义
+              {t('settings.theme.new_button')}
             </button>
           </div>
         </div>
 
         {cssThemes.length === 0 ? (
           <div className="text-center py-8 text-text-muted text-sm border border-dashed border-border rounded-radius-md">
-            尚未创建自定义主题
+            {t('settings.theme.empty')}
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-3">
@@ -148,7 +154,9 @@ export function ThemeSelector() {
                       />
                     ) : (
                       <div className="w-full h-20 bg-bg-subtle flex items-center justify-center text-text-muted text-xs">
-                        {theme.appearance === 'dark' ? '深色' : '浅色'}
+                        {theme.appearance === 'dark'
+                          ? t('settings.theme.dark')
+                          : t('settings.theme.light')}
                       </div>
                     )}
                   </button>
@@ -166,8 +174,8 @@ export function ThemeSelector() {
                     <button
                       type="button"
                       onClick={() => handleDeleteTheme(theme)}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-text-muted hover:text-error transition-opacity"
-                      title="删除主题"
+                      className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-1 text-text-muted hover:text-error transition-opacity"
+                      title={t('settings.theme.delete_tooltip')}
                     >
                       <Trash2 size={14} />
                     </button>

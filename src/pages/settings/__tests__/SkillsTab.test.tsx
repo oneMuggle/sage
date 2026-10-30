@@ -76,12 +76,10 @@ describe('SkillsTab — 渲染', () => {
     });
   });
 
-  it('渲染审计快照与 JSON 复制控件', async () => {
-    renderTab();
-    await waitFor(() => {
-      expect(screen.getByTestId('skills-tab-copy-audit')).toBeTruthy();
-    });
-    expect(screen.getByTestId('skills-tab-copy-json')).toBeTruthy();
+  it('audit copy controls moved to the audit export tab (P3)', () => {
+    // P3: 页内「复制审计快照/JSON」按钮已收敛到「审计导出」tab —— SkillsTab 不再渲染这两枚按钮。
+    // formatXxxAuditSnapshot / formatXxxAuditJson 由 settingsAuditExports.ts 集中消费,
+    // 其实在 AuditExportTab 单元测试里断言。
   });
 });
 

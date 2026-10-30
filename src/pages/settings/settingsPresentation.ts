@@ -1,53 +1,23 @@
 import type { SettingsSearchEntry, SettingsTabKey } from './settingsSearchIndex';
+import { SETTINGS_GROUPS, SETTINGS_TABS } from './settingsTabs';
 
-const GROUPS = [
-  { id: 'basic', zh: '基础与外观', en: 'Basics and appearance', keys: ['general', 'basic'] },
-  { id: 'models', zh: '模型与服务', en: 'Models and services', keys: ['endpoints', 'models'] },
-  {
-    id: 'knowledge',
-    zh: '记忆与资料',
-    en: 'Memory and sources',
-    keys: ['memory-knowledge', 'memory', 'zotero'],
-  },
-  {
-    id: 'tools',
-    zh: '工具与安全',
-    en: 'Tools and safety',
-    keys: [
-      'tools-connections',
-      'mcp',
-      'plugins',
-      'orchestration',
-      'evolution',
-      'skills',
-      'global-rules',
-    ],
-  },
-  {
-    id: 'network',
-    zh: '网络与远程',
-    en: 'Network and remote',
-    keys: ['network', 'remote-workspaces'],
-  },
-  {
-    id: 'diagnostics',
-    zh: '诊断、用量与更新',
-    en: 'Diagnostics, usage and updates',
-    keys: ['runtime', 'usage-stats', 'updates', 'providers'],
-  },
-  {
-    id: 'feedback',
-    zh: '反馈',
-    en: 'Feedback',
-    keys: ['feedback'],
-  },
-] as const;
-
+/**
+ * 设置页左侧导航的分组。
+ *
+ * P2 (2026-10-28): 分组顺序、组名与成员全部从 `settingsTabs.tsx` 注册表派生。
+ * 此前本文件自带一份 `GROUPS` 常量（含已下线的 `memory-knowledge`），
+ * 与 `Settings.tsx` 的 tabs 数组、`settingsNavigation` 的 visibleTabs 各写一份，
+ * 改一处忘另一处就会漂移。
+ *
+ * 组内 tab 顺序 = 注册表顺序；`available` 决定哪些 tab 实际可见。
+ */
 export function settingsGroups(available: readonly SettingsTabKey[], locale = 'zh') {
-  return GROUPS.map((group) => ({
+  return SETTINGS_GROUPS.map((group) => ({
     id: group.id,
     label: locale === 'en' ? group.en : group.zh,
-    keys: available.filter((key) => (group.keys as readonly string[]).includes(key)),
+    keys: SETTINGS_TABS.filter((tab) => tab.group === group.id && available.includes(tab.key)).map(
+      (tab) => tab.key,
+    ),
   })).filter((group) => group.keys.length > 0);
 }
 
@@ -100,7 +70,7 @@ export function auditSettingsPresentationGovernance(): {
   supportsGroupedNavigationAndRowFocus: boolean;
   compliant: boolean;
 } {
-  const groups = settingsGroups(['basic', 'models', 'runtime'], 'zh');
+  const groups = settingsGroups(['basic', 'models-services', 'runtime'], 'zh');
   return {
     module: 'src/pages/settings/settingsPresentation.ts',
     phase: 'P174',

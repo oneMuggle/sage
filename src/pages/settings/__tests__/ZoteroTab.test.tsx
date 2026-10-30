@@ -52,15 +52,35 @@ function availableStatus() {
 
 const COLLECTION = { key: 'CK1', name: 'Root', parent_key: null, item_count: 4, version: 7 };
 const SUMMARY = {
-  key: 'ITEM1', title: '一篇论文', item_type: 'journalArticle', year: 2024,
-  authors: ['作者甲'], abstract: '摘要内容', collections: ['CK1'], tags: ['ml'],
+  key: 'ITEM1',
+  title: '一篇论文',
+  item_type: 'journalArticle',
+  year: 2024,
+  authors: ['作者甲'],
+  abstract: '摘要内容',
+  collections: ['CK1'],
+  tags: ['ml'],
   date_added: null,
 };
 const DETAIL = {
-  ...SUMMARY, date_modified: null, extra: null, doi: null, url: null,
-  attachments: [{ key: 'AT1', filename: 'a.pdf', path: '/p/a.pdf', content_type: 'application/pdf' }],
+  ...SUMMARY,
+  date_modified: null,
+  extra: null,
+  doi: null,
+  url: null,
+  attachments: [
+    { key: 'AT1', filename: 'a.pdf', path: '/p/a.pdf', content_type: 'application/pdf' },
+  ],
 };
-const ANNOTATION = { key: 'AN1', type: 'highlight', text: '划线内容', comment: null, color: '#ffd400', page_label: '3', date_added: null };
+const ANNOTATION = {
+  key: 'AN1',
+  type: 'highlight',
+  text: '划线内容',
+  comment: null,
+  color: '#ffd400',
+  page_label: '3',
+  date_added: null,
+};
 
 function renderTab() {
   return render(
@@ -80,12 +100,23 @@ beforeEach(() => {
   setPathMock.mockResolvedValue({ ok: true, db_path: '' });
   // M5 同步面板挂载时会拉取状态与 wiki tag，必须给出解析值
   syncMock.mockResolvedValue({
-    items: 0, chunks: 0, dim: 0, last_sync_ts: null,
-    skipped: false, elapsed_ms: 0, errors: [],
+    items: 0,
+    chunks: 0,
+    dim: 0,
+    last_sync_ts: null,
+    skipped: false,
+    elapsed_ms: 0,
+    errors: [],
   });
   syncStatusMock.mockResolvedValue({
-    last_sync_ts: null, last_sync_at: null, item_count: 0, wiki_page_count: 0,
-    embedding_configured: true, vector_dim: null, sync_in_progress: false, errors: [],
+    last_sync_ts: null,
+    last_sync_at: null,
+    item_count: 0,
+    wiki_page_count: 0,
+    embedding_configured: true,
+    vector_dim: null,
+    sync_in_progress: false,
+    errors: [],
   });
   getWikiTagMock.mockResolvedValue('sage:wiki');
   setWikiTagMock.mockResolvedValue(undefined);
@@ -113,7 +144,12 @@ describe('ZoteroTab 状态卡片', () => {
   });
 
   it('不可用显示未连接', async () => {
-    statusMock.mockResolvedValue({ available: false, db_path: null, error: 'Zotero database not found.', stats: null });
+    statusMock.mockResolvedValue({
+      available: false,
+      db_path: null,
+      error: 'Zotero database not found.',
+      stats: null,
+    });
     renderTab();
     await waitFor(() => expect(screen.getByText('未连接')).toBeInTheDocument());
     expect(screen.getByText('Zotero database not found.')).toBeInTheDocument();
@@ -161,7 +197,10 @@ describe('ZoteroTab 搜索', () => {
       await vi.advanceTimersByTimeAsync(350);
     });
     expect(searchMock).toHaveBeenCalledWith({
-      q: '论文', collection_key: undefined, tag: undefined, limit: 30,
+      q: '论文',
+      collection_key: undefined,
+      tag: undefined,
+      limit: 30,
     });
     expect(screen.getByText('一篇论文')).toBeInTheDocument();
   });
@@ -189,11 +228,7 @@ describe('ZoteroTab 搜索', () => {
     expect(screen.getByText(/批注 \(\d\)/)).toBeInTheDocument();
   });
 
-  it('exports ZoteroTab audit snapshot and JSON helpers and renders copy controls', async () => {
-    renderTab();
-    await waitFor(() => expect(screen.getByText('已连接')).toBeInTheDocument());
-    expect(screen.getByTestId('zotero-tab-copy-audit')).toBeInTheDocument();
-
+  it('exports ZoteroTab audit snapshot and JSON helpers; copy controls moved to the audit export tab (P3)', async () => {
     const snapshot = formatZoteroTabAuditSnapshot({
       connected: true,
       statusLoading: false,

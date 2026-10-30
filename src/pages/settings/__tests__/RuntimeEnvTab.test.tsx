@@ -23,7 +23,28 @@ vi.mock('../../../shared/api/runtimeApi', () => ({
   },
 }));
 
-import { formatRuntimeEnvTabAuditJson, formatRuntimeEnvTabAuditSnapshot, RuntimeEnvTab } from '../RuntimeEnvTab';
+// 2026-10-28 设置页整理：原「通用」tab 的日志/LLM 诊断卡片迁入本 tab；
+// 该用例只关心运行时状态机，诊断子树用桩隔离。
+vi.mock('../../../widgets/settings/DiagnosticsCard', () => ({
+  DiagnosticsCard: () => <div data-testid="diagnostics-stub" />,
+}));
+vi.mock('../../../features/diagnostic', () => ({
+  DiagnosticCard: () => <div data-testid="diagnostic-preview-stub" />,
+}));
+
+import { I18nProvider } from '../../../shared/lib/i18n';
+import {
+  formatRuntimeEnvTabAuditJson,
+  formatRuntimeEnvTabAuditSnapshot,
+  RuntimeEnvTab,
+} from '../RuntimeEnvTab';
+
+const renderTab = () =>
+  render(
+    <I18nProvider defaultLocale="zh">
+      <RuntimeEnvTab />
+    </I18nProvider>,
+  );
 
 const RUNTIME = {
   language: 'python',
@@ -82,21 +103,26 @@ beforeEach(() => {
 describe('RuntimeEnvTab 探测面板', () => {
   it('加载中显示正在探测', () => {
     probeMock.mockReturnValue(new Promise(() => {}));
-    render(<RuntimeEnvTab />);
+    renderTab();
     expect(screen.getByText('正在探测…')).toBeInTheDocument();
   });
 
   it('探测成功列出运行时并自动选中推荐项', async () => {
-    render(<RuntimeEnvTab />);
+    renderTab();
     // effect 重跑会让面板短暂回 loading——全部用 waitFor 重查询，禁用
     // findBy-then-assert 模式（findBy 抓到的元素可能在断言前被重挂卸载）
     await waitFor(() => expect(screen.getByText('3.11.5')).toBeInTheDocument(), { timeout: 30000 });
     await waitFor(() => expect(screen.getByText('推荐')).toBeInTheDocument(), { timeout: 30000 });
-    await waitFor(() => expect(screen.getByText('C:/py/python.exe')).toBeInTheDocument(), { timeout: 30000 });
-    await waitFor(() => {
-      const select = screen.getByRole('combobox') as HTMLSelectElement;
-      expect(select.value).toBe(RUNTIME.path);
-    }, { timeout: 30000 });
+    await waitFor(() => expect(screen.getByText('C:/py/python.exe')).toBeInTheDocument(), {
+      timeout: 30000,
+    });
+    await waitFor(
+      () => {
+        const select = screen.getByRole('combobox') as HTMLSelectElement;
+        expect(select.value).toBe(RUNTIME.path);
+      },
+      { timeout: 30000 },
+    );
   });
 
   it('空运行时显示未探测到提示与错误详情', async () => {
@@ -104,45 +130,55 @@ describe('RuntimeEnvTab 探测面板', () => {
       success: true,
       output: { runtimes: [], recommended: null, errors: ['py launcher missing'] },
     });
-    render(<RuntimeEnvTab />);
-    expect(await screen.findByText(/未探测到任何运行时/, {}, { timeout: 30000 })).toBeInTheDocument();
+    renderTab();
+    expect(
+      await screen.findByText(/未探测到任何运行时/, {}, { timeout: 30000 }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/py launcher missing/)).toBeInTheDocument();
   });
 
   it('探测异常显示失败信息与重试按钮', async () => {
     probeMock.mockRejectedValue(new Error('ipc down'));
-    render(<RuntimeEnvTab />);
-    expect(await screen.findByText('探测失败: ipc down', {}, { timeout: 30000 })).toBeInTheDocument();
+    renderTab();
+    expect(
+      await screen.findByText('探测失败: ipc down', {}, { timeout: 30000 }),
+    ).toBeInTheDocument();
     expect(screen.getByText('重试')).toBeInTheDocument();
   });
 });
 
 describe('RuntimeEnvTab 诊断面板', () => {
   it('诊断成功显示满足度与诊断项', async () => {
-    render(<RuntimeEnvTab />);
-    await waitFor(() => expect(screen.getByText('✓ 全部满足')).toBeInTheDocument(), { timeout: 30000 });
+    renderTab();
+    await waitFor(() => expect(screen.getByText('✓ 全部满足')).toBeInTheDocument(), {
+      timeout: 30000,
+    });
     await waitFor(() => expect(screen.getByText('PY_OK')).toBeInTheDocument(), { timeout: 30000 });
-    expect(await screen.findByText('推荐运行时: C:/py/python.exe', {}, { timeout: 30000 })).toBeInTheDocument();
+    expect(
+      await screen.findByText('推荐运行时: C:/py/python.exe', {}, { timeout: 30000 }),
+    ).toBeInTheDocument();
   });
 
   it('诊断失败显示失败信息', async () => {
     // probe 保持 pending，避免 selectedRuntime 变化触发 useEffect 重跑
     probeMock.mockReturnValue(new Promise(() => {}));
     diagnoseMock.mockRejectedValue(new Error('diagnose down'));
-    render(<RuntimeEnvTab />);
-    expect(await screen.findByText('诊断失败: diagnose down', {}, { timeout: 30000 })).toBeInTheDocument();
+    renderTab();
+    expect(
+      await screen.findByText('诊断失败: diagnose down', {}, { timeout: 30000 }),
+    ).toBeInTheDocument();
   });
 });
 
 describe('RuntimeEnvTab 试跑', () => {
   it('探测成功后执行按钮可用', async () => {
-    render(<RuntimeEnvTab />);
+    renderTab();
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
   });
 
   it('执行成功展示退出码与 stdout', async () => {
-    render(<RuntimeEnvTab />);
+    renderTab();
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
@@ -152,7 +188,7 @@ describe('RuntimeEnvTab 试跑', () => {
 
   it('执行进入 running 态显示等待批准', async () => {
     execMock.mockReturnValue(new Promise(() => {}));
-    render(<RuntimeEnvTab />);
+    renderTab();
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
@@ -161,7 +197,7 @@ describe('RuntimeEnvTab 试跑', () => {
 
   it('权限拒绝显示拒绝文案', async () => {
     execMock.mockResolvedValue({ success: false, error: '权限拒绝: 需要 exec 审批' });
-    render(<RuntimeEnvTab />);
+    renderTab();
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
@@ -170,7 +206,7 @@ describe('RuntimeEnvTab 试跑', () => {
   });
 
   it('exec 透传语言与运行时路径', async () => {
-    render(<RuntimeEnvTab />);
+    renderTab();
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
@@ -180,10 +216,7 @@ describe('RuntimeEnvTab 试跑', () => {
     );
   });
 
-  it('exports RuntimeEnvTab audit snapshot and JSON helpers and renders copy controls', async () => {
-    render(<RuntimeEnvTab />);
-    expect(screen.getByTestId('runtime-env-tab-copy-audit')).toBeInTheDocument();
-
+  it('exports RuntimeEnvTab audit snapshot and JSON helpers; copy controls moved to the audit export tab (P3)', async () => {
     const snapshot = formatRuntimeEnvTabAuditSnapshot({
       probeKind: 'ok',
       runtimeCount: 1,
@@ -191,7 +224,7 @@ describe('RuntimeEnvTab 试跑', () => {
       diagnoseKind: 'ok',
       execKind: 'idle',
     });
-    expect(snapshot).toContain('# 开发环境审计快照');
+    expect(snapshot).toContain('# 运行环境与诊断审计快照');
     expect(snapshot).toContain('可用运行时数: 1');
     expect(snapshot).toContain('当前选中运行时: C:/py/python.exe');
 

@@ -11,20 +11,22 @@
 import { useEffect, useState } from 'react';
 
 import { settingsClient } from '../../shared/api/settingsClient';
+import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
 import { SettingRow } from './components';
 
-const OPTIONS: { label: string; value: number | null }[] = [
-  { label: '无限制', value: null },
-  { label: '3 轮', value: 3 },
-  { label: '5 轮', value: 5 },
-  { label: '8 轮', value: 8 },
-  { label: '10 轮', value: 10 },
-  { label: '15 轮', value: 15 },
-  { label: '20 轮', value: 20 },
+const OPTIONS: { key: TranslationKey; value: number | null }[] = [
+  { key: 'settings.context.unlimited', value: null },
+  { key: 'settings.context.turns_3', value: 3 },
+  { key: 'settings.context.turns_5', value: 5 },
+  { key: 'settings.context.turns_8', value: 8 },
+  { key: 'settings.context.turns_10', value: 10 },
+  { key: 'settings.context.turns_15', value: 15 },
+  { key: 'settings.context.turns_20', value: 20 },
 ];
 
 export function ContextTurnLimitSelect(): JSX.Element {
+  const { t } = useI18n();
   const [val, setVal] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -52,12 +54,12 @@ export function ContextTurnLimitSelect(): JSX.Element {
   return (
     <SettingRow
       anchor="context_turn_limit"
-      label="上下文轮数限制"
-      desc="限制每次发送给模型的最近对话轮数（1 轮 = 1 次用户输入 + 1 次助手回复）。无限制 = 发送全部历史"
+      label={t('settings.context.turn_limit.label')}
+      desc={t('settings.context.turn_limit.desc')}
     >
       <select
         data-testid="settings-context-turn-limit-select"
-        aria-label="上下文轮数限制"
+        aria-label={t('settings.context.turn_limit.label')}
         disabled={!loaded}
         value={val === null ? 'null' : String(val)}
         onChange={(e) => handleChange(e.target.value)}
@@ -65,7 +67,7 @@ export function ContextTurnLimitSelect(): JSX.Element {
       >
         {OPTIONS.map((o) => (
           <option key={String(o.value)} value={String(o.value)}>
-            {o.label}
+            {t(o.key)}
           </option>
         ))}
       </select>

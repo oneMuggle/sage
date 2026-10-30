@@ -9,9 +9,9 @@
  * 部分更新，必须保留其余 orch 键。
  */
 
-import { useState } from 'react';
-
+import { getSettingMetadata } from '../../entities/setting/settingsRegistry';
 import { useSettings } from '../../features/manage-settings/useSettings';
+import { useI18n } from '../../shared/lib/i18n';
 
 import { SettingRow, Toggle } from './components';
 
@@ -95,8 +95,17 @@ function NumberField({
   min?: number;
   max?: number;
 }) {
+  const metadata = anchor === undefined ? undefined : getSettingMetadata(anchor);
+  const defaultValue =
+    typeof metadata?.defaultValue === 'number' ? metadata.defaultValue : undefined;
   return (
-    <SettingRow label={label} desc={desc} anchor={anchor}>
+    <SettingRow
+      label={label}
+      desc={desc}
+      anchor={anchor}
+      value={value}
+      onReset={defaultValue === undefined ? undefined : () => onChange(defaultValue)}
+    >
       <input
         type="number"
         data-testid={dataTestId}
@@ -135,8 +144,17 @@ function TextField({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const metadata = anchor === undefined ? undefined : getSettingMetadata(anchor);
+  const defaultValue =
+    typeof metadata?.defaultValue === 'string' ? metadata.defaultValue : undefined;
   return (
-    <SettingRow label={label} desc={desc} anchor={anchor}>
+    <SettingRow
+      label={label}
+      desc={desc}
+      anchor={anchor}
+      value={value}
+      onReset={defaultValue === undefined ? undefined : () => onChange(defaultValue)}
+    >
       <input
         type="text"
         data-testid={dataTestId}
@@ -153,57 +171,33 @@ function TextField({
 
 export function OrchestrationTab() {
   const { settings, updateSettings } = useSettings();
-  const [copiedAudit, setCopiedAudit] = useState(false);
+  const { t } = useI18n();
   const setOrch = (patch: Partial<typeof settings.orch>) =>
     updateSettings({ orch: { ...settings.orch, ...patch } });
 
-  /* v8 ignore start */
-  const handleCopyAudit = async () => {
-    const text = formatOrchestrationTabAuditSnapshot({
-      planPreflightEnabled: settings.orch.planPreflightEnabled,
-      planScoutEnabled: settings.orch.planScoutEnabled,
-      maxScoutIterations: settings.orch.maxScoutIterations,
-      maxPlannerIterations: settings.orch.maxPlannerIterations,
-      maxConcurrentSubagents: settings.orch.maxConcurrentSubagents,
-      maxRetries: settings.orch.maxRetries,
-      maxLaneIterations: settings.orch.maxLaneIterations,
-      maxSubagentIterations: settings.orch.maxSubagentIterations,
-      subagentApprovalMode: settings.orch.subagentApprovalMode,
-      worktreeIsolation: settings.orch.worktreeIsolation,
-      scratchRoot: settings.orch.scratchRoot,
-    });
-    setCopiedAudit(true);
-    await navigator.clipboard?.writeText(text);
+  // 「恢复默认」统一从 registry 取 defaultValue —— 默认值只有一处来源，调用点不重复硬编码。
+  const resetOrchKey = (key: keyof typeof settings.orch) => {
+    const metadata = getSettingMetadata(`orch.${key}`);
+    if (metadata !== undefined) {
+      setOrch({ [key]: metadata.defaultValue } as Partial<typeof settings.orch>);
+    }
   };
-
-  /* v8 ignore stop */
 
   return (
     <div className="space-y-6" data-testid="orch-settings-section">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-xs text-muted leading-relaxed">
-          编排器派发子代理的执行参数（orch 段）。修改即保存并生效于新发起的 run；预算与守门项设 0
-          表示不限制，请谨慎放开。
-        </p>
-        <div className="flex items-center gap-2 shrink-0">
-          <span
-            data-testid="orchestration-tab-copy-audit"
-            onClick={() => void handleCopyAudit()}
-            title="复制编排设置审计快照"
-            className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
-          >
-            {copiedAudit ? '已复制快照' : '复制快照'}
-          </span>
-        </div>
-      </div>
+      <p className="text-xs text-muted leading-relaxed">{t('settings.orch.intro')}</p>
       <section>
         {/* Round 1/3 (2026-09-19) 计划前置旋钮 —— 管线级开关排最前。
             关闭后 multi 拆解行为与 2026-09-19 之前完全一致。 */}
-        <h3 className="text-sm font-semibold text-text mb-3">计划前置</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.orch.section_plan_preflight')}
+        </h3>
         <SettingRow
           anchor="orch.planPreflightEnabled"
-          label="拆解前澄清需求"
-          desc="复杂任务进入编排前,先判断目标是否有歧义并向你提问(≤3 问);超时或跳过则按合理默认值执行并在计划中写明假设"
+          label={t('settings.orch.plan_preflight.label')}
+          desc={t('settings.orch.plan_preflight.desc')}
+          value={settings.orch.planPreflightEnabled}
+          onReset={() => resetOrchKey('planPreflightEnabled')}
         >
           <Toggle
             testId="orch-plan-preflight"
@@ -213,8 +207,10 @@ export function OrchestrationTab() {
         </SettingRow>
         <SettingRow
           anchor="orch.planScoutEnabled"
-          label="拆解前事实侦察"
-          desc="拆解任务前派一个只读子代理快速收集工作区/网络/记忆事实,作为计划依据;会增加少量等待时间"
+          label={t('settings.orch.plan_scout.label')}
+          desc={t('settings.orch.plan_scout.desc')}
+          value={settings.orch.planScoutEnabled}
+          onReset={() => resetOrchKey('planScoutEnabled')}
         >
           <Toggle
             testId="orch-plan-scout"
@@ -223,16 +219,16 @@ export function OrchestrationTab() {
           />
         </SettingRow>
         <NumberField
-          label="侦察迭代预算"
-          desc="侦察子代理 ReAct 循环最大轮数; 侦察要快, 默认 4, 至少 1; 不受全局迭代上限影响, 侦察另有时长护栏"
+          label={t('settings.orch.max_scout_iterations.label')}
+          desc={t('settings.orch.max_scout_iterations.desc')}
           dataTestId="orch-max-scout-iterations"
           value={settings.orch.maxScoutIterations}
           min={1}
           onChange={(v) => setOrch({ maxScoutIterations: v })}
         />
         <NumberField
-          label="Planner 迭代预算"
-          desc="Planner ReAct 循环最大轮数; 当前 Planner 为单次拆解, 该值预配置, 阶段 2.1 ReAct 接入后生效"
+          label={t('settings.orch.max_planner_iterations.label')}
+          desc={t('settings.orch.max_planner_iterations.desc')}
           dataTestId="orch-max-planner-iterations"
           value={settings.orch.maxPlannerIterations}
           min={1}
@@ -240,11 +236,13 @@ export function OrchestrationTab() {
         />
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">并发与迭代</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.orch.section_concurrency')}
+        </h3>
         <NumberField
           anchor="orch.maxConcurrentSubagents"
-          label="最大并发子任务数"
-          desc="必须大于 0；设 0 会让编排信号量归零并挂死"
+          label={t('settings.orch.max_concurrent_subagents.label')}
+          desc={t('settings.orch.max_concurrent_subagents.desc')}
           dataTestId="orch-max-concurrent"
           value={settings.orch.maxConcurrentSubagents}
           onChange={(v) => setOrch({ maxConcurrentSubagents: v })}
@@ -252,104 +250,109 @@ export function OrchestrationTab() {
         />
         <NumberField
           anchor="orch.maxRetries"
-          label="子任务重试次数"
+          label={t('settings.orch.max_retries.label')}
           dataTestId="orch-max-retries"
           value={settings.orch.maxRetries}
           onChange={(v) => setOrch({ maxRetries: v })}
         />
         <NumberField
           anchor="orch.maxLaneIterations"
-          label="Lane 迭代上限"
+          label={t('settings.orch.max_lane_iterations.label')}
           dataTestId="orch-max-lane-iterations"
           value={settings.orch.maxLaneIterations}
           onChange={(v) => setOrch({ maxLaneIterations: v })}
         />
         <NumberField
           anchor="orch.maxSubagentIterations"
-          label="子代理迭代上限"
+          label={t('settings.orch.max_subagent_iterations.label')}
           dataTestId="orch-max-subagent-iterations"
           value={settings.orch.maxSubagentIterations}
           onChange={(v) => setOrch({ maxSubagentIterations: v })}
         />
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">结果上限</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.orch.section_result_limits')}
+        </h3>
         <NumberField
           anchor="orch.maxAggregateChars"
-          label="聚合结果上限（字符）"
+          label={t('settings.orch.max_aggregate_chars.label')}
           dataTestId="orch-max-aggregate"
           value={settings.orch.maxAggregateChars}
           onChange={(v) => setOrch({ maxAggregateChars: v })}
         />
         <NumberField
           anchor="orch.maxSubagentResultChars"
-          label="单结果截断上限（字符）"
+          label={t('settings.orch.max_subagent_result_chars.label')}
           dataTestId="orch-max-subagent-result"
           value={settings.orch.maxSubagentResultChars}
           onChange={(v) => setOrch({ maxSubagentResultChars: v })}
         />
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">预算与守门</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.orch.section_budget')}
+        </h3>
         <NumberField
           anchor="orch.runTokenBudget"
-          label="Run token 预算（tokens，0=不限）"
-          desc="单个 run 累计 total_tokens 上限，触顶后剩余任务收口归因 budget_exceeded"
+          label={t('settings.orch.run_token_budget.label')}
+          desc={t('settings.orch.run_token_budget.desc')}
           dataTestId="orch-run-token-budget"
           value={settings.orch.runTokenBudget}
           onChange={(v) => setOrch({ runTokenBudget: v })}
         />
         <NumberField
           anchor="orch.runWallClockLimitMinutes"
-          label="Run 墙钟上限（分钟，0=不限）"
-          desc="单个 run 的最长挂钟时间，超限后剩余任务经 run 级取消通道收口"
+          label={t('settings.orch.run_wall_clock_limit.label')}
+          desc={t('settings.orch.run_wall_clock_limit.desc')}
           dataTestId="orch-run-wall-clock-limit"
           value={settings.orch.runWallClockLimitMinutes}
           onChange={(v) => setOrch({ runWallClockLimitMinutes: v })}
         />
         <NumberField
           anchor="orch.subagentTaskTimeoutS"
-          label="单子任务超时（秒，0=不限）"
-          desc="子任务挂钟超时，防止卡死任务占住并发信号量"
+          label={t('settings.orch.subagent_task_timeout.label')}
+          desc={t('settings.orch.subagent_task_timeout.desc')}
           dataTestId="orch-subagent-task-timeout"
           value={settings.orch.subagentTaskTimeoutS}
           onChange={(v) => setOrch({ subagentTaskTimeoutS: v })}
         />
         <NumberField
           anchor="orch.maxRetryOfChains"
-          label="重派链上限（次）"
-          desc="每 run retry_of 链式重派上限，防止误判时无限重派；超限降级普通任务"
+          label={t('settings.orch.max_retry_of_chains.label')}
+          desc={t('settings.orch.max_retry_of_chains.desc')}
           dataTestId="orch-max-retry-of-chains"
           value={settings.orch.maxRetryOfChains}
           onChange={(v) => setOrch({ maxRetryOfChains: v })}
         />
         <NumberField
           anchor="orch.maxToolCallsPerRun"
-          label="工具调用预算（次/run，0=默认值）"
-          desc="单个 run 内工具调用总数上限（串行 + 并行累计），超限后本次 run 终止并归因 tool_budget_exceeded"
+          label={t('settings.orch.max_tool_calls_per_run.label')}
+          desc={t('settings.orch.max_tool_calls_per_run.desc')}
           dataTestId="orch-max-tool-calls-per-run"
           value={settings.orch.maxToolCallsPerRun}
           onChange={(v) => setOrch({ maxToolCallsPerRun: v })}
         />
         <NumberField
           anchor="orch.maxIterations"
-          label="Agent 迭代次数上限（次，0=默认值）"
-          desc="Primary agent 最大迭代次数（每次迭代 LLM 思考一次，可能调用多个工具），超限后会话终止并归因 max_iterations_exceeded"
+          label={t('settings.orch.max_iterations.label')}
+          desc={t('settings.orch.max_iterations.desc')}
           dataTestId="orch-max-iterations"
           value={settings.orch.maxIterations}
           onChange={(v) => setOrch({ maxIterations: v })}
         />
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">提问限制</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.orch.section_question_limits')}
+        </h3>
         <p className="text-xs text-muted leading-relaxed mb-3">
-          控制 agent 通过 ask_user_question 向你提问的频率与规模。连续未应答达到上限后 agent
-          会停止提问并按合理默认值继续推进任务。
+          {t('settings.orch.question_limits_intro')}
         </p>
         <NumberField
           anchor="orch.maxConsecutiveUnansweredQuestions"
-          label="连续未应答提问上限（次）"
-          desc="同一轮会话内连续提问未获应答达到该次数后，agent 停止提问并直接推进任务，防止反复骚扰"
+          label={t('settings.orch.max_consecutive_unanswered.label')}
+          desc={t('settings.orch.max_consecutive_unanswered.desc')}
           dataTestId="orch-max-consecutive-unanswered"
           value={settings.orch.maxConsecutiveUnansweredQuestions}
           onChange={(v) => setOrch({ maxConsecutiveUnansweredQuestions: v })}
@@ -357,8 +360,8 @@ export function OrchestrationTab() {
         />
         <NumberField
           anchor="orch.minOptionsPerQuestion"
-          label="每题最少选项数"
-          desc="agent 提问时至少要给出这么多个选项；不得大于「每题最多选项数」"
+          label={t('settings.orch.min_options_per_question.label')}
+          desc={t('settings.orch.min_options_per_question.desc')}
           dataTestId="orch-min-options-per-question"
           value={settings.orch.minOptionsPerQuestion}
           onChange={(v) => setOrch({ minOptionsPerQuestion: v })}
@@ -367,8 +370,8 @@ export function OrchestrationTab() {
         />
         <NumberField
           anchor="orch.maxOptionsPerQuestion"
-          label="每题最多选项数"
-          desc="agent 提问时最多给出这么多个选项；不得小于「每题最少选项数」"
+          label={t('settings.orch.max_options_per_question.label')}
+          desc={t('settings.orch.max_options_per_question.desc')}
           dataTestId="orch-max-options-per-question"
           value={settings.orch.maxOptionsPerQuestion}
           onChange={(v) => setOrch({ maxOptionsPerQuestion: v })}
@@ -376,8 +379,8 @@ export function OrchestrationTab() {
         />
         <NumberField
           anchor="orch.maxClarifyQuestionsInPrompt"
-          label="提示词中澄清问题数引导"
-          desc="系统提示里告诉 agent 最多澄清几个问题的软限制"
+          label={t('settings.orch.max_clarify_questions_in_prompt.label')}
+          desc={t('settings.orch.max_clarify_questions_in_prompt.desc')}
           dataTestId="orch-max-clarify-questions-in-prompt"
           value={settings.orch.maxClarifyQuestionsInPrompt}
           onChange={(v) => setOrch({ maxClarifyQuestionsInPrompt: v })}
@@ -385,8 +388,8 @@ export function OrchestrationTab() {
         />
         <NumberField
           anchor="orch.maxClarifyQuestionsPerRound"
-          label="计划前置每轮澄清提问数"
-          desc="复杂任务拆解前的澄清阶段，每轮最多提问数"
+          label={t('settings.orch.max_clarify_questions_per_round.label')}
+          desc={t('settings.orch.max_clarify_questions_per_round.desc')}
           dataTestId="orch-max-clarify-questions-per-round"
           value={settings.orch.maxClarifyQuestionsPerRound}
           onChange={(v) => setOrch({ maxClarifyQuestionsPerRound: v })}
@@ -394,11 +397,15 @@ export function OrchestrationTab() {
         />
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">隔离与审批</h3>
+        <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.orch.section_isolation')}
+        </h3>
         <SettingRow
           anchor="orch.subagentApprovalMode"
-          label="子代理自动批准非危险工具"
-          desc="编排子代理遇到需审批的工具时,自动放行非危险调用;破坏性/可疑命令与工作区越界仍弹窗确认"
+          label={t('settings.orch.subagent_approval_mode.label')}
+          desc={t('settings.orch.subagent_approval_mode.desc')}
+          value={settings.orch.subagentApprovalMode}
+          onReset={() => resetOrchKey('subagentApprovalMode')}
         >
           <Toggle
             value={settings.orch.subagentApprovalMode === 'auto'}
@@ -409,8 +416,10 @@ export function OrchestrationTab() {
             非 git 仓库 / git 不可用时自动降级 scratch 目录隔离。 */}
         <SettingRow
           anchor="orch.worktreeIsolation"
-          label="子任务 git worktree 隔离"
-          desc="会话绑定 git 仓库时,每个子任务在临时 worktree 副本中工作(仅文件系统隔离,产物不自动合并回主工作区);非仓库或 git 失败自动降级"
+          label={t('settings.orch.worktree_isolation.label')}
+          desc={t('settings.orch.worktree_isolation.desc')}
+          value={settings.orch.worktreeIsolation}
+          onReset={() => resetOrchKey('worktreeIsolation')}
         >
           <Toggle
             testId="orch-worktree-isolation"
@@ -420,8 +429,8 @@ export function OrchestrationTab() {
         </SettingRow>
         <TextField
           anchor="orch.scratchRoot"
-          label="Scratch 根目录名（data 目录下）"
-          desc="仅限单层目录名；绝对路径、含 / 或 .. 的输入会被后端拒绝并回落默认"
+          label={t('settings.orch.scratch_root.label')}
+          desc={t('settings.orch.scratch_root.desc')}
           dataTestId="orch-scratch-root"
           value={settings.orch.scratchRoot}
           onChange={(v) => setOrch({ scratchRoot: v })}

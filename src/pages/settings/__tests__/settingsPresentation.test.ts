@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { focusSettingsEntry, formatSettingsGroupsJson, formatSettingsGroupsSummary, settingsGroups } from '../settingsPresentation';
 describe('settings presentation', () => {
   it('groups known tabs without creating unsupported platform tabs', () => {
-    const groups = settingsGroups(['basic', 'models', 'network', 'usage-stats'], 'en');
+    const groups = settingsGroups(['basic', 'models-services', 'network', 'usage-stats'], 'en');
     expect(groups).toHaveLength(4);
     expect(groups.flatMap((group) => group.keys)).toEqual([
       'basic',
-      'models',
+      'models-services',
       'network',
       'usage-stats',
     ]);
@@ -38,7 +38,7 @@ describe('settings presentation', () => {
 
 describe('formatSettingsGroupsSummary / formatSettingsGroupsJson', () => {
   it('formats settings presentation groups summary and JSON payload', () => {
-    const tabs = ['basic', 'models', 'network', 'usage-stats'] as const;
+    const tabs = ['basic', 'models-services', 'network', 'usage-stats'] as const;
     expect(formatSettingsGroupsSummary(tabs, 'en')).toBe(
       'settings-groups: 4 groups · 4 tabs · locale=en',
     );
@@ -47,7 +47,7 @@ describe('formatSettingsGroupsSummary / formatSettingsGroupsJson', () => {
       groupCount: 4,
       tabCount: 4,
       locale: 'en',
-      groupIds: ['basic', 'models', 'network', 'diagnostics'],
+      groupIds: ['basic', 'models', 'network', 'maintenance'],
     });
   });
 });

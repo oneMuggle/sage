@@ -26,6 +26,7 @@ import {
   testEndpointConnection,
   type ConnectionTestResult,
 } from '../../../features/manage-endpoints/api';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import {
   EndpointsTab,
   formatEndpointsTabAuditJson,
@@ -83,6 +84,14 @@ function makeProps(overrides: Partial<AppSettings> = {}): EndpointsTabProps {
   return { settings, updateSettings } as EndpointsTabProps;
 }
 
+function renderTab(props: EndpointsTabProps) {
+  return render(
+    <I18nProvider defaultLocale="zh">
+      <EndpointsTab {...props} />
+    </I18nProvider>,
+  );
+}
+
 describe('EndpointsTab (2026-08-26 cleanup)', () => {
   it('does NOT render a 本地模型路径 input in the regular endpoint edit form', () => {
     // Regression guard: Task 1 (2026-08-23) added this input together
@@ -91,7 +100,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     // backward-compat reads, but the user must not be prompted to type
     // a local .gguf path any more.
     const props = makeProps();
-    render(<EndpointsTab {...props} />);
+    renderTab(props);
 
     // Open the inline editor for the seeded endpoint.
     const editButton = screen.getByRole('button', { name: '编辑' });
@@ -109,7 +118,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     // must see at least one of these names in the dropdown so they don't
     // think this option is reserved for the OpenAI cloud API.
     const props = makeProps();
-    render(<EndpointsTab {...props} />);
+    renderTab(props);
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
 
     const select = screen.getByTestId('endpoint-protocol-select');
@@ -128,7 +137,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     // users on those endpoints lose the ability to switch protocols
     // from this tab.
     const props = makeProps();
-    render(<EndpointsTab {...props} />);
+    renderTab(props);
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
 
     const select = screen.getByTestId('endpoint-protocol-select');
@@ -145,7 +154,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     // openai-compatible and ollama show "本地/内网代理可留空",
     // other protocols show "sk-...".
     const props = makeProps();
-    render(<EndpointsTab {...props} />);
+    renderTab(props);
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
 
     const apiKeyInput = screen.getByPlaceholderText(/本地\/内网代理可留空/);
@@ -159,13 +168,13 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     // + modelSelections is the normal selection path — if this input
     // disappears it breaks the fallback flow.
     const props = makeProps();
-    render(<EndpointsTab {...props} />);
+    renderTab(props);
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
 
     expect(screen.getByPlaceholderText('留空走 ModelsTab 选择')).toBeInTheDocument();
   });
 
-  it('formats and copies endpoints tab audit snapshot and JSON', () => {
+  it('formats endpoints tab audit snapshot and JSON; copy controls moved to the audit export tab (P3)', () => {
     expect(
       formatEndpointsTabAuditSnapshot({
         endpointCount: 2,
@@ -187,14 +196,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
       testingId: 'ep2',
     });
 
-    const props = makeProps();
-    render(<EndpointsTab {...props} />);
-    const summaryBtn = screen.getByTestId('endpoints-tab-copy-summary');
-    const jsonBtn = screen.getByTestId('endpoints-tab-copy-json');
-    fireEvent.click(summaryBtn);
-    expect(summaryBtn.textContent).toBe('已复制');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn.textContent).toBe('已复制');
+    // P3: 页内「复制快照/JSON」按钮已收敛到「审计导出」tab —— EndpointsTab 不再渲染这两枚按钮。
   });
 
   it('reconciles discovered models into the catalog without breaking discovery on failure', async () => {
@@ -224,7 +226,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
       discoveredModels: [{ id: 'gpt-4o', capabilities: ['chat'], endpointId: 'ep-1' }],
     };
     vi.mocked(testEndpointConnection).mockResolvedValueOnce(discovered);
-    render(<EndpointsTab {...props} />);
+    renderTab(props);
 
     fireEvent.click(screen.getByRole('button', { name: '测试连接' }));
 
@@ -277,7 +279,7 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
       latency: 0,
       discoveredModels: [{ id: 'gpt-4o', capabilities: ['chat'], endpointId: 'ep-1' }],
     });
-    render(<EndpointsTab {...props} />);
+    renderTab(props);
 
     fireEvent.click(screen.getByRole('button', { name: '测试连接' }));
 

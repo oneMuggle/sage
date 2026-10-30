@@ -6,9 +6,13 @@
 // （CodeMirror lazy）。没有门禁时这类回潮无法察觉——shiki 换回全量
 // bundle 或大依赖被静态引入都会静默膨胀安装包。
 //
-// 预算（2026-09-24 实测留 ~10% 余量，超限即失败）：
-//   - dist/assets 总体积   ≤ 12MB   （实测 ~9.9MB）
-//   - 最大单个 .js chunk   ≤ 1.6MB  （实测 index 主 chunk ~1.45MB）
+// 预算（实测留 ~10% 余量，超限即失败）：
+//   - dist/assets 总体积   ≤ 12MB   （2026-09-24 实测 ~9.9MB）
+//   - 最大单个 .js chunk   ≤ 1.8MB  （2026-10-30 实测 1704KB）
+//
+// 2026-10-30 棘轮上调：设置页 IA 收敛（#2657）把设置项 i18n 词典拆入
+// settingsUi.ts 并随默认语言包静态加载，主 chunk 由 1.45MB 增至 1.70MB，
+// 超过原 1.6MB 上限 66KB（总量仍在 11/12MB 内）。按棘轮协议仅上调该项。
 //
 // 用法：npm run build 之后执行 `node scripts/check-bundle-size.mjs`。
 // 退出码：0 = 全部预算内；1 = 超限或 dist 不存在。
@@ -21,7 +25,7 @@ const ASSETS = 'dist/assets';
 
 const BUDGETS = [
   { name: 'dist/assets 总体积', max: 12 * 1024 * 1024 },
-  { name: '最大单个 .js chunk', max: 1.6 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
+  { name: '最大单个 .js chunk', max: 1.8 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
 ];
 
 if (!readdirSync('.').includes('dist')) {

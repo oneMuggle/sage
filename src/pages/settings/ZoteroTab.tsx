@@ -77,7 +77,6 @@ export function ZoteroTab() {
   // ── status ──────────────────────────────────────────────────────────────────
   const [status, setStatus] = useState<ZoteroStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
-  const [copiedAudit, setCopiedAudit] = useState(false);
 
   // ── path config ─────────────────────────────────────────────────────────────
   const [pathInput, setPathInput] = useState('');
@@ -224,45 +223,13 @@ export function ZoteroTab() {
 
   // ── render ───────────────────────────────────────────────────────────────────
   const connected = status?.available ?? false;
-  const itemCount = status?.stats?.items ?? 0;
-  const collectionCount = status?.stats?.collections ?? collections.length;
-
-  /* v8 ignore start */
-  const handleCopyAudit = async () => {
-    const text = formatZoteroTabAuditSnapshot({
-      connected,
-      statusLoading,
-      itemCount,
-      collectionCount,
-      searchResultCount: searchResults.length,
-      query,
-      selectedCollectionKey,
-      selectedTag,
-    });
-    setCopiedAudit(true);
-    await navigator.clipboard?.writeText(text);
-  };
-
-  /* v8 ignore stop */
 
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-medium text-primary">{t('settings.zotero.title')}</h3>
-          <p className="mt-1 text-xs text-faint">{t('settings.zotero.desc')}</p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span
-            data-testid="zotero-tab-copy-audit"
-            onClick={() => void handleCopyAudit()}
-            title="复制 Zotero 审计快照"
-            className="px-2 py-0.5 text-xs rounded border border-line-subtle text-faint hover:text-primary cursor-pointer select-none"
-          >
-            {copiedAudit ? '已复制快照' : '复制快照'}
-          </span>
-        </div>
+      <div>
+        <h3 className="text-sm font-medium text-primary">{t('settings.zotero.title')}</h3>
+        <p className="mt-1 text-xs text-faint">{t('settings.zotero.desc')}</p>
       </div>
 
       {/* Status card */}

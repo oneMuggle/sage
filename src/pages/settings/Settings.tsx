@@ -6,83 +6,53 @@
  * - 搜索升级为设置项级：命中具体设置项（settingsSearchIndex），
  *   点击结果跳转到所属 tab；无查询时按 tab 名过滤左侧导航；
  * - 编排 13 项从「通用」拆出为独立「编排」tab。
+ *
+ * P2 (2026-10-28)：tab 元数据（key / label / 分组 / 别名 / 内容面板）
+ * 全部收进 `settingsTabs.tsx` 注册表，本文件只负责搜索、锚点定位与渲染。
+ * 新增 tab 只改注册表 1 处。
  */
 
 import { clsx } from 'clsx';
 import { Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useSettings } from '../../features/manage-settings/useSettings';
-import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
-import { ENABLE_UPDATE_PROVIDERS_UI } from '../../shared/updateFeatureFlag';
-import { EvolutionLog } from '../../widgets/evolution/EvolutionLog';
-import { EvolutionPanel } from '../../widgets/evolution/EvolutionPanel';
-import { LearnedPreferences } from '../../widgets/evolution/LearnedPreferences';
-import { RecallMetrics } from '../../widgets/evolution/RecallMetrics';
-import { HarnessDashboard } from '../../widgets/harness/HarnessDashboard';
+import { useI18n } from '../../shared/lib/i18n';
 
-import { BasicTab } from './BasicTab';
 import { EffectiveSettingsSummary } from './EffectiveSettingsSummary';
-import { EndpointsTab } from './EndpointsTab';
-import { FeedbackTab } from './FeedbackTab';
-import { GeneralTab } from './GeneralTab';
-import { GlobalRulesTab } from './GlobalRulesTab';
-import { McpTab } from './McpTab';
-import { MemorySettingsTab } from './MemorySettingsTab';
-import { ModelsTab } from './ModelsTab';
-import { NetworkTab } from './NetworkTab';
-import { OrchestrationTab } from './OrchestrationTab';
-import { PluginsTab } from './PluginsTab';
-import { ProvidersManager } from './ProvidersManager';
-import { RemoteWorkspacesTab } from './RemoteWorkspacesTab';
-import { RuntimeEnvTab } from './RuntimeEnvTab';
-import { SkillsTab } from './SkillsTab';
-import { ToolsConnectionsTab } from './ToolsConnectionsTab';
-import { UpdatesTab } from './UpdatesTab';
-import { UsageStatsTab } from './UsageStatsTab';
-import { ZoteroTab } from './ZoteroTab';
 import { initialSettingsTab } from './settingsNavigation';
 import { focusSettingsEntry, settingsGroups } from './settingsPresentation';
-import {
-  searchSettings,
-  type SettingsSearchEntry,
-  type SettingsTabKey,
-} from './settingsSearchIndex';
+import { loadSettingsRecents, pushSettingsRecent, saveSettingsRecents } from './settingsRecents';
+import { searchSettings, type SettingsSearchEntry } from './settingsSearchIndex';
+import { SETTINGS_TABS, findSettingsTab, type SettingsTabKey } from './settingsTabs';
 
 export type SettingsTab = SettingsTabKey;
 
-/**
- * 历史持久化 tab 值 → 当前 tab 的迁移表。
- *
- * - `general`：P0-5 之前 'general' 不在 tabs 列表里却承载默认落地页，迁到 basic。
- * - `memory-knowledge`：P1-5 把两个「记忆」tab 合并成一个，该 key 已下线，
- *   迁到 memory。老用户 localStorage 里还留着旧值，不迁移就会落进
- *   “无 tab 内容”的空白页。
- */
-const LEGACY_TAB_ALIASES: Record<string, SettingsTab> = {
-  general: 'basic',
-  'memory-knowledge': 'memory',
-};
-
-function migrateTab(saved: string): SettingsTab {
-  return (LEGACY_TAB_ALIASES[saved] ?? saved) as SettingsTab;
-}
+/** Cmd/Ctrl+K 的提示标签 —— 按平台显示，Windows/Linux 上不该出现 ⌘。 */
+const SEARCH_SHORTCUT_LABEL =
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘K' : 'Ctrl+K';
 
 export function Settings() {
   // R45: 记住上次访问的 tab —— localStorage 持久化，重开设置页恢复
   const [activeTab, setActiveTabState] = useState<SettingsTab>(() => {
     try {
       const saved = localStorage.getItem('sage:settings-tab');
-      // 上游把「记忆与知识」tab 重命名为 memory：旧书签先按上游别名迁移，
-      // 再走 initialSettingsTab 的合法性与可见性校验（providers 开关、未知值回退 basic）。
-      return initialSettingsTab(saved ? migrateTab(saved) : null, ENABLE_UPDATE_PROVIDERS_UI());
+      // 历史 localStorage 值（旧 tab key、已下线 tab）由 initialSettingsTab
+      // 统一做别名迁移 + 合法性校验，未知值回退 basic。
+      return initialSettingsTab(saved);
     } catch {
       /* ignore */
     }
     return 'basic';
   });
+  // P3: 最近访问的 tab —— 顶部固定几条，省去在 17 个 tab 里来回找。
+  const [recents, setRecents] = useState<SettingsTabKey[]>(loadSettingsRecents);
+  useEffect(() => {
+    saveSettingsRecents(recents);
+  }, [recents]);
+
   const setActiveTab = useCallback((tab: SettingsTab) => {
     setActiveTabState(tab);
+    setRecents((current) => pushSettingsRecent(current, tab));
     try {
       localStorage.setItem('sage:settings-tab', tab);
     } catch {
@@ -90,7 +60,21 @@ export function Settings() {
     }
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // P3: Cmd/Ctrl+K 聚焦搜索并全选 —— 直接覆盖上一次查询，不用先手动清空。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return;
+      event.preventDefault();
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   // 上游 P1-4：待定位的设置项锚点。点击搜索结果时写入，在目标 tab 渲染完成后
   // 消费一次。用 ref 而非 state —— 它不是渲染输入，只是一条「下一帧要做的事」。
   const pendingAnchorRef = useRef<{ key: string; entry: SettingsSearchEntry } | null>(null);
@@ -100,41 +84,13 @@ export function Settings() {
   // 两条路都定不到就如实提示，不伪造跳转。
   const [fallbackEntry, setFallbackEntry] = useState<SettingsSearchEntry | null>(null);
   const [focusMissing, setFocusMissing] = useState(false);
-  const { settings, updateSettings, resetSettings } = useSettings();
   const { t, locale } = useI18n();
 
-  const tabs: { key: SettingsTab; label: string }[] = [
-    // P0-5: 'general' 此前不在此列表（却作为默认 activeTab + 承载破坏性
-    // 「重置全部设置」），导致默认落地页在左侧导航无高亮项、切走后无法
-    // 返回。SettingsTabKey 与 i18n 均已有该 key，属单纯的数组漏项。
-    { key: 'general', label: t('settings.tab.general') },
-    { key: 'basic', label: t('settings.tab.basic') },
-    { key: 'tools-connections', label: t('settings.tab.tools-connections') },
-    { key: 'endpoints', label: t('settings.tab.endpoints') },
-    { key: 'models', label: t('settings.tab.models') },
-    { key: 'orchestration', label: t('settings.tab.orchestration') },
-    // P1-5: 「记忆与知识」tab 已下线并入这里 —— 它里面没有任何知识库设置，
-    // 却让用户以为记忆与知识是绑定的，徒增记忆能力的入口数量。
-    { key: 'memory', label: t('settings.tab.memory') },
-    { key: 'network', label: t('settings.tab.network') },
-    { key: 'mcp', label: t('settings.tab.mcp') },
-    { key: 'plugins', label: t('settings.tab.plugins') },
-    { key: 'remote-workspaces', label: t('settings.tab.remote-workspaces') },
-    { key: 'zotero', label: t('settings.tab.zotero') },
-    { key: 'runtime', label: t('settings.tab.runtime') },
-    { key: 'evolution', label: t('settings.tab.evolution') },
-    { key: 'harness', label: t('settings.tab.harness') },
-    { key: 'updates', label: t('settings.tab.updates') },
-    { key: 'feedback', label: t('settings.tab.feedback') },
-    { key: 'usage-stats', label: t('settings.tab.usage-stats' as TranslationKey) },
-  ];
-  if (ENABLE_UPDATE_PROVIDERS_UI()) {
-    tabs.push({ key: 'providers', label: t('settings.tab.providers' as TranslationKey) });
-  }
-  // T-3/T-4: 技能设置 Tab（脚本执行开关 + 技能目录）
-  tabs.push({ key: 'skills', label: t('settings.tab.skills' as TranslationKey) });
-  // G1 (2026-10-27): 全局规则 Tab（~/.sage/SAGE.md 读写）
-  tabs.push({ key: 'global-rules', label: t('settings.tab.global-rules' as TranslationKey) });
+  // 左侧导航与搜索结果里的 tab 名都来自注册表。
+  const tabs = useMemo(
+    () => SETTINGS_TABS.map((tab) => ({ key: tab.key, label: t(tab.labelKey) })),
+    [t],
+  );
 
   // 设置项级搜索：命中项列表 + 其所属 tab（导航区仍按 tab 名过滤）
   const matchedItems = useMemo(() => searchSettings(searchQuery), [searchQuery]);
@@ -143,6 +99,10 @@ export function Settings() {
   const filteredTabs = query
     ? tabs.filter((tab) => matchingTabs.has(tab.key) || tab.label.toLowerCase().includes(query))
     : tabs;
+
+  // 当前 tab 不在「最近访问」里重复出现 —— 它在下方分组中已经高亮。
+  const filteredKeys = new Set(filteredTabs.map((tab) => tab.key));
+  const visibleRecents = recents.filter((key) => key !== activeTab && filteredKeys.has(key));
 
   const jumpToItem = (item: SettingsSearchEntry): void => {
     setActiveTab(item.tab);
@@ -221,6 +181,9 @@ export function Settings() {
     locale,
   );
 
+  // 内容面板由注册表决定 —— render 返回 JSX 元素，React 正常挂载组件。
+  const activeTabDef = useMemo(() => findSettingsTab(activeTab), [activeTab]);
+
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* Left sub-nav (U15 from OpenWorker) */}
@@ -232,22 +195,36 @@ export function Settings() {
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
             <input
+              ref={searchInputRef}
               data-testid="settings-search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
               placeholder={t('settings.search.placeholder')}
               className="w-full pl-7 pr-6 py-1.5 text-ui-sm rounded-md border border-border bg-bg text-text placeholder:text-muted"
             />
-            {searchQuery && (
+            {searchQuery ? (
               <button
                 type="button"
                 data-testid="settings-search-clear"
-                aria-label="清空搜索"
+                aria-label={t('settings.search.clear')}
                 onClick={() => setSearchQuery('')}
                 className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted hover:text-text hover:bg-bg-hover"
               >
                 <X className="w-3 h-3" />
               </button>
+            ) : (
+              !searchFocused && (
+                // 快捷键提示只在未聚焦且无查询时出现，避免与清空按钮抢位置。
+                <kbd
+                  data-testid="settings-search-shortcut"
+                  title={t('settings.search.shortcut')}
+                  className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 rounded border border-border px-1 text-ui-2xs text-muted"
+                >
+                  {SEARCH_SHORTCUT_LABEL}
+                </kbd>
+              )
             )}
           </div>
         </div>
@@ -277,40 +254,54 @@ export function Settings() {
             )}
           </div>
         )}
-        <nav className="flex-1 overflow-y-auto p-2 space-y-1">
-          {groups.map((group) => {
-            const selected = group.keys.includes(activeTab);
-            return (
-              <section key={group.id}>
-                <button
-                  type="button"
-                  data-testid={`settings-group-${group.id}`}
-                  aria-expanded={selected}
-                  onClick={() => setActiveTab(group.keys[0])}
-                  className={`w-full px-3 py-2 text-ui-base rounded text-left ${selected ? 'bg-primary/10 text-primary font-medium' : 'text-muted hover:bg-bg-hover'}`}
-                >
-                  {group.label}
-                </button>
-                {(selected || query) &&
-                  group.keys.length > 1 &&
-                  group.keys.map((key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setActiveTab(key)}
-                      className={clsx(
-                        'w-full pl-5 pr-2 py-1.5 text-ui-sm rounded-r text-left transition-colors',
-                        activeTab === key
-                          ? 'border-l-2 border-primary bg-primary/5 text-primary font-medium'
-                          : 'text-muted hover:bg-bg-hover',
-                      )}
-                    >
-                      {tabs.find((tab) => tab.key === key)?.label}
-                    </button>
-                  ))}
-              </section>
-            );
-          })}
+        <nav className="flex-1 overflow-y-auto p-2 space-y-3">
+          {visibleRecents.length > 0 && (
+            <section data-testid="settings-recent-tabs">
+              <div className="px-3 py-1 text-ui-2xs font-medium text-muted uppercase tracking-wide">
+                {t('settings.nav.recent')}
+              </div>
+              <div className="mt-0.5 space-y-0.5">
+                {visibleRecents.map((key) => (
+                  <button
+                    key={`recent-${key}`}
+                    type="button"
+                    data-testid={`settings-recent-${key}`}
+                    onClick={() => setActiveTab(key)}
+                    className="w-full px-3 py-1.5 text-ui-sm rounded text-left text-text-secondary hover:bg-bg-hover transition-colors"
+                  >
+                    {tabs.find((tab) => tab.key === key)?.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+          {groups.map((group) => (
+            <section key={group.id}>
+              <div
+                data-testid={`settings-group-${group.id}`}
+                className="px-3 py-1 text-ui-2xs font-medium text-muted uppercase tracking-wide"
+              >
+                {group.label}
+              </div>
+              <div className="mt-0.5 space-y-0.5">
+                {group.keys.map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setActiveTab(key)}
+                    className={clsx(
+                      'w-full px-3 py-1.5 text-ui-sm rounded text-left transition-colors',
+                      activeTab === key
+                        ? 'bg-primary/10 text-primary font-medium'
+                        : 'text-text-secondary hover:bg-bg-hover',
+                    )}
+                  >
+                    {tabs.find((tab) => tab.key === key)?.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
         </nav>
       </div>
 
@@ -323,43 +314,10 @@ export function Settings() {
               <p role="status" className="text-ui-sm text-warning mb-2">
                 {locale === 'en'
                   ? 'The section is open, but the exact setting is unavailable or hidden by an advanced option.'
-                  : '已打开所属分组；该设置可能尚未加载或需展开高级选项，未伪造定位结果。'}
+                  : t('settings.search.focus_missing')}
               </p>
             )}
-            {activeTab === 'general' && <GeneralTab resetSettings={resetSettings} />}
-            {activeTab === 'basic' && <BasicTab />}
-            {activeTab === 'tools-connections' && <ToolsConnectionsTab />}
-            {activeTab === 'endpoints' && (
-              <EndpointsTab settings={settings} updateSettings={updateSettings} />
-            )}
-            {activeTab === 'models' && (
-              <ModelsTab settings={settings} updateSettings={updateSettings} />
-            )}
-            {activeTab === 'orchestration' && <OrchestrationTab />}
-            {/* P1-5: 记忆设置合并为单 tab（日常开关 + 记忆引擎），顶部指向
-                唯一的记忆工作台 /memory —— 设置页不再自成第三个记忆入口。 */}
-            {activeTab === 'memory' && <MemorySettingsTab />}
-            {activeTab === 'network' && <NetworkTab />}
-            {activeTab === 'remote-workspaces' && <RemoteWorkspacesTab />}
-            {activeTab === 'mcp' && <McpTab />}
-            {activeTab === 'plugins' && <PluginsTab />}
-            {activeTab === 'zotero' && <ZoteroTab />}
-            {activeTab === 'runtime' && <RuntimeEnvTab />}
-            {activeTab === 'evolution' && (
-              <div className="space-y-6">
-                <EvolutionPanel />
-                <LearnedPreferences />
-                <RecallMetrics />
-                <EvolutionLog />
-              </div>
-            )}
-            {activeTab === 'harness' && <HarnessDashboard />}
-            {activeTab === 'updates' && <UpdatesTab />}
-            {activeTab === 'usage-stats' && <UsageStatsTab />}
-            {activeTab === 'providers' && ENABLE_UPDATE_PROVIDERS_UI() && <ProvidersManager />}
-            {activeTab === 'skills' && <SkillsTab />}
-            {activeTab === 'global-rules' && <GlobalRulesTab />}
-            {activeTab === 'feedback' && <FeedbackTab />}
+            {activeTabDef?.render()}
           </div>
         </div>
       </div>

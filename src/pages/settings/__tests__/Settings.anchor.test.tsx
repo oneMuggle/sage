@@ -11,16 +11,15 @@ import { Settings } from '../Settings';
 vi.mock('../useSettings', () => ({
   useSettings: () => ({ settings: {}, updateSettings: vi.fn(), resetSettings: vi.fn() }),
 }));
-vi.mock('../BasicTab', () => ({ BasicTab: () => <div data-testid="tab-basic" /> }));
-vi.mock('../EffectiveSettingsSummary', () => ({ EffectiveSettingsSummary: () => <div /> }));
-vi.mock('../EndpointsTab', () => ({ EndpointsTab: () => <div data-testid="tab-endpoints" /> }));
-vi.mock('../GeneralTab', () => ({
-  GeneralTab: () => (
-    <div data-testid="tab-general">
+vi.mock('../BasicTab', () => ({
+  BasicTab: () => (
+    <div data-testid="tab-basic">
       <div data-settings-anchor="reset_settings">重置全部设置</div>
     </div>
   ),
 }));
+vi.mock('../EffectiveSettingsSummary', () => ({ EffectiveSettingsSummary: () => <div /> }));
+vi.mock('../EndpointsTab', () => ({ EndpointsTab: () => <div data-testid="tab-endpoints" /> }));
 vi.mock('../McpTab', () => ({ McpTab: () => <div data-testid="tab-mcp" /> }));
 vi.mock('../MemorySettingsTab', () => ({
   MemorySettingsTab: () => (
@@ -32,18 +31,7 @@ vi.mock('../MemorySettingsTab', () => ({
     </div>
   ),
 }));
-vi.mock('../ModelsTab', () => ({
-  ModelsTab: () => (
-    <div data-testid="tab-models">
-      {/* 真实 ModelsTab 把温度/上下文参数收进默认闭合的「高级」折叠；
-          这里复刻该结构，覆盖「跳转时先展开闭合 details」路径。 */}
-      <details>
-        <summary>高级</summary>
-        <div data-settings-anchor="temperature">Temperature</div>
-      </details>
-    </div>
-  ),
-}));
+vi.mock('../ModelsTab', () => ({ ModelsTab: () => <div data-testid="tab-models" /> }));
 vi.mock('../NetworkTab', () => ({ NetworkTab: () => <div data-testid="tab-network" /> }));
 vi.mock('../OrchestrationTab', () => ({
   OrchestrationTab: () => (
@@ -54,6 +42,22 @@ vi.mock('../OrchestrationTab', () => ({
 }));
 vi.mock('../ProvidersManager', () => ({
   ProvidersManager: () => <div data-testid="tab-providers" />,
+}));
+// P1-b: 合并后的包装 tab —— 锚点测试直接 mock，避免依赖真实子 tab 切换逻辑。
+// 真实的 ModelsServicesTab 内嵌 ModelsTab，后者把温度/上下文参数收进默认闭合
+// 的「高级」折叠；这里复刻该嵌套结构，覆盖 R31c「跳转时先展开闭合 details」。
+vi.mock('../ModelsServicesTab', () => ({
+  ModelsServicesTab: () => (
+    <div data-testid="tab-models-services">
+      <details>
+        <summary>高级</summary>
+        <div data-settings-anchor="temperature">Temperature</div>
+      </details>
+    </div>
+  ),
+}));
+vi.mock('../PluginsSkillsTab', () => ({
+  PluginsSkillsTab: () => <div data-testid="tab-plugins-skills" />,
 }));
 vi.mock('../RemoteWorkspacesTab', () => ({
   RemoteWorkspacesTab: () => <div data-testid="tab-remote-workspaces" />,
@@ -111,7 +115,7 @@ beforeEach(() => {
 describe('设置搜索锚点定位 (P1-4)', () => {
   it('switches to the owning tab and highlights the anchored row', async () => {
     renderSettings();
-    // 默认落在 general tab；搜索「重置全部设置」应跳到 general 并高亮该行。
+    // 默认落在 basic tab；搜索「重置全部设置」应跳到 basic 并高亮该行。
     // 注意这条同时守住了「命中项就在当前 tab」的场景 —— 此时 activeTab 不变，
     // 定位不能被依赖 activeTab 的 effect 静默吞掉。
     await clickSearchResult('reset_settings');
@@ -154,9 +158,10 @@ describe('设置搜索锚点定位 (P1-4)', () => {
   it('falls back to plain tab switching when the entry has no anchor', async () => {
     // 整 tab 级条目（端点管理、MCP…）本身没有对应行 —— 必须静默降级为
     // 「只切 tab」，不报错、不空手。
+    // P1-b: endpoints 现在是 models-services 的子 tab，搜索命中仍切到父 tab。
     renderSettings();
     await clickSearchResult('endpoints');
-    expect(screen.getByTestId('tab-endpoints')).toBeInTheDocument();
+    expect(screen.getByTestId('tab-models-services')).toBeInTheDocument();
   });
 
   it('clears the search box after jumping', async () => {
@@ -195,5 +200,61 @@ describe('记忆 tab 合并 (P1-5)', () => {
     renderSettings();
     const link = screen.getByTestId('memory-workspace-link');
     expect(link.getAttribute('href')).toBe('/memory');
+  });
+});
+
+describe('导航快捷键与最近访问 (P3)', () => {
+  it('Cmd/Ctrl+K 聚焦搜索框', () => {
+    renderSettings();
+    const input = screen.getByTestId('settings-search');
+    expect(input).not.toHaveFocus();
+    act(() => {
+      fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    });
+    expect(input).toHaveFocus();
+  });
+
+  it('不带修饰键的 k 不抢焦点（否则在输入框里打字就会被劫持）', () => {
+    renderSettings();
+    act(() => {
+      fireEvent.keyDown(window, { key: 'k' });
+    });
+    expect(screen.getByTestId('settings-search')).not.toHaveFocus();
+  });
+
+  it('未聚焦且无查询时显示平台快捷键提示', () => {
+    renderSettings();
+    expect(screen.getByTestId('settings-search-shortcut')).toHaveTextContent('Ctrl+K');
+  });
+
+  it('把最近访问的 tab 固定在导航顶部并持久化', async () => {
+    renderSettings();
+    // 初始落在 basic（不进 recents）；依次访问网络 → 记忆。
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '网络' }));
+    });
+    // 访问网络后它成为当前 tab，不在「最近访问」里重复出现。
+    expect(screen.queryByTestId('settings-recent-tabs')).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '记忆' }));
+    });
+    expect(screen.getByTestId('settings-recent-network')).toBeInTheDocument();
+    expect(localStorage.getItem('sage:settings-recent-tabs')).toBe('["memory","network"]');
+  });
+
+  it('点击最近访问项即切回该 tab，且该项前移', async () => {
+    renderSettings();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '网络' }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '记忆' }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('settings-recent-network'));
+    });
+    expect(screen.getByTestId('tab-network')).toBeInTheDocument();
+    // network 成为当前 tab，记忆顶替它进入「最近访问」。
+    expect(screen.getByTestId('settings-recent-memory')).toBeInTheDocument();
   });
 });
