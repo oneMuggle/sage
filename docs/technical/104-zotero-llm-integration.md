@@ -202,3 +202,18 @@ Electron 侧新增两个通道（`electron/commandRoutes/integrations.ts`）：
 
 **非目标（YAGNI）**：PDF 全文入向量库、PDF reference 段抽取 → 引用边、vision 图表理解、
 inotify 实时监听、Collection/Tag 图谱节点、独立导入对话框（标记走 Zotero tag）。
+
+## 2026-10-30 修复：REST 契约归一 + 项目绑定
+
+- **REST 形状归一**：`backend/api/zotero_routes.py` 在路由层把
+  `ZoteroClient` 的混合形状转换为文档化契约：`date → year`、拼接作者
+  字符串/对象数组 → `list[str]`、标签对象 → `list[str]`、Collection
+  `parentKey/itemCount → parent_key/item_count`、`pageLabel →
+  page_label`；`get_item()` 附件新增 `key` / `filename`。修复设置页
+  「文献库」在真实库上的渲染报错与分类筛选失效。
+- **项目绑定**：新增设置键 `zotero_wiki_project_path`（设置 → 文献库 →
+  Wiki 项目路径）。`POST /zotero/sync` 在未显式传 `project_path` 时回退
+  到绑定值；启动期后台增量同步在绑定存在时也会把带 Wiki 标签的文献
+  沉淀到该项目的 `wiki/zotero/`。`GET /zotero/sync-status` 返回
+  `wiki_project_path` 供 UI 显示。
+

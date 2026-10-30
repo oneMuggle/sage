@@ -1,5 +1,7 @@
 # Wiki × 文献库 P0/P1 修复实施计划
 
+> **状态：** 2026-10-30 已实施完成（Task 1-6 + 回归 + 技术文档更新）。分支 `fix/wiki-literature-p0-p1`，待 PR 合并与 main cherry-pick。
+
 > **For agentic workers:** 按任务顺序执行，每个任务独立测试、独立提交。步骤使用 `- [ ]` 跟踪。
 
 **Goal:** 修复 Wiki 图谱与 Zotero 设置页的真实缺陷，并把 Wiki 的来源管理、Deep Research、排队摄入、Zotero 项目绑定从"半成品"补到可用闭环。
@@ -62,7 +64,7 @@
 - Produces: `normalizeGraphSignal(signal: string): GraphSignal | null`（从 `WikiGraphView.tsx` 导出，`@internal` 供测试）。
 - Produces: `GraphSignalWire = 'direct_link' | 'source_overlap' | 'type_affinity'`；`GraphEdge.signal: GraphSignal | GraphSignalWire`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `WikiGraphView.test.tsx` 增加：
 
@@ -98,12 +100,12 @@ describe('buildGraph with backend wire signals', () => {
 });
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npm run test:run -- src/widgets/wiki/__tests__/WikiGraphView.test.tsx`
 Expected: FAIL（`normalizeGraphSignal` 未导出）。
 
-- [ ] **Step 3: 最小实现**
+- [x] **Step 3: 最小实现**
 
 `src/shared/types/wiki.ts`：
 
@@ -152,12 +154,12 @@ const edges: Edge[] = data.edges.map((e, i) => {
 });
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `npm run test:run -- src/widgets/wiki/__tests__/WikiGraphView.test.tsx`
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/shared/types/wiki.ts src/widgets/wiki/WikiGraphView.tsx src/widgets/wiki/__tests__/WikiGraphView.test.tsx
@@ -179,7 +181,7 @@ git commit -m "fix(wiki): 图谱信号兼容后端 snake_case 输出"
 - Produces: `_annotation_to_rest(row) -> {page_label, date_added, ...}`；`/collections` 输出 `parent_key/item_count`。
 - Consumes: `ZoteroClient.get_item()` 附件新增 `key` / `filename` 字段（其余字段不变，MCP 兼容）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `backend/tests/unit/api/test_zotero_routes.py` 增加：
 
@@ -236,12 +238,12 @@ def test_collection_to_rest_normalizes_camel_case():
     assert out["item_count"] == 2
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest backend/tests/unit/api/test_zotero_routes.py -q`
 Expected: FAIL（`_annotation_to_rest` / `_collection_to_rest` 不存在；年份/作者断言失败）。
 
-- [ ] **Step 3: 实现归一化助手并接入路由**
+- [x] **Step 3: 实现归一化助手并接入路由**
 
 在 `zotero_routes.py` Helpers 区：
 
@@ -388,7 +390,7 @@ def _attachment_filename(path: Optional[str]) -> str:
     return Path(path).name
 ```
 
-- [ ] **Step 4: 运行后端测试**
+- [x] **Step 4: 运行后端测试**
 
 Run:
 ```bash
@@ -397,11 +399,11 @@ Run:
 ```
 Expected: PASS（若 `test_client.py` 旧断言依赖 attachments 字段集合，更新为新字段并保留旧字段）。
 
-- [ ] **Step 5: 前端类型确认**
+- [x] **Step 5: 前端类型确认**
 
 `src/shared/api/zoteroClient.ts` 的 `ZoteroItemDetail.collections` 与后端 detail 现统一为 `string[]`；`ZoteroAttachment` 已匹配。无需改 UI 代码。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/api/zotero_routes.py backend/zotero/client.py backend/tests/unit/api/test_zotero_routes.py backend/tests/unit/zotero
@@ -428,7 +430,7 @@ git commit -m "fix(zotero): REST 契约归一 authors/tags/collections/annotatio
 - Produces: `wikiImportSource(sourcePath: string, projectPath: string): Promise<{relative_path: string; name: string}>`
 - Produces: `window.electronAPI.selectFile(opts?: {title?: string; filters?: {name: string; extensions: string[]}[]}): Promise<string | null>`
 
-- [ ] **Step 1: 写后端失败测试**
+- [x] **Step 1: 写后端失败测试**
 
 `backend/tests/unit/wiki/test_ingest_import.py`：
 
@@ -486,7 +488,7 @@ async def test_rejects_oversized_file(tmp_path):
         await import_source_into_raw(project, big, max_bytes=16)
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run:
 ```bash
@@ -494,7 +496,7 @@ Run:
 ```
 Expected: FAIL（`import_source_into_raw` 不存在）。
 
-- [ ] **Step 3: 实现导入助手（`backend/wiki/ingest.py`）**
+- [x] **Step 3: 实现导入助手（`backend/wiki/ingest.py`）**
 
 ```python
 async def import_source_into_raw(
@@ -528,7 +530,7 @@ async def import_source_into_raw(
 
 （`os`/`stat`/`secure_read_file_bounded` 在 ingest.py 已导入；若 `secure_read_file_bounded` 未导入则补充。）
 
-- [ ] **Step 4: 实现导入路由（`backend/api/wiki_routes.py`）**
+- [x] **Step 4: 实现导入路由（`backend/api/wiki_routes.py`）**
 
 ```python
 class SourceImportRequest(BaseModel):
@@ -554,12 +556,12 @@ async def import_source(req: SourceImportRequest) -> dict:
     return {"relative_path": relative, "name": dest.name}
 ```
 
-- [ ] **Step 5: 运行后端测试**
+- [x] **Step 5: 运行后端测试**
 
 Run: `... -m pytest backend/tests/unit/wiki/test_ingest_import.py backend/tests/unit/api/test_wiki_routes.py -q`
 Expected: PASS。
 
-- [ ] **Step 6: Electron 文件选择器**
+- [x] **Step 6: Electron 文件选择器**
 
 `electron/main.ts` 在 `sage:dialog:select-directory` 之后新增：
 
@@ -589,7 +591,7 @@ selectFile: (opts?: { title?: string; filters?: { name: string; extensions: stri
 
 `src/shared/types/electron-api.d.ts` 同步加入方法签名。
 
-- [ ] **Step 7: 前端 API + SourcesView 重写**
+- [x] **Step 7: 前端 API + SourcesView 重写**
 
 `src/shared/api-client/wiki.ts` 增加：
 
@@ -611,7 +613,7 @@ export async function wikiImportSource(
 - Header：移除无实现的"新建文件夹"按钮；"导入文件"绑定 `handleImport`。
 - `SourcesTree` 不需要改（列表为空时显示空态）。
 
-- [ ] **Step 8: 写前端测试**
+- [x] **Step 8: 写前端测试**
 
 `src/widgets/wiki/__tests__/SourcesView.test.tsx` mock `shared/api-client/wiki` 与 `window.electronAPI`：
 
@@ -638,7 +640,7 @@ it('imports a picked file then ingests the returned relative path', async () => 
 
 （`useWikiStore.setState({ project: { id:'p', name:'p', path:'/proj' } })` 在 beforeEach 设置。）
 
-- [ ] **Step 9: 运行前后端测试**
+- [x] **Step 9: 运行前后端测试**
 
 Run:
 ```bash
@@ -647,7 +649,7 @@ npm run test:run -- src/widgets/wiki/__tests__/SourcesView.test.tsx src/widgets/
 ```
 Expected: PASS。
 
-- [ ] **Step 10: 提交**
+- [x] **Step 10: 提交**
 
 ```bash
 git add backend/wiki/ingest.py backend/api/wiki_routes.py backend/tests/unit/wiki/test_ingest_import.py \
@@ -671,16 +673,16 @@ git commit -m "feat(wiki): SourcesView 接真实数据并支持外部文件导�
 - Produces: `parseTavilyKey(raw: string | null): string`（从 `searchConfig.ts`）。
 - Consumes: `useSettings()` + `resolveEndpoint()`（同 `WikiChat` 的模式）、`settingsClient.getPreference('search_config')`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `RightPanel.research.test.tsx`：mock `useSettings` 返回聊天端点、`settingsClient.getPreference` 返回 `{"tavily_key":"tvly-x"}`、`useResearchStore.setState({panelOpen:true})`、`useWikiStore.setState({project:{...}})`；断言渲染出 "Deep Research" 文本框且"开始研究"按钮可用。第二个用例 tavily_key 为空时断言按钮 disabled 且出现配置提示。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npm run test:run -- src/widgets/wiki/__tests__/RightPanel.research.test.tsx`
 Expected: FAIL（右栏仍是"待实现"）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/shared/lib/searchConfig.ts`：
 
@@ -733,7 +735,7 @@ export function parseTavilyKey(raw: string | null): string {
 
 `Knowledge.tsx` 右侧面板条件改为 `(activeView === 'browser' || useResearchStore.getState().panelOpen)`（用订阅变量 `researchPanelOpen`，新增一行 `const researchPanelOpen = useResearchStore((s) => s.panelOpen);`），保证任意视图点研究按钮都能看到面板。
 
-- [ ] **Step 4: 运行前端测试**
+- [x] **Step 4: 运行前端测试**
 
 Run:
 ```bash
@@ -742,7 +744,7 @@ npm run typecheck
 ```
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/shared/lib/searchConfig.ts src/widgets/wiki/RightPanel.tsx src/widgets/wiki/WikiResearchPanel.tsx \
@@ -769,7 +771,7 @@ git commit -m "feat(wiki): 挂载 Deep Research 面板并接入 Tavily 配置"
 - Produces: `_configured_wiki_project() -> Optional[str]`；`POST /zotero/sync` 在 `project_path` 缺省时使用绑定；`run_background_sync()` 在绑定存在时执行 wiki 导出。
 - Produces: `GET /zotero/sync-status` 新增 `wiki_project_path: str | null`。
 
-- [ ] **Step 1: 写后端失败测试**
+- [x] **Step 1: 写后端失败测试**
 
 在 `test_zotero_sync_routes.py` 增加（mock `SettingsRepository.get` 返回 `/proj`，monkeypatch `_run_wiki_export`）：
 
@@ -790,12 +792,12 @@ def test_sync_status_exposes_wiki_project(monkeypatch):
     assert zr.sync_status()["wiki_project_path"] == "/proj"
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `... -m pytest backend/tests/unit/test_zotero_sync_routes.py -q`
 Expected: FAIL。
 
-- [ ] **Step 3: 后端实现**
+- [x] **Step 3: 后端实现**
 
 `settings_repo.py` 白名单追加：
 
@@ -839,7 +841,7 @@ if binding:
 
 `sync_status` 返回体追加 `"wiki_project_path": _configured_wiki_project()`。
 
-- [ ] **Step 4: 前端客户端 + UI**
+- [x] **Step 4: 前端客户端 + UI**
 
 `zoteroClient.ts` 增加（与 `getWikiTag` 同模式）：
 
@@ -876,7 +878,7 @@ async setWikiProjectPath(path: string): Promise<void> {
 
 `ZoteroSyncPanel.test.tsx` 增加：绑定存在时 `zoteroClient.sync` 收到的 `projectPath` 为绑定值。
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 Run:
 ```bash
@@ -885,7 +887,7 @@ npm run test:run -- src/pages/settings/__tests__/ZoteroSyncPanel.test.tsx src/pa
 ```
 Expected: PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/data/settings_repo.py backend/api/zotero_sync_routes.py backend/tests/unit/test_zotero_sync_routes.py \
@@ -915,7 +917,7 @@ git commit -m "feat(zotero): 持久化 wiki 项目绑定并在后台同步中沉
 - Produces: `POST /api/v1/wiki/ingest/queue/process` body `{project_path, limit}`（limit 夹紧 1..20）。
 - Produces: `queueProcess(projectPath, limit?)` API + `processQueue` store action。
 
-- [ ] **Step 1: 写后端失败测试**
+- [x] **Step 1: 写后端失败测试**
 
 `test_queue_worker.py`（真实 `IngestQueue`，monkeypatch 依赖）：
 
@@ -947,12 +949,12 @@ async def test_process_pending_marks_completed(tmp_path, monkeypatch):
 
 再加失败用例（fake_ingest 抛错 → FAILED）与未配置 LLM 用例（返回 `error` 且任务保持 PENDING）。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `... -m pytest backend/tests/unit/wiki/test_queue_worker.py -q`
 Expected: FAIL（模块不存在）。
 
-- [ ] **Step 3: 实现 queue_worker**
+- [x] **Step 3: 实现 queue_worker**
 
 ```python
 """摄入队列的顺序处理入口（手动触发；不是后台守护进程）。"""
@@ -1024,7 +1026,7 @@ async def process_pending(project_root: Path, limit: int = 1) -> Dict[str, Any]:
     return {"processed": processed, "remaining": queue.get_status_summary()}
 ```
 
-- [ ] **Step 4: 路由 + 入队校验**
+- [x] **Step 4: 路由 + 入队校验**
 
 `queue_add` 在 authorize 后：
 
@@ -1053,12 +1055,12 @@ async def queue_process(req: QueueProcessRequest):
     return await process_pending(project_root, limit=limit)
 ```
 
-- [ ] **Step 5: 运行后端测试**
+- [x] **Step 5: 运行后端测试**
 
 Run: `... -m pytest backend/tests/unit/wiki/test_queue_worker.py backend/tests/unit/wiki/test_ingest_queue.py backend/tests/integration/test_wiki_queue_routes.py -q`
 Expected: PASS。
 
-- [ ] **Step 6: 前端 API/store/UI**
+- [x] **Step 6: 前端 API/store/UI**
 
 `wiki.ts`：
 
@@ -1111,11 +1113,11 @@ processQueue: async (projectPath, limit = 1) => {
 
 `SourcesTree` 新增可选 `onQueue?: (path: string) => void`，文件 action 区增加"加入队列"按钮；`SourcesView` 传入 `handleQueue`（调用 `useQueueStore.getState().addTask(project.path, path)`，成功 toast）。
 
-- [ ] **Step 7: 前端测试**
+- [x] **Step 7: 前端测试**
 
 新增 store 测试：mock `queueProcess` 返回 1 completed + remaining，断言调用 `loadStatus/loadTasks` 并返回结果。`SourcesView.test.tsx` 增加"加入队列"调用 `addTask` 的断言。
 
-- [ ] **Step 8: 运行测试**
+- [x] **Step 8: 运行测试**
 
 Run:
 ```bash
@@ -1124,7 +1126,7 @@ npm run typecheck
 ```
 Expected: PASS。
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```bash
 git add backend/wiki/queue_worker.py backend/api/wiki_routes.py backend/tests/unit/wiki/test_queue_worker.py \
@@ -1137,21 +1139,21 @@ git commit -m "feat(wiki): 队列处理入口与入队 UI 闭环"
 
 ## 回归与收尾
 
-- [ ] 后端全量相关测试：
+- [x] 后端全量相关测试：
   ```bash
   /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
     backend/tests/unit/wiki backend/tests/unit/api/test_zotero_routes.py \
     backend/tests/unit/zotero backend/tests/unit/test_zotero_sync_routes.py \
     backend/tests/integration/test_wiki_queue_routes.py -q
   ```
-- [ ] 前端相关测试 + 类型检查：
+- [x] 前端相关测试 + 类型检查：
   ```bash
   npm run test:run -- src/widgets/wiki src/pages/settings/__tests__/ZoteroSyncPanel.test.tsx src/entities/wiki
   npm run typecheck
   ```
-- [ ] 文档：更新 `docs/technical/25-llm-wiki-integration.md`（来源导入、Research 面板、队列处理）、`docs/technical/104-zotero-llm-integration.md`（项目绑定 + 后台沉淀）、`docs/technical/106-wiki-completeness-optimization.md`（勾选对应项）。
-- [ ] 本计划文件保留在 `docs/plans/` 直至 PR 合并；合并后按文档规范并入技术手册并删除。
-- [ ] 完成后提醒：cherry-pick 本分支到 `main`，验证 py3.10 + pydantic 2.x。
+- [x] 文档：更新 `docs/technical/25-llm-wiki-integration.md`（来源导入、Research 面板、队列处理）、`docs/technical/104-zotero-llm-integration.md`（项目绑定 + 后台沉淀）、`docs/technical/106-wiki-completeness-optimization.md`（勾选对应项）。
+- [x] 本计划文件保留在 `docs/plans/` 直至 PR 合并；合并后按文档规范并入技术手册并删除。
+- [x] 完成后提醒：cherry-pick 本分支到 `main`，验证 py3.10 + pydantic 2.x。
 
 ## 风险与依赖
 
