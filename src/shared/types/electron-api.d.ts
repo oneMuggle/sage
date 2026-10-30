@@ -498,6 +498,11 @@ export interface ElectronAPI {
     intent: 'create' | 'open';
     defaultPath?: string;
   }) => Promise<string | null>;
+  /** 打开原生单文件选择器（Wiki 来源导入）；取消返回 null。 */
+  selectFile?: (opts?: {
+    title?: string;
+    filters?: { name: string; extensions: string[] }[];
+  }) => Promise<string | null>;
   /** live-events P1 附带: 审批等待 OS 通知（点击聚焦窗口; 不支持平台降级）。 */
   notifyApproval?: (payload: { title?: string; body?: string }) => Promise<{
     ok: boolean;

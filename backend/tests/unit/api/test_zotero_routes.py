@@ -90,6 +90,70 @@ def test_item_to_detail_defaults():
     assert out["url"] is None
 
 
+def test_item_to_summary_normalizes_client_shape():
+    out = zr._item_to_summary(
+        {
+            "key": "K1",
+            "title": "T1",
+            "item_type": "journalArticle",
+            "date": "2021-05-01",
+            "authors": "Doe John, Smith Jane",
+            "tags": ["a", "b"],
+            "collections": ["Col A"],
+        }
+    )
+    assert out["year"] == 2021
+    assert out["authors"] == ["Doe John", "Smith Jane"]
+    assert out["tags"] == ["a", "b"]
+    assert out["collections"] == ["Col A"]
+
+
+def test_item_to_detail_normalizes_objects():
+    out = zr._item_to_detail(
+        {
+            "key": "K1",
+            "date": "2019",
+            "authors": [{"firstName": "John", "lastName": "Doe", "creatorType": "author"}],
+            "tags": [{"name": "ml", "type": 0}],
+            "collections": [{"key": "C1", "name": "Paper"}],
+            "attachments": [
+                {
+                    "itemID": 7,
+                    "contentType": "application/pdf",
+                    "path": "storage:a.pdf",
+                    "linkMode": 1,
+                }
+            ],
+        }
+    )
+    assert out["year"] == 2019
+    assert out["authors"] == ["John Doe"]
+    assert out["tags"] == ["ml"]
+    assert out["collections"] == ["Paper"]
+    assert out["attachments"][0]["filename"] == "a.pdf"
+    assert out["attachments"][0]["content_type"] == "application/pdf"
+
+
+def test_annotation_to_rest_renames_page_label():
+    out = zr._annotation_to_rest(
+        {
+            "key": "a1",
+            "type": "highlight",
+            "text": "x",
+            "pageLabel": "3",
+            "dateModified": "2026-01-01",
+        }
+    )
+    assert out["page_label"] == "3"
+    assert out["date_added"] == "2026-01-01"
+
+
+def test_collection_to_rest_normalizes_camel_case():
+    out = zr._collection_to_rest({"key": "C1", "name": "Col", "parentKey": None, "itemCount": 2})
+    assert out["parent_key"] is None
+    assert out["item_count"] == 2
+
+
 # ---------------------------------------------------------------------------
 # status
 # ---------------------------------------------------------------------------

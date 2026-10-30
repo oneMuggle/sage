@@ -7,9 +7,15 @@ import {
   queueClearTasks,
   queueGetStatus,
   queueListTasks,
+  queueProcess,
   queueRetryTask,
 } from '../../shared/api-client/wiki';
-import type { IngestTask, QueueStatus, QueueStatusSummary } from '../../shared/api-client/wiki';
+import type {
+  IngestTask,
+  QueueProcessResult,
+  QueueStatus,
+  QueueStatusSummary,
+} from '../../shared/api-client/wiki';
 
 interface QueueStoreState {
   tasks: IngestTask[];
@@ -26,6 +32,7 @@ interface QueueStoreState {
   retryTask: (projectPath: string, taskId: string) => Promise<boolean>;
   clearCompleted: (projectPath: string) => Promise<number>;
   clearAll: (projectPath: string) => Promise<number>;
+  processQueue: (projectPath: string, limit?: number) => Promise<QueueProcessResult | null>;
 
   // UI 控制
   setPanelOpen: (open: boolean) => void;
@@ -136,6 +143,21 @@ export const useQueueStore = create<QueueStoreState>((set, get) => ({
       const message = err instanceof Error ? err.message : '清除所有任务失败';
       set({ error: message, loading: false });
       return 0;
+    }
+  },
+
+  processQueue: async (projectPath, limit = 1) => {
+    set({ loading: true, error: null });
+    try {
+      const result = await queueProcess(projectPath, limit);
+      await get().loadStatus(projectPath);
+      await get().loadTasks(projectPath);
+      set({ loading: false });
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '处理队列失败';
+      set({ error: message, loading: false });
+      return null;
     }
   },
 

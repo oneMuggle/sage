@@ -17,6 +17,8 @@ const syncMock = vi.fn();
 const syncStatusMock = vi.fn();
 const getWikiTagMock = vi.fn();
 const setWikiTagMock = vi.fn();
+const getWikiProjectPathMock = vi.fn();
+const setWikiProjectPathMock = vi.fn();
 
 vi.mock('../../../shared/api/zoteroClient', () => ({
   DEFAULT_WIKI_TAG: 'sage:wiki',
@@ -31,6 +33,8 @@ vi.mock('../../../shared/api/zoteroClient', () => ({
     syncStatus: (...args: unknown[]) => syncStatusMock(...args),
     getWikiTag: (...args: unknown[]) => getWikiTagMock(...args),
     setWikiTag: (...args: unknown[]) => setWikiTagMock(...args),
+    getWikiProjectPath: (...args: unknown[]) => getWikiProjectPathMock(...args),
+    setWikiProjectPath: (...args: unknown[]) => setWikiProjectPathMock(...args),
   },
 }));
 
@@ -85,6 +89,8 @@ beforeEach(() => {
   });
   getWikiTagMock.mockResolvedValue('sage:wiki');
   setWikiTagMock.mockResolvedValue(undefined);
+  getWikiProjectPathMock.mockResolvedValue('');
+  setWikiProjectPathMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {

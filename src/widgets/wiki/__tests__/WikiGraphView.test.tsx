@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 
 import type { GraphData } from '../../../shared/types/wiki';
-import { buildGraph, colorByType } from '../WikiGraphView';
+import { buildGraph, colorByType, normalizeGraphSignal } from '../WikiGraphView';
 
 // ============================================================================
 // colorByType
@@ -100,5 +100,72 @@ describe('buildGraph', () => {
   it('returns empty matchedIds when query is empty/whitespace', () => {
     const { matchedIds } = buildGraph(sampleData, '   ');
     expect(matchedIds.size).toBe(0);
+  });
+});
+
+// ============================================================================
+// normalizeGraphSignal + backend wire values
+// ============================================================================
+
+describe('normalizeGraphSignal', () => {
+  it('maps backend snake_case values to canonical signals', () => {
+    expect(normalizeGraphSignal('direct_link')).toBe('DirectLink');
+    expect(normalizeGraphSignal('source_overlap')).toBe('SourceOverlap');
+    expect(normalizeGraphSignal('type_affinity')).toBe('TypeAffinity');
+  });
+
+  it('accepts canonical values and returns null for unknown', () => {
+    expect(normalizeGraphSignal('DirectLink')).toBe('DirectLink');
+    expect(normalizeGraphSignal('mystery')).toBeNull();
+  });
+});
+
+describe('buildGraph with backend wire signals', () => {
+  it('colors and animates direct_link edges like DirectLink', () => {
+    const data: GraphData = {
+      nodes: [
+        { id: 'a', label: 'A', sources: [], wikilinks: [] },
+        { id: 'b', label: 'B', sources: [], wikilinks: [] },
+      ],
+      edges: [{ source: 'a', target: 'b', signal: 'direct_link', weight: 3 }],
+    };
+
+    const { edges } = buildGraph(data);
+
+    expect(edges[0].label).toBe('DirectLink');
+    expect((edges[0].style as { stroke: string }).stroke).toBe('#0ea5e9');
+    expect(edges[0].animated).toBe(true);
+  });
+
+  it('maps source_overlap to its palette color without animation', () => {
+    const data: GraphData = {
+      nodes: [
+        { id: 'a', label: 'A', sources: [], wikilinks: [] },
+        { id: 'b', label: 'B', sources: [], wikilinks: [] },
+      ],
+      edges: [{ source: 'a', target: 'b', signal: 'source_overlap', weight: 4 }],
+    };
+
+    const { edges } = buildGraph(data);
+
+    expect(edges[0].label).toBe('SourceOverlap');
+    expect((edges[0].style as { stroke: string }).stroke).toBe('#a855f7');
+    expect(edges[0].animated).toBe(false);
+  });
+
+  it('keeps unknown signals grey instead of throwing', () => {
+    const data: GraphData = {
+      nodes: [
+        { id: 'a', label: 'A', sources: [], wikilinks: [] },
+        { id: 'b', label: 'B', sources: [], wikilinks: [] },
+      ],
+      edges: [{ source: 'a', target: 'b', signal: 'mystery' as never, weight: 1 }],
+    };
+
+    const { edges } = buildGraph(data);
+
+    expect(edges[0].label).toBe('mystery');
+    expect((edges[0].style as { stroke: string }).stroke).toBe('#94a3b8');
+    expect(edges[0].animated).toBe(false);
   });
 });

@@ -12,6 +12,8 @@ const syncStatusMock = vi.fn();
 const syncMock = vi.fn();
 const getWikiTagMock = vi.fn();
 const setWikiTagMock = vi.fn();
+const getWikiProjectPathMock = vi.fn();
+const setWikiProjectPathMock = vi.fn();
 const recentProjectsMock = vi.fn();
 const toastSuccess = vi.fn();
 const toastWarning = vi.fn();
@@ -34,6 +36,8 @@ vi.mock('../../../shared/api/zoteroClient', () => ({
     sync: (...args: unknown[]) => syncMock(...args),
     getWikiTag: (...args: unknown[]) => getWikiTagMock(...args),
     setWikiTag: (...args: unknown[]) => setWikiTagMock(...args),
+    getWikiProjectPath: (...args: unknown[]) => getWikiProjectPathMock(...args),
+    setWikiProjectPath: (...args: unknown[]) => setWikiProjectPathMock(...args),
   },
 }));
 
@@ -95,6 +99,8 @@ beforeEach(() => {
   );
   getWikiTagMock.mockResolvedValue('sage:wiki');
   setWikiTagMock.mockResolvedValue(undefined);
+  getWikiProjectPathMock.mockResolvedValue('');
+  setWikiProjectPathMock.mockResolvedValue(undefined);
   recentProjectsMock.mockResolvedValue([]);
 });
 
@@ -147,9 +153,7 @@ describe('ZoteroSyncPanel 同步动作', () => {
     renderPanel();
     fireEvent.click(screen.getByTestId('zotero-sync-now'));
 
-    await waitFor(() =>
-      expect(syncMock).toHaveBeenCalledWith({ force: false, projectPath: null }),
-    );
+    await waitFor(() => expect(syncMock).toHaveBeenCalledWith({ force: false, projectPath: null }));
     const result = await screen.findByTestId('zotero-sync-result');
     expect(result).toHaveTextContent('同步完成');
     expect(result).toHaveTextContent('已索引文献: 5');
@@ -166,9 +170,7 @@ describe('ZoteroSyncPanel 同步动作', () => {
     syncMock.mockResolvedValue(makeResult());
     renderPanel();
     fireEvent.click(screen.getByTestId('zotero-sync-rebuild'));
-    await waitFor(() =>
-      expect(syncMock).toHaveBeenCalledWith({ force: true, projectPath: null }),
-    );
+    await waitFor(() => expect(syncMock).toHaveBeenCalledWith({ force: true, projectPath: null }));
   });
 
   it('优先使用已打开的 wiki 项目', async () => {
@@ -180,6 +182,21 @@ describe('ZoteroSyncPanel 同步动作', () => {
       expect(syncMock).toHaveBeenCalledWith({ force: false, projectPath: '/active/proj' }),
     );
     expect(recentProjectsMock).not.toHaveBeenCalled();
+  });
+
+  it('优先使用持久化的项目绑定（高于当前打开项目）', async () => {
+    wikiState.project = { path: '/active/proj' };
+    getWikiProjectPathMock.mockResolvedValue('/bound/proj');
+    syncMock.mockResolvedValue(makeResult());
+    renderPanel();
+    await screen.findByTestId('zotero-sync-status-line');
+    await waitFor(() =>
+      expect(screen.getByTestId('zotero-wiki-project-input')).toHaveValue('/bound/proj'),
+    );
+    fireEvent.click(screen.getByTestId('zotero-sync-now'));
+    await waitFor(() =>
+      expect(syncMock).toHaveBeenCalledWith({ force: false, projectPath: '/bound/proj' }),
+    );
   });
 
   it('无活跃项目时回退到最近打开的项目', async () => {
@@ -277,8 +294,6 @@ describe('formatZoteroSyncTime', () => {
   it('处理空值、非法值与 ISO-8601', () => {
     expect(formatZoteroSyncTime(null)).toBeNull();
     expect(formatZoteroSyncTime('not-a-date')).toBe('not-a-date');
-    expect(formatZoteroSyncTime('2026-10-27T03:05:00Z')).toMatch(
-      /^2026-10-\d{2} \d{2}:\d{2}$/,
-    );
+    expect(formatZoteroSyncTime('2026-10-27T03:05:00Z')).toMatch(/^2026-10-\d{2} \d{2}:\d{2}$/);
   });
 });

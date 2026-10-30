@@ -15,6 +15,8 @@ interface WikiResearchPanelProps {
   searchProvider?: string;
   searchApiKey?: string;
   searchBaseUrl?: string;
+  /** 非空时禁用「开始研究」并展示原因（例如缺 Tavily Key）。 */
+  disabledReason?: string | null;
 }
 
 type ResearchStatus = 'idle' | 'searching' | 'synthesizing' | 'done' | 'error';
@@ -34,6 +36,7 @@ export function WikiResearchPanel({
   searchProvider = 'tavily',
   searchApiKey = '',
   searchBaseUrl = '',
+  disabledReason = null,
 }: WikiResearchPanelProps) {
   const [topic, setTopic] = useState('');
   const [autoIngest, setAutoIngest] = useState(true);
@@ -126,10 +129,16 @@ export function WikiResearchPanel({
             </div>
           )}
 
+          {disabledReason && (
+            <div className="p-3 rounded-md bg-amber-500/10 text-amber-600 text-sm">
+              {disabledReason}
+            </div>
+          )}
+
           <button
             className="w-full py-2 px-4 bg-accent text-white rounded-md hover:bg-accent/90 disabled:opacity-50"
             onClick={startResearch}
-            disabled={!topic.trim()}
+            disabled={!topic.trim() || Boolean(disabledReason)}
           >
             开始研究
           </button>
@@ -205,7 +214,6 @@ export function WikiResearchPanel({
 }
 
 function SourceCard({ index, source }: { index: number; source: WebResultData }) {
-
   return (
     <div className="p-3 rounded-md border border-border bg-surface">
       <div className="flex items-start gap-2">

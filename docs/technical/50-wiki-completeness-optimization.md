@@ -344,3 +344,16 @@ function mapBackendItem(raw: ReviewItemRaw): ReviewItem {
 - `backend/tests/integration/test_wiki_queue_routes.py`
 - `backend/tests/integration/test_wiki_lint_routes.py`
 - `backend/tests/integration/test_wiki_review_routes.py`
+
+## 2026-10-30 补齐：队列执行入口 / 来源管理 / 研究面板
+
+- **队列**：新增 `backend/wiki/queue_worker.py` 与
+  `POST /wiki/ingest/queue/process`，按 FIFO 真实执行 ingest；
+  `WikiQueuePanel`「处理队列」按钮与 `SourcesTree`「加入队列」入口闭环。
+- **来源管理**：`SourcesView` 去 mock，接真实列表/预览/级联删除；
+  新增外部文件导入端点与 Electron 单文件选择器。
+- **研究面板**：`RightPanel` 挂载 `WikiResearchPanel`（Tavily Key 来自
+  `search_config`；缺失时禁用并提示）。
+- **已知剩余**：后台守护进程式队列执行、PDF FTS itemID 修正、
+  `literature_aggregator` 目录收敛仍未做（P2）。
+

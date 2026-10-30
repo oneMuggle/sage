@@ -24,7 +24,6 @@ import pytest
 from backend.wiki.ingest import IngestConfig, copy_to_raw, ingest_source_stream
 from backend.wiki.llm_context import LLMContext
 
-ingest_os = copy_to_raw.__globals__["os"]
 copy_to_raw_windows = copy_to_raw.__globals__["_copy_to_raw_windows"]
 
 pytestmark = pytest.mark.integration
@@ -106,17 +105,27 @@ async def test_copy_to_raw_writes_legal_source(tmp_path):
     assert target.read_bytes() == b"legal"
 
 
-def test_copy_to_raw_windows_fails_closed_without_no_follow(tmp_path, monkeypatch):
+def test_copy_to_raw_windows_uses_reparse_safe_writer(tmp_path, monkeypatch):
     project = tmp_path / "project"
     dest = project / "raw" / "sources" / "input.md"
     project.mkdir()
 
-    monkeypatch.delattr(ingest_os, "O_NOFOLLOW", raising=False)
+    from backend.tools import win_reparse_io
 
-    with pytest.raises(OSError, match="no-follow"):
-        copy_to_raw_windows(project, "input.md", b"windows-safe", dest)
+    calls = []
 
-    assert not dest.exists()
+    def fake_write(path, data, *, overwrite):
+        assert overwrite is False
+        calls.append((path, data))
+        with open(path, "wb") as handle:
+            handle.write(data)
+
+    monkeypatch.setattr(win_reparse_io, "write_file_reparse_safe", fake_write)
+
+    copy_to_raw_windows(project, "input.md", b"windows-safe", dest)
+
+    assert dest.read_bytes() == b"windows-safe"
+    assert calls == [(str(dest), b"windows-safe")]
 
 
 @pytest.mark.asyncio()

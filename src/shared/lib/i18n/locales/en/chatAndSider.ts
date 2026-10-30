@@ -626,6 +626,12 @@ export const enChatAndSider = {
   'settings.zotero.wiki_tag.hint': 'Only Zotero items carrying this tag are sunk into wiki pages.',
   'settings.zotero.wiki_tag.save': 'Save tag',
   'settings.zotero.wiki_tag.saved': 'Tag saved',
+  'settings.zotero.wiki_project.label': 'Wiki project path (optional)',
+  'settings.zotero.wiki_project.placeholder': 'Empty = use current/recent project',
+  'settings.zotero.wiki_project.save': 'Save binding',
+  'settings.zotero.wiki_project.saved': 'Project binding saved',
+  'settings.zotero.wiki_project.hint':
+    "Tagged items are exported into the bound project's wiki/zotero/ directory.",
 };
 
 export function formatEnChatAndSiderSummary(): string {
