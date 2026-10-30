@@ -99,6 +99,11 @@ interface RightPanelState {
   maximized: boolean;
   /** 当前在产物详情视图的 artifact id（RightPanel 按列表解析出对象） */
   selectedArtifactId: string | null;
+  /**
+   * 消息内文件引用 → 右栏统一文件预览。与 selectedArtifactId 互斥：
+   * 两者同时最多一个非空，RightPanel 按它渲染 FilePreviewPanel。
+   */
+  selectedFilePath: string | null;
   /** right-panel R5: 待在变更 Tab 打开的文件路径（ChangesSection 消费后清除） */
   selectedChangePath: string | null;
   /**
@@ -121,6 +126,12 @@ interface RightPanelState {
   /** 直达产物预览：开面板 + 切产物 Tab + 选中（内联卡片入口） */
   selectArtifact: (artifactId: string) => void;
   clearSelectedArtifact: () => void;
+  /**
+   * 消息内文件引用直达预览：开面板并记录路径，RightPanel 渲染
+   * FilePreviewPanel（与产物选中互斥）。
+   */
+  openFilePreview: (filePath: string) => void;
+  clearFilePreview: () => void;
   /** right-panel R5: 直达变更 diff：开面板 + 切变更 Tab + 选中文件（内联卡片入口） */
   selectChange: (path: string) => void;
   clearSelectedChange: () => void;
@@ -140,6 +151,7 @@ export const useRightPanelStore = create<RightPanelState>((set, get) => ({
   tab: loadInitialTab(),
   maximized: false,
   selectedArtifactId: null,
+  selectedFilePath: null,
   selectedChangePath: null,
   previewOnSelect: null,
   autoPreviewMode: false,
@@ -168,9 +180,24 @@ export const useRightPanelStore = create<RightPanelState>((set, get) => ({
   setMaximized: (maximized) => set({ maximized }),
 
   selectArtifact: (artifactId) =>
-    set({ open: true, tab: 'artifacts', selectedArtifactId: artifactId }),
+    set({
+      open: true,
+      tab: 'artifacts',
+      selectedArtifactId: artifactId,
+      // 与文件预览互斥：产物详情与消息内文件详情共用右栏详情态
+      selectedFilePath: null,
+    }),
 
   clearSelectedArtifact: () => set({ selectedArtifactId: null }),
+
+  openFilePreview: (filePath) =>
+    set({
+      open: true,
+      selectedFilePath: filePath,
+      selectedArtifactId: null,
+    }),
+
+  clearFilePreview: () => set({ selectedFilePath: null }),
 
   selectChange: (path) => set({ open: true, tab: 'changes', selectedChangePath: path }),
 

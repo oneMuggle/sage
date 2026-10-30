@@ -23,6 +23,7 @@ import { MessageActionBar } from './MessageActionBar';
 import { MessageClientMeta } from './MessageClientMeta';
 import {
   fileChangePaths,
+  FileRefLinksProvider,
   MarkdownChunk,
   renderTextWithLinks,
   ThinkingPanel,
@@ -498,22 +499,28 @@ function MessageComponent({
                 isThinkingPlaceholder ? (
                   <ThinkingShimmer startTime={streamingStartTime} />
                 ) : (
-                  <div className="max-w-none max-w-3xl mx-auto w-full">
-                    {/* P2: 阅读宽度约束 48rem 居中（对标主流 AI 应用），宽屏下
-                    长文不再一行拉满；表格/代码块仍在容器内滚动 */}
-                    {chunks.stable.map((md, i) => (
-                      <MarkdownChunk key={i} md={md} />
-                    ))}
-                    <MarkdownChunk md={chunks.live} plainFences={unclosedFence || undefined} />
-                    {/* 流式生成光标 — 跟随内容尾部闪烁（reduced-motion 全局关闭） */}
-                    {isStreaming && (
-                      <span
-                        className="stream-cursor"
-                        aria-hidden="true"
-                        data-testid="stream-cursor"
-                      />
-                    )}
-                  </div>
+                  <FileRefLinksProvider
+                    sessionId={message.session_id ?? null}
+                    text={displayContent}
+                    enabled={!isStreaming}
+                  >
+                    <div className="max-w-none max-w-3xl mx-auto w-full">
+                      {/* P2: 阅读宽度约束 48rem 居中（对标主流 AI 应用），宽屏下
+                        长文不再一行拉满；表格/代码块仍在容器内滚动 */}
+                      {chunks.stable.map((md, i) => (
+                        <MarkdownChunk key={i} md={md} />
+                      ))}
+                      <MarkdownChunk md={chunks.live} plainFences={unclosedFence || undefined} />
+                      {/* 流式生成光标 — 跟随内容尾部闪烁（reduced-motion 全局关闭） */}
+                      {isStreaming && (
+                        <span
+                          className="stream-cursor"
+                          aria-hidden="true"
+                          data-testid="stream-cursor"
+                        />
+                      )}
+                    </div>
+                  </FileRefLinksProvider>
                 )
               ) : (
                 <p className="whitespace-pre-wrap">{renderTextWithLinks(message.content)}</p>

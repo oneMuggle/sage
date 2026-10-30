@@ -967,6 +967,16 @@ _TODO_GUIDANCE_PROMPT = (
     "简单单步任务不必建清单。"
 )
 
+#: feat/file-reference-preview: 文件引用约定 —— 模型按固定格式输出工作区
+#: 文件链接，前端据此渲染为可点击项（点击在右栏预览）。文本兜底识别只能
+#: 当作补充，约定格式的置信度最高。
+_FILE_REFERENCE_LINK_PROMPT = (
+    "\n\n文件引用约定：提到当前工作区内的文件时，使用 Markdown 链接格式 "
+    "`[文件名](相对路径)`（相对路径相对于工作区根目录）；生成或修改文件后，"
+    "主动给出该文件的链接，用户点击即可在右侧面板预览。不要使用绝对路径、"
+    "`file://` 或以 `@` 开头的链接。"
+)
+
 
 #: 计划前置 Round (2026-09-19): 全局需求澄清指引 —— 此前"先澄清"只存在于
 #: 个别角色提示词（ppt-maker/writer），通用基座无任何澄清引导，复杂任务
@@ -1055,6 +1065,7 @@ def build_system_base() -> str:
         base
         + _OFFICE_CREATE_CAPABILITY_PROMPT
         + _TODO_GUIDANCE_PROMPT
+        + _FILE_REFERENCE_LINK_PROMPT
         + _build_clarify_guidance()
         + _CODE_EXECUTION_CAPABILITY_PROMPT
         + _CONFIG_CAPABILITY_PROMPT

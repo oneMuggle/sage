@@ -1,7 +1,7 @@
 {
   "version": 1,
   "files": {
-    "backend/agents/profiles.py": 1067,
+    "backend/agents/profiles.py": 1078,
     "backend/api/legacy_routes.py": 2682,
     "backend/api/llm_proxy_routes.py": 1216,
     "backend/api/orchestration_router.py": 807,
@@ -51,7 +51,7 @@
     "backend/wiki/ingest.py": 828,
     "backend/zotero/client.py": 1183,
     "electron/__tests__/commands.test.ts": 1210,
-    "electron/main.ts": 3049,
+    "electron/main.ts": 3062,
     "electron/tests/updateIntegration.test.ts": 869,
     "electron/tests/updateManager.test.ts": 1813,
     "electron/updateManager.ts": 1498,
@@ -64,7 +64,7 @@
     "src/shared/api/projectApi.ts": 1342,
     "src/shared/api/projectApiTypes.ts": 1498,
     "src/widgets/chat/ChatInput.tsx": 816,
-    "src/widgets/chat/Message.tsx": 819,
+    "src/widgets/chat/Message.tsx": 826,
     "src/features/send-message/__tests__/useChat.streamingAndGates.test.ts": 957,
     "src/features/send-message/chatStreamStore.ts": 853,
     "src/features/send-message/useChat.ts": 1037,

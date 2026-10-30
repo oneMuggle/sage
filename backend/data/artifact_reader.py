@@ -257,6 +257,113 @@ def read_office(artifact_id: str, kind: str, max_bytes: int = 0) -> dict:
     return result
 
 
+# ==================== 工作区路径版读取（消息内文件预览） ====================
+# artifact 版函数按 artifact_id 查库定位文件；消息内文件引用只有路径，没有
+# artifact 记录（read_file 不登记产物、普通源文件也不登记），故提供 path 版
+# 读取。口径与 `GET /workspace/changes/file` 对齐，避免绕开工作区边界。
+
+#: 工作区预览文本读取上限（字节）——超过直接拒绝，不做部分读取
+WORKSPACE_PREVIEW_READ_CAP = 2 * 1024 * 1024
+#: 工作区预览文本返回字符上限——超出截断并置 truncated
+WORKSPACE_PREVIEW_CONTENT_CAP = 512 * 1024
+
+
+def read_text_path(
+    path: Path, kind: str, max_read_bytes: int = 0, max_chars: int = 0
+) -> dict:
+    """按路径读取文本预览。
+
+    失败返回 ``{"ok": False, "code": ..., "error": ...}``，由路由层映射
+    HTTP 状态（binary_file → 415、file_too_large → 413、file_not_found → 404）。
+    """
+    effective_read_cap = (
+        max_read_bytes if max_read_bytes > 0 else WORKSPACE_PREVIEW_READ_CAP
+    )
+    effective_max_chars = (
+        max_chars if max_chars > 0 else WORKSPACE_PREVIEW_CONTENT_CAP
+    )
+    if not path.is_file():
+        return {"ok": False, "code": "file_not_found", "error": "文件不存在"}
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        return {"ok": False, "code": "file_read_error", "error": f"读取失败: {exc}"}
+    if len(data) > effective_read_cap:
+        return {
+            "ok": False,
+            "code": "file_too_large",
+            "error": f"文件 {len(data)} 字节超过预览上限 {effective_read_cap} 字节",
+        }
+    if b"\x00" in data[:8192]:
+        return {"ok": False, "code": "binary_file", "error": "二进制文件不支持预览"}
+    text = data.decode("utf-8", errors="replace")
+    truncated = len(text) > effective_max_chars
+    if truncated:
+        text = text[:effective_max_chars]
+    return {"ok": True, "kind": kind, "content": text, "truncated": truncated}
+
+
+def read_image_path(path: Path, max_bytes: int = 0) -> dict:
+    """按路径读取图片,返回 base64 data URL。"""
+    effective_max = max_bytes if max_bytes > 0 else MAX_IMAGE_BYTES
+    if not path.is_file():
+        return {"ok": False, "error": "file not found"}
+    if path.stat().st_size > effective_max:
+        return {"ok": False, "error": "file too large"}
+    mime = _IMAGE_MIME.get(path.suffix.lower(), "application/octet-stream")
+    data = base64.b64encode(path.read_bytes()).decode("ascii")
+    return {"ok": True, "kind": "image", "data_url": f"data:{mime};base64,{data}"}
+
+
+def read_pdf_path(path: Path, max_bytes: int = 0) -> dict:
+    """按路径读取 PDF,返回 base64 data URL（Chromium 内置 viewer 渲染）。"""
+    effective_max = max_bytes if max_bytes > 0 else MAX_PDF_BYTES
+    if not path.is_file():
+        return {"ok": False, "error": "file not found"}
+    if path.stat().st_size > effective_max:
+        return {"ok": False, "error": "PDF 超过 20MB 预览上限,请在文件管理器中查看"}
+    data = base64.b64encode(path.read_bytes()).decode("ascii")
+    return {"ok": True, "kind": "pdf", "data_url": f"data:application/pdf;base64,{data}"}
+
+
+def read_office_path(path: Path, kind: str, max_bytes: int = 0) -> dict:
+    """按路径读取 docx/xlsx/pptx 轻量 HTML 预览（兼返回 structured）。"""
+    effective_max = max_bytes if max_bytes > 0 else MAX_OFFICE_BYTES
+    if not path.is_file():
+        return {"ok": False, "error": "file not found"}
+    if path.stat().st_size > effective_max:
+        return {"ok": False, "error": "文件超过 20MB 预览上限,请在文件管理器中查看"}
+
+    try:
+        if kind == "docx":
+            html = _docx_to_html(path)
+            structured = _structured_or_none("docx", path)
+        elif kind == "xlsx":
+            html = _xlsx_to_html(path)
+            structured = _structured_or_none("xlsx", path)
+        elif kind == "pptx":
+            html = _pptx_to_html(path)
+            structured = _structured_or_none("pptx", path)
+        else:
+            return {"ok": False, "error": f"unsupported office kind: {kind}"}
+    except Exception as exc:  # noqa: BLE001 — 解析失败降级为不可预览
+        return {"ok": False, "error": f"文件解析失败: {exc}"}
+
+    result = {"ok": True, "kind": kind, "html": html}
+    if kind == "docx":
+        # 2026-10-29（基线同步）: docx 原文 data URL —— 前端 docx-preview 直接
+        # 解析二进制呈现 Word 版式；工作区预览与产物预览共用同一行为。
+        try:
+            encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+            result["data_url"] = f"data:{_DOCX_MIME};base64,{encoded}"
+        except OSError:
+            # 读盘失败不阻断结构化/HTML 降级路径
+            pass
+    if structured is not None:
+        result["structured"] = structured
+    return result
+
+
 def _structured_or_none(kind: str, path: Path):
     """read_* 结果的 JSON 序列化；失败返回 None（html 仍可渲染,不降级整体）。"""
     try:

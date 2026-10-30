@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 # win7 LTS py38 环境钉 pydantic 1.10.13，ConfigDict 是 v2 专有 → 走兼容垫片（v2 下为 no-op）。
+from backend.api.workspace_preview_routes import router as workspace_preview_router
 from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import get_database
 from backend.office.errors import OfficePathError
@@ -33,6 +34,8 @@ from backend.office.workspace_search import WorkspaceSearchResult, search_worksp
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions/{session_id}/workspace", tags=["workspace"])
+# feat/file-reference-preview: 预览/解析子路由独立成模块（避免主文件超 800 行架构上限）
+router.include_router(workspace_preview_router)
 
 
 class WorkspaceBindingModel(BaseModel):

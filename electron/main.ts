@@ -72,7 +72,7 @@ logger.info('main: process started', {
 
 import { spawn, ChildProcess } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { basename, join, dirname, sep } from 'node:path';
+import { basename, join, dirname, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   constants as fsConstants,
@@ -83,6 +83,7 @@ import {
   closeSync,
   writeSync,
   readFileSync,
+  realpathSync,
   mkdirSync,
   renameSync,
   unlinkSync,
@@ -100,6 +101,7 @@ import {
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
 import { registerOfficeIpc } from './officeIpc';
+import { isPathWithinWorkspace } from './officePaths';
 import { registerRemoteMcpIpc, type RemoteMcpController } from './remoteMcpIpc';
 import { RemoteTunnel } from './remoteTunnel';
 import { registerMediaIpc } from './mediaIpc';
@@ -2185,7 +2187,7 @@ async function registerIpcHandlers(): Promise<void> {
     }
     try {
       const res = await fetch(
-        `${BACKEND_URL}/api/v1/workspace?session_id=${encodeURIComponent(opts.sessionId)}`,
+        `${BACKEND_URL}/api/v1/sessions/${encodeURIComponent(opts.sessionId)}/workspace`,
         {
           headers: {
             ...(backendAuthToken ? { Authorization: `Bearer ${backendAuthToken}` } : {}),
@@ -2201,7 +2203,18 @@ async function registerIpcHandlers(): Promise<void> {
       if (!data.binding?.workspace_path) {
         return { error: '此会话未绑定工作区' };
       }
-      const absolutePath = join(data.binding.workspace_path, opts.path);
+      // 相对路径按工作区根解析；绝对路径直接使用。realpath 展开 symlink 后
+      // 再做包含性校验，防止 `../` 与工作区内软链逃逸（与预览端点同口径）。
+      const workspaceRoot = realpathSync(data.binding.workspace_path);
+      let absolutePath: string;
+      try {
+        absolutePath = realpathSync(resolve(workspaceRoot, opts.path));
+      } catch {
+        return { error: '文件不存在或不可访问' };
+      }
+      if (!isPathWithinWorkspace(workspaceRoot, absolutePath)) {
+        return { error: '路径不在工作区内，已拒绝打开' };
+      }
       const openResult = await shell.openPath(absolutePath);
       if (openResult) {
         return { error: `打开失败：${openResult}` };

@@ -1,10 +1,24 @@
 import { Brain, Check, ChevronDown, Copy, Eye, EyeOff } from 'lucide-react';
-import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  memo,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 
+import {
+  remarkFileRefLinks,
+  useConfirmedFilePaths,
+} from '../../features/chat/useConfirmedFilePaths';
+import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
 import type { ToolCall } from '../../shared/lib/store';
@@ -32,6 +46,20 @@ const MD_REMARK_PLUGINS = [remarkGfm, remarkMath];
 const MD_REHYPE_PLUGINS = [rehypeKatex];
 
 const URL_SPLIT_RE = /(https?:\/\/[^\s<>()]+)/;
+
+/** 本地/工作区文件链接判定（feat/file-reference-preview）——非外链且有路径特征 */
+const FILE_EXT_RE =
+  /\.(md|markdown|mdx|txt|log|py|js|ts|tsx|jsx|rs|go|java|c|cpp|h|hpp|cs|rb|php|swift|kt|sh|bash|zsh|ps1|sql|html?|css|scss|yaml|yml|toml|ini|xml|png|jpe?g|gif|webp|svg|bmp|csv|tsv|json|pdf|docx|xlsx|pptx)$/i;
+const NON_FILE_SCHEME_RE = /^(https?:|mailto:|tel:|#|data:|blob:|sage-file:)/i;
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function isLocalFilePathHref(href: string | undefined | null): href is string {
+  const value = (href ?? '').trim();
+  if (!value) return false;
+  if (NON_FILE_SCHEME_RE.test(value)) return false;
+  if (value.startsWith('//')) return false;
+  return /[\\/]/.test(value) || FILE_EXT_RE.test(value);
+}
 
 /** P3: 用户消息纯文本中的 URL 自动链接化（assistant 走 markdown 已自带链接） */
 // eslint-disable-next-line react-refresh/only-export-components
@@ -198,6 +226,20 @@ const markdownComponents = {
     return <input type={type} checked={checked} disabled={disabled} />;
   },
   a({ href, children }: { href?: string; children?: ReactNode }) {
+    // 消息内文件引用：非外链且形如文件路径 → 打开右栏预览（不跳出对话）
+    if (isLocalFilePathHref(href)) {
+      return (
+        <button
+          type="button"
+          className="text-primary hover:underline inline cursor-pointer"
+          title={`${href}（点击预览）`}
+          data-testid="markdown-file-link"
+          onClick={() => useRightPanelStore.getState().openFilePreview(href)}
+        >
+          {children}
+        </button>
+      );
+    }
     return (
       <a
         href={href}
@@ -234,6 +276,31 @@ const liveMarkdownComponents: typeof markdownComponents = {
   code: PlainCodeBlock,
 };
 
+/** 文本兜底文件引用（feat/file-reference-preview M5）：Provider 在消息层
+ *  批量确认正文中的路径是否存在，MarkdownChunk 据此注入 remark 插件。 */
+const ConfirmedFilePathsContext = createContext<ReadonlySet<string>>(new Set<string>());
+
+interface FileRefLinksProviderProps {
+  sessionId: string | null | undefined;
+  text: string;
+  enabled: boolean;
+  children: ReactNode;
+}
+
+export function FileRefLinksProvider({
+  sessionId,
+  text,
+  enabled,
+  children,
+}: FileRefLinksProviderProps) {
+  const confirmed = useConfirmedFilePaths(text, sessionId, enabled);
+  return (
+    <ConfirmedFilePathsContext.Provider value={confirmed}>
+      {children}
+    </ConfirmedFilePathsContext.Provider>
+  );
+}
+
 /**
  * memo 化的 markdown 块渲染器 — P1 流式分块的关键。
  * 比较器按字符串值相等跳过重解析（slice 出的新字符串实例也能命中），
@@ -244,9 +311,21 @@ export const MarkdownChunk = memo(
     // Components 断言: 映射对象是模块级单例，handler 参数用窄化类型
     // （react-markdown 的 ExtraProps 交叉类型过宽，直接标注反而失配）
     const components = (plainFences ? liveMarkdownComponents : markdownComponents) as Components;
+    // 文本兜底文件引用：仅当本消息有「已确认存在」的路径时追加 remark 插件
+    const confirmedPaths = useContext(ConfirmedFilePathsContext);
+    const remarkPlugins = useMemo(
+      () =>
+        confirmedPaths.size > 0
+          ? ([
+              ...MD_REMARK_PLUGINS,
+              remarkFileRefLinks(confirmedPaths),
+            ] as unknown as typeof MD_REMARK_PLUGINS)
+          : MD_REMARK_PLUGINS,
+      [confirmedPaths],
+    );
     return (
       <ReactMarkdown
-        remarkPlugins={MD_REMARK_PLUGINS}
+        remarkPlugins={remarkPlugins}
         rehypePlugins={MD_REHYPE_PLUGINS}
         components={components}
       >
