@@ -17,6 +17,7 @@ message instead of a generic 500.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -172,7 +173,7 @@ def get_annotations(item_key: str) -> List[Dict[str, Any]]:
         annotations = client.get_annotations(item_key)
     except ZoteroItemNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return annotations
+    return [_annotation_to_rest(a) for a in annotations]
 
 
 @router.get("/collections")
@@ -181,7 +182,7 @@ def list_collections(
 ) -> List[Dict[str, Any]]:
     """List collections (top-level or children of a parent)."""
     client = _get_client()
-    return client.list_collections(parent_key=parent_key)
+    return [_collection_to_rest(r) for r in client.list_collections(parent_key=parent_key)]
 
 
 @router.post("/path")
@@ -213,34 +214,138 @@ def set_db_path(path: str = Query(..., description="Path to zotero.sqlite")) -> 
 
 def _item_to_summary(row: Dict[str, Any]) -> Dict[str, Any]:
     """Map a ZoteroClient.search() result to a summary dict."""
+    raw_year = row.get("year")
     return {
         "key": row.get("key", ""),
         "title": row.get("title", ""),
         "item_type": row.get("item_type", ""),
-        "year": row.get("year"),
-        "authors": row.get("authors", []),
+        "year": raw_year if isinstance(raw_year, int) else _year_from_date(row.get("date")),
+        "authors": _author_names(row.get("authors")),
         "abstract": row.get("abstract"),
-        "collections": row.get("collections", []),
-        "tags": row.get("tags", []),
+        "collections": _collection_names(row.get("collections")),
+        "tags": _tag_names(row.get("tags")),
         "date_added": row.get("date_added"),
     }
 
 
 def _item_to_detail(row: Dict[str, Any]) -> Dict[str, Any]:
     """Map a ZoteroClient.get_item() result to a detail dict."""
+    raw_year = row.get("year")
     return {
         "key": row.get("key", ""),
         "title": row.get("title", ""),
         "item_type": row.get("item_type", ""),
-        "year": row.get("year"),
-        "authors": row.get("authors", []),
+        "year": raw_year if isinstance(raw_year, int) else _year_from_date(row.get("date")),
+        "authors": _author_names(row.get("authors")),
         "abstract": row.get("abstract"),
-        "collections": row.get("collections", []),
-        "tags": row.get("tags", []),
+        "collections": _collection_names(row.get("collections")),
+        "tags": _tag_names(row.get("tags")),
         "date_added": row.get("date_added"),
         "date_modified": row.get("date_modified"),
         "extra": row.get("extra"),
         "doi": row.get("doi"),
         "url": row.get("url"),
-        "attachments": row.get("attachments", []),
+        "attachments": [_attachment_to_rest(a) for a in row.get("attachments") or []],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Client shape → REST shape normalization
+#
+# ``ZoteroClient`` predates this REST layer and returns a mix of shapes:
+# joined author strings, ``[{name,type}]`` tags, ``parentKey/itemCount``
+# collections, ``pageLabel`` annotations. The REST contract documented at the
+# top of this file is snake_case with scalar lists; normalize here so the
+# MCP-facing client API stays untouched.
+# ---------------------------------------------------------------------------
+
+
+def _year_from_date(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    match = re.match(r"^\s*(\d{4})", str(value))
+    return int(match.group(1)) if match else None
+
+
+def _author_name(entry: Any) -> str:
+    if isinstance(entry, str):
+        return entry.strip()
+    if isinstance(entry, dict):
+        parts = [entry.get("firstName"), entry.get("lastName")]
+        return " ".join(str(p).strip() for p in parts if p and str(p).strip())
+    return ""
+
+
+def _author_names(value: Any) -> List[str]:
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    if isinstance(value, list):
+        return [name for name in (_author_name(item) for item in value) if name]
+    return []
+
+
+def _tag_names(value: Any) -> List[str]:
+    if not isinstance(value, list):
+        return []
+    names: List[str] = []
+    for item in value:
+        if isinstance(item, str):
+            name = item
+        elif isinstance(item, dict):
+            name = item.get("name") or ""
+        else:
+            name = ""
+        if str(name).strip():
+            names.append(str(name).strip())
+    return names
+
+
+def _collection_names(value: Any) -> List[str]:
+    if not isinstance(value, list):
+        return []
+    names: List[str] = []
+    for item in value:
+        if isinstance(item, str):
+            name = item
+        elif isinstance(item, dict):
+            name = item.get("name") or item.get("key") or ""
+        else:
+            name = ""
+        if str(name).strip():
+            names.append(str(name).strip())
+    return names
+
+
+def _attachment_to_rest(entry: Dict[str, Any]) -> Dict[str, Any]:
+    path = entry.get("path") or ""
+    filename = entry.get("filename") or ""
+    if not filename and path:
+        filename = path[len("storage:") :] if path.startswith("storage:") else Path(path).name
+    return {
+        "key": entry.get("key") or "",
+        "filename": filename,
+        "path": path or None,
+        "content_type": entry.get("content_type") or entry.get("contentType") or None,
+    }
+
+
+def _annotation_to_rest(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "key": row.get("key", ""),
+        "type": row.get("type", ""),
+        "text": row.get("text") or None,
+        "comment": row.get("comment") or None,
+        "color": row.get("color") or None,
+        "page_label": row.get("page_label") or row.get("pageLabel") or None,
+        "date_added": row.get("date_added") or row.get("dateModified") or None,
+    }
+
+
+def _collection_to_rest(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "key": row.get("key", ""),
+        "name": row.get("name", ""),
+        "parent_key": row.get("parent_key", row.get("parentKey")),
+        "item_count": row.get("item_count", row.get("itemCount", 0)),
+        "version": row.get("version", 0),
     }
