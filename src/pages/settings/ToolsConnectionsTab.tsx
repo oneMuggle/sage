@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 import { PreferenceSaveStatus } from '../../features/manage-settings/PreferenceSaveStatus';
 import { useConfirmedPreference } from '../../features/manage-settings/useConfirmedPreference';
 import { permissionApi } from '../../shared/api/permissionApi';
-import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { useI18n } from '../../shared/lib/i18n';
 import { GatewaySection } from '../../widgets/settings/GatewaySection';
 import { HooksCard } from '../../widgets/settings/HooksCard';
 
