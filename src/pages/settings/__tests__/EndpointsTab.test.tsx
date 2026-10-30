@@ -22,11 +22,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { bindDiscoveredModels } from '../../../entities/model-catalog/api';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../entities/setting/types';
-import { I18nProvider } from '../../../shared/lib/i18n';
 import {
   testEndpointConnection,
   type ConnectionTestResult,
 } from '../../../features/manage-endpoints/api';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import {
   EndpointsTab,
   formatEndpointsTabAuditJson,

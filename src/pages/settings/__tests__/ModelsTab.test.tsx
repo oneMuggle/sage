@@ -150,7 +150,6 @@ describe('ModelsTab routing mode (Task 11)', () => {
     // 自动模式: 隐藏 chat, 剩 6 个。无其它 <select> 干扰, 直接全量计数。
     const capabilitySelects = (container: HTMLElement) =>
       container.querySelectorAll('select');
-
     const manual = render(<ModelsTab settings={settings} updateSettings={vi.fn()} />);
     expect(capabilitySelects(manual.container)).toHaveLength(7);
     manual.unmount();
