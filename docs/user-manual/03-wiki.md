@@ -18,10 +18,12 @@ Wiki 是一个**由 LLM 增量维护的个人知识库**——导入源文档(�
 进入"知识库"页 → 项目选择器(顶部) → "创建新项目" 或 "打开现有项目"。
 
 创建新项目时需要填写:
+
 - **项目名**: 例如 `my-research`
 - **基础路径**: wiki 项目根目录(例如 `/Users/me/wikis`)
 
 创建后会自动生成目录结构:
+
 ```
 my-research/
 ├── purpose.md          # wiki 灵魂(目标/范围)
@@ -41,6 +43,7 @@ my-research/
 Wiki 工具栏 → "导入"按钮(Phase 7+ 上线后) → 选择 .md / .txt 文件。
 
 导入过程(共 5 阶段,UI 实时显示进度):
+
 1. **复制源文件** (0-10%): 复制到 `raw/sources/`
 2. **LLM 分析** (20-40%): 提取实体、概念、标签、相关主题
 3. **LLM 写作** (45-70%): 生成完整 wiki 页面 + frontmatter
@@ -52,10 +55,12 @@ Wiki 工具栏 → "导入"按钮(Phase 7+ 上线后) → 选择 .md / .txt 文�
 ## 浏览与编辑
 
 工具栏 → "浏览" 视图:
-- 左侧: 文件树(右键新建/删除/重命名)
+
+- 左侧: 文件树(右键新建文件 / 重命名 / 删除 / 复制路径)
 - 右侧: Markdown 编辑器 + 实时预览
 
 页面 frontmatter 规范:
+
 ```yaml
 ---
 title: <页面标题>
@@ -75,6 +80,7 @@ updated: 2026-06-12
 工具栏 → "搜索" 视图 → 输入关键词。
 
 搜索是 CJK 友好的 BM25-like 评分:
+
 - 标题命中权重 ×10
 - 正文出现次数 ×0.5
 - 多 token 查询首个 token 权重 ×1.5
@@ -86,6 +92,7 @@ updated: 2026-06-12
 工具栏 → "对话" 视图 → 输入问题。
 
 底层是 **hybrid 检索**:
+
 1. **Token 搜索** (CJK 友好)
 2. **向量搜索** (cosine similarity,需要 embedding 模型)
 3. **RRF 融合** (k=60) → 取 top 5 页面
@@ -157,10 +164,12 @@ MVP 复用 chat 端点作 embedding 端点(需要端点支持 `/v1/embeddings`)�
 ## LLM 配置
 
 Wiki 用 sage 已配置的端点。Settings → 模型选择:
+
 - Chat 模型:用于 Step 1 分析 + Step 2 写作 + RAG 综合
 - Embedding 模型:用于向量化(默认 `text-embedding-3-small`,1536 维)
 
 支持的 4 个 provider:
+
 - **OpenAI** (默认,任意 OpenAI 兼容端点)
 - **Anthropic** (Claude 系列)
 - **Ollama** (本地 `http://localhost:11434/v1`)

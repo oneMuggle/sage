@@ -79,6 +79,15 @@ export function useI18n(): I18nContextValue {
   return ctx;
 }
 
+/**
+ * 可选 i18n：无 Provider 时返回 null（如共享 UI 基座被单测直接渲染）。
+ * 仅用于"有 Provider 就本地化、没有就回退默认文案"的场景。
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useOptionalI18n(): I18nContextValue | null {
+  return useContext(I18nContext);
+}
+
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatI18nProviderSummary(locale: Locale = 'zh'): string {
   const safeLocale: Locale = locale === 'en' ? 'en' : 'zh';
@@ -104,4 +113,3 @@ export function auditI18nProviderGovernance(): string {
     audited: true,
   });
 }
-

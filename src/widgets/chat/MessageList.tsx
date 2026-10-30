@@ -291,6 +291,7 @@ export function MessageList({
                     onRegenerate={onRegenerate}
                     onDelete={onDelete}
                     onQuote={onQuote}
+                    onQuoteSelection={onQuoteSelection}
                     onSaveToMemory={onSaveToMemory}
                     onOpenMemory={onOpenMemory}
                     artifactsByToolCall={artifactsByToolCall}
@@ -327,6 +328,7 @@ export function MessageList({
                 onRegenerate={onRegenerate}
                 onDelete={onDelete}
                 onQuote={onQuote}
+                onQuoteSelection={onQuoteSelection}
                 onSaveToMemory={onSaveToMemory}
                 onOpenMemory={onOpenMemory}
                 onBlockedAction={onBlockedAction}

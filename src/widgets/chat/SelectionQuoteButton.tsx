@@ -16,6 +16,10 @@ import {
   getQuotableSelection,
 } from '../../features/chat/selectionQuote';
 import { useI18n } from '../../shared/lib/i18n';
+import {
+  CONTEXT_MENU_OPEN_EVENT,
+  isContextMenuOpen,
+} from '../../shared/ui/ContextMenu/contextMenuEvents';
 
 interface SelectionQuoteButtonProps {
   /** 可引用区域所在的根节点（MessageList） */
@@ -65,6 +69,11 @@ export function SelectionQuoteButton({ rootRef, onQuote }: SelectionQuoteButtonP
     const evaluate = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
+        // 右键菜单打开时让位：菜单自带「引用选区」项，避免双浮层叠加
+        if (isContextMenuOpen()) {
+          setState(null);
+          return;
+        }
         const info = getQuotableSelection(window.getSelection(), rootRef.current);
         if (!info) {
           setState(null);
@@ -74,6 +83,7 @@ export function SelectionQuoteButton({ rootRef, onQuote }: SelectionQuoteButtonP
       });
     };
     const hide = () => setState(null);
+    const onContextMenuOpen = () => setState(null);
     const onSelectionChange = () => {
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed) hide();
@@ -85,6 +95,7 @@ export function SelectionQuoteButton({ rootRef, onQuote }: SelectionQuoteButtonP
     document.addEventListener('keyup', evaluate);
     document.addEventListener('selectionchange', onSelectionChange);
     document.addEventListener('keydown', onKeyDown);
+    window.addEventListener(CONTEXT_MENU_OPEN_EVENT, onContextMenuOpen);
     window.addEventListener('scroll', hide, true);
     window.addEventListener('resize', hide);
     return () => {
@@ -93,6 +104,7 @@ export function SelectionQuoteButton({ rootRef, onQuote }: SelectionQuoteButtonP
       document.removeEventListener('keyup', evaluate);
       document.removeEventListener('selectionchange', onSelectionChange);
       document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener(CONTEXT_MENU_OPEN_EVENT, onContextMenuOpen);
       window.removeEventListener('scroll', hide, true);
       window.removeEventListener('resize', hide);
     };
@@ -107,7 +119,12 @@ export function SelectionQuoteButton({ rootRef, onQuote }: SelectionQuoteButtonP
         data-testid="selection-quote-button"
         title={t('chat.quote_selection_hint')}
         aria-label={t('chat.quote_selection_hint')}
-        style={{ position: 'fixed', top: state.top, left: state.left, transform: 'translateX(-50%)' }}
+        style={{
+          position: 'fixed',
+          top: state.top,
+          left: state.left,
+          transform: 'translateX(-50%)',
+        }}
         className="z-50 inline-flex items-center gap-1 px-2 py-1 text-xs rounded-radius-sm border border-border bg-surface text-text shadow-md hover:bg-bg-hover"
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => {

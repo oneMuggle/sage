@@ -23,6 +23,7 @@ import { ComposerPlusMenu, type ComposerPlusMenuItem } from './ComposerPlusMenu'
 import { DeliverySendGroup } from './DeliverySendGroup';
 import { FileAttachment } from './FileAttachment';
 import { KnowledgeChip } from './KnowledgeChip';
+import { OfficeRefChip } from './OfficeRefChip';
 import { SlashCommandMenu } from './SlashCommandMenu';
 import type { SlashCommand } from './slashCommands';
 
@@ -480,37 +481,14 @@ function InputCardInner({
 
       {officeRefs.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2" data-testid="office-ref-chips">
-          {officeRefs.map((ref) => {
-            const kindLabel =
-              ref.docType === 'ppt'
-                ? '📊'
-                : ref.docType === 'word'
-                  ? '📝'
-                  : ref.docType === 'pdf'
-                    ? '📄'
-                    : '📈';
-            return (
-              <span
-                key={ref.docId}
-                className="office-ref-chip inline-flex items-center gap-1 px-2 py-0.5 rounded-radius-sm bg-primary/10 text-primary text-xs"
-                data-testid="office-ref-chip"
-                data-doc-id={ref.docId}
-              >
-                <span aria-hidden="true">{kindLabel}</span>
-                <span>{ref.filename}</span>
-                {onRemoveOfficeRef && (
-                  <button
-                    type="button"
-                    className="ml-1 hover:text-error transition-colors"
-                    aria-label={`remove office ref ${ref.filename}`}
-                    onClick={() => onRemoveOfficeRef(ref.docId)}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </span>
-            );
-          })}
+          {officeRefs.map((ref) => (
+            <OfficeRefChip
+              key={ref.docId}
+              chip={ref}
+              variant="composer"
+              onRemove={onRemoveOfficeRef ? () => onRemoveOfficeRef(ref.docId) : undefined}
+            />
+          ))}
         </div>
       )}
 

@@ -686,6 +686,16 @@ const electronAPI = {
   } satisfies FileElectronApiBridge,
 
   /**
+   * 开发期右键「检查元素」—— 仅非打包环境主进程会执行（见 electron/main.ts）。
+   * 渲染层自绘菜单无法交给 Chromium 默认处理，故按坐标走 IPC。
+   */
+  devtools: {
+    inspectAt: (x: number, y: number) => {
+      ipcRenderer.send('sage:devtools:inspect', { x, y });
+    },
+  },
+
+  /**
    * P2 (2026-10-19): detected project root from startup cwd.
    * Used as fallback auto-bind target for new sessions.
    */
