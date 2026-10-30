@@ -31,11 +31,14 @@ from backend.tools.browser_tool import (
     BrowserDownloadsTool,
     BrowserInteractTool,
     BrowserLaunchTool,
+    BrowserLoginTool,
     BrowserNavigateTool,
     BrowserScreenshotTool,
     BrowserSnapshotTool,
+    _capture_local_storage,
     _js_click,
     _js_type,
+    _storage_domain_matches,
     validate_url,
 )
 
@@ -622,3 +625,170 @@ def test_launch_tool_starts_download_tracking(monkeypatch, tmp_path):
 
 def test_browser_tool_names_include_downloads():
     assert "browser_downloads" in browser_tool.BROWSER_TOOL_NAMES
+
+
+def test_browser_login_check_status_confirmed():
+    """测试用户在悬浮条上点击确认后，_check_login_status 立即返回 logged_in。"""
+    session = _fake_session("b-login")
+
+    def _fake_cdp(sess, method, params=None, target_id=None):
+        if method == "Runtime.evaluate":
+            return {"result": {"value": {"confirmed": True}}}
+        return {}
+
+    from unittest.mock import patch
+    with patch.object(browser_tool, "cdp_command", side_effect=_fake_cdp):
+        status = browser_tool._check_login_status(session, "t1", "example.com")
+        assert status == "logged_in"
+
+
+def test_browser_login_execute_success_returns_instruction(monkeypatch):
+    """测试 browser_login 成功完成后返回给 LLM 的指令。"""
+    tool = browser_tool.BrowserLoginTool()
+    session = _fake_session("login-default")
+
+    monkeypatch.setattr(browser_tool, "get_browser_manager", lambda: SimpleNamespace(get=lambda _: session))
+    monkeypatch.setattr(session, "is_alive", lambda: True)
+    monkeypatch.setattr(browser_tool, "_wait_for_page_load", lambda *a, **kw: None)
+    monkeypatch.setattr(browser_tool, "_check_login_status", lambda *a, **kw: "logged_in")
+    monkeypatch.setattr(browser_tool, "cdp_command", lambda *a, **kw: {"targetId": "t-1"})
+    monkeypatch.setattr(tool, "_export_cookies", lambda sess, host, target_id="": ["example.com"])
+
+    result = tool.execute(url="https://example.com/settings")
+    assert result.success is True
+    assert "example.com" in result.content["saved_domains"]
+    assert "instruction" in result.content
+    assert "web_fetch" in result.content["instruction"]
+    assert "https://example.com/settings" in result.content["instruction"]
+
+
+# ---------------------------------------------------------------------------
+# storage_state：登录 / 导出时捕获 localStorage
+# ---------------------------------------------------------------------------
+
+
+def test_capture_local_storage_parses_origin(monkeypatch):
+    payload = json.dumps(
+        {"origin": "https://www.example.com", "localStorage": {"k": "v", "empty": ""}}
+    )
+
+    def fake_cdp(session, method, params=None, target_id=None):
+        assert method == "Runtime.evaluate"
+        assert target_id == "t-1"
+        return {"result": {"value": payload}}
+
+    monkeypatch.setattr(browser_tool, "cdp_command", fake_cdp)
+    out = _capture_local_storage(_fake_session("b"), "t-1")
+    assert out == [{"origin": "https://www.example.com", "localStorage": {"k": "v"}}]
+
+
+def test_capture_local_storage_handles_empty_and_errors(monkeypatch):
+    monkeypatch.setattr(browser_tool, "cdp_command", lambda *a, **kw: {"result": {"value": ""}})
+    assert _capture_local_storage(_fake_session("b"), "t-1") == []
+    assert _capture_local_storage(_fake_session("b"), "") == []
+
+    def boom(*a, **kw):
+        raise browser_cdp.BrowserCDPError("cdp down")
+
+    monkeypatch.setattr(browser_tool, "cdp_command", boom)
+    assert _capture_local_storage(_fake_session("b"), "t-1") == []
+
+
+def test_storage_domain_matches_cookie_domain():
+    assert _storage_domain_matches(".example.com", "www.example.com") is True
+    assert _storage_domain_matches("www.example.com", "www.example.com") is True
+    assert _storage_domain_matches(".example.com", "evil.com") is False
+    assert _storage_domain_matches("", "www.example.com") is False
+
+
+def test_export_cookies_saves_storage_state(monkeypatch):
+    from backend.tools import credential_vault
+
+    calls = []
+    monkeypatch.setattr(
+        credential_vault,
+        "save_credential",
+        lambda *a, **kw: calls.append(("cookie", a, kw)),
+    )
+    monkeypatch.setattr(
+        credential_vault,
+        "save_storage_state",
+        lambda *a, **kw: calls.append(("storage", a, kw)),
+    )
+    storage = json.dumps(
+        {"origin": "https://www.example.com", "localStorage": {"cnki_user_token": "tok"}}
+    )
+
+    def fake_cdp(session, method, params=None, target_id=None):
+        if method == "Network.getCookies":
+            return {"cookies": [{"name": "SID", "value": "v", "domain": ".example.com", "path": "/"}]}
+        if method == "Runtime.evaluate":
+            return {"result": {"value": storage}}
+        return {}
+
+    monkeypatch.setattr(browser_tool, "cdp_command", fake_cdp)
+    tool = BrowserLoginTool()
+    saved = tool._export_cookies(_fake_session("login-default"), "www.example.com", "t-1")
+    assert saved == [".example.com"]
+    assert calls
+    assert calls[-1][0] == "storage"
+    assert calls[-1][1][2] == [
+        {"origin": "https://www.example.com", "localStorage": {"cnki_user_token": "tok"}}
+    ]
+
+
+def test_export_cookies_without_storage_uses_plain_cookie(monkeypatch):
+    from backend.tools import credential_vault
+
+    calls = []
+    monkeypatch.setattr(credential_vault, "save_credential", lambda *a, **kw: calls.append("cookie"))
+    monkeypatch.setattr(credential_vault, "save_storage_state", lambda *a, **kw: calls.append("storage"))
+
+    def fake_cdp(session, method, params=None, target_id=None):
+        if method == "Network.getCookies":
+            return {"cookies": [{"name": "SID", "value": "v", "domain": ".example.com", "path": "/"}]}
+        return {"result": {"value": ""}}
+
+    monkeypatch.setattr(browser_tool, "cdp_command", fake_cdp)
+    saved = BrowserLoginTool()._export_cookies(_fake_session("login-default"), "www.example.com", "t-1")
+    assert saved == [".example.com"]
+    assert calls == ["cookie"]
+
+
+def test_export_cookies_filters_other_domains(monkeypatch):
+    from backend.tools import credential_vault
+
+    saved_args = []
+    monkeypatch.setattr(
+        credential_vault, "save_credential", lambda domain, *a, **kw: saved_args.append(domain)
+    )
+    monkeypatch.setattr(
+        credential_vault, "save_storage_state", lambda domain, *a, **kw: saved_args.append(domain)
+    )
+
+    def fake_cdp(session, method, params=None, target_id=None):
+        if method == "Network.getCookies":
+            return {
+                "cookies": [
+                    {"name": "SID", "value": "v", "domain": ".example.com", "path": "/"},
+                    {"name": "MAIL", "value": "m", "domain": ".other.com", "path": "/"},
+                ]
+            }
+        return {"result": {"value": ""}}
+
+    monkeypatch.setattr(browser_tool, "cdp_command", fake_cdp)
+    saved = BrowserLoginTool()._export_cookies(_fake_session("login-default"), "www.example.com", "t-1")
+    assert saved == [".example.com"]
+    assert saved_args == [".example.com"]
+
+
+def test_browser_login_respects_network_policy(monkeypatch):
+    class _RejectingPolicy:
+        def check_host(self, url):
+            return "offline 模式禁止出网"
+
+    monkeypatch.setattr(browser_tool, "load_network_policy", lambda: _RejectingPolicy())
+    result = BrowserLoginTool().execute(url="https://example.com/login")
+    assert result.success is False
+    assert "offline" in result.error
+

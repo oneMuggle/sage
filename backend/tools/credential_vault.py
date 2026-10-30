@@ -28,9 +28,11 @@ py3.8 纪律：本模块同时服务 main 与 release/win7 — stdlib only。
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import re
+import threading
 import time
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -45,9 +47,32 @@ SETTINGS_KEY_CREDENTIAL_VAULT = "browser_credential_vault"
 
 _VAULT_ACCOUNT_PREFIX = "browser-cookie:"
 _HEADER_ACCOUNT_PREFIX = "browser-header:"
+_STORAGE_ACCOUNT_PREFIX = "browser-origin:"
 
 KIND_COOKIE = "cookie"
 KIND_HEADER = "header"
+
+#: 档案是 preferences KV 上的「整表读-改-写」；后台登录导出与渲染池回写
+#: 可能并发，必须串行化（可重入：save_storage_state 内部会调 save_credential）。
+_VAULT_LOCK = threading.RLock()
+
+
+def _vault_write(fn):
+    """把整段读-改-写放进模块级锁，避免并发写互相覆盖。"""
+
+    @functools.wraps(fn)
+    def _wrapped(*args, **kwargs):
+        with _VAULT_LOCK:
+            return fn(*args, **kwargs)
+
+    return _wrapped
+
+#: storage_state 上限：防止站点把 IndexedDB 级数据塞进 preferences
+_MAX_STORAGE_ORIGINS = 50
+_MAX_STORAGE_KEYS = 200
+_MAX_STORAGE_KEY_LEN = 512
+_MAX_STORAGE_VALUE_LEN = 8192
+_MAX_STORAGE_JSON_BYTES = 262144
 
 #: 头部凭据禁止覆盖的头（由传输层 / cookie 通道各自负责）
 _FORBIDDEN_CREDENTIAL_HEADERS = frozenset(
@@ -239,6 +264,7 @@ def normalize_cookie_for_cdp(cookie: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
+@_vault_write
 def save_credential(
     domain: str,
     cookies: List[Dict[str, Any]],
@@ -272,6 +298,12 @@ def save_credential(
     source_profile = (source_profile or "").strip()
     if source_profile:
         entry["source_profile"] = source_profile
+    # cookie 续期（save_credential）不能顺带清掉已保存的 localStorage 快照
+    old_entry = vault.get(domain)
+    if isinstance(old_entry, dict) and old_entry.get("origins_enc"):
+        entry["origins_enc"] = old_entry["origins_enc"]
+        if old_entry.get("storage_saved_at"):
+            entry["storage_saved_at"] = old_entry["storage_saved_at"]
     vault[domain] = entry
     _save_vault(store, vault)
     if current_scheme() == "none":
@@ -299,6 +331,219 @@ def load_credential(domain: str, repo: Optional[Any] = None) -> Optional[List[Di
     if _entry_kind(entry) != KIND_COOKIE:
         return None
     return _decrypt_cookies(entry, domain)
+
+
+# ----------------------------------------------------------------- storage_state
+
+
+def _canonical_origin(scheme: str, host: str, port: Optional[int]) -> str:
+    """``scheme://host[:port]``，省略协议默认端口（与浏览器 ``location.origin`` 对齐）。"""
+    if port and not (
+        (scheme == "https" and port == 443) or (scheme == "http" and port == 80)
+    ):
+        return f"{scheme}://{host}:{port}"
+    return f"{scheme}://{host}"
+
+
+def _normalize_origin(raw: Any) -> Optional[str]:  # noqa: PLR0911 — 各拒绝路径独立 return
+    """把 origin 规整为 ``scheme://host[:port]``（忽略路径）；非 http(s) 或带 userinfo → None。"""
+    if not isinstance(raw, str):
+        return None
+    candidate = raw.strip()
+    if not candidate:
+        return None
+    try:
+        parsed = urlparse(candidate)
+    except ValueError:
+        return None
+    scheme = (parsed.scheme or "").lower()
+    host = (parsed.hostname or "").strip().lower()
+    if scheme not in ("http", "https") or not host:
+        return None
+    if parsed.username or parsed.password:
+        return None
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    return _canonical_origin(scheme, host, port)
+
+
+def _clean_origins(origins: Any) -> List[Dict[str, Any]]:
+    """裁剪 / 校验 origins（localStorage 快照），超限条目静默丢弃。
+
+    只接受字符串键值；拒绝控制字符，防止渲染脚本注入时破坏字符串字面量。
+    """
+    if not isinstance(origins, list):
+        return []
+    cleaned: List[Dict[str, Any]] = []
+    total_bytes = 0
+    for item in origins[:_MAX_STORAGE_ORIGINS]:
+        if not isinstance(item, dict):
+            continue
+        origin = _normalize_origin(item.get("origin"))
+        if not origin:
+            continue
+        raw_storage = item.get("localStorage")
+        if not isinstance(raw_storage, dict):
+            continue
+        storage: Dict[str, str] = {}
+        for key, value in list(raw_storage.items())[:_MAX_STORAGE_KEYS]:
+            if not isinstance(key, str) or not isinstance(value, str):
+                continue
+            if not key or len(key) > _MAX_STORAGE_KEY_LEN:
+                continue
+            if len(value) > _MAX_STORAGE_VALUE_LEN:
+                continue
+            if any(ord(ch) < 0x20 for ch in key + value):
+                continue
+            storage[key] = value
+        if not storage:
+            continue
+        payload = json.dumps({"origin": origin, "localStorage": storage}, ensure_ascii=False)
+        size = len(payload.encode("utf-8"))
+        if total_bytes + size > _MAX_STORAGE_JSON_BYTES:
+            logger.warning("storage_state 超过大小上限，后续 origin 已丢弃")
+            break
+        total_bytes += size
+        cleaned.append({"origin": origin, "localStorage": storage})
+    return cleaned
+
+
+def _decrypt_origins(entry: Any, domain: str) -> List[Dict[str, Any]]:
+    if not isinstance(entry, dict) or not entry.get("origins_enc"):
+        return []
+    try:
+        parsed = json.loads(decrypt_secret(str(entry["origins_enc"])))
+    except Exception:  # noqa: BLE001 — 解密失败按无存储处理
+        logger.warning("storage_state 解密失败: %s", domain, exc_info=True)
+        return []
+    return _clean_origins(parsed) if isinstance(parsed, list) else []
+
+
+@_vault_write
+def save_storage_state(
+    domain: str,
+    cookies: List[Dict[str, Any]],
+    origins: List[Dict[str, Any]],
+    repo: Optional[Any] = None,
+    source_profile: str = "",
+) -> None:
+    """保存 cookie + localStorage 会话快照（覆盖同 domain 旧值）。
+
+    先复用 ``save_credential`` 完成 cookie 加密落库，再在同一档案条目上追加
+    ``origins_enc``。``origins`` 为空时只保存 cookie（向后兼容）。
+    """
+    domain = (domain or "").strip().lower()
+    if not domain:
+        raise ValueError("save_storage_state: domain 不能为空")
+    save_credential(domain, cookies, repo=repo, source_profile=source_profile)
+    cleaned = _clean_origins(origins)
+    store = _get_repo(repo)
+    vault = _load_vault(store)
+    entry = vault.get(domain)
+    if not isinstance(entry, dict):
+        return
+    if cleaned:
+        entry["origins_enc"] = encrypt_secret(
+            json.dumps(cleaned, ensure_ascii=False),
+            account=_STORAGE_ACCOUNT_PREFIX + domain,
+        )
+        entry["storage_saved_at"] = _now_ms()
+    else:
+        entry.pop("origins_enc", None)
+        entry.pop("storage_saved_at", None)
+    entry["updated_at"] = _now_ms()
+    vault[domain] = entry
+    _save_vault(store, vault)
+
+
+def load_storage_origins(domain: str, repo: Optional[Any] = None) -> List[Dict[str, Any]]:
+    """取某 domain 的 origin → localStorage 快照（已解密）；无档案返回空列表。"""
+    domain = (domain or "").strip().lower()
+    if not domain:
+        return []
+    entry = _load_vault(_get_repo(repo)).get(domain)
+    return _decrypt_origins(entry, domain)
+
+
+def _origin_host_matches(origin: str, domain: str) -> bool:
+    """origin 的 host 是否归属凭据 domain（跨域重定向回写守卫）。"""
+    try:
+        host = (urlparse(origin).hostname or "").lower()
+    except ValueError:
+        return False
+    return bool(host) and cookie_domain_matches(host, domain)
+
+
+@_vault_write
+def merge_storage_origins(
+    domain: str, origins: List[Dict[str, Any]], repo: Optional[Any] = None
+) -> bool:
+    """把渲染/登录过程中刷新的 localStorage 合并回档案（按 origin/键覆盖）。
+
+    返回 False 表示无档案或没有可合并条目；加密写入失败抛异常由调用方决定。
+    """
+    domain = (domain or "").strip().lower()
+    if not domain:
+        return False
+    cleaned = _clean_origins(origins)
+    if not cleaned:
+        return False
+    store = _get_repo(repo)
+    vault = _load_vault(store)
+    entry = vault.get(domain)
+    if _entry_kind(entry) != KIND_COOKIE:
+        return False
+    merged: Dict[str, Dict[str, str]] = {}
+    for item in _decrypt_origins(entry, domain):
+        merged[item["origin"]] = dict(item["localStorage"])
+    for item in cleaned:
+        merged.setdefault(item["origin"], {}).update(item["localStorage"])
+    # 跨域重定向可能把攻击域 localStorage 回写进来：只保留归属 domain 的 origin
+    merged = {
+        origin: storage
+        for origin, storage in merged.items()
+        if _origin_host_matches(origin, domain)
+    }
+    payload = _clean_origins(
+        [
+            {"origin": origin, "localStorage": storage}
+            for origin, storage in sorted(merged.items())
+        ]
+    )
+    if not payload:
+        return False
+    entry["origins_enc"] = encrypt_secret(
+        json.dumps(payload, ensure_ascii=False),
+        account=_STORAGE_ACCOUNT_PREFIX + domain,
+    )
+    entry["storage_saved_at"] = _now_ms()
+    entry["updated_at"] = entry["storage_saved_at"]
+    vault[domain] = entry
+    _save_vault(store, vault)
+    return True
+
+
+def _origins_for_url(entry: Any, url: Optional[str], domain: str) -> List[Dict[str, Any]]:
+    """按页面 origin 精确过滤（localStorage 是 same-origin 语义，不做子域放宽）。"""
+    origins = _decrypt_origins(entry, domain)
+    if not origins or not url:
+        return origins
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return []
+    scheme = (parsed.scheme or "").lower()
+    host = (parsed.hostname or "").lower()
+    if not scheme or not host:
+        return []
+    try:
+        port = parsed.port
+    except ValueError:
+        return []
+    page_origin = _canonical_origin(scheme, host, port)
+    return [item for item in origins if item["origin"] == page_origin]
 
 
 def _split_cookies(
@@ -352,6 +597,7 @@ def cookie_header_for(
 # --------------------------------------------------------------------------- header kind
 
 
+@_vault_write
 def save_header_credential(
     domain: str,
     headers: Dict[str, str],
@@ -428,6 +674,7 @@ class CredentialResolution:
         "kind",
         "headers",
         "cookies",
+        "origins",
         "expired_names",
         "expires_in",
         "domain",
@@ -439,6 +686,7 @@ class CredentialResolution:
         kind: Optional[str] = None,
         headers: Optional[Dict[str, str]] = None,
         cookies: Optional[List[Dict[str, Any]]] = None,
+        origins: Optional[List[Dict[str, Any]]] = None,
         expired_names: Optional[List[str]] = None,
         expires_in: Optional[int] = None,
         domain: str = "",
@@ -447,6 +695,7 @@ class CredentialResolution:
         self.kind = kind
         self.headers = headers or {}
         self.cookies = cookies or []
+        self.origins = origins or []
         self.expired_names = expired_names or []
         self.expires_in = expires_in
         self.domain = domain
@@ -519,6 +768,7 @@ def resolve_credential(  # noqa: PLR0911 — 各状态独立 return，扁平更�
         kind=kind,
         headers=headers,
         cookies=usable,
+        origins=_origins_for_url(entry, url, domain),
         expired_names=expired_names,
         expires_in=expires_in,
         domain=domain,
@@ -616,6 +866,7 @@ def parse_set_cookie(  # noqa: PLR0911 — 前缀 / 名值守卫各自独立 ret
     return cookie
 
 
+@_vault_write
 def merge_set_cookies(
     domain: str,
     set_cookie_values: List[str],
@@ -687,6 +938,7 @@ def merge_set_cookies(
 # --------------------------------------------------------------------------- misc
 
 
+@_vault_write
 def merge_cdp_cookies(
     domain: str,
     cookies: List[Dict[str, Any]],
@@ -809,6 +1061,7 @@ def get_source_profile(domain: str, repo: Optional[Any] = None) -> Optional[str]
     return str(source) if source else None
 
 
+@_vault_write
 def delete_credential(domain: str, repo: Optional[Any] = None) -> bool:
     """删除某 domain 档案；返回是否确有删除。"""
     domain = (domain or "").strip().lower()
@@ -857,6 +1110,10 @@ def list_credentials(repo: Optional[Any] = None) -> List[Dict[str, Any]]:
             "expires_in_seconds": expires_in,
             "expired": expired,
         }
+        if kind == KIND_COOKIE:
+            origin_items = _decrypt_origins(entry, domain)
+            record["has_storage"] = bool(origin_items)
+            record["origin_count"] = len(origin_items)
         if kind == KIND_HEADER:
             record["header_names"] = names
         source_profile = entry.get("source_profile") if isinstance(entry, dict) else None
@@ -930,12 +1187,15 @@ __all__ = [
     "get_source_profile",
     "list_credentials",
     "load_credential",
+    "load_storage_origins",
     "looks_like_login_html",
     "looks_like_login_url",
     "merge_set_cookies",
     "merge_cdp_cookies",
+    "merge_storage_origins",
     "parse_set_cookie",
     "resolve_credential",
     "save_credential",
     "save_header_credential",
+    "save_storage_state",
 ]

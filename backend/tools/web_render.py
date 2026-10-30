@@ -500,6 +500,98 @@ def _writeback_render_cookies(
     return sorted(set(changed)) or None
 
 
+#: 渲染页面内读取 localStorage（按 origin 打包）；失败返回空串
+_LOCAL_STORAGE_JS = (
+    "(function(){try{var out={};var ls=window.localStorage;"
+    "for(var i=0;i<ls.length;i++){var k=ls.key(i);out[k]=ls.getItem(k);}"
+    "return JSON.stringify({origin:location.origin,localStorage:out});}"
+    "catch(e){return ''}})()"
+)
+
+#: 渲染页面 localStorage 快照上限（字节）
+_LOCAL_STORAGE_CAP = 512 * 1024
+
+
+def _inject_local_storage(
+    session: Any, target_id: str, origins: List[Dict[str, Any]]
+) -> None:
+    """导航前把 storage_state 注入新文档（按 location.origin 精确匹配）。
+
+    站点登录态若依赖 localStorage（知网双 token），仅注入 cookie 会拿到
+    未登录正文。注入失败抛 BrowserCDPError，由调用方决定是否中断——
+    显式带凭据渲染却静默降级会误导调用方。
+    """
+    for item in origins:
+        origin = str(item.get("origin") or "")
+        storage = item.get("localStorage")
+        if not origin or not isinstance(storage, dict):
+            continue
+        source = (
+            "(function(){try{var o="
+            + json.dumps(origin)
+            + ";var d="
+            + json.dumps(storage, ensure_ascii=True)
+            + ";if(location.origin===o){for(var k in d){"
+            + "try{localStorage.setItem(k,d[k]);}catch(e){}}}"
+            + "}catch(e){}})()"
+        )
+        cdp_command(
+            session,
+            "Page.addScriptToEvaluateOnNewDocument",
+            {"source": source},
+            target_id=target_id,
+        )
+
+
+def _writeback_render_storage(  # noqa: PLR0911 — 各失败路径独立 return，扁平更直读
+    session: Any, target_id: str, credential_domain: str, repo: Any = None
+) -> bool:
+    """渲染后把页面 localStorage 合并回档案（尽力而为，失败返回 False）。"""
+    if not target_id:
+        return False
+    try:
+        result = cdp_command(
+            session,
+            "Runtime.evaluate",
+            {"expression": _LOCAL_STORAGE_JS, "returnByValue": True},
+            target_id=target_id,
+        )
+    except BrowserCDPError:
+        return False
+    value = (result.get("result") or {}).get("value")
+    if not isinstance(value, str) or not value or len(value) > _LOCAL_STORAGE_CAP:
+        return False
+    try:
+        parsed = json.loads(value)
+    except ValueError:
+        return False
+    if not isinstance(parsed, dict):
+        return False
+    origin = str(parsed.get("origin") or "")
+    storage = parsed.get("localStorage")
+    if not origin.startswith(("http://", "https://")) or not isinstance(storage, dict):
+        return False
+    cleaned = {
+        str(key): str(val)
+        for key, val in storage.items()
+        if isinstance(key, str) and isinstance(val, str) and val != ""
+    }
+    if not cleaned:
+        return False
+    from .credential_vault import merge_storage_origins
+
+    try:
+        return bool(
+            merge_storage_origins(
+                credential_domain,
+                [{"origin": origin, "localStorage": cleaned}],
+                repo=repo,
+            )
+        )
+    except Exception:  # noqa: BLE001 — 回写失败不影响本次请求
+        return False
+
+
 def refresh_credentials(  # noqa: PLR0911 — 各失败路径独立 return，扁平更直读
     credential_domain: str,
     url: str,
@@ -640,6 +732,7 @@ def render_page(
 
     credential_domain = (credential_domain or "").strip().lower()
     credential_cookies: List[Dict[str, Any]] = []
+    credential_origins: List[Dict[str, Any]] = []
     if credential_domain:
         from .credential_vault import (
             KIND_COOKIE,
@@ -650,12 +743,14 @@ def render_page(
         resolution = resolve_credential(credential_domain, url=url, repo=repo)
         if resolution.ok and resolution.kind == KIND_COOKIE:
             credential_cookies = list(resolution.cookies or [])
+            credential_origins = list(resolution.origins or [])
 
     session = _pool.acquire()
     channel_ok = _ensure_pool_channel(session)
     target_id: Optional[str] = None
     net_session: Optional[str] = None
     refreshed: Optional[List[str]] = None
+    storage_refreshed = False
     try:
         created = cdp_command(session, "Target.createTarget", {"url": "about:blank"})
         target_id = created.get("targetId")
@@ -679,6 +774,9 @@ def render_page(
                 normalize_cookie_for_cdp(c) for c in credential_cookies
             ]
             cdp_command(session, "Storage.setCookies", {"cookies": normalized_cookies})
+        # storage_state：localStorage 必须在文档创建前注入（SPA 首次脚本执行前）
+        if credential_origins:
+            _inject_local_storage(session, target_id, credential_origins)
         # AB4：文档创建前注入 stealth（失败不阻断渲染）
         apply_stealth(session, target_id, command=cdp_command)
         result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)
@@ -705,6 +803,10 @@ def render_page(
         # 任何失败静默——与 AU2"回写失败不影响本次请求"同口径）。
         if credential_cookies:
             refreshed = _writeback_render_cookies(session, credential_domain, url, repo=repo)
+        if (credential_cookies or credential_origins) and target_id:
+            storage_refreshed = _writeback_render_storage(
+                session, target_id, credential_domain, repo=repo
+            )
     except BrowserCDPError as exc:
         raise RenderError(
             f"JS 渲染失败: {exc}"
@@ -767,9 +869,11 @@ def render_page(
         rendered["wait_for_satisfied"] = bool(wait_for_satisfied)
     if refreshed:
         rendered["credential_refreshed"] = refreshed
+    if storage_refreshed:
+        rendered["credential_storage_refreshed"] = True
     # AU7：带凭据渲染却落在密码框页（正文极短）→ 登录墙标记
     if (
-        credential_cookies
+        (credential_cookies or credential_origins)
         and looks_like_login_html(html)
         and len(content_text.strip()) < 500
     ):
