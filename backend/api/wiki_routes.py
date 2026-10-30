@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
+from backend.orchestration._lazy_lock import LazyLock
 from backend.wiki import (
     ChatConfig,
     GraphData,
@@ -57,6 +58,9 @@ from backend.wiki.project_authorization import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/wiki", tags=["wiki"])
+
+# 队列处理是长跑 + LLM 计费操作：进程内同一时刻只允许一个处理请求。
+_queue_process_lock = LazyLock()
 
 
 def _cleanup_temp_paths(*paths: Optional[Path], project_root: Optional[Path] = None) -> None:
@@ -621,6 +625,31 @@ async def delete_source(source_path: str, project_path: str) -> dict:
         raise HTTPException(status_code=500, detail="级联删除失败") from e
 
 
+class SourceImportRequest(BaseModel):
+    """外部文件导入请求。"""
+
+    source_path: str
+    project_path: str
+
+
+@router.post("/source/import")
+async def import_source(req: SourceImportRequest) -> dict:
+    """把项目外部文件导入 ``raw/sources/``，返回项目内相对路径。"""
+    from backend.wiki.ingest import import_source_into_raw
+
+    authorize_registered_project(req.project_path)
+    project_root = _canonical_project_root(req.project_path)
+    try:
+        dest = await import_source_into_raw(project_root, Path(req.source_path))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        logger.warning("source import failed: error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=400, detail="文件导入失败") from exc
+    relative = str(dest.relative_to(project_root)).replace("\\", "/")
+    return {"relative_path": relative, "name": dest.name}
+
+
 @router.post("/rename")
 async def rename_file(old_path: str, new_path: str, project_path: str) -> dict:
     """重命名文件。
@@ -853,8 +882,10 @@ async def queue_add(req: QueueAddRequest):
     project_root = _canonical_project_root(req.project_path)
     authorize_registered_project(req.project_path)
 
+    _, resolved = _resolve_source_file(req.project_path, req.source_path)
+    source_path = str(resolved.relative_to(project_root)).replace("\\", "/")
     queue = IngestQueue(project_root)
-    task_id = queue.add(req.source_path, max_retries=req.max_retries)
+    task_id = queue.add(source_path, max_retries=req.max_retries)
 
     return {"task_id": task_id, "status": "pending"}
 
@@ -998,6 +1029,33 @@ async def queue_clear(project_path: str, completed_only: bool = False):
     count = queue.clear_completed() if completed_only else queue.clear_all()
 
     return {"cleared": count}
+
+
+class QueueProcessRequest(BaseModel):
+    """队列处理请求。"""
+
+    project_path: str
+    limit: int = 1
+
+
+@router.post("/ingest/queue/process")
+async def queue_process(req: QueueProcessRequest) -> dict:
+    """按 FIFO 顺序处理 pending 任务（每个任务真实调用 ingest 管线）。
+
+    LLM/embedding 配置从 app_settings 解析；未配置时返回 ``error`` 且
+    任务保持 pending。单任务失败会标记 failed 并继续下一个。
+    """
+    from backend.wiki.queue_worker import process_pending
+
+    project_root = _canonical_project_root(req.project_path)
+    authorize_registered_project(req.project_path)
+
+    if _queue_process_lock.locked():
+        raise HTTPException(status_code=409, detail="wiki queue already processing")
+
+    limit = max(1, min(int(req.limit), 20))
+    async with _queue_process_lock:
+        return await process_pending(project_root, limit=limit)
 
 
 # ============================================================================

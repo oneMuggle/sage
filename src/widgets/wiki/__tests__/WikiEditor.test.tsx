@@ -174,14 +174,31 @@ describe('WikiEditor', () => {
     await waitFor(() => expect(screen.getByText(/Search API unavailable/)).toBeInTheDocument());
   });
 
-  it('renders SourcesView and selects files', () => {
+  it('renders SourcesView from raw/sources and selects files', async () => {
     useWikiStore.setState({
       project: { id: 'p1', name: 'Demo Wiki', path: '/tmp/wiki' },
     });
+    mockWikiListDirectory.mockResolvedValue([
+      {
+        name: 'sources',
+        path: 'raw/sources',
+        is_dir: true,
+        children: [
+          {
+            name: 'architecture.docx',
+            path: 'raw/sources/architecture.docx',
+            is_dir: false,
+            children: [],
+          },
+        ],
+      },
+    ]);
     renderWithI18n(<SourcesView />);
-    fireEvent.click(screen.getByText('sources'));
-    fireEvent.click(screen.getByText('architecture.docx'));
-    expect(screen.getByText('文件信息')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(mockWikiListDirectory).toHaveBeenCalledWith('raw/sources', '/tmp/wiki'),
+    );
+    fireEvent.click(await screen.findByText('architecture.docx'));
+    expect(screen.getByText('raw/sources/architecture.docx')).toBeInTheDocument();
   });
 
   it('renders LeftPanel, RightPanel, and WikiIngestProgress', () => {

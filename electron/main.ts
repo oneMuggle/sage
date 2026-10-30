@@ -1860,6 +1860,22 @@ async function registerIpcHandlers(): Promise<void> {
     },
   );
 
+  // File picker for Wiki source import (added 2026-10-30)
+  ipcMain.handle(
+    'sage:dialog:select-file',
+    async (evt, opts: { title?: string; filters?: { name: string; extensions: string[] }[] }) => {
+      if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+      const win = BrowserWindow.fromWebContents(evt.sender);
+      const result = await dialog.showOpenDialog(win ?? undefined!, {
+        properties: ['openFile'],
+        title: opts?.title,
+        filters: opts?.filters,
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      return result.filePaths[0];
+    },
+  );
+
   // ─── PR-C: Skills load-new IPC (rescan + import) ─────────────────────
   // Three channels back the Skills page buttons:
   //   skills:pick-files → native multi-select dialog

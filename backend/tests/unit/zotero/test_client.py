@@ -325,7 +325,14 @@ def test_get_item_full(client: ZoteroClient) -> None:
     assert item["tags"] == [{"name": "ml", "type": 0}]
     assert item["collections"] == [{"key": "COL1", "name": "Papers"}]
     assert item["attachments"] == [
-        {"itemID": 20, "contentType": "application/pdf", "path": "storage:paper.pdf", "linkMode": 0}
+        {
+            "itemID": 20,
+            "key": "ATT20",
+            "filename": "paper.pdf",
+            "contentType": "application/pdf",
+            "path": "storage:paper.pdf",
+            "linkMode": 0,
+        }
     ]
     assert item["notes"] == [{"title": "My Note", "note": "<p>note text</p>"}]
     assert item["fields"]["publicationTitle"] == "Nature"

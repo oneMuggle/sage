@@ -1,5 +1,6 @@
 // WikiQueuePanel - 摄入队列管理界面
 import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 
 import { useQueueStore } from '../../entities/wiki/queue-store';
 import type { IngestTask, QueueStatus } from '../../shared/api-client/wiki';
@@ -59,8 +60,30 @@ export function WikiQueuePanel({ projectPath }: WikiQueuePanelProps) {
   const retryTask = useQueueStore((s) => s.retryTask);
   const clearCompleted = useQueueStore((s) => s.clearCompleted);
   const clearAll = useQueueStore((s) => s.clearAll);
+  const processQueue = useQueueStore((s) => s.processQueue);
 
   const [filter, setFilter] = useState<QueueStatus | 'all'>('all');
+
+  const handleProcess = async () => {
+    const result = await processQueue(projectPath, 10);
+    if (!result) return;
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    const completed = result.processed.filter((task) => task.status === 'completed').length;
+    const failed = result.processed.length - completed;
+    if (completed + failed === 0) {
+      toast.info('队列中没有待处理任务');
+      return;
+    }
+    const message = `处理完成：${completed} 个成功，${failed} 个失败`;
+    if (failed > 0) {
+      toast.warning(message);
+    } else {
+      toast.success(message);
+    }
+  };
 
   useEffect(() => {
     if (!projectPath) return;
@@ -87,6 +110,15 @@ export function WikiQueuePanel({ projectPath }: WikiQueuePanelProps) {
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-text">摄入队列</h3>
           <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              data-testid="queue-process"
+              className="rounded bg-accent px-2 py-0.5 text-xs text-white hover:opacity-90 disabled:opacity-50"
+              disabled={loading || statusSummary.pending === 0}
+              onClick={() => void handleProcess()}
+            >
+              处理队列（{statusSummary.pending}）
+            </button>
             <span className="text-xs text-muted">共 {totalCount} 个任务</span>
           </div>
         </div>

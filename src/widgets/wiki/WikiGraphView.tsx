@@ -86,6 +86,23 @@ export function colorByType(pageType?: string): string {
   return TYPE_COLORS[pageType] ?? TYPE_COLORS.default;
 }
 
+/**
+ * @internal
+ * Exported for unit tests in `__tests__/WikiGraphView.test.tsx`.
+ * Not part of the public widget API — do not import from feature/app code.
+ *
+ * Backend serializes `GraphSignal` enum values (snake_case) while the UI
+ * palette uses canonical PascalCase; accept both and normalize once.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function normalizeGraphSignal(signal: string): GraphSignal | null {
+  const key = signal.replace(/[_\s-]/g, '').toLowerCase();
+  if (key === 'directlink') return 'DirectLink';
+  if (key === 'sourceoverlap') return 'SourceOverlap';
+  if (key === 'typeaffinity') return 'TypeAffinity';
+  return null;
+}
+
 function nodeSizeByLinks(wikilinkCount: number, maxLinks: number): number {
   if (maxLinks === 0) return BASE_NODE_SIZE;
   const ratio = wikilinkCount / maxLinks;
@@ -315,18 +332,21 @@ export function buildGraph(
     };
   });
 
-  const edges: Edge[] = data.edges.map((e, i) => ({
-    id: `${e.source}->${e.target}-${e.signal}-${i}`,
-    source: e.source,
-    target: e.target,
-    label: e.signal,
-    style: {
-      stroke: SIGNAL_COLORS[e.signal] ?? '#94a3b8',
-      strokeWidth: Math.max(1, e.weight / 2),
-      opacity: 0.6,
-    },
-    animated: e.signal === 'DirectLink',
-  }));
+  const edges: Edge[] = data.edges.map((e, i) => {
+    const signal = normalizeGraphSignal(e.signal);
+    return {
+      id: `${e.source}->${e.target}-${e.signal}-${i}`,
+      source: e.source,
+      target: e.target,
+      label: signal ?? e.signal,
+      style: {
+        stroke: signal ? SIGNAL_COLORS[signal] : '#94a3b8',
+        strokeWidth: Math.max(1, e.weight / 2),
+        opacity: 0.6,
+      },
+      animated: signal === 'DirectLink',
+    };
+  });
 
   return { nodes, edges, matchedIds, neighborIds: new Set() };
 }

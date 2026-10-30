@@ -1,6 +1,7 @@
 // Knowledge Page - Wiki workspace with multi-panel layout
 import { useEffect } from 'react';
 
+import { useResearchStore } from '../entities/wiki/research-store';
 import { useWikiStore } from '../entities/wiki/store';
 import {
   IconSidebar,
@@ -37,6 +38,7 @@ export function Knowledge() {
   const activeView = useWikiStore((s) => s.activeView);
   const project = useWikiStore((s) => s.project);
   const graphData = useWikiStore((s) => s.graphData);
+  const researchPanelOpen = useResearchStore((s) => s.panelOpen);
   const loadGraph = useWikiStore.getState().loadGraph;
   const openFile = useWikiStore.getState().openFile;
 
@@ -101,8 +103,8 @@ export function Knowledge() {
         </div>
       </div>
 
-      {/* Right Panel - 右侧面板（仅 browser 视图显示预览） */}
-      {activeView === 'browser' && <RightPanel />}
+      {/* Right Panel - 预览（browser 视图）或研究面板（任意视图打开时） */}
+      {(activeView === 'browser' || researchPanelOpen) && <RightPanel />}
     </div>
   );
 }
