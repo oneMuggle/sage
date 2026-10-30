@@ -69,6 +69,7 @@ def test_flat_multiword_keys_survive_relay_roundtrip() -> None:
         "llmRetryMaxAttempts": 3,
         "llmRetryBaseDelayS": 1.0,
         "llmRetryMaxDelayS": 15.0,
+        "llmRetryTotalBudgetS": 120,
         "llmTotalTimeoutS": 0,
     }
     translated = to_camel(_relay(camel_payload))

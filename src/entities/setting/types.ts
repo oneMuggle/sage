@@ -206,6 +206,9 @@ export interface AppSettings {
   llmRetryMaxAttempts: number; // 3
   llmRetryBaseDelayS: number; // 1.0 (秒)
   llmRetryMaxDelayS: number; // 30.0 (秒)
+  // 2026-10-30: 自动重试总时长预算（秒）。0 = 不限。
+  // 从首次尝试起算，退避前累计耗时超过预算即停止（后端 _retry_settings() 读取）。
+  llmRetryTotalBudgetS: number; // 180
 
   // 2026-10-22: 整轮任务 wall-clock 上限（秒）。0 = 不限。
   // 与后端 SettingsPayload.llmTotalTimeoutS 对齐；后端函数式读取，改后立即生效。
@@ -333,6 +336,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   llmRetryMaxAttempts: 3,
   llmRetryBaseDelayS: 1.0,
   llmRetryMaxDelayS: 30.0,
+  // 2026-10-30: 自动重试总时长预算默认 180s（与后端 _LLM_RETRY_TOTAL_BUDGET_S 对齐）。
+  llmRetryTotalBudgetS: 180,
 
   // 2026-10-22: 整轮任务 wall-clock 默认上限（秒）= 2 × subagentTaskTimeoutS 默认 900s。
   llmTotalTimeoutS: 1800,

@@ -145,6 +145,7 @@ export const SETTINGS_AUDIT_SECTIONS: readonly SettingsAuditSectionDef[] = [
         llmRetryMaxAttempts: Number(s.llmRetryMaxAttempts),
         llmRetryBaseDelayS: Number(s.llmRetryBaseDelayS),
         llmRetryMaxDelayS: Number(s.llmRetryMaxDelayS),
+        llmRetryTotalBudgetS: Number(s.llmRetryTotalBudgetS),
         llmTotalTimeoutS: Number(s.llmTotalTimeoutS),
         llmProxyTimeoutS: Number(s.llmProxyTimeoutS),
         timezone: s.timezone || '',
