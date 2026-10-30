@@ -234,7 +234,7 @@ def _terminate_session(session: BrowserSession) -> None:
 
     Embedded 会话的生命周期归 Electron 主进程：这里不做任何终止。
     """
-    if session.browser_type == BrowserType.EMBEDDED:
+    if getattr(session, "browser_type", None) == BrowserType.EMBEDDED:
         return
     # SN3：先停事件通道（常驻 WS 线程），再杀进程
     try:
@@ -715,7 +715,7 @@ def cdp_command(
     自动带 sessionId；浏览器级方法（Target.*）不带。
     Embedded 会话经 Electron 主进程 HTTP 桥执行，协议语义保持一致。
     """
-    if session.browser_type == BrowserType.EMBEDDED:
+    if getattr(session, "browser_type", None) == BrowserType.EMBEDDED:
         return _embedded_command(session, method, params, target_id)
     connection = _CDPConnection(session)
     try:
