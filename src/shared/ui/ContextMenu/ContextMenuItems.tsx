@@ -57,7 +57,7 @@ function renderSpec(item: ContextMenuItemSpec) {
       disabled={item.disabled}
       onSelect={() => {
         // handler 自行负责错误提示；此处兜底防止异步拒绝变成 unhandled rejection
-        void Promise.resolve(item.onSelect()).catch(() => {});
+        if (item.onSelect) void Promise.resolve(item.onSelect()).catch(() => {});
       }}
     >
       {Icon ? <Icon aria-hidden className="h-4 w-4 shrink-0 text-faint" /> : null}

@@ -5,10 +5,18 @@
  * - pinned 徽标随状态切换（📌 已钉住 / 未钉住）
  * - onPin 未提供时不渲染（旧调用方兼容）
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { I18nProvider } from '../../../shared/lib/i18n';
 import SkillCard from '../SkillCard';
+
+function I18nWrapper({ children }: { children: React.ReactNode }) {
+  return <I18nProvider defaultLocale="zh">{children}</I18nProvider>;
+}
+
+const render = (ui: React.ReactElement, options?: Parameters<typeof rtlRender>[1]) =>
+  rtlRender(ui, { wrapper: I18nWrapper, ...options });
 
 const base = {
   name: 'search',

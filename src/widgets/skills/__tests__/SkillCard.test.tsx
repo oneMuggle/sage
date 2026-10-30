@@ -4,10 +4,18 @@
  * - 切换开关触发 onToggle(name, enabled)
  * - SKILL.md 适配层 (PR-8): source badge / body 折叠区 / version badge / base_dir
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { I18nProvider } from '../../../shared/lib/i18n';
 import SkillCard from '../SkillCard';
+
+function I18nWrapper({ children }: { children: React.ReactNode }) {
+  return <I18nProvider defaultLocale="zh">{children}</I18nProvider>;
+}
+
+const render = (ui: React.ReactElement, options?: Parameters<typeof rtlRender>[1]) =>
+  rtlRender(ui, { wrapper: I18nWrapper, ...options });
 
 describe('SkillCard', () => {
   it('renders skill metadata correctly', () => {
@@ -347,6 +355,4 @@ describe('SkillCard', () => {
     );
     expect(screen.queryByRole('button', { name: /归档 travel/i })).toBeNull();
   });
-
-
 });

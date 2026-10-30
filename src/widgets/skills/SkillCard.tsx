@@ -1,6 +1,13 @@
+import { Archive, ArchiveRestore, Copy, History, Pin, PinOff, Trash2 } from 'lucide-react';
 import React from 'react';
 
 import type { SkillDispatch } from '../../shared/api';
+import { copyToClipboard } from '../../shared/lib/clipboard';
+import { fillTemplate } from '../../shared/lib/formatTemplate';
+import { useI18n } from '../../shared/lib/i18n';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
+import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
+import type { ContextMenuItemSpec } from '../../shared/ui/ContextMenu/types';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 import { SkillAuditDrawer } from './SkillAuditDrawer';
@@ -53,8 +60,81 @@ const SkillCard: React.FC<SkillCardProps> = ({
   onPin,
   onRolledBack,
 }) => {
+  const { t } = useI18n();
   // P2-2: 审计抽屉只在用户点开时才加载，不随卡片列表批量拉取。
   const [auditOpen, setAuditOpen] = React.useState(false);
+
+  const copy = (text: string) =>
+    void copyToClipboard(text, {
+      successMessage: t('contextMenu.common.copied'),
+      errorMessage: t('contextMenu.common.copyFailed'),
+    });
+
+  const menuItems = (): ContextMenuItemSpec[] => {
+    const items: ContextMenuItemSpec[] = [];
+    if (onPin) {
+      items.push({
+        id: 'skill-pin',
+        label: pinned ? t('contextMenu.skill.unpin') : t('contextMenu.skill.pin'),
+        icon: pinned ? PinOff : Pin,
+        onSelect: () => onPin(name, !pinned),
+      });
+    }
+    if (onArchive) {
+      items.push({
+        id: 'skill-archive',
+        label:
+          lifecycle === 'archived'
+            ? t('contextMenu.skill.unarchive')
+            : t('contextMenu.skill.archive'),
+        icon: lifecycle === 'archived' ? ArchiveRestore : Archive,
+        onSelect: () => onArchive(name, lifecycle !== 'archived'),
+      });
+    }
+    items.push(
+      {
+        id: 'skill-history',
+        label: t('contextMenu.skill.history'),
+        icon: History,
+        onSelect: () => setAuditOpen(true),
+      },
+      {
+        id: 'skill-copy-name',
+        label: t('contextMenu.common.copyName'),
+        icon: Copy,
+        onSelect: () => copy(name),
+      },
+    );
+    if (body) {
+      items.push({
+        id: 'skill-copy-body',
+        label: t('contextMenu.skill.copyBody'),
+        icon: Copy,
+        onSelect: () => copy(body),
+      });
+    }
+    if (onDelete && source !== 'builtin') {
+      items.push(
+        { id: 'skill-sep-delete', kind: 'separator' },
+        {
+          id: 'skill-delete',
+          label: t('contextMenu.skill.delete'),
+          icon: Trash2,
+          destructive: true,
+          onSelect: async () => {
+            const confirmed = await confirmDialog({
+              title: t('contextMenu.skill.deleteTitle'),
+              message: fillTemplate(t('contextMenu.skill.deleteBody'), { name }),
+              confirmLabel: t('common.delete'),
+              danger: true,
+            });
+            if (confirmed) onDelete(name);
+          },
+        },
+      );
+    }
+    return items;
+  };
 
   /* v8 ignore start */
 
@@ -70,180 +150,182 @@ const SkillCard: React.FC<SkillCardProps> = ({
       ? dispatch.command_dispatch
       : null;
   return (
-    <div
-      className={`bg-surface rounded-lg shadow-md p-4 border-2 transition-all ${
-        enabled ? 'border-primary' : 'border-border opacity-75'
-      } ${lifecycle === 'archived' ? 'opacity-60' : ''}`}
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          {/* 名称 + 来源 badge + M9 dispatch 元数据 */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-lg font-semibold text-text">{name}</h3>
-            <span
-              className={`px-2 py-0.5 text-xs rounded-full ${
-                source === 'skillmd'
-                  ? 'bg-accent text-text-inverse'
-                  : 'bg-bg-subtle text-text-secondary'
-              }`}
-            >
-              {source}
-            </span>
-            {version && (
-              <span className="px-2 py-0.5 text-xs rounded-full bg-bg-subtle text-text-secondary">
-                v{version}
-              </span>
-            )}
-            {slashCommand && (
-              <span
-                className="px-2 py-0.5 text-xs rounded-full bg-primary/20 text-primary font-mono"
-                title="可通过此命令主动调用"
-              >
-                {slashCommand}
-              </span>
-            )}
-            {dispatchChip && (
-              <span
-                className="px-2 py-0.5 text-xs rounded-full bg-bg-subtle text-text-secondary"
-                title={`命令调度模式: ${dispatchChip}`}
-              >
-                {dispatchChip}
-              </span>
-            )}
-            {pinned != null && (
+    <ContextMenu items={menuItems}>
+      <div
+        className={`bg-surface rounded-lg shadow-md p-4 border-2 transition-all ${
+          enabled ? 'border-primary' : 'border-border opacity-75'
+        } ${lifecycle === 'archived' ? 'opacity-60' : ''}`}
+      >
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            {/* 名称 + 来源 badge + M9 dispatch 元数据 */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-lg font-semibold text-text">{name}</h3>
               <span
                 className={`px-2 py-0.5 text-xs rounded-full ${
-                  pinned ? 'bg-warning/20 text-warning' : 'bg-bg-subtle text-text-secondary'
-                }`}
-                title={pinned ? '已钉住：不可归档，巡检不给出归档建议' : '未钉住'}
-              >
-                {pinned ? '📌 已钉住' : '未钉住'}
-              </span>
-            )}
-            {lifecycle && (
-              <span
-                className={`px-2 py-0.5 text-xs rounded-full ${
-                  lifecycle === 'active'
-                    ? 'bg-primary/20 text-primary'
-                    : lifecycle === 'archived'
-                      ? 'bg-accent/20 text-accent'
-                      : 'bg-bg-subtle text-muted'
+                  source === 'skillmd'
+                    ? 'bg-accent text-text-inverse'
+                    : 'bg-bg-subtle text-text-secondary'
                 }`}
               >
-                {lifecycle === 'active' ? '活跃' : lifecycle === 'archived' ? '已归档' : '已冷'}
+                {source}
               </span>
-            )}
-          </div>
-          <p className="text-sm text-text-secondary mt-1">{description}</p>
-
-          {/* 触发词 */}
-          <div className="flex flex-wrap gap-1 mt-2">
-            {triggers.map((trigger, index) => (
-              <span
-                key={index}
-                className="px-2 py-0.5 bg-bg-subtle text-text-secondary text-xs rounded-full"
-              >
-                {trigger}
-              </span>
-            ))}
-          </div>
-
-          {/* 使用统计 */}
-          <p className="text-xs text-muted mt-2">已使用 {usage_count} 次</p>
-
-          {/* SKILL.md body 折叠区 (仅 SKILL.md 显示) */}
-          {source === 'skillmd' && body && (
-            <details className="mt-3 border-t border-border pt-2">
-              <summary className="text-xs text-text-secondary cursor-pointer hover:text-text">
-                查看提示词模板
-              </summary>
-              <pre className="mt-2 p-2 bg-bg-subtle rounded text-xs whitespace-pre-wrap text-text-secondary max-h-64 overflow-auto">
-                {body}
-              </pre>
-              {base_dir && (
-                <p className="text-xs text-muted mt-1 truncate" title={base_dir}>
-                  路径: {base_dir}
-                </p>
+              {version && (
+                <span className="px-2 py-0.5 text-xs rounded-full bg-bg-subtle text-text-secondary">
+                  v{version}
+                </span>
               )}
-            </details>
-          )}
-        </div>
+              {slashCommand && (
+                <span
+                  className="px-2 py-0.5 text-xs rounded-full bg-primary/20 text-primary font-mono"
+                  title="可通过此命令主动调用"
+                >
+                  {slashCommand}
+                </span>
+              )}
+              {dispatchChip && (
+                <span
+                  className="px-2 py-0.5 text-xs rounded-full bg-bg-subtle text-text-secondary"
+                  title={`命令调度模式: ${dispatchChip}`}
+                >
+                  {dispatchChip}
+                </span>
+              )}
+              {pinned != null && (
+                <span
+                  className={`px-2 py-0.5 text-xs rounded-full ${
+                    pinned ? 'bg-warning/20 text-warning' : 'bg-bg-subtle text-text-secondary'
+                  }`}
+                  title={pinned ? '已钉住：不可归档，巡检不给出归档建议' : '未钉住'}
+                >
+                  {pinned ? '📌 已钉住' : '未钉住'}
+                </span>
+              )}
+              {lifecycle && (
+                <span
+                  className={`px-2 py-0.5 text-xs rounded-full ${
+                    lifecycle === 'active'
+                      ? 'bg-primary/20 text-primary'
+                      : lifecycle === 'archived'
+                        ? 'bg-accent/20 text-accent'
+                        : 'bg-bg-subtle text-muted'
+                  }`}
+                >
+                  {lifecycle === 'active' ? '活跃' : lifecycle === 'archived' ? '已归档' : '已冷'}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-text-secondary mt-1">{description}</p>
 
-        {/* 开关 + 删除按钮 (builtin 不显示) */}
-        <div className="flex items-center gap-2 ml-4">
-          {/* R17-A1 管理面：钉住 / 取消钉住（pin 后不可归档） */}
-          {onPin && (
-            <button
-              type="button"
-              onClick={() => onPin(name, !pinned)}
-              className={`px-2 py-1 text-xs rounded border transition-colors ${
-                pinned
-                  ? 'border-warning text-warning hover:bg-warning/10'
-                  : 'border-border text-text-secondary hover:text-text'
-              }`}
-              aria-label={pinned ? `取消钉住 ${name}` : `钉住 ${name}`}
-            >
-              {pinned ? '取消钉住' : '钉住'}
-            </button>
-          )}
-          {/* 生命周期：归档 / 取消归档（软标记，可逆） */}
-          {onArchive && (
-            <button
-              type="button"
-              onClick={() => onArchive(name, lifecycle !== 'archived')}
-              className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:text-text transition-colors"
-              aria-label={lifecycle === 'archived' ? `取消归档 ${name}` : `归档 ${name}`}
-            >
-              {lifecycle === 'archived' ? '取消归档' : '归档'}
-            </button>
-          )}
-          {/* P2-2: 变更历史 + 回滚。技能会被后台自动改动，此前用户既看不到
+            {/* 触发词 */}
+            <div className="flex flex-wrap gap-1 mt-2">
+              {triggers.map((trigger, index) => (
+                <span
+                  key={index}
+                  className="px-2 py-0.5 bg-bg-subtle text-text-secondary text-xs rounded-full"
+                >
+                  {trigger}
+                </span>
+              ))}
+            </div>
+
+            {/* 使用统计 */}
+            <p className="text-xs text-muted mt-2">已使用 {usage_count} 次</p>
+
+            {/* SKILL.md body 折叠区 (仅 SKILL.md 显示) */}
+            {source === 'skillmd' && body && (
+              <details className="mt-3 border-t border-border pt-2">
+                <summary className="text-xs text-text-secondary cursor-pointer hover:text-text">
+                  查看提示词模板
+                </summary>
+                <pre className="mt-2 p-2 bg-bg-subtle rounded text-xs whitespace-pre-wrap text-text-secondary max-h-64 overflow-auto">
+                  {body}
+                </pre>
+                {base_dir && (
+                  <p className="text-xs text-muted mt-1 truncate" title={base_dir}>
+                    路径: {base_dir}
+                  </p>
+                )}
+              </details>
+            )}
+          </div>
+
+          {/* 开关 + 删除按钮 (builtin 不显示) */}
+          <div className="flex items-center gap-2 ml-4">
+            {/* R17-A1 管理面：钉住 / 取消钉住（pin 后不可归档） */}
+            {onPin && (
+              <button
+                type="button"
+                onClick={() => onPin(name, !pinned)}
+                className={`px-2 py-1 text-xs rounded border transition-colors ${
+                  pinned
+                    ? 'border-warning text-warning hover:bg-warning/10'
+                    : 'border-border text-text-secondary hover:text-text'
+                }`}
+                aria-label={pinned ? `取消钉住 ${name}` : `钉住 ${name}`}
+              >
+                {pinned ? '取消钉住' : '钉住'}
+              </button>
+            )}
+            {/* 生命周期：归档 / 取消归档（软标记，可逆） */}
+            {onArchive && (
+              <button
+                type="button"
+                onClick={() => onArchive(name, lifecycle !== 'archived')}
+                className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:text-text transition-colors"
+                aria-label={lifecycle === 'archived' ? `取消归档 ${name}` : `归档 ${name}`}
+              >
+                {lifecycle === 'archived' ? '取消归档' : '归档'}
+              </button>
+            )}
+            {/* P2-2: 变更历史 + 回滚。技能会被后台自动改动，此前用户既看不到
               改了什么、也无法退回 —— 只能被动接受。 */}
-          <button
-            type="button"
-            onClick={() => setAuditOpen(true)}
-            data-testid={`skill-audit-open-${name}`}
-            className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:text-text transition-colors"
-            aria-label={`查看 ${name} 的变更历史`}
-          >
-            历史
-          </button>
-          {/* U12: 两步式确认卸载 — 不弹 modal，armed 后二次点击生效 */}
-          {onDelete && source !== 'builtin' && (
-            <TwoStepDelete
-              onConfirm={() => onDelete(name)}
-              label={`删除技能 ${name}`}
-              armedLabel={`确认删除 ${name}`}
-              className="p-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-error"
-            />
-          )}
+            <button
+              type="button"
+              onClick={() => setAuditOpen(true)}
+              data-testid={`skill-audit-open-${name}`}
+              className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:text-text transition-colors"
+              aria-label={`查看 ${name} 的变更历史`}
+            >
+              历史
+            </button>
+            {/* U12: 两步式确认卸载 — 不弹 modal，armed 后二次点击生效 */}
+            {onDelete && source !== 'builtin' && (
+              <TwoStepDelete
+                onConfirm={() => onDelete(name)}
+                label={`删除技能 ${name}`}
+                armedLabel={`确认删除 ${name}`}
+                className="p-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-error"
+              />
+            )}
 
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              className="sr-only peer"
-              checked={enabled}
-              onChange={(e) => onToggle(name, e.target.checked)}
-            />
-            <div
-              className="w-11 h-6 bg-bg-subtle peer-focus:outline-none peer-focus:ring-4
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={enabled}
+                onChange={(e) => onToggle(name, e.target.checked)}
+              />
+              <div
+                className="w-11 h-6 bg-bg-subtle peer-focus:outline-none peer-focus:ring-4
                        peer-focus:ring-primary/30 rounded-full peer
                        peer-checked:after:translate-x-full peer-checked:after:border-text-inverse
                        after:content-[''] after:absolute after:top-[2px] after:left-[2px]
                        after:bg-text-inverse after:border-border after:border after:rounded-full
                        after:h-5 after:w-5 after:transition-all
                        peer-checked:bg-primary"
-            ></div>
-          </label>
+              ></div>
+            </label>
+          </div>
         </div>
+        <SkillAuditDrawer
+          skillName={name}
+          open={auditOpen}
+          onOpenChange={setAuditOpen}
+          onRolledBack={onRolledBack}
+        />
       </div>
-      <SkillAuditDrawer
-        skillName={name}
-        open={auditOpen}
-        onOpenChange={setAuditOpen}
-        onRolledBack={onRolledBack}
-      />
-    </div>
+    </ContextMenu>
   );
 };
 
