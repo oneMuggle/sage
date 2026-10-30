@@ -2130,7 +2130,7 @@ class Database:
         # ==================== 用户反馈系统（Phase 1: 本地会话） ====================
         # 双向会话：用户发起 + 管理员通过 Jira/GitLab/SMTP 回复，回复经转发脚本中继，
         # 客户端定期 GET 拉取。conversation_id 为客户端生成 UUID v4，全程不变。
-        # 详见 docs/plans/2026-10-29_direct-feedback-channel.md §3.1
+        # 详见 docs/technical/111-feedback-relay-deployment.md §11.1
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS feedback_conversations (
                 id TEXT PRIMARY KEY,

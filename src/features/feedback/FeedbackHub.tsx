@@ -4,7 +4,7 @@
 // 管理员回复由 Electron 主进程的 FeedbackSyncer 拉取后落进本地 SQLite，
 // 这里只读本地数据（经 feedbackStore），不直接访问管理员地址。
 //
-// 设计见 docs/plans/2026-10-29_direct-feedback-channel.md §4。
+// 设计见 docs/technical/111-feedback-relay-deployment.md §11.2。
 
 import { clsx } from 'clsx';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';

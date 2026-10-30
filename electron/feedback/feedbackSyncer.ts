@@ -10,7 +10,7 @@
 // 失败重试退避：[5min, 15min, 1h, 4h, 24h]。配置缺失（managerUrl / sharedSecret 任一为空）
 // 时 syncer 不启动，等用户填好设置后手动 start() 或下次 app 启动时启动。
 //
-// 设计见 docs/plans/2026-10-29_direct-feedback-channel.md §4 Endpoint A/B/C。
+// 设计见 docs/technical/111-feedback-relay-deployment.md §11.2 / §11.3。
 
 import { fetchCompat } from '../fetchCompat';
 import { logger } from '../logger';

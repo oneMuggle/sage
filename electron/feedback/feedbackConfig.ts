@@ -5,7 +5,7 @@
 //   - electron-store 存 JSON（明文 URL + base64 加密密钥 + UUID）
 //   - Electron safeStorage 加密共享密钥（不可用时降级：chmod 0600 + warn 一次）
 //
-// 设计见 docs/plans/2026-10-29_direct-feedback-channel.md §1 / §4。
+// 设计见 docs/technical/111-feedback-relay-deployment.md §11。
 
 import Store from 'electron-store';
 import { safeStorage } from 'electron';
