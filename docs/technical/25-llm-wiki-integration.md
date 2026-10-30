@@ -944,3 +944,33 @@ const { answer, citations, streaming, error, reset } = useWikiChatStream(streamI
 ---
 
 _🎉 PR-8 完成。本文档随 Phase 实施滚动更新,最终更新于 Phase 8 收官。_
+
+---
+
+## 2026-10-30 修复：来源管理 / Deep Research / 队列处理
+
+- **图谱信号归一**：后端 `GraphEdge.to_dict()` 输出 snake_case 枚举值
+  （`direct_link` 等），前端 `normalizeGraphSignal()` 统一映射为
+  `DirectLink/SourceOverlap/TypeAffinity`，修复真实图谱边全灰、无动画。
+- **来源文件真实化**：`SourcesView` 改为调用 `GET /wiki/list?path=raw/sources`，
+  删除走 `DELETE /wiki/source/*`（级联清理页面/向量/死链），预览走
+  `GET /wiki/read`（仅 md/markdown/txt）。新增 `POST /wiki/source/import`
+  把项目外部普通文件导入 `raw/sources/`（绝对路径、普通文件、
+  ≤ `MAX_FILE_BYTES`、symlink fail-closed），配合 Electron
+  `sage:dialog:select-file` 文件选择器。
+- **Deep Research 面板**：`RightPanel` 在研究区挂载 `WikiResearchPanel`，
+  LLM 配置取 `useSettings()` 的 chatModel，搜索配置取 `search_config`
+  的 `tavily_key`；缺 Key 时禁用并提示。`Knowledge` 在所有视图打开研究
+  面板时都渲染右栏。
+- **队列处理入口**：新增 `POST /wiki/ingest/queue/process` 与
+  `backend/wiki/queue_worker.py::process_pending`，按 FIFO 处理 pending
+  任务，LLM/embedding 配置从 `app_settings` 解析；单任务失败标记 failed
+  并继续。`queue_add` 现在校验源文件必须位于项目内。前端
+  `WikiQueuePanel` 增加「处理队列」，`SourcesTree` 增加「加入队列」。
+- **评审加固（同日）**：导入端点只接受文档后缀白名单（`.md/.pdf/.docx/...`）
+  以收紧任意文件读取；队列处理加进程级 409 互斥锁，取消/崩溃时任务回滚为
+  pending，队列 JSON 改为同目录临时文件 + 原子替换，并在每次读改写前重新
+  加载以合并并发入队；Windows 的 `copy_to_raw` 改用
+  `win_reparse_io.write_file_reparse_safe`（CREATE_NEW + 句柄复核），
+  修复 Windows 上 ingest/导入/队列必然失败的问题。
+

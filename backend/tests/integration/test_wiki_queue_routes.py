@@ -10,10 +10,12 @@ from fastapi import HTTPException
 from backend.api import wiki_routes
 from backend.api.wiki_routes import (
     QueueAddRequest,
+    QueueProcessRequest,
     queue_add,
     queue_cancel,
     queue_clear,
     queue_next,
+    queue_process,
     queue_retry,
     queue_status,
     queue_tasks,
@@ -43,11 +45,18 @@ def _patch_auth(monkeypatch, project_root: Path):
 class TestQueueAddEndpoint:
     """测试 POST /ingest/queue/add。"""
 
+    def _source_file(self, project_root: Path) -> Path:
+        sources = project_root / "raw" / "sources"
+        sources.mkdir(parents=True, exist_ok=True)
+        source = sources / "doc.pdf"
+        source.write_bytes(b"%PDF-1.4")
+        return source
+
     async def test_add_task_returns_task_id(self, project_root: Path):
         """添加任务应返回 task_id 和 pending 状态。"""
         req = QueueAddRequest(
             project_path=str(project_root),
-            source_path="/path/to/doc.pdf",
+            source_path=str(self._source_file(project_root)),
         )
         result = await queue_add(req)
 
@@ -59,7 +68,7 @@ class TestQueueAddEndpoint:
         """可以指定自定义最大重试次数。"""
         req = QueueAddRequest(
             project_path=str(project_root),
-            source_path="/path/to/doc.pdf",
+            source_path=str(self._source_file(project_root)),
             max_retries=5,
         )
         result = await queue_add(req)
@@ -67,6 +76,31 @@ class TestQueueAddEndpoint:
         queue = IngestQueue(project_root)
         task = queue.get(result["task_id"])
         assert task.max_retries == 5
+        assert task.source_path == "raw/sources/doc.pdf"
+
+    async def test_add_rejects_source_outside_project(self, project_root: Path):
+        req = QueueAddRequest(
+            project_path=str(project_root),
+            source_path="/path/to/doc.pdf",
+        )
+        with pytest.raises(HTTPException) as excinfo:
+            await queue_add(req)
+        assert excinfo.value.status_code == 400
+
+
+class TestQueueProcessEndpoint:
+    """POST /ingest/queue/process 的并发保护。"""
+
+    async def test_rejects_when_already_processing(self, project_root: Path, monkeypatch):
+        class _HeldLock:
+            def locked(self) -> bool:
+                return True
+
+        monkeypatch.setattr(wiki_routes, "_queue_process_lock", _HeldLock())
+
+        with pytest.raises(HTTPException) as excinfo:
+            await queue_process(QueueProcessRequest(project_path=str(project_root)))
+        assert excinfo.value.status_code == 409
 
 
 class TestQueueStatusEndpoint:
@@ -261,9 +295,13 @@ class TestQueueWorkflow:
     async def test_full_lifecycle(self, project_root: Path):
         """完整生命周期: add → next → mark processing → complete。"""
         # 添加任务
+        sources = project_root / "raw" / "sources"
+        sources.mkdir(parents=True, exist_ok=True)
+        source = sources / "doc.pdf"
+        source.write_bytes(b"%PDF-1.4")
         req = QueueAddRequest(
             project_path=str(project_root),
-            source_path="/doc.pdf",
+            source_path=str(source),
         )
         add_result = await queue_add(req)
         task_id = add_result["task_id"]

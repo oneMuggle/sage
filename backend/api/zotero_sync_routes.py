@@ -37,6 +37,20 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["zotero"])
 
+WIKI_PROJECT_KEY = "zotero_wiki_project_path"
+
+
+def _configured_wiki_project() -> Optional[str]:
+    """Read the persisted wiki project binding (empty/absent → None)."""
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        value = SettingsRepository().get(WIKI_PROJECT_KEY) or ""
+    except Exception:
+        return None
+    value = value.strip()
+    return value or None
+
 
 class SyncRequest(BaseModel):
     force: bool = False
@@ -95,11 +109,12 @@ async def sync_zotero(body: SyncRequest) -> Dict[str, Any]:
 
     payload = result.to_dict()
 
-    if body.project_path:
-        wiki_payload = _run_wiki_export(client, body.project_path)
+    project_path = body.project_path or _configured_wiki_project()
+    if project_path:
+        wiki_payload = _run_wiki_export(client, project_path)
         payload["wiki"] = wiki_payload
         # 把 wiki 页数合并到同步状态，供 sync-status 显示
-        if not wiki_payload.get("errors"):
+        if not wiki_payload.get("errors") and not wiki_payload.get("error"):
             _record_wiki_pages(wiki_payload.get("items_exported", 0) + wiki_payload.get("authors_exported", 0))
 
     return payload
@@ -110,9 +125,13 @@ def _run_wiki_export(client: Any, project_path: str) -> Dict[str, Any]:
     from backend.zotero.wiki_export import export_wiki
 
     try:
-        root = Path(project_path)
+        root = Path(project_path).expanduser()
+        if not root.is_absolute():
+            return {"error": f"project_path must be absolute: {project_path}"}
         if not root.is_dir():
             return {"error": f"project_path is not a directory: {project_path}"}
+        if not (root / "wiki").is_dir():
+            return {"error": f"project_path is not a wiki project (missing wiki/): {project_path}"}
         result = export_wiki(client, root)
         return result.to_dict()
     except Exception as exc:  # noqa: BLE001 - wiki 沉淀不影响主同步
@@ -171,6 +190,7 @@ def sync_status() -> Dict[str, Any]:
         "vector_dim": vector_dim,
         "sync_in_progress": _sync_in_progress,
         "errors": list(state.get("errors") or [])[:10],
+        "wiki_project_path": _configured_wiki_project(),
     }
 
 
@@ -215,6 +235,19 @@ async def run_background_sync() -> None:
                 result.items,
                 len(result.errors),
             )
+            binding = _configured_wiki_project()
+            if binding:
+                wiki_payload = _run_wiki_export(client, binding)
+                if not wiki_payload.get("errors") and not wiki_payload.get("error"):
+                    _record_wiki_pages(
+                        wiki_payload.get("items_exported", 0)
+                        + wiki_payload.get("authors_exported", 0)
+                    )
+                else:
+                    logger.warning(
+                        "zotero background wiki export failed: %s",
+                        wiki_payload.get("error") or wiki_payload.get("errors"),
+                    )
         except Exception as exc:  # pragma: no cover - 启动期兜底
             logger.warning("zotero background sync failed (ignored): %s", exc)
         finally:

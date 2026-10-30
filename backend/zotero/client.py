@@ -452,8 +452,9 @@ class ZoteroClient:
         # Fetch child attachments
         attachment_rows = self._execute(
             """
-            SELECT ia.itemID, ia.contentType, ia.path, ia.linkMode
+            SELECT ia.itemID, i.key AS attachment_key, ia.contentType, ia.path, ia.linkMode
             FROM itemAttachments ia
+            JOIN items i ON i.itemID = ia.itemID
             WHERE ia.parentItemID = ?
             """,
             (item_id,),
@@ -461,6 +462,8 @@ class ZoteroClient:
         attachments = [
             {
                 "itemID": r["itemID"],
+                "key": r["attachment_key"],
+                "filename": self._attachment_filename(r["path"]),
                 "contentType": r["contentType"],
                 "path": r["path"],
                 "linkMode": r["linkMode"],
@@ -1067,6 +1070,15 @@ class ZoteroClient:
             pass
 
         return None
+
+    @staticmethod
+    def _attachment_filename(path: Optional[str]) -> str:
+        """Derive a display filename from a Zotero attachment path."""
+        if not path:
+            return ""
+        if path.startswith("storage:"):
+            return path[len("storage:") :]
+        return Path(path).name
 
     def _find_pdf_attachment(self, item_id: int) -> str | None:
         """Find the local PDF file path for an item (via child attachments)."""

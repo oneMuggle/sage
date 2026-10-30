@@ -127,7 +127,24 @@ export async function wikiDeleteSource(
   sourcePath: string,
   projectPath: string,
 ): Promise<CascadeDeleteResult> {
-  return httpDelete<CascadeDeleteResult>(`/wiki/source/${sourcePath}`, {
+  const encoded = sourcePath.split('/').map(encodeURIComponent).join('/');
+  return httpDelete<CascadeDeleteResult>(`/wiki/source/${encoded}`, {
+    project_path: projectPath,
+  });
+}
+
+/**
+ * 把项目外部的普通文件导入 `raw/sources/`。
+ *
+ * 后端只接受绝对路径、普通文件、且大小不超过 ingest 上限；
+ * 返回项目内相对路径，可直接传给 `wikiIngestStream`。
+ */
+export async function wikiImportSource(
+  sourcePath: string,
+  projectPath: string,
+): Promise<{ relative_path: string; name: string }> {
+  return httpPost('/wiki/source/import', {
+    source_path: sourcePath,
     project_path: projectPath,
   });
 }
@@ -541,6 +558,27 @@ export async function queueClearTasks(
   });
 }
 
+export interface QueueProcessedTask {
+  task_id: string;
+  status: 'completed' | 'failed';
+  wiki_page_path?: string;
+  error?: string;
+}
+
+export interface QueueProcessResult {
+  processed: QueueProcessedTask[];
+  remaining: QueueStatusSummary;
+  error?: string;
+}
+
+/** 按 FIFO 处理最多 `limit` 个 pending 任务（后端逐任务真实 ingest）。 */
+export async function queueProcess(projectPath: string, limit = 1): Promise<QueueProcessResult> {
+  return httpPost<QueueProcessResult>('/wiki/ingest/queue/process', {
+    project_path: projectPath,
+    limit,
+  });
+}
+
 export const WIKI_API_BASE = API_BASE;
 
 export function formatWikiApiClientSummary(
@@ -551,10 +589,7 @@ export function formatWikiApiClientSummary(
   return `baseUrl=${WIKI_API_BASE} · demoBlocked=${Boolean(demoMode)} · defaultLimit=${safeLimit}`;
 }
 
-export function formatWikiApiClientJson(
-  demoMode = isDemoMode(),
-  defaultSearchLimit = 20,
-): string {
+export function formatWikiApiClientJson(demoMode = isDemoMode(), defaultSearchLimit = 20): string {
   const safeLimit = Math.max(1, Math.round(defaultSearchLimit));
   return JSON.stringify({
     baseUrl: WIKI_API_BASE,
