@@ -22,6 +22,11 @@ from fastapi import APIRouter, HTTPException
 
 from backend.api.project_schemas import (
     AddMaterialFromFileRequest,
+    BootstrapApplyRequest,
+    BootstrapApplyResponse,
+    BootstrapErrorModel,
+    BootstrapPreviewRequest,
+    BootstrapPreviewResponse,
     ConstraintCreateRequest,
     ConstraintModel,
     ConstraintsResponse,
@@ -31,6 +36,7 @@ from backend.api.project_schemas import (
     CreateCheckpointRequest,
     DetectionSignalModel,
     GitCommitModel,
+    GitInitResponse,
     GitStatusResponse,
     MaterialMutationResponse,
     MilestoneCreateRequest,
@@ -43,6 +49,7 @@ from backend.api.project_schemas import (
     ProjectContextBudgetResponse,
     ProjectDiagnoseResponse,
     ProjectListResponse,
+    ProjectLocationResponse,
     ProjectMaterialAddRequest,
     ProjectMaterialModel,
     ProjectMaterialsResponse,
@@ -93,9 +100,12 @@ from backend.data.project_repo import (
 from backend.data.session_repo import MessageRepository
 from backend.office.errors import OfficePathError
 from backend.office.session_workspace import get_workspace_binding
+from backend.office.storage import validate_workspace
 from backend.services.default_workspace import DefaultWorkspaceResolver
 from backend.services.git_integration import GitIntegration
 from backend.services.project_archetype_scaffold import execute_project_scaffold
+from backend.services.project_bootstrap import apply_bootstrap, build_bootstrap_preview
+from backend.services.project_git_init import init_project_git
 from backend.services.project_type_detector import (
     DetectionResult,
     detect_project_type,
@@ -141,6 +151,74 @@ def _get_project_or_404(project_id: str) -> Project:
     if project is None:
         raise _error(404, "project_not_found", "项目不存在")
     return project
+
+
+@router.get("/{project_id}/location", response_model=ProjectLocationResponse)
+@with_db_lock
+def get_project_location(project_id: str) -> ProjectLocationResponse:
+    """返回项目目录的规范化绝对路径（只读，不刷新 last_opened_at、不建会话）。"""
+    project = _get_project_or_404(project_id)
+    try:
+        resolved = validate_workspace(Path(project.path))
+    except OfficePathError as exc:
+        raise _error(410, "project_path_missing", "项目目录不存在或已被移动") from exc
+    return ProjectLocationResponse(id=project.id, path=str(resolved))
+
+
+@router.post(
+    "/{project_id}/bootstrap/preview", response_model=BootstrapPreviewResponse
+)
+@with_db_lock
+async def bootstrap_preview(
+    project_id: str, request: BootstrapPreviewRequest
+) -> BootstrapPreviewResponse:
+    """扫描项目并返回 AI 初始化建议（只读）。"""
+    project = _get_project_or_404(project_id)
+    data = await build_bootstrap_preview(project, use_llm=request.use_llm)
+    repo = ProjectRepository()
+    return BootstrapPreviewResponse(
+        project=_with_stats(project, repo.session_stats()),
+        scan=data["scan"],
+        suggestions=data["suggestions"],
+        llm_available=data["llm_available"],
+    )
+
+
+@router.post(
+    "/{project_id}/bootstrap/apply", response_model=BootstrapApplyResponse
+)
+@with_db_lock
+def bootstrap_apply(
+    project_id: str, request: BootstrapApplyRequest
+) -> BootstrapApplyResponse:
+    """应用用户确认的初始化建议（逐项幂等）。"""
+    project = _get_project_or_404(project_id)
+    accept = (
+        request.model_dump()
+        if hasattr(request, "model_dump")
+        else request.dict()
+    )
+    result = apply_bootstrap(project, accept)
+    repo = ProjectRepository()
+    updated = repo.get(project_id) or project
+    return BootstrapApplyResponse(
+        project=_with_stats(updated, repo.session_stats()),
+        applied=result["applied"],
+        skipped=result["skipped"],
+        errors=[BootstrapErrorModel(**item) for item in result["errors"]],
+        git=result.get("git"),
+    )
+
+
+@router.post("/{project_id}/git/init", response_model=GitInitResponse)
+@with_db_lock
+def init_project_git_route(project_id: str) -> GitInitResponse:
+    """在项目目录执行 git init（仅在用户显式请求时调用）。"""
+    project = _get_project_or_404(project_id)
+    result = init_project_git(project.path)
+    if result.get("initialized") or result.get("already_repo"):
+        ProjectRepository().update_vcs_mode(project_id, "git")
+    return GitInitResponse(**result)
 
 
 def _material_model(material: ProjectMaterial) -> ProjectMaterialModel:
@@ -204,6 +282,8 @@ def update_project(project_id: str, request: ProjectUpdateRequest) -> ProjectMod
         repo.update_project_type(project_id, request.project_type)
     if "project_stage" in fields_set:
         repo.update_project_stage(project_id, request.project_stage)
+    if "project_sub_type" in fields_set:
+        repo.update_project_sub_type(project_id, request.project_sub_type)
     if "vcs_mode" in fields_set and request.vcs_mode:
         repo.update_vcs_mode(project_id, request.vcs_mode)
 

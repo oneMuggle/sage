@@ -68,6 +68,9 @@ class Project:
     project_stage: Optional[str] = None
     vcs_mode: str = "builtin"
     detected_type: Optional[str] = None
+    # 2026-10-29: 两级分类子类型 + AI 初始化状态 JSON。
+    project_sub_type: Optional[str] = None
+    bootstrap_state: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -83,6 +86,8 @@ class Project:
             "project_stage": self.project_stage,
             "vcs_mode": self.vcs_mode,
             "detected_type": self.detected_type,
+            "project_sub_type": self.project_sub_type,
+            "bootstrap_state": self.bootstrap_state,
         }
 
 
@@ -108,6 +113,8 @@ def _row_to_project(row) -> Project:  # noqa: ANN001 — sqlite3.Row
         project_stage=row["project_stage"] if "project_stage" in row.keys() else None,  # noqa: SIM118
         vcs_mode=row["vcs_mode"] if "vcs_mode" in row.keys() and row["vcs_mode"] else "builtin",  # noqa: SIM118
         detected_type=row["detected_type"] if "detected_type" in row.keys() else None,  # noqa: SIM118
+        project_sub_type=row["project_sub_type"] if "project_sub_type" in row.keys() else None,  # noqa: SIM118
+        bootstrap_state=row["bootstrap_state"] if "bootstrap_state" in row.keys() else None,  # noqa: SIM118
     )
 
 
@@ -366,6 +373,30 @@ class ProjectRepository:
         cursor.execute(
             "UPDATE projects SET vcs_mode = ? WHERE id = ?",
             (vcs_mode, project_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def update_project_sub_type(
+        self, project_id: str, project_sub_type: Optional[str]
+    ) -> bool:
+        """更新项目子类型（不存在返回 False）。"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET project_sub_type = ? WHERE id = ?",
+            (project_sub_type, project_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def update_bootstrap_state(self, project_id: str, state_json: str) -> bool:
+        """更新项目 AI 初始化状态 JSON（不存在返回 False）。"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET bootstrap_state = ? WHERE id = ?",
+            (state_json, project_id),
         )
         conn.commit()
         return cursor.rowcount > 0

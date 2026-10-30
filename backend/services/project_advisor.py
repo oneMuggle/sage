@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from backend.services.llm_json import parse_json
@@ -46,12 +47,19 @@ class AdvisorSuggestion:
     action: str
     reason: Optional[str] = None
     priority: str = "medium"  # low | medium | high
+    # 2026-10-29: 证据与可执行动作类型（前端可据此展示“为什么”并一键执行）
+    evidence: List[str] = field(default_factory=list)
+    action_type: str = ""
+    action_payload: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "action": self.action,
             "reason": self.reason,
             "priority": self.priority,
+            "evidence": list(self.evidence),
+            "action_type": self.action_type,
+            "action_payload": dict(self.action_payload),
         }
 
 
@@ -218,10 +226,28 @@ class ProjectAdvisor:
             except Exception:
                 logger.debug("Failed to load profile for %s", project_key, exc_info=True)
 
+        # 2026-10-29: 补充技术栈/Git/知识/会话上下文，避免顾问只能看到里程碑。
+        from backend.data.project_constraint_repo import ProjectConstraintRepository
+        from backend.data.project_material_repo import ProjectMaterialRepository
+        from backend.services.project_profiler import profile_project
+
+        try:
+            codebase = profile_project(project.path)
+        except Exception:
+            logger.debug("Failed to profile project %s", project.path, exc_info=True)
+            codebase = None
+
+        constraint_count = len(ProjectConstraintRepository().list_by_project(project_id))
+        material_count = len(ProjectMaterialRepository().list_by_project(project_id))
+        sessions = ProjectRepository().sessions_for_project(project.path, limit=5)
+        session_count = ProjectRepository().session_stats().get(project.path, (0, None))[0]
+        wiki_root = Path(project.path) / "wiki"
+
         return {
             "project": {
                 "name": project.name,
-                "type": project.project_type or "unknown",
+                "type": project.project_type or project.detected_type or "unknown",
+                "sub_type": project.project_sub_type,
                 "stage": project.project_stage or "unknown",
                 "description": (project.description or "")[:200],
             },
@@ -231,6 +257,29 @@ class ProjectAdvisor:
                 "overdue": overdue,
             },
             "profile_entry_count": profile_count,
+            "codebase": (
+                {
+                    "tech_stack": list(codebase.tech_stack[:12]),
+                    "frameworks": list(codebase.frameworks[:10]),
+                    "build_commands": list(codebase.build_commands[:6]),
+                    "test_frameworks": list(codebase.test_frameworks[:6]),
+                    "ci_workflows": list(codebase.ci_workflows[:6]),
+                    "directory_layout": list(codebase.directory_layout[:10]),
+                    "git": codebase.git_stats.to_dict(),
+                }
+                if codebase is not None
+                else {}
+            ),
+            "knowledge": {
+                "constraints": constraint_count,
+                "materials": material_count,
+                "profile_entries": profile_count,
+                "wiki_exists": wiki_root.is_dir(),
+            },
+            "sessions": {
+                "count": session_count,
+                "recent": [s.title for s in sessions],
+            },
         }
 
     # ── Prompt 构建 ──────────────────────────────────────────────────────
@@ -252,13 +301,40 @@ class ProjectAdvisor:
                 )
             overdue_text = "\n".join(items)
 
-        return f"""你是一位经验丰富的项目顾问。根据以下项目数据，给出简洁、可操作的建议。
+        codebase = data.get("codebase") or {}
+        git = codebase.get("git") or {}
+        knowledge = data.get("knowledge") or {}
+        sessions = data.get("sessions") or {}
+
+        tech_text = "、".join(codebase.get("tech_stack") or []) or "未识别"
+        frameworks_text = "、".join(codebase.get("frameworks") or []) or "无"
+        build_text = "；".join(codebase.get("build_commands") or []) or "未识别"
+        test_text = "、".join(codebase.get("test_frameworks") or []) or "未识别"
+        ci_text = "、".join(codebase.get("ci_workflows") or []) or "无"
+        recent_sessions = "、".join(sessions.get("recent") or []) or "无"
+
+        return f"""你是一位经验丰富的项目顾问。根据以下项目数据，给出简洁、可操作、**有证据**的建议。
 
 ## 项目信息
 - 名称: {project['name']}
-- 类型: {project['type']}
+- 类型: {project['type']} / 子类型: {project.get('sub_type') or '未识别'}
 - 阶段: {project['stage']}
 - 描述: {project['description'] or '未设置'}
+
+## 代码库与技术栈
+- 技术栈: {tech_text}
+- 框架: {frameworks_text}
+- 构建命令: {build_text}
+- 测试框架: {test_text}
+- CI: {ci_text}
+- Git: 仓库={git.get('is_repo')}，分支={git.get('current_branch') or '无'}，未提交={git.get('dirty_files', 0)}，提交数={git.get('commit_count', 0)}
+
+## 知识与会话
+- 约束规则: {knowledge.get('constraints', 0)} 条
+- 项目资料: {knowledge.get('materials', 0)} 条
+- AI 记忆: {knowledge.get('profile_entries', 0)} 条
+- Wiki: {'已生成' if knowledge.get('wiki_exists') else '未生成'}
+- 会话数: {sessions.get('count', 0)}，最近会话: {recent_sessions}
 
 ## 里程碑状态
 - 总计: {milestones['total']} 个
@@ -266,7 +342,6 @@ class ProjectAdvisor:
 - 进行中: {by_status.get('in_progress', 0)}
 - 已完成: {by_status.get('completed', 0)}
 - 已阻塞: {by_status.get('blocked', 0)}
-- 画像条目数: {data['profile_entry_count']}
 
 ## 逾期里程碑
 {overdue_text or '无逾期'}
@@ -293,12 +368,17 @@ class ProjectAdvisor:
     {{
       "action": "<具体行动>",
       "reason": "<原因>",
-      "priority": "<low|medium|high>"
+      "priority": "<low|medium|high>",
+      "evidence": ["<引用上面的具体事实，如 git: 12 uncommitted / tech_stack: fastapi>"],
+      "action_type": "<create_milestone|add_rule|generate_wiki|init_git|create_checkpoint|start_session|add_material|open_settings>",
+      "action_payload": {{}}
     }}
   ]
 }}
 
 注意：
+- 每条建议必须引用上面的具体事实作为 evidence，禁止泛泛而谈（如“保持良好沟通”）
+- 不要建议已经完成的事项（例如 Git 已存在就不要建议 init_git）
 - risks 最多 3 条，按 severity 降序
 - suggestions 最多 3 条，按 priority 降序
 - 只输出 JSON，不要额外说明"""
@@ -330,11 +410,18 @@ class ProjectAdvisor:
 
         suggestions = []
         for s in obj.get("suggestions", [])[:3]:
+            evidence = s.get("evidence")
+            payload = s.get("action_payload")
             suggestions.append(
                 AdvisorSuggestion(
                     action=str(s.get("action", "")),
                     reason=s.get("reason"),
                     priority=str(s.get("priority", "medium")),
+                    evidence=[
+                        str(item) for item in (evidence if isinstance(evidence, list) else [])
+                    ][:5],
+                    action_type=str(s.get("action_type", "")),
+                    action_payload=dict(payload) if isinstance(payload, dict) else {},
                 )
             )
 

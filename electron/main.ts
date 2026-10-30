@@ -61,6 +61,7 @@ import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeTo
 import { readLogTimezone, writeLogTimezone } from './logTimezone';
 import { setLogTimezone } from './logger';
 import { detectProjectRoot } from './projectDetector';
+import { registerProjectIpc } from './projectIpc';
 logger.info('main: process started', {
   pid: process.pid,
   electronVer: process.versions.electron,
@@ -75,6 +76,7 @@ import { pathToFileURL } from 'node:url';
 import {
   constants as fsConstants,
   lstatSync,
+  statSync,
   existsSync,
   openSync,
   closeSync,
@@ -2032,6 +2034,24 @@ async function registerIpcHandlers(): Promise<void> {
         error: `打开文件失败：${err instanceof Error ? err.message : String(err)}`,
       };
     }
+  });
+
+  // 2026-10-29: project folder open/reveal. The renderer passes only a
+  // registered project id; main resolves the path from the backend.
+  registerProjectIpc({
+    register: (channel, handler) => ipcMain.handle(channel, handler),
+    fetch,
+    shell,
+    isDirectory: (path) => {
+      try {
+        return statSync(path).isDirectory();
+      } catch {
+        return false;
+      }
+    },
+    isTrusted: (sender) => isTrustedRenderer(sender as Electron.WebContents),
+    backendUrl: BACKEND_URL,
+    getToken: () => backendAuthToken,
   });
 
   // P2 (2026-10-19): expose the detected project root so the renderer can

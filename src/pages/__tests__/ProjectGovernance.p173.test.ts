@@ -8,7 +8,7 @@ describe('auditProjectGovernancePageGovernance (P173)', () => {
     expect(report.module).toBe('src/pages/ProjectGovernance.tsx');
     expect(report.phase).toBe('P173');
     expect(report.domain).toBe('pages');
-    expect(report.tabs).toEqual(['paths', 'milestones', 'materials', 'profile', 'charter']);
+    expect(report.tabs).toEqual(['overview', 'knowledge', 'settings']);
     expect(report.compliant).toBe(true);
   });
 });

@@ -138,7 +138,7 @@ export function ProjectCreationWizard({
   const [copiedSummaryMd, setCopiedSummaryMd] = useState(false);
   const [projectDescription, setProjectDescription] = useState<string>('');
   const [projectInstructions, setProjectInstructions] = useState<string>('');
-  const [vcsMode, setVcsMode] = useState<'git' | 'builtin' | 'none'>('builtin');
+  const [vcsMode, setVcsMode] = useState<'git' | 'builtin'>('builtin');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -419,13 +419,12 @@ export function ProjectCreationWizard({
                     <span className="text-xs font-medium text-muted-foreground">版本控制：</span>
                     <select
                       value={vcsMode}
-                      onChange={(e) => setVcsMode(e.target.value as 'git' | 'builtin' | 'none')}
+                      onChange={(e) => setVcsMode(e.target.value as 'git' | 'builtin')}
                       data-testid="wizard-vcs-mode-select"
                       className="ml-1 rounded border border-input bg-background px-2 py-0.5 text-xs text-foreground"
                     >
                       <option value="git">Git 仓库版本控制</option>
                       <option value="builtin">内置快照 (.sage/checkpoints)</option>
-                      <option value="none">不启用版本控制</option>
                     </select>
                   </div>
                 </div>
