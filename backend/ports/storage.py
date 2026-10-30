@@ -37,8 +37,11 @@ class StoragePort(Protocol):
         """创建新会话，返回会话 ID。"""
         ...
 
-    async def list_sessions(self) -> List[Dict[str, Any]]:
-        """列出当前所有会话（字典形式，键集由实现定义）。"""
+    async def list_sessions(self, archived: Optional[bool] = None) -> List[Dict[str, Any]]:
+        """列出会话（字典形式，键集由实现定义）。
+
+        ``archived``: None/False → 未归档（默认）；True → 仅已归档。
+        """
         ...
 
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:

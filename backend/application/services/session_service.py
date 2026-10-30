@@ -115,9 +115,13 @@ class SessionService:
         self,
         limit: int = 100,
         offset: int = 0,
+        archived: Optional[bool] = None,
     ) -> List[Dict[str, Any]]:
-        """列出会话;offset/limit 仅做分页(底层 storage 暂不支持,先 in-mem 切片)。"""
-        all_sessions = await self.storage.list_sessions()
+        """列出会话;offset/limit 仅做分页(底层 storage 暂不支持,先 in-mem 切片)。
+
+        ``archived``: True 只返回已归档会话（侧栏归档视图）；缺省只列未归档。
+        """
+        all_sessions = await self.storage.list_sessions(archived=archived)
         return all_sessions[offset : offset + limit]
 
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
