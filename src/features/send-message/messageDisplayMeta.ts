@@ -49,6 +49,8 @@ export interface BuildMessageDisplayMetaInput {
   images?: readonly { name: string; size: number; type: string; dataUrl?: string }[];
   officeRefs?: readonly ChatOfficeRef[];
   knowledgeRefs?: readonly { id: string; title: string }[];
+  /** 发送时的工作区根目录；随 office_refs 落库，供历史消息在切换工作区后定位文档。 */
+  workspacePath?: string;
 }
 
 /** 汇总一条用户消息的全部引用信息；无任何引用时返回 undefined。 */
@@ -58,6 +60,7 @@ export function buildMessageDisplayMeta({
   images,
   officeRefs,
   knowledgeRefs,
+  workspacePath,
 }: BuildMessageDisplayMetaInput): MessageDisplayMeta | undefined {
   const fileRefs = extractFileRefs(content);
   const meta: MessageDisplayMeta = {
@@ -74,6 +77,7 @@ export function buildMessageDisplayMeta({
             doc_id: docId,
             doc_type: docType,
             filename,
+            ...(workspacePath ? { workspace_path: workspacePath } : {}),
           })),
         }
       : {}),

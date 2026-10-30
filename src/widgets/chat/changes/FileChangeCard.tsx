@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronRight,
   Columns,
+  Copy,
   ExternalLink,
   Eye,
   FileText,
@@ -25,7 +26,11 @@ import { toast } from 'sonner';
 import { useChangesListStore } from '../../../features/changes/changesListStore';
 import { useRightPanelStore } from '../../../features/right-panel/rightPanelStore';
 import { workspaceApi } from '../../../shared/api/workspaceApi';
+import { copyToClipboard } from '../../../shared/lib/clipboard';
+import { useI18n } from '../../../shared/lib/i18n';
 import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
+import { ContextMenu } from '../../../shared/ui/ContextMenu/ContextMenu';
+import type { ContextMenuItemSpec } from '../../../shared/ui/ContextMenu/types';
 import { ShikiCodeBlock } from '../ShikiCodeBlock';
 
 import { SplitDiff } from './SplitDiff';
@@ -83,6 +88,7 @@ export function buildFileChangeCardAuditJson(input: FileChangeCardAuditInput = {
 }
 
 export function FileChangeCard({ sessionId, path }: FileChangeCardProps) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const [diff, setDiff] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
@@ -227,146 +233,202 @@ export function FileChangeCard({ sessionId, path }: FileChangeCardProps) {
     setExpanded(false);
   }, []);
 
+  const menuItems = (): ContextMenuItemSpec[] => [
+    {
+      id: 'change-toggle',
+      label: expanded ? t('contextMenu.change.collapse') : t('contextMenu.change.expand'),
+      icon: expanded ? ChevronDown : ChevronRight,
+      onSelect: toggle,
+    },
+    {
+      id: 'change-accept',
+      label: t('contextMenu.change.accept'),
+      icon: Check,
+      disabled: accepted,
+      onSelect: handleAccept,
+    },
+    {
+      id: 'change-revert',
+      label: t('contextMenu.change.revert'),
+      icon: RotateCcw,
+      destructive: true,
+      disabled: reverting,
+      onSelect: () => {
+        void handleRevert();
+      },
+    },
+    { id: 'change-sep-view', kind: 'separator' },
+    {
+      id: 'change-toggle-view',
+      label: t('contextMenu.change.toggleView'),
+      icon: diffMode === 'inline' ? Columns : Rows,
+      onSelect: toggleDiffMode,
+    },
+    {
+      id: 'change-open-editor',
+      label: t('contextMenu.change.openInEditor'),
+      icon: ExternalLink,
+      onSelect: handleOpenInEditor,
+    },
+    {
+      id: 'change-open-panel',
+      label: t('contextMenu.change.openInPanel'),
+      icon: PanelRightOpen,
+      onSelect: openInPanel,
+    },
+    { id: 'change-sep-copy', kind: 'separator' },
+    {
+      id: 'change-copy-path',
+      label: t('contextMenu.common.copyPath'),
+      icon: Copy,
+      onSelect: () =>
+        void copyToClipboard(path, {
+          successMessage: t('contextMenu.common.copied'),
+          errorMessage: t('contextMenu.common.copyFailed'),
+        }),
+    },
+  ];
+
   return (
-    <div
-      className={`mx-2 mb-1.5 rounded border bg-surface ${accepted ? 'border-success/50 opacity-60' : 'border-border'}`}
-      data-testid="file-change-card"
-    >
-      <div className="flex items-center gap-1 px-2 py-1">
-        <button
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-          onClick={toggle}
-          aria-expanded={expanded}
-          title={expanded ? '收起 diff' : '展开 diff'}
-          data-testid="file-change-toggle"
-        >
-          {expanded ? (
-            <ChevronDown className="w-3.5 h-3.5 shrink-0 text-text-secondary" />
-          ) : (
-            <ChevronRight className="w-3.5 h-3.5 shrink-0 text-text-secondary" />
-          )}
-          <span className="truncate font-mono text-ui-2xs text-text" title={path}>
-            {path}
-          </span>
-          {accepted && <Check className="w-3 h-3 shrink-0 text-success" />}
-          {stats?.insertions != null && stats.insertions > 0 && (
-            <span className="shrink-0 font-mono text-ui-2xs text-success">
-              +{stats.insertions}
+    <ContextMenu items={menuItems}>
+      <div
+        className={`mx-2 mb-1.5 rounded border bg-surface ${accepted ? 'border-success/50 opacity-60' : 'border-border'}`}
+        data-testid="file-change-card"
+      >
+        <div className="flex items-center gap-1 px-2 py-1">
+          <button
+            className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+            onClick={toggle}
+            aria-expanded={expanded}
+            title={expanded ? '收起 diff' : '展开 diff'}
+            data-testid="file-change-toggle"
+          >
+            {expanded ? (
+              <ChevronDown className="w-3.5 h-3.5 shrink-0 text-text-secondary" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5 shrink-0 text-text-secondary" />
+            )}
+            <span className="truncate font-mono text-ui-2xs text-text" title={path}>
+              {path}
             </span>
-          )}
-          {stats?.deletions != null && stats.deletions > 0 && (
-            <span className="shrink-0 font-mono text-ui-2xs text-error">−{stats.deletions}</span>
-          )}
-        </button>
-        {/* Phase 4: Accept 按钮 */}
-        <button
-          className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover hover:text-success"
-          onClick={handleAccept}
-          title="接受此变更"
-          aria-label={`接受 ${path} 的变更`}
-          data-testid="file-change-accept"
-        >
-          <Check className="w-3.5 h-3.5" />
-        </button>
-        {/* Phase 4: Revert 按钮 */}
-        <button
-          className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover hover:text-error disabled:opacity-50"
-          onClick={handleRevert}
-          disabled={reverting}
-          title={reverting ? '回滚中…' : '回滚此变更'}
-          aria-label={`回滚 ${path} 的变更`}
-          data-testid="file-change-revert"
-        >
-          <RotateCcw className={`w-3.5 h-3.5 ${reverting ? 'animate-spin' : ''}`} />
-        </button>
-        {/* Phase 4: Diff 视图切换 */}
-        <button
-          className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover"
-          onClick={toggleDiffMode}
-          title={diffMode === 'inline' ? '切换到并排视图' : '切换到内联视图'}
-          aria-label={diffMode === 'inline' ? '切换到并排 diff 视图' : '切换到内联 diff 视图'}
-          data-testid="file-change-toggle-view"
-        >
-          {diffMode === 'inline' ? (
-            <Columns className="w-3.5 h-3.5" />
-          ) : (
-            <Rows className="w-3.5 h-3.5" />
-          )}
-        </button>
-        {/* Phase 4: 在编辑器中打开 */}
-        <button
-          className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover"
-          onClick={handleOpenInEditor}
-          title="在系统编辑器中打开"
-          aria-label={`在编辑器中打开 ${path}`}
-          data-testid="file-change-open-editor"
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-        </button>
-        <button
-          className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover"
-          onClick={openInPanel}
-          title="在右侧面板中查看 diff"
-          aria-label={`在右侧面板中查看 ${path} 的 diff`}
-          data-testid="file-change-open-panel"
-        >
-          <PanelRightOpen className="w-3.5 h-3.5" />
-        </button>
-        <span
-          role="status"
-          data-testid="file-change-card-copy-audit"
-          onClick={() => void handleCopyAudit()}
-          className="shrink-0 cursor-pointer rounded px-1 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-          title="复制文件变更卡治理快照"
-        >
-          {copiedAudit ? '已复制快照' : '快照'}
-        </span>
-        <span
-          role="status"
-          data-testid="file-change-card-copy-audit-json"
-          onClick={() => void handleCopyAuditJson()}
-          className="shrink-0 cursor-pointer rounded px-1 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-          title="复制文件变更卡治理 JSON"
-        >
-          {copiedAuditJson ? '已复制 JSON' : 'JSON'}
-        </span>
-        {isPreviewable(path) && (
+            {accepted && <Check className="w-3 h-3 shrink-0 text-success" />}
+            {stats?.insertions != null && stats.insertions > 0 && (
+              <span className="shrink-0 font-mono text-ui-2xs text-success">
+                +{stats.insertions}
+              </span>
+            )}
+            {stats?.deletions != null && stats.deletions > 0 && (
+              <span className="shrink-0 font-mono text-ui-2xs text-error">−{stats.deletions}</span>
+            )}
+          </button>
+          {/* Phase 4: Accept 按钮 */}
+          <button
+            className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover hover:text-success"
+            onClick={handleAccept}
+            title="接受此变更"
+            aria-label={`接受 ${path} 的变更`}
+            data-testid="file-change-accept"
+          >
+            <Check className="w-3.5 h-3.5" />
+          </button>
+          {/* Phase 4: Revert 按钮 */}
+          <button
+            className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover hover:text-error disabled:opacity-50"
+            onClick={handleRevert}
+            disabled={reverting}
+            title={reverting ? '回滚中…' : '回滚此变更'}
+            aria-label={`回滚 ${path} 的变更`}
+            data-testid="file-change-revert"
+          >
+            <RotateCcw className={`w-3.5 h-3.5 ${reverting ? 'animate-spin' : ''}`} />
+          </button>
+          {/* Phase 4: Diff 视图切换 */}
           <button
             className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover"
-            onClick={previewInPanel}
-            title="在预览 Tab 中查看文档"
-            aria-label={`预览文档 ${path}`}
-            data-testid="file-change-preview-doc"
+            onClick={toggleDiffMode}
+            title={diffMode === 'inline' ? '切换到并排视图' : '切换到内联视图'}
+            aria-label={diffMode === 'inline' ? '切换到并排 diff 视图' : '切换到内联 diff 视图'}
+            data-testid="file-change-toggle-view"
           >
-            <Eye className="w-3.5 h-3.5" />
+            {diffMode === 'inline' ? (
+              <Columns className="w-3.5 h-3.5" />
+            ) : (
+              <Rows className="w-3.5 h-3.5" />
+            )}
           </button>
+          {/* Phase 4: 在编辑器中打开 */}
+          <button
+            className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover"
+            onClick={handleOpenInEditor}
+            title="在系统编辑器中打开"
+            aria-label={`在编辑器中打开 ${path}`}
+            data-testid="file-change-open-editor"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+          </button>
+          <button
+            className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover"
+            onClick={openInPanel}
+            title="在右侧面板中查看 diff"
+            aria-label={`在右侧面板中查看 ${path} 的 diff`}
+            data-testid="file-change-open-panel"
+          >
+            <PanelRightOpen className="w-3.5 h-3.5" />
+          </button>
+          <span
+            role="status"
+            data-testid="file-change-card-copy-audit"
+            onClick={() => void handleCopyAudit()}
+            className="shrink-0 cursor-pointer rounded px-1 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+            title="复制文件变更卡治理快照"
+          >
+            {copiedAudit ? '已复制快照' : '快照'}
+          </span>
+          <span
+            role="status"
+            data-testid="file-change-card-copy-audit-json"
+            onClick={() => void handleCopyAuditJson()}
+            className="shrink-0 cursor-pointer rounded px-1 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+            title="复制文件变更卡治理 JSON"
+          >
+            {copiedAuditJson ? '已复制 JSON' : 'JSON'}
+          </span>
+          {isPreviewable(path) && (
+            <button
+              className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover"
+              onClick={previewInPanel}
+              title="在预览 Tab 中查看文档"
+              aria-label={`预览文档 ${path}`}
+              data-testid="file-change-preview-doc"
+            >
+              <Eye className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+        {expanded && (
+          <div className="border-t border-border px-2 py-1.5">
+            {loading ? (
+              <div className="py-1 text-xs text-muted">加载 diff…</div>
+            ) : error ? (
+              <div className="py-1 text-xs text-error">{error}</div>
+            ) : diff !== null && diff.trim() === '' ? (
+              <div className="py-1 text-xs text-muted">暂无 diff 内容</div>
+            ) : diff !== null ? (
+              <>
+                {truncated && (
+                  <div className="pb-1 text-xs text-warning">diff 过长，已截断显示前 64KiB</div>
+                )}
+                {diffMode === 'inline' ? (
+                  <ShikiCodeBlock language="diff">{diff.trimEnd()}</ShikiCodeBlock>
+                ) : (
+                  <SplitDiff diff={diff} />
+                )}
+              </>
+            ) : null}
+          </div>
         )}
       </div>
-      {expanded && (
-        <div className="border-t border-border px-2 py-1.5">
-          {loading ? (
-            <div className="py-1 text-xs text-muted">加载 diff…</div>
-          ) : error ? (
-            <div className="py-1 text-xs text-error">{error}</div>
-          ) : diff !== null && diff.trim() === '' ? (
-            <div className="py-1 text-xs text-muted">暂无 diff 内容</div>
-          ) : diff !== null ? (
-            <>
-              {truncated && (
-                <div className="pb-1 text-xs text-warning">
-                  diff 过长，已截断显示前 64KiB
-                </div>
-              )}
-              {diffMode === 'inline' ? (
-                <ShikiCodeBlock language="diff">{diff.trimEnd()}</ShikiCodeBlock>
-              ) : (
-                <SplitDiff diff={diff} />
-              )}
-            </>
-          ) : null}
-        </div>
-      )}
-    </div>
+    </ContextMenu>
   );
 }
 
@@ -505,9 +567,7 @@ export function FileChangeCards({ sessionId, paths }: { sessionId: string; paths
           <span className="text-ui-2xs text-text">修改了 {paths.length} 个文件</span>
           {totals.known && (
             <>
-              <span className="font-mono text-ui-2xs text-success">
-                +{totals.insertions}
-              </span>
+              <span className="font-mono text-ui-2xs text-success">+{totals.insertions}</span>
               {totals.deletions > 0 && (
                 <span className="font-mono text-ui-2xs text-error">−{totals.deletions}</span>
               )}
@@ -515,11 +575,7 @@ export function FileChangeCards({ sessionId, paths }: { sessionId: string; paths
           )}
           <span className="text-ui-2xs text-muted">点击展开</span>
         </button>
-        <RevertAllButton
-          count={paths.length}
-          onClick={handleRevertAll}
-          disabled={revertingAll}
-        />
+        <RevertAllButton count={paths.length} onClick={handleRevertAll} disabled={revertingAll} />
       </div>
     );
   }
@@ -527,11 +583,7 @@ export function FileChangeCards({ sessionId, paths }: { sessionId: string; paths
   return (
     <div className="flex flex-col">
       <div className="mb-1 flex items-center justify-end">
-        <RevertAllButton
-          count={paths.length}
-          onClick={handleRevertAll}
-          disabled={revertingAll}
-        />
+        <RevertAllButton count={paths.length} onClick={handleRevertAll} disabled={revertingAll} />
       </div>
       {paths.map((path) => (
         <FileChangeCard key={path} sessionId={sessionId} path={path} />

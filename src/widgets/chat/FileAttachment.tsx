@@ -1,4 +1,8 @@
-import { File, FileText, Image, X } from 'lucide-react';
+import { Copy, File, FileText, Image, X } from 'lucide-react';
+
+import { copyToClipboard } from '../../shared/lib/clipboard';
+import { useI18n } from '../../shared/lib/i18n';
+import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
 
 interface FileAttachmentProps {
   name: string;
@@ -8,17 +12,45 @@ interface FileAttachmentProps {
 }
 
 export function FileAttachment({ name, size, type, onRemove }: FileAttachmentProps) {
+  const { t } = useI18n();
+  const menuItems = () => [
+    {
+      id: 'copy-file-name',
+      label: t('contextMenu.common.copyName'),
+      icon: Copy,
+      onSelect: () =>
+        void copyToClipboard(name, {
+          successMessage: t('contextMenu.common.copied'),
+          errorMessage: t('contextMenu.common.copyFailed'),
+        }),
+    },
+    ...(onRemove
+      ? [
+          { id: 'file-remove-sep', kind: 'separator' as const },
+          {
+            id: 'file-remove',
+            label: t('contextMenu.common.remove'),
+            icon: X,
+            destructive: true,
+            onSelect: onRemove,
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-radius-sm bg-bg-muted text-xs text-text-secondary border border-border">
-      {getFileIcon(type)}
-      <span className="truncate max-w-32">{name}</span>
-      <span className="text-muted">({formatFileSize(size)})</span>
-      {onRemove && (
-        <button className="ml-1 hover:text-text transition-colors" onClick={onRemove}>
-          <X className="w-3 h-3" />
-        </button>
-      )}
-    </span>
+    <ContextMenu items={menuItems}>
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-radius-sm bg-bg-muted text-xs text-text-secondary border border-border">
+        {getFileIcon(type)}
+        <span className="truncate max-w-32">{name}</span>
+        <span className="text-muted">({formatFileSize(size)})</span>
+        {onRemove && (
+          <button className="ml-1 hover:text-text transition-colors" onClick={onRemove}>
+            <X className="w-3 h-3" />
+          </button>
+        )}
+      </span>
+    </ContextMenu>
   );
 }
 
@@ -86,9 +118,7 @@ export function evaluateFileAttachmentAudit(
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function exportFileAttachmentAuditJson(
-  input: FileAttachmentAuditInput,
-): string {
+export function exportFileAttachmentAuditJson(input: FileAttachmentAuditInput): string {
   return JSON.stringify(evaluateFileAttachmentAudit(input));
 }
 // eslint-disable-next-line react-refresh/only-export-components

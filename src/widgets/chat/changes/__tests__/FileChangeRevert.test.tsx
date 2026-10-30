@@ -12,13 +12,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useChangesListStore } from '../../../../features/changes/changesListStore';
 import type { WorkspaceChanges, WorkspaceDiff } from '../../../../shared/api/workspaceApi';
+import { I18nProvider } from '../../../../shared/lib/i18n';
 import { resolveConfirm } from '../../../../shared/ui/ConfirmDialog/confirmService';
 import { FileChangeCard, FileChangeCards } from '../FileChangeCard';
+
+const renderWithI18n = (ui: React.ReactElement) =>
+  render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
 
 const mockGetChangeDiff = vi.fn<(s: string, p: string) => Promise<WorkspaceDiff>>();
 const mockGetChanges = vi.fn<(s: string) => Promise<WorkspaceChanges>>();
 const mockRevertChanges = vi.fn<
-  (s: string, paths: string[], deleteUntracked?: boolean) => Promise<{
+  (
+    s: string,
+    paths: string[],
+    deleteUntracked?: boolean,
+  ) => Promise<{
     reverted: string[];
     errors: Array<{ path: string; error: string }>;
   }>
@@ -48,7 +56,9 @@ const SAMPLE: WorkspaceChanges = {
   ahead: 0,
   behind: 0,
   clean: false,
-  changes: [{ indexStatus: '', worktreeStatus: 'M', path: 'src/app.ts', insertions: 1, deletions: 0 }],
+  changes: [
+    { indexStatus: '', worktreeStatus: 'M', path: 'src/app.ts', insertions: 1, deletions: 0 },
+  ],
 };
 
 beforeEach(() => {
@@ -72,13 +82,13 @@ async function clickAndConfirm(btn: HTMLElement, confirmed: boolean) {
 
 describe('逐文件回滚需要显式确认 (P2-1)', () => {
   it('取消确认时不调用 API', async () => {
-    render(<FileChangeCard sessionId="s1" path="src/app.ts" />);
+    renderWithI18n(<FileChangeCard sessionId="s1" path="src/app.ts" />);
     await clickAndConfirm(screen.getByTestId('file-change-revert'), false);
     expect(mockRevertChanges).not.toHaveBeenCalled();
   });
 
   it('确认后执行回滚', async () => {
-    render(<FileChangeCard sessionId="s1" path="src/app.ts" />);
+    renderWithI18n(<FileChangeCard sessionId="s1" path="src/app.ts" />);
     await clickAndConfirm(screen.getByTestId('file-change-revert'), true);
     // 第三个参数是 deleteUntracked（默认 false，不删未跟踪文件）
     await waitFor(() =>
@@ -89,29 +99,27 @@ describe('逐文件回滚需要显式确认 (P2-1)', () => {
 
 describe('批量回滚 (P2-1)', () => {
   it('折叠态也提供「全部回滚」入口 —— 不想逐个展开也能反悔', () => {
-    render(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts', 'c.ts']} />);
+    renderWithI18n(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts', 'c.ts']} />);
     expect(screen.getByTestId('file-change-group')).toBeInTheDocument();
     expect(screen.getByTestId('file-change-revert-all')).toBeInTheDocument();
     expect(screen.getByText('全部回滚 (3)')).toBeInTheDocument();
   });
 
   it('展开态同样提供入口 —— 行为不因用户先展开就变松', async () => {
-    render(<FileChangeCards sessionId="s1" paths={['a.ts']} />);
+    renderWithI18n(<FileChangeCards sessionId="s1" paths={['a.ts']} />);
     expect(screen.queryByTestId('file-change-group')).not.toBeInTheDocument();
     expect(screen.getByTestId('file-change-revert-all')).toBeInTheDocument();
   });
 
   it('一次调用回滚全部文件，而不是逐个', async () => {
-    render(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts', 'c.ts']} />);
+    renderWithI18n(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts', 'c.ts']} />);
     await clickAndConfirm(screen.getByTestId('file-change-revert-all'), true);
-    await waitFor(() =>
-      expect(mockRevertChanges).toHaveBeenCalledTimes(1),
-    );
+    await waitFor(() => expect(mockRevertChanges).toHaveBeenCalledTimes(1));
     expect(mockRevertChanges).toHaveBeenCalledWith('s1', ['a.ts', 'b.ts', 'c.ts'], false);
   });
 
   it('取消确认时不调用 API', async () => {
-    render(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts']} />);
+    renderWithI18n(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts']} />);
     await clickAndConfirm(screen.getByTestId('file-change-revert-all'), false);
     expect(mockRevertChanges).not.toHaveBeenCalled();
   });
@@ -121,7 +129,7 @@ describe('批量回滚 (P2-1)', () => {
       reverted: ['a.ts'],
       errors: [{ path: 'b.ts', error: '文件被占用' }],
     });
-    render(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts']} />);
+    renderWithI18n(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts']} />);
     await clickAndConfirm(screen.getByTestId('file-change-revert-all'), true);
     await waitFor(() => expect(mockRevertChanges).toHaveBeenCalled());
     // toast.error 被调用即视为如实上报；关键是不能走成功分支
@@ -141,12 +149,18 @@ describe('批量回滚 (P2-1)', () => {
 describe('未跟踪文件（本次新建）的回滚语义', () => {
   const NEW_FILE: WorkspaceChanges = {
     ...SAMPLE,
-    changes: [{ indexStatus: '?', worktreeStatus: '?', path: 'new.ts', insertions: 3, deletions: 0 }],
+    changes: [
+      { indexStatus: '?', worktreeStatus: '?', path: 'new.ts', insertions: 3, deletions: 0 },
+    ],
   };
 
   it('逐文件回滚：显式授权删除，且确认框说清「回滚即删除」', async () => {
-    useChangesListStore.setState({ bySession: { s1: NEW_FILE }, errors: {}, loadingBy: {} } as never);
-    render(<FileChangeCard sessionId="s1" path="new.ts" />);
+    useChangesListStore.setState({
+      bySession: { s1: NEW_FILE },
+      errors: {},
+      loadingBy: {},
+    } as never);
+    renderWithI18n(<FileChangeCard sessionId="s1" path="new.ts" />);
     await clickAndConfirm(screen.getByTestId('file-change-revert'), true);
     await waitFor(() => expect(mockRevertChanges).toHaveBeenCalledWith('s1', ['new.ts'], true));
   });
@@ -165,9 +179,11 @@ describe('未跟踪文件（本次新建）的回滚语义', () => {
       errors: {},
       loadingBy: {},
     } as never);
-    render(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts']} />);
+    renderWithI18n(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts']} />);
     await clickAndConfirm(screen.getByTestId('file-change-revert-all'), true);
     // 标志整批生效：后端只对确实是未跟踪的路径删文件，a.ts 仍走 git checkout
-    await waitFor(() => expect(mockRevertChanges).toHaveBeenCalledWith('s1', ['a.ts', 'b.ts'], true));
+    await waitFor(() =>
+      expect(mockRevertChanges).toHaveBeenCalledWith('s1', ['a.ts', 'b.ts'], true),
+    );
   });
 });

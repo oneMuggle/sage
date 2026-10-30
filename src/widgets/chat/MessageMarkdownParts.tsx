@@ -6,7 +6,9 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 
 import { humanizeToolCall } from '../../shared/lib/humanize';
+import { useI18n } from '../../shared/lib/i18n';
 import type { ToolCall } from '../../shared/lib/store';
+import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
 
 import { HtmlCodeBlock } from './HtmlCodeBlock';
 import { MarkdownImage } from './MarkdownImage';
@@ -68,6 +70,7 @@ function PlainCodeBlock({ className, children }: { className?: string; children:
 }
 
 function MarkdownTable({ children }: { children?: ReactNode }) {
+  const { t } = useI18n();
   const tableRef = useRef<HTMLTableElement | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -90,27 +93,38 @@ function MarkdownTable({ children }: { children?: ReactNode }) {
     }
   };
 
+  const menuItems = () => [
+    {
+      id: 'copy-table',
+      label: t('contextMenu.table.copy'),
+      icon: Copy,
+      onSelect: () => void handleCopyTable(),
+    },
+  ];
+
   return (
-    <div className="relative group/table my-3 rounded-radius-sm border border-border overflow-hidden">
-      <div className="flex items-center justify-end px-2 py-1 bg-bg-subtle border-b border-border/60">
-        <button
-          type="button"
-          onClick={() => void handleCopyTable()}
-          data-testid="markdown-table-copy"
-          aria-label={copied ? '已复制表格' : '复制表格'}
-          title="复制为 TSV（可直接粘贴至 Excel / 表格）"
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-text-secondary hover:text-text hover:bg-bg-hover transition-colors"
-        >
-          {copied ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
-          <span>{copied ? '已复制' : '复制表格'}</span>
-        </button>
+    <ContextMenu items={menuItems}>
+      <div className="relative group/table my-3 rounded-radius-sm border border-border overflow-hidden">
+        <div className="flex items-center justify-end px-2 py-1 bg-bg-subtle border-b border-border/60">
+          <button
+            type="button"
+            onClick={() => void handleCopyTable()}
+            data-testid="markdown-table-copy"
+            aria-label={copied ? '已复制表格' : '复制表格'}
+            title="复制为 TSV（可直接粘贴至 Excel / 表格）"
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-text-secondary hover:text-text hover:bg-bg-hover transition-colors"
+          >
+            {copied ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
+            <span>{copied ? '已复制' : '复制表格'}</span>
+          </button>
+        </div>
+        <div className="overflow-x-auto max-h-80 overflow-y-auto">
+          <table ref={tableRef} className="min-w-full text-ui-sm border-collapse">
+            {children}
+          </table>
+        </div>
       </div>
-      <div className="overflow-x-auto max-h-80 overflow-y-auto">
-        <table ref={tableRef} className="min-w-full text-ui-sm border-collapse">
-          {children}
-        </table>
-      </div>
-    </div>
+    </ContextMenu>
   );
 }
 

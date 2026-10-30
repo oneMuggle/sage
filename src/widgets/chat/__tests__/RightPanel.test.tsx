@@ -32,8 +32,16 @@ vi.mock('../../../shared/api/orchRunClient', () => ({
 
 import type { Artifact } from '../../../features/artifacts/artifactApi';
 import { useRightPanelStore } from '../../../features/right-panel/rightPanelStore';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { useStore } from '../../../shared/lib/store';
 import { RightPanel } from '../RightPanel';
+
+function I18nWrapper({ children }: { children: React.ReactNode }) {
+  return <I18nProvider defaultLocale="zh">{children}</I18nProvider>;
+}
+
+const renderWithI18n = (ui: React.ReactElement, options?: Parameters<typeof render>[1]) =>
+  render(ui, { wrapper: I18nWrapper, ...options });
 
 const props = {
   iteration: 0,
@@ -74,21 +82,21 @@ describe('RightPanel', () => {
   });
 
   it('renders both tabs', () => {
-    render(<RightPanel {...props} />);
+    renderWithI18n(<RightPanel {...props} />);
     expect(screen.getByText('进度')).toBeInTheDocument();
     expect(screen.getByText('产物')).toBeInTheDocument();
   });
 
   it('switches to Artifacts tab via store', () => {
-    render(<RightPanel {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: /产物/ }));
+    renderWithI18n(<RightPanel {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: /产物/ }));
     expect(useRightPanelStore.getState().tab).toBe('artifacts');
     expect(screen.getByText(/暂无产物/)).toBeInTheDocument();
   });
 
   // P0-3 (UI 优化方案 2026-09-12): 左边缘拖拽手柄存在 + 默认宽度 320px
   it('renders resize handle with default width', () => {
-    render(<RightPanel {...props} variant="push" />);
+    renderWithI18n(<RightPanel {...props} variant="push" />);
     const handle = screen.getByTestId('right-panel-resize-handle');
     expect(handle).toBeInTheDocument();
     // 默认 320px (localStorage 无持久化值)；push 模式下结构为 aside → 内容容器 → 手柄
@@ -99,20 +107,20 @@ describe('RightPanel', () => {
 
   describe('close button (right-panel R1: 写 store)', () => {
     it('list view renders close button with correct aria-label', () => {
-      render(<RightPanel {...props} />);
+      renderWithI18n(<RightPanel {...props} />);
       expect(screen.getByRole('button', { name: '关闭右侧面板' })).toBeInTheDocument();
     });
 
     it('clicking close button closes panel via store', () => {
-      render(<RightPanel {...props} />);
+      renderWithI18n(<RightPanel {...props} />);
       fireEvent.click(screen.getByRole('button', { name: '关闭右侧面板' }));
       expect(useRightPanelStore.getState().open).toBe(false);
       expect(localStorage.getItem('right-panel-open')).toBe('0');
     });
 
     it('clicking close button in Artifacts tab closes panel', () => {
-      render(<RightPanel {...props} />);
-      fireEvent.click(screen.getByRole("button", { name: /产物/ }));
+      renderWithI18n(<RightPanel {...props} />);
+      fireEvent.click(screen.getByRole('button', { name: /产物/ }));
       fireEvent.click(screen.getByRole('button', { name: '关闭右侧面板' }));
       expect(useRightPanelStore.getState().open).toBe(false);
     });
@@ -126,7 +134,7 @@ describe('RightPanel', () => {
         loading: false,
         refresh: vi.fn(),
       });
-      const { rerender } = render(<RightPanel {...props} sessionId="sess_001" />);
+      const { rerender } = renderWithI18n(<RightPanel {...props} sessionId="sess_001" />);
       useRightPanelStore.getState().selectArtifact('a1');
       expect(useRightPanelStore.getState().selectedArtifactId).toBe('a1');
       rerender(<RightPanel {...props} sessionId="sess_002" />);
@@ -149,7 +157,7 @@ describe('RightPanel', () => {
       // 注意：RightPanel 挂载 effect 会清理"上一会话"的选中产物，
       // 因此选中必须在挂载后设置（与生产链路一致：chip 点击发生在挂载后）。
       // store 直改不在 React 事件内，需 act() 触发同步刷新。
-      render(<RightPanel {...props} />);
+      renderWithI18n(<RightPanel {...props} />);
       act(() => {
         useRightPanelStore.getState().selectArtifact('a1');
       });
@@ -161,7 +169,7 @@ describe('RightPanel', () => {
 
   describe('right-panel R1 批次 D: 最大化 + 宽度档位', () => {
     it('maximize toggle flips store state', () => {
-      render(<RightPanel {...props} variant="push" />);
+      renderWithI18n(<RightPanel {...props} variant="push" />);
       const btn = screen.getByTestId('right-panel-maximize-toggle');
       fireEvent.click(btn);
       expect(useRightPanelStore.getState().maximized).toBe(true);
@@ -172,21 +180,21 @@ describe('RightPanel', () => {
 
     it('Escape exits maximize', () => {
       useRightPanelStore.setState({ maximized: true });
-      render(<RightPanel {...props} variant="push" />);
+      renderWithI18n(<RightPanel {...props} variant="push" />);
       fireEvent.keyDown(window, { key: 'Escape' });
       expect(useRightPanelStore.getState().maximized).toBe(false);
     });
 
     it('maximized panel fills container (width 100%)', () => {
       useRightPanelStore.setState({ maximized: true });
-      render(<RightPanel {...props} variant="push" />);
+      renderWithI18n(<RightPanel {...props} variant="push" />);
       expect(screen.getByTestId('right-panel').style.width).toBe('100%');
       // 最大化时隐藏 resize 手柄
       expect(screen.queryByTestId('right-panel-resize-handle')).not.toBeInTheDocument();
     });
 
     it('applies width presets and persists', () => {
-      render(<RightPanel {...props} />);
+      renderWithI18n(<RightPanel {...props} />);
       // 宽度档位按钮已收进「选项」浮层（2026-09-29）
       fireEvent.click(screen.getByTestId('right-panel-options-toggle'));
       fireEvent.click(screen.getByTestId('right-panel-preset-L'));
@@ -194,16 +202,16 @@ describe('RightPanel', () => {
     });
 
     it('overlay variant (窄屏) 不显示最大化按钮', () => {
-      render(<RightPanel {...props} variant="overlay" />);
+      renderWithI18n(<RightPanel {...props} variant="overlay" />);
       expect(screen.queryByTestId('right-panel-maximize-toggle')).not.toBeInTheDocument();
     });
   });
 
   describe('right-panel R1 批次 B: 产物自动唤起开关', () => {
     it('bell toggle only on artifacts tab, flips localStorage flag', () => {
-      render(<RightPanel {...props} />);
+      renderWithI18n(<RightPanel {...props} />);
       expect(screen.queryByTestId('right-panel-auto-open-toggle')).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: /产物/ }));
+      fireEvent.click(screen.getByRole('button', { name: /产物/ }));
       // 自动唤起开关已收进「选项」浮层（2026-09-29），需先打开浮层
       fireEvent.click(screen.getByTestId('right-panel-options-toggle'));
       const bell = screen.getByTestId('right-panel-auto-open-toggle');
@@ -230,7 +238,7 @@ describe('RightPanel', () => {
         loading: false,
         refresh: vi.fn(),
       });
-      render(<RightPanel {...props} />);
+      renderWithI18n(<RightPanel {...props} />);
       act(() => {
         useRightPanelStore.getState().selectArtifact('a1');
       });
@@ -267,7 +275,7 @@ describe('RightPanel', () => {
 
   describe('right-panel R2 批次 B: overlay 抽屉三件套', () => {
     it('overlay 打开时渲染遮罩，点击遮罩关闭面板', () => {
-      render(<RightPanel {...props} variant="overlay" />);
+      renderWithI18n(<RightPanel {...props} variant="overlay" />);
       const backdrop = screen.getByTestId('right-panel-overlay-backdrop');
       expect(backdrop).toBeInTheDocument();
       fireEvent.click(backdrop);
@@ -276,20 +284,20 @@ describe('RightPanel', () => {
 
     it('overlay 关闭态遮罩不可交互（pointer-events-none）', () => {
       useRightPanelStore.setState({ open: false });
-      render(<RightPanel {...props} variant="overlay" />);
+      renderWithI18n(<RightPanel {...props} variant="overlay" />);
       expect(screen.getByTestId('right-panel-overlay-backdrop').className).toContain(
         'pointer-events-none',
       );
     });
 
     it('overlay 打开时 Esc 关闭面板', () => {
-      render(<RightPanel {...props} variant="overlay" />);
+      renderWithI18n(<RightPanel {...props} variant="overlay" />);
       fireEvent.keyDown(window, { key: 'Escape' });
       expect(useRightPanelStore.getState().open).toBe(false);
     });
 
     it('push 模式无遮罩，Esc 不关面板', () => {
-      render(<RightPanel {...props} variant="push" />);
+      renderWithI18n(<RightPanel {...props} variant="push" />);
       expect(screen.queryByTestId('right-panel-overlay-backdrop')).not.toBeInTheDocument();
       fireEvent.keyDown(window, { key: 'Escape' });
       expect(useRightPanelStore.getState().open).toBe(true);
@@ -298,12 +306,12 @@ describe('RightPanel', () => {
 
   describe('right-panel R4 批次 B: 变更预取', () => {
     it('挂载即按会话预取变更列表', () => {
-      render(<RightPanel {...props} />);
+      renderWithI18n(<RightPanel {...props} />);
       expect(fetchChangesSpy).toHaveBeenCalledWith('sess_001');
     });
 
     it('会话切换时重新预取', () => {
-      const { rerender } = render(<RightPanel {...props} sessionId="sA" />);
+      const { rerender } = renderWithI18n(<RightPanel {...props} sessionId="sA" />);
       fetchChangesSpy.mockClear();
       rerender(<RightPanel {...props} sessionId="sB" />);
       expect(fetchChangesSpy).toHaveBeenCalledWith('sB');
@@ -337,7 +345,7 @@ describe('RightPanel — 轮次导航（U1 对标）', () => {
       ] as never,
     });
 
-    render(<RightPanel {...props} sessionId="sess_001" />);
+    renderWithI18n(<RightPanel {...props} sessionId="sess_001" />);
     fireEvent.click(screen.getByText('目录'));
 
     expect(screen.getByTestId('turn-list-heading')).toBeInTheDocument();
@@ -381,7 +389,7 @@ describe('RightPanel — 轨迹 sub-tab（F3 对标，UI 优化 2026-10-14）', 
     useRightPanelStore.getState().setOpen(true);
     useRightPanelStore.getState().setTab('progress');
 
-    render(<RightPanel {...props} sessionId="sess_001" />);
+    renderWithI18n(<RightPanel {...props} sessionId="sess_001" />);
     // 进度 Tab 默认已激活；点击「完整轨迹」sub-tab
     fireEvent.click(screen.getByTestId('progress-subtab-trajectory'));
 

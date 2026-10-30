@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { useResearchStore } from '../../../entities/wiki/research-store';
 import { useWikiStore } from '../../../entities/wiki/store';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { CommunityColoredGraph } from '../CommunityColoredGraph';
 import { LeftPanel } from '../LeftPanel';
 import { RightPanel } from '../RightPanel';
@@ -12,6 +13,13 @@ import { WikiGraphView } from '../WikiGraphView';
 import { WikiIngestProgress } from '../WikiIngestProgress';
 import { WikiResearchPanel } from '../WikiResearchPanel';
 import { WikiToolbar } from '../WikiToolbar';
+
+function I18nWrapper({ children }: { children: React.ReactNode }) {
+  return <I18nProvider defaultLocale="zh">{children}</I18nProvider>;
+}
+
+const renderWithI18n = (ui: React.ReactElement, options?: Parameters<typeof render>[1]) =>
+  render(ui, { wrapper: I18nWrapper, ...options });
 
 const mockStartWikiResearch = vi.fn();
 const mockWikiIngestStream = vi.fn();
@@ -60,7 +68,7 @@ describe('WikiEditor', () => {
       fileContent: 'first',
       isLoading: false,
     });
-    const { rerender } = render(<WikiEditor />);
+    const { rerender } = renderWithI18n(<WikiEditor />);
 
     // Enter edit mode — the 编辑 button copies fileContent into local
     // editContent, so the textarea starts showing 'first'.
@@ -86,7 +94,7 @@ describe('WikiEditor', () => {
 
   it('handles empty/loading/save states in WikiEditor', async () => {
     useWikiStore.setState({ selectedFile: null, fileContent: '', isLoading: false });
-    const { rerender } = render(<WikiEditor />);
+    const { rerender } = renderWithI18n(<WikiEditor />);
     expect(screen.getByText('选择一个文件以查看或编辑')).toBeInTheDocument();
 
     act(() => {
@@ -113,7 +121,7 @@ describe('WikiEditor', () => {
 
   it('renders WikiToolbar and switches views', () => {
     useWikiStore.setState({ project: null, selectedFile: null });
-    const { rerender } = render(<WikiToolbar />);
+    const { rerender } = renderWithI18n(<WikiToolbar />);
 
     act(() => {
       useWikiStore.setState({
@@ -170,7 +178,7 @@ describe('WikiEditor', () => {
     useWikiStore.setState({
       project: { id: 'p1', name: 'Demo Wiki', path: '/tmp/wiki' },
     });
-    render(<SourcesView />);
+    renderWithI18n(<SourcesView />);
     fireEvent.click(screen.getByText('sources'));
     fireEvent.click(screen.getByText('architecture.docx'));
     expect(screen.getByText('文件信息')).toBeInTheDocument();
@@ -197,17 +205,17 @@ describe('WikiEditor', () => {
         children: [{ name: 'intro.md', path: 'wiki/intro.md', is_dir: false }],
       },
     ]);
-    render(<LeftPanel />);
+    renderWithI18n(<LeftPanel />);
     fireEvent.click(screen.getByText('活动'));
     expect(screen.getByText(/活动面板内容/)).toBeInTheDocument();
 
     useResearchStore.setState({ panelOpen: true });
-    render(<RightPanel />);
+    renderWithI18n(<RightPanel />);
     const closeResearchBtn = screen.getByText('深度研究').parentElement?.querySelector('button');
     if (closeResearchBtn) fireEvent.click(closeResearchBtn);
     useWikiStore.setState({ selectedFile: null });
     useResearchStore.setState({ panelOpen: false });
-    render(<RightPanel />);
+    renderWithI18n(<RightPanel />);
 
     const { rerender } = render(
       <WikiIngestProgress
@@ -245,13 +253,13 @@ describe('WikiEditor', () => {
       ],
       edges: [{ source: 'a', target: 'b', signal: 'DirectLink' as const, weight: 1.0 }],
     };
-    render(<CommunityColoredGraph data={graphData} projectPath="/tmp/wiki" query="Node" />);
+    renderWithI18n(<CommunityColoredGraph data={graphData} projectPath="/tmp/wiki" query="Node" />);
     await waitFor(() => expect(screen.getByText(/社区 1/)).toBeInTheDocument());
     fireEvent.click(screen.getByText(/社区 1/));
     fireEvent.click(screen.getByText('清除'));
 
-    render(<WikiGraphView data={{ nodes: [], edges: [] }} />);
+    renderWithI18n(<WikiGraphView data={{ nodes: [], edges: [] }} />);
     expect(screen.getByText(/暂无 wiki 页面/)).toBeInTheDocument();
-    render(<CommunityColoredGraph data={graphData} />);
+    renderWithI18n(<CommunityColoredGraph data={graphData} />);
   });
 });

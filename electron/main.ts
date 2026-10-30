@@ -46,6 +46,7 @@ import {
 } from 'electron';
 import './crashGuard';
 import { logger } from './logger';
+import { registerEditableContextMenu } from './contextMenu';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
 import {
@@ -998,6 +999,10 @@ function createMainWindow(): void {
     }
   });
 
+  // 可编辑控件（输入框 / CodeMirror / xterm）使用系统原生右键菜单；
+  // 应用内对象级菜单由渲染层 Radix ContextMenu 负责，互不重复。
+  registerEditableContextMenu(win.webContents, { isDev: !app.isPackaged });
+
   if (isDev) {
     win.loadURL(VITE_DEV_URL).catch(async (e) => {
       logger.error('main: loadURL failed', { url: VITE_DEV_URL, err: e.message });
@@ -1124,6 +1129,16 @@ const REMOTE_MCP_HOTKEY = 'Control+Alt+Escape';
 let remoteMcp: RemoteMcpController | null = null;
 
 async function registerIpcHandlers(): Promise<void> {
+  // 开发期右键「检查元素」：渲染层自绘菜单无法交给 Chromium 默认处理，
+  // 经此 IPC 让主进程按坐标 inspect；仅非打包环境 + 可信渲染器可用。
+  ipcMain.on('sage:devtools:inspect', (evt, payload: { x?: unknown; y?: unknown }) => {
+    if (app.isPackaged || !isTrustedRenderer(evt.sender)) return;
+    const x = Number(payload?.x);
+    const y = Number(payload?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    evt.sender.inspectElement(Math.round(x), Math.round(y));
+  });
+
   ipcMain.handle(
     'sage:invoke',
     async (evt, payload: { cmd: string; args?: Record<string, unknown> }) => {
