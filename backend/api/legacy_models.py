@@ -28,6 +28,9 @@ class SessionUpdate(BaseModel):
 
     is_pinned: Optional[bool] = None
 
+    # 手动归档/恢复（侧栏会话条目菜单）。None = 不更新。
+    is_archived: Optional[bool] = None
+
 
 class ChatRequest(BaseModel):
     session_id: str

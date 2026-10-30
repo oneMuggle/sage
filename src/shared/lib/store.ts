@@ -154,6 +154,11 @@ interface StoreState {
 
   // 操作方法
   loadSessions: () => Promise<void>;
+  /** 会话列表是否还有下一页（侧栏滚动触底时追加加载） */
+  sessionsHasMore: boolean;
+  /** 正在追加加载下一页（单飞行锁） */
+  sessionsLoadingMore: boolean;
+  loadMoreSessions: () => Promise<void>;
   setCurrentSessionId: (id: string | null) => void;
   createSession: () => Promise<string>;
   deleteSession: (id: string) => Promise<void>;
@@ -180,6 +185,9 @@ interface StoreState {
 
 const messageLoadGenerations = new Map<string, number>();
 let latestMessageLoadToken = 0;
+
+/** 会话列表分页大小（与后端/Electron 默认 limit 对齐）。 */
+const SESSIONS_PAGE_SIZE = 100;
 
 export function mergeLoadedMessages(
   loadedMessages: Message[],
@@ -233,14 +241,45 @@ export const useStore = create<StoreState>((set, _get) => ({
   contextPressure: null,
   setContextPressure: (cp) => set({ contextPressure: cp }),
   isLoading: false,
+  sessionsHasMore: false,
+  sessionsLoadingMore: false,
 
-  // 加载会话列表
+  // 加载会话列表（首页；已加载过多页时按已加载条数刷新，避免滚动位置被重置）
   loadSessions: async () => {
     try {
-      const sessions = await invoke<Session[]>('list_sessions');
-      set({ sessions });
+      const limit = Math.max(SESSIONS_PAGE_SIZE, _get().sessions.length);
+      const sessions = await invoke<Session[]>('list_sessions', { limit, offset: 0 });
+      set({
+        sessions,
+        sessionsHasMore: sessions.length >= limit,
+        sessionsLoadingMore: false,
+      });
     } catch (error) {
       clientLogger.error('store.loadSessions failed', { error: String(error) });
+    }
+  },
+
+  // 追加下一页（单飞行锁；按 id 去重，容忍并发变更导致的 offset 漂移）
+  loadMoreSessions: async () => {
+    const state = _get();
+    if (state.sessionsLoadingMore || !state.sessionsHasMore) return;
+    set({ sessionsLoadingMore: true });
+    try {
+      const page = await invoke<Session[]>('list_sessions', {
+        limit: SESSIONS_PAGE_SIZE,
+        offset: state.sessions.length,
+      });
+      const current = _get().sessions;
+      const seen = new Set(current.map((s) => s.id));
+      const merged = [...current, ...page.filter((s) => !seen.has(s.id))];
+      set({
+        sessions: merged,
+        sessionsHasMore: page.length === SESSIONS_PAGE_SIZE,
+        sessionsLoadingMore: false,
+      });
+    } catch (error) {
+      set({ sessionsLoadingMore: false });
+      clientLogger.error('store.loadMoreSessions failed', { error: String(error) });
     }
   },
 

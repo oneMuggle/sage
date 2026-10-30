@@ -1,5 +1,7 @@
 import {
   AlertCircle,
+  Archive,
+  ArchiveRestore,
   Check,
   Clock,
   FileText,
@@ -43,6 +45,10 @@ interface SessionItemProps {
   onRename?: (sessionId: string, title: string) => Promise<void>;
   /** F12: 消息内容命中条数（侧栏搜索增强;缺省不显示徽标） */
   messageHits?: number;
+  /** 手动归档（缺省时不渲染入口；运行中禁用） */
+  onArchive?: () => void;
+  /** 恢复归档（归档视图使用） */
+  onUnarchive?: () => void;
 }
 
 /** 文件变更类工具（S6-lite: 本次运行的变更文件计数徽章）。
@@ -60,6 +66,8 @@ export function SessionItem({
   onDelete,
   onRename,
   messageHits,
+  onArchive,
+  onUnarchive,
 }: SessionItemProps) {
   const { t } = useI18n();
   const [exporting, setExporting] = useState(false);
@@ -95,6 +103,8 @@ export function SessionItem({
     ? (mapAgentErrorToText(session.last_error) ?? session.last_error)
     : '';
   const suspended = !isLive && dbStatus === 'suspended';
+  // 与后端 archive_stale 策略一致：运行中/挂起的会话不归档，避免提醒与流被隐藏。
+  const archiveDisabled = isLive || dbStatus === 'running' || dbStatus === 'suspended';
   const hasAttention = hasPendingApproval || hasPendingQuestion;
 
   // S5: mini 进度 —— 编排 5 元组优先，todo 完成度兜底
@@ -411,6 +421,36 @@ export function SessionItem({
 
       {/* 操作按钮 */}
       <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        {onUnarchive && (
+          <button
+            data-testid="unarchive-session"
+            onClick={(e) => {
+              e.stopPropagation();
+              onUnarchive();
+            }}
+            className="p-1 rounded hover:bg-primary/10 text-muted hover:text-primary"
+            title={t('session.unarchive')}
+            aria-label={t('session.unarchive')}
+          >
+            <ArchiveRestore className="w-4 h-4" />
+          </button>
+        )}
+        {onArchive && (
+          <button
+            data-testid="archive-session"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (archiveDisabled) return;
+              onArchive();
+            }}
+            disabled={archiveDisabled}
+            className="p-1 rounded hover:bg-primary/10 text-muted hover:text-primary disabled:opacity-40 disabled:hover:text-muted"
+            title={archiveDisabled ? t('session.archive_disabled_running') : t('session.archive')}
+            aria-label={t('session.archive')}
+          >
+            <Archive className="w-4 h-4" />
+          </button>
+        )}
         {session.is_pinned && <Pin className="w-4 h-4 text-primary" />}
         {/* U18: 导出完整会话为自包含 HTML */}
         <button
@@ -435,20 +475,22 @@ export function SessionItem({
           <FileText className="w-4 h-4" />
         </button>
         {/* R18-B: 置顶切换 —— 置顶会话在侧栏置顶组中始终排在最前 */}
-        <button
-          data-testid="toggle-pin"
-          onClick={handleTogglePin}
-          disabled={pinning}
-          className={`p-1 rounded disabled:opacity-50 ${
-            session.is_pinned
-              ? 'text-primary hover:bg-primary/10'
-              : 'text-muted hover:bg-bg-hover hover:text-primary'
-          }`}
-          title={session.is_pinned ? t('session.unpin') : t('session.pin')}
-          aria-label={session.is_pinned ? t('session.unpin') : t('session.pin')}
-        >
-          {session.is_pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
-        </button>
+        {!session.is_archived && (
+          <button
+            data-testid="toggle-pin"
+            onClick={handleTogglePin}
+            disabled={pinning}
+            className={`p-1 rounded disabled:opacity-50 ${
+              session.is_pinned
+                ? 'text-primary hover:bg-primary/10'
+                : 'text-muted hover:bg-bg-hover hover:text-primary'
+            }`}
+            title={session.is_pinned ? t('session.unpin') : t('session.pin')}
+            aria-label={session.is_pinned ? t('session.unpin') : t('session.pin')}
+          >
+            {session.is_pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+          </button>
+        )}
         {/* U12: 两步式确认删除 — 不弹 modal，armed 后二次点击生效 */}
         <TwoStepDelete
           data-testid="delete-session"

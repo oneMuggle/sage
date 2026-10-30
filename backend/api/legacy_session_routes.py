@@ -128,10 +128,17 @@ def create_session(data: SessionCreate, repo: SessionRepository = Depends(get_se
 @router.get("/sessions", response_model=List[dict])
 @with_db_lock
 def list_sessions(
-    limit: int = 100, offset: int = 0, repo: SessionRepository = Depends(get_session_repo)
+    limit: int = 100,
+    offset: int = 0,
+    archived: Optional[bool] = None,
+    repo: SessionRepository = Depends(get_session_repo),
 ):
-    """获取会话列表"""
-    sessions = repo.list(limit=limit, offset=offset)
+    """获取会话列表。
+
+    ``archived=true`` 时只返回已归档会话（侧栏归档视图）；缺省只返回未归档，
+    与既有调用方行为一致。
+    """
+    sessions = repo.list(limit=limit, offset=offset, archived=archived)
     result = [s.to_dict() for s in sessions]
     # P0-4 (UI 优化方案 2026-09-13): 批量附加 last_message_preview(每个会话最后一条
     # user/assistant 消息截断 40 字符),空会话 → None。
@@ -222,6 +229,8 @@ def update_session(
         update_data["title"] = data.title
     if data.is_pinned is not None:
         update_data["is_pinned"] = 1 if data.is_pinned else 0
+    if data.is_archived is not None:
+        update_data["is_archived"] = 1 if data.is_archived else 0
 
     if update_data:
         repo.update(session_id, **update_data)

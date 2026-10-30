@@ -465,6 +465,8 @@ class SessionUpdate(BaseModel):
 
     title: Optional[str] = None
     is_pinned: Optional[bool] = None
+    # 手动归档/恢复；None = 不更新。
+    is_archived: Optional[bool] = None
 
 
 # ==================== 依赖注入 ====================
@@ -535,7 +537,12 @@ async def update_session(
 ) -> dict:
     """Hex 路径 PATCH /sessions/{id}:局部更新;会话不存在返 404。"""
     try:
-        return await svc.update_session(session_id, title=data.title, is_pinned=data.is_pinned)
+        return await svc.update_session(
+            session_id,
+            title=data.title,
+            is_pinned=data.is_pinned,
+            is_archived=data.is_archived,
+        )
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="会话不存在")
 
