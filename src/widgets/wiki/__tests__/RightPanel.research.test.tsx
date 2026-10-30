@@ -17,8 +17,7 @@ vi.mock('../../../entities/wiki/store', () => ({
   useWikiStore: (select: (s: typeof mocks.wikiState) => unknown) => select(mocks.wikiState),
 }));
 vi.mock('../../../entities/wiki/research-store', () => {
-  const hook = (select: (s: typeof mocks.researchState) => unknown) =>
-    select(mocks.researchState);
+  const hook = (select: (s: typeof mocks.researchState) => unknown) => select(mocks.researchState);
   hook.getState = () => mocks.researchState;
   return { useResearchStore: hook };
 });

@@ -16,11 +16,7 @@ vi.mock('../../../shared/api-client/wiki', () => ({
   queueProcess: api.process,
 }));
 
-import {
-  formatQueueStoreJson,
-  formatQueueStoreSummary,
-  useQueueStore,
-} from '../queue-store';
+import { formatQueueStoreJson, formatQueueStoreSummary, useQueueStore } from '../queue-store';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -66,14 +62,8 @@ describe('wiki queue-store audit helpers', () => {
   it('resets store state and formats queue summary', () => {
     useQueueStore.getState().reset();
     expect(
-      formatQueueStoreSummary(
-        { pending: 2, processing: 1, completed: 5, failed: 0 },
-        8,
-        false,
-      ),
-    ).toBe(
-      'tasks=8 · pending=2 · processing=1 · completed=5 · failed=0 · loading=false',
-    );
+      formatQueueStoreSummary({ pending: 2, processing: 1, completed: 5, failed: 0 }, 8, false),
+    ).toBe('tasks=8 · pending=2 · processing=1 · completed=5 · failed=0 · loading=false');
   });
 
   it('serializes queue store audit JSON', () => {

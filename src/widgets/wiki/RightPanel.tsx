@@ -41,8 +41,6 @@ export function RightPanel() {
     : undefined;
   const model = settings?.settings.modelSelections.chatModel.modelId ?? '';
 
-
-
   // 如果没有选中文件且研究面板未打开，不显示右侧面板
   if (!selectedFile && !researchPanelOpen) {
     return null;
@@ -59,8 +57,7 @@ export function RightPanel() {
             <span className="text-xs font-semibold text-text uppercase tracking-wide">
               预览: {selectedFile.split('/').pop()}
             </span>
-            <div className="flex items-center gap-1">
-            </div>
+            <div className="flex items-center gap-1"></div>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             <MarkdownPreview content={fileContent} />
@@ -91,9 +88,7 @@ export function RightPanel() {
                 llmModel={model}
                 searchProvider="tavily"
                 searchApiKey={tavilyKey}
-                disabledReason={
-                  tavilyKey ? null : '需要在「设置 → 网络」配置 Tavily API Key'
-                }
+                disabledReason={tavilyKey ? null : '需要在「设置 → 网络」配置 Tavily API Key'}
               />
             ) : (
               <p className="text-sm text-muted p-4">请先选择项目并配置聊天模型</p>

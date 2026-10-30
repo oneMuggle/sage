@@ -214,7 +214,6 @@ export function WikiResearchPanel({
 }
 
 function SourceCard({ index, source }: { index: number; source: WebResultData }) {
-
   return (
     <div className="p-3 rounded-md border border-border bg-surface">
       <div className="flex items-start gap-2">

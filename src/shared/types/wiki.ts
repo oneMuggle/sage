@@ -280,4 +280,3 @@ export function auditWikiTypesGovernance(): string {
     audited: true,
   });
 }
-

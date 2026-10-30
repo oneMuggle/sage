@@ -74,10 +74,7 @@ export function SourcesView() {
   const handleIngest = async (path: string) => {
     if (!project) return;
     const endpoint = settings
-      ? resolveEndpoint(
-          settings.settings.modelSelections.chatModel,
-          settings.settings.endpoints,
-        )
+      ? resolveEndpoint(settings.settings.modelSelections.chatModel, settings.settings.endpoints)
       : undefined;
     const modelId = settings?.settings.modelSelections.chatModel.modelId ?? '';
     if (!endpoint || !modelId) {

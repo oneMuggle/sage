@@ -572,10 +572,7 @@ export interface QueueProcessResult {
 }
 
 /** 按 FIFO 处理最多 `limit` 个 pending 任务（后端逐任务真实 ingest）。 */
-export async function queueProcess(
-  projectPath: string,
-  limit = 1,
-): Promise<QueueProcessResult> {
+export async function queueProcess(projectPath: string, limit = 1): Promise<QueueProcessResult> {
   return httpPost<QueueProcessResult>('/wiki/ingest/queue/process', {
     project_path: projectPath,
     limit,
@@ -592,10 +589,7 @@ export function formatWikiApiClientSummary(
   return `baseUrl=${WIKI_API_BASE} · demoBlocked=${Boolean(demoMode)} · defaultLimit=${safeLimit}`;
 }
 
-export function formatWikiApiClientJson(
-  demoMode = isDemoMode(),
-  defaultSearchLimit = 20,
-): string {
+export function formatWikiApiClientJson(demoMode = isDemoMode(), defaultSearchLimit = 20): string {
   const safeLimit = Math.max(1, Math.round(defaultSearchLimit));
   return JSON.stringify({
     baseUrl: WIKI_API_BASE,

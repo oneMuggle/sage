@@ -161,7 +161,9 @@ export const zoteroClient = {
    * `projectPath` additionally sinks tag-marked items into `<project>/wiki/zotero/`.
    * Omit it to index only — the backend skips wiki export without a project root.
    */
-  async sync(options: { force?: boolean; projectPath?: string | null } = {}): Promise<ZoteroSyncResult> {
+  async sync(
+    options: { force?: boolean; projectPath?: string | null } = {},
+  ): Promise<ZoteroSyncResult> {
     return invoke<ZoteroSyncResult>('zotero_sync', {
       force: options.force ?? false,
       project_path: options.projectPath ?? null,

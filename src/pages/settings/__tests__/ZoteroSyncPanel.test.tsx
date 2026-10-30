@@ -153,9 +153,7 @@ describe('ZoteroSyncPanel 同步动作', () => {
     renderPanel();
     fireEvent.click(screen.getByTestId('zotero-sync-now'));
 
-    await waitFor(() =>
-      expect(syncMock).toHaveBeenCalledWith({ force: false, projectPath: null }),
-    );
+    await waitFor(() => expect(syncMock).toHaveBeenCalledWith({ force: false, projectPath: null }));
     const result = await screen.findByTestId('zotero-sync-result');
     expect(result).toHaveTextContent('同步完成');
     expect(result).toHaveTextContent('已索引文献: 5');
@@ -172,9 +170,7 @@ describe('ZoteroSyncPanel 同步动作', () => {
     syncMock.mockResolvedValue(makeResult());
     renderPanel();
     fireEvent.click(screen.getByTestId('zotero-sync-rebuild'));
-    await waitFor(() =>
-      expect(syncMock).toHaveBeenCalledWith({ force: true, projectPath: null }),
-    );
+    await waitFor(() => expect(syncMock).toHaveBeenCalledWith({ force: true, projectPath: null }));
   });
 
   it('优先使用已打开的 wiki 项目', async () => {
@@ -298,8 +294,6 @@ describe('formatZoteroSyncTime', () => {
   it('处理空值、非法值与 ISO-8601', () => {
     expect(formatZoteroSyncTime(null)).toBeNull();
     expect(formatZoteroSyncTime('not-a-date')).toBe('not-a-date');
-    expect(formatZoteroSyncTime('2026-10-27T03:05:00Z')).toMatch(
-      /^2026-10-\d{2} \d{2}:\d{2}$/,
-    );
+    expect(formatZoteroSyncTime('2026-10-27T03:05:00Z')).toMatch(/^2026-10-\d{2} \d{2}:\d{2}$/);
   });
 });
