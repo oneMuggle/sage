@@ -38,10 +38,10 @@ const settings = {
   temperature: 0.7,
 };
 
-function renderTab(updateSettings = vi.fn()) {
+function renderTab(updateSettings = vi.fn(), settingsOverride: typeof settings = settings) {
   return render(
     <I18nProvider defaultLocale="zh">
-      <ModelsTab settings={settings} updateSettings={updateSettings} />
+      <ModelsTab settings={settingsOverride} updateSettings={updateSettings} />
     </I18nProvider>,
   );
 }
@@ -147,8 +147,7 @@ describe('ModelsTab routing mode (Task 11)', () => {
   it('auto mode keeps the other five capability selectors', () => {
     // 6 个能力选择器 (手动: chat/vision/embedding/tts/asr/image_gen) → 自动模式
     // 隐藏 chat 选择器剩 5 个。无其它 <select> 干扰, 直接全量计数。
-    const capabilitySelects = (container: HTMLElement) =>
-      container.querySelectorAll('select');
+    const capabilitySelects = (container: HTMLElement) => container.querySelectorAll('select');
 
     const manual = render(<ModelsTab settings={settings} updateSettings={vi.fn()} />);
     expect(capabilitySelects(manual.container)).toHaveLength(6);

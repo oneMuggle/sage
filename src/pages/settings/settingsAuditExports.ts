@@ -48,8 +48,8 @@ import { promptApi } from '../../shared/api/promptApi';
 import { runtimeApi } from '../../shared/api/runtimeApi';
 import { settingsClient } from '../../shared/api/settingsClient';
 import { zoteroClient } from '../../shared/api/zoteroClient';
-import type { TranslationKey } from '../../shared/lib/i18n';
 import { isFeatureUnlocked } from '../../shared/lib/hooks/useFeatureUnlock';
+import type { TranslationKey } from '../../shared/lib/i18n';
 
 import {
   formatArenaAccountsToggleAuditJson,
@@ -93,11 +93,11 @@ import {
   formatSkillsTabAuditJson,
   formatSkillsTabAuditSnapshot,
 } from './SkillsTab';
-import type { SettingsTabKey } from './settingsTabs';
 import {
   formatZoteroTabAuditJson,
   formatZoteroTabAuditSnapshot,
 } from './ZoteroTab';
+import type { SettingsTabKey } from './settingsTabs';
 
 /** 单节审计的两种格式输出。 */
 export interface SettingsAuditPayload {
