@@ -82,6 +82,21 @@ export const projectRoutes: Record<string, CommandRoute> = {
     method: 'GET',
     path: (a) => `/api/v1/projects/${projectId(a)}/git-status`,
   },
+  // 2026-10-29: AI bootstrap preview/apply + explicit git init.
+  projects_bootstrap_preview: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/bootstrap/preview`,
+    body: (a) => ({ use_llm: a.useLlm ?? a.use_llm ?? true }),
+  },
+  projects_bootstrap_apply: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/bootstrap/apply`,
+    body: (a) => (a.body as Record<string, unknown> | undefined) ?? {},
+  },
+  projects_git_init: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/git/init`,
+  },
 
   // ---- constraints ---------------------------------------------------------------------------
   projects_list_constraints: {

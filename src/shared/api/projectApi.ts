@@ -93,8 +93,190 @@ import {
   mapSubTypes,
   toAnalysisReportWire,
   toCodebaseProfileWire,
+  // AI bootstrap (2026-10-29)
+  type BootstrapApplyPayload,
+  type BootstrapApplyResult,
+  type BootstrapPreviewResult,
+  type BootstrapMilestoneSuggestion,
+  type BootstrapRuleSuggestion,
+  type GitInitResult,
 } from './projectApiTypes';
 /* eslint-enable import/order */
+
+// ── AI bootstrap wire mapping (2026-10-29) ────────────────────────────────
+
+interface BootstrapPreviewWire {
+  project: ProjectWire;
+  scan: {
+    level1_type: string | null;
+    sub_type: string | null;
+    tech_stack: string[];
+    source_files: Array<{ language: string; count: number }>;
+    git: {
+      is_repo: boolean;
+      current_branch: string | null;
+      commit_count: number;
+      dirty_files: number;
+      git_available: boolean;
+    };
+    existing: {
+      sage_md: boolean;
+      rules_count: number;
+      milestones_count: number;
+      materials_count: number;
+    };
+  };
+  suggestions: {
+    sage_md: { content: string; rationale: string; exists: boolean };
+    rules: Array<{
+      key: string;
+      label: string;
+      content: string;
+      reason: string;
+      category: string;
+      priority: number;
+      trigger_pattern: string;
+      source: string;
+    }>;
+    milestones: Array<{
+      title: string;
+      description?: string;
+      stage?: string | null;
+      estimated_days?: number | null;
+    }>;
+    allowed_paths: string[];
+    git_init: { recommended: boolean; reason: string; blockers: string[] };
+    wiki: { recommended: boolean; estimated_pages: number };
+    first_prompt: string;
+  };
+  llm_available: boolean;
+}
+
+interface BootstrapApplyWire {
+  project: ProjectWire;
+  applied: string[];
+  skipped: string[];
+  errors: Array<{ item: string; message: string }>;
+  git: Record<string, unknown> | null;
+}
+
+interface GitInitWire {
+  initialized: boolean;
+  already_repo: boolean;
+  git_available: boolean;
+  error: string | null;
+}
+
+function mapBootstrapPreview(wire: BootstrapPreviewWire): BootstrapPreviewResult {
+  return {
+    project: mapProject(wire.project),
+    scan: {
+      level1Type: wire.scan.level1_type,
+      subType: wire.scan.sub_type,
+      techStack: wire.scan.tech_stack,
+      sourceFiles: wire.scan.source_files.map((item) => ({
+        language: item.language,
+        count: item.count,
+      })),
+      git: {
+        isRepo: wire.scan.git.is_repo,
+        currentBranch: wire.scan.git.current_branch,
+        commitCount: wire.scan.git.commit_count,
+        dirtyFiles: wire.scan.git.dirty_files,
+        gitAvailable: wire.scan.git.git_available,
+      },
+      existing: {
+        sageMd: wire.scan.existing.sage_md,
+        rulesCount: wire.scan.existing.rules_count,
+        milestonesCount: wire.scan.existing.milestones_count,
+        materialsCount: wire.scan.existing.materials_count,
+      },
+    },
+    suggestions: {
+      sageMd: {
+        content: wire.suggestions.sage_md.content,
+        rationale: wire.suggestions.sage_md.rationale,
+        exists: wire.suggestions.sage_md.exists,
+      },
+      rules: wire.suggestions.rules.map((rule) => ({
+        key: rule.key,
+        label: rule.label,
+        content: rule.content,
+        reason: rule.reason,
+        category: rule.category,
+        priority: rule.priority,
+        triggerPattern: rule.trigger_pattern,
+        source: rule.source,
+      })),
+      milestones: wire.suggestions.milestones.map((item) => ({
+        title: item.title,
+        description: item.description ?? '',
+        stage: item.stage ?? null,
+        estimatedDays: item.estimated_days ?? null,
+      })),
+      allowedPaths: wire.suggestions.allowed_paths,
+      gitInit: wire.suggestions.git_init,
+      wiki: {
+        recommended: wire.suggestions.wiki.recommended,
+        estimatedPages: wire.suggestions.wiki.estimated_pages,
+      },
+      firstPrompt: wire.suggestions.first_prompt,
+    },
+    llmAvailable: wire.llm_available,
+  };
+}
+
+function mapBootstrapApplyPayload(payload: BootstrapApplyPayload): Record<string, unknown> {
+  return {
+    ...(payload.metadata
+      ? {
+          metadata: {
+            description: payload.metadata.description,
+            instructions: payload.metadata.instructions,
+            project_type: payload.metadata.projectType,
+            project_sub_type: payload.metadata.projectSubType,
+          },
+        }
+      : {}),
+    sage_md: payload.sageMd ?? false,
+    sage_md_content: payload.sageMdContent ?? null,
+    overwrite_sage_md: payload.overwriteSageMd ?? false,
+    rules: (payload.rules ?? []).map((rule) => ({
+      category: rule.category,
+      content: rule.content,
+      trigger_pattern: rule.triggerPattern ?? 'always',
+      priority: rule.priority ?? 5,
+    })),
+    milestones: (payload.milestones ?? []).map((item) => ({
+      title: item.title,
+      description: item.description ?? null,
+      stage: item.stage ?? null,
+      estimated_days: item.estimatedDays ?? null,
+    })),
+    ...(payload.allowedPaths !== undefined ? { allowed_paths: payload.allowedPaths } : {}),
+    git_init: payload.gitInit ?? false,
+    initial_checkpoint: payload.initialCheckpoint ?? false,
+  };
+}
+
+function mapBootstrapApply(wire: BootstrapApplyWire): BootstrapApplyResult {
+  return {
+    project: mapProject(wire.project),
+    applied: wire.applied,
+    skipped: wire.skipped,
+    errors: wire.errors,
+    git: wire.git,
+  };
+}
+
+function mapGitInit(wire: GitInitWire): GitInitResult {
+  return {
+    initialized: wire.initialized,
+    alreadyRepo: wire.already_repo,
+    gitAvailable: wire.git_available,
+    error: wire.error,
+  };
+}
 
 // Re-export AI types for barrel consumption
 export type {
@@ -167,6 +349,13 @@ export type {
   WorkspaceCheckpointDetail,
   WorkspaceCheckpointItem,
   WorkspaceDirectorySummary,
+  // AI bootstrap (2026-10-29)
+  BootstrapPreviewResult,
+  BootstrapApplyPayload,
+  BootstrapApplyResult,
+  BootstrapRuleSuggestion,
+  BootstrapMilestoneSuggestion,
+  GitInitResult,
 };
 
 export const projectApi = {
@@ -1034,7 +1223,7 @@ export const projectApi = {
     try {
       const wire = await invoke<FileScanWire>('projects_wiki_scan_files', {
         projectId,
-        languages: languages ?? 'python',
+        ...(languages ? { languages } : {}),
       });
       return mapFileScan(wire);
     } catch (error) {
@@ -1097,6 +1286,47 @@ export const projectApi = {
         projectId,
         materialId,
       });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  // ── AI bootstrap (2026-10-29) ─────────────────────────────────────────────
+
+  /** 扫描项目并返回初始化建议（只读）。 */
+  async bootstrapPreview(projectId: string, useLlm = true): Promise<BootstrapPreviewResult> {
+    try {
+      const wire = await invoke<BootstrapPreviewWire>('projects_bootstrap_preview', {
+        projectId,
+        useLlm,
+      });
+      return mapBootstrapPreview(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 应用用户确认的初始化建议。 */
+  async bootstrapApply(
+    projectId: string,
+    payload: BootstrapApplyPayload,
+  ): Promise<BootstrapApplyResult> {
+    try {
+      const wire = await invoke<BootstrapApplyWire>('projects_bootstrap_apply', {
+        projectId,
+        body: mapBootstrapApplyPayload(payload),
+      });
+      return mapBootstrapApply(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 在项目目录执行 git init（显式操作）。 */
+  async gitInit(projectId: string): Promise<GitInitResult> {
+    try {
+      const wire = await invoke<GitInitWire>('projects_git_init', { projectId });
+      return mapGitInit(wire);
     } catch (error) {
       throw handleApiError(error);
     }

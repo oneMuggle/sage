@@ -160,19 +160,22 @@ class ProjectAnalysisAgent:
         """LLM 客户端是否可用（False 时走确定性降级）。"""
         return self._llm is not None
 
-    async def analyze(self, profile: CodebaseProfile) -> AnalysisReport:
+    async def analyze(
+        self, profile: CodebaseProfile, *, allow_llm: bool = True
+    ) -> AnalysisReport:
         """分析项目，返回治理报告。
 
-        LLM 可用时优先 LLM 分析；LLM 不可用或调用失败时走确定性降级。
-        永不抛出 LLM 相关异常——端点始终返回 200。
+        LLM 可用时优先 LLM 分析；LLM 不可用、被调用方禁用或调用失败时走
+        确定性降级。永不抛出 LLM 相关异常——端点始终返回 200。
 
         Args:
             profile: ``CodebaseProfile``（来自 ``profile_project``）
+            allow_llm: False 时跳过 LLM，直接返回确定性降级报告
 
         Returns:
             ``AnalysisReport``
         """
-        if not self.available:
+        if not allow_llm or not self.available:
             logger.info("LLM unavailable, falling back to deterministic rules")
             return self._fallback_report(profile, reason="llm_unavailable")
 

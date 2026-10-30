@@ -571,7 +571,7 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByTestId('milestone-summary-active-to-l2-btn')).toHaveTextContent('已转 L2');
     fireEvent.click(screen.getByTestId('milestone-summary-to-constraint-m-overdue-1'));
     expect(screen.getByTestId('milestone-summary-to-constraint-m-overdue-1')).toHaveTextContent(
-      '已转L2',
+      '已保存',
     );
     fireEvent.click(screen.getByTestId('milestone-summary-to-l3-m-overdue-1'));
     expect(screen.getByTestId('milestone-summary-to-l3-m-overdue-1')).toHaveTextContent('已存L3');
@@ -587,17 +587,17 @@ describe('MilestoneProgressWidget', () => {
       '学术论文撰述、定量对比实验与可复现消融分析',
     );
     fireEvent.click(screen.getByTestId('sidebar-overview-save-l3'));
-    expect(screen.getByTestId('sidebar-overview-save-l3')).toHaveTextContent('已存L3');
+    expect(screen.getByTestId('sidebar-overview-save-l3')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('sidebar-overview-to-constraint'));
-    expect(screen.getByTestId('sidebar-overview-to-constraint')).toHaveTextContent('已转L2');
+    expect(screen.getByTestId('sidebar-overview-to-constraint')).toHaveTextContent('已保存');
 
     // L4 sidebar materials status filter, promote to L2 constraint, search & copy (Phase P36)
     fireEvent.click(screen.getByTestId('sidebar-materials-filter-enabled'));
     fireEvent.click(screen.getByTestId('sidebar-materials-filter-all'));
     fireEvent.click(screen.getByTestId('sidebar-material-to-l3-mat-1'));
-    expect(screen.getByTestId('sidebar-material-to-l3-mat-1')).toHaveTextContent('已转L3');
+    expect(screen.getByTestId('sidebar-material-to-l3-mat-1')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('sidebar-material-to-constraint-mat-1'));
-    expect(screen.getByTestId('sidebar-material-to-constraint-mat-1')).toHaveTextContent('已转L2');
+    expect(screen.getByTestId('sidebar-material-to-constraint-mat-1')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('sidebar-material-to-milestone-mat-1'));
     expect(screen.getByTestId('sidebar-material-to-milestone-mat-1')).toHaveTextContent(
       '已建里程碑',
@@ -815,7 +815,7 @@ describe('MilestoneProgressWidget', () => {
     );
     fireEvent.click(screen.getByTestId('milestone-to-constraint-ms-p33-overdue'));
     expect(screen.getByTestId('milestone-to-constraint-ms-p33-overdue')).toHaveTextContent(
-      '已转L2',
+      '已保存',
     );
     fireEvent.click(screen.getByTestId('milestone-to-l4-ms-p33-overdue'));
     expect(screen.getByTestId('milestone-to-l4-ms-p33-overdue')).toHaveTextContent('已存L4');

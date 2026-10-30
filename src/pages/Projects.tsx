@@ -205,7 +205,10 @@ export function Projects() {
         <ProjectCreationWizard
           open={wizardOpen}
           onOpenChange={setWizardOpen}
-          onSuccess={() => void loadProjects()}
+          onSuccess={(project) => {
+            void loadProjects();
+            navigate(`/projects/governance/${project.id}`);
+          }}
         />
       )}
     </div>

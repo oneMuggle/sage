@@ -42,6 +42,8 @@ export type { MilestoneProgressWidgetProps } from './MilestoneProgressWidget';
 
 export { ProjectOverviewWidgets } from './ProjectOverviewWidgets';
 export type { ProjectOverviewWidgetsProps } from './ProjectOverviewWidgets';
+export { ProjectBootstrapPanel } from './ProjectBootstrapPanel';
+export type { ProjectBootstrapPanelProps } from './ProjectBootstrapPanel';
 
 export { ConstraintManager } from './ConstraintManager';
 export type { ConstraintManagerProps } from './ConstraintManager';

@@ -156,10 +156,44 @@ class TestScanFiles:
         (tmp_path / "app.js").write_text("console.log('hi')")
 
         gen = ProjectWikiGenerator()
-        # 默认只扫 Python
+        # 显式只扫 Python
         files = gen.scan_files(str(tmp_path), languages={"python"})
         assert len(files) == 1
         assert files[0].language == "python"
+
+    def test_scan_all_languages_by_default(self, tmp_path):
+        """默认扫描全部支持的源文件（不再只扫 Python）。"""
+        (tmp_path / "main.py").write_text("print('hi')")
+        (tmp_path / "app.ts").write_text("export const x = 1")
+        (tmp_path / "main.rs").write_text("fn main() {}")
+
+        gen = ProjectWikiGenerator()
+        files = gen.scan_files(str(tmp_path))
+
+        assert {f.language for f in files} == {"python", "typescript", "rust"}
+
+    def test_build_fallback_pages_without_llm(self, tmp_path):
+        """无 LLM 时仍生成确定性骨架页。"""
+        from types import SimpleNamespace
+
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.ts").write_text("export const x = 1", encoding="utf-8")
+
+        gen = ProjectWikiGenerator()
+        files = gen.scan_files(str(tmp_path))
+        pages = gen.build_fallback_pages(
+            SimpleNamespace(path=str(tmp_path), name="demo"),
+            files,
+            [],
+        )
+
+        paths = {page["path"] for page in pages}
+        assert {
+            "wiki/architecture/overview.md",
+            "wiki/api-docs/symbol-index.md",
+            "wiki/guides/build-and-test.md",
+        } <= paths
+        assert "typescript" in pages[0]["content"]
 
 
 # ── extract_symbols() ─────────────────────────────────────────────────────────

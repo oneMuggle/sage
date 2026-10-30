@@ -354,6 +354,25 @@ describe('WorkbenchProjectList', () => {
       vi.useRealTimers();
     }
   });
+
+  it('right-click opens the project context menu and calls openFolder', async () => {
+    const openFolder = vi.fn().mockResolvedValue({ success: true });
+    (window as unknown as { electronAPI: unknown }).electronAPI = {
+      project: { openFolder, revealFolder: vi.fn() },
+    };
+    listMock.mockResolvedValue(projects);
+    try {
+      renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
+      const rows = await screen.findAllByTestId('project-row');
+
+      fireEvent.contextMenu(rows[0]);
+      fireEvent.click(await screen.findByText('打开项目文件夹'));
+
+      await waitFor(() => expect(openFolder).toHaveBeenCalledWith('p1'));
+    } finally {
+      delete (window as unknown as { electronAPI?: unknown }).electronAPI;
+    }
+  });
 });
 
 /* ═══════════════════════════════════════════════════════════════════

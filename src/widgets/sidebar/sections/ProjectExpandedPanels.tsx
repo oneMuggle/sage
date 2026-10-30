@@ -129,7 +129,7 @@ export function ProjectOverviewPanel({
     setSavedOverviewL3(true);
     const desc = (draft?.description ?? project.description ?? '').trim();
     const inst = (draft?.instructions ?? project.instructions ?? '').trim();
-    const summary = `[L2项目目标与指令] 目标: ${desc || '未设置'} | 指令: ${inst || '未设置'}`;
+    const summary = `[项目目标与指令] 目标: ${desc || '未设置'} | 指令: ${inst || '未设置'}`;
     if (typeof projectApi?.confirmKnowledge !== 'function') return;
     try {
       await projectApi.confirmKnowledge(project.id, {
@@ -139,7 +139,7 @@ export function ProjectOverviewPanel({
             content: summary.slice(0, 300),
             importance: 8,
             sourceMessageIds: [],
-            reasoning: '侧边栏 L2 目标与指令沉淀至 L3 画像',
+            reasoning: '项目目标与指令保存至 AI 记忆',
           },
         ],
       });
@@ -168,9 +168,9 @@ export function ProjectOverviewPanel({
             data-testid="sidebar-overview-save-l3"
             onClick={() => void handleSaveOverviewToL3()}
             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-primary hover:bg-primary/10"
-            title="将当前 L2 目标与指令沉淀至 L3 画像"
+            title="将当前项目目标与指令保存到 AI 记忆"
           >
-            {savedOverviewL3 ? '已存L3' : '沉淀指令至 L3'}
+            {savedOverviewL3 ? '已保存' : '保存到 AI 记忆'}
           </button>
           <button
             type="button"
@@ -184,7 +184,7 @@ export function ProjectOverviewPanel({
               try {
                 await projectApi.createConstraint(project.id, {
                   category: 'convention',
-                  content: `L2 目标与指令约束：${desc || '核心目标'} — ${inst || '遵循项目规范'}`,
+                  content: `项目目标与指令约束：${desc || '核心目标'} — ${inst || '遵循项目规范'}`,
                   priority: 8,
                 });
               } catch {
@@ -193,7 +193,7 @@ export function ProjectOverviewPanel({
             }}
             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-muted hover:text-text hover:bg-bg-hover"
           >
-            {savedOverviewL2 ? '已转L2' : '指令转 L2'}
+            {savedOverviewL2 ? '已保存' : '保存为项目规则'}
           </button>
           {project.vcsMode !== 'git' && project.projectType !== 'coding' && (
             <button
@@ -580,10 +580,10 @@ export function ProjectMaterialsPanel({
                           entries: [
                             {
                               category: 'note',
-                              content: `[L4受控资料摘录] ${(m.content ?? '').slice(0, 200)}`,
+                              content: `[项目资料摘录] ${(m.content ?? '').slice(0, 200)}`,
                               importance: 7,
                               sourceMessageIds: [],
-                              reasoning: '侧边栏 L4 受控资料沉淀至 L3 画像',
+                              reasoning: '项目资料保存至 AI 记忆',
                             },
                           ],
                         });
@@ -591,10 +591,10 @@ export function ProjectMaterialsPanel({
                         // ignore in test/offline mode
                       }
                     }}
-                    title="归档为 L3 项目画像"
+                    title="保存到 AI 记忆"
                     className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border/60 bg-bg px-1 py-0.5 text-ui-2xs text-muted hover:text-primary"
                   >
-                    {promotedProfileMaterialIds.has(m.id) ? '已转L3' : '+L3'}
+                    {promotedProfileMaterialIds.has(m.id) ? '已保存' : '保存到记忆'}
                   </button>
                 )}
                 {m.status === 'ready' && m.content && (
@@ -615,11 +615,11 @@ export function ProjectMaterialsPanel({
                         // ignore in test/offline mode
                       }
                     }}
-                    title="提炼为 L2 项目约束"
+                    title="保存为项目规则"
                     className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border/60 bg-bg px-1 py-0.5 text-ui-2xs text-muted hover:text-primary"
                   >
                     <ShieldPlus className="w-2.5 h-2.5" aria-hidden="true" />
-                    {promotedConstraintIds.has(m.id) ? '已转L2' : '+L2'}
+                    {promotedConstraintIds.has(m.id) ? '已保存' : '保存为规则'}
                   </button>
                 )}
                 {m.status === 'ready' && m.content && (
@@ -633,7 +633,7 @@ export function ProjectMaterialsPanel({
                       try {
                         await projectApi.createMilestone(project.id, {
                           title: `[资料研读] ${(m.content ?? '').slice(0, 48)}`,
-                          description: `源自侧边栏 L4 资料 (${m.id})`,
+                          description: `源自项目资料 (${m.id})`,
                           status: 'pending',
                         });
                       } catch {

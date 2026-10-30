@@ -651,6 +651,9 @@ export interface AdvisorSuggestion {
   action: string;
   reason?: string | null;
   priority: string;
+  evidence?: string[];
+  actionType?: string;
+  actionPayload?: Record<string, unknown>;
 }
 
 /** M3: 顾问分析结果（camelCase） */
@@ -674,6 +677,9 @@ export interface AdvisorSuggestionWire {
   action: string;
   reason?: string | null;
   priority: string;
+  evidence?: string[];
+  action_type?: string;
+  action_payload?: Record<string, unknown>;
 }
 
 /** M3: 顾问分析响应 wire 格式 */
@@ -700,6 +706,9 @@ export function mapAdvisorSuggestion(w: AdvisorSuggestionWire): AdvisorSuggestio
     action: w.action,
     reason: w.reason ?? null,
     priority: w.priority,
+    evidence: w.evidence ?? [],
+    actionType: w.action_type ?? '',
+    actionPayload: w.action_payload ?? {},
   };
 }
 
@@ -1375,6 +1384,108 @@ export function toAnalysisReportWire(r: AnalysisReport): AnalysisReportWire {
     llm_available: r.llmAvailable,
     raw_json: r.rawJson,
   };
+}
+
+// ── AI bootstrap (2026-10-29) ──────────────────────────────────────────────
+
+export interface BootstrapSourceFileCount {
+  language: string;
+  count: number;
+}
+
+export interface BootstrapGitInfo {
+  isRepo: boolean;
+  currentBranch: string | null;
+  commitCount: number;
+  dirtyFiles: number;
+  gitAvailable: boolean;
+}
+
+export interface BootstrapRuleSuggestion {
+  key: string;
+  label: string;
+  content: string;
+  reason: string;
+  category: string;
+  priority: number;
+  triggerPattern: string;
+  source: string;
+}
+
+export interface BootstrapMilestoneSuggestion {
+  title: string;
+  description: string;
+  stage: string | null;
+  estimatedDays: number | null;
+}
+
+export interface BootstrapPreviewResult {
+  project: ProjectSummary;
+  scan: {
+    level1Type: string | null;
+    subType: string | null;
+    techStack: string[];
+    sourceFiles: BootstrapSourceFileCount[];
+    git: BootstrapGitInfo;
+    existing: {
+      sageMd: boolean;
+      rulesCount: number;
+      milestonesCount: number;
+      materialsCount: number;
+    };
+  };
+  suggestions: {
+    sageMd: { content: string; rationale: string; exists: boolean };
+    rules: BootstrapRuleSuggestion[];
+    milestones: BootstrapMilestoneSuggestion[];
+    allowedPaths: string[];
+    gitInit: { recommended: boolean; reason: string; blockers: string[] };
+    wiki: { recommended: boolean; estimatedPages: number };
+    firstPrompt: string;
+  };
+  llmAvailable: boolean;
+}
+
+export interface BootstrapApplyPayload {
+  metadata?: {
+    description?: string | null;
+    instructions?: string | null;
+    projectType?: ProjectType;
+    projectSubType?: string | null;
+  };
+  sageMd?: boolean;
+  sageMdContent?: string | null;
+  overwriteSageMd?: boolean;
+  rules?: Array<{
+    category: string;
+    content: string;
+    triggerPattern?: string | null;
+    priority?: number;
+  }>;
+  milestones?: Array<{
+    title: string;
+    description?: string | null;
+    stage?: string | null;
+    estimatedDays?: number | null;
+  }>;
+  allowedPaths?: string[] | null;
+  gitInit?: boolean;
+  initialCheckpoint?: boolean;
+}
+
+export interface BootstrapApplyResult {
+  project: ProjectSummary;
+  applied: string[];
+  skipped: string[];
+  errors: Array<{ item: string; message: string }>;
+  git: Record<string, unknown> | null;
+}
+
+export interface GitInitResult {
+  initialized: boolean;
+  alreadyRepo: boolean;
+  gitAvailable: boolean;
+  error: string | null;
 }
 
 export function auditProjectApiTypesGovernance(): string {

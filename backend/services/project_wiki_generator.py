@@ -151,15 +151,24 @@ class ProjectWikiGenerator:
         Args:
             project_root: 项目根目录
             allowed_paths: 允许访问的路径规则 (glob patterns)
-            languages: 语言过滤 (默认 {"python"})
+            languages: 语言过滤 (默认扫描全部支持的源文件)
 
         Returns:
             SourceFile 列表
         """
         if languages is None:
-            languages = {"python"}
+            languages = {
+                "python",
+                "typescript",
+                "javascript",
+                "rust",
+                "go",
+                "java",
+                "cpp",
+                "c",
+            }
 
-        extensions = PYTHON_EXTENSIONS if "python" in languages else ALL_SOURCE_EXTENSIONS
+        extensions = PYTHON_EXTENSIONS if languages == {"python"} else ALL_SOURCE_EXTENSIONS
         root = Path(project_root)
 
         if not root.is_dir():
@@ -520,12 +529,18 @@ class ProjectWikiGenerator:
 
         # 4. LLM 规划文档结构
         if not self.available:
+            fallback_pages = self.build_fallback_pages(
+                project=project,
+                source_files=source_files,
+                symbols=symbols,
+            )
+            fallback_paths = self._write_wiki_pages(project_root, fallback_pages)
             return GenerationResult(
-                pages_generated=0,
+                pages_generated=len(fallback_paths),
                 pages_updated=0,
                 pages_skipped=0,
-                errors=["LLM 客户端不可用"],
-                wiki_paths=[],
+                errors=[],
+                wiki_paths=fallback_paths,
             )
 
         try:
@@ -564,6 +579,97 @@ class ProjectWikiGenerator:
             errors=[],
             wiki_paths=wiki_paths,
         )
+
+    def build_fallback_pages(
+        self,
+        project: Any,
+        source_files: List[SourceFile],
+        symbols: List[SymbolInfo],
+    ) -> List[Dict[str, str]]:
+        """无 LLM 时生成的确定性骨架页面（2026-10-29）。
+
+        保证 Wiki 生成在未配置 LLM 的环境下仍然可用：目录总览、符号索引、
+        构建与测试指南。内容只来自本地扫描，不调用任何模型。
+        """
+        from collections import Counter
+
+        root = Path(getattr(project, "path", ""))
+        name = getattr(project, "name", None) or root.name or "Project"
+        counts = Counter(source_file.language for source_file in source_files)
+        language_lines = "\n".join(
+            f"- {language}: {count} 个文件"
+            for language, count in sorted(counts.items())
+        )
+        try:
+            top_dirs = sorted(
+                entry.name
+                for entry in root.iterdir()
+                if entry.is_dir()
+                and not entry.name.startswith(".")
+                and entry.name not in EXCLUDED_DIRS
+            )[:15]
+        except OSError:
+            top_dirs = []
+
+        overview = (
+            "---\ngenerator: sage\n---\n\n"
+            "# {name} 项目总览\n\n"
+            "> 由 Sage 在未配置 LLM 时生成的骨架文档；配置 LLM 后可重新生成更完整的文档。\n\n"
+            "## 源文件统计\n{langs}\n\n"
+            "## 顶层目录\n{dirs}\n"
+        ).format(
+            name=name,
+            langs=language_lines or "- 未扫描到源文件",
+            dirs="\n".join(f"- `{d}/`" for d in top_dirs) or "- 无",
+        )
+
+        if symbols:
+            symbol_lines = "\n".join(
+                f"- `{symbol.kind}` `{symbol.name}` — `{symbol.file_path}:{symbol.lineno}`"
+                for symbol in symbols[:200]
+            )
+        else:
+            symbol_lines = "未提取到 Python 符号（其他语言的符号索引将在后续版本提供）。"
+        symbol_index = (
+            "---\ngenerator: sage\n---\n\n# 符号索引\n\n" + symbol_lines + "\n"
+        )
+
+        try:
+            from backend.services.project_profiler import profile_project
+
+            profile = profile_project(str(root))
+            build_commands = "\n".join(
+                f"- `{command}`" for command in profile.build_commands
+            ) or "- 未识别，请补充构建命令"
+            test_frameworks = "、".join(profile.test_frameworks) or "未识别"
+        except Exception:
+            build_commands = "- 未识别，请补充构建命令"
+            test_frameworks = "未识别"
+
+        guide = (
+            "---\ngenerator: sage\n---\n\n"
+            "# 构建与测试\n\n"
+            f"## 构建命令\n{build_commands}\n\n"
+            f"## 测试框架\n{test_frameworks}\n"
+        )
+
+        return [
+            {
+                "path": "wiki/architecture/overview.md",
+                "title": "项目总览",
+                "content": overview,
+            },
+            {
+                "path": "wiki/api-docs/symbol-index.md",
+                "title": "符号索引",
+                "content": symbol_index,
+            },
+            {
+                "path": "wiki/guides/build-and-test.md",
+                "title": "构建与测试",
+                "content": guide,
+            },
+        ]
 
     async def _plan_documentation(
         self,
@@ -772,7 +878,7 @@ generated: true
             full_path.parent.mkdir(parents=True, exist_ok=True)
 
             try:
-                secure_write_file(str(root), rel_path, content)
+                secure_write_file(root, root / rel_path, content)
                 written.append(rel_path)
                 logger.info("写入 Wiki 页面: %s", rel_path)
             except Exception as exc:
