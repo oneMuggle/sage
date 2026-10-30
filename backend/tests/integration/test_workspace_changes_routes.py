@@ -98,6 +98,161 @@ async def test_changes_requires_bound_workspace(
     assert response.json()["detail"]["code"] == "workspace_not_bound"
 
 
+@pytest.fixture()
+def bound_non_git_session(
+    conn: sqlite3.Connection, session_id: str, tmp_path: Path
+) -> str:
+    plain = tmp_path / "plain-workspace"
+    plain.mkdir()
+    bind_session_workspace(conn, session_id, str(plain))
+    return session_id
+
+
+@pytest.mark.asyncio()
+async def test_changes_non_git_workspace_returns_empty_state(
+    client: httpx.AsyncClient, bound_non_git_session: str
+) -> None:
+    """非 git 工作区不是错误：返回 200 空态 + is_git_repo=False。"""
+    response = await client.get(
+        f"/api/v1/sessions/{bound_non_git_session}/workspace/changes"
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_git_repo"] is False
+    assert body["changes"] == []
+    assert body["clean"] is True
+
+
+@pytest.mark.asyncio()
+async def test_diff_non_git_workspace_returns_409(
+    client: httpx.AsyncClient, bound_non_git_session: str
+) -> None:
+    response = await client.get(
+        f"/api/v1/sessions/{bound_non_git_session}/workspace/changes/diff",
+        params={"path": "a.py"},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "not_a_git_repo"
+
+
+@pytest.mark.asyncio()
+async def test_changes_git_binary_missing_is_502(
+    client: httpx.AsyncClient,
+    bound_session: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """git 缺失是环境错误（502），不能误报成「不是 Git 仓库」空态。"""
+    from backend.tools import git_tool
+
+    monkeypatch.setattr(git_tool, "GIT_BINARY", "definitely-not-git-xyz")
+    response = await client.get(f"/api/v1/sessions/{bound_session}/workspace/changes")
+    assert response.status_code == 502
+    assert response.json()["detail"]["code"] == "git_error"
+
+
+@pytest.mark.asyncio()
+async def test_changes_rename_numstat_maps_new_path(
+    client: httpx.AsyncClient, bound_session: str, git_workspace: Path
+) -> None:
+    """同目录 rename 的 numstat 需映射回新路径，+/- 徽章才不丢。"""
+    src = git_workspace / "tracked.py"
+    subprocess.run(["git", "mv", "tracked.py", "renamed.py"], cwd=git_workspace, check=True, capture_output=True)
+    (git_workspace / "renamed.py").write_text("print('v2 renamed')\n", encoding="utf-8")
+    assert not src.exists()
+
+    body = (
+        await client.get(f"/api/v1/sessions/{bound_session}/workspace/changes")
+    ).json()
+    renamed = next(e for e in body["changes"] if e["path"] == "renamed.py")
+    assert renamed["insertions"] is not None
+    assert renamed["old_path"] == "tracked.py"
+
+
+@pytest.fixture()
+def subdir_repo(tmp_path: Path):
+    """仓库根下有一个工作区子目录 pkg/，同时存在工作区外的改动。"""
+    repo = tmp_path / "repo"
+    sub = repo / "pkg"
+    sub.mkdir(parents=True)
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+    git("init")
+    git("config", "user.email", "test@sage.local")
+    git("config", "user.name", "Sage Test")
+    (repo / "outside.txt").write_text("v1\n", encoding="utf-8")
+    (sub / "inside.py").write_text("v1\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-m", "init")
+    (repo / "outside.txt").write_text("v2\n", encoding="utf-8")
+    (sub / "inside.py").write_text("v2\n", encoding="utf-8")
+    (sub / "new.txt").write_text("n\n", encoding="utf-8")
+    return repo, sub
+
+
+@pytest.mark.asyncio()
+async def test_changes_subdir_workspace_is_workspace_relative(
+    client: httpx.AsyncClient,
+    conn: sqlite3.Connection,
+    session_id: str,
+    subdir_repo,
+) -> None:
+    """工作区是仓库子目录时：只列工作区内文件，路径相对工作区，徽章可用。"""
+    _repo, sub = subdir_repo
+    bind_session_workspace(conn, session_id, str(sub))
+
+    body = (
+        await client.get(f"/api/v1/sessions/{session_id}/workspace/changes")
+    ).json()
+    entries = {entry["path"]: entry for entry in body["changes"]}
+    assert set(entries) == {"inside.py", "new.txt"}
+    assert entries["inside.py"]["insertions"] == 1
+    assert entries["new.txt"]["insertions"] == 1
+    assert body["clean"] is False
+
+    diff = await client.get(
+        f"/api/v1/sessions/{session_id}/workspace/changes/diff",
+        params={"path": "inside.py"},
+    )
+    assert diff.status_code == 200
+    assert "+v2" in diff.json()["diff"]
+
+    preview = await client.get(
+        f"/api/v1/sessions/{session_id}/workspace/changes/file",
+        params={"path": "inside.py"},
+    )
+    assert preview.status_code == 200
+    assert preview.json()["content"] == "v2\n"
+
+
+@pytest.mark.asyncio()
+async def test_changes_unicode_untracked_path_roundtrip(
+    client: httpx.AsyncClient, bound_session: str, git_workspace: Path
+) -> None:
+    """中文未跟踪文件：列表原文、diff 与预览均可用（porcelain -z 回归）。"""
+    (git_workspace / "02_编制说明.txt").write_text("内容\n", encoding="utf-8")
+
+    body = (
+        await client.get(f"/api/v1/sessions/{bound_session}/workspace/changes")
+    ).json()
+    assert "02_编制说明.txt" in {entry["path"] for entry in body["changes"]}
+
+    diff = await client.get(
+        f"/api/v1/sessions/{bound_session}/workspace/changes/diff",
+        params={"path": "02_编制说明.txt"},
+    )
+    assert diff.status_code == 200
+    assert "+内容" in diff.json()["diff"]
+
+    file_response = await client.get(
+        f"/api/v1/sessions/{bound_session}/workspace/changes/file",
+        params={"path": "02_编制说明.txt"},
+    )
+    assert file_response.status_code == 200
+    assert file_response.json()["content"] == "内容\n"
+
+
 @pytest.mark.asyncio()
 async def test_changes_lists_modified_and_untracked(
     client: httpx.AsyncClient, bound_session: str

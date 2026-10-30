@@ -47,10 +47,14 @@ interface WorkspaceChangesWire {
   ahead: number;
   behind: number;
   clean: boolean;
+  /** 2026-10-29: 非 git 工作区 → false（旧后端缺省时按 true 处理） */
+  is_git_repo?: boolean;
   changes: Array<{
     index_status: string;
     worktree_status: string;
     path: string;
+    /** 2026-10-29: rename/copy 旧路径（porcelain -z 第二段） */
+    old_path?: string | null;
     /** right-panel R5: +/- 行数；二进制/统计失败为 null（旧宿主可能缺省） */
     insertions?: number | null;
     deletions?: number | null;
@@ -64,10 +68,14 @@ export interface WorkspaceChanges {
   ahead: number;
   behind: number;
   clean: boolean;
+  /** 2026-10-29: false = 工作区不是 git 仓库（渲染空态而非报错） */
+  isGitRepo?: boolean;
   changes: Array<{
     indexStatus: string;
     worktreeStatus: string;
     path: string;
+    /** 2026-10-29: rename/copy 旧路径（仅展示用） */
+    oldPath?: string | null;
     /** right-panel R5: +/- 行数（numstat）；二进制/统计失败为 null */
     insertions: number | null;
     deletions: number | null;
@@ -238,10 +246,13 @@ export const workspaceApi = {
         ahead: response.ahead,
         behind: response.behind,
         clean: response.clean,
+        // 2026-10-29: 旧后端不返回该字段 → 按 git 仓库处理（保持原行为）
+        isGitRepo: response.is_git_repo ?? true,
         changes: response.changes.map((entry) => ({
           indexStatus: entry.index_status,
           worktreeStatus: entry.worktree_status,
           path: entry.path,
+          oldPath: entry.old_path ?? null,
           insertions: entry.insertions ?? null,
           deletions: entry.deletions ?? null,
         })),

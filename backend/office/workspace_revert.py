@@ -21,7 +21,11 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from backend.tools.git_tool import _run_git
+from backend.tools.git_tool import (
+    _run_git,
+    git_repo_root,
+    to_workspace_relative_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -105,11 +109,14 @@ def revert_files(
             errors.append({"path": path, "error": error})
             continue
 
-        status_out, error = _run_git(["status", "--porcelain=v1", "--", path], root)
+        status_out, error = _run_git(
+            ["-c", "core.quotepath=false", "status", "--porcelain=v1", "-z", "--", path],
+            root,
+        )
         if error is not None:
             errors.append({"path": path, "error": error})
             continue
-        lines = [line for line in (status_out or "").splitlines() if line.strip()]
+        lines = [line for line in (status_out or "").split("\0") if line.strip()]
         if not lines:
             errors.append({"path": path, "error": "该路径没有未提交变更"})
             continue
@@ -118,7 +125,19 @@ def revert_files(
         index_status = entry[:1].strip()
         worktree_status = entry[1:2].strip()
         porcelain_path = entry[3:]
-        targets = porcelain_path.split(" -> ") if " -> " in porcelain_path else [porcelain_path]
+        # porcelain -z: rename/copy 的下一段是旧路径（原始字节，无需 unquote）
+        # porcelain 路径相对仓库根；请求方传入的 path 已相对工作区。
+        # 非 rename 直接撤销请求路径；rename 才需要把新旧路径转成工作区相对。
+        targets = [path]
+        if (
+            (index_status in ("R", "C") or worktree_status in ("R", "C"))
+            and len(lines) > 1
+            and lines[1]
+        ):
+            repo_root = git_repo_root(root) or root
+            new_rel = to_workspace_relative_path(root, repo_root, porcelain_path)
+            old_rel = to_workspace_relative_path(root, repo_root, lines[1])
+            targets = [p for p in (new_rel, old_rel) if p] or [path]
 
         if index_status == "?" and worktree_status == "?":
             # 未跟踪文件：git checkout 无从恢复，只能删除（显式授权）
@@ -129,7 +148,7 @@ def revert_files(
                 })
                 continue
             try:
-                Path(root, porcelain_path).unlink()
+                Path(root, path).unlink()
                 reverted.append(path)
             except OSError as exc:
                 errors.append({"path": path, "error": f"删除失败: {exc}"})

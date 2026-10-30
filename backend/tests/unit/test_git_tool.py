@@ -83,6 +83,38 @@ def test_status_lists_untracked_and_modified(repo):
     assert by_path["new.txt"]["worktree_status"] == "?"
 
 
+def test_status_keeps_unicode_paths_verbatim(repo):
+    """porcelain 默认会把非 ASCII 路径转成八进制 C-quote；必须原文回显。"""
+    (repo / "02_编制说明.txt").write_text("x\n", encoding="utf-8")
+
+    result = _tool(GitStatusTool, repo).execute()
+    assert result.success is True
+    paths = [entry["path"] for entry in result.content["changes"]]
+    assert paths == ["02_编制说明.txt"]
+
+
+def test_status_keeps_paths_with_spaces_verbatim(repo):
+    """core.quotepath=false 仍会给含空格路径加引号，必须用 -z 才拿得到原文。"""
+    (repo / "新 文件.txt").write_text("x\n", encoding="utf-8")
+
+    result = _tool(GitStatusTool, repo).execute()
+    assert result.success is True
+    paths = [entry["path"] for entry in result.content["changes"]]
+    assert paths == ["新 文件.txt"]
+
+
+def test_status_rename_exposes_new_path_and_old_path(repo):
+    """porcelain -z 的 rename 是 ``R  new\\0old``，主 path 应为新名。"""
+    _git("mv", "hello.txt", "renamed.txt", cwd=repo)
+
+    result = _tool(GitStatusTool, repo).execute()
+    assert result.success is True
+    entries = [entry for entry in result.content["changes"] if entry["path"] == "renamed.txt"]
+    assert len(entries) == 1
+    assert entries[0]["old_path"] == "hello.txt"
+    assert entries[0]["index_status"] == "R"
+
+
 # ---------------------------------------------------------------------------
 # git_diff
 # ---------------------------------------------------------------------------

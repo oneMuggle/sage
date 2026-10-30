@@ -30,13 +30,16 @@ def list_artifacts(session_id: str) -> dict:
 
 
 @router.get("/{artifact_id}/content")
-@with_db_lock
 def get_artifact_content(session_id: str, artifact_id: str) -> dict:
     """读取产物内容:文本返回 content,图片/PDF 返回 data_url,office 返回 HTML。
 
     F11 (round4 批次 D): PDF 走 base64 data URL,前端 iframe 内嵌渲染。
     C-2 (round5 批次 C): docx/xlsx/pptx 走后端转换的全转义 HTML 预览。
     kind 判定带后缀兜底——历史产物注册时后缀曾归为 "text"。
+
+    2026-10-29: 不再持全局 DB 锁做文件读取/base64（最大 20MB）——单条
+    ``get_artifact`` 已由 ``_LockedConnection`` 逐查询加锁，大文件读盘不应
+    串行化其他会话的 DB 请求。
     """
     artifact = artifact_repo.get_artifact(artifact_id)
     if artifact is None or artifact.session_id != session_id:

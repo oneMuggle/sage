@@ -34,7 +34,9 @@ export interface InvokeError extends Error {
   status_code?: number;
 }
 
-const STATUS_RE = /→ (\d+):/;
+// 2026-10-29: 新增「（HTTP <status>）」形态 —— main 进程透传后端 detail.message
+// 时为保持文案友好不再使用 "→ status:" 前缀，但 status_code 恢复不能丢。
+const STATUS_RE = /→ (\d+):|（HTTP (\d+)）/;
 
 /** Marker that main process throws when backend isn't ready yet. */
 const BACKEND_NOT_READY_MARKER = '后端服务尚未就绪';
@@ -65,7 +67,7 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
   } catch (err) {
     if (err instanceof Error && (err as InvokeError).status_code == null) {
       const m = err.message.match(STATUS_RE);
-      if (m) (err as InvokeError).status_code = Number(m[1]);
+      if (m) (err as InvokeError).status_code = Number(m[1] ?? m[2]);
     }
     const raw = err instanceof Error ? err.message : String(err);
     // Task 0 review round 1: BackendNotReadyError takes precedence over the
@@ -88,10 +90,7 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
   }
 }
 
-export function formatDesktopInvokeSummary(
-  cmd: string,
-  args?: Record<string, unknown>,
-): string {
+export function formatDesktopInvokeSummary(cmd: string, args?: Record<string, unknown>): string {
   /* v8 ignore start */
   const safeCmd = cmd.trim() || 'unknown';
   const argCount = args ? Object.keys(args).length : 0;
@@ -100,10 +99,7 @@ export function formatDesktopInvokeSummary(
   return `desktop-invoke: ${safeCmd} · ${argCount} args · mode=${mode}`;
 }
 
-export function formatDesktopInvokeJson(
-  cmd: string,
-  args?: Record<string, unknown>,
-): string {
+export function formatDesktopInvokeJson(cmd: string, args?: Record<string, unknown>): string {
   /* v8 ignore start */
   const safeCmd = cmd.trim() || 'unknown';
   const argKeys = args ? Object.keys(args).sort() : [];
@@ -134,7 +130,9 @@ export function auditDesktopInvokeGovernance(): {
     module: 'src/shared/api/desktopInvoke.ts',
     phase: 'P175',
     domain: 'shared-api',
-    supportsReadinessGateAndConnectionNormalization: summary.includes('desktop-invoke: get_sessions'),
+    supportsReadinessGateAndConnectionNormalization: summary.includes(
+      'desktop-invoke: get_sessions',
+    ),
     compliant: summary.includes('1 args'),
   };
 }

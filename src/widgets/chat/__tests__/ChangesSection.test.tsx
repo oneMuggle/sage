@@ -3,16 +3,20 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import type { WorkspaceChanges, WorkspaceCheckpoint, WorkspaceDiff, WorkspaceFileContent } from '../../../shared/api/workspaceApi';
+import type {
+  WorkspaceChanges,
+  WorkspaceCheckpoint,
+  WorkspaceDiff,
+  WorkspaceFileContent,
+} from '../../../shared/api/workspaceApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
 import { ChangesSection } from '../changes/ChangesSection';
 
 const mockGetChanges = vi.fn<() => Promise<WorkspaceChanges>>();
 const mockGetChangeDiff = vi.fn<(path?: string, staged?: boolean) => Promise<WorkspaceDiff>>();
-const mockGetChangeFile = vi.fn<
-  (sessionId: string, path: string) => Promise<WorkspaceFileContent>
->();
+const mockGetChangeFile =
+  vi.fn<(sessionId: string, path: string) => Promise<WorkspaceFileContent>>();
 const mockRevertChanges =
   vi.fn<
     (
@@ -140,6 +144,29 @@ describe('ChangesSection', () => {
     await waitFor(() => {
       expect(screen.getByText(/git 不可用/)).toBeInTheDocument();
     });
+  });
+
+  it('非 git 工作区渲染专用空态（不显示干净态/报错）', async () => {
+    mockGetChanges.mockResolvedValue({
+      branch: '',
+      upstream: '',
+      ahead: 0,
+      behind: 0,
+      clean: true,
+      isGitRepo: false,
+      changes: [],
+    });
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('changes-non-git')).toBeInTheDocument();
+    });
+    expect(screen.getByText(/当前工作区不是 Git 仓库/)).toBeInTheDocument();
+    expect(screen.queryByText(/工作区干净/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('review-all-button')).not.toBeInTheDocument();
   });
 
   it('right-panel R5: 渲染 +/- 行数徽章（0/null 不渲染）', async () => {
