@@ -169,6 +169,18 @@ describe('GatewayCard', () => {
     expect(screen.queryByText(/chat 42 → session/)).not.toBeInTheDocument();
   });
 
+  it('fetches once per mount (no render loop)', async () => {
+    // 回归：gatewayApiFor() 每次渲染返回新对象 → reload 每次变化 →
+    // effect 每次渲染都执行 → setState 再渲染，形成无限请求循环。
+    render(<GatewayCard platform="telegram" />);
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('****ABCD')).toBeInTheDocument();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(mockedApi.getConfig).toHaveBeenCalledTimes(1);
+    expect(mockedApi.status).toHaveBeenCalledTimes(1);
+  });
+
   it('formats gateway card config as Markdown and JSON', () => {
     const md = formatGatewayCardMarkdown(
       'telegram',
@@ -185,9 +197,7 @@ describe('GatewayCard', () => {
     );
     expect(md).toContain('# 消息网关（Telegram）配置摘要');
     expect(md).toContain('chat `42` → session `sess-abc`');
-    const parsed = JSON.parse(
-      formatGatewayCardJson('discord', 'Discord', false, null, '', []),
-    );
+    const parsed = JSON.parse(formatGatewayCardJson('discord', 'Discord', false, null, '', []));
     expect(parsed.platform).toBe('discord');
     expect(parsed.allowedIds).toEqual([]);
   });

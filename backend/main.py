@@ -734,44 +734,17 @@ async def lifespan(app: FastAPI):
     logger.info("WakeScheduler 已初始化并启动（A4 Suspend-Resume，tick=15s）")
     _startup_mark("wake-scheduler")
 
-    # Round 6 (Telegram 网关 MVP): 配置了 TELEGRAM_BOT_TOKEN 才启动长轮询
-    # 后台线程；未配置零开销。白名单见 gateway/telegram.py 模块文档。
+    # Round 6 / Round 16: 网关懒启动 —— 只有 enabled && configured 的平台才
+    # 创建实例并启动轮询；未配置零开销。配置变更后由 gateway_routes 动态启停。
     try:
-        from backend.gateway.telegram import get_telegram_gateway
+        from backend.gateway.supervisor import get_gateway_supervisor
 
-        _tg_gateway = get_telegram_gateway()
-        if _tg_gateway is not None:
-            _tg_gateway.start_polling()
-            app.state.telegram_gateway = _tg_gateway
-            logger.info(
-                "Telegram 网关已启动（长轮询，白名单 %d 个 chat）",
-                len(_tg_gateway.config.allowed_chat_ids),
-            )
-        _startup_mark("telegram-gateway")
+        _gateway_supervisor = get_gateway_supervisor()
+        app.state.gateway_supervisor = _gateway_supervisor
+        _gateway_supervisor.start_enabled()
+        _startup_mark("gateways")
     except Exception as exc:  # noqa: BLE001 — 网关失败不阻塞后端启动
-        logger.warning("Telegram 网关启动失败（忽略）: %s", exc)
-
-    # Round 16: Discord / Slack 网关（同 telegram 模式，未配置零开销）
-    for _platform, _getter in (
-        ("Discord", "backend.gateway.discord:get_discord_gateway"),
-        ("Slack", "backend.gateway.slack:get_slack_gateway"),
-    ):
-        try:
-            import importlib
-
-            _mod_name, _fn_name = _getter.split(":")
-            _gateway = getattr(importlib.import_module(_mod_name), _fn_name)()
-            if _gateway is not None:
-                _gateway.start_polling()
-                setattr(app.state, f"{_platform.lower()}_gateway", _gateway)
-                logger.info(
-                    "%s 网关已启动（轮询，白名单 %d 个 channel）",
-                    _platform,
-                    len(_gateway.config.allowed_channel_ids),
-                )
-            _startup_mark(f"{_platform.lower()}-gateway")
-        except Exception as exc:  # noqa: BLE001 — 网关失败不阻塞后端启动
-            logger.warning("%s 网关启动失败（忽略）: %s", _platform, exc)
+        logger.warning("网关 supervisor 初始化失败（忽略）: %s", exc)
 
     # M1 工具安全加固: 全局审批闸口 — agent 循环 await 审批, 路由解析应答
     from backend.services.permission_gate import init_permission_gate
@@ -930,16 +903,11 @@ async def lifespan(app: FastAPI):
     yield
 
     # 关闭时清理
-    # Round 6: 停 Telegram 轮询线程（daemon 兜底，显式停更干净）
-    _tg = getattr(app.state, "telegram_gateway", None)
-    if _tg is not None:
+    # Round 6 / Round 16: 统一停止网关轮询线程（daemon 兜底，显式停更干净）
+    _gateway_supervisor = getattr(app.state, "gateway_supervisor", None)
+    if _gateway_supervisor is not None:
         with suppress(Exception):
-            _tg.stop_polling()
-    for _platform in ("discord", "slack"):
-        _gw = getattr(app.state, f"{_platform}_gateway", None)
-        if _gw is not None:
-            with suppress(Exception):
-                _gw.stop_polling()
+            _gateway_supervisor.stop_all()
     _shutdown_bash_sessions()
     _shutdown_browser_sessions()
     _shutdown_repl_cleanups()
