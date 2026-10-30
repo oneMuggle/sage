@@ -468,6 +468,16 @@ export function WikiGenerationPanel({
             )}
           </div>
 
+          {files.length === 0 && (
+            <div
+              className="flex items-start gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700"
+              data-testid="wiki-no-source-files"
+            >
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>未扫描到支持的源文件。请确认项目目录非空，或检查项目路径是否正确。</span>
+            </div>
+          )}
+
           {/* 符号统计与分类筛选 */}
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -714,7 +724,12 @@ export function WikiGenerationPanel({
           </div>
 
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => void handleGenerate()} data-testid="wiki-generate-btn">
+            <Button
+              size="sm"
+              onClick={() => void handleGenerate()}
+              disabled={files.length === 0}
+              data-testid="wiki-generate-btn"
+            >
               <Sparkles className="mr-1.5 h-3.5 w-3.5" />
               生成 Wiki
             </Button>

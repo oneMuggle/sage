@@ -407,6 +407,16 @@ export interface FileElectronApiBridge {
   openInEditor: (sessionId: string, path: string) => Promise<{ success: true } | { error: string }>;
 }
 
+/**
+ * Project folder bridge (2026-10-29): open/reveal a registered project
+ * directory. The renderer passes only the project id; main resolves the
+ * path from the backend.
+ */
+export interface ProjectElectronApiBridge {
+  openFolder: (projectId: string) => Promise<{ success: true } | { error: string }>;
+  revealFolder: (projectId: string) => Promise<{ success: true } | { error: string }>;
+}
+
 export interface ElectronAPI {
   /** Authenticated renderer-to-backend request; main injects the local capability. */
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
@@ -448,6 +458,7 @@ export interface ElectronAPI {
   remoteMcp?: RemoteMcpElectronApiBridge;
   arenaToken: ArenaTokenElectronApiBridge;
   office: OfficeElectronApiBridge;
+  project: ProjectElectronApiBridge;
   media: MediaElectronApiBridge;
   journal: JournalElectronApiBridge;
   updates: UpdateElectronApiBridge;

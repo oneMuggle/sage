@@ -84,6 +84,13 @@ export type {
   SubTypeDefinition,
   SubTypesCatalog,
   GenerateRulesOptions,
+  // AI bootstrap (2026-10-29)
+  BootstrapPreviewResult,
+  BootstrapApplyPayload,
+  BootstrapApplyResult,
+  BootstrapRuleSuggestion,
+  BootstrapMilestoneSuggestion,
+  GitInitResult,
 } from './projectApi';
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';

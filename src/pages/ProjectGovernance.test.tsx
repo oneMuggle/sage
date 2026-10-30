@@ -38,6 +38,7 @@ vi.mock('../features/project-type', () => ({
   MilestoneManager: () => <div data-testid="milestone-manager-stub" />,
   PolymorphicArchetypeCards: () => <div data-testid="archetype-cards-stub" />,
   ProjectOverviewWidgets: () => <div data-testid="overview-widgets-stub" />,
+  ProjectBootstrapPanel: () => <div data-testid="bootstrap-panel-stub" />,
   ProjectTypeBadge: ({ type }: { type: string }) => <span data-testid="type-badge">{type}</span>,
   GovernanceRulesPanel: () => <div data-testid="rules-panel-stub" />,
 }));
@@ -154,17 +155,14 @@ describe('ProjectGovernance', () => {
     expect(screen.getByText('/home/user/project')).toBeInTheDocument();
   });
 
-  it('renders 6 governance tabs', async () => {
+  it('renders 3 governance tabs', async () => {
     renderAt('proj-1');
     await waitFor(() => {
       expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
     });
     expect(screen.getByTestId('governance-tab-overview')).toBeInTheDocument();
-    expect(screen.getByTestId('governance-tab-charter')).toBeInTheDocument();
-    expect(screen.getByTestId('governance-tab-materials')).toBeInTheDocument();
-    expect(screen.getByTestId('governance-tab-rules')).toBeInTheDocument();
-    expect(screen.getByTestId('governance-tab-milestones')).toBeInTheDocument();
-    expect(screen.getByTestId('governance-tab-profile')).toBeInTheDocument();
+    expect(screen.getByTestId('governance-tab-knowledge')).toBeInTheDocument();
+    expect(screen.getByTestId('governance-tab-settings')).toBeInTheDocument();
   });
 
   it('defaults to overview tab showing archetype cards', async () => {
@@ -176,37 +174,36 @@ describe('ProjectGovernance', () => {
     expect(screen.getByTestId('overview-widgets-stub')).toBeInTheDocument();
   });
 
-  it('switches to rules tab when clicked', async () => {
+  it('switches to rules sub-tab under project knowledge', async () => {
     renderAt('proj-1');
     await waitFor(() => {
       expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByTestId('governance-tab-rules'));
+    fireEvent.click(screen.getByTestId('governance-tab-knowledge'));
+    fireEvent.click(screen.getByTestId('governance-knowledge-rules'));
     await waitFor(() => {
       expect(screen.getByTestId('rules-panel-stub')).toBeInTheDocument();
     });
     expect(screen.queryByTestId('archetype-cards-stub')).not.toBeInTheDocument();
   });
 
-  it('switches to milestones tab when clicked', async () => {
+  it('keeps the milestone manager available in overview', async () => {
     renderAt('proj-1');
     await waitFor(() => {
       expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByTestId('governance-tab-milestones'));
-    await waitFor(() => {
-      expect(screen.getByTestId('milestone-manager-stub')).toBeInTheDocument();
-    });
+    expect(screen.getByTestId('milestone-manager-stub')).toBeInTheDocument();
   });
 
-  it('rules tab label shows allowed paths count', async () => {
+  it('rules sub-tab label shows allowed paths count', async () => {
     renderAt('proj-1');
     await waitFor(() => {
       expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
     });
-    expect(screen.getByTestId('governance-tab-rules')).toHaveTextContent('规则与约束 (1)');
+    fireEvent.click(screen.getByTestId('governance-tab-knowledge'));
+    expect(screen.getByTestId('governance-knowledge-rules')).toHaveTextContent('规则与约束 (1)');
   });
 
   it('type selector calls projectApi.update on change', async () => {
@@ -216,6 +213,7 @@ describe('ProjectGovernance', () => {
       expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
     });
 
+    fireEvent.click(screen.getByTestId('governance-tab-settings'));
     const typeSelect = screen.getByLabelText('切换项目形态');
     fireEvent.change(typeSelect, { target: { value: 'business' } });
 
@@ -284,6 +282,7 @@ describe('ProjectGovernance', () => {
     await waitFor(() => {
       expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
     });
+    fireEvent.click(screen.getByTestId('governance-tab-settings'));
     const snapBtn = screen.getByTestId('project-governance-copy-snapshot');
     const jsonBtn = screen.getByTestId('project-governance-copy-json');
     fireEvent.click(snapBtn);

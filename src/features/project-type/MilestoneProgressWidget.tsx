@@ -649,7 +649,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                         }}
                         className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
                       >
-                        {promotedConstraintIds.has(milestone.id) ? '已转L2' : '+L2'}
+                        {promotedConstraintIds.has(milestone.id) ? '已保存' : '+L2'}
                       </button>
                       <button
                         type="button"

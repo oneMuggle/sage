@@ -604,7 +604,27 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                       >
                         {sug.priority}
                       </span>
-                      <span className="flex-1">{sug.action}</span>
+                      <div className="flex-1 space-y-0.5">
+                        <span>{sug.action}</span>
+                        {sug.reason && (
+                          <div className="text-ui-2xs text-muted-foreground">{sug.reason}</div>
+                        )}
+                        {sug.evidence && sug.evidence.length > 0 && (
+                          <div
+                            className="flex flex-wrap gap-1"
+                            data-testid={`advisor-evidence-${idx}`}
+                          >
+                            {sug.evidence.map((item, evidenceIdx) => (
+                              <span
+                                key={evidenceIdx}
+                                className="rounded bg-muted px-1 py-0.5 text-ui-2xs text-muted-foreground"
+                              >
+                                {item}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <button
                         type="button"
                         disabled={guardedSuggestions.has(idx)}
@@ -628,7 +648,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                         }}
                         data-testid={`advisor-suggestion-to-constraint-${idx}`}
                         className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-emerald-500 disabled:opacity-60"
-                        title="将此改进建议固化为 L2 行为约束"
+                        title="将此改进建议保存为项目规则"
                       >
                         <Shield className="h-3 w-3" />
                         <span>{guardedSuggestions.has(idx) ? '已固化约束' : '固化为约束'}</span>
