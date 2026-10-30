@@ -85,6 +85,63 @@ class TestExtractLiteratureEntry:
         assert "Alice" in entry.authors
         assert "Bob" in entry.authors
 
+    def test_extracts_zotero_page_metadata(self, tmp_path: Path) -> None:
+        md_file = tmp_path / "K1.md"
+        md_file.write_text(
+            "---\n"
+            "title: Attention Is All You Need\n"
+            "tags: [transformer]\n"
+            "sources: [zotero:K1]\n"
+            "---\n\n"
+            "# Attention Is All You Need\n\n"
+            "**Authors**: Vaswani, A.; Shazeer, N.\n\n"
+            "Year: 2017 | Type: journalArticle\n\n"
+            "## Abstract\n\n"
+            "The dominant sequence transduction models are based on complex "
+            "recurrent or convolutional neural networks.\n",
+            encoding="utf-8",
+        )
+
+        entry = extract_literature_entry(md_file)
+        assert entry is not None
+        assert entry.authors == ["Vaswani, A.", "Shazeer, N."]
+        assert entry.year == 2017
+        assert "dominant" in entry.summary
+
+
+class TestZoteroIntegration:
+    """Zotero 文献页 → 综述索引"""
+
+    def test_scan_includes_zotero_items_and_skips_index(self, tmp_path: Path) -> None:
+        items = tmp_path / "wiki" / "zotero" / "items"
+        items.mkdir(parents=True)
+        (items / "K1.md").write_text(
+            "---\ntitle: Zotero Paper\n---\n**Authors**: Doe, J.\nYear: 2020 | Type: article\n",
+            encoding="utf-8",
+        )
+        lit = tmp_path / "wiki" / "literature"
+        lit.mkdir(parents=True)
+        (lit / "index.md").write_text("# 文献综述索引\n", encoding="utf-8")
+
+        entries = scan_literature_directory(tmp_path)
+        assert [entry.title for entry in entries] == ["Zotero Paper"]
+
+    def test_generates_index_linking_back_to_zotero_item(self, tmp_path: Path) -> None:
+        items = tmp_path / "wiki" / "zotero" / "items"
+        items.mkdir(parents=True)
+        (items / "K1.md").write_text(
+            "---\ntitle: Zotero Paper\n---\n**Authors**: Doe, J.\nYear: 2020 | Type: article\n",
+            encoding="utf-8",
+        )
+
+        result = generate_literature_review(tmp_path)
+
+        assert result is not None
+        assert result.name == "index.md"
+        content = result.read_text(encoding="utf-8")
+        assert "Zotero Paper" in content
+        assert "../zotero/items/K1.md" in content
+
 
 class TestScanLiteratureDirectory:
     """scan_literature_directory 测试"""

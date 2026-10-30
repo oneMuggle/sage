@@ -1042,30 +1042,42 @@ class ZoteroClient:
             "dateModified": row["dateModified"],
         }
 
-    def _get_fulltext_from_index(self, item_id: int) -> Optional[str]:
-        """Retrieve full text from Zotero's FTS index, if available."""
-        # Zotero stores full text in a separate table (varies by version).
-        # Try common schemas.
-        for table in ("fulltextItemWords", "fulltextItems"):
-            try:
-                self._execute(f"SELECT 1 FROM {table} LIMIT 1")
-            except sqlite3.OperationalError:
-                continue
+    def _fulltext_item_ids(self, item_id: int) -> List[int]:
+        """Parent item + its attachment itemIDs, attachments first.
 
-        # Primary: fulltextItemWords joined with fulltextWords
+        Real Zotero indexes PDF full text under the attachment itemID; older
+        databases (and tests) may still have text indexed on the parent.
+        """
+        ids: List[int] = []
         try:
             rows = self._execute(
-                """
-                SELECT fw.word
-                FROM fulltextItemWords fiw
-                JOIN fulltextWords fw ON fiw.wordID = fw.wordID
-                WHERE fiw.itemID = ?
-                ORDER BY fiw.wordID
-                """,
+                "SELECT itemID FROM itemAttachments WHERE parentItemID = ? ORDER BY itemID",
                 (item_id,),
             )
-            if rows:
-                return " ".join(r["word"] for r in rows)
+            ids.extend(int(r["itemID"]) for r in rows)
+        except sqlite3.OperationalError:
+            pass
+        ids.append(item_id)
+        return ids
+
+    def _get_fulltext_from_index(self, item_id: int) -> Optional[str]:
+        """Retrieve full text from Zotero's FTS index, if available."""
+        # Primary: fulltextItemWords joined with fulltextWords.
+        # Check attachment itemIDs first, then the parent for legacy databases.
+        try:
+            for candidate in self._fulltext_item_ids(item_id):
+                rows = self._execute(
+                    """
+                    SELECT fw.word
+                    FROM fulltextItemWords fiw
+                    JOIN fulltextWords fw ON fiw.wordID = fw.wordID
+                    WHERE fiw.itemID = ?
+                    ORDER BY fiw.wordID
+                    """,
+                    (candidate,),
+                )
+                if rows:
+                    return " ".join(r["word"] for r in rows)
         except sqlite3.OperationalError:
             pass
 

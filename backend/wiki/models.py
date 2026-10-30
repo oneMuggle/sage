@@ -78,6 +78,7 @@ class GraphSignal(str, Enum):
     DirectLink = "direct_link"
     SourceOverlap = "source_overlap"
     TypeAffinity = "type_affinity"
+    AdamicAdar = "adamic_adar"
 
 
 @dataclass

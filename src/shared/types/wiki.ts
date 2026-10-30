@@ -193,13 +193,21 @@ export interface WebResult {
   snippet: string;
 }
 
-export type GraphSignal = 'DirectLink' | 'SourceOverlap' | 'TypeAffinity';
+export type GraphSignal =
+  | 'DirectLink'
+  | 'SourceOverlap'
+  | 'TypeAffinity'
+  | 'AdamicAdar';
 
 /**
  * 后端 `GraphEdge.to_dict()` 输出的是枚举值（snake_case）；
  * 前端展示用 canonical PascalCase。两种形状都接受，展示前统一归一。
  */
-export type GraphSignalWire = 'direct_link' | 'source_overlap' | 'type_affinity';
+export type GraphSignalWire =
+  | 'direct_link'
+  | 'source_overlap'
+  | 'type_affinity'
+  | 'adamic_adar';
 
 export interface GraphNode {
   id: string;

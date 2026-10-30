@@ -216,6 +216,10 @@ inotify 实时监听、Collection/Tag 图谱节点、独立导入对话框（标
   到绑定值；启动期后台增量同步在绑定存在时也会把带 Wiki 标签的文献
   沉淀到该项目的 `wiki/zotero/`。`GET /zotero/sync-status` 返回
   `wiki_project_path` 供 UI 显示。
+- **PDF 全文索引（2026-10-30 P2）**：`read_pdf_fulltext` 现在优先按
+  `itemAttachments` 的附件 itemID 查询 `fulltextItemWords`，父条目
+  itemID 仅作 legacy fallback；修复真实 Zotero 库上 PDF 全文永远
+  `unavailable` 的问题。
 - **评审加固（同日）**：导出前校验绑定为绝对路径且包含 `wiki/` 目录，
   拒绝向普通目录写入；`wiki_export` 改用 `secure_atomic_write_file`
   （no-follow + 原子替换），残留清理跳过符号链接，避免通过预置 symlink

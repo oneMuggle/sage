@@ -70,6 +70,7 @@ const SIGNAL_COLORS: Record<GraphSignal, string> = {
   DirectLink: '#0ea5e9',
   SourceOverlap: '#a855f7',
   TypeAffinity: '#94a3b8',
+  AdamicAdar: '#f59e0b',
 };
 
 const BASE_NODE_SIZE = 40;
@@ -100,6 +101,7 @@ export function normalizeGraphSignal(signal: string): GraphSignal | null {
   if (key === 'directlink') return 'DirectLink';
   if (key === 'sourceoverlap') return 'SourceOverlap';
   if (key === 'typeaffinity') return 'TypeAffinity';
+  if (key === 'adamicadar') return 'AdamicAdar';
   return null;
 }
 
