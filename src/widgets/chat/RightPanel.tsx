@@ -29,6 +29,7 @@ import { TurnList } from './TurnList';
 import { ArtifactViewer } from './artifacts/ArtifactViewer';
 import { ArtifactsSection } from './artifacts/ArtifactsSection';
 import { ChangesSection } from './changes/ChangesSection';
+import { FilePreviewPanel } from './preview/FilePreviewPanel';
 import { ProgressSection } from './progress/ProgressSection';
 
 interface RightPanelProps {
@@ -364,6 +365,7 @@ function RightPanelInner({
   const tab = useRightPanelStore((s) => s.tab);
   const maximized = useRightPanelStore((s) => s.maximized);
   const selectedArtifactId = useRightPanelStore((s) => s.selectedArtifactId);
+  const selectedFilePath = useRightPanelStore((s) => s.selectedFilePath);
   const setTab = useRightPanelStore((s) => s.setTab);
   const setMaximized = useRightPanelStore((s) => s.setMaximized);
   const { artifacts, loading, refresh } = useArtifacts(sessionId);
@@ -419,6 +421,7 @@ function RightPanelInner({
   // 批次 C: 切会话清掉上一会话的选中产物，避免详情页跨会话串台。
   useEffect(() => {
     useRightPanelStore.getState().clearSelectedArtifact();
+    useRightPanelStore.getState().clearFilePreview();
   }, [sessionId]);
 
   // R4 批次 B: 会话切换即预取变更列表 —— 徽标计数即时可用，切到变更 Tab
@@ -465,6 +468,7 @@ function RightPanelInner({
   const handleTabChange = useCallback(
     (next: RightPanelTab) => {
       useRightPanelStore.getState().clearSelectedArtifact();
+      useRightPanelStore.getState().clearFilePreview();
       setTab(next);
     },
     [setTab],
@@ -512,7 +516,13 @@ function RightPanelInner({
       />
 
       <div className="h-[calc(100%-2.5rem)] overflow-y-auto min-h-0">
-        {selected && sessionId ? (
+        {selectedFilePath && sessionId ? (
+          <FilePreviewPanel
+            sessionId={sessionId}
+            path={selectedFilePath}
+            onBack={() => useRightPanelStore.getState().clearFilePreview()}
+          />
+        ) : selected && sessionId ? (
           <ArtifactViewer
             artifact={selected}
             sessionId={sessionId}

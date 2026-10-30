@@ -282,6 +282,8 @@
     "workspace_health": { "method": "GET", "path": "/api/v1/workspace/health" },
     "workspace_list_checkpoints": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/workspace/checkpoints" },
     "workspace_migrate_preference": { "method": "POST", "path": "/api/v1/workspace/migrate" },
+    "workspace_preview_file": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/workspace/preview" },
+    "workspace_resolve_files": { "method": "POST", "path": "/api/v1/sessions/{sessionId}/workspace/resolve" },
     "workspace_restore_checkpoint": { "method": "POST", "path": "/api/v1/sessions/{sessionId}/workspace/checkpoints/restore" },
     "workspace_revert_change_hunks": { "method": "POST", "path": "/api/v1/sessions/{sessionId}/workspace/changes/revert-hunks" },
     "workspace_revert_changes": { "method": "POST", "path": "/api/v1/sessions/{sessionId}/workspace/changes/revert" },
