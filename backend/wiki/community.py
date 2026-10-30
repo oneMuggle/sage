@@ -11,7 +11,7 @@ from typing import List, Tuple
 import networkx as nx
 
 from .graph import build_graph
-from .models import GraphData
+from .models import GraphData, GraphSignal
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +47,11 @@ def detect_communities(graph_data: GraphData) -> List[CommunityInfo]:
     for node in graph_data.nodes:
         G.add_node(node.id)
 
-    # 添加边（使用权重）
+    # 添加边（使用权重）。Adamic-Adar 是相关性信号而非结构链接，
+    # 不应参与社区划分（否则会把弱相关的簇合并）。
     for edge in graph_data.edges:
+        if edge.signal is GraphSignal.AdamicAdar:
+            continue
         # 避免重复边（networkx 会自动处理）
         if G.has_edge(edge.source, edge.target):
             # 如果边已存在，取最大权重

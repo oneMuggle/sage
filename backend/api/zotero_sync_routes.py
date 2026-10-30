@@ -133,6 +133,13 @@ def _run_wiki_export(client: Any, project_path: str) -> Dict[str, Any]:
         if not (root / "wiki").is_dir():
             return {"error": f"project_path is not a wiki project (missing wiki/): {project_path}"}
         result = export_wiki(client, root)
+        if not result.errors:
+            try:
+                from backend.wiki.literature_aggregator import generate_literature_review
+
+                generate_literature_review(root)
+            except Exception as exc:  # noqa: BLE001 - 索引失败不影响文献沉淀
+                logger.warning("literature review generation failed: %s", exc)
         return result.to_dict()
     except Exception as exc:  # noqa: BLE001 - wiki 沉淀不影响主同步
         logger.warning("zotero wiki export failed: %s", exc)

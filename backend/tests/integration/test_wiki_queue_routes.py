@@ -96,7 +96,9 @@ class TestQueueProcessEndpoint:
             def locked(self) -> bool:
                 return True
 
-        monkeypatch.setattr(wiki_routes, "_queue_process_lock", _HeldLock())
+        from backend.wiki import queue_worker
+
+        monkeypatch.setattr(queue_worker, "queue_process_lock", _HeldLock())
 
         with pytest.raises(HTTPException) as excinfo:
             await queue_process(QueueProcessRequest(project_path=str(project_root)))

@@ -703,6 +703,16 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("zotero background sync task creation failed (ignored)")
 
+    # Wiki 摄入队列 daemon：只消费用户显式入队的任务（60s 轮询）。
+    try:
+        from backend.wiki.queue_daemon import run_queue_daemon
+
+        app.state.wiki_queue_task = asyncio.create_task(
+            run_queue_daemon(), name="wiki-queue-daemon"
+        )
+    except Exception:
+        logger.exception("wiki queue daemon task creation failed (ignored)")
+
     # PR-C §5.1: 把 5 个 evolution 任务挂到 lifespan,按 cron 自动跑
     # (memory_pruning / memory_consolidation / daily_summary /
     #  preference_learning / importance_reevaluation)。读 config.yaml
@@ -1221,6 +1231,10 @@ async def lifespan(app: FastAPI):
     zotero_sync_task = getattr(app.state, "zotero_sync_task", None)
     if zotero_sync_task is not None and not zotero_sync_task.done():
         zotero_sync_task.cancel()
+
+    wiki_queue_task = getattr(app.state, "wiki_queue_task", None)
+    if wiki_queue_task is not None and not wiki_queue_task.done():
+        wiki_queue_task.cancel()
 
     # M1/M2 审批/提问闸口：关闭时重置全局单例。否则 TestClient（或多次
     # lifespan 启停）之后 `_global_gate` 残留装配——后续 agent 循环对

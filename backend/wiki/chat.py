@@ -22,7 +22,7 @@ from .llm_context import LLMContext
 from .models import RetrievalStats, WikiChatOutcome
 from .rrf import rrf_fuse
 from .search import search_wiki
-from .vectorstore import VectorStore
+from .vectorstore_factory import open_vector_store
 
 # 常量
 DEFAULT_EMBED_DIM = 1536
@@ -126,7 +126,7 @@ async def _build_chat_context(
         embed_response = await http_post(embed_req.url, embed_req.headers, embed_req.body)
         query_vec = parse_embed_response(embed_response, config.embed_dim)[0]
 
-        vector_store = VectorStore.open(project_root, config.embed_dim)
+        vector_store = open_vector_store(project_root, config.embed_dim)
         vector_hits = vector_store.search(
             query_vec, limit=RETRIEVAL_LIMIT, allowed_paths=allowed_paths
         )
