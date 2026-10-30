@@ -37,6 +37,9 @@ export const zhSettingsUi = {
   'settings.basic.retry_base_label': '退避基数（秒）',
   'settings.basic.retry_max_desc': 'LLM 请求失败后自动重试的次数上限。设为 0 表示禁用自动重试。',
   'settings.basic.retry_max_label': '最大重试次数',
+  'settings.basic.retry_total_budget_desc':
+    '从首次尝试起算，退避前累计耗时超过该值即停止自动重试。0 = 不限。',
+  'settings.basic.retry_total_budget_label': '重试总时长预算（秒）',
   'settings.basic.section.data': '数据',
   'settings.basic.section.demo': '演示',
   'settings.basic.section.llm_proxy_timeout': 'LLM 代理超时',

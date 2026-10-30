@@ -41,6 +41,9 @@ export const enSettingsUi = {
   'settings.basic.retry_max_desc':
     'Maximum automatic retries after a failed LLM request. Set to 0 to disable automatic retries.',
   'settings.basic.retry_max_label': 'Max retries',
+  'settings.basic.retry_total_budget_desc':
+    'Total time spent waiting since the first attempt. Once this budget is exhausted, automatic retries stop. 0 = unlimited.',
+  'settings.basic.retry_total_budget_label': 'Total retry budget (s)',
   'settings.basic.section.data': 'Data',
   'settings.basic.section.demo': 'Demo',
   'settings.basic.section.llm_proxy_timeout': 'LLM proxy timeout',
