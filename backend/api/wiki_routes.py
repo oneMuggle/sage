@@ -759,6 +759,26 @@ async def review(project_path: str) -> dict:
 
 
 # ============================================================================
+# Literature review index
+# ============================================================================
+
+
+@router.post("/literature/review")
+async def literature_review(project_path: str) -> dict:
+    """聚合 ``wiki/zotero/items`` 与 ``wiki/literature`` 生成综述索引。"""
+    from backend.wiki.literature_aggregator import (
+        generate_literature_review,
+        scan_literature_directory,
+    )
+
+    project_root = authorize_registered_project(project_path)
+    path = generate_literature_review(project_root)
+    count = len(scan_literature_directory(project_root))
+    relative = str(path.relative_to(project_root)).replace("\\", "/") if path else None
+    return {"path": relative, "count": count}
+
+
+# ============================================================================
 # Ingest
 # ============================================================================
 
