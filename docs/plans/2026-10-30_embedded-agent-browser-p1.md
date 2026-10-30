@@ -68,48 +68,48 @@ backend browser_cdp.cdp_command
 ## 5. 任务
 
 ### Task 1：Electron bridge（纯模块 + 单测）
-- [ ] `agentBrowserBridge.ts` 定义 `BridgeDeps`（createWindow/closeWindow/getSession/now）与 `dispatch(request)`；
+- [x] `agentBrowserBridge.ts` 定义 `BridgeDeps`（createWindow/closeWindow/getSession/now）与 `dispatch(request)`；
       命令：`Target.getTargets/createTarget/closeTarget/attachToTarget`、`Browser.getVersion/setDownloadBehavior`、
       `Network.getCookies/enable`、`Storage.getCookies/setCookies`、`Page.*`/`Runtime.*`（debugger 透传）、
       `Page.captureScreenshot`（capturePage）。
-- [ ] 单测：模式隔离（headless 看不到 visible 目标）、attach 返回 sessionId、cookie 映射 CDP↔Electron、
+- [x] 单测：模式隔离（headless 看不到 visible 目标）、attach 返回 sessionId、cookie 映射 CDP↔Electron、
       未知方法报错、缺少 token 401（HTTP 层另测）。
-- [ ] 提交。
+- [x] 提交。
 
 ### Task 2：main 集成 + env
-- [ ] `startAgentBrowserBridge()` 在 `spawnBackend()` 前启动；env 注入 `SAGE_EMBEDDED_BROWSER=1`（仅 Win7/force）、
+- [x] `startAgentBrowserBridge()` 在 `spawnBackend()` 前启动；env 注入 `SAGE_EMBEDDED_BROWSER=1`（仅 Win7/force）、
       `SAGE_EMBEDDED_BROWSER_PORT`、`SAGE_EMBEDDED_BROWSER_TOKEN`。
-- [ ] `before-quit` 关闭 server 与窗口；日志只打端口不打印 token。
-- [ ] `npm run typecheck:electron` 通过；提交。
+- [x] `before-quit` 关闭 server 与窗口；日志只打端口不打印 token。
+- [x] `npm run typecheck:electron` 通过；提交。
 
 ### Task 3：后端 Embedded 启动器与命令路由
-- [ ] `BrowserType.EMBEDDED` + `EmbeddedLauncher`（build_command 空、wait_for_cdp 复用 env 端口/路径）；
+- [x] `BrowserType.EMBEDDED` + `EmbeddedLauncher`（build_command 空、wait_for_cdp 复用 env 端口/路径）；
       `launch_browser` 走嵌入式分支（dummy process、persistent、profile_name="embedded"）。
-- [ ] `_discover_from_env` 优先 embedded（`SAGE_EMBEDDED_BROWSER=1` 且 port/token 齐全）。
-- [ ] `cdp_command` 顶层分流 `_embedded_command`（urllib + token + `X-Sage-Headless`）；页面方法缺 target 时由 bridge 选首个/新建。
-- [ ] `browser_events.start_event_channel`/`start_download_tracking` 对 embedded 直接返回 False；
+- [x] `_discover_from_env` 优先 embedded（`SAGE_EMBEDDED_BROWSER=1` 且 port/token 齐全）。
+- [x] `cdp_command` 顶层分流 `_embedded_command`（urllib + token + `X-Sage-Headless`）；页面方法缺 target 时由 bridge 选首个/新建。
+- [x] `browser_events.start_event_channel`/`start_download_tracking` 对 embedded 直接返回 False；
       `web_render._ensure_pool_channel` 同理。
-- [ ] 单测：env 发现优先级、launch 不 spawn、命令 POST 形状/错误映射、embedded 跳过事件通道。
-- [ ] 提交。
+- [x] 单测：env 发现优先级、launch 不 spawn、命令 POST 形状/错误映射、embedded 跳过事件通道。
+- [x] 提交。
 
 ### Task 4：健康检查与降级
-- [ ] `diagnostic_routes.get_browser_health`：embedded 时 `browserFound=true, executable="Sage 内置浏览器"`。
-- [ ] `browser_downloads` 在 embedded 无 tracker 时扫描下载目录（现有 fallback 已覆盖，补测试）。
-- [ ] 提交。
+- [x] `diagnostic_routes.get_browser_health`：embedded 时 `browserFound=true, executable="Sage 内置浏览器"`。
+- [x] `browser_downloads` 在 embedded 无 tracker 时扫描下载目录（现有 fallback 已覆盖，补测试）。
+- [x] 提交。
 
 ### Task 5：CNKI playbook + 适配器
-- [ ] `cnki-research/SKILL.md`：登录（个人/机构/校园网）→ 检索 → 结果解析 → 详情 → 点「PDF下载」
+- [x] `cnki-research/SKILL.md`：登录（个人/机构/校园网）→ 检索 → 结果解析 → 详情 → 点「PDF下载」
       （禁 CAJ）→ `browser_downloads` 等待 → `%PDF-` 校验 → 5–12s 限速、单批 ≤20。
       `allowed-tools: browser_launch browser_navigate browser_snapshot browser_interact browser_downloads browser_login web_fetch http_download`
-- [ ] `academic_adapters.CNKIAdapter` 改用 `https://kns.cnki.net/kns8s/AdvSearch?dbcode=SCDB&kw=<query>` 形态；
+- [x] `academic_adapters.CNKIAdapter` 改用 `https://kns.cnki.net/kns8s/defaultresult/index?kw=<query>&korder=SU` 形态；
       保留旧模板说明。更新/新增单测断言 URL 含 `kns8s` 与编码关键词。
-- [ ] 手册补充「知网等登录站点的推荐流程」。
-- [ ] 提交。
+- [x] 手册补充「知网等登录站点的推荐流程」。
+- [x] 提交。
 
 ### Task 6：验证
-- [ ] 后端：新增/相关测试 + `test_browser_tool/test_web_render/test_diagnostic_routes` 回归。
-- [ ] Electron：`npm run typecheck:electron` + `npx vitest run electron/__tests__/agentBrowserBridge.test.ts`。
-- [ ] `scripts/check_py38_compat.py`、ruff、architecture check。
+- [x] 后端：新增/相关测试 + `test_browser_tool/test_web_render/test_diagnostic_routes` 回归。
+- [x] Electron：`npm run typecheck:electron` + `npx vitest run electron/__tests__/agentBrowserBridge.test.ts`。
+- [x] `scripts/check_py38_compat.py`、ruff、architecture check。
 - [ ] 推送 + PR（stacked on #2683），CI 绿。
 
 ## 6. 风险

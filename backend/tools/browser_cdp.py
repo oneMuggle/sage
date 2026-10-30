@@ -232,9 +232,25 @@ def _terminate_session(session: BrowserSession) -> None:
     保留的前提；启动失败路径同样经由本函数，持久目录即使启动失败也不删
     （里面可能有用户既有登录态）。
 
-    Embedded 会话的生命周期归 Electron 主进程：这里不做任何终止。
+    Embedded 会话的生命周期归 Electron 主进程：这里关闭其全部窗口后返回。
     """
     if getattr(session, "browser_type", None) == BrowserType.EMBEDDED:
+        for headless_mode in (True, False):
+            try:
+                targets = _embedded_command(
+                    session, "Target.getTargets", {}, headless_override=headless_mode
+                )
+                for info in targets.get("targetInfos") or []:
+                    target_id = str(info.get("targetId") or "")
+                    if target_id:
+                        _embedded_command(
+                            session,
+                            "Target.closeTarget",
+                            {"targetId": target_id},
+                            headless_override=headless_mode,
+                        )
+            except Exception:  # noqa: BLE001 — 关闭失败不阻断会话回收
+                logger.debug("关闭内置浏览器目标失败", exc_info=True)
         return
     # SN3：先停事件通道（常驻 WS 线程），再杀进程
     try:
@@ -673,6 +689,7 @@ def _embedded_command(
     method: str,
     params: Optional[Dict[str, Any]] = None,
     target_id: Optional[str] = None,
+    headless_override: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """把 CDP 命令转发到 Electron 主进程的内置浏览器 HTTP 桥。"""
     payload = json.dumps(
@@ -680,7 +697,11 @@ def _embedded_command(
             "method": method,
             "params": params or {},
             "targetId": target_id or "",
-            "headless": bool(session.headless),
+            "headless": (
+                bool(headless_override)
+                if headless_override is not None
+                else bool(session.headless)
+            ),
         }
     ).encode("utf-8")
     request = urllib.request.Request(
