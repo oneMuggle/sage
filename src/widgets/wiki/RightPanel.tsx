@@ -1,15 +1,44 @@
 // Right Panel - 右侧面板（文件预览 + 研究面板）
 import { X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
+import { resolveEndpoint } from '../../entities/setting/types';
 import { useResearchStore } from '../../entities/wiki/research-store';
 import { useWikiStore } from '../../entities/wiki/store';
+import { useSettings } from '../../features/manage-settings/useSettings';
+import { settingsClient } from '../../shared/api/settingsClient';
+import { parseTavilyKey } from '../../shared/lib/searchConfig';
 
 import { MarkdownPreview } from './MarkdownPreview';
+import { WikiResearchPanel } from './WikiResearchPanel';
 
 export function RightPanel() {
   const selectedFile = useWikiStore((s) => s.selectedFile);
   const fileContent = useWikiStore((s) => s.fileContent);
+  const project = useWikiStore((s) => s.project);
   const researchPanelOpen = useResearchStore((s) => s.panelOpen);
+  const settings = useSettings();
+  const [tavilyKey, setTavilyKey] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void settingsClient
+      .getPreference('search_config')
+      .then((raw) => {
+        if (!cancelled) setTavilyKey(parseTavilyKey(raw));
+      })
+      .catch(() => {
+        // 读不到搜索配置时保持空值，面板会提示去设置。
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const endpoint = settings
+    ? resolveEndpoint(settings.settings.modelSelections.chatModel, settings.settings.endpoints)
+    : undefined;
+  const model = settings?.settings.modelSelections.chatModel.modelId ?? '';
 
 
 
@@ -52,8 +81,22 @@ export function RightPanel() {
               <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-4">
-            <p className="text-sm text-muted">研究面板内容（待实现）</p>
+          <div className="flex-1 overflow-y-auto">
+            {project && endpoint && model ? (
+              <WikiResearchPanel
+                projectPath={project.path}
+                llmBaseUrl={endpoint.baseUrl}
+                llmApiKey={endpoint.apiKey}
+                llmModel={model}
+                searchProvider="tavily"
+                searchApiKey={tavilyKey}
+                disabledReason={
+                  tavilyKey ? null : '需要在「设置 → 网络」配置 Tavily API Key'
+                }
+              />
+            ) : (
+              <p className="text-sm text-muted p-4">请先选择项目并配置聊天模型</p>
+            )}
           </div>
         </div>
       )}
