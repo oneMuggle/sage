@@ -102,14 +102,10 @@ describe('AgentBrowserBridge', () => {
     const headlessList = await bridge.dispatch({ method: 'Target.getTargets', headless: true });
     const visibleList = await bridge.dispatch({ method: 'Target.getTargets', headless: false });
     expect(headlessList).toEqual({
-      targetInfos: [
-        expect.objectContaining({ url: 'https://hidden.example/', type: 'page' }),
-      ],
+      targetInfos: [expect.objectContaining({ url: 'https://hidden.example/', type: 'page' })],
     });
     expect(visibleList).toEqual({
-      targetInfos: [
-        expect.objectContaining({ url: 'https://visible.example/', type: 'page' }),
-      ],
+      targetInfos: [expect.objectContaining({ url: 'https://visible.example/', type: 'page' })],
     });
   });
 

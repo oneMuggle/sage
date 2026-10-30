@@ -206,15 +206,15 @@ export class AgentBrowserBridge {
         const cookies = Array.isArray(params.cookies) ? params.cookies : [];
         for (const cookie of cookies) {
           if (cookie && typeof cookie === 'object') {
-            await this.deps.getSession().cookies.set(
-              toElectronCookie(cookie as Record<string, unknown>),
-            );
+            await this.deps
+              .getSession()
+              .cookies.set(toElectronCookie(cookie as Record<string, unknown>));
           }
         }
         return {};
       }
       case 'Page.captureScreenshot': {
-        const entry = await this.resolveTarget(scope, mode, request.targetId,false);
+        const entry = await this.resolveTarget(scope, mode, request.targetId, false);
         const image = await entry.win.webContents.capturePage();
         return { data: Buffer.from(image.toPNG()).toString('base64') };
       }
@@ -225,12 +225,12 @@ export class AgentBrowserBridge {
       case 'Page.getNavigationHistory':
       case 'Runtime.evaluate':
       case 'Runtime.enable': {
-        const entry = await this.resolveTarget(scope, mode, request.targetId,true);
+        const entry = await this.resolveTarget(scope, mode, request.targetId, true);
         return this.sendToDebugger(entry, method, params);
       }
       default:
         if (DEBUGGER_PREFIXES.some((prefix) => method.startsWith(prefix))) {
-          const entry = await this.resolveTarget(scope, mode, request.targetId,true);
+          const entry = await this.resolveTarget(scope, mode, request.targetId, true);
           return this.sendToDebugger(entry, method, params);
         }
         throw new Error(`unsupported method: ${method}`);
@@ -296,10 +296,7 @@ export class AgentBrowserBridge {
     return { targetId: id };
   }
 
-  private closeTarget(
-    scope: Map<string, TargetEntry>,
-    targetId: string,
-  ): Record<string, unknown> {
+  private closeTarget(scope: Map<string, TargetEntry>, targetId: string): Record<string, unknown> {
     const entry = scope.get(targetId);
     if (!entry) throw new Error(`unknown targetId: ${targetId}`);
     scope.delete(targetId);

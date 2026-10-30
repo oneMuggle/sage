@@ -143,12 +143,12 @@ export function defaultCreateWindow(): WindowLike {
   }) as unknown as WindowLike;
   // 首次 load 之前归一化分区会话 UA（自定义 createWindow 的调用方自管）。
   try {
-    const rawUa = (win as unknown as {
-      webContents: { getUserAgent: () => string };
-    }).webContents.getUserAgent();
-    session
-      .fromPartition(ARENA_TOKEN_PARTITION)
-      .setUserAgent(plainChromeUa(rawUa));
+    const rawUa = (
+      win as unknown as {
+        webContents: { getUserAgent: () => string };
+      }
+    ).webContents.getUserAgent();
+    session.fromPartition(ARENA_TOKEN_PARTITION).setUserAgent(plainChromeUa(rawUa));
   } catch {
     // 归一化失败不阻断窗口创建（降级为默认 UA）
   }
@@ -396,14 +396,15 @@ export class ArenaTokenWindowController {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       const tokenValue = this.authToken();
       if (tokenValue) headers.Authorization = `Bearer ${tokenValue}`;
-      const result = await this.fetchJson(
-        `${this.backendUrl}/api/v1/arena/token-window/push`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ token, exit_ip: this.exitIp || undefined, ua: this.ua || undefined }),
-        },
-      );
+      const result = await this.fetchJson(`${this.backendUrl}/api/v1/arena/token-window/push`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          token,
+          exit_ip: this.exitIp || undefined,
+          ua: this.ua || undefined,
+        }),
+      });
       if (result.ok) return;
       if (result.status === 403 || result.status === 401) {
         // arena/token_window disabled or auth changed — stop, state poll will confirm
