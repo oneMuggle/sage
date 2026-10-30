@@ -12,6 +12,8 @@ const syncStatusMock = vi.fn();
 const syncMock = vi.fn();
 const getWikiTagMock = vi.fn();
 const setWikiTagMock = vi.fn();
+const getWikiProjectPathMock = vi.fn();
+const setWikiProjectPathMock = vi.fn();
 const recentProjectsMock = vi.fn();
 const toastSuccess = vi.fn();
 const toastWarning = vi.fn();
@@ -34,6 +36,8 @@ vi.mock('../../../shared/api/zoteroClient', () => ({
     sync: (...args: unknown[]) => syncMock(...args),
     getWikiTag: (...args: unknown[]) => getWikiTagMock(...args),
     setWikiTag: (...args: unknown[]) => setWikiTagMock(...args),
+    getWikiProjectPath: (...args: unknown[]) => getWikiProjectPathMock(...args),
+    setWikiProjectPath: (...args: unknown[]) => setWikiProjectPathMock(...args),
   },
 }));
 
@@ -95,6 +99,8 @@ beforeEach(() => {
   );
   getWikiTagMock.mockResolvedValue('sage:wiki');
   setWikiTagMock.mockResolvedValue(undefined);
+  getWikiProjectPathMock.mockResolvedValue('');
+  setWikiProjectPathMock.mockResolvedValue(undefined);
   recentProjectsMock.mockResolvedValue([]);
 });
 
@@ -180,6 +186,18 @@ describe('ZoteroSyncPanel 同步动作', () => {
       expect(syncMock).toHaveBeenCalledWith({ force: false, projectPath: '/active/proj' }),
     );
     expect(recentProjectsMock).not.toHaveBeenCalled();
+  });
+
+  it('优先使用持久化的项目绑定（高于当前打开项目）', async () => {
+    wikiState.project = { path: '/active/proj' };
+    getWikiProjectPathMock.mockResolvedValue('/bound/proj');
+    syncMock.mockResolvedValue(makeResult());
+    renderPanel();
+    await screen.findByTestId('zotero-sync-status-line');
+    fireEvent.click(screen.getByTestId('zotero-sync-now'));
+    await waitFor(() =>
+      expect(syncMock).toHaveBeenCalledWith({ force: false, projectPath: '/bound/proj' }),
+    );
   });
 
   it('无活跃项目时回退到最近打开的项目', async () => {

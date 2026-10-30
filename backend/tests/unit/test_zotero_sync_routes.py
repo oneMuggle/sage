@@ -245,3 +245,67 @@ async def test_background_sync_skips_when_lock_held(monkeypatch):
 
     await zotero_sync_routes.run_background_sync()
     assert ingestor_calls == []
+
+
+# ---------------------------------------------------------------------------
+# Persisted wiki project binding
+# ---------------------------------------------------------------------------
+
+
+def test_sync_uses_persisted_wiki_project(client, monkeypatch):
+    """POST /sync without project_path falls back to the saved binding."""
+    ingestor = _FakeIngestor()
+    monkeypatch.setattr(zotero_service, "build_client", lambda: _FakeClient())
+    monkeypatch.setattr(zotero_service, "build_ingestor", lambda c: ingestor)
+    monkeypatch.setattr(
+        zotero_sync_routes, "_configured_wiki_project", lambda: "/bound/project"
+    )
+    seen = {}
+
+    def fake_export(client_obj, project_path):
+        seen["path"] = project_path
+        return {"items_exported": 1, "authors_exported": 0, "errors": []}
+
+    monkeypatch.setattr(zotero_sync_routes, "_run_wiki_export", fake_export)
+    monkeypatch.setattr(zotero_sync_routes, "_record_wiki_pages", lambda count: None)
+
+    resp = client.post("/sync", json={})
+    assert resp.status_code == 200
+    assert seen["path"] == "/bound/project"
+    assert resp.json()["wiki"]["items_exported"] == 1
+
+
+def test_sync_status_exposes_wiki_project(client, monkeypatch):
+    monkeypatch.setattr(zotero_service, "stored_summary", lambda: (None, 0))
+    monkeypatch.setattr(zotero_service, "embed_config", lambda: None)
+    monkeypatch.setattr(zotero_sync_routes, "_load_sync_state", lambda: {})
+    monkeypatch.setattr(
+        zotero_sync_routes, "_configured_wiki_project", lambda: "/bound/project"
+    )
+
+    body = client.get("/sync-status").json()
+    assert body["wiki_project_path"] == "/bound/project"
+
+
+@pytest.mark.asyncio()
+async def test_background_sync_exports_wiki_when_bound(monkeypatch):
+    monkeypatch.setattr(
+        zotero_sync_routes, "_load_sync_state",
+        lambda: {"last_sync_ts": 1700000000},
+    )
+    monkeypatch.setattr(zotero_service, "build_client", lambda: _FakeClient())
+    monkeypatch.setattr(zotero_service, "build_ingestor", lambda c: _FakeIngestor())
+    monkeypatch.setattr(
+        zotero_sync_routes, "_configured_wiki_project", lambda: "/bound/project"
+    )
+    seen = {}
+
+    def fake_export(client_obj, project_path):
+        seen["path"] = project_path
+        return {"items_exported": 2, "authors_exported": 1, "errors": []}
+
+    monkeypatch.setattr(zotero_sync_routes, "_run_wiki_export", fake_export)
+    monkeypatch.setattr(zotero_sync_routes, "_record_wiki_pages", lambda count: None)
+
+    await zotero_sync_routes.run_background_sync()
+    assert seen["path"] == "/bound/project"

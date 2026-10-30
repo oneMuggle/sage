@@ -57,7 +57,8 @@ export function formatZoteroSyncTime(value: string | null): string | null {
   )}:${pad(date.getMinutes())}`;
 }
 
-async function resolveProjectPath(): Promise<string | null> {
+async function resolveProjectPath(boundPath: string): Promise<string | null> {
+  if (boundPath) return boundPath;
   const active = useWikiStore.getState().project?.path;
   if (active) return active;
   try {
@@ -80,6 +81,10 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
   const [wikiTag, setWikiTag] = useState(DEFAULT_WIKI_TAG);
   const [wikiTagSaving, setWikiTagSaving] = useState(false);
   const [wikiTagSaved, setWikiTagSaved] = useState(false);
+
+  const [wikiProjectPath, setWikiProjectPath] = useState('');
+  const [wikiProjectSaving, setWikiProjectSaving] = useState(false);
+  const [wikiProjectSaved, setWikiProjectSaved] = useState(false);
 
   // 卸载后不再 setState（React 18 静默丢弃，但避免警告与内存驻留）
   const mountedRef = useRef(true);
@@ -116,6 +121,14 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
       .catch(() => {
         // 读不到就用默认值，不打扰用户
       });
+    void zoteroClient
+      .getWikiProjectPath()
+      .then((path) => {
+        if (!cancelled) setWikiProjectPath(path);
+      })
+      .catch(() => {
+        // 未绑定是正常状态
+      });
     return () => {
       cancelled = true;
     };
@@ -127,7 +140,7 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
     setLastError(null);
     setLastResult(null);
     try {
-      const projectPath = await resolveProjectPath();
+      const projectPath = await resolveProjectPath(wikiProjectPath);
       const result = await zoteroClient.sync({ force, projectPath });
       if (!mountedRef.current) return;
       setLastResult(result);
@@ -163,6 +176,24 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
       setLastError(errorMessage(err));
     } finally {
       if (mountedRef.current) setWikiTagSaving(false);
+    }
+  };
+
+  const handleSaveWikiProject = async () => {
+    setWikiProjectSaving(true);
+    setWikiProjectSaved(false);
+    try {
+      await zoteroClient.setWikiProjectPath(wikiProjectPath);
+      if (!mountedRef.current) return;
+      setWikiProjectPath(wikiProjectPath.trim());
+      setWikiProjectSaved(true);
+      setLastError(null);
+      await loadStatus();
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setLastError(errorMessage(err));
+    } finally {
+      if (mountedRef.current) setWikiProjectSaving(false);
     }
   };
 
@@ -312,6 +343,45 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
         <p className="mt-1 text-xs text-faint">{t('settings.zotero.wiki_tag.hint')}</p>
         {wikiTagSaved && (
           <p className="mt-1 text-xs text-green-400">{t('settings.zotero.wiki_tag.saved')}</p>
+        )}
+      </div>
+
+      {/* Wiki project binding */}
+      <div className="border-t border-line-subtle pt-3">
+        <label
+          className="mb-1 block text-xs font-medium text-secondary"
+          htmlFor="zotero-wiki-project"
+        >
+          {t('settings.zotero.wiki_project.label')}
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="zotero-wiki-project"
+            data-testid="zotero-wiki-project-input"
+            type="text"
+            className="flex-1 rounded border border-line-subtle bg-surface px-3 py-1.5 text-sm text-primary placeholder:text-faint/60 focus:border-accent focus:outline-none"
+            placeholder={t('settings.zotero.wiki_project.placeholder')}
+            value={wikiProjectPath}
+            onChange={(e) => {
+              setWikiProjectPath(e.target.value);
+              setWikiProjectSaved(false);
+            }}
+          />
+          <button
+            type="button"
+            data-testid="zotero-wiki-project-save"
+            className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+            disabled={wikiProjectSaving}
+            onClick={() => void handleSaveWikiProject()}
+          >
+            {wikiProjectSaving ? '…' : t('settings.zotero.wiki_project.save')}
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-faint">{t('settings.zotero.wiki_project.hint')}</p>
+        {wikiProjectSaved && (
+          <p className="mt-1 text-xs text-green-400">
+            {t('settings.zotero.wiki_project.saved')}
+          </p>
         )}
       </div>
     </div>

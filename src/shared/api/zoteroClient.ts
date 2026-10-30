@@ -111,6 +111,8 @@ export interface ZoteroSyncStatus {
   vector_dim: number | null;
   sync_in_progress: boolean;
   errors: string[];
+  /** Persisted wiki project binding used for the wiki-sinking half of a sync. */
+  wiki_project_path: string | null;
 }
 
 /** Zotero tag whose items are sunk into wiki pages; mirrors backend default. */
@@ -183,6 +185,24 @@ export const zoteroClient = {
     await invoke('set_preference', {
       key: 'zotero_wiki_tag',
       value: tag.trim() || DEFAULT_WIKI_TAG,
+      value_type: 'string',
+      category: 'general',
+    });
+  },
+
+  /** Read the persisted wiki project binding; empty when unbound. */
+  async getWikiProjectPath(): Promise<string> {
+    const pref = await invoke<{ value: string | null } | null>('get_preference', {
+      key: 'zotero_wiki_project_path',
+    });
+    return (pref?.value ?? '').trim();
+  },
+
+  /** Persist the wiki project binding; empty input clears the binding. */
+  async setWikiProjectPath(path: string): Promise<void> {
+    await invoke('set_preference', {
+      key: 'zotero_wiki_project_path',
+      value: path.trim(),
       value_type: 'string',
       category: 'general',
     });

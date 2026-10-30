@@ -104,6 +104,8 @@ class SettingsRepository:
             # 2026-10-27 feat/zotero-llm-visible: 进入 wiki 沉淀的 Zotero tag
             # (缺省 = "sage:wiki")。读取口径见 backend/zotero/wiki_export.py
             "zotero_wiki_tag",
+            # 2026-10-30: Zotero wiki 沉淀的持久项目路径（手动/后台同步共用）
+            "zotero_wiki_project_path",
             # T-3: 技能脚本执行开关（"1" 开启 / "0" 或缺省 = 关闭，fail-closed）。
             # 读取口径见 backend/skills/skill_md/script_policy.py
             "allow_skill_scripts",

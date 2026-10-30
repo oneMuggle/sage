@@ -637,6 +637,12 @@ export const zhChatAndSider = {
   'settings.zotero.wiki_tag.hint': '带有该 Zotero 标签的文献才会沉淀为 wiki 页面。',
   'settings.zotero.wiki_tag.save': '保存标签',
   'settings.zotero.wiki_tag.saved': '标签已保存',
+  'settings.zotero.wiki_project.label': 'Wiki 项目路径（可选）',
+  'settings.zotero.wiki_project.placeholder': '留空则自动使用当前/最近项目',
+  'settings.zotero.wiki_project.save': '保存绑定',
+  'settings.zotero.wiki_project.saved': '项目绑定已保存',
+  'settings.zotero.wiki_project.hint':
+    '同步时把带 Wiki 标签的文献沉淀到该项目的 wiki/zotero/ 目录。',
 
   // ─── 设置页 · 更新 ────────────────
 } as const;
