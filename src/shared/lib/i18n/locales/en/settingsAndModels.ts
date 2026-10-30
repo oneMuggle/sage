@@ -413,6 +413,7 @@ export const enSettingsAndModels = {
   'settings.usage.trend.empty': 'No trend data in selected range',
   'settings.usage.trend.legendRequests': 'Requests',
   'settings.usage.trend.legendCost': 'Cost',
+  'settings.usage.trend.hint': 'Hover or focus the chart for period details',
   'settings.usage.trend.loadFailed': 'Failed to load trend data',
   'settings.usage.exportCsv': 'Export CSV',
   // Task 6 (2026-09-15): cost unknown vs 0, partial-estimate footnote

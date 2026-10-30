@@ -6,7 +6,7 @@
  *
  * 数据来源: src/shared/api/usageApi.ts (invoke 通道, 无额外依赖)。
  */
-import { Download, TrendingUp } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
@@ -20,7 +20,7 @@ import {
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { Card } from '../../shared/ui';
 import { UsageRequestsTable } from '../../widgets/settings/UsageRequestsTable';
-import { monotoneAreaPath } from '../../widgets/settings/chartUtils';
+import { UsageTrendChart } from '../../widgets/settings/UsageTrendChart';
 
 const RANGE_OPTIONS: { value: UsageRange; labelKey: TranslationKey }[] = [
   { value: 'today', labelKey: 'settings.usage.range.today' },
@@ -150,8 +150,8 @@ export function UsageStatsTab() {
       {/* Summary cards */}
       {summary && <SummaryCards summary={summary} />}
 
-      {/* Trend chart */}
-      {trend && trend.series.length > 0 && <TrendChart trend={trend} />}
+      {/* Trend chart（共享组件，hover 展示时段详情） */}
+      <UsageTrendChart trend={trend} loading={loading && trend === null} />
 
       {/* Model breakdown */}
       {summary && summary.by_model.length > 0 && <ModelBreakdown byModel={summary.by_model} />}
@@ -210,115 +210,6 @@ function SummaryCards({ summary }: { summary: UsageSummary }) {
         </Card>
       ))}
     </div>
-  );
-}
-
-// ---- Trend Chart (pure SVG area chart) ----
-function TrendChart({ trend }: { trend: UsageTrend }) {
-  const { t } = useI18n();
-  const { series } = trend;
-  const maxTokens = useMemo(
-    () => Math.max(1, ...series.map((p) => p.prompt_tokens + p.completion_tokens)),
-    [series],
-  );
-
-  const width = 600;
-  const height = 180;
-  const padX = 40;
-  const padY = 20;
-  const chartW = width - padX * 2;
-  const chartH = height - padY * 2;
-
-  const xStep = series.length > 1 ? chartW / (series.length - 1) : chartW;
-  const baselineY = padY + chartH;
-
-  const makeArea = (getter: (p: (typeof series)[0]) => number) => {
-    const points = series.map((p, i) => ({
-      x: padX + i * xStep,
-      y: padY + chartH - (getter(p) / maxTokens) * chartH,
-    }));
-    return monotoneAreaPath(points, baselineY);
-  };
-
-  const promptArea = makeArea((p) => p.prompt_tokens);
-  const completionArea = makeArea((p) => p.completion_tokens);
-
-  // Y-axis labels
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((frac) => ({
-    y: padY + chartH - frac * chartH,
-    label: formatNumber(Math.round(frac * maxTokens)),
-  }));
-
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <TrendingUp className="w-4 h-4 text-primary" />
-        <h4 className="text-sm font-medium text-text">{t('settings.usage.trend_title')}</h4>
-        <div className="ml-auto flex items-center gap-3 text-ui-xs">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full" style={{ background: COLORS.prompt }} />
-            {t('settings.usage.legend_input')}
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full" style={{ background: COLORS.completion }} />
-            {t('settings.usage.legend_output')}
-          </span>
-        </div>
-      </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
-        {/* Grid lines */}
-        {yTicks.map((tick) => (
-          <g key={tick.label}>
-            <line
-              x1={padX}
-              y1={tick.y}
-              x2={width - padX}
-              y2={tick.y}
-              stroke="currentColor"
-              className="text-border"
-              strokeWidth={0.5}
-            />
-            <text
-              x={padX - 4}
-              y={tick.y + 3}
-              textAnchor="end"
-              className="fill-text-muted"
-              fontSize={8}
-            >
-              {tick.label}
-            </text>
-          </g>
-        ))}
-        {/* Areas */}
-        <path d={promptArea} fill={COLORS.prompt} opacity={0.3} />
-        <path d={completionArea} fill={COLORS.completion} opacity={0.3} />
-        {/* X-axis labels (first / middle / last) */}
-        {series.length > 0 && (
-          <>
-            {[0, Math.floor(series.length / 2), series.length - 1].map((idx) => {
-              const x = padX + idx * xStep;
-              const date = new Date(series[idx].ts);
-              const label =
-                trend.bucket === 'hour'
-                  ? `${date.getHours()}:00`
-                  : `${date.getMonth() + 1}/${date.getDate()}`;
-              return (
-                <text
-                  key={idx}
-                  x={x}
-                  y={height - 2}
-                  textAnchor={idx === 0 ? 'start' : idx === series.length - 1 ? 'end' : 'middle'}
-                  className="fill-text-muted"
-                  fontSize={8}
-                >
-                  {label}
-                </text>
-              );
-            })}
-          </>
-        )}
-      </svg>
-    </Card>
   );
 }
 

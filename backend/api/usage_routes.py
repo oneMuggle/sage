@@ -153,6 +153,30 @@ _RANGE_TO_DAYS = {
 }
 
 
+def _trend_bucket_starts(range_: str, bucket: str) -> List[datetime]:
+    """趋势图完整时间槽起点（本地 naive datetime，升序）。
+
+    - ``today``: 本地当天 00:00 起 24 个小时槽
+    - ``7d`` / ``30d`` / ``total``: 含今天在内的最近 N 个自然日零点
+
+    补齐空槽让前端 hover 有稳定的「时段」概念；否则只有有数据的桶，
+    X 轴会被压缩，用户无法查看零用量时段。
+    """
+    now = datetime.now()
+    if bucket == "hour":
+        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return [day_start + timedelta(hours=i) for i in range(24)]
+    days = _RANGE_TO_DAYS.get(range_, 7)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return [today - timedelta(days=i) for i in range(days - 1, -1, -1)]
+
+
+def _ts_key(dt: datetime, bucket: str) -> str:
+    if bucket == "hour":
+        return dt.strftime("%Y-%m-%dT%H:00:00")
+    return dt.strftime("%Y-%m-%dT00:00:00")
+
+
 @router.get("/trend")
 async def get_usage_trend(
     range: str = Query(  # noqa: A002
@@ -163,18 +187,20 @@ async def get_usage_trend(
     """L8 PR-C (2026-09-09): 时间序列, 按桶聚合。
 
     返回 ``{range, bucket, series: [{ts, requests, prompt_tokens,
-    completion_tokens, cost_usd, cache_hit_rate}]}``, ts 是桶起始**本地**
-    ISO8601 (无时区后缀, 形如 "2026-09-09T07:00:00").
-    bucket=today → hour (24 桶); 7d/30d/total → day.
+    completion_tokens, total_tokens, cached_tokens, cache_read_tokens,
+    cache_creation_tokens, cost_usd, cache_hit_rate, known_requests,
+    unknown_requests}]}``, ts 是桶起始**本地** ISO8601 (无时区后缀, 形如
+    "2026-09-09T07:00:00").
+
+    bucket=today → hour (固定 24 槽); 7d/30d/total → day (固定 7/30/90 槽)。
+    无数据的时段补零槽，保证前端 hover 能定位每个时间段。
     """
     try:
         from backend.data.database import _SQLITE_LOCK, get_database
 
         bucket = _RANGE_TO_BUCKET.get(range, "day")
-        days = _RANGE_TO_DAYS.get(range, 7)
-        cutoff_ms = int(
-            (datetime.now(timezone.utc) - timedelta(days=days)).timestamp() * 1000  # noqa: UP017 — datetime.UTC 是 Py 3.11+
-        )
+        slots = _trend_bucket_starts(range, bucket)
+        cutoff_ms = int(slots[0].timestamp() * 1000)
         with _SQLITE_LOCK:
             conn = get_database().get_connection()
             params: List[Any] = [cutoff_ms]
@@ -182,43 +208,52 @@ async def get_usage_trend(
             if session_id is not None:
                 where_session = " AND session_id = ?"
                 params.append(session_id)
-            if bucket == "hour":
-                # strftime %Y-%m-%dT%H:00:00, 取 created_at 的本地整点起始 (localtime)
-                fmt = "%Y-%m-%dT%H:00:00"
-                trunc_expr = "strftime(?, created_at / 1000, 'unixepoch', 'localtime')"
-                fmt_params: List[Any] = [fmt]
-            else:
-                fmt = "%Y-%m-%dT00:00:00"
-                trunc_expr = "strftime(?, created_at / 1000, 'unixepoch', 'localtime')"
-                fmt_params = [fmt]
+            fmt = "%Y-%m-%dT%H:00:00" if bucket == "hour" else "%Y-%m-%dT00:00:00"
+            trunc_expr = "strftime(?, created_at / 1000, 'unixepoch', 'localtime')"
+            fmt_params: List[Any] = [fmt]
             sql = (
                 f"SELECT {trunc_expr} AS ts,"
                 " COUNT(*) AS requests,"
                 " COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,"
                 " COALESCE(SUM(completion_tokens), 0) AS completion_tokens,"
+                " COALESCE(SUM(total_tokens), 0) AS total_tokens,"
+                " COALESCE(SUM(cached_tokens), 0) AS cached_tokens,"
                 " COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,"
                 " COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,"
+                " SUM(CASE WHEN estimated_cost_usd IS NULL THEN 0 ELSE 1 END)"
+                " AS known_requests,"
+                " SUM(CASE WHEN estimated_cost_usd IS NULL THEN 1 ELSE 0 END)"
+                " AS unknown_requests,"
                 " COALESCE(SUM(estimated_cost_usd), 0) AS cost_usd"
                 " FROM usage_events WHERE created_at >= ?"
                 f"{where_session}"
-                f" GROUP BY ts ORDER BY ts ASC"
+                " GROUP BY ts ORDER BY ts ASC"
             )
             rows = conn.execute(sql, (*fmt_params, *params)).fetchall()
+        by_ts = {str(row["ts"] or ""): row for row in rows}
         series: List[Dict[str, Any]] = []
-        for row in rows:
-            prompt = int(row["prompt_tokens"] or 0)
-            creation = int(row["cache_creation_tokens"] or 0)
-            read = int(row["cache_read_tokens"] or 0)
+        for slot in slots:
+            key = _ts_key(slot, bucket)
+            row = by_ts.get(key)
+            prompt = int(row["prompt_tokens"] or 0) if row else 0
+            creation = int(row["cache_creation_tokens"] or 0) if row else 0
+            read = int(row["cache_read_tokens"] or 0) if row else 0
             eligible = prompt + creation
             hit_rate = round(read / eligible, 4) if eligible > 0 else 0.0
             series.append(
                 {
-                    "ts": row["ts"] or "",
-                    "requests": int(row["requests"] or 0),
+                    "ts": key,
+                    "requests": int(row["requests"] or 0) if row else 0,
                     "prompt_tokens": prompt,
-                    "completion_tokens": int(row["completion_tokens"] or 0),
-                    "cost_usd": round(float(row["cost_usd"] or 0), 6),
+                    "completion_tokens": int(row["completion_tokens"] or 0) if row else 0,
+                    "total_tokens": int(row["total_tokens"] or 0) if row else 0,
+                    "cached_tokens": int(row["cached_tokens"] or 0) if row else 0,
+                    "cache_read_tokens": read,
+                    "cache_creation_tokens": creation,
+                    "cost_usd": round(float(row["cost_usd"] or 0), 6) if row else 0.0,
                     "cache_hit_rate": hit_rate,
+                    "known_requests": int(row["known_requests"] or 0) if row else 0,
+                    "unknown_requests": int(row["unknown_requests"] or 0) if row else 0,
                 }
             )
         return {"range": range, "bucket": bucket, "series": series}
