@@ -101,9 +101,7 @@ describe('LatexBuildPanel', () => {
     });
     fireEvent.click(screen.getByTestId('latex-compile-run'));
 
-    await waitFor(() =>
-      expect(screen.getByText(/请先绑定工作区/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/请先绑定工作区/)).toBeInTheDocument());
     expect(mockedCompile).not.toHaveBeenCalled();
   });
 });

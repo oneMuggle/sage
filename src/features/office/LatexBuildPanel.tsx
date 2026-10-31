@@ -49,9 +49,7 @@ function ResultBox({
       {result.log_tail ? (
         <details className="mt-1">
           <summary className="cursor-pointer text-muted">日志</summary>
-          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap">
-            {result.log_tail}
-          </pre>
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap">{result.log_tail}</pre>
         </details>
       ) : null}
     </div>
