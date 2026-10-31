@@ -580,7 +580,7 @@ def launch_browser(
         get_browser_manager().register(session)
         return session
     executable = discover_browser_executable()
-    if not executable or not Path(executable).is_file():
+    if not executable:
         raise BrowserCDPError(
             "未找到 Chrome/Edge 浏览器：请安装或用环境变量 SAGE_BROWSER_PATH 指定可执行文件路径"
         )
