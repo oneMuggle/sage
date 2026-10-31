@@ -54,7 +54,7 @@
     "backend/zotero/client.py": 1195,
     "electron/__tests__/commands.test.ts": 1210,
     "electron/main.ts": 3167,
-    "electron/preload.ts": 863,
+    "electron/preload.ts": 866,
     "src/pages/settings/settingsSearchEntries.ts": 802,
     "electron/tests/updateIntegration.test.ts": 869,
     "electron/tests/updateManager.test.ts": 1813,
