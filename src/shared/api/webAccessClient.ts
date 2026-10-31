@@ -105,11 +105,61 @@ export interface SiteSessionVerify {
   error?: string;
 }
 
+export interface BrowserExtensionDevice {
+  device_id: string;
+  label: string;
+  created_at: number;
+  last_seen_at: number;
+  connected: boolean;
+  sharing: boolean;
+}
+
+export interface BrowserExtensionShared {
+  device_id: string;
+  origin: string;
+  host: string;
+  title: string;
+  shared_at: number;
+}
+
+export interface BrowserExtensionStatus {
+  devices: BrowserExtensionDevice[];
+  connected: boolean;
+  shared: BrowserExtensionShared | null;
+  base_url: string;
+  extension_dir: string | null;
+}
+
+export interface BrowserExtensionPairingCode {
+  code: string;
+  expires_at: number;
+  base_url: string;
+  extension_dir: string | null;
+}
+
 export async function verifySiteSession(domain: string): Promise<SiteSessionVerify> {
   return requestJson<SiteSessionVerify>('/api/v1/web-access/sites/verify', {
     method: 'POST',
     body: JSON.stringify({ domain }),
   });
+}
+
+export async function fetchBrowserExtensionStatus(): Promise<BrowserExtensionStatus> {
+  return requestJson<BrowserExtensionStatus>('/api/v1/web-access/browser-extension/status');
+}
+
+export async function createBrowserExtensionPairingCode(): Promise<BrowserExtensionPairingCode> {
+  return requestJson<BrowserExtensionPairingCode>(
+    '/api/v1/web-access/browser-extension/pairing-code',
+    { method: 'POST', body: JSON.stringify({}) },
+  );
+}
+
+export async function revokeBrowserExtensionDevice(deviceId: string): Promise<void> {
+  await requestJson(
+    `/api/v1/web-access/browser-extension/devices/${encodeURIComponent(deviceId)}`,
+    { method: 'DELETE' },
+  );
 }
 
 export async function getSiteLoginJob(jobId: string): Promise<SiteLoginJob> {

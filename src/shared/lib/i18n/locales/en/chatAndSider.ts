@@ -1,4 +1,6 @@
 // Auto-split domain dictionary (en: chat & sidebar)
+import { enChatAndSiderBrowserExtension } from './chatAndSiderBrowserExtension';
+
 export const enChatAndSider = {
   // --- Task center: A1 states & actions (parity-s4) ---
   'taskCenter.cancel': 'Cancel',
@@ -762,6 +764,7 @@ export const enChatAndSider = {
   'settings.zotero.wiki_project.saved': 'Project binding saved',
   'settings.zotero.wiki_project.hint':
     "Tagged items are exported into the bound project's wiki/zotero/ directory.",
+  ...enChatAndSiderBrowserExtension,
 };
 
 export function formatEnChatAndSiderSummary(): string {
