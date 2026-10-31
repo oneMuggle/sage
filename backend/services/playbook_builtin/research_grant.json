@@ -1,0 +1,323 @@
+{
+  "schema_version": "1.0",
+  "id": "cn-research-grant",
+  "name": "科研课题（开题 · 实施 · 结题）",
+  "description": "面向国家/省部级科研课题与学位论文的开题—实施—结题全周期管理",
+  "applies_to": {
+    "project_types": [
+      "research"
+    ],
+    "sub_types": [
+      "grant_proposal",
+      "academic_paper",
+      "lab_experiment"
+    ]
+  },
+  "directory_layout": [
+    {
+      "path": "01_开题",
+      "required": true,
+      "purpose": "开题报告、任务书、伦理审批"
+    },
+    {
+      "path": "02_实施/数据",
+      "required": true,
+      "purpose": "原始数据、实验记录、分析脚本"
+    },
+    {
+      "path": "03_成果",
+      "required": true,
+      "purpose": "论文、专利、软件著作权"
+    },
+    {
+      "path": "04_结题",
+      "required": true,
+      "purpose": "结题报告、经费决算、验收材料"
+    }
+  ],
+  "stages": [
+    {
+      "id": "proposal",
+      "label": "开题",
+      "order": 1,
+      "objective": "明确研究问题、科学假设、技术路线与可行性",
+      "artifacts": [
+        {
+          "id": "proposal_report",
+          "label": "开题报告",
+          "required": true,
+          "match": {
+            "globs": [
+              "**/开题报告*.{doc,docx,pdf,md}"
+            ],
+            "min_bytes": 10,
+            "max_age_days": 730
+          },
+          "content_checks": [
+            {
+              "id": "research_question",
+              "label": "包含研究问题与科学假设",
+              "type": "keyword_or_llm",
+              "keywords": [
+                "研究问题",
+                "假设",
+                "技术路线"
+              ],
+              "llm_prompt": "判断开题报告是否明确写出研究问题、科学假设与技术路线，输出 {pass, reason}"
+            }
+          ],
+          "missing_action": {
+            "type": "create_doc_stub",
+            "payload": {
+              "path": "01_开题/开题报告.md",
+              "template": "research_proposal"
+            }
+          },
+          "target_dir": "01_开题"
+        },
+        {
+          "id": "literature_matrix",
+          "label": "文献对比矩阵",
+          "required": false,
+          "match": {
+            "globs": [
+              "**/文献*综述*",
+              "**/literature*mapping*",
+              "**/*.bib"
+            ],
+            "min_count": 1
+          },
+          "target_dir": "01_开题"
+        },
+        {
+          "id": "ethics_approval",
+          "label": "伦理审批件",
+          "required": false,
+          "match": {
+            "globs": [
+              "**/伦理*",
+              "**/IRB*"
+            ]
+          },
+          "target_dir": "01_开题"
+        }
+      ],
+      "exit_criteria": [
+        {
+          "id": "proposal_finalized",
+          "label": "开题报告已定稿",
+          "type": "artifact",
+          "artifact_id": "proposal_report"
+        },
+        {
+          "id": "literature_matrix_ready",
+          "label": "文献对比矩阵已建立",
+          "type": "manual"
+        }
+      ],
+      "rules": [
+        {
+          "template_key": "citation_strict",
+          "priority": 8
+        },
+        {
+          "content": "开题阶段的所有文献论断必须绑定 .bib 或项目资料中的条目，禁止编造 DOI",
+          "category": "academic",
+          "trigger_pattern": "01_开题/**",
+          "priority": 9
+        }
+      ],
+      "recommended_milestones": [
+        {
+          "title": "完成开题报告初稿",
+          "due_offset_days": 14
+        },
+        {
+          "title": "开题答辩通过",
+          "due_offset_days": 45
+        }
+      ]
+    },
+    {
+      "id": "execution",
+      "label": "实施",
+      "order": 2,
+      "objective": "按技术路线完成研究，确保数据可复现",
+      "artifacts": [
+        {
+          "id": "raw_data",
+          "label": "原始数据",
+          "required": true,
+          "match": {
+            "globs": [
+              "02_实施/数据/**/*.{csv,parquet,xlsx,json,tsv}"
+            ],
+            "min_count": 1
+          },
+          "missing_action": {
+            "type": "create_folder",
+            "payload": {
+              "path": "02_实施/数据"
+            }
+          },
+          "target_dir": "02_实施/数据"
+        },
+        {
+          "id": "experiment_log",
+          "label": "实验记录",
+          "required": true,
+          "match": {
+            "globs": [
+              "**/实验记录*.{md,docx}",
+              "02_实施/**/实验记录*.md"
+            ],
+            "min_bytes": 200
+          },
+          "content_checks": [
+            {
+              "id": "reproducibility",
+              "label": "记录随机种子、超参数与统计结果",
+              "type": "keyword_or_llm",
+              "keywords": [
+                "随机种子",
+                "超参数",
+                "均值",
+                "标准差"
+              ],
+              "llm_prompt": "判断实验记录是否包含随机种子、超参数、均值与标准差，输出 {pass, reason}"
+            }
+          ],
+          "missing_action": {
+            "type": "create_doc_stub",
+            "payload": {
+              "path": "02_实施/实验记录.md",
+              "template": "experiment_log"
+            }
+          },
+          "target_dir": "02_实施"
+        }
+      ],
+      "exit_criteria": [
+        {
+          "id": "data_reproducible",
+          "label": "数据与脚本可复现",
+          "type": "artifact",
+          "artifact_id": "raw_data"
+        }
+      ],
+      "rules": [
+        {
+          "content": "所有实验必须记录随机种子、超参数与均值±标准差",
+          "category": "research",
+          "trigger_pattern": "02_实施/**",
+          "priority": 8
+        }
+      ],
+      "recommended_milestones": [
+        {
+          "title": "跑通 Baseline 与消融实验",
+          "due_offset_days": 60
+        },
+        {
+          "title": "完成数据清洗与可复现归档",
+          "due_offset_days": 90
+        }
+      ]
+    },
+    {
+      "id": "closure",
+      "label": "结题",
+      "order": 3,
+      "objective": "形成成果、完成验收与经费决算",
+      "artifacts": [
+        {
+          "id": "outputs",
+          "label": "成果材料",
+          "required": true,
+          "match": {
+            "globs": [
+              "03_成果/**/*"
+            ],
+            "min_count": 1
+          },
+          "missing_action": {
+            "type": "create_folder",
+            "payload": {
+              "path": "03_成果"
+            }
+          },
+          "target_dir": "03_成果"
+        },
+        {
+          "id": "final_report",
+          "label": "结题报告",
+          "required": true,
+          "match": {
+            "globs": [
+              "04_结题/**/*.{doc,docx,pdf,md}"
+            ],
+            "min_bytes": 1024
+          },
+          "missing_action": {
+            "type": "create_doc_stub",
+            "payload": {
+              "path": "04_结题/结题报告.md",
+              "template": "final_report"
+            }
+          },
+          "target_dir": "04_结题"
+        },
+        {
+          "id": "budget_statement",
+          "label": "经费决算表",
+          "required": true,
+          "match": {
+            "globs": [
+              "**/经费*决算*",
+              "04_结题/**/*经费*"
+            ]
+          },
+          "target_dir": "04_结题"
+        }
+      ],
+      "exit_criteria": [
+        {
+          "id": "final_report_ready",
+          "label": "结题报告已提交",
+          "type": "artifact",
+          "artifact_id": "final_report"
+        }
+      ],
+      "rules": [],
+      "recommended_milestones": [
+        {
+          "title": "完成结题报告与经费决算",
+          "due_offset_days": 30
+        }
+      ]
+    }
+  ],
+  "global_rules": [
+    {
+      "content": "所有交付物命名遵循『阶段_类型_版本_日期』，如『开题_报告_v2_20261031』",
+      "category": "naming",
+      "priority": 5
+    }
+  ],
+  "todos": [
+    {
+      "title": "建立文献库目录与 .bib 文件",
+      "stage": "proposal",
+      "suggested": true
+    }
+  ],
+  "ai_guidance": {
+    "stage_hint": "当用户处于『开题』阶段时，优先提醒研究问题、假设、文献与伦理四件事；不要提前催结题材料。",
+    "completeness_tone": "用事实和证据说明缺什么，给出一个可执行动作，不要泛泛而谈。"
+  },
+  "meta": {
+    "author": "Sage 内置",
+    "license": "CC-BY-4.0",
+    "created_at": "2026-10-31"
+  }
+}

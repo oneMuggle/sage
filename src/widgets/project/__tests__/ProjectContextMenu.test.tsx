@@ -23,6 +23,7 @@ const renderMenu = (overrides: Partial<Parameters<typeof ProjectContextMenu>[0]>
       onOpen={vi.fn()}
       onNewSession={vi.fn()}
       onSettings={vi.fn()}
+      onCheckPlaybook={vi.fn()}
       onRemove={vi.fn()}
       {...overrides}
     >
@@ -66,8 +67,9 @@ describe('ProjectContextMenu', () => {
     const onOpen = vi.fn();
     const onNewSession = vi.fn();
     const onSettings = vi.fn();
+    const onCheckPlaybook = vi.fn();
     const onRemove = vi.fn();
-    renderMenu({ onOpen, onNewSession, onSettings, onRemove });
+    renderMenu({ onOpen, onNewSession, onSettings, onCheckPlaybook, onRemove });
 
     fireEvent.contextMenu(screen.getByText('项目行'));
     fireEvent.click(await screen.findByText('打开项目'));
@@ -76,11 +78,14 @@ describe('ProjectContextMenu', () => {
     fireEvent.contextMenu(screen.getByText('项目行'));
     fireEvent.click(await screen.findByText('项目设置与 AI 初始化…'));
     fireEvent.contextMenu(screen.getByText('项目行'));
+    fireEvent.click(await screen.findByText('检查项目完整性'));
+    fireEvent.contextMenu(screen.getByText('项目行'));
     fireEvent.click(await screen.findByText('移除项目'));
 
     expect(onOpen).toHaveBeenCalledTimes(1);
     expect(onNewSession).toHaveBeenCalledTimes(1);
     expect(onSettings).toHaveBeenCalledTimes(1);
+    expect(onCheckPlaybook).toHaveBeenCalledTimes(1);
     expect(onRemove).toHaveBeenCalledTimes(1);
   });
 });

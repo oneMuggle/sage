@@ -145,7 +145,7 @@ class TestAnalyze:
                     },
                     "profile_entry_count": 5,
                 },
-            ):
+        ):
             result = await advisor.analyze(project_id="proj-123")
 
         assert isinstance(result, AdviceResult)
@@ -202,7 +202,7 @@ class TestAnalyze:
                     },
                     "profile_entry_count": 0,
                 },
-            ):
+        ):
             result = await advisor.analyze(
                 project_id="proj-123", force_refresh=True
             )
@@ -366,6 +366,30 @@ class TestBuildPrompt:
         assert "My Project" in prompt
         assert "coding" in prompt
         assert "planning" in prompt
+
+    def test_contains_playbook_context(self, advisor):
+        data = {
+            "project": {
+                "name": "P",
+                "type": "research",
+                "stage": "proposal",
+                "description": "",
+            },
+            "playbook": {
+                "name": "科研课题",
+                "current_stage": "proposal",
+                "detected_stage": "proposal",
+                "progress": 50,
+                "missing": ["开题报告"],
+                "classification_suggestions": 1,
+            },
+            "milestones": {"total": 0, "by_status": {}, "overdue": []},
+            "profile_entry_count": 0,
+        }
+        prompt = advisor._build_prompt(data)
+        assert "科研课题" in prompt
+        assert "开题报告" in prompt
+        assert "项目规程" in prompt
 
     def test_contains_overdue_info(self, advisor):
         data = {
