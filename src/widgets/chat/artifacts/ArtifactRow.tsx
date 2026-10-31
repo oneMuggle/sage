@@ -37,6 +37,7 @@ const KIND_ICONS: Record<ArtifactKind, typeof File> = {
   docx: FileText, // C-2 (round5 批次 C)
   xlsx: FileSpreadsheet,
   pptx: FileText,
+  latex: FileCode,
   text: File,
 };
 

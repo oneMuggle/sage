@@ -78,6 +78,7 @@ from .office_journal_tool import (
     OfficeJournalParseTemplateTool,
     OfficeJournalValidateTool,
 )
+from .office_latex_tool import OfficeReadLatexTool
 from .office_lint_tool import OfficeLintWordTool
 from .office_pdf_tool import (
     OfficeFillPdfFormTool,
@@ -223,6 +224,7 @@ def _install_office_quality(ctx: ToolInstallContext) -> None:
     # Round 9 引用体系 / Round 10 格式 Linter / Round 12 自动修复 / Round 39 目录页码
     ctx.registry.register(OfficeBibTexTool(policy=policy))
     ctx.registry.register(OfficeLintWordTool(policy=policy))
+    ctx.registry.register(OfficeReadLatexTool(policy=policy))
     ctx.registry.register(OfficeRepairWordTool(policy=policy))
     ctx.registry.register(OfficeRefreshTocTool(policy=policy))
 

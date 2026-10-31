@@ -719,6 +719,14 @@ from backend.api.office_journal_routes import (  # noqa: E402
 
 router.include_router(_journal_router)
 
+# ──────────────────────────────────────────────────────────────────────
+# LaTeX read-only preview (office_latex_routes.py)
+# ──────────────────────────────────────────────────────────────────────
+
+from backend.api.office_latex_routes import router as _latex_router  # noqa: E402
+
+router.include_router(_latex_router)
+
 __all__ = [
     "router",
     "register_office_exception_handlers",

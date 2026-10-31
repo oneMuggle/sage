@@ -67,6 +67,7 @@ from .office_journal_tool import (
     OfficeJournalParseTemplateTool,
     OfficeJournalValidateTool,
 )
+from .office_latex_tool import OfficeReadLatexTool
 from .office_lint_tool import OfficeLintWordTool
 from .office_pdf_tool import (
     OfficeFillPdfFormTool,
@@ -248,6 +249,7 @@ __all__ = [
     "OfficeAnalyzeTool",
     "OfficeBibTexTool",
     "OfficeLintWordTool",
+    "OfficeReadLatexTool",
     "OfficeRepairWordTool",
     "OfficeRefreshTocTool",
     "OfficeJournalParseTemplateTool",
