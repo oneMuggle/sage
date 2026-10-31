@@ -3,13 +3,7 @@ import { useState } from 'react';
 import { auditLatex, type LatexAuditResult } from '../../shared/api/latexApi';
 import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 
-function joinWorkspacePath(root: string, relative: string): string {
-  const rel = relative.trim().replace(/^[\\/]+/, '');
-  if (!rel) return '';
-  if (/^([a-zA-Z]:[\\/]|[\\/])/.test(rel)) return rel;
-  const separator = root.includes('\\') ? '\\' : '/';
-  return `${root.replace(/[\\/]+$/, '')}${separator}${rel}`;
-}
+import { joinWorkspacePath } from './latexPath';
 
 function splitSections(value: string): string[] {
   return value

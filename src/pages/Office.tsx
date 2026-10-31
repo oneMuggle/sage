@@ -69,6 +69,7 @@ import {
 } from '../features/office';
 import { LatexAuditPanel } from '../features/office/LatexAuditPanel';
 import { LatexBuildPanel } from '../features/office/LatexBuildPanel';
+import { LatexProjectImportPanel } from '../features/office/LatexProjectImportPanel';
 import { LatexTemplatePanel } from '../features/office/LatexTemplatePanel';
 import { OfficeStagingInspector } from '../features/office/OfficeStagingInspector';
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
@@ -512,9 +513,11 @@ export function Office() {
               SessionWorkspaceProvider as its workspace source-of-truth. */}
           <JournalPanel />
 
-          {/* LaTeX template panel — analyze .tex/.cls/.sty slots and fill a
-              new .tex inside the bound workspace. Uses backendRequest (no
-              extra IPC manifest entry). */}
+          {/* LaTeX panels — import a project zip, analyze/fill templates,
+              audit sources, and optionally compile inside the bound
+              workspace. Uses backendRequest (no extra IPC manifest
+              entry). */}
+          <LatexProjectImportPanel />
           <LatexTemplatePanel />
           <LatexAuditPanel />
           <LatexBuildPanel />

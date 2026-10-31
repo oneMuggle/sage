@@ -100,6 +100,16 @@ export interface LatexDiffResult {
   log_tail?: string;
 }
 
+export interface LatexProjectExtractResult {
+  ok: boolean;
+  project_dir: string;
+  main_file: string | null;
+  main_candidates: string[];
+  files_count: number;
+  bytes_written: number;
+  warnings: Array<{ code: string; message: string; path?: string }>;
+}
+
 export async function analyzeLatexTemplate(
   workspacePath: string,
   filePath: string,
@@ -190,6 +200,22 @@ export async function latexdiff(
       compile_pdf: compilePdf,
       engine: engine || null,
       timeout_s: 60,
+    },
+  });
+}
+
+export async function extractLatexProject(
+  workspacePath: string,
+  zipPath: string,
+  outputDirName?: string,
+): Promise<LatexProjectExtractResult> {
+  return backendRequest<LatexProjectExtractResult>({
+    method: 'POST',
+    path: '/api/v1/office/latex/project/extract',
+    body: {
+      workspace_path: workspacePath,
+      zip_path: zipPath,
+      output_dir_name: outputDirName || null,
     },
   });
 }

@@ -69,6 +69,7 @@ from .office_journal_tool import (
 )
 from .office_latex_audit_tool import OfficeAuditLatexTool
 from .office_latex_build_tool import OfficeCompileLatexTool, OfficeLatexdiffTool
+from .office_latex_project_tool import OfficeExtractLatexProjectTool
 from .office_latex_template_tool import (
     OfficeAnalyzeLatexTemplateTool,
     OfficeFillLatexTemplateTool,
@@ -261,6 +262,7 @@ __all__ = [
     "OfficeAuditLatexTool",
     "OfficeCompileLatexTool",
     "OfficeLatexdiffTool",
+    "OfficeExtractLatexProjectTool",
     "OfficeRepairWordTool",
     "OfficeRefreshTocTool",
     "OfficeJournalParseTemplateTool",

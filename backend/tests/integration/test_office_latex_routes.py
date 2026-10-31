@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import zipfile
 from pathlib import Path
 
 import httpx
@@ -314,3 +315,56 @@ async def test_latexdiff_without_tool_degrades(
     assert resp.status_code == 200
     assert resp.json()["ok"] is False
     assert resp.json()["code"] == "no_latexdiff"
+
+
+def _write_project_zip(path: Path) -> Path:
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("paper/main.tex", "\\documentclass{article}")
+        archive.writestr("paper/sections/intro.tex", "\\section{Intro}")
+        archive.writestr("paper/figs/arch.png", b"png")
+    return path
+
+
+@pytest.mark.asyncio()
+async def test_extract_latex_project_zip(client: httpx.AsyncClient, tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    archive = _write_project_zip(workspace / "project.zip")
+
+    resp = await client.post(
+        "/api/v1/office/latex/project/extract",
+        json={
+            "workspace_path": str(workspace),
+            "zip_path": str(archive),
+            "output_dir_name": "imported",
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["ok"] is True
+    assert payload["project_dir"] == "imported"
+    assert payload["main_file"] == "imported/paper/main.tex"
+    assert payload["files_count"] == 3
+    assert (workspace / "imported" / "paper" / "main.tex").is_file()
+
+
+@pytest.mark.asyncio()
+async def test_extract_latex_project_refuses_existing_dir(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "imported").mkdir()
+    archive = _write_project_zip(workspace / "project.zip")
+
+    resp = await client.post(
+        "/api/v1/office/latex/project/extract",
+        json={
+            "workspace_path": str(workspace),
+            "zip_path": str(archive),
+            "output_dir_name": "imported",
+        },
+    )
+
+    assert resp.status_code == 422

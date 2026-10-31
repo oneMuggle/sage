@@ -433,6 +433,7 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_audit_latex",
                 "office_compile_latex",
                 "office_latexdiff",
+                "office_extract_latex_project",
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -657,6 +658,8 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     # 2026-10-31 LaTeX 可选编译 / 红字版（与 writer.tools 同步）。
     "office_compile_latex",
     "office_latexdiff",
+    # 2026-10-31 LaTeX 项目 zip 导入（与 writer.tools 同步）。
+    "office_extract_latex_project",
 ]
 
 

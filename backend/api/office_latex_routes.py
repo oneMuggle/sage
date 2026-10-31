@@ -12,6 +12,7 @@ from backend.office.latex.service import (
     analyze_latex_template_file,
     audit_latex_file_service,
     compile_latex_file,
+    extract_latex_project_service,
     fill_latex_template_file,
     latex_capabilities,
     latexdiff_files_service,
@@ -157,16 +158,38 @@ def latexdiff_endpoint(req: LatexDiffRequest) -> dict:
     )
 
 
+class LatexProjectExtractRequest(BaseModel):
+    """Safely extract a LaTeX/Overleaf project zip into the workspace."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    zip_path: str
+    output_dir_name: Optional[str] = None
+
+
+@router.post("/project/extract")
+def extract_latex_project_endpoint(req: LatexProjectExtractRequest) -> dict:
+    """Extract a project zip into a new workspace directory (never compiles)."""
+    return extract_latex_project_service(
+        Path(req.zip_path),
+        workspace=Path(req.workspace_path),
+        output_dir_name=req.output_dir_name,
+    )
+
+
 __all__ = [
     "LatexAuditRequest",
     "LatexCompileRequest",
     "LatexDiffRequest",
+    "LatexProjectExtractRequest",
     "LatexReadRequest",
     "LatexTemplateAnalyzeRequest",
     "LatexTemplateFillRequest",
     "analyze_latex_template_endpoint",
     "audit_latex_endpoint",
     "compile_latex_endpoint",
+    "extract_latex_project_endpoint",
     "fill_latex_template_endpoint",
     "latex_capabilities_endpoint",
     "latexdiff_endpoint",
