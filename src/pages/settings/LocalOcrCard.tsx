@@ -153,9 +153,7 @@ export function LocalOcrCard() {
         <select
           data-testid="settings-ocr-engine"
           value={config.engine}
-          onChange={(e) =>
-            save({ ...config, engine: e.target.value as LocalOcrConfig['engine'] })
-          }
+          onChange={(e) => save({ ...config, engine: e.target.value as LocalOcrConfig['engine'] })}
           className="rounded-radius-sm border border-border bg-surface px-2 py-1 text-xs text-text"
         >
           <option value="auto">{t('settings.ocr.engine_auto')}</option>

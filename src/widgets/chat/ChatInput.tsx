@@ -126,14 +126,9 @@ function ChatInputInner({
   // 探测失败按不可用处理，不改变既有「无视觉模型即禁用上传」的行为。
   const [ocrCaps, setOcrCaps] = useState<OcrCapabilities | null>(null);
   const [ocrTextByDataUrl, setOcrTextByDataUrl] = useState<Record<string, string>>({});
-  const handleOcrTextsChange = useCallback(
-    (entries: { dataUrl: string; text: string }[]) => {
-      setOcrTextByDataUrl(
-        Object.fromEntries(entries.map((entry) => [entry.dataUrl, entry.text])),
-      );
-    },
-    [],
-  );
+  const handleOcrTextsChange = useCallback((entries: { dataUrl: string; text: string }[]) => {
+    setOcrTextByDataUrl(Object.fromEntries(entries.map((entry) => [entry.dataUrl, entry.text])));
+  }, []);
   useEffect(() => {
     let cancelled = false;
     ocrApi
@@ -402,7 +397,7 @@ function ChatInputInner({
       images: images.length > 0 ? images : undefined,
       imageOcrTexts:
         images.length > 0 && Object.keys(ocrTextByDataUrl).length > 0
-          ? images.map((img) => (img.dataUrl ? ocrTextByDataUrl[img.dataUrl] ?? '' : ''))
+          ? images.map((img) => (img.dataUrl ? (ocrTextByDataUrl[img.dataUrl] ?? '') : ''))
           : undefined,
       officeRefs: officeRefs.length > 0 ? officeRefs : undefined,
       // Wave 3 C6: auto 不传键 → 保持既有 undefined → auto 语义；

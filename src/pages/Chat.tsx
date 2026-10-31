@@ -278,9 +278,7 @@ export function Chat() {
       const imageEntries = (options?.images ?? [])
         .map((img, index) => ({ img, index }))
         .filter(({ img }) => Boolean(img.dataUrl))
-        .filter(
-          ({ img }) => ((img.dataUrl as string).length * 3) / 4 <= MAX_IMAGE_BYTES,
-        );
+        .filter(({ img }) => ((img.dataUrl as string).length * 3) / 4 <= MAX_IMAGE_BYTES);
       const dataUrlCount = (options?.images ?? []).filter((img) => Boolean(img.dataUrl)).length;
       if (imageEntries.length < dataUrlCount) {
         toast.warning('部分图片超过 5MiB 上限，已跳过');

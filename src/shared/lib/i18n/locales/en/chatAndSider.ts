@@ -92,7 +92,8 @@ export const enChatAndSider = {
   'chat.blocked.action.configure_proxy': 'Configure proxy',
   'chat.blocked.action.view_docs': 'View docs',
   'chat.blocked.tech_details': 'Technical details',
-  'chat.blocked.login.starting': 'Opening the sign-in window. Please complete sign-in in your browser…',
+  'chat.blocked.login.starting':
+    'Opening the sign-in window. Please complete sign-in in your browser…',
   'chat.blocked.login.continue':
     'Signed in to {host}. Please continue the request that was blocked: {url}, and summarize the result.',
   'chat.blocked.login.failed': 'Sign-in was not completed: {error}',
