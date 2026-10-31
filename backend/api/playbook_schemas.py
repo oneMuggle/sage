@@ -36,8 +36,41 @@ class PlaybookBindRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     playbook_id: Optional[str] = Field(default=None, max_length=128)
+    library_id: Optional[str] = Field(default=None, max_length=128)
     spec: Optional[Dict[str, Any]] = None
     source: Optional[str] = Field(default=None, max_length=256)
+
+
+class PlaybookLibraryItemModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    source: str
+    spec_hash: str
+    created_at: int
+    stage_count: int = 0
+    directories: List[str] = Field(default_factory=list)
+
+
+class PlaybookLibraryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[PlaybookLibraryItemModel] = Field(default_factory=list)
+
+
+class PlaybookLibrarySaveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    envelope: Dict[str, Any]
+    source: Optional[str] = Field(default=None, max_length=128)
+
+
+class PlaybookLibrarySaveResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item: PlaybookLibraryItemModel
+    created: bool
 
 
 class PlaybookStateUpdateRequest(BaseModel):
@@ -148,6 +181,7 @@ class PlaybookImportRequest(BaseModel):
     envelope: Dict[str, Any]
     project_id: Optional[str] = Field(default=None, max_length=128)
     conflict: str = Field(default="save_as_new", pattern="^(replace|merge|save_as_new)$")
+    save_to_library: bool = False
 
 
 class PlaybookAuthorPreviewRequest(BaseModel):
@@ -181,6 +215,10 @@ __all__ = [
     "PlaybookImportPreviewRequest",
     "PlaybookImportPreviewResponse",
     "PlaybookImportRequest",
+    "PlaybookLibraryItemModel",
+    "PlaybookLibraryResponse",
+    "PlaybookLibrarySaveRequest",
+    "PlaybookLibrarySaveResponse",
     "PlaybookRuleCleanupResponse",
     "PlaybookStageConfirmRequest",
     "PlaybookStateUpdateRequest",
