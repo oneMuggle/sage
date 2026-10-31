@@ -537,10 +537,10 @@ src/shared/lib/i18n/locales/{zh,en}/playbook.ts  # 文案
 ### P1 — 可操作与可分享（4–6 天）
 
 - [x] `create_folder` / `create_doc_stub` / `apply_rules` / `seed_milestones` 动作 + 批量预览/执行
-- [ ] 缺失项一键转 Todo（带 `project_id`）
+- [x] 缺失项一键转 Todo（带 `project_id`）
 - [x] 导入：校验 + diff + 冲突策略（replace/merge/save_as_new）
 - [x] 阶段识别（确定性三路证据）+ 确认/回退 API + 阶段历史
-- [ ] 右键菜单入口 + 导入/导出对话框（隐私提示）
+- [x] 右键菜单入口 + 导入/导出对话框（隐私提示）
 - [x] 应用动作前自动检查点
 - [x] 集成测试：导入→绑定→审计→执行→阶段确认全链路
 - [ ] 双分支适配检查（py3.8 / pydantic v1）
@@ -550,10 +550,10 @@ src/shared/lib/i18n/locales/{zh,en}/playbook.ts  # 文案
 ### P2 — AI 深度参与（5–7 天）
 
 - [x] `playbook_author.py`：问卷式 AI 定制 + 确定性降级 + schema 校验重试
-- [ ] 内容级 LLM 检查（异步、缓存、可取消、关键词兜底）
-- [ ] 阶段歧义 LLM 裁决（证据约束 prompt）
+- [x] 内容级 LLM 检查（同步执行、失败降级、关键词兜底）
+- [x] 阶段歧义 LLM 裁决（证据约束 prompt）
 - [ ] `ProjectAdvisor` 接入审计摘要与规程 `ai_guidance`；建议带 `playbook_ref`
-- [ ] 导出 `AGENTS.md` / `CLAUDE.md` 片段；"规程手册写入 Wiki"
+- [x] 导出 `AGENTS.md` / `CLAUDE.md` 片段（Wiki 手册写入待做）
 - [ ] 规程编辑器（结构化表单 + JSON 高级视图 + 保存新版本）
 - [ ] 前端文案 i18n（zh/en 键对齐）
 
@@ -564,7 +564,7 @@ src/shared/lib/i18n/locales/{zh,en}/playbook.ts  # 文案
 - [ ] 更多内置规程：学位论文、基金申报、公文案卷、个人知识库
 - [ ] 全局"规程库"页面：管理导入/自建规程、导出合集
 - [ ] 评分模板/权威 checklist 映射（PRISMA、DMP 模板）作为内置数据
-- [ ] 文件归类建议（逐文件 diff，仍然只建议不自动移动）
+- [x] 文件归类建议（逐文件 diff，仍然只建议不自动移动）
 - [ ] 规程市场/云端分享（明确超出本地优先边界，需单独评审）
 
 ---

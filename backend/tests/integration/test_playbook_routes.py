@@ -199,6 +199,41 @@ async def test_author_preview_deterministic(
 
 
 @pytest.mark.asyncio()
+async def test_audit_ai_falls_back_without_llm(
+    client: httpx.AsyncClient, project_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import backend.orchestration.llm_factory as llm_factory
+
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    monkeypatch.setattr(llm_factory, "build_llm_client_from_settings", lambda: None)
+    response = await client.post(
+        "/api/v1/projects/{}/playbook/audit/ai".format(project["id"]),
+        json={"use_llm": True},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["llm_available"] is False
+    assert payload["stages"]
+
+
+@pytest.mark.asyncio()
+async def test_export_agents_markdown(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    exported = await client.get(
+        "/api/v1/projects/{}/playbook/export?format=agents".format(project["id"])
+    )
+    assert exported.status_code == 200
+    payload = exported.json()
+    assert payload["format"] == "agents"
+    assert payload["filename"].endswith("-AGENTS.md")
+    assert "AI 协同约定" in payload["content"]
+
+
+@pytest.mark.asyncio()
 async def test_import_rejects_unsafe_scaffold(
     client: httpx.AsyncClient, project_dir: Path
 ) -> None:

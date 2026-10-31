@@ -8,6 +8,7 @@ overwritten. Actions are always previewed by the caller before this module runs.
 from __future__ import annotations
 
 import logging
+import shutil
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -149,6 +150,40 @@ def _set_stage(project: Any, payload: Dict[str, Any]) -> str:
     return "applied"
 
 
+def _add_todo(project: Any, payload: Dict[str, Any]) -> str:
+    from backend.data.database import get_database
+    from backend.services.todo_service import TodoService
+
+    title = str(payload.get("title") or "").strip()
+    if not title:
+        raise ValueError("add_todo 需要 title")
+    project_tag = str(getattr(project, "name", "") or "").strip() or None
+    service = TodoService(get_database())
+    if project_tag:
+        for todo in service.list_todos(project_tag=project_tag, limit=200):
+            if todo.title == title:
+                return "skipped"
+    service.create_todo(
+        title=title[:200],
+        description=str(payload.get("description") or "")[:4000] or None,
+        priority=str(payload.get("priority") or "medium"),
+        project_tag=project_tag,
+    )
+    return "applied"
+
+
+def _move_file(root: Path, payload: Dict[str, Any]) -> str:
+    source = _safe_target(root, payload.get("from"))
+    target = _safe_target(root, payload.get("to"))
+    if not source.is_file():
+        raise ValueError("源文件不存在或不是文件")
+    if target.exists():
+        raise ValueError("目标文件已存在，拒绝覆盖")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(source), str(target))
+    return "applied"
+
+
 def apply_playbook_actions(project: Any, actions: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Execute a user-approved action list.
 
@@ -199,6 +234,10 @@ def apply_playbook_actions(project: Any, actions: List[Dict[str, Any]]) -> Dict[
                 outcome = _seed_milestones(project.id, payload)
             elif action_type == "set_stage":
                 outcome = _set_stage(project, payload)
+            elif action_type == "add_todo":
+                outcome = _add_todo(project, payload)
+            elif action_type == "move_file":
+                outcome = _move_file(root, payload)
             else:
                 errors.append({"item": action_type or "unknown", "message": "不支持的动作类型"})
                 continue

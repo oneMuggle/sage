@@ -164,6 +164,7 @@ def _check_content(paths: List[Path], checks: List[Dict[str, Any]]) -> List[Dict
                     "status": status,
                     "keywords": keywords,
                     "hits": hits,
+                    "llm_prompt": check.get("llm_prompt") or "",
                 }
             )
         else:
@@ -175,6 +176,7 @@ def _check_content(paths: List[Path], checks: List[Dict[str, Any]]) -> List[Dict
                     "status": "pending",
                     "keywords": keywords,
                     "hits": [],
+                    "llm_prompt": check.get("llm_prompt") or "",
                 }
             )
     return results
@@ -237,13 +239,26 @@ def _artifact_audit(
         except ValueError:
             continue
 
+    target_dir = artifact.get("target_dir")
+    misplaced: List[str] = []
+    if target_dir:
+        for path in valid[:20]:
+            try:
+                relative = path.relative_to(root.resolve()).as_posix()
+            except ValueError:
+                continue
+            if relative != target_dir and not relative.startswith(target_dir + "/"):
+                misplaced.append(relative)
+
     return {
         "id": artifact["id"],
         "label": artifact.get("label", artifact["id"]),
         "required": bool(artifact.get("required", True)),
         "status": status,
+        "target_dir": target_dir,
         "evidence": {
             "matches": relative_matches,
+            "misplaced": misplaced[:10],
             "count": len(valid),
             "latest_mtime": int(latest_mtime) if latest_mtime is not None else None,
             "globs": list(match.get("globs") or []),
@@ -365,11 +380,34 @@ def audit_playbook(
     if current_stage not in stage_ids:
         current_stage = stage_ids[0] if stage_ids else None
 
+    classification_suggestions = []
+    seen_moves = set()
+    for stage in stages_out:
+        for artifact in stage["artifacts"]:
+            target_dir = artifact.get("target_dir")
+            for relative in artifact["evidence"].get("misplaced") or []:
+                move_to = target_dir + "/" + Path(relative).name
+                key = (relative, move_to)
+                if key in seen_moves:
+                    continue
+                seen_moves.add(key)
+                classification_suggestions.append(
+                    {
+                        "from": relative,
+                        "to": move_to,
+                        "artifact_id": artifact["id"],
+                        "label": artifact["label"],
+                        "stage_id": stage["id"],
+                        "reason": f"{artifact['label']} 应位于 {target_dir}/",
+                    }
+                )
+
     return {
         "playbook": {"id": spec.get("id"), "name": spec.get("name")},
         "current_stage": current_stage,
         "detected_stage": detected,
         "stages": stages_out,
+        "classification_suggestions": classification_suggestions,
         "overall": {
             "required_total": total_required,
             "required_done": total_done,

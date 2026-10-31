@@ -31,6 +31,14 @@ describe('playbookApi', () => {
     });
   });
 
+  it('auditAi 传 projectId 与 useLlm', async () => {
+    await playbookApi.auditAi('proj-1', false);
+    expect(mockInvoke).toHaveBeenCalledWith('playbook_audit_ai', {
+      projectId: 'proj-1',
+      useLlm: false,
+    });
+  });
+
   it('bind 透传 playbookId/spec/source', async () => {
     await playbookApi.bind('proj-1', {
       playbookId: 'cn-research-grant',

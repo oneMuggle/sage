@@ -9,6 +9,7 @@ const getCurrentMock = vi.fn();
 const listBuiltinMock = vi.fn();
 const bindMock = vi.fn();
 const auditMock = vi.fn();
+const auditAiMock = vi.fn();
 const authorPreviewMock = vi.fn();
 const applyActionsMock = vi.fn();
 const confirmStageMock = vi.fn();
@@ -22,6 +23,7 @@ vi.mock('../../../shared/api/playbookApi', () => ({
     listBuiltin: (...args: unknown[]) => listBuiltinMock(...args),
     bind: (...args: unknown[]) => bindMock(...args),
     audit: (...args: unknown[]) => auditMock(...args),
+    auditAi: (...args: unknown[]) => auditAiMock(...args),
     authorPreview: (...args: unknown[]) => authorPreviewMock(...args),
     applyActions: (...args: unknown[]) => applyActionsMock(...args),
     confirmStage: (...args: unknown[]) => confirmStageMock(...args),
@@ -68,6 +70,16 @@ const audit = {
     },
   ],
   overall: { required_total: 2, required_done: 1, progress: 50 },
+  classification_suggestions: [
+    {
+      from: '开题报告.md',
+      to: '01_开题/开题报告.md',
+      artifact_id: 'proposal_report',
+      label: '开题报告',
+      stage_id: 'proposal',
+      reason: '开题报告应位于 01_开题/',
+    },
+  ],
   scanned_at: 1,
 };
 
@@ -214,5 +226,80 @@ describe('PlaybookCard', () => {
     await screen.findByTestId('playbook-card');
     fireEvent.click(screen.getByTestId('playbook-refresh-audit'));
     await waitFor(() => expect(auditMock).toHaveBeenCalledWith('p1'));
+  });
+
+  it('AI 检查内容调用 auditAi', async () => {
+    getCurrentMock.mockResolvedValue(bound);
+    auditAiMock.mockResolvedValue({ ...audit, llm_available: true });
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-card');
+    fireEvent.click(screen.getByTestId('playbook-ai-audit'));
+    await waitFor(() => expect(auditAiMock).toHaveBeenCalledWith('p1'));
+  });
+
+  it('待补项可一键转待办', async () => {
+    getCurrentMock.mockResolvedValue(boundExecution);
+    applyActionsMock.mockResolvedValue({
+      applied: ['add_todo'],
+      skipped: [],
+      errors: [],
+      checkpoint_created: true,
+      audit,
+    });
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-add-todo-raw_data');
+    fireEvent.click(screen.getByTestId('playbook-add-todo-raw_data'));
+    await waitFor(() =>
+      expect(applyActionsMock).toHaveBeenCalledWith('p1', [
+        {
+          type: 'add_todo',
+          payload: {
+            title: '补齐：原始数据',
+            description: '项目规程 科研课题（开题 · 实施 · 结题） · 阶段 实施',
+          },
+        },
+      ]),
+    );
+  });
+
+  it('归类建议可逐项确认移动', async () => {
+    getCurrentMock.mockResolvedValue(bound);
+    applyActionsMock.mockResolvedValue({
+      applied: ['move_file'],
+      skipped: [],
+      errors: [],
+      checkpoint_created: true,
+      audit,
+    });
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-classification');
+    fireEvent.click(screen.getByTestId('playbook-move-proposal_report'));
+    await waitFor(() =>
+      expect(applyActionsMock).toHaveBeenCalledWith('p1', [
+        {
+          type: 'move_file',
+          payload: { from: '开题报告.md', to: '01_开题/开题报告.md' },
+        },
+      ]),
+    );
+  });
+
+  it('可编辑规程 JSON 并保存为新版本', async () => {
+    getCurrentMock.mockResolvedValue(bound);
+    bindMock.mockResolvedValue({ ...bound, version: 2 });
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-edit-btn');
+    fireEvent.click(screen.getByTestId('playbook-edit-btn'));
+    const editor = (await screen.findByTestId('playbook-spec-editor')) as HTMLTextAreaElement;
+    const draft = JSON.parse(editor.value);
+    draft.name = '自定义规程';
+    fireEvent.change(editor, { target: { value: JSON.stringify(draft, null, 2) } });
+    fireEvent.click(screen.getByTestId('playbook-save-spec'));
+    await waitFor(() =>
+      expect(bindMock).toHaveBeenCalledWith('p1', {
+        spec: expect.objectContaining({ name: '自定义规程' }),
+        source: 'custom',
+      }),
+    );
   });
 });

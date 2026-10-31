@@ -27,6 +27,7 @@ from backend.api.playbook_schemas import (
     BuiltinPlaybookResponse,
     PlaybookActionsApplyRequest,
     PlaybookActionsApplyResponse,
+    PlaybookAiAuditRequest,
     PlaybookAuditResponse,
     PlaybookAuthorPreviewRequest,
     PlaybookAuthorPreviewResponse,
@@ -42,12 +43,14 @@ from backend.data.database import make_with_db_lock
 from backend.data.playbook_repo import PlaybookRepository, PlaybookSnapshot
 from backend.data.project_repo import Project, ProjectRepository
 from backend.services.playbook_actions import apply_playbook_actions
+from backend.services.playbook_ai import audit_with_llm
 from backend.services.playbook_auditor import audit_playbook
 from backend.services.playbook_author import build_author_preview
 from backend.services.playbook_library import (
     build_export_envelope,
     get_builtin,
     list_builtin,
+    render_agents_markdown,
     render_markdown_handbook,
     suggested_builtin,
     validate_import_envelope,
@@ -226,6 +229,30 @@ def audit_project_playbook(project_id: str) -> PlaybookAuditResponse:
 
 
 @router.post(
+    "/projects/{project_id}/playbook/audit/ai",
+    response_model=PlaybookAuditResponse,
+)
+@with_db_lock
+async def audit_project_playbook_with_ai(
+    project_id: str, request: PlaybookAiAuditRequest
+) -> PlaybookAuditResponse:
+    """Deterministic audit plus optional LLM content checks / stage adjudication."""
+    project = _project_or_404(project_id)
+    snapshot = _active_snapshot_or_404(project.id)
+    state = PlaybookRepository().get_state(project.id)
+    result = await audit_with_llm(
+        project,
+        snapshot.spec,
+        state=state,
+        use_llm=request.use_llm,
+    )
+    return PlaybookAuditResponse(
+        **result.audit,
+        llm_available=result.llm_available,
+    )
+
+
+@router.post(
     "/projects/{project_id}/playbook/author/preview",
     response_model=PlaybookAuthorPreviewResponse,
 )
@@ -290,7 +317,7 @@ def apply_project_playbook_actions(
 @with_db_lock
 def export_project_playbook(
     project_id: str,
-    format: str = Query(default="json", pattern="^(json|md)$"),
+    format: str = Query(default="json", pattern="^(json|md|agents)$"),
     include_scaffold: bool = Query(default=True),
 ) -> PlaybookExportResponse:
     project = _project_or_404(project_id)
@@ -301,6 +328,12 @@ def export_project_playbook(
             format="md",
             filename="{}-handbook.md".format(spec["id"]),
             content=render_markdown_handbook(spec),
+        )
+    if format == "agents":
+        return PlaybookExportResponse(
+            format="agents",
+            filename="{}-AGENTS.md".format(spec["id"]),
+            content=render_agents_markdown(spec),
         )
     return PlaybookExportResponse(
         format="json",

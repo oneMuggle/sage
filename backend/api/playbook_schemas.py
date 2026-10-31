@@ -69,8 +69,16 @@ class PlaybookAuditResponse(BaseModel):
     current_stage: Optional[str] = None
     detected_stage: Dict[str, Any] = Field(default_factory=dict)
     stages: List[Dict[str, Any]] = Field(default_factory=list)
+    classification_suggestions: List[Dict[str, Any]] = Field(default_factory=list)
     overall: Dict[str, Any] = Field(default_factory=dict)
     scanned_at: int = 0
+    llm_available: bool = False
+
+
+class PlaybookAiAuditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    use_llm: bool = True
 
 
 class PlaybookExportResponse(BaseModel):
@@ -125,6 +133,7 @@ __all__ = [
     "BuiltinPlaybookResponse",
     "PlaybookActionsApplyRequest",
     "PlaybookActionsApplyResponse",
+    "PlaybookAiAuditRequest",
     "PlaybookAuditResponse",
     "PlaybookAuthorPreviewRequest",
     "PlaybookAuthorPreviewResponse",

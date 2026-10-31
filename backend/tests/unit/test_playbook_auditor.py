@@ -94,3 +94,15 @@ def test_path_outside_root_is_not_scanned(tmp_path: Path) -> None:
     proposal = next(stage for stage in result["stages"] if stage["id"] == "proposal")
     report = next(item for item in proposal["artifacts"] if item["id"] == "proposal_report")
     assert report["evidence"]["matches"] == ["01_开题/开题报告.md"]
+
+
+def test_classification_suggestion_for_misplaced_file(tmp_path: Path) -> None:
+    root = tmp_path / "misplaced"
+    root.mkdir()
+    (root / "开题报告.md").write_text("研究问题\n假设\n技术路线", encoding="utf-8")
+    result = audit_playbook(_project(root), get_builtin("cn-research-grant"))
+    suggestions = result["classification_suggestions"]
+    assert any(
+        item["from"] == "开题报告.md" and item["to"] == "01_开题/开题报告.md"
+        for item in suggestions
+    )

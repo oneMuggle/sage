@@ -66,6 +66,9 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const [dismissedDetected, setDismissedDetected] = useState(false);
   const [authorNotes, setAuthorNotes] = useState('');
   const [authorResult, setAuthorResult] = useState<PlaybookAuthorPreview | null>(null);
+  const [editingSpec, setEditingSpec] = useState(false);
+  const [specDraft, setSpecDraft] = useState('');
+  const [specError, setSpecError] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<PlaybookImportPreview | null>(null);
   const [importEnvelope, setImportEnvelope] = useState<Record<string, unknown> | null>(null);
   const [importConflict, setImportConflict] = useState<'save_as_new' | 'merge' | 'replace'>(
@@ -122,6 +125,17 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       setNotice('完整性检查已刷新');
     });
 
+  const handleAiAudit = () =>
+    run('audit-ai', async () => {
+      const audit: PlaybookAudit = await playbookApi.auditAi(projectId);
+      setCurrent((prev) => (prev ? { ...prev, audit } : prev));
+      setNotice(
+        audit.llm_available
+          ? 'AI 内容检查完成'
+          : '未配置 LLM，已保留关键词检查结果',
+      );
+    });
+
   const handleAction = (action: PlaybookAction) =>
     run(action.type, async () => {
       const result = await playbookApi.applyActions(projectId, [action]);
@@ -160,14 +174,44 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       setNotice('已绑定 AI 定制规程');
     });
 
-  const handleExport = (format: 'json' | 'md') =>
+  const handleStartEdit = () => {
+    if (!current?.playbook) return;
+    setSpecDraft(JSON.stringify(current.playbook, null, 2));
+    setSpecError(null);
+    setEditingSpec(true);
+  };
+
+  const handleSaveSpec = () =>
+    run('save-spec', async () => {
+      setSpecError(null);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(specDraft);
+      } catch (err) {
+        setSpecError('JSON 解析失败：' + errorMessage(err));
+        return;
+      }
+      const data = await playbookApi.bind(projectId, {
+        spec: parsed as never,
+        source: 'custom',
+      });
+      setCurrent(data);
+      setEditingSpec(false);
+      setNotice('规程已保存为新版本');
+    });
+
+  const handleExport = (format: 'json' | 'md' | 'agents') =>
     run('export-' + format, async () => {
       const result = await playbookApi.exportPlaybook(projectId, format);
       const text =
         typeof result.content === 'string'
           ? result.content
           : JSON.stringify(result.content, null, 2);
-      downloadText(result.filename, text, format === 'md' ? 'text/markdown' : 'application/json');
+      downloadText(
+        result.filename,
+        text,
+        format === 'json' ? 'application/json' : 'text/markdown',
+      );
       setNotice('已导出：' + result.filename);
     });
 
@@ -406,6 +450,15 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           <Button
             size="sm"
             variant="secondary"
+            onClick={() => void handleAiAudit()}
+            disabled={busy === 'audit-ai'}
+            data-testid="playbook-ai-audit"
+          >
+            {busy === 'audit-ai' ? 'AI 检查中…' : 'AI 检查内容'}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
             onClick={() => void handleExport('json')}
             disabled={busy === 'export-json'}
           >
@@ -414,6 +467,18 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           </Button>
           <Button size="sm" variant="secondary" onClick={() => void handleExport('md')}>
             导出手册
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => void handleExport('agents')}>
+            导出 AGENTS
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={handleStartEdit}
+            disabled={!current.playbook}
+            data-testid="playbook-edit-btn"
+          >
+            编辑规程
           </Button>
           <Button size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()}>
             <Upload className="mr-1 h-3.5 w-3.5" />
@@ -433,6 +498,42 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           />
         </div>
       </div>
+
+      {editingSpec && (
+        <div className="space-y-2 rounded-md border border-border p-3">
+          <div className="text-xs font-medium text-foreground">编辑规程 JSON</div>
+          <textarea
+            value={specDraft}
+            onChange={(event) => setSpecDraft(event.target.value)}
+            rows={12}
+            spellCheck={false}
+            className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono text-xs text-foreground"
+            data-testid="playbook-spec-editor"
+          />
+          {specError && <div className="text-xs text-destructive">{specError}</div>}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => void handleSaveSpec()}
+              disabled={busy === 'save-spec'}
+              data-testid="playbook-save-spec"
+            >
+              {busy === 'save-spec' ? '保存中…' : '保存为新版本'}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setEditingSpec(false);
+                setSpecError(null);
+              }}
+            >
+              取消
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* 阶段条 */}
       <div className="flex flex-wrap items-center gap-1.5" data-testid="playbook-stepper">
@@ -531,21 +632,74 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
                     <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
                     待补：{item.label}
                   </span>
-                  {item.missing_action && (
+                  <span className="flex items-center gap-1.5">
+                    {item.missing_action && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void handleAction(item.missing_action as PlaybookAction)}
+                        disabled={busy === item.missing_action.type}
+                        data-testid={`playbook-missing-action-${item.id}`}
+                      >
+                        {ACTION_LABELS[item.missing_action.type] ?? '处理'}
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => void handleAction(item.missing_action as PlaybookAction)}
-                      disabled={busy === item.missing_action.type}
-                      data-testid={`playbook-missing-action-${item.id}`}
+                      onClick={() =>
+                        void handleAction({
+                          type: 'add_todo',
+                          payload: {
+                            title: '补齐：' + item.label,
+                            description:
+                              '项目规程 ' +
+                              (current.playbook?.name ?? '') +
+                              ' · 阶段 ' +
+                              (currentStage?.label ?? ''),
+                          },
+                        })
+                      }
+                      disabled={busy === 'add_todo'}
+                      data-testid={`playbook-add-todo-${item.id}`}
                     >
-                      {ACTION_LABELS[item.missing_action.type] ?? '处理'}
+                      转待办
                     </Button>
-                  )}
+                  </span>
                 </li>
               ))}
             </ul>
           )}
+        </div>
+      )}
+
+      {audit && audit.classification_suggestions.length > 0 && (
+        <div className="space-y-1.5" data-testid="playbook-classification">
+          <div className="text-xs font-medium text-foreground">归类建议（需逐项确认）</div>
+          {audit.classification_suggestions.map((item) => (
+            <div
+              key={`${item.from}-${item.to}`}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-2 py-1.5 text-xs"
+            >
+              <span className="text-muted-foreground">
+                {item.from} → {item.to}
+              </span>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  void handleAction({
+                    type: 'move_file',
+                    payload: { from: item.from, to: item.to },
+                  })
+                }
+                disabled={busy === 'move_file'}
+                data-testid={`playbook-move-${item.artifact_id}`}
+              >
+                移动
+              </Button>
+            </div>
+          ))}
         </div>
       )}
 

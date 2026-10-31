@@ -29,6 +29,7 @@ _MISSING_ACTION_TYPES = {
     "seed_milestones",
     "add_todo",
     "open_doc",
+    "move_file",
 }
 _CONTENT_CHECK_TYPES = {"keyword", "keyword_or_llm", "llm", "manual"}
 
@@ -145,6 +146,11 @@ def _normalize_artifact(raw: Dict[str, Any], stage_id: str, index: int) -> Dict[
         "label": label,
         "required": _bool(raw.get("required"), True),
         "required_when": _text(raw.get("required_when"), "required_when", max_len=200) or None,
+        "target_dir": (
+            _rel_path(raw.get("target_dir"), "target_dir")
+            if raw.get("target_dir")
+            else None
+        ),
         "match": {
             "globs": globs,
             "min_bytes": _positive_int(match.get("min_bytes"), "match.min_bytes", 0),

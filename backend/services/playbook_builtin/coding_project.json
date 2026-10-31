@@ -4,13 +4,37 @@
   "name": "代码工程（规划 · 研发 · 测试 · 发布 · 维护）",
   "description": "面向软件仓库的规划—研发—测试—发布—维护全周期管理，强调架构决策、测试门禁与发布归档",
   "applies_to": {
-    "project_types": ["coding"],
-    "sub_types": ["python_backend", "typescript_frontend", "fullstack_web", "desktop_app", "data_science", "rust_systems", "go_services", "java_spring", "mobile_app"]
+    "project_types": [
+      "coding"
+    ],
+    "sub_types": [
+      "python_backend",
+      "typescript_frontend",
+      "fullstack_web",
+      "desktop_app",
+      "data_science",
+      "rust_systems",
+      "go_services",
+      "java_spring",
+      "mobile_app"
+    ]
   },
   "directory_layout": [
-    { "path": "src", "required": false, "purpose": "源代码（若项目使用其他布局可忽略）" },
-    { "path": "tests", "required": true, "purpose": "自动化测试" },
-    { "path": "docs", "required": true, "purpose": "设计文档、ADR 与用户文档" }
+    {
+      "path": "src",
+      "required": false,
+      "purpose": "源代码（若项目使用其他布局可忽略）"
+    },
+    {
+      "path": "tests",
+      "required": true,
+      "purpose": "自动化测试"
+    },
+    {
+      "path": "docs",
+      "required": true,
+      "purpose": "设计文档、ADR 与用户文档"
+    }
   ],
   "stages": [
     {
@@ -24,28 +48,49 @@
           "label": "架构决策记录（ADR）",
           "required": true,
           "match": {
-            "globs": ["docs/**/ADR*.md", "docs/**/adr*.md", "**/architecture*decision*.md", "**/架构决策*.md"],
+            "globs": [
+              "docs/**/ADR*.md",
+              "docs/**/adr*.md",
+              "**/architecture*decision*.md",
+              "**/架构决策*.md"
+            ],
             "min_bytes": 200
           },
           "missing_action": {
             "type": "create_doc_stub",
-            "payload": { "path": "docs/ADR-0001-architecture.md", "template": "architecture_decision" }
-          }
+            "payload": {
+              "path": "docs/ADR-0001-architecture.md",
+              "template": "architecture_decision"
+            }
+          },
+          "target_dir": "docs"
         },
         {
           "id": "project_rules",
           "label": "项目说明（SAGE.md / CLAUDE.md / AGENTS.md）",
           "required": false,
           "match": {
-            "globs": ["SAGE.md", "CLAUDE.md", "AGENTS.md"]
+            "globs": [
+              "SAGE.md",
+              "CLAUDE.md",
+              "AGENTS.md"
+            ]
           }
         }
       ],
       "exit_criteria": [
-        { "id": "architecture_approved", "label": "架构设计与技术选型已确认", "type": "artifact", "artifact_id": "architecture_decision" }
+        {
+          "id": "architecture_approved",
+          "label": "架构设计与技术选型已确认",
+          "type": "artifact",
+          "artifact_id": "architecture_decision"
+        }
       ],
       "rules": [
-        { "template_key": "security_basic", "priority": 9 },
+        {
+          "template_key": "security_basic",
+          "priority": 9
+        },
         {
           "content": "修改核心逻辑前先阅读相关模块与现有测试，保持最小侵入式变更",
           "category": "coding_style",
@@ -54,8 +99,14 @@
         }
       ],
       "recommended_milestones": [
-        { "title": "完成架构设计与 ADR 决策评审", "due_offset_days": 7 },
-        { "title": "确定接口契约与数据模型", "due_offset_days": 14 }
+        {
+          "title": "完成架构设计与 ADR 决策评审",
+          "due_offset_days": 7
+        },
+        {
+          "title": "确定接口契约与数据模型",
+          "due_offset_days": 14
+        }
       ]
     },
     {
@@ -69,7 +120,10 @@
           "label": "源代码",
           "required": true,
           "match": {
-            "globs": ["src/**/*.{py,ts,tsx,js,jsx,rs,go,java,kt,dart}", "backend/**/*.py"],
+            "globs": [
+              "src/**/*.{py,ts,tsx,js,jsx,rs,go,java,kt,dart}",
+              "backend/**/*.py"
+            ],
             "min_count": 1
           }
         },
@@ -78,12 +132,21 @@
           "label": "项目说明（SAGE.md / CLAUDE.md / AGENTS.md）",
           "required": false,
           "match": {
-            "globs": ["SAGE.md", "CLAUDE.md", "AGENTS.md"]
+            "globs": [
+              "SAGE.md",
+              "CLAUDE.md",
+              "AGENTS.md"
+            ]
           }
         }
       ],
       "exit_criteria": [
-        { "id": "main_path_working", "label": "主干功能可运行", "type": "artifact", "artifact_id": "source_code" }
+        {
+          "id": "main_path_working",
+          "label": "主干功能可运行",
+          "type": "artifact",
+          "artifact_id": "source_code"
+        }
       ],
       "rules": [
         {
@@ -94,7 +157,10 @@
         }
       ],
       "recommended_milestones": [
-        { "title": "核心模块编码与接口联调", "due_offset_days": 30 }
+        {
+          "title": "核心模块编码与接口联调",
+          "due_offset_days": 30
+        }
       ]
     },
     {
@@ -108,33 +174,56 @@
           "label": "自动化测试",
           "required": true,
           "match": {
-            "globs": ["tests/**/*", "**/*.test.{ts,tsx,js,jsx}", "**/*_test.py", "**/test_*.py"],
+            "globs": [
+              "tests/**/*",
+              "**/*.test.{ts,tsx,js,jsx}",
+              "**/*_test.py",
+              "**/test_*.py"
+            ],
             "min_count": 1
           },
           "missing_action": {
             "type": "create_folder",
-            "payload": { "path": "tests" }
-          }
+            "payload": {
+              "path": "tests"
+            }
+          },
+          "target_dir": "tests"
         },
         {
           "id": "test_report",
           "label": "测试报告",
           "required": false,
           "match": {
-            "globs": ["docs/**/测试报告*.md", "**/test-report*.md", "**/coverage/**"]
+            "globs": [
+              "docs/**/测试报告*.md",
+              "**/test-report*.md",
+              "**/coverage/**"
+            ]
           },
           "missing_action": {
             "type": "create_doc_stub",
-            "payload": { "path": "docs/测试报告.md", "template": "test_report" }
+            "payload": {
+              "path": "docs/测试报告.md",
+              "template": "test_report"
+            }
           }
         }
       ],
       "exit_criteria": [
-        { "id": "tests_green", "label": "核心测试通过", "type": "artifact", "artifact_id": "tests" }
+        {
+          "id": "tests_green",
+          "label": "核心测试通过",
+          "type": "artifact",
+          "artifact_id": "tests"
+        }
       ],
       "rules": [],
       "recommended_milestones": [
-        { "title": "单元测试覆盖与回归验证", "due_offset_days": 45 }
+        {
+          "title": "单元测试覆盖与回归验证",
+          "due_offset_days": 45
+        }
       ]
     },
     {
@@ -148,21 +237,38 @@
           "label": "发布说明 / CHANGELOG",
           "required": true,
           "match": {
-            "globs": ["CHANGELOG*.md", "docs/**/CHANGELOG*.md", "**/release-notes*.md", "**/发布说明*.md"],
+            "globs": [
+              "CHANGELOG*.md",
+              "docs/**/CHANGELOG*.md",
+              "**/release-notes*.md",
+              "**/发布说明*.md"
+            ],
             "min_bytes": 100
           },
           "missing_action": {
             "type": "create_doc_stub",
-            "payload": { "path": "CHANGELOG.md", "template": "release_notes" }
-          }
+            "payload": {
+              "path": "CHANGELOG.md",
+              "template": "release_notes"
+            }
+          },
+          "target_dir": "docs"
         }
       ],
       "exit_criteria": [
-        { "id": "release_documented", "label": "发布说明已归档", "type": "artifact", "artifact_id": "release_notes" }
+        {
+          "id": "release_documented",
+          "label": "发布说明已归档",
+          "type": "artifact",
+          "artifact_id": "release_notes"
+        }
       ],
       "rules": [],
       "recommended_milestones": [
-        { "title": "版本构建发布与变更归档", "due_offset_days": 60 }
+        {
+          "title": "版本构建发布与变更归档",
+          "due_offset_days": 60
+        }
       ]
     },
     {
@@ -176,7 +282,11 @@
           "label": "项目说明（SAGE.md / CLAUDE.md / AGENTS.md）",
           "required": false,
           "match": {
-            "globs": ["SAGE.md", "CLAUDE.md", "AGENTS.md"]
+            "globs": [
+              "SAGE.md",
+              "CLAUDE.md",
+              "AGENTS.md"
+            ]
           }
         }
       ],

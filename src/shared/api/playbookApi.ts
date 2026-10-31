@@ -89,8 +89,10 @@ export interface PlaybookArtifactAudit {
   label: string;
   required: boolean;
   status: 'present' | 'missing' | 'stale' | 'optional' | 'waived';
+  target_dir?: string | null;
   evidence: {
     matches: string[];
+    misplaced: string[];
     count: number;
     latest_mtime: number | null;
     globs: string[];
@@ -137,12 +139,21 @@ export interface PlaybookAudit {
     evidence: string[];
   };
   stages: PlaybookStageAudit[];
+  classification_suggestions: Array<{
+    from: string;
+    to: string;
+    artifact_id: string;
+    label: string;
+    stage_id: string;
+    reason: string;
+  }>;
   overall: {
     required_total: number;
     required_done: number;
     progress: number;
   };
   scanned_at: number;
+  llm_available?: boolean;
 }
 
 export interface PlaybookCurrent {
@@ -165,7 +176,7 @@ export interface PlaybookActionsResult {
 }
 
 export interface PlaybookExportResult {
-  format: 'json' | 'md';
+  format: 'json' | 'md' | 'agents';
   filename: string;
   content: unknown;
 }
@@ -223,6 +234,10 @@ export const playbookApi = {
     return invoke<PlaybookAudit>('playbook_audit', { projectId });
   },
 
+  async auditAi(projectId: string, useLlm = true): Promise<PlaybookAudit> {
+    return invoke<PlaybookAudit>('playbook_audit_ai', { projectId, useLlm });
+  },
+
   async authorPreview(
     projectId: string,
     answers: Record<string, unknown> = {},
@@ -251,7 +266,7 @@ export const playbookApi = {
 
   async exportPlaybook(
     projectId: string,
-    format: 'json' | 'md' = 'json',
+    format: 'json' | 'md' | 'agents' = 'json',
     includeScaffold = true,
   ): Promise<PlaybookExportResult> {
     return invoke<PlaybookExportResult>('playbook_export', {

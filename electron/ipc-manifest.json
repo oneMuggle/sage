@@ -141,6 +141,7 @@
     "pin_skill": { "method": "POST", "path": "/api/v1/skills/{name}/pin" },
     "playbook_actions_apply": { "method": "POST", "path": "/api/v1/projects/{projectId}/playbook/actions/apply" },
     "playbook_audit": { "method": "GET", "path": "/api/v1/projects/{projectId}/playbook/audit" },
+    "playbook_audit_ai": { "method": "POST", "path": "/api/v1/projects/{projectId}/playbook/audit/ai" },
     "playbook_author_preview": { "method": "POST", "path": "/api/v1/projects/{projectId}/playbook/author/preview" },
     "playbook_bind": { "method": "PUT", "path": "/api/v1/projects/{projectId}/playbook" },
     "playbook_export": { "method": "GET", "path": "/api/v1/projects/{projectId}/playbook/export" },

@@ -254,6 +254,54 @@ def _safe_relative_path(value: Any, field: str) -> str:
     return "/".join(parts)
 
 
+def render_agents_markdown(spec: Dict[str, Any]) -> str:
+    """Render an AGENTS.md / CLAUDE.md compatible snippet for other AI tools."""
+    lines: List[str] = [f"# 项目管理约定：{spec['name']}", ""]
+    if spec.get("description"):
+        lines.extend([spec["description"], ""])
+    lines.extend(["## 目录约定", ""])
+    for item in spec.get("directory_layout") or []:
+        mark = "必需" if item.get("required", True) else "可选"
+        purpose = item.get("purpose") or ""
+        lines.append(f"- `{item['path']}/`（{mark}）{purpose}")
+    lines.extend(["", "## 阶段与交付物", ""])
+    for stage in sorted(spec.get("stages") or [], key=lambda item: item["order"]):
+        lines.append(f"### {stage['order']}. {stage['label']}")
+        if stage.get("objective"):
+            lines.append(stage["objective"])
+        lines.append("")
+        for artifact in stage.get("artifacts") or []:
+            mark = "必需" if artifact.get("required", True) else "可选"
+            globs = ", ".join(f"`{item}`" for item in artifact["match"]["globs"])
+            lines.append(f"- {artifact['label']}（{mark}）：{globs}")
+        for criterion in stage.get("exit_criteria") or []:
+            label = criterion.get("label") or criterion.get("id")
+            if label:
+                lines.append(f"- 退出条件：{label}")
+        lines.append("")
+    rules = list(spec.get("global_rules") or [])
+    for stage in spec.get("stages") or []:
+        rules.extend(stage.get("rules") or [])
+    if rules:
+        lines.extend(["## 规则", ""])
+        for rule in rules:
+            content = rule.get("content")
+            if content:
+                lines.append(f"- {content}")
+        lines.append("")
+    lines.extend(
+        [
+            "## AI 协同约定",
+            "",
+            "- 修改或新增文件前，先对照本规程的目录与交付物要求。",
+            "- 缺失的必需要素应先补齐，再推进阶段；阶段变更需用户确认。",
+            "- 不要编造文献、数据或交付物；只引用项目中真实存在的文件。",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def validate_import_envelope(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Validate an imported envelope and return ``{playbook, scaffold}``.
 
@@ -298,6 +346,7 @@ __all__ = [
     "build_export_envelope",
     "get_builtin",
     "list_builtin",
+    "render_agents_markdown",
     "render_doc_stub",
     "render_markdown_handbook",
     "suggested_builtin",

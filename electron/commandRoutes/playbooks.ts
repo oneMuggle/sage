@@ -47,6 +47,11 @@ export const playbookRoutes: Record<string, CommandRoute> = {
     method: 'GET',
     path: (a) => `/api/v1/projects/${projectId(a)}/playbook/audit`,
   },
+  playbook_audit_ai: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/playbook/audit/ai`,
+    body: (a) => ({ use_llm: a.useLlm ?? a.use_llm ?? true }),
+  },
   playbook_author_preview: {
     method: 'POST',
     path: (a) => `/api/v1/projects/${projectId(a)}/playbook/author/preview`,

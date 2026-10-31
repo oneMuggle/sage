@@ -80,8 +80,9 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 | `match.min_bytes` / `min_count` | 存在性阈值 |
 | `match.max_age_days` | 时效性阈值 |
 | `required` | 非必需缺失时状态为 `optional`，不扣完成度 |
-| `content_checks` | `keyword` / `keyword_or_llm` / `llm` / `manual`；P0 只做关键词 |
-| `missing_action` | `create_folder` / `create_doc_stub` / `apply_rules` / `seed_milestones` / `add_todo` / `open_doc` |
+| `content_checks` | `keyword` / `keyword_or_llm` / `llm` / `manual`；P0 关键词，P2 可触发 LLM |
+| `missing_action` | `create_folder` / `create_doc_stub` / `apply_rules` / `seed_milestones` / `add_todo` / `move_file` / `open_doc` |
+| `target_dir` | 可选目标目录；文件匹配到产物但不在目标目录时生成归类建议 |
 
 路径校验拒绝绝对路径、`~` 开头与 `..` 段；导入信封的 scaffold 路径同样校验。
 
@@ -101,10 +102,11 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 | GET | `/api/v1/projects/{id}/playbook` | 当前绑定 + 状态 + 审计 |
 | PUT | `/api/v1/projects/{id}/playbook` | 绑定内置或自定义规程（生成快照） |
 | GET | `/api/v1/projects/{id}/playbook/audit` | 重新审计 |
+| POST | `/api/v1/projects/{id}/playbook/audit/ai` | 审计 + LLM 内容检查 / 阶段裁决（失败降级） |
 | POST | `/api/v1/projects/{id}/playbook/author/preview` | AI 定制规程草案（schema 校验 + 确定性降级） |
 | POST | `/api/v1/projects/{id}/playbook/stage/confirm` | 确认阶段（写历史） |
 | POST | `/api/v1/projects/{id}/playbook/actions/apply` | 执行用户勾选动作 |
-| GET | `/api/v1/projects/{id}/playbook/export?format=json\|md` | 导出 |
+| GET | `/api/v1/projects/{id}/playbook/export?format=json\|md\|agents` | 导出 |
 | POST | `/api/v1/playbooks/import/preview` | 校验 + diff |
 | POST | `/api/v1/playbooks/import` | 导入并绑定（replace/merge/save_as_new） |
 
@@ -125,7 +127,7 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 ```
 
 - 默认只导出规程与空目录/文档骨架，不包含用户项目文件内容；
-- 另有 Markdown 手册（人读）；`AGENTS.md` 类片段（P2 待做）；
+- 另有 Markdown 手册（人读）与 `AGENTS.md` / `CLAUDE.md` 兼容片段（供其他 AI 工具读取）；
 - 导入时做 schema 校验、路径安全检查与结构 diff；同名规程默认另存为新 id。
 
 ## 8. 前端
@@ -154,10 +156,10 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 - 集成：`test_playbook_routes.py`（绑定 → 审计 → 动作 → 阶段确认 → 导出/导入 → 路径拒绝）；
 - 前端：`PlaybookCard.test.tsx`、`playbookApi.test.ts`。
 
-## 12. 已知限制（后续 P2/P3）
+## 12. 已知限制（后续 P3）
 
-- LLM 定制规程已实现（`author/preview`，带确定性降级）；LLM 内容级检查、阶段 LLM 裁决尚未实现；
-- 暂无 `AGENTS.md`/`CLAUDE.md` 导出与 Wiki 手册写入；
-- 暂无可视化规程编辑器（当前为 AI 草案 + 内置模板 + 导入）；
-- 暂不自动移动/归类文件；
-- 暂无云端规程市场。
+- LLM 定制、内容检查与阶段裁决已实现（同步执行，失败自动降级）；尚无后台任务/取消/缓存。
+- 规程编辑目前是 JSON 编辑器，尚无表单式可视化编辑器。
+- 归类为“建议 + 逐项确认移动”，不自动批量移动文件。
+- 暂无 Wiki 手册写入与云端规程市场。
+- `release/win7` cherry-pick 仍需按 pydantic v1 适配。

@@ -8,6 +8,7 @@ from backend.services.playbook_library import (
     build_export_envelope,
     get_builtin,
     list_builtin,
+    render_agents_markdown,
     render_markdown_handbook,
     validate_import_envelope,
 )
@@ -96,3 +97,11 @@ def test_markdown_and_export_envelope_round_trip():
     parsed = validate_import_envelope(envelope)
     assert parsed["playbook"]["id"] == spec["id"]
     assert parsed["scaffold"]["directories"]
+
+
+def test_agents_markdown_contains_rules_and_stages():
+    spec = get_builtin("cn-research-grant")
+    markdown = render_agents_markdown(spec)
+    assert "开题" in markdown
+    assert "AI 协同约定" in markdown
+    assert "01_开题/" in markdown

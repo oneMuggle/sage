@@ -111,3 +111,49 @@ def test_unknown_action_reports_error(project) -> None:
     result = apply_playbook_actions(project, [{"type": "rm_rf", "payload": {}}])
     assert result["errors"]
     assert "rm_rf" in result["errors"][0]["item"]
+
+
+def test_add_todo_is_idempotent_and_links_project(project) -> None:
+    from backend.data.database import get_database
+    from backend.services.todo_service import TodoService
+
+    action = {
+        "type": "add_todo",
+        "payload": {"title": "补齐开题报告", "description": "缺失必需要素"},
+    }
+    first = apply_playbook_actions(project, [action])
+    second = apply_playbook_actions(project, [action])
+    assert "add_todo" in first["applied"]
+    assert "add_todo" in second["skipped"]
+    todos = TodoService(get_database()).list_todos(project_tag=project.name)
+    matches = [item for item in todos if item.title == "补齐开题报告"]
+    assert len(matches) == 1
+
+
+def test_move_file_and_refuse_overwrite(project, tmp_path: Path) -> None:
+    root = Path(project.path)
+    (root / "开题报告.md").write_text("研究问题", encoding="utf-8")
+    moved = apply_playbook_actions(
+        project,
+        [
+            {
+                "type": "move_file",
+                "payload": {"from": "开题报告.md", "to": "01_开题/开题报告.md"},
+            }
+        ],
+    )
+    assert "move_file" in moved["applied"]
+    assert (root / "01_开题" / "开题报告.md").is_file()
+
+    (root / "另一份.md").write_text("内容", encoding="utf-8")
+    refused = apply_playbook_actions(
+        project,
+        [
+            {
+                "type": "move_file",
+                "payload": {"from": "另一份.md", "to": "01_开题/开题报告.md"},
+            }
+        ],
+    )
+    assert refused["errors"]
+    assert (root / "另一份.md").is_file()
