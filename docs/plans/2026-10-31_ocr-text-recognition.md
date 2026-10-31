@@ -568,6 +568,12 @@ UI：
 - 性能调优：截图默认 `max_side=1280` + 关闭方向分类，Office 扫描页保留 2048 + 分类；
 - 文档：`docs/technical/116-local-ocr.md` + `docs/user-manual/29-local-ocr.md`；
 - 基准：`scripts/ocr_benchmark.py`（合成图 + CER + 耗时，可 JSON 输出）；
+- 打包收口（2026-10-31 P0）：main 安装包捆绑 `rapidocr==3.10.0` +
+  `onnxruntime==1.19.2` + `opencv-python-headless==4.11.0.86` + `Pillow`
+  （`requirements-bundled.txt`，新增契约测试）；Office 扫描页 OCR 改为
+  `ocr_config.office_enabled` 设置（`SAGE_OCR` 兼容覆盖）；
+  单图 20k / 总量 60k 文本注入上限；Electron 自动探测
+  `resources/tesseract/tesseract[.exe]` 并注入 `SAGE_TESSERACT_PATH`；
 - 测试：新增 6 个测试文件（服务/引擎、Agent 兜底、工具、REST、ChatInput、Wiki 回退），
   相关后端 98 项、前端 15 项通过；`ruff`、ESLint、`check_py38_compat`、
   `architecture-check` 通过。
@@ -584,9 +590,11 @@ UI：
 
 待完成：
 
+- main/win7 正式安装包构建与体积实测（OCR 依赖 wheel 合计约 107MB）；
+- Win7 安装包是否捆绑 Tesseract 4.1 的最终决策与真机冒烟；
 - 设置页模型下载器（Electron 清单/SHA-256/进度；默认 small 模型已随 wheel 提供）；
 - 真实业务截图/低配机的 CER 基准（合成基准已完成）；
-- Win7 真机验证（Tesseract 4.1 / RapidOCR 实验路径）与 CI 收口。
+- 已发送消息中的 OCR 文本展示与 PDF/多图批处理。
 
 
 

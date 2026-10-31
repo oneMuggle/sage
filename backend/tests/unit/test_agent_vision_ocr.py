@@ -223,3 +223,26 @@ def test_format_ocr_text_empty_result() -> None:
     formatted = SageAgent._format_ocr_text(1, OcrResult(text="", engine="fake-ocr"))
 
     assert "未识别到文字" in formatted
+
+
+def test_provided_ocr_text_is_truncated_per_image() -> None:
+    formatted = SageAgent._format_provided_ocr_text(1, "字" * 25_000)
+
+    assert "OCR 文本已截断" in formatted
+    body = formatted.split("\n", 1)[1]
+    assert body.count("字") == 20_000
+
+
+def test_total_ocr_text_is_truncated_across_images() -> None:
+    agent = _agent(vision=False)
+
+    result = agent._replace_images_with_text(
+        [{"role": "user", "content": "hi"}],
+        ["x" * 30_000 for _ in range(3)],
+    )
+
+    text = result[-1]["content"][0]["text"]
+    assert "OCR 文本已截断" in text
+    injected = text.split("\n…[OCR 文本已截断]")[0]
+    assert len(injected) <= 60_000
+    assert text.count("x") <= 60_000

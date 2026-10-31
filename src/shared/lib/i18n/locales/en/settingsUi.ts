@@ -254,6 +254,9 @@ export const enSettingsUi = {
   'settings.ocr.prefer_local': 'Prefer local OCR even with a vision model',
   'settings.ocr.prefer_local_desc':
     'Faster and cheaper for text screenshots; falls back to the vision model on failure',
+  'settings.ocr.office_enabled': 'Also OCR scanned PDF / Office pages',
+  'settings.ocr.office_enabled_desc':
+    'Only applies to pages with no text layer; increases processing time noticeably',
   'settings.ocr.saving': 'Saving…',
   'settings.ocr.test': 'Test recognition',
   'settings.ocr.testing': 'Recognizing…',
