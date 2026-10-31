@@ -86,3 +86,18 @@ async def test_llm_failure_degrades_gracefully(tmp_path: Path) -> None:
     )
     assert result.llm_available is False
     assert result.audit["stages"]
+
+
+def test_collect_text_reads_docx(tmp_path: Path) -> None:
+    import docx
+
+    root = tmp_path / "docx"
+    root.mkdir()
+    document = docx.Document()
+    document.add_paragraph("研究问题与科学假设")
+    document.save(str(root / "开题报告.docx"))
+
+    from backend.services.playbook_ai import _collect_text
+
+    text = _collect_text(root, ["开题报告.docx"])
+    assert "研究问题与科学假设" in text

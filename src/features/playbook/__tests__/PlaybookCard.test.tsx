@@ -121,8 +121,13 @@ const bound: PlaybookCurrent = {
     name: '科研课题（开题 · 实施 · 结题）',
     description: '科研全周期管理',
     stages: [
-      { id: 'proposal', label: '开题', artifacts: [] },
-      { id: 'execution', label: '实施', artifacts: [] },
+      {
+        id: 'proposal',
+        label: '开题',
+        artifacts: [],
+        recommended_milestones: [{ title: '完成开题报告初稿', stage: 'proposal' }],
+      },
+      { id: 'execution', label: '实施', artifacts: [], recommended_milestones: [] },
     ],
   } as never,
   source: 'builtin:cn-research-grant',
@@ -408,5 +413,35 @@ describe('PlaybookCard', () => {
     fireEvent.click(screen.getByTestId('playbook-unbind'));
     await waitFor(() => expect(unbindMock).toHaveBeenCalledWith('p1'));
     confirm.mockRestore();
+  });
+
+  it('可播种推荐里程碑', async () => {
+    getCurrentMock.mockResolvedValue(bound);
+    applyActionsMock.mockResolvedValue({
+      applied: ['seed_milestones'],
+      skipped: [],
+      errors: [],
+      checkpoint_created: true,
+      audit,
+    });
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-seed-milestones');
+    fireEvent.click(screen.getByTestId('playbook-seed-milestones'));
+    await waitFor(() =>
+      expect(applyActionsMock).toHaveBeenCalledWith('p1', [
+        {
+          type: 'seed_milestones',
+          payload: {
+            milestones: [
+              {
+                title: '完成开题报告初稿',
+                description: '',
+                stage: 'proposal',
+              },
+            ],
+          },
+        },
+      ]),
+    );
   });
 });
