@@ -83,3 +83,29 @@ Office 页的 **“LaTeX 源码审校”** 面板可做确定性检查：
 - include 缺失/循环/越界、参考文献/图片资源警告。
 
 问题列表会显示 `rule_id`、severity、`file:line` 锚点与修复建议。**只做源码检查，不编译 PDF、不检查版式/页数/字体**。
+
+## 7. 编译 PDF / 红字版
+
+Office 页的 **“LaTeX 编译与红字版”** 面板依赖本机外部工具（不捆绑 TeX）：
+
+**编译 PDF**
+
+1. 填写工作区内 `.tex` 主文件路径；
+2. 可选填写输出 PDF 文件名（默认 `<stem>.pdf`）；
+3. 选择引擎（自动 / latexmk / xelatex / lualatex / pdflatex）；
+4. 点击“编译 PDF”。
+
+编译前会先运行源码审校：存在 error（含 `\write18` 等危险命令、越界 include）会拒绝编译。
+无 TeX 引擎时提示 `no_engine`，不会生成文件。
+
+**红字版（latexdiff）**
+
+1. 填写原始版本与修订版本 `.tex` 路径；
+2. 可选填写输出 `diff.tex` 文件名；
+3. 需要 PDF 时勾选“同时编译 PDF”；
+4. 点击“生成红字版”。
+
+无 `latexdiff` 时提示 `no_latexdiff`。
+
+> 安全提示：编译通道使用临时目录、`-no-shell-escape`、`openin_any=p`、`openout_any=p` 和超时限制，
+> 但**不是 OS 级沙箱**。请不要编译来源不可信的 LaTeX 文档。

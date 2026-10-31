@@ -34,7 +34,9 @@ backend/office/latex/
   template.py        # .tex + .cls/.sty → TemplateProfile（slots/style/macros）
   filler.py          # 槽位替换 + LaTeX 转义 + 输出新 .tex
   validator.py       # 括号/环境配对/残留占位符校验
-  service.py         # workspace 边界、大小限制、read/analyze/fill
+  compile.py         # 可选外部 TeX 引擎编译（审计门禁/临时目录/禁 shell escape）
+  diff.py            # latexdiff 红字版适配
+  service.py         # workspace 边界、大小限制、read/analyze/fill/audit/compile/diff
 ```
 
 每个文件 <800 行（architecture-check）。零新增 Python 依赖；py38 hazard scan 0。
@@ -50,11 +52,16 @@ backend/office/latex/
 | 模板分析 | `POST /api/v1/office/latex/template/analyze` | `.tex` + `.cls/.sty` → `{document_class, packages, macros, style, metadata, slots, warnings}` |
 | 模板填充 | `POST /api/v1/office/latex/template/fill` | `{workspace_path, template_path, output_filename, data}` → 新 `.tex` + `validation` |
 | 源码审校 | `POST /api/v1/office/latex/audit` | `{workspace_path, file_path, required_sections?}` → issues + summary |
+| 能力探测 | `GET /api/v1/office/latex/capabilities` | 本机 TeX 引擎 + latexdiff 可用性 |
+| 编译 PDF | `POST /api/v1/office/latex/compile` | `{workspace_path, file_path, output_filename?, engine?, timeout_s?}` → PDF |
+| 红字版 | `POST /api/v1/office/latex/diff` | `{workspace_path, original_path, revised_path, ...}` → diff.tex（可选 PDF） |
 | Agent 工具 | `office_analyze_latex_template` / `office_fill_latex_template` | analyze READ；fill WRITE_LOCAL（file_path 模式） |
 | Agent 工具 | `office_audit_latex` | READ；源码级确定性审校，需 workspace 上下文 |
+| Agent 工具 | `office_compile_latex` / `office_latexdiff` | WRITE_LOCAL；可选外部引擎/latexdiff |
 | 前端 | `LatexPreview` | 标题/作者/警告/块渲染/源码切换 |
 | 前端 | `LatexTemplatePanel` | Office 页“LaTeX 模板助手”：路径输入 → 槽位表单 → 填充输出 |
 | 前端 | `LatexAuditPanel` | Office 页“LaTeX 源码审校”：路径 + 必需章节 → 问题列表 |
+| 前端 | `LatexBuildPanel` | Office 页“LaTeX 编译与红字版”：编译 PDF / latexdiff |
 
 `structured` 形状：
 
@@ -135,6 +142,19 @@ backend/office/latex/
 
 `ok = 无 error`；issue 按 `(rule_id, file, line, message)` 去重。
 
+### 4.3 可选编译与红字版
+
+`compile` / `diff` 只在检测到本机外部工具时执行；不捆绑 TeX、不下载宏包：
+
+- 引擎探测：`latexmk` / `xelatex` / `lualatex` / `pdflatex`；
+- **编译前强制 audit**：存在 error（含 `\write18`/越界 include 等）即拒绝；
+- 临时目录复制项目（≤500 文件 / 50 MiB）；固定参数 `-no-shell-escape -interaction=nonstopmode
+  -halt-on-error`；环境 `openin_any=p`、`openout_any=p`、临时 `TEXMFHOME/TEXMFVAR/TEXMFCACHE`；
+- 超时 1–600s；日志只回传尾部；
+- 无引擎/无 latexdiff 时返回 `{ok:false, code:"no_engine"|"no_latexdiff"}`；
+- `latexdiff` 生成 `diff.tex`，可选编译 `diff.pdf`；
+- **注意**：这不是 OS 级沙箱；不可信文档不要编译，后续需容器/低权限隔离。
+
 ## 5. 安全与限制
 
 - **不执行 TeX**：只解析源码；未知命令/环境降级为文本 + warning；
@@ -144,22 +164,26 @@ backend/office/latex/
 - 不支持：TeX 编译/PDF、`.cls/.sty` 宏展开、zip 项目上传、TikZ 渲染、DOCX↔LaTeX；
 - 模板填充不自动补 `.bib`、不处理图片槽位；前端模板面板使用路径输入（暂未接入通用文件选择器）。
 - 源码审校只做确定性规则；不做 PDF/版式/页数/字体检查，也不做 LLM 语义审校。
+- 编译/红字版依赖本机外部工具；不是 OS 级沙箱，不可信文档不应编译。
 
 ## 6. 测试
 
 - `backend/tests/unit/office/latex/test_template.py`（6）：profile/slots/style/macros、填充转义/必填/拒绝覆盖、validator；
 - `backend/tests/unit/office/latex/test_audit.py`（10）：元数据/引用/交叉引用/图表/重复 label/TODO/危险命令/必需章节/include；
+- `backend/tests/unit/office/latex/test_compile.py`（6）：引擎探测/无引擎/audit gate/成功复制 PDF/输出覆盖/超时；
+- `backend/tests/unit/office/latex/test_diff.py`（3）：无 latexdiff/生成 diff.tex/输出覆盖；
 - `backend/tests/unit/tools/test_office_latex_template_tool.py`（4）：analyze/fill/缺上下文/缺必填；
 - `backend/tests/unit/tools/test_office_latex_audit_tool.py`（3）：上下文/问题清单/越界；
-- `backend/tests/integration/test_office_latex_routes.py`（7）：read + template analyze/fill + audit；
+- `backend/tests/unit/tools/test_office_latex_build_tool.py`（4）：compile/diff 上下文与降级；
+- `backend/tests/integration/test_office_latex_routes.py`（9）：read + template analyze/fill + audit + compile/diff 降级；
 - `backend/tests/integration/test_workspace_preview_routes.py`：`.tex` 预览；
 - `backend/tests/api/test_artifact_routes.py`：`.tex` artifact；
 - `backend/tests/unit/tools/test_office_latex_tool.py`（4）：上下文/成功/越界/后缀；
 - `backend/tests/unit/test_profiles_office_tools.py`、`test_tool_bundles_parity.py`：工具面/快照；
-- 前端 `src/features/office/__tests__/LatexPreview.test.tsx`（3）、`LatexTemplatePanel.test.tsx`（2）、`LatexAuditPanel.test.tsx`（2）。
+- 前端 `LatexPreview.test.tsx`（3）、`LatexTemplatePanel.test.tsx`（2）、`LatexAuditPanel.test.tsx`（2）、`LatexBuildPanel.test.tsx`（2）。
 
 ## 7. 后续
 
-- L3b：PDF 编译与版式检查（OS 级沙箱）、`latexdiff` 红字版、LLM 语义审校；
-- L2 前端增强：通用文件选择器、槽位自动填充建议；
-- `.bib` 自动补写、图片槽位、zip 项目上传；TikZ/高级包渲染（可选 PDF 编译通道）。
+- L4：容器/低权限用户等 OS 级编译沙箱、PDF 版式/字体/页数审计、LLM 语义审校；
+- `.bib` 自动补写、图片槽位、zip/Overleaf 项目上传；
+- 通用文件选择器、槽位自动填充建议；TikZ/高级包渲染（通过可选 PDF 编译）。

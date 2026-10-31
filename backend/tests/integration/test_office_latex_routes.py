@@ -250,3 +250,67 @@ async def test_audit_latex_returns_anchored_issues(
     assert "LATEX-UNSAFE-COMMAND" in rules
     assert "LATEX-SECTION-REQUIRED" in rules
     assert any(issue.get("anchor") for issue in payload["issues"])
+
+
+@pytest.mark.asyncio()
+async def test_compile_without_engine_degrades(
+    client: httpx.AsyncClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    main = _write(
+        workspace,
+        "paper.tex",
+        r"""
+\documentclass{article}
+\title{T}
+\author{A}
+\begin{document}
+\begin{abstract}A\end{abstract}
+Hello.
+\end{document}
+""",
+    )
+    monkeypatch.setattr(
+        "backend.office.latex.compile.shutil.which", lambda name: None
+    )
+
+    resp = await client.post(
+        "/api/v1/office/latex/compile",
+        json={
+            "workspace_path": str(workspace),
+            "file_path": str(main),
+            "output_filename": "out.pdf",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is False
+    assert resp.json()["code"] == "no_engine"
+
+
+@pytest.mark.asyncio()
+async def test_latexdiff_without_tool_degrades(
+    client: httpx.AsyncClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    original = _write(workspace, "v1.tex", "\\documentclass{article}")
+    revised = _write(workspace, "v2.tex", "\\documentclass{article}")
+    monkeypatch.setattr(
+        "backend.office.latex.diff.shutil.which", lambda name: None
+    )
+
+    resp = await client.post(
+        "/api/v1/office/latex/diff",
+        json={
+            "workspace_path": str(workspace),
+            "original_path": str(original),
+            "revised_path": str(revised),
+            "output_filename": "diff.tex",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is False
+    assert resp.json()["code"] == "no_latexdiff"
