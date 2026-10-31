@@ -5,10 +5,8 @@
 import type { CommandRoute } from '../commands';
 
 const enc = (value: unknown): string => encodeURIComponent(String(value));
-const projectId = (a: Record<string, unknown>): string =>
-  enc(a.projectId ?? a.project_id);
-const playbookId = (a: Record<string, unknown>): string =>
-  enc(a.playbookId ?? a.playbook_id);
+const projectId = (a: Record<string, unknown>): string => enc(a.projectId ?? a.project_id);
+const playbookId = (a: Record<string, unknown>): string => enc(a.playbookId ?? a.playbook_id);
 
 function pick(
   a: Record<string, unknown>,

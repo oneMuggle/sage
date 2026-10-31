@@ -173,9 +173,7 @@ describe('PlaybookCard', () => {
 
     await screen.findByTestId('playbook-card');
     fireEvent.click(screen.getByTestId('playbook-author-btn'));
-    await waitFor(() =>
-      expect(authorPreviewMock).toHaveBeenCalledWith('p1', { notes: '' }),
-    );
+    await waitFor(() => expect(authorPreviewMock).toHaveBeenCalledWith('p1', { notes: '' }));
     expect(screen.getByText('AI 生成的规程')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('playbook-bind-authored'));
     await waitFor(() =>
@@ -196,9 +194,7 @@ describe('PlaybookCard', () => {
 
     await screen.findByTestId('playbook-detected-stage');
     fireEvent.click(screen.getByTestId('playbook-confirm-stage'));
-    await waitFor(() =>
-      expect(confirmStageMock).toHaveBeenCalledWith('p1', 'execution'),
-    );
+    await waitFor(() => expect(confirmStageMock).toHaveBeenCalledWith('p1', 'execution'));
   });
 
   it('“保持当前”会隐藏检测提示', async () => {

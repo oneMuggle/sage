@@ -195,17 +195,14 @@ export interface PlaybookBindPayload {
 
 export const playbookApi = {
   async listBuiltin(): Promise<PlaybookSummary[]> {
-    const response = await invoke<{ playbooks: PlaybookSummary[] }>(
-      'playbooks_builtin_list',
-    );
+    const response = await invoke<{ playbooks: PlaybookSummary[] }>('playbooks_builtin_list');
     return response.playbooks ?? [];
   },
 
   async getBuiltin(playbookId: string): Promise<PlaybookSpec> {
-    const response = await invoke<{ playbook: PlaybookSpec }>(
-      'playbooks_builtin_get',
-      { playbookId },
-    );
+    const response = await invoke<{ playbook: PlaybookSpec }>('playbooks_builtin_get', {
+      playbookId,
+    });
     return response.playbook;
   },
 
@@ -213,10 +210,7 @@ export const playbookApi = {
     return invoke<PlaybookCurrent>('playbook_get_current', { projectId });
   },
 
-  async bind(
-    projectId: string,
-    payload: PlaybookBindPayload,
-  ): Promise<PlaybookCurrent> {
+  async bind(projectId: string, payload: PlaybookBindPayload): Promise<PlaybookCurrent> {
     return invoke<PlaybookCurrent>('playbook_bind', {
       projectId,
       playbookId: payload.playbookId,
@@ -241,20 +235,14 @@ export const playbookApi = {
     });
   },
 
-  async confirmStage(
-    projectId: string,
-    stageId: string,
-  ): Promise<PlaybookCurrent> {
+  async confirmStage(projectId: string, stageId: string): Promise<PlaybookCurrent> {
     return invoke<PlaybookCurrent>('playbook_stage_confirm', {
       projectId,
       stageId,
     });
   },
 
-  async applyActions(
-    projectId: string,
-    actions: PlaybookAction[],
-  ): Promise<PlaybookActionsResult> {
+  async applyActions(projectId: string, actions: PlaybookAction[]): Promise<PlaybookActionsResult> {
     return invoke<PlaybookActionsResult>('playbook_actions_apply', {
       projectId,
       actions,

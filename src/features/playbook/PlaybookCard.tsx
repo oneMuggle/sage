@@ -167,11 +167,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         typeof result.content === 'string'
           ? result.content
           : JSON.stringify(result.content, null, 2);
-      downloadText(
-        result.filename,
-        text,
-        format === 'md' ? 'text/markdown' : 'application/json',
-      );
+      downloadText(result.filename, text, format === 'md' ? 'text/markdown' : 'application/json');
       setNotice('已导出：' + result.filename);
     });
 
@@ -191,11 +187,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const handleImportConfirm = () =>
     run('import', async () => {
       if (!importEnvelope) return;
-      const data = await playbookApi.importPlaybook(
-        importEnvelope,
-        projectId,
-        importConflict,
-      );
+      const data = await playbookApi.importPlaybook(importEnvelope, projectId, importConflict);
       setCurrent(data);
       setImportPreview(null);
       setImportEnvelope(null);
@@ -276,11 +268,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           >
             {busy === 'bind' ? '绑定中…' : '绑定此规程'}
           </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => fileInputRef.current?.click()}
-          >
+          <Button size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()}>
             <Upload className="mr-1 h-3.5 w-3.5" />
             导入规程文件
           </Button>
@@ -320,9 +308,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           </Button>
           {authorResult && (
             <div className="space-y-1 text-xs">
-              <div className="font-medium text-foreground">
-                {authorResult.playbook.name}
-              </div>
+              <div className="font-medium text-foreground">{authorResult.playbook.name}</div>
               <div className="text-muted-foreground">
                 {authorResult.rationale}
                 {authorResult.source === 'deterministic' ? '（未配置 LLM，已降级）' : ''}
@@ -382,12 +368,9 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
 
   const audit = current.audit;
   const stages = audit?.stages ?? [];
-  const currentStage =
-    stages.find((stage) => stage.id === audit?.current_stage) ?? stages[0];
+  const currentStage = stages.find((stage) => stage.id === audit?.current_stage) ?? stages[0];
   const detected = audit?.detected_stage;
-  const detectedStage = detected?.id
-    ? stages.find((stage) => stage.id === detected.id)
-    : undefined;
+  const detectedStage = detected?.id ? stages.find((stage) => stage.id === detected.id) : undefined;
   const showDetected =
     Boolean(detectedStage) &&
     detectedStage?.id !== audit?.current_stage &&
@@ -432,11 +415,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           <Button size="sm" variant="secondary" onClick={() => void handleExport('md')}>
             导出手册
           </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => fileInputRef.current?.click()}
-          >
+          <Button size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()}>
             <Upload className="mr-1 h-3.5 w-3.5" />
             导入
           </Button>
@@ -478,9 +457,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
                 {stage.label}
                 <span className="text-[10px] opacity-70">{stage.progress}%</span>
               </div>
-              {index < stages.length - 1 && (
-                <span className="text-muted-foreground">→</span>
-              )}
+              {index < stages.length - 1 && <span className="text-muted-foreground">→</span>}
             </div>
           );
         })}
@@ -577,9 +554,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs"
           data-testid="playbook-import-preview"
         >
-          <div className="font-medium text-foreground">
-            导入预览：{importPreview.playbook.name}
-          </div>
+          <div className="font-medium text-foreground">导入预览：{importPreview.playbook.name}</div>
           <div className="text-muted-foreground">
             阶段 {importPreview.playbook.stages.length} 个 · 目录{' '}
             {importPreview.scaffold.directories.length} 个 · 导入不包含对方项目文件内容
