@@ -210,6 +210,15 @@ export const zhChatAndSider = {
   'chat.vision_not_available':
     '当前对话模型不支持视觉识别，请配置视觉理解模型或更换支持视觉的对话模型',
   'chat.vision_fallback_info': '图片将通过视觉理解模型识别后转为文本描述',
+  'chat.ocr_fallback_info': '图片将通过本地 OCR 识别为文本（仅在本机处理，不上传图片）',
+  'chat.image_ocr_title': '图片文字（本地 OCR）',
+  'chat.image_ocr_edit_hint': '可直接编辑，发送时以这里的文本为准',
+  'chat.image_ocr_loading': '识别中…',
+  'chat.image_ocr_empty': '未识别到文字',
+  'chat.image_ocr_failed': '识别失败：{error}',
+  'chat.image_ocr_copy': '复制',
+  'chat.image_ocr_copied': '已复制',
+  'chat.image_ocr_retry': '重新识别',
 
   // ─── M4 会话压缩 / 分叉 ───────────
   // LOW-1: 统一口径 —— "before → after 条（removed 条历史已合并为摘要）"
@@ -421,7 +430,8 @@ export const zhChatAndSider = {
   'settings.network.sites.waiting': '请在弹出的浏览器窗口中完成登录，完成后会自动保存…',
   'settings.network.sites.success': '登录成功，已保存登录状态',
   'settings.network.sites.failed': '登录失败：{error}',
-  'settings.network.sites.login_in_progress': '已有登录窗口在等待操作，请先在浏览器中完成或关闭它。',
+  'settings.network.sites.login_in_progress':
+    '已有登录窗口在等待操作，请先在浏览器中完成或关闭它。',
   'settings.network.sites.invalid_url': '请输入以 http:// 或 https:// 开头的网址',
   'settings.network.sites.status.logged_in': '已登录',
   'settings.network.sites.status.expired': '已过期',
@@ -438,8 +448,7 @@ export const zhChatAndSider = {
   'settings.network.sites.saved_hours': '{hours} 小时',
   'settings.network.sites.saved_just_now': '刚刚',
   'settings.network.advanced': '高级：手动导入与诊断',
-  'settings.network.advanced.hint':
-    '面向高级用户与开发者。普通使用不需要修改这里的任何选项。',
+  'settings.network.advanced.hint': '面向高级用户与开发者。普通使用不需要修改这里的任何选项。',
   'settings.network.search': '搜索引擎',
   'settings.network.search.hint':
     '按顺序尝试：首选引擎无结果时自动回退后续引擎。API 引擎未填 key 时自动跳过。',

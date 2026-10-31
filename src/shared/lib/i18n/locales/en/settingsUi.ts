@@ -237,6 +237,28 @@ export const enSettingsUi = {
   'settings.models.fixed_use_above': 'Fixed (use value above)',
   'settings.models.image_gen_model': 'Image generation',
   'settings.models.image_gen_model_desc': 'Used for text-to-image (optional)',
+  'settings.ocr.title': 'Local OCR',
+  'settings.ocr.desc':
+    'Recognize text from images on this device when no vision model is available; images are not uploaded',
+  'settings.ocr.available': 'Available ({engine})',
+  'settings.ocr.unavailable': 'Unavailable',
+  'settings.ocr.engine_none': 'No engine detected',
+  'settings.ocr.install_hint':
+    'Install rapidocr + onnxruntime or Tesseract to enable; you can also place models manually',
+  'settings.ocr.engine': 'OCR engine',
+  'settings.ocr.engine_auto': 'Auto (prefer RapidOCR)',
+  'settings.ocr.lang': 'Recognition language',
+  'settings.ocr.lang_auto': 'Auto (Chinese + English)',
+  'settings.ocr.lang_ch': 'Chinese',
+  'settings.ocr.lang_en': 'English',
+  'settings.ocr.prefer_local': 'Prefer local OCR even with a vision model',
+  'settings.ocr.prefer_local_desc':
+    'Faster and cheaper for text screenshots; falls back to the vision model on failure',
+  'settings.ocr.saving': 'Saving…',
+  'settings.ocr.test': 'Test recognition',
+  'settings.ocr.testing': 'Recognizing…',
+  'settings.ocr.test_empty': 'No text recognized',
+  'settings.ocr.test_failed': 'Recognition failed: {error}',
   'settings.models.max_context': 'Max context length',
   'settings.models.max_context_desc':
     'Maximum tokens sent to the model per conversation; ignored in automatic mode',

@@ -106,6 +106,7 @@ _EXPECTED_ONLINE = [
     "text_to_speech",
     "speech_to_text",
     "generate_image",
+    "ocr_image",
     "read_sage_config",
     "update_sage_config",
     "diagnose_sage_config",
@@ -371,7 +372,7 @@ def test_standard_online_matches_golden_snapshot() -> None:
     registry = _install_via_facade()
 
     assert registry.list_names() == _EXPECTED_ONLINE
-    assert len(registry.list_names()) == len(set(registry.list_names())) == 95
+    assert len(registry.list_names()) == len(set(registry.list_names())) == 96
 
 
 def test_standard_risks_and_schemas_align_with_golden_snapshot() -> None:
@@ -395,7 +396,7 @@ def test_network_gating_counts_and_differences() -> None:
     intranet = _install_via_facade(NetworkMode.INTRANET).list_names()
     offline = _install_via_facade(NetworkMode.OFFLINE).list_names()
 
-    assert (len(online), len(intranet), len(offline)) == (95, 94, 90)
+    assert (len(online), len(intranet), len(offline)) == (96, 95, 91)
     assert set(online) - set(intranet) == {"web_search"}
     assert set(intranet) - set(offline) == {
         "web_fetch",
@@ -469,7 +470,7 @@ def test_focus_install_excludes_heavy_tool_surfaces() -> None:
     assert not any(name.startswith("office_") for name in names)
     assert not any(name.startswith("browser_") for name in names)
     assert not any(name.startswith("design_") for name in names)
-    assert not {"text_to_speech", "speech_to_text", "generate_image"} & set(names)
+    assert not {"text_to_speech", "speech_to_text", "generate_image", "ocr_image"} & set(names)
     assert {"bash", "read_file", "ask_user_question", "agent"} <= set(names)
     _assert_subsequence(names)
 
@@ -478,7 +479,7 @@ def test_headless_install_excludes_ask_user_only() -> None:
     registry = _install_bundles(_harness("headless"))
     names = registry.list_names()
 
-    assert len(names) == 94
+    assert len(names) == 95
     assert "ask_user_question" not in names
     assert set(_EXPECTED_ONLINE) - set(names) == {"ask_user_question"}
     _assert_subsequence(names)
@@ -515,7 +516,7 @@ def test_register_all_tools_reads_project_harness(tmp_path: Path) -> None:
 
     registry = _install_via_facade()
 
-    assert len(registry.list_names()) == 94
+    assert len(registry.list_names()) == 95
     assert "ask_user_question" not in registry.list_names()
 
 

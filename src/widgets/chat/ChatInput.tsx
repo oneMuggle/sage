@@ -13,6 +13,7 @@ import { useSettings } from '../../features/manage-settings/useSettings';
 import type { DeliveryMode } from '../../features/send-message/deliveryMode';
 import { knowledgeApi, promptApi, skillsApi } from '../../shared/api';
 import { listen as desktopListen } from '../../shared/api/desktopEvent';
+import { ocrApi, type OcrCapabilities } from '../../shared/api/ocrApi';
 import type { ChatOfficeRef } from '../../shared/api/types';
 import { worktreeApi } from '../../shared/api/worktreeApi';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
@@ -22,6 +23,7 @@ import { useSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { useI18n } from '../../shared/lib/i18n';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 
+import { ImageOcrPreview } from './ImageOcrPreview';
 import {
   InputCard,
   type AudioAttachmentChipType,
@@ -61,6 +63,8 @@ interface ChatInputProps extends Pick<InputCardProps, 'composerControls'> {
       knowledgeRefs?: { id: string; title: string }[];
       attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
       images?: { name: string; size: number; type: string; dataUrl?: string }[];
+      /** 2026-10-31: 前端确认/编辑后的本地 OCR 文本（与 images 对齐） */
+      imageOcrTexts?: string[];
       /** Task 7 (2026-07-26): managed Office references from the @-menu. The Chat page forwards these into `chatApi.chatStream`'s 5th arg so the LLM can see the office doc summaries. */
       officeRefs?: readonly ChatOfficeRef[];
       /** Multi-Agent Orchestration: /orchestrate → force_multi、/single → force_single。 Wave 3 C6: 编排模式条可传 'auto' | 'force_multi' | 'template:<id>'。 普通消息不传（undefined → 后端 auto）。 */
@@ -118,6 +122,28 @@ function ChatInputInner({
   const { t } = useI18n();
   const { settings } = useSettings();
 
+  // 本地 OCR：无视觉模型时的图片文本兜底（GET /api/v1/ocr/capabilities）。
+  // 探测失败按不可用处理，不改变既有「无视觉模型即禁用上传」的行为。
+  const [ocrCaps, setOcrCaps] = useState<OcrCapabilities | null>(null);
+  const [ocrTextByDataUrl, setOcrTextByDataUrl] = useState<Record<string, string>>({});
+  const handleOcrTextsChange = useCallback((entries: { dataUrl: string; text: string }[]) => {
+    setOcrTextByDataUrl(Object.fromEntries(entries.map((entry) => [entry.dataUrl, entry.text])));
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    ocrApi
+      .capabilities()
+      .then((caps) => {
+        if (!cancelled) setOcrCaps(caps);
+      })
+      .catch(() => {
+        if (!cancelled) setOcrCaps(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Task 9 (2026-10-15): vision 可用性检测
   // 从 discoveredModels 查找当前 chatModel 的 capabilities。
   // 端点未探测时 capabilities 未知 —— fail-safe 取「支持 vision」，与后端
@@ -128,8 +154,12 @@ function ChatInputInner({
   )?.capabilities ?? ['chat', 'vision'];
   const supportsVision = chatModelCaps.includes('vision');
   const visionModelConfigured = Boolean(settings.modelSelections.visionModel?.modelId);
-  const visionUploadDisabled = !supportsVision && !visionModelConfigured;
+  const ocrAvailable = Boolean(ocrCaps?.enabled && ocrCaps?.available);
+  const preferLocalOcr = Boolean(ocrCaps?.prefer_local_for_images);
+  const ocrFallbackMode = !supportsVision && !visionModelConfigured && ocrAvailable;
+  const visionUploadDisabled = !supportsVision && !visionModelConfigured && !ocrAvailable;
   const visionFallbackMode = !supportsVision && visionModelConfigured;
+  const ocrPreviewEnabled = ocrAvailable && (ocrFallbackMode || preferLocalOcr);
 
   // Workspace context — provides sessionId + binding for the @ menu.
   // Falls back to the legacy `workspacePath` prop for callers that don't
@@ -365,6 +395,10 @@ function ChatInputInner({
       knowledgeRefs: knowledgeRefs.length > 0 ? knowledgeRefs : undefined,
       attachments: files.length > 0 ? files : undefined,
       images: images.length > 0 ? images : undefined,
+      imageOcrTexts:
+        images.length > 0 && Object.keys(ocrTextByDataUrl).length > 0
+          ? images.map((img) => (img.dataUrl ? (ocrTextByDataUrl[img.dataUrl] ?? '') : ''))
+          : undefined,
       officeRefs: officeRefs.length > 0 ? officeRefs : undefined,
       // Wave 3 C6: auto 不传键 → 保持既有 undefined → auto 语义；
       // force_multi / template:<id> 显式透传。
@@ -728,6 +762,20 @@ function ChatInputInner({
           <span>{t('chat.vision_fallback_info')}</span>
         </div>
       )}
+      {ocrFallbackMode && (
+        <div
+          data-testid="chat-ocr-fallback-banner"
+          className="mx-3 mb-1 px-3 py-1.5 rounded-md bg-info/10 text-info text-xs flex items-center gap-1.5"
+        >
+          <Info className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+          <span>{t('chat.ocr_fallback_info')}</span>
+        </div>
+      )}
+      <ImageOcrPreview
+        images={images}
+        enabled={ocrPreviewEnabled}
+        onTextsChange={handleOcrTextsChange}
+      />
       <InputCard
         value={value}
         onChange={handleChange}

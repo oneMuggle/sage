@@ -246,6 +246,8 @@ export function Chat() {
         knowledgeRefs?: { id: string; title: string }[];
         attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
         images?: { name: string; size: number; type: string; dataUrl?: string }[];
+        /** 2026-10-31: 前端确认/编辑后的本地 OCR 文本（与 images 对齐） */
+        imageOcrTexts?: string[];
         officeRefs?: readonly ChatOfficeRef[];
         orchestrationMode?: string;
         // PM1 (round8): /plan 计划模式 —— 本次 run 只读 + 计划产出。
@@ -273,17 +275,22 @@ export function Chat() {
         xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       };
       const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-      const dataUrls = (options?.images ?? [])
-        .map((img) => img.dataUrl)
-        .filter((d): d is string => Boolean(d));
-      const sized = dataUrls.filter((d) => (d.length * 3) / 4 <= MAX_IMAGE_BYTES);
-      if (sized.length < dataUrls.length) {
+      const imageEntries = (options?.images ?? [])
+        .map((img, index) => ({ img, index }))
+        .filter(({ img }) => Boolean(img.dataUrl))
+        .filter(({ img }) => ((img.dataUrl as string).length * 3) / 4 <= MAX_IMAGE_BYTES);
+      const dataUrlCount = (options?.images ?? []).filter((img) => Boolean(img.dataUrl)).length;
+      if (imageEntries.length < dataUrlCount) {
         toast.warning('部分图片超过 5MiB 上限，已跳过');
       }
-      const images = sized.slice(0, MAX_IMAGES);
-      if (sized.length > MAX_IMAGES) {
+      const limitedEntries = imageEntries.slice(0, MAX_IMAGES);
+      if (imageEntries.length > MAX_IMAGES) {
         toast.warning(`最多发送 ${MAX_IMAGES} 张图片，已截取前 ${MAX_IMAGES} 张`);
       }
+      const images = limitedEntries.map(({ img }) => img.dataUrl as string);
+      const imageOcrTexts = options?.imageOcrTexts
+        ? limitedEntries.map(({ index }) => options.imageOcrTexts?.[index] ?? '')
+        : undefined;
       const attachmentMediaIds: string[] = [];
       for (const att of options?.attachments ?? []) {
         if (!att.dataUrl) continue;
@@ -334,6 +341,7 @@ export function Chat() {
           planMode: options?.planMode,
           memoryDisabled: tempChatSessions.has(sessionId),
           images,
+          imageOcrTexts,
           attachmentMediaIds,
           attachmentRag,
           contextReset: options?.contextReset,
@@ -344,6 +352,7 @@ export function Chat() {
           planMode: options?.planMode,
           memoryDisabled: tempChatSessions.has(currentSessionId),
           images,
+          imageOcrTexts,
           attachmentMediaIds,
           attachmentRag,
           contextReset: options?.contextReset,
