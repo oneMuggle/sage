@@ -84,7 +84,12 @@ def test_spec_hash_is_stable_and_order_independent():
 
 def test_builtin_library_has_research_and_coding():
     ids = {item["id"] for item in list_builtin()}
-    assert {"cn-research-grant", "coding-project"} <= ids
+    assert {
+        "cn-research-grant",
+        "coding-project",
+        "business-dossier",
+        "personal-knowledge",
+    } <= ids
     assert get_builtin("cn-research-grant")["stages"][0]["id"] == "proposal"
 
 

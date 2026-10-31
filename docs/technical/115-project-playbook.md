@@ -70,7 +70,9 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 内置规程位于 `backend/services/playbook_builtin/`，启动时加载并校验：
 
 - `cn-research-grant`：开题 / 实施 / 结题；
-- `coding-project`：规划 / 研发 / 测试 / 发布 / 维护。
+- `coding-project`：规划 / 研发 / 测试 / 发布 / 维护；
+- `business-dossier`：立卷 / 编制 / 签发封卷；
+- `personal-knowledge`：活跃整理 / 归档封存。
 
 阶段产物支持：
 
