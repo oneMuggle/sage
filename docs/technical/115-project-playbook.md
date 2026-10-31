@@ -163,7 +163,7 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 ## 12. 已知限制（后续 P3）
 
 - LLM 定制、内容检查与阶段裁决已实现（同步执行，失败自动降级）；尚无后台任务/取消/缓存。
-- 规程编辑目前是 JSON 编辑器，尚无表单式可视化编辑器。
+- 规程编辑支持表单（名称/描述/阶段/产物）与 JSON 高级视图；表单暂不编辑规则/里程碑等高级字段。
 - 归类为“建议 + 逐项确认移动”，不自动批量移动文件。
 - 暂无 Wiki 手册写入与云端规程市场。
 - `release/win7` cherry-pick 仍需按 pydantic v1 适配。

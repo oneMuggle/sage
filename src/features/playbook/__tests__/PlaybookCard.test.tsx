@@ -105,7 +105,10 @@ const bound: PlaybookCurrent = {
     id: 'cn-research-grant',
     name: '科研课题（开题 · 实施 · 结题）',
     description: '科研全周期管理',
-    stages: [{ id: 'proposal' }, { id: 'execution' }],
+    stages: [
+      { id: 'proposal', label: '开题', artifacts: [] },
+      { id: 'execution', label: '实施', artifacts: [] },
+    ],
   } as never,
   source: 'builtin:cn-research-grant',
   version: 1,
@@ -305,6 +308,8 @@ describe('PlaybookCard', () => {
     render(<PlaybookCard projectId="p1" />);
     await screen.findByTestId('playbook-edit-btn');
     fireEvent.click(screen.getByTestId('playbook-edit-btn'));
+    await screen.findByTestId('playbook-editor-form');
+    fireEvent.click(screen.getByTestId('playbook-editor-mode-json'));
     const editor = (await screen.findByTestId('playbook-spec-editor')) as HTMLTextAreaElement;
     const draft = JSON.parse(editor.value);
     draft.name = '自定义规程';
@@ -313,6 +318,23 @@ describe('PlaybookCard', () => {
     await waitFor(() =>
       expect(bindMock).toHaveBeenCalledWith('p1', {
         spec: expect.objectContaining({ name: '自定义规程' }),
+        source: 'custom',
+      }),
+    );
+  });
+
+  it('表单模式可改名并保存', async () => {
+    getCurrentMock.mockResolvedValue(bound);
+    bindMock.mockResolvedValue({ ...bound, version: 2 });
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-edit-btn');
+    fireEvent.click(screen.getByTestId('playbook-edit-btn'));
+    const nameInput = await screen.findByTestId('playbook-editor-name');
+    fireEvent.change(nameInput, { target: { value: '表单改名规程' } });
+    fireEvent.click(screen.getByTestId('playbook-save-spec'));
+    await waitFor(() =>
+      expect(bindMock).toHaveBeenCalledWith('p1', {
+        spec: expect.objectContaining({ name: '表单改名规程' }),
         source: 'custom',
       }),
     );

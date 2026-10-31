@@ -554,7 +554,7 @@ src/shared/lib/i18n/locales/{zh,en}/playbook.ts  # 文案
 - [x] 阶段歧义 LLM 裁决（证据约束 prompt）
 - [x] `ProjectAdvisor` 接入审计摘要（当前阶段/完成度/待补项），建议带证据
 - [x] 导出 AGENTS.md / CLAUDE.md 片段；规程手册写入项目 Wiki
-- [ ] 规程编辑器（结构化表单 + JSON 高级视图 + 保存新版本）
+- [x] 规程编辑器（结构化表单 + JSON 高级视图 + 保存新版本）
 - [ ] 前端文案 i18n（zh/en 键对齐）
 
 **验收**：无 LLM 环境全链路可用；有 LLM 时 AI 定制的规程通过校验率 ≥ 95%，内容检查结果带证据且可人工推翻。

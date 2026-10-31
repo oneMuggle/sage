@@ -27,6 +27,7 @@ export interface PlaybookArtifactSpec {
   label: string;
   required: boolean;
   required_when?: string | null;
+  target_dir?: string | null;
   match: PlaybookMatch;
   content_checks: PlaybookContentCheck[];
   missing_action?: PlaybookAction | null;

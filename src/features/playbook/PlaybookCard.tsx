@@ -22,9 +22,12 @@ import type {
   PlaybookAuthorPreview,
   PlaybookCurrent,
   PlaybookImportPreview,
+  PlaybookSpec,
   PlaybookSummary,
 } from '../../shared/api/playbookApi';
 import { Button } from '../../shared/ui/Button';
+
+import { PlaybookSpecEditor } from './PlaybookSpecEditor';
 
 export interface PlaybookCardProps {
   projectId: string;
@@ -67,8 +70,6 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const [authorNotes, setAuthorNotes] = useState('');
   const [authorResult, setAuthorResult] = useState<PlaybookAuthorPreview | null>(null);
   const [editingSpec, setEditingSpec] = useState(false);
-  const [specDraft, setSpecDraft] = useState('');
-  const [specError, setSpecError] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<PlaybookImportPreview | null>(null);
   const [importEnvelope, setImportEnvelope] = useState<Record<string, unknown> | null>(null);
   const [importConflict, setImportConflict] = useState<'save_as_new' | 'merge' | 'replace'>(
@@ -172,23 +173,13 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
 
   const handleStartEdit = () => {
     if (!current?.playbook) return;
-    setSpecDraft(JSON.stringify(current.playbook, null, 2));
-    setSpecError(null);
     setEditingSpec(true);
   };
 
-  const handleSaveSpec = () =>
+  const handleSaveSpec = (spec: PlaybookSpec) =>
     run('save-spec', async () => {
-      setSpecError(null);
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(specDraft);
-      } catch (err) {
-        setSpecError('JSON 解析失败：' + errorMessage(err));
-        return;
-      }
       const data = await playbookApi.bind(projectId, {
-        spec: parsed as never,
+        spec,
         source: 'custom',
       });
       setCurrent(data);
@@ -508,40 +499,14 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         </div>
       </div>
 
-      {editingSpec && (
-        <div className="space-y-2 rounded-md border border-border p-3">
-          <div className="text-xs font-medium text-foreground">编辑规程 JSON</div>
-          <textarea
-            value={specDraft}
-            onChange={(event) => setSpecDraft(event.target.value)}
-            rows={12}
-            spellCheck={false}
-            className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono text-xs text-foreground"
-            data-testid="playbook-spec-editor"
-          />
-          {specError && <div className="text-xs text-destructive">{specError}</div>}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => void handleSaveSpec()}
-              disabled={busy === 'save-spec'}
-              data-testid="playbook-save-spec"
-            >
-              {busy === 'save-spec' ? '保存中…' : '保存为新版本'}
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                setEditingSpec(false);
-                setSpecError(null);
-              }}
-            >
-              取消
-            </Button>
-          </div>
-        </div>
+      {editingSpec && current.playbook && (
+        <PlaybookSpecEditor
+          spec={current.playbook}
+          saving={busy === 'save-spec'}
+          error={error}
+          onSave={(spec) => void handleSaveSpec(spec)}
+          onCancel={() => setEditingSpec(false)}
+        />
       )}
 
       {/* 阶段条 */}
