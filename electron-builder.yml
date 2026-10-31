@@ -78,6 +78,7 @@ extraResources:
     to: "sage-core"
     filter:
       - "**/*"
+
   # MSYS2 bash runtime for Win7 (bundled by scripts/bundle-git-bash.ps1).
   # shell_resolver._find_windows_bash() third-priority candidate falls back
   # to this path when system Git bash is absent (Win7 default).
@@ -99,6 +100,14 @@ extraResources:
       - "**/*"
   # NOTE: start-backend.bat removed — was dead code (electron/main.ts spawns
   # python.exe directly, never invoked the .bat). See PR #107/#111/#112.
+
+  # External daily-browser bridge (Chrome/Edge MV3 extension).  Shipped
+  # unpacked so the user can load it from the install directory; the settings
+  # UI displays this path.  No build step: plain JS + manifest.
+  - from: "extension/agent-bridge"
+    to: "extension/agent-bridge"
+    filter:
+      - "**/*"
 
 # Win7 + Win10/11 NSIS installer (electron-builder 24.x)
 win:

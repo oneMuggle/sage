@@ -48,6 +48,7 @@ class BrowserType(str, Enum):
     CHROMIUM = "chromium"
     FIREFOX = "firefox"
     EMBEDDED = "embedded"
+    EXTERNAL = "external"
     UNKNOWN = "unknown"
 
 

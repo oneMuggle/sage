@@ -83,6 +83,7 @@ from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapt
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.artifact_routes import router as artifact_router
+from backend.api.browser_extension_routes import router as browser_extension_router
 from backend.api.chat_attachment_routes import router as chat_attachment_router
 from backend.api.chat_stream_registry import StreamRegistry
 
@@ -1405,6 +1406,16 @@ app.add_middleware(
     limits={
         "/api/v1/skills/import": 12 * 1024 * 1024,
         "/api/v1/skills/import-directory": 12 * 1024 * 1024,
+        # Browser-extension bridge.  Pairing/poll/detach are small and are
+        # public to LocalAuthMiddleware, so cap them before Pydantic parses
+        # the body.  Command results may carry screenshots (8 MiB protocol
+        # cap + JSON envelope); session snapshots are capped at 500 cookies
+        # + 50 origins by the service layer.
+        "/api/v1/web-access/extension/pair": 64 * 1024,
+        "/api/v1/web-access/extension/poll": 64 * 1024,
+        "/api/v1/web-access/extension/detach": 16 * 1024,
+        "/api/v1/web-access/extension/result": 9 * 1024 * 1024,
+        "/api/v1/web-access/extension/sync-session": 2 * 1024 * 1024,
     },
 )
 
@@ -1468,6 +1479,8 @@ app.include_router(playbook_router, prefix="/api/v1")
 # M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}
 app.include_router(permission_router, prefix="/api/v1")
 app.include_router(web_access_router, prefix="/api/v1")
+# 外部日常浏览器扩展桥: /api/v1/web-access/{extension,browser-extension}/*
+app.include_router(browser_extension_router, prefix="/api/v1")
 # M6 生态扩展 Phase 1: /api/v1/hooks/builtins 内置钩子元数据 (设置页"推荐 Hook")
 app.include_router(hooks_router, prefix="/api/v1")
 # M2 part B: /api/v1/questions/{pending, <id>/answer}（AskUserQuestion）

@@ -45,8 +45,7 @@ export function webAccessApiUrl(path: string): string {
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? 'GET') as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   // Electron：走主进程中继（注入本地 bearer token、解析真实后端端口）
-  const bridge =
-    typeof window !== 'undefined' ? window.electronAPI?.backendRequest : undefined;
+  const bridge = typeof window !== 'undefined' ? window.electronAPI?.backendRequest : undefined;
   if (bridge) {
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
     return bridge<T>({ method, path, body });
@@ -105,6 +104,38 @@ export interface SiteSessionVerify {
   error?: string;
 }
 
+export interface BrowserExtensionDevice {
+  device_id: string;
+  label: string;
+  created_at: number;
+  last_seen_at: number;
+  connected: boolean;
+  sharing: boolean;
+}
+
+export interface BrowserExtensionShared {
+  device_id: string;
+  origin: string;
+  host: string;
+  title: string;
+  shared_at: number;
+}
+
+export interface BrowserExtensionStatus {
+  devices: BrowserExtensionDevice[];
+  connected: boolean;
+  shared: BrowserExtensionShared | null;
+  base_url: string;
+  extension_dir: string | null;
+}
+
+export interface BrowserExtensionPairingCode {
+  code: string;
+  expires_at: number;
+  base_url: string;
+  extension_dir: string | null;
+}
+
 export async function verifySiteSession(domain: string): Promise<SiteSessionVerify> {
   return requestJson<SiteSessionVerify>('/api/v1/web-access/sites/verify', {
     method: 'POST',
@@ -112,10 +143,26 @@ export async function verifySiteSession(domain: string): Promise<SiteSessionVeri
   });
 }
 
-export async function getSiteLoginJob(jobId: string): Promise<SiteLoginJob> {
-  return requestJson<SiteLoginJob>(
-    `/api/v1/web-access/sites/login/${encodeURIComponent(jobId)}`,
+export async function fetchBrowserExtensionStatus(): Promise<BrowserExtensionStatus> {
+  return requestJson<BrowserExtensionStatus>('/api/v1/web-access/browser-extension/status');
+}
+
+export async function createBrowserExtensionPairingCode(): Promise<BrowserExtensionPairingCode> {
+  return requestJson<BrowserExtensionPairingCode>(
+    '/api/v1/web-access/browser-extension/pairing-code',
+    { method: 'POST', body: JSON.stringify({}) },
   );
+}
+
+export async function revokeBrowserExtensionDevice(deviceId: string): Promise<void> {
+  await requestJson(
+    `/api/v1/web-access/browser-extension/devices/${encodeURIComponent(deviceId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export async function getSiteLoginJob(jobId: string): Promise<SiteLoginJob> {
+  return requestJson<SiteLoginJob>(`/api/v1/web-access/sites/login/${encodeURIComponent(jobId)}`);
 }
 
 export async function deleteSiteSession(domain: string): Promise<void> {

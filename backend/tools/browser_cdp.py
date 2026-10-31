@@ -59,6 +59,10 @@ MAX_BROWSER_SESSIONS = 4
 #: 跳过它 —— 渲染池后台常驻时 browser_snapshot 仍应能免 id 解析用户实例。
 RESERVED_BROWSER_ID = "render-pool"
 
+#: 用户日常浏览器扩展共享标签页的固定会话 id（与
+#: ``browser_extension_bridge.EXTENSION_BROWSER_ID`` 保持一致）。
+EXTENSION_BROWSER_ID = "external"
+
 #: 一次性（非持久）浏览器 user-data-dir 的目录名前缀，启动清扫按此匹配
 EPHEMERAL_PREFIX = "sage_browser_"
 
@@ -77,6 +81,7 @@ _LAUNCH_POLL_INTERVAL = 0.2
 
 class BrowserCDPError(RuntimeError):
     """CDP 命令失败（协议错误 / 目标丢失 / 命令报 errorText）。"""
+
 
 
 # ---------------------------------------------------------------------------
@@ -144,10 +149,15 @@ class BrowserSession:
     persistent: bool = False
     #: 持久 profile 目录名（persistent=True 时记录；AU3 自动刷新按名复用）
     profile_name: str = ""
+
     #: 浏览器类型（Chrome/Edge/Chromium/Firefox/Embedded）
     browser_type: BrowserType = BrowserType.CHROME
     #: Embedded：Electron 内置浏览器桥的鉴权 token（仅内存持有）
     bridge_token: str = ""
+    #: External：共享该标签页的浏览器扩展设备 id（仅内存持有）
+    external_device_id: str = ""
+    #: External：用户共享标签页的 Chrome tabId（仅内存持有）
+    external_tab_id: str = ""
 
     def is_alive(self) -> bool:
         return self.process.poll() is None
@@ -170,14 +180,22 @@ class BrowserSessionManager:
                 getattr(old.process, "pid", None),
             )
             _terminate_session(old)
-        if len(self._sessions) >= MAX_BROWSER_SESSIONS:
+        # The user-shared external tab is one logical session and must remain
+        # usable even when Sage's own Chrome/render sessions fill the cap.
+        if (
+            session.browser_id != EXTENSION_BROWSER_ID
+            and len(self._sessions) >= MAX_BROWSER_SESSIONS
+        ):
             raise BrowserCDPError(
                 f"浏览器实例数已达上限 {MAX_BROWSER_SESSIONS}，请先用 browser_close 关闭"
             )
         self._sessions[session.browser_id] = session
 
     def get(self, browser_id: Optional[str]) -> Optional[BrowserSession]:
-        """按 id 取会话；None → 唯一"用户"实例（单实例场景免传 id）。
+        """按 id 取会话；None → 优先用户共享的日常浏览器，其次唯一实例。
+
+        用户显式共享的标签页（EXTERNAL）优先于 Sage 自己启动的浏览器：
+        这是用户刚刚做出的选择，agent 的下一步操作应符合该意图。
 
         保留 id（RESERVED_BROWSER_ID 及其 ``render-pool-`` 前缀槽位，web_fetch
         渲染池）不算用户实例——否则多槽渲染池会挤掉单用户浏览器免传 id 的
@@ -185,6 +203,9 @@ class BrowserSessionManager:
         """
         if browser_id:
             return self._sessions.get(browser_id)
+        external = self._sessions.get(EXTENSION_BROWSER_ID)
+        if external is not None:
+            return external
         user_sessions = [
             session
             for session_id, session in self._sessions.items()
@@ -235,7 +256,10 @@ def _terminate_session(session: BrowserSession) -> None:
     （里面可能有用户既有登录态）。
 
     Embedded 会话的生命周期归 Electron 主进程：这里关闭本会话的目标后返回。
+    External 会话是用户自己的标签页：Sage 只丢弃会话引用，绝不关闭页面。
     """
+    if getattr(session, "browser_type", None) == BrowserType.EXTERNAL:
+        return
     if getattr(session, "browser_type", None) == BrowserType.EMBEDDED:
         try:
             targets = _embedded_command(session, "Target.getTargets", {})
@@ -659,6 +683,9 @@ class _CDPConnection:
 
 
 def _list_page_targets(session: BrowserSession) -> List[Dict[str, Any]]:
+    if getattr(session, "browser_type", None) == BrowserType.EXTERNAL:
+        result = _external_command(session, "Target.getTargets", {})
+        return [info for info in result.get("targetInfos", []) if info.get("type") == "page"]
     connection = _CDPConnection(session)
     try:
         result = connection.command("Target.getTargets")
@@ -676,6 +703,9 @@ def ensure_page_target(session: BrowserSession, target_id: Optional[str] = None)
         raise BrowserCDPError(f"未知 target_id: {target_id}")
     if pages:
         return pages[0]["targetId"]
+    if getattr(session, "browser_type", None) == BrowserType.EXTERNAL:
+        # 用户共享的标签页已关闭 / 尚未就绪；不替用户新建标签页。
+        raise BrowserCDPError("共享的浏览器标签页不可用——请重新在扩展中共享标签页")
     connection = _CDPConnection(session)
     try:
         result = connection.command("Target.createTarget", {"url": "about:blank"})
@@ -728,6 +758,24 @@ def _embedded_command(
     return (data.get("result") if isinstance(data, dict) else None) or {}
 
 
+def _external_command(
+    session: BrowserSession,
+    method: str,
+    params: Optional[Dict[str, Any]] = None,
+    target_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """把 CDP 命令转发到用户日常浏览器的扩展桥（长轮询 + chrome.debugger）。"""
+    from backend.services.browser_extension_bridge import (
+        BrowserExtensionError,
+        browser_extension_bridge,
+    )
+
+    try:
+        return browser_extension_bridge.execute_cdp(method, params, target_id)
+    except BrowserExtensionError as exc:
+        raise BrowserCDPError(f"浏览器扩展桥: {exc}") from exc
+
+
 def cdp_command(
     session: BrowserSession,
     method: str,
@@ -738,8 +786,11 @@ def cdp_command(
 
     一次调用 = 一条短连接（attach → command → close）。页面级方法
     自动带 sessionId；浏览器级方法（Target.*）不带。
-    Embedded 会话经 Electron 主进程 HTTP 桥执行，协议语义保持一致。
+    Embedded 会话经 Electron 主进程 HTTP 桥执行，External 会话经用户
+    日常浏览器扩展桥执行，协议语义保持一致。
     """
+    if getattr(session, "browser_type", None) == BrowserType.EXTERNAL:
+        return _external_command(session, method, params, target_id)
     if getattr(session, "browser_type", None) == BrowserType.EMBEDDED:
         return _embedded_command(session, method, params, target_id)
     connection = _CDPConnection(session)
