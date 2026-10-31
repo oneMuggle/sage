@@ -97,6 +97,21 @@ export async function startSiteLogin(url: string): Promise<string> {
   return data.job_id;
 }
 
+export interface SiteSessionVerify {
+  domain: string;
+  url: string;
+  status: 'logged_in' | 'login_required' | 'unknown';
+  checked_at: number;
+  error?: string;
+}
+
+export async function verifySiteSession(domain: string): Promise<SiteSessionVerify> {
+  return requestJson<SiteSessionVerify>('/api/v1/web-access/sites/verify', {
+    method: 'POST',
+    body: JSON.stringify({ domain }),
+  });
+}
+
 export async function getSiteLoginJob(jobId: string): Promise<SiteLoginJob> {
   return requestJson<SiteLoginJob>(
     `/api/v1/web-access/sites/login/${encodeURIComponent(jobId)}`,
