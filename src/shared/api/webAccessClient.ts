@@ -82,11 +82,18 @@ export async function fetchSiteLoginTemplates(): Promise<SiteLoginTemplate[]> {
 }
 
 export async function startSiteLogin(url: string): Promise<string> {
-  const data = await requestJson<{ job_id?: string }>('/api/v1/web-access/sites/login', {
+  // 调用方是用户的显式点击（设置页「登录网站」/ 聊天登录卡），视为本次
+  // EXTERNAL 调用的批准；DISCUSS/PLAN 模式仍由 PermissionEngine 拒绝。
+  const data = await requestJson<{
+    job_id?: string;
+    approval_required?: boolean;
+    error?: string;
+  }>('/api/v1/web-access/sites/login', {
     method: 'POST',
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, approved: true }),
   });
-  if (!data.job_id) throw new Error('missing_job_id');
+  if (data.approval_required) throw new Error('permission_approval_required');
+  if (!data.job_id) throw new Error(data.error || 'missing_job_id');
   return data.job_id;
 }
 
