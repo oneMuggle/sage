@@ -25,13 +25,16 @@ from backend.tools.credential_vault import (
     delete_credential,
     list_credentials,
     load_credential,
+    load_storage_origins,
     looks_like_login_html,
     looks_like_login_url,
     merge_set_cookies,
+    merge_storage_origins,
     parse_set_cookie,
     resolve_credential,
     save_credential,
     save_header_credential,
+    save_storage_state,
 )
 from backend.tools.download_tool import HttpDownloadTool
 from backend.tools.web_tool import WebFetchTool
@@ -278,6 +281,8 @@ class TestBrowserCookiesTool:
         monkeypatch.setattr(browser_tool, "get_browser_manager", lambda: manager)
 
         def _fake_cdp(session_, method, params=None, target_id=None):
+            if method == "Target.getTargets":
+                return {"targetInfos": []}
             assert method == "Network.getCookies"
             return {
                 "cookies": [
@@ -298,6 +303,60 @@ class TestBrowserCookiesTool:
         # 密文落库
         raw = json.loads(repo.data[SETTINGS_KEY_CREDENTIAL_VAULT])
         assert raw[".example.com"]["cookies_enc"].startswith("enc:")
+
+    def test_export_filters_cookies_to_open_pages(self, repo, monkeypatch):
+        manager = BrowserSessionManager()
+        manager.register(_fake_session())
+        monkeypatch.setattr(browser_tool, "get_browser_manager", lambda: manager)
+
+        def _fake_cdp(session_, method, params=None, target_id=None):
+            if method == "Target.getTargets":
+                return {
+                    "targetInfos": [
+                        {
+                            "type": "page",
+                            "url": "https://www.example.com/list",
+                            "targetId": "t1",
+                        }
+                    ]
+                }
+            if method == "Runtime.evaluate":
+                return {"result": {"value": ""}}
+            assert method == "Network.getCookies"
+            return {
+                "cookies": [
+                    {"name": "SID", "value": "s", "domain": ".example.com"},
+                    {"name": "MAIL", "value": "m", "domain": ".other.com"},
+                ]
+            }
+
+        monkeypatch.setattr(browser_tool, "cdp_command", _fake_cdp)
+        with patch_vault_repo(repo):
+            result = BrowserCookiesTool().execute(action="export")
+        assert result.success is True
+        assert [item["domain"] for item in result.content["saved"]] == [".example.com"]
+
+    def test_export_reports_when_page_cookies_do_not_match(self, repo, monkeypatch):
+        manager = BrowserSessionManager()
+        manager.register(_fake_session())
+        monkeypatch.setattr(browser_tool, "get_browser_manager", lambda: manager)
+
+        def _fake_cdp(session_, method, params=None, target_id=None):
+            if method == "Target.getTargets":
+                return {
+                    "targetInfos": [
+                        {"type": "page", "url": "https://www.example.com/", "targetId": "t1"}
+                    ]
+                }
+            if method == "Runtime.evaluate":
+                return {"result": {"value": ""}}
+            return {"cookies": [{"name": "MAIL", "value": "m", "domain": ".other.com"}]}
+
+        monkeypatch.setattr(browser_tool, "cdp_command", _fake_cdp)
+        with patch_vault_repo(repo):
+            result = BrowserCookiesTool().execute(action="export")
+        assert result.success is False
+        assert "no_cookies_for_page" in result.error
 
     def test_export_no_cookies(self, repo, monkeypatch):
         manager = BrowserSessionManager()
@@ -1338,3 +1397,109 @@ class TestFindCredentialForHost:
         from backend.tools.credential_vault import find_credential_for_host
 
         assert find_credential_for_host("example.com", repo=repo) is None
+
+
+class TestStorageState:
+    """storage_state：cookie 档案旁路保存 localStorage（知网双 token 场景）。"""
+
+    _ORIGINS = [
+        {
+            "origin": "https://www.example.com",
+            "localStorage": {"cnki_user_token": "tok1", "theme": "light"},
+        },
+        {"origin": "https://api.example.com", "localStorage": {"k": "v"}},
+    ]
+
+    def test_storage_state_roundtrip(self, repo):
+        save_storage_state(".example.com", _COOKIES, self._ORIGINS, repo=repo)
+        assert load_storage_origins(".example.com", repo=repo) == self._ORIGINS
+        loaded = load_credential(".example.com", repo=repo)
+        assert loaded == _COOKIES
+
+    def test_resolve_filters_origins_by_url_host(self, repo):
+        save_storage_state(".example.com", _COOKIES, self._ORIGINS, repo=repo)
+        res = resolve_credential(
+            ".example.com", url="https://www.example.com/page", repo=repo
+        )
+        assert res.ok
+        assert [o["origin"] for o in res.origins] == ["https://www.example.com"]
+        # 非 https 或无匹配 host 时不泄漏其他 origin
+        res_http = resolve_credential(
+            ".example.com", url="http://www.example.com/page", repo=repo
+        )
+        assert res_http.origins == []
+
+    def test_storage_state_rejects_oversize_and_bad_origin(self, repo):
+        save_storage_state(
+            ".example.com",
+            _COOKIES,
+            [
+                {"origin": "ftp://example.com", "localStorage": {"k": "v"}},
+                {"origin": "https://www.example.com", "localStorage": {"k": "x" * 9000}},
+                {
+                    "origin": "https://www.example.com",
+                    "localStorage": {"ok": "v", "x" * 600: "big-key"},
+                },
+            ],
+            repo=repo,
+        )
+        origins = load_storage_origins(".example.com", repo=repo)
+        assert [o["origin"] for o in origins] == ["https://www.example.com"]
+        assert origins[0]["localStorage"] == {"ok": "v"}
+
+    def test_merge_storage_origins(self, repo):
+        save_storage_state(".example.com", _COOKIES, self._ORIGINS, repo=repo)
+        changed = merge_storage_origins(
+            ".example.com",
+            [
+                {
+                    "origin": "https://www.example.com",
+                    "localStorage": {"cnki_user_token": "tok2", "new_key": "n"},
+                }
+            ],
+            repo=repo,
+        )
+        assert changed is True
+        origins = {o["origin"]: o["localStorage"] for o in load_storage_origins(".example.com", repo=repo)}
+        assert origins["https://www.example.com"] == {
+            "cnki_user_token": "tok2",
+            "theme": "light",
+            "new_key": "n",
+        }
+        assert origins["https://api.example.com"] == {"k": "v"}
+        assert merge_storage_origins(".unknown.com", self._ORIGINS, repo=repo) is False
+
+    def test_list_reports_storage_fields(self, repo):
+        save_storage_state(".example.com", _COOKIES, self._ORIGINS, repo=repo)
+        entry = list_credentials(repo=repo)[0]
+        assert entry["has_storage"] is True
+        assert entry["origin_count"] == 2
+        assert isinstance(entry["saved_at"], int)
+        assert "tok1" not in json.dumps(entry)  # 值不回显
+
+    def test_cookie_refresh_preserves_storage(self, repo):
+        save_storage_state(".example.com", _COOKIES, self._ORIGINS, repo=repo)
+        save_credential(".example.com", _COOKIES, repo=repo)
+        assert load_storage_origins(".example.com", repo=repo) == self._ORIGINS
+
+    def test_merge_drops_foreign_origin(self, repo):
+        save_storage_state(".example.com", _COOKIES, self._ORIGINS, repo=repo)
+        merge_storage_origins(
+            ".example.com",
+            [{"origin": "https://evil.test", "localStorage": {"k": "x"}}],
+            repo=repo,
+        )
+        origins = {item["origin"] for item in load_storage_origins(".example.com", repo=repo)}
+        assert "https://evil.test" not in origins
+
+    def test_merge_respects_origin_limit(self, repo):
+        save_storage_state(".example.com", _COOKIES, self._ORIGINS, repo=repo)
+        many = [
+            {
+                "origin": "https://www.example.com" if i == 0 else f"https://s{i}.example.com",
+                "localStorage": {"k": str(i)},
+            }
+            for i in range(60)
+        ]
+        merge_storage_origins(".example.com", many, repo=repo)
+        assert len(load_storage_origins(".example.com", repo=repo)) <= 50
