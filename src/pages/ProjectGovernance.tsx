@@ -25,6 +25,7 @@ import {
   StudioMaterialsTabPanel,
   StudioProfileTabPanel,
 } from '../features/project-type/StudioMaterialsAndProfilePanels';
+import { PlaybookCard } from '../features/playbook/PlaybookCard';
 import {
   ARCHETYPE_ORDER,
   ARCHETYPE_BLUEPRINTS,
@@ -422,6 +423,7 @@ export function ProjectGovernance() {
           {activeTab === 'overview' && (
             <div className="space-y-4">
               <ProjectBootstrapPanel projectId={project.id} />
+              <PlaybookCard projectId={project.id} />
               <PolymorphicArchetypeCards project={project} projectType={activeProjectType} />
               <ProjectOverviewWidgets project={project} />
               <details className="rounded-lg border border-border bg-card/50">
@@ -524,6 +526,8 @@ export function ProjectGovernance() {
                   setProject((prev) => (prev ? { ...prev, ...patch } : prev));
                 }}
               />
+
+              <PlaybookCard projectId={project.id} compact />
 
               <div
                 className="space-y-3 rounded-lg border border-border p-3"
