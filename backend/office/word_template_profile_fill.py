@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from docxtpl import DocxTemplate
+from jinja2.sandbox import SandboxedEnvironment
 
 from .errors import (
     OfficeFileNotFoundError,
@@ -16,6 +19,7 @@ from .errors import (
     OfficeTemplateFillError,
 )
 from .path_safety import resolve_within
+from .word_template import _validate_template_safety
 from .word_template_profile import (
     _PLACEHOLDER_RE,
     _sdt_name,
@@ -151,7 +155,30 @@ def _iter_paragraphs(document: Any) -> List[Any]:
         for row in table.rows:
             for cell in row.cells:
                 paragraphs.extend(cell.paragraphs)
+    for section in document.sections:
+        for story in (section.header, section.footer):
+            try:
+                paragraphs.extend(story.paragraphs)
+                for table in story.tables:
+                    for row in table.rows:
+                        for cell in row.cells:
+                            paragraphs.extend(cell.paragraphs)
+            except (AttributeError, ValueError):
+                continue
     return paragraphs
+
+
+def _fill_story_content_controls(document: Any, data: Dict[str, Any]) -> None:
+    for section in document.sections:
+        for story in (section.header, section.footer):
+            try:
+                elements = story._element.iter(qn("w:sdt"))
+            except (AttributeError, ValueError):
+                continue
+            for sdt in elements:
+                name = _sdt_name(sdt)
+                if name and name in data:
+                    _set_sdt_text(sdt, _value_text(data[name]))
 
 
 def _fill_placeholders(document: Any, data: Dict[str, Any]) -> int:
@@ -200,10 +227,6 @@ def fill_word_template_profile(
         raise OfficeFileNotFoundError(template)
     resolved = resolve_within(root, template)
     profile = analyze_word_template_profile(resolved, workspace_path=str(root))
-    if profile["summary"]["has_jinja_control"]:
-        raise OfficeTemplateFillError(
-            "模板包含 Jinja 控制流；请使用现有 /office/word/template/fill"
-        )
     if not isinstance(data, dict):
         raise OfficeTemplateFillError("data 必须是对象")
     missing = sorted(
@@ -226,6 +249,7 @@ def fill_word_template_profile(
         name = _sdt_name(sdt)
         if name and name in data and _set_sdt_text(sdt, _value_text(data[name])):
             filled_names.add(name)
+    _fill_story_content_controls(document, data)
     _fill_bookmarks(document, data)
     _fill_placeholders(document, data)
     for slot in profile["slots"]:
@@ -241,13 +265,38 @@ def fill_word_template_profile(
         raise OfficeTemplateFillError("输出文件不能覆盖模板")
     if target.exists():
         raise OfficeTemplateFillError("输出文件已存在，拒绝覆盖")
+
+    has_control_flow = bool(profile["summary"]["has_jinja_control"])
+    work_path = target.with_name(f".{target.stem}.{uuid.uuid4().hex}.m1b.docx")
     try:
-        document.save(str(target))
+        document.save(str(work_path))
+        if has_control_flow:
+            _validate_template_safety(work_path)
+            template = DocxTemplate(str(work_path))
+            template.render(
+                data, jinja_env=SandboxedEnvironment(autoescape=False)
+            )
+            template.save(str(target))
+        else:
+            work_path.replace(target)
     except OSError as exc:
         raise OfficeTemplateFillError(f"写入输出文件失败: {exc}") from exc
+    finally:
+        try:
+            if work_path.exists():
+                work_path.unlink()
+        except OSError:
+            pass
 
     residual: List[str] = []
     warnings: List[Dict[str, Any]] = list(profile["warnings"])
+    if has_control_flow:
+        warnings.append(
+            {
+                "code": "jinja_control_rendered",
+                "message": "Jinja 控制流已由 docxtpl 渲染",
+            }
+        )
     try:
         output_profile = analyze_word_template_profile(target, workspace_path=str(root))
         residual = sorted(
@@ -283,6 +332,7 @@ def fill_word_template_profile(
         "filled_count": len(filled_names),
         "unfilled_slots": unfilled,
         "residual_placeholders": residual,
+        "jinja_rendered": has_control_flow,
         "warnings": warnings,
     }
 
