@@ -92,6 +92,7 @@
 | 114  | [会话状态徽章](./114-session-status-badges.md) | 侧栏徽章优先级 / 重试中与后台运行中 / run_status 写入链路与已知限制 |
 | 115  | [项目规程 Playbook](./115-project-playbook.md) | 阶段/交付物规格 + 项目级快照 + 确定性审计与阶段识别 + 目录/骨架/规则/里程碑动作 + JSON/Markdown/AGENTS 导出与导入冲突策略 |
 | 116  | [本地 OCR](./116-local-ocr.md) | RapidOCR/Tesseract 双引擎 + 聊天兜底/预览编辑 + Office/PDF/Wiki/工具接入 + 配置、性能与 Win7 边界 |
+| 117  | [桌面宠物](./117-desktop-pet.md) | 透明置顶窗 / AgentState 状态映射与面板 / 应用内形态 / Task Center + 编排 lanes + 定时失败聚合 / 自定义动画包（zip + sage-pet://）/ Win7 兼容模式 |
 
 ---
 

@@ -49,6 +49,9 @@ import { logger } from './logger';
 import { release as osRelease } from 'node:os';
 import { registerEditableContextMenu } from './contextMenu';
 import { setupTrayAndGlobalShortcut } from './tray';
+import { disposePet, getPetController, initPet } from './pet';
+import { registerPetPackProtocol, registerPetPackScheme } from './pet/packProtocol';
+import { petPacksDir } from './pet/packStore';
 import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
 import {
   registerSageFileProtocol,
@@ -328,6 +331,11 @@ if (isLegacyWindows()) {
   app.commandLine.appendSwitch('disable-gpu-sandbox');
   app.commandLine.appendSwitch('disable-dev-shm-usage');
 }
+
+// 2026-10-31: sage-pet:// serves imported pet packs from <userData>/pets/.
+// Scheme privileges must be declared before `app.whenReady()` resolves; the
+// handler itself is registered inside the whenReady chain below.
+registerPetPackScheme();
 
 let backendProc: ChildProcess | null = null;
 let backendGeneration = 0;
@@ -1107,6 +1115,18 @@ function openExternalSafely(url: string): void {
   shell.openExternal(url).catch(() => undefined);
 }
 
+function ensurePetInitialized(): void {
+  if (getPetController()) return;
+  initPet({
+    backendUrl: BACKEND_URL,
+    getAuthToken: () => backendAuthToken,
+    getMainWindow: () => mainWindow,
+    devUrl: VITE_DEV_URL,
+    isPackaged: app.isPackaged,
+    userDataDir: resolveSageUserDataDir(),
+  });
+}
+
 function createMainWindow(): void {
   // Platform-specific titlebar configuration:
   // - macOS: hide traffic light area, custom titlebar from y=28
@@ -1150,6 +1170,7 @@ function createMainWindow(): void {
     },
   });
   setMainWindow(win);
+  ensurePetInitialized();
 
   // 主窗口关闭时一并回收内置浏览器窗口：否则残留的可见/隐藏窗口会让
   // window-all-closed 永不触发，进程在无 UI 状态下继续存活。
@@ -1357,12 +1378,23 @@ async function registerIpcHandlers(): Promise<void> {
         return startWikiIngestStream(evt.sender, payload.args ?? {}, BACKEND_URL);
       }
       try {
-        return await invokeBackend(
+        const result = await invokeBackend(
           payload.cmd,
           payload.args ?? {},
           BACKEND_URL,
           backendAuthToken ?? undefined,
         );
+        if (payload.cmd === 'agent_chat_stream' && result && typeof result === 'object') {
+          const streamId = (result as { streamId?: unknown }).streamId;
+          const args = payload.args ?? {};
+          const sessionId = typeof args.sessionId === 'string' ? args.sessionId : null;
+          const rawMax = Number(args.maxContext);
+          const contextMax = Number.isFinite(rawMax) && rawMax > 0 ? rawMax : null;
+          if (typeof streamId === 'string') {
+            getPetController()?.trackStream(streamId, sessionId, contextMax);
+          }
+        }
+        return result;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         logger.error('ipc: invoke failed', { cmd: payload.cmd, err: msg });
@@ -1482,6 +1514,7 @@ async function registerIpcHandlers(): Promise<void> {
       const chatStreamMatch = event.match(/^chat-stream-(.+)$/);
       if (chatStreamMatch) {
         const streamId = chatStreamMatch[1];
+        getPetController()?.trackStream(streamId, null);
         const abort = new AbortController();
         eventSubscriptions.set(event, abort);
         // I2: 直接用 streamId attach 到后端已有流 — 不再需要 pendingChatArgs
@@ -2626,6 +2659,9 @@ app.whenReady().then(async () => {
   // 校验后安全渲染（MarkdownImage 生成 sage-file://p/<enc> URL）。
   // 必须在窗口加载页面前注册。
   registerSageFileProtocol();
+  // 2026-10-31: user-imported pet packs — serve <userData>/pets/<id>/ assets
+  // to both the overlay and the in-app pet via sage-pet://.
+  registerPetPackProtocol(petPacksDir(resolveSageUserDataDir()));
   ipcMain.handle('sage-file:register-root', (_evt, root: string) => {
     return registerWorkspaceRoot(String(root ?? ''));
   });
@@ -3080,6 +3116,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   appIsQuitting = true;
+  disposePet();
   globalShortcut.unregister(REMOTE_MCP_HOTKEY);
   getGlobalSyncer()?.stop();
   remoteMcp?.dispose();

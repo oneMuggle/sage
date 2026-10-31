@@ -23,6 +23,8 @@ import { useStore } from './shared/lib/store';
 import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
 import { ApprovalDialog, RemoteApprovalBridge } from './widgets/permission';
+import { InAppPet } from './widgets/pet/InAppPet';
+import { TaskCenterPetBridge } from './widgets/pet/TaskCenterPetBridge';
 import { QuestionDialog } from './widgets/question';
 import { BackendStatusBanner } from './widgets/system/BackendStatusBanner';
 import { ShortcutHelpOverlay } from './widgets/system/ShortcutHelpOverlay';
@@ -172,6 +174,22 @@ function FeedbackMenuBridge() {
   return null;
 }
 
+// 2026-10-30: 桌宠右键「宠物设置…」→ 主进程回发事件 → 跳到设置页 pet tab。
+function PetSettingsBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const unlisten = window.electronAPI?.listen?.('open-settings', () => {
+      // Add a nonce so a second click still changes the hash when the user
+      // has already switched away from the pet tab.
+      navigate(`/settings?tab=pet&t=${Date.now()}`);
+    });
+    return () => {
+      void unlisten?.then((fn) => fn?.());
+    };
+  }, [navigate]);
+  return null;
+}
+
 function App() {
   const [commandOpen, setCommandOpen] = useState(false);
   // U18 (round4): 快捷键帮助覆盖层（非输入焦点下按 ? 打开）
@@ -234,6 +252,7 @@ function App() {
         <AppStartupSettings />
         <SessionNotifyBridge />
         <FeedbackMenuBridge />
+        <PetSettingsBridge />
         <Routes>
           <Route
             path="/"
@@ -282,6 +301,10 @@ function App() {
         <QuestionDialog />
         {/* Task 11: 全局更新对话框 — 由 update:state-changed 事件驱动 */}
         <UpdateDialog />
+        {/* 2026-10-31: displayMode=in-app/both 时的应用内角落宠物 */}
+        <InAppPet />
+        {/* 2026-10-31: Task Center 后台任务上报给宠物 */}
+        <TaskCenterPetBridge />
       </NavHistoryProvider>
     </HashRouter>
   );

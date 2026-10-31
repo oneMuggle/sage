@@ -5,6 +5,7 @@
  * 查询/格式化/治理函数仍在 `settingsSearchIndex.ts`，对外 API 不变。
  */
 
+import { PET_SETTINGS_SEARCH_ENTRIES } from './settingsSearchEntriesPet';
 import type { SettingsTabKey } from './settingsTabs';
 
 export interface SettingsSearchEntry {
@@ -796,4 +797,5 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     labelEn: 'Audit export',
     keywords: 'audit export 审计 导出 复制 摘要 json 诊断',
   },
+  ...PET_SETTINGS_SEARCH_ENTRIES,
 ];

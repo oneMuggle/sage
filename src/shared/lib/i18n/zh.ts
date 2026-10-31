@@ -3,6 +3,8 @@
  */
 import { zhChatAndSider } from './locales/zh/chatAndSider';
 import { zhContextMenu } from './locales/zh/contextMenu';
+import { zhPet } from './locales/zh/pet';
+import { zhPetPack } from './locales/zh/petPack';
 import { zhSettingsAndModels } from './locales/zh/settingsAndModels';
 import { zhSettingsUi } from './locales/zh/settingsUi';
 import { zhWorkspaceAndTools } from './locales/zh/workspaceAndTools';
@@ -12,6 +14,8 @@ import { retryBannerZh } from './retryBanner';
 export const zh = {
   ...zhChatAndSider,
   ...zhContextMenu,
+  ...zhPet,
+  ...zhPetPack,
   ...zhSettingsAndModels,
   ...zhSettingsUi,
   ...zhWorkspaceAndTools,
