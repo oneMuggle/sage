@@ -96,6 +96,12 @@ export const enChatAndSider = {
   'chat.blocked.login.continue':
     'Signed in to {host}. Please continue the request that was blocked: {url}, and summarize the result.',
   'chat.blocked.login.failed': 'Sign-in was not completed: {error}',
+  'browser.panel.back': 'Back',
+  'browser.panel.forward': 'Forward',
+  'browser.panel.reload': 'Reload',
+  'browser.panel.placeholder': 'Enter a URL, e.g. https://kns.cnki.net',
+  'browser.panel.invalid_url': 'Enter a URL starting with http:// or https://',
+  'browser.panel.desktop_only': 'The browser panel is available in the Sage desktop app only.',
   'chat.loading': 'Loading conversation...',
   'chat.welcome': 'Welcome to Sage',
   'chat.welcome_sub': 'Start a new conversation',

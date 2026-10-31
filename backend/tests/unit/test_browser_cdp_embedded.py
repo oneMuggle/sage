@@ -131,16 +131,36 @@ def test_embedded_command_maps_bridge_error(monkeypatch):
         browser_cdp._embedded_command(_embedded_session(), "Page.navigate", {})
 
 
-def test_render_pool_skips_event_channel_for_embedded():
-    session = SimpleNamespace(browser_id="emb", browser_type=BrowserType.EMBEDDED)
-    assert web_render._ensure_pool_channel(session) is False
+def test_render_pool_uses_event_channel_for_embedded(monkeypatch):
+    monkeypatch.setattr(web_render, "start_event_channel", lambda *a, **kw: True)
+    session = SimpleNamespace(
+        browser_id="emb", browser_type=BrowserType.EMBEDDED, port=43210, ws_path="/ws"
+    )
+    assert web_render._ensure_pool_channel(session) is True
 
 
-def test_browser_launch_tool_embedded_skips_tracker(monkeypatch, tmp_path):
-    """回归：embedded 会话不得引用未赋值的 tracker（曾导致 UnboundLocalError）。"""
+def test_launch_browser_embedded_ws_path_has_bridge_auth(monkeypatch):
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER", "1")
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER_PORT", "43210")
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER_TOKEN", "tok-123")
+    monkeypatch.setattr(browser_cdp, "_manager", browser_cdp.BrowserSessionManager())
+    session = browser_cdp.launch_browser(headless=True, browser_id="sess-1")
+    assert session.ws_path.startswith("/devtools/browser/embedded?")
+    assert "token=tok-123" in session.ws_path
+    assert "session=sess-1" in session.ws_path
+    assert "headless=1" in session.ws_path
+
+
+def test_browser_launch_tool_embedded_starts_tracker(monkeypatch, tmp_path):
+    """embedded 与外部浏览器一样走 WS 下载事件通道（P2）。"""
     from backend.tools import browser_tool
 
     session = _embedded_session(headless=False)
+
+    class _Tracker:
+        connected = True
+        error = ""
+
     monkeypatch.setattr(browser_tool, "launch_browser", lambda **kw: session)
     monkeypatch.setattr(
         browser_tool,
@@ -149,14 +169,12 @@ def test_browser_launch_tool_embedded_skips_tracker(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(browser_tool, "cdp_command", lambda *a, **kw: {})
     monkeypatch.setattr(
-        browser_tool,
-        "start_download_tracking",
-        lambda *a, **kw: (_ for _ in ()).throw(AssertionError("embedded must skip tracker")),
+        browser_tool, "start_download_tracking", lambda *a, **kw: _Tracker()
     )
 
     result = browser_tool.BrowserLaunchTool().execute(headless=False)
     assert result.success is True
-    assert result.content["download_tracking"] is False
+    assert result.content["download_tracking"] is True
     assert result.content["browser_id"] == "emb"
 
 

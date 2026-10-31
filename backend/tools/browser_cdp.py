@@ -38,6 +38,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional
+from urllib.parse import quote
 
 from .browser_ws import ws_close, ws_connect, ws_recv_text, ws_send_text
 
@@ -556,18 +557,25 @@ def launch_browser(
     """
     embedded = _discover_embedded_env()
     if embedded:
+        session_id = browser_id or uuid.uuid4().hex[:12]
+        bridge_token = str(embedded["token"])
+        bridge_query = (
+            f"token={quote(bridge_token, safe='')}"
+            f"&session={quote(session_id, safe='')}"
+            f"&headless={'1' if headless else '0'}"
+        )
         session = BrowserSession(
-            browser_id=browser_id or uuid.uuid4().hex[:12],
+            browser_id=session_id,
             executable=EMBEDDED_EXECUTABLE,
             headless=headless,
             user_data_dir="",
             process=_EmbeddedProcess(),
             port=int(embedded["port"]),
-            ws_path="/devtools/browser/embedded",
+            ws_path=f"/devtools/browser/embedded?{bridge_query}",
             persistent=True,
             profile_name="embedded",
             browser_type=BrowserType.EMBEDDED,
-            bridge_token=str(embedded["token"]),
+            bridge_token=bridge_token,
         )
         get_browser_manager().register(session)
         return session

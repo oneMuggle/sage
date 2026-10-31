@@ -17,11 +17,22 @@
 import { randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { Duplex } from 'node:stream';
+import { WebSocketServer } from 'ws';
 
 export interface BridgeDebugger {
   attach(protocolVersion: string): void;
   detach?(): void;
   sendCommand(method: string, params?: Record<string, unknown>): Promise<unknown>;
+  on?(
+    event: 'message',
+    listener: (
+      event: unknown,
+      method: string,
+      params: Record<string, unknown>,
+      sessionId?: string,
+    ) => void,
+  ): void;
 }
 
 export interface BridgeWebContents {
@@ -32,6 +43,7 @@ export interface BridgeWebContents {
   loadURL(url: string): Promise<void>;
   capturePage(): Promise<{ toPNG(): Uint8Array }>;
   isDestroyed(): boolean;
+  on?(event: 'did-finish-load', listener: () => void): void;
 }
 
 export interface BridgeWindow {
@@ -66,6 +78,8 @@ export interface BridgeDeps {
   getSession(): BridgeSession;
   randomId(): string;
   log?(message: string): void;
+  /** 订阅 Electron will-download，把下载事件转成 CDP Browser.download* 帧。 */
+  onDownload?(handler: (method: string, params: Record<string, unknown>) => void): void;
 }
 
 export interface BridgeRequest {
@@ -81,6 +95,9 @@ interface TargetEntry {
   id: string;
   win: BridgeWindow;
   attached: boolean;
+  /** 已为哪些 WS sessionId 订阅了 Page/Network 事件（避免重复挂监听）。 */
+  pageSubscriptions?: Set<string>;
+  networkSubscriptions?: Set<string>;
 }
 
 type Mode = 'headless' | 'visible';
@@ -154,8 +171,29 @@ function toElectronCookie(cookie: Record<string, unknown>): Record<string, unkno
 export class AgentBrowserBridge {
   /** key = `${mode}|${session}`；session 由后端 browser_id 提供。 */
   private readonly targets = new Map<string, Map<string, TargetEntry>>();
+  private readonly eventClients = new Set<(message: Record<string, unknown>) => void>();
 
-  constructor(private readonly deps: BridgeDeps) {}
+  constructor(private readonly deps: BridgeDeps) {
+    deps.onDownload?.((method, params) => this.emitEvent({ method, params }));
+  }
+
+  /** 注册 WS 事件客户端；返回注销函数。 */
+  attachEventClient(send: (message: Record<string, unknown>) => void): () => void {
+    this.eventClients.add(send);
+    return () => {
+      this.eventClients.delete(send);
+    };
+  }
+
+  private emitEvent(message: Record<string, unknown>): void {
+    for (const client of this.eventClients) {
+      try {
+        client(message);
+      } catch {
+        /* 单个客户端异常不影响其他订阅者 */
+      }
+    }
+  }
 
   private scope(mode: Mode, session: string): Map<string, TargetEntry> {
     const key = `${mode}|${session || 'default'}`;
@@ -235,6 +273,83 @@ export class AgentBrowserBridge {
         }
         throw new Error(`unsupported method: ${method}`);
     }
+  }
+
+  /** 处理一条 WS CDP 消息（id/method/params[/sessionId]）。 */
+  async handleSocketMessage(
+    raw: string,
+    session: string,
+    headless: boolean,
+    send: (message: Record<string, unknown>) => void,
+  ): Promise<void> {
+    let message: Record<string, unknown>;
+    try {
+      message = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    const id = message.id;
+    const method = typeof message.method === 'string' ? message.method : '';
+    if (id === undefined || id === null || !method) return;
+    const mode: Mode = headless ? 'headless' : 'visible';
+    try {
+      let result: unknown;
+      const sessionId = typeof message.sessionId === 'string' ? message.sessionId : '';
+      if (sessionId) {
+        const entry = this.entryForSessionId(mode, session, sessionId);
+        result = await this.sendToDebugger(
+          entry,
+          method,
+          (message.params as Record<string, unknown>) || {},
+        );
+        if (method === 'Page.enable') this.subscribePageEvents(entry, sessionId);
+        if (method === 'Network.enable') this.subscribeNetworkEvents(entry, sessionId);
+      } else {
+        result = await this.dispatch({
+          method,
+          params: (message.params as Record<string, unknown>) || {},
+          session,
+          headless,
+        });
+      }
+      send({ id, result });
+    } catch (error) {
+      send({
+        id,
+        error: { message: error instanceof Error ? error.message : String(error) },
+      });
+    }
+  }
+
+  private entryForSessionId(mode: Mode, session: string, sessionId: string): TargetEntry {
+    const targetId = sessionId.startsWith('sage-') ? sessionId.slice(5) : sessionId;
+    const entry = this.scope(mode, session).get(targetId);
+    if (!entry) throw new Error(`unknown sessionId: ${sessionId}`);
+    return entry;
+  }
+
+  private subscribePageEvents(entry: TargetEntry, sessionId: string): void {
+    if (!entry.pageSubscriptions) entry.pageSubscriptions = new Set();
+    if (entry.pageSubscriptions.has(sessionId)) return;
+    entry.pageSubscriptions.add(sessionId);
+    entry.win.webContents.on?.('did-finish-load', () => {
+      this.emitEvent({
+        method: 'Page.loadEventFired',
+        params: { timestamp: Date.now() / 1000 },
+        sessionId,
+      });
+    });
+  }
+
+  private subscribeNetworkEvents(entry: TargetEntry, sessionId: string): void {
+    if (!entry.networkSubscriptions) entry.networkSubscriptions = new Set();
+    if (entry.networkSubscriptions.has(sessionId)) return;
+    entry.networkSubscriptions.add(sessionId);
+    entry.win.webContents.debugger.on?.('message', (_event, method, params) => {
+      if (method === 'Network.responseReceived') {
+        this.emitEvent({ method, params, sessionId });
+      }
+    });
   }
 
   /** 关闭全部窗口（应用退出时调用）。 */
@@ -407,6 +522,7 @@ export function startAgentBrowserBridge(
 ): Promise<AgentBrowserBridgeHandle> {
   const bridge = new AgentBrowserBridge(deps);
   const token = options.token ?? randomBytes(24).toString('base64url');
+  const wss = new WebSocketServer({ noServer: true });
   const server = createServer((req, res) => {
     void (async () => {
       try {
@@ -437,6 +553,38 @@ export function startAgentBrowserBridge(
       }
     })();
   });
+
+  server.on('upgrade', (req, socket, head) => {
+    let url: URL;
+    try {
+      url = new URL(req.url ?? '', 'http://127.0.0.1');
+    } catch {
+      socket.destroy();
+      return;
+    }
+    if (url.pathname !== '/devtools/browser/embedded') {
+      socket.destroy();
+      return;
+    }
+    if (url.searchParams.get('token') !== token) {
+      socket.destroy();
+      return;
+    }
+    const session = url.searchParams.get('session') || 'default';
+    const headless = url.searchParams.get('headless') === '1';
+    wss.handleUpgrade(req, socket as Duplex, head, (ws) => {
+      const send = (message: Record<string, unknown>): void => {
+        if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
+      };
+      const unsubscribe = bridge.attachEventClient(send);
+      ws.on('message', (data) => {
+        void bridge.handleSocketMessage(String(data), session, headless, send);
+      });
+      ws.on('close', unsubscribe);
+      ws.on('error', unsubscribe);
+    });
+  });
+
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, options.host ?? '127.0.0.1', () => {
@@ -447,6 +595,8 @@ export function startAgentBrowserBridge(
         close: () =>
           new Promise<void>((done) => {
             bridge.closeAll();
+            for (const client of wss.clients) client.terminate();
+            wss.close();
             server.close(() => done());
           }),
       });

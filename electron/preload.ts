@@ -104,6 +104,73 @@ const electronAPI = {
 
   memory: memoryBridge,
 
+  /** P2 应用内浏览器面板（BrowserView，主进程持有）。 */
+  browserPanel: {
+    show(): Promise<{ ok: boolean }> {
+      return ipcRenderer.invoke('sage:invoke', {
+        cmd: 'browser_panel',
+        args: { action: 'show' },
+      }) as Promise<{ ok: boolean }>;
+    },
+    hide(): Promise<{ ok: boolean }> {
+      return ipcRenderer.invoke('sage:invoke', {
+        cmd: 'browser_panel',
+        args: { action: 'hide' },
+      }) as Promise<{ ok: boolean }>;
+    },
+    setBounds(rect: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }): Promise<{ ok: boolean }> {
+      return ipcRenderer.invoke('sage:invoke', {
+        cmd: 'browser_panel',
+        args: { action: 'setBounds', rect },
+      }) as Promise<{ ok: boolean }>;
+    },
+    navigate(url: string): Promise<{ ok: boolean }> {
+      return ipcRenderer.invoke('sage:invoke', {
+        cmd: 'browser_panel',
+        args: { action: 'navigate', url },
+      }) as Promise<{ ok: boolean }>;
+    },
+    back(): Promise<{ ok: boolean }> {
+      return ipcRenderer.invoke('sage:invoke', {
+        cmd: 'browser_panel',
+        args: { action: 'back' },
+      }) as Promise<{ ok: boolean }>;
+    },
+    forward(): Promise<{ ok: boolean }> {
+      return ipcRenderer.invoke('sage:invoke', {
+        cmd: 'browser_panel',
+        args: { action: 'forward' },
+      }) as Promise<{ ok: boolean }>;
+    },
+    reload(): Promise<{ ok: boolean }> {
+      return ipcRenderer.invoke('sage:invoke', {
+        cmd: 'browser_panel',
+        args: { action: 'reload' },
+      }) as Promise<{ ok: boolean }>;
+    },
+    current(): Promise<{
+      url: string;
+      title: string;
+      canGoBack: boolean;
+      canGoForward: boolean;
+    }> {
+      return ipcRenderer.invoke('sage:invoke', {
+        cmd: 'browser_panel',
+        args: { action: 'current' },
+      }) as Promise<{
+        url: string;
+        title: string;
+        canGoBack: boolean;
+        canGoForward: boolean;
+      }>;
+    },
+  },
+
   /** Authenticated raw backend relay; the local capability stays in main. */
   backendRequest<T>(request: {
     method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';

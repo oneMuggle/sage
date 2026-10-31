@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import WebSocket from 'ws';
 
 import {
   AgentBrowserBridge,
@@ -51,9 +52,14 @@ function makeWindow(visible: boolean): FakeWindow {
 function makeDeps(cookieStore: Record<string, unknown>[] = [], failLoad = false) {
   const windows: FakeWindow[] = [];
   let counter = 0;
-  const deps: BridgeDeps & { windows: FakeWindow[]; cookieStore: Record<string, unknown>[] } = {
+  const deps: BridgeDeps & {
+    windows: FakeWindow[];
+    cookieStore: Record<string, unknown>[];
+    downloadHandler: ((method: string, params: Record<string, unknown>) => void) | null;
+  } = {
     windows,
     cookieStore,
+    downloadHandler: null,
     createWindow: (visible: boolean) => {
       const win = makeWindow(visible);
       if (failLoad) {
@@ -74,6 +80,9 @@ function makeDeps(cookieStore: Record<string, unknown>[] = [], failLoad = false)
     }),
     randomId: () => `t${++counter}`,
     log: () => undefined,
+    onDownload: (handler) => {
+      deps.downloadHandler = handler;
+    },
   };
   return deps;
 }
@@ -309,6 +318,55 @@ describe('AgentBrowserBridge', () => {
       }),
     ).rejects.toThrow('unsupported url scheme');
   });
+
+  it('forwards download events to attached event clients', () => {
+    const deps = makeDeps();
+    const bridge = new AgentBrowserBridge(deps);
+    const messages: Array<Record<string, unknown>> = [];
+    const unsubscribe = bridge.attachEventClient((message) => messages.push(message));
+
+    deps.downloadHandler?.('Browser.downloadWillBegin', { guid: 'g1', url: 'https://x/' });
+    expect(messages).toEqual([
+      { method: 'Browser.downloadWillBegin', params: { guid: 'g1', url: 'https://x/' } },
+    ]);
+
+    unsubscribe();
+    deps.downloadHandler?.('Browser.downloadWillBegin', { guid: 'g2' });
+    expect(messages).toHaveLength(1);
+  });
+
+  it('routes WS sessionId commands to the target debugger', async () => {
+    const deps = makeDeps();
+    const bridge = new AgentBrowserBridge(deps);
+    await bridge.dispatch({
+      method: 'Target.createTarget',
+      params: { url: 'about:blank' },
+      headless: true,
+      session: 's1',
+    });
+    const attached = (await bridge.dispatch({
+      method: 'Target.attachToTarget',
+      params: { targetId: 't1' },
+      headless: true,
+      session: 's1',
+    })) as { sessionId: string };
+
+    const sent: Array<Record<string, unknown>> = [];
+    await bridge.handleSocketMessage(
+      JSON.stringify({
+        id: 7,
+        method: 'Page.navigate',
+        params: { url: 'https://example.com/' },
+        sessionId: attached.sessionId,
+      }),
+      's1',
+      true,
+      (message) => sent.push(message),
+    );
+
+    expect(sent[0]).toMatchObject({ id: 7, result: { method: 'Page.navigate' } });
+    expect(deps.windows[0].debuggerCommands.at(-1)?.method).toBe('Page.navigate');
+  });
 });
 
 describe('startAgentBrowserBridge', () => {
@@ -338,6 +396,42 @@ describe('startAgentBrowserBridge', () => {
       const payload = (await bad.json()) as { error?: { message: string } };
       expect(payload.error?.message).toContain('unsupported method');
     } finally {
+      await handle.close();
+    }
+  });
+
+  it('accepts WS only with the token and dispatches commands', async () => {
+    const handle = await startAgentBrowserBridge(makeDeps(), { token: 'ws-token' });
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${handle.port}/devtools/browser/embedded?token=ws-token&session=s1&headless=1`,
+    );
+    try {
+      const reply = await new Promise<Record<string, unknown>>((resolve, reject) => {
+        ws.once('open', () => ws.send(JSON.stringify({ id: 1, method: 'Target.getTargets' })));
+        ws.once('message', (data) => resolve(JSON.parse(String(data)) as Record<string, unknown>));
+        ws.once('error', reject);
+        setTimeout(() => reject(new Error('ws timeout')), 3000);
+      });
+      expect(reply).toMatchObject({ id: 1, result: { targetInfos: [] } });
+    } finally {
+      ws.close();
+      await handle.close();
+    }
+  });
+
+  it('rejects WS without the token', async () => {
+    const handle = await startAgentBrowserBridge(makeDeps(), { token: 'ws-token' });
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${handle.port}/devtools/browser/embedded?session=s1`,
+    );
+    try {
+      const outcome = await new Promise<string>((resolve) => {
+        ws.once('open', () => resolve('open'));
+        ws.once('error', () => resolve('error'));
+      });
+      expect(outcome).toBe('error');
+    } finally {
+      ws.close();
       await handle.close();
     }
   });
