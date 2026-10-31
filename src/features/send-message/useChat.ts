@@ -679,6 +679,16 @@ export function useChat() {
                 });
               }
 
+              // 2026-10-31: 动态迭代预算自动延长 —— 不打断流，只提示用户
+              // 当前上限已提高（后端已依据进度审计决定继续）。
+              if (evt.state === 'iteration_checkpoint') {
+                const info = evt.budget_info;
+                const extensions = info?.extensions ?? 0;
+                const nextBudget = info?.next_budget ?? 0;
+                toast.info(`已自动延长迭代预算（第 ${extensions} 次，当前上限 ${nextBudget} 步）`);
+                return;
+              }
+
               // 2026-09 step-by-step: 收到 step_done → 把当前 streaming 快照成
               // 一条 Message 推入 completedSteps,然后重置 streaming 并切换
               // messageId,后续 deltas 路由到新消息。`return` 跳过本事件其余
