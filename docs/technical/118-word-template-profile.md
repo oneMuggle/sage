@@ -17,6 +17,7 @@
 | `bookmark` | `w:bookmarkStart/End`（非 `_` 开头） | 否 |
 | `placeholder` | `<<name>>` / `[[name]]` / `【name】` | 是 |
 | `jinja` | `{{ name }}`（无控制流） | 是 |
+| `image` | 名称含 `image/logo/photo/avatar/icon/图片` 的占位符 | 是（走 `images`） |
 
 槽位包含：`name`、`kind`、`type`、`required`、`description`、`current_value`、`confidence`、`anchor`。
 
@@ -48,13 +49,13 @@
 `POST /api/v1/office/word/template/profile/fill`
 
 ```json
-{"workspace_path": "/ws", "template_path": "/ws/template.docx", "output_filename": "filled.docx", "data": {"project_title": "Sage", "company": "New Co", "funding": "NSF"}}
+{"workspace_path": "/ws", "template_path": "/ws/template.docx", "output_filename": "filled.docx", "data": {"project_title": "Sage", "company": "New Co", "funding": "NSF"}, "images": {"logo": "assets/logo.png"}}
 ```
 
 响应：
 
 ```json
-{"ok": true, "template_path": "template.docx", "output_path": "filled.docx", "filename": "filled.docx", "filled_count": 3, "unfilled_slots": [], "residual_placeholders": [], "warnings": []}
+{"ok": true, "template_path": "template.docx", "output_path": "filled.docx", "filename": "filled.docx", "filled_count": 4, "unfilled_slots": [], "residual_placeholders": [], "jinja_rendered": false, "images_rendered": 1, "warnings": []}
 ```
 
 ## 4. 填充规则
@@ -64,18 +65,19 @@
 - 占位符/Jinja：正文、表格、页眉页脚文本替换；跨 run 时保留首个受影响 run 格式；
 - `{{ name | filter }}` 使用基础变量名，写入字符串值；
 - 含 `{%`/`{#` 控制流时：先完成手动槽位填充，再写临时 docx，经 `_validate_template_safety` 后用 docxtpl 渲染并输出；结果 `jinja_rendered=true`；
+- 图片槽位：`images` 中提供工作区路径或 data URL，手动文本替换跳过，交由 docxtpl `InlineImage` 渲染；结果 `images_rendered=N`；
 - 输出文件名不允许路径分隔符；不覆盖模板/已有文件；workspace 边界校验；
 - 填充后重新分析，残留占位符写入 `residual_placeholders` 并 warning。
 
 ## 5. 限制（后续）
 
-- Jinja 控制流通过 docxtpl 渲染，但尚未做自定义重复表格行/条件块 schema；
-- 图片/富文本槽位暂不支持；
+- 富文本（RichText）槽位、图片尺寸/裁剪参数暂不支持；
+- 自定义重复表格行/条件块 schema 暂不支持（docxtpl 循环仍可用）；
 - 书签跨段落暂不支持；
 - 前端表单/模板库 instantiate 工具未接入。
 
 ## 6. 测试
 
-- `backend/tests/unit/office/test_word_template_profile.py`（6）：内容控件/书签/占位符/Jinja 识别、填充与格式保留、Jinja 控制流混合渲染、页眉页脚、必填/覆盖拒绝；
+- `backend/tests/unit/office/test_word_template_profile.py`（8）：内容控件/书签/占位符/Jinja 识别、填充与格式保留、Jinja 控制流混合渲染、页眉页脚、图片槽位、必填/覆盖拒绝；
 - `backend/tests/integration/test_office_routes.py`：analyze/fill 端点；
 - ruff / py38 / architecture 门禁通过。
