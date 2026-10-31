@@ -255,6 +255,26 @@ def test_config_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.min_confidence == 0.0
 
 
+def test_office_enabled_from_preference(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SAGE_OCR", raising=False)
+    monkeypatch.setattr(
+        "backend.services.ocr.config._read_preference",
+        lambda: {"office_enabled": True},
+    )
+
+    assert load_ocr_config().office_enabled is True
+
+
+def test_sage_ocr_env_overrides_office_setting(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "backend.services.ocr.config._read_preference",
+        lambda: {"office_enabled": False},
+    )
+    monkeypatch.setenv("SAGE_OCR", "1")
+
+    assert load_ocr_config().office_enabled is True
+
+
 def test_rapidocr_model_dir_resolution(monkeypatch, tmp_path) -> None:
     from backend.services.ocr.engines.rapidocr import resolve_model_dir
 

@@ -34,6 +34,8 @@ class OcrConfig:
     """OCR 运行配置。"""
 
     enabled: bool = True
+    #: Office/PDF 扫描页 OCR（历史 SAGE_OCR=1 语义；默认关闭）
+    office_enabled: bool = False
     engine: str = "auto"
     lang: str = "auto"
     prefer_local_for_images: bool = False
@@ -105,8 +107,13 @@ def load_ocr_config() -> OcrConfig:
     """读取 OCR 配置：preference → env 覆盖 → 默认值。"""
     raw = _read_preference()
 
-    enabled_raw = _env_override(raw, "SAGE_OCR", "enabled")
-    enabled = _as_bool(enabled_raw, True)
+    enabled = _as_bool(_pick(raw, "enabled", "enabled"), True)
+
+    office_pref = _pick(raw, "office_enabled", "officeEnabled")
+    office_env = os.environ.get("SAGE_OCR")
+    office_enabled = _as_bool(
+        office_env if office_env is not None else office_pref, False
+    )
 
     engine = str(_pick(raw, "engine", "engine") or "auto").strip().lower()
     if engine not in _VALID_ENGINES:
@@ -143,6 +150,7 @@ def load_ocr_config() -> OcrConfig:
 
     return OcrConfig(
         enabled=enabled,
+        office_enabled=office_enabled,
         engine=engine,
         lang=lang,
         prefer_local_for_images=prefer_local,

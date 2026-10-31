@@ -233,6 +233,8 @@ export const zhSettingsUi = {
   'settings.ocr.lang_en': '英文',
   'settings.ocr.prefer_local': '有视觉模型时也优先本地 OCR',
   'settings.ocr.prefer_local_desc': '纯文字截图更快、更省；失败仍可回退视觉模型',
+  'settings.ocr.office_enabled': '扫描 PDF / Office 页面也启用 OCR',
+  'settings.ocr.office_enabled_desc': '仅对文本层为空的扫描页生效；会明显增加处理时间',
   'settings.ocr.saving': '保存中…',
   'settings.ocr.test': '测试识别',
   'settings.ocr.testing': '识别中…',

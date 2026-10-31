@@ -53,8 +53,8 @@
 # =============================================================================
 # 本地 OCR 推荐引擎 (2026-10-31) — RapidOCR + ONNX Runtime
 # =============================================================================
-# 为什么单独放: RapidOCR/onnxruntime 含平台二进制与 ONNX 模型，体积远大于
-# 默认依赖；缺依赖时 backend/services/ocr 能力位降级，不影响主程序启动。
+# main 安装包已在 backend/requirements-bundled.txt 中捆绑 rapidocr/onnxruntime/
+# opencv-headless/Pillow；本文件仅用于 dev/CI 手动安装（保持默认依赖轻量）。
 # 启用（main / Win10+）:
 #   pip install "rapidocr>=3.10,<4" "onnxruntime==1.19.2"
 #   # 模型外置到 SAGE_USER_DATA_DIR/models/rapidocr/{det,rec,cls}.onnx
