@@ -94,6 +94,70 @@ async def test_bind_and_audit_reflect_files(
 
 
 @pytest.mark.asyncio()
+async def test_playbook_library_save_list_bind(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    from backend.services.playbook_library import build_export_envelope, get_builtin
+
+    envelope = build_export_envelope(
+        get_builtin("coding-project"), include_scaffold=False, app_version="test"
+    )
+    saved = await client.post("/api/v1/playbooks/library", json={"envelope": envelope})
+    assert saved.status_code == 200, saved.text
+    payload = saved.json()
+    assert payload["created"] is True
+    library_id = payload["item"]["id"]
+    assert payload["item"]["stage_count"] == 5
+
+    listed = await client.get("/api/v1/playbooks/library")
+    assert listed.status_code == 200
+    assert any(item["id"] == library_id for item in listed.json()["items"])
+
+    project = await _register(client, project_dir)
+    bound = await client.put(
+        "/api/v1/projects/{}/playbook".format(project["id"]),
+        json={"library_id": library_id},
+    )
+    assert bound.status_code == 200, bound.text
+    assert bound.json()["bound"] is True
+    assert bound.json()["source"].startswith("library:")
+
+    deleted = await client.delete(
+        f"/api/v1/playbooks/library/{library_id}"
+    )
+    assert deleted.status_code == 200
+    listed = await client.get("/api/v1/playbooks/library")
+    assert not any(item["id"] == library_id for item in listed.json()["items"])
+
+
+@pytest.mark.asyncio()
+async def test_import_can_save_to_library(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    from backend.services.playbook_library import build_export_envelope, get_builtin
+
+    project = await _register(client, project_dir)
+    envelope = build_export_envelope(
+        get_builtin("cn-research-grant"), include_scaffold=False, app_version="test"
+    )
+    imported = await client.post(
+        "/api/v1/playbooks/import",
+        json={
+            "envelope": envelope,
+            "project_id": project["id"],
+            "conflict": "save_as_new",
+            "save_to_library": True,
+        },
+    )
+    assert imported.status_code == 200, imported.text
+    listed = await client.get("/api/v1/playbooks/library")
+    assert any(
+        item["name"] == "科研课题（开题 · 实施 · 结题）"
+        for item in listed.json()["items"]
+    )
+
+
+@pytest.mark.asyncio()
 async def test_bind_projects_rules_and_stage_adds_more(
     client: httpx.AsyncClient, project_dir: Path
 ) -> None:

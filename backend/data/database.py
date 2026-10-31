@@ -1037,6 +1037,24 @@ class Database:
         )
         conn.commit()
 
+        # Playbook library (2026-10-31): imported/shared playbooks that are not
+        # bound to a single project. Deduplicated by canonical spec hash.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS playbook_library (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                source TEXT NOT NULL,
+                spec_json TEXT NOT NULL,
+                spec_hash TEXT NOT NULL UNIQUE,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_playbook_library_recent "
+            "ON playbook_library(created_at DESC)"
+        )
+        conn.commit()
+
         # Project constraints (2026-09-24): 结构化项目约束，替代纯文本
         # instructions。按类别分类（coding_style/security/testing 等），支持
         # 触发模式匹配（glob）和优先级排序。注入到系统提示词影响 AI 行为。

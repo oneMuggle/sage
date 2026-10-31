@@ -22,13 +22,16 @@ import type {
   PlaybookAuthorPreview,
   PlaybookCurrent,
   PlaybookImportPreview,
+  PlaybookLibraryItem,
   PlaybookSpec,
   PlaybookSummary,
   PlaybookVersion,
 } from '../../shared/api/playbookApi';
 import { Button } from '../../shared/ui/Button';
 
+import { PlaybookAuthorPanel } from './PlaybookAuthorPanel';
 import { PlaybookChecklist } from './PlaybookChecklist';
+import { PlaybookImportPreviewCard } from './PlaybookImportPreviewCard';
 import { PlaybookSpecEditor } from './PlaybookSpecEditor';
 
 export interface PlaybookCardProps {
@@ -54,6 +57,7 @@ function downloadText(filename: string, text: string, mime: string): void {
 export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) {
   const [current, setCurrent] = useState<PlaybookCurrent | null>(null);
   const [builtins, setBuiltins] = useState<PlaybookSummary[]>([]);
+  const [library, setLibrary] = useState<PlaybookLibraryItem[]>([]);
   const [selectedPlaybook, setSelectedPlaybook] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -68,6 +72,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const [importConflict, setImportConflict] = useState<'save_as_new' | 'merge' | 'replace'>(
     'save_as_new',
   );
+  const [saveToLibrary, setSaveToLibrary] = useState(false);
   const [versions, setVersions] = useState<PlaybookVersion[]>([]);
   const [showVersions, setShowVersions] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -79,9 +84,20 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       const data = await playbookApi.getCurrent(projectId);
       setCurrent(data);
       if (!data.bound) {
-        const list = await playbookApi.listBuiltin();
+        const [list, items] = await Promise.all([
+          playbookApi.listBuiltin(),
+          playbookApi.listLibrary(),
+        ]);
         setBuiltins(list);
-        setSelectedPlaybook((prev) => prev || data.suggested?.id || list[0]?.id || '');
+        setLibrary(items);
+        const defaultSelection = data.suggested?.id
+          ? `builtin:${data.suggested.id}`
+          : list[0]
+            ? `builtin:${list[0].id}`
+            : items[0]
+              ? `library:${items[0].id}`
+              : '';
+        setSelectedPlaybook((prev) => prev || defaultSelection);
       }
     } catch (err) {
       setError(errorMessage(err));
@@ -109,7 +125,11 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
 
   const handleBind = () =>
     run('bind', async () => {
-      const data = await playbookApi.bind(projectId, { playbookId: selectedPlaybook });
+      const [kind, id] = selectedPlaybook.split(':', 2);
+      const data =
+        kind === 'library'
+          ? await playbookApi.bind(projectId, { libraryId: id })
+          : await playbookApi.bind(projectId, { playbookId: id });
       setCurrent(data);
       setNotice('已绑定项目规程');
     });
@@ -199,6 +219,16 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       setNotice(
         (result.created ? '已写入 Wiki：' : '已更新 Wiki：') + result.path,
       );
+    });
+
+  const handleSaveToLibrary = () =>
+    run('save-library', async () => {
+      const exported = await playbookApi.exportPlaybook(projectId, 'json', true);
+      const item = await playbookApi.saveLibrary(
+        exported.content as Record<string, unknown>,
+        'project',
+      );
+      setNotice('已保存到规程库：' + item.name);
     });
 
   const handleWaive = (stageId: string, artifactId: string) =>
@@ -291,10 +321,16 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const handleImportConfirm = () =>
     run('import', async () => {
       if (!importEnvelope) return;
-      const data = await playbookApi.importPlaybook(importEnvelope, projectId, importConflict);
+      const data = await playbookApi.importPlaybook(
+        importEnvelope,
+        projectId,
+        importConflict,
+        saveToLibrary,
+      );
       setCurrent(data);
       setImportPreview(null);
       setImportEnvelope(null);
+      setSaveToLibrary(false);
       setNotice('规程已导入并绑定');
     });
 
@@ -357,11 +393,22 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
             onChange={(event) => setSelectedPlaybook(event.target.value)}
             className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
           >
-            {builtins.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}（{item.stage_count} 阶段）
-              </option>
-            ))}
+            <optgroup label="内置规程">
+              {builtins.map((item) => (
+                <option key={item.id} value={`builtin:${item.id}`}>
+                  {item.name}（{item.stage_count} 阶段）
+                </option>
+              ))}
+            </optgroup>
+            {library.length > 0 && (
+              <optgroup label="规程库">
+                {library.map((item) => (
+                  <option key={item.id} value={`library:${item.id}`}>
+                    {item.name}（{item.stage_count} 阶段）
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
           <Button
             size="sm"
@@ -389,80 +436,29 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
             }}
           />
         </div>
-        <div className="space-y-2 rounded-md border border-border p-2">
-          <div className="text-xs text-muted-foreground">
-            不确定怎么划分阶段？让 AI 根据项目生成一份草案。
-          </div>
-          <textarea
-            value={authorNotes}
-            onChange={(event) => setAuthorNotes(event.target.value)}
-            placeholder="补充要求（可选）：资助方、必须交付的材料、时间节点…"
-            rows={2}
-            className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
-            data-testid="playbook-author-notes"
-          />
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => void handleAuthor()}
-            disabled={busy === 'author'}
-            data-testid="playbook-author-btn"
-          >
-            {busy === 'author' ? '生成中…' : 'AI 定制规程'}
-          </Button>
-          {authorResult && (
-            <div className="space-y-1 text-xs">
-              <div className="font-medium text-foreground">{authorResult.playbook.name}</div>
-              <div className="text-muted-foreground">
-                {authorResult.rationale}
-                {authorResult.source === 'deterministic' ? '（未配置 LLM，已降级）' : ''}
-              </div>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => void handleBindAuthored()}
-                disabled={busy === 'bind-authored'}
-                data-testid="playbook-bind-authored"
-              >
-                {busy === 'bind-authored' ? '绑定中…' : '绑定生成的规程'}
-              </Button>
-            </div>
-          )}
-        </div>
+        <PlaybookAuthorPanel
+          notes={authorNotes}
+          onNotesChange={setAuthorNotes}
+          onAuthor={() => void handleAuthor()}
+          authoring={busy === 'author'}
+          authorResult={authorResult}
+          onBindAuthored={() => void handleBindAuthored()}
+          bindingAuthored={busy === 'bind-authored'}
+        />
         {importPreview && (
-          <div
-            className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs"
-            data-testid="playbook-import-preview"
-          >
-            <div className="font-medium text-foreground">
-              导入预览：{importPreview.playbook.name}
-            </div>
-            <div className="text-muted-foreground">
-              阶段 {importPreview.playbook.stages.length} 个 · 目录{' '}
-              {importPreview.scaffold.directories.length} 个 · 导入不包含对方项目文件内容
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => void handleImportConfirm()}
-                disabled={busy === 'import'}
-                data-testid="playbook-import-confirm"
-              >
-                {busy === 'import' ? '导入中…' : '导入并绑定'}
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  setImportPreview(null);
-                  setImportEnvelope(null);
-                }}
-              >
-                取消
-              </Button>
-            </div>
-          </div>
+          <PlaybookImportPreviewCard
+            preview={importPreview}
+            conflict={importConflict}
+            onConflictChange={setImportConflict}
+            saveToLibrary={saveToLibrary}
+            onSaveToLibraryChange={setSaveToLibrary}
+            onConfirm={() => void handleImportConfirm()}
+            onCancel={() => {
+              setImportPreview(null);
+              setImportEnvelope(null);
+            }}
+            importing={busy === 'import'}
+          />
         )}
         {error && <div className="text-xs text-destructive">{error}</div>}
         {notice && <div className="text-xs text-primary">{notice}</div>}
@@ -539,6 +535,15 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
             data-testid="playbook-wiki-export"
           >
             {busy === 'wiki-export' ? '写入中…' : '写入 Wiki'}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void handleSaveToLibrary()}
+            disabled={busy === 'save-library'}
+            data-testid="playbook-save-library"
+          >
+            {busy === 'save-library' ? '保存中…' : '保存到规程库'}
           </Button>
           <Button
             size="sm"
@@ -697,58 +702,19 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       )}
 
       {importPreview && (
-        <div
-          className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs"
-          data-testid="playbook-import-preview"
-        >
-          <div className="font-medium text-foreground">导入预览：{importPreview.playbook.name}</div>
-          <div className="text-muted-foreground">
-            阶段 {importPreview.playbook.stages.length} 个 · 目录{' '}
-            {importPreview.scaffold.directories.length} 个 · 导入不包含对方项目文件内容
-          </div>
-          {Object.entries(importPreview.diff).length > 0 && (
-            <div className="text-muted-foreground">
-              变更：
-              {Object.entries(importPreview.diff)
-                .filter(([, value]) => Array.isArray(value) && value.length > 0)
-                .map(([key, value]) => `${key} ${(value as unknown[]).length} 项`)
-                .join('，') || '无结构变更'}
-            </div>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              aria-label="导入冲突策略"
-              value={importConflict}
-              onChange={(event) =>
-                setImportConflict(event.target.value as 'save_as_new' | 'merge' | 'replace')
-              }
-              className="rounded-md border border-input bg-background px-2 py-1 text-xs"
-            >
-              <option value="save_as_new">另存为新规程</option>
-              <option value="merge">合并到当前规程</option>
-              <option value="replace">替换当前规程</option>
-            </select>
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => void handleImportConfirm()}
-              disabled={busy === 'import'}
-              data-testid="playbook-import-confirm"
-            >
-              {busy === 'import' ? '导入中…' : '导入并绑定'}
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                setImportPreview(null);
-                setImportEnvelope(null);
-              }}
-            >
-              取消
-            </Button>
-          </div>
-        </div>
+        <PlaybookImportPreviewCard
+          preview={importPreview}
+          conflict={importConflict}
+          onConflictChange={setImportConflict}
+          saveToLibrary={saveToLibrary}
+          onSaveToLibraryChange={setSaveToLibrary}
+          onConfirm={() => void handleImportConfirm()}
+          onCancel={() => {
+            setImportPreview(null);
+            setImportEnvelope(null);
+          }}
+          importing={busy === 'import'}
+        />
       )}
 
       {showVersions && (
