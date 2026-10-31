@@ -1,0 +1,139 @@
+{
+  "schema_version": "1.0",
+  "id": "business-dossier",
+  "name": "公文档案（立卷 · 编制 · 签发）",
+  "description": "面向公文、合同、招投标与行政案卷的立卷—编制—签发封卷管理",
+  "applies_to": {
+    "project_types": ["business"],
+    "sub_types": ["archive_dossier", "contract_mgmt", "report_writing", "presentation"]
+  },
+  "directory_layout": [
+    { "path": "00_立项与背景材料", "required": true, "purpose": "任务通知、会议纪要与立项说明" },
+    { "path": "01_原始依据与佐证", "required": true, "purpose": "原始凭据、政策依据与参考范本" },
+    { "path": "02_编制中工作稿", "required": true, "purpose": "正在起草与修订的工作稿" },
+    { "path": "03_定稿与签发归档", "required": true, "purpose": "终审定稿、签发件与归档清单" }
+  ],
+  "stages": [
+    {
+      "id": "initiation",
+      "label": "立卷归集",
+      "order": 1,
+      "objective": "明确任务依据、受控目录与原始佐证",
+      "artifacts": [
+        {
+          "id": "background_materials",
+          "label": "立项与背景材料",
+          "required": true,
+          "match": { "globs": ["00_立项与背景材料/**/*"], "min_count": 1 },
+          "target_dir": "00_立项与背景材料"
+        },
+        {
+          "id": "source_evidence",
+          "label": "原始依据与佐证",
+          "required": false,
+          "match": { "globs": ["01_原始依据与佐证/**/*"], "min_count": 1 },
+          "target_dir": "01_原始依据与佐证"
+        }
+      ],
+      "exit_criteria": [
+        { "id": "dossier_created", "label": "案卷目录与原始依据已归集", "type": "artifact", "artifact_id": "background_materials" }
+      ],
+      "rules": [
+        { "template_key": "archive_dossier_cn", "priority": 8 },
+        {
+          "content": "01_原始依据与佐证 目录只读：AI 仅可引用核对，严禁修改或覆盖",
+          "category": "archive",
+          "trigger_pattern": "01_原始依据与佐证/**",
+          "priority": 9
+        }
+      ],
+      "recommended_milestones": [
+        { "title": "完成立卷与原始依据归集", "due_offset_days": 7 }
+      ]
+    },
+    {
+      "id": "execution",
+      "label": "文书编制",
+      "order": 2,
+      "objective": "按范本完成工作稿起草、排版与内部会签",
+      "artifacts": [
+        {
+          "id": "working_draft",
+          "label": "编制中工作稿",
+          "required": true,
+          "match": {
+            "globs": ["02_编制中工作稿/**/*.{doc,docx,xlsx,pptx,pdf,md}"],
+            "min_count": 1
+          },
+          "target_dir": "02_编制中工作稿"
+        }
+      ],
+      "exit_criteria": [
+        { "id": "draft_ready", "label": "主体文书工作稿完成", "type": "artifact", "artifact_id": "working_draft" }
+      ],
+      "rules": [
+        { "template_key": "document_format", "priority": 7 },
+        {
+          "content": "金额必须大小写一致，主体名称使用全称且全文一致",
+          "category": "compliance",
+          "trigger_pattern": "02_编制中工作稿/**",
+          "priority": 8
+        }
+      ],
+      "recommended_milestones": [
+        { "title": "完成主体文书初稿与会签", "due_offset_days": 21 }
+      ]
+    },
+    {
+      "id": "closure",
+      "label": "签发封卷",
+      "order": 3,
+      "objective": "完成合规审校、正式签发与归档核验",
+      "artifacts": [
+        {
+          "id": "final_documents",
+          "label": "定稿与签发件",
+          "required": true,
+          "match": { "globs": ["03_定稿与签发归档/**/*.{pdf,doc,docx}"], "min_count": 1 },
+          "target_dir": "03_定稿与签发归档"
+        },
+        {
+          "id": "archive_checklist",
+          "label": "归档核验清单",
+          "required": true,
+          "match": { "globs": ["03_定稿与签发归档/**/*归档*", "**/归档清单*"] },
+          "missing_action": {
+            "type": "create_doc_stub",
+            "payload": { "path": "03_定稿与签发归档/归档核验清单.md", "template": "generic_document" }
+          }
+        }
+      ],
+      "exit_criteria": [
+        { "id": "dossier_closed", "label": "定稿签发并完成归档核验", "type": "artifact", "artifact_id": "final_documents" }
+      ],
+      "rules": [
+        { "template_key": "contract_review", "priority": 7 }
+      ],
+      "recommended_milestones": [
+        { "title": "完成签发与案卷封存", "due_offset_days": 14 }
+      ]
+    }
+  ],
+  "global_rules": [
+    {
+      "content": "案卷编号、密级与发文机关必须在 SAGE.md 与所有交付物中保持一致",
+      "category": "archive",
+      "priority": 8
+    }
+  ],
+  "todos": [],
+  "ai_guidance": {
+    "stage_hint": "立卷阶段先确认依据与目录；编制阶段遵循范本与版式；签发阶段优先合规审校与归档核验。",
+    "completeness_tone": "用文件证据说明缺失项，并给出一个可执行动作。"
+  },
+  "meta": {
+    "author": "Sage 内置",
+    "license": "CC-BY-4.0",
+    "created_at": "2026-10-31"
+  }
+}

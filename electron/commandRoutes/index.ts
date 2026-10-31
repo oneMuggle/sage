@@ -20,6 +20,7 @@ import { memoryRoutes } from './memory';
 import { officeRoutes } from './office';
 import { orchestrationRoutes } from './orchestration';
 import { projectRoutes } from './projects';
+import { playbookRoutes } from './playbooks';
 import { promptRoutes } from './prompts';
 import { sessionRoutes } from './sessions';
 import { settingsRoutes } from './settings';
@@ -34,6 +35,7 @@ export const DOMAIN_ROUTES: Record<string, CommandRoute> = {
   ...orchestrationRoutes,
   ...officeRoutes,
   ...projectRoutes,
+  ...playbookRoutes,
   ...promptRoutes,
   ...integrationRoutes,
   ...feedbackRoutes,

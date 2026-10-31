@@ -1,0 +1,95 @@
+{
+  "schema_version": "1.0",
+  "id": "personal-knowledge",
+  "name": "个人知识库（收集 · 整理 · 归档）",
+  "description": "面向个人笔记、读书卡片与事务整理的收件箱—笔记—归档流程",
+  "applies_to": {
+    "project_types": ["personal"],
+    "sub_types": ["knowledge_base", "journal", "todo_planning", "learning_notes"]
+  },
+  "directory_layout": [
+    { "path": "00_inbox", "required": true, "purpose": "未整理的收集箱" },
+    { "path": "01_notes", "required": true, "purpose": "原子笔记与专题卡片" },
+    { "path": "02_references", "required": false, "purpose": "外部资料与摘录" },
+    { "path": "03_archive", "required": false, "purpose": "已完成专题的历史归档" }
+  ],
+  "stages": [
+    {
+      "id": "active",
+      "label": "活跃整理",
+      "order": 1,
+      "objective": "清空收件箱，沉淀可检索的原子笔记",
+      "artifacts": [
+        {
+          "id": "inbox",
+          "label": "收件箱收集",
+          "required": true,
+          "match": { "globs": ["00_inbox/**/*"], "min_count": 1 },
+          "target_dir": "00_inbox"
+        },
+        {
+          "id": "notes",
+          "label": "原子笔记",
+          "required": true,
+          "match": { "globs": ["01_notes/**/*.{md,txt}"], "min_count": 1 },
+          "target_dir": "01_notes",
+          "missing_action": {
+            "type": "create_doc_stub",
+            "payload": { "path": "01_notes/第一篇笔记.md", "template": "generic_document" }
+          }
+        },
+        {
+          "id": "references",
+          "label": "参考资料",
+          "required": false,
+          "match": { "globs": ["02_references/**/*"] },
+          "target_dir": "02_references"
+        }
+      ],
+      "exit_criteria": [
+        { "id": "inbox_processed", "label": "收件箱已处理并形成笔记", "type": "artifact", "artifact_id": "notes" }
+      ],
+      "rules": [
+        { "template_key": "concise_note_taking", "priority": 7 }
+      ],
+      "recommended_milestones": []
+    },
+    {
+      "id": "archived",
+      "label": "归档封存",
+      "order": 2,
+      "objective": "专题结束，历史笔记归档并更新索引",
+      "artifacts": [
+        {
+          "id": "archived_notes",
+          "label": "归档笔记",
+          "required": false,
+          "match": { "globs": ["03_archive/**/*"] },
+          "target_dir": "03_archive"
+        }
+      ],
+      "exit_criteria": [],
+      "rules": [],
+      "recommended_milestones": [
+        { "title": "完成阶段复盘与历史专题归档", "due_offset_days": 30 }
+      ]
+    }
+  ],
+  "global_rules": [
+    {
+      "content": "敏感账号、证件与凭据信息不得写入笔记；需要时使用占位符",
+      "category": "privacy",
+      "priority": 9
+    }
+  ],
+  "todos": [],
+  "ai_guidance": {
+    "stage_hint": "活跃整理阶段优先清空收件箱与提炼卡片；归档阶段优先复盘与索引更新。",
+    "completeness_tone": "提示具体缺失的笔记或归档动作，避免泛泛而谈。"
+  },
+  "meta": {
+    "author": "Sage 内置",
+    "license": "CC-BY-4.0",
+    "created_at": "2026-10-31"
+  }
+}
