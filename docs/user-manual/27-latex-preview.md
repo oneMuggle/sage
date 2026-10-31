@@ -49,7 +49,8 @@ KaTeX 不支持的宏或包会降级显示；可切到“源码”查看，或�
 2. 点击“分析模板”，查看槽位（title/author/abstract/keywords/`<<占位符>>`/注释）；
 3. 填写槽位内容；作者/单位/关键词多个值用逗号分隔；
 4. 图片槽位填写工作区内的图片路径（如 `figures/arch.png`）；填充时会把图片复制到输出文件旁的 `<输出名>_assets/`，并自动改写 `\includegraphics` 路径；
-5. 指定输出文件名（默认 `main-filled.tex`），点击“填充并输出”。
+5. 文献槽位填写工作区内的 `.bib` 路径（如 `refs.bib`）；填充时会复制 `.bib` 并重写 `\bibliography` / `\addbibresource` 路径；
+6. 指定输出文件名（默认 `main-filled.tex`），点击“填充并输出”。
 
 也可以让 agent 使用：
 
@@ -62,6 +63,7 @@ KaTeX 不支持的宏或包会降级显示；可切到“源码”查看，或�
 - 作者/单位数组用 `\and` 连接，关键词用逗号；
 - 文本会自动做 LaTeX 转义；
 - 图片槽位只接受工作区内 `.png/.jpg/.jpeg/.pdf/.eps/.svg`（单图 ≤20 MiB）；同名图片自动加 `-N` 后缀，不覆盖已有文件；
+- 文献槽位只接受工作区内 `.bib`（≤20 MiB，需能解析出条目）；复制后 `\bibliography` 路径不带 `.bib`，`\addbibresource` 保留 `.bib`；
 - 只写新文件，不会覆盖模板或已有文件；
 - 填充后做括号/环境配对校验，但**不编译 PDF**。
 

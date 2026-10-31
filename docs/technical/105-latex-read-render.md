@@ -134,6 +134,7 @@ backend/office/latex/
 - `author/affil/institute` 数组用 ` \and ` 连接，`keywords` 用逗号；
 - 只替换槽位内容，其他源码原样保留；
 - 图片槽位（`type: "image"`）：值必须是工作区内图片（`.png/.jpg/.jpeg/.pdf/.eps/.svg`，≤20 MiB）；复制到 `<输出名>_assets/` 并重写 `\includegraphics` 路径；同名不同源自动 `-N` 去重；
+- 文献槽位（`type: "bibliography"`）：值必须是工作区内 `.bib`（≤20 MiB，解析成功）；复制到 `<输出名>_assets/`；`\bibliography` 重写为无扩展名路径，`\addbibresource` 保留 `.bib`；同名去重；
 - 输出新文件，拒绝覆盖模板/已有文件；
 - 写入前校验括号/环境配对；失败不写文件；
 - 不自动补 `.bib`、不处理其它资源槽位（后续 L4c+）。
@@ -285,7 +286,7 @@ backend/office/latex/
 - 只读工作区/项目目录内文件；`resolve` 后必须落在 root 内，拒绝绝对路径、`..`、URL、管道；
 - 循环 include 检测；单文件 ≤5 MiB、项目 ≤20 MiB、include 深度 ≤20、文件数 ≤200、blocks ≤5000；
 - 前端 KaTeX 由 `rehype-katex` 渲染；`LatexPreview` 不使用 `dangerouslySetInnerHTML` 渲染用户文本；
-- 模板填充图片槽位：图片必须来自工作区；复制文件名清洗为 `[A-Za-z0-9._-]`，不覆盖已有文件；
+- 模板填充图片/文献槽位：资源必须来自工作区；复制文件名清洗为 `[A-Za-z0-9._-]`，不覆盖已有文件；
 - 不支持：`.cls/.sty` 宏展开、TikZ 渲染、DOCX↔LaTeX；TeX 编译/PDF 仅在检测到本机引擎时可用；
 - 项目 zip 导入仅接受工作区内 `.zip`；不执行/不编译解压内容，不做病毒扫描；
 - 模板填充不自动补 `.bib`；图片槽位会复制到输出目录旁的 `<输出名>_assets/`；前端模板面板使用路径输入（暂未接入通用文件选择器）。
@@ -294,7 +295,7 @@ backend/office/latex/
 
 ## 6. 测试
 
-- `backend/tests/unit/office/latex/test_template.py`（12）：profile/slots/style/macros、填充转义/必填/拒绝覆盖、validator、图片槽位识别/复制/路径重写/越界/后缀/同名去重；
+- `backend/tests/unit/office/latex/test_template.py`（17）：profile/slots/style/macros、填充转义/必填/拒绝覆盖、validator、图片槽位、bibliography 槽位识别/复制/路径重写/无效或缺失 `.bib`；
 - `backend/tests/unit/office/latex/test_audit.py`（10）：元数据/引用/交叉引用/图表/重复 label/TODO/危险命令/必需章节/include；
 - `backend/tests/unit/office/latex/test_compile.py`（6）：引擎探测/无引擎/audit gate/成功复制 PDF/输出覆盖/超时；
 - `backend/tests/unit/office/latex/test_diff.py`（3）：无 latexdiff/生成 diff.tex/输出覆盖；
@@ -314,7 +315,7 @@ backend/office/latex/
 - `backend/tests/api/test_artifact_routes.py`：`.tex` artifact；
 - `backend/tests/unit/tools/test_office_latex_tool.py`（4）：上下文/成功/越界/后缀；
 - `backend/tests/unit/test_profiles_office_tools.py`、`test_tool_bundles_parity.py`：工具面/快照；
-- 前端 `LatexPreview.test.tsx`（3）、`LatexTemplatePanel.test.tsx`（3）、`LatexAuditPanel.test.tsx`（2）、`LatexBuildPanel.test.tsx`（2）、`LatexProjectImportPanel.test.tsx`（2）、`LatexPdfAuditPanel.test.tsx`（2）、`LatexCompliancePanel.test.tsx`（3）、`LatexProfileLibraryPanel.test.tsx`（2）。
+- 前端 `LatexPreview.test.tsx`（3）、`LatexTemplatePanel.test.tsx`（4）、`LatexAuditPanel.test.tsx`（2）、`LatexBuildPanel.test.tsx`（2）、`LatexProjectImportPanel.test.tsx`（2）、`LatexPdfAuditPanel.test.tsx`（2）、`LatexCompliancePanel.test.tsx`（3）、`LatexProfileLibraryPanel.test.tsx`（2）。
 
 ## 7. 后续
 

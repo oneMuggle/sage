@@ -12,7 +12,7 @@ import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 import { joinWorkspacePath } from './latexPath';
 
 function defaultValue(slot: LatexTemplateSlot): string {
-  if (slot.type === 'image') {
+  if (slot.type === 'image' || slot.type === 'bibliography') {
     return /^(<<|\[\[|【)/.test(slot.current_value) ? '' : slot.current_value;
   }
   if (slot.type === 'list') {
@@ -164,7 +164,11 @@ export function LatexTemplatePanel({ workspacePath: wsOverride }: LatexTemplateP
                 <input
                   className="rounded border border-border bg-bg px-2 py-1 text-sm"
                   placeholder={
-                    slot.type === 'image' ? '工作区图片路径，如 figures/arch.png' : undefined
+                    slot.type === 'image'
+                      ? '工作区图片路径，如 figures/arch.png'
+                      : slot.type === 'bibliography'
+                        ? '工作区 .bib 路径，如 refs.bib'
+                        : undefined
                   }
                   value={values[slot.name] ?? ''}
                   onChange={(event) =>
@@ -177,6 +181,9 @@ export function LatexTemplatePanel({ workspacePath: wsOverride }: LatexTemplateP
                 当前值：{slot.current_value || '（空）'}
                 {slot.type === 'list' ? ' · 多个值用逗号分隔' : ''}
                 {slot.type === 'image' ? ' · 图片会复制到输出目录旁的 *_assets' : ''}
+                {slot.type === 'bibliography'
+                  ? ' · .bib 会复制到输出目录旁的 *_assets'
+                  : ''}
               </span>
             </label>
           ))}
@@ -218,6 +225,12 @@ export function LatexTemplatePanel({ workspacePath: wsOverride }: LatexTemplateP
           {fillResult.images_copied && fillResult.images_copied.length > 0 ? (
             <div className="text-xs text-muted mt-1">
               图片：{fillResult.images_copied.join(', ')}
+            </div>
+          ) : null}
+          {fillResult.bibliographies_copied &&
+          fillResult.bibliographies_copied.length > 0 ? (
+            <div className="text-xs text-muted mt-1">
+              文献：{fillResult.bibliographies_copied.join(', ')}
             </div>
           ) : null}
           {fillResult.validation.issues.length > 0 ? (
