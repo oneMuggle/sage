@@ -25,6 +25,25 @@ export { messageApi } from './messageApi';
 export { promptApi } from './promptApi';
 export type { PromptTemplate } from './promptApi';
 export { projectApi } from './projectApi';
+export { playbookApi } from './playbookApi';
+export type {
+  PlaybookAction,
+  PlaybookActionsResult,
+  PlaybookArtifactAudit,
+  PlaybookArtifactSpec,
+  PlaybookAudit,
+  PlaybookBindPayload,
+  PlaybookContentCheck,
+  PlaybookCurrent,
+  PlaybookExportResult,
+  PlaybookImportPreview,
+  PlaybookMatch,
+  PlaybookSpec,
+  PlaybookStageAudit,
+  PlaybookStageSpec,
+  PlaybookState,
+  PlaybookSummary,
+} from './playbookApi';
 export type {
   ProjectOpenResult,
   ProjectSummary,
