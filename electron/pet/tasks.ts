@@ -81,6 +81,26 @@ export function normalizeTaskReports(input: unknown, limit = 20): PetTaskReport[
   return result;
 }
 
+/**
+ * Combine Task Center reports (renderer registered) with polled background
+ * sources (orchestration/scheduled). Primary entries win duplicate ids.
+ */
+export function mergeTaskReports(
+  primary: readonly PetTaskReport[],
+  secondary: readonly PetTaskReport[],
+  limit = 20,
+): PetTaskReport[] {
+  const seen = new Set<string>();
+  const merged: PetTaskReport[] = [];
+  for (const task of [...primary, ...secondary]) {
+    if (seen.has(task.id)) continue;
+    seen.add(task.id);
+    merged.push(task);
+    if (merged.length >= limit) break;
+  }
+  return merged;
+}
+
 interface TaskAction {
   action: PetAction;
   detail: PetDetail | null;

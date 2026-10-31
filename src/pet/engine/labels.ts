@@ -94,6 +94,8 @@ export function taskStatusLabel(status: string): string {
 export function taskKindLabel(kind: string): string {
   if (kind === 'office') return 'Office';
   if (kind === 'wiki') return 'Wiki';
+  if (kind === 'orchestration') return isZh() ? '编排' : 'Orchestration';
+  if (kind === 'scheduled') return isZh() ? '定时' : 'Scheduled';
   return isZh() ? '任务' : 'Task';
 }
 

@@ -101,7 +101,11 @@ FastAPI chat stream (NDJSON)
 - Task Center 是 renderer 本地状态（office/wiki/custom/编排任务在页面里 register），主进程无法轮询；`TaskCenterPetBridge` 在 App 层订阅 store，把非终态任务压缩为 `PetTaskReport`，经 `pet:report-tasks` 上报。
 - 主进程 `normalizeTaskReports` 校验/去重/限制 20 条；`PetSnapshot.tasks` 随状态一起下发。
 - 仅在聊天空闲/睡眠时用后台任务覆盖动作：`awaiting_approval` > `failed`（10 分钟窗口）> `running/queued/paused`；活跃聊天会话始终优先。
-- 面板「后台任务」区显示 kind/title/status/percent；带 `sessionId` 的任务可点击回到对应会话。定时任务和未注册到 Task Center 的独立编排 run 仍不会覆盖宠物。
+- 面板「后台任务」区显示 kind/title/status/percent；带 `sessionId` 的任务可点击回到对应会话。
+- 主进程补充轮询（`electron/pet/backgroundTasks.ts`，桌宠启用且 `displayMode≠off` 时每 20s）：
+  - `GET /api/v1/orchestration/lanes?limit=20`：按 `metadata.team_id` 把一个编排 run 的多个 lane 聚合成一行（标题优先 `metadata.goal`），`blocked→awaiting_approval`、`running→running`、`created/ready/queued→queued`、近期 `failed→failed`；成功/取消的组不常驻面板。
+  - `GET /api/v1/scheduled/tasks`：后端没有持久「运行中」状态，只在 `last_status=failed` 且 `last_attempt` 在 10 分钟内时上报失败（带目标 `session_id`，可点回会话）。
+  - 轮询失败保留上一份快照；与 Task Center 报告按 id 去重合并（Task Center 优先），总量仍限 20 条。
 
 ## 4. 窗口行为
 
@@ -201,6 +205,7 @@ my-pet.zip
   `petPackManifest.test.ts`（schema/根目录/引用校验）、
   `petPackStore.test.ts`（导入/导出/删除/同名拒绝）、
   `packProtocol.test.ts`（URL 解析/Range）、
+  `petBackgroundTasks.test.ts`（编排 lane 聚合/定时失败/任务合并）、
   `src/pet/__tests__/animation.test.ts`、`src/pet/__tests__/tempo.test.ts`、
   `src/pet/__tests__/packs.test.ts`、
   `src/pages/settings/__tests__/PetTab.pack.test.tsx`、
@@ -221,7 +226,7 @@ my-pet.zip
 - 未在 Win7 真机验证透明/穿透；兼容模式已写好但需真机回归。
 - 提示音为 WebAudio 合成短音，不是角色语音；需一次用户手势解锁 AudioContext。
 - 面板已能列出最近/活跃会话，但「每个会话一只宠物」未实现。
-- 独立编排 run（`orch-events-*`）、Task Center、定时任务：Task Center（office/wiki/custom）已通过 renderer 上报接入；未注册到 Task Center 的独立 run 与定时任务仍不会反馈到宠物。
+- 独立编排 run 已通过主进程轮询 lanes 接入（按 team 聚合）；定时任务只覆盖「近期投递失败」，因为后端没有持久运行中状态，成功/等待中的定时任务不会显示。
 - 上下文条依赖 chat 参数里的 `maxContext` 与 usage 事件；自动推断上下文时可能只显示已用量、不显示百分比。
 - 完整动画包已全量内置（约 52.7MB），安装包相应增大；如果后续要控制体积，可改成「精选内置 + 完整包可选下载/导入」。
 - 自定义 pet pack 导入/导出已实现（zip + `sage-pet://`）；尚未做包内素材热更新（同名 id 需删除后重新导入），也未验证 Win7 下大体积 zip 的导入耗时。聊天/TTS 未做。
