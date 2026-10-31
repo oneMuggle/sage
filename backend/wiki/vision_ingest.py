@@ -67,9 +67,11 @@ class VisionIngestConfig:
     """Vision-enabled Ingest 配置。"""
 
     ingest_config: IngestConfig
-    vision_config: VisionConfig
+    vision_config: Optional[VisionConfig]
     project_root: Path
     auto_caption: bool = True
+    #: 视觉模型缺失/失败时，是否用本地 OCR 提取图片文字
+    ocr_fallback: bool = True
 
 
 async def ingest_with_vision(
@@ -139,7 +141,7 @@ async def ingest_with_vision(
         except Exception as e:
             logger.warning("图片提取失败（继续 Ingest）: error_type=%s", type(e).__name__)
 
-        # Step 3: 为每个图片生成描述
+        # Step 3: 为每个图片生成描述（视觉模型缺失/失败时回退本地 OCR）
         image_captions: Dict[int, str] = {}
         if config.auto_caption and images:
             for i, img in enumerate(images):
@@ -152,19 +154,11 @@ async def ingest_with_vision(
                         }
                     )
 
-                try:
-                    result = await caption_image(
-                        config=config.vision_config,
-                        image_data=img.data,
-                        image_path=f"{source_file_path.name}#image-{img.index}",
-                        project_root=config.project_root,
-                        context=f"来自文档: {source_file_path.name}",
-                    )
-                    image_captions[img.index] = result.caption
-                    logger.info("图片 %d 描述生成完成", img.index)
-                except Exception as e:
-                    logger.warning("图片 %d 描述失败: error_type=%s", img.index, type(e).__name__)
-                    image_captions[img.index] = "[图片描述生成失败]"
+                image_captions[img.index] = await _caption_or_ocr(
+                    config=config,
+                    img=img,
+                    source_file_path=source_file_path,
+                )
 
         # Step 4: 将图片描述插入到文档内容
         enhanced_content = _insert_image_captions(text_content, image_captions)
@@ -192,6 +186,53 @@ async def ingest_with_vision(
             source_snapshot.close()
         with suppress(OSError):
             source_snapshot_path.unlink()
+
+
+async def _caption_or_ocr(
+    config: VisionIngestConfig,
+    img: ImageInfo,
+    source_file_path: Path,
+) -> str:
+    """优先视觉描述；视觉缺失/失败且允许时回退本地 OCR。"""
+    if config.vision_config is not None:
+        try:
+            result = await caption_image(
+                config=config.vision_config,
+                image_data=img.data,
+                image_path=f"{source_file_path.name}#image-{img.index}",
+                project_root=config.project_root,
+                context=f"来自文档: {source_file_path.name}",
+            )
+            caption = (result.caption or "").strip()
+            if caption:
+                logger.info("图片 %d 描述生成完成", img.index)
+                return caption
+        except Exception as e:
+            logger.warning(
+                "图片 %d 描述失败: error_type=%s", img.index, type(e).__name__
+            )
+
+    if config.ocr_fallback:
+        text = _ocr_image_text(img.data)
+        if text:
+            logger.info("图片 %d 使用本地 OCR 文本", img.index)
+            return "[本地 OCR]\n" + text
+
+    return "[未提取到图片文字/描述]"
+
+
+def _ocr_image_text(image_data: bytes) -> Optional[str]:
+    """本地 OCR 单图文本；不可用/空结果返回 None。"""
+    try:
+        from backend.services.ocr import get_ocr_service
+
+        result = get_ocr_service().recognize_bytes(image_data, source="wiki_ingest")
+        text = (result.text or "").strip()
+        if result.ok and text:
+            return text
+    except Exception:  # noqa: BLE001 — OCR 是增强能力，失败不影响 ingest
+        logger.warning("图片本地 OCR 失败", exc_info=True)
+    return None
 
 
 def _insert_image_captions(content: str, captions: Dict[int, str]) -> str:

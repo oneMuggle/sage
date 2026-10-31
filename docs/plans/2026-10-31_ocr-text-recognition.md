@@ -559,7 +559,11 @@ UI：
 - `backend/tools/ocr_image_tool.py` + `MULTIMODAL_TOOLS` / `tool_bundles` 注册；
 - `backend/data/settings_repo.py`：新增 `ocr_config` preference；前端 `settingsRegistry` 同步元数据；
 - 前端 `ChatInput`：OCR 能力探测、上传门控、`chat.ocr_fallback_info` 提示；
-- 测试：新增 5 个测试文件（服务/引擎、Agent 兜底、工具、REST、ChatInput），
+- Wiki：`POST /wiki/vision` 视觉失败时回退本地 OCR（响应 `mode=ocr`/`engine`）；
+  `VisionIngestConfig.vision_config` 可缺省，caption 缺失/失败时回退 OCR 文本；
+- 设置页：新增「本地 OCR」卡片（引擎状态、语言、`prefer_local_for_images`），
+  通过 `ocr_config` preference 持久化；
+- 测试：新增 6 个测试文件（服务/引擎、Agent 兜底、工具、REST、ChatInput、Wiki 回退），
   相关后端 98 项、前端 15 项通过；`ruff`、ESLint、`check_py38_compat`、
   `architecture-check` 通过。
 - 真实冒烟（临时 venv：Python 3.10 + `rapidocr>=3.10,<4` + `onnxruntime==1.19.2`）：
@@ -569,9 +573,9 @@ UI：
 
 待完成：
 
-- Wiki 图片摄入接 OCR；
-- 设置页可视化面板（引擎状态/模型下载/测试按钮）与 Electron 模型下载器；
-- 真实 RapidOCR/Tesseract 安装后的端到端性能与 CER 实测；
+- 设置页模型下载器（Electron 清单/SHA-256/进度）与 OCR 测试按钮；
+- 前端 OCR 结果查看/复制/编辑/重试；
+- 真实 1080p 截图性能与 CER 基准（小图冒烟已完成）；
 - Win7 真机验证（Tesseract 4.1 / RapidOCR 实验路径）与 CI 收口。
 
 
@@ -599,13 +603,13 @@ UI：
 ### M2：Agent 工具 + Wiki/预览集成（1 周）
 
 - [x] `ocr_image` 工具（工具三件套、profile 白名单、schema 契约测试）；
-- [ ] Wiki 图片摄入无视觉模型时用 OCR；
+- [x] Wiki 图片摄入无视觉模型时用 OCR（`/wiki/vision` + `vision_ingest`）；
 - [ ] 前端 OCR 结果查看/复制/编辑/重试；
 - 验收：Agent 能对工作区截图调用 OCR；工具可见性计数与白名单测试通过。
 
 ### M3：设置 UI + 模型下载 + 文档（1–2 周）
 
-- [ ] 设置页 OCR 区块（状态/下载/测试/隐私说明）；
+- [x] 设置页 OCR 区块（引擎状态/语言/优先策略/隐私说明）；
 - [ ] 复用 Electron 模型下载器（清单/SHA-256/进度/取消）；
 - [ ] 技术文档章节 + 用户手册；
 - 验收：新用户无需命令行即可启用；离线环境手动放置模型可工作。
