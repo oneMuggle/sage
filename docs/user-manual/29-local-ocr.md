@@ -89,5 +89,5 @@ Tesseract 4.1 路径可用；RapidOCR 在 Win7 上属于实验路径，默认不
 
 ## 8. 相关文档
 
-- 技术细节：[115 本地 OCR](../technical/115-local-ocr.md)
+- 技术细节：[116 本地 OCR](../technical/116-local-ocr.md)
 - 方案与选型：[docs/plans/2026-10-31_ocr-text-recognition.md](../../docs/plans/2026-10-31_ocr-text-recognition.md)

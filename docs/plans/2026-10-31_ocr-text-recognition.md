@@ -566,7 +566,7 @@ UI：
 - 聊天输入区：新增「图片文字（本地 OCR）」预览卡片，支持查看、复制、编辑、重新识别；
   编辑后的文本通过 `image_ocr_texts` 随消息发送，Agent 直接采用、不再重复识别；
 - 性能调优：截图默认 `max_side=1280` + 关闭方向分类，Office 扫描页保留 2048 + 分类；
-- 文档：`docs/technical/115-local-ocr.md` + `docs/user-manual/28-local-ocr.md`；
+- 文档：`docs/technical/116-local-ocr.md` + `docs/user-manual/29-local-ocr.md`；
 - 基准：`scripts/ocr_benchmark.py`（合成图 + CER + 耗时，可 JSON 输出）；
 - 测试：新增 6 个测试文件（服务/引擎、Agent 兜底、工具、REST、ChatInput、Wiki 回退），
   相关后端 98 项、前端 15 项通过；`ruff`、ESLint、`check_py38_compat`、
@@ -624,7 +624,7 @@ UI：
 - [x] 设置页 OCR 区块（引擎状态/引擎选择/语言/测试识别/优先策略/隐私说明）；
 - [ ] 复用 Electron 模型下载器（清单/SHA-256/进度/取消）；RapidOCR wheel 已自带 small 模型，
       下载器主要用于 tiny/更大模型的可选升级；
-- [x] 技术文档章节 + 用户手册（`115-local-ocr.md` / `28-local-ocr.md`）；
+- [x] 技术文档章节 + 用户手册（`116-local-ocr.md` / `29-local-ocr.md`）；
 - 验收：新用户无需命令行即可启用；离线环境手动放置模型可工作。
 
 ### M4：win7 收口与批量能力（1 周）

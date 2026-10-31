@@ -37,6 +37,7 @@ class ProjectModel(BaseModel):
     detected_type: Optional[str] = None
     project_sub_type: Optional[str] = None
     bootstrap_state: Optional[str] = None
+    playbook_state: Optional[str] = None
     session_count: int = 0
     last_session_id: Optional[str] = None
 
