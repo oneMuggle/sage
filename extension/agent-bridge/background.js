@@ -168,8 +168,7 @@ async function backendRequest(baseUrl, path, body, token) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message =
-      data.message || data.error || `Sage 后端返回 HTTP ${response.status}`;
+    const message = data.message || data.error || `Sage 后端返回 HTTP ${response.status}`;
     throw extensionError(message, data.error || 'backend_error');
   }
   return data;
@@ -367,7 +366,7 @@ function normalizeCookie(cookie) {
 
 async function collectLocalStorage(tabId) {
   const expression =
-    "(() => { try { const data = {}; for (let i = 0; i < localStorage.length; i++) { const key = localStorage.key(i); if (key) data[key] = localStorage.getItem(key); } return JSON.stringify({ origin: location.origin, localStorage: data }); } catch (error) { return JSON.stringify({ origin: location.origin, localStorage: {} }); } })()";
+    '(() => { try { const data = {}; for (let i = 0; i < localStorage.length; i++) { const key = localStorage.key(i); if (key) data[key] = localStorage.getItem(key); } return JSON.stringify({ origin: location.origin, localStorage: data }); } catch (error) { return JSON.stringify({ origin: location.origin, localStorage: {} }); } })()';
   const evaluated = await sendCdp(tabId, 'Runtime.evaluate', {
     expression,
     returnByValue: true,

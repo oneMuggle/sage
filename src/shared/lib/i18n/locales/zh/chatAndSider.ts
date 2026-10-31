@@ -508,8 +508,7 @@ export const zhChatAndSider = {
   'settings.network.extension.install': '安装步骤',
   'settings.network.extension.install.step1':
     '打开 chrome://extensions（Edge 为 edge://extensions），开启开发者模式。',
-  'settings.network.extension.install.step2':
-    '点击「加载已解压的扩展程序」，选择下面的扩展目录。',
+  'settings.network.extension.install.step2': '点击「加载已解压的扩展程序」，选择下面的扩展目录。',
   'settings.network.extension.install.step3':
     '点击扩展图标，粘贴配对码完成配对；之后在目标网站点「共享此标签页」。',
   'settings.network.extension.path': '扩展目录',

@@ -108,11 +108,7 @@ function render() {
   if (!paired) {
     els.baseUrl.value = (config && config.baseUrl) || els.baseUrl.value;
     els.pairLabel.value = (config && config.label) || els.pairLabel.value;
-    setError(
-      state.lastError
-        ? friendlyError(state.lastError, state.lastError)
-        : '',
-    );
+    setError(state.lastError ? friendlyError(state.lastError, state.lastError) : '');
     return;
   }
 
@@ -134,18 +130,13 @@ function render() {
   els.syncBtn.disabled = busy || !shared;
 
   if (shared) {
-    els.shareHint.textContent =
-      notice || 'Sage 正在使用这个标签页；你可以随时点「停止共享」。';
+    els.shareHint.textContent = notice || 'Sage 正在使用这个标签页；你可以随时点「停止共享」。';
   } else if (!shareable) {
     els.shareHint.textContent = '请切换到 http/https 网页后再共享。';
   } else if (currentState.lastError) {
-    els.shareHint.textContent = friendlyError(
-      currentState.lastError,
-      currentState.lastError,
-    );
+    els.shareHint.textContent = friendlyError(currentState.lastError, currentState.lastError);
   } else {
-    els.shareHint.textContent =
-      notice || 'Sage 只能操作你手动共享的这一个标签页。';
+    els.shareHint.textContent = notice || 'Sage 只能操作你手动共享的这一个标签页。';
   }
   setError('');
 }

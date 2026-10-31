@@ -45,8 +45,7 @@ export function webAccessApiUrl(path: string): string {
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? 'GET') as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   // Electron：走主进程中继（注入本地 bearer token、解析真实后端端口）
-  const bridge =
-    typeof window !== 'undefined' ? window.electronAPI?.backendRequest : undefined;
+  const bridge = typeof window !== 'undefined' ? window.electronAPI?.backendRequest : undefined;
   if (bridge) {
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
     return bridge<T>({ method, path, body });
@@ -163,9 +162,7 @@ export async function revokeBrowserExtensionDevice(deviceId: string): Promise<vo
 }
 
 export async function getSiteLoginJob(jobId: string): Promise<SiteLoginJob> {
-  return requestJson<SiteLoginJob>(
-    `/api/v1/web-access/sites/login/${encodeURIComponent(jobId)}`,
-  );
+  return requestJson<SiteLoginJob>(`/api/v1/web-access/sites/login/${encodeURIComponent(jobId)}`);
 }
 
 export async function deleteSiteSession(domain: string): Promise<void> {

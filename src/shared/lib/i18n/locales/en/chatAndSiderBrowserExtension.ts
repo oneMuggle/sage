@@ -17,10 +17,8 @@ export const enChatAndSiderBrowserExtension = {
   'settings.network.extension.revoked': 'Extension device revoked',
   'settings.network.extension.generate': 'Generate pairing code',
   'settings.network.extension.generating': 'Generating…',
-  'settings.network.extension.code.title':
-    'Pairing code (valid for 5 minutes, single use)',
-  'settings.network.extension.code.expired':
-    'This pairing code has expired. Generate a new one.',
+  'settings.network.extension.code.title': 'Pairing code (valid for 5 minutes, single use)',
+  'settings.network.extension.code.expired': 'This pairing code has expired. Generate a new one.',
   'settings.network.extension.code.base_url': 'Backend URL to enter in the extension',
   'settings.network.extension.code.copy': 'Copy',
   'settings.network.extension.code.copied': 'Pairing code copied',

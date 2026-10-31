@@ -62,11 +62,13 @@ describe('webAccessClient', () => {
   it('times out when the job never finishes', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => jsonResponse({ job_id: 'j1', url: 'https://a.example', status: 'running' })),
+      vi.fn(async () =>
+        jsonResponse({ job_id: 'j1', url: 'https://a.example', status: 'running' }),
+      ),
     );
-    await expect(
-      waitForSiteLogin('j1', { intervalMs: 20, timeoutMs: 30 }),
-    ).rejects.toThrow('login_timeout');
+    await expect(waitForSiteLogin('j1', { intervalMs: 20, timeoutMs: 30 })).rejects.toThrow(
+      'login_timeout',
+    );
   });
 
   it('detects the 409 login_in_progress error text', () => {
@@ -88,24 +90,23 @@ describe('webAccessClient', () => {
   });
 
   it('fetches browser extension status without token material', async () => {
-    const fetchMock = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        jsonResponse({
-          devices: [
-            {
-              device_id: 'dev_1',
-              label: 'Chrome',
-              created_at: 1793500000,
-              last_seen_at: 1793500100,
-              connected: true,
-              sharing: false,
-            },
-          ],
-          connected: true,
-          shared: null,
-          base_url: 'http://127.0.0.1:8765',
-          extension_dir: '/repo/extension/agent-bridge',
-        }),
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse({
+        devices: [
+          {
+            device_id: 'dev_1',
+            label: 'Chrome',
+            created_at: 1793500000,
+            last_seen_at: 1793500100,
+            connected: true,
+            sharing: false,
+          },
+        ],
+        connected: true,
+        shared: null,
+        base_url: 'http://127.0.0.1:8765',
+        extension_dir: '/repo/extension/agent-bridge',
+      }),
     );
     vi.stubGlobal('fetch', fetchMock);
 
@@ -120,14 +121,13 @@ describe('webAccessClient', () => {
   });
 
   it('creates a pairing code with POST', async () => {
-    const fetchMock = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        jsonResponse({
-          code: 'ABCDE23456',
-          expires_at: 1793500300,
-          base_url: 'http://127.0.0.1:8834',
-          extension_dir: null,
-        }),
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse({
+        code: 'ABCDE23456',
+        expires_at: 1793500300,
+        base_url: 'http://127.0.0.1:8834',
+        extension_dir: null,
+      }),
     );
     vi.stubGlobal('fetch', fetchMock);
 
@@ -139,8 +139,8 @@ describe('webAccessClient', () => {
   });
 
   it('revokes a device with an encoded id', async () => {
-    const fetchMock = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse({ ok: true }),
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse({ ok: true }),
     );
     vi.stubGlobal('fetch', fetchMock);
 

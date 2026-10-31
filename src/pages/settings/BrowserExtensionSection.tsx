@@ -98,9 +98,7 @@ export function BrowserExtensionSection({ pollIntervalMs = 5000 }: BrowserExtens
       toast.success(t('settings.network.extension.revoked'));
       setStatus(await fetchBrowserExtensionStatus());
     } catch (cause) {
-      toast.error(
-        fill(t('settings.network.extension.revoke_failed'), { error: errorText(cause) }),
-      );
+      toast.error(fill(t('settings.network.extension.revoke_failed'), { error: errorText(cause) }));
     }
   };
 
@@ -111,9 +109,7 @@ export function BrowserExtensionSection({ pollIntervalMs = 5000 }: BrowserExtens
 
   return (
     <section data-testid="browser-extension" data-settings-anchor="browser_extension">
-      <h3 className="text-sm font-semibold text-text mb-3">
-        {t('settings.network.extension')}
-      </h3>
+      <h3 className="text-sm font-semibold text-text mb-3">{t('settings.network.extension')}</h3>
       <p className="text-xs text-muted mb-2">{t('settings.network.extension.hint')}</p>
 
       {error && (
@@ -211,9 +207,7 @@ export function BrowserExtensionSection({ pollIntervalMs = 5000 }: BrowserExtens
         >
           <RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} />
           {t(
-            busy
-              ? 'settings.network.extension.generating'
-              : 'settings.network.extension.generate',
+            busy ? 'settings.network.extension.generating' : 'settings.network.extension.generate',
           )}
         </button>
       </div>
