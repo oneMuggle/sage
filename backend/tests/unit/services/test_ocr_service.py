@@ -267,3 +267,29 @@ def test_rapidocr_model_dir_resolution(monkeypatch, tmp_path) -> None:
     # 仓库内没有模型目录时必须返回 None（使用包内默认模型），
     # 而不是误判引擎不可用。
     assert resolved is None or resolved.is_dir()
+
+
+def test_tesseract_explicit_path(monkeypatch, tmp_path) -> None:
+    import shutil
+    import sys
+    import types
+
+    exe = tmp_path / "tesseract"
+    exe.write_text("fake", encoding="utf-8")
+    fake = types.ModuleType("pytesseract")
+
+    class _PyTesseract:
+        tesseract_cmd = ""
+
+    fake.pytesseract = _PyTesseract()
+    fake.get_languages = staticmethod(lambda config="": ["eng"])
+    monkeypatch.setitem(sys.modules, "pytesseract", fake)
+    monkeypatch.setenv("SAGE_TESSERACT_PATH", str(exe))
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+
+    from backend.services.ocr.engines.tesseract import TesseractEngine
+
+    ok, reason = TesseractEngine().available()
+
+    assert ok, reason
+    assert fake.pytesseract.tesseract_cmd == str(exe)
