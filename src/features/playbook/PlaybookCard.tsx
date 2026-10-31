@@ -455,7 +455,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
                   <Circle className="h-3.5 w-3.5" />
                 )}
                 {stage.label}
-                <span className="text-[10px] opacity-70">{stage.progress}%</span>
+                <span className="text-ui-2xs opacity-70">{stage.progress}%</span>
               </div>
               {index < stages.length - 1 && <span className="text-muted-foreground">→</span>}
             </div>
