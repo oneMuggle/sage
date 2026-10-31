@@ -13,6 +13,7 @@ import { fetchCompat } from '../fetchCompat';
 import type { WebContentsLike } from '../relay';
 import { relayChatStream } from '../relay';
 import { logger } from '../logger';
+import { mapOrchestrationLanes, mapScheduledTasks } from './backgroundTasks';
 import { mergePetConfig, readPetConfig, writePetConfig } from './config';
 import { shouldShowInApp } from './display';
 import {
@@ -40,7 +41,7 @@ import {
   type PetAgentEvent,
   type PetSessionState,
 } from './state';
-import { applyTaskOverrides, normalizeTaskReports } from './tasks';
+import { applyTaskOverrides, mergeTaskReports, normalizeTaskReports } from './tasks';
 import { PetWindow } from './windows';
 import type {
   PetBubbleMode,
@@ -90,6 +91,10 @@ const BUBBLE_LABELS: Record<PetBubbleMode, string> = {
   off: '隐藏',
 };
 
+/** Orchestration/scheduled sources are polled while the pet is visible. */
+const BACKGROUND_POLL_MS = 20_000;
+const BACKGROUND_FETCH_TIMEOUT_MS = 5_000;
+
 export class PetController {
   private config: PetConfig;
   private sessions: PetSessionState = createEmptyState();
@@ -100,6 +105,9 @@ export class PetController {
   private readonly packsDir: string;
   private profile: PetProfile;
   private reportedTasks: PetTaskReport[] = [];
+  private remoteTasks: PetTaskReport[] = [];
+  private backgroundTimer: ReturnType<typeof setInterval> | null = null;
+  private backgroundInFlight = false;
   private readonly streams = new Map<string, AbortController>();
   private readonly titles = new Map<string, string>();
   private tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -119,6 +127,11 @@ export class PetController {
     this.syncWindow();
     this.broadcastConfig(this.config);
     this.tickTimer = setInterval(() => this.onTick(), 500);
+    this.backgroundTimer = setInterval(
+      () => void this.refreshBackgroundTasks(),
+      BACKGROUND_POLL_MS,
+    );
+    void this.refreshBackgroundTasks();
     this.emit(true);
   }
 
@@ -126,6 +139,10 @@ export class PetController {
     if (this.tickTimer) {
       clearInterval(this.tickTimer);
       this.tickTimer = null;
+    }
+    if (this.backgroundTimer) {
+      clearInterval(this.backgroundTimer);
+      this.backgroundTimer = null;
     }
     for (const abort of this.streams.values()) abort.abort();
     this.streams.clear();
@@ -146,7 +163,8 @@ export class PetController {
   }
 
   setConfig(patch: unknown): PetConfig {
-    const next = mergePetConfig(this.config, patch);
+    const previous = this.config;
+    const next = mergePetConfig(previous, patch);
     this.config = next;
     if (!writePetConfig(this.configFile, next)) {
       logger.warn('pet: config save failed');
@@ -154,6 +172,9 @@ export class PetController {
     this.syncWindow();
     this.broadcastConfig(next);
     this.emit(true);
+    if (next.enabled !== previous.enabled || next.displayMode !== previous.displayMode) {
+      void this.refreshBackgroundTasks();
+    }
     return next;
   }
 
@@ -258,6 +279,54 @@ export class PetController {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
+  }
+
+  private async fetchJson(path: string): Promise<unknown> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), BACKGROUND_FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetchCompat(`${this.options.backendUrl}${path}`, {
+        method: 'GET',
+        headers: this.authHeaders(),
+        signal: controller.signal,
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as unknown;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Poll orchestration lanes and scheduled tasks while the pet is visible.
+   * Best-effort: a down/slow backend keeps the previous snapshot.
+   */
+  private async refreshBackgroundTasks(): Promise<void> {
+    if (this.backgroundInFlight) return;
+    if (!this.config.enabled || this.config.displayMode === 'off') {
+      if (this.remoteTasks.length > 0) {
+        this.remoteTasks = [];
+        this.emit();
+      }
+      return;
+    }
+    this.backgroundInFlight = true;
+    try {
+      const [lanes, scheduled] = await Promise.all([
+        this.fetchJson('/api/v1/orchestration/lanes?limit=20'),
+        this.fetchJson('/api/v1/scheduled/tasks'),
+      ]);
+      const now = Date.now();
+      this.remoteTasks = mergeTaskReports(
+        mapOrchestrationLanes(lanes, now),
+        mapScheduledTasks(scheduled, now),
+      );
+      this.emit();
+    } catch {
+      // Background sources are optional; keep the last known snapshot.
+    } finally {
+      this.backgroundInFlight = false;
+    }
   }
 
   private async fetchSessionTitle(sessionId: string, key: string): Promise<void> {
@@ -464,13 +533,14 @@ export class PetController {
   private emit(force = false): void {
     const now = Date.now();
     const base = selectSnapshot(this.sessions, now);
+    const tasks = mergeTaskReports(this.reportedTasks, this.remoteTasks);
     const withMeta = {
       ...base,
       patCount: this.profile.patCount,
       bondDays: bondDays(this.profile, now),
-      tasks: this.reportedTasks,
+      tasks,
     };
-    const snapshot = this.applyBubbleMode(applyTaskOverrides(withMeta, this.reportedTasks, now));
+    const snapshot = this.applyBubbleMode(applyTaskOverrides(withMeta, tasks, now));
     // Ignore updatedAt for dedupe: an idle snapshot's updatedAt changes on
     // every tick and would otherwise push IPC every 500ms forever.
     const key = JSON.stringify({ ...snapshot, updatedAt: 0 });
