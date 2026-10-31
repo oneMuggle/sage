@@ -41,20 +41,19 @@ KaTeX 不支持的宏或包会降级显示；可切到“源码”查看，或�
 **引用显示为 `[key]` 而不是编号？**
 `\label` 未定义或引用目标不在项目内；查看顶部“解析警告”里的 `undefined_reference`。
 
-## 5. 用 Agent 填充 LaTeX 模板
+## 5. 用 LaTeX 模板助手 / Agent 填充模板
 
-目前没有独立的 LaTeX 模板面板，可直接让 agent 使用：
+可在 **Office 页的“LaTeX 模板助手”** 中操作：
 
-- `office_analyze_latex_template`：分析模板，返回可填槽位（title/author/abstract/
-  keywords/`<<占位符>>`/注释）；
+1. 在输入框填写工作区内的模板路径（如 `paper/main.tex`）；
+2. 点击“分析模板”，查看槽位（title/author/abstract/keywords/`<<占位符>>`/注释）；
+3. 填写槽位内容；作者/单位/关键词多个值用逗号分隔；
+4. 指定输出文件名（默认 `main-filled.tex`），点击“填充并输出”。
+
+也可以让 agent 使用：
+
+- `office_analyze_latex_template`：分析模板，返回可填槽位；
 - `office_fill_latex_template`：按槽位名填充，输出新的 `.tex` 文件。
-
-示例：
-
-```text
-先分析工作区 paper/main.tex 的模板槽位，然后用以下内容填充并输出 main-filled.tex：
-title=...，author=[Alice, Bob]，abstract=...，placeholder_author_note_1=...
-```
 
 规则：
 

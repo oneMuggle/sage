@@ -51,6 +51,7 @@ backend/office/latex/
 | 模板填充 | `POST /api/v1/office/latex/template/fill` | `{workspace_path, template_path, output_filename, data}` → 新 `.tex` + `validation` |
 | Agent 工具 | `office_analyze_latex_template` / `office_fill_latex_template` | analyze READ；fill WRITE_LOCAL（file_path 模式） |
 | 前端 | `LatexPreview` | 标题/作者/警告/块渲染/源码切换 |
+| 前端 | `LatexTemplatePanel` | Office 页“LaTeX 模板助手”：路径输入 → 槽位表单 → 填充输出 |
 
 `structured` 形状：
 
@@ -113,7 +114,7 @@ backend/office/latex/
 - 循环 include 检测；单文件 ≤5 MiB、项目 ≤20 MiB、include 深度 ≤20、文件数 ≤200、blocks ≤5000；
 - 前端 KaTeX 由 `rehype-katex` 渲染；`LatexPreview` 不使用 `dangerouslySetInnerHTML` 渲染用户文本；
 - 不支持：TeX 编译/PDF、`.cls/.sty` 宏展开、zip 项目上传、TikZ 渲染、DOCX↔LaTeX；
-- 模板填充不自动补 `.bib`、不处理图片槽位；前端暂无独立的 LaTeX 模板面板（通过 Agent/REST 使用）。
+- 模板填充不自动补 `.bib`、不处理图片槽位；前端模板面板使用路径输入（暂未接入通用文件选择器）。
 
 ## 6. 测试
 
@@ -124,7 +125,7 @@ backend/office/latex/
 - `backend/tests/api/test_artifact_routes.py`：`.tex` artifact；
 - `backend/tests/unit/tools/test_office_latex_tool.py`（4）：上下文/成功/越界/后缀；
 - `backend/tests/unit/test_profiles_office_tools.py`、`test_tool_bundles_parity.py`：工具面/快照；
-- 前端 `src/features/office/__tests__/LatexPreview.test.tsx`（3）。
+- 前端 `src/features/office/__tests__/LatexPreview.test.tsx`（3）与 `LatexTemplatePanel.test.tsx`（2）。
 
 ## 7. 后续
 

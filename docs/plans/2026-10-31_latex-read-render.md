@@ -235,7 +235,8 @@ backend/office/latex/
   `office_fill_latex_template`（WRITE_LOCAL，file_path 模式）；
 - 测试：L2 相关 33 项 + 全量 LaTeX/预览/工具回归 93 项全绿；ruff / py38 / architecture-check 全绿。
 
-尚余：前端模板面板（路径选择/槽位表单）、`.bib` 自动补写、图片槽位、zip 项目上传。
+尚余：`.bib` 自动补写、图片槽位、zip 项目上传。前端已在 Office 页新增
+“LaTeX 模板助手”（路径输入 → 槽位表单 → 填充输出）。
 
 ## 12. 后续（不在本 PR）
 
