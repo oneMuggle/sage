@@ -339,6 +339,41 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
             </div>
           )}
         </div>
+        {importPreview && (
+          <div
+            className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs"
+            data-testid="playbook-import-preview"
+          >
+            <div className="font-medium text-foreground">
+              导入预览：{importPreview.playbook.name}
+            </div>
+            <div className="text-muted-foreground">
+              阶段 {importPreview.playbook.stages.length} 个 · 目录{' '}
+              {importPreview.scaffold.directories.length} 个 · 导入不包含对方项目文件内容
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => void handleImportConfirm()}
+                disabled={busy === 'import'}
+                data-testid="playbook-import-confirm"
+              >
+                {busy === 'import' ? '导入中…' : '导入并绑定'}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setImportPreview(null);
+                  setImportEnvelope(null);
+                }}
+              >
+                取消
+              </Button>
+            </div>
+          </div>
+        )}
         {error && <div className="text-xs text-destructive">{error}</div>}
         {notice && <div className="text-xs text-primary">{notice}</div>}
       </div>
