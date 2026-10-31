@@ -15,7 +15,7 @@ import { relayChatStream } from '../relay';
 import { logger } from '../logger';
 import { mapOrchestrationLanes, mapScheduledTasks } from './backgroundTasks';
 import { mergePetConfig, readPetConfig, writePetConfig } from './config';
-import { shouldShowInApp } from './display';
+import { shouldShowDesktop, shouldShowInApp } from './display';
 import {
   deleteUserPack,
   exportPackZip,
@@ -46,7 +46,9 @@ import { PetWindow } from './windows';
 import type {
   PetBubbleMode,
   PetConfig,
+  PetInstanceConfig,
   PetPackManifest,
+  PetRenderConfig,
   PetSessionMeta,
   PetSize,
   PetSnapshot,
@@ -99,7 +101,7 @@ export class PetController {
   private config: PetConfig;
   private sessions: PetSessionState = createEmptyState();
   private snapshot: PetSnapshot;
-  private window: PetWindow | null = null;
+  private readonly windows = new Map<string, PetWindow>();
   private readonly configFile: string;
   private readonly profileFile: string;
   private readonly packsDir: string;
@@ -124,8 +126,8 @@ export class PetController {
 
   init(): void {
     writePetProfile(this.profileFile, this.profile);
-    this.syncWindow();
-    this.broadcastConfig(this.config);
+    this.syncWindows();
+    this.broadcastConfig();
     this.tickTimer = setInterval(() => this.onTick(), 500);
     this.backgroundTimer = setInterval(
       () => void this.refreshBackgroundTasks(),
@@ -146,8 +148,8 @@ export class PetController {
     }
     for (const abort of this.streams.values()) abort.abort();
     this.streams.clear();
-    this.window?.destroy();
-    this.window = null;
+    for (const window of this.windows.values()) window.destroy();
+    this.windows.clear();
   }
 
   getConfig(): PetConfig {
@@ -169,8 +171,8 @@ export class PetController {
     if (!writePetConfig(this.configFile, next)) {
       logger.warn('pet: config save failed');
     }
-    this.syncWindow();
-    this.broadcastConfig(next);
+    this.syncWindows();
+    this.broadcastConfig();
     this.emit(true);
     if (next.enabled !== previous.enabled || next.displayMode !== previous.displayMode) {
       void this.refreshBackgroundTasks();
@@ -227,8 +229,8 @@ export class PetController {
       });
   }
 
-  setPanelOpen(open: boolean): void {
-    this.window?.setPanelOpen(open);
+  setPanelOpen(sender: WebContents, open: boolean): void {
+    this.windowForSender(sender)?.setPanelOpen(open);
   }
 
   recordPat(): void {
@@ -264,11 +266,15 @@ export class PetController {
     return exportPackZip(this.packsDir, id, destPath);
   }
 
-  /** Delete a user pack; fall back to the built-in pack if it was selected. */
+  /** Delete a user pack; any pet using it falls back to the built-in pack. */
   deletePack(id: string): DeleteResult {
     const result = deleteUserPack(this.packsDir, id);
-    if (result.ok && this.config.petPack === id) {
-      this.setConfig({ petPack: 'dafeiyu' });
+    if (result.ok && this.config.pets.some((pet) => pet.petPack === id)) {
+      this.setConfig({
+        pets: this.config.pets.map((pet) =>
+          pet.petPack === id ? { ...pet, petPack: 'dafeiyu' } : pet,
+        ),
+      });
     }
     return result;
   }
@@ -374,9 +380,17 @@ export class PetController {
     }
   }
 
-  windowReady(): void {
-    this.window?.show();
-    this.broadcastConfig(this.config);
+  /** Full config for the settings window; per-pet view for a pet window. */
+  getConfigForSender(sender: WebContents): PetConfig | PetRenderConfig {
+    const pet = this.petForSender(sender);
+    return pet ? this.renderConfig(pet) : this.config;
+  }
+
+  windowReady(sender: WebContents): void {
+    const pet = this.petForSender(sender);
+    if (!pet) return;
+    this.windows.get(pet.id)?.show();
+    this.windows.get(pet.id)?.sendConfig(this.renderConfig(pet));
     this.emit(true);
   }
 
@@ -389,8 +403,12 @@ export class PetController {
   }
 
   toggleVisible(): void {
-    if (this.window) {
-      this.window.toggleVisible();
+    if (this.windows.size > 0) {
+      const anyVisible = [...this.windows.values()].some((window) => window.isVisible());
+      for (const window of this.windows.values()) {
+        if (anyVisible) window.hide();
+        else window.show();
+      }
       return;
     }
     if (shouldShowInApp(this.config)) {
@@ -404,7 +422,7 @@ export class PetController {
   }
 
   resetPosition(): void {
-    this.window?.resetPosition();
+    for (const window of this.windows.values()) window.resetPosition();
   }
 
   openSession(sessionId: string | null): void {
@@ -427,24 +445,32 @@ export class PetController {
     main.webContents.send('sage:event:open-settings', { tab: 'pet' });
   }
 
-  startDrag(): void {
-    this.window?.startDrag();
+  startDrag(sender: WebContents): void {
+    this.windowForSender(sender)?.startDrag();
   }
 
-  moveDrag(): void {
-    this.window?.moveDrag();
+  moveDrag(sender: WebContents): void {
+    this.windowForSender(sender)?.moveDrag();
   }
 
-  endDrag(): void {
-    this.window?.endDrag();
+  endDrag(sender: WebContents): void {
+    this.windowForSender(sender)?.endDrag();
   }
 
-  hideForNow(): void {
-    this.window?.hide();
+  hideForNow(sender: WebContents): void {
+    this.windowForSender(sender)?.hide();
   }
 
-  showMenu(): void {
-    if (!this.window) return;
+  showMenu(sender: WebContents): void {
+    const pet = this.petForSender(sender);
+    if (!pet) return;
+    const window = this.windows.get(pet.id);
+    if (!window) return;
+    const setPetSize = (size: PetSize): void => {
+      this.setConfig({
+        pets: this.config.pets.map((item) => (item.id === pet.id ? { ...item, size } : item)),
+      });
+    };
     const sizes = Object.keys(SIZE_LABELS) as PetSize[];
     const tempos = Object.keys(TEMPO_LABELS) as PetTempo[];
     const bubbles = Object.keys(BUBBLE_LABELS) as PetBubbleMode[];
@@ -454,8 +480,8 @@ export class PetController {
         submenu: sizes.map((size) => ({
           label: SIZE_LABELS[size],
           type: 'radio' as const,
-          checked: this.config.size === size,
-          click: () => this.setConfig({ size }),
+          checked: pet.size === size,
+          click: () => setPetSize(size),
         })),
       },
       {
@@ -484,17 +510,17 @@ export class PetController {
       },
       { type: 'separator' as const },
       { label: '打开会话', click: () => this.openSession(this.snapshot.sessionId) },
-      { label: '回到初始位置', click: () => this.resetPosition() },
+      { label: '回到初始位置', click: () => window.resetPosition() },
       { label: '宠物设置…', click: () => this.openSettings() },
-      { label: '本次隐藏', click: () => this.hideForNow() },
+      { label: '本次隐藏', click: () => window.hide() },
       { type: 'separator' as const },
       { label: '关闭桌宠', click: () => this.setConfig({ enabled: false }) },
     ]);
-    this.window.popupMenu(menu);
+    window.popupMenu(menu);
   }
 
   isPetSender(sender: WebContents): boolean {
-    return this.window?.ownsSender(sender) ?? false;
+    return Boolean(this.petForSender(sender));
   }
 
   isMainSender(sender: WebContents): boolean {
@@ -502,32 +528,61 @@ export class PetController {
     return Boolean(main && !main.isDestroyed() && main.webContents === sender);
   }
 
+  private windowForSender(sender: WebContents): PetWindow | null {
+    for (const window of this.windows.values()) {
+      if (window.ownsSender(sender)) return window;
+    }
+    return null;
+  }
+
+  private petForSender(sender: WebContents): PetInstanceConfig | null {
+    for (const [id, window] of this.windows) {
+      if (!window.ownsSender(sender)) continue;
+      return this.config.pets.find((pet) => pet.id === id) ?? null;
+    }
+    return null;
+  }
+
   private onTick(): void {
     this.sessions = tick(this.sessions, Date.now());
     this.emit();
   }
 
-  private syncWindow(): void {
-    if (this.window && this.window.needsRecreate(this.config)) {
-      this.window.destroy();
-      this.window = null;
+  private syncWindows(): void {
+    const desired = shouldShowDesktop(this.config) ? this.config.pets : [];
+    const desiredIds = new Set(desired.map((pet) => pet.id));
+    for (const [id, window] of [...this.windows]) {
+      if (desiredIds.has(id)) continue;
+      window.destroy();
+      this.windows.delete(id);
     }
-    if (!PetWindow.shouldShow(this.config)) {
-      this.window?.destroy();
-      this.window = null;
-      return;
-    }
-    if (!this.window) {
-      this.window = new PetWindow({
-        config: this.config,
+    desired.forEach((pet, index) => {
+      const render = this.renderConfig(pet);
+      const existing = this.windows.get(pet.id);
+      if (existing) {
+        if (existing.needsRecreate(render)) {
+          existing.destroy();
+          this.windows.delete(pet.id);
+        } else {
+          existing.applyConfig(render);
+          return;
+        }
+      }
+      const window = new PetWindow({
+        config: render,
+        petId: pet.id,
+        instanceIndex: index,
         devUrl: this.options.devUrl,
         isPackaged: this.options.isPackaged,
         userDataDir: this.options.userDataDir,
       });
-      this.window.create();
-      return;
-    }
-    this.window.applyConfig(this.config);
+      this.windows.set(pet.id, window);
+      window.create();
+    });
+  }
+
+  private renderConfig(pet: PetInstanceConfig): PetRenderConfig {
+    return { ...this.config, petId: pet.id, petPack: pet.petPack, size: pet.size };
   }
 
   private emit(force = false): void {
@@ -547,7 +602,7 @@ export class PetController {
     if (!force && key === this.lastSent) return;
     this.lastSent = key;
     this.snapshot = snapshot;
-    this.window?.sendState(snapshot);
+    for (const window of this.windows.values()) window.sendState(snapshot);
     if (shouldShowInApp(this.config)) {
       this.sendToMain('pet:state', snapshot);
     }
@@ -559,9 +614,11 @@ export class PetController {
     main.webContents.send(channel, payload);
   }
 
-  private broadcastConfig(config: PetConfig): void {
-    this.window?.sendConfig(config);
-    this.sendToMain('pet:config', config);
+  private broadcastConfig(): void {
+    for (const pet of this.config.pets) {
+      this.windows.get(pet.id)?.sendConfig(this.renderConfig(pet));
+    }
+    this.sendToMain('pet:config', this.config);
   }
 
   private applyBubbleMode(snapshot: PetSnapshot): PetSnapshot {

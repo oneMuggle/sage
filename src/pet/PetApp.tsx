@@ -41,18 +41,20 @@ const EMPTY_SNAPSHOT: PetSnapshotBridge = {
 };
 
 const DEFAULT_CONFIG: PetConfigBridge = {
-  version: 1,
+  version: 2,
   enabled: true,
   displayMode: 'desktop',
-  size: 'medium',
   tempo: 'standard',
   reduceMotion: false,
   bubbleMode: 'important',
   soundScenes: { waiting: true, error: false, done: false },
   showSessionTitle: false,
   compatibilityMode: 'auto',
-  petPack: 'dafeiyu',
   followActiveSession: true,
+  pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
+  petId: 'default',
+  petPack: 'dafeiyu',
+  size: 'medium',
 };
 
 interface PlaybackOverride {
@@ -128,7 +130,13 @@ export function PetApp(): JSX.Element {
     }
   }, [snapshot.action]);
 
+  const pack = usePetPacks(config.petPack ?? 'dafeiyu');
+  // Only the first pet owns status sounds; otherwise every window would play
+  // the same cue through its own AudioContext.
+  const isPrimary = !config.petId || config.pets[0]?.id === config.petId;
+
   useEffect(() => {
+    if (!isPrimary) return;
     const action = snapshot.action;
     if (action === lastSoundActionRef.current) return;
     lastSoundActionRef.current = action;
@@ -141,7 +149,7 @@ export function PetApp(): JSX.Element {
             ? 'done'
             : null;
     if (kind && config.soundScenes[kind]) playSound(kind);
-  }, [snapshot.action, config.soundScenes]);
+  }, [snapshot.action, config.soundScenes, isPrimary]);
 
   useEffect(() => {
     if (!localBubble) return undefined;
@@ -157,8 +165,6 @@ export function PetApp(): JSX.Element {
     },
     [],
   );
-
-  const pack = usePetPacks(config.petPack);
 
   const choice = useMemo(() => {
     if (override) return override;

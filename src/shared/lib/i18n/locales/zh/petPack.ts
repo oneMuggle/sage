@@ -1,10 +1,16 @@
 /**
- * 桌宠动画包设置文案。
+ * 桌宠动画包与多宠物设置文案。
  *
  * 从 chatAndSider.ts 拆出：该聚合词典已接近 800 行架构门禁，新增键放这里
  * 可保持域内聚且不再推高行数。聚合入口见 ../../zh.ts。
  */
 export const zhPetPack = {
+  'settings.pet.pets': '宠物',
+  'settings.pet.pets_desc': '最多 3 只；每只可单独选择动画包和大小，位置互相独立。',
+  'settings.pet.pet_label': '宠物',
+  'settings.pet.add_pet': '添加宠物',
+  'settings.pet.remove_pet': '移除',
+  'settings.pet.pets_max': '最多 3 只宠物',
   'settings.pet.pack': '动画包',
   'settings.pet.pack_desc':
     '内置大肥鱼，或导入 zip 格式的自定义动画包（仅支持 webm/mp4/webp/png 等素材，不执行包内脚本）。',
