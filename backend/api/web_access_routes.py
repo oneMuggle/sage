@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
@@ -99,6 +100,15 @@ class SiteLoginBody(BaseModel):
     #: 用户在设置页/聊天卡片点击「登录」即视为本次 EXTERNAL 调用的批准；
     #: DISCUSS/PLAN 模式仍会被 PermissionEngine 直接拒绝。
     approved: bool = False
+
+    class Config:
+        extra = Extra.forbid
+
+
+class SiteVerifyBody(BaseModel):
+    """POST /web-access/sites/verify：检查某站点的登录态。"""
+
+    domain: str
 
     class Config:
         extra = Extra.forbid
@@ -268,6 +278,59 @@ def _login_permission_decision(url: str) -> Any:
 
     enforcer = load_enforcer_from_settings()
     return enforcer.check("browser_login", {"url": url})
+
+
+@router.post("/web-access/sites/verify")
+async def verify_site_session(request: Request, body: SiteVerifyBody) -> Dict[str, Any]:
+    """检查站点登录态（尽力而为）：渲染登录入口并按页面特征分类。"""
+    guard = _origin_guard(request)
+    if guard:
+        return guard
+    domain = (body.domain or "").strip().lower()
+    if not domain:
+        return JSONResponse(status_code=422, content={"ok": False, "error": "invalid_domain"})
+    record = next(
+        (
+            item
+            for item in list_credentials()
+            if str(item.get("domain") or "").lower() == domain
+        ),
+        None,
+    )
+    if record is None:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "not_found"})
+    if str(record.get("kind") or "cookie") != "cookie":
+        return JSONResponse(
+            status_code=422,
+            content={"ok": False, "error": "unsupported_credential_kind"},
+        )
+    host = domain.lstrip(".")
+    url = login_url_for_host(host)
+
+    from starlette.concurrency import run_in_threadpool
+
+    from backend.services.site_session_probe import classify_session_page
+    from backend.tools.network_config import load_network_policy
+    from backend.tools.web_render import RenderError, render_page
+
+    policy = load_network_policy()
+
+    def _probe() -> Dict[str, Any]:
+        try:
+            rendered = render_page(url, policy, credential_domain=domain)
+        except RenderError as exc:
+            return {"status": "unknown", "error": str(exc)[:300]}
+        except Exception as exc:  # noqa: BLE001 — 探针失败不拖垮设置页
+            return {"status": "unknown", "error": str(exc)[:300]}
+        return {"status": classify_session_page(rendered)}
+
+    outcome = await run_in_threadpool(_probe)
+    return {
+        "domain": domain,
+        "url": url,
+        "checked_at": int(time.time()),
+        **outcome,
+    }
 
 
 @router.post("/web-access/sites/login")
