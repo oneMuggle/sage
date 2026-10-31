@@ -7,6 +7,7 @@ import { bubbleText, resolveAnimation, resolveInteraction } from './engine/anima
 import { isChinese, statusLabel } from './engine/labels';
 import { packFor } from './engine/packs';
 import { playSound, primeAudio } from './engine/sounds';
+import { idleDelayMs } from './engine/tempo';
 
 const LONG_PRESS_MS = 550;
 const CLICK_DELAY_MS = 240;
@@ -89,6 +90,8 @@ export function PetApp(): JSX.Element {
   const [override, setOverride] = useState<PlaybackOverride | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [localBubble, setLocalBubble] = useState<LocalBubble | null>(null);
+  const [idleVariant, setIdleVariant] = useState(0);
+  const [idleResting, setIdleResting] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const dragRef = useRef({
     down: false,
@@ -100,6 +103,7 @@ export function PetApp(): JSX.Element {
   const currentFileRef = useRef('');
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clickTimes = useRef<number[]>([]);
   const suppressClickUntil = useRef(0);
   const lastActionRef = useRef(snapshot.action);
@@ -135,6 +139,12 @@ export function PetApp(): JSX.Element {
     lastActionRef.current = snapshot.action;
     setOverride(null);
     setLocalBubble(null);
+    setIdleVariant((variant) => variant + 1);
+    setIdleResting(false);
+    if (idleTimer.current) {
+      clearTimeout(idleTimer.current);
+      idleTimer.current = null;
+    }
   }, [snapshot.action]);
 
   useEffect(() => {
@@ -162,16 +172,20 @@ export function PetApp(): JSX.Element {
     () => () => {
       if (pressTimer.current) clearTimeout(pressTimer.current);
       if (clickTimer.current) clearTimeout(clickTimer.current);
+      if (idleTimer.current) clearTimeout(idleTimer.current);
     },
     [],
   );
 
   const pack = useMemo(() => packFor(config.petPack), [config.petPack]);
 
-  const choice = useMemo(
-    () => override ?? resolveAnimation(snapshot, pack),
-    [override, snapshot, pack],
-  );
+  const choice = useMemo(() => {
+    if (override) return override;
+    if (snapshot.action === 'idle' && idleResting && pack?.actions.idle?.length) {
+      return { file: pack.actions.idle[0], loop: true };
+    }
+    return resolveAnimation(snapshot, pack, idleVariant);
+  }, [override, snapshot, pack, idleVariant, idleResting]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -336,8 +350,21 @@ export function PetApp(): JSX.Element {
   };
 
   const handleEnded = (): void => {
-    if (override) setOverride(null);
+    if (override) {
+      setOverride(null);
+      if (localBubble) setLocalBubble(null);
+      return;
+    }
     if (localBubble) setLocalBubble(null);
+    if (snapshot.action === 'idle' && !config.reduceMotion) {
+      setIdleResting(true);
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+      idleTimer.current = setTimeout(() => {
+        idleTimer.current = null;
+        setIdleResting(false);
+        setIdleVariant((variant) => variant + 1);
+      }, idleDelayMs(config.tempo));
+    }
   };
 
   const stateBubble = bubbleText(snapshot.bubbleKey, {

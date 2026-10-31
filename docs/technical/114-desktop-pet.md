@@ -81,6 +81,7 @@ FastAPI chat stream (NDJSON)
 - **拖拽**：移动超过 4px 取消长按/点击，进入窗口拖动；松手保存位置。
 - **提示音**：WebAudio 合成等待审批/出错/完成三种短音，按 `soundScenes` 开关播放；首次 pointerdown 时 prime AudioContext，失败静默。
 - **陪伴数据**：`<userData>/pet-profile.json`，字段 `version/firstSeenAt/patCount/lastPatAt`（毫秒时间戳）；`bondDays = floor((now-firstSeenAt)/86400000)+1`。
+- **完整动画包**：内置 dsh-pet 全部 109 个 WebM（约 52.7MB，MIT）。其中 87 个进入待机池，每段播完回到 `待机呼吸休闲` 循环，按 `tempo` 的 quiet/standard/lively（45–90 / 25–45 / 12–22 秒）随机休息后播下一段；点击回应从 5 个里随机抽。
 - 以上互动不读取消息正文/参数，只记录本地计数。
 
 ## 4. 窗口行为
@@ -124,17 +125,17 @@ canonicalizer 与 Win7 设置 schema parity。
 
 ## 6. 素材与许可
 
-- `public/pet/dafeiyu/*.webm`：从 dsh-pet `assets/webm` 选取 20 个动作（含摸头/生气），
-  MIT；完整 109 个动作共 52.7MB，未全部内置。
-- 出处、修改与角色 IP 提示见 `third_party/dsh-pet/NOTICE.md`。
+- `public/pet/dafeiyu/*.webm`：完整 109 个动作（约 52.7MB），MIT；其中 87 个作为待机随机池，6 个工作状态、5 个点击回应、3 个睡眠、6 个余额（预留）、1 个拖拽、1 个重试，以及摸头/生气两个专属动作。
+- 出处、修改与角色 IP 提示见 `third_party/dsh-pet/NOTICE.md`；清单由 `scripts/pet-pack/generate-dafeiyu-pack.mjs` 从 WebM 文件生成。
 - 新增素材：在 `public/pet/<id>/` 放 WebM + `pack.json`，并在
   `src/pet/engine/packs.ts` 注册清单（打包环境不走 `fetch(pack.json)`，
-  避免 `file://` CORS）。
+  避免 `file://` CORS）。完整包会让安装包增加约 45MB，这是当前全量内置的代价。
 
 ## 7. 测试与验证
 
 - 单测：`electron/__tests__/petState.test.ts`、`petConfig.test.ts`、
-  `petGeometry.test.ts`、`petProfile.test.ts`、`src/pet/__tests__/animation.test.ts`。
+  `petGeometry.test.ts`、`petProfile.test.ts`、`src/pet/__tests__/animation.test.ts`、
+  `src/pet/__tests__/tempo.test.ts`。
 - 设置守卫：`settingsTabs.guards.test.ts`（tab 数 19）、
   `settingsSearchIndex.test.ts`（`pet` 为合法 tab）。
 - 手工/自动冒烟：Electron 启动后确认 `pet.html` 窗口存在、置顶、视频源正确；
@@ -142,7 +143,8 @@ canonicalizer 与 Win7 设置 schema parity。
   面板冒烟额外验证：会话标题、待办 2/5、步骤 3/7、上下文 31%（40k/128k）、
   窗口 300×241 → 300×541、完成态显示 7/7 与「已完成」。
   互动冒烟：长按 750ms → 摸头动画 + 气泡 + `patCount=1`；2 秒内点 5 下 → 生气动画 + 「别戳啦」。
-- 体积门禁：主 chunk 1.67MB / 1.80MB；`dist/assets` 11.07MB / 12MB。
+  动画包冒烟：109 个 WebM 全部存在；idle 池 87 个，`resolveAnimation` 变体轮播与 `resolveInteraction` 随机回应由单测覆盖。
+- 体积门禁：主 chunk 1.68MB / 1.80MB；`dist/assets` 11.10MB / 12MB；`public/pet` 资源不计入该门禁，但安装包会增大约 45MB。
 
 ## 8. 已知限制 / 下一步
 
@@ -154,4 +156,5 @@ canonicalizer 与 Win7 设置 schema parity。
 - 独立编排 run（`orch-events-*`）、Task Center、定时任务尚未接入宠物聚合；
   聊天流内的 `task_status` / `task_progress` 已覆盖。
 - 上下文条依赖 chat 参数里的 `maxContext` 与 usage 事件；自动推断上下文时可能只显示已用量、不显示百分比。
-- 素材完整包/自定义 pet pack 导入待后续；聊天/TTS 未做。
+- 完整动画包已全量内置（约 52.7MB），安装包相应增大；如果后续要控制体积，可改成「精选内置 + 完整包可选下载/导入」。
+- 自定义 pet pack 导入/导出尚未实现；聊天/TTS 未做。
