@@ -55,7 +55,7 @@ export interface LatexAuditIssue {
   category: string;
   message: string;
   fix_hint: string;
-  anchor?: { file: string; line: number; column?: number };
+  anchor?: { file: string; line?: number; column?: number; page?: number };
   evidence?: Record<string, unknown>;
 }
 
@@ -108,6 +108,26 @@ export interface LatexProjectExtractResult {
   files_count: number;
   bytes_written: number;
   warnings: Array<{ code: string; message: string; path?: string }>;
+}
+
+export interface LatexPdfAuditResult {
+  ok: boolean;
+  source_path: string;
+  summary: {
+    pages: number;
+    page_size: { width: number; height: number; label: string };
+    page_sizes: Array<{ width: number; height: number; pages: number[] }>;
+    fonts: Array<{
+      basefont: string;
+      type: string;
+      ext: string;
+      embedded: boolean;
+      pages: number[];
+    }>;
+    images_count: number;
+    min_image_dpi: number | null;
+  };
+  issues: LatexAuditIssue[];
 }
 
 export async function analyzeLatexTemplate(
@@ -216,6 +236,26 @@ export async function extractLatexProject(
       workspace_path: workspacePath,
       zip_path: zipPath,
       output_dir_name: outputDirName || null,
+    },
+  });
+}
+
+export async function auditLatexPdf(
+  workspacePath: string,
+  filePath: string,
+  requiredMinPages?: number,
+  requiredMaxPages?: number,
+  minImageDpi = 150,
+): Promise<LatexPdfAuditResult> {
+  return backendRequest<LatexPdfAuditResult>({
+    method: 'POST',
+    path: '/api/v1/office/latex/pdf/audit',
+    body: {
+      workspace_path: workspacePath,
+      file_path: filePath,
+      required_min_pages: requiredMinPages || null,
+      required_max_pages: requiredMaxPages || null,
+      min_image_dpi: minImageDpi,
     },
   });
 }

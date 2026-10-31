@@ -6,6 +6,7 @@ import zipfile
 from pathlib import Path
 
 import httpx
+import pymupdf
 import pytest
 import pytest_asyncio
 
@@ -368,3 +369,56 @@ async def test_extract_latex_project_refuses_existing_dir(
     )
 
     assert resp.status_code == 422
+
+
+def _write_pdf(path: Path, *, pages: int = 1) -> Path:
+    doc = pymupdf.open()
+    for _ in range(pages):
+        page = doc.new_page(width=595.28, height=841.89)
+        page.insert_text((72, 100), "Hello")
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+@pytest.mark.asyncio()
+async def test_audit_latex_pdf_returns_issues(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    pdf = _write_pdf(workspace / "main.pdf", pages=2)
+
+    resp = await client.post(
+        "/api/v1/office/latex/pdf/audit",
+        json={
+            "workspace_path": str(workspace),
+            "file_path": str(pdf),
+            "required_min_pages": 3,
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["summary"]["pages"] == 2
+    assert payload["summary"]["page_size"]["label"] == "A4"
+    rules = {issue["rule_id"] for issue in payload["issues"]}
+    assert "PDF-FONT-NOT-EMBEDDED" in rules
+    assert "PDF-PAGE-COUNT" in rules
+    assert payload["ok"] is False
+
+
+@pytest.mark.asyncio()
+async def test_audit_latex_pdf_rejects_outside_workspace(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = _write_pdf(tmp_path / "outside.pdf")
+
+    resp = await client.post(
+        "/api/v1/office/latex/pdf/audit",
+        json={"workspace_path": str(workspace), "file_path": str(outside)},
+    )
+
+    assert resp.status_code == 400
