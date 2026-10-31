@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pymupdf
 import pytest
 from docx import Document
 from docx.oxml import OxmlElement
@@ -177,5 +178,49 @@ def test_fill_refuses_overwrite(tmp_path: Path) -> None:
             template,
             {"project_title": "Sage", "company": "C", "funding": "F", "author": "A"},
             "filled.docx",
+            workspace_path=str(tmp_path),
+        )
+
+
+_PNG_PIXEL = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 2, 2))
+_PNG_PIXEL.clear_with(200)
+
+
+def test_image_slot_is_rendered_with_inline_image(tmp_path: Path) -> None:
+    document = Document()
+    document.add_paragraph("Logo: {{logo}}")
+    template = tmp_path / "image.docx"
+    document.save(str(template))
+    (tmp_path / "logo.png").write_bytes(_PNG_PIXEL.tobytes("png"))
+
+    profile = analyze_word_template_profile(template, workspace_path=str(tmp_path))
+    logo = next(slot for slot in profile["slots"] if slot["name"] == "logo")
+    assert logo["type"] == "image"
+
+    result = fill_word_template_profile(
+        template,
+        {},
+        "image-filled.docx",
+        workspace_path=str(tmp_path),
+        images={"logo": "logo.png"},
+    )
+
+    assert result["images_rendered"] == 1
+    assert result["residual_placeholders"] == []
+    output = Document(str(tmp_path / "image-filled.docx"))
+    assert len(output.inline_shapes) == 1
+
+
+def test_image_slot_requires_image(tmp_path: Path) -> None:
+    document = Document()
+    document.add_paragraph("Logo: {{logo}}")
+    template = tmp_path / "image.docx"
+    document.save(str(template))
+
+    with pytest.raises(OfficeTemplateFillError):
+        fill_word_template_profile(
+            template,
+            {},
+            "out.docx",
             workspace_path=str(tmp_path),
         )

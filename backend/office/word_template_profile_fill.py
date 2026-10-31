@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docxtpl import DocxTemplate
+from docxtpl import DocxTemplate, InlineImage
 from jinja2.sandbox import SandboxedEnvironment
 
 from .errors import (
@@ -19,7 +19,7 @@ from .errors import (
     OfficeTemplateFillError,
 )
 from .path_safety import resolve_within
-from .word_template import _validate_template_safety
+from .word_template import _load_image_descriptor, _validate_template_safety
 from .word_template_profile import (
     _PLACEHOLDER_RE,
     _sdt_name,
@@ -181,7 +181,10 @@ def _fill_story_content_controls(document: Any, data: Dict[str, Any]) -> None:
                     _set_sdt_text(sdt, _value_text(data[name]))
 
 
-def _fill_placeholders(document: Any, data: Dict[str, Any]) -> int:
+def _fill_placeholders(
+    document: Any, data: Dict[str, Any], skip_names: Optional[set] = None
+) -> int:
+    skip = skip_names or set()
     filled = 0
     for paragraph in _iter_paragraphs(document):
         for _ in range(200):
@@ -195,7 +198,7 @@ def _fill_placeholders(document: Any, data: Dict[str, Any]) -> int:
                     name = raw[2:-2].strip()
                 else:
                     name = raw[1:-1].strip()
-                if name in data:
+                if name in data and name not in skip:
                     match = candidate
                     matched_name = name
                     break
@@ -217,6 +220,7 @@ def fill_word_template_profile(
     output_filename: str,
     *,
     workspace_path: str,
+    images: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Fill M1a template slots into a new .docx, preserving non-slot formatting."""
     root = Path(workspace_path).resolve()
@@ -229,11 +233,20 @@ def fill_word_template_profile(
     profile = analyze_word_template_profile(resolved, workspace_path=str(root))
     if not isinstance(data, dict):
         raise OfficeTemplateFillError("data 必须是对象")
+    image_data = images if isinstance(images, dict) else {}
+    image_names = {
+        slot["name"] for slot in profile["slots"] if slot.get("type") == "image"
+    }
     missing = sorted(
         {
             slot["name"]
             for slot in profile["slots"]
-            if slot["required"] and slot["name"] not in data
+            if slot["required"]
+            and (
+                slot["name"] not in image_data
+                if slot.get("type") == "image"
+                else slot["name"] not in data
+            )
         }
     )
     if missing:
@@ -251,9 +264,9 @@ def fill_word_template_profile(
             filled_names.add(name)
     _fill_story_content_controls(document, data)
     _fill_bookmarks(document, data)
-    _fill_placeholders(document, data)
+    _fill_placeholders(document, data, skip_names=image_names)
     for slot in profile["slots"]:
-        if slot["name"] in data:
+        if slot["name"] in data or slot["name"] in image_data:
             filled_names.add(slot["name"])
 
     output_name = _check_output_name(output_filename)
@@ -267,14 +280,26 @@ def fill_word_template_profile(
         raise OfficeTemplateFillError("输出文件已存在，拒绝覆盖")
 
     has_control_flow = bool(profile["summary"]["has_jinja_control"])
+    needs_render = has_control_flow or bool(image_data)
     work_path = target.with_name(f".{target.stem}.{uuid.uuid4().hex}.m1b.docx")
     try:
         document.save(str(work_path))
-        if has_control_flow:
+        if needs_render:
             _validate_template_safety(work_path)
             template = DocxTemplate(str(work_path))
+            context = dict(data)
+            for name, descriptor in image_data.items():
+                value = descriptor
+                if isinstance(value, str) and not value.startswith("data:image/"):
+                    candidate = Path(value).expanduser()
+                    if not candidate.is_absolute():
+                        candidate = root / candidate
+                    value = str(candidate)
+                context[name] = InlineImage(
+                    template, _load_image_descriptor(value, root)
+                )
             template.render(
-                data, jinja_env=SandboxedEnvironment(autoescape=False)
+                context, jinja_env=SandboxedEnvironment(autoescape=False)
             )
             template.save(str(target))
         else:
@@ -333,6 +358,7 @@ def fill_word_template_profile(
         "unfilled_slots": unfilled,
         "residual_placeholders": residual,
         "jinja_rendered": has_control_flow,
+        "images_rendered": len(image_data),
         "warnings": warnings,
     }
 

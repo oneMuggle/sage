@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
@@ -35,6 +35,7 @@ class WordTemplateProfileFillRequest(BaseModel):
     template_path: str
     output_filename: str
     data: Dict[str, Any]
+    images: Optional[Dict[str, str]] = None
 
 
 def _resolve_template(workspace_path: str, file_path: str) -> Path:
@@ -62,6 +63,7 @@ def fill_word_template_profile_endpoint(req: WordTemplateProfileFillRequest) -> 
         req.data,
         req.output_filename,
         workspace_path=str(Path(req.workspace_path).resolve()),
+        images=req.images,
     )
 
 

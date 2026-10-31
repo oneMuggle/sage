@@ -96,13 +96,22 @@ def _placeholder_slots(
             name = raw[1:-1].strip()
         if not name:
             continue
+        lowered = name.lower()
+        is_image = any(
+            hint in lowered for hint in ("image", "logo", "photo", "avatar", "icon")
+        ) or "图片" in name
+        slot_type = "image" if is_image else "text"
         slots.append(
             {
                 "name": name,
                 "kind": kind,
-                "type": "text",
+                "type": slot_type,
                 "required": True,
-                "description": f"模板占位符：{raw[:80]}",
+                "description": (
+                    f"图片占位符：{raw[:80]}"
+                    if slot_type == "image"
+                    else f"模板占位符：{raw[:80]}"
+                ),
                 "current_value": raw,
                 "confidence": 0.9,
                 "anchor": _anchor(
