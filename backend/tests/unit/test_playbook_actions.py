@@ -9,8 +9,10 @@ import pytest
 from backend.data import database as database_module
 from backend.data.database import Database
 from backend.data.playbook_repo import PlaybookRepository
+from backend.data.project_constraint_repo import ProjectConstraintRepository
 from backend.data.project_repo import ProjectRepository
-from backend.services.playbook_actions import apply_playbook_actions
+from backend.services.playbook_actions import apply_playbook_actions, project_playbook_rules
+from backend.services.playbook_library import get_builtin
 
 
 @pytest.fixture()
@@ -157,3 +159,20 @@ def test_move_file_and_refuse_overwrite(project, tmp_path: Path) -> None:
     )
     assert refused["errors"]
     assert (root / "另一份.md").is_file()
+
+
+def test_project_playbook_rules_are_idempotent_and_stage_scoped(project) -> None:
+    spec = get_builtin("cn-research-grant")
+    first = project_playbook_rules(project.id, spec, stage_id="proposal")
+    assert first > 0
+    again = project_playbook_rules(project.id, spec, stage_id="proposal")
+    assert again == 0
+
+    contents = [item.content for item in ProjectConstraintRepository().list_by_project(project.id)]
+    assert any("DOI" in item for item in contents)
+    assert any("零幻觉" in item for item in contents)
+
+    execution = project_playbook_rules(project.id, spec, stage_id="execution")
+    assert execution > 0
+    contents = [item.content for item in ProjectConstraintRepository().list_by_project(project.id)]
+    assert any("随机种子" in item for item in contents)

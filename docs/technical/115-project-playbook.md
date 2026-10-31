@@ -96,6 +96,10 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 - 阶段识别：取完成度 ≥ 70% 的最晚阶段作为候选，返回 `confidence` 与 `evidence`；**从不自动切换**，必须调用 `stage/confirm`。
 - 项目顾问（`ProjectAdvisor`）的上下文包含规程审计摘要（当前阶段、完成度、待补项），建议会引用具体待补项；归类建议由审计结果生成，移动需逐项确认。
 
+### 规则投影
+
+绑定规程、导入规程或确认阶段时，会把全局规则与当前阶段规则幂等写入 `project_constraints`（`template_key` 会展开为模板内的多条规则）；因此规程规则会随约束注入 system prompt，真正约束 AI 行为。同一内容不会重复写入；旧阶段规则保留，不会自动删除。
+
 ## 6. API
 
 | 方法 | 路径 | 说明 |

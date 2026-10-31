@@ -94,6 +94,34 @@ async def test_bind_and_audit_reflect_files(
 
 
 @pytest.mark.asyncio()
+async def test_bind_projects_rules_and_stage_adds_more(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    first = await client.get(
+        "/api/v1/projects/{}/constraints".format(project["id"])
+    )
+    assert first.status_code == 200
+    contents = [item["content"] for item in first.json()["constraints"]]
+    assert any("DOI" in item for item in contents)
+    before = len(contents)
+
+    confirmed = await client.post(
+        "/api/v1/projects/{}/playbook/stage/confirm".format(project["id"]),
+        json={"stage_id": "execution"},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+    second = await client.get(
+        "/api/v1/projects/{}/constraints".format(project["id"])
+    )
+    contents = [item["content"] for item in second.json()["constraints"]]
+    assert len(contents) > before
+    assert any("随机种子" in item for item in contents)
+
+
+@pytest.mark.asyncio()
 async def test_actions_apply_and_stage_confirm(
     client: httpx.AsyncClient, project_dir: Path
 ) -> None:

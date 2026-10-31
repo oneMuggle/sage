@@ -43,7 +43,7 @@ from backend.api.playbook_schemas import (
 from backend.data.database import make_with_db_lock
 from backend.data.playbook_repo import PlaybookRepository, PlaybookSnapshot
 from backend.data.project_repo import Project, ProjectRepository
-from backend.services.playbook_actions import apply_playbook_actions
+from backend.services.playbook_actions import apply_playbook_actions, project_playbook_rules
 from backend.services.playbook_ai import audit_with_llm
 from backend.services.playbook_auditor import audit_playbook
 from backend.services.playbook_author import build_author_preview
@@ -214,7 +214,10 @@ def bind_project_playbook(
             raise _error(400, "invalid_playbook", str(exc)) from exc
         source = request.source or "custom"
     PlaybookRepository().create_snapshot(project.id, spec, source=source)
-    _ensure_state(project.id, spec)
+    state = _ensure_state(project.id, spec)
+    project_playbook_rules(
+        project.id, spec, stage_id=state.get("current_stage")
+    )
     return _current_payload(project)
 
 
@@ -287,6 +290,7 @@ def confirm_project_stage(
     )
     if result["errors"]:
         raise _error(400, "stage_confirm_failed", result["errors"][0]["message"])
+    project_playbook_rules(project.id, snapshot.spec, stage_id=request.stage_id)
     refreshed = _project_or_404(project_id)
     return _current_payload(refreshed)
 
@@ -428,7 +432,10 @@ def import_playbook(request: PlaybookImportRequest) -> PlaybookCurrentResponse:
         spec = normalize_playbook(duplicate)
     source = f"imported:{spec_hash(spec)[:12]}"
     repo.create_snapshot(project.id, spec, source=source)
-    _ensure_state(project.id, spec)
+    state = _ensure_state(project.id, spec)
+    project_playbook_rules(
+        project.id, spec, stage_id=state.get("current_stage")
+    )
     return _current_payload(project)
 
 
