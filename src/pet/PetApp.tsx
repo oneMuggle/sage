@@ -4,7 +4,8 @@ import type { PetConfigBridge, PetSnapshotBridge } from '../shared/types/electro
 
 import { PetPanel } from './PetPanel';
 import { bubbleText, resolveAnimation, resolveInteraction } from './engine/animation';
-import { isChinese, statusLabel } from './engine/labels';
+import { isChinese, statusGlyph, statusLabel } from './engine/labels';
+import { safePlay } from './engine/media';
 import { packFor } from './engine/packs';
 import { playSound, primeAudio } from './engine/sounds';
 import { idleDelayMs } from './engine/tempo';
@@ -60,28 +61,6 @@ interface PlaybackOverride {
 interface LocalBubble {
   text: string;
   kind: 'info' | 'success' | 'error';
-}
-
-function statusGlyph(action: string): string {
-  switch (action) {
-    case 'waiting':
-    case 'error':
-      return '!';
-    case 'done':
-      return '✓';
-    case 'acting':
-      return '▶';
-    case 'thinking':
-      return '…';
-    case 'retry':
-      return '↻';
-    case 'observing':
-      return '◇';
-    case 'sleeping':
-      return 'z';
-    default:
-      return '·';
-  }
 }
 
 export function PetApp(): JSX.Element {
@@ -196,10 +175,10 @@ export function PetApp(): JSX.Element {
       video.src = src;
       video.loop = choice.loop;
       video.muted = true;
-      void video.play().catch(() => undefined);
+      safePlay(video);
     } else {
       video.loop = choice.loop;
-      if (video.paused) void video.play().catch(() => undefined);
+      if (video.paused) safePlay(video);
     }
     if (config.reduceMotion) {
       const stop = (): void => {

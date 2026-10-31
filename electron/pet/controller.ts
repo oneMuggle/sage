@@ -14,6 +14,7 @@ import type { WebContentsLike } from '../relay';
 import { relayChatStream } from '../relay';
 import { logger } from '../logger';
 import { mergePetConfig, readPetConfig, writePetConfig } from './config';
+import { shouldShowInApp } from './display';
 import {
   bondDays,
   readPetProfile,
@@ -93,6 +94,7 @@ export class PetController {
   init(): void {
     writePetProfile(this.profileFile, this.profile);
     this.syncWindow();
+    this.broadcastConfig(this.config);
     this.tickTimer = setInterval(() => this.onTick(), 500);
     this.emit(true);
   }
@@ -127,7 +129,7 @@ export class PetController {
       logger.warn('pet: config save failed');
     }
     this.syncWindow();
-    this.window?.sendConfig(next);
+    this.broadcastConfig(next);
     this.emit(true);
     return next;
   }
@@ -248,7 +250,7 @@ export class PetController {
 
   windowReady(): void {
     this.window?.show();
-    this.window?.sendConfig(this.config);
+    this.broadcastConfig(this.config);
     this.emit(true);
   }
 
@@ -261,14 +263,18 @@ export class PetController {
   }
 
   toggleVisible(): void {
-    if (!this.window) {
-      this.setConfig({
-        enabled: true,
-        ...(this.config.displayMode === 'off' ? { displayMode: 'desktop' } : {}),
-      });
+    if (this.window) {
+      this.window.toggleVisible();
       return;
     }
-    this.window.toggleVisible();
+    if (shouldShowInApp(this.config)) {
+      this.setConfig({ enabled: !this.config.enabled });
+      return;
+    }
+    this.setConfig({
+      enabled: true,
+      ...(this.config.displayMode === 'off' ? { displayMode: 'desktop' } : {}),
+    });
   }
 
   resetPosition(): void {
@@ -413,6 +419,20 @@ export class PetController {
     this.lastSent = key;
     this.snapshot = snapshot;
     this.window?.sendState(snapshot);
+    if (shouldShowInApp(this.config)) {
+      this.sendToMain('pet:state', snapshot);
+    }
+  }
+
+  private sendToMain(channel: string, payload: unknown): void {
+    const main = this.options.getMainWindow();
+    if (!main || main.isDestroyed()) return;
+    main.webContents.send(channel, payload);
+  }
+
+  private broadcastConfig(config: PetConfig): void {
+    this.window?.sendConfig(config);
+    this.sendToMain('pet:config', config);
   }
 
   private applyBubbleMode(snapshot: PetSnapshot): PetSnapshot {

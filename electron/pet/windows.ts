@@ -11,6 +11,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { logger } from '../logger';
+import { shouldShowDesktop } from './display';
 import {
   clampToWorkArea,
   defaultPosition,
@@ -52,12 +53,6 @@ function compatibilityEnabled(config: PetConfig): boolean {
   if (config.compatibilityMode === 'on') return true;
   if (config.compatibilityMode === 'off') return false;
   return isLegacyWindows();
-}
-
-function shouldShowDesktop(config: PetConfig): boolean {
-  // P0 has no in-app renderer yet: "in-app" and "both" fall back to the
-  // desktop window so the option never silently hides the pet.
-  return config.enabled && config.displayMode !== 'off';
 }
 
 function readStoredPosition(file: string): StoredPosition | null {

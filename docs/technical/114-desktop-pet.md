@@ -84,6 +84,13 @@ FastAPI chat stream (NDJSON)
 - **完整动画包**：内置 dsh-pet 全部 109 个 WebM（约 52.7MB，MIT）。其中 87 个进入待机池，每段播完回到 `待机呼吸休闲` 循环，按 `tempo` 的 quiet/standard/lively（45–90 / 25–45 / 12–22 秒）随机休息后播下一段；点击回应从 5 个里随机抽。
 - 以上互动不读取消息正文/参数，只记录本地计数。
 
+### 3.3 应用内角落形态（P1 补全）
+
+- `displayMode` 四种取值现在互相独立：`desktop` 只开透明置顶窗；`in-app` 只在主窗口右下角显示；`both` 同时显示；`off` 全部关闭。
+- `in-app` 不创建额外 `BrowserWindow`：controller 仍聚合同一份 `PetSnapshot`，并在 `emit` / `broadcastConfig` 时推给主窗口；`src/widgets/pet/InAppPet.tsx` 渲染固定右下角的小宠物。
+- 点击 in-app 宠物 → 打开当前会话；右键 → 打开宠物设置；尺寸按 `size` 映射 96/120/150/190/230px；`reduceMotion` 时暂停在首帧。
+- 这条形态不依赖透明窗/点击穿透，作为 Win7 无 Aero、远程桌面或不想开桌面窗时的可用方案；与桌面窗共用动作/气泡/徽章。
+
 ## 4. 窗口行为
 
 - `transparent` + `frame:false` + `alwaysOnTop` + `skipTaskbar` + `focusable:false`。
@@ -148,8 +155,7 @@ canonicalizer 与 Win7 设置 schema parity。
 
 ## 8. 已知限制 / 下一步
 
-- P0 仅实现「桌面」形态；`displayMode=in-app/both` 暂按桌面处理，应用内角落
-  浮层待后续。
+- P0 仅实现「桌面」形态；`displayMode=in-app/both` 由主窗口内的 `InAppPet` 承担，不再回退到桌面窗。
 - 未在 Win7 真机验证透明/穿透；兼容模式已写好但需真机回归。
 - 提示音为 WebAudio 合成短音，不是角色语音；需一次用户手势解锁 AudioContext。
 - 面板已能列出最近/活跃会话，但「每个会话一只宠物」未实现。

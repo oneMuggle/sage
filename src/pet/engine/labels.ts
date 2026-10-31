@@ -82,6 +82,28 @@ export function isActiveAction(action: string): boolean {
   return ACTIVE_ACTIONS.has(action);
 }
 
+export function statusGlyph(action: string): string {
+  switch (action) {
+    case 'waiting':
+    case 'error':
+      return '!';
+    case 'done':
+      return '✓';
+    case 'acting':
+      return '▶';
+    case 'thinking':
+      return '…';
+    case 'retry':
+      return '↻';
+    case 'observing':
+      return '◇';
+    case 'sleeping':
+      return 'z';
+    default:
+      return '·';
+  }
+}
+
 export function relativeTime(timestamp: number | null, now = Date.now()): string {
   if (!timestamp || timestamp <= 0) return '';
   const seconds = Math.max(0, Math.round((now - timestamp) / 1000));
