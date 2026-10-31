@@ -60,6 +60,7 @@ Office/PDF 页面   ─┘        │
 | 字段 | 类型 | 默认 | 说明 |
 |---|---|---|---|
 | `enabled` | bool | true | 总开关 |
+| `office_enabled` | bool | false | Office/PDF 扫描页 OCR（`SAGE_OCR=1` 仍可覆盖） |
 | `engine` | `auto/rapidocr/tesseract` | `auto` | `auto` 优先 RapidOCR，缺失时回退 Tesseract |
 | `lang` | `auto/ch/en` | `auto` | Tesseract 语言；RapidOCR 使用模型语言 |
 | `prefer_local_for_images` | bool | false | 有视觉模型时也优先 OCR |
@@ -74,7 +75,12 @@ Office/PDF 页面   ─┘        │
 
 ### RapidOCR（推荐）
 
-- 可选依赖：`rapidocr>=3.10,<4` + `onnxruntime==1.19.2`；
+- **win7 安装包不捆绑 RapidOCR**（onnxruntime >=1.15 不支持 Win7）；
+  Win7 推荐 Tesseract 4.1（可把二进制放到 `resources/tesseract/`，
+  Electron 会自动注入 `SAGE_TESSERACT_PATH`）。
+- 实验路径（需真机验证）：`rapidocr-onnxruntime==1.4.4` + `onnxruntime==1.14.1`
+  + PP-OCRv4 mobile；默认不启用。
+- dev/main 手动安装方式见 `backend/requirements-optional.txt`。
 - wheel 自带 PP-OCRv6 small det/rec + 方向分类模型（约 31MB），安装后离线可用；
 - 自定义模型目录：`SAGE_OCR_MODEL_DIR` 或 `SAGE_USER_DATA_DIR/models/rapidocr/`
   （`det.onnx` + `rec.onnx`，可选 `cls.onnx`）。
@@ -82,7 +88,9 @@ Office/PDF 页面   ─┘        │
 ### Tesseract（兼容/降级）
 
 - 可选依赖：`pytesseract` + 系统 `tesseract` 二进制；中文需 `chi_sim` 语言包；
-- Win7 建议 Tesseract 4.1 兼容构建；Tesseract 5 官方只支持 Win10/11。
+- Win7 建议 Tesseract 4.1 兼容构建；Tesseract 5 官方只支持 Win10/11；
+- 若发布包在 `resources/tesseract/tesseract[.exe]` 放置二进制，Electron 启动后端时会
+  自动注入 `SAGE_TESSERACT_PATH`（显式环境变量优先）。
 
 ### 平台矩阵
 
@@ -105,6 +113,7 @@ RapidOCR/onnxruntime 未进默认安装包；缺依赖时能力位降级，不�
 - `ChatInput` 启动时探测 OCR 能力；无视觉模型且 OCR 可用时不再禁用图片上传；
 - `ImageOcrPreview`：输入区展示每张图片的 OCR 文本，支持复制、编辑、重新识别；
 - 编辑后的文本经 `image_ocr_texts` 随 `POST /api/v1/chat/stream` 发送；
+- 注入 LLM 的 OCR 文本有上限：单图 20k 字符、总量 60k，超出会追加截断标记；
 - 设置页「本地 OCR」卡片：状态、引擎、语言、测试识别、优先策略；持久化 `ocr_config`。
 
 ## 8. 性能

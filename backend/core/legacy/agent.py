@@ -138,6 +138,12 @@ from backend.tools.permissions import (
 
 logger = logging.getLogger(__name__)
 
+#: 单张图片 OCR 文本注入上限（防止编辑结果/异常长文本挤爆上下文）
+_OCR_TEXT_MAX_CHARS_PER_IMAGE = 20_000
+#: 多图 OCR 文本总注入上限
+_OCR_TEXT_MAX_TOTAL_CHARS = 60_000
+_OCR_TEXT_TRUNCATION_MARKER = "\n…[OCR 文本已截断]"
+
 
 def _tool_signature(tc: Any) -> str:
     """B2 复读守卫: 规范化工具调用签名为 "工具名:排序参数JSON"。
@@ -309,6 +315,13 @@ def _retry_events_to_agent_events(
         )
         for ev in retry_events
     ]
+
+
+def _truncate_ocr_text(text: str, limit: int) -> str:
+    """截断注入 LLM 的 OCR 文本，避免异常长文本挤爆上下文。"""
+    if len(text) <= limit:
+        return text
+    return text[:limit] + _OCR_TEXT_TRUNCATION_MARKER
 
 
 class SageAgent:
@@ -1147,7 +1160,9 @@ class SageAgent:
     @staticmethod
     def _format_provided_ocr_text(index: int, text: str) -> str:
         """格式化用户确认/编辑后的 OCR 文本块。"""
-        value = (text or "").strip()
+        value = _truncate_ocr_text(
+            (text or "").strip(), _OCR_TEXT_MAX_CHARS_PER_IMAGE
+        )
         if not value:
             return "[图片 %d 未识别到文字（使用发送前预览结果）]" % index
         return "[图片 %d 文字内容 · 本地 OCR · 用户确认]\n%s" % (index, value)
@@ -1158,7 +1173,10 @@ class SageAgent:
         if result is None or not getattr(result, "ok", False):
             reason = getattr(result, "error", "") if result is not None else ""
             return "[图片 %d 文字识别失败：%s]" % (index, reason or "ocr_failed")
-        text = (getattr(result, "text", "") or "").strip()
+        text = _truncate_ocr_text(
+            (getattr(result, "text", "") or "").strip(),
+            _OCR_TEXT_MAX_CHARS_PER_IMAGE,
+        )
         engine = getattr(result, "engine", "") or "ocr"
         quality = getattr(result, "quality", "ok")
         if not text:
@@ -1188,7 +1206,10 @@ class SageAgent:
         if last_msg.get("role") != "user":
             return result
 
-        block_text = "\n\n".join(block for block in blocks if block)
+        block_text = _truncate_ocr_text(
+            "\n\n".join(block for block in blocks if block),
+            _OCR_TEXT_MAX_TOTAL_CHARS,
+        )
         original_content = last_msg.get("content", "")
         if isinstance(original_content, list):
             original_text = "\n".join(
