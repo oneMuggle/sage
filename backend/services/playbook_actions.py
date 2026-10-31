@@ -150,6 +150,69 @@ def _set_stage(project: Any, payload: Dict[str, Any]) -> str:
     return "applied"
 
 
+def project_playbook_rules(
+    project_id: str,
+    spec: Dict[str, Any],
+    *,
+    stage_id: Optional[str] = None,
+) -> int:
+    """Project playbook rules into ``project_constraints`` (idempotent).
+
+    When ``stage_id`` is set, only that stage's rules plus global rules are
+    projected; otherwise all stage rules are considered. Existing constraint
+    content is never duplicated.
+    """
+    from backend.data.project_constraint_repo import CONSTRAINT_TEMPLATES
+
+    rules: List[Dict[str, Any]] = list(spec.get("global_rules") or [])
+    for stage in spec.get("stages") or []:
+        if stage_id is not None and stage.get("id") != stage_id:
+            continue
+        rules.extend(stage.get("rules") or [])
+
+    repo = ProjectConstraintRepository()
+    existing = {_normalize(item.content) for item in repo.list_by_project(project_id)}
+    created = 0
+
+    def _create(content: str, category: str, trigger_pattern: str, priority: int) -> None:
+        nonlocal created
+        content = content.strip()
+        normalized = _normalize(content)
+        if not content or normalized in existing:
+            return
+        repo.create(
+            project_id=project_id,
+            category=category,
+            content=content,
+            trigger_pattern=trigger_pattern or "always",
+            priority=int(priority or 5),
+        )
+        existing.add(normalized)
+        created += 1
+
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        template_key = str(rule.get("template_key") or "").strip()
+        if template_key:
+            for template in CONSTRAINT_TEMPLATES.get(template_key) or []:
+                if isinstance(template, dict):
+                    _create(
+                        str(template.get("content") or ""),
+                        str(template.get("category") or "playbook"),
+                        str(template.get("trigger_pattern") or "always"),
+                        int(template.get("priority") or 5),
+                    )
+            continue
+        _create(
+            str(rule.get("content") or ""),
+            str(rule.get("category") or "playbook"),
+            str(rule.get("trigger_pattern") or "always"),
+            int(rule.get("priority") or 5),
+        )
+    return created
+
+
 def _add_todo(project: Any, payload: Dict[str, Any]) -> str:
     from backend.data.database import get_database
     from backend.services.todo_service import TodoService
@@ -256,4 +319,4 @@ def apply_playbook_actions(project: Any, actions: List[Dict[str, Any]]) -> Dict[
     }
 
 
-__all__ = ["apply_playbook_actions"]
+__all__ = ["apply_playbook_actions", "project_playbook_rules"]
