@@ -90,12 +90,10 @@ describe('LatexTemplatePanel', () => {
     fireEvent.click(screen.getByTestId('latex-template-fill'));
 
     await waitFor(() => expect(screen.getByTestId('latex-fill-result')).toBeInTheDocument());
-    expect(mockedFill).toHaveBeenCalledWith(
-      '/ws',
-      '/ws/paper/main.tex',
-      'main-filled.tex',
-      { title: 'New Title', author: ['Alice', 'Bob'] },
-    );
+    expect(mockedFill).toHaveBeenCalledWith('/ws', '/ws/paper/main.tex', 'main-filled.tex', {
+      title: 'New Title',
+      author: ['Alice', 'Bob'],
+    });
     expect(screen.getByText(/main-filled\.tex/)).toBeInTheDocument();
   });
 

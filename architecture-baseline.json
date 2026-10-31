@@ -1,7 +1,7 @@
 {
   "version": 1,
   "files": {
-    "backend/agents/profiles.py": 1084,
+    "backend/agents/profiles.py": 1087,
     "backend/api/legacy_routes.py": 2637,
     "backend/api/llm_proxy_routes.py": 1216,
     "backend/api/orchestration_router.py": 807,
@@ -78,6 +78,6 @@
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
     "backend/tools/config_tool.py": 976,
     "scripts/feedback_receiver.py": 1154,
-    "electron/preload.ts": 844
+    "electron/preload.ts": 847
   }
 }

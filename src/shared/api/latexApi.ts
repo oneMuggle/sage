@@ -49,6 +49,28 @@ export interface LatexFillResult {
   warnings: Array<{ code: string; message: string }>;
 }
 
+export interface LatexAuditIssue {
+  rule_id: string;
+  severity: 'error' | 'warning' | 'info';
+  category: string;
+  message: string;
+  fix_hint: string;
+  anchor?: { file: string; line: number; column?: number };
+  evidence?: Record<string, unknown>;
+}
+
+export interface LatexAuditResult {
+  ok: boolean;
+  source_path: string;
+  issues: LatexAuditIssue[];
+  summary: {
+    count: number;
+    severity: { error: number; warning: number; info: number };
+    categories: Record<string, number>;
+  };
+  required_sections: string[];
+}
+
 export async function analyzeLatexTemplate(
   workspacePath: string,
   filePath: string,
@@ -74,6 +96,22 @@ export async function fillLatexTemplate(
       template_path: templatePath,
       output_filename: outputFilename,
       data,
+    },
+  });
+}
+
+export async function auditLatex(
+  workspacePath: string,
+  filePath: string,
+  requiredSections: string[] = [],
+): Promise<LatexAuditResult> {
+  return backendRequest<LatexAuditResult>({
+    method: 'POST',
+    path: '/api/v1/office/latex/audit',
+    body: {
+      workspace_path: workspacePath,
+      file_path: filePath,
+      required_sections: requiredSections,
     },
   });
 }

@@ -206,3 +206,47 @@ async def test_template_fill_missing_required_returns_422(
     )
 
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio()
+async def test_audit_latex_returns_anchored_issues(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    main = _write(
+        workspace,
+        "paper.tex",
+        r"""
+\documentclass{article}
+\title{T}
+\author{A}
+\begin{document}
+\begin{abstract}A\end{abstract}
+\section{Introduction}
+\cite{missing}
+\begin{thebibliography}{9}
+\bibitem{known} Known.
+\end{thebibliography}
+\write18{echo unsafe}
+\end{document}
+""",
+    )
+
+    resp = await client.post(
+        "/api/v1/office/latex/audit",
+        json={
+            "workspace_path": str(workspace),
+            "file_path": str(main),
+            "required_sections": ["Introduction", "Conclusion"],
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["ok"] is False
+    rules = {issue["rule_id"] for issue in payload["issues"]}
+    assert "LATEX-CITE-UNDEFINED" in rules
+    assert "LATEX-UNSAFE-COMMAND" in rules
+    assert "LATEX-SECTION-REQUIRED" in rules
+    assert any(issue.get("anchor") for issue in payload["issues"])
