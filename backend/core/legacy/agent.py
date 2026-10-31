@@ -33,6 +33,15 @@ from backend.core.legacy.context_first_aid import (
     run_ctx_budget_tokens,
 )
 from backend.core.legacy.context_microcompact import micro_compact
+from backend.core.legacy.iteration_budget import (
+    BudgetConfig,
+    BudgetLevel,
+    audit_window,
+    build_budget_info,
+    build_step_record,
+    decide_budget,
+    estimate_initial_budget,
+)
 from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse, RetryEvent
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
@@ -99,6 +108,11 @@ def _load_max_consecutive_unanswered() -> int:
 #: 与 ``agents/profiles.py`` 的 dataclass 默认、``data/database.py``
 #: 的 DB 列默认保持一致，避免降级路径静默砍半预算。
 DEFAULT_MAX_ITERATIONS = 10
+
+#: ``OrchSettings.max_iterations`` 的默认值（backend/orchestration/orch_settings.py）。
+#: run_loop 用它区分"用户未配置"（→ 启用动态预算）与"用户显式设置"
+#: （→ 作为硬上限，不自动延长）。0 仍保留"按各 agent profile 分别设置"语义。
+DEFAULT_ORCH_MAX_ITERATIONS = 25
 
 #: RT2 (round7): 上下文溢出急救压缩的最大重试次数。第 1 次用常规压缩
 #: （保留最近 6 条），第 2 次用激进压缩（保留最近 2 条）；仍溢出则按
@@ -1672,10 +1686,29 @@ class SageAgent:
         tool_sig_counts: Dict[str, int] = {}
         repeat_nudged: set = set()
 
+        # 2026-10-31: 动态迭代预算开关。默认开启；SAGE_DYNAMIC_ITERATION_BUDGET=0
+        # 可恢复旧的固定上限行为（测试/排障）。
+        _dynamic_budget_enabled = (
+            os.getenv("SAGE_DYNAMIC_ITERATION_BUDGET", "1").strip().lower()
+            not in ("0", "false", "off", "no")
+        )
+        _budget_config = BudgetConfig.from_env()
+        _budget_level: BudgetLevel = "medium"
+        _dynamic_budget_active = False
+        _profile_max_iterations: Optional[int] = None
+        if isinstance(self.profile, dict):
+            try:
+                _profile_max_iterations = int(self.profile.get("max_iterations"))
+            except (TypeError, ValueError):
+                _profile_max_iterations = None
+
         # 阶段 1: max_iterations 优先级：
-        # 1. 显式传入的 max_iterations 参数（最高优先级）
-        # 2. OrchSettings.max_iterations（UI 可配置，2026-10-20 新增）
-        # 3. AgentProfile.max_iterations（profile 硬编码默认值）
+        # 1. 显式传入的 max_iterations 参数（最高优先级，硬上限，不自动延长）
+        # 2. OrchSettings.max_iterations：
+        #    - 0    → 按 profile 分别设置（沿用旧语义，不自动延长）
+        #    - 25   → 默认值 = 用户未显式配置，启用动态预算
+        #    - 其他 → 用户显式设置，作为硬上限，不自动延长
+        # 3. AgentProfile.max_iterations
         # 4. DEFAULT_MAX_ITERATIONS（兜底值 10）
         #
         # ``_limit_source`` 记录本次上限来自哪一层，随 FAILED 事件下发给前端，
@@ -1687,25 +1720,52 @@ class SageAgent:
             effective_max_iterations = max_iterations
             _limit_source = "explicit"
         else:
+            _orch_settings_max: Optional[int] = None
             try:
                 from backend.orchestration.orch_settings import load_orch_settings
-                orch_settings_max = load_orch_settings().max_iterations
-                if orch_settings_max > 0:
-                    effective_max_iterations = orch_settings_max
-                    _limit_source = "orch.global"
-                elif self.profile:
-                    effective_max_iterations = self.profile.get("max_iterations", DEFAULT_MAX_ITERATIONS)
-                    _limit_source = "profile"
-                else:
-                    effective_max_iterations = DEFAULT_MAX_ITERATIONS
-                    _limit_source = "default"
+
+                _orch_settings_max = load_orch_settings().max_iterations
             except Exception:  # noqa: BLE001 — settings 读取失败回落 profile 默认
+                _orch_settings_max = None
+
+            if _dynamic_budget_enabled and _orch_settings_max == DEFAULT_ORCH_MAX_ITERATIONS:
+                # OrchSettings 的默认值（25）= 用户未显式配置迭代上限 →
+                # 按任务分级给初始预算，到检查点再按进度自动延长。
+                _user_message = ""
+                for _m in reversed(messages):
+                    if (
+                        isinstance(_m, dict)
+                        and _m.get("role") == "user"
+                        and isinstance(_m.get("content"), str)
+                    ):
+                        _user_message = _m["content"]
+                        break
+                _has_attachments = any(
+                    isinstance(_m.get("content"), (list, dict))  # noqa: UP038 — py3.8 兼容
+                    for _m in messages
+                    if isinstance(_m, dict)
+                )
+                effective_max_iterations, _budget_level = estimate_initial_budget(
+                    _user_message,
+                    has_attachments=_has_attachments,
+                    profile_floor=_profile_max_iterations,
+                    config=_budget_config,
+                )
+                _dynamic_budget_active = True
+                _limit_source = "dynamic"
+            elif _orch_settings_max is not None and _orch_settings_max > 0:
+                effective_max_iterations = _orch_settings_max
+                _limit_source = "orch.global"
+            elif self.profile:
                 effective_max_iterations = (
-                    self.profile.get("max_iterations", DEFAULT_MAX_ITERATIONS)
-                    if self.profile
+                    _profile_max_iterations
+                    if _profile_max_iterations is not None
                     else DEFAULT_MAX_ITERATIONS
                 )
-                _limit_source = "profile" if self.profile else "default"
+                _limit_source = "profile"
+            else:
+                effective_max_iterations = DEFAULT_MAX_ITERATIONS
+                _limit_source = "default"
         # 无 profile 时退到 agent_id，保证错误文本里始终能指出是哪个 agent。
         _limit_agent_id = _profile_id or str(self.agent_id or "")
 
@@ -1762,8 +1822,60 @@ class SageAgent:
                 f"如需其余部分请用更精确的查询/offset 重试]"
             )
 
+        _loop_hard_cap = (
+            max(int(effective_max_iterations), _budget_config.hard_cap)
+            if _dynamic_budget_active
+            else int(effective_max_iterations)
+        )
+        _step_history: List[Any] = []
+        _seen_result_hashes: set = set()
+        _budget_extensions = 0
+        _budget_stop_reason: Optional[str] = None
+        _iter_message_start: Optional[int] = None
+
         try:
-            for i in range(effective_max_iterations):
+            for i in range(_loop_hard_cap):
+                # 2026-10-31 动态迭代预算: 先结算上一步，再判断是否到达检查点。
+                # 从 messages 增量推导 StepRecord，避免改动所有工具分支。
+                if _iter_message_start is not None:
+                    _step_history.append(
+                        build_step_record(
+                            i - 1,
+                            messages[_iter_message_start :],
+                            _seen_result_hashes,
+                        )
+                    )
+                if i >= effective_max_iterations:
+                    if not _dynamic_budget_active:
+                        break
+                    _audit = audit_window(
+                        _step_history[-_budget_config.window :], _budget_config
+                    )
+                    _decision = decide_budget(
+                        int(effective_max_iterations),
+                        _audit,
+                        _budget_extensions,
+                        _budget_config,
+                    )
+                    if _decision.action == "extend":
+                        _previous_budget = int(effective_max_iterations)
+                        effective_max_iterations = _decision.next_budget
+                        _budget_extensions += 1
+                        yield AgentEvent(
+                            state=AgentState.ITERATION_CHECKPOINT,
+                            iteration=i,
+                            agent_id=self.agent_id,
+                            budget_info=build_budget_info(
+                                level=_budget_level,
+                                previous_budget=_previous_budget,
+                                next_budget=effective_max_iterations,
+                                extensions=_budget_extensions,
+                                audit=_audit,
+                            ),
+                        )
+                    else:
+                        _budget_stop_reason = _decision.reason
+                        break
                 # P0-1 (2026-08-20): 中断检查 —— 每轮迭代顶部消费一次中断信号（one-shot）。
                 # 此前 interrupt() 只置标志位、is_interrupted() 零调用者，run_loop 从不读，
                 # 中断请求完全无效。现在最迟在下一轮迭代开头终止：发 FAILED 事件，
@@ -1795,6 +1907,9 @@ class SageAgent:
                     messages, i, _compact_failures
                 )
 
+                # 动态预算: 记录本轮消息起点（steering/压缩之后），下一轮顶部
+                # 用 messages[_iter_message_start:] 生成本 step 的进度快照。
+                _iter_message_start = len(messages)
                 yield AgentEvent(state=AgentState.THINKING, iteration=i, agent_id=self.agent_id)
 
                 # Pass available tools to LLM so it can call them
@@ -2647,18 +2762,30 @@ class SageAgent:
                     agent_id=self.agent_id,
                 )
 
+            # 动态预算: 若循环因 hard cap 自然结束（未显式决定停止），补原因。
+            if _dynamic_budget_active and _budget_stop_reason is None:
+                _budget_stop_reason = "hard_cap"
             # agent= 只在能识别出 agent 时下发；空值会渲染成 "agent=, source=…"
             # 这种畸形装饰，前端解析器虽能容忍，但日志里很难看。
             _limit_agent_part = f", agent={_limit_agent_id}" if _limit_agent_id else ""
+            _budget_reason_part = (
+                f", reason={_budget_stop_reason}" if _budget_stop_reason else ""
+            )
+            _budget_extension_part = (
+                f", extensions={_budget_extensions}" if _budget_extensions else ""
+            )
             yield AgentEvent(
                 state=AgentState.FAILED,
                 iteration=effective_max_iterations,
                 # 上限值随错误码一并下发，前端据此提示用户
                 # "该调到多少"，而不是只说"超上限了"。
-                # agent= / source= 让前端能指出是哪个 Agent 打的哪个配置。
+                # agent= / source= 让前端能指出是哪个 Agent 打的哪个配置；
+                # reason= / extensions= 说明动态预算为何停止（stuck / no_progress /
+                # extension_limit / hard_cap）以及自动延长了几次。
                 error=(
                     f"max_iterations_exceeded (limit={effective_max_iterations}"
-                    f"{_limit_agent_part}, source={_limit_source})"
+                    f"{_limit_agent_part}, source={_limit_source}"
+                    f"{_budget_reason_part}{_budget_extension_part})"
                 ),
                 agent_id=self.agent_id,
             )
