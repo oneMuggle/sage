@@ -35,4 +35,18 @@ export const PET_SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [
     labelEn: 'Pet idle tempo',
     keywords: 'pet 桌宠 节奏 tempo quiet standard lively 待机',
   },
+  {
+    key: 'pet_pack',
+    tab: 'pet',
+    label: '宠物动画包',
+    labelEn: 'Pet animation pack',
+    keywords: 'pet 桌宠 宠物 动画包 pack 大肥鱼 自定义 选择',
+  },
+  {
+    key: 'pet_pack_manage',
+    tab: 'pet',
+    label: '动画包导入导出',
+    labelEn: 'Import and export pet packs',
+    keywords: 'pet 桌宠 动画包 pack zip 导入 导出 删除 import export delete',
+  },
 ];

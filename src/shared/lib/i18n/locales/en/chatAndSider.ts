@@ -356,7 +356,7 @@ export const enChatAndSider = {
   'settings.pet.compat.off': 'Off',
   'settings.pet.reset_position': 'Reset position',
   'settings.pet.asset_notice':
-    'Assets are from dsh-pet (MIT); the full asset pack is not shipped by default.',
+    'Assets are from dsh-pet (MIT); the full asset pack ships with the installer.',
   'settings.search.placeholder': 'Search settings…',
   'settings.search.hits': '{count} matches',
   'settings.search.empty': 'No matching settings',

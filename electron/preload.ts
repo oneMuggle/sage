@@ -33,6 +33,10 @@ import type {
   PickedOfficeFile,
   PetConfigBridge,
   PetElectronApiBridge,
+  PetPackDeleteResultBridge,
+  PetPackExportResultBridge,
+  PetPackImportResultBridge,
+  PetPackManifestBridge,
   PetSnapshotBridge,
   ProvidersElectronApiBridge,
   PtyElectronApiBridge,
@@ -817,6 +821,14 @@ const electronAPI = {
     hide: () => {
       ipcRenderer.send('pet:hide');
     },
+    listPacks: () =>
+      ipcRenderer.invoke('pet:list-packs') as Promise<PetPackManifestBridge[]>,
+    importPack: () =>
+      ipcRenderer.invoke('pet:import-pack') as Promise<PetPackImportResultBridge>,
+    exportPack: (id) =>
+      ipcRenderer.invoke('pet:export-pack', { id }) as Promise<PetPackExportResultBridge>,
+    deletePack: (id) =>
+      ipcRenderer.invoke('pet:delete-pack', { id }) as Promise<PetPackDeleteResultBridge>,
   } satisfies PetElectronApiBridge,
 
   /**

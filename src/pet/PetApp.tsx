@@ -6,9 +6,10 @@ import { PetPanel } from './PetPanel';
 import { bubbleText, resolveAnimation, resolveInteraction } from './engine/animation';
 import { isChinese, statusGlyph, statusLabel } from './engine/labels';
 import { safePlay } from './engine/media';
-import { packFor } from './engine/packs';
+import { packSource } from './engine/packs';
 import { playSound, primeAudio } from './engine/sounds';
 import { idleDelayMs } from './engine/tempo';
+import { usePetPacks } from './usePetPacks';
 
 const LONG_PRESS_MS = 550;
 const CLICK_DELAY_MS = 240;
@@ -157,7 +158,7 @@ export function PetApp(): JSX.Element {
     [],
   );
 
-  const pack = useMemo(() => packFor(config.petPack), [config.petPack]);
+  const pack = usePetPacks(config.petPack);
 
   const choice = useMemo(() => {
     if (override) return override;
@@ -170,7 +171,7 @@ export function PetApp(): JSX.Element {
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !choice) return;
-    const src = encodeURI(`./pet/${config.petPack}/${choice.file}`);
+    const src = packSource(pack, choice.file);
     if (currentFileRef.current !== src) {
       currentFileRef.current = src;
       video.src = src;
@@ -193,7 +194,7 @@ export function PetApp(): JSX.Element {
       if (video.readyState >= 2) stop();
       else video.addEventListener('loadeddata', stop, { once: true });
     }
-  }, [choice, config.petPack, config.reduceMotion]);
+  }, [choice, pack, config.reduceMotion]);
 
   const togglePanel = useCallback(() => {
     setPanelOpen((open) => {

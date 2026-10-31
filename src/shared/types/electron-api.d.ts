@@ -522,6 +522,41 @@ export interface PetSnapshotBridge {
   updatedAt: number;
 }
 
+/**
+ * A user-imported pet pack manifest (validated in the main process).
+ * Built-in packs are bundled with the renderer and are not returned here.
+ */
+export interface PetPackManifestBridge {
+  id: string;
+  name: string;
+  version: string;
+  license: string;
+  source?: string;
+  canvas: { width: number; height: number };
+  anchor: { x: number; y: number };
+  actions: Record<string, string[]>;
+}
+
+export interface PetPackImportResultBridge {
+  ok: boolean;
+  canceled?: boolean;
+  error?: string;
+  manifest?: PetPackManifestBridge;
+  config?: PetConfigBridge;
+}
+
+export interface PetPackExportResultBridge {
+  ok: boolean;
+  canceled?: boolean;
+  error?: string;
+  path?: string;
+}
+
+export interface PetPackDeleteResultBridge {
+  ok: boolean;
+  error?: string;
+}
+
 export interface PetElectronApiBridge {
   getConfig: () => Promise<PetConfigBridge>;
   setConfig: (patch: Partial<PetConfigBridge>) => Promise<PetConfigBridge>;
@@ -540,6 +575,11 @@ export interface PetElectronApiBridge {
   pat: () => void;
   reportTasks: (tasks: PetTaskReportBridge[]) => void;
   hide: () => void;
+  /** Installed user packs (does not include built-in packs). */
+  listPacks: () => Promise<PetPackManifestBridge[]>;
+  importPack: () => Promise<PetPackImportResultBridge>;
+  exportPack: (id: string) => Promise<PetPackExportResultBridge>;
+  deletePack: (id: string) => Promise<PetPackDeleteResultBridge>;
 }
 
 export interface ElectronAPI {

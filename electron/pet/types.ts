@@ -65,6 +65,21 @@ export interface PetConfig {
   followActiveSession: boolean;
 }
 
+/**
+ * Normalized user pack manifest (validated from `userData/pets/<id>/pack.json`).
+ * Built-in packs live in the renderer bundle and never pass through here.
+ */
+export interface PetPackManifest {
+  id: string;
+  name: string;
+  version: string;
+  license: string;
+  source?: string;
+  canvas: { width: number; height: number };
+  anchor: { x: number; y: number };
+  actions: Record<string, string[]>;
+}
+
 export type PetTaskStatus =
   | 'queued'
   | 'running'

@@ -50,6 +50,8 @@ import { release as osRelease } from 'node:os';
 import { registerEditableContextMenu } from './contextMenu';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { disposePet, getPetController, initPet } from './pet';
+import { registerPetPackProtocol, registerPetPackScheme } from './pet/packProtocol';
+import { petPacksDir } from './pet/packStore';
 import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
 import {
   registerSageFileProtocol,
@@ -323,6 +325,11 @@ if (isLegacyWindows()) {
   app.commandLine.appendSwitch('disable-gpu-sandbox');
   app.commandLine.appendSwitch('disable-dev-shm-usage');
 }
+
+// 2026-10-31: sage-pet:// serves imported pet packs from <userData>/pets/.
+// Scheme privileges must be declared before `app.whenReady()` resolves; the
+// handler itself is registered inside the whenReady chain below.
+registerPetPackScheme();
 
 let backendProc: ChildProcess | null = null;
 let backendGeneration = 0;
@@ -2469,6 +2476,9 @@ app
     // 校验后安全渲染（MarkdownImage 生成 sage-file://p/<enc> URL）。
     // 必须在窗口加载页面前注册。
     registerSageFileProtocol();
+    // 2026-10-31: user-imported pet packs — serve <userData>/pets/<id>/ assets
+    // to both the overlay and the in-app pet via sage-pet://.
+    registerPetPackProtocol(petPacksDir(resolveSageUserDataDir()));
     ipcMain.handle('sage-file:register-root', (_evt, root: string) => {
       return registerWorkspaceRoot(String(root ?? ''));
     });

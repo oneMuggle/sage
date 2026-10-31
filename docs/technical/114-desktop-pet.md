@@ -22,6 +22,8 @@ FastAPI chat stream (NDJSON)
 │ electron/pet/controller.ts  ← main.ts: trackStream()     │
 │   ├─ state.ts        纯函数：AgentEvent → PetSnapshot    │
 │   ├─ config.ts       userData/pet-config.json            │
+│   ├─ packStore.ts    userData/pets/ 导入/导出/删除        │
+│   ├─ packProtocol.ts sage-pet:// 协议（Range 支持）       │
 │   ├─ windows.ts      透明置顶窗/穿透/拖拽/位置/看门狗     │
 │   └─ ipc.ts          pet:* 白名单通道（校验发送窗口）      │
 └───────┬──────────────────────────────────────────────────┘
@@ -29,7 +31,8 @@ FastAPI chat stream (NDJSON)
 ┌───────▼──────────────── 宠物渲染器 ──────────────────────┐
 │ pet.html + src/pet/PetApp.tsx                            │
 │   engine/animation.ts  动作选择 / 气泡文案                │
-│   engine/packs.ts      内置素材清单（大肥鱼）             │
+│   engine/packs.ts      内置素材清单 + 用户包 URL 解析     │
+│   usePetPacks.ts       当前动画包（内置/用户导入）         │
 │   public/pet/dafeiyu/  WebM 动画（VP9-alpha）             │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -37,6 +40,8 @@ FastAPI chat stream (NDJSON)
 **IPC 信任边界**：宠物窗不是 `isTrustedRenderer` 认可的窗口，不能调用
 `sage:invoke` / `sage:listen`。它只有 `window.electronAPI.pet` 的窄桥；
 主进程校验 `BrowserWindow.fromWebContents(sender)` 是主窗或宠物窗。
+动画包管理（`pet:import-pack` / `pet:export-pack` / `pet:delete-pack`）
+只接受主窗发送者，宠物窗仅能 `pet:list-packs` 读取清单。
 
 ## 3. 状态映射
 
@@ -141,15 +146,64 @@ canonicalizer 与 Win7 设置 schema parity。
 
 - `public/pet/dafeiyu/*.webm`：完整 109 个动作（约 52.7MB），MIT；其中 87 个作为待机随机池，6 个工作状态、5 个点击回应、3 个睡眠、6 个余额（预留）、1 个拖拽、1 个重试，以及摸头/生气两个专属动作。
 - 出处、修改与角色 IP 提示见 `third_party/dsh-pet/NOTICE.md`；清单由 `scripts/pet-pack/generate-dafeiyu-pack.mjs` 从 WebM 文件生成。
-- 新增素材：在 `public/pet/<id>/` 放 WebM + `pack.json`，并在
+- 新增内置素材：在 `public/pet/<id>/` 放 WebM + `pack.json`，并在
   `src/pet/engine/packs.ts` 注册清单（打包环境不走 `fetch(pack.json)`，
   避免 `file://` CORS）。完整包会让安装包增加约 45MB，这是当前全量内置的代价。
+  **用户导入的动画包不需要改这里**，见下一节。
+
+### 6.1 自定义动画包（导入 / 导出）
+
+用户可在 **设置 → 智能体 → 桌宠 → 动画包** 导入 zip。包解压到
+`<userData>/pets/<id>/`，与安装包解耦；选中项存在 `pet-config.json` 的
+`petPack` 字段。
+
+```
+my-pet.zip
+├─ pack.json              # 可放在 zip 根，或唯一的顶层文件夹内
+└─ frames/
+   ├─ idle-0.webp
+   ├─ think.webm
+   └─ 待机.webm
+```
+
+`pack.json`：
+
+```jsonc
+{
+  "id": "my-pet",                 // ^[a-z0-9][a-z0-9-]{1,31}$，不能是 dafeiyu
+  "name": "小叶灵",
+  "version": "1.0.0",
+  "license": "CC-BY-4.0",         // 必填，便于署名
+  "source": "https://example.com", // 可选，仅 http(s)
+  "canvas": { "width": 256, "height": 256 },  // 64–2048
+  "anchor": { "x": 128, "y": 236 },           // 位于 canvas 内
+  "actions": {
+    "idle": ["frames/idle-0.webp"],           // 必填，1–64 个文件
+    "thinking": ["frames/think.webm"],
+    "acting_edit": ["frames/coding.webm"]
+  }
+}
+```
+
+- 动作键白名单：`idle/sleeping/thinking/acting/observing/retry/waiting/done/error/click/pat/angry/drag/sleep_start/sleep_loop/sleep_end/balance` 及 `acting_{bash,edit,read,web,mcp,office,other}`；缺失动作回落到 `idle`。
+- 素材扩展名：`webm/mp4/webp/png/jpg/jpeg/gif/apng`；允许 `README.md` 等未引用的纯文档，其余未引用文件拒绝。
+- 限制：zip ≤ 320MB、解压总计 ≤ 256MB、单文件 ≤ 64MB、条目 ≤ 512、`pack.json` ≤ 1MB。
+- 校验（`electron/pet/packManifest.ts` + `zip.ts`）：拒绝路径穿越（含 `%2F`/`..`）、符号链接、加密/ZIP64、重复条目、CRC 不符、未知动作、越界 canvas/anchor；**不执行包内任何脚本**。
+- 写入采用“先解压到隐藏 staging 目录，再 rename 到位”，失败不会留下半成品；同名 id 不覆盖，需先删除或改 id。
+- 渲染层通过 `sage-pet://<id>/<相对路径>` 读取素材（`packProtocol.ts`），协议只服务上述扩展名且根目录限定在 `<userData>/pets/<id>/`，支持 200/206/416，WebM 可正常 Range 播放。
+- 导入成功后自动切换到新包；删除当前包会回落到内置 `dafeiyu`。导出仅针对用户包，生成 stored zip（`<id>/pack.json` + 引用的素材），可再次导入或分享。
 
 ## 7. 测试与验证
 
 - 单测：`electron/__tests__/petState.test.ts`、`petConfig.test.ts`、
   `petGeometry.test.ts`、`petProfile.test.ts`、`petTasks.test.ts`、
+  `petZip.test.ts`（CRC/穿越/zip bomb/GBK 文件名）、
+  `petPackManifest.test.ts`（schema/根目录/引用校验）、
+  `petPackStore.test.ts`（导入/导出/删除/同名拒绝）、
+  `packProtocol.test.ts`（URL 解析/Range）、
   `src/pet/__tests__/animation.test.ts`、`src/pet/__tests__/tempo.test.ts`、
+  `src/pet/__tests__/packs.test.ts`、
+  `src/pages/settings/__tests__/PetTab.pack.test.tsx`、
   `src/features/task-center/__tests__/petReports.test.ts`。
 - 设置守卫：`settingsTabs.guards.test.ts`（tab 数 19）、
   `settingsSearchIndex.test.ts`（`pet` 为合法 tab）。
@@ -170,4 +224,4 @@ canonicalizer 与 Win7 设置 schema parity。
 - 独立编排 run（`orch-events-*`）、Task Center、定时任务：Task Center（office/wiki/custom）已通过 renderer 上报接入；未注册到 Task Center 的独立 run 与定时任务仍不会反馈到宠物。
 - 上下文条依赖 chat 参数里的 `maxContext` 与 usage 事件；自动推断上下文时可能只显示已用量、不显示百分比。
 - 完整动画包已全量内置（约 52.7MB），安装包相应增大；如果后续要控制体积，可改成「精选内置 + 完整包可选下载/导入」。
-- 自定义 pet pack 导入/导出尚未实现；聊天/TTS 未做。
+- 自定义 pet pack 导入/导出已实现（zip + `sage-pet://`）；尚未做包内素材热更新（同名 id 需删除后重新导入），也未验证 Win7 下大体积 zip 的导入耗时。聊天/TTS 未做。

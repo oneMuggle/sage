@@ -16,6 +16,8 @@ export interface PetPack {
   canvas: { width: number; height: number };
   anchor: { x: number; y: number };
   actions: Record<string, string[]>;
+  /** True for packs bundled into the renderer, false for user-imported packs. */
+  builtin?: boolean;
 }
 
 export interface AnimationChoice {

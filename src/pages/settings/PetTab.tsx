@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react';
 
 import { useI18n } from '../../shared/lib/i18n';
-import type { PetConfigBridge } from '../../shared/types/electron-api';
+import type { PetConfigBridge, PetPackManifestBridge } from '../../shared/types/electron-api';
 
 import { SettingRow, Toggle } from './components';
 
@@ -59,7 +59,11 @@ export function PetTab(): JSX.Element {
   const { t } = useI18n();
   const bridge = typeof window !== 'undefined' ? window.electronAPI?.pet : undefined;
   const [config, setConfig] = useState<PetConfigBridge | null>(null);
+  const [packs, setPacks] = useState<PetPackManifestBridge[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<'import' | 'export' | 'delete' | null>(null);
+  const [deleteArmed, setDeleteArmed] = useState<string | null>(null);
 
   useEffect(() => {
     if (!bridge) return;
@@ -72,10 +76,30 @@ export function PetTab(): JSX.Element {
       .catch((err: unknown) => {
         if (alive) setError(err instanceof Error ? err.message : String(err));
       });
+    if (bridge.listPacks) {
+      bridge
+        .listPacks()
+        .then((list) => {
+          if (alive) setPacks(list);
+        })
+        .catch((err: unknown) => {
+          if (alive) setError(err instanceof Error ? err.message : String(err));
+        });
+    }
     return () => {
       alive = false;
     };
   }, [bridge]);
+
+  const refresh = async (): Promise<void> => {
+    if (!bridge) return;
+    const [nextConfig, nextPacks] = await Promise.all([
+      bridge.getConfig(),
+      bridge.listPacks ? bridge.listPacks() : Promise.resolve([]),
+    ]);
+    setConfig(nextConfig);
+    setPacks(nextPacks);
+  };
 
   const update = (patch: Partial<PetConfigBridge>): void => {
     if (!bridge) return;
@@ -83,6 +107,74 @@ export function PetTab(): JSX.Element {
       .setConfig(patch)
       .then(setConfig)
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+  };
+
+  const importPack = async (): Promise<void> => {
+    if (!bridge) return;
+    setBusy('import');
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await bridge.importPack();
+      if (result.canceled) return;
+      if (!result.ok) {
+        setError(result.error ?? t('settings.pet.pack_failed'));
+        return;
+      }
+      setNotice(`${t('settings.pet.pack_imported')}${result.manifest?.name ?? ''}`);
+      await refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const exportPack = async (): Promise<void> => {
+    const id = config?.petPack;
+    if (!bridge || !id) return;
+    setBusy('export');
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await bridge.exportPack(id);
+      if (result.canceled) return;
+      if (!result.ok) {
+        setError(result.error ?? t('settings.pet.pack_failed'));
+        return;
+      }
+      setNotice(`${t('settings.pet.pack_exported')}${result.path ?? ''}`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const deletePack = async (): Promise<void> => {
+    const id = config?.petPack;
+    if (!bridge || !id) return;
+    if (deleteArmed !== id) {
+      setDeleteArmed(id);
+      return;
+    }
+    setBusy('delete');
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await bridge.deletePack(id);
+      if (!result.ok) {
+        setError(result.error ?? t('settings.pet.pack_failed'));
+        return;
+      }
+      setDeleteArmed(null);
+      setNotice(t('settings.pet.pack_deleted'));
+      await refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
   };
 
   if (!bridge) {
@@ -94,6 +186,21 @@ export function PetTab(): JSX.Element {
   }
 
   const current = config ?? FALLBACK_CONFIG;
+  const packOptions = [
+    { value: 'dafeiyu', label: t('settings.pet.pack_builtin') },
+    ...packs.map((pack) => ({ value: pack.id, label: pack.name })),
+  ];
+  if (!packOptions.some((option) => option.value === current.petPack)) {
+    packOptions.push({
+      value: current.petPack,
+      label: `${current.petPack} (${t('settings.pet.pack_missing')})`,
+    });
+  }
+  const selectedUserPack = packs.find((pack) => pack.id === current.petPack) ?? null;
+  const actionButtonClass =
+    'rounded-md border border-line-strong px-3 py-1.5 text-xs text-text hover:border-primary disabled:cursor-default disabled:opacity-50';
+  const dangerButtonClass =
+    'rounded-md border border-red-500/50 px-3 py-1.5 text-xs text-red-400 hover:border-red-400 disabled:cursor-default disabled:opacity-50';
 
   return (
     <div className="space-y-4">
@@ -105,6 +212,15 @@ export function PetTab(): JSX.Element {
       {error ? (
         <div className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-400">
           {error}
+        </div>
+      ) : null}
+
+      {notice ? (
+        <div
+          data-testid="pet-pack-notice"
+          className="rounded-md border border-green-500/40 bg-green-500/10 p-3 text-xs text-green-400"
+        >
+          {notice}
         </div>
       ) : null}
 
@@ -234,6 +350,70 @@ export function PetTab(): JSX.Element {
               { value: 'off', label: t('settings.pet.compat.off') },
             ]}
           />
+        </SettingRow>
+
+        <SettingRow label={t('settings.pet.pack')} desc={t('settings.pet.pack_desc')} anchor="pet_pack">
+          <Select
+            value={current.petPack}
+            testId="pet-pack"
+            onChange={(value) => {
+              setDeleteArmed(null);
+              update({ petPack: value });
+            }}
+            options={packOptions}
+          />
+        </SettingRow>
+
+        <SettingRow
+          label={t('settings.pet.pack_actions')}
+          desc={
+            selectedUserPack
+              ? `${selectedUserPack.name} v${selectedUserPack.version} · ${selectedUserPack.license}`
+              : t('settings.pet.pack_builtin_desc')
+          }
+          anchor="pet_pack_manage"
+        >
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              data-testid="pet-pack-import"
+              disabled={busy !== null}
+              onClick={() => void importPack()}
+              className={actionButtonClass}
+            >
+              {busy === 'import'
+                ? t('settings.pet.pack_import_busy')
+                : t('settings.pet.pack_import')}
+            </button>
+            {selectedUserPack ? (
+              <>
+                <button
+                  type="button"
+                  data-testid="pet-pack-export"
+                  disabled={busy !== null}
+                  onClick={() => void exportPack()}
+                  className={actionButtonClass}
+                >
+                  {t('settings.pet.pack_export')}
+                </button>
+                <button
+                  type="button"
+                  data-testid="pet-pack-delete"
+                  disabled={busy !== null}
+                  onClick={() => void deletePack()}
+                  className={
+                    deleteArmed === current.petPack
+                      ? 'rounded-md border border-red-500 bg-red-500/15 px-3 py-1.5 text-xs text-red-300 disabled:opacity-50'
+                      : dangerButtonClass
+                  }
+                >
+                  {deleteArmed === current.petPack
+                    ? t('settings.pet.pack_delete_confirm')
+                    : t('settings.pet.pack_delete')}
+                </button>
+              </>
+            ) : null}
+          </div>
         </SettingRow>
       </div>
 

@@ -11,7 +11,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { bubbleText, resolveAnimation } from '../../pet/engine/animation';
 import { statusGlyph, statusLabel } from '../../pet/engine/labels';
 import { safePlay } from '../../pet/engine/media';
-import { packFor } from '../../pet/engine/packs';
+import { packSource } from '../../pet/engine/packs';
+import { usePetPacks } from '../../pet/usePetPacks';
 import type { PetConfigBridge, PetSnapshotBridge } from '../../shared/types/electron-api';
 
 const WIDTHS: Record<string, number> = {
@@ -110,7 +111,7 @@ export function InAppPet(): JSX.Element | null {
     };
   }, [pet]);
 
-  const pack = useMemo(() => packFor(config.petPack), [config.petPack]);
+  const pack = usePetPacks(config.petPack);
   const choice = useMemo(() => {
     const action = snapshot.action;
     const detail = snapshot.detail;
@@ -124,7 +125,7 @@ export function InAppPet(): JSX.Element | null {
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !choice) return;
-    const src = encodeURI(`./pet/${config.petPack}/${choice.file}`);
+    const src = packSource(pack, choice.file);
     if (currentFileRef.current !== src) {
       currentFileRef.current = src;
       video.src = src;
@@ -147,7 +148,7 @@ export function InAppPet(): JSX.Element | null {
       if (video.readyState >= 2) stop();
       else video.addEventListener('loadeddata', stop, { once: true });
     }
-  }, [choice, config.petPack, config.reduceMotion, config.enabled, config.displayMode]);
+  }, [choice, pack, config.reduceMotion, config.enabled, config.displayMode]);
 
   const visible =
     config.enabled && (config.displayMode === 'in-app' || config.displayMode === 'both');
