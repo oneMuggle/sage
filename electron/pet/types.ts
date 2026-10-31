@@ -100,6 +100,9 @@ export interface PetSnapshot {
   contextMax: number | null;
   lastTerminalAction: 'done' | 'error' | null;
   lastTerminalAt: number | null;
+  /** Companion stats (filled by the controller from pet-profile.json). */
+  patCount: number;
+  bondDays: number;
   activeSessions: number;
   /** Active/recent sessions, highest priority first (panel only). */
   sessions: PetSessionSummary[];

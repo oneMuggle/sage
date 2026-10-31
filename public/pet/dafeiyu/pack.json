@@ -7,12 +7,7 @@
   "canvas": { "width": 640, "height": 360 },
   "anchor": { "x": 320, "y": 330 },
   "actions": {
-    "idle": [
-      "待机呼吸休闲.webm",
-      "东张西望.webm",
-      "超大伸懒腰.webm",
-      "哈欠连天.webm"
-    ],
+    "idle": ["待机呼吸休闲.webm", "东张西望.webm", "超大伸懒腰.webm", "哈欠连天.webm"],
     "thinking": ["工作状态-思考冒泡.webm"],
     "acting": ["工作状态-忙碌点按.webm"],
     "acting_edit": ["写代码.webm"],
@@ -24,6 +19,8 @@
     "done": ["工作状态-雀跃庆祝.webm"],
     "error": ["工作状态-垂头叹气冒汗.webm"],
     "click": ["点击回应-开心跃动.webm"],
+    "pat": ["点击回应-挠痒咯咯笑.webm"],
+    "angry": ["点击回应-傲娇生气.webm"],
     "drag": ["被鼠标拖拽悬空反馈.webm"],
     "sleep_start": ["睡觉-开始.webm"],
     "sleep_loop": ["睡觉-循环.webm"],

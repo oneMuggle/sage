@@ -30,6 +30,8 @@ export const DAFEIYU_PACK: PetPack = {
     done: ['工作状态-雀跃庆祝.webm'],
     error: ['工作状态-垂头叹气冒汗.webm'],
     click: ['点击回应-开心跃动.webm'],
+    pat: ['点击回应-挠痒咯咯笑.webm'],
+    angry: ['点击回应-傲娇生气.webm'],
     drag: ['被鼠标拖拽悬空反馈.webm'],
     sleep_start: ['睡觉-开始.webm'],
     sleep_loop: ['睡觉-循环.webm'],

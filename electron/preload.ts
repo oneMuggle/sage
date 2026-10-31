@@ -741,6 +741,9 @@ const electronAPI = {
     setPanel: (open: boolean) => {
       ipcRenderer.send('pet:set-panel', { open });
     },
+    pat: () => {
+      ipcRenderer.send('pet:pat');
+    },
     hide: () => {
       ipcRenderer.send('pet:hide');
     },

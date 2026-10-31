@@ -78,6 +78,10 @@ export function registerPetIpc(controller: PetController): void {
     if (isPet(evt)) controller.setPanelOpen(payload?.open === true);
   });
 
+  ipcMain.on('pet:pat', (evt) => {
+    if (isPet(evt)) controller.recordPat();
+  });
+
   ipcMain.on('pet:hide', (evt) => {
     if (isPet(evt)) controller.hideForNow();
   });

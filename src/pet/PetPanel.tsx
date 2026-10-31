@@ -125,6 +125,10 @@ export function PetPanel({
             最近：{terminalLabel(lastTerminal)} · {relativeTime(lastTerminalAt)}
           </div>
         ) : null}
+
+        <div className="pet-bond">
+          陪伴 {snapshot.bondDays} 天 · 摸头 {snapshot.patCount} 次
+        </div>
       </div>
 
       {snapshot.sessions.length > 1 ? (
