@@ -81,6 +81,7 @@ from .office_journal_tool import (
 )
 from .office_latex_audit_tool import OfficeAuditLatexTool
 from .office_latex_build_tool import OfficeCompileLatexTool, OfficeLatexdiffTool
+from .office_latex_project_tool import OfficeExtractLatexProjectTool
 from .office_latex_template_tool import (
     OfficeAnalyzeLatexTemplateTool,
     OfficeFillLatexTemplateTool,
@@ -237,6 +238,7 @@ def _install_office_quality(ctx: ToolInstallContext) -> None:
     ctx.registry.register(OfficeAuditLatexTool(policy=policy))
     ctx.registry.register(OfficeCompileLatexTool(policy=policy))
     ctx.registry.register(OfficeLatexdiffTool(policy=policy))
+    ctx.registry.register(OfficeExtractLatexProjectTool(policy=policy))
     ctx.registry.register(OfficeRepairWordTool(policy=policy))
     ctx.registry.register(OfficeRefreshTocTool(policy=policy))
 

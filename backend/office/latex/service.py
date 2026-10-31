@@ -24,6 +24,7 @@ from .compile import compile_latex, detect_tools
 from .diff import latexdiff_files
 from .filler import fill_latex_template
 from .parser import LatexLimits, parse_latex_project
+from .project import extract_latex_project_zip
 from .template import analyze_latex_template
 
 #: Raw source returned alongside the structured preview (characters).
@@ -266,6 +267,23 @@ def latexdiff_files_service(
     )
 
 
+def extract_latex_project_service(
+    zip_path: Path,
+    *,
+    workspace: Path,
+    output_dir_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Workspace-safe LaTeX project zip import (extract only, never compile)."""
+    workspace_path = Path(workspace)
+    if not workspace_path.is_dir():
+        raise OfficeParseError("工作区目录不存在")
+    return extract_latex_project_zip(
+        Path(zip_path),
+        workspace=workspace_path,
+        output_dir_name=output_dir_name,
+    )
+
+
 def latex_capabilities() -> Dict[str, Any]:
     """Return available TeX engines and latexdiff."""
     return detect_tools()
@@ -291,6 +309,7 @@ __all__ = [
     "analyze_latex_template_file",
     "audit_latex_file_service",
     "compile_latex_file",
+    "extract_latex_project_service",
     "fill_latex_template_file",
     "is_latex_path",
     "is_within_root",
