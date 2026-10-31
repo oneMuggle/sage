@@ -1,21 +1,24 @@
 /**
- * 嵌入模型下载 IPC (B2, P11)
+ * 本地模型下载 IPC。
  *
- * 把 bge-small-zh ONNX 模型（model.onnx ~90MB + tokenizer.json）下载到
- * userData/models/<dirName>/。单文件直下（不经 zip 解压），SHA-256 校验，
- * .part 临时文件 + rename，失败/取消即清理不留残留。
+ * - 嵌入模型（B2/P8）：bge-small-zh ONNX → userData/models/bge-small-zh-v1.5
+ * - 本地 OCR（2026-10-31）：RapidOCR PP-OCRv6 tiny det/rec →
+ *   userData/models/rapidocr/{det.onnx,rec.onnx}
  *
- * channels:
- *   models:embedder:download  → { baseUrl, dirName, files: [{name, sha256}] }
- *   models:embedder:cancel    → dirName
- *   models:embedder:progress  → {dirName, stage, file?, bytes?, error?} (事件)
- *
- * P5 (2026-09-14): 进度事件通道补 `sage:event:` 前缀 —— preload 的 listen
- * shim 只在 `sage:event:<event>` 上注册（与 #733 修复的 backend:* 同族
- * 问题），裸通道的进度事件永远到不了渲染端。
+ * 单文件直下（不经 zip），SHA-256 校验，.part + rename，失败/取消清理。
+ * 进度事件统一走 `sage:event:<prefix>`。
  */
 import { createHash } from 'crypto';
-import { createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, statSync, unlinkSync } from 'fs';
+import {
+  createReadStream,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+} from 'fs';
 import { join } from 'path';
 import type { IpcMain } from 'electron';
 import type { BrowserWindow } from 'electron';
@@ -23,34 +26,68 @@ import type { BrowserWindow } from 'electron';
 import { logger } from './logger';
 import { fetchCompat } from './fetchCompat';
 
-interface EmbedderFile {
+interface ModelFile {
   name: string;
   sha256: string;
+  /** 落盘文件名（默认取 name 的 basename） */
+  saveAs?: string;
+}
+
+interface ModelManifest {
+  dirName: string;
+  baseUrl: string;
+  files: readonly ModelFile[];
 }
 
 interface DownloadRequest {
   baseUrl?: string;
   dirName?: string;
-  files?: EmbedderFile[];
+  files?: ModelFile[];
 }
 
 /**
- * P8 (2026-09-14): bge-small-zh-v1.5 ONNX 产物清单（Xenova 转换版，
- * huggingface resolve 端点）。sha256 提取自 2026-09-14 实际下载产物：
- *   tokenizer.json  439,125 B
- *   onnx/model.onnx 94,851,877 B
- * dirName 与 backend/memory/embedder_factory.py DEFAULT_ONNX_MODEL_DIR_NAME
- * 一致（OnnxEmbedder 期望模型目录下平铺 model.onnx + tokenizer.json）。
- * `onnx/` 子路径仅用于远端 URL；落盘取 basename（见 downloadVerified）。
+ * P8 (2026-09-14): bge-small-zh-v1.5 ONNX 产物清单（Xenova 转换版）。
+ * sha256 提取自 2026-09-14 实际下载产物。
+ * dirName 与 backend/memory/embedder_factory.py DEFAULT_ONNX_MODEL_DIR_NAME 一致。
  */
-export const EMBEDDER_MODEL_MANIFEST = {
+export const EMBEDDER_MODEL_MANIFEST: ModelManifest = {
   dirName: 'bge-small-zh-v1.5',
   baseUrl: 'https://hf-mirror.com/Xenova/bge-small-zh-v1.5/resolve/main/',
   files: [
-    { name: 'tokenizer.json', sha256: '48cea5d44424912a6fd1ea647bf4fe50b55ab8b1e5879c3275f80e339e8fae26' },
-    { name: 'onnx/model.onnx', sha256: '69a0b846f4f116b5e6aabf9546ea6754d02264f3211a13a1bd69b31b8040749a' },
+    {
+      name: 'tokenizer.json',
+      sha256: '48cea5d44424912a6fd1ea647bf4fe50b55ab8b1e5879c3275f80e339e8fae26',
+    },
+    {
+      name: 'onnx/model.onnx',
+      sha256: '69a0b846f4f116b5e6aabf9546ea6754d02264f3211a13a1bd69b31b8040749a',
+    },
   ],
-} as const;
+};
+
+/**
+ * 2026-10-31: RapidOCR PP-OCRv6 tiny（det/rec）清单。
+ * 模型来源 ModelScope RapidAI/RapidOCR v3.10.0；sha256 为实际下载产物。
+ * 落盘名固定 det.onnx / rec.onnx，匹配 backend/services/ocr/engines/rapidocr.py。
+ * 体积约 6MB（det 1.8MB + rec 4.3MB），支持中文/英文/繁体。
+ */
+export const OCR_MODEL_MANIFEST: ModelManifest = {
+  dirName: 'rapidocr',
+  baseUrl:
+    'https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv6/',
+  files: [
+    {
+      name: 'det/PP-OCRv6_det_tiny.onnx',
+      saveAs: 'det.onnx',
+      sha256: 'f42c0fbd294d95eac1a550e131b277dac97462c8025fa4b6c3cec1b7894bd3d5',
+    },
+    {
+      name: 'rec/PP-OCRv6_rec_tiny.onnx',
+      saveAs: 'rec.onnx',
+      sha256: 'e16e242de5937ad92609223f19bc2aff3727ee40b095f996907c24749bad251b',
+    },
+  ],
+};
 
 interface ActiveDownload {
   cancelled: boolean;
@@ -84,8 +121,7 @@ async function downloadToFile(
       if (download.cancelled) throw new Error('cancelled');
       const buf = chunk as Buffer;
       bytes += buf.length;
-      // 2026-09 修复: 无视 write 返回值会把整个文件缓冲进内存 (94MB 模型
-      // 在慢盘上) —— 写缓冲满时等待 drain, 保持稳定背压。
+      // 写缓冲满时等待 drain，保持背压（94MB 模型在慢盘上不整文件进内存）。
       if (!ws.write(buf)) {
         await new Promise<void>((resolve) => {
           ws.once('drain', resolve);
@@ -107,23 +143,19 @@ async function downloadToFile(
 async function downloadVerified(
   baseUrl: string,
   dirName: string,
-  file: EmbedderFile,
+  file: ModelFile,
   modelsBaseDir: string,
   download: ActiveDownload,
 ): Promise<number> {
   const url = `${baseUrl.replace(/\/$/, '')}/${file.name}`;
   const targetDir = join(modelsBaseDir, dirName);
-  // P8: 落盘取 basename —— 清单里的 name 可含远端子路径（onnx/model.onnx），
-  // 但 OnnxEmbedder 期望模型目录平铺（model.onnx / tokenizer.json）。
-  const saveName = file.name.split('/').pop() ?? file.name;
+  const saveName = file.saveAs ?? file.name.split('/').pop() ?? file.name;
   const tmpPath = join(targetDir, `${saveName}.part`);
   const finalPath = join(targetDir, saveName);
 
   try {
     await downloadToFile(url, tmpPath, download);
   } catch (err) {
-    // 2026-09 修复: 取消/网络中断残留 .part —— 只在 sha256 不匹配分支清理
-    // 覆盖不到这些路径, 磁盘会累积孤儿分片文件。
     try {
       unlinkSync(tmpPath);
     } catch {
@@ -145,6 +177,80 @@ async function downloadVerified(
   return statSync(finalPath).size;
 }
 
+function registerDownloadHandler(
+  ipcMain: IpcMain,
+  opts: {
+    modelsBaseDir: () => string;
+    getWindow: () => BrowserWindow | null;
+  },
+  channel: string,
+  cancelChannel: string,
+  eventName: string,
+  manifest: ModelManifest,
+): void {
+  ipcMain.handle(cancelChannel, (_evt, dirName?: string) => {
+    const key = `${channel}:${String(dirName ?? manifest.dirName)}`;
+    const entry = active.get(key);
+    if (entry) entry.cancelled = true;
+    return { ok: true };
+  });
+
+  ipcMain.handle(channel, async (_evt, payload: DownloadRequest = {}) => {
+    const dirName = String(payload?.dirName ?? manifest.dirName);
+    if (!dirName || /[\\/]/.test(dirName) || dirName.includes('..')) {
+      return { ok: false, error: 'invalid dirName' };
+    }
+    const files: ModelFile[] = Array.isArray(payload?.files)
+      ? payload.files
+      : [...manifest.files];
+    const baseUrl = String(payload?.baseUrl ?? manifest.baseUrl);
+    if (files.length === 0) return { ok: false, error: 'no files' };
+    const key = `${channel}:${dirName}`;
+    if (active.has(key)) return { ok: false, error: 'already-running' };
+
+    const download: ActiveDownload = { cancelled: false };
+    active.set(key, download);
+    const win: BrowserWindow | null = opts.getWindow();
+
+    const emit = (extra: Record<string, unknown>): void => {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send(`sage:event:${eventName}`, { dirName, ...extra });
+      }
+    };
+
+    try {
+      const targetDir = join(opts.modelsBaseDir(), dirName);
+      mkdirSync(targetDir, { recursive: true });
+      emit({ stage: 'start' });
+
+      let totalBytes = 0;
+      for (const file of files) {
+        if (download.cancelled) throw new Error('cancelled');
+        const bytes = await downloadVerified(
+          baseUrl,
+          dirName,
+          file,
+          opts.modelsBaseDir(),
+          download,
+        );
+        totalBytes += bytes;
+        emit({ file: file.name, stage: 'done', bytes });
+      }
+
+      emit({ stage: 'complete', totalBytes });
+      logger.info('model download: complete', { dirName, totalBytes });
+      return { ok: true, totalBytes };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('model download failed', { dirName, err: message });
+      emit({ stage: 'error', error: message });
+      return { ok: false, error: message };
+    } finally {
+      active.delete(key);
+    }
+  });
+}
+
 export function registerModelDownloadIpc(
   ipcMain: IpcMain,
   opts: {
@@ -152,70 +258,31 @@ export function registerModelDownloadIpc(
     getWindow: () => BrowserWindow | null;
   },
 ): void {
-  ipcMain.handle('models:embedder:cancel', (_evt, dirName: string) => {
-    const entry = active.get(String(dirName));
-    if (entry) entry.cancelled = true;
-    return { ok: true };
-  });
-
-  ipcMain.handle(
+  registerDownloadHandler(
+    ipcMain,
+    opts,
     'models:embedder:download',
-    async (_evt, payload: DownloadRequest = {}) => {
-      // P8: payload 缺省字段回落到内置清单（渲染端只需无参调用）
-      const manifest = EMBEDDER_MODEL_MANIFEST;
-      const dirName = String(payload?.dirName ?? manifest.dirName);
-      if (!dirName || /[\\/]/.test(dirName) || dirName.includes('..')) {
-        return { ok: false, error: 'invalid dirName' };
-      }
-      const files: EmbedderFile[] = Array.isArray(payload?.files)
-        ? payload.files
-        : [...manifest.files];
-      const baseUrl = String(payload?.baseUrl ?? manifest.baseUrl);
-      if (files.length === 0) return { ok: false, error: 'no files' };
-      if (active.has(dirName)) return { ok: false, error: 'already-running' };
-
-      const download: ActiveDownload = { cancelled: false };
-      active.set(dirName, download);
-      const win: BrowserWindow | null = opts.getWindow();
-
-      const emit = (extra: Record<string, unknown>): void => {
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('sage:event:models:embedder:progress', { dirName, ...extra });
-        }
-      };
-
-      try {
-        const targetDir = join(opts.modelsBaseDir(), dirName);
-        mkdirSync(targetDir, { recursive: true });
-        emit({ stage: 'start' });
-
-        let totalBytes = 0;
-        for (const file of files) {
-          if (download.cancelled) throw new Error('cancelled');
-          const bytes = await downloadVerified(
-            baseUrl,
-            dirName,
-            file,
-            opts.modelsBaseDir(),
-            download,
-          );
-          totalBytes += bytes;
-          emit({ file: file.name, stage: 'done', bytes });
-        }
-
-        emit({ stage: 'complete', totalBytes });
-        logger.info('model download: complete', { dirName, totalBytes });
-        return { ok: true, totalBytes };
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error('model download failed', { dirName, err: message });
-        emit({ stage: 'error', error: message });
-        return { ok: false, error: message };
-      } finally {
-        // P8: 失败/取消后清出进行中表 —— 否则同 dirName 永远 already-running，
-        // 只能重启应用才能重试。
-        active.delete(dirName);
-      }
-    },
+    'models:embedder:cancel',
+    'models:embedder:progress',
+    EMBEDDER_MODEL_MANIFEST,
   );
+  registerDownloadHandler(
+    ipcMain,
+    opts,
+    'models:ocr:download',
+    'models:ocr:cancel',
+    'models:ocr:progress',
+    OCR_MODEL_MANIFEST,
+  );
+
+  // 恢复 RapidOCR 包内默认模型：只删除受管的 models/rapidocr 目录。
+  ipcMain.handle('models:ocr:reset', () => {
+    const targetDir = join(opts.modelsBaseDir(), OCR_MODEL_MANIFEST.dirName);
+    try {
+      rmSync(targetDir, { recursive: true, force: true });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
 }

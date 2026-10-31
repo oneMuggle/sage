@@ -56,6 +56,7 @@ export function ImageOcrPreview({
       return;
     }
     let cancelled = false;
+    let jobId: string | null = null;
     setItems(
       targets.map((img, index) => ({
         key: `${index}-${img.name}`,
@@ -63,16 +64,24 @@ export function ImageOcrPreview({
         status: 'loading',
       })),
     );
-    (async () => {
-      for (let index = 0; index < targets.length; index += 1) {
-        const target = targets[index];
+
+    const markFailed = (index: number, error: string) => {
+      setItems((prev) =>
+        prev.map((item, idx) =>
+          idx === index ? { ...item, status: 'failed', error } : item,
+        ),
+      );
+    };
+
+    if (targets.length === 1) {
+      (async () => {
         try {
-          const result = await ocrApi.recognize(target.dataUrl);
+          const result = await ocrApi.recognize(targets[0].dataUrl);
           if (cancelled) return;
           const text = (result.text || '').trim();
           setItems((prev) =>
             prev.map((item, idx) =>
-              idx === index
+              idx === 0
                 ? {
                     ...item,
                     status: text ? 'ok' : 'empty',
@@ -84,23 +93,83 @@ export function ImageOcrPreview({
             ),
           );
         } catch (err) {
+          if (!cancelled) {
+            markFailed(0, err instanceof Error ? err.message : String(err));
+          }
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      try {
+        const submitted = await ocrApi.batch(targets.map((target) => target.dataUrl));
+        if (cancelled) {
+          void ocrApi.batchCancel(submitted.job_id).catch(() => undefined);
+          return;
+        }
+        jobId = submitted.job_id;
+        while (!cancelled) {
+          const status = await ocrApi.batchStatus(jobId);
           if (cancelled) return;
           setItems((prev) =>
-            prev.map((item, idx) =>
-              idx === index
-                ? {
-                    ...item,
-                    status: 'failed',
-                    error: err instanceof Error ? err.message : String(err),
-                  }
+            prev.map((item, idx) => {
+              const result = status.results?.[idx];
+              if (!result) return item;
+              const text = (result.text || '').trim();
+              return {
+                ...item,
+                status: result.error ? 'failed' : text ? 'ok' : 'empty',
+                text,
+                engine: result.engine,
+                quality: result.quality,
+                error: result.error ?? undefined,
+              };
+            }),
+          );
+          if (
+            status.status === 'completed' ||
+            status.status === 'failed' ||
+            status.status === 'cancelled'
+          ) {
+            if (status.status !== 'completed') {
+              setItems((prev) =>
+                prev.map((item) =>
+                  item.status === 'loading'
+                    ? {
+                        ...item,
+                        status: 'failed',
+                        error: status.error ?? status.status,
+                      }
+                    : item,
+                ),
+              );
+            }
+            break;
+          }
+          await new Promise((resolve) => {
+            window.setTimeout(resolve, 300);
+          });
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : String(err);
+          setItems((prev) =>
+            prev.map((item) =>
+              item.status === 'loading'
+                ? { ...item, status: 'failed', error: message }
                 : item,
             ),
           );
         }
       }
     })();
+
     return () => {
       cancelled = true;
+      if (jobId) void ocrApi.batchCancel(jobId).catch(() => undefined);
     };
   }, [enabled, targets, reloadKey]);
 

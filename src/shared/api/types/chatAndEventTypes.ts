@@ -172,11 +172,20 @@ export interface MessageDisplayOfficeRef {
   workspace_path?: string;
 }
 
+export interface MessageDisplayImageOcrText {
+  /** 图片文件名（与 images 对齐） */
+  name: string;
+  /** OCR 文本（展示用，已截断到 meta 预算内） */
+  text: string;
+}
+
 export interface MessageDisplayMeta {
   /** 随消息上传的文档附件（名称/大小/类型，不含 dataUrl） */
   attachments?: MessageDisplayAttachment[];
   /** 聊天图片（同上，不含 dataUrl） */
   images?: MessageDisplayAttachment[];
+  /** 本地 OCR / 用户编辑后的图片文字（仅展示，不参与 LLM 上下文） */
+  image_ocr_texts?: MessageDisplayImageOcrText[];
   /** 从消息正文提取的 `@path` 文件引用 */
   file_refs?: MessageDisplayFileRef[];
   /** `@` 菜单选择的 Office 文档 */

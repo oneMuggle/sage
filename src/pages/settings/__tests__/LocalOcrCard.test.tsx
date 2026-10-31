@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { LocalOcrCard } from '../LocalOcrCard';
@@ -8,13 +8,18 @@ const { mocks } = vi.hoisted(() => ({
   mocks: {
     capabilities: vi.fn(),
     recognize: vi.fn(),
+    reload: vi.fn(),
     getPreference: vi.fn(),
     setPreference: vi.fn(),
   },
 }));
 
 vi.mock('../../../shared/api/ocrApi', () => ({
-  ocrApi: { capabilities: mocks.capabilities, recognize: mocks.recognize },
+  ocrApi: {
+    capabilities: mocks.capabilities,
+    recognize: mocks.recognize,
+    reload: mocks.reload,
+  },
 }));
 
 vi.mock('../../../shared/api/settingsClient', () => ({
@@ -33,6 +38,10 @@ function renderCard() {
 }
 
 describe('LocalOcrCard', () => {
+  afterEach(() => {
+    delete (window as { electronAPI?: unknown }).electronAPI;
+  });
+
   it('shows engine status and persists prefer_local_for_images', async () => {
     mocks.capabilities.mockResolvedValue({
       enabled: true,
@@ -91,6 +100,41 @@ describe('LocalOcrCard', () => {
         'ocr',
       );
     });
+  });
+
+  it('downloads the tiny OCR model and reloads capabilities', async () => {
+    mocks.capabilities.mockResolvedValue({
+      enabled: true,
+      available: true,
+      selected_engine: 'rapidocr',
+      reason: '',
+    });
+    mocks.getPreference.mockResolvedValue(null);
+    mocks.reload.mockResolvedValue({ enabled: true, available: true });
+    const downloadOcr = vi.fn().mockResolvedValue({ ok: true, totalBytes: 6_200_000 });
+    const resetOcr = vi.fn().mockResolvedValue({ ok: true });
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      value: {
+        modelDownload: { downloadOcr, resetOcr },
+        listen: vi.fn().mockResolvedValue(() => undefined),
+      },
+    });
+
+    renderCard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-ocr-download')).not.toBeDisabled();
+    });
+    fireEvent.click(screen.getByTestId('settings-ocr-download'));
+
+    await waitFor(() => {
+      expect(downloadOcr).toHaveBeenCalledTimes(1);
+      expect(mocks.reload).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByTestId('settings-ocr-model-status')).toHaveTextContent(
+      '已启用 tiny 模型',
+    );
   });
 
   it('runs the built-in OCR test image', async () => {

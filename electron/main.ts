@@ -581,6 +581,12 @@ function spawnBackend(): ChildProcess {
       SAGE_BACKEND_GENERATION: String(generation),
       SAGE_BACKEND_OWNERSHIP_TOKEN: ownershipToken,
       SAGE_LOCAL_AUTH_TOKEN: backendAuthToken,
+      // 本地 OCR 可选模型目录：存在 det.onnx/rec.onnx 时优先于包内默认模型
+      SAGE_OCR_MODEL_DIR: join(
+        process.env.SAGE_USER_DATA_DIR || process.cwd(),
+        'models',
+        'rapidocr',
+      ),
       ...(bundledTesseract ? { SAGE_TESSERACT_PATH: bundledTesseract } : {}),
       ...(agentBrowserHandle
         ? {

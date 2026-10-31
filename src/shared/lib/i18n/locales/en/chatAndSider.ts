@@ -229,6 +229,8 @@ export const enChatAndSider = {
   'chat.image_ocr_copy': 'Copy',
   'chat.image_ocr_copied': 'Copied',
   'chat.image_ocr_retry': 'Recognize again',
+  'chat.image_ocr_message_title': 'Image text (local OCR, {count})',
+  'chat.image_ocr_message_copy': 'Copy text',
 
   // ─── M4 session compact / fork ────
   // LOW-1: unified phrasing — "before → after messages (removed merged into summary)"

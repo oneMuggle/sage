@@ -79,3 +79,28 @@ def test_image_endpoint_rejects_too_large(monkeypatch) -> None:
         ocr_routes.ocr_image(ocr_routes.OcrImageRequest(image=PNG_DATA_URL))
 
     assert exc.value.status_code == 413
+
+
+def test_batch_endpoint_roundtrip() -> None:
+    from backend.services.ocr.batch import reset_ocr_batch_service
+
+    try:
+        submitted = ocr_routes.ocr_batch(
+            ocr_routes.OcrBatchRequest(images=[PNG_DATA_URL, PNG_DATA_URL])
+        )
+        job_id = submitted["job_id"]
+        status = None
+        import time
+
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            status = ocr_routes.ocr_batch_status(job_id)
+            if status["status"] in ("completed", "failed", "cancelled"):
+                break
+            time.sleep(0.02)
+        assert status is not None
+        assert status["status"] == "completed"
+        assert status["total"] == 2
+        assert [item["text"] for item in status["results"]] == ["识别结果", "识别结果"]
+    finally:
+        reset_ocr_batch_service()

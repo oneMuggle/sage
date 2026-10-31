@@ -614,6 +614,11 @@ export interface ElectronAPI {
       files?: { name: string; sha256: string }[];
     }) => Promise<{ ok: boolean; totalBytes?: number; error?: string }>;
     cancel: (dirName: string) => Promise<{ ok: boolean }>;
+    /** RapidOCR PP-OCRv6 tiny det/rec → userData/models/rapidocr */
+    downloadOcr: () => Promise<{ ok: boolean; totalBytes?: number; error?: string }>;
+    cancelOcr: () => Promise<{ ok: boolean }>;
+    /** 删除受管的 userData/models/rapidocr，恢复包内默认模型 */
+    resetOcr: () => Promise<{ ok: boolean; error?: string }>;
   };
   /** P13/P17: sage-file 工作区注册表 —— 渲染端绑定工作区时登记/注销到主进程白名单。 */
   sageFile?: {
