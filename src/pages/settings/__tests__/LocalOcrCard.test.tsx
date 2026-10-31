@@ -85,9 +85,7 @@ describe('LocalOcrCard', () => {
     fireEvent.click(screen.getByTestId('settings-ocr-test'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('settings-ocr-test-result')).toHaveTextContent(
-        'SAGE OCR 123',
-      );
+      expect(screen.getByTestId('settings-ocr-test-result')).toHaveTextContent('SAGE OCR 123');
     });
     expect(mocks.recognize).toHaveBeenCalledWith(expect.stringContaining('data:image/png'));
   });

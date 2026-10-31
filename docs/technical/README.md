@@ -92,6 +92,7 @@
 | 113  | [设置页信息架构整理](./113-settings-ia-consolidation.md) | 单一 tab registry 派生导航/分组/别名/类型 + 平铺分组 + 搜索索引守卫（anchor/归属/tab 数）+ 审计导出集中 + `AdvancedSection` 折叠边界与每行「恢复默认」+ i18n/CJK 守卫 |
 | 114  | [桌面宠物（大肥鱼）](./114-desktop-pet.md) | 透明置顶窗 + 点击穿透/拖拽/多屏 + Agent 事件状态映射 + 窄 `pet:*` IPC 信任边界 + dsh-pet 素材一次性移植与 MIT 出处 |
 | 115  | [项目规程 Playbook](./115-project-playbook.md) | 阶段/交付物规格 + 项目级快照 + 确定性审计与阶段识别 + 目录/骨架/规则/里程碑动作 + JSON/Markdown 导出与导入冲突策略 |
+| 116  | [本地 OCR](./116-local-ocr.md) | RapidOCR/Tesseract 双引擎 + 聊天兜底/预览编辑 + Office/PDF/Wiki/工具接入 + 配置、性能与 Win7 边界 |
 
 ---
 

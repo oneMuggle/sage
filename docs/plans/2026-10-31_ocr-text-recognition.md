@@ -566,6 +566,8 @@ UI：
 - 聊天输入区：新增「图片文字（本地 OCR）」预览卡片，支持查看、复制、编辑、重新识别；
   编辑后的文本通过 `image_ocr_texts` 随消息发送，Agent 直接采用、不再重复识别；
 - 性能调优：截图默认 `max_side=1280` + 关闭方向分类，Office 扫描页保留 2048 + 分类；
+- 文档：`docs/technical/116-local-ocr.md` + `docs/user-manual/29-local-ocr.md`；
+- 基准：`scripts/ocr_benchmark.py`（合成图 + CER + 耗时，可 JSON 输出）；
 - 测试：新增 6 个测试文件（服务/引擎、Agent 兜底、工具、REST、ChatInput、Wiki 回退），
   相关后端 98 项、前端 15 项通过；`ruff`、ESLint、`check_py38_compat`、
   `architecture-check` 通过。
@@ -577,11 +579,13 @@ UI：
   调优为 `max_side=1280` + 关闭方向分类（`use_cls=False`）后，安静机器上约 **1.2–2.0s**
   （多次运行有波动），CPU 争用时可达 2.5–4s。截图场景默认采用该组合；Office 扫描页
   仍使用 `max_side=2048` + `use_cls=True` 保真。识别内容一致，quality=`ok`。
+- 可复现基准（`scripts/ocr_benchmark.py`，1600×900 / 10 行合成文本）：中位 **1272ms**，
+  CER **1.59%**（3 次，RapidOCR PP-OCRv6 small，1280/关分类）。
 
 待完成：
 
 - 设置页模型下载器（Electron 清单/SHA-256/进度；默认 small 模型已随 wheel 提供）；
-- 低配机/CPU 争用下的稳定性能基准与 CER 基准；
+- 真实业务截图/低配机的 CER 基准（合成基准已完成）；
 - Win7 真机验证（Tesseract 4.1 / RapidOCR 实验路径）与 CI 收口。
 
 
@@ -602,7 +606,8 @@ UI：
 - [ ] 模型 SHA-256 校验/预热（待设置页下载器接入）；
 - [x] `auto` 选择：RapidOCR > Tesseract；失败自动降级；
 - [x] 结果缓存（sha256）；
-- [x] 单图性能基准与调优（截图 1280/关分类约 1.2–2.0s；Office 2048/开分类保真）；
+- [x] 单图性能基准与调优（截图 1280/关分类约 1.2–2.0s；Office 2048/开分类保真；
+  `scripts/ocr_benchmark.py` 实测中位 1272ms / CER 1.59%）；
 - 验收：目标机器 1080p 截图 P95 < 2s（模型已加载）；中文截图 CER 相对 Tesseract 基线下降 ≥30%；
   引擎缺失无异常、UI 给可操作提示。
 
@@ -619,7 +624,7 @@ UI：
 - [x] 设置页 OCR 区块（引擎状态/引擎选择/语言/测试识别/优先策略/隐私说明）；
 - [ ] 复用 Electron 模型下载器（清单/SHA-256/进度/取消）；RapidOCR wheel 已自带 small 模型，
       下载器主要用于 tiny/更大模型的可选升级；
-- [ ] 技术文档章节 + 用户手册；
+- [x] 技术文档章节 + 用户手册（`116-local-ocr.md` / `29-local-ocr.md`）；
 - 验收：新用户无需命令行即可启用；离线环境手动放置模型可工作。
 
 ### M4：win7 收口与批量能力（1 周）

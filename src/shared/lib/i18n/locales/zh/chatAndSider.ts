@@ -468,7 +468,8 @@ export const zhChatAndSider = {
   'settings.network.sites.waiting': '请在弹出的浏览器窗口中完成登录，完成后会自动保存…',
   'settings.network.sites.success': '登录成功，已保存登录状态',
   'settings.network.sites.failed': '登录失败：{error}',
-  'settings.network.sites.login_in_progress': '已有登录窗口在等待操作，请先在浏览器中完成或关闭它。',
+  'settings.network.sites.login_in_progress':
+    '已有登录窗口在等待操作，请先在浏览器中完成或关闭它。',
   'settings.network.sites.invalid_url': '请输入以 http:// 或 https:// 开头的网址',
   'settings.network.sites.status.logged_in': '已登录',
   'settings.network.sites.status.expired': '已过期',
@@ -485,8 +486,7 @@ export const zhChatAndSider = {
   'settings.network.sites.saved_hours': '{hours} 小时',
   'settings.network.sites.saved_just_now': '刚刚',
   'settings.network.advanced': '高级：手动导入与诊断',
-  'settings.network.advanced.hint':
-    '面向高级用户与开发者。普通使用不需要修改这里的任何选项。',
+  'settings.network.advanced.hint': '面向高级用户与开发者。普通使用不需要修改这里的任何选项。',
   'settings.network.search': '搜索引擎',
   'settings.network.search.hint':
     '按顺序尝试：首选引擎无结果时自动回退后续引擎。API 引擎未填 key 时自动跳过。',
