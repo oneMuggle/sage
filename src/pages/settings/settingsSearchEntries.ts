@@ -6,6 +6,7 @@
  */
 
 import { PET_SETTINGS_SEARCH_ENTRIES } from './settingsSearchEntriesPet';
+import { BROWSER_EXTENSION_SETTINGS_SEARCH_ENTRIES } from './settingsSearchEntriesBrowserExtension';
 import type { SettingsTabKey } from './settingsTabs';
 
 export interface SettingsSearchEntry {
@@ -247,7 +248,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     labelEn: 'Reset settings',
     keywords: 'reset 恢复默认 重置 数据',
   },
-
   // ── 端点 ──
   {
     key: 'endpoints',
@@ -256,7 +256,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     labelEn: 'Endpoints',
     keywords: 'endpoint base url api key 端点 协议 模型探测',
   },
-
   // ── 模型 ──
   {
     key: 'model_selections',
@@ -315,7 +314,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     labelEn: 'Smart model routing',
     keywords: 'routing 智能路由 模型 自动 task_type 按任务选 model auto manual',
   },
-
   // ── 编排 ──
   {
     key: 'orch.planPreflightEnabled',
@@ -798,4 +796,5 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'audit export 审计 导出 复制 摘要 json 诊断',
   },
   ...PET_SETTINGS_SEARCH_ENTRIES,
+  ...BROWSER_EXTENSION_SETTINGS_SEARCH_ENTRIES,
 ];

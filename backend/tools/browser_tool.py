@@ -248,7 +248,9 @@ class BrowserLaunchTool(BaseTool):
                 "关闭即清理；persistent=true 使用持久 profile（登录态跨会话"
                 "保留，适合先登录再抓取的场景）。返回 browser_id，后续 "
                 "browser_* 工具用它与浏览器交互。headless 默认 true（无窗口）；"
-                "需要可视化调试或手动登录时传 false。"
+                "需要可视化调试或手动登录时传 false。注意：若用户已在浏览器"
+                "扩展中共享标签页，browser_* 工具会自动优先使用共享标签页；"
+                "本工具会另行启动独立实例（用返回的 browser_id 显式指定它）。"
             ),
             parameters={
                 "type": "object",
@@ -646,7 +648,9 @@ class BrowserCloseTool(BaseTool):
             },
         )
 
-    def execute(self, browser_id: str = "", target_id: str = "", **kwargs: Any) -> ToolResult:
+    def execute(  # noqa: PLR0911 — 每个拒绝路径独立 return，扁平更直读
+        self, browser_id: str = "", target_id: str = "", **kwargs: Any
+    ) -> ToolResult:
         if kwargs:
             return ToolResult(
                 success=False,
@@ -659,11 +663,22 @@ class BrowserCloseTool(BaseTool):
             return _error(exc)
 
         if target_id:
+            if getattr(session, "browser_type", None) == "external":
+                return ToolResult(
+                    success=False,
+                    error="共享标签页由用户控制，Sage 无法关闭；请在浏览器扩展中停止共享",
+                )
             try:
                 cdp_command(session, "Target.closeTarget", {"targetId": target_id})
             except BrowserCDPError as exc:
                 return _error(exc)
             return ToolResult(success=True, content={"closed": "target", "target_id": target_id})
+
+        if getattr(session, "browser_type", None) == "external":
+            return ToolResult(
+                success=False,
+                error="共享标签页由用户控制，Sage 无法关闭；请在浏览器扩展中停止共享",
+            )
 
         from .browser_cdp import _terminate_session
 
