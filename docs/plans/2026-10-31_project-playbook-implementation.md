@@ -62,8 +62,8 @@
 - `src/shared/lib/i18n/locales/zh/playbook.ts`、`en/playbook.ts`（若接入 i18n；P0 可先硬编码中文，P1 补）。
 
 **文档**
-- `docs/technical/114-project-playbook.md`（编号以实际最新为准）
-- `docs/user-manual/26-project-playbook.md`（编号以实际最新为准）
+- `docs/technical/115-project-playbook.md`（编号以实际最新为准）
+- `docs/user-manual/27-project-playbook.md`（编号以实际最新为准）
 - 更新 `docs/technical/README.md`、`docs/user-manual/README.md`
 
 ---

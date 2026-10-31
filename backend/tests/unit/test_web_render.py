@@ -295,6 +295,7 @@ def _install_au5_render(
     page_json: str,
     storage_cookies: List[Dict[str, Any]] = None,
     fail_method: str = "",
+    storage_snapshot: str = "",
 ) -> tuple:
     """AU5 假体：标准渲染链 + Storage.* 支持，返回 (调用记录, repo)。"""
     storage_cookies = storage_cookies if storage_cookies is not None else []
@@ -315,6 +316,8 @@ def _install_au5_render(
             return {"count": len(params.get("cookies") or [])}
         if method == "Storage.getCookies":
             return {"cookies": storage_cookies}
+        if method == "Runtime.evaluate":
+            return {"result": {"value": storage_snapshot}}
         if method in (
             "Page.navigate",
             "Target.closeTarget",
@@ -431,6 +434,108 @@ def test_render_page_writeback_merges_refreshed_cookies(monkeypatch):
     from backend.tools.credential_vault import load_credential
 
     assert load_credential(".spa.example", repo=repo)[0]["value"] == "v2"
+
+
+def _seed_storage(repo, domain=".spa.example", origin="https://spa.example", token="v1"):
+    from backend.tools.credential_vault import save_storage_state
+
+    save_storage_state(
+        domain,
+        [{"name": "SID", "value": "v", "domain": domain, "path": "/"}],
+        [{"origin": origin, "localStorage": {"cnki_user_token": token}}],
+        repo=repo,
+    )
+
+
+def test_render_page_injects_local_storage_before_navigation(monkeypatch):
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    calls, repo = _install_au5_render(monkeypatch, page_json)
+    _seed_storage(repo)
+
+    render_page(
+        "https://spa.example/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        credential_domain=".spa.example",
+        repo=repo,
+    )
+
+    methods = [call["method"] for call in calls]
+    assert "Page.addScriptToEvaluateOnNewDocument" in methods
+    inject_idx = methods.index("Page.addScriptToEvaluateOnNewDocument")
+    assert inject_idx < methods.index("Page.navigate")
+    source = calls[inject_idx]["params"]["source"]
+    assert "https://spa.example" in source
+    assert "localStorage.setItem" in source
+    assert "cnki_user_token" in source
+
+
+def test_render_page_writeback_merges_local_storage(monkeypatch):
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    snapshot = json.dumps(
+        {"origin": "https://spa.example", "localStorage": {"cnki_user_token": "v2"}}
+    )
+    calls, repo = _install_au5_render(
+        monkeypatch, page_json, storage_snapshot=snapshot
+    )
+    _seed_storage(repo, token="v1")
+
+    result = render_page(
+        "https://spa.example/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        credential_domain=".spa.example",
+        repo=repo,
+    )
+
+    assert result["credential_storage_refreshed"] is True
+    from backend.tools.credential_vault import load_storage_origins
+
+    origins = load_storage_origins(".spa.example", repo=repo)
+    assert origins[0]["localStorage"]["cnki_user_token"] == "v2"
+
+
+def test_inject_local_storage_escapes_hostile_values(monkeypatch):
+    """站点数据不得跳出 JS 字符串字面量（引号/反斜杠/U+2028 全转义）。"""
+    from backend.tools.web_render import _inject_local_storage
+
+    captured = []
+
+    def fake_cdp(session, method, params=None, target_id=None):
+        captured.append((method, params or {}))
+        return {}
+
+    monkeypatch.setattr(web_render, "cdp_command", fake_cdp)
+    hostile = '"</script>\\  '
+    _inject_local_storage(
+        SimpleNamespace(),
+        "t-render",
+        [{"origin": "https://spa.example", "localStorage": {"k": hostile}}],
+    )
+    source = captured[0][1]["source"]
+    assert "\\u2028" in source
+    assert "\\u2029" in source
+    assert '\\"' in source
+    assert "\\\\" in source
+
+
+def test_render_page_without_storage_skips_local_storage_hooks(monkeypatch):
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    calls, repo = _install_au5_render(monkeypatch, page_json)
+    _seed_credential(repo, ".spa.example")
+
+    result = render_page(
+        "https://spa.example/",
+        NetworkPolicy(mode=NetworkMode.ONLINE),
+        credential_domain=".spa.example",
+        repo=repo,
+    )
+
+    inject_sources = [
+        call["params"].get("source", "")
+        for call in calls
+        if call["method"] == "Page.addScriptToEvaluateOnNewDocument"
+    ]
+    assert not any("localStorage.setItem" in source for source in inject_sources)
+    assert "credential_storage_refreshed" not in result
 
 
 def test_render_page_writeback_failure_is_silent(monkeypatch):

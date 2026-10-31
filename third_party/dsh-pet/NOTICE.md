@@ -1,0 +1,43 @@
+# Third-party notice — dsh-pet
+
+This directory documents code and visual assets ported from
+[PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet), MIT licensed.
+
+- Upstream branch/version used for this port: `main`, `dsh-pet@0.3.8` (2026-10-30)
+- Upstream license: MIT (see `LICENSE` in this directory)
+
+## Ported assets
+
+`public/pet/dafeiyu/*.webm` are selected WebM animations from
+`dsh-pet/assets/webm/`, re-used verbatim. The upstream project distributes
+these AI-generated animations under the MIT license. The selection and
+`pack.json` manifest are Sage additions.
+
+## Ported code
+
+The following upstream modules informed or were adapted into
+`src/pet/engine/` and `electron/pet/`:
+
+- `dsh-pet/src/shared/physics.ts`
+- `dsh-pet/src/shared/state.ts` (types and state-leaf ideas)
+- `dsh-pet/runtime/electron-helper/pointer-target.js`
+- `dsh-pet/runtime/electron-helper/desktop-geometry.js`
+- `dsh-pet/runtime/electron-helper/dpi-linearization.js`
+- `dsh-pet/runtime/electron-helper/topmost-watchdog.js`
+- `dsh-pet/runtime/electron-helper/taskbar-watchdog.js`
+- `dsh-pet/runtime/electron-helper/main/windows.js` (window lifecycle ideas)
+- `dsh-pet/src/client/pet/animation/**` (animation-chain ideas)
+
+Sage-specific changes: React runtime is the project React, state comes from
+Sage Agent events via the Electron main process, the DSH Cordis host and
+HTTP `/state` polling are removed, and window/IPC code is rewritten in
+TypeScript against Sage's existing IPC trust model.
+
+## Character notice
+
+「蓝色大肥鱼」is an AI-generated community character from the upstream
+project. Its visual design may evoke DeepSeek's whale mascot. Upstream MIT
+covers the upstream authors' contributions only. If Sage is distributed
+commercially with this asset pack built in, obtain written permission from
+the upstream author and have legal review the character/trademark question.
+Do not imply any official relationship with DeepSeek.

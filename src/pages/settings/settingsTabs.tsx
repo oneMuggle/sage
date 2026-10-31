@@ -32,6 +32,7 @@ import { MemorySettingsTab } from './MemorySettingsTab';
 import { ModelsServicesTab } from './ModelsServicesTab';
 import { NetworkTab } from './NetworkTab';
 import { OrchestrationTab } from './OrchestrationTab';
+import { PetTab } from './PetTab';
 import { PluginsSkillsTab } from './PluginsSkillsTab';
 import { RemoteWorkspacesTab } from './RemoteWorkspacesTab';
 import { RuntimeEnvTab } from './RuntimeEnvTab';
@@ -48,6 +49,7 @@ export type SettingsTabKey =
   | 'mcp'
   | 'plugins-skills'
   | 'global-rules'
+  | 'pet'
   | 'memory'
   | 'zotero'
   | 'network'
@@ -149,6 +151,13 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
     labelKey: 'settings.tab.global-rules',
     group: 'agent',
     render: () => <GlobalRulesTab />,
+  },
+  {
+    key: 'pet',
+    labelKey: 'settings.tab.pet',
+    group: 'agent',
+    // 2026-10-30: 桌面宠物（大肥鱼移植）设置。
+    render: () => <PetTab />,
   },
   {
     key: 'memory',

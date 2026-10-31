@@ -15,6 +15,7 @@ import { join } from 'path';
 import { logger } from './logger';
 import { mainWindow } from './mainWindow';
 import { runDiagnosticExport } from './diagnosticExport';
+import { getPetController } from './pet';
 
 let tray: Tray | null = null;
 
@@ -63,6 +64,15 @@ export function setupTrayAndGlobalShortcut(): void {
       Menu.buildFromTemplate([
         { label: '显示 Sage', click: () => showMainWindow() },
         {
+          label: '显示/隐藏桌宠',
+          click: () => getPetController()?.toggleVisible(),
+        },
+        {
+          label: '宠物设置…',
+          click: () => getPetController()?.openSettings(),
+        },
+        { type: 'separator' },
+        {
           label: '导出诊断包…',
           click: async () => {
             try {
@@ -73,8 +83,7 @@ export function setupTrayAndGlobalShortcut(): void {
                 cancelId: 2,
                 title: '导出诊断包',
                 message: '将导出最近 50 次 LLM 调用为 zip 文件',
-                detail:
-                  '是否在导出中包含原始 prompt 内容（可能含业务敏感信息）？',
+                detail: '是否在导出中包含原始 prompt 内容（可能含业务敏感信息）？',
               });
               if (choice.response === 2) return;
               await runDiagnosticExport({

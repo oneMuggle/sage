@@ -1,7 +1,7 @@
 # 项目规程（Playbook）：可配置、可核验、可分享的项目管理方案
 
 > 日期：2026-10-31
-> 状态：已实施 P0/P1（2026-10-31；技术细节见 `docs/technical/114-project-playbook.md`）
+> 状态：已实施 P0/P1（2026-10-31；技术细节见 `docs/technical/115-project-playbook.md`）
 > 分支：`feat/project-playbook`
 > 前置阅读：`docs/plans/2026-10-29_project-management-simplification.md`、`docs/plans/2026-10-27_project-governance-ai.md`、`docs/plans/2026-10-12_ai-project-enhancements.md`
 > 对标：Claude Projects / ChatGPT Projects / Cursor Rules / Claude Code Skills / Notion 项目模板 / Linear-Jira 工作流 / GitHub Issue Forms / DMPTool / PRISMA / OSF

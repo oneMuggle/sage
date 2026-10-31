@@ -76,6 +76,8 @@ def _bound_workspace_or_raise(conn: sqlite3.Connection, session_id: str) -> str:
 _IMAGE_PREVIEW_SUFFIXES = frozenset({"png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"})
 #: Office 三件套 → 结构化/HTML 轻量预览
 _OFFICE_PREVIEW_SUFFIXES = frozenset({"docx", "xlsx", "pptx"})
+#: LaTeX 源文件 → 结构化 blocks（前端 KaTeX 渲染）
+_LATEX_PREVIEW_SUFFIXES = frozenset({"tex", "ltx"})
 
 
 def _resolve_workspace_target(root: str, raw_path: str) -> Path:
@@ -109,6 +111,8 @@ def _raise_preview_failure(result: dict) -> None:
         raise _error(415, "binary_file", message)
     if code == "file_too_large":
         raise _error(413, "file_too_large", message)
+    if code == "latex_parse_error":
+        raise _error(422, "latex_parse_error", message)
     raise _error(502, "file_read_error", message)
 
 
@@ -136,6 +140,11 @@ def preview_workspace_file(
         return artifact_reader.read_image_path(resolved)
     if suffix in _OFFICE_PREVIEW_SUFFIXES:
         return artifact_reader.read_office_path(resolved, kind=suffix)
+    if suffix in _LATEX_PREVIEW_SUFFIXES:
+        result = artifact_reader.read_latex_path(resolved, root=Path(root))
+        if not result.get("ok"):
+            _raise_preview_failure(result)
+        return result
 
     result = artifact_reader.read_text_path(resolved, kind=_kind_for_preview(resolved))
     if not result.get("ok"):

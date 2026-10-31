@@ -35,15 +35,17 @@ class AcademicSiteAdapter(Protocol):
 class CNKIAdapter:
     """中国知网(CNKI)检索适配器 —— 仅负责 URL 模板,不做 HTML 解析。
 
-    URL 模板基于 ``https://www.cnki.net/old/`` 的传统检索入口,
-    通过 query string 传递关键词 / 每页条数。实际页面解析留给 LLM。
+    新站 ``kns8s`` 是 Vue SPA：结果由 XHR 返回 HTML 片段，静态抓取通常
+    只能拿到壳页——请配合 ``cnki-research`` skill 的浏览器通道使用。
+    旧站模板保留在 ``LEGACY_BASE_URL``，仅作参考。
     """
 
     name = "cnki"
-    BASE_URL = "https://www.cnki.net/old/kns/brief/default_result.aspx"
+    BASE_URL = "https://kns.cnki.net/kns8s/defaultresult/index"
+    LEGACY_BASE_URL = "https://www.cnki.net/old/kns/brief/default_result.aspx"
 
     def build_search_url(self, query: str, **kwargs: Any) -> str:
-        """构造 CNKI 检索结果页 URL。
+        """构造 CNKI(kns8s) 检索结果页 URL。
 
         Args:
             query: 检索关键词。
@@ -56,14 +58,9 @@ class CNKIAdapter:
 
         limit = int(kwargs.get("limit", 10))
         params = {
-            "QueryID": "0",
-            "Txt": query,
-            "PageName": "ASP.brief_result_aspx",
-            "DbPrefix": "SCDB",
-            "DbCatalog": "中国学术期刊网络出版总库",
-            "ConfigFile": "SCDB.xml",
-            "research": "off",
-            "t": str(limit),
+            "kw": query,
+            "korder": "SU",  # 主题排序
+            "pageSize": str(limit),
         }
         return f"{self.BASE_URL}?{urlencode(params)}"
 

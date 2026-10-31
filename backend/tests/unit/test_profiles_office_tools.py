@@ -72,11 +72,13 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
     # office_analyze_ppt_template / office_fill_ppt_template, 22 → 24 件。
     assert visible == [
         "office_analyze",
+        "office_analyze_latex_template",
         "office_analyze_ppt_template",
         "office_analyze_word_template",
         "office_archive",
         "office_create",
         "office_delete",
+        "office_fill_latex_template",
         "office_fill_pdf_form",
         "office_fill_ppt_template",
         "office_fill_word_template",
@@ -89,6 +91,7 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
         "office_list",
         "office_parse_bibtex",
         "office_read",
+        "office_read_latex",
         "office_read_pdf",
         "office_read_pdf_form",
         "office_refresh_toc",
@@ -120,10 +123,12 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
     # office_fill_ppt_template, 21 → 23 件（仍不给 office_delete）。
     assert visible == [
         "office_analyze",
+        "office_analyze_latex_template",
         "office_analyze_ppt_template",
         "office_analyze_word_template",
         "office_archive",
         "office_create",
+        "office_fill_latex_template",
         "office_fill_pdf_form",
         "office_fill_ppt_template",
         "office_fill_word_template",
@@ -136,6 +141,7 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
         "office_list",
         "office_parse_bibtex",
         "office_read",
+        "office_read_latex",
         "office_read_pdf",
         "office_read_pdf_form",
         "office_refresh_toc",
@@ -168,6 +174,7 @@ def test_list_and_read_hidden_without_workspace_binding(registry):
     assert visible == [
         "office_create",
         "office_delete",
+        "office_fill_latex_template",
         "office_fill_pdf_form",
         "office_fill_ppt_template",
         "office_fill_word_template",

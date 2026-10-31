@@ -202,7 +202,7 @@ async def test_author_preview_deterministic(
 async def test_audit_ai_falls_back_without_llm(
     client: httpx.AsyncClient, project_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import backend.orchestration.llm_factory as llm_factory
+    from backend.orchestration import llm_factory
 
     project = await _register(client, project_dir)
     await _bind(client, project["id"])

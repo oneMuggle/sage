@@ -18,6 +18,8 @@ const EXT_LANG: Record<string, string> = {
   jsonc: 'json',
   md: 'markdown',
   markdown: 'markdown',
+  tex: 'latex',
+  ltx: 'latex',
   sh: 'bash',
   bash: 'bash',
   rs: 'rust',

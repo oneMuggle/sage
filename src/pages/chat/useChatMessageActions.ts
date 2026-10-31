@@ -6,6 +6,12 @@ import { regenerateInPlace } from '../../features/chat/answerVersions';
 import { useQuoteDraft } from '../../features/chat/useQuoteDraft';
 import { sessionApi, learnApi, messageApi, memoryApi } from '../../shared/api';
 import { orchRunClient } from '../../shared/api/orchRunClient';
+import {
+  isHttpUrl,
+  isLoginInProgressError,
+  startSiteLogin,
+  waitForSiteLogin,
+} from '../../shared/api/webAccessClient';
 import { useI18n } from '../../shared/lib/i18n';
 import type { BlockedAction, Message as MessageType } from '../../shared/lib/store';
 
@@ -280,15 +286,50 @@ export function useChatMessageActions({
     [navigate],
   );
 
+  /** 单飞保护：同一 URL 的登录轮询只允许一个（双击/重复点击不重复发消息）。 */
+  const siteLoginInFlight = useRef<string | null>(null);
+
+  /** 登录墙一键登录：直接启动后台登录任务，成功后自动继续原任务。 */
+  const runSiteLogin = useCallback(
+    async (url: string): Promise<void> => {
+      if (!isHttpUrl(url)) return;
+      if (siteLoginInFlight.current === url) return;
+      siteLoginInFlight.current = url;
+      toast.info(t('chat.blocked.login.starting'));
+      try {
+        const jobId = await startSiteLogin(url);
+        const job = await waitForSiteLogin(jobId);
+        if (job.status !== 'success') {
+          throw new Error(job.error || 'login_failed');
+        }
+        let host = url;
+        try {
+          host = new URL(url).hostname;
+        } catch {
+          /* keep raw url as display */
+        }
+        void sendMessage(fill(t('chat.blocked.login.continue'), { host, url }));
+      } catch (error) {
+        toast.error(
+          isLoginInProgressError(error)
+            ? t('settings.network.sites.login_in_progress')
+            : fill(t('chat.blocked.login.failed'), {
+                error: error instanceof Error ? error.message : String(error),
+              }),
+        );
+      } finally {
+        siteLoginInFlight.current = null;
+      }
+    },
+    [sendMessage, t],
+  );
+
   const handleBlockedAction = useCallback(
     (action: BlockedAction) => {
       const url = typeof action.params?.url === 'string' ? action.params.url : undefined;
       switch (action.action) {
         case 'login_to_site':
-          if (url)
-            void sendMessage(
-              `请用 browser_login 工具登录 ${url}，完成登录态保存后重新访问该页面。`,
-            );
+          if (url) void runSiteLogin(url);
           break;
         case 'open_browser':
           if (url) void sendMessage(`请用 browser_navigate 工具打开 ${url} 并提取正文。`);
@@ -309,7 +350,7 @@ export function useChatMessageActions({
           break;
       }
     },
-    [sendMessage, navigate],
+    [sendMessage, navigate, runSiteLogin],
   );
 
   const handleCancelRun = useCallback(
