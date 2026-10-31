@@ -44,6 +44,7 @@ export type {
   PlaybookStageSpec,
   PlaybookState,
   PlaybookSummary,
+  PlaybookWikiExportResult,
 } from './playbookApi';
 export type {
   ProjectOpenResult,

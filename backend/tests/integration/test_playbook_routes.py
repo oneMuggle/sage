@@ -218,6 +218,47 @@ async def test_audit_ai_falls_back_without_llm(
 
 
 @pytest.mark.asyncio()
+async def test_wiki_export_creates_and_updates(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    first = await client.post(
+        "/api/v1/projects/{}/playbook/wiki/export".format(project["id"])
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["created"] is True
+    page = project_dir / "wiki" / "guides" / "playbook-handbook.md"
+    assert page.is_file()
+    text = page.read_text(encoding="utf-8")
+    assert "generator: sage" in text
+    assert "开题" in text
+
+    second = await client.post(
+        "/api/v1/projects/{}/playbook/wiki/export".format(project["id"])
+    )
+    assert second.status_code == 200
+    assert second.json()["updated"] is True
+
+
+@pytest.mark.asyncio()
+async def test_wiki_export_refuses_user_page(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    page = project_dir / "wiki" / "guides" / "playbook-handbook.md"
+    page.parent.mkdir(parents=True)
+    page.write_text("# 用户手写内容", encoding="utf-8")
+
+    response = await client.post(
+        "/api/v1/projects/{}/playbook/wiki/export".format(project["id"])
+    )
+    assert response.status_code == 409
+    assert page.read_text(encoding="utf-8") == "# 用户手写内容"
+
+
+@pytest.mark.asyncio()
 async def test_export_agents_markdown(
     client: httpx.AsyncClient, project_dir: Path
 ) -> None:

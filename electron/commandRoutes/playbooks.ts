@@ -83,6 +83,10 @@ export const playbookRoutes: Record<string, CommandRoute> = {
       )}&include_scaffold=${includeScaffold ? 'true' : 'false'}`;
     },
   },
+  playbook_wiki_export: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/playbook/wiki/export`,
+  },
   playbook_import_preview: {
     method: 'POST',
     path: () => '/api/v1/playbooks/import/preview',

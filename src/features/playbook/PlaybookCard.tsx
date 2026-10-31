@@ -129,11 +129,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
     run('audit-ai', async () => {
       const audit: PlaybookAudit = await playbookApi.auditAi(projectId);
       setCurrent((prev) => (prev ? { ...prev, audit } : prev));
-      setNotice(
-        audit.llm_available
-          ? 'AI 内容检查完成'
-          : '未配置 LLM，已保留关键词检查结果',
-      );
+      setNotice(audit.llm_available ? 'AI 内容检查完成' : '未配置 LLM，已保留关键词检查结果');
     });
 
   const handleAction = (action: PlaybookAction) =>
@@ -207,12 +203,16 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         typeof result.content === 'string'
           ? result.content
           : JSON.stringify(result.content, null, 2);
-      downloadText(
-        result.filename,
-        text,
-        format === 'json' ? 'application/json' : 'text/markdown',
-      );
+      downloadText(result.filename, text, format === 'json' ? 'application/json' : 'text/markdown');
       setNotice('已导出：' + result.filename);
+    });
+
+  const handleWikiExport = () =>
+    run('wiki-export', async () => {
+      const result = await playbookApi.exportToWiki(projectId);
+      setNotice(
+        (result.created ? '已写入 Wiki：' : '已更新 Wiki：') + result.path,
+      );
     });
 
   const handleFile = async (file: File) => {
@@ -470,6 +470,15 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           </Button>
           <Button size="sm" variant="secondary" onClick={() => void handleExport('agents')}>
             导出 AGENTS
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void handleWikiExport()}
+            disabled={busy === 'wiki-export'}
+            data-testid="playbook-wiki-export"
+          >
+            {busy === 'wiki-export' ? '写入中…' : '写入 Wiki'}
           </Button>
           <Button
             size="sm"

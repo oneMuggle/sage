@@ -38,6 +38,7 @@ from backend.api.playbook_schemas import (
     PlaybookImportPreviewResponse,
     PlaybookImportRequest,
     PlaybookStageConfirmRequest,
+    PlaybookWikiExportResponse,
 )
 from backend.data.database import make_with_db_lock
 from backend.data.playbook_repo import PlaybookRepository, PlaybookSnapshot
@@ -341,6 +342,43 @@ def export_project_playbook(
         content=build_export_envelope(
             spec, include_scaffold=include_scaffold, app_version="unknown"
         ),
+    )
+
+
+@router.post(
+    "/projects/{project_id}/playbook/wiki/export",
+    response_model=PlaybookWikiExportResponse,
+)
+@with_db_lock
+def export_project_playbook_to_wiki(project_id: str) -> PlaybookWikiExportResponse:
+    """Write the playbook handbook into the project Wiki (sage-owned page only)."""
+    from backend.wiki.files import secure_ensure_directory, secure_write_file
+
+    project = _project_or_404(project_id)
+    snapshot = _active_snapshot_or_404(project.id)
+    root = Path(project.path)
+    relative = "wiki/guides/playbook-handbook.md"
+    target = root / relative
+    created = not target.exists()
+    if not created:
+        try:
+            existing = target.read_text(encoding="utf-8", errors="ignore")[:1000]
+        except OSError as exc:
+            raise _error(500, "wiki_read_failed", str(exc)) from exc
+        if "generator: sage" not in existing:
+            raise _error(
+                409,
+                "wiki_page_exists",
+                "目标 Wiki 页面已存在且不是 Sage 生成，请先改名或删除",
+            )
+    content = "---\ngenerator: sage\n---\n\n" + render_markdown_handbook(snapshot.spec)
+    try:
+        secure_ensure_directory(root, target.parent)
+        secure_write_file(root, target, content)
+    except Exception as exc:  # noqa: BLE001 — surface wiki write failure
+        raise _error(500, "wiki_write_failed", str(exc)) from exc
+    return PlaybookWikiExportResponse(
+        path=relative, created=created, updated=not created
     )
 
 

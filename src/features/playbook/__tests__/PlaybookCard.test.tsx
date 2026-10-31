@@ -14,6 +14,7 @@ const authorPreviewMock = vi.fn();
 const applyActionsMock = vi.fn();
 const confirmStageMock = vi.fn();
 const exportMock = vi.fn();
+const wikiExportMock = vi.fn();
 const importPreviewMock = vi.fn();
 const importMock = vi.fn();
 
@@ -28,6 +29,7 @@ vi.mock('../../../shared/api/playbookApi', () => ({
     applyActions: (...args: unknown[]) => applyActionsMock(...args),
     confirmStage: (...args: unknown[]) => confirmStageMock(...args),
     exportPlaybook: (...args: unknown[]) => exportMock(...args),
+    exportToWiki: (...args: unknown[]) => wikiExportMock(...args),
     importPreview: (...args: unknown[]) => importPreviewMock(...args),
     importPlaybook: (...args: unknown[]) => importMock(...args),
   },
@@ -226,6 +228,19 @@ describe('PlaybookCard', () => {
     await screen.findByTestId('playbook-card');
     fireEvent.click(screen.getByTestId('playbook-refresh-audit'));
     await waitFor(() => expect(auditMock).toHaveBeenCalledWith('p1'));
+  });
+
+  it('写入 Wiki 调用 exportToWiki', async () => {
+    getCurrentMock.mockResolvedValue(bound);
+    wikiExportMock.mockResolvedValue({
+      path: 'wiki/guides/playbook-handbook.md',
+      created: true,
+      updated: false,
+    });
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-wiki-export');
+    fireEvent.click(screen.getByTestId('playbook-wiki-export'));
+    await waitFor(() => expect(wikiExportMock).toHaveBeenCalledWith('p1'));
   });
 
   it('AI 检查内容调用 auditAi', async () => {

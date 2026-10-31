@@ -149,6 +149,7 @@
     "playbook_import": { "method": "POST", "path": "/api/v1/playbooks/import" },
     "playbook_import_preview": { "method": "POST", "path": "/api/v1/playbooks/import/preview" },
     "playbook_stage_confirm": { "method": "POST", "path": "/api/v1/projects/{projectId}/playbook/stage/confirm" },
+    "playbook_wiki_export": { "method": "POST", "path": "/api/v1/projects/{projectId}/playbook/wiki/export" },
     "playbooks_builtin_get": { "method": "GET", "path": "/api/v1/playbooks/builtin/{playbookId}" },
     "playbooks_builtin_list": { "method": "GET", "path": "/api/v1/playbooks/builtin" },
     "projects_add_material": { "method": "POST", "path": "/api/v1/projects/{id}/materials" },

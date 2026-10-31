@@ -78,6 +78,13 @@ describe('playbookApi', () => {
     });
   });
 
+  it('exportToWiki 调 playbook_wiki_export', async () => {
+    await playbookApi.exportToWiki('proj-1');
+    expect(mockInvoke).toHaveBeenCalledWith('playbook_wiki_export', {
+      projectId: 'proj-1',
+    });
+  });
+
   it('importPlaybook 默认 conflict=save_as_new', async () => {
     await playbookApi.importPlaybook({ format: 'sage.playbook' }, 'proj-1');
     expect(mockInvoke).toHaveBeenCalledWith('playbook_import', {

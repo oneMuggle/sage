@@ -110,6 +110,7 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 | POST | `/api/v1/projects/{id}/playbook/stage/confirm` | 确认阶段（写历史） |
 | POST | `/api/v1/projects/{id}/playbook/actions/apply` | 执行用户勾选动作 |
 | GET | `/api/v1/projects/{id}/playbook/export?format=json\|md\|agents` | 导出 |
+| POST | `/api/v1/projects/{id}/playbook/wiki/export` | 将规程手册写入项目 Wiki（仅覆盖 Sage 生成页） |
 | POST | `/api/v1/playbooks/import/preview` | 校验 + diff |
 | POST | `/api/v1/playbooks/import` | 导入并绑定（replace/merge/save_as_new） |
 

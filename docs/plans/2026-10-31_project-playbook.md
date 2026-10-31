@@ -553,7 +553,7 @@ src/shared/lib/i18n/locales/{zh,en}/playbook.ts  # 文案
 - [x] 内容级 LLM 检查（同步执行、失败降级、关键词兜底）
 - [x] 阶段歧义 LLM 裁决（证据约束 prompt）
 - [x] `ProjectAdvisor` 接入审计摘要（当前阶段/完成度/待补项），建议带证据
-- [x] 导出 `AGENTS.md` / `CLAUDE.md` 片段（Wiki 手册写入待做）
+- [x] 导出 AGENTS.md / CLAUDE.md 片段；规程手册写入项目 Wiki
 - [ ] 规程编辑器（结构化表单 + JSON 高级视图 + 保存新版本）
 - [ ] 前端文案 i18n（zh/en 键对齐）
 

@@ -89,6 +89,14 @@ class PlaybookExportResponse(BaseModel):
     content: Any
 
 
+class PlaybookWikiExportResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    created: bool
+    updated: bool
+
+
 class PlaybookImportPreviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -144,4 +152,5 @@ __all__ = [
     "PlaybookImportPreviewResponse",
     "PlaybookImportRequest",
     "PlaybookStageConfirmRequest",
+    "PlaybookWikiExportResponse",
 ]

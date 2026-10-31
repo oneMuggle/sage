@@ -75,6 +75,7 @@
 - 「导出」：下载 `.sageplaybook.json`，包含规程定义与空目录骨架，**不包含你的项目文件内容**；
 - 「导出手册」：下载 Markdown 版规程手册，便于打印或放进 Wiki；
 - 「导出 AGENTS」：下载兼容 `AGENTS.md` / `CLAUDE.md` 的片段，让其他 AI 工具读到同一套目录与阶段约定；
+- 「写入 Wiki」：把规程手册写入 `wiki/guides/playbook-handbook.md`；若该页面已存在且不是 Sage 生成，会拒绝覆盖；
 - 把文件发给同事后，对方可在项目主页选择「导入」：
   1. 选择文件；
   2. Sage 校验并显示结构差异；

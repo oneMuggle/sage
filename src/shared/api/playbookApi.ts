@@ -181,6 +181,12 @@ export interface PlaybookExportResult {
   content: unknown;
 }
 
+export interface PlaybookWikiExportResult {
+  path: string;
+  created: boolean;
+  updated: boolean;
+}
+
 export interface PlaybookImportPreview {
   playbook: PlaybookSpec;
   scaffold: {
@@ -274,6 +280,10 @@ export const playbookApi = {
       format,
       includeScaffold,
     });
+  },
+
+  async exportToWiki(projectId: string): Promise<PlaybookWikiExportResult> {
+    return invoke<PlaybookWikiExportResult>('playbook_wiki_export', { projectId });
   },
 
   async importPreview(
