@@ -75,9 +75,7 @@ export function LatexTemplatePanel({ workspacePath: wsOverride }: LatexTemplateP
         joinWorkspacePath(workspacePath!, templatePath),
       );
       setProfile(result);
-      setValues(
-        Object.fromEntries(result.slots.map((slot) => [slot.name, defaultValue(slot)])),
-      );
+      setValues(Object.fromEntries(result.slots.map((slot) => [slot.name, defaultValue(slot)])));
       setOutputName(defaultOutputName(templatePath));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -92,10 +90,7 @@ export function LatexTemplatePanel({ workspacePath: wsOverride }: LatexTemplateP
     setError(null);
     try {
       const data = Object.fromEntries(
-        profile.slots.map((slot) => [
-          slot.name,
-          toDataValue(slot, values[slot.name] ?? ''),
-        ]),
+        profile.slots.map((slot) => [slot.name, toDataValue(slot, values[slot.name] ?? '')]),
       );
       const result = await fillLatexTemplate(
         workspacePath!,

@@ -67,6 +67,7 @@ import {
   type OfficePreviewData,
   type OfficeReadResult,
 } from '../features/office';
+import { LatexAuditPanel } from '../features/office/LatexAuditPanel';
 import { LatexTemplatePanel } from '../features/office/LatexTemplatePanel';
 import { OfficeStagingInspector } from '../features/office/OfficeStagingInspector';
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
@@ -514,6 +515,7 @@ export function Office() {
               new .tex inside the bound workspace. Uses backendRequest (no
               extra IPC manifest entry). */}
           <LatexTemplatePanel />
+          <LatexAuditPanel />
         </>
       )}
 
