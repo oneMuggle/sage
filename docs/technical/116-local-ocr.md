@@ -68,7 +68,7 @@ Office/PDF 页面   ─┘        │
 | `timeout_s` | float | 30 | Tesseract 调用超时；RapidOCR 由外层超时保护 |
 | `use_cls` | bool | false | RapidOCR 方向分类；截图默认关闭，Office 扫描页开启 |
 
-环境变量兼容：`SAGE_OCR=1`（Office 显式开启）、`SAGE_OCR_LANG`、`SAGE_OCR_MIN_CONFIDENCE`、`SAGE_OCR_MODEL_DIR`。
+环境变量兼容：`SAGE_OCR=1`（Office 显式开启）、`SAGE_OCR_LANG`、`SAGE_OCR_MIN_CONFIDENCE`、`SAGE_OCR_MODEL_DIR`、`SAGE_TESSERACT_PATH`（指定 tesseract 可执行文件，适合捆绑/非 PATH 安装）。
 
 ## 5. 引擎与打包
 
