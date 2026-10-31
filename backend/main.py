@@ -111,6 +111,7 @@ from backend.api.permission_routes import router as permission_router
 from backend.api.plugin_routes import router as plugin_router
 from backend.api.project_ai_routes import router as project_ai_router
 from backend.api.project_routes import router as project_router
+from backend.api.playbook_routes import router as playbook_router
 from backend.api.prompt_routes import router as prompt_router
 from backend.api.question_routes import router as question_router
 from backend.api.request_body_limit import MaxRequestBodyMiddleware
@@ -1167,6 +1168,8 @@ app.include_router(worktree_router, prefix="/api/v1")
 app.include_router(project_router, prefix="/api/v1")
 # AI 增强 M1 (2026-10-12): /api/v1/projects/{id}/ai/decompose-tasks/*
 app.include_router(project_ai_router, prefix="/api/v1")
+# 项目规程 (2026-10-31): /api/v1/playbooks/* 与 /api/v1/projects/{id}/playbook/*
+app.include_router(playbook_router, prefix="/api/v1")
 # M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}
 app.include_router(permission_router, prefix="/api/v1")
 app.include_router(web_access_router, prefix="/api/v1")
