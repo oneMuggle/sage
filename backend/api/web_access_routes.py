@@ -93,9 +93,12 @@ class CookieCredentialBody(BaseModel):
 
 
 class SiteLoginBody(BaseModel):
-    """POST /web-access/sites/login：用户选定的登录入口 URL。"""
+    """POST /web-access/sites/login：用户选定的登录入口 URL + 显式批准。"""
 
     url: str
+    #: 用户在设置页/聊天卡片点击「登录」即视为本次 EXTERNAL 调用的批准；
+    #: DISCUSS/PLAN 模式仍会被 PermissionEngine 直接拒绝。
+    approved: bool = False
 
     class Config:
         extra = Extra.forbid
@@ -254,6 +257,19 @@ async def get_sites(request: Request) -> Dict[str, Any]:
     return {"sites": sites}
 
 
+def _login_permission_decision(url: str) -> Any:
+    """用当前权限配置裁决 ``browser_login``（与 agent 工具执行同一执行器）。
+
+    PermissionEnforcer 读取 ``permission_mode`` + 持久/会话规则：
+    read_only 拒绝；prompt 需要用户批准；workspace_write/full_access 放行。
+    规则层的 deny/allow/ask 同样生效。
+    """
+    from backend.tools.permissions import load_enforcer_from_settings
+
+    enforcer = load_enforcer_from_settings()
+    return enforcer.check("browser_login", {"url": url})
+
+
 @router.post("/web-access/sites/login")
 async def start_site_login(  # noqa: PLR0911 — 各拒绝路径独立 return，扁平更直读
     request: Request, body: SiteLoginBody
@@ -282,6 +298,26 @@ async def start_site_login(  # noqa: PLR0911 — 各拒绝路径独立 return，
     rejection = load_network_policy().check_host(url)
     if rejection:
         return JSONResponse(status_code=403, content={"ok": False, "error": rejection})
+    decision = _login_permission_decision(url)
+    if not decision.allowed:
+        if not decision.needs_approval:
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "ok": False,
+                    "error": f"permission_denied: {decision.reason}",
+                },
+            )
+        if not body.approved:
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "ok": False,
+                    "approval_required": True,
+                    "error": "permission_approval_required",
+                    "reason": decision.reason,
+                },
+            )
     try:
         job_id = site_login_jobs.start(url)
     except ValueError as exc:
