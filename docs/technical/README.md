@@ -91,6 +91,7 @@
 | 113  | [右键上下文菜单体系](./113-context-menu.md) | Radix ContextMenu 基座 + 声明式菜单 spec（打开时求值）/ 会话·消息·代码块·引用 chip·Wiki 树·变更卡·产物 接入 / Electron 原生编辑菜单 + 开发期检查元素 / 选区联动与危险动作统一确认 |
 | 114  | [会话状态徽章](./114-session-status-badges.md) | 侧栏徽章优先级 / 重试中与后台运行中 / run_status 写入链路与已知限制 |
 | 115  | [项目规程 Playbook](./115-project-playbook.md) | 阶段/交付物规格 + 项目级快照 + 确定性审计与阶段识别 + 目录/骨架/规则/里程碑动作 + JSON/Markdown/AGENTS 导出与导入冲突策略 |
+| 116  | [本地 OCR](./116-local-ocr.md) | RapidOCR/Tesseract 双引擎 + 聊天兜底/预览编辑 + Office/PDF/Wiki/工具接入 + 配置、性能与 Win7 边界 |
 
 ---
 

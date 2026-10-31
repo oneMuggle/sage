@@ -59,11 +59,7 @@ describe('ImageOcrPreview', () => {
 
     render(
       <I18nProvider defaultLocale="zh">
-        <ImageOcrPreview
-          images={[IMAGE]}
-          enabled
-          onTextsChange={onTextsChange}
-        />
+        <ImageOcrPreview images={[IMAGE]} enabled onTextsChange={onTextsChange} />
       </I18nProvider>,
     );
 

@@ -119,9 +119,7 @@ export function ImageOcrPreview({
   const updateText = (index: number, value: string) => {
     setItems((prev) =>
       prev.map((item, idx) =>
-        idx === index
-          ? { ...item, text: value, status: value.trim() ? 'ok' : 'empty' }
-          : item,
+        idx === index ? { ...item, text: value, status: value.trim() ? 'ok' : 'empty' } : item,
       ),
     );
   };
@@ -155,9 +153,7 @@ export function ImageOcrPreview({
                 className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 hover:bg-bg-hover"
               >
                 <Copy className="h-3 w-3" aria-hidden="true" />
-                {copiedIndex === index
-                  ? t('chat.image_ocr_copied')
-                  : t('chat.image_ocr_copy')}
+                {copiedIndex === index ? t('chat.image_ocr_copied') : t('chat.image_ocr_copy')}
               </button>
             )}
             <button
@@ -172,9 +168,7 @@ export function ImageOcrPreview({
           {item.status === 'loading' && (
             <div className="text-muted">{t('chat.image_ocr_loading')}</div>
           )}
-          {item.status === 'empty' && (
-            <div className="text-muted">{t('chat.image_ocr_empty')}</div>
-          )}
+          {item.status === 'empty' && <div className="text-muted">{t('chat.image_ocr_empty')}</div>}
           {item.status === 'failed' && (
             <div className="text-warning">
               {t('chat.image_ocr_failed').replace('{error}', item.error ?? '')}
