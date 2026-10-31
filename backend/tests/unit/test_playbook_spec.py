@@ -90,7 +90,8 @@ def test_builtin_library_has_research_and_coding():
 def test_markdown_and_export_envelope_round_trip():
     spec = get_builtin("cn-research-grant")
     md = render_markdown_handbook(spec)
-    assert "开题" in md and "实施" in md
+    assert "开题" in md
+    assert "实施" in md
     envelope = build_export_envelope(spec, include_scaffold=True, app_version="0.6.0")
     parsed = validate_import_envelope(envelope)
     assert parsed["playbook"]["id"] == spec["id"]

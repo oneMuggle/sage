@@ -52,7 +52,7 @@ MAX_TEXT_BYTES = 200_000
 MAX_EVIDENCE_MATCHES = 5
 
 
-def _glob_to_regex(pattern: str) -> "re.Pattern[str]":
+def _glob_to_regex(pattern: str) -> re.Pattern[str]:
     """Translate a playbook glob to regex.
 
     Supports ``*`` (no path separator), ``?``, ``**`` (any depth, including
@@ -186,8 +186,8 @@ def _artifact_audit(
     artifact: Dict[str, Any],
     state: Dict[str, Any],
 ) -> Dict[str, Any]:
-    waivers: Set[str] = set(str(item) for item in (state.get("waivers") or []))
-    artifact_key = "%s.%s" % (stage_id, artifact["id"])
+    waivers: Set[str] = {str(item) for item in (state.get("waivers") or [])}
+    artifact_key = "{}.{}".format(stage_id, artifact["id"])
     match = artifact.get("match") or {}
     min_bytes = int(match.get("min_bytes") or 0)
     min_count = max(1, int(match.get("min_count") or 1))
@@ -223,9 +223,12 @@ def _artifact_audit(
         status = "optional" if not artifact.get("required", True) else "missing"
     else:
         max_age_days = match.get("max_age_days")
-        if max_age_days and latest_mtime is not None:
-            if (time.time() - latest_mtime) > int(max_age_days) * 86400:
-                status = "stale"
+        if (
+            max_age_days
+            and latest_mtime is not None
+            and (time.time() - latest_mtime) > int(max_age_days) * 86400
+        ):
+            status = "stale"
 
     relative_matches = []
     for path in valid[:MAX_EVIDENCE_MATCHES]:
@@ -263,8 +266,8 @@ def _criterion_status(
         if artifact is not None and artifact["status"] in {"present", "stale", "waived"}:
             status = "done"
     elif criterion_type == "manual":
-        manual_done = set(str(item) for item in (state.get("manual_done") or []))
-        if "%s.%s" % (stage_id, criterion.get("id")) in manual_done:
+        manual_done = {str(item) for item in (state.get("manual_done") or [])}
+        if "{}.{}".format(stage_id, criterion.get("id")) in manual_done:
             status = "done"
     return {
         "id": criterion.get("id"),

@@ -28,6 +28,8 @@ from backend.api.playbook_schemas import (
     PlaybookActionsApplyRequest,
     PlaybookActionsApplyResponse,
     PlaybookAuditResponse,
+    PlaybookAuthorPreviewRequest,
+    PlaybookAuthorPreviewResponse,
     PlaybookBindRequest,
     PlaybookCurrentResponse,
     PlaybookExportResponse,
@@ -41,6 +43,7 @@ from backend.data.playbook_repo import PlaybookRepository, PlaybookSnapshot
 from backend.data.project_repo import Project, ProjectRepository
 from backend.services.playbook_actions import apply_playbook_actions
 from backend.services.playbook_auditor import audit_playbook
+from backend.services.playbook_author import build_author_preview
 from backend.services.playbook_library import (
     build_export_envelope,
     get_builtin,
@@ -199,7 +202,7 @@ def bind_project_playbook(
         spec = get_builtin(request.playbook_id)
         if spec is None:
             raise _error(404, "playbook_not_found", "内置规程不存在")
-        source = request.source or ("builtin:%s" % request.playbook_id)
+        source = request.source or (f"builtin:{request.playbook_id}")
     else:
         try:
             spec = normalize_playbook(request.spec or {})
@@ -220,6 +223,22 @@ def audit_project_playbook(project_id: str) -> PlaybookAuditResponse:
     snapshot = _active_snapshot_or_404(project.id)
     state = PlaybookRepository().get_state(project.id)
     return PlaybookAuditResponse(**audit_playbook(project, snapshot.spec, state=state))
+
+
+@router.post(
+    "/projects/{project_id}/playbook/author/preview",
+    response_model=PlaybookAuthorPreviewResponse,
+)
+@with_db_lock
+async def author_project_playbook(
+    project_id: str, request: PlaybookAuthorPreviewRequest
+) -> PlaybookAuthorPreviewResponse:
+    """Generate an AI-assisted playbook draft (deterministic fallback)."""
+    project = _project_or_404(project_id)
+    result = await build_author_preview(
+        project, request.answers, use_llm=request.use_llm
+    )
+    return PlaybookAuthorPreviewResponse(**result.to_dict())
 
 
 @router.post(
@@ -280,12 +299,12 @@ def export_project_playbook(
     if format == "md":
         return PlaybookExportResponse(
             format="md",
-            filename="%s-handbook.md" % spec["id"],
+            filename="{}-handbook.md".format(spec["id"]),
             content=render_markdown_handbook(spec),
         )
     return PlaybookExportResponse(
         format="json",
-        filename="%s.sageplaybook.json" % spec["id"],
+        filename="{}.sageplaybook.json".format(spec["id"]),
         content=build_export_envelope(
             spec, include_scaffold=include_scaffold, app_version="unknown"
         ),
@@ -328,12 +347,15 @@ def import_playbook(request: PlaybookImportRequest) -> PlaybookCurrentResponse:
     spec = parsed["playbook"]
     if active is not None and request.conflict == "merge":
         spec = _merge_specs(active.spec, spec)
-    elif active is not None and request.conflict == "save_as_new":
-        if active.spec.get("id") == spec["id"]:
-            duplicate = dict(spec)
-            duplicate["id"] = "%s-imported-%s" % (spec["id"], spec_hash(spec)[:8])
-            spec = normalize_playbook(duplicate)
-    source = "imported:%s" % spec_hash(spec)[:12]
+    if (
+        active is not None
+        and request.conflict == "save_as_new"
+        and active.spec.get("id") == spec["id"]
+    ):
+        duplicate = dict(spec)
+        duplicate["id"] = "{}-imported-{}".format(spec["id"], spec_hash(spec)[:8])
+        spec = normalize_playbook(duplicate)
+    source = f"imported:{spec_hash(spec)[:12]}"
     repo.create_snapshot(project.id, spec, source=source)
     _ensure_state(project.id, spec)
     return _current_payload(project)

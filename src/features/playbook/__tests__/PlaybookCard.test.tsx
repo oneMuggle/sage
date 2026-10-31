@@ -9,6 +9,7 @@ const getCurrentMock = vi.fn();
 const listBuiltinMock = vi.fn();
 const bindMock = vi.fn();
 const auditMock = vi.fn();
+const authorPreviewMock = vi.fn();
 const applyActionsMock = vi.fn();
 const confirmStageMock = vi.fn();
 const exportMock = vi.fn();
@@ -21,6 +22,7 @@ vi.mock('../../../shared/api/playbookApi', () => ({
     listBuiltin: (...args: unknown[]) => listBuiltinMock(...args),
     bind: (...args: unknown[]) => bindMock(...args),
     audit: (...args: unknown[]) => auditMock(...args),
+    authorPreview: (...args: unknown[]) => authorPreviewMock(...args),
     applyActions: (...args: unknown[]) => applyActionsMock(...args),
     confirmStage: (...args: unknown[]) => confirmStageMock(...args),
     exportPlaybook: (...args: unknown[]) => exportMock(...args),
@@ -155,6 +157,32 @@ describe('PlaybookCard', () => {
       expect(applyActionsMock).toHaveBeenCalledWith('p1', [
         { type: 'create_folder', payload: { path: '02_实施/数据' } },
       ]),
+    );
+  });
+
+  it('AI 定制规程后可直接绑定生成的草案', async () => {
+    getCurrentMock.mockResolvedValue(unbound);
+    authorPreviewMock.mockResolvedValue({
+      playbook: { ...bound.playbook, id: 'custom-1', name: 'AI 生成的规程' },
+      rationale: '根据学校要求生成',
+      llm_available: true,
+      source: 'llm',
+    });
+    bindMock.mockResolvedValue({ ...bound, version: 2 });
+    render(<PlaybookCard projectId="p1" />);
+
+    await screen.findByTestId('playbook-card');
+    fireEvent.click(screen.getByTestId('playbook-author-btn'));
+    await waitFor(() =>
+      expect(authorPreviewMock).toHaveBeenCalledWith('p1', { notes: '' }),
+    );
+    expect(screen.getByText('AI 生成的规程')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('playbook-bind-authored'));
+    await waitFor(() =>
+      expect(bindMock).toHaveBeenCalledWith('p1', {
+        spec: expect.objectContaining({ id: 'custom-1' }),
+        source: 'ai-authored',
+      }),
     );
   });
 

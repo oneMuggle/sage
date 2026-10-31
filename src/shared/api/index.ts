@@ -32,6 +32,7 @@ export type {
   PlaybookArtifactAudit,
   PlaybookArtifactSpec,
   PlaybookAudit,
+  PlaybookAuthorPreview,
   PlaybookBindPayload,
   PlaybookContentCheck,
   PlaybookCurrent,

@@ -142,7 +142,7 @@ def suggested_builtin(project_type: Optional[str]) -> Optional[Dict[str, Any]]:
 
 def render_markdown_handbook(spec: Dict[str, Any]) -> str:
     """Render a human-readable, printable handbook for sharing."""
-    lines: List[str] = ["# %s" % spec["name"], ""]
+    lines: List[str] = ["# {}".format(spec["name"]), ""]
     if spec.get("description"):
         lines.extend([spec["description"], ""])
     lines.extend(["## 目录结构", ""])
@@ -150,23 +150,23 @@ def render_markdown_handbook(spec: Dict[str, Any]) -> str:
         for item in spec["directory_layout"]:
             mark = "必需" if item.get("required", True) else "可选"
             purpose = item.get("purpose") or ""
-            lines.append("- `%s/`（%s）%s" % (item["path"], mark, purpose))
+            lines.append("- `{}/`（{}）{}".format(item["path"], mark, purpose))
     else:
         lines.append("- （无固定目录要求）")
     lines.extend(["", "## 阶段与交付物", ""])
     for stage in sorted(spec["stages"], key=lambda item: item["order"]):
-        lines.append("### %s. %s" % (stage["order"], stage["label"]))
+        lines.append("### {}. {}".format(stage["order"], stage["label"]))
         if stage.get("objective"):
             lines.append(stage["objective"])
         lines.append("")
         for artifact in stage["artifacts"]:
             mark = "必需" if artifact.get("required", True) else "可选"
-            globs = ", ".join("`%s`" % item for item in artifact["match"]["globs"])
-            lines.append("- [ ] %s（%s）：%s" % (artifact["label"], mark, globs))
+            globs = ", ".join(f"`{item}`" for item in artifact["match"]["globs"])
+            lines.append("- [ ] {}（{}）：{}".format(artifact["label"], mark, globs))
         for criterion in stage.get("exit_criteria") or []:
             label = criterion.get("label") or criterion.get("id")
             if label:
-                lines.append("- [ ] 退出条件：%s" % label)
+                lines.append(f"- [ ] 退出条件：{label}")
         lines.append("")
 
     rules = list(spec.get("global_rules") or [])
@@ -179,14 +179,14 @@ def render_markdown_handbook(spec: Dict[str, Any]) -> str:
         for rule in rules:
             content = rule.get("content") or rule.get("template_key") or ""
             if content:
-                lines.append("- %s" % content)
+                lines.append(f"- {content}")
         lines.append("")
 
     milestones = []
     for stage in spec["stages"]:
         for milestone in stage.get("recommended_milestones") or []:
             if milestone.get("title"):
-                milestones.append("- [ ] %s（%s）" % (milestone["title"], stage["label"]))
+                milestones.append("- [ ] {}（{}）".format(milestone["title"], stage["label"]))
     if milestones:
         lines.extend(["## 推荐里程碑", ""] + milestones + [""])
 
@@ -194,7 +194,7 @@ def render_markdown_handbook(spec: Dict[str, Any]) -> str:
         lines.extend(["## 建议待办", ""])
         for todo in spec["todos"]:
             if todo.get("title"):
-                lines.append("- [ ] %s" % todo["title"])
+                lines.append("- [ ] {}".format(todo["title"]))
         lines.append("")
 
     meta = spec.get("meta") or {}
@@ -202,8 +202,7 @@ def render_markdown_handbook(spec: Dict[str, Any]) -> str:
         [
             "---",
             "",
-            "> 作者：%s · 许可证：%s · 导出自 Sage"
-            % (meta.get("author") or "未知", meta.get("license") or "未声明"),
+            "> 作者：{} · 许可证：{} · 导出自 Sage".format(meta.get("author") or "未知", meta.get("license") or "未声明"),
             "",
         ]
     )
@@ -237,7 +236,7 @@ def build_export_envelope(
     return {
         "format": "sage.playbook",
         "schema_version": normalized["schema_version"],
-        "exported_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "exported_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),  # noqa: UP017 — py3.8 compat
         "exporter": {"app": "Sage", "version": str(app_version)},
         "playbook": normalized,
         "scaffold": scaffold,
@@ -248,10 +247,10 @@ def build_export_envelope(
 def _safe_relative_path(value: Any, field: str) -> str:
     raw = str(value if value is not None else "").strip().replace("\\", "/")
     if raw.startswith("/") or raw.startswith("~"):
-        raise PlaybookValidationError("非法相对路径: %r" % raw)
+        raise PlaybookValidationError(f"非法相对路径: {raw!r}")
     parts = [part for part in raw.split("/") if part not in ("", ".")]
     if not parts or any(part == ".." for part in parts):
-        raise PlaybookValidationError("非法相对路径: %r" % raw)
+        raise PlaybookValidationError(f"非法相对路径: {raw!r}")
     return "/".join(parts)
 
 
@@ -288,9 +287,9 @@ def render_doc_stub(template_id: Optional[str], *, title: Optional[str] = None) 
     """Render a markdown stub for ``create_doc_stub`` actions."""
     template = DOC_STUB_TEMPLATES.get(str(template_id or "")) or DOC_STUB_TEMPLATES["generic_document"]
     heading = title or template["title"]
-    lines = ["# %s" % heading, ""]
+    lines = [f"# {heading}", ""]
     for section in template["sections"]:
-        lines.extend(["## %s" % section, "", "（待填写）", ""])
+        lines.extend([f"## {section}", "", "（待填写）", ""])
     return "\n".join(lines)
 
 

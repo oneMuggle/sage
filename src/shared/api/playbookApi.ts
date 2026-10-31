@@ -180,6 +180,13 @@ export interface PlaybookImportPreview {
   diff: Record<string, unknown>;
 }
 
+export interface PlaybookAuthorPreview {
+  playbook: PlaybookSpec;
+  rationale: string;
+  llm_available: boolean;
+  source: string;
+}
+
 export interface PlaybookBindPayload {
   playbookId?: string;
   spec?: PlaybookSpec;
@@ -220,6 +227,18 @@ export const playbookApi = {
 
   async audit(projectId: string): Promise<PlaybookAudit> {
     return invoke<PlaybookAudit>('playbook_audit', { projectId });
+  },
+
+  async authorPreview(
+    projectId: string,
+    answers: Record<string, unknown> = {},
+    useLlm = true,
+  ): Promise<PlaybookAuthorPreview> {
+    return invoke<PlaybookAuthorPreview>('playbook_author_preview', {
+      projectId,
+      answers,
+      useLlm,
+    });
   },
 
   async confirmStage(

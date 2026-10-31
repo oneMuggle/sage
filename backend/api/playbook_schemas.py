@@ -104,12 +104,30 @@ class PlaybookImportRequest(BaseModel):
     conflict: str = Field(default="save_as_new", pattern="^(replace|merge|save_as_new)$")
 
 
+class PlaybookAuthorPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answers: Dict[str, Any] = Field(default_factory=dict)
+    use_llm: bool = True
+
+
+class PlaybookAuthorPreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    playbook: Dict[str, Any]
+    rationale: str
+    llm_available: bool
+    source: str
+
+
 __all__ = [
     "BuiltinPlaybookListResponse",
     "BuiltinPlaybookResponse",
     "PlaybookActionsApplyRequest",
     "PlaybookActionsApplyResponse",
     "PlaybookAuditResponse",
+    "PlaybookAuthorPreviewRequest",
+    "PlaybookAuthorPreviewResponse",
     "PlaybookBindRequest",
     "PlaybookCurrentResponse",
     "PlaybookExportResponse",

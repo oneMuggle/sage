@@ -19,6 +19,7 @@ import { playbookApi } from '../../shared/api/playbookApi';
 import type {
   PlaybookAction,
   PlaybookAudit,
+  PlaybookAuthorPreview,
   PlaybookCurrent,
   PlaybookImportPreview,
   PlaybookSummary,
@@ -63,6 +64,8 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [dismissedDetected, setDismissedDetected] = useState(false);
+  const [authorNotes, setAuthorNotes] = useState('');
+  const [authorResult, setAuthorResult] = useState<PlaybookAuthorPreview | null>(null);
   const [importPreview, setImportPreview] = useState<PlaybookImportPreview | null>(null);
   const [importEnvelope, setImportEnvelope] = useState<Record<string, unknown> | null>(null);
   const [importConflict, setImportConflict] = useState<'save_as_new' | 'merge' | 'replace'>(
@@ -137,6 +140,24 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       setCurrent(data);
       setDismissedDetected(true);
       setNotice('阶段已更新');
+    });
+
+  const handleAuthor = () =>
+    run('author', async () => {
+      const result = await playbookApi.authorPreview(projectId, { notes: authorNotes });
+      setAuthorResult(result);
+      setNotice(result.rationale);
+    });
+
+  const handleBindAuthored = () =>
+    run('bind-authored', async () => {
+      if (!authorResult) return;
+      const data = await playbookApi.bind(projectId, {
+        spec: authorResult.playbook,
+        source: 'ai-authored',
+      });
+      setCurrent(data);
+      setNotice('已绑定 AI 定制规程');
     });
 
   const handleExport = (format: 'json' | 'md') =>
@@ -275,6 +296,48 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
               event.target.value = '';
             }}
           />
+        </div>
+        <div className="space-y-2 rounded-md border border-border p-2">
+          <div className="text-xs text-muted-foreground">
+            不确定怎么划分阶段？让 AI 根据项目生成一份草案。
+          </div>
+          <textarea
+            value={authorNotes}
+            onChange={(event) => setAuthorNotes(event.target.value)}
+            placeholder="补充要求（可选）：资助方、必须交付的材料、时间节点…"
+            rows={2}
+            className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
+            data-testid="playbook-author-notes"
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void handleAuthor()}
+            disabled={busy === 'author'}
+            data-testid="playbook-author-btn"
+          >
+            {busy === 'author' ? '生成中…' : 'AI 定制规程'}
+          </Button>
+          {authorResult && (
+            <div className="space-y-1 text-xs">
+              <div className="font-medium text-foreground">
+                {authorResult.playbook.name}
+              </div>
+              <div className="text-muted-foreground">
+                {authorResult.rationale}
+                {authorResult.source === 'deterministic' ? '（未配置 LLM，已降级）' : ''}
+              </div>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => void handleBindAuthored()}
+                disabled={busy === 'bind-authored'}
+                data-testid="playbook-bind-authored"
+              >
+                {busy === 'bind-authored' ? '绑定中…' : '绑定生成的规程'}
+              </Button>
+            </div>
+          )}
         </div>
         {error && <div className="text-xs text-destructive">{error}</div>}
         {notice && <div className="text-xs text-primary">{notice}</div>}

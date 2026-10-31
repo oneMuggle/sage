@@ -34,14 +34,14 @@ def _normalize(text: Optional[str]) -> str:
 def _safe_target(root: Path, relative: Any) -> Path:
     raw = str(relative if relative is not None else "").strip().replace("\\", "/")
     if not raw or raw.startswith("/") or raw.startswith("~"):
-        raise ValueError("非法路径: %r" % raw)
+        raise ValueError(f"非法路径: {raw!r}")
     parts = [part for part in raw.split("/") if part not in ("", ".")]
     if not parts or any(part == ".." for part in parts):
-        raise ValueError("非法路径: %r" % raw)
+        raise ValueError(f"非法路径: {raw!r}")
     root_resolved = root.resolve()
     target = (root_resolved / "/".join(parts)).resolve()
     if target != root_resolved and root_resolved not in target.parents:
-        raise ValueError("路径越界: %r" % raw)
+        raise ValueError(f"路径越界: {raw!r}")
     return target
 
 
@@ -58,7 +58,7 @@ def _create_doc_stub(root: Path, payload: Dict[str, Any]) -> str:
     if target.exists():
         return "skipped"
     if target.suffix.lower() not in {".md", ".txt"}:
-        raise ValueError("文档骨架目前只支持 .md / .txt: %s" % target.name)
+        raise ValueError(f"文档骨架目前只支持 .md / .txt: {target.name}")
     target.parent.mkdir(parents=True, exist_ok=True)
     title = payload.get("title")
     content = render_doc_stub(payload.get("template"), title=title)

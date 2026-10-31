@@ -46,19 +46,19 @@ def is_compatible(version: str) -> bool:
 def _text(value: Any, field: str, *, required: bool = False, max_len: int = 4000) -> str:
     text = str(value if value is not None else "").strip()
     if required and not text:
-        raise PlaybookValidationError("缺少字段: %s" % field)
+        raise PlaybookValidationError(f"缺少字段: {field}")
     if len(text) > max_len:
-        raise PlaybookValidationError("字段 %s 超长" % field)
+        raise PlaybookValidationError(f"字段 {field} 超长")
     return text
 
 
 def _rel_path(value: Any, field: str) -> str:
     raw = _text(value, field, required=True, max_len=1024).replace("\\", "/")
     if raw.startswith("/") or raw.startswith("~"):
-        raise PlaybookValidationError("非法相对路径: %r" % raw)
+        raise PlaybookValidationError(f"非法相对路径: {raw!r}")
     parts = [part for part in raw.split("/") if part not in ("", ".")]
     if not parts or any(part == ".." for part in parts):
-        raise PlaybookValidationError("非法相对路径: %r" % raw)
+        raise PlaybookValidationError(f"非法相对路径: {raw!r}")
     return "/".join(parts)
 
 
@@ -68,9 +68,9 @@ def _positive_int(value: Any, field: str, default: int) -> int:
     try:
         number = int(value)
     except (TypeError, ValueError) as exc:
-        raise PlaybookValidationError("字段 %s 必须是整数" % field) from exc
+        raise PlaybookValidationError(f"字段 {field} 必须是整数") from exc
     if number < 0:
-        raise PlaybookValidationError("字段 %s 不能为负数" % field)
+        raise PlaybookValidationError(f"字段 {field} 不能为负数")
     return number
 
 
@@ -85,13 +85,13 @@ def _normalize_artifact(raw: Dict[str, Any], stage_id: str, index: int) -> Dict[
     label = _text(raw.get("label"), "artifacts.label", required=True, max_len=200)
     match = raw.get("match") or {}
     if not isinstance(match, dict):
-        raise PlaybookValidationError("产物 %s 的 match 必须是对象" % artifact_id)
+        raise PlaybookValidationError(f"产物 {artifact_id} 的 match 必须是对象")
     globs: List[str] = []
     for glob in (match.get("globs") or [])[:MAX_GLOBS_PER_ARTIFACT]:
         normalized = _text(glob, "match.globs", required=True, max_len=1024).replace("\\", "/")
         globs.append(normalized)
     if not globs:
-        raise PlaybookValidationError("产物 %s 缺少 match.globs" % artifact_id)
+        raise PlaybookValidationError(f"产物 {artifact_id} 缺少 match.globs")
 
     max_age_days = match.get("max_age_days")
     if max_age_days is not None:
@@ -99,11 +99,11 @@ def _normalize_artifact(raw: Dict[str, Any], stage_id: str, index: int) -> Dict[
             max_age_days = int(max_age_days)
         except (TypeError, ValueError) as exc:
             raise PlaybookValidationError(
-                "产物 %s 的 max_age_days 必须是整数" % artifact_id
+                f"产物 {artifact_id} 的 max_age_days 必须是整数"
             ) from exc
         if max_age_days <= 0:
             raise PlaybookValidationError(
-                "产物 %s 的 max_age_days 必须大于 0" % artifact_id
+                f"产物 {artifact_id} 的 max_age_days 必须大于 0"
             )
 
     checks: List[Dict[str, Any]] = []
@@ -112,7 +112,7 @@ def _normalize_artifact(raw: Dict[str, Any], stage_id: str, index: int) -> Dict[
             raise PlaybookValidationError("content_checks 必须是对象数组")
         check_type = _text(check.get("type"), "content_checks.type", required=True, max_len=32)
         if check_type not in _CONTENT_CHECK_TYPES:
-            raise PlaybookValidationError("不支持的 content_check 类型: %s" % check_type)
+            raise PlaybookValidationError(f"不支持的 content_check 类型: {check_type}")
         checks.append(
             {
                 "id": _text(check.get("id"), "content_checks.id", required=True, max_len=128),
@@ -134,7 +134,7 @@ def _normalize_artifact(raw: Dict[str, Any], stage_id: str, index: int) -> Dict[
             missing_action.get("type"), "missing_action.type", required=True, max_len=32
         )
         if action_type not in _MISSING_ACTION_TYPES:
-            raise PlaybookValidationError("不支持的 missing_action: %s" % action_type)
+            raise PlaybookValidationError(f"不支持的 missing_action: {action_type}")
         payload = missing_action.get("payload") or {}
         if not isinstance(payload, dict):
             raise PlaybookValidationError("missing_action.payload 必须是对象")
@@ -164,14 +164,14 @@ def _normalize_stage(raw: Dict[str, Any], fallback_order: int) -> Dict[str, Any]
     try:
         order = int(raw.get("order") or fallback_order)
     except (TypeError, ValueError) as exc:
-        raise PlaybookValidationError("阶段 %s 的 order 必须是整数" % stage_id) from exc
+        raise PlaybookValidationError(f"阶段 {stage_id} 的 order 必须是整数") from exc
 
     artifacts: List[Dict[str, Any]] = []
     seen_artifacts = set()
     for index, artifact in enumerate((raw.get("artifacts") or [])[:MAX_ARTIFACTS_PER_STAGE]):
         normalized = _normalize_artifact(artifact, stage_id, index)
         if normalized["id"] in seen_artifacts:
-            raise PlaybookValidationError("阶段 %s 的产物 id 重复: %s" % (stage_id, normalized["id"]))
+            raise PlaybookValidationError("阶段 {} 的产物 id 重复: {}".format(stage_id, normalized["id"]))
         seen_artifacts.add(normalized["id"])
         artifacts.append(normalized)
 
@@ -207,7 +207,7 @@ def normalize_playbook(raw: Dict[str, Any]) -> Dict[str, Any]:
 
     version = str(raw.get("schema_version") or "")
     if not is_compatible(version):
-        raise PlaybookValidationError("不兼容的 schema_version: %s" % version)
+        raise PlaybookValidationError(f"不兼容的 schema_version: {version}")
 
     playbook_id = _text(raw.get("id"), "id", required=True, max_len=128)
     name = _text(raw.get("name"), "name", required=True, max_len=200)
@@ -226,7 +226,7 @@ def normalize_playbook(raw: Dict[str, Any]) -> Dict[str, Any]:
     ]
     unknown_types = [item for item in project_types if item not in _PROJECT_TYPES]
     if unknown_types:
-        raise PlaybookValidationError("未知项目类型: %s" % ", ".join(unknown_types))
+        raise PlaybookValidationError("未知项目类型: {}".format(", ".join(unknown_types)))
 
     directories: List[Dict[str, Any]] = []
     seen_paths = set()
@@ -235,7 +235,7 @@ def normalize_playbook(raw: Dict[str, Any]) -> Dict[str, Any]:
             raise PlaybookValidationError("directory_layout 必须是对象数组")
         path = _rel_path(item.get("path"), "directory_layout.path")
         if path in seen_paths:
-            raise PlaybookValidationError("目录重复: %s" % path)
+            raise PlaybookValidationError(f"目录重复: {path}")
         seen_paths.add(path)
         directories.append(
             {
@@ -250,7 +250,7 @@ def normalize_playbook(raw: Dict[str, Any]) -> Dict[str, Any]:
     for index, stage in enumerate(stages_raw, start=1):
         normalized = _normalize_stage(stage, index)
         if normalized["id"] in seen_stages:
-            raise PlaybookValidationError("阶段 id 重复: %s" % normalized["id"])
+            raise PlaybookValidationError("阶段 id 重复: {}".format(normalized["id"]))
         seen_stages.add(normalized["id"])
         stages.append(normalized)
     stages.sort(key=lambda item: (item["order"], item["id"]))

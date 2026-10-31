@@ -45,7 +45,7 @@ async def _register(client: httpx.AsyncClient, path: Path) -> dict:
 
 async def _bind(client: httpx.AsyncClient, project_id: str) -> dict:
     response = await client.put(
-        "/api/v1/projects/%s/playbook" % project_id,
+        f"/api/v1/projects/{project_id}/playbook",
         json={"playbook_id": "cn-research-grant"},
     )
     assert response.status_code == 200, response.text
@@ -84,7 +84,7 @@ async def test_bind_and_audit_reflect_files(
         "研究问题\n科学假设\n技术路线", encoding="utf-8"
     )
 
-    audit = await client.get("/api/v1/projects/%s/playbook/audit" % project["id"])
+    audit = await client.get("/api/v1/projects/{}/playbook/audit".format(project["id"]))
     assert audit.status_code == 200
     data = audit.json()
     proposal = next(stage for stage in data["stages"] if stage["id"] == "proposal")
@@ -101,7 +101,7 @@ async def test_actions_apply_and_stage_confirm(
     await _bind(client, project["id"])
 
     applied = await client.post(
-        "/api/v1/projects/%s/playbook/actions/apply" % project["id"],
+        "/api/v1/projects/{}/playbook/actions/apply".format(project["id"]),
         json={
             "actions": [
                 {"type": "create_folder", "payload": {"path": "02_实施/数据"}},
@@ -121,7 +121,7 @@ async def test_actions_apply_and_stage_confirm(
     assert (project_dir / "02_实施" / "实验记录.md").is_file()
 
     confirmed = await client.post(
-        "/api/v1/projects/%s/playbook/stage/confirm" % project["id"],
+        "/api/v1/projects/{}/playbook/stage/confirm".format(project["id"]),
         json={"stage_id": "execution"},
     )
     assert confirmed.status_code == 200, confirmed.text
@@ -143,7 +143,7 @@ async def test_export_and_import_preview(
     await _bind(client, project["id"])
 
     exported = await client.get(
-        "/api/v1/projects/%s/playbook/export?format=json" % project["id"]
+        "/api/v1/projects/{}/playbook/export?format=json".format(project["id"])
     )
     assert exported.status_code == 200
     payload = exported.json()
@@ -176,10 +176,26 @@ async def test_export_markdown(client: httpx.AsyncClient, project_dir: Path) -> 
     project = await _register(client, project_dir)
     await _bind(client, project["id"])
     exported = await client.get(
-        "/api/v1/projects/%s/playbook/export?format=md" % project["id"]
+        "/api/v1/projects/{}/playbook/export?format=md".format(project["id"])
     )
     assert exported.status_code == 200
     assert "开题" in exported.json()["content"]
+
+
+@pytest.mark.asyncio()
+async def test_author_preview_deterministic(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    response = await client.post(
+        f"/api/v1/projects/{project['id']}/playbook/author/preview",
+        json={"answers": {"name": "我的规程"}, "use_llm": False},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["source"] == "deterministic"
+    assert payload["playbook"]["name"] == "我的规程"
+    assert payload["playbook"]["stages"]
 
 
 @pytest.mark.asyncio()

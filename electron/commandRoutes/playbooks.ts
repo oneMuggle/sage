@@ -49,6 +49,14 @@ export const playbookRoutes: Record<string, CommandRoute> = {
     method: 'GET',
     path: (a) => `/api/v1/projects/${projectId(a)}/playbook/audit`,
   },
+  playbook_author_preview: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/playbook/author/preview`,
+    body: (a) => ({
+      answers: a.answers ?? {},
+      use_llm: a.useLlm ?? a.use_llm ?? true,
+    }),
+  },
   playbook_stage_confirm: {
     method: 'POST',
     path: (a) => `/api/v1/projects/${projectId(a)}/playbook/stage/confirm`,

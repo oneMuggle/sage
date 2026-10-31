@@ -1,7 +1,7 @@
 # 项目规程（Playbook）：可配置、可核验、可分享的项目管理方案
 
 > 日期：2026-10-31
-> 状态：待评审（本文档是方案，未开始实施）
+> 状态：已实施 P0/P1（2026-10-31；技术细节见 `docs/technical/114-project-playbook.md`）
 > 分支：`feat/project-playbook`
 > 前置阅读：`docs/plans/2026-10-29_project-management-simplification.md`、`docs/plans/2026-10-27_project-governance-ai.md`、`docs/plans/2026-10-12_ai-project-enhancements.md`
 > 对标：Claude Projects / ChatGPT Projects / Cursor Rules / Claude Code Skills / Notion 项目模板 / Linear-Jira 工作流 / GitHub Issue Forms / DMPTool / PRISMA / OSF
@@ -522,34 +522,34 @@ src/shared/lib/i18n/locales/{zh,en}/playbook.ts  # 文案
 
 ### P0 — 内核与只读体验（3–5 天）
 
-- [ ] `playbook_spec.py`：规格 dataclass + 校验 + canonical hash + 版本兼容
-- [ ] 内置规程：科研（开题/实施/结题）、代码工程（规划/研发/测试/发布/维护）两份 JSON
-- [ ] `project_playbooks` 表 + `projects.playbook_state` 迁移 + `playbook_repo`
-- [ ] `playbook_auditor.py`：目录/产物存在性、时效性、关键词检查、完成度汇总（无 LLM）
-- [ ] API：builtin 列表/详情、绑定/预览、audit（确定性）
-- [ ] 前端：`PlaybookCard` + 阶段条 + 清单（只读）+ 设置区展示
-- [ ] 导出 JSON（含空目录骨架）与人类可读 Markdown
-- [ ] 单测：规格校验、glob 匹配、完成度、路径越界、无 LLM 降级
-- [ ] 文档：技术文档新增章节；用户手册"项目规程"一节
+- [x] `playbook_spec.py`：规格 dataclass + 校验 + canonical hash + 版本兼容
+- [x] 内置规程：科研（开题/实施/结题）、代码工程（规划/研发/测试/发布/维护）两份 JSON
+- [x] `project_playbooks` 表 + `projects.playbook_state` 迁移 + `playbook_repo`
+- [x] `playbook_auditor.py`：目录/产物存在性、时效性、关键词检查、完成度汇总（无 LLM）
+- [x] API：builtin 列表/详情、绑定/预览、audit（确定性）
+- [x] 前端：`PlaybookCard` + 阶段条 + 清单（只读）+ 设置区展示
+- [x] 导出 JSON（含空目录骨架）与人类可读 Markdown
+- [x] 单测：规格校验、glob 匹配、完成度、路径越界、无 LLM 降级
+- [x] 文档：技术文档新增章节；用户手册"项目规程"一节
 
 **验收**：科研项目绑定内置规程后，项目主页能看到"当前阶段 + 完成度 + 缺失项"，导出的 JSON 可在另一台机器上打开并通过校验。
 
 ### P1 — 可操作与可分享（4–6 天）
 
-- [ ] `create_folder` / `create_doc_stub` / `apply_rules` / `seed_milestones` 动作 + 批量预览/执行
+- [x] `create_folder` / `create_doc_stub` / `apply_rules` / `seed_milestones` 动作 + 批量预览/执行
 - [ ] 缺失项一键转 Todo（带 `project_id`）
-- [ ] 导入：校验 + diff + 冲突策略（replace/merge/save_as_new）
-- [ ] 阶段识别（确定性三路证据）+ 确认/回退 API + 阶段历史
+- [x] 导入：校验 + diff + 冲突策略（replace/merge/save_as_new）
+- [x] 阶段识别（确定性三路证据）+ 确认/回退 API + 阶段历史
 - [ ] 右键菜单入口 + 导入/导出对话框（隐私提示）
-- [ ] 应用动作前自动检查点
-- [ ] 集成测试：导入→绑定→审计→执行→阶段确认全链路
+- [x] 应用动作前自动检查点
+- [x] 集成测试：导入→绑定→审计→执行→阶段确认全链路
 - [ ] 双分支适配检查（py3.8 / pydantic v1）
 
 **验收**：用户 A 导出的规程，用户 B 导入后一键创建同构目录与文档骨架，审计结果一致；阶段识别给出证据且需确认才生效。
 
 ### P2 — AI 深度参与（5–7 天）
 
-- [ ] `playbook_author.py`：问卷式 AI 定制 + 确定性降级 + schema 校验重试
+- [x] `playbook_author.py`：问卷式 AI 定制 + 确定性降级 + schema 校验重试
 - [ ] 内容级 LLM 检查（异步、缓存、可取消、关键词兜底）
 - [ ] 阶段歧义 LLM 裁决（证据约束 prompt）
 - [ ] `ProjectAdvisor` 接入审计摘要与规程 `ai_guidance`；建议带 `playbook_ref`
