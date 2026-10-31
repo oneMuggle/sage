@@ -39,7 +39,9 @@ backend/office/latex/
   project.py         # 项目 zip 安全解压 + 主文件识别（不执行内容）
   pdf_audit.py       # PDF 页面尺寸/页数/字体嵌入/图片 DPI 只读审计
   compliance.py      # 规范档案：源码 + 可选 PDF 合并合规检查
-  service.py         # workspace 边界、大小限制、read/analyze/fill/audit/compile/diff/extract/pdf/compliance
+  profile_store.py   # 工作区 .sage/latex-profiles 档案库 CRUD
+  profile_extract.py # 从 PDF/DOCX/TXT/MD 作者指南启发式抽取候选档案
+  service.py         # workspace 边界、大小限制、read/analyze/fill/audit/compile/diff/extract/pdf/compliance/profiles
 ```
 
 每个文件 <800 行（architecture-check）。零新增 Python 依赖；py38 hazard scan 0。
@@ -61,6 +63,11 @@ backend/office/latex/
 | 项目导入 | `POST /api/v1/office/latex/project/extract` | `{workspace_path, zip_path, output_dir_name?}` → 解压到新目录 + 主文件 |
 | PDF 审计 | `POST /api/v1/office/latex/pdf/audit` | `{workspace_path, file_path, required_min_pages?, required_max_pages?, min_image_dpi?}` → 版式/字体/DPI 问题 |
 | 合规检查 | `POST /api/v1/office/latex/compliance/check` | `{workspace_path, tex_path, pdf_path?, profile}` → 逐项 checks + 合并 issues |
+| 档案列表 | `GET /api/v1/office/latex/profiles?workspace_path=` | `.sage/latex-profiles/*.json` 列表 + warnings |
+| 档案加载 | `GET /api/v1/office/latex/profiles/{name}?workspace_path=` | 单档案 |
+| 档案保存 | `POST /api/v1/office/latex/profiles` | `{workspace_path,name,profile,source?,evidence?}` |
+| 档案删除 | `DELETE /api/v1/office/latex/profiles/{name}?workspace_path=` | 删除 |
+| 指南抽取 | `POST /api/v1/office/latex/profiles/extract` | `{workspace_path, source_path}` → 候选 profile + evidence |
 | Agent 工具 | `office_analyze_latex_template` / `office_fill_latex_template` | analyze READ；fill WRITE_LOCAL（file_path 模式） |
 | Agent 工具 | `office_audit_latex` | READ；源码级确定性审校，需 workspace 上下文 |
 | Agent 工具 | `office_compile_latex` / `office_latexdiff` | WRITE_LOCAL；可选外部引擎/latexdiff |
@@ -74,6 +81,7 @@ backend/office/latex/
 | 前端 | `LatexProjectImportPanel` | Office 页“LaTeX 项目导入”：zip 路径 → 新目录 + 主文件 |
 | 前端 | `LatexPdfAuditPanel` | Office 页“PDF 版式审计”：页数/尺寸/字体/DPI 问题列表 |
 | 前端 | `LatexCompliancePanel` | Office 页“LaTeX 投稿合规检查”：规范档案 → checks + issues |
+| 前端 | `LatexProfileLibraryPanel` | Office 页“期刊规范档案”：指南抽取 / 保存 / 删除；合规面板可选用 |
 
 `structured` 形状：
 
@@ -251,6 +259,26 @@ backend/office/latex/
 - `require_embedded_fonts=false` 时过滤字体嵌入问题并把 `pdf.fonts` 标记 skipped；
 - 未提供 PDF 时 PDF 检查全部 skipped；`ok = 无 error`。
 
+### 4.7 期刊规范档案库
+
+档案保存在 `<workspace>/.sage/latex-profiles/<name>.json`：
+
+```json
+{
+  "version": 1,
+  "name": "ieee-2026",
+  "profile": {"required_sections": ["Introduction"], "required_max_pages": 20},
+  "source": "guidelines/ieee.pdf",
+  "evidence": [{"field": "required_max_pages", "value": 20, "snippet": "Maximum 20 pages", "source": "guidelines/ieee.pdf", "page": 2, "line": 7}],
+  "updated_at": "2026-10-31T09:00:00+00:00"
+}
+```
+
+- 名称 `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`；文件 ≤256 KiB；`resolve_within` 防符号链接逃逸；写入用临时文件 + rename；
+- 列表遇到损坏 JSON 返回 warning 而不阻断；
+- 指南抽取支持 `.pdf/.docx/.txt/.md`（≤20 MiB），启发式识别页数/页面尺寸/字体嵌入/DPI/章节/元数据，每条结果带 `evidence` 且 `needs_review=true`；
+- 抽取不做 LLM 语义理解，用户核对后保存；保存时复用 `normalize_profile` 校验/夹取范围。
+
 ## 5. 安全与限制
 
 - **不执行 TeX**：只解析源码；未知命令/环境降级为文本 + warning；
@@ -276,18 +304,20 @@ backend/office/latex/
 - `backend/tests/unit/tools/test_office_latex_pdf_tool.py`（4）：上下文/非 PDF/越界/字体问题；
 - `backend/tests/unit/office/latex/test_compliance.py`（7）：源码通过/元素缺失/禁用命令/PDF 页数尺寸字体/字体不要求/低 DPI/profile 键警告；
 - `backend/tests/unit/tools/test_office_latex_compliance_tool.py`（4）：上下文/非 tex/越界/checks；
+- `backend/tests/unit/office/latex/test_profile_store.py`（8）：CRUD/缺档/非法名称/规范化/覆盖/损坏 JSON/版本与证据；
+- `backend/tests/unit/office/latex/test_profile_extract.py`（6）：TXT/DOCX/PDF 抽取/页数区间/不支持后缀/越界；
 - `backend/tests/unit/tools/test_office_latex_template_tool.py`（4）：analyze/fill/缺上下文/缺必填；
 - `backend/tests/unit/tools/test_office_latex_audit_tool.py`（3）：上下文/问题清单/越界；
 - `backend/tests/unit/tools/test_office_latex_build_tool.py`（4）：compile/diff 上下文与降级；
-- `backend/tests/integration/test_office_latex_routes.py`（15）：read + template analyze/fill + audit + compile/diff 降级 + project extract + pdf audit + compliance；
+- `backend/tests/integration/test_office_latex_routes.py`（18）：read + template analyze/fill + audit + compile/diff 降级 + project extract + pdf audit + compliance + profile CRUD/extract；
 - `backend/tests/integration/test_workspace_preview_routes.py`：`.tex` 预览；
 - `backend/tests/api/test_artifact_routes.py`：`.tex` artifact；
 - `backend/tests/unit/tools/test_office_latex_tool.py`（4）：上下文/成功/越界/后缀；
 - `backend/tests/unit/test_profiles_office_tools.py`、`test_tool_bundles_parity.py`：工具面/快照；
-- 前端 `LatexPreview.test.tsx`（3）、`LatexTemplatePanel.test.tsx`（3）、`LatexAuditPanel.test.tsx`（2）、`LatexBuildPanel.test.tsx`（2）、`LatexProjectImportPanel.test.tsx`（2）、`LatexPdfAuditPanel.test.tsx`（2）、`LatexCompliancePanel.test.tsx`（2）。
+- 前端 `LatexPreview.test.tsx`（3）、`LatexTemplatePanel.test.tsx`（3）、`LatexAuditPanel.test.tsx`（2）、`LatexBuildPanel.test.tsx`（2）、`LatexProjectImportPanel.test.tsx`（2）、`LatexPdfAuditPanel.test.tsx`（2）、`LatexCompliancePanel.test.tsx`（3）、`LatexProfileLibraryPanel.test.tsx`（2）。
 
 ## 7. 后续
 
 - L4：容器/低权限用户等 OS 级编译沙箱、LLM 语义审校；
-- `.bib` 自动补写、图片槽位；
+- LLM 辅助规范抽取（带原文引用与人工确认）、`.bib` 槽位；
 - 通用文件选择器、槽位自动填充建议；TikZ/高级包渲染（通过可选 PDF 编译）。

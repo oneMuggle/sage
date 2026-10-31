@@ -168,6 +168,37 @@ export interface LatexComplianceResult {
   };
 }
 
+export interface LatexProfileEvidence {
+  field: string;
+  value: unknown;
+  snippet: string;
+  source: string;
+  page?: number;
+  line?: number;
+}
+
+export interface LatexProfileRecord {
+  name: string;
+  profile: LatexComplianceProfile;
+  source: string;
+  evidence: LatexProfileEvidence[];
+  updated_at: string;
+}
+
+export interface LatexProfileList {
+  profiles: LatexProfileRecord[];
+  warnings: Array<{ code: string; message: string }>;
+}
+
+export interface LatexProfileExtractResult {
+  ok: boolean;
+  source_path: string;
+  profile: LatexComplianceProfile;
+  evidence: LatexProfileEvidence[];
+  warnings: Array<{ code: string; message: string }>;
+  needs_review: boolean;
+}
+
 export async function analyzeLatexTemplate(
   workspacePath: string,
   filePath: string,
@@ -313,5 +344,65 @@ export async function checkLatexCompliance(
       pdf_path: pdfPath || null,
       profile,
     },
+  });
+}
+
+export async function listLatexProfiles(workspacePath: string): Promise<LatexProfileList> {
+  return backendRequest<LatexProfileList>({
+    path: `/api/v1/office/latex/profiles?workspace_path=${encodeURIComponent(workspacePath)}`,
+  });
+}
+
+export async function loadLatexProfile(
+  workspacePath: string,
+  name: string,
+): Promise<LatexProfileRecord> {
+  return backendRequest<LatexProfileRecord>({
+    path: `/api/v1/office/latex/profiles/${encodeURIComponent(
+      name,
+    )}?workspace_path=${encodeURIComponent(workspacePath)}`,
+  });
+}
+
+export async function saveLatexProfile(
+  workspacePath: string,
+  name: string,
+  profile: LatexComplianceProfile,
+  source = '',
+  evidence: LatexProfileEvidence[] = [],
+): Promise<LatexProfileRecord> {
+  return backendRequest<LatexProfileRecord>({
+    method: 'POST',
+    path: '/api/v1/office/latex/profiles',
+    body: {
+      workspace_path: workspacePath,
+      name,
+      profile,
+      source,
+      evidence,
+    },
+  });
+}
+
+export async function deleteLatexProfile(
+  workspacePath: string,
+  name: string,
+): Promise<{ ok: boolean; name: string }> {
+  return backendRequest<{ ok: boolean; name: string }>({
+    method: 'DELETE',
+    path: `/api/v1/office/latex/profiles/${encodeURIComponent(
+      name,
+    )}?workspace_path=${encodeURIComponent(workspacePath)}`,
+  });
+}
+
+export async function extractLatexProfile(
+  workspacePath: string,
+  sourcePath: string,
+): Promise<LatexProfileExtractResult> {
+  return backendRequest<LatexProfileExtractResult>({
+    method: 'POST',
+    path: '/api/v1/office/latex/profiles/extract',
+    body: { workspace_path: workspacePath, source_path: sourcePath },
   });
 }

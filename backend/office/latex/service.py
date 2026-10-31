@@ -26,6 +26,13 @@ from .diff import latexdiff_files
 from .filler import fill_latex_template
 from .parser import LatexLimits, parse_latex_project
 from .pdf_audit import DEFAULT_MAX_PDF_BYTES, audit_pdf
+from .profile_extract import extract_latex_profile
+from .profile_store import (
+    delete_latex_profile,
+    list_latex_profiles,
+    load_latex_profile,
+    save_latex_profile,
+)
 from .project import extract_latex_project_zip
 from .template import analyze_latex_template
 
@@ -353,6 +360,48 @@ def latex_capabilities() -> Dict[str, Any]:
     return detect_tools()
 
 
+def list_latex_profiles_service(workspace: Path) -> Dict[str, Any]:
+    """List workspace-scoped compliance profiles."""
+    return list_latex_profiles(Path(workspace))
+
+
+def load_latex_profile_service(workspace: Path, name: str) -> Dict[str, Any]:
+    """Load one workspace-scoped compliance profile."""
+    return load_latex_profile(Path(workspace), name)
+
+
+def save_latex_profile_service(
+    workspace: Path,
+    name: str,
+    profile: Dict[str, Any],
+    *,
+    source: str = "",
+    evidence: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Create/update a workspace-scoped compliance profile."""
+    return save_latex_profile(
+        Path(workspace),
+        name,
+        profile,
+        source=source,
+        evidence=evidence,
+    )
+
+
+def delete_latex_profile_service(workspace: Path, name: str) -> Dict[str, Any]:
+    """Delete a workspace-scoped compliance profile."""
+    return delete_latex_profile(Path(workspace), name)
+
+
+def extract_latex_profile_service(
+    source_path: Path,
+    *,
+    workspace: Path,
+) -> Dict[str, Any]:
+    """Extract a candidate profile from a guideline document."""
+    return extract_latex_profile(Path(source_path), workspace=Path(workspace))
+
+
 def is_within_root(path: Path, root: Path) -> bool:
     try:
         return is_within(Path(root).resolve(), Path(path).resolve())
@@ -375,13 +424,18 @@ __all__ = [
     "audit_latex_pdf_service",
     "check_latex_compliance_service",
     "compile_latex_file",
+    "delete_latex_profile_service",
     "extract_latex_project_service",
+    "extract_latex_profile_service",
     "fill_latex_template_file",
     "is_latex_path",
     "is_within_root",
     "latex_capabilities",
     "latexdiff_files_service",
+    "list_latex_profiles_service",
+    "load_latex_profile_service",
     "read_latex_file",
     "read_latex_path",
     "safe_relative",
+    "save_latex_profile_service",
 ]

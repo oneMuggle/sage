@@ -49,7 +49,7 @@ def _positive_int(value: Any) -> Optional[int]:
     return number if number > 0 else None
 
 
-def _normalize_profile(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def normalize_profile(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     data = raw if isinstance(raw, dict) else {}
     allowed_pages: List[str] = []
     for item in _norm_list(data.get("allowed_page_sizes")):
@@ -295,7 +295,7 @@ def check_latex_compliance(
     root_path = Path(root).resolve()
     tex = Path(tex_path)
     tex_rel = _rel(tex, root_path)
-    normalized = _normalize_profile(profile)
+    normalized = normalize_profile(profile)
 
     audit = audit_latex_file(
         tex,
@@ -436,4 +436,4 @@ def check_latex_compliance(
     }
 
 
-__all__ = ["check_latex_compliance"]
+__all__ = ["check_latex_compliance", "normalize_profile"]

@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   checkLatexCompliance,
+  listLatexProfiles,
+  loadLatexProfile,
   type LatexComplianceCheck,
   type LatexComplianceResult,
+  type LatexProfileRecord,
 } from '../../shared/api/latexApi';
 import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 
@@ -60,6 +63,56 @@ export function LatexCompliancePanel({
   const [result, setResult] = useState<LatexComplianceResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<LatexProfileRecord[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState('');
+
+  useEffect(() => {
+    if (!canUse) return;
+    let cancelled = false;
+    listLatexProfiles(workspacePath!)
+      .then((value) => {
+        if (!cancelled) setProfiles(value.profiles);
+      })
+      .catch(() => {
+        if (!cancelled) setProfiles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canUse, workspacePath]);
+
+  const applyProfile = (profile: LatexProfileRecord) => {
+    setSelectedProfile(profile.name);
+    setSections(profile.profile.required_sections.join(', '));
+    setMetadata(profile.profile.required_metadata.join(', '));
+    setPageSizes(profile.profile.allowed_page_sizes.join(', '));
+    setMinPages(
+      profile.profile.required_min_pages
+        ? String(profile.profile.required_min_pages)
+        : '',
+    );
+    setMaxPages(
+      profile.profile.required_max_pages
+        ? String(profile.profile.required_max_pages)
+        : '',
+    );
+    setMinDpi(String(profile.profile.min_image_dpi));
+    setRequireFonts(profile.profile.require_embedded_fonts);
+    setForbidden(profile.profile.forbidden_commands.join(', '));
+  };
+
+  const handleProfileChange = async (profileName: string) => {
+    if (!canUse || !profileName) {
+      setSelectedProfile('');
+      return;
+    }
+    try {
+      const loaded = await loadLatexProfile(workspacePath!, profileName);
+      applyProfile(loaded);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const handleCheck = async () => {
     if (!canUse || !texPath.trim()) {
@@ -124,6 +177,23 @@ export function LatexCompliancePanel({
           onChange={(event) => setPdfPath(event.target.value)}
           data-testid="latex-compliance-pdf"
         />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <select
+          className="flex-1 rounded border border-border bg-bg px-2 py-1 text-sm"
+          value={selectedProfile}
+          onChange={(event) => void handleProfileChange(event.target.value)}
+          data-testid="latex-compliance-profile"
+        >
+          <option value="">手动填写（或选择已保存规范）</option>
+          {profiles.map((profile) => (
+            <option key={profile.name} value={profile.name}>
+              {profile.name}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-muted">已保存档案：{profiles.length}</span>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
