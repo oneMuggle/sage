@@ -14,6 +14,7 @@ import { useI18n } from '../../shared/lib/i18n';
 
 export interface LocalOcrConfig {
   enabled: boolean;
+  office_enabled: boolean;
   engine: 'auto' | 'rapidocr' | 'tesseract';
   lang: 'auto' | 'ch' | 'en';
   prefer_local_for_images: boolean;
@@ -23,6 +24,7 @@ export interface LocalOcrConfig {
 
 const DEFAULT_CONFIG: LocalOcrConfig = {
   enabled: true,
+  office_enabled: false,
   engine: 'auto',
   lang: 'auto',
   prefer_local_for_images: false,
@@ -40,6 +42,7 @@ function parseConfig(raw: string | null): LocalOcrConfig {
     const parsed = JSON.parse(raw) as Partial<LocalOcrConfig>;
     return {
       enabled: parsed.enabled ?? DEFAULT_CONFIG.enabled,
+      office_enabled: parsed.office_enabled ?? DEFAULT_CONFIG.office_enabled,
       engine: parsed.engine ?? DEFAULT_CONFIG.engine,
       lang: parsed.lang ?? DEFAULT_CONFIG.lang,
       prefer_local_for_images:
@@ -174,6 +177,19 @@ export function LocalOcrCard() {
           <option value="ch">{t('settings.ocr.lang_ch')}</option>
           <option value="en">{t('settings.ocr.lang_en')}</option>
         </select>
+      </label>
+
+      <label className="flex items-start justify-between gap-3 text-xs">
+        <span>
+          <span className="block text-text">{t('settings.ocr.office_enabled')}</span>
+          <span className="block text-muted">{t('settings.ocr.office_enabled_desc')}</span>
+        </span>
+        <input
+          type="checkbox"
+          data-testid="settings-ocr-office"
+          checked={config.office_enabled}
+          onChange={(e) => save({ ...config, office_enabled: e.target.checked })}
+        />
       </label>
 
       <label className="flex items-start justify-between gap-3 text-xs">

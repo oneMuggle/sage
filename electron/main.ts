@@ -477,6 +477,24 @@ let reportedBrokenInstaller = false;
  *   process — the actual cause (missing bundled Python) was hidden.
  *   We now refuse the fallback in packaged mode and tell the user what to do.
  */
+/**
+ * Optional bundled Tesseract (Win7/Linux): resources/tesseract/tesseract[.exe].
+ * Release builders can drop the binary there; dev env stays unaffected and an
+ * explicit SAGE_TESSERACT_PATH always wins.
+ */
+function resolveBundledTesseract(): string | null {
+  if (process.env.SAGE_TESSERACT_PATH) return null;
+  const resourcesPath = process.resourcesPath;
+  if (!resourcesPath) return null;
+  const exeName = process.platform === 'win32' ? 'tesseract.exe' : 'tesseract';
+  const candidates = [
+    join(resourcesPath, 'tesseract', exeName),
+    join(resourcesPath, 'tesseract', 'bin', exeName),
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+
 function spawnBackend(): ChildProcess {
   // Resolve SAGE_DB_PATH and SAGE_USER_DATA_DIR once so both packaged and
   // dev spawn paths share them. Backend prefers these env vars; falls back to:
@@ -593,6 +611,7 @@ function spawnBackend(): ChildProcess {
     });
   }
 
+  const bundledTesseract = resolveBundledTesseract();
   const proc = spawn(plan.command, plan.args, {
     cwd: plan.cwd,
     env: {
@@ -608,6 +627,7 @@ function spawnBackend(): ChildProcess {
       SAGE_BACKEND_GENERATION: String(generation),
       SAGE_BACKEND_OWNERSHIP_TOKEN: ownershipToken,
       SAGE_LOCAL_AUTH_TOKEN: backendAuthToken,
+      ...(bundledTesseract ? { SAGE_TESSERACT_PATH: bundledTesseract } : {}),
       ...(agentBrowserHandle
         ? {
             SAGE_EMBEDDED_BROWSER: '1',

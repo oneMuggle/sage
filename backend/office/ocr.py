@@ -56,8 +56,20 @@ def _min_confidence() -> int:
 
 
 def is_ocr_enabled() -> bool:
-    """用户是否显式开启 OCR（``SAGE_OCR=1``）。"""
-    return os.environ.get(_OCR_ENV_VAR, "").strip() == "1"
+    """是否对 Office/PDF 扫描页启用 OCR。
+
+    优先读取 ``SAGE_OCR``（兼容旧行为）；未设置时读取
+    ``ocr_config.office_enabled``（设置页开关），默认关闭。
+    """
+    raw = os.environ.get(_OCR_ENV_VAR)
+    if raw is not None and raw.strip() != "":
+        return raw.strip() == "1"
+    try:
+        from backend.services.ocr import load_ocr_config
+
+        return bool(load_ocr_config().office_enabled)
+    except Exception:  # noqa: BLE001 — 配置不可用按关闭处理
+        return False
 
 
 def ocr_available() -> Tuple[bool, str]:

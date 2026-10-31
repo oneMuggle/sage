@@ -240,6 +240,7 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     storage: 'preference',
     defaultValue: {
       enabled: true,
+      office_enabled: false,
       engine: 'auto',
       lang: 'auto',
       prefer_local_for_images: false,

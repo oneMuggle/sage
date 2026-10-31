@@ -67,6 +67,32 @@ describe('LocalOcrCard', () => {
     });
   });
 
+  it('persists office_enabled toggle', async () => {
+    mocks.capabilities.mockResolvedValue({
+      enabled: true,
+      available: true,
+      selected_engine: 'rapidocr',
+      reason: '',
+    });
+    mocks.getPreference.mockResolvedValue(null);
+    mocks.setPreference.mockResolvedValue(undefined);
+
+    renderCard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-ocr-office')).not.toBeChecked();
+    });
+    fireEvent.click(screen.getByTestId('settings-ocr-office'));
+
+    await waitFor(() => {
+      expect(mocks.setPreference).toHaveBeenCalledWith(
+        'ocr_config',
+        expect.stringContaining('"office_enabled":true'),
+        'ocr',
+      );
+    });
+  });
+
   it('runs the built-in OCR test image', async () => {
     mocks.capabilities.mockResolvedValue({
       enabled: true,

@@ -21,7 +21,7 @@
 - 显示「不可用」时，说明本机没有安装 OCR 引擎（见第 5 节）；
 - 点「测试识别」可确认引擎是否真的能工作。
 
-> 当前安装包默认不包含 OCR 引擎与 ONNX 运行时。需要使用可选依赖安装（main / Win10+ 推荐 RapidOCR；Win7 推荐 Tesseract 4.1）。
+> Win7 安装包不含 OCR 引擎，需要安装 Tesseract 4.1（见第 5 节）；main 版本已内置 RapidOCR。开发环境可手动安装可选依赖。
 
 ## 3. 设置项
 
@@ -30,6 +30,7 @@
 | OCR 引擎 | 自动 / RapidOCR / Tesseract | 默认「自动」：优先 RapidOCR，缺失时回退 Tesseract |
 | 识别语言 | 自动 / 中文 / 英文 | 中文截图选「自动」或「中文」 |
 | 有视觉模型时也优先本地 OCR | 即使模型能看图，也先用 OCR 提字 | 纯文字截图建议开启；照片/图表建议关闭 |
+| 扫描 PDF / Office 页面也启用 OCR | 文本层为空的扫描页也做 OCR | 处理扫描件时开启；会增加处理时间 |
 | 测试识别 | 用内置图片验证引擎 | 首次启用时点一次 |
 
 设置会自动保存，无需重启。
@@ -48,7 +49,7 @@
 
 ### 推荐：RapidOCR（main / Win10+）
 
-在 Sage 使用的 Python 环境（`sage-backend`）中安装：
+**main 安装包已内置**；Win7 请使用 Tesseract 4.1（见下）。开发环境手动安装：
 
 ```bash
 pip install "rapidocr>=3.10,<4" "onnxruntime==1.19.2"
@@ -63,7 +64,8 @@ RapidOCR 自带小型中英模型，安装后即可离线使用。
 3. 中文识别需安装 `chi_sim` 语言包。
 
 如果 tesseract 不在 PATH（例如便携版/捆绑版），可设置环境变量
-`SAGE_TESSERACT_PATH` 指向 `tesseract.exe` 的完整路径。
+`SAGE_TESSERACT_PATH` 指向 `tesseract.exe` 的完整路径。发行包若把二进制放在
+`resources/tesseract/` 下，Sage 会自动识别。
 
 Win7 用户建议使用 Tesseract 4.1 兼容构建（Tesseract 5 官方只支持 Win10/11）。
 
