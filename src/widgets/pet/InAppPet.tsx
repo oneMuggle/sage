@@ -197,7 +197,7 @@ export function InAppPet(): JSX.Element | null {
           style={{ width, height }}
         />
         <span
-          className={`absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-full border bg-slate-900/80 text-[11px] font-bold ${badgeClass(
+          className={`absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-full border bg-slate-900/80 text-ui-2xs font-bold ${badgeClass(
             snapshot.action,
           )}`}
         >
