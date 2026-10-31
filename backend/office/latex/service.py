@@ -24,6 +24,7 @@ from .compile import compile_latex, detect_tools
 from .diff import latexdiff_files
 from .filler import fill_latex_template
 from .parser import LatexLimits, parse_latex_project
+from .pdf_audit import DEFAULT_MAX_PDF_BYTES, audit_pdf
 from .project import extract_latex_project_zip
 from .template import analyze_latex_template
 
@@ -284,6 +285,35 @@ def extract_latex_project_service(
     )
 
 
+def audit_latex_pdf_service(
+    file_path: Path,
+    *,
+    workspace: Path,
+    required_min_pages: Optional[int] = None,
+    required_max_pages: Optional[int] = None,
+    min_image_dpi: float = 150.0,
+    max_bytes: int = DEFAULT_MAX_PDF_BYTES,
+) -> Dict[str, Any]:
+    """Workspace-safe read-only PDF layout/font audit."""
+    workspace_path = Path(workspace)
+    if not workspace_path.is_dir():
+        raise OfficeParseError("工作区目录不存在")
+    source = Path(file_path)
+    if not source.is_file():
+        raise OfficeFileNotFoundError(source)
+    if source.suffix.lower() != ".pdf":
+        raise OfficeParseError("仅支持 .pdf 审计")
+    resolved = resolve_within(workspace_path, source)
+    return audit_pdf(
+        resolved,
+        root=workspace_path,
+        required_min_pages=required_min_pages,
+        required_max_pages=required_max_pages,
+        min_image_dpi=min_image_dpi,
+        max_bytes=max_bytes,
+    )
+
+
 def latex_capabilities() -> Dict[str, Any]:
     """Return available TeX engines and latexdiff."""
     return detect_tools()
@@ -308,6 +338,7 @@ __all__ = [
     "MAX_SOURCE_CHARS",
     "analyze_latex_template_file",
     "audit_latex_file_service",
+    "audit_latex_pdf_service",
     "compile_latex_file",
     "extract_latex_project_service",
     "fill_latex_template_file",

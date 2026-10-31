@@ -98,6 +98,8 @@ OFFICE_TOOLS = (
     "office_fill_latex_template",
     # 2026-10-31 LaTeX 源码审校（READ）
     "office_audit_latex",
+    # 2026-10-31 PDF 版式/字体/DPI 审计（READ，不修改 PDF）
+    "office_audit_latex_pdf",
     # 2026-10-31 LaTeX 可选编译 / 红字版（WRITE_LOCAL）
     "office_compile_latex",
     "office_latexdiff",

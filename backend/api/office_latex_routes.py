@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.office.latex.service import (
     analyze_latex_template_file,
     audit_latex_file_service,
+    audit_latex_pdf_service,
     compile_latex_file,
     extract_latex_project_service,
     fill_latex_template_file,
@@ -178,16 +179,42 @@ def extract_latex_project_endpoint(req: LatexProjectExtractRequest) -> dict:
     )
 
 
+class LatexPdfAuditRequest(BaseModel):
+    """Audit a PDF's page size/count, embedded fonts and image DPI."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str
+    required_min_pages: Optional[int] = Field(default=None, ge=1, le=5000)
+    required_max_pages: Optional[int] = Field(default=None, ge=1, le=5000)
+    min_image_dpi: float = Field(default=150.0, ge=1, le=2400)
+
+
+@router.post("/pdf/audit")
+def audit_latex_pdf_endpoint(req: LatexPdfAuditRequest) -> dict:
+    """Audit a workspace PDF (read-only; never modifies the file)."""
+    return audit_latex_pdf_service(
+        Path(req.file_path),
+        workspace=Path(req.workspace_path),
+        required_min_pages=req.required_min_pages,
+        required_max_pages=req.required_max_pages,
+        min_image_dpi=req.min_image_dpi,
+    )
+
+
 __all__ = [
     "LatexAuditRequest",
     "LatexCompileRequest",
     "LatexDiffRequest",
+    "LatexPdfAuditRequest",
     "LatexProjectExtractRequest",
     "LatexReadRequest",
     "LatexTemplateAnalyzeRequest",
     "LatexTemplateFillRequest",
     "analyze_latex_template_endpoint",
     "audit_latex_endpoint",
+    "audit_latex_pdf_endpoint",
     "compile_latex_endpoint",
     "extract_latex_project_endpoint",
     "fill_latex_template_endpoint",
