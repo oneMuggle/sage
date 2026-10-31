@@ -137,6 +137,57 @@ describe('LocalOcrCard', () => {
     );
   });
 
+  it('cancels an in-flight OCR model download', async () => {
+    mocks.capabilities.mockResolvedValue({
+      enabled: true,
+      available: true,
+      selected_engine: 'rapidocr',
+      reason: '',
+    });
+    mocks.getPreference.mockResolvedValue(null);
+    let resolveDownload:
+      | ((value: { ok: boolean; error?: string }) => void)
+      | undefined;
+    const downloadOcr = vi.fn(
+      () =>
+        new Promise<{ ok: boolean; error?: string }>((resolve) => {
+          resolveDownload = resolve;
+        }),
+    );
+    const cancelOcr = vi.fn().mockResolvedValue({ ok: true });
+    const resetOcr = vi.fn().mockResolvedValue({ ok: true });
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      value: {
+        modelDownload: { downloadOcr, cancelOcr, resetOcr },
+        listen: vi.fn().mockResolvedValue(() => undefined),
+      },
+    });
+
+    renderCard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-ocr-download')).not.toBeDisabled();
+    });
+    fireEvent.click(screen.getByTestId('settings-ocr-download'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-ocr-cancel-download')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('settings-ocr-cancel-download'));
+
+    await waitFor(() => {
+      expect(cancelOcr).toHaveBeenCalledTimes(1);
+    });
+    resolveDownload?.({ ok: false, error: 'cancelled' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-ocr-model-status')).toHaveTextContent(
+        '已取消下载',
+      );
+    });
+  });
+
   it('runs the built-in OCR test image', async () => {
     mocks.capabilities.mockResolvedValue({
       enabled: true,

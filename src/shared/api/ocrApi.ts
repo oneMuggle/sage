@@ -55,11 +55,17 @@ export interface OcrBatchCaseResult extends OcrImageResult {
 export interface OcrBatchStatus {
   job_id: string;
   status: 'pending' | 'running' | 'completed' | 'cancelled' | 'failed';
+  source?: 'images' | 'pdf';
   total: number;
   completed: number;
   failed: number;
   error: string | null;
   results: Array<OcrBatchCaseResult | null>;
+}
+
+export interface OcrPdfBatchSubmitResult extends OcrBatchSubmitResult {
+  pages: number;
+  source: 'pdf';
 }
 
 export const ocrApi = {
@@ -92,6 +98,23 @@ export const ocrApi = {
       body: { images, ...(lang ? { lang } : {}) },
     });
   },
+
+  batchPdf(
+    pdf: string,
+    lang?: string,
+    maxPages?: number,
+  ): Promise<OcrPdfBatchSubmitResult> {
+    return backendRequest<OcrPdfBatchSubmitResult>({
+      method: 'POST',
+      path: '/api/v1/ocr/batch/pdf',
+      body: {
+        pdf,
+        ...(lang ? { lang } : {}),
+        ...(maxPages ? { max_pages: maxPages } : {}),
+      },
+    });
+  },
+
 
   batchStatus(jobId: string): Promise<OcrBatchStatus> {
     return backendRequest<OcrBatchStatus>({
