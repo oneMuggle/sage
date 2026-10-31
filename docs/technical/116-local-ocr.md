@@ -110,6 +110,10 @@ RapidOCR/onnxruntime 未进默认安装包；缺依赖时能力位降级，不�
 - `GET /api/v1/ocr/capabilities`：引擎、模型、语言可用性；
 - `POST /api/v1/ocr/image`：请求 `{image: data URL, lang?}`，返回 `OcrResult`；
 - `POST /api/v1/ocr/reload`：模型下载/恢复默认后重建 OCR 服务并返回最新能力位；
+- `POST /api/v1/ocr/batch`：提交多图批处理（最多 20 张，返回 `job_id`）；
+- `GET /api/v1/ocr/batch/{job_id}`：查询进度与逐项结果；
+- `POST /api/v1/ocr/batch/{job_id}/cancel`：请求取消当前任务；
+  批处理为进程内单 worker（任务状态在内存，重启丢失），每项失败互不影响；
 - Agent 工具 `ocr_image`：参数 `path`（工作区内）或 `media_id`、`lang`；READ 级、`requires_tool_context=True`；
 - 安全：只接受 data URL / 工作区路径；单图上限 10MB；路径越界拒绝。
 
@@ -117,6 +121,7 @@ RapidOCR/onnxruntime 未进默认安装包；缺依赖时能力位降级，不�
 
 - `ChatInput` 启动时探测 OCR 能力；无视觉模型且 OCR 可用时不再禁用图片上传；
 - `ImageOcrPreview`：输入区展示每张图片的 OCR 文本，支持复制、编辑、重新识别；
+  多图时走 `/ocr/batch` 队列并轮询进度，单图走同步 `/ocr/image`；
 - 编辑后的文本经 `image_ocr_texts` 随 `POST /api/v1/chat/stream` 发送；
 - 发送后 OCR 文本以 `client_meta.image_ocr_texts` 落库（每图 ≤4k、总量 ≤8k 字符），
   消息气泡可展开查看/复制；不参与 LLM 上下文；

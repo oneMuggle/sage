@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,6 +18,11 @@ from backend.services.ocr import (
     MAX_IMAGE_BYTES,
     get_ocr_service,
     reset_ocr_service,
+)
+from backend.services.ocr.batch import (
+    MAX_BATCH_ITEMS,
+    decode_batch_images,
+    get_ocr_batch_service,
 )
 
 router = APIRouter(prefix="/ocr", tags=["ocr"])
@@ -37,6 +42,16 @@ class OcrImageRequest(BaseModel):
     )
 
 
+class OcrBatchRequest(BaseModel):
+    """批量 OCR 请求（多图）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    images: List[str] = Field(description="图片 data URL 列表（最多 20 张）")
+    lang: Optional[str] = None
+    max_side: Optional[int] = Field(default=None, ge=256, le=8192)
+
+
 @router.get("/capabilities")
 def ocr_capabilities() -> dict:
     """返回 OCR 引擎与模型可用性。"""
@@ -48,6 +63,45 @@ def ocr_reload() -> dict:
     """重新探测 OCR 引擎/模型（模型下载或恢复默认后调用）。"""
     reset_ocr_service()
     return get_ocr_service().capabilities()
+
+
+@router.post("/batch")
+def ocr_batch(payload: OcrBatchRequest) -> dict:
+    """提交多图批处理任务，立即返回 job_id。"""
+    if not payload.images:
+        raise HTTPException(status_code=400, detail="images_required")
+    if len(payload.images) > MAX_BATCH_ITEMS:
+        raise HTTPException(status_code=413, detail="too_many_images")
+    for index, image in enumerate(payload.images):
+        if len(image) > _MAX_DATA_URL_CHARS:
+            raise HTTPException(
+                status_code=413, detail="image_too_large:images[%d]" % index
+            )
+    try:
+        images = decode_batch_images(payload.images)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    job = get_ocr_batch_service().submit(
+        images, lang=payload.lang or "auto", max_side=payload.max_side
+    )
+    return {"job_id": job.job_id, "total": job.total}
+
+
+@router.get("/batch/{job_id}")
+def ocr_batch_status(job_id: str) -> dict:
+    """查询批处理进度与结果。"""
+    job = get_ocr_batch_service().get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job_not_found")
+    return job
+
+
+@router.post("/batch/{job_id}/cancel")
+def ocr_batch_cancel(job_id: str) -> dict:
+    """请求取消批处理（worker 在当前项结束后停止）。"""
+    if not get_ocr_batch_service().cancel(job_id):
+        raise HTTPException(status_code=404, detail="job_not_found")
+    return {"ok": True}
 
 
 @router.post("/image")
