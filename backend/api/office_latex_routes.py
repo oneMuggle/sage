@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.office.latex.service import (
@@ -14,11 +14,16 @@ from backend.office.latex.service import (
     audit_latex_pdf_service,
     check_latex_compliance_service,
     compile_latex_file,
+    delete_latex_profile_service,
+    extract_latex_profile_service,
     extract_latex_project_service,
     fill_latex_template_file,
     latex_capabilities,
     latexdiff_files_service,
+    list_latex_profiles_service,
+    load_latex_profile_service,
     read_latex_file,
+    save_latex_profile_service,
 )
 
 router = APIRouter(prefix="/latex", tags=["latex"])
@@ -248,6 +253,70 @@ def check_latex_compliance_endpoint(req: LatexComplianceRequest) -> dict:
     )
 
 
+@router.get("/profiles")
+def list_latex_profiles_endpoint(workspace_path: str = Query(...)) -> dict:
+    """List saved compliance profiles in the workspace."""
+    return list_latex_profiles_service(Path(workspace_path))
+
+
+@router.get("/profiles/{name}")
+def load_latex_profile_endpoint(
+    name: str, workspace_path: str = Query(...)
+) -> dict:
+    """Load one saved compliance profile."""
+    return load_latex_profile_service(Path(workspace_path), name)
+
+
+class LatexProfileSaveRequest(BaseModel):
+    """Create/update a workspace compliance profile."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    name: str
+    profile: Dict[str, Any]
+    source: str = ""
+    evidence: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+@router.post("/profiles")
+def save_latex_profile_endpoint(req: LatexProfileSaveRequest) -> dict:
+    """Create/update a compliance profile under .sage/latex-profiles."""
+    return save_latex_profile_service(
+        Path(req.workspace_path),
+        req.name,
+        req.profile,
+        source=req.source,
+        evidence=req.evidence,
+    )
+
+
+@router.delete("/profiles/{name}")
+def delete_latex_profile_endpoint(
+    name: str, workspace_path: str = Query(...)
+) -> dict:
+    """Delete a saved compliance profile."""
+    return delete_latex_profile_service(Path(workspace_path), name)
+
+
+class LatexProfileExtractRequest(BaseModel):
+    """Extract a candidate profile from a guideline document."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    source_path: str
+
+
+@router.post("/profiles/extract")
+def extract_latex_profile_endpoint(req: LatexProfileExtractRequest) -> dict:
+    """Heuristically extract a compliance profile from a guideline document."""
+    return extract_latex_profile_service(
+        Path(req.source_path),
+        workspace=Path(req.workspace_path),
+    )
+
+
 __all__ = [
     "LatexAuditRequest",
     "LatexCompileRequest",
@@ -255,6 +324,8 @@ __all__ = [
     "LatexComplianceRequest",
     "LatexDiffRequest",
     "LatexPdfAuditRequest",
+    "LatexProfileExtractRequest",
+    "LatexProfileSaveRequest",
     "LatexProjectExtractRequest",
     "LatexReadRequest",
     "LatexTemplateAnalyzeRequest",
@@ -264,10 +335,15 @@ __all__ = [
     "audit_latex_pdf_endpoint",
     "check_latex_compliance_endpoint",
     "compile_latex_endpoint",
+    "delete_latex_profile_endpoint",
+    "extract_latex_profile_endpoint",
     "extract_latex_project_endpoint",
     "fill_latex_template_endpoint",
     "latex_capabilities_endpoint",
     "latexdiff_endpoint",
+    "list_latex_profiles_endpoint",
+    "load_latex_profile_endpoint",
     "read_latex_endpoint",
     "router",
+    "save_latex_profile_endpoint",
 ]

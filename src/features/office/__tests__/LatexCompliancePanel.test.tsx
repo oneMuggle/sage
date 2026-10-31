@@ -1,17 +1,24 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   checkLatexCompliance,
+  listLatexProfiles,
+  loadLatexProfile,
   type LatexComplianceResult,
+  type LatexProfileRecord,
 } from '../../../shared/api/latexApi';
 import { LatexCompliancePanel } from '../LatexCompliancePanel';
 
 vi.mock('../../../shared/api/latexApi', () => ({
   checkLatexCompliance: vi.fn(),
+  listLatexProfiles: vi.fn(),
+  loadLatexProfile: vi.fn(),
 }));
 
 const mockedCheck = vi.mocked(checkLatexCompliance);
+const mockedList = vi.mocked(listLatexProfiles);
+const mockedLoad = vi.mocked(loadLatexProfile);
 
 const RESULT: LatexComplianceResult = {
   ok: false,
@@ -61,8 +68,29 @@ const RESULT: LatexComplianceResult = {
   },
 };
 
+const RECORD: LatexProfileRecord = {
+  name: 'ieee-2026',
+  source: 'guidelines.pdf',
+  evidence: [],
+  updated_at: '2026-10-31T09:00:00+00:00',
+  profile: {
+    required_sections: ['Introduction', 'Conclusion'],
+    required_metadata: ['title'],
+    allowed_page_sizes: ['A4'],
+    required_min_pages: 8,
+    required_max_pages: 20,
+    require_embedded_fonts: true,
+    min_image_dpi: 300,
+    forbidden_commands: ['write18'],
+  },
+};
+
 afterEach(() => {
   vi.clearAllMocks();
+});
+
+beforeEach(() => {
+  mockedList.mockResolvedValue({ profiles: [], warnings: [] });
 });
 
 describe('LatexCompliancePanel', () => {
@@ -115,6 +143,33 @@ describe('LatexCompliancePanel', () => {
 
     await waitFor(() =>
       expect(screen.getByText('LaTeX 文件不在项目目录内')).toBeTruthy(),
+    );
+  });
+
+  it('loads a saved profile into the form', async () => {
+    mockedList.mockResolvedValue({ profiles: [RECORD], warnings: [] });
+    mockedLoad.mockResolvedValue(RECORD);
+
+    render(<LatexCompliancePanel workspacePath="/ws" />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'ieee-2026' })).toBeInTheDocument(),
+    );
+    fireEvent.change(screen.getByTestId('latex-compliance-profile'), {
+      target: { value: 'ieee-2026' },
+    });
+
+    await waitFor(() =>
+      expect(mockedLoad).toHaveBeenCalledWith('/ws', 'ieee-2026'),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('latex-compliance-sections')).toHaveValue(
+        'Introduction, Conclusion',
+      ),
+    );
+    expect(screen.getByTestId('latex-compliance-dpi')).toHaveValue('300');
+    expect(screen.getByTestId('latex-compliance-forbidden')).toHaveValue(
+      'write18',
     );
   });
 });

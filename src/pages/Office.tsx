@@ -71,6 +71,7 @@ import { LatexAuditPanel } from '../features/office/LatexAuditPanel';
 import { LatexBuildPanel } from '../features/office/LatexBuildPanel';
 import { LatexCompliancePanel } from '../features/office/LatexCompliancePanel';
 import { LatexPdfAuditPanel } from '../features/office/LatexPdfAuditPanel';
+import { LatexProfileLibraryPanel } from '../features/office/LatexProfileLibraryPanel';
 import { LatexProjectImportPanel } from '../features/office/LatexProjectImportPanel';
 import { LatexTemplatePanel } from '../features/office/LatexTemplatePanel';
 import { OfficeStagingInspector } from '../features/office/OfficeStagingInspector';
@@ -524,6 +525,7 @@ export function Office() {
           <LatexAuditPanel />
           <LatexPdfAuditPanel />
           <LatexCompliancePanel />
+          <LatexProfileLibraryPanel />
           <LatexBuildPanel />
         </>
       )}

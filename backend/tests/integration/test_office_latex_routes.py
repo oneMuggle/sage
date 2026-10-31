@@ -491,3 +491,105 @@ async def test_compliance_check_rejects_outside_pdf(
     )
 
     assert resp.status_code == 400
+
+
+_PROFILE = {
+    "required_sections": ["Introduction"],
+    "required_metadata": ["title"],
+    "allowed_page_sizes": ["A4"],
+    "required_min_pages": None,
+    "required_max_pages": 20,
+    "require_embedded_fonts": True,
+    "min_image_dpi": 300,
+    "forbidden_commands": ["write18"],
+}
+
+
+@pytest.mark.asyncio()
+async def test_profile_library_crud(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    saved = await client.post(
+        "/api/v1/office/latex/profiles",
+        json={
+            "workspace_path": str(workspace),
+            "name": "ieee-2026",
+            "profile": _PROFILE,
+            "source": "guidelines.pdf",
+        },
+    )
+    assert saved.status_code == 200
+    assert saved.json()["profile"]["required_max_pages"] == 20
+
+    listed = await client.get(
+        "/api/v1/office/latex/profiles",
+        params={"workspace_path": str(workspace)},
+    )
+    assert listed.status_code == 200
+    assert listed.json()["profiles"][0]["name"] == "ieee-2026"
+
+    loaded = await client.get(
+        "/api/v1/office/latex/profiles/ieee-2026",
+        params={"workspace_path": str(workspace)},
+    )
+    assert loaded.status_code == 200
+    assert loaded.json()["profile"]["allowed_page_sizes"] == ["A4"]
+
+    deleted = await client.delete(
+        "/api/v1/office/latex/profiles/ieee-2026",
+        params={"workspace_path": str(workspace)},
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["ok"] is True
+
+
+@pytest.mark.asyncio()
+async def test_profile_extract_from_guideline_text(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    guide = workspace / "guidelines.txt"
+    guide.write_text(
+        "Maximum length: 20 pages.\n"
+        "Manuscripts must include the following sections:\n"
+        "Introduction\n"
+        "Conclusion\n"
+        "Papers must use A4 paper.\n"
+        "Embed all fonts in the PDF.\n",
+        encoding="utf-8",
+    )
+
+    resp = await client.post(
+        "/api/v1/office/latex/profiles/extract",
+        json={"workspace_path": str(workspace), "source_path": str(guide)},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["profile"]["required_max_pages"] == 20
+    assert payload["profile"]["allowed_page_sizes"] == ["A4"]
+    assert payload["needs_review"] is True
+    assert payload["evidence"]
+
+
+@pytest.mark.asyncio()
+async def test_profile_save_rejects_invalid_name(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    resp = await client.post(
+        "/api/v1/office/latex/profiles",
+        json={
+            "workspace_path": str(workspace),
+            "name": "../evil",
+            "profile": _PROFILE,
+        },
+    )
+
+    assert resp.status_code == 422
