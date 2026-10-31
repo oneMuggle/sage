@@ -52,6 +52,9 @@ class SettingsRepository:
             # 网页访问 Round 1: 站点 cookie 凭据档案 (JSON, cookie 经 SecretBox 加密)
             # 见 backend/tools/credential_vault.py
             "browser_credential_vault",
+            # 外部日常浏览器扩展桥: 已配对设备注册表 (JSON, 只存 token 的 SHA-256)
+            # 见 backend/services/browser_extension_bridge.py
+            "browser_extension_devices",
             # bash 工具运行参数: 超时/输出截断/后台会话上限 (JSON)
             # 见 backend/tools/bash_config.py
             "bash_config",
