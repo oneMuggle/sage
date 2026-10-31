@@ -43,6 +43,16 @@ export function registerPetIpc(controller: PetController): void {
 
   ipcMain.handle('pet:set-config', (evt, patch: unknown) => {
     if (!isAllowed(evt)) throw new Error(UNAUTHORIZED);
+    // The local status API is a security-sensitive global switch: only the
+    // settings window may toggle it (pet windows keep the narrow bridge).
+    if (
+      patch &&
+      typeof patch === 'object' &&
+      Object.prototype.hasOwnProperty.call(patch, 'externalApi') &&
+      !controller.isMainSender(evt.sender)
+    ) {
+      throw new Error(UNAUTHORIZED);
+    }
     return controller.setConfig(patch);
   });
 
@@ -55,6 +65,12 @@ export function registerPetIpc(controller: PetController): void {
   ipcMain.handle('pet:list-packs', (evt) => {
     if (!isAllowed(evt)) throw new Error(UNAUTHORIZED);
     return controller.listPacks();
+  });
+
+  /** Read-only local API runtime info; the token stays in pet-api.json. */
+  ipcMain.handle('pet:api-info', (evt) => {
+    if (!controller.isMainSender(evt.sender)) throw new Error(UNAUTHORIZED);
+    return controller.getApiInfo();
   });
 
   ipcMain.handle('pet:import-pack', async (evt) => {

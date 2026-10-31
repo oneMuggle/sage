@@ -127,6 +127,24 @@ FastAPI chat stream (NDJSON)
 - 应用内模式按 `pets` 顺序横向排列，气泡只显示在第一只上；桌面模式每只都有气泡。
 - 设置页可添加/移除宠物（最多 3 只），导入动画包会自动赋给第一只；删除动画包会把使用它的所有宠物回落到内置包。
 
+### 4.2 本地只读状态 API（可选，默认关闭）
+
+- 设置 → 桌宠 → 「本地只读状态 API」开启后，主进程在 `127.0.0.1` 的随机端口启动 HTTP 服务；关闭或退出立即停止并断开所有连接（含 keep-alive）。
+- 每次启动生成 32 字节随机 token，写入 `<userData>/pet-api.json`（POSIX 权限 0600；Windows 依赖用户目录 ACL）：
+  ```json
+  { "version": 1, "pid": 12345, "port": 51234, "token": "<64 hex>", "createdAt": 1700000000000 }
+  ```
+- 请求约定：仅 `GET`；必须携带 `Authorization: Bearer <token>`；`Host` 必须为 `127.0.0.1:<port>` 或 `localhost:<port>`（阻断 DNS rebinding）；每 IP 60 次/分钟；无 CORS 头。
+- 端点：
+  - `GET /v1/health` → `{ok:true, version:1, uptimeMs}`
+  - `GET /v1/status` → 与面板同构的只读快照：动作/工具/待办/上下文/陪伴数据、`sessions ≤5`、`tasks ≤10`（不含工具错误原文）、`pets` 与 `config`。
+- 示例：
+  ```bash
+  # port/token 从 pet-api.json 读取
+  curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:$PORT/v1/status"
+  ```
+- 不提供任何控制/写入/推送接口；服务关闭即撤销访问。
+
 ## 5. 配置
 
 `<userData>/pet-config.json`（dev 为 `<repo>/data/pet-config.json`）：
@@ -143,6 +161,7 @@ FastAPI chat stream (NDJSON)
   "showSessionTitle": false,
   "compatibilityMode": "auto",
   "followActiveSession": true,
+  "externalApi": false,
   "pets": [
     { "id": "default", "petPack": "dafeiyu", "size": "medium" },
     { "id": "pet-2", "petPack": "my-pack", "size": "small" }
@@ -218,6 +237,8 @@ my-pet.zip
   `petPackStore.test.ts`（导入/导出/删除/同名拒绝）、
   `packProtocol.test.ts`（URL 解析/Range）、
   `petBackgroundTasks.test.ts`（编排 lane 聚合/定时失败/任务合并）、
+  `petStatusPayload.test.ts`（只读快照映射/截断/脱敏）、
+  `petStatusServer.test.ts`（Bearer/Host/方法/限流/token 文件/停止清理）、
   `src/pet/__tests__/animation.test.ts`、`src/pet/__tests__/tempo.test.ts`、
   `src/pet/__tests__/packs.test.ts`、
   `src/pages/settings/__tests__/PetTab.pack.test.tsx`、
@@ -244,3 +265,4 @@ my-pet.zip
 - 上下文条依赖 chat 参数里的 `maxContext` 与 usage 事件；自动推断上下文时可能只显示已用量、不显示百分比。
 - 完整动画包已全量内置（约 52.7MB），安装包相应增大；如果后续要控制体积，可改成「精选内置 + 完整包可选下载/导入」。
 - 自定义 pet pack 导入/导出已实现（zip + `sage-pet://`）；尚未做包内素材热更新（同名 id 需删除后重新导入），也未验证 Win7 下大体积 zip 的导入耗时。聊天/TTS 未做。
+- 本地只读状态 API 已实现（默认关闭、仅回环、Bearer token、GET-only、限流）；没有 SSE/推送，也不提供控制接口。

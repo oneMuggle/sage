@@ -35,6 +35,7 @@ export const DEFAULT_PET_CONFIG: PetConfig = {
   showSessionTitle: false,
   compatibilityMode: 'auto',
   followActiveSession: true,
+  externalApi: false,
   pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
 };
 
@@ -125,6 +126,7 @@ export function normalizePetConfig(raw: unknown): PetConfig {
       source.followActiveSession,
       DEFAULT_PET_CONFIG.followActiveSession,
     ),
+    externalApi: pickBool(source.externalApi, DEFAULT_PET_CONFIG.externalApi),
     pets: normalizePets(source),
   };
 }

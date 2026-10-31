@@ -43,4 +43,11 @@ export const PET_SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [
     labelEn: 'Import and export pet packs',
     keywords: 'pet 桌宠 动画包 pack zip 导入 导出 删除 import export delete',
   },
+  {
+    key: 'pet_external_api',
+    tab: 'pet',
+    label: '本地只读状态 API',
+    labelEn: 'Local read-only status API',
+    keywords: 'pet 桌宠 api http 127.0.0.1 token 插件 plugin 状态 status 只读 readonly',
+  },
 ];
