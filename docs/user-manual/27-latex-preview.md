@@ -62,3 +62,24 @@ KaTeX 不支持的宏或包会降级显示；可切到“源码”查看，或�
 - 文本会自动做 LaTeX 转义；
 - 只写新文件，不会覆盖模板或已有文件；
 - 填充后做括号/环境配对校验，但**不编译 PDF**。
+
+## 6. 源码审校
+
+Office 页的 **“LaTeX 源码审校”** 面板可做确定性检查：
+
+1. 填写工作区内的 `.tex` 主文件路径（如 `paper/main.tex`）；
+2. 可选填写“必需章节”（逗号分隔，如 `Introduction, Conclusion`）；
+3. 点击“开始审校”。
+
+检查项：
+
+- `\documentclass` / title / author / abstract；
+- 必需章节是否缺失；
+- `\cite` key 是否在参考文献中、`\ref` 是否指向已定义 label；
+- 图/表是否缺少 caption/label；
+- 重复 label；
+- TODO / `<<占位符>>` / `\todo{}` 残留；
+- `\write18`、`\openin`、`\openout`、管道或绝对路径 include 等危险命令；
+- include 缺失/循环/越界、参考文献/图片资源警告。
+
+问题列表会显示 `rule_id`、severity、`file:line` 锚点与修复建议。**只做源码检查，不编译 PDF、不检查版式/页数/字体**。

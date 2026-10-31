@@ -96,6 +96,8 @@ OFFICE_TOOLS = (
     # 2026-10-31 LaTeX 模板：槽位/样式分析（READ）与填充（WRITE_LOCAL）
     "office_analyze_latex_template",
     "office_fill_latex_template",
+    # 2026-10-31 LaTeX 源码审校（READ）
+    "office_audit_latex",
     # 2026-09-12 Round 12 自动修复：lint→修复→复检（WRITE_LOCAL）
     "office_repair_word",
     # 2026-09-18 Round 39 目录真页码：Word COM 刷新 TOC 域（WRITE_LOCAL，

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from backend.office.errors import (
     OfficeFileNotFoundError,
@@ -19,6 +19,7 @@ from backend.office.errors import (
 )
 from backend.office.path_safety import is_within, resolve_within
 
+from .audit import audit_latex_file
 from .filler import fill_latex_template
 from .parser import LatexLimits, parse_latex_project
 from .template import analyze_latex_template
@@ -168,6 +169,35 @@ def fill_latex_template_file(
     )
 
 
+def audit_latex_file_service(
+    file_path: Path,
+    *,
+    workspace: Path,
+    required_sections: Optional[List[str]] = None,
+    max_bytes: int = DEFAULT_MAX_FILE_BYTES,
+    limits: Optional[LatexLimits] = None,
+) -> Dict[str, Any]:
+    """Workspace-safe deterministic LaTeX audit."""
+    workspace_path = Path(workspace)
+    if not workspace_path.is_dir():
+        raise OfficeParseError("工作区目录不存在")
+    source = Path(file_path)
+    if not source.is_file():
+        raise OfficeFileNotFoundError(source)
+    if source.suffix.lower() not in (".tex", ".ltx"):
+        raise OfficeParseError("仅支持 .tex 审校")
+    resolved = resolve_within(workspace_path, source)
+    size = resolved.stat().st_size
+    if size > max_bytes:
+        raise OfficeSizeLimitError(size, max_bytes)
+    return audit_latex_file(
+        resolved,
+        root=workspace_path,
+        required_sections=required_sections,
+        limits=limits,
+    )
+
+
 def is_within_root(path: Path, root: Path) -> bool:
     try:
         return is_within(Path(root).resolve(), Path(path).resolve())
@@ -186,6 +216,7 @@ __all__ = [
     "DEFAULT_MAX_FILE_BYTES",
     "MAX_SOURCE_CHARS",
     "analyze_latex_template_file",
+    "audit_latex_file_service",
     "fill_latex_template_file",
     "is_latex_path",
     "is_within_root",

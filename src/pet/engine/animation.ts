@@ -36,6 +36,7 @@ const LOOPING_ACTIONS = new Set([
 export function resolveAnimation(
   snapshot: Pick<PetSnapshotBridge, 'action' | 'detail'>,
   pack: PetPack | null,
+  variant = 0,
 ): AnimationChoice | null {
   if (!pack) return null;
   const detailKey =
@@ -48,16 +49,23 @@ export function resolveAnimation(
   for (const key of keys) {
     const files = pack.actions[key];
     if (files && files.length > 0) {
-      return { file: files[0], loop: LOOPING_ACTIONS.has(snapshot.action) };
+      const index = Math.abs(Math.floor(variant)) % files.length;
+      const loop = LOOPING_ACTIONS.has(snapshot.action) && snapshot.action !== 'idle';
+      return { file: files[index], loop };
     }
   }
   return null;
 }
 
-export function resolveInteraction(pack: PetPack | null, key: string): AnimationChoice | null {
+export function resolveInteraction(
+  pack: PetPack | null,
+  key: string,
+  random: () => number = Math.random,
+): AnimationChoice | null {
   const files = pack?.actions[key];
   if (!files || files.length === 0) return null;
-  return { file: files[0], loop: false };
+  const index = Math.abs(Math.floor(random() * files.length)) % files.length;
+  return { file: files[index], loop: false };
 }
 
 const BUBBLE_TEXT: Record<string, { zh: string; en: string }> = {
