@@ -111,11 +111,17 @@ RapidOCR/onnxruntime 未进默认安装包；缺依赖时能力位降级，不�
 - `POST /api/v1/ocr/image`：请求 `{image: data URL, lang?}`，返回 `OcrResult`；
 - `POST /api/v1/ocr/reload`：模型下载/恢复默认后重建 OCR 服务并返回最新能力位；
 - `POST /api/v1/ocr/batch`：提交多图批处理（最多 20 张，返回 `job_id`）；
-- `GET /api/v1/ocr/batch/{job_id}`：查询进度与逐项结果；
+- `POST /api/v1/ocr/batch/pdf`：提交 PDF 页批处理，请求
+  `{pdf: data:application/pdf;base64,..., lang?, max_side?, max_pages?}`；
+  服务端用 PyMuPDF 以 200 DPI 逐页光栅化后复用同一队列，PDF ≤20MB、≤50 页；
+- `GET /api/v1/ocr/batch/{job_id}`：查询进度与逐项结果（含 `source: images|pdf`）；
 - `POST /api/v1/ocr/batch/{job_id}/cancel`：请求取消当前任务；
-  批处理为进程内单 worker（任务状态在内存，重启丢失），每项失败互不影响；
+  批处理为进程内单 worker，每项失败互不影响；任务快照持久化到
+  `SAGE_USER_DATA_DIR/cache/ocr_batch/<job_id>.json`（不保存原始图片/PDF 字节），
+  重启后可查询已完成任务；重启前仍在运行的任务标记为
+  `failed`（`interrupted: backend restarted`），需重新提交；
 - Agent 工具 `ocr_image`：参数 `path`（工作区内）或 `media_id`、`lang`；READ 级、`requires_tool_context=True`；
-- 安全：只接受 data URL / 工作区路径；单图上限 10MB；路径越界拒绝。
+- 安全：只接受 data URL / 工作区路径；单图上限 10MB；PDF 上限 20MB/50 页；路径越界拒绝。
 
 ## 7. 前端
 
@@ -126,7 +132,8 @@ RapidOCR/onnxruntime 未进默认安装包；缺依赖时能力位降级，不�
 - 发送后 OCR 文本以 `client_meta.image_ocr_texts` 落库（每图 ≤4k、总量 ≤8k 字符），
   消息气泡可展开查看/复制；不参与 LLM 上下文；
 - 注入 LLM 的 OCR 文本有上限：单图 20k 字符、总量 60k，超出会追加截断标记；
-- 设置页「本地 OCR」卡片：状态、引擎、语言、测试识别、优先策略；持久化 `ocr_config`。
+- 设置页「本地 OCR」卡片：状态、引擎、语言、测试识别、优先策略；RapidOCR 模型下载
+  支持进度、取消与恢复默认；持久化 `ocr_config`。
 
 ## 8. 性能
 
@@ -144,7 +151,8 @@ Office 扫描页使用 2048 + 方向分类以保真；聊天截图使用 1280 + 
 
 ## 9. 测试与基准
 
-- 单元/集成：`backend/tests/unit/services/test_ocr_service.py`、`test_agent_vision_ocr.py`、
+- 单元/集成：`backend/tests/unit/services/test_ocr_service.py`、
+  `backend/tests/unit/services/test_ocr_batch.py`、`test_agent_vision_ocr.py`、
   `test_ocr_image_tool.py`、`backend/tests/unit/api/test_ocr_routes.py`、
   `backend/tests/unit/api/test_wiki_vision_ocr.py`、`backend/tests/unit/office/test_ocr.py`；
 - 前端：`ChatInput.ocrFallback.test.tsx`、`ImageOcrPreview.test.tsx`、`LocalOcrCard.test.tsx`；

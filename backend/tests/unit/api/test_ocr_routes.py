@@ -104,3 +104,50 @@ def test_batch_endpoint_roundtrip() -> None:
         assert [item["text"] for item in status["results"]] == ["识别结果", "识别结果"]
     finally:
         reset_ocr_batch_service()
+
+
+def _make_pdf_data_url() -> str:
+    fitz = pytest.importorskip("fitz")
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "SAGE PDF OCR")
+    pdf_bytes = document.tobytes()
+    document.close()
+    return "data:application/pdf;base64," + base64.b64encode(pdf_bytes).decode("ascii")
+
+
+def test_pdf_batch_endpoint_roundtrip() -> None:
+    from backend.services.ocr.batch import reset_ocr_batch_service
+
+    try:
+        submitted = ocr_routes.ocr_batch_pdf(
+            ocr_routes.OcrPdfBatchRequest(pdf=_make_pdf_data_url())
+        )
+        job_id = submitted["job_id"]
+        assert submitted["source"] == "pdf"
+        assert submitted["pages"] == 1
+
+        import time
+
+        deadline = time.monotonic() + 3
+        status = None
+        while time.monotonic() < deadline:
+            status = ocr_routes.ocr_batch_status(job_id)
+            if status["status"] in ("completed", "failed", "cancelled"):
+                break
+            time.sleep(0.02)
+        assert status is not None
+        assert status["status"] == "completed"
+        assert status["source"] == "pdf"
+        assert status["results"][0]["text"] == "识别结果"
+    finally:
+        reset_ocr_batch_service()
+
+
+def test_pdf_batch_endpoint_rejects_invalid_pdf() -> None:
+    with pytest.raises(HTTPException) as exc:
+        ocr_routes.ocr_batch_pdf(
+            ocr_routes.OcrPdfBatchRequest(pdf="data:application/pdf;base64,AAAA")
+        )
+
+    assert exc.value.status_code == 400

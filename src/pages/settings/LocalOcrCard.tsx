@@ -91,9 +91,13 @@ export function LocalOcrCard() {
         (payload) => {
           if (cancelled) return;
           if (payload.stage === 'error') {
-            setModelStatus(
-              t('settings.ocr.model_failed').replace('{error}', payload.error ?? ''),
-            );
+            if (payload.error === 'cancelled') {
+              setModelStatus(t('settings.ocr.model_cancelled'));
+            } else {
+              setModelStatus(
+                t('settings.ocr.model_failed').replace('{error}', payload.error ?? ''),
+              );
+            }
           } else if (payload.stage === 'complete') {
             setModelStatus(t('settings.ocr.model_done'));
           } else if (payload.file) {
@@ -129,7 +133,9 @@ export function LocalOcrCard() {
       const result = await api.downloadOcr();
       if (!result.ok) {
         setModelStatus(
-          t('settings.ocr.model_failed').replace('{error}', result.error ?? ''),
+          result.error === 'cancelled'
+            ? t('settings.ocr.model_cancelled')
+            : t('settings.ocr.model_failed').replace('{error}', result.error ?? ''),
         );
         return;
       }
@@ -140,6 +146,23 @@ export function LocalOcrCard() {
       setDownloadingModel(false);
     }
   };
+
+  const cancelModelDownload = async () => {
+    const api = window.electronAPI?.modelDownload;
+    if (!api?.cancelOcr) return;
+    setModelStatus(t('settings.ocr.model_cancelling'));
+    try {
+      await api.cancelOcr();
+    } catch (err) {
+      setModelStatus(
+        t('settings.ocr.model_failed').replace(
+          '{error}',
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+    }
+  };
+
 
   const resetDefaultModel = async () => {
     const api = window.electronAPI?.modelDownload;
@@ -294,6 +317,16 @@ export function LocalOcrCard() {
                 ? t('settings.ocr.model_downloading')
                 : t('settings.ocr.model_download')}
             </button>
+            {downloadingModel && (
+              <button
+                type="button"
+                data-testid="settings-ocr-cancel-download"
+                onClick={cancelModelDownload}
+                className="rounded-radius-sm border border-border bg-surface px-2 py-1 text-xs text-text disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {t('settings.ocr.model_cancel')}
+              </button>
+            )}
             <button
               type="button"
               data-testid="settings-ocr-reset-model"
