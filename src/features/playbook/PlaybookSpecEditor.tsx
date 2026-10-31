@@ -29,11 +29,34 @@ interface ArtifactForm {
   required: boolean;
 }
 
+interface RuleForm {
+  templateKey: string;
+  content: string;
+  category: string;
+  triggerPattern: string;
+  priority: number;
+}
+
+interface MilestoneForm {
+  title: string;
+  description: string;
+}
+
+interface CriterionForm {
+  id: string;
+  label: string;
+  type: 'manual' | 'artifact';
+  artifactId: string;
+}
+
 interface StageForm {
   id: string;
   label: string;
   objective: string;
   artifacts: ArtifactForm[];
+  rules: RuleForm[];
+  milestones: MilestoneForm[];
+  criteria: CriterionForm[];
 }
 
 interface FormState {
@@ -56,6 +79,23 @@ function toForm(spec: PlaybookSpec): FormState {
         globs: (artifact.match?.globs ?? []).join(', '),
         targetDir: artifact.target_dir ?? '',
         required: artifact.required !== false,
+      })),
+      rules: (stage.rules ?? []).map((rule) => ({
+        templateKey: String(rule.template_key ?? ''),
+        content: String(rule.content ?? ''),
+        category: String(rule.category ?? ''),
+        triggerPattern: String(rule.trigger_pattern ?? ''),
+        priority: Number(rule.priority ?? 5),
+      })),
+      milestones: (stage.recommended_milestones ?? []).map((item) => ({
+        title: String(item.title ?? ''),
+        description: String(item.description ?? ''),
+      })),
+      criteria: (stage.exit_criteria ?? []).map((item) => ({
+        id: String(item.id ?? ''),
+        label: String(item.label ?? ''),
+        type: item.type === 'artifact' ? 'artifact' : 'manual',
+        artifactId: String(item.artifact_id ?? ''),
       })),
     })),
   };
@@ -98,9 +138,34 @@ function toSpec(spec: PlaybookSpec, form: FormState): PlaybookSpec {
       order: stageIndex + 1,
       objective: stage.objective,
       artifacts,
-      exit_criteria: original?.exit_criteria ?? [],
-      rules: original?.rules ?? [],
-      recommended_milestones: original?.recommended_milestones ?? [],
+      rules: stage.rules
+        .map((rule) =>
+          rule.templateKey.trim()
+            ? { template_key: rule.templateKey.trim(), priority: rule.priority }
+            : {
+                content: rule.content.trim(),
+                category: rule.category.trim() || 'playbook',
+                trigger_pattern: rule.triggerPattern.trim() || 'always',
+                priority: rule.priority,
+              },
+        )
+        .filter((rule) => ('content' in rule ? rule.content : rule.template_key)),
+      recommended_milestones: stage.milestones
+        .filter((milestone) => milestone.title.trim())
+        .map((milestone) => ({
+          title: milestone.title.trim(),
+          description: milestone.description.trim(),
+        })),
+      exit_criteria: stage.criteria
+        .filter((criterion) => criterion.label.trim())
+        .map((criterion, criterionIndex) => ({
+          id: criterion.id || `criterion-${stageIndex + 1}-${criterionIndex + 1}`,
+          label: criterion.label.trim(),
+          type: criterion.type,
+          ...(criterion.type === 'artifact' && criterion.artifactId.trim()
+            ? { artifact_id: criterion.artifactId.trim() }
+            : {}),
+        })),
     } as PlaybookStageSpec;
   });
   return {
@@ -145,6 +210,66 @@ export function PlaybookSpecEditor({
               ...stage,
               artifacts: stage.artifacts.map((artifact, artifactIndex2) =>
                 artifactIndex2 === artifactIndex ? { ...artifact, ...patch } : artifact,
+              ),
+            }
+          : stage,
+      ),
+    }));
+  };
+
+  const updateRule = (stageIndex: number, ruleIndex: number, patch: Partial<RuleForm>) => {
+    setForm((prev) => ({
+      ...prev,
+      stages: prev.stages.map((stage, index) =>
+        index === stageIndex
+          ? {
+              ...stage,
+              rules: stage.rules.map((rule, ruleIndex2) =>
+                ruleIndex2 === ruleIndex ? { ...rule, ...patch } : rule,
+              ),
+            }
+          : stage,
+      ),
+    }));
+  };
+
+  const updateMilestone = (
+    stageIndex: number,
+    milestoneIndex: number,
+    patch: Partial<MilestoneForm>,
+  ) => {
+    setForm((prev) => ({
+      ...prev,
+      stages: prev.stages.map((stage, index) =>
+        index === stageIndex
+          ? {
+              ...stage,
+              milestones: stage.milestones.map((milestone, milestoneIndex2) =>
+                milestoneIndex2 === milestoneIndex
+                  ? { ...milestone, ...patch }
+                  : milestone,
+              ),
+            }
+          : stage,
+      ),
+    }));
+  };
+
+  const updateCriterion = (
+    stageIndex: number,
+    criterionIndex: number,
+    patch: Partial<CriterionForm>,
+  ) => {
+    setForm((prev) => ({
+      ...prev,
+      stages: prev.stages.map((stage, index) =>
+        index === stageIndex
+          ? {
+              ...stage,
+              criteria: stage.criteria.map((criterion, criterionIndex2) =>
+                criterionIndex2 === criterionIndex
+                  ? { ...criterion, ...patch }
+                  : criterion,
               ),
             }
           : stage,
@@ -336,6 +461,231 @@ export function PlaybookSpecEditor({
               >
                 添加产物
               </Button>
+
+              <div
+                className="space-y-1.5 border-t border-border pt-2"
+                data-testid={`playbook-editor-rules-${stage.id || stageIndex}`}
+              >
+                <div className="text-xs font-medium text-muted-foreground">阶段规则</div>
+                {stage.rules.map((rule, ruleIndex) => (
+                  <div key={ruleIndex} className="space-y-1 rounded-md border border-border p-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <input
+                        value={rule.templateKey}
+                        onChange={(event) =>
+                          updateRule(stageIndex, ruleIndex, { templateKey: event.target.value })
+                        }
+                        placeholder="模板 key（可选）"
+                        className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
+                      />
+                      <input
+                        value={rule.category}
+                        onChange={(event) =>
+                          updateRule(stageIndex, ruleIndex, { category: event.target.value })
+                        }
+                        placeholder="类别"
+                        className="w-24 rounded-md border border-input bg-background px-2 py-1 text-xs"
+                      />
+                      <input
+                        type="number"
+                        value={rule.priority}
+                        onChange={(event) =>
+                          updateRule(stageIndex, ruleIndex, {
+                            priority: Number(event.target.value) || 5,
+                          })
+                        }
+                        className="w-16 rounded-md border border-input bg-background px-2 py-1 text-xs"
+                      />
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() =>
+                          updateStage(stageIndex, {
+                            rules: stage.rules.filter((_, index) => index !== ruleIndex),
+                          })
+                        }
+                      >
+                        删除
+                      </Button>
+                    </div>
+                    <input
+                      value={rule.content}
+                      onChange={(event) =>
+                        updateRule(stageIndex, ruleIndex, { content: event.target.value })
+                      }
+                      placeholder="规则正文（无模板 key 时必填）"
+                      className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+                    />
+                    <input
+                      value={rule.triggerPattern}
+                      onChange={(event) =>
+                        updateRule(stageIndex, ruleIndex, {
+                          triggerPattern: event.target.value,
+                        })
+                      }
+                      placeholder="触发 glob（可选，默认 always）"
+                      className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono text-xs"
+                    />
+                  </div>
+                ))}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    updateStage(stageIndex, {
+                      rules: [
+                        ...stage.rules,
+                        {
+                          templateKey: '',
+                          content: '',
+                          category: 'playbook',
+                          triggerPattern: 'always',
+                          priority: 5,
+                        },
+                      ],
+                    })
+                  }
+                >
+                  添加规则
+                </Button>
+              </div>
+
+              <div
+                className="space-y-1.5 border-t border-border pt-2"
+                data-testid={`playbook-editor-milestones-${stage.id || stageIndex}`}
+              >
+                <div className="text-xs font-medium text-muted-foreground">推荐里程碑</div>
+                {stage.milestones.map((milestone, milestoneIndex) => (
+                  <div key={milestoneIndex} className="flex flex-wrap items-center gap-1.5">
+                    <input
+                      value={milestone.title}
+                      onChange={(event) =>
+                        updateMilestone(stageIndex, milestoneIndex, {
+                          title: event.target.value,
+                        })
+                      }
+                      placeholder="里程碑标题"
+                      className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
+                    />
+                    <input
+                      value={milestone.description}
+                      onChange={(event) =>
+                        updateMilestone(stageIndex, milestoneIndex, {
+                          description: event.target.value,
+                        })
+                      }
+                      placeholder="描述"
+                      className="flex-[2] rounded-md border border-input bg-background px-2 py-1 text-xs"
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() =>
+                        updateStage(stageIndex, {
+                          milestones: stage.milestones.filter(
+                            (_, index) => index !== milestoneIndex,
+                          ),
+                        })
+                      }
+                    >
+                      删除
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    updateStage(stageIndex, {
+                      milestones: [...stage.milestones, { title: '', description: '' }],
+                    })
+                  }
+                >
+                  添加里程碑
+                </Button>
+              </div>
+
+              <div
+                className="space-y-1.5 border-t border-border pt-2"
+                data-testid={`playbook-editor-criteria-${stage.id || stageIndex}`}
+              >
+                <div className="text-xs font-medium text-muted-foreground">退出条件</div>
+                {stage.criteria.map((criterion, criterionIndex) => (
+                  <div key={criterionIndex} className="flex flex-wrap items-center gap-1.5">
+                    <input
+                      value={criterion.id}
+                      onChange={(event) =>
+                        updateCriterion(stageIndex, criterionIndex, {
+                          id: event.target.value,
+                        })
+                      }
+                      placeholder="id（可选）"
+                      className="w-32 rounded-md border border-input bg-background px-2 py-1 text-xs"
+                    />
+                    <input
+                      value={criterion.label}
+                      onChange={(event) =>
+                        updateCriterion(stageIndex, criterionIndex, {
+                          label: event.target.value,
+                        })
+                      }
+                      placeholder="条件名称"
+                      className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
+                    />
+                    <select
+                      value={criterion.type}
+                      onChange={(event) =>
+                        updateCriterion(stageIndex, criterionIndex, {
+                          type: event.target.value as CriterionForm['type'],
+                        })
+                      }
+                      className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+                    >
+                      <option value="manual">手动</option>
+                      <option value="artifact">产物</option>
+                    </select>
+                    {criterion.type === 'artifact' && (
+                      <input
+                        value={criterion.artifactId}
+                        onChange={(event) =>
+                          updateCriterion(stageIndex, criterionIndex, {
+                            artifactId: event.target.value,
+                          })
+                        }
+                        placeholder="产物 id"
+                        className="w-32 rounded-md border border-input bg-background px-2 py-1 text-xs"
+                      />
+                    )}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() =>
+                        updateStage(stageIndex, {
+                          criteria: stage.criteria.filter(
+                            (_, index) => index !== criterionIndex,
+                          ),
+                        })
+                      }
+                    >
+                      删除
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    updateStage(stageIndex, {
+                      criteria: [
+                        ...stage.criteria,
+                        { id: '', label: '', type: 'manual', artifactId: '' },
+                      ],
+                    })
+                  }
+                >
+                  添加退出条件
+                </Button>
+              </div>
             </div>
           ))}
           <Button
@@ -351,6 +701,9 @@ export function PlaybookSpecEditor({
                     label: '',
                     objective: '',
                     artifacts: [],
+                    rules: [],
+                    milestones: [],
+                    criteria: [],
                   },
                 ],
               }))
