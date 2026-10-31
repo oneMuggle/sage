@@ -330,6 +330,7 @@ export function Chat() {
           return CHAT_DOCUMENT_EXTENSIONS.has(ext);
         }),
         images: options?.images,
+        imageOcrTexts,
         officeRefs,
         knowledgeRefs: options?.knowledgeRefs,
         workspacePath,

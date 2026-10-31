@@ -1,0 +1,81 @@
+name: OCR smoke (real RapidOCR)
+
+on:
+  pull_request:
+    paths:
+      - "backend/services/ocr/**"
+      - "backend/api/ocr_routes.py"
+      - "backend/tools/ocr_image_tool.py"
+      - "scripts/ocr_benchmark.py"
+      - "backend/requirements-optional.txt"
+      - "backend/requirements-bundled.txt"
+      - ".github/workflows/ocr-smoke.yml"
+  push:
+    branches: [main, develop]
+    paths:
+      - "backend/services/ocr/**"
+      - "backend/api/ocr_routes.py"
+      - "backend/tools/ocr_image_tool.py"
+      - "scripts/ocr_benchmark.py"
+      - "backend/requirements-optional.txt"
+      - "backend/requirements-bundled.txt"
+      - ".github/workflows/ocr-smoke.yml"
+  schedule:
+    # Weekly canary for RapidOCR/onnxruntime resolution drift (Monday 03:23 UTC).
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ocr-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rapidocr-smoke:
+    name: RapidOCR real-engine smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install CJK font for synthetic fixture
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
+
+      - name: Install OCR runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            "rapidocr==3.10.0" \
+            "onnxruntime==1.19.2" \
+            "opencv-python-headless==4.11.0.86" \
+            "numpy>=1.24,<2" \
+            "Pillow>=10.0"
+
+      - name: Real OCR benchmark + assertions
+        run: |
+          python scripts/ocr_benchmark.py --runs 2 --json > /tmp/ocr-bench.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("/tmp/ocr-bench.json").read_text(encoding="utf-8"))
+          assert data["engine"] == "rapidocr", data
+          assert data["quality"] == "ok", data
+          assert "Sage" in (data["text"] or ""), data
+          assert data["cer"] is not None and data["cer"] < 0.2, data
+          print(
+              "OCR smoke OK:",
+              f"median={data['median_ms']}ms cer={data['cer']}",
+              f"runs={data['runs_ms']}",
+          )
+          PY

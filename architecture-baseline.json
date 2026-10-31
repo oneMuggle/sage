@@ -53,8 +53,8 @@
     "backend/wiki/ingest.py": 828,
     "backend/zotero/client.py": 1195,
     "electron/__tests__/commands.test.ts": 1210,
-    "electron/main.ts": 3161,
-    "electron/preload.ts": 860,
+    "electron/main.ts": 3167,
+    "electron/preload.ts": 863,
     "src/pages/settings/settingsSearchEntries.ts": 802,
     "electron/tests/updateIntegration.test.ts": 869,
     "electron/tests/updateManager.test.ts": 1813,
@@ -81,7 +81,7 @@
     "backend/tools/config_tool.py": 991,
     "backend/scheduler/evolution.py": 1739,
     "src/pages/Chat.tsx": 831,
-    "src/shared/api/types/chatAndEventTypes.ts": 843,
+    "src/shared/api/types/chatAndEventTypes.ts": 848,
     "scripts/feedback_receiver.py": 1154
   }
 }

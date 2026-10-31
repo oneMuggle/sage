@@ -281,6 +281,9 @@ def test_rapidocr_model_dir_resolution(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SAGE_OCR_MODEL_DIR", str(tmp_path))
     assert resolve_model_dir() == tmp_path
 
+    monkeypatch.setenv("SAGE_OCR_MODEL_DIR", str(tmp_path / "missing"))
+    assert resolve_model_dir() is None
+
     monkeypatch.delenv("SAGE_OCR_MODEL_DIR")
     monkeypatch.delenv("SAGE_USER_DATA_DIR", raising=False)
     resolved = resolve_model_dir()

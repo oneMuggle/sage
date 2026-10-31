@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
-"""本地 OCR 可复现基准：合成图 → OCR → CER / 耗时。
+"""本地 OCR 可复现基准：合成图/清单 → OCR → CER / 耗时。
 
 用法：
     python scripts/ocr_benchmark.py                    # 合成 1600x900 中英混排图
-    python scripts/ocr_benchmark.py --image shot.png   # 指定图片（需 --truth）
+    python scripts/ocr_benchmark.py --image shot.png --truth "文字"
+    python scripts/ocr_benchmark.py --manifest cases.json --json
     python scripts/ocr_benchmark.py --runs 5 --json
+
+manifest 格式（相对图片路径按 manifest 所在目录解析）：
+    {
+      "cases": [
+        {"name": "chat", "category": "screenshot", "image": "chat.png", "truth": "..."},
+        {"name": "scan", "category": "scan", "image": "scan.png", "truth": "..."}
+      ]
+    }
 
 依赖：Pillow（生成合成图）+ 可选 OCR 引擎（rapidocr/onnxruntime 或 tesseract）。
 未安装 OCR 引擎时只打印能力位与安装提示，不报错。
@@ -89,11 +98,114 @@ def _cer(truth: str, predicted: str) -> float:
     return _levenshtein(truth_n, predicted_n) / len(truth_n)
 
 
+def _median(values: list) -> int:
+    if not values:
+        return 0
+    ordered = sorted(values)
+    return int(ordered[len(ordered) // 2])
+
+
+def _benchmark_one(service, image_path: Path, truth: str, runs: int) -> dict:
+    service.recognize_path(str(image_path))
+    service.clear_cache()
+    times = []
+    result = None
+    for _ in range(max(1, runs)):
+        started = time.monotonic()
+        result = service.recognize_path(str(image_path))
+        times.append(int((time.monotonic() - started) * 1000))
+        service.clear_cache()
+    assert result is not None
+    return {
+        "engine": result.engine,
+        "quality": result.quality,
+        "error": result.error,
+        "runs_ms": times,
+        "median_ms": _median(times),
+        "cer": round(_cer(truth, result.text), 4) if truth else None,
+        "text": result.text,
+    }
+
+
+def _load_manifest(path: Path) -> list:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    raw_cases = data.get("cases")
+    if not isinstance(raw_cases, list) or not raw_cases:
+        raise ValueError("manifest 需要非空 cases 数组")
+    base = path.parent
+    cases = []
+    for index, raw in enumerate(raw_cases):
+        if not isinstance(raw, dict) or not raw.get("image"):
+            raise ValueError("cases[%d] 缺少 image" % index)
+        image = Path(raw["image"])
+        if not image.is_absolute():
+            image = base / image
+        if not image.is_file():
+            raise FileNotFoundError("图片不存在: %s" % image)
+        cases.append(
+            {
+                "name": str(raw.get("name") or image.name),
+                "category": str(raw.get("category") or "default"),
+                "image": image,
+                "truth": str(raw.get("truth") or ""),
+            }
+        )
+    return cases
+
+
+def _aggregate(cases: list) -> dict:
+    groups = {}
+    for case in cases:
+        bucket = groups.setdefault(
+            case["category"], {"count": 0, "cers": [], "medians": []}
+        )
+        bucket["count"] += 1
+        bucket["medians"].append(case["median_ms"])
+        if case["cer"] is not None:
+            bucket["cers"].append(case["cer"])
+    summary = {}
+    for category, bucket in sorted(groups.items()):
+        summary[category] = {
+            "count": bucket["count"],
+            "mean_cer": (
+                round(sum(bucket["cers"]) / len(bucket["cers"]), 4)
+                if bucket["cers"]
+                else None
+            ),
+            "median_ms": _median(bucket["medians"]),
+        }
+    return summary
+
+
+def _print_manifest(cases: list, summary: dict) -> None:
+    print("name\tcategory\tcer\tmedian_ms\tengine\tquality\terror")
+    for case in cases:
+        print(
+            "%s\t%s\t%s\t%s\t%s\t%s\t%s"
+            % (
+                case["name"],
+                case["category"],
+                case["cer"],
+                case["median_ms"],
+                case["engine"],
+                case["quality"],
+                case["error"] or "",
+            )
+        )
+    print("\nsummary:")
+    for category, stats in summary.items():
+        print(
+            "%s\tcount=%d\tmean_cer=%s\tmedian_ms=%s"
+            % (category, stats["count"], stats["mean_cer"], stats["median_ms"])
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Local OCR benchmark")
     parser.add_argument("--image", help="使用指定图片（需同时提供 --truth）")
     parser.add_argument("--truth", help="指定图片的真实文本")
-    parser.add_argument("--runs", type=int, default=3, help="识别次数（默认 3）")
+    parser.add_argument("--manifest", help="批量清单 JSON（cases: name/category/image/truth）")
+    parser.add_argument("--runs", type=int, default=3, help="每张图识别次数（默认 3）")
     parser.add_argument("--max-side", type=int, default=1280, help="长边上限")
     parser.add_argument("--use-cls", action="store_true", help="开启方向分类")
     parser.add_argument("--lang", default="auto", help="auto/ch/en")
@@ -116,6 +228,36 @@ def main() -> int:
         print('安装提示：pip install "rapidocr>=3.10,<4" "onnxruntime==1.19.2"')
         return 1
 
+    if args.manifest:
+        try:
+            manifest_cases = _load_manifest(Path(args.manifest))
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print("读取 manifest 失败：", exc)
+            return 2
+        results = []
+        for case in manifest_cases:
+            result = _benchmark_one(service, case["image"], case["truth"], args.runs)
+            results.append(
+                {
+                    "name": case["name"],
+                    "category": case["category"],
+                    **result,
+                }
+            )
+        summary = _aggregate(results)
+        payload = {
+            "engine": caps.get("selected_engine"),
+            "max_side": args.max_side,
+            "use_cls": args.use_cls,
+            "cases": results,
+            "summary": summary,
+        }
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            _print_manifest(results, summary)
+        return 0
+
     cleanup_path = None
     if args.image:
         image_path = Path(args.image)
@@ -134,16 +276,7 @@ def main() -> int:
         image_path = cleanup_path
 
     try:
-        # 预热：排除模型加载时间
-        service.recognize_path(str(image_path))
-        service.clear_cache()
-        times = []
-        result = None
-        for _ in range(max(1, args.runs)):
-            started = time.monotonic()
-            result = service.recognize_path(str(image_path))
-            times.append(int((time.monotonic() - started) * 1000))
-            service.clear_cache()
+        payload = _benchmark_one(service, image_path, truth, args.runs)
     finally:
         if cleanup_path is not None:
             try:
@@ -151,23 +284,19 @@ def main() -> int:
             except OSError:
                 pass
 
-    assert result is not None
-    payload = {
-        "engine": result.engine,
-        "quality": result.quality,
-        "error": result.error,
-        "runs_ms": times,
-        "median_ms": sorted(times)[len(times) // 2],
-        "cer": round(_cer(truth, result.text), 4) if truth else None,
-        "text": result.text,
-    }
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
-        print(f"engine={payload['engine']} quality={payload['quality']} error={payload['error']}")
-        print(f"runs_ms={times} median={payload['median_ms']}ms cer={payload['cer']}")
+        print(
+            f"engine={payload['engine']} quality={payload['quality']} "
+            f"error={payload['error']}"
+        )
+        print(
+            f"runs_ms={payload['runs_ms']} median={payload['median_ms']}ms "
+            f"cer={payload['cer']}"
+        )
         print("text:")
-        print(result.text)
+        print(payload["text"])
     return 0
 
 

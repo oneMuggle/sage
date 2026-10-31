@@ -43,6 +43,25 @@ export interface OcrImageResult {
   error: string | null;
 }
 
+export interface OcrBatchSubmitResult {
+  job_id: string;
+  total: number;
+}
+
+export interface OcrBatchCaseResult extends OcrImageResult {
+  index: number;
+}
+
+export interface OcrBatchStatus {
+  job_id: string;
+  status: 'pending' | 'running' | 'completed' | 'cancelled' | 'failed';
+  total: number;
+  completed: number;
+  failed: number;
+  error: string | null;
+  results: Array<OcrBatchCaseResult | null>;
+}
+
 export const ocrApi = {
   capabilities(): Promise<OcrCapabilities> {
     return backendRequest<OcrCapabilities>({
@@ -56,6 +75,35 @@ export const ocrApi = {
       method: 'POST',
       path: '/api/v1/ocr/image',
       body: { image, ...(lang ? { lang } : {}) },
+    });
+  },
+
+  reload(): Promise<OcrCapabilities> {
+    return backendRequest<OcrCapabilities>({
+      method: 'POST',
+      path: '/api/v1/ocr/reload',
+    });
+  },
+
+  batch(images: string[], lang?: string): Promise<OcrBatchSubmitResult> {
+    return backendRequest<OcrBatchSubmitResult>({
+      method: 'POST',
+      path: '/api/v1/ocr/batch',
+      body: { images, ...(lang ? { lang } : {}) },
+    });
+  },
+
+  batchStatus(jobId: string): Promise<OcrBatchStatus> {
+    return backendRequest<OcrBatchStatus>({
+      method: 'GET',
+      path: `/api/v1/ocr/batch/${encodeURIComponent(jobId)}`,
+    });
+  },
+
+  batchCancel(jobId: string): Promise<{ ok: boolean }> {
+    return backendRequest<{ ok: boolean }>({
+      method: 'POST',
+      path: `/api/v1/ocr/batch/${encodeURIComponent(jobId)}/cancel`,
     });
   },
 };
