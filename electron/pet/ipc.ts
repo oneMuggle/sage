@@ -38,7 +38,7 @@ export function registerPetIpc(controller: PetController): void {
 
   ipcMain.handle('pet:get-config', (evt) => {
     if (!isAllowed(evt)) throw new Error(UNAUTHORIZED);
-    return controller.getConfig();
+    return controller.getConfigForSender(evt.sender);
   });
 
   ipcMain.handle('pet:set-config', (evt, patch: unknown) => {
@@ -94,7 +94,7 @@ export function registerPetIpc(controller: PetController): void {
   });
 
   ipcMain.on('pet:ready', (evt) => {
-    if (isPet(evt)) controller.windowReady();
+    if (isPet(evt)) controller.windowReady(evt.sender);
   });
 
   ipcMain.on('pet:open-session', (evt, payload: unknown) => {
@@ -106,19 +106,19 @@ export function registerPetIpc(controller: PetController): void {
   });
 
   ipcMain.on('pet:show-menu', (evt) => {
-    if (isPet(evt)) controller.showMenu();
+    if (isPet(evt)) controller.showMenu(evt.sender);
   });
 
   ipcMain.on('pet:drag-start', (evt) => {
-    if (isPet(evt)) controller.startDrag();
+    if (isPet(evt)) controller.startDrag(evt.sender);
   });
 
   ipcMain.on('pet:drag-move', (evt) => {
-    if (isPet(evt)) controller.moveDrag();
+    if (isPet(evt)) controller.moveDrag(evt.sender);
   });
 
   ipcMain.on('pet:drag-end', (evt) => {
-    if (isPet(evt)) controller.endDrag();
+    if (isPet(evt)) controller.endDrag(evt.sender);
   });
 
   ipcMain.on('pet:reset-position', (evt) => {
@@ -126,7 +126,7 @@ export function registerPetIpc(controller: PetController): void {
   });
 
   ipcMain.on('pet:set-panel', (evt, payload: { open?: unknown }) => {
-    if (isPet(evt)) controller.setPanelOpen(payload?.open === true);
+    if (isPet(evt)) controller.setPanelOpen(evt.sender, payload?.open === true);
   });
 
   ipcMain.on('pet:pat', (evt) => {
@@ -138,6 +138,6 @@ export function registerPetIpc(controller: PetController): void {
   });
 
   ipcMain.on('pet:hide', (evt) => {
-    if (isPet(evt)) controller.hideForNow();
+    if (isPet(evt)) controller.hideForNow(evt.sender);
   });
 }

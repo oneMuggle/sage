@@ -442,19 +442,28 @@ export interface ProjectElectronApiBridge {
  * Desktop pet bridge. Keep in sync with `electron/pet/types.ts`.
  * Available in both the main window (settings page) and the pet window.
  */
+export interface PetInstanceBridge {
+  id: string;
+  petPack: string;
+  size: 'mini' | 'small' | 'medium' | 'large' | 'huge';
+}
+
 export interface PetConfigBridge {
-  version: 1;
+  version: 2;
   enabled: boolean;
   displayMode: 'desktop' | 'in-app' | 'both' | 'off';
-  size: 'mini' | 'small' | 'medium' | 'large' | 'huge';
   tempo: 'quiet' | 'standard' | 'lively';
   reduceMotion: boolean;
   bubbleMode: 'important' | 'always' | 'off';
   soundScenes: { waiting: boolean; error: boolean; done: boolean };
   showSessionTitle: boolean;
   compatibilityMode: 'auto' | 'on' | 'off';
-  petPack: string;
   followActiveSession: boolean;
+  pets: PetInstanceBridge[];
+  /** Present only in the pet window's per-instance view. */
+  petId?: string;
+  petPack?: string;
+  size?: 'mini' | 'small' | 'medium' | 'large' | 'huge';
 }
 
 export type PetTaskStatus =

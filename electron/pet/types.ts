@@ -50,19 +50,37 @@ export interface PetSoundScenes {
   done: boolean;
 }
 
+/** One desktop pet instance. Global behavior settings live on PetConfig. */
+export interface PetInstanceConfig {
+  /** Stable id; also names the window-position file. */
+  id: string;
+  petPack: string;
+  size: PetSize;
+}
+
 export interface PetConfig {
-  version: 1;
+  version: 2;
   enabled: boolean;
   displayMode: PetDisplayMode;
-  size: PetSize;
   tempo: PetTempo;
   reduceMotion: boolean;
   bubbleMode: PetBubbleMode;
   soundScenes: PetSoundScenes;
   showSessionTitle: boolean;
   compatibilityMode: PetCompatibilityMode;
-  petPack: string;
   followActiveSession: boolean;
+  /** 1–3 pets, each with its own pack and size. */
+  pets: PetInstanceConfig[];
+}
+
+/**
+ * Per-window view of PetConfig: globals plus this instance's identity, pack
+ * and size. The renderer only needs `petId` / `petPack` / `size` from this.
+ */
+export interface PetRenderConfig extends PetConfig {
+  petId: string;
+  petPack: string;
+  size: PetSize;
 }
 
 /**

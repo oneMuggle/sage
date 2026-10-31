@@ -42,6 +42,20 @@ async function waitForPetWindow(
   throw new Error('pet window did not open');
 }
 
+async function waitForPetWindows(
+  app: ElectronApplication,
+  count: number,
+  timeoutMs = 15_000,
+): Promise<import('@playwright/test').Page[]> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const found = app.windows().filter((window) => window.url().includes('pet.html'));
+    if (found.length >= count) return found;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`expected ${count} pet windows`);
+}
+
 test('pet pack: user packs are listed and served via sage-pet://', async () => {
   const userData = mkdtempSync(join(tmpdir(), 'sage-pet-e2e-'));
   const packDir = join(userData, 'pets', 'e2e-pet');
@@ -89,8 +103,8 @@ test('pet pack: user packs are listed and served via sage-pet://', async () => {
       await window.electronAPI?.pet?.setConfig({
         enabled: true,
         displayMode: 'desktop',
-        petPack: 'e2e-pet',
         compatibilityMode: 'on',
+        pets: [{ id: 'default', petPack: 'e2e-pet', size: 'medium' }],
       });
     });
     const pet = await waitForPetWindow(app);
@@ -114,6 +128,63 @@ test('pet pack: user packs are listed and served via sage-pet://', async () => {
     expect(media.error).toBeNull();
     expect(media.readyState).toBeGreaterThanOrEqual(1);
     expect(media.duration).toBeGreaterThan(0);
+  } finally {
+    await app.close();
+    stub.stop();
+    rmSync(userData, { recursive: true, force: true });
+  }
+});
+
+test('pet windows: multiple pets get independent windows and packs', async () => {
+  const userData = mkdtempSync(join(tmpdir(), 'sage-pet-multi-'));
+  const packDir = join(userData, 'pets', 'e2e-pet');
+  mkdirSync(join(packDir, 'frames'), { recursive: true });
+  writeFileSync(join(packDir, 'pack.json'), JSON.stringify(MANIFEST));
+  writeFileSync(join(packDir, 'frames', 'idle.png'), ONE_PIXEL_PNG);
+  writeFileSync(join(packDir, 'frames', 'idle.webm'), readFileSync(SAMPLE_WEBM));
+
+  const { app, page, stub } = await launchElectronWithStub({
+    env: { SAGE_USER_DATA_DIR: userData },
+  });
+
+  try {
+    await page.waitForLoadState('load');
+    await page.evaluate(async () => {
+      await window.electronAPI?.pet?.setConfig({
+        enabled: true,
+        displayMode: 'desktop',
+        compatibilityMode: 'on',
+        pets: [
+          { id: 'default', petPack: 'e2e-pet', size: 'medium' },
+          { id: 'pet-2', petPack: 'dafeiyu', size: 'small' },
+        ],
+      });
+    });
+
+    const petWindows = await waitForPetWindows(app, 2);
+    const states = await Promise.all(
+      petWindows.map((pet) =>
+        pet
+          .waitForFunction(
+            () => {
+              const video = document.querySelector('video');
+              if (!video || !video.src || video.readyState < 1) return false;
+              return { src: video.src, x: window.screenX, y: window.screenY };
+            },
+            null,
+            { timeout: 20_000 },
+          )
+          .then((handle) => handle.jsonValue()),
+      ),
+    );
+
+    const sources = states.map((state) => state.src as string);
+    expect(sources.some((src) => src.startsWith('sage-pet://e2e-pet/'))).toBe(true);
+    expect(sources.some((src) => src.includes('/pet/dafeiyu/'))).toBe(true);
+    expect(new Set(states.map((state) => `${state.x},${state.y}`)).size).toBe(2);
+
+    const config = await page.evaluate(async () => window.electronAPI?.pet?.getConfig());
+    expect(config?.pets).toHaveLength(2);
   } finally {
     await app.close();
     stub.stop();

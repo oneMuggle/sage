@@ -1,10 +1,17 @@
 /**
- * Desktop pet animation-pack settings copy.
+ * Desktop pet animation-pack and multi-pet settings copy.
  *
  * Split out of chatAndSider.ts: that aggregate dictionary sits at the 800-line
  * architecture gate, so new keys live here. Aggregated by ../../en.ts.
  */
 export const enPetPack = {
+  'settings.pet.pets': 'Pets',
+  'settings.pet.pets_desc':
+    'Up to 3 pets; each can use its own animation pack and size, with an independent position.',
+  'settings.pet.pet_label': 'Pet',
+  'settings.pet.add_pet': 'Add pet',
+  'settings.pet.remove_pet': 'Remove',
+  'settings.pet.pets_max': 'Up to 3 pets',
   'settings.pet.pack': 'Animation pack',
   'settings.pet.pack_desc':
     'Use the built-in Big Fish, or import a custom zip pack (webm/mp4/webp/png assets only; scripts inside the archive are never executed).',
