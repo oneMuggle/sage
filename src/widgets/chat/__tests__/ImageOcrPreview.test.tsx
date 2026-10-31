@@ -5,11 +5,21 @@ import { I18nProvider } from '../../../shared/lib/i18n';
 import { ImageOcrPreview } from '../ImageOcrPreview';
 
 const { mocks } = vi.hoisted(() => ({
-  mocks: { recognize: vi.fn() },
+  mocks: {
+    recognize: vi.fn(),
+    batch: vi.fn(),
+    batchStatus: vi.fn(),
+    batchCancel: vi.fn(),
+  },
 }));
 
 vi.mock('../../../shared/api/ocrApi', () => ({
-  ocrApi: { recognize: mocks.recognize },
+  ocrApi: {
+    recognize: mocks.recognize,
+    batch: mocks.batch,
+    batchStatus: mocks.batchStatus,
+    batchCancel: mocks.batchCancel,
+  },
 }));
 
 const IMAGE = { name: 'shot.png', dataUrl: 'data:image/png;base64,AAAA' };
@@ -25,6 +35,10 @@ function renderPreview(enabled = true, images = [IMAGE]) {
 describe('ImageOcrPreview', () => {
   beforeEach(() => {
     mocks.recognize.mockReset();
+    mocks.batch.mockReset();
+    mocks.batchStatus.mockReset();
+    mocks.batchCancel.mockReset();
+    mocks.batchCancel.mockResolvedValue({ ok: true });
   });
 
   it('renders recognized text and supports copy', async () => {
@@ -83,17 +97,35 @@ describe('ImageOcrPreview', () => {
     expect(screen.queryByTestId('chat-image-ocr-preview')).not.toBeInTheDocument();
   });
 
-  it('shows empty and failure states', async () => {
-    mocks.recognize
-      .mockResolvedValueOnce({ text: '', engine: 'rapidocr', quality: 'empty' })
-      .mockRejectedValueOnce(new Error('engine down'));
+  it('shows empty and failure states through the batch queue', async () => {
+    mocks.batch.mockResolvedValue({ job_id: 'job-1', total: 2 });
+    mocks.batchStatus.mockResolvedValue({
+      job_id: 'job-1',
+      status: 'completed',
+      total: 2,
+      completed: 2,
+      failed: 1,
+      error: null,
+      results: [
+        { index: 0, text: '', engine: 'rapidocr', quality: 'empty', error: null },
+        {
+          index: 1,
+          text: '',
+          engine: 'rapidocr',
+          quality: 'failed',
+          error: 'engine down',
+        },
+      ],
+    });
 
     renderPreview(true, [IMAGE, { ...IMAGE, name: 'second.png' }]);
 
     await waitFor(() => {
+      expect(mocks.batch).toHaveBeenCalledTimes(1);
       expect(screen.getByText('未识别到文字')).toBeInTheDocument();
       expect(screen.getByText(/识别失败：engine down/)).toBeInTheDocument();
     });
+    expect(mocks.recognize).not.toHaveBeenCalled();
   });
 
   it('re-runs OCR when retry is clicked', async () => {

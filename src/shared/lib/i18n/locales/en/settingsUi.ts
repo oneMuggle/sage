@@ -257,6 +257,16 @@ export const enSettingsUi = {
   'settings.ocr.office_enabled': 'Also OCR scanned PDF / Office pages',
   'settings.ocr.office_enabled_desc':
     'Only applies to pages with no text layer; increases processing time noticeably',
+  'settings.ocr.model_title': 'OCR model',
+  'settings.ocr.model_hint':
+    'The tiny model is smaller and faster; the default small model ships with the installer',
+  'settings.ocr.model_download': 'Download fast model (~6MB)',
+  'settings.ocr.model_downloading': 'Downloading…',
+  'settings.ocr.model_done': 'Tiny model enabled',
+  'settings.ocr.model_reset': 'Restore default model',
+  'settings.ocr.model_reset_done': 'Default model restored',
+  'settings.ocr.model_failed': 'Model operation failed: {error}',
+  'settings.ocr.model_unsupported': 'Model download is not supported in this environment',
   'settings.ocr.saving': 'Saving…',
   'settings.ocr.test': 'Test recognition',
   'settings.ocr.testing': 'Recognizing…',

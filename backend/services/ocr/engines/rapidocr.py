@@ -144,7 +144,9 @@ def resolve_model_dir() -> Optional[Path]:
     """显式/已存在的模型目录；都没有时返回 None（使用包内默认模型）。"""
     explicit = os.environ.get(_MODEL_DIR_ENV, "").strip()
     if explicit:
-        return Path(explicit)
+        path = Path(explicit)
+        # 目录不存在时回退包内默认模型（下载器尚未落盘/用户删除后恢复默认）
+        return path if path.is_dir() else None
     user_data = os.environ.get("SAGE_USER_DATA_DIR", "").strip()
     if user_data:
         candidate = Path(user_data) / "models" / "rapidocr"
