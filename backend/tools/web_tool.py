@@ -719,6 +719,7 @@ class WebFetchTool(BaseTool):
                 return ToolResult(success=True, content=content)
 
         credential_headers: Optional[Dict[str, str]] = None
+        storage_forced_render = False
         if credential_domain.strip():
             from .credential_vault import cookie_domain_matches, resolve_credential
 
@@ -760,6 +761,11 @@ class WebFetchTool(BaseTool):
                     ),
                 )
             credential_headers = resolution.headers
+            # storage_state 站点（知网等）的登录态依赖 localStorage，静态
+            # HTTP 通道无法携带 → auto 模式直接升级渲染通道。
+            if resolution.origins and render == "auto":
+                render = "always"
+                storage_forced_render = True
 
         network_policy = self._effective_network_policy()
         url_error = self._validate_target_url(url)
@@ -855,6 +861,17 @@ class WebFetchTool(BaseTool):
                 elapsed_ms,
                 escalated=bool(content.get("escalated")),
             )
+            if storage_forced_render:
+                storage_note = (
+                    "该站点使用浏览器会话（localStorage），已自动改用渲染通道。"
+                    if content.get("rendered")
+                    else "该站点依赖浏览器会话（localStorage），静态结果可能缺少登录态。"
+                )
+                content["note"] = (
+                    storage_note
+                    if not content.get("note")
+                    else f"{content['note']}；{storage_note}"
+                )
             content["content"] = str(content.get("content", ""))[:max_length]
             return ToolResult(success=True, content=content)
         except httpx.HTTPStatusError as e:

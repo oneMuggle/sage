@@ -5,6 +5,7 @@
  * 查询/格式化/治理函数仍在 `settingsSearchIndex.ts`，对外 API 不变。
  */
 
+import { PET_SETTINGS_SEARCH_ENTRIES } from './settingsSearchEntriesPet';
 import type { SettingsTabKey } from './settingsTabs';
 
 export interface SettingsSearchEntry {
@@ -531,11 +532,19 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'search 搜索 bing ddg tavily zhipu 智谱',
   },
   {
+    key: 'site_sessions',
+    tab: 'network',
+    label: '网站登录',
+    labelEn: 'Signed-in websites',
+    keywords:
+      '登录 网站 sign in login cookie 凭据 credential 会话 session 账号 知网 cnki 万方 ieee springer',
+  },
+  {
     key: 'web_credentials',
     tab: 'network',
-    label: '网站凭据',
-    labelEn: 'Site credentials',
-    keywords: 'credential 凭据 cookie 登录 header 浏览器',
+    label: '高级：手动导入凭据',
+    labelEn: 'Advanced: manual credentials',
+    keywords: 'credential 凭据 cookie 登录 header 浏览器 高级 advanced',
   },
 
   // ── MCP ──
@@ -780,4 +789,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     labelEn: 'Audit export',
     keywords: 'audit export 审计 导出 复制 摘要 json 诊断',
   },
+  // ── 桌宠 ──
+  ...PET_SETTINGS_SEARCH_ENTRIES,
 ];

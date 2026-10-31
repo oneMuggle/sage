@@ -46,8 +46,10 @@ import {
 } from 'electron';
 import './crashGuard';
 import { logger } from './logger';
+import { release as osRelease } from 'node:os';
 import { registerEditableContextMenu } from './contextMenu';
 import { setupTrayAndGlobalShortcut } from './tray';
+import { disposePet, getPetController, initPet } from './pet';
 import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
 import {
   registerSageFileProtocol,
@@ -111,6 +113,9 @@ import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
 import { registerModelDownloadIpc } from './modelDownloadIpc';
 import { registerArenaTokenWindow } from './arenaTokenWindow';
+import type { AgentBrowserBridgeHandle } from './agentBrowserBridge';
+import { startAgentBrowserHost } from './agentBrowserHost';
+import { handleBrowserPanelCommand } from './browserPanel';
 import { registerUpdateIpc } from './updateIpc';
 import { registerFeedbackIpc } from './feedback/feedbackIpc';
 import { getFeedbackConfig } from './feedback/feedbackConfig';
@@ -146,7 +151,8 @@ const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const BACKEND_HEALTH = `${BACKEND_URL}/health/proof`;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
-const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
+const VITE_DEV_URL =
+  process.env.VITE_DEV_SERVER_URL ?? `http://localhost:${process.env.VITE_DEV_PORT ?? 1420}`;
 const buildManifest = loadBuildManifest(
   process.resourcesPath ? join(process.resourcesPath, 'build-manifest.json') : '',
   // CRITICAL: guard app.getVersion() for vitest environments where the
@@ -323,6 +329,12 @@ let backendGeneration = 0;
 let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 let backendAuthToken: string | null = null;
+
+/**
+ * 内置 Agent 浏览器桥（P1）。仅 Win7 / SAGE_FORCE_EMBEDDED_BROWSER=1 时启动；
+ * 端口与 token 通过 env 传给后端，后端 browser_* 工具据此使用 Sage 自带 Chromium。
+ */
+let agentBrowserHandle: AgentBrowserBridgeHandle | null = null;
 let updateManager: UpdateManager | null = null;
 // P2 (2026-10-19): detected project root from startup cwd — used as fallback
 // auto-bind target for new sessions when no lastWorkspace is stored.
@@ -543,6 +555,13 @@ function spawnBackend(): ChildProcess {
       SAGE_BACKEND_GENERATION: String(generation),
       SAGE_BACKEND_OWNERSHIP_TOKEN: ownershipToken,
       SAGE_LOCAL_AUTH_TOKEN: backendAuthToken,
+      ...(agentBrowserHandle
+        ? {
+            SAGE_EMBEDDED_BROWSER: '1',
+            SAGE_EMBEDDED_BROWSER_PORT: String(agentBrowserHandle.port),
+            SAGE_EMBEDDED_BROWSER_TOKEN: agentBrowserHandle.token,
+          }
+        : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -928,6 +947,18 @@ function openExternalSafely(url: string): void {
   shell.openExternal(url).catch(() => undefined);
 }
 
+function ensurePetInitialized(): void {
+  if (getPetController()) return;
+  initPet({
+    backendUrl: BACKEND_URL,
+    getAuthToken: () => backendAuthToken,
+    getMainWindow: () => mainWindow,
+    devUrl: VITE_DEV_URL,
+    isPackaged: app.isPackaged,
+    userDataDir: resolveSageUserDataDir(),
+  });
+}
+
 function createMainWindow(): void {
   // Platform-specific titlebar configuration:
   // - macOS: hide traffic light area, custom titlebar from y=28
@@ -971,6 +1002,16 @@ function createMainWindow(): void {
     },
   });
   setMainWindow(win);
+  ensurePetInitialized();
+
+  // 主窗口关闭时一并回收内置浏览器窗口：否则残留的可见/隐藏窗口会让
+  // window-all-closed 永不触发，进程在无 UI 状态下继续存活。
+  win.on('closed', () => {
+    if (agentBrowserHandle) {
+      void agentBrowserHandle.close();
+      agentBrowserHandle = null;
+    }
+  });
 
   // 2026-09-13: ready-to-show（首帧就绪）后再显示主窗口并关闭启动屏，
   // 消除「窗口已出现但页面尚未绘制」的白屏闪烁。
@@ -1147,6 +1188,10 @@ async function registerIpcHandlers(): Promise<void> {
       if (!isTrustedRenderer(evt.sender)) {
         throw new Error('未授权的窗口请求');
       }
+      if (payload.cmd === 'browser_panel') {
+        // 面板只依赖 Electron 自身与共享分区，不经过后端/演示模式门禁。
+        return handleBrowserPanelCommand(evt.sender, payload.args ?? {});
+      }
       if (isDemoProcess()) {
         throw new Error('演示模式不支持该后端操作');
       }
@@ -1180,12 +1225,24 @@ async function registerIpcHandlers(): Promise<void> {
         return startWikiIngestStream(evt.sender, payload.args ?? {}, BACKEND_URL);
       }
       try {
-        return await invokeBackend(
+        const result = await invokeBackend(
           payload.cmd,
           payload.args ?? {},
           BACKEND_URL,
           backendAuthToken ?? undefined,
         );
+        if (payload.cmd === 'agent_chat_stream' && result && typeof result === 'object') {
+          const streamId = (result as { streamId?: unknown }).streamId;
+          const args = payload.args ?? {};
+          const sessionId = typeof args.sessionId === 'string' ? args.sessionId : null;
+          const rawMax = Number(args.maxContext);
+          const contextMax =
+            Number.isFinite(rawMax) && rawMax > 0 ? rawMax : null;
+          if (typeof streamId === 'string') {
+            getPetController()?.trackStream(streamId, sessionId, contextMax);
+          }
+        }
+        return result;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         logger.error('ipc: invoke failed', { cmd: payload.cmd, err: msg });
@@ -1305,6 +1362,7 @@ async function registerIpcHandlers(): Promise<void> {
       const chatStreamMatch = event.match(/^chat-stream-(.+)$/);
       if (chatStreamMatch) {
         const streamId = chatStreamMatch[1];
+        getPetController()?.trackStream(streamId, null);
         const abort = new AbortController();
         eventSubscriptions.set(event, abort);
         // I2: 直接用 streamId attach 到后端已有流 — 不再需要 pendingChatArgs
@@ -1377,7 +1435,11 @@ async function registerIpcHandlers(): Promise<void> {
       // S8: 主进程自主产生的事件（OS 通知点击回发）。无需后端 relay,
       // renderer 侧 listen() 注册的 ipcRenderer.on 直接收 webContents.send。
       // 反馈入口（Phase 1.11 帮助菜单）同理。
-      if (event === 'session-notify-click' || event === 'open-feedback') {
+      if (
+        event === 'session-notify-click' ||
+        event === 'open-feedback' ||
+        event === 'open-settings'
+      ) {
         return { ok: true, event };
       }
 
@@ -2649,9 +2711,7 @@ app
     // 触发任何 auto-bind，也不写入用户偏好。
     detectedProjectRoot = detectProjectRoot(process.cwd());
     if (detectedProjectRoot) {
-      logger.info(
-        `main: detected project root at ${detectedProjectRoot} (low-priority hint only)`,
-      );
+      logger.info(`main: detected project root at ${detectedProjectRoot} (low-priority hint only)`);
     } else {
       logger.info('main: no project root detected (decision chain will fall back)');
     }
@@ -2704,7 +2764,15 @@ app
       buildApplicationMenu();
       return;
     }
-    updateSplashStage('正在启动后端服务…');
+    // P1: Win7 无系统浏览器时使用 Sage 自带 Chromium（SAGE_FORCE_EMBEDDED_BROWSER=1 便于非 Win7 验证）。
+  const embeddedBrowserEnabled =
+    process.env.SAGE_FORCE_EMBEDDED_BROWSER === '1' ||
+    (process.platform === 'win32' && osRelease().startsWith('6.1'));
+  if (embeddedBrowserEnabled) {
+    updateSplashStage('正在准备内置浏览器…');
+    agentBrowserHandle = await startAgentBrowserHost();
+  }
+  updateSplashStage('正在启动后端服务…');
     try {
       backendProc = spawnBackend();
     } catch (err) {
@@ -2857,6 +2925,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   appIsQuitting = true;
+  disposePet();
   globalShortcut.unregister(REMOTE_MCP_HOTKEY);
   getGlobalSyncer()?.stop();
   remoteMcp?.dispose();
@@ -2865,6 +2934,10 @@ app.on('before-quit', () => {
   cleanupUpdateIpc = null;
   cleanupProviderIpc?.();
   cleanupProviderIpc = null;
+  if (agentBrowserHandle) {
+    void agentBrowserHandle.close();
+    agentBrowserHandle = null;
+  }
   void shutdownBackend();
 });
 

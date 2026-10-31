@@ -1,0 +1,44 @@
+/**
+ * Built-in pet packs.
+ *
+ * Bundled as a module instead of fetched from `public/pet/<id>/pack.json`:
+ * the packaged renderer loads `file://.../dist/pet.html`, where `fetch()`
+ * on a sibling file can be blocked by CORS. The JSON file remains the
+ * authoring/tooling copy.
+ */
+
+import type { PetPack } from './animation';
+
+export const DAFEIYU_PACK: PetPack = {
+  id: 'dafeiyu',
+  name: '大肥鱼',
+  version: '0.3.8',
+  license: 'MIT',
+  source: 'https://github.com/PC2005-cloud/dsh-pet',
+  canvas: { width: 640, height: 360 },
+  anchor: { x: 320, y: 330 },
+  actions: {
+    idle: ['待机呼吸休闲.webm', '东张西望.webm', '超大伸懒腰.webm', '哈欠连天.webm'],
+    thinking: ['工作状态-思考冒泡.webm'],
+    acting: ['工作状态-忙碌点按.webm'],
+    acting_edit: ['写代码.webm'],
+    acting_read: ['工作状态-清点归档.webm'],
+    acting_web: ['工作状态-原地踱步张望.webm'],
+    observing: ['工作状态-原地踱步张望.webm'],
+    retry: ['深度思考碎碎念.webm'],
+    waiting: ['点击回应-害羞惊讶.webm'],
+    done: ['工作状态-雀跃庆祝.webm'],
+    error: ['工作状态-垂头叹气冒汗.webm'],
+    click: ['点击回应-开心跃动.webm'],
+    pat: ['点击回应-挠痒咯咯笑.webm'],
+    angry: ['点击回应-傲娇生气.webm'],
+    drag: ['被鼠标拖拽悬空反馈.webm'],
+    sleep_start: ['睡觉-开始.webm'],
+    sleep_loop: ['睡觉-循环.webm'],
+    sleep_end: ['睡觉-起来.webm'],
+  },
+};
+
+export function packFor(id: string): PetPack | null {
+  return id === DAFEIYU_PACK.id ? DAFEIYU_PACK : null;
+}

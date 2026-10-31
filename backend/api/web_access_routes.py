@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -36,6 +37,12 @@ from pydantic import BaseModel, Extra
 from backend.api.permission_routes import forbidden_origin_response
 from backend.api.settings_models import model_dump_compat
 from backend.data.settings_repo import SettingsRepository
+from backend.services.site_login_jobs import site_login_jobs
+from backend.services.site_login_templates import (
+    SITE_LOGIN_TEMPLATES,
+    display_name_for_host,
+    login_url_for_host,
+)
 from backend.tools.credential_vault import (
     delete_credential,
     list_credentials,
@@ -80,6 +87,15 @@ class CookieCredentialBody(BaseModel):
 
     domain: str
     cookies: List[Dict[str, Any]]
+
+    class Config:
+        extra = Extra.forbid
+
+
+class SiteLoginBody(BaseModel):
+    """POST /web-access/sites/login：用户选定的登录入口 URL。"""
+
+    url: str
 
     class Config:
         extra = Extra.forbid
@@ -186,6 +202,10 @@ async def create_cookie_credential(
     guard = _origin_guard(request)
     if guard:
         return guard
+    if len(body.cookies) > 500:
+        return JSONResponse(
+            status_code=422, content={"ok": False, "error": "too_many_cookies"}
+        )
     try:
         save_credential(body.domain.strip().lower(), body.cookies)
     except ValueError:
@@ -193,6 +213,104 @@ async def create_cookie_credential(
             status_code=422,
             content={"ok": False, "error": "invalid_cookie_credential"},
         )
+    return {"ok": True}
+
+
+@router.get("/web-access/site-templates")
+async def get_site_login_templates(request: Request) -> Dict[str, Any]:
+    """常见站点登录模板（展示名 / 登录入口 / 登录方式提示）。"""
+    guard = _origin_guard(request)
+    if guard:
+        return guard
+    return {"templates": SITE_LOGIN_TEMPLATES}
+
+
+@router.get("/web-access/sites")
+async def get_sites(request: Request) -> Dict[str, Any]:
+    """已登录的网站（脱敏）：仅 cookie/header 档案的展示信息，不含任何值。"""
+    guard = _origin_guard(request)
+    if guard:
+        return guard
+    sites: List[Dict[str, Any]] = []
+    for record in list_credentials():
+        domain = str(record.get("domain") or "")
+        host = domain.lstrip(".")
+        if not host:
+            continue
+        sites.append(
+            {
+                "domain": domain,
+                "display_name": display_name_for_host(host),
+                "login_url": login_url_for_host(host),
+                "kind": record.get("kind", "cookie"),
+                "status": "expired" if record.get("expired") else "logged_in",
+                "expires_in_seconds": record.get("expires_in_seconds"),
+                "has_local_storage": bool(record.get("has_storage")),
+                "origin_count": int(record.get("origin_count") or 0),
+                "saved_at": record.get("saved_at"),
+                "source_profile": record.get("source_profile"),
+            }
+        )
+    return {"sites": sites}
+
+
+@router.post("/web-access/sites/login")
+async def start_site_login(  # noqa: PLR0911 — 各拒绝路径独立 return，扁平更直读
+    request: Request, body: SiteLoginBody
+) -> Dict[str, Any]:
+    """启动后台登录任务；返回 job_id，前端轮询状态。"""
+    guard = _origin_guard(request)
+    if guard:
+        return guard
+    url = (body.url or "").strip()
+    if not url.startswith(("http://", "https://")):
+        return JSONResponse(
+            status_code=422,
+            content={"ok": False, "error": "invalid_url_scheme"},
+        )
+    if not urlsplit(url).hostname:
+        return JSONResponse(status_code=422, content={"ok": False, "error": "invalid_url"})
+    parsed_url = urlsplit(url)
+    if parsed_url.username or parsed_url.password:
+        # 拒绝把账号密码嵌在 URL 里（会随响应/任务记录回显）
+        return JSONResponse(
+            status_code=422, content={"ok": False, "error": "url_userinfo_not_allowed"}
+        )
+    # 与 web_fetch / browser_navigate 同口径：离线 / 白名单模式不得绕过门禁
+    from backend.tools.network_config import load_network_policy
+
+    rejection = load_network_policy().check_host(url)
+    if rejection:
+        return JSONResponse(status_code=403, content={"ok": False, "error": rejection})
+    try:
+        job_id = site_login_jobs.start(url)
+    except ValueError as exc:
+        in_progress = str(exc) == "login_in_progress"
+        return JSONResponse(
+            status_code=409 if in_progress else 422,
+            content={"ok": False, "error": str(exc)[:200]},
+        )
+    return {"job_id": job_id, "url": url}
+
+
+@router.get("/web-access/sites/login/{job_id}")
+async def get_site_login_job(request: Request, job_id: str) -> Dict[str, Any]:
+    guard = _origin_guard(request)
+    if guard:
+        return guard
+    job = site_login_jobs.get(job_id)
+    if job is None:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "job_not_found"})
+    return job
+
+
+@router.delete("/web-access/sites/{domain}")
+async def delete_site_session(request: Request, domain: str) -> Dict[str, Any]:
+    guard = _origin_guard(request)
+    if guard:
+        return guard
+    if not delete_credential(domain):
+        return JSONResponse(status_code=404, content={"ok": False, "error": "not_found"})
     return {"ok": True}
 
 

@@ -5,6 +5,7 @@ import { lazy, memo, Suspense, useCallback, useEffect, useRef, useState } from '
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
 import { useArtifacts } from '../../features/artifacts/useArtifacts';
+import { BrowserPanel } from '../../features/browser/BrowserPanel';
 import { useChangesListStore } from '../../features/changes/changesListStore';
 import { requestMessageJump } from '../../features/chat/messageJumpStore';
 import {
@@ -60,13 +61,20 @@ interface RightPanelProps {
   variant?: 'overlay' | 'push';
 }
 
-const RIGHT_PANEL_TABS: readonly RightPanelTab[] = ['progress', 'outline', 'changes', 'artifacts'];
+const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
+  'progress',
+  'outline',
+  'changes',
+  'artifacts',
+  'browser',
+];
 
 const TAB_LABELS: Record<RightPanelTab, string> = {
   progress: '进度',
   artifacts: '产物',
   changes: '变更',
   outline: '目录',
+  browser: '浏览器',
 };
 
 /** 宽度档位（right-panel R1 批次 D，对齐 Claude 的小/中/大三档） */
@@ -521,8 +529,16 @@ function RightPanelInner({
         changesCount={changesCount}
       />
 
-      <div className="h-[calc(100%-2.5rem)] overflow-y-auto min-h-0">
-        {selectedFilePath && sessionId ? (
+      <div
+        className={
+          tab === 'browser'
+            ? 'h-[calc(100%-2.5rem)] min-h-0 overflow-hidden'
+            : 'h-[calc(100%-2.5rem)] overflow-y-auto min-h-0'
+        }
+      >
+        {tab === 'browser' ? (
+          <BrowserPanel />
+        ) : selectedFilePath && sessionId ? (
           <Suspense fallback={<div className="p-3 text-sm text-muted">加载中...</div>}>
             <FilePreviewPanel
               sessionId={sessionId}
