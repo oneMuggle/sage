@@ -575,6 +575,12 @@ UI：
   单图 20k / 总量 60k 文本注入上限；Electron 自动探测
   `resources/tesseract/tesseract[.exe]` 并注入 `SAGE_TESSERACT_PATH`；
   win7 分支不捆绑 RapidOCR，仅同步 Office 开关、文本上限与 Electron 探测；
+- P1 开发（2026-10-31）：发送后消息气泡展示 OCR 文本
+  （`client_meta.image_ocr_texts`，每图 4k/总量 8k）；`/ocr/reload` 与设置页
+  tiny 模型下载/恢复；`ocr_benchmark.py --manifest` 分类统计；
+  `.github/workflows/ocr-smoke.yml` 真实 RapidOCR 冒烟；
+- P1 批处理（2026-10-31）：`/ocr/batch` 单 worker 队列（≤20 项、进度/取消/逐项失败），
+  多图预览自动走批处理并轮询；
 - 测试：新增 6 个测试文件（服务/引擎、Agent 兜底、工具、REST、ChatInput、Wiki 回退），
   相关后端 98 项、前端 15 项通过；`ruff`、ESLint、`check_py38_compat`、
   `architecture-check` 通过。
