@@ -31,6 +31,9 @@ import type {
   OfficeElectronApiBridge,
   OfficeManagedRef,
   PickedOfficeFile,
+  PetConfigBridge,
+  PetElectronApiBridge,
+  PetSnapshotBridge,
   ProvidersElectronApiBridge,
   PtyElectronApiBridge,
   RescanResult,
@@ -693,6 +696,57 @@ const electronAPI = {
   } satisfies FileElectronApiBridge,
 
   /**
+   * Desktop pet bridge (2026-10-30): the pet window is not a trusted
+   * `sage:invoke` renderer; this narrow bridge carries state/config and
+   * a few whitelisted actions. Main validates the sender window.
+   */
+  pet: {
+    getConfig: () => ipcRenderer.invoke('pet:get-config') as Promise<PetConfigBridge>,
+    setConfig: (patch) => ipcRenderer.invoke('pet:set-config', patch) as Promise<PetConfigBridge>,
+    getState: () => ipcRenderer.invoke('pet:get-state') as Promise<PetSnapshotBridge>,
+    onState: (handler: (snapshot: PetSnapshotBridge) => void): UnlistenFn => {
+      const listener = (_e: IpcRendererEvent, payload: PetSnapshotBridge) => handler(payload);
+      ipcRenderer.on('pet:state', listener);
+      return () => ipcRenderer.off('pet:state', listener);
+    },
+    onConfig: (handler: (config: PetConfigBridge) => void): UnlistenFn => {
+      const listener = (_e: IpcRendererEvent, payload: PetConfigBridge) => handler(payload);
+      ipcRenderer.on('pet:config', listener);
+      return () => ipcRenderer.off('pet:config', listener);
+    },
+    ready: () => {
+      ipcRenderer.send('pet:ready');
+    },
+    openSession: (sessionId) => {
+      ipcRenderer.send('pet:open-session', { sessionId });
+    },
+    openSettings: () => {
+      ipcRenderer.send('pet:open-settings');
+    },
+    showMenu: () => {
+      ipcRenderer.send('pet:show-menu');
+    },
+    dragStart: () => {
+      ipcRenderer.send('pet:drag-start');
+    },
+    dragMove: () => {
+      ipcRenderer.send('pet:drag-move');
+    },
+    dragEnd: () => {
+      ipcRenderer.send('pet:drag-end');
+    },
+    resetPosition: () => {
+      ipcRenderer.send('pet:reset-position');
+    },
+    setPanel: (open: boolean) => {
+      ipcRenderer.send('pet:set-panel', { open });
+    },
+    hide: () => {
+      ipcRenderer.send('pet:hide');
+    },
+  } satisfies PetElectronApiBridge,
+
+  /**
    * 开发期右键「检查元素」—— 仅非打包环境主进程会执行（见 electron/main.ts）。
    * 渲染层自绘菜单无法交给 Chromium 默认处理，故按坐标走 IPC。
    */
@@ -711,7 +765,12 @@ const electronAPI = {
   },
 };
 
-contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+const isPetWindow = process.argv.includes('--sage-pet-window=1');
+
+contextBridge.exposeInMainWorld(
+  'electronAPI',
+  isPetWindow ? { pet: electronAPI.pet } : electronAPI,
+);
 
 // Type augmentation for the renderer side (auto-imported by src/lib/electronApi.d.ts)
 export type ElectronAPI = typeof electronAPI;

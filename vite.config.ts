@@ -1,6 +1,7 @@
 /// <reference types="vitest" />
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
+import { resolve } from 'node:path';
 
 import { defineConfig, type Plugin } from 'vitest/config';
 import react from '@vitejs/plugin-react';
@@ -133,6 +134,10 @@ export default defineConfig({
       dedupe: ['react', 'react-dom', 'react-dom/client'],
     },
     rollupOptions: {
+      input: {
+        main: resolve(process.cwd(), 'index.html'),
+        pet: resolve(process.cwd(), 'pet.html'),
+      },
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],

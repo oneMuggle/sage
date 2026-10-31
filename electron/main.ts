@@ -48,6 +48,7 @@ import './crashGuard';
 import { logger } from './logger';
 import { registerEditableContextMenu } from './contextMenu';
 import { setupTrayAndGlobalShortcut } from './tray';
+import { disposePet, getPetController, initPet } from './pet';
 import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
 import {
   registerSageFileProtocol,
@@ -146,7 +147,8 @@ const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const BACKEND_HEALTH = `${BACKEND_URL}/health/proof`;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
-const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
+const VITE_DEV_URL =
+  process.env.VITE_DEV_SERVER_URL ?? `http://localhost:${process.env.VITE_DEV_PORT ?? 1420}`;
 const buildManifest = loadBuildManifest(
   process.resourcesPath ? join(process.resourcesPath, 'build-manifest.json') : '',
   // CRITICAL: guard app.getVersion() for vitest environments where the
@@ -928,6 +930,18 @@ function openExternalSafely(url: string): void {
   shell.openExternal(url).catch(() => undefined);
 }
 
+function ensurePetInitialized(): void {
+  if (getPetController()) return;
+  initPet({
+    backendUrl: BACKEND_URL,
+    getAuthToken: () => backendAuthToken,
+    getMainWindow: () => mainWindow,
+    devUrl: VITE_DEV_URL,
+    isPackaged: app.isPackaged,
+    userDataDir: resolveSageUserDataDir(),
+  });
+}
+
 function createMainWindow(): void {
   // Platform-specific titlebar configuration:
   // - macOS: hide traffic light area, custom titlebar from y=28
@@ -971,6 +985,7 @@ function createMainWindow(): void {
     },
   });
   setMainWindow(win);
+  ensurePetInitialized();
 
   // 2026-09-13: ready-to-show（首帧就绪）后再显示主窗口并关闭启动屏，
   // 消除「窗口已出现但页面尚未绘制」的白屏闪烁。
@@ -1180,12 +1195,24 @@ async function registerIpcHandlers(): Promise<void> {
         return startWikiIngestStream(evt.sender, payload.args ?? {}, BACKEND_URL);
       }
       try {
-        return await invokeBackend(
+        const result = await invokeBackend(
           payload.cmd,
           payload.args ?? {},
           BACKEND_URL,
           backendAuthToken ?? undefined,
         );
+        if (payload.cmd === 'agent_chat_stream' && result && typeof result === 'object') {
+          const streamId = (result as { streamId?: unknown }).streamId;
+          const args = payload.args ?? {};
+          const sessionId = typeof args.sessionId === 'string' ? args.sessionId : null;
+          const rawMax = Number(args.maxContext);
+          const contextMax =
+            Number.isFinite(rawMax) && rawMax > 0 ? rawMax : null;
+          if (typeof streamId === 'string') {
+            getPetController()?.trackStream(streamId, sessionId, contextMax);
+          }
+        }
+        return result;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         logger.error('ipc: invoke failed', { cmd: payload.cmd, err: msg });
@@ -1305,6 +1332,7 @@ async function registerIpcHandlers(): Promise<void> {
       const chatStreamMatch = event.match(/^chat-stream-(.+)$/);
       if (chatStreamMatch) {
         const streamId = chatStreamMatch[1];
+        getPetController()?.trackStream(streamId, null);
         const abort = new AbortController();
         eventSubscriptions.set(event, abort);
         // I2: 直接用 streamId attach 到后端已有流 — 不再需要 pendingChatArgs
@@ -1377,7 +1405,11 @@ async function registerIpcHandlers(): Promise<void> {
       // S8: 主进程自主产生的事件（OS 通知点击回发）。无需后端 relay,
       // renderer 侧 listen() 注册的 ipcRenderer.on 直接收 webContents.send。
       // 反馈入口（Phase 1.11 帮助菜单）同理。
-      if (event === 'session-notify-click' || event === 'open-feedback') {
+      if (
+        event === 'session-notify-click' ||
+        event === 'open-feedback' ||
+        event === 'open-settings'
+      ) {
         return { ok: true, event };
       }
 
@@ -2649,9 +2681,7 @@ app
     // 触发任何 auto-bind，也不写入用户偏好。
     detectedProjectRoot = detectProjectRoot(process.cwd());
     if (detectedProjectRoot) {
-      logger.info(
-        `main: detected project root at ${detectedProjectRoot} (low-priority hint only)`,
-      );
+      logger.info(`main: detected project root at ${detectedProjectRoot} (low-priority hint only)`);
     } else {
       logger.info('main: no project root detected (decision chain will fall back)');
     }
@@ -2857,6 +2887,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   appIsQuitting = true;
+  disposePet();
   globalShortcut.unregister(REMOTE_MCP_HOTKEY);
   getGlobalSyncer()?.stop();
   remoteMcp?.dispose();

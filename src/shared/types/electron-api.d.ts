@@ -417,6 +417,82 @@ export interface ProjectElectronApiBridge {
   revealFolder: (projectId: string) => Promise<{ success: true } | { error: string }>;
 }
 
+/**
+ * Desktop pet bridge. Keep in sync with `electron/pet/types.ts`.
+ * Available in both the main window (settings page) and the pet window.
+ */
+export interface PetConfigBridge {
+  version: 1;
+  enabled: boolean;
+  displayMode: 'desktop' | 'in-app' | 'both' | 'off';
+  size: 'mini' | 'small' | 'medium' | 'large' | 'huge';
+  tempo: 'quiet' | 'standard' | 'lively';
+  reduceMotion: boolean;
+  bubbleMode: 'important' | 'always' | 'off';
+  soundScenes: { waiting: boolean; error: boolean; done: boolean };
+  showSessionTitle: boolean;
+  compatibilityMode: 'auto' | 'on' | 'off';
+  petPack: string;
+  followActiveSession: boolean;
+}
+
+export interface PetSessionSummaryBridge {
+  sessionId: string;
+  sessionTitle: string | null;
+  action: string;
+  detail: string | null;
+  toolName: string | null;
+  bubbleKey: string | null;
+  todoDone: number;
+  todoTotal: number;
+  todoActive: string | null;
+  progressKind: 'todo' | 'plan' | null;
+  contextUsed: number | null;
+  contextMax: number | null;
+  lastTerminalAction: 'done' | 'error' | null;
+  lastTerminalAt: number | null;
+  updatedAt: number;
+}
+
+export interface PetSnapshotBridge {
+  action: string;
+  detail: string | null;
+  sessionId: string | null;
+  sessionTitle: string | null;
+  toolName: string | null;
+  bubbleKey: string | null;
+  bubbleKind: 'info' | 'success' | 'error' | 'waiting' | null;
+  todoDone: number;
+  todoTotal: number;
+  todoActive: string | null;
+  progressKind: 'todo' | 'plan' | null;
+  contextUsed: number | null;
+  contextMax: number | null;
+  lastTerminalAction: 'done' | 'error' | null;
+  lastTerminalAt: number | null;
+  activeSessions: number;
+  sessions: PetSessionSummaryBridge[];
+  updatedAt: number;
+}
+
+export interface PetElectronApiBridge {
+  getConfig: () => Promise<PetConfigBridge>;
+  setConfig: (patch: Partial<PetConfigBridge>) => Promise<PetConfigBridge>;
+  getState: () => Promise<PetSnapshotBridge>;
+  onState: (handler: (snapshot: PetSnapshotBridge) => void) => UnlistenFn;
+  onConfig: (handler: (config: PetConfigBridge) => void) => UnlistenFn;
+  ready: () => void;
+  openSession: (sessionId: string | null) => void;
+  openSettings: () => void;
+  showMenu: () => void;
+  dragStart: () => void;
+  dragMove: () => void;
+  dragEnd: () => void;
+  resetPosition: () => void;
+  setPanel: (open: boolean) => void;
+  hide: () => void;
+}
+
 export interface ElectronAPI {
   /** Authenticated renderer-to-backend request; main injects the local capability. */
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
@@ -466,6 +542,8 @@ export interface ElectronAPI {
   arenaToken: ArenaTokenElectronApiBridge;
   office: OfficeElectronApiBridge;
   project: ProjectElectronApiBridge;
+  /** Desktop pet window + settings bridge (2026-10-30). */
+  pet?: PetElectronApiBridge;
   media: MediaElectronApiBridge;
   journal: JournalElectronApiBridge;
   updates: UpdateElectronApiBridge;
