@@ -80,12 +80,8 @@ describe('LatexProfileLibraryPanel', () => {
     });
     fireEvent.click(screen.getByTestId('latex-profile-extract'));
 
-    await waitFor(() =>
-      expect(mockedExtract).toHaveBeenCalledWith('/ws', '/ws/guidelines.txt'),
-    );
-    expect(screen.getByTestId('latex-profile-candidate')).toHaveTextContent(
-      'required_max_pages',
-    );
+    await waitFor(() => expect(mockedExtract).toHaveBeenCalledWith('/ws', '/ws/guidelines.txt'));
+    expect(screen.getByTestId('latex-profile-candidate')).toHaveTextContent('required_max_pages');
     expect(screen.getByTestId('latex-profile-name')).toHaveValue('guidelines');
 
     fireEvent.click(screen.getByTestId('latex-profile-save'));
@@ -99,9 +95,7 @@ describe('LatexProfileLibraryPanel', () => {
         CANDIDATE.evidence,
       ),
     );
-    expect(screen.getByTestId('latex-profile-saved')).toHaveTextContent(
-      '已保存：guidelines',
-    );
+    expect(screen.getByTestId('latex-profile-saved')).toHaveTextContent('已保存：guidelines');
   });
 
   it('deletes a saved profile', async () => {
@@ -110,13 +104,9 @@ describe('LatexProfileLibraryPanel', () => {
 
     render(<LatexProfileLibraryPanel workspacePath="/ws" />);
 
-    const deleteButton = await screen.findByTestId(
-      'latex-profile-delete-ieee-2026',
-    );
+    const deleteButton = await screen.findByTestId('latex-profile-delete-ieee-2026');
     fireEvent.click(deleteButton);
 
-    await waitFor(() =>
-      expect(mockedDelete).toHaveBeenCalledWith('/ws', 'ieee-2026'),
-    );
+    await waitFor(() => expect(mockedDelete).toHaveBeenCalledWith('/ws', 'ieee-2026'));
   });
 });

@@ -82,6 +82,7 @@ backend/office/latex/
 | 前端 | `LatexPdfAuditPanel` | Office 页“PDF 版式审计”：页数/尺寸/字体/DPI 问题列表 |
 | 前端 | `LatexCompliancePanel` | Office 页“LaTeX 投稿合规检查”：规范档案 → checks + issues |
 | 前端 | `LatexProfileLibraryPanel` | Office 页“期刊规范档案”：指南抽取 / 保存 / 删除；合规面板可选用 |
+| 前端 | `LatexPathPicker` | 所有 LaTeX 路径字段的原生文件选择 + 拖拽（按后缀白名单） |
 
 `structured` 形状：
 
@@ -287,6 +288,7 @@ backend/office/latex/
 - 循环 include 检测；单文件 ≤5 MiB、项目 ≤20 MiB、include 深度 ≤20、文件数 ≤200、blocks ≤5000；
 - 前端 KaTeX 由 `rehype-katex` 渲染；`LatexPreview` 不使用 `dangerouslySetInnerHTML` 渲染用户文本；
 - 模板填充图片/文献槽位：资源必须来自工作区；复制文件名清洗为 `[A-Za-z0-9._-]`，不覆盖已有文件；
+- 前端路径输入统一使用 `LatexPathPicker`：原生选择器 + 拖拽，后缀白名单在前端先校验，后端仍做最终边界校验；
 - 不支持：`.cls/.sty` 宏展开、TikZ 渲染、DOCX↔LaTeX；TeX 编译/PDF 仅在检测到本机引擎时可用；
 - 项目 zip 导入仅接受工作区内 `.zip`；不执行/不编译解压内容，不做病毒扫描；
 - 模板填充不自动补 `.bib`；图片槽位会复制到输出目录旁的 `<输出名>_assets/`；前端模板面板使用路径输入（暂未接入通用文件选择器）。
@@ -315,10 +317,10 @@ backend/office/latex/
 - `backend/tests/api/test_artifact_routes.py`：`.tex` artifact；
 - `backend/tests/unit/tools/test_office_latex_tool.py`（4）：上下文/成功/越界/后缀；
 - `backend/tests/unit/test_profiles_office_tools.py`、`test_tool_bundles_parity.py`：工具面/快照；
-- 前端 `LatexPreview.test.tsx`（3）、`LatexTemplatePanel.test.tsx`（4）、`LatexAuditPanel.test.tsx`（2）、`LatexBuildPanel.test.tsx`（2）、`LatexProjectImportPanel.test.tsx`（2）、`LatexPdfAuditPanel.test.tsx`（2）、`LatexCompliancePanel.test.tsx`（3）、`LatexProfileLibraryPanel.test.tsx`（2）。
+- 前端 `LatexPreview.test.tsx`（3）、`LatexTemplatePanel.test.tsx`（4）、`LatexAuditPanel.test.tsx`（2）、`LatexBuildPanel.test.tsx`（2）、`LatexProjectImportPanel.test.tsx`（2）、`LatexPdfAuditPanel.test.tsx`（2）、`LatexCompliancePanel.test.tsx`（3）、`LatexProfileLibraryPanel.test.tsx`（2）、`LatexPathPicker.test.tsx`（3）。
 
 ## 7. 后续
 
 - L4：容器/低权限用户等 OS 级编译沙箱、LLM 语义审校；
 - LLM 辅助规范抽取（带原文引用与人工确认）、`.bib` 槽位；
-- 通用文件选择器、槽位自动填充建议；TikZ/高级包渲染（通过可选 PDF 编译）。
+- 槽位自动填充建议；TikZ/高级包渲染（通过可选 PDF 编译）。

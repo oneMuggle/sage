@@ -185,9 +185,7 @@ describe('LatexTemplatePanel', () => {
     });
     fireEvent.click(screen.getByTestId('latex-template-analyze'));
     await waitFor(() =>
-      expect(
-        screen.getByTestId('latex-slot-bibliography_refs_1'),
-      ).toBeInTheDocument(),
+      expect(screen.getByTestId('latex-slot-bibliography_refs_1')).toBeInTheDocument(),
     );
 
     const bibInput = screen.getByTestId('latex-slot-bibliography_refs_1');
