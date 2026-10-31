@@ -110,3 +110,11 @@ def test_agents_markdown_contains_rules_and_stages():
     assert "开题" in markdown
     assert "AI 协同约定" in markdown
     assert "01_开题/" in markdown
+
+
+def test_import_rejects_integrity_mismatch():
+    spec = get_builtin("cn-research-grant")
+    envelope = build_export_envelope(spec, include_scaffold=False, app_version="test")
+    envelope["integrity"]["sha256"] = "0" * 64
+    with pytest.raises(PlaybookValidationError):
+        validate_import_envelope(envelope)

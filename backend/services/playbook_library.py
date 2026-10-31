@@ -312,6 +312,12 @@ def validate_import_envelope(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(payload, dict) or payload.get("format") != "sage.playbook":
         raise PlaybookValidationError("不是 Sage 规程文件")
     spec = normalize_playbook(payload.get("playbook") or {})
+    integrity = payload.get("integrity")
+    if isinstance(integrity, dict) and integrity.get("sha256"):
+        expected = str(integrity.get("sha256"))
+        actual = spec_hash(spec)
+        if expected != actual:
+            raise PlaybookValidationError("规程文件校验失败：integrity.sha256 不匹配")
     raw_scaffold = payload.get("scaffold") or {}
     if not isinstance(raw_scaffold, dict):
         raise PlaybookValidationError("scaffold 必须是对象")

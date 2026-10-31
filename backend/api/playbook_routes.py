@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -37,11 +37,16 @@ from backend.api.playbook_schemas import (
     PlaybookImportPreviewRequest,
     PlaybookImportPreviewResponse,
     PlaybookImportRequest,
+    PlaybookRuleCleanupResponse,
     PlaybookStageConfirmRequest,
+    PlaybookStateUpdateRequest,
+    PlaybookVersionModel,
+    PlaybookVersionsResponse,
     PlaybookWikiExportResponse,
 )
 from backend.data.database import make_with_db_lock
 from backend.data.playbook_repo import PlaybookRepository, PlaybookSnapshot
+from backend.data.project_constraint_repo import ProjectConstraintRepository
 from backend.data.project_repo import Project, ProjectRepository
 from backend.services.playbook_actions import apply_playbook_actions, project_playbook_rules
 from backend.services.playbook_ai import audit_with_llm
@@ -124,6 +129,37 @@ def _active_snapshot_or_404(project_id: str) -> PlaybookSnapshot:
     if snapshot is None:
         raise _error(404, "playbook_not_bound", "项目尚未绑定规程")
     return snapshot
+
+
+def _create_bind_checkpoint(project: Project) -> None:
+    try:
+        from backend.services.project_workspace_inspector import create_project_checkpoint
+
+        create_project_checkpoint(project, "绑定项目规程")
+    except Exception:  # noqa: BLE001 — checkpoint failure must not block binding
+        logger.warning("failed to create checkpoint before playbook bind", exc_info=True)
+
+
+def _validate_state_keys(
+    spec: Dict[str, Any],
+    waivers: Optional[List[str]],
+    manual_done: Optional[List[str]],
+) -> None:
+    artifact_keys = set()
+    criterion_keys = set()
+    for stage in spec.get("stages") or []:
+        for artifact in stage.get("artifacts") or []:
+            artifact_keys.add(f"{stage.get('id')}.{artifact.get('id')}")
+        for criterion in stage.get("exit_criteria") or []:
+            criterion_keys.add(f"{stage.get('id')}.{criterion.get('id')}")
+    invalid = [key for key in (waivers or []) if key not in artifact_keys]
+    if invalid:
+        raise _error(400, "invalid_waiver", f"未知的豁免项: {', '.join(invalid)}")
+    invalid = [key for key in (manual_done or []) if key not in criterion_keys]
+    if invalid:
+        raise _error(
+            400, "invalid_manual_done", f"未知的手动完成项: {', '.join(invalid)}"
+        )
 
 
 def _diff_specs(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
@@ -213,12 +249,83 @@ def bind_project_playbook(
         except PlaybookValidationError as exc:
             raise _error(400, "invalid_playbook", str(exc)) from exc
         source = request.source or "custom"
+    _create_bind_checkpoint(project)
     PlaybookRepository().create_snapshot(project.id, spec, source=source)
     state = _ensure_state(project.id, spec)
     project_playbook_rules(
         project.id, spec, stage_id=state.get("current_stage")
     )
     return _current_payload(project)
+
+
+@router.patch(
+    "/projects/{project_id}/playbook/state", response_model=PlaybookCurrentResponse
+)
+@with_db_lock
+def update_project_playbook_state(
+    project_id: str, request: PlaybookStateUpdateRequest
+) -> PlaybookCurrentResponse:
+    """Update waivers / manual completion / conditional flags."""
+    project = _project_or_404(project_id)
+    snapshot = _active_snapshot_or_404(project.id)
+    _validate_state_keys(snapshot.spec, request.waivers, request.manual_done)
+    repo = PlaybookRepository()
+    state = repo.get_state(project.id)
+    if request.waivers is not None:
+        state["waivers"] = sorted(set(request.waivers))
+    if request.manual_done is not None:
+        state["manual_done"] = sorted(set(request.manual_done))
+    if request.conditions is not None:
+        state["conditions"] = dict(request.conditions)
+    repo.update_state(project.id, state)
+    return _current_payload(project)
+
+
+@router.delete(
+    "/projects/{project_id}/playbook", response_model=PlaybookCurrentResponse
+)
+@with_db_lock
+def unbind_project_playbook(project_id: str) -> PlaybookCurrentResponse:
+    """Deactivate the bound playbook and clear its state (history is kept)."""
+    project = _project_or_404(project_id)
+    PlaybookRepository().unbind(project.id)
+    ProjectRepository().update_playbook_state(project.id, None)
+    return _current_payload(project)
+
+
+@router.get(
+    "/projects/{project_id}/playbook/versions",
+    response_model=PlaybookVersionsResponse,
+)
+@with_db_lock
+def list_project_playbook_versions(project_id: str) -> PlaybookVersionsResponse:
+    project = _project_or_404(project_id)
+    versions = PlaybookRepository().list_versions(project.id)
+    return PlaybookVersionsResponse(
+        versions=[
+            PlaybookVersionModel(
+                version=item.version,
+                source=item.source,
+                spec_hash=item.spec_hash,
+                created_at=item.created_at,
+                active=item.active,
+            )
+            for item in versions
+        ]
+    )
+
+
+@router.post(
+    "/projects/{project_id}/playbook/rules/cleanup",
+    response_model=PlaybookRuleCleanupResponse,
+)
+@with_db_lock
+def cleanup_project_playbook_rules(project_id: str) -> PlaybookRuleCleanupResponse:
+    project = _project_or_404(project_id)
+    removed = ProjectConstraintRepository().delete_by_source_prefix(
+        project.id, "playbook:"
+    )
+    return PlaybookRuleCleanupResponse(removed=removed)
 
 
 @router.get(
@@ -431,6 +538,7 @@ def import_playbook(request: PlaybookImportRequest) -> PlaybookCurrentResponse:
         duplicate["id"] = "{}-imported-{}".format(spec["id"], spec_hash(spec)[:8])
         spec = normalize_playbook(duplicate)
     source = f"imported:{spec_hash(spec)[:12]}"
+    _create_bind_checkpoint(project)
     repo.create_snapshot(project.id, spec, source=source)
     state = _ensure_state(project.id, spec)
     project_playbook_rules(

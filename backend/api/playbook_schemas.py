@@ -40,6 +40,36 @@ class PlaybookBindRequest(BaseModel):
     source: Optional[str] = Field(default=None, max_length=256)
 
 
+class PlaybookStateUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    waivers: Optional[List[str]] = None
+    manual_done: Optional[List[str]] = None
+    conditions: Optional[Dict[str, Any]] = None
+
+
+class PlaybookVersionModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: int
+    source: str
+    spec_hash: str
+    created_at: int
+    active: bool
+
+
+class PlaybookVersionsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    versions: List[PlaybookVersionModel] = Field(default_factory=list)
+
+
+class PlaybookRuleCleanupResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    removed: int
+
+
 class PlaybookStageConfirmRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -151,6 +181,10 @@ __all__ = [
     "PlaybookImportPreviewRequest",
     "PlaybookImportPreviewResponse",
     "PlaybookImportRequest",
+    "PlaybookRuleCleanupResponse",
     "PlaybookStageConfirmRequest",
+    "PlaybookStateUpdateRequest",
+    "PlaybookVersionModel",
+    "PlaybookVersionsResponse",
     "PlaybookWikiExportResponse",
 ]
