@@ -26,7 +26,7 @@
           "required": true,
           "match": {
             "globs": ["**/开题报告*.{doc,docx,pdf,md}"],
-            "min_bytes": 1024,
+            "min_bytes": 10,
             "max_age_days": 730
           },
           "content_checks": [
