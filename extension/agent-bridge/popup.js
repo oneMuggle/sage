@@ -1,5 +1,6 @@
 /* Sage Browser Bridge — popup UI. */
 
+/* eslint-disable no-undef */  // chrome APIs + DOM
 'use strict';
 
 const els = {

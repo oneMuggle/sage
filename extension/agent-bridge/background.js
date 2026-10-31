@@ -10,6 +10,7 @@
  * evicted when idle; an offscreen document survives).
  */
 
+/* eslint-disable no-undef, @typescript-eslint/no-unused-vars */  // chrome APIs
 'use strict';
 
 const CONFIG_KEY = 'sageBridgeConfig';

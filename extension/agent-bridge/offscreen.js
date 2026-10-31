@@ -5,6 +5,7 @@
  * background.js owns chrome.debugger and tab access.
  */
 
+/* eslint-disable no-undef, @typescript-eslint/no-unused-vars */  // chrome APIs
 'use strict';
 
 const POLL_TIMEOUT_MS = 25000;
