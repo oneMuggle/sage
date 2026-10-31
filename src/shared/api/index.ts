@@ -43,7 +43,9 @@ export type {
   PlaybookStageAudit,
   PlaybookStageSpec,
   PlaybookState,
+  PlaybookStatePatch,
   PlaybookSummary,
+  PlaybookVersion,
   PlaybookWikiExportResult,
 } from './playbookApi';
 export type {

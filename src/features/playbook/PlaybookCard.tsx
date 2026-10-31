@@ -24,9 +24,11 @@ import type {
   PlaybookImportPreview,
   PlaybookSpec,
   PlaybookSummary,
+  PlaybookVersion,
 } from '../../shared/api/playbookApi';
 import { Button } from '../../shared/ui/Button';
 
+import { PlaybookChecklist } from './PlaybookChecklist';
 import { PlaybookSpecEditor } from './PlaybookSpecEditor';
 
 export interface PlaybookCardProps {
@@ -49,15 +51,6 @@ function downloadText(filename: string, text: string, mime: string): void {
   URL.revokeObjectURL(url);
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  create_folder: '创建目录',
-  create_doc_stub: '生成骨架',
-  apply_rules: '写入规则',
-  seed_milestones: '创建里程碑',
-  add_todo: '转为待办',
-  open_doc: '打开文档',
-};
-
 export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) {
   const [current, setCurrent] = useState<PlaybookCurrent | null>(null);
   const [builtins, setBuiltins] = useState<PlaybookSummary[]>([]);
@@ -75,6 +68,8 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const [importConflict, setImportConflict] = useState<'save_as_new' | 'merge' | 'replace'>(
     'save_as_new',
   );
+  const [versions, setVersions] = useState<PlaybookVersion[]>([]);
+  const [showVersions, setShowVersions] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
@@ -204,6 +199,53 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       setNotice(
         (result.created ? '已写入 Wiki：' : '已更新 Wiki：') + result.path,
       );
+    });
+
+  const handleWaive = (stageId: string, artifactId: string) =>
+    run('waive', async () => {
+      const key = `${stageId}.${artifactId}`;
+      const waivers = Array.from(new Set([...(current?.state.waivers ?? []), key]));
+      const data = await playbookApi.updateState(projectId, { waivers });
+      setCurrent(data);
+      setNotice('已豁免：' + artifactId);
+    });
+
+  const handleManualDone = (stageId: string, criterionId: string) =>
+    run('manual-done', async () => {
+      const key = `${stageId}.${criterionId}`;
+      const manualDone = Array.from(
+        new Set([...(current?.state.manual_done ?? []), key]),
+      );
+      const data = await playbookApi.updateState(projectId, {
+        manual_done: manualDone,
+      });
+      setCurrent(data);
+      setNotice('已标记完成：' + criterionId);
+    });
+
+  const handleCleanupRules = () => {
+    if (!window.confirm('将删除所有由项目规程写入的规则（不影响手工规则），继续？')) return;
+    void run('cleanup-rules', async () => {
+      const removed = await playbookApi.cleanupRules(projectId);
+      setNotice(`已清理 ${removed} 条规程规则`);
+    });
+  };
+
+  const handleUnbind = () => {
+    if (!window.confirm('解绑后规程状态会清空（历史版本保留），继续？')) return;
+    void run('unbind', async () => {
+      const data = await playbookApi.unbind(projectId);
+      setCurrent(data);
+      setEditingSpec(false);
+      setNotice('已解绑规程');
+    });
+  };
+
+  const handleLoadVersions = () =>
+    run('versions', async () => {
+      const list = await playbookApi.listVersions(projectId);
+      setVersions(list);
+      setShowVersions(true);
     });
 
   const handleFile = async (file: File) => {
@@ -480,6 +522,30 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           >
             编辑规程
           </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void handleLoadVersions()}
+            data-testid="playbook-versions-btn"
+          >
+            版本历史
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={handleCleanupRules}
+            data-testid="playbook-cleanup-rules"
+          >
+            清理规程规则
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={handleUnbind}
+            data-testid="playbook-unbind"
+          >
+            解绑规程
+          </Button>
           <Button size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()}>
             <Upload className="mr-1 h-3.5 w-3.5" />
             导入
@@ -580,101 +646,18 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         </div>
       )}
 
-      {currentStage && !compact && (
-        <div className="space-y-2">
-          <div className="text-xs font-medium text-foreground">
-            当前阶段：{currentStage.label}
-            {currentStage.objective ? (
-              <span className="ml-2 font-normal text-muted-foreground">
-                {currentStage.objective}
-              </span>
-            ) : null}
-          </div>
-          {currentStage.remaining.length === 0 ? (
-            <div className="flex items-center gap-1.5 text-xs text-emerald-600">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              本阶段必需要素已齐备
-            </div>
-          ) : (
-            <ul className="space-y-1.5">
-              {currentStage.remaining.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-2 py-1.5 text-xs"
-                >
-                  <span className="flex items-center gap-1.5 text-foreground">
-                    <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
-                    待补：{item.label}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    {item.missing_action && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void handleAction(item.missing_action as PlaybookAction)}
-                        disabled={busy === item.missing_action.type}
-                        data-testid={`playbook-missing-action-${item.id}`}
-                      >
-                        {ACTION_LABELS[item.missing_action.type] ?? '处理'}
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() =>
-                        void handleAction({
-                          type: 'add_todo',
-                          payload: {
-                            title: '补齐：' + item.label,
-                            description:
-                              '项目规程 ' +
-                              (current.playbook?.name ?? '') +
-                              ' · 阶段 ' +
-                              (currentStage?.label ?? ''),
-                          },
-                        })
-                      }
-                      disabled={busy === 'add_todo'}
-                      data-testid={`playbook-add-todo-${item.id}`}
-                    >
-                      转待办
-                    </Button>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
-      {audit && audit.classification_suggestions.length > 0 && (
-        <div className="space-y-1.5" data-testid="playbook-classification">
-          <div className="text-xs font-medium text-foreground">归类建议（需逐项确认）</div>
-          {audit.classification_suggestions.map((item) => (
-            <div
-              key={`${item.from}-${item.to}`}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-2 py-1.5 text-xs"
-            >
-              <span className="text-muted-foreground">
-                {item.from} → {item.to}
-              </span>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() =>
-                  void handleAction({
-                    type: 'move_file',
-                    payload: { from: item.from, to: item.to },
-                  })
-                }
-                disabled={busy === 'move_file'}
-                data-testid={`playbook-move-${item.artifact_id}`}
-              >
-                移动
-              </Button>
-            </div>
-          ))}
-        </div>
+      {!compact && (
+        <PlaybookChecklist
+          stage={currentStage}
+          classification={audit?.classification_suggestions ?? []}
+          busy={busy}
+          playbookName={current.playbook?.name ?? ''}
+          onAction={(action) => void handleAction(action)}
+          onWaive={(stageId, artifactId) => void handleWaive(stageId, artifactId)}
+          onManualDone={(stageId, criterionId) =>
+            void handleManualDone(stageId, criterionId)
+          }
+        />
       )}
 
       {importPreview && (
@@ -729,6 +712,31 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
               取消
             </Button>
           </div>
+        </div>
+      )}
+
+      {showVersions && (
+        <div
+          className="space-y-1 rounded-md border border-border p-2 text-xs"
+          data-testid="playbook-versions"
+        >
+          <div className="font-medium text-foreground">版本历史</div>
+          {versions.length === 0 ? (
+            <div className="text-muted-foreground">暂无版本记录</div>
+          ) : (
+            versions.map((item) => (
+              <div key={item.version} className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">
+                  v{item.version} · {item.source} ·{' '}
+                  {new Date(item.created_at).toLocaleString()}
+                </span>
+                {item.active && <span className="text-primary">当前</span>}
+              </div>
+            ))
+          )}
+          <Button size="sm" variant="secondary" onClick={() => setShowVersions(false)}>
+            收起
+          </Button>
         </div>
       )}
 

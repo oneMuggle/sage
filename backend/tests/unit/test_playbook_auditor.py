@@ -106,3 +106,23 @@ def test_classification_suggestion_for_misplaced_file(tmp_path: Path) -> None:
         item["from"] == "开题报告.md" and item["to"] == "01_开题/开题报告.md"
         for item in suggestions
     )
+
+
+def test_required_when_condition_controls_required(tmp_path: Path) -> None:
+    root = _make_research_project(tmp_path)
+    spec = get_builtin("cn-research-grant")
+    result = audit_playbook(_project(root), spec)
+    proposal = next(stage for stage in result["stages"] if stage["id"] == "proposal")
+    ethics = next(item for item in proposal["artifacts"] if item["id"] == "ethics_approval")
+    assert ethics["required"] is False
+    assert ethics["status"] == "optional"
+
+    enabled = audit_playbook(
+        _project(root),
+        spec,
+        state={"conditions": {"contains_human_subjects": True}},
+    )
+    proposal = next(stage for stage in enabled["stages"] if stage["id"] == "proposal")
+    ethics = next(item for item in proposal["artifacts"] if item["id"] == "ethics_approval")
+    assert ethics["required"] is True
+    assert ethics["status"] == "missing"

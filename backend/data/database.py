@@ -1087,6 +1087,7 @@ class Database:
                 trigger_pattern TEXT,
                 priority INTEGER NOT NULL DEFAULT 5,
                 enabled INTEGER NOT NULL DEFAULT 1,
+                source TEXT NOT NULL DEFAULT 'user',
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
                 FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -1096,6 +1097,12 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_project_constraints_project "
             "ON project_constraints(project_id, enabled)"
         )
+        cursor.execute("PRAGMA table_info(project_constraints)")
+        _constraint_columns = {row["name"] for row in cursor.fetchall()}
+        if "source" not in _constraint_columns:
+            cursor.execute(
+                "ALTER TABLE project_constraints ADD COLUMN source TEXT NOT NULL DEFAULT 'user'"
+            )
         conn.commit()
 
         # Project milestones (2026-09-24): 项目里程碑追踪。按项目类型有不

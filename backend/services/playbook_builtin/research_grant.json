@@ -92,14 +92,15 @@
         {
           "id": "ethics_approval",
           "label": "伦理审批件",
-          "required": false,
+          "required": true,
           "match": {
             "globs": [
               "**/伦理*",
               "**/IRB*"
             ]
           },
-          "target_dir": "01_开题"
+          "target_dir": "01_开题",
+          "required_when": "project.contains_human_subjects"
         }
       ],
       "exit_criteria": [

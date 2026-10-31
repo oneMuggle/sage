@@ -15,6 +15,10 @@ const applyActionsMock = vi.fn();
 const confirmStageMock = vi.fn();
 const exportMock = vi.fn();
 const wikiExportMock = vi.fn();
+const updateStateMock = vi.fn();
+const unbindMock = vi.fn();
+const versionsMock = vi.fn();
+const cleanupRulesMock = vi.fn();
 const importPreviewMock = vi.fn();
 const importMock = vi.fn();
 
@@ -30,6 +34,10 @@ vi.mock('../../../shared/api/playbookApi', () => ({
     confirmStage: (...args: unknown[]) => confirmStageMock(...args),
     exportPlaybook: (...args: unknown[]) => exportMock(...args),
     exportToWiki: (...args: unknown[]) => wikiExportMock(...args),
+    updateState: (...args: unknown[]) => updateStateMock(...args),
+    unbind: (...args: unknown[]) => unbindMock(...args),
+    listVersions: (...args: unknown[]) => versionsMock(...args),
+    cleanupRules: (...args: unknown[]) => cleanupRulesMock(...args),
     importPreview: (...args: unknown[]) => importPreviewMock(...args),
     importPlaybook: (...args: unknown[]) => importMock(...args),
   },
@@ -50,7 +58,14 @@ const audit = {
       required_done: 1,
       remaining: [],
       artifacts: [],
-      exit_criteria: [],
+      exit_criteria: [
+        {
+          id: 'literature_matrix_ready',
+          label: '文献对比矩阵已建立',
+          type: 'manual',
+          status: 'pending',
+        },
+      ],
     },
     {
       id: 'execution',
@@ -338,5 +353,60 @@ describe('PlaybookCard', () => {
         source: 'custom',
       }),
     );
+  });
+
+  it('待补项可豁免', async () => {
+    getCurrentMock.mockResolvedValue(boundExecution);
+    updateStateMock.mockResolvedValue({
+      ...boundExecution,
+      state: { ...boundExecution.state, waivers: ['execution.raw_data'] },
+    });
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-waive-raw_data');
+    fireEvent.click(screen.getByTestId('playbook-waive-raw_data'));
+    await waitFor(() =>
+      expect(updateStateMock).toHaveBeenCalledWith('p1', {
+        waivers: ['execution.raw_data'],
+      }),
+    );
+  });
+
+  it('手动退出条件可标记完成', async () => {
+    getCurrentMock.mockResolvedValue(bound);
+    updateStateMock.mockResolvedValue({
+      ...bound,
+      state: { ...bound.state, manual_done: ['proposal.literature_matrix_ready'] },
+    });
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-manual-literature_matrix_ready');
+    fireEvent.click(screen.getByTestId('playbook-manual-literature_matrix_ready'));
+    await waitFor(() =>
+      expect(updateStateMock).toHaveBeenCalledWith('p1', {
+        manual_done: ['proposal.literature_matrix_ready'],
+      }),
+    );
+  });
+
+  it('版本历史可展开', async () => {
+    getCurrentMock.mockResolvedValue(bound);
+    versionsMock.mockResolvedValue([
+      { version: 1, source: 'builtin:cn-research-grant', spec_hash: 'a', created_at: 1, active: true },
+    ]);
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-versions-btn');
+    fireEvent.click(screen.getByTestId('playbook-versions-btn'));
+    await waitFor(() => expect(versionsMock).toHaveBeenCalledWith('p1'));
+    expect(await screen.findByTestId('playbook-versions')).toBeInTheDocument();
+  });
+
+  it('解绑前需要确认', async () => {
+    getCurrentMock.mockResolvedValue(bound);
+    unbindMock.mockResolvedValue({ bound: false, state: {} });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-unbind');
+    fireEvent.click(screen.getByTestId('playbook-unbind'));
+    await waitFor(() => expect(unbindMock).toHaveBeenCalledWith('p1'));
+    confirm.mockRestore();
   });
 });
