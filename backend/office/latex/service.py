@@ -21,6 +21,7 @@ from backend.office.path_safety import is_within, resolve_within
 
 from .audit import audit_latex_file
 from .compile import compile_latex, detect_tools
+from .compliance import check_latex_compliance
 from .diff import latexdiff_files
 from .filler import fill_latex_template
 from .parser import LatexLimits, parse_latex_project
@@ -314,6 +315,39 @@ def audit_latex_pdf_service(
     )
 
 
+def check_latex_compliance_service(
+    tex_path: Path,
+    *,
+    workspace: Path,
+    pdf_path: Optional[Path] = None,
+    profile: Optional[Dict[str, Any]] = None,
+    limits: Optional[LatexLimits] = None,
+) -> Dict[str, Any]:
+    """Workspace-safe source + optional PDF compliance check."""
+    workspace_path = Path(workspace)
+    if not workspace_path.is_dir():
+        raise OfficeParseError("工作区目录不存在")
+    tex = Path(tex_path)
+    if not tex.is_file():
+        raise OfficeFileNotFoundError(tex)
+    resolved_tex = resolve_within(workspace_path, tex)
+    resolved_pdf: Optional[Path] = None
+    if pdf_path is not None:
+        pdf = Path(pdf_path)
+        if not pdf.is_file():
+            raise OfficeFileNotFoundError(pdf)
+        if pdf.suffix.lower() != ".pdf":
+            raise OfficeParseError("仅支持 .pdf 合规检查")
+        resolved_pdf = resolve_within(workspace_path, pdf)
+    return check_latex_compliance(
+        resolved_tex,
+        root=workspace_path,
+        pdf_path=resolved_pdf,
+        profile=profile,
+        limits=limits,
+    )
+
+
 def latex_capabilities() -> Dict[str, Any]:
     """Return available TeX engines and latexdiff."""
     return detect_tools()
@@ -339,6 +373,7 @@ __all__ = [
     "analyze_latex_template_file",
     "audit_latex_file_service",
     "audit_latex_pdf_service",
+    "check_latex_compliance_service",
     "compile_latex_file",
     "extract_latex_project_service",
     "fill_latex_template_file",

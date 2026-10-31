@@ -38,7 +38,8 @@ backend/office/latex/
   diff.py            # latexdiff 红字版适配
   project.py         # 项目 zip 安全解压 + 主文件识别（不执行内容）
   pdf_audit.py       # PDF 页面尺寸/页数/字体嵌入/图片 DPI 只读审计
-  service.py         # workspace 边界、大小限制、read/analyze/fill/audit/compile/diff/extract/pdf
+  compliance.py      # 规范档案：源码 + 可选 PDF 合并合规检查
+  service.py         # workspace 边界、大小限制、read/analyze/fill/audit/compile/diff/extract/pdf/compliance
 ```
 
 每个文件 <800 行（architecture-check）。零新增 Python 依赖；py38 hazard scan 0。
@@ -59,17 +60,20 @@ backend/office/latex/
 | 红字版 | `POST /api/v1/office/latex/diff` | `{workspace_path, original_path, revised_path, ...}` → diff.tex（可选 PDF） |
 | 项目导入 | `POST /api/v1/office/latex/project/extract` | `{workspace_path, zip_path, output_dir_name?}` → 解压到新目录 + 主文件 |
 | PDF 审计 | `POST /api/v1/office/latex/pdf/audit` | `{workspace_path, file_path, required_min_pages?, required_max_pages?, min_image_dpi?}` → 版式/字体/DPI 问题 |
+| 合规检查 | `POST /api/v1/office/latex/compliance/check` | `{workspace_path, tex_path, pdf_path?, profile}` → 逐项 checks + 合并 issues |
 | Agent 工具 | `office_analyze_latex_template` / `office_fill_latex_template` | analyze READ；fill WRITE_LOCAL（file_path 模式） |
 | Agent 工具 | `office_audit_latex` | READ；源码级确定性审校，需 workspace 上下文 |
 | Agent 工具 | `office_compile_latex` / `office_latexdiff` | WRITE_LOCAL；可选外部引擎/latexdiff |
 | Agent 工具 | `office_extract_latex_project` | WRITE_LOCAL；工作区内 zip 安全解压 + 主文件识别 |
 | Agent 工具 | `office_audit_latex_pdf` | READ；PDF 页数/尺寸/字体嵌入/图片 DPI 审计 |
+| Agent 工具 | `office_check_latex_compliance` | READ；规范档案驱动的源码 + 可选 PDF 合规检查 |
 | 前端 | `LatexPreview` | 标题/作者/警告/块渲染/源码切换 |
 | 前端 | `LatexTemplatePanel` | Office 页“LaTeX 模板助手”：路径输入 → 槽位表单 → 填充输出 |
 | 前端 | `LatexAuditPanel` | Office 页“LaTeX 源码审校”：路径 + 必需章节 → 问题列表 |
 | 前端 | `LatexBuildPanel` | Office 页“LaTeX 编译与红字版”：编译 PDF / latexdiff |
 | 前端 | `LatexProjectImportPanel` | Office 页“LaTeX 项目导入”：zip 路径 → 新目录 + 主文件 |
 | 前端 | `LatexPdfAuditPanel` | Office 页“PDF 版式审计”：页数/尺寸/字体/DPI 问题列表 |
+| 前端 | `LatexCompliancePanel` | Office 页“LaTeX 投稿合规检查”：规范档案 → checks + issues |
 
 `structured` 形状：
 
@@ -222,6 +226,31 @@ backend/office/latex/
 
 限制：单文件 ≤100 MiB；加密 PDF 直接拒绝（不尝试破解）；PyMuPDF 缺失时返回 422。
 
+### 4.6 投稿合规检查
+
+`compliance/check` 把规范档案与源码/PDF 审计合并为逐项检查：
+
+```json
+{
+  "required_sections": ["Introduction", "Conclusion"],
+  "required_metadata": ["title", "author", "abstract", "keywords"],
+  "allowed_page_sizes": ["A4"],
+  "required_min_pages": 8,
+  "required_max_pages": 20,
+  "require_embedded_fonts": true,
+  "min_image_dpi": 300,
+  "forbidden_commands": ["write18", "todo"]
+}
+```
+
+响应 `{ok, tex_path, pdf_path, profile, checks, issues, summary}`：
+
+- `checks`：`tex.sections`、`tex.metadata`、`tex.commands`、`pdf.page_count`、`pdf.page_size`、`pdf.fonts`、`pdf.images`，状态 `pass|warn|fail|skipped`；
+- `issues` 增加 `source: tex|pdf|profile`；PDF 问题保留页码锚点；
+- 新规则：`LATEX-META-REQUIRED`（必需元数据缺失）、`LATEX-COMMAND-FORBIDDEN`（禁用命令）、`PDF-PAGE-SIZE-NOT-ALLOWED`（页面尺寸不在允许列表）、`LATEX-COMPLIANCE-PROFILE`（未知元数据键，warning）；
+- `require_embedded_fonts=false` 时过滤字体嵌入问题并把 `pdf.fonts` 标记 skipped；
+- 未提供 PDF 时 PDF 检查全部 skipped；`ok = 无 error`。
+
 ## 5. 安全与限制
 
 - **不执行 TeX**：只解析源码；未知命令/环境降级为文本 + warning；
@@ -232,7 +261,7 @@ backend/office/latex/
 - 不支持：`.cls/.sty` 宏展开、TikZ 渲染、DOCX↔LaTeX；TeX 编译/PDF 仅在检测到本机引擎时可用；
 - 项目 zip 导入仅接受工作区内 `.zip`；不执行/不编译解压内容，不做病毒扫描；
 - 模板填充不自动补 `.bib`；图片槽位会复制到输出目录旁的 `<输出名>_assets/`；前端模板面板使用路径输入（暂未接入通用文件选择器）。
-- 源码审校只做确定性规则；PDF 审计只做页面/字体/DPI，不做视觉排版/OCR/语义审校。
+- 源码审校只做确定性规则；PDF 审计只做页面/字体/DPI；合规检查只按档案汇总，不做视觉排版/OCR/语义审校。
 - 编译/红字版依赖本机外部工具；不是 OS 级沙箱，不可信文档不应编译。
 
 ## 6. 测试
@@ -245,15 +274,17 @@ backend/office/latex/
 - `backend/tests/unit/tools/test_office_latex_project_tool.py`（4）：上下文/非 zip/越界/成功；
 - `backend/tests/unit/office/latex/test_pdf_audit.py`（9）：A4 字体未嵌入/页数上下限/混合尺寸/异常尺寸/低 DPI/加密/非 PDF/页数上限/相对路径；
 - `backend/tests/unit/tools/test_office_latex_pdf_tool.py`（4）：上下文/非 PDF/越界/字体问题；
+- `backend/tests/unit/office/latex/test_compliance.py`（7）：源码通过/元素缺失/禁用命令/PDF 页数尺寸字体/字体不要求/低 DPI/profile 键警告；
+- `backend/tests/unit/tools/test_office_latex_compliance_tool.py`（4）：上下文/非 tex/越界/checks；
 - `backend/tests/unit/tools/test_office_latex_template_tool.py`（4）：analyze/fill/缺上下文/缺必填；
 - `backend/tests/unit/tools/test_office_latex_audit_tool.py`（3）：上下文/问题清单/越界；
 - `backend/tests/unit/tools/test_office_latex_build_tool.py`（4）：compile/diff 上下文与降级；
-- `backend/tests/integration/test_office_latex_routes.py`（13）：read + template analyze/fill + audit + compile/diff 降级 + project extract + pdf audit；
+- `backend/tests/integration/test_office_latex_routes.py`（15）：read + template analyze/fill + audit + compile/diff 降级 + project extract + pdf audit + compliance；
 - `backend/tests/integration/test_workspace_preview_routes.py`：`.tex` 预览；
 - `backend/tests/api/test_artifact_routes.py`：`.tex` artifact；
 - `backend/tests/unit/tools/test_office_latex_tool.py`（4）：上下文/成功/越界/后缀；
 - `backend/tests/unit/test_profiles_office_tools.py`、`test_tool_bundles_parity.py`：工具面/快照；
-- 前端 `LatexPreview.test.tsx`（3）、`LatexTemplatePanel.test.tsx`（3）、`LatexAuditPanel.test.tsx`（2）、`LatexBuildPanel.test.tsx`（2）、`LatexProjectImportPanel.test.tsx`（2）、`LatexPdfAuditPanel.test.tsx`（2）。
+- 前端 `LatexPreview.test.tsx`（3）、`LatexTemplatePanel.test.tsx`（3）、`LatexAuditPanel.test.tsx`（2）、`LatexBuildPanel.test.tsx`（2）、`LatexProjectImportPanel.test.tsx`（2）、`LatexPdfAuditPanel.test.tsx`（2）、`LatexCompliancePanel.test.tsx`（2）。
 
 ## 7. 后续
 
