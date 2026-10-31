@@ -22,11 +22,12 @@ export const PET_SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [
     keywords: 'pet 桌宠 显示 位置 desktop in-app off',
   },
   {
-    key: 'pet_size',
+    key: 'pet_pets',
     tab: 'pet',
-    label: '桌宠大小',
-    labelEn: 'Pet size',
-    keywords: 'pet 桌宠 大小 size mini small medium large huge',
+    label: '宠物列表与大小',
+    labelEn: 'Pets and sizes',
+    keywords:
+      'pet 桌宠 宠物 多宠物 大小 size mini small medium large huge 动画包 pack 添加 add 移除 remove',
   },
   {
     key: 'pet_tempo',
@@ -34,13 +35,6 @@ export const PET_SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [
     label: '桌宠待机节奏',
     labelEn: 'Pet idle tempo',
     keywords: 'pet 桌宠 节奏 tempo quiet standard lively 待机',
-  },
-  {
-    key: 'pet_pack',
-    tab: 'pet',
-    label: '宠物动画包',
-    labelEn: 'Pet animation pack',
-    keywords: 'pet 桌宠 宠物 动画包 pack 大肥鱼 自定义 选择',
   },
   {
     key: 'pet_pack_manage',
