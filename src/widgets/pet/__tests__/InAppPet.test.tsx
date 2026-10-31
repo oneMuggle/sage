@@ -57,6 +57,7 @@ const SNAPSHOT: PetSnapshotBridge = {
       updatedAt: 1,
     },
   ],
+  tasks: [],
   updatedAt: 1,
 };
 

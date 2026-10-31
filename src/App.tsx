@@ -24,6 +24,7 @@ import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
 import { ApprovalDialog, RemoteApprovalBridge } from './widgets/permission';
 import { InAppPet } from './widgets/pet/InAppPet';
+import { TaskCenterPetBridge } from './widgets/pet/TaskCenterPetBridge';
 import { QuestionDialog } from './widgets/question';
 import { BackendStatusBanner } from './widgets/system/BackendStatusBanner';
 import { ShortcutHelpOverlay } from './widgets/system/ShortcutHelpOverlay';
@@ -302,6 +303,8 @@ function App() {
         <UpdateDialog />
         {/* 2026-10-31: displayMode=in-app/both 时的应用内角落宠物 */}
         <InAppPet />
+        {/* 2026-10-31: Task Center 后台任务上报给宠物 */}
+        <TaskCenterPetBridge />
       </NavHistoryProvider>
     </HashRouter>
   );

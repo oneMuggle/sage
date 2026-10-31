@@ -31,6 +31,7 @@ import {
   type PetAgentEvent,
   type PetSessionState,
 } from './state';
+import { applyTaskOverrides, normalizeTaskReports } from './tasks';
 import { PetWindow } from './windows';
 import type {
   PetBubbleMode,
@@ -38,6 +39,7 @@ import type {
   PetSessionMeta,
   PetSize,
   PetSnapshot,
+  PetTaskReport,
   PetTempo,
 } from './types';
 
@@ -78,6 +80,7 @@ export class PetController {
   private readonly configFile: string;
   private readonly profileFile: string;
   private profile: PetProfile;
+  private reportedTasks: PetTaskReport[] = [];
   private readonly streams = new Map<string, AbortController>();
   private readonly titles = new Map<string, string>();
   private tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -192,6 +195,11 @@ export class PetController {
     if (!writePetProfile(this.profileFile, this.profile)) {
       logger.warn('pet: profile save failed');
     }
+    this.emit(true);
+  }
+
+  reportTasks(input: unknown): void {
+    this.reportedTasks = normalizeTaskReports(input);
     this.emit(true);
   }
 
@@ -407,11 +415,13 @@ export class PetController {
   private emit(force = false): void {
     const now = Date.now();
     const base = selectSnapshot(this.sessions, now);
-    const snapshot = this.applyBubbleMode({
+    const withMeta = {
       ...base,
       patCount: this.profile.patCount,
       bondDays: bondDays(this.profile, now),
-    });
+      tasks: this.reportedTasks,
+    };
+    const snapshot = this.applyBubbleMode(applyTaskOverrides(withMeta, this.reportedTasks, now));
     // Ignore updatedAt for dedupe: an idle snapshot's updatedAt changes on
     // every tick and would otherwise push IPC every 500ms forever.
     const key = JSON.stringify({ ...snapshot, updatedAt: 0 });

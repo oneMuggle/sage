@@ -91,6 +91,13 @@ FastAPI chat stream (NDJSON)
 - 点击 in-app 宠物 → 打开当前会话；右键 → 打开宠物设置；尺寸按 `size` 映射 96/120/150/190/230px；`reduceMotion` 时暂停在首帧。
 - 这条形态不依赖透明窗/点击穿透，作为 Win7 无 Aero、远程桌面或不想开桌面窗时的可用方案；与桌面窗共用动作/气泡/徽章。
 
+### 3.4 后台任务聚合（P1 补全）
+
+- Task Center 是 renderer 本地状态（office/wiki/custom/编排任务在页面里 register），主进程无法轮询；`TaskCenterPetBridge` 在 App 层订阅 store，把非终态任务压缩为 `PetTaskReport`，经 `pet:report-tasks` 上报。
+- 主进程 `normalizeTaskReports` 校验/去重/限制 20 条；`PetSnapshot.tasks` 随状态一起下发。
+- 仅在聊天空闲/睡眠时用后台任务覆盖动作：`awaiting_approval` > `failed`（10 分钟窗口）> `running/queued/paused`；活跃聊天会话始终优先。
+- 面板「后台任务」区显示 kind/title/status/percent；带 `sessionId` 的任务可点击回到对应会话。定时任务和未注册到 Task Center 的独立编排 run 仍不会覆盖宠物。
+
 ## 4. 窗口行为
 
 - `transparent` + `frame:false` + `alwaysOnTop` + `skipTaskbar` + `focusable:false`。
@@ -141,8 +148,9 @@ canonicalizer 与 Win7 设置 schema parity。
 ## 7. 测试与验证
 
 - 单测：`electron/__tests__/petState.test.ts`、`petConfig.test.ts`、
-  `petGeometry.test.ts`、`petProfile.test.ts`、`src/pet/__tests__/animation.test.ts`、
-  `src/pet/__tests__/tempo.test.ts`。
+  `petGeometry.test.ts`、`petProfile.test.ts`、`petTasks.test.ts`、
+  `src/pet/__tests__/animation.test.ts`、`src/pet/__tests__/tempo.test.ts`、
+  `src/features/task-center/__tests__/petReports.test.ts`。
 - 设置守卫：`settingsTabs.guards.test.ts`（tab 数 19）、
   `settingsSearchIndex.test.ts`（`pet` 为合法 tab）。
 - 手工/自动冒烟：Electron 启动后确认 `pet.html` 窗口存在、置顶、视频源正确；
@@ -159,8 +167,7 @@ canonicalizer 与 Win7 设置 schema parity。
 - 未在 Win7 真机验证透明/穿透；兼容模式已写好但需真机回归。
 - 提示音为 WebAudio 合成短音，不是角色语音；需一次用户手势解锁 AudioContext。
 - 面板已能列出最近/活跃会话，但「每个会话一只宠物」未实现。
-- 独立编排 run（`orch-events-*`）、Task Center、定时任务尚未接入宠物聚合；
-  聊天流内的 `task_status` / `task_progress` 已覆盖。
+- 独立编排 run（`orch-events-*`）、Task Center、定时任务：Task Center（office/wiki/custom）已通过 renderer 上报接入；未注册到 Task Center 的独立 run 与定时任务仍不会反馈到宠物。
 - 上下文条依赖 chat 参数里的 `maxContext` 与 usage 事件；自动推断上下文时可能只显示已用量、不显示百分比。
 - 完整动画包已全量内置（约 52.7MB），安装包相应增大；如果后续要控制体积，可改成「精选内置 + 完整包可选下载/导入」。
 - 自定义 pet pack 导入/导出尚未实现；聊天/TTS 未做。

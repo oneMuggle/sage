@@ -457,6 +457,29 @@ export interface PetConfigBridge {
   followActiveSession: boolean;
 }
 
+export type PetTaskStatus =
+  | 'queued'
+  | 'running'
+  | 'awaiting_approval'
+  | 'paused'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
+
+export interface PetTaskReportBridge {
+  id: string;
+  kind: string;
+  title: string;
+  status: PetTaskStatus;
+  phase?: string | null;
+  percent?: number | null;
+  sessionId?: string | null;
+  runId?: string | null;
+  error?: string | null;
+  startedAt?: number | null;
+  finishedAt?: number | null;
+}
+
 export interface PetSessionSummaryBridge {
   sessionId: string;
   sessionTitle: string | null;
@@ -495,6 +518,7 @@ export interface PetSnapshotBridge {
   bondDays: number;
   activeSessions: number;
   sessions: PetSessionSummaryBridge[];
+  tasks: PetTaskReportBridge[];
   updatedAt: number;
 }
 
@@ -514,6 +538,7 @@ export interface PetElectronApiBridge {
   resetPosition: () => void;
   setPanel: (open: boolean) => void;
   pat: () => void;
+  reportTasks: (tasks: PetTaskReportBridge[]) => void;
   hide: () => void;
 }
 

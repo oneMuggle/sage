@@ -811,6 +811,9 @@ const electronAPI = {
     pat: () => {
       ipcRenderer.send('pet:pat');
     },
+    reportTasks: (tasks) => {
+      ipcRenderer.send('pet:report-tasks', tasks);
+    },
     hide: () => {
       ipcRenderer.send('pet:hide');
     },
