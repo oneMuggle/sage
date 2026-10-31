@@ -1,0 +1,208 @@
+"""Integration tests for the read-only LaTeX preview endpoint."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import httpx
+import pytest
+import pytest_asyncio
+
+from backend.data import database as database_module
+from backend.data.database import Database
+from backend.main import app
+
+
+@pytest.fixture()
+def db(monkeypatch: pytest.MonkeyPatch) -> Database:
+    test_db = Database(":memory:")
+    test_db.init_db()
+    monkeypatch.setattr(database_module, "_db", test_db)
+    return test_db
+
+
+@pytest_asyncio.fixture()
+async def client(db: Database):
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as value:
+        yield value
+
+
+def _write(workspace: Path, name: str, text: str) -> Path:
+    path = workspace / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+@pytest.mark.asyncio()
+async def test_read_latex_returns_structured_blocks(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    main = _write(
+        workspace,
+        "paper/main.tex",
+        r"""
+\documentclass{article}
+\title{Demo Paper}
+\author{Alice}
+\begin{document}
+\section{Introduction}
+See $E=mc^2$ and \cite{knuth84}.
+\[
+a^2+b^2=c^2
+\]
+\end{document}
+""",
+    )
+
+    resp = await client.post(
+        "/api/v1/office/latex/read",
+        json={"workspace_path": str(workspace), "file_path": str(main)},
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["ok"] is True
+    assert payload["kind"] == "latex"
+    assert payload["structured"]["metadata"]["title"] == "Demo Paper"
+    types = [block["type"] for block in payload["structured"]["blocks"]]
+    assert "heading" in types
+    assert "equation" in types
+    assert "\\documentclass" in payload["content"]
+
+
+@pytest.mark.asyncio()
+async def test_read_latex_rejects_path_outside_workspace(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.tex"
+    outside.write_text("\\documentclass{article}", encoding="utf-8")
+
+    resp = await client.post(
+        "/api/v1/office/latex/read",
+        json={"workspace_path": str(workspace), "file_path": str(outside)},
+    )
+
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio()
+async def test_read_latex_missing_file_returns_404(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    resp = await client.post(
+        "/api/v1/office/latex/read",
+        json={
+            "workspace_path": str(workspace),
+            "file_path": str(workspace / "missing.tex"),
+        },
+    )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio()
+async def test_read_latex_rejects_extra_fields(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    main = _write(workspace, "a.tex", "\\documentclass{article}")
+
+    resp = await client.post(
+        "/api/v1/office/latex/read",
+        json={
+            "workspace_path": str(workspace),
+            "file_path": str(main),
+            "unexpected": True,
+        },
+    )
+
+    assert resp.status_code == 422
+
+
+_TEMPLATE = r"""
+\documentclass{article}
+\title{Old Title}
+\author{Old Author}
+\begin{document}
+\begin{abstract}
+Old abstract.
+\end{abstract}
+<<note>>
+\end{document}
+"""
+
+
+@pytest.mark.asyncio()
+async def test_template_analyze_and_fill(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    template = _write(workspace, "paper.tex", _TEMPLATE)
+
+    analyzed = await client.post(
+        "/api/v1/office/latex/template/analyze",
+        json={"workspace_path": str(workspace), "file_path": str(template)},
+    )
+    assert analyzed.status_code == 200
+    profile = analyzed.json()
+    assert profile["kind"] == "latex-template"
+    slot_names = {slot["name"] for slot in profile["slots"]}
+    assert {"title", "author", "abstract"}.issubset(slot_names)
+    placeholder = next(
+        slot["name"] for slot in profile["slots"] if slot["kind"] == "placeholder"
+    )
+
+    filled = await client.post(
+        "/api/v1/office/latex/template/fill",
+        json={
+            "workspace_path": str(workspace),
+            "template_path": str(template),
+            "output_filename": "paper-filled.tex",
+            "data": {
+                "title": "New & Title",
+                "author": ["Alice", "Bob"],
+                "abstract": "New abstract.",
+                placeholder: "Thanks",
+            },
+        },
+    )
+    assert filled.status_code == 200
+    result = filled.json()
+    assert result["ok"] is True
+    assert result["filled_count"] == 4
+    output = workspace / "paper-filled.tex"
+    assert output.is_file()
+    assert r"New \& Title" in output.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio()
+async def test_template_fill_missing_required_returns_422(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    template = _write(workspace, "paper.tex", _TEMPLATE)
+
+    resp = await client.post(
+        "/api/v1/office/latex/template/fill",
+        json={
+            "workspace_path": str(workspace),
+            "template_path": str(template),
+            "output_filename": "out.tex",
+            "data": {"title": "Only title"},
+        },
+    )
+
+    assert resp.status_code == 422

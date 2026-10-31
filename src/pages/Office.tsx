@@ -67,6 +67,7 @@ import {
   type OfficePreviewData,
   type OfficeReadResult,
 } from '../features/office';
+import { LatexTemplatePanel } from '../features/office/LatexTemplatePanel';
 import { OfficeStagingInspector } from '../features/office/OfficeStagingInspector';
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
 import { WorkspaceBindModal } from '../features/workspace';
@@ -508,6 +509,11 @@ export function Office() {
               valid workspace path for fill-from-content. Reuses the
               SessionWorkspaceProvider as its workspace source-of-truth. */}
           <JournalPanel />
+
+          {/* LaTeX template panel — analyze .tex/.cls/.sty slots and fill a
+              new .tex inside the bound workspace. Uses backendRequest (no
+              extra IPC manifest entry). */}
+          <LatexTemplatePanel />
         </>
       )}
 

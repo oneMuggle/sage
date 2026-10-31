@@ -15,6 +15,8 @@ import { ExcelPreview, PptPreview, WordPreview } from '../../../features/office'
 // 2026-10-29（基线同步）: Word 产物默认走 docx-preview 原生渲染，结构化段落
 // 视图保留为切换/降级项。
 import { DocxBlobPreview } from '../../../features/office/DocxBlobPreview';
+import { LatexPreview } from '../../../features/office/LatexPreview';
+import type { LatexStructured } from '../../../features/office/latexTypes';
 import type {
   OfficeExcelReadResult,
   OfficePptReadResult,
@@ -246,6 +248,13 @@ export function FileContentRenderer({
   }
   if (content.kind === 'csv') {
     return <CsvPreview text={content.content ?? ''} />;
+  }
+  if (content.kind === 'latex') {
+    const structured = content.structured as LatexStructured | undefined;
+    if (structured && Array.isArray(structured.blocks)) {
+      return <LatexPreview data={structured} source={content.content} name={name} />;
+    }
+    return <ShikiCodeBlock language="latex">{content.content ?? ''}</ShikiCodeBlock>;
   }
   return <pre className="whitespace-pre-wrap text-sm">{content.content}</pre>;
 }

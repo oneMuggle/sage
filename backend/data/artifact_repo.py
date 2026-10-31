@@ -264,6 +264,8 @@ _EXT_KIND_MAP = {
     ".docx": "docx",
     ".xlsx": "xlsx",
     ".pptx": "pptx",
+    ".tex": "latex",
+    ".ltx": "latex",
 }
 
 
