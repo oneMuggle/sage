@@ -155,4 +155,53 @@ describe('LatexTemplatePanel', () => {
     );
     expect(screen.getByText(/main-filled_assets\/chart\.png/)).toBeInTheDocument();
   });
+
+  it('fills bibliography slots with a workspace .bib path', async () => {
+    mockedAnalyze.mockResolvedValue({
+      ...PROFILE,
+      slots: [
+        ...PROFILE.slots,
+        {
+          name: 'bibliography_refs_1',
+          kind: 'command_arg',
+          type: 'bibliography',
+          required: true,
+          description: '文献',
+          current_value: '<<refs>>',
+          confidence: 0.9,
+        },
+      ],
+    });
+    mockedFill.mockResolvedValue({
+      ...FILL,
+      filled_count: 3,
+      bibliographies_copied: ['main-filled_assets/refs.bib'],
+    });
+
+    render(<LatexTemplatePanel workspacePath="/ws" />);
+
+    fireEvent.change(screen.getByTestId('latex-template-path'), {
+      target: { value: 'paper/main.tex' },
+    });
+    fireEvent.click(screen.getByTestId('latex-template-analyze'));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('latex-slot-bibliography_refs_1'),
+      ).toBeInTheDocument(),
+    );
+
+    const bibInput = screen.getByTestId('latex-slot-bibliography_refs_1');
+    expect(bibInput).toHaveValue('');
+    fireEvent.change(bibInput, { target: { value: 'refs.bib' } });
+    fireEvent.click(screen.getByTestId('latex-template-fill'));
+
+    await waitFor(() =>
+      expect(mockedFill).toHaveBeenCalledWith('/ws', '/ws/paper/main.tex', 'main-filled.tex', {
+        title: 'Old Title',
+        author: ['Alice'],
+        bibliography_refs_1: 'refs.bib',
+      }),
+    );
+    expect(screen.getByText(/main-filled_assets\/refs\.bib/)).toBeInTheDocument();
+  });
 });

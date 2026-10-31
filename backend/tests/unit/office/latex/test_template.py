@@ -304,3 +304,100 @@ def test_fill_template_dedupes_image_names(tmp_path: Path) -> None:
     assert result["images_copied"][0] == "paper-filled_assets/chart.png"
     assert result["images_copied"][1] == "paper-filled_assets/chart-1.png"
     assert (tmp_path / "paper-filled_assets" / "chart-1.png").read_bytes() == b"b"
+
+
+_BIB_TEMPLATE = r"""
+\documentclass{article}
+\title{T}
+\author{A}
+\begin{document}
+\begin{abstract}Abs\end{abstract}
+\bibliography{<<refs>>}
+\addbibresource{<<refs2>>}
+\end{document}
+"""
+
+_BIB_ENTRY = """
+@article{key1,
+  title = {A Title},
+  author = {Alice},
+  year = {2020},
+}
+"""
+
+
+def _bib(path: Path, text: str = _BIB_ENTRY) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_analyze_template_detects_bibliography_slots(tmp_path: Path) -> None:
+    main = _write(tmp_path, "paper.tex", _BIB_TEMPLATE)
+
+    profile = analyze_latex_template(main, root=tmp_path)
+
+    bib_slots = [slot for slot in profile.slots if slot.type == "bibliography"]
+    assert len(bib_slots) == 2
+    commands = {slot.command for slot in bib_slots}
+    assert commands == {"bibliography", "addbibresource"}
+    assert all(slot.required for slot in bib_slots)
+    assert not any(
+        slot.kind == "placeholder" and "refs" in slot.name for slot in profile.slots
+    )
+
+
+def test_analyze_existing_bibliography_is_not_a_slot(tmp_path: Path) -> None:
+    _bib(tmp_path / "refs.bib")
+    main = _write(
+        tmp_path,
+        "paper.tex",
+        _BIB_TEMPLATE.replace("<<refs>>", "refs").replace("<<refs2>>", "refs.bib"),
+    )
+
+    profile = analyze_latex_template(main, root=tmp_path)
+
+    assert not any(slot.type == "bibliography" for slot in profile.slots)
+
+
+def test_fill_template_copies_bibliography_and_rewrites_paths(tmp_path: Path) -> None:
+    _bib(tmp_path / "refs.bib")
+    main = _write(tmp_path, "paper.tex", _BIB_TEMPLATE)
+    profile = analyze_latex_template(main, root=tmp_path)
+    bib_slots = [slot for slot in profile.slots if slot.type == "bibliography"]
+    data = _fill_data(
+        profile,
+        {slot.name: "refs.bib" for slot in bib_slots},
+    )
+
+    result = fill_latex_template(main, data, "paper-filled.tex", root=tmp_path)
+
+    output = (tmp_path / "paper-filled.tex").read_text(encoding="utf-8")
+    assert r"\bibliography{paper-filled_assets/refs}" in output
+    assert r"\addbibresource{paper-filled_assets/refs.bib}" in output
+    assert result["bibliographies_copied"] == ["paper-filled_assets/refs.bib"]
+    assert (tmp_path / "paper-filled_assets" / "refs.bib").is_file()
+
+
+def test_fill_template_rejects_invalid_bibliography(tmp_path: Path) -> None:
+    _bib(tmp_path / "bad.bib", "not a bibtex file")
+    main = _write(tmp_path, "paper.tex", _BIB_TEMPLATE)
+    profile = analyze_latex_template(main, root=tmp_path)
+    bib_slots = [slot for slot in profile.slots if slot.type == "bibliography"]
+    data = _fill_data(profile, {slot.name: "bad.bib" for slot in bib_slots})
+
+    with pytest.raises(OfficeTemplateFillError):
+        fill_latex_template(main, data, "out.tex", root=tmp_path)
+
+
+def test_fill_template_rejects_missing_bibliography(tmp_path: Path) -> None:
+    main = _write(tmp_path, "paper.tex", _BIB_TEMPLATE)
+    profile = analyze_latex_template(main, root=tmp_path)
+    bib_slots = [slot for slot in profile.slots if slot.type == "bibliography"]
+    data = _fill_data(
+        profile,
+        {slot.name: "missing.bib" for slot in bib_slots},
+    )
+
+    with pytest.raises(OfficeTemplateFillError):
+        fill_latex_template(main, data, "out.tex", root=tmp_path)
