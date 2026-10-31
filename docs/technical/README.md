@@ -94,7 +94,7 @@
 | 115  | [项目规程 Playbook](./115-project-playbook.md) | 阶段/交付物规格 + 项目级快照 + 确定性审计与阶段识别 + 目录/骨架/规则/里程碑动作 + JSON/Markdown 导出与导入冲突策略 |
 | 116  | [本地 OCR](./116-local-ocr.md) | RapidOCR/Tesseract 双引擎 + 聊天兜底/预览编辑 + Office/PDF/Wiki/工具接入 + 配置、性能与 Win7 边界 |
 | 117  | [Word 文档画像](./117-word-document-profile.md) | 只读 DocumentProfile：页面设置 / 样式级联 / 段落与 run 格式 / 编号 / 表格合并 / 书签 / 域 / 锚点；旧 read 契约不变 |
-| 118  | [Word 模板 Profile 与填充](./118-word-template-profile.md) | 内容控件 / 书签 / 通用占位符 / 简单 Jinja 统一槽位；保格式填充、必填校验、residual 检查；控制流仍走 docxtpl |
+| 118  | [Word 模板 Profile 与填充](./118-word-template-profile.md) | 内容控件 / 书签 / 通用占位符 / 简单 Jinja 统一槽位；页眉页脚；Jinja 控制流混合渲染；保格式填充、必填校验、residual 检查 |
 
 ---
 

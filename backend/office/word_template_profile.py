@@ -35,6 +35,7 @@ def _rel(path: Path, workspace: Optional[str]) -> str:
 
 def _anchor(
     *,
+    part: str = "word/document.xml",
     paragraph_index: Optional[int] = None,
     table_index: Optional[int] = None,
     row: Optional[int] = None,
@@ -44,9 +45,11 @@ def _anchor(
     sdt_index: Optional[int] = None,
     tag: Optional[str] = None,
     bookmark: Optional[str] = None,
+    section: Optional[int] = None,
+    story: Optional[str] = None,
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = {
-        "part": "word/document.xml",
+        "part": part,
         "paragraph_index": paragraph_index,
         "table_index": table_index,
         "row": row,
@@ -61,6 +64,10 @@ def _anchor(
         payload["tag"] = tag
     if bookmark:
         payload["bookmark"] = bookmark
+    if section is not None:
+        payload["section"] = section
+    if story:
+        payload["story"] = story
     return payload
 
 
@@ -71,6 +78,9 @@ def _placeholder_slots(
     table_index: Optional[int] = None,
     row: Optional[int] = None,
     col: Optional[int] = None,
+    part: str = "word/document.xml",
+    section: Optional[int] = None,
+    story: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     slots: List[Dict[str, Any]] = []
     for match in _PLACEHOLDER_RE.finditer(text):
@@ -96,12 +106,15 @@ def _placeholder_slots(
                 "current_value": raw,
                 "confidence": 0.9,
                 "anchor": _anchor(
+                    part=part,
                     paragraph_index=paragraph_index,
                     table_index=table_index,
                     row=row,
                     col=col,
                     char_start=match.start(),
                     char_end=match.end(),
+                    section=section,
+                    story=story,
                 ),
             }
         )
@@ -201,6 +214,99 @@ def _bookmark_slots(
     return slots, warnings
 
 
+def _sdt_slot(
+    sdt: Any,
+    sdt_index: int,
+    *,
+    part: str = "word/document.xml",
+    section: Optional[int] = None,
+    story: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    name = _sdt_name(sdt)
+    if not name:
+        return None
+    text = _sdt_text(sdt)
+    return {
+        "name": name,
+        "kind": "content_control",
+        "type": "rich_text" if "\n" in text else "text",
+        "required": True,
+        "description": f"内容控件：{name}",
+        "current_value": text,
+        "confidence": 0.95,
+        "anchor": _anchor(
+            part=part,
+            sdt_index=sdt_index,
+            tag=name,
+            section=section,
+            story=story,
+        ),
+    }
+
+
+def _story_slots(
+    document: Any,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, str]], List[str]]:
+    slots: List[Dict[str, Any]] = []
+    warnings: List[Dict[str, str]] = []
+    texts: List[str] = []
+    for section_index, section in enumerate(document.sections):
+        for story_name, story in (
+            ("header", section.header),
+            ("footer", section.footer),
+        ):
+            try:
+                part = str(story.part.partname).lstrip("/")
+                paragraphs = list(story.paragraphs)
+                tables = list(story.tables)
+            except (AttributeError, KeyError, ValueError):
+                warnings.append(
+                    {
+                        "code": "story_unavailable",
+                        "message": f"无法读取第 {section_index + 1} 节 {story_name}",
+                    }
+                )
+                continue
+            for paragraph_index, paragraph in enumerate(paragraphs):
+                texts.append(paragraph.text)
+                slots.extend(
+                    _placeholder_slots(
+                        paragraph.text,
+                        paragraph_index=paragraph_index,
+                        part=part,
+                        section=section_index,
+                        story=story_name,
+                    )
+                )
+                for sdt_index, sdt in enumerate(paragraph._p.iter(qn("w:sdt"))):
+                    slot = _sdt_slot(
+                        sdt,
+                        sdt_index,
+                        part=part,
+                        section=section_index,
+                        story=story_name,
+                    )
+                    if slot is not None:
+                        slots.append(slot)
+            for table_index, table in enumerate(tables):
+                for row_index, row in enumerate(table.rows):
+                    for col_index, cell in enumerate(row.cells):
+                        for paragraph in cell.paragraphs:
+                            texts.append(paragraph.text)
+                            slots.extend(
+                                _placeholder_slots(
+                                    paragraph.text,
+                                    table_index=table_index,
+                                    row=row_index,
+                                    col=col_index,
+                                    part=part,
+                                    section=section_index,
+                                    story=story_name,
+                                )
+                            )
+    return slots, warnings, texts
+
+
 def _analysis(document: Any, source_path: str) -> Dict[str, Any]:
     slots: List[Dict[str, Any]] = []
     warnings: List[Dict[str, str]] = []
@@ -220,28 +326,20 @@ def _analysis(document: Any, source_path: str) -> Dict[str, Any]:
                     )
     sdt_index = 0
     for sdt in document.element.body.iter(qn("w:sdt")):
-        name = _sdt_name(sdt)
-        if not name:
-            continue
-        text = _sdt_text(sdt)
-        slots.append(
-            {
-                "name": name,
-                "kind": "content_control",
-                "type": "rich_text" if "\n" in text else "text",
-                "required": True,
-                "description": f"内容控件：{name}",
-                "current_value": text,
-                "confidence": 0.95,
-                "anchor": _anchor(sdt_index=sdt_index, tag=name),
-            }
-        )
-        sdt_index += 1
+        slot = _sdt_slot(sdt, sdt_index)
+        if slot is not None:
+            slots.append(slot)
+            sdt_index += 1
+    story_slots, story_warnings, story_texts = _story_slots(document)
+    slots.extend(story_slots)
+    warnings.extend(story_warnings)
     bookmark_slots, bookmark_warnings = _bookmark_slots(document)
     slots.extend(bookmark_slots)
     warnings.extend(bookmark_warnings)
 
-    all_text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    all_text = "\n".join(
+        [paragraph.text for paragraph in document.paragraphs] + story_texts
+    )
     has_control_flow = bool(_JINJA_CONTROL_RE.search(all_text))
     if has_control_flow:
         warnings.append(

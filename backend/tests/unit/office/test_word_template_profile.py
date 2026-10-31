@@ -119,19 +119,53 @@ def test_fill_rejects_missing_required_slot(tmp_path: Path) -> None:
         )
 
 
-def test_fill_rejects_jinja_control_flow(tmp_path: Path) -> None:
+def test_fill_renders_jinja_control_flow(tmp_path: Path) -> None:
     document = Document()
-    document.add_paragraph("{% if flag %}A{% endif %}")
+    document.add_paragraph("{% if flag %}Enabled{% else %}Disabled{% endif %}")
+    document.add_paragraph("Name: <<name>>")
     template = tmp_path / "control.docx"
     document.save(str(template))
 
-    with pytest.raises(OfficeTemplateFillError):
-        fill_word_template_profile(
-            template,
-            {"flag": "x"},
-            "out.docx",
-            workspace_path=str(tmp_path),
-        )
+    result = fill_word_template_profile(
+        template,
+        {"flag": True, "name": "Sage"},
+        "out.docx",
+        workspace_path=str(tmp_path),
+    )
+
+    assert result["jinja_rendered"] is True
+    output = Document(str(tmp_path / "out.docx"))
+    text = "\n".join(p.text for p in output.paragraphs)
+    assert "Enabled" in text
+    assert "Sage" in text
+    assert result["residual_placeholders"] == []
+
+
+def test_fill_headers_and_footers(tmp_path: Path) -> None:
+    document = Document()
+    section = document.sections[0]
+    section.header.paragraphs[0].text = "Running: <<running>>"
+    section.footer.paragraphs[0].text = "Note: {{note}}"
+    document.add_paragraph("Body")
+    template = tmp_path / "header.docx"
+    document.save(str(template))
+
+    profile = analyze_word_template_profile(template, workspace_path=str(tmp_path))
+    slots = {slot["name"]: slot for slot in profile["slots"]}
+    assert slots["running"]["anchor"]["story"] == "header"
+    assert slots["note"]["anchor"]["story"] == "footer"
+
+    result = fill_word_template_profile(
+        template,
+        {"running": "Sage Paper", "note": "Draft"},
+        "header-filled.docx",
+        workspace_path=str(tmp_path),
+    )
+
+    assert result["residual_placeholders"] == []
+    output = Document(str(tmp_path / "header-filled.docx"))
+    assert output.sections[0].header.paragraphs[0].text == "Running: Sage Paper"
+    assert output.sections[0].footer.paragraphs[0].text == "Note: Draft"
 
 
 def test_fill_refuses_overwrite(tmp_path: Path) -> None:
