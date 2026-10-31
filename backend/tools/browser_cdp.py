@@ -37,6 +37,7 @@ from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional
+from urllib.parse import quote
 
 from .browser_launcher import (
     EMBEDDED_EXECUTABLE,
@@ -528,18 +529,25 @@ def launch_browser(
             "未找到 Chrome/Edge/Firefox 浏览器：请安装或用环境变量 SAGE_BROWSER_PATH / SAGE_FIREFOX_PATH 指定可执行文件路径"
         )
     if cap.browser_type == BrowserType.EMBEDDED:
+        session_id = browser_id or uuid.uuid4().hex[:12]
+        bridge_token = getattr(cap.launcher, "token", "")
+        bridge_query = (
+            f"token={quote(bridge_token, safe='')}"
+            f"&session={quote(session_id, safe='')}"
+            f"&headless={'1' if headless else '0'}"
+        )
         session = BrowserSession(
-            browser_id=browser_id or uuid.uuid4().hex[:12],
+            browser_id=session_id,
             executable=EMBEDDED_EXECUTABLE,
             headless=headless,
             user_data_dir="",
             process=_EmbeddedProcess(),
             port=cap.cdp_port,
-            ws_path="/devtools/browser/embedded",
+            ws_path=f"/devtools/browser/embedded?{bridge_query}",
             persistent=True,
             profile_name="embedded",
             browser_type=BrowserType.EMBEDDED,
-            bridge_token=getattr(cap.launcher, "token", ""),
+            bridge_token=bridge_token,
         )
         get_browser_manager().register(session)
         return session

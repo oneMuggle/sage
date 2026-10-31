@@ -8,6 +8,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
+import { basename, join } from 'node:path';
 import { BrowserWindow, session } from 'electron';
 
 import {
@@ -71,12 +72,49 @@ export async function startAgentBrowserHost(): Promise<AgentBrowserBridgeHandle 
     partitionSession.setPermissionRequestHandler((_wc, _permission, callback) => {
       callback(false);
     });
-    const bridgeSession = partitionSession as unknown as BridgeSession;
+    let downloadDir = '';
+    const bridgeSession: BridgeSession = {
+      cookies: partitionSession.cookies as unknown as BridgeSession['cookies'],
+      setDownloadPath: (path: string) => {
+        downloadDir = path;
+      },
+    };
     const handle = await startAgentBrowserBridge({
       createWindow: (visible: boolean) => createWindow(partitionSession, visible),
       getSession: () => bridgeSession,
       randomId: () => randomBytes(8).toString('hex'),
       log: (message: string) => logger.debug(message),
+      onDownload: (handler) => {
+        partitionSession.on('will-download', (_event, item) => {
+          // Electron 默认会弹保存对话框（隐藏窗口下会卡住）；后端已通过
+          // Browser.setDownloadBehavior 指定目录，这里直接落盘。
+          if (downloadDir) {
+            item.setSavePath(join(downloadDir, basename(item.getFilename())));
+          }
+          const guid = randomBytes(8).toString('hex');
+          const emit = (method: string, extra: Record<string, unknown>): void => {
+            handler(method, { guid, ...extra });
+          };
+          emit('Browser.downloadWillBegin', {
+            url: item.getURL(),
+            suggestedFilename: item.getFilename(),
+          });
+          item.on('updated', (_e, state) => {
+            emit('Browser.downloadProgress', {
+              state: state === 'interrupted' ? 'canceled' : 'inProgress',
+              receivedBytes: item.getReceivedBytes(),
+              totalBytes: item.getTotalBytes(),
+            });
+          });
+          item.once('done', (_e, state) => {
+            emit('Browser.downloadProgress', {
+              state: state === 'completed' ? 'completed' : 'canceled',
+              receivedBytes: item.getReceivedBytes(),
+              totalBytes: item.getTotalBytes(),
+            });
+          });
+        });
+      },
     });
     logger.info('main: embedded agent browser bridge started', { port: handle.port });
     return handle;

@@ -15,12 +15,18 @@ import { create } from 'zustand';
 import { useStore } from '../../shared/lib/store';
 import { useArtifactEventsStore } from '../artifacts/artifactEventsStore';
 
-export type RightPanelTab = 'progress' | 'artifacts' | 'changes' | 'outline';
+export type RightPanelTab = 'progress' | 'artifacts' | 'changes' | 'outline' | 'browser';
 
 const TAB_KEY = 'right-panel-tab';
 const OPEN_KEY = 'right-panel-open';
 
-const VALID_TABS: readonly RightPanelTab[] = ['progress', 'artifacts', 'changes', 'outline'];
+const VALID_TABS: readonly RightPanelTab[] = [
+  'progress',
+  'artifacts',
+  'changes',
+  'outline',
+  'browser',
+];
 
 /**
  * 旧 localStorage 值迁移：若用户上次用的是已移除的 tab（trajectory/preview），

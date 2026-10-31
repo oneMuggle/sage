@@ -27,6 +27,27 @@ import type { LogLevel } from '../log/levels';
 
 export type UnlistenFn = () => void;
 
+export interface BrowserPanelElectronApiBridge {
+  show(): Promise<{ ok: boolean }>;
+  hide(): Promise<{ ok: boolean }>;
+  setBounds(rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): Promise<{ ok: boolean }>;
+  navigate(url: string): Promise<{ ok: boolean }>;
+  back(): Promise<{ ok: boolean }>;
+  forward(): Promise<{ ok: boolean }>;
+  reload(): Promise<{ ok: boolean }>;
+  current(): Promise<{
+    url: string;
+    title: string;
+    canGoBack: boolean;
+    canGoForward: boolean;
+  }>;
+}
+
 export interface MemoryElectronApiBridge {
   list: (args?: Record<string, unknown>) => Promise<unknown>;
   search: (args: Record<string, unknown>) => Promise<unknown>;
@@ -492,6 +513,8 @@ export interface ElectronAPI {
    * `/api/v1/memory/*` endpoints (T1 wired the IPC routes).
    */
   memory: MemoryElectronApiBridge;
+  /** P2 应用内浏览器面板（BrowserView，共享登录分区）。 */
+  browserPanel?: BrowserPanelElectronApiBridge;
   /**
    * Phase 6 (2026-06-27): Native folder picker (used by LLM Wiki and Office).
    * Returns absolute path string, or null if user cancelled.
