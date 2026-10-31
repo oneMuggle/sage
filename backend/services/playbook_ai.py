@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 MAX_FILES_PER_CHECK = 2
 MAX_TEXT_CHARS = 6000
+OFFICE_SUFFIXES = {".docx", ".xlsx", ".pptx"}
+PDF_SUFFIXES = {".pdf"}
 
 
 @dataclass
@@ -29,21 +31,55 @@ class AiAuditResult:
     source: str
 
 
+def _read_document_text(root: Path, relative: str) -> str:
+    path = (root / relative).resolve()
+    try:
+        path.relative_to(root.resolve())
+    except ValueError:
+        return ""
+    if not path.is_file():
+        return ""
+    suffix = path.suffix.lower()
+    result = ""
+    if suffix in TEXT_SUFFIXES:
+        try:
+            result = path.read_bytes()[:MAX_TEXT_CHARS].decode("utf-8", errors="ignore")
+        except OSError:
+            result = ""
+    elif suffix in OFFICE_SUFFIXES:
+        try:
+            from backend.services.project_workspace_inspector import (
+                extract_workspace_file_as_material_content,
+            )
+
+            result = extract_workspace_file_as_material_content(root, relative)
+        except Exception:  # noqa: BLE001 — extraction is best-effort
+            logger.debug("office text extraction failed for %s", relative, exc_info=True)
+    elif suffix in PDF_SUFFIXES:
+        try:
+            try:
+                import pymupdf  # type: ignore[import-not-found]
+            except ImportError:  # pragma: no cover — older PyMuPDF exposes fitz
+                import fitz as pymupdf  # type: ignore[import-not-found]
+
+            document = pymupdf.open(str(path))
+            try:
+                result = "\n".join(
+                    document.load_page(index).get_text()
+                    for index in range(min(10, document.page_count))
+                )
+            finally:
+                document.close()
+        except Exception:  # noqa: BLE001 — PDF extraction is best-effort
+            logger.debug("pdf text extraction failed for %s", relative, exc_info=True)
+    return result
+
+
 def _collect_text(root: Path, relative_paths: List[str]) -> str:
-    root_resolved = root.resolve()
     parts: List[str] = []
     total = 0
     for relative in relative_paths[:MAX_FILES_PER_CHECK]:
-        candidate = (root_resolved / relative).resolve()
-        if candidate != root_resolved and root_resolved not in candidate.parents:
-            continue
-        if not candidate.is_file() or candidate.suffix.lower() not in TEXT_SUFFIXES:
-            continue
-        try:
-            data = candidate.read_bytes()[:MAX_TEXT_CHARS]
-            text = data.decode("utf-8", errors="ignore")
-        except OSError:
-            continue
+        text = _read_document_text(root, relative)
         if not text.strip():
             continue
         parts.append(f"# {relative}\n{text}")

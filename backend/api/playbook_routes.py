@@ -343,7 +343,6 @@ def audit_project_playbook(project_id: str) -> PlaybookAuditResponse:
     "/projects/{project_id}/playbook/audit/ai",
     response_model=PlaybookAuditResponse,
 )
-@with_db_lock
 async def audit_project_playbook_with_ai(
     project_id: str, request: PlaybookAiAuditRequest
 ) -> PlaybookAuditResponse:
@@ -367,7 +366,6 @@ async def audit_project_playbook_with_ai(
     "/projects/{project_id}/playbook/author/preview",
     response_model=PlaybookAuthorPreviewResponse,
 )
-@with_db_lock
 async def author_project_playbook(
     project_id: str, request: PlaybookAuthorPreviewRequest
 ) -> PlaybookAuthorPreviewResponse:

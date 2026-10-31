@@ -113,20 +113,28 @@ def _iter_files(root: Path) -> Iterable[Path]:
             yield path
 
 
+class ProjectFileIndex:
+    """One-pass project file index shared by all artifact globs in an audit."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = Path(root).expanduser().resolve()
+        self.entries: List[tuple] = []
+        if self.root.is_dir():
+            for path in _iter_files(self.root):
+                try:
+                    relative = path.relative_to(self.root).as_posix()
+                except ValueError:
+                    continue
+                self.entries.append((path, relative))
+
+    def match(self, pattern: str) -> List[Path]:
+        regex = _glob_to_regex(pattern)
+        return [path for path, relative in self.entries if regex.match(relative)]
+
+
 def match_glob(root: Path, pattern: str) -> List[Path]:
     """Return files under ``root`` matching a playbook glob, sorted by path."""
-    root_path = Path(root).expanduser()
-    if not root_path.is_dir():
-        return []
-    regex = _glob_to_regex(pattern)
-    matches: List[Path] = []
-    for path in _iter_files(root_path):
-        try:
-            relative = path.relative_to(root_path.resolve())
-        except ValueError:
-            continue
-        if regex.match(relative.as_posix()):
-            matches.append(path)
+    matches = ProjectFileIndex(root).match(pattern)
     matches.sort(key=lambda item: item.as_posix())
     return matches
 
@@ -230,12 +238,13 @@ def _effective_required(project: Any, artifact: Dict[str, Any], state: Dict[str,
 
 
 def _artifact_audit(
-    root: Path,
+    index: ProjectFileIndex,
     project: Any,
     stage_id: str,
     artifact: Dict[str, Any],
     state: Dict[str, Any],
 ) -> Dict[str, Any]:
+    root = index.root
     waivers: Set[str] = {str(item) for item in (state.get("waivers") or [])}
     artifact_key = "{}.{}".format(stage_id, artifact["id"])
     required = _effective_required(project, artifact, state)
@@ -245,7 +254,7 @@ def _artifact_audit(
 
     matches: List[Path] = []
     for pattern in match.get("globs") or []:
-        for path in match_glob(root, pattern):
+        for path in index.match(pattern):
             if path not in matches:
                 matches.append(path)
     matches.sort(key=lambda item: item.as_posix())
@@ -379,6 +388,7 @@ def audit_playbook(
         A JSON-serializable audit report. Never raises for missing files.
     """
     root = Path(getattr(project, "path", None) or project["path"]).expanduser()
+    index = ProjectFileIndex(root)
     state = state or {}
     stages_out: List[Dict[str, Any]] = []
     total_required = 0
@@ -386,7 +396,7 @@ def audit_playbook(
 
     for stage in spec.get("stages") or []:
         artifacts = [
-            _artifact_audit(root, project, stage["id"], artifact, state)
+            _artifact_audit(index, project, stage["id"], artifact, state)
             for artifact in stage.get("artifacts") or []
         ]
         by_id = {artifact["id"]: artifact for artifact in artifacts}
