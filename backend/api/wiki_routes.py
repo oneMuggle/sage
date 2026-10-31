@@ -1532,6 +1532,9 @@ async def caption_image_endpoint(req: VisionRequest) -> dict:
     - anthropic: Claude 3 with vision
     - ollama: Ollama 视觉模型
 
+    视觉模型调用失败时，若本地 OCR 可用则回退为「本地 OCR 文本」，
+    响应中通过 ``mode=ocr`` 与 ``engine`` 标明来源。
+
     Args:
         req: Vision Caption 请求
 
@@ -1579,10 +1582,41 @@ async def caption_image_endpoint(req: VisionRequest) -> dict:
             "sha256": result.sha256,
             "cached": result.cached,
             "image_path": result.image_path,
+            "mode": "vision",
         }
     except Exception as e:
         logger.error("Vision Caption failed: error_type=%s", type(e).__name__)
-        raise HTTPException(status_code=500, detail="Vision Caption 失败") from e
+        ocr_result = _local_ocr_for_wiki(image_data)
+        if ocr_result is not None:
+            return ocr_result
+        raise HTTPException(
+            status_code=500, detail="Vision Caption 失败，且本地 OCR 不可用"
+        ) from e
+
+
+def _local_ocr_for_wiki(image_data: bytes) -> Optional[dict]:
+    """视觉模型失败时的本地 OCR 兜底；不可用/空结果返回 None。"""
+    try:
+        import hashlib
+
+        from backend.services.ocr import get_ocr_service
+
+        result = get_ocr_service().recognize_bytes(image_data, source="wiki_vision")
+        text = (result.text or "").strip()
+        if not result.ok or not text:
+            return None
+        return {
+            "caption": text,
+            "sha256": result.image_sha256 or hashlib.sha256(image_data).hexdigest(),
+            "cached": result.cached,
+            "image_path": "",
+            "mode": "ocr",
+            "engine": result.engine,
+            "quality": result.quality,
+        }
+    except Exception:  # noqa: BLE001 — OCR 兜底失败不影响原错误路径
+        logger.warning("本地 OCR 兜底失败", exc_info=True)
+        return None
 
 
 # --- Project folder picker support (added 2026-06-27) ---------------------

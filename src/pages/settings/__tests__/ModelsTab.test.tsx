@@ -147,9 +147,10 @@ describe('ModelsTab routing mode (Task 11)', () => {
   it('auto mode keeps the other capability selectors (win7: 6 + title)', () => {
     // win7 比 main 多一个 TitleModelSelector (PR #2604, 会话标题模型)。
     // 手动模式: chat/vision/embedding/tts/asr/image_gen/title = 7
-    // 自动模式: 隐藏 chat, 剩 6 个。无其它 <select> 干扰, 直接全量计数。
+    // 自动模式: 隐藏 chat, 剩 6 个；排除本地 OCR 的引擎/语言下拉。
     const capabilitySelects = (container: HTMLElement) =>
-      container.querySelectorAll('select');
+      container.querySelectorAll('select:not([data-testid^="settings-ocr-"])');
+
     const manual = renderTab();
     expect(capabilitySelects(manual.container)).toHaveLength(7);
     manual.unmount();

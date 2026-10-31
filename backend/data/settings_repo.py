@@ -83,6 +83,9 @@ class SettingsRepository:
             # P11: 记忆检索嵌入器模式 ("onnx"/"hash")。
             # 读取口径见 backend/memory/embedder_factory._preferred_mode_from_settings
             "embedding_mode",
+            # 本地 OCR：引擎/语言/聊天兜底偏好（JSON blob）
+            # 读取口径见 backend/services/ocr/config.load_ocr_config
+            "ocr_config",
             # Context Isolation (Task 6): turn limit + topic detection keys
             # - context_turn_limit: int, applied by Task 7 turn-limit logic
             # - auto_topic_detection: "true"/"false", enables auto detection in Task 10

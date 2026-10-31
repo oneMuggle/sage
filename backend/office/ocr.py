@@ -1,23 +1,25 @@
-"""扫描件 OCR 兜底（office-p4a）—— pytesseract 可选依赖。
+"""扫描件 OCR 兜底（office-p4a）——统一 OCR 服务适配层。
+
+保留既有语义（SAGE_OCR=1 显式开启、文本层阈值、语言包回退、置信度过滤），
+识别实现委托给 ``backend.services.ocr``，以便聊天 / Agent / Wiki 复用同一套
+引擎与模型管理。
 
 触发条件（由 :mod:`.pdf` 的 read_pdf 逐页调用）：
 - 页面文本层近乎为空（< ``OCR_MIN_TEXT_CHARS``，即扫描/纯图页）；
-- 环境变量 ``SAGE_OCR=1``（显式 opt-in —— OCR 整页光栅化 + tesseract
-  推理代价高，默认关闭，行为与未引入本模块前完全一致）；
+- 环境变量 ``SAGE_OCR=1``（显式 opt-in —— OCR 整页光栅化 + 推理代价高，
+  默认关闭，行为与未引入本模块前完全一致）；
 - 依赖可用：``pytesseract``（pip 包，可选）+ ``tesseract`` 二进制
   （系统安装；中文需 ``chi_sim`` 语言包）。
 
 任一条件不满足 → 返回 ``None``，调用方沿用原（空）文本。绝不抛异常。
 
-Python 3.8 兼容（typing.* generics），win7 cherry-pick 友好
-（tesseract 有官方 Win7 构建；语言包安装见模块常量注释）。
+Python 3.8 兼容；win7 cherry-pick 友好（tesseract 有 Win7 社区构建）。
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import shutil
 from typing import Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -59,14 +61,20 @@ def is_ocr_enabled() -> bool:
 
 
 def ocr_available() -> Tuple[bool, str]:
-    """探测 OCR 依赖可用性；返回 ``(可用, 缺失原因)``。缺失原因为空串表示可用。"""
+    """探测 OCR 依赖可用性；返回 ``(可用, 缺失原因)``。
+
+    统一走 ``backend.services.ocr`` 的引擎选择（RapidOCR 优先、Tesseract
+    兜底）；Office 扫描页仍由 ``SAGE_OCR=1`` 显式开启。
+    """
     try:
-        import pytesseract  # noqa: F401 — 懒加载探测
-    except Exception:  # noqa: BLE001 — 缺失/损坏都归为不可用
-        return False, "pytesseract 未安装（pip install pytesseract）"
-    if not shutil.which("tesseract"):
-        return False, "tesseract 未安装或不在 PATH"
-    return True, ""
+        from backend.services.ocr import get_ocr_service
+
+        caps = get_ocr_service().capabilities()
+        if caps.get("available"):
+            return True, ""
+        return False, str(caps.get("reason") or "OCR 引擎不可用")
+    except Exception as exc:  # noqa: BLE001 — 探测失败归为不可用
+        return False, str(exc)
 
 
 def _ocr_lang() -> str:
@@ -74,36 +82,36 @@ def _ocr_lang() -> str:
 
 
 def ocr_languages() -> Optional[list]:
-    """返回 tesseract 已安装的语言包列表；依赖缺失返回 None。
+    """返回 tesseract 已安装的语言包列表；依赖缺失返回 None。"""
+    from backend.services.ocr.engines.tesseract import TesseractEngine
 
-    P4-B：供 capabilities 展示 + 请求语言回退判断（用户配置了未安装的
-    语言包时，回退到已安装语言里第一个可用的，避免 tesseract 直接报错）。
-    """
-    try:
-        import pytesseract
-
-        langs = pytesseract.get_languages(config="")
-        return sorted(langs) if langs else None
-    except Exception:  # noqa: BLE001 — best-effort
-        return None
+    return TesseractEngine().languages()
 
 
 def _resolve_lang_with_fallback(pytesseract: Any) -> str:
-    """请求语言与已安装语言包求交集；全部缺失时回退 'eng'（如已装）。"""
-    requested = [seg for seg in _ocr_lang().split("+") if seg]
+    """兼容旧调用方：请求语言与已安装语言包求交集；全部缺失回退 eng。"""
+    from backend.services.ocr.engines.tesseract import resolve_lang_with_fallback
+
+    return resolve_lang_with_fallback(pytesseract, _ocr_lang())
+
+
+def _recognize(pytesseract: Any, img: Any, lang: str, min_conf: int) -> str:
+    """兼容旧调用方：识别一页（优先 image_to_data，失败退回 image_to_string）。"""
+    from backend.services.ocr.engines.tesseract import _lines_from_data
+
+    if min_conf <= 0:
+        return pytesseract.image_to_string(img, lang=lang)
     try:
-        installed = set(pytesseract.get_languages(config=""))
-    except Exception:  # noqa: BLE001 — 枚举失败则不回退，交由 tesseract 报错
-        return "+".join(requested)
-    usable = [seg for seg in requested if seg in installed]
-    if usable:
-        return "+".join(usable)
-    logger.warning(
-        "OCR 语言包 %s 均未安装（已装: %s），回退 eng",
-        requested,
-        sorted(installed),
-    )
-    return "eng" if "eng" in installed else _ocr_lang()
+        data = pytesseract.image_to_data(
+            img, lang=lang, output_type=pytesseract.Output.DICT
+        )
+        lines, _best = _lines_from_data(data, min_conf / 100.0)
+        return "\n".join(line.text for line in lines if line.text)
+    except Exception:  # noqa: BLE001 — data 通道失败退回 string 通道
+        logger.warning(
+            "image_to_data failed; falling back to image_to_string", exc_info=True
+        )
+        return pytesseract.image_to_string(img, lang=lang)
 
 
 def ocr_page_if_needed(page: Any, text: str) -> Optional[str]:
@@ -121,48 +129,24 @@ def ocr_page_if_needed(page: Any, text: str) -> Optional[str]:
         logger.debug("OCR skipped: %s", reason)
         return None
     try:
-        import io
-
-        import pytesseract
-        from PIL import Image
-
         pix = page.get_pixmap(dpi=200)
-        img = Image.open(io.BytesIO(pix.tobytes("png")))
-        # P4-B: image_to_data 取逐词置信度，过滤低置信度噪声后再拼文本
-        # （扫描件常见噪声：低置信度乱码行）。失败退回 image_to_string。
-        lang = _resolve_lang_with_fallback(pytesseract)
-        min_conf = _min_confidence()
-        recognized = _recognize(pytesseract, img, lang, min_conf)
-        return recognized if recognized.strip() else None
+        image_bytes = pix.tobytes("png")
+
+        from backend.services.ocr import get_ocr_service
+
+        result = get_ocr_service().recognize_bytes(
+            image_bytes,
+            source="office_pdf",
+            lang=_ocr_lang(),
+            min_confidence=_min_confidence() / 100.0,
+            # 扫描页优先保真：更高分辨率 + 开启方向分类
+            max_side=2048,
+            use_cls=True,
+        )
+        if not result.ok:
+            logger.debug("OCR failed: %s", result.error)
+            return None
+        return result.text if result.text.strip() else None
     except Exception:  # noqa: BLE001 — best-effort 兜底
         logger.warning("OCR failed on page; keeping original text", exc_info=True)
         return None
-
-
-def _recognize(pytesseract: Any, img: Any, lang: str, min_conf: int) -> str:
-    """识别一页：优先 image_to_data（置信度过滤），异常退回 image_to_string。"""
-    if min_conf <= 0:
-        return pytesseract.image_to_string(img, lang=lang)
-    try:
-        data = pytesseract.image_to_data(img, lang=lang, output_type=pytesseract.Output.DICT)
-        lines: dict = {}
-        for raw_word, conf, block, par, line in zip(  # noqa: B905 — zip strict= 是 3.10+ 形参
-            data.get("text", []),
-            data.get("conf", []),
-            data.get("block_num", []),
-            data.get("par_num", []),
-            data.get("line_num", []),
-        ):
-            word = str(raw_word).strip()
-            try:
-                conf_v = float(conf)
-            except (TypeError, ValueError):
-                conf_v = -1.0
-            if not word or conf_v < min_conf:
-                continue
-            key = (block, par, line)
-            lines.setdefault(key, []).append(word)
-        return "\n".join(" ".join(words) for _, words in sorted(lines.items()))
-    except Exception:  # noqa: BLE001 — data 通道失败退回 string 通道
-        logger.warning("image_to_data failed; falling back to image_to_string", exc_info=True)
-        return pytesseract.image_to_string(img, lang=lang)

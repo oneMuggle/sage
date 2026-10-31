@@ -59,3 +59,52 @@ tokenizers>=0.15.0
 #
 # pytesseract>=0.3.10
 
+# =============================================================================
+# 本地 OCR 推荐引擎 (2026-10-31) — RapidOCR + ONNX Runtime
+# =============================================================================
+# 为什么单独放: RapidOCR/onnxruntime 含平台二进制与 ONNX 模型，体积远大于
+# 默认依赖；缺依赖时 backend/services/ocr 能力位降级，不影响主程序启动。
+# 启用（main / Win10+）:
+#   pip install "rapidocr>=3.10,<4" "onnxruntime==1.19.2"
+#   # 模型外置到 SAGE_USER_DATA_DIR/models/rapidocr/{det,rec,cls}.onnx
+#   # 或设置 SAGE_OCR_MODEL_DIR 指向模型目录
+# 验证: python -c "from backend.services.ocr import get_ocr_service; print(get_ocr_service().capabilities())"
+#
+# Win7 (Py3.8) 不承诺 RapidOCR（onnxruntime >=1.15 不支持 Win7）：
+#   保守方案用 Tesseract 4.1 兼容构建 + tessdata_fast chi_sim/eng。
+#   实验路径（需真机验证）：rapidocr-onnxruntime==1.4.4 + onnxruntime==1.14.1
+#   + numpy==1.24.4 + opencv-python-headless==4.10.0.84 + PP-OCRv4 mobile。
+#
+# rapidocr>=3.10,<4
+# onnxruntime==1.19.2
+
+# =============================================================================
+# Word COM 自动化 (Round 39 目录真页码) — pywin32
+# =============================================================================
+# 为什么单独放:
+#   pywin32 仅 Windows 可用、非 pure-python（含二进制扩展），且只在
+#   "本机装有 Microsoft Word" 时才有意义——不适合进默认依赖。
+#   现有两个消费方共用本通道:
+#     - office/export_pdf.py  Word COM 导出 PDF（SaveAs2, wdFormatPDF）
+#     - office/toc_refresh.py 刷新 TOC 域为真页码（TablesOfContents.Update）
+#   两者均为懒加载：未安装时优雅降级（capabilities.word_com_available=False，
+#   工具返回带安装引导的失败），不影响默认安装面。
+# 启用: pip install pywin32
+# 验证: python -c "import win32com.client; print('pywin32 OK')"
+# win7（Python 3.8 手动启用）: 钉 pywin32==306（最后支持 3.8 的版本）；
+#   新功能不回流 release/win7，本条仅供老分支自装参考。
+#
+# pywin32>=306
+
+# =============================================================================
+# AB3 TLS/HTTP2 指纹 (Round 27) — curl_cffi
+# =============================================================================
+# 为什么单独放:
+#   curl_cffi 含平台二进制扩展（libcurl-impersonate），且属于"对抗性增强"
+#   而非基础能力 —— 未安装时静态抓取照常走标准 httpx 传输（行为与 R26 前
+#   完全一致）。release/win7（Python 3.8 依赖契约）不安装本包。
+# 启用: pip install curl_cffi
+#       并在 设置→网络→web_access_config 打开 tls_fingerprint（默认关）
+# 验证: python -c "import curl_cffi; print('curl_cffi OK')"
+#
+# curl_cffi>=0.7

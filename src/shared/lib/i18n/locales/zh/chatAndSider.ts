@@ -210,6 +210,15 @@ export const zhChatAndSider = {
   'chat.vision_not_available':
     '当前对话模型不支持视觉识别，请配置视觉理解模型或更换支持视觉的对话模型',
   'chat.vision_fallback_info': '图片将通过视觉理解模型识别后转为文本描述',
+  'chat.ocr_fallback_info': '图片将通过本地 OCR 识别为文本（仅在本机处理，不上传图片）',
+  'chat.image_ocr_title': '图片文字（本地 OCR）',
+  'chat.image_ocr_edit_hint': '可直接编辑，发送时以这里的文本为准',
+  'chat.image_ocr_loading': '识别中…',
+  'chat.image_ocr_empty': '未识别到文字',
+  'chat.image_ocr_failed': '识别失败：{error}',
+  'chat.image_ocr_copy': '复制',
+  'chat.image_ocr_copied': '已复制',
+  'chat.image_ocr_retry': '重新识别',
 
   // ─── M4 会话压缩 / 分叉 ───────────
   // LOW-1: 统一口径 —— "before → after 条（removed 条历史已合并为摘要）"

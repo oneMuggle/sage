@@ -103,22 +103,21 @@ def _probe() -> OfficeCapabilities:
 
 
 def _ocr_available() -> bool:
-    """P4-A: OCR 依赖探测（懒加载，异常归为不可用）。"""
+    """P4-A: OCR 依赖探测（统一 OCR 服务，异常归为不可用）。"""
     try:
-        from .ocr import ocr_available
+        from backend.services.ocr import get_ocr_service
 
-        ok, _ = ocr_available()
-        return ok
+        return bool(get_ocr_service().is_available())
     except Exception:  # noqa: BLE001 — 探测失败即不可用
         return False
 
 
 def _ocr_languages() -> Optional[list]:
-    """P4-B: 已装语言包枚举（懒加载，异常归为 None）。"""
+    """P4-B: 已装语言包枚举（统一 OCR 服务，异常归为 None）。"""
     try:
-        from .ocr import ocr_languages
+        from backend.services.ocr import get_ocr_service
 
-        return ocr_languages()
+        return get_ocr_service().capabilities().get("languages")
     except Exception:  # noqa: BLE001 — 枚举失败即 None
         return None
 
