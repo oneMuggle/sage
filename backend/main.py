@@ -106,6 +106,7 @@ from backend.api.office_routes import (
     register_office_exception_handlers,
     router as office_router,
 )
+from backend.api.ocr_routes import router as ocr_router
 from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.permission_routes import router as permission_router
 from backend.api.plugin_routes import router as plugin_router
@@ -1149,6 +1150,8 @@ API_MODE = os.environ.get("API_MODE", "legacy").lower()
 app.include_router(llm_proxy_router, prefix="/api/v1")
 app.include_router(theme_router, prefix="/api/v1/theme")
 app.include_router(office_router, prefix="/api/v1")
+# 本地 OCR：/api/v1/ocr/capabilities + /api/v1/ocr/image
+app.include_router(ocr_router, prefix="/api/v1")
 # Office 隔离式清理 (staging quarantine): plan/run/report/restore 四端点。
 # 有意不注册 purge —— 永久删除仍只保留 CLI 三重门禁（见模块 docstring）。
 app.include_router(office_quarantine_router, prefix="/api/v1")

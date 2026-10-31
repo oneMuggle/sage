@@ -13,6 +13,7 @@ import { useSettings } from '../../features/manage-settings/useSettings';
 import type { DeliveryMode } from '../../features/send-message/deliveryMode';
 import { knowledgeApi, promptApi, skillsApi } from '../../shared/api';
 import { listen as desktopListen } from '../../shared/api/desktopEvent';
+import { ocrApi } from '../../shared/api/ocrApi';
 import type { ChatOfficeRef } from '../../shared/api/types';
 import { worktreeApi } from '../../shared/api/worktreeApi';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
@@ -118,6 +119,24 @@ function ChatInputInner({
   const { t } = useI18n();
   const { settings } = useSettings();
 
+  // 本地 OCR：无视觉模型时的图片文本兜底（GET /api/v1/ocr/capabilities）。
+  // 探测失败按不可用处理，不改变既有「无视觉模型即禁用上传」的行为。
+  const [ocrAvailable, setOcrAvailable] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    ocrApi
+      .capabilities()
+      .then((caps) => {
+        if (!cancelled) setOcrAvailable(Boolean(caps.enabled && caps.available));
+      })
+      .catch(() => {
+        if (!cancelled) setOcrAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Task 9 (2026-10-15): vision 可用性检测
   // 从 discoveredModels 查找当前 chatModel 的 capabilities。
   // 端点未探测时 capabilities 未知 —— fail-safe 取「支持 vision」，与后端
@@ -128,7 +147,8 @@ function ChatInputInner({
   )?.capabilities ?? ['chat', 'vision'];
   const supportsVision = chatModelCaps.includes('vision');
   const visionModelConfigured = Boolean(settings.modelSelections.visionModel?.modelId);
-  const visionUploadDisabled = !supportsVision && !visionModelConfigured;
+  const ocrFallbackMode = !supportsVision && !visionModelConfigured && ocrAvailable;
+  const visionUploadDisabled = !supportsVision && !visionModelConfigured && !ocrAvailable;
   const visionFallbackMode = !supportsVision && visionModelConfigured;
 
   // Workspace context — provides sessionId + binding for the @ menu.
@@ -726,6 +746,15 @@ function ChatInputInner({
         <div className="mx-3 mb-1 px-3 py-1.5 rounded-md bg-info/10 text-info text-xs flex items-center gap-1.5">
           <Info className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           <span>{t('chat.vision_fallback_info')}</span>
+        </div>
+      )}
+      {ocrFallbackMode && (
+        <div
+          data-testid="chat-ocr-fallback-banner"
+          className="mx-3 mb-1 px-3 py-1.5 rounded-md bg-info/10 text-info text-xs flex items-center gap-1.5"
+        >
+          <Info className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+          <span>{t('chat.ocr_fallback_info')}</span>
         </div>
       )}
       <InputCard

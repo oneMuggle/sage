@@ -67,6 +67,7 @@ from .git_tool import (
 )
 from .image_gen_tool import ImageGenerationTool
 from .memory_tool import MemorySaveTool, MemorySearchTool
+from .ocr_image_tool import OcrImageTool
 from .office_analyze_tool import OfficeAnalyzeTool
 from .office_archive_tool import OfficeArchiveTool
 from .office_bibtex_tool import OfficeBibTexTool
@@ -335,6 +336,8 @@ def _install_multimodal(ctx: ToolInstallContext) -> None:
     ctx.registry.register(TextToSpeechTool(policy=policy))
     ctx.registry.register(SpeechToTextTool(policy=policy))
     ctx.registry.register(ImageGenerationTool(policy=policy))
+    # 本地 OCR（READ，本地推理；无引擎时 execute 返回可读失败）
+    ctx.registry.register(OcrImageTool(policy=policy))
 
 
 def _install_sage_config(ctx: ToolInstallContext) -> None:

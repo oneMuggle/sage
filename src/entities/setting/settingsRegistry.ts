@@ -232,6 +232,23 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     ],
     'next-request',
   ),
+  ocr_config: {
+    key: 'ocr_config',
+    label: '本地 OCR',
+    description: '无视觉模型时在本机识别图片文字（引擎、语言、优先策略）',
+    scope: 'global',
+    storage: 'preference',
+    defaultValue: {
+      enabled: true,
+      engine: 'auto',
+      lang: 'auto',
+      prefer_local_for_images: false,
+    },
+    applyMode: 'next-request',
+    visibility: 'advanced',
+    riskLevel: 'low',
+    constraints: { type: 'json' },
+  },
   context_turn_limit: numberSetting(
     'context_turn_limit',
     '上下文轮数限制',

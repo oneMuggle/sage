@@ -805,9 +805,15 @@ class SageAgent:
     ) -> List[Dict[str, Any]]:
         """根据 chatModel 能力智能处理图片。
 
-        chatModel 支持（或能力未知）vision 时直接注入图片，走标准
-        ``image_url`` content 块；确认不支持时降级到 visionModel 生成
-        描述后以文本替换；均未配置时抛出 ``VisionNotAvailableError``。
+        默认路由顺序：
+
+        1. chatModel 支持（或能力未知）vision → 原生 ``image_url`` 注入；
+        2. 确认不支持 vision 且配置了 visionModel → 视觉模型生成描述；
+        3. 本地 OCR 可用 → 识别为文本后替换图片；
+        4. 都不满足 → ``VisionNotAvailableError``。
+
+        设置 ``ocr_config.prefer_local_for_images`` 时，若本地 OCR 可用，
+        即使 chatModel 支持 vision 也优先 OCR（纯文字截图更快、更省）。
 
         Args:
             messages: 原始消息列表。
@@ -817,23 +823,54 @@ class SageAgent:
             处理后的消息列表。
 
         Raises:
-            VisionNotAvailableError: chatModel 不支持 vision 且未配置 visionModel。
+            VisionNotAvailableError: chatModel 不支持 vision、未配置
+                visionModel，且本地 OCR 不可用。
         """
         if not images:
             return messages
 
         chat_model_caps = await self._get_model_capabilities(self._resolve_chat_model_id())
+        supports_vision = "vision" in chat_model_caps
+        ocr_available = self._local_ocr_available()
 
-        if "vision" in chat_model_caps:
-            return self._inject_images_as_content(messages, images)
-
-        if self._is_vision_model_configured():
+        if supports_vision:
+            prefer_local = self._prefer_local_ocr()
+            # 仅当「显式偏好本地 OCR」且「OCR 确实可用」时才改变默认路由；
+            # 用 is True 判定，避免测试桩/第三方包装的 truthy 值误触发。
+            if prefer_local is not True or ocr_available is not True:
+                return self._inject_images_as_content(messages, images)
+        elif self._is_vision_model_configured():
             descriptions = await self._generate_image_descriptions(images)
             return self._replace_images_with_descriptions(messages, descriptions)
 
+        if ocr_available:
+            texts = await self._generate_image_ocr_texts(images)
+            return self._replace_images_with_text(messages, texts)
+
         from backend.core.exceptions import VisionNotAvailableError
 
-        raise VisionNotAvailableError("对话模型不支持视觉识别，且未配置视觉理解模型")
+        raise VisionNotAvailableError(
+            "对话模型不支持视觉识别，未配置视觉理解模型，且本地 OCR 不可用"
+        )
+
+    def _prefer_local_ocr(self) -> bool:
+        """用户是否显式要求「有视觉模型时也优先本地 OCR」。"""
+        try:
+            from backend.services.ocr import get_ocr_service
+
+            return bool(get_ocr_service().config.prefer_local_for_images)
+        except Exception:  # noqa: BLE001 — 配置读取失败按默认（否）处理
+            return False
+
+    def _local_ocr_available(self) -> bool:
+        """本地 OCR 是否可用（引擎 + 开关 + 模型）。探测失败一律按不可用。"""
+        try:
+            from backend.services.ocr import get_ocr_service
+
+            return bool(get_ocr_service().is_available())
+        except Exception:  # noqa: BLE001 — OCR 是增强能力，探测失败不阻断聊天
+            logger.warning("本地 OCR 能力探测失败", exc_info=True)
+            return False
 
     def _inject_images_as_content(
         self,
@@ -1061,6 +1098,87 @@ class SageAgent:
 
         combined_text = f"{desc_text}\n\n{original_text}" if original_text else desc_text
 
+        result[-1] = {
+            **last_msg,
+            "content": [{"type": "text", "text": combined_text}],
+        }
+        return result
+
+    async def _generate_image_ocr_texts(self, images: List[str]) -> List[str]:
+        """逐张调用本地 OCR，返回用于注入的文本块。
+
+        单张失败不中断整体，对应位置填入可读占位符；OCR 故障永远不会
+        升级为聊天失败。线程池执行避免阻塞事件循环（py38 无
+        ``asyncio.to_thread``）。
+        """
+        try:
+            from backend.services.ocr import get_ocr_service
+
+            service = get_ocr_service()
+            loop = asyncio.get_running_loop()
+            texts: List[str] = []
+            for index, image_data in enumerate(images, 1):
+                try:
+                    result = await loop.run_in_executor(
+                        None, functools.partial(service.recognize_data_url, image_data)
+                    )
+                except Exception as exc:  # noqa: BLE001 — 单张失败不扩散
+                    logger.error("本地 OCR 调用失败: %s", exc, exc_info=True)
+                    result = None
+                texts.append(self._format_ocr_text(index, result))
+            return texts
+        except Exception:
+            logger.warning("本地 OCR 流程异常", exc_info=True)
+            return ["[图片文字识别失败]" for _ in images]
+
+    @staticmethod
+    def _format_ocr_text(index: int, result: Any) -> str:
+        """把 OcrResult 格式化为注入 LLM 的文本块（含来源与质量提示）。"""
+        if result is None or not getattr(result, "ok", False):
+            reason = getattr(result, "error", "") if result is not None else ""
+            return "[图片 %d 文字识别失败：%s]" % (index, reason or "ocr_failed")
+        text = (getattr(result, "text", "") or "").strip()
+        engine = getattr(result, "engine", "") or "ocr"
+        quality = getattr(result, "quality", "ok")
+        if not text:
+            return "[图片 %d 未识别到文字（可能图片质量低或无文字）]" % index
+        header = "[图片 %d 文字内容 · 本地 OCR · 引擎 %s]" % (index, engine)
+        if quality == "low_confidence":
+            header = (
+                "[图片 %d 文字内容 · 本地 OCR · 引擎 %s · 置信度较低，请核对]"
+                % (index, engine)
+            )
+        return header + "\n" + text
+
+    def _replace_images_with_text(
+        self,
+        messages: List[Dict[str, Any]],
+        blocks: List[str],
+    ) -> List[Dict[str, Any]]:
+        """将图片替换为文本块（与描述替换同构，不额外包裹标签）。
+
+        不可变：返回新列表，原 ``messages`` 与其中的 dict 保持不变。
+        """
+        if not messages:
+            return messages
+
+        result = list(messages)
+        last_msg = result[-1]
+        if last_msg.get("role") != "user":
+            return result
+
+        block_text = "\n\n".join(block for block in blocks if block)
+        original_content = last_msg.get("content", "")
+        if isinstance(original_content, list):
+            original_text = "\n".join(
+                seg.get("text", "")
+                for seg in original_content
+                if seg.get("type") == "text"
+            )
+        else:
+            original_text = str(original_content)
+
+        combined_text = f"{block_text}\n\n{original_text}" if original_text else block_text
         result[-1] = {
             **last_msg,
             "content": [{"type": "text", "text": combined_text}],

@@ -51,6 +51,25 @@
 # pytesseract>=0.3.10
 
 # =============================================================================
+# 本地 OCR 推荐引擎 (2026-10-31) — RapidOCR + ONNX Runtime
+# =============================================================================
+# 为什么单独放: RapidOCR/onnxruntime 含平台二进制与 ONNX 模型，体积远大于
+# 默认依赖；缺依赖时 backend/services/ocr 能力位降级，不影响主程序启动。
+# 启用（main / Win10+）:
+#   pip install "rapidocr>=3.10,<4" "onnxruntime==1.19.2"
+#   # 模型外置到 SAGE_USER_DATA_DIR/models/rapidocr/{det,rec,cls}.onnx
+#   # 或设置 SAGE_OCR_MODEL_DIR 指向模型目录
+# 验证: python -c "from backend.services.ocr import get_ocr_service; print(get_ocr_service().capabilities())"
+#
+# Win7 (Py3.8) 不承诺 RapidOCR（onnxruntime >=1.15 不支持 Win7）：
+#   保守方案用 Tesseract 4.1 兼容构建 + tessdata_fast chi_sim/eng。
+#   实验路径（需真机验证）：rapidocr-onnxruntime==1.4.4 + onnxruntime==1.14.1
+#   + numpy==1.24.4 + opencv-python-headless==4.10.0.84 + PP-OCRv4 mobile。
+#
+# rapidocr>=3.10,<4
+# onnxruntime==1.19.2
+
+# =============================================================================
 # Word COM 自动化 (Round 39 目录真页码) — pywin32
 # =============================================================================
 # 为什么单独放:
