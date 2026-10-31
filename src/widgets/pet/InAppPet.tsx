@@ -2,8 +2,9 @@
  * In-app pet corner dock.
  *
  * Shown when displayMode is `in-app` or `both`. Uses the same snapshots and
- * pet pack as the desktop overlay, but renders inside the main window so it
- * works without a transparent OS window (Win7 / remote desktop).
+ * pet packs as the desktop overlay, but renders inside the main window so it
+ * works without a transparent OS window (Win7 / remote desktop). Multiple
+ * pets sit side by side, each with its own pack and size.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -13,7 +14,11 @@ import { statusGlyph, statusLabel } from '../../pet/engine/labels';
 import { safePlay } from '../../pet/engine/media';
 import { packSource } from '../../pet/engine/packs';
 import { usePetPacks } from '../../pet/usePetPacks';
-import type { PetConfigBridge, PetSnapshotBridge } from '../../shared/types/electron-api';
+import type {
+  PetConfigBridge,
+  PetInstanceBridge,
+  PetSnapshotBridge,
+} from '../../shared/types/electron-api';
 
 const WIDTHS: Record<string, number> = {
   mini: 96,
@@ -48,19 +53,20 @@ const EMPTY_SNAPSHOT: PetSnapshotBridge = {
 };
 
 const DEFAULT_CONFIG: PetConfigBridge = {
-  version: 1,
+  version: 2,
   enabled: false,
   displayMode: 'desktop',
-  size: 'medium',
   tempo: 'standard',
   reduceMotion: false,
   bubbleMode: 'important',
   soundScenes: { waiting: true, error: false, done: false },
   showSessionTitle: false,
   compatibilityMode: 'auto',
-  petPack: 'dafeiyu',
   followActiveSession: true,
+  pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
 };
+
+const FALLBACK_PET: PetInstanceBridge = { id: 'default', petPack: 'dafeiyu', size: 'medium' };
 
 function badgeClass(action: string): string {
   switch (action) {
@@ -81,37 +87,27 @@ function badgeClass(action: string): string {
   }
 }
 
-export function InAppPet(): JSX.Element | null {
-  const [snapshot, setSnapshot] = useState<PetSnapshotBridge>(EMPTY_SNAPSHOT);
-  const [config, setConfig] = useState<PetConfigBridge>(DEFAULT_CONFIG);
+interface InAppPetItemProps {
+  instance: PetInstanceBridge;
+  config: PetConfigBridge;
+  snapshot: PetSnapshotBridge;
+  primary: boolean;
+  onOpenSession: (sessionId: string | null) => void;
+  onOpenSettings: () => void;
+}
+
+function InAppPetItem({
+  instance,
+  config,
+  snapshot,
+  primary,
+  onOpenSession,
+  onOpenSettings,
+}: InAppPetItemProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const currentFileRef = useRef('');
+  const pack = usePetPacks(instance.petPack);
 
-  const pet = typeof window !== 'undefined' ? window.electronAPI?.pet : undefined;
-
-  useEffect(() => {
-    if (!pet) return undefined;
-    let alive = true;
-    void pet.getConfig().then((value) => {
-      if (alive) setConfig(value);
-    });
-    void pet.getState().then((value) => {
-      if (alive) setSnapshot(value);
-    });
-    const offState = pet.onState((value) => {
-      if (alive) setSnapshot(value);
-    });
-    const offConfig = pet.onConfig((value) => {
-      if (alive) setConfig(value);
-    });
-    return () => {
-      alive = false;
-      offState();
-      offConfig();
-    };
-  }, [pet]);
-
-  const pack = usePetPacks(config.petPack);
   const choice = useMemo(() => {
     const action = snapshot.action;
     const detail = snapshot.detail;
@@ -150,26 +146,26 @@ export function InAppPet(): JSX.Element | null {
     }
   }, [choice, pack, config.reduceMotion, config.enabled, config.displayMode]);
 
-  const visible =
-    config.enabled && (config.displayMode === 'in-app' || config.displayMode === 'both');
-  if (!visible) return null;
-
-  const width = WIDTHS[config.size] ?? 150;
+  const width = WIDTHS[instance.size] ?? 150;
   const height = Math.round((width * 360) / 640);
   const title = statusLabel(snapshot.action, snapshot.detail, snapshot.toolName);
-  const bubble = bubbleText(snapshot.bubbleKey, {
-    toolName: snapshot.toolName,
-    sessionTitle: snapshot.sessionTitle,
-    showSession: config.showSessionTitle,
-    todoDone: snapshot.todoDone,
-    todoTotal: snapshot.todoTotal,
-  });
+  const bubble = primary
+    ? bubbleText(snapshot.bubbleKey, {
+        toolName: snapshot.toolName,
+        sessionTitle: snapshot.sessionTitle,
+        showSession: config.showSessionTitle,
+        todoDone: snapshot.todoDone,
+        todoTotal: snapshot.todoTotal,
+      })
+    : null;
   const targetSession = snapshot.sessionId ?? snapshot.sessions[0]?.sessionId ?? null;
 
   return (
     <div
-      className="pointer-events-none fixed bottom-20 right-4 z-30 flex flex-col items-end"
-      data-testid="in-app-pet"
+      className="flex flex-col items-end"
+      data-testid="in-app-pet-item"
+      data-pet-id={instance.id}
+      data-pet-pack={instance.petPack}
     >
       {bubble ? (
         <div className="mb-1 max-w-[220px] truncate rounded-lg border border-slate-500/40 bg-slate-900/90 px-2 py-1 text-xs text-slate-100 shadow">
@@ -182,11 +178,11 @@ export function InAppPet(): JSX.Element | null {
         title={title}
         aria-label={title}
         onClick={() => {
-          if (targetSession) pet?.openSession(targetSession);
+          if (targetSession) onOpenSession(targetSession);
         }}
         onContextMenu={(event) => {
           event.preventDefault();
-          pet?.openSettings();
+          onOpenSettings();
         }}
       >
         <video
@@ -206,6 +202,63 @@ export function InAppPet(): JSX.Element | null {
           {statusGlyph(snapshot.action)}
         </span>
       </button>
+    </div>
+  );
+}
+
+export function InAppPet(): JSX.Element | null {
+  const [snapshot, setSnapshot] = useState<PetSnapshotBridge>(EMPTY_SNAPSHOT);
+  const [config, setConfig] = useState<PetConfigBridge>(DEFAULT_CONFIG);
+
+  const pet = typeof window !== 'undefined' ? window.electronAPI?.pet : undefined;
+
+  useEffect(() => {
+    if (!pet) return undefined;
+    let alive = true;
+    void pet.getConfig().then((value) => {
+      if (alive) setConfig(value);
+    });
+    void pet.getState().then((value) => {
+      if (alive) setSnapshot(value);
+    });
+    const offState = pet.onState((value) => {
+      if (alive) setSnapshot(value);
+    });
+    const offConfig = pet.onConfig((value) => {
+      if (alive) setConfig(value);
+    });
+    return () => {
+      alive = false;
+      offState();
+      offConfig();
+    };
+  }, [pet]);
+
+  const visible =
+    config.enabled && (config.displayMode === 'in-app' || config.displayMode === 'both');
+  if (!visible) return null;
+
+  const pets = config.pets.length > 0 ? config.pets : [FALLBACK_PET];
+
+  return (
+    <div
+      className="pointer-events-none fixed bottom-20 right-4 z-30 flex flex-row-reverse items-end gap-2"
+      data-testid="in-app-pet"
+      data-pet-count={pets.length}
+    >
+      {pets.map((instance, index) => (
+        <InAppPetItem
+          key={instance.id}
+          instance={instance}
+          config={config}
+          snapshot={snapshot}
+          primary={index === 0}
+          onOpenSession={(sessionId) => {
+            if (sessionId) pet?.openSession(sessionId);
+          }}
+          onOpenSettings={() => pet?.openSettings()}
+        />
+      ))}
     </div>
   );
 }

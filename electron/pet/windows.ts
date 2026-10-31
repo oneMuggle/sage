@@ -21,7 +21,7 @@ import {
   type Point,
   type Size,
 } from './geometry';
-import type { PetConfig, PetSnapshot } from './types';
+import type { PetConfig, PetRenderConfig, PetSnapshot } from './types';
 
 interface StoredPosition {
   x: number;
@@ -29,7 +29,9 @@ interface StoredPosition {
 }
 
 export interface PetWindowOptions {
-  config: PetConfig;
+  config: PetRenderConfig;
+  petId: string;
+  instanceIndex: number;
   devUrl: string;
   isPackaged: boolean;
   userDataDir: string;
@@ -69,7 +71,7 @@ function readStoredPosition(file: string): StoredPosition | null {
 
 export class PetWindow {
   private win: BrowserWindow | null = null;
-  private config: PetConfig;
+  private config: PetRenderConfig;
   private readonly positionFile: string;
   private pointerTimer: ReturnType<typeof setInterval> | null = null;
   private topmostTimer: ReturnType<typeof setInterval> | null = null;
@@ -85,14 +87,19 @@ export class PetWindow {
   constructor(private readonly options: PetWindowOptions) {
     this.config = options.config;
     this.compatibility = compatibilityEnabled(options.config);
-    this.positionFile = join(options.userDataDir, 'pet-window.json');
+    // Keep the legacy filename for the first/default pet so existing user
+    // positions survive the v2 migration.
+    this.positionFile = join(
+      options.userDataDir,
+      options.petId === 'default' ? 'pet-window.json' : `pet-window-${options.petId}.json`,
+    );
   }
 
-  static shouldShow(config: PetConfig): boolean {
+  static shouldShow(config: PetRenderConfig | PetConfig): boolean {
     return shouldShowDesktop(config);
   }
 
-  needsRecreate(config: PetConfig): boolean {
+  needsRecreate(config: PetRenderConfig): boolean {
     return compatibilityEnabled(config) !== this.compatibility;
   }
 
@@ -102,8 +109,12 @@ export class PetWindow {
     const cursor = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(cursor);
     const stored = readStoredPosition(this.positionFile);
+    const base = stored ?? defaultPosition(display.workArea, size);
+    // Stack additional pets to the left of the default bottom-right corner so
+    // they don't spawn on top of each other; stored positions are respected.
+    const offset = stored ? 0 : this.options.instanceIndex * (size.width + 12);
     const position = clampToWorkArea(
-      stored ?? defaultPosition(display.workArea, size),
+      { x: base.x - offset, y: base.y },
       size,
       display.workArea,
     );
@@ -169,7 +180,7 @@ export class PetWindow {
     this.startTimers();
   }
 
-  applyConfig(config: PetConfig): void {
+  applyConfig(config: PetRenderConfig): void {
     this.config = config;
     this.compatibility = compatibilityEnabled(config);
     if (!this.win || this.win.isDestroyed()) return;
@@ -218,7 +229,7 @@ export class PetWindow {
     this.send('pet:state', snapshot);
   }
 
-  sendConfig(config: PetConfig): void {
+  sendConfig(config: PetRenderConfig): void {
     this.send('pet:config', config);
   }
 

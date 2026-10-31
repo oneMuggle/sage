@@ -115,9 +115,17 @@ FastAPI chat stream (NDJSON)
 - 穿透 API 异常（Win7/VM）时永久退回「整窗可交互」并记日志。
 - 面板打开时整窗可交互；面板关闭后恢复按角色命中框穿透。
 - 拖拽：渲染层 pointer 事件 → 主进程按全局光标位移窗口；松手保存到
-  `userData/pet-window.json`（面板打开时保存的是收起后的基准位置）。
+  `userData/pet-window-<petId>.json`（默认宠物仍用旧 `pet-window.json`；面板打开时保存的是收起后的基准位置）。
 - 位置：启动时按当前显示器工作区夹取；支持多屏/DPI。
 - Win7：`compatibilityMode=auto` 时检测到 Windows 6.x 使用不透明窗口、关闭穿透。
+
+### 4.1 多宠物（1–3 只）
+
+- 每个宠物是独立窗口，拥有自己的 `id`、动画包、大小与位置文件；节奏/气泡/提示音/减少动态/兼容模式等行为设置保持全局。
+- 默认位置从右下角向左依次错开；拖动/「回到初始位置」只影响当前宠物。
+- 所有宠物共享同一份 Agent 快照（同一状态、同一气泡），避免多窗口状态漂移。
+- 应用内模式按 `pets` 顺序横向排列，气泡只显示在第一只上；桌面模式每只都有气泡。
+- 设置页可添加/移除宠物（最多 3 只），导入动画包会自动赋给第一只；删除动画包会把使用它的所有宠物回落到内置包。
 
 ## 5. 配置
 
@@ -125,20 +133,24 @@ FastAPI chat stream (NDJSON)
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "enabled": true,
   "displayMode": "desktop",
-  "size": "medium",
   "tempo": "standard",
   "reduceMotion": false,
   "bubbleMode": "important",
   "soundScenes": { "waiting": true, "error": false, "done": false },
   "showSessionTitle": false,
   "compatibilityMode": "auto",
-  "petPack": "dafeiyu",
-  "followActiveSession": true
+  "followActiveSession": true,
+  "pets": [
+    { "id": "default", "petPack": "dafeiyu", "size": "medium" },
+    { "id": "pet-2", "petPack": "my-pack", "size": "small" }
+  ]
 }
 ```
+
+v1 单宠配置（顶层 `petPack`/`size`）读取时自动迁移为一只 `default` 宠物；`id` 只允许 `^[a-z0-9][a-z0-9-]{0,31}$`，重复或非法 id 会被替换，列表最多 3 只。
 
 配置由主进程独占写入（原子 rename），设置页经 `pet:get-config` /
 `pet:set-config` 读写，不进入 `AppSettings`，因此不影响后端 settings
@@ -159,7 +171,7 @@ canonicalizer 与 Win7 设置 schema parity。
 
 用户可在 **设置 → 智能体 → 桌宠 → 动画包** 导入 zip。包解压到
 `<userData>/pets/<id>/`，与安装包解耦；选中项存在 `pet-config.json` 的
-`petPack` 字段。
+`pets[].petPack` 字段（每只宠物可不同）。
 
 ```
 my-pet.zip
@@ -218,6 +230,7 @@ my-pet.zip
   窗口 300×241 → 300×541、完成态显示 7/7 与「已完成」。
   互动冒烟：长按 750ms → 摸头动画 + 气泡 + `patCount=1`；2 秒内点 5 下 → 生气动画 + 「别戳啦」。
   动画包冒烟：109 个 WebM 全部存在；idle 池 87 个，`resolveAnimation` 变体轮播与 `resolveInteraction` 随机回应由单测覆盖。
+  多宠物冒烟：配置两只（内置包 + 用户包）→ 两个独立窗口、视频源分别来自 `./pet/dafeiyu` 与 `sage-pet://`、窗口位置不重叠。
 - 体积门禁：主 chunk 1.68MB / 1.80MB；`dist/assets` 11.10MB / 12MB；`public/pet` 资源不计入该门禁，但安装包会增大约 45MB。
 
 ## 8. 已知限制 / 下一步
@@ -226,6 +239,7 @@ my-pet.zip
 - 未在 Win7 真机验证透明/穿透；兼容模式已写好但需真机回归。
 - 提示音为 WebAudio 合成短音，不是角色语音；需一次用户手势解锁 AudioContext。
 - 面板已能列出最近/活跃会话，但「每个会话一只宠物」未实现。
+- 多宠物已支持 1–3 只（独立动画包/大小/位置）；应用内模式横向排列且只有第一只显示气泡，尚未按会话分配不同宠物。
 - 独立编排 run 已通过主进程轮询 lanes 接入（按 team 聚合）；定时任务只覆盖「近期投递失败」，因为后端没有持久运行中状态，成功/等待中的定时任务不会显示。
 - 上下文条依赖 chat 参数里的 `maxContext` 与 usage 事件；自动推断上下文时可能只显示已用量、不显示百分比。
 - 完整动画包已全量内置（约 52.7MB），安装包相应增大；如果后续要控制体积，可改成「精选内置 + 完整包可选下载/导入」。

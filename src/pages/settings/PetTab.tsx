@@ -4,29 +4,53 @@
  * Pet config is owned by the Electron main process (`pet-config.json`) and
  * accessed through the narrow `window.electronAPI.pet` bridge, so this tab
  * does not touch AppSettings or the backend settings schema.
+ *
+ * v2: a pets list (1–3). Each pet has its own pack and size; behavior
+ * settings (tempo/bubble/sound/…) stay global.
  */
 
 import { useEffect, useState } from 'react';
 
 import { useI18n } from '../../shared/lib/i18n';
-import type { PetConfigBridge, PetPackManifestBridge } from '../../shared/types/electron-api';
+import type {
+  PetConfigBridge,
+  PetInstanceBridge,
+  PetPackManifestBridge,
+} from '../../shared/types/electron-api';
 
 import { SettingRow, Toggle } from './components';
 
+const MAX_PETS = 3;
+
 const FALLBACK_CONFIG: PetConfigBridge = {
-  version: 1,
+  version: 2,
   enabled: false,
   displayMode: 'desktop',
-  size: 'medium',
   tempo: 'standard',
   reduceMotion: false,
   bubbleMode: 'important',
   soundScenes: { waiting: true, error: false, done: false },
   showSessionTitle: false,
   compatibilityMode: 'auto',
-  petPack: 'dafeiyu',
   followActiveSession: true,
+  pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
 };
+
+const SIZE_OPTIONS = [
+  { value: 'mini', labelKey: 'settings.pet.size.mini' },
+  { value: 'small', labelKey: 'settings.pet.size.small' },
+  { value: 'medium', labelKey: 'settings.pet.size.medium' },
+  { value: 'large', labelKey: 'settings.pet.size.large' },
+  { value: 'huge', labelKey: 'settings.pet.size.huge' },
+] as const;
+
+function nextPetId(pets: PetInstanceBridge[]): string {
+  for (let i = 1; i <= 99; i++) {
+    const candidate = `pet-${i}`;
+    if (!pets.some((pet) => pet.id === candidate)) return candidate;
+  }
+  return `pet-${Date.now().toString(36)}`;
+}
 
 function Select({
   value,
@@ -64,6 +88,7 @@ export function PetTab(): JSX.Element {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<'import' | 'export' | 'delete' | null>(null);
   const [deleteArmed, setDeleteArmed] = useState<string | null>(null);
+  const [managePackId, setManagePackId] = useState<string>('');
 
   useEffect(() => {
     if (!bridge) return;
@@ -109,6 +134,33 @@ export function PetTab(): JSX.Element {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
   };
 
+  const updatePet = (id: string, patch: Partial<PetInstanceBridge>): void => {
+    if (!config) return;
+    update({
+      pets: config.pets.map((pet) => (pet.id === id ? { ...pet, ...patch } : pet)),
+    });
+  };
+
+  const addPet = (): void => {
+    if (!config || config.pets.length >= MAX_PETS) return;
+    update({
+      pets: [
+        ...config.pets,
+        {
+          id: nextPetId(config.pets),
+          petPack: config.pets[0]?.petPack ?? 'dafeiyu',
+          size: 'medium',
+        },
+      ],
+    });
+  };
+
+  const removePet = (id: string): void => {
+    if (!config || config.pets.length <= 1) return;
+    update({ pets: config.pets.filter((pet) => pet.id !== id) });
+    if (deleteArmed) setDeleteArmed(null);
+  };
+
   const importPack = async (): Promise<void> => {
     if (!bridge) return;
     setBusy('import');
@@ -121,6 +173,7 @@ export function PetTab(): JSX.Element {
         setError(result.error ?? t('settings.pet.pack_failed'));
         return;
       }
+      setManagePackId(result.manifest?.id ?? '');
       setNotice(`${t('settings.pet.pack_imported')}${result.manifest?.name ?? ''}`);
       await refresh();
     } catch (err: unknown) {
@@ -131,7 +184,7 @@ export function PetTab(): JSX.Element {
   };
 
   const exportPack = async (): Promise<void> => {
-    const id = config?.petPack;
+    const id = managePackId || config?.pets[0]?.petPack;
     if (!bridge || !id) return;
     setBusy('export');
     setError(null);
@@ -152,7 +205,7 @@ export function PetTab(): JSX.Element {
   };
 
   const deletePack = async (): Promise<void> => {
-    const id = config?.petPack;
+    const id = managePackId || config?.pets[0]?.petPack;
     if (!bridge || !id) return;
     if (deleteArmed !== id) {
       setDeleteArmed(id);
@@ -168,6 +221,7 @@ export function PetTab(): JSX.Element {
         return;
       }
       setDeleteArmed(null);
+      setManagePackId('');
       setNotice(t('settings.pet.pack_deleted'));
       await refresh();
     } catch (err: unknown) {
@@ -186,17 +240,21 @@ export function PetTab(): JSX.Element {
   }
 
   const current = config ?? FALLBACK_CONFIG;
+  const activeManagePackId = managePackId || current.pets[0]?.petPack || 'dafeiyu';
   const packOptions = [
     { value: 'dafeiyu', label: t('settings.pet.pack_builtin') },
     ...packs.map((pack) => ({ value: pack.id, label: pack.name })),
   ];
-  if (!packOptions.some((option) => option.value === current.petPack)) {
-    packOptions.push({
-      value: current.petPack,
-      label: `${current.petPack} (${t('settings.pet.pack_missing')})`,
-    });
+  for (const id of new Set([...current.pets.map((pet) => pet.petPack), activeManagePackId])) {
+    if (!packOptions.some((option) => option.value === id)) {
+      packOptions.push({ value: id, label: `${id} (${t('settings.pet.pack_missing')})` });
+    }
   }
-  const selectedUserPack = packs.find((pack) => pack.id === current.petPack) ?? null;
+  const selectedUserPack = packs.find((pack) => pack.id === activeManagePackId) ?? null;
+  const sizeOptions = SIZE_OPTIONS.map((option) => ({
+    value: option.value,
+    label: t(option.labelKey),
+  }));
   const actionButtonClass =
     'rounded-md border border-line-strong px-3 py-1.5 text-xs text-text hover:border-primary disabled:cursor-default disabled:opacity-50';
   const dangerButtonClass =
@@ -251,19 +309,62 @@ export function PetTab(): JSX.Element {
           />
         </SettingRow>
 
-        <SettingRow label={t('settings.pet.size')} anchor="pet_size">
-          <Select
-            value={current.size}
-            testId="pet-size"
-            onChange={(value) => update({ size: value as PetConfigBridge['size'] })}
-            options={[
-              { value: 'mini', label: t('settings.pet.size.mini') },
-              { value: 'small', label: t('settings.pet.size.small') },
-              { value: 'medium', label: t('settings.pet.size.medium') },
-              { value: 'large', label: t('settings.pet.size.large') },
-              { value: 'huge', label: t('settings.pet.size.huge') },
-            ]}
-          />
+        <SettingRow
+          label={t('settings.pet.pets')}
+          desc={t('settings.pet.pets_desc')}
+          anchor="pet_pets"
+        >
+          <div className="flex w-full flex-col gap-2">
+            {current.pets.map((instance, index) => (
+              <div
+                key={instance.id}
+                data-testid={`pet-row-${instance.id}`}
+                className="flex flex-wrap items-center justify-end gap-2"
+              >
+                <span className="text-xs text-muted">
+                  {t('settings.pet.pet_label')} {index + 1}
+                </span>
+                <Select
+                  value={instance.petPack}
+                  testId={`pet-pack-${instance.id}`}
+                  onChange={(value) => updatePet(instance.id, { petPack: value })}
+                  options={packOptions}
+                />
+                <Select
+                  value={instance.size}
+                  testId={`pet-size-${instance.id}`}
+                  onChange={(value) =>
+                    updatePet(instance.id, { size: value as PetInstanceBridge['size'] })
+                  }
+                  options={sizeOptions}
+                />
+                {current.pets.length > 1 ? (
+                  <button
+                    type="button"
+                    data-testid={`pet-remove-${instance.id}`}
+                    onClick={() => removePet(instance.id)}
+                    className={dangerButtonClass}
+                  >
+                    {t('settings.pet.remove_pet')}
+                  </button>
+                ) : null}
+              </div>
+            ))}
+            {current.pets.length < MAX_PETS ? (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  data-testid="pet-add"
+                  onClick={addPet}
+                  className={actionButtonClass}
+                >
+                  {t('settings.pet.add_pet')}
+                </button>
+              </div>
+            ) : (
+              <div className="text-right text-xs text-muted">{t('settings.pet.pets_max')}</div>
+            )}
+          </div>
         </SettingRow>
 
         <SettingRow label={t('settings.pet.tempo')} anchor="pet_tempo">
@@ -352,18 +453,6 @@ export function PetTab(): JSX.Element {
           />
         </SettingRow>
 
-        <SettingRow label={t('settings.pet.pack')} desc={t('settings.pet.pack_desc')} anchor="pet_pack">
-          <Select
-            value={current.petPack}
-            testId="pet-pack"
-            onChange={(value) => {
-              setDeleteArmed(null);
-              update({ petPack: value });
-            }}
-            options={packOptions}
-          />
-        </SettingRow>
-
         <SettingRow
           label={t('settings.pet.pack_actions')}
           desc={
@@ -374,6 +463,15 @@ export function PetTab(): JSX.Element {
           anchor="pet_pack_manage"
         >
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <Select
+              value={activeManagePackId}
+              testId="pet-pack-manage"
+              onChange={(value) => {
+                setDeleteArmed(null);
+                setManagePackId(value);
+              }}
+              options={packOptions}
+            />
             <button
               type="button"
               data-testid="pet-pack-import"
@@ -402,12 +500,12 @@ export function PetTab(): JSX.Element {
                   disabled={busy !== null}
                   onClick={() => void deletePack()}
                   className={
-                    deleteArmed === current.petPack
+                    deleteArmed === activeManagePackId
                       ? 'rounded-md border border-red-500 bg-red-500/15 px-3 py-1.5 text-xs text-red-300 disabled:opacity-50'
                       : dangerButtonClass
                   }
                 >
-                  {deleteArmed === current.petPack
+                  {deleteArmed === activeManagePackId
                     ? t('settings.pet.pack_delete_confirm')
                     : t('settings.pet.pack_delete')}
                 </button>

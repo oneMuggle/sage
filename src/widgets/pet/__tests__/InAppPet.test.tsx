@@ -5,18 +5,17 @@ import type { PetConfigBridge, PetSnapshotBridge } from '../../../shared/types/e
 import { InAppPet } from '../InAppPet';
 
 const BASE_CONFIG: PetConfigBridge = {
-  version: 1,
+  version: 2,
   enabled: true,
   displayMode: 'in-app',
-  size: 'medium',
   tempo: 'standard',
   reduceMotion: false,
   bubbleMode: 'important',
   soundScenes: { waiting: true, error: false, done: false },
   showSessionTitle: false,
   compatibilityMode: 'auto',
-  petPack: 'dafeiyu',
   followActiveSession: true,
+  pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
 };
 
 const SNAPSHOT: PetSnapshotBridge = {
@@ -104,5 +103,20 @@ describe('InAppPet', () => {
     const petButton = await screen.findByRole('button', { name: /思考中|Thinking/ });
     petButton.click();
     expect(bridge.openSession).toHaveBeenCalledWith('sess-1');
+  });
+
+  it('renders one item per configured pet', async () => {
+    installBridge({
+      ...BASE_CONFIG,
+      pets: [
+        { id: 'default', petPack: 'dafeiyu', size: 'medium' },
+        { id: 'pet-2', petPack: 'dafeiyu', size: 'small' },
+      ],
+    });
+    render(<InAppPet />);
+    const dock = await screen.findByTestId('in-app-pet');
+    expect(dock).toHaveAttribute('data-pet-count', '2');
+    expect(screen.getAllByTestId('in-app-pet-item')).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /思考中|Thinking/ })).toHaveLength(2);
   });
 });
