@@ -94,6 +94,7 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 - 每个必需产物的状态：`present` / `missing` / `stale` / `optional` / `waived`。
 - 阶段完成度 = 必需产物完成率；整体完成度按所有阶段的必需项汇总。
 - 阶段识别：取完成度 ≥ 70% 的最晚阶段作为候选，返回 `confidence` 与 `evidence`；**从不自动切换**，必须调用 `stage/confirm`。
+- 项目顾问（`ProjectAdvisor`）的上下文包含规程审计摘要（当前阶段、完成度、待补项），建议会引用具体待补项；归类建议由审计结果生成，移动需逐项确认。
 
 ## 6. API
 

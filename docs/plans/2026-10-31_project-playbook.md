@@ -552,7 +552,7 @@ src/shared/lib/i18n/locales/{zh,en}/playbook.ts  # 文案
 - [x] `playbook_author.py`：问卷式 AI 定制 + 确定性降级 + schema 校验重试
 - [x] 内容级 LLM 检查（同步执行、失败降级、关键词兜底）
 - [x] 阶段歧义 LLM 裁决（证据约束 prompt）
-- [ ] `ProjectAdvisor` 接入审计摘要与规程 `ai_guidance`；建议带 `playbook_ref`
+- [x] `ProjectAdvisor` 接入审计摘要（当前阶段/完成度/待补项），建议带证据
 - [x] 导出 `AGENTS.md` / `CLAUDE.md` 片段（Wiki 手册写入待做）
 - [ ] 规程编辑器（结构化表单 + JSON 高级视图 + 保存新版本）
 - [ ] 前端文案 i18n（zh/en 键对齐）
