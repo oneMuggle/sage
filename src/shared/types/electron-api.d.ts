@@ -491,6 +491,8 @@ export interface PetSnapshotBridge {
   contextMax: number | null;
   lastTerminalAction: 'done' | 'error' | null;
   lastTerminalAt: number | null;
+  patCount: number;
+  bondDays: number;
   activeSessions: number;
   sessions: PetSessionSummaryBridge[];
   updatedAt: number;
@@ -511,6 +513,7 @@ export interface PetElectronApiBridge {
   dragEnd: () => void;
   resetPosition: () => void;
   setPanel: (open: boolean) => void;
+  pat: () => void;
   hide: () => void;
 }
 

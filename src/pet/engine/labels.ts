@@ -11,6 +11,10 @@ function isZh(): boolean {
   return typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('zh');
 }
 
+export function isChinese(): boolean {
+  return isZh();
+}
+
 const TOOL_VERBS: Record<string, { zh: string; en: string }> = {
   bash: { zh: '跑命令', en: 'running a command' },
   edit: { zh: '改代码', en: 'editing code' },

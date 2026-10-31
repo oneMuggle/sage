@@ -15,6 +15,13 @@ import { relayChatStream } from '../relay';
 import { logger } from '../logger';
 import { mergePetConfig, readPetConfig, writePetConfig } from './config';
 import {
+  bondDays,
+  readPetProfile,
+  recordPat as incrementPat,
+  writePetProfile,
+  type PetProfile,
+} from './profile';
+import {
   applyEvent,
   applyMeta,
   createEmptyState,
@@ -68,6 +75,8 @@ export class PetController {
   private snapshot: PetSnapshot;
   private window: PetWindow | null = null;
   private readonly configFile: string;
+  private readonly profileFile: string;
+  private profile: PetProfile;
   private readonly streams = new Map<string, AbortController>();
   private readonly titles = new Map<string, string>();
   private tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -75,11 +84,14 @@ export class PetController {
 
   constructor(private readonly options: PetControllerOptions) {
     this.configFile = join(options.userDataDir, 'pet-config.json');
+    this.profileFile = join(options.userDataDir, 'pet-profile.json');
     this.config = readPetConfig(this.configFile);
+    this.profile = readPetProfile(this.profileFile, Date.now());
     this.snapshot = selectSnapshot(this.sessions, Date.now());
   }
 
   init(): void {
+    writePetProfile(this.profileFile, this.profile);
     this.syncWindow();
     this.tickTimer = setInterval(() => this.onTick(), 500);
     this.emit(true);
@@ -171,6 +183,14 @@ export class PetController {
 
   setPanelOpen(open: boolean): void {
     this.window?.setPanelOpen(open);
+  }
+
+  recordPat(): void {
+    this.profile = incrementPat(this.profile, Date.now());
+    if (!writePetProfile(this.profileFile, this.profile)) {
+      logger.warn('pet: profile save failed');
+    }
+    this.emit(true);
   }
 
   private authHeaders(): Record<string, string> {
@@ -379,8 +399,13 @@ export class PetController {
   }
 
   private emit(force = false): void {
-    const base = selectSnapshot(this.sessions, Date.now());
-    const snapshot = this.applyBubbleMode(base);
+    const now = Date.now();
+    const base = selectSnapshot(this.sessions, now);
+    const snapshot = this.applyBubbleMode({
+      ...base,
+      patCount: this.profile.patCount,
+      bondDays: bondDays(this.profile, now),
+    });
     // Ignore updatedAt for dedupe: an idle snapshot's updatedAt changes on
     // every tick and would otherwise push IPC every 500ms forever.
     const key = JSON.stringify({ ...snapshot, updatedAt: 0 });

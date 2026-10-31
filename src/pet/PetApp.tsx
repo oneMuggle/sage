@@ -4,8 +4,14 @@ import type { PetConfigBridge, PetSnapshotBridge } from '../shared/types/electro
 
 import { PetPanel } from './PetPanel';
 import { bubbleText, resolveAnimation, resolveInteraction } from './engine/animation';
-import { statusLabel } from './engine/labels';
+import { isChinese, statusLabel } from './engine/labels';
 import { packFor } from './engine/packs';
+import { playSound, primeAudio } from './engine/sounds';
+
+const LONG_PRESS_MS = 550;
+const CLICK_DELAY_MS = 240;
+const ANGER_WINDOW_MS = 2000;
+const ANGER_CLICKS = 5;
 
 const EMPTY_SNAPSHOT: PetSnapshotBridge = {
   action: 'idle',
@@ -23,6 +29,8 @@ const EMPTY_SNAPSHOT: PetSnapshotBridge = {
   contextMax: null,
   lastTerminalAction: null,
   lastTerminalAt: null,
+  patCount: 0,
+  bondDays: 1,
   activeSessions: 0,
   sessions: [],
   updatedAt: 0,
@@ -48,10 +56,14 @@ interface PlaybackOverride {
   loop: boolean;
 }
 
+interface LocalBubble {
+  text: string;
+  kind: 'info' | 'success' | 'error';
+}
+
 function statusGlyph(action: string): string {
   switch (action) {
     case 'waiting':
-      return '!';
     case 'error':
       return '!';
     case 'done':
@@ -76,9 +88,22 @@ export function PetApp(): JSX.Element {
   const [config, setConfig] = useState<PetConfigBridge>(DEFAULT_CONFIG);
   const [override, setOverride] = useState<PlaybackOverride | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [localBubble, setLocalBubble] = useState<LocalBubble | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const dragRef = useRef({ down: false, moved: false, startX: 0, startY: 0 });
+  const dragRef = useRef({
+    down: false,
+    moved: false,
+    longPressFired: false,
+    startX: 0,
+    startY: 0,
+  });
   const currentFileRef = useRef('');
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clickTimes = useRef<number[]>([]);
+  const suppressClickUntil = useRef(0);
+  const lastActionRef = useRef(snapshot.action);
+  const lastSoundActionRef = useRef('');
 
   const pet = typeof window !== 'undefined' ? window.electronAPI?.pet : undefined;
 
@@ -92,10 +117,7 @@ export function PetApp(): JSX.Element {
       if (alive) setSnapshot(value);
     });
     const offState = pet.onState((value) => {
-      if (alive) {
-        setSnapshot(value);
-        setOverride(null);
-      }
+      if (alive) setSnapshot(value);
     });
     const offConfig = pet.onConfig((value) => {
       if (alive) setConfig(value);
@@ -107,6 +129,42 @@ export function PetApp(): JSX.Element {
       offConfig();
     };
   }, [pet]);
+
+  useEffect(() => {
+    if (lastActionRef.current === snapshot.action) return;
+    lastActionRef.current = snapshot.action;
+    setOverride(null);
+    setLocalBubble(null);
+  }, [snapshot.action]);
+
+  useEffect(() => {
+    const action = snapshot.action;
+    if (action === lastSoundActionRef.current) return;
+    lastSoundActionRef.current = action;
+    const kind =
+      action === 'waiting'
+        ? 'waiting'
+        : action === 'error'
+          ? 'error'
+          : action === 'done'
+            ? 'done'
+            : null;
+    if (kind && config.soundScenes[kind]) playSound(kind);
+  }, [snapshot.action, config.soundScenes]);
+
+  useEffect(() => {
+    if (!localBubble) return undefined;
+    const timer = setTimeout(() => setLocalBubble(null), 2500);
+    return () => clearTimeout(timer);
+  }, [localBubble]);
+
+  useEffect(
+    () => () => {
+      if (pressTimer.current) clearTimeout(pressTimer.current);
+      if (clickTimer.current) clearTimeout(clickTimer.current);
+    },
+    [],
+  );
 
   const pack = useMemo(() => packFor(config.petPack), [config.petPack]);
 
@@ -167,29 +225,93 @@ export function PetApp(): JSX.Element {
     pet?.openSettings();
   }, [pet]);
 
-  const handleClick = useCallback(() => {
+  const clearClickTimer = useCallback(() => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+  }, []);
+
+  const triggerClick = useCallback(() => {
     const click = resolveInteraction(pack, 'click');
     if (click) setOverride(click);
     togglePanel();
   }, [pack, togglePanel]);
 
+  const triggerPat = useCallback(() => {
+    const pat = resolveInteraction(pack, 'pat');
+    if (pat) setOverride(pat);
+    setLocalBubble({
+      text: isChinese() ? '被摸头了～' : 'Head pat!',
+      kind: 'success',
+    });
+    pet?.pat();
+  }, [pack, pet]);
+
+  const triggerAngry = useCallback(() => {
+    const angry = resolveInteraction(pack, 'angry');
+    if (angry) setOverride(angry);
+    setLocalBubble({
+      text: isChinese() ? '别戳啦！' : 'Stop poking!',
+      kind: 'error',
+    });
+    suppressClickUntil.current = Date.now() + 1500;
+  }, [pack]);
+
+  const handleShortClick = useCallback(() => {
+    const now = Date.now();
+    clickTimes.current = [
+      ...clickTimes.current.filter((time) => now - time <= ANGER_WINDOW_MS),
+      now,
+    ];
+    if (clickTimes.current.length >= ANGER_CLICKS) {
+      clickTimes.current = [];
+      clearClickTimer();
+      triggerAngry();
+      return;
+    }
+    clearClickTimer();
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null;
+      triggerClick();
+    }, CLICK_DELAY_MS);
+  }, [clearClickTimer, triggerAngry, triggerClick]);
+
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0) return;
+    primeAudio();
     dragRef.current = {
       down: true,
       moved: false,
-      startX: event.screenX,
-      startY: event.screenY,
+      longPressFired: false,
+      startX: event.clientX,
+      startY: event.clientY,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic or already-released pointers may not support capture.
+    }
     pet?.dragStart();
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+    pressTimer.current = setTimeout(() => {
+      pressTimer.current = null;
+      const drag = dragRef.current;
+      if (!drag.down || drag.moved) return;
+      drag.longPressFired = true;
+      triggerPat();
+    }, LONG_PRESS_MS);
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
     const drag = dragRef.current;
     if (!drag.down) return;
-    if (!drag.moved && Math.hypot(event.screenX - drag.startX, event.screenY - drag.startY) > 4) {
+    if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 4) {
       drag.moved = true;
+      if (pressTimer.current) {
+        clearTimeout(pressTimer.current);
+        pressTimer.current = null;
+      }
     }
     if (drag.moved) pet?.dragMove();
   };
@@ -198,29 +320,36 @@ export function PetApp(): JSX.Element {
     const drag = dragRef.current;
     if (!drag.down) return;
     drag.down = false;
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
     try {
       event.currentTarget.releasePointerCapture(event.pointerId);
     } catch {
       // Pointer may already be released.
     }
     pet?.dragEnd();
-    if (!drag.moved) handleClick();
+    if (drag.moved || drag.longPressFired) return;
+    if (Date.now() < suppressClickUntil.current) return;
+    handleShortClick();
   };
 
   const handleEnded = (): void => {
     if (override) setOverride(null);
+    if (localBubble) setLocalBubble(null);
   };
 
-  const bubble = bubbleText(snapshot.bubbleKey, {
+  const stateBubble = bubbleText(snapshot.bubbleKey, {
     toolName: snapshot.toolName,
     sessionTitle: snapshot.sessionTitle,
     showSession: config.showSessionTitle,
     todoDone: snapshot.todoDone,
     todoTotal: snapshot.todoTotal,
   });
-  const bubbleClass = snapshot.bubbleKind
-    ? `pet-bubble pet-bubble-${snapshot.bubbleKind}`
-    : 'pet-bubble';
+  const bubble = localBubble?.text ?? stateBubble;
+  const bubbleKind = localBubble?.kind ?? snapshot.bubbleKind;
+  const bubbleClass = bubbleKind ? `pet-bubble pet-bubble-${bubbleKind}` : 'pet-bubble';
   const statusTitle = statusLabel(snapshot.action, snapshot.detail, snapshot.toolName);
 
   return (
@@ -239,6 +368,7 @@ export function PetApp(): JSX.Element {
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onContextMenu={(event) => {
           event.preventDefault();
           pet?.showMenu();

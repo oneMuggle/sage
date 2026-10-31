@@ -284,6 +284,14 @@ body {
   font-size: 11px;
 }
 
+.pet-bond {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.18);
+  color: #94a3b8;
+  font-size: 11px;
+}
+
 .pet-panel-sessions {
   overflow: auto;
   padding: 0 12px 8px;
