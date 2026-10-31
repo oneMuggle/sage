@@ -162,3 +162,145 @@ def test_validator_reports_residue_as_warning() -> None:
     assert result["ok"] is True
     assert result["issues"][0]["severity"] == "warning"
     assert result["issues"][0]["code"] == "placeholder_residue"
+
+
+_IMAGE_TEMPLATE = r"""
+\documentclass{article}
+\title{T}
+\author{A}
+\begin{document}
+\begin{abstract}Abs\end{abstract}
+\includegraphics[width=0.5\linewidth]{<<figure1>>}
+\includegraphics{figures/missing.png}
+\end{document}
+"""
+
+
+def _image(path: Path, payload: bytes = b"png-bytes") -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+    return path
+
+
+def _fill_data(profile, extra=None):
+    data = {"title": "T", "author": "A", "abstract": "Abs"}
+    data.update(extra or {})
+    return data
+
+
+def test_analyze_template_detects_image_slots(tmp_path: Path) -> None:
+    main = _write(tmp_path, "paper.tex", _IMAGE_TEMPLATE)
+
+    profile = analyze_latex_template(main, root=tmp_path)
+
+    image_slots = [slot for slot in profile.slots if slot.type == "image"]
+    assert len(image_slots) == 2
+    placeholder = next(slot for slot in image_slots if slot.required)
+    assert placeholder.current_value == "<<figure1>>"
+    assert placeholder.command == "includegraphics"
+    missing = next(slot for slot in image_slots if not slot.required)
+    assert missing.current_value == "figures/missing.png"
+    assert any(warning.code == "missing_image" for warning in profile.warnings)
+    assert not any(
+        slot.kind == "placeholder" and "figure1" in slot.name for slot in profile.slots
+    )
+
+
+def test_analyze_existing_image_is_not_a_slot(tmp_path: Path) -> None:
+    _image(tmp_path / "figures" / "existing.png")
+    main = _write(
+        tmp_path,
+        "paper.tex",
+        _IMAGE_TEMPLATE.replace("<<figure1>>", "figures/existing.png").replace(
+            "figures/missing.png", "figures/existing.png"
+        ),
+    )
+
+    profile = analyze_latex_template(main, root=tmp_path)
+
+    assert not any(slot.type == "image" for slot in profile.slots)
+
+
+def test_fill_template_copies_image_and_rewrites_path(tmp_path: Path) -> None:
+    _image(tmp_path / "figures" / "chart.png")
+    main = _write(tmp_path, "paper.tex", _IMAGE_TEMPLATE)
+    profile = analyze_latex_template(main, root=tmp_path)
+    image_slot = next(
+        slot for slot in profile.slots if slot.type == "image" and slot.required
+    )
+
+    result = fill_latex_template(
+        main,
+        _fill_data(profile, {image_slot.name: "figures/chart.png"}),
+        "paper-filled.tex",
+        root=tmp_path,
+    )
+
+    output = (tmp_path / "paper-filled.tex").read_text(encoding="utf-8")
+    assert "paper-filled_assets/chart.png" in output
+    assert result["images_copied"] == ["paper-filled_assets/chart.png"]
+    assert (tmp_path / "paper-filled_assets" / "chart.png").is_file()
+
+
+def test_fill_template_rejects_image_outside_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    main = _write(workspace, "paper.tex", _IMAGE_TEMPLATE)
+    outside = _image(tmp_path / "outside.png")
+    profile = analyze_latex_template(main, root=workspace)
+    image_slot = next(
+        slot for slot in profile.slots if slot.type == "image" and slot.required
+    )
+
+    with pytest.raises(OfficeTemplateFillError):
+        fill_latex_template(
+            main,
+            _fill_data(profile, {image_slot.name: str(outside)}),
+            "out.tex",
+            root=workspace,
+        )
+
+
+def test_fill_template_rejects_unsupported_image_type(tmp_path: Path) -> None:
+    _write(tmp_path, "notes.txt", "hello")
+    main = _write(tmp_path, "paper.tex", _IMAGE_TEMPLATE)
+    profile = analyze_latex_template(main, root=tmp_path)
+    image_slot = next(
+        slot for slot in profile.slots if slot.type == "image" and slot.required
+    )
+
+    with pytest.raises(OfficeTemplateFillError):
+        fill_latex_template(
+            main,
+            _fill_data(profile, {image_slot.name: "notes.txt"}),
+            "out.tex",
+            root=tmp_path,
+        )
+
+
+def test_fill_template_dedupes_image_names(tmp_path: Path) -> None:
+    _image(tmp_path / "a" / "chart.png", b"a")
+    _image(tmp_path / "b" / "chart.png", b"b")
+    template = _IMAGE_TEMPLATE.replace("figures/missing.png", "<<figure2>>")
+    main = _write(tmp_path, "paper.tex", template)
+    profile = analyze_latex_template(main, root=tmp_path)
+    image_slots = [slot for slot in profile.slots if slot.type == "image"]
+    assert len(image_slots) == 2
+
+    result = fill_latex_template(
+        main,
+        _fill_data(
+            profile,
+            {
+                image_slots[0].name: "a/chart.png",
+                image_slots[1].name: "b/chart.png",
+            },
+        ),
+        "paper-filled.tex",
+        root=tmp_path,
+    )
+
+    assert len(result["images_copied"]) == 2
+    assert result["images_copied"][0] == "paper-filled_assets/chart.png"
+    assert result["images_copied"][1] == "paper-filled_assets/chart-1.png"
+    assert (tmp_path / "paper-filled_assets" / "chart-1.png").read_bytes() == b"b"
