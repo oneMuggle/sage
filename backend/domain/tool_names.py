@@ -98,6 +98,9 @@ OFFICE_TOOLS = (
     "office_fill_latex_template",
     # 2026-10-31 LaTeX 源码审校（READ）
     "office_audit_latex",
+    # 2026-10-31 LaTeX 可选编译 / 红字版（WRITE_LOCAL）
+    "office_compile_latex",
+    "office_latexdiff",
     # 2026-09-12 Round 12 自动修复：lint→修复→复检（WRITE_LOCAL）
     "office_repair_word",
     # 2026-09-18 Round 39 目录真页码：Word COM 刷新 TOC 域（WRITE_LOCAL，

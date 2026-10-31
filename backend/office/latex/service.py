@@ -20,6 +20,8 @@ from backend.office.errors import (
 from backend.office.path_safety import is_within, resolve_within
 
 from .audit import audit_latex_file
+from .compile import compile_latex, detect_tools
+from .diff import latexdiff_files
 from .filler import fill_latex_template
 from .parser import LatexLimits, parse_latex_project
 from .template import analyze_latex_template
@@ -198,6 +200,77 @@ def audit_latex_file_service(
     )
 
 
+def compile_latex_file(
+    file_path: Path,
+    *,
+    workspace: Path,
+    output_filename: Optional[str] = None,
+    engine: Optional[str] = None,
+    timeout_s: int = 60,
+    max_bytes: int = DEFAULT_MAX_FILE_BYTES,
+    limits: Optional[LatexLimits] = None,
+) -> Dict[str, Any]:
+    """Workspace-safe optional TeX compile."""
+    workspace_path = Path(workspace)
+    if not workspace_path.is_dir():
+        raise OfficeParseError("工作区目录不存在")
+    source = Path(file_path)
+    if not source.is_file():
+        raise OfficeFileNotFoundError(source)
+    resolved = resolve_within(workspace_path, source)
+    size = resolved.stat().st_size
+    if size > max_bytes:
+        raise OfficeSizeLimitError(size, max_bytes)
+    return compile_latex(
+        resolved,
+        root=workspace_path,
+        output_filename=output_filename,
+        engine=engine,
+        timeout_s=timeout_s,
+        limits=limits,
+    )
+
+
+def latexdiff_files_service(
+    original_path: Path,
+    revised_path: Path,
+    *,
+    workspace: Path,
+    output_filename: str = "",
+    compile_pdf: bool = False,
+    engine: Optional[str] = None,
+    timeout_s: int = 60,
+    max_bytes: int = DEFAULT_MAX_FILE_BYTES,
+    limits: Optional[LatexLimits] = None,
+) -> Dict[str, Any]:
+    """Workspace-safe latexdiff (optional PDF compile)."""
+    workspace_path = Path(workspace)
+    if not workspace_path.is_dir():
+        raise OfficeParseError("工作区目录不存在")
+    for path in (original_path, revised_path):
+        source = Path(path)
+        if not source.is_file():
+            raise OfficeFileNotFoundError(source)
+        resolved = resolve_within(workspace_path, source)
+        if resolved.stat().st_size > max_bytes:
+            raise OfficeSizeLimitError(resolved.stat().st_size, max_bytes)
+    return latexdiff_files(
+        Path(original_path),
+        Path(revised_path),
+        root=workspace_path,
+        output_filename=output_filename,
+        compile_pdf=compile_pdf,
+        engine=engine,
+        timeout_s=timeout_s,
+        limits=limits,
+    )
+
+
+def latex_capabilities() -> Dict[str, Any]:
+    """Return available TeX engines and latexdiff."""
+    return detect_tools()
+
+
 def is_within_root(path: Path, root: Path) -> bool:
     try:
         return is_within(Path(root).resolve(), Path(path).resolve())
@@ -217,9 +290,12 @@ __all__ = [
     "MAX_SOURCE_CHARS",
     "analyze_latex_template_file",
     "audit_latex_file_service",
+    "compile_latex_file",
     "fill_latex_template_file",
     "is_latex_path",
     "is_within_root",
+    "latex_capabilities",
+    "latexdiff_files_service",
     "read_latex_file",
     "read_latex_path",
     "safe_relative",

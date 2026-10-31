@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,7 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.office.latex.service import (
     analyze_latex_template_file,
     audit_latex_file_service,
+    compile_latex_file,
     fill_latex_template_file,
+    latex_capabilities,
+    latexdiff_files_service,
     read_latex_file,
 )
 
@@ -96,14 +99,77 @@ def audit_latex_endpoint(req: LatexAuditRequest) -> dict:
     )
 
 
+class LatexCompileRequest(BaseModel):
+    """Compile a .tex project with a detected external engine."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str
+    output_filename: Optional[str] = None
+    engine: Optional[str] = None
+    timeout_s: int = Field(default=60, ge=1, le=600)
+
+
+class LatexDiffRequest(BaseModel):
+    """Generate latexdiff source (optionally compile it)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    original_path: str
+    revised_path: str
+    output_filename: str = ""
+    compile_pdf: bool = False
+    engine: Optional[str] = None
+    timeout_s: int = Field(default=60, ge=1, le=600)
+
+
+@router.get("/capabilities")
+def latex_capabilities_endpoint() -> dict:
+    """Return available TeX engines and latexdiff."""
+    return latex_capabilities()
+
+
+@router.post("/compile")
+def compile_latex_endpoint(req: LatexCompileRequest) -> dict:
+    """Compile a .tex project to PDF (optional external engine)."""
+    return compile_latex_file(
+        Path(req.file_path),
+        workspace=Path(req.workspace_path),
+        output_filename=req.output_filename,
+        engine=req.engine,
+        timeout_s=req.timeout_s,
+    )
+
+
+@router.post("/diff")
+def latexdiff_endpoint(req: LatexDiffRequest) -> dict:
+    """Generate latexdiff .tex and optionally compile a redline PDF."""
+    return latexdiff_files_service(
+        Path(req.original_path),
+        Path(req.revised_path),
+        workspace=Path(req.workspace_path),
+        output_filename=req.output_filename,
+        compile_pdf=req.compile_pdf,
+        engine=req.engine,
+        timeout_s=req.timeout_s,
+    )
+
+
 __all__ = [
     "LatexAuditRequest",
+    "LatexCompileRequest",
+    "LatexDiffRequest",
     "LatexReadRequest",
     "LatexTemplateAnalyzeRequest",
     "LatexTemplateFillRequest",
     "analyze_latex_template_endpoint",
     "audit_latex_endpoint",
+    "compile_latex_endpoint",
     "fill_latex_template_endpoint",
+    "latex_capabilities_endpoint",
+    "latexdiff_endpoint",
     "read_latex_endpoint",
     "router",
 ]

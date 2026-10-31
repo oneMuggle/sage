@@ -431,6 +431,8 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_analyze_latex_template",
                 "office_fill_latex_template",
                 "office_audit_latex",
+                "office_compile_latex",
+                "office_latexdiff",
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -652,6 +654,9 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     "office_fill_latex_template",
     # 2026-10-31 LaTeX 源码审校（与 writer.tools 同步）。
     "office_audit_latex",
+    # 2026-10-31 LaTeX 可选编译 / 红字版（与 writer.tools 同步）。
+    "office_compile_latex",
+    "office_latexdiff",
 ]
 
 

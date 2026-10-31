@@ -71,6 +71,35 @@ export interface LatexAuditResult {
   required_sections: string[];
 }
 
+export interface LatexCapabilities {
+  engines: Array<{ name: string; path: string }>;
+  latexdiff: string | null;
+}
+
+export interface LatexCompileResult {
+  ok: boolean;
+  code?: string;
+  message?: string;
+  engine?: string;
+  pdf_path?: string;
+  returncode?: number;
+  log_tail?: string;
+  duration_ms?: number;
+  available?: Array<{ name: string; path: string }>;
+  issues?: LatexAuditIssue[];
+}
+
+export interface LatexDiffResult {
+  ok: boolean;
+  code?: string;
+  message?: string;
+  diff_path?: string;
+  pdf_path?: string;
+  compile?: LatexCompileResult;
+  latexdiff_available?: boolean;
+  log_tail?: string;
+}
+
 export async function analyzeLatexTemplate(
   workspacePath: string,
   filePath: string,
@@ -112,6 +141,55 @@ export async function auditLatex(
       workspace_path: workspacePath,
       file_path: filePath,
       required_sections: requiredSections,
+    },
+  });
+}
+
+export async function getLatexCapabilities(): Promise<LatexCapabilities> {
+  return backendRequest<LatexCapabilities>({
+    path: '/api/v1/office/latex/capabilities',
+  });
+}
+
+export async function compileLatex(
+  workspacePath: string,
+  filePath: string,
+  outputFilename?: string,
+  engine?: string,
+  timeoutS = 60,
+): Promise<LatexCompileResult> {
+  return backendRequest<LatexCompileResult>({
+    method: 'POST',
+    path: '/api/v1/office/latex/compile',
+    body: {
+      workspace_path: workspacePath,
+      file_path: filePath,
+      output_filename: outputFilename || null,
+      engine: engine || null,
+      timeout_s: timeoutS,
+    },
+  });
+}
+
+export async function latexdiff(
+  workspacePath: string,
+  originalPath: string,
+  revisedPath: string,
+  outputFilename = '',
+  compilePdf = false,
+  engine?: string,
+): Promise<LatexDiffResult> {
+  return backendRequest<LatexDiffResult>({
+    method: 'POST',
+    path: '/api/v1/office/latex/diff',
+    body: {
+      workspace_path: workspacePath,
+      original_path: originalPath,
+      revised_path: revisedPath,
+      output_filename: outputFilename,
+      compile_pdf: compilePdf,
+      engine: engine || null,
+      timeout_s: 60,
     },
   });
 }

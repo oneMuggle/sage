@@ -68,6 +68,7 @@ import {
   type OfficeReadResult,
 } from '../features/office';
 import { LatexAuditPanel } from '../features/office/LatexAuditPanel';
+import { LatexBuildPanel } from '../features/office/LatexBuildPanel';
 import { LatexTemplatePanel } from '../features/office/LatexTemplatePanel';
 import { OfficeStagingInspector } from '../features/office/OfficeStagingInspector';
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
@@ -516,6 +517,7 @@ export function Office() {
               extra IPC manifest entry). */}
           <LatexTemplatePanel />
           <LatexAuditPanel />
+          <LatexBuildPanel />
         </>
       )}
 
