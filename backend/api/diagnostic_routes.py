@@ -188,6 +188,14 @@ def get_browser_health() -> BrowserHealthResponse:
         executable = discover_browser_executable() or ""
     except Exception:  # noqa: BLE001 — 发现失败按未找到处理
         executable = ""
+    if executable == "(embedded)":
+        return BrowserHealthResponse(
+            browserFound=True,
+            executable="Sage 内置浏览器",
+            chromeMajor=None,
+            uaDeclaredMajor=chrome_major_version(),
+            warning="",
+        )
     chrome_major = _probe_chrome_major_safe()
     ua_declared = chrome_major_version()
     warning = ""

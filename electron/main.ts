@@ -46,6 +46,7 @@ import {
 } from 'electron';
 import './crashGuard';
 import { logger } from './logger';
+import { release as osRelease } from 'node:os';
 import { registerEditableContextMenu } from './contextMenu';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { disposePet, getPetController, initPet } from './pet';
@@ -112,6 +113,8 @@ import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
 import { registerModelDownloadIpc } from './modelDownloadIpc';
 import { registerArenaTokenWindow } from './arenaTokenWindow';
+import type { AgentBrowserBridgeHandle } from './agentBrowserBridge';
+import { startAgentBrowserHost } from './agentBrowserHost';
 import { registerUpdateIpc } from './updateIpc';
 import { registerFeedbackIpc } from './feedback/feedbackIpc';
 import { getFeedbackConfig } from './feedback/feedbackConfig';
@@ -325,6 +328,12 @@ let backendGeneration = 0;
 let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 let backendAuthToken: string | null = null;
+
+/**
+ * 内置 Agent 浏览器桥（P1）。仅 Win7 / SAGE_FORCE_EMBEDDED_BROWSER=1 时启动；
+ * 端口与 token 通过 env 传给后端，后端 browser_* 工具据此使用 Sage 自带 Chromium。
+ */
+let agentBrowserHandle: AgentBrowserBridgeHandle | null = null;
 let updateManager: UpdateManager | null = null;
 // P2 (2026-10-19): detected project root from startup cwd — used as fallback
 // auto-bind target for new sessions when no lastWorkspace is stored.
@@ -545,6 +554,13 @@ function spawnBackend(): ChildProcess {
       SAGE_BACKEND_GENERATION: String(generation),
       SAGE_BACKEND_OWNERSHIP_TOKEN: ownershipToken,
       SAGE_LOCAL_AUTH_TOKEN: backendAuthToken,
+      ...(agentBrowserHandle
+        ? {
+            SAGE_EMBEDDED_BROWSER: '1',
+            SAGE_EMBEDDED_BROWSER_PORT: String(agentBrowserHandle.port),
+            SAGE_EMBEDDED_BROWSER_TOKEN: agentBrowserHandle.token,
+          }
+        : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -986,6 +1002,15 @@ function createMainWindow(): void {
   });
   setMainWindow(win);
   ensurePetInitialized();
+
+  // 主窗口关闭时一并回收内置浏览器窗口：否则残留的可见/隐藏窗口会让
+  // window-all-closed 永不触发，进程在无 UI 状态下继续存活。
+  win.on('closed', () => {
+    if (agentBrowserHandle) {
+      void agentBrowserHandle.close();
+      agentBrowserHandle = null;
+    }
+  });
 
   // 2026-09-13: ready-to-show（首帧就绪）后再显示主窗口并关闭启动屏，
   // 消除「窗口已出现但页面尚未绘制」的白屏闪烁。
@@ -2734,7 +2759,15 @@ app
       buildApplicationMenu();
       return;
     }
-    updateSplashStage('正在启动后端服务…');
+    // P1: Win7 无系统浏览器时使用 Sage 自带 Chromium（SAGE_FORCE_EMBEDDED_BROWSER=1 便于非 Win7 验证）。
+  const embeddedBrowserEnabled =
+    process.env.SAGE_FORCE_EMBEDDED_BROWSER === '1' ||
+    (process.platform === 'win32' && osRelease().startsWith('6.1'));
+  if (embeddedBrowserEnabled) {
+    updateSplashStage('正在准备内置浏览器…');
+    agentBrowserHandle = await startAgentBrowserHost();
+  }
+  updateSplashStage('正在启动后端服务…');
     try {
       backendProc = spawnBackend();
     } catch (err) {
@@ -2896,6 +2929,10 @@ app.on('before-quit', () => {
   cleanupUpdateIpc = null;
   cleanupProviderIpc?.();
   cleanupProviderIpc = null;
+  if (agentBrowserHandle) {
+    void agentBrowserHandle.close();
+    agentBrowserHandle = null;
+  }
   void shutdownBackend();
 });
 

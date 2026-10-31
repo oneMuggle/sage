@@ -30,9 +30,12 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.request
 import uuid
 from collections import deque
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
@@ -67,6 +70,34 @@ class BrowserCDPError(RuntimeError):
     """CDP 命令失败（协议错误 / 目标丢失 / 命令报 errorText）。"""
 
 
+#: 内置浏览器（Electron 主进程桥）的占位可执行文件名
+EMBEDDED_EXECUTABLE = "(embedded)"
+
+
+class BrowserType(str, Enum):
+    """浏览器类型（main 分支仅区分外部 Chromium 与内置浏览器）。"""
+
+    CHROME = "chrome"
+    EMBEDDED = "embedded"
+
+
+def _discover_embedded_env() -> Optional[Dict[str, Any]]:
+    """读取 Electron 注入的内置浏览器环境（端口/token）；不完整返回 None。"""
+    if os.environ.get("SAGE_EMBEDDED_BROWSER", "").strip() != "1":
+        return None
+    raw_port = os.environ.get("SAGE_EMBEDDED_BROWSER_PORT", "").strip()
+    token = os.environ.get("SAGE_EMBEDDED_BROWSER_TOKEN", "").strip()
+    if not raw_port or not token:
+        return None
+    try:
+        port = int(raw_port)
+    except ValueError:
+        return None
+    if not 0 < port < 65536:
+        return None
+    return {"port": port, "token": token}
+
+
 # ---------------------------------------------------------------------------
 # 浏览器可执行文件发现
 # ---------------------------------------------------------------------------
@@ -94,6 +125,8 @@ def _windows_candidates() -> List[Path]:
 
 def discover_browser_executable() -> Optional[str]:
     """按 环境变量 → 平台路径 → PATH 顺序找 Chromium 系浏览器。"""
+    if _discover_embedded_env():
+        return EMBEDDED_EXECUTABLE
     env_override = os.environ.get("SAGE_BROWSER_PATH")
     if env_override and Path(env_override).is_file():
         return env_override
@@ -142,6 +175,10 @@ class BrowserSession:
     persistent: bool = False
     #: 持久 profile 目录名（persistent=True 时记录；AU3 自动刷新按名复用）
     profile_name: str = ""
+    #: 浏览器类型（main：chrome / embedded）
+    browser_type: BrowserType = BrowserType.CHROME
+    #: Embedded：Electron 内置浏览器桥的鉴权 token（仅内存持有）
+    bridge_token: str = ""
 
     def is_alive(self) -> bool:
         return self.process.poll() is None
@@ -227,7 +264,21 @@ def _terminate_session(session: BrowserSession) -> None:
     持久 profile（session.persistent）只关进程不删目录 —— 登录态跨会话
     保留的前提；启动失败路径同样经由本函数，持久目录即使启动失败也不删
     （里面可能有用户既有登录态）。
+
+    Embedded 会话的生命周期归 Electron 主进程：这里关闭本会话的目标后返回。
     """
+    if getattr(session, "browser_type", None) == BrowserType.EMBEDDED:
+        try:
+            targets = _embedded_command(session, "Target.getTargets", {})
+            for info in targets.get("targetInfos") or []:
+                target_id = str(info.get("targetId") or "")
+                if target_id:
+                    _embedded_command(
+                        session, "Target.closeTarget", {"targetId": target_id}
+                    )
+        except Exception:  # noqa: BLE001 — 关闭失败不阻断会话回收
+            logger.debug("关闭内置浏览器目标失败", exc_info=True)
+        return
     # SN3：先停事件通道（常驻 WS 线程），再杀进程
     try:
         from .browser_events import stop_download_tracking
@@ -466,6 +517,24 @@ def _build_launch_command(
     return command
 
 
+class _EmbeddedProcess:
+    """占位的子进程接口：内置浏览器由 Electron 管理，无本进程句柄。"""
+
+    pid = 0
+
+    def poll(self) -> Optional[int]:
+        return None  # 只要 Electron 存活，会话即视为存活
+
+    def terminate(self) -> None:
+        return None
+
+    def kill(self) -> None:
+        return None
+
+    def wait(self, timeout: Optional[float] = None) -> int:
+        return 0
+
+
 def launch_browser(
     headless: bool = True,
     browser_id: Optional[str] = None,
@@ -485,8 +554,25 @@ def launch_browser(
     Raises:
         BrowserCDPError: 找不到浏览器 / 启动超时 / 实例数超限。
     """
+    embedded = _discover_embedded_env()
+    if embedded:
+        session = BrowserSession(
+            browser_id=browser_id or uuid.uuid4().hex[:12],
+            executable=EMBEDDED_EXECUTABLE,
+            headless=headless,
+            user_data_dir="",
+            process=_EmbeddedProcess(),
+            port=int(embedded["port"]),
+            ws_path="/devtools/browser/embedded",
+            persistent=True,
+            profile_name="embedded",
+            browser_type=BrowserType.EMBEDDED,
+            bridge_token=str(embedded["token"]),
+        )
+        get_browser_manager().register(session)
+        return session
     executable = discover_browser_executable()
-    if not executable:
+    if not executable or not Path(executable).is_file():
         raise BrowserCDPError(
             "未找到 Chrome/Edge 浏览器：请安装或用环境变量 SAGE_BROWSER_PATH 指定可执行文件路径"
         )
@@ -628,6 +714,47 @@ def ensure_page_target(session: BrowserSession, target_id: Optional[str] = None)
     return created
 
 
+def _embedded_command(
+    session: BrowserSession,
+    method: str,
+    params: Optional[Dict[str, Any]] = None,
+    target_id: Optional[str] = None,
+    headless_override: Optional[bool] = None,
+) -> Dict[str, Any]:
+    """把 CDP 命令转发到 Electron 主进程的内置浏览器 HTTP 桥。"""
+    payload = json.dumps(
+        {
+            "method": method,
+            "params": params or {},
+            "targetId": target_id or "",
+            "session": session.browser_id,
+            "headless": (
+                bool(headless_override)
+                if headless_override is not None
+                else bool(session.headless)
+            ),
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{session.port}/command",
+        data=payload,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "X-Sage-Bridge-Token": session.bridge_token,
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=CDP_TIMEOUT_SECONDS + 10) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise BrowserCDPError(f"内置浏览器桥不可用: {exc}") from exc
+    if isinstance(data, dict) and data.get("error"):
+        message = (data.get("error") or {}).get("message", "unknown")
+        raise BrowserCDPError(f"CDP 错误 ({method}): {message}")
+    return (data.get("result") if isinstance(data, dict) else None) or {}
+
+
 def cdp_command(
     session: BrowserSession,
     method: str,
@@ -638,7 +765,10 @@ def cdp_command(
 
     一次调用 = 一条短连接（attach → command → close）。页面级方法
     自动带 sessionId；浏览器级方法（Target.*）不带。
+    Embedded 会话经 Electron 主进程 HTTP 桥执行，协议语义保持一致。
     """
+    if getattr(session, "browser_type", None) == BrowserType.EMBEDDED:
+        return _embedded_command(session, method, params, target_id)
     connection = _CDPConnection(session)
     try:
         # 浏览器级方法不带 sessionId（Target.* 自身即浏览器级；Browser.* 如

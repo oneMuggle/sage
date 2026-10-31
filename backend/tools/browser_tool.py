@@ -306,13 +306,24 @@ class BrowserLaunchTool(BaseTool):
             logger.warning("setDownloadBehavior 失败（不影响启动）: %s", exc)
 
         # SN3：常驻事件通道跟踪下载（downloadWillBegin / downloadProgress）
-        tracker = start_download_tracking(
-            session.browser_id, session.port, session.ws_path, str(download_dir)
-        )
-        if not tracker.connected:
-            logger.warning(
-                "下载事件通道未建立（browser_downloads 将退化为目录列举）: %s", tracker.error
+        # Embedded（Electron 内置浏览器）无 WS 通道：browser_downloads 走目录列举。
+        tracker = None
+        if getattr(session, "browser_type", "") != "embedded":
+            tracker = start_download_tracking(
+                session.browser_id, session.port, session.ws_path, str(download_dir)
             )
+            if not tracker.connected:
+                logger.warning(
+                    "下载事件通道未建立（browser_downloads 将退化为目录列举）: %s",
+                    tracker.error,
+                )
+
+        if getattr(session, "browser_type", "") == "embedded":
+            note = "使用 Sage 内置浏览器；cookie/localStorage 共享持久分区，browser_close 不会清除。"
+        else:
+            note = "用 browser_navigate 打开页面；browser_close 结束会话。"
+            if session.persistent:
+                note += "持久 profile 关闭后登录态保留。"
 
         return ToolResult(
             success=True,
@@ -323,11 +334,8 @@ class BrowserLaunchTool(BaseTool):
                 "persistent": session.persistent,
                 "profile_dir": session.user_data_dir,
                 "download_dir": str(download_dir),
-                "download_tracking": bool(tracker.connected),
-                "note": (
-                    "用 browser_navigate 打开页面；browser_close 结束会话。"
-                    + ("持久 profile 关闭后登录态保留。" if session.persistent else "")
-                ),
+                "download_tracking": bool(tracker is not None and tracker.connected),
+                "note": note,
             },
         )
 

@@ -455,6 +455,9 @@ def _ensure_pool_channel(session: Any) -> bool:
     不影响渲染（返回 False，状态走 Navigation Timing 兜底）；幂等，池重建
     后经既有 ``stop_download_tracking`` 清理、下次渲染自动重连。
     """
+    # Embedded（Electron 内置浏览器）没有 WebSocket 事件通道：走轮询兜底
+    if getattr(session, "browser_type", "") == "embedded":
+        return False
     try:
         return start_event_channel(
             session.browser_id, session.port, session.ws_path

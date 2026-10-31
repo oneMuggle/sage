@@ -89,8 +89,8 @@ class TestHappyPath:
         from urllib.parse import parse_qs, urlparse
 
         qs = parse_qs(urlparse(call_kwargs["url"]).query)
-        assert qs["Txt"] == ["大语言模型综述"]
-        assert qs["t"] == ["5"]
+        assert qs["kw"] == ["大语言模型综述"]
+        assert qs["pageSize"] == ["5"]
 
         # ask_user 也被调用
         ask_user.execute.assert_called_once()
