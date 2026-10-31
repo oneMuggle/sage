@@ -3,6 +3,8 @@
  */
 import { enChatAndSider } from './locales/en/chatAndSider';
 import { enContextMenu } from './locales/en/contextMenu';
+import { enPet } from './locales/en/pet';
+import { enPetPack } from './locales/en/petPack';
 import { enSettingsAndModels } from './locales/en/settingsAndModels';
 import { enSettingsUi } from './locales/en/settingsUi';
 import { enWorkspaceAndTools } from './locales/en/workspaceAndTools';
@@ -13,6 +15,8 @@ import type { TranslationKey } from './zh';
 export const en: Record<TranslationKey, string> = {
   ...enChatAndSider,
   ...enContextMenu,
+  ...enPet,
+  ...enPetPack,
   ...enSettingsAndModels,
   ...enSettingsUi,
   ...enWorkspaceAndTools,
