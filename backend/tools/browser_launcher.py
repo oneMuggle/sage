@@ -36,6 +36,10 @@ CHROME_POLL_INTERVAL = 0.2
 FIREFOX_POLL_INTERVAL = 0.5
 
 
+#: 内置浏览器的占位可执行文件名（无真实文件；仅用于诊断/日志展示）
+EMBEDDED_EXECUTABLE = "(embedded)"
+
+
 class BrowserType(str, Enum):
     """支持的浏览器类型枚举。"""
 
@@ -43,6 +47,7 @@ class BrowserType(str, Enum):
     EDGE = "edge"
     CHROMIUM = "chromium"
     FIREFOX = "firefox"
+    EMBEDDED = "embedded"
     UNKNOWN = "unknown"
 
 
@@ -202,6 +207,35 @@ class FirefoxLauncher(BrowserLauncher):
         )
 
 
+class EmbeddedLauncher(BrowserLauncher):
+    """连接 Electron 主进程的内置浏览器桥（不 spawn 子进程）。
+
+    端口与 token 由 Electron 启动后端时通过环境变量注入；CDP 语义由
+    Electron 侧的 HTTP 桥模拟（见 electron/agentBrowserBridge.ts）。
+    """
+
+    def __init__(self, port: int, token: str) -> None:
+        self.port = port
+        self.token = token
+
+    def build_command(
+        self,
+        executable: str,
+        headless: bool,
+        user_data_dir: str,
+        proxy_flag: str = "",
+    ) -> List[str]:
+        return []
+
+    def wait_for_cdp(
+        self,
+        process: subprocess.Popen,
+        user_data_dir: str,
+        timeout: float = LAUNCH_TIMEOUT_SECONDS,
+    ) -> Tuple[int, str]:
+        return self.port, "/devtools/browser/embedded"
+
+
 def _windows_candidates() -> List[Tuple[BrowserType, Path]]:
     program_files = os.environ.get("PROGRAMFILES", r"C:\Program Files")
     program_files_x86 = os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
@@ -278,6 +312,30 @@ def _create_capability(b_type: BrowserType, executable: str) -> BrowserCapabilit
     )
 
 
+def _discover_embedded() -> Optional[BrowserCapability]:
+    """Electron 内置浏览器桥（Win7 兜底）：env 齐全且显式启用时生效。"""
+    if os.environ.get("SAGE_EMBEDDED_BROWSER", "").strip() != "1":
+        return None
+    raw_port = os.environ.get("SAGE_EMBEDDED_BROWSER_PORT", "").strip()
+    token = os.environ.get("SAGE_EMBEDDED_BROWSER_TOKEN", "").strip()
+    if not raw_port or not token:
+        return None
+    try:
+        port = int(raw_port)
+    except ValueError:
+        return None
+    if not 0 < port < 65536:
+        return None
+    return BrowserCapability(
+        browser_type=BrowserType.EMBEDDED,
+        executable=EMBEDDED_EXECUTABLE,
+        version=None,
+        cdp_port=port,
+        cdp_endpoint_strategy="embedded",
+        launcher=EmbeddedLauncher(port, token),
+    )
+
+
 def _discover_from_env() -> Optional[BrowserCapability]:
     env_browser = os.environ.get("SAGE_BROWSER_PATH")
     if env_browser and Path(env_browser).is_file():
@@ -286,7 +344,9 @@ def _discover_from_env() -> Optional[BrowserCapability]:
     env_firefox = os.environ.get("SAGE_FIREFOX_PATH")
     if env_firefox and Path(env_firefox).is_file():
         return _create_capability(BrowserType.FIREFOX, env_firefox)
-    return None
+
+    # 显式路径优先；否则使用 Electron 内置浏览器（仅 Win7 / 强制开关时注入）
+    return _discover_embedded()
 
 
 def _discover_windows() -> Optional[BrowserCapability]:

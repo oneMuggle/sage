@@ -30,35 +30,36 @@ pytestmark = pytest.mark.unit
 
 
 class TestCNKIAdapter:
-    def test_build_url_uses_cnki_old_endpoint(self):
+    def test_build_url_uses_cnki_kns8s_endpoint(self):
         url = CNKIAdapter().build_search_url("大语言模型 综述")
         parsed = urlparse(url)
         assert parsed.scheme == "https"
-        assert parsed.netloc == "www.cnki.net"
-        assert parsed.path == "/old/kns/brief/default_result.aspx"
+        assert parsed.netloc == "kns.cnki.net"
+        assert parsed.path == "/kns8s/defaultresult/index"
+
+    def test_build_url_keeps_legacy_endpoint_constant(self):
+        assert "old/kns/brief" in CNKIAdapter.LEGACY_BASE_URL
 
     def test_build_url_encodes_query_chinese(self):
         url = CNKIAdapter().build_search_url("深度学习 综述")
         qs = parse_qs(urlparse(url).query)
-        assert qs["Txt"] == ["深度学习 综述"]
+        assert qs["kw"] == ["深度学习 综述"]
 
     def test_build_url_default_limit_is_10(self):
         url = CNKIAdapter().build_search_url("机器学习")
         qs = parse_qs(urlparse(url).query)
-        assert qs["t"] == ["10"]
+        assert qs["pageSize"] == ["10"]
 
     def test_build_url_respects_explicit_limit(self):
         url = CNKIAdapter().build_search_url("机器学习", limit=20)
         qs = parse_qs(urlparse(url).query)
-        assert qs["t"] == ["20"]
+        assert qs["pageSize"] == ["20"]
 
     def test_build_url_has_required_cnki_params(self):
         url = CNKIAdapter().build_search_url("foo")
         qs = parse_qs(urlparse(url).query)
-        assert qs["QueryID"] == ["0"]
-        assert qs["PageName"] == ["ASP.brief_result_aspx"]
-        assert qs["DbPrefix"] == ["SCDB"]
-        assert qs["research"] == ["off"]
+        assert qs["kw"] == ["foo"]
+        assert qs["korder"] == ["SU"]
 
 
 # ============================================================================

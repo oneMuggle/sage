@@ -69,6 +69,8 @@ def _check_executable_chrome(cap: Optional[Any] = None) -> CheckResult:
     """检查 Chrome/Edge 可执行文件是否可发现。"""
     if cap is None:
         cap = discover_and_select()
+    if cap and cap.browser_type == BrowserType.EMBEDDED:
+        return _pass("executable_chrome", "发现 Sage 内置浏览器（Electron Chromium）")
     if cap and cap.browser_type in (BrowserType.CHROME, BrowserType.EDGE):
         return _pass(
             "executable_chrome",
@@ -225,6 +227,9 @@ def _check_cdp_handshake() -> CheckResult:
     executable = discover_browser_executable()
     if not executable:
         return _warn("cdp_handshake", "无可执行文件，跳过握手测试")
+    cap = discover_and_select()
+    if cap and cap.browser_type == BrowserType.EMBEDDED:
+        return _pass("cdp_handshake", "内置浏览器由 Electron 主进程托管，无需独立握手")
 
     try:
         # 启动浏览器（headless + 临时目录）
