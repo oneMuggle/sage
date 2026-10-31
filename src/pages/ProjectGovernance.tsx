@@ -12,6 +12,7 @@ import { ArrowLeft, CheckCircle2, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { PlaybookCard } from '../features/playbook/PlaybookCard';
 import {
   MilestoneManager,
   PolymorphicArchetypeCards,
@@ -25,7 +26,6 @@ import {
   StudioMaterialsTabPanel,
   StudioProfileTabPanel,
 } from '../features/project-type/StudioMaterialsAndProfilePanels';
-import { PlaybookCard } from '../features/playbook/PlaybookCard';
 import {
   ARCHETYPE_ORDER,
   ARCHETYPE_BLUEPRINTS,
