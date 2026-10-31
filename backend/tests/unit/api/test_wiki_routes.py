@@ -793,3 +793,5 @@ def test_route_vision_ok(client, patch_auth, monkeypatch, tmp_path) -> None:
     body = client.post("/wiki/vision", json=payload).json()
     assert body["caption"] == "a cat"
     assert body["cached"] is False
+    assert body["mode"] == "vision"
+

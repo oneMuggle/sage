@@ -171,7 +171,13 @@ SKILL_TOOLS = ("skill", "skill_save")
 
 # 多模态工具（2026-09-12 multimodal capabilities）：TTS 文本转语音 /
 # ASR 语音识别 / 图像生成。全部 EXTERNAL（调用外部 API），requires_tool_context=True。
-MULTIMODAL_TOOLS = ("text_to_speech", "speech_to_text", "generate_image")
+# 2026-10-31 本地 OCR：ocr_image 为 READ（本地推理，不调用外部 API）。
+MULTIMODAL_TOOLS = (
+    "text_to_speech",
+    "speech_to_text",
+    "generate_image",
+    "ocr_image",
+)
 
 # 循环内编排：子代理委派 / 任务清单 / 结构化输出 / 用户提问
 ORCH_TOOLS = ("agent", "todo_write", "structured_output", "ask_user_question")

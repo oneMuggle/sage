@@ -1866,7 +1866,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # G6 (2026-09-06): 图片附件处理。
             # 智能降级：优先使用 chatModel 的原生 vision 能力，不足时降级到 visionModel。
             if data.images:
-                messages = await agent._prepare_messages_with_images(messages, data.images)
+                messages = await agent._prepare_messages_with_images(
+                    messages, data.images, data.image_ocr_texts or None
+                )
 
             # Task 5 (round 2): explicit reject when the assembled request
             # exceeds the catalog-resolved window. History was already
