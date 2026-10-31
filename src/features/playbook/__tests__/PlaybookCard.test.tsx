@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PlaybookCurrent } from '../../../shared/api/playbookApi';
@@ -355,6 +355,45 @@ describe('PlaybookCard', () => {
     await waitFor(() =>
       expect(bindMock).toHaveBeenCalledWith('p1', {
         spec: expect.objectContaining({ name: '表单改名规程' }),
+        source: 'custom',
+      }),
+    );
+  });
+
+  it('表单模式可编辑阶段规则与退出条件', async () => {
+    getCurrentMock.mockResolvedValue(bound);
+    bindMock.mockResolvedValue({ ...bound, version: 2 });
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-edit-btn');
+    fireEvent.click(screen.getByTestId('playbook-edit-btn'));
+
+    const rules = await screen.findByTestId('playbook-editor-rules-proposal');
+    fireEvent.click(within(rules).getByText('添加规则'));
+    fireEvent.change(within(rules).getByPlaceholderText('规则正文（无模板 key 时必填）'), {
+      target: { value: '禁止编造引用' },
+    });
+
+    const criteria = screen.getByTestId('playbook-editor-criteria-proposal');
+    fireEvent.click(within(criteria).getByText('添加退出条件'));
+    fireEvent.change(within(criteria).getByPlaceholderText('条件名称'), {
+      target: { value: '文献矩阵已完成' },
+    });
+
+    fireEvent.click(screen.getByTestId('playbook-save-spec'));
+    await waitFor(() =>
+      expect(bindMock).toHaveBeenCalledWith('p1', {
+        spec: expect.objectContaining({
+          stages: expect.arrayContaining([
+            expect.objectContaining({
+              rules: expect.arrayContaining([
+                expect.objectContaining({ content: '禁止编造引用' }),
+              ]),
+              exit_criteria: expect.arrayContaining([
+                expect.objectContaining({ label: '文献矩阵已完成', type: 'manual' }),
+              ]),
+            }),
+          ]),
+        }),
         source: 'custom',
       }),
     );
