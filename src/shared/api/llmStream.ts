@@ -28,7 +28,13 @@ export type AgentState =
   | 'subagent_event'
   | 'approval_mode'
   // Task 10 (2026-09-17): 自动话题检测 — 切换 segment 时由 producer 推送。
+<<<<<<< HEAD
   | 'topic_shifted';
+=======
+  | 'topic_shifted'
+  // 2026-10-31: 动态迭代预算检查点（与 types/chatAndEventTypes.ts 同步）。
+  | 'iteration_checkpoint';
+>>>>>>> origin/main
 
 // 窄类型事件接口 —— useChat taskBoard 状态机的数据类型。
 // AgentState / AgentEvent（宽松字段）见 types.ts —— 双处保持一致。
@@ -50,6 +56,7 @@ export interface TaskPlanEvent {
   reasoning?: string;
 }
 
+<<<<<<< HEAD
 export type TaskStatusValue =
   | 'queued'
   | 'running'
@@ -57,6 +64,9 @@ export type TaskStatusValue =
   | 'failed'
   | 'cancelled'
   | 'skipped';
+=======
+export type TaskStatusValue = 'queued' | 'running' | 'done' | 'failed' | 'cancelled' | 'skipped';
+>>>>>>> origin/main
 
 export interface TaskStatusEvent {
   state: 'task_status';

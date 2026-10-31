@@ -3,7 +3,10 @@
  */
 import { enChatAndSider } from './locales/en/chatAndSider';
 import { enContextMenu } from './locales/en/contextMenu';
+<<<<<<< HEAD
 import { enPet } from './locales/en/pet';
+=======
+>>>>>>> origin/main
 import { enPetPack } from './locales/en/petPack';
 import { enSettingsAndModels } from './locales/en/settingsAndModels';
 import { enSettingsUi } from './locales/en/settingsUi';
@@ -15,7 +18,10 @@ import type { TranslationKey } from './zh';
 export const en: Record<TranslationKey, string> = {
   ...enChatAndSider,
   ...enContextMenu,
+<<<<<<< HEAD
   ...enPet,
+=======
+>>>>>>> origin/main
   ...enPetPack,
   ...enSettingsAndModels,
   ...enSettingsUi,

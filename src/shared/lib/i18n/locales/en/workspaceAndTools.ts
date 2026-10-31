@@ -413,7 +413,10 @@ export const enWorkspaceAndTools = {
   // ─── U4' Session management closure (parity round 5 batch A) ─────
   'session.rename': 'Rename session',
   'session.rename_failed': 'Rename failed: {message}',
+<<<<<<< HEAD
   'session.title_generating': '✨ Generating title…',
+=======
+>>>>>>> origin/main
   'sidebar.search_sessions': 'Search sessions',
   'sidebar.no_match': 'No matching sessions',
 

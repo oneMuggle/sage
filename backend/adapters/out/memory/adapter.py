@@ -39,6 +39,10 @@ def _extract_query_tags(query: str, max_tags: int = 5) -> List[str]:
     """
     return extract_tags(query, max_tags)
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/main
 class MemoryAdapter:
     """记忆端口适配器 - 将 MemoryPort 适配到现有的 MemoryManager
 
@@ -466,6 +470,15 @@ class MemoryAdapter:
             "source_message_id": source_message_id,
             "memory_category": memory_category,
         }
+
+        # P3 (Mem0 风格): 写入前冲突消解——NOOP 复用既有记忆 ID,
+        # UPDATE 写新行并使旧行失效;返回 None 表示按 ADD 走原路径。
+        # 消解的任何失败都不阻塞写入（退回普通 append）。
+        conflict_id = await self._resolve_conflict(
+            content, session_id, importance, metadata, memory_type
+        )
+        if conflict_id is not None:
+            return conflict_id
 
         # P3 (Mem0 风格): 写入前冲突消解——NOOP 复用既有记忆 ID,
         # UPDATE 写新行并使旧行失效;返回 None 表示按 ADD 走原路径。

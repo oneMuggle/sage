@@ -7,6 +7,11 @@ import { PlaybookCard } from '../PlaybookCard';
 
 const getCurrentMock = vi.fn();
 const listBuiltinMock = vi.fn();
+<<<<<<< HEAD
+=======
+const listLibraryMock = vi.fn();
+const saveLibraryMock = vi.fn();
+>>>>>>> origin/main
 const bindMock = vi.fn();
 const auditMock = vi.fn();
 const auditAiMock = vi.fn();
@@ -26,6 +31,11 @@ vi.mock('../../../shared/api/playbookApi', () => ({
   playbookApi: {
     getCurrent: (...args: unknown[]) => getCurrentMock(...args),
     listBuiltin: (...args: unknown[]) => listBuiltinMock(...args),
+<<<<<<< HEAD
+=======
+    listLibrary: (...args: unknown[]) => listLibraryMock(...args),
+    saveLibrary: (...args: unknown[]) => saveLibraryMock(...args),
+>>>>>>> origin/main
     bind: (...args: unknown[]) => bindMock(...args),
     audit: (...args: unknown[]) => auditMock(...args),
     auditAi: (...args: unknown[]) => auditAiMock(...args),
@@ -159,6 +169,10 @@ beforeEach(() => {
       directories: [],
     },
   ]);
+<<<<<<< HEAD
+=======
+  listLibraryMock.mockResolvedValue([]);
+>>>>>>> origin/main
 });
 
 describe('PlaybookCard', () => {
@@ -483,4 +497,49 @@ describe('PlaybookCard', () => {
       ]),
     );
   });
+<<<<<<< HEAD
+=======
+
+  it('可从规程库选择并绑定', async () => {
+    getCurrentMock.mockResolvedValue(unbound);
+    listLibraryMock.mockResolvedValue([
+      {
+        id: 'lib-1',
+        name: '课题规程库',
+        source: 'imported',
+        spec_hash: 'h',
+        created_at: 1,
+        stage_count: 3,
+        directories: [],
+      },
+    ]);
+    bindMock.mockResolvedValue({ ...bound, version: 2 });
+    render(<PlaybookCard projectId="p1" />);
+    const select = await screen.findByLabelText('选择项目规程');
+    fireEvent.change(select, { target: { value: 'library:lib-1' } });
+    fireEvent.click(screen.getByTestId('playbook-bind-btn'));
+    await waitFor(() =>
+      expect(bindMock).toHaveBeenCalledWith('p1', { libraryId: 'lib-1' }),
+    );
+  });
+
+  it('可把当前规程保存到规程库', async () => {
+    getCurrentMock.mockResolvedValue(bound);
+    exportMock.mockResolvedValue({
+      format: 'json',
+      filename: 'x.sageplaybook.json',
+      content: { format: 'sage.playbook' },
+    });
+    saveLibraryMock.mockResolvedValue({ id: 'lib-2', name: '科研课题' });
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-save-library');
+    fireEvent.click(screen.getByTestId('playbook-save-library'));
+    await waitFor(() =>
+      expect(saveLibraryMock).toHaveBeenCalledWith(
+        { format: 'sage.playbook' },
+        'project',
+      ),
+    );
+  });
+>>>>>>> origin/main
 });

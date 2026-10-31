@@ -773,9 +773,12 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_episodic_scope_project
             ON memories_episodic(scope, project_key)
         """)
+<<<<<<< HEAD
 
         # win7-only（Task 4 / Gap A）：补 source_turn_id 等三列，见 _migrate_memory_traceability。
         _migrate_memory_traceability(conn)
+=======
+>>>>>>> origin/main
 
         # 技能定义不再由 SQLite ``skills`` 表承载。
         # 当前实现从 SkillRegistry / SKILL.md 文件加载；故新数据库不得创建
@@ -1075,6 +1078,27 @@ class Database:
         )
         conn.commit()
 
+<<<<<<< HEAD
+=======
+        # Playbook library (2026-10-31): imported/shared playbooks that are not
+        # bound to a single project. Deduplicated by canonical spec hash.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS playbook_library (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                source TEXT NOT NULL,
+                spec_json TEXT NOT NULL,
+                spec_hash TEXT NOT NULL UNIQUE,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_playbook_library_recent "
+            "ON playbook_library(created_at DESC)"
+        )
+        conn.commit()
+
+>>>>>>> origin/main
         # Project constraints (2026-09-24): 结构化项目约束，替代纯文本
         # instructions。按类别分类（coding_style/security/testing 等），支持
         # 触发模式匹配（glob）和优先级排序。注入到系统提示词影响 AI 行为。
@@ -2164,7 +2188,11 @@ class Database:
         # ==================== 用户反馈系统（Phase 1: 本地会话） ====================
         # 双向会话：用户发起 + 管理员通过 Jira/GitLab/SMTP 回复，回复经转发脚本中继，
         # 客户端定期 GET 拉取。conversation_id 为客户端生成 UUID v4，全程不变。
+<<<<<<< HEAD
         # 详见 docs/technical/111-feedback-relay-deployment.md §11.1
+=======
+        # 详见 docs/technical/109-feedback-relay-deployment.md §11.1
+>>>>>>> origin/main
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS feedback_conversations (
                 id TEXT PRIMARY KEY,

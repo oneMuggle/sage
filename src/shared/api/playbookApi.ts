@@ -196,6 +196,19 @@ export interface PlaybookVersion {
   active: boolean;
 }
 
+<<<<<<< HEAD
+=======
+export interface PlaybookLibraryItem {
+  id: string;
+  name: string;
+  source: string;
+  spec_hash: string;
+  created_at: number;
+  stage_count: number;
+  directories: string[];
+}
+
+>>>>>>> origin/main
 export interface PlaybookStatePatch {
   waivers?: string[];
   manual_done?: string[];
@@ -221,6 +234,10 @@ export interface PlaybookAuthorPreview {
 
 export interface PlaybookBindPayload {
   playbookId?: string;
+<<<<<<< HEAD
+=======
+  libraryId?: string;
+>>>>>>> origin/main
   spec?: PlaybookSpec;
   source?: string;
 }
@@ -246,6 +263,10 @@ export const playbookApi = {
     return invoke<PlaybookCurrent>('playbook_bind', {
       projectId,
       playbookId: payload.playbookId,
+<<<<<<< HEAD
+=======
+      libraryId: payload.libraryId,
+>>>>>>> origin/main
       spec: payload.spec,
       source: payload.source,
     });
@@ -344,11 +365,43 @@ export const playbookApi = {
     envelope: Record<string, unknown>,
     projectId: string,
     conflict: 'replace' | 'merge' | 'save_as_new' = 'save_as_new',
+<<<<<<< HEAD
+=======
+    saveToLibrary = false,
+>>>>>>> origin/main
   ): Promise<PlaybookCurrent> {
     return invoke<PlaybookCurrent>('playbook_import', {
       envelope,
       projectId,
       conflict,
+<<<<<<< HEAD
     });
   },
+=======
+      saveToLibrary,
+    });
+  },
+
+  async listLibrary(): Promise<PlaybookLibraryItem[]> {
+    const response = await invoke<{ items: PlaybookLibraryItem[] }>(
+      'playbooks_library_list',
+    );
+    return response.items ?? [];
+  },
+
+  async saveLibrary(
+    envelope: Record<string, unknown>,
+    source = 'imported',
+  ): Promise<PlaybookLibraryItem> {
+    const response = await invoke<{ item: PlaybookLibraryItem }>(
+      'playbooks_library_save',
+      { envelope, source },
+    );
+    return response.item;
+  },
+
+  async deleteLibrary(libraryId: string): Promise<void> {
+    await invoke<{ removed: boolean }>('playbooks_library_delete', { libraryId });
+  },
+>>>>>>> origin/main
 };

@@ -111,7 +111,11 @@ def test_max_subagent_iterations_bad_value_falls_back():
             "orch": {"maxSubagentIterations": True}
         }
         s = load_orch_settings()
+<<<<<<< HEAD
     assert s.max_subagent_iterations == 10  # alpha.36 (Bug #2): 6 → 10
+=======
+    assert s.max_subagent_iterations == 6
+>>>>>>> origin/main
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +142,11 @@ def test_iteration_budgets_override():
     assert s.max_scout_iterations == 2
     assert s.max_planner_iterations == 12
     # 同段其他键不受影响
+<<<<<<< HEAD
     assert s.max_subagent_iterations == 10
+=======
+    assert s.max_subagent_iterations == 6
+>>>>>>> origin/main
 
 
 def test_iteration_budgets_bad_value_falls_back():

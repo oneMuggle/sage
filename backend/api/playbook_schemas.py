@@ -36,10 +36,49 @@ class PlaybookBindRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     playbook_id: Optional[str] = Field(default=None, max_length=128)
+<<<<<<< HEAD
+=======
+    library_id: Optional[str] = Field(default=None, max_length=128)
+>>>>>>> origin/main
     spec: Optional[Dict[str, Any]] = None
     source: Optional[str] = Field(default=None, max_length=256)
 
 
+<<<<<<< HEAD
+=======
+class PlaybookLibraryItemModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    source: str
+    spec_hash: str
+    created_at: int
+    stage_count: int = 0
+    directories: List[str] = Field(default_factory=list)
+
+
+class PlaybookLibraryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[PlaybookLibraryItemModel] = Field(default_factory=list)
+
+
+class PlaybookLibrarySaveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    envelope: Dict[str, Any]
+    source: Optional[str] = Field(default=None, max_length=128)
+
+
+class PlaybookLibrarySaveResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item: PlaybookLibraryItemModel
+    created: bool
+
+
+>>>>>>> origin/main
 class PlaybookStateUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -148,6 +187,10 @@ class PlaybookImportRequest(BaseModel):
     envelope: Dict[str, Any]
     project_id: Optional[str] = Field(default=None, max_length=128)
     conflict: str = Field(default="save_as_new", pattern="^(replace|merge|save_as_new)$")
+<<<<<<< HEAD
+=======
+    save_to_library: bool = False
+>>>>>>> origin/main
 
 
 class PlaybookAuthorPreviewRequest(BaseModel):
@@ -181,6 +224,13 @@ __all__ = [
     "PlaybookImportPreviewRequest",
     "PlaybookImportPreviewResponse",
     "PlaybookImportRequest",
+<<<<<<< HEAD
+=======
+    "PlaybookLibraryItemModel",
+    "PlaybookLibraryResponse",
+    "PlaybookLibrarySaveRequest",
+    "PlaybookLibrarySaveResponse",
+>>>>>>> origin/main
     "PlaybookRuleCleanupResponse",
     "PlaybookStageConfirmRequest",
     "PlaybookStateUpdateRequest",

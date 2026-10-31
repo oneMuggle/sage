@@ -33,6 +33,7 @@ import threading
 from pathlib import Path
 from typing import Literal, Optional, Tuple
 
+<<<<<<< HEAD
 from pydantic import BaseModel, Field
 
 # ConfigDict 其实不是 v2 专有（pydantic 1.10.13 的 __init__.py 就有，自 v1.10.0 起），
@@ -41,6 +42,9 @@ from pydantic import BaseModel, Field
 # 垫片的 ConfigDict 在 v2 下直接 re-export pydantic 的，在 v1 下返回普通 dict
 # 配合 install() 的 metaclass hook 转成 class Config。
 from backend.compat.win7.pydantic_compat import ConfigDict
+=======
+from pydantic import BaseModel, ConfigDict, Field
+>>>>>>> origin/main
 
 from .errors import OfficeError
 from .path_safety import resolve_within

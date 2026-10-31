@@ -23,7 +23,10 @@ from __future__ import annotations
 
 import logging
 import os
+<<<<<<< HEAD
 from typing import Optional
+=======
+>>>>>>> origin/main
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +86,11 @@ def llm_total_timeout_s() -> float:
     return value
 
 
+<<<<<<< HEAD
 def llm_total_timeout_or_none() -> Optional[float]:
+=======
+def llm_total_timeout_or_none() -> float | None:
+>>>>>>> origin/main
     """返回可直接传给 ``asyncio.wait_for(coro, timeout=...)`` 的值。
 
     0.0 → None（= 不限）；其他正值原样返回。

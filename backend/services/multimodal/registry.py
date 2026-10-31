@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from .capability import AICapability, CapabilityKind
 
@@ -17,7 +17,7 @@ class CapabilityRegistry:
         cls._capabilities[capability.kind] = capability
 
     @classmethod
-    def get(cls, kind: CapabilityKind) -> Optional[AICapability]:
+    def get(cls, kind: CapabilityKind) -> AICapability | None:
         return cls._capabilities.get(kind)
 
     @classmethod

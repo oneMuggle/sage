@@ -79,6 +79,19 @@ from .office_journal_tool import (
     OfficeJournalParseTemplateTool,
     OfficeJournalValidateTool,
 )
+<<<<<<< HEAD
+=======
+from .office_latex_audit_tool import OfficeAuditLatexTool
+from .office_latex_build_tool import OfficeCompileLatexTool, OfficeLatexdiffTool
+from .office_latex_compliance_tool import OfficeCheckLatexComplianceTool
+from .office_latex_pdf_tool import OfficeAuditLatexPdfTool
+from .office_latex_project_tool import OfficeExtractLatexProjectTool
+from .office_latex_template_tool import (
+    OfficeAnalyzeLatexTemplateTool,
+    OfficeFillLatexTemplateTool,
+)
+from .office_latex_tool import OfficeReadLatexTool
+>>>>>>> origin/main
 from .office_lint_tool import OfficeLintWordTool
 from .office_pdf_tool import (
     OfficeFillPdfFormTool,
@@ -224,6 +237,18 @@ def _install_office_quality(ctx: ToolInstallContext) -> None:
     # Round 9 引用体系 / Round 10 格式 Linter / Round 12 自动修复 / Round 39 目录页码
     ctx.registry.register(OfficeBibTexTool(policy=policy))
     ctx.registry.register(OfficeLintWordTool(policy=policy))
+<<<<<<< HEAD
+=======
+    ctx.registry.register(OfficeReadLatexTool(policy=policy))
+    ctx.registry.register(OfficeAnalyzeLatexTemplateTool(policy=policy))
+    ctx.registry.register(OfficeFillLatexTemplateTool(policy=policy))
+    ctx.registry.register(OfficeAuditLatexTool(policy=policy))
+    ctx.registry.register(OfficeAuditLatexPdfTool(policy=policy))
+    ctx.registry.register(OfficeCheckLatexComplianceTool(policy=policy))
+    ctx.registry.register(OfficeCompileLatexTool(policy=policy))
+    ctx.registry.register(OfficeLatexdiffTool(policy=policy))
+    ctx.registry.register(OfficeExtractLatexProjectTool(policy=policy))
+>>>>>>> origin/main
     ctx.registry.register(OfficeRepairWordTool(policy=policy))
     ctx.registry.register(OfficeRefreshTocTool(policy=policy))
 

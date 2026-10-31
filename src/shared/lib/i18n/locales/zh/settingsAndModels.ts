@@ -302,7 +302,10 @@ export const zhSettingsAndModels = {
   'settings.font.fallback': '未安装的字体会自动回退到系统可用字体，不会下载字体。',
   'settings.font.saveError': '字体偏好保存失败，当前界面已生效；请重试或稍后重新打开应用同步。',
   'settings.font.loadError': '字体偏好加载失败，暂时使用默认字体。',
+<<<<<<< HEAD
   'settings.density.label': '信息密度',
+=======
+>>>>>>> origin/main
   'font.option.inter': 'Inter',
   'font.option.system': '系统默认',
   'font.option.noto-sans-sc': '思源黑体',

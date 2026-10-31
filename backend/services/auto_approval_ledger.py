@@ -41,7 +41,7 @@ class AutoApproval:
         return asdict(self)
 
 
-def summarize_args(tool_name: str, args: Optional[Dict[str, Any]], limit: int = 160) -> str:
+def summarize_args(tool_name: str, args: Dict[str, Any] | None, limit: int = 160) -> str:
     """把工具参数压成一行可读摘要：优先 command / path / file_path / query。"""
     args = args or {}
     for key in ("command", "path", "file_path", "target", "query", "name", "url"):
@@ -66,13 +66,13 @@ class AutoApprovalLedger:
     def record(
         self,
         *,
-        session_id: Optional[str],
+        session_id: str | None,
         tool_name: str,
         capability: str,
         mode: str,
         reason: str,
-        args: Optional[Dict[str, Any]] = None,
-    ) -> Optional[AutoApproval]:
+        args: Dict[str, Any] | None = None,
+    ) -> AutoApproval | None:
         if not session_id or not tool_name:
             return None
         with self._lock:

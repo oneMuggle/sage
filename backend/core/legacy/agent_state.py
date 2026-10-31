@@ -45,6 +45,14 @@ class AgentState(str, Enum):
     # legacy_routes 收到后把当前累加的 reasoning/tool_calls/content 快照成
     # 一条 assistant 消息,并重置累加器准备下一步。
     STEP_DONE = "step_done"
+<<<<<<< HEAD
+=======
+    # 2026-10-31: 动态迭代预算检查点。run_loop 到达软预算且进度审计判定
+    # "仍在推进"时自动提高上限,并推此事件让前端显示"已自动延长 N 次"。
+    # 载荷: budget_info = {level, previous_budget, next_budget, extensions,
+    # stuck_score, progress_signals, reasons}。
+    ITERATION_CHECKPOINT = "iteration_checkpoint"
+>>>>>>> origin/main
     # 2026-10-28 Plan Mode 增强 Phase 3: 自动确认点。
     # dispatcher 在 auto_confirm 步骤派发前推一个 AWAITING_STEP_CONFIRM 事件,
     # 前端渲染 StepConfirmDialog 并 POST /api/v1/orch/runs/{run_id}/step-confirm
@@ -129,6 +137,13 @@ class AgentEvent:
     # 步骤确认信息（StepConfirmInfo 形态），供前端 StepConfirmDialog 渲染。
     # 包含 goal / stepId / impact / categories / previousOutput / nextStepPreview。
     step_confirm: Optional[Dict[str, Any]] = None
+<<<<<<< HEAD
+=======
+    # 2026-10-31 动态迭代预算: state=ITERATION_CHECKPOINT 时携带审计结果
+    # （level / previous_budget / next_budget / extensions / stuck_score /
+    # progress_signals / reasons），前端据此提示"已自动延长 N 次"。
+    budget_info: Optional[Dict[str, Any]] = None
+>>>>>>> origin/main
 
     def __post_init__(self) -> None:
         # finish_reason 只接受字符串: 测试替身 (MagicMock 响应) 等非 str 值归一为
@@ -192,4 +207,9 @@ class AgentEvent:
             d["retry_info"] = self.retry_info
         if self.step_confirm is not None:
             d["step_confirm"] = self.step_confirm
+<<<<<<< HEAD
+=======
+        if self.budget_info is not None:
+            d["budget_info"] = self.budget_info
+>>>>>>> origin/main
         return d

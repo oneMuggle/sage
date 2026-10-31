@@ -39,6 +39,10 @@ export const playbookRoutes: Record<string, CommandRoute> = {
     body: (a) =>
       pick(a, {
         playbook_id: ['playbookId', 'playbook_id'],
+<<<<<<< HEAD
+=======
+        library_id: ['libraryId', 'library_id'],
+>>>>>>> origin/main
         spec: ['spec'],
         source: ['source'],
       }),
@@ -125,6 +129,25 @@ export const playbookRoutes: Record<string, CommandRoute> = {
       envelope: a.envelope,
       project_id: a.projectId ?? a.project_id,
       conflict: a.conflict ?? 'save_as_new',
+<<<<<<< HEAD
     }),
   },
+=======
+      save_to_library: a.saveToLibrary ?? a.save_to_library ?? false,
+    }),
+  },
+  playbooks_library_list: {
+    method: 'GET',
+    path: () => '/api/v1/playbooks/library',
+  },
+  playbooks_library_save: {
+    method: 'POST',
+    path: () => '/api/v1/playbooks/library',
+    body: (a) => ({ envelope: a.envelope, source: a.source ?? 'imported' }),
+  },
+  playbooks_library_delete: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/playbooks/library/${enc(a.libraryId ?? a.library_id)}`,
+  },
+>>>>>>> origin/main
 };

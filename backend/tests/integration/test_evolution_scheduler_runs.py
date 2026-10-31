@@ -34,6 +34,10 @@ def test_lifespan_registers_all_five_evolution_tasks(tmp_path):
         "skill_consolidation",
         "importance_reevaluation",
         "memory_consolidation",
+<<<<<<< HEAD
+=======
+        "skill_consolidation",
+>>>>>>> origin/main
         "memory_reflection",
     }
     assert set(registered.keys()) == expected

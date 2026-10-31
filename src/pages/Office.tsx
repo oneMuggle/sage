@@ -67,6 +67,16 @@ import {
   type OfficePreviewData,
   type OfficeReadResult,
 } from '../features/office';
+<<<<<<< HEAD
+=======
+import { LatexAuditPanel } from '../features/office/LatexAuditPanel';
+import { LatexBuildPanel } from '../features/office/LatexBuildPanel';
+import { LatexCompliancePanel } from '../features/office/LatexCompliancePanel';
+import { LatexPdfAuditPanel } from '../features/office/LatexPdfAuditPanel';
+import { LatexProfileLibraryPanel } from '../features/office/LatexProfileLibraryPanel';
+import { LatexProjectImportPanel } from '../features/office/LatexProjectImportPanel';
+import { LatexTemplatePanel } from '../features/office/LatexTemplatePanel';
+>>>>>>> origin/main
 import { OfficeStagingInspector } from '../features/office/OfficeStagingInspector';
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
 import { WorkspaceBindModal } from '../features/workspace';
@@ -508,6 +518,18 @@ export function Office() {
               valid workspace path for fill-from-content. Reuses the
               SessionWorkspaceProvider as its workspace source-of-truth. */}
           <JournalPanel />
+
+          {/* LaTeX panels — import a project zip, analyze/fill templates,
+              audit sources, and optionally compile inside the bound
+              workspace. Uses backendRequest (no extra IPC manifest
+              entry). */}
+          <LatexProjectImportPanel />
+          <LatexTemplatePanel />
+          <LatexAuditPanel />
+          <LatexPdfAuditPanel />
+          <LatexCompliancePanel />
+          <LatexProfileLibraryPanel />
+          <LatexBuildPanel />
         </>
       )}
 

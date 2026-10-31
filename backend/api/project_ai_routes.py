@@ -72,11 +72,16 @@ class PreviewMilestoneNode(BaseModel):
     children: List[PreviewMilestoneNode] = Field(default_factory=list)
 
 
+<<<<<<< HEAD
 # 解决自引用 (pydantic v1/v2 兼容)
 if hasattr(PreviewMilestoneNode, "model_rebuild"):
     PreviewMilestoneNode.model_rebuild()
 else:
     PreviewMilestoneNode.update_forward_refs()
+=======
+# 解决自引用
+PreviewMilestoneNode.model_rebuild()
+>>>>>>> origin/main
 
 
 class DecomposePreviewResponse(BaseModel):

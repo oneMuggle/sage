@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import subprocess
 from pathlib import Path
+<<<<<<< HEAD
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query
@@ -23,6 +24,12 @@ from pydantic import BaseModel
 
 # win7 LTS py38 环境钉 pydantic 1.10.13，ConfigDict 是 v2 专有 → 走兼容垫片（v2 下为 no-op）。
 from backend.compat.win7.pydantic_compat import ConfigDict
+=======
+from typing import List, Optional
+
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, ConfigDict
+>>>>>>> origin/main
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +86,11 @@ _STATUS_MAP = {
 }
 
 
+<<<<<<< HEAD
 def _run_git(cwd: str, args: List[str], timeout: float = 5.0) -> Tuple[int, str]:
+=======
+def _run_git(cwd: str, args: list[str], timeout: float = 5.0) -> tuple[int, str]:
+>>>>>>> origin/main
     """在指定目录运行 git 命令，返回 (returncode, stdout)。"""
     try:
         result = subprocess.run(
@@ -102,7 +113,11 @@ def _run_git(cwd: str, args: List[str], timeout: float = 5.0) -> Tuple[int, str]
         return 1, ""
 
 
+<<<<<<< HEAD
 def _parse_porcelain_line(line: str) -> Optional[GitFileChange]:
+=======
+def _parse_porcelain_line(line: str) -> GitFileChange | None:
+>>>>>>> origin/main
     """解析 porcelain v1 状态行（XY path 或 XY \"path with spaces\"）。"""
     if len(line) < 4:
         return None
@@ -127,7 +142,11 @@ def _parse_porcelain_line(line: str) -> Optional[GitFileChange]:
     return GitFileChange(path=raw_path, status=status)
 
 
+<<<<<<< HEAD
 def _get_branch_info(cwd: str) -> Tuple[Optional[str], int, int]:
+=======
+def _get_branch_info(cwd: str) -> tuple[Optional[str], int, int]:
+>>>>>>> origin/main
     """获取当前分支名和 ahead/behind 数。"""
     # 分支名
     rc, out = _run_git(cwd, ["rev-parse", "--abbrev-ref", "HEAD"])
@@ -175,7 +194,11 @@ def get_git_status(
     if rc2 != 0:
         return GitStatusResponse(branch=branch, ahead=ahead, behind=behind, files=[])
 
+<<<<<<< HEAD
     files: List[GitFileChange] = []
+=======
+    files: list[GitFileChange] = []
+>>>>>>> origin/main
     for line in out.splitlines():
         change = _parse_porcelain_line(line)
         if change:

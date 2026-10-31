@@ -69,6 +69,11 @@ export interface PetConfig {
   showSessionTitle: boolean;
   compatibilityMode: PetCompatibilityMode;
   followActiveSession: boolean;
+<<<<<<< HEAD
+=======
+  /** Opt-in read-only local HTTP status API (loopback + bearer token). */
+  externalApi: boolean;
+>>>>>>> origin/main
   /** 1–3 pets, each with its own pack and size. */
   pets: PetInstanceConfig[];
 }

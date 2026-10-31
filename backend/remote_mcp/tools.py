@@ -12,7 +12,10 @@ from __future__ import annotations
 import fnmatch
 import os
 import re
+<<<<<<< HEAD
 import stat
+=======
+>>>>>>> origin/main
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -27,7 +30,10 @@ from .jobs import JobManager
 from .remote_path import (
     SKIP_WALK_SEGMENTS,
     RemotePathError,
+<<<<<<< HEAD
     _is_junction,
+=======
+>>>>>>> origin/main
     is_hidden_entry,
     resolve,
     to_relative,
@@ -38,7 +44,10 @@ MAX_FIND_RESULTS = 500
 MAX_SEARCH_MATCHES = 200
 MAX_SEARCH_FILE_BYTES = 1024 * 1024
 MAX_WALK_FILES = 20000
+<<<<<<< HEAD
 MAX_REGEX_LENGTH = 200  # 防止灾难性回溯
+=======
+>>>>>>> origin/main
 
 
 class ToolFailure(Exception):  # noqa: N818 — 对外错误名与计划文档一致
@@ -148,6 +157,7 @@ def _list_directory(ctx: ToolContext, args: Dict[str, Any]) -> Dict[str, Any]:
     names = sorted(os.listdir(target))
     for name in names:
         full = os.path.join(target, name)
+<<<<<<< HEAD
         try:
             entry_stat = os.lstat(full)
         except OSError:
@@ -158,6 +168,13 @@ def _list_directory(ctx: ToolContext, args: Dict[str, Any]) -> Dict[str, Any]:
         is_dir = stat.S_ISDIR(entry_stat.st_mode)
         entries.append({"name": name, "type": "directory" if is_dir else "file",
                         "size": None if is_dir else entry_stat.st_size})
+=======
+        if is_hidden_entry(name) or Path(full).is_symlink():
+            continue
+        is_dir = os.path.isdir(full)
+        entries.append({"name": name, "type": "directory" if is_dir else "file",
+                        "size": None if is_dir else _safe_size(full)})
+>>>>>>> origin/main
     entries.sort(key=lambda e: (e["type"] != "directory", e["name"].lower()))
     return {"path": to_relative(ctx.root, target), "entries": entries[:MAX_LIST_ENTRIES],
             "truncated": len(entries) > MAX_LIST_ENTRIES}
@@ -176,6 +193,7 @@ def _walk_files(ctx: ToolContext, base_rel: str):
         raise ToolFailure("NOT_A_DIRECTORY: path is not a directory")
     seen = 0
     for current, dirs, files in os.walk(base, followlinks=False):
+<<<<<<< HEAD
         filtered_dirs = []
         for d in sorted(dirs):
             if is_hidden_entry(d) or d in SKIP_WALK_SEGMENTS:
@@ -197,6 +215,16 @@ def _walk_files(ctx: ToolContext, base_rel: str):
             except OSError:
                 continue
             if is_hidden_entry(name) or stat.S_ISLNK(file_stat.st_mode):
+=======
+        dirs[:] = sorted(
+            d for d in dirs
+            if not is_hidden_entry(d) and d not in SKIP_WALK_SEGMENTS
+            and not Path(current, d).is_symlink()
+        )
+        for name in sorted(files):
+            full = os.path.join(current, name)
+            if is_hidden_entry(name) or Path(full).is_symlink():
+>>>>>>> origin/main
                 continue
             seen += 1
             if seen > MAX_WALK_FILES:
@@ -224,6 +252,7 @@ def _search_files(ctx: ToolContext, args: Dict[str, Any]) -> Dict[str, Any]:
     query = args.get("query")
     if not isinstance(query, str) or not query or len(query) > 500:
         raise ToolFailure("INVALID_ARGUMENT: query required (max 500 chars)")
+<<<<<<< HEAD
     is_regex = bool(args.get("regex"))
     if is_regex and len(query) > MAX_REGEX_LENGTH:
         raise ToolFailure(
@@ -233,6 +262,11 @@ def _search_files(ctx: ToolContext, args: Dict[str, Any]) -> Dict[str, Any]:
     flags = 0 if args.get("case_sensitive") else re.IGNORECASE
     try:
         matcher = re.compile(query if is_regex else re.escape(query), flags)
+=======
+    flags = 0 if args.get("case_sensitive") else re.IGNORECASE
+    try:
+        matcher = re.compile(query if args.get("regex") else re.escape(query), flags)
+>>>>>>> origin/main
     except re.error as exc:
         raise ToolFailure(f"INVALID_ARGUMENT: bad regex: {exc}") from None
     glob = args.get("glob")

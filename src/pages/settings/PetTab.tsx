@@ -33,6 +33,10 @@ const FALLBACK_CONFIG: PetConfigBridge = {
   showSessionTitle: false,
   compatibilityMode: 'auto',
   followActiveSession: true,
+<<<<<<< HEAD
+=======
+  externalApi: false,
+>>>>>>> origin/main
   pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
 };
 
@@ -89,6 +93,17 @@ export function PetTab(): JSX.Element {
   const [busy, setBusy] = useState<'import' | 'export' | 'delete' | null>(null);
   const [deleteArmed, setDeleteArmed] = useState<string | null>(null);
   const [managePackId, setManagePackId] = useState<string>('');
+<<<<<<< HEAD
+=======
+  const [apiInfo, setApiInfo] = useState<{
+    enabled: boolean;
+    port: number | null;
+    error?: string | null;
+  }>({
+    enabled: false,
+    port: null,
+  });
+>>>>>>> origin/main
 
   useEffect(() => {
     if (!bridge) return;
@@ -116,6 +131,30 @@ export function PetTab(): JSX.Element {
     };
   }, [bridge]);
 
+<<<<<<< HEAD
+=======
+  useEffect(() => {
+    if (!bridge) return undefined;
+    let alive = true;
+    if (!bridge.getApiInfo) return undefined;
+    const refresh = (): void => {
+      bridge
+        .getApiInfo?.()
+        .then((info) => {
+          if (alive) setApiInfo(info);
+        })
+        .catch(() => undefined);
+    };
+    refresh();
+    // Main starts/stops the server asynchronously; re-check shortly after.
+    const timers = [300, 900, 1800].map((ms) => setTimeout(refresh, ms));
+    return () => {
+      alive = false;
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }, [bridge, config?.externalApi]);
+
+>>>>>>> origin/main
   const refresh = async (): Promise<void> => {
     if (!bridge) return;
     const [nextConfig, nextPacks] = await Promise.all([
@@ -454,6 +493,32 @@ export function PetTab(): JSX.Element {
         </SettingRow>
 
         <SettingRow
+<<<<<<< HEAD
+=======
+          label={t('settings.pet.external_api')}
+          desc={t('settings.pet.external_api_desc')}
+          anchor="pet_external_api"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted" data-testid="pet-api-port">
+              {current.externalApi
+                ? apiInfo.error
+                  ? `${t('settings.pet.external_api_failed')}: ${apiInfo.error}`
+                  : apiInfo.port
+                    ? t('settings.pet.external_api_port').replace('{port}', String(apiInfo.port))
+                    : t('settings.pet.external_api_starting')
+                : ''}
+            </span>
+            <Toggle
+              value={current.externalApi}
+              onChange={(externalApi) => update({ externalApi })}
+              testId="pet-external-api"
+            />
+          </div>
+        </SettingRow>
+
+        <SettingRow
+>>>>>>> origin/main
           label={t('settings.pet.pack_actions')}
           desc={
             selectedUserPack

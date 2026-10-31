@@ -64,6 +64,18 @@ _EXPECTED_ONLINE = [
     "office_journal_validate",
     "office_parse_bibtex",
     "office_lint_word",
+<<<<<<< HEAD
+=======
+    "office_read_latex",
+    "office_analyze_latex_template",
+    "office_fill_latex_template",
+    "office_audit_latex",
+    "office_audit_latex_pdf",
+    "office_check_latex_compliance",
+    "office_compile_latex",
+    "office_latexdiff",
+    "office_extract_latex_project",
+>>>>>>> origin/main
     "office_repair_word",
     "office_refresh_toc",
     "edit_file",
@@ -150,6 +162,10 @@ _EXPECTED_SCHEMA_NAMES = [
     "office_fill_word_template",
     "office_fill_ppt_template",
     "office_parse_bibtex",
+<<<<<<< HEAD
+=======
+    "office_fill_latex_template",
+>>>>>>> origin/main
     "edit_file",
     "glob_search",
     "grep_search",
@@ -372,7 +388,11 @@ def test_standard_online_matches_golden_snapshot() -> None:
     registry = _install_via_facade()
 
     assert registry.list_names() == _EXPECTED_ONLINE
+<<<<<<< HEAD
     assert len(registry.list_names()) == len(set(registry.list_names())) == 96
+=======
+    assert len(registry.list_names()) == len(set(registry.list_names())) == 105
+>>>>>>> origin/main
 
 
 def test_standard_risks_and_schemas_align_with_golden_snapshot() -> None:
@@ -396,7 +416,11 @@ def test_network_gating_counts_and_differences() -> None:
     intranet = _install_via_facade(NetworkMode.INTRANET).list_names()
     offline = _install_via_facade(NetworkMode.OFFLINE).list_names()
 
+<<<<<<< HEAD
     assert (len(online), len(intranet), len(offline)) == (96, 95, 91)
+=======
+    assert (len(online), len(intranet), len(offline)) == (105, 104, 100)
+>>>>>>> origin/main
     assert set(online) - set(intranet) == {"web_search"}
     assert set(intranet) - set(offline) == {
         "web_fetch",
@@ -479,7 +503,11 @@ def test_headless_install_excludes_ask_user_only() -> None:
     registry = _install_bundles(_harness("headless"))
     names = registry.list_names()
 
+<<<<<<< HEAD
     assert len(names) == 95
+=======
+    assert len(names) == 104
+>>>>>>> origin/main
     assert "ask_user_question" not in names
     assert set(_EXPECTED_ONLINE) - set(names) == {"ask_user_question"}
     _assert_subsequence(names)
@@ -516,7 +544,11 @@ def test_register_all_tools_reads_project_harness(tmp_path: Path) -> None:
 
     registry = _install_via_facade()
 
+<<<<<<< HEAD
     assert len(registry.list_names()) == 95
+=======
+    assert len(registry.list_names()) == 104
+>>>>>>> origin/main
     assert "ask_user_question" not in registry.list_names()
 
 

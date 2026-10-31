@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+from typing import Any, Dict, List, Mapping, Tuple, Union
 
 REDACTION_MARKER = "***REDACTED:{kind}***"
 
@@ -125,10 +125,10 @@ def _redact_message_item(item: Any, *, include_prompts: bool) -> Any:
 
 
 def redact_body(  # noqa: PLR0911
-    body: Optional[Union[bytes, str, dict, list]],
+    body: Union[bytes, str, dict, list] | None,
     *,
     include_prompts: bool = False,
-) -> Tuple[Any, Optional[str]]:
+) -> Tuple[Any, str | None]:
     """脱敏 body。
 
     Returns:

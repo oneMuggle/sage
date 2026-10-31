@@ -9,9 +9,13 @@ API 路由定义
 
 from __future__ import annotations
 
+<<<<<<< HEAD
 import asyncio
 import contextlib
 import json
+=======
+import contextlib
+>>>>>>> origin/main
 
 # I5: 流式视觉延迟 — DONE 事件的 content 拆成 chunk 逐个入队,
 # 让前端能逐字渲染 (避免 LLM 一次返回完整字符串时 "砰一下" 全显示)。
@@ -22,8 +26,12 @@ _STREAMING_CHUNK_DELAY_S = 0.04
 import logging
 from typing import Any, Dict, List, Optional
 
+<<<<<<< HEAD
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
+=======
+from fastapi import APIRouter, HTTPException
+>>>>>>> origin/main
 
 from backend.memory import get_memory_manager
 from backend.memory.summary import (
@@ -415,6 +423,7 @@ def list_session_summaries(
 # Wave 2 P1-4 (2026-08-14): 编排 run 读取/resume/计划更新端点挂载。
 # orch_routes 用独立 APIRouter(prefix="/orch")，经 include_router 并入
 # legacy_router → main.py 挂载后最终前缀 /api/v1/orch。
+<<<<<<< HEAD
 
 
 # ==================== 记忆可追溯性 API (Gap E / Task 5) ====================
@@ -519,3 +528,5 @@ async def memory_events(request: Request):
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
+=======
+>>>>>>> origin/main

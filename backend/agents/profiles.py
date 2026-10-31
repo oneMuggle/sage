@@ -346,9 +346,12 @@ def create_default_agents() -> List[AgentProfile]:
                 "browser_cookies",
                 "browser_close",
                 "browser_login",
+<<<<<<< HEAD
                 # win7 保留 memory_save —— researcher 查到资料后必须能落地为记忆,
                 # 否则下次 session 找不到（PR #396 knowledge persistence 闭环）。
                 "memory_save",
+=======
+>>>>>>> origin/main
             ],
             memory_access=["episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.5),
@@ -429,6 +432,19 @@ def create_default_agents() -> List[AgentProfile]:
                 # Round 39 目录真页码: Word COM 刷新 TOC 域（WRITE_LOCAL，
                 # 可选通道——缺失 Word/pywin32 时降级为可读理由）
                 "office_refresh_toc",
+<<<<<<< HEAD
+=======
+                # 2026-10-31 LaTeX 读取：.tex 项目 → 结构化预览（READ）。
+                "office_read_latex",
+                "office_analyze_latex_template",
+                "office_fill_latex_template",
+                "office_audit_latex",
+                "office_audit_latex_pdf",
+                "office_check_latex_compliance",
+                "office_compile_latex",
+                "office_latexdiff",
+                "office_extract_latex_project",
+>>>>>>> origin/main
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -643,6 +659,25 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     "office_repair_word",
     # 2026-09-18 Round 39: 目录真页码刷新（与 writer.tools 同步）。
     "office_refresh_toc",
+<<<<<<< HEAD
+=======
+    # 2026-10-31 LaTeX 读取：.tex 结构化预览（与 writer.tools 同步）。
+    "office_read_latex",
+    # 2026-10-31 LaTeX 模板分析/填充（与 writer.tools 同步）。
+    "office_analyze_latex_template",
+    "office_fill_latex_template",
+    # 2026-10-31 LaTeX 源码审校（与 writer.tools 同步）。
+    "office_audit_latex",
+    # 2026-10-31 PDF 版式/字体/DPI 审计（与 writer.tools 同步）。
+    "office_audit_latex_pdf",
+    # 2026-10-31 投稿合规检查（与 writer.tools 同步）。
+    "office_check_latex_compliance",
+    # 2026-10-31 LaTeX 可选编译 / 红字版（与 writer.tools 同步）。
+    "office_compile_latex",
+    "office_latexdiff",
+    # 2026-10-31 LaTeX 项目 zip 导入（与 writer.tools 同步）。
+    "office_extract_latex_project",
+>>>>>>> origin/main
 ]
 
 

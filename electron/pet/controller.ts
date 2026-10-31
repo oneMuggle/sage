@@ -41,6 +41,10 @@ import {
   type PetAgentEvent,
   type PetSessionState,
 } from './state';
+<<<<<<< HEAD
+=======
+import { PetStatusServer, type StatusServerInfo } from './statusServer';
+>>>>>>> origin/main
 import { applyTaskOverrides, mergeTaskReports, normalizeTaskReports } from './tasks';
 import { PetWindow } from './windows';
 import type {
@@ -108,6 +112,12 @@ export class PetController {
   private profile: PetProfile;
   private reportedTasks: PetTaskReport[] = [];
   private remoteTasks: PetTaskReport[] = [];
+<<<<<<< HEAD
+=======
+  private statusServer: PetStatusServer | null = null;
+  private statusGeneration = 0;
+  private statusError: string | null = null;
+>>>>>>> origin/main
   private backgroundTimer: ReturnType<typeof setInterval> | null = null;
   private backgroundInFlight = false;
   private readonly streams = new Map<string, AbortController>();
@@ -134,6 +144,10 @@ export class PetController {
       BACKGROUND_POLL_MS,
     );
     void this.refreshBackgroundTasks();
+<<<<<<< HEAD
+=======
+    if (this.config.externalApi) void this.startStatusServer();
+>>>>>>> origin/main
     this.emit(true);
   }
 
@@ -148,6 +162,10 @@ export class PetController {
     }
     for (const abort of this.streams.values()) abort.abort();
     this.streams.clear();
+<<<<<<< HEAD
+=======
+    this.stopStatusServer();
+>>>>>>> origin/main
     for (const window of this.windows.values()) window.destroy();
     this.windows.clear();
   }
@@ -164,6 +182,14 @@ export class PetController {
     return this.options.getMainWindow();
   }
 
+<<<<<<< HEAD
+=======
+  getApiInfo(): StatusServerInfo {
+    const info = this.statusServer?.getInfo() ?? { enabled: false, port: null };
+    return { ...info, error: this.statusError };
+  }
+
+>>>>>>> origin/main
   setConfig(patch: unknown): PetConfig {
     const previous = this.config;
     const next = mergePetConfig(previous, patch);
@@ -177,6 +203,13 @@ export class PetController {
     if (next.enabled !== previous.enabled || next.displayMode !== previous.displayMode) {
       void this.refreshBackgroundTasks();
     }
+<<<<<<< HEAD
+=======
+    if (next.externalApi !== previous.externalApi) {
+      if (next.externalApi) void this.startStatusServer();
+      else this.stopStatusServer();
+    }
+>>>>>>> origin/main
     return next;
   }
 
@@ -279,6 +312,44 @@ export class PetController {
     return result;
   }
 
+<<<<<<< HEAD
+=======
+  private async startStatusServer(): Promise<void> {
+    if (this.statusServer) return;
+    this.statusError = null;
+    const server = new PetStatusServer({ userDataDir: this.options.userDataDir });
+    server.update(this.snapshot, this.config);
+    this.statusServer = server;
+    const generation = ++this.statusGeneration;
+    try {
+      await server.start();
+      if (
+        generation !== this.statusGeneration ||
+        !this.config.externalApi ||
+        this.statusServer !== server
+      ) {
+        server.stop();
+        if (this.statusServer === server) this.statusServer = null;
+      }
+    } catch (error) {
+      if (this.statusServer === server) this.statusServer = null;
+      if (generation === this.statusGeneration) {
+        this.statusError = error instanceof Error ? error.message : String(error);
+      }
+      logger.warn('pet: status API start failed', {
+        err: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private stopStatusServer(): void {
+    this.statusGeneration += 1;
+    this.statusServer?.stop();
+    this.statusServer = null;
+    this.statusError = null;
+  }
+
+>>>>>>> origin/main
   private authHeaders(): Record<string, string> {
     const token = this.options.getAuthToken();
     return {
@@ -602,6 +673,10 @@ export class PetController {
     if (!force && key === this.lastSent) return;
     this.lastSent = key;
     this.snapshot = snapshot;
+<<<<<<< HEAD
+=======
+    this.statusServer?.update(snapshot, this.config);
+>>>>>>> origin/main
     for (const window of this.windows.values()) window.sendState(snapshot);
     if (shouldShowInApp(this.config)) {
       this.sendToMain('pet:state', snapshot);

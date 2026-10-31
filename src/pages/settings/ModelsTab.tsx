@@ -200,6 +200,7 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
             {t('settings.models.model_parameters')}
           </h3>
           <SettingRow
+<<<<<<< HEAD
             anchor="title_model"
             label={t('settings.models.title_model')}
             desc={t('settings.models.title_model_desc')}
@@ -212,6 +213,8 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
             />
           </SettingRow>
           <SettingRow
+=======
+>>>>>>> origin/main
             anchor="max_context"
             label={t('settings.models.max_context')}
             desc={t('settings.models.max_context_desc')}
@@ -301,12 +304,15 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
           </button>
         </SettingRow>
       </div>
+<<<<<<< HEAD
 
       {/* 原「通用」tab 的高级区块（2026-10-28 迁入）：Arena 账号池开关。 */}
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.models.arena_pool')}</h3>
         <ArenaAccountsToggle />
       </section>
+=======
+>>>>>>> origin/main
     </>
   );
 
@@ -326,6 +332,15 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
       ) : (
         modelsBody
       )}
+<<<<<<< HEAD
+=======
+
+      {/* 原「通用」tab 的高级区块（2026-10-28 迁入）：Arena 账号池开关。 */}
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.models.arena_pool')}</h3>
+        <ArenaAccountsToggle />
+      </section>
+>>>>>>> origin/main
     </div>
   );
 }
@@ -441,6 +456,7 @@ function ChatEndpointReadOnly({ endpointName }: ChatEndpointReadOnlyProps) {
   );
 }
 
+<<<<<<< HEAD
 interface TitleModelSelectorProps {
   groupedModels: GroupedModel[];
   chatEndpointId: string | null;
@@ -489,6 +505,8 @@ function TitleModelSelector({
   );
 }
 
+=======
+>>>>>>> origin/main
 interface ModelSelectorProps {
   label: string;
   desc: string;

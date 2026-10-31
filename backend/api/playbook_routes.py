@@ -37,6 +37,13 @@ from backend.api.playbook_schemas import (
     PlaybookImportPreviewRequest,
     PlaybookImportPreviewResponse,
     PlaybookImportRequest,
+<<<<<<< HEAD
+=======
+    PlaybookLibraryItemModel,
+    PlaybookLibraryResponse,
+    PlaybookLibrarySaveRequest,
+    PlaybookLibrarySaveResponse,
+>>>>>>> origin/main
     PlaybookRuleCleanupResponse,
     PlaybookStageConfirmRequest,
     PlaybookStateUpdateRequest,
@@ -45,6 +52,10 @@ from backend.api.playbook_schemas import (
     PlaybookWikiExportResponse,
 )
 from backend.data.database import make_with_db_lock
+<<<<<<< HEAD
+=======
+from backend.data.playbook_library_repo import PlaybookLibraryRepository
+>>>>>>> origin/main
 from backend.data.playbook_repo import PlaybookRepository, PlaybookSnapshot
 from backend.data.project_constraint_repo import ProjectConstraintRepository
 from backend.data.project_repo import Project, ProjectRepository
@@ -219,6 +230,45 @@ def get_builtin_playbook(playbook_id: str) -> BuiltinPlaybookResponse:
     return BuiltinPlaybookResponse(playbook=spec)
 
 
+<<<<<<< HEAD
+=======
+@router.get("/playbooks/library", response_model=PlaybookLibraryResponse)
+@with_db_lock
+def list_playbook_library() -> PlaybookLibraryResponse:
+    items = PlaybookLibraryRepository().list()
+    return PlaybookLibraryResponse(
+        items=[PlaybookLibraryItemModel(**item.summary()) for item in items]
+    )
+
+
+@router.post("/playbooks/library", response_model=PlaybookLibrarySaveResponse)
+@with_db_lock
+def save_playbook_to_library(
+    request: PlaybookLibrarySaveRequest,
+) -> PlaybookLibrarySaveResponse:
+    try:
+        parsed = validate_import_envelope(request.envelope)
+    except PlaybookValidationError as exc:
+        raise _error(400, "invalid_playbook", str(exc)) from exc
+    item, created = PlaybookLibraryRepository().save(
+        parsed["playbook"], source=request.source or "imported"
+    )
+    return PlaybookLibrarySaveResponse(
+        item=PlaybookLibraryItemModel(**item.summary()),
+        created=created,
+    )
+
+
+@router.delete("/playbooks/library/{library_id}")
+@with_db_lock
+def delete_playbook_from_library(library_id: str) -> Dict[str, bool]:
+    removed = PlaybookLibraryRepository().delete(library_id)
+    if not removed:
+        raise _error(404, "playbook_not_found", "规程库条目不存在")
+    return {"removed": True}
+
+
+>>>>>>> origin/main
 @router.get(
     "/projects/{project_id}/playbook", response_model=PlaybookCurrentResponse
 )
@@ -236,9 +286,26 @@ def bind_project_playbook(
     project_id: str, request: PlaybookBindRequest
 ) -> PlaybookCurrentResponse:
     project = _project_or_404(project_id)
+<<<<<<< HEAD
     if bool(request.playbook_id) == bool(request.spec):
         raise _error(400, "invalid_playbook_request", "playbook_id 与 spec 必须二选一")
     if request.playbook_id:
+=======
+    selected = [bool(request.playbook_id), bool(request.library_id), bool(request.spec)]
+    if sum(selected) != 1:
+        raise _error(
+            400,
+            "invalid_playbook_request",
+            "playbook_id / library_id / spec 必须三选一",
+        )
+    if request.library_id:
+        item = PlaybookLibraryRepository().get(request.library_id)
+        if item is None:
+            raise _error(404, "playbook_not_found", "规程库条目不存在")
+        spec = item.spec
+        source = request.source or f"library:{item.id}"
+    elif request.playbook_id:
+>>>>>>> origin/main
         spec = get_builtin(request.playbook_id)
         if spec is None:
             raise _error(404, "playbook_not_found", "内置规程不存在")
@@ -525,6 +592,11 @@ def import_playbook(request: PlaybookImportRequest) -> PlaybookCurrentResponse:
     repo = PlaybookRepository()
     active = repo.get_active(project.id)
     spec = parsed["playbook"]
+<<<<<<< HEAD
+=======
+    if request.save_to_library:
+        PlaybookLibraryRepository().save(spec, source="imported")
+>>>>>>> origin/main
     if active is not None and request.conflict == "merge":
         spec = _merge_specs(active.spec, spec)
     if (

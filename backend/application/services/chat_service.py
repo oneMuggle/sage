@@ -129,7 +129,10 @@ class ChatService:
         permission_allowed_paths: Optional[List[str]] = None,  # M3 允许的路径
         permission_denied_tools: Optional[List[str]] = None,  # M3 黑名单
         wake_store: Optional[WakeStore] = None,  # A4 Suspend-Resume 唤醒仓储
+<<<<<<< HEAD
         lifecycle: Optional[Any] = None,  # Task 4 / Gap A — optional MemoryLifecycleManager
+=======
+>>>>>>> origin/main
         context_window_resolver: Optional[Callable[[], Optional[int]]] = None,  # UX-IA R2-D
     ) -> None:
         self.llm = llm
@@ -521,6 +524,25 @@ class ChatService:
             {"session_id": session_id},
         )
 
+        # 5.5) Repeated Pattern Signal (2026-09-14): 检测当前会话是否
+        #      出现了同一工具签名的重复调用（>= 3 次）。命中则入队
+        #      ``repeated_pattern`` review event, 由后台 worker 起草 skill.
+        #      best-effort：异常仅 logger.debug, 不影响 chat 主路径.
+        #      复用 history + 当前 response (line 277-280 已加载 history),
+        #      不额外查 DB.
+        try:
+            from backend.skills.repeated_pattern_signal import (
+                detect_and_enqueue as _detect_repeated_pattern,
+            )
+
+            _detect_repeated_pattern(
+                session_id=session_id,
+                history_messages=[*history, response],
+                span=span,
+            )
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            logger.debug(f"Repeated pattern signal skipped: {exc}")
+
         # 6) 埋点：token 消耗（9 指标之一）— 仅在响应携带 usage 时记录
         # MetricPort 的 counter 只能 inc(1)；此处用 Counter 表示
         # "至少发生了一次 token 消耗" 的事件计数。精确的 token 总数
@@ -602,7 +624,33 @@ class ChatService:
                 # 8) 压缩工作记忆 (Memory Integration)
                 await self._compress_working_memory(session_id, span)
 
+<<<<<<< HEAD
             # 9) 标题自动生成：首轮对话后
+=======
+            # 记忆提取异步化：投递到后台队列由单 worker 串行消费，
+            # 不阻塞本轮聊天响应（提取含一次 LLM 调用）。
+            get_memory_extraction_queue().submit(
+                ExtractionRequest(
+                    memory_port=self.memory,
+                    extractor=MemoryExtractor(llm_client=self.llm),
+                    user_text=user_message.content or "",
+                    # 剥离技能 nudge 后缀, 避免提示文本被提取为"记忆事实"（review LOW）
+                    assistant_text=(response.content or "").replace(SKILL_NUDGE_SUFFIX, ""),
+                    session_id=session_id,
+                    enabled=True,  # hex 路径保持现状行为：有 memory 即写
+                    tool_observations=_pop_env_observations(session_id),
+                )
+            )
+
+            # 8) 压缩工作记忆 (Memory Integration)
+            try:
+                await self.memory.compress(session_id)
+            except Exception as e:
+                logger.warning(f"Failed to compress working memory: {e}")
+                span.set_attribute("memory.compress_error", str(e))
+
+            # 9) 标题自动生成：首轮对话后 (message_count <= 2)
+>>>>>>> origin/main
             try:
                 session_data = await self.storage.get_session(session_id)
                 if session_data and _needs_title(session_data):
@@ -1171,8 +1219,11 @@ async def extract_and_store_memory(
         # 用户画像类事实类别（extractor 产出）→ 路由到 store_profile。
         # environment（本机工具链事实）进画像后随 USER PROFILE 快照置顶注入，
         # 绕开 episodic recency/decay 限制（PR 环境记忆化）。
+<<<<<<< HEAD
         # F4 new→old 分类兼容：extractor 输出 user_pref（新分类），路由需
         # 映射为 preference（UserProfileStore 接受的旧分类）。
+=======
+>>>>>>> origin/main
         profile_categories = ("preference", "goal", "environment")
         # 结构性探测 store_profile（MemoryPort 协议外的扩展方法）:
         # 用**类级** hasattr（而非实例 getattr）—— 无 spec 的 Mock 在实例上
@@ -1183,6 +1234,7 @@ async def extract_and_store_memory(
             else None
         )
         for fact in facts:
+<<<<<<< HEAD
             category = fact.get("category", "project_fact")
             # 防御：extractor 新分类 (user_pref / project_fact / decision /
             # task_summary / cross_session_pattern) 与 UserProfileStore 接
@@ -1191,6 +1243,13 @@ async def extract_and_store_memory(
             # 同时兼容 LLM 仍输出旧分类 "fact" / "preference" 的情况（F4
             # normalize 双向防御），统一 remap 到 profile 可接受的词汇。
             if category in ("user_pref", "fact"):
+=======
+            category = fact.get("category", "fact")
+            # 防御：LLM 仍可能输出 prompt 已禁止的 "fact" / "event" 类别。
+            # "fact" 几乎都是关于用户的事实（提取 prompt 的语义），remap 到
+            # "preference" 让其正确路由到 UserProfileStore，避免画像库长期饥饿。
+            if category == "fact":
+>>>>>>> origin/main
                 category = "preference"
                 fact["category"] = category
             if category in profile_categories and callable(store_profile):

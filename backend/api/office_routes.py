@@ -20,7 +20,11 @@ from __future__ import annotations
 import base64
 import logging
 from pathlib import Path
+<<<<<<< HEAD
 from typing import TYPE_CHECKING, Optional
+=======
+from typing import TYPE_CHECKING
+>>>>>>> origin/main
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -28,6 +32,11 @@ from fastapi.responses import JSONResponse
 from backend.data.database import Database, get_database
 from backend.office import progress as office_progress, read_cache
 from backend.office.bibtex import parse_bibtex
+<<<<<<< HEAD
+=======
+from backend.office.doc_profile import read_doc_profile
+from backend.office.doc_profile_models import WordDocumentProfileResult
+>>>>>>> origin/main
 from backend.office.errors import (
     OfficeError,
     OfficePathError,
@@ -225,7 +234,7 @@ def _persist_read_summary(
     *,
     file_path: Path,
     canonical_workspace: str,
-    original_filename: Optional[str],
+    original_filename: str | None,
 ) -> None:
     """Persist a read result's summary into the office_documents table.
 
@@ -370,6 +379,18 @@ def read_word_endpoint(req: OfficeReadRequest) -> OfficeWordReadResult:
         original_filename=req.original_filename,
     )
     return result
+
+
+@router.post("/word/profile", response_model=WordDocumentProfileResult)
+def read_word_profile_endpoint(req: OfficeReadRequest) -> WordDocumentProfileResult:
+    """Read a .docx into the M0 DocumentProfile (page/styles/runs/anchors)."""
+    logger.info("Reading Word profile: %s", req.file_path)
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    _check_size_limit(file_path, req.max_size_bytes)
+    canonical_workspace = str(Path(req.workspace_path).resolve())
+    return WordDocumentProfileResult(
+        **read_doc_profile(file_path, workspace_path=canonical_workspace)
+    )
 
 
 @router.post("/excel/read", response_model=OfficeExcelReadResult)
@@ -718,6 +739,23 @@ from backend.api.office_journal_routes import (  # noqa: E402
 )
 
 router.include_router(_journal_router)
+<<<<<<< HEAD
+=======
+
+# ──────────────────────────────────────────────────────────────────────
+# LaTeX read-only preview (office_latex_routes.py)
+# ──────────────────────────────────────────────────────────────────────
+
+from backend.api.office_latex_routes import router as _latex_router  # noqa: E402
+
+router.include_router(_latex_router)
+
+from backend.api.office_word_template_profile_routes import (  # noqa: E402
+    router as _word_template_profile_router,
+)
+
+router.include_router(_word_template_profile_router)
+>>>>>>> origin/main
 
 __all__ = [
     "router",

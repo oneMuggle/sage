@@ -38,6 +38,10 @@ export type {
   PlaybookCurrent,
   PlaybookExportResult,
   PlaybookImportPreview,
+<<<<<<< HEAD
+=======
+  PlaybookLibraryItem,
+>>>>>>> origin/main
   PlaybookMatch,
   PlaybookSpec,
   PlaybookStageAudit,

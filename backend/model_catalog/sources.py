@@ -18,7 +18,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+<<<<<<< HEAD
 from typing import List, Optional
+=======
+from typing import List
+>>>>>>> origin/main
 
 from .schemas import CandidateModel, ModelKey, Price
 
@@ -43,7 +47,11 @@ def _split_model_id(raw_id: str) -> ModelKey:
     return ModelKey(provider=_OPENROUTER_SOURCE, model_id=raw_id)
 
 
+<<<<<<< HEAD
 def _price_per_million(raw) -> Optional[Decimal]:
+=======
+def _price_per_million(raw) -> Decimal | None:
+>>>>>>> origin/main
     """Convert a per-token string to per-million Decimal.
 
     None / empty → unknown (None).  Negative → unknown (not free).

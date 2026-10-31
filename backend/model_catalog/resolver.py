@@ -1,6 +1,14 @@
+<<<<<<< HEAD
 """Resolve caller-filtered layers; this module does not select price scopes."""
 from typing import List, Mapping
 
+=======
+from typing import List, Mapping
+
+"""Resolve caller-filtered layers; this module does not select price scopes."""
+
+
+>>>>>>> origin/main
 from .schemas import ContextLimits, EffectiveModel, LayerValues, ModelKey, Price
 
 _FIELDS = (

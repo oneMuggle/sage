@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容，保留 typing 注解
+=======
+# ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容，保留 typing 注解
+>>>>>>> origin/main
 """存量会话事件回填（DSH 对标 R2，SE2）。
 
 SE1 落地前的历史会话没有 ``session_events`` 记录 —— 读取切换

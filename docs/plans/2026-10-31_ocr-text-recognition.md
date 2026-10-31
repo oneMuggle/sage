@@ -574,7 +574,10 @@ UI：
   `ocr_config.office_enabled` 设置（`SAGE_OCR` 兼容覆盖）；
   单图 20k / 总量 60k 文本注入上限；Electron 自动探测
   `resources/tesseract/tesseract[.exe]` 并注入 `SAGE_TESSERACT_PATH`；
+<<<<<<< HEAD
   win7 分支不捆绑 RapidOCR，仅同步 Office 开关、文本上限与 Electron 探测；
+=======
+>>>>>>> origin/main
 - P1 开发（2026-10-31）：发送后消息气泡展示 OCR 文本
   （`client_meta.image_ocr_texts`，每图 4k/总量 8k）；`/ocr/reload` 与设置页
   tiny 模型下载/恢复；`ocr_benchmark.py --manifest` 分类统计；

@@ -193,7 +193,10 @@ class ProjectWikiGenerator:
 
                 abs_path = Path(dirpath) / filename
                 rel_path = abs_path.relative_to(root)
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/main
                 # SourceFile.path 是项目相对逻辑标识（供 wiki/依赖分析/前端展示），
                 # 统一 POSIX 分隔符，避免 Windows 反斜杠污染序列化结果。
                 rel_posix = rel_path.as_posix()
