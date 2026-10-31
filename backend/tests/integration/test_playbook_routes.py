@@ -122,6 +122,104 @@ async def test_bind_projects_rules_and_stage_adds_more(
 
 
 @pytest.mark.asyncio()
+async def test_state_update_waiver_and_manual_done(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    response = await client.patch(
+        "/api/v1/projects/{}/playbook/state".format(project["id"]),
+        json={
+            "waivers": ["proposal.proposal_report"],
+            "manual_done": ["proposal.literature_matrix_ready"],
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["state"]["waivers"] == ["proposal.proposal_report"]
+    proposal = next(stage for stage in payload["audit"]["stages"] if stage["id"] == "proposal")
+    report = next(item for item in proposal["artifacts"] if item["id"] == "proposal_report")
+    assert report["status"] == "waived"
+    criterion = next(
+        item for item in proposal["exit_criteria"] if item["id"] == "literature_matrix_ready"
+    )
+    assert criterion["status"] == "done"
+
+
+@pytest.mark.asyncio()
+async def test_unbind_and_version_history(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    versions = await client.get(
+        "/api/v1/projects/{}/playbook/versions".format(project["id"])
+    )
+    assert versions.status_code == 200
+    assert len(versions.json()["versions"]) == 1
+    assert versions.json()["versions"][0]["active"] is True
+
+    unbound = await client.delete(
+        "/api/v1/projects/{}/playbook".format(project["id"])
+    )
+    assert unbound.status_code == 200
+    assert unbound.json()["bound"] is False
+
+    versions = await client.get(
+        "/api/v1/projects/{}/playbook/versions".format(project["id"])
+    )
+    assert versions.json()["versions"][0]["active"] is False
+
+
+@pytest.mark.asyncio()
+async def test_cleanup_playbook_rules(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    constraints = await client.get(
+        "/api/v1/projects/{}/constraints".format(project["id"])
+    )
+    assert any(
+        str(item.get("source", "")).startswith("playbook:")
+        for item in constraints.json()["constraints"]
+    )
+    cleanup = await client.post(
+        "/api/v1/projects/{}/playbook/rules/cleanup".format(project["id"])
+    )
+    assert cleanup.status_code == 200
+    assert cleanup.json()["removed"] > 0
+    constraints = await client.get(
+        "/api/v1/projects/{}/constraints".format(project["id"])
+    )
+    assert not any(
+        str(item.get("source", "")).startswith("playbook:")
+        for item in constraints.json()["constraints"]
+    )
+
+
+@pytest.mark.asyncio()
+async def test_project_patch_stage_syncs_playbook_state(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    patched = await client.patch(
+        "/api/v1/projects/{}".format(project["id"]),
+        json={"project_stage": "execution"},
+    )
+    assert patched.status_code == 200, patched.text
+    current = await client.get(
+        "/api/v1/projects/{}/playbook".format(project["id"])
+    )
+    assert current.json()["state"]["current_stage"] == "execution"
+    constraints = await client.get(
+        "/api/v1/projects/{}/constraints".format(project["id"])
+    )
+    assert any("随机种子" in item["content"] for item in constraints.json()["constraints"])
+
+
+@pytest.mark.asyncio()
 async def test_actions_apply_and_stage_confirm(
     client: httpx.AsyncClient, project_dir: Path
 ) -> None:

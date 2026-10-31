@@ -85,6 +85,29 @@ describe('playbookApi', () => {
     });
   });
 
+  it('updateState 透传 waivers/manual_done', async () => {
+    await playbookApi.updateState('proj-1', {
+      waivers: ['proposal.ethics'],
+      manual_done: ['proposal.matrix'],
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('playbook_state_update', {
+      projectId: 'proj-1',
+      waivers: ['proposal.ethics'],
+      manual_done: ['proposal.matrix'],
+    });
+  });
+
+  it('unbind/listVersions/cleanupRules 调用正确命令', async () => {
+    await playbookApi.unbind('proj-1');
+    expect(mockInvoke).toHaveBeenCalledWith('playbook_unbind', { projectId: 'proj-1' });
+    await playbookApi.listVersions('proj-1');
+    expect(mockInvoke).toHaveBeenCalledWith('playbook_versions', { projectId: 'proj-1' });
+    await playbookApi.cleanupRules('proj-1');
+    expect(mockInvoke).toHaveBeenCalledWith('playbook_rules_cleanup', {
+      projectId: 'proj-1',
+    });
+  });
+
   it('importPlaybook 默认 conflict=save_as_new', async () => {
     await playbookApi.importPlaybook({ format: 'sage.playbook' }, 'proj-1');
     expect(mockInvoke).toHaveBeenCalledWith('playbook_import', {

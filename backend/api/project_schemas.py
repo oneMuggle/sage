@@ -196,6 +196,7 @@ class ConstraintModel(BaseModel):
     trigger_pattern: Optional[str]
     priority: int
     enabled: bool
+    source: str = "user"
     created_at: int
     updated_at: int
 

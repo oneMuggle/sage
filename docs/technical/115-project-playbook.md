@@ -61,9 +61,12 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
   "current_stage": "proposal",
   "stage_history": [{"from": null, "to": "proposal", "at": 1793400000000, "source": "user"}],
   "waivers": ["closure.budget_statement"],
-  "manual_done": ["proposal.literature_matrix_ready"]
+  "manual_done": ["proposal.literature_matrix_ready"],
+  "conditions": {"contains_human_subjects": false}
 }
 ```
+
+`required_when` 支持 `project.<field>`、`state.<key>` 以及 `==` 比较；未知条件按"不适用"处理。`conditions` 由 `PATCH /playbook/state` 更新。
 
 ## 4. 规程规格
 
@@ -98,7 +101,7 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 
 ### 规则投影
 
-绑定规程、导入规程或确认阶段时，会把全局规则与当前阶段规则幂等写入 `project_constraints`（`template_key` 会展开为模板内的多条规则）；因此规程规则会随约束注入 system prompt，真正约束 AI 行为。同一内容不会重复写入；旧阶段规则保留，不会自动删除。
+绑定规程、导入规程或确认阶段时，会把全局规则与当前阶段规则幂等写入 `project_constraints`（`template_key` 会展开为模板内的多条规则）；因此规程规则会随约束注入 system prompt，真正约束 AI 行为。同一内容不会重复写入；旧阶段规则保留，不会自动删除。写入的约束 `source` 标记为 `playbook:<stage>`，可用 `POST /playbook/rules/cleanup` 清理；绑定前会创建项目检查点。旧版阶段下拉框通过 `PATCH /projects/{id}` 修改阶段时，也会同步 `playbook_state` 与规则投影。
 
 ## 6. API
 
@@ -109,6 +112,10 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 | GET | `/api/v1/projects/{id}/playbook` | 当前绑定 + 状态 + 审计 |
 | PUT | `/api/v1/projects/{id}/playbook` | 绑定内置或自定义规程（生成快照） |
 | GET | `/api/v1/projects/{id}/playbook/audit` | 重新审计 |
+| PATCH | `/api/v1/projects/{id}/playbook/state` | 更新豁免 / 手动完成 / 条件标记 |
+| DELETE | `/api/v1/projects/{id}/playbook` | 解绑规程（保留历史快照） |
+| GET | `/api/v1/projects/{id}/playbook/versions` | 版本历史 |
+| POST | `/api/v1/projects/{id}/playbook/rules/cleanup` | 删除规程投影到项目规则的约束 |
 | POST | `/api/v1/projects/{id}/playbook/audit/ai` | 审计 + LLM 内容检查 / 阶段裁决（失败降级） |
 | POST | `/api/v1/projects/{id}/playbook/author/preview` | AI 定制规程草案（schema 校验 + 确定性降级） |
 | POST | `/api/v1/projects/{id}/playbook/stage/confirm` | 确认阶段（写历史） |

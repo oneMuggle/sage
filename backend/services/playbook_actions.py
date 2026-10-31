@@ -173,6 +173,7 @@ def project_playbook_rules(
     repo = ProjectConstraintRepository()
     existing = {_normalize(item.content) for item in repo.list_by_project(project_id)}
     created = 0
+    playbook_source = f"playbook:{stage_id or 'all'}"
 
     def _create(content: str, category: str, trigger_pattern: str, priority: int) -> None:
         nonlocal created
@@ -186,6 +187,7 @@ def project_playbook_rules(
             content=content,
             trigger_pattern=trigger_pattern or "always",
             priority=int(priority or 5),
+            source=playbook_source,
         )
         existing.add(normalized)
         created += 1
