@@ -101,12 +101,12 @@ from backend.api.local_auth import (
 from backend.api.mcp_routes import router as mcp_router
 from backend.api.media_routes import router as media_router
 from backend.api.model_catalog_routes import build_router as build_model_catalog_router
+from backend.api.ocr_routes import router as ocr_router
 from backend.api.office_quarantine_routes import router as office_quarantine_router
 from backend.api.office_routes import (
     register_office_exception_handlers,
     router as office_router,
 )
-from backend.api.ocr_routes import router as ocr_router
 from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.permission_routes import router as permission_router
 from backend.api.plugin_routes import router as plugin_router
