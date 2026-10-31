@@ -246,6 +246,9 @@ const electronAPI = {
       files?: { name: string; sha256: string }[];
     }) => ipcRenderer.invoke('models:embedder:download', payload ?? {}),
     cancel: (dirName: string) => ipcRenderer.invoke('models:embedder:cancel', dirName),
+    downloadOcr: () => ipcRenderer.invoke('models:ocr:download', {}),
+    cancelOcr: () => ipcRenderer.invoke('models:ocr:cancel', 'rapidocr'),
+    resetOcr: () => ipcRenderer.invoke('models:ocr:reset'),
   },
 
   /**

@@ -47,10 +47,39 @@ export interface BuildMessageDisplayMetaInput {
   content: string;
   attachments?: readonly { name: string; size: number; type: string; dataUrl?: string }[];
   images?: readonly { name: string; size: number; type: string; dataUrl?: string }[];
+  /** 与 images 对齐的 OCR 文本（前端预览/编辑结果） */
+  imageOcrTexts?: readonly string[];
   officeRefs?: readonly ChatOfficeRef[];
   knowledgeRefs?: readonly { id: string; title: string }[];
   /** 发送时的工作区根目录；随 office_refs 落库，供历史消息在切换工作区后定位文档。 */
   workspacePath?: string;
+}
+
+//: message_meta 总上限 32 KiB；OCR 文本展示预算（避免挤掉附件/引用信息）
+const OCR_META_MAX_PER_IMAGE = 4000;
+const OCR_META_MAX_TOTAL = 8000;
+
+function buildOcrMetaEntries(
+  images: BuildMessageDisplayMetaInput['images'],
+  texts: readonly string[] | undefined,
+): { name: string; text: string }[] {
+  if (!images || !texts || images.length === 0 || texts.length === 0) return [];
+  const entries: { name: string; text: string }[] = [];
+  let remaining = OCR_META_MAX_TOTAL;
+  const count = Math.min(images.length, texts.length);
+  for (let index = 0; index < count; index += 1) {
+    const raw = (texts[index] ?? '').trim();
+    if (!raw || remaining <= 0) continue;
+    const clipped =
+      raw.length > OCR_META_MAX_PER_IMAGE
+        ? `${raw.slice(0, OCR_META_MAX_PER_IMAGE)}…`
+        : raw;
+    const budget = Math.min(clipped.length, remaining);
+    const text = budget < clipped.length ? `${clipped.slice(0, budget)}…` : clipped;
+    entries.push({ name: images[index].name, text });
+    remaining -= text.length;
+  }
+  return entries;
 }
 
 /** 汇总一条用户消息的全部引用信息；无任何引用时返回 undefined。 */
@@ -58,11 +87,13 @@ export function buildMessageDisplayMeta({
   content,
   attachments,
   images,
+  imageOcrTexts,
   officeRefs,
   knowledgeRefs,
   workspacePath,
 }: BuildMessageDisplayMetaInput): MessageDisplayMeta | undefined {
   const fileRefs = extractFileRefs(content);
+  const ocrEntries = buildOcrMetaEntries(images, imageOcrTexts);
   const meta: MessageDisplayMeta = {
     ...(attachments && attachments.length > 0
       ? { attachments: attachments.map(({ name, size, type }) => ({ name, size, type })) }
@@ -70,6 +101,7 @@ export function buildMessageDisplayMeta({
     ...(images && images.length > 0
       ? { images: images.map(({ name, size, type }) => ({ name, size, type })) }
       : {}),
+    ...(ocrEntries.length > 0 ? { image_ocr_texts: ocrEntries } : {}),
     ...(fileRefs.length > 0 ? { file_refs: fileRefs } : {}),
     ...(officeRefs && officeRefs.length > 0
       ? {
