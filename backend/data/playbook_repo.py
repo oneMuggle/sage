@@ -171,6 +171,17 @@ class PlaybookRepository:
         conn.commit()
         return cursor.rowcount > 0
 
+    def unbind(self, project_id: str) -> int:
+        """Deactivate all snapshots for a project (history is kept)."""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE project_playbooks SET active = 0 WHERE project_id = ? AND active = 1",
+            (project_id,),
+        )
+        conn.commit()
+        return cursor.rowcount
+
     def get_state(self, project_id: str) -> Dict[str, Any]:
         project = ProjectRepository().get(project_id)
         if project is None or not project.playbook_state:

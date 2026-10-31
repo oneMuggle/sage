@@ -87,6 +87,28 @@ export const playbookRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/projects/${projectId(a)}/playbook/wiki/export`,
   },
+  playbook_state_update: {
+    method: 'PATCH',
+    path: (a) => `/api/v1/projects/${projectId(a)}/playbook/state`,
+    body: (a) =>
+      pick(a, {
+        waivers: ['waivers'],
+        manual_done: ['manualDone', 'manual_done'],
+        conditions: ['conditions'],
+      }),
+  },
+  playbook_unbind: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/projects/${projectId(a)}/playbook`,
+  },
+  playbook_versions: {
+    method: 'GET',
+    path: (a) => `/api/v1/projects/${projectId(a)}/playbook/versions`,
+  },
+  playbook_rules_cleanup: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/playbook/rules/cleanup`,
+  },
   playbook_import_preview: {
     method: 'POST',
     path: () => '/api/v1/playbooks/import/preview',

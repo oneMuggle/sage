@@ -182,14 +182,63 @@ def _check_content(paths: List[Path], checks: List[Dict[str, Any]]) -> List[Dict
     return results
 
 
+def _condition_true(expr: Any, project: Any, state: Dict[str, Any]) -> bool:
+    """Evaluate a small, safe subset of ``required_when`` expressions.
+
+    Supported forms:
+    - ``project.<field>`` (boolean truthiness; ``contains_human_subjects``
+      reads from ``state.conditions``)
+    - ``state.<key>`` (boolean truthiness)
+    - ``project.<field> == value`` / ``state.<key> == value``
+
+    Unknown expressions evaluate to False, so an unrecognized condition is
+    treated as "not required" rather than causing false missing reports.
+    """
+    text = str(expr or "").strip()
+    if not text:
+        return True
+    conditions = state.get("conditions") if isinstance(state.get("conditions"), dict) else {}
+    if "==" in text:
+        left, right = text.split("==", 1)
+        left = left.strip()
+        right = right.strip().strip("'\"")
+        if left.startswith("project."):
+            result = str(getattr(project, left[len("project.") :], "") or "") == right
+        elif left.startswith("state."):
+            result = str(conditions.get(left[len("state.") :], "") or "") == right
+        else:
+            result = False
+    elif text.startswith("state."):
+        result = bool(conditions.get(text[len("state.") :]))
+    elif text.startswith("project."):
+        field = text[len("project.") :]
+        if field == "contains_human_subjects":
+            result = bool(conditions.get(field))
+        elif field == "has_git":
+            result = str(getattr(project, "vcs_mode", "") or "") == "git"
+        else:
+            result = bool(getattr(project, field, False))
+    else:
+        result = False
+    return result
+
+
+def _effective_required(project: Any, artifact: Dict[str, Any], state: Dict[str, Any]) -> bool:
+    if not _condition_true(artifact.get("required_when"), project, state):
+        return False
+    return bool(artifact.get("required", True))
+
+
 def _artifact_audit(
     root: Path,
+    project: Any,
     stage_id: str,
     artifact: Dict[str, Any],
     state: Dict[str, Any],
 ) -> Dict[str, Any]:
     waivers: Set[str] = {str(item) for item in (state.get("waivers") or [])}
     artifact_key = "{}.{}".format(stage_id, artifact["id"])
+    required = _effective_required(project, artifact, state)
     match = artifact.get("match") or {}
     min_bytes = int(match.get("min_bytes") or 0)
     min_count = max(1, int(match.get("min_count") or 1))
@@ -222,7 +271,7 @@ def _artifact_audit(
     if artifact_key in waivers:
         status = "waived"
     elif len(valid) < min_count:
-        status = "optional" if not artifact.get("required", True) else "missing"
+        status = "optional" if not required else "missing"
     else:
         max_age_days = match.get("max_age_days")
         if (
@@ -253,7 +302,8 @@ def _artifact_audit(
     return {
         "id": artifact["id"],
         "label": artifact.get("label", artifact["id"]),
-        "required": bool(artifact.get("required", True)),
+        "required": required,
+        "required_when": artifact.get("required_when"),
         "status": status,
         "target_dir": target_dir,
         "evidence": {
@@ -336,7 +386,7 @@ def audit_playbook(
 
     for stage in spec.get("stages") or []:
         artifacts = [
-            _artifact_audit(root, stage["id"], artifact, state)
+            _artifact_audit(root, project, stage["id"], artifact, state)
             for artifact in stage.get("artifacts") or []
         ]
         by_id = {artifact["id"]: artifact for artifact in artifacts}

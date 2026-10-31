@@ -188,6 +188,20 @@ export interface PlaybookWikiExportResult {
   updated: boolean;
 }
 
+export interface PlaybookVersion {
+  version: number;
+  source: string;
+  spec_hash: string;
+  created_at: number;
+  active: boolean;
+}
+
+export interface PlaybookStatePatch {
+  waivers?: string[];
+  manual_done?: string[];
+  conditions?: Record<string, unknown>;
+}
+
 export interface PlaybookImportPreview {
   playbook: PlaybookSpec;
   scaffold: {
@@ -285,6 +299,35 @@ export const playbookApi = {
 
   async exportToWiki(projectId: string): Promise<PlaybookWikiExportResult> {
     return invoke<PlaybookWikiExportResult>('playbook_wiki_export', { projectId });
+  },
+
+  async updateState(
+    projectId: string,
+    patch: PlaybookStatePatch,
+  ): Promise<PlaybookCurrent> {
+    return invoke<PlaybookCurrent>('playbook_state_update', {
+      projectId,
+      ...patch,
+    });
+  },
+
+  async unbind(projectId: string): Promise<PlaybookCurrent> {
+    return invoke<PlaybookCurrent>('playbook_unbind', { projectId });
+  },
+
+  async listVersions(projectId: string): Promise<PlaybookVersion[]> {
+    const response = await invoke<{ versions: PlaybookVersion[] }>(
+      'playbook_versions',
+      { projectId },
+    );
+    return response.versions ?? [];
+  },
+
+  async cleanupRules(projectId: string): Promise<number> {
+    const response = await invoke<{ removed: number }>('playbook_rules_cleanup', {
+      projectId,
+    });
+    return response.removed;
   },
 
   async importPreview(
