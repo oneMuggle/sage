@@ -28,6 +28,12 @@ from backend.api.office_routes import (
     read_word_endpoint,
     read_word_profile_endpoint,
 )
+from backend.api.office_word_template_profile_routes import (
+    WordTemplateProfileFillRequest,
+    WordTemplateProfileRequest,
+    analyze_word_template_profile_endpoint,
+    fill_word_template_profile_endpoint,
+)
 from backend.data.database import get_database
 from backend.office.models import OfficeDocType, OfficeReadRequest
 from backend.office.path_safety import managed_document_path
@@ -219,3 +225,33 @@ def test_word_profile_endpoint_returns_document_profile(workspace: Path) -> None
     assert result.sections[0].page_width_pt is not None
     assert result.source_path.startswith("office/word/")
     assert isinstance(result.styles, list)
+
+
+def test_word_template_profile_endpoints_analyze_and_fill(workspace: Path) -> None:
+    from docx import Document
+
+    document = Document()
+    document.add_paragraph("Hello <<name>>")
+    template = workspace / "template.docx"
+    document.save(str(template))
+
+    analyzed = analyze_word_template_profile_endpoint(
+        WordTemplateProfileRequest(
+            workspace_path=str(workspace),
+            file_path=str(template),
+        )
+    )
+    assert analyzed["kind"] == "word-template-profile"
+    assert analyzed["slots"][0]["name"] == "name"
+
+    filled = fill_word_template_profile_endpoint(
+        WordTemplateProfileFillRequest(
+            workspace_path=str(workspace),
+            template_path=str(template),
+            output_filename="filled.docx",
+            data={"name": "World"},
+        )
+    )
+    assert filled["ok"] is True
+    assert filled["residual_placeholders"] == []
+    assert (workspace / "filled.docx").is_file()
