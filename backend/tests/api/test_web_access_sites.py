@@ -305,3 +305,63 @@ def test_login_permission_asks_in_prompt_mode(monkeypatch):
     decision = routes._login_permission_decision("https://kns.cnki.net/")
     assert decision.allowed is False
     assert decision.needs_approval is True
+
+
+async def test_verify_site_not_found(client, monkeypatch):
+    monkeypatch.setattr(routes, "list_credentials", lambda: [])
+    resp = await client.post("/api/v1/web-access/sites/verify", json={"domain": ".cnki.net"})
+    assert resp.status_code == 404
+
+
+async def test_verify_site_logged_in(client, monkeypatch):
+    monkeypatch.setattr(routes, "list_credentials", lambda: [_record()])
+    from backend.tools import web_render
+
+    monkeypatch.setattr(
+        web_render,
+        "render_page",
+        lambda *a, **kw: {"login_wall": False, "content": "欢迎回来 退出登录"},
+    )
+    resp = await client.post("/api/v1/web-access/sites/verify", json={"domain": ".cnki.net"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "logged_in"
+    assert body["domain"] == ".cnki.net"
+    assert body["url"].startswith("https://")
+    assert isinstance(body["checked_at"], int)
+
+
+async def test_verify_site_login_required(client, monkeypatch):
+    monkeypatch.setattr(routes, "list_credentials", lambda: [_record()])
+    from backend.tools import web_render
+
+    monkeypatch.setattr(
+        web_render,
+        "render_page",
+        lambda *a, **kw: {"login_wall": False, "content": "请登录后查看全文"},
+    )
+    resp = await client.post("/api/v1/web-access/sites/verify", json={"domain": ".cnki.net"})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "login_required"
+
+
+async def test_verify_site_render_error_is_unknown(client, monkeypatch):
+    monkeypatch.setattr(routes, "list_credentials", lambda: [_record()])
+    from backend.tools import web_render
+
+    def _boom(*a, **kw):
+        raise web_render.RenderError("browser missing")
+
+    monkeypatch.setattr(web_render, "render_page", _boom)
+    resp = await client.post("/api/v1/web-access/sites/verify", json={"domain": ".cnki.net"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "unknown"
+    assert "browser missing" in body["error"]
+
+
+async def test_verify_site_rejects_header_credential(client, monkeypatch):
+    monkeypatch.setattr(routes, "list_credentials", lambda: [_record(kind="header")])
+    resp = await client.post("/api/v1/web-access/sites/verify", json={"domain": ".cnki.net"})
+    assert resp.status_code == 422
+    assert resp.json()["error"] == "unsupported_credential_kind"
