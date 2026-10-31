@@ -1,0 +1,322 @@
+{
+  "schema_version": "1.0",
+  "id": "coding-project",
+  "name": "代码工程（规划 · 研发 · 测试 · 发布 · 维护）",
+  "description": "面向软件仓库的规划—研发—测试—发布—维护全周期管理，强调架构决策、测试门禁与发布归档",
+  "applies_to": {
+    "project_types": [
+      "coding"
+    ],
+    "sub_types": [
+      "python_backend",
+      "typescript_frontend",
+      "fullstack_web",
+      "desktop_app",
+      "data_science",
+      "rust_systems",
+      "go_services",
+      "java_spring",
+      "mobile_app"
+    ]
+  },
+  "directory_layout": [
+    {
+      "path": "src",
+      "required": false,
+      "purpose": "源代码（若项目使用其他布局可忽略）"
+    },
+    {
+      "path": "tests",
+      "required": true,
+      "purpose": "自动化测试"
+    },
+    {
+      "path": "docs",
+      "required": true,
+      "purpose": "设计文档、ADR 与用户文档"
+    }
+  ],
+  "stages": [
+    {
+      "id": "planning",
+      "label": "规划设计",
+      "order": 1,
+      "objective": "明确架构边界、接口契约与技术选型",
+      "artifacts": [
+        {
+          "id": "architecture_decision",
+          "label": "架构决策记录（ADR）",
+          "required": true,
+          "match": {
+            "globs": [
+              "docs/**/ADR*.md",
+              "docs/**/adr*.md",
+              "**/architecture*decision*.md",
+              "**/架构决策*.md"
+            ],
+            "min_bytes": 200
+          },
+          "missing_action": {
+            "type": "create_doc_stub",
+            "payload": {
+              "path": "docs/ADR-0001-architecture.md",
+              "template": "architecture_decision"
+            }
+          },
+          "target_dir": "docs"
+        },
+        {
+          "id": "project_rules",
+          "label": "项目说明（SAGE.md / CLAUDE.md / AGENTS.md）",
+          "required": false,
+          "match": {
+            "globs": [
+              "SAGE.md",
+              "CLAUDE.md",
+              "AGENTS.md"
+            ]
+          }
+        }
+      ],
+      "exit_criteria": [
+        {
+          "id": "architecture_approved",
+          "label": "架构设计与技术选型已确认",
+          "type": "artifact",
+          "artifact_id": "architecture_decision"
+        }
+      ],
+      "rules": [
+        {
+          "template_key": "security_basic",
+          "priority": 9
+        },
+        {
+          "content": "修改核心逻辑前先阅读相关模块与现有测试，保持最小侵入式变更",
+          "category": "coding_style",
+          "trigger_pattern": "src/**",
+          "priority": 7
+        }
+      ],
+      "recommended_milestones": [
+        {
+          "title": "完成架构设计与 ADR 决策评审",
+          "due_offset_days": 7
+        },
+        {
+          "title": "确定接口契约与数据模型",
+          "due_offset_days": 14
+        }
+      ]
+    },
+    {
+      "id": "development",
+      "label": "研发实现",
+      "order": 2,
+      "objective": "按分层规范完成主干功能实现与类型校验",
+      "artifacts": [
+        {
+          "id": "source_code",
+          "label": "源代码",
+          "required": true,
+          "match": {
+            "globs": [
+              "src/**/*.{py,ts,tsx,js,jsx,rs,go,java,kt,dart}",
+              "backend/**/*.py"
+            ],
+            "min_count": 1
+          }
+        },
+        {
+          "id": "project_rules",
+          "label": "项目说明（SAGE.md / CLAUDE.md / AGENTS.md）",
+          "required": false,
+          "match": {
+            "globs": [
+              "SAGE.md",
+              "CLAUDE.md",
+              "AGENTS.md"
+            ]
+          }
+        }
+      ],
+      "exit_criteria": [
+        {
+          "id": "main_path_working",
+          "label": "主干功能可运行",
+          "type": "artifact",
+          "artifact_id": "source_code"
+        }
+      ],
+      "rules": [
+        {
+          "content": "新增公共接口须同步补充单元测试；严禁硬编码敏感凭据",
+          "category": "security",
+          "trigger_pattern": "src/**",
+          "priority": 8
+        }
+      ],
+      "recommended_milestones": [
+        {
+          "title": "核心模块编码与接口联调",
+          "due_offset_days": 30
+        }
+      ]
+    },
+    {
+      "id": "testing",
+      "label": "测试验证",
+      "order": 3,
+      "objective": "补充关键路径测试并通过 CI 门禁",
+      "artifacts": [
+        {
+          "id": "tests",
+          "label": "自动化测试",
+          "required": true,
+          "match": {
+            "globs": [
+              "tests/**/*",
+              "**/*.test.{ts,tsx,js,jsx}",
+              "**/*_test.py",
+              "**/test_*.py"
+            ],
+            "min_count": 1
+          },
+          "missing_action": {
+            "type": "create_folder",
+            "payload": {
+              "path": "tests"
+            }
+          },
+          "target_dir": "tests"
+        },
+        {
+          "id": "test_report",
+          "label": "测试报告",
+          "required": false,
+          "match": {
+            "globs": [
+              "docs/**/测试报告*.md",
+              "**/test-report*.md",
+              "**/coverage/**"
+            ]
+          },
+          "missing_action": {
+            "type": "create_doc_stub",
+            "payload": {
+              "path": "docs/测试报告.md",
+              "template": "test_report"
+            }
+          }
+        }
+      ],
+      "exit_criteria": [
+        {
+          "id": "tests_green",
+          "label": "核心测试通过",
+          "type": "artifact",
+          "artifact_id": "tests"
+        }
+      ],
+      "rules": [],
+      "recommended_milestones": [
+        {
+          "title": "单元测试覆盖与回归验证",
+          "due_offset_days": 45
+        }
+      ]
+    },
+    {
+      "id": "deployment",
+      "label": "发布部署",
+      "order": 4,
+      "objective": "完成构建产物验证、发布说明与里程碑归档",
+      "artifacts": [
+        {
+          "id": "release_notes",
+          "label": "发布说明 / CHANGELOG",
+          "required": true,
+          "match": {
+            "globs": [
+              "CHANGELOG*.md",
+              "docs/**/CHANGELOG*.md",
+              "**/release-notes*.md",
+              "**/发布说明*.md"
+            ],
+            "min_bytes": 100
+          },
+          "missing_action": {
+            "type": "create_doc_stub",
+            "payload": {
+              "path": "CHANGELOG.md",
+              "template": "release_notes"
+            }
+          },
+          "target_dir": "docs"
+        }
+      ],
+      "exit_criteria": [
+        {
+          "id": "release_documented",
+          "label": "发布说明已归档",
+          "type": "artifact",
+          "artifact_id": "release_notes"
+        }
+      ],
+      "rules": [],
+      "recommended_milestones": [
+        {
+          "title": "版本构建发布与变更归档",
+          "due_offset_days": 60
+        }
+      ]
+    },
+    {
+      "id": "maintenance",
+      "label": "持续维护",
+      "order": 5,
+      "objective": "处理缺陷、性能与技术债",
+      "artifacts": [
+        {
+          "id": "project_rules",
+          "label": "项目说明（SAGE.md / CLAUDE.md / AGENTS.md）",
+          "required": false,
+          "match": {
+            "globs": [
+              "SAGE.md",
+              "CLAUDE.md",
+              "AGENTS.md"
+            ]
+          }
+        }
+      ],
+      "exit_criteria": [],
+      "rules": [
+        {
+          "content": "线上问题修复须补充回归测试，并在发布说明中记录",
+          "category": "testing",
+          "trigger_pattern": "src/**",
+          "priority": 6
+        }
+      ],
+      "recommended_milestones": []
+    }
+  ],
+  "global_rules": [
+    {
+      "content": "提交信息遵循 Conventional Commits：feat/fix/docs/refactor/test/chore/perf/ci",
+      "category": "workflow",
+      "priority": 5
+    }
+  ],
+  "todos": [],
+  "ai_guidance": {
+    "stage_hint": "先确认当前阶段：规划阶段优先架构与接口，研发阶段优先可运行代码，测试阶段优先覆盖率，发布阶段优先变更说明。",
+    "completeness_tone": "用文件证据说明缺失项，给出一个可执行动作，不要泛泛而谈。"
+  },
+  "meta": {
+    "author": "Sage 内置",
+    "license": "CC-BY-4.0",
+    "created_at": "2026-10-31"
+  }
+}

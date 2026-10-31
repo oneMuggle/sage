@@ -243,6 +243,33 @@ class ProjectAdvisor:
         session_count = ProjectRepository().session_stats().get(project.path, (0, None))[0]
         wiki_root = Path(project.path) / "wiki"
 
+        playbook_summary = None
+        try:
+            from backend.data.playbook_repo import PlaybookRepository
+            from backend.services.playbook_auditor import audit_playbook
+
+            snapshot = PlaybookRepository().get_active(project_id)
+            if snapshot is not None:
+                state = PlaybookRepository().get_state(project_id)
+                audit = audit_playbook(project, snapshot.spec, state=state)
+                missing = [
+                    item["label"]
+                    for stage in audit.get("stages") or []
+                    for item in stage.get("remaining") or []
+                ]
+                playbook_summary = {
+                    "name": snapshot.spec.get("name"),
+                    "current_stage": audit.get("current_stage"),
+                    "detected_stage": (audit.get("detected_stage") or {}).get("id"),
+                    "progress": (audit.get("overall") or {}).get("progress", 0),
+                    "missing": missing[:8],
+                    "classification_suggestions": len(
+                        audit.get("classification_suggestions") or []
+                    ),
+                }
+        except Exception:
+            logger.debug("Failed to load playbook audit for %s", project_id, exc_info=True)
+
         return {
             "project": {
                 "name": project.name,
@@ -251,6 +278,7 @@ class ProjectAdvisor:
                 "stage": project.project_stage or "unknown",
                 "description": (project.description or "")[:200],
             },
+            "playbook": playbook_summary,
             "milestones": {
                 "total": sum(status_counts.values()),
                 "by_status": status_counts,
@@ -312,6 +340,18 @@ class ProjectAdvisor:
         test_text = "、".join(codebase.get("test_frameworks") or []) or "未识别"
         ci_text = "、".join(codebase.get("ci_workflows") or []) or "无"
         recent_sessions = "、".join(sessions.get("recent") or []) or "无"
+        playbook = data.get("playbook") or {}
+        if playbook:
+            missing_text = "、".join(playbook.get("missing") or []) or "无"
+            playbook_text = (
+                f"- 规程: {playbook.get('name')}\n"
+                f"- 当前阶段: {playbook.get('current_stage')}，检测阶段: {playbook.get('detected_stage')}\n"
+                f"- 完成度: {playbook.get('progress')}%\n"
+                f"- 待补: {missing_text}\n"
+                f"- 归类建议: {playbook.get('classification_suggestions')} 项"
+            )
+        else:
+            playbook_text = "未绑定项目规程"
 
         return f"""你是一位经验丰富的项目顾问。根据以下项目数据，给出简洁、可操作、**有证据**的建议。
 
@@ -335,6 +375,9 @@ class ProjectAdvisor:
 - AI 记忆: {knowledge.get('profile_entries', 0)} 条
 - Wiki: {'已生成' if knowledge.get('wiki_exists') else '未生成'}
 - 会话数: {sessions.get('count', 0)}，最近会话: {recent_sessions}
+
+## 项目规程
+{playbook_text}
 
 ## 里程碑状态
 - 总计: {milestones['total']} 个
@@ -378,6 +421,7 @@ class ProjectAdvisor:
 
 注意：
 - 每条建议必须引用上面的具体事实作为 evidence，禁止泛泛而谈（如“保持良好沟通”）
+- 若项目规程存在待补项，优先给出补齐建议，并在 evidence 中引用具体待补项名称
 - 不要建议已经完成的事项（例如 Git 已存在就不要建议 init_git）
 - risks 最多 3 条，按 severity 降序
 - suggestions 最多 3 条，按 priority 降序

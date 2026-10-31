@@ -71,6 +71,8 @@ class Project:
     # 2026-10-29: 两级分类子类型 + AI 初始化状态 JSON。
     project_sub_type: Optional[str] = None
     bootstrap_state: Optional[str] = None
+    # 2026-10-31: 项目规程状态 JSON（当前阶段、阶段历史、豁免项、忽略建议）。
+    playbook_state: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -88,6 +90,7 @@ class Project:
             "detected_type": self.detected_type,
             "project_sub_type": self.project_sub_type,
             "bootstrap_state": self.bootstrap_state,
+            "playbook_state": self.playbook_state,
         }
 
 
@@ -115,6 +118,7 @@ def _row_to_project(row) -> Project:  # noqa: ANN001 — sqlite3.Row
         detected_type=row["detected_type"] if "detected_type" in row.keys() else None,  # noqa: SIM118
         project_sub_type=row["project_sub_type"] if "project_sub_type" in row.keys() else None,  # noqa: SIM118
         bootstrap_state=row["bootstrap_state"] if "bootstrap_state" in row.keys() else None,  # noqa: SIM118
+        playbook_state=row["playbook_state"] if "playbook_state" in row.keys() else None,  # noqa: SIM118
     )
 
 
@@ -396,6 +400,17 @@ class ProjectRepository:
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE projects SET bootstrap_state = ? WHERE id = ?",
+            (state_json, project_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def update_playbook_state(self, project_id: str, state_json: Optional[str]) -> bool:
+        """更新项目规程状态 JSON（不存在返回 False）。"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET playbook_state = ? WHERE id = ?",
             (state_json, project_id),
         )
         conn.commit()
