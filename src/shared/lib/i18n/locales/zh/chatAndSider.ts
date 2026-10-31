@@ -96,6 +96,12 @@ export const zhChatAndSider = {
   'chat.blocked.login.continue':
     '已完成 {host} 的登录。请继续完成刚才失败的请求：{url}，并总结结果。',
   'chat.blocked.login.failed': '登录未完成：{error}',
+  'browser.panel.back': '后退',
+  'browser.panel.forward': '前进',
+  'browser.panel.reload': '刷新',
+  'browser.panel.placeholder': '输入网址，如 https://kns.cnki.net',
+  'browser.panel.invalid_url': '请输入以 http:// 或 https:// 开头的网址',
+  'browser.panel.desktop_only': '浏览器面板仅在 Sage 桌面端可用。',
   'chat.loading': '正在加载对话...',
   'chat.welcome': '欢迎使用 Sage',
   'chat.welcome_sub': '开始一段新对话吧',

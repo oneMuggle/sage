@@ -305,18 +305,16 @@ class BrowserLaunchTool(BaseTool):
         except BrowserCDPError as exc:
             logger.warning("setDownloadBehavior 失败（不影响启动）: %s", exc)
 
-        # SN3：常驻事件通道跟踪下载（downloadWillBegin / downloadProgress）
-        # Embedded（Electron 内置浏览器）无 WS 通道：browser_downloads 走目录列举。
-        tracker = None
-        if getattr(session, "browser_type", "") != "embedded":
-            tracker = start_download_tracking(
-                session.browser_id, session.port, session.ws_path, str(download_dir)
+        # SN3：常驻事件通道跟踪下载（downloadWillBegin / downloadProgress）。
+        # embedded 也走同一 WS 通道（P2 桥已支持事件升级）。
+        tracker = start_download_tracking(
+            session.browser_id, session.port, session.ws_path, str(download_dir)
+        )
+        if not tracker.connected:
+            logger.warning(
+                "下载事件通道未建立（browser_downloads 将退化为目录列举）: %s",
+                tracker.error,
             )
-            if not tracker.connected:
-                logger.warning(
-                    "下载事件通道未建立（browser_downloads 将退化为目录列举）: %s",
-                    tracker.error,
-                )
 
         if getattr(session, "browser_type", "") == "embedded":
             note = "使用 Sage 内置浏览器；cookie/localStorage 共享持久分区，browser_close 不会清除。"

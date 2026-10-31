@@ -114,6 +114,7 @@ import { registerModelDownloadIpc } from './modelDownloadIpc';
 import { registerArenaTokenWindow } from './arenaTokenWindow';
 import type { AgentBrowserBridgeHandle } from './agentBrowserBridge';
 import { startAgentBrowserHost } from './agentBrowserHost';
+import { handleBrowserPanelCommand } from './browserPanel';
 import { registerUpdateIpc } from './updateIpc';
 import { registerFeedbackIpc } from './feedback/feedbackIpc';
 import { getFeedbackConfig } from './feedback/feedbackConfig';
@@ -1318,6 +1319,10 @@ async function registerIpcHandlers(): Promise<void> {
     async (evt, payload: { cmd: string; args?: Record<string, unknown> }) => {
       if (!isTrustedRenderer(evt.sender)) {
         throw new Error('未授权的窗口请求');
+      }
+      if (payload.cmd === 'browser_panel') {
+        // 面板只依赖 Electron 自身与共享分区，不经过后端/演示模式门禁。
+        return handleBrowserPanelCommand(evt.sender, payload.args ?? {});
       }
       if (isDemoProcess()) {
         throw new Error('演示模式不支持该后端操作');
