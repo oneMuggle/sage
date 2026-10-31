@@ -343,7 +343,7 @@ export const zhChatAndSider = {
   'settings.pet.compat.on': '开启',
   'settings.pet.compat.off': '关闭',
   'settings.pet.reset_position': '回到初始位置',
-  'settings.pet.asset_notice': '素材来自 dsh-pet（MIT）；默认不随安装包分发完整素材。',
+  'settings.pet.asset_notice': '素材来自 dsh-pet（MIT）；完整动画包随安装包分发。',
   'settings.search.placeholder': '搜索设置…',
   'settings.search.hits': '匹配 {count} 项',
   'settings.search.empty': '没有匹配的设置项',

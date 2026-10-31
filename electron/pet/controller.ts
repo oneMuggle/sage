@@ -16,6 +16,15 @@ import { logger } from '../logger';
 import { mergePetConfig, readPetConfig, writePetConfig } from './config';
 import { shouldShowInApp } from './display';
 import {
+  deleteUserPack,
+  exportPackZip,
+  importPackZip,
+  listUserPacks,
+  petPacksDir,
+  type DeleteResult,
+  type ExportResult,
+} from './packStore';
+import {
   bondDays,
   readPetProfile,
   recordPat as incrementPat,
@@ -36,12 +45,21 @@ import { PetWindow } from './windows';
 import type {
   PetBubbleMode,
   PetConfig,
+  PetPackManifest,
   PetSessionMeta,
   PetSize,
   PetSnapshot,
   PetTaskReport,
   PetTempo,
 } from './types';
+
+export interface PetPackImportResponse {
+  ok: boolean;
+  canceled?: boolean;
+  error?: string;
+  manifest?: PetPackManifest;
+  config?: PetConfig;
+}
 
 export interface PetControllerOptions {
   backendUrl: string;
@@ -79,6 +97,7 @@ export class PetController {
   private window: PetWindow | null = null;
   private readonly configFile: string;
   private readonly profileFile: string;
+  private readonly packsDir: string;
   private profile: PetProfile;
   private reportedTasks: PetTaskReport[] = [];
   private readonly streams = new Map<string, AbortController>();
@@ -89,6 +108,7 @@ export class PetController {
   constructor(private readonly options: PetControllerOptions) {
     this.configFile = join(options.userDataDir, 'pet-config.json');
     this.profileFile = join(options.userDataDir, 'pet-profile.json');
+    this.packsDir = petPacksDir(options.userDataDir);
     this.config = readPetConfig(this.configFile);
     this.profile = readPetProfile(this.profileFile, Date.now());
     this.snapshot = selectSnapshot(this.sessions, Date.now());
@@ -201,6 +221,35 @@ export class PetController {
   reportTasks(input: unknown): void {
     this.reportedTasks = normalizeTaskReports(input);
     this.emit(true);
+  }
+
+  /** Installed user packs. Built-in packs are bundled with the renderer. */
+  listPacks(): PetPackManifest[] {
+    return listUserPacks(this.packsDir).map((pack) => pack.manifest);
+  }
+
+  /**
+   * Import a pack from a zip and select it. On failure the previous pack
+   * stays active; the config is only written after extraction succeeded.
+   */
+  importPack(zipPath: string): PetPackImportResponse {
+    const result = importPackZip(this.packsDir, zipPath);
+    if (!result.ok) return { ok: false, error: result.error };
+    const config = this.setConfig({ petPack: result.manifest.id });
+    return { ok: true, manifest: result.manifest, config };
+  }
+
+  exportPack(id: string, destPath: string): ExportResult {
+    return exportPackZip(this.packsDir, id, destPath);
+  }
+
+  /** Delete a user pack; fall back to the built-in pack if it was selected. */
+  deletePack(id: string): DeleteResult {
+    const result = deleteUserPack(this.packsDir, id);
+    if (result.ok && this.config.petPack === id) {
+      this.setConfig({ petPack: 'dafeiyu' });
+    }
+    return result;
   }
 
   private authHeaders(): Record<string, string> {

@@ -6,7 +6,13 @@
  * sibling file can be blocked by CORS.
  */
 
+import type { PetPackManifestBridge } from '../../shared/types/electron-api';
+
 import type { PetPack } from './animation';
+
+export type { PetPack };
+
+export const PET_PACK_SCHEME = 'sage-pet';
 
 export const DAFEIYU_PACK: PetPack = {
   id: 'dafeiyu',
@@ -14,6 +20,7 @@ export const DAFEIYU_PACK: PetPack = {
   version: '0.3.8',
   license: 'MIT',
   source: 'https://github.com/PC2005-cloud/dsh-pet',
+  builtin: true,
   canvas: {
     width: 640,
     height: 360,
@@ -148,4 +155,48 @@ export const DAFEIYU_PACK: PetPack = {
 
 export function packFor(id: string): PetPack | null {
   return id === DAFEIYU_PACK.id ? DAFEIYU_PACK : null;
+}
+
+/**
+ * Defensive conversion of a main-process manifest into a renderer pack.
+ * The main process validates first; this only keeps a stale/mocked bridge
+ * from crashing animation selection.
+ */
+export function packFromManifest(manifest: PetPackManifestBridge): PetPack | null {
+  if (!manifest || typeof manifest.id !== 'string' || !manifest.id) return null;
+  if (!manifest.actions || typeof manifest.actions !== 'object') return null;
+  const actions: Record<string, string[]> = {};
+  for (const [key, files] of Object.entries(manifest.actions)) {
+    if (!Array.isArray(files)) continue;
+    const valid = files.filter((file): file is string => typeof file === 'string' && file.length > 0);
+    if (valid.length > 0) actions[key] = valid;
+  }
+  if (!actions.idle?.length) return null;
+  const width = Number(manifest.canvas?.width);
+  const height = Number(manifest.canvas?.height);
+  const anchorX = Number(manifest.anchor?.x);
+  const anchorY = Number(manifest.anchor?.y);
+  return {
+    id: manifest.id,
+    name: typeof manifest.name === 'string' && manifest.name ? manifest.name : manifest.id,
+    version: typeof manifest.version === 'string' ? manifest.version : '',
+    license: typeof manifest.license === 'string' ? manifest.license : '',
+    source: typeof manifest.source === 'string' ? manifest.source : '',
+    canvas: {
+      width: Number.isFinite(width) && width > 0 ? width : 640,
+      height: Number.isFinite(height) && height > 0 ? height : 360,
+    },
+    anchor: {
+      x: Number.isFinite(anchorX) && anchorX >= 0 ? anchorX : 320,
+      y: Number.isFinite(anchorY) && anchorY >= 0 ? anchorY : 330,
+    },
+    actions,
+    builtin: false,
+  };
+}
+
+/** Video URL for one clip: bundled assets stay relative, user packs use sage-pet://. */
+export function packSource(pack: PetPack, file: string): string {
+  if (pack.builtin) return encodeURI(`./pet/${pack.id}/${file}`);
+  return `${PET_PACK_SCHEME}://${pack.id}/${encodeURI(file)}`;
 }

@@ -6,7 +6,7 @@
  * checks the sender window.
  */
 
-import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
+import { dialog, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 
 import type { PetController } from './controller';
 
@@ -16,6 +16,15 @@ function sessionIdOf(payload: unknown): string | null {
   if (typeof payload === 'string') return payload;
   if (payload && typeof payload === 'object' && 'sessionId' in payload) {
     const value = (payload as { sessionId?: unknown }).sessionId;
+    return typeof value === 'string' && value ? value : null;
+  }
+  return null;
+}
+
+function packIdOf(payload: unknown): string | null {
+  if (typeof payload === 'string') return payload;
+  if (payload && typeof payload === 'object' && 'id' in payload) {
+    const value = (payload as { id?: unknown }).id;
     return typeof value === 'string' && value ? value : null;
   }
   return null;
@@ -40,6 +49,48 @@ export function registerPetIpc(controller: PetController): void {
   ipcMain.handle('pet:get-state', (evt) => {
     if (!isAllowed(evt)) throw new Error(UNAUTHORIZED);
     return controller.getState();
+  });
+
+  /** Both the pet window (animation assets) and settings need this list. */
+  ipcMain.handle('pet:list-packs', (evt) => {
+    if (!isAllowed(evt)) throw new Error(UNAUTHORIZED);
+    return controller.listPacks();
+  });
+
+  ipcMain.handle('pet:import-pack', async (evt) => {
+    if (!controller.isMainSender(evt.sender)) throw new Error(UNAUTHORIZED);
+    const main = controller.getMainWindow();
+    if (!main || main.isDestroyed()) return { ok: false, error: '主窗口不可用' };
+    const picked = await dialog.showOpenDialog(main, {
+      title: '导入宠物动画包',
+      buttonLabel: '导入',
+      properties: ['openFile'],
+      filters: [{ name: 'Sage 宠物动画包 (*.zip)', extensions: ['zip'] }],
+    });
+    if (picked.canceled || picked.filePaths.length === 0) return { ok: false, canceled: true };
+    return controller.importPack(picked.filePaths[0]!);
+  });
+
+  ipcMain.handle('pet:export-pack', async (evt, payload: unknown) => {
+    if (!controller.isMainSender(evt.sender)) throw new Error(UNAUTHORIZED);
+    const id = packIdOf(payload);
+    if (!id) return { ok: false, error: '缺少动画包 id' };
+    const main = controller.getMainWindow();
+    if (!main || main.isDestroyed()) return { ok: false, error: '主窗口不可用' };
+    const picked = await dialog.showSaveDialog(main, {
+      title: '导出宠物动画包',
+      defaultPath: `${id}.zip`,
+      filters: [{ name: 'Sage 宠物动画包 (*.zip)', extensions: ['zip'] }],
+    });
+    if (picked.canceled || !picked.filePath) return { ok: false, canceled: true };
+    return controller.exportPack(id, picked.filePath);
+  });
+
+  ipcMain.handle('pet:delete-pack', (evt, payload: unknown) => {
+    if (!controller.isMainSender(evt.sender)) throw new Error(UNAUTHORIZED);
+    const id = packIdOf(payload);
+    if (!id) return { ok: false, error: '缺少动画包 id' };
+    return controller.deletePack(id);
   });
 
   ipcMain.on('pet:ready', (evt) => {

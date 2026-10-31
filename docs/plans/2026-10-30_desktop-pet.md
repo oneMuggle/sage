@@ -1,7 +1,7 @@
 # Sage 桌面宠物（Sage Pet）方案
 
 > 日期：2026-10-30
-> 状态：P0 + P1 状态面板 + P2 互动/提示音已实施（2026-10-31，feat/desktop-pet-p2），技术文档见 `docs/technical/114-desktop-pet.md`
+> 状态：P0 + P1 状态面板 + P2 互动/提示音 + 应用内形态 + Task Center 聚合 + 自定义动画包已实施（2026-10-31），技术文档见 `docs/technical/114-desktop-pet.md`
 > 参考：DeepSeek Harness（DSH）「大肥鱼」桌宠生态、豆包系 AI 桌宠、vscode-pets / BongoCat 等开源实现
 
 ---
@@ -382,7 +382,7 @@ P0 选 A。`petState.ts` 保持纯函数（事件数组 → 快照），便于�
 - [x] 上下文用量条（面板；需要 chat `maxContext` + usage 数据）。
 - [x] 应用内角落形态（Win7/VM 默认可用；主窗口右下角 InAppPet）。
 - [x] 多会话面板（最近/活跃会话列表，最多 5 个）；「每会话一只宠物」未实现。
-- [ ] pet pack 导入/导出 + 校验。
+- [x] pet pack 导入/导出 + 校验（zip + `sage-pet://`；设置页导入/导出/删除）。
 - [x] 完整动画包：109 个 WebM 全量内置（约 52.7MB），87 个待机随机池 + 5 个随机点击回应 + tempo 休息间隔。
 - [x] 状态面板 + 常驻徽章 + 终态保留 45 秒 + 会话标题/工具/进度/上下文。
 
