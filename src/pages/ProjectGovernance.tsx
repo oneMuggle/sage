@@ -527,7 +527,12 @@ export function ProjectGovernance() {
                 }}
               />
 
-              <PlaybookCard projectId={project.id} compact />
+              <div
+                className="rounded-lg border border-border bg-card/50 p-3 text-xs text-muted-foreground"
+                data-testid="playbook-settings-note"
+              >
+                项目规程与阶段管理已移至「概览」页，避免重复扫描项目。
+              </div>
 
               <div
                 className="space-y-3 rounded-lg border border-border p-3"
