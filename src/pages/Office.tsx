@@ -69,6 +69,7 @@ import {
 } from '../features/office';
 import { LatexAuditPanel } from '../features/office/LatexAuditPanel';
 import { LatexBuildPanel } from '../features/office/LatexBuildPanel';
+import { LatexCompliancePanel } from '../features/office/LatexCompliancePanel';
 import { LatexPdfAuditPanel } from '../features/office/LatexPdfAuditPanel';
 import { LatexProjectImportPanel } from '../features/office/LatexProjectImportPanel';
 import { LatexTemplatePanel } from '../features/office/LatexTemplatePanel';
@@ -522,6 +523,7 @@ export function Office() {
           <LatexTemplatePanel />
           <LatexAuditPanel />
           <LatexPdfAuditPanel />
+          <LatexCompliancePanel />
           <LatexBuildPanel />
         </>
       )}

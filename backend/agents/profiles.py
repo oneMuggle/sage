@@ -432,6 +432,7 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_fill_latex_template",
                 "office_audit_latex",
                 "office_audit_latex_pdf",
+                "office_check_latex_compliance",
                 "office_compile_latex",
                 "office_latexdiff",
                 "office_extract_latex_project",
@@ -658,6 +659,8 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     "office_audit_latex",
     # 2026-10-31 PDF 版式/字体/DPI 审计（与 writer.tools 同步）。
     "office_audit_latex_pdf",
+    # 2026-10-31 投稿合规检查（与 writer.tools 同步）。
+    "office_check_latex_compliance",
     # 2026-10-31 LaTeX 可选编译 / 红字版（与 writer.tools 同步）。
     "office_compile_latex",
     "office_latexdiff",

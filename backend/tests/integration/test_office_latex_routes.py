@@ -422,3 +422,72 @@ async def test_audit_latex_pdf_rejects_outside_workspace(
     )
 
     assert resp.status_code == 400
+
+
+@pytest.mark.asyncio()
+async def test_compliance_check_returns_checks(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    tex = _write(
+        workspace,
+        "paper/main.tex",
+        r"""
+\documentclass{article}
+\title{T}
+\author{A}
+\keywords{k}
+\begin{document}
+\begin{abstract}Abs\end{abstract}
+\section{Introduction}
+Text.
+\end{document}
+""",
+    )
+    pdf = _write_pdf(workspace / "main.pdf", pages=1)
+
+    resp = await client.post(
+        "/api/v1/office/latex/compliance/check",
+        json={
+            "workspace_path": str(workspace),
+            "tex_path": str(tex),
+            "pdf_path": str(pdf),
+            "profile": {
+                "required_sections": ["Introduction"],
+                "required_metadata": ["title", "author", "abstract", "keywords"],
+                "required_min_pages": 2,
+                "allowed_page_sizes": ["A4"],
+            },
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["tex.sections"]["status"] == "pass"
+    assert checks["tex.metadata"]["status"] == "pass"
+    assert checks["pdf.page_count"]["status"] == "fail"
+    assert payload["pdf_path"] == "main.pdf"
+    assert payload["ok"] is False
+
+
+@pytest.mark.asyncio()
+async def test_compliance_check_rejects_outside_pdf(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    tex = _write(workspace, "paper.tex", "\\documentclass{article}")
+    outside = _write_pdf(tmp_path / "outside.pdf")
+
+    resp = await client.post(
+        "/api/v1/office/latex/compliance/check",
+        json={
+            "workspace_path": str(workspace),
+            "tex_path": str(tex),
+            "pdf_path": str(outside),
+        },
+    )
+
+    assert resp.status_code == 400

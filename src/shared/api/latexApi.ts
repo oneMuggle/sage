@@ -131,6 +131,43 @@ export interface LatexPdfAuditResult {
   issues: LatexAuditIssue[];
 }
 
+export interface LatexComplianceProfile {
+  required_sections: string[];
+  required_metadata: string[];
+  allowed_page_sizes: string[];
+  required_min_pages: number | null;
+  required_max_pages: number | null;
+  require_embedded_fonts: boolean;
+  min_image_dpi: number;
+  forbidden_commands: string[];
+}
+
+export interface LatexComplianceCheck {
+  id: string;
+  label: string;
+  status: 'pass' | 'warn' | 'fail' | 'skipped';
+  message: string;
+  rule_ids: string[];
+}
+
+export interface LatexComplianceIssue extends LatexAuditIssue {
+  source: 'tex' | 'pdf' | 'profile' | string;
+}
+
+export interface LatexComplianceResult {
+  ok: boolean;
+  tex_path: string;
+  pdf_path: string | null;
+  profile: LatexComplianceProfile;
+  checks: LatexComplianceCheck[];
+  issues: LatexComplianceIssue[];
+  summary: {
+    count: number;
+    severity: { error: number; warning: number; info: number };
+    categories: Record<string, number>;
+  };
+}
+
 export async function analyzeLatexTemplate(
   workspacePath: string,
   filePath: string,
@@ -257,6 +294,24 @@ export async function auditLatexPdf(
       required_min_pages: requiredMinPages || null,
       required_max_pages: requiredMaxPages || null,
       min_image_dpi: minImageDpi,
+    },
+  });
+}
+
+export async function checkLatexCompliance(
+  workspacePath: string,
+  texPath: string,
+  pdfPath: string | undefined,
+  profile: LatexComplianceProfile,
+): Promise<LatexComplianceResult> {
+  return backendRequest<LatexComplianceResult>({
+    method: 'POST',
+    path: '/api/v1/office/latex/compliance/check',
+    body: {
+      workspace_path: workspacePath,
+      tex_path: texPath,
+      pdf_path: pdfPath || null,
+      profile,
     },
   });
 }
