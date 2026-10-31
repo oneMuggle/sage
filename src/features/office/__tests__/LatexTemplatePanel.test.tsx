@@ -108,4 +108,51 @@ describe('LatexTemplatePanel', () => {
     await waitFor(() => expect(screen.getByText(/请先绑定工作区/)).toBeInTheDocument());
     expect(mockedAnalyze).not.toHaveBeenCalled();
   });
+
+  it('fills image slots with a workspace image path', async () => {
+    mockedAnalyze.mockResolvedValue({
+      ...PROFILE,
+      slots: [
+        ...PROFILE.slots,
+        {
+          name: 'image_figure1_1',
+          kind: 'command_arg',
+          type: 'image',
+          required: true,
+          description: '图片',
+          current_value: '<<figure1>>',
+          confidence: 0.9,
+        },
+      ],
+    });
+    mockedFill.mockResolvedValue({
+      ...FILL,
+      filled_count: 3,
+      images_copied: ['main-filled_assets/chart.png'],
+    });
+
+    render(<LatexTemplatePanel workspacePath="/ws" />);
+
+    fireEvent.change(screen.getByTestId('latex-template-path'), {
+      target: { value: 'paper/main.tex' },
+    });
+    fireEvent.click(screen.getByTestId('latex-template-analyze'));
+    await waitFor(() =>
+      expect(screen.getByTestId('latex-slot-image_figure1_1')).toBeInTheDocument(),
+    );
+
+    const imageInput = screen.getByTestId('latex-slot-image_figure1_1');
+    expect(imageInput).toHaveValue('');
+    fireEvent.change(imageInput, { target: { value: 'figures/chart.png' } });
+    fireEvent.click(screen.getByTestId('latex-template-fill'));
+
+    await waitFor(() =>
+      expect(mockedFill).toHaveBeenCalledWith('/ws', '/ws/paper/main.tex', 'main-filled.tex', {
+        title: 'Old Title',
+        author: ['Alice'],
+        image_figure1_1: 'figures/chart.png',
+      }),
+    );
+    expect(screen.getByText(/main-filled_assets\/chart\.png/)).toBeInTheDocument();
+  });
 });

@@ -77,6 +77,8 @@ _COMMENT_PATTERN = re.compile(
 )
 _TODO_COMMAND = re.compile(r"\\todo\s*\{([^{}]{1,200})\}")
 
+_IMAGE_HINTS = ("placeholder", "example-image", "example_image", "dummy")
+
 _MACRO_RE = re.compile(
     r"\\(newcommand|renewcommand|providecommand)\s*\{?\s*\\([A-Za-z@]+)\s*\}?"
     r"(?:\s*\[(\d+)\])?(?:\s*\[([^\]]*)\])?\s*\{",
@@ -128,6 +130,51 @@ def _add_slot(profile: LatexTemplateProfile, slot: LatexTemplateSlot) -> None:
         ):
             return
     profile.slots.append(slot)
+
+
+def _placeholder_label(value: str) -> Optional[str]:
+    for pattern in _PLACEHOLDER_PATTERNS:
+        match = pattern.search(value)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def _image_needs_fill(value: str) -> bool:
+    text = value.strip()
+    if not text:
+        return True
+    if _placeholder_label(text) is not None:
+        return True
+    lowered = text.lower()
+    return any(hint in lowered for hint in _IMAGE_HINTS)
+
+
+def _image_exists(target: str, template_dir: Path, root: Path) -> bool:
+    value = target.strip()
+    if not value:
+        return False
+    candidate = Path(value)
+    paths = [candidate] if candidate.is_absolute() else [template_dir / candidate, root / candidate]
+    for path in paths:
+        try:
+            resolved = path.resolve()
+        except OSError:
+            continue
+        if is_within(root, resolved) and resolved.is_file():
+            return True
+    return False
+
+
+def _inside_includegraphics(raw: str, pos: int) -> bool:
+    """True when ``pos`` sits inside a ``\\includegraphics{...}`` argument."""
+    start = raw.rfind("\\includegraphics", 0, pos)
+    if start < 0:
+        return False
+    brace = raw.find("{", start)
+    if brace < 0 or brace > pos:
+        return False
+    return "}" not in raw[brace:pos]
 
 
 def _anchor(file_path: Path, root: Path, text: str, pos: int) -> LatexAnchor:
@@ -238,6 +285,7 @@ def _scan_slots(
 ) -> None:
     pos = 0
     n = len(clean)
+    image_index = 0
     while pos < n:
         idx = clean.find("\\", pos)
         if idx < 0:
@@ -283,6 +331,44 @@ def _scan_slots(
                     confidence=0.7,
                 ),
             )
+        elif cmd.name == "includegraphics" and spans:
+            start, end = spans[0]
+            target = clean[start:end].strip()
+            placeholder_label = _placeholder_label(target)
+            needs_fill = _image_needs_fill(target)
+            exists = _image_exists(target, file_path.parent, root)
+            if needs_fill or not exists:
+                image_index += 1
+                label = placeholder_label or (
+                    Path(target).stem if target else ""
+                ) or "figure"
+                _add_slot(
+                    profile,
+                    LatexTemplateSlot(
+                        name=f"image_{_slug(label, image_index)}",
+                        kind="command_arg",
+                        type="image",
+                        required=needs_fill,
+                        description=(
+                            "图片：填写工作区内图片路径"
+                            "（将复制到 <输出名>_assets/）"
+                        ),
+                        current_value=target,
+                        command=cmd.name,
+                        anchor=_anchor(file_path, root, clean, cmd.start),
+                        start=start,
+                        end=end,
+                        confidence=0.9 if needs_fill else 0.6,
+                    ),
+                )
+                if not needs_fill and not exists:
+                    profile.warnings.append(
+                        LatexWarning(
+                            "missing_image",
+                            f"图片不存在: {target}",
+                            _anchor(file_path, root, clean, cmd.start),
+                        )
+                    )
         elif cmd.name == "begin" and cmd.args:
             env = cmd.args[0].strip()
             if env in _ENV_SLOTS:
@@ -309,6 +395,8 @@ def _scan_slots(
 
     for pattern in _PLACEHOLDER_PATTERNS:
         for index, match in enumerate(pattern.finditer(raw), start=1):
+            if _inside_includegraphics(raw, match.start()):
+                continue
             label = match.group(1).strip()
             _add_slot(
                 profile,

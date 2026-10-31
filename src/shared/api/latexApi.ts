@@ -3,7 +3,7 @@ import { backendRequest } from './backendRequest';
 export interface LatexTemplateSlot {
   name: string;
   kind: 'command_arg' | 'environment_body' | 'placeholder' | 'comment' | string;
-  type: 'text' | 'rich_text' | 'date' | 'list' | string;
+  type: 'text' | 'rich_text' | 'date' | 'list' | 'image' | string;
   required: boolean;
   description: string;
   current_value: string;
@@ -35,6 +35,7 @@ export interface LatexFillResult {
   output_path: string;
   filename: string;
   filled_count: number;
+  images_copied?: string[];
   unfilled_slots: string[];
   validation: {
     ok: boolean;
