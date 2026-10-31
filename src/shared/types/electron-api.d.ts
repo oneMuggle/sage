@@ -459,6 +459,7 @@ export interface PetConfigBridge {
   showSessionTitle: boolean;
   compatibilityMode: 'auto' | 'on' | 'off';
   followActiveSession: boolean;
+  externalApi: boolean;
   pets: PetInstanceBridge[];
   /** Present only in the pet window's per-instance view. */
   petId?: string;
@@ -566,6 +567,12 @@ export interface PetPackDeleteResultBridge {
   error?: string;
 }
 
+export interface PetApiInfoBridge {
+  enabled: boolean;
+  port: number | null;
+  error?: string | null;
+}
+
 export interface PetElectronApiBridge {
   getConfig: () => Promise<PetConfigBridge>;
   setConfig: (patch: Partial<PetConfigBridge>) => Promise<PetConfigBridge>;
@@ -586,6 +593,7 @@ export interface PetElectronApiBridge {
   hide: () => void;
   /** Installed user packs (does not include built-in packs). */
   listPacks: () => Promise<PetPackManifestBridge[]>;
+  getApiInfo: () => Promise<PetApiInfoBridge>;
   importPack: () => Promise<PetPackImportResultBridge>;
   exportPack: (id: string) => Promise<PetPackExportResultBridge>;
   deletePack: (id: string) => Promise<PetPackDeleteResultBridge>;

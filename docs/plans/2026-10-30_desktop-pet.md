@@ -1,7 +1,7 @@
 # Sage 桌面宠物（Sage Pet）方案
 
 > 日期：2026-10-30
-> 状态：P0 + P1 状态面板 + P2 互动/提示音 + 应用内形态 + Task Center 聚合 + 自定义动画包 + 多宠物已实施（2026-10-31），技术文档见 `docs/technical/114-desktop-pet.md`
+> 状态：P0 + P1 状态面板 + P2 互动/提示音 + 应用内形态 + Task Center 聚合 + 自定义动画包 + 多宠物 + 只读状态 API 已实施（2026-10-31），技术文档见 `docs/technical/114-desktop-pet.md`
 > 参考：DeepSeek Harness（DSH）「大肥鱼」桌宠生态、豆包系 AI 桌宠、vscode-pets / BongoCat 等开源实现
 
 ---
@@ -390,7 +390,7 @@ P0 选 A。`petState.ts` 保持纯函数（事件数组 → 快照），便于�
 
 - [x] 陪伴天数 + 摸头计数（`pet-profile.json`）；好感度等级未做。
 - [x] 多宠物（1–3 只，各自动画包/大小/位置；应用内横向排列，气泡只在第一只）。
-- [ ] 对外只读状态 API / 本地 HTTP（供插件联动）。
+- [x] 对外只读状态 API / 本地 HTTP（供插件联动）：127.0.0.1 随机端口 + Bearer token + GET-only + 限流；token 文件 `pet-api.json`。
 - [x] 后台任务聚合：Task Center（office/wiki/custom）renderer 上报 + 主进程轮询独立编排 lanes（按 team 聚合）与定时任务近期失败；面板「后台任务」+ 空闲时驱动动作。
 - [ ] 素材生成管线：视频/图片序列 → 透明帧 → manifest。
 - [ ] 可选聊天/语音（走 Sage 已有 Agent 与 TTS，需单独评审隐私与成本）。

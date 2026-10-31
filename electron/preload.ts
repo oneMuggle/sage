@@ -32,6 +32,7 @@ import type {
   OfficeManagedRef,
   PickedOfficeFile,
   PetConfigBridge,
+  PetApiInfoBridge,
   PetElectronApiBridge,
   PetPackDeleteResultBridge,
   PetPackExportResultBridge,
@@ -826,6 +827,7 @@ const electronAPI = {
     },
     listPacks: () =>
       ipcRenderer.invoke('pet:list-packs') as Promise<PetPackManifestBridge[]>,
+    getApiInfo: () => ipcRenderer.invoke('pet:api-info') as Promise<PetApiInfoBridge>,
     importPack: () =>
       ipcRenderer.invoke('pet:import-pack') as Promise<PetPackImportResultBridge>,
     exportPack: (id) =>
