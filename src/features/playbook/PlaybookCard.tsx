@@ -223,6 +223,33 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       setNotice('已标记完成：' + criterionId);
     });
 
+  const handleSeedMilestones = () => {
+    const milestones = (current?.playbook?.stages ?? []).flatMap((stage) =>
+      (stage.recommended_milestones ?? [])
+        .map((item) => ({
+          title: String(item.title ?? ''),
+          description: String(item.description ?? ''),
+          stage: String(item.stage ?? stage.id),
+        }))
+        .filter((item) => item.title),
+    );
+    if (!milestones.length) {
+      setNotice('当前规程没有推荐里程碑');
+      return;
+    }
+    void run('seed-milestones', async () => {
+      const result = await playbookApi.applyActions(projectId, [
+        { type: 'seed_milestones', payload: { milestones } },
+      ]);
+      if (result.errors.length) {
+        setError(result.errors.map((item) => item.message).join('；'));
+        return;
+      }
+      setCurrent((prev) => (prev ? { ...prev, audit: result.audit ?? prev.audit } : prev));
+      setNotice('已播种推荐里程碑');
+    });
+  };
+
   const handleCleanupRules = () => {
     if (!window.confirm('将删除所有由项目规程写入的规则（不影响手工规则），继续？')) return;
     void run('cleanup-rules', async () => {
@@ -529,6 +556,15 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
             data-testid="playbook-versions-btn"
           >
             版本历史
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={handleSeedMilestones}
+            disabled={busy === 'seed-milestones'}
+            data-testid="playbook-seed-milestones"
+          >
+            播种推荐里程碑
           </Button>
           <Button
             size="sm"
