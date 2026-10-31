@@ -14,7 +14,11 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.services.ocr import MAX_IMAGE_BYTES, get_ocr_service
+from backend.services.ocr import (
+    MAX_IMAGE_BYTES,
+    get_ocr_service,
+    reset_ocr_service,
+)
 
 router = APIRouter(prefix="/ocr", tags=["ocr"])
 
@@ -36,6 +40,13 @@ class OcrImageRequest(BaseModel):
 @router.get("/capabilities")
 def ocr_capabilities() -> dict:
     """返回 OCR 引擎与模型可用性。"""
+    return get_ocr_service().capabilities()
+
+
+@router.post("/reload")
+def ocr_reload() -> dict:
+    """重新探测 OCR 引擎/模型（模型下载或恢复默认后调用）。"""
+    reset_ocr_service()
     return get_ocr_service().capabilities()
 
 

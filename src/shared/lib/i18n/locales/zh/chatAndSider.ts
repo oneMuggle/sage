@@ -219,6 +219,8 @@ export const zhChatAndSider = {
   'chat.image_ocr_copy': '复制',
   'chat.image_ocr_copied': '已复制',
   'chat.image_ocr_retry': '重新识别',
+  'chat.image_ocr_message_title': '图片文字（本地 OCR，{count} 张）',
+  'chat.image_ocr_message_copy': '复制文字',
 
   // ─── M4 会话压缩 / 分叉 ───────────
   // LOW-1: 统一口径 —— "before → after 条（removed 条历史已合并为摘要）"

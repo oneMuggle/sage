@@ -58,4 +58,11 @@ export const ocrApi = {
       body: { image, ...(lang ? { lang } : {}) },
     });
   },
+
+  reload(): Promise<OcrCapabilities> {
+    return backendRequest<OcrCapabilities>({
+      method: 'POST',
+      path: '/api/v1/ocr/reload',
+    });
+  },
 };

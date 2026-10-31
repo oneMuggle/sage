@@ -62,6 +62,8 @@ export function LocalOcrCard() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [downloadingModel, setDownloadingModel] = useState(false);
+  const [modelStatus, setModelStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +79,90 @@ export function LocalOcrCard() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.listen) return;
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    api
+      .listen<{ stage: string; file?: string; error?: string }>(
+        'models:ocr:progress',
+        (payload) => {
+          if (cancelled) return;
+          if (payload.stage === 'error') {
+            setModelStatus(
+              t('settings.ocr.model_failed').replace('{error}', payload.error ?? ''),
+            );
+          } else if (payload.stage === 'complete') {
+            setModelStatus(t('settings.ocr.model_done'));
+          } else if (payload.file) {
+            setModelStatus(`${payload.stage}: ${payload.file}`);
+          }
+        },
+      )
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [t]);
+
+  const refreshCaps = async () => {
+    const next = await ocrApi.capabilities().catch(() => null);
+    setCaps(next);
+  };
+
+  const downloadTinyModel = async () => {
+    const api = window.electronAPI?.modelDownload;
+    if (!api?.downloadOcr) {
+      setModelStatus(t('settings.ocr.model_unsupported'));
+      return;
+    }
+    setDownloadingModel(true);
+    setModelStatus(t('settings.ocr.model_downloading'));
+    try {
+      const result = await api.downloadOcr();
+      if (!result.ok) {
+        setModelStatus(
+          t('settings.ocr.model_failed').replace('{error}', result.error ?? ''),
+        );
+        return;
+      }
+      await ocrApi.reload();
+      await refreshCaps();
+      setModelStatus(t('settings.ocr.model_done'));
+    } finally {
+      setDownloadingModel(false);
+    }
+  };
+
+  const resetDefaultModel = async () => {
+    const api = window.electronAPI?.modelDownload;
+    if (!api?.resetOcr) {
+      setModelStatus(t('settings.ocr.model_unsupported'));
+      return;
+    }
+    setDownloadingModel(true);
+    try {
+      const result = await api.resetOcr();
+      if (!result.ok) {
+        setModelStatus(
+          t('settings.ocr.model_failed').replace('{error}', result.error ?? ''),
+        );
+        return;
+      }
+      await ocrApi.reload();
+      await refreshCaps();
+      setModelStatus(t('settings.ocr.model_reset_done'));
+    } finally {
+      setDownloadingModel(false);
+    }
+  };
 
   const save = async (next: LocalOcrConfig) => {
     setConfig(next);
@@ -191,6 +277,40 @@ export function LocalOcrCard() {
           onChange={(e) => save({ ...config, office_enabled: e.target.checked })}
         />
       </label>
+
+      {caps?.available && caps?.selected_engine === 'rapidocr' && (
+        <div className="space-y-1 border-t border-border pt-2 text-xs">
+          <div className="text-text">{t('settings.ocr.model_title')}</div>
+          <div className="text-muted">{t('settings.ocr.model_hint')}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-testid="settings-ocr-download"
+              disabled={downloadingModel}
+              onClick={downloadTinyModel}
+              className="rounded-radius-sm border border-border bg-surface px-2 py-1 text-xs text-text disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {downloadingModel
+                ? t('settings.ocr.model_downloading')
+                : t('settings.ocr.model_download')}
+            </button>
+            <button
+              type="button"
+              data-testid="settings-ocr-reset-model"
+              disabled={downloadingModel}
+              onClick={resetDefaultModel}
+              className="rounded-radius-sm border border-border bg-surface px-2 py-1 text-xs text-text disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {t('settings.ocr.model_reset')}
+            </button>
+            {modelStatus && (
+              <span data-testid="settings-ocr-model-status" className="text-muted">
+                {modelStatus}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       <label className="flex items-start justify-between gap-3 text-xs">
         <span>
