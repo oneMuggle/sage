@@ -15,6 +15,7 @@ import logging
 import os
 import shutil
 import tempfile
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..models import (
@@ -29,7 +30,19 @@ from ..models import (
 logger = logging.getLogger(__name__)
 
 _LANG_ENV_VAR = "SAGE_OCR_LANG"
+_TESSERACT_PATH_ENV = "SAGE_TESSERACT_PATH"
 _DEFAULT_LANG = "eng+chi_sim"
+
+
+def _configure_tesseract(module: Any) -> Optional[str]:
+    """若设置 ``SAGE_TESSERACT_PATH`` 且文件存在，写入 pytesseract 命令路径。"""
+    explicit = os.environ.get(_TESSERACT_PATH_ENV, "").strip()
+    if not explicit or not Path(explicit).is_file():
+        return None
+    with contextlib.suppress(Exception):
+        # 测试桩/旧版本可能没有该属性
+        module.pytesseract.tesseract_cmd = explicit
+    return explicit
 
 
 class TesseractEngine:
@@ -42,14 +55,20 @@ class TesseractEngine:
             import pytesseract  # noqa: F401 — 懒加载探测
         except Exception:  # noqa: BLE001
             return False, "pytesseract 未安装（pip install pytesseract）"
+        if _configure_tesseract(pytesseract) is not None:
+            return True, ""
         if not shutil.which("tesseract"):
-            return False, "tesseract 未安装或不在 PATH"
+            return False, (
+                "tesseract 未安装或不在 PATH"
+                "（可用 SAGE_TESSERACT_PATH 指定可执行文件路径）"
+            )
         return True, ""
 
     def languages(self) -> Optional[List[str]]:
         try:
             import pytesseract
 
+            _configure_tesseract(pytesseract)
             langs = pytesseract.get_languages(config="")
             return sorted(langs) if langs else None
         except Exception:  # noqa: BLE001 — best-effort
@@ -57,6 +76,8 @@ class TesseractEngine:
 
     def recognize(self, image_bytes: bytes, opts: OcrOptions) -> OcrResult:
         import pytesseract
+
+        _configure_tesseract(pytesseract)
 
         lang = resolve_lang_with_fallback(pytesseract, opts.lang)
         min_conf = max(0.0, min(1.0, float(opts.min_confidence)))

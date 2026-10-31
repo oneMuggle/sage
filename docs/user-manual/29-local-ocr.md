@@ -62,6 +62,9 @@ RapidOCR 自带小型中英模型，安装后即可离线使用。
 2. 安装系统 `tesseract`，并确保在 PATH 中；
 3. 中文识别需安装 `chi_sim` 语言包。
 
+如果 tesseract 不在 PATH（例如便携版/捆绑版），可设置环境变量
+`SAGE_TESSERACT_PATH` 指向 `tesseract.exe` 的完整路径。
+
 Win7 用户建议使用 Tesseract 4.1 兼容构建（Tesseract 5 官方只支持 Win10/11）。
 
 安装后回到设置页点「测试识别」验证。
