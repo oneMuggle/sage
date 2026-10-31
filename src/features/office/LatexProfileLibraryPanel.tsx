@@ -10,6 +10,7 @@ import {
 } from '../../shared/api/latexApi';
 import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 
+import { LatexPathPicker } from './LatexPathPicker';
 import { joinWorkspacePath } from './latexPath';
 
 function defaultName(sourcePath: string): string {
@@ -29,9 +30,7 @@ export function LatexProfileLibraryPanel({
   const canUse = Boolean(workspacePath && workspacePath.trim());
 
   const [profiles, setProfiles] = useState<LatexProfileRecord[]>([]);
-  const [warnings, setWarnings] = useState<
-    Array<{ code: string; message: string }>
-  >([]);
+  const [warnings, setWarnings] = useState<Array<{ code: string; message: string }>>([]);
   const [sourcePath, setSourcePath] = useState('');
   const [candidate, setCandidate] = useState<LatexProfileExtractResult | null>(null);
   const [name, setName] = useState('');
@@ -128,12 +127,14 @@ export function LatexProfileLibraryPanel({
       </header>
 
       <div className="flex gap-2">
-        <input
-          className="flex-1 rounded border border-border bg-bg px-2 py-1 text-sm"
-          placeholder="guidelines/ieee-author-guide.pdf"
+        <LatexPathPicker
           value={sourcePath}
-          onChange={(event) => setSourcePath(event.target.value)}
-          data-testid="latex-profile-source"
+          onChange={setSourcePath}
+          title="选择作者指南"
+          extensions={['pdf', 'docx', 'txt', 'md', 'markdown']}
+          placeholder="guidelines/ieee-author-guide.pdf"
+          testId="latex-profile-source"
+          className="flex-1"
         />
         <button
           type="button"
@@ -154,8 +155,7 @@ export function LatexProfileLibraryPanel({
           <div className="font-medium">
             候选档案 · {candidate.profile.required_sections.length} 个章节 · 页数{' '}
             {candidate.profile.required_min_pages ?? '-'}–
-            {candidate.profile.required_max_pages ?? '-'} · DPI{' '}
-            {candidate.profile.min_image_dpi}
+            {candidate.profile.required_max_pages ?? '-'} · DPI {candidate.profile.min_image_dpi}
           </div>
           {candidate.warnings.length > 0 ? (
             <ul className="list-disc pl-4 text-warning">
@@ -171,12 +171,8 @@ export function LatexProfileLibraryPanel({
               </summary>
               <ul className="mt-1 flex flex-col gap-1">
                 {candidate.evidence.map((item, index) => (
-                  <li
-                    key={`${item.field}:${index}`}
-                    className="rounded border border-border p-1"
-                  >
-                    <span className="font-mono">{item.field}</span> ={' '}
-                    {String(item.value)}
+                  <li key={`${item.field}:${index}`} className="rounded border border-border p-1">
+                    <span className="font-mono">{item.field}</span> = {String(item.value)}
                     <div className="text-muted">
                       {item.source}
                       {item.page ? ` · 第 ${item.page} 页` : ''}

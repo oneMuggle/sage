@@ -141,9 +141,7 @@ describe('LatexCompliancePanel', () => {
     });
     fireEvent.click(screen.getByTestId('latex-compliance-run'));
 
-    await waitFor(() =>
-      expect(screen.getByText('LaTeX 文件不在项目目录内')).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText('LaTeX 文件不在项目目录内')).toBeTruthy());
   });
 
   it('loads a saved profile into the form', async () => {
@@ -159,17 +157,13 @@ describe('LatexCompliancePanel', () => {
       target: { value: 'ieee-2026' },
     });
 
-    await waitFor(() =>
-      expect(mockedLoad).toHaveBeenCalledWith('/ws', 'ieee-2026'),
-    );
+    await waitFor(() => expect(mockedLoad).toHaveBeenCalledWith('/ws', 'ieee-2026'));
     await waitFor(() =>
       expect(screen.getByTestId('latex-compliance-sections')).toHaveValue(
         'Introduction, Conclusion',
       ),
     );
     expect(screen.getByTestId('latex-compliance-dpi')).toHaveValue('300');
-    expect(screen.getByTestId('latex-compliance-forbidden')).toHaveValue(
-      'write18',
-    );
+    expect(screen.getByTestId('latex-compliance-forbidden')).toHaveValue('write18');
   });
 });

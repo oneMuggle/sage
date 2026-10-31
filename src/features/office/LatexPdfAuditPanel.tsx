@@ -7,6 +7,7 @@ import {
 } from '../../shared/api/latexApi';
 import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 
+import { LatexPathPicker } from './LatexPathPicker';
 import { joinWorkspacePath } from './latexPath';
 
 function severityLabel(severity: LatexAuditIssue['severity']): string {
@@ -83,12 +84,13 @@ export function LatexPdfAuditPanel({
         </p>
       </header>
 
-      <input
-        className="rounded border border-border bg-bg px-2 py-1 text-sm"
-        placeholder="paper/main.pdf"
+      <LatexPathPicker
         value={pdfPath}
-        onChange={(event) => setPdfPath(event.target.value)}
-        data-testid="latex-pdf-path"
+        onChange={setPdfPath}
+        title="选择 PDF"
+        extensions={['pdf']}
+        placeholder="paper/main.pdf"
+        testId="latex-pdf-path"
       />
       <div className="flex flex-wrap gap-2">
         <input

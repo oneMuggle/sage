@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { auditLatex, type LatexAuditResult } from '../../shared/api/latexApi';
 import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 
+import { LatexPathPicker } from './LatexPathPicker';
 import { joinWorkspacePath } from './latexPath';
 
 function splitSections(value: string): string[] {
@@ -69,12 +70,14 @@ export function LatexAuditPanel({ workspacePath: wsOverride }: LatexAuditPanelPr
       </header>
 
       <div className="flex gap-2">
-        <input
-          className="flex-1 rounded border border-border bg-bg px-2 py-1 text-sm"
-          placeholder="paper/main.tex"
+        <LatexPathPicker
           value={filePath}
-          onChange={(event) => setFilePath(event.target.value)}
-          data-testid="latex-audit-path"
+          onChange={setFilePath}
+          title="选择 LaTeX 源码"
+          extensions={['tex', 'ltx']}
+          placeholder="paper/main.tex"
+          testId="latex-audit-path"
+          className="flex-1"
         />
         <button
           type="button"

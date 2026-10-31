@@ -9,6 +9,7 @@ import {
 } from '../../shared/api/latexApi';
 import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 
+import { LatexPathPicker } from './LatexPathPicker';
 import { joinWorkspacePath } from './latexPath';
 
 function defaultValue(slot: LatexTemplateSlot): string {
@@ -116,12 +117,14 @@ export function LatexTemplatePanel({ workspacePath: wsOverride }: LatexTemplateP
       </header>
 
       <div className="flex gap-2">
-        <input
-          className="flex-1 rounded border border-border bg-bg px-2 py-1 text-sm"
-          placeholder="paper/main.tex"
+        <LatexPathPicker
           value={templatePath}
-          onChange={(event) => setTemplatePath(event.target.value)}
-          data-testid="latex-template-path"
+          onChange={setTemplatePath}
+          title="选择 LaTeX 模板"
+          extensions={['tex', 'ltx']}
+          placeholder="paper/main.tex"
+          testId="latex-template-path"
+          className="flex-1"
         />
         <button
           type="button"
@@ -181,9 +184,7 @@ export function LatexTemplatePanel({ workspacePath: wsOverride }: LatexTemplateP
                 当前值：{slot.current_value || '（空）'}
                 {slot.type === 'list' ? ' · 多个值用逗号分隔' : ''}
                 {slot.type === 'image' ? ' · 图片会复制到输出目录旁的 *_assets' : ''}
-                {slot.type === 'bibliography'
-                  ? ' · .bib 会复制到输出目录旁的 *_assets'
-                  : ''}
+                {slot.type === 'bibliography' ? ' · .bib 会复制到输出目录旁的 *_assets' : ''}
               </span>
             </label>
           ))}
@@ -227,8 +228,7 @@ export function LatexTemplatePanel({ workspacePath: wsOverride }: LatexTemplateP
               图片：{fillResult.images_copied.join(', ')}
             </div>
           ) : null}
-          {fillResult.bibliographies_copied &&
-          fillResult.bibliographies_copied.length > 0 ? (
+          {fillResult.bibliographies_copied && fillResult.bibliographies_copied.length > 0 ? (
             <div className="text-xs text-muted mt-1">
               文献：{fillResult.bibliographies_copied.join(', ')}
             </div>

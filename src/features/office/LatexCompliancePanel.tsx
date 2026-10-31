@@ -10,6 +10,7 @@ import {
 } from '../../shared/api/latexApi';
 import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 
+import { LatexPathPicker } from './LatexPathPicker';
 import { joinWorkspacePath } from './latexPath';
 
 function splitList(value: string): string[] {
@@ -43,9 +44,7 @@ export interface LatexCompliancePanelProps {
   workspacePath?: string | null;
 }
 
-export function LatexCompliancePanel({
-  workspacePath: wsOverride,
-}: LatexCompliancePanelProps) {
+export function LatexCompliancePanel({ workspacePath: wsOverride }: LatexCompliancePanelProps) {
   const activeWorkspace = useCurrentWorkspace() ?? null;
   const workspacePath = wsOverride ?? activeWorkspace;
   const canUse = Boolean(workspacePath && workspacePath.trim());
@@ -87,14 +86,10 @@ export function LatexCompliancePanel({
     setMetadata(profile.profile.required_metadata.join(', '));
     setPageSizes(profile.profile.allowed_page_sizes.join(', '));
     setMinPages(
-      profile.profile.required_min_pages
-        ? String(profile.profile.required_min_pages)
-        : '',
+      profile.profile.required_min_pages ? String(profile.profile.required_min_pages) : '',
     );
     setMaxPages(
-      profile.profile.required_max_pages
-        ? String(profile.profile.required_max_pages)
-        : '',
+      profile.profile.required_max_pages ? String(profile.profile.required_max_pages) : '',
     );
     setMinDpi(String(profile.profile.min_image_dpi));
     setRequireFonts(profile.profile.require_embedded_fonts);
@@ -162,20 +157,22 @@ export function LatexCompliancePanel({
         </p>
       </header>
 
-      <div className="flex gap-2">
-        <input
-          className="flex-1 rounded border border-border bg-bg px-2 py-1 text-sm"
-          placeholder="paper/main.tex"
+      <div className="grid grid-cols-2 gap-2">
+        <LatexPathPicker
           value={texPath}
-          onChange={(event) => setTexPath(event.target.value)}
-          data-testid="latex-compliance-tex"
+          onChange={setTexPath}
+          title="选择 LaTeX 源码"
+          extensions={['tex', 'ltx']}
+          placeholder="paper/main.tex"
+          testId="latex-compliance-tex"
         />
-        <input
-          className="flex-1 rounded border border-border bg-bg px-2 py-1 text-sm"
-          placeholder="可选：paper/main.pdf"
+        <LatexPathPicker
           value={pdfPath}
-          onChange={(event) => setPdfPath(event.target.value)}
-          data-testid="latex-compliance-pdf"
+          onChange={setPdfPath}
+          title="选择 PDF"
+          extensions={['pdf']}
+          placeholder="可选：paper/main.pdf"
+          testId="latex-compliance-pdf"
         />
       </div>
 
@@ -273,8 +270,8 @@ export function LatexCompliancePanel({
           data-testid="latex-compliance-result"
         >
           <div className="font-medium">
-            {result.ok ? '合规检查通过' : '存在不合规项'} · 错误{' '}
-            {result.summary.severity.error} · 警告 {result.summary.severity.warning}
+            {result.ok ? '合规检查通过' : '存在不合规项'} · 错误 {result.summary.severity.error} ·
+            警告 {result.summary.severity.warning}
           </div>
           <ul className="flex flex-col gap-1">
             {result.checks.map((check) => (
@@ -290,18 +287,13 @@ export function LatexCompliancePanel({
           {result.issues.length > 0 ? (
             <ul className="mt-1 flex flex-col gap-1">
               {result.issues.map((issue, index) => (
-                <li
-                  key={`${issue.rule_id}:${index}`}
-                  className="rounded border border-border p-1"
-                >
+                <li key={`${issue.rule_id}:${index}`} className="rounded border border-border p-1">
                   <div className="font-medium">
                     {issue.source} · {issue.rule_id}
                     {issueAnchor(issue) ? ` · ${issueAnchor(issue)}` : ''}
                   </div>
                   <div>{issue.message}</div>
-                  {issue.fix_hint ? (
-                    <div className="text-muted">建议：{issue.fix_hint}</div>
-                  ) : null}
+                  {issue.fix_hint ? <div className="text-muted">建议：{issue.fix_hint}</div> : null}
                 </li>
               ))}
             </ul>

@@ -6,6 +6,7 @@ import {
 } from '../../shared/api/latexApi';
 import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 
+import { LatexPathPicker } from './LatexPathPicker';
 import { joinWorkspacePath } from './latexPath';
 
 function formatBytes(value: number): string {
@@ -66,12 +67,13 @@ export function LatexProjectImportPanel({
         </p>
       </header>
 
-      <input
-        className="rounded border border-border bg-bg px-2 py-1 text-sm"
-        placeholder="下载/ieee-template.zip"
+      <LatexPathPicker
         value={zipPath}
-        onChange={(event) => setZipPath(event.target.value)}
-        data-testid="latex-project-zip-path"
+        onChange={setZipPath}
+        title="选择 LaTeX 项目 zip"
+        extensions={['zip']}
+        placeholder="下载/ieee-template.zip"
+        testId="latex-project-zip-path"
       />
       <div className="flex gap-2">
         <input

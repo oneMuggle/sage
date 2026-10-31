@@ -10,6 +10,7 @@ import {
 } from '../../shared/api/latexApi';
 import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 
+import { LatexPathPicker } from './LatexPathPicker';
 import { joinWorkspacePath } from './latexPath';
 
 function ResultBox({
@@ -155,12 +156,13 @@ export function LatexBuildPanel({ workspacePath: wsOverride }: LatexBuildPanelPr
 
       <div className="flex flex-col gap-2 rounded border border-border p-3">
         <div className="text-sm font-medium">编译 PDF</div>
-        <input
-          className="rounded border border-border bg-bg px-2 py-1 text-sm"
-          placeholder="paper/main.tex"
+        <LatexPathPicker
           value={filePath}
-          onChange={(event) => setFilePath(event.target.value)}
-          data-testid="latex-compile-path"
+          onChange={setFilePath}
+          title="选择 LaTeX 主文件"
+          extensions={['tex', 'ltx']}
+          placeholder="paper/main.tex"
+          testId="latex-compile-path"
         />
         <div className="flex gap-2">
           <input
@@ -199,19 +201,23 @@ export function LatexBuildPanel({ workspacePath: wsOverride }: LatexBuildPanelPr
       <div className="flex flex-col gap-2 rounded border border-border p-3">
         <div className="text-sm font-medium">红字版（latexdiff）</div>
         <div className="flex gap-2">
-          <input
-            className="flex-1 rounded border border-border bg-bg px-2 py-1 text-sm"
-            placeholder="原始版本 v1.tex"
+          <LatexPathPicker
             value={originalPath}
-            onChange={(event) => setOriginalPath(event.target.value)}
-            data-testid="latex-diff-original"
+            onChange={setOriginalPath}
+            title="选择原始版本"
+            extensions={['tex', 'ltx']}
+            placeholder="原始版本 v1.tex"
+            testId="latex-diff-original"
+            className="flex-1"
           />
-          <input
-            className="flex-1 rounded border border-border bg-bg px-2 py-1 text-sm"
-            placeholder="修订版本 v2.tex"
+          <LatexPathPicker
             value={revisedPath}
-            onChange={(event) => setRevisedPath(event.target.value)}
-            data-testid="latex-diff-revised"
+            onChange={setRevisedPath}
+            title="选择修订版本"
+            extensions={['tex', 'ltx']}
+            placeholder="修订版本 v2.tex"
+            testId="latex-diff-revised"
+            className="flex-1"
           />
         </div>
         <div className="flex gap-2 items-center">
