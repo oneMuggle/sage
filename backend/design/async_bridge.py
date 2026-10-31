@@ -122,7 +122,14 @@ def run_sync(coro: Awaitable, timeout: Optional[float] = None):
     future = asyncio.run_coroutine_threadsafe(
         _run_with_timeout(coro, timeout), loop,
     )
-    return future.result(timeout=timeout)
+    try:
+        return future.result(timeout=timeout)
+    except asyncio.TimeoutError as exc:  # noqa: UP041 — py3.8 与内建 TimeoutError 不同源
+        # 内层 ``asyncio.wait_for`` 的超时先于外层 ``future.result`` 超时
+        # 落地时，future 携带的是 asyncio.TimeoutError（py3.8 与
+        # concurrent.futures.TimeoutError 不是同一个类）。对外契约统一为
+        # concurrent.futures.TimeoutError，避免 CI 负载下随机漏出。
+        raise concurrent.futures.TimeoutError() from exc
 
 
 __all__ = ["run_sync", "DEFAULT_TIMEOUT"]
