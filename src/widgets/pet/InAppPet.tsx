@@ -42,6 +42,7 @@ const EMPTY_SNAPSHOT: PetSnapshotBridge = {
   bondDays: 1,
   activeSessions: 0,
   sessions: [],
+  tasks: [],
   updatedAt: 0,
 };
 

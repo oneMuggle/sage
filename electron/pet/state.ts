@@ -467,6 +467,7 @@ function emptySnapshot(now: number): PetSnapshot {
     bondDays: 1,
     activeSessions: 0,
     sessions: [],
+    tasks: [],
     updatedAt: now,
   };
 }
@@ -511,6 +512,7 @@ export function selectSnapshot(state: PetSessionState, now: number): PetSnapshot
     bondDays: 1,
     activeSessions,
     sessions,
+    tasks: [],
     updatedAt: session.updatedAt,
   };
 }

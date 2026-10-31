@@ -15,6 +15,9 @@ import {
   relativeTime,
   sessionLabel,
   statusLabel,
+  taskAction,
+  taskKindLabel,
+  taskStatusLabel,
   toolLabel,
 } from './engine/labels';
 
@@ -67,6 +70,10 @@ export function PetPanel({
   const lastTerminalAt = current?.lastTerminalAt ?? snapshot.lastTerminalAt;
   const isIdle = action === 'idle' || action === 'sleeping';
   const activeSessions = snapshot.sessions.filter((session) => isActiveAction(session.action));
+  const activeTasks = snapshot.tasks.filter((task) => taskAction(task.status) !== 'idle');
+  const activeCount = activeSessions.length + activeTasks.length;
+  const primarySessionId =
+    current?.sessionId ?? snapshot.sessionId ?? snapshot.tasks[0]?.sessionId ?? null;
 
   return (
     <div className="pet-panel">
@@ -74,7 +81,7 @@ export function PetPanel({
         <span className={`pet-status-dot pet-status-${action}`} />
         <span className="pet-panel-title">大肥鱼</span>
         <span className="pet-panel-subtitle">
-          {activeSessions.length > 0 ? `${activeSessions.length} 个进行中` : status}
+          {activeCount > 0 ? `${activeCount} 个进行中` : status}
         </span>
         <button type="button" className="pet-panel-close" onClick={onClose} aria-label="关闭面板">
           ×
@@ -131,6 +138,31 @@ export function PetPanel({
         </div>
       </div>
 
+      {snapshot.tasks.length > 0 ? (
+        <div className="pet-panel-sessions">
+          <div className="pet-panel-section-title">后台任务</div>
+          {snapshot.tasks.slice(0, 5).map((task) => (
+            <button
+              type="button"
+              key={task.id}
+              className="pet-session-row"
+              disabled={!task.sessionId}
+              title={`${taskKindLabel(task.kind)} · ${task.title}`}
+              onClick={() => {
+                if (task.sessionId) onOpenSession(task.sessionId);
+              }}
+            >
+              <span className={`pet-status-dot pet-status-${taskAction(task.status)}`} />
+              <span className="pet-session-row-title">{task.title}</span>
+              <span className="pet-session-row-status">
+                {taskStatusLabel(task.status)}
+                {task.percent !== null && task.percent !== undefined ? ` ${task.percent}%` : ''}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {snapshot.sessions.length > 1 ? (
         <div className="pet-panel-sessions">
           <div className="pet-panel-section-title">活跃会话</div>
@@ -157,10 +189,9 @@ export function PetPanel({
         <button
           type="button"
           className="pet-action-primary"
-          disabled={!current?.sessionId}
+          disabled={!primarySessionId}
           onClick={() => {
-            const sessionId = current?.sessionId;
-            if (sessionId) onOpenSession(sessionId);
+            if (primarySessionId) onOpenSession(primarySessionId);
           }}
         >
           回到会话

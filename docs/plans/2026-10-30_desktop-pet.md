@@ -391,6 +391,7 @@ P0 选 A。`petState.ts` 保持纯函数（事件数组 → 快照），便于�
 - [x] 陪伴天数 + 摸头计数（`pet-profile.json`）；好感度等级未做。
 - [ ] 多宠物。
 - [ ] 对外只读状态 API / 本地 HTTP（供插件联动）。
+- [x] Task Center（office/wiki/custom）后台任务聚合：renderer 上报 + 面板「后台任务」+ 空闲时驱动动作；独立编排 run/定时任务未覆盖。
 - [ ] 素材生成管线：视频/图片序列 → 透明帧 → manifest。
 - [ ] 可选聊天/语音（走 Sage 已有 Agent 与 TTS，需单独评审隐私与成本）。
 

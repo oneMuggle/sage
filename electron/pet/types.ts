@@ -65,6 +65,32 @@ export interface PetConfig {
   followActiveSession: boolean;
 }
 
+export type PetTaskStatus =
+  | 'queued'
+  | 'running'
+  | 'awaiting_approval'
+  | 'paused'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
+
+/** A Task Center entry reported by the main window renderer. */
+export interface PetTaskReport {
+  id: string;
+  kind: string;
+  title: string;
+  status: PetTaskStatus;
+  phase?: string | null;
+  percent?: number | null;
+  sessionId?: string | null;
+  runId?: string | null;
+  error?: string | null;
+  startedAt?: number | null;
+  finishedAt?: number | null;
+}
+
+export type PetTaskSummary = PetTaskReport;
+
 /** One active/recent session row shown in the pet panel. */
 export interface PetSessionSummary {
   sessionId: string;
@@ -106,6 +132,8 @@ export interface PetSnapshot {
   activeSessions: number;
   /** Active/recent sessions, highest priority first (panel only). */
   sessions: PetSessionSummary[];
+  /** Background tasks reported by the main window Task Center. */
+  tasks: PetTaskSummary[];
   updatedAt: number;
 }
 

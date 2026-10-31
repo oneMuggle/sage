@@ -82,6 +82,10 @@ export function registerPetIpc(controller: PetController): void {
     if (isPet(evt)) controller.recordPat();
   });
 
+  ipcMain.on('pet:report-tasks', (evt, tasks: unknown) => {
+    if (controller.isMainSender(evt.sender)) controller.reportTasks(tasks);
+  });
+
   ipcMain.on('pet:hide', (evt) => {
     if (isPet(evt)) controller.hideForNow();
   });
