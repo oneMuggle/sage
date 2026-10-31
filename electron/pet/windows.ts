@@ -18,6 +18,7 @@ import {
   petHitBox,
   petWindowSize,
   type Point,
+  type Size,
 } from './geometry';
 import type { PetConfig, PetSnapshot } from './types';
 
@@ -84,6 +85,7 @@ export class PetWindow {
   private dragStartCursor: Point | null = null;
   private dragStartPosition: Point | null = null;
   private compatibility: boolean;
+  private panelOpen = false;
 
   constructor(private readonly options: PetWindowOptions) {
     this.config = options.config;
@@ -182,13 +184,39 @@ export class PetWindow {
     }
     const size = petWindowSize(config.size);
     const bounds = this.win.getBounds();
-    if (bounds.width !== size.width || bounds.height !== size.height) {
-      this.win.setSize(size.width, size.height, false);
+    const target = this.panelOpen ? this.expandedSize(size) : size;
+    if (bounds.width !== target.width || bounds.height !== target.height) {
+      this.win.setSize(target.width, target.height, false);
       const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
-      const position = clampToWorkArea({ x: bounds.x, y: bounds.y }, size, display.workArea);
+      const position = clampToWorkArea({ x: bounds.x, y: bounds.y }, target, display.workArea);
       this.win.setPosition(position.x, position.y, false);
     }
     this.sendConfig(config);
+  }
+
+  setPanelOpen(open: boolean): void {
+    if (!this.win || this.win.isDestroyed() || this.panelOpen === open) return;
+    const base = petWindowSize(this.config.size);
+    const current = this.win.getBounds();
+    const target = open ? this.expandedSize(base) : base;
+    const display = screen.getDisplayNearestPoint({ x: current.x, y: current.y });
+    const extraHeight = target.height - current.height;
+    const position = clampToWorkArea(
+      { x: current.x, y: current.y - extraHeight },
+      target,
+      display.workArea,
+    );
+    this.panelOpen = open;
+    this.win.setSize(target.width, target.height, false);
+    this.win.setPosition(position.x, position.y, false);
+    if (!open) this.savePosition();
+  }
+
+  private expandedSize(base: Size): Size {
+    return {
+      width: Math.max(base.width, 300),
+      height: base.height + 300,
+    };
   }
 
   sendState(snapshot: PetSnapshot): void {
@@ -278,6 +306,7 @@ export class PetWindow {
 
   resetPosition(): void {
     if (!this.win || this.win.isDestroyed()) return;
+    if (this.panelOpen) this.setPanelOpen(false);
     const size = petWindowSize(this.config.size);
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const position = defaultPosition(display.workArea, size);
@@ -287,6 +316,7 @@ export class PetWindow {
 
   destroy(): void {
     this.stopTimers();
+    this.panelOpen = false;
     if (this.win && !this.win.isDestroyed()) {
       this.win.destroy();
     }
@@ -305,12 +335,10 @@ export class PetWindow {
   private savePosition(): void {
     if (!this.win || this.win.isDestroyed()) return;
     const bounds = this.win.getBounds();
+    const base = petWindowSize(this.config.size);
+    const y = this.panelOpen ? bounds.y + (bounds.height - base.height) : bounds.y;
     try {
-      writeFileSync(
-        this.positionFile,
-        `${JSON.stringify({ x: bounds.x, y: bounds.y }, null, 2)}\n`,
-        'utf8',
-      );
+      writeFileSync(this.positionFile, `${JSON.stringify({ x: bounds.x, y }, null, 2)}\n`, 'utf8');
     } catch (err) {
       logger.warn('pet: save position failed', {
         err: err instanceof Error ? err.message : String(err),
@@ -351,6 +379,10 @@ export class PetWindow {
   private pollPointer(): void {
     if (this.compatibility || this.dragging || this.pointerFallbackBroken) return;
     if (!this.win || this.win.isDestroyed() || !this.win.isVisible()) return;
+    if (this.panelOpen) {
+      this.setIgnoreMouse(false);
+      return;
+    }
     try {
       const cursor = screen.getCursorScreenPoint();
       const bounds = this.win.getBounds();

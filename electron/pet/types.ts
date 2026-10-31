@@ -31,9 +31,12 @@ export type PetBubbleKey =
   | 'tool_office'
   | 'tool_other'
   | 'subagent'
-  | 'todo';
+  | 'todo'
+  | 'progress';
 
 export type PetBubbleKind = 'info' | 'success' | 'error' | 'waiting';
+
+export type PetProgressKind = 'todo' | 'plan';
 
 export type PetSize = 'mini' | 'small' | 'medium' | 'large' | 'huge';
 export type PetTempo = 'quiet' | 'standard' | 'lively';
@@ -62,13 +65,50 @@ export interface PetConfig {
   followActiveSession: boolean;
 }
 
+/** One active/recent session row shown in the pet panel. */
+export interface PetSessionSummary {
+  sessionId: string;
+  sessionTitle: string | null;
+  action: PetAction;
+  detail: PetDetail | null;
+  toolName: string | null;
+  bubbleKey: PetBubbleKey | null;
+  todoDone: number;
+  todoTotal: number;
+  todoActive: string | null;
+  progressKind: PetProgressKind | null;
+  contextUsed: number | null;
+  contextMax: number | null;
+  lastTerminalAction: 'done' | 'error' | null;
+  lastTerminalAt: number | null;
+  updatedAt: number;
+}
+
 export interface PetSnapshot {
   action: PetAction;
   detail: PetDetail | null;
   sessionId: string | null;
   sessionTitle: string | null;
+  toolName: string | null;
   bubbleKey: PetBubbleKey | null;
   bubbleKind: PetBubbleKind | null;
+  todoDone: number;
+  todoTotal: number;
+  todoActive: string | null;
+  progressKind: PetProgressKind | null;
+  contextUsed: number | null;
+  contextMax: number | null;
+  lastTerminalAction: 'done' | 'error' | null;
+  lastTerminalAt: number | null;
   activeSessions: number;
+  /** Active/recent sessions, highest priority first (panel only). */
+  sessions: PetSessionSummary[];
   updatedAt: number;
+}
+
+/** Metadata refreshed outside the event stream (title / token usage). */
+export interface PetSessionMeta {
+  sessionTitle?: string | null;
+  contextUsed?: number | null;
+  contextMax?: number | null;
 }

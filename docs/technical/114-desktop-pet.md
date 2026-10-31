@@ -1,6 +1,6 @@
 # 114 — 桌面宠物（大肥鱼）
 
-> 2026-10-30 起实施。P0 状态陪伴已落地；素材与窗口层一次性移植自
+> 2026-10-30 起实施。P0 状态陪伴 + P1 状态面板已落地；素材与窗口层一次性移植自
 > [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)（MIT），
 > 许可与出处见仓库根 `third_party/dsh-pet/`。
 
@@ -53,9 +53,25 @@ FastAPI chat stream (NDJSON)
 | `observing` / `step_done`                                                              | `observing`                                     | 30     | 无         |
 | 无活跃会话                                                                             | `idle` → 2 分钟后 `sleeping`                    | 0      | 无         |
 
-- `done` / `error` 8 秒后衰减回 `idle`。
+- `done` / `error` 45 秒后衰减回 `idle`；最近一次终态结果保留在面板里。
 - 多会话并发时显示优先级最高的会话；平级取最近更新。
 - 工具分类：`electron/pet/state.ts: classifyTool()`。
+- `todo_snapshot` 记 `待办 n/m` + 当前项；`task_progress` 记 `步骤 n/m`。这两类事件只更新进度，不覆盖等待审批/工具执行的更高优先级气泡。
+- 会话标题/上下文用量由 controller 异步补充：`GET /api/v1/sessions/{id}` 拿标题；流结束后 `GET /api/v1/usage/requests?session_id=…&limit=1` 拿最近一次 `prompt_tokens`，配合 chat 参数里的 `maxContext` 计算上下文占比。两者都是 best-effort，失败不影响状态动画。
+
+### 3.1 面板与常驻徽章（P1）
+
+- 单击宠物打开/关闭面板；主进程把窗口高度 +300px 并向上扩展，关闭时恢复。
+- 面板内容：
+  - 当前会话名（无标题时显示短 ID）、状态、当前工具；
+  - 待办/步骤进度条 + 当前 todo；
+  - 上下文用量条（有 `contextUsed/contextMax` 时）；
+  - 最多 5 个最近/活跃会话，点击直达；
+  - 「回到会话」「设置」按钮；
+  - 空闲时显示「最近：已完成/出错 · N 分钟前」。
+- 常驻状态徽章：宠物右上角的小圆点/字符，颜色区分等待审批/出错/完成/工具/思考/重试/睡眠，不受气泡模式影响。
+- 气泡：`showSessionTitle=true` 时追加会话名；等待审批/出错会带工具名；待办/步骤显示 n/m。面板始终显示会话名（用户主动打开）。
+- 面板打开时关闭点击穿透，保证面板按钮可点；关闭后恢复 60ms 光标命中。
 
 ## 4. 窗口行为
 
@@ -63,8 +79,9 @@ FastAPI chat stream (NDJSON)
 - 点击穿透：主进程每 60ms 读取光标，落在角色命中框内才可交互
   （`electron/pet/geometry.ts: petHitBox`）；`setIgnoreMouseEvents(true, {forward:true})`。
 - 穿透 API 异常（Win7/VM）时永久退回「整窗可交互」并记日志。
+- 面板打开时整窗可交互；面板关闭后恢复按角色命中框穿透。
 - 拖拽：渲染层 pointer 事件 → 主进程按全局光标位移窗口；松手保存到
-  `userData/pet-window.json`。
+  `userData/pet-window.json`（面板打开时保存的是收起后的基准位置）。
 - 位置：启动时按当前显示器工作区夹取；支持多屏/DPI。
 - Win7：`compatibilityMode=auto` 时检测到 Windows 6.x 使用不透明窗口、关闭穿透。
 
@@ -110,13 +127,18 @@ canonicalizer 与 Win7 设置 schema parity。
   `settingsSearchIndex.test.ts`（`pet` 为合法 tab）。
 - 手工/自动冒烟：Electron 启动后确认 `pet.html` 窗口存在、置顶、视频源正确；
   用本地假 NDJSON 流验证 thinking → acting(edit) → done 的动画与气泡。
+  面板冒烟额外验证：会话标题、待办 2/5、步骤 3/7、上下文 31%（40k/128k）、
+  窗口 300×241 → 300×541、完成态显示 7/7 与「已完成」。
 - 体积门禁：主 chunk 1.67MB / 1.80MB；`dist/assets` 11.07MB / 12MB。
 
 ## 8. 已知限制 / 下一步
 
 - P0 仅实现「桌面」形态；`displayMode=in-app/both` 暂按桌面处理，应用内角落
-  浮层待 P1。
+  浮层待后续。
 - 未在 Win7 真机验证透明/穿透；兼容模式已写好但需真机回归。
 - 提示音字段已持久化，尚未接线播放。
-- 多会话聚合已支持，但「每个会话一只宠物」未实现。
-- 素材完整包/自定义 pet pack 导入待 P1/P2。
+- 面板已能列出最近/活跃会话，但「每个会话一只宠物」未实现。
+- 独立编排 run（`orch-events-*`）、Task Center、定时任务尚未接入宠物聚合；
+  聊天流内的 `task_status` / `task_progress` 已覆盖。
+- 上下文条依赖 chat 参数里的 `maxContext` 与 usage 事件；自动推断上下文时可能只显示已用量、不显示百分比。
+- 素材完整包/自定义 pet pack 导入待后续。

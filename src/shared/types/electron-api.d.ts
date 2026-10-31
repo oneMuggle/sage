@@ -436,14 +436,42 @@ export interface PetConfigBridge {
   followActiveSession: boolean;
 }
 
+export interface PetSessionSummaryBridge {
+  sessionId: string;
+  sessionTitle: string | null;
+  action: string;
+  detail: string | null;
+  toolName: string | null;
+  bubbleKey: string | null;
+  todoDone: number;
+  todoTotal: number;
+  todoActive: string | null;
+  progressKind: 'todo' | 'plan' | null;
+  contextUsed: number | null;
+  contextMax: number | null;
+  lastTerminalAction: 'done' | 'error' | null;
+  lastTerminalAt: number | null;
+  updatedAt: number;
+}
+
 export interface PetSnapshotBridge {
   action: string;
   detail: string | null;
   sessionId: string | null;
   sessionTitle: string | null;
+  toolName: string | null;
   bubbleKey: string | null;
   bubbleKind: 'info' | 'success' | 'error' | 'waiting' | null;
+  todoDone: number;
+  todoTotal: number;
+  todoActive: string | null;
+  progressKind: 'todo' | 'plan' | null;
+  contextUsed: number | null;
+  contextMax: number | null;
+  lastTerminalAction: 'done' | 'error' | null;
+  lastTerminalAt: number | null;
   activeSessions: number;
+  sessions: PetSessionSummaryBridge[];
   updatedAt: number;
 }
 
@@ -461,6 +489,7 @@ export interface PetElectronApiBridge {
   dragMove: () => void;
   dragEnd: () => void;
   resetPosition: () => void;
+  setPanel: (open: boolean) => void;
   hide: () => void;
 }
 

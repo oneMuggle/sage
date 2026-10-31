@@ -9,12 +9,14 @@
 import { Menu, type WebContents } from 'electron';
 import { join } from 'node:path';
 
+import { fetchCompat } from '../fetchCompat';
 import type { WebContentsLike } from '../relay';
 import { relayChatStream } from '../relay';
 import { logger } from '../logger';
 import { mergePetConfig, readPetConfig, writePetConfig } from './config';
 import {
   applyEvent,
+  applyMeta,
   createEmptyState,
   selectSnapshot,
   tick,
@@ -22,7 +24,14 @@ import {
   type PetSessionState,
 } from './state';
 import { PetWindow } from './windows';
-import type { PetBubbleMode, PetConfig, PetSize, PetSnapshot, PetTempo } from './types';
+import type {
+  PetBubbleMode,
+  PetConfig,
+  PetSessionMeta,
+  PetSize,
+  PetSnapshot,
+  PetTempo,
+} from './types';
 
 export interface PetControllerOptions {
   backendUrl: string;
@@ -60,6 +69,7 @@ export class PetController {
   private window: PetWindow | null = null;
   private readonly configFile: string;
   private readonly streams = new Map<string, AbortController>();
+  private readonly titles = new Map<string, string>();
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private lastSent = '';
 
@@ -110,20 +120,33 @@ export class PetController {
     return next;
   }
 
-  trackStream(streamId: string, sessionId: string | null): void {
+  trackStream(streamId: string, sessionId: string | null, contextMax: number | null = null): void {
     if (!streamId || this.streams.has(streamId)) return;
     const abort = new AbortController();
     this.streams.set(streamId, abort);
     const key = sessionId || `stream:${streamId}`;
+    if (sessionId) {
+      const cachedTitle = this.titles.get(sessionId);
+      if (cachedTitle) {
+        this.sessions = applyMeta(this.sessions, key, { sessionTitle: cachedTitle }, Date.now());
+      }
+      if (contextMax !== null && Number.isFinite(contextMax) && contextMax > 0) {
+        this.sessions = applyMeta(this.sessions, key, { contextMax }, Date.now());
+      }
+      void this.fetchSessionTitle(sessionId, key);
+    }
+    let contextRefreshed = false;
+    const refreshContext = (): void => {
+      if (!sessionId || contextRefreshed) return;
+      contextRefreshed = true;
+      void this.refreshContextUsage(sessionId, key, contextMax);
+    };
     const sink: WebContentsLike = {
       send: (_channel, payload) => {
-        this.sessions = applyEvent(
-          this.sessions,
-          key,
-          (payload ?? {}) as PetAgentEvent,
-          Date.now(),
-        );
+        const event = (payload ?? {}) as PetAgentEvent;
+        this.sessions = applyEvent(this.sessions, key, event, Date.now());
         this.emit();
+        if (event.state === 'done') refreshContext();
       },
     };
     relayChatStream(
@@ -142,7 +165,65 @@ export class PetController {
           this.sessions = applyEvent(this.sessions, key, { state: 'idle' }, Date.now());
           this.emit();
         }
+        refreshContext();
       });
+  }
+
+  setPanelOpen(open: boolean): void {
+    this.window?.setPanelOpen(open);
+  }
+
+  private authHeaders(): Record<string, string> {
+    const token = this.options.getAuthToken();
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+  }
+
+  private async fetchSessionTitle(sessionId: string, key: string): Promise<void> {
+    try {
+      const res = await fetchCompat(
+        `${this.options.backendUrl}/api/v1/sessions/${encodeURIComponent(sessionId)}`,
+        { method: 'GET', headers: this.authHeaders() },
+      );
+      if (!res.ok) return;
+      const data = (await res.json()) as { title?: unknown };
+      const title = typeof data.title === 'string' ? data.title.trim() : '';
+      if (!title) return;
+      this.titles.set(sessionId, title);
+      this.sessions = applyMeta(this.sessions, key, { sessionTitle: title }, Date.now());
+      this.emit();
+    } catch {
+      // Best-effort metadata; the panel falls back to the short session id.
+    }
+  }
+
+  private async refreshContextUsage(
+    sessionId: string,
+    key: string,
+    contextMax: number | null,
+  ): Promise<void> {
+    try {
+      const res = await fetchCompat(
+        `${this.options.backendUrl}/api/v1/usage/requests?session_id=${encodeURIComponent(sessionId)}&limit=1`,
+        { method: 'GET', headers: this.authHeaders() },
+      );
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        items?: Array<{ prompt_tokens?: unknown }>;
+      };
+      const used = Number(data.items?.[0]?.prompt_tokens);
+      if (!Number.isFinite(used) || used <= 0) return;
+      const meta: PetSessionMeta = { contextUsed: used };
+      if (contextMax !== null && Number.isFinite(contextMax) && contextMax > 0) {
+        meta.contextMax = contextMax;
+      }
+      this.sessions = applyMeta(this.sessions, key, meta, Date.now());
+      this.emit();
+    } catch {
+      // Usage data is optional; keep the last known values.
+    }
   }
 
   windowReady(): void {
@@ -250,6 +331,7 @@ export class PetController {
         })),
       },
       { type: 'separator' as const },
+      { label: '打开会话', click: () => this.openSession(this.snapshot.sessionId) },
       { label: '回到初始位置', click: () => this.resetPosition() },
       { label: '宠物设置…', click: () => this.openSettings() },
       { label: '本次隐藏', click: () => this.hideForNow() },

@@ -74,6 +74,10 @@ export function registerPetIpc(controller: PetController): void {
     if (isAllowed(evt)) controller.resetPosition();
   });
 
+  ipcMain.on('pet:set-panel', (evt, payload: { open?: unknown }) => {
+    if (isPet(evt)) controller.setPanelOpen(payload?.open === true);
+  });
+
   ipcMain.on('pet:hide', (evt) => {
     if (isPet(evt)) controller.hideForNow();
   });

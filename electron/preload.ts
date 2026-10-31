@@ -738,6 +738,9 @@ const electronAPI = {
     resetPosition: () => {
       ipcRenderer.send('pet:reset-position');
     },
+    setPanel: (open: boolean) => {
+      ipcRenderer.send('pet:set-panel', { open });
+    },
     hide: () => {
       ipcRenderer.send('pet:hide');
     },

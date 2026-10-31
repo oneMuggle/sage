@@ -74,12 +74,47 @@ const BUBBLE_TEXT: Record<string, { zh: string; en: string }> = {
   tool_other: { zh: '正在干活', en: 'Working' },
   subagent: { zh: '子任务进行中', en: 'Sub-agent is working' },
   todo: { zh: '更新了待办', en: 'Updated the todo list' },
+  progress: { zh: '任务进度更新', en: 'Task progress updated' },
 };
 
-export function bubbleText(key: string | null): string | null {
+export interface BubbleContext {
+  toolName?: string | null;
+  sessionTitle?: string | null;
+  showSession?: boolean;
+  todoDone?: number;
+  todoTotal?: number;
+}
+
+function shortTitle(title: string | null | undefined): string {
+  const trimmed = title?.trim();
+  if (!trimmed) return '';
+  return trimmed.length > 18 ? `${trimmed.slice(0, 18)}…` : trimmed;
+}
+
+export function bubbleText(key: string | null, ctx: BubbleContext = {}): string | null {
   if (!key) return null;
+  const zh = typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('zh');
+  const suffix = ctx.showSession ? shortTitle(ctx.sessionTitle) : '';
+  const withSuffix = (base: string): string => (suffix ? `${base} · ${suffix}` : base);
+  if (key === 'waiting' && ctx.toolName) {
+    return zh ? withSuffix(`等待审批：${ctx.toolName}`) : withSuffix(`Approval: ${ctx.toolName}`);
+  }
+  if (key === 'error' && ctx.toolName) {
+    return zh ? withSuffix(`出错了：${ctx.toolName}`) : withSuffix(`Error: ${ctx.toolName}`);
+  }
+  if (key === 'todo' && ctx.todoTotal) {
+    const done = ctx.todoDone ?? 0;
+    return zh
+      ? withSuffix(`待办 ${done}/${ctx.todoTotal}`)
+      : withSuffix(`Todos ${done}/${ctx.todoTotal}`);
+  }
+  if (key === 'progress' && ctx.todoTotal) {
+    const done = ctx.todoDone ?? 0;
+    return zh
+      ? withSuffix(`步骤 ${done}/${ctx.todoTotal}`)
+      : withSuffix(`Steps ${done}/${ctx.todoTotal}`);
+  }
   const text = BUBBLE_TEXT[key];
   if (!text) return null;
-  const zh = typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('zh');
-  return zh ? text.zh : text.en;
+  return withSuffix(zh ? text.zh : text.en);
 }

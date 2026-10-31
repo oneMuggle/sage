@@ -1205,8 +1205,11 @@ async function registerIpcHandlers(): Promise<void> {
           const streamId = (result as { streamId?: unknown }).streamId;
           const args = payload.args ?? {};
           const sessionId = typeof args.sessionId === 'string' ? args.sessionId : null;
+          const rawMax = Number(args.maxContext);
+          const contextMax =
+            Number.isFinite(rawMax) && rawMax > 0 ? rawMax : null;
           if (typeof streamId === 'string') {
-            getPetController()?.trackStream(streamId, sessionId);
+            getPetController()?.trackStream(streamId, sessionId, contextMax);
           }
         }
         return result;
