@@ -29,9 +29,11 @@ interface PreviewItem {
 export function ImageOcrPreview({
   images,
   enabled,
+  onTextsChange,
 }: {
   images: PreviewImage[];
   enabled: boolean;
+  onTextsChange?: (entries: { dataUrl: string; text: string }[]) => void;
 }) {
   const { t } = useI18n();
   const signature = images.map((img) => img.dataUrl ?? '').join('|');
@@ -102,7 +104,27 @@ export function ImageOcrPreview({
     };
   }, [enabled, targets, reloadKey]);
 
+  useEffect(() => {
+    if (!onTextsChange) return;
+    onTextsChange(
+      targets.map((target, index) => ({
+        dataUrl: target.dataUrl,
+        text: items[index]?.text ?? '',
+      })),
+    );
+  }, [items, targets, onTextsChange]);
+
   if (!enabled || items.length === 0) return null;
+
+  const updateText = (index: number, value: string) => {
+    setItems((prev) =>
+      prev.map((item, idx) =>
+        idx === index
+          ? { ...item, text: value, status: value.trim() ? 'ok' : 'empty' }
+          : item,
+      ),
+    );
+  };
 
   const copy = async (index: number, text: string) => {
     try {
@@ -120,6 +142,7 @@ export function ImageOcrPreview({
       className="mx-3 mb-1 rounded-md border border-border bg-bg-subtle p-2 text-xs"
     >
       <div className="mb-1 font-medium text-text">{t('chat.image_ocr_title')}</div>
+      <div className="mb-1 text-muted">{t('chat.image_ocr_edit_hint')}</div>
       {items.map((item, index) => (
         <div key={item.key} className="mb-1 last:mb-0">
           <div className="flex items-center gap-2 text-muted">
@@ -158,9 +181,12 @@ export function ImageOcrPreview({
             </div>
           )}
           {item.status === 'ok' && item.text && (
-            <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-text">
-              {item.text}
-            </pre>
+            <textarea
+              value={item.text}
+              onChange={(event) => updateText(index, event.target.value)}
+              rows={Math.min(8, Math.max(2, item.text.split('\n').length))}
+              className="mt-1 w-full resize-y rounded border border-border bg-surface p-1 font-sans text-xs text-text"
+            />
           )}
         </div>
       ))}

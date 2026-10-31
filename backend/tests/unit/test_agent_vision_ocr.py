@@ -138,6 +138,35 @@ async def test_vision_model_still_precedes_local_ocr() -> None:
 
 
 @pytest.mark.asyncio()
+async def test_provided_ocr_texts_are_used_without_engine_call() -> None:
+    engine = FakeEngine()
+    agent = _agent(vision=False, vision_model=False, engine=engine)
+
+    result = await agent._prepare_messages_with_images(
+        [{"role": "user", "content": "看图"}], [PNG_URL], ["用户编辑后的文字"]
+    )
+
+    text = _text_of(result)
+    assert "用户编辑后的文字" in text
+    assert "用户确认" in text
+    assert engine.calls == 0
+
+
+@pytest.mark.asyncio()
+async def test_mismatched_provided_texts_fall_back_to_ocr() -> None:
+    engine = FakeEngine()
+    agent = _agent(vision=False, vision_model=False, engine=engine)
+
+    result = await agent._prepare_messages_with_images(
+        [{"role": "user", "content": "看图"}], [PNG_URL], ["one", "two"]
+    )
+
+    text = _text_of(result)
+    assert "识别出的文字" in text
+    assert engine.calls == 1
+
+
+@pytest.mark.asyncio()
 async def test_ocr_failure_becomes_placeholder_not_exception() -> None:
     agent = _agent(vision=False, vision_model=False, engine=FakeEngine(error="boom"))
 

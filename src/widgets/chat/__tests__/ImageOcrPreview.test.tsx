@@ -39,13 +39,45 @@ describe('ImageOcrPreview', () => {
     renderPreview();
 
     await waitFor(() => {
-      expect(screen.getByText('截图里的文字')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('截图里的文字')).toBeInTheDocument();
     });
     expect(screen.getByText('rapidocr')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('复制'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith('截图里的文字');
+    });
+  });
+
+  it('emits edited text through onTextsChange', async () => {
+    mocks.recognize.mockResolvedValue({
+      text: '原始文字',
+      engine: 'rapidocr',
+      quality: 'ok',
+    });
+    const onTextsChange = vi.fn();
+
+    render(
+      <I18nProvider defaultLocale="zh">
+        <ImageOcrPreview
+          images={[IMAGE]}
+          enabled
+          onTextsChange={onTextsChange}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('原始文字')).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByDisplayValue('原始文字'), {
+      target: { value: '用户编辑后的文字' },
+    });
+
+    await waitFor(() => {
+      expect(onTextsChange).toHaveBeenLastCalledWith([
+        { dataUrl: IMAGE.dataUrl, text: '用户编辑后的文字' },
+      ]);
     });
   });
 

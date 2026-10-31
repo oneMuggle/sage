@@ -63,6 +63,8 @@ interface ChatInputProps extends Pick<InputCardProps, 'composerControls'> {
       knowledgeRefs?: { id: string; title: string }[];
       attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
       images?: { name: string; size: number; type: string; dataUrl?: string }[];
+      /** 2026-10-31: 前端确认/编辑后的本地 OCR 文本（与 images 对齐） */
+      imageOcrTexts?: string[];
       /** Task 7 (2026-07-26): managed Office references from the @-menu. The Chat page forwards these into `chatApi.chatStream`'s 5th arg so the LLM can see the office doc summaries. */
       officeRefs?: readonly ChatOfficeRef[];
       /** Multi-Agent Orchestration: /orchestrate → force_multi、/single → force_single。 Wave 3 C6: 编排模式条可传 'auto' | 'force_multi' | 'template:<id>'。 普通消息不传（undefined → 后端 auto）。 */
@@ -123,6 +125,15 @@ function ChatInputInner({
   // 本地 OCR：无视觉模型时的图片文本兜底（GET /api/v1/ocr/capabilities）。
   // 探测失败按不可用处理，不改变既有「无视觉模型即禁用上传」的行为。
   const [ocrCaps, setOcrCaps] = useState<OcrCapabilities | null>(null);
+  const [ocrTextByDataUrl, setOcrTextByDataUrl] = useState<Record<string, string>>({});
+  const handleOcrTextsChange = useCallback(
+    (entries: { dataUrl: string; text: string }[]) => {
+      setOcrTextByDataUrl(
+        Object.fromEntries(entries.map((entry) => [entry.dataUrl, entry.text])),
+      );
+    },
+    [],
+  );
   useEffect(() => {
     let cancelled = false;
     ocrApi
@@ -389,6 +400,10 @@ function ChatInputInner({
       knowledgeRefs: knowledgeRefs.length > 0 ? knowledgeRefs : undefined,
       attachments: files.length > 0 ? files : undefined,
       images: images.length > 0 ? images : undefined,
+      imageOcrTexts:
+        images.length > 0 && Object.keys(ocrTextByDataUrl).length > 0
+          ? images.map((img) => (img.dataUrl ? ocrTextByDataUrl[img.dataUrl] ?? '' : ''))
+          : undefined,
       officeRefs: officeRefs.length > 0 ? officeRefs : undefined,
       // Wave 3 C6: auto 不传键 → 保持既有 undefined → auto 语义；
       // force_multi / template:<id> 显式透传。
@@ -761,7 +776,11 @@ function ChatInputInner({
           <span>{t('chat.ocr_fallback_info')}</span>
         </div>
       )}
-      <ImageOcrPreview images={images} enabled={ocrPreviewEnabled} />
+      <ImageOcrPreview
+        images={images}
+        enabled={ocrPreviewEnabled}
+        onTextsChange={handleOcrTextsChange}
+      />
       <InputCard
         value={value}
         onChange={handleChange}

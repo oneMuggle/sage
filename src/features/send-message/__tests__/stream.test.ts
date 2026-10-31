@@ -84,6 +84,7 @@ describe('chatApi.chatStream (PR-6)', () => {
       memory_mode: 'on',
       // R23-D2: 聊天图片输入, 缺省空数组
       images: [],
+      image_ocr_texts: [],
       // R37: 文本文档附件 id, 缺省空数组
       attachment_media_ids: [],
       // r67: 附件检索注入, 缺省 null（opt-in）

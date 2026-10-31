@@ -563,8 +563,8 @@ UI：
   `VisionIngestConfig.vision_config` 可缺省，caption 缺失/失败时回退 OCR 文本；
 - 设置页：新增「本地 OCR」卡片（引擎状态、引擎选择、识别语言、测试识别按钮、
   `prefer_local_for_images`），通过 `ocr_config` preference 持久化；
-- 聊天输入区：新增「图片文字（本地 OCR）」预览卡片，支持查看、复制与重新识别
-  （发送时后端按 sha256 命中同一 OCR 缓存）；
+- 聊天输入区：新增「图片文字（本地 OCR）」预览卡片，支持查看、复制、编辑、重新识别；
+  编辑后的文本通过 `image_ocr_texts` 随消息发送，Agent 直接采用、不再重复识别；
 - 性能调优：截图默认 `max_side=1280` + 关闭方向分类，Office 扫描页保留 2048 + 分类；
 - 测试：新增 6 个测试文件（服务/引擎、Agent 兜底、工具、REST、ChatInput、Wiki 回退），
   相关后端 98 项、前端 15 项通过；`ruff`、ESLint、`check_py38_compat`、
@@ -581,7 +581,6 @@ UI：
 待完成：
 
 - 设置页模型下载器（Electron 清单/SHA-256/进度；默认 small 模型已随 wheel 提供）；
-- OCR 结果编辑并作为发送内容（`images_ocr_texts` 协议扩展）；
 - 低配机/CPU 争用下的稳定性能基准与 CER 基准；
 - Win7 真机验证（Tesseract 4.1 / RapidOCR 实验路径）与 CI 收口。
 
@@ -611,8 +610,8 @@ UI：
 
 - [x] `ocr_image` 工具（工具三件套、profile 白名单、schema 契约测试）；
 - [x] Wiki 图片摄入无视觉模型时用 OCR（`/wiki/vision` + `vision_ingest`）；
-- [x] 前端 OCR 结果查看/复制/重新识别（`ImageOcrPreview`）；
-- [ ] 编辑 OCR 结果并作为发送内容（需要 `images_ocr_texts` 协议扩展，后续）；
+- [x] 前端 OCR 结果查看/复制/编辑/重新识别（`ImageOcrPreview`）；
+- [x] 编辑结果随消息发送（`ChatRequest.image_ocr_texts`，Agent 直接采用）；
 - 验收：Agent 能对工作区截图调用 OCR；工具可见性计数与白名单测试通过。
 
 ### M3：设置 UI + 模型下载 + 文档（1–2 周）

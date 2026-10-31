@@ -802,6 +802,7 @@ class SageAgent:
         self,
         messages: List[Dict[str, Any]],
         images: List[str],
+        image_ocr_texts: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """根据 chatModel 能力智能处理图片。
 
@@ -818,6 +819,8 @@ class SageAgent:
         Args:
             messages: 原始消息列表。
             images: 图片 data URL 列表。
+            image_ocr_texts: 前端预览/编辑后的 OCR 文本（与 images 对齐）。
+                长度匹配时直接采用，省略重复识别。
 
         Returns:
             处理后的消息列表。
@@ -844,7 +847,13 @@ class SageAgent:
             return self._replace_images_with_descriptions(messages, descriptions)
 
         if ocr_available:
-            texts = await self._generate_image_ocr_texts(images)
+            if image_ocr_texts and len(image_ocr_texts) == len(images):
+                texts = [
+                    self._format_provided_ocr_text(index, text)
+                    for index, text in enumerate(image_ocr_texts, 1)
+                ]
+            else:
+                texts = await self._generate_image_ocr_texts(images)
             return self._replace_images_with_text(messages, texts)
 
         from backend.core.exceptions import VisionNotAvailableError
@@ -1130,6 +1139,14 @@ class SageAgent:
         except Exception:
             logger.warning("本地 OCR 流程异常", exc_info=True)
             return ["[图片文字识别失败]" for _ in images]
+
+    @staticmethod
+    def _format_provided_ocr_text(index: int, text: str) -> str:
+        """格式化用户确认/编辑后的 OCR 文本块。"""
+        value = (text or "").strip()
+        if not value:
+            return "[图片 %d 未识别到文字（使用发送前预览结果）]" % index
+        return "[图片 %d 文字内容 · 本地 OCR · 用户确认]\n%s" % (index, value)
 
     @staticmethod
     def _format_ocr_text(index: int, result: Any) -> str:

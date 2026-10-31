@@ -836,6 +836,7 @@ export function useChat() {
           opts?.attachmentRag,
           clientMessageId,
           opts?.displayMeta,
+          opts?.imageOcrTexts,
         );
         // Never let a late subscription overwrite a newer run's handle.
         if (finished || activeStreamRegistry.get(sid) !== streamHandle) {
