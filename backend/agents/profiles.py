@@ -428,6 +428,8 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_refresh_toc",
                 # 2026-10-31 LaTeX 读取：.tex 项目 → 结构化预览（READ）。
                 "office_read_latex",
+                "office_analyze_latex_template",
+                "office_fill_latex_template",
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -644,6 +646,9 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     "office_refresh_toc",
     # 2026-10-31 LaTeX 读取：.tex 结构化预览（与 writer.tools 同步）。
     "office_read_latex",
+    # 2026-10-31 LaTeX 模板分析/填充（与 writer.tools 同步）。
+    "office_analyze_latex_template",
+    "office_fill_latex_template",
 ]
 
 

@@ -220,7 +220,24 @@ backend/office/latex/
 - 已知边界：无 TeX 编译；`.cls/.sty` 仅识别常用宏，不展开；无 zip 项目上传；
   TikZ/高级包降级为文本/图片占位；`parser.py` 已拆分为 <800 行模块。
 
-## 11. 后续（不在本刀）
+## 11. L2 实施记录（2026-10-31）
+
+已完成后端核心：
+
+- `template.py`：从 `.tex` + 同目录/根目录 `.cls/.sty` 抽取 `LatexTemplateProfile`
+  （document_class/packages/macros/style/metadata/slots/warnings/includes）；
+- `filler.py`：按槽位替换（command_arg / environment_body / placeholder / comment），
+  LaTeX 转义，作者/单位/关键词数组用 `\and` / 逗号连接，输出新 `.tex`，绝不覆盖模板；
+- `validator.py`：花括号/环境配对/残留占位符校验；
+- REST：`POST /api/v1/office/latex/template/analyze`、
+  `POST /api/v1/office/latex/template/fill`；
+- Agent 工具：`office_analyze_latex_template`（READ）、
+  `office_fill_latex_template`（WRITE_LOCAL，file_path 模式）；
+- 测试：L2 相关 33 项 + 全量 LaTeX/预览/工具回归 93 项全绿；ruff / py38 / architecture-check 全绿。
+
+尚余：前端模板面板（路径选择/槽位表单）、`.bib` 自动补写、图片槽位、zip 项目上传。
+
+## 12. 后续（不在本 PR）
 
 - L2：`.cls/.sty` 宏表、模板槽位、智能填充、校验；
 - L3：LaTeX 审校规则、`latexdiff`、PDF 编译/沙箱；

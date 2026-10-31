@@ -151,3 +151,73 @@ class LatexDocument:
             "includes": list(self.includes),
             "citations": list(self.citations),
         }
+
+
+@dataclass
+class LatexTemplateSlot:
+    """A fillable slot discovered in a LaTeX template."""
+
+    name: str
+    kind: str  # command_arg | environment_body | placeholder | comment
+    type: str = "text"  # text | rich_text | date | list
+    required: bool = False
+    description: str = ""
+    current_value: str = ""
+    command: Optional[str] = None
+    environment: Optional[str] = None
+    placeholder: Optional[str] = None
+    anchor: Optional[LatexAnchor] = None
+    confidence: float = 1.0
+    #: Internal source span (not serialized; used by the filler).
+    start: int = 0
+    end: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "name": self.name,
+            "kind": self.kind,
+            "type": self.type,
+            "required": self.required,
+            "description": self.description,
+            "current_value": self.current_value,
+            "confidence": self.confidence,
+        }
+        if self.command:
+            payload["command"] = self.command
+        if self.environment:
+            payload["environment"] = self.environment
+        if self.placeholder:
+            payload["placeholder"] = self.placeholder
+        if self.anchor is not None:
+            payload["anchor"] = self.anchor.to_dict()
+        return payload
+
+
+@dataclass
+class LatexTemplateProfile:
+    """Machine-readable LaTeX template profile."""
+
+    source_path: str
+    document_class: Optional[str] = None
+    document_options: List[str] = field(default_factory=list)
+    packages: List[str] = field(default_factory=list)
+    macros: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    style: Dict[str, Any] = field(default_factory=dict)
+    metadata: LatexMetadata = field(default_factory=LatexMetadata)
+    slots: List[LatexTemplateSlot] = field(default_factory=list)
+    warnings: List[LatexWarning] = field(default_factory=list)
+    includes: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "source_path": self.source_path,
+            "document_class": self.document_class,
+            "document_options": list(self.document_options),
+            "packages": list(self.packages),
+            "macros": {name: dict(value) for name, value in self.macros.items()},
+            "style": dict(self.style),
+            "metadata": self.metadata.to_dict(),
+            "slots": [slot.to_dict() for slot in self.slots],
+            "warnings": [warning.to_dict() for warning in self.warnings],
+            "includes": list(self.includes),
+        }

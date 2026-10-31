@@ -19,7 +19,9 @@ from backend.office.errors import (
 )
 from backend.office.path_safety import is_within, resolve_within
 
+from .filler import fill_latex_template
 from .parser import LatexLimits, parse_latex_project
+from .template import analyze_latex_template
 
 #: Raw source returned alongside the structured preview (characters).
 MAX_SOURCE_CHARS = 512 * 1024
@@ -106,6 +108,66 @@ def is_latex_path(path: Path) -> bool:
     return path.suffix.lower() in (".tex", ".ltx")
 
 
+def analyze_latex_template_file(
+    file_path: Path,
+    *,
+    workspace: Path,
+    max_bytes: int = DEFAULT_MAX_FILE_BYTES,
+    limits: Optional[LatexLimits] = None,
+) -> Dict[str, Any]:
+    """Workspace-safe template profile extraction."""
+    workspace_path = Path(workspace)
+    if not workspace_path.is_dir():
+        raise OfficeParseError("工作区目录不存在")
+    source = Path(file_path)
+    if not source.is_file():
+        raise OfficeFileNotFoundError(source)
+    if source.suffix.lower() not in (".tex", ".ltx"):
+        raise OfficeParseError("仅支持 .tex 模板")
+    resolved = resolve_within(workspace_path, source)
+    size = resolved.stat().st_size
+    if size > max_bytes:
+        raise OfficeSizeLimitError(size, max_bytes)
+    profile = analyze_latex_template(
+        resolved,
+        root=workspace_path,
+        limits=limits,
+    )
+    payload = profile.to_dict()
+    payload["ok"] = True
+    payload["kind"] = "latex-template"
+    return payload
+
+
+def fill_latex_template_file(
+    template_path: Path,
+    data: Dict[str, Any],
+    output_filename: str,
+    *,
+    workspace: Path,
+    max_bytes: int = DEFAULT_MAX_FILE_BYTES,
+    limits: Optional[LatexLimits] = None,
+) -> Dict[str, Any]:
+    """Workspace-safe template fill (writes a new .tex, never the template)."""
+    workspace_path = Path(workspace)
+    if not workspace_path.is_dir():
+        raise OfficeParseError("工作区目录不存在")
+    template = Path(template_path)
+    if not template.is_file():
+        raise OfficeFileNotFoundError(template)
+    resolved = resolve_within(workspace_path, template)
+    size = resolved.stat().st_size
+    if size > max_bytes:
+        raise OfficeSizeLimitError(size, max_bytes)
+    return fill_latex_template(
+        resolved,
+        data,
+        output_filename,
+        root=workspace_path,
+        limits=limits,
+    )
+
+
 def is_within_root(path: Path, root: Path) -> bool:
     try:
         return is_within(Path(root).resolve(), Path(path).resolve())
@@ -123,6 +185,8 @@ def safe_relative(path: Path, root: Path) -> str:
 __all__ = [
     "DEFAULT_MAX_FILE_BYTES",
     "MAX_SOURCE_CHARS",
+    "analyze_latex_template_file",
+    "fill_latex_template_file",
     "is_latex_path",
     "is_within_root",
     "read_latex_file",

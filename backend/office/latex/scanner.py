@@ -197,6 +197,45 @@ def find_environment_start(text: str, pos: int) -> Optional[Tuple[str, int, int]
     return name, cmd.end, cmd.end
 
 
+def command_arg_spans(text: str, cmd: Command) -> List[Tuple[int, int]]:
+    """Return ``(content_start, content_end)`` spans for each required arg.
+
+    ``start``/``end`` point *inside* the braces, so a filler can replace the
+    argument content without touching the braces.
+    """
+    i = cmd.start + 1
+    n = len(text)
+    if i >= n:
+        return []
+    if _is_name_char(text[i]):
+        while i < n and _is_name_char(text[i]):
+            i += 1
+    else:
+        i += 1
+    if i < n and text[i] == "*":
+        i += 1
+    while True:
+        j = skip_ws(text, i)
+        if j < n and text[j] == "[":
+            _, end = parse_group(text, j, "[", "]")
+            if end <= j:
+                return []
+            i = end
+        else:
+            break
+    spans: List[Tuple[int, int]] = []
+    while True:
+        j = skip_ws(text, i)
+        if j >= n or text[j] != "{":
+            break
+        _, end = parse_group(text, j, "{", "}")
+        if end <= j:
+            break
+        spans.append((j + 1, end - 1))
+        i = end
+    return spans
+
+
 def split_top_level(text: str, separator: str) -> List[str]:
     """Split on a single-character separator at brace depth 0.
 
