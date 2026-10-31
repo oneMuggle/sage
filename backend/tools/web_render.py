@@ -765,7 +765,6 @@ def render_page(
         # 重定向自动按域携带）。注入失败走 RenderError——显式带凭据渲染却
         # 拿到未登录正文会误导调用方。
         if credential_cookies:
-        if credential_cookies:
             from .credential_vault import normalize_cookie_for_cdp
 
             normalized_cookies = [

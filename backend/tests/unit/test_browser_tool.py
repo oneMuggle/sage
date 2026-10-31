@@ -450,7 +450,6 @@ def test_unknown_browser_id_maps_to_error():
 
 def test_launch_tool_reports_discovery_failure(monkeypatch):
     monkeypatch.setattr(browser_cdp, "discover_browser_executable", lambda: None)
-    monkeypatch.setattr(browser_cdp, "discover_and_select", lambda: None)
     result = _tool(BrowserLaunchTool).execute()
     assert result.success is False
     assert "SAGE_BROWSER_PATH" in result.error
