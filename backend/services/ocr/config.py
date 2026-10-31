@@ -38,8 +38,10 @@ class OcrConfig:
     lang: str = "auto"
     prefer_local_for_images: bool = False
     min_confidence: float = 0.4
-    max_side: int = 2048
+    max_side: int = 1280
     timeout_s: float = 30.0
+    #: RapidOCR 方向分类；截图默认关闭以提速（扫描件可显式开启）
+    use_cls: bool = False
 
 
 def _as_bool(value: Any, default: bool) -> bool:
@@ -132,11 +134,12 @@ def load_ocr_config() -> OcrConfig:
     )
 
     max_side = _as_int(
-        _pick(raw, "max_side", "maxSide") or 2048, 2048, low=256, high=8192
+        _pick(raw, "max_side", "maxSide") or 1280, 1280, low=256, high=8192
     )
     timeout_s = _as_float(
         _pick(raw, "timeout_s", "timeoutS") or 30.0, 30.0, low=1.0, high=300.0
     )
+    use_cls = _as_bool(_pick(raw, "use_cls", "useCls"), False)
 
     return OcrConfig(
         enabled=enabled,
@@ -146,4 +149,5 @@ def load_ocr_config() -> OcrConfig:
         min_confidence=min_confidence,
         max_side=max_side,
         timeout_s=timeout_s,
+        use_cls=use_cls,
     )

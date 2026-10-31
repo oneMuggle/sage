@@ -116,6 +116,8 @@ class OcrService:
         lang: Optional[str] = None,
         min_confidence: Optional[float] = None,
         timeout_s: Optional[float] = None,
+        max_side: Optional[int] = None,
+        use_cls: Optional[bool] = None,
     ) -> OcrResult:
         """识别原始图片字节；任何异常都折叠为失败结果。"""
         config = self.config
@@ -136,10 +138,18 @@ class OcrService:
             min_confidence=(
                 config.min_confidence if min_confidence is None else min_confidence
             ),
-            max_side=config.max_side,
+            max_side=config.max_side if max_side is None else max_side,
             timeout_s=config.timeout_s if timeout_s is None else timeout_s,
+            use_cls=config.use_cls if use_cls is None else use_cls,
         )
-        cache_key = (digest, engine.name, opts.lang, round(opts.min_confidence, 4))
+        cache_key = (
+            digest,
+            engine.name,
+            opts.lang,
+            round(opts.min_confidence, 4),
+            opts.max_side,
+            opts.use_cls,
+        )
         cached = self._cache_get(cache_key)
         if cached is not None:
             return replace(cached, cached=True)

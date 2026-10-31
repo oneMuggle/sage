@@ -139,6 +139,9 @@ def ocr_page_if_needed(page: Any, text: str) -> Optional[str]:
             source="office_pdf",
             lang=_ocr_lang(),
             min_confidence=_min_confidence() / 100.0,
+            # 扫描页优先保真：更高分辨率 + 开启方向分类
+            max_side=2048,
+            use_cls=True,
         )
         if not result.ok:
             logger.debug("OCR failed: %s", result.error)

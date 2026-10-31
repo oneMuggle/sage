@@ -46,6 +46,7 @@ class FakeEngine:
 
     def recognize(self, image_bytes, opts):
         self.calls += 1
+        self.last_opts = opts
         if self.error:
             raise RuntimeError(self.error)
         return OcrResult(
@@ -115,6 +116,15 @@ def test_engine_exception_is_folded() -> None:
     assert result.quality == QUALITY_FAILED
     assert result.error == "boom"
     assert result.engine == "x"
+
+
+def test_max_side_and_use_cls_overrides() -> None:
+    engine = FakeEngine("x")
+
+    _service([engine]).recognize_bytes(b"img", max_side=2048, use_cls=True)
+
+    assert engine.last_opts.max_side == 2048
+    assert engine.last_opts.use_cls is True
 
 
 def test_cache_hit_marks_cached_and_skips_engine() -> None:

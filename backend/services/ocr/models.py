@@ -75,5 +75,7 @@ class OcrOptions:
 
     lang: str = "auto"
     min_confidence: float = 0.4
-    max_side: int = 2048
+    max_side: int = 1280
     timeout_s: float = 30.0
+    #: RapidOCR 方向分类；截图通常正向，关闭可省 ~30-50% 时间
+    use_cls: bool = False

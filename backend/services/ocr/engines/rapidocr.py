@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import contextlib
+import inspect
 import os
 import tempfile
 import threading
@@ -42,6 +43,7 @@ class RapidOcrEngine:
     def __init__(self) -> None:
         self._engine: Any = None
         self._lock = threading.Lock()
+        self._call_lock = threading.Lock()
 
     def available(self) -> Tuple[bool, str]:
         try:
@@ -55,7 +57,9 @@ class RapidOcrEngine:
 
     def recognize(self, image_bytes: bytes, opts: OcrOptions) -> OcrResult:
         engine = self._ensure_engine()
-        raw = self._run(engine, image_bytes)
+        with self._call_lock:
+            _apply_runtime_options(engine, opts)
+            raw = self._run(engine, image_bytes)
         lines = _parse_result(raw, opts.min_confidence)
         text = "\n".join(line.text for line in lines if line.text)
         if not text.strip():
@@ -93,7 +97,6 @@ class RapidOcrEngine:
                 with contextlib.suppress(OSError):
                     os.unlink(tmp_path)
 
-
 def _import_rapidocr() -> Any:
     try:
         from rapidocr import RapidOCR  # type: ignore
@@ -107,12 +110,34 @@ def _import_rapidocr() -> Any:
 
 def _create_engine() -> Any:
     rapidocr_cls = _import_rapidocr()
-    kwargs = _model_kwargs(resolve_model_dir())
+    model_dir = resolve_model_dir()
+    try:
+        supports_params = "params" in inspect.signature(rapidocr_cls.__init__).parameters
+    except (TypeError, ValueError):
+        supports_params = False
+    if supports_params:
+        # 3.x：通过 params 指定默认模型与预处理尺寸；单次调用会再按
+        # OcrOptions 覆盖 max_side_len / use_cls。
+        params: dict = {
+            "Global.max_side_len": 1280,
+            "Global.use_cls": False,
+        }
+        params.update(_model_params(model_dir))
+        return rapidocr_cls(params=params)
+    kwargs = _model_kwargs(model_dir)
     try:
         return rapidocr_cls(**kwargs) if kwargs else rapidocr_cls()
     except TypeError:
-        # 3.x 与 legacy 的构造参数不同：退回默认构造（使用包内模型）
+        # legacy 与期望参数不同：退回默认构造（使用包内模型）
         return rapidocr_cls()
+
+
+def _apply_runtime_options(engine: Any, opts: OcrOptions) -> None:
+    """按单次请求覆盖 RapidOCR 的预处理参数（调用方持锁）。"""
+    with contextlib.suppress(Exception):
+        engine.max_side_len = opts.max_side
+    with contextlib.suppress(Exception):
+        engine.use_cls = opts.use_cls
 
 
 def resolve_model_dir() -> Optional[Path]:
@@ -129,6 +154,20 @@ def resolve_model_dir() -> Optional[Path]:
 
 def _models_ready(model_dir: Path) -> bool:
     return (model_dir / "det.onnx").is_file() and (model_dir / "rec.onnx").is_file()
+
+
+def _model_params(model_dir: Optional[Path]) -> dict:
+    """3.x params 形态的模型路径覆盖。"""
+    if model_dir is None or not _models_ready(model_dir):
+        return {}
+    params = {
+        "Det.model_path": str(model_dir / "det.onnx"),
+        "Rec.model_path": str(model_dir / "rec.onnx"),
+    }
+    cls_path = model_dir / "cls.onnx"
+    if cls_path.is_file():
+        params["Cls.model_path"] = str(cls_path)
+    return params
 
 
 def _model_kwargs(model_dir: Optional[Path]) -> dict:

@@ -245,6 +245,8 @@ export const enSettingsUi = {
   'settings.ocr.engine_none': 'No engine detected',
   'settings.ocr.install_hint':
     'Install rapidocr + onnxruntime or Tesseract to enable; you can also place models manually',
+  'settings.ocr.engine': 'OCR engine',
+  'settings.ocr.engine_auto': 'Auto (prefer RapidOCR)',
   'settings.ocr.lang': 'Recognition language',
   'settings.ocr.lang_auto': 'Auto (Chinese + English)',
   'settings.ocr.lang_ch': 'Chinese',
@@ -253,6 +255,10 @@ export const enSettingsUi = {
   'settings.ocr.prefer_local_desc':
     'Faster and cheaper for text screenshots; falls back to the vision model on failure',
   'settings.ocr.saving': 'Saving…',
+  'settings.ocr.test': 'Test recognition',
+  'settings.ocr.testing': 'Recognizing…',
+  'settings.ocr.test_empty': 'No text recognized',
+  'settings.ocr.test_failed': 'Recognition failed: {error}',
   'settings.models.max_context': 'Max context length',
   'settings.models.max_context_desc':
     'Maximum tokens sent to the model per conversation; ignored in automatic mode',

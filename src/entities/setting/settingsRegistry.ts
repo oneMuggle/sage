@@ -243,6 +243,8 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
       engine: 'auto',
       lang: 'auto',
       prefer_local_for_images: false,
+      max_side: 1280,
+      use_cls: false,
     },
     applyMode: 'next-request',
     visibility: 'advanced',

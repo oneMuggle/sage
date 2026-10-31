@@ -561,8 +561,9 @@ UI：
 - 前端 `ChatInput`：OCR 能力探测、上传门控、`chat.ocr_fallback_info` 提示；
 - Wiki：`POST /wiki/vision` 视觉失败时回退本地 OCR（响应 `mode=ocr`/`engine`）；
   `VisionIngestConfig.vision_config` 可缺省，caption 缺失/失败时回退 OCR 文本；
-- 设置页：新增「本地 OCR」卡片（引擎状态、语言、`prefer_local_for_images`），
-  通过 `ocr_config` preference 持久化；
+- 设置页：新增「本地 OCR」卡片（引擎状态、引擎选择、识别语言、测试识别按钮、
+  `prefer_local_for_images`），通过 `ocr_config` preference 持久化；
+- 性能调优：截图默认 `max_side=1280` + 关闭方向分类，Office 扫描页保留 2048 + 分类；
 - 测试：新增 6 个测试文件（服务/引擎、Agent 兜底、工具、REST、ChatInput、Wiki 回退），
   相关后端 98 项、前端 15 项通过；`ruff`、ESLint、`check_py38_compat`、
   `architecture-check` 通过。
@@ -570,15 +571,16 @@ UI：
   900×240 中英混排图识别正确（`Sage 本地 OCR 测试 2026` / `Invoice No: A-1024 Total: 88.00`），
   首次调用约 2.3s（含模型加载），预热后约 1.8s，缓存命中 0ms；RapidOCR wheel 自带
   PP-OCRv6 small 模型，模型目录为可选覆盖项。
-- 1080p 基准（同上环境，PP-OCRv6 small，10 行文本）：预热后约 **3.0–3.2s**（3 次），
-  识别质量 `ok`；**未达到 <2s 目标**，后续可通过 PP-OCRv6 tiny / 降采样 / 低功耗机器
-  单独调优，当前不阻塞交互兜底。
+- 1080p 基准（同上环境，PP-OCRv6 small，10 行文本）：默认参数预热后约 **3.0–3.2s**；
+  调优为 `max_side=1280` + 关闭方向分类（`use_cls=False`）后，安静机器上约 **1.2–2.0s**
+  （多次运行有波动），CPU 争用时可达 2.5–4s。截图场景默认采用该组合；Office 扫描页
+  仍使用 `max_side=2048` + `use_cls=True` 保真。识别内容一致，quality=`ok`。
 
 待完成：
 
-- 设置页模型下载器（Electron 清单/SHA-256/进度）与 OCR 测试按钮；
+- 设置页模型下载器（Electron 清单/SHA-256/进度；默认 small 模型已随 wheel 提供）；
 - 前端 OCR 结果查看/复制/编辑/重试；
-- 1080p 性能调优（PP-OCRv6 tiny / 降采样）与 CER 基准；
+- 低配机/CPU 争用下的稳定性能基准与 CER 基准；
 - Win7 真机验证（Tesseract 4.1 / RapidOCR 实验路径）与 CI 收口。
 
 
@@ -599,7 +601,7 @@ UI：
 - [ ] 模型 SHA-256 校验/预热（待设置页下载器接入）；
 - [x] `auto` 选择：RapidOCR > Tesseract；失败自动降级；
 - [x] 结果缓存（sha256）；
-- [x] 单图性能基准（1080p 预热约 3.0–3.2s，未达 <2s 目标；后续调优 tiny/降采样）；
+- [x] 单图性能基准与调优（截图 1280/关分类约 1.2–2.0s；Office 2048/开分类保真）；
 - 验收：目标机器 1080p 截图 P95 < 2s（模型已加载）；中文截图 CER 相对 Tesseract 基线下降 ≥30%；
   引擎缺失无异常、UI 给可操作提示。
 
@@ -612,8 +614,9 @@ UI：
 
 ### M3：设置 UI + 模型下载 + 文档（1–2 周）
 
-- [x] 设置页 OCR 区块（引擎状态/语言/优先策略/隐私说明）；
-- [ ] 复用 Electron 模型下载器（清单/SHA-256/进度/取消）；
+- [x] 设置页 OCR 区块（引擎状态/引擎选择/语言/测试识别/优先策略/隐私说明）；
+- [ ] 复用 Electron 模型下载器（清单/SHA-256/进度/取消）；RapidOCR wheel 已自带 small 模型，
+      下载器主要用于 tiny/更大模型的可选升级；
 - [ ] 技术文档章节 + 用户手册；
 - 验收：新用户无需命令行即可启用；离线环境手动放置模型可工作。
 

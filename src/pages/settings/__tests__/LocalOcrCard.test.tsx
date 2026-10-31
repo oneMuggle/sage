@@ -7,13 +7,14 @@ import { LocalOcrCard } from '../LocalOcrCard';
 const { mocks } = vi.hoisted(() => ({
   mocks: {
     capabilities: vi.fn(),
+    recognize: vi.fn(),
     getPreference: vi.fn(),
     setPreference: vi.fn(),
   },
 }));
 
 vi.mock('../../../shared/api/ocrApi', () => ({
-  ocrApi: { capabilities: mocks.capabilities },
+  ocrApi: { capabilities: mocks.capabilities, recognize: mocks.recognize },
 }));
 
 vi.mock('../../../shared/api/settingsClient', () => ({
@@ -64,6 +65,31 @@ describe('LocalOcrCard', () => {
         'ocr',
       );
     });
+  });
+
+  it('runs the built-in OCR test image', async () => {
+    mocks.capabilities.mockResolvedValue({
+      enabled: true,
+      available: true,
+      selected_engine: 'rapidocr',
+      reason: '',
+    });
+    mocks.getPreference.mockResolvedValue(null);
+    mocks.recognize.mockResolvedValue({ text: 'SAGE OCR 123' });
+
+    renderCard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-ocr-test')).not.toBeDisabled();
+    });
+    fireEvent.click(screen.getByTestId('settings-ocr-test'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-ocr-test-result')).toHaveTextContent(
+        'SAGE OCR 123',
+      );
+    });
+    expect(mocks.recognize).toHaveBeenCalledWith(expect.stringContaining('data:image/png'));
   });
 
   it('shows unavailable hint when no engine is present', async () => {
