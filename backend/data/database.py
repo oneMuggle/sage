@@ -1008,6 +1008,33 @@ class Database:
             )
         if "detected_type" not in _projects_columns:
             cursor.execute("ALTER TABLE projects ADD COLUMN detected_type TEXT")
+        # Project playbook (2026-10-31): 项目规程状态 JSON——当前阶段、阶段历史、
+        # 豁免项、忽略建议与手动勾选。幂等迁移，旧行 NULL 允许。
+        if "playbook_state" not in _projects_columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN playbook_state TEXT")
+        conn.commit()
+
+        # Project playbooks (2026-10-31): 项目绑定的规程快照。每次绑定/编辑
+        # 生成一个新版本，只有最新版本 active=1；规格完整存快照，内置规程
+        # 升级不会改变已绑定项目的行为。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS project_playbooks (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                source TEXT NOT NULL,
+                parent_id TEXT,
+                spec_json TEXT NOT NULL,
+                spec_hash TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_project_playbooks_project "
+            "ON project_playbooks(project_id, active, version DESC)"
+        )
         conn.commit()
 
         # Project constraints (2026-09-24): 结构化项目约束，替代纯文本
