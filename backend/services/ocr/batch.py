@@ -174,7 +174,7 @@ class OcrBatchService:
                 self._persist_locked(job)
 
     def _job_path(self, job_id: str) -> Path:
-        return self._store_dir / ("%s.json" % job_id)
+        return self._store_dir / f"{job_id}.json"
 
     def _persist_locked(self, job: OcrBatchJob) -> None:
         """原子写入任务快照；持久化失败不阻断 OCR 本身。"""
@@ -185,7 +185,7 @@ class OcrBatchService:
             tmp.write_text(
                 json.dumps(asdict(job), ensure_ascii=False), encoding="utf-8"
             )
-            os.replace(str(tmp), str(path))
+            tmp.replace(path)
         except OSError:
             logger.warning("persist OCR batch job failed", exc_info=True)
 
@@ -280,7 +280,7 @@ def decode_pdf_data_url(data_url: str) -> bytes:
     except Exception as exc:  # noqa: BLE001
         raise ValueError("PDF base64 decode failed") from exc
     if len(pdf_bytes) > MAX_PDF_BYTES:
-        raise ValueError("PDF exceeds %d bytes" % MAX_PDF_BYTES)
+        raise ValueError(f"PDF exceeds {MAX_PDF_BYTES} bytes")
     return pdf_bytes
 
 
@@ -317,8 +317,7 @@ def rasterize_pdf_pages(
     except ValueError:
         raise
     except Exception as exc:  # noqa: BLE001 — 第三方解析错误统一折叠
-        raise ValueError("invalid PDF: %s" % exc) from exc
-
+        raise ValueError(f"invalid PDF: {exc}") from exc
 
 
 _global_service: Optional[OcrBatchService] = None
