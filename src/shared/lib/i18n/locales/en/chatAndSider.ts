@@ -207,6 +207,13 @@ export const enChatAndSider = {
     'Images will be recognized by the vision model and converted to text descriptions',
   'chat.ocr_fallback_info':
     'Images will be recognized by local OCR and converted to text (processed on this device only)',
+  'chat.image_ocr_title': 'Image text (local OCR)',
+  'chat.image_ocr_loading': 'Recognizing…',
+  'chat.image_ocr_empty': 'No text recognized',
+  'chat.image_ocr_failed': 'Recognition failed: {error}',
+  'chat.image_ocr_copy': 'Copy',
+  'chat.image_ocr_copied': 'Copied',
+  'chat.image_ocr_retry': 'Recognize again',
 
   // ─── M4 session compact / fork ────
   // LOW-1: unified phrasing — "before → after messages (removed merged into summary)"

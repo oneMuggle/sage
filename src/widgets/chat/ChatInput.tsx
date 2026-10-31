@@ -13,7 +13,7 @@ import { useSettings } from '../../features/manage-settings/useSettings';
 import type { DeliveryMode } from '../../features/send-message/deliveryMode';
 import { knowledgeApi, promptApi, skillsApi } from '../../shared/api';
 import { listen as desktopListen } from '../../shared/api/desktopEvent';
-import { ocrApi } from '../../shared/api/ocrApi';
+import { ocrApi, type OcrCapabilities } from '../../shared/api/ocrApi';
 import type { ChatOfficeRef } from '../../shared/api/types';
 import { worktreeApi } from '../../shared/api/worktreeApi';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
@@ -23,6 +23,7 @@ import { useSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { useI18n } from '../../shared/lib/i18n';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 
+import { ImageOcrPreview } from './ImageOcrPreview';
 import {
   InputCard,
   type AudioAttachmentChipType,
@@ -121,16 +122,16 @@ function ChatInputInner({
 
   // 本地 OCR：无视觉模型时的图片文本兜底（GET /api/v1/ocr/capabilities）。
   // 探测失败按不可用处理，不改变既有「无视觉模型即禁用上传」的行为。
-  const [ocrAvailable, setOcrAvailable] = useState(false);
+  const [ocrCaps, setOcrCaps] = useState<OcrCapabilities | null>(null);
   useEffect(() => {
     let cancelled = false;
     ocrApi
       .capabilities()
       .then((caps) => {
-        if (!cancelled) setOcrAvailable(Boolean(caps.enabled && caps.available));
+        if (!cancelled) setOcrCaps(caps);
       })
       .catch(() => {
-        if (!cancelled) setOcrAvailable(false);
+        if (!cancelled) setOcrCaps(null);
       });
     return () => {
       cancelled = true;
@@ -147,9 +148,12 @@ function ChatInputInner({
   )?.capabilities ?? ['chat', 'vision'];
   const supportsVision = chatModelCaps.includes('vision');
   const visionModelConfigured = Boolean(settings.modelSelections.visionModel?.modelId);
+  const ocrAvailable = Boolean(ocrCaps?.enabled && ocrCaps?.available);
+  const preferLocalOcr = Boolean(ocrCaps?.prefer_local_for_images);
   const ocrFallbackMode = !supportsVision && !visionModelConfigured && ocrAvailable;
   const visionUploadDisabled = !supportsVision && !visionModelConfigured && !ocrAvailable;
   const visionFallbackMode = !supportsVision && visionModelConfigured;
+  const ocrPreviewEnabled = ocrAvailable && (ocrFallbackMode || preferLocalOcr);
 
   // Workspace context — provides sessionId + binding for the @ menu.
   // Falls back to the legacy `workspacePath` prop for callers that don't
@@ -757,6 +761,7 @@ function ChatInputInner({
           <span>{t('chat.ocr_fallback_info')}</span>
         </div>
       )}
+      <ImageOcrPreview images={images} enabled={ocrPreviewEnabled} />
       <InputCard
         value={value}
         onChange={handleChange}
