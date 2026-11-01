@@ -13,6 +13,7 @@ from backend.office.errors import OfficeParseError, OfficePathError, OfficeSizeL
 from backend.office.path_safety import resolve_within
 from backend.office.storage import validate_workspace
 from backend.office.word_audit import audit_word_document
+from backend.office.word_batch_audit import audit_word_batch
 from backend.office.word_fix import fix_word_document
 from backend.office.word_render_audit import audit_word_render
 from backend.office.word_revision_writer import (
@@ -26,6 +27,7 @@ from backend.office.word_rule_extract import (
 from backend.office.word_rulepack_models import (
     WordAuditFixResult,
     WordAuditResult,
+    WordBatchAuditResult,
     WordRenderAuditResult,
     WordRevisionResult,
     WordRuleExtractionResult,
@@ -145,6 +147,21 @@ class WordAuditRenderRequest(BaseModel):
     margin_tolerance_cm: float = Field(default=0.3, ge=0, le=5)
     page_number_band: float = Field(default=0.15, ge=0.01, le=0.5)
     timeout_seconds: int = Field(default=120, ge=1, le=600)
+    max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
+
+
+class WordBatchAuditRequest(BaseModel):
+    """POST /office/word/audit/batch body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_paths: Optional[List[str]] = None
+    pattern: str = Field(default="**/*.docx", max_length=500)
+    max_files: int = Field(default=20, ge=1, le=100)
+    rulepack_id: Optional[str] = Field(default=None, max_length=80)
+    rulepack: Optional[WordRulePack] = None
+    include_report: bool = True
     max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
 
 
@@ -358,16 +375,37 @@ def render_audit_endpoint(req: WordAuditRenderRequest) -> WordRenderAuditResult:
     )
 
 
+@router.post("/audit/batch")
+def batch_audit_endpoint(req: WordBatchAuditRequest) -> WordBatchAuditResult:
+    """Audit multiple workspace .docx files and build a Markdown report (M5b)."""
+    workspace = validate_workspace(Path(req.workspace_path))
+    if req.rulepack is not None:
+        pack = req.rulepack
+    else:
+        pack = load_rulepack(workspace, req.rulepack_id or DEFAULT_RULEPACK_ID)["pack"]
+    return audit_word_batch(
+        workspace,
+        pack,
+        file_paths=req.file_paths,
+        pattern=req.pattern,
+        max_files=req.max_files,
+        max_size_bytes=req.max_size_bytes,
+        include_report=req.include_report,
+    )
+
+
 __all__ = [
     "WordAuditFixRequest",
     "WordAuditRenderRequest",
     "WordAuditRequest",
     "WordAuditReviseRequest",
+    "WordBatchAuditRequest",
     "WordRevisionChangeRequest",
     "WordRuleExtractRequest",
     "WordRuleExtractSaveRequest",
     "WordRulePackSaveRequest",
     "audit_word_endpoint",
+    "batch_audit_endpoint",
     "delete_rulepack_endpoint",
     "extract_rulepack_endpoint",
     "fix_word_endpoint",
