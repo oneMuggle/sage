@@ -1,7 +1,7 @@
 /**
- * PlaybookImportPreviewCard — 导入前的结构摘要、冲突策略与保存到规程库选项。
+ * PlaybookImportPreviewCard — 导入前的逐项 diff、冲突策略与保存到规程库选项。
  */
-import type { PlaybookImportPreview } from '../../shared/api/playbookApi';
+import type { PlaybookImportPreview, PlaybookStageDiff } from '../../shared/api/playbookApi';
 import { Button } from '../../shared/ui/Button';
 
 export interface PlaybookImportPreviewProps {
@@ -15,6 +15,102 @@ export interface PlaybookImportPreviewProps {
   importing: boolean;
 }
 
+function stageChangeCount(detail: PlaybookStageDiff): number {
+  return (
+    detail.changed_fields.length +
+    detail.artifacts_added.length +
+    detail.artifacts_removed.length +
+    detail.artifacts_changed.length +
+    detail.rules_added.length +
+    detail.rules_removed.length +
+    detail.milestones_added.length +
+    detail.milestones_removed.length +
+    detail.criteria_added.length +
+    detail.criteria_removed.length +
+    detail.criteria_changed.length
+  );
+}
+
+function summaryCounts(preview: PlaybookImportPreview): string[] {
+  const { diff } = preview;
+  const counts: string[] = [];
+  if (diff.stages_added.length) counts.push(`新增阶段 ${diff.stages_added.length}`);
+  if (diff.stages_removed.length) counts.push(`删除阶段 ${diff.stages_removed.length}`);
+  if (diff.directories_added.length) counts.push(`新增目录 ${diff.directories_added.length}`);
+  if (diff.directories_removed.length) counts.push(`删除目录 ${diff.directories_removed.length}`);
+  if (diff.directories_changed.length) counts.push(`调整目录 ${diff.directories_changed.length}`);
+  if (diff.global_rules_added.length) counts.push(`新增全局规则 ${diff.global_rules_added.length}`);
+  if (diff.global_rules_removed.length)
+    counts.push(`删除全局规则 ${diff.global_rules_removed.length}`);
+  if (diff.name_changed) counts.push('名称变更');
+  if (diff.description_changed) counts.push('描述变更');
+  return counts;
+}
+
+function StageDiffList({ detail }: { detail: PlaybookStageDiff }) {
+  return (
+    <ul className="mt-1 space-y-0.5">
+      {detail.changed_fields.length > 0 && (
+        <li className="text-amber-600 dark:text-amber-400">
+          ~ 阶段字段：{detail.changed_fields.join('、')}
+        </li>
+      )}
+      {detail.artifacts_added.map((item) => (
+        <li key={`artifact-add-${item.id}`} className="text-emerald-600 dark:text-emerald-400">
+          + 产物：{item.label}
+        </li>
+      ))}
+      {detail.artifacts_removed.map((item) => (
+        <li key={`artifact-del-${item.id}`} className="text-destructive">
+          − 产物：{item.label}
+        </li>
+      ))}
+      {detail.artifacts_changed.map((item) => (
+        <li key={`artifact-mod-${item.id}`} className="text-amber-600 dark:text-amber-400">
+          ~ 产物：{item.label}
+          {item.fields?.length ? `（${item.fields.join('、')}）` : ''}
+        </li>
+      ))}
+      {detail.rules_added.map((label) => (
+        <li key={`rule-add-${label}`} className="text-emerald-600 dark:text-emerald-400">
+          + 规则：{label}
+        </li>
+      ))}
+      {detail.rules_removed.map((label) => (
+        <li key={`rule-del-${label}`} className="text-destructive">
+          − 规则：{label}
+        </li>
+      ))}
+      {detail.milestones_added.map((title) => (
+        <li key={`milestone-add-${title}`} className="text-emerald-600 dark:text-emerald-400">
+          + 里程碑：{title}
+        </li>
+      ))}
+      {detail.milestones_removed.map((title) => (
+        <li key={`milestone-del-${title}`} className="text-destructive">
+          − 里程碑：{title}
+        </li>
+      ))}
+      {detail.criteria_added.map((item) => (
+        <li key={`criterion-add-${item.id}`} className="text-emerald-600 dark:text-emerald-400">
+          + 退出条件：{item.label}
+        </li>
+      ))}
+      {detail.criteria_removed.map((item) => (
+        <li key={`criterion-del-${item.id}`} className="text-destructive">
+          − 退出条件：{item.label}
+        </li>
+      ))}
+      {detail.criteria_changed.map((item) => (
+        <li key={`criterion-mod-${item.id}`} className="text-amber-600 dark:text-amber-400">
+          ~ 退出条件：{item.label}
+          {item.fields?.length ? `（${item.fields.join('、')}）` : ''}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function PlaybookImportPreviewCard({
   preview,
   conflict,
@@ -25,6 +121,8 @@ export function PlaybookImportPreviewCard({
   onCancel,
   importing,
 }: PlaybookImportPreviewProps) {
+  const counts = summaryCounts(preview);
+  const stageDetails = Object.entries(preview.diff.stage_details ?? {});
   return (
     <div
       className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs"
@@ -32,16 +130,24 @@ export function PlaybookImportPreviewCard({
     >
       <div className="font-medium text-foreground">导入预览：{preview.playbook.name}</div>
       <div className="text-muted-foreground">
-        阶段 {preview.playbook.stages.length} 个 · 目录{' '}
-        {preview.scaffold.directories.length} 个 · 导入不包含对方项目文件内容
+        阶段 {preview.playbook.stages.length} 个 · 目录 {preview.scaffold.directories.length} 个 ·
+        导入不包含对方项目文件内容
       </div>
-      {Object.entries(preview.diff).length > 0 && (
-        <div className="text-muted-foreground">
-          变更：
-          {Object.entries(preview.diff)
-            .filter(([, value]) => Array.isArray(value) && value.length > 0)
-            .map(([key, value]) => `${key} ${(value as unknown[]).length} 项`)
-            .join('，') || '无结构变更'}
+      <div className="text-muted-foreground">变更：{counts.join('，') || '无结构变更'}</div>
+      {stageDetails.length > 0 && (
+        <div className="space-y-1" data-testid="playbook-diff-details">
+          {stageDetails.map(([stageId, detail]) => (
+            <details
+              key={stageId}
+              className="rounded-md border border-border px-2 py-1"
+              data-testid={`playbook-diff-stage-${stageId}`}
+            >
+              <summary className="cursor-pointer text-muted-foreground">
+                阶段「{detail.label || stageId}」：{stageChangeCount(detail)} 项变更
+              </summary>
+              <StageDiffList detail={detail} />
+            </details>
+          ))}
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">

@@ -138,6 +138,19 @@ export const playbookRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/playbooks/library',
     body: (a) => ({ envelope: a.envelope, source: a.source ?? 'imported' }),
   },
+  playbooks_library_get: {
+    method: 'GET',
+    path: (a) => `/api/v1/playbooks/library/${enc(a.libraryId ?? a.library_id)}`,
+  },
+  playbooks_library_export: {
+    method: 'GET',
+    path: (a) => {
+      const includeScaffold = a.includeScaffold ?? a.include_scaffold ?? true;
+      return `/api/v1/playbooks/library/${enc(
+        a.libraryId ?? a.library_id,
+      )}/export?include_scaffold=${includeScaffold ? 'true' : 'false'}`;
+    },
+  },
   playbooks_library_delete: {
     method: 'DELETE',
     path: (a) => `/api/v1/playbooks/library/${enc(a.libraryId ?? a.library_id)}`,

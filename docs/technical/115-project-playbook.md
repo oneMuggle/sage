@@ -113,6 +113,8 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 | GET | `/api/v1/playbooks/builtin` | 内置规程摘要 |
 | GET | `/api/v1/playbooks/builtin/{id}` | 完整规格 |
 | GET | `/api/v1/playbooks/library` | 规程库列表（导入/分享的规程） |
+| GET | `/api/v1/playbooks/library/{id}` | 规程库条目详情（含完整规格） |
+| GET | `/api/v1/playbooks/library/{id}/export` | 导出规程库条目为 `.sageplaybook.json` |
 | POST | `/api/v1/playbooks/library` | 保存规程到规程库（按 spec hash 去重） |
 | DELETE | `/api/v1/playbooks/library/{id}` | 删除规程库条目 |
 | GET | `/api/v1/projects/{id}/playbook` | 当前绑定 + 状态 + 审计 |
@@ -128,12 +130,12 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 | POST | `/api/v1/projects/{id}/playbook/actions/apply` | 执行用户勾选动作 |
 | GET | `/api/v1/projects/{id}/playbook/export?format=json\|md\|agents` | 导出 |
 | POST | `/api/v1/projects/{id}/playbook/wiki/export` | 将规程手册写入项目 Wiki（仅覆盖 Sage 生成页） |
-| POST | `/api/v1/playbooks/import/preview` | 校验 + diff |
+| POST | `/api/v1/playbooks/import/preview` | 校验 + 逐项 diff（阶段/产物/规则/里程碑/退出条件） |
 | POST | `/api/v1/playbooks/import` | 导入并绑定（replace/merge/save_as_new） |
 
 ### 规程库
 
-导入或分享的规程可保存到全局规程库（`playbook_library`，最多 100 条，按 spec hash 去重）；绑定项目时可直接选择 `library_id`，导入时也可勾选 `save_to_library` 一并入库。库中的规程与项目解耦，不包含任何项目文件内容。
+导入或分享的规程可保存到全局规程库（`playbook_library`，最多 100 条，按 spec hash 去重）；绑定项目时可直接选择 `library_id`，导入时也可勾选 `save_to_library` 一并入库。库中的规程与项目解耦，不包含任何项目文件内容。前端「规程库」面板可查看全部条目、展开查看目录/阶段、导出 `.sageplaybook.json` 与删除；删除库条目不影晌已绑定项目（项目侧持有快照）。
 
 ## 7. 导出与分享
 
@@ -177,14 +179,15 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 
 ## 11. 测试
 
-- 单元：`test_playbook_spec.py`、`test_playbook_repo.py`、`test_playbook_auditor.py`、`test_playbook_actions.py`；
-- 集成：`test_playbook_routes.py`（绑定 → 审计 → 动作 → 阶段确认 → 导出/导入 → 路径拒绝）；
-- 前端：`PlaybookCard.test.tsx`、`playbookApi.test.ts`。
+- 单元：`test_playbook_spec.py`、`test_playbook_repo.py`、`test_playbook_auditor.py`、`test_playbook_actions.py`、`test_playbook_diff.py`；
+- 集成：`test_playbook_routes.py`（绑定 → 审计 → 动作 → 阶段确认 → 导出/导入 → 逐项 diff → 库详情/导出 → 路径拒绝）；
+- 前端：`PlaybookCard.test.tsx`、`PlaybookLibraryPanel.test.tsx`、`PlaybookImportPreviewCard.test.tsx`、`playbookApi.test.ts`。
 
 ## 12. 已知限制（后续 P3）
 
 - LLM 定制、内容检查与阶段裁决已实现（同步执行，失败自动降级）；尚无后台任务/取消/缓存。
 - 规程编辑表单已覆盖名称/描述/阶段/产物/阶段规则/推荐里程碑/退出条件；内容检查等字段仍需 JSON 视图。
 - 归类建议为启发式打分，可能误判；移动需勾选确认，批量移动支持撤销最近一批（不保留更早批次）。
+- 导入 diff 为结构级（阶段/产物/规则/里程碑/退出条件，各列表最多 20 项），不展示 `content_checks` 的文本级差异。
 - 暂无云端规程市场。
 - `release/win7` cherry-pick 仍需按 pydantic v1 适配。
