@@ -26,6 +26,7 @@ from backend.orchestration.subagent_approval import AutoApproveEnforcer, build_s
 from backend.orchestration.subagent_events import (
     MAX_EVENTS_PER_SUBTASK,
     PHASE_APPROVAL_RESOLVED,
+    PHASE_BUDGET_EXTENDED,
     PHASE_TOOL_CALL,
     PHASE_TOOL_RESULT,
     SubagentEventSink,
@@ -502,3 +503,33 @@ def test_auto_enforcer_respects_user_rules():
     )
     decision = AutoApproveEnforcer(base_deny).check("bash", {"command": "echo hi"})
     assert decision.allowed is False
+
+
+# ---------------------------------------------------------------------------
+# 2026-11-01: 子代理动态迭代预算延长事件
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_iteration_checkpoint_projects_budget_extended_mirror():
+    """子代理自动延长预算 → 任务树 live 步骤收到 budget_extended 镜像。"""
+    sink, mirror, _ = _make_sink()
+    await sink(
+        AgentEvent(
+            state=AgentState.ITERATION_CHECKPOINT,
+            iteration=5,
+            agent_id="researcher",
+            budget_info={
+                "previous_budget": 6,
+                "next_budget": 12,
+                "extensions": 1,
+            },
+        )
+    )
+
+    assert len(mirror) == 1
+    event = mirror[0]
+    assert event["state"] == "subagent_event"
+    assert event["phase"] == PHASE_BUDGET_EXTENDED
+    assert event["budget_info"]["next_budget"] == 12
+    assert "6→12" in event["live_step"]

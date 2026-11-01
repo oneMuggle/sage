@@ -1,0 +1,181 @@
+# 119 — Word 规则包与确定性审校（M2a）
+
+> 日期：2026-11-01 · 分支：`feat/word-rulepack-audit`
+> 方案：`docs/plans/2026-10-31_word-document-intelligence.md`（M2）、`docs/plans/2026-11-01_word-rulepack-audit-m2a.md`
+
+## 1. 定位
+
+M2a 把“规范 → 规则 → 审校”中的确定性部分落地：
+
+- `RulePack` / `Rule` 数据模型与三层存储（内置、工作区、请求内联）；
+- 12 类确定性检查器，覆盖页面、样式、结构、内容；
+- 每条 issue 带 `scope` 与可选 `anchor`（`WordTextAnchor`），为 M2c 前端定位/高亮提供链路；
+- 内置两个规则包：GB/T 9704 通用版面参数、Word 通用质量检查。
+
+本阶段**只读**：不修改文档、不执行修复。旧 `/office/word/lint`、`/office/word/repair`
+契约与行为不变。
+
+## 2. 规则包模型
+
+```json
+{
+  "id": "general-quality",
+  "name": "Word 通用质量检查",
+  "version": "1.0",
+  "description": "…",
+  "source": null,
+  "rules": [
+    {
+      "id": "content/placeholder_residue",
+      "title": "无未解析占位符",
+      "category": "content",
+      "severity": "error",
+      "kind": "content.placeholder_residue",
+      "params": {},
+      "source": "",
+      "fixable": false,
+      "fix_hint": "解析或删除 {{}} / <<>> / [[ ]] / 【】 / 交叉引用占位符"
+    }
+  ]
+}
+```
+
+- `kind` 选择检查器；未知 kind 在审校/保存前返回 422；
+- 规则 id 在包内唯一；单包最多 500 条规则；
+- `source` 用于标注标准/范本来源；内置 GB/T 9704 包只收录通用参数，不复制标准全文。
+
+## 3. 存储
+
+| 层 | 位置 | 说明 |
+|---|---|---|
+| 内置 | `backend/office/word_rulepack_builtin.py` | 只读；id 不可覆盖/删除 |
+| 工作区 | `<workspace>/.sage/word-rulepacks/<id>.json` | 记录 `{version, pack, updated_at}`；原子写入；256 KiB 上限 |
+| 内联 | 审校请求 `rulepack` 字段 | 即时校验，不落盘 |
+
+加载顺序：工作区同名包优先于内置包；保存时禁止使用内置 id。
+
+## 4. 检查器
+
+| kind | 参数 | 作用 | issue scope |
+|---|---|---|---|
+| `page.size` | `size` | A4/Letter 纸张 | section |
+| `page.orientation` | `orientation` | 纵向/横向 | section |
+| `page.margins` | `top_cm/bottom_cm/left_cm/right_cm/tolerance_cm` | 页边距 | section |
+| `page.page_number` | `required/format` | 页码域与页码格式 | section |
+| `style.font` | `style/font_ascii/font_east_asia/size_pt/bold/italic/underline/color/tolerance_pt` | 样式字体 | style（锚定首个使用段落） |
+| `style.paragraph` | `style/line_spacing/line_spacing_pt/first_line_indent_cm/alignment/tolerance_cm` | 样式段落格式 | style |
+| `structure.heading_sequence` | `levels/require_prefix/skip_texts` | 多级标题编号连续 | paragraph |
+| `structure.required_headings` | `headings/match` | 必含标题/章节 | document |
+| `content.placeholder_residue` | — | `{{}}`/`<<>>`/`[[ ]]`/`【】`/交叉引用残渍 | paragraph；内容控件内为 document |
+| `content.empty_paragraphs` | `max_consecutive` | 连续空段落超限 | paragraph |
+| `content.caption_sequence` | `labels` | 图/表题注编号连续 | paragraph |
+| `content.citation_coverage` | — | 引用编号缺号 | paragraph |
+
+容差：页面尺寸 A4 ±1mm、Letter ±0.5mm；尺寸类默认 ±0.05cm；字号默认 ±0.01pt。
+
+## 5. 接口
+
+### 5.1 规则包
+
+```http
+GET    /api/v1/office/word/rulepacks?workspace_path=/ws
+GET    /api/v1/office/word/rulepacks/gb-t-9704-general?workspace_path=/ws
+POST   /api/v1/office/word/rulepacks
+DELETE /api/v1/office/word/rulepacks/<id>?workspace_path=/ws
+```
+
+列表响应：
+
+```json
+{
+  "ok": true,
+  "workspace_path": "/ws",
+  "packs": [
+    {"id": "gb-t-9704-general", "name": "…", "version": "1.0", "origin": "builtin", "rule_count": 5},
+    {"id": "ws-pack", "name": "…", "version": "1.0", "origin": "workspace", "rule_count": 1}
+  ],
+  "warnings": []
+}
+```
+
+保存请求：
+
+```json
+{"workspace_path": "/ws", "pack": {"id": "ws-pack", "name": "…", "rules": [...]}}
+```
+
+### 5.2 审校
+
+```http
+POST /api/v1/office/word/audit
+```
+
+```json
+{
+  "workspace_path": "/ws",
+  "file_path": "/ws/doc.docx",
+  "rulepack_id": "gb-t-9704-general",
+  "rulepack": null,
+  "max_size_bytes": 52428800
+}
+```
+
+`rulepack`（内联）优先于 `rulepack_id`；两者都缺省时使用 `general-quality`。
+
+响应：
+
+```json
+{
+  "ok": false,
+  "source_path": "doc.docx",
+  "rule_pack_id": "gb-t-9704-general",
+  "rule_pack_name": "…",
+  "summary": {"rules_checked": 5, "issue_count": 3, "error_count": 3, "warning_count": 0, "paragraphs": 12, "tables": 0, "sections": 1},
+  "issues": [
+    {
+      "rule_id": "style/body_font",
+      "rule_pack_id": "gb-t-9704-general",
+      "category": "style",
+      "severity": "error",
+      "scope": "style",
+      "message": "样式 Normal 的中文字体实测 未设置，期望 仿宋_GB2312",
+      "expected": "仿宋_GB2312",
+      "actual": "未设置",
+      "fix_hint": "正文样式改为仿宋_GB2312 三号（16pt）",
+      "fixable": true,
+      "source": "GB/T 9704-2012（通用版面参数摘要，不复制标准全文）",
+      "anchor": {"part": "word/document.xml", "paragraph_index": 0, "run_index": null, "char_start": 0, "char_end": 4, "text_hash": "…", "table_index": null, "row": null, "col": null}
+    }
+  ],
+  "warnings": []
+}
+```
+
+`ok` = 无 `error` 级 issue。问题数超过 1000 条时截断并追加 `issues_truncated` warning。
+
+## 6. 定位语义
+
+| scope | anchor |
+|---|---|
+| `paragraph` | 对应段落锚点（段落索引 + 字符范围 + text_hash） |
+| `style` | 该样式的首个使用段落锚点；无使用段落时为 null |
+| `section` / `document` | null（页面/文档级问题） |
+
+M2c 前端可按 `anchor.paragraph_index` 滚动定位并高亮；`text_hash` 用于文档变更后的弱校验。
+
+## 7. 限制（后续）
+
+- 确定性修复与复检（M2b）；
+- 前端 `DocumentAuditPanel`、点击定位/高亮（M2c）；
+- 表格/内容控件级规则、`vMerge` 跨行内容检查；
+- 语义规则（必填章节语义、日期格式、术语一致性）与 LLM 规则抽取（M3/M4）；
+- 内置 GB 包字体名使用常见实现值（`仿宋_GB2312`），字库差异可通过自定义包覆盖。
+
+## 8. 测试
+
+- `backend/tests/unit/office/test_word_rulepack_audit.py`（9）：内置包校验、干净文档通过、
+  页面/样式问题与锚点、标题编号与必含标题、占位符/空段落、题注/引用、样式段落格式、
+  未知 kind/重复 id/坏参数、工作区包 CRUD 与内置保护；
+- `backend/tests/integration/test_office_word_audit_routes.py`（3）：列表/详情/审校、
+  工作区包保存/加载/删除、缺包/坏 kind/超限/越界拒绝；
+- ruff 0.4.4、py38 兼容检查、architecture 门禁通过。

@@ -95,6 +95,7 @@
 | 116  | [本地 OCR](./116-local-ocr.md) | RapidOCR/Tesseract 双引擎 + 聊天兜底/预览编辑 + Office/PDF/Wiki/工具接入 + 配置、性能与 Win7 边界 |
 | 117  | [Word 文档画像](./117-word-document-profile.md) | 只读 DocumentProfile：页面设置 / 样式级联 / 段落与 run 格式 / 编号 / 表格合并 / 书签 / 域 / 锚点；旧 read 契约不变 |
 | 118  | [Word 模板 Profile 与填充](./118-word-template-profile.md) | 内容控件 / 书签 / 占位符 / 图片 / Jinja 统一槽位；页眉页脚；控制流混合渲染；保格式填充、必填校验、residual 检查 |
+| 119  | [Word 规则包与确定性审校](./119-word-rulepack-audit.md) | RulePack/Rule 三层存储 + GB/T 9704 通用参数与通用质量内置包；12 类确定性检查器；带 scope/anchor 的 issue；规则包与审校 REST |
 
 ---
 
