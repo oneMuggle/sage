@@ -15,11 +15,12 @@ import type {
   WordAuditFixResult,
   WordAuditIssue,
   WordAuditResult,
+  WordRevisionResult,
   WordRulePackSummary,
   WordTextAnchor,
 } from '../../shared/api/wordAuditTypes';
 
-import { defaultFixedName } from './wordAuditFilename';
+import { defaultFixedName, defaultRevisedName } from './wordAuditFilename';
 
 const DEFAULT_PACKS: WordRulePackSummary[] = [
   {
@@ -84,6 +85,10 @@ export function DocumentAuditPanel({
   const [fixing, setFixing] = useState(false);
   const [fixError, setFixError] = useState<string | null>(null);
   const [fixResult, setFixResult] = useState<WordAuditFixResult | null>(null);
+  const [revising, setRevising] = useState(false);
+  const [revisionError, setRevisionError] = useState<string | null>(null);
+  const [revisionResult, setRevisionResult] = useState<WordRevisionResult | null>(null);
+  const [addComments, setAddComments] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +118,7 @@ export function DocumentAuditPanel({
       });
       setAudit(result);
       setFixResult(null);
+      setRevisionResult(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -156,6 +162,31 @@ export function DocumentAuditPanel({
 
   const issueTotal = audit?.summary.issue_count ?? 0;
   const canFix = Boolean(audit && issueTotal > 0) && !fixing;
+  const canRevise = Boolean(audit && issueTotal > 0) && !revising;
+
+  const handleRevise = async () => {
+    if (!audit || revising) return;
+    setRevising(true);
+    setRevisionError(null);
+    try {
+      const result = await officeApi.reviseWord({
+        workspace_path: workspacePath,
+        file_path: filePath,
+        rulepack_id: packId,
+        output_filename: defaultRevisedName(filename, filePath),
+        add_comments: addComments,
+      });
+      setRevisionResult(result);
+      if (result.overwritten) {
+        onFixed?.();
+        await runAudit();
+      }
+    } catch (e: unknown) {
+      setRevisionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRevising(false);
+    }
+  };
 
   return (
     <section
@@ -202,6 +233,24 @@ export function DocumentAuditPanel({
           >
             {fixing ? '修复中…' : '一键修复'}
           </button>
+          <button
+            type="button"
+            onClick={() => void handleRevise()}
+            disabled={!canRevise}
+            data-testid="word-audit-revise"
+            className="rounded border border-border px-2 py-1 text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-50"
+          >
+            {revising ? '修订中…' : '生成修订'}
+          </button>
+          <label className="flex items-center gap-1 text-xs text-muted">
+            <input
+              type="checkbox"
+              checked={addComments}
+              onChange={(event) => setAddComments(event.target.checked)}
+              data-testid="word-audit-add-comments"
+            />
+            添加批注
+          </label>
           <label className="flex items-center gap-1 text-xs text-muted">
             <input
               type="checkbox"
@@ -317,6 +366,50 @@ export function DocumentAuditPanel({
           {fixResult.warnings.length > 0 && (
             <ul className="mt-1 text-muted">
               {fixResult.warnings.map((warning, index) => (
+                <li key={`${warning.code}-${index}`}>
+                  {warning.code}: {warning.message}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {revisionError && (
+        <p className="text-xs text-error" data-testid="word-audit-revise-error">
+          {revisionError}
+        </p>
+      )}
+
+      {revisionResult && (
+        <div
+          className="rounded border border-border bg-bg-subtle p-3 text-xs"
+          data-testid="word-audit-revision-result"
+        >
+          <p>
+            已写入 {revisionResult.applied} 项修订，跳过 {revisionResult.skipped} 项
+            {revisionResult.overwritten
+              ? '（已覆盖原文件）'
+              : `，输出 ${revisionResult.output_path}`}
+          </p>
+          {revisionResult.remaining && (
+            <p>
+              复检：{revisionResult.remaining.summary.error_count} 错误 ·{' '}
+              {revisionResult.remaining.summary.warning_count} 警告
+            </p>
+          )}
+          {revisionResult.changes.length > 0 && (
+            <ul className="mt-1 text-muted">
+              {revisionResult.changes.map((change, index) => (
+                <li key={`${change.find}-${index}`}>
+                  {change.applied ? '已修订' : '未处理'}: {change.find} → {change.replace}
+                  {!change.applied && change.reason ? `（${change.reason}）` : ''}
+                </li>
+              ))}
+            </ul>
+          )}
+          {revisionResult.warnings.length > 0 && (
+            <ul className="mt-1 text-muted">
+              {revisionResult.warnings.map((warning, index) => (
                 <li key={`${warning.code}-${index}`}>
                   {warning.code}: {warning.message}
                 </li>

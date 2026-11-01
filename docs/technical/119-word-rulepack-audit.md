@@ -226,11 +226,14 @@ M2c 前端可按 `anchor.paragraph_index` 滚动定位并高亮；`text_hash` �
 - 点击带 `anchor.paragraph_index` 的 issue → 关闭高保真视图，`WordPreview` 滚动到对应段落并高亮；
   锚点超出 300 段渲染窗口时自动扩展窗口；
 - 「一键修复」默认输出 `<stem>-fixed.docx`，勾选「覆盖原文件」时原子覆盖并触发重新读取；
-  展示 `fixed_count`、输出路径、复检计数与逐规则修复数。
+  展示 `fixed_count`、输出路径、复检计数与逐规则修复数；
+- 「生成修订」按当前规则包自动派生 tracked changes（术语/日期），可开关批注；
+  展示 `applied/skipped`、输出路径、逐条 `find → replace` 与复检计数（M4c）。
 
 IPC 命令：`office_word_rulepacks_list` / `office_word_rulepack_get` /
-`office_word_audit` / `office_word_audit_fix`（manifest 由 `npm run ipc:manifest` 生成）。
-audit/fix 使用 `rawBody`，避免规则 `params` 的用户键被 camelCase 改写。
+`office_word_audit` / `office_word_audit_fix` / `office_word_revise`
+（manifest 由 `npm run ipc:manifest` 生成）。audit/fix/revise 使用 `rawBody`，
+避免规则 `params` 的用户键被 camelCase 改写。
 
 ## 8. 限制（后续）
 
@@ -238,7 +241,7 @@ audit/fix 使用 `rawBody`，避免规则 `params` 的用户键被 camelCase 改
 - 原生 docx 渲染视图（docx-preview）中的段落定位（DOM 无稳定段落索引）；
 - 标题编号/题注/引用的自动重排（当前只在审校中报告，不自动修复）；
 - 语义规则已有确定性子集（日期格式/术语表/必备表述）；LLM 语义判断与语义修订（M4）；
-- 原生修订已支持（M4b）；修订视图与逐条接受/拒绝 UI 仍待 M4c；
+- 原生修订已支持（M4b）；修订生成入口已接入审校面板（M4c）；修订 diff/逐条接受拒绝 UI 待后续；
 - 修订只处理段落直接普通 run；超链接/域/表格结构级修订待后续；
 - 确定性规范/范本规则抽取见 [120](./120-word-rule-extraction.md)。
 - 内置 GB 包字体名使用常见实现值（`仿宋_GB2312`），字库差异可通过自定义包覆盖。
@@ -255,8 +258,9 @@ audit/fix 使用 `rawBody`，避免规则 `params` 的用户键被 camelCase 改
   未实现修复器 warning、输出安全、缺文件拒绝；
 - `backend/tests/integration/test_office_word_fix_routes.py`（3）：修复端点输出、
   覆盖幂等、缺包/超限/越界/冲突拒绝；
-- `src/features/office/__tests__/DocumentAuditPanel.test.tsx`（6）：自动审校/过滤/定位回调、
-  规则包切换重跑、默认输出修复、覆盖修复通知父级、错误展示、默认文件名；
+- `src/features/office/__tests__/DocumentAuditPanel.test.tsx`（8）：自动审校/过滤/定位回调、
+  规则包切换重跑、默认输出修复、覆盖修复通知父级、错误展示、默认文件名、
+  生成修订 applied/skipped、批注开关；
 - `src/features/office/__tests__/WordPreview.highlight.test.tsx`（3）：默认不干扰、
   锚点高亮/滚动、超出渲染窗口自动扩展；
 - `backend/tests/unit/office/test_word_semantic_rules.py`（6）：日期主导/允许格式、

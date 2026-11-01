@@ -95,7 +95,7 @@
 | 116  | [本地 OCR](./116-local-ocr.md) | RapidOCR/Tesseract 双引擎 + 聊天兜底/预览编辑 + Office/PDF/Wiki/工具接入 + 配置、性能与 Win7 边界 |
 | 117  | [Word 文档画像](./117-word-document-profile.md) | 只读 DocumentProfile：页面设置 / 样式级联 / 段落与 run 格式 / 编号 / 表格合并 / 书签 / 域 / 锚点；旧 read 契约不变 |
 | 118  | [Word 模板 Profile 与填充](./118-word-template-profile.md) | 内容控件 / 书签 / 占位符 / 图片 / Jinja 统一槽位；页眉页脚；控制流混合渲染；保格式填充、必填校验、residual 检查 |
-| 119  | [Word 规则包、确定性审校与修复](./119-word-rulepack-audit.md) | RulePack/Rule 三层存储 + GB/T 9704 通用参数与通用质量内置包；15 类确定性检查器（含日期格式/术语/必备表述）；带 scope/anchor 的 issue；确定性修复 + 自动复检；原生修订写入（w:ins/w:del + 批注）；`/office` 审校面板与一键修复 |
+| 119  | [Word 规则包、确定性审校与修复](./119-word-rulepack-audit.md) | RulePack/Rule 三层存储 + GB/T 9704 通用参数与通用质量内置包；15 类确定性检查器（含日期格式/术语/必备表述）；带 scope/anchor 的 issue；确定性修复 + 自动复检；原生修订写入（w:ins/w:del + 批注）与前端修订生成入口；`/office` 审校面板与一键修复 |
 | 120  | [Word 规范/范本文档规则抽取](./120-word-rule-extraction.md) | 规范条文与范本主导值 → 候选规则；置信度、来源强制、去重与冲突标记；可选 LLM 语义候选 + 确定性后校验；抽取/保存 REST；`/office` 复核面板 |
 
 ---

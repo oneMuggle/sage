@@ -168,6 +168,28 @@ export const officeRoutes: Record<string, CommandRoute> = {
       pack: a.pack,
     }),
   },
+  // M4c: native tracked revisions (w:ins/w:del + comments). rawBody keeps
+  // explicit change payloads and nested rule-pack params untouched.
+  office_word_revise: {
+    method: 'POST',
+    path: () => '/api/v1/office/word/audit/revise',
+    rawBody: true,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      file_path: a.filePath ?? a.file_path,
+      ...((a.rulepackId ?? a.rulepack_id) ? { rulepack_id: a.rulepackId ?? a.rulepack_id } : {}),
+      ...(Array.isArray(a.changes) ? { changes: a.changes } : {}),
+      ...((a.outputFilename ?? a.output_filename)
+        ? { output_filename: a.outputFilename ?? a.output_filename }
+        : {}),
+      overwrite: Boolean(a.overwrite),
+      author: a.author ?? 'Sage',
+      add_comments: a.addComments ?? a.add_comments ?? true,
+      ...((a.maxSizeBytes ?? a.max_size_bytes)
+        ? { max_size_bytes: a.maxSizeBytes ?? a.max_size_bytes }
+        : {}),
+    }),
+  },
   // Office parity batch 1 (item 1.2): PDF read/generate.
   // Backend: backend/api/office_routes.py:495-508 (POST /pdf/read, POST /pdf/generate).
   // NOTE: PdfReadRequest is extra="forbid" — officeApi.readPdf must send
