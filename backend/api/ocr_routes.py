@@ -21,7 +21,10 @@ from backend.services.ocr import (
 )
 from backend.services.ocr.batch import (
     MAX_BATCH_ITEMS,
+    MAX_PDF_BYTES,
+    MAX_PDF_PAGES,
     decode_batch_images,
+    decode_pdf_data_url,
     get_ocr_batch_service,
 )
 
@@ -29,6 +32,7 @@ router = APIRouter(prefix="/ocr", tags=["ocr"])
 
 #: base64 膨胀后的请求体上限（10MB 原始字节 × 4/3 + data URL 前缀余量）
 _MAX_DATA_URL_CHARS = int(MAX_IMAGE_BYTES * 4 / 3) + 4096
+_MAX_PDF_DATA_URL_CHARS = int(MAX_PDF_BYTES * 4 / 3) + 4096
 
 
 class OcrImageRequest(BaseModel):
@@ -50,6 +54,18 @@ class OcrBatchRequest(BaseModel):
     images: List[str] = Field(description="图片 data URL 列表（最多 20 张）")
     lang: Optional[str] = None
     max_side: Optional[int] = Field(default=None, ge=256, le=8192)
+
+
+class OcrPdfBatchRequest(BaseModel):
+    """PDF 页批处理请求（服务端逐页光栅化）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pdf: str = Field(description="data:application/pdf;base64,... 形式的 PDF")
+    lang: Optional[str] = None
+    max_side: Optional[int] = Field(default=None, ge=256, le=8192)
+    max_pages: int = Field(default=MAX_PDF_PAGES, ge=1, le=MAX_PDF_PAGES)
+
 
 
 @router.get("/capabilities")
@@ -85,6 +101,29 @@ def ocr_batch(payload: OcrBatchRequest) -> dict:
         images, lang=payload.lang or "auto", max_side=payload.max_side
     )
     return {"job_id": job.job_id, "total": job.total}
+
+
+@router.post("/batch/pdf")
+def ocr_batch_pdf(payload: OcrPdfBatchRequest) -> dict:
+    """提交 PDF 页批处理；服务端用 PyMuPDF 逐页光栅化。"""
+    if len(payload.pdf) > _MAX_PDF_DATA_URL_CHARS:
+        raise HTTPException(status_code=413, detail="pdf_too_large")
+    try:
+        pdf_bytes = decode_pdf_data_url(payload.pdf)
+        job = get_ocr_batch_service().submit_pdf(
+            pdf_bytes,
+            lang=payload.lang or "auto",
+            max_side=payload.max_side,
+            max_pages=payload.max_pages,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "job_id": job.job_id,
+        "total": job.total,
+        "pages": job.total,
+        "source": job.source,
+    }
 
 
 @router.get("/batch/{job_id}")
