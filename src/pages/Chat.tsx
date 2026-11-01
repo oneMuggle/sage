@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 import { StepConfirmDialog } from '../components/StepConfirmDialog';
 import type { StepConfirmAction } from '../components/StepConfirmDialog';
+import { useCompactionArchives } from '../entities/chat/compactionArchivesStore';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStore';
 import { useSessionMemoryPause } from '../features/chat/useSessionMemoryPause';
@@ -203,6 +204,15 @@ export function Chat() {
   const workspacePath = useCurrentWorkspace();
   const pendingSentRef = useRef(false);
   const [archivesOpen, setArchivesOpen] = useState(false);
+  // 2026-11-01: CompactBanner 的「查看压缩前原文」通过 store 请求打开归档弹窗。
+  const pendingArchiveSessionId = useCompactionArchives((s) => s.pendingSessionId);
+  useEffect(() => {
+    if (!pendingArchiveSessionId) return;
+    if (pendingArchiveSessionId === currentSessionId) {
+      setArchivesOpen(true);
+      useCompactionArchives.getState().consume();
+    }
+  }, [pendingArchiveSessionId, currentSessionId]);
   const { scrollRef, showScrollToBottom, scrollToLatest } = useChatStickyScroll({
     currentSessionId,
     messages,
@@ -752,7 +762,10 @@ export function Chat() {
       {/* R17-A2: 压缩谱系归档查看器（compact 成功 toast「查看归档」打开） */}
       <ArchivesModal
         isOpen={archivesOpen}
-        onClose={() => setArchivesOpen(false)}
+        onClose={() => {
+          setArchivesOpen(false);
+          useCompactionArchives.getState().consume();
+        }}
         sessionId={currentSessionId}
       />
       {rewindTarget && currentSessionId && (

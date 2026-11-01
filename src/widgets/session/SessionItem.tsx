@@ -266,7 +266,7 @@ export function SessionItem({
         onClick={onSelect}
         onKeyDown={handleKeyDown}
         className={`
-          group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer
+          group relative flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer
           w-full min-w-0 overflow-hidden
           transition-colors focus:outline-none focus:ring-2 focus:ring-primary
           ${isActive ? 'bg-primary/10 text-primary' : 'hover:bg-bg-hover'}
@@ -314,7 +314,9 @@ export function SessionItem({
                 className="flex-1 min-w-0 text-sm font-medium bg-bg-hover border border-primary rounded px-1 py-0 focus:outline-none"
               />
             ) : (
-              <span className="truncate flex-1 min-w-0">{session.title}</span>
+              <span className="truncate flex-1 min-w-0" title={session.title}>
+                {session.title}
+              </span>
             )}
             {/* U4': 双击标题进入 inline 重命名 */}
             {onRename && !renaming && (
@@ -493,8 +495,9 @@ export function SessionItem({
           )}
         </div>
 
-        {/* 操作按钮 */}
-        <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* 操作按钮：绝对定位悬浮层，不占用标题宽度（窄侧栏不再把标题压成 1–2 字）。
+            hover / 键盘 focus 时显现；点击区域固定，避免布局位移。 */}
+        <div className="absolute right-1 top-1 flex items-center gap-0.5 rounded-md bg-bg/95 px-0.5 shadow-sm opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
           {onUnarchive && (
             <button
               data-testid="unarchive-session"

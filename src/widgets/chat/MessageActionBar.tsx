@@ -262,7 +262,7 @@ export function MessageActionBar({
             className={
               moreOpen
                 ? 'flex items-center gap-1'
-                : 'hidden group-hover/msg-actions:flex items-center gap-1'
+                : 'invisible flex items-center gap-1 opacity-0 pointer-events-none transition-opacity group-hover/msg-actions:visible group-hover/msg-actions:opacity-100 group-hover/msg-actions:pointer-events-auto group-focus-within/msg-actions:visible group-focus-within/msg-actions:opacity-100 group-focus-within/msg-actions:pointer-events-auto'
             }
             data-testid="message-secondary-actions"
           >
@@ -312,9 +312,7 @@ export function MessageActionBar({
         </>
       )}
 
-      {isAssistant && !isStreaming && (
-        <GenerationStatsBadge stats={message.generation_stats} />
-      )}
+      {isAssistant && !isStreaming && <GenerationStatsBadge stats={message.generation_stats} />}
       <span
         role="status"
         data-testid="message-action-bar-copy-audit"

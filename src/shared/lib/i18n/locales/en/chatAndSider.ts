@@ -236,6 +236,7 @@ export const enChatAndSider = {
   // LOW-1: unified phrasing — "before → after messages (removed merged into summary)"
   'chat.compact_success':
     'Context compacted: {before} → {after} messages ({removed} merged into summary)',
+  'chat.compact_view_archives': 'View original messages',
   'chat.compact_skipped': 'Conversation too short to compact',
   'chat.compact_failed': 'Compaction failed: {message}',
   'chat.fork_from_here': 'Fork from here',
