@@ -56,3 +56,27 @@
 - 保存不触发 400（canonicalizer 白名单/别名齐全）；
 - 修改后新 run 的初始预算/上限按设置生效；env 覆盖仍优先；
 - 既有测试全绿。
+
+## 6. 追加：委派子代理接入动态预算（2026-11-01）
+
+- `run_loop` 新增 `dynamic_budget: Optional[bool]` 与
+  `initial_iteration_budget: Optional[int]`：
+  - `True` 强制启用动态预算（即使全局 `max_iterations` 是用户自定义值）；
+  - `False` 强制关闭；
+  - `initial_iteration_budget` 作为初始步数（委派子代理用
+    `max_subagent_iterations` 作为起点）。
+- `agent_tool` 通过能力探测（`run_loop_accepts_dynamic_budget`）优先传
+  `dynamic_budget=True + initial_iteration_budget`；旧测试替身回退
+  `max_iterations`。
+- `SubagentEventSink` 新增 `PHASE_BUDGET_EXTENDED` 投影：子代理自动延长时，
+  任务树/聊天镜像收到 `budget_extended` 事件（含 `budget_info` 与
+  `live_step`），父级可感知。
+- 测试：run_loop 强制动态 + 初始预算；subagent_event 投影。
+
+### 验证（追加）
+
+- pytest：`test_iteration_budget` + `test_agent_tool` + `test_subagent_events`
+  + `test_subagent_runner` + `test_agent_run_loop` + `test_orch_settings`
+  → **134 passed**；
+- `ruff check` 改动后端文件通过；py38 兼容 0 violations；
+- `architecture-check` 通过（agent.py ratchet 至 3427）。

@@ -708,13 +708,20 @@ class AgentTool(BaseTool):
             # subagent_runner 顶层 import SageAgent（反向依赖 backend.tools），
             # 模块顶层导入会成环。
             from backend.orchestration.subagent_runner import (
+                run_loop_accepts_dynamic_budget,
                 run_loop_accepts_session_id,
             )
 
             subagent_iterations = _resolve_subagent_iterations()
-            run_kwargs: Dict[str, Any] = {
-                "max_iterations": subagent_iterations
-            }
+            run_kwargs: Dict[str, Any] = {}
+            if run_loop_accepts_dynamic_budget(subagent):
+                # 2026-11-01: 委派子代理接入动态预算 —— 以
+                # max_subagent_iterations 为初始预算，卡死检测 / 自动延长
+                # 与主 agent 同源（不再到点直接失败）。
+                run_kwargs["dynamic_budget"] = True
+                run_kwargs["initial_iteration_budget"] = subagent_iterations
+            else:
+                run_kwargs["max_iterations"] = subagent_iterations
             if session_id and run_loop_accepts_session_id(subagent):
                 run_kwargs["session_id"] = session_id
             async for event in subagent.run_loop(messages, **run_kwargs):

@@ -1631,6 +1631,8 @@ class SageAgent:
         max_iterations: Optional[int] = None,
         llm_config: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
+        dynamic_budget: Optional[bool] = None,
+        initial_iteration_budget: Optional[int] = None,
     ):
         """ReAct 主循环。
 
@@ -1646,6 +1648,11 @@ class SageAgent:
                 如果同时存在 self.llm_client,会临时覆盖并在循环结束后恢复。
             session_id: 可选的会话归因 (L8, 批次 C) —— 注入 llm_client 供
                 usage_tracker 落库 usage_events;None 时用量记为 unattributed。
+            dynamic_budget: 显式覆盖动态预算开关。True = 强制启用（即使全局
+                max_iterations 被用户自定义）；False = 强制关闭。
+                None = 按设置页/env 默认。
+            initial_iteration_budget: 动态预算的初始步数覆盖（如委派子代理
+                使用 ``max_subagent_iterations`` 作为起点）。仅 dynamic 生效时使用。
 
         Yields:
             AgentEvent:状态机事件,前端通过流式响应(NDJSON)接收。每个事件携带
@@ -1700,8 +1707,10 @@ class SageAgent:
         except Exception:  # noqa: BLE001 — settings 读取失败回落 env/默认
             _orch_settings = None
         _budget_config = BudgetConfig.from_settings(_orch_settings)
-        _dynamic_budget_enabled = _dynamic_budget_env_enabled and bool(
-            getattr(_orch_settings, "dynamic_budget_enabled", True)
+        _dynamic_budget_enabled = (
+            dynamic_budget is not False
+            and _dynamic_budget_env_enabled
+            and bool(getattr(_orch_settings, "dynamic_budget_enabled", True))
         )
         _budget_level: BudgetLevel = "medium"
         _dynamic_budget_active = False
@@ -1726,7 +1735,7 @@ class SageAgent:
         _profile_id = ""
         if isinstance(self.profile, dict):
             _profile_id = str(self.profile.get("id") or "")
-        if max_iterations is not None:
+        if max_iterations is not None and dynamic_budget is not True:
             effective_max_iterations = max_iterations
             _limit_source = "explicit"
         else:
@@ -1736,29 +1745,43 @@ class SageAgent:
                 else None
             )
 
-            if _dynamic_budget_enabled and _orch_settings_max == DEFAULT_ORCH_MAX_ITERATIONS:
-                # OrchSettings 的默认值（25）= 用户未显式配置迭代上限 →
-                # 按任务分级给初始预算，到检查点再按进度自动延长。
-                _user_message = ""
-                for _m in reversed(messages):
-                    if (
-                        isinstance(_m, dict)
-                        and _m.get("role") == "user"
-                        and isinstance(_m.get("content"), str)
-                    ):
-                        _user_message = _m["content"]
-                        break
-                _has_attachments = any(
-                    isinstance(_m.get("content"), (list, dict))  # noqa: UP038 — py3.8 兼容
-                    for _m in messages
-                    if isinstance(_m, dict)
-                )
-                effective_max_iterations, _budget_level = estimate_initial_budget(
-                    _user_message,
-                    has_attachments=_has_attachments,
-                    profile_floor=_profile_max_iterations,
-                    config=_budget_config,
-                )
+            _force_dynamic = dynamic_budget is True
+            if _force_dynamic or (
+                _dynamic_budget_enabled
+                and _orch_settings_max == DEFAULT_ORCH_MAX_ITERATIONS
+            ):
+                if (
+                    isinstance(initial_iteration_budget, int)
+                    and not isinstance(initial_iteration_budget, bool)
+                    and initial_iteration_budget > 0
+                ):
+                    effective_max_iterations = min(
+                        int(initial_iteration_budget), _budget_config.hard_cap
+                    )
+                    _budget_level = "medium"
+                else:
+                    # OrchSettings 的默认值（25）= 用户未显式配置迭代上限 →
+                    # 按任务分级给初始预算，到检查点再按进度自动延长。
+                    _user_message = ""
+                    for _m in reversed(messages):
+                        if (
+                            isinstance(_m, dict)
+                            and _m.get("role") == "user"
+                            and isinstance(_m.get("content"), str)
+                        ):
+                            _user_message = _m["content"]
+                            break
+                    _has_attachments = any(
+                        isinstance(_m.get("content"), (list, dict))  # noqa: UP038 — py3.8 兼容
+                        for _m in messages
+                        if isinstance(_m, dict)
+                    )
+                    effective_max_iterations, _budget_level = estimate_initial_budget(
+                        _user_message,
+                        has_attachments=_has_attachments,
+                        profile_floor=_profile_max_iterations,
+                        config=_budget_config,
+                    )
                 _dynamic_budget_active = True
                 _limit_source = "dynamic"
             elif _orch_settings_max is not None and _orch_settings_max > 0:

@@ -404,3 +404,38 @@ async def test_run_loop_respects_settings_toggle_off():
 
     assert AgentState.ITERATION_CHECKPOINT not in [e.state for e in events]
     assert AgentState.DONE in [e.state for e in events]
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_force_dynamic_with_initial_budget():
+    """委派子代理：dynamic_budget=True + initial_iteration_budget 强制启用
+    动态预算（即使全局 max_iterations 是用户自定义值）。"""
+    settings = SimpleNamespace(max_iterations=7, dynamic_budget_enabled=True)
+    agent = _make_agent(
+        [
+            _tool_response("a"),
+            _tool_response("b"),
+            _text_response("完成"),
+        ]
+    )
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=settings,
+    ):
+        events = [
+            evt
+            async for evt in agent.run_loop(
+                [{"role": "user", "content": "hi"}],
+                dynamic_budget=True,
+                initial_iteration_budget=2,
+            )
+        ]
+
+    checkpoint = next(
+        (e for e in events if e.state == AgentState.ITERATION_CHECKPOINT), None
+    )
+    assert checkpoint is not None
+    assert checkpoint.budget_info is not None
+    assert checkpoint.budget_info["previous_budget"] == 2
+    assert AgentState.DONE in [e.state for e in events]
+    assert AgentState.FAILED not in [e.state for e in events]
