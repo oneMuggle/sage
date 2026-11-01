@@ -6,6 +6,7 @@
  * sprite jump while the new frame was being painted on XWayland.
  */
 import { useCallback, useEffect, useState } from 'react';
+
 import type { PetConfigBridge, PetSnapshotBridge } from '../shared/types/electron-api';
 
 import { PetPanel } from './PetPanel';
