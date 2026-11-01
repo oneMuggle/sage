@@ -298,6 +298,9 @@ export type AgentState =
   // 前端据此把当前 streaming 气泡快照为已完成 step + 准备下一步占位。
   // win7: 后端已同步 main 的 step-by-step 落库(AgentState.STEP_DONE + 事件产出)。
   | 'step_done'
+  // 2026-10-31: 动态迭代预算检查点 — 到达软预算且进度审计判定仍在推进时,
+  // 后端自动提高上限并推送 budget_info（已延长次数 / 新上限 / 审计信号）。
+  | 'iteration_checkpoint'
   // Multi-Agent Orchestration (2026-08-11)
   | 'task_plan'
   | 'task_status'
@@ -683,6 +686,17 @@ export interface AgentEvent {
   // 2026-10-28: Plan Mode 增强 Phase 3 — 步骤确认卡点。
   // state === 'awaiting_step_confirm' 时携带的步骤信息。
   step_confirm?: import('./planModeTypes').StepConfirmInfo;
+  // 2026-10-31: 动态迭代预算检查点载荷。
+  // state === 'iteration_checkpoint' 时携带已延长的预算与审计信号。
+  budget_info?: {
+    level?: string;
+    previous_budget?: number;
+    next_budget?: number;
+    extensions?: number;
+    stuck_score?: number;
+    progress_signals?: number;
+    reasons?: string[];
+  };
   // Multi-Agent Orchestration (2026-08-11): 宽松字段（与 llmStream.ts AgentEvent 同步）
   run_id?: string;
   plan?: TaskPlanItem[];
