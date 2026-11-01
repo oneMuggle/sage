@@ -6,7 +6,6 @@
  * sprite jump while the new frame was being painted on XWayland.
  */
 import { useCallback, useEffect, useState } from 'react';
-
 import type { PetConfigBridge, PetSnapshotBridge } from '../shared/types/electron-api';
 
 import { PetPanel } from './PetPanel';
@@ -37,14 +36,6 @@ export function PetPanelApp(): JSX.Element {
       offState();
       offConfig();
     };
-  }, [pet]);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') pet?.setPanel(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
   }, [pet]);
 
   const closePanel = useCallback(() => {

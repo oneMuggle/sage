@@ -14,6 +14,7 @@ import type { PetRenderConfig } from '../pet/types';
 import { PetWindow } from '../pet/windows';
 
 interface FakeWindow {
+  options: unknown;
   setIgnoreMouseEvents: ReturnType<typeof vi.fn>;
   setBounds: ReturnType<typeof vi.fn>;
   setSize: ReturnType<typeof vi.fn>;
@@ -28,6 +29,7 @@ const { fakeWindows } = vi.hoisted(() => ({ fakeWindows: [] as unknown[] }));
 
 vi.mock('electron', () => {
   class FakeBrowserWindow {
+    options: unknown;
     webContents = { setWindowOpenHandler: vi.fn(), on: vi.fn(), send: vi.fn() };
     setAlwaysOnTop = vi.fn();
     on = vi.fn();
@@ -48,7 +50,8 @@ vi.mock('electron', () => {
     destroy = vi.fn();
     isDestroyed = vi.fn(() => false);
 
-    constructor() {
+    constructor(options: unknown) {
+      this.options = options;
       fakeWindows.push(this);
     }
   }
@@ -177,6 +180,10 @@ describe('PetWindow status panel (separate window)', () => {
       false,
     );
     expect(panel.showInactive).toHaveBeenCalled();
+    // focusable:false keeps the panel out of the WM's management on X11, so
+    // it stays above normal windows exactly like the overlay.
+    const panelOptions = (panel as unknown as { options: { focusable?: boolean } }).options;
+    expect(panelOptions.focusable).toBe(false);
     // The overlay must stay put — moving/resizing it made the sprite jump.
     expect(win.setBounds).not.toHaveBeenCalled();
     expect(win.setSize).not.toHaveBeenCalled();
