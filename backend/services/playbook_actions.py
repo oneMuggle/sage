@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 MAX_ACTIONS_PER_APPLY = 50
 MAX_RULES_PER_ACTION = 30
 MAX_MILESTONES_PER_ACTION = 30
+MAX_MOVE_BATCH = 30
 MAX_STAGE_HISTORY = 100
 
 
@@ -249,6 +250,84 @@ def _move_file(root: Path, payload: Dict[str, Any]) -> str:
     return "applied"
 
 
+def _relative_text(value: Any) -> str:
+    text = str(value if value is not None else "").strip().replace("\\", "/")
+    while text.startswith("./"):
+        text = text[2:]
+    return text.strip("/")
+
+
+def _plan_moves(root: Path, moves: Any) -> List[Dict[str, Any]]:
+    if not isinstance(moves, list) or not moves:
+        raise ValueError("batch_move 需要 moves 数组")
+    if len(moves) > MAX_MOVE_BATCH:
+        raise ValueError(f"单次最多批量移动 {MAX_MOVE_BATCH} 个文件")
+    planned: List[Dict[str, Any]] = []
+    sources: set = set()
+    targets: set = set()
+    for item in moves:
+        if not isinstance(item, dict):
+            raise ValueError("moves 项必须是对象")
+        from_text = _relative_text(item.get("from"))
+        to_text = _relative_text(item.get("to"))
+        source = _safe_target(root, from_text)
+        target = _safe_target(root, to_text)
+        if not source.is_file():
+            raise ValueError("源文件不存在: " + from_text)
+        if target.exists():
+            raise ValueError("目标文件已存在: " + to_text)
+        if from_text in sources or from_text in targets:
+            raise ValueError("同一文件在批次中出现多次: " + from_text)
+        if to_text in targets or to_text in sources:
+            raise ValueError("批次内存在链式移动，请分开执行: " + to_text)
+        sources.add(from_text)
+        targets.add(to_text)
+        planned.append({"source": source, "target": target, "from": from_text, "to": to_text})
+    return planned
+
+
+def _batch_move(project: Any, root: Path, payload: Dict[str, Any]) -> str:
+    planned = _plan_moves(root, payload.get("moves"))
+    done: List[Dict[str, str]] = []
+    for item in planned:
+        item["target"].parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(item["source"]), str(item["target"]))
+        done.append({"from": item["from"], "to": item["to"]})
+    repo = PlaybookRepository()
+    state = repo.get_state(project.id)
+    state["last_move_batch"] = {"at": int(time.time() * 1000), "moves": done}
+    repo.update_state(project.id, state)
+    return "applied"
+
+
+def _undo_last_batch_move(project: Any, root: Path) -> str:
+    repo = PlaybookRepository()
+    state = repo.get_state(project.id)
+    batch = state.get("last_move_batch")
+    moves = batch.get("moves") if isinstance(batch, dict) else None
+    if not isinstance(moves, list) or not moves:
+        raise ValueError("没有可撤销的批量移动")
+    planned: List[Dict[str, Any]] = []
+    for item in reversed(moves):
+        if not isinstance(item, dict):
+            continue
+        current = _safe_target(root, item.get("to"))
+        original = _safe_target(root, item.get("from"))
+        if not current.is_file():
+            raise ValueError("撤销失败，文件已不在移动后的位置: " + str(item.get("to")))
+        if original.exists():
+            raise ValueError("撤销失败，原位置已有同名文件: " + str(item.get("from")))
+        planned.append({"current": current, "original": original})
+    if not planned:
+        raise ValueError("没有可撤销的批量移动")
+    for item in planned:
+        item["original"].parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(item["current"]), str(item["original"]))
+    state.pop("last_move_batch", None)
+    repo.update_state(project.id, state)
+    return "applied"
+
+
 def apply_playbook_actions(project: Any, actions: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Execute a user-approved action list.
 
@@ -303,6 +382,10 @@ def apply_playbook_actions(project: Any, actions: List[Dict[str, Any]]) -> Dict[
                 outcome = _add_todo(project, payload)
             elif action_type == "move_file":
                 outcome = _move_file(root, payload)
+            elif action_type == "batch_move":
+                outcome = _batch_move(project, root, payload)
+            elif action_type == "undo_last_batch_move":
+                outcome = _undo_last_batch_move(project, root)
             else:
                 errors.append({"item": action_type or "unknown", "message": "不支持的动作类型"})
                 continue

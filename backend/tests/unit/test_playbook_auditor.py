@@ -126,3 +126,37 @@ def test_required_when_condition_controls_required(tmp_path: Path) -> None:
     ethics = next(item for item in proposal["artifacts"] if item["id"] == "ethics_approval")
     assert ethics["required"] is True
     assert ethics["status"] == "missing"
+
+
+def test_unclassified_document_gets_destination_suggestion(tmp_path: Path) -> None:
+    root = _make_research_project(tmp_path)
+    (root / "论文初稿.docx").write_bytes(b"x" * 32)
+    (root / "随手笔记.md").write_text("随手记录", encoding="utf-8")
+
+    result = audit_playbook(_project(root), get_builtin("cn-research-grant"))
+    by_path = {item["path"]: item for item in result["unclassified_files"]}
+
+    assert by_path["论文初稿.docx"]["suggested_to"] == "03_成果/论文初稿.docx"
+    assert by_path["论文初稿.docx"]["confidence"] >= 0.5
+    assert "论文" in by_path["论文初稿.docx"]["reason"]
+    # Files already matched by an artifact glob, or without a keyword signal,
+    # must not be reported as unclassified.
+    assert "01_开题/开题报告.md" not in by_path
+    assert "随手笔记.md" not in by_path
+
+
+def test_undo_available_reflects_last_batch_move(tmp_path: Path) -> None:
+    root = _make_research_project(tmp_path)
+    spec = get_builtin("cn-research-grant")
+    plain = audit_playbook(_project(root), spec)
+    assert plain["undo_available"] is None
+
+    state = {
+        "last_move_batch": {
+            "at": 1793500000000,
+            "moves": [{"from": "a.md", "to": "01_开题/a.md"}],
+        }
+    }
+    with_batch = audit_playbook(_project(root), spec, state=state)
+    assert with_batch["undo_available"] == {"at": 1793500000000, "count": 1}
+
