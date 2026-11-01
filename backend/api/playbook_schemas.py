@@ -59,6 +59,13 @@ class PlaybookLibraryResponse(BaseModel):
     items: List[PlaybookLibraryItemModel] = Field(default_factory=list)
 
 
+class PlaybookLibraryDetailResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item: PlaybookLibraryItemModel
+    playbook: Dict[str, Any]
+
+
 class PlaybookLibrarySaveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -218,6 +225,7 @@ __all__ = [
     "PlaybookImportPreviewResponse",
     "PlaybookImportRequest",
     "PlaybookLibraryItemModel",
+    "PlaybookLibraryDetailResponse",
     "PlaybookLibraryResponse",
     "PlaybookLibrarySaveRequest",
     "PlaybookLibrarySaveResponse",

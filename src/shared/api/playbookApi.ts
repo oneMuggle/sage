@@ -228,6 +228,42 @@ export interface PlaybookStatePatch {
   conditions?: Record<string, unknown>;
 }
 
+export interface PlaybookStageDiffItem {
+  id: string;
+  label: string;
+  fields?: string[];
+}
+
+export interface PlaybookStageDiff {
+  label: string;
+  changed_fields: string[];
+  artifacts_added: PlaybookStageDiffItem[];
+  artifacts_removed: PlaybookStageDiffItem[];
+  artifacts_changed: PlaybookStageDiffItem[];
+  rules_added: string[];
+  rules_removed: string[];
+  milestones_added: string[];
+  milestones_removed: string[];
+  criteria_added: PlaybookStageDiffItem[];
+  criteria_removed: PlaybookStageDiffItem[];
+  criteria_changed: PlaybookStageDiffItem[];
+  has_changes: boolean;
+}
+
+export interface PlaybookDiff {
+  stages_added: string[];
+  stages_removed: string[];
+  stages_changed: string[];
+  directories_added: string[];
+  directories_removed: string[];
+  directories_changed: string[];
+  name_changed: boolean;
+  description_changed: boolean;
+  global_rules_added: string[];
+  global_rules_removed: string[];
+  stage_details?: Record<string, PlaybookStageDiff>;
+}
+
 export interface PlaybookImportPreview {
   playbook: PlaybookSpec;
   scaffold: {
@@ -235,7 +271,12 @@ export interface PlaybookImportPreview {
     directories: string[];
     documents: Array<Record<string, unknown>>;
   };
-  diff: Record<string, unknown>;
+  diff: PlaybookDiff;
+}
+
+export interface PlaybookLibraryDetail {
+  item: PlaybookLibraryItem;
+  playbook: PlaybookSpec;
 }
 
 export interface PlaybookAuthorPreview {
@@ -396,5 +437,16 @@ export const playbookApi = {
 
   async deleteLibrary(libraryId: string): Promise<void> {
     await invoke<{ removed: boolean }>('playbooks_library_delete', { libraryId });
+  },
+
+  async getLibraryItem(libraryId: string): Promise<PlaybookLibraryDetail> {
+    return invoke<PlaybookLibraryDetail>('playbooks_library_get', { libraryId });
+  },
+
+  async exportLibrary(libraryId: string, includeScaffold = true): Promise<PlaybookExportResult> {
+    return invoke<PlaybookExportResult>('playbooks_library_export', {
+      libraryId,
+      includeScaffold,
+    });
   },
 };
