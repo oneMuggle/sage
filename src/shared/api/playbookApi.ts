@@ -131,6 +131,27 @@ export interface PlaybookStageAudit {
   }>;
 }
 
+export interface PlaybookClassificationSuggestion {
+  from: string;
+  to: string;
+  artifact_id: string;
+  label: string;
+  stage_id: string;
+  reason: string;
+}
+
+export interface PlaybookUnclassifiedFile {
+  path: string;
+  suggested_to: string;
+  confidence: number;
+  reason: string;
+}
+
+export interface PlaybookMove {
+  from: string;
+  to: string;
+}
+
 export interface PlaybookAudit {
   playbook: { id?: string; name?: string };
   current_stage: string | null;
@@ -140,14 +161,9 @@ export interface PlaybookAudit {
     evidence: string[];
   };
   stages: PlaybookStageAudit[];
-  classification_suggestions: Array<{
-    from: string;
-    to: string;
-    artifact_id: string;
-    label: string;
-    stage_id: string;
-    reason: string;
-  }>;
+  classification_suggestions: PlaybookClassificationSuggestion[];
+  unclassified_files: PlaybookUnclassifiedFile[];
+  undo_available: { at: number; count: number } | null;
   overall: {
     required_total: number;
     required_done: number;
@@ -313,10 +329,7 @@ export const playbookApi = {
     return invoke<PlaybookWikiExportResult>('playbook_wiki_export', { projectId });
   },
 
-  async updateState(
-    projectId: string,
-    patch: PlaybookStatePatch,
-  ): Promise<PlaybookCurrent> {
+  async updateState(projectId: string, patch: PlaybookStatePatch): Promise<PlaybookCurrent> {
     return invoke<PlaybookCurrent>('playbook_state_update', {
       projectId,
       ...patch,
@@ -328,10 +341,9 @@ export const playbookApi = {
   },
 
   async listVersions(projectId: string): Promise<PlaybookVersion[]> {
-    const response = await invoke<{ versions: PlaybookVersion[] }>(
-      'playbook_versions',
-      { projectId },
-    );
+    const response = await invoke<{ versions: PlaybookVersion[] }>('playbook_versions', {
+      projectId,
+    });
     return response.versions ?? [];
   },
 
@@ -367,9 +379,7 @@ export const playbookApi = {
   },
 
   async listLibrary(): Promise<PlaybookLibraryItem[]> {
-    const response = await invoke<{ items: PlaybookLibraryItem[] }>(
-      'playbooks_library_list',
-    );
+    const response = await invoke<{ items: PlaybookLibraryItem[] }>('playbooks_library_list');
     return response.items ?? [];
   },
 
@@ -377,10 +387,10 @@ export const playbookApi = {
     envelope: Record<string, unknown>,
     source = 'imported',
   ): Promise<PlaybookLibraryItem> {
-    const response = await invoke<{ item: PlaybookLibraryItem }>(
-      'playbooks_library_save',
-      { envelope, source },
-    );
+    const response = await invoke<{ item: PlaybookLibraryItem }>('playbooks_library_save', {
+      envelope,
+      source,
+    });
     return response.item;
   },
 

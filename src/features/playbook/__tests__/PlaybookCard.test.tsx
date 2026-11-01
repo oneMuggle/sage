@@ -327,6 +327,70 @@ describe('PlaybookCard', () => {
     );
   });
 
+  it('未知文件可勾选后批量移动', async () => {
+    const auditWithUnknown = {
+      ...audit,
+      unclassified_files: [
+        {
+          path: '论文初稿.docx',
+          suggested_to: '03_成果/论文初稿.docx',
+          confidence: 0.83,
+          reason: '文件名包含「论文」',
+        },
+      ],
+      undo_available: null,
+    };
+    getCurrentMock.mockResolvedValue({ ...bound, audit: auditWithUnknown as never });
+    applyActionsMock.mockResolvedValue({
+      applied: ['batch_move'],
+      skipped: [],
+      errors: [],
+      checkpoint_created: true,
+      audit: auditWithUnknown,
+    });
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-unclassified');
+    fireEvent.click(screen.getByTestId('playbook-select-all'));
+    fireEvent.click(screen.getByTestId('playbook-batch-move'));
+    await waitFor(() =>
+      expect(applyActionsMock).toHaveBeenCalledWith('p1', [
+        {
+          type: 'batch_move',
+          payload: {
+            moves: [
+              { from: '开题报告.md', to: '01_开题/开题报告.md' },
+              { from: '论文初稿.docx', to: '03_成果/论文初稿.docx' },
+            ],
+          },
+        },
+      ]),
+    );
+  });
+
+  it('可撤销上次批量移动', async () => {
+    const auditWithUndo = {
+      ...audit,
+      unclassified_files: [],
+      undo_available: { at: 1793500000000, count: 1 },
+    };
+    getCurrentMock.mockResolvedValue({ ...bound, audit: auditWithUndo as never });
+    applyActionsMock.mockResolvedValue({
+      applied: ['undo_last_batch_move'],
+      skipped: [],
+      errors: [],
+      checkpoint_created: true,
+      audit: { ...auditWithUndo, undo_available: null },
+    });
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-undo-batch');
+    fireEvent.click(screen.getByTestId('playbook-undo-batch'));
+    await waitFor(() =>
+      expect(applyActionsMock).toHaveBeenCalledWith('p1', [
+        { type: 'undo_last_batch_move', payload: {} },
+      ]),
+    );
+  });
+
   it('可编辑规程 JSON 并保存为新版本', async () => {
     getCurrentMock.mockResolvedValue(bound);
     bindMock.mockResolvedValue({ ...bound, version: 2 });
@@ -390,9 +454,7 @@ describe('PlaybookCard', () => {
         spec: expect.objectContaining({
           stages: expect.arrayContaining([
             expect.objectContaining({
-              rules: expect.arrayContaining([
-                expect.objectContaining({ content: '禁止编造引用' }),
-              ]),
+              rules: expect.arrayContaining([expect.objectContaining({ content: '禁止编造引用' })]),
               exit_criteria: expect.arrayContaining([
                 expect.objectContaining({ label: '文献矩阵已完成', type: 'manual' }),
               ]),
@@ -439,7 +501,13 @@ describe('PlaybookCard', () => {
   it('版本历史可展开', async () => {
     getCurrentMock.mockResolvedValue(bound);
     versionsMock.mockResolvedValue([
-      { version: 1, source: 'builtin:cn-research-grant', spec_hash: 'a', created_at: 1, active: true },
+      {
+        version: 1,
+        source: 'builtin:cn-research-grant',
+        spec_hash: 'a',
+        created_at: 1,
+        active: true,
+      },
     ]);
     render(<PlaybookCard projectId="p1" />);
     await screen.findByTestId('playbook-versions-btn');
@@ -507,9 +575,7 @@ describe('PlaybookCard', () => {
     const select = await screen.findByLabelText('选择项目规程');
     fireEvent.change(select, { target: { value: 'library:lib-1' } });
     fireEvent.click(screen.getByTestId('playbook-bind-btn'));
-    await waitFor(() =>
-      expect(bindMock).toHaveBeenCalledWith('p1', { libraryId: 'lib-1' }),
-    );
+    await waitFor(() => expect(bindMock).toHaveBeenCalledWith('p1', { libraryId: 'lib-1' }));
   });
 
   it('可把当前规程保存到规程库', async () => {
@@ -524,10 +590,7 @@ describe('PlaybookCard', () => {
     await screen.findByTestId('playbook-save-library');
     fireEvent.click(screen.getByTestId('playbook-save-library'));
     await waitFor(() =>
-      expect(saveLibraryMock).toHaveBeenCalledWith(
-        { format: 'sage.playbook' },
-        'project',
-      ),
+      expect(saveLibraryMock).toHaveBeenCalledWith({ format: 'sage.playbook' }, 'project'),
     );
   });
 });

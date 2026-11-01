@@ -23,6 +23,7 @@ import type {
   PlaybookCurrent,
   PlaybookImportPreview,
   PlaybookLibraryItem,
+  PlaybookMove,
   PlaybookSpec,
   PlaybookSummary,
   PlaybookVersion,
@@ -31,6 +32,7 @@ import { Button } from '../../shared/ui/Button';
 
 import { PlaybookAuthorPanel } from './PlaybookAuthorPanel';
 import { PlaybookChecklist } from './PlaybookChecklist';
+import { PlaybookClassificationPanel } from './PlaybookClassificationPanel';
 import { PlaybookImportPreviewCard } from './PlaybookImportPreviewCard';
 import { PlaybookSpecEditor } from './PlaybookSpecEditor';
 
@@ -160,6 +162,35 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       setNotice(result.applied.length ? '已执行：' + result.applied.join('、') : '项目已是最新');
     });
 
+  const handleBatchMove = (moves: PlaybookMove[]) =>
+    run('batch-move', async () => {
+      if (!moves.length) return;
+      const result = await playbookApi.applyActions(projectId, [
+        { type: 'batch_move', payload: { moves } },
+      ]);
+      if (result.errors.length) {
+        setError(result.errors.map((item) => item.message).join('；'));
+        return;
+      }
+      setCurrent((prev) => (prev ? { ...prev, audit: result.audit ?? prev.audit } : prev));
+      if (!result.audit) await refresh();
+      setNotice(`已批量移动 ${moves.length} 个文件（可撤销）`);
+    });
+
+  const handleUndoBatch = () =>
+    run('undo-batch', async () => {
+      const result = await playbookApi.applyActions(projectId, [
+        { type: 'undo_last_batch_move', payload: {} },
+      ]);
+      if (result.errors.length) {
+        setError(result.errors.map((item) => item.message).join('；'));
+        return;
+      }
+      setCurrent((prev) => (prev ? { ...prev, audit: result.audit ?? prev.audit } : prev));
+      if (!result.audit) await refresh();
+      setNotice('已撤销上次批量移动');
+    });
+
   const handleConfirmStage = (stageId: string) =>
     run('stage', async () => {
       const data = await playbookApi.confirmStage(projectId, stageId);
@@ -216,9 +247,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const handleWikiExport = () =>
     run('wiki-export', async () => {
       const result = await playbookApi.exportToWiki(projectId);
-      setNotice(
-        (result.created ? '已写入 Wiki：' : '已更新 Wiki：') + result.path,
-      );
+      setNotice((result.created ? '已写入 Wiki：' : '已更新 Wiki：') + result.path);
     });
 
   const handleSaveToLibrary = () =>
@@ -243,9 +272,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const handleManualDone = (stageId: string, criterionId: string) =>
     run('manual-done', async () => {
       const key = `${stageId}.${criterionId}`;
-      const manualDone = Array.from(
-        new Set([...(current?.state.manual_done ?? []), key]),
-      );
+      const manualDone = Array.from(new Set([...(current?.state.manual_done ?? []), key]));
       const data = await playbookApi.updateState(projectId, {
         manual_done: manualDone,
       });
@@ -688,17 +715,25 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       )}
 
       {!compact && (
-        <PlaybookChecklist
-          stage={currentStage}
-          classification={audit?.classification_suggestions ?? []}
-          busy={busy}
-          playbookName={current.playbook?.name ?? ''}
-          onAction={(action) => void handleAction(action)}
-          onWaive={(stageId, artifactId) => void handleWaive(stageId, artifactId)}
-          onManualDone={(stageId, criterionId) =>
-            void handleManualDone(stageId, criterionId)
-          }
-        />
+        <>
+          <PlaybookChecklist
+            stage={currentStage}
+            busy={busy}
+            playbookName={current.playbook?.name ?? ''}
+            onAction={(action) => void handleAction(action)}
+            onWaive={(stageId, artifactId) => void handleWaive(stageId, artifactId)}
+            onManualDone={(stageId, criterionId) => void handleManualDone(stageId, criterionId)}
+          />
+          <PlaybookClassificationPanel
+            classification={audit?.classification_suggestions ?? []}
+            unclassified={audit?.unclassified_files ?? []}
+            undoAvailable={audit?.undo_available ?? null}
+            busy={busy}
+            onAction={(action) => void handleAction(action)}
+            onBatchMove={(moves) => void handleBatchMove(moves)}
+            onUndo={() => void handleUndoBatch()}
+          />
+        </>
       )}
 
       {importPreview && (
@@ -729,8 +764,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
             versions.map((item) => (
               <div key={item.version} className="flex items-center justify-between gap-2">
                 <span className="text-muted-foreground">
-                  v{item.version} · {item.source} ·{' '}
-                  {new Date(item.created_at).toLocaleString()}
+                  v{item.version} · {item.source} · {new Date(item.created_at).toLocaleString()}
                 </span>
                 {item.active && <span className="text-primary">当前</span>}
               </div>

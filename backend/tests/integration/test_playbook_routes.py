@@ -326,6 +326,46 @@ async def test_actions_apply_and_stage_confirm(
 
 
 @pytest.mark.asyncio()
+async def test_batch_move_and_undo_via_http(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    (project_dir / "论文初稿.docx").write_bytes(b"x" * 32)
+
+    applied = await client.post(
+        "/api/v1/projects/{}/playbook/actions/apply".format(project["id"]),
+        json={
+            "actions": [
+                {
+                    "type": "batch_move",
+                    "payload": {
+                        "moves": [
+                            {"from": "论文初稿.docx", "to": "03_成果/论文初稿.docx"}
+                        ]
+                    },
+                }
+            ]
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    payload = applied.json()
+    assert payload["applied"] == ["batch_move"]
+    assert payload["audit"]["undo_available"]["count"] == 1
+    assert (project_dir / "03_成果" / "论文初稿.docx").is_file()
+
+    undone = await client.post(
+        "/api/v1/projects/{}/playbook/actions/apply".format(project["id"]),
+        json={"actions": [{"type": "undo_last_batch_move", "payload": {}}]},
+    )
+    assert undone.status_code == 200, undone.text
+    assert undone.json()["applied"] == ["undo_last_batch_move"]
+    assert undone.json()["audit"]["undo_available"] is None
+    assert (project_dir / "论文初稿.docx").is_file()
+
+
+
+@pytest.mark.asyncio()
 async def test_export_and_import_preview(
     client: httpx.AsyncClient, project_dir: Path
 ) -> None:
