@@ -27,7 +27,7 @@ const DEFAULT_PACKS: WordRulePackSummary[] = [
     name: 'Word 通用质量检查',
     version: '1.0',
     origin: 'builtin',
-    rule_count: 5,
+    rule_count: 6,
   },
   {
     id: 'gb-t-9704-general',

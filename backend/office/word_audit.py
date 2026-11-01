@@ -32,6 +32,7 @@ from .word_rulepack_models import (
     WordRulePack,
     WordRuleSpec,
 )
+from .word_semantic_audit import SEMANTIC_CHECKERS
 from .word_template_profile import _PLACEHOLDER_RE
 
 _PT_TO_MM = 25.4 / 72.0
@@ -692,6 +693,7 @@ _CHECKERS: Dict[str, Callable[[_AuditContext, WordRuleSpec], None]] = {
     "content.empty_paragraphs": _check_empty_paragraphs,
     "content.caption_sequence": _check_caption_sequence,
     "content.citation_coverage": _check_citation_coverage,
+    **SEMANTIC_CHECKERS,
 }
 
 
