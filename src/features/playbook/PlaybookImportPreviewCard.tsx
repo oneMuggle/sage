@@ -36,6 +36,7 @@ function summaryCounts(preview: PlaybookImportPreview): string[] {
   const counts: string[] = [];
   if (diff.stages_added.length) counts.push(`新增阶段 ${diff.stages_added.length}`);
   if (diff.stages_removed.length) counts.push(`删除阶段 ${diff.stages_removed.length}`);
+  if (diff.stages_changed.length) counts.push(`阶段调整 ${diff.stages_changed.length}`);
   if (diff.directories_added.length) counts.push(`新增目录 ${diff.directories_added.length}`);
   if (diff.directories_removed.length) counts.push(`删除目录 ${diff.directories_removed.length}`);
   if (diff.directories_changed.length) counts.push(`调整目录 ${diff.directories_changed.length}`);

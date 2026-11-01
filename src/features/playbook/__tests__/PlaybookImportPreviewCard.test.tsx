@@ -73,6 +73,13 @@ describe('PlaybookImportPreviewCard', () => {
     expect(screen.getByText('+ 退出条件：数据管理计划完成')).toBeInTheDocument();
   });
 
+  it('仅阶段内部变更时汇总显示阶段调整', () => {
+    renderCard(preview({ proposal: STAGE_DIFF }));
+    expect(screen.getByText(/阶段调整 1/)).toBeInTheDocument();
+    expect(screen.queryByText('变更：无结构变更')).not.toBeInTheDocument();
+    expect(screen.getByTestId('playbook-diff-details')).toBeInTheDocument();
+  });
+
   it('无变更时显示无结构变更且不渲染明细', () => {
     renderCard(preview({}));
     expect(screen.getByText('变更：无结构变更')).toBeInTheDocument();
