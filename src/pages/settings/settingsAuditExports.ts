@@ -55,6 +55,7 @@ import {
   formatArenaAccountsToggleAuditJson,
   formatArenaAccountsToggleAuditSnapshot,
 } from './ArenaAccountsToggle';
+<<<<<<< HEAD
 import {
   formatBasicTabAuditJson,
   formatBasicTabAuditSnapshot,
@@ -72,6 +73,13 @@ import {
   formatModelsTabAuditJson,
   formatModelsTabAuditSnapshot,
 } from './ModelsTab';
+=======
+import { formatBasicTabAuditJson, formatBasicTabAuditSnapshot } from './BasicTab';
+import { formatEndpointsTabAuditJson, formatEndpointsTabAuditSnapshot } from './EndpointsTab';
+import { formatMcpTabAuditJson, formatMcpTabAuditSnapshot } from './McpTab';
+import { formatMemoryTabAuditJson, formatMemoryTabAuditSnapshot } from './MemoryTab';
+import { formatModelsTabAuditJson, formatModelsTabAuditSnapshot } from './ModelsTab';
+>>>>>>> origin/main
 import {
   formatNetworkTabAuditJson,
   formatNetworkTabAuditSnapshot,
@@ -85,6 +93,7 @@ import {
   formatPromptTemplatesTabAuditJson,
   formatPromptTemplatesTabAuditSnapshot,
 } from './PromptTemplatesTab';
+<<<<<<< HEAD
 import {
   formatRuntimeEnvTabAuditJson,
   formatRuntimeEnvTabAuditSnapshot,
@@ -97,6 +106,11 @@ import {
   formatZoteroTabAuditJson,
   formatZoteroTabAuditSnapshot,
 } from './ZoteroTab';
+=======
+import { formatRuntimeEnvTabAuditJson, formatRuntimeEnvTabAuditSnapshot } from './RuntimeEnvTab';
+import { formatSkillsTabAuditJson, formatSkillsTabAuditSnapshot } from './SkillsTab';
+import { formatZoteroTabAuditJson, formatZoteroTabAuditSnapshot } from './ZoteroTab';
+>>>>>>> origin/main
 import type { SettingsTabKey } from './settingsTabs';
 
 /** 单节审计的两种格式输出。 */
@@ -476,7 +490,11 @@ export function combineAuditOutputs(
     );
     return JSON.stringify(combined, null, 2);
   }
+<<<<<<< HEAD
   return ready
     .map(({ status }) => status.payload.snapshot)
     .join('\n\n---\n\n');
+=======
+  return ready.map(({ status }) => status.payload.snapshot).join('\n\n---\n\n');
+>>>>>>> origin/main
 }

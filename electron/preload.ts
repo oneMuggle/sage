@@ -816,6 +816,12 @@ const electronAPI = {
     setPanel: (open: boolean) => {
       ipcRenderer.send('pet:set-panel', { open });
     },
+<<<<<<< HEAD
+=======
+    togglePanel: () => {
+      ipcRenderer.send('pet:toggle-panel');
+    },
+>>>>>>> origin/main
     pat: () => {
       ipcRenderer.send('pet:pat');
     },
@@ -825,11 +831,17 @@ const electronAPI = {
     hide: () => {
       ipcRenderer.send('pet:hide');
     },
+<<<<<<< HEAD
     listPacks: () =>
       ipcRenderer.invoke('pet:list-packs') as Promise<PetPackManifestBridge[]>,
     getApiInfo: () => ipcRenderer.invoke('pet:api-info') as Promise<PetApiInfoBridge>,
     importPack: () =>
       ipcRenderer.invoke('pet:import-pack') as Promise<PetPackImportResultBridge>,
+=======
+    listPacks: () => ipcRenderer.invoke('pet:list-packs') as Promise<PetPackManifestBridge[]>,
+    getApiInfo: () => ipcRenderer.invoke('pet:api-info') as Promise<PetApiInfoBridge>,
+    importPack: () => ipcRenderer.invoke('pet:import-pack') as Promise<PetPackImportResultBridge>,
+>>>>>>> origin/main
     exportPack: (id) =>
       ipcRenderer.invoke('pet:export-pack', { id }) as Promise<PetPackExportResultBridge>,
     deletePack: (id) =>

@@ -83,6 +83,11 @@ export const zhSettingsUi = {
   'settings.endpoints.add': '+ 添加端点',
   'settings.endpoints.api_key_hint':
     'OpenAI-compatible 和 Ollama 协议允许留空（适用于本地服务或无需密钥的内网代理）',
+<<<<<<< HEAD
+=======
+  'settings.endpoints.api_key_saved_hint':
+    '后端已保存密钥（出于安全不会回显）；留空保存将保留原密钥',
+>>>>>>> origin/main
   'settings.endpoints.api_key_placeholder_local': '本地/内网代理可留空',
   'settings.endpoints.cancel': '取消',
   'settings.endpoints.delete': '删除',
@@ -283,10 +288,13 @@ export const zhSettingsUi = {
   'settings.models.routing_tier': '分档',
   'settings.models.temperature_desc':
     '控制输出的随机性：数值越高越随机；0 最稳定，2 最随机。实际效果取决于模型实现',
+<<<<<<< HEAD
   'settings.models.title_model': '会话标题模型',
   'settings.models.title_model_desc':
     '生成会话标题时使用的模型（选填）。留空则沿用对话模型；专用小模型通常更快更省',
   'settings.models.title_model_inherit': '-- 沿用对话模型 --',
+=======
+>>>>>>> origin/main
   'settings.models.tts_model': '语音合成 (TTS)',
   'settings.models.tts_model_desc': '用于文本转语音（选填）',
   'settings.models.vision_model': '视觉理解模型',

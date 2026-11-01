@@ -6,7 +6,11 @@
  */
 
 import { PetController, type PetControllerOptions } from './controller';
+<<<<<<< HEAD
 import { registerPetIpc } from './ipc';
+=======
+import { registerPetIpc, unregisterPetIpc } from './ipc';
+>>>>>>> origin/main
 
 let controller: PetController | null = null;
 
@@ -25,4 +29,10 @@ export function getPetController(): PetController | null {
 export function disposePet(): void {
   controller?.dispose();
   controller = null;
+<<<<<<< HEAD
+=======
+  // A later initPet() (e.g. macOS activate after the window was closed) must
+  // be able to register the same channels again.
+  unregisterPetIpc();
+>>>>>>> origin/main
 }

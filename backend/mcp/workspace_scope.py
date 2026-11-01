@@ -15,7 +15,11 @@ import json
 import logging
 import sqlite3
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Dict, List, Optional, Union
+=======
+from typing import List, Optional, Union
+>>>>>>> origin/main
 
 from pydantic import BaseModel, Field
 
@@ -40,7 +44,11 @@ class WorkspaceMcpConfig(BaseModel):
     auto_discover: bool = Field(default=True, description="是否自动发现服务器")
 
     @property
+<<<<<<< HEAD
     def all_server_names(self) -> List[str]:
+=======
+    def all_server_names(self) -> list[str]:
+>>>>>>> origin/main
         """Get all server names (enabled + disabled)."""
         return self.enabled_servers + self.disabled_servers
 
@@ -68,7 +76,11 @@ class WorkspaceScopeManager:
         manager.set_server_enabled("/path/to/workspace", "server-name", True)
     """
 
+<<<<<<< HEAD
     def __init__(self, db_path: Optional[[Path, str]] = None) -> None:
+=======
+    def __init__(self, db_path: Optional[Union[Path, str]] = None) -> None:
+>>>>>>> origin/main
         """
         Initialize workspace scope manager.
 
@@ -80,7 +92,11 @@ class WorkspaceScopeManager:
 
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
+<<<<<<< HEAD
         self._cache: Dict[str, WorkspaceMcpConfig] = {}
+=======
+        self._cache: dict[str, WorkspaceMcpConfig] = {}
+>>>>>>> origin/main
 
         self._init_database()
 
@@ -334,7 +350,11 @@ class WorkspaceScopeManager:
         self,
         workspace_path: Union[Path, str],
         discovery_service: Optional[McpServerDiscoveryService] = None,
+<<<<<<< HEAD
     ) -> List[DiscoveredMcpServer]:
+=======
+    ) -> list[DiscoveredMcpServer]:
+>>>>>>> origin/main
         """
         Get all enabled servers for a workspace.
 
@@ -363,7 +383,11 @@ class WorkspaceScopeManager:
 
         return enabled
 
+<<<<<<< HEAD
     def list_workspaces(self) -> List[str]:
+=======
+    def list_workspaces(self) -> list[str]:
+>>>>>>> origin/main
         """
         List all configured workspaces.
 

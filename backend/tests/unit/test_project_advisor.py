@@ -117,7 +117,12 @@ class TestAnalyze:
     @pytest.mark.asyncio()
     async def test_analyze_cache_miss(self, advisor, mock_llm):
         """cache miss 时应调用 LLM。"""
+<<<<<<< HEAD
         with patch(
+=======
+        with (
+            patch(
+>>>>>>> origin/main
                 "backend.services.project_advisor.ProjectAdvisor._collect_data",
                 return_value={
                     "project": {
@@ -145,6 +150,10 @@ class TestAnalyze:
                     },
                     "profile_entry_count": 5,
                 },
+<<<<<<< HEAD
+=======
+            ),
+>>>>>>> origin/main
         ):
             result = await advisor.analyze(project_id="proj-123")
 
@@ -186,7 +195,12 @@ class TestAnalyze:
         cached_result = AdviceResult(health_score=80, summary="cached")
         advisor._set_cached("proj-123", cached_result)
 
+<<<<<<< HEAD
         with patch(
+=======
+        with (
+            patch(
+>>>>>>> origin/main
                 "backend.services.project_advisor.ProjectAdvisor._collect_data",
                 return_value={
                     "project": {
@@ -202,6 +216,10 @@ class TestAnalyze:
                     },
                     "profile_entry_count": 0,
                 },
+<<<<<<< HEAD
+=======
+            ),
+>>>>>>> origin/main
         ):
             result = await advisor.analyze(
                 project_id="proj-123", force_refresh=True

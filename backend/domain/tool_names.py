@@ -91,6 +91,22 @@ OFFICE_TOOLS = (
     "office_parse_bibtex",
     # 2026-09-11 Round 10 格式 Linter：对照 FormatSpec 校验 docx（READ）
     "office_lint_word",
+    # 2026-10-31 LaTeX 读取：.tex 项目 → 结构化预览（READ，不编译 TeX）
+    "office_read_latex",
+    # 2026-10-31 LaTeX 模板：槽位/样式分析（READ）与填充（WRITE_LOCAL）
+    "office_analyze_latex_template",
+    "office_fill_latex_template",
+    # 2026-10-31 LaTeX 源码审校（READ）
+    "office_audit_latex",
+    # 2026-10-31 PDF 版式/字体/DPI 审计（READ，不修改 PDF）
+    "office_audit_latex_pdf",
+    # 2026-10-31 投稿合规检查：源码 + 可选 PDF（READ）
+    "office_check_latex_compliance",
+    # 2026-10-31 LaTeX 可选编译 / 红字版（WRITE_LOCAL）
+    "office_compile_latex",
+    "office_latexdiff",
+    # 2026-10-31 LaTeX 项目 zip 导入（WRITE_LOCAL，安全解压）
+    "office_extract_latex_project",
     # 2026-09-12 Round 12 自动修复：lint→修复→复检（WRITE_LOCAL）
     "office_repair_word",
     # 2026-09-18 Round 39 目录真页码：Word COM 刷新 TOC 域（WRITE_LOCAL，

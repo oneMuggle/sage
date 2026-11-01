@@ -42,7 +42,11 @@ export const enSettingsUi = {
     'Maximum automatic retries after a failed LLM request. Set to 0 to disable automatic retries.',
   'settings.basic.retry_max_label': 'Max retries',
   'settings.basic.retry_total_budget_desc':
+<<<<<<< HEAD
     'Cumulative wait between the first attempt and the next retry; retrying stops once this budget is exceeded. 0 = no limit.',
+=======
+    'Total time spent waiting since the first attempt. Once this budget is exhausted, automatic retries stop. 0 = unlimited.',
+>>>>>>> origin/main
   'settings.basic.retry_total_budget_label': 'Total retry budget (s)',
   'settings.basic.section.data': 'Data',
   'settings.basic.section.demo': 'Demo',
@@ -89,6 +93,11 @@ export const enSettingsUi = {
   'settings.endpoints.add': '+ Add endpoint',
   'settings.endpoints.api_key_hint':
     'OpenAI-compatible and Ollama protocols may leave this empty (for local services or internal proxies without a key)',
+<<<<<<< HEAD
+=======
+  'settings.endpoints.api_key_saved_hint':
+    'A key is already stored on the backend (never echoed back); leaving this empty keeps it',
+>>>>>>> origin/main
   'settings.endpoints.api_key_placeholder_local': 'Can be empty for local/intranet proxies',
   'settings.endpoints.cancel': 'Cancel',
   'settings.endpoints.delete': 'Delete',
@@ -308,10 +317,13 @@ export const enSettingsUi = {
   'settings.models.routing_tier': 'Tier',
   'settings.models.temperature_desc':
     'Controls output randomness: higher is more random; 0 is most stable, 2 most random. Actual behavior depends on the model implementation',
+<<<<<<< HEAD
   'settings.models.title_model': 'Session title model',
   'settings.models.title_model_desc':
     'Model used to generate session titles (optional). Leave empty to reuse the chat model; a dedicated small model is usually faster and cheaper',
   'settings.models.title_model_inherit': '-- Inherit from chat model --',
+=======
+>>>>>>> origin/main
   'settings.models.tts_model': 'Speech synthesis (TTS)',
   'settings.models.tts_model_desc': 'Used for text-to-speech (optional)',
   'settings.models.vision_model': 'Vision model',

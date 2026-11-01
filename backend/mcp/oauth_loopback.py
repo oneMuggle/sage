@@ -33,9 +33,13 @@ class _CallbackHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 — http.server 命名约定
         server: LoopbackCallbackServer = self.server.sage_oauth_owner  # type: ignore[attr-defined]
+<<<<<<< HEAD
         # 精确匹配 /callback 或 /callback?...；拒绝 /callback-evil 等前缀扩展
         path_only = self.path.split("?", 1)[0]
         if path_only == "/callback" and server._captured is None:
+=======
+        if self.path.startswith("/callback"):
+>>>>>>> origin/main
             server._captured = (
                 f"http://127.0.0.1:{server.port}{self.path}"
             )

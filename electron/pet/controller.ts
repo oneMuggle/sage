@@ -245,7 +245,15 @@ export class PetController {
   }
 
   setPanelOpen(sender: WebContents, open: boolean): void {
+<<<<<<< HEAD
     this.windowForSender(sender)?.setPanelOpen(open);
+=======
+    (this.windowForSender(sender) ?? this.panelForSender(sender))?.setPanelOpen(open);
+  }
+
+  togglePanel(sender: WebContents): void {
+    (this.windowForSender(sender) ?? this.panelForSender(sender))?.togglePanel();
+>>>>>>> origin/main
   }
 
   recordPat(): void {
@@ -437,6 +445,16 @@ export class PetController {
   }
 
   windowReady(sender: WebContents): void {
+<<<<<<< HEAD
+=======
+    const panelWindow = this.panelForSender(sender);
+    if (panelWindow) {
+      panelWindow.sendPanelState(this.snapshot);
+      const pet = this.petForSender(sender);
+      if (pet) panelWindow.sendPanelConfig(this.renderConfig(pet));
+      return;
+    }
+>>>>>>> origin/main
     const pet = this.petForSender(sender);
     if (!pet) return;
     this.windows.get(pet.id)?.show();
@@ -585,9 +603,23 @@ export class PetController {
     return null;
   }
 
+<<<<<<< HEAD
   private petForSender(sender: WebContents): PetInstanceConfig | null {
     for (const [id, window] of this.windows) {
       if (!window.ownsSender(sender)) continue;
+=======
+  /** Panel windows are owned by their pet window but speak the same IPC. */
+  private panelForSender(sender: WebContents): PetWindow | null {
+    for (const window of this.windows.values()) {
+      if (window.panelOwnsSender(sender)) return window;
+    }
+    return null;
+  }
+
+  private petForSender(sender: WebContents): PetInstanceConfig | null {
+    for (const [id, window] of this.windows) {
+      if (!window.ownsSender(sender) && !window.panelOwnsSender(sender)) continue;
+>>>>>>> origin/main
       return this.config.pets.find((pet) => pet.id === id) ?? null;
     }
     return null;
@@ -653,7 +685,14 @@ export class PetController {
     this.lastSent = key;
     this.snapshot = snapshot;
     this.statusServer?.update(snapshot, this.config);
+<<<<<<< HEAD
     for (const window of this.windows.values()) window.sendState(snapshot);
+=======
+    for (const window of this.windows.values()) {
+      window.sendState(snapshot);
+      window.sendPanelState(snapshot);
+    }
+>>>>>>> origin/main
     if (shouldShowInApp(this.config)) {
       this.sendToMain('pet:state', snapshot);
     }
@@ -667,7 +706,13 @@ export class PetController {
 
   private broadcastConfig(): void {
     for (const pet of this.config.pets) {
+<<<<<<< HEAD
       this.windows.get(pet.id)?.sendConfig(this.renderConfig(pet));
+=======
+      const window = this.windows.get(pet.id);
+      window?.sendConfig(this.renderConfig(pet));
+      window?.sendPanelConfig(this.renderConfig(pet));
+>>>>>>> origin/main
     }
     this.sendToMain('pet:config', this.config);
   }

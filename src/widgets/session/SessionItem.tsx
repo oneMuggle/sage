@@ -315,11 +315,15 @@ export function SessionItem({
               />
             ) : (
               <span className="truncate flex-1 min-w-0" title={session.title}>
+<<<<<<< HEAD
                 {session.title === '新对话' &&
                 session.message_count > 0 &&
                 (session.title_attempts ?? 0) === 0
                   ? t('session.title_generating')
                   : session.title}
+=======
+                {session.title}
+>>>>>>> origin/main
               </span>
             )}
             {/* U4': 双击标题进入 inline 重命名 */}

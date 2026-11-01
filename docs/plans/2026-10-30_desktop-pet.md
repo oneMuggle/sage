@@ -1,7 +1,11 @@
 # Sage 桌面宠物（Sage Pet）方案
 
 > 日期：2026-10-30
+<<<<<<< HEAD
 > 状态：核心功能已实施（2026-10-31，技术文档见 `docs/technical/117-desktop-pet.md`）；后续计划见 M5，**暂不实施**（2026-11-01 登记）。
+=======
+> 状态：核心功能已实施（2026-10-31，技术文档见 `docs/technical/114-desktop-pet.md`）；后续计划见 M5，**暂不实施**（2026-11-01 登记）。
+>>>>>>> origin/main
 > 参考：DeepSeek Harness（DSH）「大肥鱼」桌宠生态、豆包系 AI 桌宠、vscode-pets / BongoCat 等开源实现
 
 ---

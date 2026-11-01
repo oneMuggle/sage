@@ -96,12 +96,15 @@ ALIASES: Dict[str, str] = {
     "budget_max_extensions": "budgetMaxExtensions",
     "log_timezone": "logTimezone",
     "use_folder_picker": "useFolderPicker",
+<<<<<<< HEAD
     # win7 专属: OrchSettings 已含四个 profile 迭代上限键 (前端整体 spread
     # 提交时必带上, 不翻译/不白名单则编排段任一保存 400)。
     "max_primary_iterations": "maxPrimaryIterations",
     "max_coder_iterations": "maxCoderIterations",
     "max_reviewer_iterations": "maxReviewerIterations",
     "max_writer_iterations": "maxWriterIterations",
+=======
+>>>>>>> origin/main
     # 2026-10-25: LLM 重试参数 — 前端发送 camelCase，但某些中间层可能转成 snake_case，
     # 需要 ALIASES 映射回 camelCase 以通过白名单校验。
     "llm_retry_max_attempts": "llmRetryMaxAttempts",
@@ -110,17 +113,26 @@ ALIASES: Dict[str, str] = {
     # 2026-10-30: 自动重试总时长预算（秒，0 = 不限）。
     "llm_retry_total_budget_s": "llmRetryTotalBudgetS",
     "llm_total_timeout_s": "llmTotalTimeoutS",
+<<<<<<< HEAD
     # 2026-10-27: 会话标题专用模型 id — 与后端 title_generator.load_title_llm_config 对齐。
     "title_model_id": "titleModelId",
     # 2026-10-28: LLM 代理上游超时（秒）— 前端「LLM 代理超时」设置。
     # 缺别名时 relay 的 camelToSnake 往返后翻不回 camel，保存 400 被静默吞掉。
     "llm_proxy_timeout_s": "llmProxyTimeoutS",
+=======
+>>>>>>> origin/main
     # 2026-10-28: ask_user_question 工具的可配置限制。
     "max_consecutive_unanswered_questions": "maxConsecutiveUnansweredQuestions",
     "min_options_per_question": "minOptionsPerQuestion",
     "max_options_per_question": "maxOptionsPerQuestion",
     "max_clarify_questions_in_prompt": "maxClarifyQuestionsInPrompt",
     "max_clarify_questions_per_round": "maxClarifyQuestionsPerRound",
+<<<<<<< HEAD
+=======
+    # 2026-10-28: LLM 代理上游超时（秒）— 前端「LLM 代理超时」设置。
+    # 缺别名时 relay 的 camelToSnake 往返后翻不回 camel，保存 400 被静默吞掉。
+    "llm_proxy_timeout_s": "llmProxyTimeoutS",
+>>>>>>> origin/main
 }
 
 # AppSettings (src/entities/setting/types.ts) 锁死的白名单
@@ -157,10 +169,13 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         # 2026-10-22: 整轮任务 wall-clock 上限（秒）— 0 = 不限；函数式读取
         # 立即生效，无须重启后端。前端 DEFAULT_SETTINGS = 1800。
         "llmTotalTimeoutS",
+<<<<<<< HEAD
         # 2026-10-27: 会话标题生成专用模型 id（顶层扁平键，与 chatModel 同风格）。
         # 值为模型 id 字符串；留空表示回退到聊天模型。后端
         # title_generator.load_title_llm_config() 读取此键。
         "titleModelId",
+=======
+>>>>>>> origin/main
         # 2026-10-28: LLM 代理上游超时（秒）。backend/api/llm_proxy_routes.py
         # 函数式读取，改后下一个请求即生效。
         "llmProxyTimeoutS",
@@ -245,6 +260,7 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "runWallClockLimitMinutes",
         "subagentTaskTimeoutS",
         "maxRetryOfChains",
+<<<<<<< HEAD
         # win7 专属: 四个 profile 迭代上限已在 OrchSettings (types.ts), 前端
         # 部分更新 spread 必带上, 白名单不跟则编排段任一保存 400。
         "maxPrimaryIterations",
@@ -252,6 +268,9 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "maxReviewerIterations",
         "maxWriterIterations",
         # 2026-10-20 全局迭代上限 (Win7 适配: 0=按各 agent 分别设置)
+=======
+        # 2026-10-20 全局迭代上限 (0=按各 agent 分别设置)
+>>>>>>> origin/main
         "maxIterations",
         # 2026-11-01: 动态迭代预算（P1 设置页暴露）。
         "dynamicBudgetEnabled",
@@ -295,7 +314,7 @@ def to_camel(value: Any) -> Any:
 
 def from_camel(value: Any) -> Any:
     """反向: ALIASES 仅翻译已知 snake↔camel 对; 其它 camelCase key 原样保留."""
-    if not isinstance(value, (dict, list)):
+    if not isinstance(value, (dict, list)):  # noqa: UP038 — py38 运行时 isinstance 不支持 union
         return value
     inverse = {v: k for k, v in ALIASES.items()}
     if isinstance(value, dict):
@@ -681,7 +700,11 @@ def validate_log_timezone(value: Any) -> Any:
         return value
     try:
         # 延迟导入 zoneinfo — Python 3.9+ 标准库; Win7 走 backports.zoneinfo.
+<<<<<<< HEAD
         from zoneinfo import ZoneInfo  # py38-ok 守卫/降级已覆盖（win7 适配写法）
+=======
+        from zoneinfo import ZoneInfo  # py38-ok except ImportError 守卫 + backports 兜底
+>>>>>>> origin/main
     except ImportError:  # pragma: no cover — py3.9+ always has zoneinfo
         try:
             from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
@@ -712,7 +735,11 @@ def validate_timezone(value: Any) -> Any:
         raise ValueError(f"timezone must be a string, got {type(value).__name__}")
     try:
         # 延迟导入 zoneinfo — Python 3.9+ 标准库; Win7 走 backports.zoneinfo.
+<<<<<<< HEAD
         from zoneinfo import ZoneInfo  # py38-ok 守卫/降级已覆盖（win7 适配写法）
+=======
+        from zoneinfo import ZoneInfo  # py38-ok except ImportError 守卫 + backports 兜底
+>>>>>>> origin/main
     except ImportError:  # pragma: no cover — py3.9+ always has zoneinfo
         try:
             from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
@@ -896,3 +923,45 @@ def classify_settings_shape_field(exc: ValueError) -> str:
     if match and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,63}", match.group(1)):
         return match.group(1)
     return classify_settings_shape_error(exc)
+
+
+def preserve_endpoint_api_keys(
+    merged: Dict[Any, Any], existing: Dict[str, Any]
+) -> Dict[Any, Any]:
+    """Keep stored endpoint apiKeys when a PUT blanks them.
+
+    GET responses redact ``apiKey`` to ``""`` (``hasApiKey`` marks presence),
+    so a client that edits any other endpoint field round-trips an empty
+    apiKey. Treat empty/missing as "unchanged" here; otherwise the redacted
+    round-trip would erase the credential from the database.
+    """
+    if not isinstance(merged, dict) or not isinstance(existing, dict):
+        return merged
+    merged_eps = merged.get("endpoints")
+    existing_eps = existing.get("endpoints")
+    if not isinstance(merged_eps, list) or not isinstance(existing_eps, list):
+        return merged
+    stored: Dict[Any, str] = {}
+    for ep in existing_eps:
+        if not isinstance(ep, dict):
+            continue
+        key = ep.get("apiKey")
+        if isinstance(key, str) and key.strip():
+            stored[ep.get("id")] = key
+    if not stored:
+        return merged
+    preserved: List[Any] = []
+    changed = False
+    for ep in merged_eps:
+        if not isinstance(ep, dict):
+            preserved.append(ep)
+            continue
+        key = ep.get("apiKey")
+        if (key is None or key == "") and ep.get("id") in stored:
+            preserved.append({**ep, "apiKey": stored[ep.get("id")]})
+            changed = True
+        else:
+            preserved.append(ep)
+    if not changed:
+        return merged
+    return {**merged, "endpoints": preserved}

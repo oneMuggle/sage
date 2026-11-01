@@ -308,11 +308,11 @@ class SchedulerService:
         self,
         name: str,
         task: "BaseEvolutionTask",  # noqa: UP037
-        cron_expr: Optional[str] = None,
+        cron_expr: str | None = None,
         *,
-        hour: Optional[int] = None,
-        minute: Optional[int] = None,
-        day_of_week: Optional[str] = None,
+        hour: int | None = None,
+        minute: int | None = None,
+        day_of_week: str | None = None,
     ) -> None:
         """注册一个 evolution 任务到 BackgroundScheduler (不写 JSON 持久化)。
 
@@ -373,7 +373,7 @@ class SchedulerService:
         self._fire_evolution(name, task)
         return True
 
-    def run_evolution_task_now(self, name: str) -> Optional[Dict[str, Any]]:
+    def run_evolution_task_now(self, name: str) -> Dict[str, Any] | None:
         """同步运行一个 evolution 任务并返回其统计结果(手动触发 API 用, R17-B)。
 
         与 trigger_evolution_task 的区别:任务返回值(如 MemoryConsolidationTask

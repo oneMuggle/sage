@@ -60,18 +60,30 @@ def test_global_search_unknown_type_ignored(monkeypatch):
     assert set(out) == {"sessions"}
 
 
+<<<<<<< HEAD
 def test_global_search_knowledge_project_single_root(monkeypatch):
     # win7 行为基线（P9）：knowledge_project 单值整串授权解析（无 P13 多根拆分）
+=======
+def test_global_search_knowledge_project_multi_root(monkeypatch):
+>>>>>>> origin/main
     _patch_all_helpers(monkeypatch)
     resolved = []
     monkeypatch.setattr(
         sr, "_resolve_knowledge_scope", lambda raw: resolved.append(raw) or f"/p/{raw}"
     )
     out = sr.global_search(
+<<<<<<< HEAD
         q="kw", limit=3, types="knowledge", knowledge_project="alpha"
     )
     assert resolved == ["alpha"]
     assert out["knowledge"][0]["scope"] == "/p/alpha"
+=======
+        q="kw", limit=3, types="knowledge", knowledge_project="alpha,beta"
+    )
+    assert resolved == ["alpha", "beta"]
+    # scope 以逗号拼接传给 knowledge 搜索
+    assert out["knowledge"][0]["scope"] == "/p/alpha,/p/beta"
+>>>>>>> origin/main
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +181,7 @@ class _SearchResponse:
         self.results = results
 
 
+<<<<<<< HEAD
 def test_search_knowledge_explicit_scope_passthrough(monkeypatch):
     # win7 行为基线（P9）：project_path 单值直接作为 project_root，
     # 结果按 path/title/snippet(截断 200) 映射
@@ -192,6 +205,33 @@ def test_search_knowledge_empty_project_root_empty(monkeypatch):
         lambda project_root, query, limit: (_ for _ in ()).throw(AssertionError("should not search")),
     )
     assert sr._search_knowledge("kw", 5, project_path="") == []
+=======
+def test_search_knowledge_duplicate_root_dedup(monkeypatch):
+    # P13 去重键为 {root}::{path}：同一根重复提交 → 第二次命中去重
+    calls = []
+
+    def fake_search(project_root, query, limit):
+        calls.append(str(project_root))
+        return _SearchResponse([_Doc("wiki/x.md", "XA", "s" * 300)])
+
+    monkeypatch.setattr("backend.wiki.search.search_wiki", fake_search)
+    out = sr._search_knowledge("kw", 5, project_path="/w/a,/w/a")
+    assert len(calls) == 2
+    assert len(out) == 1
+    assert out[0]["title"] == "XA"
+    assert len(out[0]["snippet"]) == 200  # 截断
+
+
+def test_search_knowledge_distinct_roots_both_kept(monkeypatch):
+    # 不同根的同类相对路径是不同文件 → 都保留
+    def fake_search(project_root, query, limit):
+        suffix = "A" if str(project_root).endswith("a") else "B"
+        return _SearchResponse([_Doc(f"wiki/x{suffix}.md", f"X{suffix}", "s")])
+
+    monkeypatch.setattr("backend.wiki.search.search_wiki", fake_search)
+    out = sr._search_knowledge("kw", 5, project_path="/w/a,/w/b")
+    assert [d["title"] for d in out] == ["XA", "XB"]
+>>>>>>> origin/main
 
 
 def test_search_knowledge_no_recent_projects_empty(monkeypatch):

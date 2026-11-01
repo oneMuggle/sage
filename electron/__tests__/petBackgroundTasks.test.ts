@@ -88,11 +88,110 @@ describe('mapOrchestrationLanes', () => {
 
     const fallback = mapOrchestrationLanes([lane({ lane_id: 'lonely', metadata: {} })], NOW);
     expect(fallback[0]?.id).toBe('orch:lonely');
+<<<<<<< HEAD
     expect(fallback[0]?.title).toBe('lonely');
   });
 
   it('ignores malformed entries and unknown statuses', () => {
     expect(mapOrchestrationLanes([null, 1, 'x', { lane_id: 'a', status: 'bogus' }], NOW)).toEqual([]);
+=======
+    expect(fallback[0]?.title).toBe('编排任务');
+  });
+
+  it('trusts the heartbeat only once it advances past the start time', () => {
+    // Heartbeat advanced an hour after start, then went quiet 2h ago → stale.
+    const staleHeartbeat = lane({
+      lane_id: 'hb-stale',
+      metadata: { team_id: 'team-hb-stale', goal: '心跳停了' },
+      started_at: NOW - 3 * 60 * 60_000,
+      created_at: NOW - 3 * 60 * 60_000,
+      heartbeat: { last_ping_at: NOW - 2 * 60 * 60_000 },
+    });
+    expect(mapOrchestrationLanes([staleHeartbeat], NOW)).toEqual([]);
+
+    const freshHeartbeat = lane({
+      lane_id: 'hb-fresh',
+      metadata: { team_id: 'team-hb-fresh', goal: '心跳正常' },
+      started_at: NOW - 10 * 60_000,
+      heartbeat: { last_ping_at: NOW - 60_000 },
+    });
+    expect(mapOrchestrationLanes([freshHeartbeat], NOW)[0]).toMatchObject({
+      id: 'orch:team-hb-fresh',
+      status: 'running',
+    });
+  });
+
+  it('keeps long-running lanes when the heartbeat is static (backend not refreshing)', () => {
+    const longRunning = lane({
+      metadata: { team_id: 'team-long' },
+      started_at: NOW - 2 * 60 * 60_000,
+      created_at: NOW - 2 * 60 * 60_000,
+      heartbeat: { last_ping_at: NOW - 2 * 60 * 60_000 },
+    });
+    expect(mapOrchestrationLanes([longRunning], NOW)[0]).toMatchObject({
+      id: 'orch:team-long',
+      status: 'running',
+    });
+
+    const abandoned = lane({
+      metadata: { team_id: 'team-abandoned' },
+      started_at: NOW - 12 * 24 * 60 * 60_000,
+      created_at: NOW - 12 * 24 * 60 * 60_000,
+      heartbeat: { last_ping_at: NOW - 12 * 24 * 60 * 60_000 },
+    });
+    expect(mapOrchestrationLanes([abandoned], NOW)).toEqual([]);
+  });
+
+  it('keeps lanes waiting on a human decision for up to a day', () => {
+    const waiting = lane({
+      status: 'blocked',
+      metadata: { team_id: 'team-wait' },
+      started_at: NOW - 3 * 60 * 60_000,
+      created_at: NOW - 3 * 60 * 60_000,
+      heartbeat: { last_ping_at: NOW - 3 * 60 * 60_000 },
+    });
+    expect(mapOrchestrationLanes([waiting], NOW)[0]).toMatchObject({
+      id: 'orch:team-wait',
+      status: 'awaiting_approval',
+    });
+  });
+
+  it('keeps active lanes when timestamps are missing', () => {
+    const noTimestamps = lane({
+      metadata: { team_id: 'team-nots' },
+      started_at: null,
+      created_at: undefined,
+      heartbeat: null,
+    });
+    expect(mapOrchestrationLanes([noTimestamps], NOW)[0]?.id).toBe('orch:team-nots');
+  });
+
+  it('drops queued lanes that were never started for more than a day', () => {
+    const stale = lane({
+      status: 'created',
+      metadata: { team_id: 'team-q' },
+      started_at: null,
+      created_at: NOW - 48 * 60 * 60_000,
+    });
+    expect(mapOrchestrationLanes([stale], NOW)).toEqual([]);
+
+    const fresh = lane({
+      status: 'created',
+      metadata: { team_id: 'team-q2' },
+      started_at: null,
+      created_at: NOW - 60_000,
+    });
+    expect(mapOrchestrationLanes([fresh], NOW)[0]).toMatchObject({
+      id: 'orch:team-q2',
+      status: 'queued',
+    });
+  });
+
+  it('ignores malformed entries and unknown statuses', () => {
+    expect(mapOrchestrationLanes([null, 1, 'x', { lane_id: 'a', status: 'bogus' }], NOW)).toEqual(
+      [],
+    );
+>>>>>>> origin/main
     expect(mapOrchestrationLanes('nope', NOW)).toEqual([]);
   });
 });
@@ -127,7 +226,13 @@ describe('mapScheduledTasks', () => {
   });
 
   it('drops old failures and non-failed tasks', () => {
+<<<<<<< HEAD
     expect(mapScheduledTasks([{ ...failedTask, last_attempt: NOW - 20 * 60_000 }], NOW)).toEqual([]);
+=======
+    expect(mapScheduledTasks([{ ...failedTask, last_attempt: NOW - 20 * 60_000 }], NOW)).toEqual(
+      [],
+    );
+>>>>>>> origin/main
     expect(mapScheduledTasks([{ ...failedTask, last_status: 'succeeded' }], NOW)).toEqual([]);
     expect(mapScheduledTasks([{ ...failedTask, last_status: 'never' }], NOW)).toEqual([]);
   });

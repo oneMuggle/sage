@@ -42,10 +42,16 @@ class MemoryExtractionQueue:
     """异步记忆提取队列（单 worker 串行消费）。"""
 
     def __init__(self) -> None:
+<<<<<<< HEAD
         # py3.8/3.9: asyncio.Queue() 在构造期绑定 get_event_loop()，若在运行中的
         # loop 之外（模块导入 / 同步 fixture）创建，worker 会拿到"attached to a
         # different loop"的 Future。惰性创建，保证首次使用时在运行 loop 内。
         self._queue_obj: Optional[asyncio.Queue] = None
+=======
+        # py38 的 asyncio.Queue 在 __init__ 即绑定 get_event_loop() 的循环；
+        # 惰性创建，让队列绑定到实际运行 submit/drain 的那个循环。
+        self._queue: Optional[asyncio.Queue[ExtractionRequest]] = None
+>>>>>>> origin/main
         self._worker_task: Optional[asyncio.Task] = None
         self._completed = 0
         self._failed = 0
@@ -64,7 +70,7 @@ class MemoryExtractionQueue:
         if request.memory_port is None or not request.enabled:
             self._skipped += 1
             return
-        self._queue.put_nowait(request)
+        self._get_queue().put_nowait(request)
         self._ensure_worker()
 
     def start(self) -> None:
@@ -83,13 +89,17 @@ class MemoryExtractionQueue:
         if self._queue_obj is None:
             return
         try:
-            await asyncio.wait_for(self._queue.join(), timeout=timeout)
+            await asyncio.wait_for(self._get_queue().join(), timeout=timeout)
         except Exception:  # noqa: BLE001 - best-effort，超时/异常都不外抛
             logger.debug("memory extraction drain timed out after %.1fs", timeout)
 
     def pending(self) -> int:
         """当前排队未处理的请求数。"""
+<<<<<<< HEAD
         return 0 if self._queue_obj is None else self._queue_obj.qsize()
+=======
+        return self._get_queue().qsize()
+>>>>>>> origin/main
 
     @property
     def completed(self) -> int:
@@ -105,6 +115,12 @@ class MemoryExtractionQueue:
 
     # ---- 内部实现 ------------------------------------------------------- #
 
+    def _get_queue(self) -> asyncio.Queue[ExtractionRequest]:
+        """惰性创建队列——必须绑定到当前运行的循环（py38 Queue 即建即绑）。"""
+        if self._queue is None:
+            self._queue = asyncio.Queue()
+        return self._queue
+
     def _ensure_worker(self) -> None:
         """懒启动 worker（幂等）；submit 与 start 共用。"""
         if self._worker_task is None or self._worker_task.done():
@@ -116,7 +132,7 @@ class MemoryExtractionQueue:
         """单 worker 循环：消费队列 → 提取 → 失败隔离。"""
         while True:
             try:
-                request = await asyncio.wait_for(self._queue.get(), timeout=0.5)
+                request = await asyncio.wait_for(self._get_queue().get(), timeout=0.5)
             except asyncio.TimeoutError:  # noqa: UP041 — py3.10/3.8 中 asyncio.TimeoutError ≠ builtin TimeoutError
                 continue
             except asyncio.CancelledError:
@@ -132,7 +148,7 @@ class MemoryExtractionQueue:
                     exc,
                 )
             finally:
-                self._queue.task_done()
+                self._get_queue().task_done()
 
     async def _process(self, request: ExtractionRequest) -> None:
         """复用 hex/legacy 共用的统一写入路径（worker 内惰性导入防循环）。"""

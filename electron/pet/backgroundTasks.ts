@@ -16,6 +16,21 @@ import type { PetTaskReport, PetTaskStatus } from './types';
 
 const FAILED_WINDOW_MS = 10 * 60_000;
 const MAX_TASKS = 20;
+<<<<<<< HEAD
+=======
+/**
+ * Non-terminal lanes can outlive their run (crash, restart, test fixtures).
+ * The backend initialises `heartbeat.last_ping_at` to `started_at` and does
+ * not refresh it yet, so heartbeat freshness is only trusted once it has
+ * visibly advanced past the start; otherwise a legitimately long-running lane
+ * would be hidden after half an hour. Static/missing heartbeats fall back to a
+ * conservative threshold, and lanes waiting on a human may take hours.
+ */
+const HEARTBEAT_LIVE_MS = 60_000;
+const HEARTBEAT_STALE_MS = 30 * 60_000;
+const RUNNING_FALLBACK_STALE_MS = 6 * 60 * 60_000;
+const WAITING_STALE_MS = 24 * 60 * 60_000;
+>>>>>>> origin/main
 
 const STATUS_PRIORITY: Record<PetTaskStatus, number> = {
   awaiting_approval: 100,
@@ -57,11 +72,22 @@ function ms(value: unknown): number | null {
 interface LaneInfo {
   laneId: string;
   team: string;
+<<<<<<< HEAD
   status: PetTaskStatus;
   taskName: string | null;
   goal: string | null;
   startedAt: number | null;
   completedAt: number | null;
+=======
+  teamId: string | null;
+  status: PetTaskStatus;
+  taskName: string | null;
+  goal: string | null;
+  createdAt: number | null;
+  startedAt: number | null;
+  completedAt: number | null;
+  heartbeatAt: number | null;
+>>>>>>> origin/main
   error: string | null;
 }
 
@@ -72,6 +98,7 @@ function parseLane(raw: unknown): LaneInfo | null {
   const status = LANE_STATUS[rawStatus];
   if (!laneId || !status) return null;
   const metadata = isRecord(raw.metadata) ? raw.metadata : {};
+<<<<<<< HEAD
   const team = text(metadata.team_id, 128) ?? laneId;
   return {
     laneId,
@@ -81,10 +108,53 @@ function parseLane(raw: unknown): LaneInfo | null {
     goal: text(metadata.goal, 200),
     startedAt: ms(raw.started_at) ?? ms(raw.created_at),
     completedAt: ms(raw.completed_at),
+=======
+  const heartbeat = isRecord(raw.heartbeat) ? raw.heartbeat : {};
+  const teamId = text(metadata.team_id, 128);
+  return {
+    laneId,
+    team: teamId ?? laneId,
+    teamId,
+    status,
+    taskName: text(metadata.task_name, 120),
+    goal: text(metadata.goal, 200),
+    createdAt: ms(raw.created_at),
+    startedAt: ms(raw.started_at) ?? ms(raw.created_at),
+    completedAt: ms(raw.completed_at),
+    heartbeatAt: ms(heartbeat.last_ping_at),
+>>>>>>> origin/main
     error: text(raw.error, 240),
   };
 }
 
+<<<<<<< HEAD
+=======
+/**
+ * A lane is stale when its last sign of life is too old for its status.
+ * Heartbeats are only authoritative once they advance past the start time
+ * (the backend currently writes heartbeat == started_at and never refreshes
+ * it); started/created timestamps are the fallback. Missing timestamps keep
+ * the lane visible — hiding real work is worse than showing an orphan.
+ */
+function isStale(lane: LaneInfo, now: number): boolean {
+  const lastSeen = lane.heartbeatAt ?? lane.startedAt ?? lane.createdAt;
+  if (lastSeen === null) return false;
+  if (lane.status === 'running') {
+    const heartbeatLive =
+      lane.heartbeatAt !== null &&
+      lane.startedAt !== null &&
+      lane.heartbeatAt - lane.startedAt > HEARTBEAT_LIVE_MS;
+    const staleAfter = heartbeatLive ? HEARTBEAT_STALE_MS : RUNNING_FALLBACK_STALE_MS;
+    return now - lastSeen > staleAfter;
+  }
+  if (lane.status === 'awaiting_approval' || lane.status === 'paused' || lane.status === 'queued') {
+    // Waiting on a human decision or a long queue can legitimately take hours.
+    return now - lastSeen > WAITING_STALE_MS;
+  }
+  return false;
+}
+
+>>>>>>> origin/main
 function isTerminalStatus(status: PetTaskStatus): boolean {
   return status === 'succeeded' || status === 'cancelled';
 }
@@ -109,6 +179,10 @@ export function mapOrchestrationLanes(raw: unknown, now = Date.now()): PetTaskRe
   for (const [team, lanes] of groups) {
     const visible = lanes.filter((lane) => {
       if (isTerminalStatus(lane.status)) return false;
+<<<<<<< HEAD
+=======
+      if (isStale(lane, now)) return false;
+>>>>>>> origin/main
       if (lane.status !== 'failed') return true;
       return lane.completedAt !== null && lane.completedAt >= now - FAILED_WINDOW_MS;
     });
@@ -120,8 +194,19 @@ export function mapOrchestrationLanes(raw: unknown, now = Date.now()): PetTaskRe
     const names = Array.from(
       new Set(visible.map((lane) => lane.taskName).filter((name): name is string => Boolean(name))),
     );
+<<<<<<< HEAD
     const title =
       goal ?? (names.length > 1 ? `${names[0]} 等 ${names.length} 个任务` : (names[0] ?? team));
+=======
+    // A lane without any human-readable metadata falls back to a generic
+    // label instead of leaking its opaque lane id into the panel.
+    const teamId = visible.find((lane) => lane.teamId)?.teamId ?? null;
+    const title =
+      goal ??
+      (names.length > 1
+        ? `${names[0]} 等 ${names.length} 个任务`
+        : (names[0] ?? teamId ?? '编排任务'));
+>>>>>>> origin/main
     const started = visible.reduce<number | null>((min, lane) => {
       if (lane.startedAt === null) return min;
       return min === null ? lane.startedAt : Math.min(min, lane.startedAt);
@@ -141,9 +226,13 @@ export function mapOrchestrationLanes(raw: unknown, now = Date.now()): PetTaskRe
     });
   }
 
+<<<<<<< HEAD
   return reports
     .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))
     .slice(0, MAX_TASKS);
+=======
+  return reports.sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0)).slice(0, MAX_TASKS);
+>>>>>>> origin/main
 }
 
 /**

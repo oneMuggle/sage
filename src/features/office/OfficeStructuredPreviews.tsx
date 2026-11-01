@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { useState } from 'react';
+=======
+import { useEffect, useRef, useState } from 'react';
+>>>>>>> origin/main
 
 import type {
   OfficeExcelReadResult,
@@ -196,18 +200,53 @@ export function PdfPreview({ data }: { data: OfficePdfReadResult }) {
   );
 }
 
+<<<<<<< HEAD
 export function WordPreview({ data }: { data: OfficeWordReadResult }) {
+=======
+export function WordPreview({
+  data,
+  highlightParagraphIndex = null,
+}: {
+  data: OfficeWordReadResult;
+  highlightParagraphIndex?: number | null;
+}) {
+>>>>>>> origin/main
   const { t } = useI18n();
   // Round C P7: read results already carry the FULL document (the backend
   // never truncates) — the old hard slice was purely a render guard. 加载
   // 更多 grows the render window instead of hiding the tail forever.
   const [renderCap, setRenderCap] = useState(PARAGRAPH_RENDER_CAP);
+<<<<<<< HEAD
+=======
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (highlightParagraphIndex == null) return;
+    if (highlightParagraphIndex >= renderCap) {
+      setRenderCap(highlightParagraphIndex + 1);
+      return;
+    }
+    const container = containerRef.current;
+    const target = container?.querySelector<HTMLElement>(
+      `[data-paragraph-index="${highlightParagraphIndex}"]`,
+    );
+    target?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, [highlightParagraphIndex, renderCap]);
+>>>>>>> origin/main
   const shown = data.paragraphs.slice(0, renderCap);
   const hidden = data.paragraphs.length - shown.length;
   const headersFooters = data.headers_footers ?? [];
   const tocFields = data.toc_fields ?? [];
+<<<<<<< HEAD
   return (
     <div className="space-y-2">
+=======
+  const highlightClass = (index: number) =>
+    index === highlightParagraphIndex
+      ? 'rounded-sm bg-primary/10 ring-2 ring-primary px-1 -mx-1'
+      : '';
+  return (
+    <div className="space-y-2" ref={containerRef} data-testid="office-word-preview">
+>>>>>>> origin/main
       <p className="text-xs text-muted">
         {data.paragraphs.length} {t('office.preview.paragraphCount')} · {data.tables.length}{' '}
         {t('office.preview.tableCount')} · {data.images} {t('office.preview.imageCount')}
@@ -216,7 +255,15 @@ export function WordPreview({ data }: { data: OfficeWordReadResult }) {
         {shown.map((para, i) => {
           if (para.level > 0) {
             return (
+<<<<<<< HEAD
               <div key={i} className={`mt-3 ${headingClass(para.level)}`}>
+=======
+              <div
+                key={i}
+                data-paragraph-index={i}
+                className={`mt-3 ${headingClass(para.level)} ${highlightClass(i)}`}
+              >
+>>>>>>> origin/main
                 {para.text}
               </div>
             );
@@ -225,14 +272,30 @@ export function WordPreview({ data }: { data: OfficeWordReadResult }) {
           const isListItem = /list/i.test(para.style);
           if (isListItem) {
             return (
+<<<<<<< HEAD
               <div key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+=======
+              <div
+                key={i}
+                data-paragraph-index={i}
+                className={`flex items-start gap-2 text-sm text-text-secondary ${highlightClass(i)}`}
+              >
+>>>>>>> origin/main
                 <span className="mt-[7px] w-1 h-1 rounded-full bg-current shrink-0" aria-hidden />
                 <span className="min-w-0">{renderInlineMarks(para.text)}</span>
               </div>
             );
           }
           return (
+<<<<<<< HEAD
             <p key={i} className="text-sm text-text-secondary leading-relaxed">
+=======
+            <p
+              key={i}
+              data-paragraph-index={i}
+              className={`text-sm text-text-secondary leading-relaxed ${highlightClass(i)}`}
+            >
+>>>>>>> origin/main
               {renderInlineMarks(para.text)}
             </p>
           );

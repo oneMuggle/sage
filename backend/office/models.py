@@ -267,11 +267,15 @@ class WordImagePreview(BaseModel):
     )
 
 
+<<<<<<< HEAD
 # pydantic v1（win7/py38 通道）用 update_forward_refs，v2 用 model_rebuild
 if hasattr(OfficeWordReadResult, "update_forward_refs"):
     OfficeWordReadResult.update_forward_refs()
 elif hasattr(OfficeWordReadResult, "model_rebuild"):
     OfficeWordReadResult.model_rebuild()
+=======
+OfficeWordReadResult.model_rebuild()
+>>>>>>> origin/main
 
 
 class ExcelSheetContent(BaseModel):
@@ -780,6 +784,38 @@ class WordFormatSpec(BaseModel):
     # Round 42：图目录/表目录（TOC \c 收录 SEQ 题注；None = 不插入）。
     figure_index: Optional[WordIndexSpec] = None
     table_index: Optional[WordIndexSpec] = None
+<<<<<<< HEAD
+=======
+
+
+class WordIndexSpec(BaseModel):
+    r"""图目录/表目录设置（Round 42）。
+
+    TOF 域（``TOC \h \z \c "<图|表>"``）由 Word 收录 SEQ 题注段；
+    生成器插入域与静态缓存条目（无页码——由渲染器/COM 刷新域计算），
+    与 R13 目录域同一思路。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    heading_text: str = Field(default="图目录", max_length=50)
+    placeholder_text: str = Field(
+        default='（图目录：在 Word 中按 F9 或右键"更新域"生成）',
+        max_length=200,
+        description="域未更新时的占位提示",
+    )
+
+
+class WordSectionBreakSpec(BaseModel):
+    """分节设置（Round 26）：start_paragraph 前插入 NEW_PAGE 分节，
+    新节应用 page_setup（横排宽表/财务页场景）。复用 WordPageSetupSpec。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_paragraph: int = Field(ge=0, description="该 0-based 段落下标起进入新节")
+    page_setup: WordPageSetupSpec = Field(description="新节的页面设置")
+>>>>>>> origin/main
 
 
 class OfficeWordGenerateRequest(BaseModel):

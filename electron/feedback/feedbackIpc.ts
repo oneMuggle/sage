@@ -8,7 +8,11 @@
 //   - 附件上传是 raw binary，CommandRoute 只支持 JSON body
 //   - 手动触发 syncer 属于 main 进程内部行为
 //
+<<<<<<< HEAD
 // 设计见 docs/technical/111-feedback-relay-deployment.md §11.2。
+=======
+// 设计见 docs/technical/109-feedback-relay-deployment.md §11.2。
+>>>>>>> origin/main
 
 import { fetchCompat } from '../fetchCompat';
 import { logger } from '../logger';

@@ -4,7 +4,10 @@
 import { zhChatAndSider } from './locales/zh/chatAndSider';
 import { zhChatPdfOcr } from './locales/zh/chatPdfOcr';
 import { zhContextMenu } from './locales/zh/contextMenu';
+<<<<<<< HEAD
 import { zhPet } from './locales/zh/pet';
+=======
+>>>>>>> origin/main
 import { zhPetPack } from './locales/zh/petPack';
 import { zhPlaybook } from './locales/zh/playbook';
 import { zhSettingsAndModels } from './locales/zh/settingsAndModels';
@@ -17,7 +20,10 @@ export const zh = {
   ...zhChatAndSider,
   ...zhChatPdfOcr,
   ...zhContextMenu,
+<<<<<<< HEAD
   ...zhPet,
+=======
+>>>>>>> origin/main
   ...zhPetPack,
   ...zhPlaybook,
   ...zhSettingsAndModels,

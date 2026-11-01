@@ -91,6 +91,108 @@ export const officeRoutes: Record<string, CommandRoute> = {
   // 文件，并自动复检把 remaining 带回。接线前该端点全仓零调用，"一键修复"
   // 在 UI 上不存在（只报问题不给修法）。
   office_word_repair: { method: 'POST', path: () => '/api/v1/office/word/repair' },
+<<<<<<< HEAD
+=======
+
+  // M2c (2026-11-01): Word rule-pack audit/fix surface.
+  // GET query strings are not auto-translated by the bridge — serialize workspacePath here.
+  // The audit/fix POST bodies use rawBody because nested rule `params` keys are user data and
+  // must never be camelCase-rewritten.
+  office_word_rulepacks_list: {
+    method: 'GET',
+    path: (a) => {
+      const ws = a.workspacePath ?? a.workspace_path;
+      return `/api/v1/office/word/rulepacks${ws ? `?workspace_path=${encodeURIComponent(String(ws))}` : ''}`;
+    },
+  },
+  office_word_rulepack_get: {
+    method: 'GET',
+    path: (a) => {
+      const ws = a.workspacePath ?? a.workspace_path;
+      const base = `/api/v1/office/word/rulepacks/${encodeURIComponent(String(a.packId ?? a.pack_id))}`;
+      return ws ? `${base}?workspace_path=${encodeURIComponent(String(ws))}` : base;
+    },
+  },
+  office_word_audit: {
+    method: 'POST',
+    path: () => '/api/v1/office/word/audit',
+    rawBody: true,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      file_path: a.filePath ?? a.file_path,
+      ...((a.rulepackId ?? a.rulepack_id) ? { rulepack_id: a.rulepackId ?? a.rulepack_id } : {}),
+      ...((a.maxSizeBytes ?? a.max_size_bytes)
+        ? { max_size_bytes: a.maxSizeBytes ?? a.max_size_bytes }
+        : {}),
+    }),
+  },
+  office_word_audit_fix: {
+    method: 'POST',
+    path: () => '/api/v1/office/word/audit/fix',
+    rawBody: true,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      file_path: a.filePath ?? a.file_path,
+      ...((a.rulepackId ?? a.rulepack_id) ? { rulepack_id: a.rulepackId ?? a.rulepack_id } : {}),
+      ...((a.outputFilename ?? a.output_filename)
+        ? { output_filename: a.outputFilename ?? a.output_filename }
+        : {}),
+      overwrite: Boolean(a.overwrite),
+      ...((a.maxSizeBytes ?? a.max_size_bytes)
+        ? { max_size_bytes: a.maxSizeBytes ?? a.max_size_bytes }
+        : {}),
+    }),
+  },
+  // M3c: rule extraction from spec/template documents. rawBody keeps the
+  // nested rule-pack params untouched on save.
+  office_word_rulepacks_extract: {
+    method: 'POST',
+    path: () => '/api/v1/office/word/rulepacks/extract',
+    rawBody: true,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      file_path: a.filePath ?? a.file_path,
+      file_type: a.fileType ?? a.file_type ?? 'spec',
+      ...((a.packId ?? a.pack_id) ? { pack_id: a.packId ?? a.pack_id } : {}),
+      ...((a.packName ?? a.pack_name) ? { pack_name: a.packName ?? a.pack_name } : {}),
+      use_llm: Boolean(a.useLlm ?? a.use_llm),
+      ...((a.maxSizeBytes ?? a.max_size_bytes)
+        ? { max_size_bytes: a.maxSizeBytes ?? a.max_size_bytes }
+        : {}),
+    }),
+  },
+  office_word_rulepacks_extract_save: {
+    method: 'POST',
+    path: () => '/api/v1/office/word/rulepacks/extract/save',
+    rawBody: true,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      pack: a.pack,
+    }),
+  },
+  // M4c: native tracked revisions (w:ins/w:del + comments). rawBody keeps
+  // explicit change payloads and nested rule-pack params untouched.
+  office_word_revise: {
+    method: 'POST',
+    path: () => '/api/v1/office/word/audit/revise',
+    rawBody: true,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      file_path: a.filePath ?? a.file_path,
+      ...((a.rulepackId ?? a.rulepack_id) ? { rulepack_id: a.rulepackId ?? a.rulepack_id } : {}),
+      ...(Array.isArray(a.changes) ? { changes: a.changes } : {}),
+      ...((a.outputFilename ?? a.output_filename)
+        ? { output_filename: a.outputFilename ?? a.output_filename }
+        : {}),
+      overwrite: Boolean(a.overwrite),
+      author: a.author ?? 'Sage',
+      add_comments: a.addComments ?? a.add_comments ?? true,
+      ...((a.maxSizeBytes ?? a.max_size_bytes)
+        ? { max_size_bytes: a.maxSizeBytes ?? a.max_size_bytes }
+        : {}),
+    }),
+  },
+>>>>>>> origin/main
   // Office parity batch 1 (item 1.2): PDF read/generate.
   // Backend: backend/api/office_routes.py:495-508 (POST /pdf/read, POST /pdf/generate).
   // NOTE: PdfReadRequest is extra="forbid" — officeApi.readPdf must send

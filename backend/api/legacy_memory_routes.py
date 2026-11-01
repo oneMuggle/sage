@@ -22,7 +22,11 @@ import os
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
+<<<<<<< HEAD
 from pydantic import BaseModel, Field
+=======
+from pydantic import BaseModel, ConfigDict, Field
+>>>>>>> origin/main
 
 from backend.data.database import get_database
 from backend.memory import get_memory_manager
@@ -79,6 +83,7 @@ class MemorySaveRequest(BaseModel):
 
 
 class MemoryDeleteRequest(BaseModel):
+<<<<<<< HEAD
     # Gap E (Task 5): 渲染器桥 (T1) 发 { memory_id }，preload 直传；
     # 兼容 legacy { id } 两种拼法，端到端打通 Memory 页删除。
     id: Optional[str] = None
@@ -89,6 +94,9 @@ class MemoryDeleteRequest(BaseModel):
         if self.memory_id and self.id and self.memory_id != self.id:
             raise HTTPException(status_code=422, detail="memory id mismatch")
         return self.memory_id or self.id
+=======
+    id: str
+>>>>>>> origin/main
 
 
 # ---- 对标 S2（2026-09-13）：记忆写入台账 / 撤销 / 用户画像 CRUD ---------
@@ -306,8 +314,12 @@ def list_learned_preferences():
 class LearnedPreferenceUpdate(BaseModel):
     """手动纠正已学偏好的请求体。"""
 
+<<<<<<< HEAD
     class Config:
         extra = "forbid"
+=======
+    model_config = ConfigDict(extra="forbid")
+>>>>>>> origin/main
 
     key: str = Field(min_length=1)
     value: str = Field(min_length=1)
@@ -397,8 +409,12 @@ def refresh_user_profile():
 class RecallFeedbackRequest(BaseModel):
     """召回反馈上报体。"""
 
+<<<<<<< HEAD
     class Config:
         extra = "forbid"
+=======
+    model_config = ConfigDict(extra="forbid")
+>>>>>>> origin/main
 
     log_id: str = Field(min_length=1)
     feedback: str = Field(pattern="^(up|down)$")
@@ -644,14 +660,23 @@ def delete_memory(data: MemoryDeleteRequest):
     try:
         mm = get_memory_manager()
         # 尝试从所有类型中删除(working 通过合成 id 支持单条删除)
+<<<<<<< HEAD
         target_id = data.resolve_id()
         if not target_id:
             raise HTTPException(status_code=422, detail="memory id required")
         for mtype in ["episodic", "semantic", "working"]:
             if mm.delete_memory(target_id, mtype):
+=======
+        for mtype in ["episodic", "semantic", "working"]:
+            if mm.delete_memory(data.id, mtype):
+>>>>>>> origin/main
                 return {"status": "ok"}
         raise HTTPException(status_code=404, detail="记忆不存在")
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/main

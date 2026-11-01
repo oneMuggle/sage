@@ -299,6 +299,14 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                       {t('settings.endpoints.api_key_hint')}
                     </p>
                   )}
+<<<<<<< HEAD
+=======
+                  {ep.hasApiKey === true && !apiKey ? (
+                    <p className="text-ui-xs text-amber-500/80 mt-0.5">
+                      {t('settings.endpoints.api_key_saved_hint')}
+                    </p>
+                  ) : null}
+>>>>>>> origin/main
                 </div>
                 <div>
                   <label className="text-xs text-muted block mb-1">

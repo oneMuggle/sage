@@ -25,10 +25,13 @@ _RAW_KEYS = {
     "maxRetries": "max_retries",
     "maxLaneIterations": "max_lane_iterations",
     "maxSubagentIterations": "max_subagent_iterations",
+<<<<<<< HEAD
     "maxPrimaryIterations": "max_primary_iterations",
     "maxCoderIterations": "max_coder_iterations",
     "maxReviewerIterations": "max_reviewer_iterations",
     "maxWriterIterations": "max_writer_iterations",
+=======
+>>>>>>> origin/main
     # 键名必须与前端 OrchSettings.subagentTaskTimeoutS 逐字一致
     # (此前写成 taskTimeoutSeconds, 永远取不到值回落默认 900)。
     "subagentTaskTimeoutS": "subagent_task_timeout_s",
@@ -137,7 +140,10 @@ class OrchSettings:
     #: Primary agent 迭代次数上限（2026-10-20 新增）。覆盖 AgentProfile 的
     #: 硬编码 max_iterations，允许用户在 UI 中调整。默认 25（与 profiles.py
     #: primary profile 一致）。0 = 使用 profile 默认值。
+<<<<<<< HEAD
     #: 2026-11-01 win7 同步：此前默认 0 会关闭动态预算，改为与 main 一致的 25。
+=======
+>>>>>>> origin/main
     max_iterations: int = 25
     #: 2026-11-01: 动态迭代预算总开关（P1 设置页暴露）。
     #: 关闭后 run_loop 回到固定 max_iterations 行为（仍可用 env 强制关闭）。

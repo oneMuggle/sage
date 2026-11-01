@@ -8,6 +8,7 @@ import html as _html_mod
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 from backend.data import artifact_repo
 
@@ -326,6 +327,56 @@ def read_pdf_path(path: Path, max_bytes: int = 0) -> dict:
     return {"ok": True, "kind": "pdf", "data_url": f"data:application/pdf;base64,{data}"}
 
 
+<<<<<<< HEAD
+=======
+def read_latex(artifact_id: str, max_bytes: int = 0) -> dict:
+    """按 artifact id 读取 .tex 的 LaTeX 结构化预览。"""
+    artifact = artifact_repo.get_artifact(artifact_id)
+    if artifact is None:
+        return {"ok": False, "error": "artifact not found"}
+    return read_latex_path(Path(artifact.path), max_bytes=max_bytes)
+
+
+def read_latex_path(
+    path: Path, max_bytes: int = 0, root: Optional[Path] = None
+) -> dict:
+    """按路径读取 .tex：解析项目并返回 blocks/warnings/source。
+
+    ``root`` 默认是文件父目录；工作区预览应传入绑定工作区根，确保 include
+    不能越界。解析失败返回 ``ok=False``，不抛异常给预览层。
+    """
+    from backend.office.errors import OfficeError
+    from backend.office.latex.service import (
+        DEFAULT_MAX_FILE_BYTES,
+        read_latex_file,
+    )
+
+    effective_max = max_bytes if max_bytes > 0 else DEFAULT_MAX_FILE_BYTES
+    if not path.is_file():
+        return {"ok": False, "code": "file_not_found", "error": "文件不存在"}
+    try:
+        if path.stat().st_size > effective_max:
+            return {
+                "ok": False,
+                "code": "file_too_large",
+                "error": f"文件超过 {effective_max} 字节预览上限",
+            }
+        return read_latex_file(
+            path,
+            workspace=root if root is not None else path.parent,
+            max_bytes=effective_max,
+        )
+    except OfficeError as exc:
+        return {"ok": False, "code": "latex_parse_error", "error": str(exc)}
+    except Exception as exc:  # noqa: BLE001 — 预览必须降级
+        return {
+            "ok": False,
+            "code": "latex_parse_error",
+            "error": f"LaTeX 解析失败: {exc}",
+        }
+
+
+>>>>>>> origin/main
 def read_office_path(path: Path, kind: str, max_bytes: int = 0) -> dict:
     """按路径读取 docx/xlsx/pptx 轻量 HTML 预览（兼返回 structured）。"""
     effective_max = max_bytes if max_bytes > 0 else MAX_OFFICE_BYTES

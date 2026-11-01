@@ -9,6 +9,10 @@
 
 from __future__ import annotations
 
+<<<<<<< HEAD
+=======
+import json
+>>>>>>> origin/main
 import sys
 
 import pytest
@@ -22,11 +26,20 @@ from backend.hooks.runner import (
     run_hook,
 )
 
+<<<<<<< HEAD
 pytestmark = pytest.mark.unit
+=======
+pytestmark = [
+    pytest.mark.unit,
+    # Windows cmd.exe 不解释 shell 命令中的单引号 → -c 参数解析失败 (产品级 Windows 兼容缺口)
+    pytest.mark.skipif(sys.platform == "win32", reason="hooks shell 引用在 Windows cmd.exe 下不兼容（产品缺口）"),
+]
+>>>>>>> origin/main
 
 PY = sys.executable
 
 
+<<<<<<< HEAD
 def _hook_code(code: str) -> str:
     """把一段 Python 代码包成跨平台的 hook 命令。
 
@@ -48,6 +61,8 @@ def _hook_json(payload: dict) -> str:
     lit = repr(payload)
     return _hook_code(f"import json; print(json.dumps({lit}))")
 
+=======
+>>>>>>> origin/main
 def _cfg(command: str, event: str = "post_tool_use", matcher: str = "*", timeout: float = 5.0) -> HookConfig:
     return HookConfig(event=event, command=command, matcher=matcher, timeout_seconds=timeout)
 
@@ -75,12 +90,19 @@ def test_hookoutcome_default_severity_is_info():
 
 @pytest.mark.asyncio()
 async def test_hook_stdout_additional_context_captured():
+<<<<<<< HEAD
     cmd = _hook_json(
         {
             "decision": "allow",
             "additional_context": "ruff: F401 unused import on line 5",
             "severity": "warning",
         }
+=======
+    cmd = (
+        f"""{PY} -c 'import json; print(json.dumps({{"decision": "allow", """
+        f""""additional_context": "ruff: F401 unused import on line 5", """
+        f""""severity": "warning"}}))'"""
+>>>>>>> origin/main
     )
     outcome = await run_hook(_cfg(cmd), _post_payload())
     assert outcome.additional_context == "ruff: F401 unused import on line 5"
@@ -90,7 +112,14 @@ async def test_hook_stdout_additional_context_captured():
 @pytest.mark.asyncio()
 async def test_hook_stdout_truncates_oversized_feedback():
     huge = "x" * 5000
+<<<<<<< HEAD
     cmd = _hook_json({"decision": "allow", "additional_context": huge})
+=======
+    cmd = (
+        f"""{PY} -c 'import json; print(json.dumps({{"decision": "allow", """
+        f""""additional_context": {json.dumps(huge)}}}))'"""
+    )
+>>>>>>> origin/main
     outcome = await run_hook(_cfg(cmd), _post_payload())
     assert outcome.additional_context is not None
     assert len(outcome.additional_context) <= 2048 + 10  # 截断后缀
@@ -98,14 +127,28 @@ async def test_hook_stdout_truncates_oversized_feedback():
 
 @pytest.mark.asyncio()
 async def test_hook_invalid_severity_falls_back_to_info():
+<<<<<<< HEAD
     cmd = _hook_json({"decision": "allow", "additional_context": "msg", "severity": "criticallll"})
+=======
+    cmd = (
+        f"""{PY} -c 'import json; print(json.dumps({{"decision": "allow", """
+        f""""additional_context": "msg", "severity": "criticallll"}}))'"""
+    )
+>>>>>>> origin/main
     outcome = await run_hook(_cfg(cmd), _post_payload())
     assert outcome.severity == "info"
 
 
 @pytest.mark.asyncio()
 async def test_hook_feedback_on_deny_still_propagates():
+<<<<<<< HEAD
     cmd = _hook_json({"decision": "deny", "reason": "blocked", "additional_context": "see docs"})
+=======
+    cmd = (
+        f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny", """
+        f""""reason": "blocked", "additional_context": "see docs"}}))'"""
+    )
+>>>>>>> origin/main
     outcome = await run_hook(_cfg(cmd), _post_payload())
     assert outcome.denied
     assert outcome.additional_context == "see docs"
@@ -116,8 +159,19 @@ async def test_hook_feedback_on_deny_still_propagates():
 
 @pytest.mark.asyncio()
 async def test_run_event_hooks_merges_multiple_feedbacks():
+<<<<<<< HEAD
     cmd1 = _hook_json({"decision": "allow", "additional_context": "line 1: unused import"})
     cmd2 = _hook_json({"decision": "allow", "additional_context": "line 5: typo"})
+=======
+    cmd1 = (
+        f"""{PY} -c 'import json; print(json.dumps({{"decision": "allow", """
+        f""""additional_context": "line 1: unused import"}}))'"""
+    )
+    cmd2 = (
+        f"""{PY} -c 'import json; print(json.dumps({{"decision": "allow", """
+        f""""additional_context": "line 5: typo"}}))'"""
+    )
+>>>>>>> origin/main
     hooks = [_cfg(cmd1), _cfg(cmd2)]
     outcome = await run_event_hooks(hooks, "post_tool_use", "bash", _post_payload())
     assert outcome.has_feedback
@@ -127,6 +181,7 @@ async def test_run_event_hooks_merges_multiple_feedbacks():
 
 @pytest.mark.asyncio()
 async def test_run_event_hooks_severity_takes_highest():
+<<<<<<< HEAD
     info_cmd = _hook_json(
         {
             "decision": "allow",
@@ -147,6 +202,19 @@ async def test_run_event_hooks_severity_takes_highest():
             "additional_context": "warn msg",
             "severity": "warning",
         }
+=======
+    info_cmd = (
+        f"""{PY} -c 'import json; print(json.dumps({{"decision": "allow", """
+        f""""additional_context": "info msg", "severity": "info"}}))'"""
+    )
+    err_cmd = (
+        f"""{PY} -c 'import json; print(json.dumps({{"decision": "allow", """
+        f""""additional_context": "err msg", "severity": "error"}}))'"""
+    )
+    warn_cmd = (
+        f"""{PY} -c 'import json; print(json.dumps({{"decision": "allow", """
+        f""""additional_context": "warn msg", "severity": "warning"}}))'"""
+>>>>>>> origin/main
     )
     outcome = await run_event_hooks(
         [_cfg(info_cmd), _cfg(warn_cmd), _cfg(err_cmd)],
@@ -160,8 +228,18 @@ async def test_run_event_hooks_severity_takes_highest():
 @pytest.mark.asyncio()
 async def test_run_event_hooks_feedback_on_deny_still_aggregated():
     """deny 短路时仍把之前已收集的反馈带上。"""
+<<<<<<< HEAD
     info_cmd = _hook_json({"decision": "allow", "additional_context": "first observation"})
     deny_cmd = _hook_json({"decision": "deny", "reason": "no"})
+=======
+    info_cmd = (
+        f"""{PY} -c 'import json; print(json.dumps({{"decision": "allow", """
+        f""""additional_context": "first observation"}}))'"""
+    )
+    deny_cmd = (
+        f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny", "reason": "no"}}))'"""
+    )
+>>>>>>> origin/main
     outcome = await run_event_hooks(
         [_cfg(info_cmd), _cfg(deny_cmd)], "post_tool_use", "bash", _post_payload()
     )
@@ -171,7 +249,11 @@ async def test_run_event_hooks_feedback_on_deny_still_aggregated():
 
 @pytest.mark.asyncio()
 async def test_run_event_hooks_no_feedback_when_none_provided():
+<<<<<<< HEAD
     cmd = _hook_json({"decision": "allow"})
+=======
+    cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "allow"}}))'"""
+>>>>>>> origin/main
     outcome = await run_event_hooks([_cfg(cmd)], "post_tool_use", "bash", _post_payload())
     assert not outcome.has_feedback
     assert outcome.additional_context is None

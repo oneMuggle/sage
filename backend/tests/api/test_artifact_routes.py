@@ -209,3 +209,34 @@ async def test_update_artifact_404_missing(client):
         json={"base_hash": "a" * 64, "content": "x"},
     )
     assert resp.status_code == 404
+<<<<<<< HEAD
+=======
+
+
+@pytest.mark.asyncio()
+async def test_content_latex_returns_structured(client, tmp_path: Path):
+    tex = tmp_path / "paper.tex"
+    tex.write_text(
+        r"""
+\documentclass{article}
+\title{Artifact Demo}
+\begin{document}
+\section{Intro}
+Hello $x^2$.
+\end{document}
+""",
+        encoding="utf-8",
+    )
+    aid = artifact_repo.record_artifact(
+        "sess_test", str(tex), "paper.tex", "latex", tex.stat().st_size
+    )
+
+    resp = await client.get(f"/api/v1/sessions/sess_test/artifacts/{aid}/content")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["ok"] is True
+    assert payload["kind"] == "latex"
+    assert payload["structured"]["metadata"]["title"] == "Artifact Demo"
+    assert any(block["type"] == "heading" for block in payload["structured"]["blocks"])
+>>>>>>> origin/main

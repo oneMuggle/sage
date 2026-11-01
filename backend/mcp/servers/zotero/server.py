@@ -22,7 +22,11 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
+<<<<<<< HEAD
 from typing import Any, Dict, List, Optional
+=======
+from typing import Any, Dict, List
+>>>>>>> origin/main
 
 from backend.zotero import service as zotero_service
 
@@ -60,7 +64,11 @@ else:
     _MCP_IMPORT_ERROR = None
 
 
+<<<<<<< HEAD
 def _build_server() -> Optional[Server]:  # type: ignore[valid-type]
+=======
+def _build_server() -> Server | None:  # type: ignore[valid-type]
+>>>>>>> origin/main
     if Server is None:
         return None
     try:

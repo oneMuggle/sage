@@ -41,6 +41,44 @@ def _clean():
 
 @pytest.mark.asyncio()
 @_HEX_ONLY
+async def test_hex_put_blank_api_key_preserves_stored_key(client):
+    """hex 路由同样：空 apiKey 表示保持不变，不能抹掉已存凭据。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        "app_settings",
+        {
+            "endpoints": [
+                {
+                    "id": "e1",
+                    "baseUrl": "https://api.example.com",
+                    "apiKey": "sk-stored",
+                    "protocol": "openai-compatible",
+                }
+            ]
+        },
+    )
+
+    response = await client.put(
+        "/api/v1/settings",
+        json={
+            "endpoints": [
+                {
+                    "id": "e1",
+                    "baseUrl": "https://api.example.com",
+                    "apiKey": "",
+                    "protocol": "openai-compatible",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+
+    stored = repo.get_json("app_settings")
+    assert stored["endpoints"][0]["apiKey"] == "sk-stored"
+
+
+@pytest.mark.asyncio()
+@_HEX_ONLY
 async def test_hex_put_invalid_settings_uses_safe_structured_error_and_log(client, caplog):
     """Hex settings validation does not echo protocol/path values."""
     import logging

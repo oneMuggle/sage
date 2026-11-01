@@ -9,6 +9,8 @@ import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { TaskStatusValue } from '../../../shared/api';
 import { orchRunClient } from '../../../shared/api/orchRunClient';
 import { orchRunControlClient } from '../../../shared/api/orchRunControlClient';
+import { usePluginNames } from '../../../shared/lib/hooks/usePluginNames';
+import { findPluginToolOwner } from '../../../shared/lib/permissionInsights';
 
 import { SubagentDetailDrawer } from './SubagentDetailDrawer';
 import { buildTaskTree, descendantsOf, flattenTree } from './taskTree';
@@ -88,6 +90,28 @@ export function TaskTreeSection({
     if (wallClock) return '⚠ 墙钟上限已到，剩余任务已停止派发';
     return null;
   }, [board.statuses]);
+<<<<<<< HEAD
+=======
+  // R114: 实时行（等待审批徽章 + 事件行）的插件归属后缀供数。
+  // 子代理事件只有 tool_name、没有 plugin_name，按转录
+  // （R111）同一名单前端派生；仅当板上出现带工具名的实时
+  // 数据时才取数，无编排实时数据的渲染零影响。后缀文案
+  // 跟随本文件硬编码中文（未接 i18n，如「（错误）」）。
+  const hasLiveToolNames = useMemo(
+    () =>
+      Object.values(board.live ?? {}).some(
+        (liveState) =>
+          Boolean(liveState.waitingApproval) ||
+          liveState.events.some((evt) => Boolean(evt.tool_name)),
+      ),
+    [board.live],
+  );
+  const pluginNames = usePluginNames(hasLiveToolNames);
+  const pluginOwnerSuffix = (toolName?: string | null): string => {
+    const owner = toolName ? findPluginToolOwner(toolName, pluginNames) : null;
+    return owner ? `（所属插件: ${owner}）` : '';
+  };
+>>>>>>> origin/main
   const [drawerOpen, setDrawerOpen] = useState(false);
   const selectTask = useRunControlStore((s) => s.selectTask);
   // B3 (2026-09-09): 单任务跳过 in-flight 集合 —— 防重复点击；终态由
@@ -477,6 +501,7 @@ export function TaskTreeSection({
                 className="pl-6 text-ui-2xs text-warning"
               >
                 ⏳ 等待审批: {live.waitingApproval}
+                {pluginOwnerSuffix(live.waitingApproval)}
               </div>
             )}
             {/* live-events P0: 行内实时步骤（running 时显示最新一条投影） */}
@@ -510,7 +535,7 @@ export function TaskTreeSection({
                           : ''}
                       </span>{' '}
                       {evt.phase === 'approval_requested'
-                        ? `⏳ 等待审批: ${evt.tool_name ?? 'tool'}`
+                        ? `⏳ 等待审批: ${evt.tool_name ?? 'tool'}${pluginOwnerSuffix(evt.tool_name)}`
                         : evt.phase === 'approval_resolved'
                           ? evt.approved
                             ? '✓ 已批准'
@@ -520,8 +545,8 @@ export function TaskTreeSection({
                             : evt.phase === 'failed'
                               ? '✗ 失败'
                               : evt.phase === 'tool_result'
-                                ? `👀 ${evt.tool_name ?? 'tool'} ${evt.is_error ? '（错误）' : ''}`
-                                : `🔧 ${evt.tool_name ?? 'tool'}`}
+                                ? `👀 ${evt.tool_name ?? 'tool'}${pluginOwnerSuffix(evt.tool_name)} ${evt.is_error ? '（错误）' : ''}`
+                                : `🔧 ${evt.tool_name ?? 'tool'}${pluginOwnerSuffix(evt.tool_name)}`}
                     </li>
                   ))}
                 </ul>

@@ -432,7 +432,11 @@ class PluginLifecycleManager:
 
     def list_plugins(
         self, status: Optional[PluginStatus] = None
+<<<<<<< HEAD
     ) -> List[PluginRecord]:
+=======
+    ) -> list[PluginRecord]:
+>>>>>>> origin/main
         """
         List all plugins, optionally filtered by status.
 

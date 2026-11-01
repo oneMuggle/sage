@@ -75,12 +75,22 @@ Office/PDF 页面   ─┘        │
 
 ### RapidOCR（推荐）
 
+<<<<<<< HEAD
 - **win7 安装包不捆绑 RapidOCR**（onnxruntime >=1.15 不支持 Win7）；
   Win7 推荐 Tesseract 4.1（可把二进制放到 `resources/tesseract/`，
   Electron 会自动注入 `SAGE_TESSERACT_PATH`）。
 - 实验路径（需真机验证）：`rapidocr-onnxruntime==1.4.4` + `onnxruntime==1.14.1`
   + PP-OCRv4 mobile；默认不启用。
 - dev/main 手动安装方式见 `backend/requirements-optional.txt`。
+=======
+- **main 安装包已捆绑**：`rapidocr==3.10.0` + `onnxruntime==1.19.2` +
+  `opencv-python-headless==4.11.0.86` + `Pillow`，写在
+  `backend/requirements-bundled.txt`；`numpy<2` 保证 win_amd64 解析到
+  opencv 4.11（4.12+ 要求 numpy>=2）。
+- 体积：上述 OCR 依赖的 cp311 win_amd64 wheel 合计约 107MB，解压后约 200MB；
+  安装包（压缩后）增量需在 release 构建实测。
+- dev/CI 不默认安装（见 `backend/requirements-optional.txt`）；手动安装后即可使用。
+>>>>>>> origin/main
 - wheel 自带 PP-OCRv6 small det/rec + 方向分类模型（约 31MB），安装后离线可用；
 - 自定义模型目录：`SAGE_OCR_MODEL_DIR` 或 `SAGE_USER_DATA_DIR/models/rapidocr/`
   （`det.onnx` + `rec.onnx`，可选 `cls.onnx`）。

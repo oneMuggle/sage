@@ -85,9 +85,12 @@ class MemoryManager:
         self.episodic = episodic
         self.semantic = semantic
         self.summary_store = summary_store
+<<<<<<< HEAD
         # Lazily-created ConsolidationPipeline (F2) — built on first use so
         # the constructor stays lightweight and test-friendly.
         self._consolidation_pipeline = None
+=======
+>>>>>>> origin/main
         # P3 (Mem0 风格) 冲突消解器: 惰性构造（首次判定时才建, 见
         # get_conflict_resolver）; 仅服务 episodic/semantic 持久层。
         self._conflict_resolver = None
@@ -284,9 +287,12 @@ class MemoryManager:
                 importance=importance,
                 metadata=meta,
                 session_id=sid,
+<<<<<<< HEAD
                 source_turn_id=meta.get("source_turn_id"),
                 source_message_id=meta.get("source_message_id"),
                 memory_category=meta.get("memory_category"),
+=======
+>>>>>>> origin/main
                 scope=scope,
                 project_key=project_key,
                 supersedes_id=supersedes_id,
@@ -298,7 +304,11 @@ class MemoryManager:
                 content=content,
                 summary=None,
                 tags=tags,
+<<<<<<< HEAD
                 session_id=session_id or meta.get("session_id"),
+=======
+                session_id=session_id,
+>>>>>>> origin/main
                 scope=scope,
                 project_key=project_key,
                 supersedes_id=supersedes_id,

@@ -17,7 +17,11 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Dict, Iterable, List, Optional, Set, Tuple
+=======
+from typing import Dict, Iterable, List, Set, Tuple
+>>>>>>> origin/main
 
 # 复用 lint 中的 wikilink 正则
 try:

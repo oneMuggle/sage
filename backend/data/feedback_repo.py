@@ -1,6 +1,10 @@
 """SQLite repository for user feedback conversations and messages.
 
+<<<<<<< HEAD
 See docs/technical/111-feedback-relay-deployment.md §11.1 (local schema) and §11.2 (local API).
+=======
+See docs/technical/109-feedback-relay-deployment.md §11.1 (local schema) and §11.2 (local API).
+>>>>>>> origin/main
 Supports bidirectional conversations: users create conversations and send messages,
 admins reply via Jira/GitLab/SMTP forwarding script, clients poll for new admin messages.
 

@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { PetConfigBridge, PetSnapshotBridge } from '../shared/types/electron-api';
 
+<<<<<<< HEAD
 import { PetPanel } from './PetPanel';
+=======
+import { DEFAULT_CONFIG, EMPTY_SNAPSHOT } from './defaults';
+>>>>>>> origin/main
 import { bubbleText, resolveAnimation, resolveInteraction } from './engine/animation';
 import { isChinese, statusGlyph, statusLabel } from './engine/labels';
 import { safePlay } from './engine/media';
@@ -16,6 +20,7 @@ const CLICK_DELAY_MS = 240;
 const ANGER_WINDOW_MS = 2000;
 const ANGER_CLICKS = 5;
 
+<<<<<<< HEAD
 const EMPTY_SNAPSHOT: PetSnapshotBridge = {
   action: 'idle',
   detail: null,
@@ -58,6 +63,8 @@ const DEFAULT_CONFIG: PetConfigBridge = {
   size: 'medium',
 };
 
+=======
+>>>>>>> origin/main
 interface PlaybackOverride {
   file: string;
   loop: boolean;
@@ -72,7 +79,10 @@ export function PetApp(): JSX.Element {
   const [snapshot, setSnapshot] = useState<PetSnapshotBridge>(EMPTY_SNAPSHOT);
   const [config, setConfig] = useState<PetConfigBridge>(DEFAULT_CONFIG);
   const [override, setOverride] = useState<PlaybackOverride | null>(null);
+<<<<<<< HEAD
   const [panelOpen, setPanelOpen] = useState(false);
+=======
+>>>>>>> origin/main
   const [localBubble, setLocalBubble] = useState<LocalBubble | null>(null);
   const [idleVariant, setIdleVariant] = useState(0);
   const [idleResting, setIdleResting] = useState(false);
@@ -204,6 +214,7 @@ export function PetApp(): JSX.Element {
   }, [choice, pack, config.reduceMotion]);
 
   const togglePanel = useCallback(() => {
+<<<<<<< HEAD
     setPanelOpen((open) => {
       const next = !open;
       pet?.setPanel(next);
@@ -225,6 +236,11 @@ export function PetApp(): JSX.Element {
 
   const openSettings = useCallback(() => {
     pet?.openSettings();
+=======
+    // The status panel is its own window; the overlay itself never resizes
+    // (resizing + moving it made the sprite jump on XWayland).
+    pet?.togglePanel();
+>>>>>>> origin/main
   }, [pet]);
 
   const clearClickTimer = useCallback(() => {
@@ -368,6 +384,7 @@ export function PetApp(): JSX.Element {
   const statusTitle = statusLabel(snapshot.action, snapshot.detail, snapshot.toolName);
 
   return (
+<<<<<<< HEAD
     <div className="pet-root" data-panel={panelOpen ? 'open' : 'closed'}>
       {panelOpen ? (
         <PetPanel
@@ -378,6 +395,9 @@ export function PetApp(): JSX.Element {
           onOpenSettings={openSettings}
         />
       ) : null}
+=======
+    <div className="pet-root">
+>>>>>>> origin/main
       <div
         className="pet-stage"
         onPointerDown={handlePointerDown}

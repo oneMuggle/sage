@@ -67,7 +67,19 @@ import {
   type OfficePreviewData,
   type OfficeReadResult,
 } from '../features/office';
+<<<<<<< HEAD
 import { OfficeStagingInspector } from '../features/office/OfficeStagingInspector';
+=======
+import { LatexAuditPanel } from '../features/office/LatexAuditPanel';
+import { LatexBuildPanel } from '../features/office/LatexBuildPanel';
+import { LatexCompliancePanel } from '../features/office/LatexCompliancePanel';
+import { LatexPdfAuditPanel } from '../features/office/LatexPdfAuditPanel';
+import { LatexProfileLibraryPanel } from '../features/office/LatexProfileLibraryPanel';
+import { LatexProjectImportPanel } from '../features/office/LatexProjectImportPanel';
+import { LatexTemplatePanel } from '../features/office/LatexTemplatePanel';
+import { OfficeStagingInspector } from '../features/office/OfficeStagingInspector';
+import { WordRuleExtractionPanel } from '../features/office/WordRuleExtractionPanel';
+>>>>>>> origin/main
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
 import { WorkspaceBindModal } from '../features/workspace';
 import type { OfficeCapabilities, OfficeDocType } from '../shared/api/types';
@@ -508,6 +520,21 @@ export function Office() {
               valid workspace path for fill-from-content. Reuses the
               SessionWorkspaceProvider as its workspace source-of-truth. */}
           <JournalPanel />
+
+          {/* M3c: 规范/范本文档 → 规则抽取复核与保存。 */}
+          <WordRuleExtractionPanel workspacePath={workspacePath} />
+
+          {/* LaTeX panels — import a project zip, analyze/fill templates,
+              audit sources, and optionally compile inside the bound
+              workspace. Uses backendRequest (no extra IPC manifest
+              entry). */}
+          <LatexProjectImportPanel />
+          <LatexTemplatePanel />
+          <LatexAuditPanel />
+          <LatexPdfAuditPanel />
+          <LatexCompliancePanel />
+          <LatexProfileLibraryPanel />
+          <LatexBuildPanel />
         </>
       )}
 

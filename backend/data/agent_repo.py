@@ -25,11 +25,14 @@ SQLite ``agents`` 表 (见 ``backend/data/database.py:init_db``)。
 """
 
 from __future__ import annotations
+<<<<<<< HEAD
 from typing import Dict, List, Optional, Tuple
+=======
+>>>>>>> origin/main
 
 import json
 import time
-from typing import Any
+from typing import Any, Dict, List, Tuple
 
 
 class AgentRepository:
