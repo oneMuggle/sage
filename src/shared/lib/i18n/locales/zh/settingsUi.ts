@@ -304,6 +304,24 @@ export const zhSettingsUi = {
   'settings.orch.max_iterations.desc':
     'Primary agent 最大迭代次数（每次迭代 LLM 思考一次，可能调用多个工具），超限后会话终止并归因 max_iterations_exceeded',
   'settings.orch.max_iterations.label': 'Agent 迭代次数上限（次，0=默认值）',
+  // 2026-11-01: 动态迭代预算（P1 设置页暴露）。
+  'settings.orch.section_dynamic_budget': '动态迭代预算',
+  'settings.orch.dynamic_budget_intro':
+    '按任务复杂度给初始迭代预算：简单任务省预算，复杂/长任务可自动延长；连续重复调用或长期无进展时带证据停止。环境变量 SAGE_DYNAMIC_BUDGET_* 优先于此处设置。',
+  'settings.orch.dynamic_budget_enabled.label': '启用动态迭代预算',
+  'settings.orch.dynamic_budget_enabled.desc': '关闭后回到固定「Agent 迭代次数上限」',
+  'settings.orch.budget_simple.label': '简单任务初始预算（步）',
+  'settings.orch.budget_simple.desc': '短消息、无附件等简单任务的初始迭代步数',
+  'settings.orch.budget_medium.label': '中等任务初始预算（步）',
+  'settings.orch.budget_medium.desc': '默认档位；无法明确判断复杂度时使用',
+  'settings.orch.budget_complex.label': '复杂任务初始预算（步）',
+  'settings.orch.budget_complex.desc': '包含重构/迁移/设计等强信号或多文件任务的初始步数',
+  'settings.orch.budget_long.label': '长任务初始预算（步）',
+  'settings.orch.budget_long.desc': '长任务模式下的初始步数（按需调高）',
+  'settings.orch.budget_hard_cap.label': '自动延长硬顶（步）',
+  'settings.orch.budget_hard_cap.desc': '任何情况下允许的最大迭代步数',
+  'settings.orch.budget_max_extensions.label': '最大自动延长次数',
+  'settings.orch.budget_max_extensions.desc': '0 = 不自动延长，到达软预算即停止',
   'settings.orch.max_lane_iterations.label': 'Lane 迭代上限',
   'settings.orch.max_options_per_question.desc':
     'agent 提问时最多给出这么多个选项；不得小于「每题最少选项数」',
