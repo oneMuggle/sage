@@ -43,6 +43,7 @@ const RESULT: WordRuleExtractionResult = {
   ok: true,
   source_path: 'spec.docx',
   file_type: 'spec',
+  llm_used: false,
   pack: {
     id: 'journal-spec',
     name: '期刊规范',
@@ -103,6 +104,7 @@ describe('WordRuleExtractionPanel', () => {
       file_path: '/ws/docs/spec.docx',
       file_type: 'spec',
       pack_id: 'extracted-pack',
+      use_llm: false,
     });
     expect(screen.getByText('置信度 90%')).toBeInTheDocument();
     expect(screen.getByTestId('word-rule-extract-conflicts')).toBeInTheDocument();
@@ -162,7 +164,31 @@ describe('WordRuleExtractionPanel', () => {
       file_path: '/ws/template.docx',
       file_type: 'template',
       pack_id: 'template-pack',
+      use_llm: false,
     });
+  });
+
+  it('passes use_llm when the LLM supplement is enabled', async () => {
+    mockedExtract.mockResolvedValue({ ...RESULT, llm_used: true });
+
+    render(<WordRuleExtractionPanel workspacePath="/ws" />);
+    fireEvent.click(screen.getByTestId('word-rule-extract-use-llm'));
+    fireEvent.change(screen.getByTestId('word-rule-extract-path'), {
+      target: { value: 'spec.docx' },
+    });
+    fireEvent.click(screen.getByTestId('word-rule-extract-run'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('word-rule-extract-summary')).toBeInTheDocument(),
+    );
+    expect(mockedExtract).toHaveBeenCalledWith({
+      workspace_path: '/ws',
+      file_path: '/ws/spec.docx',
+      file_type: 'spec',
+      pack_id: 'extracted-pack',
+      use_llm: true,
+    });
+    expect(screen.getByText('LLM 已参与')).toBeInTheDocument();
   });
 
   it('shows extraction errors', async () => {

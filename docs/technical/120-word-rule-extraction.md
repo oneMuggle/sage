@@ -89,7 +89,7 @@ POST /api/v1/office/word/rulepacks/extract/save
 
 ## 7. 限制（后续）
 
-- LLM 语义候选与条文分段（M3b）；
+- LLM 语义候选已支持（单次、有界）；多轮分段/超长规范分批与候选参数在线编辑留待后续；
 - 规则包版本对比与导出/导入（后续）；
 - 规范中的表格/附件条文暂不扫描。
 
@@ -107,13 +107,34 @@ POST /api/v1/office/word/rulepacks/extract/save
 IPC：`office_word_rulepacks_extract` / `office_word_rulepacks_extract_save`，
 均使用 `rawBody`，避免规则 `params` 的用户键被 camelCase 改写。
 
-## 9. 测试
+## 9. LLM 补充（M3b）
+
+抽取请求可选 `use_llm=true`（仅 spec）：
+
+- 条文按 ≤40 条、≤12,000 字符分段，单次调用用户配置的 LLM；
+- prompt 限定允许的 kind/params，并要求每条候选引用 `clause_id`；
+- 响应按 JSON 数组解析（容忍 markdown 围栏），逐条经过确定性白名单校验：
+  - 未知 kind、越界数值、未知 clause、非对象项直接丢弃并计数；
+  - 合法候选来源标注 `<文件> 第 N 段（LLM）`，置信度 clamp 0.3–0.85；
+- LLM 候选与确定性候选走同一套去重/冲突/来源逻辑；
+- 无 LLM 配置 / 调用失败 / 解析失败 → 降级为确定性结果并返回对应 warning；
+- 范本 + `use_llm` → `llm_template_unsupported` warning；
+- 结果 `llm_used` 表示 LLM 路径是否实际参与；前端「LLM 补充」复选框控制。
+
+安全边界：规范条文只作为用户数据进入 prompt，不暴露工具调用；所有候选仍由确定性校验把关。
+
+## 10. 测试
 
 - `backend/tests/unit/office/test_word_rule_extract.py`（9）：
   spec 全类型抽取与来源/置信度、可复现、重复合并、冲突标记、字符缩进换算与缺字号 warning、
   范本主导值、无正文样本 warning、txt 规范、非法类型拒绝；
 - `backend/tests/integration/test_office_word_extract_routes.py`（4）：
   抽取→保存→列表、范本端点、无来源保存拒绝、超限/越界/非法范本类型拒绝；
-- `src/features/office/__tests__/WordRuleExtractionPanel.test.tsx`（5）：
-  无工作区提示、抽取与置信度/冲突展示、启停后只保存启用项、范本类型传参、错误展示；
+- `src/features/office/__tests__/WordRuleExtractionPanel.test.tsx`（6）：
+  无工作区提示、抽取与置信度/冲突展示、启停后只保存启用项、范本类型传参、
+  LLM 补充开启传参/徽章、错误展示；
+- `backend/tests/unit/office/test_word_rule_extract_llm.py`（8）：
+  分段稳定性、JSON 围栏解析、参数白名单、非法候选丢弃、异步合并、无配置/失败降级、范本不支持；
+- `backend/tests/integration/test_office_word_extract_llm_route.py`（1）：
+  `use_llm=true` 走异步分支并透传参数；
 - ruff 0.4.4、py38 兼容、architecture、import-linter、tsc、ESLint、Vitest 通过。

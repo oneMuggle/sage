@@ -29,6 +29,7 @@ export interface WordRuleExtractionPanelProps {
 export function WordRuleExtractionPanel({ workspacePath }: WordRuleExtractionPanelProps) {
   const [filePath, setFilePath] = useState('');
   const [fileType, setFileType] = useState<'spec' | 'template'>('spec');
+  const [useLlm, setUseLlm] = useState(false);
   const [packId, setPackId] = useState('extracted-pack');
   const [packName, setPackName] = useState('');
   const [result, setResult] = useState<WordRuleExtractionResult | null>(null);
@@ -81,6 +82,7 @@ export function WordRuleExtractionPanel({ workspacePath }: WordRuleExtractionPan
         file_type: fileType,
         pack_id: packId.trim() || 'extracted-pack',
         ...(packName.trim() ? { pack_name: packName.trim() } : {}),
+        use_llm: fileType === 'spec' ? useLlm : false,
       });
       setResult(data);
       setDisabledRuleIds(new Set());
@@ -147,6 +149,19 @@ export function WordRuleExtractionPanel({ workspacePath }: WordRuleExtractionPan
           testId="word-rule-extract-path"
           className="min-w-[16rem] flex-1"
         />
+        <label
+          className="flex items-center gap-1 text-xs text-muted"
+          title={fileType === 'template' ? 'LLM 补充仅适用于规范文档' : undefined}
+        >
+          <input
+            type="checkbox"
+            checked={useLlm}
+            onChange={(event) => setUseLlm(event.target.checked)}
+            disabled={fileType === 'template'}
+            data-testid="word-rule-extract-use-llm"
+          />
+          LLM 补充
+        </label>
         <input
           value={packId}
           onChange={(event) => setPackId(event.target.value)}
@@ -199,6 +214,11 @@ export function WordRuleExtractionPanel({ workspacePath }: WordRuleExtractionPan
               {result.summary.rules} 条规则 · {result.summary.conflicts} 个冲突 ·{' '}
               {result.summary.warnings} 个警告
             </span>
+            {result.llm_used && (
+              <span className="rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-primary">
+                LLM 已参与
+              </span>
+            )}
             <span className="text-muted">{result.source_path}</span>
           </div>
 
