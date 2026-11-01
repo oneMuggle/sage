@@ -146,6 +146,7 @@ def _general_quality() -> Dict[str, Any]:
                 {"max_consecutive": 2},
                 category="content",
                 severity="warning",
+                fixable=True,
                 fix_hint="删除多余空段落，用段落间距代替空行",
             ),
             _rule(

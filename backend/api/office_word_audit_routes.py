@@ -12,7 +12,9 @@ from backend.office.errors import OfficePathError, OfficeSizeLimitError
 from backend.office.path_safety import resolve_within
 from backend.office.storage import validate_workspace
 from backend.office.word_audit import audit_word_document
+from backend.office.word_fix import fix_word_document
 from backend.office.word_rulepack_models import (
+    WordAuditFixResult,
     WordAuditResult,
     WordRulePack,
     WordRulePackDetailResult,
@@ -49,6 +51,20 @@ class WordRulePackSaveRequest(BaseModel):
 
     workspace_path: str
     pack: WordRulePack
+
+
+class WordAuditFixRequest(BaseModel):
+    """POST /office/word/audit/fix body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str = Field(min_length=1, max_length=2000)
+    rulepack_id: Optional[str] = Field(default=None, max_length=80)
+    rulepack: Optional[WordRulePack] = None
+    output_filename: Optional[str] = Field(default=None, max_length=255)
+    overwrite: bool = False
+    max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
 
 
 def _check_size_limit(file_path: Path, max_size_bytes: int) -> None:
@@ -122,11 +138,37 @@ def audit_word_endpoint(req: WordAuditRequest) -> WordAuditResult:
     return audit_word_document(file_path, pack, workspace_path=str(workspace))
 
 
+@router.post("/audit/fix")
+def fix_word_endpoint(req: WordAuditFixRequest) -> WordAuditFixResult:
+    """Apply deterministic fixes, then re-audit the output (M2b)."""
+    workspace = validate_workspace(Path(req.workspace_path))
+    file_path = resolve_within(workspace, Path(req.file_path))
+    if not file_path.is_file():
+        raise OfficePathError(
+            f"file_path is not a regular file: {req.file_path}",
+            file_path=file_path,
+        )
+    _check_size_limit(file_path, req.max_size_bytes)
+    if req.rulepack is not None:
+        pack = req.rulepack
+    else:
+        pack = load_rulepack(workspace, req.rulepack_id or DEFAULT_RULEPACK_ID)["pack"]
+    return fix_word_document(
+        file_path,
+        pack,
+        req.output_filename,
+        overwrite=req.overwrite,
+        workspace_path=str(workspace),
+    )
+
+
 __all__ = [
+    "WordAuditFixRequest",
     "WordAuditRequest",
     "WordRulePackSaveRequest",
     "audit_word_endpoint",
     "delete_rulepack_endpoint",
+    "fix_word_endpoint",
     "get_rulepack_endpoint",
     "list_rulepacks_endpoint",
     "router",
