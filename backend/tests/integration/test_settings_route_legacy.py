@@ -62,6 +62,52 @@ async def test_put_invalid_settings_uses_safe_structured_error_and_log(client, c
 
 
 @pytest.mark.asyncio()
+async def test_put_blank_api_key_preserves_stored_key(client):
+    """脱敏回传（apiKey=""）编辑其它字段时不得抹掉已存凭据。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        "app_settings",
+        {
+            "endpoints": [
+                {
+                    "id": "e1",
+                    "baseUrl": "https://api.example.com",
+                    "apiKey": "sk-stored",
+                    "protocol": "openai-compatible",
+                    "name": "original",
+                }
+            ]
+        },
+    )
+
+    response = await client.put(
+        "/api/v1/settings",
+        json={
+            "endpoints": [
+                {
+                    "id": "e1",
+                    "baseUrl": "https://api.example.com",
+                    "apiKey": "",
+                    "protocol": "openai-compatible",
+                    "name": "renamed",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+
+    stored = repo.get_json("app_settings")
+    endpoint = stored["endpoints"][0]
+    assert endpoint["apiKey"] == "sk-stored"
+    assert endpoint["name"] == "renamed"
+
+    fetched = await client.get("/api/v1/settings")
+    out = fetched.json()["endpoints"][0]
+    assert out["apiKey"] == ""
+    assert out["hasApiKey"] is True
+
+
+@pytest.mark.asyncio()
 async def test_get_translates_legacy_snake_to_camel(client):
     """DB 里手插一条 snake_case 行, GET 应翻译为 camelCase 返回。
 

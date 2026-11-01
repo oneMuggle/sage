@@ -32,9 +32,49 @@ describe('protocol-aware endpoint readiness', () => {
       }),
     ).toBe(true);
   });
+  it('treats a backend-saved key (hasApiKey) as configured without local text', () => {
+    expect(
+      isEndpointConfigured({
+        baseUrl: 'https://api.example.com',
+        apiKey: '',
+        protocol: 'openai-compatible',
+        hasApiKey: true,
+      }),
+    ).toBe(true);
+    // Without baseUrl the endpoint is still unusable.
+    expect(
+      isEndpointConfigured({
+        baseUrl: ' ',
+        apiKey: '',
+        protocol: 'openai-compatible',
+        hasApiKey: true,
+      }),
+    ).toBe(false);
+    // Redaction flag must not be trusted for a non-boolean.
+    expect(
+      isEndpointConfigured({
+        baseUrl: 'https://api.example.com',
+        apiKey: '',
+        protocol: 'openai-compatible',
+        hasApiKey: false,
+      }),
+    ).toBe(false);
+  });
 });
 
 describe('endpointReadiness governance audit helpers (Phase P106)', () => {
+  it('reflects backend-saved keys in the audit snapshot', () => {
+    const snap = buildEndpointReadinessAuditSnapshot({
+      baseUrl: 'https://api.example.com',
+      apiKey: '',
+      protocol: 'openai-compatible',
+      hasApiKey: true,
+    });
+    expect(snap.configured).toBe(true);
+    expect(snap.hasApiKey).toBe(true);
+    expect(snap.signature).toBe('1|openai-compatible|1|1|1');
+  });
+
   it('builds deterministic audit snapshot and JSON for null, ollama, and cloud endpoints', () => {
     const emptySnap = buildEndpointReadinessAuditSnapshot(null);
     expect(emptySnap).toEqual({
