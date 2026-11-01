@@ -12,6 +12,7 @@
 import { getSettingMetadata } from '../../entities/setting/settingsRegistry';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { useI18n } from '../../shared/lib/i18n';
+import { NumberField as NumberInput } from '../../shared/ui/NumberField';
 
 import { SettingRow, Toggle } from './components';
 
@@ -106,21 +107,13 @@ function NumberField({
       value={value}
       onReset={defaultValue === undefined ? undefined : () => onChange(defaultValue)}
     >
-      <input
-        type="number"
-        data-testid={dataTestId}
+      <NumberInput
+        value={value}
+        onChange={onChange}
         min={min}
         max={max}
-        value={value}
-        onChange={(e) => {
-          // 空输入 = 不修改：Number('') === 0 会经 n >= min 守卫提交 0，
-          // 落库后 load_orch_settings() 读到 0 → asyncio.Semaphore(0) → 编排挂死。
-          if (e.target.value === '') return;
-          const n = Number(e.target.value);
-          if (Number.isFinite(n) && n >= min && (max === undefined || n <= max)) {
-            onChange(Math.floor(n));
-          }
-        }}
+        clampOnChange={false}
+        testId={dataTestId}
         className="w-32 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
       />
     </SettingRow>
