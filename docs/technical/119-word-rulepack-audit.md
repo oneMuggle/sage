@@ -182,6 +182,30 @@ POST /api/v1/office/word/audit/fix
 响应字段：`ok` / `source_path` / `output_path` / `overwritten` / `rule_pack_id` /
 `actions[{rule_id,kind,fixed_count,message}]` / `fixed_count` / `before` / `remaining` / `warnings`。
 
+### 5.4 原生修订写入（M4b）
+
+```http
+POST /api/v1/office/word/audit/revise
+```
+
+请求可选 `changes`（显式修订项）；省略时由服务端根据规则包审校结果生成计划：
+
+- `content.terminology`：`variant → preferred`；
+- `content.date_format`：实际日期样本转换为期望格式；
+- 仅处理 `fixable=true` 的规则与 issue；无可用计划返回 422。
+
+写入规则：
+
+- 定位首个包含 `find` 的正文/表格段落，按字符偏移切分 run；
+- 旧文本写入 `w:del`（`w:delText`），新文本写入 `w:ins`（`w:t`），带 `author`/`date`/唯一 id；
+- 保留首个受影响 run 的 `rPr`；`\n` 转为 `w:br`；
+- 可选在替换前为段落添加批注（复用 comments part）；批注失败仅 warning；
+- 默认输出 `<stem>-revised.docx`，`overwrite=true` 时原子替换；修订后用同一规则包复检并返回 `remaining`。
+
+已知限制：`python-docx` 的 `paragraph.text` 不包含 `w:ins` 文本与 `w:delText`，
+结构化预览/复检看不到待接受的新文本（Word/WPS 打开可见）；仅支持段落直接普通 run，
+批注锚定整段。
+
 ## 6. 定位语义
 
 | scope | anchor |
@@ -214,7 +238,8 @@ audit/fix 使用 `rawBody`，避免规则 `params` 的用户键被 camelCase 改
 - 原生 docx 渲染视图（docx-preview）中的段落定位（DOM 无稳定段落索引）；
 - 标题编号/题注/引用的自动重排（当前只在审校中报告，不自动修复）；
 - 语义规则已有确定性子集（日期格式/术语表/必备表述）；LLM 语义判断与语义修订（M4）；
-- 原生 track-changes / 批注式修订写入（M4b）；
+- 原生修订已支持（M4b）；修订视图与逐条接受/拒绝 UI 仍待 M4c；
+- 修订只处理段落直接普通 run；超链接/域/表格结构级修订待后续；
 - 确定性规范/范本规则抽取见 [120](./120-word-rule-extraction.md)。
 - 内置 GB 包字体名使用常见实现值（`仿宋_GB2312`），字库差异可通过自定义包覆盖。
 
@@ -236,4 +261,8 @@ audit/fix 使用 `rawBody`，避免规则 `params` 的用户键被 camelCase 改
   锚点高亮/滚动、超出渲染窗口自动扩展；
 - `backend/tests/unit/office/test_word_semantic_rules.py`（6）：日期主导/允许格式、
   术语 variant 锚点、必备表述、参数校验、内置日期规则；
+- `backend/tests/unit/office/test_word_revision_writer.py`（7）：tracked replace/批注、
+  跨 run 替换、缺文本/重复跳过、覆盖幂等、计划生成、输出安全；
+- `backend/tests/integration/test_office_word_revise_route.py`（4）：审校派生计划、
+  显式 changes、无计划拒绝、超限/越界拒绝；
 - ruff 0.4.4、py38 兼容检查、architecture 门禁、tsc、ESLint、Vitest 通过。
