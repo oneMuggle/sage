@@ -131,14 +131,44 @@ class WordAuditResult(BaseModel):
     warnings: List[Dict[str, str]] = Field(default_factory=list)
 
 
+class WordFixAction(BaseModel):
+    """One rule's deterministic fix summary."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule_id: str = Field(min_length=1, max_length=80)
+    kind: str = Field(min_length=1, max_length=80)
+    fixed_count: int = Field(ge=0, default=0)
+    message: str = Field(default="", max_length=1000)
+
+
+class WordAuditFixResult(BaseModel):
+    """POST /office/word/audit/fix result."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    source_path: str
+    output_path: str
+    overwritten: bool = False
+    rule_pack_id: str
+    actions: List[WordFixAction] = Field(default_factory=list)
+    fixed_count: int = Field(ge=0, default=0)
+    before: WordAuditSummary
+    remaining: WordAuditResult
+    warnings: List[Dict[str, str]] = Field(default_factory=list)
+
+
 __all__ = [
     "IssueScope",
     "PackOrigin",
     "RuleCategory",
     "RuleSeverity",
+    "WordAuditFixResult",
     "WordAuditIssue",
     "WordAuditResult",
     "WordAuditSummary",
+    "WordFixAction",
     "WordRulePack",
     "WordRulePackDetailResult",
     "WordRulePackListResult",

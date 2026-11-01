@@ -1,4 +1,4 @@
-# 119 — Word 规则包与确定性审校（M2a）
+# 119 — Word 规则包、确定性审校与修复（M2a/M2b）
 
 > 日期：2026-11-01 · 分支：`feat/word-rulepack-audit`
 > 方案：`docs/plans/2026-10-31_word-document-intelligence.md`（M2）、`docs/plans/2026-11-01_word-rulepack-audit-m2a.md`
@@ -153,6 +153,32 @@ POST /api/v1/office/word/audit
 
 `ok` = 无 `error` 级 issue。问题数超过 1000 条时截断并追加 `issues_truncated` warning。
 
+### 5.3 确定性修复（M2b）
+
+```http
+POST /api/v1/office/word/audit/fix
+```
+
+```json
+{
+  "workspace_path": "/ws",
+  "file_path": "/ws/doc.docx",
+  "rulepack_id": "gb-t-9704-general",
+  "output_filename": "doc-fixed.docx",
+  "overwrite": false
+}
+```
+
+- `overwrite=false`（默认）：输出 `output_filename`（缺省 `<stem>-fixed.docx`），拒绝覆盖源文件或已有文件；
+- `overwrite=true`：临时文件 + 原子替换源文件；此时不能同时给 `output_filename`；
+- 仅执行 `fixable=true` 且已实现修复器的规则：`page.size` / `page.orientation` / `page.margins` / `page.page_number` / `style.font` / `style.paragraph` / `content.empty_paragraphs`；
+- 其他 `fixable=true` 但无修复器的 kind → `fix_unsupported_kind` warning，不写文档；
+- 修复后用同一规则包复检，`remaining` 为完整 `WordAuditResult`；`ok` = 复检无 error；
+- 幂等：已修复文档再次修复时 `fixed_count=0`、`actions=[]`。
+
+响应字段：`ok` / `source_path` / `output_path` / `overwritten` / `rule_pack_id` /
+`actions[{rule_id,kind,fixed_count,message}]` / `fixed_count` / `before` / `remaining` / `warnings`。
+
 ## 6. 定位语义
 
 | scope | anchor |
@@ -165,9 +191,9 @@ M2c 前端可按 `anchor.paragraph_index` 滚动定位并高亮；`text_hash` �
 
 ## 7. 限制（后续）
 
-- 确定性修复与复检（M2b）；
 - 前端 `DocumentAuditPanel`、点击定位/高亮（M2c）；
 - 表格/内容控件级规则、`vMerge` 跨行内容检查；
+- 标题编号/题注/引用的自动重排（当前只在审校中报告，不自动修复）；
 - 语义规则（必填章节语义、日期格式、术语一致性）与 LLM 规则抽取（M3/M4）；
 - 内置 GB 包字体名使用常见实现值（`仿宋_GB2312`），字库差异可通过自定义包覆盖。
 
@@ -178,4 +204,9 @@ M2c 前端可按 `anchor.paragraph_index` 滚动定位并高亮；`text_hash` �
   未知 kind/重复 id/坏参数、工作区包 CRUD 与内置保护；
 - `backend/tests/integration/test_office_word_audit_routes.py`（3）：列表/详情/审校、
   工作区包保存/加载/删除、缺包/坏 kind/超限/越界拒绝；
+- `backend/tests/unit/office/test_word_rulepack_fix.py`（9）：内置可修复 kind 覆盖、
+  GB 包修复输出、覆盖模式幂等、空段落删除、样式段落修复、不可修复项保留、
+  未实现修复器 warning、输出安全、缺文件拒绝；
+- `backend/tests/integration/test_office_word_fix_routes.py`（3）：修复端点输出、
+  覆盖幂等、缺包/超限/越界/冲突拒绝；
 - ruff 0.4.4、py38 兼容检查、architecture 门禁通过。
