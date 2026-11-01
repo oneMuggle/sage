@@ -7,6 +7,7 @@ on:
       - "backend/api/ocr_routes.py"
       - "backend/tools/ocr_image_tool.py"
       - "scripts/ocr_benchmark.py"
+      - "scripts/ocr_tesseract_smoke.py"
       - "backend/requirements-optional.txt"
       - "backend/requirements-bundled.txt"
       - ".github/workflows/ocr-smoke.yml"
@@ -17,6 +18,7 @@ on:
       - "backend/api/ocr_routes.py"
       - "backend/tools/ocr_image_tool.py"
       - "scripts/ocr_benchmark.py"
+      - "scripts/ocr_tesseract_smoke.py"
       - "backend/requirements-optional.txt"
       - "backend/requirements-bundled.txt"
       - ".github/workflows/ocr-smoke.yml"
@@ -79,3 +81,36 @@ jobs:
               f"runs={data['runs_ms']}",
           )
           PY
+
+  tesseract-windows-smoke:
+    name: Tesseract real-engine smoke (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Tesseract
+        shell: pwsh
+        run: |
+          choco install tesseract --no-progress -y
+          $candidates = @(
+            "C:\Program Files\Tesseract-OCR\tesseract.exe",
+            "C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"
+          )
+          $exe = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $exe) { throw "Tesseract executable not found" }
+          "SAGE_TESSERACT_PATH=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Install OCR runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install "pytesseract>=0.3.10" "Pillow>=10.0"
+
+      - name: Tesseract real OCR smoke
+        run: python scripts/ocr_tesseract_smoke.py

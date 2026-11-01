@@ -11,6 +11,7 @@ import pytest
 
 from backend.services.ocr.batch import (
     MAX_BATCH_ITEMS,
+    MAX_JOB_AGE_SECONDS,
     OcrBatchJob,
     OcrBatchService,
     decode_batch_images,
@@ -163,3 +164,52 @@ def test_submit_pdf_marks_source_and_runs(tmp_path) -> None:
     assert data["source"] == "pdf"
     assert data["total"] == 1
     assert data["results"][0]["text"] == "批处理文字"
+
+
+def test_delete_removes_job_and_snapshot(tmp_path) -> None:
+    service = _new_service(tmp_path)
+    job = service.submit([b"one"])
+    _wait(service, job.job_id)
+
+    assert service.delete(job.job_id) is True
+    assert service.get(job.job_id) is None
+    assert not (tmp_path / (job.job_id + ".json")).exists()
+    assert service.delete(job.job_id) is False
+
+
+def test_cleanup_removes_finished_jobs(tmp_path) -> None:
+    service = _new_service(tmp_path)
+    job = service.submit([b"one"])
+    _wait(service, job.job_id)
+
+    assert service.cleanup(0) == 1
+    assert service.get(job.job_id) is None
+
+
+def test_cleanup_keeps_recent_jobs(tmp_path) -> None:
+    service = _new_service(tmp_path)
+    job = service.submit([b"one"])
+    _wait(service, job.job_id)
+
+    assert service.cleanup(3600) == 0
+    assert service.get(job.job_id) is not None
+
+
+def test_expired_job_is_pruned_on_load(tmp_path) -> None:
+    job = OcrBatchJob(
+        job_id="expired1",
+        total=1,
+        lang="auto",
+        max_side=None,
+        status="completed",
+        updated_at=time.time() - MAX_JOB_AGE_SECONDS - 10,
+        results=[{"text": "old"}],
+    )
+    (tmp_path / "expired1.json").write_text(
+        json.dumps(asdict(job), ensure_ascii=False), encoding="utf-8"
+    )
+
+    restarted = _new_service(tmp_path)
+
+    assert restarted.get("expired1") is None
+    assert not (tmp_path / "expired1.json").exists()

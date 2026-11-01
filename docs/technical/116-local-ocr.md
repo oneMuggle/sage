@@ -115,6 +115,8 @@ RapidOCR/onnxruntime 未进默认安装包；缺依赖时能力位降级，不�
   服务端用 PyMuPDF 以 200 DPI 逐页光栅化后复用同一队列，PDF ≤20MB、≤50 页；
 - `GET /api/v1/ocr/batch/{job_id}`：查询进度与逐项结果（含 `source: images|pdf`）；
 - `POST /api/v1/ocr/batch/{job_id}/cancel`：请求取消当前任务；
+- `DELETE /api/v1/ocr/batch/{job_id}`：删除任务及持久化快照；
+- `POST /api/v1/ocr/batch/cleanup`：清理已结束任务，`{older_than_s?}` 缺省按 7 天 TTL；
   批处理为进程内单 worker，每项失败互不影响；任务快照持久化到
   `SAGE_USER_DATA_DIR/cache/ocr_batch/<job_id>.json`（不保存原始图片/PDF 字节），
   重启后可查询已完成任务；重启前仍在运行的任务标记为
@@ -127,12 +129,14 @@ RapidOCR/onnxruntime 未进默认安装包；缺依赖时能力位降级，不�
 - `ChatInput` 启动时探测 OCR 能力；无视觉模型且 OCR 可用时不再禁用图片上传；
 - `ImageOcrPreview`：输入区展示每张图片的 OCR 文本，支持复制、编辑、重新识别；
   多图时走 `/ocr/batch` 队列并轮询进度，单图走同步 `/ocr/image`；
+- `PdfOcrPreview`：PDF 附件 chip 提供「识别 PDF 文字」入口，调用
+  `/ocr/batch/pdf` 并展示页级文本，支持复制/重试/关闭；不会自动改写聊天内容；
 - 编辑后的文本经 `image_ocr_texts` 随 `POST /api/v1/chat/stream` 发送；
 - 发送后 OCR 文本以 `client_meta.image_ocr_texts` 落库（每图 ≤4k、总量 ≤8k 字符），
   消息气泡可展开查看/复制；不参与 LLM 上下文；
 - 注入 LLM 的 OCR 文本有上限：单图 20k 字符、总量 60k，超出会追加截断标记；
 - 设置页「本地 OCR」卡片：状态、引擎、语言、测试识别、优先策略；RapidOCR 模型下载
-  支持进度、取消与恢复默认；持久化 `ocr_config`。
+  支持进度、取消与恢复默认；支持清理批处理记录（TTL 默认 7 天）；持久化 `ocr_config`。
 
 ## 8. 性能
 
@@ -157,7 +161,9 @@ Office 扫描页使用 2048 + 方向分类以保真；聊天截图使用 1280 + 
 - 前端：`ChatInput.ocrFallback.test.tsx`、`ImageOcrPreview.test.tsx`、`LocalOcrCard.test.tsx`；
 - 可复现基准：`python scripts/ocr_benchmark.py`（需可选依赖；生成合成图并计算 CER/耗时）。
   支持 `--manifest cases.json` 批量跑真实黄金集，按 `category` 汇总 mean_cer / median_ms；
-  CI 有独立 `.github/workflows/ocr-smoke.yml` 每周/路径触发真实 RapidOCR 冒烟。
+- 真实引擎 CI：`.github/workflows/ocr-smoke.yml` 在 Ubuntu 跑 RapidOCR，
+  在 Windows 跑 `scripts/ocr_tesseract_smoke.py`（安装 Tesseract + eng 语言包），
+  每周/路径触发；
 
 ## 10. 故障排查
 
