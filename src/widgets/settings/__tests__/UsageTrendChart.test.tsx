@@ -111,15 +111,18 @@ describe('UsageTrendChart', () => {
     expect(screen.getByTestId('usage-trend-empty')).toBeDefined();
   });
 
-  it('有数据时渲染堆叠柱 + 成本虚线 + 图例', () => {
+  it('有数据时渲染输入/输出曲线 + 面积 + 成本虚线 + 图例', () => {
     renderChart({ trend: SAMPLE_TREND, loading: false });
     const chart = screen.getByTestId('usage-trend-chart');
     expect(chart).toBeDefined();
 
-    expect(screen.getAllByTestId('usage-trend-bar-input')).toHaveLength(SAMPLE_TREND.series.length);
-    expect(screen.getAllByTestId('usage-trend-bar-output')).toHaveLength(
-      SAMPLE_TREND.series.length,
-    );
+    const inputLine = screen.getByTestId('usage-trend-line-input');
+    const outputLine = screen.getByTestId('usage-trend-line-output');
+    expect(inputLine.getAttribute('d')).toMatch(/^M /);
+    expect(outputLine.getAttribute('d')).toMatch(/^M /);
+    // 曲线下方渐变面积存在
+    expect(screen.getByTestId('usage-trend-area-input').getAttribute('d')).toContain('Z');
+    expect(screen.getByTestId('usage-trend-area-output').getAttribute('d')).toContain('Z');
 
     const costLine = screen.getByTestId('usage-trend-line-cost');
     expect(costLine.getAttribute('d')).toMatch(/^M /);
