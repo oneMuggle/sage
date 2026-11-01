@@ -34,7 +34,10 @@ import { PlaybookAuthorPanel } from './PlaybookAuthorPanel';
 import { PlaybookChecklist } from './PlaybookChecklist';
 import { PlaybookClassificationPanel } from './PlaybookClassificationPanel';
 import { PlaybookImportPreviewCard } from './PlaybookImportPreviewCard';
+import { PlaybookLibraryPanel } from './PlaybookLibraryPanel';
 import { PlaybookSpecEditor } from './PlaybookSpecEditor';
+import { PlaybookVersionsPanel } from './PlaybookVersionsPanel';
+import { downloadPlaybookText } from './playbookDownload';
 
 export interface PlaybookCardProps {
   projectId: string;
@@ -43,17 +46,6 @@ export interface PlaybookCardProps {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-function downloadText(filename: string, text: string, mime: string): void {
-  if (typeof URL.createObjectURL !== 'function') return;
-  const blob = new Blob([text], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
 }
 
 export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) {
@@ -77,6 +69,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const [saveToLibrary, setSaveToLibrary] = useState(false);
   const [versions, setVersions] = useState<PlaybookVersion[]>([]);
   const [showVersions, setShowVersions] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
@@ -240,7 +233,11 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         typeof result.content === 'string'
           ? result.content
           : JSON.stringify(result.content, null, 2);
-      downloadText(result.filename, text, format === 'json' ? 'application/json' : 'text/markdown');
+      downloadPlaybookText(
+        result.filename,
+        text,
+        format === 'json' ? 'application/json' : 'text/markdown',
+      );
       setNotice('已导出：' + result.filename);
     });
 
@@ -450,6 +447,14 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
             <Upload className="mr-1 h-3.5 w-3.5" />
             导入规程文件
           </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setShowLibrary((value) => !value)}
+            data-testid="playbook-open-library-unbound"
+          >
+            规程库
+          </Button>
           <input
             ref={fileInputRef}
             type="file"
@@ -571,6 +576,14 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
             data-testid="playbook-save-library"
           >
             {busy === 'save-library' ? '保存中…' : '保存到规程库'}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setShowLibrary((value) => !value)}
+            data-testid="playbook-open-library"
+          >
+            规程库
           </Button>
           <Button
             size="sm"
@@ -753,28 +766,13 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       )}
 
       {showVersions && (
-        <div
-          className="space-y-1 rounded-md border border-border p-2 text-xs"
-          data-testid="playbook-versions"
-        >
-          <div className="font-medium text-foreground">版本历史</div>
-          {versions.length === 0 ? (
-            <div className="text-muted-foreground">暂无版本记录</div>
-          ) : (
-            versions.map((item) => (
-              <div key={item.version} className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">
-                  v{item.version} · {item.source} · {new Date(item.created_at).toLocaleString()}
-                </span>
-                {item.active && <span className="text-primary">当前</span>}
-              </div>
-            ))
-          )}
-          <Button size="sm" variant="secondary" onClick={() => setShowVersions(false)}>
-            收起
-          </Button>
-        </div>
+        <PlaybookVersionsPanel
+          versions={versions}
+          onClose={() => setShowVersions(false)}
+        />
       )}
+
+      {showLibrary && <PlaybookLibraryPanel onClose={() => setShowLibrary(false)} />}
 
       {(error || notice) && (
         <div className={`text-xs ${error ? 'text-destructive' : 'text-primary'}`}>

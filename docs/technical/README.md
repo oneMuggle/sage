@@ -90,7 +90,7 @@
 | 112  | [设置页信息架构整理](./112-settings-ia-consolidation.md) | 单一 tab registry 派生导航/分组/别名/类型 + 平铺分组 + 搜索索引守卫（anchor/归属/tab 数）+ 审计导出集中 + `AdvancedSection` 折叠边界与每行「恢复默认」+ i18n/CJK 守卫 |
 | 113  | [右键上下文菜单体系](./113-context-menu.md) | Radix ContextMenu 基座 + 声明式菜单 spec（打开时求值）/ 会话·消息·代码块·引用 chip·Wiki 树·变更卡·产物 接入 / Electron 原生编辑菜单 + 开发期检查元素 / 选区联动与危险动作统一确认 |
 | 114  | [会话状态徽章](./114-session-status-badges.md) | 侧栏徽章优先级 / 重试中与后台运行中 / run_status 写入链路与已知限制 |
-| 115  | [项目规程 Playbook](./115-project-playbook.md) | 阶段/交付物规格 + 项目级快照 + 确定性审计与阶段识别 + 目录/骨架/规则/里程碑动作 + 全局规程库 + 未知文件批量归类/撤销 + JSON/Markdown/AGENTS 导出与导入冲突策略 |
+| 115  | [项目规程 Playbook](./115-project-playbook.md) | 阶段/交付物规格 + 项目级快照 + 确定性审计与阶段识别 + 目录/骨架/规则/里程碑动作 + 全局规程库（详情/导出/删除）+ 导入逐项 diff + 未知文件批量归类/撤销 + JSON/Markdown/AGENTS 导出与导入冲突策略 |
 | 116  | [本地 OCR](./116-local-ocr.md) | RapidOCR/Tesseract 双引擎 + 聊天兜底/预览编辑 + Office/PDF/Wiki/工具接入 + 配置、性能与 Win7 边界 |
 | 117  | [桌面宠物](./117-desktop-pet.md) | 透明置顶窗 / AgentState 状态映射与面板 / 应用内形态 / Task Center + 编排 lanes + 定时失败聚合 / 自定义动画包（zip + sage-pet://）/ Win7 兼容模式 |
 

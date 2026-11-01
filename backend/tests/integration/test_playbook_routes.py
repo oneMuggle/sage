@@ -131,6 +131,34 @@ async def test_playbook_library_save_list_bind(
 
 
 @pytest.mark.asyncio()
+async def test_library_detail_and_export(client: httpx.AsyncClient) -> None:
+    from backend.services.playbook_library import build_export_envelope, get_builtin
+
+    envelope = build_export_envelope(
+        get_builtin("coding-project"), include_scaffold=False, app_version="test"
+    )
+    saved = await client.post("/api/v1/playbooks/library", json={"envelope": envelope})
+    assert saved.status_code == 200, saved.text
+    library_id = saved.json()["item"]["id"]
+
+    detail = await client.get(f"/api/v1/playbooks/library/{library_id}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["playbook"]["id"] == "coding-project"
+    assert detail.json()["item"]["stage_count"] == 5
+
+    exported = await client.get(f"/api/v1/playbooks/library/{library_id}/export")
+    assert exported.status_code == 200, exported.text
+    payload = exported.json()
+    assert payload["filename"].endswith(".sageplaybook.json")
+    assert payload["content"]["format"] == "sage.playbook"
+    assert payload["content"]["playbook"]["id"] == "coding-project"
+
+    missing = await client.get("/api/v1/playbooks/library/missing")
+    assert missing.status_code == 404
+    await client.delete(f"/api/v1/playbooks/library/{library_id}")
+
+
+@pytest.mark.asyncio()
 async def test_import_can_save_to_library(
     client: httpx.AsyncClient, project_dir: Path
 ) -> None:
@@ -399,6 +427,38 @@ async def test_export_and_import_preview(
     )
     assert imported.status_code == 200, imported.text
     assert imported.json()["version"] == 2
+
+
+@pytest.mark.asyncio()
+async def test_import_preview_reports_item_level_diff(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    from copy import deepcopy
+
+    from backend.services.playbook_library import build_export_envelope, get_builtin
+
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+
+    spec = deepcopy(get_builtin("cn-research-grant"))
+    proposal = next(stage for stage in spec["stages"] if stage["id"] == "proposal")
+    proposal["artifacts"][0]["match"]["globs"] = ["**/开题报告*.md"]
+    proposal["rules"].append({"content": "导入规则：参考文献必须可核验"})
+    proposal["recommended_milestones"].append({"title": "完成伦理审批"})
+    envelope = build_export_envelope(spec, include_scaffold=False, app_version="test")
+
+    preview = await client.post(
+        "/api/v1/playbooks/import/preview",
+        json={"envelope": envelope, "project_id": project["id"]},
+    )
+    assert preview.status_code == 200, preview.text
+    diff = preview.json()["diff"]
+    assert diff["stages_changed"] == ["proposal"]
+    details = diff["stage_details"]["proposal"]
+    assert details["artifacts_changed"][0]["id"] == "proposal_report"
+    assert "match" in details["artifacts_changed"][0]["fields"]
+    assert details["rules_added"] == ["导入规则：参考文献必须可核验"]
+    assert details["milestones_added"] == ["完成伦理审批"]
 
 
 @pytest.mark.asyncio()

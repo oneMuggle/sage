@@ -37,6 +37,7 @@ from backend.api.playbook_schemas import (
     PlaybookImportPreviewRequest,
     PlaybookImportPreviewResponse,
     PlaybookImportRequest,
+    PlaybookLibraryDetailResponse,
     PlaybookLibraryItemModel,
     PlaybookLibraryResponse,
     PlaybookLibrarySaveRequest,
@@ -57,6 +58,7 @@ from backend.services.playbook_actions import apply_playbook_actions, project_pl
 from backend.services.playbook_ai import audit_with_llm
 from backend.services.playbook_auditor import audit_playbook
 from backend.services.playbook_author import build_author_preview
+from backend.services.playbook_diff import diff_playbooks
 from backend.services.playbook_library import (
     build_export_envelope,
     get_builtin,
@@ -167,26 +169,6 @@ def _validate_state_keys(
         )
 
 
-def _diff_specs(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
-    old_stages = {stage["id"]: stage for stage in old.get("stages") or []}
-    new_stages = {stage["id"]: stage for stage in new.get("stages") or []}
-    old_dirs = {item["path"] for item in old.get("directory_layout") or []}
-    new_dirs = {item["path"] for item in new.get("directory_layout") or []}
-    return {
-        "stages_added": sorted(set(new_stages) - set(old_stages)),
-        "stages_removed": sorted(set(old_stages) - set(new_stages)),
-        "stages_changed": sorted(
-            stage_id
-            for stage_id in set(old_stages) & set(new_stages)
-            if old_stages[stage_id] != new_stages[stage_id]
-        ),
-        "directories_added": sorted(new_dirs - old_dirs),
-        "directories_removed": sorted(old_dirs - new_dirs),
-        "name_changed": old.get("name") != new.get("name"),
-        "description_changed": old.get("description") != new.get("description"),
-    }
-
-
 def _merge_specs(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
     """Merge imported spec into the active one: new entries win, old-only kept."""
     old_by_id = {stage["id"]: stage for stage in old.get("stages") or []}
@@ -248,6 +230,41 @@ def save_playbook_to_library(
     return PlaybookLibrarySaveResponse(
         item=PlaybookLibraryItemModel(**item.summary()),
         created=created,
+    )
+
+
+@router.get(
+    "/playbooks/library/{library_id}", response_model=PlaybookLibraryDetailResponse
+)
+@with_db_lock
+def get_playbook_library_item(library_id: str) -> PlaybookLibraryDetailResponse:
+    item = PlaybookLibraryRepository().get(library_id)
+    if item is None:
+        raise _error(404, "playbook_not_found", "规程库条目不存在")
+    return PlaybookLibraryDetailResponse(
+        item=PlaybookLibraryItemModel(**item.summary()),
+        playbook=item.spec,
+    )
+
+
+@router.get(
+    "/playbooks/library/{library_id}/export", response_model=PlaybookExportResponse
+)
+@with_db_lock
+def export_playbook_library_item(
+    library_id: str,
+    include_scaffold: bool = Query(default=True),
+) -> PlaybookExportResponse:
+    item = PlaybookLibraryRepository().get(library_id)
+    if item is None:
+        raise _error(404, "playbook_not_found", "规程库条目不存在")
+    spec = item.spec
+    return PlaybookExportResponse(
+        format="json",
+        filename="{}.sageplaybook.json".format(spec.get("id") or item.id),
+        content=build_export_envelope(
+            spec, include_scaffold=include_scaffold, app_version="unknown"
+        ),
     )
 
 
@@ -558,7 +575,7 @@ def preview_playbook_import(
         project = _project_or_404(request.project_id)
         active = PlaybookRepository().get_active(project.id)
         if active is not None:
-            diff = _diff_specs(active.spec, parsed["playbook"])
+            diff = diff_playbooks(active.spec, parsed["playbook"])
     return PlaybookImportPreviewResponse(
         playbook=parsed["playbook"], scaffold=parsed["scaffold"], diff=diff
     )
