@@ -588,6 +588,7 @@ export interface PetElectronApiBridge {
   dragEnd: () => void;
   resetPosition: () => void;
   setPanel: (open: boolean) => void;
+  togglePanel: () => void;
   pat: () => void;
   reportTasks: (tasks: PetTaskReportBridge[]) => void;
   hide: () => void;

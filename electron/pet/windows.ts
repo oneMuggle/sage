@@ -19,7 +19,6 @@ import {
   petHitBox,
   petWindowSize,
   type Point,
-  type Size,
 } from './geometry';
 import type { PetConfig, PetRenderConfig, PetSnapshot } from './types';
 
@@ -40,6 +39,12 @@ export interface PetWindowOptions {
 const POINTER_POLL_MS = 60;
 const TOPMOST_WATCHDOG_MS = 5_000;
 const SHOW_FALLBACK_MS = 3_000;
+
+/** Separate status panel window: anchored above the pet, never resizes it. */
+const PANEL_WINDOW_HEIGHT = 360;
+const PANEL_MIN_WIDTH = 320;
+const PANEL_MAX_WIDTH = 480;
+const PANEL_GAP = 8;
 
 function isLegacyWindows(): boolean {
   if (process.platform !== 'win32') return false;
@@ -82,7 +87,8 @@ export class PetWindow {
   private dragStartCursor: Point | null = null;
   private dragStartPosition: Point | null = null;
   private compatibility: boolean;
-  private panelOpen = false;
+  private panel: BrowserWindow | null = null;
+  private panelVisible = false;
 
   constructor(private readonly options: PetWindowOptions) {
     this.config = options.config;
@@ -186,39 +192,160 @@ export class PetWindow {
     }
     const size = petWindowSize(config.size);
     const bounds = this.win.getBounds();
-    const target = this.panelOpen ? this.expandedSize(size) : size;
-    if (bounds.width !== target.width || bounds.height !== target.height) {
-      this.win.setSize(target.width, target.height, false);
+    if (bounds.width !== size.width || bounds.height !== size.height) {
+      // Settings-driven size change: keep the bottom edge fixed.
       const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
-      const position = clampToWorkArea({ x: bounds.x, y: bounds.y }, target, display.workArea);
-      this.win.setPosition(position.x, position.y, false);
+      const position = clampToWorkArea(
+        { x: bounds.x, y: bounds.y + bounds.height - size.height },
+        size,
+        display.workArea,
+      );
+      this.win.setBounds(
+        { x: position.x, y: position.y, width: size.width, height: size.height },
+        false,
+      );
     }
+    this.syncPanelPosition();
     this.sendConfig(config);
   }
 
   setPanelOpen(open: boolean): void {
-    if (!this.win || this.win.isDestroyed() || this.panelOpen === open) return;
-    const base = petWindowSize(this.config.size);
-    const current = this.win.getBounds();
-    const target = open ? this.expandedSize(base) : base;
-    const display = screen.getDisplayNearestPoint({ x: current.x, y: current.y });
-    const extraHeight = target.height - current.height;
-    const position = clampToWorkArea(
-      { x: current.x, y: current.y - extraHeight },
-      target,
-      display.workArea,
-    );
-    this.panelOpen = open;
-    this.win.setSize(target.width, target.height, false);
-    this.win.setPosition(position.x, position.y, false);
-    if (!open) this.savePosition();
+    if (!this.win || this.win.isDestroyed()) return;
+    if (open) this.showPanel();
+    else this.hidePanel();
   }
 
-  private expandedSize(base: Size): Size {
-    return {
-      width: Math.max(base.width, 300),
-      height: base.height + 300,
-    };
+  /**
+   * The panel is its own window. Resizing the pet window to reveal a panel
+   * moved the (bottom-anchored) sprite before the new frame was painted on
+   * XWayland — visible as the pet jumping up and back down. A separate
+   * window keeps the overlay completely still.
+   */
+  showPanel(): void {
+    if (!this.win || this.win.isDestroyed()) return;
+    const panel = this.ensurePanel();
+    if (!panel) return;
+    this.panelVisible = true;
+    panel.setBounds(this.panelBounds(), false);
+    panel.showInactive();
+  }
+
+  hidePanel(): void {
+    this.panelVisible = false;
+    if (this.panel && !this.panel.isDestroyed() && this.panel.isVisible()) {
+      this.panel.hide();
+    }
+  }
+
+  togglePanel(): void {
+    if (this.isPanelVisible()) this.hidePanel();
+    else this.showPanel();
+  }
+
+  isPanelVisible(): boolean {
+    return Boolean(
+      this.panelVisible && this.panel && !this.panel.isDestroyed() && this.panel.isVisible(),
+    );
+  }
+
+  panelOwnsSender(sender: WebContents): boolean {
+    if (!this.panel || this.panel.isDestroyed()) return false;
+    return BrowserWindow.fromWebContents(sender) === this.panel;
+  }
+
+  sendPanelState(snapshot: PetSnapshot): void {
+    this.sendToPanel('pet:state', snapshot);
+  }
+
+  sendPanelConfig(config: PetRenderConfig): void {
+    this.sendToPanel('pet:config', config);
+  }
+
+  private sendToPanel(channel: string, payload: unknown): void {
+    if (!this.panel || this.panel.isDestroyed()) return;
+    try {
+      this.panel.webContents.send(channel, payload);
+    } catch {
+      // Renderer may be mid-reload; the next push recovers.
+    }
+  }
+
+  /** Centered above the pet, falling back below it, clamped to the work area. */
+  private panelBounds(): { x: number; y: number; width: number; height: number } {
+    const pet = this.win!.getBounds();
+    const width = Math.min(Math.max(pet.width, PANEL_MIN_WIDTH), PANEL_MAX_WIDTH);
+    const height = PANEL_WINDOW_HEIGHT;
+    const display = screen.getDisplayNearestPoint({ x: pet.x, y: pet.y });
+    let y = pet.y - height - PANEL_GAP;
+    if (y < display.workArea.y) y = pet.y + pet.height + PANEL_GAP;
+    const position = clampToWorkArea(
+      { x: pet.x + Math.round((pet.width - width) / 2), y },
+      { width, height },
+      display.workArea,
+    );
+    return { x: position.x, y: position.y, width, height };
+  }
+
+  private syncPanelPosition(): void {
+    if (!this.panel || this.panel.isDestroyed() || !this.panel.isVisible()) return;
+    this.panel.setBounds(this.panelBounds(), false);
+  }
+
+  private ensurePanel(): BrowserWindow | null {
+    if (this.panel && !this.panel.isDestroyed()) return this.panel;
+    const preload = join(__dirname, '..', 'preload.js');
+    try {
+      const panel = new BrowserWindow({
+        ...this.panelBounds(),
+        show: false,
+        frame: false,
+        resizable: false,
+        movable: false,
+        hasShadow: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        focusable: true,
+        backgroundColor: '#0f172a',
+        webPreferences: {
+          preload,
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: !(isLegacyWindows() || process.env.SAGE_NO_SANDBOX === '1'),
+          additionalArguments: ['--sage-pet-window=1'],
+        },
+      });
+      panel.setAlwaysOnTop(true, 'floating');
+      panel.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+      panel.webContents.on('will-navigate', (event) => event.preventDefault());
+      panel.on('closed', () => {
+        this.panel = null;
+        this.panelVisible = false;
+      });
+      if (this.options.isPackaged) {
+        const page = join(__dirname, '..', '..', '..', 'dist', 'pet.html');
+        panel.loadFile(page, { query: { panel: '1' } }).catch((err: unknown) => {
+          logger.error('pet: panel loadFile failed', {
+            page,
+            err: err instanceof Error ? err.message : String(err),
+          });
+        });
+      } else {
+        const page = `${this.options.devUrl}/pet.html?panel=1`;
+        panel.loadURL(page).catch((err: unknown) => {
+          logger.error('pet: panel loadURL failed', {
+            page,
+            err: err instanceof Error ? err.message : String(err),
+          });
+        });
+      }
+      this.panel = panel;
+      return panel;
+    } catch (err) {
+      logger.error('pet: panel window creation failed', {
+        err: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    }
   }
 
   sendState(snapshot: PetSnapshot): void {
@@ -248,6 +375,7 @@ export class PetWindow {
   hide(): void {
     if (!this.win || this.win.isDestroyed()) return;
     this.win.hide();
+    this.hidePanel();
     if (this.clickThroughActive()) this.setIgnoreMouse(true);
   }
 
@@ -295,6 +423,7 @@ export class PetWindow {
       display.workArea,
     );
     this.win.setPosition(position.x, position.y, false);
+    this.syncPanelPosition();
   }
 
   endDrag(): void {
@@ -303,22 +432,27 @@ export class PetWindow {
     this.dragStartCursor = null;
     this.dragStartPosition = null;
     this.savePosition();
+    this.syncPanelPosition();
     if (this.clickThroughActive()) this.setIgnoreMouse(true);
   }
 
   resetPosition(): void {
     if (!this.win || this.win.isDestroyed()) return;
-    if (this.panelOpen) this.setPanelOpen(false);
     const size = petWindowSize(this.config.size);
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const position = defaultPosition(display.workArea, size);
     this.win.setPosition(position.x, position.y, false);
     this.savePosition();
+    this.syncPanelPosition();
   }
 
   destroy(): void {
     this.stopTimers();
-    this.panelOpen = false;
+    this.panelVisible = false;
+    if (this.panel && !this.panel.isDestroyed()) {
+      this.panel.destroy();
+    }
+    this.panel = null;
     if (this.win && !this.win.isDestroyed()) {
       this.win.destroy();
     }
@@ -337,10 +471,12 @@ export class PetWindow {
   private savePosition(): void {
     if (!this.win || this.win.isDestroyed()) return;
     const bounds = this.win.getBounds();
-    const base = petWindowSize(this.config.size);
-    const y = this.panelOpen ? bounds.y + (bounds.height - base.height) : bounds.y;
     try {
-      writeFileSync(this.positionFile, `${JSON.stringify({ x: bounds.x, y }, null, 2)}\n`, 'utf8');
+      writeFileSync(
+        this.positionFile,
+        `${JSON.stringify({ x: bounds.x, y: bounds.y }, null, 2)}\n`,
+        'utf8',
+      );
     } catch (err) {
       logger.warn('pet: save position failed', {
         err: err instanceof Error ? err.message : String(err),
@@ -381,10 +517,6 @@ export class PetWindow {
   private pollPointer(): void {
     if (this.compatibility || this.dragging || this.pointerFallbackBroken) return;
     if (!this.win || this.win.isDestroyed() || !this.win.isVisible()) return;
-    if (this.panelOpen) {
-      this.setIgnoreMouse(false);
-      return;
-    }
     try {
       const cursor = screen.getCursorScreenPoint();
       const bounds = this.win.getBounds();

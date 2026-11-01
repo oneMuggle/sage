@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { PetConfigBridge, PetSnapshotBridge } from '../shared/types/electron-api';
 
-import { PetPanel } from './PetPanel';
+import { DEFAULT_CONFIG, EMPTY_SNAPSHOT } from './defaults';
 import { bubbleText, resolveAnimation, resolveInteraction } from './engine/animation';
 import { isChinese, statusGlyph, statusLabel } from './engine/labels';
 import { safePlay } from './engine/media';
@@ -15,48 +15,6 @@ const LONG_PRESS_MS = 550;
 const CLICK_DELAY_MS = 240;
 const ANGER_WINDOW_MS = 2000;
 const ANGER_CLICKS = 5;
-
-const EMPTY_SNAPSHOT: PetSnapshotBridge = {
-  action: 'idle',
-  detail: null,
-  sessionId: null,
-  sessionTitle: null,
-  toolName: null,
-  bubbleKey: null,
-  bubbleKind: null,
-  todoDone: 0,
-  todoTotal: 0,
-  todoActive: null,
-  progressKind: null,
-  contextUsed: null,
-  contextMax: null,
-  lastTerminalAction: null,
-  lastTerminalAt: null,
-  patCount: 0,
-  bondDays: 1,
-  activeSessions: 0,
-  sessions: [],
-  tasks: [],
-  updatedAt: 0,
-};
-
-const DEFAULT_CONFIG: PetConfigBridge = {
-  version: 2,
-  enabled: true,
-  displayMode: 'desktop',
-  tempo: 'standard',
-  reduceMotion: false,
-  bubbleMode: 'important',
-  soundScenes: { waiting: true, error: false, done: false },
-  showSessionTitle: false,
-  compatibilityMode: 'auto',
-  followActiveSession: true,
-  externalApi: false,
-  pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
-  petId: 'default',
-  petPack: 'dafeiyu',
-  size: 'medium',
-};
 
 interface PlaybackOverride {
   file: string;
@@ -72,7 +30,6 @@ export function PetApp(): JSX.Element {
   const [snapshot, setSnapshot] = useState<PetSnapshotBridge>(EMPTY_SNAPSHOT);
   const [config, setConfig] = useState<PetConfigBridge>(DEFAULT_CONFIG);
   const [override, setOverride] = useState<PlaybackOverride | null>(null);
-  const [panelOpen, setPanelOpen] = useState(false);
   const [localBubble, setLocalBubble] = useState<LocalBubble | null>(null);
   const [idleVariant, setIdleVariant] = useState(0);
   const [idleResting, setIdleResting] = useState(false);
@@ -204,27 +161,9 @@ export function PetApp(): JSX.Element {
   }, [choice, pack, config.reduceMotion]);
 
   const togglePanel = useCallback(() => {
-    setPanelOpen((open) => {
-      const next = !open;
-      pet?.setPanel(next);
-      return next;
-    });
-  }, [pet]);
-
-  const closePanel = useCallback(() => {
-    setPanelOpen(false);
-    pet?.setPanel(false);
-  }, [pet]);
-
-  const openSession = useCallback(
-    (sessionId: string | null) => {
-      if (sessionId) pet?.openSession(sessionId);
-    },
-    [pet],
-  );
-
-  const openSettings = useCallback(() => {
-    pet?.openSettings();
+    // The status panel is its own window; the overlay itself never resizes
+    // (resizing + moving it made the sprite jump on XWayland).
+    pet?.togglePanel();
   }, [pet]);
 
   const clearClickTimer = useCallback(() => {
@@ -368,16 +307,7 @@ export function PetApp(): JSX.Element {
   const statusTitle = statusLabel(snapshot.action, snapshot.detail, snapshot.toolName);
 
   return (
-    <div className="pet-root" data-panel={panelOpen ? 'open' : 'closed'}>
-      {panelOpen ? (
-        <PetPanel
-          snapshot={snapshot}
-          config={config}
-          onClose={closePanel}
-          onOpenSession={openSession}
-          onOpenSettings={openSettings}
-        />
-      ) : null}
+    <div className="pet-root">
       <div
         className="pet-stage"
         onPointerDown={handlePointerDown}

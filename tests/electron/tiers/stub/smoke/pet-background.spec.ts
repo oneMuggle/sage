@@ -1,9 +1,19 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { test, expect } from '@playwright/test';
 
 import { launchElectronWithStub } from '../../../helpers/electron-launcher';
 
 test('pet background: orchestration lanes appear as background tasks', async () => {
-  const { app, page, stub } = await launchElectronWithStub();
+  // Isolate pet-config.json: a leftover config equal to the values this test
+  // sets (enabled + in-app) would suppress the immediate refresh and the
+  // assertion would wait for the 20s background poll.
+  const userDataDir = mkdtempSync(join(tmpdir(), 'sage-pet-background-'));
+  const { app, page, stub } = await launchElectronWithStub({
+    env: { SAGE_USER_DATA_DIR: userDataDir },
+  });
 
   try {
     await page.waitForLoadState('load');
@@ -41,5 +51,6 @@ test('pet background: orchestration lanes appear as background tasks', async () 
   } finally {
     await app.close();
     stub.stop();
+    rmSync(userDataDir, { recursive: true, force: true });
   }
 });

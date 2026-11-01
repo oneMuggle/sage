@@ -15,6 +15,11 @@ import { PetWindow } from '../pet/windows';
 
 interface FakeWindow {
   setIgnoreMouseEvents: ReturnType<typeof vi.fn>;
+  setBounds: ReturnType<typeof vi.fn>;
+  setSize: ReturnType<typeof vi.fn>;
+  setPosition: ReturnType<typeof vi.fn>;
+  showInactive: ReturnType<typeof vi.fn>;
+  loadURL: ReturnType<typeof vi.fn>;
   destroy: ReturnType<typeof vi.fn>;
   hide: ReturnType<typeof vi.fn>;
 }
@@ -30,7 +35,11 @@ vi.mock('electron', () => {
     loadURL = vi.fn(() => Promise.resolve());
     loadFile = vi.fn(() => Promise.resolve());
     setIgnoreMouseEvents = vi.fn();
-    getBounds = vi.fn(() => ({ x: 100, y: 100, width: 300, height: 241 }));
+    bounds = { x: 1023, y: 715, width: 520, height: 365 };
+    getBounds = vi.fn(() => ({ ...this.bounds }));
+    setBounds = vi.fn((next: { x: number; y: number; width: number; height: number }) => {
+      this.bounds = { ...next };
+    });
     setSize = vi.fn();
     setPosition = vi.fn();
     showInactive = vi.fn();
@@ -82,13 +91,17 @@ function makeConfig(overrides: Partial<PetRenderConfig> = {}): PetRenderConfig {
 
 const cleanup: Array<{ window: PetWindow; dir: string }> = [];
 
-function createPetWindow(compatibilityMode: PetRenderConfig['compatibilityMode']): {
+function createPetWindow(
+  compatibilityMode: PetRenderConfig['compatibilityMode'],
+  overrides: Partial<PetRenderConfig> = {},
+): {
   petWindow: PetWindow;
   win: FakeWindow;
+  dir: string;
 } {
   const dir = mkdtempSync(join(tmpdir(), 'sage-pet-window-test-'));
   const petWindow = new PetWindow({
-    config: makeConfig({ compatibilityMode }),
+    config: makeConfig({ compatibilityMode, ...overrides }),
     petId: 'default',
     instanceIndex: 0,
     devUrl: 'http://localhost:1420',
@@ -100,6 +113,7 @@ function createPetWindow(compatibilityMode: PetRenderConfig['compatibilityMode']
   return {
     petWindow,
     win: fakeWindows[fakeWindows.length - 1] as FakeWindow,
+    dir,
   };
 }
 
@@ -144,5 +158,44 @@ describe('PetWindow click-through', () => {
     petWindow.endDrag();
 
     expect(win.setIgnoreMouseEvents.mock.calls).toEqual([[false], [true, { forward: true }]]);
+  });
+});
+
+describe('PetWindow status panel (separate window)', () => {
+  it('opens the panel in its own window without moving or resizing the overlay', () => {
+    const { petWindow, win } = createPetWindow('on', { size: 'huge' });
+    expect(fakeWindows).toHaveLength(1);
+
+    petWindow.setPanelOpen(true);
+
+    expect(fakeWindows).toHaveLength(2);
+    const panel = fakeWindows[1] as unknown as FakeWindow;
+    expect(panel.loadURL).toHaveBeenCalledWith('http://localhost:1420/pet.html?panel=1');
+    // Centered above the pet, clamped to the work area.
+    expect(panel.setBounds).toHaveBeenCalledWith(
+      { x: 1043, y: 347, width: 480, height: 360 },
+      false,
+    );
+    expect(panel.showInactive).toHaveBeenCalled();
+    // The overlay must stay put — moving/resizing it made the sprite jump.
+    expect(win.setBounds).not.toHaveBeenCalled();
+    expect(win.setSize).not.toHaveBeenCalled();
+    expect(win.setPosition).not.toHaveBeenCalled();
+  });
+
+  it('hides the panel on close and when the pet is hidden', () => {
+    const { petWindow } = createPetWindow('on', { size: 'huge' });
+
+    petWindow.setPanelOpen(true);
+    expect(petWindow.isPanelVisible()).toBe(true);
+    const panel = fakeWindows[1] as unknown as FakeWindow;
+
+    petWindow.setPanelOpen(false);
+    expect(panel.hide).toHaveBeenCalled();
+    expect(petWindow.isPanelVisible()).toBe(false);
+
+    petWindow.setPanelOpen(true);
+    petWindow.hide();
+    expect(petWindow.isPanelVisible()).toBe(false);
   });
 });

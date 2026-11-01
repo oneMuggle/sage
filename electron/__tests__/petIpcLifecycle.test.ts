@@ -48,7 +48,7 @@ describe('pet IPC registration lifecycle', () => {
   it('registers every pet channel', () => {
     registerPetIpc(fakeController());
     expect(handlers.size).toBe(8);
-    expect(listeners.size).toBe(12);
+    expect(listeners.size).toBe(13);
   });
 
   it('unregisters cleanly and allows a fresh registration', () => {
@@ -59,7 +59,7 @@ describe('pet IPC registration lifecycle', () => {
 
     expect(() => registerPetIpc(fakeController())).not.toThrow();
     expect(handlers.size).toBe(8);
-    expect(listeners.size).toBe(12);
+    expect(listeners.size).toBe(13);
   });
 
   it('still rejects a duplicate registration when dispose was skipped', () => {
