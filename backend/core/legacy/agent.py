@@ -1686,13 +1686,23 @@ class SageAgent:
         tool_sig_counts: Dict[str, int] = {}
         repeat_nudged: set = set()
 
-        # 2026-10-31: 动态迭代预算开关。默认开启；SAGE_DYNAMIC_ITERATION_BUDGET=0
-        # 可恢复旧的固定上限行为（测试/排障）。
-        _dynamic_budget_enabled = (
+        # 2026-10-31/11-01: 动态迭代预算。开关 = env 开关 AND 设置页开关；
+        # 参数优先级 env > 设置页 > 代码默认（env 保留 CI/运维覆盖能力）。
+        _dynamic_budget_env_enabled = (
             os.getenv("SAGE_DYNAMIC_ITERATION_BUDGET", "1").strip().lower()
             not in ("0", "false", "off", "no")
         )
-        _budget_config = BudgetConfig.from_env()
+        _orch_settings = None
+        try:
+            from backend.orchestration.orch_settings import load_orch_settings
+
+            _orch_settings = load_orch_settings()
+        except Exception:  # noqa: BLE001 — settings 读取失败回落 env/默认
+            _orch_settings = None
+        _budget_config = BudgetConfig.from_settings(_orch_settings)
+        _dynamic_budget_enabled = _dynamic_budget_env_enabled and bool(
+            getattr(_orch_settings, "dynamic_budget_enabled", True)
+        )
         _budget_level: BudgetLevel = "medium"
         _dynamic_budget_active = False
         _profile_max_iterations: Optional[int] = None
@@ -1720,13 +1730,11 @@ class SageAgent:
             effective_max_iterations = max_iterations
             _limit_source = "explicit"
         else:
-            _orch_settings_max: Optional[int] = None
-            try:
-                from backend.orchestration.orch_settings import load_orch_settings
-
-                _orch_settings_max = load_orch_settings().max_iterations
-            except Exception:  # noqa: BLE001 — settings 读取失败回落 profile 默认
-                _orch_settings_max = None
+            _orch_settings_max: Optional[int] = (
+                getattr(_orch_settings, "max_iterations", None)
+                if _orch_settings is not None
+                else None
+            )
 
             if _dynamic_budget_enabled and _orch_settings_max == DEFAULT_ORCH_MAX_ITERATIONS:
                 # OrchSettings 的默认值（25）= 用户未显式配置迭代上限 →
