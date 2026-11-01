@@ -83,6 +83,7 @@
     "backend/scheduler/evolution.py": 1739,
     "src/pages/Chat.tsx": 831,
     "src/shared/api/types/chatAndEventTypes.ts": 862,
-    "scripts/feedback_receiver.py": 1154
+    "scripts/feedback_receiver.py": 1154,
+    "electron/preload.ts": 870
   }
 }
