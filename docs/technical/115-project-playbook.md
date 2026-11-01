@@ -181,7 +181,8 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 
 - 单元：`test_playbook_spec.py`、`test_playbook_repo.py`、`test_playbook_auditor.py`、`test_playbook_actions.py`、`test_playbook_diff.py`；
 - 集成：`test_playbook_routes.py`（绑定 → 审计 → 动作 → 阶段确认 → 导出/导入 → 逐项 diff → 库详情/导出 → 路径拒绝）；
-- 前端：`PlaybookCard.test.tsx`、`PlaybookLibraryPanel.test.tsx`、`PlaybookImportPreviewCard.test.tsx`、`playbookApi.test.ts`。
+- 前端：`PlaybookCard.test.tsx`、`PlaybookLibraryPanel.test.tsx`、`PlaybookImportPreviewCard.test.tsx`、`PlaybookSpecEditor.a11y.test.tsx`（表单控件可访问名称）、`playbookApi.test.ts`；
+- E2E：`tests/electron/tiers/stub/smoke/playbook.spec.ts`（项目治理页 → 归类全选 → 批量移动 → 撤销，校验 IPC 动作负载）。
 
 ## 12. 已知限制（后续 P3）
 
