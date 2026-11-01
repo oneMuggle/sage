@@ -109,6 +109,12 @@ from .office_template_tool import (
 from .office_toc_refresh_tool import OfficeRefreshTocTool
 from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
+from .office_word_intelligence_tools import (
+    OfficeAuditWordTool,
+    OfficeExtractRulesTool,
+    OfficeFixWordTool,
+    OfficeReviseWordTool,
+)
 from .patch_tool import ApplyPatchTool
 from .project_diagnose import ProjectDiagnoseTool
 from .repl_tool import ReplTool
@@ -234,6 +240,11 @@ def _install_office_quality(ctx: ToolInstallContext) -> None:
     # Round 9 引用体系 / Round 10 格式 Linter / Round 12 自动修复 / Round 39 目录页码
     ctx.registry.register(OfficeBibTexTool(policy=policy))
     ctx.registry.register(OfficeLintWordTool(policy=policy))
+    # 2026-11-01 M6: rule-pack audit / fix / extract / revise tools.
+    ctx.registry.register(OfficeAuditWordTool(policy=policy))
+    ctx.registry.register(OfficeFixWordTool(policy=policy))
+    ctx.registry.register(OfficeExtractRulesTool(policy=policy))
+    ctx.registry.register(OfficeReviseWordTool(policy=policy))
     ctx.registry.register(OfficeReadLatexTool(policy=policy))
     ctx.registry.register(OfficeAnalyzeLatexTemplateTool(policy=policy))
     ctx.registry.register(OfficeFillLatexTemplateTool(policy=policy))

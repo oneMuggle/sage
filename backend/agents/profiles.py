@@ -421,6 +421,11 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_parse_bibtex",
                 # Round 10 格式 Linter: 对照 FormatSpec 校验 docx（READ）
                 "office_lint_word",
+                # 2026-11-01 M6 规则包工具（审校/修复/抽取/修订）
+                "office_audit_word",
+                "office_fix_word",
+                "office_extract_rules",
+                "office_revise_word",
                 # Round 12 自动修复: lint→修复→复检（WRITE_LOCAL）
                 "office_repair_word",
                 # Round 39 目录真页码: Word COM 刷新 TOC 域（WRITE_LOCAL，
@@ -646,6 +651,8 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     "office_parse_bibtex",
     # 2026-09-11 Round 10: 格式 Linter（与 writer.tools 同步）。
     "office_lint_word",
+    # 2026-11-01 M6: 规则包审校/修复/抽取/修订（与 writer.tools 同步）。
+    "office_audit_word", "office_fix_word", "office_extract_rules", "office_revise_word",
     # 2026-09-12 Round 12: 自动修复（与 writer.tools 同步）。
     "office_repair_word",
     # 2026-09-18 Round 39: 目录真页码刷新（与 writer.tools 同步）。
