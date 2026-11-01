@@ -4,6 +4,8 @@
 import type { PlaybookAuthorPreview } from '../../shared/api/playbookApi';
 import { Button } from '../../shared/ui/Button';
 
+import { usePlaybookI18n } from './usePlaybookI18n';
+
 export interface PlaybookAuthorPanelProps {
   notes: string;
   onNotesChange: (value: string) => void;
@@ -23,15 +25,15 @@ export function PlaybookAuthorPanel({
   onBindAuthored,
   bindingAuthored,
 }: PlaybookAuthorPanelProps) {
+  const { t } = usePlaybookI18n();
   return (
     <div className="space-y-2 rounded-md border border-border p-2">
-      <div className="text-xs text-muted-foreground">
-        不确定怎么划分阶段？让 AI 根据项目生成一份草案。
-      </div>
+      <div className="text-xs text-muted-foreground">{t('playbook.author.hint')}</div>
       <textarea
         value={notes}
         onChange={(event) => onNotesChange(event.target.value)}
-        placeholder="补充要求（可选）：资助方、必须交付的材料、时间节点…"
+        aria-label={t('playbook.author.placeholder')}
+        placeholder={t('playbook.author.placeholder')}
         rows={2}
         className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
         data-testid="playbook-author-notes"
@@ -43,14 +45,14 @@ export function PlaybookAuthorPanel({
         disabled={authoring}
         data-testid="playbook-author-btn"
       >
-        {authoring ? '生成中…' : 'AI 定制规程'}
+        {authoring ? t('playbook.author.generating') : t('playbook.author.generate')}
       </Button>
       {authorResult && (
         <div className="space-y-1 text-xs">
           <div className="font-medium text-foreground">{authorResult.playbook.name}</div>
           <div className="text-muted-foreground">
             {authorResult.rationale}
-            {authorResult.source === 'deterministic' ? '（未配置 LLM，已降级）' : ''}
+            {authorResult.source === 'deterministic' ? t('playbook.author.fallback') : ''}
           </div>
           <Button
             size="sm"
@@ -59,7 +61,7 @@ export function PlaybookAuthorPanel({
             disabled={bindingAuthored}
             data-testid="playbook-bind-authored"
           >
-            {bindingAuthored ? '绑定中…' : '绑定生成的规程'}
+            {bindingAuthored ? t('playbook.author.binding') : t('playbook.author.bind')}
           </Button>
         </div>
       )}

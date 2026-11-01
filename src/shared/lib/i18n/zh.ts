@@ -6,6 +6,7 @@ import { zhChatPdfOcr } from './locales/zh/chatPdfOcr';
 import { zhContextMenu } from './locales/zh/contextMenu';
 import { zhPet } from './locales/zh/pet';
 import { zhPetPack } from './locales/zh/petPack';
+import { zhPlaybook } from './locales/zh/playbook';
 import { zhSettingsAndModels } from './locales/zh/settingsAndModels';
 import { zhSettingsUi } from './locales/zh/settingsUi';
 import { zhWorkspaceAndTools } from './locales/zh/workspaceAndTools';
@@ -18,6 +19,7 @@ export const zh = {
   ...zhContextMenu,
   ...zhPet,
   ...zhPetPack,
+  ...zhPlaybook,
   ...zhSettingsAndModels,
   ...zhSettingsUi,
   ...zhWorkspaceAndTools,
