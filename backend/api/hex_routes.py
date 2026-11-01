@@ -227,6 +227,7 @@ async def update_settings(
     from backend.data.settings_canonicalizer import (
         classify_settings_shape_field,
         classify_settings_validation_error,
+        preserve_endpoint_api_keys,
         strip_unknown_fields,
         to_camel,
         validate_settings_payload,
@@ -247,6 +248,8 @@ async def update_settings(
     # payload 侧的未知字段仍原样保留并触发 400 —— 静默净化历史残留，严格拒绝新提交。
     camel_existing = strip_unknown_fields(to_camel(existing))
     camel_merged = {**camel_existing, **to_camel(canonical_payload)}
+    # 2026-11-01: 空 apiKey 表示"保持不变"，避免脱敏回传把已存 key 覆盖为空.
+    camel_merged = preserve_endpoint_api_keys(camel_merged, camel_existing)
     # Task 1 (2026-08-23): 旧 endpoints 写入前补 protocol 默认值, 与 GET 路径对齐.
     _migrate_default_protocol(camel_merged)
     # Task 1 round 1 (2026-08-24): 显式跑 timezone / protocol / localModelPath

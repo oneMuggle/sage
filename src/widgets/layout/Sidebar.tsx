@@ -204,7 +204,7 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
   const { settings } = useSettings();
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
   const [connectionStatus, setConnectionStatus] = useState<
-    'connected' | 'not-configured' | 'error'
+    'connected' | 'configured' | 'not-configured' | 'error'
   >('not-configured');
   const [latency, setLatency] = useState<number | null>(null);
 
@@ -248,7 +248,6 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
       : connectionStatus === 'not-configured'
         ? 'sleeping'
         : 'idle';
-
   // 渐进式功能披露 (U10)：高级入口的解锁状态。
   const [orchestrationUnlocked] = useFeatureUnlock('orchestration');
   const [officeUnlocked] = useFeatureUnlock('office');
@@ -305,6 +304,14 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
     let cancelled = false;
     if (!chatEndpoint || !isEndpointConfigured(chatEndpoint)) {
       setConnectionStatus('not-configured');
+      return;
+    }
+    // The backend stores the credential but never returns it; without local
+    // key text an authenticated probe is impossible, yet the endpoint is
+    // configured (hasApiKey=true). Report that instead of a false failure.
+    if (!chatEndpoint.apiKey.trim() && chatEndpoint.protocol !== 'ollama') {
+      setConnectionStatus('configured');
+      setLatency(null);
       return;
     }
     testEndpointConnection(
@@ -640,6 +647,9 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
               <span title={latency != null ? `延迟 ${latency}ms` : ''}>
                 {connectionStatus === 'connected' &&
                   `已连接${latency != null ? ` · ${latency}ms` : ''}`}
+                {connectionStatus === 'configured' && (
+                  <span title="API Key 由后端保存，前端不可回显">已配置</span>
+                )}
                 {connectionStatus === 'not-configured' && '未配置'}
                 {connectionStatus === 'error' && '连接失败'}
               </span>

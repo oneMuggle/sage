@@ -878,3 +878,45 @@ def classify_settings_shape_field(exc: ValueError) -> str:
     if match and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,63}", match.group(1)):
         return match.group(1)
     return classify_settings_shape_error(exc)
+
+
+def preserve_endpoint_api_keys(
+    merged: Dict[Any, Any], existing: Dict[str, Any]
+) -> Dict[Any, Any]:
+    """Keep stored endpoint apiKeys when a PUT blanks them.
+
+    GET responses redact ``apiKey`` to ``""`` (``hasApiKey`` marks presence),
+    so a client that edits any other endpoint field round-trips an empty
+    apiKey. Treat empty/missing as "unchanged" here; otherwise the redacted
+    round-trip would erase the credential from the database.
+    """
+    if not isinstance(merged, dict) or not isinstance(existing, dict):
+        return merged
+    merged_eps = merged.get("endpoints")
+    existing_eps = existing.get("endpoints")
+    if not isinstance(merged_eps, list) or not isinstance(existing_eps, list):
+        return merged
+    stored: Dict[Any, str] = {}
+    for ep in existing_eps:
+        if not isinstance(ep, dict):
+            continue
+        key = ep.get("apiKey")
+        if isinstance(key, str) and key.strip():
+            stored[ep.get("id")] = key
+    if not stored:
+        return merged
+    preserved: List[Any] = []
+    changed = False
+    for ep in merged_eps:
+        if not isinstance(ep, dict):
+            preserved.append(ep)
+            continue
+        key = ep.get("apiKey")
+        if (key is None or key == "") and ep.get("id") in stored:
+            preserved.append({**ep, "apiKey": stored[ep.get("id")]})
+            changed = True
+        else:
+            preserved.append(ep)
+    if not changed:
+        return merged
+    return {**merged, "endpoints": preserved}
