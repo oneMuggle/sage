@@ -4,15 +4,7 @@
  * 数据来自 `/projects/{id}/playbook` 与 `/playbook/audit`。所有写操作
  * （绑定、创建目录/骨架、推进阶段、导入）都先由用户点击确认。
  */
-import {
-  AlertCircle,
-  CheckCircle2,
-  Circle,
-  Download,
-  Loader2,
-  RefreshCw,
-  Upload,
-} from 'lucide-react';
+import { AlertCircle, CheckCircle2, Circle, Loader2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { playbookApi } from '../../shared/api/playbookApi';
@@ -36,8 +28,10 @@ import { PlaybookClassificationPanel } from './PlaybookClassificationPanel';
 import { PlaybookImportPreviewCard } from './PlaybookImportPreviewCard';
 import { PlaybookLibraryPanel } from './PlaybookLibraryPanel';
 import { PlaybookSpecEditor } from './PlaybookSpecEditor';
+import { PlaybookToolbar } from './PlaybookToolbar';
 import { PlaybookVersionsPanel } from './PlaybookVersionsPanel';
 import { downloadPlaybookText } from './playbookDownload';
+import { usePlaybookI18n } from './usePlaybookI18n';
 
 export interface PlaybookCardProps {
   projectId: string;
@@ -49,6 +43,7 @@ function errorMessage(err: unknown): string {
 }
 
 export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) {
+  const { t, tf } = usePlaybookI18n();
   const [current, setCurrent] = useState<PlaybookCurrent | null>(null);
   const [builtins, setBuiltins] = useState<PlaybookSummary[]>([]);
   const [library, setLibrary] = useState<PlaybookLibraryItem[]>([]);
@@ -126,33 +121,43 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           ? await playbookApi.bind(projectId, { libraryId: id })
           : await playbookApi.bind(projectId, { playbookId: id });
       setCurrent(data);
-      setNotice('已绑定项目规程');
+      setNotice(t('playbook.notice.bound'));
     });
 
   const handleRefreshAudit = () =>
     run('audit', async () => {
       const audit: PlaybookAudit = await playbookApi.audit(projectId);
       setCurrent((prev) => (prev ? { ...prev, audit } : prev));
-      setNotice('完整性检查已刷新');
+      setNotice(t('playbook.notice.auditRefreshed'));
     });
 
   const handleAiAudit = () =>
     run('audit-ai', async () => {
       const audit: PlaybookAudit = await playbookApi.auditAi(projectId);
       setCurrent((prev) => (prev ? { ...prev, audit } : prev));
-      setNotice(audit.llm_available ? 'AI 内容检查完成' : '未配置 LLM，已保留关键词检查结果');
+      setNotice(
+        audit.llm_available ? t('playbook.notice.aiDone') : t('playbook.notice.aiFallback'),
+      );
     });
 
   const handleAction = (action: PlaybookAction) =>
     run(action.type, async () => {
       const result = await playbookApi.applyActions(projectId, [action]);
       if (result.errors.length) {
-        setError(result.errors.map((item) => item.message).join('；'));
+        setError(
+          result.errors.map((item) => item.message).join(t('playbook.common.errorSeparator')),
+        );
         return;
       }
       setCurrent((prev) => (prev ? { ...prev, audit: result.audit ?? prev.audit } : prev));
       if (!result.audit) await refresh();
-      setNotice(result.applied.length ? '已执行：' + result.applied.join('、') : '项目已是最新');
+      setNotice(
+        result.applied.length
+          ? tf('playbook.notice.executed', {
+              items: result.applied.join(t('playbook.common.listSeparator')),
+            })
+          : t('playbook.notice.upToDate'),
+      );
     });
 
   const handleBatchMove = (moves: PlaybookMove[]) =>
@@ -162,12 +167,14 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         { type: 'batch_move', payload: { moves } },
       ]);
       if (result.errors.length) {
-        setError(result.errors.map((item) => item.message).join('；'));
+        setError(
+          result.errors.map((item) => item.message).join(t('playbook.common.errorSeparator')),
+        );
         return;
       }
       setCurrent((prev) => (prev ? { ...prev, audit: result.audit ?? prev.audit } : prev));
       if (!result.audit) await refresh();
-      setNotice(`已批量移动 ${moves.length} 个文件（可撤销）`);
+      setNotice(tf('playbook.notice.batchMoved', { count: moves.length }));
     });
 
   const handleUndoBatch = () =>
@@ -176,12 +183,14 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         { type: 'undo_last_batch_move', payload: {} },
       ]);
       if (result.errors.length) {
-        setError(result.errors.map((item) => item.message).join('；'));
+        setError(
+          result.errors.map((item) => item.message).join(t('playbook.common.errorSeparator')),
+        );
         return;
       }
       setCurrent((prev) => (prev ? { ...prev, audit: result.audit ?? prev.audit } : prev));
       if (!result.audit) await refresh();
-      setNotice('已撤销上次批量移动');
+      setNotice(t('playbook.notice.undoBatch'));
     });
 
   const handleConfirmStage = (stageId: string) =>
@@ -189,7 +198,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       const data = await playbookApi.confirmStage(projectId, stageId);
       setCurrent(data);
       setDismissedDetected(true);
-      setNotice('阶段已更新');
+      setNotice(t('playbook.notice.stageUpdated'));
     });
 
   const handleAuthor = () =>
@@ -207,7 +216,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         source: 'ai-authored',
       });
       setCurrent(data);
-      setNotice('已绑定 AI 定制规程');
+      setNotice(t('playbook.notice.boundAuthored'));
     });
 
   const handleStartEdit = () => {
@@ -223,7 +232,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       });
       setCurrent(data);
       setEditingSpec(false);
-      setNotice('规程已保存为新版本');
+      setNotice(t('playbook.notice.specSaved'));
     });
 
   const handleExport = (format: 'json' | 'md' | 'agents') =>
@@ -238,13 +247,17 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         text,
         format === 'json' ? 'application/json' : 'text/markdown',
       );
-      setNotice('已导出：' + result.filename);
+      setNotice(tf('playbook.notice.exported', { filename: result.filename }));
     });
 
   const handleWikiExport = () =>
     run('wiki-export', async () => {
       const result = await playbookApi.exportToWiki(projectId);
-      setNotice((result.created ? '已写入 Wiki：' : '已更新 Wiki：') + result.path);
+      setNotice(
+        result.created
+          ? tf('playbook.notice.wikiCreated', { path: result.path })
+          : tf('playbook.notice.wikiUpdated', { path: result.path }),
+      );
     });
 
   const handleSaveToLibrary = () =>
@@ -254,7 +267,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         exported.content as Record<string, unknown>,
         'project',
       );
-      setNotice('已保存到规程库：' + item.name);
+      setNotice(tf('playbook.notice.savedLibrary', { name: item.name }));
     });
 
   const handleWaive = (stageId: string, artifactId: string) =>
@@ -263,7 +276,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       const waivers = Array.from(new Set([...(current?.state.waivers ?? []), key]));
       const data = await playbookApi.updateState(projectId, { waivers });
       setCurrent(data);
-      setNotice('已豁免：' + artifactId);
+      setNotice(tf('playbook.notice.waived', { id: artifactId }));
     });
 
   const handleManualDone = (stageId: string, criterionId: string) =>
@@ -274,7 +287,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         manual_done: manualDone,
       });
       setCurrent(data);
-      setNotice('已标记完成：' + criterionId);
+      setNotice(tf('playbook.notice.manualDone', { id: criterionId }));
     });
 
   const handleSeedMilestones = () => {
@@ -288,7 +301,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         .filter((item) => item.title),
     );
     if (!milestones.length) {
-      setNotice('当前规程没有推荐里程碑');
+      setNotice(t('playbook.notice.noMilestones'));
       return;
     }
     void run('seed-milestones', async () => {
@@ -296,29 +309,31 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         { type: 'seed_milestones', payload: { milestones } },
       ]);
       if (result.errors.length) {
-        setError(result.errors.map((item) => item.message).join('；'));
+        setError(
+          result.errors.map((item) => item.message).join(t('playbook.common.errorSeparator')),
+        );
         return;
       }
       setCurrent((prev) => (prev ? { ...prev, audit: result.audit ?? prev.audit } : prev));
-      setNotice('已播种推荐里程碑');
+      setNotice(t('playbook.notice.seeded'));
     });
   };
 
   const handleCleanupRules = () => {
-    if (!window.confirm('将删除所有由项目规程写入的规则（不影响手工规则），继续？')) return;
+    if (!window.confirm(t('playbook.confirm.cleanup'))) return;
     void run('cleanup-rules', async () => {
       const removed = await playbookApi.cleanupRules(projectId);
-      setNotice(`已清理 ${removed} 条规程规则`);
+      setNotice(tf('playbook.notice.cleaned', { count: removed }));
     });
   };
 
   const handleUnbind = () => {
-    if (!window.confirm('解绑后规程状态会清空（历史版本保留），继续？')) return;
+    if (!window.confirm(t('playbook.confirm.unbind'))) return;
     void run('unbind', async () => {
       const data = await playbookApi.unbind(projectId);
       setCurrent(data);
       setEditingSpec(false);
-      setNotice('已解绑规程');
+      setNotice(t('playbook.notice.unbound'));
     });
   };
 
@@ -338,7 +353,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       setImportEnvelope(envelope);
       setImportPreview(preview);
     } catch (err) {
-      setError('导入文件无效：' + errorMessage(err));
+      setError(tf('playbook.error.invalidImport', { message: errorMessage(err) }));
     }
   };
 
@@ -355,7 +370,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       setImportPreview(null);
       setImportEnvelope(null);
       setSaveToLibrary(false);
-      setNotice('规程已导入并绑定');
+      setNotice(t('playbook.notice.imported'));
     });
 
   if (loading) {
@@ -365,7 +380,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         data-testid="playbook-loading"
       >
         <Loader2 className="h-4 w-4 animate-spin" />
-        正在检查项目规程…
+        {t('playbook.card.loading')}
       </div>
     );
   }
@@ -380,7 +395,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         <div className="space-y-1">
           <div>{error}</div>
           <Button size="sm" variant="secondary" onClick={() => void refresh()}>
-            重试
+            {t('playbook.card.retry')}
           </Button>
         </div>
       </div>
@@ -398,37 +413,42 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       >
         <div className="flex items-center justify-between gap-2">
           <div>
-            <div className="text-sm font-medium text-foreground">项目规程</div>
-            <div className="text-xs text-muted-foreground">
-              为项目选择一套阶段与交付物要求；AI 会据此检查完整性。
-            </div>
+            <div className="text-sm font-medium text-foreground">{t('playbook.card.title')}</div>
+            <div className="text-xs text-muted-foreground">{t('playbook.card.subtitle')}</div>
           </div>
         </div>
         {suggested && (
           <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-xs text-foreground">
-            推荐：<span className="font-medium">{suggested.name}</span>
+            {t('playbook.card.recommended')}
+            <span className="font-medium">{suggested.name}</span>
             <span className="ml-2 text-muted-foreground">{suggested.description}</span>
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2">
           <select
-            aria-label="选择项目规程"
+            aria-label={t('playbook.card.selectLabel')}
             value={selectedPlaybook}
             onChange={(event) => setSelectedPlaybook(event.target.value)}
             className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
           >
-            <optgroup label="内置规程">
+            <optgroup label={t('playbook.card.builtinGroup')}>
               {builtins.map((item) => (
                 <option key={item.id} value={`builtin:${item.id}`}>
-                  {item.name}（{item.stage_count} 阶段）
+                  {tf('playbook.card.optionLabel', {
+                    name: item.name,
+                    count: item.stage_count,
+                  })}
                 </option>
               ))}
             </optgroup>
             {library.length > 0 && (
-              <optgroup label="规程库">
+              <optgroup label={t('playbook.card.libraryGroup')}>
                 {library.map((item) => (
                   <option key={item.id} value={`library:${item.id}`}>
-                    {item.name}（{item.stage_count} 阶段）
+                    {tf('playbook.card.optionLabel', {
+                      name: item.name,
+                      count: item.stage_count,
+                    })}
                   </option>
                 ))}
               </optgroup>
@@ -441,11 +461,11 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
             onClick={() => void handleBind()}
             data-testid="playbook-bind-btn"
           >
-            {busy === 'bind' ? '绑定中…' : '绑定此规程'}
+            {busy === 'bind' ? t('playbook.card.binding') : t('playbook.card.bind')}
           </Button>
           <Button size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()}>
             <Upload className="mr-1 h-3.5 w-3.5" />
-            导入规程文件
+            {t('playbook.card.importFile')}
           </Button>
           <Button
             size="sm"
@@ -453,7 +473,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
             onClick={() => setShowLibrary((value) => !value)}
             data-testid="playbook-open-library-unbound"
           >
-            规程库
+            {t('playbook.card.library')}
           </Button>
           <input
             ref={fileInputRef}
@@ -492,8 +512,16 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
             importing={busy === 'import'}
           />
         )}
-        {error && <div className="text-xs text-destructive">{error}</div>}
-        {notice && <div className="text-xs text-primary">{notice}</div>}
+        {error && (
+          <div role="status" aria-live="polite" className="text-xs text-destructive">
+            {error}
+          </div>
+        )}
+        {notice && (
+          <div role="status" aria-live="polite" className="text-xs text-primary">
+            {notice}
+          </div>
+        )}
       </div>
     );
   }
@@ -517,133 +545,41 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="text-sm font-medium text-foreground">
-            项目规程：{current.playbook?.name}
+            {tf('playbook.card.boundTitle', { name: current.playbook?.name ?? '' })}
           </div>
           <div className="text-xs text-muted-foreground">
             v{current.version ?? 1} · {current.source ?? 'custom'}
             {current.playbook?.description ? ' · ' + current.playbook.description : ''}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => void handleRefreshAudit()}
-            disabled={busy === 'audit'}
-            data-testid="playbook-refresh-audit"
-          >
-            <RefreshCw className="mr-1 h-3.5 w-3.5" />
-            {busy === 'audit' ? '检查中…' : '检查完整性'}
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => void handleAiAudit()}
-            disabled={busy === 'audit-ai'}
-            data-testid="playbook-ai-audit"
-          >
-            {busy === 'audit-ai' ? 'AI 检查中…' : 'AI 检查内容'}
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => void handleExport('json')}
-            disabled={busy === 'export-json'}
-          >
-            <Download className="mr-1 h-3.5 w-3.5" />
-            导出
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => void handleExport('md')}>
-            导出手册
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => void handleExport('agents')}>
-            导出 AGENTS
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => void handleWikiExport()}
-            disabled={busy === 'wiki-export'}
-            data-testid="playbook-wiki-export"
-          >
-            {busy === 'wiki-export' ? '写入中…' : '写入 Wiki'}
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => void handleSaveToLibrary()}
-            disabled={busy === 'save-library'}
-            data-testid="playbook-save-library"
-          >
-            {busy === 'save-library' ? '保存中…' : '保存到规程库'}
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => setShowLibrary((value) => !value)}
-            data-testid="playbook-open-library"
-          >
-            规程库
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={handleStartEdit}
-            disabled={!current.playbook}
-            data-testid="playbook-edit-btn"
-          >
-            编辑规程
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => void handleLoadVersions()}
-            data-testid="playbook-versions-btn"
-          >
-            版本历史
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={handleSeedMilestones}
-            disabled={busy === 'seed-milestones'}
-            data-testid="playbook-seed-milestones"
-          >
-            播种推荐里程碑
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={handleCleanupRules}
-            data-testid="playbook-cleanup-rules"
-          >
-            清理规程规则
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={handleUnbind}
-            data-testid="playbook-unbind"
-          >
-            解绑规程
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()}>
-            <Upload className="mr-1 h-3.5 w-3.5" />
-            导入
-          </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,.sageplaybook.json,application/json"
-            className="hidden"
-            data-testid="playbook-import-input"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void handleFile(file);
-              event.target.value = '';
-            }}
-          />
-        </div>
+        <PlaybookToolbar
+          busy={busy}
+          hasPlaybook={Boolean(current.playbook)}
+          onRefreshAudit={() => void handleRefreshAudit()}
+          onAiAudit={() => void handleAiAudit()}
+          onExport={(format) => void handleExport(format)}
+          onWikiExport={() => void handleWikiExport()}
+          onSaveToLibrary={() => void handleSaveToLibrary()}
+          onToggleLibrary={() => setShowLibrary((value) => !value)}
+          onEdit={handleStartEdit}
+          onLoadVersions={() => void handleLoadVersions()}
+          onSeedMilestones={handleSeedMilestones}
+          onCleanupRules={handleCleanupRules}
+          onUnbind={handleUnbind}
+          onImportClick={() => fileInputRef.current?.click()}
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,.sageplaybook.json,application/json"
+          className="hidden"
+          data-testid="playbook-import-input"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void handleFile(file);
+            event.target.value = '';
+          }}
+        />
       </div>
 
       {editingSpec && current.playbook && (
@@ -693,8 +629,11 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           />
         </div>
         <span>
-          整体完成度 {audit?.overall.progress ?? 0}%（{audit?.overall.required_done ?? 0}/
-          {audit?.overall.required_total ?? 0}）
+          {tf('playbook.card.overall', {
+            progress: audit?.overall.progress ?? 0,
+            done: audit?.overall.required_done ?? 0,
+            total: audit?.overall.required_total ?? 0,
+          })}
         </span>
       </div>
 
@@ -705,8 +644,10 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         >
           <AlertCircle className="h-3.5 w-3.5" />
           <span>
-            检测到可能已进入「{detectedStage.label}」阶段（置信度{' '}
-            {Math.round((detected?.confidence ?? 0) * 100)}%）
+            {tf('playbook.card.detected', {
+              stage: detectedStage.label,
+              confidence: Math.round((detected?.confidence ?? 0) * 100),
+            })}
           </span>
           <Button
             size="sm"
@@ -714,7 +655,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
             onClick={() => void handleConfirmStage(detectedStage.id)}
             data-testid="playbook-confirm-stage"
           >
-            确认推进
+            {t('playbook.card.confirmStage')}
           </Button>
           <Button
             size="sm"
@@ -722,7 +663,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
             onClick={() => setDismissedDetected(true)}
             data-testid="playbook-keep-stage"
           >
-            保持当前
+            {t('playbook.card.keepStage')}
           </Button>
         </div>
       )}

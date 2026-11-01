@@ -1,8 +1,14 @@
 /**
  * PlaybookImportPreviewCard — 导入前的逐项 diff、冲突策略与保存到规程库选项。
  */
-import type { PlaybookImportPreview, PlaybookStageDiff } from '../../shared/api/playbookApi';
+import type {
+  PlaybookDiff,
+  PlaybookImportPreview,
+  PlaybookStageDiff,
+} from '../../shared/api/playbookApi';
 import { Button } from '../../shared/ui/Button';
+
+import { usePlaybookI18n, type PlaybookI18n } from './usePlaybookI18n';
 
 export interface PlaybookImportPreviewProps {
   preview: PlaybookImportPreview;
@@ -31,81 +37,92 @@ function stageChangeCount(detail: PlaybookStageDiff): number {
   );
 }
 
-function summaryCounts(preview: PlaybookImportPreview): string[] {
-  const { diff } = preview;
+function summaryCounts(diff: PlaybookDiff, tf: PlaybookI18n['tf']): string[] {
   const counts: string[] = [];
-  if (diff.stages_added.length) counts.push(`新增阶段 ${diff.stages_added.length}`);
-  if (diff.stages_removed.length) counts.push(`删除阶段 ${diff.stages_removed.length}`);
-  if (diff.stages_changed.length) counts.push(`阶段调整 ${diff.stages_changed.length}`);
-  if (diff.directories_added.length) counts.push(`新增目录 ${diff.directories_added.length}`);
-  if (diff.directories_removed.length) counts.push(`删除目录 ${diff.directories_removed.length}`);
-  if (diff.directories_changed.length) counts.push(`调整目录 ${diff.directories_changed.length}`);
-  if (diff.global_rules_added.length) counts.push(`新增全局规则 ${diff.global_rules_added.length}`);
-  if (diff.global_rules_removed.length)
-    counts.push(`删除全局规则 ${diff.global_rules_removed.length}`);
-  if (diff.name_changed) counts.push('名称变更');
-  if (diff.description_changed) counts.push('描述变更');
+  const push = (key: Parameters<PlaybookI18n['tf']>[0], count: number) => {
+    if (count > 0) counts.push(tf(key, { count }));
+  };
+  push('playbook.import.count.stagesAdded', diff.stages_added.length);
+  push('playbook.import.count.stagesRemoved', diff.stages_removed.length);
+  push('playbook.import.count.stagesChanged', diff.stages_changed.length);
+  push('playbook.import.count.directoriesAdded', diff.directories_added.length);
+  push('playbook.import.count.directoriesRemoved', diff.directories_removed.length);
+  push('playbook.import.count.directoriesChanged', diff.directories_changed.length);
+  push('playbook.import.count.globalRulesAdded', diff.global_rules_added.length);
+  push('playbook.import.count.globalRulesRemoved', diff.global_rules_removed.length);
+  if (diff.name_changed) counts.push(tf('playbook.import.count.nameChanged'));
+  if (diff.description_changed) counts.push(tf('playbook.import.count.descriptionChanged'));
   return counts;
 }
 
-function StageDiffList({ detail }: { detail: PlaybookStageDiff }) {
+function StageDiffList({ detail, tf }: { detail: PlaybookStageDiff; tf: PlaybookI18n['tf'] }) {
+  const separator = tf('playbook.import.listSeparator');
+  const fieldsSuffix = (fields: string[] | undefined) =>
+    fields?.length ? tf('playbook.import.fieldSuffix', { fields: fields.join(separator) }) : '';
+  const listClass = {
+    added: 'text-emerald-600 dark:text-emerald-400',
+    removed: 'text-destructive',
+    changed: 'text-amber-600 dark:text-amber-400',
+  };
   return (
     <ul className="mt-1 space-y-0.5">
       {detail.changed_fields.length > 0 && (
-        <li className="text-amber-600 dark:text-amber-400">
-          ~ 阶段字段：{detail.changed_fields.join('、')}
+        <li className={listClass.changed}>
+          {tf('playbook.import.stageFields', {
+            fields: detail.changed_fields.join(separator),
+          })}
         </li>
       )}
       {detail.artifacts_added.map((item) => (
-        <li key={`artifact-add-${item.id}`} className="text-emerald-600 dark:text-emerald-400">
-          + 产物：{item.label}
+        <li key={`artifact-add-${item.id}`} className={listClass.added}>
+          {tf('playbook.import.artifactAdded', { label: item.label })}
         </li>
       ))}
       {detail.artifacts_removed.map((item) => (
-        <li key={`artifact-del-${item.id}`} className="text-destructive">
-          − 产物：{item.label}
+        <li key={`artifact-del-${item.id}`} className={listClass.removed}>
+          {tf('playbook.import.artifactRemoved', { label: item.label })}
         </li>
       ))}
       {detail.artifacts_changed.map((item) => (
-        <li key={`artifact-mod-${item.id}`} className="text-amber-600 dark:text-amber-400">
-          ~ 产物：{item.label}
-          {item.fields?.length ? `（${item.fields.join('、')}）` : ''}
+        <li key={`artifact-mod-${item.id}`} className={listClass.changed}>
+          {tf('playbook.import.artifactChanged', { label: item.label })}
+          {fieldsSuffix(item.fields)}
         </li>
       ))}
       {detail.rules_added.map((label) => (
-        <li key={`rule-add-${label}`} className="text-emerald-600 dark:text-emerald-400">
-          + 规则：{label}
+        <li key={`rule-add-${label}`} className={listClass.added}>
+          {tf('playbook.import.ruleAdded', { label })}
         </li>
       ))}
       {detail.rules_removed.map((label) => (
-        <li key={`rule-del-${label}`} className="text-destructive">
-          − 规则：{label}
+        <li key={`rule-del-${label}`} className={listClass.removed}>
+          {tf('playbook.import.ruleRemoved', { label })}
         </li>
       ))}
       {detail.milestones_added.map((title) => (
-        <li key={`milestone-add-${title}`} className="text-emerald-600 dark:text-emerald-400">
-          + 里程碑：{title}
+        <li key={`milestone-add-${title}`} className={listClass.added}>
+          {tf('playbook.import.milestoneAdded', { title })}
         </li>
       ))}
       {detail.milestones_removed.map((title) => (
-        <li key={`milestone-del-${title}`} className="text-destructive">
-          − 里程碑：{title}
+        <li key={`milestone-del-${title}`} className={listClass.removed}>
+          {tf('playbook.import.milestoneRemoved', { title })}
         </li>
       ))}
       {detail.criteria_added.map((item) => (
-        <li key={`criterion-add-${item.id}`} className="text-emerald-600 dark:text-emerald-400">
-          + 退出条件：{item.label}
+        <li key={`criterion-add-${item.id}`} className={listClass.added}>
+          {tf('playbook.import.criterionAdded', { label: item.label })}
         </li>
       ))}
       {detail.criteria_removed.map((item) => (
-        <li key={`criterion-del-${item.id}`} className="text-destructive">
-          − 退出条件：{item.label}
+        <li key={`criterion-del-${item.id}`} className={listClass.removed}>
+          {tf('playbook.import.criterionRemoved', { label: item.label })}
         </li>
       ))}
       {detail.criteria_changed.map((item) => (
-        <li key={`criterion-mod-${item.id}`} className="text-amber-600 dark:text-amber-400">
-          ~ 退出条件：{item.label}
-          {item.fields?.length ? `（${item.fields.join('、')}）` : ''}
+        <li key={`criterion-mod-${item.id}`} className={listClass.changed}>
+          {tf('playbook.import.criterionChanged', { label: item.label })}
+          {fieldsSuffix(item.fields)}
         </li>
       ))}
     </ul>
@@ -122,19 +139,30 @@ export function PlaybookImportPreviewCard({
   onCancel,
   importing,
 }: PlaybookImportPreviewProps) {
-  const counts = summaryCounts(preview);
+  const { t, tf } = usePlaybookI18n();
+  const counts = summaryCounts(preview.diff, tf);
   const stageDetails = Object.entries(preview.diff.stage_details ?? {});
   return (
     <div
       className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs"
       data-testid="playbook-import-preview"
     >
-      <div className="font-medium text-foreground">导入预览：{preview.playbook.name}</div>
-      <div className="text-muted-foreground">
-        阶段 {preview.playbook.stages.length} 个 · 目录 {preview.scaffold.directories.length} 个 ·
-        导入不包含对方项目文件内容
+      <div className="font-medium text-foreground">
+        {tf('playbook.import.title', { name: preview.playbook.name })}
       </div>
-      <div className="text-muted-foreground">变更：{counts.join('，') || '无结构变更'}</div>
+      <div className="text-muted-foreground">
+        {tf('playbook.import.summary', {
+          stages: preview.playbook.stages.length,
+          dirs: preview.scaffold.directories.length,
+        })}
+      </div>
+      <div className="text-muted-foreground">
+        {tf('playbook.import.changes', {
+          items:
+            counts.join(tf('playbook.import.listSeparator')) ||
+            t('playbook.import.noStructuralChanges'),
+        })}
+      </div>
       {stageDetails.length > 0 && (
         <div className="space-y-1" data-testid="playbook-diff-details">
           {stageDetails.map(([stageId, detail]) => (
@@ -144,25 +172,28 @@ export function PlaybookImportPreviewCard({
               data-testid={`playbook-diff-stage-${stageId}`}
             >
               <summary className="cursor-pointer text-muted-foreground">
-                阶段「{detail.label || stageId}」：{stageChangeCount(detail)} 项变更
+                {tf('playbook.import.stageSummary', {
+                  label: detail.label || stageId,
+                  count: stageChangeCount(detail),
+                })}
               </summary>
-              <StageDiffList detail={detail} />
+              <StageDiffList detail={detail} tf={tf} />
             </details>
           ))}
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
         <select
-          aria-label="导入冲突策略"
+          aria-label={t('playbook.import.conflictLabel')}
           value={conflict}
           onChange={(event) =>
             onConflictChange(event.target.value as 'save_as_new' | 'merge' | 'replace')
           }
           className="rounded-md border border-input bg-background px-2 py-1 text-xs"
         >
-          <option value="save_as_new">另存为新规程</option>
-          <option value="merge">合并到当前规程</option>
-          <option value="replace">替换当前规程</option>
+          <option value="save_as_new">{t('playbook.import.conflict.saveAsNew')}</option>
+          <option value="merge">{t('playbook.import.conflict.merge')}</option>
+          <option value="replace">{t('playbook.import.conflict.replace')}</option>
         </select>
         <label className="flex items-center gap-1 text-xs text-muted-foreground">
           <input
@@ -171,7 +202,7 @@ export function PlaybookImportPreviewCard({
             onChange={(event) => onSaveToLibraryChange(event.target.checked)}
             data-testid="playbook-import-save-library"
           />
-          保存到规程库
+          {t('playbook.import.saveToLibrary')}
         </label>
         <Button
           size="sm"
@@ -180,10 +211,10 @@ export function PlaybookImportPreviewCard({
           disabled={importing}
           data-testid="playbook-import-confirm"
         >
-          {importing ? '导入中…' : '导入并绑定'}
+          {importing ? t('playbook.import.importing') : t('playbook.import.confirm')}
         </Button>
         <Button size="sm" variant="secondary" onClick={onCancel}>
-          取消
+          {t('playbook.import.cancel')}
         </Button>
       </div>
     </div>

@@ -15,6 +15,8 @@ import type {
 } from '../../shared/api/playbookApi';
 import { Button } from '../../shared/ui/Button';
 
+import { usePlaybookI18n } from './usePlaybookI18n';
+
 export interface PlaybookClassificationPanelProps {
   classification: PlaybookClassificationSuggestion[];
   unclassified: PlaybookUnclassifiedFile[];
@@ -39,6 +41,7 @@ export function PlaybookClassificationPanel({
   onBatchMove,
   onUndo,
 }: PlaybookClassificationPanelProps) {
+  const { t, tf } = usePlaybookI18n();
   const [selected, setSelected] = useState<Record<string, boolean>>({});
 
   const moves: SelectableMove[] = [
@@ -65,16 +68,18 @@ export function PlaybookClassificationPanel({
     <div className="space-y-1.5" data-testid="playbook-classification">
       {classification.length > 0 && (
         <div className="flex items-center justify-between gap-2">
-          <div className="text-xs font-medium text-foreground">归类建议（需逐项确认）</div>
+          <div className="text-xs font-medium text-foreground">
+            {t('playbook.classification.title')}
+          </div>
           <label className="flex items-center gap-1 text-ui-2xs text-muted-foreground">
             <input
               type="checkbox"
               checked={allSelected}
               onChange={toggleAll}
-              aria-label="全选归类建议"
+              aria-label={t('playbook.classification.selectAll')}
               data-testid="playbook-select-all"
             />
-            全选
+            {t('playbook.classification.selectAllLabel')}
           </label>
         </div>
       )}
@@ -91,7 +96,7 @@ export function PlaybookClassificationPanel({
                 type="checkbox"
                 checked={Boolean(selected[key])}
                 onChange={() => toggle(key)}
-                aria-label={`选择 ${item.from}`}
+                aria-label={tf('playbook.classification.select', { path: item.from })}
                 data-testid={`playbook-select-${key}`}
               />
               <span className="truncate" title={item.reason}>
@@ -110,7 +115,7 @@ export function PlaybookClassificationPanel({
               disabled={busy === 'move_file'}
               data-testid={`playbook-move-${item.artifact_id}`}
             >
-              移动
+              {t('playbook.classification.move')}
             </Button>
           </div>
         );
@@ -119,7 +124,7 @@ export function PlaybookClassificationPanel({
       {unclassified.length > 0 && (
         <div className="space-y-1.5 pt-1" data-testid="playbook-unclassified">
           <div className="text-xs font-medium text-foreground">
-            未知文件（建议归类，可批量移动）
+            {t('playbook.classification.unknownTitle')}
           </div>
           {unclassified.map((item, index) => {
             const key = `unknown-${index}`;
@@ -133,13 +138,15 @@ export function PlaybookClassificationPanel({
                     type="checkbox"
                     checked={Boolean(selected[key])}
                     onChange={() => toggle(key)}
-                    aria-label={`选择 ${item.path}`}
+                    aria-label={tf('playbook.classification.select', { path: item.path })}
                     data-testid={`playbook-select-${key}`}
                   />
                   <span className="truncate" title={item.reason}>
                     {item.path} → {item.suggested_to}
                     <span className="ml-1 text-ui-2xs opacity-70">
-                      （建议 {Math.round(item.confidence * 100)}%）
+                      {tf('playbook.classification.suggestion', {
+                        percent: Math.round(item.confidence * 100),
+                      })}
                     </span>
                   </span>
                 </span>
@@ -155,7 +162,7 @@ export function PlaybookClassificationPanel({
                   disabled={busy === 'move_file'}
                   data-testid={`playbook-move-unknown-${index}`}
                 >
-                  移动
+                  {t('playbook.classification.move')}
                 </Button>
               </div>
             );
@@ -175,7 +182,7 @@ export function PlaybookClassificationPanel({
             disabled={chosen.length === 0 || busy === 'batch-move'}
             data-testid="playbook-batch-move"
           >
-            移动选中（{chosen.length}）
+            {tf('playbook.classification.batchMove', { count: chosen.length })}
           </Button>
         )}
         {undoAvailable && (
@@ -184,11 +191,13 @@ export function PlaybookClassificationPanel({
             variant="secondary"
             onClick={onUndo}
             disabled={busy === 'undo-batch'}
-            title={`最近一次批量移动：${new Date(undoAvailable.at).toLocaleString()}`}
+            title={tf('playbook.classification.undoTitle', {
+              time: new Date(undoAvailable.at).toLocaleString(),
+            })}
             data-testid="playbook-undo-batch"
           >
             <Undo2 className="mr-1 h-3.5 w-3.5" />
-            撤销上次批量移动（{undoAvailable.count}）
+            {tf('playbook.classification.undo', { count: undoAvailable.count })}
           </Button>
         )}
       </div>

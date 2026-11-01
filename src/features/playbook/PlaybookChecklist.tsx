@@ -1,12 +1,15 @@
 /**
- * PlaybookChecklist — 当前阶段待补项、退出条件与归类建议。
+ * PlaybookChecklist — 当前阶段待补项与退出条件。
  *
  * 所有动作都通过回调交给父组件执行，组件本身不直接调用 API。
  */
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 
 import type { PlaybookAction, PlaybookStageAudit } from '../../shared/api/playbookApi';
+import type { PlaybookTranslationKey } from '../../shared/lib/i18n/locales/zh/playbook';
 import { Button } from '../../shared/ui/Button';
+
+import { usePlaybookI18n } from './usePlaybookI18n';
 
 export interface PlaybookChecklistProps {
   stage: PlaybookStageAudit | undefined;
@@ -17,13 +20,13 @@ export interface PlaybookChecklistProps {
   onManualDone: (stageId: string, criterionId: string) => void;
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  create_folder: '创建目录',
-  create_doc_stub: '生成骨架',
-  apply_rules: '写入规则',
-  seed_milestones: '创建里程碑',
-  add_todo: '转为待办',
-  open_doc: '打开文档',
+const ACTION_KEYS: Record<string, PlaybookTranslationKey> = {
+  create_folder: 'playbook.checklist.action.create_folder',
+  create_doc_stub: 'playbook.checklist.action.create_doc_stub',
+  apply_rules: 'playbook.checklist.action.apply_rules',
+  seed_milestones: 'playbook.checklist.action.seed_milestones',
+  add_todo: 'playbook.checklist.action.add_todo',
+  open_doc: 'playbook.checklist.action.open_doc',
 };
 
 export function PlaybookChecklist({
@@ -34,12 +37,17 @@ export function PlaybookChecklist({
   onWaive,
   onManualDone,
 }: PlaybookChecklistProps) {
+  const { t, tf } = usePlaybookI18n();
   if (!stage) return null;
+  const actionLabel = (type: string): string => {
+    const key = ACTION_KEYS[type];
+    return key ? t(key) : t('playbook.checklist.fallbackAction');
+  };
   return (
     <>
       <div className="space-y-2" data-testid="playbook-current-stage">
         <div className="text-xs font-medium text-foreground">
-          当前阶段：{stage.label}
+          {tf('playbook.checklist.currentStage', { stage: stage.label })}
           {stage.objective ? (
             <span className="ml-2 font-normal text-muted-foreground">{stage.objective}</span>
           ) : null}
@@ -47,7 +55,7 @@ export function PlaybookChecklist({
         {stage.remaining.length === 0 ? (
           <div className="flex items-center gap-1.5 text-xs text-emerald-600">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            本阶段必需要素已齐备
+            {t('playbook.checklist.allReady')}
           </div>
         ) : (
           <ul className="space-y-1.5">
@@ -58,7 +66,7 @@ export function PlaybookChecklist({
               >
                 <span className="flex items-center gap-1.5 text-foreground">
                   <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
-                  待补：{item.label}
+                  {tf('playbook.checklist.missing', { label: item.label })}
                 </span>
                 <span className="flex items-center gap-1.5">
                   {item.missing_action && (
@@ -69,7 +77,7 @@ export function PlaybookChecklist({
                       disabled={busy === item.missing_action.type}
                       data-testid={`playbook-missing-action-${item.id}`}
                     >
-                      {ACTION_LABELS[item.missing_action.type] ?? '处理'}
+                      {actionLabel(item.missing_action.type)}
                     </Button>
                   )}
                   <Button
@@ -79,15 +87,20 @@ export function PlaybookChecklist({
                       onAction({
                         type: 'add_todo',
                         payload: {
-                          title: '补齐：' + item.label,
-                          description: '项目规程 ' + playbookName + ' · 阶段 ' + stage.label,
+                          title: tf('playbook.checklist.addTodoTitle', {
+                            label: item.label,
+                          }),
+                          description: tf('playbook.checklist.addTodoDescription', {
+                            playbook: playbookName,
+                            stage: stage.label,
+                          }),
                         },
                       })
                     }
                     disabled={busy === 'add_todo'}
                     data-testid={`playbook-add-todo-${item.id}`}
                   >
-                    转待办
+                    {t('playbook.checklist.toTodo')}
                   </Button>
                   <Button
                     size="sm"
@@ -96,7 +109,7 @@ export function PlaybookChecklist({
                     disabled={busy === 'waive'}
                     data-testid={`playbook-waive-${item.id}`}
                   >
-                    豁免
+                    {t('playbook.checklist.waive')}
                   </Button>
                 </span>
               </li>
@@ -107,7 +120,9 @@ export function PlaybookChecklist({
 
       {stage.exit_criteria.length > 0 && (
         <div className="space-y-1.5" data-testid="playbook-exit-criteria">
-          <div className="text-xs font-medium text-foreground">退出条件</div>
+          <div className="text-xs font-medium text-foreground">
+            {t('playbook.checklist.exitCriteria')}
+          </div>
           {stage.exit_criteria.map((criterion) => (
             <div
               key={criterion.id ?? criterion.label}
@@ -125,7 +140,7 @@ export function PlaybookChecklist({
                   disabled={busy === 'manual-done'}
                   data-testid={`playbook-manual-${criterion.id}`}
                 >
-                  标记完成
+                  {t('playbook.checklist.markDone')}
                 </Button>
               )}
             </div>
