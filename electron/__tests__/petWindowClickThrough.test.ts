@@ -1,0 +1,148 @@
+/**
+ * Regression: click-through must never be restored on a window that does not
+ * use the pointer-polling mechanism (opaque compatibility window, or polling
+ * fallback). Otherwise `endDrag()`/`hide()` would leave the pet permanently
+ * click-through with no code path to make it interactive again.
+ */
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import type { PetRenderConfig } from '../pet/types';
+import { PetWindow } from '../pet/windows';
+
+interface FakeWindow {
+  setIgnoreMouseEvents: ReturnType<typeof vi.fn>;
+  destroy: ReturnType<typeof vi.fn>;
+  hide: ReturnType<typeof vi.fn>;
+}
+
+const { fakeWindows } = vi.hoisted(() => ({ fakeWindows: [] as unknown[] }));
+
+vi.mock('electron', () => {
+  class FakeBrowserWindow {
+    webContents = { setWindowOpenHandler: vi.fn(), on: vi.fn(), send: vi.fn() };
+    setAlwaysOnTop = vi.fn();
+    on = vi.fn();
+    once = vi.fn();
+    loadURL = vi.fn(() => Promise.resolve());
+    loadFile = vi.fn(() => Promise.resolve());
+    setIgnoreMouseEvents = vi.fn();
+    getBounds = vi.fn(() => ({ x: 100, y: 100, width: 300, height: 241 }));
+    setSize = vi.fn();
+    setPosition = vi.fn();
+    showInactive = vi.fn();
+    isVisible = vi.fn(() => true);
+    hide = vi.fn();
+    destroy = vi.fn();
+    isDestroyed = vi.fn(() => false);
+
+    constructor() {
+      fakeWindows.push(this);
+    }
+  }
+  return {
+    BrowserWindow: FakeBrowserWindow,
+    Menu: { buildFromTemplate: vi.fn() },
+    screen: {
+      getCursorScreenPoint: vi.fn(() => ({ x: 0, y: 0 })),
+      getDisplayNearestPoint: vi.fn(() => ({
+        workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+      })),
+    },
+  };
+});
+
+vi.mock('../logger', () => ({
+  logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
+
+function makeConfig(overrides: Partial<PetRenderConfig> = {}): PetRenderConfig {
+  return {
+    version: 2,
+    enabled: true,
+    displayMode: 'desktop',
+    tempo: 'standard',
+    reduceMotion: false,
+    bubbleMode: 'important',
+    soundScenes: { waiting: true, error: false, done: false },
+    showSessionTitle: false,
+    compatibilityMode: 'auto',
+    followActiveSession: true,
+    externalApi: false,
+    pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
+    petId: 'default',
+    petPack: 'dafeiyu',
+    size: 'medium',
+    ...overrides,
+  };
+}
+
+const cleanup: Array<{ window: PetWindow; dir: string }> = [];
+
+function createPetWindow(compatibilityMode: PetRenderConfig['compatibilityMode']): {
+  petWindow: PetWindow;
+  win: FakeWindow;
+} {
+  const dir = mkdtempSync(join(tmpdir(), 'sage-pet-window-test-'));
+  const petWindow = new PetWindow({
+    config: makeConfig({ compatibilityMode }),
+    petId: 'default',
+    instanceIndex: 0,
+    devUrl: 'http://localhost:1420',
+    isPackaged: false,
+    userDataDir: dir,
+  });
+  petWindow.create();
+  cleanup.push({ window: petWindow, dir });
+  return {
+    petWindow,
+    win: fakeWindows[fakeWindows.length - 1] as FakeWindow,
+  };
+}
+
+afterEach(() => {
+  for (const entry of cleanup.splice(0)) {
+    entry.window.destroy();
+    rmSync(entry.dir, { recursive: true, force: true });
+  }
+  fakeWindows.length = 0;
+});
+
+describe('PetWindow click-through', () => {
+  it('keeps the opaque compatibility window interactive after a drag', () => {
+    const { petWindow, win } = createPetWindow('on');
+
+    petWindow.startDrag();
+    petWindow.endDrag();
+
+    expect(win.setIgnoreMouseEvents).not.toHaveBeenCalledWith(true, expect.anything());
+    expect(win.setIgnoreMouseEvents).not.toHaveBeenCalledWith(true);
+  });
+
+  it('keeps the opaque compatibility window interactive after hide()', () => {
+    const { petWindow, win } = createPetWindow('on');
+
+    petWindow.startDrag();
+    petWindow.endDrag();
+    petWindow.hide();
+
+    expect(win.setIgnoreMouseEvents).not.toHaveBeenCalledWith(true, expect.anything());
+    expect(win.setIgnoreMouseEvents).not.toHaveBeenCalledWith(true);
+  });
+
+  it('still restores click-through for the transparent overlay after a drag', () => {
+    const { petWindow, win } = createPetWindow('off');
+
+    // Initial state: click-through with forward.
+    expect(win.setIgnoreMouseEvents).toHaveBeenCalledWith(true, { forward: true });
+    win.setIgnoreMouseEvents.mockClear();
+
+    petWindow.startDrag();
+    petWindow.endDrag();
+
+    expect(win.setIgnoreMouseEvents.mock.calls).toEqual([[false], [true, { forward: true }]]);
+  });
+});

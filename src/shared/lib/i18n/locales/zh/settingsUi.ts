@@ -83,6 +83,8 @@ export const zhSettingsUi = {
   'settings.endpoints.add': '+ 添加端点',
   'settings.endpoints.api_key_hint':
     'OpenAI-compatible 和 Ollama 协议允许留空（适用于本地服务或无需密钥的内网代理）',
+  'settings.endpoints.api_key_saved_hint':
+    '后端已保存密钥（出于安全不会回显）；留空保存将保留原密钥',
   'settings.endpoints.api_key_placeholder_local': '本地/内网代理可留空',
   'settings.endpoints.cancel': '取消',
   'settings.endpoints.delete': '删除',
