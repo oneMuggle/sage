@@ -91,6 +91,7 @@ export const wordAuditApi = {
         fileType: req.file_type ?? 'spec',
         ...(req.pack_id ? { packId: req.pack_id } : {}),
         ...(req.pack_name ? { packName: req.pack_name } : {}),
+        useLlm: req.use_llm ?? false,
         ...(req.max_size_bytes !== undefined ? { maxSizeBytes: req.max_size_bytes } : {}),
       });
     } catch (error) {

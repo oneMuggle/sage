@@ -153,6 +153,7 @@ export const officeRoutes: Record<string, CommandRoute> = {
       file_type: a.fileType ?? a.file_type ?? 'spec',
       ...((a.packId ?? a.pack_id) ? { pack_id: a.packId ?? a.pack_id } : {}),
       ...((a.packName ?? a.pack_name) ? { pack_name: a.packName ?? a.pack_name } : {}),
+      use_llm: Boolean(a.useLlm ?? a.use_llm),
       ...((a.maxSizeBytes ?? a.max_size_bytes)
         ? { max_size_bytes: a.maxSizeBytes ?? a.max_size_bytes }
         : {}),

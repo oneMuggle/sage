@@ -199,6 +199,7 @@ class WordRuleExtractionResult(BaseModel):
     ok: bool = True
     source_path: str
     file_type: Literal["spec", "template"]
+    llm_used: bool = False
     pack: WordRulePack
     candidates: List[WordRuleCandidate] = Field(default_factory=list)
     conflicts: List[WordRuleConflict] = Field(default_factory=list)

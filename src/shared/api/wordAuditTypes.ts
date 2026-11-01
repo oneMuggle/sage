@@ -148,6 +148,7 @@ export interface WordRuleExtractionResult {
   ok: boolean;
   source_path: string;
   file_type: 'spec' | 'template';
+  llm_used: boolean;
   pack: WordRulePack;
   candidates: WordRuleCandidate[];
   conflicts: WordRuleConflict[];
@@ -161,6 +162,7 @@ export interface WordRuleExtractRequest {
   file_type?: 'spec' | 'template';
   pack_id?: string;
   pack_name?: string;
+  use_llm?: boolean;
   max_size_bytes?: number;
 }
 

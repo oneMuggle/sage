@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -13,7 +14,10 @@ from backend.office.path_safety import resolve_within
 from backend.office.storage import validate_workspace
 from backend.office.word_audit import audit_word_document
 from backend.office.word_fix import fix_word_document
-from backend.office.word_rule_extract import extract_word_rules
+from backend.office.word_rule_extract import (
+    extract_word_rules,
+    extract_word_rules_async,
+)
 from backend.office.word_rulepack_models import (
     WordAuditFixResult,
     WordAuditResult,
@@ -79,6 +83,7 @@ class WordRuleExtractRequest(BaseModel):
     file_type: Literal["spec", "template"] = "spec"
     pack_id: str = Field(default="extracted-pack", min_length=1, max_length=80)
     pack_name: Optional[str] = Field(default=None, max_length=200)
+    use_llm: bool = False
     max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
 
 
@@ -197,6 +202,17 @@ def extract_rulepack_endpoint(req: WordRuleExtractRequest) -> WordRuleExtraction
             file_path=file_path,
         )
     _check_size_limit(file_path, req.max_size_bytes)
+    if req.use_llm:
+        return asyncio.run(
+            extract_word_rules_async(
+                file_path,
+                file_type=req.file_type,
+                pack_id=req.pack_id,
+                pack_name=req.pack_name,
+                workspace_path=str(workspace),
+                use_llm=True,
+            )
+        )
     return extract_word_rules(
         file_path,
         file_type=req.file_type,
