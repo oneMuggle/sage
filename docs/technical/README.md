@@ -98,6 +98,7 @@
 | 119  | [Word 规则包、确定性审校与修复](./119-word-rulepack-audit.md) | RulePack/Rule 三层存储 + GB/T 9704 通用参数与通用质量内置包；15 类确定性检查器（含日期格式/术语/必备表述）；带 scope/anchor 的 issue；确定性修复 + 自动复检；原生修订写入（w:ins/w:del + 批注）与前端修订生成入口；`/office` 审校面板与一键修复 |
 | 120  | [Word 规范/范本文档规则抽取](./120-word-rule-extraction.md) | 规范条文与范本主导值 → 候选规则；置信度、来源强制、去重与冲突标记；可选 LLM 语义候选 + 确定性后校验；抽取/保存 REST；`/office` 复核面板 |
 | 121  | [Word 渲染级校验](./121-word-render-audit.md) | DOCX→PDF（LibreOffice/Word COM）+ PyMuPDF 检查页面尺寸/页边距/字体/页码；无转换器降级；渲染审计 REST；批量审校与 Markdown 报告 |
+| 122  | [Word 规则包 LLM 工具](./122-word-rule-tools.md) | `office_audit_word/fix_word/extract_rules/revise_word`；工具上下文/工作区围栏/输出截断；bundle/profile/tool_names 反漂移同步 |
 
 ---
 
