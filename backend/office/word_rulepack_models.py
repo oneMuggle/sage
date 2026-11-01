@@ -238,6 +238,33 @@ class WordRevisionResult(BaseModel):
     warnings: List[Dict[str, str]] = Field(default_factory=list)
 
 
+class WordRenderIssue(BaseModel):
+    """One rendered (PDF) layout/font finding."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    page_index: int = Field(ge=0)
+    category: Literal["page", "margin", "font", "page_number"]
+    severity: Literal["error", "warning"] = "warning"
+    message: str = Field(min_length=1, max_length=1000)
+    expected: Optional[str] = Field(default=None, max_length=500)
+    actual: Optional[str] = Field(default=None, max_length=500)
+
+
+class WordRenderAuditResult(BaseModel):
+    """POST /office/word/audit/render result."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    source_path: str
+    rendered: bool = False
+    method: Optional[str] = Field(default=None, max_length=40)
+    page_count: int = Field(ge=0, default=0)
+    issues: List[WordRenderIssue] = Field(default_factory=list)
+    warnings: List[Dict[str, str]] = Field(default_factory=list)
+
+
 __all__ = [
     "IssueScope",
     "PackOrigin",
@@ -248,6 +275,8 @@ __all__ = [
     "WordAuditResult",
     "WordAuditSummary",
     "WordFixAction",
+    "WordRenderAuditResult",
+    "WordRenderIssue",
     "WordRevisionChange",
     "WordRevisionResult",
     "WordRuleCandidate",

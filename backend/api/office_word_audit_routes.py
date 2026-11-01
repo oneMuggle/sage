@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,6 +14,7 @@ from backend.office.path_safety import resolve_within
 from backend.office.storage import validate_workspace
 from backend.office.word_audit import audit_word_document
 from backend.office.word_fix import fix_word_document
+from backend.office.word_render_audit import audit_word_render
 from backend.office.word_revision_writer import (
     apply_word_revisions,
     build_revision_plan,
@@ -25,6 +26,7 @@ from backend.office.word_rule_extract import (
 from backend.office.word_rulepack_models import (
     WordAuditFixResult,
     WordAuditResult,
+    WordRenderAuditResult,
     WordRevisionResult,
     WordRuleExtractionResult,
     WordRulePack,
@@ -126,6 +128,23 @@ class WordAuditReviseRequest(BaseModel):
     overwrite: bool = False
     author: str = Field(default="Sage", min_length=1, max_length=100)
     add_comments: bool = True
+    max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
+
+
+class WordAuditRenderRequest(BaseModel):
+    """POST /office/word/audit/render body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str = Field(min_length=1, max_length=2000)
+    expected_size: Optional[Literal["A4", "Letter"]] = None
+    margins_cm: Optional[Dict[str, float]] = None
+    allowed_fonts: Optional[List[str]] = None
+    require_page_number: bool = False
+    margin_tolerance_cm: float = Field(default=0.3, ge=0, le=5)
+    page_number_band: float = Field(default=0.15, ge=0.01, le=0.5)
+    timeout_seconds: int = Field(default=120, ge=1, le=600)
     max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
 
 
@@ -313,8 +332,35 @@ def revise_word_endpoint(req: WordAuditReviseRequest) -> WordRevisionResult:
     return result.model_copy(update={"remaining": remaining, "ok": remaining.ok})
 
 
+@router.post("/audit/render")
+def render_audit_endpoint(req: WordAuditRenderRequest) -> WordRenderAuditResult:
+    """Render the DOCX to PDF and check page/margin/font/page-number (M5a)."""
+    workspace = validate_workspace(Path(req.workspace_path))
+    file_path = resolve_within(workspace, Path(req.file_path))
+    if not file_path.is_file():
+        raise OfficePathError(
+            f"file_path is not a regular file: {req.file_path}",
+            file_path=file_path,
+        )
+    _check_size_limit(file_path, req.max_size_bytes)
+    return audit_word_render(
+        file_path,
+        workspace_path=str(workspace),
+        options={
+            "expected_size": req.expected_size,
+            "margins_cm": req.margins_cm,
+            "allowed_fonts": req.allowed_fonts,
+            "require_page_number": req.require_page_number,
+            "margin_tolerance_cm": req.margin_tolerance_cm,
+            "page_number_band": req.page_number_band,
+            "timeout_seconds": req.timeout_seconds,
+        },
+    )
+
+
 __all__ = [
     "WordAuditFixRequest",
+    "WordAuditRenderRequest",
     "WordAuditRequest",
     "WordAuditReviseRequest",
     "WordRevisionChangeRequest",
@@ -327,6 +373,7 @@ __all__ = [
     "fix_word_endpoint",
     "get_rulepack_endpoint",
     "list_rulepacks_endpoint",
+    "render_audit_endpoint",
     "revise_word_endpoint",
     "router",
     "save_extracted_rulepack_endpoint",
