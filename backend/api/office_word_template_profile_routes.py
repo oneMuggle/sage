@@ -14,7 +14,7 @@ from backend.office.storage import validate_workspace
 from backend.office.word_template_profile import analyze_word_template_profile
 from backend.office.word_template_profile_fill import fill_word_template_profile
 
-router = APIRouter(prefix="/office/word/template", tags=["office"])
+router = APIRouter(prefix="/word/template", tags=["office"])
 
 
 class WordTemplateProfileRequest(BaseModel):

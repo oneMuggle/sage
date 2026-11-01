@@ -29,7 +29,7 @@ from backend.office.word_rulepack_store import (
     save_rulepack,
 )
 
-router = APIRouter(prefix="/office/word", tags=["office"])
+router = APIRouter(prefix="/word", tags=["office"])
 
 
 class WordAuditRequest(BaseModel):
