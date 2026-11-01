@@ -15,7 +15,7 @@ import hashlib
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Dict, List, Literal, Optional, Sequence, Set, Tuple
 
 BudgetLevel = Literal["simple", "medium", "complex", "long"]
@@ -105,6 +105,48 @@ class BudgetConfig:
     repeat_hard: int = 5
     no_progress_threshold: int = 6
     error_streak_threshold: int = 3
+
+    @classmethod
+    def from_settings(cls, settings: Any) -> BudgetConfig:
+        """以 env 为基线，用设置页 ``OrchSettings`` 覆盖未由 env 指定的项。
+
+        优先级：环境变量 > 设置页 > 代码默认（env 保留 CI/运维覆盖能力）。
+        ``settings`` 允许为 None 或缺少新字段的旧测试替身。
+        """
+        base = cls.from_env()
+
+        def _override(env_name: str, attr: str, current: int, minimum: int) -> int:
+            if env_name in os.environ:
+                return current
+            value = getattr(settings, attr, None) if settings is not None else None
+            if isinstance(value, int) and not isinstance(value, bool):
+                return max(minimum, int(value))
+            return current
+
+        return replace(
+            base,
+            simple_budget=_override(
+                "SAGE_DYNAMIC_BUDGET_SIMPLE", "budget_simple", base.simple_budget, 1
+            ),
+            medium_budget=_override(
+                "SAGE_DYNAMIC_BUDGET_MEDIUM", "budget_medium", base.medium_budget, 1
+            ),
+            complex_budget=_override(
+                "SAGE_DYNAMIC_BUDGET_COMPLEX", "budget_complex", base.complex_budget, 1
+            ),
+            long_budget=_override(
+                "SAGE_DYNAMIC_BUDGET_LONG", "budget_long", base.long_budget, 1
+            ),
+            hard_cap=_override(
+                "SAGE_DYNAMIC_BUDGET_HARD_CAP", "budget_hard_cap", base.hard_cap, 1
+            ),
+            max_extensions=_override(
+                "SAGE_DYNAMIC_BUDGET_MAX_EXTENSIONS",
+                "budget_max_extensions",
+                base.max_extensions,
+                0,
+            ),
+        )
 
     @classmethod
     def from_env(cls) -> BudgetConfig:

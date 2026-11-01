@@ -344,6 +344,81 @@ export function OrchestrationTab() {
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">
+          {t('settings.orch.section_dynamic_budget')}
+        </h3>
+        <p className="text-xs text-muted leading-relaxed mb-3">
+          {t('settings.orch.dynamic_budget_intro')}
+        </p>
+        <SettingRow
+          anchor="orch.dynamicBudgetEnabled"
+          label={t('settings.orch.dynamic_budget_enabled.label')}
+          desc={t('settings.orch.dynamic_budget_enabled.desc')}
+          value={settings.orch.dynamicBudgetEnabled}
+          onReset={() => resetOrchKey('dynamicBudgetEnabled')}
+        >
+          <Toggle
+            testId="orch-dynamic-budget-enabled"
+            value={settings.orch.dynamicBudgetEnabled}
+            onChange={(v) => setOrch({ dynamicBudgetEnabled: v })}
+          />
+        </SettingRow>
+        <NumberField
+          anchor="orch.budgetSimple"
+          label={t('settings.orch.budget_simple.label')}
+          desc={t('settings.orch.budget_simple.desc')}
+          dataTestId="orch-budget-simple"
+          value={settings.orch.budgetSimple}
+          min={1}
+          onChange={(v) => setOrch({ budgetSimple: v })}
+        />
+        <NumberField
+          anchor="orch.budgetMedium"
+          label={t('settings.orch.budget_medium.label')}
+          desc={t('settings.orch.budget_medium.desc')}
+          dataTestId="orch-budget-medium"
+          value={settings.orch.budgetMedium}
+          min={1}
+          onChange={(v) => setOrch({ budgetMedium: v })}
+        />
+        <NumberField
+          anchor="orch.budgetComplex"
+          label={t('settings.orch.budget_complex.label')}
+          desc={t('settings.orch.budget_complex.desc')}
+          dataTestId="orch-budget-complex"
+          value={settings.orch.budgetComplex}
+          min={1}
+          onChange={(v) => setOrch({ budgetComplex: v })}
+        />
+        <NumberField
+          anchor="orch.budgetLong"
+          label={t('settings.orch.budget_long.label')}
+          desc={t('settings.orch.budget_long.desc')}
+          dataTestId="orch-budget-long"
+          value={settings.orch.budgetLong}
+          min={1}
+          onChange={(v) => setOrch({ budgetLong: v })}
+        />
+        <NumberField
+          anchor="orch.budgetHardCap"
+          label={t('settings.orch.budget_hard_cap.label')}
+          desc={t('settings.orch.budget_hard_cap.desc')}
+          dataTestId="orch-budget-hard-cap"
+          value={settings.orch.budgetHardCap}
+          min={1}
+          onChange={(v) => setOrch({ budgetHardCap: v })}
+        />
+        <NumberField
+          anchor="orch.budgetMaxExtensions"
+          label={t('settings.orch.budget_max_extensions.label')}
+          desc={t('settings.orch.budget_max_extensions.desc')}
+          dataTestId="orch-budget-max-extensions"
+          value={settings.orch.budgetMaxExtensions}
+          min={0}
+          onChange={(v) => setOrch({ budgetMaxExtensions: v })}
+        />
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">
           {t('settings.orch.section_question_limits')}
         </h3>
         <p className="text-xs text-muted leading-relaxed mb-3">

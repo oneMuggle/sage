@@ -50,6 +50,8 @@ PHASE_APPROVAL_REQUESTED = "approval_requested"
 PHASE_APPROVAL_RESOLVED = "approval_resolved"
 PHASE_QUESTION = "question"
 PHASE_FAILED = "failed"
+#: 2026-11-01: 子代理动态迭代预算自动延长（镜像到任务树 live 步骤）。
+PHASE_BUDGET_EXTENDED = "budget_extended"
 
 
 class SubagentEventSink:
@@ -113,6 +115,8 @@ class SubagentEventSink:
             await self._on_permission_request(evt)
         elif state is AgentState.ASK_USER_QUESTION and evt.user_question:
             await self._on_question(evt)
+        elif state is AgentState.ITERATION_CHECKPOINT:
+            await self._on_budget_checkpoint(evt)
         elif state is AgentState.FAILED:
             await self._on_failed(evt)
         # THINKING / REASONING / CONTENT_DELTA / DONE：不转发（降噪）。
@@ -255,6 +259,23 @@ class SubagentEventSink:
             {"error": error[:MAX_STEP_PREVIEW_CHARS]},
         )
 
+    # -- 动态迭代预算延长（2026-11-01） --------------------------------
+
+    async def _on_budget_checkpoint(self, evt: AgentEvent) -> None:
+        info = evt.budget_info or {}
+        previous = info.get("previous_budget")
+        next_budget = info.get("next_budget")
+        extensions = info.get("extensions")
+        self._emit_mirror(self._mirror(
+            phase=PHASE_BUDGET_EXTENDED,
+            iteration=evt.iteration,
+            live_step=(
+                f"⏫ 迭代预算 {previous}→{next_budget}"
+                f"（第 {extensions} 次自动延长）"
+            ),
+            budget_info=info,
+        ))
+
     # -- 审批解决（由 dispatcher.resolve_approval 复用） ----------------
 
     async def emit_approval_resolved(self, request_id: str, approved: bool) -> None:
@@ -288,7 +309,9 @@ class SubagentEventSink:
     def _mirror(self, *, phase: str, iteration: int = 0, live_step: str = "",
                 tool_name: Optional[str] = None, args_summary: Optional[str] = None,
                 preview: Optional[str] = None, is_error: bool = False,
-                approved: Optional[bool] = None) -> Optional[Dict[str, Any]]:
+                approved: Optional[bool] = None,
+                budget_info: Optional[Dict[str, Any]] = None,
+                ) -> Optional[Dict[str, Any]]:
         """构造聊天流 ``subagent_event`` 镜像；预算耗尽返回 None（丢弃）。"""
         if self._budget <= 0:
             return None
@@ -315,6 +338,8 @@ class SubagentEventSink:
             event["is_error"] = True
         if approved is not None:
             event["approved"] = approved
+        if budget_info is not None:
+            event["budget_info"] = budget_info
         return event
 
     def _subagent_ctx(self) -> Dict[str, Any]:
@@ -374,4 +399,5 @@ __all__ = [
     "PHASE_APPROVAL_RESOLVED",
     "PHASE_QUESTION",
     "PHASE_FAILED",
+    "PHASE_BUDGET_EXTENDED",
 ]
