@@ -766,16 +766,17 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       )}
 
       {showVersions && (
-        <PlaybookVersionsPanel
-          versions={versions}
-          onClose={() => setShowVersions(false)}
-        />
+        <PlaybookVersionsPanel versions={versions} onClose={() => setShowVersions(false)} />
       )}
 
       {showLibrary && <PlaybookLibraryPanel onClose={() => setShowLibrary(false)} />}
 
       {(error || notice) && (
-        <div className={`text-xs ${error ? 'text-destructive' : 'text-primary'}`}>
+        <div
+          role="status"
+          aria-live="polite"
+          className={`text-xs ${error ? 'text-destructive' : 'text-primary'}`}
+        >
           {error || notice}
         </div>
       )}

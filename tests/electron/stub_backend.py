@@ -46,6 +46,7 @@ from stub_modules.chat import register_chat_routes
 from stub_modules.evolution import register_evolution_routes
 from stub_modules.memory import register_memory_routes
 from stub_modules.orchestration import register_orchestration_routes
+from stub_modules.playbook import register_playbook_routes
 from stub_modules.settings import register_settings_routes
 from stub_modules.wiki import register_wiki_routes
 
@@ -97,6 +98,7 @@ class StubBackend:
         register_memory_routes(self.routes)
         register_evolution_routes(self.routes)
         register_settings_routes(self.routes)
+        register_playbook_routes(self.routes)
 
     def _init_db(self) -> None:
         """Initialize in-memory SQLite database with schema."""

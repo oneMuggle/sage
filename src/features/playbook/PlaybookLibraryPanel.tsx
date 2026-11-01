@@ -202,7 +202,11 @@ export function PlaybookLibraryPanel({ onClose }: PlaybookLibraryPanelProps) {
       )}
 
       {(error || notice) && (
-        <div className={`text-xs ${error ? 'text-destructive' : 'text-primary'}`}>
+        <div
+          role="status"
+          aria-live="polite"
+          className={`text-xs ${error ? 'text-destructive' : 'text-primary'}`}
+        >
           {error || notice}
         </div>
       )}
