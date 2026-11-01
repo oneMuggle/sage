@@ -1,5 +1,6 @@
 import { Package } from 'lucide-react';
 
+import { useCompactionArchives } from '../../entities/chat/compactionArchivesStore';
 import { useI18n } from '../../shared/lib/i18n';
 
 /** 上下文压缩的统计三元组（与后端 compact_info 列同形）。 */
@@ -26,7 +27,7 @@ function fill(template: string, vars: Record<string, string | number>): string {
  * 文案完全由 `info` 推导，**不读 message.content** —— 续接行的 content
  * 是 LLM 写的摘要正文，与统计无关。
  */
-export function CompactBanner({ info }: { info: CompactInfo }) {
+export function CompactBanner({ info, sessionId }: { info: CompactInfo; sessionId?: string }) {
   const { t } = useI18n();
   const text = fill(t('chat.compact_success'), {
     before: info.before,
@@ -40,6 +41,16 @@ export function CompactBanner({ info }: { info: CompactInfo }) {
     >
       <Package className="w-3 h-3 text-muted flex-shrink-0" />
       <span>{text}</span>
+      {sessionId ? (
+        <button
+          type="button"
+          data-testid="compact-banner-open-archives"
+          onClick={() => useCompactionArchives.getState().requestOpen(sessionId)}
+          className="ml-auto flex-shrink-0 rounded px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
+        >
+          {t('chat.compact_view_archives')}
+        </button>
+      ) : null}
     </div>
   );
 }

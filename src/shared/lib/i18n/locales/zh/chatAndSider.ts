@@ -225,6 +225,7 @@ export const zhChatAndSider = {
   // ─── M4 会话压缩 / 分叉 ───────────
   // LOW-1: 统一口径 —— "before → after 条（removed 条历史已合并为摘要）"
   'chat.compact_success': '上下文已压缩：{before} → {after} 条（{removed} 条历史已合并为摘要）',
+  'chat.compact_view_archives': '查看压缩前原文',
   'chat.compact_skipped': '对话较短，无需压缩',
   'chat.compact_failed': '压缩失败：{message}',
   'chat.fork_from_here': '从此处分叉',

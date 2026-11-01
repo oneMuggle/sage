@@ -276,7 +276,7 @@ function MessageComponent({
   if (isSystem && message.compact_info) {
     return (
       <div className="flex justify-center my-3">
-        <CompactBanner info={message.compact_info} />
+        <CompactBanner info={message.compact_info} sessionId={message.session_id} />
       </div>
     );
   }
