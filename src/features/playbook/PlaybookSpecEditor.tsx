@@ -1,8 +1,8 @@
 /**
  * PlaybookSpecEditor — 结构化表单 + JSON 高级视图。
  *
- * 表单只编辑名称、描述、阶段与产物（label/globs/target_dir/required）；
- * 规则、里程碑、内容检查等高级字段保留在 JSON 视图中编辑。
+ * 表单可编辑名称/描述/阶段/产物，以及阶段规则、推荐里程碑与退出条件；
+ * 内容检查等其余字段保留在 JSON 视图中编辑。
  */
 import { useState } from 'react';
 
@@ -245,9 +245,7 @@ export function PlaybookSpecEditor({
           ? {
               ...stage,
               milestones: stage.milestones.map((milestone, milestoneIndex2) =>
-                milestoneIndex2 === milestoneIndex
-                  ? { ...milestone, ...patch }
-                  : milestone,
+                milestoneIndex2 === milestoneIndex ? { ...milestone, ...patch } : milestone,
               ),
             }
           : stage,
@@ -267,9 +265,7 @@ export function PlaybookSpecEditor({
           ? {
               ...stage,
               criteria: stage.criteria.map((criterion, criterionIndex2) =>
-                criterionIndex2 === criterionIndex
-                  ? { ...criterion, ...patch }
-                  : criterion,
+                criterionIndex2 === criterionIndex ? { ...criterion, ...patch } : criterion,
               ),
             }
           : stage,
@@ -359,26 +355,29 @@ export function PlaybookSpecEditor({
           {form.stages.map((stage, stageIndex) => (
             <div
               key={stage.id || stageIndex}
+              role="group"
+              aria-label={`阶段 ${stageIndex + 1}`}
               className="space-y-2 rounded-md border border-border p-2"
             >
               <div className="flex flex-wrap items-center gap-2">
                 <input
                   value={stage.label}
                   onChange={(event) => updateStage(stageIndex, { label: event.target.value })}
+                  aria-label={`阶段 ${stageIndex + 1} 名称`}
                   placeholder="阶段名称"
                   className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
                 />
                 <input
                   value={stage.objective}
-                  onChange={(event) =>
-                    updateStage(stageIndex, { objective: event.target.value })
-                  }
+                  onChange={(event) => updateStage(stageIndex, { objective: event.target.value })}
+                  aria-label={`阶段 ${stageIndex + 1} 目标`}
                   placeholder="阶段目标"
                   className="flex-[2] rounded-md border border-input bg-background px-2 py-1 text-xs"
                 />
                 <Button
                   size="sm"
                   variant="secondary"
+                  aria-label={`删除阶段 ${stageIndex + 1}`}
                   onClick={() =>
                     setForm((prev) => ({
                       ...prev,
@@ -402,6 +401,7 @@ export function PlaybookSpecEditor({
                           label: event.target.value,
                         })
                       }
+                      aria-label={`阶段 ${stageIndex + 1} 产物 ${artifactIndex + 1} 名称`}
                       placeholder="产物名称"
                       className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
                     />
@@ -412,6 +412,7 @@ export function PlaybookSpecEditor({
                           targetDir: event.target.value,
                         })
                       }
+                      aria-label={`阶段 ${stageIndex + 1} 产物 ${artifactIndex + 1} 目标目录`}
                       placeholder="目标目录（可选）"
                       className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
                     />
@@ -424,6 +425,7 @@ export function PlaybookSpecEditor({
                             required: event.target.checked,
                           })
                         }
+                        aria-label={`阶段 ${stageIndex + 1} 产物 ${artifactIndex + 1} 必需`}
                       />
                       必需
                     </label>
@@ -435,6 +437,7 @@ export function PlaybookSpecEditor({
                         globs: event.target.value,
                       })
                     }
+                    aria-label={`阶段 ${stageIndex + 1} 产物 ${artifactIndex + 1} 匹配 glob`}
                     placeholder="匹配 glob（逗号分隔）"
                     className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono text-xs"
                     data-testid={`playbook-editor-globs-${artifact.id || artifactIndex}`}
@@ -475,6 +478,7 @@ export function PlaybookSpecEditor({
                         onChange={(event) =>
                           updateRule(stageIndex, ruleIndex, { templateKey: event.target.value })
                         }
+                        aria-label={`阶段 ${stageIndex + 1} 规则 ${ruleIndex + 1} 模板 key`}
                         placeholder="模板 key（可选）"
                         className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
                       />
@@ -483,6 +487,7 @@ export function PlaybookSpecEditor({
                         onChange={(event) =>
                           updateRule(stageIndex, ruleIndex, { category: event.target.value })
                         }
+                        aria-label={`阶段 ${stageIndex + 1} 规则 ${ruleIndex + 1} 类别`}
                         placeholder="类别"
                         className="w-24 rounded-md border border-input bg-background px-2 py-1 text-xs"
                       />
@@ -494,11 +499,13 @@ export function PlaybookSpecEditor({
                             priority: Number(event.target.value) || 5,
                           })
                         }
+                        aria-label={`阶段 ${stageIndex + 1} 规则 ${ruleIndex + 1} 优先级`}
                         className="w-16 rounded-md border border-input bg-background px-2 py-1 text-xs"
                       />
                       <Button
                         size="sm"
                         variant="secondary"
+                        aria-label={`删除阶段 ${stageIndex + 1} 规则 ${ruleIndex + 1}`}
                         onClick={() =>
                           updateStage(stageIndex, {
                             rules: stage.rules.filter((_, index) => index !== ruleIndex),
@@ -513,6 +520,7 @@ export function PlaybookSpecEditor({
                       onChange={(event) =>
                         updateRule(stageIndex, ruleIndex, { content: event.target.value })
                       }
+                      aria-label={`阶段 ${stageIndex + 1} 规则 ${ruleIndex + 1} 正文`}
                       placeholder="规则正文（无模板 key 时必填）"
                       className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
                     />
@@ -523,6 +531,7 @@ export function PlaybookSpecEditor({
                           triggerPattern: event.target.value,
                         })
                       }
+                      aria-label={`阶段 ${stageIndex + 1} 规则 ${ruleIndex + 1} 触发 glob`}
                       placeholder="触发 glob（可选，默认 always）"
                       className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono text-xs"
                     />
@@ -564,6 +573,7 @@ export function PlaybookSpecEditor({
                           title: event.target.value,
                         })
                       }
+                      aria-label={`阶段 ${stageIndex + 1} 里程碑 ${milestoneIndex + 1} 标题`}
                       placeholder="里程碑标题"
                       className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
                     />
@@ -574,12 +584,14 @@ export function PlaybookSpecEditor({
                           description: event.target.value,
                         })
                       }
+                      aria-label={`阶段 ${stageIndex + 1} 里程碑 ${milestoneIndex + 1} 描述`}
                       placeholder="描述"
                       className="flex-[2] rounded-md border border-input bg-background px-2 py-1 text-xs"
                     />
                     <Button
                       size="sm"
                       variant="secondary"
+                      aria-label={`删除阶段 ${stageIndex + 1} 里程碑 ${milestoneIndex + 1}`}
                       onClick={() =>
                         updateStage(stageIndex, {
                           milestones: stage.milestones.filter(
@@ -619,6 +631,7 @@ export function PlaybookSpecEditor({
                           id: event.target.value,
                         })
                       }
+                      aria-label={`阶段 ${stageIndex + 1} 退出条件 ${criterionIndex + 1} id`}
                       placeholder="id（可选）"
                       className="w-32 rounded-md border border-input bg-background px-2 py-1 text-xs"
                     />
@@ -629,6 +642,7 @@ export function PlaybookSpecEditor({
                           label: event.target.value,
                         })
                       }
+                      aria-label={`阶段 ${stageIndex + 1} 退出条件 ${criterionIndex + 1} 名称`}
                       placeholder="条件名称"
                       className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
                     />
@@ -639,6 +653,7 @@ export function PlaybookSpecEditor({
                           type: event.target.value as CriterionForm['type'],
                         })
                       }
+                      aria-label={`阶段 ${stageIndex + 1} 退出条件 ${criterionIndex + 1} 类型`}
                       className="rounded-md border border-input bg-background px-2 py-1 text-xs"
                     >
                       <option value="manual">手动</option>
@@ -652,6 +667,7 @@ export function PlaybookSpecEditor({
                             artifactId: event.target.value,
                           })
                         }
+                        aria-label={`阶段 ${stageIndex + 1} 退出条件 ${criterionIndex + 1} 关联产物 id`}
                         placeholder="产物 id"
                         className="w-32 rounded-md border border-input bg-background px-2 py-1 text-xs"
                       />
@@ -659,11 +675,10 @@ export function PlaybookSpecEditor({
                     <Button
                       size="sm"
                       variant="secondary"
+                      aria-label={`删除阶段 ${stageIndex + 1} 退出条件 ${criterionIndex + 1}`}
                       onClick={() =>
                         updateStage(stageIndex, {
-                          criteria: stage.criteria.filter(
-                            (_, index) => index !== criterionIndex,
-                          ),
+                          criteria: stage.criteria.filter((_, index) => index !== criterionIndex),
                         })
                       }
                     >
