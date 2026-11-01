@@ -13,56 +13,23 @@ import type {
 } from '../../shared/api/playbookApi';
 import { Button } from '../../shared/ui/Button';
 
+import { PlaybookStageSections } from './PlaybookStageSections';
+import type {
+  ArtifactForm,
+  CriterionForm,
+  FormState,
+  MilestoneForm,
+  RuleForm,
+  StageForm,
+} from './playbookEditorTypes';
+import { usePlaybookI18n } from './usePlaybookI18n';
+
 export interface PlaybookSpecEditorProps {
   spec: PlaybookSpec;
   saving: boolean;
   error: string | null;
   onSave: (spec: PlaybookSpec) => void;
   onCancel: () => void;
-}
-
-interface ArtifactForm {
-  id: string;
-  label: string;
-  globs: string;
-  targetDir: string;
-  required: boolean;
-}
-
-interface RuleForm {
-  templateKey: string;
-  content: string;
-  category: string;
-  triggerPattern: string;
-  priority: number;
-}
-
-interface MilestoneForm {
-  title: string;
-  description: string;
-}
-
-interface CriterionForm {
-  id: string;
-  label: string;
-  type: 'manual' | 'artifact';
-  artifactId: string;
-}
-
-interface StageForm {
-  id: string;
-  label: string;
-  objective: string;
-  artifacts: ArtifactForm[];
-  rules: RuleForm[];
-  milestones: MilestoneForm[];
-  criteria: CriterionForm[];
-}
-
-interface FormState {
-  name: string;
-  description: string;
-  stages: StageForm[];
 }
 
 function toForm(spec: PlaybookSpec): FormState {
@@ -183,6 +150,7 @@ export function PlaybookSpecEditor({
   onSave,
   onCancel,
 }: PlaybookSpecEditorProps) {
+  const { t, tf } = usePlaybookI18n();
   const [mode, setMode] = useState<'form' | 'json'>('form');
   const [form, setForm] = useState<FormState>(() => toForm(spec));
   const [jsonDraft, setJsonDraft] = useState(() => JSON.stringify(spec, null, 2));
@@ -280,22 +248,26 @@ export function PlaybookSpecEditor({
         const parsed = JSON.parse(jsonDraft) as PlaybookSpec;
         onSave(parsed);
       } catch (err) {
-        setLocalError('JSON 解析失败：' + (err instanceof Error ? err.message : String(err)));
+        setLocalError(
+          tf('playbook.editor.error.json', {
+            message: err instanceof Error ? err.message : String(err),
+          }),
+        );
       }
       return;
     }
     if (!form.name.trim()) {
-      setLocalError('规程名称不能为空');
+      setLocalError(t('playbook.editor.error.name'));
       return;
     }
     for (const stage of form.stages) {
       if (!stage.label.trim()) {
-        setLocalError('阶段名称不能为空');
+        setLocalError(t('playbook.editor.error.stageName'));
         return;
       }
       for (const artifact of stage.artifacts) {
         if (!artifact.label.trim() || !artifact.globs.trim()) {
-          setLocalError('产物名称与匹配 glob 不能为空');
+          setLocalError(t('playbook.editor.error.artifact'));
           return;
         }
       }
@@ -306,7 +278,7 @@ export function PlaybookSpecEditor({
   return (
     <div className="space-y-3 rounded-md border border-border p-3" data-testid="playbook-editor">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-xs font-medium text-foreground">编辑项目规程</div>
+        <div className="text-xs font-medium text-foreground">{t('playbook.editor.title')}</div>
         <div className="flex gap-1">
           <Button
             size="sm"
@@ -314,7 +286,7 @@ export function PlaybookSpecEditor({
             onClick={() => setMode('form')}
             data-testid="playbook-editor-mode-form"
           >
-            表单
+            {t('playbook.editor.form')}
           </Button>
           <Button
             size="sm"
@@ -333,7 +305,7 @@ export function PlaybookSpecEditor({
       {mode === 'form' ? (
         <div className="space-y-3" data-testid="playbook-editor-form">
           <label className="block text-xs text-muted-foreground">
-            规程名称
+            {t('playbook.editor.name')}
             <input
               value={form.name}
               onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
@@ -342,7 +314,7 @@ export function PlaybookSpecEditor({
             />
           </label>
           <label className="block text-xs text-muted-foreground">
-            描述
+            {t('playbook.editor.description')}
             <textarea
               value={form.description}
               onChange={(event) =>
@@ -356,28 +328,28 @@ export function PlaybookSpecEditor({
             <div
               key={stage.id || stageIndex}
               role="group"
-              aria-label={`阶段 ${stageIndex + 1}`}
+              aria-label={tf('playbook.editor.stageGroup', { n: stageIndex + 1 })}
               className="space-y-2 rounded-md border border-border p-2"
             >
               <div className="flex flex-wrap items-center gap-2">
                 <input
                   value={stage.label}
                   onChange={(event) => updateStage(stageIndex, { label: event.target.value })}
-                  aria-label={`阶段 ${stageIndex + 1} 名称`}
-                  placeholder="阶段名称"
+                  aria-label={tf('playbook.editor.stageName', { n: stageIndex + 1 })}
+                  placeholder={t('playbook.editor.stagePlaceholder')}
                   className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
                 />
                 <input
                   value={stage.objective}
                   onChange={(event) => updateStage(stageIndex, { objective: event.target.value })}
-                  aria-label={`阶段 ${stageIndex + 1} 目标`}
-                  placeholder="阶段目标"
+                  aria-label={tf('playbook.editor.stageObjective', { n: stageIndex + 1 })}
+                  placeholder={t('playbook.editor.stageObjectivePlaceholder')}
                   className="flex-[2] rounded-md border border-input bg-background px-2 py-1 text-xs"
                 />
                 <Button
                   size="sm"
                   variant="secondary"
-                  aria-label={`删除阶段 ${stageIndex + 1}`}
+                  aria-label={tf('playbook.editor.deleteStage', { n: stageIndex + 1 })}
                   onClick={() =>
                     setForm((prev) => ({
                       ...prev,
@@ -385,322 +357,18 @@ export function PlaybookSpecEditor({
                     }))
                   }
                 >
-                  删除阶段
+                  {t('playbook.editor.delete')}
                 </Button>
               </div>
-              {stage.artifacts.map((artifact, artifactIndex) => (
-                <div
-                  key={artifact.id || artifactIndex}
-                  className="space-y-1 border-t border-border pt-2"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      value={artifact.label}
-                      onChange={(event) =>
-                        updateArtifact(stageIndex, artifactIndex, {
-                          label: event.target.value,
-                        })
-                      }
-                      aria-label={`阶段 ${stageIndex + 1} 产物 ${artifactIndex + 1} 名称`}
-                      placeholder="产物名称"
-                      className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
-                    />
-                    <input
-                      value={artifact.targetDir}
-                      onChange={(event) =>
-                        updateArtifact(stageIndex, artifactIndex, {
-                          targetDir: event.target.value,
-                        })
-                      }
-                      aria-label={`阶段 ${stageIndex + 1} 产物 ${artifactIndex + 1} 目标目录`}
-                      placeholder="目标目录（可选）"
-                      className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
-                    />
-                    <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <input
-                        type="checkbox"
-                        checked={artifact.required}
-                        onChange={(event) =>
-                          updateArtifact(stageIndex, artifactIndex, {
-                            required: event.target.checked,
-                          })
-                        }
-                        aria-label={`阶段 ${stageIndex + 1} 产物 ${artifactIndex + 1} 必需`}
-                      />
-                      必需
-                    </label>
-                  </div>
-                  <input
-                    value={artifact.globs}
-                    onChange={(event) =>
-                      updateArtifact(stageIndex, artifactIndex, {
-                        globs: event.target.value,
-                      })
-                    }
-                    aria-label={`阶段 ${stageIndex + 1} 产物 ${artifactIndex + 1} 匹配 glob`}
-                    placeholder="匹配 glob（逗号分隔）"
-                    className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono text-xs"
-                    data-testid={`playbook-editor-globs-${artifact.id || artifactIndex}`}
-                  />
-                </div>
-              ))}
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() =>
-                  updateStage(stageIndex, {
-                    artifacts: [
-                      ...stage.artifacts,
-                      {
-                        id: `artifact-${stageIndex + 1}-${stage.artifacts.length + 1}`,
-                        label: '',
-                        globs: '',
-                        targetDir: '',
-                        required: true,
-                      },
-                    ],
-                  })
-                }
-              >
-                添加产物
-              </Button>
-
-              <div
-                className="space-y-1.5 border-t border-border pt-2"
-                data-testid={`playbook-editor-rules-${stage.id || stageIndex}`}
-              >
-                <div className="text-xs font-medium text-muted-foreground">阶段规则</div>
-                {stage.rules.map((rule, ruleIndex) => (
-                  <div key={ruleIndex} className="space-y-1 rounded-md border border-border p-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <input
-                        value={rule.templateKey}
-                        onChange={(event) =>
-                          updateRule(stageIndex, ruleIndex, { templateKey: event.target.value })
-                        }
-                        aria-label={`阶段 ${stageIndex + 1} 规则 ${ruleIndex + 1} 模板 key`}
-                        placeholder="模板 key（可选）"
-                        className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
-                      />
-                      <input
-                        value={rule.category}
-                        onChange={(event) =>
-                          updateRule(stageIndex, ruleIndex, { category: event.target.value })
-                        }
-                        aria-label={`阶段 ${stageIndex + 1} 规则 ${ruleIndex + 1} 类别`}
-                        placeholder="类别"
-                        className="w-24 rounded-md border border-input bg-background px-2 py-1 text-xs"
-                      />
-                      <input
-                        type="number"
-                        value={rule.priority}
-                        onChange={(event) =>
-                          updateRule(stageIndex, ruleIndex, {
-                            priority: Number(event.target.value) || 5,
-                          })
-                        }
-                        aria-label={`阶段 ${stageIndex + 1} 规则 ${ruleIndex + 1} 优先级`}
-                        className="w-16 rounded-md border border-input bg-background px-2 py-1 text-xs"
-                      />
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        aria-label={`删除阶段 ${stageIndex + 1} 规则 ${ruleIndex + 1}`}
-                        onClick={() =>
-                          updateStage(stageIndex, {
-                            rules: stage.rules.filter((_, index) => index !== ruleIndex),
-                          })
-                        }
-                      >
-                        删除
-                      </Button>
-                    </div>
-                    <input
-                      value={rule.content}
-                      onChange={(event) =>
-                        updateRule(stageIndex, ruleIndex, { content: event.target.value })
-                      }
-                      aria-label={`阶段 ${stageIndex + 1} 规则 ${ruleIndex + 1} 正文`}
-                      placeholder="规则正文（无模板 key 时必填）"
-                      className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-                    />
-                    <input
-                      value={rule.triggerPattern}
-                      onChange={(event) =>
-                        updateRule(stageIndex, ruleIndex, {
-                          triggerPattern: event.target.value,
-                        })
-                      }
-                      aria-label={`阶段 ${stageIndex + 1} 规则 ${ruleIndex + 1} 触发 glob`}
-                      placeholder="触发 glob（可选，默认 always）"
-                      className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono text-xs"
-                    />
-                  </div>
-                ))}
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() =>
-                    updateStage(stageIndex, {
-                      rules: [
-                        ...stage.rules,
-                        {
-                          templateKey: '',
-                          content: '',
-                          category: 'playbook',
-                          triggerPattern: 'always',
-                          priority: 5,
-                        },
-                      ],
-                    })
-                  }
-                >
-                  添加规则
-                </Button>
-              </div>
-
-              <div
-                className="space-y-1.5 border-t border-border pt-2"
-                data-testid={`playbook-editor-milestones-${stage.id || stageIndex}`}
-              >
-                <div className="text-xs font-medium text-muted-foreground">推荐里程碑</div>
-                {stage.milestones.map((milestone, milestoneIndex) => (
-                  <div key={milestoneIndex} className="flex flex-wrap items-center gap-1.5">
-                    <input
-                      value={milestone.title}
-                      onChange={(event) =>
-                        updateMilestone(stageIndex, milestoneIndex, {
-                          title: event.target.value,
-                        })
-                      }
-                      aria-label={`阶段 ${stageIndex + 1} 里程碑 ${milestoneIndex + 1} 标题`}
-                      placeholder="里程碑标题"
-                      className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
-                    />
-                    <input
-                      value={milestone.description}
-                      onChange={(event) =>
-                        updateMilestone(stageIndex, milestoneIndex, {
-                          description: event.target.value,
-                        })
-                      }
-                      aria-label={`阶段 ${stageIndex + 1} 里程碑 ${milestoneIndex + 1} 描述`}
-                      placeholder="描述"
-                      className="flex-[2] rounded-md border border-input bg-background px-2 py-1 text-xs"
-                    />
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      aria-label={`删除阶段 ${stageIndex + 1} 里程碑 ${milestoneIndex + 1}`}
-                      onClick={() =>
-                        updateStage(stageIndex, {
-                          milestones: stage.milestones.filter(
-                            (_, index) => index !== milestoneIndex,
-                          ),
-                        })
-                      }
-                    >
-                      删除
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() =>
-                    updateStage(stageIndex, {
-                      milestones: [...stage.milestones, { title: '', description: '' }],
-                    })
-                  }
-                >
-                  添加里程碑
-                </Button>
-              </div>
-
-              <div
-                className="space-y-1.5 border-t border-border pt-2"
-                data-testid={`playbook-editor-criteria-${stage.id || stageIndex}`}
-              >
-                <div className="text-xs font-medium text-muted-foreground">退出条件</div>
-                {stage.criteria.map((criterion, criterionIndex) => (
-                  <div key={criterionIndex} className="flex flex-wrap items-center gap-1.5">
-                    <input
-                      value={criterion.id}
-                      onChange={(event) =>
-                        updateCriterion(stageIndex, criterionIndex, {
-                          id: event.target.value,
-                        })
-                      }
-                      aria-label={`阶段 ${stageIndex + 1} 退出条件 ${criterionIndex + 1} id`}
-                      placeholder="id（可选）"
-                      className="w-32 rounded-md border border-input bg-background px-2 py-1 text-xs"
-                    />
-                    <input
-                      value={criterion.label}
-                      onChange={(event) =>
-                        updateCriterion(stageIndex, criterionIndex, {
-                          label: event.target.value,
-                        })
-                      }
-                      aria-label={`阶段 ${stageIndex + 1} 退出条件 ${criterionIndex + 1} 名称`}
-                      placeholder="条件名称"
-                      className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
-                    />
-                    <select
-                      value={criterion.type}
-                      onChange={(event) =>
-                        updateCriterion(stageIndex, criterionIndex, {
-                          type: event.target.value as CriterionForm['type'],
-                        })
-                      }
-                      aria-label={`阶段 ${stageIndex + 1} 退出条件 ${criterionIndex + 1} 类型`}
-                      className="rounded-md border border-input bg-background px-2 py-1 text-xs"
-                    >
-                      <option value="manual">手动</option>
-                      <option value="artifact">产物</option>
-                    </select>
-                    {criterion.type === 'artifact' && (
-                      <input
-                        value={criterion.artifactId}
-                        onChange={(event) =>
-                          updateCriterion(stageIndex, criterionIndex, {
-                            artifactId: event.target.value,
-                          })
-                        }
-                        aria-label={`阶段 ${stageIndex + 1} 退出条件 ${criterionIndex + 1} 关联产物 id`}
-                        placeholder="产物 id"
-                        className="w-32 rounded-md border border-input bg-background px-2 py-1 text-xs"
-                      />
-                    )}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      aria-label={`删除阶段 ${stageIndex + 1} 退出条件 ${criterionIndex + 1}`}
-                      onClick={() =>
-                        updateStage(stageIndex, {
-                          criteria: stage.criteria.filter((_, index) => index !== criterionIndex),
-                        })
-                      }
-                    >
-                      删除
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() =>
-                    updateStage(stageIndex, {
-                      criteria: [
-                        ...stage.criteria,
-                        { id: '', label: '', type: 'manual', artifactId: '' },
-                      ],
-                    })
-                  }
-                >
-                  添加退出条件
-                </Button>
-              </div>
+              <PlaybookStageSections
+                stage={stage}
+                stageIndex={stageIndex}
+                updateStage={updateStage}
+                updateArtifact={updateArtifact}
+                updateRule={updateRule}
+                updateMilestone={updateMilestone}
+                updateCriterion={updateCriterion}
+              />
             </div>
           ))}
           <Button
@@ -724,7 +392,7 @@ export function PlaybookSpecEditor({
               }))
             }
           >
-            添加阶段
+            {t('playbook.editor.addStage')}
           </Button>
         </div>
       ) : (
@@ -749,10 +417,10 @@ export function PlaybookSpecEditor({
           disabled={saving}
           data-testid="playbook-save-spec"
         >
-          {saving ? '保存中…' : '保存为新版本'}
+          {saving ? t('playbook.editor.saving') : t('playbook.editor.save')}
         </Button>
         <Button size="sm" variant="secondary" onClick={onCancel}>
-          取消
+          {t('playbook.editor.cancel')}
         </Button>
       </div>
     </div>

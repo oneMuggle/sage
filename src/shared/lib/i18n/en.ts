@@ -5,6 +5,7 @@ import { enChatAndSider } from './locales/en/chatAndSider';
 import { enChatPdfOcr } from './locales/en/chatPdfOcr';
 import { enContextMenu } from './locales/en/contextMenu';
 import { enPetPack } from './locales/en/petPack';
+import { enPlaybook } from './locales/en/playbook';
 import { enSettingsAndModels } from './locales/en/settingsAndModels';
 import { enSettingsUi } from './locales/en/settingsUi';
 import { enWorkspaceAndTools } from './locales/en/workspaceAndTools';
@@ -17,6 +18,7 @@ export const en: Record<TranslationKey, string> = {
   ...enChatPdfOcr,
   ...enContextMenu,
   ...enPetPack,
+  ...enPlaybook,
   ...enSettingsAndModels,
   ...enSettingsUi,
   ...enWorkspaceAndTools,

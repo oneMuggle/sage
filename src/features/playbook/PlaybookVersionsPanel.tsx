@@ -2,32 +2,35 @@
 import type { PlaybookVersion } from '../../shared/api/playbookApi';
 import { Button } from '../../shared/ui/Button';
 
+import { usePlaybookI18n } from './usePlaybookI18n';
+
 export interface PlaybookVersionsPanelProps {
   versions: PlaybookVersion[];
   onClose: () => void;
 }
 
 export function PlaybookVersionsPanel({ versions, onClose }: PlaybookVersionsPanelProps) {
+  const { t } = usePlaybookI18n();
   return (
     <div
       className="space-y-1 rounded-md border border-border p-2 text-xs"
       data-testid="playbook-versions"
     >
-      <div className="font-medium text-foreground">版本历史</div>
+      <div className="font-medium text-foreground">{t('playbook.versions.title')}</div>
       {versions.length === 0 ? (
-        <div className="text-muted-foreground">暂无版本记录</div>
+        <div className="text-muted-foreground">{t('playbook.versions.empty')}</div>
       ) : (
         versions.map((item) => (
           <div key={item.version} className="flex items-center justify-between gap-2">
             <span className="text-muted-foreground">
               v{item.version} · {item.source} · {new Date(item.created_at).toLocaleString()}
             </span>
-            {item.active && <span className="text-primary">当前</span>}
+            {item.active && <span className="text-primary">{t('playbook.versions.current')}</span>}
           </div>
         ))
       )}
       <Button size="sm" variant="secondary" onClick={onClose}>
-        收起
+        {t('playbook.versions.collapse')}
       </Button>
     </div>
   );
