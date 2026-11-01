@@ -65,6 +65,33 @@ def test_estimate_clamped_to_hard_cap():
     assert budget == 1000
 
 
+def test_budget_config_from_settings_overrides_defaults():
+    """设置页 OrchSettings 覆盖代码默认；缺省字段回落默认。"""
+    cfg = BudgetConfig.from_settings(
+        SimpleNamespace(
+            budget_simple=12,
+            budget_medium=90,
+            budget_complex=300,
+            budget_long=600,
+            budget_hard_cap=2000,
+            budget_max_extensions=5,
+        )
+    )
+    assert cfg.simple_budget == 12
+    assert cfg.medium_budget == 90
+    assert cfg.complex_budget == 300
+    assert cfg.long_budget == 600
+    assert cfg.hard_cap == 2000
+    assert cfg.max_extensions == 5
+
+
+def test_budget_config_env_wins_over_settings(monkeypatch):
+    """环境变量优先于设置页（CI/运维覆盖）。"""
+    monkeypatch.setenv("SAGE_DYNAMIC_BUDGET_SIMPLE", "7")
+    cfg = BudgetConfig.from_settings(SimpleNamespace(budget_simple=12))
+    assert cfg.simple_budget == 7
+
+
 # ---------------------------------------------------------------------------
 # StepRecord 构建
 # ---------------------------------------------------------------------------
@@ -320,3 +347,218 @@ async def test_explicit_max_iterations_never_extends(monkeypatch):
     failed = [e for e in events if e.state == AgentState.FAILED]
     assert len(failed) == 1
     assert failed[0].error == "max_iterations_exceeded (limit=1, source=explicit)"
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_uses_settings_page_budget(monkeypatch):
+    """设置页的 budgetSimple 参与初始预算（无 env 覆盖时）。"""
+    monkeypatch.delenv("SAGE_DYNAMIC_BUDGET_SIMPLE", raising=False)
+    settings = SimpleNamespace(
+        max_iterations=25,
+        dynamic_budget_enabled=True,
+        budget_simple=2,
+        budget_medium=2,
+        budget_complex=2,
+        budget_long=2,
+        budget_hard_cap=10,
+        budget_max_extensions=2,
+    )
+    agent = _make_agent(
+        [
+            _tool_response("a"),
+            _tool_response("b"),
+            _tool_response("c"),
+            _text_response("完成"),
+        ]
+    )
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=settings,
+    ):
+        events = await _collect(agent)
+
+    checkpoint = next(
+        (e for e in events if e.state == AgentState.ITERATION_CHECKPOINT), None
+    )
+    assert checkpoint is not None
+    assert checkpoint.budget_info is not None
+    assert checkpoint.budget_info["previous_budget"] == 2
+    assert AgentState.DONE in [e.state for e in events]
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_respects_settings_toggle_off():
+    """设置页关闭动态预算 → 不延长，按固定 OrchSettings.max_iterations 运行。"""
+    settings = SimpleNamespace(
+        max_iterations=25,
+        dynamic_budget_enabled=False,
+    )
+    agent = _make_agent(
+        [_tool_response("a"), _tool_response("b"), _text_response("完成")]
+    )
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=settings,
+    ):
+        events = await _collect(agent)
+
+    assert AgentState.ITERATION_CHECKPOINT not in [e.state for e in events]
+    assert AgentState.DONE in [e.state for e in events]
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_force_dynamic_with_initial_budget():
+    """委派子代理：dynamic_budget=True + initial_iteration_budget 强制启用
+    动态预算（即使全局 max_iterations 是用户自定义值）。"""
+    settings = SimpleNamespace(max_iterations=7, dynamic_budget_enabled=True)
+    agent = _make_agent(
+        [
+            _tool_response("a"),
+            _tool_response("b"),
+            _text_response("完成"),
+        ]
+    )
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=settings,
+    ):
+        events = [
+            evt
+            async for evt in agent.run_loop(
+                [{"role": "user", "content": "hi"}],
+                dynamic_budget=True,
+                initial_iteration_budget=2,
+            )
+        ]
+
+    checkpoint = next(
+        (e for e in events if e.state == AgentState.ITERATION_CHECKPOINT), None
+    )
+    assert checkpoint is not None
+    assert checkpoint.budget_info is not None
+    assert checkpoint.budget_info["previous_budget"] == 2
+    assert AgentState.DONE in [e.state for e in events]
+    assert AgentState.FAILED not in [e.state for e in events]
+
+
+class _FakeBudgetGate:
+    """固定返回用户选择的提问闸口替身。"""
+
+    def __init__(self, labels) -> None:
+        self._labels = tuple(labels)
+        self.requests = []
+
+    async def request(self, req, timeout=300.0):  # noqa: ANN001, ANN201
+        self.requests.append(req)
+        from backend.services.question_gate import QuestionAnswer
+
+        return QuestionAnswer(answers=self._labels, custom=None, answered_by="gui")
+
+
+@pytest.mark.asyncio()
+async def test_iteration_budget_question_continue_extends_and_completes():
+    """预算到期询问 → 用户选「继续」→ 延长并完成。"""
+    gate = _FakeBudgetGate(["继续（再延长一次）"])
+    agent = _make_agent(
+        [_tool_response("a"), _tool_response("b"), _tool_response("c"), _text_response("完成")]
+    )
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=SimpleNamespace(
+            max_iterations=7,
+            dynamic_budget_enabled=True,
+            budget_max_extensions=0,
+            budget_hard_cap=10,
+        ),
+    ), patch(
+        "backend.core.legacy.agent.get_question_gate",
+        return_value=gate,
+    ):
+        events = [
+            evt
+            async for evt in agent.run_loop(
+                [{"role": "user", "content": "hi"}],
+                dynamic_budget=True,
+                initial_iteration_budget=2,
+            )
+        ]
+
+    assert len(gate.requests) == 1
+    assert AgentState.ASK_USER_QUESTION in [e.state for e in events]
+    checkpoint = next(
+        e for e in events if e.state == AgentState.ITERATION_CHECKPOINT
+    )
+    assert checkpoint.budget_info is not None
+    assert checkpoint.budget_info["action"] == "user_extend"
+    assert AgentState.DONE in [e.state for e in events]
+
+
+@pytest.mark.asyncio()
+async def test_iteration_budget_question_auto_continue_extends_and_completes():
+    """预算到期询问 → 用户选「自动继续」→ 标记 auto_extend 并完成。"""
+    gate = _FakeBudgetGate(["自动继续"])
+    agent = _make_agent(
+        [_tool_response("a"), _tool_response("b"), _tool_response("c"), _text_response("完成")]
+    )
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=SimpleNamespace(
+            max_iterations=7,
+            dynamic_budget_enabled=True,
+            budget_max_extensions=0,
+            budget_hard_cap=10,
+        ),
+    ), patch(
+        "backend.core.legacy.agent.get_question_gate",
+        return_value=gate,
+    ):
+        events = [
+            evt
+            async for evt in agent.run_loop(
+                [{"role": "user", "content": "hi"}],
+                dynamic_budget=True,
+                initial_iteration_budget=2,
+            )
+        ]
+
+    assert len(gate.requests) == 1
+    checkpoint = next(
+        e for e in events if e.state == AgentState.ITERATION_CHECKPOINT
+    )
+    assert checkpoint.budget_info is not None
+    assert checkpoint.budget_info["action"] == "auto_extend"
+    assert AgentState.DONE in [e.state for e in events]
+
+
+@pytest.mark.asyncio()
+async def test_iteration_budget_question_stop_yields_failed():
+    """预算到期询问 → 用户选「停止」→ 带 user_stopped 原因结束。"""
+    gate = _FakeBudgetGate(["停止"])
+    agent = _make_agent(
+        [_tool_response("a"), _tool_response("b"), _text_response("完成")]
+    )
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=SimpleNamespace(
+            max_iterations=7,
+            dynamic_budget_enabled=True,
+            budget_max_extensions=0,
+            budget_hard_cap=10,
+        ),
+    ), patch(
+        "backend.core.legacy.agent.get_question_gate",
+        return_value=gate,
+    ):
+        events = [
+            evt
+            async for evt in agent.run_loop(
+                [{"role": "user", "content": "hi"}],
+                dynamic_budget=True,
+                initial_iteration_budget=2,
+            )
+        ]
+
+    assert len(gate.requests) == 1
+    failed = [e for e in events if e.state == AgentState.FAILED]
+    assert len(failed) == 1
+    assert "reason=user_stopped" in (failed[0].error or "")

@@ -124,6 +124,16 @@ export interface OrchSettings {
   // 与后端 ``OrchSettings.max_iterations`` camelCase 对齐。
   // 默认 25；0 回落 profile 默认值。
   maxIterations: number; // 25
+  // 2026-11-01: 动态迭代预算（与后端 OrchSettings camelCase 对齐）。
+  // 关闭后回到固定 maxIterations 行为。
+  dynamicBudgetEnabled: boolean; // true
+  // 各档初始预算；到软预算后由进度审计决定自动延长或停止。
+  budgetSimple: number; // 20
+  budgetMedium: number; // 80
+  budgetComplex: number; // 200
+  budgetLong: number; // 400
+  budgetHardCap: number; // 1000
+  budgetMaxExtensions: number; // 3（0 = 不自动延长）
   // Round 1 (2026-09-19) 计划前置: multi 拆解前的澄清+侦察总开关（默认开）。
   // 与后端 OrchSettings.plan_preflight_enabled camelCase 对齐。
   planPreflightEnabled: boolean; // true
@@ -276,6 +286,13 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   maxRetryOfChains: 10,
   maxToolCallsPerRun: 100,
   maxIterations: 25, // 2026-10-20: primary agent 迭代次数上限
+  dynamicBudgetEnabled: true,
+  budgetSimple: 20,
+  budgetMedium: 80,
+  budgetComplex: 200,
+  budgetLong: 400,
+  budgetHardCap: 1000,
+  budgetMaxExtensions: 3,
   planPreflightEnabled: true,
   planScoutEnabled: true,
   maxScoutIterations: 4, // 2026-10-27: 侦察 ReAct 预算（立即生效）

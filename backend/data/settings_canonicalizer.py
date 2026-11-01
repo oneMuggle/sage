@@ -85,6 +85,15 @@ ALIASES: Dict[str, str] = {
     # - logTimezone / useFolderPicker: 通用 Tab / Wiki Tab 保存 400
     #   (同类 pre-existing 回归, 一并补齐)。
     "max_iterations": "maxIterations",
+    # 2026-11-01: 动态迭代预算（OrchSettings P1）。relay 会把 orch 子层整体
+    # 转 snake，缺别名时保存 400 被前端静默吞掉。
+    "dynamic_budget_enabled": "dynamicBudgetEnabled",
+    "budget_simple": "budgetSimple",
+    "budget_medium": "budgetMedium",
+    "budget_complex": "budgetComplex",
+    "budget_long": "budgetLong",
+    "budget_hard_cap": "budgetHardCap",
+    "budget_max_extensions": "budgetMaxExtensions",
     "log_timezone": "logTimezone",
     "use_folder_picker": "useFolderPicker",
     # win7 专属: OrchSettings 已含四个 profile 迭代上限键 (前端整体 spread
@@ -244,6 +253,14 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "maxWriterIterations",
         # 2026-10-20 全局迭代上限 (Win7 适配: 0=按各 agent 分别设置)
         "maxIterations",
+        # 2026-11-01: 动态迭代预算（P1 设置页暴露）。
+        "dynamicBudgetEnabled",
+        "budgetSimple",
+        "budgetMedium",
+        "budgetComplex",
+        "budgetLong",
+        "budgetHardCap",
+        "budgetMaxExtensions",
         # 2026-10-27: 单 run 工具调用上限 (已在 OrchSettings/UI/ALIASES, 白名单
         # 漏加 → 编排段任一保存 400) + 计划前置/Planner 迭代预算。
         "maxToolCallsPerRun",

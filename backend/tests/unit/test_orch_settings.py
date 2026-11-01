@@ -170,3 +170,64 @@ def test_iteration_budgets_clamped_to_lower_bound():
         s = load_orch_settings()
     assert s.max_scout_iterations == 1
     assert s.max_planner_iterations == 1
+
+
+# ---------------------------------------------------------------------------
+# 2026-11-01 — 动态迭代预算（P1 设置页暴露）
+# ---------------------------------------------------------------------------
+
+
+def test_dynamic_budget_overrides_and_clamps():
+    """7 个新键走 camelCase 映射；预算/硬顶下界 1，延长次数允许 0。"""
+    with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
+        repo_cls.return_value.get_json.return_value = {
+            "orch": {
+                "dynamicBudgetEnabled": False,
+                "budgetSimple": 12,
+                "budgetMedium": 90,
+                "budgetComplex": 300,
+                "budgetLong": 600,
+                "budgetHardCap": 2000,
+                "budgetMaxExtensions": 5,
+            }
+        }
+        s = load_orch_settings()
+    assert s.dynamic_budget_enabled is False
+    assert s.budget_simple == 12
+    assert s.budget_medium == 90
+    assert s.budget_complex == 300
+    assert s.budget_long == 600
+    assert s.budget_hard_cap == 2000
+    assert s.budget_max_extensions == 5
+
+
+def test_dynamic_budget_defaults_and_lower_bounds():
+    """缺省值 20/80/200/400/1000/3；预算与硬顶低于 1 时钳到 1，
+    延长次数允许 0（表示不自动延长）。"""
+    with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
+        repo_cls.return_value.get_json.return_value = None
+        s = load_orch_settings()
+    assert s.dynamic_budget_enabled is True
+    assert (s.budget_simple, s.budget_medium, s.budget_complex, s.budget_long) == (
+        20,
+        80,
+        200,
+        400,
+    )
+    assert s.budget_hard_cap == 1000
+    assert s.budget_max_extensions == 3
+
+    with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
+        repo_cls.return_value.get_json.return_value = {
+            "orch": {
+                "budgetSimple": 0,
+                "budgetMedium": -1,
+                "budgetHardCap": 0,
+                "budgetMaxExtensions": -2,
+            }
+        }
+        s = load_orch_settings()
+    assert s.budget_simple == 1
+    assert s.budget_medium == 1
+    assert s.budget_hard_cap == 1
+    assert s.budget_max_extensions == 0

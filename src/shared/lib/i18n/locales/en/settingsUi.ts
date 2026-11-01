@@ -336,6 +336,27 @@ export const enSettingsUi = {
   'settings.orch.max_iterations.desc':
     'Maximum iterations for the primary agent (each iteration is one LLM call that may invoke multiple tools); when exceeded, the session ends with reason max_iterations_exceeded',
   'settings.orch.max_iterations.label': 'Agent iteration limit (0 = default)',
+  // 2026-11-01: dynamic iteration budget (P1 settings exposure).
+  'settings.orch.section_dynamic_budget': 'Dynamic iteration budget',
+  'settings.orch.dynamic_budget_intro':
+    'Starts each task with a complexity-based iteration budget: simple tasks stay lean while complex/long tasks can auto-extend; repeated calls or long stretches without progress stop with evidence. Environment variables SAGE_DYNAMIC_BUDGET_* take precedence over these settings.',
+  'settings.orch.dynamic_budget_enabled.label': 'Enable dynamic iteration budget',
+  'settings.orch.dynamic_budget_enabled.desc':
+    'When off, falls back to the fixed “Agent iteration limit”',
+  'settings.orch.budget_simple.label': 'Simple task initial budget (steps)',
+  'settings.orch.budget_simple.desc': 'Initial steps for short, attachment-free simple tasks',
+  'settings.orch.budget_medium.label': 'Medium task initial budget (steps)',
+  'settings.orch.budget_medium.desc': 'Default tier when complexity cannot be determined',
+  'settings.orch.budget_complex.label': 'Complex task initial budget (steps)',
+  'settings.orch.budget_complex.desc':
+    'Initial steps for tasks with refactor/migration/design signals or many files',
+  'settings.orch.budget_long.label': 'Long task initial budget (steps)',
+  'settings.orch.budget_long.desc': 'Initial steps for long-task mode (raise as needed)',
+  'settings.orch.budget_hard_cap.label': 'Auto-extension hard cap (steps)',
+  'settings.orch.budget_hard_cap.desc': 'Maximum iteration steps allowed in any case',
+  'settings.orch.budget_max_extensions.label': 'Max auto extensions',
+  'settings.orch.budget_max_extensions.desc':
+    '0 = never auto-extend; stop as soon as the soft budget is reached',
   'settings.orch.max_lane_iterations.label': 'Lane iteration limit',
   'settings.orch.max_options_per_question.desc':
     'Maximum options the agent may offer per question; must not be less than the minimum options per question',

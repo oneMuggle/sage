@@ -136,7 +136,7 @@ def test_legal_model_selections_obj_keys_is_stable() -> None:
 
 
 def test_legal_orch_keys_is_stable() -> None:
-    """LEGAL_ORCH_KEYS 必须与前端 OrchSettings interface 23 键逐字同步.
+    """LEGAL_ORCH_KEYS 必须与前端 OrchSettings interface 35 键逐字同步.
 
     历史事故两次: 2026-09 漏 worktreeIsolation / subagentApprovalMode /
     runTokenBudget, RD15 后又漏 runWallClockLimitMinutes /
@@ -184,6 +184,14 @@ def test_legal_orch_keys_is_stable() -> None:
             "maxOptionsPerQuestion",
             "maxClarifyQuestionsInPrompt",
             "maxClarifyQuestionsPerRound",
+            # 2026-11-01 动态迭代预算（P1 设置页暴露）
+            "dynamicBudgetEnabled",
+            "budgetSimple",
+            "budgetMedium",
+            "budgetComplex",
+            "budgetLong",
+            "budgetHardCap",
+            "budgetMaxExtensions",
         }
     ) == LEGAL_ORCH_KEYS
 
