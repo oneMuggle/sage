@@ -13,6 +13,8 @@ import type {
   WordAuditFixResult,
   WordAuditRequest,
   WordAuditResult,
+  WordAuditReviseRequest,
+  WordRevisionResult,
   WordRuleExtractRequest,
   WordRuleExtractionResult,
   WordRulePack,
@@ -110,6 +112,28 @@ export const wordAuditApi = {
       return await invoke<WordRulePackDetailResult>('office_word_rulepacks_extract_save', {
         workspacePath: req.workspace_path,
         pack: req.pack,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Write native tracked revisions (w:ins/w:del + comments) and re-audit (M4b).
+   * Side-effecting like fixWord — no retry.
+   */
+  async reviseWord(req: WordAuditReviseRequest): Promise<WordRevisionResult> {
+    try {
+      return await invoke<WordRevisionResult>('office_word_revise', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+        ...(req.rulepack_id !== undefined ? { rulepackId: req.rulepack_id } : {}),
+        ...(req.changes !== undefined ? { changes: req.changes } : {}),
+        ...(req.output_filename !== undefined ? { outputFilename: req.output_filename } : {}),
+        overwrite: req.overwrite ?? false,
+        author: req.author ?? 'Sage',
+        addComments: req.add_comments ?? true,
+        ...(req.max_size_bytes !== undefined ? { maxSizeBytes: req.max_size_bytes } : {}),
       });
     } catch (error) {
       throw handleApiError(error);

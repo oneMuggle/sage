@@ -5,6 +5,7 @@ import { officeApi } from '../../../shared/api/officeApi';
 import type {
   WordAuditFixResult,
   WordAuditResult,
+  WordRevisionResult,
   WordRulePackListResult,
   WordTextAnchor,
 } from '../../../shared/api/wordAuditTypes';
@@ -16,12 +17,14 @@ vi.mock('../../../shared/api/officeApi', () => ({
     listWordRulePacks: vi.fn(),
     auditWord: vi.fn(),
     fixWord: vi.fn(),
+    reviseWord: vi.fn(),
   },
 }));
 
 const mockedList = vi.mocked(officeApi.listWordRulePacks);
 const mockedAudit = vi.mocked(officeApi.auditWord);
 const mockedFix = vi.mocked(officeApi.fixWord);
+const mockedRevise = vi.mocked(officeApi.reviseWord);
 
 const ANCHOR: WordTextAnchor = {
   part: 'word/document.xml',
@@ -121,6 +124,38 @@ const FIX: WordAuditFixResult = {
       warning_count: 1,
     },
     issues: [AUDIT.issues[1]],
+  },
+  warnings: [],
+};
+
+const REVISION: WordRevisionResult = {
+  ok: true,
+  source_path: 'doc.docx',
+  output_path: 'doc-revised.docx',
+  overwritten: false,
+  rule_pack_id: 'general-quality',
+  planned: 2,
+  applied: 1,
+  skipped: 1,
+  changes: [
+    { find: 'AI', replace: '人工智能', applied: true },
+    {
+      find: '旧日期',
+      replace: '2026年10月31日',
+      applied: false,
+      reason: '未找到目标文本',
+    },
+  ],
+  remaining: {
+    ...AUDIT,
+    ok: true,
+    summary: {
+      ...AUDIT.summary,
+      issue_count: 0,
+      error_count: 0,
+      warning_count: 0,
+    },
+    issues: [],
   },
   warnings: [],
 };
@@ -243,6 +278,52 @@ describe('DocumentAuditPanel', () => {
 
     await waitFor(() => expect(screen.getByTestId('word-audit-error')).toBeInTheDocument());
     expect(screen.getByText('backend offline')).toBeInTheDocument();
+  });
+
+  it('generates tracked revisions and shows applied/skipped', async () => {
+    mockedList.mockResolvedValue(PACKS);
+    mockedAudit.mockResolvedValue(AUDIT);
+    mockedRevise.mockResolvedValue(REVISION);
+
+    render(<DocumentAuditPanel workspacePath="/ws" filePath="/ws/doc.docx" filename="doc.docx" />);
+    await waitFor(() => expect(screen.getByTestId('word-audit-summary')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('word-audit-revise'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('word-audit-revision-result')).toBeInTheDocument(),
+    );
+    expect(mockedRevise).toHaveBeenCalledWith({
+      workspace_path: '/ws',
+      file_path: '/ws/doc.docx',
+      rulepack_id: 'general-quality',
+      output_filename: 'doc-revised.docx',
+      add_comments: true,
+    });
+    expect(screen.getByText(/已写入 1 项修订，跳过 1 项/)).toBeInTheDocument();
+    expect(screen.getByText(/旧日期/)).toBeInTheDocument();
+    expect(screen.getByText(/复检：0 错误 · 0 警告/)).toBeInTheDocument();
+  });
+
+  it('passes add_comments=false when the comment option is disabled', async () => {
+    mockedList.mockResolvedValue(PACKS);
+    mockedAudit.mockResolvedValue(AUDIT);
+    mockedRevise.mockResolvedValue(REVISION);
+
+    render(<DocumentAuditPanel workspacePath="/ws" filePath="/ws/doc.docx" filename="doc.docx" />);
+    await waitFor(() => expect(screen.getByTestId('word-audit-summary')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('word-audit-add-comments'));
+    fireEvent.click(screen.getByTestId('word-audit-revise'));
+
+    await waitFor(() => expect(mockedRevise).toHaveBeenCalled());
+    expect(mockedRevise).toHaveBeenCalledWith({
+      workspace_path: '/ws',
+      file_path: '/ws/doc.docx',
+      rulepack_id: 'general-quality',
+      output_filename: 'doc-revised.docx',
+      add_comments: false,
+    });
   });
 });
 

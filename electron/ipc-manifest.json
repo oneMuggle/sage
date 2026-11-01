@@ -105,6 +105,7 @@
     "office_word_lint": { "method": "POST", "path": "/api/v1/office/word/lint" },
     "office_word_read": { "method": "POST", "path": "/api/v1/office/word/read" },
     "office_word_repair": { "method": "POST", "path": "/api/v1/office/word/repair" },
+    "office_word_revise": { "method": "POST", "path": "/api/v1/office/word/audit/revise" },
     "office_word_rulepack_get": { "method": "GET", "path": "/api/v1/office/word/rulepacks/{packId}" },
     "office_word_rulepacks_extract": { "method": "POST", "path": "/api/v1/office/word/rulepacks/extract" },
     "office_word_rulepacks_extract_save": { "method": "POST", "path": "/api/v1/office/word/rulepacks/extract/save" },

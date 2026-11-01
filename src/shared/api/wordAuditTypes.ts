@@ -166,6 +166,44 @@ export interface WordRuleExtractRequest {
   max_size_bytes?: number;
 }
 
+export interface WordRevisionChangeRequest {
+  rule_id?: string;
+  find: string;
+  replace?: string;
+  comment?: string;
+}
+
+export interface WordRevisionChange extends WordRevisionChangeRequest {
+  applied: boolean;
+  reason?: string;
+}
+
+export interface WordAuditReviseRequest {
+  workspace_path: string;
+  file_path: string;
+  rulepack_id?: string;
+  changes?: WordRevisionChangeRequest[];
+  output_filename?: string;
+  overwrite?: boolean;
+  author?: string;
+  add_comments?: boolean;
+  max_size_bytes?: number;
+}
+
+export interface WordRevisionResult {
+  ok: boolean;
+  source_path: string;
+  output_path: string;
+  overwritten: boolean;
+  rule_pack_id: string;
+  planned: number;
+  applied: number;
+  skipped: number;
+  changes: WordRevisionChange[];
+  remaining?: WordAuditResult | null;
+  warnings: Array<{ code: string; message: string }>;
+}
+
 export interface WordAuditRequest {
   workspace_path: string;
   file_path: string;
