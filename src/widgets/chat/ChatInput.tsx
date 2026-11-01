@@ -30,6 +30,7 @@ import {
   type InputCardProps,
   type KnowledgeDocType,
 } from './InputCard';
+import { PdfOcrPreview, type PdfOcrTarget } from './PdfOcrPreview';
 import { extractTemplateVars, TemplateFillDialog } from './TemplateFillDialog';
 import {
   commandToPrompt,
@@ -126,6 +127,7 @@ function ChatInputInner({
   // 探测失败按不可用处理，不改变既有「无视觉模型即禁用上传」的行为。
   const [ocrCaps, setOcrCaps] = useState<OcrCapabilities | null>(null);
   const [ocrTextByDataUrl, setOcrTextByDataUrl] = useState<Record<string, string>>({});
+  const [pdfOcrTarget, setPdfOcrTarget] = useState<PdfOcrTarget | null>(null);
   const handleOcrTextsChange = useCallback((entries: { dataUrl: string; text: string }[]) => {
     setOcrTextByDataUrl(Object.fromEntries(entries.map((entry) => [entry.dataUrl, entry.text])));
   }, []);
@@ -342,6 +344,26 @@ function ChatInputInner({
     isDragOver,
   } = useFileUpload();
 
+  const handleFileOcr = useCallback(
+    (index: number) => {
+      const file = files[index];
+      if (!file?.dataUrl || file.type !== 'application/pdf') return;
+      setPdfOcrTarget({ name: file.name, dataUrl: file.dataUrl });
+    },
+    [files],
+  );
+
+  const handleRemoveFile = useCallback(
+    (index: number) => {
+      const file = files[index];
+      setPdfOcrTarget((prev) =>
+        prev && file?.dataUrl === prev.dataUrl ? null : prev,
+      );
+      removeFile(index);
+    },
+    [files, removeFile],
+  );
+
   /** Add a managed office ref. Dedupe by `docId` — adding the same docId twice is a no-op (immutable update). */
   const addOfficeRef = useCallback((ref: ChatOfficeRef) => {
     setOfficeRefs((prev) => {
@@ -412,6 +434,7 @@ function ChatInputInner({
     setKnowledgeRefs([]);
     setOfficeRefs([]);
     setAudioAttachments([]);
+    setPdfOcrTarget(null);
     clearAll();
   };
 
@@ -776,6 +799,10 @@ function ChatInputInner({
         enabled={ocrPreviewEnabled}
         onTextsChange={handleOcrTextsChange}
       />
+      <PdfOcrPreview
+        target={pdfOcrTarget}
+        onClose={() => setPdfOcrTarget(null)}
+      />
       <InputCard
         value={value}
         onChange={handleChange}
@@ -791,7 +818,8 @@ function ChatInputInner({
         knowledgeRefs={knowledgeRefs}
         officeRefs={officeRefs}
         audioAttachments={audioAttachments}
-        onRemoveFile={removeFile}
+        onRemoveFile={handleRemoveFile}
+        onOcrFile={handleFileOcr}
         onRemoveImage={removeImage}
         onRemoveKnowledge={(idx) => setKnowledgeRefs((prev) => prev.filter((_, i) => i !== idx))}
         onRemoveOfficeRef={removeOfficeRef}

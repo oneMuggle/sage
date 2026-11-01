@@ -30,6 +30,8 @@ MAX_BATCH_ITEMS = 20
 MAX_PDF_PAGES = 50
 MAX_PDF_BYTES = 20 * 1024 * 1024
 MAX_RETAINED_JOBS = 50
+#: 已完成任务的默认保留期（7 天）；运行中任务不会被 TTL 清理。
+MAX_JOB_AGE_SECONDS = 7 * 24 * 3600
 
 
 @dataclass
@@ -47,6 +49,7 @@ class OcrBatchJob:
     error: Optional[str] = None
     results: List[Optional[Dict[str, Any]]] = field(default_factory=list)
     cancelled: bool = False
+    deleted: bool = False
 
 
 def _default_store_dir() -> Path:
@@ -97,6 +100,7 @@ class OcrBatchService:
         )
         with self._lock:
             self._jobs[job.job_id] = job
+            self._cleanup_expired_locked(time.time())
             self._prune_locked()
             self._persist_locked(job)
         self._executor.submit(self._run, job, list(images))
@@ -134,6 +138,49 @@ class OcrBatchService:
             job.updated_at = time.time()
             self._persist_locked(job)
             return True
+
+    def delete(self, job_id: str) -> bool:
+        """删除任务及其快照；运行中任务会被标记取消并阻止回写。"""
+        with self._lock:
+            job = self._jobs.pop(job_id, None)
+            if job is None:
+                return False
+            job.deleted = True
+            job.cancelled = True
+            job.updated_at = time.time()
+            self._unlink_job(job_id)
+            return True
+
+    def cleanup(self, older_than_s: Optional[float] = None) -> int:
+        """清理已结束且超过保留期的任务；返回删除数量。"""
+        with self._lock:
+            return self._cleanup_expired_locked(time.time(), older_than_s)
+
+    def _unlink_job(self, job_id: str) -> None:
+        try:
+            self._job_path(job_id).unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            logger.warning("remove OCR batch job file failed", exc_info=True)
+
+    def _cleanup_expired_locked(
+        self,
+        now: float,
+        older_than_s: Optional[float] = None,
+    ) -> int:
+        ttl = MAX_JOB_AGE_SECONDS if older_than_s is None else max(0.0, older_than_s)
+        cutoff = now - ttl
+        removed = 0
+        for job in list(self._jobs.values()):
+            if job.status in ("pending", "running"):
+                continue
+            if job.updated_at >= cutoff:
+                continue
+            self._jobs.pop(job.job_id, None)
+            self._unlink_job(job.job_id)
+            removed += 1
+        return removed
 
     def _run(self, job: OcrBatchJob, images: List[bytes]) -> None:
         try:
@@ -178,6 +225,8 @@ class OcrBatchService:
 
     def _persist_locked(self, job: OcrBatchJob) -> None:
         """原子写入任务快照；持久化失败不阻断 OCR 本身。"""
+        if job.deleted:
+            return
         try:
             self._store_dir.mkdir(parents=True, exist_ok=True)
             path = self._job_path(job.job_id)
@@ -219,6 +268,7 @@ class OcrBatchService:
                 job.updated_at = time.time()
                 self._persist_locked(job)
             self._jobs[job.job_id] = job
+        self._cleanup_expired_locked(time.time())
 
     def _prune_locked(self) -> None:
         if len(self._jobs) <= MAX_RETAINED_JOBS:
@@ -226,12 +276,7 @@ class OcrBatchService:
         ordered = sorted(self._jobs.values(), key=lambda item: item.created_at)
         for job in ordered[: len(self._jobs) - MAX_RETAINED_JOBS]:
             self._jobs.pop(job.job_id, None)
-            try:
-                self._job_path(job.job_id).unlink()
-            except FileNotFoundError:
-                pass
-            except OSError:
-                logger.warning("prune OCR batch job file failed", exc_info=True)
+            self._unlink_job(job.job_id)
 
     @staticmethod
     def _serialize(job: OcrBatchJob) -> Dict[str, Any]:
