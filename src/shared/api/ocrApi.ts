@@ -99,11 +99,7 @@ export const ocrApi = {
     });
   },
 
-  batchPdf(
-    pdf: string,
-    lang?: string,
-    maxPages?: number,
-  ): Promise<OcrPdfBatchSubmitResult> {
+  batchPdf(pdf: string, lang?: string, maxPages?: number): Promise<OcrPdfBatchSubmitResult> {
     return backendRequest<OcrPdfBatchSubmitResult>({
       method: 'POST',
       path: '/api/v1/ocr/batch/pdf',
@@ -115,11 +111,25 @@ export const ocrApi = {
     });
   },
 
-
   batchStatus(jobId: string): Promise<OcrBatchStatus> {
     return backendRequest<OcrBatchStatus>({
       method: 'GET',
       path: `/api/v1/ocr/batch/${encodeURIComponent(jobId)}`,
+    });
+  },
+
+  batchDelete(jobId: string): Promise<{ ok: boolean }> {
+    return backendRequest<{ ok: boolean }>({
+      method: 'DELETE',
+      path: `/api/v1/ocr/batch/${encodeURIComponent(jobId)}`,
+    });
+  },
+
+  batchCleanup(olderThanS?: number): Promise<{ removed: number }> {
+    return backendRequest<{ removed: number }>({
+      method: 'POST',
+      path: '/api/v1/ocr/batch/cleanup',
+      body: olderThanS === undefined ? {} : { older_than_s: olderThanS },
     });
   },
 

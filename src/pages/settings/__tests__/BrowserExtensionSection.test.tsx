@@ -101,7 +101,7 @@ describe('BrowserExtensionSection', () => {
     mocks.fetchStatus.mockResolvedValue(EMPTY_STATUS);
     mocks.createPairingCode.mockResolvedValue({
       code: 'ABCDE23456',
-      expires_at: Math.floor(Date.now() / 1000) + 600,
+      expires_at: 4102444800,
       base_url: 'http://127.0.0.1:8834',
       extension_dir: '/repo/extension/agent-bridge',
     });

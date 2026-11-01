@@ -151,3 +151,55 @@ def test_pdf_batch_endpoint_rejects_invalid_pdf() -> None:
         )
 
     assert exc.value.status_code == 400
+
+
+def _wait_batch(job_id: str) -> dict:
+    import time
+
+    deadline = time.monotonic() + 3
+    status = None
+    while time.monotonic() < deadline:
+        status = ocr_routes.ocr_batch_status(job_id)
+        if status["status"] in ("completed", "failed", "cancelled"):
+            break
+        time.sleep(0.02)
+    assert status is not None
+    return status
+
+
+def test_batch_delete_endpoint() -> None:
+    from backend.services.ocr.batch import reset_ocr_batch_service
+
+    try:
+        submitted = ocr_routes.ocr_batch(
+            ocr_routes.OcrBatchRequest(images=[PNG_DATA_URL])
+        )
+        job_id = submitted["job_id"]
+        _wait_batch(job_id)
+
+        assert ocr_routes.ocr_batch_delete(job_id) == {"ok": True}
+        with pytest.raises(HTTPException) as exc:
+            ocr_routes.ocr_batch_status(job_id)
+        assert exc.value.status_code == 404
+    finally:
+        reset_ocr_batch_service()
+
+
+def test_batch_cleanup_endpoint() -> None:
+    from backend.services.ocr.batch import reset_ocr_batch_service
+
+    try:
+        submitted = ocr_routes.ocr_batch(
+            ocr_routes.OcrBatchRequest(images=[PNG_DATA_URL])
+        )
+        job_id = submitted["job_id"]
+        _wait_batch(job_id)
+
+        result = ocr_routes.ocr_batch_cleanup(
+            ocr_routes.OcrBatchCleanupRequest(older_than_s=0)
+        )
+        assert result["removed"] >= 1
+        with pytest.raises(HTTPException):
+            ocr_routes.ocr_batch_status(job_id)
+    finally:
+        reset_ocr_batch_service()

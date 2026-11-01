@@ -66,7 +66,7 @@
     "backend/api/project_ai_routes.py": 862,
     "src/shared/api/projectApi.ts": 1342,
     "src/shared/api/projectApiTypes.ts": 1498,
-    "src/widgets/chat/ChatInput.tsx": 869,
+    "src/widgets/chat/ChatInput.tsx": 892,
     "src/widgets/chat/Message.tsx": 826,
     "src/entities/setting/settingsRegistry.ts": 812,
     "src/pages/settings/settingsSearchEntries.ts": 851,
