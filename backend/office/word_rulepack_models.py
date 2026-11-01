@@ -159,6 +159,53 @@ class WordAuditFixResult(BaseModel):
     warnings: List[Dict[str, str]] = Field(default_factory=list)
 
 
+class WordRuleCandidate(BaseModel):
+    """One extracted rule with provenance and confidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule: WordRuleSpec
+    confidence: float = Field(ge=0.0, le=1.0)
+    source_excerpt: str = Field(default="", max_length=1000)
+    conflict_group: Optional[str] = Field(default=None, max_length=120)
+
+
+class WordRuleConflict(BaseModel):
+    """Conflicting values extracted for the same rule kind."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str = Field(min_length=1, max_length=80)
+    rule_ids: List[str] = Field(default_factory=list)
+    message: str = Field(min_length=1, max_length=1000)
+
+
+class WordRuleExtractionSummary(BaseModel):
+    """Counts for one extraction run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rules: int = Field(ge=0, default=0)
+    candidates: int = Field(ge=0, default=0)
+    conflicts: int = Field(ge=0, default=0)
+    warnings: int = Field(ge=0, default=0)
+
+
+class WordRuleExtractionResult(BaseModel):
+    """POST /office/word/rulepacks/extract result."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool = True
+    source_path: str
+    file_type: Literal["spec", "template"]
+    pack: WordRulePack
+    candidates: List[WordRuleCandidate] = Field(default_factory=list)
+    conflicts: List[WordRuleConflict] = Field(default_factory=list)
+    warnings: List[Dict[str, str]] = Field(default_factory=list)
+    summary: WordRuleExtractionSummary = Field(default_factory=WordRuleExtractionSummary)
+
+
 __all__ = [
     "IssueScope",
     "PackOrigin",
@@ -169,6 +216,10 @@ __all__ = [
     "WordAuditResult",
     "WordAuditSummary",
     "WordFixAction",
+    "WordRuleCandidate",
+    "WordRuleConflict",
+    "WordRuleExtractionResult",
+    "WordRuleExtractionSummary",
     "WordRulePack",
     "WordRulePackDetailResult",
     "WordRulePackListResult",
