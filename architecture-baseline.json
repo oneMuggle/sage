@@ -11,7 +11,7 @@
     "backend/core/legacy/agent.py": 3397,
     "backend/core/legacy/llm_client.py": 1342,
 
-    "backend/data/database.py": 2250,
+    "backend/data/database.py": 2268,
     "backend/data/session_repo.py": 1121,
     "backend/data/settings_canonicalizer.py": 882,
     "backend/main.py": 1730,

@@ -110,6 +110,9 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 |---|---|---|
 | GET | `/api/v1/playbooks/builtin` | 内置规程摘要 |
 | GET | `/api/v1/playbooks/builtin/{id}` | 完整规格 |
+| GET | `/api/v1/playbooks/library` | 规程库列表（导入/分享的规程） |
+| POST | `/api/v1/playbooks/library` | 保存规程到规程库（按 spec hash 去重） |
+| DELETE | `/api/v1/playbooks/library/{id}` | 删除规程库条目 |
 | GET | `/api/v1/projects/{id}/playbook` | 当前绑定 + 状态 + 审计 |
 | PUT | `/api/v1/projects/{id}/playbook` | 绑定内置或自定义规程（生成快照） |
 | GET | `/api/v1/projects/{id}/playbook/audit` | 重新审计 |
@@ -125,6 +128,10 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 | POST | `/api/v1/projects/{id}/playbook/wiki/export` | 将规程手册写入项目 Wiki（仅覆盖 Sage 生成页） |
 | POST | `/api/v1/playbooks/import/preview` | 校验 + diff |
 | POST | `/api/v1/playbooks/import` | 导入并绑定（replace/merge/save_as_new） |
+
+### 规程库
+
+导入或分享的规程可保存到全局规程库（`playbook_library`，最多 100 条，按 spec hash 去重）；绑定项目时可直接选择 `library_id`，导入时也可勾选 `save_to_library` 一并入库。库中的规程与项目解耦，不包含任何项目文件内容。
 
 ## 7. 导出与分享
 

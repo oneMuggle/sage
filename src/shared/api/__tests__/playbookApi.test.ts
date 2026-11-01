@@ -47,6 +47,7 @@ describe('playbookApi', () => {
     expect(mockInvoke).toHaveBeenCalledWith('playbook_bind', {
       projectId: 'proj-1',
       playbookId: 'cn-research-grant',
+      libraryId: undefined,
       spec: undefined,
       source: 'custom',
     });
@@ -108,12 +109,31 @@ describe('playbookApi', () => {
     });
   });
 
+  it('规程库 list/save/delete 调用正确命令', async () => {
+    mockInvoke.mockResolvedValueOnce({ items: [{ id: 'lib-1' }] });
+    expect(await playbookApi.listLibrary()).toEqual([{ id: 'lib-1' }]);
+    expect(mockInvoke).toHaveBeenCalledWith('playbooks_library_list');
+
+    mockInvoke.mockResolvedValueOnce({ item: { id: 'lib-2' } });
+    await playbookApi.saveLibrary({ format: 'sage.playbook' }, 'project');
+    expect(mockInvoke).toHaveBeenCalledWith('playbooks_library_save', {
+      envelope: { format: 'sage.playbook' },
+      source: 'project',
+    });
+
+    await playbookApi.deleteLibrary('lib-2');
+    expect(mockInvoke).toHaveBeenCalledWith('playbooks_library_delete', {
+      libraryId: 'lib-2',
+    });
+  });
+
   it('importPlaybook 默认 conflict=save_as_new', async () => {
     await playbookApi.importPlaybook({ format: 'sage.playbook' }, 'proj-1');
     expect(mockInvoke).toHaveBeenCalledWith('playbook_import', {
       envelope: { format: 'sage.playbook' },
       projectId: 'proj-1',
       conflict: 'save_as_new',
+      saveToLibrary: false,
     });
   });
 
