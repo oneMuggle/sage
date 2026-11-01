@@ -20,6 +20,7 @@ const BASE_CONFIG: PetConfigBridge = {
   showSessionTitle: false,
   compatibilityMode: 'auto',
   followActiveSession: true,
+  externalApi: false,
   pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
 };
 

@@ -11,6 +11,12 @@ export const zhPetPack = {
   'settings.pet.add_pet': '添加宠物',
   'settings.pet.remove_pet': '移除',
   'settings.pet.pets_max': '最多 3 只宠物',
+  'settings.pet.external_api': '本地只读状态 API',
+  'settings.pet.external_api_desc':
+    '开启后仅在 127.0.0.1 的随机端口提供 GET /v1/health 与 /v1/status；请求需携带 Bearer token，端口与令牌写入用户数据目录的 pet-api.json。仅读取状态，不能控制 Sage。',
+  'settings.pet.external_api_port': '端口 {port}',
+  'settings.pet.external_api_starting': '启动中…',
+  'settings.pet.external_api_failed': '启动失败',
   'settings.pet.pack': '动画包',
   'settings.pet.pack_desc':
     '内置大肥鱼，或导入 zip 格式的自定义动画包（仅支持 webm/mp4/webp/png 等素材，不执行包内脚本）。',
