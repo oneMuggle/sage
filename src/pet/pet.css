@@ -420,3 +420,15 @@ body {
   color: #64748b;
   font-size: 10px;
 }
+
+/* Standalone panel window (pet.html?panel=1): opaque card filling the window. */
+html.pet-panel-window,
+html.pet-panel-window body {
+  background: #0b1220;
+}
+
+html.pet-panel-window .pet-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 8px;
+}

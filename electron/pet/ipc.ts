@@ -34,6 +34,7 @@ const PET_EVENT_CHANNELS = [
   'pet:drag-end',
   'pet:reset-position',
   'pet:set-panel',
+  'pet:toggle-panel',
   'pet:pat',
   'pet:report-tasks',
   'pet:hide',
@@ -170,6 +171,10 @@ export function registerPetIpc(controller: PetController): void {
 
   ipcMain.on('pet:set-panel', (evt, payload: { open?: unknown }) => {
     if (isPet(evt)) controller.setPanelOpen(evt.sender, payload?.open === true);
+  });
+
+  ipcMain.on('pet:toggle-panel', (evt) => {
+    if (isPet(evt)) controller.togglePanel(evt.sender);
   });
 
   ipcMain.on('pet:pat', (evt) => {
