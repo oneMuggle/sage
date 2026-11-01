@@ -448,7 +448,7 @@ export function OfficePreviewPanel({
       className="border border-border rounded-lg bg-surface overflow-hidden"
       data-testid="office-preview-panel"
     >
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-bg-subtle">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border bg-bg-subtle">
         {preview.docType === 'ppt' && <Presentation className="w-4 h-4" />}
         {preview.docType === 'word' && <FileText className="w-4 h-4" />}
         {preview.docType === 'excel' && <FileSpreadsheet className="w-4 h-4" />}
