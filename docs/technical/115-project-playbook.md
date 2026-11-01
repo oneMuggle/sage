@@ -99,6 +99,8 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 - 阶段识别：取完成度 ≥ 70% 的最晚阶段作为候选，返回 `confidence` 与 `evidence`；**从不自动切换**，必须调用 `stage/confirm`。
 - 项目顾问（`ProjectAdvisor`）的上下文包含规程审计摘要（当前阶段、完成度、待补项），建议会引用具体待补项；归类建议由审计结果生成，移动需逐项确认。
 - 审计使用一次性项目文件索引复用所有 glob；AI 内容检查支持文本、Word/Excel/PPT 与 PDF（前 10 页）文本提取，单次最多 2 个文件、约 6000 字符。
+- 未知文件归类：审计额外返回 `unclassified_files`——未被任何产物 glob 匹配、也不在任何声明目录下的文档型文件（`.md/.docx/.pdf/.xlsx` 等）。建议目标目录由目录 `purpose`、产物 `label` 关键词与扩展名打分（阈值 ≥ 3，最多 30 条），仅用于展示，不自动移动。
+- 批量移动：`batch_move` 动作一次最多 30 个文件，执行前全量预校验（源存在、目标不冲突、拒绝重复与链式移动），成功后把反向映射写入 `playbook_state.last_move_batch`；`undo_last_batch_move` 全量校验后逆序还原，仅保留最近一批。审计返回 `undo_available: {at, count}` 供前端展示撤销入口。
 
 ### 规则投影
 
@@ -182,7 +184,7 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 ## 12. 已知限制（后续 P3）
 
 - LLM 定制、内容检查与阶段裁决已实现（同步执行，失败自动降级）；尚无后台任务/取消/缓存。
-- 规程编辑支持表单（名称/描述/阶段/产物）与 JSON 高级视图；表单暂不编辑规则/里程碑等高级字段。
-- 归类为“建议 + 逐项确认移动”，不自动批量移动文件。
-- 暂无 Wiki 手册写入与云端规程市场。
+- 规程编辑表单已覆盖名称/描述/阶段/产物/阶段规则/推荐里程碑/退出条件；内容检查等字段仍需 JSON 视图。
+- 归类建议为启发式打分，可能误判；移动需勾选确认，批量移动支持撤销最近一批（不保留更早批次）。
+- 暂无云端规程市场。
 - `release/win7` cherry-pick 仍需按 pydantic v1 适配。
