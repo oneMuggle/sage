@@ -64,6 +64,8 @@ export function LocalOcrCard() {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [downloadingModel, setDownloadingModel] = useState(false);
   const [modelStatus, setModelStatus] = useState<string | null>(null);
+  const [cleaningJobs, setCleaningJobs] = useState(false);
+  const [cleanupStatus, setCleanupStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -163,7 +165,6 @@ export function LocalOcrCard() {
     }
   };
 
-
   const resetDefaultModel = async () => {
     const api = window.electronAPI?.modelDownload;
     if (!api?.resetOcr) {
@@ -174,9 +175,7 @@ export function LocalOcrCard() {
     try {
       const result = await api.resetOcr();
       if (!result.ok) {
-        setModelStatus(
-          t('settings.ocr.model_failed').replace('{error}', result.error ?? ''),
-        );
+        setModelStatus(t('settings.ocr.model_failed').replace('{error}', result.error ?? ''));
         return;
       }
       await ocrApi.reload();
@@ -184,6 +183,26 @@ export function LocalOcrCard() {
       setModelStatus(t('settings.ocr.model_reset_done'));
     } finally {
       setDownloadingModel(false);
+    }
+  };
+
+  const cleanupBatchJobs = async () => {
+    setCleaningJobs(true);
+    setCleanupStatus(null);
+    try {
+      const result = await ocrApi.batchCleanup(0);
+      setCleanupStatus(
+        t('settings.ocr.jobs_cleaned').replace('{count}', String(result.removed)),
+      );
+    } catch (err) {
+      setCleanupStatus(
+        t('settings.ocr.jobs_cleanup_failed').replace(
+          '{error}',
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+    } finally {
+      setCleaningJobs(false);
     }
   };
 
@@ -357,6 +376,25 @@ export function LocalOcrCard() {
           onChange={(e) => save({ ...config, prefer_local_for_images: e.target.checked })}
         />
       </label>
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2 text-xs">
+        <button
+          type="button"
+          data-testid="settings-ocr-cleanup-jobs"
+          disabled={cleaningJobs}
+          onClick={cleanupBatchJobs}
+          className="rounded-radius-sm border border-border bg-surface px-2 py-1 text-xs text-text disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {cleaningJobs
+            ? t('settings.ocr.jobs_cleaning')
+            : t('settings.ocr.jobs_cleanup')}
+        </button>
+        {cleanupStatus && (
+          <span data-testid="settings-ocr-cleanup-status" className="text-muted">
+            {cleanupStatus}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

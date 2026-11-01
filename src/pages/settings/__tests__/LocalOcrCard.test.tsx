@@ -9,6 +9,7 @@ const { mocks } = vi.hoisted(() => ({
     capabilities: vi.fn(),
     recognize: vi.fn(),
     reload: vi.fn(),
+    batchCleanup: vi.fn(),
     getPreference: vi.fn(),
     setPreference: vi.fn(),
   },
@@ -19,6 +20,7 @@ vi.mock('../../../shared/api/ocrApi', () => ({
     capabilities: mocks.capabilities,
     recognize: mocks.recognize,
     reload: mocks.reload,
+    batchCleanup: mocks.batchCleanup,
   },
 }));
 
@@ -132,9 +134,7 @@ describe('LocalOcrCard', () => {
       expect(downloadOcr).toHaveBeenCalledTimes(1);
       expect(mocks.reload).toHaveBeenCalledTimes(1);
     });
-    expect(screen.getByTestId('settings-ocr-model-status')).toHaveTextContent(
-      '已启用 tiny 模型',
-    );
+    expect(screen.getByTestId('settings-ocr-model-status')).toHaveTextContent('已启用 tiny 模型');
   });
 
   it('cancels an in-flight OCR model download', async () => {
@@ -145,9 +145,7 @@ describe('LocalOcrCard', () => {
       reason: '',
     });
     mocks.getPreference.mockResolvedValue(null);
-    let resolveDownload:
-      | ((value: { ok: boolean; error?: string }) => void)
-      | undefined;
+    let resolveDownload: ((value: { ok: boolean; error?: string }) => void) | undefined;
     const downloadOcr = vi.fn(
       () =>
         new Promise<{ ok: boolean; error?: string }>((resolve) => {
@@ -182,9 +180,7 @@ describe('LocalOcrCard', () => {
     resolveDownload?.({ ok: false, error: 'cancelled' });
 
     await waitFor(() => {
-      expect(screen.getByTestId('settings-ocr-model-status')).toHaveTextContent(
-        '已取消下载',
-      );
+      expect(screen.getByTestId('settings-ocr-model-status')).toHaveTextContent('已取消下载');
     });
   });
 
@@ -209,6 +205,31 @@ describe('LocalOcrCard', () => {
       expect(screen.getByTestId('settings-ocr-test-result')).toHaveTextContent('SAGE OCR 123');
     });
     expect(mocks.recognize).toHaveBeenCalledWith(expect.stringContaining('data:image/png'));
+  });
+
+  it('cleans finished OCR batch records', async () => {
+    mocks.capabilities.mockResolvedValue({
+      enabled: true,
+      available: true,
+      selected_engine: 'rapidocr',
+      reason: '',
+    });
+    mocks.getPreference.mockResolvedValue(null);
+    mocks.batchCleanup.mockResolvedValue({ removed: 3 });
+
+    renderCard();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-ocr-cleanup-jobs')).not.toBeDisabled();
+    });
+    fireEvent.click(screen.getByTestId('settings-ocr-cleanup-jobs'));
+
+    await waitFor(() => {
+      expect(mocks.batchCleanup).toHaveBeenCalledWith(0);
+      expect(screen.getByTestId('settings-ocr-cleanup-status')).toHaveTextContent(
+        '已清理 3 条记录',
+      );
+    });
   });
 
   it('shows unavailable hint when no engine is present', async () => {
