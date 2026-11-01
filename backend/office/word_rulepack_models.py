@@ -207,6 +207,37 @@ class WordRuleExtractionResult(BaseModel):
     summary: WordRuleExtractionSummary = Field(default_factory=WordRuleExtractionSummary)
 
 
+class WordRevisionChange(BaseModel):
+    """One planned/applied tracked-change replacement."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule_id: Optional[str] = Field(default=None, max_length=80)
+    find: str = Field(min_length=1, max_length=2000)
+    replace: str = Field(default="", max_length=2000)
+    comment: str = Field(default="", max_length=1000)
+    applied: bool = False
+    reason: str = Field(default="", max_length=500)
+
+
+class WordRevisionResult(BaseModel):
+    """POST /office/word/audit/revise result."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    source_path: str
+    output_path: str
+    overwritten: bool = False
+    rule_pack_id: str = ""
+    planned: int = Field(ge=0, default=0)
+    applied: int = Field(ge=0, default=0)
+    skipped: int = Field(ge=0, default=0)
+    changes: List[WordRevisionChange] = Field(default_factory=list)
+    remaining: Optional[WordAuditResult] = None
+    warnings: List[Dict[str, str]] = Field(default_factory=list)
+
+
 __all__ = [
     "IssueScope",
     "PackOrigin",
@@ -217,6 +248,8 @@ __all__ = [
     "WordAuditResult",
     "WordAuditSummary",
     "WordFixAction",
+    "WordRevisionChange",
+    "WordRevisionResult",
     "WordRuleCandidate",
     "WordRuleConflict",
     "WordRuleExtractionResult",

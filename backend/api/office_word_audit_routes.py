@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,6 +14,10 @@ from backend.office.path_safety import resolve_within
 from backend.office.storage import validate_workspace
 from backend.office.word_audit import audit_word_document
 from backend.office.word_fix import fix_word_document
+from backend.office.word_revision_writer import (
+    apply_word_revisions,
+    build_revision_plan,
+)
 from backend.office.word_rule_extract import (
     extract_word_rules,
     extract_word_rules_async,
@@ -21,6 +25,7 @@ from backend.office.word_rule_extract import (
 from backend.office.word_rulepack_models import (
     WordAuditFixResult,
     WordAuditResult,
+    WordRevisionResult,
     WordRuleExtractionResult,
     WordRulePack,
     WordRulePackDetailResult,
@@ -94,6 +99,34 @@ class WordRuleExtractSaveRequest(BaseModel):
 
     workspace_path: str
     pack: WordRulePack
+
+
+class WordRevisionChangeRequest(BaseModel):
+    """One requested tracked replacement."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule_id: Optional[str] = Field(default=None, max_length=80)
+    find: str = Field(min_length=1, max_length=2000)
+    replace: str = Field(default="", max_length=2000)
+    comment: str = Field(default="", max_length=1000)
+
+
+class WordAuditReviseRequest(BaseModel):
+    """POST /office/word/audit/revise body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str = Field(min_length=1, max_length=2000)
+    rulepack_id: Optional[str] = Field(default=None, max_length=80)
+    rulepack: Optional[WordRulePack] = None
+    changes: Optional[List[WordRevisionChangeRequest]] = None
+    output_filename: Optional[str] = Field(default=None, max_length=255)
+    overwrite: bool = False
+    author: str = Field(default="Sage", min_length=1, max_length=100)
+    add_comments: bool = True
+    max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
 
 
 def _check_size_limit(file_path: Path, max_size_bytes: int) -> None:
@@ -239,9 +272,52 @@ def save_extracted_rulepack_endpoint(
     )
 
 
+@router.post("/audit/revise")
+def revise_word_endpoint(req: WordAuditReviseRequest) -> WordRevisionResult:
+    """Write tracked replacements/comments, then re-audit (M4b)."""
+    workspace = validate_workspace(Path(req.workspace_path))
+    file_path = resolve_within(workspace, Path(req.file_path))
+    if not file_path.is_file():
+        raise OfficePathError(
+            f"file_path is not a regular file: {req.file_path}",
+            file_path=file_path,
+        )
+    _check_size_limit(file_path, req.max_size_bytes)
+    if req.rulepack is not None:
+        pack = req.rulepack
+    else:
+        pack = load_rulepack(workspace, req.rulepack_id or DEFAULT_RULEPACK_ID)["pack"]
+    if req.changes is not None:
+        raw_changes = [change.model_dump() for change in req.changes]
+    else:
+        audit = audit_word_document(file_path, pack, workspace_path=str(workspace))
+        raw_changes = build_revision_plan(audit.issues, pack)
+    if not raw_changes:
+        raise OfficeParseError("没有可应用的修订")
+    result = apply_word_revisions(
+        file_path,
+        raw_changes,
+        req.output_filename,
+        overwrite=req.overwrite,
+        author=req.author,
+        workspace_path=str(workspace),
+        rule_pack_id=pack.id,
+        add_comments=req.add_comments,
+    )
+    target = (
+        file_path
+        if result.overwritten
+        else resolve_within(workspace, workspace / Path(result.output_path))
+    )
+    remaining = audit_word_document(target, pack, workspace_path=str(workspace))
+    return result.model_copy(update={"remaining": remaining, "ok": remaining.ok})
+
+
 __all__ = [
     "WordAuditFixRequest",
     "WordAuditRequest",
+    "WordAuditReviseRequest",
+    "WordRevisionChangeRequest",
     "WordRuleExtractRequest",
     "WordRuleExtractSaveRequest",
     "WordRulePackSaveRequest",
@@ -251,6 +327,7 @@ __all__ = [
     "fix_word_endpoint",
     "get_rulepack_endpoint",
     "list_rulepacks_endpoint",
+    "revise_word_endpoint",
     "router",
     "save_extracted_rulepack_endpoint",
     "save_rulepack_endpoint",
