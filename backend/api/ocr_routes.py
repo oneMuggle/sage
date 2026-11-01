@@ -67,6 +67,14 @@ class OcrPdfBatchRequest(BaseModel):
     max_pages: int = Field(default=MAX_PDF_PAGES, ge=1, le=MAX_PDF_PAGES)
 
 
+class OcrBatchCleanupRequest(BaseModel):
+    """清理已完成任务；缺省按服务端 TTL（7 天）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    older_than_s: Optional[int] = Field(default=None, ge=0)
+
+
 
 @router.get("/capabilities")
 def ocr_capabilities() -> dict:
@@ -126,6 +134,13 @@ def ocr_batch_pdf(payload: OcrPdfBatchRequest) -> dict:
     }
 
 
+@router.post("/batch/cleanup")
+def ocr_batch_cleanup(payload: OcrBatchCleanupRequest) -> dict:
+    """清理已结束任务；缺省按 7 天 TTL。"""
+    removed = get_ocr_batch_service().cleanup(payload.older_than_s)
+    return {"removed": removed}
+
+
 @router.get("/batch/{job_id}")
 def ocr_batch_status(job_id: str) -> dict:
     """查询批处理进度与结果。"""
@@ -133,6 +148,14 @@ def ocr_batch_status(job_id: str) -> dict:
     if job is None:
         raise HTTPException(status_code=404, detail="job_not_found")
     return job
+
+
+@router.delete("/batch/{job_id}")
+def ocr_batch_delete(job_id: str) -> dict:
+    """删除任务及其持久化快照。"""
+    if not get_ocr_batch_service().delete(job_id):
+        raise HTTPException(status_code=404, detail="job_not_found")
+    return {"ok": True}
 
 
 @router.post("/batch/{job_id}/cancel")
