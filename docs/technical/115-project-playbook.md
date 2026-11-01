@@ -159,9 +159,11 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 
 ## 8. 前端
 
-- `src/features/playbook/PlaybookCard.tsx` 挂载在项目概览 Tab（完整模式）与设置 Tab（紧凑模式）；
+- 主卡片 `PlaybookCard` 挂载在项目治理页「概览」Tab；同目录下还有 `PlaybookChecklist`（待补项/退出条件）、`PlaybookClassificationPanel`（归类与未知文件批量移动/撤销）、`PlaybookLibraryPanel`（全局规程库管理）、`PlaybookSpecEditor`（表单/JSON 编辑）、`PlaybookAuthorPanel`、`PlaybookImportPreviewCard` 与 `PlaybookVersionsPanel`；
 - 展示阶段条、整体完成度、当前阶段待补项、阶段推进确认、导出/导入；
-- 所有动作按钮均需用户点击；错误与结果就地显示。
+- 所有动作按钮均需用户点击；错误与结果就地显示，并通过 `role="status"` / `aria-live="polite"` 暴露给读屏；
+- 文案 i18n：词典位于 `src/shared/lib/i18n/locales/{zh,en}/playbook.ts`，组件通过 `usePlaybookI18n()` 取 `t/tf`；无 `I18nProvider` 时回退中文（便于组件单测）。**后端返回的审计 reason 与错误消息仍为中文**，英文界面下这部分保持原文；后续如需全量本地化，应改为后端返回 code + params。
+
 
 ## 9. 安全与隐私
 
@@ -190,5 +192,6 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 - 规程编辑表单已覆盖名称/描述/阶段/产物/阶段规则/推荐里程碑/退出条件；内容检查等字段仍需 JSON 视图。
 - 归类建议为启发式打分，可能误判；移动需勾选确认，批量移动支持撤销最近一批（不保留更早批次）。
 - 导入 diff 为结构级（阶段/产物/规则/里程碑/退出条件，各列表最多 20 项），不展示 `content_checks` 的文本级差异。
+- 规程前端文案已支持 zh/en；后端审计 reason、错误消息与内置规程内容仍为中文，英文界面下不回退翻译。
 - 暂无云端规程市场。
 - `release/win7` cherry-pick 仍需按 pydantic v1 适配。
