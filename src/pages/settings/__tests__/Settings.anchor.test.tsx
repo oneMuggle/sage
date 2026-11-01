@@ -258,3 +258,13 @@ describe('导航快捷键与最近访问 (P3)', () => {
     expect(screen.getByTestId('settings-recent-memory')).toBeInTheDocument();
   });
 });
+
+describe('设置页标题层级 (2026-11-01)', () => {
+  it('renders exactly one page-level h1 matching the active tab', () => {
+    renderSettings();
+    const headings = screen.getAllByRole('heading', { level: 1 });
+    expect(headings).toHaveLength(1);
+    expect(headings[0].textContent).toContain('基础');
+    expect(screen.getByTestId('settings-page-header')).toBeInTheDocument();
+  });
+});
