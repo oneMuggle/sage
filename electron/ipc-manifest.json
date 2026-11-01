@@ -106,6 +106,8 @@
     "office_word_read": { "method": "POST", "path": "/api/v1/office/word/read" },
     "office_word_repair": { "method": "POST", "path": "/api/v1/office/word/repair" },
     "office_word_rulepack_get": { "method": "GET", "path": "/api/v1/office/word/rulepacks/{packId}" },
+    "office_word_rulepacks_extract": { "method": "POST", "path": "/api/v1/office/word/rulepacks/extract" },
+    "office_word_rulepacks_extract_save": { "method": "POST", "path": "/api/v1/office/word/rulepacks/extract/save" },
     "office_word_rulepacks_list": { "method": "GET", "path": "/api/v1/office/word/rulepacks" },
     "orchestration_board": { "method": "GET", "path": "/api/v1/orchestration/board" },
     "orchestration_cancel_lane": { "method": "POST", "path": "/api/v1/orchestration/lanes/{lane_id}/cancel" },

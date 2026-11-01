@@ -13,6 +13,10 @@ import type {
   WordAuditFixResult,
   WordAuditRequest,
   WordAuditResult,
+  WordRuleExtractRequest,
+  WordRuleExtractionResult,
+  WordRulePack,
+  WordRulePackDetailResult,
   WordRulePackListResult,
 } from './wordAuditTypes';
 
@@ -69,6 +73,42 @@ export const wordAuditApi = {
         ...(req.output_filename !== undefined ? { outputFilename: req.output_filename } : {}),
         overwrite: req.overwrite ?? false,
         ...(req.max_size_bytes !== undefined ? { maxSizeBytes: req.max_size_bytes } : {}),
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Extract a draft rule pack from a spec/template document (M3a/M3c).
+   * Deterministic backend; no writing until saveExtractedRulePack is called.
+   */
+  async extractWordRules(req: WordRuleExtractRequest): Promise<WordRuleExtractionResult> {
+    try {
+      return await invoke<WordRuleExtractionResult>('office_word_rulepacks_extract', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+        fileType: req.file_type ?? 'spec',
+        ...(req.pack_id ? { packId: req.pack_id } : {}),
+        ...(req.pack_name ? { packName: req.pack_name } : {}),
+        ...(req.max_size_bytes !== undefined ? { maxSizeBytes: req.max_size_bytes } : {}),
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Save a reviewed extraction pack. Backend rejects rules without source.
+   */
+  async saveExtractedRulePack(req: {
+    workspace_path: string;
+    pack: WordRulePack;
+  }): Promise<WordRulePackDetailResult> {
+    try {
+      return await invoke<WordRulePackDetailResult>('office_word_rulepacks_extract_save', {
+        workspacePath: req.workspace_path,
+        pack: req.pack,
       });
     } catch (error) {
       throw handleApiError(error);

@@ -117,6 +117,53 @@ export interface WordAuditFixResult {
   warnings: Array<{ code: string; message: string }>;
 }
 
+export interface WordRulePackDetailResult {
+  ok: boolean;
+  workspace_path: string;
+  origin: WordRulePackOrigin;
+  pack: WordRulePack;
+}
+
+export interface WordRuleCandidate {
+  rule: WordRuleSpec;
+  confidence: number;
+  source_excerpt?: string;
+  conflict_group?: string | null;
+}
+
+export interface WordRuleConflict {
+  kind: string;
+  rule_ids: string[];
+  message: string;
+}
+
+export interface WordRuleExtractionSummary {
+  rules: number;
+  candidates: number;
+  conflicts: number;
+  warnings: number;
+}
+
+export interface WordRuleExtractionResult {
+  ok: boolean;
+  source_path: string;
+  file_type: 'spec' | 'template';
+  pack: WordRulePack;
+  candidates: WordRuleCandidate[];
+  conflicts: WordRuleConflict[];
+  warnings: Array<{ code: string; message: string }>;
+  summary: WordRuleExtractionSummary;
+}
+
+export interface WordRuleExtractRequest {
+  workspace_path: string;
+  file_path: string;
+  file_type?: 'spec' | 'template';
+  pack_id?: string;
+  pack_name?: string;
+  max_size_bytes?: number;
+}
+
 export interface WordAuditRequest {
   workspace_path: string;
   file_path: string;
