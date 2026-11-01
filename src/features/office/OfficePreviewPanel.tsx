@@ -34,6 +34,7 @@ import {
   FileType,
   Pencil,
   Presentation,
+  ShieldCheck,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -50,6 +51,7 @@ import type {
 import { useI18n } from '../../shared/lib/i18n';
 import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
 
+import { DocumentAuditPanel } from './DocumentAuditPanel';
 import { DocxNativePreview } from './DocxNativePreview';
 import {
   ExcelPreview,
@@ -230,6 +232,13 @@ export function OfficePreviewPanel({
   const [fidelityLoading, setFidelityLoading] = useState(false);
   const [fidelityUrl, setFidelityUrl] = useState<string | null>(null);
   const [fidelityKey, setFidelityKey] = useState<string | null>(null);
+  // M2c: Word 规则审校面板 + 段落定位高亮。
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [highlightParagraphIndex, setHighlightParagraphIndex] = useState<number | null>(null);
+  useEffect(() => {
+    setAuditOpen(false);
+    setHighlightParagraphIndex(null);
+  }, [summaryId]);
   const [copiedSummary, setCopiedSummary] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
   const fidelityElapsed = useElapsedSeconds(fidelityLoading);
@@ -554,6 +563,26 @@ export function OfficePreviewPanel({
                 )}
               </button>
             )}
+            {preview.docType === 'word' && Boolean(workspacePath ?? summary.workspace_path) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAuditOpen((open) => !open);
+                  if (!auditOpen) setFidelityOn(false);
+                }}
+                aria-pressed={auditOpen}
+                className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors ${
+                  auditOpen
+                    ? 'border-primary text-primary bg-primary/10'
+                    : 'border-border text-text-secondary hover:bg-bg-hover'
+                }`}
+                data-testid="office-word-audit-toggle"
+                aria-label="Word 规则审校"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                规则审校
+              </button>
+            )}
             {onEditPreview && (
               <button
                 type="button"
@@ -661,11 +690,31 @@ export function OfficePreviewPanel({
           ) : (
             <>
               {preview.docType === 'ppt' && <PptPreview data={preview.data} />}
-              {preview.docType === 'word' && <WordPreview data={preview.data} />}
+              {preview.docType === 'word' && (
+                <WordPreview
+                  data={preview.data}
+                  highlightParagraphIndex={highlightParagraphIndex}
+                />
+              )}
               {preview.docType === 'excel' && <ExcelPreview key={summary.id} data={preview.data} />}
               {preview.docType === 'pdf' && <PdfPreview data={preview.data} />}
             </>
           )}
+        </div>
+      )}
+
+      {auditOpen && preview.docType === 'word' && (
+        <div className="border-t border-border p-4" data-testid="office-word-audit-host">
+          <DocumentAuditPanel
+            workspacePath={workspacePath ?? summary.workspace_path ?? ''}
+            filePath={buildManagedPath(workspacePath ?? summary.workspace_path ?? '')}
+            filename={summary.generated_filename}
+            onLocate={(anchor) => {
+              setFidelityOn(false);
+              setHighlightParagraphIndex(anchor.paragraph_index ?? null);
+            }}
+            onFixed={onRefresh}
+          />
         </div>
       )}
     </div>
