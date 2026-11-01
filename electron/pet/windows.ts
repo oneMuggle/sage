@@ -113,11 +113,7 @@ export class PetWindow {
     // Stack additional pets to the left of the default bottom-right corner so
     // they don't spawn on top of each other; stored positions are respected.
     const offset = stored ? 0 : this.options.instanceIndex * (size.width + 12);
-    const position = clampToWorkArea(
-      { x: base.x - offset, y: base.y },
-      size,
-      display.workArea,
-    );
+    const position = clampToWorkArea({ x: base.x - offset, y: base.y }, size, display.workArea);
 
     const transparent = !this.compatibility;
     const preload = join(__dirname, '..', 'preload.js');
@@ -176,7 +172,7 @@ export class PetWindow {
 
     this.win.once('ready-to-show', () => this.show());
     this.showFallback = setTimeout(() => this.show(), SHOW_FALLBACK_MS);
-    if (!this.compatibility) this.setIgnoreMouse(true);
+    if (this.clickThroughActive()) this.setIgnoreMouse(true);
     this.startTimers();
   }
 
@@ -252,7 +248,7 @@ export class PetWindow {
   hide(): void {
     if (!this.win || this.win.isDestroyed()) return;
     this.win.hide();
-    this.setIgnoreMouse(true);
+    if (this.clickThroughActive()) this.setIgnoreMouse(true);
   }
 
   toggleVisible(): void {
@@ -307,7 +303,7 @@ export class PetWindow {
     this.dragStartCursor = null;
     this.dragStartPosition = null;
     this.savePosition();
-    this.setIgnoreMouse(true);
+    if (this.clickThroughActive()) this.setIgnoreMouse(true);
   }
 
   resetPosition(): void {
@@ -403,6 +399,17 @@ export class PetWindow {
         err: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  /**
+   * Click-through is only switched on for the transparent overlay. The opaque
+   * compatibility window and the polling-unavailable fallback stay fully
+   * interactive — otherwise restoring "click-through" after a drag (or a
+   * hide/show cycle) would leave no code path to make the window clickable
+   * again.
+   */
+  private clickThroughActive(): boolean {
+    return !this.compatibility && !this.pointerFallbackBroken;
   }
 
   private setIgnoreMouse(ignore: boolean): void {

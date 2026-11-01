@@ -12,6 +12,33 @@ import type { PetController } from './controller';
 
 const UNAUTHORIZED = '未授权的宠物窗口请求';
 
+/** Every channel registered below; kept in sync so dispose can unregister. */
+const PET_INVOKE_CHANNELS = [
+  'pet:get-config',
+  'pet:set-config',
+  'pet:get-state',
+  'pet:list-packs',
+  'pet:api-info',
+  'pet:import-pack',
+  'pet:export-pack',
+  'pet:delete-pack',
+] as const;
+
+const PET_EVENT_CHANNELS = [
+  'pet:ready',
+  'pet:open-session',
+  'pet:open-settings',
+  'pet:show-menu',
+  'pet:drag-start',
+  'pet:drag-move',
+  'pet:drag-end',
+  'pet:reset-position',
+  'pet:set-panel',
+  'pet:pat',
+  'pet:report-tasks',
+  'pet:hide',
+] as const;
+
 function sessionIdOf(payload: unknown): string | null {
   if (typeof payload === 'string') return payload;
   if (payload && typeof payload === 'object' && 'sessionId' in payload) {
@@ -156,4 +183,14 @@ export function registerPetIpc(controller: PetController): void {
   ipcMain.on('pet:hide', (evt) => {
     if (isPet(evt)) controller.hideForNow(evt.sender);
   });
+}
+
+/**
+ * Remove every pet channel. `disposePet()` nulls the controller but a later
+ * `initPet()` (e.g. macOS activate after the window was closed) would
+ * otherwise call `ipcMain.handle` on already-registered channels and throw.
+ */
+export function unregisterPetIpc(): void {
+  for (const channel of PET_INVOKE_CHANNELS) ipcMain.removeHandler(channel);
+  for (const channel of PET_EVENT_CHANNELS) ipcMain.removeAllListeners(channel);
 }

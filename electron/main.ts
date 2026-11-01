@@ -206,7 +206,13 @@ if (!gotSingleInstanceLock) {
 // 二次启动时聚焦/还原已有主窗口。没有这个处理器, 双击图标会静默退出,
 // 用户观感是"点了没反应"。
 app.on('second-instance', (_event, argv) => {
-  const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
+  const petController = getPetController();
+  // Prefer the real main window; the pet overlay (focusable:false) and the
+  // built-in browser are windows too, so never focus them as "the app".
+  const fallback = BrowserWindow.getAllWindows().find(
+    (candidate) => !petController?.isPetSender(candidate.webContents),
+  );
+  const win = mainWindow ?? fallback ?? null;
   // E-1: 第二实例可能携带 sage:// 深链 —— 聚焦窗口并跳转到目标会话
   const sageUrl = extractSageUrlFromArgv(Array.isArray(argv) ? argv : []);
   if (sageUrl) {
@@ -479,7 +485,6 @@ function resolveBundledTesseract(): string | null {
   ];
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
-
 
 function spawnBackend(): ChildProcess {
   // Resolve SAGE_DB_PATH and SAGE_USER_DATA_DIR once so both packaged and
@@ -1037,9 +1042,11 @@ function createMainWindow(): void {
   setMainWindow(win);
   ensurePetInitialized();
 
-  // 主窗口关闭时一并回收内置浏览器窗口：否则残留的可见/隐藏窗口会让
-  // window-all-closed 永不触发，进程在无 UI 状态下继续存活。
+  // 主窗口关闭时一并回收内置浏览器窗口与桌宠窗口：否则残留的可见/隐藏窗口
+  // 会让 window-all-closed 永不触发，进程在无 UI 状态下继续存活（桌宠是
+  // 独立 BrowserWindow，只回收 agentBrowser 不够）。
   win.on('closed', () => {
+    disposePet();
     if (agentBrowserHandle) {
       void agentBrowserHandle.close();
       agentBrowserHandle = null;
@@ -1269,8 +1276,7 @@ async function registerIpcHandlers(): Promise<void> {
           const args = payload.args ?? {};
           const sessionId = typeof args.sessionId === 'string' ? args.sessionId : null;
           const rawMax = Number(args.maxContext);
-          const contextMax =
-            Number.isFinite(rawMax) && rawMax > 0 ? rawMax : null;
+          const contextMax = Number.isFinite(rawMax) && rawMax > 0 ? rawMax : null;
           if (typeof streamId === 'string') {
             getPetController()?.trackStream(streamId, sessionId, contextMax);
           }
@@ -2801,14 +2807,14 @@ app
       return;
     }
     // P1: Win7 无系统浏览器时使用 Sage 自带 Chromium（SAGE_FORCE_EMBEDDED_BROWSER=1 便于非 Win7 验证）。
-  const embeddedBrowserEnabled =
-    process.env.SAGE_FORCE_EMBEDDED_BROWSER === '1' ||
-    (process.platform === 'win32' && osRelease().startsWith('6.1'));
-  if (embeddedBrowserEnabled) {
-    updateSplashStage('正在准备内置浏览器…');
-    agentBrowserHandle = await startAgentBrowserHost();
-  }
-  updateSplashStage('正在启动后端服务…');
+    const embeddedBrowserEnabled =
+      process.env.SAGE_FORCE_EMBEDDED_BROWSER === '1' ||
+      (process.platform === 'win32' && osRelease().startsWith('6.1'));
+    if (embeddedBrowserEnabled) {
+      updateSplashStage('正在准备内置浏览器…');
+      agentBrowserHandle = await startAgentBrowserHost();
+    }
+    updateSplashStage('正在启动后端服务…');
     try {
       backendProc = spawnBackend();
     } catch (err) {
