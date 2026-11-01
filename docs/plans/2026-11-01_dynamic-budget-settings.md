@@ -80,3 +80,22 @@
   → **134 passed**；
 - `ruff check` 改动后端文件通过；py38 兼容 0 violations；
 - `architecture-check` 通过（agent.py ratchet 至 3427）。
+
+## 7. 追加：交互式「继续 / 自动继续 / 停止」（2026-11-01）
+
+复用现有 `ask_user_question` 闸口与 `QuestionDialog`，不新增 UI/路由：
+
+- 动态预算审计判定停止（stuck / no_progress / extension_limit）时，主 agent
+  通过 `QuestionRequest` 发出三选一提问：
+  - **继续（再延长一次）**：上限 +chunk，本次继续；
+  - **自动继续**：标记 `_auto_continue`，后续检查点自动延长直到硬顶，不再询问；
+  - **停止**：带 `reason=user_stopped` 结束。
+- 无人值守 / 子代理 / gate 未初始化 / 超时 → 直接停止（fail-safe），不阻塞。
+- `hard_cap` 不再询问，直接停止。
+- 延长事件 `budget_info.action` 区分 `extend` / `user_extend` / `auto_extend`。
+
+### 验证（追加）
+
+- `test_iteration_budget` 新增 继续 / 自动继续 / 停止 三条集成用例；
+- 与 run_loop / 复读守卫 / subagent_events 联跑 **95 passed**；
+- ruff 通过。

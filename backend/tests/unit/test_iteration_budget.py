@@ -439,3 +439,126 @@ async def test_run_loop_force_dynamic_with_initial_budget():
     assert checkpoint.budget_info["previous_budget"] == 2
     assert AgentState.DONE in [e.state for e in events]
     assert AgentState.FAILED not in [e.state for e in events]
+
+
+class _FakeBudgetGate:
+    """固定返回用户选择的提问闸口替身。"""
+
+    def __init__(self, labels) -> None:
+        self._labels = tuple(labels)
+        self.requests = []
+
+    async def request(self, req, timeout=300.0):  # noqa: ANN001, ANN201
+        self.requests.append(req)
+        from backend.services.question_gate import QuestionAnswer
+
+        return QuestionAnswer(answers=self._labels, custom=None, answered_by="gui")
+
+
+@pytest.mark.asyncio()
+async def test_iteration_budget_question_continue_extends_and_completes():
+    """预算到期询问 → 用户选「继续」→ 延长并完成。"""
+    gate = _FakeBudgetGate(["继续（再延长一次）"])
+    agent = _make_agent(
+        [_tool_response("a"), _tool_response("b"), _tool_response("c"), _text_response("完成")]
+    )
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=SimpleNamespace(
+            max_iterations=7,
+            dynamic_budget_enabled=True,
+            budget_max_extensions=0,
+            budget_hard_cap=10,
+        ),
+    ), patch(
+        "backend.core.legacy.agent.get_question_gate",
+        return_value=gate,
+    ):
+        events = [
+            evt
+            async for evt in agent.run_loop(
+                [{"role": "user", "content": "hi"}],
+                dynamic_budget=True,
+                initial_iteration_budget=2,
+            )
+        ]
+
+    assert len(gate.requests) == 1
+    assert AgentState.ASK_USER_QUESTION in [e.state for e in events]
+    checkpoint = next(
+        e for e in events if e.state == AgentState.ITERATION_CHECKPOINT
+    )
+    assert checkpoint.budget_info is not None
+    assert checkpoint.budget_info["action"] == "user_extend"
+    assert AgentState.DONE in [e.state for e in events]
+
+
+@pytest.mark.asyncio()
+async def test_iteration_budget_question_auto_continue_extends_and_completes():
+    """预算到期询问 → 用户选「自动继续」→ 标记 auto_extend 并完成。"""
+    gate = _FakeBudgetGate(["自动继续"])
+    agent = _make_agent(
+        [_tool_response("a"), _tool_response("b"), _tool_response("c"), _text_response("完成")]
+    )
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=SimpleNamespace(
+            max_iterations=7,
+            dynamic_budget_enabled=True,
+            budget_max_extensions=0,
+            budget_hard_cap=10,
+        ),
+    ), patch(
+        "backend.core.legacy.agent.get_question_gate",
+        return_value=gate,
+    ):
+        events = [
+            evt
+            async for evt in agent.run_loop(
+                [{"role": "user", "content": "hi"}],
+                dynamic_budget=True,
+                initial_iteration_budget=2,
+            )
+        ]
+
+    assert len(gate.requests) == 1
+    checkpoint = next(
+        e for e in events if e.state == AgentState.ITERATION_CHECKPOINT
+    )
+    assert checkpoint.budget_info is not None
+    assert checkpoint.budget_info["action"] == "auto_extend"
+    assert AgentState.DONE in [e.state for e in events]
+
+
+@pytest.mark.asyncio()
+async def test_iteration_budget_question_stop_yields_failed():
+    """预算到期询问 → 用户选「停止」→ 带 user_stopped 原因结束。"""
+    gate = _FakeBudgetGate(["停止"])
+    agent = _make_agent(
+        [_tool_response("a"), _tool_response("b"), _text_response("完成")]
+    )
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=SimpleNamespace(
+            max_iterations=7,
+            dynamic_budget_enabled=True,
+            budget_max_extensions=0,
+            budget_hard_cap=10,
+        ),
+    ), patch(
+        "backend.core.legacy.agent.get_question_gate",
+        return_value=gate,
+    ):
+        events = [
+            evt
+            async for evt in agent.run_loop(
+                [{"role": "user", "content": "hi"}],
+                dynamic_budget=True,
+                initial_iteration_budget=2,
+            )
+        ]
+
+    assert len(gate.requests) == 1
+    failed = [e for e in events if e.state == AgentState.FAILED]
+    assert len(failed) == 1
+    assert "reason=user_stopped" in (failed[0].error or "")

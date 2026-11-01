@@ -1861,6 +1861,7 @@ class SageAgent:
         _step_history: List[Any] = []
         _seen_result_hashes: set = set()
         _budget_extensions = 0
+        _auto_continue = False
         _budget_stop_reason: Optional[str] = None
         _iter_message_start: Optional[int] = None
 
@@ -1888,25 +1889,108 @@ class SageAgent:
                         _budget_extensions,
                         _budget_config,
                     )
-                    if _decision.action == "extend":
+                    _chunk = max(
+                        _budget_config.min_extension,
+                        min(
+                            _budget_config.max_extension,
+                            int(effective_max_iterations * _budget_config.extension_ratio),
+                        ),
+                    )
+                    _next_budget = min(
+                        _budget_config.hard_cap,
+                        max(
+                            int(effective_max_iterations) + 1,
+                            int(effective_max_iterations) + _chunk,
+                        ),
+                    )
+                    if _decision.action == "extend" or _auto_continue:
+                        if _next_budget <= effective_max_iterations:
+                            _budget_stop_reason = "hard_cap"
+                            break
                         _previous_budget = int(effective_max_iterations)
-                        effective_max_iterations = _decision.next_budget
+                        effective_max_iterations = _next_budget
                         _budget_extensions += 1
+                        _info = build_budget_info(
+                            level=_budget_level,
+                            previous_budget=_previous_budget,
+                            next_budget=effective_max_iterations,
+                            extensions=_budget_extensions,
+                            audit=_audit,
+                        )
+                        _info["action"] = "auto_extend" if _auto_continue else "extend"
                         yield AgentEvent(
                             state=AgentState.ITERATION_CHECKPOINT,
                             iteration=i,
                             agent_id=self.agent_id,
-                            budget_info=build_budget_info(
-                                level=_budget_level,
-                                previous_budget=_previous_budget,
-                                next_budget=effective_max_iterations,
-                                extensions=_budget_extensions,
-                                audit=_audit,
-                            ),
+                            budget_info=_info,
                         )
                     else:
-                        _budget_stop_reason = _decision.reason
-                        break
+                        # 2026-11-01 P1: 交互式「继续 / 自动继续 / 停止」。
+                        # 复用 ask_user_question 闸口与 QuestionDialog —— 仅主
+                        # agent 在闸口可用时询问；子代理/无人值守直接停止。
+                        _can_ask = (
+                            _decision.reason != "hard_cap"
+                            and str(self.agent_id or "") in ("", "primary")
+                            and get_question_gate() is not None
+                            and _next_budget > effective_max_iterations
+                        )
+                        if not _can_ask:
+                            _budget_stop_reason = _decision.reason
+                            break
+                        _question = QuestionRequest.create(
+                            question=(
+                                f"动态迭代预算已用完（当前上限 "
+                                f"{int(effective_max_iterations)} 步；"
+                                f"原因：{_decision.reason}）。是否继续执行？"
+                            ),
+                            options=[
+                                {
+                                    "label": "继续 Continue（再延长一次）",
+                                    "description": f"上限提高到 {_next_budget} 步",
+                                },
+                                {
+                                    "label": "自动继续 Auto-continue",
+                                    "description": "后续自动延长直到硬顶，不再询问",
+                                },
+                                {
+                                    "label": "停止 Stop",
+                                    "description": "保留当前进度并结束本次运行",
+                                },
+                            ],
+                            header="迭代预算",
+                        )
+                        yield AgentEvent(
+                            state=AgentState.ASK_USER_QUESTION,
+                            iteration=i,
+                            agent_id=self.agent_id,
+                            user_question=_question.to_dict(),
+                        )
+                        _answer = await self._await_question_answer(_question)
+                        _labels = [str(label).strip() for label in _answer.answers]
+                        _auto = any("自动" in label for label in _labels)
+                        _go = _auto or any("继续" in label for label in _labels)
+                        if not _go:
+                            _budget_stop_reason = "user_stopped"
+                            break
+                        _previous_budget = int(effective_max_iterations)
+                        effective_max_iterations = _next_budget
+                        _budget_extensions += 1
+                        if _auto:
+                            _auto_continue = True
+                        _info = build_budget_info(
+                            level=_budget_level,
+                            previous_budget=_previous_budget,
+                            next_budget=effective_max_iterations,
+                            extensions=_budget_extensions,
+                            audit=_audit,
+                        )
+                        _info["action"] = "auto_extend" if _auto else "user_extend"
+                        yield AgentEvent(
+                            state=AgentState.ITERATION_CHECKPOINT,
+                            iteration=i,
+                            agent_id=self.agent_id,
+                            budget_info=_info,
+                        )
                 # P0-1 (2026-08-20): 中断检查 —— 每轮迭代顶部消费一次中断信号（one-shot）。
                 # 此前 interrupt() 只置标志位、is_interrupted() 零调用者，run_loop 从不读，
                 # 中断请求完全无效。现在最迟在下一轮迭代开头终止：发 FAILED 事件，
