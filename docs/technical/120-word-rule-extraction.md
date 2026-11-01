@@ -90,15 +90,30 @@ POST /api/v1/office/word/rulepacks/extract/save
 ## 7. 限制（后续）
 
 - LLM 语义候选与条文分段（M3b）；
-- 规则复核 UI（来源原文、置信度、样例、启停、测试）（M3c）；
 - 规则包版本对比与导出/导入（后续）；
 - 规范中的表格/附件条文暂不扫描。
 
-## 8. 测试
+## 8. 前端接入（M3c）
+
+`/office` 页面新增「Word 规则抽取」面板（`WordRuleExtractionPanel`）：
+
+- 抽取类型：规范文档 / 范本模板；路径支持文本输入、原生选择与拖拽；
+- 结果区展示规则数、冲突数、警告数与源文件；
+- 冲突以警示块列出 kind/消息/涉及规则；warning 列表；
+- 每条候选展示标题、规则 id、置信度、冲突徽章、来源摘录与 params JSON；
+- 支持逐条启停 / 全部启停；「保存规则包（N 条）」只提交启用项；
+- 保存成功显示规则包 id 与条数；无启用规则时前端拒绝。
+
+IPC：`office_word_rulepacks_extract` / `office_word_rulepacks_extract_save`，
+均使用 `rawBody`，避免规则 `params` 的用户键被 camelCase 改写。
+
+## 9. 测试
 
 - `backend/tests/unit/office/test_word_rule_extract.py`（9）：
   spec 全类型抽取与来源/置信度、可复现、重复合并、冲突标记、字符缩进换算与缺字号 warning、
   范本主导值、无正文样本 warning、txt 规范、非法类型拒绝；
 - `backend/tests/integration/test_office_word_extract_routes.py`（4）：
   抽取→保存→列表、范本端点、无来源保存拒绝、超限/越界/非法范本类型拒绝；
-- ruff 0.4.4、py38 兼容、architecture、import-linter 通过。
+- `src/features/office/__tests__/WordRuleExtractionPanel.test.tsx`（5）：
+  无工作区提示、抽取与置信度/冲突展示、启停后只保存启用项、范本类型传参、错误展示；
+- ruff 0.4.4、py38 兼容、architecture、import-linter、tsc、ESLint、Vitest 通过。

@@ -141,6 +141,32 @@ export const officeRoutes: Record<string, CommandRoute> = {
         : {}),
     }),
   },
+  // M3c: rule extraction from spec/template documents. rawBody keeps the
+  // nested rule-pack params untouched on save.
+  office_word_rulepacks_extract: {
+    method: 'POST',
+    path: () => '/api/v1/office/word/rulepacks/extract',
+    rawBody: true,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      file_path: a.filePath ?? a.file_path,
+      file_type: a.fileType ?? a.file_type ?? 'spec',
+      ...((a.packId ?? a.pack_id) ? { pack_id: a.packId ?? a.pack_id } : {}),
+      ...((a.packName ?? a.pack_name) ? { pack_name: a.packName ?? a.pack_name } : {}),
+      ...((a.maxSizeBytes ?? a.max_size_bytes)
+        ? { max_size_bytes: a.maxSizeBytes ?? a.max_size_bytes }
+        : {}),
+    }),
+  },
+  office_word_rulepacks_extract_save: {
+    method: 'POST',
+    path: () => '/api/v1/office/word/rulepacks/extract/save',
+    rawBody: true,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      pack: a.pack,
+    }),
+  },
   // Office parity batch 1 (item 1.2): PDF read/generate.
   // Backend: backend/api/office_routes.py:495-508 (POST /pdf/read, POST /pdf/generate).
   // NOTE: PdfReadRequest is extra="forbid" — officeApi.readPdf must send
