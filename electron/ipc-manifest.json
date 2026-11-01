@@ -163,6 +163,8 @@
     "playbooks_builtin_get": { "method": "GET", "path": "/api/v1/playbooks/builtin/{playbookId}" },
     "playbooks_builtin_list": { "method": "GET", "path": "/api/v1/playbooks/builtin" },
     "playbooks_library_delete": { "method": "DELETE", "path": "/api/v1/playbooks/library/{libraryId}" },
+    "playbooks_library_export": { "method": "GET", "path": "/api/v1/playbooks/library/{libraryId}/export" },
+    "playbooks_library_get": { "method": "GET", "path": "/api/v1/playbooks/library/{libraryId}" },
     "playbooks_library_list": { "method": "GET", "path": "/api/v1/playbooks/library" },
     "playbooks_library_save": { "method": "POST", "path": "/api/v1/playbooks/library" },
     "projects_add_material": { "method": "POST", "path": "/api/v1/projects/{id}/materials" },

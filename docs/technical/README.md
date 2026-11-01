@@ -91,7 +91,7 @@
 | 112  | [会话状态徽章](./112-session-status-badges.md) | 侧栏徽章优先级 / 重试中与后台运行中 / run_status 写入链路与已知限制 |
 | 113  | [设置页信息架构整理](./113-settings-ia-consolidation.md) | 单一 tab registry 派生导航/分组/别名/类型 + 平铺分组 + 搜索索引守卫（anchor/归属/tab 数）+ 审计导出集中 + `AdvancedSection` 折叠边界与每行「恢复默认」+ i18n/CJK 守卫 |
 | 114  | [桌面宠物（大肥鱼）](./114-desktop-pet.md) | 透明置顶窗 + 点击穿透/拖拽/多屏 + Agent 事件状态映射 + 窄 `pet:*` IPC 信任边界 + dsh-pet 素材一次性移植与 MIT 出处 |
-| 115  | [项目规程 Playbook](./115-project-playbook.md) | 阶段/交付物规格 + 项目级快照 + 确定性审计与阶段识别 + 目录/骨架/规则/里程碑动作 + 全局规程库 + 未知文件批量归类/撤销 + JSON/Markdown 导出与导入冲突策略 |
+| 115  | [项目规程 Playbook](./115-project-playbook.md) | 阶段/交付物规格 + 项目级快照 + 确定性审计与阶段识别 + 目录/骨架/规则/里程碑动作 + 全局规程库（详情/导出/删除）+ 导入逐项 diff + 未知文件批量归类/撤销 + JSON/Markdown 导出与导入冲突策略 |
 | 116  | [本地 OCR](./116-local-ocr.md) | RapidOCR/Tesseract 双引擎 + 聊天兜底/预览编辑 + Office/PDF/Wiki/工具接入 + 配置、性能与 Win7 边界 |
 | 117  | [Word 文档画像](./117-word-document-profile.md) | 只读 DocumentProfile：页面设置 / 样式级联 / 段落与 run 格式 / 编号 / 表格合并 / 书签 / 域 / 锚点；旧 read 契约不变 |
 | 118  | [Word 模板 Profile 与填充](./118-word-template-profile.md) | 内容控件 / 书签 / 占位符 / 图片 / Jinja 统一槽位；页眉页脚；控制流混合渲染；保格式填充、必填校验、residual 检查 |

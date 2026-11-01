@@ -23,6 +23,8 @@ const versionsMock = vi.fn();
 const cleanupRulesMock = vi.fn();
 const importPreviewMock = vi.fn();
 const importMock = vi.fn();
+const getLibraryItemMock = vi.fn();
+const exportLibraryMock = vi.fn();
 
 vi.mock('../../../shared/api/playbookApi', () => ({
   playbookApi: {
@@ -44,6 +46,8 @@ vi.mock('../../../shared/api/playbookApi', () => ({
     cleanupRules: (...args: unknown[]) => cleanupRulesMock(...args),
     importPreview: (...args: unknown[]) => importPreviewMock(...args),
     importPlaybook: (...args: unknown[]) => importMock(...args),
+    getLibraryItem: (...args: unknown[]) => getLibraryItemMock(...args),
+    exportLibrary: (...args: unknown[]) => exportLibraryMock(...args),
   },
 }));
 
@@ -576,6 +580,19 @@ describe('PlaybookCard', () => {
     fireEvent.change(select, { target: { value: 'library:lib-1' } });
     fireEvent.click(screen.getByTestId('playbook-bind-btn'));
     await waitFor(() => expect(bindMock).toHaveBeenCalledWith('p1', { libraryId: 'lib-1' }));
+  });
+
+  it('可打开全局规程库面板并关闭', async () => {
+    getCurrentMock.mockResolvedValue(bound);
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-open-library');
+    fireEvent.click(screen.getByTestId('playbook-open-library'));
+    expect(await screen.findByTestId('playbook-library-panel')).toBeInTheDocument();
+    await waitFor(() => expect(listLibraryMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId('playbook-library-close'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('playbook-library-panel')).not.toBeInTheDocument(),
+    );
   });
 
   it('可把当前规程保存到规程库', async () => {

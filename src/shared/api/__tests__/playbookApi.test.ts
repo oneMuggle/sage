@@ -127,6 +127,27 @@ describe('playbookApi', () => {
     });
   });
 
+  it('规程库详情与导出调用正确命令', async () => {
+    mockInvoke.mockResolvedValueOnce({ item: { id: 'lib-3' }, playbook: { id: 'p' } });
+    const detail = await playbookApi.getLibraryItem('lib-3');
+    expect(detail.playbook).toEqual({ id: 'p' });
+    expect(mockInvoke).toHaveBeenCalledWith('playbooks_library_get', {
+      libraryId: 'lib-3',
+    });
+
+    mockInvoke.mockResolvedValueOnce({
+      format: 'json',
+      filename: 'p.sageplaybook.json',
+      content: { format: 'sage.playbook' },
+    });
+    const exported = await playbookApi.exportLibrary('lib-3', false);
+    expect(exported.filename).toBe('p.sageplaybook.json');
+    expect(mockInvoke).toHaveBeenCalledWith('playbooks_library_export', {
+      libraryId: 'lib-3',
+      includeScaffold: false,
+    });
+  });
+
   it('importPlaybook 默认 conflict=save_as_new', async () => {
     await playbookApi.importPlaybook({ format: 'sage.playbook' }, 'proj-1');
     expect(mockInvoke).toHaveBeenCalledWith('playbook_import', {
