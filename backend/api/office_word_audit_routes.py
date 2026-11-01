@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.office.errors import OfficePathError, OfficeSizeLimitError
+from backend.office.errors import OfficeParseError, OfficePathError, OfficeSizeLimitError
 from backend.office.path_safety import resolve_within
 from backend.office.storage import validate_workspace
 from backend.office.word_audit import audit_word_document
 from backend.office.word_fix import fix_word_document
+from backend.office.word_rule_extract import extract_word_rules
 from backend.office.word_rulepack_models import (
     WordAuditFixResult,
     WordAuditResult,
+    WordRuleExtractionResult,
     WordRulePack,
     WordRulePackDetailResult,
     WordRulePackListResult,
@@ -65,6 +67,28 @@ class WordAuditFixRequest(BaseModel):
     output_filename: Optional[str] = Field(default=None, max_length=255)
     overwrite: bool = False
     max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
+
+
+class WordRuleExtractRequest(BaseModel):
+    """POST /office/word/rulepacks/extract body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str = Field(min_length=1, max_length=2000)
+    file_type: Literal["spec", "template"] = "spec"
+    pack_id: str = Field(default="extracted-pack", min_length=1, max_length=80)
+    pack_name: Optional[str] = Field(default=None, max_length=200)
+    max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
+
+
+class WordRuleExtractSaveRequest(BaseModel):
+    """POST /office/word/rulepacks/extract/save body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    pack: WordRulePack
 
 
 def _check_size_limit(file_path: Path, max_size_bytes: int) -> None:
@@ -162,15 +186,56 @@ def fix_word_endpoint(req: WordAuditFixRequest) -> WordAuditFixResult:
     )
 
 
+@router.post("/rulepacks/extract")
+def extract_rulepack_endpoint(req: WordRuleExtractRequest) -> WordRuleExtractionResult:
+    """Extract a draft rule pack from a spec or template document (M3a)."""
+    workspace = validate_workspace(Path(req.workspace_path))
+    file_path = resolve_within(workspace, Path(req.file_path))
+    if not file_path.is_file():
+        raise OfficePathError(
+            f"file_path is not a regular file: {req.file_path}",
+            file_path=file_path,
+        )
+    _check_size_limit(file_path, req.max_size_bytes)
+    return extract_word_rules(
+        file_path,
+        file_type=req.file_type,
+        pack_id=req.pack_id,
+        pack_name=req.pack_name,
+        workspace_path=str(workspace),
+    )
+
+
+@router.post("/rulepacks/extract/save")
+def save_extracted_rulepack_endpoint(
+    req: WordRuleExtractSaveRequest,
+) -> WordRulePackDetailResult:
+    """Save an extracted pack; rules without provenance are rejected."""
+    missing = [rule.id for rule in req.pack.rules if not (rule.source or "").strip()]
+    if missing:
+        raise OfficeParseError(
+            "以下规则缺少来源，不能保存: " + ", ".join(missing[:10])
+        )
+    workspace = validate_workspace(Path(req.workspace_path))
+    pack = save_rulepack(workspace, req.pack)
+    return WordRulePackDetailResult(
+        workspace_path=str(workspace), origin="workspace", pack=pack
+    )
+
+
 __all__ = [
     "WordAuditFixRequest",
     "WordAuditRequest",
+    "WordRuleExtractRequest",
+    "WordRuleExtractSaveRequest",
     "WordRulePackSaveRequest",
     "audit_word_endpoint",
     "delete_rulepack_endpoint",
+    "extract_rulepack_endpoint",
     "fix_word_endpoint",
     "get_rulepack_endpoint",
     "list_rulepacks_endpoint",
     "router",
+    "save_extracted_rulepack_endpoint",
     "save_rulepack_endpoint",
 ]
