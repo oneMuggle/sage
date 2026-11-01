@@ -291,6 +291,7 @@ export const zhChatAndSider = {
 
   // ─── 设置页 ───────────────────────
   'settings.title': '设置',
+  'settings.page_description': '管理「{tab}」相关设置项，修改后按各设置项说明生效。',
   'settings.tab.general': '通用',
   'settings.tab.basic': '基础',
   'settings.tab.tools-connections': '权限与工具',

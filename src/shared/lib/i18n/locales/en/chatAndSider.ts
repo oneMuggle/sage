@@ -303,6 +303,7 @@ export const enChatAndSider = {
 
   // ─── Settings ─────────────────────
   'settings.title': 'Settings',
+  'settings.page_description': 'Manage settings for "{tab}". Changes follow each setting\'s apply rules.',
   'settings.tab.general': 'General',
   'settings.tab.basic': 'Basic',
   'settings.tab.tools-connections': 'Permissions & Tools',

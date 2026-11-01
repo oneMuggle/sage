@@ -67,6 +67,44 @@ export function formatSettingRowAuditJson(input: SettingRowAuditInput): string {
 
 // ==================== 共用组件 ====================
 
+/** 设置页级标题（h1）—— 每个 tab 唯一，和左侧导航的固定标题区分开。 */
+export function SettingsPageHeader({
+  title,
+  description,
+}: {
+  title: string;
+  description?: string;
+}) {
+  return (
+    <header data-testid="settings-page-header">
+      <h1 className="text-ui-xl font-semibold text-ink">{title}</h1>
+      {description ? <p className="mt-1 text-ui-sm text-muted">{description}</p> : null}
+    </header>
+  );
+}
+
+/** 分组标题（h2）+ 卡片容器 —— 与设置项名称（text-sm）形成明确层级。 */
+export function SettingsSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      data-testid="settings-section"
+      className="rounded-lg border border-border bg-surface p-4"
+    >
+      <h2 className="text-ui-lg font-semibold text-ink">{title}</h2>
+      {description ? <p className="mt-1 text-ui-xs text-muted">{description}</p> : null}
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
 /**
  * registry 默认值比较：原始值直接比，对象/数组按序列化比（键序稳定，见各
  * 设置的构造方式）。序列化失败（环）时保守地视为「已修改」。
