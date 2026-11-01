@@ -3,10 +3,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAtFileMenu } from '../../features/chat/useAtFileMenu';
 import type { PendingComposerOptions } from '../../features/send-message/pendingComposerOptions';
 import { useTypewriterPlaceholder } from '../../features/welcome/useTypewriterPlaceholder';
+import { skillsApi } from '../../shared/api';
 import type { ChatOfficeRef } from '../../shared/api/types';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 import { InputCard } from '../chat/InputCard';
+import {
+  commandToPrompt,
+  mergeSlashCommands,
+  type DynamicSlashSkill,
+  type SlashCommand,
+} from '../chat/slashCommands';
 
 interface WelcomeInputCardProps {
   placeholder?: string;
@@ -74,6 +81,34 @@ export function WelcomeInputCard({
   const [focusSeq, setFocusSeq] = useState(0);
   const [cursorPos, setCursorPos] = useState(initialValue.length);
   const [officeRefs, setOfficeRefs] = useState<readonly ChatOfficeRef[]>([]);
+  // 2026-11-01: 欢迎页 slash 菜单 —— 会话内由 ChatInput 提供，首屏此前完全没有。
+  const [dynamicSlashCommands, setDynamicSlashCommands] = useState<DynamicSlashSkill[]>([]);
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    skillsApi
+      .list()
+      .then((skills) => {
+        if (!alive) return;
+        setDynamicSlashCommands(
+          skills
+            .filter((s) => s.dispatch?.user_invocable === true)
+            .map((s) => ({
+              commandName: s.dispatch?.user_invocable_name ?? `/${s.name}`,
+              description: s.description,
+            })),
+        );
+      })
+      .catch(() => {
+        if (alive) setDynamicSlashCommands([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const {
     files,
@@ -131,6 +166,78 @@ export function WelcomeInputCard({
   const handleChange = (newValue: string) => {
     setValue(newValue);
     setCursorPos(newValue.length);
+    if (!newValue.startsWith('/')) {
+      setSlashMenuOpen(false);
+      return;
+    }
+    const query = newValue.slice(1).split(/\s/)[0] ?? '';
+    const merged = mergeSlashCommands(dynamicSlashCommands);
+    const lower = query.toLowerCase();
+    const filtered = merged.filter(
+      (cmd) => cmd.name.toLowerCase().includes(lower) || cmd.label.toLowerCase().includes(lower),
+    );
+    if (filtered.length > 0) {
+      setSlashCommands(filtered);
+      setSlashSelectedIndex(0);
+      setSlashMenuOpen(true);
+    } else {
+      setSlashMenuOpen(false);
+    }
+  };
+
+  const handleSlashSelect = (cmd: SlashCommand) => {
+    setSlashMenuOpen(false);
+    if (disabled) return;
+    const args = value.trim().split(/\s+/).slice(1).join(' ');
+    if (cmd.mode === 'skill' && cmd.skillName) {
+      const skillName = cmd.skillName;
+      skillsApi
+        .execute(skillName, { args: { query: args } })
+        .then((result) => {
+          const body =
+            typeof result.content === 'string'
+              ? result.content
+              : `/${skillName} ${args}`.trim();
+          onSend?.(body);
+          setValue('');
+          setCursorPos(0);
+        })
+        .catch(() => {
+          onSend?.(commandToPrompt({ ...cmd, mode: 'prompt', name: skillName }, args));
+          setValue('');
+          setCursorPos(0);
+        });
+      return;
+    }
+    if (cmd.mode === 'template' && cmd.content != null) {
+      setValue(cmd.content);
+      setCursorPos(cmd.content.length);
+      setFocusSeq((seq) => seq + 1);
+      return;
+    }
+    if (cmd.mode === 'navigate' && cmd.route) {
+      window.location.hash = cmd.route;
+      setValue('');
+      return;
+    }
+    if (cmd.mode === 'clear') {
+      setValue('');
+      return;
+    }
+    if (cmd.mode === 'help') {
+      const helpText = mergeSlashCommands(dynamicSlashCommands)
+        .map((c) => `/${c.name} — ${c.description}`)
+        .join('\n');
+      onSend?.(`可用命令列表：\n${helpText}`);
+      setValue('');
+      return;
+    }
+    if (cmd.mode === 'compact' || cmd.mode === 'learn' || cmd.mode === 'worktree') {
+      return;
+    }
+    onSend?.(commandToPrompt(cmd, args));
+    setValue('');
+    setCursorPos(0);
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -197,7 +304,12 @@ export function WelcomeInputCard({
           onPaste={handlePaste}
           isDragOver={isDragOver}
           atFileMenu={atFileMenu}
-          enableCommandItem={false}
+          showSlashMenu={slashMenuOpen}
+          slashCommands={slashCommands}
+          slashSelectedIndex={slashSelectedIndex}
+          onSlashSelect={handleSlashSelect}
+          onSlashHighlight={setSlashSelectedIndex}
+          onSlashClose={() => setSlashMenuOpen(false)}
           autoFocus
           focusRequest={focusSeq}
         />
