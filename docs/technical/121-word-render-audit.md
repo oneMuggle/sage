@@ -68,10 +68,30 @@ LibreOffice / Word COM 转 PDF，再用 PyMuPDF 检查页面尺寸、页边距�
 - 单元格内溢出、分栏、图表越界等专业排版检查；
 - 页码/页眉页脚定位为文本带近似，非 Word 结构级识别。
 
-## 5. 测试
+## 5. 批量审校（M5b）
+
+`POST /api/v1/office/word/audit/batch`
+
+- `file_paths` 显式列表优先，否则按 `pattern`（默认 `**/*.docx`）扫描工作区；
+- 跳过隐藏目录与 `.git/.sage/node_modules/dist/build/...`；
+- `max_files` 上限（1–100）；单文件超限/解析失败记为失败文件，不中断整批；
+- 响应 `totals{files,ok_files,failed_files,issue_count,error_count,warning_count}` +
+  `files[{source_path,ok,issue_count,error_count,warning_count,issues,warnings,error}]` +
+  `report_markdown`（include_report 控制，单文件最多列 20 条 issue）；
+- `ok` = 无失败文件且无 error 级 issue；只读，不生成 PDF。
+
+```json
+{"workspace_path": "/ws", "pattern": "**/*.docx", "max_files": 20, "rulepack_id": "general-quality", "include_report": true}
+```
+
+## 6. 测试
 
 - `backend/tests/unit/office/test_word_render_audit.py`（5）：
   A4 尺寸/越界边距/非允许字体/缺失页码、无转换器降级、注入导出 PDF、非 docx 拒绝；
 - `backend/tests/integration/test_office_word_render_route.py`（2）：
   选项透传、超限/越界拒绝；
+- `backend/tests/unit/office/test_word_batch_audit.py`（5）：
+  显式/模式收集、隐藏目录跳过、越界/非法 pattern、汇总/报告、坏文件与大小上限；
+- `backend/tests/integration/test_office_word_batch_route.py`（2）：
+  工作区批量审校、非法 pattern/越界拒绝；
 - ruff 0.4.4、py38 兼容、architecture 门禁通过。

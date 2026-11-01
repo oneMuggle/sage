@@ -265,6 +265,47 @@ class WordRenderAuditResult(BaseModel):
     warnings: List[Dict[str, str]] = Field(default_factory=list)
 
 
+class WordBatchFileResult(BaseModel):
+    """One file in a batch audit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_path: str
+    ok: bool
+    issue_count: int = Field(ge=0, default=0)
+    error_count: int = Field(ge=0, default=0)
+    warning_count: int = Field(ge=0, default=0)
+    issues: List[WordAuditIssue] = Field(default_factory=list)
+    warnings: List[Dict[str, str]] = Field(default_factory=list)
+    error: Optional[str] = Field(default=None, max_length=1000)
+
+
+class WordBatchTotals(BaseModel):
+    """Aggregate counts for a batch audit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    files: int = Field(ge=0, default=0)
+    ok_files: int = Field(ge=0, default=0)
+    failed_files: int = Field(ge=0, default=0)
+    issue_count: int = Field(ge=0, default=0)
+    error_count: int = Field(ge=0, default=0)
+    warning_count: int = Field(ge=0, default=0)
+
+
+class WordBatchAuditResult(BaseModel):
+    """POST /office/word/audit/batch result."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    workspace_path: str
+    rule_pack_id: str
+    totals: WordBatchTotals = Field(default_factory=WordBatchTotals)
+    files: List[WordBatchFileResult] = Field(default_factory=list)
+    report_markdown: Optional[str] = None
+
+
 __all__ = [
     "IssueScope",
     "PackOrigin",
@@ -274,6 +315,9 @@ __all__ = [
     "WordAuditIssue",
     "WordAuditResult",
     "WordAuditSummary",
+    "WordBatchAuditResult",
+    "WordBatchFileResult",
+    "WordBatchTotals",
     "WordFixAction",
     "WordRenderAuditResult",
     "WordRenderIssue",
