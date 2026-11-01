@@ -10,14 +10,6 @@ import { Button } from '../../shared/ui/Button';
 
 export interface PlaybookChecklistProps {
   stage: PlaybookStageAudit | undefined;
-  classification: Array<{
-    from: string;
-    to: string;
-    artifact_id: string;
-    label: string;
-    stage_id: string;
-    reason: string;
-  }>;
   busy: string | null;
   playbookName: string;
   onAction: (action: PlaybookAction) => void;
@@ -36,7 +28,6 @@ const ACTION_LABELS: Record<string, string> = {
 
 export function PlaybookChecklist({
   stage,
-  classification,
   busy,
   playbookName,
   onAction,
@@ -50,9 +41,7 @@ export function PlaybookChecklist({
         <div className="text-xs font-medium text-foreground">
           当前阶段：{stage.label}
           {stage.objective ? (
-            <span className="ml-2 font-normal text-muted-foreground">
-              {stage.objective}
-            </span>
+            <span className="ml-2 font-normal text-muted-foreground">{stage.objective}</span>
           ) : null}
         </div>
         {stage.remaining.length === 0 ? (
@@ -91,8 +80,7 @@ export function PlaybookChecklist({
                         type: 'add_todo',
                         payload: {
                           title: '补齐：' + item.label,
-                          description:
-                            '项目规程 ' + playbookName + ' · 阶段 ' + stage.label,
+                          description: '项目规程 ' + playbookName + ' · 阶段 ' + stage.label,
                         },
                       })
                     }
@@ -129,49 +117,17 @@ export function PlaybookChecklist({
                 {criterion.status === 'done' ? '✓ ' : '○ '}
                 {criterion.label}
               </span>
-              {criterion.type === 'manual' &&
-                criterion.status !== 'done' &&
-                criterion.id && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => onManualDone(stage.id, criterion.id as string)}
-                    disabled={busy === 'manual-done'}
-                    data-testid={`playbook-manual-${criterion.id}`}
-                  >
-                    标记完成
-                  </Button>
-                )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {classification.length > 0 && (
-        <div className="space-y-1.5" data-testid="playbook-classification">
-          <div className="text-xs font-medium text-foreground">归类建议（需逐项确认）</div>
-          {classification.map((item) => (
-            <div
-              key={`${item.from}-${item.to}`}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-2 py-1.5 text-xs"
-            >
-              <span className="text-muted-foreground">
-                {item.from} → {item.to}
-              </span>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() =>
-                  onAction({
-                    type: 'move_file',
-                    payload: { from: item.from, to: item.to },
-                  })
-                }
-                disabled={busy === 'move_file'}
-                data-testid={`playbook-move-${item.artifact_id}`}
-              >
-                移动
-              </Button>
+              {criterion.type === 'manual' && criterion.status !== 'done' && criterion.id && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => onManualDone(stage.id, criterion.id as string)}
+                  disabled={busy === 'manual-done'}
+                  data-testid={`playbook-manual-${criterion.id}`}
+                >
+                  标记完成
+                </Button>
+              )}
             </div>
           ))}
         </div>

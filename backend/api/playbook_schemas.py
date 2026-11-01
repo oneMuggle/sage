@@ -133,6 +133,8 @@ class PlaybookAuditResponse(BaseModel):
     detected_stage: Dict[str, Any] = Field(default_factory=dict)
     stages: List[Dict[str, Any]] = Field(default_factory=list)
     classification_suggestions: List[Dict[str, Any]] = Field(default_factory=list)
+    unclassified_files: List[Dict[str, Any]] = Field(default_factory=list)
+    undo_available: Optional[Dict[str, Any]] = None
     overall: Dict[str, Any] = Field(default_factory=dict)
     scanned_at: int = 0
     llm_available: bool = False

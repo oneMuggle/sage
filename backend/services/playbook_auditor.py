@@ -50,6 +50,32 @@ TEXT_SUFFIXES = {
 }
 MAX_TEXT_BYTES = 200_000
 MAX_EVIDENCE_MATCHES = 5
+MAX_UNCLASSIFIED_FILES = 30
+UNCLASSIFIED_MIN_SCORE = 3
+DOC_SUFFIXES = {
+    ".md",
+    ".markdown",
+    ".txt",
+    ".doc",
+    ".docx",
+    ".pdf",
+    ".xls",
+    ".xlsx",
+    ".ppt",
+    ".pptx",
+    ".csv",
+    ".tex",
+    ".bib",
+}
+ROOT_IGNORED_NAMES = {
+    "readme.md",
+    "license",
+    "license.md",
+    "changelog.md",
+    "contributing.md",
+    "agents.md",
+    "claude.md",
+}
 
 
 def _glob_to_regex(pattern: str) -> re.Pattern[str]:
@@ -371,6 +397,168 @@ def _detect_stage(stages: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {"id": candidate["id"], "confidence": 0.5 if started else 0.3, "evidence": evidence}
 
 
+def _normalize_relative(path: Any) -> str:
+    text = str(path or "").strip().replace("\\", "/")
+    while text.startswith("./"):
+        text = text[2:]
+    return text.strip("/")
+
+
+def _split_keywords(text: str) -> List[str]:
+    tokens: List[str] = []
+    for raw in re.split(r"[、，,;；/\s]+", text or ""):
+        token = raw.strip().lower()
+        if len(token) >= 2 and not token.isdigit():
+            tokens.append(token)
+    return tokens
+
+
+def _dir_name_keyword(path: str) -> str:
+    name = _normalize_relative(path).rsplit("/", 1)[-1]
+    name = re.sub(r"^[0-9]+[_\-\s.]*", "", name)
+    return name.strip().lower()
+
+
+def _glob_suffix_info(pattern: str) -> tuple:
+    """Return ``(suffixes, accepts_any_document)`` for an artifact glob."""
+    text = _normalize_relative(pattern)
+    if text.endswith("/**/*") or text == "**/*":
+        return set(), True
+    name = text.rsplit("/", 1)[-1]
+    if "." not in name:
+        return set(), False
+    extension = name.rsplit(".", 1)[1]
+    if extension.startswith("{") and extension.endswith("}"):
+        values = [item.strip().lower() for item in extension[1:-1].split(",")]
+        return {"." + item for item in values if item and not any(ch in item for ch in "*?")}, False
+    if any(ch in extension for ch in "*?{}"):
+        return set(), False
+    return {"." + extension.lower()}, False
+
+
+def _classification_directories(spec: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    candidates: Dict[str, Dict[str, Any]] = {}
+
+    def ensure(path: Any) -> Optional[Dict[str, Any]]:
+        normalized = _normalize_relative(path)
+        if not normalized:
+            return None
+        return candidates.setdefault(
+            normalized, {"keywords": set(), "extensions": set(), "generic": False}
+        )
+
+    for entry in spec.get("directory_layout") or []:
+        candidate = ensure(entry.get("path"))
+        if candidate is None:
+            continue
+        candidate["keywords"].update(_split_keywords(str(entry.get("purpose") or "")))
+        basename = _dir_name_keyword(entry.get("path"))
+        if basename:
+            candidate["keywords"].add(basename)
+
+    for stage in spec.get("stages") or []:
+        for artifact in stage.get("artifacts") or []:
+            candidate = ensure(artifact.get("target_dir"))
+            if candidate is None:
+                continue
+            label = str(artifact.get("label") or "").strip().lower()
+            if len(label) >= 2:
+                candidate["keywords"].add(label)
+            for pattern in (artifact.get("match") or {}).get("globs") or []:
+                suffixes, generic = _glob_suffix_info(str(pattern))
+                candidate["extensions"].update(suffixes)
+                candidate["generic"] = candidate["generic"] or generic
+    return candidates
+
+
+def _under_directories(relative: str, directories: Iterable[str]) -> bool:
+    return any(
+        relative == directory or relative.startswith(directory + "/")
+        for directory in directories
+    )
+
+
+def _suggest_destination(
+    path: Path,
+    relative: str,
+    files: Set[str],
+    candidates: Dict[str, Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    stem = path.stem.lower()
+    suffix = path.suffix.lower()
+    best_score = 0
+    best: Optional[Dict[str, Any]] = None
+    for directory, candidate in candidates.items():
+        if _under_directories(relative, [directory]):
+            continue
+        score = 0
+        reasons: List[str] = []
+        hits = [keyword for keyword in candidate["keywords"] if keyword and keyword in stem]
+        if hits:
+            score += 3 + min(2, len(hits) - 1)
+            reasons.append(f"文件名包含「{hits[0]}」")
+        if suffix in candidate["extensions"]:
+            score += 2
+            reasons.append(f"扩展名 {suffix} 与目标目录产物格式一致")
+        elif candidate["generic"] and suffix in DOC_SUFFIXES:
+            score += 1
+            reasons.append("目标目录收纳该类型文档")
+        if score <= best_score or score < UNCLASSIFIED_MIN_SCORE:
+            continue
+        best_score = score
+        best = {"directory": directory, "score": score, "reason": "；".join(reasons[:2])}
+    if best is None:
+        return None
+    destination = "{}/{}".format(best["directory"], path.name)
+    if destination in files:
+        return None
+    return {
+        "suggested_to": destination,
+        "confidence": round(min(0.95, 0.35 + 0.12 * best_score), 2),
+        "reason": best["reason"],
+    }
+
+
+def _unclassified_files(
+    index: ProjectFileIndex,
+    spec: Dict[str, Any],
+    matched: Set[str],
+) -> List[Dict[str, Any]]:
+    """Suggest a home for document files outside every declared location."""
+    candidates = _classification_directories(spec)
+    if not candidates:
+        return []
+    files = {relative for _path, relative in index.entries}
+    results: List[Dict[str, Any]] = []
+    for path, relative in sorted(index.entries, key=lambda item: item[1]):
+        if relative in matched:
+            continue
+        if _under_directories(relative, candidates.keys()):
+            continue
+        if path.suffix.lower() not in DOC_SUFFIXES:
+            continue
+        if path.name.lower() in ROOT_IGNORED_NAMES:
+            continue
+        suggestion = _suggest_destination(path, relative, files, candidates)
+        if suggestion is None:
+            continue
+        results.append({"path": relative, **suggestion})
+        if len(results) >= MAX_UNCLASSIFIED_FILES:
+            break
+    return results
+
+
+def _undo_available(state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    batch = state.get("last_move_batch")
+    if not isinstance(batch, dict):
+        return None
+    moves = batch.get("moves")
+    if not isinstance(moves, list) or not moves:
+        return None
+    return {"at": int(batch.get("at") or 0), "count": len(moves)}
+
+
+
 def audit_playbook(
     project: Any,
     spec: Dict[str, Any],
@@ -462,12 +650,24 @@ def audit_playbook(
                     }
                 )
 
+    matched_files: Set[str] = set()
+    for stage in spec.get("stages") or []:
+        for artifact in stage.get("artifacts") or []:
+            for pattern in (artifact.get("match") or {}).get("globs") or []:
+                for path in index.match(str(pattern)):
+                    try:
+                        matched_files.add(path.relative_to(index.root).as_posix())
+                    except ValueError:
+                        continue
+
     return {
         "playbook": {"id": spec.get("id"), "name": spec.get("name")},
         "current_stage": current_stage,
         "detected_stage": detected,
         "stages": stages_out,
         "classification_suggestions": classification_suggestions,
+        "unclassified_files": _unclassified_files(index, spec, matched_files),
+        "undo_available": _undo_available(state),
         "overall": {
             "required_total": total_required,
             "required_done": total_done,

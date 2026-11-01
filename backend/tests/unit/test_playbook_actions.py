@@ -161,6 +161,64 @@ def test_move_file_and_refuse_overwrite(project, tmp_path: Path) -> None:
     assert (root / "另一份.md").is_file()
 
 
+def test_batch_move_records_and_undo_restores(project) -> None:
+    root = Path(project.path)
+    (root / "论文初稿.docx").write_bytes(b"x")
+    (root / "预算表.xlsx").write_bytes(b"y")
+
+    moved = apply_playbook_actions(
+        project,
+        [
+            {
+                "type": "batch_move",
+                "payload": {
+                    "moves": [
+                        {"from": "论文初稿.docx", "to": "03_成果/论文初稿.docx"},
+                        {"from": "预算表.xlsx", "to": "04_结题/预算表.xlsx"},
+                    ]
+                },
+            }
+        ],
+    )
+    assert "batch_move" in moved["applied"]
+    assert (root / "03_成果" / "论文初稿.docx").is_file()
+    assert (root / "04_结题" / "预算表.xlsx").is_file()
+
+    state = PlaybookRepository().get_state(project.id)
+    assert state["last_move_batch"]["moves"][1]["to"] == "04_结题/预算表.xlsx"
+
+    undone = apply_playbook_actions(
+        project, [{"type": "undo_last_batch_move", "payload": {}}]
+    )
+    assert "undo_last_batch_move" in undone["applied"]
+    assert (root / "论文初稿.docx").is_file()
+    assert (root / "预算表.xlsx").is_file()
+    assert not (root / "03_成果" / "论文初稿.docx").exists()
+    assert "last_move_batch" not in PlaybookRepository().get_state(project.id)
+
+
+def test_batch_move_rejects_missing_source_without_partial_move(project) -> None:
+    root = Path(project.path)
+    (root / "a.md").write_text("x", encoding="utf-8")
+    result = apply_playbook_actions(
+        project,
+        [
+            {
+                "type": "batch_move",
+                "payload": {
+                    "moves": [
+                        {"from": "a.md", "to": "01_开题/a.md"},
+                        {"from": "missing.md", "to": "01_开题/missing.md"},
+                    ]
+                },
+            }
+        ],
+    )
+    assert result["errors"]
+    assert (root / "a.md").is_file()
+    assert not (root / "01_开题" / "a.md").exists()
+
+
 def test_project_playbook_rules_are_idempotent_and_stage_scoped(project) -> None:
     spec = get_builtin("cn-research-grant")
     first = project_playbook_rules(project.id, spec, stage_id="proposal")
