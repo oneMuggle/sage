@@ -228,6 +228,11 @@ export class PetWindow {
     this.panelVisible = true;
     panel.setBounds(this.panelBounds(), false);
     panel.showInactive();
+    // On X11 `alwaysOnTop` set before the window is mapped is ignored; the
+    // overlay sidesteps this by being `focusable:false` (unmanaged window).
+    // Re-assert after showing for Windows/macOS where focusable:false still
+    // goes through the window manager.
+    panel.setAlwaysOnTop(true, 'floating');
   }
 
   hidePanel(): void {
@@ -304,7 +309,12 @@ export class PetWindow {
         hasShadow: true,
         alwaysOnTop: true,
         skipTaskbar: true,
-        focusable: true,
+        // Same treatment as the overlay: a focusable:false window is not
+        // managed by the WM on X11, so it stays above normal windows without
+        // taskbar entries or "demands attention" hints. Buttons still receive
+        // mouse clicks; keyboard shortcuts inside the panel are not available.
+        focusable: false,
+        acceptFirstMouse: true,
         backgroundColor: '#0f172a',
         webPreferences: {
           preload,
@@ -506,9 +516,10 @@ export class PetWindow {
   }
 
   private reassertTopmost(): void {
-    if (!this.win || this.win.isDestroyed() || !this.win.isVisible()) return;
+    if (!this.win || this.win.isDestroyed()) return;
     try {
-      this.win.setAlwaysOnTop(true, 'floating');
+      if (this.win.isVisible()) this.win.setAlwaysOnTop(true, 'floating');
+      if (this.isPanelVisible()) this.panel!.setAlwaysOnTop(true, 'floating');
     } catch {
       // Some window managers reject the level; the initial flag still applies.
     }

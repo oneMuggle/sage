@@ -39,14 +39,6 @@ export function PetPanelApp(): JSX.Element {
     };
   }, [pet]);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') pet?.setPanel(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [pet]);
-
   const closePanel = useCallback(() => {
     pet?.setPanel(false);
   }, [pet]);
