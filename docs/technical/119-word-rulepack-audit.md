@@ -8,7 +8,7 @@
 M2a 把“规范 → 规则 → 审校”中的确定性部分落地：
 
 - `RulePack` / `Rule` 数据模型与三层存储（内置、工作区、请求内联）；
-- 12 类确定性检查器，覆盖页面、样式、结构、内容；
+- 15 类确定性检查器，覆盖页面、样式、结构、内容（含 M4a 语义子集）；
 - 每条 issue 带 `scope` 与可选 `anchor`（`WordTextAnchor`），为 M2c 前端定位/高亮提供链路；
 - 内置两个规则包：GB/T 9704 通用版面参数、Word 通用质量检查。
 
@@ -70,6 +70,9 @@ M2a 把“规范 → 规则 → 审校”中的确定性部分落地：
 | `content.empty_paragraphs` | `max_consecutive` | 连续空段落超限 | paragraph |
 | `content.caption_sequence` | `labels` | 图/表题注编号连续 | paragraph |
 | `content.citation_coverage` | — | 引用编号缺号 | paragraph |
+| `content.date_format` | `allowed?: cn/iso/slash/dot` | 日期格式一致性（默认主导格式） | paragraph |
+| `content.terminology` | `pairs: [{preferred, variants}]` | 术语统一（variant → preferred） | paragraph |
+| `content.required_phrases` | `phrases`, `match?` | 必备表述缺失 | document |
 
 容差：页面尺寸 A4 ±1mm、Letter ±0.5mm；尺寸类默认 ±0.05cm；字号默认 ±0.01pt。
 
@@ -210,7 +213,8 @@ audit/fix 使用 `rawBody`，避免规则 `params` 的用户键被 camelCase 改
 - 表格/内容控件级规则、`vMerge` 跨行内容检查；
 - 原生 docx 渲染视图（docx-preview）中的段落定位（DOM 无稳定段落索引）；
 - 标题编号/题注/引用的自动重排（当前只在审校中报告，不自动修复）；
-- 语义规则（必填章节语义、日期格式、术语一致性）与 LLM 规则抽取（M4）；
+- 语义规则已有确定性子集（日期格式/术语表/必备表述）；LLM 语义判断与语义修订（M4）；
+- 原生 track-changes / 批注式修订写入（M4b）；
 - 确定性规范/范本规则抽取见 [120](./120-word-rule-extraction.md)。
 - 内置 GB 包字体名使用常见实现值（`仿宋_GB2312`），字库差异可通过自定义包覆盖。
 
@@ -230,4 +234,6 @@ audit/fix 使用 `rawBody`，避免规则 `params` 的用户键被 camelCase 改
   规则包切换重跑、默认输出修复、覆盖修复通知父级、错误展示、默认文件名；
 - `src/features/office/__tests__/WordPreview.highlight.test.tsx`（3）：默认不干扰、
   锚点高亮/滚动、超出渲染窗口自动扩展；
+- `backend/tests/unit/office/test_word_semantic_rules.py`（6）：日期主导/允许格式、
+  术语 variant 锚点、必备表述、参数校验、内置日期规则；
 - ruff 0.4.4、py38 兼容检查、architecture 门禁、tsc、ESLint、Vitest 通过。

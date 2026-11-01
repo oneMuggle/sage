@@ -150,6 +150,15 @@ def _general_quality() -> Dict[str, Any]:
                 fix_hint="删除多余空段落，用段落间距代替空行",
             ),
             _rule(
+                "content/date_format",
+                "日期格式一致",
+                "content.date_format",
+                {},
+                category="content",
+                severity="warning",
+                fix_hint="统一全文日期格式（默认以出现最多的格式为准）",
+            ),
+            _rule(
                 "structure/heading_sequence",
                 "标题编号连续",
                 "structure.heading_sequence",
