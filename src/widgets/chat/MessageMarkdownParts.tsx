@@ -28,6 +28,11 @@ import { HtmlCodeBlock } from './HtmlCodeBlock';
 import { MarkdownImage } from './MarkdownImage';
 import { MermaidBlock } from './MermaidBlock';
 import { ShikiCodeBlock } from './ShikiCodeBlock';
+import {
+  isThinkingExpanded,
+  setThinkingExpanded,
+  thinkingExpansionKey,
+} from './thinkingExpansionStore';
 
 /** Code block renderer — delegates to ShikiCodeBlock for syntax highlighting */
 function CodeBlock({ language, children }: { language?: string; children: string }) {
@@ -411,14 +416,20 @@ export function ThinkingPanel({
   reasoning: string;
   isStreaming?: boolean;
 }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const expansionKey = thinkingExpansionKey(reasoning);
+  const [isExpanded, setIsExpanded] = useState(() => isThinkingExpanded(expansionKey));
   // P21: 流式期间自动滚动到底部，显示最新思考内容
   const contentRef = useRef<HTMLDivElement | null>(null);
 
   // P1 fix: 当 isStreaming 变为 true 时自动展开 (useState 只读初始值,需 useEffect 同步)
+  // 2026-11-01: 自动展开只写内存（不落 sessionStorage），避免每个 delta 落盘；
+  // 流结束/消息 id 替换导致重挂载时，内存键仍能恢复展开态。
   useEffect(() => {
-    if (isStreaming) setIsExpanded(true);
-  }, [isStreaming]);
+    if (isStreaming) {
+      setIsExpanded(true);
+      setThinkingExpanded(expansionKey, true, false);
+    }
+  }, [isStreaming, expansionKey]);
 
   // 流式期间 reasoning 增长时自动滚动到底部
   useEffect(() => {
@@ -427,19 +438,44 @@ export function ThinkingPanel({
     }
   }, [reasoning, isStreaming]);
 
+  const toggleExpanded = (): void => {
+    const next = !isExpanded;
+    setIsExpanded(next);
+    setThinkingExpanded(expansionKey, next);
+  };
+
+  // 折叠态展示首行摘要，让用户不用点开也能确认思考内容仍在。
+  const preview = isExpanded
+    ? ''
+    : (reasoning
+        .trim()
+        .split('\n')
+        .find((line) => line.trim().length > 0) ?? ''
+      ).trim().slice(0, 60);
+
   return (
     <div className="mb-2 border border-border/50 rounded-radius-sm overflow-hidden">
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={toggleExpanded}
         className="w-full flex items-center gap-2 px-3 py-2 bg-bg-subtle hover:bg-bg-hover transition-colors text-left"
         aria-expanded={isExpanded}
       >
-        <Brain className="w-4 h-4 text-primary" />
-        <span className="text-ui-sm font-medium text-text-secondary">
-          思考过程 ({reasoning.length} 字)
+        <Brain className="w-4 h-4 text-primary flex-shrink-0" />
+        <span className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="flex-shrink-0 text-ui-sm font-medium text-text-secondary">
+            思考过程 ({reasoning.length} 字)
+          </span>
+          {preview ? (
+            <span
+              data-testid="thinking-preview"
+              className="truncate text-ui-xs text-muted min-w-0"
+            >
+              {preview}
+            </span>
+          ) : null}
         </span>
         <ChevronDown
-          className={`w-4 h-4 ml-auto transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 ml-auto flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
         />
       </button>
       {isExpanded && (
