@@ -75,6 +75,7 @@ import { LatexProfileLibraryPanel } from '../features/office/LatexProfileLibrary
 import { LatexProjectImportPanel } from '../features/office/LatexProjectImportPanel';
 import { LatexTemplatePanel } from '../features/office/LatexTemplatePanel';
 import { OfficeStagingInspector } from '../features/office/OfficeStagingInspector';
+import { WordBatchAuditPanel } from '../features/office/WordBatchAuditPanel';
 import { WordRuleExtractionPanel } from '../features/office/WordRuleExtractionPanel';
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
 import { WorkspaceBindModal } from '../features/workspace';
@@ -519,6 +520,9 @@ export function Office() {
 
           {/* M3c: 规范/范本文档 → 规则抽取复核与保存。 */}
           <WordRuleExtractionPanel workspacePath={workspacePath} />
+
+          {/* M5c: 工作区批量审校（glob + 规则包 → 汇总 + Markdown 报告）。 */}
+          <WordBatchAuditPanel workspacePath={workspacePath} />
 
           {/* LaTeX panels — import a project zip, analyze/fill templates,
               audit sources, and optionally compile inside the bound

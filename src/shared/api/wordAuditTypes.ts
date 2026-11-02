@@ -219,3 +219,74 @@ export interface WordAuditFixRequest {
   overwrite?: boolean;
   max_size_bytes?: number;
 }
+
+export interface WordRenderIssue {
+  page_index: number;
+  category: 'page' | 'margin' | 'font' | 'page_number';
+  severity: WordRuleSeverity;
+  message: string;
+  expected?: string | null;
+  actual?: string | null;
+}
+
+export interface WordRenderAuditResult {
+  ok: boolean;
+  source_path: string;
+  rendered: boolean;
+  method?: string | null;
+  page_count: number;
+  issues: WordRenderIssue[];
+  warnings: Array<{ code: string; message: string }>;
+}
+
+export interface WordRenderAuditRequest {
+  workspace_path: string;
+  file_path: string;
+  expected_size?: 'A4' | 'Letter';
+  margins_cm?: Record<string, number>;
+  allowed_fonts?: string[];
+  require_page_number?: boolean;
+  margin_tolerance_cm?: number;
+  page_number_band?: number;
+  timeout_seconds?: number;
+}
+
+export interface WordBatchFileResult {
+  source_path: string;
+  ok: boolean;
+  issue_count: number;
+  error_count: number;
+  warning_count: number;
+  issues: WordAuditIssue[];
+  warnings: Array<{ code: string; message: string }>;
+  error?: string | null;
+}
+
+export interface WordBatchTotals {
+  files: number;
+  ok_files: number;
+  failed_files: number;
+  issue_count: number;
+  error_count: number;
+  warning_count: number;
+}
+
+export interface WordBatchAuditResult {
+  ok: boolean;
+  workspace_path: string;
+  rule_pack_id: string;
+  totals: WordBatchTotals;
+  files: WordBatchFileResult[];
+  report_markdown?: string | null;
+}
+
+export interface WordBatchAuditRequest {
+  workspace_path: string;
+  file_paths?: string[];
+  pattern?: string;
+  max_files?: number;
+  rulepack_id?: string;
+  rulepack?: WordRulePack;
+  include_report?: boolean;
+  max_size_bytes?: number;
+}

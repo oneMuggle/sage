@@ -63,8 +63,8 @@ LibreOffice / Word COM 转 PDF，再用 PyMuPDF 检查页面尺寸、页边距�
 
 ## 4. 限制（后续）
 
-- 批量审计与报告导出（M5b）；
-- 前端渲染审计面板（M5c）；
+- ~~批量审计与报告导出（M5b）~~ → 见 §5；
+- ~~前端渲染审计面板（M5c）~~ → 见 §7；
 - 单元格内溢出、分栏、图表越界等专业排版检查；
 - 页码/页眉页脚定位为文本带近似，非 Word 结构级识别。
 
@@ -95,3 +95,50 @@ LibreOffice / Word COM 转 PDF，再用 PyMuPDF 检查页面尺寸、页边距�
 - `backend/tests/integration/test_office_word_batch_route.py`（2）：
   工作区批量审校、非法 pattern/越界拒绝；
 - ruff 0.4.4、py38 兼容、architecture 门禁通过。
+
+## 7. 前端渲染审计面板（M5c）
+
+> 分支：`feat/word-audit-panels-m5c` · 上游：§2 接口 + §5 批量接口
+
+### 7.1 组件位置
+
+`WordRenderAuditSection` 挂在 `DocumentAuditPanel`（M2c）底部，
+作为 Word 预览 → 「规则审校」面板的最后一个子区块。
+
+- `src/features/office/WordRenderAuditSection.tsx`
+- 由 `DocumentAuditPanel.tsx` 直接 import 并渲染；
+- `electron/commandRoutes/office.ts` +2 IPC 路由（`office_word_audit_render`，rawBody）。
+
+### 7.2 交互
+
+手动触发（默认不自动运行，避免无转换器环境挂起）：
+
+- 期望页面尺寸：`<select>` — 不校验 / A4 / Letter；
+- 字体白名单：`<input>` 支持 `,` `;` `，` `；` `\n` 分隔，自动 trim + 去空；
+- 四边页边距（cm）：top / bottom / left / right，`<input type="number">`，仅填非空值时下发；
+- 要求页码：复选框。
+
+点击「渲染校验」→ `officeApi.renderAuditWord({...})` → 展示：
+
+- 无转换器：`rendered=false`，显示「未渲染：当前环境没有可用的 DOCX→PDF 转换器」；
+- 有结果：页面数 + 方法 + error/warning 计数；
+- 逐 issue 卡片：类别（页面/页边距/字体/页码）+ 页号 + 期望 vs 实测；
+- warnings 列表（如 `render_unavailable` / `render_audit_failed`）。
+
+### 7.3 测试
+
+`src/features/office/__tests__/WordRenderAuditSection.test.tsx`（3）：
+
+- 降级展示：`rendered=false` 显示 warning 而非 issue；
+- 字体分隔：`宋体, Times New Roman；黑体` → `['宋体', 'Times New Roman', '黑体']`；
+- 空结果 + error 路径：空 issue 列表显示「渲染检查通过」，请求失败显示错误。
+
+### 7.4 数据流
+
+```
+DocumentAuditPanel
+  └── WordRenderAuditSection
+        └── officeApi.renderAuditWord({workspace_path, file_path, expected_size?, margins_cm?, allowed_fonts?, require_page_number})
+              └── POST /api/v1/office/word/audit/render (rawBody)
+                    └── WordRenderAuditService.run() → PyMuPDF → issues/warnings
+```

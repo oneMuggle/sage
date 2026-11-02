@@ -20,25 +20,9 @@ import type {
   WordTextAnchor,
 } from '../../shared/api/wordAuditTypes';
 
+import { WordRenderAuditSection } from './WordRenderAuditSection';
 import { defaultFixedName, defaultRevisedName } from './wordAuditFilename';
-
-const DEFAULT_PACKS: WordRulePackSummary[] = [
-  {
-    id: 'general-quality',
-    name: 'Word 通用质量检查',
-    version: '1.0',
-    origin: 'builtin',
-    rule_count: 6,
-  },
-  {
-    id: 'gb-t-9704-general',
-    name: '党政机关公文格式（GB/T 9704 通用参数）',
-    version: '1.0',
-    origin: 'builtin',
-    rule_count: 5,
-  },
-];
-const DEFAULT_PACK_ID = 'general-quality';
+import { DEFAULT_PACK_ID, DEFAULT_PACKS } from './wordRulePackDefaults';
 
 type SeverityFilter = 'all' | 'error' | 'warning';
 
@@ -418,6 +402,8 @@ export function DocumentAuditPanel({
           )}
         </div>
       )}
+
+      <WordRenderAuditSection workspacePath={workspacePath} filePath={filePath} />
     </section>
   );
 }
