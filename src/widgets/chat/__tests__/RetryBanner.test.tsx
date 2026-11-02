@@ -100,6 +100,18 @@ describe('RetryBanner', () => {
     expect(getByTestId('retry-banner-reason').textContent).toContain('Request timed out');
   });
 
+  it('shows the remaining total-budget when the backend reports it', () => {
+    const { getByTestId } = renderBanner(
+      makeInfo({ budget_total_s: 180, budget_remaining_s: 140 }),
+    );
+    expect(getByTestId('retry-banner-budget').textContent).toContain('剩余预算 140 秒');
+  });
+
+  it('hides the budget line when the backend omits budget fields', () => {
+    const { queryByTestId } = renderBanner(makeInfo());
+    expect(queryByTestId('retry-banner-budget')).toBeNull();
+  });
+
   it('formats RetryBanner audit summary and JSON (Phase P119)', async () => {
     const { formatRetryBannerSummary, formatRetryBannerJson } = await import('../RetryBanner');
     const info = makeInfo({ attempt: 2, max_attempts: 3, error_type: 'timeout', delay: 4 });

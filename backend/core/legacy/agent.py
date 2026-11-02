@@ -2080,6 +2080,8 @@ class SageAgent:
                                                 "error_type": payload.error_type,
                                                 "error_message": payload.error_message,
                                                 "delay": payload.delay,
+                                                "budget_total_s": payload.budget_total_s,
+                                                "budget_remaining_s": payload.budget_remaining_s,
                                             },
                                             agent_id=self.agent_id,
                                         )

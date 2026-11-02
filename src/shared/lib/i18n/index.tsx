@@ -88,6 +88,18 @@ export function useOptionalI18n(): I18nContextValue | null {
   return useContext(I18nContext);
 }
 
+/**
+ * 静态翻译：供组件树之外（zustand store、事件处理器等）取当前 locale 文案。
+ *
+ * 2026-11-02: 设置保存失败 toast 在 settingsStore 中触发，拿不到 useI18n hook；
+ * 复用 Provider 持久化到 localStorage 的 locale，未持久化时回退 zh。
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function translateStatic(key: TranslationKey, fallbackLocale: Locale = 'zh'): string {
+  const locale = loadStoredLocale(fallbackLocale);
+  return translations[locale][key] ?? key;
+}
+
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatI18nProviderSummary(locale: Locale = 'zh'): string {
   const safeLocale: Locale = locale === 'en' ? 'en' : 'zh';

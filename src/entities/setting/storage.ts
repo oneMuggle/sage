@@ -349,9 +349,12 @@ export async function loadSettings(): Promise<AppSettings> {
 }
 
 /**
- * 同步写 local cache + 异步推后端
+ * 同步写 local cache + 异步推后端（strict 通道）。
+ *
+ * 2026-11-02: 返回 boolean 让调用方感知后端 PUT 是否成功，失败时由
+ * settingsStore 弹 toast 通知用户（此前静默吞掉，用户重启后值回滚）。
  */
-export async function saveSettings(partial: Partial<AppSettings>): Promise<void> {
+export async function saveSettings(partial: Partial<AppSettings>): Promise<boolean> {
   const current = readLocalCacheSync() ?? DEFAULT_SETTINGS;
   // Partial 展开后所有字段 T|undefined，但 current 提供兜底，所以断言为完整 AppSettings
   const merged = {
@@ -364,9 +367,12 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<void>
   writeLocalCacheSync(merged);
   try {
     // 2026-08-26: 同样净化 PUT 载荷, 防止带历史字段的 partial 触发 400.
-    await settingsClient.setSettings(sanitizeForBackend(partial));
-  } catch {
-    // settingsClient 内部已 warn
+    // 2026-11-02: 改用 strict 通道，失败时抛异常让调用方可见。
+    await settingsClient.setSettingsStrict(sanitizeForBackend(partial));
+    return true;
+  } catch (err) {
+    console.warn('[settings] 后端保存失败，本地缓存已更新，重启后可能回滚:', err);
+    return false;
   }
 }
 

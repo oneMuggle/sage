@@ -17,6 +17,8 @@ export const retryBannerZh = {
   'chat.retry.error.parsing_error': '响应解析失败',
   'chat.retry.error.context_overflow': '上下文溢出',
   'chat.retry.error.unknown': '未知错误',
+  // 2026-11-02: 总时长预算可见性 — 后端推送 budget_remaining_s 时展示
+  'chat.retry.budget_remaining': '剩余预算 {seconds} 秒',
 } as const;
 
 export const retryBannerEn: Record<keyof typeof retryBannerZh, string> = {
@@ -30,6 +32,7 @@ export const retryBannerEn: Record<keyof typeof retryBannerZh, string> = {
   'chat.retry.error.parsing_error': 'Failed to parse response',
   'chat.retry.error.context_overflow': 'Context overflow',
   'chat.retry.error.unknown': 'Unknown error',
+  'chat.retry.budget_remaining': '{seconds}s budget left',
 };
 
 export function formatRetryBannerI18nSummary(): string {
