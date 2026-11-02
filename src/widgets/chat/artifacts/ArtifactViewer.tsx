@@ -5,16 +5,19 @@ import {
   Eye,
   FileCode,
   FolderOpen,
+  List,
   Pencil,
   RefreshCw,
   Save,
   X,
 } from 'lucide-react';
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
 import { revealArtifact, updateArtifactContent } from '../../../features/artifacts/artifactApi';
 import { useArtifactContent } from '../../../features/artifacts/useArtifactContent';
+import { MarkdownOutline } from '../../markdown/MarkdownOutline';
+import { buildMarkdownOutline, extractHeadings } from '../../markdown/outline';
 import { FileContentRenderer } from '../preview/FileContentRenderer';
 
 import { VersionHistory } from './VersionHistory';
@@ -44,6 +47,11 @@ const EDITABLE_KINDS: ReadonlySet<ArtifactKind> = new Set([
 // right-panel R2 批次 A: markdown 渲染 / CSV 表格 / 各类型内容分发已上移至
 // shared 预览组件 FileContentRenderer（消息内文件预览共用，feat/file-reference-preview）
 
+/** 把产物名清理成 anchor id 安全字符 —— 与 MarkdownOutline prefix 对齐 */
+function sanitizeAnchorName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32) || 'artifact';
+}
+
 export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerProps) {
   const { content, loading, refresh } = useArtifactContent(sessionId, artifact.id);
   // R3 批次 B: 跟随应用主题（ThemeProvider 同步维护 .dark class，直读
@@ -63,6 +71,18 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
   // 回退到结构化段落视图。
   const [docxFidelity, setDocxFidelity] = useState(true);
   const [docxFidelityFailed, setDocxFidelityFailed] = useState(false);
+
+  // feat/markdown-renderer-unification M5: TOC 大纲条 —— markdown 产物有标题时
+  // 默认展开，点击跳转 + 滚动高亮。大纲与 Markdown 渲染共用 headingAnchorPrefix。
+  const [outlineOpen, setOutlineOpen] = useState(true);
+  const mdOutlineData = useMemo(() => {
+    if (content?.ok && content.kind === 'markdown' && content.content) {
+      const raw = extractHeadings(content.content);
+      return buildMarkdownOutline(raw, `artifact-${sanitizeAnchorName(artifact.name)}`);
+    }
+    return { entries: [], count: 0 };
+  }, [content, artifact.name]);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setDocxFidelity(true);
@@ -129,6 +149,18 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             onClick={() => setMdRendered((v) => !v)}
           >
             {mdRendered ? <FileCode className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        )}
+        {content?.ok && content.kind === 'markdown' && mdRendered && mdOutlineData.count > 0 && (
+          <button
+            className="p-1.5 rounded hover:bg-bg-hover text-text-secondary hover:text-text transition-colors"
+            title={outlineOpen ? '隐藏大纲' : '显示大纲'}
+            aria-label={outlineOpen ? '隐藏大纲' : '显示大纲'}
+            aria-expanded={outlineOpen}
+            data-testid="artifact-outline-toggle"
+            onClick={() => setOutlineOpen((v) => !v)}
+          >
+            <List className="w-4 h-4" />
           </button>
         )}
         {content?.ok && content.kind === 'html' && (
@@ -212,43 +244,54 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto p-3">
-        {editMode ? (
-          <div className="flex flex-col h-full" data-testid="artifact-edit-codemirror">
-            {/* R3 批次 B: textarea → CodeMirror（行号 + 语法高亮编辑），
-                value/onChange 与乐观并发 hash 保存逻辑完全兼容 */}
-            <div className="flex-1 min-h-0 border border-border rounded overflow-auto bg-bg-input">
-              <Suspense
-                fallback={
-                  <pre className="h-full overflow-auto bg-bg-input p-3 text-code font-mono leading-relaxed">
-                    {editContent}
-                  </pre>
-                }
-              >
-                <CodeMirrorEditor
-                  value={editContent}
-                  height="100%"
-                  theme={themeResolved}
-                  basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: true }}
-                  onChange={(value) => setEditContent(value)}
-                />
-              </Suspense>
+      <div className="flex-1 min-h-0 flex flex-row">
+        <div ref={scrollContainerRef} className="flex-1 overflow-auto p-3 min-w-0">
+          {editMode ? (
+            <div className="flex flex-col h-full" data-testid="artifact-edit-codemirror">
+              {/* R3 批次 B: textarea → CodeMirror（行号 + 语法高亮编辑），
+                  value/onChange 与乐观并发 hash 保存逻辑完全兼容 */}
+              <div className="flex-1 min-h-0 border border-border rounded overflow-auto bg-bg-input">
+                <Suspense
+                  fallback={
+                    <pre className="h-full overflow-auto bg-bg-input p-3 text-code font-mono leading-relaxed">
+                      {editContent}
+                    </pre>
+                  }
+                >
+                  <CodeMirrorEditor
+                    value={editContent}
+                    height="100%"
+                    theme={themeResolved}
+                    basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: true }}
+                    onChange={(value) => setEditContent(value)}
+                  />
+                </Suspense>
+              </div>
+              {saveError && <div className="mt-2 text-xs text-error">{saveError}</div>}
             </div>
-            {saveError && <div className="mt-2 text-xs text-error">{saveError}</div>}
-          </div>
-        ) : loading ? (
-          <div className="text-sm text-muted">加载中...</div>
-        ) : content ? (
-          <FileContentRenderer
-            content={content}
-            name={artifact.name}
-            mdRendered={mdRendered}
-            htmlReloadKey={htmlReloadKey}
-            docxFidelity={docxFidelity && !docxFidelityFailed}
-            onDocxFidelityError={() => setDocxFidelityFailed(true)}
-          />
-        ) : (
-          <div className="text-sm text-error">加载失败</div>
+          ) : loading ? (
+            <div className="text-sm text-muted">加载中...</div>
+          ) : content ? (
+            <FileContentRenderer
+              content={content}
+              name={artifact.name}
+              mdRendered={mdRendered}
+              htmlReloadKey={htmlReloadKey}
+              docxFidelity={docxFidelity && !docxFidelityFailed}
+              onDocxFidelityError={() => setDocxFidelityFailed(true)}
+            />
+          ) : (
+            <div className="text-sm text-error">加载失败</div>
+          )}
+        </div>
+        {outlineOpen && mdOutlineData.count > 0 && (
+          <aside className="md-outline-sidebar" data-testid="artifact-outline">
+            <MarkdownOutline
+              entries={mdOutlineData.entries}
+              prefix={`artifact-${sanitizeAnchorName(artifact.name)}`}
+              scrollContainerRef={scrollContainerRef as React.RefObject<HTMLElement>}
+            />
+          </aside>
         )}
       </div>
 

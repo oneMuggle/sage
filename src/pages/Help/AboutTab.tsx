@@ -18,7 +18,7 @@ export function AboutTab() {
           <span>🎯</span>
           <span>应用愿景</span>
         </h2>
-        <div className="prose prose-invert max-w-none">
+        <div className="max-w-none">
           <p className="text-text leading-relaxed whitespace-pre-line">{VISION}</p>
         </div>
       </section>
