@@ -114,15 +114,18 @@ Sage 的问题：Office 读取工具比 `read_file` 更严格，且 `@-mention` 
 
 ### Phase 3（P2）— 文档与提示
 
-- [ ] Step 7: 更新系统提示
-  - `backend/agents/profiles.py`
-  - 修改 `_OFFICE_CREATE_CAPABILITY_PROMPT` 中关于工作区边界的描述
-  - 明确 "Office 读取工具可读取任意路径；写入工作区外需审批"
+- [x] Step 7: 更新系统提示
+  - `backend/agents/profiles.py` — `_OFFICE_CREATE_CAPABILITY_PROMPT`
+  - 明确「Office 读取工具可读取任意路径、无需审批」
+  - 明确写入工作区外：命中 allowed_paths 自动放行，未命中走审批
+  - 补充 @-mention 白名单读取与跳过说明
 
-- [ ] Step 8: 更新用户手册
-  - `docs/user-manual/` 新增或更新 "工作区边界" 章节
-  - 说明 `allowed_paths` 配置方法
-  - 说明审批流程
+- [x] Step 8: 更新用户手册
+  - `docs/user-manual/16-allowed-paths.md` — 重写为「工作区边界 + allowed_paths」章节
+    （读写规则一览、默认预填、审批流程、@-mention 行为）
+  - `docs/user-manual/README.md` — 第 17 项简介同步
+  - `docs/technical/75-allowed-paths.md` + `docs/technical/README.md` — 技术手册同步
+    （读写分离、`_enforce_workspace` 四层判定、@-mention、默认预填）
 
 ## 风险评估
 
