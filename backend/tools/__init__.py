@@ -67,6 +67,16 @@ from .office_journal_tool import (
     OfficeJournalParseTemplateTool,
     OfficeJournalValidateTool,
 )
+from .office_latex_audit_tool import OfficeAuditLatexTool
+from .office_latex_build_tool import OfficeCompileLatexTool, OfficeLatexdiffTool
+from .office_latex_compliance_tool import OfficeCheckLatexComplianceTool
+from .office_latex_pdf_tool import OfficeAuditLatexPdfTool
+from .office_latex_project_tool import OfficeExtractLatexProjectTool
+from .office_latex_template_tool import (
+    OfficeAnalyzeLatexTemplateTool,
+    OfficeFillLatexTemplateTool,
+)
+from .office_latex_tool import OfficeReadLatexTool
 from .office_lint_tool import OfficeLintWordTool
 from .office_pdf_tool import (
     OfficeFillPdfFormTool,
@@ -87,6 +97,14 @@ from .office_template_tool import (
 from .office_toc_refresh_tool import OfficeRefreshTocTool
 from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
+from .office_word_intelligence_tools import (
+    OfficeAuditWordTool,
+    OfficeBatchAuditTool,
+    OfficeExtractRulesTool,
+    OfficeFixWordTool,
+    OfficeRenderAuditTool,
+    OfficeReviseWordTool,
+)
 from .patch_tool import ApplyPatchTool
 from .project_diagnose import ProjectDiagnoseTool
 from .registry import ToolRegistry
@@ -248,7 +266,22 @@ __all__ = [
     "OfficeAnalyzeTool",
     "OfficeBibTexTool",
     "OfficeLintWordTool",
+    "OfficeReadLatexTool",
+    "OfficeAnalyzeLatexTemplateTool",
+    "OfficeFillLatexTemplateTool",
+    "OfficeAuditLatexTool",
+    "OfficeAuditLatexPdfTool",
+    "OfficeCheckLatexComplianceTool",
+    "OfficeCompileLatexTool",
+    "OfficeLatexdiffTool",
+    "OfficeExtractLatexProjectTool",
     "OfficeRepairWordTool",
+    "OfficeAuditWordTool",
+    "OfficeBatchAuditTool",
+    "OfficeFixWordTool",
+    "OfficeExtractRulesTool",
+    "OfficeRenderAuditTool",
+    "OfficeReviseWordTool",
     "OfficeRefreshTocTool",
     "OfficeJournalParseTemplateTool",
     "OfficeJournalFillFromContentTool",
