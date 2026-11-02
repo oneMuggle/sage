@@ -36,7 +36,7 @@ export const zhSettingsUi = {
   'settings.basic.retry_base_desc': '首次重试等待时间，后续按指数递增（base × 2^(attempt-1)）',
   'settings.basic.retry_base_label': '退避基数（秒）',
   'settings.basic.retry_max_desc':
-    'LLM 请求的总尝试次数（含首次请求）。例如设为 10 表示最多尝试 10 次（首次 + 9 次重试）。设为 1 表示禁用自动重试。',
+    'LLM 请求的总尝试次数（含首次请求）。例如设为 10 表示最多尝试 10 次（首次 + 9 次重试）。设为 0 或 1 表示禁用自动重试。',
   'settings.basic.retry_max_label': '最大尝试次数',
   'settings.basic.retry_total_budget_desc':
     '从首次尝试起算，退避前累计耗时超过该值即停止自动重试。0 = 不限。',
