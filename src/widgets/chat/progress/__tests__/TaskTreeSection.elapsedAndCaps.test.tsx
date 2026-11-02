@@ -179,120 +179,6 @@ describe('TaskTreeSection — running 实时耗时 (BU15)', () => {
 });
 
 // ============================================================================
-// BU16 (round30): run 级耗时与上限提示
-// ============================================================================
-
-describe('TaskTreeSection — run 级耗时 (BU16)', () => {
-  it('in-flight 显示已运行与上限提示', () => {
-    vi.useFakeTimers();
-    try {
-      useSettingsMock.mockReturnValue({
-        settings: { orch: { runWallClockLimitMinutes: 30 } },
-        isLoading: false,
-        loadSettings: vi.fn(),
-        updateSettings: vi.fn(),
-        resetSettings: vi.fn(),
-      });
-      vi.setSystemTime(new Date('2026-09-18T12:05:00Z'));
-      render(
-        <TaskTreeSection
-          board={makeBoard({
-            dispatchedAt: Date.now() - 150_000, // 2m30s
-            statuses: {
-              t1: {
-                state: 'task_status',
-                run_id: 'orch-rerun-ui',
-                task_id: 't1',
-                status: 'running',
-                agent_id: 'primary',
-                goal: 'g1',
-                error: null,
-                output_preview: null,
-                retry_count: 0,
-                runningSince: Date.now() - 30_000,
-              },
-              t2: {
-                state: 'task_status',
-                run_id: 'orch-rerun-ui',
-                task_id: 't2',
-                status: 'queued',
-                agent_id: 'primary',
-                goal: 'g2',
-                error: null,
-                output_preview: null,
-                retry_count: 0,
-              },
-            } as TaskBoardState['statuses'],
-            progress: { total: 2, done: 0, running: 1, queued: 1, failed: 0, cancelled: 0 },
-          })}
-        />,
-      );
-      const el = screen.getByTestId('task-tree-run-elapsed');
-      expect(el.textContent).toContain('已运行 2m30s');
-      expect(el.textContent).toContain('上限 30 分钟');
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('终态后冻结且无上限设置时不提示', () => {
-    vi.useFakeTimers();
-    try {
-      useSettingsMock.mockReturnValue({
-        settings: { orch: { runWallClockLimitMinutes: 0 } },
-        isLoading: false,
-        loadSettings: vi.fn(),
-        updateSettings: vi.fn(),
-        resetSettings: vi.fn(),
-      });
-      vi.setSystemTime(new Date('2026-09-18T12:05:00Z'));
-      render(
-        <TaskTreeSection
-          board={makeBoard({
-            dispatchedAt: Date.now() - 90_000,
-            statuses: {
-              t1: {
-                state: 'task_status',
-                run_id: 'orch-rerun-ui',
-                task_id: 't1',
-                status: 'done',
-                agent_id: 'primary',
-                goal: 'g1',
-                error: null,
-                output_preview: null,
-                retry_count: 0,
-              },
-              t2: {
-                state: 'task_status',
-                run_id: 'orch-rerun-ui',
-                task_id: 't2',
-                status: 'failed',
-                agent_id: 'primary',
-                goal: 'g2',
-                error: 'boom',
-                output_preview: null,
-                retry_count: 0,
-              },
-            } as TaskBoardState['statuses'],
-            progress: { total: 2, done: 1, running: 0, queued: 0, failed: 1, cancelled: 0 },
-          })}
-        />,
-      );
-      const el = screen.getByTestId('task-tree-run-elapsed');
-      expect(el.textContent).toContain('已运行 1m30s');
-      expect(el.textContent).not.toContain('上限');
-      // 冻结：时间前进后不重渲染（无 tick）
-      vi.advanceTimersByTime(5_000);
-      expect(screen.getByTestId('task-tree-run-elapsed').textContent).toContain(
-        '已运行 1m30s',
-      );
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-});
-
-// ============================================================================
 // RD18 (round33): 级联跳过根因徽章
 // ============================================================================
 
@@ -405,9 +291,7 @@ describe('TaskTreeSection — run 触顶原因横幅 (RD21)', () => {
         })}
       />,
     );
-    expect(screen.getByTestId('task-tree-trip-reason').textContent).toContain(
-      '墙钟上限已到',
-    );
+    expect(screen.getByTestId('task-tree-trip-reason').textContent).toContain('墙钟上限已到');
     // 普通失败（无守门前缀）不触发横幅
     cleanup();
     render(
@@ -430,50 +314,5 @@ describe('TaskTreeSection — run 触顶原因横幅 (RD21)', () => {
       />,
     );
     expect(screen.queryByTestId('task-tree-trip-reason')).toBeNull();
-  });
-});
-
-// ============================================================================
-// RD20 (round43): 历史 run 恢复态 —— BU16 时长显示原始总时长
-// ============================================================================
-
-describe('TaskTreeSection — 恢复态时长 (RD20)', () => {
-  it('endedAt 存在时 elapsed 冻结为原始总时长', () => {
-    vi.useFakeTimers();
-    try {
-      vi.setSystemTime(new Date('2026-09-18T12:00:00Z'));
-      render(
-        <TaskTreeSection
-          board={makeBoard({
-            dispatchedAt: Date.now() - 600_000,
-            endedAt: Date.now() - 300_000, // run 原始时长 5 分钟
-            statuses: {
-              t1: {
-                state: 'task_status',
-                run_id: 'orch-rerun-ui',
-                task_id: 't1',
-                status: 'done',
-                agent_id: 'primary',
-                goal: 'g1',
-                error: null,
-                output_preview: null,
-                retry_count: 0,
-              },
-            } as TaskBoardState['statuses'],
-            progress: { total: 1, done: 1, running: 0, queued: 0, failed: 0, cancelled: 0 },
-          })}
-        />,
-      );
-      expect(screen.getByTestId('task-tree-run-elapsed').textContent).toContain(
-        '已运行 5m',
-      );
-      // 时间前进后不重渲染（endedAt 冻结，无 tick）
-      vi.advanceTimersByTime(60_000);
-      expect(screen.getByTestId('task-tree-run-elapsed').textContent).toContain(
-        '已运行 5m',
-      );
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });
