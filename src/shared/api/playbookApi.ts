@@ -474,10 +474,7 @@ export const playbookApi = {
     return response.events ?? [];
   },
 
-  async aggregateEvents(
-    projectId?: string,
-    days = 30,
-  ): Promise<PlaybookEventAggregate> {
+  async aggregateEvents(projectId?: string, days = 30): Promise<PlaybookEventAggregate> {
     return invoke<PlaybookEventAggregate>('playbooks_events_aggregate', {
       projectId,
       days,

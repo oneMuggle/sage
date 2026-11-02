@@ -83,7 +83,8 @@ def test_repository_record_and_list() -> None:
     second = repo.record(
         "proj_abc", "audit", stage="planning", payload={"issues_count": 3}
     )
-    assert second is not None and second > first
+    assert second is not None
+    assert second > first
 
     events = repo.list_recent("proj_abc")
     assert [e.event for e in events] == ["audit", "bind"]  # newest first

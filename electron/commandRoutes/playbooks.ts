@@ -167,9 +167,7 @@ export const playbookRoutes: Record<string, CommandRoute> = {
     path: (a) => {
       const days = Number(a.days ?? 30);
       const pid = a.projectId ?? a.project_id;
-      const query = pid
-        ? `project_id=${enc(String(pid))}&days=${days}`
-        : `days=${days}`;
+      const query = pid ? `project_id=${enc(String(pid))}&days=${days}` : `days=${days}`;
       return `/api/v1/playbooks/events/aggregate?${query}`;
     },
   },
