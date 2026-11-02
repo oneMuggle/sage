@@ -99,6 +99,7 @@ from backend.data.project_repo import (
     open_project,
 )
 from backend.data.session_repo import MessageRepository
+from backend.office.allowed_paths import default_allowed_paths
 from backend.office.errors import OfficePathError
 from backend.office.session_workspace import get_workspace_binding
 from backend.office.storage import validate_workspace
@@ -253,9 +254,15 @@ def register_project(request: ProjectRegisterRequest) -> ProjectModel:
             detected_type = result.project_type
             project_type = detected_type
 
+        # 未显式提供 allowed_paths（None）时预填常用文档目录，减少工作区外
+        # 读写审批；显式 [] 表示用户选择清空，保持不变。
+        allowed_paths = request.allowed_paths
+        if allowed_paths is None:
+            allowed_paths = default_allowed_paths()
+
         project = ProjectRepository().register(
             request.path,
-            allowed_paths=request.allowed_paths,
+            allowed_paths=allowed_paths,
             project_type=project_type,
             detected_type=detected_type,
         )

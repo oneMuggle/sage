@@ -215,4 +215,6 @@ def test_oversized_file_rejected(word_workspace, monkeypatch) -> None:
     """mock size 上限 (收紧常数等价触发同一分支), 不真造 50MB 文件。"""
     monkeypatch.setattr(attachment_resolver, "MAX_ATTACHMENT_FILE_SIZE_BYTES", 10)
     out = process("看 @report.docx", workspace=str(word_workspace))
-    assert out == ""
+    assert "<attachments>" not in out
+    assert "<attachments_skipped>" in out
+    assert "- report.docx: 文件无法读取，已跳过（unreadable）" in out

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.office.allowed_paths import is_allowed
+from backend.office.allowed_paths import default_allowed_paths, is_allowed
 
 
 class TestIsAllowed:
@@ -170,3 +170,33 @@ class TestPathSafety:
         (tmp_path / "subdir" / "file.txt").write_text("test")
 
         assert is_allowed(candidate, [rule]) is True
+
+
+class TestDefaultAllowedPaths:
+    """default_allowed_paths() —— 新建项目预填规则。"""
+
+    def test_only_existing_home_dirs(self, tmp_path: Path):
+        """仅返回实际存在的主目录常用目录；缺失的（Downloads）跳过。"""
+        home = tmp_path / "home"
+        (home / "Documents").mkdir(parents=True)
+        (home / "Desktop").mkdir()
+
+        assert default_allowed_paths(home=home) == ["~/Documents/**", "~/Desktop/**"]
+
+    def test_returns_empty_when_no_common_dirs(self, tmp_path: Path):
+        home = tmp_path / "bare-home"
+        home.mkdir()
+
+        assert default_allowed_paths(home=home) == []
+
+    def test_rules_match_paths_under_home(self, tmp_path: Path, monkeypatch):
+        """预填规则可命中主目录内路径，且不越界到主目录外。"""
+        home = tmp_path / "home"
+        papers = home / "Documents" / "papers"
+        papers.mkdir(parents=True)
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+        rules = default_allowed_paths(home=home)
+
+        assert is_allowed(str(papers / "a.pdf"), rules) is True
+        assert is_allowed(str(home / "secret.txt"), rules) is False

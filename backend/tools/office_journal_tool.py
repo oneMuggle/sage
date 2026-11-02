@@ -7,8 +7,9 @@
 - ``office_journal_validate``         (READ, requires_tool_context)
 
 所有工具走 ``_resolve_active_workspace`` 拿当前 chat session 绑定的工作区。
-非绑定调用（无 ctx）→ 返 ``workspace_not_bound``。file_path 模式额外做
-``_enforce_workspace`` 围栏（policy.workspace_root 非空时）。
+非绑定调用（无 ctx）→ 返 ``workspace_not_bound``。file_path 模式的 READ 工具
+（parse_template / validate）走绝对路径把守，纯读不做工作区边界检查；
+WRITE 工具的工作区外写入由 PermissionEnforcer 的 path boundary 升级为审批。
 
 LLM 代理桥接由 ``backend.office.journal.llm_adapter.JournalLLMAdapter`` 提供，
 把 ``ProviderClient.complete`` 适配为 ``generate_article`` 期望的
@@ -121,10 +122,8 @@ class OfficeJournalParseTemplateTool(BaseTool):
     def execute(self, file_path: Optional[str] = None, **kwargs: Any) -> ToolResult:
         if not isinstance(file_path, str) or not file_path.strip():
             return ToolResult(success=False, error="content_shape_invalid")
-        # 路径围栏：file_path 必须在绑定 workspace 内（policy.workspace_root）
-        blocked = self._enforce_workspace(file_path)
-        if blocked is not None:
-            return blocked
+        # 读路径不做工作区检查（与 read_file 对齐：允许读取任意位置）。
+        # parse_template 是 READ 工具，不修改文件。
         p = Path(file_path).expanduser()
         if p.suffix.lower() not in {".doc", ".docx"}:
             return ToolResult(
@@ -415,10 +414,8 @@ class OfficeJournalValidateTool(BaseTool):
     ) -> ToolResult:
         if not isinstance(file_path, str) or not file_path.strip():
             return ToolResult(success=False, error="content_shape_invalid")
-        # 路径围栏：被校验 docx 必须落在绑定工作区内
-        blocked = self._enforce_workspace(file_path)
-        if blocked is not None:
-            return blocked
+        # 读路径不做工作区检查（与 read_file 对齐：允许读取任意位置）。
+        # validate 是 READ 工具，不修改文件。
         p = Path(file_path).expanduser()
         if not p.is_file():
             return ToolResult(

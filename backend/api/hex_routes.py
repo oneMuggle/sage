@@ -125,9 +125,15 @@ async def chat(
 
     # Office @-mention: 与 legacy /chat/stream 对齐, 调用 resolve_attachments
     # (含路径安全校验 + 50MiB 上限 + 失败 mention 静默 skip — 这些已在 Task 3
-    # 落地到 attachment_resolver.process 本身).
+    # 落地到 attachment_resolver.process 本身). 项目 allowed_paths 命中的
+    # 工作区外文件允许注入, 未命中仍按 skipped 原因告知模型.
+    from backend.office.allowed_paths import get_session_allowed_paths
+
     attachment_block = await resolve_attachments(
-        req.message, req.workspace_path or ""
+        req.message,
+        req.workspace_path or "",
+        allowed_paths=get_session_allowed_paths(req.session_id),
+        project_root=req.workspace_path,
     )
     # T4.M2 closure: 附件块只在当前 LLM 调用中生效, 不持久化.
     # 旧实现用 svc.storage.append_message(...) 会让后续 turn 重发同一块,

@@ -115,9 +115,14 @@ async def test_legacy_chat_stream_no_mention_no_injection(
     process_calls = []
     original_process = attachment_resolver.process
 
-    def tracking_process(text, workspace):
+    def tracking_process(text, workspace, allowed_paths=None, project_root=None):
         process_calls.append((text, workspace))
-        return original_process(text, workspace)
+        return original_process(
+            text,
+            workspace,
+            allowed_paths=allowed_paths,
+            project_root=project_root,
+        )
 
     monkeypatch.setattr(attachment_resolver, "process", tracking_process)
 
@@ -191,6 +196,9 @@ async def test_legacy_chat_stream_silently_skips_failed_mention(
     attachment_messages = _attachment_messages(messages)
     assert len(attachment_messages) == 1
     content = attachment_messages[0]["content"]
-    assert "outside.pptx" not in content
-    assert "bad.pptx" not in content
+    # 未注入的 mention 不进 <attachments>，改为在 <attachments_skipped> 中说明原因
+    assert "=== outside.pptx ===" not in content
+    assert "=== bad.pptx ===" not in content
+    assert "outside.pptx: 文件不在当前工作区内" in content
+    assert "bad.pptx: 文件无法读取" in content
     assert "=== good.docx ===\nW" in content

@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import atexit
 import concurrent.futures
+from typing import List, Optional
 
 from backend.chat import attachment_resolver
 
@@ -31,7 +32,12 @@ ATTACHMENT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
 atexit.register(ATTACHMENT_EXECUTOR.shutdown, wait=False)
 
 
-async def resolve_attachments(text: str, workspace_path: str) -> str:
+async def resolve_attachments(
+    text: str,
+    workspace_path: str,
+    allowed_paths: Optional[List[str]] = None,
+    project_root: Optional[str] = None,
+) -> str:
     """Resolve @-mention attachments in text and return formatted block.
 
     This async wrapper runs the synchronous attachment_resolver.process()
@@ -40,6 +46,10 @@ async def resolve_attachments(text: str, workspace_path: str) -> str:
     Args:
         text: User message containing @-mentions (e.g., "see @file.md")
         workspace_path: Root path for resolving relative file references
+        allowed_paths: Project whitelist rules; matching paths may live
+            outside ``workspace_path`` (computed on the event loop to keep
+            DB access out of the worker thread)
+        project_root: Base for expanding relative whitelist rules
 
     Returns:
         Formatted attachment block (XML-ish string) or empty string if
@@ -50,4 +60,6 @@ async def resolve_attachments(text: str, workspace_path: str) -> str:
         attachment_resolver.process,
         text,
         workspace_path,
+        allowed_paths,
+        project_root,
     )
