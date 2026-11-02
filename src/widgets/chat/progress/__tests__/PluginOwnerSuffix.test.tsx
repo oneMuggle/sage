@@ -1,19 +1,21 @@
-// src/widgets/chat/__tests__/TaskTreeSection.pluginOwner.test.tsx
+// src/widgets/chat/progress/__tests__/PluginOwnerSuffix.test.tsx
 //
-// R114: 编排任务树实时行的插件归属后缀 —— 等待审批徽章与事
-// 件行在工具名后追加「（所属插件: <name>）」；名单供数由
-// usePluginNames 承担（其契约在 hook 套件），这里只 mock
-// 返回值测渲染结合。既有 TaskTree 套件无 live 夹具、门控关，
-// 不受影响。
-
+// R114: 编排子代理实时行的插件归属后缀 —— 等待审批徽章与实时事件行在
+// 工具名后追加「（所属插件: <name>）」；名单供数由 usePluginNames 承担
+// （其契约在 hook 套件），这里只 mock 返回值测渲染结合。
+//
+// 2026-11-02 进度面板优化后实时事件行从 TaskTreeSection 迁入
+// TaskDetailView：列表页只保留审批徽章，详情页同时有审批徽章与事件行，
+// 本套件同时覆盖两处。
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TaskBoard } from '../../../features/send-message/useChat';
-import { TaskTreeSection } from '../progress/TaskTreeSection';
+import type { TaskBoard } from '../../../../features/send-message/useChat';
+import { TaskDetailView } from '../TaskDetailView';
+import { TaskTreeSection } from '../TaskTreeSection';
 
 const usePluginNamesMock = vi.fn();
-vi.mock('../../../shared/lib/hooks/usePluginNames', () => ({
+vi.mock('../../../../shared/lib/hooks/usePluginNames', () => ({
   usePluginNames: (...a: unknown[]) => usePluginNamesMock(...a),
 }));
 
@@ -60,30 +62,50 @@ const boardWithLive: TaskBoard = {
   },
 };
 
+function renderDetail() {
+  return render(<TaskDetailView board={boardWithLive} taskId="t1" onBack={() => {}} />);
+}
+
 beforeEach(() => {
   usePluginNamesMock.mockReset().mockReturnValue(null);
 });
 
-describe('TaskTreeSection 实时行插件归属（R114）', () => {
-  it('等待审批徽章与插件事件行带归属后缀，内置工具事件行不带', () => {
+describe('插件归属后缀（R114）', () => {
+  it('名单可用：列表徽章 / 详情徽章 / 插件事件行带后缀，内置工具事件行不带', () => {
     usePluginNamesMock.mockReturnValue(['demo']);
-    render(<TaskTreeSection board={boardWithLive} />);
+
+    const { unmount } = render(<TaskTreeSection board={boardWithLive} />);
     expect(screen.getByTestId('task-tree-approval-t1')).toHaveTextContent(
       '⏳ 等待审批: plugin__demo__echo（所属插件: demo）',
     );
     expect(usePluginNamesMock).toHaveBeenCalledWith(true);
-    const list = screen.getByTestId('task-tree-events-t1');
+    unmount();
+
+    usePluginNamesMock.mockClear();
+    renderDetail();
+    expect(screen.getByTestId('task-detail-approval')).toHaveTextContent(
+      '⏳ 等待审批: plugin__demo__echo（所属插件: demo）',
+    );
+    expect(usePluginNamesMock).toHaveBeenCalledWith(true);
+    const list = screen.getByTestId('task-detail-events');
     expect(list.textContent).toContain('🔧 plugin__demo__echo（所属插件: demo）');
     expect(list.textContent).toContain('👀 read_file');
     expect(list.textContent?.match(/所属插件/g)).toHaveLength(1);
   });
 
-  it('名单不可用时徽章与事件行都不加后缀', () => {
-    render(<TaskTreeSection board={boardWithLive} />);
+  it('名单不可用：列表徽章 / 详情徽章 / 事件行都不加后缀', () => {
+    const { unmount } = render(<TaskTreeSection board={boardWithLive} />);
     expect(screen.getByTestId('task-tree-approval-t1')).toHaveTextContent(
       '⏳ 等待审批: plugin__demo__echo',
     );
     expect(screen.getByTestId('task-tree-approval-t1')).not.toHaveTextContent('所属插件');
-    expect(screen.getByTestId('task-tree-events-t1').textContent).not.toContain('所属插件');
+    unmount();
+
+    renderDetail();
+    expect(screen.getByTestId('task-detail-approval')).toHaveTextContent(
+      '⏳ 等待审批: plugin__demo__echo',
+    );
+    expect(screen.getByTestId('task-detail-approval')).not.toHaveTextContent('所属插件');
+    expect(screen.getByTestId('task-detail-events').textContent).not.toContain('所属插件');
   });
 });
