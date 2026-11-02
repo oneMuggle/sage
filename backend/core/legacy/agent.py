@@ -136,17 +136,14 @@ _PARALLEL_POOL_SIZE = 8
 
 from backend.tools.bash_validation import validate_bash
 from backend.tools.context import current_tool_context
-from backend.tools.context import (
-    reset_approved_paths as _reset_approved_paths,
-    set_approved_paths as _set_approved_paths,
-)
 from backend.tools.permissions import (
     DEFAULT_PERMISSION_MODE,
     PermissionDecision,
     PermissionEnforcer,
     ToolCapability,
-    boundary_paths_for_call,
     classify_tool,
+    enter_approved_paths,
+    exit_approved_paths,
     load_enforcer_from_settings,
     make_office_path_boundary,
 )
@@ -2720,66 +2717,47 @@ class SageAgent:
                                         result_content = q_result.error or "工具执行失败"
 
                         if not ask_handled:
-                            # B1 (GT1, DSH 对标 R5): 分发前门控链抽离 —— profile
-                            # 白名单 → M1 enforcer → S3 自动放行台账（见
-                            # _pre_dispatch_gate）。审批闸口（PERMISSION_REQUEST
-                            # yield + await）含事件/异步语义，仍留在本循环，GT2 收。
+                            # B1 (GT1, DSH 对标 R5): 分发前门控链抽离 —— profile 白名单
+                            # → M1 enforcer → S3 自动放行台账（见 _pre_dispatch_gate）；
+                            # 审批闸口含事件/异步语义仍留本循环，GT2 收。
                             decision, denial_content = self._pre_dispatch_gate(
                                 tc, args, enforcer, session_id
                             )
-                            # Phase C: 本次调用是否经用户显式批准（决定是否把
-                            # 路径写入 approved-paths 作用域放行工作区外写入）。
-                            approval_granted = False
+                            # 用户显式批准的路径作用域：审批通过后注入，工具层
+                            # ``_enforce_workspace`` 据此放行工作区外的写入。
+                            approved_token = None
                             if denial_content:
                                 result_content = denial_content
                                 is_error = True
                             if decision.needs_approval:
-                                # B1 (GT2, DSH 对标 R6): 审批闸口抽离 ——
-                                # ask 阶段（PERMISSION_REQUEST 流式转发 +
-                                # await 应答 → 决议）。事件先于 await 产出
-                                # （前端先看到请求），最终决议经 result box
-                                # 返回（async generator 只能 yield 不能 return 值）。
+                                # B1 (GT2, DSH 对标 R6): 审批闸口抽离 —— ask 阶段
+                                # （PERMISSION_REQUEST 流式转发 + await 应答 → 决议）；
+                                # 事件先于 await 产出，决议经 result box 返回。
                                 gate_result: Dict[str, Any] = {}
                                 async for _gate_ev in self._approval_gate(
                                     tc, args, decision, i, gate_result
                                 ):
                                     yield _gate_ev
                                 decision = gate_result["decision"]
-                                # 闸口决议把 needs_approval 归零，用独立标记记住
-                                # "本次调用经用户批准"（Phase C 注入 approved-paths）。
-                                approval_granted = decision.allowed
+                                approved_token = enter_approved_paths(tc.name, args, decision.allowed)
 
                             if not decision.allowed:
                                 logger.info(
-                                    "工具调用被权限执行器拒绝: tool=%s reason=%s",
-                                    tc.name,
-                                    decision.reason,
+                                    "工具调用被权限执行器拒绝: tool=%s reason=%s", tc.name, decision.reason
                                 )
                                 result_content = f"权限拒绝: {decision.reason}"
                                 is_error = True
                             else:
-                                # Phase C: 审批通过后把本次调用的路径注入
-                                # approved-paths ContextVar，让工具层
-                                # ``_enforce_workspace`` 放行这些路径。作用域在
-                                # 调用结束（finally）即清理，不泄漏到后续调用。
-                                approved_token = None
-                                if approval_granted:
-                                    approved = boundary_paths_for_call(tc.name, args)
-                                    if approved:
-                                        approved_token = _set_approved_paths(approved)
                                 try:
                                     tool = self.tool_registry.get(tc.name)
                                     if tool is None:
                                         result_content = f"[错误] 工具不存在: {tc.name}"
                                         is_error = True
                                     else:
-                                        # L12-lite: 可等待执行统一走中断竞争,
-                                        # 中断先到即取消当前工具、事件循环立即恢复,
-                                        # 否则语义与旧版完全一致。
-                                        # live-events P0: dispatch_subagents 透传本工具
-                                        # 调用 ID（helper 内注入）—— dispatcher 给子
-                                        # 任务标 parent_tool_call_id，前端把子代理
-                                        # 实时步骤挂到 Delegate 卡片。
+                                        # L12-lite: 可等待执行统一走中断竞争, 中断先到即取消
+                                        # 当前工具、事件循环立即恢复。live-events P0:
+                                        # dispatch_subagents 透传工具调用 ID（helper 内注入）
+                                        # —— 子任务标 parent_tool_call_id, 前端挂到 Delegate 卡片。
                                         cancelled, result = await self._await_tool_execution(
                                             tool, tc.name, args, tool_call_id=tc.id
                                         )
@@ -2859,10 +2837,7 @@ class SageAgent:
                                     result_content = f"[工具错误] {str(e)}"
                                     is_error = True
                                 finally:
-                                    # Phase C: 清理本次调用的 approved-paths 作用域，
-                                    # 避免批准过的路径泄漏到后续工具调用。
-                                    if approved_token is not None:
-                                        _reset_approved_paths(approved_token)
+                                    exit_approved_paths(approved_token)
 
                         tool_result = ToolCallResult(
                             tool_call_id=tc.id,

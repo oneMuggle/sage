@@ -22,6 +22,7 @@ import fnmatch
 import logging
 import threading
 from collections import OrderedDict
+from contextvars import Token
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -35,7 +36,11 @@ from backend.domain.tool_names import (
 )
 from backend.tools.base import _is_safe_path
 from backend.tools.bash_validation import BashRisk, validate_bash
-from backend.tools.context import current_tool_context
+from backend.tools.context import (
+    current_tool_context,
+    reset_approved_paths,
+    set_approved_paths,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -564,7 +569,8 @@ def boundary_paths_for_call(
     落在源文件同目录（如 ``<stem>.fill-*.docx`` / ``<stem>-analysis.xlsx``），
     只批准文件本身会漏掉这些同目录写入。
 
-    返回空元组表示无需注入（工具不在边界表 / 路径缺失 / 路径在工作区内）。
+    返回空元组表示无需注入（工具不在边界表 / 路径缺失 / 非绝对路径）。
+    落在工作区内的路径也会一并返回——它们本就被放行，注入无副作用。
     """
     paths: List[str] = []
     for target in _boundary_targets(tool_name, args):
@@ -579,6 +585,27 @@ def boundary_paths_for_call(
         if parent not in paths:
             paths.append(parent)
     return tuple(paths)
+
+
+def enter_approved_paths(
+    tool_name: str, args: Dict[str, Any], granted: bool
+) -> Optional[Token]:
+    """用户批准后把本次调用的路径写入 approved-paths 作用域。
+
+    ``granted`` 为 False（未走审批闸口 / 用户拒绝）时返回 ``None``，不放行
+    任何路径。返回的 ``Token`` 必须交回 :func:`exit_approved_paths` 清理，
+    否则作用域会泄漏到后续工具调用。
+    """
+    if not granted:
+        return None
+    approved = boundary_paths_for_call(tool_name, args)
+    return set_approved_paths(approved) if approved else None
+
+
+def exit_approved_paths(token: Optional[Token]) -> None:
+    """清理 :func:`enter_approved_paths` 注入的作用域（token 为 None 时无操作）。"""
+    if token is not None:
+        reset_approved_paths(token)
 
 
 # ---------------------------------------------------------------------------
@@ -677,5 +704,7 @@ __all__ = [
     "clear_session_rules",
     "make_office_path_boundary",
     "boundary_paths_for_call",
+    "enter_approved_paths",
+    "exit_approved_paths",
     "load_enforcer_from_settings",
 ]

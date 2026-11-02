@@ -142,17 +142,6 @@ def _resolve_active_workspace(ctx: Optional[ToolExecutionContext]) -> Optional[P
     return Path(binding.workspace_path)
 
 
-def _workspace_for_input(
-    ctx: Optional[ToolExecutionContext], input_path: Path
-) -> Path:
-    """file_path 模式的 workspace 取值：输入在绑定工作区内 → 绑定工作区；
-    否则 → 输入父目录（委托 :func:`workspace_for_input`，与 pdf/template/
-    toc_refresh 模块共用同一围栏语义）。
-    """
-    binding_ws = _resolve_active_workspace(ctx)
-    return workspace_for_input(binding_ws, input_path)
-
-
 def _bounded(data: Dict[str, Any], max_bytes: int) -> Dict[str, Any]:
     """超 ``max_bytes`` 时退化为 bounded head，语义同 tool_service。"""
     serialized = json.dumps(data, ensure_ascii=False, default=str)
@@ -204,7 +193,7 @@ def _resolve_xlsx_input(  # noqa: PLR0911 — 错误早退路径多，保持线�
                 success=False,
                 error="unsupported_file_type: 仅支持 .xlsx",
             )
-        workspace = _workspace_for_input(ctx, path)
+        workspace = workspace_for_input(_resolve_active_workspace(ctx), path)
         return path, str(workspace), None
     return ToolResult(success=False, error="doc_id_or_file_path_required")
 

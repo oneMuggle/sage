@@ -52,6 +52,11 @@ Sage 的问题：Office 读取工具比 `read_file` 更严格，且 `@-mention` 
     - `OfficeFillPptTemplateTool.execute` 预测输出路径加 `_enforce_workspace`
     - `OfficeFillPdfFormTool.execute` in-place 分支加 `_enforce_workspace`
     - `OfficeAnalyzeTool.execute` write_report 分支加 `_enforce_workspace` + 降级模式
+  - **审批后放行**：`backend/core/legacy/agent.py` 在审批闸口后调用
+    `enter_approved_paths(tc.name, args, decision.allowed)` 注入 ContextVar
+    作用域，`BaseTool._enforce_workspace` 据此放行；`finally` 清理 token。
+    封装函数 `enter_approved_paths` / `exit_approved_paths` 置于
+    `backend/tools/permissions.py`（避免 `context.py → permissions.py` 循环依赖）。
   - 待补：`office_lint_word` / `office_latex_build` / `office_journal_*` / `office_word_intelligence_*`
 
 - [ ] Step 3: `@-mention` 附件不再静默跳过
