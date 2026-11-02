@@ -5,6 +5,7 @@ export const zhChatDisplayMode = {
   'chat.displayMode.trace': '仅执行',
   'chat.displayMode.result': '仅结果',
   'chat.displayMode.followGlobal': '跟随全局默认',
+  'chat.displayMode.followSession': '跟随会话',
   'chat.displayMode.hiddenSummary': '已隐藏思考过程与 {count} 步工具调用',
   'chat.displayMode.reveal': '展开',
   'settings.basic.chat_display_mode_label': '思考展示档位',
