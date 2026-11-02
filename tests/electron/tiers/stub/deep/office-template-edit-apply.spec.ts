@@ -57,6 +57,10 @@ test.describe('office template create → edit preview → apply (demo stub mode
 
   test('instantiate a builtin template, restore it into preview, apply a replace_text edit', async () => {
     // ── 1. Word tab → 从模板创建 ──────────────────────────────────────
+    // 2026-11 IA restructure: the generate form (and its WORD/PPT/EXCEL/PDF
+    // format tabs) moved into the dedicated "文档生成" top-level tab. The
+    // beforeEach lands on the default "文档处理" tab, so we must switch first.
+    await page.getByTestId('office-tab-generate').click();
     await page.getByRole('button', { name: 'WORD', exact: true }).click();
     await page.getByTestId('office-word-mode-template').click();
 
@@ -81,17 +85,22 @@ test.describe('office template create → edit preview → apply (demo stub mode
     await page.getByTestId('office-generate-submit').click();
     await expect(page.locator('[data-sonner-toast]', { hasText: '已从模板创建' })).toBeVisible();
 
-    // onGenerated refreshed the list; instantiate unshifts its row.
-    const list = page.getByTestId('office-document-list');
-    const newRow = list.locator('li').filter({ hasText: TEMPLATE_ROW_TITLE });
-    await expect(newRow).toHaveCount(1);
-    await expect(newRow).toContainText('已生成');
-
     // ── 2b. A4b: word 产物自动打开交付抽屉；断言出现后关闭 ────────
     const deliveryDrawer = page.getByTestId('office-delivery-drawer');
     await expect(deliveryDrawer).toBeVisible();
     await deliveryDrawer.getByTestId('drawer-close').click();
     await expect(deliveryDrawer).toBeHidden();
+
+    // ── 2c. The generate form lives in the "文档生成" tab, but the
+    // document list (and the new row's 历史版本 action) is in the
+    // "文档处理" tab. Switch back so Playwright can see and click the list.
+    await page.getByTestId('office-tab-documents').click();
+
+    // onGenerated refreshed the list; instantiate unshifts its row.
+    const list = page.getByTestId('office-document-list');
+    const newRow = list.locator('li').filter({ hasText: TEMPLATE_ROW_TITLE });
+    await expect(newRow).toHaveCount(1);
+    await expect(newRow).toContainText('已生成');
 
     // ── 3. Select → preview via the 历史版本 restore path ────────────
     await newRow.getByLabel('历史版本').click();

@@ -435,7 +435,7 @@ export const enSettingsAndModels = {
   'office.staging.review': 'Old import with no live owner — manual review only',
   'office.staging.untracked': 'No trustworthy staging evidence — retain',
   'office.staging.unreadable': 'Evidence unavailable — retain',
-  'office.title': 'Office Documents',
+  'office.title': 'Documents and Review',
   'office.selectWorkspace': 'Select Workspace',
   'office.emptyState': 'Select a workspace directory to get started',
   'office.section.pickFile': 'Select File',
@@ -480,6 +480,18 @@ export const enSettingsAndModels = {
   'office.generate.button': 'Generate',
   'office.generate.generating': 'Generating...',
   'office.generate.success': 'Generated',
+
+  // ─── 2026-11 IA restructure: section tabs / env popover ─────────────────
+  // win7: the LaTeX and Review & Rules sections come back with their feature syncs.
+  'office.tabs.label': 'Document workspace sections',
+  'office.tab.documents': 'Documents',
+  'office.tab.generate': 'Generate',
+  'office.env.title': 'Environment',
+  'office.env.capabilities': 'Local capabilities',
+  'office.env.staging': 'Staging directory (read-only)',
+  'office.generate.journal.title': 'Journal template assistant',
+  'office.generate.journal.hint':
+    'Pick a .docx template → fill content → generate or validate',
 };
 
 export function formatEnSettingsAndModelsSummary(): string {

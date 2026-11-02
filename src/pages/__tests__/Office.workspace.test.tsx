@@ -17,6 +17,7 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockBind = vi.fn();
@@ -74,6 +75,18 @@ vi.mock('../../features/office', () => ({
   }),
 }));
 
+// 2026-11 IA restructure: the Office page now nests JournalPanel inside the
+// generate tab. Stub it to keep this file focused on workspace lifecycle
+// (the sub-panel pulls its own data from the backend).
+//
+// win7: the LaTeX / Word-rule sub-panels that main also stubs are not synced
+// to release/win7 yet, so their module paths do not exist here and must not
+// be mocked — vi.mock() on a missing path fails module resolution.
+vi.mock('../../features/journal', () => ({
+  JournalPanel: () => <div data-testid="office-journal-stub" />,
+}));
+
+
 import { SessionWorkspaceProvider } from '../../app/providers/SessionWorkspaceProvider';
 import { I18nProvider } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
@@ -91,13 +104,15 @@ afterEach(() => {
   useStore.setState({ currentSessionId: null });
 });
 
-function renderWithProvider() {
+function renderWithProvider(initialEntries: string[] = ['/office']) {
   return render(
-    <I18nProvider defaultLocale="zh">
-      <SessionWorkspaceProvider>
-        <Office />
-      </SessionWorkspaceProvider>
-    </I18nProvider>,
+    <MemoryRouter initialEntries={initialEntries}>
+      <I18nProvider defaultLocale="zh">
+        <SessionWorkspaceProvider>
+          <Office />
+        </SessionWorkspaceProvider>
+      </I18nProvider>
+    </MemoryRouter>,
   );
 }
 

@@ -66,6 +66,11 @@ test.describe('office pdf generate + preview (demo stub mode)', () => {
   });
 
   test('01: PDF tab generate succeeds, list gains a pdf row', async () => {
+    // 2026-11 IA restructure: the generate form (and its PPT/WORD/EXCEL/PDF
+    // format tabs) moved from the default "文档处理" panel into the dedicated
+    // "文档生成" top-level tab. Switch to it before looking for the PDF button.
+    await page.getByTestId('office-tab-generate').click();
+
     // Switch the generate form to the PDF tab (tab buttons read PPT/WORD/EXCEL/PDF).
     await page.getByRole('button', { name: 'PDF', exact: true }).click();
 
@@ -82,6 +87,10 @@ test.describe('office pdf generate + preview (demo stub mode)', () => {
     await expect(
       page.locator('[data-sonner-toast]', { hasText: '已生成' }),
     ).toBeVisible();
+
+    // The generate form lives in the "文档生成" tab, but the document list is
+    // in the "文档处理" tab. Switch back so Playwright can see the list rows.
+    await page.getByTestId('office-tab-documents').click();
 
     // The list is the source of truth for "a row was persisted": the 4 demo
     // rows + our new pdf row (top of the list, newest first).
