@@ -11,10 +11,10 @@ export type {
 export { OfficeIntake } from './OfficeIntake';
 export { OfficePreviewPanel } from './OfficePreviewPanel';
 export type { OfficePreviewData } from './OfficePreviewPanel';
+export { DocumentAuditPanel } from './DocumentAuditPanel';
 export { OfficeDocumentList } from './OfficeDocumentList';
 export { OfficeSnapshotPanel } from './OfficeSnapshotPanel';
 export { OfficeEditPreviewDialog } from './OfficeEditPreviewDialog';
-;
 export { buildUpdateOps } from './OfficeEditPreviewDialog';
 export { OfficeDuplicateDialog } from './OfficeDuplicateDialog';
 export { OfficeGenerateForm } from './OfficeGenerateForm';
@@ -35,6 +35,7 @@ export function auditOfficeFeatureBarrel(): OfficeFeatureBarrelAuditReport {
     'useOfficeDocuments',
     'OfficeIntake',
     'OfficePreviewPanel',
+    'DocumentAuditPanel',
     'OfficeDocumentList',
     'OfficeSnapshotPanel',
     'OfficeEditPreviewDialog',

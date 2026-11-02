@@ -517,17 +517,21 @@ export const enSettingsAndModels = {
   'office.generate.generating': 'Generating...',
   'office.generate.success': 'Generated',
 
-  // ─── 2026-11 IA restructure: section tabs / env popover ─────────────────
-  // win7: the LaTeX and Review & Rules sections come back with their feature syncs.
+  // ─── 2026-11 IA restructure: section tabs / LaTeX sub-tabs / env popover ─────
   'office.tabs.label': 'Document workspace sections',
   'office.tab.documents': 'Documents',
   'office.tab.generate': 'Generate',
+  'office.tab.rules': 'Review & Rules',
+  'office.tab.latex': 'LaTeX',
+  'office.latex.tabs.label': 'LaTeX sections',
+  'office.latex.project': 'Project & Build',
+  'office.latex.templates': 'Templates & Profiles',
+  'office.latex.audit': 'Review & Compliance',
   'office.env.title': 'Environment',
   'office.env.capabilities': 'Local capabilities',
   'office.env.staging': 'Staging directory (read-only)',
   'office.generate.journal.title': 'Journal template assistant',
-  'office.generate.journal.hint':
-    'Pick a .docx template → fill content → generate or validate',
+  'office.generate.journal.hint': 'Pick a .docx template → fill content → generate or validate',
   'office.rules.guide.title': 'Where is Word review?',
   'office.rules.guide.body':
     'Import a document, then review, revise and export PDF from the preview panel under Documents. This section turns spec / template files into reusable rule packs.',

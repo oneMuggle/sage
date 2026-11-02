@@ -2,7 +2,7 @@
 
 > **适用版本**: Sage main @ 2026-09-09 —— Office 对标批次 1-3 + Round 2/3(PR #554 / #561 / #564 / #569)
 > **用户入口**: 桌面端 Office 页面(`/office` 路由)+ Chat 内自动调用
-> **页面导航**: 页面按任务分为 2 个页签（文档处理 / 文档生成），详见 [30-office-tabs.md](./30-office-tabs.md)
+> **页面导航**: 页面按任务分为 4 个页签（文档处理 / 文档生成 / 审校与规范 / LaTeX），详见 [30-office-tabs.md](./30-office-tabs.md)
 
 ## 9.1 什么是 Office 文档助手
 
@@ -239,4 +239,4 @@ Office 页面生成表单切到「从模板创建」,内置 **10 套中文模板
 - 用户: [`01-desktop.md`](./01-desktop.md) —— 安装与启动
 - 用户: [`06-diagnostics.md`](./06-diagnostics.md) —— 故障排查与日志
 - 用户: [`11-sage-doctor.md`](./11-sage-doctor.md) —— sage doctor 自检
-- 用户: [`30-office-tabs.md`](./30-office-tabs.md) —— 文档与验收页面导航（页签结构与深链）
+- 用户: [`30-office-tabs.md`](./30-office-tabs.md) —— 文档与验收页面导航（4 个页签的结构与深链）
