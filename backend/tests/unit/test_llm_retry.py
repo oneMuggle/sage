@@ -266,6 +266,56 @@ async def test_retry_total_budget_stops_retries(monkeypatch):
     assert mock_http.post.await_count == 2
     assert exc_info.value.type == LLMErrorType.SERVER_ERROR
     assert "预算" in exc_info.value.message
+    # 停止原因必须可操作：带上已尝试次数与建议
+    assert "已尝试 2/10 次" in exc_info.value.message
+    assert "调大总时长预算" in exc_info.value.message
+
+
+@pytest.mark.asyncio()
+async def test_chat_rate_limited_error_carries_status_code(monkeypatch):
+    """429 分类回传 status_code，供下游按状态码区分限流。"""
+    monkeypatch.setenv("SAGE_LLM_RETRY_MAX_ATTEMPTS", "1")
+    client = _make_client()
+    _wire_post(client, [_http_status_error(429)])
+
+    with pytest.raises(LLMError) as exc_info:
+        await client.chat([{"role": "user", "content": "hi"}])
+
+    assert exc_info.value.type == LLMErrorType.RATE_LIMITED
+    assert exc_info.value.status_code == 429
+
+
+@pytest.mark.asyncio()
+async def test_retry_event_includes_budget_fields(monkeypatch):
+    """非流式重试事件携带总预算与本次等待后的剩余预算。"""
+    monkeypatch.setenv("SAGE_LLM_RETRY_MAX_ATTEMPTS", "5")
+    monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "60")
+    monkeypatch.setenv("SAGE_LLM_RETRY_TOTAL_BUDGET_S", "200")
+    monkeypatch.setattr(
+        "backend.core.legacy.llm_client._LLM_RETRY_MAX_DELAY_S", 60.0
+    )
+
+    clock = {"t": 0.0}
+    monkeypatch.setattr("backend.core.legacy.llm_client._retry_now", lambda: clock["t"])
+
+    async def fake_sleep(delay: float) -> None:
+        clock["t"] += delay
+
+    monkeypatch.setattr("backend.core.legacy.llm_client.asyncio.sleep", fake_sleep)
+
+    client = _make_client()
+    _wire_post(client, [_http_status_error(504)] * 5)
+    events = []
+
+    with pytest.raises(LLMError):
+        await client.chat(
+            [{"role": "user", "content": "hi"}], retry_callback=events.append
+        )
+
+    # 200s 预算、每次退避 60s → 第 4 次失败时 180+60 > 200 停止；共 3 个重试事件
+    assert len(events) == 3
+    assert [e.budget_total_s for e in events] == [200.0, 200.0, 200.0]
+    assert [e.budget_remaining_s for e in events] == [140.0, 80.0, 20.0]
 
 
 @pytest.mark.asyncio()
@@ -326,7 +376,55 @@ async def test_stream_retry_total_budget_stops_retries(monkeypatch):
         await drain()
 
     assert "预算" in exc_info.value.message
+    assert "已尝试 2/10 次" in exc_info.value.message
+    assert "调大总时长预算" in exc_info.value.message
     assert mock_http.stream.call_count == 2
+
+
+@pytest.mark.asyncio()
+async def test_stream_retry_event_includes_budget_fields(monkeypatch):
+    """流式重试事件同样携带总预算与剩余预算（与非流式对称）。"""
+    monkeypatch.setenv("SAGE_LLM_RETRY_MAX_ATTEMPTS", "5")
+    monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "60")
+    monkeypatch.setenv("SAGE_LLM_RETRY_TOTAL_BUDGET_S", "200")
+    monkeypatch.setattr(
+        "backend.core.legacy.llm_client._LLM_RETRY_MAX_DELAY_S", 60.0
+    )
+
+    clock = {"t": 0.0}
+    monkeypatch.setattr(
+        "backend.core.legacy.llm_client.time",
+        SimpleNamespace(monotonic=lambda: clock["t"], time=time.time),
+    )
+
+    async def fake_sleep(delay: float) -> None:
+        clock["t"] += delay
+
+    monkeypatch.setattr("backend.core.legacy.llm_client.asyncio.sleep", fake_sleep)
+
+    client = _make_client()
+    fail_ctx = _sse_ctx([])
+    fail_response = fail_ctx.__aenter__.return_value
+
+    def raise_500():
+        raise _http_status_error(500)
+
+    fail_response.raise_for_status = MagicMock(side_effect=raise_500)
+    _wire_stream(client, [fail_ctx] * 5)
+    retry_events = []
+
+    async def drain():
+        async for kind, payload in client.chat_stream_events(
+            [{"role": "user", "content": "x"}]
+        ):
+            if kind == "retry":
+                retry_events.append(payload)
+
+    with pytest.raises(LLMError):
+        await drain()
+
+    assert [e.budget_total_s for e in retry_events] == [200.0, 200.0, 200.0]
+    assert [e.budget_remaining_s for e in retry_events] == [140.0, 80.0, 20.0]
 
 
 @pytest.mark.parametrize(

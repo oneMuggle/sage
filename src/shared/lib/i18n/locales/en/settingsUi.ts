@@ -39,11 +39,14 @@ export const enSettingsUi = {
     'Wait before the first retry; subsequent retries grow exponentially (base × 2^(attempt-1))',
   'settings.basic.retry_base_label': 'Backoff base (s)',
   'settings.basic.retry_max_desc':
-    'Maximum automatic retries after a failed LLM request. Set to 0 to disable automatic retries.',
-  'settings.basic.retry_max_label': 'Max retries',
+    'Total attempt count for LLM requests (including the first request). For example, 10 means up to 10 attempts (first + 9 retries). Set to 1 to disable automatic retries.',
+  'settings.basic.retry_max_label': 'Max attempts',
   'settings.basic.retry_total_budget_desc':
     'Total time spent waiting since the first attempt. Once this budget is exhausted, automatic retries stop. 0 = unlimited.',
   'settings.basic.retry_total_budget_label': 'Total retry budget (s)',
+  // 2026-11-02: save failure toast — after saveSettings switched to strict channel,
+  // settingsStore toasts on backend PUT failure
+  'settings.save_failed_sync': 'Failed to sync settings to backend; may rollback on restart',
   'settings.basic.section.data': 'Data',
   'settings.basic.section.demo': 'Demo',
   'settings.basic.section.llm_proxy_timeout': 'LLM proxy timeout',

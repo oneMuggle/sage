@@ -166,16 +166,47 @@ class RetryEvent:
 
     Attributes:
         attempt: 当前重试次数（从 1 开始）
-        max_attempts: 最大重试次数
+        max_attempts: 最大尝试次数（含首次请求）
         error_type: 错误类型（timeout/network_error/server_error/rate_limited）
         error_message: 错误消息
         delay: 本次重试前的等待时间（秒）
+        budget_total_s: 自动重试总时长预算（秒）；未配置/0 = 不限时为 None
+        budget_remaining_s: 本次等待之后剩余的预算（秒）；无预算时为 None
     """
     attempt: int
     max_attempts: int
     error_type: str  # LLMErrorType.value
     error_message: str
     delay: float
+    budget_total_s: Optional[float] = None
+    budget_remaining_s: Optional[float] = None
+
+
+def _retry_budget_remaining(
+    total_budget: float, retry_started: float, delay: float
+) -> Optional[float]:
+    """本次退避等待后剩余的重试预算；预算未启用（<=0）时返回 None。"""
+    if total_budget <= 0:
+        return None
+    return max(0.0, total_budget - ((_retry_now() - retry_started) + delay))
+
+
+def _retry_budget_exhausted_error(
+    llm_err: LLMError,
+    attempt: int,
+    max_attempts: int,
+    delay: float,
+    total_budget: float,
+) -> LLMError:
+    """预算耗尽时抛出的错误：保留原始类型/状态码，并给出可操作提示。"""
+    return LLMError(
+        llm_err.type,
+        f"{llm_err.message}（已尝试 {attempt}/{max_attempts} 次后停止：本次重试还需"
+        f"等待 {delay:.0f}s，加上此前累计等待将超过 {total_budget:.0f}s 总时长预算。"
+        f"可在「设置 → 基础 → LLM 重试」调大总时长预算或降低最大退避）",
+        status_code=llm_err.status_code,
+        retry_after=llm_err.retry_after,
+    )
 
 
 def extract_cached_tokens(usage: Dict[str, Any]) -> int:
@@ -582,7 +613,10 @@ class LLMClient:
                 except (ValueError, TypeError):
                     retry_after = None
                 raise LLMError(
-                    LLMErrorType.RATE_LIMITED, "请求过于频繁，请稍后再试", retry_after=retry_after
+                    LLMErrorType.RATE_LIMITED,
+                    "请求过于频繁，请稍后再试",
+                    status_code=429,
+                    retry_after=retry_after,
                 )
             if 500 <= status < 600:
                 # Sage 自己的 LLM 代理在等待上游超时时回 504，并在 detail.type
@@ -807,12 +841,8 @@ class LLMClient:
                         total_budget > 0
                         and (_retry_now() - retry_started) + delay > total_budget
                     ):
-                        raise LLMError(
-                            llm_err.type,
-                            f"{llm_err.message}（自动重试累计超过 "
-                            f"{total_budget:.0f}s 总时长预算，已停止）",
-                            status_code=llm_err.status_code,
-                            retry_after=llm_err.retry_after,
+                        raise _retry_budget_exhausted_error(
+                            llm_err, attempt, max_attempts, delay, total_budget
                         )
                     logger.warning(
                         "LLM 请求失败(%s/%s): %s — %.1fs 后重试",
@@ -830,6 +860,10 @@ class LLMClient:
                                 error_type=llm_err.type.value,
                                 error_message=llm_err.message,
                                 delay=delay,
+                                budget_total_s=total_budget if total_budget > 0 else None,
+                                budget_remaining_s=_retry_budget_remaining(
+                                    total_budget, retry_started, delay
+                                ),
                             )
                         )
                     await asyncio.sleep(delay)
@@ -1214,12 +1248,8 @@ class LLMClient:
                         total_budget > 0
                         and (_retry_now() - stream_started) + delay > total_budget
                     ):
-                        raise LLMError(
-                            llm_err.type,
-                            f"{llm_err.message}（自动重试累计超过 "
-                            f"{total_budget:.0f}s 总时长预算，已停止）",
-                            status_code=llm_err.status_code,
-                            retry_after=llm_err.retry_after,
+                        raise _retry_budget_exhausted_error(
+                            llm_err, attempt, max_attempts, delay, total_budget
                         )
                     logger.warning(
                         "LLM 流式请求失败(%s/%s): %s — %.1fs 后重试",
@@ -1238,6 +1268,10 @@ class LLMClient:
                             error_type=llm_err.type.value,
                             error_message=llm_err.message,
                             delay=delay,
+                            budget_total_s=total_budget if total_budget > 0 else None,
+                            budget_remaining_s=_retry_budget_remaining(
+                                total_budget, stream_started, delay
+                            ),
                         ),
                     )
                     # 重置累积器,保证重放从零开始

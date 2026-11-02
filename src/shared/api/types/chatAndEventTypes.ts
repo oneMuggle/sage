@@ -631,6 +631,10 @@ export interface RetryInfo {
   error_type: string;
   error_message: string;
   delay: number;
+  /** 2026-11-02: 重试总时长预算（秒）；0/缺省 = 不限 */
+  budget_total_s?: number;
+  /** 2026-11-02: 本次等待结束后剩余的预算秒数（后端可省略） */
+  budget_remaining_s?: number;
 }
 
 /** 流式聊天事件 (NDJSON 协议的一行) */

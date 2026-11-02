@@ -112,6 +112,22 @@ export function RetryBanner({ info }: RetryBannerProps) {
         </span>
       )}
 
+      {/* 2026-11-02: 总时长预算可见性 — 后端推送 budget_remaining_s 时展示 */}
+      {info.budget_total_s != null && info.budget_remaining_s != null && (
+        <span
+          className="flex items-center gap-1 flex-shrink-0 text-text-secondary"
+          data-testid="retry-banner-budget"
+        >
+          <Clock className="w-3 h-3" aria-hidden="true" />
+          <span className="font-mono tabular-nums">
+            {t('chat.retry.budget_remaining').replace(
+              '{seconds}',
+              String(Math.max(0, Math.round(info.budget_remaining_s))),
+            )}
+          </span>
+        </span>
+      )}
+
       {/* 尝试进度点：已完成的 attempt 个实心，其余空心 */}
       <span className="flex items-center gap-0.5 ml-auto flex-shrink-0" aria-hidden="true">
         {Array.from({ length: attemptCount }, (_, i) => (

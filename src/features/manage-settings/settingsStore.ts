@@ -15,6 +15,8 @@
  */
 import { create } from 'zustand';
 
+import { toast } from 'sonner';
+
 import {
   loadSettings as loadSettingsFromStorage,
   resetSettings as resetSettingsLib,
@@ -24,6 +26,7 @@ import {
 import type { AppSettings } from '../../entities/setting/types';
 import { DEFAULT_SETTINGS, withDemoSettingsDefaults } from '../../entities/setting/types';
 import { getDemoModeOverride, setDemoModeOverride } from '../../shared/api/demoRuntime';
+import { translateStatic } from '../../shared/lib/i18n';
 
 interface SettingsStoreState {
   settings: AppSettings;
@@ -36,6 +39,10 @@ interface SettingsStoreState {
 }
 
 let strictWrites: Promise<void> = Promise.resolve();
+
+// 2026-11-02: 保存失败 toast 节流 — 连续修改时不刷屏
+const SAVE_FAILURE_TOAST_INTERVAL_MS = 5000;
+let lastSaveFailureToastAt = Number.NEGATIVE_INFINITY;
 
 export const useSettingsStore = create<SettingsStoreState>((set) => ({
   settings: { ...DEFAULT_SETTINGS },
@@ -62,7 +69,15 @@ export const useSettingsStore = create<SettingsStoreState>((set) => ({
 
   updateSettings: async (partial) => {
     set((state) => ({ settings: { ...state.settings, ...partial } }));
-    await saveSettings(partial);
+    const ok = await saveSettings(partial);
+    if (!ok) {
+      // 2026-11-02: 后端 PUT 失败 — 弹 toast 通知用户，5 秒节流
+      const now = Date.now();
+      if (now - lastSaveFailureToastAt >= SAVE_FAILURE_TOAST_INTERVAL_MS) {
+        toast.error(translateStatic('settings.save_failed_sync'));
+        lastSaveFailureToastAt = now;
+      }
+    }
   },
 
   updateSettingsStrict: (partial) => {
