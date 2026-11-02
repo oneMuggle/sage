@@ -426,6 +426,7 @@ export async function resetPreferencesToDefaults(): Promise<void> {
     settingsClient.setPreference('auto_checkpoint', '1'),
     settingsClient.setPreference('spend_limit_usd', '0', 'general'),
     settingsClient.setPreference('hooks', '[]', 'general'),
+    settingsClient.setPreference('chat_display_mode', 'trace', 'ui'),
   ]);
 }
 
