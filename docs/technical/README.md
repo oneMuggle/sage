@@ -99,6 +99,7 @@
 | 120  | [Word 规范/范本文档规则抽取](./120-word-rule-extraction.md) | 规范条文与范本主导值 → 候选规则；置信度、来源强制、去重与冲突标记；可选 LLM 语义候选 + 确定性后校验；抽取/保存 REST；`/office` 复核面板 |
 | 121  | [Word 渲染级校验](./121-word-render-audit.md) | DOCX→PDF（LibreOffice/Word COM）+ PyMuPDF 检查页面尺寸/页边距/字体/页码；无转换器降级；渲染审计 REST；批量审校与 Markdown 报告 |
 | 122  | [Word 规则包 LLM 工具](./122-word-rule-tools.md) | `office_audit_word/fix_word/extract_rules/revise_word/batch_audit/render_audit`；工具上下文/工作区围栏/输出截断；bundle/profile/tool_names 反漂移同步 |
+| 123  | [文档与验收信息架构：顶层 Tab + LaTeX 二级分组](./123-office-ia-tabs.md) | URL 为唯一事实源 + keep-alive 保状态 + 诊断收进「环境」popover；14 常驻区块 → 4 任务域 |
 
 ---
 

@@ -1,6 +1,6 @@
 # 文档与验收（/office）信息架构梳理与优化方案
 
-> 日期：2026-11-02 · 状态：方案（待评审，未开始实施）
+> 日期：2026-11-02 · 状态：实施中（M0–M7 已完成；M8 `release/win7` 同步待办）
 > 范围：前端 `/office` 页面的信息架构与页面元素（IA/UX）；不改后端 API、不改 Agent 工具能力清单
 > 分支：main 先落，`release/win7` 同步（纯前端，win7 适配成本低）
 
@@ -130,14 +130,21 @@
 
 ## 7. 实施步骤（里程碑）
 
-- [ ] M0 脚手架：抽公共 `TabList/TabPanel`（a11y：`role=tablist/tab/tabpanel` + 左右键切换 + `aria-selected`）；`/office` 接入 URL 参数；keep-alive 容器；H1 文案统一。
-- [ ] M1 文档处理 tab：迁移 pickers + preview + 文档列表；testid 全部保留；`Office.workspace.test.tsx` 适配。
-- [ ] M2 文档生成 tab：`OfficeGenerateForm` + `JournalPanel` 折叠卡；顺手修 `h-full` 与 slate 色。
-- [ ] M3 审校与规范 tab：`WordRuleExtractionPanel` + 审校说明卡（按钮切换到文档处理）。
-- [ ] M4 LaTeX tab：3 个二级 tab 归置 7 个面板（组件本身不改）。
-- [ ] M5 诊断降噪：能力徽章条 → 页头「环境」popover；`OfficeStagingInspector` 移入；空态精简。
-- [ ] M6 入口与深链：`OfficeDeliveryDrawer`/产物面板跳转带 `tab`；欢迎页与帮助文档更新。
-- [ ] M7 测试：更新/新增 tab 切换、keep-alive 状态保持、URL 深链、a11y 用例；跑 office 全量 + 前端全量。
+- [x] M0 脚手架：抽公共 `TabList/TabPanel`（a11y：`role=tablist/tab/tabpanel` + 左右键切换 + `aria-selected`）；`/office` 接入 URL 参数；keep-alive 容器；H1 文案统一。
+      → `src/pages/office/officeTabs.ts`（URL 参数解析 + `useKeepAliveTabs`）、`src/pages/Office.tsx`（复用既有 `src/shared/ui/Tabs/Tabs.tsx` 的 Radix 封装 + `forceMount`/`hidden`）。
+      说明：未新建跨页公共 Tabs 组件 —— 仓库已有 `src/shared/ui/Tabs/Tabs.tsx`（Radix 封装，自带 `tablist/tab/tabpanel` 角色与键盘导航），
+      直接复用即可；新增公共组件反而会与既有封装重复。
+- [x] M1 文档处理 tab：迁移 pickers + preview + 文档列表；testid 全部保留；`Office.workspace.test.tsx` 适配。
+- [x] M2 文档生成 tab：`OfficeGenerateForm` + `JournalPanel` 折叠卡；顺手修 `h-full` 与 slate 色。
+- [x] M3 审校与规范 tab：`WordRuleExtractionPanel` + 审校说明卡（按钮切换到文档处理）。
+- [x] M4 LaTeX tab：3 个二级 tab 归置 7 个面板（组件本身不改）→ `src/pages/office/OfficeLatexTab.tsx`。
+- [x] M5 诊断降噪：能力徽章条 → 页头「环境」popover；`OfficeStagingInspector` 移入；空态精简。→ `src/pages/office/OfficeEnvironmentButton.tsx`。
+- [x] M6 入口与深链：`OfficeDeliveryDrawer`/产物面板跳转带 `tab`；欢迎页与帮助文档更新。
+      → `OfficeDeliveryDrawer.tsx`（拒绝后跳 `?tab=documents`）、`slashCommands.ts`（`/office` → `?tab=documents`，`/journal` → `?tab=generate`）。
+      说明：`Sidebar.tsx` / `TaskCenterWidget.tsx` / `commandItems.ts` / `Welcome.tsx` 的 `/office` 入口落在默认 tab，无需改动。
+- [x] M7 测试：更新/新增 tab 切换、keep-alive 状态保持、URL 深链、a11y 用例；跑 office 全量 + 前端全量。
+      → 新增 `src/pages/__tests__/Office.tabs.test.tsx`（12 例）；更新 `Office.workspace.test.tsx`、`slashCommands.navigate.test.ts`。
+      注意：Radix Tabs 在 `onMouseDown` 激活（不是 `onClick`），测试须 `fireEvent.mouseDown(trigger, { button: 0, ctrlKey: false })`。
 - [ ] M8 `release/win7` cherry-pick（纯前端，注意 baseline 与文档编号冲突）。
 
 ## 8. 风险与依赖

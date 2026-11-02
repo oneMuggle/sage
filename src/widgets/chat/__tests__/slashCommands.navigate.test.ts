@@ -5,8 +5,10 @@ import { filterCommands, getCommand, slashCommands } from '../slashCommands';
 describe('slashCommands — navigate mode (S3)', () => {
   it('defines the five page-direct commands with routes', () => {
     const expected: Record<string, string> = {
-      office: '/office',
-      journal: '/office',
+      // 2026-11 IA restructure: /office 的子分区用 URL query 表达，
+      // /journal 落到「文档生成」tab（JournalPanel 收在该 tab 的折叠区）。
+      office: '/office?tab=documents',
+      journal: '/office?tab=generate',
       schedule: '/scheduled',
       wiki: '/knowledge',
       memory: '/memory',
