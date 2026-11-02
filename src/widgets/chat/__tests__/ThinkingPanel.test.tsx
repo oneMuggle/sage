@@ -99,4 +99,21 @@ describe('ThinkingPanel — variant key + streaming auto-expand gating', () => {
     );
     expect(container.textContent).toContain('D-second-detail-explicit-choice');
   });
+
+  it('keeps a user-expanded panel open while streamed reasoning grows (ref-gated reset)', () => {
+    const { rerender } = render(<ThinkingPanel reasoning="第一行思考" isStreaming mode="trace" />);
+    fireEvent.click(screen.getByRole('button', { name: /思考过程/ }));
+    expect(screen.getByRole('button', { name: /思考过程/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+
+    // 流式 delta 改变 reasoning 内容 → thinkingExpansionKey 变化；mode 未变，
+    // reset effect 必须被 prevModeRef 挡住，不能把用户手动展开的面板折回去。
+    rerender(<ThinkingPanel reasoning="第一行思考\n第二行新增" isStreaming mode="trace" />);
+    expect(screen.getByRole('button', { name: /思考过程/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+  });
 });
