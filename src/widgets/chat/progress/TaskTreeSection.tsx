@@ -2,35 +2,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
-import { useSettings } from '../../../features/manage-settings/useSettings';
-// TaskStatusValue 定义在 shared/api（Task 7 已 re-export），不从 useChat import
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { TaskStatusValue } from '../../../shared/api';
 import { orchRunClient } from '../../../shared/api/orchRunClient';
-import { orchRunControlClient } from '../../../shared/api/orchRunControlClient';
+import { usePluginNames } from '../../../shared/lib/hooks/usePluginNames';
+import { findPluginToolOwner } from '../../../shared/lib/permissionInsights';
 
-import { SubagentDetailDrawer } from './SubagentDetailDrawer';
+import { formatDuration, formatElapsed, formatTokens } from './progressFormat';
 import { buildTaskTree, descendantsOf, flattenTree } from './taskTree';
-
-// BU13 (round24): 徽章数值格式化 —— token ≥1k 显 k（1 位小数去尾 0），
-// 时长 <1s 显 ms，其余显秒（1 位小数）。纯展示，不做四舍五入承诺。
-const formatTokens = (tokens: number): string =>
-  tokens >= 1000 ? `${(tokens / 1000).toFixed(1).replace(/\.0$/, '')}k tokens` : `${tokens} tokens`;
-
-const formatDuration = (ms: number): string =>
-  ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1).replace(/\.0$/, '')}s`;
-
-// BU15 (round29): 运行中任务实时耗时 —— <60s 显秒、<1h 显分秒、否则时分。
-const formatElapsed = (ms: number): string => {
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  if (totalSec < 60) return `${totalSec}s`;
-  const hh = Math.floor(totalSec / 3600);
-  const mm = Math.floor((totalSec % 3600) / 60);
-  const ss = totalSec % 60;
-  if (hh > 0) return `${hh}h${String(mm).padStart(2, '0')}m`;
-  return `${mm}m${String(ss).padStart(2, '0')}s`;
-};
 
 const STATUS_ICON: Record<TaskStatusValue, string> = {
   queued: '○',
@@ -55,25 +34,22 @@ const STATUS_TITLE: Record<TaskStatusValue, string> = {
 
 interface TaskTreeSectionProps {
   board: TaskBoard;
-  // Wave 3 H2 (2026-08-15): 运行中编排的取消入口。由上层
-  // (Chat.handleCancelRun) 统一调 cancelRun + 清空 taskBoard。
-  onCancel?: () => void;
   // RV3 (round8): run 终态且有失败任务时的"重跑失败任务"入口。由上层
   // 调 rerun-failed 端点拿 planOverride 后经 chatStream 重发。
   onRerunFailed?: () => void;
   // RV4 (round27): 单任务重试入口 —— failed 行内「重试」按钮。
   onRetryTask?: (runId: string, taskId: string) => void;
+  // 2026-11-02 进度面板优化: 点击任务 → 整面板切换到 TaskDetailView。
+  // 不传则行不可点击（详情入口失效）。
+  onSelectTask?: (taskId: string) => void;
 }
 
 export function TaskTreeSection({
   board,
-  onCancel,
   onRerunFailed,
   onRetryTask,
+  onSelectTask,
 }: TaskTreeSectionProps) {
-  // BU16 (round30): run 起始时刻与墙钟上限（round25 设置键；未设置 = 0 不提示）。
-  const runWallClockLimitMinutes = useSettings().settings.orch?.runWallClockLimitMinutes ?? 0;
-  const runStartedAt = board.dispatchedAt ?? null;
   // RD21 (round42): run 触顶原因 —— 从被取消/失败任务的 error 前缀推导
   // （后端归因语义：budget_exceeded / wall_clock_exceeded，预算优先）。
   const tripReason = useMemo(() => {
@@ -88,61 +64,26 @@ export function TaskTreeSection({
     if (wallClock) return '⚠ 墙钟上限已到，剩余任务已停止派发';
     return null;
   }, [board.statuses]);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const selectTask = useRunControlStore((s) => s.selectTask);
+  // R114: 等待审批徽章的插件归属后缀供数。子代理事件只有 tool_name、
+  // 没有 plugin_name，按转录（R111）同一名单前端派生；仅当板上出现
+  // 带工具名的实时数据时才取数，无编排实时数据的渲染零影响。
+  const hasLiveToolNames = useMemo(
+    () =>
+      Object.values(board.live ?? {}).some(
+        (liveState) =>
+          Boolean(liveState.waitingApproval) ||
+          liveState.events.some((evt) => Boolean(evt.tool_name)),
+      ),
+    [board.live],
+  );
+  const pluginNames = usePluginNames(hasLiveToolNames);
+  const pluginOwnerSuffix = (toolName?: string | null): string => {
+    const owner = toolName ? findPluginToolOwner(toolName, pluginNames) : null;
+    return owner ? `（所属插件: ${owner}）` : '';
+  };
   // B3 (2026-09-09): 单任务跳过 in-flight 集合 —— 防重复点击；终态由
   // task_status 事件驱动刷新，这里只做乐观禁用。
   const [skipping, setSkipping] = useState<ReadonlySet<string>>(new Set());
-  // live-events P1: run 级审批模式开关（乐观更新，后端 approval_mode 事件
-  // 回显为准；失败回滚到 board 上的值）。
-  const [approvalMode, setApprovalMode] = useState<'ask' | 'auto'>(board.approvalMode ?? 'ask');
-  const [approvalPending, setApprovalPending] = useState(false);
-
-  const toggleApprovalMode = () => {
-    if (approvalPending) return;
-    const next = approvalMode === 'auto' ? 'ask' : 'auto';
-    setApprovalPending(true);
-    setApprovalMode(next); // 乐观
-    orchRunControlClient
-      .setApprovalMode({ run_id: board.runId, mode: next })
-      .catch(() => {
-        setApprovalMode(board.approvalMode ?? 'ask'); // 回滚
-        toast.error('审批模式切换失败（run 已结束?）');
-      })
-      .finally(() => setApprovalPending(false));
-  };
-
-  const handleTaskClick = (taskId: string, runId: string) => {
-    const st = board.statuses[taskId];
-    // RD19 (round35): 行内统计带入 Drawer 详情（终态事件携带的归因值）。
-    selectTask(runId, taskId, {
-      used_tokens: st?.used_tokens,
-      duration_ms: st?.duration_ms,
-    });
-    setDrawerOpen(true);
-  };
-
-  // B3 (2026-09-09): 单任务跳过 —— 只停该子任务；后端 task_status 事件把
-  // 状态收敛到 cancelled，依赖它的下游由级联闭包置 failed。
-  const handleTaskSkip = (taskId: string) => {
-    if (skipping.has(taskId)) return;
-    setSkipping((prev) => new Set(prev).add(taskId));
-    orchRunClient
-      .cancelTask(board.runId, taskId)
-      .then(() => toast.info(`已请求跳过子任务 ${taskId}`))
-      .catch(() => {
-        toast.error(`跳过子任务 ${taskId} 失败（已结束?）`);
-        setSkipping((prev) => {
-          const next = new Set(prev);
-          next.delete(taskId);
-          return next;
-        });
-      });
-  };
-
-  const handleCloseDrawer = () => {
-    setDrawerOpen(false);
-  };
 
   const total = board.progress?.total ?? board.plan.length;
   const doneCount =
@@ -161,21 +102,8 @@ export function TaskTreeSection({
   // 进度可视化 L2 修正 (2026-08-12): 全部完成时不再显示"等待结果中"，
   // 避免与下方 "完成 6/6" 自相矛盾。
   const allDone = doneCount + failed + cancelled === total && inFlight === 0;
-  // BU13 (round24): 终态任务的 per-task 消耗求和（round24 起 used_tokens 语义
-  // 为本任务归因值，各任务互不重叠 → 求和即 run 总消耗；BU9 时代的累计语义
-  // 取 max 已不适用）。预算关闭也可见，仅在有消耗时展示。
-  const usedTokens = Object.values(board.statuses).reduce(
-    (sum, st) => sum + (st.used_tokens ?? 0),
-    0,
-  );
   // BU15 (round29): 存在 running 任务时 1s tick 驱动实时计时徽章；
   // 全部终态后停止定时器（避免终态面板无谓重渲染）。
-  const hasRunning = useMemo(
-    () => Object.values(board.statuses).some((st) => st.status === 'running'),
-    [board.statuses],
-  );
-  // BU16 (round30): run 级计时 —— in-flight（running/queued）即 tick；
-  // allDone 后停止 tick，now 冻结在最后一次渲染时刻 = run 总时长。
   const inFlightTasks = useMemo(
     () =>
       Object.values(board.statuses).filter(
@@ -185,10 +113,10 @@ export function TaskTreeSection({
   );
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
-    if (!hasRunning && inFlightTasks === 0) return undefined;
+    if (inFlightTasks === 0) return undefined;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [hasRunning, inFlightTasks]);
+  }, [inFlightTasks]);
 
   // 任务层级（spec 2026-09-19）：把平铺计划索引成树，支持缩进与折叠。
   // 旧计划（无 parent_task_id）全部为根 → 渲染结果与既有平铺一致。
@@ -214,11 +142,26 @@ export function TaskTreeSection({
     });
   };
 
+  // B3 (2026-09-09): 单任务跳过 —— 只停该子任务；后端 task_status 事件把
+  // 状态收敛到 cancelled，依赖它的下游由级联闭包置 failed。
+  const handleTaskSkip = (taskId: string) => {
+    if (skipping.has(taskId)) return;
+    setSkipping((prev) => new Set(prev).add(taskId));
+    orchRunClient
+      .cancelTask(board.runId, taskId)
+      .then(() => toast.info(`已请求跳过子任务 ${taskId}`))
+      .catch(() => {
+        toast.error(`跳过子任务 ${taskId} 失败（已结束?）`);
+        setSkipping((prev) => {
+          const next = new Set(prev);
+          next.delete(taskId);
+          return next;
+        });
+      });
+  };
+
   return (
     <div className="space-y-1" data-testid="task-tree">
-      {!allDone && (
-        <div className="text-xs text-text-secondary">已拆解为 {total} 个子任务,等待结果中…</div>
-      )}
       {/* RD21 (round42): run 触顶原因横幅 —— 用户侧直读"为什么停"。 */}
       {tripReason && (
         <div
@@ -228,70 +171,19 @@ export function TaskTreeSection({
           {tripReason}
         </div>
       )}
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-xs text-text-secondary">
-          完成 {doneCount}/{total}
-          {inFlight > 0 && ` · ${inFlight} 个进行中`}
-          {failed > 0 && <span className="text-error ml-1">({failed} 失败)</span>}
-          {cancelled > 0 && <span className="text-text-secondary ml-1">({cancelled} 已取消)</span>}
-          {/* BU16 (round30): run 级耗时 + 可选上限提示 —— in-flight 实时
-              tick，终态冻结为总时长；上限为 round25 透出的设置键。 */}
-          {runStartedAt && (
-            <span className="ml-1" data-testid="task-tree-run-elapsed">
-              已运行 {formatElapsed((board.endedAt ?? now) - runStartedAt)}
-              {runWallClockLimitMinutes > 0 ? ` · 上限 ${runWallClockLimitMinutes} 分钟` : ''}
-            </span>
-          )}
-          {/* BU13 (round24): per-task 消耗求和展示 —— 预算关闭也可见 */}
-          {usedTokens > 0 && (
-            <span className="ml-1">（已消耗 {usedTokens.toLocaleString()} tokens）</span>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-        {/* live-events P1 (2026-09-06): run 级子代理审批模式开关 —— auto =
-            非危险工具自动批准（破坏性/可疑/边界升级仍弹审批）。仅活动 run
-            显示；后端 approval_mode 事件到达后 board.approvalMode 对齐。 */}
-        {!allDone && board.runId && (
-          <button
-            type="button"
-            onClick={toggleApprovalMode}
-            disabled={approvalPending}
-            data-testid="task-tree-approval-mode"
-            title="自动批准子代理的非危险工具调用（破坏性/可疑命令仍需确认）"
-            className={`px-2 py-1 text-xs border rounded shrink-0 transition-colors disabled:opacity-50 ${
-              approvalMode === 'auto'
-                ? 'border-primary/40 bg-primary/10 text-primary'
-                : 'border-border text-text-secondary'
-            }`}
-          >
-            {approvalMode === 'auto' ? '⚡ 自动批准：开' : '⚡ 自动批准：关'}
-          </button>
-        )}
-        {/* Wave 3 H2 (2026-08-15): 运行中取消按钮 —— 全部完成/无 onCancel 时隐藏 */}
-        {!allDone && onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            data-testid="task-tree-cancel"
-            className="px-2 py-1 text-xs border rounded shrink-0"
-          >
-            取消执行
-          </button>
-        )}
-        {/* RV3 (round8): 终态且有失败任务 → 重跑失败任务（已完成结果保留） */}
-        {allDone && failed > 0 && onRerunFailed && (
-          <button
-            type="button"
-            onClick={onRerunFailed}
-            data-testid="task-tree-rerun-failed"
-            title="只重跑失败/取消的子任务，已完成子任务的结果保留"
-            className="px-2 py-1 text-xs border border-primary/40 text-primary rounded shrink-0 hover:bg-primary/10 transition-colors"
-          >
-            重跑失败任务
-          </button>
-        )}
-        </div>
-      </div>
+      {/* RV3 (round8): 终态且有失败任务 → 重跑失败任务（已完成结果保留）。
+          run 级汇总（完成数 / 耗时 / token）已上移到 StatusBar 常驻顶栏。 */}
+      {allDone && failed > 0 && onRerunFailed && (
+        <button
+          type="button"
+          onClick={onRerunFailed}
+          data-testid="task-tree-rerun-failed"
+          title="只重跑失败/取消的子任务，已完成子任务的结果保留"
+          className="px-2 py-1 text-xs border border-primary/40 text-primary rounded shrink-0 hover:bg-primary/10 transition-colors"
+        >
+          重跑失败任务
+        </button>
+      )}
       {/* P0-6 (2026-08-20): reviewer 复核结论横幅 —— pass/fail 双色 */}
       {board.review && (
         <div
@@ -310,45 +202,37 @@ export function TaskTreeSection({
       {visibleRows.map(({ item, depth, childIds }) => {
         const st = board.statuses[item.task_id];
         const status: TaskStatusValue = st?.status ?? 'queued';
-        const preview = st?.output_preview ?? st?.error ?? null;
         // live-events P0 (2026-09-06): 子代理实时执行态（subagent_event 镜像）。
         const live = board.live?.[item.task_id];
-        const recentEvents = live ? [...live.events].reverse().slice(0, 10) : [];
         // P1-6 (2026-08-14): depends_on 透传 —— 有依赖的任务缩进 + 标记行。
         const dependsOn = item.depends_on ?? [];
         const hasDeps = dependsOn.length > 0;
         const hasChildren = childIds.length > 0;
         const isCollapsed = collapsed.has(item.task_id);
+        const clickable = Boolean(onSelectTask);
         return (
           <div
             key={item.task_id}
             data-testid={`task-tree-item-${item.task_id}`}
             data-depth={depth}
             style={depth > 0 ? { paddingLeft: depth * 16 } : undefined}
-            className={`flex flex-col gap-1 px-2 py-1 rounded text-xs bg-bg-hover cursor-pointer hover:bg-bg-active transition-colors ${
-              hasDeps ? 'ml-4' : ''
-            }`}
-            onClick={() => handleTaskClick(item.task_id, board.runId)}
-            role="button"
-            tabIndex={0}
+            className={`flex flex-col gap-1 px-2 py-1 rounded text-xs bg-bg-hover ${
+              clickable ? 'cursor-pointer hover:bg-bg-active transition-colors' : ''
+            } ${hasDeps ? 'ml-4' : ''}`}
+            onClick={() => onSelectTask?.(item.task_id)}
+            role={clickable ? 'button' : undefined}
+            tabIndex={clickable ? 0 : undefined}
             onKeyDown={(event) => {
+              if (!clickable) return;
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
-                handleTaskClick(item.task_id, board.runId);
+                onSelectTask?.(item.task_id);
               }
             }}
           >
-            {hasDeps && (
-              <div
-                className="text-text-tertiary text-ui-2xs"
-                data-testid={`task-tree-deps-${item.task_id}`}
-              >
-                ↳ 依赖 {dependsOn.join(', ')}
-              </div>
-            )}
             <div className="flex items-center gap-2">
               {/* 任务层级（spec 2026-09-19）：有子任务时提供折叠/展开入口。
-                  stopPropagation 防止触发整行 Drawer 点击。 */}
+                  stopPropagation 防止触发整行点击。 */}
               {hasChildren && (
                 <button
                   type="button"
@@ -379,7 +263,7 @@ export function TaskTreeSection({
               <span className="px-1 rounded bg-primary/10 text-primary">{item.agent_id}</span>
               <span className="text-text-secondary flex-1">{item.goal}</span>
               {/* B3 (2026-09-09): 单任务跳过 —— queued/running 行内按钮；
-                  stopPropagation 防触发整行的 Drawer 点击。 */}
+                  stopPropagation 防触发整行点击。 */}
               {board.runId && (status === 'queued' || status === 'running') && (
                 <button
                   type="button"
@@ -397,7 +281,7 @@ export function TaskTreeSection({
               )}
               {/* RV4 (round27): 单任务重试 —— failed 行内按钮；run 终态才可重试
                  （rerun-failed 端点对 running run 返 409）。stopPropagation
-                  防触发整行 Drawer 点击。 */}
+                  防触发整行点击。 */}
               {onRetryTask && board.runId && allDone && status === 'failed' && (
                 <button
                   type="button"
@@ -435,7 +319,7 @@ export function TaskTreeSection({
               ) : null}
               {/* RD18 (round33): 级联跳过根因徽章 —— 上游失败导致本任务
                   未启动即置 failed（error 前缀 blocked_by_failed:<root>），
-                  行内直读根因，不必开 Drawer 翻原始文本。 */}
+                  行内直读根因，不必开详情翻原始文本。 */}
               {status === 'failed' && st?.error?.startsWith('blocked_by_failed:') && (
                 <span
                   data-testid={`task-tree-blocked-${item.task_id}`}
@@ -477,6 +361,7 @@ export function TaskTreeSection({
                 className="pl-6 text-ui-2xs text-warning"
               >
                 ⏳ 等待审批: {live.waitingApproval}
+                {pluginOwnerSuffix(live.waitingApproval)}
               </div>
             )}
             {/* live-events P0: 行内实时步骤（running 时显示最新一条投影） */}
@@ -488,55 +373,9 @@ export function TaskTreeSection({
                 {live.liveStep}
               </div>
             )}
-            {/* live-events P0: 最近事件环形缓冲（最多展示最近 10 条,尾新头旧） */}
-            {recentEvents.length > 0 && (
-              <details className="pl-6">
-                <summary className="text-ui-2xs text-muted">
-                  实时动态（{live!.events.length} 条）
-                </summary>
-                <ul
-                  data-testid={`task-tree-events-${item.task_id}`}
-                  className="mt-1 space-y-0.5 text-muted"
-                >
-                  {recentEvents.map((evt, idx) => (
-                    <li key={`${evt.ts ?? idx}-${idx}`} className="truncate">
-                      <span className="text-text-tertiary">
-                        {evt.ts
-                          ? new Date(evt.ts).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              second: '2-digit',
-                            })
-                          : ''}
-                      </span>{' '}
-                      {evt.phase === 'approval_requested'
-                        ? `⏳ 等待审批: ${evt.tool_name ?? 'tool'}`
-                        : evt.phase === 'approval_resolved'
-                          ? evt.approved
-                            ? '✓ 已批准'
-                            : '✗ 已拒绝'
-                          : evt.phase === 'question'
-                            ? '❓ 向用户提问'
-                            : evt.phase === 'failed'
-                              ? '✗ 失败'
-                              : evt.phase === 'tool_result'
-                                ? `👀 ${evt.tool_name ?? 'tool'} ${evt.is_error ? '（错误）' : ''}`
-                                : `🔧 ${evt.tool_name ?? 'tool'}`}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
-            {preview && status !== 'queued' && (
-              <details className="pl-6 text-muted">
-                <summary>{status === 'failed' ? '错误详情' : '结果预览'}</summary>
-                <pre className="mt-1 whitespace-pre-wrap">{preview}</pre>
-              </details>
-            )}
           </div>
         );
       })}
-      <SubagentDetailDrawer open={drawerOpen} onClose={handleCloseDrawer} />
     </div>
   );
 }
