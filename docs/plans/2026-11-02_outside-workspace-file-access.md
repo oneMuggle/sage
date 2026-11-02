@@ -59,10 +59,13 @@ Sage 的问题：Office 读取工具比 `read_file` 更严格，且 `@-mention` 
     `backend/tools/permissions.py`（避免 `context.py → permissions.py` 循环依赖）。
   - 待补：`office_lint_word` / `office_latex_build` / `office_journal_*` / `office_word_intelligence_*`
 
-- [ ] Step 3: `@-mention` 附件不再静默跳过
-  - `backend/chat/attachment_resolver.py` — `resolve_mentions()`
-  - 工作区外文件返回 `skipped_reason: "outside_workspace"` 而非空 blocks
-  - 前端展示跳过原因（如 "文件在工作区外，已跳过"）
+- [x] Step 3: `@-mention` 附件不再静默跳过
+  - `backend/chat/attachment_resolver.py` — 新增 `SkippedMention` + `_resolve_mentions_detailed()`；
+    `resolve_mentions()` 签名不变（既有调用方零改动），跳过信息独立返回
+  - 跳过原因短码：`outside_workspace` / `unreadable` / `no_workspace` / `invalid_workspace`
+  - `render_attachment_block()` 新增可选 `skipped` 参数，输出 `<attachments_skipped>` 段随
+    system prompt 下发，模型据此向用户解释为什么 @文件 没进来
+  - 前端 chip 级提示留作后续（当前无结构化 notice 通道）
 
 ### Phase 2（P1）— 预填 allowed_paths + 白名单优先
 
