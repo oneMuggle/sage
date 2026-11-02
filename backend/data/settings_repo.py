@@ -123,6 +123,9 @@ class SettingsRepository:
             # 这样重装/换机后仍能恢复上次的工作目录。
             # 写入口径见 backend/services/default_workspace.py:remember_workspace
             "last_workspace_path",
+            # 思考展示档位 ("detail" / "trace" / "result")。
+            # 读取口径见 src/features/chat/displayMode/useDisplayMode.ts
+            "chat_display_mode",
         }
     )
 

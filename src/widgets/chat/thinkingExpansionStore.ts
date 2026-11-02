@@ -46,6 +46,25 @@ export function isThinkingExpanded(key: string): boolean {
   return false;
 }
 
+export function getThinkingExpanded(key: string): boolean | undefined {
+  const cached = memory.get(key);
+  if (cached !== undefined) return cached;
+  try {
+    const raw = sessionStorage.getItem(STORAGE_PREFIX + key);
+    if (raw === '1') {
+      memory.set(key, true);
+      return true;
+    }
+    if (raw === '0') {
+      memory.set(key, false);
+      return false;
+    }
+  } catch {
+    /* sessionStorage unavailable */
+  }
+  return undefined;
+}
+
 export function setThinkingExpanded(key: string, expanded: boolean, persist = true): void {
   memory.set(key, expanded);
   if (!persist) return;
