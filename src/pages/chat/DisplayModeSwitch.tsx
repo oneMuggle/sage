@@ -27,6 +27,7 @@ export function DisplayModeSwitch({ sessionId }: DisplayModeSwitchProps) {
         onClick={() => setMenuOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
+        aria-label={`${t('chat.displayMode.label')} · ${t(MODE_LABELS[mode])}`}
         data-testid="display-mode-button"
         className="flex items-center gap-1 px-2 py-1 text-xs border border-border rounded-radius-sm hover:bg-bg-hover transition-colors"
         title={t('chat.displayMode.label')}
