@@ -36,6 +36,8 @@ export type {
   PlaybookBindPayload,
   PlaybookContentCheck,
   PlaybookCurrent,
+  PlaybookEvent,
+  PlaybookEventAggregate,
   PlaybookExportResult,
   PlaybookImportPreview,
   PlaybookLibraryItem,

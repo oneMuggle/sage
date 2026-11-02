@@ -586,3 +586,76 @@ async def test_import_rejects_unsafe_scaffold(
     )
     assert response.status_code == 400
     assert not (project_dir.parent / "escape").exists()
+
+
+@pytest.mark.asyncio()
+async def test_events_list_after_bind_and_audit(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+
+    audit = await client.get(
+        "/api/v1/projects/{}/playbook/audit".format(project["id"])
+    )
+    assert audit.status_code == 200
+
+    events = await client.get(
+        "/api/v1/projects/{}/playbook/events".format(project["id"])
+    )
+    assert events.status_code == 200, events.text
+    payload = events.json()
+    assert payload["project_id"] == project["id"]
+    event_names = [e["event"] for e in payload["events"]]
+    assert "bind" in event_names
+    assert "audit" in event_names
+    # Newest first
+    assert event_names[0] == "audit"
+    assert event_names[-1] == "bind"
+
+
+@pytest.mark.asyncio()
+async def test_events_aggregate_counts(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    await client.get("/api/v1/projects/{}/playbook/audit".format(project["id"]))
+    await client.get("/api/v1/projects/{}/playbook/audit".format(project["id"]))
+
+    agg = await client.get(
+        "/api/v1/playbooks/events/aggregate?project_id={}&days=30".format(
+            project["id"]
+        )
+    )
+    assert agg.status_code == 200, agg.text
+    payload = agg.json()
+    assert payload["project_id"] == project["id"]
+    assert payload["days"] == 30
+    assert payload["counts"].get("bind") == 1
+    assert payload["counts"].get("audit") == 2
+    assert payload["total"] == 3
+
+    global_agg = await client.get("/api/v1/playbooks/events/aggregate?days=30")
+    assert global_agg.status_code == 200
+    assert global_agg.json()["project_id"] is None
+    assert global_agg.json()["total"] >= 3
+
+
+@pytest.mark.asyncio()
+async def test_events_limit_clamped(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+
+    too_large = await client.get(
+        "/api/v1/projects/{}/playbook/events?limit=999".format(project["id"])
+    )
+    assert too_large.status_code == 422  # FastAPI Query(le=200) validation
+
+    valid = await client.get(
+        "/api/v1/projects/{}/playbook/events?limit=1".format(project["id"])
+    )
+    assert valid.status_code == 200
+    assert len(valid.json()["events"]) == 1
