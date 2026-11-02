@@ -1,0 +1,68 @@
+"""回归（2026-11-02）：DONE 不得被收尾副作用阻塞。
+
+实测现场：assistant 行已于 21:22:18 落盘，前端直到 21:24:34 才收到
+``done``，光标在正文末尾停留 136 秒。根因是 producer 在 DONE 入队前
+inline await stop hooks 与记忆抽取；现两者移入后台任务
+（``_spawn_post_turn_task``），DONE 立即送达。
+"""
+
+from __future__ import annotations
+
+import asyncio
+from unittest.mock import patch
+
+import pytest
+
+from backend.api.legacy_routes import drain_post_turn_tasks
+from backend.core.legacy.agent_state import AgentEvent, AgentState
+from backend.data.session_repo import SessionRepository
+
+pytestmark = pytest.mark.integration
+
+CHAT_STREAM_PATH = "/api/v1/chat/stream"
+
+
+@pytest.mark.asyncio()
+async def test_done_arrives_while_post_turn_side_effects_still_running(client):
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _slow_extract(*args, **kwargs):  # noqa: ARG001 — 测试夹具
+        started.set()
+        await release.wait()
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="即时完成")
+
+    session = SessionRepository().create(title="DONE 解耦回归")
+
+    try:
+        with (
+            patch("backend.api.legacy_routes.SageAgent") as MockAgent,
+            patch(
+                "backend.api.legacy_routes._extract_legacy_chat_memory",
+                _slow_extract,
+            ),
+        ):
+            MockAgent.return_value.run_loop = mock_run_loop
+            MockAgent.return_value.memory_manager = None
+
+            create_resp = await client.post(
+                CHAT_STREAM_PATH,
+                json={"session_id": session.id, "message": "帮我记住这个偏好"},
+            )
+            assert create_resp.status_code == 200, create_resp.text
+            stream_id = create_resp.json()["streamId"]
+
+            attach_resp = await asyncio.wait_for(
+                client.get(f"{CHAT_STREAM_PATH}/{stream_id}"), timeout=2.0
+            )
+            assert attach_resp.status_code == 200
+            assert "done" in attach_resp.text
+            # 收尾任务已启动但尚未完成 —— DONE 已先行送达。
+            await asyncio.wait_for(started.wait(), timeout=1.0)
+            assert not release.is_set()
+    finally:
+        release.set()
+        await drain_post_turn_tasks(timeout=1.0)

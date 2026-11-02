@@ -21,6 +21,11 @@ class AgentState(str, Enum):
     # REASONING: 携带 LLM 思考/推理过程内容（reasoning_content）
     # 区别于 THINKING（仅表示"LLM 正在思考"阶段标记）
     REASONING = "reasoning"
+    # 2026-11-02: 流式 reasoning 增量。适配器每吐一段 reasoning_content
+    # 就立即下发一个 REASONING_DELTA,前端 ThinkingPanel 边收边显示;
+    # 此前只在流收尾汇总成一条 REASONING,导致思考过程晚于正文出现。
+    # 上游完全不发 delta 时仍以 REASONING 整段兜底。
+    REASONING_DELTA = "reasoning_delta"
     ACTING = "acting"
     OBSERVING = "observing"
     # I4: 流式 LLM 响应时,每个 token chunk 推一个 CONTENT_DELTA 事件,

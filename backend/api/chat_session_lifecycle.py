@@ -323,7 +323,6 @@ async def _extract_legacy_chat_memory(
         if not enabled:
             return
 
-        from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
         from backend.adapters.out.memory.adapter import MemoryAdapter
 
         # 记忆提取异步化：廉价装配（读设置/建 adapter）仍在本函数内完成，
@@ -334,11 +333,12 @@ async def _extract_legacy_chat_memory(
             get_memory_extraction_queue,
         )
         from backend.memory.extractor import MemoryExtractor
+        from backend.orchestration.llm_factory import build_httpx_adapter_from_settings
 
         get_memory_extraction_queue().submit(
             ExtractionRequest(
                 memory_port=MemoryAdapter(get_memory_manager()),
-                extractor=MemoryExtractor(llm_client=HttpxLLMAdapter()),
+                extractor=MemoryExtractor(llm_client=build_httpx_adapter_from_settings()),
                 user_text=user_text,
                 assistant_text=assistant_text,
                 session_id=session_id,
