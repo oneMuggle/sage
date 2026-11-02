@@ -474,6 +474,15 @@ _BOUNDARY_SPECS: Dict[str, Tuple[Tuple[str, Optional[str]], ...]] = {
     "office_generate_pdf": (("output_path", None), ("file_path", None)),
     "office_fill_pdf_form": (("file_path", None), ("output_path", None)),
     "office_analyze": (("file_path", "write_report"),),
+    # 以下工具的产物默认落在源文件同目录（<stem>-fixed.docx / diff.tex /
+    # <stem>.pdf），只校验输入路径会漏掉同目录写入，故一并纳入。
+    "office_compile_latex": (("file_path", None),),
+    "office_latexdiff": (("original_path", None), ("revised_path", None)),
+    "office_fix_word": (("file_path", None),),
+    "office_revise_word": (("file_path", None),),
+    "office_render_audit": (("file_path", None),),
+    "office_fill_latex_template": (("template_path", None),),
+    "office_extract_latex_project": (("zip_path", None),),
 }
 
 

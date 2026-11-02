@@ -22,12 +22,13 @@ resolve 双方后严格比对，拒绝任何越界路径。
 Public surface:
 
     workspace_for_input(binding_workspace, input_path) -> Path
+    workspace_for_policy(policy, input_path) -> Path
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from backend.tools.base import _is_safe_path
 
@@ -51,4 +52,20 @@ def workspace_for_input(
     return input_path.parent
 
 
-__all__ = ["workspace_for_input"]
+def workspace_for_policy(policy: Any, input_path: Path, *extra_paths: Path) -> Path:
+    """:func:`workspace_for_input` 的 ``ToolPolicy`` 便捷形态（读工具共用）。
+
+    ``policy.workspace_root`` 为空 / 缺省 → 视为未绑定，回退输入父目录。
+    ``extra_paths`` 为同一调用的附加输入（如 tex + pdf）：全部落在绑定
+    工作区内才用绑定工作区，任一在外即回退 ``input_path.parent``。
+    """
+    root = getattr(policy, "workspace_root", None)
+    binding = Path(root) if root else None
+    if binding is not None:
+        inputs = (input_path,) + extra_paths
+        if all(_is_safe_path(str(p), str(binding)) for p in inputs):
+            return binding
+    return input_path.parent
+
+
+__all__ = ["workspace_for_input", "workspace_for_policy"]

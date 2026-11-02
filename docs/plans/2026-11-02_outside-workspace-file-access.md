@@ -42,11 +42,12 @@ Sage 的问题：Office 读取工具比 `read_file` 更严格，且 `@-mention` 
   - 语义：输入在绑定工作区内 → 用绑定工作区；否则 → 用输入父目录（读任意路径生效）
   - 更新测试 `test_read_pdf_allows_path_outside_policy_workspace` / `test_allows_path_outside_policy_workspace`
 
-- [x] Step 2: Office 辅助工具改为审批制（部分完成）
+- [x] Step 2: Office 辅助工具改为审批制 + READ 工具对齐 read_file
   - `backend/tools/permissions.py` — `_BOUNDARY_SPECS` 已覆盖：
     - `office_create` / `office_update` / `office_delete`（原有）
     - `office_repair_word` / `office_refresh_toc`（新增）
     - `office_fill_word_template` / `office_fill_ppt_template` / `office_generate_pdf` / `office_fill_pdf_form` / `office_analyze`（新增/扩展）
+    - `office_compile_latex` / `office_latexdiff` / `office_fix_word` / `office_revise_word` / `office_render_audit` / `office_fill_latex_template` / `office_extract_latex_project`（新增）
   - 写 gap 补 fence：
     - `OfficeFillWordTemplateTool.execute` in-place 分支加 `_enforce_workspace`
     - `OfficeFillPptTemplateTool.execute` 预测输出路径加 `_enforce_workspace`
@@ -57,7 +58,18 @@ Sage 的问题：Office 读取工具比 `read_file` 更严格，且 `@-mention` 
     作用域，`BaseTool._enforce_workspace` 据此放行；`finally` 清理 token。
     封装函数 `enter_approved_paths` / `exit_approved_paths` 置于
     `backend/tools/permissions.py`（避免 `context.py → permissions.py` 循环依赖）。
-  - 待补：`office_lint_word` / `office_latex_build` / `office_journal_*` / `office_word_intelligence_*`
+  - **LaTeX / Word intelligence READ 工具对齐 read_file**：
+    - `office_read_latex` / `office_audit_latex` / `office_check_latex_compliance` /
+      `office_audit_latex_pdf` / `office_analyze_latex_template` / `office_audit_word` /
+      `office_extract_rules` — 全部移除 `_enforce_workspace` 硬拒绝
+    - service 层围栏基座统一用 `workspace_for_policy()`（`office_workspace_scope.py`
+      新增 helper）：输入在绑定工作区内 → 用绑定工作区；否则 → 用输入父目录
+    - WRITE 工具（`office_fix_word` / `office_revise_word` / `office_render_audit` /
+      `office_fill_latex_template` / `office_extract_latex_project`）保留
+      `_enforce_workspace`（含 allowed_paths / approved 路径放行层），service 层
+      围栏同样对齐 helper，避免批准后 resolve_within 因基座错位而误拦
+    - `_WordToolBase._resolve_target` 按 `self.risk is RiskClass.READ` 跳边界
+    - `office_batch_audit_word` 保持绑定工作区强要求（批量遍历语义）
 
 - [x] Step 3: `@-mention` 附件不再静默跳过
   - `backend/chat/attachment_resolver.py` — 新增 `SkippedMention` + `_resolve_mentions_detailed()`；
