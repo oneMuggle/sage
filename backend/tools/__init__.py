@@ -99,8 +99,10 @@ from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
 from .office_word_intelligence_tools import (
     OfficeAuditWordTool,
+    OfficeBatchAuditTool,
     OfficeExtractRulesTool,
     OfficeFixWordTool,
+    OfficeRenderAuditTool,
     OfficeReviseWordTool,
 )
 from .patch_tool import ApplyPatchTool
@@ -275,8 +277,10 @@ __all__ = [
     "OfficeExtractLatexProjectTool",
     "OfficeRepairWordTool",
     "OfficeAuditWordTool",
+    "OfficeBatchAuditTool",
     "OfficeFixWordTool",
     "OfficeExtractRulesTool",
+    "OfficeRenderAuditTool",
     "OfficeReviseWordTool",
     "OfficeRefreshTocTool",
     "OfficeJournalParseTemplateTool",

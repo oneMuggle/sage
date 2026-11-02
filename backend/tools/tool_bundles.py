@@ -111,8 +111,10 @@ from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
 from .office_word_intelligence_tools import (
     OfficeAuditWordTool,
+    OfficeBatchAuditTool,
     OfficeExtractRulesTool,
     OfficeFixWordTool,
+    OfficeRenderAuditTool,
     OfficeReviseWordTool,
 )
 from .patch_tool import ApplyPatchTool
@@ -245,6 +247,8 @@ def _install_office_quality(ctx: ToolInstallContext) -> None:
     ctx.registry.register(OfficeFixWordTool(policy=policy))
     ctx.registry.register(OfficeExtractRulesTool(policy=policy))
     ctx.registry.register(OfficeReviseWordTool(policy=policy))
+    ctx.registry.register(OfficeBatchAuditTool(policy=policy))
+    ctx.registry.register(OfficeRenderAuditTool(policy=policy))
     ctx.registry.register(OfficeReadLatexTool(policy=policy))
     ctx.registry.register(OfficeAnalyzeLatexTemplateTool(policy=policy))
     ctx.registry.register(OfficeFillLatexTemplateTool(policy=policy))

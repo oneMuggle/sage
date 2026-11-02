@@ -13,7 +13,7 @@ Risk classes:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
@@ -423,9 +423,164 @@ class OfficeReviseWordTool(_WordToolBase):
         return ToolResult(success=True, content=data)
 
 
+class OfficeBatchAuditTool(_WordToolBase):
+    """Audit multiple workspace .docx files with a rule pack (READ)."""
+
+    risk: RiskClass = RiskClass.READ
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="office_batch_audit",
+            description=(
+                "批量审校工作区内的多个 .docx：按规则包逐篇检查，返回汇总、"
+                "逐文件问题与可选 Markdown 报告。适合交付前扫一批稿件；"
+                "单文件失败不影响其余文件。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "file_paths": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "显式文件列表（相对工作区或绝对路径）",
+                    },
+                    "pattern": {
+                        "type": "string",
+                        "default": "**/*.docx",
+                        "description": "未给 file_paths 时的 glob 模式",
+                    },
+                    "max_files": {"type": "integer", "default": 20, "minimum": 1, "maximum": 50},
+                    "rulepack_id": {"type": "string"},
+                    "rulepack": {"type": "object"},
+                    "include_report": {"type": "boolean", "default": True},
+                },
+            },
+        )
+
+    def execute(  # noqa: PLR0911 — 逐项参数校验早退
+        self,
+        file_paths: Optional[list] = None,
+        pattern: str = "**/*.docx",
+        max_files: int = 20,
+        rulepack_id: Optional[str] = None,
+        rulepack: Optional[Dict[str, Any]] = None,
+        include_report: bool = True,
+        **kwargs: Any,
+    ) -> ToolResult:
+        blocked = self._guard()
+        if blocked is not None:
+            return blocked
+        root = _workspace_root(self._policy)
+        if not root:
+            return ToolResult(success=False, error="workspace_not_bound")
+        pack, error = self._resolve_pack(rulepack, rulepack_id)
+        if error is not None:
+            return error
+        from backend.office.errors import OfficeError
+        from backend.office.word_batch_audit import audit_word_batch
+
+        try:
+            result = audit_word_batch(
+                Path(root),
+                pack,
+                file_paths=list(file_paths) if file_paths is not None else None,
+                pattern=pattern or "**/*.docx",
+                max_files=max(1, min(int(max_files or 20), 50)),
+                include_report=bool(include_report),
+            )
+        except OfficeError as exc:
+            return ToolResult(success=False, error=f"batch_audit_failed: {exc}")
+        data = result.model_dump()
+        for file_result in data.get("files") or []:
+            issues = file_result.get("issues") or []
+            if len(issues) > _MAX_ISSUES_IN_TOOL:
+                file_result["issues"] = issues[:_MAX_ISSUES_IN_TOOL]
+                file_result["issues_truncated"] = len(issues) - _MAX_ISSUES_IN_TOOL
+        return ToolResult(success=True, content=data)
+
+
+class OfficeRenderAuditTool(_WordToolBase):
+    """Render a .docx to PDF and check the rendered layout (WRITE_LOCAL)."""
+
+    risk: RiskClass = RiskClass.WRITE_LOCAL
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="office_render_audit",
+            description=(
+                "把 .docx 渲染为 PDF（需本机 LibreOffice/Word）并检查渲染后的"
+                "页面尺寸/页边距/字体/页码。无转换器时返回 rendered=false，"
+                "不报错。会在源文件旁生成 <stem>.pdf。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "工作区内 .docx 绝对路径",
+                    },
+                    "expected_size": {"type": "string", "enum": ["A4", "Letter"]},
+                    "margins_cm": {
+                        "type": "object",
+                        "description": "期望页边距（top/bottom/left/right，cm）",
+                    },
+                    "allowed_fonts": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "允许的字体名（子集前缀会被忽略）",
+                    },
+                    "require_page_number": {"type": "boolean", "default": False},
+                    "margin_tolerance_cm": {"type": "number", "default": 0.3},
+                    "timeout_seconds": {"type": "integer", "default": 120},
+                },
+                "required": ["file_path"],
+            },
+        )
+
+    def execute(  # noqa: PLR0911 — 逐项参数校验早退
+        self,
+        file_path: Optional[str] = None,
+        expected_size: Optional[str] = None,
+        margins_cm: Optional[Dict[str, float]] = None,
+        allowed_fonts: Optional[List[str]] = None,
+        require_page_number: bool = False,
+        margin_tolerance_cm: float = 0.3,
+        timeout_seconds: int = 120,
+        **kwargs: Any,
+    ) -> ToolResult:
+        blocked = self._guard()
+        if blocked is not None:
+            return blocked
+        target, error = self._resolve_target(file_path)
+        if error is not None:
+            return error
+        from backend.office.errors import OfficeError
+        from backend.office.word_render_audit import audit_word_render
+
+        root = _workspace_root(self._policy) or str(target.parent)
+        try:
+            result = audit_word_render(
+                target,
+                workspace_path=root,
+                options={
+                    "expected_size": expected_size,
+                    "margins_cm": margins_cm,
+                    "allowed_fonts": allowed_fonts,
+                    "require_page_number": bool(require_page_number),
+                    "margin_tolerance_cm": float(margin_tolerance_cm),
+                    "timeout_seconds": int(timeout_seconds),
+                },
+            )
+        except OfficeError as exc:
+            return ToolResult(success=False, error=f"render_audit_failed: {exc}")
+        return ToolResult(success=True, content=result.model_dump())
+
+
 __all__ = [
     "OfficeAuditWordTool",
+    "OfficeBatchAuditTool",
     "OfficeExtractRulesTool",
     "OfficeFixWordTool",
+    "OfficeRenderAuditTool",
     "OfficeReviseWordTool",
 ]
