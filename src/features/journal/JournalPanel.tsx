@@ -24,12 +24,10 @@ export function JournalPanel({ workspacePath: wsOverride }: JournalPanelProps) {
   const warningCount = templates.violations.filter((v) => v.severity === 'warning').length;
 
   return (
-    <section className="flex h-full flex-col gap-3 overflow-y-auto p-4">
+    <section className="flex flex-col gap-3 p-4">
       <header>
-        <h2 className="text-base font-semibold text-slate-800">期刊模板助手</h2>
-        <p className="text-xs text-slate-500">
-          选择 .docx 期刊模板 → 填写内容 → 一键生成或校验格式
-        </p>
+        <h2 className="text-base font-semibold text-text">期刊模板助手</h2>
+        <p className="text-xs text-muted">选择 .docx 期刊模板 → 填写内容 → 一键生成或校验格式</p>
       </header>
       <JournalActions templates={templates} workspacePath={workspacePath} />
       <JournalSpecCard spec={templates.spec} />
