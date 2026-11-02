@@ -12,6 +12,10 @@ import {
 } from 'react';
 
 import {
+  getDisplayContract,
+  type DisplayMode,
+} from '../../features/chat/displayMode/resolveDisplayMode';
+import {
   remarkFileRefLinks,
   useConfirmedFilePaths,
 } from '../../features/chat/useConfirmedFilePaths';
@@ -192,34 +196,56 @@ export function ThinkingShimmer({ startTime }: { startTime?: number }) {
 
 /** ThinkingPanel - 可折叠的 LLM 思考过程展示面板
  *  P1: 流式 reasoning 时自动展开 (isStreaming=true)
+ *
+ *  variant key = `${mode}:${thinkingExpansionKey(reasoning)}` so each display
+ *  mode remembers its own expansion state independently. Switching from trace
+ *  to detail and back restores each mode's prior manual choice.
+ *
+ *  auto-expand while streaming is gated on the mode's contract
+ *  (`autoExpandWhileStreaming`), NOT unconditional on `isStreaming`.
+ *  detail mode auto-expands; trace/result modes stay collapsed.
  */
 export function ThinkingPanel({
   reasoning,
   isStreaming,
+  mode,
   defaultExpanded = false,
 }: {
   reasoning: string;
   isStreaming?: boolean;
+  mode: DisplayMode;
   defaultExpanded?: boolean;
 }) {
-  const expansionKey = thinkingExpansionKey(reasoning);
+  const contract = getDisplayContract(mode);
+  const variantKey = `${mode}:${thinkingExpansionKey(reasoning)}`;
   // 显式用户选择优先于档位默认：从未设置过才回落到 defaultExpanded。
   const [isExpanded, setIsExpanded] = useState(() => {
-    const explicit = getThinkingExpanded(expansionKey);
+    const explicit = getThinkingExpanded(variantKey);
     return explicit !== undefined ? explicit : defaultExpanded;
   });
   // P21: 流式期间自动滚动到底部，显示最新思考内容
   const contentRef = useRef<HTMLDivElement | null>(null);
 
-  // P1 fix: 当 isStreaming 变为 true 时自动展开 (useState 只读初始值,需 useEffect 同步)
-  // 2026-11-01: 自动展开只写内存（不落 sessionStorage），避免每个 delta 落盘；
+  // 档位切换重置（§3.5）：useState 只读一次初值，切换 mode 时必须重新读取
+  // 新 variant key 的存量展开态。ref-gated，避免流式 delta 改 variantKey 时误触发。
+  const prevModeRef = useRef(mode);
+  useEffect(() => {
+    if (prevModeRef.current === mode) return;
+    prevModeRef.current = mode;
+    const explicit = getThinkingExpanded(variantKey);
+    setIsExpanded(explicit !== undefined ? explicit : defaultExpanded);
+  }, [mode, variantKey, defaultExpanded]);
+
+  // P1 fix: 流式自动展开 —— 仅当当前 display mode 的 contract 要求时
+  // (`autoExpandWhileStreaming === true`)。trace/result 模式保持折叠。
+  // 自动展开只写内存（不落 sessionStorage），避免每个 delta 落盘；
   // 流结束/消息 id 替换导致重挂载时，内存键仍能恢复展开态。
   useEffect(() => {
-    if (isStreaming) {
+    if (isStreaming && contract.autoExpandWhileStreaming) {
       setIsExpanded(true);
-      setThinkingExpanded(expansionKey, true, false);
+      setThinkingExpanded(variantKey, true, false);
     }
-  }, [isStreaming, expansionKey]);
+  }, [isStreaming, variantKey, contract.autoExpandWhileStreaming]);
 
   // 流式期间 reasoning 增长时自动滚动到底部
   useEffect(() => {
@@ -231,17 +257,20 @@ export function ThinkingPanel({
   const toggleExpanded = (): void => {
     const next = !isExpanded;
     setIsExpanded(next);
-    setThinkingExpanded(expansionKey, next);
+    setThinkingExpanded(variantKey, next);
   };
 
   // 折叠态展示首行摘要，让用户不用点开也能确认思考内容仍在。
   const preview = isExpanded
     ? ''
-    : (reasoning
+    : (
+        reasoning
+          .trim()
+          .split('\n')
+          .find((line) => line.trim().length > 0) ?? ''
+      )
         .trim()
-        .split('\n')
-        .find((line) => line.trim().length > 0) ?? ''
-      ).trim().slice(0, 60);
+        .slice(0, 60);
 
   return (
     <div className="mb-2 border border-border/50 rounded-radius-sm overflow-hidden">
@@ -256,10 +285,7 @@ export function ThinkingPanel({
             思考过程 ({reasoning.length} 字)
           </span>
           {preview ? (
-            <span
-              data-testid="thinking-preview"
-              className="truncate text-ui-xs text-muted min-w-0"
-            >
+            <span data-testid="thinking-preview" className="truncate text-ui-xs text-muted min-w-0">
               {preview}
             </span>
           ) : null}

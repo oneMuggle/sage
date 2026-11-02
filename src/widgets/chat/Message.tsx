@@ -310,6 +310,7 @@ function MessageComponent({
           <ThinkingPanel
             reasoning={message.reasoning_content}
             isStreaming={isStreaming}
+            mode={mode}
             defaultExpanded={contract.thinkingDefaultExpanded}
           />
         )}
