@@ -35,11 +35,15 @@ export const zhSettingsUi = {
   'settings.basic.log_timezone.utc': 'UTC (历史默认)',
   'settings.basic.retry_base_desc': '首次重试等待时间，后续按指数递增（base × 2^(attempt-1)）',
   'settings.basic.retry_base_label': '退避基数（秒）',
-  'settings.basic.retry_max_desc': 'LLM 请求失败后自动重试的次数上限。设为 0 表示禁用自动重试。',
-  'settings.basic.retry_max_label': '最大重试次数',
+  'settings.basic.retry_max_desc':
+    'LLM 请求的总尝试次数（含首次请求）。例如设为 10 表示最多尝试 10 次（首次 + 9 次重试）。设为 0 或 1 表示禁用自动重试。',
+  'settings.basic.retry_max_label': '最大尝试次数',
   'settings.basic.retry_total_budget_desc':
     '从首次尝试起算，退避前累计耗时超过该值即停止自动重试。0 = 不限。',
   'settings.basic.retry_total_budget_label': '重试总时长预算（秒）',
+  // 2026-11-02: 设置保存失败 toast — saveSettings 改用 strict 通道后，
+  // 后端 PUT 失败时由 settingsStore 弹 toast 通知用户
+  'settings.save_failed_sync': '设置同步到后端失败，重启后可能回滚',
   'settings.basic.section.data': '数据',
   'settings.basic.section.demo': '演示',
   'settings.basic.section.llm_proxy_timeout': 'LLM 代理超时',

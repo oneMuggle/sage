@@ -83,8 +83,8 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   {
     key: 'llmRetryMaxAttempts',
     tab: 'basic',
-    label: '最大重试次数',
-    labelEn: 'Max retry attempts',
+    label: '最大尝试次数',
+    labelEn: 'Max attempts',
     keywords: 'llm retry max attempts 重试 次数 最大 自动重试',
   },
   {
