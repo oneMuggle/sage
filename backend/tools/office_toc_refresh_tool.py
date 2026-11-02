@@ -26,6 +26,7 @@ from typing import Any, Optional
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.context import ToolExecutionContext
+from backend.tools.office_workspace_scope import workspace_for_input
 
 
 class OfficeRefreshTocTool(BaseTool):
@@ -119,8 +120,9 @@ def _resolve_active_workspace(ctx: Optional[ToolExecutionContext]) -> Optional[P
 
 
 def _workspace_for_input(ctx: Optional[ToolExecutionContext], input_path: Path) -> Path:
-    """file_path 模式的服务层 workspace：优先绑定工作区，回退输入父目录。"""
+    """file_path 模式的服务层 workspace：输入在绑定工作区内 → 绑定工作区；
+    否则 → 输入父目录（委托 :func:`workspace_for_input`，与 template/pdf/
+    analyze 模块共用同一围栏语义）。
+    """
     binding_ws = _resolve_active_workspace(ctx)
-    if binding_ws is not None:
-        return binding_ws
-    return input_path.parent
+    return workspace_for_input(binding_ws, input_path)

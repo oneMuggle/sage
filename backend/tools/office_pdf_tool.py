@@ -13,7 +13,8 @@ Phase-2 段的镜像）：
 
 1. 读工具（read_pdf / read_pdf_form）``requires_tool_context = True``：
    registry 在无活动 ``ToolExecutionContext`` 时隐藏 schema；execute()
-   顶部再 fail-closed（防御纵深，stale 调用照样拒绝）。
+   顶部再 fail-closed（防御纵深，stale 调用照样拒绝）。读路径不做工作区
+   边界检查（与 ``read_file`` 对齐：允许读取任意位置）。
 2. 写工具（generate_pdf / fill_pdf_form）``requires_tool_context = False``
    （同 office_create / office_update 的 file_path 模式），越界写入由
    (1) M1 PermissionEnforcer 的 path boundary（legacy 链升级为审批）和
@@ -65,6 +66,7 @@ from backend.office.storage import document_path
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.context import ToolExecutionContext, current_tool_context
 from backend.tools.file_tool import _record_artifact_safely
+from backend.tools.office_workspace_scope import workspace_for_input
 
 #: page_size 参数（LLM 面小写）→ PdfGenerateRequest 服务层取值
 _PAGE_SIZE_MAP = {
@@ -127,14 +129,14 @@ def _workspace_for_input(
 ) -> Path:
     """file_path 模式的服务层 workspace 取值。
 
-    优先绑定工作区（覆盖 ``<workspace>/office/...`` 受管文档与工作区任意
-    子目录）；无绑定时回退输入文件父目录（ad-hoc 单文件模式，越界由
-    ``_enforce_workspace`` + 服务层 ``resolve_within`` 双层把守）。
+    输入在绑定工作区内 → 绑定工作区（覆盖 ``<workspace>/office/...`` 受管文档
+    与工作区任意子目录）；输入在工作区外 → 输入父目录（与 read_file 对齐，
+    允许读任意绝对路径；写路径由 ``_enforce_workspace`` + 服务层
+    ``resolve_within`` 双层把守）。委托 :func:`workspace_for_input`，与
+    template/analyze/toc_refresh 模块共用同一围栏语义。
     """
     binding_ws = _resolve_active_workspace(ctx)
-    if binding_ws is not None:
-        return binding_ws
-    return input_path.parent
+    return workspace_for_input(binding_ws, input_path)
 
 
 def _bounded(data: Dict[str, Any], max_bytes: int) -> Dict[str, Any]:
@@ -193,9 +195,8 @@ def _resolve_pdf_input(  # noqa: PLR0911 — 错误早退路径多，保持线�
             return ToolResult(success=False, error="document_not_found")
         return found
     if isinstance(file_path, str) and file_path.strip():
-        blocked = tool._enforce_workspace(file_path)
-        if blocked is not None:
-            return blocked
+        # 读路径不做工作区检查（与 read_file 对齐：允许读取任意位置）；
+        # 写路径由调用方单独 enforce（OfficeGeneratePdfTool / OfficeFillPdfFormTool）。
         path = Path(file_path).expanduser()
         if not path.is_absolute():
             return ToolResult(
@@ -607,6 +608,13 @@ class OfficeFillPdfFormTool(BaseTool):
                 )
         else:
             final = input_path.resolve()
+            # 原地覆盖：对输入路径本身做工作区围栏（显式 output_path 分支
+            # 已在上方单独 enforce；子代理路径 ``policy.workspace_root``
+            # 非空时此处硬拒绝，主聊天路径 ``workspace_root=None`` 为 no-op，
+            # 由 ``make_office_path_boundary`` 在分发前承担边界校验）。
+            blocked = self._enforce_workspace(str(final))
+            if blocked is not None:
+                return blocked
 
         # 服务层要求 output 不存在且不带路径分隔符 → 先写工作区内临时名，
         # 成功后 os.replace 到最终落点（同一工作区卷内原子改名）。

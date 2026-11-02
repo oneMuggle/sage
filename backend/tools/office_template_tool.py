@@ -10,9 +10,9 @@
   → ``word_template.fill_word_template``（按 data 填充，支持图片占位符）
 
 安全姿态与 :mod:`backend.tools.office_pdf_tool` 一致（读工具
-``requires_tool_context = True`` fail-closed；写工具走
-``_enforce_workspace`` + 服务层 ``resolve_within`` 双层边界；doc_id 模式
-经 binding 解析、失败折叠为 document_not_found；输出剥除
+``requires_tool_context = True`` fail-closed；读路径不做工作区边界检查，
+写工具走 ``_enforce_workspace`` + 服务层 ``resolve_within`` 双层边界；
+doc_id 模式经 binding 解析、失败折叠为 document_not_found；输出剥除
 summary.workspace_path；读输出按 ``policy.max_output_bytes`` 截断）。
 
 填充落点：服务层永远写「新文件且不存在」，这里统一先落工作区内临时名，
@@ -50,6 +50,7 @@ from backend.office.storage import document_path
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.context import ToolExecutionContext, current_tool_context
 from backend.tools.file_tool import _record_artifact_safely
+from backend.tools.office_workspace_scope import workspace_for_input
 
 # ──────────────────────────────────────────────────────────────────────
 # 共享小助手（office_pdf_tool.py 内有镜像副本，保持模块自包含）
@@ -96,11 +97,12 @@ def _resolve_active_workspace(ctx: Optional[ToolExecutionContext]) -> Optional[P
 def _workspace_for_input(
     ctx: Optional[ToolExecutionContext], input_path: Path
 ) -> Path:
-    """file_path 模式的服务层 workspace：优先绑定工作区，回退输入父目录。"""
+    """file_path 模式的服务层 workspace：输入在绑定工作区内 → 绑定工作区；
+    否则 → 输入父目录（委托 :func:`workspace_for_input`，与 pdf/analyze/
+    toc_refresh 模块共用同一围栏语义）。
+    """
     binding_ws = _resolve_active_workspace(ctx)
-    if binding_ws is not None:
-        return binding_ws
-    return input_path.parent
+    return workspace_for_input(binding_ws, input_path)
 
 
 def _bounded(data: Dict[str, Any], max_bytes: int) -> Dict[str, Any]:
@@ -152,9 +154,8 @@ def _resolve_template_input(  # noqa: PLR0911 — 错误早退路径多，保持
             return ToolResult(success=False, error="document_not_found")
         return found
     if isinstance(file_path, str) and file_path.strip():
-        blocked = tool._enforce_workspace(file_path)
-        if blocked is not None:
-            return blocked
+        # 读路径不做工作区检查（与 read_file 对齐：允许读取任意位置）；
+        # 写路径（output_path）由 OfficeFillWordTemplateTool.execute() 单独 enforce。
         path = Path(file_path).expanduser()
         if not path.is_absolute():
             return ToolResult(
@@ -365,6 +366,13 @@ class OfficeFillWordTemplateTool(BaseTool):
                 )
         else:
             final = input_path.resolve()
+            # 原地覆盖：对输入路径本身做工作区围栏（显式 output_path 分支
+            # 已在上方单独 enforce；子代理路径 ``policy.workspace_root``
+            # 非空时此处硬拒绝，主聊天路径 ``workspace_root=None`` 为 no-op，
+            # 由 ``make_office_path_boundary`` 在分发前承担边界校验）。
+            blocked = self._enforce_workspace(str(final))
+            if blocked is not None:
+                return blocked
 
         # 服务层要求 output 不存在、不带分隔符、且写在模板同目录 →
         # 先落临时名再 os.replace 到最终落点。

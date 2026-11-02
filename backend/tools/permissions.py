@@ -24,6 +24,7 @@ import threading
 from collections import OrderedDict
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from backend.domain.tool_names import (
@@ -439,33 +440,80 @@ class PermissionEnforcer:
         return _ask(reason)
 
 
+#: 工具名 → 需要校验的路径参数列表 ``((参数名, 生效条件参数名), ...)``。
+#:
+#: - ``参数名``: 工具入参里的路径字段；缺失 / 非字符串 / 空 → 跳过该字段。
+#: - ``生效条件参数名``: 该字段仅在同名入参为真值时才参与校验（``None``
+#:   = 总是校验）。用于区分同一工具的读写两种形态（``office_analyze``
+#:   默认只读，只有 ``write_report=true`` 才落盘）。
+#:
+#: 语义：命中路径落在会话工作区内 → 放行；命中项目 ``allowed_paths``
+#: 白名单 → 放行；其余 → ``ask``（用户逐次确认）。
+#:
+#: 读工具不在此表内 —— 读取任意路径与 ``read_file`` 对齐，不做工作区
+#: 边界检查（2026-11-02 工作区外文件访问放宽）。
+#:
+#: 模板 / PDF 填充类工具额外纳入 ``file_path``：它们的临时产物落在源
+#: 文件同目录（``fill_word_template`` 写 ``<stem>.fill-*.docx``、
+#: ``fill_pdf_form`` 同理），源目录本身就是写入边界。
+_BOUNDARY_SPECS: Dict[str, Tuple[Tuple[str, Optional[str]], ...]] = {
+    "office_create": (("output_dir", None),),
+    "office_update": (("file_path", None),),
+    "office_delete": (("file_path", None),),
+    "office_repair_word": (("file_path", None),),
+    "office_refresh_toc": (("file_path", None),),
+    "office_fill_word_template": (("file_path", None), ("output_path", None)),
+    "office_fill_ppt_template": (("file_path", None),),
+    # generate_pdf 的 file_path 是 output_path 的别名（LLM 偶尔叫错名），
+    # 两个字段都纳入校验，避免用别名绕过边界检查。
+    "office_generate_pdf": (("output_path", None), ("file_path", None)),
+    "office_fill_pdf_form": (("file_path", None), ("output_path", None)),
+    "office_analyze": (("file_path", "write_report"),),
+}
+
+
+def _boundary_targets(
+    tool_name: str, args: Dict[str, Any]
+) -> Tuple[str, ...]:
+    """按 ``_BOUNDARY_SPECS`` 取出本次调用需要做边界校验的路径串。
+
+    生效条件不满足 / 参数缺失 / 非字符串 / 空串 → 该字段跳过。返回的
+    路径保持调用方原样（相对路径也照原样返回，交给后续
+    ``_is_safe_path`` / 白名单判定处理）。
+    """
+    specs = _BOUNDARY_SPECS.get(tool_name)
+    if not specs:
+        return ()
+    targets: List[str] = []
+    for arg_key, condition_arg in specs:
+        if condition_arg is not None and not args.get(condition_arg):
+            continue
+        target = args.get(arg_key)
+        if not isinstance(target, str) or not target.strip():
+            continue
+        targets.append(target)
+    return tuple(targets)
+
+
 def make_office_path_boundary(
     boundary_resolver: Optional[Callable[[], Optional[str]]] = None,
 ) -> Callable[[str, Dict[str, Any]], Optional[PermissionDecision]]:
-    """构造 office 写类工具（create/update/delete）的 path-boundary 校验器。
+    """构造 office 写类工具的 path-boundary 校验器。
 
     ``boundary_resolver`` 每次调用返回当前会话 workspace_root（``None`` 表示
     未绑定 → 不检查边界，与 write_file 未绑定语义一致）。返回的校验器仅对
-    office 写类工具且带对应路径参数时生效：
+    ``_BOUNDARY_SPECS`` 里登记的写类工具生效：
 
-    - ``office_create`` 的 ``output_dir``：目录 resolve 后落在 workspace 内 →
-      ``None``（放行）；在外 → ``ask``（写工作区外需确认）。
-    - ``office_update`` / ``office_delete`` 的 ``file_path``：对既有文件的原地
-      修改 / 删除，越界（工作区外）同样升级为 ``ask``。
+    - 路径落在 workspace 内 → ``None``（放行）；
+    - 路径落在 workspace 外且命中项目 ``allowed_paths`` 白名单 → ``None``；
+    - 其余 → ``ask``（写工作区外需用户确认）。
 
     ``boundary_resolver`` 抛异常（DB 故障等）时 **fail-closed**：升级为 ask，
     绝不因无法解析边界而静默放行越界写入。
     """
 
-    #: 工具名 → 需要校验的路径参数名
-    _BOUNDARY_TOOLS = {
-        "office_create": "output_dir",
-        "office_update": "file_path",
-        "office_delete": "file_path",
-    }
-
     def _validator(tool_name: str, args: Dict[str, Any]) -> Optional[PermissionDecision]:
-        if tool_name not in _BOUNDARY_TOOLS:
+        if tool_name not in _BOUNDARY_SPECS:
             return None
         if boundary_resolver is None:
             return None
@@ -475,20 +523,62 @@ def make_office_path_boundary(
             return _ask(f"{tool_name} 无法解析会话工作区边界，需人工审批")
         if not root:
             return None
-        return _check_path_arg(args, _BOUNDARY_TOOLS[tool_name], root, tool_name)
-
-    def _check_path_arg(
-        args: Dict[str, Any], key: str, root: str, tool_name: str
-    ) -> Optional[PermissionDecision]:
-        """校验 ``args[key]`` 是否落在 ``root`` 内；外 → ask，内/缺失 → None。"""
-        target = args.get(key)
-        if not isinstance(target, str) or not target.strip():
-            return None
-        if _is_safe_path(target, root):
-            return None
-        return _ask(f"{tool_name} 读写工作区外的路径 {target}，需要用户确认")
+        for target in _boundary_targets(tool_name, args):
+            # 工作区内 → 放行。
+            if _is_safe_path(target, root):
+                continue
+            # 项目 allowed_paths 白名单 → 放行（不经审批）。
+            if _is_path_in_allowed_paths(target):
+                continue
+            return _ask(f"{tool_name} 读写工作区外的路径 {target}，需要用户确认")
+        return None
 
     return _validator
+
+
+def _is_path_in_allowed_paths(target: str) -> bool:
+    """``target`` 命中当前 session 的 allowed_paths 白名单 → True。
+
+    无活动 ToolExecutionContext / 查询失败 → False（fail-closed，让调用方
+    继续走审批流）。惰性导入避免顶层 import 环。
+    """
+    if not isinstance(target, str) or not target.strip():
+        return False
+    try:
+        from backend.tools.base import BaseTool
+    except Exception:  # noqa: BLE001
+        return False
+    return BaseTool._is_path_allowed(target)
+
+
+def boundary_paths_for_call(
+    tool_name: str, args: Dict[str, Any]
+) -> Tuple[str, ...]:
+    """提取一次工具调用中应被用户批准的路径集合（供 agent 注入 approved-paths 作用域）。
+
+    用于审批通过后的 ContextVar 写入：用户批准了某次调用，把提取到的路径
+    作为 ``set_approved_paths`` 的输入，使工具层的 ``_enforce_workspace`` 在
+    这些路径上放行。
+
+    除路径本身外，还纳入其**父目录**：填充类工具的临时产物与分析报告都
+    落在源文件同目录（如 ``<stem>.fill-*.docx`` / ``<stem>-analysis.xlsx``），
+    只批准文件本身会漏掉这些同目录写入。
+
+    返回空元组表示无需注入（工具不在边界表 / 路径缺失 / 路径在工作区内）。
+    """
+    paths: List[str] = []
+    for target in _boundary_targets(tool_name, args):
+        paths.append(target)
+        try:
+            candidate = Path(target).expanduser()
+        except Exception:  # noqa: BLE001 — 路径不可解析就只登记原串
+            continue
+        if not candidate.is_absolute():
+            continue
+        parent = str(candidate.parent)
+        if parent not in paths:
+            paths.append(parent)
+    return tuple(paths)
 
 
 # ---------------------------------------------------------------------------
@@ -586,5 +676,6 @@ __all__ = [
     "forget_session_rule",
     "clear_session_rules",
     "make_office_path_boundary",
+    "boundary_paths_for_call",
     "load_enforcer_from_settings",
 ]

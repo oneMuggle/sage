@@ -136,11 +136,16 @@ _PARALLEL_POOL_SIZE = 8
 
 from backend.tools.bash_validation import validate_bash
 from backend.tools.context import current_tool_context
+from backend.tools.context import (
+    reset_approved_paths as _reset_approved_paths,
+    set_approved_paths as _set_approved_paths,
+)
 from backend.tools.permissions import (
     DEFAULT_PERMISSION_MODE,
     PermissionDecision,
     PermissionEnforcer,
     ToolCapability,
+    boundary_paths_for_call,
     classify_tool,
     load_enforcer_from_settings,
     make_office_path_boundary,
@@ -2722,6 +2727,9 @@ class SageAgent:
                             decision, denial_content = self._pre_dispatch_gate(
                                 tc, args, enforcer, session_id
                             )
+                            # Phase C: 本次调用是否经用户显式批准（决定是否把
+                            # 路径写入 approved-paths 作用域放行工作区外写入）。
+                            approval_granted = False
                             if denial_content:
                                 result_content = denial_content
                                 is_error = True
@@ -2737,6 +2745,9 @@ class SageAgent:
                                 ):
                                     yield _gate_ev
                                 decision = gate_result["decision"]
+                                # 闸口决议把 needs_approval 归零，用独立标记记住
+                                # "本次调用经用户批准"（Phase C 注入 approved-paths）。
+                                approval_granted = decision.allowed
 
                             if not decision.allowed:
                                 logger.info(
@@ -2747,6 +2758,15 @@ class SageAgent:
                                 result_content = f"权限拒绝: {decision.reason}"
                                 is_error = True
                             else:
+                                # Phase C: 审批通过后把本次调用的路径注入
+                                # approved-paths ContextVar，让工具层
+                                # ``_enforce_workspace`` 放行这些路径。作用域在
+                                # 调用结束（finally）即清理，不泄漏到后续调用。
+                                approved_token = None
+                                if approval_granted:
+                                    approved = boundary_paths_for_call(tc.name, args)
+                                    if approved:
+                                        approved_token = _set_approved_paths(approved)
                                 try:
                                     tool = self.tool_registry.get(tc.name)
                                     if tool is None:
@@ -2838,6 +2858,11 @@ class SageAgent:
                                     logger.error(f"工具执行失败: {tc.name}, error: {str(e)}")
                                     result_content = f"[工具错误] {str(e)}"
                                     is_error = True
+                                finally:
+                                    # Phase C: 清理本次调用的 approved-paths 作用域，
+                                    # 避免批准过的路径泄漏到后续工具调用。
+                                    if approved_token is not None:
+                                        _reset_approved_paths(approved_token)
 
                         tool_result = ToolCallResult(
                             tool_call_id=tc.id,

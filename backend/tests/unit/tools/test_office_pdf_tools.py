@@ -233,7 +233,8 @@ def test_read_pdf_unknown_doc_id_is_document_not_found(tmp_path: Path):
     assert result.error == "document_not_found"
 
 
-def test_read_pdf_rejects_path_outside_policy_workspace(tmp_path: Path):
+def test_read_pdf_allows_path_outside_policy_workspace(tmp_path: Path):
+    """读路径不做工作区边界检查（与 read_file 对齐：允许读取任意位置）。"""
     env = _BoundWorkspace(tmp_path, workspace_root=str(tmp_path / "work"))
     outside = tmp_path / "outside.pdf"
     _make_plain_pdf(outside)
@@ -243,8 +244,7 @@ def test_read_pdf_rejects_path_outside_policy_workspace(tmp_path: Path):
             result = _tool(OfficeReadPdfTool, **env.policy_kwargs).execute(file_path=str(outside))
         finally:
             reset_tool_context(token)
-    assert result.success is False
-    assert result.error.startswith("path_outside_workspace")
+    assert result.success is True
 
 
 def test_read_pdf_requires_doc_id_or_file_path(tmp_path: Path):
