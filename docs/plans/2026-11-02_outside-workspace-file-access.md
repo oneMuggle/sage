@@ -81,14 +81,20 @@ Sage 的问题：Office 读取工具比 `read_file` 更严格，且 `@-mention` 
 
 ### Phase 2（P1）— 预填 allowed_paths + 白名单优先
 
-- [ ] Step 4: 项目创建时预填默认 `allowed_paths`
-  - `backend/api/project_routes.py` — `create_project()`
-  - 默认值：
+- [x] Step 4: 项目创建时预填默认 `allowed_paths`
+  - `backend/office/allowed_paths.py` — 新增 `default_allowed_paths(home=None)`
+  - `backend/api/project_routes.py` — `register_project()` 在 `request.allowed_paths is None`
+    时使用默认值；显式 `[]` 尊重用户清空选择，显式自定义列表不覆盖
+  - 默认值（仅加入实际存在的目录）：
     - `~/Documents/**`
     - `~/Desktop/**`
     - `~/Downloads/**`
     - Windows 追加：`D:/Documents/**`, `E:/Documents/**`（如存在）
-  - 用户可在设置页编辑
+  - 幂等：`ProjectRepository.register` 的 `ON CONFLICT(path)` 不更新 `allowed_paths`，
+    重新打开/登记不会重置用户编辑
+  - 用户可在创建向导或设置页编辑（向导选中路径后走 `updateAllowedPaths` 覆盖）
+  - 测试：`test_allowed_paths.py::TestDefaultAllowedPaths` +
+    `test_project_routes.py` 三条注册预填用例
 
 - [ ] Step 5: Office 读取工具检查 `allowed_paths`
   - `backend/tools/office_tool.py` / `office_pdf_tool.py` / `office_analyze_tool.py`
