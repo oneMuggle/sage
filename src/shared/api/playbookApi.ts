@@ -293,6 +293,22 @@ export interface PlaybookBindPayload {
   source?: string;
 }
 
+export interface PlaybookEvent {
+  id: number;
+  project_id: string;
+  event: string;
+  stage: string | null;
+  payload: Record<string, unknown>;
+  created_at: number;
+}
+
+export interface PlaybookEventAggregate {
+  days: number;
+  project_id: string | null;
+  counts: Record<string, number>;
+  total: number;
+}
+
 export const playbookApi = {
   async listBuiltin(): Promise<PlaybookSummary[]> {
     const response = await invoke<{ playbooks: PlaybookSummary[] }>('playbooks_builtin_list');
@@ -447,6 +463,21 @@ export const playbookApi = {
     return invoke<PlaybookExportResult>('playbooks_library_export', {
       libraryId,
       includeScaffold,
+    });
+  },
+
+  async listEvents(projectId: string, limit = 50): Promise<PlaybookEvent[]> {
+    const response = await invoke<{ events: PlaybookEvent[] }>('playbooks_events_list', {
+      projectId,
+      limit,
+    });
+    return response.events ?? [];
+  },
+
+  async aggregateEvents(projectId?: string, days = 30): Promise<PlaybookEventAggregate> {
+    return invoke<PlaybookEventAggregate>('playbooks_events_aggregate', {
+      projectId,
+      days,
     });
   },
 };

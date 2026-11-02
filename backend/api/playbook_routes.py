@@ -33,6 +33,9 @@ from backend.api.playbook_schemas import (
     PlaybookAuthorPreviewResponse,
     PlaybookBindRequest,
     PlaybookCurrentResponse,
+    PlaybookEventAggregateResponse,
+    PlaybookEventModel,
+    PlaybookEventsResponse,
     PlaybookExportResponse,
     PlaybookImportPreviewRequest,
     PlaybookImportPreviewResponse,
@@ -50,6 +53,10 @@ from backend.api.playbook_schemas import (
     PlaybookWikiExportResponse,
 )
 from backend.data.database import make_with_db_lock
+from backend.data.playbook_event_repo import (
+    PlaybookEventRepository,
+    record_playbook_event,
+)
 from backend.data.playbook_library_repo import PlaybookLibraryRepository
 from backend.data.playbook_repo import PlaybookRepository, PlaybookSnapshot
 from backend.data.project_constraint_repo import ProjectConstraintRepository
@@ -227,6 +234,17 @@ def save_playbook_to_library(
     item, created = PlaybookLibraryRepository().save(
         parsed["playbook"], source=request.source or "imported"
     )
+    # Library operations are not project-bound; use the library id as the
+    # pseudo project_id so the event stays queryable.
+    record_playbook_event(
+        f"library:{item.id}",
+        "library_save",
+        payload={
+            "library_id": item.id,
+            "name": item.name,
+            "created": created,
+        },
+    )
     return PlaybookLibrarySaveResponse(
         item=PlaybookLibraryItemModel(**item.summary()),
         created=created,
@@ -259,6 +277,11 @@ def export_playbook_library_item(
     if item is None:
         raise _error(404, "playbook_not_found", "规程库条目不存在")
     spec = item.spec
+    record_playbook_event(
+        f"library:{item.id}",
+        "library_export",
+        payload={"library_id": item.id, "name": item.name},
+    )
     return PlaybookExportResponse(
         format="json",
         filename="{}.sageplaybook.json".format(spec.get("id") or item.id),
@@ -272,6 +295,12 @@ def export_playbook_library_item(
 @with_db_lock
 def delete_playbook_from_library(library_id: str) -> Dict[str, bool]:
     removed = PlaybookLibraryRepository().delete(library_id)
+    if removed:
+        record_playbook_event(
+            f"library:{library_id}",
+            "library_delete",
+            payload={"library_id": library_id},
+        )
     if not removed:
         raise _error(404, "playbook_not_found", "规程库条目不存在")
     return {"removed": True}
@@ -324,6 +353,17 @@ def bind_project_playbook(
     project_playbook_rules(
         project.id, spec, stage_id=state.get("current_stage")
     )
+    record_playbook_event(
+        project.id,
+        "bind",
+        stage=state.get("current_stage"),
+        payload={
+            "source": source,
+            "playbook_id": request.playbook_id,
+            "library_id": request.library_id,
+            "playbook_name": (spec.get("name") or "")[:120],
+        },
+    )
     return _current_payload(project)
 
 
@@ -347,6 +387,20 @@ def update_project_playbook_state(
     if request.conditions is not None:
         state["conditions"] = dict(request.conditions)
     repo.update_state(project.id, state)
+    state_event = (
+        "exemption_grant"
+        if request.waivers
+        else ("manual_complete" if request.manual_done else "update_state")
+    )
+    record_playbook_event(
+        project.id,
+        state_event,
+        stage=state.get("current_stage"),
+        payload={
+            "waivers_count": len(state.get("waivers") or []),
+            "manual_done_count": len(state.get("manual_done") or []),
+        },
+    )
     return _current_payload(project)
 
 
@@ -357,8 +411,19 @@ def update_project_playbook_state(
 def unbind_project_playbook(project_id: str) -> PlaybookCurrentResponse:
     """Deactivate the bound playbook and clear its state (history is kept)."""
     project = _project_or_404(project_id)
+    snapshot = _active_snapshot_or_404(project.id)
+    playbook_name = ""
+    source = ""
+    if snapshot is not None:
+        playbook_name = (snapshot.spec.get("name") or "")[:120]
+        source = snapshot.source or ""
     PlaybookRepository().unbind(project.id)
     ProjectRepository().update_playbook_state(project.id, None)
+    record_playbook_event(
+        project.id,
+        "unbind",
+        payload={"playbook_name": playbook_name, "source": source},
+    )
     return _current_payload(project)
 
 
@@ -394,6 +459,7 @@ def cleanup_project_playbook_rules(project_id: str) -> PlaybookRuleCleanupRespon
     removed = ProjectConstraintRepository().delete_by_source_prefix(
         project.id, "playbook:"
     )
+    record_playbook_event(project.id, "cleanup_rules", payload={"removed": removed})
     return PlaybookRuleCleanupResponse(removed=removed)
 
 
@@ -405,7 +471,17 @@ def audit_project_playbook(project_id: str) -> PlaybookAuditResponse:
     project = _project_or_404(project_id)
     snapshot = _active_snapshot_or_404(project.id)
     state = PlaybookRepository().get_state(project.id)
-    return PlaybookAuditResponse(**audit_playbook(project, snapshot.spec, state=state))
+    audit = audit_playbook(project, snapshot.spec, state=state)
+    record_playbook_event(
+        project.id,
+        "audit",
+        stage=audit.get("current_stage"),
+        payload={
+            "issues_count": int(audit.get("overall", {}).get("issues_count") or 0),
+            "unclassified_count": len(audit.get("unclassified_files") or []),
+        },
+    )
+    return PlaybookAuditResponse(**audit)
 
 
 @router.post(
@@ -425,6 +501,18 @@ async def audit_project_playbook_with_ai(
         state=state,
         use_llm=request.use_llm,
     )
+    record_playbook_event(
+        project.id,
+        "audit_ai",
+        stage=result.audit.get("current_stage"),
+        payload={
+            "llm_available": bool(result.llm_available),
+            "use_llm": bool(request.use_llm),
+            "issues_count": int(
+                result.audit.get("overall", {}).get("issues_count") or 0
+            ),
+        },
+    )
     return PlaybookAuditResponse(
         **result.audit,
         llm_available=result.llm_available,
@@ -442,6 +530,15 @@ async def author_project_playbook(
     project = _project_or_404(project_id)
     result = await build_author_preview(
         project, request.answers, use_llm=request.use_llm
+    )
+    record_playbook_event(
+        project.id,
+        "author",
+        payload={
+            "llm_available": bool(result.llm_available),
+            "use_llm": bool(request.use_llm),
+            "source": str(result.source or "")[:120],
+        },
     )
     return PlaybookAuthorPreviewResponse(**result.to_dict())
 
@@ -465,6 +562,12 @@ def confirm_project_stage(
     if result["errors"]:
         raise _error(400, "stage_confirm_failed", result["errors"][0]["message"])
     project_playbook_rules(project.id, snapshot.spec, stage_id=request.stage_id)
+    record_playbook_event(
+        project.id,
+        "stage_confirm",
+        stage=request.stage_id,
+        payload={"stage_id": request.stage_id},
+    )
     refreshed = _project_or_404(project_id)
     return _current_payload(refreshed)
 
@@ -481,6 +584,25 @@ def apply_project_playbook_actions(
     snapshot = _active_snapshot_or_404(project.id)
     result = apply_playbook_actions(project, request.actions)
     state = PlaybookRepository().get_state(project.id)
+    action_types = [str(a.get("type")) for a in request.actions if a.get("type")]
+    # Classify as batch_move / undo_batch_move when those are the sole action.
+    if action_types == ["batch_move"]:
+        event_name = "batch_move"
+    elif action_types == ["undo_last_batch_move"]:
+        event_name = "undo_batch_move"
+    else:
+        event_name = "actions_apply"
+    record_playbook_event(
+        project.id,
+        event_name,
+        stage=state.get("current_stage"),
+        payload={
+            "action_types": action_types[:32],
+            "applied": result["applied"],
+            "skipped": result["skipped"],
+            "errors_count": len(result["errors"]),
+        },
+    )
     return PlaybookActionsApplyResponse(
         applied=result["applied"],
         skipped=result["skipped"],
@@ -503,17 +625,26 @@ def export_project_playbook(
     snapshot = _active_snapshot_or_404(project.id)
     spec = snapshot.spec
     if format == "md":
+        record_playbook_event(project.id, "export_md", payload={"format": "md"})
         return PlaybookExportResponse(
             format="md",
             filename="{}-handbook.md".format(spec["id"]),
             content=render_markdown_handbook(spec),
         )
     if format == "agents":
+        record_playbook_event(
+            project.id, "export_agents", payload={"format": "agents"}
+        )
         return PlaybookExportResponse(
             format="agents",
             filename="{}-AGENTS.md".format(spec["id"]),
             content=render_agents_markdown(spec),
         )
+    record_playbook_event(
+        project.id,
+        "export_json",
+        payload={"format": "json", "include_scaffold": include_scaffold},
+    )
     return PlaybookExportResponse(
         format="json",
         filename="{}.sageplaybook.json".format(spec["id"]),
@@ -555,6 +686,11 @@ def export_project_playbook_to_wiki(project_id: str) -> PlaybookWikiExportRespon
         secure_write_file(root, target, content)
     except Exception as exc:  # noqa: BLE001 — surface wiki write failure
         raise _error(500, "wiki_write_failed", str(exc)) from exc
+    record_playbook_event(
+        project.id,
+        "export_wiki",
+        payload={"path": relative, "created": created},
+    )
     return PlaybookWikiExportResponse(
         path=relative, created=created, updated=not created
     )
@@ -613,7 +749,65 @@ def import_playbook(request: PlaybookImportRequest) -> PlaybookCurrentResponse:
     project_playbook_rules(
         project.id, spec, stage_id=state.get("current_stage")
     )
+    record_playbook_event(
+        project.id,
+        "import",
+        stage=state.get("current_stage"),
+        payload={
+            "playbook_id": spec.get("id"),
+            "playbook_name": (spec.get("name") or "")[:120],
+            "conflict": request.conflict,
+            "saved_to_library": bool(request.save_to_library),
+        },
+    )
     return _current_payload(project)
+
+
+@router.get(
+    "/projects/{project_id}/playbook/events",
+    response_model=PlaybookEventsResponse,
+)
+def list_playbook_events(
+    project_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> PlaybookEventsResponse:
+    """Return recent playbook usage events for a project (newest first)."""
+    _project_or_404(project_id)
+    repo = PlaybookEventRepository()
+    events = repo.list_recent(project_id, limit=limit)
+    return PlaybookEventsResponse(
+        project_id=project_id,
+        events=[
+            PlaybookEventModel(
+                id=e.id,
+                project_id=e.project_id,
+                event=e.event,
+                stage=e.stage,
+                payload=e.payload,
+                created_at=e.created_at,
+            )
+            for e in events
+        ],
+    )
+
+
+@router.get(
+    "/playbooks/events/aggregate",
+    response_model=PlaybookEventAggregateResponse,
+)
+def aggregate_playbook_events(
+    project_id: Optional[str] = Query(default=None, max_length=128),
+    days: int = Query(default=30, ge=1, le=365),
+) -> PlaybookEventAggregateResponse:
+    """Return event counts grouped by event name within the time window."""
+    repo = PlaybookEventRepository()
+    counts = repo.aggregate(project_id=project_id, days=days)
+    return PlaybookEventAggregateResponse(
+        days=days,
+        project_id=project_id,
+        counts=counts,
+        total=sum(counts.values()),
+    )
 
 
 __all__ = ["router"]
