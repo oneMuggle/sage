@@ -94,6 +94,7 @@
 | 116  | [本地 OCR](./116-local-ocr.md) | RapidOCR/Tesseract 双引擎 + 聊天兜底/预览编辑 + Office/PDF/Wiki/工具接入 + 配置、性能与 Win7 边界 |
 | 117  | [桌面宠物](./117-desktop-pet.md) | 透明置顶窗 / AgentState 状态映射与面板 / 应用内形态 / Task Center + 编排 lanes + 定时失败聚合 / 自定义动画包（zip + sage-pet://）/ Win7 兼容模式 |
 | 118  | [文档与验收信息架构：按任务域分组的顶层 Tab](./118-office-ia-tabs.md) | URL 为唯一事实源 + keep-alive 保状态 + 诊断收进「环境」popover；十余个常驻区块 → 2 任务域（win7 编号避让 117=桌面宠物；LaTeX 与审校与规范分区待对应功能同步后补齐） |
+| 119  | [Markdown 渲染器统一](./119-markdown-renderer.md) | 聊天/产物/Wiki 单一收敛点：minimal/chat 两档 + GFM/KaTeX 统一管线 + 表格复制与限高 + Shiki 降级 + 锚点前缀与 TOC 大纲 + 作用域 token 样式（win7 编号避让 118=office IA；main 对应 §124） |
 
 ---
 
