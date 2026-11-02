@@ -22,6 +22,7 @@ _STREAMING_CHUNK_DELAY_S = 0.04
 # title_updated 事件在 SENTINEL 关闭流之前送达；超时则任务转入后台继续
 # （落库后由前端轮询兜底），不阻塞流收尾过久。
 _TITLE_WAIT_S = 3.0
+
 import json
 import logging
 import os
@@ -85,6 +86,27 @@ from backend.services.scheduler import get_scheduler_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# 收尾后台任务强引用集合：asyncio 只持弱引用，不保留强引用时任务可能被 GC。
+_POST_TURN_TASKS: Set[asyncio.Task] = set()
+
+
+def _spawn_post_turn_task(coro) -> None:
+    """Fire-and-forget 收尾任务（stop hooks / 记忆抽取）。
+
+    这些是 best-effort 工作，绝不能阻塞 DONE：旧实现同步 await，记忆抽取
+    打向不可达的默认 endpoint 时实测让光标停住 136s。
+    """
+    task = asyncio.create_task(coro)
+    _POST_TURN_TASKS.add(task)
+    task.add_done_callback(_POST_TURN_TASKS.discard)
+
+
+async def drain_post_turn_tasks(timeout: float = 5.0) -> None:
+    """等待未完成的收尾任务（测试 / 关停用）。"""
+    pending = [t for t in _POST_TURN_TASKS if not t.done()]
+    if pending:
+        await asyncio.wait(pending, timeout=timeout)
 
 
 def _event_repo():
@@ -2104,6 +2126,14 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         evt.step_index = evt.iteration
                         done_event = evt
                         run_outcome = "completed"
+                    elif evt.state.value == "reasoning_delta" and evt.reasoning:
+                        # 2026-11-02: 适配器已按增量下发思考内容，这里只累积
+                        # 供落库，并原样直通事件（不再二次切块 / sleep）。
+                        if done_reasoning is None:
+                            done_reasoning = evt.reasoning
+                        else:
+                            done_reasoning += evt.reasoning
+                        await entry.queue.put(evt.to_dict())
                     elif evt.state.value == "reasoning" and evt.reasoning:
                         # PR-7b: 累积 reasoning 事件,持久化时一起写入 DB
                         if done_reasoning is None:
@@ -2357,54 +2387,70 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 # 提取（落盘失败则跳过, 避免产生无对应消息的脏记忆）。
                 # best-effort + autoMemory 开关, 失败只 warning, 不影响流。
                 if assistant_persisted:
-                    # ===== L11 stop 钩子 (批次 C-2, observe-only) =====
-                    # run 正常结束通知; deny/modify 无语义, 一律忽略。
-                    try:
-                        import backend.data.settings_repo as _settings_repo_mod
-                        from backend.hooks.config import load_hooks as _load_hooks_fn
-                        from backend.hooks.runner import run_event_hooks as _run_hooks_fn
 
-                        _stop_hooks = _load_hooks_fn(_settings_repo_mod.SettingsRepository())
-                        if _stop_hooks:
-                            _capped = done_content[:4096]
-                            await _run_hooks_fn(
-                                _stop_hooks,
-                                "stop",
-                                "",
-                                {
-                                    "hook_event_name": "stop",
-                                    "session_id": data.session_id,
-                                    "final_content": _capped,
-                                },
-                            )
-                    except Exception as l11_stop_err:
-                        logger.debug(
-                            f"[REQ {request_id}] stop hooks skipped: {l11_stop_err}"
-                        )
-                    # Important-1 (win7 Task 6): when lifespan has installed a
-                    # lifecycle manager, use it so memory_written hooks and
-                    # traceability are emitted. Otherwise fall back to the
-                    # async extraction queue.
-                    lifecycle = getattr(request.app.state, "lifecycle", None)
-                    if lifecycle is not None and not memory_off:
+                    async def _run_post_turn_side_effects() -> None:
+                        # ===== L11 stop 钩子 (批次 C-2, observe-only) =====
+                        # run 正常结束通知; deny/modify 无语义, 一律忽略。
                         try:
-                            await lifecycle.on_turn_complete(
-                                data.session_id,
-                                [
-                                    {"role": "user", "content": data.message},
-                                    {"role": "assistant", "content": done_content},
-                                ],
-                                source_message_id=assistant_db_id,
+                            import backend.data.settings_repo as _settings_repo_mod
+                            from backend.hooks.config import load_hooks as _load_hooks_fn
+                            from backend.hooks.runner import run_event_hooks as _run_hooks_fn
+
+                            _stop_hooks = _load_hooks_fn(
+                                _settings_repo_mod.SettingsRepository()
                             )
-                        except Exception as exc:
-                            logger.warning(
-                                f"[REQ {request_id}] lifecycle on_turn_complete failed: {exc}"
+                            if _stop_hooks:
+                                _capped = done_content[:4096]
+                                await _run_hooks_fn(
+                                    _stop_hooks,
+                                    "stop",
+                                    "",
+                                    {
+                                        "hook_event_name": "stop",
+                                        "session_id": data.session_id,
+                                        "final_content": _capped,
+                                    },
+                                )
+                        except Exception as l11_stop_err:
+                            logger.debug(
+                                f"[REQ {request_id}] stop hooks skipped: {l11_stop_err}"
                             )
-                    elif not memory_off:
-                        # 对标 S2: 临时聊天（memory_mode='off'）不提取记忆
-                        await _extract_legacy_chat_memory(
-                            request_id, data.session_id, data.message, done_content
-                        )
+                        # Important-1 (win7 Task 6): when lifespan has installed a
+                        # lifecycle manager, use it so memory_written hooks and
+                        # traceability are emitted. Otherwise fall back to the
+                        # async extraction queue.
+                        lifecycle = getattr(request.app.state, "lifecycle", None)
+                        if lifecycle is not None and not memory_off:
+                            try:
+                                await lifecycle.on_turn_complete(
+                                    data.session_id,
+                                    [
+                                        {"role": "user", "content": data.message},
+                                        {"role": "assistant", "content": done_content},
+                                    ],
+                                    source_message_id=assistant_db_id,
+                                )
+                            except Exception as exc:
+                                logger.warning(
+                                    f"[REQ {request_id}] lifecycle on_turn_complete failed: {exc}"
+                                )
+                        elif not memory_off:
+                            # 对标 S2: 临时聊天（memory_mode='off'）不提取记忆
+                            try:
+                                await _extract_legacy_chat_memory(
+                                    request_id,
+                                    data.session_id,
+                                    data.message,
+                                    done_content,
+                                )
+                            except Exception as exc:
+                                logger.warning(
+                                    f"[REQ {request_id}] legacy memory extraction failed: {exc}"
+                                )
+
+                    # 收尾工作移出 DONE 关键路径：钩子/记忆抽取是 best-effort，
+                    # 让 done 立即入队，避免前端光标长时间不结束。
+                    _spawn_post_turn_task(_run_post_turn_side_effects())
                 # win7 分支同款防御 (回流): sess 先初始化为 None。否则
                 # session_repo.get 抛错时 except 吞掉后, 下方标题生成判断行
                 # `if done_event and sess` 触发 UnboundLocalError, 一路冒穿

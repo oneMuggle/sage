@@ -274,6 +274,27 @@ def build_llm_client_from_settings() -> Optional[Any]:
         return None
 
 
+def build_httpx_adapter_from_settings() -> Optional[Any]:
+    """Build an ``HttpxLLMAdapter`` bound to the persisted endpoint, or ``None``.
+
+    ``None`` means "no usable endpoint configured" — callers pass it straight
+    to ``MemoryExtractor``, which then degrades to keyword extraction without
+    touching the network. Returning a default-configured adapter instead (the
+    old behaviour) made background memory extraction hit an unreachable
+    ``api.openai.com`` with an empty key and stall for minutes.
+    """
+    cfg = load_llm_config_from_settings()
+    if cfg is None:
+        return None
+    try:
+        from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
+
+        return HttpxLLMAdapter(**cfg)
+    except Exception as exc:
+        logger.warning("llm_factory: failed to build HttpxLLMAdapter: %s", exc)
+        return None
+
+
 # ---------------------------------------------------------------------------
 # G5 会话级模型覆盖（2026-09-06 对标增强 Phase-2，docs/plans §2.1）
 # ---------------------------------------------------------------------------

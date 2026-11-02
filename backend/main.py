@@ -339,15 +339,18 @@ def _build_lifecycle_extractor():
     """生产用的记忆事实提取器 — LLM 驱动（与 legacy ``_extract_and_store_memory``
     同级），而非 keyword-only 降级。
 
-    ``MemoryExtractor`` 需要 ``llm_client``（支持 ``chat()``）;
-    ``HttpxLLMAdapter`` 是 ``_build_chat_service`` 里用的同一个生产 adapter，
-    构造无副作用（不发起网络请求）。Important-3 (final review)：之前
-    ``MemoryLifecycleManager`` 没传 ``extractor=``，导致生命周期路径静默退化
-    成 ``MemoryExtractor(llm_client=None)`` 的关键词启发式。"""
-    from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
+    ``MemoryExtractor`` 需要 ``llm_client``（支持 ``chat()``）; 适配器由
+    ``build_httpx_adapter_from_settings`` 按已保存的 endpoint 构建。
+    无可用 endpoint 时返回 ``None``，``MemoryExtractor`` 内部降级为关键词
+    提取，不发起任何网络请求（旧实现用无配置的 ``HttpxLLMAdapter()``，
+    会以空 key 打 ``api.openai.com`` 并重试数十秒，阻塞对话收尾）。
+    Important-3 (final review)：之前 ``MemoryLifecycleManager`` 没传
+    ``extractor=``，导致生命周期路径静默退化成
+    ``MemoryExtractor(llm_client=None)`` 的关键词启发式。"""
     from backend.memory.extractor import MemoryExtractor
+    from backend.orchestration.llm_factory import build_httpx_adapter_from_settings
 
-    return MemoryExtractor(llm_client=HttpxLLMAdapter())
+    return MemoryExtractor(llm_client=build_httpx_adapter_from_settings())
 
 
 def _resolve_default_context_window() -> Optional[int]:

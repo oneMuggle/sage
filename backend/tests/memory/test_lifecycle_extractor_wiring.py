@@ -165,11 +165,38 @@ def _async_chat(payload: str):
     return _chat
 
 
-def test_main_wiring_helper_builds_llm_backed_extractor():
-    """backend.main's extractor factory must return a MemoryExtractor whose
-    llm_client is a real HttpxLLMAdapter (not the keyword-only default)."""
+def test_main_wiring_helper_builds_llm_backed_extractor(monkeypatch):
+    """A configured endpoint must yield a MemoryExtractor carrying a real
+    HttpxLLMAdapter bound to the persisted settings."""
     from backend.main import _build_lifecycle_extractor
+    from backend.orchestration import llm_factory
+
+    monkeypatch.setattr(
+        llm_factory,
+        "load_llm_config_from_settings",
+        lambda: {
+            "provider": "custom",
+            "api_key": "test-key",
+            "base_url": "http://127.0.0.1:1234/v1",
+            "model": "test-model",
+            "temperature": 0.3,
+        },
+    )
 
     extractor = _build_lifecycle_extractor()
     assert extractor is not None
     assert extractor._llm is not None, "extractor must carry an LLM client"
+    assert extractor._llm._client.config.base_url == "http://127.0.0.1:1234/v1"
+
+
+def test_main_wiring_helper_without_endpoint_uses_keyword_fallback(monkeypatch):
+    """No configured endpoint → no network client; MemoryExtractor falls back
+    to keyword extraction instead of hitting api.openai.com with an empty key."""
+    from backend.main import _build_lifecycle_extractor
+    from backend.orchestration import llm_factory
+
+    monkeypatch.setattr(llm_factory, "load_llm_config_from_settings", lambda: None)
+
+    extractor = _build_lifecycle_extractor()
+    assert extractor is not None
+    assert extractor._llm is None

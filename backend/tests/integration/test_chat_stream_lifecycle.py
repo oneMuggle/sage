@@ -28,6 +28,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+from backend.api.legacy_routes import drain_post_turn_tasks
 from backend.core.legacy.agent_state import AgentEvent, AgentState
 from backend.main import app
 from backend.tests.conftest import ensure_session
@@ -64,6 +65,9 @@ async def _drain_producer(stream_id: str) -> None:
     if entry and entry.task:
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await entry.task
+    # 收尾副作用（stop hooks / 记忆抽取）已移出 DONE 关键路径，改为后台任务；
+    # 断言它们的效果前必须显式等待。
+    await drain_post_turn_tasks()
 
 
 @pytest.mark.asyncio()
@@ -184,6 +188,145 @@ async def test_chat_stream_producer_works_without_lifecycle(tmp_db_path):
                 # the done event must still arrive (stream not broken)
                 assert "done" in attach_resp.text
         await _drain_producer(stream_id)
+    finally:
+        app.state.lifecycle = prev_lifecycle
+        app.state.hooks = prev_hooks
+        if app.state.streams is not None:
+            for entry in list(app.state.streams._entries.values()):
+                if entry.task is not None and not entry.task.done():
+                    entry.task.cancel()
+            app.state.streams._entries.clear()
+
+
+@pytest.mark.asyncio()
+async def test_chat_stream_done_not_blocked_by_slow_lifecycle(tmp_db_path):
+    """DONE must reach the client while ``on_turn_complete`` is still running.
+
+    Regression: the producer used to inline-await the lifecycle (memory
+    extraction) before queueing DONE. With an unreachable default endpoint
+    the assistant row was persisted at 21:22:18 and DONE only arrived at
+    21:24:34 — the cursor sat at the end of the message for 136s.
+    """
+    from backend.api.chat_stream_registry import StreamRegistry
+    from backend.data.database import get_database
+
+    class _SlowLifecycle:
+        def __init__(self):
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+
+        async def on_turn_complete(self, *args, **kwargs):  # noqa: ARG002 — fixture
+            self.started.set()
+            await self.release.wait()
+
+    slow = _SlowLifecycle()
+    prev_lifecycle = getattr(app.state, "lifecycle", None)
+    prev_hooks = getattr(app.state, "hooks", None)
+    app.state.lifecycle = slow
+    app.state.hooks = None
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        app.state.streams = StreamRegistry()
+
+    session_id = "00000000-0000-0000-0000-00000000000a"
+    ensure_session(get_database(), session_id)
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="即时完成")
+
+    try:
+        with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+            MockAgent.return_value.run_loop = mock_run_loop
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                create_resp = await ac.post(
+                    CHAT_STREAM_PATH,
+                    json={
+                        "session_id": session_id,
+                        "message": "帮我记住这个偏好：我更喜欢简洁的回答",
+                    },
+                )
+                assert create_resp.status_code == 200, create_resp.text
+                stream_id = create_resp.json()["streamId"]
+                attach_resp = await asyncio.wait_for(
+                    ac.get(f"{CHAT_STREAM_PATH}/{stream_id}"), timeout=2.0
+                )
+        assert "done" in attach_resp.text
+        # 收尾任务确实已启动，但尚未完成 —— DONE 已先送达。
+        await asyncio.wait_for(slow.started.wait(), timeout=1.0)
+        assert not slow.release.is_set()
+        slow.release.set()
+        await _drain_producer(stream_id)
+    finally:
+        slow.release.set()
+        await drain_post_turn_tasks(timeout=1.0)
+        app.state.lifecycle = prev_lifecycle
+        app.state.hooks = prev_hooks
+        if app.state.streams is not None:
+            for entry in list(app.state.streams._entries.values()):
+                if entry.task is not None and not entry.task.done():
+                    entry.task.cancel()
+            app.state.streams._entries.clear()
+
+
+@pytest.mark.asyncio()
+async def test_chat_stream_producer_passes_reasoning_delta_through(tmp_db_path):
+    """Reasoning deltas must reach the wire as-is and be concatenated for
+    persistence — no second chunking pass, no duplicate full ``reasoning``.
+
+    Regression: the agent buffered every adapter ``reasoning_delta`` and only
+    emitted one full ``REASONING`` after the stream ended, so the producer's
+    re-chunking always put the thinking panel after the body.
+    """
+    from backend.api.chat_stream_registry import StreamRegistry
+    from backend.data.database import get_database
+    from backend.data.session_repo import MessageRepository
+
+    prev_lifecycle = getattr(app.state, "lifecycle", None)
+    prev_hooks = getattr(app.state, "hooks", None)
+    app.state.lifecycle = None
+    app.state.hooks = None
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        app.state.streams = StreamRegistry()
+
+    session_id = "00000000-0000-0000-0000-00000000000b"
+    ensure_session(get_database(), session_id)
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        yield AgentEvent(
+            state=AgentState.REASONING_DELTA, iteration=0, reasoning="先读文件，"
+        )
+        yield AgentEvent(
+            state=AgentState.REASONING_DELTA, iteration=0, reasoning="再改代码。"
+        )
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="已完成")
+
+    try:
+        with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+            MockAgent.return_value.run_loop = mock_run_loop
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                create_resp = await ac.post(
+                    CHAT_STREAM_PATH,
+                    json={"session_id": session_id, "message": "看一下这个文件"},
+                )
+                assert create_resp.status_code == 200, create_resp.text
+                stream_id = create_resp.json()["streamId"]
+                attach_resp = await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+                assert attach_resp.status_code == 200
+
+        assert "reasoning_delta" in attach_resp.text
+        assert "先读文件，" in attach_resp.text
+        assert "再改代码。" in attach_resp.text
+        assert "reasoning_final" not in attach_resp.text
+
+        await _drain_producer(stream_id)
+        persisted = MessageRepository().get_by_session(session_id)
+        asst = next((m for m in persisted if m.role == "assistant"), None)
+        assert asst is not None, "assistant message not persisted"
+        assert asst.reasoning_content == "先读文件，再改代码。"
     finally:
         app.state.lifecycle = prev_lifecycle
         app.state.hooks = prev_hooks

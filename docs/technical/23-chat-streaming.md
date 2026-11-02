@@ -280,13 +280,29 @@ max_iterations_exceeded (limit=10, agent=writer, source=profile)
 排查结论:**前端主 SSE 路径的 reasoning 累积本就存在**——`useChat` 的 onEvent
 先调 `applyTransparencyAndToolEvents`(`chatStreamRuntime.ts:231`),由它按
 `reasoning_delta` / `reasoning` append、`reasoning_final` replace 写入
-`useChatStreamStore`,主路径与 reattach 路径共用同一处。真正的缺口在后端:
+`useChatStreamStore`,主路径与 reattach 路径共用同一处。
+
+后端有两次修复:
 
 - **流式分支**只看 provider 的增量 `reasoning_delta`;当 provider 把整段思考塞进
   `response.reasoning_content` 而不发增量时,整段思考被丢弃(非流式路径本来就有
-  `response.reasoning_content` 兜底)。
-- 修复:`agent.py` 流式分支在 `stream_reasoning_parts` 为空时回退
-  `response.reasoning_content`,补发一条 `REASONING` 事件,与非流式路径口径对齐。
+  `response.reasoning_content` 兜底)。修复:`agent.py` 流式分支在
+  `stream_reasoning_parts` 为空时回退 `response.reasoning_content`,补发一条
+  `REASONING` 事件,与非流式路径口径对齐。
+- **思考晚于正文(2026-11-02)**:此前 `agent.py` 只把适配器的 `reasoning_delta`
+  累积起来,等整个 LLM 流结束后才 yield 一条完整 `REASONING`;producer 再把它二次
+  切块成 wire `reasoning_delta`。结果前端总是先看到正文、后看到思考。修复:
+  - 新增 `AgentState.REASONING_DELTA`;`agent.py` 每收到一段适配器增量就立即
+    yield 一个 `REASONING_DELTA` 事件,同时继续累积供落库。
+  - producer 对该状态**直通**(只累积 `done_reasoning`,不再二次切块/延迟)。
+  - 仅当流全程没有任何 delta 时才补发整段 `REASONING`(上面的兜底),避免同一段
+    思考被前端追加两遍。
+  - 安全性:`LLMClient` 的流式重试仅在 `nothing_yielded`(无 content 且无
+    reasoning)时发生,已下发的 delta 不会因重试重复。
+  - 回归:`backend/tests/unit/test_agent_streaming.py` 的
+    `test_run_loop_streaming_forwards_reasoning_delta_immediately`、
+    `backend/tests/integration/test_chat_stream_lifecycle.py` 的
+    `test_chat_stream_producer_passes_reasoning_delta_through`。
 
 ### 10.3 中间态占位符不得吞掉已流式正文
 
@@ -310,3 +326,31 @@ max_iterations_exceeded (limit=10, agent=writer, source=profile)
 - `backend/tests/unit/test_agent_streaming.py` —
   `test_run_loop_streaming_emits_reasoning_from_response_fallback`
 - `src/shared/lib/errorMapping.test.ts` — agent/source 解析与差异化文案(共 29 例)
+
+### 10.4 DONE 不再被收尾副作用阻塞(2026-11-02)
+
+现象:输出完成后光标停在末尾,流迟迟不结束(实测落库到前端收到 `done` 相差约
+136 秒)。
+
+根因:producer 在 assistant 消息落库后、`done` 入队前**同步 await** stop hooks
+与 `lifecycle.on_turn_complete`。后者的 `MemoryExtractor` 用无配置的
+`HttpxLLMAdapter()`(默认 `https://api.openai.com/v1`、空 key、timeout=60s),
+3 次尝试 ≈ 136s。期间生产者不发心跳,前端 watchdog 默认 1800s 也不会触发。
+
+修复(`backend/api/legacy_routes.py`):
+
+- 落库后的 stop hooks + 记忆抽取整体移入 `_spawn_post_turn_task(...)` 后台协程,
+  `done` 立即入队。后台协程内部逐段 try/except,异常只记日志,不会产生
+  "Task exception was never retrieved"。
+- `_POST_TURN_TASKS` 强引用集合防止任务被 GC;`drain_post_turn_tasks()` 供测试与
+  关停时等待。
+- 记忆抽取改用 `backend/orchestration/llm_factory.py` 新增的
+  `build_httpx_adapter_from_settings()`:按持久化 endpoint 构建适配器;无可用
+  endpoint 返回 `None`,`MemoryExtractor` 降级为关键词抽取,零网络。
+  `main.py:_build_lifecycle_extractor()` 与
+  `chat_session_lifecycle._extract_legacy_chat_memory` 同步替换。
+- **heartbeat / watchdog 语义不改动**:心跳只在重试退避期间发出,是合法的活性
+  信号;卡顿根因是 `done` 被阻塞,不是 watchdog 阈值。
+- 回归:`test_chat_stream_done_not_blocked_by_slow_lifecycle`、
+  `test_llm_factory.py::TestBuildHttpxAdapter`、
+  `test_lifecycle_extractor_wiring.py` 的有/无 endpoint 两条分支。
