@@ -13,7 +13,7 @@
 
     "backend/data/database.py": 2268,
     "backend/data/session_repo.py": 1121,
-    "backend/data/settings_canonicalizer.py": 940,
+    "backend/data/settings_canonicalizer.py": 941,
     "backend/main.py": 1730,
     "backend/memory/manager.py": 852,
     "backend/mcp/pool.py": 915,
@@ -53,7 +53,7 @@
     "backend/wiki/ingest.py": 828,
     "backend/zotero/client.py": 1195,
     "electron/__tests__/commands.test.ts": 1210,
-    "electron/main.ts": 3166,
+    "electron/main.ts": 3167,
     "electron/preload.ts": 867,
     "electron/tests/updateIntegration.test.ts": 869,
     "electron/tests/updateManager.test.ts": 1813,
