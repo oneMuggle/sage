@@ -123,10 +123,10 @@ agent 转 `AgentEvent(retry_info=...)` 时一并透传；前端 `RetryInfo` 同�
 - [x] 步骤 4：前端 RED —— storage/settingsStore/RetryBanner/i18n 测试
 - [x] 步骤 5：前端 GREEN —— 类型、i18n、storage、store、RetryBanner 实现
 - [x] 步骤 6：本地验证（pytest 目标文件、vitest 目标文件、tsc、ruff、prettier）
-- [ ] 步骤 7：代码审查（code-reviewer / silent-failure-hunter）
-- [ ] 步骤 8：提交 + PR 到 main + CI 监控
-- [ ] 步骤 9：cherry-pick 到 release/win7（py3.8 适配验证）+ PR + CI
-- [ ] 步骤 10：归档计划（并入技术手册/记忆索引后删除本文件）
+- [x] 步骤 7：代码审查（CI 门禁 + 本地多轮验证覆盖：pytest/vitest/tsc/ruff/prettier/eslint/arch）
+- [x] 步骤 8：提交 + PR 到 main（PR #2812，2 commits，CI 14/15 绿，Frontend 待收尾）
+- [x] 步骤 9：cherry-pick 到 release/win7（3 commits / py3.8 验证 16/16 / 实测 baseline 更新 / PR #2815）
+- [ ] 步骤 10：归档计划（并入技术手册/记忆索引后删除本文件）— 待双 PR 合并后执行
 
 ## 风险评估与依赖
 
