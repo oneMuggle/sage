@@ -89,6 +89,8 @@ export const enSettingsUi = {
   'settings.endpoints.add': '+ Add endpoint',
   'settings.endpoints.api_key_hint':
     'OpenAI-compatible and Ollama protocols may leave this empty (for local services or internal proxies without a key)',
+  'settings.endpoints.api_key_saved_hint':
+    'A key is already stored on the backend (never echoed back); leaving this empty keeps it',
   'settings.endpoints.api_key_placeholder_local': 'Can be empty for local/intranet proxies',
   'settings.endpoints.cancel': 'Cancel',
   'settings.endpoints.delete': 'Delete',
