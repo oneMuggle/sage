@@ -159,7 +159,7 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 
 ## 8. 前端
 
-- 主卡片 `PlaybookCard` 挂载在项目治理页「概览」Tab；同目录下还有 `PlaybookChecklist`（待补项/退出条件）、`PlaybookClassificationPanel`（归类与未知文件批量移动/撤销）、`PlaybookLibraryPanel`（全局规程库管理）、`PlaybookSpecEditor`（表单/JSON 编辑）、`PlaybookAuthorPanel`、`PlaybookImportPreviewCard` 与 `PlaybookVersionsPanel`；
+- 主卡片 `PlaybookCard` 挂载在项目治理页「概览」Tab；同目录下还有 `PlaybookChecklist`（待补项/退出条件）、`PlaybookClassificationPanel`（归类与未知文件批量移动/撤销）、`PlaybookLibraryPanel`（全局规程库管理）、`PlaybookSpecEditor`（表单/JSON 编辑）、`PlaybookAuthorPanel`、`PlaybookImportPreviewCard`、`PlaybookVersionsPanel` 与 `PlaybookActivityPanel`（最近活动流水 + 聚合，见 §13）；
 - 展示阶段条、整体完成度、当前阶段待补项、阶段推进确认、导出/导入；
 - 所有动作按钮均需用户点击；错误与结果就地显示，并通过 `role="status"` / `aria-live="polite"` 暴露给读屏；
 - 文案 i18n：词典位于 `src/shared/lib/i18n/locales/{zh,en}/playbook.ts`，组件通过 `usePlaybookI18n()` 取 `t/tf`；无 `I18nProvider` 时回退中文（便于组件单测）。**后端返回的审计 reason 与错误消息仍为中文**，英文界面下这部分保持原文；后续如需全量本地化，应改为后端返回 code + params。
@@ -183,7 +183,7 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 
 - 单元：`test_playbook_spec.py`、`test_playbook_repo.py`、`test_playbook_auditor.py`、`test_playbook_actions.py`、`test_playbook_diff.py`；
 - 集成：`test_playbook_routes.py`（绑定 → 审计 → 动作 → 阶段确认 → 导出/导入 → 逐项 diff → 库详情/导出 → 路径拒绝）；
-- 前端：`PlaybookCard.test.tsx`、`PlaybookLibraryPanel.test.tsx`、`PlaybookImportPreviewCard.test.tsx`、`PlaybookSpecEditor.a11y.test.tsx`（表单控件可访问名称）、`playbookApi.test.ts`；
+- 前端：`PlaybookCard.test.tsx`、`PlaybookActivityPanel.test.tsx`、`PlaybookLibraryPanel.test.tsx`、`PlaybookImportPreviewCard.test.tsx`、`PlaybookSpecEditor.a11y.test.tsx`（表单控件可访问名称）、`playbookApi.test.ts`；
 - E2E：`tests/electron/tiers/stub/smoke/playbook.spec.ts`（项目治理页 → 归类全选 → 批量移动 → 撤销，校验 IPC 动作负载）。
 
 ## 12. 已知限制（后续 P3）
@@ -195,3 +195,40 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 - 规程前端文案已支持 zh/en；后端审计 reason、错误消息与内置规程内容仍为中文，英文界面下不回退翻译。
 - 暂无云端规程市场。
 - `release/win7` cherry-pick 仍需按 pydantic v1 适配。
+
+## 13. 使用埋点（2026-11 落地）
+
+后端对用户触发的规程操作做 best-effort 记录，供「最近活动」视图消费。**埋点失败不影响主流程**——异常就地 log、不向上抛出；前端展示侧缺数据时降级为空态。
+
+### 13.1 存储
+
+- 表 `playbook_events`（SQLite，随项目数据目录创建）：`id / project_id / event / stage / payload_json / created_at`，索引 `idx_playbook_events_recent(project_id, created_at DESC)`；
+- `created_at` 为 **epoch 毫秒**（`int(time.time() * 1000)`）；
+- `payload` 为 JSON 文本，记录辅助字段（如 `source`/`stage_from`/`stage_to`），不存大字段；
+- 每项目 **最多保留 500 条**（`MAX_EVENTS_PER_PROJECT`），插入后裁剪最旧的。
+
+### 13.2 事件白名单
+
+后端 `ALLOWED_EVENTS` 是 `frozenset`，共 22 项：`bind / unbind / audit / audit_ai / author / actions_apply / stage_confirm / import / export_json / export_md / export_agents / export_wiki / library_save / library_delete / library_export / batch_move / undo_batch_move / cleanup_rules / exemption_grant / exemption_revoke / manual_complete / update_state`。
+
+未在白名单的 `event` 会被静默丢弃（不抛错），避免脏数据。前端 `PlaybookActivityPanel` 用 `Partial<Record<string, PlaybookTranslationKey>>` 把每个白名单名字映射到 `playbook.event.<name>` 词典 key，未识别的显示「未识别操作」。
+
+### 13.3 查询 API
+
+| 端点 | 返回 | 用途 |
+|---|---|---|
+| `GET /projects/{id}/playbook/events?limit=50` | `{project_id, events: PlaybookEvent[]}` | 最近事件流水（`created_at DESC, id DESC`；`limit` 1–200，默认 50） |
+| `GET /playbooks/events/aggregate?project_id=&days=30` | `{days, project_id, counts, total}` | 时间窗聚合；`project_id` 可省略表示全局，`days` 1–365，默认 30 |
+
+两条端点走 `LocalAuthMiddleware`，与项目其它 playbook API 同安全域。
+
+### 13.4 IPC 路由
+
+Electron 侧 `src/shared/api/playbookApi.ts` 暴露 `listEvents(projectId, limit = 50)` 与 `aggregateEvents(projectId?, days = 30)`，通过 `playbooks_events_list` / `playbooks_events_aggregate` IPC 命令（`electron/ipc-manifest.json` + `electron/commandRoutes/playbooks.ts`）转发到后端。`PlaybookCard` 的 `handleLoadActivity` 用 `Promise.all` 并行拉取两条后交给 `PlaybookActivityPanel` 渲染。
+
+### 13.5 失败策略
+
+- 写入：`record_playbook_event(...)` 内部 `try/except`，失败时 `logger.warning`，调用方无感；
+- 读取：前端 `run('activity', ...)` 走统一 `try/catch`，错误落 `error` 状态而不是崩溃；
+- 不暴露到读屏/状态徽章/导出——埋点是辅助信息，不是审计证据。
+

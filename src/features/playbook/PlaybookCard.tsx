@@ -13,6 +13,8 @@ import type {
   PlaybookAudit,
   PlaybookAuthorPreview,
   PlaybookCurrent,
+  PlaybookEvent,
+  PlaybookEventAggregate,
   PlaybookImportPreview,
   PlaybookLibraryItem,
   PlaybookMove,
@@ -22,6 +24,7 @@ import type {
 } from '../../shared/api/playbookApi';
 import { Button } from '../../shared/ui/Button';
 
+import { PlaybookActivityPanel } from './PlaybookActivityPanel';
 import { PlaybookAuthorPanel } from './PlaybookAuthorPanel';
 import { PlaybookChecklist } from './PlaybookChecklist';
 import { PlaybookClassificationPanel } from './PlaybookClassificationPanel';
@@ -64,6 +67,9 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const [saveToLibrary, setSaveToLibrary] = useState(false);
   const [versions, setVersions] = useState<PlaybookVersion[]>([]);
   const [showVersions, setShowVersions] = useState(false);
+  const [events, setEvents] = useState<PlaybookEvent[]>([]);
+  const [aggregate, setAggregate] = useState<PlaybookEventAggregate | null>(null);
+  const [showActivity, setShowActivity] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -344,6 +350,17 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       setShowVersions(true);
     });
 
+  const handleLoadActivity = () =>
+    run('activity', async () => {
+      const [list, summary] = await Promise.all([
+        playbookApi.listEvents(projectId),
+        playbookApi.aggregateEvents(projectId),
+      ]);
+      setEvents(list);
+      setAggregate(summary);
+      setShowActivity(true);
+    });
+
   const handleFile = async (file: File) => {
     setError(null);
     try {
@@ -563,6 +580,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           onToggleLibrary={() => setShowLibrary((value) => !value)}
           onEdit={handleStartEdit}
           onLoadVersions={() => void handleLoadVersions()}
+          onLoadActivity={() => void handleLoadActivity()}
           onSeedMilestones={handleSeedMilestones}
           onCleanupRules={handleCleanupRules}
           onUnbind={handleUnbind}
@@ -708,6 +726,14 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
 
       {showVersions && (
         <PlaybookVersionsPanel versions={versions} onClose={() => setShowVersions(false)} />
+      )}
+
+      {showActivity && (
+        <PlaybookActivityPanel
+          events={events}
+          aggregate={aggregate}
+          onClose={() => setShowActivity(false)}
+        />
       )}
 
       {showLibrary && <PlaybookLibraryPanel onClose={() => setShowLibrary(false)} />}

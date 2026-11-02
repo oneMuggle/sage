@@ -20,6 +20,8 @@ const wikiExportMock = vi.fn();
 const updateStateMock = vi.fn();
 const unbindMock = vi.fn();
 const versionsMock = vi.fn();
+const listEventsMock = vi.fn();
+const aggregateEventsMock = vi.fn();
 const cleanupRulesMock = vi.fn();
 const importPreviewMock = vi.fn();
 const importMock = vi.fn();
@@ -43,6 +45,8 @@ vi.mock('../../../shared/api/playbookApi', () => ({
     updateState: (...args: unknown[]) => updateStateMock(...args),
     unbind: (...args: unknown[]) => unbindMock(...args),
     listVersions: (...args: unknown[]) => versionsMock(...args),
+    listEvents: (...args: unknown[]) => listEventsMock(...args),
+    aggregateEvents: (...args: unknown[]) => aggregateEventsMock(...args),
     cleanupRules: (...args: unknown[]) => cleanupRulesMock(...args),
     importPreview: (...args: unknown[]) => importPreviewMock(...args),
     importPlaybook: (...args: unknown[]) => importMock(...args),
@@ -518,6 +522,34 @@ describe('PlaybookCard', () => {
     fireEvent.click(screen.getByTestId('playbook-versions-btn'));
     await waitFor(() => expect(versionsMock).toHaveBeenCalledWith('p1'));
     expect(await screen.findByTestId('playbook-versions')).toBeInTheDocument();
+  });
+
+  it('最近活动可展开', async () => {
+    getCurrentMock.mockResolvedValue(bound);
+    listEventsMock.mockResolvedValue([
+      {
+        id: 1,
+        project_id: 'p1',
+        event: 'audit',
+        stage: 'proposal',
+        payload: {},
+        created_at: 1793500000000,
+      },
+    ]);
+    aggregateEventsMock.mockResolvedValue({
+      days: 7,
+      project_id: 'p1',
+      counts: { audit: 3, bind: 1 },
+      total: 4,
+    });
+    render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-activity-btn');
+    fireEvent.click(screen.getByTestId('playbook-activity-btn'));
+    await waitFor(() => expect(listEventsMock).toHaveBeenCalledWith('p1'));
+    await waitFor(() => expect(aggregateEventsMock).toHaveBeenCalledWith('p1'));
+    expect(await screen.findByTestId('playbook-activity')).toBeInTheDocument();
+    expect(screen.getByTestId('playbook-activity-summary')).toHaveTextContent(/4/);
+    expect(screen.getByTestId('playbook-activity-event-1')).toBeInTheDocument();
   });
 
   it('解绑前需要确认', async () => {
