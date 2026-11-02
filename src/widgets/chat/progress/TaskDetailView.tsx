@@ -123,7 +123,8 @@ export function TaskDetailView({ board, taskId, onBack, onRetryTask }: TaskDetai
   // R114: 实时行插件归属后缀 —— 子代理事件只有 tool_name，按同一名单派生。
   const hasLiveToolNames = useMemo(
     () =>
-      Boolean(live?.waitingApproval) || (live?.events.some((evt) => Boolean(evt.tool_name)) ?? false),
+      Boolean(live?.waitingApproval) ||
+      (live?.events.some((evt) => Boolean(evt.tool_name)) ?? false),
     [live],
   );
   const pluginNames = usePluginNames(hasLiveToolNames);
@@ -295,7 +296,9 @@ export function TaskDetailView({ board, taskId, onBack, onRetryTask }: TaskDetai
                         })
                       : ''}
                   </span>
-                  <span className="min-w-0 break-words">{describeLiveEvent(evt, pluginOwnerSuffix)}</span>
+                  <span className="min-w-0 break-words">
+                    {describeLiveEvent(evt, pluginOwnerSuffix)}
+                  </span>
                 </li>
               ))}
             </ul>
