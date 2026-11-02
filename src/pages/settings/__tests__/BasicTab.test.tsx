@@ -79,16 +79,16 @@ describe('BasicTab — LLM 重试 section', () => {
     // section 标题
     expect(screen.getByText('LLM 重试')).toBeTruthy();
 
-    // 最大重试次数 input 存在且默认值为 3
+    // 最大尝试次数 input 存在且默认值为 3
     const maxAttemptsInput = screen.getByTestId('settings-llm-retry-max-attempts');
     expect(maxAttemptsInput).toBeTruthy();
     expect((maxAttemptsInput as HTMLInputElement).value).toBe('3');
 
-    // 描述文本
-    expect(screen.getByText(/LLM 请求失败后自动重试的次数上限/)).toBeTruthy();
+    // 描述文本 —— 2026-11-02：语义修正为「总尝试次数（含首次请求）」
+    expect(screen.getByText(/LLM 请求的总尝试次数（含首次请求）/)).toBeTruthy();
   });
 
-  it('修改最大重试次数触发 updateSettings', async () => {
+  it('修改最大尝试次数触发 updateSettings', async () => {
     renderTab();
 
     const input = screen.getByTestId('settings-llm-retry-max-attempts');

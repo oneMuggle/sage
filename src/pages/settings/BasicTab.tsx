@@ -38,7 +38,7 @@ export function formatBasicTabAuditSnapshot(input: BasicTabAuditInput): string {
   return [
     `# 基础设置审计快照`,
     `- 流式输出: ${input.streaming ? '开启' : '关闭'}`,
-    `- LLM 最大重试次数: ${input.llmRetryMaxAttempts}`,
+    `- LLM 最大尝试次数: ${input.llmRetryMaxAttempts}`,
     `- 退避基数(秒): ${input.llmRetryBaseDelayS}`,
     `- 最大退避(秒): ${input.llmRetryMaxDelayS}`,
     `- 重试总时长预算(秒): ${input.llmRetryTotalBudgetS === 0 ? '不限' : input.llmRetryTotalBudgetS}`,
