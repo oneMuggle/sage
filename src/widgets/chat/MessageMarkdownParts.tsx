@@ -22,7 +22,7 @@ import { Markdown } from '../markdown';
 import { MD_REHYPE_PLUGINS, MD_REMARK_PLUGINS } from '../markdown/plugins';
 
 import {
-  isThinkingExpanded,
+  getThinkingExpanded,
   setThinkingExpanded,
   thinkingExpansionKey,
 } from './thinkingExpansionStore';
@@ -196,12 +196,18 @@ export function ThinkingShimmer({ startTime }: { startTime?: number }) {
 export function ThinkingPanel({
   reasoning,
   isStreaming,
+  defaultExpanded = false,
 }: {
   reasoning: string;
   isStreaming?: boolean;
+  defaultExpanded?: boolean;
 }) {
   const expansionKey = thinkingExpansionKey(reasoning);
-  const [isExpanded, setIsExpanded] = useState(() => isThinkingExpanded(expansionKey));
+  // 显式用户选择优先于档位默认：从未设置过才回落到 defaultExpanded。
+  const [isExpanded, setIsExpanded] = useState(() => {
+    const explicit = getThinkingExpanded(expansionKey);
+    return explicit !== undefined ? explicit : defaultExpanded;
+  });
   // P21: 流式期间自动滚动到底部，显示最新思考内容
   const contentRef = useRef<HTMLDivElement | null>(null);
 
