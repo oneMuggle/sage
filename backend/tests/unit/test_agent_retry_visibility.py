@@ -31,6 +31,8 @@ async def test_non_stream_retry_events_emitted_before_failure():
         error_type="server_error",
         error_message="LLM 服务端错误 (HTTP 504)",
         delay=2.0,
+        budget_total_s=180.0,
+        budget_remaining_s=140.0,
     )
 
     async def _chat(messages, tools=None, tool_choice=None, retry_callback=None):
@@ -59,3 +61,6 @@ async def test_non_stream_retry_events_emitted_before_failure():
     assert info["attempt"] == 1
     assert info["max_attempts"] == 3
     assert info["error_type"] == "server_error"
+    # 2026-11-02: 非流式回退路径曾漏掉预算字段，导致 RetryBanner 不显示剩余预算。
+    assert info["budget_total_s"] == 180.0
+    assert info["budget_remaining_s"] == 140.0

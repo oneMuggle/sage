@@ -39,7 +39,7 @@ export const enSettingsUi = {
     'Wait before the first retry; subsequent retries grow exponentially (base × 2^(attempt-1))',
   'settings.basic.retry_base_label': 'Backoff base (s)',
   'settings.basic.retry_max_desc':
-    'Total attempt count for LLM requests (including the first request). For example, 10 means up to 10 attempts (first + 9 retries). Set to 1 to disable automatic retries.',
+    'Total attempt count for LLM requests (including the first request). For example, 10 means up to 10 attempts (first + 9 retries). Set to 0 or 1 to disable automatic retries.',
   'settings.basic.retry_max_label': 'Max attempts',
   'settings.basic.retry_total_budget_desc':
     'Total time spent waiting since the first attempt. Once this budget is exhausted, automatic retries stop. 0 = unlimited.',

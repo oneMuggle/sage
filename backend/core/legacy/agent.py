@@ -308,6 +308,23 @@ def _streaming_enabled_from_settings() -> bool:
     return True
 
 
+def _retry_info_from_event(ev: RetryEvent) -> Dict[str, Any]:
+    """把 RetryEvent 转成前端 retry_info 字典。
+
+    流式与非流式两条路径共用，避免字段漂移（2026-11-02 曾因重复构造
+    导致非流式回退路径漏掉预算字段）。
+    """
+    return {
+        "attempt": ev.attempt,
+        "max_attempts": ev.max_attempts,
+        "error_type": ev.error_type,
+        "error_message": ev.error_message,
+        "delay": ev.delay,
+        "budget_total_s": ev.budget_total_s,
+        "budget_remaining_s": ev.budget_remaining_s,
+    }
+
+
 def _retry_events_to_agent_events(
     retry_events: List[RetryEvent], iteration: int, agent_id: str
 ) -> List[AgentEvent]:
@@ -316,13 +333,7 @@ def _retry_events_to_agent_events(
         AgentEvent(
             state=AgentState.RETRY,
             iteration=iteration,
-            retry_info={
-                "attempt": ev.attempt,
-                "max_attempts": ev.max_attempts,
-                "error_type": ev.error_type,
-                "error_message": ev.error_message,
-                "delay": ev.delay,
-            },
+            retry_info=_retry_info_from_event(ev),
             agent_id=agent_id,
         )
         for ev in retry_events
@@ -2072,15 +2083,7 @@ class SageAgent:
                                         yield AgentEvent(
                                             state=AgentState.RETRY,
                                             iteration=i,
-                                            retry_info={
-                                                "attempt": payload.attempt,
-                                                "max_attempts": payload.max_attempts,
-                                                "error_type": payload.error_type,
-                                                "error_message": payload.error_message,
-                                                "delay": payload.delay,
-                                                "budget_total_s": payload.budget_total_s,
-                                                "budget_remaining_s": payload.budget_remaining_s,
-                                            },
+                                            retry_info=_retry_info_from_event(payload),
                                             agent_id=self.agent_id,
                                         )
                                     elif evt_kind == "heartbeat":
