@@ -303,3 +303,47 @@ Sage 自己的 LLM 代理在等待上游超时时返回 504，响应体为
 旧实现仅在 `chat()` 正常返回后补发——重试耗尽抛异常时补发代码不执行，
 前端完全看不到「重试中」。现在失败路径会先补发所有暂存重试事件再抛出。
 流式路径仍是实时的。
+
+## 重试预算/次数可见性（2026-11-02，PR #2812 / #2815）
+
+背景：用户把「重试次数」设为 10，429 场景下只重试了约 3 次。参数本身生效，
+真正截断的是总时长预算（上游 `Retry-After` ≈ 60s，`llmRetryMaxDelayS` 封顶
+60s，180s 预算 ÷ 60s ≈ 3 次），但 UI 无法看出预算截断。
+
+### 事件字段
+
+`RetryEvent` 新增两个可选字段，两条重试循环（`chat()` / `chat_stream_events()`）
+用同一口径填充：
+
+```python
+budget_total_s: Optional[float] = None      # 0 / 未配置时为 None
+budget_remaining_s: Optional[float] = None  # 本次等待后剩余预算，>= 0
+```
+
+`agent.py` 中流式与非流式两条分发路径统一调用 `_retry_info_from_event(ev)`
+构造 `retry_info`——避免重复内联构造导致字段漂移（非流式回退路径曾漏发预算
+字段）。前端 `RetryInfo` 增加同名可选字段，`RetryBanner` 在
+`budget_remaining_s != null` 时渲染「剩余预算 N 秒」。
+
+### 预算耗尽消息
+
+```
+{原始消息}（已尝试 {attempt}/{max_attempts} 次后停止：本次重试还需等待 {delay:.0f}s，
+加上此前累计等待将超过 {total_budget:.0f}s 总时长预算。可在「设置 → 基础 → LLM 重试」
+调大总时长预算或降低最大退避）
+```
+
+### 次数语义与 429 分类
+
+- `llmRetryMaxAttempts` 是**总尝试次数（含首次请求）**：10 = 首次 + 9 次重试；
+  0 或 1 = 禁用自动重试。设置页文案与搜索索引已同步为「最大尝试次数」。
+- `RATE_LIMITED` 分类现在回传 `status_code=429`（此前只有 401 回传状态码），
+  下游可据此区分限流与其他失败。
+
+### 设置保存失败可见化
+
+`saveSettings` 改用 `setSettingsStrict` 并返回 `Promise<boolean>`
+（后端确认才算成功）；唯一调用方 `settingsStore.updateSettings` 在返回 `false`
+时弹出 `toast.error('settings.save_failed_sync')`，5 秒节流避免连点刷屏。
+文案由纯 TS 模块 `src/shared/lib/i18n/translations.ts` 的 `translateStatic()`
+提供（Electron 主进程编译链不能引用 `.tsx` 的 i18n Provider）。
