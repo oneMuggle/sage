@@ -1479,7 +1479,16 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug(f"[REQ {request_id}] attachment media inject skipped: {r37_att_err}")
             # ===== R37 文本文档附件注入 END =====
 
-            attachment_block = await resolve_attachments(data.message, data.workspace_path or "")
+            # 项目 allowed_paths 命中的工作区外文件允许注入；未命中按
+            # skipped 原因透出给模型（见 attachment_resolver 模块文档）。
+            from backend.office.allowed_paths import get_session_allowed_paths
+
+            attachment_block = await resolve_attachments(
+                data.message,
+                data.workspace_path or "",
+                allowed_paths=get_session_allowed_paths(data.session_id),
+                project_root=data.workspace_path,
+            )
 
             # ===== S3 实体引用 (@memory:/@wiki:/@skill:/@agent:) BEGIN =====
             # 对标 S3（统一入口）：把消息里的实体引用解析为 <references> 块，

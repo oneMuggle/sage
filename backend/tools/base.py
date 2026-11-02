@@ -132,6 +132,16 @@ class BaseTool(ABC):
         返回 ``ToolResult(success=False, ...)`` 表示拒绝（调用方应直接
         return 该结果）；返回 ``None`` 表示放行（继续正常流程）。
 
+        四层判定（由内到外）：
+
+        1. 路径在 ``workspace_root`` 内 → 放行；
+        2. 路径命中当前 session 绑定项目的 ``allowed_paths`` 白名单 → 放行
+           （用户显式授权的额外路径，如 ``~/Documents/**``）；
+        3. 路径落在当前调用的已审批路径作用域内 → 放行（用户刚刚批准过
+           的工作区外写入；由 ``backend.tools.context.set_approved_paths``
+           在调用外层注入）；
+        4. 其余 → 拒绝。
+
         本方法有意不检查 ``path`` 是否存在——只检查路径是否在 workspace
         内；不存在的合法路径（例如写入新文件）应被允许，后续 ``exists /
         is_dir`` 校验再报错。
@@ -139,12 +149,74 @@ class BaseTool(ABC):
         root = self._policy.workspace_root
         if not root:
             return None
-        if not _is_safe_path(path, root):
-            return ToolResult(
-                success=False,
-                error=f"path_outside_workspace: resolved path is not under {root}",
+        if _is_safe_path(path, root):
+            return None
+        # 工作区外：用户显式授权的项目白名单（allowed_paths）优先放行。
+        if self._is_path_allowed(path, root):
+            return None
+        # 工作区外 + 不在白名单：刚被用户批准的写入（per-call scope）放行。
+        if self._is_path_approved(path):
+            return None
+        return ToolResult(
+            success=False,
+            error=f"path_outside_workspace: resolved path is not under {root}",
+        )
+
+    @staticmethod
+    def _is_path_approved(path: str) -> bool:
+        """路径是否落在当前调用的已审批路径作用域内。
+
+        ``set_approved_paths`` 在审批通过后由 agent 写入；路径 ``resolve``
+        后必须等于或为任一已审批路径的后代才放行。空作用域 / 解析失败
+        → False（fail-closed）。
+        """
+        from backend.tools.context import current_approved_paths
+
+        approved = current_approved_paths()
+        if not approved:
+            return False
+        try:
+            resolved = Path(path).expanduser().resolve()
+        except Exception:
+            return False
+        for anchor in approved:
+            try:
+                anchor_resolved = Path(anchor).resolve()
+            except Exception:
+                continue
+            # 精确相等或后代（用 relative_to 严格比对，避免字符串前缀碰撞）
+            if resolved == anchor_resolved:
+                return True
+            try:
+                resolved.relative_to(anchor_resolved)
+                return True
+            except ValueError:
+                continue
+        return False
+
+    @staticmethod
+    def _is_path_allowed(path: str, project_root: Optional[str] = None) -> bool:
+        """路径是否命中当前 session 绑定项目的 ``allowed_paths`` 白名单。
+
+        无活动 ToolExecutionContext / 项目未绑定 / 查询失败 / 未命中 → False
+        （fail-closed）。延迟 import 避免 ``backend.tools`` → ``backend.office``
+        的导入环。
+        """
+        try:
+            from backend.office.allowed_paths import (
+                get_session_allowed_paths,
+                is_allowed,
             )
-        return None
+            from backend.tools.context import current_tool_context
+
+            ctx = current_tool_context()
+            session_id = ctx.session_id if ctx is not None else None
+            allowed_paths = get_session_allowed_paths(session_id)
+            if not allowed_paths:
+                return False
+            return is_allowed(path, allowed_paths, project_root=project_root)
+        except Exception:  # noqa: BLE001 — 白名单查询失败一律按未授权处理
+            return False
 
     @property
     def schema(self) -> ToolSchema:

@@ -19,8 +19,12 @@ import pytest
 from backend.chat import attachment_resolver
 from backend.chat.attachment_resolver import (
     OFFICE_EXTS,
+    SKIP_NO_WORKSPACE,
+    SKIP_OUTSIDE_WORKSPACE,
+    SKIP_UNREADABLE,
     Mention,
     ResolvedBlock,
+    SkippedMention,
     extract_mentions,
     process,
     render_attachment_block,
@@ -160,6 +164,32 @@ def test_resolve_mentions_skips_path_outside_workspace(monkeypatch, tmp_path) ->
 
     assert blocks == []
     assert digest_calls == []
+
+
+def test_resolve_mentions_allowed_path_outside_workspace(monkeypatch, tmp_path) -> None:
+    """命中 allowed_paths 的工作区外文件允许注入，读取基座回退到文件父目录。"""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    shared_dir = tmp_path / "shared"
+    shared_dir.mkdir()
+    outside_path = shared_dir / "proposal.pptx"
+    outside_path.touch()
+    digest_calls = []
+    monkeypatch.setattr(
+        attachment_resolver,
+        "_digest_ppt",
+        lambda path, ws: digest_calls.append((path, ws)) or "P",
+    )
+
+    mentions = [Mention(raw=str(outside_path), path=str(outside_path), kind="office-ppt")]
+    blocks = resolve_mentions(
+        mentions,
+        workspace=str(workspace),
+        allowed_paths=[str(shared_dir / "**")],
+    )
+
+    assert [b.digest_text for b in blocks] == ["P"]
+    assert digest_calls == [(str(outside_path.resolve()), str(shared_dir.resolve()))]
 
 
 def test_resolve_mentions_skips_oversized_file(monkeypatch, tmp_path) -> None:
@@ -340,3 +370,84 @@ def test_process_happy_path(monkeypatch, tmp_path) -> None:
 def test_process_skips_non_office(monkeypatch) -> None:
     """@foo.txt 不触发任何 digest, 返回空串"""
     assert process("see @foo.txt", workspace="/w") == ""
+
+
+# ─── 跳过原因（工作区外不再静默吞掉） ─────────────────────────────
+
+
+def test_resolve_mentions_detailed_reports_outside_workspace(tmp_path) -> None:
+    """工作区外的 mention 记入 skipped 清单, 原因码 outside_workspace。"""
+    outside_path = tmp_path.parent / "outside_detail.pptx"
+    outside_path.touch()
+    mentions = [Mention(raw=str(outside_path), path=str(outside_path), kind="office-ppt")]
+
+    blocks, skipped = attachment_resolver._resolve_mentions_detailed(
+        mentions, workspace=str(tmp_path)
+    )
+
+    assert blocks == []
+    assert len(skipped) == 1
+    assert skipped[0].source_ref == "outside_detail.pptx"
+    assert skipped[0].reason == SKIP_OUTSIDE_WORKSPACE
+
+
+def test_resolve_mentions_detailed_reports_unreadable_inside_workspace(
+    monkeypatch, tmp_path
+) -> None:
+    """工作区内但读不了的文件 → unreadable, 不误报成 outside_workspace。"""
+    from backend.office.errors import OfficePathError
+
+    monkeypatch.setattr(
+        attachment_resolver,
+        "_digest_ppt",
+        lambda path, workspace: (_ for _ in ()).throw(
+            OfficePathError("boom", file_path=None)
+        ),
+    )
+    _touch_office_file(tmp_path, "bad.pptx")
+    mentions = [Mention(raw="bad.pptx", path="bad.pptx", kind="office-ppt")]
+
+    blocks, skipped = attachment_resolver._resolve_mentions_detailed(
+        mentions, workspace=str(tmp_path)
+    )
+
+    assert blocks == []
+    assert skipped[0].reason == SKIP_UNREADABLE
+
+
+def test_resolve_mentions_detailed_no_workspace() -> None:
+    """没有绑定工作区 → 原因码 no_workspace。"""
+    mentions = [Mention(raw="@a.pptx", path="a.pptx", kind="office-ppt")]
+
+    blocks, skipped = attachment_resolver._resolve_mentions_detailed(
+        mentions, workspace=""
+    )
+
+    assert blocks == []
+    assert skipped[0].reason == SKIP_NO_WORKSPACE
+
+
+def test_render_attachment_block_includes_skipped_section() -> None:
+    blocks = [ResolvedBlock(source_ref="a.pptx", digest_text="A_BODY")]
+    skipped = [SkippedMention(source_ref="b.docx", reason=SKIP_OUTSIDE_WORKSPACE)]
+    out = render_attachment_block(blocks, skipped)
+    assert "<attachments_skipped>" in out
+    assert "b.docx" in out
+    assert "outside_workspace" in out
+
+
+def test_render_attachment_block_only_skipped_is_not_empty() -> None:
+    """只有被跳过的 mention 时也要产出提示段 (不能回到静默空串)。"""
+    skipped = [SkippedMention(source_ref="b.docx", reason=SKIP_OUTSIDE_WORKSPACE)]
+    out = render_attachment_block([], skipped)
+    assert "<attachments_skipped>" in out
+    assert "b.docx" in out
+
+
+def test_process_reports_outside_workspace_mention(tmp_path) -> None:
+    """端到端: @工作区外文件 → 提示段出现在注入文本里。"""
+    outside_path = tmp_path.parent / "outside_e2e.pptx"
+    outside_path.touch()
+    out = process(f"看下 @{outside_path}", workspace=str(tmp_path))
+    assert "<attachments_skipped>" in out
+    assert "outside_e2e.pptx" in out

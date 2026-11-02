@@ -11,8 +11,9 @@
   （按 {1 起页号, 占位符 idx, 文本} 填充模板副本，另存新文件，原件不动）
 
 安全姿态与 :mod:`backend.tools.office_template_tool` 一致（读工具
-``requires_tool_context = True`` fail-closed；写工具走 ``_enforce_workspace`` +
-服务层 ``resolve_within`` 双层边界；doc_id 模式经 binding 解析、失败折叠为
+``requires_tool_context = True`` fail-closed；读路径不做工作区边界检查，
+写工具走 ``_enforce_workspace`` + 服务层 ``resolve_within`` 双层边界；
+doc_id 模式经 binding 解析、失败折叠为
 document_not_found；输出按 ``policy.max_output_bytes`` 截断）。共享助手直接
 从 office_template_tool 导入（同为 .docx→.pptx 的双模式解析形状）。
 
@@ -60,9 +61,8 @@ def _resolve_ppt_template_input(  # noqa: PLR0911 — 错误早退路径多，�
             return ToolResult(success=False, error="document_not_found")
         return found
     if isinstance(file_path, str) and file_path.strip():
-        blocked = tool._enforce_workspace(file_path)
-        if blocked is not None:
-            return blocked
+        # 读路径不做工作区检查（与 read_file 对齐：允许读取任意位置）；
+        # 写路径（output_path）由 OfficeFillPptTemplateTool.execute() 单独 enforce。
         path = Path(file_path).expanduser()
         if not path.is_absolute():
             return ToolResult(
@@ -251,6 +251,20 @@ class OfficeFillPptTemplateTool(BaseTool):
         if isinstance(resolved, ToolResult):
             return resolved
         path, workspace, doc = resolved
+
+        # 填充永远另存新文件在模板同目录：预测输出路径并做工作区围栏。
+        # 子代理路径 ``policy.workspace_root`` 非空时硬拒绝越界输出；主
+        # 聊天路径 ``workspace_root=None`` 为 no-op，由
+        # ``make_office_path_boundary`` 在分发前承担边界校验。
+        predicted_name = (
+            output_filename
+            if output_filename.lower().endswith(".pptx")
+            else output_filename + ".pptx"
+        )
+        predicted_output = path.parent / predicted_name
+        blocked = self._enforce_workspace(str(predicted_output))
+        if blocked is not None:
+            return blocked
 
         from pydantic import ValidationError
 
