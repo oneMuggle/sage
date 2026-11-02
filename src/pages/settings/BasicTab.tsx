@@ -7,6 +7,8 @@
 
 import { useEffect, useState } from 'react';
 
+import type { DisplayMode } from '../../features/chat/displayMode/types';
+import { useConfirmedPreference } from '../../features/manage-settings/useConfirmedPreference';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { getInputHistorySize, setInputHistorySize } from '../../shared/lib/hooks/useInputHistory';
 import { useI18n } from '../../shared/lib/i18n';
@@ -139,6 +141,15 @@ export function BasicTab() {
   const [inputHistorySize, setInputHistorySizeState] = useState(getInputHistorySize());
   const [proxyTimeoutDraft, setProxyTimeoutDraft] = useState(String(settings.llmProxyTimeoutS));
 
+  const displayModePref = useConfirmedPreference<DisplayMode>({
+    key: 'chat_display_mode',
+    initial: 'trace',
+    parse: (value) =>
+      value === 'detail' || value === 'trace' || value === 'result' ? value : 'trace',
+    serialize: (value) => value,
+    category: 'ui',
+  });
+
   useEffect(() => {
     setProxyTimeoutDraft(String(settings.llmProxyTimeoutS));
   }, [settings.llmProxyTimeoutS]);
@@ -178,6 +189,21 @@ export function BasicTab() {
           desc={t('settings.basic.streaming_desc')}
         >
           <Toggle value={settings.streaming} onChange={(v) => updateSettings({ streaming: v })} />
+        </SettingRow>
+        <SettingRow
+          anchor="chat_display_mode"
+          label={t('settings.basic.chat_display_mode_label')}
+          desc={t('settings.basic.chat_display_mode_desc')}
+        >
+          <select
+            value={displayModePref.value}
+            onChange={(e) => displayModePref.update(e.target.value as DisplayMode)}
+            className="px-2 py-1 text-ui-xs border rounded-radius-sm outline-none"
+          >
+            <option value="detail">{t('chat.displayMode.detail')}</option>
+            <option value="trace">{t('chat.displayMode.trace')}</option>
+            <option value="result">{t('chat.displayMode.result')}</option>
+          </select>
         </SettingRow>
       </section>
       <section>
