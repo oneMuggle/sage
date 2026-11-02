@@ -18,15 +18,14 @@ import {
 import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import type { ToolCall } from '../../shared/lib/store';
+import { Markdown } from '../markdown';
+import { MD_REHYPE_PLUGINS, MD_REMARK_PLUGINS } from '../markdown/plugins';
 
 import {
   isThinkingExpanded,
   setThinkingExpanded,
   thinkingExpansionKey,
 } from './thinkingExpansionStore';
-
-import { Markdown } from '../markdown';
-import { MD_REHYPE_PLUGINS, MD_REMARK_PLUGINS } from '../markdown/plugins';
 
 const URL_SPLIT_RE = /(https?:\/\/[^\s<>()]+)/;
 

@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+
 import type { TocEntry } from './outline';
 import { useMdI18n } from './useMdI18n';
 import './outline.css';

@@ -10,7 +10,9 @@
  */
 
 import { useCallback } from 'react';
+
 import { useOptionalI18n } from '../../shared/lib/i18n';
+
 import { MARKDOWN_I18N_DICTS, type MarkdownI18nKey } from './i18n';
 
 /**

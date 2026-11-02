@@ -11,6 +11,7 @@
 
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+
 import { Markdown, tableToTsv } from '../index';
 
 describe('Markdown GFM — tables', () => {

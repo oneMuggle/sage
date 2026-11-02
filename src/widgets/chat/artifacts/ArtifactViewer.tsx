@@ -16,8 +16,8 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
 import { revealArtifact, updateArtifactContent } from '../../../features/artifacts/artifactApi';
 import { useArtifactContent } from '../../../features/artifacts/useArtifactContent';
-import { buildMarkdownOutline, extractHeadings } from '../../markdown/outline';
 import { MarkdownOutline } from '../../markdown/MarkdownOutline';
+import { buildMarkdownOutline, extractHeadings } from '../../markdown/outline';
 import { FileContentRenderer } from '../preview/FileContentRenderer';
 
 import { VersionHistory } from './VersionHistory';

@@ -11,15 +11,17 @@
  *   与 TOC 完全一致；react-markdown 在 heading 渲染时通过 node.position.start.line 取。
  */
 
+import { Copy } from 'lucide-react';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
-import { ShikiCodeBlock } from '../chat/ShikiCodeBlock';
-import { MermaidBlock } from '../chat/MermaidBlock';
-import { MarkdownImage } from '../chat/MarkdownImage';
-import { HtmlCodeBlock } from '../chat/HtmlCodeBlock';
-import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
-import { Copy } from 'lucide-react';
+
 import { useOptionalI18n } from '../../shared/lib/i18n';
+import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
+import { HtmlCodeBlock } from '../chat/HtmlCodeBlock';
+import { MarkdownImage } from '../chat/MarkdownImage';
+import { MermaidBlock } from '../chat/MermaidBlock';
+import { ShikiCodeBlock } from '../chat/ShikiCodeBlock';
+
 import { isLocalFilePathHref } from './links';
 import { extractHeadings, headingIdForLine, type RawHeading } from './outline';
 import { useMdI18n } from './useMdI18n';
@@ -159,6 +161,8 @@ export function createMarkdownComponents(opts: MarkdownComponentsOptions): Compo
     pre: ({ children }) => <>{children}</>,
 
     code: (props) => {
+      // node 必须解构出来但不使用：否则会随 rest 展开到 DOM 上触发 React 警告
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { className, children, node, ...rest } = props as {
         className?: string;
         children?: ReactNode;
