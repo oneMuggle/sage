@@ -157,6 +157,8 @@
     "playbook_wiki_export": { "method": "POST", "path": "/api/v1/projects/{projectId}/playbook/wiki/export" },
     "playbooks_builtin_get": { "method": "GET", "path": "/api/v1/playbooks/builtin/{playbookId}" },
     "playbooks_builtin_list": { "method": "GET", "path": "/api/v1/playbooks/builtin" },
+    "playbooks_events_aggregate": { "method": "GET", "path": "/api/v1/playbooks/events/aggregate" },
+    "playbooks_events_list": { "method": "GET", "path": "/api/v1/projects/{projectId}/playbook/events" },
     "playbooks_library_delete": { "method": "DELETE", "path": "/api/v1/playbooks/library/{libraryId}" },
     "playbooks_library_export": { "method": "GET", "path": "/api/v1/playbooks/library/{libraryId}/export" },
     "playbooks_library_get": { "method": "GET", "path": "/api/v1/playbooks/library/{libraryId}" },

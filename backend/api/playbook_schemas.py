@@ -209,6 +209,33 @@ class PlaybookAuthorPreviewResponse(BaseModel):
     source: str
 
 
+class PlaybookEventModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    project_id: str
+    event: str
+    stage: Optional[str] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    created_at: int
+
+
+class PlaybookEventsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    events: List[PlaybookEventModel] = Field(default_factory=list)
+
+
+class PlaybookEventAggregateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    days: int
+    project_id: Optional[str] = None
+    counts: Dict[str, int] = Field(default_factory=dict)
+    total: int = 0
+
+
 __all__ = [
     "BuiltinPlaybookListResponse",
     "BuiltinPlaybookResponse",
@@ -220,6 +247,9 @@ __all__ = [
     "PlaybookAuthorPreviewResponse",
     "PlaybookBindRequest",
     "PlaybookCurrentResponse",
+    "PlaybookEventAggregateResponse",
+    "PlaybookEventModel",
+    "PlaybookEventsResponse",
     "PlaybookExportResponse",
     "PlaybookImportPreviewRequest",
     "PlaybookImportPreviewResponse",

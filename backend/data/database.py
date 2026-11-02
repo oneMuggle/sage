@@ -1093,6 +1093,24 @@ class Database:
         )
         conn.commit()
 
+        # Playbook events (2026-11-02): 规程使用埋点，记录绑定/审计/导出/
+        # 归类等关键动作供本地统计与调试。写入失败不阻断主流程。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS playbook_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL,
+                event TEXT NOT NULL,
+                stage TEXT,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_playbook_events_recent "
+            "ON playbook_events(project_id, created_at DESC)"
+        )
+        conn.commit()
+
         # Project constraints (2026-09-24): 结构化项目约束，替代纯文本
         # instructions。按类别分类（coding_style/security/testing 等），支持
         # 触发模式匹配（glob）和优先级排序。注入到系统提示词影响 AI 行为。
