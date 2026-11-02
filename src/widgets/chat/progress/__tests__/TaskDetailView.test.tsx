@@ -10,8 +10,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskBoard } from '../../../../features/send-message/useChat';
-import type { SubagentLiveState } from '../../../../shared/api/types/chatAndEventTypes';
 import { orchRunClient } from '../../../../shared/api/orchRunClient';
+import type { SubagentLiveState } from '../../../../shared/api/types/chatAndEventTypes';
 import { TaskDetailView } from '../TaskDetailView';
 
 vi.mock('../../../../shared/api/orchRunClient', () => ({
