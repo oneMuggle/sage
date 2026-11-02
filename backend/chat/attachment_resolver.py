@@ -12,6 +12,8 @@ M2: 多文档按出现顺序拼接, 块首 `=== name ===` 分隔。
   记入 skipped 清单并带原因短码 (outside_workspace / unreadable / ...),
   渲染成 `<attachments_skipped>` 段随 system prompt 下发, 让模型能向用户解释
   为什么这个 @文件 没进来
+- 项目 allowed_paths 白名单命中的路径允许在工作区外: 读取围栏基座回退到
+  文件父目录（保留 symlink/`..` 防护），不再归类为 outside_workspace
 - 与现有 office_ppt_read / office_word_read / office_excel_read IPC endpoint 不同:
   * 不触发 _persist_read_summary (即不写 DB)
   * 不做 size validation (chat 信任 digest 输出)
@@ -30,6 +32,7 @@ from pathlib import Path
 from typing import FrozenSet, List, Optional, Tuple
 
 # Task 2: 真实 digest 格式化器 (复用 office 纯函数, 不触发 FastAPI endpoint)
+from backend.office.allowed_paths import is_allowed
 from backend.office.errors import OfficeError, OfficePathError, OfficeSizeLimitError
 from backend.office.excel import read_xlsx
 from backend.office.path_safety import is_within, resolve_within
@@ -418,12 +421,27 @@ def extract_mentions(text: str) -> List[Mention]:
     return result
 
 
-def _resolve_attachment_path(raw_path: str, workspace_root: Path) -> Path:
-    """Resolve one mention inside a validated workspace and enforce the read limit."""
+def _resolve_attachment_path(
+    raw_path: str,
+    workspace_root: Path,
+    allowed_paths: Optional[List[str]] = None,
+    project_root: Optional[str] = None,
+) -> Tuple[Path, Path]:
+    """Resolve one mention and enforce the read limit.
+
+    命中项目 ``allowed_paths`` 白名单的路径允许位于工作区外：此时读取围栏
+    基座回退到文件父目录（仍由底层 ``resolve_within`` 挡住 symlink / ``..``
+    逃逸）。返回 ``(resolved_file, read_base)``。
+    """
     candidate = Path(raw_path)
     if not candidate.is_absolute():
         candidate = workspace_root / candidate
-    resolved = resolve_within(workspace_root, candidate)
+    if allowed_paths and is_allowed(str(candidate), allowed_paths, project_root):
+        resolved = candidate.resolve()
+        read_base = resolved.parent
+    else:
+        resolved = resolve_within(workspace_root, candidate)
+        read_base = workspace_root
     try:
         is_file = resolved.is_file()
     except OSError as exc:
@@ -453,7 +471,7 @@ def _resolve_attachment_path(raw_path: str, workspace_root: Path) -> Path:
             max_size=MAX_ATTACHMENT_FILE_SIZE_BYTES,
             file_path=resolved,
         )
-    return resolved
+    return resolved, read_base
 
 
 def _digest_for_kind(kind: str, file_path: str, workspace: str) -> str:
@@ -468,11 +486,22 @@ def _digest_for_kind(kind: str, file_path: str, workspace: str) -> str:
     return _digest_excel(file_path, workspace)
 
 
-def _classify_skip_reason(raw_path: str, workspace_root: Path) -> str:
-    """归类单个 mention 的失败原因：工作区外 vs 读不了。"""
+def _classify_skip_reason(
+    raw_path: str,
+    workspace_root: Path,
+    allowed_paths: Optional[List[str]] = None,
+    project_root: Optional[str] = None,
+) -> str:
+    """归类单个 mention 的失败原因：工作区外 vs 读不了。
+
+    命中 ``allowed_paths`` 的路径不按"工作区外"归类——它是被允许的路径，
+    失败只可能是读取/解析问题。
+    """
     candidate = Path(raw_path)
     if not candidate.is_absolute():
         candidate = workspace_root / candidate
+    if allowed_paths and is_allowed(str(candidate), allowed_paths, project_root):
+        return SKIP_UNREADABLE
     try:
         resolved = candidate.resolve()
         base = workspace_root.resolve()
@@ -486,6 +515,8 @@ def _classify_skip_reason(raw_path: str, workspace_root: Path) -> str:
 def _resolve_mentions_detailed(
     mentions: List[Mention],
     workspace: str,
+    allowed_paths: Optional[List[str]] = None,
+    project_root: Optional[str] = None,
 ) -> Tuple[List[ResolvedBlock], List[SkippedMention]]:
     """解析 mention → (成功注入的块, 被跳过的 mention 及其原因)。"""
     office_mentions = [
@@ -521,11 +552,16 @@ def _resolve_mentions_detailed(
     skipped: List[SkippedMention] = []
     for mention in office_mentions:
         try:
-            resolved_path = _resolve_attachment_path(mention.path, workspace_root)
+            resolved_path, read_base = _resolve_attachment_path(
+                mention.path,
+                workspace_root,
+                allowed_paths=allowed_paths,
+                project_root=project_root,
+            )
             digest = _digest_for_kind(
                 mention.kind or "",
                 str(resolved_path),
-                str(workspace_root),
+                str(read_base),
             )
             blocks.append(
                 ResolvedBlock(
@@ -534,7 +570,12 @@ def _resolve_mentions_detailed(
                 )
             )
         except OfficeError as exc:
-            reason = _classify_skip_reason(mention.path, workspace_root)
+            reason = _classify_skip_reason(
+                mention.path,
+                workspace_root,
+                allowed_paths=allowed_paths,
+                project_root=project_root,
+            )
             skipped.append(
                 SkippedMention(source_ref=os.path.basename(mention.path), reason=reason)
             )
@@ -550,9 +591,16 @@ def _resolve_mentions_detailed(
 def resolve_mentions(
     mentions: List[Mention],
     workspace: str,
+    allowed_paths: Optional[List[str]] = None,
+    project_root: Optional[str] = None,
 ) -> List[ResolvedBlock]:
-    """Resolve Office mentions within ``workspace``; invalid mentions are skipped."""
-    blocks, _ = _resolve_mentions_detailed(mentions, workspace)
+    """Resolve Office mentions within ``workspace``; invalid mentions are skipped.
+
+    ``allowed_paths``（项目白名单规则）命中的路径允许位于工作区外。
+    """
+    blocks, _ = _resolve_mentions_detailed(
+        mentions, workspace, allowed_paths=allowed_paths, project_root=project_root
+    )
     return blocks
 
 
@@ -593,8 +641,15 @@ def render_attachment_block(
     return "\n".join(parts)
 
 
-def process(text: str, workspace: str) -> str:
+def process(
+    text: str,
+    workspace: str,
+    allowed_paths: Optional[List[str]] = None,
+    project_root: Optional[str] = None,
+) -> str:
     """route 层一键调: 返回附件块字符串 (可能为空串)。"""
     mentions = extract_mentions(text)
-    blocks, skipped = _resolve_mentions_detailed(mentions, workspace)
+    blocks, skipped = _resolve_mentions_detailed(
+        mentions, workspace, allowed_paths=allowed_paths, project_root=project_root
+    )
     return render_attachment_block(blocks, skipped)

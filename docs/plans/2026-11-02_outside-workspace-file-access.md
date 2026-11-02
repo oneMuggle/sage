@@ -96,16 +96,21 @@ Sage 的问题：Office 读取工具比 `read_file` 更严格，且 `@-mention` 
   - 测试：`test_allowed_paths.py::TestDefaultAllowedPaths` +
     `test_project_routes.py` 三条注册预填用例
 
-- [ ] Step 5: Office 读取工具检查 `allowed_paths`
-  - `backend/tools/office_tool.py` / `office_pdf_tool.py` / `office_analyze_tool.py`
-  - 读取前先 `is_allowed(path, allowed_paths)`
-  - 命中白名单 → 放行
-  - 未命中 → 走审批（同 Step 2）
+- [x] Step 5: ~~Office 读取工具检查 `allowed_paths`~~ **（作废，被 Step 2 取代）**
+  - Step 2 已让 Office READ 工具对齐 `read_file`：直接接受任意路径、无审批闸口，
+    「读取前先查白名单、未命中走审批」的设计已无适用点
+  - 白名单只对**写入**（`_enforce_workspace`）与 **@-mention 注入**（Step 6）生效
 
-- [ ] Step 6: `attachment_resolver` 检查 `allowed_paths`
-  - `backend/chat/attachment_resolver.py` — `_resolve_attachment_path()`
-  - 命中白名单 → 放行
-  - 未命中 → 返回 `skipped_reason: "outside_workspace"`
+- [x] Step 6: `attachment_resolver` 检查 `allowed_paths`
+  - `backend/chat/attachment_resolver.py` — `_resolve_attachment_path()` 新增
+    `allowed_paths` / `project_root` 参数：命中白名单 → 放行（读取基座回退到文件父目录，
+    兼容底层 `read_*` 的 `resolve_within` 围栏，同时保留 symlink / `..` 防护）；
+    未命中 → 仍走 `resolve_within(workspace)`，返回 `skipped_reason: "outside_workspace"`
+  - `backend/chat/executors.py` — `resolve_attachments()` 透传两个新参数
+  - `backend/api/hex_routes.py` / `backend/api/legacy_routes.py` — 在事件循环中调用
+    `get_session_allowed_paths(session_id)` 后传入线程池（避免 DB 访问落在 worker 线程）
+  - 测试：`test_attachment_resolver.py::test_resolve_mentions_allowed_path_outside_workspace`；
+    既有 executor / legacy 注入测试同步断言新调用形状与 `<attachments_skipped>` 段
 
 ### Phase 3（P2）— 文档与提示
 

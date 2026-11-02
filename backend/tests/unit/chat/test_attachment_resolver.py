@@ -166,6 +166,32 @@ def test_resolve_mentions_skips_path_outside_workspace(monkeypatch, tmp_path) ->
     assert digest_calls == []
 
 
+def test_resolve_mentions_allowed_path_outside_workspace(monkeypatch, tmp_path) -> None:
+    """命中 allowed_paths 的工作区外文件允许注入，读取基座回退到文件父目录。"""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    shared_dir = tmp_path / "shared"
+    shared_dir.mkdir()
+    outside_path = shared_dir / "proposal.pptx"
+    outside_path.touch()
+    digest_calls = []
+    monkeypatch.setattr(
+        attachment_resolver,
+        "_digest_ppt",
+        lambda path, ws: digest_calls.append((path, ws)) or "P",
+    )
+
+    mentions = [Mention(raw=str(outside_path), path=str(outside_path), kind="office-ppt")]
+    blocks = resolve_mentions(
+        mentions,
+        workspace=str(workspace),
+        allowed_paths=[str(shared_dir / "**")],
+    )
+
+    assert [b.digest_text for b in blocks] == ["P"]
+    assert digest_calls == [(str(outside_path.resolve()), str(shared_dir.resolve()))]
+
+
 def test_resolve_mentions_skips_oversized_file(monkeypatch, tmp_path) -> None:
     file_path = tmp_path / "large.pptx"
     file_path.write_bytes(b"too large")
