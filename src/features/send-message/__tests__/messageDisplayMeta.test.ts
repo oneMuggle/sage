@@ -75,4 +75,20 @@ describe('buildMessageDisplayMeta', () => {
     expect(meta?.attachments?.[0]).not.toHaveProperty('dataUrl');
     expect(meta?.images?.[0]).not.toHaveProperty('dataUrl');
   });
+
+  it('stores OCR text aligned with images and caps the meta budget', () => {
+    const meta = buildMessageDisplayMeta({
+      content: '',
+      images: [
+        { name: 'a.png', size: 1, type: 'image/png' },
+        { name: 'b.png', size: 1, type: 'image/png' },
+      ],
+      imageOcrTexts: ['第一张图片文字'.repeat(800), ''],
+    });
+
+    expect(meta?.image_ocr_texts?.[0].name).toBe('a.png');
+    expect(meta?.image_ocr_texts?.[0].text.length).toBeLessThanOrEqual(4001);
+    expect(meta?.image_ocr_texts?.[0].text.endsWith('…')).toBe(true);
+    expect(meta?.image_ocr_texts).toHaveLength(1);
+  });
 });

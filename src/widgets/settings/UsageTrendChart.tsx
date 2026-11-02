@@ -138,29 +138,53 @@ export function UsageTrendChart({ trend, loading }: UsageTrendChartProps) {
     const innerW = SVG_W - PAD_L - PAD_R;
     const innerH = SVG_H - PAD_T - PAD_B;
     const slotW = series.length > 0 ? innerW / series.length : innerW;
-    const barW = Math.max(1, Math.min(18, slotW * 0.62));
+    const stepX = series.length > 1 ? innerW / (series.length - 1) : 0;
     const maxTotal = Math.max(1, ...series.map((p) => totalTokens(p)));
     const maxCost = Math.max(1e-9, ...series.map((p) => p.cost_usd ?? 0));
-    const bars = series.map((p, i) => {
-      const promptH = (p.prompt_tokens / maxTotal) * innerH;
-      const completionH = (p.completion_tokens / maxTotal) * innerH;
-      const x = PAD_L + i * slotW + (slotW - barW) / 2;
-      const centerX = PAD_L + i * slotW + slotW / 2;
-      const inputY = PAD_T + innerH - promptH;
-      const outputY = inputY - completionH;
-      const costY = PAD_T + innerH - ((p.cost_usd ?? 0) / maxCost) * innerH;
-      return { raw: p, x, centerX, inputY, outputY, promptH, completionH, costY };
+    const points = series.map((p, i) => {
+      const centerX = series.length > 1 ? PAD_L + i * stepX : PAD_L + innerW / 2;
+      return {
+        raw: p,
+        centerX,
+        inputY: PAD_T + innerH - (p.prompt_tokens / maxTotal) * innerH,
+        outputY: PAD_T + innerH - (p.completion_tokens / maxTotal) * innerH,
+        costY: PAD_T + innerH - ((p.cost_usd ?? 0) / maxCost) * innerH,
+      };
     });
-    const costPath = monotonePath(bars.map((b) => ({ x: b.centerX, y: b.costY })));
+    const inputPath = monotonePath(points.map((p) => ({ x: p.centerX, y: p.inputY })));
+    const outputPath = monotonePath(points.map((p) => ({ x: p.centerX, y: p.outputY })));
+    const costPath = monotonePath(points.map((p) => ({ x: p.centerX, y: p.costY })));
+    const baseline = PAD_T + innerH;
+    const areaPath = (path: string): string => {
+      if (!path || points.length === 0) return '';
+      const first = points[0];
+      const last = points[points.length - 1];
+      return `${path} L ${last.centerX} ${baseline} L ${first.centerX} ${baseline} Z`;
+    };
     const ticks = Array.from(new Set([0, Math.floor(series.length / 2), series.length - 1])).filter(
       (i) => i >= 0 && i < series.length,
     );
-    return { innerW, innerH, slotW, barW, maxTotal, maxCost, bars, costPath, ticks };
+    return {
+      innerW,
+      innerH,
+      slotW,
+      maxTotal,
+      maxCost,
+      points,
+      inputPath,
+      outputPath,
+      costPath,
+      inputArea: areaPath(inputPath),
+      outputArea: areaPath(outputPath),
+      ticks,
+    };
   }, [series]);
 
   const active = activeIndex !== null && activeIndex < series.length ? series[activeIndex] : null;
-  const activeBar = active !== null ? (layout.bars[activeIndex as number] ?? null) : null;
-  const activeXPercent = activeBar !== null ? ((activeBar.centerX / SVG_W) * 100).toFixed(2) : '0';
+  const activePoint =
+    active !== null ? (layout.points[activeIndex as number] ?? null) : null;
+  const activeXPercent =
+    activePoint !== null ? ((activePoint.centerX / SVG_W) * 100).toFixed(2) : '0';
   const alignRight = activeIndex !== null && activeIndex >= series.length - 2;
   const alignLeft = activeIndex !== null && activeIndex <= 1;
   const tooltipAlignClass = alignLeft
@@ -279,29 +303,45 @@ export function UsageTrendChart({ trend, loading }: UsageTrendChartProps) {
               />
             );
           })}
-          {/* 堆叠柱: 输入 + 输出 */}
-          {layout.bars.map((bar, i) => (
-            <g key={`bar-${i}`} opacity={activeIndex === null || activeIndex === i ? 1 : 0.45}>
-              <rect
-                x={bar.x}
-                y={bar.inputY}
-                width={layout.barW}
-                height={bar.promptH}
-                fill={COLOR_INPUT}
-                rx={1}
-                data-testid="usage-trend-bar-input"
-              />
-              <rect
-                x={bar.x}
-                y={bar.outputY}
-                width={layout.barW}
-                height={bar.completionH}
-                fill={COLOR_OUTPUT}
-                rx={1}
-                data-testid="usage-trend-bar-output"
-              />
-            </g>
-          ))}
+          <defs>
+            <linearGradient id="usage-input-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={COLOR_INPUT} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={COLOR_INPUT} stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="usage-output-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={COLOR_OUTPUT} stopOpacity={0.24} />
+              <stop offset="100%" stopColor={COLOR_OUTPUT} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          {/* 输入 / 输出曲线（渐变面积 + 平滑折线） */}
+          <path
+            d={layout.inputArea}
+            fill="url(#usage-input-fill)"
+            stroke="none"
+            data-testid="usage-trend-area-input"
+          />
+          <path
+            d={layout.outputArea}
+            fill="url(#usage-output-fill)"
+            stroke="none"
+            data-testid="usage-trend-area-output"
+          />
+          <path
+            d={layout.inputPath}
+            fill="none"
+            stroke={COLOR_INPUT}
+            strokeWidth={1.75}
+            opacity={activeIndex === null ? 1 : 0.75}
+            data-testid="usage-trend-line-input"
+          />
+          <path
+            d={layout.outputPath}
+            fill="none"
+            stroke={COLOR_OUTPUT}
+            strokeWidth={1.75}
+            opacity={activeIndex === null ? 1 : 0.75}
+            data-testid="usage-trend-line-output"
+          />
           {/* 成本虚线（右轴） */}
           <path
             d={layout.costPath}
@@ -312,11 +352,11 @@ export function UsageTrendChart({ trend, loading }: UsageTrendChartProps) {
             data-testid="usage-trend-line-cost"
           />
           {/* 悬停参考线与高亮 */}
-          {activeBar !== null && (
+          {activePoint !== null && (
             <line
-              x1={activeBar.centerX}
+              x1={activePoint.centerX}
               y1={PAD_T}
-              x2={activeBar.centerX}
+              x2={activePoint.centerX}
               y2={PAD_T + layout.innerH}
               stroke="currentColor"
               strokeOpacity={0.35}
@@ -325,7 +365,7 @@ export function UsageTrendChart({ trend, loading }: UsageTrendChartProps) {
             />
           )}
           {/* 透明热区 */}
-          {layout.bars.map((_bar, i) => (
+          {layout.points.map((_point, i) => (
             <rect
               key={`hit-${i}`}
               x={PAD_L + i * layout.slotW}
@@ -342,19 +382,19 @@ export function UsageTrendChart({ trend, loading }: UsageTrendChartProps) {
           ))}
           {/* X 轴 tick（起点/中点/终点） */}
           {layout.ticks.map((i) => {
-            const bar = layout.bars[i];
-            if (!bar) return null;
+            const point = layout.points[i];
+            if (!point) return null;
             return (
               <text
                 key={`xt-${i}`}
-                x={bar.centerX}
+                x={point.centerX}
                 y={SVG_H - 6}
                 fontSize={10}
                 textAnchor="middle"
                 fill="currentColor"
                 opacity={0.6}
               >
-                {formatTick(bar.raw.ts, bucket, i, series.length)}
+                {formatTick(point.raw.ts, bucket, i, series.length)}
               </text>
             );
           })}

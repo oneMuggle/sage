@@ -45,7 +45,11 @@ function jsonResponse(payload: unknown, ok = true): Response {
   } as Response;
 }
 
-function installFetch(initialSites: unknown[], afterLoginSites: unknown[] = initialSites) {
+function installFetch(
+  initialSites: unknown[],
+  afterLoginSites: unknown[] = initialSites,
+  verifyStatus = 'login_required',
+) {
   let sites = initialSites;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -55,6 +59,14 @@ function installFetch(initialSites: unknown[], afterLoginSites: unknown[] = init
     }
     if (url.endsWith('/api/v1/web-access/site-templates')) {
       return jsonResponse({ templates: TEMPLATES });
+    }
+    if (url.endsWith('/api/v1/web-access/sites/verify') && method === 'POST') {
+      return jsonResponse({
+        domain: '.cnki.net',
+        url: 'https://kns.cnki.net/',
+        status: verifyStatus,
+        checked_at: 1737000000,
+      });
     }
     if (url.endsWith('/api/v1/web-access/sites/login') && method === 'POST') {
       sites = afterLoginSites;
@@ -140,5 +152,21 @@ describe('SiteSessionsSection', () => {
       (call) => String(call[0]).endsWith('/web-access/sites/login'),
     );
     expect(posts).toHaveLength(0);
+  });
+
+  it('checks login health and updates the status badge', async () => {
+    const fetchMock = installFetch([SITE], [SITE], 'login_required');
+    renderSection();
+    await waitFor(() => expect(screen.getByTestId('site-row-.cnki.net')).toBeTruthy());
+    expect(screen.getByTestId('site-status-.cnki.net').textContent).toContain('已登录');
+
+    fireEvent.click(screen.getByTestId('site-check-.cnki.net'));
+    await waitFor(() =>
+      expect(screen.getByTestId('site-status-.cnki.net').textContent).toContain('需要登录'),
+    );
+    const posts = fetchMock.mock.calls.filter(
+      (call) => String(call[0]).endsWith('/web-access/sites/verify'),
+    );
+    expect(posts).toHaveLength(1);
   });
 });

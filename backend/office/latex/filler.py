@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from backend.office.bibtex import parse_bibtex_file
 from backend.office.errors import (
     OfficeFileNotFoundError,
     OfficeParseError,
@@ -19,6 +22,9 @@ from .template import analyze_latex_template
 from .validator import validate_latex_source
 
 _LIST_SLOTS = {"author", "affil", "affiliation", "institute", "keywords"}
+_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".pdf", ".eps", ".svg"}
+_MAX_IMAGE_BYTES = 20 * 1024 * 1024
+_MAX_BIB_BYTES = 20 * 1024 * 1024
 
 
 def escape_latex(value: str) -> str:
@@ -58,6 +64,108 @@ def _check_output_name(output_filename: str) -> str:
     if name in (".", ".."):
         raise OfficeTemplateFillError("output_filename 非法")
     return name
+
+
+def _asset_dir_name(output_name: str) -> str:
+    stem = re.sub(r"[^0-9A-Za-z._-]+", "_", Path(output_name).stem).strip("._")
+    return f"{stem or 'output'}_assets"
+
+
+def _sanitize_asset_name(name: str) -> str:
+    stem = re.sub(r"[^0-9A-Za-z._-]+", "_", Path(name).stem).strip("._") or "asset"
+    return f"{stem}{Path(name).suffix.lower()}"
+
+
+def _resolve_image(value: Any, template_dir: Path, root: Path) -> Path:
+    raw = str(value).strip()
+    if not raw:
+        raise OfficeTemplateFillError("图片槽位需要填写工作区内图片路径")
+    candidate = Path(raw).expanduser()
+    resolved: Optional[Path]
+    if candidate.is_absolute():
+        try:
+            resolved = resolve_within(root, candidate)
+        except OfficePathError as exc:
+            raise OfficeTemplateFillError("图片不在工作区内") from exc
+    else:
+        resolved = None
+        for base in (template_dir, root):
+            try:
+                check = resolve_within(root, base / candidate)
+            except OfficePathError:
+                continue
+            if check.is_file():
+                resolved = check
+                break
+        if resolved is None:
+            raise OfficeTemplateFillError(f"图片不存在或不在工作区内: {raw}")
+    if not resolved.is_file():
+        raise OfficeTemplateFillError(f"图片不存在: {raw}")
+    if resolved.suffix.lower() not in _IMAGE_SUFFIXES:
+        raise OfficeTemplateFillError(f"不支持的图片格式: {resolved.suffix}")
+    if resolved.stat().st_size > _MAX_IMAGE_BYTES:
+        raise OfficeTemplateFillError(f"图片超过 20 MiB: {raw}")
+    return resolved
+
+
+def _copy_asset(
+    source: Path,
+    assets_dir: Path,
+    used: Dict[str, Optional[Path]],
+) -> str:
+    name = _sanitize_asset_name(source.name)
+    if used.get(name) == source:
+        return name
+    candidate = name
+    index = 1
+    while candidate in used:
+        candidate = f"{Path(name).stem}-{index}{Path(name).suffix}"
+        index += 1
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copyfile(str(source), str(assets_dir / candidate))
+    except OSError as exc:
+        raise OfficeTemplateFillError(f"复制图片失败: {source.name}") from exc
+    used[candidate] = source
+    return candidate
+
+
+def _resolve_bibliography(
+    value: Any, template_dir: Path, root: Path
+) -> Tuple[Path, int]:
+    raw = str(value).strip()
+    if not raw:
+        raise OfficeTemplateFillError("文献槽位需要填写工作区内 .bib 路径")
+    candidate = Path(raw).expanduser()
+    if candidate.suffix.lower() != ".bib":
+        raise OfficeTemplateFillError("仅支持 .bib 文献文件")
+    resolved: Optional[Path]
+    if candidate.is_absolute():
+        try:
+            resolved = resolve_within(root, candidate)
+        except OfficePathError as exc:
+            raise OfficeTemplateFillError("文献文件不在工作区内") from exc
+    else:
+        resolved = None
+        for base in (template_dir, root):
+            try:
+                check = resolve_within(root, base / candidate)
+            except OfficePathError:
+                continue
+            if check.is_file():
+                resolved = check
+                break
+        if resolved is None:
+            raise OfficeTemplateFillError(f"文献文件不存在或不在工作区内: {raw}")
+    if not resolved.is_file():
+        raise OfficeTemplateFillError(f"文献文件不存在: {raw}")
+    if resolved.stat().st_size > _MAX_BIB_BYTES:
+        raise OfficeTemplateFillError(f"文献文件超过 20 MiB: {raw}")
+    try:
+        entries = parse_bibtex_file(str(resolved))
+    except OfficeParseError as exc:
+        raise OfficeTemplateFillError(f"BibTeX 解析失败: {exc}") from exc
+    return resolved, len(entries)
 
 
 def _apply_replacements(
@@ -116,6 +224,27 @@ def fill_latex_template(
         raise OfficeFileNotFoundError(resolved)
     source = resolved.read_text(encoding="utf-8", errors="replace")
 
+    output_name = _check_output_name(output_filename)
+    try:
+        target = resolve_within(root_path, resolved.parent / output_name)
+    except OfficePathError as exc:
+        raise OfficeTemplateFillError("输出路径不在工作区内") from exc
+    if target == resolved:
+        raise OfficeTemplateFillError("输出文件不能覆盖模板")
+    if target.exists():
+        raise OfficeTemplateFillError("输出文件已存在，拒绝覆盖")
+
+    asset_prefix = _asset_dir_name(output_name)
+    assets_dir = resolved.parent / asset_prefix
+    used_assets: Dict[str, Optional[Path]] = {}
+    if assets_dir.is_dir():
+        for existing in assets_dir.iterdir():
+            if existing.is_file():
+                used_assets[existing.name] = None
+    relative_output_dir = target.parent.relative_to(root_path)
+    images_copied: List[str] = []
+    bibliographies_copied: List[str] = []
+
     replacements: List[Tuple[int, int, str]] = []
     filled = 0
     unfilled: List[str] = []
@@ -123,11 +252,30 @@ def fill_latex_template(
         if slot.name not in data:
             unfilled.append(slot.name)
             continue
-        value = _coerce_value(slot, data[slot.name])
-        if slot.kind == "comment":
-            replacements.append((slot.start, slot.end, "% " + value))
+        if slot.type == "image":
+            source_image = _resolve_image(data[slot.name], resolved.parent, root_path)
+            filename = _copy_asset(source_image, assets_dir, used_assets)
+            value = f"{asset_prefix}/{filename}"
+            rel_image = (relative_output_dir / asset_prefix / filename).as_posix()
+            if rel_image not in images_copied:
+                images_copied.append(rel_image)
+        elif slot.type == "bibliography":
+            source_bib, _entries = _resolve_bibliography(
+                data[slot.name], resolved.parent, root_path
+            )
+            filename = _copy_asset(source_bib, assets_dir, used_assets)
+            include_path = f"{asset_prefix}/{filename}"
+            if slot.command == "bibliography" and include_path.lower().endswith(".bib"):
+                include_path = include_path[:-4]
+            value = include_path
+            rel_bib = (relative_output_dir / asset_prefix / filename).as_posix()
+            if rel_bib not in bibliographies_copied:
+                bibliographies_copied.append(rel_bib)
         else:
-            replacements.append((slot.start, slot.end, value))
+            value = _coerce_value(slot, data[slot.name])
+            if slot.kind == "comment":
+                value = "% " + value
+        replacements.append((slot.start, slot.end, value))
         filled += 1
 
     rendered = _apply_replacements(source, replacements)
@@ -142,15 +290,6 @@ def fill_latex_template(
             "填充后校验失败: " + "; ".join(messages[:5])
         )
 
-    output_name = _check_output_name(output_filename)
-    try:
-        target = resolve_within(root_path, resolved.parent / output_name)
-    except OfficePathError as exc:
-        raise OfficeTemplateFillError("输出路径不在工作区内") from exc
-    if target == resolved:
-        raise OfficeTemplateFillError("输出文件不能覆盖模板")
-    if target.exists():
-        raise OfficeTemplateFillError("输出文件已存在，拒绝覆盖")
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(rendered, encoding="utf-8")
@@ -174,6 +313,8 @@ def fill_latex_template(
         "output_path": target.relative_to(root_path).as_posix(),
         "filename": output_name,
         "filled_count": filled,
+        "images_copied": images_copied,
+        "bibliographies_copied": bibliographies_copied,
         "unfilled_slots": unfilled,
         "validation": validation,
         "warnings": warnings,

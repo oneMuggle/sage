@@ -28,6 +28,8 @@ from fastapi.responses import JSONResponse
 from backend.data.database import Database, get_database
 from backend.office import progress as office_progress, read_cache
 from backend.office.bibtex import parse_bibtex
+from backend.office.doc_profile import read_doc_profile
+from backend.office.doc_profile_models import WordDocumentProfileResult
 from backend.office.errors import (
     OfficeError,
     OfficePathError,
@@ -370,6 +372,18 @@ def read_word_endpoint(req: OfficeReadRequest) -> OfficeWordReadResult:
         original_filename=req.original_filename,
     )
     return result
+
+
+@router.post("/word/profile", response_model=WordDocumentProfileResult)
+def read_word_profile_endpoint(req: OfficeReadRequest) -> WordDocumentProfileResult:
+    """Read a .docx into the M0 DocumentProfile (page/styles/runs/anchors)."""
+    logger.info("Reading Word profile: %s", req.file_path)
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    _check_size_limit(file_path, req.max_size_bytes)
+    canonical_workspace = str(Path(req.workspace_path).resolve())
+    return WordDocumentProfileResult(
+        **read_doc_profile(file_path, workspace_path=canonical_workspace)
+    )
 
 
 @router.post("/excel/read", response_model=OfficeExcelReadResult)
@@ -726,6 +740,18 @@ router.include_router(_journal_router)
 from backend.api.office_latex_routes import router as _latex_router  # noqa: E402
 
 router.include_router(_latex_router)
+
+from backend.api.office_word_template_profile_routes import (  # noqa: E402
+    router as _word_template_profile_router,
+)
+
+router.include_router(_word_template_profile_router)
+
+from backend.api.office_word_audit_routes import (  # noqa: E402
+    router as _word_audit_router,
+)
+
+router.include_router(_word_audit_router)
 
 __all__ = [
     "router",

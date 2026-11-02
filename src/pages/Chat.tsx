@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 import { StepConfirmDialog } from '../components/StepConfirmDialog';
 import type { StepConfirmAction } from '../components/StepConfirmDialog';
+import { useCompactionArchives } from '../entities/chat/compactionArchivesStore';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStore';
 import { useSessionMemoryPause } from '../features/chat/useSessionMemoryPause';
@@ -203,6 +204,15 @@ export function Chat() {
   const workspacePath = useCurrentWorkspace();
   const pendingSentRef = useRef(false);
   const [archivesOpen, setArchivesOpen] = useState(false);
+  // 2026-11-01: CompactBanner 的「查看压缩前原文」通过 store 请求打开归档弹窗。
+  const pendingArchiveSessionId = useCompactionArchives((s) => s.pendingSessionId);
+  useEffect(() => {
+    if (!pendingArchiveSessionId) return;
+    if (pendingArchiveSessionId === currentSessionId) {
+      setArchivesOpen(true);
+      useCompactionArchives.getState().consume();
+    }
+  }, [pendingArchiveSessionId, currentSessionId]);
   const { scrollRef, showScrollToBottom, scrollToLatest } = useChatStickyScroll({
     currentSessionId,
     messages,
@@ -246,6 +256,8 @@ export function Chat() {
         knowledgeRefs?: { id: string; title: string }[];
         attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
         images?: { name: string; size: number; type: string; dataUrl?: string }[];
+        /** 2026-10-31: 前端确认/编辑后的本地 OCR 文本（与 images 对齐） */
+        imageOcrTexts?: string[];
         officeRefs?: readonly ChatOfficeRef[];
         orchestrationMode?: string;
         // PM1 (round8): /plan 计划模式 —— 本次 run 只读 + 计划产出。
@@ -273,17 +285,22 @@ export function Chat() {
         xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       };
       const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-      const dataUrls = (options?.images ?? [])
-        .map((img) => img.dataUrl)
-        .filter((d): d is string => Boolean(d));
-      const sized = dataUrls.filter((d) => (d.length * 3) / 4 <= MAX_IMAGE_BYTES);
-      if (sized.length < dataUrls.length) {
+      const imageEntries = (options?.images ?? [])
+        .map((img, index) => ({ img, index }))
+        .filter(({ img }) => Boolean(img.dataUrl))
+        .filter(({ img }) => ((img.dataUrl as string).length * 3) / 4 <= MAX_IMAGE_BYTES);
+      const dataUrlCount = (options?.images ?? []).filter((img) => Boolean(img.dataUrl)).length;
+      if (imageEntries.length < dataUrlCount) {
         toast.warning('部分图片超过 5MiB 上限，已跳过');
       }
-      const images = sized.slice(0, MAX_IMAGES);
-      if (sized.length > MAX_IMAGES) {
+      const limitedEntries = imageEntries.slice(0, MAX_IMAGES);
+      if (imageEntries.length > MAX_IMAGES) {
         toast.warning(`最多发送 ${MAX_IMAGES} 张图片，已截取前 ${MAX_IMAGES} 张`);
       }
+      const images = limitedEntries.map(({ img }) => img.dataUrl as string);
+      const imageOcrTexts = options?.imageOcrTexts
+        ? limitedEntries.map(({ index }) => options.imageOcrTexts?.[index] ?? '')
+        : undefined;
       const attachmentMediaIds: string[] = [];
       for (const att of options?.attachments ?? []) {
         if (!att.dataUrl) continue;
@@ -323,6 +340,7 @@ export function Chat() {
           return CHAT_DOCUMENT_EXTENSIONS.has(ext);
         }),
         images: options?.images,
+        imageOcrTexts,
         officeRefs,
         knowledgeRefs: options?.knowledgeRefs,
         workspacePath,
@@ -334,6 +352,7 @@ export function Chat() {
           planMode: options?.planMode,
           memoryDisabled: tempChatSessions.has(sessionId),
           images,
+          imageOcrTexts,
           attachmentMediaIds,
           attachmentRag,
           contextReset: options?.contextReset,
@@ -344,6 +363,7 @@ export function Chat() {
           planMode: options?.planMode,
           memoryDisabled: tempChatSessions.has(currentSessionId),
           images,
+          imageOcrTexts,
           attachmentMediaIds,
           attachmentRag,
           contextReset: options?.contextReset,
@@ -742,7 +762,10 @@ export function Chat() {
       {/* R17-A2: 压缩谱系归档查看器（compact 成功 toast「查看归档」打开） */}
       <ArchivesModal
         isOpen={archivesOpen}
-        onClose={() => setArchivesOpen(false)}
+        onClose={() => {
+          setArchivesOpen(false);
+          useCompactionArchives.getState().consume();
+        }}
         sessionId={currentSessionId}
       />
       {rewindTarget && currentSessionId && (

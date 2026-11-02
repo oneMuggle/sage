@@ -1008,6 +1008,69 @@ class Database:
             )
         if "detected_type" not in _projects_columns:
             cursor.execute("ALTER TABLE projects ADD COLUMN detected_type TEXT")
+        # Project playbook (2026-10-31): 项目规程状态 JSON——当前阶段、阶段历史、
+        # 豁免项、忽略建议与手动勾选。幂等迁移，旧行 NULL 允许。
+        if "playbook_state" not in _projects_columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN playbook_state TEXT")
+        conn.commit()
+
+        # Project playbooks (2026-10-31): 项目绑定的规程快照。每次绑定/编辑
+        # 生成一个新版本，只有最新版本 active=1；规格完整存快照，内置规程
+        # 升级不会改变已绑定项目的行为。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS project_playbooks (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                source TEXT NOT NULL,
+                parent_id TEXT,
+                spec_json TEXT NOT NULL,
+                spec_hash TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_project_playbooks_project "
+            "ON project_playbooks(project_id, active, version DESC)"
+        )
+        conn.commit()
+
+        # Playbook library (2026-10-31): imported/shared playbooks that are not
+        # bound to a single project. Deduplicated by canonical spec hash.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS playbook_library (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                source TEXT NOT NULL,
+                spec_json TEXT NOT NULL,
+                spec_hash TEXT NOT NULL UNIQUE,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_playbook_library_recent "
+            "ON playbook_library(created_at DESC)"
+        )
+        conn.commit()
+
+        # Playbook events (2026-11-02): 规程使用埋点，记录绑定/审计/导出/
+        # 归类等关键动作供本地统计与调试。写入失败不阻断主流程。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS playbook_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL,
+                event TEXT NOT NULL,
+                stage TEXT,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_playbook_events_recent "
+            "ON playbook_events(project_id, created_at DESC)"
+        )
         conn.commit()
 
         # Project constraints (2026-09-24): 结构化项目约束，替代纯文本
@@ -1022,6 +1085,7 @@ class Database:
                 trigger_pattern TEXT,
                 priority INTEGER NOT NULL DEFAULT 5,
                 enabled INTEGER NOT NULL DEFAULT 1,
+                source TEXT NOT NULL DEFAULT 'user',
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
                 FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -1031,6 +1095,12 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_project_constraints_project "
             "ON project_constraints(project_id, enabled)"
         )
+        cursor.execute("PRAGMA table_info(project_constraints)")
+        _constraint_columns = {row["name"] for row in cursor.fetchall()}
+        if "source" not in _constraint_columns:
+            cursor.execute(
+                "ALTER TABLE project_constraints ADD COLUMN source TEXT NOT NULL DEFAULT 'user'"
+            )
         conn.commit()
 
         # Project milestones (2026-09-24): 项目里程碑追踪。按项目类型有不

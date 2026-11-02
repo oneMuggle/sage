@@ -50,7 +50,9 @@ export type PreferenceKey =
   // T-3: 技能脚本执行开关（fail-closed，缺省关闭）
   | 'allow_skill_scripts'
   // T-4a: 自定义技能目录
-  | 'skills_dir';
+  | 'skills_dir'
+  // 本地 OCR：引擎/语言/优先策略（JSON blob）
+  | 'ocr_config';
 
 async function ipcCall<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {

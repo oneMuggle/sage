@@ -1,0 +1,661 @@
+"""Integration tests for playbook HTTP routes (2026-10-31)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import AsyncIterator
+
+import httpx
+import pytest
+import pytest_asyncio
+
+from backend.data import database as database_module
+from backend.data.database import Database
+from backend.main import app
+
+
+@pytest.fixture()
+def db(monkeypatch: pytest.MonkeyPatch) -> Database:
+    test_db = Database(":memory:")
+    test_db.init_db()
+    monkeypatch.setattr(database_module, "_db", test_db)
+    return test_db
+
+
+@pytest.fixture()
+def project_dir(tmp_path: Path) -> Path:
+    path = tmp_path / "demo-project"
+    path.mkdir()
+    return path
+
+
+@pytest_asyncio.fixture()
+async def client(db: Database) -> AsyncIterator[httpx.AsyncClient]:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as value:
+        yield value
+
+
+async def _register(client: httpx.AsyncClient, path: Path) -> dict:
+    response = await client.post("/api/v1/projects", json={"path": str(path)})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+async def _bind(client: httpx.AsyncClient, project_id: str) -> dict:
+    response = await client.put(
+        f"/api/v1/projects/{project_id}/playbook",
+        json={"playbook_id": "cn-research-grant"},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+@pytest.mark.asyncio()
+async def test_builtin_list_and_detail(client: httpx.AsyncClient) -> None:
+    response = await client.get("/api/v1/playbooks/builtin")
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()["playbooks"]}
+    assert {"cn-research-grant", "coding-project"} <= ids
+
+    detail = await client.get("/api/v1/playbooks/builtin/cn-research-grant")
+    assert detail.status_code == 200
+    assert detail.json()["playbook"]["stages"][0]["id"] == "proposal"
+
+    missing = await client.get("/api/v1/playbooks/builtin/nope")
+    assert missing.status_code == 404
+
+
+@pytest.mark.asyncio()
+async def test_bind_and_audit_reflect_files(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    bound = await _bind(client, project["id"])
+    assert bound["bound"] is True
+    assert bound["version"] == 1
+    assert bound["state"]["current_stage"] == "proposal"
+    assert bound["audit"]["overall"]["required_total"] > 0
+
+    proposal_dir = project_dir / "01_开题"
+    proposal_dir.mkdir()
+    (proposal_dir / "开题报告.md").write_text(
+        "研究问题\n科学假设\n技术路线", encoding="utf-8"
+    )
+
+    audit = await client.get("/api/v1/projects/{}/playbook/audit".format(project["id"]))
+    assert audit.status_code == 200
+    data = audit.json()
+    proposal = next(stage for stage in data["stages"] if stage["id"] == "proposal")
+    report = next(item for item in proposal["artifacts"] if item["id"] == "proposal_report")
+    assert report["status"] == "present"
+    assert report["evidence"]["matches"] == ["01_开题/开题报告.md"]
+
+
+@pytest.mark.asyncio()
+async def test_playbook_library_save_list_bind(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    from backend.services.playbook_library import build_export_envelope, get_builtin
+
+    envelope = build_export_envelope(
+        get_builtin("coding-project"), include_scaffold=False, app_version="test"
+    )
+    saved = await client.post("/api/v1/playbooks/library", json={"envelope": envelope})
+    assert saved.status_code == 200, saved.text
+    payload = saved.json()
+    assert payload["created"] is True
+    library_id = payload["item"]["id"]
+    assert payload["item"]["stage_count"] == 5
+
+    listed = await client.get("/api/v1/playbooks/library")
+    assert listed.status_code == 200
+    assert any(item["id"] == library_id for item in listed.json()["items"])
+
+    project = await _register(client, project_dir)
+    bound = await client.put(
+        "/api/v1/projects/{}/playbook".format(project["id"]),
+        json={"library_id": library_id},
+    )
+    assert bound.status_code == 200, bound.text
+    assert bound.json()["bound"] is True
+    assert bound.json()["source"].startswith("library:")
+
+    deleted = await client.delete(
+        f"/api/v1/playbooks/library/{library_id}"
+    )
+    assert deleted.status_code == 200
+    listed = await client.get("/api/v1/playbooks/library")
+    assert not any(item["id"] == library_id for item in listed.json()["items"])
+
+
+@pytest.mark.asyncio()
+async def test_library_detail_and_export(client: httpx.AsyncClient) -> None:
+    from backend.services.playbook_library import build_export_envelope, get_builtin
+
+    envelope = build_export_envelope(
+        get_builtin("coding-project"), include_scaffold=False, app_version="test"
+    )
+    saved = await client.post("/api/v1/playbooks/library", json={"envelope": envelope})
+    assert saved.status_code == 200, saved.text
+    library_id = saved.json()["item"]["id"]
+
+    detail = await client.get(f"/api/v1/playbooks/library/{library_id}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["playbook"]["id"] == "coding-project"
+    assert detail.json()["item"]["stage_count"] == 5
+
+    exported = await client.get(f"/api/v1/playbooks/library/{library_id}/export")
+    assert exported.status_code == 200, exported.text
+    payload = exported.json()
+    assert payload["filename"].endswith(".sageplaybook.json")
+    assert payload["content"]["format"] == "sage.playbook"
+    assert payload["content"]["playbook"]["id"] == "coding-project"
+
+    missing = await client.get("/api/v1/playbooks/library/missing")
+    assert missing.status_code == 404
+    await client.delete(f"/api/v1/playbooks/library/{library_id}")
+
+
+@pytest.mark.asyncio()
+async def test_import_can_save_to_library(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    from backend.services.playbook_library import build_export_envelope, get_builtin
+
+    project = await _register(client, project_dir)
+    envelope = build_export_envelope(
+        get_builtin("cn-research-grant"), include_scaffold=False, app_version="test"
+    )
+    imported = await client.post(
+        "/api/v1/playbooks/import",
+        json={
+            "envelope": envelope,
+            "project_id": project["id"],
+            "conflict": "save_as_new",
+            "save_to_library": True,
+        },
+    )
+    assert imported.status_code == 200, imported.text
+    listed = await client.get("/api/v1/playbooks/library")
+    assert any(
+        item["name"] == "科研课题（开题 · 实施 · 结题）"
+        for item in listed.json()["items"]
+    )
+
+
+@pytest.mark.asyncio()
+async def test_bind_projects_rules_and_stage_adds_more(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    first = await client.get(
+        "/api/v1/projects/{}/constraints".format(project["id"])
+    )
+    assert first.status_code == 200
+    contents = [item["content"] for item in first.json()["constraints"]]
+    assert any("DOI" in item for item in contents)
+    before = len(contents)
+
+    confirmed = await client.post(
+        "/api/v1/projects/{}/playbook/stage/confirm".format(project["id"]),
+        json={"stage_id": "execution"},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+    second = await client.get(
+        "/api/v1/projects/{}/constraints".format(project["id"])
+    )
+    contents = [item["content"] for item in second.json()["constraints"]]
+    assert len(contents) > before
+    assert any("随机种子" in item for item in contents)
+
+
+@pytest.mark.asyncio()
+async def test_state_update_waiver_and_manual_done(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    response = await client.patch(
+        "/api/v1/projects/{}/playbook/state".format(project["id"]),
+        json={
+            "waivers": ["proposal.proposal_report"],
+            "manual_done": ["proposal.literature_matrix_ready"],
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["state"]["waivers"] == ["proposal.proposal_report"]
+    proposal = next(stage for stage in payload["audit"]["stages"] if stage["id"] == "proposal")
+    report = next(item for item in proposal["artifacts"] if item["id"] == "proposal_report")
+    assert report["status"] == "waived"
+    criterion = next(
+        item for item in proposal["exit_criteria"] if item["id"] == "literature_matrix_ready"
+    )
+    assert criterion["status"] == "done"
+
+
+@pytest.mark.asyncio()
+async def test_unbind_and_version_history(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    versions = await client.get(
+        "/api/v1/projects/{}/playbook/versions".format(project["id"])
+    )
+    assert versions.status_code == 200
+    assert len(versions.json()["versions"]) == 1
+    assert versions.json()["versions"][0]["active"] is True
+
+    unbound = await client.delete(
+        "/api/v1/projects/{}/playbook".format(project["id"])
+    )
+    assert unbound.status_code == 200
+    assert unbound.json()["bound"] is False
+
+    versions = await client.get(
+        "/api/v1/projects/{}/playbook/versions".format(project["id"])
+    )
+    assert versions.json()["versions"][0]["active"] is False
+
+
+@pytest.mark.asyncio()
+async def test_cleanup_playbook_rules(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    constraints = await client.get(
+        "/api/v1/projects/{}/constraints".format(project["id"])
+    )
+    assert any(
+        str(item.get("source", "")).startswith("playbook:")
+        for item in constraints.json()["constraints"]
+    )
+    cleanup = await client.post(
+        "/api/v1/projects/{}/playbook/rules/cleanup".format(project["id"])
+    )
+    assert cleanup.status_code == 200
+    assert cleanup.json()["removed"] > 0
+    constraints = await client.get(
+        "/api/v1/projects/{}/constraints".format(project["id"])
+    )
+    assert not any(
+        str(item.get("source", "")).startswith("playbook:")
+        for item in constraints.json()["constraints"]
+    )
+
+
+@pytest.mark.asyncio()
+async def test_project_patch_stage_syncs_playbook_state(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    patched = await client.patch(
+        "/api/v1/projects/{}".format(project["id"]),
+        json={"project_stage": "execution"},
+    )
+    assert patched.status_code == 200, patched.text
+    current = await client.get(
+        "/api/v1/projects/{}/playbook".format(project["id"])
+    )
+    assert current.json()["state"]["current_stage"] == "execution"
+    constraints = await client.get(
+        "/api/v1/projects/{}/constraints".format(project["id"])
+    )
+    assert any("随机种子" in item["content"] for item in constraints.json()["constraints"])
+
+
+@pytest.mark.asyncio()
+async def test_actions_apply_and_stage_confirm(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+
+    applied = await client.post(
+        "/api/v1/projects/{}/playbook/actions/apply".format(project["id"]),
+        json={
+            "actions": [
+                {"type": "create_folder", "payload": {"path": "02_实施/数据"}},
+                {
+                    "type": "create_doc_stub",
+                    "payload": {
+                        "path": "02_实施/实验记录.md",
+                        "template": "experiment_log",
+                    },
+                },
+            ]
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    assert "create_folder" in applied.json()["applied"]
+    assert (project_dir / "02_实施" / "数据").is_dir()
+    assert (project_dir / "02_实施" / "实验记录.md").is_file()
+
+    confirmed = await client.post(
+        "/api/v1/projects/{}/playbook/stage/confirm".format(project["id"]),
+        json={"stage_id": "execution"},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["state"]["current_stage"] == "execution"
+
+    project_after = await client.get("/api/v1/projects")
+    assert project_after.status_code == 200
+    listed = next(
+        item for item in project_after.json()["projects"] if item["id"] == project["id"]
+    )
+    assert listed["project_stage"] == "execution"
+
+
+@pytest.mark.asyncio()
+async def test_batch_move_and_undo_via_http(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    (project_dir / "论文初稿.docx").write_bytes(b"x" * 32)
+
+    applied = await client.post(
+        "/api/v1/projects/{}/playbook/actions/apply".format(project["id"]),
+        json={
+            "actions": [
+                {
+                    "type": "batch_move",
+                    "payload": {
+                        "moves": [
+                            {"from": "论文初稿.docx", "to": "03_成果/论文初稿.docx"}
+                        ]
+                    },
+                }
+            ]
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    payload = applied.json()
+    assert payload["applied"] == ["batch_move"]
+    assert payload["audit"]["undo_available"]["count"] == 1
+    assert (project_dir / "03_成果" / "论文初稿.docx").is_file()
+
+    undone = await client.post(
+        "/api/v1/projects/{}/playbook/actions/apply".format(project["id"]),
+        json={"actions": [{"type": "undo_last_batch_move", "payload": {}}]},
+    )
+    assert undone.status_code == 200, undone.text
+    assert undone.json()["applied"] == ["undo_last_batch_move"]
+    assert undone.json()["audit"]["undo_available"] is None
+    assert (project_dir / "论文初稿.docx").is_file()
+
+
+
+@pytest.mark.asyncio()
+async def test_export_and_import_preview(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+
+    exported = await client.get(
+        "/api/v1/projects/{}/playbook/export?format=json".format(project["id"])
+    )
+    assert exported.status_code == 200
+    payload = exported.json()
+    assert payload["format"] == "json"
+    envelope = payload["content"]
+    assert envelope["format"] == "sage.playbook"
+    assert envelope["scaffold"]["directories"]
+
+    preview = await client.post(
+        "/api/v1/playbooks/import/preview",
+        json={"envelope": envelope, "project_id": project["id"]},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["playbook"]["id"] == "cn-research-grant"
+
+    imported = await client.post(
+        "/api/v1/playbooks/import",
+        json={
+            "envelope": envelope,
+            "project_id": project["id"],
+            "conflict": "save_as_new",
+        },
+    )
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["version"] == 2
+
+
+@pytest.mark.asyncio()
+async def test_import_preview_reports_item_level_diff(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    from copy import deepcopy
+
+    from backend.services.playbook_library import build_export_envelope, get_builtin
+
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+
+    spec = deepcopy(get_builtin("cn-research-grant"))
+    proposal = next(stage for stage in spec["stages"] if stage["id"] == "proposal")
+    proposal["artifacts"][0]["match"]["globs"] = ["**/开题报告*.md"]
+    proposal["rules"].append({"content": "导入规则：参考文献必须可核验"})
+    proposal["recommended_milestones"].append({"title": "完成伦理审批"})
+    envelope = build_export_envelope(spec, include_scaffold=False, app_version="test")
+
+    preview = await client.post(
+        "/api/v1/playbooks/import/preview",
+        json={"envelope": envelope, "project_id": project["id"]},
+    )
+    assert preview.status_code == 200, preview.text
+    diff = preview.json()["diff"]
+    assert diff["stages_changed"] == ["proposal"]
+    details = diff["stage_details"]["proposal"]
+    assert details["artifacts_changed"][0]["id"] == "proposal_report"
+    assert "match" in details["artifacts_changed"][0]["fields"]
+    assert details["rules_added"] == ["导入规则：参考文献必须可核验"]
+    assert details["milestones_added"] == ["完成伦理审批"]
+
+
+@pytest.mark.asyncio()
+async def test_export_markdown(client: httpx.AsyncClient, project_dir: Path) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    exported = await client.get(
+        "/api/v1/projects/{}/playbook/export?format=md".format(project["id"])
+    )
+    assert exported.status_code == 200
+    assert "开题" in exported.json()["content"]
+
+
+@pytest.mark.asyncio()
+async def test_author_preview_deterministic(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    response = await client.post(
+        f"/api/v1/projects/{project['id']}/playbook/author/preview",
+        json={"answers": {"name": "我的规程"}, "use_llm": False},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["source"] == "deterministic"
+    assert payload["playbook"]["name"] == "我的规程"
+    assert payload["playbook"]["stages"]
+
+
+@pytest.mark.asyncio()
+async def test_audit_ai_falls_back_without_llm(
+    client: httpx.AsyncClient, project_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from backend.orchestration import llm_factory
+
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    monkeypatch.setattr(llm_factory, "build_llm_client_from_settings", lambda: None)
+    response = await client.post(
+        "/api/v1/projects/{}/playbook/audit/ai".format(project["id"]),
+        json={"use_llm": True},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["llm_available"] is False
+    assert payload["stages"]
+
+
+@pytest.mark.asyncio()
+async def test_wiki_export_creates_and_updates(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    first = await client.post(
+        "/api/v1/projects/{}/playbook/wiki/export".format(project["id"])
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["created"] is True
+    page = project_dir / "wiki" / "guides" / "playbook-handbook.md"
+    assert page.is_file()
+    text = page.read_text(encoding="utf-8")
+    assert "generator: sage" in text
+    assert "开题" in text
+
+    second = await client.post(
+        "/api/v1/projects/{}/playbook/wiki/export".format(project["id"])
+    )
+    assert second.status_code == 200
+    assert second.json()["updated"] is True
+
+
+@pytest.mark.asyncio()
+async def test_wiki_export_refuses_user_page(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    page = project_dir / "wiki" / "guides" / "playbook-handbook.md"
+    page.parent.mkdir(parents=True)
+    page.write_text("# 用户手写内容", encoding="utf-8")
+
+    response = await client.post(
+        "/api/v1/projects/{}/playbook/wiki/export".format(project["id"])
+    )
+    assert response.status_code == 409
+    assert page.read_text(encoding="utf-8") == "# 用户手写内容"
+
+
+@pytest.mark.asyncio()
+async def test_export_agents_markdown(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    exported = await client.get(
+        "/api/v1/projects/{}/playbook/export?format=agents".format(project["id"])
+    )
+    assert exported.status_code == 200
+    payload = exported.json()
+    assert payload["format"] == "agents"
+    assert payload["filename"].endswith("-AGENTS.md")
+    assert "AI 协同约定" in payload["content"]
+
+
+@pytest.mark.asyncio()
+async def test_import_rejects_unsafe_scaffold(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    envelope = {
+        "format": "sage.playbook",
+        "schema_version": "1.0",
+        "playbook": {
+            "schema_version": "1.0",
+            "id": "evil",
+            "name": "evil",
+            "stages": [{"id": "s1", "label": "S1", "artifacts": []}],
+        },
+        "scaffold": {"include": True, "directories": ["../escape"]},
+    }
+    response = await client.post(
+        "/api/v1/playbooks/import/preview",
+        json={"envelope": envelope, "project_id": project["id"]},
+    )
+    assert response.status_code == 400
+    assert not (project_dir.parent / "escape").exists()
+
+
+@pytest.mark.asyncio()
+async def test_events_list_after_bind_and_audit(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+
+    audit = await client.get(
+        "/api/v1/projects/{}/playbook/audit".format(project["id"])
+    )
+    assert audit.status_code == 200
+
+    events = await client.get(
+        "/api/v1/projects/{}/playbook/events".format(project["id"])
+    )
+    assert events.status_code == 200, events.text
+    payload = events.json()
+    assert payload["project_id"] == project["id"]
+    event_names = [e["event"] for e in payload["events"]]
+    assert "bind" in event_names
+    assert "audit" in event_names
+    # Newest first
+    assert event_names[0] == "audit"
+    assert event_names[-1] == "bind"
+
+
+@pytest.mark.asyncio()
+async def test_events_aggregate_counts(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+    await client.get("/api/v1/projects/{}/playbook/audit".format(project["id"]))
+    await client.get("/api/v1/projects/{}/playbook/audit".format(project["id"]))
+
+    agg = await client.get(
+        "/api/v1/playbooks/events/aggregate?project_id={}&days=30".format(
+            project["id"]
+        )
+    )
+    assert agg.status_code == 200, agg.text
+    payload = agg.json()
+    assert payload["project_id"] == project["id"]
+    assert payload["days"] == 30
+    assert payload["counts"].get("bind") == 1
+    assert payload["counts"].get("audit") == 2
+    assert payload["total"] == 3
+
+    global_agg = await client.get("/api/v1/playbooks/events/aggregate?days=30")
+    assert global_agg.status_code == 200
+    assert global_agg.json()["project_id"] is None
+    assert global_agg.json()["total"] >= 3
+
+
+@pytest.mark.asyncio()
+async def test_events_limit_clamped(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    project = await _register(client, project_dir)
+    await _bind(client, project["id"])
+
+    too_large = await client.get(
+        "/api/v1/projects/{}/playbook/events?limit=999".format(project["id"])
+    )
+    assert too_large.status_code == 422  # FastAPI Query(le=200) validation
+
+    valid = await client.get(
+        "/api/v1/projects/{}/playbook/events?limit=1".format(project["id"])
+    )
+    assert valid.status_code == 200
+    assert len(valid.json()["events"]) == 1

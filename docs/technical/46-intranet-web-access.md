@@ -117,3 +117,46 @@ host 校验在 **执行时** 读策略（`NetworkPolicy.check_host(url)`），�
 两者不矛盾：前者处理故障，后者执行用户意图。
 
 `load_network_policy` 的返回值经过 `NetworkPolicy.__post_init__` 校验，校验失败同样 fail-safe 回 ONLINE。所以"写入了一个坏配置"与"读不出配置"在系统层面是同一类失效。
+
+## 外部日常浏览器扩展桥（EXTERNAL）
+
+用户日常 Chrome/Edge 中安装 `extension/agent-bridge`（MV3），显式共享一个标签页后，Sage 可以直接复用该页面的登录态、指纹与网络环境。适用于扫码 / 短信 / 机构 CARSI 等无法在 Sage 内置浏览器中自动完成的登录。
+
+### 数据流
+
+```
+扩展 offscreen（长轮询 20s）
+  → POST /api/v1/web-access/extension/poll   （设备 token）
+  ← {id, method, params}                     （CDP 原样）
+  → background.js chrome.debugger.sendCommand({tabId})
+  → POST /api/v1/web-access/extension/result
+后端 BrowserExtensionBridge
+  → BrowserType.EXTERNAL → cdp_command 直通
+```
+
+`Target.getTargets` 由扩展直接按 `chrome.tabs.get(tabId)` 返回；`Target.createTarget` / `Target.closeTarget` / `Browser.close` 等全部拒绝，保证只操作共享标签页。`BrowserSessionManager.get(None)` 在存在 EXTERNAL 会话时优先返回它，`BrowserLaunchTool` 也会直接复用共享会话，不会另开浏览器。
+
+### 鉴权与配对
+
+- `LocalAuthMiddleware` 放行 `/api/v1/web-access/extension/` 前缀；端点内部用 `X-Sage-Extension-Token` 鉴权（配对端点使用一次性配对码）。
+- 设置页生成 10 位 base32 码（约 50 bit），5 分钟 TTL、一次性、连续 5 次失败作废。
+- 设备 token 只在配对响应中返回一次；`browser_extension_devices` 只存 SHA-256。
+- 设备 token 存储于 `chrome.storage.local`，不进入日志、不进入聊天。
+
+### 共享与数据最小化
+
+- 同一时间只允许一个共享标签页；第二个设备 `/poll` 收到 409 并自动停止。
+- 扩展在每次命令前校验 tabId + origin；跨域跳转 / 标签页关闭自动停止共享。
+- `sync-session` 只接受与共享标签页 host 匹配的 cookie domain 与当前 origin 的 localStorage；值经 `credential_vault` 加密，不返回设置页/聊天。
+- 请求体上限：result 9 MiB（协议层 8 MiB）、sync-session 2 MiB；cookie 最多 500 条、origin 最多 50 个。
+
+### 相关文件
+
+| 文件 | 职责 |
+|---|---|
+| `backend/services/browser_extension_bridge.py` | 设备注册 / 配对 / 长轮询 / 命令 Future / 会话注册 / 凭据同步 |
+| `backend/api/browser_extension_routes.py` | 扩展 I/O + 设置页管理端点 |
+| `backend/tools/browser_cdp.py` | `BrowserType.EXTERNAL` 分发、目标解析、会话终止 no-op |
+| `extension/agent-bridge/` | MV3 扩展（popup / background / offscreen） |
+| `src/pages/settings/BrowserExtensionSection.tsx` | 设置页配对与设备管理 |
+| `electron-builder.yml` | 安装包内附带 `resources/extension/agent-bridge` |

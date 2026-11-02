@@ -1,0 +1,29 @@
+/*
+ * 设置页统一视觉：页面 h1 / 分组 h2 / 小节 h3 与卡片容器。
+ *
+ * 现有各 tab 手写标题样式（text-sm / text-ui-base / text-ui-md / text-ui-lg
+ * 混用）保留在标记里，由本文件的非 layer 规则统一覆盖 —— 新 tab 不必再手动
+ * 对齐字号，也避免一次性改动 25 个文件。
+ */
+
+.settings-content section:not(section section) {
+  @apply rounded-lg border border-border bg-surface p-4;
+}
+
+.settings-content h2 {
+  @apply text-ui-lg font-semibold text-ink;
+}
+
+.settings-content h3 {
+  @apply text-ui-base font-semibold text-ink mb-3;
+}
+
+.settings-content section:not(section section) > h2:first-child,
+.settings-content section:not(section section) > h3:first-child {
+  @apply mt-0;
+}
+
+/* 行与行之间保留呼吸感；SettingRow 自带 border-b，最后一个不再重复。 */
+.settings-content section:not(section section) > div:last-child > .border-b:last-child {
+  @apply border-b-0;
+}

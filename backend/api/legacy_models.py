@@ -111,6 +111,10 @@ class ChatRequest(BaseModel):
     # 上限 4 张 / 单张 5MiB（解码后字节计）—— 防上下文爆炸。
     images: List[str] = Field(default_factory=list)
 
+    # 2026-10-31: 用户在前端预览/编辑后的本地 OCR 文本，与 images 一一对应。
+    # 非空且长度匹配时，Agent 直接使用这些文本（不再重复识别）；不匹配时忽略。
+    image_ocr_texts: List[str] = Field(default_factory=list)
+
     # 2026-10-28: 用户消息展示元数据（附件 / @ 文件引用 / office 引用）。
     # 仅用于会话气泡回显，落库 messages.client_meta（JSON-in-TEXT），
     # 不参与 LLM 上下文。前端保证不含 dataUrl；服务端再做 32 KiB 上限保护。

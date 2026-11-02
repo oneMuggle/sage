@@ -33,6 +33,15 @@ from backend.core.legacy.context_first_aid import (
     run_ctx_budget_tokens,
 )
 from backend.core.legacy.context_microcompact import micro_compact
+from backend.core.legacy.iteration_budget import (
+    BudgetConfig,
+    BudgetLevel,
+    audit_window,
+    build_budget_info,
+    build_step_record,
+    decide_budget,
+    estimate_initial_budget,
+)
 from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse, RetryEvent
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
@@ -100,6 +109,11 @@ def _load_max_consecutive_unanswered() -> int:
 #: 的 DB 列默认保持一致，避免降级路径静默砍半预算。
 DEFAULT_MAX_ITERATIONS = 10
 
+#: ``OrchSettings.max_iterations`` 的默认值（backend/orchestration/orch_settings.py）。
+#: run_loop 用它区分"用户未配置"（→ 启用动态预算）与"用户显式设置"
+#: （→ 作为硬上限，不自动延长）。0 仍保留"按各 agent profile 分别设置"语义。
+DEFAULT_ORCH_MAX_ITERATIONS = 25
+
 #: RT2 (round7): 上下文溢出急救压缩的最大重试次数。第 1 次用常规压缩
 #: （保留最近 6 条），第 2 次用激进压缩（保留最近 2 条）；仍溢出则按
 #: 原错误面终止——同一请求盲目重试必然复现，压缩是唯一出路。
@@ -133,6 +147,12 @@ from backend.tools.permissions import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: 单张图片 OCR 文本注入上限（防止编辑结果/异常长文本挤爆上下文）
+_OCR_TEXT_MAX_CHARS_PER_IMAGE = 20_000
+#: 多图 OCR 文本总注入上限
+_OCR_TEXT_MAX_TOTAL_CHARS = 60_000
+_OCR_TEXT_TRUNCATION_MARKER = "\n…[OCR 文本已截断]"
 
 
 def _tool_signature(tc: Any) -> str:
@@ -305,6 +325,13 @@ def _retry_events_to_agent_events(
         )
         for ev in retry_events
     ]
+
+
+def _truncate_ocr_text(text: str, limit: int) -> str:
+    """截断注入 LLM 的 OCR 文本，避免异常长文本挤爆上下文。"""
+    if len(text) <= limit:
+        return text
+    return text[:limit] + _OCR_TEXT_TRUNCATION_MARKER
 
 
 class SageAgent:
@@ -802,38 +829,84 @@ class SageAgent:
         self,
         messages: List[Dict[str, Any]],
         images: List[str],
+        image_ocr_texts: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """根据 chatModel 能力智能处理图片。
 
-        chatModel 支持（或能力未知）vision 时直接注入图片，走标准
-        ``image_url`` content 块；确认不支持时降级到 visionModel 生成
-        描述后以文本替换；均未配置时抛出 ``VisionNotAvailableError``。
+        默认路由顺序：
+
+        1. chatModel 支持（或能力未知）vision → 原生 ``image_url`` 注入；
+        2. 确认不支持 vision 且配置了 visionModel → 视觉模型生成描述；
+        3. 本地 OCR 可用 → 识别为文本后替换图片；
+        4. 都不满足 → ``VisionNotAvailableError``。
+
+        设置 ``ocr_config.prefer_local_for_images`` 时，若本地 OCR 可用，
+        即使 chatModel 支持 vision 也优先 OCR（纯文字截图更快、更省）。
 
         Args:
             messages: 原始消息列表。
             images: 图片 data URL 列表。
+            image_ocr_texts: 前端预览/编辑后的 OCR 文本（与 images 对齐）。
+                长度匹配时直接采用，省略重复识别。
 
         Returns:
             处理后的消息列表。
 
         Raises:
-            VisionNotAvailableError: chatModel 不支持 vision 且未配置 visionModel。
+            VisionNotAvailableError: chatModel 不支持 vision、未配置
+                visionModel，且本地 OCR 不可用。
         """
         if not images:
             return messages
 
         chat_model_caps = await self._get_model_capabilities(self._resolve_chat_model_id())
+        supports_vision = "vision" in chat_model_caps
+        ocr_available = self._local_ocr_available()
 
-        if "vision" in chat_model_caps:
-            return self._inject_images_as_content(messages, images)
-
-        if self._is_vision_model_configured():
+        if supports_vision:
+            prefer_local = self._prefer_local_ocr()
+            # 仅当「显式偏好本地 OCR」且「OCR 确实可用」时才改变默认路由；
+            # 用 is True 判定，避免测试桩/第三方包装的 truthy 值误触发。
+            if prefer_local is not True or ocr_available is not True:
+                return self._inject_images_as_content(messages, images)
+        elif self._is_vision_model_configured():
             descriptions = await self._generate_image_descriptions(images)
             return self._replace_images_with_descriptions(messages, descriptions)
 
+        if ocr_available:
+            if image_ocr_texts and len(image_ocr_texts) == len(images):
+                texts = [
+                    self._format_provided_ocr_text(index, text)
+                    for index, text in enumerate(image_ocr_texts, 1)
+                ]
+            else:
+                texts = await self._generate_image_ocr_texts(images)
+            return self._replace_images_with_text(messages, texts)
+
         from backend.core.exceptions import VisionNotAvailableError
 
-        raise VisionNotAvailableError("对话模型不支持视觉识别，且未配置视觉理解模型")
+        raise VisionNotAvailableError(
+            "对话模型不支持视觉识别，未配置视觉理解模型，且本地 OCR 不可用"
+        )
+
+    def _prefer_local_ocr(self) -> bool:
+        """用户是否显式要求「有视觉模型时也优先本地 OCR」。"""
+        try:
+            from backend.services.ocr import get_ocr_service
+
+            return bool(get_ocr_service().config.prefer_local_for_images)
+        except Exception:  # noqa: BLE001 — 配置读取失败按默认（否）处理
+            return False
+
+    def _local_ocr_available(self) -> bool:
+        """本地 OCR 是否可用（引擎 + 开关 + 模型）。探测失败一律按不可用。"""
+        try:
+            from backend.services.ocr import get_ocr_service
+
+            return bool(get_ocr_service().is_available())
+        except Exception:  # noqa: BLE001 — OCR 是增强能力，探测失败不阻断聊天
+            logger.warning("本地 OCR 能力探测失败", exc_info=True)
+            return False
 
     def _inject_images_as_content(
         self,
@@ -1061,6 +1134,103 @@ class SageAgent:
 
         combined_text = f"{desc_text}\n\n{original_text}" if original_text else desc_text
 
+        result[-1] = {
+            **last_msg,
+            "content": [{"type": "text", "text": combined_text}],
+        }
+        return result
+
+    async def _generate_image_ocr_texts(self, images: List[str]) -> List[str]:
+        """逐张调用本地 OCR，返回用于注入的文本块。
+
+        单张失败不中断整体，对应位置填入可读占位符；OCR 故障永远不会
+        升级为聊天失败。线程池执行避免阻塞事件循环（py38 无
+        ``asyncio.to_thread``）。
+        """
+        try:
+            from backend.services.ocr import get_ocr_service
+
+            service = get_ocr_service()
+            loop = asyncio.get_running_loop()
+            texts: List[str] = []
+            for index, image_data in enumerate(images, 1):
+                try:
+                    result = await loop.run_in_executor(
+                        None, functools.partial(service.recognize_data_url, image_data)
+                    )
+                except Exception as exc:  # noqa: BLE001 — 单张失败不扩散
+                    logger.error("本地 OCR 调用失败: %s", exc, exc_info=True)
+                    result = None
+                texts.append(self._format_ocr_text(index, result))
+            return texts
+        except Exception:
+            logger.warning("本地 OCR 流程异常", exc_info=True)
+            return ["[图片文字识别失败]" for _ in images]
+
+    @staticmethod
+    def _format_provided_ocr_text(index: int, text: str) -> str:
+        """格式化用户确认/编辑后的 OCR 文本块。"""
+        value = _truncate_ocr_text(
+            (text or "").strip(), _OCR_TEXT_MAX_CHARS_PER_IMAGE
+        )
+        if not value:
+            return "[图片 %d 未识别到文字（使用发送前预览结果）]" % index
+        return "[图片 %d 文字内容 · 本地 OCR · 用户确认]\n%s" % (index, value)
+
+    @staticmethod
+    def _format_ocr_text(index: int, result: Any) -> str:
+        """把 OcrResult 格式化为注入 LLM 的文本块（含来源与质量提示）。"""
+        if result is None or not getattr(result, "ok", False):
+            reason = getattr(result, "error", "") if result is not None else ""
+            return "[图片 %d 文字识别失败：%s]" % (index, reason or "ocr_failed")
+        text = _truncate_ocr_text(
+            (getattr(result, "text", "") or "").strip(),
+            _OCR_TEXT_MAX_CHARS_PER_IMAGE,
+        )
+        engine = getattr(result, "engine", "") or "ocr"
+        quality = getattr(result, "quality", "ok")
+        if not text:
+            return "[图片 %d 未识别到文字（可能图片质量低或无文字）]" % index
+        header = "[图片 %d 文字内容 · 本地 OCR · 引擎 %s]" % (index, engine)
+        if quality == "low_confidence":
+            header = (
+                "[图片 %d 文字内容 · 本地 OCR · 引擎 %s · 置信度较低，请核对]"
+                % (index, engine)
+            )
+        return header + "\n" + text
+
+    def _replace_images_with_text(
+        self,
+        messages: List[Dict[str, Any]],
+        blocks: List[str],
+    ) -> List[Dict[str, Any]]:
+        """将图片替换为文本块（与描述替换同构，不额外包裹标签）。
+
+        不可变：返回新列表，原 ``messages`` 与其中的 dict 保持不变。
+        """
+        if not messages:
+            return messages
+
+        result = list(messages)
+        last_msg = result[-1]
+        if last_msg.get("role") != "user":
+            return result
+
+        block_text = _truncate_ocr_text(
+            "\n\n".join(block for block in blocks if block),
+            _OCR_TEXT_MAX_TOTAL_CHARS,
+        )
+        original_content = last_msg.get("content", "")
+        if isinstance(original_content, list):
+            original_text = "\n".join(
+                seg.get("text", "")
+                for seg in original_content
+                if seg.get("type") == "text"
+            )
+        else:
+            original_text = str(original_content)
+
+        combined_text = f"{block_text}\n\n{original_text}" if original_text else block_text
         result[-1] = {
             **last_msg,
             "content": [{"type": "text", "text": combined_text}],
@@ -1461,6 +1631,8 @@ class SageAgent:
         max_iterations: Optional[int] = None,
         llm_config: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
+        dynamic_budget: Optional[bool] = None,
+        initial_iteration_budget: Optional[int] = None,
     ):
         """ReAct 主循环。
 
@@ -1476,6 +1648,11 @@ class SageAgent:
                 如果同时存在 self.llm_client,会临时覆盖并在循环结束后恢复。
             session_id: 可选的会话归因 (L8, 批次 C) —— 注入 llm_client 供
                 usage_tracker 落库 usage_events;None 时用量记为 unattributed。
+            dynamic_budget: 显式覆盖动态预算开关。True = 强制启用（即使全局
+                max_iterations 被用户自定义）；False = 强制关闭。
+                None = 按设置页/env 默认。
+            initial_iteration_budget: 动态预算的初始步数覆盖（如委派子代理
+                使用 ``max_subagent_iterations`` 作为起点）。仅 dynamic 生效时使用。
 
         Yields:
             AgentEvent:状态机事件,前端通过流式响应(NDJSON)接收。每个事件携带
@@ -1516,10 +1693,41 @@ class SageAgent:
         tool_sig_counts: Dict[str, int] = {}
         repeat_nudged: set = set()
 
+        # 2026-10-31/11-01: 动态迭代预算。开关 = env 开关 AND 设置页开关；
+        # 参数优先级 env > 设置页 > 代码默认（env 保留 CI/运维覆盖能力）。
+        _dynamic_budget_env_enabled = (
+            os.getenv("SAGE_DYNAMIC_ITERATION_BUDGET", "1").strip().lower()
+            not in ("0", "false", "off", "no")
+        )
+        _orch_settings = None
+        try:
+            from backend.orchestration.orch_settings import load_orch_settings
+
+            _orch_settings = load_orch_settings()
+        except Exception:  # noqa: BLE001 — settings 读取失败回落 env/默认
+            _orch_settings = None
+        _budget_config = BudgetConfig.from_settings(_orch_settings)
+        _dynamic_budget_enabled = (
+            dynamic_budget is not False
+            and _dynamic_budget_env_enabled
+            and bool(getattr(_orch_settings, "dynamic_budget_enabled", True))
+        )
+        _budget_level: BudgetLevel = "medium"
+        _dynamic_budget_active = False
+        _profile_max_iterations: Optional[int] = None
+        if isinstance(self.profile, dict):
+            try:
+                _profile_max_iterations = int(self.profile.get("max_iterations"))
+            except (TypeError, ValueError):
+                _profile_max_iterations = None
+
         # 阶段 1: max_iterations 优先级：
-        # 1. 显式传入的 max_iterations 参数（最高优先级）
-        # 2. OrchSettings.max_iterations（UI 可配置，2026-10-20 新增）
-        # 3. AgentProfile.max_iterations（profile 硬编码默认值）
+        # 1. 显式传入的 max_iterations 参数（最高优先级，硬上限，不自动延长）
+        # 2. OrchSettings.max_iterations：
+        #    - 0    → 按 profile 分别设置（沿用旧语义，不自动延长）
+        #    - 25   → 默认值 = 用户未显式配置，启用动态预算
+        #    - 其他 → 用户显式设置，作为硬上限，不自动延长
+        # 3. AgentProfile.max_iterations
         # 4. DEFAULT_MAX_ITERATIONS（兜底值 10）
         #
         # ``_limit_source`` 记录本次上限来自哪一层，随 FAILED 事件下发给前端，
@@ -1527,29 +1735,68 @@ class SageAgent:
         _profile_id = ""
         if isinstance(self.profile, dict):
             _profile_id = str(self.profile.get("id") or "")
-        if max_iterations is not None:
+        if max_iterations is not None and dynamic_budget is not True:
             effective_max_iterations = max_iterations
             _limit_source = "explicit"
         else:
-            try:
-                from backend.orchestration.orch_settings import load_orch_settings
-                orch_settings_max = load_orch_settings().max_iterations
-                if orch_settings_max > 0:
-                    effective_max_iterations = orch_settings_max
-                    _limit_source = "orch.global"
-                elif self.profile:
-                    effective_max_iterations = self.profile.get("max_iterations", DEFAULT_MAX_ITERATIONS)
-                    _limit_source = "profile"
+            _orch_settings_max: Optional[int] = (
+                getattr(_orch_settings, "max_iterations", None)
+                if _orch_settings is not None
+                else None
+            )
+
+            _force_dynamic = dynamic_budget is True
+            if _force_dynamic or (
+                _dynamic_budget_enabled
+                and _orch_settings_max == DEFAULT_ORCH_MAX_ITERATIONS
+            ):
+                if (
+                    isinstance(initial_iteration_budget, int)
+                    and not isinstance(initial_iteration_budget, bool)
+                    and initial_iteration_budget > 0
+                ):
+                    effective_max_iterations = min(
+                        int(initial_iteration_budget), _budget_config.hard_cap
+                    )
+                    _budget_level = "medium"
                 else:
-                    effective_max_iterations = DEFAULT_MAX_ITERATIONS
-                    _limit_source = "default"
-            except Exception:  # noqa: BLE001 — settings 读取失败回落 profile 默认
+                    # OrchSettings 的默认值（25）= 用户未显式配置迭代上限 →
+                    # 按任务分级给初始预算，到检查点再按进度自动延长。
+                    _user_message = ""
+                    for _m in reversed(messages):
+                        if (
+                            isinstance(_m, dict)
+                            and _m.get("role") == "user"
+                            and isinstance(_m.get("content"), str)
+                        ):
+                            _user_message = _m["content"]
+                            break
+                    _has_attachments = any(
+                        isinstance(_m.get("content"), (list, dict))  # noqa: UP038 — py3.8 兼容
+                        for _m in messages
+                        if isinstance(_m, dict)
+                    )
+                    effective_max_iterations, _budget_level = estimate_initial_budget(
+                        _user_message,
+                        has_attachments=_has_attachments,
+                        profile_floor=_profile_max_iterations,
+                        config=_budget_config,
+                    )
+                _dynamic_budget_active = True
+                _limit_source = "dynamic"
+            elif _orch_settings_max is not None and _orch_settings_max > 0:
+                effective_max_iterations = _orch_settings_max
+                _limit_source = "orch.global"
+            elif self.profile:
                 effective_max_iterations = (
-                    self.profile.get("max_iterations", DEFAULT_MAX_ITERATIONS)
-                    if self.profile
+                    _profile_max_iterations
+                    if _profile_max_iterations is not None
                     else DEFAULT_MAX_ITERATIONS
                 )
-                _limit_source = "profile" if self.profile else "default"
+                _limit_source = "profile"
+            else:
+                effective_max_iterations = DEFAULT_MAX_ITERATIONS
+                _limit_source = "default"
         # 无 profile 时退到 agent_id，保证错误文本里始终能指出是哪个 agent。
         _limit_agent_id = _profile_id or str(self.agent_id or "")
 
@@ -1606,8 +1853,144 @@ class SageAgent:
                 f"如需其余部分请用更精确的查询/offset 重试]"
             )
 
+        _loop_hard_cap = (
+            max(int(effective_max_iterations), _budget_config.hard_cap)
+            if _dynamic_budget_active
+            else int(effective_max_iterations)
+        )
+        _step_history: List[Any] = []
+        _seen_result_hashes: set = set()
+        _budget_extensions = 0
+        _auto_continue = False
+        _budget_stop_reason: Optional[str] = None
+        _iter_message_start: Optional[int] = None
+
         try:
-            for i in range(effective_max_iterations):
+            for i in range(_loop_hard_cap):
+                # 2026-10-31 动态迭代预算: 先结算上一步，再判断是否到达检查点。
+                # 从 messages 增量推导 StepRecord，避免改动所有工具分支。
+                if _iter_message_start is not None:
+                    _step_history.append(
+                        build_step_record(
+                            i - 1,
+                            messages[_iter_message_start :],
+                            _seen_result_hashes,
+                        )
+                    )
+                if i >= effective_max_iterations:
+                    if not _dynamic_budget_active:
+                        break
+                    _audit = audit_window(
+                        _step_history[-_budget_config.window :], _budget_config
+                    )
+                    _decision = decide_budget(
+                        int(effective_max_iterations),
+                        _audit,
+                        _budget_extensions,
+                        _budget_config,
+                    )
+                    _chunk = max(
+                        _budget_config.min_extension,
+                        min(
+                            _budget_config.max_extension,
+                            int(effective_max_iterations * _budget_config.extension_ratio),
+                        ),
+                    )
+                    _next_budget = min(
+                        _budget_config.hard_cap,
+                        max(
+                            int(effective_max_iterations) + 1,
+                            int(effective_max_iterations) + _chunk,
+                        ),
+                    )
+                    if _decision.action == "extend" or _auto_continue:
+                        if _next_budget <= effective_max_iterations:
+                            _budget_stop_reason = "hard_cap"
+                            break
+                        _previous_budget = int(effective_max_iterations)
+                        effective_max_iterations = _next_budget
+                        _budget_extensions += 1
+                        _info = build_budget_info(
+                            level=_budget_level,
+                            previous_budget=_previous_budget,
+                            next_budget=effective_max_iterations,
+                            extensions=_budget_extensions,
+                            audit=_audit,
+                        )
+                        _info["action"] = "auto_extend" if _auto_continue else "extend"
+                        yield AgentEvent(
+                            state=AgentState.ITERATION_CHECKPOINT,
+                            iteration=i,
+                            agent_id=self.agent_id,
+                            budget_info=_info,
+                        )
+                    else:
+                        # 2026-11-01 P1: 交互式「继续 / 自动继续 / 停止」。
+                        # 复用 ask_user_question 闸口与 QuestionDialog —— 仅主
+                        # agent 在闸口可用时询问；子代理/无人值守直接停止。
+                        _can_ask = (
+                            _decision.reason != "hard_cap"
+                            and str(self.agent_id or "") in ("", "primary")
+                            and get_question_gate() is not None
+                            and _next_budget > effective_max_iterations
+                        )
+                        if not _can_ask:
+                            _budget_stop_reason = _decision.reason
+                            break
+                        _question = QuestionRequest.create(
+                            question=(
+                                f"动态迭代预算已用完（当前上限 "
+                                f"{int(effective_max_iterations)} 步；"
+                                f"原因：{_decision.reason}）。是否继续执行？"
+                            ),
+                            options=[
+                                {
+                                    "label": "继续 Continue（再延长一次）",
+                                    "description": f"上限提高到 {_next_budget} 步",
+                                },
+                                {
+                                    "label": "自动继续 Auto-continue",
+                                    "description": "后续自动延长直到硬顶，不再询问",
+                                },
+                                {
+                                    "label": "停止 Stop",
+                                    "description": "保留当前进度并结束本次运行",
+                                },
+                            ],
+                            header="迭代预算",
+                        )
+                        yield AgentEvent(
+                            state=AgentState.ASK_USER_QUESTION,
+                            iteration=i,
+                            agent_id=self.agent_id,
+                            user_question=_question.to_dict(),
+                        )
+                        _answer = await self._await_question_answer(_question)
+                        _labels = [str(label).strip() for label in _answer.answers]
+                        _auto = any("自动" in label for label in _labels)
+                        _go = _auto or any("继续" in label for label in _labels)
+                        if not _go:
+                            _budget_stop_reason = "user_stopped"
+                            break
+                        _previous_budget = int(effective_max_iterations)
+                        effective_max_iterations = _next_budget
+                        _budget_extensions += 1
+                        if _auto:
+                            _auto_continue = True
+                        _info = build_budget_info(
+                            level=_budget_level,
+                            previous_budget=_previous_budget,
+                            next_budget=effective_max_iterations,
+                            extensions=_budget_extensions,
+                            audit=_audit,
+                        )
+                        _info["action"] = "auto_extend" if _auto else "user_extend"
+                        yield AgentEvent(
+                            state=AgentState.ITERATION_CHECKPOINT,
+                            iteration=i,
+                            agent_id=self.agent_id,
+                            budget_info=_info,
+                        )
                 # P0-1 (2026-08-20): 中断检查 —— 每轮迭代顶部消费一次中断信号（one-shot）。
                 # 此前 interrupt() 只置标志位、is_interrupted() 零调用者，run_loop 从不读，
                 # 中断请求完全无效。现在最迟在下一轮迭代开头终止：发 FAILED 事件，
@@ -1639,6 +2022,9 @@ class SageAgent:
                     messages, i, _compact_failures
                 )
 
+                # 动态预算: 记录本轮消息起点（steering/压缩之后），下一轮顶部
+                # 用 messages[_iter_message_start:] 生成本 step 的进度快照。
+                _iter_message_start = len(messages)
                 yield AgentEvent(state=AgentState.THINKING, iteration=i, agent_id=self.agent_id)
 
                 # Pass available tools to LLM so it can call them
@@ -2491,18 +2877,30 @@ class SageAgent:
                     agent_id=self.agent_id,
                 )
 
+            # 动态预算: 若循环因 hard cap 自然结束（未显式决定停止），补原因。
+            if _dynamic_budget_active and _budget_stop_reason is None:
+                _budget_stop_reason = "hard_cap"
             # agent= 只在能识别出 agent 时下发；空值会渲染成 "agent=, source=…"
             # 这种畸形装饰，前端解析器虽能容忍，但日志里很难看。
             _limit_agent_part = f", agent={_limit_agent_id}" if _limit_agent_id else ""
+            _budget_reason_part = (
+                f", reason={_budget_stop_reason}" if _budget_stop_reason else ""
+            )
+            _budget_extension_part = (
+                f", extensions={_budget_extensions}" if _budget_extensions else ""
+            )
             yield AgentEvent(
                 state=AgentState.FAILED,
                 iteration=effective_max_iterations,
                 # 上限值随错误码一并下发，前端据此提示用户
                 # "该调到多少"，而不是只说"超上限了"。
-                # agent= / source= 让前端能指出是哪个 Agent 打的哪个配置。
+                # agent= / source= 让前端能指出是哪个 Agent 打的哪个配置；
+                # reason= / extensions= 说明动态预算为何停止（stuck / no_progress /
+                # extension_limit / hard_cap）以及自动延长了几次。
                 error=(
                     f"max_iterations_exceeded (limit={effective_max_iterations}"
-                    f"{_limit_agent_part}, source={_limit_source})"
+                    f"{_limit_agent_part}, source={_limit_source}"
+                    f"{_budget_reason_part}{_budget_extension_part})"
                 ),
                 agent_id=self.agent_id,
             )

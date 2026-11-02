@@ -19,11 +19,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { EffectiveSettingsSummary } from './EffectiveSettingsSummary';
+import { SettingsPageHeader } from './components';
 import { initialSettingsTab } from './settingsNavigation';
 import { focusSettingsEntry, settingsGroups } from './settingsPresentation';
 import { loadSettingsRecents, pushSettingsRecent, saveSettingsRecents } from './settingsRecents';
 import { searchSettings, type SettingsSearchEntry } from './settingsSearchIndex';
 import { SETTINGS_TABS, findSettingsTab, type SettingsTabKey } from './settingsTabs';
+import './settings.css';
 
 export type SettingsTab = SettingsTabKey;
 
@@ -212,6 +214,8 @@ export function Settings() {
 
   // 内容面板由注册表决定 —— render 返回 JSX 元素，React 正常挂载组件。
   const activeTabDef = useMemo(() => findSettingsTab(activeTab), [activeTab]);
+  const activeTabLabel = activeTabDef ? t(activeTabDef.labelKey) : t('settings.title');
+  const activeTabDescription = t('settings.page_description').replace('{tab}', activeTabLabel);
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -308,7 +312,7 @@ export function Settings() {
             <section key={group.id}>
               <div
                 data-testid={`settings-group-${group.id}`}
-                className="px-3 py-1 text-ui-2xs font-medium text-muted uppercase tracking-wide"
+                className="px-3 py-1 text-ui-xs font-semibold text-muted"
               >
                 {group.label}
               </div>
@@ -318,10 +322,11 @@ export function Settings() {
                     key={key}
                     type="button"
                     onClick={() => setActiveTab(key)}
+                    aria-current={activeTab === key ? 'page' : undefined}
                     className={clsx(
                       'w-full px-3 py-1.5 text-ui-sm rounded text-left transition-colors',
                       activeTab === key
-                        ? 'bg-primary/10 text-primary font-medium'
+                        ? 'bg-primary/10 text-primary font-medium ring-1 ring-primary/20'
                         : 'text-text-secondary hover:bg-bg-hover',
                     )}
                   >
@@ -336,17 +341,24 @@ export function Settings() {
 
       {/* Right content panel */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-3xl mx-auto" ref={contentRef}>
-            <EffectiveSettingsSummary />
-            {focusMissing && (
-              <p role="status" className="text-ui-sm text-warning mb-2">
-                {locale === 'en'
-                  ? 'The section is open, but the exact setting is unavailable or hidden by an advanced option.'
-                  : t('settings.search.focus_missing')}
-              </p>
-            )}
-            {activeTabDef?.render()}
+        <div className="flex-1 overflow-y-auto">
+          <div className="sticky top-0 z-10 border-b border-line bg-bg/95 px-6 py-4 backdrop-blur">
+            <div className="max-w-3xl mx-auto">
+              <SettingsPageHeader title={activeTabLabel} description={activeTabDescription} />
+            </div>
+          </div>
+          <div className="p-6">
+            <div className="max-w-3xl mx-auto space-y-6 settings-content" ref={contentRef}>
+              <EffectiveSettingsSummary />
+              {focusMissing && (
+                <p role="status" className="text-ui-sm text-warning mb-2">
+                  {locale === 'en'
+                    ? 'The section is open, but the exact setting is unavailable or hidden by an advanced option.'
+                    : t('settings.search.focus_missing')}
+                </p>
+              )}
+              {activeTabDef?.render()}
+            </div>
           </div>
         </div>
       </div>

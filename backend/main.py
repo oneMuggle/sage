@@ -78,6 +78,7 @@ from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapt
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.artifact_routes import router as artifact_router
+from backend.api.browser_extension_routes import router as browser_extension_router
 from backend.api.chat_attachment_routes import router as chat_attachment_router
 from backend.api.chat_stream_registry import StreamRegistry
 
@@ -101,6 +102,7 @@ from backend.api.local_auth import (
 from backend.api.mcp_routes import router as mcp_router
 from backend.api.media_routes import router as media_router
 from backend.api.model_catalog_routes import build_router as build_model_catalog_router
+from backend.api.ocr_routes import router as ocr_router
 from backend.api.office_quarantine_routes import router as office_quarantine_router
 from backend.api.office_routes import (
     register_office_exception_handlers,
@@ -108,6 +110,7 @@ from backend.api.office_routes import (
 )
 from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.permission_routes import router as permission_router
+from backend.api.playbook_routes import router as playbook_router
 from backend.api.plugin_routes import router as plugin_router
 from backend.api.project_ai_routes import router as project_ai_router
 from backend.api.project_routes import router as project_router
@@ -1111,6 +1114,16 @@ app.add_middleware(
     limits={
         "/api/v1/skills/import": 12 * 1024 * 1024,
         "/api/v1/skills/import-directory": 12 * 1024 * 1024,
+        # Browser-extension bridge.  Pairing/poll/detach are small and are
+        # public to LocalAuthMiddleware, so cap them before Pydantic parses
+        # the body.  Command results may carry screenshots (8 MiB protocol
+        # cap + JSON envelope); session snapshots are capped at 500 cookies
+        # + 50 origins by the service layer.
+        "/api/v1/web-access/extension/pair": 64 * 1024,
+        "/api/v1/web-access/extension/poll": 64 * 1024,
+        "/api/v1/web-access/extension/detach": 16 * 1024,
+        "/api/v1/web-access/extension/result": 9 * 1024 * 1024,
+        "/api/v1/web-access/extension/sync-session": 2 * 1024 * 1024,
     },
 )
 
@@ -1149,6 +1162,8 @@ API_MODE = os.environ.get("API_MODE", "legacy").lower()
 app.include_router(llm_proxy_router, prefix="/api/v1")
 app.include_router(theme_router, prefix="/api/v1/theme")
 app.include_router(office_router, prefix="/api/v1")
+# 本地 OCR：/api/v1/ocr/capabilities + /api/v1/ocr/image
+app.include_router(ocr_router, prefix="/api/v1")
 # Office 隔离式清理 (staging quarantine): plan/run/report/restore 四端点。
 # 有意不注册 purge —— 永久删除仍只保留 CLI 三重门禁（见模块 docstring）。
 app.include_router(office_quarantine_router, prefix="/api/v1")
@@ -1167,9 +1182,13 @@ app.include_router(worktree_router, prefix="/api/v1")
 app.include_router(project_router, prefix="/api/v1")
 # AI 增强 M1 (2026-10-12): /api/v1/projects/{id}/ai/decompose-tasks/*
 app.include_router(project_ai_router, prefix="/api/v1")
+# 项目规程 (2026-10-31): /api/v1/playbooks/* 与 /api/v1/projects/{id}/playbook/*
+app.include_router(playbook_router, prefix="/api/v1")
 # M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}
 app.include_router(permission_router, prefix="/api/v1")
 app.include_router(web_access_router, prefix="/api/v1")
+# 外部日常浏览器扩展桥: /api/v1/web-access/{extension,browser-extension}/*
+app.include_router(browser_extension_router, prefix="/api/v1")
 # M6 生态扩展 Phase 1: /api/v1/hooks/builtins 内置钩子元数据 (设置页"推荐 Hook")
 app.include_router(hooks_router, prefix="/api/v1")
 # R82: /api/v1/plugins 插件生命周期记录 REST（代码托管留待 R83）

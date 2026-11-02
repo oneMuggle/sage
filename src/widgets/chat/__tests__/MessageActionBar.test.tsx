@@ -54,11 +54,14 @@ describe('MessageActionBar progressive disclosure', () => {
     expect(secondary.querySelector('[data-testid="delete-message"]')).not.toBeNull();
 
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(secondary.className).toContain('hidden');
+    // 2026-11-01: hover 时不再 hidden/flex 切换布局；保留占位（invisible +
+    // pointer-events-none），按钮位置固定，避免误触。
+    expect(secondary.className).toContain('invisible');
+    expect(secondary.className).toContain('pointer-events-none');
 
     fireEvent.click(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(secondary.className).not.toContain('hidden');
+    expect(secondary.className).not.toContain('invisible');
 
     fireEvent.click(screen.getByTestId('fork-message'));
     expect(onFork).toHaveBeenCalledWith('msg-1');

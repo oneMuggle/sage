@@ -23,10 +23,10 @@ pytestmark = pytest.mark.unit
 # ---------------------- 枚举值 & 字符串继承 ----------------------
 
 
-def test_agent_state_enum_has_fourteen_states():
-    """状态机应有 14 个状态:IDLE/THINKING/REASONING/ACTING/OBSERVING/
+def test_agent_state_enum_has_fifteen_states():
+    """状态机应有 15 个状态:IDLE/THINKING/REASONING/ACTING/OBSERVING/
     CONTENT_DELTA/RETRY/HEARTBEAT/PERMISSION_REQUEST/ASK_USER_QUESTION/STEP_DONE/
-    AWAITING_STEP_CONFIRM/DONE/FAILED。
+    ITERATION_CHECKPOINT/AWAITING_STEP_CONFIRM/DONE/FAILED。
 
     CONTENT_DELTA 由 I4 引入,用于流式 LLM 响应 — 每个 token chunk 推一个
     CONTENT_DELTA 事件,前端 appendContent 累积实现逐字渲染。
@@ -44,7 +44,7 @@ def test_agent_state_enum_has_fourteen_states():
     AWAITING_STEP_CONFIRM 由 Plan Mode 增强 (2026-10-28) 引入 — 破坏性步骤
     执行前暂停,等待用户 continue/skip/abort。
     """
-    assert len(AgentState) == 14
+    assert len(AgentState) == 15
 
 
 def test_agent_state_enum_string_inheritance():
@@ -89,6 +89,7 @@ def test_agent_state_iteration_order():
         "permission_request",  # M1 工具安全加固
         "ask_user_question",  # M2 part B: AskUserQuestion
         "step_done",  # step-by-step ReAct: 每步完成信号
+        "iteration_checkpoint",  # 2026-10-31: 动态迭代预算检查点
         "awaiting_step_confirm",  # 2026-10-28 Plan Mode 增强：步骤级确认
         "done",
         "failed",

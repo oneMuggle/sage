@@ -15,6 +15,7 @@ Claude Code 项目 → 会话归属）。路由面涵盖：
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -282,6 +283,36 @@ def update_project(project_id: str, request: ProjectUpdateRequest) -> ProjectMod
         repo.update_project_type(project_id, request.project_type)
     if "project_stage" in fields_set:
         repo.update_project_stage(project_id, request.project_stage)
+        # Keep playbook state/history and projected rules consistent when the
+        # legacy stage selector is used.
+        try:
+            from backend.data.playbook_repo import PlaybookRepository
+            from backend.services.playbook_actions import project_playbook_rules
+
+            playbook_repo = PlaybookRepository()
+            snapshot = playbook_repo.get_active(project_id)
+            if snapshot is not None:
+                state = playbook_repo.get_state(project_id)
+                history = list(state.get("stage_history") or [])
+                history.append(
+                    {
+                        "from": state.get("current_stage"),
+                        "to": request.project_stage,
+                        "at": int(time.time() * 1000),
+                        "source": "project_update",
+                    }
+                )
+                state["current_stage"] = request.project_stage
+                state["stage_history"] = history[-100:]
+                playbook_repo.update_state(project_id, state)
+                if request.project_stage:
+                    project_playbook_rules(
+                        project_id, snapshot.spec, stage_id=request.project_stage
+                    )
+        except Exception:  # noqa: BLE001 — stage update must not fail on playbook sync
+            logging.getLogger(__name__).warning(
+                "failed to sync playbook stage for %s", project_id, exc_info=True
+            )
     if "project_sub_type" in fields_set:
         repo.update_project_sub_type(project_id, request.project_sub_type)
     if "vcs_mode" in fields_set and request.vcs_mode:

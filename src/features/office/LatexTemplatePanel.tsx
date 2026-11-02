@@ -9,15 +9,13 @@ import {
 } from '../../shared/api/latexApi';
 import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 
-function joinWorkspacePath(root: string, relative: string): string {
-  const rel = relative.trim().replace(/^[\\/]+/, '');
-  if (!rel) return '';
-  if (/^([a-zA-Z]:[\\/]|[\\/])/.test(rel)) return rel;
-  const separator = root.includes('\\') ? '\\' : '/';
-  return `${root.replace(/[\\/]+$/, '')}${separator}${rel}`;
-}
+import { LatexPathPicker } from './LatexPathPicker';
+import { joinWorkspacePath } from './latexPath';
 
 function defaultValue(slot: LatexTemplateSlot): string {
+  if (slot.type === 'image' || slot.type === 'bibliography') {
+    return /^(<<|\[\[|【)/.test(slot.current_value) ? '' : slot.current_value;
+  }
   if (slot.type === 'list') {
     return slot.current_value
       .split(/\s*(?:,|，|;|；|\\and)\s*/)
@@ -75,9 +73,7 @@ export function LatexTemplatePanel({ workspacePath: wsOverride }: LatexTemplateP
         joinWorkspacePath(workspacePath!, templatePath),
       );
       setProfile(result);
-      setValues(
-        Object.fromEntries(result.slots.map((slot) => [slot.name, defaultValue(slot)])),
-      );
+      setValues(Object.fromEntries(result.slots.map((slot) => [slot.name, defaultValue(slot)])));
       setOutputName(defaultOutputName(templatePath));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -92,10 +88,7 @@ export function LatexTemplatePanel({ workspacePath: wsOverride }: LatexTemplateP
     setError(null);
     try {
       const data = Object.fromEntries(
-        profile.slots.map((slot) => [
-          slot.name,
-          toDataValue(slot, values[slot.name] ?? ''),
-        ]),
+        profile.slots.map((slot) => [slot.name, toDataValue(slot, values[slot.name] ?? '')]),
       );
       const result = await fillLatexTemplate(
         workspacePath!,
@@ -124,12 +117,14 @@ export function LatexTemplatePanel({ workspacePath: wsOverride }: LatexTemplateP
       </header>
 
       <div className="flex gap-2">
-        <input
-          className="flex-1 rounded border border-border bg-bg px-2 py-1 text-sm"
-          placeholder="paper/main.tex"
+        <LatexPathPicker
           value={templatePath}
-          onChange={(event) => setTemplatePath(event.target.value)}
-          data-testid="latex-template-path"
+          onChange={setTemplatePath}
+          title="选择 LaTeX 模板"
+          extensions={['tex', 'ltx']}
+          placeholder="paper/main.tex"
+          testId="latex-template-path"
+          className="flex-1"
         />
         <button
           type="button"
@@ -171,6 +166,13 @@ export function LatexTemplatePanel({ workspacePath: wsOverride }: LatexTemplateP
               ) : (
                 <input
                   className="rounded border border-border bg-bg px-2 py-1 text-sm"
+                  placeholder={
+                    slot.type === 'image'
+                      ? '工作区图片路径，如 figures/arch.png'
+                      : slot.type === 'bibliography'
+                        ? '工作区 .bib 路径，如 refs.bib'
+                        : undefined
+                  }
                   value={values[slot.name] ?? ''}
                   onChange={(event) =>
                     setValues((current) => ({ ...current, [slot.name]: event.target.value }))
@@ -181,6 +183,8 @@ export function LatexTemplatePanel({ workspacePath: wsOverride }: LatexTemplateP
               <span className="text-xs text-muted">
                 当前值：{slot.current_value || '（空）'}
                 {slot.type === 'list' ? ' · 多个值用逗号分隔' : ''}
+                {slot.type === 'image' ? ' · 图片会复制到输出目录旁的 *_assets' : ''}
+                {slot.type === 'bibliography' ? ' · .bib 会复制到输出目录旁的 *_assets' : ''}
               </span>
             </label>
           ))}
@@ -217,6 +221,16 @@ export function LatexTemplatePanel({ workspacePath: wsOverride }: LatexTemplateP
           {fillResult.unfilled_slots.length > 0 ? (
             <div className="text-xs text-muted mt-1">
               未填：{fillResult.unfilled_slots.join(', ')}
+            </div>
+          ) : null}
+          {fillResult.images_copied && fillResult.images_copied.length > 0 ? (
+            <div className="text-xs text-muted mt-1">
+              图片：{fillResult.images_copied.join(', ')}
+            </div>
+          ) : null}
+          {fillResult.bibliographies_copied && fillResult.bibliographies_copied.length > 0 ? (
+            <div className="text-xs text-muted mt-1">
+              文献：{fillResult.bibliographies_copied.join(', ')}
             </div>
           ) : null}
           {fillResult.validation.issues.length > 0 ? (

@@ -32,7 +32,12 @@ import type {
   OfficeManagedRef,
   PickedOfficeFile,
   PetConfigBridge,
+  PetApiInfoBridge,
   PetElectronApiBridge,
+  PetPackDeleteResultBridge,
+  PetPackExportResultBridge,
+  PetPackImportResultBridge,
+  PetPackManifestBridge,
   PetSnapshotBridge,
   ProvidersElectronApiBridge,
   PtyElectronApiBridge,
@@ -242,6 +247,9 @@ const electronAPI = {
       files?: { name: string; sha256: string }[];
     }) => ipcRenderer.invoke('models:embedder:download', payload ?? {}),
     cancel: (dirName: string) => ipcRenderer.invoke('models:embedder:cancel', dirName),
+    downloadOcr: () => ipcRenderer.invoke('models:ocr:download', {}),
+    cancelOcr: () => ipcRenderer.invoke('models:ocr:cancel', 'rapidocr'),
+    resetOcr: () => ipcRenderer.invoke('models:ocr:reset'),
   },
 
   /**
@@ -808,12 +816,25 @@ const electronAPI = {
     setPanel: (open: boolean) => {
       ipcRenderer.send('pet:set-panel', { open });
     },
+    togglePanel: () => {
+      ipcRenderer.send('pet:toggle-panel');
+    },
     pat: () => {
       ipcRenderer.send('pet:pat');
+    },
+    reportTasks: (tasks) => {
+      ipcRenderer.send('pet:report-tasks', tasks);
     },
     hide: () => {
       ipcRenderer.send('pet:hide');
     },
+    listPacks: () => ipcRenderer.invoke('pet:list-packs') as Promise<PetPackManifestBridge[]>,
+    getApiInfo: () => ipcRenderer.invoke('pet:api-info') as Promise<PetApiInfoBridge>,
+    importPack: () => ipcRenderer.invoke('pet:import-pack') as Promise<PetPackImportResultBridge>,
+    exportPack: (id) =>
+      ipcRenderer.invoke('pet:export-pack', { id }) as Promise<PetPackExportResultBridge>,
+    deletePack: (id) =>
+      ipcRenderer.invoke('pet:delete-pack', { id }) as Promise<PetPackDeleteResultBridge>,
   } satisfies PetElectronApiBridge,
 
   /**

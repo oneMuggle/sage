@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sage Browser Bridge</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="brand">
+        <span class="dot"></span>
+        <strong>Sage Browser Bridge</strong>
+      </div>
+      <span id="state-badge" class="badge">未配对</span>
+    </header>
+
+    <div id="error" class="error" hidden></div>
+
+    <section id="pair-view" class="view" hidden>
+      <p class="hint">
+        在 Sage「设置 → 网络 → 日常浏览器扩展」中生成配对码，然后粘贴到这里。
+      </p>
+      <label class="field">
+        <span>Sage 后端地址</span>
+        <input id="base-url" type="text" value="http://127.0.0.1:8765" />
+      </label>
+      <label class="field">
+        <span>配对码</span>
+        <input id="pair-code" type="text" maxlength="16" placeholder="10 位配对码" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>设备名称（可选）</span>
+        <input id="pair-label" type="text" maxlength="64" placeholder="例如：我的 Chrome" />
+      </label>
+      <button id="pair-btn" class="primary" type="button">配对</button>
+    </section>
+
+    <section id="device-view" class="view" hidden>
+      <div class="device-line">
+        <span id="device-label" class="device-label"></span>
+        <button id="forget-btn" class="link" type="button">解除配对</button>
+      </div>
+
+      <div id="tab-card" class="card">
+        <div id="tab-title" class="tab-title">当前标签页</div>
+        <div id="tab-origin" class="tab-origin"></div>
+        <div id="share-hint" class="hint"></div>
+        <div class="actions">
+          <button id="share-btn" class="primary" type="button">共享此标签页</button>
+          <button id="stop-btn" class="secondary" type="button" hidden>停止共享</button>
+        </div>
+      </div>
+
+      <button id="sync-btn" class="secondary full" type="button" disabled>
+        保存登录状态到 Sage
+      </button>
+      <p class="hint small">
+        共享期间 Sage 可以读取和操作这个标签页；随时点「停止共享」即可断开。
+        保存登录状态会把当前站点的 Cookie 与 localStorage 加密写入 Sage，供以后抓取复用。
+      </p>
+    </section>
+
+    <section id="status-view" class="view">
+      <p class="hint">正在读取状态…</p>
+    </section>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

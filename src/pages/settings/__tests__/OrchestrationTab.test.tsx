@@ -64,6 +64,14 @@ describe('OrchestrationTab 渲染', () => {
     // RD16 (round26): 后端键集全量对齐的最后两个旋钮
     expect(screen.getByTestId('orch-worktree-isolation')).toBeInTheDocument();
     expect(screen.getByTestId('orch-scratch-root')).toBeInTheDocument();
+    // 2026-11-01: 动态迭代预算（P1 设置页暴露）
+    expect(screen.getByTestId('orch-dynamic-budget-enabled')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-budget-simple')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-budget-medium')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-budget-complex')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-budget-long')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-budget-hard-cap')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-budget-max-extensions')).toBeInTheDocument();
   });
 
   it('守门键默认值与后端 OrchSettings 对齐（RD15）', () => {

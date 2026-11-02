@@ -117,6 +117,7 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
     from backend.data.settings_canonicalizer import (
         classify_settings_shape_field,
         classify_settings_validation_error,
+        preserve_endpoint_api_keys,
         strip_unknown_fields,
         to_camel,
         validate_settings_payload,
@@ -150,6 +151,9 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
     # payload 侧的未知字段仍原样保留并触发 400（与 hex PUT 对齐）。
     camel_existing = strip_unknown_fields(to_camel(existing))
     camel_merged = {**camel_existing, **to_camel(payload)}
+    # 2026-11-01: GET 脱敏后的 apiKey 是空串; 客户端编辑其它字段回传时不能
+    # 把后端已存的真实 key 覆盖为空 —— 空 apiKey 视为"保持不变".
+    camel_merged = preserve_endpoint_api_keys(camel_merged, camel_existing)
     # Task 1 (2026-08-23): 写入前给旧 endpoints (无 protocol) 补默认值, 与 GET 路径对齐.
     _migrate_default_protocol(camel_merged)
     # Task 1 round 1 (2026-08-24): 显式跑 timezone / protocol / localModelPath

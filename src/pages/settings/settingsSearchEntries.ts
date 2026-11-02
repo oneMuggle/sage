@@ -5,6 +5,7 @@
  * 查询/格式化/治理函数仍在 `settingsSearchIndex.ts`，对外 API 不变。
  */
 
+import { BROWSER_EXTENSION_SETTINGS_SEARCH_ENTRIES } from './settingsSearchEntriesBrowserExtension';
 import { PET_SETTINGS_SEARCH_ENTRIES } from './settingsSearchEntriesPet';
 import type { SettingsTabKey } from './settingsTabs';
 
@@ -329,6 +330,56 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: 'Agent 迭代次数上限',
     labelEn: 'Agent iterations limit',
     keywords: 'orch 编排 agent 迭代 上限 maxiterations',
+  },
+  // 2026-11-01: 动态迭代预算（P1 设置页暴露）。
+  {
+    key: 'orch.dynamicBudgetEnabled',
+    tab: 'orchestration',
+    label: '动态迭代预算',
+    labelEn: 'Dynamic iteration budget',
+    keywords: 'orch 编排 动态 迭代 预算 自动延长 dynamicbudgetenabled',
+  },
+  {
+    key: 'orch.budgetSimple',
+    tab: 'orchestration',
+    label: '简单任务初始预算',
+    labelEn: 'Simple task initial budget',
+    keywords: 'orch 编排 预算 简单 simple budget',
+  },
+  {
+    key: 'orch.budgetMedium',
+    tab: 'orchestration',
+    label: '中等任务初始预算',
+    labelEn: 'Medium task initial budget',
+    keywords: 'orch 编排 预算 中等 medium budget',
+  },
+  {
+    key: 'orch.budgetComplex',
+    tab: 'orchestration',
+    label: '复杂任务初始预算',
+    labelEn: 'Complex task initial budget',
+    keywords: 'orch 编排 预算 复杂 complex budget',
+  },
+  {
+    key: 'orch.budgetLong',
+    tab: 'orchestration',
+    label: '长任务初始预算',
+    labelEn: 'Long task initial budget',
+    keywords: 'orch 编排 预算 长任务 long budget',
+  },
+  {
+    key: 'orch.budgetHardCap',
+    tab: 'orchestration',
+    label: '自动延长硬顶',
+    labelEn: 'Extension hard cap',
+    keywords: 'orch 编排 硬顶 上限 hardcap budget',
+  },
+  {
+    key: 'orch.budgetMaxExtensions',
+    tab: 'orchestration',
+    label: '最大自动延长次数',
+    labelEn: 'Max auto extensions',
+    keywords: 'orch 编排 自动延长 次数 extensions budget',
   },
   {
     key: 'orch.maxConcurrentSubagents',
@@ -791,4 +842,5 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   },
   // ── 桌宠 ──
   ...PET_SETTINGS_SEARCH_ENTRIES,
+  ...BROWSER_EXTENSION_SETTINGS_SEARCH_ENTRIES,
 ];

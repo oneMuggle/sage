@@ -8,6 +8,8 @@ import {
   AdvancedSection,
   ApplyModeBadge,
   SettingRow,
+  SettingsPageHeader,
+  SettingsSection,
   Toggle,
   formatSettingRowAuditJson,
   formatSettingRowAuditSnapshot,
@@ -144,5 +146,24 @@ describe('SettingRow 搜索锚点 (P1-4)', () => {
     );
     expect(screen.queryByTestId('setting-row-audit-copy')).not.toBeInTheDocument();
     expect(screen.queryByTestId('setting-row-audit-copy-json')).not.toBeInTheDocument();
+  });
+});
+
+describe('Settings 标题层级 (2026-11-01)', () => {
+  it('页面级 h1 与分组 h2 使用不同层级', () => {
+    renderZh(
+      <div>
+        <SettingsPageHeader title="编排" description="管理编排设置" />
+        <SettingsSection title="并发与迭代">
+          <div>内容</div>
+        </SettingsSection>
+      </div>,
+    );
+
+    const h1 = screen.getByRole('heading', { level: 1 });
+    const h2 = screen.getByRole('heading', { level: 2 });
+    expect(h1.textContent).toBe('编排');
+    expect(h2.textContent).toBe('并发与迭代');
+    expect(screen.getByText('管理编排设置')).toBeInTheDocument();
   });
 });

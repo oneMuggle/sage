@@ -49,6 +49,10 @@ vi.mock('../features/project-type/StudioMaterialsAndProfilePanels', () => ({
   StudioProfileTabPanel: () => <div data-testid="profile-panel-stub" />,
 }));
 
+vi.mock('../features/playbook/PlaybookCard', () => ({
+  PlaybookCard: () => <div data-testid="playbook-card-stub" />,
+}));
+
 vi.mock('../features/project-type/archetypeBlueprints', () => ({
   ARCHETYPE_ORDER: ['coding', 'business', 'research', 'personal'],
   ARCHETYPE_BLUEPRINTS: {

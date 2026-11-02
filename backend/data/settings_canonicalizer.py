@@ -85,6 +85,15 @@ ALIASES: Dict[str, str] = {
     # - logTimezone / useFolderPicker: 通用 Tab / Wiki Tab 保存 400
     #   (同类 pre-existing 回归, 一并补齐)。
     "max_iterations": "maxIterations",
+    # 2026-11-01: 动态迭代预算（OrchSettings P1）。relay 会把 orch 子层整体
+    # 转 snake，缺别名时保存 400 被前端静默吞掉。
+    "dynamic_budget_enabled": "dynamicBudgetEnabled",
+    "budget_simple": "budgetSimple",
+    "budget_medium": "budgetMedium",
+    "budget_complex": "budgetComplex",
+    "budget_long": "budgetLong",
+    "budget_hard_cap": "budgetHardCap",
+    "budget_max_extensions": "budgetMaxExtensions",
     "log_timezone": "logTimezone",
     "use_folder_picker": "useFolderPicker",
     # 2026-10-25: LLM 重试参数 — 前端发送 camelCase，但某些中间层可能转成 snake_case，
@@ -226,6 +235,14 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "maxRetryOfChains",
         # 2026-10-20 全局迭代上限 (0=按各 agent 分别设置)
         "maxIterations",
+        # 2026-11-01: 动态迭代预算（P1 设置页暴露）。
+        "dynamicBudgetEnabled",
+        "budgetSimple",
+        "budgetMedium",
+        "budgetComplex",
+        "budgetLong",
+        "budgetHardCap",
+        "budgetMaxExtensions",
         # 2026-10-27: 单 run 工具调用上限 (已在 OrchSettings/UI/ALIASES, 白名单
         # 漏加 → 编排段任一保存 400) + 计划前置/Planner 迭代预算。
         "maxToolCallsPerRun",
@@ -861,3 +878,45 @@ def classify_settings_shape_field(exc: ValueError) -> str:
     if match and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,63}", match.group(1)):
         return match.group(1)
     return classify_settings_shape_error(exc)
+
+
+def preserve_endpoint_api_keys(
+    merged: Dict[Any, Any], existing: Dict[str, Any]
+) -> Dict[Any, Any]:
+    """Keep stored endpoint apiKeys when a PUT blanks them.
+
+    GET responses redact ``apiKey`` to ``""`` (``hasApiKey`` marks presence),
+    so a client that edits any other endpoint field round-trips an empty
+    apiKey. Treat empty/missing as "unchanged" here; otherwise the redacted
+    round-trip would erase the credential from the database.
+    """
+    if not isinstance(merged, dict) or not isinstance(existing, dict):
+        return merged
+    merged_eps = merged.get("endpoints")
+    existing_eps = existing.get("endpoints")
+    if not isinstance(merged_eps, list) or not isinstance(existing_eps, list):
+        return merged
+    stored: Dict[Any, str] = {}
+    for ep in existing_eps:
+        if not isinstance(ep, dict):
+            continue
+        key = ep.get("apiKey")
+        if isinstance(key, str) and key.strip():
+            stored[ep.get("id")] = key
+    if not stored:
+        return merged
+    preserved: List[Any] = []
+    changed = False
+    for ep in merged_eps:
+        if not isinstance(ep, dict):
+            preserved.append(ep)
+            continue
+        key = ep.get("apiKey")
+        if (key is None or key == "") and ep.get("id") in stored:
+            preserved.append({**ep, "apiKey": stored[ep.get("id")]})
+            changed = True
+        else:
+            preserved.append(ep)
+    if not changed:
+        return merged
+    return {**merged, "endpoints": preserved}

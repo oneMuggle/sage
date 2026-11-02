@@ -52,6 +52,9 @@ class SettingsRepository:
             # 网页访问 Round 1: 站点 cookie 凭据档案 (JSON, cookie 经 SecretBox 加密)
             # 见 backend/tools/credential_vault.py
             "browser_credential_vault",
+            # 外部日常浏览器扩展桥: 已配对设备注册表 (JSON, 只存 token 的 SHA-256)
+            # 见 backend/services/browser_extension_bridge.py
+            "browser_extension_devices",
             # bash 工具运行参数: 超时/输出截断/后台会话上限 (JSON)
             # 见 backend/tools/bash_config.py
             "bash_config",
@@ -70,6 +73,9 @@ class SettingsRepository:
             # P11: 记忆检索嵌入器模式 ("onnx"/"hash")。
             # 读取口径见 backend/memory/embedder_factory._preferred_mode_from_settings
             "embedding_mode",
+            # 本地 OCR：引擎/语言/聊天兜底偏好（JSON blob）
+            # 读取口径见 backend/services/ocr/config.load_ocr_config
+            "ocr_config",
             # Context Isolation (Task 6): turn limit + topic detection keys
             # - context_turn_limit: int, applied by Task 7 turn-limit logic
             # - auto_topic_detection: "true"/"false", enables auto detection in Task 10

@@ -36,6 +36,15 @@ _RAW_KEYS = {
     "maxRetryOfChains": "max_retry_of_chains",
     "maxToolCallsPerRun": "max_tool_calls_per_run",
     "maxIterations": "max_iterations",  # 2026-10-20: primary agent 迭代次数上限
+    # 2026-11-01: 动态迭代预算（P1 设置页暴露）。键名与前端
+    # OrchSettings 逐字一致；漏加映射会导致 UI 保存后不生效。
+    "dynamicBudgetEnabled": "dynamic_budget_enabled",
+    "budgetSimple": "budget_simple",
+    "budgetMedium": "budget_medium",
+    "budgetComplex": "budget_complex",
+    "budgetLong": "budget_long",
+    "budgetHardCap": "budget_hard_cap",
+    "budgetMaxExtensions": "budget_max_extensions",
     "planPreflightEnabled": "plan_preflight_enabled",
     "planScoutEnabled": "plan_scout_enabled",
     # 2026-10-27: 计划前置 / Planner 迭代预算（Scout 立即生效；Planner 为
@@ -65,6 +74,14 @@ _INT_MIN_BOUNDS = {
     "max_options_per_question": 1,
     "max_clarify_questions_in_prompt": 1,
     "max_clarify_questions_per_round": 1,
+    # 2026-11-01: 动态迭代预算。各档预算/硬顶至少 1；自动延长次数 0 表示
+    # 不自动延长（到软预算即停止），因此下界为 0。
+    "budget_simple": 1,
+    "budget_medium": 1,
+    "budget_complex": 1,
+    "budget_long": 1,
+    "budget_hard_cap": 1,
+    "budget_max_extensions": 0,
 }
 
 
@@ -108,6 +125,19 @@ class OrchSettings:
     #: 硬编码 max_iterations，允许用户在 UI 中调整。默认 25（与 profiles.py
     #: primary profile 一致）。0 = 使用 profile 默认值。
     max_iterations: int = 25
+    #: 2026-11-01: 动态迭代预算总开关（P1 设置页暴露）。
+    #: 关闭后 run_loop 回到固定 max_iterations 行为（仍可用 env 强制关闭）。
+    dynamic_budget_enabled: bool = True
+    #: 各档初始预算（simple/medium/complex/long）。到软预算后由进度审计
+    #: 决定自动延长或带原因停止；见 backend/core/legacy/iteration_budget.py。
+    budget_simple: int = 20
+    budget_medium: int = 80
+    budget_complex: int = 200
+    budget_long: int = 400
+    #: 自动延长硬顶（任何情况下不超过该值）。
+    budget_hard_cap: int = 1000
+    #: 单 run 自动延长次数上限；0 = 不自动延长（到达软预算即停止）。
+    budget_max_extensions: int = 3
     #: 计划前置 (2026-09-19): multi 拆解前的澄清+侦察总开关。关闭后拆解
     #: 行为与 2026-09-19 之前完全一致（decompose_request(context=None)）。
     #: env 总闸 ``SAGE_ORCH_PLAN_PREFLIGHT``（tests conftest 置 0）优先于本值。

@@ -32,6 +32,7 @@ class ProjectConstraint:
     trigger_pattern: Optional[str] = None
     priority: int = 5
     enabled: bool = True
+    source: str = "user"
     created_at: int = 0
     updated_at: int = 0
 
@@ -44,6 +45,7 @@ class ProjectConstraint:
             "trigger_pattern": self.trigger_pattern,
             "priority": self.priority,
             "enabled": self.enabled,
+            "source": self.source,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -58,6 +60,7 @@ def _row_to_constraint(row) -> ProjectConstraint:  # noqa: ANN001 — sqlite3.Ro
         trigger_pattern=row["trigger_pattern"],
         priority=row["priority"],
         enabled=bool(row["enabled"]),
+        source=row["source"] if "source" in row.keys() else "user",  # noqa: SIM118
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
@@ -185,6 +188,7 @@ class ProjectConstraintRepository:
         content: str,
         trigger_pattern: Optional[str] = None,
         priority: int = 5,
+        source: str = "user",
         now_ms: Optional[int] = None,
     ) -> ProjectConstraint:
         """创建一条约束。"""
@@ -195,10 +199,20 @@ class ProjectConstraintRepository:
         cursor.execute(
             """
             INSERT INTO project_constraints
-                (id, project_id, category, content, trigger_pattern, priority, enabled, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+                (id, project_id, category, content, trigger_pattern, priority, enabled, source, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
             """,
-            (constraint_id, project_id, category, content, trigger_pattern, priority, ts, ts),
+            (
+                constraint_id,
+                project_id,
+                category,
+                content,
+                trigger_pattern,
+                priority,
+                source or "user",
+                ts,
+                ts,
+            ),
         )
         conn.commit()
         return ProjectConstraint(
@@ -209,6 +223,7 @@ class ProjectConstraintRepository:
             trigger_pattern=trigger_pattern,
             priority=priority,
             enabled=True,
+            source=source or "user",
             created_at=ts,
             updated_at=ts,
         )
@@ -292,6 +307,17 @@ class ProjectConstraintRepository:
         cursor = conn.cursor()
         cursor.execute(
             "DELETE FROM project_constraints WHERE project_id = ?", (project_id,)
+        )
+        conn.commit()
+        return cursor.rowcount
+
+    def delete_by_source_prefix(self, project_id: str, prefix: str) -> int:
+        """删除项目下 source 以 prefix 开头的约束，返回删除数量。"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM project_constraints WHERE project_id = ? AND source LIKE ?",
+            (project_id, f"{prefix}%"),
         )
         conn.commit()
         return cursor.rowcount

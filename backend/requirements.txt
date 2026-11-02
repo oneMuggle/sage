@@ -87,7 +87,8 @@ matplotlib>=3.7
 # office.excel_eval.evaluate_workbook 懒加载；缺库时公式视图退回缓存值/提示行，不影响读取。
 formulas>=1.2
 
-# Pillow — 图片压缩管线（Round 22）— main 通道 only；requirements-bundled/py38（Win7）不加。
+# Pillow — 图片压缩管线（Round 22）— main 通道 only；py38（Win7）不加。
+# 2026-10-31: requirements-bundled.txt 中由本地 OCR（RapidOCR）显式引入。
 # office.image_optimize 懒加载；未安装时 >8MB 嵌入图片原样返回（行为同 R21 之前）。
 Pillow>=10.0
 

@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { getInputHistorySize, setInputHistorySize } from '../../shared/lib/hooks/useInputHistory';
 import { useI18n } from '../../shared/lib/i18n';
+import { NumberField as NumberInput } from '../../shared/ui/NumberField';
 
 import { AttachmentRagCard } from './AttachmentRagCard';
 import { ContextTurnLimitSelect } from './ContextTurnLimitSelect';
@@ -192,15 +193,12 @@ export function BasicTab() {
           label={t('settings.basic.history_size_label')}
           desc={t('settings.basic.history_size_desc')}
         >
-          <input
-            type="number"
-            data-testid="settings-input-history-size"
+          <NumberInput
+            value={inputHistorySize}
             min={1}
             max={200}
-            value={inputHistorySize}
-            onChange={(e) => {
-              const raw = parseInt(e.target.value, 10);
-              const v = Number.isFinite(raw) ? Math.max(1, Math.min(200, raw)) : 50;
+            testId="settings-input-history-size"
+            onChange={(v) => {
               setInputHistorySize(v);
               setInputHistorySizeState(v);
             }}
@@ -215,16 +213,12 @@ export function BasicTab() {
           label={t('settings.basic.retry_max_label')}
           desc={t('settings.basic.retry_max_desc')}
         >
-          <input
-            type="number"
-            data-testid="settings-llm-retry-max-attempts"
+          <NumberInput
+            value={settings.llmRetryMaxAttempts}
             min={0}
             max={10}
-            value={settings.llmRetryMaxAttempts}
-            onChange={(e) => {
-              const v = Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0));
-              updateSettings({ llmRetryMaxAttempts: v });
-            }}
+            testId="settings-llm-retry-max-attempts"
+            onChange={(v) => updateSettings({ llmRetryMaxAttempts: v })}
             className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
           />
         </SettingRow>
@@ -233,17 +227,13 @@ export function BasicTab() {
           label={t('settings.basic.retry_total_budget_label')}
           desc={t('settings.basic.retry_total_budget_desc')}
         >
-          <input
-            type="number"
-            data-testid="settings-llm-retry-total-budget"
+          <NumberInput
+            value={settings.llmRetryTotalBudgetS}
             min={0}
             max={1800}
             step={10}
-            value={settings.llmRetryTotalBudgetS}
-            onChange={(e) => {
-              const v = Math.max(0, Math.min(1800, parseInt(e.target.value, 10) || 0));
-              updateSettings({ llmRetryTotalBudgetS: v });
-            }}
+            testId="settings-llm-retry-total-budget"
+            onChange={(v) => updateSettings({ llmRetryTotalBudgetS: v })}
             className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
           />
         </SettingRow>
@@ -256,16 +246,13 @@ export function BasicTab() {
             label={t('settings.basic.retry_base_label')}
             desc={t('settings.basic.retry_base_desc')}
           >
-            <input
-              type="number"
-              data-testid="settings-llm-retry-base-delay"
+            <NumberInput
+              value={settings.llmRetryBaseDelayS}
               min={0.1}
               step={0.5}
-              value={settings.llmRetryBaseDelayS}
-              onChange={(e) => {
-                const v = Math.max(0.1, parseFloat(e.target.value) || 1.0);
-                updateSettings({ llmRetryBaseDelayS: v });
-              }}
+              integer={false}
+              testId="settings-llm-retry-base-delay"
+              onChange={(v) => updateSettings({ llmRetryBaseDelayS: v })}
               className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
             />
           </SettingRow>
@@ -274,16 +261,12 @@ export function BasicTab() {
             label={t('settings.basic.llm_retry.max_delay.label')}
             desc={t('settings.basic.llm_retry.max_delay.desc')}
           >
-            <input
-              type="number"
-              data-testid="settings-llm-retry-max-delay"
+            <NumberInput
+              value={settings.llmRetryMaxDelayS}
               min={1}
               step={1}
-              value={settings.llmRetryMaxDelayS}
-              onChange={(e) => {
-                const v = Math.max(1, parseInt(e.target.value, 10) || 30);
-                updateSettings({ llmRetryMaxDelayS: v });
-              }}
+              testId="settings-llm-retry-max-delay"
+              onChange={(v) => updateSettings({ llmRetryMaxDelayS: v })}
               className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
             />
           </SettingRow>
@@ -298,16 +281,12 @@ export function BasicTab() {
           label={t('settings.basic.llm_total_limit.label')}
           desc={t('settings.basic.llm_total_limit.desc')}
         >
-          <input
-            type="number"
-            data-testid="settings-llm-total-timeout"
+          <NumberInput
+            value={settings.llmTotalTimeoutS}
             min={0}
             step={60}
-            value={settings.llmTotalTimeoutS}
-            onChange={(e) => {
-              const v = Math.max(0, parseInt(e.target.value, 10) || 0);
-              updateSettings({ llmTotalTimeoutS: v });
-            }}
+            testId="settings-llm-total-timeout"
+            onChange={(v) => updateSettings({ llmTotalTimeoutS: v })}
             className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
           />
         </SettingRow>

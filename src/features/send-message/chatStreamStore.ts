@@ -61,6 +61,8 @@ export interface QueuedSendOptions {
   memoryDisabled?: boolean;
   /** R23-D2: 聊天图片输入（base64 data URL，后端限 4 张/单张 5MiB） */
   images?: string[];
+  /** 2026-10-31: 前端确认/编辑后的本地 OCR 文本（与 images 对齐） */
+  imageOcrTexts?: string[];
   /** R37: 已上传附件的 media id 列表 */
   attachmentMediaIds?: string[];
   /** r67: 附件检索注入配置（opt-in） */

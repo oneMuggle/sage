@@ -33,6 +33,7 @@ function hasAnyRefs(
   return (
     (meta?.file_refs?.length ?? 0) > 0 ||
     (meta?.office_refs?.length ?? 0) > 0 ||
+    (meta?.image_ocr_texts?.length ?? 0) > 0 ||
     knowledgeCount > 0 ||
     attachmentCount > 0
   );
@@ -54,6 +55,7 @@ export function MessageClientMeta({
   ];
   const fileRefs = meta?.file_refs ?? [];
   const officeRefs = meta?.office_refs ?? [];
+  const imageOcrTexts = meta?.image_ocr_texts ?? [];
   if (!hasAnyRefs(meta, effectiveKnowledge.length, effectiveAttachments.length)) return null;
 
   const copy = (text: string) =>
@@ -116,10 +118,11 @@ export function MessageClientMeta({
   ];
 
   return (
-    <div
-      data-testid="message-client-meta"
-      className={`flex flex-wrap gap-1.5 mb-1 ${isUser ? 'justify-end' : ''}`}
-    >
+    <>
+      <div
+        data-testid="message-client-meta"
+        className={`flex flex-wrap gap-1.5 mb-1 ${isUser ? 'justify-end' : ''}`}
+      >
       {fileRefs.map((ref) => (
         <ContextMenu key={`file-${ref.path}`} items={() => fileRefMenu(ref)}>
           <button
@@ -178,6 +181,39 @@ export function MessageClientMeta({
         </ContextMenu>
       ))}
       {lightboxSrc && <Lightbox src={lightboxSrc} alt="" onClose={() => setLightboxSrc(null)} />}
-    </div>
+      </div>
+      {imageOcrTexts.length > 0 && (
+        <details
+          data-testid="message-image-ocr"
+          className={`mb-1 rounded border border-border bg-bg-subtle px-2 py-1 text-ui-2xs ${
+            isUser ? 'ml-auto' : ''
+          }`}
+        >
+          <summary className="cursor-pointer text-muted">
+            {t('chat.image_ocr_message_title').replace('{count}', String(imageOcrTexts.length))}
+          </summary>
+          <div className="mt-1 space-y-1">
+            {imageOcrTexts.map((entry, index) => (
+              <div key={`${entry.name}-${index}`}>
+                <div className="flex items-center gap-2 text-muted">
+                  <span className="flex-1 truncate">{entry.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => copy(entry.text)}
+                    className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 hover:bg-bg-hover"
+                  >
+                    <Copy className="h-3 w-3" aria-hidden="true" />
+                    {t('chat.image_ocr_message_copy')}
+                  </button>
+                </div>
+                <pre className="mt-0.5 whitespace-pre-wrap break-words font-sans text-text">
+                  {entry.text}
+                </pre>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </>
   );
 }
