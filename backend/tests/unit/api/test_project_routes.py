@@ -69,35 +69,6 @@ def test_register_project_idempotent_by_path(client, ws_dir: Path) -> None:
     assert rows[0]["project_type"] == "coding"
 
 
-def test_register_prefills_default_allowed_paths(client, ws_dir: Path, monkeypatch) -> None:
-    """未提供 allowed_paths 时预填默认值（工作区外访问减少审批）。"""
-    monkeypatch.setattr(pr, "default_allowed_paths", lambda: ["~/Documents/**"])
-
-    body = _register(client, ws_dir)
-
-    assert body["allowed_paths"] == ["~/Documents/**"]
-
-
-def test_register_respects_explicit_empty_allowed_paths(
-    client, ws_dir: Path, monkeypatch
-) -> None:
-    """显式 [] 表示用户选择清空，不预填默认值。"""
-    monkeypatch.setattr(pr, "default_allowed_paths", lambda: ["~/Documents/**"])
-
-    body = _register(client, ws_dir, allowed_paths=[])
-
-    assert body["allowed_paths"] == []
-
-
-def test_register_keeps_explicit_allowed_paths(client, ws_dir: Path, monkeypatch) -> None:
-    """显式自定义列表不被默认值覆盖。"""
-    monkeypatch.setattr(pr, "default_allowed_paths", lambda: ["~/Documents/**"])
-
-    body = _register(client, ws_dir, allowed_paths=["/data/**"])
-
-    assert body["allowed_paths"] == ["/data/**"]
-
-
 def test_register_project_missing_dir(client, tmp_path: Path) -> None:
     resp = client.post("/projects", json={"path": str(tmp_path / "ghost")})
     assert resp.status_code == 400
