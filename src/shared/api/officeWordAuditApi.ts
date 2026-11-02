@@ -14,6 +14,10 @@ import type {
   WordAuditRequest,
   WordAuditResult,
   WordAuditReviseRequest,
+  WordBatchAuditRequest,
+  WordBatchAuditResult,
+  WordRenderAuditRequest,
+  WordRenderAuditResult,
   WordRevisionResult,
   WordRuleExtractRequest,
   WordRuleExtractionResult,
@@ -133,6 +137,52 @@ export const wordAuditApi = {
         overwrite: req.overwrite ?? false,
         author: req.author ?? 'Sage',
         addComments: req.add_comments ?? true,
+        ...(req.max_size_bytes !== undefined ? { maxSizeBytes: req.max_size_bytes } : {}),
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Render the .docx to PDF and audit page size / margins / fonts / page
+   * numbers (M5a backend). Degrades to rendered=false when no converter is
+   * available — callers must render that state, not treat it as an error.
+   */
+  async renderAuditWord(req: WordRenderAuditRequest): Promise<WordRenderAuditResult> {
+    try {
+      return await invoke<WordRenderAuditResult>('office_word_audit_render', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+        ...(req.expected_size !== undefined ? { expectedSize: req.expected_size } : {}),
+        ...(req.margins_cm !== undefined ? { marginsCm: req.margins_cm } : {}),
+        ...(req.allowed_fonts !== undefined ? { allowedFonts: req.allowed_fonts } : {}),
+        requirePageNumber: req.require_page_number ?? false,
+        ...(req.margin_tolerance_cm !== undefined
+          ? { marginToleranceCm: req.margin_tolerance_cm }
+          : {}),
+        ...(req.page_number_band !== undefined ? { pageNumberBand: req.page_number_band } : {}),
+        ...(req.timeout_seconds !== undefined ? { timeoutSeconds: req.timeout_seconds } : {}),
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Audit many workspace .docx files with one rule pack (M5b backend).
+   * Read-only; per-file failures are isolated server-side.
+   */
+  async batchAuditWord(req: WordBatchAuditRequest): Promise<WordBatchAuditResult> {
+    try {
+      return await invoke<WordBatchAuditResult>('office_word_audit_batch', {
+        workspacePath: req.workspace_path,
+        ...(req.file_paths !== undefined ? { filePaths: req.file_paths } : {}),
+        ...(req.pattern !== undefined ? { pattern: req.pattern } : {}),
+        ...(req.max_files !== undefined ? { maxFiles: req.max_files } : {}),
+        ...(req.rulepack_id !== undefined ? { rulepackId: req.rulepack_id } : {}),
+        ...(req.rulepack !== undefined ? { rulepack: req.rulepack } : {}),
+        includeReport: req.include_report ?? true,
         ...(req.max_size_bytes !== undefined ? { maxSizeBytes: req.max_size_bytes } : {}),
       });
     } catch (error) {

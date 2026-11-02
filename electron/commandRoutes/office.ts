@@ -190,6 +190,58 @@ export const officeRoutes: Record<string, CommandRoute> = {
         : {}),
     }),
   },
+  // M5c (2026-11-02): render-level audit + workspace batch audit surface.
+  // rawBody: margins_cm is keyed by side (top/bottom/left/right) and
+  // rulepack.params by rule-specific keys — both are user data the generic
+  // camelCase pass must not rewrite.
+  office_word_audit_render: {
+    method: 'POST',
+    path: () => '/api/v1/office/word/audit/render',
+    rawBody: true,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      file_path: a.filePath ?? a.file_path,
+      ...((a.expectedSize ?? a.expected_size)
+        ? { expected_size: a.expectedSize ?? a.expected_size }
+        : {}),
+      ...(a.marginsCm ?? a.margins_cm ? { margins_cm: a.marginsCm ?? a.margins_cm } : {}),
+      ...(Array.isArray(a.allowedFonts ?? a.allowed_fonts)
+        ? { allowed_fonts: a.allowedFonts ?? a.allowed_fonts }
+        : {}),
+      require_page_number: Boolean(a.requirePageNumber ?? a.require_page_number),
+      ...((a.marginToleranceCm ?? a.margin_tolerance_cm) !== undefined
+        ? { margin_tolerance_cm: a.marginToleranceCm ?? a.margin_tolerance_cm }
+        : {}),
+      ...((a.pageNumberBand ?? a.page_number_band) !== undefined
+        ? { page_number_band: a.pageNumberBand ?? a.page_number_band }
+        : {}),
+      ...((a.timeoutSeconds ?? a.timeout_seconds) !== undefined
+        ? { timeout_seconds: a.timeoutSeconds ?? a.timeout_seconds }
+        : {}),
+      ...((a.maxSizeBytes ?? a.max_size_bytes)
+        ? { max_size_bytes: a.maxSizeBytes ?? a.max_size_bytes }
+        : {}),
+    }),
+  },
+  office_word_audit_batch: {
+    method: 'POST',
+    path: () => '/api/v1/office/word/audit/batch',
+    rawBody: true,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      ...(Array.isArray(a.filePaths ?? a.file_paths)
+        ? { file_paths: a.filePaths ?? a.file_paths }
+        : {}),
+      ...(a.pattern ? { pattern: a.pattern } : {}),
+      ...(a.maxFiles ?? a.max_files ? { max_files: a.maxFiles ?? a.max_files } : {}),
+      ...((a.rulepackId ?? a.rulepack_id) ? { rulepack_id: a.rulepackId ?? a.rulepack_id } : {}),
+      ...(a.rulepack ? { rulepack: a.rulepack } : {}),
+      include_report: a.includeReport ?? a.include_report ?? true,
+      ...((a.maxSizeBytes ?? a.max_size_bytes)
+        ? { max_size_bytes: a.maxSizeBytes ?? a.max_size_bytes }
+        : {}),
+    }),
+  },
   // Office parity batch 1 (item 1.2): PDF read/generate.
   // Backend: backend/api/office_routes.py:495-508 (POST /pdf/read, POST /pdf/generate).
   // NOTE: PdfReadRequest is extra="forbid" — officeApi.readPdf must send

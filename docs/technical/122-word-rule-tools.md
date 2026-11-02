@@ -44,3 +44,52 @@
   注册/writer 可见、批量扫描、渲染审计 graceful 降级；
 - parity/profile 测试更新（66 passed）；
 - ruff 0.4.4、py38 兼容、architecture 门禁通过。
+
+## 4. 前端批量审校面板（M5c）
+
+> 分支：`feat/word-audit-panels-m5c` · 上游：§1 中 `office_batch_audit` 工具
+
+### 4.1 组件位置
+
+`WordBatchAuditPanel` 挂在 `/office` 页工作区底部面板区，
+与单文件预览的 `DocumentAuditPanel` 并列，面向工作区级别的批量扫描。
+
+- `src/features/office/WordBatchAuditPanel.tsx`
+- 由 `src/pages/Office.tsx` 直接 import 并渲染（workspacePath 来自工作区选择器）；
+- `electron/commandRoutes/office.ts` +1 IPC 路由（`office_word_audit_batch`，rawBody）。
+
+### 4.2 交互
+
+- 通配符模式：`<input>` 默认 `**/*.docx`，空值时不下发（后端按默认模式匹配）；
+- 最多文件数：`<input type="number">` 1–50（超出时自动 clamp 到上限）；
+- 规则包：`<select>`，挂载时拉取 `officeApi.listWordRulePacks`，失败或为空时回退到 `wordRulePackDefaults.ts`（`general-quality` / `gb-t-9704-general`）；
+- 点击「运行批量审校」→ `officeApi.batchAuditWord({...})` → 展示：
+  - 顶部汇总：通过/存在错误 · 文件数（成功/失败）· error · warning · 规则包 id；
+  - 逐文件 `<details>`：相对路径 + error/warning 计数，展开后列出前 20 条 issue（超出提示「还有 N 条，见下报告」）；
+  - `report_markdown` 存在时显示「展开 Markdown 报告」折叠按钮。
+
+### 4.3 共享默认值
+
+`src/features/office/wordRulePackDefaults.ts` 抽离出 `DEFAULT_PACKS` + `DEFAULT_PACK_ID`，
+被 `DocumentAuditPanel`（M2c）与 `WordBatchAuditPanel`（M5c）共用，
+避免 Fast Refresh 时两个面板各自硬编码导致的不一致。
+
+### 4.4 测试
+
+`src/features/office/__tests__/WordBatchAuditPanel.test.tsx`（4）：
+
+- 汇总 + 逐文件展开 + Markdown 报告折叠切换；
+- 规则包选择 + max_files 超过 50 时 clamp 到上限；
+- 空结果：`files=[]` 时显示空状态，报告按钮不渲染；
+- 错误路径：请求失败时展示错误消息。
+
+### 4.5 数据流
+
+```
+Office.tsx
+  └── WordBatchAuditPanel({workspacePath})
+        ├── useEffect → officeApi.listWordRulePacks({workspacePath}) → packs
+        └── officeApi.batchAuditWord({workspace_path, pattern?, max_files?, rulepack_id, include_report: true})
+              └── POST /api/v1/office/word/audit/batch (rawBody)
+                    └── WordBatchAuditService.run() → totals + per-file issues + report_markdown
+```
