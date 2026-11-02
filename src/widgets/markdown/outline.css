@@ -1,0 +1,77 @@
+/**
+ * TOC 大纲样式 —— 与 .md-outline 作用域协作。
+ *
+ * 设计取舍：
+ * - 缩进用 CSS 变量 + data-depth 属性，不依赖 Tailwind
+ * - active 项用 primary color 下划线 + 字重 600
+ * - 紧凑排版，一行一个 heading，hover 显示底色
+ */
+
+.md-outline {
+  padding: 0.5rem 0;
+  font-size: 13px;
+  color: rgb(var(--color-text-secondary-rgb));
+}
+
+.md-outline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.md-outline-item {
+  margin: 1px 0;
+}
+
+.md-outline-link {
+  display: block;
+  width: 100%;
+  padding: 3px 0.75rem 3px calc(0.75rem + var(--depth-indent, 0px));
+  background: transparent;
+  border: 0;
+  border-left: 2px solid transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.md-outline-link:hover {
+  background: rgb(var(--color-bg-hover-rgb) / 0.6);
+  color: rgb(var(--color-text-rgb));
+}
+
+.md-outline-item[data-active] .md-outline-link {
+  border-left-color: rgb(var(--color-primary-rgb));
+  color: rgb(var(--color-primary-rgb));
+  font-weight: 600;
+}
+
+/* 缩进 —— 每级 +0.75rem */
+.md-outline-item[data-depth="0"] { --depth-indent: 0rem; }
+.md-outline-item[data-depth="1"] { --depth-indent: 0.75rem; }
+.md-outline-item[data-depth="2"] { --depth-indent: 1.5rem; }
+.md-outline-item[data-depth="3"] { --depth-indent: 2.25rem; }
+.md-outline-item[data-depth="4"] { --depth-indent: 3rem; }
+.md-outline-item[data-depth="5"] { --depth-indent: 3.75rem; }
+
+.md-outline-empty {
+  padding: 0.5rem 0.75rem;
+  color: rgb(var(--color-text-muted-rgb));
+  font-style: italic;
+  font-size: 12px;
+}
+
+/* 大纲侧边栏容器 —— 产物面板 / Wiki 等宿主嵌入时统一外观
+ * （flex 行内右栏，独立滚动，限宽 200px） */
+.md-outline-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-left: 1px solid rgb(var(--color-border-rgb));
+  background: rgb(var(--color-bg-subtle-rgb) / 0.5);
+}

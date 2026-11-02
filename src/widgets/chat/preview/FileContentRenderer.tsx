@@ -6,10 +6,6 @@
 // 共用同一套渲染，保证两端视觉与行为同源。
 import { ClipboardCopy } from 'lucide-react';
 import { useCallback, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import rehypeKatex from 'rehype-katex';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 
 import { ExcelPreview, PptPreview, WordPreview } from '../../../features/office';
 // 2026-10-29（基线同步）: Word 产物默认走 docx-preview 原生渲染，结构化段落
@@ -21,6 +17,7 @@ import type {
   OfficeWordReadResult,
 } from '../../../shared/api/types';
 import { langFromPath } from '../../../shared/lib/fileLang';
+import { Markdown } from '../../markdown';
 import { ShikiCodeBlock } from '../ShikiCodeBlock';
 
 /** artifact content 与 workspace preview 的公共响应形状（后端同一套字段） */
@@ -47,35 +44,6 @@ interface FileContentRendererProps {
   docxFidelity?: boolean;
   /** docx-preview 渲染失败回调（上层据此回退结构化视图） */
   onDocxFidelityError?: () => void;
-}
-
-const MD_REMARK = [remarkGfm, remarkMath];
-
-function MarkdownRendered({ text }: { text: string }) {
-  return (
-    <div className="text-sm leading-relaxed" data-testid="artifact-md-rendered">
-      <ReactMarkdown
-        remarkPlugins={MD_REMARK}
-        rehypePlugins={[rehypeKatex]}
-        components={{
-          code({ className, children }) {
-            const match = /language-(\w+)/.exec(className || '');
-            const content = String(children).replace(/\n$/, '');
-            if (!match && !content.includes('\n')) {
-              return (
-                <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">
-                  {content}
-                </code>
-              );
-            }
-            return <ShikiCodeBlock language={match?.[1]}>{content}</ShikiCodeBlock>;
-          },
-        }}
-      >
-        {text}
-      </ReactMarkdown>
-    </div>
-  );
 }
 
 function parseCsv(text: string): string[][] {
@@ -239,7 +207,12 @@ export function FileContentRenderer({
   }
   if (content.kind === 'markdown') {
     return mdRendered ? (
-      <MarkdownRendered text={content.content ?? ''} />
+      <Markdown
+        content={content.content ?? ''}
+        tier="chat"
+        testId="artifact-md-rendered"
+        headingAnchorPrefix={`artifact-${name}`}
+      />
     ) : (
       <ShikiCodeBlock language="markdown">{content.content ?? ''}</ShikiCodeBlock>
     );

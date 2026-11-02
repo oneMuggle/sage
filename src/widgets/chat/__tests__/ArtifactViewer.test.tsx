@@ -66,7 +66,8 @@ describe('ArtifactViewer', () => {
       ...baseReturn,
     });
     render(<ArtifactViewer artifact={sample} sessionId="sess_001" onBack={() => {}} />);
-    expect(screen.getByText(/Title/)).toBeInTheDocument();
+    // M5 大纲侧边栏也包含标题文本，用 role='heading' 唯一锁定渲染的 h1
+    expect(screen.getByRole('heading', { name: /Title/ })).toBeInTheDocument();
   });
 
   it('renders image', () => {

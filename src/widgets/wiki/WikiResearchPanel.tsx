@@ -191,7 +191,7 @@ export function WikiResearchPanel({
         </div>
       )}
 
-      <div className="prose prose-sm max-w-none">
+      <div className="max-w-none">
         <pre className="whitespace-pre-wrap text-sm bg-surface p-4 rounded-md border border-border">
           {state.result?.synthesis}
         </pre>
