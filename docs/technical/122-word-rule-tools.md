@@ -1,12 +1,12 @@
-# 122 — Word 规则包 LLM 工具（M6a）
+# 122 — Word 规则包 LLM 工具（M6a/M6b）
 
-> 日期：2026-11-01 · 分支：`feat/word-rule-tools`
-> 方案：`docs/plans/2026-11-01_word-tools-m6a.md`
+> 日期：2026-11-01 · 分支：`feat/word-rule-tools` / `feat/word-audit-tools`
+> 方案：`docs/plans/2026-11-01_word-tools-m6a.md`、`docs/plans/2026-11-02_word-audit-tools-m6b.md`
 
 ## 1. 定位
 
 把规则包能力暴露给 LLM agent（primary/writer），无需前端即可完成
-“审校 → 修复 → 抽取规则 → 原生修订”闭环。
+“审校 → 修复 → 抽取规则 → 原生修订 → 批量扫 → 渲染后复核”闭环。
 
 | 工具 | 风险 | 行为 |
 |---|---|---|
@@ -14,6 +14,8 @@
 | `office_fix_word` | WRITE_LOCAL | 机械修复 + 复检；默认 `<stem>-fixed.docx`，overwrite 原子覆盖 |
 | `office_extract_rules` | READ | 规范/范本 → 候选规则包（含来源/置信度/冲突），不保存 |
 | `office_revise_word` | WRITE_LOCAL | 原生 `w:ins/w:del` + 批注 + 复检；changes 可显式或自动生成 |
+| `office_batch_audit` | READ | 批量扫工作区 .docx，返回汇总 + 逐文件 issues + Markdown 报告 |
+| `office_render_audit` | WRITE_LOCAL | 渲染 PDF 复核页面/边距/字体/页码；无转换器时 graceful 降级 |
 
 所有工具：
 
@@ -33,11 +35,12 @@
 - `backend/tests/unit/test_tool_bundles_parity.py`：golden 顺序与计数；
 - `backend/tests/unit/test_profiles_office_tools.py`：primary/writer 可见列表。
 
-全量工具数：online 109 / intranet 108 / offline 104（headless 108）。
+全量工具数：online 111 / intranet 110 / offline 106 / headless 110。
 
 ## 3. 测试
 
-- `backend/tests/unit/tools/test_office_word_intelligence_tools.py`（7）：
-  无上下文拒绝、审校锚点、修复输出、抽取规则、修订写入、越界拒绝、注册/writer 可见；
-- parity/profile 测试更新（57 passed）；
+- `backend/tests/unit/tools/test_office_word_intelligence_tools.py`（9）：
+  无上下文拒绝、审校锚点、修复输出、抽取规则、修订写入、越界拒绝、
+  注册/writer 可见、批量扫描、渲染审计 graceful 降级；
+- parity/profile 测试更新（66 passed）；
 - ruff 0.4.4、py38 兼容、architecture 门禁通过。

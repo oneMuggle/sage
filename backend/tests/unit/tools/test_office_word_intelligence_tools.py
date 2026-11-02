@@ -14,8 +14,10 @@ from backend.tools.context import (
 )
 from backend.tools.office_word_intelligence_tools import (
     OfficeAuditWordTool,
+    OfficeBatchAuditTool,
     OfficeExtractRulesTool,
     OfficeFixWordTool,
+    OfficeRenderAuditTool,
     OfficeReviseWordTool,
 )
 
@@ -69,6 +71,12 @@ def test_tools_require_context(tmp_path: Path) -> None:
         not OfficeExtractRulesTool(_policy(tmp_path)).execute(file_path=str(path)).success
     )
     assert not OfficeReviseWordTool(_policy(tmp_path)).execute(file_path=str(path)).success
+    assert not OfficeBatchAuditTool(_policy(tmp_path)).execute(
+        file_paths=[str(path)]
+    ).success
+    assert not OfficeRenderAuditTool(_policy(tmp_path)).execute(
+        file_path=str(path)
+    ).success
 
 
 def test_audit_tool_returns_anchored_issue(tmp_path: Path) -> None:
@@ -178,6 +186,8 @@ def test_tools_registered_and_visible_to_writer() -> None:
         "office_fix_word",
         "office_extract_rules",
         "office_revise_word",
+        "office_batch_audit",
+        "office_render_audit",
     }
     registry = ToolRegistry()
     register_all_tools(registry, policy=ToolPolicy())
@@ -185,3 +195,35 @@ def test_tools_registered_and_visible_to_writer() -> None:
     assert names <= set(ALL_BUILTIN_TOOL_NAMES)
     writer = next(p for p in create_default_agents() if p.id == "writer")
     assert names <= set(writer.tools)
+
+
+def test_batch_audit_scans_workspace_files(tmp_path: Path) -> None:
+    _doc(tmp_path / "a.docx", ["AI 方案"])
+    _doc(tmp_path / "b.docx", ["正文"])
+    token = _ctx(tmp_path)
+    try:
+        result = OfficeBatchAuditTool(_policy(tmp_path)).execute(
+            pattern="**/*.docx", rulepack=_TERM_PACK
+        )
+    finally:
+        reset_tool_context(token)
+
+    assert result.success is True
+    assert result.content["totals"]["files"] == 2
+    assert result.content["totals"]["ok_files"] == 2
+    assert result.content["totals"]["issue_count"] >= 1
+    assert len(result.content["files"]) == 2
+    assert result.content["report_markdown"]
+
+
+def test_render_audit_degrades_without_converter(tmp_path: Path) -> None:
+    path = _doc(tmp_path / "doc.docx", ["正文"])
+    token = _ctx(tmp_path)
+    try:
+        result = OfficeRenderAuditTool(_policy(tmp_path)).execute(file_path=str(path))
+    finally:
+        reset_tool_context(token)
+
+    # 无 LibreOffice/Word 时 graceful 降级：不报错，rendered=false。
+    assert result.success is True
+    assert "rendered" in result.content
