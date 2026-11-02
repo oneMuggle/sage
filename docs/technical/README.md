@@ -100,6 +100,7 @@
 | 121  | [Word 渲染级校验](./121-word-render-audit.md) | DOCX→PDF（LibreOffice/Word COM）+ PyMuPDF 检查页面尺寸/页边距/字体/页码；无转换器降级；渲染审计 REST；批量审校与 Markdown 报告 |
 | 122  | [Word 规则包 LLM 工具](./122-word-rule-tools.md) | `office_audit_word/fix_word/extract_rules/revise_word/batch_audit/render_audit`；工具上下文/工作区围栏/输出截断；bundle/profile/tool_names 反漂移同步 |
 | 123  | [文档与验收信息架构：顶层 Tab + LaTeX 二级分组](./123-office-ia-tabs.md) | URL 为唯一事实源 + keep-alive 保状态 + 诊断收进「环境」popover；14 常驻区块 → 4 任务域 |
+| 124  | [Markdown 渲染器统一](./124-markdown-renderer.md) | 聊天/产物/Wiki 单一收敛点：minimal/chat 两档 + GFM/KaTeX 统一管线 + 表格复制与限高 + Shiki 降级 + 锚点前缀与 TOC 大纲 + 作用域 token 样式 |
 
 ---
 
