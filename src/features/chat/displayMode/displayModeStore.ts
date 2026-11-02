@@ -38,6 +38,26 @@ function deleteStorage(key: string): void {
   }
 }
 
+type DisplayModeListener = () => void;
+const listeners = new Set<DisplayModeListener>();
+let version = 0;
+
+function emit(): void {
+  version += 1;
+  for (const listener of listeners) listener();
+}
+
+export function subscribeDisplayModeStore(listener: DisplayModeListener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+export function getDisplayModeStoreVersion(): number {
+  return version;
+}
+
 export const displayModeStore = {
   getSession(sessionId: string): DisplayMode | null {
     return readStorage(SESSION_PREFIX + sessionId);
@@ -45,10 +65,12 @@ export const displayModeStore = {
 
   setSession(sessionId: string, mode: DisplayMode): void {
     writeStorage(SESSION_PREFIX + sessionId, mode);
+    emit();
   },
 
   clearSession(sessionId: string): void {
     deleteStorage(SESSION_PREFIX + sessionId);
+    emit();
   },
 
   getMessage(messageId: string): DisplayMode | null {
@@ -57,10 +79,12 @@ export const displayModeStore = {
 
   setMessage(messageId: string, mode: DisplayMode): void {
     writeStorage(MESSAGE_PREFIX + messageId, mode);
+    emit();
   },
 
   clearMessage(messageId: string): void {
     deleteStorage(MESSAGE_PREFIX + messageId);
+    emit();
   },
 
   clearAll(): void {
@@ -77,5 +101,6 @@ export const displayModeStore = {
     } catch {
       /* sessionStorage unavailable */
     }
+    emit();
   },
 };
