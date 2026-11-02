@@ -1,9 +1,9 @@
 {
   "version": 1,
   "files": {
-    "backend/agents/profiles.py": 1114,
+    "backend/agents/profiles.py": 1118,
     "backend/api/office_routes.py": 819,
-    "backend/api/legacy_routes.py": 2684,
+    "backend/api/legacy_routes.py": 2693,
     "backend/api/llm_proxy_routes.py": 1216,
     "backend/api/orchestration_router.py": 807,
     "backend/api/permission_routes.py": 855,
@@ -78,7 +78,7 @@
     "backend/tests/unit/test_design_routes.py": 975,
     "backend/adapters/out/skill/inproc.py": 949,
     "backend/api/project_routes.py": 1099,
-    "backend/services/project_wiki_generator.py": 902,
+    "backend/services/project_wiki_generator.py": 903,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
     "backend/tools/config_tool.py": 991,
     "backend/scheduler/evolution.py": 1739,
