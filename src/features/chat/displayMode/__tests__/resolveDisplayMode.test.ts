@@ -1,9 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import {
-  resolveDisplayMode,
-  getDisplayContract,
-  type DisplayMode,
-} from '../resolveDisplayMode';
+
+import { resolveDisplayMode, getDisplayContract, type DisplayMode } from '../resolveDisplayMode';
 
 describe('resolveDisplayMode', () => {
   it('returns message override when present', () => {

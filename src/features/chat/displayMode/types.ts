@@ -6,7 +6,6 @@ export const DISPLAY_MODE_VALUES: readonly DisplayMode[] = ['detail', 'trace', '
 
 export function isValidDisplayMode(value: unknown): value is DisplayMode {
   return (
-    typeof value === 'string' &&
-    (value === 'detail' || value === 'trace' || value === 'result')
+    typeof value === 'string' && (value === 'detail' || value === 'trace' || value === 'result')
   );
 }
