@@ -129,7 +129,7 @@ function MessageComponent({
   // 2026-09 step-by-step: 多步 run 中,中间步骤可能 content="" 但有
   // tool_calls / reasoning_content。气泡只在有内容时渲染;其他部件
   // (ThinkingPanel / tool_calls) 始终渲染,确保中间步骤不会"空泡"。
-  const showBubble = isUser || (isAssistant && Boolean((message.content ?? '').trim()));
+  const showBubble = isUser || isSystem || (isAssistant && Boolean((message.content ?? '').trim()));
 
   // P1 流式分块: 已确定前缀切稳定块（memo 化跳过重解析），只有 live 尾块
   // 随 delta 全量 re-parse；非流式整体单块渲染，DOM 与旧实现一致。
@@ -292,7 +292,7 @@ function MessageComponent({
           isAssistant ? 'bg-primary/10 text-primary' : 'bg-bg text-muted border border-border'
         }`}
       >
-        {isAssistant ? 'S' : 'U'}
+        {isAssistant ? 'S' : isSystem ? '⏰' : 'U'}
       </div>
 
       <div className={`flex-1 ${isUser ? 'flex flex-col items-end' : ''}`}>
