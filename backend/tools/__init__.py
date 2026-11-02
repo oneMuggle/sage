@@ -97,6 +97,12 @@ from .office_template_tool import (
 from .office_toc_refresh_tool import OfficeRefreshTocTool
 from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
+from .office_word_intelligence_tools import (
+    OfficeAuditWordTool,
+    OfficeExtractRulesTool,
+    OfficeFixWordTool,
+    OfficeReviseWordTool,
+)
 from .patch_tool import ApplyPatchTool
 from .project_diagnose import ProjectDiagnoseTool
 from .registry import ToolRegistry
@@ -268,6 +274,10 @@ __all__ = [
     "OfficeLatexdiffTool",
     "OfficeExtractLatexProjectTool",
     "OfficeRepairWordTool",
+    "OfficeAuditWordTool",
+    "OfficeFixWordTool",
+    "OfficeExtractRulesTool",
+    "OfficeReviseWordTool",
     "OfficeRefreshTocTool",
     "OfficeJournalParseTemplateTool",
     "OfficeJournalFillFromContentTool",
