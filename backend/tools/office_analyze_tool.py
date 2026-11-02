@@ -17,8 +17,8 @@ aggregate / corr）→ 结果以紧凑 markdown 表格进 ToolResult；可选
    读工具先例 —— 分析本身就需要工作区语境）。
 2. doc_id 模式经 session-workspace binding 解析（EXCEL 类型），未知 /
    归档 / 跨工作区 / 过期 generation / 类型不符一律折叠为
-   ``document_not_found``；file_path 模式经 ``_enforce_workspace`` +
-   扩展名白名单把守。
+   ``document_not_found``；file_path 模式经绝对路径 + 扩展名白名单把守
+   （纯读，不做工作区边界检查）。
 3. 分析报告是「派生产物」：永远写在源文件同目录、文件名固定为
    ``<stem>-analysis.xlsx``（LLM 不能自选写入落点），file_path 模式下
    再经 ``resolve_within`` containment 复核；覆盖写走「临时名 +
@@ -67,6 +67,7 @@ from backend.office.storage import document_path
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.context import ToolExecutionContext, current_tool_context
 from backend.tools.file_tool import _record_artifact_safely
+from backend.tools.office_workspace_scope import workspace_for_input
 
 # ──────────────────────────────────────────────────────────────────────
 # 常量
@@ -141,16 +142,6 @@ def _resolve_active_workspace(ctx: Optional[ToolExecutionContext]) -> Optional[P
     return Path(binding.workspace_path)
 
 
-def _workspace_for_input(
-    ctx: Optional[ToolExecutionContext], input_path: Path
-) -> Path:
-    """file_path 模式的 workspace 取值：优先绑定工作区，回退输入父目录。"""
-    binding_ws = _resolve_active_workspace(ctx)
-    if binding_ws is not None:
-        return binding_ws
-    return input_path.parent
-
-
 def _bounded(data: Dict[str, Any], max_bytes: int) -> Dict[str, Any]:
     """超 ``max_bytes`` 时退化为 bounded head，语义同 tool_service。"""
     serialized = json.dumps(data, ensure_ascii=False, default=str)
@@ -190,9 +181,7 @@ def _resolve_xlsx_input(  # noqa: PLR0911 — 错误早退路径多，保持线�
             return ToolResult(success=False, error="document_not_found")
         return found
     if isinstance(file_path, str) and file_path.strip():
-        blocked = tool._enforce_workspace(file_path)
-        if blocked is not None:
-            return blocked
+        # 读路径不做工作区检查（与 read_file 对齐：允许读取任意位置）。
         path = Path(file_path).expanduser()
         if not path.is_absolute():
             return ToolResult(
@@ -204,7 +193,7 @@ def _resolve_xlsx_input(  # noqa: PLR0911 — 错误早退路径多，保持线�
                 success=False,
                 error="unsupported_file_type: 仅支持 .xlsx",
             )
-        workspace = _workspace_for_input(ctx, path)
+        workspace = workspace_for_input(_resolve_active_workspace(ctx), path)
         return path, str(workspace), None
     return ToolResult(success=False, error="doc_id_or_file_path_required")
 
@@ -911,13 +900,21 @@ class OfficeAnalyzeTool(BaseTool):
 
         if write_report:
             report_path = path.parent / f"{path.stem}-analysis.xlsx"
+            # 分析报告是派生产物，落点固定在源文件同目录。先做工作区围栏
+            # （子代理路径 ``policy.workspace_root`` 非空时硬拒绝越界写入；
+            # 主聊天路径 ``workspace_root=None`` 为 no-op，由
+            # ``make_office_path_boundary`` 在分发前承担边界校验）。
+            blocked_report = self._enforce_workspace(str(report_path))
             report_error: Optional[str] = None
-            try:
-                from backend.office.path_safety import resolve_within
+            if blocked_report is not None:
+                report_error = f"report_failed: {blocked_report.error}"
+            else:
+                try:
+                    from backend.office.path_safety import resolve_within
 
-                report_path = resolve_within(Path(_workspace_str), report_path)
-            except OfficeError as exc:
-                report_error = f"report_failed: {exc}"
+                    report_path = resolve_within(Path(_workspace_str), report_path)
+                except OfficeError as exc:
+                    report_error = f"report_failed: {exc}"
             if report_error is None:
                 try:
                     report_info = _build_analysis_report(

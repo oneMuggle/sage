@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
+from backend.tools.office_workspace_scope import workspace_for_policy
 
 
 def _require_context() -> Optional[ToolResult]:
@@ -50,9 +51,6 @@ class OfficeAnalyzeLatexTemplateTool(BaseTool):
             return blocked
         if not isinstance(file_path, str) or not file_path.strip():
             return ToolResult(success=False, error="file_path_required")
-        blocked = self._enforce_workspace(file_path)
-        if blocked is not None:
-            return blocked
         target = Path(file_path).expanduser()
         if not target.is_absolute():
             return ToolResult(success=False, error="file_path_absolute_required")
@@ -64,7 +62,7 @@ class OfficeAnalyzeLatexTemplateTool(BaseTool):
         from backend.office.errors import OfficeError
         from backend.office.latex.service import analyze_latex_template_file
 
-        root = Path(self._policy.workspace_root or str(target.parent))
+        root = workspace_for_policy(self._policy, target)
         try:
             result = analyze_latex_template_file(target, workspace=root)
         except OfficeError as exc:
@@ -136,7 +134,7 @@ class OfficeFillLatexTemplateTool(BaseTool):
         from backend.office.errors import OfficeError
         from backend.office.latex.service import fill_latex_template_file
 
-        root = Path(self._policy.workspace_root or str(target.parent))
+        root = workspace_for_policy(self._policy, target)
         try:
             result = fill_latex_template_file(
                 target,

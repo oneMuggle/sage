@@ -1,13 +1,14 @@
 # ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容，保留 typing 注解
 """Word rule-pack tools (M6): audit / fix / extract / revise.
 
-All tools require an active ToolExecutionContext and enforce the bound
-workspace with ``_enforce_workspace`` + absolute .docx paths, matching the
-existing office_lint_word / office_repair_word posture.
+All tools require an active ToolExecutionContext and use absolute .docx
+paths. WRITE tools enforce the bound workspace (or approved/allowed
+paths) via ``_enforce_workspace``; READ tools accept any absolute path
+(对齐 ``read_file``），service 层围栏基座回退到输入父目录。
 
 Risk classes:
-- ``office_audit_word`` / ``office_extract_rules``: READ
-- ``office_fix_word`` / ``office_revise_word``: WRITE_LOCAL
+- ``office_audit_word`` / ``office_extract_rules`` / ``office_batch_audit_word``: READ
+- ``office_fix_word`` / ``office_revise_word`` / ``office_render_audit``: WRITE_LOCAL
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
+from backend.tools.office_workspace_scope import workspace_for_policy
 
 _MAX_ISSUES_IN_TOOL = 200
 _MAX_CANDIDATES_IN_TOOL = 100
@@ -44,9 +46,12 @@ class _WordToolBase(BaseTool):
     ) -> Tuple[Optional[Path], Optional[ToolResult]]:
         if not isinstance(file_path, str) or not file_path.strip():
             return None, ToolResult(success=False, error="file_path_required")
-        blocked = self._enforce_workspace(file_path)
-        if blocked is not None:
-            return None, blocked
+        # READ 工具对齐 read_file：接受任意绝对路径，不做工作区边界检查。
+        # WRITE 工具保留 _enforce_workspace（含 allowed_paths / approved 路径）。
+        if self.risk is not RiskClass.READ:
+            blocked = self._enforce_workspace(file_path)
+            if blocked is not None:
+                return None, blocked
         target = Path(file_path).expanduser()
         if not target.is_absolute():
             return None, ToolResult(
@@ -144,7 +149,7 @@ class OfficeAuditWordTool(_WordToolBase):
         from backend.office.errors import OfficeError
         from backend.office.word_audit import audit_word_document
 
-        root = _workspace_root(self._policy) or str(target.parent)
+        root = workspace_for_policy(self._policy, target)
         try:
             result = audit_word_document(target, pack, workspace_path=root)
         except OfficeError as exc:
@@ -209,7 +214,7 @@ class OfficeFixWordTool(_WordToolBase):
         from backend.office.errors import OfficeError
         from backend.office.word_fix import fix_word_document
 
-        root = _workspace_root(self._policy) or str(target.parent)
+        root = workspace_for_policy(self._policy, target)
         try:
             result = fix_word_document(
                 target,
@@ -274,9 +279,6 @@ class OfficeExtractRulesTool(_WordToolBase):
             return blocked
         if not isinstance(file_path, str) or not file_path.strip():
             return ToolResult(success=False, error="file_path_required")
-        blocked = self._enforce_workspace(file_path)
-        if blocked is not None:
-            return blocked
         target = Path(file_path).expanduser()
         if not target.is_absolute():
             return ToolResult(
@@ -291,7 +293,7 @@ class OfficeExtractRulesTool(_WordToolBase):
         from backend.office.errors import OfficeError
         from backend.office.word_rule_extract import extract_word_rules
 
-        root = _workspace_root(self._policy) or str(target.parent)
+        root = workspace_for_policy(self._policy, target)
         try:
             result = extract_word_rules(
                 target,
@@ -381,7 +383,7 @@ class OfficeReviseWordTool(_WordToolBase):
             build_revision_plan,
         )
 
-        root = _workspace_root(self._policy) or str(target.parent)
+        root = workspace_for_policy(self._policy, target)
         if changes is None:
             try:
                 audit = audit_word_document(target, pack, workspace_path=root)
@@ -557,7 +559,7 @@ class OfficeRenderAuditTool(_WordToolBase):
         from backend.office.errors import OfficeError
         from backend.office.word_render_audit import audit_word_render
 
-        root = _workspace_root(self._policy) or str(target.parent)
+        root = workspace_for_policy(self._policy, target)
         try:
             result = audit_word_render(
                 target,

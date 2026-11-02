@@ -17,12 +17,22 @@ Public surface:
     current_tool_context()       # read the active context (None if unset)
     reset_tool_context(token)    # restore previous binding (pair with set)
 
+    set_approved_paths(paths)       # record paths approved for the current call
+    current_approved_paths()        # read the approved-paths scope
+    reset_approved_paths(token)     # restore (pair with set)
+
 Why a frozen dataclass with a ``frozenset`` of doc ids:
 
 * frozen -> callers can't mutate the scope after authorization, which
   would silently widen which docs the producer is allowed to load.
 * ``frozenset`` -> hashable and immutable, suitable for use as a set
   member or as part of an LRU key.
+
+Approved-paths scope (separate ContextVar, same lifetime):
+
+* 当用户批准一次工作区外写入时，审批的绝对路径被写入此作用域；
+  ``BaseTool._enforce_workspace`` 据此放行。作用域随当前工具调用结束
+  reset（agent 在 ``_await_tool_execution`` 外层 try/finally 管理 token）。
 """
 
 from __future__ import annotations
@@ -92,9 +102,49 @@ def reset_tool_context(token: Token) -> None:
     _tool_context_var.reset(token)
 
 
+#: The set of absolute paths approved by the user for the current tool
+#: call (typically because the permission engine's path boundary
+#: validator upgraded the write to ``needs_approval``). ``BaseTool._enforce_workspace``
+#: consults this scope before rejecting a path as outside the workspace.
+#: Defaults to the empty tuple so unapproved calls never inherit a prior
+#: call's scope.
+_approved_paths_var: ContextVar[tuple] = ContextVar(
+    "backend_tool_approved_paths", default=()
+)
+
+
+def set_approved_paths(paths: tuple) -> Token:
+    """Bind ``paths`` as the approved scope for the current task.
+
+    ``paths`` is typically the tuple of absolute paths extracted from
+    the tool call's arguments that triggered the approval flow. The
+    caller must pass the token back to :func:`reset_approved_paths`
+    (typically in a ``finally`` block) to prevent the scope from leaking
+    into subsequent calls.
+    """
+    return _approved_paths_var.set(tuple(paths))
+
+
+def current_approved_paths() -> tuple:
+    """Return the approved-paths scope for the current task, or ``()`` if unset."""
+    return _approved_paths_var.get()
+
+
+def reset_approved_paths(token: Token) -> None:
+    """Restore the binding captured by ``token``.
+
+    Pairs with :func:`set_approved_paths`. Always invoke from a
+    ``finally`` block.
+    """
+    _approved_paths_var.reset(token)
+
+
 __all__ = [
     "ToolExecutionContext",
     "set_tool_context",
     "current_tool_context",
     "reset_tool_context",
+    "set_approved_paths",
+    "current_approved_paths",
+    "reset_approved_paths",
 ]

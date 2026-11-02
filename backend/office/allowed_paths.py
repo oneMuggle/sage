@@ -26,10 +26,38 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path, PurePath
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
+
+# 新建项目时预填的 allowed_paths：主目录下的常用文档目录，仅当目录存在时加入。
+_DEFAULT_HOME_DIRS: tuple = ("Documents", "Desktop", "Downloads")
+# Windows 上常见的数据盘文档目录（非系统盘），仅当目录存在时加入。
+_DEFAULT_WINDOWS_DRIVES: tuple = ("D", "E")
+
+
+def default_allowed_paths(home: Optional[Path] = None) -> List[str]:
+    """新建项目时预填的默认 allowed_paths 规则（仅包含实际存在的目录）。
+
+    - 用户主目录下的 ``Documents`` / ``Desktop`` / ``Downloads``
+    - Windows 上 ``D:/Documents``、``E:/Documents``（如存在）
+
+    规则字符串保持 ``~/xxx/**`` / ``盘符:/xxx/**`` 形式，由
+    :func:`_expand_rule` 在匹配时展开；目录不存在则跳过，避免给出永远
+    匹配不到的规则。用户显式传 ``[]`` 时不调用本函数（尊重清空选择）。
+    """
+    base = home if home is not None else Path.home()
+    rules: List[str] = []
+    for name in _DEFAULT_HOME_DIRS:
+        if (base / name).is_dir():
+            rules.append(f"~/{name}/**")
+    if os.name == "nt":
+        for drive in _DEFAULT_WINDOWS_DRIVES:
+            if Path(f"{drive}:/Documents").is_dir():
+                rules.append(f"{drive}:/Documents/**")
+    return rules
 
 
 def get_session_allowed_paths(session_id: Optional[str]) -> List[str]:
@@ -231,6 +259,7 @@ def _doublestar_match(candidate: Path, pattern_str: str) -> bool:
 
 
 __all__ = [
+    "default_allowed_paths",
     "get_session_allowed_paths",
     "is_allowed",
 ]

@@ -324,12 +324,12 @@ def test_requires_doc_id_or_file_path(tmp_path: Path):
     assert result.error == "doc_id_or_file_path_required"
 
 
-def test_rejects_path_outside_policy_workspace(tmp_path: Path):
+def test_allows_path_outside_policy_workspace(tmp_path: Path):
+    """读路径不做工作区边界检查（与 read_file 对齐：允许读取任意位置）。"""
     env = _BoundWorkspace(tmp_path, workspace_root=str(tmp_path / "work"))
     outside = _make_xlsx(tmp_path / "outside.xlsx")
     result = _run(env, file_path=str(outside), operations=[{"kind": "describe"}])
-    assert result.success is False
-    assert result.error.startswith("path_outside_workspace")
+    assert result.success is True
 
 
 def test_empty_sheet_rejected(tmp_path: Path):

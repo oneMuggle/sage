@@ -1,11 +1,11 @@
 # ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容，保留 typing 注解
 """Word 格式 Linter 工具（Round 10）—— ``office_lint_word``。
 
-对照 FormatSpec 校验工作区内的 .docx（纯回读，零写入），输出带
+对照 FormatSpec 校验 .docx（纯回读，零写入），输出带
 rule_id / severity / fix_hint 的违规清单。与 office_read_pdf 同一安全
 姿态：``requires_tool_context = True``（无活动 ToolExecutionContext 时
-registry 隐藏 schema，execute() 顶部 fail-closed）；file_path 经
-``_enforce_workspace`` 工作区围栏把守。
+registry 隐藏 schema，execute() 顶部 fail-closed）；file_path 走绝对路径 +
+.docx 白名单把守（纯读，不做工作区边界检查）。
 
 Public surface:
 
@@ -154,11 +154,8 @@ class OfficeLintWordTool(BaseTool):
         except ValidationError as exc:
             return ToolResult(success=False, error=f"format_spec_invalid: {exc}")
 
-        # 与 office_read_pdf / office_generate_pdf 同一安全姿态：
-        # _enforce_workspace（绑定工作区硬拒绝）+ 绝对路径 + 后缀白名单。
-        blocked = self._enforce_workspace(file_path)
-        if blocked is not None:
-            return blocked
+        # 读路径不做工作区检查（与 read_file 对齐：允许读取任意位置）。
+        # lint 是 READ 工具，不修改文件，因此不做边界检查。
         target = Path(file_path).expanduser()
         if not target.is_absolute():
             return ToolResult(

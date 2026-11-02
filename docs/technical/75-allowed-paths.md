@@ -1,17 +1,19 @@
 # 75 — 项目级文件访问控制（Allowed Paths）
 
 > 2026-09-17 · Phase 1-5 全部落地 · PR #1010 #1013 #1014
+> 2026-11-02 · 读写边界放宽：读任意路径、写走白名单/审批
 
 ## 1. 概述
 
-allowed_paths 为每个项目提供"额外只读路径规则"，让 agent 能读取 workspace 之外的
-指定目录/文件。写入仍限于 workspace 内。
+allowed_paths 为每个项目提供"额外信任路径规则"。2026-11-02 起读写边界拆开：
+读取任意路径无需审批（与 `read_file` 对齐）；写入 workspace 内直接放行，
+workspace 外命中 allowed_paths 自动放行、未命中走审批。
 
 | 区域 | 读 | 写 |
 |------|----|----|
 | workspace 内 | ✅ | ✅ |
-| allowed_paths 匹配 | ✅ | ❌ 触发审批 |
-| 其他路径 | ❌ 触发审批 | ❌ 触发审批 |
+| allowed_paths 匹配 | ✅ | ✅ |
+| 其他路径 | ✅ 无需审批 | ⚠️ 触发审批 |
 
 ## 2. 数据模型
 
@@ -38,6 +40,10 @@ ALTER TABLE projects ADD COLUMN allowed_paths TEXT DEFAULT '[]'
 - `~` → `Path.home()`
 - 相对路径 → 相对于项目根目录
 - 前端 `AllowedPathsEditor` 输入规则，经 `projectApi.updateAllowedPaths` 写入
+- 新建项目（`register_project`）在请求未显式提供 `allowed_paths`（`None`）时预填
+  `default_allowed_paths()`：`~/Documents/**`、`~/Desktop/**`、`~/Downloads/**`
+  （仅实际存在的目录；Windows 追加 `D:/Documents/**`、`E:/Documents/**`）。
+  显式 `[]` 尊重清空选择；`ON CONFLICT(path)` 更新不会覆盖用户已编辑的规则。
 
 ## 4. 匹配引擎
 
@@ -56,8 +62,11 @@ is_allowed(candidate, allowed_paths) → bool
 
 ### 5.1 读取路径
 
-- `file_tool.py` — `read_file` / `list_dir` 先检查 workspace 包含，
-  不满足时调用 `is_allowed(candidate, project.allowed_paths)`
+- `file_tool.py` — `read_file` / `list_dir` 不设工作区围栏，可读取任意路径
+- Office READ 工具（`office_list` / `office_read` / `office_read_pdf` /
+  `office_analyze` / LaTeX & Word intelligence 读取工具）同样移除硬拒绝；
+  service 层围栏基座使用 `workspace_for_policy()`：输入在绑定工作区内时用绑定
+  工作区，否则回退到输入父目录（保留 `..` / symlink 防护）
 - `workspace_routes.py` — `/workspace/files` 搜索补充
   `_search_allowed_paths()`：展开规则 → `os.walk` 子树扫描 →
   结果以 `kind: "allowed-{file,ppt,...}"` 返回
@@ -66,8 +75,24 @@ is_allowed(candidate, allowed_paths) → bool
 
 ### 5.2 写入路径
 
-写类工具（`write_file` / `edit_file` / `apply_patch`）**不检查 allowed_paths**，
-始终限制在 workspace 内。试图写入 allowed_paths 路径会触发权限审批。
+`BaseTool._enforce_workspace` 四层判定（`backend/tools/base.py`）：
+
+1. 路径在 `workspace_root` 内 → 放行
+2. 命中当前 session 绑定项目的 `allowed_paths` → 放行
+3. 落在本次调用的已审批路径作用域内（`enter_approved_paths` 注入的 ContextVar）→ 放行
+4. 其余 → 拒绝 `path_outside_workspace`
+
+`office_create` / `office_update` / `office_delete` 及模板填充、PDF 生成、LaTeX
+编译等写工具都在权限边界 specs 中登记；工作区外未命中白名单的写入由审批闸口
+放行本次调用。
+
+### 5.3 @-mention 附件
+
+`backend/chat/attachment_resolver.py` 的 `_resolve_attachment_path()` 接受
+`allowed_paths` / `project_root`：命中白名单的工作区外文件放行（读取基座回退到
+文件父目录），未命中返回 `skipped_reason: "outside_workspace"`，并在
+`<attachments_skipped>` 段向模型说明跳过原因。legacy / hex 路由在事件循环内查询
+`get_session_allowed_paths(session_id)` 后传入线程池，避免 DB 访问落在 worker 线程。
 
 ## 6. 审批流扩展
 
