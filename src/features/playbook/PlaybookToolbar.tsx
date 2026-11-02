@@ -16,6 +16,7 @@ export interface PlaybookToolbarProps {
   onToggleLibrary: () => void;
   onEdit: () => void;
   onLoadVersions: () => void;
+  onLoadActivity: () => void;
   onSeedMilestones: () => void;
   onCleanupRules: () => void;
   onUnbind: () => void;
@@ -33,6 +34,7 @@ export function PlaybookToolbar({
   onToggleLibrary,
   onEdit,
   onLoadVersions,
+  onLoadActivity,
   onSeedMilestones,
   onCleanupRules,
   onUnbind,
@@ -119,6 +121,14 @@ export function PlaybookToolbar({
         data-testid="playbook-versions-btn"
       >
         {t('playbook.card.versions')}
+      </Button>
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={onLoadActivity}
+        data-testid="playbook-activity-btn"
+      >
+        {t('playbook.card.activity')}
       </Button>
       <Button
         size="sm"
