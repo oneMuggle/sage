@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -135,6 +135,36 @@ describe('Message display modes — result summary bar', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.queryByTestId('display-mode-result-summary')).toBeNull();
     expect(screen.getByText('trace-a.ts')).toBeInTheDocument();
+  });
+
+  it('collapses already-expanded tool cards when the session switches to result', () => {
+    renderWithI18n(
+      <Message
+        message={assistantMessage({
+          id: 'm-switch-to-result',
+          reasoning_content: '切换前已展开',
+          tool_calls: [
+            { name: 'read_file', args: { path: 'switch-a.ts' }, result: 'alpha' },
+            { name: 'read_file', args: { path: 'switch-b.ts' }, result: 'beta' },
+            { name: 'web_search', args: { query: 'gamma' }, result: 'delta' },
+          ],
+        })}
+      />,
+    );
+
+    // trace 档工具组默认展开 —— 卡片可见
+    expect(screen.getByText('switch-a.ts')).toBeInTheDocument();
+
+    // 切到 result 档后，已挂载的历史消息也必须立即生效（验收标准 #1）：
+    // 卡片收起，汇总条如实报告被隐藏的内容
+    act(() => {
+      displayModeStore.setSession('s1', 'result');
+    });
+
+    expect(screen.getByTestId('display-mode-result-summary')).toHaveTextContent(
+      '已隐藏思考过程与 3 步工具调用',
+    );
+    expect(screen.queryByText('switch-a.ts')).not.toBeInTheDocument();
   });
 
   it('renders no summary bar when there is nothing to hide', () => {
