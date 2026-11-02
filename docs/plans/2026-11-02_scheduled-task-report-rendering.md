@@ -65,8 +65,8 @@ const showBubble = isUser || isSystem || (isAssistant && Boolean((message.conten
 - [x] 步骤 1: 修改 Message.tsx showBubble 逻辑
 - [x] 步骤 2: 修改 Message.tsx 头像逻辑
 - [x] 步骤 3: 补充/更新前端测试（现有测试通过，无需新增）
-- [ ] 步骤 4: 本地验证
-- [ ] 步骤 5: 提交 + PR
+- [x] 步骤 4: 本地验证（单元测试通过）
+- [x] 步骤 5: 提交 + PR（PR #2793）
 
 ## 风险评估
 
