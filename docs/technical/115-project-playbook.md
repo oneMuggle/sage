@@ -159,7 +159,7 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 
 ## 8. 前端
 
-- 主卡片 `PlaybookCard` 挂载在项目治理页「概览」Tab；同目录下还有 `PlaybookChecklist`（待补项/退出条件）、`PlaybookClassificationPanel`（归类与未知文件批量移动/撤销）、`PlaybookLibraryPanel`（全局规程库管理）、`PlaybookSpecEditor`（表单/JSON 编辑）、`PlaybookAuthorPanel`、`PlaybookImportPreviewCard` 与 `PlaybookVersionsPanel`；
+- 主卡片 `PlaybookCard` 挂载在项目治理页「概览」Tab；同目录下还有 `PlaybookChecklist`（待补项/退出条件）、`PlaybookClassificationPanel`（归类与未知文件批量移动/撤销）、`PlaybookLibraryPanel`（全局规程库管理）、`PlaybookSpecEditor`（表单/JSON 编辑）、`PlaybookAuthorPanel`、`PlaybookImportPreviewCard`、`PlaybookVersionsPanel` 与 `PlaybookActivityPanel`（最近活动流水 + 聚合，见 §13）；
 - 展示阶段条、整体完成度、当前阶段待补项、阶段推进确认、导出/导入；
 - 所有动作按钮均需用户点击；错误与结果就地显示，并通过 `role="status"` / `aria-live="polite"` 暴露给读屏；
 - 文案 i18n：词典位于 `src/shared/lib/i18n/locales/{zh,en}/playbook.ts`，组件通过 `usePlaybookI18n()` 取 `t/tf`；无 `I18nProvider` 时回退中文（便于组件单测）。**后端返回的审计 reason 与错误消息仍为中文**，英文界面下这部分保持原文；后续如需全量本地化，应改为后端返回 code + params。
@@ -183,7 +183,7 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 
 - 单元：`test_playbook_spec.py`、`test_playbook_repo.py`、`test_playbook_auditor.py`、`test_playbook_actions.py`、`test_playbook_diff.py`；
 - 集成：`test_playbook_routes.py`（绑定 → 审计 → 动作 → 阶段确认 → 导出/导入 → 逐项 diff → 库详情/导出 → 路径拒绝）；
-- 前端：`PlaybookCard.test.tsx`、`PlaybookLibraryPanel.test.tsx`、`PlaybookImportPreviewCard.test.tsx`、`PlaybookSpecEditor.a11y.test.tsx`（表单控件可访问名称）、`playbookApi.test.ts`；
+- 前端：`PlaybookCard.test.tsx`、`PlaybookActivityPanel.test.tsx`、`PlaybookLibraryPanel.test.tsx`、`PlaybookImportPreviewCard.test.tsx`、`PlaybookSpecEditor.a11y.test.tsx`（表单控件可访问名称）、`playbookApi.test.ts`；
 - E2E：`tests/electron/tiers/stub/smoke/playbook.spec.ts`（项目治理页 → 归类全选 → 批量移动 → 撤销，校验 IPC 动作负载）。
 
 ## 12. 已知限制（后续 P3）
@@ -202,7 +202,7 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 
 ### 13.1 存储
 
-- 表 `playbook_events`（SQLite，随项目数据目录创建）：`id / project_id / event / stage / payload / created_at`；
+- 表 `playbook_events`（SQLite，随项目数据目录创建）：`id / project_id / event / stage / payload_json / created_at`，索引 `idx_playbook_events_recent(project_id, created_at DESC)`；
 - `created_at` 为 **epoch 毫秒**（`int(time.time() * 1000)`）；
 - `payload` 为 JSON 文本，记录辅助字段（如 `source`/`stage_from`/`stage_to`），不存大字段；
 - 每项目 **最多保留 500 条**（`MAX_EVENTS_PER_PROJECT`），插入后裁剪最旧的。
@@ -217,14 +217,14 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 
 | 端点 | 返回 | 用途 |
 |---|---|---|
-| `GET /projects/{id}/playbook/events` | `PlaybookEvent[]` | 最近事件流水（默认倒序） |
-| `GET /projects/{id}/playbook/events/aggregate` | `PlaybookEventAggregate` | `{days, project_id, counts, total}` 时间窗聚合 |
+| `GET /projects/{id}/playbook/events?limit=50` | `{project_id, events: PlaybookEvent[]}` | 最近事件流水（`created_at DESC, id DESC`；`limit` 1–200，默认 50） |
+| `GET /playbooks/events/aggregate?project_id=&days=30` | `{days, project_id, counts, total}` | 时间窗聚合；`project_id` 可省略表示全局，`days` 1–365，默认 30 |
 
 两条端点走 `LocalAuthMiddleware`，与项目其它 playbook API 同安全域。
 
 ### 13.4 IPC 路由
 
-Electron 侧 `src/shared/api/playbookApi.ts` 暴露 `listEvents(projectId)` 与 `aggregateEvents(projectId)`，通过 `playbook:events:list` / `playbook:events:aggregate` IPC 通道转发到后端。`PlaybookCard` 的 `handleLoadActivity` 用 `Promise.all` 并行拉取两条后交给 `PlaybookActivityPanel` 渲染。
+Electron 侧 `src/shared/api/playbookApi.ts` 暴露 `listEvents(projectId, limit = 50)` 与 `aggregateEvents(projectId?, days = 30)`，通过 `playbooks_events_list` / `playbooks_events_aggregate` IPC 命令（`electron/ipc-manifest.json` + `electron/commandRoutes/playbooks.ts`）转发到后端。`PlaybookCard` 的 `handleLoadActivity` 用 `Promise.all` 并行拉取两条后交给 `PlaybookActivityPanel` 渲染。
 
 ### 13.5 失败策略
 
