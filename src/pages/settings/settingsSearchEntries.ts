@@ -6,6 +6,7 @@
  */
 
 import { BROWSER_EXTENSION_SETTINGS_SEARCH_ENTRIES } from './settingsSearchEntriesBrowserExtension';
+import { CHAT_SETTINGS_SEARCH_ENTRIES } from './settingsSearchEntriesChat';
 import { PET_SETTINGS_SEARCH_ENTRIES } from './settingsSearchEntriesPet';
 import type { SettingsTabKey } from './settingsTabs';
 
@@ -65,20 +66,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: '代码字号',
     labelEn: 'Code font size',
     keywords: 'code font size 代码字号',
-  },
-  {
-    key: 'streaming',
-    tab: 'basic',
-    label: '流式输出',
-    labelEn: 'Streaming',
-    keywords: 'streaming 流式 逐字 输出',
-  },
-  {
-    key: 'inputHistorySize',
-    tab: 'basic',
-    label: '输入历史条数',
-    labelEn: 'Input history size',
-    keywords: 'input history size 输入 历史 条数 上限',
   },
   {
     key: 'llmRetryMaxAttempts',
@@ -156,13 +143,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: '上下文轮数限制',
     labelEn: 'Context turn limit',
     keywords: 'context turn limit 上下文 轮数 隔离 不限',
-  },
-  {
-    key: 'attachment_rag',
-    tab: 'basic',
-    label: '超长文档检索注入',
-    labelEn: 'Attachment RAG',
-    keywords: 'rag 附件 检索 embedding 长文档 top_k',
   },
   {
     key: 'auto_checkpoint',
@@ -843,4 +823,5 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // ── 桌宠 ──
   ...PET_SETTINGS_SEARCH_ENTRIES,
   ...BROWSER_EXTENSION_SETTINGS_SEARCH_ENTRIES,
+  ...CHAT_SETTINGS_SEARCH_ENTRIES,
 ];
