@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { displayModeStore } from '../../../features/chat/displayMode/displayModeStore';
 import type { TranslationKey } from '../../../shared/lib/i18n';
 import { zh } from '../../../shared/lib/i18n/zh';
 import type {
@@ -22,6 +23,26 @@ function item(items: ContextMenuItemSpec[], id: string): ContextMenuActionItem {
   return found;
 }
 
+type CheckboxSpec = Extract<ContextMenuItemSpec, { kind: 'checkbox' }>;
+
+/** 取子菜单（父项的 submenu 数组）。 */
+function submenu(items: ContextMenuItemSpec[], id: string): ContextMenuItemSpec[] {
+  const found = items.find((entry) => entry.id === id);
+  if (!found || !('submenu' in found) || !found.submenu) {
+    throw new Error(`missing submenu ${id}`);
+  }
+  return found.submenu;
+}
+
+/** 取子菜单里的复选项（kind === 'checkbox'）。 */
+function checkboxItem(items: ContextMenuItemSpec[], id: string): CheckboxSpec {
+  const found = items.find((entry) => entry.id === id);
+  if (!found || found.kind !== 'checkbox') {
+    throw new Error(`missing checkbox item ${id}`);
+  }
+  return found;
+}
+
 type Params = Parameters<typeof buildMessageContextMenuItems>[0];
 
 function build(overrides: Partial<Params> = {}) {
@@ -37,6 +58,10 @@ function build(overrides: Partial<Params> = {}) {
 }
 
 describe('buildMessageContextMenuItems', () => {
+  beforeEach(() => {
+    displayModeStore.clearAll();
+  });
+
   it('builds the assistant action set with all injected handlers', () => {
     const items = build({
       onQuote: vi.fn(),
@@ -58,6 +83,7 @@ describe('buildMessageContextMenuItems', () => {
       'fork',
       'rewind',
       'save-to-memory',
+      'display-mode-submenu',
       'sep-delete',
       'delete',
     ]);
@@ -152,5 +178,56 @@ describe('buildMessageContextMenuItems', () => {
     expect(onFeedback).toHaveBeenNthCalledWith(2, 'down');
     expect(onCopySelection).toHaveBeenCalledTimes(1);
     expect(onQuoteSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds the display-mode submenu for assistant messages only', () => {
+    const assistantItems = build();
+    expect(ids(assistantItems)).toContain('display-mode-submenu');
+
+    const sub = submenu(assistantItems, 'display-mode-submenu');
+    expect(ids(sub)).toEqual([
+      'display-mode-detail',
+      'display-mode-trace',
+      'display-mode-result',
+      'display-mode-sep',
+      'display-mode-follow-session',
+    ]);
+    expect(sub.find((entry) => entry.id === 'display-mode-sep')?.kind).toBe('separator');
+
+    const userItems = build({
+      message: { id: 'u-1', role: 'user', content: '提问' },
+    });
+    expect(ids(userItems)).not.toContain('display-mode-submenu');
+  });
+
+  it('stores the message-level display mode override when a mode is picked', () => {
+    const items = build();
+    const sub = submenu(items, 'display-mode-submenu');
+
+    expect(checkboxItem(sub, 'display-mode-detail').checked).toBe(false);
+    expect(checkboxItem(sub, 'display-mode-follow-session').checked).toBe(true);
+
+    checkboxItem(sub, 'display-mode-detail').onCheckedChange(true);
+
+    expect(displayModeStore.getMessage('a-1')).toBe('detail');
+
+    const rebuilt = submenu(build(), 'display-mode-submenu');
+    expect(checkboxItem(rebuilt, 'display-mode-detail').checked).toBe(true);
+    expect(checkboxItem(rebuilt, 'display-mode-follow-session').checked).toBe(false);
+  });
+
+  it('labels follow-session with the session mode and clears the message override', () => {
+    displayModeStore.setSession('s-1', 'result');
+    const items = build({ sessionId: 's-1' });
+    const sub = submenu(items, 'display-mode-submenu');
+
+    const follow = checkboxItem(sub, 'display-mode-follow-session');
+    expect(follow.label).toContain(t('chat.displayMode.followSession'));
+    expect(follow.label).toContain(t('chat.displayMode.result'));
+
+    displayModeStore.setMessage('a-1', 'trace');
+    follow.onCheckedChange(true);
+
+    expect(displayModeStore.getMessage('a-1')).toBeNull();
   });
 });

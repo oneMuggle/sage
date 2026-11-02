@@ -233,6 +233,7 @@ function MessageComponent({
       });
     return buildMessageContextMenuItems({
       message,
+      sessionId: message.session_id,
       t,
       isStreaming,
       selectionText,
