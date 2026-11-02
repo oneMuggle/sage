@@ -3,7 +3,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import type { TaskBoard } from '../../../features/send-message/useChat';
-import { formatProgressSectionJson, formatProgressSectionMarkdown, ProgressSection } from '../progress/ProgressSection';
+import {
+  formatProgressSectionJson,
+  formatProgressSectionMarkdown,
+  ProgressSection,
+} from '../progress/ProgressSection';
 
 describe('ProgressSection', () => {
   it('shows iteration when > 0', () => {
@@ -123,7 +127,7 @@ describe('ProgressSection', () => {
     expect(screen.getByTestId('plan-pending-label')).toBeInTheDocument();
   });
 
-  it('taskBoard 已派发 → 渲染 TaskTreeSection', () => {
+  it('taskBoard 已派发 → 默认视图不渲染 TaskTreeSection，需切到「任务」子视图', () => {
     const board: TaskBoard = {
       runId: 'r1',
       plan: [{ task_id: 't1', agent_id: 'researcher', goal: 'G' }],
@@ -139,6 +143,10 @@ describe('ProgressSection', () => {
         taskBoard={board}
       />,
     );
+    // 默认视图 = 概览，任务树不在 DOM 中。
+    expect(screen.queryByTestId('task-tree')).not.toBeInTheDocument();
+    // 切到「任务」子视图后可见。
+    fireEvent.click(screen.getByTestId('progress-subtab-tasks'));
     expect(screen.getByTestId('task-tree')).toBeInTheDocument();
   });
 
