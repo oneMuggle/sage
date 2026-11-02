@@ -203,7 +203,10 @@ function MessageComponent({
   // 的特殊调用 —— 这些调用在任何档位下都逐条可见（spec §3.4）。
   const hidesToolCalls = isResultMode && canGroup;
   const showToolGroupToggle = canGroup && !isResultMode;
-  const showToolCards = !canGroup || toolGroupExpanded || (isResultMode && resultDetailExpanded);
+  // result 档只认 resultDetailExpanded：toolGroupExpanded 是挂载时的契约初值
+  // （trace/detail 默认展开），若沿用会让切到 result 档的已挂载消息继续逐条显示工具卡片，
+  // 与汇总条「已隐藏」的文案矛盾（验收标准 #1：切换对历史消息立即生效）。
+  const showToolCards = !canGroup || (isResultMode ? resultDetailExpanded : toolGroupExpanded);
   const summary = useMemo(() => toolGroupSummary(toolCalls, canGroup, 3), [toolCalls, canGroup]);
   // R113: 折叠组头的归属去重集（与逐卡 R111 同源同名单）——
   // 折叠态下也能一眼看出组内涉及的插件；按首次出现排序。
