@@ -109,7 +109,7 @@ Progress Tab
 - [x] P6：TodoListSection 去重
 - [x] 测试：更新现有测试（SubagentDetailDrawer → TaskDetailView）
 - [x] tsc 类型检查 + 进度面板相关 12 文件 80 用例全绿
-- [ ] CI 绿后提交 → PR
+- [x] CI 绿后提交 → PR（main PR #2799 已合并；win7 PR #2804 已开，等 CI）
 
 ## 风险评估
 
