@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { formatI18nProviderJson, formatI18nProviderSummary, translateStatic } from '../index';
+import { formatI18nProviderJson, formatI18nProviderSummary } from '../index';
+import { translateStatic } from '../translations';
 
 describe('I18nProvider audit diagnostics', () => {
   it('formats i18n provider summary for zh and en', () => {

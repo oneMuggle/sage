@@ -27,7 +27,7 @@ vi.mock('sonner', () => ({
   toast: { error: (...args: unknown[]) => mocks.toastError(...args) },
 }));
 
-vi.mock('../../../shared/lib/i18n', () => ({
+vi.mock('../../../shared/lib/i18n/translations', () => ({
   translateStatic: (key: string) => mocks.translateStatic(key),
 }));
 

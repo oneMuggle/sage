@@ -13,9 +13,8 @@
  *   避免每个组件挂载都重新拉.
  * - 测试用 useSettingsStore.setState(...) 重置.
  */
-import { create } from 'zustand';
-
 import { toast } from 'sonner';
+import { create } from 'zustand';
 
 import {
   loadSettings as loadSettingsFromStorage,
@@ -26,7 +25,7 @@ import {
 import type { AppSettings } from '../../entities/setting/types';
 import { DEFAULT_SETTINGS, withDemoSettingsDefaults } from '../../entities/setting/types';
 import { getDemoModeOverride, setDemoModeOverride } from '../../shared/api/demoRuntime';
-import { translateStatic } from '../../shared/lib/i18n';
+import { translateStatic } from '../../shared/lib/i18n/translations';
 
 interface SettingsStoreState {
   settings: AppSettings;
