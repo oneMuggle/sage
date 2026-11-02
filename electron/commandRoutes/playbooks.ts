@@ -155,4 +155,20 @@ export const playbookRoutes: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/playbooks/library/${enc(a.libraryId ?? a.library_id)}`,
   },
+  playbooks_events_list: {
+    method: 'GET',
+    path: (a) => {
+      const limit = Number(a.limit ?? 50);
+      return `/api/v1/projects/${projectId(a)}/playbook/events?limit=${limit}`;
+    },
+  },
+  playbooks_events_aggregate: {
+    method: 'GET',
+    path: (a) => {
+      const days = Number(a.days ?? 30);
+      const pid = a.projectId ?? a.project_id;
+      const query = pid ? `project_id=${enc(String(pid))}&days=${days}` : `days=${days}`;
+      return `/api/v1/playbooks/events/aggregate?${query}`;
+    },
+  },
 };
