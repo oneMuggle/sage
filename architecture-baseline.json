@@ -10,8 +10,8 @@
     "backend/api/playbook_routes.py": 814,
     "backend/api/wiki_routes.py": 1764,
     "backend/application/services/chat_service.py": 1263,
-    "backend/core/legacy/agent.py": 3517,
-    "backend/core/legacy/llm_client.py": 1342,
+    "backend/core/legacy/agent.py": 3522,
+    "backend/core/legacy/llm_client.py": 1376,
     "backend/data/database.py": 2286,
     "backend/data/session_repo.py": 1121,
     "backend/data/settings_canonicalizer.py": 941,
@@ -83,7 +83,7 @@
     "backend/tools/config_tool.py": 991,
     "backend/scheduler/evolution.py": 1739,
     "src/pages/Chat.tsx": 831,
-    "src/shared/api/types/chatAndEventTypes.ts": 862,
+    "src/shared/api/types/chatAndEventTypes.ts": 866,
     "scripts/feedback_receiver.py": 1154,
     "electron/preload.ts": 870
   }

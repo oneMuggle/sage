@@ -147,7 +147,7 @@ class SettingsPayload(BaseModel):
     orch: Optional[dict] = None
 
     # ----- LLM 重试配置 (2026-10-13) -----
-    # 最大重试次数（0 = 禁用重试）
+    # 最大尝试次数（含首次请求）；0 或 1 = 禁用自动重试
     llmRetryMaxAttempts: Optional[int] = None  # noqa: N815
     # 退避基数（秒）：第一次重试前的等待时间
     llmRetryBaseDelayS: Optional[float] = None  # noqa: N815
@@ -221,7 +221,7 @@ class LegacySettingsPayload(BaseModel):
     orch: Optional[dict] = None
 
     # ----- LLM 重试配置 (2026-10-13) -----
-    # 最大重试次数（0 = 禁用重试）
+    # 最大尝试次数（含首次请求）；0 或 1 = 禁用自动重试
     llmRetryMaxAttempts: Optional[int] = None  # noqa: N815
     # 退避基数（秒）：第一次重试前的等待时间
     llmRetryBaseDelayS: Optional[float] = None  # noqa: N815

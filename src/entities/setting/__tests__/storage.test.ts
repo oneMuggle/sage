@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetSettings = vi.fn();
 const mockSetSettings = vi.fn();
+const mockSetSettingsStrict = vi.fn();
 const mockSetPreference = vi.fn();
 vi.mock('../../../shared/api/settingsClient', () => ({
   settingsClient: {
     getSettings: (...args: unknown[]) => mockGetSettings(...args),
     setSettings: (...args: unknown[]) => mockSetSettings(...args),
+    setSettingsStrict: (...args: unknown[]) => mockSetSettingsStrict(...args),
     setPreference: (...args: unknown[]) => mockSetPreference(...args),
   },
 }));
@@ -101,15 +103,25 @@ describe('settings storage (async)', () => {
 
   describe('saveSettings', () => {
     it('同步写 localStorage', async () => {
+      mockSetSettingsStrict.mockResolvedValueOnce(undefined);
       await saveSettings({ maxContext: 16000 });
       const cached = JSON.parse(localStorage.getItem(CACHE_KEY)!);
       expect(cached.maxContext).toBe(16000);
     });
 
-    it('异步调 setSettings', async () => {
-      mockSetSettings.mockResolvedValueOnce(undefined);
-      await saveSettings({ maxContext: 16000 });
-      expect(mockSetSettings).toHaveBeenCalledWith({ maxContext: 16000 });
+    it('后端确认成功时返回 true 且走 strict 通道', async () => {
+      mockSetSettingsStrict.mockResolvedValueOnce(undefined);
+      const ok = await saveSettings({ maxContext: 16000 });
+      expect(ok).toBe(true);
+      expect(mockSetSettingsStrict).toHaveBeenCalledWith({ maxContext: 16000 });
+    });
+
+    it('后端写入失败时返回 false 并保留本地缓存', async () => {
+      mockSetSettingsStrict.mockRejectedValueOnce(new Error('IPC timeout'));
+      const ok = await saveSettings({ maxContext: 16000 });
+      expect(ok).toBe(false);
+      const cached = JSON.parse(localStorage.getItem(CACHE_KEY)!);
+      expect(cached.maxContext).toBe(16000);
     });
   });
 
