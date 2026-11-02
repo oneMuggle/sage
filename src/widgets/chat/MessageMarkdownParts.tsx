@@ -1,18 +1,15 @@
-import { Brain, Check, ChevronDown, Copy, Eye, EyeOff } from 'lucide-react';
+import { Brain, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import {
   memo,
   createContext,
   useContext,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
-import rehypeKatex from 'rehype-katex';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 
 import {
   remarkFileRefLinks,
@@ -20,47 +17,14 @@ import {
 } from '../../features/chat/useConfirmedFilePaths';
 import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { humanizeToolCall } from '../../shared/lib/humanize';
-import { useI18n } from '../../shared/lib/i18n';
 import type { ToolCall } from '../../shared/lib/store';
-import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
 
-import { HtmlCodeBlock } from './HtmlCodeBlock';
-import { MarkdownImage } from './MarkdownImage';
-import { MermaidBlock } from './MermaidBlock';
-import { ShikiCodeBlock } from './ShikiCodeBlock';
-
-/** Code block renderer — delegates to ShikiCodeBlock for syntax highlighting */
-function CodeBlock({ language, children }: { language?: string; children: string }) {
-  // Inline code fallback
-  if (!language && !children.includes('\n')) {
-    return (
-      <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">{children}</code>
-    );
-  }
-
-  return <ShikiCodeBlock language={language}>{children}</ShikiCodeBlock>;
-}
-
-/** markdown 插件集 — 模块级稳定引用，避免每次渲染重建数组 */
-const MD_REMARK_PLUGINS = [remarkGfm, remarkMath];
-const MD_REHYPE_PLUGINS = [rehypeKatex];
+import { Markdown } from '../markdown';
+import { MD_REHYPE_PLUGINS, MD_REMARK_PLUGINS } from '../markdown/plugins';
 
 const URL_SPLIT_RE = /(https?:\/\/[^\s<>()]+)/;
 
 /** 本地/工作区文件链接判定（feat/file-reference-preview）——非外链且有路径特征 */
-const FILE_EXT_RE =
-  /\.(md|markdown|mdx|txt|log|py|js|ts|tsx|jsx|rs|go|java|c|cpp|h|hpp|cs|rb|php|swift|kt|sh|bash|zsh|ps1|sql|html?|css|scss|yaml|yml|toml|ini|xml|png|jpe?g|gif|webp|svg|bmp|csv|tsv|json|pdf|docx|xlsx|pptx)$/i;
-const NON_FILE_SCHEME_RE = /^(https?:|mailto:|tel:|#|data:|blob:|sage-file:)/i;
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function isLocalFilePathHref(href: string | undefined | null): href is string {
-  const value = (href ?? '').trim();
-  if (!value) return false;
-  if (NON_FILE_SCHEME_RE.test(value)) return false;
-  if (value.startsWith('//')) return false;
-  return /[\\/]/.test(value) || FILE_EXT_RE.test(value);
-}
-
 /** P3: 用户消息纯文本中的 URL 自动链接化（assistant 走 markdown 已自带链接） */
 // eslint-disable-next-line react-refresh/only-export-components
 export function renderTextWithLinks(text: string): ReactNode[] {
@@ -81,200 +45,6 @@ export function renderTextWithLinks(text: string): ReactNode[] {
     ),
   );
 }
-
-/** 流式未闭合围栏的降级代码渲染 — 纯文本 pre，不随 delta 重复触发 Shiki/mermaid */
-function PlainCodeBlock({ className, children }: { className?: string; children: unknown }) {
-  const content = String(children).replace(/\n$/, '');
-  if (!className && !content.includes('\n')) {
-    return (
-      <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">{content}</code>
-    );
-  }
-  return (
-    <pre className="bg-[#282c34] text-gray-300 p-3 text-code font-mono leading-relaxed overflow-x-auto rounded-md my-2">
-      <code>{content}</code>
-    </pre>
-  );
-}
-
-function MarkdownTable({ children }: { children?: ReactNode }) {
-  const { t } = useI18n();
-  const tableRef = useRef<HTMLTableElement | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const handleCopyTable = async () => {
-    if (!tableRef.current) return;
-    const rows = Array.from(tableRef.current.querySelectorAll('tr'));
-    const tsv = rows
-      .map((row) =>
-        Array.from(row.querySelectorAll('th, td'))
-          .map((cell) => (cell.textContent ?? '').replace(/\s+/g, ' ').trim())
-          .join('\t'),
-      )
-      .join('\n');
-    try {
-      await navigator.clipboard.writeText(tsv);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // clipboard unavailable
-    }
-  };
-
-  const menuItems = () => [
-    {
-      id: 'copy-table',
-      label: t('contextMenu.table.copy'),
-      icon: Copy,
-      onSelect: () => void handleCopyTable(),
-    },
-  ];
-
-  return (
-    <ContextMenu items={menuItems}>
-      <div className="relative group/table my-3 rounded-radius-sm border border-border overflow-hidden">
-        <div className="flex items-center justify-end px-2 py-1 bg-bg-subtle border-b border-border/60">
-          <button
-            type="button"
-            onClick={() => void handleCopyTable()}
-            data-testid="markdown-table-copy"
-            aria-label={copied ? '已复制表格' : '复制表格'}
-            title="复制为 TSV（可直接粘贴至 Excel / 表格）"
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-text-secondary hover:text-text hover:bg-bg-hover transition-colors"
-          >
-            {copied ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
-            <span>{copied ? '已复制' : '复制表格'}</span>
-          </button>
-        </div>
-        <div className="overflow-x-auto max-h-80 overflow-y-auto">
-          <table ref={tableRef} className="min-w-full text-ui-sm border-collapse">
-            {children}
-          </table>
-        </div>
-      </div>
-    </ContextMenu>
-  );
-}
-
-/** 自定义 component 映射 — 模块级单例（原先内联在 JSX 里，每次渲染重建整个映射对象） */
-const markdownComponents = {
-  code({ className, children }: { className?: string; children: unknown }) {
-    const match = /language-(\w+)/.exec(className || '');
-    const lang = match ? match[1] : undefined;
-    const content = String(children).replace(/\n$/, '');
-    // Inline code detection: no language class and short content
-    const isInlineCode = !className && !content.includes('\n');
-    if (isInlineCode || !lang) {
-      return (
-        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">{content}</code>
-      );
-    }
-    // U7': Mermaid 图表渲染（动态加载，失败回退源码展示）
-    if (lang === 'mermaid') {
-      return <MermaidBlock code={content} />;
-    }
-    // P1: HTML 代码块支持源码/预览切换（sandbox iframe）
-    if (lang === 'html') {
-      return <HtmlCodeBlock code={content} />;
-    }
-    return <CodeBlock language={lang}>{content}</CodeBlock>;
-  },
-  // P1: 图片加载骨架 + 渐入 + 点击放大（Lightbox）
-  img({ src, alt }: { src?: string; alt?: string }) {
-    return <MarkdownImage src={src} alt={alt} />;
-  },
-  pre({ children }: { children?: ReactNode }) {
-    return <>{children}</>;
-  },
-  table({ children }: { children?: ReactNode }) {
-    return <MarkdownTable>{children}</MarkdownTable>;
-  },
-  th({ children }: { children?: ReactNode }) {
-    return (
-      <th className="border border-border px-3 py-1.5 bg-bg-subtle font-semibold text-left sticky top-0 z-[1]">
-        {children}
-      </th>
-    );
-  },
-  td({ children }: { children?: ReactNode }) {
-    return <td className="border border-border px-3 py-1.5">{children}</td>;
-  },
-  p({ children }: { children?: ReactNode }) {
-    return <p className="mb-2 last:mb-0">{children}</p>;
-  },
-  ul({ children }: { children?: ReactNode }) {
-    return <ul className="list-disc list-outside ml-5 mb-2">{children}</ul>;
-  },
-  ol({ children }: { children?: ReactNode }) {
-    return <ol className="list-decimal list-outside ml-5 mb-2">{children}</ol>;
-  },
-  li({ children }: { children?: ReactNode }) {
-    return <li className="mb-0.5">{children}</li>;
-  },
-  // P2: GFM 任务列表 checkbox 主题化（默认渲染无样式反馈）
-  input({ type, checked, disabled }: { type?: string; checked?: boolean; disabled?: boolean }) {
-    if (type === 'checkbox') {
-      return (
-        <input
-          type="checkbox"
-          checked={checked}
-          disabled={disabled}
-          className="mr-1.5 w-3.5 h-3.5 align-middle accent-primary"
-        />
-      );
-    }
-    return <input type={type} checked={checked} disabled={disabled} />;
-  },
-  a({ href, children }: { href?: string; children?: ReactNode }) {
-    // 消息内文件引用：非外链且形如文件路径 → 打开右栏预览（不跳出对话）
-    if (isLocalFilePathHref(href)) {
-      return (
-        <button
-          type="button"
-          className="text-primary hover:underline inline cursor-pointer"
-          title={`${href}（点击预览）`}
-          data-testid="markdown-file-link"
-          onClick={() => useRightPanelStore.getState().openFilePreview(href)}
-        >
-          {children}
-        </button>
-      );
-    }
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        title={href}
-        className="text-primary hover:underline"
-      >
-        {children}
-      </a>
-    );
-  },
-  blockquote({ children }: { children?: ReactNode }) {
-    return (
-      <blockquote className="border-l-4 border-border pl-3 py-1 my-2 text-muted italic">
-        {children}
-      </blockquote>
-    );
-  },
-  h1({ children }: { children?: ReactNode }) {
-    return <h1 className="text-ui-xl font-bold mt-4 mb-2">{children}</h1>;
-  },
-  h2({ children }: { children?: ReactNode }) {
-    return <h2 className="text-ui-lg font-bold mt-3 mb-2">{children}</h2>;
-  },
-  h3({ children }: { children?: ReactNode }) {
-    return <h3 className="text-ui-base font-bold mt-2 mb-1">{children}</h3>;
-  },
-};
-
-/** 流式 live 尾块专用映射 — 未闭合围栏内的代码块降级纯文本 */
-const liveMarkdownComponents: typeof markdownComponents = {
-  ...markdownComponents,
-  code: PlainCodeBlock,
-};
 
 /** 文本兜底文件引用（feat/file-reference-preview M5）：Provider 在消息层
  *  批量确认正文中的路径是否存在，MarkdownChunk 据此注入 remark 插件。 */
@@ -302,15 +72,24 @@ export function FileRefLinksProvider({
 }
 
 /**
+ * 本地文件链接 → 右栏文件预览。
+ * 模块级函数（引用稳定）—— Markdown 内部据此缓存 components map，
+ * 避免每次渲染重建整棵 markdown 树。
+ */
+function openLocalFilePreview(href: string) {
+  useRightPanelStore.getState().openFilePreview(href);
+}
+
+/**
  * memo 化的 markdown 块渲染器 — P1 流式分块的关键。
  * 比较器按字符串值相等跳过重解析（slice 出的新字符串实例也能命中），
  * 已确定的稳定前缀块在每个 delta 到达时零成本跳过。
+ *
+ * 渲染委托给共享 `<Markdown tier="chat">`（widgets/markdown）——
+ * 与产物面板 / Wiki 走同一套 GFM 排版、代码块、表格实现。
  */
 export const MarkdownChunk = memo(
   function MarkdownChunk({ md, plainFences }: { md: string; plainFences?: boolean }) {
-    // Components 断言: 映射对象是模块级单例，handler 参数用窄化类型
-    // （react-markdown 的 ExtraProps 交叉类型过宽，直接标注反而失配）
-    const components = (plainFences ? liveMarkdownComponents : markdownComponents) as Components;
     // 文本兜底文件引用：仅当本消息有「已确认存在」的路径时追加 remark 插件
     const confirmedPaths = useContext(ConfirmedFilePathsContext);
     const remarkPlugins = useMemo(
@@ -323,14 +102,19 @@ export const MarkdownChunk = memo(
           : MD_REMARK_PLUGINS,
       [confirmedPaths],
     );
+    // 每条消息的锚点前缀独立 —— 避免多条消息的 heading id 互相覆盖
+    const rawId = useId();
+    const anchorPrefix = `chat-${rawId.replace(/[^a-zA-Z0-9]/g, '')}`;
     return (
-      <ReactMarkdown
+      <Markdown
+        content={md}
+        tier="chat"
+        plainFences={plainFences}
+        onLocalFileClick={openLocalFilePreview}
         remarkPlugins={remarkPlugins}
         rehypePlugins={MD_REHYPE_PLUGINS}
-        components={components}
-      >
-        {md}
-      </ReactMarkdown>
+        headingAnchorPrefix={anchorPrefix}
+      />
     );
   },
   (prev, next) => prev.md === next.md && prev.plainFences === next.plainFences,
