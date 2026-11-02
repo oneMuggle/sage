@@ -8,7 +8,7 @@ describe('auditChatHeaderBarGovernance (P172)', () => {
     expect(report.module).toBe('src/pages/chat/ChatHeaderBar.tsx');
     expect(report.phase).toBe('P172');
     expect(report.domain).toBe('chat');
-    expect(report.topHeaderControls).toHaveLength(5);
+    expect(report.topHeaderControls).toHaveLength(6);
     expect(report.compliant).toBe(true);
   });
 });
