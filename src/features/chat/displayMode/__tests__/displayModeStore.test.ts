@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { displayModeStore } from '../displayModeStore';
+import { displayModeStore, subscribeDisplayModeStore } from '../displayModeStore';
 
 describe('displayModeStore', () => {
   beforeEach(() => {
@@ -34,5 +34,24 @@ describe('displayModeStore', () => {
     displayModeStore.setMessage('msg-1', 'result');
     expect(displayModeStore.getSession('session-1')).toBe('detail');
     expect(displayModeStore.getMessage('msg-1')).toBe('result');
+  });
+
+  it('notifies subscribers on set/clear and stops after unsubscribe', () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeDisplayModeStore(listener);
+
+    displayModeStore.setSession('session-1', 'detail');
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    displayModeStore.clearSession('session-1');
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    displayModeStore.setMessage('msg-1', 'result');
+    displayModeStore.clearMessage('msg-1');
+    expect(listener).toHaveBeenCalledTimes(4);
+
+    unsubscribe();
+    displayModeStore.setSession('session-2', 'trace');
+    expect(listener).toHaveBeenCalledTimes(4);
   });
 });

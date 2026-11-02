@@ -1,31 +1,40 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 
-import { useConfirmedPreference } from '../../manage-settings/useConfirmedPreference';
-
-import { displayModeStore } from './displayModeStore';
+import {
+  displayModeStore,
+  getDisplayModeStoreVersion,
+  subscribeDisplayModeStore,
+} from './displayModeStore';
+import {
+  getGlobalDisplayModeSnapshot,
+  subscribeGlobalDisplayMode,
+} from './globalDisplayModePreference';
 import { resolveDisplayMode, type DisplayMode } from './resolveDisplayMode';
-import { DEFAULT_DISPLAY_MODE, isValidDisplayMode } from './types';
 
 export function useDisplayMode(sessionId: string | null, messageId: string | null) {
-  const globalPref = useConfirmedPreference<DisplayMode>({
-    key: 'chat_display_mode',
-    initial: DEFAULT_DISPLAY_MODE,
-    parse: (value) => (value && isValidDisplayMode(value) ? value : DEFAULT_DISPLAY_MODE),
-    serialize: (value) => value,
-    category: 'ui',
-  });
+  const storeVersion = useSyncExternalStore(
+    subscribeDisplayModeStore,
+    getDisplayModeStoreVersion,
+    getDisplayModeStoreVersion,
+  );
+  const globalDefault = useSyncExternalStore(
+    subscribeGlobalDisplayMode,
+    getGlobalDisplayModeSnapshot,
+    getGlobalDisplayModeSnapshot,
+  );
 
-  const sessionOverride = sessionId ? displayModeStore.getSession(sessionId) : null;
-  const messageOverride = messageId ? displayModeStore.getMessage(messageId) : null;
+  const sessionOverride = useMemo(
+    () => (sessionId ? displayModeStore.getSession(sessionId) : null),
+    [sessionId, storeVersion],
+  );
+  const messageOverride = useMemo(
+    () => (messageId ? displayModeStore.getMessage(messageId) : null),
+    [messageId, storeVersion],
+  );
 
   const mode = useMemo(
-    () =>
-      resolveDisplayMode({
-        messageOverride,
-        sessionOverride,
-        globalDefault: globalPref.value,
-      }),
-    [messageOverride, sessionOverride, globalPref.value],
+    () => resolveDisplayMode({ messageOverride, sessionOverride, globalDefault }),
+    [messageOverride, sessionOverride, globalDefault],
   );
 
   const setSessionMode = useCallback(
@@ -50,11 +59,5 @@ export function useDisplayMode(sessionId: string | null, messageId: string | nul
     if (messageId) displayModeStore.clearMessage(messageId);
   }, [messageId]);
 
-  return {
-    mode,
-    setSessionMode,
-    clearSessionMode,
-    setMessageMode,
-    clearMessageMode,
-  };
+  return { mode, setSessionMode, clearSessionMode, setMessageMode, clearMessageMode };
 }
