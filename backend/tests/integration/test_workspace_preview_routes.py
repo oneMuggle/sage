@@ -335,3 +335,33 @@ async def test_resolve_rejects_too_many_paths(
         json={"paths": [f"f{i}.txt" for i in range(51)]},
     )
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio()
+async def test_preview_latex_returns_structured_blocks(
+    client: httpx.AsyncClient, bound_session: str, workspace: Path
+) -> None:
+    paper = workspace / "paper"
+    paper.mkdir()
+    (paper / "main.tex").write_text(
+        r"""
+\documentclass{article}
+\title{Preview Demo}
+\begin{document}
+\section{Intro}
+Inline $x^2$.
+\end{document}
+""",
+        encoding="utf-8",
+    )
+
+    response = await client.get(_preview_url(bound_session, "paper/main.tex"))
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["kind"] == "latex"
+    assert payload["structured"]["metadata"]["title"] == "Preview Demo"
+    types = [block["type"] for block in payload["structured"]["blocks"]]
+    assert "heading" in types
+    assert "paragraph" in types

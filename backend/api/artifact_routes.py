@@ -55,6 +55,8 @@ def get_artifact_content(session_id: str, artifact_id: str) -> dict:
     if artifact.kind in ("docx", "xlsx", "pptx") or suffix in ("docx", "xlsx", "pptx"):
         kind = artifact.kind if artifact.kind in ("docx", "xlsx", "pptx") else suffix
         return artifact_reader.read_office(artifact_id, kind=kind)
+    if artifact.kind == "latex" or suffix in ("tex", "ltx"):
+        return artifact_reader.read_latex(artifact_id)
     # P1-3.5 (UI 优化方案 2026-09-13): HTML 产物返回 kind="html"，前端用沙盒 iframe 渲染
     if suffix in ("html", "htm"):
         result = artifact_reader.read_text(artifact_id)
