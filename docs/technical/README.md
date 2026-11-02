@@ -93,6 +93,7 @@
 | 115  | [项目规程 Playbook](./115-project-playbook.md) | 阶段/交付物规格 + 项目级快照 + 确定性审计与阶段识别 + 目录/骨架/规则/里程碑动作 + 全局规程库（详情/导出/删除）+ 导入逐项 diff + 未知文件批量归类/撤销 + JSON/Markdown/AGENTS 导出与导入冲突策略 |
 | 116  | [本地 OCR](./116-local-ocr.md) | RapidOCR/Tesseract 双引擎 + 聊天兜底/预览编辑 + Office/PDF/Wiki/工具接入 + 配置、性能与 Win7 边界 |
 | 117  | [桌面宠物](./117-desktop-pet.md) | 透明置顶窗 / AgentState 状态映射与面板 / 应用内形态 / Task Center + 编排 lanes + 定时失败聚合 / 自定义动画包（zip + sage-pet://）/ Win7 兼容模式 |
+| 118  | [文档与验收信息架构：按任务域分组的顶层 Tab](./118-office-ia-tabs.md) | URL 为唯一事实源 + keep-alive 保状态 + 诊断收进「环境」popover；十余个常驻区块 → 2 任务域（win7 编号避让 117=桌面宠物；LaTeX 与审校与规范分区待对应功能同步后补齐） |
 
 ---
 

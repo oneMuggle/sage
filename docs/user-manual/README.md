@@ -18,7 +18,7 @@
 | 10   | [用量与缓存面板](./10-usage-and-cache.md) | 设置 → 使用统计：请求/Token/成本汇总 + 缓存命中率 + 4 个 range tab + 请求明细分页 + 可悬停时段详情的堆叠柱趋势图 + CSV 导出（UTF-8 BOM，Excel 双击不乱码）；今日数据重启不丢 |
 | 11   | [sage doctor CLI](./11-sage-doctor.md) | 安装/环境级 self-check：Win7 LTS、白屏、conda 错配一键诊断（退出码 0/1/2 + --json 机器可读） |
 | 12   | [本地开发环境助手](./12-local-development-assistant.md) | 设置 → 开发环境 Tab：自动发现 Python/Node.js 运行时 + 项目诊断 + 试跑代码片段 |
-| 13   | [期刊模板面板](./13-journal-template-panel.md) | Office 页面底部：模板规范抽取 / 论文格式校验 / 结构化填充生成符合期刊要求的 Word 文档 |
+| 13   | [期刊模板面板](./13-journal-template-panel.md) | 文档生成页签内的折叠卡：模板规范抽取 / 论文格式校验 / 结构化填充生成符合期刊要求的 Word 文档 |
 | 14   | [可插拔更新源](./14-update-providers.md) | 设置 → 更新源 tab：添加 GitHub/Gitee/GitLab/自建 HTTP 源 + 设为默认 + 测试连接 + 删除；token 用 safeStorage 加密存储，IPC 返回自动 mask |
 | 15   | [出错时如何导出诊断包](./15-diagnostic-export.md) | 一键导出最近 50 次 LLM 调用为 zip 发给支持人员（托盘菜单 / 设置页入口 + 脱敏说明 + Win7 注意） |
 | 16   | [项目上下文（description/instructions/资料）](./16-project-context.md) | 侧边栏项目区:项目说明 + 项目指令 + 资料管理(添加/删除/保存当前回答) + 三态 status 徽章 + 优先级链说明 + 跨会话保留上下文场景 |
@@ -34,6 +34,7 @@
 | 26   | [项目规程（Playbook）](./26-project-playbook.md) | 为项目绑定阶段与交付物规则 / 完整性检查 / 待补项一键创建目录或骨架 / 未知文件批量归类与撤销 / 导入逐项 diff 与规程库管理 / 阶段确认 / 导出导入分享 |
 | 27   | [桌面宠物（大肥鱼）](./27-desktop-pet.md) | 桌宠开关与显示位置 / 状态面板与徽章 / 摸头与提示音 / 自定义动画包导入导出 |
 | 29   | [本地 OCR（图片文字识别）](./29-local-ocr.md) | 无视觉模型时本机识别图片文字 / 设置与测试 / 聊天预览与编辑 / 安装、隐私与故障排查 |
+| 30   | [文档与验收页面导航](./30-office-tabs.md) | 页面按任务分 2 个页签（文档处理/文档生成）+ 地址栏直达 + 切页签不丢输入；审校与规范 / LaTeX 分区待功能同步后补齐 |
 
 ---
 

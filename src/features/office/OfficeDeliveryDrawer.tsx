@@ -193,7 +193,7 @@ export function OfficeDeliveryDrawer({
   const handleReject = () => {
     completeTask(entryId, 'cancelled');
     onClose();
-    navigate('/office');
+    navigate('/office?tab=documents');
   };
 
   /* v8 ignore start */

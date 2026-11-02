@@ -415,7 +415,7 @@ export const zhSettingsAndModels = {
   'office.staging.review': '过期暂存且归属进程不在运行 — 仅供人工核查',
   'office.staging.untracked': '无可信暂存记录 — 保留',
   'office.staging.unreadable': '无法读取暂存记录 — 保留',
-  'office.title': 'Office 文档',
+  'office.title': '文档与验收',
   'office.selectWorkspace': '选择工作区',
   'office.emptyState': '请先选择工作区目录以开始使用',
   'office.section.pickFile': '选择文件',
@@ -465,6 +465,17 @@ export const zhSettingsAndModels = {
   'office.generate.outputPath': '已生成:',
   'office.generate.size': '大小:',
   'office.preview.empty': '选择一个文件以预览',
+
+  // ─── 2026-11 信息架构整理: 分区 tab / 环境浮层 ─────────────────────────
+  // win7: LaTeX / 审校与规范 两个分区待对应功能同步后补齐。
+  'office.tabs.label': '文档与验收功能分区',
+  'office.tab.documents': '文档处理',
+  'office.tab.generate': '文档生成',
+  'office.env.title': '环境',
+  'office.env.capabilities': '本机能力',
+  'office.env.staging': '暂存目录（只读诊断）',
+  'office.generate.journal.title': '期刊模板助手',
+  'office.generate.journal.hint': '选择 .docx 期刊模板 → 填写内容 → 一键生成或校验格式',
 } as const;
 
 export function formatZhSettingsAndModelsSummary(): string {
