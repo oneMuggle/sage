@@ -195,3 +195,40 @@ ALTER TABLE projects ADD COLUMN playbook_state TEXT;  -- JSON
 - 规程前端文案已支持 zh/en；后端审计 reason、错误消息与内置规程内容仍为中文，英文界面下不回退翻译。
 - 暂无云端规程市场。
 - `release/win7` cherry-pick 仍需按 pydantic v1 适配。
+
+## 13. 使用埋点（2026-11 落地）
+
+后端对用户触发的规程操作做 best-effort 记录，供「最近活动」视图消费。**埋点失败不影响主流程**——异常就地 log、不向上抛出；前端展示侧缺数据时降级为空态。
+
+### 13.1 存储
+
+- 表 `playbook_events`（SQLite，随项目数据目录创建）：`id / project_id / event / stage / payload / created_at`；
+- `created_at` 为 **epoch 毫秒**（`int(time.time() * 1000)`）；
+- `payload` 为 JSON 文本，记录辅助字段（如 `source`/`stage_from`/`stage_to`），不存大字段；
+- 每项目 **最多保留 500 条**（`MAX_EVENTS_PER_PROJECT`），插入后裁剪最旧的。
+
+### 13.2 事件白名单
+
+后端 `ALLOWED_EVENTS` 是 `frozenset`，共 22 项：`bind / unbind / audit / audit_ai / author / actions_apply / stage_confirm / import / export_json / export_md / export_agents / export_wiki / library_save / library_delete / library_export / batch_move / undo_batch_move / cleanup_rules / exemption_grant / exemption_revoke / manual_complete / update_state`。
+
+未在白名单的 `event` 会被静默丢弃（不抛错），避免脏数据。前端 `PlaybookActivityPanel` 用 `Partial<Record<string, PlaybookTranslationKey>>` 把每个白名单名字映射到 `playbook.event.<name>` 词典 key，未识别的显示「未识别操作」。
+
+### 13.3 查询 API
+
+| 端点 | 返回 | 用途 |
+|---|---|---|
+| `GET /projects/{id}/playbook/events` | `PlaybookEvent[]` | 最近事件流水（默认倒序） |
+| `GET /projects/{id}/playbook/events/aggregate` | `PlaybookEventAggregate` | `{days, project_id, counts, total}` 时间窗聚合 |
+
+两条端点走 `LocalAuthMiddleware`，与项目其它 playbook API 同安全域。
+
+### 13.4 IPC 路由
+
+Electron 侧 `src/shared/api/playbookApi.ts` 暴露 `listEvents(projectId)` 与 `aggregateEvents(projectId)`，通过 `playbook:events:list` / `playbook:events:aggregate` IPC 通道转发到后端。`PlaybookCard` 的 `handleLoadActivity` 用 `Promise.all` 并行拉取两条后交给 `PlaybookActivityPanel` 渲染。
+
+### 13.5 失败策略
+
+- 写入：`record_playbook_event(...)` 内部 `try/except`，失败时 `logger.warning`，调用方无感；
+- 读取：前端 `run('activity', ...)` 走统一 `try/catch`，错误落 `error` 状态而不是崩溃；
+- 不暴露到读屏/状态徽章/导出——埋点是辅助信息，不是审计证据。
+
