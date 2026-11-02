@@ -2,6 +2,7 @@
  * English translations (aggregator entry, domain dictionaries under ./locales/en/)
  */
 import { enChatAndSider } from './locales/en/chatAndSider';
+import { enChatDisplayMode } from './locales/en/chatDisplayMode';
 import { enChatPdfOcr } from './locales/en/chatPdfOcr';
 import { enContextMenu } from './locales/en/contextMenu';
 import { enPet } from './locales/en/pet';
@@ -16,6 +17,7 @@ import type { TranslationKey } from './zh';
 
 export const en: Record<TranslationKey, string> = {
   ...enChatAndSider,
+  ...enChatDisplayMode,
   ...enChatPdfOcr,
   ...enContextMenu,
   ...enPet,

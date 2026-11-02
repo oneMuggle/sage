@@ -2,6 +2,7 @@
  * 中文翻译 — 默认语言（聚合入口，分域词典位于 ./locales/zh/）
  */
 import { zhChatAndSider } from './locales/zh/chatAndSider';
+import { zhChatDisplayMode } from './locales/zh/chatDisplayMode';
 import { zhChatPdfOcr } from './locales/zh/chatPdfOcr';
 import { zhContextMenu } from './locales/zh/contextMenu';
 import { zhPet } from './locales/zh/pet';
@@ -15,6 +16,7 @@ import { retryBannerZh } from './retryBanner';
 
 export const zh = {
   ...zhChatAndSider,
+  ...zhChatDisplayMode,
   ...zhChatPdfOcr,
   ...zhContextMenu,
   ...zhPet,
