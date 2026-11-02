@@ -8,6 +8,10 @@ export const enChatDisplayMode = {
   'chat.displayMode.followSession': 'Follow session',
   'chat.displayMode.hiddenSummary': 'Hidden reasoning and {count} tool calls',
   'chat.displayMode.reveal': 'Reveal',
+  'chat.displayMode.hiddenReasoning': 'Hidden reasoning',
+  'chat.displayMode.hiddenToolCalls': 'Hidden {count} tool calls',
+  'chat.displayMode.collapse': 'Collapse',
+  'chat.displayMode.expandedLabel': 'Expanded details',
   'settings.basic.chat_display_mode_label': 'Reasoning display mode',
   'settings.basic.chat_display_mode_desc':
     'Controls how much reasoning and tool execution detail is shown',
