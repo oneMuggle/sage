@@ -164,7 +164,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                 data-testid="workspace-charter-status-badge"
               >
                 <FileText className="h-2.5 w-2.5" />
-                {hasSageMd ? 'L1 SAGE.md 已就绪' : 'L1 SAGE.md 待初始化'}
+                {hasSageMd ? '项目总纲已就绪' : '项目总纲待初始化'}
               </span>
             )}
             {hasSageMd === false && (
@@ -282,7 +282,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                 >
-                  {savedStageProfile ? '已存阶段至 L3' : '沉淀阶段至 L3'}
+                  {savedStageProfile ? '已存到项目记忆' : '沉淀到项目记忆'}
                 </button>
                 <button
                   type="button"
@@ -293,7 +293,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                     if (typeof projectApi?.addMaterial === 'function') {
                       try {
                         await projectApi.addMaterial(project.id, {
-                          content: `# 项目治理概览快照：${project.name}\n- 形态：${blueprint.label}\n- 当前阶段：${stageLabel}\n- L1 宪章：${hasSageMd ? '已就绪' : '待初始化'}\n- 快照数：${checkpointCount}`,
+                          content: `# 项目治理概览快照：${project.name}\n- 形态：${blueprint.label}\n- 当前阶段：${stageLabel}\n- 项目总纲：${hasSageMd ? '已就绪' : '待初始化'}\n- 快照数：${checkpointCount}`,
                         });
                       } catch {
                         // ignore in test/offline mode
@@ -302,7 +302,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                 >
-                  {savedOverviewL4 ? '已存概览 L4' : '存概览至 L4'}
+                  {savedOverviewL4 ? '已存为参考资料' : '存为参考资料'}
                 </button>
                 <button
                   type="button"
@@ -347,7 +347,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                 >
-                  {createdStageConstraint ? '已设阶段约束' : '当前阶段设 L2 约束'}
+                  {createdStageConstraint ? '已设阶段约束' : '设为项目规则'}
                 </button>
                 <button
                   type="button"
@@ -446,7 +446,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                 >
-                  {convertedPillarsL2 ? '已转支柱L2' : '支柱转 L2 约束'}
+                  {convertedPillarsL2 ? '已升级为规则' : '升级为项目规则'}
                 </button>
                 <button
                   type="button"
@@ -472,7 +472,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                 >
-                  {savedPillarsL3 ? '已存支柱L3' : '支柱存 L3 画像'}
+                  {savedPillarsL3 ? '已存到项目记忆' : '存到项目记忆'}
                 </button>
                 <button
                   type="button"
@@ -492,7 +492,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                 >
-                  {savedPillarsL4 ? '已存支柱L4' : '支柱存 L4 资料'}
+                  {savedPillarsL4 ? '已存为参考资料' : '存为参考资料'}
                 </button>
                 <button
                   type="button"
@@ -584,7 +584,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               }}
               className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              {savedStagesL3 ? '已存管线L3' : '阶段管线存L3'}
+              {savedStagesL3 ? '已存到项目记忆' : '存到项目记忆'}
             </button>
             <button
               type="button"
@@ -604,7 +604,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               }}
               className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              {savedStagesL4 ? '已存管线L4' : '阶段管线存L4'}
+              {savedStagesL4 ? '已存为参考资料' : '存为参考资料'}
             </button>
             <button
               type="button"
@@ -627,7 +627,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               }}
               className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              {convertedStagesL2 ? '已转管线L2' : '阶段管线转L2'}
+              {convertedStagesL2 ? '已升级为规则' : '升级为项目规则'}
             </button>
             {(() => {
               const idx = blueprint.stages.findIndex((s) => s.id === activeStageId);
