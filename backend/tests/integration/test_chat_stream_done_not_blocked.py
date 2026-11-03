@@ -38,12 +38,10 @@ async def test_done_arrives_while_post_turn_side_effects_still_running(client):
     session = SessionRepository().create(title="DONE 解耦回归")
 
     try:
-        with (
-            patch("backend.api.legacy_routes.SageAgent") as MockAgent,
-            patch(
-                "backend.api.legacy_routes._extract_legacy_chat_memory",
-                _slow_extract,
-            ),
+        # py3.8 不支持括号式多上下文写法，这里用嵌套 with。
+        with patch("backend.api.legacy_routes.SageAgent") as MockAgent, patch(
+            "backend.api.legacy_routes._extract_legacy_chat_memory",
+            _slow_extract,
         ):
             MockAgent.return_value.run_loop = mock_run_loop
             MockAgent.return_value.memory_manager = None
