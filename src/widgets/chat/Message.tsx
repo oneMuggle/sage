@@ -3,6 +3,9 @@ import { memo, useMemo, useRef, useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { MediaAttachment } from '../../features/chat/MediaAttachment';
+import { getDisplayContract } from '../../features/chat/displayMode/resolveDisplayMode';
+import { canGroupToolCalls, toolGroupSummary } from '../../features/chat/displayMode/toolGrouping';
+import { useDisplayMode } from '../../features/chat/displayMode/useDisplayMode';
 import { getQuotableSelection } from '../../features/chat/selectionQuote';
 import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { useChatStreamStore } from '../../features/send-message/chatStreamStore';
@@ -26,12 +29,13 @@ import {
   FileRefLinksProvider,
   MarkdownChunk,
   renderTextWithLinks,
-  ThinkingPanel,
   ThinkingShimmer,
   ToolCallResult,
   ToolCallTitle,
 } from './MessageMarkdownParts';
 import { RetryBanner } from './RetryBanner';
+import { ThinkingDisplay } from './ThinkingDisplay';
+import { ToolGroupToggle } from './ToolGroupToggle';
 import { TruncationNotice } from './TruncationNotice';
 import { FileChangeCards } from './changes/FileChangeCard';
 import { buildMessageContextMenuItems } from './messageContextMenu';
@@ -177,42 +181,44 @@ function MessageComponent({
   // R81: 统一参考来源 —— 记忆召回 + 附件检索溯源 + 工具命中(web/wiki/MCP)
   // 收编为一个折叠区块（类文章引用列表），N=0 时整个 chip 不渲染。
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
-  const [toolGroupExpanded, setToolGroupExpanded] = useState(false);
-  const canGroupToolCalls = useMemo(
+  // 思考展示档位（detail / trace / result）→ 渲染契约
+  // （工具分组阈值 / 折叠默认态 / 是否展示思考面板）
+  const { mode } = useDisplayMode(message.session_id, message.id);
+  const contract = useMemo(() => getDisplayContract(mode), [mode]);
+  const [toolGroupExpanded, setToolGroupExpanded] = useState(contract.toolGroupDefaultExpanded);
+  // result 档：思考过程与可折叠工具调用统一收进一条汇总条，点一次就地展开完整明细。
+  const [resultDetailExpanded, setResultDetailExpanded] = useState(false);
+  const canGroup = useMemo(
     () =>
-      !isStreaming &&
-      toolCalls.length >= 3 &&
-      !toolCalls.some(
-        (tc) =>
-          Boolean(tc.metadata?.blockReason) ||
-          Boolean(tc.metadata?.imageData) ||
-          Boolean(tc.metadata?.mediaRefs?.length) ||
-          Boolean(tc.id && artifactsByToolCall?.[tc.id]?.length),
+      canGroupToolCalls(
+        toolCalls,
+        Boolean(isStreaming),
+        contract.toolGroupThreshold,
+        artifactsByToolCall,
       ),
-    [isStreaming, toolCalls, artifactsByToolCall],
+    [toolCalls, isStreaming, contract.toolGroupThreshold, artifactsByToolCall],
   );
-  const toolGroupSummary = useMemo(() => {
-    if (!canGroupToolCalls) return '';
-    const counts = new Map<string, number>();
-    for (const tc of toolCalls) {
-      counts.set(tc.name, (counts.get(tc.name) ?? 0) + 1);
-    }
-    return Array.from(counts.entries())
-      .slice(0, 3)
-      .map(([name, cnt]) => (cnt > 1 ? `${name}×${cnt}` : name))
-      .join(' · ');
-  }, [canGroupToolCalls, toolCalls]);
+  const isResultMode = mode === 'result';
+  // 工具调用是否被收进汇总条：canGroup 已排除「被拦截 / 含图像媒体 / 产出 artifact」
+  // 的特殊调用 —— 这些调用在任何档位下都逐条可见（spec §3.4）。
+  const hidesToolCalls = isResultMode && canGroup;
+  const showToolGroupToggle = canGroup && !isResultMode;
+  // result 档只认 resultDetailExpanded：toolGroupExpanded 是挂载时的契约初值
+  // （trace/detail 默认展开），若沿用会让切到 result 档的已挂载消息继续逐条显示工具卡片，
+  // 与汇总条「已隐藏」的文案矛盾（验收标准 #1：切换对历史消息立即生效）。
+  const showToolCards = !canGroup || (isResultMode ? resultDetailExpanded : toolGroupExpanded);
+  const summary = useMemo(() => toolGroupSummary(toolCalls, canGroup), [toolCalls, canGroup]);
   // R113: 折叠组头的归属去重集（与逐卡 R111 同源同名单）——
   // 折叠态下也能一眼看出组内涉及的插件；按首次出现排序。
   const toolGroupOwners = useMemo(() => {
-    if (!canGroupToolCalls) return [] as string[];
+    if (!canGroup) return [] as string[];
     const owners = new Set<string>();
     for (const tc of toolCalls) {
       const owner = findPluginToolOwner(tc.name, pluginNames);
       if (owner) owners.add(owner);
     }
     return [...owners];
-  }, [canGroupToolCalls, toolCalls, pluginNames]);
+  }, [canGroup, toolCalls, pluginNames]);
   const memoryRefs = message.memory_refs ?? [];
   const ragCitations = message.rag_citations ?? [];
   const toolSources = message.sources ?? [];
@@ -239,6 +245,7 @@ function MessageComponent({
       });
     return buildMessageContextMenuItems({
       message,
+      sessionId: message.session_id,
       t,
       isStreaming,
       selectionText,
@@ -311,10 +318,17 @@ function MessageComponent({
           </span>
         )}
 
-        {/* ThinkingPanel - LLM 思考过程展示（仅 assistant 消息且有 reasoning_content 时） */}
-        {isAssistant && message.reasoning_content && (
-          <ThinkingPanel reasoning={message.reasoning_content} isStreaming={isStreaming} />
-        )}
+        {/* 思考展示档位 —— detail/trace 直接渲染思考面板；result 收进汇总条，点一次展开明细 */}
+        <ThinkingDisplay
+          isAssistant={isAssistant}
+          reasoning={message.reasoning_content}
+          isStreaming={isStreaming}
+          mode={mode}
+          contract={contract}
+          resultDetailExpanded={resultDetailExpanded}
+          hiddenToolCount={hidesToolCalls ? toolCalls.length : 0}
+          onToggleResultDetail={() => setResultDetailExpanded((v) => !v)}
+        />
 
         {/* 2026-10-20: LLM 重试横幅 —— 置于思考面板之下、工具调用之上。
             重试期间气泡内仍是占位符，横幅承担"系统正在自动恢复"的告知职责。 */}
@@ -331,38 +345,18 @@ function MessageComponent({
         />
 
         {/* 工具调用展示（ReAct 模式）— 在消息内容之前，因为工具调用先于最终回答 */}
-        {toolCalls.length > 0 && (
+        {toolCalls.length > 0 && (showToolGroupToggle || showToolCards) && (
           <div className="mb-2 flex flex-col gap-1.5">
-            {canGroupToolCalls && (
-              <button
-                type="button"
-                data-testid="tool-calls-group-toggle"
-                aria-expanded={toolGroupExpanded}
-                onClick={() => setToolGroupExpanded((v) => !v)}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-radius-sm border border-border bg-bg-subtle hover:bg-bg-hover text-ui-xs text-text-secondary transition-colors text-left"
-              >
-                <Wrench className="w-3.5 h-3.5 text-primary shrink-0" />
-                <span className="font-medium text-text">已执行 {toolCalls.length} 步工具调用</span>
-                <span className="text-text-tertiary truncate font-mono text-ui-2xs">
-                  ({toolGroupSummary})
-                </span>
-                {toolGroupOwners.length > 0 && (
-                  <span
-                    className="text-text-tertiary shrink-0"
-                    data-testid="tool-calls-group-plugin-owners"
-                  >
-                    {t('permission.from_plugin')}: {toolGroupOwners.join('、')}
-                  </span>
-                )}
-                <span className="ml-auto inline-flex items-center gap-0.5 text-ui-2xs text-primary shrink-0">
-                  {toolGroupExpanded ? '收起明细' : '展开明细'}
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 transition-transform ${toolGroupExpanded ? 'rotate-180' : ''}`}
-                  />
-                </span>
-              </button>
+            {showToolGroupToggle && (
+              <ToolGroupToggle
+                count={toolCalls.length}
+                summary={summary}
+                owners={toolGroupOwners}
+                expanded={toolGroupExpanded}
+                onToggle={() => setToolGroupExpanded((v) => !v)}
+              />
             )}
-            {(!canGroupToolCalls || toolGroupExpanded) &&
+            {showToolCards &&
               toolCalls.map((tc, idx) => {
                 const hasImage = tc.metadata?.imageData;
                 // right-panel R5: 写文件工具的内联 diff 卡片（展开懒加载,

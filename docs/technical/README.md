@@ -83,7 +83,7 @@
 | 102  | [全局规则 UI（~/.sage/SAGE.md）](./102-global-rules.md)                                | G1/P0：设置页读写全局规则文件 / 路径硬编码 + 原子写 + 符号链接拒写 / 扫描 level=all 护栏 / 8000 字符截断 + 64KB 保存上限 / win7 零适配                                                                                                                                                                                                                                        |
 | 103  | [Zotero → LLM 集成](./103-zotero-llm-integration.md)                                   | 四层可见性阻断修复（白名单/路径/prompt/索引）/ ZoteroIngestor 向量索引 + 语义检索降级 / wiki 沉淀与零改动图谱 / 设置页同步面板                                                                                                                                                                                                                                                |
 | 104  | [文件引用输入（新会话页拖拽 / @ 菜单 / 会话内回显）](./104-file-reference-composer.md) | 共享 useAtFileMenu / 草稿会话懒创建 / Welcome→Chat 首条消息附件透传 / messages.client_meta 持久化与消息 chips                                                                                                                                                                                                                                                                 |
-| 105  | [LaTeX 读取与语义预览](./105-latex-read-render.md)                                     | 零依赖 LaTeX 扫描/项目解析（include/循环/越界）/ 结构化 blocks + KaTeX 预览 / artifact 与工作区预览接入 / office_read_latex / Win7 可用（不编译 TeX）                                                                                                                                                                                                                              |
+| 105  | [LaTeX 读取与语义预览](./105-latex-read-render.md)                                     | 零依赖 LaTeX 扫描/项目解析（include/循环/越界）/ 结构化 blocks + KaTeX 预览 / artifact 与工作区预览接入 / office_read_latex / Win7 可用（不编译 TeX）                                                                                                                                                                                                                         |
 | 108  | [Plan Mode 增强](./108-plan-mode-enhancement.md)                                       | 复杂度分类（simple/medium/complex）/ 执行模式推荐（single/multi/ask_user）/ scout_deep 深度调研 + ResearchSummaryCard / confirm_marker 规则引擎 + 步骤级确认（continue/skip/abort）                                                                                                                                                                                           |
 | 109  | [用户反馈转发脚本部署](./109-feedback-relay-deployment.md)                             | 管理员侧单文件中继（纯标准库）：先落库再转发 + 消息 id 幂等 + GET 裸数组契约 / Jira·GitLab·SMTP 三选一 + webhook 回流 / 内置 BASIC 鉴权管理页 / systemd 与 Win7 计划任务部署                                                                                                                                                                                                  |
 | 110  | [会话列表滚动、分页与归档](./110-session-list-scroll-archive.md)                       | 侧栏独立滚动面板 + 触底分页 + 手动/自动归档闭环；legacy/hex 双路径 `archived` 过滤（main #2655 / win7 #2662）                                                                                                                                                                                                                                                                 |
@@ -101,16 +101,4 @@
 | 122  | [Word 规则包 LLM 工具](./122-word-rule-tools.md) | `office_audit_word/fix_word/extract_rules/revise_word/batch_audit/render_audit`；工具上下文/工作区围栏/输出截断；bundle/profile/tool_names 反漂移同步 |
 | 123  | [文档与验收信息架构：顶层 Tab + LaTeX 二级分组](./123-office-ia-tabs.md) | URL 为唯一事实源 + keep-alive 保状态 + 诊断收进「环境」popover；14 常驻区块 → 4 任务域 |
 | 124  | [Markdown 渲染器统一](./124-markdown-renderer.md) | 聊天/产物/Wiki 单一收敛点：minimal/chat 两档 + GFM/KaTeX 统一管线 + 表格复制与限高 + Shiki 降级 + 锚点前缀与 TOC 大纲 + 作用域 token 样式 |
-
----
-
-## 与核心章节的关系
-
-| 关注层     | 文档                                                        |
-| ---------- | ----------------------------------------------------------- |
-| 用户价值层 | [01 概述](../01-overview.md) — [12 实施计划](../12-plan.md) |
-| 横切关注点 | 本目录（15-44）                                             |
-
----
-
-_本目录文档命名规则：`XX-topic-name.md`（XX 为两位数字，topic-name 为 kebab-case）。_
+| 125  | [思考过程展示档位](./125-thinking-display-modes.md) | detail / trace / result 三档 + 消息/会话/全局三级作用域；`DisplayContract` 渲染契约 + `useSyncExternalStore` 订阅；三级存储（sessionStorage 双写 + preference singleton） |

@@ -12,6 +12,20 @@ import { I18nProvider } from '../../../shared/lib/i18n';
 import type { Message as MessageType } from '../../../shared/lib/store';
 import { Message } from '../Message';
 
+// Message 挂载时 useDisplayMode 会经 IPC 读取全局展示档位，strictIpcCall 会挂
+// 一个 5s 超时定时器；本文件用 fake timers 断言「只剩复制复位定时器」，必须把
+// 这条无关读取桩成立即成功，否则挂起的超时定时器会污染 getTimerCount。
+vi.mock('../../../shared/api/settingsClient', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../shared/api/settingsClient')>();
+  return {
+    ...actual,
+    settingsClient: {
+      ...actual.settingsClient,
+      getPreferenceStrict: vi.fn().mockResolvedValue(null),
+    },
+  };
+});
+
 const renderWithI18n = (ui: React.ReactElement) =>
   render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
 
