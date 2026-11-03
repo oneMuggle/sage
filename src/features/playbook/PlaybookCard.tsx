@@ -669,13 +669,25 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           const isDone = stage.progress >= 100;
           return (
             <div key={stage.id} className="flex items-center gap-1.5">
-              <div
-                className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs ${
+              <button
+                type="button"
+                onClick={() => {
+                  if (isCurrent) return;
+                  if (
+                    window.confirm(
+                      tf('playbook.card.confirmSwitch', { stage: stage.label }),
+                    )
+                  ) {
+                    void handleConfirmStage(stage.id);
+                  }
+                }}
+                className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors ${
                   isCurrent
                     ? 'border-primary/40 bg-primary/10 text-primary'
-                    : 'border-border text-muted-foreground'
+                    : 'border-border text-muted-foreground hover:border-primary/30 hover:text-foreground'
                 }`}
                 data-testid={`playbook-stage-${stage.id}`}
+                aria-current={isCurrent ? 'step' : undefined}
               >
                 {isDone ? (
                   <CheckCircle2 className="h-3.5 w-3.5" />
@@ -684,7 +696,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
                 )}
                 {stage.label}
                 <span className="text-ui-2xs opacity-70">{stage.progress}%</span>
-              </div>
+              </button>
               {index < stages.length - 1 && <span className="text-muted-foreground">→</span>}
             </div>
           );

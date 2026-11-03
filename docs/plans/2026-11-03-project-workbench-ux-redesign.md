@@ -140,7 +140,7 @@
 
 **测试**: apply 单测验证 verification 字段；E2E 覆盖"已应用 → 展开清单 → 点击跳转"。
 
-#### M4 · PlaybookToolbar 收束 + 主操作流
+#### M4 · PlaybookToolbar 收束 + 主操作流 ✅ 已完成
 
 **目标**: 用户一眼看到"现在该做什么"。
 

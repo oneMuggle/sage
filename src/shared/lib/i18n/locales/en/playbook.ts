@@ -86,6 +86,7 @@ export const enPlaybook: Record<PlaybookTranslationKey, string> = {
   'playbook.card.detected': 'Possible move to stage “{stage}” detected (confidence {confidence}%)',
   'playbook.card.confirmStage': 'Confirm move',
   'playbook.card.keepStage': 'Stay on current stage',
+  'playbook.card.confirmSwitch': 'Switch to stage “{stage}”? The completeness check will re-run.',
 
   'playbook.notice.bound': 'Playbook bound',
   'playbook.notice.auditRefreshed': 'Completeness check refreshed',
