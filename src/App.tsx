@@ -24,6 +24,7 @@ import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
 import { ApprovalDialog, RemoteApprovalBridge } from './widgets/permission';
 import { InAppPet } from './widgets/pet/InAppPet';
+import { PetFocusBridge } from './widgets/pet/PetFocusBridge';
 import { TaskCenterPetBridge } from './widgets/pet/TaskCenterPetBridge';
 import { QuestionDialog } from './widgets/question';
 import { BackendStatusBanner } from './widgets/system/BackendStatusBanner';
@@ -253,6 +254,7 @@ function App() {
         <SessionNotifyBridge />
         <FeedbackMenuBridge />
         <PetSettingsBridge />
+        <PetFocusBridge />
         <Routes>
           <Route
             path="/"

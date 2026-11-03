@@ -26,7 +26,7 @@ const STATUSES = new Set<PetTaskStatus>([
   'cancelled',
 ]);
 
-const FAILED_TASK_WINDOW_MS = 10 * 60_000;
+export const FAILED_TASK_WINDOW_MS = 10 * 60_000;
 const PRIORITY: Record<PetTaskStatus, number> = {
   awaiting_approval: 100,
   failed: 90,

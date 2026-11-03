@@ -4,7 +4,8 @@ import type { PetConfigBridge, PetSnapshotBridge } from '../shared/types/electro
 
 import { DEFAULT_CONFIG, EMPTY_SNAPSHOT } from './defaults';
 import { bubbleText, resolveAnimation, resolveInteraction } from './engine/animation';
-import { isChinese, statusGlyph, statusLabel } from './engine/labels';
+import { attentionView, newNeedsYouSessions } from './engine/attentionView';
+import { isChinese } from './engine/labels';
 import { safePlay } from './engine/media';
 import { packSource } from './engine/packs';
 import { playSound, primeAudio } from './engine/sounds';
@@ -15,6 +16,8 @@ const LONG_PRESS_MS = 550;
 const CLICK_DELAY_MS = 240;
 const ANGER_WINDOW_MS = 2000;
 const ANGER_CLICKS = 5;
+const WAITING_SOUND_COALESCE_MS = 3_000;
+const NO_SESSION_IDS: readonly string[] = [];
 
 interface PlaybackOverride {
   file: string;
@@ -49,6 +52,8 @@ export function PetApp(): JSX.Element {
   const suppressClickUntil = useRef(0);
   const lastActionRef = useRef(snapshot.action);
   const lastSoundActionRef = useRef('');
+  const seenNeedsYouRef = useRef<Set<string>>(new Set());
+  const waitingSoundTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pet = typeof window !== 'undefined' ? window.electronAPI?.pet : undefined;
 
@@ -92,22 +97,30 @@ export function PetApp(): JSX.Element {
   // Only the first pet owns status sounds; otherwise every window would play
   // the same cue through its own AudioContext.
   const isPrimary = !config.petId || config.pets[0]?.id === config.petId;
+  const needsYouSessionIds = snapshot.attention?.needsYouSessionIds ?? NO_SESSION_IDS;
 
+  // Terminal cues still follow this pet's own action; the waiting cue follows
+  // the global needs-you set so a background session is never silent.
   useEffect(() => {
     if (!isPrimary) return;
     const action = snapshot.action;
     if (action === lastSoundActionRef.current) return;
     lastSoundActionRef.current = action;
-    const kind =
-      action === 'waiting'
-        ? 'waiting'
-        : action === 'error'
-          ? 'error'
-          : action === 'done'
-            ? 'done'
-            : null;
+    const kind = action === 'error' ? 'error' : action === 'done' ? 'done' : null;
     if (kind && config.soundScenes[kind]) playSound(kind);
   }, [snapshot.action, config.soundScenes, isPrimary]);
+
+  useEffect(() => {
+    if (!isPrimary) return;
+    const fresh = newNeedsYouSessions(seenNeedsYouRef.current, needsYouSessionIds);
+    seenNeedsYouRef.current = new Set(needsYouSessionIds);
+    if (fresh.length === 0) return;
+    if (!config.soundScenes.waiting || waitingSoundTimerRef.current) return;
+    playSound('waiting');
+    waitingSoundTimerRef.current = setTimeout(() => {
+      waitingSoundTimerRef.current = null;
+    }, WAITING_SOUND_COALESCE_MS);
+  }, [needsYouSessionIds, config.soundScenes.waiting, isPrimary]);
 
   useEffect(() => {
     if (!localBubble) return undefined;
@@ -120,6 +133,7 @@ export function PetApp(): JSX.Element {
       if (pressTimer.current) clearTimeout(pressTimer.current);
       if (clickTimer.current) clearTimeout(clickTimer.current);
       if (idleTimer.current) clearTimeout(idleTimer.current);
+      if (waitingSoundTimerRef.current) clearTimeout(waitingSoundTimerRef.current);
     },
     [],
   );
@@ -304,7 +318,12 @@ export function PetApp(): JSX.Element {
   const bubble = localBubble?.text ?? stateBubble;
   const bubbleKind = localBubble?.kind ?? snapshot.bubbleKind;
   const bubbleClass = bubbleKind ? `pet-bubble pet-bubble-${bubbleKind}` : 'pet-bubble';
-  const statusTitle = statusLabel(snapshot.action, snapshot.detail, snapshot.toolName);
+  const badge = attentionView(
+    snapshot.action,
+    snapshot.detail,
+    snapshot.toolName,
+    snapshot.attention,
+  );
 
   return (
     <div className="pet-root">
@@ -320,11 +339,19 @@ export function PetApp(): JSX.Element {
         }}
       >
         <div
-          className={`pet-badge pet-badge-${snapshot.action}`}
-          title={statusTitle}
-          aria-label={statusTitle}
+          className={`pet-badge pet-badge-${snapshot.action}${
+            badge.alert ? ' pet-badge-alert' : ''
+          }${badge.count !== null ? ' pet-badge-with-count' : ''}`}
+          title={badge.title}
+          aria-label={badge.title}
+          data-testid="pet-badge"
         >
-          {statusGlyph(snapshot.action)}
+          <span className="pet-badge-glyph">{badge.glyph}</span>
+          {badge.count !== null ? (
+            <span className="pet-badge-count" data-testid="pet-badge-count">
+              {badge.count}
+            </span>
+          ) : null}
         </div>
         {bubble ? <div className={bubbleClass}>{bubble}</div> : null}
         <video

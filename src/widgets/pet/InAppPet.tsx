@@ -47,13 +47,21 @@ const EMPTY_SNAPSHOT: PetSnapshotBridge = {
   patCount: 0,
   bondDays: 1,
   activeSessions: 0,
+  attention: {
+    needsYou: 0,
+    failed: 0,
+    running: 0,
+    activeTasks: 0,
+    total: 0,
+    needsYouSessionIds: [],
+  },
   sessions: [],
   tasks: [],
   updatedAt: 0,
 };
 
 const DEFAULT_CONFIG: PetConfigBridge = {
-  version: 2,
+  version: 3,
   enabled: false,
   displayMode: 'desktop',
   tempo: 'standard',
@@ -62,12 +70,25 @@ const DEFAULT_CONFIG: PetConfigBridge = {
   soundScenes: { waiting: true, error: false, done: false },
   showSessionTitle: false,
   compatibilityMode: 'auto',
-  followActiveSession: true,
   externalApi: false,
-  pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
+  pets: [
+    {
+      id: 'default',
+      petPack: 'dafeiyu',
+      size: 'medium',
+      followMode: 'focus',
+      pinnedSessionId: null,
+    },
+  ],
 };
 
-const FALLBACK_PET: PetInstanceBridge = { id: 'default', petPack: 'dafeiyu', size: 'medium' };
+const FALLBACK_PET: PetInstanceBridge = {
+  id: 'default',
+  petPack: 'dafeiyu',
+  size: 'medium',
+  followMode: 'focus',
+  pinnedSessionId: null,
+};
 
 function badgeClass(action: string): string {
   switch (action) {
@@ -150,6 +171,8 @@ function InAppPetItem({
   const width = WIDTHS[instance.size] ?? 150;
   const height = Math.round((width * 360) / 640);
   const title = statusLabel(snapshot.action, snapshot.detail, snapshot.toolName);
+  const needsYou = snapshot.attention?.needsYou ?? 0;
+  const badgeTitle = needsYou > 0 ? `${title} · ${needsYou} 个待处理` : title;
   const bubble = primary
     ? bubbleText(snapshot.bubbleKey, {
         toolName: snapshot.toolName,
@@ -176,8 +199,8 @@ function InAppPetItem({
       <button
         type="button"
         className="pointer-events-auto relative block border-0 bg-transparent p-0"
-        title={title}
-        aria-label={title}
+        title={badgeTitle}
+        aria-label={badgeTitle}
         onClick={() => {
           if (targetSession) onOpenSession(targetSession);
         }}
@@ -198,10 +221,15 @@ function InAppPetItem({
         <span
           className={`absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-full border bg-slate-900/80 text-ui-2xs font-bold ${badgeClass(
             snapshot.action,
-          )}`}
+          )}${needsYou > 0 ? ' ring-2 ring-amber-400/80' : ''}`}
         >
           {statusGlyph(snapshot.action)}
         </span>
+        {needsYou > 0 ? (
+          <span className="absolute -bottom-1 -right-1 min-w-[15px] rounded-full bg-amber-400 px-1 text-center text-ui-2xs font-bold leading-4 text-slate-900">
+            {Math.min(99, needsYou)}
+          </span>
+        ) : null}
       </button>
     </div>
   );
@@ -209,6 +237,7 @@ function InAppPetItem({
 
 export function InAppPet(): JSX.Element | null {
   const [snapshot, setSnapshot] = useState<PetSnapshotBridge>(EMPTY_SNAPSHOT);
+  const [states, setStates] = useState<Record<string, PetSnapshotBridge>>({});
   const [config, setConfig] = useState<PetConfigBridge>(DEFAULT_CONFIG);
 
   const pet = typeof window !== 'undefined' ? window.electronAPI?.pet : undefined;
@@ -222,15 +251,24 @@ export function InAppPet(): JSX.Element | null {
     void pet.getState().then((value) => {
       if (alive) setSnapshot(value);
     });
+    const applyStates = (value: Record<string, PetSnapshotBridge>): void => {
+      if (alive) setStates(value);
+    };
+    const maybeGetStates = pet.getStates as
+      | (() => Promise<Record<string, PetSnapshotBridge>>)
+      | undefined;
+    if (maybeGetStates) void maybeGetStates().then(applyStates);
     const offState = pet.onState((value) => {
       if (alive) setSnapshot(value);
     });
+    const offStates = pet.onStates ? pet.onStates(applyStates) : undefined;
     const offConfig = pet.onConfig((value) => {
       if (alive) setConfig(value);
     });
     return () => {
       alive = false;
       offState();
+      offStates?.();
       offConfig();
     };
   }, [pet]);
@@ -252,7 +290,7 @@ export function InAppPet(): JSX.Element | null {
           key={instance.id}
           instance={instance}
           config={config}
-          snapshot={snapshot}
+          snapshot={states[instance.id] ?? snapshot}
           primary={index === 0}
           onOpenSession={(sessionId) => {
             if (sessionId) pet?.openSession(sessionId);
