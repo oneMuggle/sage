@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react';
 
+import { DEFAULT_SETTINGS, RETRY_LIMITS } from '../../entities/setting/types';
 import type { DisplayMode } from '../../features/chat/displayMode/types';
 import { useConfirmedPreference } from '../../features/manage-settings/useConfirmedPreference';
 import { useSettings } from '../../features/manage-settings/useSettings';
@@ -20,7 +21,7 @@ import { DemoModeSection } from './DemoModeSection';
 import { FontSettingsSection } from './FontSettingsSection';
 import { ResetDefaultsSection } from './ResetDefaultsSection';
 import { ThemeSelector } from './ThemeSelector';
-import { AdvancedSection, SettingRow, Toggle } from './components';
+import { SettingRow, Toggle } from './components';
 
 export interface BasicTabAuditInput {
   streaming: boolean;
@@ -35,15 +36,20 @@ export interface BasicTabAuditInput {
   demoMode: boolean;
 }
 
+/** 2026-11-03: 审计快照标注每个重试项的来源（当前值 vs 后端默认值）。 */
+function retrySourceLabel(value: number, defaultValue: number): string {
+  return value === defaultValue ? '默认' : '已自定义';
+}
+
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatBasicTabAuditSnapshot(input: BasicTabAuditInput): string {
   return [
     `# 基础设置审计快照`,
     `- 流式输出: ${input.streaming ? '开启' : '关闭'}`,
-    `- LLM 最大尝试次数: ${input.llmRetryMaxAttempts}`,
-    `- 退避基数(秒): ${input.llmRetryBaseDelayS}`,
-    `- 最大退避(秒): ${input.llmRetryMaxDelayS}`,
-    `- 重试总时长预算(秒): ${input.llmRetryTotalBudgetS === 0 ? '不限' : input.llmRetryTotalBudgetS}`,
+    `- LLM 最大尝试次数: ${input.llmRetryMaxAttempts}（来源：${retrySourceLabel(input.llmRetryMaxAttempts, DEFAULT_SETTINGS.llmRetryMaxAttempts)}）`,
+    `- 退避基数(秒): ${input.llmRetryBaseDelayS}（来源：${retrySourceLabel(input.llmRetryBaseDelayS, DEFAULT_SETTINGS.llmRetryBaseDelayS)}）`,
+    `- 最大退避(秒): ${input.llmRetryMaxDelayS}（来源：${retrySourceLabel(input.llmRetryMaxDelayS, DEFAULT_SETTINGS.llmRetryMaxDelayS)}）`,
+    `- 重试总时长预算(秒): ${input.llmRetryTotalBudgetS === 0 ? '不限' : input.llmRetryTotalBudgetS}（来源：${retrySourceLabel(input.llmRetryTotalBudgetS, DEFAULT_SETTINGS.llmRetryTotalBudgetS)}）`,
     `- LLM 任务上限(秒): ${input.llmTotalTimeoutS === 0 ? '不限' : input.llmTotalTimeoutS}`,
     `- LLM 代理超时(秒): ${input.llmProxyTimeoutS}`,
     `- IANA 时区: ${input.timezone || '默认'}`,
@@ -69,6 +75,22 @@ export function formatBasicTabAuditJson(input: BasicTabAuditInput): string {
     },
     null,
     2,
+  );
+}
+
+/** 重试参数来源徽标：与后端默认值一致 → 「默认」，否则「已自定义」。 */
+function RetrySourceBadge({ value, defaultValue }: { value: number; defaultValue: number }) {
+  const { t } = useI18n();
+  const isDefault = value === defaultValue;
+  return (
+    <span
+      data-testid="setting-retry-source"
+      className={`rounded px-1.5 py-0.5 text-ui-xs font-medium ${
+        isDefault ? 'bg-bg-muted text-muted' : 'bg-primary/10 text-primary'
+      }`}
+    >
+      {t(isDefault ? 'settings.basic.retry_source.default' : 'settings.basic.retry_source.custom')}
+    </span>
   );
 }
 
@@ -239,12 +261,55 @@ export function BasicTab() {
           label={t('settings.basic.retry_max_label')}
           desc={t('settings.basic.retry_max_desc')}
         >
+          <RetrySourceBadge
+            value={settings.llmRetryMaxAttempts}
+            defaultValue={DEFAULT_SETTINGS.llmRetryMaxAttempts}
+          />
           <NumberInput
             value={settings.llmRetryMaxAttempts}
-            min={0}
-            max={10}
+            min={RETRY_LIMITS.llmRetryMaxAttempts.min}
+            max={RETRY_LIMITS.llmRetryMaxAttempts.max}
             testId="settings-llm-retry-max-attempts"
             onChange={(v) => updateSettings({ llmRetryMaxAttempts: v })}
+            className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+          />
+        </SettingRow>
+        <SettingRow
+          anchor="llmRetryBaseDelayS"
+          label={t('settings.basic.retry_base_label')}
+          desc={t('settings.basic.retry_base_desc')}
+        >
+          <RetrySourceBadge
+            value={settings.llmRetryBaseDelayS}
+            defaultValue={DEFAULT_SETTINGS.llmRetryBaseDelayS}
+          />
+          <NumberInput
+            value={settings.llmRetryBaseDelayS}
+            min={RETRY_LIMITS.llmRetryBaseDelayS.min}
+            max={RETRY_LIMITS.llmRetryBaseDelayS.max}
+            step={0.5}
+            integer={false}
+            testId="settings-llm-retry-base-delay"
+            onChange={(v) => updateSettings({ llmRetryBaseDelayS: v })}
+            className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+          />
+        </SettingRow>
+        <SettingRow
+          anchor="llmRetryMaxDelayS"
+          label={t('settings.basic.llm_retry.max_delay.label')}
+          desc={t('settings.basic.llm_retry.max_delay.desc')}
+        >
+          <RetrySourceBadge
+            value={settings.llmRetryMaxDelayS}
+            defaultValue={DEFAULT_SETTINGS.llmRetryMaxDelayS}
+          />
+          <NumberInput
+            value={settings.llmRetryMaxDelayS}
+            min={RETRY_LIMITS.llmRetryMaxDelayS.min}
+            max={RETRY_LIMITS.llmRetryMaxDelayS.max}
+            step={1}
+            testId="settings-llm-retry-max-delay"
+            onChange={(v) => updateSettings({ llmRetryMaxDelayS: v })}
             className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
           />
         </SettingRow>
@@ -253,50 +318,20 @@ export function BasicTab() {
           label={t('settings.basic.retry_total_budget_label')}
           desc={t('settings.basic.retry_total_budget_desc')}
         >
+          <RetrySourceBadge
+            value={settings.llmRetryTotalBudgetS}
+            defaultValue={DEFAULT_SETTINGS.llmRetryTotalBudgetS}
+          />
           <NumberInput
             value={settings.llmRetryTotalBudgetS}
-            min={0}
-            max={1800}
+            min={RETRY_LIMITS.llmRetryTotalBudgetS.min}
+            max={RETRY_LIMITS.llmRetryTotalBudgetS.max}
             step={10}
             testId="settings-llm-retry-total-budget"
             onChange={(v) => updateSettings({ llmRetryTotalBudgetS: v })}
             className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
           />
         </SettingRow>
-        <AdvancedSection
-          title={t('settings.basic.advanced_title')}
-          description={t('settings.basic.advanced_desc')}
-        >
-          <SettingRow
-            anchor="llmRetryBaseDelayS"
-            label={t('settings.basic.retry_base_label')}
-            desc={t('settings.basic.retry_base_desc')}
-          >
-            <NumberInput
-              value={settings.llmRetryBaseDelayS}
-              min={0.1}
-              step={0.5}
-              integer={false}
-              testId="settings-llm-retry-base-delay"
-              onChange={(v) => updateSettings({ llmRetryBaseDelayS: v })}
-              className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
-            />
-          </SettingRow>
-          <SettingRow
-            anchor="llmRetryMaxDelayS"
-            label={t('settings.basic.llm_retry.max_delay.label')}
-            desc={t('settings.basic.llm_retry.max_delay.desc')}
-          >
-            <NumberInput
-              value={settings.llmRetryMaxDelayS}
-              min={1}
-              step={1}
-              testId="settings-llm-retry-max-delay"
-              onChange={(v) => updateSettings({ llmRetryMaxDelayS: v })}
-              className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
-            />
-          </SettingRow>
-        </AdvancedSection>
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">

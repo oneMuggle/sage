@@ -135,32 +135,64 @@ if not nothing_yielded:
 
 ## 重试参数
 
-重试次数与退避时长全部**可由用户在设置 UI 调整**（设置 → 基础 → LLM 重试）：
+重试次数与退避时长全部**可由用户在设置 UI 调整**（设置 → 基础 → LLM 重试）。
+四个参数恒定显示在主区（不再折叠于「高级选项」），每项旁标注「默认 / 已自定义」。
 
-| 设置项 | 键名 | 后端默认值 | UI 默认值 | 有效范围 |
-| --- | --- | --- | --- | --- |
-| 最大重试次数 | `llmRetryMaxAttempts` | 3 | 3 | UI 0–10；`config_tool` 校验 0–20 的整数 |
-| 退避基数（秒） | `llmRetryBaseDelayS` | 1.0 | 1.0 | UI ≥ 0.1；`config_tool` 校验 (0, 600] |
-| 最大退避（秒） | `llmRetryMaxDelayS` | 15.0 | 30.0 | UI ≥ 1；`config_tool` 校验 (0, 600] |
-| 重试总时长预算（秒） | `llmRetryTotalBudgetS` | 180 | 180 | UI 0–1800；0 = 不限；`config_tool` 校验 0–1800 |
+| 设置项 | 键名 | 默认值 | 有效范围 |
+| --- | --- | --- | --- |
+| 最大尝试次数 | `llmRetryMaxAttempts` | 5 | 1–100（整数） |
+| 退避基数（秒） | `llmRetryBaseDelayS` | 2.0 | 0–600 |
+| 最大退避（秒） | `llmRetryMaxDelayS` | 60.0 | 1–3600 |
+| 重试总时长预算（秒） | `llmRetryTotalBudgetS` | 300 | 0–86400；0 = 不限 |
+
+默认值由 `backend/core/retry_defaults.py::RETRY_DEFAULTS` **唯一定义**；
+前端 `src/entities/setting/types.ts::DEFAULT_SETTINGS` 必须逐项一致，
+由契约测试 `backend/tests/contract/test_retry_defaults_contract.py` 锁死。
+取值域同样定义在该模块的 `RETRY_RANGES` 中，写入侧校验与运行时回退共用一份。
+
+默认值的依据：
+
+- `maxAttempts = 5`（含首次 → 4 次重试），覆盖瞬时抖动 / 网关 502；
+- `baseDelay = 2.0s`：1s 对刚超时 60s 的上游等于无退避；
+- `maxDelay = 60.0s`：与 `llmProxyTimeoutS` 默认 60s 同量级，并消除旧版前后端
+  15.0 / 30.0 的漂移；
+- `totalBudget = 300s`：5 次 × 60s 在途时间；预算须 ≥ 在途总量，否则重试
+  还没跑完就被收口。
 
 几点语义说明：
 
-- `llmRetryMaxAttempts` 是**总尝试次数**（含首次请求），默认 3 = 首次 + 2 次
-  重试；设为 `0` 表示禁用自动重试（单次请求即终止）。
-- 后端硬编码默认 `llmRetryMaxDelayS = 15.0`，而设置 UI 的默认值是 `30.0`。
-  用户一旦在设置页保存过，后端读到的 `app_settings` 里就是 30.0 并优先生效。
-- `llmRetryBaseDelayS` 不能大于 `llmRetryMaxDelayS`，否则 `config_tool` 拒绝写入。
+- `llmRetryMaxAttempts` 是**总尝试次数**（含首次请求），默认 5 = 首次 + 4 次重试；
+  **最小值为 1**（0 不再表示禁用；不想重试请设为 1）。
+- `llmRetryBaseDelayS` 不能大于 `llmRetryMaxDelayS`；不满足时运行时会双双回退默认
+  并记 warning。
+- 写入侧只校验**本次提交的 payload**，不校验合并后的存量树——历史存量的非法值
+  不会让用户改无关字段也提交不了。
 
-配置读取顺序（`backend/core/legacy/llm_client.py` 的 `_retry_settings()`）：
+配置读取顺序（`backend/core/retry_defaults.py::resolve_retry_settings()`）：
 
 ```
-app_settings（设置 UI 落库） > 环境变量 > 硬编码默认值
+环境变量 > app_settings（设置 UI 落库） > RETRY_DEFAULTS
 ```
 
-环境变量为 `SAGE_LLM_RETRY_MAX_ATTEMPTS`（需 ≥ 1）与
-`SAGE_LLM_RETRY_BASE_DELAY_S`（需 ≥ 0），用于调试 / 测试。
-读取失败一律回退默认值，**永不抛错**。
+> 历史文档曾写作 `app_settings > 环境变量`，与实现不符；环境变量在旧实现中
+> 也是最后写入、实际优先的一方，此处按代码修正。
+
+环境变量为 `SAGE_LLM_RETRY_MAX_ATTEMPTS` / `SAGE_LLM_RETRY_BASE_DELAY_S` /
+`SAGE_LLM_RETRY_MAX_DELAY_S` / `SAGE_LLM_RETRY_TOTAL_BUDGET_S`，用于调试 / 测试，
+同样受取值域约束。类型 / 范围非法时**记 warning 并回退默认**，不会静默丢弃。
+
+### 配置摘要可见性（2026-11-03）
+
+`backend/chat/env_context.py` 注入 LLM 的 `<current-configuration>` 块中，
+四个重试参数恒定列出并标注来源（用户设置 / 环境变量 / 默认），例如：
+
+```
+- llmRetryMaxAttempts: 5 (来源: 默认)
+- llmRetryBaseDelayS: 2.0s (来源: 用户设置)
+```
+
+这样 LLM 能区分「用户显式设置」与「回退默认」，不会再依据被截断的上下文
+推断为"未显式设置"。摘要与运行时共用 `resolve_retry_settings()`，避免两边口径分叉。
 
 退避时长（`_retry_backoff_seconds()`）：
 
@@ -287,11 +319,11 @@ Sage 自己的 LLM 代理在等待上游超时时返回 504，响应体为
 从首次尝试起算，退避前的累计耗时超过预算即停止，并用最后一次错误类型
 抛出（消息追加「自动重试累计超过 Ns 总时长预算，已停止」）。
 
-| 项 | 值 |
+| 项 | 值（2026-11-03 起） |
 | --- | --- |
-| 默认预算 | 180 秒 |
-| 配置入口 | 设置 → 基础 → LLM 重试 → 重试总时长预算（`app_settings.llmRetryTotalBudgetS`，0–1800，0 = 不限） |
-| 环境变量 | `SAGE_LLM_RETRY_TOTAL_BUDGET_S`（app_settings 缺省时生效；0 = 不限，非法值回退默认） |
+| 默认预算 | 300 秒 |
+| 配置入口 | 设置 → 基础 → LLM 重试 → 重试总时长预算（`app_settings.llmRetryTotalBudgetS`，0–86400，0 = 不限） |
+| 环境变量 | `SAGE_LLM_RETRY_TOTAL_BUDGET_S`（优先于 app_settings；0 = 不限，非法值回退默认并记 warning） |
 | 作用范围 | 非流式 + 流式两条重试循环 |
 
 原因：代理超时类 504 每次尝试本身就要等满代理超时（默认 60s），
@@ -336,7 +368,8 @@ budget_remaining_s: Optional[float] = None  # 本次等待后剩余预算，>= 0
 ### 次数语义与 429 分类
 
 - `llmRetryMaxAttempts` 是**总尝试次数（含首次请求）**：10 = 首次 + 9 次重试；
-  0 或 1 = 禁用自动重试。设置页文案与搜索索引已同步为「最大尝试次数」。
+  **最小值为 1**（0 会被写入侧校验拒绝；不想重试请设为 1）。默认值 5。
+  设置页文案与搜索索引已同步为「最大尝试次数」。
 - `RATE_LIMITED` 分类现在回传 `status_code=429`（此前只有 401 回传状态码），
   下游可据此区分限流与其他失败。
 

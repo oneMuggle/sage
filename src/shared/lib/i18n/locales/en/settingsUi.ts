@@ -25,7 +25,7 @@ export const enSettingsUi = {
   'settings.basic.llm_proxy_timeout.label': 'Upstream read timeout (s)',
   'settings.basic.llm_retry': 'LLM retry',
   'settings.basic.llm_retry.max_delay.desc':
-    'Upper bound for a single retry wait, preventing excessively long exponential backoff',
+    'Upper bound for a single retry wait, preventing excessively long exponential backoff. Range 1-3600 s, and not less than the backoff base.',
   'settings.basic.llm_retry.max_delay.label': 'Max backoff (s)',
   'settings.basic.llm_total_limit.desc':
     'Total time limit for a single task (LLM calls + tool execution + subagents); the task is terminated when exceeded. 0 = no limit; when set, takes precedence over the SAGE_LLM_TOTAL_TIMEOUT_S environment variable',
@@ -36,13 +36,15 @@ export const enSettingsUi = {
   'settings.basic.log_timezone.local': 'Local system timezone',
   'settings.basic.log_timezone.utc': 'UTC (legacy default)',
   'settings.basic.retry_base_desc':
-    'Wait before the first retry; subsequent retries grow exponentially (base × 2^(attempt-1))',
+    'Wait before the first retry; subsequent retries grow exponentially (base × 2^(attempt-1)). Range 0-600 s.',
   'settings.basic.retry_base_label': 'Backoff base (s)',
   'settings.basic.retry_max_desc':
-    'Total attempt count for LLM requests (including the first request). For example, 10 means up to 10 attempts (first + 9 retries). Set to 0 or 1 to disable automatic retries.',
+    'Total attempt count for LLM requests (including the first request). For example, 10 means up to 10 attempts (first + 9 retries). Range 1-100.',
   'settings.basic.retry_max_label': 'Max attempts',
+  'settings.basic.retry_source.custom': 'Customized',
+  'settings.basic.retry_source.default': 'Default',
   'settings.basic.retry_total_budget_desc':
-    'Cumulative wait between the first attempt and the next retry; retrying stops once this budget is exceeded. 0 = no limit.',
+    'Total time spent waiting since the first attempt. Once this budget is exhausted, automatic retries stop. Range 0-86400; 0 = unlimited.',
   'settings.basic.retry_total_budget_label': 'Total retry budget (s)',
   // 2026-11-02: save failure toast — after saveSettings switched to strict channel,
   // settingsStore toasts on backend PUT failure

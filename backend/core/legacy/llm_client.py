@@ -26,15 +26,19 @@ logger = logging.getLogger(__name__)
 THINK_TAG_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
 # ===== L3 请求层重试退避（对标增强第二轮批次 B）=====
-#: 默认最大尝试次数（首次 + 2 次重试）；env ``SAGE_LLM_RETRY_MAX_ATTEMPTS`` 覆盖
-_LLM_RETRY_MAX_ATTEMPTS = 3
+# 2026-11-03: 默认值统一从 ``backend.core.retry_defaults.RETRY_DEFAULTS`` 读取。
+# 以下 4 个别名保留供测试 monkeypatch 使用（如 ``_LLM_RETRY_MAX_DELAY_S = 0.01``）。
+from backend.core.retry_defaults import RETRY_DEFAULTS, resolve_retry_settings
+
+#: 默认最大尝试次数（首次 + 4 次重试）；env ``SAGE_LLM_RETRY_MAX_ATTEMPTS`` 覆盖
+_LLM_RETRY_MAX_ATTEMPTS = RETRY_DEFAULTS["llmRetryMaxAttempts"]
 #: 指数退避基数秒数；env ``SAGE_LLM_RETRY_BASE_DELAY_S`` 覆盖
-_LLM_RETRY_BASE_DELAY_S = 1.0
+_LLM_RETRY_BASE_DELAY_S = RETRY_DEFAULTS["llmRetryBaseDelayS"]
 #: 单次退避上限
-_LLM_RETRY_MAX_DELAY_S = 15.0
-#: 自动重试的总时长预算（秒）：从首次尝试起算，含在途请求与退避的累计耗时。
+_LLM_RETRY_MAX_DELAY_S = RETRY_DEFAULTS["llmRetryMaxDelayS"]
+#: 自动重试的总时长预算（秒）：从首次尝试起算，退避前的累计耗时超预算即停止。
 #: 0 表示不限制；env ``SAGE_LLM_RETRY_TOTAL_BUDGET_S`` 覆盖（调试/测试用）。
-_LLM_RETRY_TOTAL_BUDGET_S = 180.0
+_LLM_RETRY_TOTAL_BUDGET_S = RETRY_DEFAULTS["llmRetryTotalBudgetS"]
 #: 预算启用时，剩余预算低于该值就不再发起新的尝试（避免"必然超时"的空等）。
 _LLM_RETRY_MIN_ATTEMPT_S = 5.0
 #: 可重试的错误类型：限流 / 服务端错误 / 超时 / 网络不可达
@@ -75,77 +79,41 @@ def _is_context_overflow_text(text: str) -> bool:
 
 
 def _retry_settings() -> Tuple[int, float, float, float]:
-    """读重试配置：app_settings > env > 默认。任何解析失败回退默认，永不抛错。
+    """读重试配置：委托给 ``resolve_retry_settings()``，env > app_settings > 默认。
 
-    优先级：
-    1. 环境变量 SAGE_LLM_RETRY_MAX_ATTEMPTS/BASE_DELAY_S/TOTAL_BUDGET_S（调试/测试覆盖）
-    2. app_settings.llmRetryMaxAttempts/BaseDelayS/MaxDelayS/TotalBudgetS
-    3. 硬编码默认值
-
-    Returns:
+    任何解析失败回退默认（由 ``resolve_retry_settings`` 内部处理），永不抛错。
+    返回:
         (max_attempts, base_delay, max_delay, total_budget) 元组
-    """
-    max_attempts = _LLM_RETRY_MAX_ATTEMPTS
-    base_delay = _LLM_RETRY_BASE_DELAY_S
-    max_delay = _LLM_RETRY_MAX_DELAY_S
-    total_budget = _LLM_RETRY_TOTAL_BUDGET_S
 
-    # 优先从 app_settings 读取
+    兼容性:
+        测试 monkeypatch ``_LLM_RETRY_MAX_DELAY_S`` 等别名时，这些别名作为
+        ``defaults`` 传入，覆盖 ``RETRY_DEFAULTS`` 模块级常量。
+    """
+    # 读 app_settings（可以是 camelCase 或 snake_case，resolve_retry_settings 会归一）
+    raw_app_settings: Dict[str, Any] = {}
     try:
         from backend.data.settings_repo import SettingsRepository
         raw = SettingsRepository().get_json("app_settings") or {}
         if isinstance(raw, dict):
-            # 读取重试配置（camelCase 键名）
-            retry_max = raw.get("llmRetryMaxAttempts")
-            if isinstance(retry_max, int) and retry_max >= 0:
-                max_attempts = retry_max
-
-            retry_base = raw.get("llmRetryBaseDelayS")
-            if isinstance(retry_base, (int, float)) and retry_base >= 0:  # noqa: UP038
-                base_delay = float(retry_base)
-
-            retry_max_delay = raw.get("llmRetryMaxDelayS")
-            if isinstance(retry_max_delay, (int, float)) and retry_max_delay >= 1.0:  # noqa: UP038
-                max_delay = float(retry_max_delay)
-
-            # 2026-10-30: 自动重试总时长预算（秒），0 = 不限；UI 可配置。
-            retry_total_budget = raw.get("llmRetryTotalBudgetS")
-            if isinstance(retry_total_budget, (int, float)) and retry_total_budget >= 0:  # noqa: UP038
-                total_budget = float(retry_total_budget)
+            raw_app_settings = raw
     except (ImportError, OSError, ValueError, TypeError):
         pass  # 读配置失败回退 env/默认
 
-    # 环境变量覆盖（用于调试/测试）
-    raw_attempts = os.environ.get("SAGE_LLM_RETRY_MAX_ATTEMPTS", "").strip()
-    if raw_attempts:
-        try:
-            value = int(raw_attempts)
-            if value >= 1:
-                max_attempts = value
-        except ValueError:
-            logger.warning("env SAGE_LLM_RETRY_MAX_ATTEMPTS=%r 非法,回退默认", raw_attempts)
+    # 用模块别名作为 defaults（测试 monkeypatch 会覆盖这些别名）
+    defaults = {
+        "llmRetryMaxAttempts": _LLM_RETRY_MAX_ATTEMPTS,
+        "llmRetryBaseDelayS": _LLM_RETRY_BASE_DELAY_S,
+        "llmRetryMaxDelayS": _LLM_RETRY_MAX_DELAY_S,
+        "llmRetryTotalBudgetS": _LLM_RETRY_TOTAL_BUDGET_S,
+    }
 
-    raw_delay = os.environ.get("SAGE_LLM_RETRY_BASE_DELAY_S", "").strip()
-    if raw_delay:
-        try:
-            value = float(raw_delay)
-            if value >= 0:
-                base_delay = value
-        except ValueError:
-            logger.warning("env SAGE_LLM_RETRY_BASE_DELAY_S=%r 非法,回退默认", raw_delay)
-
-    raw_budget = os.environ.get("SAGE_LLM_RETRY_TOTAL_BUDGET_S", "").strip()
-    if raw_budget:
-        try:
-            value = float(raw_budget)
-            if value >= 0:
-                total_budget = value
-        except ValueError:
-            logger.warning(
-                "env SAGE_LLM_RETRY_TOTAL_BUDGET_S=%r 非法,回退默认", raw_budget
-            )
-
-    return max_attempts, base_delay, max_delay, total_budget
+    settings = resolve_retry_settings(raw_app_settings, defaults=defaults)
+    return (
+        settings.max_attempts,
+        settings.base_delay_s,
+        settings.max_delay_s,
+        settings.total_budget_s,
+    )
 
 
 def _retry_now() -> float:

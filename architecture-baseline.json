@@ -14,7 +14,7 @@
     "backend/core/legacy/llm_client.py": 1457,
     "backend/data/database.py": 2303,
     "backend/data/session_repo.py": 1121,
-    "backend/data/settings_canonicalizer.py": 1002,
+    "backend/data/settings_canonicalizer.py": 1030,
     "backend/main.py": 1733,
     "backend/memory/manager.py": 852,
     "backend/mcp/pool.py": 915,

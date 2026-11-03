@@ -190,27 +190,20 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
         value = updates[key]
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 10_000_000:
             return f"{key} 必须是 1 到 10000000 之间的整数，收到: {value!r}"
-    # P119 Config Advisor (Phase 1.2): LLM 重试 / 超时字段类型与范围校验
+    # P119 Config Advisor (Phase 1.2): LLM 重试参数取值域校验 —— 复用后端
+    # 单一真相源 RETRY_RANGES (与运行时回退 / HTTP 写入侧共用同一份定义,
+    # 杜绝漂移).
     _llm_retry_field_errors: List[str] = []
-    if "llmRetryMaxAttempts" in updates:
-        v = updates["llmRetryMaxAttempts"]
-        if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 20:
-            _llm_retry_field_errors.append(
-                f"llmRetryMaxAttempts 必须是 0 到 20 之间的整数，收到: {v!r}"
-            )
-    for k in ("llmRetryBaseDelayS", "llmRetryMaxDelayS"):
-        if k in updates:
-            v = updates[k]
-            if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 < v <= 600:  # noqa: UP038
-                _llm_retry_field_errors.append(
-                    f"{k} 必须是大于 0 且不超过 600 的数字，收到: {v!r}"
-                )
-    if "llmRetryTotalBudgetS" in updates:
-        v = updates["llmRetryTotalBudgetS"]
-        if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 1800:
-            _llm_retry_field_errors.append(
-                f"llmRetryTotalBudgetS 必须是 0 到 1800 之间的整数（0=不限），收到: {v!r}"
-            )
+    from backend.core.retry_defaults import RETRY_KEYS, validate_retry_values
+
+    for key in RETRY_KEYS:
+        if key in updates:
+            try:
+                validate_retry_values({key: updates[key]})
+            except ValueError as exc:
+                # RetrySettingsValueError 消息已含字段名和原始值 (LLM 自己提交),
+                # 直接拼入错误串.
+                _llm_retry_field_errors.append(str(exc))
     if "llmTotalTimeoutS" in updates:
         v = updates["llmTotalTimeoutS"]
         if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 86400:

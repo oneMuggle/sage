@@ -257,17 +257,17 @@ def test_update_general_rejects_out_of_range_llm_retry(monkeypatch):
     FakeRepo, _ = _fake_repo_for_general_updates()
     monkeypatch.setattr("backend.tools.config_tool.SettingsRepository", FakeRepo)
 
-    # llmRetryMaxAttempts 上限 20
-    res = tool.execute(target="general", updates={"llmRetryMaxAttempts": 100})
+    # llmRetryMaxAttempts 取值域 [1, 100] (2026-11-03 统一到 RETRY_RANGES 单一真相源)
+    res = tool.execute(target="general", updates={"llmRetryMaxAttempts": 101})
     assert res.success is False
     assert "llmRetryMaxAttempts" in res.error
 
-    # llmRetryBaseDelayS 必须 > 0
-    res2 = tool.execute(target="general", updates={"llmRetryBaseDelayS": 0})
+    # llmRetryBaseDelayS 取值域 [0.0, 600.0] (允许 0 = 无退避; 负值拒绝)
+    res2 = tool.execute(target="general", updates={"llmRetryBaseDelayS": -1})
     assert res2.success is False
     assert "llmRetryBaseDelayS" in res2.error
 
-    # llmTotalTimeoutS 上限 86400
+    # llmTotalTimeoutS 上限 86400 (未进入 RETRY_RANGES, 保留独立校验)
     res3 = tool.execute(target="general", updates={"llmTotalTimeoutS": 100000})
     assert res3.success is False
     assert "llmTotalTimeoutS" in res3.error
