@@ -701,3 +701,40 @@ async def test_put_app_settings_does_not_echo_plaintext_api_key(client):
     assert _REDACTED_APIKEY not in resp.text
     body = resp.json()
     assert "endpoints" not in body
+
+
+@pytest.mark.asyncio()
+async def test_put_base_greater_than_max_rejected(client):
+    """2026-11-03: base > max 必须在写入侧拒绝 —— 运行时静默回退正是本模块要消除的不可见."""
+    resp = await client.put(
+        "/api/v1/settings",
+        json={"llmRetryBaseDelayS": 100.0, "llmRetryMaxDelayS": 50.0},
+    )
+    assert resp.status_code == 422
+    body = resp.json()
+    assert body["detail"]["field"] == "llmRetryBaseDelayS"
+    # 原始值不得回显到响应（安全）
+    assert "100" not in json.dumps(body["detail"], ensure_ascii=False)
+
+
+@pytest.mark.asyncio()
+async def test_put_unrelated_field_not_blocked_by_legacy_base_gt_max(client):
+    """存量里已有 base>max 时, 用户改无关字段不得被校验拦死."""
+    # 预先写入一对非法值（模拟历史数据）
+    SettingsRepository().set_json(
+        "app_settings",
+        {"llmRetryBaseDelayS": 100.0, "llmRetryMaxDelayS": 30.0},
+        category="general",
+    )
+    resp = await client.put(
+        "/api/v1/settings",
+        json={"model": "new-model"},
+    )
+    assert resp.status_code == 200, resp.json()
+    # 同时验证：再改 base 仍被拦
+    resp2 = await client.put(
+        "/api/v1/settings",
+        json={"llmRetryBaseDelayS": 50.0},
+    )
+    assert resp2.status_code == 422
+    assert resp2.json()["detail"]["field"] == "llmRetryBaseDelayS"

@@ -851,13 +851,41 @@ def validate_settings_payload(
                 raise ValueError(f"endpoints[{i}]: {exc}") from exc
 
 
+def validate_retry_settings_payload(settings: Any, effective_settings: Any = None) -> None:
+    """校验本次提交的 LLM 重试参数取值域（只查本次 payload，不查存量）。
+
+    刻意不并入 ``validate_settings_payload`` —— 后者拿到的是与存量合并后的
+    整棵树，历史存量的非法值会把用户锁死在设置页外（改一个无关字段也
+    提交不了）。取值域定义见 ``backend.core.retry_defaults.RETRY_RANGES``，
+    与运行时回退共用同一份定义。
+
+    ``effective_settings`` 是合并后的整棵树，仅用于 ``base_delay <= max_delay``
+    交叉校验的另一半：用户只改基数时也能发现它与存量上限冲突。
+
+    Raises:
+        RetrySettingsValueError: 越界 / 类型非法（``.field`` 指出错的键）。
+    """
+    if not isinstance(settings, dict):
+        return
+    from backend.core.retry_defaults import validate_retry_values
+
+    validate_retry_values(settings, effective_settings)
+
+
 def classify_settings_validation_error(exc: ValueError) -> str:
     """Return a non-sensitive field category for a settings validation error.
 
     Validation exceptions remain detailed for internal callers; HTTP handlers
     must not serialize those messages because they can contain user-controlled
     protocols, paths, or other secrets.
+
+    Exceptions carrying an explicit ``field`` attribute (e.g. retry range
+    violations) report that field name directly — it is a fixed literal from
+    our own code, never user input.
     """
+    field = getattr(exc, "field", None)
+    if isinstance(field, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", field):
+        return field
     message = str(exc)
     if "timezone" in message:
         return "timezone"

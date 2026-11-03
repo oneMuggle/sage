@@ -15,6 +15,7 @@ import {
   DEFAULT_SETTINGS,
   EndpointConfig,
   ModelSelections,
+  RETRY_LIMITS,
   SETTINGS_STORAGE_KEY,
   SETTINGS_VERSION,
 } from './types';
@@ -96,6 +97,8 @@ function sanitizeForBackend<T extends Partial<AppSettings>>(partial: T): T {
   // 防御性拷贝 + 字段级净化:
   // 1) 顶层: 只保留白名单内 key, 丢弃 snake_case 残留 (含 known-bad list).
   // 2) endpoints[*]: 同样只保留白名单内字段.
+  // 3) 重试参数: 按 RETRY_LIMITS clamp, 防止历史 localStorage 里的非法值
+  //    (如 llmRetryMaxAttempts=0) 绕过 NumberInput 直接进入后端.
   // 不修改入参, 返回新对象.
   if (!partial || typeof partial !== 'object') return partial;
   const out: Record<string, unknown> = {};
@@ -113,12 +116,22 @@ function sanitizeForBackend<T extends Partial<AppSettings>>(partial: T): T {
         }
         return cleanEp;
       });
+    } else if (RETRY_LIMIT_KEYS.has(k) && typeof v === 'number' && Number.isFinite(v)) {
+      const limits = RETRY_LIMITS[k as keyof typeof RETRY_LIMITS];
+      out[k] = Math.max(limits.min, Math.min(limits.max, v));
     } else {
       out[k] = v;
     }
   }
   return out as T;
 }
+
+const RETRY_LIMIT_KEYS = new Set<string>([
+  'llmRetryMaxAttempts',
+  'llmRetryBaseDelayS',
+  'llmRetryMaxDelayS',
+  'llmRetryTotalBudgetS',
+]);
 
 // 暴露给单测 (vitest) 验证 canonical 净化行为.
 export const __test__sanitizeForBackend = sanitizeForBackend;
