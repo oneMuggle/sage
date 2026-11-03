@@ -294,6 +294,22 @@ export interface PlaybookDocumentImportResult {
   source: string;
 }
 
+export interface PlaybookShareLink {
+  token: string;
+  playbook_id: string;
+  playbook_name: string;
+  expires_at: number;
+  share_url: string;
+}
+
+export interface PlaybookSharedPayload {
+  playbook_id: string;
+  playbook_name: string;
+  spec: PlaybookSpec;
+  shared_at: number;
+  expires_at: number;
+}
+
 export interface PlaybookBindPayload {
   playbookId?: string;
   libraryId?: string;
@@ -486,6 +502,17 @@ export const playbookApi = {
       libraryId,
       includeScaffold,
     });
+  },
+
+  async createShareLink(libraryId: string, expiryDays = 7): Promise<PlaybookShareLink> {
+    return invoke<PlaybookShareLink>('playbooks_share_create', {
+      libraryId,
+      expiryDays,
+    });
+  },
+
+  async resolveShareToken(token: string): Promise<PlaybookSharedPayload> {
+    return invoke<PlaybookSharedPayload>('playbooks_share_resolve', { token });
   },
 
   async listEvents(projectId: string, limit = 50): Promise<PlaybookEvent[]> {

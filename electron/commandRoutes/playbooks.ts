@@ -165,6 +165,17 @@ export const playbookRoutes: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/playbooks/library/${enc(a.libraryId ?? a.library_id)}`,
   },
+  playbooks_share_create: {
+    method: 'POST',
+    path: (a) => `/api/v1/playbooks/library/${enc(a.libraryId ?? a.library_id)}/share`,
+    body: (a) => ({
+      expiry_days: a.expiryDays ?? a.expiry_days ?? 7,
+    }),
+  },
+  playbooks_share_resolve: {
+    method: 'GET',
+    path: (a) => `/api/v1/playbooks/shared/${enc(a.token)}`,
+  },
   playbooks_events_list: {
     method: 'GET',
     path: (a) => {

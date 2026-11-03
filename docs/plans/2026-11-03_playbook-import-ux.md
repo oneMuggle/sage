@@ -2,7 +2,7 @@
 
 > 日期：2026-11-03
 > 分支：feat/playbook-import-ux
-> 状态：进行中
+> 状态：已实施（M1–M4）
 
 ---
 
@@ -243,19 +243,19 @@ CREATE TABLE IF NOT EXISTS playbook_shares (
 
 ### 里程碑 M3：规程分享链接（P2，1-2 天）
 
-- [ ] 新增 `playbook_shares` 数据表
-- [ ] 实现 `playbook_share_repo.py` + `playbook_share.py`
-- [ ] 新增 API endpoint：`POST /playbooks/library/{id}/share` + `GET /playbooks/shared/{token}`
-- [ ] 实现前端 `PlaybookShareDialog.tsx`：生成链接 + 复制
-- [ ] 实现分享页面：访问 URL → 预览 → 一键导入
-- [ ] 编写单元测试
+- [x] 新增 `playbook_shares` 数据表
+- [x] 实现 `playbook_share_repo.py` + `playbook_share.py`
+- [x] 新增 API endpoint：`POST /playbooks/library/{id}/share` + `GET /playbooks/shared/{token}`
+- [x] 实现前端 `PlaybookShareDialog.tsx`：生成链接 + 复制
+- [x] 实现分享页面：访问 URL → 预览 → 一键导入
+- [x] 编写单元测试
 
 ### 里程碑 M4：集成测试与文档（0.5 天）
 
-- [ ] 端到端测试：上传 Word → 预览 → 确认 → 绑定项目
-- [ ] 端到端测试：生成分享链接 → 访问 → 导入
-- [ ] 归档技术文档到 `docs/technical/XX-playbook-import-share.md`
-- [ ] 更新用户手册（如需要）
+- [x] 端到端测试：上传 Word → 预览 → 确认 → 绑定项目（`backend/tests/integration/test_playbook_import_share.py` TestDocumentImportFlow）
+- [x] 端到端测试：生成分享链接 → 访问 → 导入（`TestShareLinkFlow` 含 5 个用例，覆盖无效/过期/库缺失）
+- [x] 归档技术文档到 `docs/technical/120-playbook-import-share.md`
+- [x] 更新用户手册（如需要）—— 本轮以技术手册为主，用户手册待后续按需追加
 
 ---
 

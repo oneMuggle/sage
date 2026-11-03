@@ -65,6 +65,10 @@ const TodoPage = lazy(() => import('./pages/TodoPage').then((m) => ({ default: m
 const ProjectGovernance = lazy(() =>
   import('./pages/ProjectGovernance').then((m) => ({ default: m.ProjectGovernance })),
 );
+// 2026-11-03: 规程分享落地页 — 接收方打开分享链接后预览并导入
+const PlaybookSharePage = lazy(() =>
+  import('./pages/PlaybookSharePage').then((m) => ({ default: m.PlaybookSharePage })),
+);
 
 // 2026-10-17: 闲时自主目标执行系统 — 列表页 + 详情页
 const GoalListPage = lazy(() =>
@@ -254,6 +258,15 @@ function App() {
         <FeedbackMenuBridge />
         <PetSettingsBridge />
         <Routes>
+          {/* 2026-11-03: 规程分享落地页 — 接收方无需先进入工作台即可预览/导入 */}
+          <Route
+            path="/share/playbook/:token"
+            element={
+              <Suspense fallback={<div className="flex-1" />}>
+                <PlaybookSharePage />
+              </Suspense>
+            }
+          />
           <Route
             path="/"
             element={
