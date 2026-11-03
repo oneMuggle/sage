@@ -19,13 +19,16 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture(autouse=True)
 def _fast_llm_retry_backoff(monkeypatch):
-    """429 重试路径的退避（封顶 15s + 指数基数）在单测里是纯等待；断言
+    """429 重试路径的退避（封顶 + 指数基数）在单测里是纯等待；断言
     的是 fallback 触发语义与错误类型，不涉退避时长。压到近零后重试
-    路径仍被真实执行。见 test_llm_client_errors._fast_llm_retry_backoff。"""
+    路径仍被真实执行。见 test_llm_client_errors._fast_llm_retry_backoff。
+
+    显式钉住最大尝试次数为 3，使本文件的断言不随默认重试次数调整而漂移。"""
     monkeypatch.setattr(
         "backend.core.legacy.llm_client._LLM_RETRY_MAX_DELAY_S", 0.01
     )
     monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "0.01")
+    monkeypatch.setenv("SAGE_LLM_RETRY_MAX_ATTEMPTS", "3")
 
 
 def _rate_limited_response():

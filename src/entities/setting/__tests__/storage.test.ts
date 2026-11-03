@@ -248,6 +248,8 @@ describe('mergeWithDefaults (endpoints / modelSelections deepMerge)', () => {
       apiKey: null,
       discoveredModels: [],
       lastDiscoveredAt: null,
+      reasoningEffort: null,
+      thinkingBudget: null,
     };
     const merged = mergeWithDefaults({
       endpoints: [userExtra],
@@ -266,6 +268,8 @@ describe('mergeWithDefaults (endpoints / modelSelections deepMerge)', () => {
       apiKey: 'redacted',
       discoveredModels: [],
       lastDiscoveredAt: null,
+      reasoningEffort: null,
+      thinkingBudget: null,
     };
     const partial = { endpoints: [userEndpoint] } as unknown as Partial<AppSettings>;
     const merged = mergeWithDefaults(partial);

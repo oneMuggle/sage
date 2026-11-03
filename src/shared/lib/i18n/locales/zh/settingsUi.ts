@@ -23,7 +23,8 @@ export const zhSettingsUi = {
     '代理转发到模型端点时，两次收到字节之间的最大等待时间。企业网关偶发卡顿超过该值会触发「LLM 连接中断」；关闭流式输出后应设为大于整段生成耗时（建议 300 以上）。范围 5–1800，改后下一次请求生效。',
   'settings.basic.llm_proxy_timeout.label': '上游读超时（秒）',
   'settings.basic.llm_retry': 'LLM 重试',
-  'settings.basic.llm_retry.max_delay.desc': '单次重试等待时间上限，防止指数退避过长',
+  'settings.basic.llm_retry.max_delay.desc':
+    '单次重试等待时间上限，防止指数退避过长。范围 1–3600 秒，且不小于退避基数。',
   'settings.basic.llm_retry.max_delay.label': '最大退避（秒）',
   'settings.basic.llm_total_limit.desc':
     '单次任务（LLM 调用 + 工具执行 + 子代理）的总耗时上限，超出即终止。0 = 不限上限；设后优先于环境变量 SAGE_LLM_TOTAL_TIMEOUT_S',
@@ -33,13 +34,16 @@ export const zhSettingsUi = {
   'settings.basic.log_timezone.label': '日志时区',
   'settings.basic.log_timezone.local': '本地系统时区',
   'settings.basic.log_timezone.utc': 'UTC (历史默认)',
-  'settings.basic.retry_base_desc': '首次重试等待时间，后续按指数递增（base × 2^(attempt-1)）',
+  'settings.basic.retry_base_desc':
+    '首次重试等待时间，后续按指数递增（base × 2^(attempt-1)）。范围 0–600 秒。',
   'settings.basic.retry_base_label': '退避基数（秒）',
   'settings.basic.retry_max_desc':
-    'LLM 请求的总尝试次数（含首次请求）。例如设为 10 表示最多尝试 10 次（首次 + 9 次重试）。设为 0 或 1 表示禁用自动重试。',
+    'LLM 请求的总尝试次数（含首次请求）。例如设为 10 表示最多尝试 10 次（首次 + 9 次重试）。范围 1–100。',
   'settings.basic.retry_max_label': '最大尝试次数',
+  'settings.basic.retry_source.custom': '已自定义',
+  'settings.basic.retry_source.default': '默认',
   'settings.basic.retry_total_budget_desc':
-    '从首次尝试起算，退避前累计耗时超过该值即停止自动重试。0 = 不限。',
+    '从首次尝试起算，退避前累计耗时超过该值即停止自动重试。范围 0–86400；0 = 不限。',
   'settings.basic.retry_total_budget_label': '重试总时长预算（秒）',
   // 2026-11-02: 设置保存失败 toast — saveSettings 改用 strict 通道后，
   // 后端 PUT 失败时由 settingsStore 弹 toast 通知用户
@@ -97,6 +101,15 @@ export const zhSettingsUi = {
   'settings.endpoints.field.model_id': '模型 ID（高级，可选）',
   'settings.endpoints.field.name': '名称',
   'settings.endpoints.field.protocol': '协议',
+  // 2026-11-03: 思考过程参数 —— per-endpoint 配置,透传到上游 LLM。
+  'settings.endpoints.field.reasoning_effort': '思考力度',
+  'settings.endpoints.field.reasoning_effort.off': '关闭',
+  'settings.endpoints.field.reasoning_effort.low': '低',
+  'settings.endpoints.field.reasoning_effort.medium': '中',
+  'settings.endpoints.field.reasoning_effort.high': '高',
+  'settings.endpoints.field.reasoning_effort_hint': '请求模型输出思考过程时的力度',
+  'settings.endpoints.field.thinking_budget': '思考预算 (tokens)',
+  'settings.endpoints.field.thinking_budget_hint': '思考过程的最大 token 数；0 = 关闭，留空 = 用上游默认',
   'settings.endpoints.model_count': '{n} 个模型',
   'settings.endpoints.model_id_hint': '模型',
   'settings.endpoints.model_id_placeholder': '留空走 ModelsTab 选择',
