@@ -2059,11 +2059,13 @@ class SageAgent:
                 # 仍溢出按原错误面终止。重试对生成端透明：压缩标记直接嵌在被截断
                 # 的消息里，模型可自察上下文被治理过。
                 _first_aid_attempts = 0
+                # 2026-11-03: 提到 while 外层 —— 流式→非流式回退时也要能看到
+                # 已经下发过哪些 reasoning 增量，避免整段 reasoning 被重复发送。
+                stream_reasoning_parts: List[str] = []
                 while True:
                     try:
                         if self._should_stream(self.llm_client):
                             saw_content_delta = False
-                            stream_reasoning_parts: List[str] = []
                             try:
                                 async for evt_kind, payload in self.llm_client.chat_stream_events(
                                     messages, tools=available_tools or None
@@ -2077,9 +2079,17 @@ class SageAgent:
                                             agent_id=self.agent_id,
                                         )
                                     elif evt_kind == "reasoning_delta":
-                                        # 汇总后在流收尾统一发一条 REASONING（producer
-                                        # 会再做 reasoning_delta 切块,拆成多事件会重复）
+                                        # 2026-11-02: 即时下发思考增量。此前只
+                                        # 累积到流收尾统一发一条 REASONING,前端
+                                        # 要等正文出完才看到思考过程。producer
+                                        # 对该状态直通,不再二次切块。
                                         stream_reasoning_parts.append(payload)
+                                        yield AgentEvent(
+                                            state=AgentState.REASONING_DELTA,
+                                            iteration=i,
+                                            reasoning=payload,
+                                            agent_id=self.agent_id,
+                                        )
                                     elif evt_kind == "retry":
                                         # 2026-10-13: LLM 请求重试事件。转成
                                         # AgentEvent(RETRY) 让前端实时显示重试
@@ -2115,20 +2125,17 @@ class SageAgent:
                                     self.llm_client.stream_unsupported = True
                                 response = None
                             if response is not None:
-                                # 优先用流式 reasoning_delta 汇总；provider 只在
-                                # response.reasoning_content 里回传 reasoning（不发
-                                # delta 事件）时兜底补发，否则流式路径会把思考过程
-                                # 整段丢掉——非流式路径本来就有这个兜底。
-                                _stream_reasoning = (
-                                    "".join(stream_reasoning_parts)
-                                    if stream_reasoning_parts
-                                    else (getattr(response, "reasoning_content", None) or "")
+                                # 已即时下发过 reasoning_delta 就不再整段重发
+                                #（否则前端会把同一段思考再追加一遍）。仅在上游
+                                # 只把 reasoning 放在 response 里、不发 delta 时兜底。
+                                _fallback_reasoning = (
+                                    getattr(response, "reasoning_content", None) or ""
                                 )
-                                if _stream_reasoning:
+                                if not stream_reasoning_parts and _fallback_reasoning:
                                     yield AgentEvent(
                                         state=AgentState.REASONING,
                                         iteration=i,
-                                        reasoning=_stream_reasoning,
+                                        reasoning=_fallback_reasoning,
                                         agent_id=self.agent_id,
                                     )
                         if response is None:
@@ -2154,8 +2161,11 @@ class SageAgent:
                             ):
                                 yield retry_evt
                             # 如果 LLM 返回了 reasoning_content，yield REASONING 事件
-                            # 这允许前端展示 LLM 的思考/推理过程
-                            if response.reasoning_content:
+                            # 这允许前端展示 LLM 的思考/推理过程。
+                            # 2026-11-03: 若流式阶段已下发过增量（首个 content
+                            # 增量前失败 → 回退 chat()），此处整段重发会让前端
+                            # 追加两遍、落库的 reasoning_content 也翻倍。
+                            if response.reasoning_content and not stream_reasoning_parts:
                                 yield AgentEvent(
                                     state=AgentState.REASONING,
                                     iteration=i,

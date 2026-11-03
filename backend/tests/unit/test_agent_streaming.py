@@ -295,3 +295,78 @@ async def test_run_loop_streaming_emits_reasoning_from_response_fallback():
     # 流式正文仍完整走 CONTENT_DELTA + DONE
     assert events[-1].state.value == "done"
     assert events[-1].content == "答案是 4"
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_streaming_forwards_reasoning_delta_immediately():
+    """适配器每吐一段 reasoning_content，run_loop 就即时下发 REASONING_DELTA。
+
+    回归：此前所有增量被缓冲到流收尾，只发一条整段 REASONING，producer 再
+    二次切块 —— 前端总是先看到正文、后看到思考过程。已下发增量时也不再
+    补发整段 REASONING（否则前端会把同一段思考再追加一遍）。
+    """
+    agent = SageAgent()
+    mock_client = MagicMock()
+    mock_client.stream_unsupported = False
+
+    async def _stream_events(messages, tools=None):
+        yield ("reasoning_delta", "先读文件")
+        yield ("reasoning_delta", "，再改代码")
+        yield ("content_delta", "已完成")
+        yield (
+            "response",
+            LLMResponse(
+                content="已完成",
+                reasoning_content="先读文件，再改代码",
+                tool_calls=[],
+            ),
+        )
+
+    mock_client.chat_stream_events = _stream_events
+    agent.llm_client = mock_client
+
+    events = [evt async for evt in agent.run_loop([{"role": "user", "content": "改一下"}])]
+
+    delta_events = [e for e in events if e.state.value == "reasoning_delta"]
+    assert [e.reasoning for e in delta_events] == ["先读文件", "，再改代码"]
+
+    kinds = [e.state.value for e in events]
+    assert kinds.index("reasoning_delta") < kinds.index("content_delta")
+    # 已即时下发增量，不再补发整段 REASONING
+    assert [e for e in events if e.state.value == "reasoning"] == []
+    assert events[-1].state.value == "done"
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_streaming_fallback_does_not_duplicate_reasoning():
+    """流式已下发 reasoning_delta 后、首个 content delta 前失败 → 回退非流式时
+    不得再整段补发 REASONING。
+
+    回归 2026-11-03：此前非流式回退路径无条件发 ``response.reasoning_content``,
+    前端会把同一段思考追加两遍，落库的 reasoning_content 也会翻倍。
+    """
+    agent = SageAgent()
+    mock_client = MagicMock()
+    mock_client.stream_unsupported = False
+
+    async def _stream_events(messages, tools=None):
+        yield ("reasoning_delta", "先读文件")
+        raise LLMError(LLMErrorType.NETWORK, "connection reset")
+
+    mock_client.chat_stream_events = _stream_events
+    mock_client.chat = AsyncMock(
+        return_value=LLMResponse(
+            content="改完了",
+            reasoning_content="先读文件，再改代码",
+            tool_calls=[],
+        )
+    )
+    agent.llm_client = mock_client
+
+    events = [evt async for evt in agent.run_loop([{"role": "user", "content": "改一下"}])]
+
+    delta_events = [e for e in events if e.state.value == "reasoning_delta"]
+    assert [e.reasoning for e in delta_events] == ["先读文件"]
+    assert [e for e in events if e.state.value == "reasoning"] == []
+    assert events[-1].state.value == "done"
+    assert events[-1].content == "改完了"
