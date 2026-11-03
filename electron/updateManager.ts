@@ -18,6 +18,21 @@ import { BUILTIN_GENERIC_CONFIG } from './update/featureFlag';
 import { createGenericHttpProvider } from './update/providers/genericHttp';
 import { logger } from './logger';
 import { clearRunOnce, registerRunOnceCommand } from './update/runOnce';
+import type { ChildProcess } from 'child_process';
+
+/**
+ * Resolve once the detached installer has actually started, reject when it
+ * could not be spawned (missing file, EACCES, ...).
+ *
+ * Do NOT wait for `exit`: the installer closes this process before it finishes
+ * copying files, so an exit-based await would deadlock the updater.
+ */
+function waitForInstallerSpawn(installer: ChildProcess): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    installer.once('spawn', () => resolve());
+    installer.once('error', reject);
+  });
+}
 
 export interface CheckResult {
   updateAvailable: boolean;
@@ -586,7 +601,9 @@ export class UpdateManager {
   ): Promise<void> {
     const mode = updateDeploymentMode();
     if (mode === 'offline' || (mode === 'intranet' && !this.activeProvider)) {
-      throw new Error('Download denied by deployment policy; use an approved provider or offline maintenance package');
+      throw new Error(
+        'Download denied by deployment policy; use an approved provider or offline maintenance package',
+      );
     }
     // Task 1.7: provider-delegating download path. When activeProvider is
     // set, route through provider.downloadAsset(). The publicKey source
@@ -835,10 +852,16 @@ export class UpdateManager {
       const installDir = path.dirname(process.execPath);
       const { spawn } = await import('child_process');
       try {
-        const installer = spawn(this.providerInstallerPath, ['/S', `/D=${installDir}`], {
-          detached: true,
-          stdio: 'ignore',
-        });
+        // electron-updater's NSIS contract: --updated marks this as an
+        // upgrade, /S keeps the install silent, --force-run makes the assisted
+        // installer relaunch the NEW build when it finishes. Without
+        // --force-run the app would exit and never come back.
+        const installer = spawn(
+          this.providerInstallerPath,
+          ['--updated', '/S', '--force-run', `/D=${installDir}`],
+          { detached: true, stdio: 'ignore' },
+        );
+        await waitForInstallerSpawn(installer);
         installer.unref();
       } catch (spawnError) {
         const failedState: UpdateState = {
@@ -856,8 +879,10 @@ export class UpdateManager {
         this.notifyStateChange(failedState);
         throw spawnError;
       }
-      app.relaunch();
-      app.exit(0);
+      // Do NOT relaunch here: the old build would immediately compete with
+      // the installer for the install directory — the original "Sage cannot
+      // be closed" failure. The installer relaunches the new build itself.
+      app.quit();
       return;
     }
 
@@ -1172,21 +1197,17 @@ export class UpdateManager {
 
     const installDir = path.dirname(process.execPath);
     const { spawn } = await import('child_process');
-    const installer = spawn(packagePath, ['/S', `/D=${installDir}`]);
-
-    await new Promise<void>((resolve, reject) => {
-      installer.on('exit', (code: number) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`Installer exited with code ${code}`));
-        }
-      });
+    // Same contract as installUpdate(): detached, silent, auto-relaunch.
+    // Waiting for the installer to exit would deadlock — it terminates this
+    // process first.
+    const installer = spawn(packagePath, ['--updated', '/S', '--force-run', `/D=${installDir}`], {
+      detached: true,
+      stdio: 'ignore',
     });
+    await waitForInstallerSpawn(installer);
+    installer.unref();
 
-    // Restart app after reinstall
-    app.relaunch();
-    app.exit(0);
+    app.quit();
   }
 
   private async pathExists(p: string): Promise<boolean> {
