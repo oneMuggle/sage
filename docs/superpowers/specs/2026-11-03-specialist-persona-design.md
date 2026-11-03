@@ -571,7 +571,7 @@ async def import_specialist(file: UploadFile) -> dict:
 - [ ] `/specialists` 画廊、创建向导、六段编辑器、预览与试聊
 - [x] 技能允许集在四个入口 fail-closed
 - [x] 专家私有技能目录（`~/.sage/specialists/<id>/skills/`）
-- [ ] `.sage` 导入导出 + 专家包 zip 雏形
+- [x] `.sage` 导入导出 + 专家包 zip 雏形
 
 **验收**：同一全局技能库下，写作专家看不到编码技能；非法技能名无法执行。
 

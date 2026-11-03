@@ -307,6 +307,13 @@ from backend.api.legacy_agent_routes import (  # noqa: F401 — 经 include 挂�
 
 router.include_router(legacy_agent_routes_router)
 
+# M1-D (2026-11-03): 专家包导入/导出 zip API 独立成组。
+from backend.api.specialist_routes import (  # noqa: F401 — 经 include 挂载
+    router as specialist_routes_router,
+)
+
+router.include_router(specialist_routes_router)
+
 # C1 第二刀 (DSH 对标 R15): 技能 API 迁出至 legacy_skills_routes.py
 # （纯物理拆分，路径/行为零变更；与 orch_routes 同款 include 模式）。
 from backend.api.legacy_skills_routes import (  # noqa: F401 — skills handler 引用 _get_skill_adapter
@@ -592,9 +599,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             else:
                 # M0 修复: 请求未带端点配置时,从全局设置加载 + profile 模型覆盖
                 # (与 legacy_chat_routes.py /chat 端点对齐)
+                from backend.chat.specialist_binding import resolve_effective_agent_id
+                from backend.data.agent_repo import AgentRepository
                 from backend.orchestration.llm_factory import load_llm_config_for_chat
 
-                _profile_model_config = (agent.profile or {}).get("model_config")
+                # 此时 SageAgent 尚未构造（下方 line ~761），直接按会话/请求
+                # 解析出的 agent_id 读 agents 表取 model_config。
+                _profile_row = (
+                    AgentRepository().get(
+                        resolve_effective_agent_id(data.session_id, data.agent_id)
+                    )
+                    or {}
+                )
+                _profile_model_config = _profile_row.get("model_config")
                 _profile_model_config = (
                     _profile_model_config if isinstance(_profile_model_config, dict) else {}
                 )
