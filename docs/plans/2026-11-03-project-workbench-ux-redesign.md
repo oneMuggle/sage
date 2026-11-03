@@ -1,7 +1,7 @@
 # 项目工作台 UX 优化方案
 
 **日期**: 2026-11-03  
-**状态**: 进行中  
+**状态**: 实施完成（M1–M6），待推送/PR/合并  
 **分支**: `feat/project-workbench-ux-redesign` (main)  
 **同步计划**: main 落地后 cherry-pick 到 `release/win7`
 
