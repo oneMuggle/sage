@@ -70,8 +70,8 @@ def _extract_stages_from_text(text: str) -> List[Dict[str, Any]]:
             return int(raw)
         return CN_NUMERALS.get(raw, 0)
 
-    for line in lines:
-        line = line.strip()
+    for raw_line in lines:
+        line = raw_line.strip()
         if not line:
             continue
         for pattern in stage_patterns:
@@ -106,8 +106,8 @@ def _extract_artifacts_from_text(text: str) -> List[Dict[str, Any]]:
     lines = text.split("\n")
     in_artifact_section = False
 
-    for line in lines:
-        line = line.strip()
+    for raw_line in lines:
+        line = raw_line.strip()
         if not line:
             continue
 
@@ -148,8 +148,8 @@ def _extract_rules_from_text(text: str) -> List[Dict[str, Any]]:
     lines = text.split("\n")
     in_rule_section = False
 
-    for line in lines:
-        line = line.strip()
+    for raw_line in lines:
+        line = raw_line.strip()
         if not line:
             continue
 
@@ -192,11 +192,10 @@ def _build_deterministic_playbook(text: str, filename: str) -> Dict[str, Any]:
             "rules": [],
             "recommended_milestones": [],
         }]
-    else:
-        if artifacts:
-            for stage in stages:
-                if not stage["artifacts"]:
-                    stage["artifacts"] = artifacts[:5]
+    elif artifacts:
+        for stage in stages:
+            if not stage["artifacts"]:
+                stage["artifacts"] = artifacts[:5]
 
     name = filename.rsplit(".", 1)[0] if "." in filename else filename
     name = name[:200]

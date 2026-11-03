@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 
 import { playbookApi } from '../../shared/api/playbookApi';
 import type { PlaybookShareLink } from '../../shared/api/playbookApi';
+import { Button } from '../../shared/ui/Button';
 import {
   Dialog,
   DialogContent,
@@ -16,7 +17,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../shared/ui/Dialog';
-import { Button } from '../../shared/ui/Button';
 
 import { usePlaybookI18n } from './usePlaybookI18n';
 

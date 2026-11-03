@@ -10,8 +10,8 @@ import { playbookApi } from '../../shared/api/playbookApi';
 import type { PlaybookLibraryDetail, PlaybookLibraryItem } from '../../shared/api/playbookApi';
 import { Button } from '../../shared/ui/Button';
 
-import { downloadPlaybookText } from './playbookDownload';
 import { PlaybookShareDialog } from './PlaybookShareDialog';
+import { downloadPlaybookText } from './playbookDownload';
 import { usePlaybookI18n } from './usePlaybookI18n';
 
 export interface PlaybookLibraryPanelProps {
