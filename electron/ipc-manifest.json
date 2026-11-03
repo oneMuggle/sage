@@ -148,6 +148,7 @@
     "playbook_export": { "method": "GET", "path": "/api/v1/projects/{projectId}/playbook/export" },
     "playbook_get_current": { "method": "GET", "path": "/api/v1/projects/{projectId}/playbook" },
     "playbook_import": { "method": "POST", "path": "/api/v1/playbooks/import" },
+    "playbook_import_document": { "method": "POST", "path": "/api/v1/playbooks/import/document" },
     "playbook_import_preview": { "method": "POST", "path": "/api/v1/playbooks/import/preview" },
     "playbook_rules_cleanup": { "method": "POST", "path": "/api/v1/projects/{projectId}/playbook/rules/cleanup" },
     "playbook_stage_confirm": { "method": "POST", "path": "/api/v1/projects/{projectId}/playbook/stage/confirm" },

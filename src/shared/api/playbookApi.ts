@@ -286,6 +286,14 @@ export interface PlaybookAuthorPreview {
   source: string;
 }
 
+export interface PlaybookDocumentImportResult {
+  playbook: PlaybookSpec;
+  source_doc: string;
+  rationale: string;
+  llm_available: boolean;
+  source: string;
+}
+
 export interface PlaybookBindPayload {
   playbookId?: string;
   libraryId?: string;
@@ -432,6 +440,20 @@ export const playbookApi = {
       projectId,
       conflict,
       saveToLibrary,
+    });
+  },
+
+  async documentImport(
+    filename: string,
+    contentBase64: string,
+    projectId?: string,
+    useLlm = true,
+  ): Promise<PlaybookDocumentImportResult> {
+    return invoke<PlaybookDocumentImportResult>('playbook_import_document', {
+      filename,
+      contentBase64,
+      projectId,
+      useLlm,
     });
   },
 

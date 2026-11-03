@@ -1,5 +1,5 @@
 /** 规程卡片工具条（2026-11-01，从 PlaybookCard 拆出以控制行数）。 */
-import { Download, RefreshCw, Upload } from 'lucide-react';
+import { Download, FileUp, RefreshCw, Upload } from 'lucide-react';
 
 import { Button } from '../../shared/ui/Button';
 
@@ -21,6 +21,7 @@ export interface PlaybookToolbarProps {
   onCleanupRules: () => void;
   onUnbind: () => void;
   onImportClick: () => void;
+  onDocumentImportClick: () => void;
 }
 
 export function PlaybookToolbar({
@@ -39,6 +40,7 @@ export function PlaybookToolbar({
   onCleanupRules,
   onUnbind,
   onImportClick,
+  onDocumentImportClick,
 }: PlaybookToolbarProps) {
   const { t } = usePlaybookI18n();
   return (
@@ -153,6 +155,10 @@ export function PlaybookToolbar({
       <Button size="sm" variant="secondary" onClick={onImportClick}>
         <Upload className="mr-1 h-3.5 w-3.5" />
         {t('playbook.card.import')}
+      </Button>
+      <Button size="sm" variant="secondary" onClick={onDocumentImportClick}>
+        <FileUp className="mr-1 h-3.5 w-3.5" />
+        {t('playbook.card.importDocument')}
       </Button>
     </div>
   );

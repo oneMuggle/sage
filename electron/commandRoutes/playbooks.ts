@@ -129,6 +129,16 @@ export const playbookRoutes: Record<string, CommandRoute> = {
       save_to_library: a.saveToLibrary ?? a.save_to_library ?? false,
     }),
   },
+  playbook_import_document: {
+    method: 'POST',
+    path: () => '/api/v1/playbooks/import/document',
+    body: (a) => ({
+      filename: a.filename,
+      content_base64: a.contentBase64 ?? a.content_base64,
+      project_id: a.projectId ?? a.project_id,
+      use_llm: a.useLlm ?? a.use_llm ?? true,
+    }),
+  },
   playbooks_library_list: {
     method: 'GET',
     path: () => '/api/v1/playbooks/library',
