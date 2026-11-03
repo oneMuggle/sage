@@ -38,13 +38,13 @@
 | 42   | [Chat-Native Multi-Agent Orchestration](./42-chat-multi-agent-orchestration.md) | 聊天链路多 agent 编排：语义判定 + tool-toggle 门 + ChatDispatcher 拓扑分波调度（depends_on/级联取消）+ task_plan/task_status/todo_snapshot 事件 + 前端任务树与 todo 清单镜像 + output_schema 结构化返回/followup 续聊/worktree 隔离（默认关）/LaneBoard 快照激活 |
 | 43   | [§1.2 事件循环门禁升级](./43-event-loop-gate.md) | 单点 P99 → 5 轮 P99 中位数门禁：阈值演进 50→100→200→150→400ms 设计历史 + 抗抖动/回归敏感权衡 |
 | 44   | [bash 命令行工具](./44-bash-tool.md) | 对齐 Claude Code Bash tool：放开 shell 操作符（危险判定收敛到 bash_validation + PermissionEnforcer）+ 后台执行三工具（bash/bash_output/kill_shell）+ 30 KiB 有界输出 + 进程组回收 + 跨平台 shell 探测（Git Bash / PowerShell 降级） |
-| 45   | [渐进式功能披露](./44-progressive-disclosure.md) | sticky-unlock 存储、受门控入口及 `/skills` 始终可发现的设计边界 |
-| 46   | [Sage 品牌图标资产与复用](./45-brand-icons.md) | 品牌主形象（几何 S + 星点 + 青紫渐变）的资产层级、`<BrandLogo>` 共享组件规范、macOS `.icns` 缺口与未来补全路径 |
+| 44   | [渐进式功能披露](./44-progressive-disclosure.md) | sticky-unlock 存储、受门控入口及 `/skills` 始终可发现的设计边界 |
+| 45   | [Sage 品牌图标资产与复用](./45-brand-icons.md) | 品牌主形象（几何 S + 星点 + 青紫渐变）的资产层级、`<BrandLogo>` 共享组件规范、macOS `.icns` 缺口与未来补全路径 |
 | 46   | [内网 Web 访问（网络模式门禁 + 取页下载）](./46-intranet-web-access.md) | NetworkPolicy 三档门禁 + host 白名单通配 + web_fetch 四 mode + http_download 边界约束 + 不变量 |
 | 47   | [Git Worktree 并行开发](./47-git-worktree-workflow.md) | `scripts/worktree.sh` helper（new/list/ports/remove/clean）+ `.worktrees/` 端口分配机制 + main/release-win7 并行 cherry-pick 场景 + 与 `.claude/worktrees/` agent 隔离的边界 |
 | 48   | [Office CRUD 闭环完成](./48-office-crud-completion.md) | 2026-09 PR-1..5：profile 白名单接通 + archive/restore + pre-edit snapshot + chat @filename 兜底 + re-read 元数据保留 + write_file 二进制黑名单 + win7 同步；闭环增删改查 + chat ref + 二进制防护 + win7 兼容 |
 | 49   | [本地开发环境助手](./49-local-development-assistant.md) | 运行时探测 + 项目诊断 + 安全执行：`backend/domain` + 3 tools + `/api/v1/runtime/*` + Electron IPC + Settings 开发环境 Tab + humanize 渲染 + doctor check |
-| 50   | [Wiki 完整性优化](./50-wiki-completeness-optimization.md) | 4 项补齐：持久化摄入队列（5 状态）/ Chrome Web Clipper（Manifest V3）/ Lint（6 规则）/ Review（5 确定性审核器 + blake2b 稳定 ID + Jaccard 0.6）|
+| 106  | [Wiki 完整性优化](./106-wiki-completeness-optimization.md) | 4 项补齐：持久化摄入队列（5 状态）/ Chrome Web Clipper（Manifest V3）/ Lint（6 规则）/ Review（5 确定性审核器 + blake2b 稳定 ID + Jaccard 0.6）|
 | 53   | [学术检索 skill 与 skill_save 工具](./53-academic-search-skill.md) | M1 `skill_save`（用户显式触发沉淀）+ O2 `AcademicSearchSkill` builtin + `academic_adapters` 注册表（CNKI adapter）→ 用户引导 LLM → 流程沉淀闭环 |
 | 54   | [Office 对标追踪基线](./54-office-parity-tracking.md) | 产品×能力对标矩阵（M365 Copilot/Claude/ChatGPT/Gemini/WPS AI）+ Sage 能力落地清单（PR 号索引）+ 维护约定；随 office 迭代/对标轮更新 |
 | 55   | [期刊模板子系统](./55-journal-template-subsystem.md) | N1–N8 完整闭环：模板表 + 字段语义 + 多步向导 + 状态机 + 预览/导出 + SKILL 引导 + 持久化 |
@@ -73,15 +73,15 @@
 | 94   | [residue 补全 + append_paragraphs 交叉引用](./94-residue-update-marks.md) | R60：residue 正则补 fn/en + append_paragraphs 支持 {{fig:}}/{{tbl:}}（预校验 all-or-nothing，复用生成期书签）|
 | 95   | [append_paragraphs 支持 {{fn:}}/{{en:}}](./95-append-fn-en.md) | R61：part 追加语义（blob 增补 + 编号续接）+ 统一四类占位符解析 + update 通路全支持 |
 | 96   | [脚注/尾注引用一致性 lint](./96-ref-consistency-lint.md) | R63：footnote/endnoteReference id 对照 part note 集合（损坏文档检出）+ 无引用零开销跳过 |
-| 95   | [append_paragraphs 支持 {{fn:}}/{{en:}}](./95-append-fn-en.md) | R61：part 追加语义（blob 增补 + 编号续接）+ 统一四类占位符解析 + update 通路全支持 |
-| 92   | [LLM 定时任务工具](./92-llm-scheduled-task-tool.md) | schedule_task / list_scheduled_tasks / cancel_scheduled_task 三件套：复用 SchedulerService 单一事实源 + 会话自动绑定 + once(ISO-8601)/recurring(cron) + coordinator-only 白名单 |
-| 83   | [Python 后端代码保护方案](./83-python-code-protection.md) | Cython 二进制编译核心包 (sage_core) + Python 字节码混淆与源码剥离 (backend) + 开发与发布模式分离 (SAGE_PROTECT_CODE) |
+| 105  | [LLM 定时任务工具](./105-llm-scheduled-task-tool.md) | schedule_task / list_scheduled_tasks / cancel_scheduled_task 三件套：复用 SchedulerService 单一事实源 + 会话自动绑定 + once(ISO-8601)/recurring(cron) + coordinator-only 白名单 |
+| 104  | [Python 后端代码保护方案](./104-python-code-protection.md) | Cython 二进制编译核心包 (sage_core) + Python 字节码混淆与源码剥离 (backend) + 开发与发布模式分离 (SAGE_PROTECT_CODE) |
 | 98   | [FTS5 vs LIKE 性能基准](./98-memory-fts5-benchmark.md) | 10k 语料实测：FTS5 空命中 85×/中文 32×/低频词 29× 加速，高频英文 token 1.5-2×；recall 差异与 fallback 策略 |
-| 99   | [Agent 上限类错误透出具体上限值](./99-agent-error-limit-details.md) | `<code> (limit=N)` wire format + nonlocal 落库丢失修复 + 前端单一渲染点（聊天内联错误条 / 侧栏 tooltip）+ 兼容性与回滚 |
+| 102  | [Agent 上限类错误透出具体上限值](./102-agent-error-limit-details.md) | `<code> (limit=N)` wire format + nonlocal 落库丢失修复 + 前端单一渲染点（聊天内联错误条 / 侧栏 tooltip）+ 兼容性与回滚 |
 | 100  | [自进化可观测性与反馈闭环](./100-self-evolution-observability.md) | P0-1 进化日志结构化（duration/metrics）/ P0-2 偏好注入 user_profile（hermes 冻结语义）/ P0-3 召回反馈落库 + A/B 变体对比 |
 | 101  | [LLM 错误分类与重试](./101-llm-error-classification-retry.md) | httpx 异常→LLMErrorType 分类表 / RemoteProtocolError 归 NETWORK 修复 / 首字后不重试契约 / 重试参数与退避策略 / 代理超时可配置（llmProxyTimeoutS）/ 流式开关真正生效 / 重试预算与次数可见性 / 设置保存失败提示 |
 | 102  | [全局规则 UI（~/.sage/SAGE.md）](./102-global-rules.md) | G1/P0：设置页读写全局规则文件 / 路径硬编码 + 原子写 + 符号链接拒写 / 扫描 level=all 护栏 / 8000 字符截断 + 64KB 保存上限 / win7 零适配 |
 | 104  | [Zotero → LLM 集成](./104-zotero-llm-integration.md) | 四层可见性阻断修复（白名单/路径/prompt/索引）/ ZoteroIngestor 向量索引 + 语义检索降级 / wiki 沉淀与零改动图谱 / 设置页同步面板 |
+| 103  | [多浏览器支持](./103-multi-browser-support.md) | 浏览器自动发现/调度/诊断 + CDP 连接池 + 多浏览器并行抓取 |
 | 107  | [会话标题生成机制](./107-session-title-generation.md) | 标题 LLM 生成流程 / `title_attempts` 计数器 / 启动回补调度器 / 专用标题模型配置 |
 | 108  | [Plan Mode 增强](./108-plan-mode-enhancement.md) | 复杂度分类（simple/medium/complex）/ 执行模式推荐（single/multi/ask_user）/ scout_deep 深度调研 + ResearchSummaryCard / confirm_marker 规则引擎 + 步骤级确认（continue/skip/abort） |
 | 109  | [文件引用输入（新会话页拖拽 / @ 菜单 / 会话内回显）](./109-file-reference-composer.md) | 共享 useAtFileMenu / 草稿会话懒创建 / Welcome→Chat 首条消息附件透传 / messages.client_meta 持久化与消息 chips（main #2639 同步，win7 编号 109 避开 104=Zotero） |
