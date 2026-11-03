@@ -103,6 +103,26 @@ describe('sanitizeForBackend (2026-08-26 canonical cleanup)', () => {
     expect(sanitizer(42)).toBe(42);
   });
 
+  it('clamps legacy retry values to RETRY_LIMITS', () => {
+    const out = __test__sanitizeForBackend({
+      llmRetryMaxAttempts: 0,
+      llmRetryBaseDelayS: -5,
+      llmRetryMaxDelayS: 99999,
+      llmRetryTotalBudgetS: 300,
+    } as unknown as LooseSettings) as unknown as LooseSettings;
+    expect(out.llmRetryMaxAttempts).toBe(1);
+    expect(out.llmRetryBaseDelayS).toBe(0);
+    expect(out.llmRetryMaxDelayS).toBe(3600);
+    expect(out.llmRetryTotalBudgetS).toBe(300);
+  });
+
+  it('passes through non-finite retry values untouched for backend fallback', () => {
+    const out = __test__sanitizeForBackend({
+      llmRetryMaxAttempts: Number.NaN,
+    } as unknown as LooseSettings) as unknown as LooseSettings;
+    expect(Number.isNaN(out.llmRetryMaxAttempts as number)).toBe(true);
+  });
+
   it('SNAKE_KEYS_TO_DROP is exported for cross-check', () => {
     expect(__test__SNAKE_KEYS_TO_DROP.has('memory_server_sync')).toBe(true);
     expect(__test__SNAKE_KEYS_TO_DROP.has('local_model_path')).toBe(true);

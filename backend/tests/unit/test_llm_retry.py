@@ -441,13 +441,13 @@ async def test_stream_retry_event_includes_budget_fields(monkeypatch):
         (42, None, 42.0),  # app_settings 生效
         (42, "100", 100.0),  # env 覆盖 app_settings（调试/测试用，与其他参数一致）
         (0, None, 0.0),  # 0 = 不限
-        (-1, None, 180.0),  # 非法值回退默认
+        (-1, None, 300.0),  # 非法值回退默认
     ],
 )
 def test_retry_settings_total_budget_sources(
     monkeypatch, app_value, env_value, expected
 ):
-    """env > app_settings > 默认；非法值回退 180。"""
+    """env > app_settings > 默认；非法值回退 300。"""
     monkeypatch.delenv("SAGE_LLM_RETRY_TOTAL_BUDGET_S", raising=False)
     if env_value is not None:
         monkeypatch.setenv("SAGE_LLM_RETRY_TOTAL_BUDGET_S", env_value)
