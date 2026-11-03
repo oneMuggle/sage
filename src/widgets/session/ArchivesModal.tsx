@@ -12,8 +12,8 @@ import { Archive, X } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import { sessionApi, type LineageArchive } from '../../shared/api';
-import { formatDateTime } from '../../shared/lib/timeFormatter';
 import type { Message as MessageType } from '../../shared/lib/store';
+import { formatDateTime } from '../../shared/lib/timeFormatter';
 import { MessageList } from '../chat/MessageList';
 
 interface ArchivesModalProps {

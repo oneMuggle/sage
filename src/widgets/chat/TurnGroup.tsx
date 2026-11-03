@@ -2,8 +2,8 @@ import { ChevronRight, MessageSquare, Wrench } from 'lucide-react';
 import { memo, useEffect, useRef, useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
-import { formatRelativeTime } from '../../shared/lib/timeFormatter';
 import type { BlockedAction, Message } from '../../shared/lib/store';
+import { formatRelativeTime } from '../../shared/lib/timeFormatter';
 
 import { Message as MessageComponent } from './Message';
 import { getTurnSummary, getTurnToolCallCount, isTurnCollapsible } from './turnGrouping';

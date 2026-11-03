@@ -19,8 +19,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { skillsApi } from '../../shared/api/skillsApi';
-import { formatLocalString } from '../../shared/lib/timeFormatter';
 import type { SkillAuditEntry } from '../../shared/api/types';
+import { formatLocalString } from '../../shared/lib/timeFormatter';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import {
   Dialog,

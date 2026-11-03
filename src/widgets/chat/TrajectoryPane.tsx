@@ -7,12 +7,12 @@
 
 import { useMemo, useState } from 'react';
 
-import { formatTimeOfDay } from '../../shared/lib/timeFormatter';
 import { requestMessageJump } from '../../features/chat/messageJumpStore';
 import {
   useConversationTrajectory,
   type TrajectoryEntry,
 } from '../../features/chat/useConversationTrajectory';
+import { formatTimeOfDay } from '../../shared/lib/timeFormatter';
 
 type FilterKind = 'all' | 'user' | 'assistant' | 'tool';
 
