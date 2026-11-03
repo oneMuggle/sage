@@ -44,6 +44,23 @@ export type PetDisplayMode = 'desktop' | 'in-app' | 'both' | 'off';
 export type PetBubbleMode = 'important' | 'always' | 'off';
 export type PetCompatibilityMode = 'auto' | 'on' | 'off';
 
+export type PetFollowMode = 'focus' | 'urgent' | 'pinned';
+
+export interface PetAttentionSummary {
+  /** 需要用户处理的会话数（waiting + awaiting_approval 任务）。未截断。 */
+  needsYou: number;
+  /** 最近 10 分钟内失败的会话/任务数。未截断。 */
+  failed: number;
+  /** 正在运行的会话数，不含 waiting。未截断。 */
+  running: number;
+  /** running/queued/paused/awaiting_approval 后台任务数。 */
+  activeTasks: number;
+  /** needsYou + failed + running + activeTasks。 */
+  total: number;
+  /** 按最近更新排序，最多 20 个；只含会话。 */
+  needsYouSessionIds: string[];
+}
+
 export interface PetSoundScenes {
   waiting: boolean;
   error: boolean;
@@ -56,10 +73,12 @@ export interface PetInstanceConfig {
   id: string;
   petPack: string;
   size: PetSize;
+  followMode: PetFollowMode;
+  pinnedSessionId: string | null;
 }
 
 export interface PetConfig {
-  version: 2;
+  version: 3;
   enabled: boolean;
   displayMode: PetDisplayMode;
   tempo: PetTempo;
@@ -68,7 +87,6 @@ export interface PetConfig {
   soundScenes: PetSoundScenes;
   showSessionTitle: boolean;
   compatibilityMode: PetCompatibilityMode;
-  followActiveSession: boolean;
   /** Opt-in read-only local HTTP status API (loopback + bearer token). */
   externalApi: boolean;
   /** 1–3 pets, each with its own pack and size. */
@@ -83,6 +101,8 @@ export interface PetRenderConfig extends PetConfig {
   petId: string;
   petPack: string;
   size: PetSize;
+  followMode: PetFollowMode;
+  pinnedSessionId: string | null;
 }
 
 /**
@@ -169,6 +189,7 @@ export interface PetSnapshot {
   sessions: PetSessionSummary[];
   /** Background tasks reported by the main window Task Center. */
   tasks: PetTaskSummary[];
+  attention: PetAttentionSummary;
   updatedAt: number;
 }
 

@@ -779,6 +779,14 @@ const electronAPI = {
     getConfig: () => ipcRenderer.invoke('pet:get-config') as Promise<PetConfigBridge>,
     setConfig: (patch) => ipcRenderer.invoke('pet:set-config', patch) as Promise<PetConfigBridge>,
     getState: () => ipcRenderer.invoke('pet:get-state') as Promise<PetSnapshotBridge>,
+    getStates: () =>
+      ipcRenderer.invoke('pet:get-states') as Promise<Record<string, PetSnapshotBridge>>,
+    onStates: (handler: (states: Record<string, PetSnapshotBridge>) => void): UnlistenFn => {
+      const listener = (_e: IpcRendererEvent, payload: Record<string, PetSnapshotBridge>) =>
+        handler(payload);
+      ipcRenderer.on('pet:states', listener);
+      return () => ipcRenderer.off('pet:states', listener);
+    },
     onState: (handler: (snapshot: PetSnapshotBridge) => void): UnlistenFn => {
       const listener = (_e: IpcRendererEvent, payload: PetSnapshotBridge) => handler(payload);
       ipcRenderer.on('pet:state', listener);
@@ -794,6 +802,15 @@ const electronAPI = {
     },
     openSession: (sessionId) => {
       ipcRenderer.send('pet:open-session', { sessionId });
+    },
+    reportFocusSession: (sessionId: string | null) => {
+      ipcRenderer.send('pet:focus-session', { sessionId });
+    },
+    pinSession: (sessionId: string | null) => {
+      ipcRenderer.send('pet:pin-session', { sessionId });
+    },
+    cycleFocus: () => {
+      ipcRenderer.send('pet:cycle-focus');
     },
     openSettings: () => {
       ipcRenderer.send('pet:open-settings');

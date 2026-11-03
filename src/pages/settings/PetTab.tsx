@@ -23,7 +23,7 @@ import { SettingRow, Toggle } from './components';
 const MAX_PETS = 3;
 
 const FALLBACK_CONFIG: PetConfigBridge = {
-  version: 2,
+  version: 3,
   enabled: false,
   displayMode: 'desktop',
   tempo: 'standard',
@@ -32,9 +32,16 @@ const FALLBACK_CONFIG: PetConfigBridge = {
   soundScenes: { waiting: true, error: false, done: false },
   showSessionTitle: false,
   compatibilityMode: 'auto',
-  followActiveSession: true,
   externalApi: false,
-  pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
+  pets: [
+    {
+      id: 'default',
+      petPack: 'dafeiyu',
+      size: 'medium',
+      followMode: 'focus',
+      pinnedSessionId: null,
+    },
+  ],
 };
 
 const SIZE_OPTIONS = [
@@ -58,15 +65,18 @@ function Select({
   options,
   onChange,
   testId,
+  ariaLabel,
 }: {
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
   testId?: string;
+  ariaLabel?: string;
 }): JSX.Element {
   return (
     <select
       data-testid={testId}
+      aria-label={ariaLabel}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       className="rounded-md border border-line-strong bg-surface px-2 py-1 text-sm text-text"
@@ -180,6 +190,8 @@ export function PetTab(): JSX.Element {
           id: nextPetId(config.pets),
           petPack: config.pets[0]?.petPack ?? 'dafeiyu',
           size: 'medium',
+          followMode: 'focus',
+          pinnedSessionId: null,
         },
       ],
     });
@@ -368,6 +380,26 @@ export function PetTab(): JSX.Element {
                   }
                   options={sizeOptions}
                 />
+                <Select
+                  value={instance.followMode ?? 'focus'}
+                  testId={`pet-follow-${instance.id}`}
+                  ariaLabel={t('settings.pet.follow')}
+                  onChange={(value) =>
+                    updatePet(instance.id, {
+                      followMode: value as PetInstanceBridge['followMode'],
+                    })
+                  }
+                  options={[
+                    { value: 'focus', label: t('settings.pet.follow_focus') },
+                    { value: 'urgent', label: t('settings.pet.follow_urgent') },
+                    { value: 'pinned', label: t('settings.pet.follow_pinned') },
+                  ]}
+                />
+                {instance.followMode === 'pinned' ? (
+                  <span className="w-full text-right text-xs text-muted">
+                    {t('settings.pet.follow_pinned_hint')}
+                  </span>
+                ) : null}
                 {current.pets.length > 1 ? (
                   <button
                     type="button"

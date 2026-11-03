@@ -56,6 +56,14 @@ function snapshot(overrides: Partial<PetSnapshot> = {}): PetSnapshot {
       startedAt: NOW,
       finishedAt: null,
     })),
+    attention: {
+      needsYou: 2,
+      failed: 1,
+      running: 6,
+      activeTasks: 3,
+      total: 12,
+      needsYouSessionIds: ['s1', 's2'],
+    },
     updatedAt: NOW,
     ...overrides,
   };
@@ -84,7 +92,15 @@ describe('buildStatusPayload', () => {
     });
     expect(payload.sessions).toHaveLength(5);
     expect(payload.tasks).toHaveLength(10);
-    expect(payload.pets).toEqual([{ id: 'default', petPack: 'dafeiyu', size: 'medium' }]);
+    expect(payload.pets).toEqual([
+      {
+        id: 'default',
+        petPack: 'dafeiyu',
+        size: 'medium',
+        followMode: 'focus',
+        pinnedSessionId: null,
+      },
+    ]);
     expect(payload.config).toMatchObject({ externalApi: true, displayMode: 'desktop' });
   });
 
@@ -102,5 +118,18 @@ describe('buildStatusPayload', () => {
       DEFAULT_PET_CONFIG,
     );
     expect(payload.lastTerminal).toBeNull();
+  });
+
+  it('exposes untruncated attention and the followed-session fields', () => {
+    const payload = buildStatusPayload(snapshot(), DEFAULT_PET_CONFIG);
+    expect(payload.attention).toEqual({
+      needsYou: 2,
+      failed: 1,
+      running: 6,
+      activeTasks: 3,
+      total: 12,
+      needsYouSessionIds: ['s1', 's2'],
+    });
+    expect(payload.version).toBe(1);
   });
 });

@@ -27,6 +27,14 @@ function snapshot(overrides: Partial<PetSnapshot> = {}): PetSnapshot {
     activeSessions: 0,
     sessions: [],
     tasks: [],
+    attention: {
+      needsYou: 0,
+      failed: 0,
+      running: 0,
+      activeTasks: 0,
+      total: 0,
+      needsYouSessionIds: [],
+    },
     updatedAt: NOW,
     ...overrides,
   };
