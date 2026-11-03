@@ -493,6 +493,29 @@ class SageAgent:
             from backend.tools.memory_tool import inject_memory_manager
 
             inject_memory_manager(self.tool_registry, self.memory_manager)
+            # 注入专家技能作用域（M1，spec §5.1/§5.2）：profile 声明 skills
+            # 非空时按模式 fail-closed；同时注入 agent_id，使专家自己的
+            # 私有技能（specialist__<id>__*）在会话内可见可执行。
+            _skill_patterns = (
+                (self.profile or {}).get("skills")
+                if isinstance(self.profile, dict)
+                else None
+            )
+            if _skill_patterns or self.agent_id:
+                from backend.tools.skill_tool import inject_skill_scope
+
+                _injected = inject_skill_scope(
+                    self.tool_registry,
+                    _skill_patterns or [],
+                    agent_id=self.agent_id,
+                )
+                if _injected:
+                    logger.info(
+                        "专家技能作用域已注入: agent_id=%s patterns=%s tools=%s",
+                        self.agent_id,
+                        _skill_patterns,
+                        _injected,
+                    )
             logger.info(f"工具注册表初始化完成，已注册 {len(self.tool_registry.list())} 个工具")
 
         # M1 工具安全加固: 权限执行器注入点。

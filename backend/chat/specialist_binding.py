@@ -77,6 +77,60 @@ def resolve_effective_agent_id(session_id: str, requested_agent_id: Optional[str
     return resolve_bound_specialist(session_id)
 
 
+# --------------------------------------------------------------------------- #
+# 严格解析（技能作用域 fail-closed 专用）
+#
+# 普通聊天路径的解析是"容错优先"：读库失败回落主助手，绝不阻塞对话。
+# 但技能作用域失败必须 fail-closed —— 「判定为专家」之后的任何解析异常
+# 若降级为"不受限"，等于把全量技能库放给该专家（安全审查 HIGH）。
+# 下面的函数把异常外抛给调用方，由调用方决定拒绝全部技能。
+# --------------------------------------------------------------------------- #
+
+
+def _validated_strict(agent_id: Optional[str]) -> str:
+    """``_validated`` 的严格版：读取 / 校验异常一律外抛。
+
+    专家不存在 / 已禁用仍返回 ``'primary'``（产品语义：回落主助手）。
+    """
+    if not agent_id or agent_id == PRIMARY_AGENT_ID:
+        return PRIMARY_AGENT_ID
+    from backend.data.agent_repo import AgentRepository
+
+    row = AgentRepository().get(agent_id)  # 读取异常外抛
+    if row is None:
+        logger.info("专家 %s 不存在 → 回落主助手", agent_id)
+        return PRIMARY_AGENT_ID
+    if not row.get("enabled", True):
+        logger.info("专家 %s 已禁用 → 回落主助手", agent_id)
+        return PRIMARY_AGENT_ID
+    return agent_id
+
+
+def resolve_bound_specialist_strict(session_id: str) -> str:
+    """读会话绑定的专家 id；读取 / 校验异常外抛。
+
+    仅供技能作用域等 fail-closed 场景使用；普通聊天路径继续用
+    ``resolve_bound_specialist``（读失败回落主助手，保证对话可用）。
+    """
+    if not session_id:
+        return PRIMARY_AGENT_ID
+    from backend.data.session_repo import SessionRepository
+
+    session = SessionRepository().get(session_id)  # 读取异常外抛
+    if session is None:
+        return PRIMARY_AGENT_ID
+    return _validated_strict(session.specialist_id)
+
+
+def resolve_effective_agent_id_strict(
+    session_id: str, requested_agent_id: Optional[str]
+) -> str:
+    """``resolve_effective_agent_id`` 的严格版：解析 / 校验异常外抛。"""
+    if requested_agent_id:
+        return _validated_strict(requested_agent_id)
+    return resolve_bound_specialist_strict(session_id)
+
+
 def validate_specialist_id(raw: Optional[str]) -> Optional[str]:
     """校验 API 传入的专家 id。
 

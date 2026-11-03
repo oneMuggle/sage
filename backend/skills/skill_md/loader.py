@@ -293,9 +293,13 @@ class SkillMdHotLoader:
         dirs: Optional[List[Path]] = None,
         gating_ctx: Optional[GatingContext] = None,
         script_runner: Optional[ScriptRunner] = None,
+        name_prefix: str = "",
     ) -> None:
         self._registry = registry
         self._dirs: List[Path] = list(dirs or [])
+        # 专家私有技能装载时统一加前缀（M1，spec §5.2）：
+        # ``specialist__<agent_id>__<name>``，避免与全局技能同名互覆。
+        self._name_prefix = name_prefix
         self._file_hashes: Dict[str, str] = {}
         self._loaded_paths: Dict[str, str] = {}  # skill_name -> file_path str
         self._gating_ctx = gating_ctx  # None = 不门控 (v1 行为)
@@ -399,7 +403,9 @@ class SkillMdHotLoader:
                 path.stem, "invalid_name" if isinstance(exc, SkillMdParseError) and _has_explicit_invalid_name(path) else "parse_error"
             )
             return False
-        name = meta["name"]
+        raw_name = meta["name"]
+        # 专家私有技能统一加前缀（M1，spec §5.2）；全局技能前缀为 ""。
+        name = self._name_prefix + raw_name
         if self._registry.exists(name) and not allow_existing:
             existing = self._registry.get(name)
             if isinstance(existing, SkillMdSkill):
@@ -491,12 +497,12 @@ class SkillMdHotLoader:
         # agentskills.io spec: name 应匹配父目录名 (Task 4)
         # 仅 warning,不阻断加载(避免破坏历史 SKILL.md 的命名习惯)
         parent_name = path.parent.name
-        if name != parent_name:
+        if raw_name != parent_name:
             logger.warning(
                 "SKILL.md at %s declares name='%s' but parent dir is '%s'; "
                 "agentskills.io spec recommends name matches parent dir",
                 path,
-                name,
+                raw_name,
                 parent_name,
             )
 
@@ -582,6 +588,7 @@ class SkillMdHotLoader:
             dirs=self._dirs,
             gating_ctx=self._gating_ctx,
             script_runner=self._script_runner,
+            name_prefix=self._name_prefix,
         )
         if not candidate_loader._load_from_path(path):
             return False

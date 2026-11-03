@@ -1324,6 +1324,30 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # build_request_messages(trailing_system=...) 注入到历史之后的
             # 尾部独立 system 消息,让"稳定 system + 追加式历史"保持缓存前缀。
             dynamic_context_parts: List[str] = []
+            # 专家技能允许集（M1，spec §5.1）：从 agent.profile 解析一次，
+            # L5 技能清单 + R38 自动激活共用。None = 不受限（主助手）。
+            # 首次调用 _get_skill_adapter 会同步扫盘，用 to_thread 包裹。
+            _skill_allowed: Optional[set] = None
+            try:
+                from backend.domain.skill_scope import resolve_skill_allowlist
+
+                _skill_patterns = (
+                    (agent.profile or {}).get("skills")
+                    if isinstance(agent.profile, dict)
+                    else None
+                )
+                if _skill_patterns:
+                    _scope_adapter = await to_thread(_get_skill_adapter)
+                    _available_names = [
+                        s.name for s in _scope_adapter.list_skills()
+                    ]
+                    _skill_allowed = resolve_skill_allowlist(
+                        _skill_patterns, _available_names
+                    )
+            except Exception as _scope_err:
+                logger.debug(
+                    f"[REQ {request_id}] specialist skill scope skipped: {_scope_err}"
+                )
             # 对标 S2：临时聊天 —— 本轮跳过记忆注入 / 召回事件 / 事后提取。
             memory_off = (data.memory_mode or "on") == "off"
             try:
@@ -1350,7 +1374,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 config_block = build_configuration_summary_block()
                 if config_block:
                     dynamic_context_parts.append(config_block)
-                skills_block = build_skills_block()
+                # 专家技能作用域（M1，spec §5.1）：使用上方解析的允许集，
+                # None / 空 → 不受限（主助手）；非空 → fail-closed 过滤。
+                skills_block = build_skills_block(allowed=_skill_allowed)
                 if skills_block:
                     # 技能清单仅在注册表变化时变 —— 相对稳定,留头部前缀。
                     system_content += "\n\n" + skills_block
@@ -1376,7 +1402,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
                 r38_skills_port = await to_thread(_get_skill_adapter)
                 r38_block, r38_activated_skill_list = _skill_activation_block(
-                    data.message or "", r38_skills_port
+                    data.message or "", r38_skills_port, allowed=_skill_allowed
                 )
                 if r38_block:
                     dynamic_context_parts.append(r38_block)

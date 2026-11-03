@@ -336,8 +336,16 @@ class ChatService:
         #      ``when_to_use`` 触发短语, 命中技能的 body 注入本轮 system
         #      prompt 动态段 (不进 frozen snapshot 缓存, 不写 storage,
         #      下一轮按新消息重新匹配)。best-effort: 任何故障静默降级。
+        #      专家技能作用域（M1，spec §5.1）：会话绑定专家时按允许集
+        #      fail-closed 过滤自动激活。解析含同步 SQLite 读取，放线程池
+        #      避免阻塞事件循环（py38 用 py_compat.to_thread）。
+        from backend.utils.py_compat import to_thread
+
+        skill_allowed = await to_thread(
+            self._resolve_session_skill_allowlist, session_id
+        )
         activation_block, activated_skill_names = _skill_activation_block(
-            user_message.content or "", self.skills
+            user_message.content or "", self.skills, allowed=skill_allowed
         )
         if activation_block:
             system_content += activation_block
@@ -452,7 +460,12 @@ class ChatService:
         # 4) 执行模型发起的 tool_calls（PG2.9：单轮执行；不触发二次 LLM）
         budget_exceeded = False
         if response.tool_calls:
-            budget_exceeded = await self._execute_tool_calls(session_id, response.tool_calls, run)
+            # 专家技能作用域（M1，spec §5.1）：hex 路径的 tools 适配器是
+            # 跨会话共享的，不感知会话绑定 —— 执行前把本轮允许集写入
+            # ContextVar，让 in-loop ``SkillTool`` 按专家作用域 fail-closed。
+            budget_exceeded = await self._execute_tool_calls_scoped(
+                session_id, response.tool_calls, run, skill_allowed
+            )
             # 埋点：ReAct 步数（9 指标之一）— 本轮触发的 tool_call 数
             self.metrics.histogram(
                 _REACT_STEPS_METRIC,
@@ -672,6 +685,52 @@ class ChatService:
         except Exception:  # noqa: BLE001
             logger.debug("zotero tool prompt injection skipped", exc_info=True)
         return system_content
+
+    def _resolve_session_skill_allowlist(self, session_id: str) -> Optional[set]:
+        """解析会话绑定专家的技能允许集（M1，spec §5.1/§5.2）。
+
+        - 会话未绑定专家 / 绑定被禁用的专家 → ``None``（不受限）；
+        - 绑定专家无 ``skills`` 配置且无私有技能 → ``None``（不受限）；
+        - 否则 → adapter 的 owner 解析（公开技能按模式过滤 + 本人私有技能）。
+
+        fail-closed（安全审查 HIGH）：已判定会话属于某个专家后，解析
+        任何异常都返回空集（拒绝全部技能）—— 降级为 ``None`` 会把完整
+        技能库放给该专家。主助手路径不受影响。
+        """
+        try:
+            from backend.chat.specialist_binding import (
+                PRIMARY_AGENT_ID,
+                resolve_bound_specialist_strict,
+            )
+
+            agent_id = resolve_bound_specialist_strict(session_id)
+        except Exception as exc:  # noqa: BLE001 — 无法判定归属 → 拒绝全部技能
+            logger.warning("会话专家归属解析失败（拒绝全部技能）: %s", exc)
+            return set()
+        if agent_id == PRIMARY_AGENT_ID:
+            return None
+        try:
+            from backend.data.agent_repo import AgentRepository
+
+            row = AgentRepository().get(agent_id)
+            patterns = (row or {}).get("skills") if row else None
+            if self.skills is not None:
+                resolve_agent = getattr(
+                    self.skills, "resolve_agent_allowlist", None
+                )
+                if callable(resolve_agent):
+                    return resolve_agent(patterns, agent_id)
+            if not patterns:
+                return None
+            from backend.domain.skill_scope import resolve_skill_allowlist
+
+            names = []
+            if self.skills is not None:
+                names = [spec.name for spec in self.skills.list_skills()]
+            return resolve_skill_allowlist(patterns, names)
+        except Exception as exc:  # noqa: BLE001 — 已知专家 + 解析失败 → 拒绝全部
+            logger.warning("专家技能作用域解析失败（拒绝全部技能）: %s", exc)
+            return set()
 
     def _apply_context_budget(self, system_content: str, query: str) -> str:
         """超出注入预算时按优先级截断（backend/chat/context_budget.py）；窗口未知 / 异常时原样返回。"""
@@ -904,6 +963,31 @@ class ChatService:
                 return response
         return None
 
+    async def _execute_tool_calls_scoped(
+        self,
+        session_id: str,
+        tool_calls: List[ToolCall],
+        run: RunEventScope,
+        skill_allowed: Optional[set],
+    ) -> bool:
+        """以本轮技能作用域执行 tool_calls（M1，spec §5.1）。
+
+        hex 路径的 tools 适配器在进程内跨会话共享，构造期注入无法表达
+        "本轮是哪个专家"；改为在执行期间把解析好的允许集写入 ContextVar，
+        工具线程（``py_compat.to_thread`` 复制上下文）内的 ``SkillTool``
+        读取后按专家作用域 fail-closed。
+        """
+        from backend.tools.skill_tool import (
+            reset_turn_skill_allowlist,
+            set_turn_skill_allowlist,
+        )
+
+        token = set_turn_skill_allowlist(skill_allowed)
+        try:
+            return await self._execute_tool_calls(session_id, tool_calls, run)
+        finally:
+            reset_turn_skill_allowlist(token)
+
     async def _execute_tool_calls(
         self,
         session_id: str,
@@ -1026,9 +1110,17 @@ class ChatService:
 
 
 def _skill_activation_block(
-    message: str, skills: Optional[SkillPort]
+    message: str,
+    skills: Optional[SkillPort],
+    allowed: Optional[set] = None,
 ) -> Tuple[str, List[Dict[str, Any]]]:
     """计算本轮用户消息自动激活的技能上下文块及激活技能列表。
+
+    Args:
+        message: 用户消息文本。
+        skills: 技能适配器（InprocSkillAdapter 或 mock）。
+        allowed: 专家技能允许集（M1，spec §5.1）。``None`` 表示不受限；
+            非空集合时 auto_activate 仅匹配集合内的技能，fail-closed。
 
     结构性探测：仅当 skills adapter 实现 ``auto_activate(message)`` 扩展
     方法（``InprocSkillAdapter``）时生效；纯 ``SkillPort`` mock / 其他
@@ -1050,7 +1142,11 @@ def _skill_activation_block(
     if not callable(auto_activate):
         return "", []
     try:
-        result = auto_activate(message)
+        # 专家技能作用域（M1）：allowed 非 None 时透传给 auto_activate
+        if allowed is not None:
+            result = auto_activate(message, allowed=allowed)
+        else:
+            result = auto_activate(message)
         block = getattr(result, "context_block", "")
         names = list(getattr(result, "names", ()))
         # matches 字段可能不存在（duck-type 兼容 _FakeActivationResult 等测试 mock）
