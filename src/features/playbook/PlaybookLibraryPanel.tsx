@@ -3,13 +3,14 @@
  *
  * 库条目与项目解耦；删除条目不会影响已绑定项目的规程快照。
  */
-import { Download, Library, Trash2, X } from 'lucide-react';
+import { Download, Library, Link2, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { playbookApi } from '../../shared/api/playbookApi';
 import type { PlaybookLibraryDetail, PlaybookLibraryItem } from '../../shared/api/playbookApi';
 import { Button } from '../../shared/ui/Button';
 
+import { PlaybookShareDialog } from './PlaybookShareDialog';
 import { downloadPlaybookText } from './playbookDownload';
 import { usePlaybookI18n } from './usePlaybookI18n';
 
@@ -29,6 +30,7 @@ export function PlaybookLibraryPanel({ onClose }: PlaybookLibraryPanelProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [shareTarget, setShareTarget] = useState<PlaybookLibraryItem | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -159,6 +161,15 @@ export function PlaybookLibraryPanel({ onClose }: PlaybookLibraryPanelProps) {
                   <Button
                     size="sm"
                     variant="secondary"
+                    onClick={() => setShareTarget(item)}
+                    data-testid={`playbook-library-share-${item.id}`}
+                  >
+                    <Link2 className="mr-1 h-3.5 w-3.5" />
+                    {t('playbook.share.button')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
                     onClick={() => handleExport(item)}
                     disabled={busy === 'export'}
                     data-testid={`playbook-library-export-${item.id}`}
@@ -225,6 +236,13 @@ export function PlaybookLibraryPanel({ onClose }: PlaybookLibraryPanelProps) {
           {error || notice}
         </div>
       )}
+
+      <PlaybookShareDialog
+        open={shareTarget !== null}
+        libraryId={shareTarget?.id ?? null}
+        playbookName={shareTarget?.name}
+        onClose={() => setShareTarget(null)}
+      />
     </div>
   );
 }

@@ -72,6 +72,10 @@ const ENDPOINT_KEYS: ReadonlySet<keyof EndpointConfig> = new Set([
   'modelId',
   'discoveredModels',
   'lastDiscoveredAt',
+  // 2026-11-03: 思考过程参数 —— 漏了会被 sanitizeForBackend 静默丢弃，
+  // 前端配置永远到不了后端，上游模型不会进入思考模式。
+  'reasoningEffort',
+  'thinkingBudget',
   // 'localModelPath' 不在此白名单内 — UI 已隐藏, 后端白名单已收紧.
 ]);
 const SNAKE_KEYS_TO_DROP: ReadonlySet<string> = new Set([

@@ -274,7 +274,7 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('studio-profile-batch-promote-btn'));
     expect(screen.getByTestId('studio-profile-to-constraint-e-1')).toHaveTextContent('已升格约束');
     fireEvent.click(screen.getByTestId('studio-profile-to-l4-e-1'));
-    expect(screen.getByTestId('studio-profile-to-l4-e-1')).toHaveTextContent('已存L4');
+    expect(screen.getByTestId('studio-profile-to-l4-e-1')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('studio-profile-batch-milestone-btn'));
     expect(screen.getByTestId('studio-profile-to-milestone-e-1')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('studio-profile-seed-presets-btn'));
@@ -339,7 +339,7 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('knowledge-batch-to-constraint-btn'));
     expect(screen.getByTestId('knowledge-to-constraint-0')).toHaveTextContent('已转 L2 约束');
     fireEvent.click(screen.getByTestId('knowledge-batch-to-l4-btn'));
-    expect(screen.getByTestId('knowledge-to-l4-0')).toHaveTextContent('已存L4');
+    expect(screen.getByTestId('knowledge-to-l4-0')).toHaveTextContent('已保存');
   });
 });
 
@@ -371,16 +371,16 @@ describe('SemanticSearchPanel & WikiGenerationPanel (Phase P31)', () => {
           }),
         ],
       });
-      expect(screen.getByTestId('semantic-hit-save-profile-0')).toHaveTextContent('已沉淀 L3');
+      expect(screen.getByTestId('semantic-hit-save-profile-0')).toHaveTextContent('已保存');
     });
 
     fireEvent.click(screen.getByTestId('semantic-score-filter-0'));
     fireEvent.click(screen.getByTestId('semantic-batch-save-profile-btn'));
     await waitFor(() => {
-      expect(screen.getByTestId('semantic-hit-save-profile-1')).toHaveTextContent('已沉淀 L3');
+      expect(screen.getByTestId('semantic-hit-save-profile-1')).toHaveTextContent('已保存');
     });
     fireEvent.click(screen.getByTestId('semantic-hit-to-l4-0'));
-    expect(screen.getByTestId('semantic-hit-to-l4-0')).toHaveTextContent('已存L4');
+    expect(screen.getByTestId('semantic-hit-to-l4-0')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('semantic-batch-to-milestone-btn'));
     expect(screen.getByTestId('semantic-hit-to-milestone-0')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('semantic-clear-results-btn'));
@@ -395,15 +395,15 @@ describe('SemanticSearchPanel & WikiGenerationPanel (Phase P31)', () => {
     fireEvent.click(screen.getByTestId('wiki-save-symbols-profile-btn'));
     await waitFor(() => {
       expect(screen.getByTestId('wiki-save-symbols-profile-btn')).toHaveTextContent(
-        '已沉淀符号至 L3',
+        '已保存符号到 AI 记忆',
       );
     });
     fireEvent.click(screen.getByTestId('wiki-symbol-to-milestone-0'));
     expect(screen.getByTestId('wiki-symbol-to-milestone-0')).toHaveTextContent('已建里程碑');
     fireEvent.click(screen.getByTestId('wiki-symbol-to-l3-0'));
-    expect(screen.getByTestId('wiki-symbol-to-l3-0')).toHaveTextContent('已存L3');
+    expect(screen.getByTestId('wiki-symbol-to-l3-0')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('wiki-file-to-l4-src/core.ts'));
-    expect(screen.getByTestId('wiki-file-to-l4-src/core.ts')).toHaveTextContent('已入库L4');
+    expect(screen.getByTestId('wiki-file-to-l4-src/core.ts')).toHaveTextContent('已入库');
     fireEvent.change(filterInput, { target: { value: 'python' } });
     expect(screen.getByText('scripts/run.py')).toBeInTheDocument();
     expect(screen.queryByText('src/core.ts')).toBeNull();
@@ -412,7 +412,7 @@ describe('SemanticSearchPanel & WikiGenerationPanel (Phase P31)', () => {
     const ingestAllBtn = await screen.findByTestId('wiki-ingest-all-btn');
     fireEvent.click(ingestAllBtn);
     fireEvent.click(screen.getByTestId('wiki-save-manifest-l3-btn'));
-    expect(screen.getByTestId('wiki-save-manifest-l3-btn')).toHaveTextContent('已沉淀至 L3');
+    expect(screen.getByTestId('wiki-save-manifest-l3-btn')).toHaveTextContent('已保存到 AI 记忆');
 
     await waitFor(() => {
       expect(projectApi.addMaterialFromFile).toHaveBeenCalledWith('proj-p31', 'wiki/README.md');
@@ -420,7 +420,7 @@ describe('SemanticSearchPanel & WikiGenerationPanel (Phase P31)', () => {
         'proj-p31',
         'wiki/ARCHITECTURE.md',
       );
-      expect(screen.getByTestId('wiki-ingest-all-btn')).toHaveTextContent('已全部纳入 L4');
+      expect(screen.getByTestId('wiki-ingest-all-btn')).toHaveTextContent('已全部保存为资料');
     });
   });
 });

@@ -804,7 +804,8 @@ describe('useChat LLM 重试事件', () => {
       const assistantMsg = result.current.messages.find((m) => m.role === 'assistant');
       expect(assistantMsg?.content ?? '').not.toContain('🔄');
 
-      // 非 retry 状态到达 → retryInfo 延迟 3 秒后清空。
+      // 非 retry 状态到达 → retryInfo 立即清空（旧实现是 3 秒延迟，会被 reasoning
+      // 事件反复重设定时器导致横幅永不消失 —— 见 chatStreamStore 即时清空修复）。
       // 必须在流仍然存活时断言：done 之后 clearStream 会把整个 streaming 槽位置空，
       // 此时 `streaming?.retryInfo` 恒为 undefined，是空断言。
       act(() => {
@@ -812,15 +813,9 @@ describe('useChat LLM 重试事件', () => {
       });
       const liveSlot = useChatStreamStore.getState().sessions[VALID_SESSION_ID]?.streaming;
       expect(liveSlot?.messageId).toBeTruthy();
-      // 3 秒内 retryInfo 仍然保留（延迟隐藏，让用户能看见重试发生过）
-      expect(liveSlot?.retryInfo).toEqual(retryPayload);
-
-      // 推进 3 秒后定时器触发，retryInfo 被清 null
-      act(() => {
-        vi.advanceTimersByTime(3000);
-      });
-      const clearedSlot = useChatStreamStore.getState().sessions[VALID_SESSION_ID]?.streaming;
-      expect(clearedSlot?.retryInfo).toBeNull();
+      // content_delta 到达后 retryInfo 已被即时清空
+      expect(liveSlot?.retryInfo).toBeNull();
+      expect(liveSlot?.retryInfoClearedAt).toBeTypeOf('number');
 
       act(() => {
         capturedCb!({ payload: { state: 'done', iteration: 1, content: 'ok' } });

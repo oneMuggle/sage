@@ -620,7 +620,7 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                                   content: constraint.content,
                                   importance: constraint.priority,
                                   sourceMessageIds: [],
-                                  reasoning: 'L2 约束同步沉淀至 L3 画像',
+                                  reasoning: 'L2 约束同步保存到 AI 记忆',
                                 },
                               ],
                             });
@@ -630,9 +630,9 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                         }
                       }}
                       className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                      title="同步沉淀至 L3 项目画像"
+                      title="保存到 AI 记忆"
                     >
-                      {promotedProfileIds.has(constraint.id) ? '已存L3' : '+L3'}
+                      {promotedProfileIds.has(constraint.id) ? '已保存' : '+记忆'}
                     </button>
                     <button
                       type="button"
@@ -675,7 +675,7 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                       }}
                       className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
-                      {l4RuleIds.has(constraint.id) ? '已存L4' : '+L4'}
+                      {l4RuleIds.has(constraint.id) ? '已保存' : '+资料'}
                     </button>
                     <button
                       type="button"

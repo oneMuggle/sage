@@ -19,6 +19,13 @@ export const retryBannerZh = {
   'chat.retry.error.unknown': '未知错误',
   // 2026-11-02: 总时长预算可见性 — 后端推送 budget_remaining_s 时展示
   'chat.retry.budget_remaining': '剩余预算 {seconds} 秒',
+  // 2026-11-03: 计时协议可见性 —— 退避等待 / 在途请求两个阶段的可观测文案
+  'chat.retry.backoff_hint': '将在 {seconds} 秒后重试',
+  'chat.retry.in_flight_hint': '重试请求已发出，正在等待上游响应',
+  'chat.retry.elapsed': '已等待 {seconds} 秒',
+  'chat.retry.attempt_elapsed': '本次已等待 {seconds} 秒',
+  'chat.retry.attempt_timeout': '单次上限 {seconds} 秒',
+  'chat.retry.source.compaction': '正在压缩上下文',
 } as const;
 
 export const retryBannerEn: Record<keyof typeof retryBannerZh, string> = {
@@ -33,6 +40,12 @@ export const retryBannerEn: Record<keyof typeof retryBannerZh, string> = {
   'chat.retry.error.context_overflow': 'Context overflow',
   'chat.retry.error.unknown': 'Unknown error',
   'chat.retry.budget_remaining': '{seconds}s budget left',
+  'chat.retry.backoff_hint': 'Retrying in {seconds}s',
+  'chat.retry.in_flight_hint': 'Retry request sent, waiting for upstream response',
+  'chat.retry.elapsed': 'Waited {seconds}s',
+  'chat.retry.attempt_elapsed': 'This attempt {seconds}s',
+  'chat.retry.attempt_timeout': 'Attempt limit {seconds}s',
+  'chat.retry.source.compaction': 'Compacting context',
 };
 
 export function formatRetryBannerI18nSummary(): string {

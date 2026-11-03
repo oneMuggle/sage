@@ -194,7 +194,15 @@ async def test_stream_retries_before_first_delta(monkeypatch):
 
     assert mock_http.stream.call_count == 3  # 前两次 500 重试,第三次成功
     # 2026-10-13: 重试前推送 retry 事件（可见性优化）
-    assert [k for k, _ in events] == ["retry", "retry", "content_delta", "response"]
+    # 2026-11-03: 退避结束后推送 retry_attempt_started，前端切换到"在途等待"
+    assert [k for k, _ in events] == [
+        "retry",
+        "retry_attempt_started",
+        "retry",
+        "retry_attempt_started",
+        "content_delta",
+        "response",
+    ]
     assert events[-1][1].content == "hi"
 
 
@@ -454,3 +462,118 @@ def test_retry_settings_total_budget_sources(
     from backend.core.legacy.llm_client import _retry_settings
 
     assert _retry_settings()[3] == expected
+
+
+# ---- 2026-11-03: 重试计时协议（elapsed / attempt_timeout / 在途事件） ----
+
+
+@pytest.mark.asyncio()
+async def test_stream_retry_events_include_elapsed_and_attempt_timeout(monkeypatch):
+    """retry / retry_attempt_started 携带累计耗时与下一次尝试的超时上限。"""
+    monkeypatch.setenv("SAGE_LLM_RETRY_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "10")
+    monkeypatch.setenv("SAGE_LLM_RETRY_TOTAL_BUDGET_S", "180")
+
+    clock = {"t": 0.0}
+    monkeypatch.setattr(
+        "backend.core.legacy.llm_client.time",
+        SimpleNamespace(monotonic=lambda: clock["t"], time=time.time),
+    )
+
+    async def fake_sleep(delay: float) -> None:
+        clock["t"] += delay
+
+    monkeypatch.setattr("backend.core.legacy.llm_client.asyncio.sleep", fake_sleep)
+
+    client = _make_client()
+    fail_ctx = _sse_ctx([])
+    fail_response = fail_ctx.__aenter__.return_value
+
+    def raise_500():
+        raise _http_status_error(500)
+
+    fail_response.raise_for_status = MagicMock(side_effect=raise_500)
+    ok_ctx = _sse_ctx(
+        [{"choices": [{"delta": {"content": "ok"}}]}, "data: [DONE]"]
+    )
+    _wire_stream(client, [fail_ctx, ok_ctx])
+
+    retries = []
+    started = []
+    async for kind, payload in client.chat_stream_events(
+        [{"role": "user", "content": "x"}]
+    ):
+        if kind == "retry":
+            retries.append(payload)
+        elif kind == "retry_attempt_started":
+            started.append(payload)
+
+    assert len(retries) == 1
+    assert len(started) == 1
+    r = retries[0]
+    assert r.attempt == 1
+    assert r.elapsed_s == 0.0
+    assert r.delay == 10.0
+    assert r.attempt_timeout_s is not None
+    s = started[0]
+    assert s.attempt == 2
+    assert s.elapsed_s == 10.0
+    assert s.budget_remaining_s == pytest.approx(170.0)
+    assert s.attempt_timeout_s == pytest.approx(r.attempt_timeout_s)
+
+
+@pytest.mark.asyncio()
+async def test_retry_budget_caps_inflight_attempt_timeout(monkeypatch):
+    """剩余预算不足一个完整动态超时时，单次请求超时被收紧到剩余预算。"""
+    monkeypatch.setenv("SAGE_LLM_RETRY_MAX_ATTEMPTS", "10")
+    monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "2")
+    monkeypatch.setenv("SAGE_LLM_RETRY_TOTAL_BUDGET_S", "100")
+
+    clock = {"t": 0.0}
+    monkeypatch.setattr(
+        "backend.core.legacy.llm_client.time",
+        SimpleNamespace(monotonic=lambda: clock["t"], time=time.time),
+    )
+
+    async def fake_sleep(delay: float) -> None:
+        clock["t"] += delay
+
+    monkeypatch.setattr("backend.core.legacy.llm_client.asyncio.sleep", fake_sleep)
+
+    client = _make_client()
+    mock_http = MagicMock()
+    observed_timeouts = []
+
+    async def _fail_after_60s(*args, **kwargs):
+        observed_timeouts.append(mock_http.timeout)
+        clock["t"] += 60.0
+        raise _http_status_error(504)
+
+    mock_http.post = AsyncMock(side_effect=_fail_after_60s)
+    client._get_client = lambda: mock_http  # type: ignore[method-assign]
+
+    with pytest.raises(LLMError) as exc_info:
+        await client.chat([{"role": "user", "content": "hi"}])
+
+    # 第 1 次在途 60s + 退避 2s → 剩余预算 38s，不足以再跑一次 60s 尝试
+    assert mock_http.post.await_count == 2
+    assert observed_timeouts[1].read == pytest.approx(38.0)
+    assert "预算" in exc_info.value.message
+
+
+@pytest.mark.asyncio()
+async def test_complete_forwards_retry_callback(monkeypatch):
+    """complete() 支持透传 retry_callback（压缩等后台调用可见性）。"""
+    monkeypatch.setenv("SAGE_LLM_RETRY_BASE_DELAY_S", "0")
+    client = _make_client()
+    _wire_post(
+        client,
+        [_http_status_error(500), _ok_post_response(_CHAT_OK)],
+    )
+    events = []
+
+    result = await client.complete("hi", retry_callback=events.append)
+
+    assert result == "ok"
+    assert len(events) == 1
+    assert events[0].attempt == 1

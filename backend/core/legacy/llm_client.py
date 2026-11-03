@@ -36,9 +36,11 @@ _LLM_RETRY_MAX_ATTEMPTS = RETRY_DEFAULTS["llmRetryMaxAttempts"]
 _LLM_RETRY_BASE_DELAY_S = RETRY_DEFAULTS["llmRetryBaseDelayS"]
 #: 单次退避上限
 _LLM_RETRY_MAX_DELAY_S = RETRY_DEFAULTS["llmRetryMaxDelayS"]
-#: 自动重试的总时长预算（秒）：从首次尝试起算，退避前的累计耗时超预算即停止。
+#: 自动重试的总时长预算（秒）：从首次尝试起算，含在途请求与退避的累计耗时。
 #: 0 表示不限制；env ``SAGE_LLM_RETRY_TOTAL_BUDGET_S`` 覆盖（调试/测试用）。
 _LLM_RETRY_TOTAL_BUDGET_S = RETRY_DEFAULTS["llmRetryTotalBudgetS"]
+#: 预算启用时，剩余预算低于该值就不再发起新的尝试（避免"必然超时"的空等）。
+_LLM_RETRY_MIN_ATTEMPT_S = 5.0
 #: 可重试的错误类型：限流 / 服务端错误 / 超时 / 网络不可达
 _RETRYABLE_ERROR_TYPES = frozenset(
     {
@@ -133,11 +135,13 @@ class RetryEvent:
     当 LLM 请求失败触发重试时，通过回调推送此事件到前端，让用户感知重试状态。
 
     Attributes:
-        attempt: 当前重试次数（从 1 开始）
+        attempt: 刚失败的尝试序号（从 1 开始）
         max_attempts: 最大尝试次数（含首次请求）
         error_type: 错误类型（timeout/network_error/server_error/rate_limited）
         error_message: 错误消息
         delay: 本次重试前的等待时间（秒）
+        elapsed_s: 自本轮请求首次尝试起累计耗时（含此前在途 + 退避）
+        attempt_timeout_s: 下一次尝试的单次请求超时上限（秒）；无预算时 None
         budget_total_s: 自动重试总时长预算（秒）；未配置/0 = 不限时为 None
         budget_remaining_s: 本次等待之后剩余的预算（秒）；无预算时为 None
     """
@@ -146,17 +150,23 @@ class RetryEvent:
     error_type: str  # LLMErrorType.value
     error_message: str
     delay: float
+    elapsed_s: float = 0.0
+    attempt_timeout_s: Optional[float] = None
     budget_total_s: Optional[float] = None
     budget_remaining_s: Optional[float] = None
 
 
-def _retry_budget_remaining(
-    total_budget: float, retry_started: float, delay: float
-) -> Optional[float]:
-    """本次退避等待后剩余的重试预算；预算未启用（<=0）时返回 None。"""
-    if total_budget <= 0:
-        return None
-    return max(0.0, total_budget - ((_retry_now() - retry_started) + delay))
+@dataclass
+class RetryAttemptStartedEvent:
+    """重试请求已发出（退避结束、进入在途等待）事件（2026-11-03）。
+
+    与 RetryEvent（失败后、退避前）配对，让前端区分"退避倒计时"与
+    "请求在途、等待上游首字节"两个阶段，避免横幅在 60s 静默期内静止不动。
+    """
+    attempt: int                      # 即将/正在进行的尝试序号（失败次数 + 1）
+    elapsed_s: float                  # 自本轮首次尝试起累计耗时（含退避）
+    attempt_timeout_s: Optional[float] = None
+    budget_remaining_s: Optional[float] = None
 
 
 def _retry_budget_exhausted_error(
@@ -167,10 +177,16 @@ def _retry_budget_exhausted_error(
     total_budget: float,
 ) -> LLMError:
     """预算耗尽时抛出的错误：保留原始类型/状态码，并给出可操作提示。"""
+    if delay > 0:
+        reason = (
+            f"本次重试还需等待 {delay:.0f}s，加上此前累计等待将超过 "
+            f"{total_budget:.0f}s 总时长预算。"
+        )
+    else:
+        reason = f"剩余预算已不足以完成一次新的尝试（总时长预算 {total_budget:.0f}s）。"
     return LLMError(
         llm_err.type,
-        f"{llm_err.message}（已尝试 {attempt}/{max_attempts} 次后停止：本次重试还需"
-        f"等待 {delay:.0f}s，加上此前累计等待将超过 {total_budget:.0f}s 总时长预算。"
+        f"{llm_err.message}（已尝试 {attempt}/{max_attempts} 次后停止：{reason}"
         f"可在「设置 → 基础 → LLM 重试」调大总时长预算或降低最大退避）",
         status_code=llm_err.status_code,
         retry_after=llm_err.retry_after,
@@ -762,7 +778,7 @@ class LLMClient:
 
         # 2026-10-25: 动态超时调整 — 根据模型和上下文长度计算
         dynamic_timeout = self.config.compute_dynamic_timeout(body["messages"])
-        client.timeout = httpx.Timeout(dynamic_timeout)
+        # 超时在每次尝试开头设置（见下方 attempt_timeout），以受剩余预算约束。
 
         # L3 重试退避: 限流/服务端错误/超时/网络失败按指数退避重试
         # （尊重 retry-after）。请求整体重放安全——非流式,无部分产出。
@@ -770,8 +786,24 @@ class LLMClient:
         attempt = 0
         fallback_used = False
         retry_started = _retry_now()
+        has_failed_once = False
+        last_llm_err: Optional[LLMError] = None
         while True:
             attempt += 1
+            # 2026-11-03: 单次请求超时受剩余预算约束（首次尝试不受限）。
+            attempt_timeout = dynamic_timeout
+            if total_budget > 0 and has_failed_once:
+                remaining_now = total_budget - (_retry_now() - retry_started)
+                if remaining_now <= _LLM_RETRY_MIN_ATTEMPT_S:
+                    raise _retry_budget_exhausted_error(
+                        last_llm_err or LLMError(LLMErrorType.TIMEOUT, "重试预算耗尽"),
+                        attempt - 1,
+                        max_attempts,
+                        0.0,
+                        total_budget,
+                    )
+                attempt_timeout = min(dynamic_timeout, remaining_now)
+            client.timeout = httpx.Timeout(attempt_timeout)
             try:
                 response = await client.post("/v1/chat/completions", json=body)
                 response.raise_for_status()
@@ -781,6 +813,8 @@ class LLMClient:
                 try:
                     self._raise_classified_error(e)  # 总是抛出
                 except LLMError as llm_err:
+                    last_llm_err = llm_err
+                    has_failed_once = True
                     if (
                         attempt >= max_attempts
                         or llm_err.type not in _RETRYABLE_ERROR_TYPES
@@ -805,13 +839,16 @@ class LLMClient:
                             continue
                         raise
                     delay = _retry_backoff_seconds(llm_err, attempt, base_delay, max_delay)
-                    if (
-                        total_budget > 0
-                        and (_retry_now() - retry_started) + delay > total_budget
-                    ):
-                        raise _retry_budget_exhausted_error(
-                            llm_err, attempt, max_attempts, delay, total_budget
-                        )
+                    elapsed_now = _retry_now() - retry_started
+                    budget_remaining: Optional[float] = None
+                    next_attempt_timeout: Optional[float] = None
+                    if total_budget > 0:
+                        budget_remaining = total_budget - (elapsed_now + delay)
+                        if budget_remaining < _LLM_RETRY_MIN_ATTEMPT_S:
+                            raise _retry_budget_exhausted_error(
+                                llm_err, attempt, max_attempts, delay, total_budget
+                            )
+                        next_attempt_timeout = min(dynamic_timeout, budget_remaining)
                     logger.warning(
                         "LLM 请求失败(%s/%s): %s — %.1fs 后重试",
                         attempt,
@@ -828,10 +865,10 @@ class LLMClient:
                                 error_type=llm_err.type.value,
                                 error_message=llm_err.message,
                                 delay=delay,
+                                elapsed_s=max(0.0, elapsed_now),
+                                attempt_timeout_s=next_attempt_timeout,
                                 budget_total_s=total_budget if total_budget > 0 else None,
-                                budget_remaining_s=_retry_budget_remaining(
-                                    total_budget, retry_started, delay
-                                ),
+                                budget_remaining_s=budget_remaining,
                             )
                         )
                     await asyncio.sleep(delay)
@@ -1106,7 +1143,7 @@ class LLMClient:
 
         # 2026-10-25: 动态超时调整 — 根据模型和上下文长度计算
         dynamic_timeout = self.config.compute_dynamic_timeout(body["messages"])
-        client.timeout = httpx.Timeout(dynamic_timeout)
+        # 超时在每次尝试开头设置（见下方 attempt_timeout），以受剩余预算约束。
 
         # L3 重试退避（流式版）: 仅在"尚未产出任何增量"时重试——此时重放
         # 安全（调用方没收到过任何事件）;已有增量后失败无法安全重放,按原
@@ -1118,8 +1155,41 @@ class LLMClient:
         # 重试预算复用 stream_started —— 不额外取时钟，避免干扰调用方对时钟采样次数的假设。
         stream_started = time.monotonic()
         first_token_at: Optional[float] = None
+        # 2026-11-03: 预算现在计入在途请求耗时；记录上一次失败，供"预算不足以
+        # 再发起一次尝试"时保留原始错误类型/状态码。
+        last_llm_err: Optional[LLMError] = None
+        has_failed_once = False
         while True:
             attempt += 1
+            # 2026-11-03: 单次请求超时不再固定为 dynamic_timeout，而是受剩余
+            # 预算约束 —— 否则 180s 预算下仍可能多等一个完整超时（实测 86s）。
+            attempt_timeout = dynamic_timeout
+            if total_budget > 0 and has_failed_once:
+                elapsed_now = _retry_now() - stream_started
+                remaining_now = total_budget - elapsed_now
+                if has_failed_once:
+                    if remaining_now <= _LLM_RETRY_MIN_ATTEMPT_S:
+                        raise _retry_budget_exhausted_error(
+                            last_llm_err
+                            or LLMError(LLMErrorType.TIMEOUT, "重试预算耗尽"),
+                            attempt - 1,
+                            max_attempts,
+                            0.0,
+                            total_budget,
+                        )
+                    attempt_timeout = min(dynamic_timeout, remaining_now)
+                    # 退避结束、请求即将发出：让前端从"倒计时"切换到
+                    # "请求在途，已等待 Ns"（对标 Claude Code 的 Waiting 横幅）。
+                    yield (
+                        "retry_attempt_started",
+                        RetryAttemptStartedEvent(
+                            attempt=attempt,
+                            elapsed_s=max(0.0, elapsed_now),
+                            attempt_timeout_s=attempt_timeout,
+                            budget_remaining_s=max(0.0, remaining_now),
+                        ),
+                    )
+            client.timeout = httpx.Timeout(attempt_timeout)
             try:
                 async with client.stream(
                     "POST", "/v1/chat/completions", json=body
@@ -1176,6 +1246,8 @@ class LLMClient:
                 try:
                     self._raise_classified_error(e)  # 总是抛出
                 except LLMError as llm_err:
+                    last_llm_err = llm_err
+                    has_failed_once = True
                     nothing_yielded = not content_parts and not reasoning_parts
                     can_fallback = (
                         not fallback_used
@@ -1212,13 +1284,16 @@ class LLMClient:
                             continue
                         raise
                     delay = _retry_backoff_seconds(llm_err, attempt, base_delay, max_delay)
-                    if (
-                        total_budget > 0
-                        and (_retry_now() - stream_started) + delay > total_budget
-                    ):
-                        raise _retry_budget_exhausted_error(
-                            llm_err, attempt, max_attempts, delay, total_budget
-                        )
+                    elapsed_now = _retry_now() - stream_started
+                    budget_remaining: Optional[float] = None
+                    next_attempt_timeout: Optional[float] = None
+                    if total_budget > 0:
+                        budget_remaining = total_budget - (elapsed_now + delay)
+                        if budget_remaining < _LLM_RETRY_MIN_ATTEMPT_S:
+                            raise _retry_budget_exhausted_error(
+                                llm_err, attempt, max_attempts, delay, total_budget
+                            )
+                        next_attempt_timeout = min(dynamic_timeout, budget_remaining)
                     logger.warning(
                         "LLM 流式请求失败(%s/%s): %s — %.1fs 后重试",
                         attempt,
@@ -1236,10 +1311,10 @@ class LLMClient:
                             error_type=llm_err.type.value,
                             error_message=llm_err.message,
                             delay=delay,
+                            elapsed_s=max(0.0, elapsed_now),
+                            attempt_timeout_s=next_attempt_timeout,
                             budget_total_s=total_budget if total_budget > 0 else None,
-                            budget_remaining_s=_retry_budget_remaining(
-                                total_budget, stream_started, delay
-                            ),
+                            budget_remaining_s=budget_remaining,
                         ),
                     )
                     # 重置累积器,保证重放从零开始
@@ -1318,18 +1393,24 @@ class LLMClient:
             ),
         )
 
-    async def complete(self, prompt: str) -> str:
+    async def complete(
+        self,
+        prompt: str,
+        retry_callback: Optional[Callable[[RetryEvent], None]] = None,
+    ) -> str:
         """
         简单补全接口
 
         Args:
             prompt: 提示文本
+            retry_callback: 重试事件回调（2026-11-03：压缩等后台调用可借此
+                把重试状态透出到聊天流，避免长时间"无解释等待"）
 
         Returns:
             补全结果文本
         """
         messages = [{"role": "user", "content": prompt}]
-        response = await self.chat(messages)
+        response = await self.chat(messages, retry_callback=retry_callback)
         return response.content
 
     def to_dict(self) -> Dict[str, Any]:

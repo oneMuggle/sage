@@ -55,6 +55,14 @@ export interface EndpointConfig {
   discoveredModels: DiscoveredModel[];
   lastDiscoveredAt: number | null;
   /**
+   * 2026-11-03: 思考过程参数 —— per-endpoint 配置,透传到上游 LLM 请求体。
+   * reasoningEffort 对应 OpenAI reasoning_effort ('low'|'medium'|'high');
+   * thinkingBudget 对应 Anthropic thinking.budget_tokens / DeepSeek thinking_budget。
+   * null = 不发送该参数(上游模型不进入思考模式)。
+   */
+  reasoningEffort: 'low' | 'medium' | 'high' | null;
+  thinkingBudget: number | null;
+  /**
    * 2026-08-26 (OWASP A02:2021): 后端 redact_secrets 在 GET 响应里把
    * apiKey 置为 "" 并打这个 flag. 客户端按 id 在 localStorage 中找回真实 key.
    * sanitizeForBackend 不在白名单里, 不会回写; 仅在 GET → loadSettings 路径消费.
@@ -251,6 +259,8 @@ export const DEFAULT_ENDPOINT: EndpointConfig = {
   localModelPath: '',
   discoveredModels: [],
   lastDiscoveredAt: null,
+  reasoningEffort: null,
+  thinkingBudget: null,
 };
 
 const DEFAULT_MODEL_SELECTION: ModelSelection = {
@@ -435,6 +445,8 @@ function createDemoEndpoint(): EndpointConfig {
     localModelPath: '',
     discoveredModels: [...DEMO_ENDPOINT_MODELS],
     lastDiscoveredAt: Date.now() - 2 * 60 * 60 * 1000,
+    reasoningEffort: null,
+    thinkingBudget: null,
   };
 }
 

@@ -347,7 +347,7 @@ export function KnowledgeExtractionPanel({
                               content: `[M2 对话知识提取思路 (${sessionId})] ${reasoning}`,
                               importance: 6,
                               sourceMessageIds: [],
-                              reasoning: 'M2 对话知识提取思路沉淀至 L3 画像',
+                              reasoning: 'M2 对话知识提取思路保存到 AI 记忆',
                             },
                           ],
                         });
@@ -358,7 +358,7 @@ export function KnowledgeExtractionPanel({
                   }}
                   className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                 >
-                  {savedReasoningL3 ? '已存 L3' : '思路存为 L3'}
+                  {savedReasoningL3 ? '已保存' : '保存思路到 AI 记忆'}
                 </button>
                 <button
                   type="button"
@@ -378,7 +378,7 @@ export function KnowledgeExtractionPanel({
                   }}
                   className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                 >
-                  {savedReasoningL4 ? '已存 L4 资料' : '思路存为 L4 资料'}
+                  {savedReasoningL4 ? '已保存' : '保存思路为资料'}
                 </button>
               </div>
             </div>
@@ -676,7 +676,7 @@ export function KnowledgeExtractionPanel({
                           }}
                           className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                         >
-                          {convertedL4Indices.has(idx) ? '已存L4' : '+L4'}
+                          {convertedL4Indices.has(idx) ? '已保存' : '+资料'}
                         </button>
                         <button
                           type="button"

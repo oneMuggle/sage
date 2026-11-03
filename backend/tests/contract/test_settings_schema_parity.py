@@ -73,7 +73,8 @@ def test_legal_top_keys_matches_appsettings_interface() -> None:
 
 
 def test_legal_endpoint_keys_is_stable() -> None:
-    """LEGAL_ENDPOINT_KEYS 是 EndpointConfig 9 字段 (含 Task 1 新增 protocol / modelId / localModelPath)."""
+    """LEGAL_ENDPOINT_KEYS 是 EndpointConfig 11 字段 (含 Task 1 新增 protocol / modelId /
+    localModelPath + 2026-11-03 新增 reasoningEffort / thinkingBudget)."""
     assert (
         frozenset(
             {
@@ -86,6 +87,9 @@ def test_legal_endpoint_keys_is_stable() -> None:
                 "localModelPath",
                 "discoveredModels",
                 "lastDiscoveredAt",
+                # 2026-11-03: 思考过程参数
+                "reasoningEffort",
+                "thinkingBudget",
             }
         )
         == LEGAL_ENDPOINT_KEYS
