@@ -346,8 +346,8 @@ Sage-Setup-x.y.z.exe --updated /S --force-run /D=<installDir>
 ### 12.4 验证与残留风险
 
 - 已通过：`tsc --noEmit`、`eslint`、全量 vitest（6368 passed / 6 skipped）、
-  `architecture-check`（三条目按棘轮协议上调：`updateManager.ts` 1518、
-  两个测试文件 1823 / 881）。
+  `architecture-check`（三条目按棘轮协议上调：`updateManager.ts` 1519、
+  两个测试文件 1839 / 882）。
 - **Linux 无法编译/验证 NSIS 安装器**。发版前必须在 Win7 实机做一次覆盖安装冒烟：
   运行中的 Sage（含托盘模式）→ 覆盖安装 → 状态行出现关闭提示 → 安装完成自动拉起新版。
 - 托盘模式（`closeToTray`）会拦截 WM_CLOSE，5 秒后走强杀；这是预期行为。
