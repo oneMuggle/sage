@@ -5,85 +5,11 @@
  */
 
 import type { SettingMetadata } from './metadata';
+import { booleanSetting, numberSetting, enumSetting, orchNumber } from './settingFactories';
 import { DEFAULT_SETTINGS } from './types';
 
-const booleanSetting = (
-  key: string,
-  label: string,
-  description: string,
-  storage: SettingMetadata['storage'],
-  defaultValue: boolean,
-  applyMode: SettingMetadata['applyMode'] = 'immediate',
-  visibility: SettingMetadata['visibility'] = 'basic',
-): SettingMetadata => ({
-  key,
-  label,
-  description,
-  scope: 'global',
-  storage,
-  defaultValue,
-  applyMode,
-  visibility,
-  riskLevel: 'low',
-  constraints: { type: 'boolean' },
-});
-
-const numberSetting = (
-  key: string,
-  label: string,
-  description: string,
-  storage: SettingMetadata['storage'],
-  defaultValue: number,
-  min: number,
-  max?: number,
-  applyMode: SettingMetadata['applyMode'] = 'next-request',
-  visibility: SettingMetadata['visibility'] = 'advanced',
-): SettingMetadata => ({
-  key,
-  label,
-  description,
-  scope: 'global',
-  storage,
-  defaultValue,
-  applyMode,
-  visibility,
-  riskLevel: 'medium',
-  constraints: { type: 'number', min, ...(max === undefined ? {} : { max }) },
-});
-
-const enumSetting = (
-  key: string,
-  label: string,
-  description: string,
-  storage: SettingMetadata['storage'],
-  defaultValue: string,
-  options: Array<{ value: string; label: string }>,
-  applyMode: SettingMetadata['applyMode'] = 'immediate',
-  visibility: SettingMetadata['visibility'] = 'basic',
-): SettingMetadata => ({
-  key,
-  label,
-  description,
-  scope: 'global',
-  storage,
-  defaultValue,
-  applyMode,
-  visibility,
-  riskLevel: 'low',
-  constraints: { type: 'enum', options },
-});
-
-const orchNumber = (
-  key: string,
-  label: string,
-  description: string,
-  defaultValue: number,
-  min: number,
-  max?: number,
-): SettingMetadata => ({
-  ...numberSetting(key, label, description, 'app_settings', defaultValue, min, max, 'next-run'),
-  storageKey: key,
-});
+// Re-export for backward compatibility
+export { booleanSetting, numberSetting, enumSetting, orchNumber };
 
 export const settingsRegistry: Record<string, SettingMetadata> = {
   streaming: booleanSetting(
@@ -92,6 +18,20 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     '逐字显示 AI 回复，而非等待全部生成完成',
     'app_settings',
     true,
+  ),
+  chat_display_mode: enumSetting(
+    'chat_display_mode',
+    'settings.basic.chat_display_mode_label',
+    'settings.basic.chat_display_mode_desc',
+    'preference',
+    'trace',
+    [
+      { value: 'detail', label: 'settings.basic.chat_display_mode_detail' },
+      { value: 'trace', label: 'settings.basic.chat_display_mode_trace' },
+      { value: 'result', label: 'settings.basic.chat_display_mode_result' },
+    ],
+    'immediate',
+    'basic',
   ),
   autoMemory: booleanSetting(
     'autoMemory',
