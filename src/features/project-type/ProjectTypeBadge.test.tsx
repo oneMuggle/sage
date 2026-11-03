@@ -279,12 +279,12 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     expect(screen.getByTestId('studio-profile-to-milestone-e-1')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('studio-profile-seed-presets-btn'));
     expect(screen.getByTestId('studio-profile-seed-presets-btn')).toHaveTextContent(
-      '已写入推荐画像',
+      '已写入推荐记忆',
     );
     fireEvent.click(screen.getByTestId('studio-profile-pillar-fill-all-btn'));
     fireEvent.click(screen.getByTestId('studio-profile-seed-pillars-btn'));
     expect(screen.getByTestId('studio-profile-seed-pillars-btn')).toHaveTextContent(
-      '已写入支柱 L3',
+      '已存支柱到项目记忆',
     );
     fireEvent.click(screen.getByTestId('studio-profile-copy-draft-btn'));
     fireEvent.click(screen.getByTestId('studio-profile-clear-draft-btn'));
@@ -337,7 +337,7 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('knowledge-invert-selection-btn'));
     fireEvent.click(screen.getByTestId('knowledge-category-filter-all'));
     fireEvent.click(screen.getByTestId('knowledge-batch-to-constraint-btn'));
-    expect(screen.getByTestId('knowledge-to-constraint-0')).toHaveTextContent('已转 L2 约束');
+    expect(screen.getByTestId('knowledge-to-constraint-0')).toHaveTextContent('已转为项目规则');
     fireEvent.click(screen.getByTestId('knowledge-batch-to-l4-btn'));
     expect(screen.getByTestId('knowledge-to-l4-0')).toHaveTextContent('已保存');
   });

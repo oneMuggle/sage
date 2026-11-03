@@ -213,7 +213,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <div className="text-xs font-semibold text-foreground">2. 五层上下文注入与护栏重点</div>
+              <div className="text-xs font-semibold text-foreground">2. 项目上下文注入与护栏重点</div>
             </div>
             <ul className="space-y-1 text-xs text-muted-foreground">
               {blueprint.contextPillars.map((pillar, idx) => (
@@ -323,7 +323,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                 }}
                 className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
               >
-                {savedBlueprintL4 ? '已存蓝图 L4' : '当前蓝图存 L4'}
+                {savedBlueprintL4 ? '已存蓝图到资料' : '当前蓝图存为资料'}
               </button>
               <button
                 type="button"
@@ -344,7 +344,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                             content: `${bp.label} 蓝图规范 (${activeProject.name})：目录=${bp.directories.join('/, ')}/；阶段=${bp.stages.map((s) => s.label).join('→')}`,
                             importance: 8,
                             sourceMessageIds: [],
-                            reasoning: '多形态蓝图工作台一键沉淀当前蓝图至 L3 画像',
+                            reasoning: '多形态蓝图工作台一键保存当前蓝图到项目记忆',
                           },
                         ],
                       });
@@ -355,7 +355,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                 }}
                 className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
               >
-                {savedBlueprintL3 ? '已存蓝图 L3' : '当前蓝图存 L3'}
+                {savedBlueprintL3 ? '已存蓝图到项目记忆' : '当前蓝图存到项目记忆'}
               </button>
               <button
                 type="button"
@@ -436,7 +436,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                 }}
                 className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
               >
-                {convertedBlueprintL2 ? '已转蓝图L2' : '当前蓝图转L2'}
+                {convertedBlueprintL2 ? '已转蓝图规则' : '当前蓝图转规则'}
               </button>
               <button
                 type="button"

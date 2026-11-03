@@ -1,8 +1,8 @@
 /**
- * 项目概览 Widget (2026-09-25; Phase P14 多态版本保护与阶段状态卡片 2026-10-12; Phase P20 L1 宪章就绪度与一键快照留痕 2026-10-12; Phase P28 快捷任务拆解入口与概览导出; Phase P32 阶段快捷切换胶囊与 L1 宪章一键初始化 2026-10-13)
+ * 项目概览 Widget (2026-09-25; Phase P14 多态版本保护与阶段状态卡片 2026-10-12; Phase P20 项目总纲就绪度与一键快照留痕 2026-10-12; Phase P28 快捷任务拆解入口与概览导出; Phase P32 阶段快捷切换胶囊与 项目总纲一键初始化 2026-10-13)
  *
  * 项目类型分类系统 - Phase 4.3 & Phase P32
- * 根据项目类型与版本控制策略显示对应的概览 Widget、L1 宪章就绪状态与一键初始化、阶段快捷切换、快捷快照按钮、AI 任务拆解入口及概览 Markdown 复制
+ * 根据项目类型与版本控制策略显示对应的概览 Widget、项目总纲就绪状态与一键初始化、阶段快捷切换、快捷快照按钮、AI 任务拆解入口及概览 Markdown 复制
  */
 
 import { FileText, History, Layers, Plus, RefreshCw, Sparkles } from 'lucide-react';
@@ -282,7 +282,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                 >
-                  {savedStageProfile ? '已存到项目记忆' : '沉淀到项目记忆'}
+                  {savedStageProfile ? '已存到项目记忆' : '保存到项目记忆'}
                 </button>
                 <button
                   type="button"

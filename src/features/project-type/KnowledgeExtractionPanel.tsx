@@ -441,7 +441,7 @@ export function KnowledgeExtractionPanel({
                     className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
                   >
                     <ShieldPlus className="h-3 w-3" />
-                    选中项同步转 L2 约束
+                    选中项同步转 项目规则
                   </button>
                   <button
                     type="button"
@@ -504,7 +504,7 @@ export function KnowledgeExtractionPanel({
                     }}
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                   >
-                    选中项转 L4 资料
+                    选中项转 项目资料
                   </button>
                   <button
                     type="button"
@@ -687,10 +687,10 @@ export function KnowledgeExtractionPanel({
                           void handleConvertToConstraint(entry, idx);
                         }}
                         className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                        title="将此知识条目同步固化为 L2 项目约束"
+                        title="将此知识条目同步固化为项目规则"
                       >
                         <ShieldPlus className="h-3 w-3 text-primary" />
-                        {convertedConstraintIndices.has(idx) ? '已转 L2 约束' : '转 L2 约束'}
+                        {convertedConstraintIndices.has(idx) ? '已转为项目规则' : '转 项目规则'}
                         </button>
                       </div>
                     </div>

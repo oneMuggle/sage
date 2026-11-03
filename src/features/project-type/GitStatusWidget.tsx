@@ -326,7 +326,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                         }}
                         className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                       >
-                        {savedFilesL3 ? '已存变更 L3' : '变更存 L3'}
+                        {savedFilesL3 ? '已存变更到项目记忆' : '变更存项目记忆'}
                       </button>
                       <button
                         type="button"
@@ -383,7 +383,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                             onClick={() => void handleGuardChangedFile(f)}
                             className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-primary hover:bg-primary/10"
                           >
-                            {guardedFiles.has(f) ? '已护栏' : '+L2'}
+                            {guardedFiles.has(f) ? '已护栏' : '+规则'}
                           </button>
                           <button
                             type="button"
@@ -427,7 +427,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                             onClick={() => void handleGuardChangedFile(f)}
                             className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-primary hover:bg-primary/10"
                           >
-                            {guardedFiles.has(f) ? '已护栏' : '+L2'}
+                            {guardedFiles.has(f) ? '已护栏' : '+规则'}
                           </button>
                           <button
                             type="button"
@@ -471,7 +471,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                             onClick={() => void handleGuardChangedFile(f)}
                             className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-primary hover:bg-primary/10"
                           >
-                            {guardedFiles.has(f) ? '已护栏' : '+L2'}
+                            {guardedFiles.has(f) ? '已护栏' : '+规则'}
                           </button>
                           <button
                             type="button"
@@ -543,7 +543,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                   }}
                   className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                 >
-                  {convertedCommitsL2 ? '已转提交L2' : '提交转L2护栏'}
+                  {convertedCommitsL2 ? '已转提交规则' : '提交转规则护栏'}
                 </button>
                 <button
                   type="button"
@@ -597,7 +597,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                   }}
                   className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                 >
-                  {savedCommitsL4 ? '已存提交至 L4' : '存提交至 L4'}
+                  {savedCommitsL4 ? '已提交存为资料' : '提交存为资料'}
                 </button>
               </div>
             </div>
