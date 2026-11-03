@@ -34,6 +34,15 @@ export const chatRoutes: Record<string, CommandRoute> = {
     body: (a) => ({ enabled: a.enabled }),
   },
   create_agent: { method: 'POST', path: () => '/api/v1/agents' },
+  // M0 (2026-11-03): 删除 / 复制专家
+  delete_agent: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/agents/${encodeURIComponent(String(a.id))}`,
+  },
+  duplicate_agent: {
+    method: 'POST',
+    path: (a) => `/api/v1/agents/${encodeURIComponent(String(a.id))}/duplicate`,
+  },
   attach_chat_stream: {
     method: 'GET',
     path: (a) => `/api/v1/chat/stream/${encodeURIComponent(String(a.streamId))}`,

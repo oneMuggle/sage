@@ -114,6 +114,18 @@ class AgentRepository:
         conn.commit()
         return cursor.rowcount > 0
 
+    def delete(self, agent_id: str) -> bool:
+        """按 id 删除一个 agent。M0 (2026-11-03) 复制/删除 UI 后端支撑。
+
+        返回 True 当且仅当影响了 1 行。上层路由负责保护 ``primary`` 等内置
+        专家不被误删 —— repo 层不做语义校验, 只忠实执行 SQL。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
     def update(self, agent_id: str, profile: Dict[str, Any]) -> bool:
         """部分更新 (PR-4 用)。仅写传入的字段, id 不可改。
 

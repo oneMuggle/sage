@@ -10,6 +10,8 @@ import pytest
 from fastapi import HTTPException
 
 from backend.api.legacy_agent_routes import (
+    delete_agent,
+    duplicate_agent,
     get_agent_by_id,
     toggle_agent,
     update_agent,
@@ -40,6 +42,11 @@ class _FakeAgentRepo:
         self.enabled_set.append((agent_id, enabled))
         if agent_id in self._agents:
             self._agents[agent_id]["enabled"] = enabled
+
+    def delete(self, agent_id):
+        # M0 (2026-11-03): 删除 / 复制专家测试支撑
+        existed = self._agents.pop(agent_id, None) is not None
+        return existed
 
     def upsert(self, payload):
         self._agents[payload["id"]] = payload
@@ -125,3 +132,71 @@ def test_toggle_agent_not_found_404(fake_repo):
     with pytest.raises(HTTPException) as excinfo:
         toggle_agent("ghost", AgentToggle(enabled=True))
     assert excinfo.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# delete_agent（M0 2026-11-03）
+# ---------------------------------------------------------------------------
+
+
+def test_delete_agent_success(fake_repo):
+    out = delete_agent("coder")
+    assert out == {"ok": True, "id": "coder"}
+    assert "coder" not in fake_repo._agents
+
+
+def test_delete_agent_primary_protected_400(fake_repo):
+    with pytest.raises(HTTPException) as excinfo:
+        delete_agent("primary")
+    assert excinfo.value.status_code == 400
+    assert excinfo.value.detail["type"] == "protected_agent"
+    # primary 必须原样保留
+    assert "primary" in fake_repo._agents
+
+
+def test_delete_agent_not_found_404(fake_repo):
+    with pytest.raises(HTTPException) as excinfo:
+        delete_agent("ghost")
+    assert excinfo.value.status_code == 404
+    assert excinfo.value.detail["type"] == "agent_not_found"
+
+
+# ---------------------------------------------------------------------------
+# duplicate_agent（M0 2026-11-03）
+# ---------------------------------------------------------------------------
+
+
+def test_duplicate_agent_success(fake_repo):
+    fake_repo._agents["writer"] = {
+        "id": "writer",
+        "name": "Writer",
+        "enabled": True,
+        "system_prompt": "你是写作专家",
+        "tools": ["web_search"],
+        "memory_access": ["private"],
+        "model_config": {"model": "m1", "temperature": 0.7, "max_tokens": 0},
+        "max_iterations": 20,
+        "updated_at": 123,
+    }
+    out = duplicate_agent("writer")
+    assert out["id"].startswith("writer-copy-")
+    assert out["name"] == "Writer (副本)"
+    assert out["enabled"] is False
+    # 内容原样复制
+    assert out["system_prompt"] == "你是写作专家"
+    assert out["tools"] == ["web_search"]
+    assert out["memory_access"] == ["private"]
+    assert out["model_config"]["model"] == "m1"
+    # updated_at 被 upsert 重填（fake 的 upsert 不重填，但残留的旧值必须被清掉
+    # 再由真实 repo 填新值 —— 这里只断言不继承源的 123）
+    assert out.get("updated_at") != 123
+    # 源 agent 不受影响
+    assert fake_repo._agents["writer"]["id"] == "writer"
+    assert fake_repo._agents["writer"]["enabled"] is True
+
+
+def test_duplicate_agent_not_found_404(fake_repo):
+    with pytest.raises(HTTPException) as excinfo:
+        duplicate_agent("ghost")
+    assert excinfo.value.status_code == 404
+    assert excinfo.value.detail["type"] == "agent_not_found"

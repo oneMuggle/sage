@@ -216,6 +216,82 @@ def create_agent(data: AgentCreate):
     return repo.get(data.id)
 
 
+@router.delete("/agents/{agent_id}")
+@with_db_lock
+def delete_agent(agent_id: str):
+    """删除一个 agent（M0 2026-11-03）。
+
+    - 200 + ``{ok: true, id: "<id>"}``
+    - 400 + ``type: protected_agent`` —— ``primary`` 等内置专家不可删
+    - 404 + ``type: agent_not_found`` —— id 不存在
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    if agent_id == "primary":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "type": "protected_agent",
+                "message": "主助手 (primary) 不可删除",
+            },
+        )
+
+    repo = AgentRepository()
+    if repo.get(agent_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "type": "agent_not_found",
+                "message": f"agent {agent_id!r} 不存在",
+            },
+        )
+
+    repo.delete(agent_id)
+    return {"ok": True, "id": agent_id}
+
+
+@router.post("/agents/{agent_id}/duplicate")
+@with_db_lock
+def duplicate_agent(agent_id: str):
+    """复制一个 agent（M0 2026-11-03）。
+
+    新 id = ``{原id}-copy-{毫秒时间戳}``；新 name = ``{原name} (副本)``；
+    默认 ``enabled=False``（避免新专家立刻进入聊天选择器）；其余字段
+    （system_prompt / tools / memory_access / model_config / max_iterations /
+    role / description）原样复制。
+
+    - 200 + 完整新 profile
+    - 404 + ``type: agent_not_found`` —— 源 id 不存在
+    """
+    import time as _time
+
+    from backend.data.agent_repo import AgentRepository
+
+    repo = AgentRepository()
+    source = repo.get(agent_id)
+    if source is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "type": "agent_not_found",
+                "message": f"agent {agent_id!r} 不存在",
+            },
+        )
+
+    suffix = int(_time.time() * 1000)
+    new_id = f"{agent_id}-copy-{suffix}"
+    new_profile = {
+        **source,
+        "id": new_id,
+        "name": f"{source.get('name', agent_id)} (副本)",
+        "enabled": False,
+    }
+    # 清掉源 updated_at —— upsert 会自动填新的
+    new_profile.pop("updated_at", None)
+    repo.upsert(new_profile)
+    return repo.get(new_id)
+
+
 @router.post("/agents/import-files")
 @with_db_lock
 def import_agents_files():
@@ -226,6 +302,7 @@ def import_agents_files():
     - 解析失败的单文件计入 errors，绝不 5xx
     """
     from backend.agents.agents_files import import_agents_from_files
+
 
     result = import_agents_from_files()
     return {"ok": True, **result}

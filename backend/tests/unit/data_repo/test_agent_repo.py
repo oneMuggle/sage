@@ -135,6 +135,27 @@ def test_updated_at_bumps_on_update(repo: AgentRepository) -> None:
 
 
 # ---------------------------------------------------------------------------
+# delete（M0 2026-11-03）
+# ---------------------------------------------------------------------------
+
+
+def test_delete_existing_agent_returns_true(repo: AgentRepository) -> None:
+    repo.upsert(_profile())
+    assert repo.delete("coder") is True
+    assert repo.get("coder") is None
+
+
+def test_delete_missing_agent_returns_false(repo: AgentRepository) -> None:
+    assert repo.delete("ghost") is False
+
+
+def test_delete_is_idempotent_on_second_call(repo: AgentRepository) -> None:
+    repo.upsert(_profile())
+    assert repo.delete("coder") is True
+    assert repo.delete("coder") is False
+
+
+# ---------------------------------------------------------------------------
 # seed
 # ---------------------------------------------------------------------------
 
