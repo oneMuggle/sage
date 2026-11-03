@@ -122,6 +122,8 @@ export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';
 export { skillDraftsApi } from './skillDraftsApi';
 export { skillsApi } from './skillsApi';
+// M1-E (2026-11-03): 专家包导入/导出走专用 preload 桥（不重复走 invoke）
+export { specialistApi } from './specialistApi';
 import * as windowControlsClient from './windowControlsClient';
 export const windowControls = windowControlsClient.windowControls;
 export const getWindowControlsBridge = windowControlsClient.getWindowControlsBridge;

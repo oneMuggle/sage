@@ -45,6 +45,10 @@ const ScheduledTasks = lazy(() =>
   import('./pages/ScheduledTasks').then((m) => ({ default: m.ScheduledTasks })),
 );
 const Skills = lazy(() => import('./pages/Skills').then((m) => ({ default: m.default })));
+// M1-E (2026-11-03): 专家画廊（独立于智能体页，面向「挑专家去工作」场景）
+const Specialists = lazy(() =>
+  import('./pages/Specialists').then((m) => ({ default: m.Specialists })),
+);
 const Help = lazy(() => import('./pages/Help').then((m) => ({ default: m.Help })));
 // Phase 1.9 (2026-10-29): 用户反馈双向会话页
 const FeedbackHub = lazy(() =>
@@ -268,6 +272,7 @@ function App() {
             <Route path="settings" element={<Settings />} />
             <Route path="memory" element={<Memory />} />
             <Route path="agents" element={<Agents />} />
+            <Route path="specialists" element={<Specialists />} />
             <Route path="skills" element={<Skills />} />
             <Route path="office" element={<Office />} />
             <Route path="projects/governance/:projectId" element={<ProjectGovernance />} />

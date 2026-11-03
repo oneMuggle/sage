@@ -33,6 +33,9 @@ _VALID_AGENT_ROLES = {
     "writer",
     "slide-deck-creator",
     "reviewer",
+    # M1-E (2026-11-03): 专家画廊创建向导使用 role=specialist；
+    # 导入器（specialist_importer.py）已直接写入该值。
+    "specialist",
 }
 
 #: M1 (2026-11-03) 专家权限模式白名单。
