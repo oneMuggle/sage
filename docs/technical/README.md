@@ -104,6 +104,7 @@
 | 125  | [思考过程展示档位](./125-thinking-display-modes.md) | detail / trace / result 三档 + 消息/会话/全局三级作用域；`DisplayContract` 渲染契约 + `useSyncExternalStore` 订阅；三级存储（sessionStorage 双写 + preference singleton） |
 | 126  | [Playbook 文档导入与分享链接](./126-playbook-import-share.md) | Word/PDF/MD/PPTX → 解析 → LLM/确定性草案预览 → 确认绑定（`POST /playbooks/import/document` 只预览不写库）+ `playbook_shares` token 分享链路（只读 / 默认 7 天 / 过期 410）+ HashRouter 落地页 `/share/playbook/{token}` 导入或存库 + 术语去技术化（L1–L4 → 规则） |
 | 127  | [端点思考参数透传](./127-reasoning-params-passthrough.md) | per-endpoint `reasoningEffort`/`thinkingBudget` 九节点链路：表单 → 前后端双白名单 → useChat → relay snake 往返 → llm_client 上游请求体；值域语义（null/0/-1）+ 契约测试反漂移 |
+| 128  | [默认本地时区](./128-timezone-default-local.md) | 日志/趋势/调度/前端渲染统一本地时区，失败回退 Asia/Shanghai (+08:00)；`localtime` 解析链（env → TZ → dateutil → 回退）+ naive/aware 防御 + APScheduler `timezone=` + `formatLocalTime` 封装 |
 
 ---
 
