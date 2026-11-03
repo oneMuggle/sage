@@ -567,7 +567,7 @@ async def import_specialist(file: UploadFile) -> dict:
 **目标**：专家画廊 + 技能作用域 fail-closed
 
 **任务**：
-- [ ] `agents` 表扩展字段 + migration 版本化
+- [x] `agents` 表扩展字段 + migration 版本化
 - [ ] `/specialists` 画廊、创建向导、六段编辑器、预览与试聊
 - [ ] 技能允许集在四个入口 fail-closed
 - [ ] 专家私有技能目录（`~/.sage/specialists/<id>/skills/`）

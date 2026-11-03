@@ -1528,12 +1528,47 @@ class Database:
                 max_iterations INTEGER NOT NULL DEFAULT 10,
                 enabled INTEGER NOT NULL DEFAULT 1,
                 description TEXT NOT NULL DEFAULT '',
+                skills TEXT NOT NULL DEFAULT '[]',
+                knowledge_bindings TEXT NOT NULL DEFAULT '[]',
+                memory_policy TEXT NOT NULL DEFAULT '{}',
+                persona_ui TEXT NOT NULL DEFAULT '{}',
+                permission_mode TEXT NOT NULL DEFAULT 'workspace_write',
+                version INTEGER NOT NULL DEFAULT 1,
+                source TEXT NOT NULL DEFAULT 'user',
                 updated_at INTEGER NOT NULL
             )
         """)
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_agents_role ON agents(role)
         """)
+        # M1 (2026-11-03) 专家卡扩展字段: 技能允许集 / 知识绑定 / 记忆策略 /
+        # 卡片 UI / 权限模式 / 版本 / 来源。新库由上表直接带出；存量库走
+        # 幂等 ALTER 补齐。全部带默认值，存量行无需回填。
+        cursor.execute("PRAGMA table_info(agents)")
+        _agent_columns = {row["name"] for row in cursor.fetchall()}
+        for _col, _ddl in (
+            ("skills", "ALTER TABLE agents ADD COLUMN skills TEXT NOT NULL DEFAULT '[]'"),
+            (
+                "knowledge_bindings",
+                "ALTER TABLE agents ADD COLUMN knowledge_bindings TEXT NOT NULL DEFAULT '[]'",
+            ),
+            (
+                "memory_policy",
+                "ALTER TABLE agents ADD COLUMN memory_policy TEXT NOT NULL DEFAULT '{}'",
+            ),
+            (
+                "persona_ui",
+                "ALTER TABLE agents ADD COLUMN persona_ui TEXT NOT NULL DEFAULT '{}'",
+            ),
+            (
+                "permission_mode",
+                "ALTER TABLE agents ADD COLUMN permission_mode TEXT NOT NULL DEFAULT 'workspace_write'",
+            ),
+            ("version", "ALTER TABLE agents ADD COLUMN version INTEGER NOT NULL DEFAULT 1"),
+            ("source", "ALTER TABLE agents ADD COLUMN source TEXT NOT NULL DEFAULT 'user'"),
+        ):
+            if _col not in _agent_columns:
+                cursor.execute(_ddl)
 
         # 语义记忆表（用于 FTS5 全文搜索）
         cursor.execute("""

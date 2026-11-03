@@ -35,6 +35,12 @@ _VALID_AGENT_ROLES = {
     "reviewer",
 }
 
+#: M1 (2026-11-03) 专家权限模式白名单。
+_VALID_PERMISSION_MODES = {"read_only", "workspace_write", "prompt", "full_access"}
+
+#: 触发专家版本号 +1 的人设/配置字段（spec §2.1：每次修改人设/知识绑定 +1）。
+_PERSONA_VERSIONED_FIELDS = ("system_prompt", "persona_ui", "knowledge_bindings", "skills")
+
 
 
 # ==================== Agent API (PR-3) ====================
@@ -111,6 +117,19 @@ def update_agent(agent_id: str, data: AgentUpdate):
             },
         )
 
+    # M1: 权限模式白名单
+    if data.permission_mode is not None and data.permission_mode not in _VALID_PERMISSION_MODES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_permission_mode",
+                "message": (
+                    f"permission_mode must be one of {sorted(_VALID_PERMISSION_MODES)}, "
+                    f"got {data.permission_mode!r}"
+                ),
+            },
+        )
+
     repo = AgentRepository()
 
     # 不存在 → 404 (update 返回 0 时区分"没字段改"和"id 不存在")
@@ -124,6 +143,13 @@ def update_agent(agent_id: str, data: AgentUpdate):
     update_payload = model_dump_compat(data, exclude_none=True)
     if "model_config_data" in update_payload:
         update_payload["model_config"] = update_payload.pop("model_config_data")
+
+    # M1: 人设/配置字段变更且调用方未显式指定 version → 自动 +1（spec §2.1）。
+    if "version" not in update_payload and any(
+        field in update_payload for field in _PERSONA_VERSIONED_FIELDS
+    ):
+        current = repo.get(agent_id)
+        update_payload["version"] = int(current.get("version", 1)) + 1
 
     repo.update(agent_id, update_payload)
     return repo.get(agent_id)
@@ -189,6 +215,19 @@ def create_agent(data: AgentCreate):
             detail={
                 "type": "invalid_max_iterations",
                 "message": f"max_iterations must be in 1..50, got {data.max_iterations}",
+            },
+        )
+
+    # M1: 权限模式白名单（与 PATCH 共用）
+    if data.permission_mode is not None and data.permission_mode not in _VALID_PERMISSION_MODES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_permission_mode",
+                "message": (
+                    f"permission_mode must be one of {sorted(_VALID_PERMISSION_MODES)}, "
+                    f"got {data.permission_mode!r}"
+                ),
             },
         )
 

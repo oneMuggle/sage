@@ -61,6 +61,15 @@ class AgentProfile:
     max_iterations: int = 10
     enabled: bool = True
     description: str = ""
+    # M1 (2026-11-03) 专家卡扩展字段。全部带默认可空值 —— 旧种子 / 旧调用方
+    # 不传时行为与 M0 一致（无技能限制 / 无知识绑定 / 默认记忆策略）。
+    skills: List[str] = field(default_factory=list)
+    knowledge_bindings: List[Dict[str, Any]] = field(default_factory=list)
+    memory_policy: Dict[str, Any] = field(default_factory=dict)
+    persona_ui: Dict[str, Any] = field(default_factory=dict)
+    permission_mode: str = "workspace_write"
+    version: int = 1
+    source: str = "user"
 
     def to_dict(self) -> Dict[str, Any]:
         """导出为字典"""
@@ -75,6 +84,13 @@ class AgentProfile:
             "max_iterations": self.max_iterations,
             "enabled": self.enabled,
             "description": self.description,
+            "skills": self.skills,
+            "knowledge_bindings": self.knowledge_bindings,
+            "memory_policy": self.memory_policy,
+            "persona_ui": self.persona_ui,
+            "permission_mode": self.permission_mode,
+            "version": self.version,
+            "source": self.source,
         }
 
     @classmethod

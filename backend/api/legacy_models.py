@@ -270,6 +270,20 @@ class AgentUpdate(BaseModel):
 
     description: Optional[str] = None
 
+    # M1 (2026-11-03) 专家卡字段。permission_mode 由路由层白名单校验；
+    # version 缺省时由路由层在 persona 相关字段变更时自动 +1。
+    skills: Optional[List[str]] = None
+
+    knowledge_bindings: Optional[List[dict]] = None
+
+    memory_policy: Optional[dict] = None
+
+    persona_ui: Optional[dict] = None
+
+    permission_mode: Optional[str] = None
+
+    version: Optional[int] = None
+
 
 class AgentCreate(BaseModel):
     """POST /agents 请求体（US-4 角色可扩展）。
@@ -290,6 +304,12 @@ class AgentCreate(BaseModel):
     max_iterations: Optional[int] = None
     enabled: Optional[bool] = None
     description: Optional[str] = None
+    # M1 (2026-11-03) 专家卡字段，默认值见 database.py 表定义 / 路由层。
+    skills: Optional[List[str]] = None
+    knowledge_bindings: Optional[List[dict]] = None
+    memory_policy: Optional[dict] = None
+    persona_ui: Optional[dict] = None
+    permission_mode: Optional[str] = None
 
 
 

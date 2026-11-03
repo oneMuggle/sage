@@ -10,13 +10,14 @@ import pytest
 from fastapi import HTTPException
 
 from backend.api.legacy_agent_routes import (
+    create_agent,
     delete_agent,
     duplicate_agent,
     get_agent_by_id,
     toggle_agent,
     update_agent,
 )
-from backend.api.legacy_models import AgentToggle, AgentUpdate
+from backend.api.legacy_models import AgentCreate, AgentToggle, AgentUpdate
 
 pytestmark = pytest.mark.unit
 
@@ -200,3 +201,60 @@ def test_duplicate_agent_not_found_404(fake_repo):
         duplicate_agent("ghost")
     assert excinfo.value.status_code == 404
     assert excinfo.value.detail["type"] == "agent_not_found"
+
+
+# ---------------------------------------------------------------------------
+# M1 (2026-11-03) 专家卡字段：permission_mode 校验 + version 自动递增
+# ---------------------------------------------------------------------------
+
+
+def test_update_agent_invalid_permission_mode_422(fake_repo):
+    with pytest.raises(HTTPException) as excinfo:
+        update_agent("primary", AgentUpdate(permission_mode="hacker"))
+    assert excinfo.value.status_code == 422
+    assert excinfo.value.detail["type"] == "invalid_permission_mode"
+
+
+def test_update_agent_valid_permission_mode_persisted(fake_repo):
+    out = update_agent("primary", AgentUpdate(permission_mode="read_only"))
+    assert out["permission_mode"] == "read_only"
+
+
+def test_update_agent_bumps_version_when_persona_changes(fake_repo):
+    fake_repo._agents["primary"]["version"] = 4
+    out = update_agent("primary", AgentUpdate(system_prompt="新的写作人设"))
+    assert out["version"] == 5
+
+
+def test_update_agent_explicit_version_wins(fake_repo):
+    fake_repo._agents["primary"]["version"] = 4
+    out = update_agent("primary", AgentUpdate(persona_ui={"tagline": "x"}, version=9))
+    assert out["version"] == 9
+
+
+def test_update_agent_non_persona_change_keeps_version(fake_repo):
+    fake_repo._agents["primary"]["version"] = 4
+    out = update_agent("primary", AgentUpdate(max_iterations=20))
+    assert out["version"] == 4
+
+
+def test_create_agent_invalid_permission_mode_422(fake_repo):
+    with pytest.raises(HTTPException) as excinfo:
+        create_agent(AgentCreate(id="newbie", name="Newbie", permission_mode="hacker"))
+    assert excinfo.value.status_code == 422
+    assert excinfo.value.detail["type"] == "invalid_permission_mode"
+
+
+def test_create_agent_with_specialist_fields(fake_repo):
+    out = create_agent(
+        AgentCreate(
+            id="writer-m1",
+            name="Writer",
+            skills=["writing"],
+            memory_policy={"write_scope": "specialist"},
+            permission_mode="prompt",
+        )
+    )
+    assert out["skills"] == ["writing"]
+    assert out["memory_policy"] == {"write_scope": "specialist"}
+    assert out["permission_mode"] == "prompt"

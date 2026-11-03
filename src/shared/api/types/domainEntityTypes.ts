@@ -352,6 +352,20 @@ export interface AgentProfile {
   enabled: boolean;
   /** 后端 PR-3 起返回; PR-4 PATCH 后被刷新 */
   updated_at?: number;
+  /** M1 (2026-11-03) 专家卡扩展字段 — 技能允许集（支持 `plugin__<name>__*` 通配） */
+  skills?: string[];
+  /** M1 知识绑定列表（M2 启用检索） */
+  knowledge_bindings?: Array<Record<string, unknown>>;
+  /** M1 记忆读写策略 */
+  memory_policy?: Record<string, unknown>;
+  /** M1 卡片 UI：头像 / tagline / 开场白 / 推荐提示 */
+  persona_ui?: Record<string, unknown>;
+  /** M1 权限模式 */
+  permission_mode?: 'read_only' | 'workspace_write' | 'prompt' | 'full_access';
+  /** M1 专家版本号（人设/知识绑定变更时 +1） */
+  version?: number;
+  /** M1 来源：builtin / user / imported */
+  source?: 'builtin' | 'user' | 'imported';
 }
 
 /**
@@ -361,7 +375,7 @@ export interface AgentProfile {
  * 形状匹配 Tauri `AgentUpdateRequest` (src-tauri/src/models.rs:134),
  * 后端再映射到 Pydantic `AgentUpdate` 做白名单/范围校验。
  *
- * 注: 仅暴露 9 个允许字段，不含 `id` (id 不可变, 见 agent_repo.py 注释)
+ * 注: 仅暴露允许字段，不含 `id` (id 不可变, 见 agent_repo.py 注释)
  * 与 `updated_at` (DB 自动维护)。
  */
 export interface AgentUpdate {
@@ -374,6 +388,13 @@ export interface AgentUpdate {
   max_iterations?: number;
   enabled?: boolean;
   description?: string;
+  // M1 (2026-11-03) 专家卡字段
+  skills?: string[];
+  knowledge_bindings?: Array<Record<string, unknown>>;
+  memory_policy?: Record<string, unknown>;
+  persona_ui?: Record<string, unknown>;
+  permission_mode?: AgentProfile['permission_mode'];
+  version?: number;
 }
 
 /** POST /agents 请求体（US-4 角色可扩展）。 */
@@ -388,6 +409,12 @@ export interface AgentCreate {
   maxIterations?: number;
   enabled?: boolean;
   description?: string;
+  // M1 (2026-11-03) 专家卡字段
+  skills?: string[];
+  knowledgeBindings?: Array<Record<string, unknown>>;
+  memoryPolicy?: Record<string, unknown>;
+  personaUi?: Record<string, unknown>;
+  permissionMode?: AgentProfile['permission_mode'];
 }
 
 // ─── Scheduled Tasks (Phase 8) ───────────────────────────────
