@@ -90,6 +90,7 @@ vi.mock('electron', () => ({
     getVersion: () => mockAppVersion,
     relaunch: vi.fn(),
     exit: vi.fn(),
+    quit: vi.fn(),
   },
   BrowserWindow: vi.fn(),
 }));
@@ -828,13 +829,20 @@ describe('Update System Integration', () => {
       const { installDir } = useTempInstallDir();
       await fs.mkdir(installDir, { recursive: true });
 
-      // Mock spawn: 记录安装包路径并模拟退出码 0
+      // Mock spawn: emit 'spawn' via once(); provide unref(). Production code
+      // awaits waitForInstallerSpawn(installer) — it does NOT wait for 'exit'
+      // (the installer terminates this process first, which would deadlock).
       const spawnCalls: Array<{ file: string; args: string[] }> = [];
-      const mockSpawn = vi.fn().mockImplementation(() => ({
-        on: (event: string, callback: (code: number) => void) => {
-          if (event === 'exit') setTimeout(() => callback(0), 0);
-        },
-      }));
+      const mockSpawn = vi.fn().mockImplementation((file: string, args: string[]) => {
+        spawnCalls.push({ file, args });
+        return {
+          once: (event: string, callback: () => void) => {
+            if (event === 'spawn') setTimeout(callback, 0);
+            return undefined;
+          },
+          unref: () => {},
+        };
+      });
       vi.doMock('child_process', () => ({ spawn: mockSpawn }));
 
       // 重新导入以拾取 spawn mock
@@ -843,11 +851,13 @@ describe('Update System Integration', () => {
 
       await freshManager.rollback('auto-rollback:health-check-failed');
 
-      // 断言: 用 last-known-good 的 1.0.0 包静默重装 + 重启
+      // 断言: 用 last-known-good 的 1.0.0 包静默重装；--updated + --force-run
+      // 让安装器在完成后自行拉起新版本，本进程只需 quit。
       expect(mockSpawn).toHaveBeenCalled();
       const [spawnedFile, spawnedArgs] = mockSpawn.mock.calls[0];
       expect(spawnedFile).toContain('Sage-Setup-1.0.0.exe');
-      expect(spawnedArgs).toContain('/S');
+      expect(spawnedArgs).toEqual(expect.arrayContaining(['--updated', '/S', '--force-run']));
+      expect(spawnedArgs.find((a: string) => a.startsWith('/D='))).toBeTruthy();
 
       // 持久化的 currentVersion 不在此处翻转 —— 重装的 1.0.0 启动后由
       // onAppStartup 的 installAttempt 对账恢复 (与真实升级流一致)。
@@ -855,11 +865,10 @@ describe('Update System Integration', () => {
       expect(state.currentVersion).toBe('2.0.0');
 
       const { app } = await import('electron');
-      expect(vi.mocked(app.relaunch)).toHaveBeenCalled();
-      expect(vi.mocked(app.exit)).toHaveBeenCalledWith(0);
+      expect(vi.mocked(app.quit)).toHaveBeenCalled();
+      expect(vi.mocked(app.relaunch)).not.toHaveBeenCalled();
       expect(installDir).toBeTruthy();
       void spawnCalls;
     });
   });
-
 });

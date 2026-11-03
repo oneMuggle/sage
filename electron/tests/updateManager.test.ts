@@ -56,6 +56,7 @@ vi.mock('electron', () => ({
     getVersion: () => '1.0.0',
     relaunch: vi.fn(),
     exit: vi.fn(),
+    quit: vi.fn(),
   },
   BrowserWindow: vi.fn(),
 }));
@@ -1042,6 +1043,7 @@ describe('UpdateManager', () => {
       const { app } = await import('electron');
       vi.mocked(app.relaunch).mockClear();
       vi.mocked(app.exit).mockClear();
+      vi.mocked(app.quit).mockClear();
     });
 
     afterEach(async () => {
@@ -1100,14 +1102,17 @@ describe('UpdateManager', () => {
 
       vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
 
-      // Mock child_process.spawn
-      const mockSpawn = vi.fn().mockReturnValue({
-        on: (event: string, callback: (code: number) => void) => {
-          if (event === 'exit') {
-            setTimeout(() => callback(0), 0);
-          }
+      // Mock child_process.spawn: emit 'spawn' via once(), and provide unref().
+      // The production code awaits waitForInstallerSpawn(installer) which
+      // listens for 'spawn' or 'error'; it does NOT wait for 'exit' (that
+      // would deadlock — the installer terminates this process first).
+      const mockSpawn = vi.fn().mockImplementation(() => ({
+        once: (event: string, callback: () => void) => {
+          if (event === 'spawn') setTimeout(callback, 0);
+          return undefined;
         },
-      });
+        unref: () => {},
+      }));
 
       vi.doMock('child_process', () => ({ spawn: mockSpawn }));
 
@@ -1120,17 +1125,20 @@ describe('UpdateManager', () => {
 
       await freshManager.rollback('test-rollback');
 
-      expect(mockSpawn).toHaveBeenCalledWith(path.resolve(`${cacheDir}/Sage-Setup-1.0.0.exe`), [
-        '/S',
-        `/D=${tempInstallDir}`,
-      ]);
-      expect(mockApp.relaunch).toHaveBeenCalled();
-      expect(mockApp.exit).toHaveBeenCalledWith(0);
+      // The new contract: detached, silent, --force-run lets the installer
+      // relaunch the NEW build itself; this process just quits.
+      expect(mockSpawn).toHaveBeenCalledWith(
+        path.resolve(`${cacheDir}/Sage-Setup-1.0.0.exe`),
+        ['--updated', '/S', '--force-run', `/D=${tempInstallDir}`],
+        { detached: true, stdio: 'ignore' },
+      );
+      expect(mockApp.quit).toHaveBeenCalled();
+      expect(mockApp.relaunch).not.toHaveBeenCalled();
 
       vi.doUnmock('child_process');
     });
 
-    it('throws when installer exits with non-zero code', async () => {
+    it('throws when installer cannot be spawned', async () => {
       const cacheDir = `${mockUserData}/updates/cache`;
       await fs.mkdir(cacheDir, { recursive: true });
       const packageContent = 'fake installer';
@@ -1161,22 +1169,24 @@ describe('UpdateManager', () => {
 
       vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
 
-      const mockSpawn = vi.fn().mockReturnValue({
-        on: (event: string, callback: (code: number) => void) => {
-          if (event === 'exit') {
-            setTimeout(() => callback(1), 0);
-          }
+      // Mock child_process.spawn: emit 'error' via once() (e.g. ENOENT /
+      // missing executable). Production awaits the same once('spawn'|'error')
+      // pair and propagates the rejection.
+      const spawnError = new Error('spawn /no/such/file ENOENT');
+      const mockSpawn = vi.fn().mockImplementation(() => ({
+        once: (event: string, callback: (err: Error) => void) => {
+          if (event === 'error') setTimeout(() => callback(spawnError), 0);
+          return undefined;
         },
-      });
+        unref: () => {},
+      }));
 
       vi.doMock('child_process', () => ({ spawn: mockSpawn }));
 
       const { UpdateManager: FreshUpdateManager } = await import('../updateManager');
       const freshManager = new FreshUpdateManager(updater);
 
-      await expect(freshManager.rollback('test-rollback')).rejects.toThrow(
-        'Installer exited with code 1',
-      );
+      await expect(freshManager.rollback('test-rollback')).rejects.toThrow('ENOENT');
 
       vi.doUnmock('child_process');
     });
@@ -1600,7 +1610,6 @@ it('rollback reaches local recovery while telemetry never settles (audit #17)', 
     });
   });
 });
-
 
 interface UpdateStateLike {
   pendingUpdate?: { sha512?: string } | null;
