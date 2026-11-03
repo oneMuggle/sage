@@ -726,7 +726,7 @@ export function PolymorphicArchetypeCards({
               </h3>
             </div>
             <span className="text-ui-2xs text-muted-foreground">
-              已沉淀 {decisions.length} 条个人知识偏好
+              已保存 {decisions.length} 条个人知识偏好
             </span>
           </div>
           <div className="flex flex-wrap gap-1.5">

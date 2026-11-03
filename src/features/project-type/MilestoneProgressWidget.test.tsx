@@ -423,7 +423,7 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('decompose-preview-btn'));
     await screen.findByTestId('decompose-node-to-l4-0');
     fireEvent.click(screen.getByTestId('decompose-node-to-l4-0'));
-    expect(screen.getByTestId('decompose-node-to-l4-0')).toHaveTextContent('已存L4');
+    expect(screen.getByTestId('decompose-node-to-l4-0')).toHaveTextContent('已保存');
 
     // Deselect second milestone node and apply only first node
     fireEvent.click(screen.getByTestId('decompose-node-checkbox-1'));
@@ -566,7 +566,7 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('milestone-summary-save-l3-btn'));
     expect(screen.getByTestId('milestone-summary-save-l3-btn')).toHaveTextContent('已存进度 L3');
     fireEvent.click(screen.getByTestId('milestone-summary-save-l4-btn'));
-    expect(screen.getByTestId('milestone-summary-save-l4-btn')).toHaveTextContent('已存 L4');
+    expect(screen.getByTestId('milestone-summary-save-l4-btn')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('milestone-summary-active-to-l2-btn'));
     expect(screen.getByTestId('milestone-summary-active-to-l2-btn')).toHaveTextContent('已转 L2');
     fireEvent.click(screen.getByTestId('milestone-summary-to-constraint-m-overdue-1'));
@@ -574,9 +574,9 @@ describe('MilestoneProgressWidget', () => {
       '已保存',
     );
     fireEvent.click(screen.getByTestId('milestone-summary-to-l3-m-overdue-1'));
-    expect(screen.getByTestId('milestone-summary-to-l3-m-overdue-1')).toHaveTextContent('已存L3');
+    expect(screen.getByTestId('milestone-summary-to-l3-m-overdue-1')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('milestone-summary-to-l4-m-overdue-1'));
-    expect(screen.getByTestId('milestone-summary-to-l4-m-overdue-1')).toHaveTextContent('已存L4');
+    expect(screen.getByTestId('milestone-summary-to-l4-m-overdue-1')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('milestone-summary-complete-active-btn'));
 
     // L2 preset click
@@ -701,7 +701,7 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByTestId('decompose-total-days-badge')).toHaveTextContent('预计总工期 5 天');
     fireEvent.click(screen.getByTestId('decompose-save-reasoning-profile-btn'));
     expect(screen.getByTestId('decompose-save-reasoning-profile-btn')).toHaveTextContent(
-      '已沉淀至 L3',
+      '已保存到 AI 记忆',
     );
     fireEvent.click(screen.getByTestId('decompose-batch-to-constraint-btn'));
     expect(screen.getByTestId('decompose-batch-to-constraint-btn')).toHaveTextContent(
@@ -710,11 +710,11 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('decompose-batch-to-l3-btn'));
     expect(screen.getByTestId('decompose-batch-to-l3-btn')).toHaveTextContent('已批量存 L3');
     fireEvent.click(screen.getByTestId('decompose-save-plan-l4-btn'));
-    expect(screen.getByTestId('decompose-save-plan-l4-btn')).toHaveTextContent('已存为 L4');
+    expect(screen.getByTestId('decompose-save-plan-l4-btn')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('decompose-node-to-constraint-0'));
     expect(screen.getByTestId('decompose-node-to-constraint-0')).toHaveTextContent('已转 L2');
     fireEvent.click(screen.getByTestId('decompose-node-to-l3-0'));
-    expect(screen.getByTestId('decompose-node-to-l3-0')).toHaveTextContent('已存L3');
+    expect(screen.getByTestId('decompose-node-to-l3-0')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('decompose-stage-filter-all'));
 
     unmount();
@@ -752,9 +752,9 @@ describe('MilestoneProgressWidget', () => {
       '已转 L2 约束',
     );
     fireEvent.click(screen.getByTestId('milestone-editor-save-l4-btn'));
-    expect(screen.getByTestId('milestone-editor-save-l4-btn')).toHaveTextContent('已存 L4');
+    expect(screen.getByTestId('milestone-editor-save-l4-btn')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('milestone-editor-save-l3-btn'));
-    expect(screen.getByTestId('milestone-editor-save-l3-btn')).toHaveTextContent('已沉淀 L3');
+    expect(screen.getByTestId('milestone-editor-save-l3-btn')).toHaveTextContent('已保存');
   });
 
   it('supports MilestoneManager keyword search, overdue warning filter, and batch complete in-progress milestones (Phase P33)', async () => {
@@ -818,10 +818,10 @@ describe('MilestoneProgressWidget', () => {
       '已保存',
     );
     fireEvent.click(screen.getByTestId('milestone-to-l4-ms-p33-overdue'));
-    expect(screen.getByTestId('milestone-to-l4-ms-p33-overdue')).toHaveTextContent('已存L4');
+    expect(screen.getByTestId('milestone-to-l4-ms-p33-overdue')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('milestone-promote-profile-ms-p33-overdue'));
     expect(screen.getByTestId('milestone-promote-profile-ms-p33-overdue')).toHaveTextContent(
-      '已存L3',
+      '已保存',
     );
     fireEvent.click(screen.getByTestId('milestone-copy-single-ms-p33-overdue'));
 

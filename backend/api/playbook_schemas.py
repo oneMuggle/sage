@@ -236,6 +236,51 @@ class PlaybookEventAggregateResponse(BaseModel):
     total: int = 0
 
 
+class PlaybookDocumentImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filename: str = Field(min_length=1, max_length=256)
+    content_base64: str
+    project_id: Optional[str] = Field(default=None, max_length=128)
+    use_llm: bool = True
+
+
+class PlaybookDocumentImportResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    playbook: Dict[str, Any]
+    source_doc: str
+    rationale: str
+    llm_available: bool
+    source: str
+
+
+class PlaybookShareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expiry_days: int = 7
+
+
+class PlaybookShareResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str
+    playbook_id: str
+    playbook_name: str
+    expires_at: int
+    share_url: str
+
+
+class PlaybookSharedResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    playbook_id: str
+    playbook_name: str
+    spec: Dict[str, Any]
+    shared_at: int
+    expires_at: int
+
+
 __all__ = [
     "BuiltinPlaybookListResponse",
     "BuiltinPlaybookResponse",
@@ -247,6 +292,8 @@ __all__ = [
     "PlaybookAuthorPreviewResponse",
     "PlaybookBindRequest",
     "PlaybookCurrentResponse",
+    "PlaybookDocumentImportRequest",
+    "PlaybookDocumentImportResponse",
     "PlaybookEventAggregateResponse",
     "PlaybookEventModel",
     "PlaybookEventsResponse",
@@ -260,6 +307,9 @@ __all__ = [
     "PlaybookLibrarySaveRequest",
     "PlaybookLibrarySaveResponse",
     "PlaybookRuleCleanupResponse",
+    "PlaybookShareRequest",
+    "PlaybookShareResponse",
+    "PlaybookSharedResponse",
     "PlaybookStageConfirmRequest",
     "PlaybookStateUpdateRequest",
     "PlaybookVersionModel",

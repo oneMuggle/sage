@@ -434,9 +434,9 @@ describe('ProjectArchetypeStudio', () => {
     expect(await screen.findByTestId('project-advisor-card')).toBeInTheDocument();
     fireEvent.click(await screen.findByTestId('advisor-toggle-details-btn'));
     fireEvent.click(screen.getByTestId('advisor-batch-suggestions-to-constraint-btn'));
-    expect(screen.getByTestId('advisor-batch-suggestions-to-constraint-btn')).toHaveTextContent('已全部转约束');
+    expect(screen.getByTestId('advisor-batch-suggestions-to-constraint-btn')).toHaveTextContent('已全部转为规则');
     fireEvent.click(screen.getByTestId('advisor-suggestion-to-l4-0'));
-    expect(screen.getByTestId('advisor-suggestion-to-l4-0')).toHaveTextContent('已存L4');
+    expect(screen.getByTestId('advisor-suggestion-to-l4-0')).toHaveTextContent('已保存');
     expect(screen.getByTestId('wiki-generation-panel')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('studio-quick-scaffold-btn'));
     expect(screen.getByTestId('studio-quick-scaffold-btn')).toHaveTextContent('已初始化脚手架');
@@ -508,7 +508,7 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('checkpoint-quick-presets')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('business-save-style-l3-btn'));
     expect(screen.getByTestId('business-style-applied-hint')).toHaveTextContent(
-      '已沉淀文书规范至 L3',
+      '已保存文书规范到 AI 记忆',
     );
     fireEvent.click(screen.getByTestId('business-apply-style-btn'));
     await waitFor(() => {

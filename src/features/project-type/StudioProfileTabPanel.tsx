@@ -264,7 +264,7 @@ export function StudioProfileTabPanel({
                 }}
                 className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs font-medium text-foreground hover:bg-muted"
               >
-                {savedL4Bundle ? '已存为 L4 资料' : `存为 L4 资料 (${filteredEntries.length})`}
+                {savedL4Bundle ? '已保存为资料' : `保存为项目资料 (${filteredEntries.length})`}
               </button>
             )}
             <button
@@ -654,7 +654,7 @@ export function StudioProfileTabPanel({
                     }}
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                   >
-                    {l4PromotedIds.has(entry.id) ? '已存L4' : '+L4'}
+                    {l4PromotedIds.has(entry.id) ? '已保存' : '+资料'}
                   </button>
                   <button
                     type="button"

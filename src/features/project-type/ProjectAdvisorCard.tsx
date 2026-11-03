@@ -209,7 +209,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                           content: `AI 顾问健康度 ${healthScore}/100：${summary}（风险 ${risks.length} 项，改进建议 ${suggestions.length} 项）`,
                           importance: 7,
                           sourceMessageIds: [],
-                          reasoning: 'M3 项目顾问诊断摘要沉淀至 L3 画像',
+                          reasoning: 'M3 项目顾问诊断摘要保存到 AI 记忆',
                         },
                       ],
                     });
@@ -220,7 +220,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
               }}
               className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted hover:bg-bg-hover hover:text-text"
             >
-              {savedL3Report ? '已沉淀 L3' : '沉淀至 L3'}
+              {savedL3Report ? '已保存' : '保存到 AI 记忆'}
             </button>
             <button
               type="button"
@@ -240,7 +240,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
               }}
               className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted hover:bg-bg-hover hover:text-text"
             >
-              {savedL4Report ? '已存 L4' : '存为 L4 资料'}
+              {savedL4Report ? '已保存' : '保存为项目资料'}
             </button>
             <button
               type="button"
@@ -335,7 +335,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                       }}
                       className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-emerald-500"
                     >
-                      全部风险转约束
+                      全部风险转为规则
                     </button>
                     <button
                       type="button"
@@ -378,7 +378,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                                 content: `风险记录 [${r.severity}]：${r.description}${r.suggestion ? `（建议：${r.suggestion}）` : ''}`,
                                 importance: r.severity === 'high' ? 9 : 7,
                                 sourceMessageIds: [],
-                                reasoning: 'M3 AI 顾问全部风险批量沉淀至 L3 画像',
+                                reasoning: 'M3 AI 顾问全部风险批量保存到 AI 记忆',
                               })),
                             });
                           } catch {
@@ -388,7 +388,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                       }}
                       className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-primary"
                     >
-                      {batchRisksSavedL3 ? '已全部风险存 L3' : '全部风险存 L3'}
+                      {batchRisksSavedL3 ? '已全部保存到 AI 记忆' : '全部风险存 AI 记忆'}
                     </button>
                   </div>
                 </div>
@@ -410,17 +410,17 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                           onClick={() => void handleCreateRiskConstraint(risk, idx)}
                           data-testid={`advisor-risk-to-constraint-${idx}`}
                           className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-emerald-500 disabled:opacity-60"
-                          title="将此风险转化为项目 AI 防护约束"
+                          title="将此风险保存为项目规则"
                         >
                           {isGuarded ? (
                             <>
                               <Check className="h-3 w-3 text-emerald-500" />
-                              <span>已固化约束</span>
+                              <span>已保存为规则</span>
                             </>
                           ) : (
                             <>
                               <Shield className="h-3 w-3" />
-                              <span>固化为约束</span>
+                              <span>保存为规则</span>
                             </>
                           )}
                         </button>
@@ -461,7 +461,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                                       content: `风险记录 [${risk.severity}]：${risk.description}${risk.suggestion ? `（建议：${risk.suggestion}）` : ''}`,
                                       importance: risk.severity === 'high' ? 9 : 7,
                                       sourceMessageIds: [],
-                                      reasoning: 'M3 AI 顾问单条风险沉淀至 L3 画像',
+                                      reasoning: 'M3 AI 顾问单条风险保存到 AI 记忆',
                                     },
                                   ],
                                 });
@@ -472,7 +472,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                           }}
                           className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
                         >
-                          <span>{l3RiskIndices.has(idx) ? '已存L3' : '+L3'}</span>
+                          <span>{l3RiskIndices.has(idx) ? '已保存' : '+记忆'}</span>
                         </button>
                         <button
                           type="button"
@@ -492,7 +492,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                           }}
                           className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
                         >
-                          <span>{l4RiskIndices.has(idx) ? '已存L4' : '+L4'}</span>
+                          <span>{l4RiskIndices.has(idx) ? '已保存' : '+资料'}</span>
                         </button>
                         {risk.suggestion && (
                           <div className="text-ui-2xs text-muted ml-6 mt-0.5 w-full">
@@ -539,7 +539,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                       }}
                       className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-emerald-500"
                     >
-                      {batchSuggestionsConstrained ? '已全部转约束' : '全部建议转约束'}
+                      {batchSuggestionsConstrained ? '已全部转为规则' : '全部建议转为规则'}
                     </button>
                     <button
                       type="button"
@@ -582,7 +582,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                                 content: `改进决策 [${s.priority}]：${s.action}${s.reason ? `（原因：${s.reason}）` : ''}`,
                                 importance: s.priority === 'high' ? 8 : 6,
                                 sourceMessageIds: [],
-                                reasoning: 'M3 AI 顾问全部改进建议批量沉淀至 L3 画像',
+                                reasoning: 'M3 AI 顾问全部改进建议批量保存到 AI 记忆',
                               })),
                             });
                           } catch {
@@ -592,7 +592,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                       }}
                       className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-primary"
                     >
-                      {batchSuggestionsSavedL3 ? '已全部建议存 L3' : '全部建议存 L3'}
+                      {batchSuggestionsSavedL3 ? '已全部保存到 AI 记忆' : '全部建议存 AI 记忆'}
                     </button>
                   </div>
                 </div>
@@ -651,7 +651,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                         title="将此改进建议保存为项目规则"
                       >
                         <Shield className="h-3 w-3" />
-                        <span>{guardedSuggestions.has(idx) ? '已固化约束' : '固化为约束'}</span>
+                        <span>{guardedSuggestions.has(idx) ? '已保存为规则' : '保存为规则'}</span>
                       </button>
                       <button
                         type="button"
@@ -692,7 +692,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                                     content: `改进决策 [${sug.priority}]：${sug.action}${sug.reason ? `（原因：${sug.reason}）` : ''}`,
                                     importance: sug.priority === 'high' ? 8 : 6,
                                     sourceMessageIds: [],
-                                    reasoning: 'M3 AI 顾问单条建议沉淀至 L3 画像',
+                                    reasoning: 'M3 AI 顾问单条建议保存到 AI 记忆',
                                   },
                                 ],
                               });
@@ -703,7 +703,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                         }}
                         className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
                       >
-                        <span>{l3SuggestionIndices.has(idx) ? '已存L3' : '+L3'}</span>
+                        <span>{l3SuggestionIndices.has(idx) ? '已保存' : '+记忆'}</span>
                       </button>
                       <button
                         type="button"
@@ -723,7 +723,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                         }}
                         className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
                       >
-                        <span>{l4SuggestionIndices.has(idx) ? '已存L4' : '+L4'}</span>
+                        <span>{l4SuggestionIndices.has(idx) ? '已保存' : '+资料'}</span>
                       </button>
                       {onDecomposeTask && (
                         <button

@@ -1,8 +1,8 @@
 /**
- * Git 状态 Widget (2026-09-25; Phase P26 Git 状态与近期提交 Markdown 摘要一键复制 2026-10-13; Phase P32 变更文件分类过滤与一键纳入 L4 资料池 2026-10-13)
+ * Git 状态 Widget (2026-09-25; Phase P26 Git 状态与近期提交 Markdown 摘要一键复制 2026-10-13; Phase P32 变更文件分类过滤与一键保存为资料池 2026-10-13)
  *
  * 项目类型分类系统 - Phase 4.3 & Phase P32
- * Coding 项目专属：显示 Git 仓库状态、支持复制 Markdown 状态报告、按状态筛选变更文件并一键纳入 L4 资料池
+ * Coding 项目专属：显示 Git 仓库状态、支持复制 Markdown 状态报告、按状态筛选变更文件并一键保存为资料池
  */
 
 import { GitBranch, AlertCircle, CheckCircle2, RefreshCw, BookmarkPlus } from 'lucide-react';
@@ -315,7 +315,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                                     content: `工作区 Git 变更文件 (${status.current_branch || 'HEAD'})：${visibleChangedFiles.join(', ')}`,
                                     importance: 6,
                                     sourceMessageIds: [],
-                                    reasoning: 'Git 变更文件清单沉淀至 L3 画像',
+                                    reasoning: 'Git 变更文件清单保存到 AI 记忆',
                                   },
                                 ],
                               });
@@ -347,7 +347,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                         className="inline-flex items-center gap-0.5 rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
                       >
                         <BookmarkPlus className="h-2.5 w-2.5" />
-                        批量纳入 L4 ({visibleChangedFiles.length})
+                        批量保存为资料 ({visibleChangedFiles.length})
                       </button>
                     </div>
                   )}
@@ -392,7 +392,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                             className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
                           >
                             <BookmarkPlus className="h-2.5 w-2.5" />
-                            {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
+                            {ingestedFiles.has(f) ? '已纳入资料' : '+资料'}
                           </button>
                         </div>
                       </div>
@@ -436,7 +436,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                             className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
                           >
                             <BookmarkPlus className="h-2.5 w-2.5" />
-                            {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
+                            {ingestedFiles.has(f) ? '已纳入资料' : '+资料'}
                           </button>
                         </div>
                       </div>
@@ -480,7 +480,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                             className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
                           >
                             <BookmarkPlus className="h-2.5 w-2.5" />
-                            {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
+                            {ingestedFiles.has(f) ? '已纳入资料' : '+资料'}
                           </button>
                         </div>
                       </div>
@@ -563,7 +563,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                                 .join('；')}`,
                               importance: 6,
                               sourceMessageIds: [],
-                              reasoning: 'Git 最近提交沉淀至 L3 画像',
+                              reasoning: 'Git 最近提交保存到 AI 记忆',
                             },
                           ],
                         });
@@ -574,7 +574,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                   }}
                   className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                 >
-                  {savedCommitsL3 ? '已沉淀至 L3' : '沉淀提交摘要至 L3'}
+                  {savedCommitsL3 ? '已保存到 AI 记忆' : '保存提交摘要到 AI 记忆'}
                 </button>
                 <button
                   type="button"
@@ -644,7 +644,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                                     content: `Git 提交记录 [${commit.sha.slice(0, 7)}]：${commit.message} (${commit.author})`,
                                     importance: 7,
                                     sourceMessageIds: [],
-                                    reasoning: 'Git 单条提交记录沉淀至 L3 画像',
+                                    reasoning: 'Git 单条提交记录保存到 AI 记忆',
                                   },
                                 ],
                               });
@@ -655,7 +655,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                         }}
                         className="rounded border border-border bg-muted/40 px-1 py-0.2 text-ui-2xs text-muted-foreground hover:text-foreground"
                       >
-                        {commitL3Shas.has(commit.sha) ? '已存L3' : '+L3'}
+                        {commitL3Shas.has(commit.sha) ? '已保存' : '+记忆'}
                       </button>
                       <button
                         type="button"
@@ -675,7 +675,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                         }}
                         className="rounded border border-border bg-muted/40 px-1 py-0.2 text-ui-2xs text-muted-foreground hover:text-foreground"
                       >
-                        {commitL4Shas.has(commit.sha) ? '已存L4' : '+L4'}
+                        {commitL4Shas.has(commit.sha) ? '已保存' : '+资料'}
                       </button>
                       <button
                         type="button"
