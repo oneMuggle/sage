@@ -417,16 +417,30 @@ export function useChatReattachAndBtw(params: {
               if (evt.state === 'content_delta' && evt.content) {
                 acc += evt.content;
                 useChatStreamStore.getState().replaceContent(sid, messageId, acc);
+                // 2026-11-03: 重接路径同步触发 retryInfo 清除 —— 与主路径
+                // setStreamingMeta 的 auto-clear 行为一致。此前 content_delta
+                // 仅 replaceContent，导致重试横幅在内容到达后仍停留（用户
+                // 感知"思考内容出现后依然显示重试中"）。
+                useChatStreamStore.getState().setStreamingMeta(sid, messageId, {
+                  state: evt.state,
+                });
                 return;
               }
               if ((evt.state === 'reasoning_delta' || evt.state === 'reasoning') && evt.reasoning) {
                 accReasoning += evt.reasoning;
                 useChatStreamStore.getState().replaceReasoning(sid, messageId, accReasoning);
+                // 2026-11-03: reasoning 事件同样触发 retryInfo 立即清除
+                useChatStreamStore.getState().setStreamingMeta(sid, messageId, {
+                  state: evt.state,
+                });
                 return;
               }
               if (evt.state === 'reasoning_final') {
                 accReasoning = evt.reasoning ?? accReasoning;
                 useChatStreamStore.getState().replaceReasoning(sid, messageId, accReasoning);
+                useChatStreamStore.getState().setStreamingMeta(sid, messageId, {
+                  state: evt.state,
+                });
                 return;
               }
               if (evt.state === 'permission_request' && evt.permission_request) {
