@@ -388,20 +388,60 @@ export function ProjectBootstrapPanel({ projectId, onApplied }: ProjectBootstrap
         </Button>
         {result && (
           <span className="text-ui-2xs text-emerald-600" data-testid="bootstrap-result">
-            已应用 {result.applied.length} 项
+            已应用 {result.appliedItems.length || result.applied.length} 项
             {result.skipped.length > 0 ? ` · 跳过 ${result.skipped.length} 项` : ''}
             {result.errors.length > 0 ? ` · ${result.errors.length} 项失败` : ''}
           </span>
         )}
       </div>
 
-      {result && result.errors.length > 0 && (
-        <div className="space-y-1 text-ui-2xs text-amber-700">
-          {result.errors.map((item, index) => (
-            <div key={`${item.item}-${index}`}>
-              {item.item}: {item.message}
+      {result && (
+        <div className="space-y-1.5" data-testid="bootstrap-result-details">
+          {result.verification && (
+            <div className="text-ui-2xs text-muted-foreground" data-testid="bootstrap-verification">
+              复核结果：项目说明
+              {result.verification.sageMdExists ? '已生成' : '未生成'} · 项目规则{' '}
+              {result.verification.rulesCountAfter} 条 · 里程碑{' '}
+              {result.verification.milestonesCountAfter} 项
             </div>
-          ))}
+          )}
+          <details className="rounded-md border border-border bg-card p-2 text-ui-2xs">
+            <summary className="cursor-pointer text-muted-foreground">
+              查看逐项结果（已应用 {result.appliedItems.length || result.applied.length} · 跳过{' '}
+              {result.skippedItems.length || result.skipped.length} · 失败 {result.errors.length}）
+            </summary>
+            <ul className="mt-1.5 space-y-1">
+              {result.appliedItems.map((item, index) => (
+                <li key={`applied-${item.item}-${index}`} className="flex items-start gap-1.5">
+                  <span className="text-emerald-600">✓</span>
+                  <span className="font-medium text-foreground">{item.label || item.item}</span>
+                  {item.location && <span className="text-muted-foreground">· {item.location}</span>}
+                  {item.contentPreview && (
+                    <span className="truncate text-muted-foreground">· {item.contentPreview}</span>
+                  )}
+                </li>
+              ))}
+              {result.skippedItems.map((item, index) => (
+                <li key={`skipped-${item.item}-${index}`} className="flex items-start gap-1.5">
+                  <span className="text-muted-foreground">－</span>
+                  <span className="font-medium text-foreground">{item.label || item.item}</span>
+                  <span className="text-muted-foreground">
+                    · {item.reason === 'duplicate' ? '内容重复，已跳过' : '已存在，未覆盖'}
+                  </span>
+                  {item.contentPreview && (
+                    <span className="truncate text-muted-foreground">· {item.contentPreview}</span>
+                  )}
+                </li>
+              ))}
+              {result.errors.map((item, index) => (
+                <li key={`error-${item.item}-${index}`} className="flex items-start gap-1.5">
+                  <span className="text-amber-700">✗</span>
+                  <span className="font-medium text-foreground">{item.item}</span>
+                  <span className="text-amber-700">· {item.message}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
         </div>
       )}
     </div>

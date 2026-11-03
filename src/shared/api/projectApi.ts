@@ -96,13 +96,16 @@ import {
   // AI bootstrap (2026-10-29)
   type BootstrapApplyPayload,
   type BootstrapApplyResult,
+  type BootstrapAppliedItem,
   type BootstrapMilestoneSuggestion,
   type BootstrapPreviewResult,
   type BootstrapRuleSuggestion,
   type BootstrapScanResult,
   type BootstrapScanSection,
+  type BootstrapSkippedItem,
   type BootstrapSuggestionSet,
   type BootstrapSuggestResult,
+  type BootstrapVerification,
   type GitInitResult,
 } from './projectApiTypes';
 /* eslint-enable import/order */
@@ -175,6 +178,24 @@ interface BootstrapApplyWire {
   applied: string[];
   skipped: string[];
   errors: Array<{ item: string; message: string }>;
+  applied_items?: Array<{
+    item: string;
+    label?: string | null;
+    id?: string | null;
+    location?: string | null;
+    content_preview?: string | null;
+  }>;
+  skipped_items?: Array<{
+    item: string;
+    reason: string;
+    label?: string | null;
+    content_preview?: string | null;
+  }>;
+  verification?: {
+    sage_md_exists: boolean;
+    rules_count_after: number;
+    milestones_count_after: number;
+  } | null;
   git: Record<string, unknown> | null;
 }
 
@@ -315,6 +336,26 @@ function mapBootstrapApply(wire: BootstrapApplyWire): BootstrapApplyResult {
     applied: wire.applied,
     skipped: wire.skipped,
     errors: wire.errors,
+    appliedItems: (wire.applied_items ?? []).map((item) => ({
+      item: item.item,
+      label: item.label ?? null,
+      id: item.id ?? null,
+      location: item.location ?? null,
+      contentPreview: item.content_preview ?? null,
+    })),
+    skippedItems: (wire.skipped_items ?? []).map((item) => ({
+      item: item.item,
+      reason: item.reason,
+      label: item.label ?? null,
+      contentPreview: item.content_preview ?? null,
+    })),
+    verification: wire.verification
+      ? {
+          sageMdExists: wire.verification.sage_md_exists,
+          rulesCountAfter: wire.verification.rules_count_after,
+          milestonesCountAfter: wire.verification.milestones_count_after,
+        }
+      : null,
     git: wire.git,
   };
 }
@@ -403,6 +444,9 @@ export type {
   BootstrapPreviewResult,
   BootstrapApplyPayload,
   BootstrapApplyResult,
+  BootstrapAppliedItem,
+  BootstrapSkippedItem,
+  BootstrapVerification,
   BootstrapRuleSuggestion,
   BootstrapMilestoneSuggestion,
   BootstrapScanSection,

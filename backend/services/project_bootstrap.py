@@ -329,21 +329,58 @@ async def build_bootstrap_preview(
 
 
 def _update_metadata(
-    repo: ProjectRepository, project_id: str, metadata: Dict[str, Any]
+    repo: ProjectRepository,
+    project_id: str,
+    metadata: Dict[str, Any],
+    applied_items: List[Dict[str, Any]],
 ) -> List[str]:
     applied: List[str] = []
+    labels = {
+        "description": "项目描述",
+        "instructions": "项目指令",
+        "project_type": "项目类型",
+        "project_sub_type": "项目子类型",
+    }
     if "description" in metadata:
         repo.update_description(project_id, metadata.get("description"))
         applied.append("metadata.description")
+        applied_items.append(
+            {
+                "item": "metadata.description",
+                "label": labels["description"],
+                "location": "项目设置",
+            }
+        )
     if "instructions" in metadata:
         repo.update_instructions(project_id, metadata.get("instructions"))
         applied.append("metadata.instructions")
+        applied_items.append(
+            {
+                "item": "metadata.instructions",
+                "label": labels["instructions"],
+                "location": "项目设置",
+            }
+        )
     if "project_type" in metadata:
         repo.update_project_type(project_id, metadata.get("project_type"))
         applied.append("metadata.project_type")
+        applied_items.append(
+            {
+                "item": "metadata.project_type",
+                "label": labels["project_type"],
+                "location": "项目设置",
+            }
+        )
     if "project_sub_type" in metadata:
         repo.update_project_sub_type(project_id, metadata.get("project_sub_type"))
         applied.append("metadata.project_sub_type")
+        applied_items.append(
+            {
+                "item": "metadata.project_sub_type",
+                "label": labels["project_sub_type"],
+                "location": "项目设置",
+            }
+        )
     return applied
 
 
@@ -353,21 +390,39 @@ def apply_bootstrap(project: Project, accept: Dict[str, Any]) -> Dict[str, Any]:
     applied: List[str] = []
     skipped: List[str] = []
     errors: List[Dict[str, str]] = []
+    applied_items: List[Dict[str, Any]] = []
+    skipped_items: List[Dict[str, Any]] = []
     git_result: Optional[Dict[str, Any]] = None
 
     metadata = accept.get("metadata") or {}
     if metadata:
-        applied.extend(_update_metadata(repo, project.id, metadata))
+        applied.extend(
+            _update_metadata(repo, project.id, metadata, applied_items)
+        )
 
     if accept.get("sage_md"):
         content = accept.get("sage_md_content")
         root = Path(project.path)
         if (root / "SAGE.md").exists() and not accept.get("overwrite_sage_md"):
             skipped.append("sage_md")
+            skipped_items.append(
+                {
+                    "item": "sage_md",
+                    "reason": "exists",
+                    "label": "项目说明（SAGE.md）",
+                }
+            )
         else:
             try:
                 write_project_charter(project, str(content or "")[:MAX_SAGE_MD_CHARS])
                 applied.append("sage_md")
+                applied_items.append(
+                    {
+                        "item": "sage_md",
+                        "label": "项目说明（SAGE.md）",
+                        "location": str(root / "SAGE.md"),
+                    }
+                )
             except ValueError as exc:
                 errors.append({"item": "sage_md", "message": str(exc)})
 
@@ -383,8 +438,16 @@ def apply_bootstrap(project: Project, accept: Dict[str, Any]) -> Dict[str, Any]:
         normalized = _normalize(content)
         if normalized in existing:
             skipped.append("rule")
+            skipped_items.append(
+                {
+                    "item": "rule",
+                    "reason": "duplicate",
+                    "label": "项目规则",
+                    "content_preview": content[:120],
+                }
+            )
             continue
-        constraint_repo.create(
+        created_rule = constraint_repo.create(
             project_id=project.id,
             category=str(rule.get("category") or "coding_style"),
             content=content,
@@ -393,6 +456,15 @@ def apply_bootstrap(project: Project, accept: Dict[str, Any]) -> Dict[str, Any]:
         )
         existing.add(normalized)
         applied.append("rule")
+        applied_items.append(
+            {
+                "item": "rule",
+                "id": getattr(created_rule, "id", None),
+                "label": "项目规则",
+                "location": "项目规则列表",
+                "content_preview": content[:120],
+            }
+        )
 
     milestones = []
     for item in (accept.get("milestones") or [])[:MAX_MILESTONES_PER_APPLY]:
@@ -410,10 +482,24 @@ def apply_bootstrap(project: Project, accept: Dict[str, Any]) -> Dict[str, Any]:
     if milestones:
         ProjectMilestoneRepository().create_batch(project.id, milestones)
         applied.append("milestones")
+        applied_items.append(
+            {
+                "item": "milestones",
+                "label": "里程碑",
+                "location": "里程碑列表",
+            }
+        )
 
     if accept.get("allowed_paths") is not None:
         repo.update_allowed_paths(project.id, list(accept.get("allowed_paths") or []))
         applied.append("allowed_paths")
+        applied_items.append(
+            {
+                "item": "allowed_paths",
+                "label": "外部目录白名单",
+                "location": "项目设置",
+            }
+        )
 
     if accept.get("git_init"):
         if not git_available():
@@ -423,6 +509,13 @@ def apply_bootstrap(project: Project, accept: Dict[str, Any]) -> Dict[str, Any]:
             if git_result.get("initialized") or git_result.get("already_repo"):
                 repo.update_vcs_mode(project.id, "git")
                 applied.append("git_init")
+                applied_items.append(
+                    {
+                        "item": "git_init",
+                        "label": "Git 版本控制",
+                        "location": project.path,
+                    }
+                )
             elif git_result.get("error"):
                 errors.append({"item": "git_init", "message": str(git_result["error"])})
 
@@ -430,6 +523,13 @@ def apply_bootstrap(project: Project, accept: Dict[str, Any]) -> Dict[str, Any]:
         try:
             create_project_checkpoint(project, "AI 初始化基线快照")
             applied.append("initial_checkpoint")
+            applied_items.append(
+                {
+                    "item": "initial_checkpoint",
+                    "label": "基线快照",
+                    "location": ".sage/checkpoints",
+                }
+            )
         except ValueError as exc:
             errors.append({"item": "initial_checkpoint", "message": str(exc)})
 
@@ -446,12 +546,24 @@ def apply_bootstrap(project: Project, accept: Dict[str, Any]) -> Dict[str, Any]:
     }
     repo.update_bootstrap_state(project.id, json.dumps(state, ensure_ascii=False))
 
+    root = Path(project.path)
+    verification = {
+        "sage_md_exists": (root / "SAGE.md").is_file(),
+        "rules_count_after": len(constraint_repo.list_by_project(project.id)),
+        "milestones_count_after": len(
+            ProjectMilestoneRepository().list_by_project(project.id)
+        ),
+    }
+
     updated = repo.get(project.id) or project
     return {
         "project": updated.to_dict(),
         "applied": applied,
         "skipped": skipped,
+        "applied_items": applied_items,
+        "skipped_items": skipped_items,
         "errors": errors,
+        "verification": verification,
         "git": git_result,
     }
 
