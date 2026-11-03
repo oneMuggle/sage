@@ -2059,11 +2059,13 @@ class SageAgent:
                 # 仍溢出按原错误面终止。重试对生成端透明：压缩标记直接嵌在被截断
                 # 的消息里，模型可自察上下文被治理过。
                 _first_aid_attempts = 0
+                # 2026-11-03: 提到 while 外层 —— 流式→非流式回退时也要能看到
+                # 已经下发过哪些 reasoning 增量，避免整段 reasoning 被重复发送。
+                stream_reasoning_parts: List[str] = []
                 while True:
                     try:
                         if self._should_stream(self.llm_client):
                             saw_content_delta = False
-                            stream_reasoning_parts: List[str] = []
                             try:
                                 async for evt_kind, payload in self.llm_client.chat_stream_events(
                                     messages, tools=available_tools or None
@@ -2159,8 +2161,11 @@ class SageAgent:
                             ):
                                 yield retry_evt
                             # 如果 LLM 返回了 reasoning_content，yield REASONING 事件
-                            # 这允许前端展示 LLM 的思考/推理过程
-                            if response.reasoning_content:
+                            # 这允许前端展示 LLM 的思考/推理过程。
+                            # 2026-11-03: 若流式阶段已下发过增量（首个 content
+                            # 增量前失败 → 回退 chat()），此处整段重发会让前端
+                            # 追加两遍、落库的 reasoning_content 也翻倍。
+                            if response.reasoning_content and not stream_reasoning_parts:
                                 yield AgentEvent(
                                     state=AgentState.REASONING,
                                     iteration=i,

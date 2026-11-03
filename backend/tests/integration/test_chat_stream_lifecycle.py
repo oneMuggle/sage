@@ -300,6 +300,7 @@ async def test_chat_stream_producer_passes_reasoning_delta_through(tmp_db_path):
         yield AgentEvent(
             state=AgentState.REASONING_DELTA, iteration=0, reasoning="再改代码。"
         )
+        yield AgentEvent(state=AgentState.CONTENT_DELTA, iteration=0, content="正文")
         yield AgentEvent(state=AgentState.DONE, iteration=0, content="已完成")
 
     try:
@@ -321,6 +322,11 @@ async def test_chat_stream_producer_passes_reasoning_delta_through(tmp_db_path):
         assert "先读文件，" in attach_resp.text
         assert "再改代码。" in attach_resp.text
         assert "reasoning_final" not in attach_resp.text
+        # 每段增量只上一次 wire（producer 不再二次切块/重发整段）
+        assert attach_resp.text.count("先读文件，") == 1
+        assert attach_resp.text.count("再改代码。") == 1
+        # 思考必须在正文之前到达
+        assert attach_resp.text.index("先读文件，") < attach_resp.text.index("content_delta")
 
         await _drain_producer(stream_id)
         persisted = MessageRepository().get_by_session(session_id)

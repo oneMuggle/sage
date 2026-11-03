@@ -10,7 +10,7 @@
     "backend/api/playbook_routes.py": 814,
     "backend/api/wiki_routes.py": 1764,
     "backend/application/services/chat_service.py": 1263,
-    "backend/core/legacy/agent.py": 3522,
+    "backend/core/legacy/agent.py": 3527,
     "backend/core/legacy/llm_client.py": 1376,
     "backend/data/database.py": 2286,
     "backend/data/session_repo.py": 1121,
