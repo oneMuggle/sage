@@ -81,4 +81,25 @@ describe('useDisplayMode', () => {
     expect(read).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(result.current.mode).toBe('result'));
   });
+
+  it('retries the shared global read on the next subscription after a transient IPC failure', async () => {
+    // 冷启动时后端可能尚未就绪：首次读取被拒，之后恢复。
+    read.mockRejectedValueOnce(new Error('backend not ready'));
+    read.mockResolvedValue('result');
+    const first = renderHook(() => useDisplayMode('session-1', null));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // 失败时保持默认档位，且不把 loaded 置真（否则本会话永不重读）。
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(first.result.current.mode).toBe('trace');
+
+    // 新的消费者挂载（后续消息出现 / 页面重挂载）会触发第二次读取。
+    const second = renderHook(() => useDisplayMode('session-2', null));
+    await waitFor(() => expect(second.result.current.mode).toBe('result'));
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(first.result.current.mode).toBe('result');
+  });
 });

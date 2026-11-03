@@ -26,11 +26,7 @@ export function canGroupToolCalls(
   return true;
 }
 
-export function toolGroupSummary(
-  toolCalls: ToolCall[],
-  canGroup: boolean,
-  _threshold: number,
-): string {
+export function toolGroupSummary(toolCalls: ToolCall[], canGroup: boolean): string {
   if (!canGroup) return '';
   const counts = new Map<string, number>();
   for (const tc of toolCalls) {

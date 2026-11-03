@@ -25,10 +25,12 @@ async function load(): Promise<void> {
     try {
       const raw = await settingsClient.getPreferenceStrict('chat_display_mode');
       snapshot = isValidDisplayMode(raw) ? raw : DEFAULT_DISPLAY_MODE;
-    } catch {
-      /* keep the current snapshot (default or last known good) */
-    } finally {
       loaded = true;
+    } catch {
+      // 后端未就绪时 IPC 会失败：保留当前快照，不置 loaded ——
+      // 否则本会话永久停留在默认档位。下一个订阅者（新消息挂载 /
+      // 页面重挂载）或 sage:setting-changed 事件会再次触发读取。
+    } finally {
       inflight = null;
       emit();
     }

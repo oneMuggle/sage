@@ -145,7 +145,11 @@ displayModeStore.clearAll()
 - 监听 `sage:setting-changed` 自定义事件；`detail.key === 'chat_display_mode'` 时重新 IPC 读取并通知所有消费者；
 - `subscribeGlobalDisplayMode` 首次调用时触发懒加载（`ensureWired` + `load`），后续调用直接返回当前快照；
 - IPC 去重：`inflight` Promise 确保并发订阅不发起多次读取；
-- 失败降级：IPC 失败时保留上一次有效快照（首次为 `DEFAULT_DISPLAY_MODE`）。
+- 失败降级：IPC 失败时保留上一次有效快照（首次为 `DEFAULT_DISPLAY_MODE`），并且**不置 `loaded`**——
+  下一个订阅者（新消息挂载 / 页面重挂载）或 `sage:setting-changed` 事件会再次触发读取。
+  否则后端冷启动晚于聊天页挂载时，本会话会永久停留在默认档位。
+  不引入重试定时器：模块级挂起的定时器会污染消费方的全局定时器语义（如复制复位定时器的卸载断言），
+  而订阅触发已覆盖实际自愈路径。
 
 ## 5. 展开状态语义
 
@@ -208,7 +212,8 @@ displayModeStore.clearAll()
 
 - 使用 `useConfirmedPreference<DisplayMode>` 读写 preference；
 - `<select>` 三个 `<option>`（`detail` / `trace` / `result`），标签取 `chat.displayMode.*`；
-- 写入 → 后端 `setPreferenceStrict` 广播 `sage:setting-changed` → 前端 `globalDisplayModePreference.ts` 监听并重读 → 所有窗口立即更新。
+- 写入 → 后端 `setPreferenceStrict` 广播 `sage:setting-changed` → 前端 `globalDisplayModePreference.ts` 监听并重读 → **当前窗口**立即更新；
+  其他窗口不订阅该 DOM 事件（`settingsClient.notifyPreference` 只在当前窗口 `dispatchEvent`），需在下次读取（重挂载/重载）后生效。
 
 ## 7. 架构约束
 
