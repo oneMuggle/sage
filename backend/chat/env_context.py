@@ -15,7 +15,7 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from backend.tools.git_tool import _run_git
 
@@ -35,6 +35,47 @@ _PLATFORM_LABELS = {
 }
 
 _WEEKDAY_LABELS = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+
+#: 重试参数的来源标签 —— 让 LLM 区分"用户显式设的"与"回退默认的"。
+_RETRY_SOURCE_LABELS = {
+    "app_settings": "用户设置",
+    "env": "环境变量",
+    "default": "默认",
+}
+
+
+def _retry_config_lines(raw: dict) -> Dict[str, str]:
+    """构造四个重试参数的展示行（生效值 + 来源标注）。
+
+    恒定返回全部四个键 —— 未显式设置的键也要以"默认值"呈现，否则 LLM
+    会把"回退默认"误判成"未显式设置"。
+
+    取值走 ``resolve_retry_settings()``，与 ``llm_client`` 运行时同源，
+    避免摘要里的值和实际重试行为分叉。
+    """
+    from backend.core.retry_defaults import resolve_retry_settings
+
+    resolved = resolve_retry_settings(raw)
+
+    def _line(source: str, value: str) -> str:
+        label = _RETRY_SOURCE_LABELS.get(source, source)
+        return f"{value} (来源: {label})"
+
+    return {
+        "llmRetryMaxAttempts": _line(
+            resolved.sources["llmRetryMaxAttempts"], str(resolved.max_attempts)
+        ),
+        "llmRetryBaseDelayS": _line(
+            resolved.sources["llmRetryBaseDelayS"], f"{resolved.base_delay_s}s"
+        ),
+        "llmRetryMaxDelayS": _line(
+            resolved.sources["llmRetryMaxDelayS"], f"{resolved.max_delay_s}s"
+        ),
+        "llmRetryTotalBudgetS": _line(
+            resolved.sources["llmRetryTotalBudgetS"],
+            f"{resolved.total_budget_s}s",
+        ),
+    }
 
 
 def build_environment_block(workspace_path: Optional[str] = None) -> str:
@@ -110,6 +151,9 @@ def build_configuration_summary_block() -> str:
     仅暴露非敏感字段（API key / secret 等不在此出现，``app_settings``
     中的 ``endpoints`` 整块跳过）。任何失败返回空串（不注入块）。
 
+    四个 LLM 重试参数恒定列出并标注来源（用户设置 / 环境变量 / 默认），
+    避免 LLM 把"回退默认"误判成"未显式设置"。
+
     块末尾带一句"仅在用户主动询问或报告问题时才基于配置给出调整
     建议"，避免 LLM 看到配置后过度主动建议。
     """
@@ -143,10 +187,14 @@ def build_configuration_summary_block() -> str:
         "autoContext",
         # 2026-10-28: 代理上游超时（秒）—— 让 LLM 知道当前链路容忍度。
         "llmProxyTimeoutS",
-        # 2026-10-30: 自动重试总时长预算（秒，0 = 不限）—— 让 LLM 知道重试收口阈值。
-        "llmRetryTotalBudgetS",
     )
     general = {k: raw.get(k) for k in _GENERAL_KEYS if k in raw}
+    # 2026-11-03: 重试参数此前白名单只漏了三个键，LLM 看不到用户已设的值，
+    # 误判成"未显式设置"。改为恒定列出（含来源标注）。
+    try:
+        general.update(_retry_config_lines(raw))
+    except Exception as exc:  # noqa: BLE001 — 重试参数摘要失败绝不影响聊天
+        logger.debug("重试参数摘要注入跳过: %s", exc)
 
     # 编排参数：全量白名单
     _ORCH_KEYS = (

@@ -201,14 +201,25 @@ def test_configuration_block_omits_empty_sections(monkeypatch):
     assert "temperature: 0.5" in block
 
 
-def test_configuration_block_empty_payload_returns_empty(monkeypatch):
+def test_configuration_block_empty_payload_still_lists_retry_defaults(monkeypatch):
+    """空 payload 仍列出重试参数的生效值与来源。
+
+    2026-11-03: 此前空 payload 直接返回空串，LLM 看不到任何重试参数，
+    才会误判成"未显式设置"。现在恒定列出（标注"来源: 默认"）。
+    """
     _patch_settings_repo(monkeypatch, {})
-    assert build_configuration_summary_block() == ""
+    block = build_configuration_summary_block()
+    assert "llmRetryMaxAttempts: 5 (来源: 默认)" in block
+    assert "llmRetryBaseDelayS: 2.0s (来源: 默认)" in block
+    assert "llmRetryMaxDelayS: 60.0s (来源: 默认)" in block
+    assert "llmRetryTotalBudgetS: 300.0s (来源: 默认)" in block
 
 
-def test_configuration_block_non_dict_returns_empty(monkeypatch):
+def test_configuration_block_none_payload_falls_back_to_retry_defaults(monkeypatch):
+    """get_json 返回 None → 视为空 dict，重试参数仍列出。"""
     _patch_settings_repo(monkeypatch, None)
-    assert build_configuration_summary_block() == ""
+    block = build_configuration_summary_block()
+    assert "llmRetryMaxAttempts: 5 (来源: 默认)" in block
 
 
 def test_configuration_block_fail_safe_on_repo_error(monkeypatch):
@@ -231,3 +242,80 @@ def test_configuration_block_model_selections_string_form(monkeypatch):
     )
     block = build_configuration_summary_block()
     assert "chat: gpt-4o" in block
+
+
+# ---- 2026-11-03: 重试参数可见性 + 来源标注 ----
+#
+# 回归点：`_GENERAL_KEYS` 白名单此前只含 llmRetryTotalBudgetS，LLM 看不到
+# 用户已在设置页设定的另外三个键 → 结论成"未显式设置，回退到默认值"。
+
+
+_RETRY_ENV_VARS = (
+    "SAGE_LLM_RETRY_MAX_ATTEMPTS",
+    "SAGE_LLM_RETRY_BASE_DELAY_S",
+    "SAGE_LLM_RETRY_MAX_DELAY_S",
+    "SAGE_LLM_RETRY_TOTAL_BUDGET_S",
+)
+
+
+class TestRetryConfigSummary:
+    """2026-11-03 回归：重试参数必须在摘要里可见，并标注来源。"""
+
+    @pytest.fixture(autouse=True)
+    def _clean_retry_env(self, monkeypatch):
+        for name in _RETRY_ENV_VARS:
+            monkeypatch.delenv(name, raising=False)
+
+    def test_retry_keys_always_visible_with_default_source(self, monkeypatch):
+        """三个此前漏掉的重试键必须出现，且标明来自默认。"""
+        _patch_settings_repo(monkeypatch, {})
+        block = build_configuration_summary_block()
+        assert "llmRetryMaxAttempts: 5 (来源: 默认)" in block
+        assert "llmRetryBaseDelayS: 2.0s (来源: 默认)" in block
+        assert "llmRetryMaxDelayS: 60.0s (来源: 默认)" in block
+
+    def test_retry_keys_reflect_user_settings(self, monkeypatch):
+        """用户在设置页设的值必须出现在摘要里，并标注"用户设置"。"""
+        _patch_settings_repo(
+            monkeypatch,
+            {
+                "llmRetryMaxAttempts": 8,
+                "llmRetryBaseDelayS": 3.5,
+                "llmRetryMaxDelayS": 90.0,
+                "llmRetryTotalBudgetS": 420,
+            },
+        )
+        block = build_configuration_summary_block()
+        assert "llmRetryMaxAttempts: 8 (来源: 用户设置)" in block
+        assert "llmRetryBaseDelayS: 3.5s (来源: 用户设置)" in block
+        assert "llmRetryMaxDelayS: 90.0s (来源: 用户设置)" in block
+        assert "llmRetryTotalBudgetS: 420.0s (来源: 用户设置)" in block
+
+    def test_retry_key_source_env(self, monkeypatch):
+        """env 覆盖时标注"环境变量"，LLM 能看出值并非用户所设。"""
+        _patch_settings_repo(monkeypatch, {"llmRetryMaxAttempts": 8})
+        monkeypatch.setenv("SAGE_LLM_RETRY_MAX_ATTEMPTS", "20")
+        block = build_configuration_summary_block()
+        assert "llmRetryMaxAttempts: 20 (来源: 环境变量)" in block
+
+    def test_retry_summary_matches_runtime_resolver(self, monkeypatch):
+        """摘要里的值必须与运行时解析结果一致（同源，避免两处口径分叉）。"""
+        from backend.core.retry_defaults import resolve_retry_settings
+
+        payload = {"llmRetryMaxAttempts": 8, "llmRetryMaxDelayS": 90.0}
+        _patch_settings_repo(monkeypatch, payload)
+        block = build_configuration_summary_block()
+        resolved = resolve_retry_settings(payload)
+        assert f"llmRetryMaxAttempts: {resolved.max_attempts}" in block
+        assert f"llmRetryMaxDelayS: {resolved.max_delay_s}s" in block
+
+    def test_retry_summary_failure_does_not_break_block(self, monkeypatch):
+        """重试参数解析异常不得让整个配置块消失。"""
+        _patch_settings_repo(monkeypatch, {"temperature": 0.5})
+
+        def _boom(*_args, **_kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr("backend.core.retry_defaults.resolve_retry_settings", _boom)
+        block = build_configuration_summary_block()
+        assert "temperature: 0.5" in block
