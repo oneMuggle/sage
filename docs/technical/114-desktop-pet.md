@@ -107,6 +107,21 @@ FastAPI chat stream (NDJSON)
   - `GET /api/v1/scheduled/tasks`：后端没有持久「运行中」状态，只在 `last_status=failed` 且 `last_attempt` 在 10 分钟内时上报失败（带目标 `session_id`，可点回会话）。
   - 轮询失败保留上一份快照；与 Task Center 报告按 id 去重合并（Task Center 优先），总量仍限 20 条。
 
+### 3.5 多会话 Attention 与 Activity（2026-11）
+
+- **Attention**：全局、未截断的计数，字段 `attention.{needsYou,failed,running,activeTasks,total,needsYouSessionIds}`。
+  - `needsYou` = waiting 会话 + `awaiting_approval` 后台任务。
+  - `failed` = error 会话 + 最近 10 分钟内失败的背景任务。
+  - `running` = acting/thinking/retry/observing 会话；`activeTasks` = running/queued/paused/awaiting_approval 任务。
+  - `needsYouSessionIds` 按最近更新排序，最多 20 个。
+- **Activity**：每只宠物一个 `followMode`：
+  - `focus`：焦点会话活跃时跟随；焦点空闲时回落到最高优先级活跃会话；全部空闲时保留焦点会话标题。
+  - `urgent`：始终跟随最高优先级活跃会话。
+  - `pinned`：只要钉住会话存在就跟随它（即使 idle）；会话消失后回落到 focus/urgent 规则。
+- 主窗 `PetFocusBridge` 以 150ms 防抖把 `currentSessionId` 上报给主进程。
+- IPC：invoke `pet:get-states`；event `pet:focus-session`（仅主窗）、`pet:pin-session`、`pet:cycle-focus`（宠物/面板）。
+- 只读状态 API `version` 仍为 1；新增 `attention` 与每宠物 `followMode/pinnedSessionId` 为 additive 字段。
+
 ## 4. 窗口行为
 
 - `transparent` + `frame:false` + `alwaysOnTop` + `skipTaskbar` + `focusable:false`。
@@ -123,7 +138,7 @@ FastAPI chat stream (NDJSON)
 
 - 每个宠物是独立窗口，拥有自己的 `id`、动画包、大小与位置文件；节奏/气泡/提示音/减少动态/兼容模式等行为设置保持全局。
 - 默认位置从右下角向左依次错开；拖动/「回到初始位置」只影响当前宠物。
-- 所有宠物共享同一份 Agent 快照（同一状态、同一气泡），避免多窗口状态漂移。
+- 每只宠物按自己的 `followMode` 选择展示哪个会话的快照，因此同一时刻不同宠物可以显示不同会话（例如一只跟随焦点、一只紧急优先）。
 - 应用内模式按 `pets` 顺序横向排列，气泡只显示在第一只上；桌面模式每只都有气泡。
 - 设置页可添加/移除宠物（最多 3 只），导入动画包会自动赋给第一只；删除动画包会把使用它的所有宠物回落到内置包。
 
@@ -137,7 +152,7 @@ FastAPI chat stream (NDJSON)
 - 请求约定：仅 `GET`；必须携带 `Authorization: Bearer <token>`；`Host` 必须为 `127.0.0.1:<port>` 或 `localhost:<port>`（阻断 DNS rebinding）；每 IP 60 次/分钟；无 CORS 头。
 - 端点：
   - `GET /v1/health` → `{ok:true, version:1, uptimeMs}`
-  - `GET /v1/status` → 与面板同构的只读快照：动作/工具/待办/上下文/陪伴数据、`sessions ≤5`、`tasks ≤10`（不含工具错误原文）、`pets` 与 `config`。
+  - `GET /v1/status` → 与面板同构的只读快照：动作/工具/待办/上下文/陪伴数据、未截断的 `attention`（`needsYouSessionIds ≤20`）、`sessions ≤5`、`tasks ≤10`（不含工具错误原文）、`pets`（含 `followMode/pinnedSessionId`）与 `config`。
 - 示例：
   ```bash
   # port/token 从 pet-api.json 读取
@@ -151,7 +166,7 @@ FastAPI chat stream (NDJSON)
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "enabled": true,
   "displayMode": "desktop",
   "tempo": "standard",
@@ -160,16 +175,27 @@ FastAPI chat stream (NDJSON)
   "soundScenes": { "waiting": true, "error": false, "done": false },
   "showSessionTitle": false,
   "compatibilityMode": "auto",
-  "followActiveSession": true,
   "externalApi": false,
   "pets": [
-    { "id": "default", "petPack": "dafeiyu", "size": "medium" },
-    { "id": "pet-2", "petPack": "my-pack", "size": "small" }
+    {
+      "id": "default",
+      "petPack": "dafeiyu",
+      "size": "medium",
+      "followMode": "focus",
+      "pinnedSessionId": null
+    },
+    {
+      "id": "pet-2",
+      "petPack": "my-pack",
+      "size": "small",
+      "followMode": "urgent",
+      "pinnedSessionId": null
+    }
   ]
 }
 ```
 
-v1 单宠配置（顶层 `petPack`/`size`）读取时自动迁移为一只 `default` 宠物；`id` 只允许 `^[a-z0-9][a-z0-9-]{0,31}$`，重复或非法 id 会被替换，列表最多 3 只。
+v1 单宠配置（顶层 `petPack`/`size`）读取时自动迁移为一只 `default` 宠物；v2 的 `followActiveSession` 迁移为每只宠物的 `followMode`（`false` → `urgent`，`true`/缺省 → `focus`）。`id` 只允许 `^[a-z0-9][a-z0-9-]{0,31}$`，重复或非法 id 会被替换，列表最多 3 只；`pinnedSessionId` 只在该宠物 `followMode="pinned"` 时生效。
 
 配置由主进程独占写入（原子 rename），设置页经 `pet:get-config` /
 `pet:set-config` 读写，不进入 `AppSettings`，因此不影响后端 settings

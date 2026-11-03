@@ -30,6 +30,13 @@ export const PET_SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [
       'pet 桌宠 宠物 多宠物 大小 size mini small medium large huge 动画包 pack 添加 add 移除 remove',
   },
   {
+    key: 'pet_follow',
+    tab: 'pet',
+    label: '宠物跟随方式',
+    labelEn: 'Pet follow mode',
+    keywords: 'pet 桌宠 跟随 follow focus urgent pinned 钉住 焦点 紧急 多会话 session',
+  },
+  {
     key: 'pet_tempo',
     tab: 'pet',
     label: '桌宠待机节奏',

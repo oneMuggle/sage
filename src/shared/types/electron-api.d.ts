@@ -442,14 +442,18 @@ export interface ProjectElectronApiBridge {
  * Desktop pet bridge. Keep in sync with `electron/pet/types.ts`.
  * Available in both the main window (settings page) and the pet window.
  */
+export type PetFollowModeBridge = 'focus' | 'urgent' | 'pinned';
+
 export interface PetInstanceBridge {
   id: string;
   petPack: string;
   size: 'mini' | 'small' | 'medium' | 'large' | 'huge';
+  followMode: PetFollowModeBridge;
+  pinnedSessionId: string | null;
 }
 
 export interface PetConfigBridge {
-  version: 2;
+  version: 3;
   enabled: boolean;
   displayMode: 'desktop' | 'in-app' | 'both' | 'off';
   tempo: 'quiet' | 'standard' | 'lively';
@@ -458,13 +462,23 @@ export interface PetConfigBridge {
   soundScenes: { waiting: boolean; error: boolean; done: boolean };
   showSessionTitle: boolean;
   compatibilityMode: 'auto' | 'on' | 'off';
-  followActiveSession: boolean;
   externalApi: boolean;
   pets: PetInstanceBridge[];
   /** Present only in the pet window's per-instance view. */
   petId?: string;
   petPack?: string;
   size?: 'mini' | 'small' | 'medium' | 'large' | 'huge';
+  followMode?: PetFollowModeBridge;
+  pinnedSessionId?: string | null;
+}
+
+export interface PetAttentionBridge {
+  needsYou: number;
+  failed: number;
+  running: number;
+  activeTasks: number;
+  total: number;
+  needsYouSessionIds: string[];
 }
 
 export type PetTaskStatus =
@@ -529,6 +543,7 @@ export interface PetSnapshotBridge {
   activeSessions: number;
   sessions: PetSessionSummaryBridge[];
   tasks: PetTaskReportBridge[];
+  attention: PetAttentionBridge;
   updatedAt: number;
 }
 
@@ -577,10 +592,15 @@ export interface PetElectronApiBridge {
   getConfig: () => Promise<PetConfigBridge>;
   setConfig: (patch: Partial<PetConfigBridge>) => Promise<PetConfigBridge>;
   getState: () => Promise<PetSnapshotBridge>;
+  getStates: () => Promise<Record<string, PetSnapshotBridge>>;
+  onStates: (handler: (states: Record<string, PetSnapshotBridge>) => void) => UnlistenFn;
   onState: (handler: (snapshot: PetSnapshotBridge) => void) => UnlistenFn;
   onConfig: (handler: (config: PetConfigBridge) => void) => UnlistenFn;
   ready: () => void;
   openSession: (sessionId: string | null) => void;
+  reportFocusSession: (sessionId: string | null) => void;
+  pinSession: (sessionId: string | null) => void;
+  cycleFocus: () => void;
   openSettings: () => void;
   showMenu: () => void;
   dragStart: () => void;

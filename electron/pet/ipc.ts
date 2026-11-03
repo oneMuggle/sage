@@ -17,6 +17,7 @@ const PET_INVOKE_CHANNELS = [
   'pet:get-config',
   'pet:set-config',
   'pet:get-state',
+  'pet:get-states',
   'pet:list-packs',
   'pet:api-info',
   'pet:import-pack',
@@ -38,6 +39,9 @@ const PET_EVENT_CHANNELS = [
   'pet:pat',
   'pet:report-tasks',
   'pet:hide',
+  'pet:focus-session',
+  'pet:pin-session',
+  'pet:cycle-focus',
 ] as const;
 
 function sessionIdOf(payload: unknown): string | null {
@@ -86,7 +90,12 @@ export function registerPetIpc(controller: PetController): void {
 
   ipcMain.handle('pet:get-state', (evt) => {
     if (!isAllowed(evt)) throw new Error(UNAUTHORIZED);
-    return controller.getState();
+    return controller.getStateForSender(evt.sender);
+  });
+
+  ipcMain.handle('pet:get-states', (evt) => {
+    if (!isAllowed(evt)) throw new Error(UNAUTHORIZED);
+    return controller.getStates();
   });
 
   /** Both the pet window (animation assets) and settings need this list. */
@@ -187,6 +196,21 @@ export function registerPetIpc(controller: PetController): void {
 
   ipcMain.on('pet:hide', (evt) => {
     if (isPet(evt)) controller.hideForNow(evt.sender);
+  });
+
+  ipcMain.on('pet:focus-session', (evt, payload: unknown) => {
+    if (!controller.isMainSender(evt.sender)) return;
+    controller.setFocusSession(sessionIdOf(payload));
+  });
+
+  ipcMain.on('pet:pin-session', (evt, payload: unknown) => {
+    if (!isPet(evt)) return;
+    controller.pinSession(evt.sender, sessionIdOf(payload));
+  });
+
+  ipcMain.on('pet:cycle-focus', (evt) => {
+    if (!isPet(evt)) return;
+    controller.cycleFocus(evt.sender);
   });
 }
 
