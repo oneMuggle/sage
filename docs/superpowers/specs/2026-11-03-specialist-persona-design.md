@@ -552,13 +552,13 @@ async def import_specialist(file: UploadFile) -> dict:
 **目标**：让 `AgentProfile` 真正驱动运行时
 
 **任务**：
-- [ ] 实现 `compose_system_prompt()` + `/chat/stream` 使用
-- [ ] stream 链路接通 profile 模型 / temperature / max_tokens
-- [ ] 会话级专家绑定 + 聊天角色选择器
-- [ ] 新建 / 删除 / 复制专家 UI；模型改为目录下拉
-- [ ] 系统提示中的专家列表改读 SQLite，反映启用状态
-- [ ] `memory_access` 最小执行（读层过滤）
-- [ ] 修复内置 persona 工具名漂移（`terminal` → `bash`）
+- [x] 实现 `compose_system_prompt()` + `/chat/stream` 使用
+- [x] stream 链路接通 profile 模型 / temperature / max_tokens
+- [x] 会话级专家绑定 + 聊天角色选择器
+- [x] 新建 / 删除 / 复制专家 UI；模型改为目录下拉
+- [x] 系统提示中的专家列表改读 SQLite，反映启用状态
+- [x] `memory_access` 最小执行（读层过滤）
+- [x] 修复内置 persona 工具名漂移（`terminal` → `bash`）
 
 **验收**：在聊天中选择「写作专家」，其提示词、工具、模型、记忆读写策略全部生效；切回主助手无残留。
 
