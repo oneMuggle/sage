@@ -1,5 +1,5 @@
 /**
- * Phase P18 & P22 & P29: L3 项目演化记忆画像面板 (MEMORY.md)
+ * Phase P18 & P22 & P29: 项目记忆面板 (MEMORY.md)
  * 支持四形态画像推荐预设胶囊、关键词检索与类别筛选、中文类别标签、一键导出 MEMORY.md Markdown 视图与 M2 知识提炼确认后自动刷新画像
  */
 
@@ -169,7 +169,7 @@ export function StudioProfileTabPanel({
     <div className="space-y-3" data-testid="project-profile-studio-panel">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
         <div>
-          项目级冻结记忆画像（<code className="font-mono">MEMORY.md</code> · 绑定路径{' '}
+          项目级长期记忆（<code className="font-mono">MEMORY.md</code> · 绑定路径{' '}
           <code className="font-mono">{projectPath}</code>
           ），仅在当前项目会话中注入系统提示词，保障跨项目语境隔离与 Prefix Cache 命中率。
         </div>
@@ -204,7 +204,7 @@ export function StudioProfileTabPanel({
                 className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-1 text-ui-2xs font-medium text-primary hover:bg-primary/10"
               >
                 <ShieldPlus className="h-3 w-3" />
-                批量升格L2 ({filteredEntries.filter((e) => !promotedIds.has(e.id)).length})
+                批量升级为规则 ({filteredEntries.filter((e) => !promotedIds.has(e.id)).length})
               </button>
             )}
             {projectId && filteredEntries.length > 0 && (
@@ -224,7 +224,7 @@ export function StudioProfileTabPanel({
                       try {
                         await projectApi.createMilestone(projectId, {
                           title: entry.content.slice(0, 80),
-                          description: `从 L3 项目画像 (${entry.category}) 批量转化`,
+                          description: `从 项目记忆 (${entry.category}) 批量转化`,
                           status: 'pending',
                         });
                       } catch {
@@ -247,7 +247,7 @@ export function StudioProfileTabPanel({
                   setSavedL4Bundle(true);
                   if (typeof projectApi?.addMaterial === 'function') {
                     const md = [
-                      `# L3 项目画像快照 (${projectPath})`,
+                      `# 项目记忆快照 (${projectPath})`,
                       ...filteredEntries.map(
                         (e) =>
                           `- [${CATEGORY_LABELS[e.category] ?? e.category}] ${e.content}`,
@@ -303,7 +303,7 @@ export function StudioProfileTabPanel({
       >
         <span className="inline-flex items-center gap-1 text-ui-2xs text-muted-foreground">
           <Sparkles className="h-3 w-3 text-primary" />
-          当前形态推荐画像条目：
+          当前形态推荐记忆条目：
         </span>
         {presets.map((preset, idx) => (
           <button
@@ -372,7 +372,7 @@ export function StudioProfileTabPanel({
                       content: p,
                       importance: 8,
                       sourceMessageIds: [],
-                      reasoning: '上下文护栏支柱一键写入 L3 画像',
+                      reasoning: '上下文护栏支柱一键写入 项目记忆',
                     })),
                   });
                   onRefreshProfile?.();
@@ -383,7 +383,7 @@ export function StudioProfileTabPanel({
             }}
             className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
           >
-            {seededPillars ? '已写入支柱 L3' : '支柱一键写入 L3'}
+            {seededPillars ? '已存支柱到项目记忆' : '支柱存到项目记忆'}
           </button>
         )}
         {projectId && blueprint.contextPillars.length > 0 && (
@@ -405,7 +405,7 @@ export function StudioProfileTabPanel({
             }}
             className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
           >
-            {savedPillarsL4 ? '已存支柱 L4' : '支柱存 L4'}
+            {savedPillarsL4 ? '已存支柱为资料' : '支柱存为资料'}
           </button>
         )}
         {projectId && presets.length > 0 && (
@@ -434,7 +434,7 @@ export function StudioProfileTabPanel({
             }}
             className="inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/15"
           >
-            {seededPresets ? '已写入推荐画像' : '一键写入推荐画像'}
+            {seededPresets ? '已写入推荐记忆' : '一键写入推荐记忆'}
           </button>
         )}
       </div>
@@ -504,7 +504,7 @@ export function StudioProfileTabPanel({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索 L3 画像条目或类别..."
+              placeholder="搜索 项目记忆条目或类别..."
               data-testid="studio-profile-search-input"
               className="w-full rounded border border-input bg-background pl-7 pr-2 py-1 text-xs"
             />
@@ -560,7 +560,7 @@ export function StudioProfileTabPanel({
                   setSavedCatStatsL4(true);
                   if (typeof projectApi?.addMaterial === 'function') {
                     const lines = [
-                      `# L3 画像类别分布 (${profileEntries.length} 条)`,
+                      `# 项目记忆类别分布 (${profileEntries.length} 条)`,
                       ...PROFILE_CATEGORIES.filter((c) => c !== 'all').map(
                         (c) =>
                           `- ${CATEGORY_LABELS[c] ?? c} (${c}): ${profileEntries.filter((e) => e.category === c).length} 条`,
@@ -575,7 +575,7 @@ export function StudioProfileTabPanel({
                 }}
                 className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
               >
-                {savedCatStatsL4 ? '已存分布L4' : '分布存 L4'}
+                {savedCatStatsL4 ? '已存分布为资料' : '分布存为资料'}
               </button>
             )}
           </div>
@@ -645,7 +645,7 @@ export function StudioProfileTabPanel({
                       if (typeof projectApi?.addMaterial === 'function') {
                         try {
                           await projectApi.addMaterial(projectId, {
-                            content: `# L3 画像条目归档 [${CATEGORY_LABELS[entry.category] ?? entry.category}]\n\n${entry.content}`,
+                            content: `# 项目记忆条目归档 [${CATEGORY_LABELS[entry.category] ?? entry.category}]\n\n${entry.content}`,
                           });
                         } catch {
                           // ignore in test/offline mode
@@ -666,7 +666,7 @@ export function StudioProfileTabPanel({
                         try {
                           await projectApi.createMilestone(projectId, {
                             title: entry.content.slice(0, 80),
-                            description: `从 L3 项目画像 (${entry.category}) 转化`,
+                            description: `从 项目记忆 (${entry.category}) 转化`,
                             status: 'pending',
                             sortOrder: 10,
                           });
@@ -676,7 +676,7 @@ export function StudioProfileTabPanel({
                       }
                     }}
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                    title="将此 L3 画像条目转化为项目里程碑"
+                    title="将此 项目记忆条目转化为项目里程碑"
                   >
                     {milestonePromotedIds.has(entry.id) ? '已转里程碑' : '+里程碑'}
                   </button>
@@ -702,7 +702,7 @@ export function StudioProfileTabPanel({
                       }
                     }}
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                    title="将此 L3 画像条目升格为 L2 强约束规则"
+                    title="将此 项目记忆条目升格为 项目规则"
                   >
                     <ShieldPlus className="h-3 w-3 text-primary" />
                     {promotedIds.has(entry.id) ? '已升格约束' : '升格为约束'}

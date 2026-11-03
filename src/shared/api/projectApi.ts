@@ -1153,7 +1153,7 @@ export const projectApi = {
     }
   },
 
-  /** M2: 确认知识（将用户勾选的条目写入项目画像） */
+  /** M2: 确认知识（将用户勾选的条目写入项目记忆） */
   async confirmKnowledge(
     projectId: string,
     payload: ConfirmKnowledgePayload,

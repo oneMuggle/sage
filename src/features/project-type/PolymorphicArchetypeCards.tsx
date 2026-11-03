@@ -602,7 +602,7 @@ export function PolymorphicArchetypeCards({
                 <select
                   value={researchCategory}
                   onChange={(e) => setResearchCategory(e.target.value)}
-                  aria-label="选择学术画像类别"
+                  aria-label="选择研究方向类别"
                   data-testid="research-profile-category"
                   className="rounded border border-input bg-background px-2 py-1 text-xs text-foreground"
                 >
@@ -640,7 +640,7 @@ export function PolymorphicArchetypeCards({
               </div>
               {decisions.length === 0 ? (
                 <div className="text-ui-2xs text-muted-foreground">
-                  暂未登记研究问题 (RQ)。登记后将持久写入项目画像并作为科研综述与实验分析的锚点。
+                  暂未登记研究问题 (RQ)。登记后将持久写入项目记忆并作为科研综述与实验分析的锚点。
                 </div>
               ) : (
                 <ul className="space-y-1 max-h-32 overflow-y-auto" data-testid="research-rq-list">
@@ -762,7 +762,7 @@ export function PolymorphicArchetypeCards({
                 data-testid="personal-note-add"
               >
                 <Plus className="mr-1 h-3 w-3" />
-                沉淀偏好
+                保存偏好
               </Button>
             </div>
           </div>

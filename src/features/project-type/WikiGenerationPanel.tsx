@@ -310,7 +310,7 @@ export function WikiGenerationPanel({
                             content: `M5 Wiki 生成索引（共 ${result.wikiPaths.length} 页）：${result.wikiPaths.join('、')}`,
                             importance: 7,
                             sourceMessageIds: [],
-                            reasoning: 'M5 Wiki 文档清单沉淀至 L3 项目画像',
+                            reasoning: 'M5 Wiki 文档清单保存到项目记忆',
                           },
                         ],
                       });
@@ -598,7 +598,7 @@ export function WikiGenerationPanel({
                           }}
                           className="rounded border border-border bg-background px-1 py-0 text-ui-2xs text-primary hover:bg-primary/10"
                         >
-                          {guardedSymbolIndices.has(idx) ? '已护栏' : '+L2'}
+                          {guardedSymbolIndices.has(idx) ? '已护栏' : '+规则'}
                         </button>
                         <button
                           type="button"
