@@ -24,10 +24,19 @@ describe('playbookApi', () => {
     expect(mockInvoke).toHaveBeenCalledWith('playbooks_builtin_list');
   });
 
-  it('getCurrent 传 projectId', async () => {
+  it('getCurrent 传 projectId 与 withAudit', async () => {
     await playbookApi.getCurrent('proj-1');
     expect(mockInvoke).toHaveBeenCalledWith('playbook_get_current', {
       projectId: 'proj-1',
+      withAudit: true,
+    });
+  });
+
+  it('getCurrent 支持跳过审计（M2）', async () => {
+    await playbookApi.getCurrent('proj-1', false);
+    expect(mockInvoke).toHaveBeenCalledWith('playbook_get_current', {
+      projectId: 'proj-1',
+      withAudit: false,
     });
   });
 
