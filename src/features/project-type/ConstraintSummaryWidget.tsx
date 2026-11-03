@@ -161,7 +161,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                             content: c.content,
                             importance: c.priority,
                             sourceMessageIds: [],
-                            reasoning: '约束统计摘要高优规则沉淀至 L3 画像',
+                            reasoning: '约束统计摘要高优规则保存到 AI 记忆',
                           })),
                         });
                       } catch {
@@ -191,7 +191,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
-                  {savedSummaryL4 ? '已存 L4' : '存 L4'}
+                  {savedSummaryL4 ? '已保存' : '存为资料'}
                 </button>
                 <button
                   type="button"
@@ -319,7 +319,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                             content: `[Glob: ${gc.triggerPattern}] ${gc.content}`,
                             importance: gc.priority,
                             sourceMessageIds: [],
-                            reasoning: 'Glob 按需触发约束规则沉淀至 L3 画像',
+                            reasoning: 'Glob 按需触发约束规则保存到 AI 记忆',
                           })),
                         });
                       } catch {
@@ -410,7 +410,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                                 .join('、')}`,
                               importance: 6,
                               sourceMessageIds: [],
-                              reasoning: 'L2 约束类别分布快照沉淀至 L3 画像',
+                              reasoning: 'L2 约束类别分布快照保存到 AI 记忆',
                             },
                           ],
                         });
@@ -558,7 +558,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                                     content: rule.content,
                                     importance: rule.priority,
                                     sourceMessageIds: [],
-                                    reasoning: '约束统计预览规则沉淀至 L3 画像',
+                                    reasoning: '约束统计预览规则保存到 AI 记忆',
                                   },
                                 ],
                               });
@@ -569,7 +569,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                         }}
                         className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
                       >
-                        {promotedRuleL3Ids.has(rule.id) ? '已存 L3' : '+L3'}
+                        {promotedRuleL3Ids.has(rule.id) ? '已保存' : '+记忆'}
                       </button>
                       <button
                         type="button"
@@ -611,7 +611,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                         }}
                         className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                       >
-                        {promotedRuleL4Ids.has(rule.id) ? '已存L4' : '+L4'}
+                        {promotedRuleL4Ids.has(rule.id) ? '已保存' : '+资料'}
                       </button>
                       <button
                         type="button"

@@ -16,7 +16,10 @@ Mounted under ``/api/v1``:
 
 from __future__ import annotations
 
+import base64
+import contextlib
 import logging
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -33,6 +36,8 @@ from backend.api.playbook_schemas import (
     PlaybookAuthorPreviewResponse,
     PlaybookBindRequest,
     PlaybookCurrentResponse,
+    PlaybookDocumentImportRequest,
+    PlaybookDocumentImportResponse,
     PlaybookEventAggregateResponse,
     PlaybookEventModel,
     PlaybookEventsResponse,
@@ -46,6 +51,9 @@ from backend.api.playbook_schemas import (
     PlaybookLibrarySaveRequest,
     PlaybookLibrarySaveResponse,
     PlaybookRuleCleanupResponse,
+    PlaybookSharedResponse,
+    PlaybookShareRequest,
+    PlaybookShareResponse,
     PlaybookStageConfirmRequest,
     PlaybookStateUpdateRequest,
     PlaybookVersionModel,
@@ -66,6 +74,7 @@ from backend.services.playbook_ai import audit_with_llm
 from backend.services.playbook_auditor import audit_playbook
 from backend.services.playbook_author import build_author_preview
 from backend.services.playbook_diff import diff_playbooks
+from backend.services.playbook_document_import import import_playbook_from_document
 from backend.services.playbook_library import (
     build_export_envelope,
     get_builtin,
@@ -74,6 +83,13 @@ from backend.services.playbook_library import (
     render_markdown_handbook,
     suggested_builtin,
     validate_import_envelope,
+)
+from backend.services.playbook_share import (
+    PlaybookNotFoundError,
+    ShareTokenExpiredError,
+    ShareTokenInvalidError,
+    create_share_link,
+    resolve_share_token,
 )
 from backend.services.playbook_spec import (
     PlaybookValidationError,
@@ -304,6 +320,54 @@ def delete_playbook_from_library(library_id: str) -> Dict[str, bool]:
     if not removed:
         raise _error(404, "playbook_not_found", "规程库条目不存在")
     return {"removed": True}
+
+
+@router.post(
+    "/playbooks/library/{library_id}/share", response_model=PlaybookShareResponse
+)
+@with_db_lock
+def create_playbook_share_link(
+    library_id: str,
+    request: Optional[PlaybookShareRequest] = None,
+) -> PlaybookShareResponse:
+    """生成规程分享链接（带 token，默认 7 天有效）。"""
+    expiry_days = request.expiry_days if request else 7
+    try:
+        result = create_share_link(library_id, expiry_days=expiry_days)
+    except PlaybookNotFoundError as exc:
+        raise _error(404, "playbook_not_found", str(exc)) from exc
+
+    record_playbook_event(
+        f"library:{library_id}",
+        "library_share",
+        payload={
+            "library_id": library_id,
+            "expires_at": result.expires_at,
+        },
+    )
+    return PlaybookShareResponse(
+        token=result.token,
+        playbook_id=result.playbook_id,
+        playbook_name=result.playbook_name,
+        expires_at=result.expires_at,
+        share_url=result.share_url,
+    )
+
+
+@router.get("/playbooks/shared/{token}", response_model=PlaybookSharedResponse)
+@with_db_lock
+def get_shared_playbook(token: str) -> PlaybookSharedResponse:
+    """通过分享 token 获取规程内容（只读）。"""
+    try:
+        payload = resolve_share_token(token)
+    except ShareTokenExpiredError as exc:
+        raise _error(410, "share_expired", str(exc)) from exc
+    except ShareTokenInvalidError as exc:
+        raise _error(404, "share_invalid", str(exc)) from exc
+    except PlaybookNotFoundError as exc:
+        raise _error(404, "playbook_not_found", str(exc)) from exc
+
+    return PlaybookSharedResponse(**payload)
 
 
 @router.get(
@@ -761,6 +825,59 @@ def import_playbook(request: PlaybookImportRequest) -> PlaybookCurrentResponse:
         },
     )
     return _current_payload(project)
+
+
+@router.post(
+    "/playbooks/import/document",
+    response_model=PlaybookDocumentImportResponse,
+)
+async def import_playbook_from_document_endpoint(
+    request: PlaybookDocumentImportRequest,
+) -> PlaybookDocumentImportResponse:
+    """从 Word/PDF/Markdown 文档生成 Playbook 预览（不写库）。
+
+    前端上传 base64 编码的文档内容，后端解析后使用 LLM 生成
+    Playbook 草案。LLM 不可用时自动降级到确定性模板。
+    """
+    if request.project_id:
+        _project_or_404(request.project_id)
+
+    try:
+        file_bytes = base64.b64decode(request.content_base64)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="base64 解码失败") from exc
+
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="文档内容为空")
+
+    ext = Path(request.filename).suffix.lower()
+    allowed = {".docx", ".pdf", ".md", ".pptx", ".xlsx", ".html", ".txt"}
+    if ext not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件格式：{ext}，支持 {', '.join(sorted(allowed))}",
+        )
+
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        tmp.write(file_bytes)
+        tmp_path = Path(tmp.name)
+
+    try:
+        result = await import_playbook_from_document(
+            tmp_path,
+            request.filename,
+            use_llm=request.use_llm,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("document import failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="文档解析失败") from exc
+    finally:
+        with contextlib.suppress(OSError):
+            tmp_path.unlink()
+
+    return PlaybookDocumentImportResponse(**result.to_dict())
 
 
 @router.get(

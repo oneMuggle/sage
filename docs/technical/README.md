@@ -96,6 +96,12 @@
 | 118  | [文档与验收信息架构：按任务域分组的顶层 Tab](./118-office-ia-tabs.md) | URL 为唯一事实源 + keep-alive 保状态 + 诊断收进「环境」popover；十余个常驻区块 → 2 任务域（win7 编号避让 117=桌面宠物；LaTeX 与审校与规范分区待对应功能同步后补齐） |
 | 119  | [Markdown 渲染器统一](./119-markdown-renderer.md) | 聊天/产物/Wiki 单一收敛点：minimal/chat 两档 + GFM/KaTeX 统一管线 + 表格复制与限高 + Shiki 降级 + 锚点前缀与 TOC 大纲 + 作用域 token 样式（win7 编号避让 118=office IA；main 对应 §124） |
 | 120  | [思考过程展示档位](./120-thinking-display-modes.md) | detail / trace / result 三档 + 消息/会话/全局三级作用域；`DisplayContract` 渲染契约 + `useSyncExternalStore` 订阅；三级存储（sessionStorage 双写 + preference singleton） |
+| 121  | [Word 渲染级校验](./121-word-render-audit.md) | DOCX→PDF（LibreOffice/Word COM）+ PyMuPDF 检查页面尺寸/页边距/字体/页码；无转换器降级；渲染审计 REST；批量审校与 Markdown 报告 |
+| 122  | [Word 规则包 LLM 工具](./122-word-rule-tools.md) | `office_audit_word/fix_word/extract_rules/revise_word/batch_audit/render_audit`；工具上下文/工作区围栏/输出截断；bundle/profile/tool_names 反漂移同步 |
+| 123  | [文档与验收信息架构：顶层 Tab + LaTeX 二级分组](./123-office-ia-tabs.md) | URL 为唯一事实源 + keep-alive 保状态 + 诊断收进「环境」popover；14 常驻区块 → 4 任务域 |
+| 124  | [Markdown 渲染器统一](./124-markdown-renderer.md) | 聊天/产物/Wiki 单一收敛点：minimal/chat 两档 + GFM/KaTeX 统一管线 + 表格复制与限高 + Shiki 降级 + 锚点前缀与 TOC 大纲 + 作用域 token 样式 |
+| 125  | [思考过程展示档位](./125-thinking-display-modes.md) | detail / trace / result 三档 + 消息/会话/全局三级作用域；`DisplayContract` 渲染契约 + `useSyncExternalStore` 订阅；三级存储（sessionStorage 双写 + preference singleton） |
+| 126  | [Playbook 文档导入与分享链接](./126-playbook-import-share.md) | Word/PDF/MD/PPTX → 解析 → LLM/确定性草案预览 → 确认绑定（`POST /playbooks/import/document` 只预览不写库）+ `playbook_shares` token 分享链路（只读 / 默认 7 天 / 过期 410）+ HashRouter 落地页 `/share/playbook/{token}` 导入或存库 + 术语去技术化（L1–L4 → 规则） |
 
 ---
 
