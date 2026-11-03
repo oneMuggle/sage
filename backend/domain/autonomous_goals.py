@@ -20,6 +20,7 @@ from backend.domain.execution_conditions import (
     ExecutionCondition,
     TriggerMode,
 )
+from backend.utils.timezones import LOCAL_TIMEZONE, ensure_utc, utc_now
 
 
 class GoalStatus(str, Enum):
@@ -64,7 +65,7 @@ class TimeWindow:
     weekends_off_peak: bool = True         # 周末是否全天闲时
     holidays: List[str] = field(default_factory=list)  # 节假日列表 (YYYY-MM-DD)
     min_pricing_tier: PricingTier = PricingTier.OFF_PEAK  # 最低定价等级要求
-    timezone: str = "Asia/Shanghai"        # 时区
+    timezone: str = LOCAL_TIMEZONE         # 时区: 'local' | IANA (默认本地)
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典（用于 JSON 存储）"""
@@ -86,7 +87,7 @@ class TimeWindow:
             weekends_off_peak=data.get("weekends_off_peak", True),
             holidays=data.get("holidays", []),
             min_pricing_tier=PricingTier(data.get("min_pricing_tier", "off_peak")),
-            timezone=data.get("timezone", "Asia/Shanghai"),
+            timezone=data.get("timezone", LOCAL_TIMEZONE),
         )
 
 
@@ -148,7 +149,7 @@ class Checkpoint:
         """从字典创建"""
         verified_at = None
         if data.get("verified_at"):
-            verified_at = datetime.fromisoformat(data["verified_at"])
+            verified_at = ensure_utc(datetime.fromisoformat(data["verified_at"]))
 
         return cls(
             id=data["id"],
@@ -198,8 +199,8 @@ class ExecutionRound:
         """从字典创建"""
         return cls(
             round_number=data["round_number"],
-            started_at=datetime.fromisoformat(data["started_at"]),
-            completed_at=datetime.fromisoformat(data["completed_at"]) if data.get("completed_at") else None,
+            started_at=ensure_utc(datetime.fromisoformat(data["started_at"])),
+            completed_at=ensure_utc(datetime.fromisoformat(data["completed_at"])) if data.get("completed_at") else None,
             tasks_executed=data.get("tasks_executed", 0),
             tasks_succeeded=data.get("tasks_succeeded", 0),
             tasks_failed=data.get("tasks_failed", 0),
@@ -232,7 +233,7 @@ class Goal:
     current_round: int = 0                 # 当前轮次
 
     # 元数据
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=utc_now)
     started_at: Optional[datetime] = None  # 开始执行时间
     completed_at: Optional[datetime] = None  # 完成时间
     total_tokens_used: int = 0             # 总 token 消耗
@@ -284,9 +285,9 @@ class Goal:
             checkpoints=[Checkpoint.from_dict(c) for c in data.get("checkpoints", [])],
             rounds=[ExecutionRound.from_dict(r) for r in data.get("rounds", [])],
             current_round=data.get("current_round", 0),
-            created_at=datetime.fromisoformat(data["created_at"]) if data.get("created_at") else datetime.utcnow(),  # noqa: DTZ003
-            started_at=datetime.fromisoformat(data["started_at"]) if data.get("started_at") else None,
-            completed_at=datetime.fromisoformat(data["completed_at"]) if data.get("completed_at") else None,
+            created_at=ensure_utc(datetime.fromisoformat(data["created_at"])) if data.get("created_at") else utc_now(),
+            started_at=ensure_utc(datetime.fromisoformat(data["started_at"])) if data.get("started_at") else None,
+            completed_at=ensure_utc(datetime.fromisoformat(data["completed_at"])) if data.get("completed_at") else None,
             total_tokens_used=data.get("total_tokens_used", 0),
             completion_percentage=data.get("completion_percentage", 0.0),
             degradation_level=DegradationLevel(data.get("degradation_level", "none")),

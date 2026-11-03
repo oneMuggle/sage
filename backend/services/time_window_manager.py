@@ -11,6 +11,7 @@ from datetime import datetime, time, timedelta
 from typing import Optional
 
 from backend.domain.autonomous_goals import Goal, PricingTier, TimeWindow
+from backend.utils.timezones import LOCAL_TIMEZONE, ensure_utc, local_now
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 class TimeWindowManager:
     """时间窗口与定价管理器"""
 
-    def __init__(self, default_timezone: str = "Asia/Shanghai") -> None:
+    def __init__(self, default_timezone: str = LOCAL_TIMEZONE) -> None:
         self.default_timezone = default_timezone
 
     def is_off_peak(
@@ -35,7 +36,7 @@ class TimeWindowManager:
         3. 检查当前时间是否在 off_peak_start ~ off_peak_end 之间
         """
         if now is None:
-            now = datetime.now()
+            now = local_now()
 
         # 1. 节假日检查
         date_str = now.strftime("%Y-%m-%d")
@@ -82,7 +83,7 @@ class TimeWindowManager:
         - 其他时间 → PEAK (1.0x)
         """
         if now is None:
-            now = datetime.now()
+            now = local_now()
 
         # 闲时窗口内
         if self.is_off_peak(time_window, now):
@@ -110,7 +111,7 @@ class TimeWindowManager:
         3. 检查是否有足够的预算
         """
         if now is None:
-            now = datetime.now()
+            now = local_now()
 
         # 1. 时间窗口检查
         if not self.is_off_peak(goal.time_window, now):
@@ -139,7 +140,9 @@ class TimeWindowManager:
             return False
 
         if goal.started_at:
-            elapsed_hours = (now - goal.started_at).total_seconds() / 3600
+            elapsed_hours = (
+                ensure_utc(now) - ensure_utc(goal.started_at)
+            ).total_seconds() / 3600
             if elapsed_hours >= goal.budget.max_hours:
                 logger.info(
                     f"Goal {goal.id}: max hours reached "
@@ -169,7 +172,7 @@ class TimeWindowManager:
         如果当前不在闲时，返回下一个闲时开始时间。
         """
         if now is None:
-            now = datetime.now()
+            now = local_now()
 
         if self.is_off_peak(goal.time_window, now):
             return now

@@ -7,6 +7,7 @@
 
 import { useMemo, useState } from 'react';
 
+import { formatTimeOfDay } from '../../shared/lib/timeFormatter';
 import { requestMessageJump } from '../../features/chat/messageJumpStore';
 import {
   useConversationTrajectory,
@@ -29,13 +30,7 @@ const FILTER_OPTIONS: ReadonlyArray<{ id: FilterKind; label: string }> = [
   { id: 'tool', label: '含工具' },
 ];
 
-function formatTime(createdAt: number): string {
-  try {
-    return new Date(createdAt).toLocaleTimeString('zh-CN', { hour12: false });
-  } catch {
-    return '';
-  }
-}
+// formatTime 已统一到 src/shared/lib/timeFormatter#formatTimeOfDay
 
 function truncate(text: string, max: number): string {
   const flat = text.replace(/\s+/g, ' ').trim();
@@ -261,7 +256,7 @@ export function TrajectoryPane({ sessionId }: TrajectoryPaneProps) {
                 </div>
                 <div className="mt-0.5 text-ui-2xs text-muted truncate">
                   {[
-                    formatTime(entry.createdAt),
+                    formatTimeOfDay(entry.createdAt),
                     entry.model,
                     typeof entry.stepIndex === 'number' ? `step ${entry.stepIndex}` : null,
                     entry.toolCallCount > 0 ? `工具 ×${entry.toolCallCount}` : null,

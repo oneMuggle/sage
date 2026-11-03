@@ -4,7 +4,7 @@
  * 与 closeToTray / demoMode 同模式: 主进程从 userData JSON 文件读取,
  * renderer 通过 IPC 写入. 主进程启动时读一次, 设置 Electron logger 时区.
  *
- * 格式: `{"logTimezone": "UTC"}` (单字段, 便于后续扩展).
+ * 格式: `{"logTimezone": "local"}` (单字段, 便于后续扩展).
  */
 import { app } from 'electron';
 import { readFileSync, writeFileSync } from 'fs';
@@ -15,7 +15,7 @@ function getLogTimezonePath(): string {
   return join(process.cwd(), 'data', 'sage-log-timezone.json');
 }
 
-/** 读取持久化的 logTimezone. 失败/缺失返回 'UTC' (历史默认). */
+/** 读取持久化的 logTimezone. 失败/缺失返回 'local' (跟随系统本地时区). */
 export function readLogTimezone(): string {
   try {
     const raw = readFileSync(getLogTimezonePath(), 'utf-8');
@@ -23,9 +23,9 @@ export function readLogTimezone(): string {
     if (typeof parsed.logTimezone === 'string' && parsed.logTimezone.length > 0) {
       return parsed.logTimezone;
     }
-    return 'UTC';
+    return 'local';
   } catch {
-    return 'UTC';
+    return 'local';
   }
 }
 

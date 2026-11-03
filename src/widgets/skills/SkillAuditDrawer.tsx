@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { skillsApi } from '../../shared/api/skillsApi';
+import { formatLocalString } from '../../shared/lib/timeFormatter';
 import type { SkillAuditEntry } from '../../shared/api/types';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import {
@@ -44,11 +45,7 @@ const ACTOR_LABELS: Record<SkillAuditEntry['actor'], string> = {
   system: '系统',
 };
 
-function formatTime(ms: number): string {
-  const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return '时间未知';
-  return d.toLocaleString('zh-CN');
-}
+// formatTime 已统一到 src/shared/lib/timeFormatter#formatLocalString
 
 interface SkillAuditDrawerProps {
   skillName: string;
@@ -141,7 +138,7 @@ export function SkillAuditDrawer({
                   className="flex items-baseline gap-2 border-b border-border pb-2 text-sm last:border-b-0"
                 >
                   <span className="shrink-0 text-text-secondary">
-                    {formatTime(entry.created_at)}
+                    {formatLocalString(entry.created_at)}
                   </span>
                   <span className="shrink-0 font-medium text-text">
                     {ACTION_LABELS[entry.action] ?? entry.action}

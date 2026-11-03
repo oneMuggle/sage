@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { memoryApi, Memory } from '../../shared/api';
+import { formatDate } from '../../shared/lib/timeFormatter';
 
 // Constants
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -93,7 +94,11 @@ const SCOPE_BADGE_LABEL: Record<string, string> = {
   global: '全局',
 };
 
-export function MemoryBrowser({ initialType = 'all', refreshKey, focusMemoryId }: MemoryBrowserProps) {
+export function MemoryBrowser({
+  initialType = 'all',
+  refreshKey,
+  focusMemoryId,
+}: MemoryBrowserProps) {
   const navigate = useNavigate();
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,7 +154,8 @@ export function MemoryBrowser({ initialType = 'all', refreshKey, focusMemoryId }
       // searchMemories 只接受 episodic/semantic —— working/session_summary
       // 归为 undefined 交由后端全量匹配,避免静默收窄结果集。
       if (searchQuery) {
-        const searchType = filterType === 'episodic' || filterType === 'semantic' ? filterType : undefined;
+        const searchType =
+          filterType === 'episodic' || filterType === 'semantic' ? filterType : undefined;
         const hits = await memoryApi.searchMemories(searchQuery, searchType);
         if (gen !== requestGenRef.current) return;
         setMemories(hits);
@@ -619,15 +625,7 @@ function MemoryItemCard({
   );
 }
 
-function formatDate(timestampMs: number): string {
-  if (!Number.isFinite(timestampMs) || timestampMs <= 0) return '—';
-  const date = new Date(timestampMs);
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-}
+// formatDate 已统一到 src/shared/lib/timeFormatter
 
 function truncate(s: string, max: number): string {
   if (s.length <= max) return s;

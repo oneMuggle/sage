@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from backend.data.goal_repository import GoalRepository
@@ -27,6 +26,7 @@ from backend.domain.execution_conditions import (
 )
 from backend.services.checkpoint_manager import CheckpointManager, CheckpointReport
 from backend.services.time_window_manager import TimeWindowManager
+from backend.utils.timezones import ensure_utc, utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ class GoalService:
 
         # 更新状态
         goal.status = GoalStatus.RUNNING
-        goal.started_at = datetime.utcnow()  # noqa: DTZ003
+        goal.started_at = utc_now()
         self.goal_repo.update(goal)
 
         # 启动执行循环（异步）
@@ -157,7 +157,7 @@ class GoalService:
             raise ValueError(f"Goal not found: {goal_id}")
 
         goal.status = GoalStatus.CANCELLED
-        goal.completed_at = datetime.utcnow()  # noqa: DTZ003
+        goal.completed_at = utc_now()
         self.goal_repo.update(goal)
 
         logger.info(f"Cancelled execution for goal: {goal_id}")
@@ -186,7 +186,7 @@ class GoalService:
                 # 1. 时间窗口检查
                 if not self.time_window_mgr.should_execute_now(goal):
                     next_time = self.time_window_mgr.get_next_execution_time(goal)
-                    wait_seconds = (next_time - datetime.utcnow()).total_seconds()  # noqa: DTZ003
+                    wait_seconds = (next_time - utc_now()).total_seconds()
 
                     logger.info(
                         f"Goal {goal_id}: outside time window, "
@@ -228,7 +228,7 @@ class GoalService:
 
                 if is_complete:
                     goal.status = GoalStatus.COMPLETED
-                    goal.completed_at = datetime.utcnow()  # noqa: DTZ003
+                    goal.completed_at = utc_now()
                     self.goal_repo.update(goal)
                     logger.info(f"Goal {goal_id} completed at round {goal.current_round}")
                     break
@@ -245,7 +245,7 @@ class GoalService:
             if goal:
                 goal.status = GoalStatus.FAILED
                 goal.last_error = str(e)
-                goal.completed_at = datetime.utcnow()  # noqa: DTZ003
+                goal.completed_at = utc_now()
                 await self._apply_degradation(goal, e)
                 self.goal_repo.update(goal)
 
@@ -261,7 +261,7 @@ class GoalService:
             return False
 
         if goal.started_at:
-            elapsed_hours = (datetime.utcnow() - goal.started_at).total_seconds() / 3600  # noqa: DTZ003
+            elapsed_hours = (utc_now() - ensure_utc(goal.started_at)).total_seconds() / 3600
             if elapsed_hours >= goal.budget.max_hours:
                 logger.info(
                     f"Goal {goal.id}: max hours reached "
@@ -301,7 +301,7 @@ class GoalService:
             raise ValueError(f"Goal not found: {goal_id}")
 
         round_number = goal.current_round + 1
-        started_at = datetime.utcnow()  # noqa: DTZ003
+        started_at = utc_now()
 
         logger.info(f"Goal {goal_id}: starting round {round_number}")
 
@@ -411,7 +411,7 @@ class GoalService:
             return ExecutionRound(
                 round_number=round_number,
                 started_at=started_at,
-                completed_at=datetime.utcnow(),  # noqa: DTZ003
+                completed_at=utc_now(),
                 tasks_executed=tasks_executed,
                 tasks_succeeded=tasks_succeeded,
                 tasks_failed=tasks_failed,
@@ -427,7 +427,7 @@ class GoalService:
             return ExecutionRound(
                 round_number=round_number,
                 started_at=started_at,
-                completed_at=datetime.utcnow(),  # noqa: DTZ003
+                completed_at=utc_now(),
                 tasks_executed=tasks_executed,
                 tasks_succeeded=tasks_succeeded,
                 tasks_failed=tasks_failed + 1,
@@ -632,7 +632,7 @@ class GoalService:
             # 第三次失败：停止
             goal.degradation_level = DegradationLevel.STOPPED
             goal.status = GoalStatus.FAILED
-            goal.completed_at = datetime.utcnow()  # noqa: DTZ003
+            goal.completed_at = utc_now()
             logger.warning(
                 f"Goal {goal.id}: {consecutive_failures} consecutive failures, stopping"
             )

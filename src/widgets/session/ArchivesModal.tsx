@@ -12,6 +12,7 @@ import { Archive, X } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import { sessionApi, type LineageArchive } from '../../shared/api';
+import { formatDateTime } from '../../shared/lib/timeFormatter';
 import type { Message as MessageType } from '../../shared/lib/store';
 import { MessageList } from '../chat/MessageList';
 
@@ -22,12 +23,7 @@ interface ArchivesModalProps {
   sessionId: string | null;
 }
 
-function formatTime(value: LineageArchive['archived_at']): string {
-  if (value == null) return '—';
-  const ts = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(ts) || ts <= 0) return String(value);
-  return new Date(ts).toLocaleString();
-}
+// formatTime 已统一到 src/shared/lib/timeFormatter#formatDateTime
 
 export function ArchivesModal({ isOpen, onClose, sessionId }: ArchivesModalProps) {
   const [archives, setArchives] = useState<LineageArchive[]>([]);
@@ -148,7 +144,12 @@ export function ArchivesModal({ isOpen, onClose, sessionId }: ArchivesModalProps
                           </span>
                           <span className="text-xs text-muted flex-shrink-0 flex items-center gap-2">
                             <span>
-                              {archive.message_count} 条 · {formatTime(archive.archived_at)}
+                              {archive.message_count} 条 ·{' '}
+                              {formatDateTime(
+                                typeof archive.archived_at === 'number'
+                                  ? archive.archived_at
+                                  : Number(archive.archived_at),
+                              )}
                             </span>
                           </span>
                         </button>

@@ -11,17 +11,21 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _reset_timezone():
-    """Reset timezone to UTC after each test."""
+    """Reset timezone to default ('local') after each test."""
     yield
     from backend.utils.logging import set_log_timezone
-    set_log_timezone("UTC")
+    set_log_timezone("local")
 
 
 class TestTimezoneFormatter:
     """TimezoneFormatter renders timestamps in the configured timezone."""
 
-    def test_default_utc(self):
-        """Default formatter produces UTC timestamps."""
+    def test_default_local(self):
+        """Default formatter produces local-time timestamps (fallback: Beijing).
+
+        系统本地时区为 Asia/Shanghai (中国自 1991 年起无夏令时),
+        所以默认输出应与北京时间一致.
+        """
         from backend.utils.logging import TimezoneFormatter
         fmt = TimezoneFormatter("%(asctime)s", "%Y-%m-%dT%H:%M:%S")
         record = logging.LogRecord(
@@ -30,7 +34,8 @@ class TestTimezoneFormatter:
         )
         record.created = 1700000000.0  # 2023-11-14T22:13:20 UTC
         output = fmt.formatTime(record)
-        assert "2023-11-14T22:13:20" in output
+        # 2023-11-14T22:13:20 UTC = 2023-11-15T06:13:20 +08:00
+        assert "2023-11-15T06:13:20" in output
 
     def test_asia_shanghai(self):
         """Asia/Shanghai formatter produces +08:00 timestamps."""
@@ -60,8 +65,8 @@ class TestTimezoneFormatter:
         # Should not raise; exact output depends on system timezone
         assert "2023-11-" in output
 
-    def test_invalid_timezone_falls_back_to_utc(self):
-        """Invalid IANA timezone falls back to UTC."""
+    def test_invalid_timezone_falls_back_to_beijing(self):
+        """Invalid IANA timezone falls back to Beijing time (Asia/Shanghai)."""
         from backend.utils.logging import TimezoneFormatter, set_log_timezone
         set_log_timezone("Invalid/Timezone")
         fmt = TimezoneFormatter("%(asctime)s", "%Y-%m-%dT%H:%M:%S")
@@ -71,7 +76,8 @@ class TestTimezoneFormatter:
         )
         record.created = 1700000000.0
         output = fmt.formatTime(record)
-        assert "2023-11-14T22:13:20" in output
+        # 2023-11-14T22:13:20 UTC = 2023-11-15T06:13:20 +08:00
+        assert "2023-11-15T06:13:20" in output
 
     def test_switch_timezone(self):
         """Switching timezone affects subsequent records."""
