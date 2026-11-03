@@ -747,8 +747,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     return
 
+            # M0 (2026-11-03): 会话级专家绑定 —— 请求未显式指定 agent_id 时
+            # 取会话绑定的专家（不存在/已禁用回落主助手）。
+            from backend.chat.specialist_binding import resolve_effective_agent_id
+
             agent = SageAgent(
-                agent_id=data.agent_id or "primary",
+                agent_id=resolve_effective_agent_id(data.session_id, data.agent_id),
                 scheduler_service_getter=get_scheduler_service,
             )
             # 2026-10-28: 输出长度 —— 请求自带端点配置时, 上方 llm_config 直接由

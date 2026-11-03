@@ -9,7 +9,7 @@ import asyncio
 import contextlib
 import functools
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from backend.memory import scope as memory_scope
 from backend.memory.episodic import EpisodicMemory
@@ -69,6 +69,7 @@ class MemoryManager:
         episodic: EpisodicMemory,
         semantic: SemanticMemory,
         summary_store: Optional[SessionSummaryStore] = None,
+        allowed_tiers: Optional[Iterable[str]] = None,
     ):
         """
         初始化记忆管理器
@@ -80,17 +81,51 @@ class MemoryManager:
             summary_store: 会话摘要 store（批次三 step 5）；可选，向后兼容
                 未注入 store 的旧调用方；没有 store 时 ``get_context`` 不
                 注入 ``【会话摘要】`` 段。
+            allowed_tiers: M0 (2026-11-03) 专家记忆读权限 —— 允许读取的
+                记忆层（``working`` / ``episodic`` / ``semantic``）。
+                ``None``（默认）= **不限制**，保持既有行为不变；
+                空列表 = **禁止一切记忆读取**（专家显式声明"无记忆权限"）。
         """
         self.working = working
         self.episodic = episodic
         self.semantic = semantic
         self.summary_store = summary_store
+        # M0 (2026-11-03): 读层权限闸门。None = 不限制（默认，向后兼容）。
+        self.allowed_tiers: Optional[Set[str]] = (
+            {str(t).strip().lower() for t in allowed_tiers if str(t).strip()}
+            if allowed_tiers is not None
+            else None
+        )
         # Lazily-created ConsolidationPipeline (F2) — built on first use so
         # the constructor stays lightweight and test-friendly.
         self._consolidation_pipeline = None
         # P3 (Mem0 风格) 冲突消解器: 惰性构造（首次判定时才建, 见
         # get_conflict_resolver）; 仅服务 episodic/semantic 持久层。
         self._conflict_resolver = None
+
+    # ------------------------------------------------------------------ #
+    # M0: 记忆读层权限（memory_access）
+    # ------------------------------------------------------------------ #
+
+    def set_allowed_tiers(self, tiers: Optional[Iterable[str]]) -> None:
+        """设置允许读取的记忆层。
+
+        Args:
+            tiers: ``working`` / ``episodic`` / ``semantic`` 的任意组合；
+                ``None`` = 不限制；空列表 = 禁止一切记忆读取。
+        """
+        if tiers is None:
+            self.allowed_tiers = None
+            return
+        self.allowed_tiers = {
+            str(t).strip().lower() for t in tiers if str(t).strip()
+        }
+
+    def _tier_allowed(self, tier: str) -> bool:
+        """该记忆层当前是否可读。``allowed_tiers is None`` → 恒真。"""
+        if self.allowed_tiers is None:
+            return True
+        return tier.lower() in self.allowed_tiers
 
     def remember(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         """
@@ -438,6 +473,13 @@ class MemoryManager:
         if memory_types is None:
             memory_types = ["working", "episodic", "semantic"]
 
+        # M0 (2026-11-03): 读层权限闸门 —— 专家无权读取的记忆层在此
+        # 直接剔除，不下发到检索后端。
+        if self.allowed_tiers is not None:
+            memory_types = [
+                t for t in memory_types if self._tier_allowed(str(t))
+            ]
+
         # 工作记忆 - 简单的上下文匹配（按 session 隔离）
         if "working" in memory_types:
             working_context = self.working.get_context(session_id)
@@ -517,33 +559,40 @@ class MemoryManager:
         # 让 legacy SageAgent（经 memory_manager.get_context）与 hex
         # ChatService（经 MemoryAdapter.retrieve → MemoryContext.core）都能
         # 注入同一份用户知识。快照冻结于 load(), 中途写入不改（保 prefix cache）。
-        try:
-            from backend.memory.user_profile import get_user_profile
+        # M0: 画像属于长期语义知识，按 semantic 层权限闸门。
+        if self._tier_allowed("semantic"):
+            try:
+                from backend.memory.user_profile import get_user_profile
 
-            profile_snapshot = get_user_profile().get_snapshot()
-            if profile_snapshot:
-                parts.append(profile_snapshot)
-        except Exception as exc:
-            logger.debug(f"用户画像快照注入失败: {exc}")
+                profile_snapshot = get_user_profile().get_snapshot()
+                if profile_snapshot:
+                    parts.append(profile_snapshot)
+            except Exception as exc:
+                logger.debug(f"用户画像快照注入失败: {exc}")
 
         # P2 项目画像: 会话绑定了工作区才注入该项目自己的快照;
         # 未绑定/解析失败恒为空串, 绝不注入"别的项目"的画像。
-        try:
-            project_key = memory_scope.resolve_session_project_key(
-                getattr(self.episodic, "db", None), session_id
-            )
-            if project_key:
-                from backend.memory.project_profile import get_project_profile
+        # M0: 同样按 semantic 层权限闸门。
+        if self._tier_allowed("semantic"):
+            try:
+                project_key = memory_scope.resolve_session_project_key(
+                    getattr(self.episodic, "db", None), session_id
+                )
+                if project_key:
+                    from backend.memory.project_profile import get_project_profile
 
-                project_snapshot = get_project_profile().get_snapshot(project_key)
-                if project_snapshot:
-                    parts.append(project_snapshot)
-        except Exception as exc:
-            logger.debug(f"项目画像快照注入失败: {exc}")
+                    project_snapshot = get_project_profile().get_snapshot(project_key)
+                    if project_snapshot:
+                        parts.append(project_snapshot)
+            except Exception as exc:
+                logger.debug(f"项目画像快照注入失败: {exc}")
 
         # 获取工作记忆上下文（按 session 隔离 + Task 14 按 segment_id 隔离）
-        working_context = self.working.get_context(
-            session_id, limit=limit, segment_id=segment_id
+        # M0: working 层权限闸门。
+        working_context = (
+            self.working.get_context(session_id, limit=limit, segment_id=segment_id)
+            if self._tier_allowed("working")
+            else []
         )
         if working_context:
             parts.append("【当前对话】")
@@ -564,7 +613,8 @@ class MemoryManager:
         # （失败摘要只用于诊断，不假装为普通事实）。
         # 未注入 summary_store 或 session_id 为空时整段跳过 ——
         # 永不注入"全部 session 的最新摘要"以避免跨 session 串味。
-        if self.summary_store is not None and session_id:
+        # M0: 摘要由本会话对话派生，归入 working 层权限闸门。
+        if self.summary_store is not None and session_id and self._tier_allowed("working"):
             try:
                 latest_ready = self.summary_store.get_latest_ready(session_id)
             except Exception as exc:
@@ -582,10 +632,12 @@ class MemoryManager:
                 )
 
         # 获取最近的 episodic 记忆
+        # M0: episodic 层权限闸门。
         try:
-            recent_episodic = self.episodic.get_recent(
-                limit=3,
-                session_id=session_id,
+            recent_episodic = (
+                self.episodic.get_recent(limit=3, session_id=session_id)
+                if self._tier_allowed("episodic")
+                else []
             )
             if recent_episodic:
                 parts.append("\n【相关经历】")
@@ -605,8 +657,13 @@ class MemoryManager:
             logger.warning(f"获取情景记忆失败: {e}")
 
         # 获取最近的 semantic 记忆
+        # M0: semantic 层权限闸门。
         try:
-            recent_semantic = self.semantic.get_recent(limit=3, session_id=session_id)
+            recent_semantic = (
+                self.semantic.get_recent(limit=3, session_id=session_id)
+                if self._tier_allowed("semantic")
+                else []
+            )
             if recent_semantic:
                 parts.append("\n【相关知识】")
                 for mem in recent_semantic:
@@ -732,6 +789,15 @@ class MemoryManager:
                 query, memory_type, limit, session_id, scope
             )
 
+        # M0 (2026-11-03): 读层权限闸门 —— 指定了无权读取的层直接返回空，
+        # 避免把"禁止"变成"检索后过滤"（后者仍会把内容读进进程）。
+        if (
+            self.allowed_tiers is not None
+            and memory_type is not None
+            and not self._tier_allowed(str(memory_type))
+        ):
+            return []
+
         if memory_type == "episodic":
             return self.episodic.search(query, limit=limit, session_id=session_id)
         elif memory_type == "semantic":
@@ -744,7 +810,7 @@ class MemoryManager:
         results: List[Dict[str, Any]] = []
 
         # 工作记忆（memory_type 为 None 或 'working'），按 session 隔离
-        if memory_type in (None, "working"):
+        if memory_type in (None, "working") and self._tier_allowed("working"):
             sid = self.working.resolve_session_id(session_id)
             for msg in self.working.get_context(session_id):
                 if query and query.lower() not in msg.get("content", "").lower():
@@ -759,10 +825,14 @@ class MemoryManager:
             return results[:limit]
 
         # memory_type 为 None：搜索所有持久层并与工作记忆合并
-        results.extend(self.episodic.search(query, limit=limit, session_id=session_id))
-        results.extend(
-            self.semantic.search(query, limit=limit, session_id=session_id)
-        )
+        if self._tier_allowed("episodic"):
+            results.extend(
+                self.episodic.search(query, limit=limit, session_id=session_id)
+            )
+        if self._tier_allowed("semantic"):
+            results.extend(
+                self.semantic.search(query, limit=limit, session_id=session_id)
+            )
         return results[:limit]
 
     def _search_by_scope(
@@ -783,13 +853,14 @@ class MemoryManager:
         if memory_type == "working":
             return []
         results: List[Dict[str, Any]] = []
-        if memory_type in (None, "episodic"):
+        # M0: 作用域轴检索同样受读层权限闸门约束。
+        if memory_type in (None, "episodic") and self._tier_allowed("episodic"):
             results.extend(
                 self.episodic.search(
                     query, limit=limit, scope=scope, project_key=project_key
                 )
             )
-        if memory_type in (None, "semantic"):
+        if memory_type in (None, "semantic") and self._tier_allowed("semantic"):
             results.extend(
                 self.semantic.search(
                     query, limit=limit, scope=scope, project_key=project_key

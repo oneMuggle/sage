@@ -73,6 +73,12 @@ export const enChatAndSider = {
   'chat.orchMode.forceMulti': 'Force orchestration (LLM decomposes)',
   'chat.orchMode.templateResearchWrite': 'Template: research & write',
   'chat.orchMode.templateGatherAnalyzeReport': 'Template: gather-analyze-report',
+  // M0 (2026-11-03): session-level specialist picker
+  'chat.specialist.label': 'Specialist',
+  'chat.specialist.primary': 'Main assistant',
+  'chat.specialist.hint': 'Specialist for this session (affects subsequent turns only)',
+  'chat.specialist.switched': 'This session now uses {name}',
+  'chat.specialist.switchFailed': 'Failed to switch specialist',
   'chat.stop': 'Stop',
   'chat.config_warning': 'API endpoint or chat model not configured',
   'chat.config_warning_action': 'Go to Settings',

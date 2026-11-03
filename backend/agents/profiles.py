@@ -924,11 +924,42 @@ def get_enabled_agent(agent_id: str) -> Optional[Dict[str, Any]]:
 
 
 def format_agents_for_prompt() -> str:
-    """格式化已启用 Agent 列表，供注入 system prompt。"""
-    agents = [a for a in list_agents() if a.enabled]
-    if not agents:
+    """格式化已启用 Agent 列表，供注入 system prompt。
+
+    M0 (2026-11-03): 改读 SQLite —— 用户在 Agent 管理页禁用某个专家后，
+    system prompt 必须立刻不再把它列为"可用"。此前只读内存注册表
+    (``get_agent_registry()``)，注册表在进程启动时播种，禁用状态不回流，
+    LLM 仍会把已停用的专家推荐给用户。
+
+    DB 不可用（首次启动 / 表未建）时降级回内存注册表 —— prompt 组装
+    永不因 DB 故障而抛错。
+    """
+    entries = []
+    try:
+        from backend.data.agent_repo import AgentRepository
+
+        for row in AgentRepository().list_all():
+            if not row.get("enabled", True):
+                continue
+            entries.append(
+                (
+                    row.get("name") or row.get("id") or "",
+                    row.get("id") or "",
+                    row.get("description") or row.get("role") or "",
+                )
+            )
+    except Exception as exc:  # noqa: BLE001 — 降级不阻塞 prompt 组装
+        logger.warning("读取 agents 表失败, 退回内存注册表: %s", exc)
+        entries = []
+
+    if not entries:
+        for agent in list_agents():
+            if agent.enabled:
+                entries.append((agent.name, agent.id, agent.description or agent.role))
+
+    if not entries:
         return ""
-    lines = [f"- {a.name} ({a.id}): {a.description or a.role}" for a in agents]
+    lines = [f"- {name} ({agent_id}): {desc}" for name, agent_id, desc in entries]
     return "\n\n你可以向用户介绍以下可用 Agent：\n" + "\n".join(lines)
 
 

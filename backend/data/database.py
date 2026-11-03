@@ -513,6 +513,7 @@ class Database:
                 run_status TEXT DEFAULT 'idle',
                 last_error TEXT,
                 last_run_at INTEGER,
+                specialist_id TEXT DEFAULT 'primary',
                 FOREIGN KEY (parent_id) REFERENCES sessions(id)
             )
         """)
@@ -720,6 +721,12 @@ class Database:
         # 用 title == '新对话' AND title_attempts == 0 作为"未生成"信号。
         if "title_attempts" not in session_columns:
             cursor.execute("ALTER TABLE sessions ADD COLUMN title_attempts INTEGER DEFAULT 0")
+        # M0 (2026-11-03): 会话级专家绑定。指向 agents.id；'primary' = 主助手。
+        # 存量会话回填为 'primary'（保持既有行为）。
+        if "specialist_id" not in session_columns:
+            cursor.execute(
+                "ALTER TABLE sessions ADD COLUMN specialist_id TEXT DEFAULT 'primary'"
+            )
         conn.commit()
 
         # 情景记忆表
@@ -1843,6 +1850,10 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC)"
         )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_pinned ON sessions(is_pinned)")
+        # M0 (2026-11-03): 会话级专家绑定查询（按专家列出会话）
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_specialist ON sessions(specialist_id)"
+        )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at)"
         )

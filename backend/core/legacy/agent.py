@@ -461,6 +461,19 @@ class SageAgent:
                 semantic,
                 summary_store=SessionSummaryStore(db),
             )
+            # M0 (2026-11-03): 专家记忆读权限 —— 把 profile.memory_access
+            # 下发到记忆层闸门（read-layer filtering）。
+            # 空列表 = "未声明"（历史 agent 与 API 创建的 agent 默认都是
+            # []），此时**不设限**，保持既有行为；非空列表才按层过滤。
+            # profile is None（默认助手）→ 无闸门，"切回主助手无残留"。
+            _memory_access = (self.profile or {}).get("memory_access")
+            if isinstance(_memory_access, list) and _memory_access:
+                self.memory_manager.set_allowed_tiers(_memory_access)
+                logger.info(
+                    "记忆读权限已收窄: agent=%s tiers=%s",
+                    self.agent_id,
+                    ",".join(str(t) for t in _memory_access),
+                )
 
             # 初始化工具注册表
             self.tool_registry = ToolRegistry()

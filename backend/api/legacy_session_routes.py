@@ -35,6 +35,7 @@ from backend.chat.compaction import (
     compact_messages,
     should_compact,
 )
+from backend.chat.specialist_binding import validate_specialist_id
 from backend.data.answer_version_repo import AnswerVersionError, AnswerVersionRepository
 from backend.data.database import get_database, make_with_db_lock
 from backend.data.session_repo import (
@@ -97,7 +98,16 @@ def create_session(data: SessionCreate, repo: SessionRepository = Depends(get_se
     解析失败（连 scratch 都不可用）时响应里 ``workspace_binding`` 为 null，
     前端据此渲染"选择文件夹"引导，不会阻塞会话创建。
     """
-    session = repo.create(title=data.title, parent_id=data.parent_id)
+    # M0 (2026-11-03): 会话级专家绑定。校验失败整体拒绝，不写半截数据。
+    try:
+        bound_specialist = validate_specialist_id(data.specialist_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    session = repo.create(
+        title=data.title,
+        parent_id=data.parent_id,
+        specialist_id=bound_specialist,
+    )
 
     workspace_binding: Optional[Dict[str, Any]] = None
     try:
@@ -231,6 +241,12 @@ def update_session(
         update_data["is_pinned"] = 1 if data.is_pinned else 0
     if data.is_archived is not None:
         update_data["is_archived"] = 1 if data.is_archived else 0
+    # M0 (2026-11-03): 切换专家绑定。空串 = 解绑回主助手；非法 id 整体拒绝。
+    if data.specialist_id is not None:
+        try:
+            update_data["specialist_id"] = validate_specialist_id(data.specialist_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
     if update_data:
         repo.update(session_id, **update_data)

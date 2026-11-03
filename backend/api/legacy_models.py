@@ -21,6 +21,8 @@ class SessionCreate(BaseModel):
     # 2026-10-29 (feat/workspace-optimization): Electron 启动时从 cwd 嗅探到的
     # 项目根。仅作为决策链的低优先级参考输入（低于用户显式偏好），不会被记住。
     detected_root: Optional[str] = None
+    # M0 (2026-11-03): 会话级专家绑定。指向 agents.id；缺省 → 'primary'（主助手）。
+    specialist_id: Optional[str] = None
 
 
 class SessionUpdate(BaseModel):
@@ -30,6 +32,9 @@ class SessionUpdate(BaseModel):
 
     # 手动归档/恢复（侧栏会话条目菜单）。None = 不更新。
     is_archived: Optional[bool] = None
+
+    # M0 (2026-11-03): 切换会话绑定的专家。None = 不更新；空串 = 解绑回主助手。
+    specialist_id: Optional[str] = None
 
 
 class ChatRequest(BaseModel):
