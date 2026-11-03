@@ -434,7 +434,7 @@ describe('ProjectArchetypeStudio', () => {
     expect(await screen.findByTestId('project-advisor-card')).toBeInTheDocument();
     fireEvent.click(await screen.findByTestId('advisor-toggle-details-btn'));
     fireEvent.click(screen.getByTestId('advisor-batch-suggestions-to-constraint-btn'));
-    expect(screen.getByTestId('advisor-batch-suggestions-to-constraint-btn')).toHaveTextContent('已全部转约束');
+    expect(screen.getByTestId('advisor-batch-suggestions-to-constraint-btn')).toHaveTextContent('已全部转为规则');
     fireEvent.click(screen.getByTestId('advisor-suggestion-to-l4-0'));
     expect(screen.getByTestId('advisor-suggestion-to-l4-0')).toHaveTextContent('已保存');
     expect(screen.getByTestId('wiki-generation-panel')).toBeInTheDocument();
