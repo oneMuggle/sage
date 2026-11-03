@@ -211,7 +211,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                           content: `项目里程碑进度快照：总体完成率 ${Math.round(progress)}%（已完成 ${completed}/${milestones.length}，进行中 ${inProgress}，阻塞 ${blocked}${overdueCount > 0 ? `，逾期 ${overdueCount}` : ''}）`,
                           importance: 7,
                           sourceMessageIds: [],
-                          reasoning: '里程碑进度摘要沉淀至 L3 画像',
+                          reasoning: '里程碑进度摘要保存到 AI 记忆',
                         },
                       ],
                     });
@@ -242,7 +242,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
               }}
               className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              {savedProgressL4 ? '已存 L4' : '存 L4'}
+              {savedProgressL4 ? '已保存' : '存为资料'}
             </button>
             <button
               type="button"
@@ -381,7 +381,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                           content: `[已达成里程碑] ${dm.title}`,
                           importance: 7,
                           sourceMessageIds: [],
-                          reasoning: '已完成里程碑成果沉淀至 L3 画像',
+                          reasoning: '已完成里程碑成果保存到 AI 记忆',
                         })),
                       });
                     } catch {
@@ -494,7 +494,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                           content: `项目里程碑阶段分布 (${milestones.length} 项)`,
                           importance: 6,
                           sourceMessageIds: [],
-                          reasoning: '里程碑阶段分布统计沉淀至 L3 画像',
+                          reasoning: '里程碑阶段分布统计保存到 AI 记忆',
                         },
                       ],
                     });
@@ -666,7 +666,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                                     content: `里程碑进展 [${milestone.title}] (${milestone.status})`,
                                     importance: 7,
                                     sourceMessageIds: [],
-                                    reasoning: '里程碑进度摘要单条沉淀至 L3 画像',
+                                    reasoning: '里程碑进度摘要单条保存到 AI 记忆',
                                   },
                                 ],
                               });
@@ -677,7 +677,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                         }}
                         className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                       >
-                        {promotedL3Ids.has(milestone.id) ? '已存L3' : '+L3'}
+                        {promotedL3Ids.has(milestone.id) ? '已保存' : '+记忆'}
                       </button>
                       <button
                         type="button"
@@ -697,7 +697,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                         }}
                         className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                       >
-                        {promotedL4Ids.has(milestone.id) ? '已存L4' : '+L4'}
+                        {promotedL4Ids.has(milestone.id) ? '已保存' : '+资料'}
                       </button>
                       <button
                         type="button"

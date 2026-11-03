@@ -271,7 +271,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                               content: `项目阶段快照 [${project.name}]：形态=${blueprint.label}，当前阶段=${stageLabel}，L1宪章=${hasSageMd ? '已就绪' : '待初始化'}，快照数=${checkpointCount}`,
                               importance: 7,
                               sourceMessageIds: [],
-                              reasoning: '概览阶段状态沉淀至 L3 画像',
+                              reasoning: '概览阶段状态保存到 AI 记忆',
                             },
                           ],
                         });
@@ -462,7 +462,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                             content: pillar,
                             importance: 8,
                             sourceMessageIds: [],
-                            reasoning: '概览组件护栏支柱一键沉淀至 L3 画像',
+                            reasoning: '概览组件护栏支柱一键保存到 AI 记忆',
                           })),
                         });
                       } catch {
@@ -573,7 +573,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                           content: `${blueprint.label} 阶段管线 (${project.name})：${blueprint.stages.map((s) => (s.id === activeStageId ? `[${s.label}*]` : s.label)).join(' → ')}`,
                           importance: 7,
                           sourceMessageIds: [],
-                          reasoning: '项目概览阶段推进管线一键沉淀至 L3 画像',
+                          reasoning: '项目概览阶段推进管线一键保存到 AI 记忆',
                         },
                       ],
                     });
