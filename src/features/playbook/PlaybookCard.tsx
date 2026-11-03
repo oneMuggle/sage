@@ -53,6 +53,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const [library, setLibrary] = useState<PlaybookLibraryItem[]>([]);
   const [selectedPlaybook, setSelectedPlaybook] = useState('');
   const [loading, setLoading] = useState(true);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -75,11 +76,23 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const [showDocumentImport, setShowDocumentImport] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const loadAudit = useCallback(async () => {
+    setAuditLoading(true);
+    try {
+      const audit = await playbookApi.audit(projectId);
+      if (audit) setCurrent((prev) => (prev ? { ...prev, audit } : prev));
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [projectId]);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await playbookApi.getCurrent(projectId);
+      const data = await playbookApi.getCurrent(projectId, false);
       setCurrent(data);
       if (!data.bound) {
         const [list, items] = await Promise.all([
@@ -96,13 +109,16 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
               ? `library:${items[0].id}`
               : '';
         setSelectedPlaybook((prev) => prev || defaultSelection);
+      } else if (!data.audit) {
+        // M2: audit runs after the card renders, so the page is not blocked.
+        void loadAudit();
       }
     } catch (err) {
       setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, loadAudit]);
 
   useEffect(() => {
     void refresh();
@@ -622,6 +638,28 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           onSave={(spec) => void handleSaveSpec(spec)}
           onCancel={() => setEditingSpec(false)}
         />
+      )}
+
+      {/* M2: audit runs in the background after the card renders. */}
+      {auditLoading && !audit && (
+        <div
+          className="flex items-center gap-2 text-xs text-muted-foreground"
+          data-testid="playbook-audit-loading"
+        >
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          正在检查规程完整性…
+        </div>
+      )}
+      {!auditLoading && !audit && (
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 p-2 text-xs text-muted-foreground"
+          data-testid="playbook-audit-pending"
+        >
+          <span>尚未检查规程完整性。</span>
+          <Button size="sm" variant="secondary" onClick={() => void loadAudit()}>
+            立即检查
+          </Button>
+        </div>
       )}
 
       {/* 阶段条 */}

@@ -5,12 +5,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BootstrapPreviewResult } from '../../../shared/api/projectApi';
 import { ProjectBootstrapPanel } from '../ProjectBootstrapPanel';
 
-const previewMock = vi.fn();
+const scanMock = vi.fn();
+const suggestMock = vi.fn();
 const applyMock = vi.fn();
 
 vi.mock('../../../shared/api/projectApi', () => ({
   projectApi: {
-    bootstrapPreview: (...args: unknown[]) => previewMock(...args),
+    bootstrapScan: (...args: unknown[]) => scanMock(...args),
+    bootstrapSuggest: (...args: unknown[]) => suggestMock(...args),
     bootstrapApply: (...args: unknown[]) => applyMock(...args),
   },
 }));
@@ -72,9 +74,16 @@ const preview: BootstrapPreviewResult = {
 
 describe('ProjectBootstrapPanel', () => {
   beforeEach(() => {
-    previewMock.mockReset();
+    scanMock.mockReset();
+    suggestMock.mockReset();
     applyMock.mockReset();
-    previewMock.mockResolvedValue(preview);
+    scanMock.mockResolvedValue({ project: preview.project, scan: preview.scan });
+    suggestMock.mockResolvedValue({
+      suggestions: preview.suggestions,
+      llmAvailable: true,
+      llmError: null,
+      ruleSource: 'ai',
+    });
     applyMock.mockResolvedValue({
       project: preview.project,
       applied: ['sage_md', 'git_init'],
@@ -92,6 +101,7 @@ describe('ProjectBootstrapPanel', () => {
     expect(screen.getByTestId('bootstrap-rules')).toBeInTheDocument();
     expect(screen.getByTestId('bootstrap-milestones')).toBeInTheDocument();
     expect(screen.getByTestId('bootstrap-git-init')).toBeChecked();
+    expect(suggestMock).toHaveBeenCalledWith('p1', true);
   });
 
   it('applies selected suggestions including git init', async () => {
@@ -111,22 +121,31 @@ describe('ProjectBootstrapPanel', () => {
     expect(payload.milestones).toHaveLength(1);
     expect(onApplied).toHaveBeenCalledTimes(1);
     expect(await screen.findByTestId('bootstrap-result')).toHaveTextContent('已应用 2 项');
+    // Applying refreshes the deterministic scan (existing counts).
+    expect(scanMock).toHaveBeenCalledTimes(2);
   });
 
-  it('shows local-rules badge when LLM is unavailable', async () => {
-    previewMock.mockResolvedValue({ ...preview, llmAvailable: false });
+  it('shows local-template badge and fallback notice when LLM is unavailable', async () => {
+    suggestMock.mockResolvedValue({
+      suggestions: preview.suggestions,
+      llmAvailable: false,
+      llmError: 'LLM 未配置或请求失败，已改用本地推荐模板',
+      ruleSource: 'template',
+    });
     render(<ProjectBootstrapPanel projectId="p1" />);
 
     await screen.findByTestId('project-bootstrap-panel');
-    expect(screen.getByText('本地规则')).toBeInTheDocument();
+    expect(screen.getByText('本地推荐模板')).toBeInTheDocument();
+    expect(screen.getByTestId('bootstrap-llm-fallback')).toHaveTextContent('已改用本地推荐模板');
   });
 
-  it('shows an error and retry action when preview fails', async () => {
-    previewMock.mockRejectedValueOnce(new Error('backend down'));
+  it('shows an error and retry action when scan fails', async () => {
+    scanMock.mockRejectedValueOnce(new Error('backend down'));
     render(<ProjectBootstrapPanel projectId="p1" />);
 
     expect(await screen.findByTestId('project-bootstrap-error')).toHaveTextContent('backend down');
-    fireEvent.click(screen.getByText('重试（不调用 AI）'));
-    await waitFor(() => expect(previewMock).toHaveBeenCalledWith('p1', false));
+    fireEvent.click(screen.getByText('仅扫描（不调用 AI）'));
+    await waitFor(() => expect(scanMock).toHaveBeenCalledTimes(2));
+    expect(suggestMock).toHaveBeenCalledWith('p1', false);
   });
 });

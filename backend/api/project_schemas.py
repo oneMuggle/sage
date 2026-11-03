@@ -633,6 +633,28 @@ class BootstrapPreviewResponse(BaseModel):
     scan: Dict[str, Any]
     suggestions: Dict[str, Any]
     llm_available: bool
+    llm_error: Optional[str] = None
+    rule_source: Optional[str] = None
+
+
+class BootstrapScanResponse(BaseModel):
+    """POST /projects/{id}/bootstrap/scan 的响应（确定性扫描，不调用 LLM）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project: ProjectModel
+    scan: Dict[str, Any]
+
+
+class BootstrapSuggestResponse(BaseModel):
+    """POST /projects/{id}/bootstrap/suggest 的响应（AI 建议阶段）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    suggestions: Dict[str, Any]
+    llm_available: bool
+    llm_error: Optional[str] = None
+    rule_source: Optional[str] = None
 
 
 class BootstrapMetadataInput(BaseModel):

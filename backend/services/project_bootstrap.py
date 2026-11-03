@@ -176,35 +176,8 @@ def _first_prompt(project_type: Optional[str]) -> str:
     return "请先了解这个项目，总结它的目标、现状和下一步最值得做的事。"
 
 
-async def build_bootstrap_preview(
-    project: Project,
-    *,
-    use_llm: bool = True,
-) -> Dict[str, Any]:
-    """Build a read-only initialization proposal for a project."""
-    profile = profile_project(project.path)
-
-    agent = ProjectAnalysisAgent()
-    report = await agent.analyze(profile, allow_llm=use_llm)
-
-    existing_constraints = ProjectConstraintRepository().list_by_project(project.id)
-    existing_contents = [item.content for item in existing_constraints]
-
-    generated = None
-    if use_llm:
-        try:
-            generated = await ProjectRuleGenerator().generate(
-                profile,
-                report,
-                existing_contents=existing_contents,
-            )
-        except Exception:  # LLM/parse failure must not break preview
-            logger.warning("rule generation failed during bootstrap preview", exc_info=True)
-
-    rules = _collect_rules(report, generated, existing_contents)
-    milestones = _collect_milestones(generated, profile.level1_type)
-    sage_md = _sage_md_draft(report, project)
-
+def _scan_payload(project: Project, profile: Any) -> Dict[str, Any]:
+    """Assemble the deterministic scan section from a codebase profile."""
     try:
         scanned = ProjectWikiGenerator().scan_files(
             project_root=project.path,
@@ -225,26 +198,84 @@ async def build_bootstrap_preview(
     root = Path(project.path)
     materials = ProjectMaterialRepository().list_by_project(project.id)
     milestones_count = len(ProjectMilestoneRepository().list_by_project(project.id))
+    existing_constraints = ProjectConstraintRepository().list_by_project(project.id)
 
     return {
-        "project": project.to_dict(),
-        "scan": {
-            "level1_type": profile.level1_type,
-            "sub_type": profile.sub_type,
-            "tech_stack": list(profile.tech_stack),
-            "frameworks": list(profile.frameworks),
-            "source_files": [
-                {"language": language, "count": count}
-                for language, count in sorted(language_counts.items())
-            ],
-            "git": {**git_stats, "git_available": has_git},
-            "existing": {
-                "sage_md": (root / "SAGE.md").is_file(),
-                "rules_count": len(existing_constraints),
-                "milestones_count": milestones_count,
-                "materials_count": len(materials),
-            },
+        "level1_type": profile.level1_type,
+        "sub_type": profile.sub_type,
+        "tech_stack": list(profile.tech_stack),
+        "frameworks": list(profile.frameworks),
+        "source_files": [
+            {"language": language, "count": count}
+            for language, count in sorted(language_counts.items())
+        ],
+        "git": {**git_stats, "git_available": has_git},
+        "existing": {
+            "sage_md": (root / "SAGE.md").is_file(),
+            "rules_count": len(existing_constraints),
+            "milestones_count": milestones_count,
+            "materials_count": len(materials),
         },
+    }
+
+
+async def build_bootstrap_scan(project: Project) -> Dict[str, Any]:
+    """Deterministic, fast project scan (no LLM).
+
+    Returns immediately so the UI can render scan results while the
+    slower suggestion step is still running.
+    """
+    profile = profile_project(project.path)
+    return {
+        "project": project.to_dict(),
+        "scan": _scan_payload(project, profile),
+    }
+
+
+async def build_bootstrap_suggestions(
+    project: Project,
+    *,
+    use_llm: bool = True,
+) -> Dict[str, Any]:
+    """Build initialization suggestions (LLM-backed when available)."""
+    profile = profile_project(project.path)
+
+    agent = ProjectAnalysisAgent()
+    report = await agent.analyze(profile, allow_llm=use_llm)
+
+    existing_constraints = ProjectConstraintRepository().list_by_project(project.id)
+    existing_contents = [item.content for item in existing_constraints]
+
+    generated = None
+    llm_error: Optional[str] = None
+    if use_llm:
+        try:
+            generated = await ProjectRuleGenerator().generate(
+                profile,
+                report,
+                existing_contents=existing_contents,
+            )
+        except Exception as exc:  # LLM/parse failure must not break preview
+            llm_error = str(exc)
+            logger.warning("rule generation failed during bootstrap preview", exc_info=True)
+
+    rules = _collect_rules(report, generated, existing_contents)
+    milestones = _collect_milestones(generated, profile.level1_type)
+    sage_md = _sage_md_draft(report, project)
+    root = Path(project.path)
+    git_stats = profile.git_stats.to_dict()
+    has_git = git_available()
+
+    llm_available = bool(getattr(report, "llm_available", False) and use_llm)
+    rule_source = (
+        "ai"
+        if generated is not None and getattr(generated, "llm_available", False)
+        else "template"
+    )
+    if use_llm and not llm_available and llm_error is None:
+        llm_error = "LLM 未配置或请求失败，已改用本地推荐模板"
+
+    return {
         "suggestions": {
             "sage_md": {
                 "content": sage_md,
@@ -267,15 +298,33 @@ async def build_bootstrap_preview(
                 ),
                 "blockers": [] if has_git else ["git_not_available"],
             },
-            "wiki": {
-                "recommended": len(scanned) > 0,
-                "estimated_pages": max(3, min(20, (len(scanned) + 11) // 12))
-                if scanned
-                else 0,
-            },
             "first_prompt": _first_prompt(profile.level1_type),
         },
-        "llm_available": bool(getattr(report, "llm_available", False) and use_llm),
+        "llm_available": llm_available,
+        "llm_error": llm_error,
+        "rule_source": rule_source,
+    }
+
+
+async def build_bootstrap_preview(
+    project: Project,
+    *,
+    use_llm: bool = True,
+) -> Dict[str, Any]:
+    """Build a read-only initialization proposal for a project.
+
+    Kept for backward compatibility; new clients should call the scan and
+    suggest endpoints separately so progress can be shown.
+    """
+    scan_data = await build_bootstrap_scan(project)
+    suggest_data = await build_bootstrap_suggestions(project, use_llm=use_llm)
+    return {
+        "project": scan_data["project"],
+        "scan": scan_data["scan"],
+        "suggestions": suggest_data["suggestions"],
+        "llm_available": suggest_data["llm_available"],
+        "llm_error": suggest_data["llm_error"],
+        "rule_source": suggest_data["rule_source"],
     }
 
 

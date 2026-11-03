@@ -1419,31 +1419,51 @@ export interface BootstrapMilestoneSuggestion {
   estimatedDays: number | null;
 }
 
+export interface BootstrapScanSection {
+  level1Type: string | null;
+  subType: string | null;
+  techStack: string[];
+  sourceFiles: BootstrapSourceFileCount[];
+  git: BootstrapGitInfo;
+  existing: {
+    sageMd: boolean;
+    rulesCount: number;
+    milestonesCount: number;
+    materialsCount: number;
+  };
+}
+
+export interface BootstrapSuggestionSet {
+  sageMd: { content: string; rationale: string; exists: boolean };
+  rules: BootstrapRuleSuggestion[];
+  milestones: BootstrapMilestoneSuggestion[];
+  allowedPaths: string[];
+  gitInit: { recommended: boolean; reason: string; blockers: string[] };
+  wiki?: { recommended: boolean; estimatedPages: number };
+  firstPrompt: string;
+}
+
 export interface BootstrapPreviewResult {
   project: ProjectSummary;
-  scan: {
-    level1Type: string | null;
-    subType: string | null;
-    techStack: string[];
-    sourceFiles: BootstrapSourceFileCount[];
-    git: BootstrapGitInfo;
-    existing: {
-      sageMd: boolean;
-      rulesCount: number;
-      milestonesCount: number;
-      materialsCount: number;
-    };
-  };
-  suggestions: {
-    sageMd: { content: string; rationale: string; exists: boolean };
-    rules: BootstrapRuleSuggestion[];
-    milestones: BootstrapMilestoneSuggestion[];
-    allowedPaths: string[];
-    gitInit: { recommended: boolean; reason: string; blockers: string[] };
-    wiki: { recommended: boolean; estimatedPages: number };
-    firstPrompt: string;
-  };
+  scan: BootstrapScanSection;
+  suggestions: BootstrapSuggestionSet;
   llmAvailable: boolean;
+  llmError?: string | null;
+  ruleSource?: string | null;
+}
+
+/** M2: 两步初始化——第一步确定性扫描结果。 */
+export interface BootstrapScanResult {
+  project: ProjectSummary;
+  scan: BootstrapScanSection;
+}
+
+/** M2: 两步初始化——第二步 AI 建议结果。 */
+export interface BootstrapSuggestResult {
+  suggestions: BootstrapSuggestionSet;
+  llmAvailable: boolean;
+  llmError: string | null;
+  ruleSource: string | null;
 }
 
 export interface BootstrapApplyPayload {

@@ -28,6 +28,8 @@ from backend.api.project_schemas import (
     BootstrapErrorModel,
     BootstrapPreviewRequest,
     BootstrapPreviewResponse,
+    BootstrapScanResponse,
+    BootstrapSuggestResponse,
     ConstraintCreateRequest,
     ConstraintModel,
     ConstraintsResponse,
@@ -106,7 +108,12 @@ from backend.office.storage import validate_workspace
 from backend.services.default_workspace import DefaultWorkspaceResolver
 from backend.services.git_integration import GitIntegration
 from backend.services.project_archetype_scaffold import execute_project_scaffold
-from backend.services.project_bootstrap import apply_bootstrap, build_bootstrap_preview
+from backend.services.project_bootstrap import (
+    apply_bootstrap,
+    build_bootstrap_preview,
+    build_bootstrap_scan,
+    build_bootstrap_suggestions,
+)
 from backend.services.project_git_init import init_project_git
 from backend.services.project_type_detector import (
     DetectionResult,
@@ -168,6 +175,39 @@ def get_project_location(project_id: str) -> ProjectLocationResponse:
 
 
 @router.post(
+    "/{project_id}/bootstrap/scan", response_model=BootstrapScanResponse
+)
+@with_db_lock
+async def bootstrap_scan(project_id: str) -> BootstrapScanResponse:
+    """确定性扫描项目（不调用 LLM），供初始化向导立即展示扫描结果。"""
+    project = _get_project_or_404(project_id)
+    data = await build_bootstrap_scan(project)
+    repo = ProjectRepository()
+    return BootstrapScanResponse(
+        project=_with_stats(project, repo.session_stats()),
+        scan=data["scan"],
+    )
+
+
+@router.post(
+    "/{project_id}/bootstrap/suggest", response_model=BootstrapSuggestResponse
+)
+@with_db_lock
+async def bootstrap_suggest(
+    project_id: str, request: BootstrapPreviewRequest
+) -> BootstrapSuggestResponse:
+    """生成 AI 初始化建议（LLM 可用时），供初始化向导第二步调用。"""
+    project = _get_project_or_404(project_id)
+    data = await build_bootstrap_suggestions(project, use_llm=request.use_llm)
+    return BootstrapSuggestResponse(
+        suggestions=data["suggestions"],
+        llm_available=data["llm_available"],
+        llm_error=data.get("llm_error"),
+        rule_source=data.get("rule_source"),
+    )
+
+
+@router.post(
     "/{project_id}/bootstrap/preview", response_model=BootstrapPreviewResponse
 )
 @with_db_lock
@@ -183,6 +223,8 @@ async def bootstrap_preview(
         scan=data["scan"],
         suggestions=data["suggestions"],
         llm_available=data["llm_available"],
+        llm_error=data.get("llm_error"),
+        rule_source=data.get("rule_source"),
     )
 
 
