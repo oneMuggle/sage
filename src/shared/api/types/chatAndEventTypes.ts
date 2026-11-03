@@ -635,6 +635,17 @@ export interface RetryInfo {
   budget_total_s?: number;
   /** 2026-11-02: 本次等待结束后剩余的预算秒数（后端可省略） */
   budget_remaining_s?: number;
+  /**
+   * 2026-11-03: 重试阶段 —— backoff = 退避等待中（等 delay 秒后重试）；
+   * in_flight = 重试请求已发出、在途等待上游响应。缺省按 backoff 处理。
+   */
+  phase?: 'backoff' | 'in_flight';
+  /** 2026-11-03: 本次重试链路已累计耗时（秒，含在途请求与退避） */
+  elapsed_s?: number;
+  /** 2026-11-03: 本次尝试的请求超时上限（秒）—— in_flight 阶段用于提示还剩多久判超时 */
+  attempt_timeout_s?: number;
+  /** 2026-11-03: 事件来源（如 compaction = 会话压缩触发的后台调用） */
+  source?: string;
 }
 
 /** 流式聊天事件 (NDJSON 协议的一行) */

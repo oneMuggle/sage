@@ -105,8 +105,8 @@ async def test_retry_with_zero_delay_emits_no_heartbeat(monkeypatch):
     ):
         events.append(kind)
 
-    # delay=0 → 无 heartbeat, 与原有 test_stream_retries_before_first_delta 一致
-    assert events == ["retry", "content_delta", "response"]
+    # delay=0 → 无 heartbeat; 2026-11-03: 退避结束后发 retry_attempt_started
+    assert events == ["retry", "retry_attempt_started", "content_delta", "response"]
 
 
 @pytest.mark.asyncio()
@@ -159,6 +159,7 @@ async def test_retry_with_12s_delay_emits_3_heartbeats(monkeypatch):
         "heartbeat",
         "heartbeat",
         "heartbeat",
+        "retry_attempt_started",
         "content_delta",
         "response",
     ]
@@ -199,7 +200,13 @@ async def test_retry_with_3s_delay_emits_1_heartbeat(monkeypatch):
     ):
         events.append(kind)
 
-    assert events == ["retry", "heartbeat", "content_delta", "response"]
+    assert events == [
+        "retry",
+        "heartbeat",
+        "retry_attempt_started",
+        "content_delta",
+        "response",
+    ]
     assert slept == [3.0]
 
 

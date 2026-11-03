@@ -42,7 +42,13 @@ from backend.core.legacy.iteration_budget import (
     decide_budget,
     estimate_initial_budget,
 )
-from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse, RetryEvent
+from backend.core.legacy.llm_client import (
+    LLMClient,
+    LLMConfig,
+    LLMResponse,
+    RetryAttemptStartedEvent,
+    RetryEvent,
+)
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
 from backend.domain.scheduler import SchedulerServicePort
@@ -320,9 +326,34 @@ def _retry_info_from_event(ev: RetryEvent) -> Dict[str, Any]:
         "error_type": ev.error_type,
         "error_message": ev.error_message,
         "delay": ev.delay,
+        "phase": "backoff",
+        "elapsed_s": ev.elapsed_s,
+        "attempt_timeout_s": ev.attempt_timeout_s,
         "budget_total_s": ev.budget_total_s,
         "budget_remaining_s": ev.budget_remaining_s,
     }
+
+
+def _retry_started_info_from_event(
+    ev: RetryAttemptStartedEvent, last_info: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """把"重试请求已发出"事件转成 retry_info 字典。
+
+    错误类型/消息沿用上一次 RetryEvent（请求在途期间保留失败原因），
+    phase 置为 in_flight，让前端从倒计时切换到"已等待 Ns"。
+    """
+    merged = dict(last_info or {})
+    merged.update(
+        {
+            "attempt": ev.attempt,
+            "phase": "in_flight",
+            "delay": 0.0,
+            "elapsed_s": ev.elapsed_s,
+            "attempt_timeout_s": ev.attempt_timeout_s,
+            "budget_remaining_s": ev.budget_remaining_s,
+        }
+    )
+    return merged
 
 
 def _retry_events_to_agent_events(
@@ -2058,6 +2089,9 @@ class SageAgent:
                 # 2026-11-03: 提到 while 外层 —— 流式→非流式回退时也要能看到
                 # 已经下发过哪些 reasoning 增量，避免整段 reasoning 被重复发送。
                 stream_reasoning_parts: List[str] = []
+                # 2026-11-03: 最近一次 retry_info —— "请求在途"事件沿用其错误
+                # 类型/消息，前端据 phase 区分退避倒计时与在途等待。
+                last_retry_info: Optional[Dict[str, Any]] = None
                 while True:
                     try:
                         if self._should_stream(self.llm_client):
@@ -2090,10 +2124,23 @@ class SageAgent:
                                         # 2026-10-13: LLM 请求重试事件。转成
                                         # AgentEvent(RETRY) 让前端实时显示重试
                                         # 状态 —— 此前退避等待完全不可见。
+                                        last_retry_info = _retry_info_from_event(payload)
                                         yield AgentEvent(
                                             state=AgentState.RETRY,
                                             iteration=i,
-                                            retry_info=_retry_info_from_event(payload),
+                                            retry_info=last_retry_info,
+                                            agent_id=self.agent_id,
+                                        )
+                                    elif evt_kind == "retry_attempt_started":
+                                        # 2026-11-03: 退避结束、请求已发出。前端
+                                        # 从"Ns 后重试"切换到"重试请求进行中 ·
+                                        # 已等待 Ns"，覆盖上游静默期。
+                                        yield AgentEvent(
+                                            state=AgentState.RETRY,
+                                            iteration=i,
+                                            retry_info=_retry_started_info_from_event(
+                                                payload, last_retry_info
+                                            ),
                                             agent_id=self.agent_id,
                                         )
                                     elif evt_kind == "heartbeat":

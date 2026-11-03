@@ -49,7 +49,7 @@ from backend.chat.history_context import (
 )
 from backend.chat.sources_extractor import extract_sources_from_tool, merge_sources
 from backend.core.errors import LLMError
-from backend.core.legacy.agent import SageAgent
+from backend.core.legacy.agent import SageAgent, _retry_info_from_event
 from backend.core.legacy.llm_total_timeout import llm_total_timeout_or_none
 from backend.data import answer_version_repo as answer_versions
 from backend.data.database import get_database
@@ -1543,7 +1543,25 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 历史,而历史马上会注入本轮 LLM 请求(见下)。
             compact_result = None
             try:
-                compact_result = await _maybe_auto_compact_session(data.session_id, llm_config)
+                # 2026-11-03: 压缩本身也走 LLM 重试；把重试状态透出到聊天流，
+                # 避免压缩期间（实测可达 2 分钟）用户只看到"思考中"。
+                def _compact_retry_cb(retry_evt: Any) -> None:
+                    try:
+                        retry_info = _retry_info_from_event(retry_evt)
+                        retry_info["source"] = "compaction"
+                        entry.queue.put_nowait({
+                            "state": "retry",
+                            "session_id": data.session_id,
+                            "retry_info": retry_info,
+                        })
+                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞压缩
+                        logger.debug(
+                            f"[REQ {request_id}] compaction retry event push failed, ignored"
+                        )
+
+                compact_result = await _maybe_auto_compact_session(
+                    data.session_id, llm_config, retry_callback=_compact_retry_cb
+                )
             except Exception as compact_err:
                 logger.warning(
                     f"[REQ {request_id}] 自动压缩失败(忽略, 继续未压缩聊天): {compact_err}"

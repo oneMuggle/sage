@@ -15,7 +15,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from backend.chat.compaction import compact_messages, should_compact
 from backend.data.database import get_database
@@ -43,7 +43,9 @@ def _safe_log_field(value: object, max_length: int = 64) -> str:
 # 本节只负责装配 LLM 客户端 + 落盘编排。
 
 
-def _build_compaction_llm_callable():
+def _build_compaction_llm_callable(
+    retry_callback: Optional[Callable[[Any], None]] = None,
+):
     """从持久化的 app_settings 装配压缩摘要用的 LLM complete 回调。
 
     解析顺序: modelSelections.chatModel → 对应 endpoint 的 baseUrl/apiKey。
@@ -95,7 +97,13 @@ def _build_compaction_llm_callable():
             temperature=0.3,
         )
     )
-    return client.complete
+    if retry_callback is None:
+        return client.complete
+
+    async def _complete_with_retry(prompt: str) -> str:
+        return await client.complete(prompt, retry_callback=retry_callback)
+
+    return _complete_with_retry
 
 
 def _persist_compaction(
@@ -173,7 +181,11 @@ def _persist_compaction(
     return after
 
 
-async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict]) -> Dict[str, int] | None:
+async def _maybe_auto_compact_session(
+    session_id: str,
+    llm_config: Optional[Dict],
+    retry_callback: Optional[Callable[[Any], None]] = None,
+) -> Dict[str, int] | None:
     """聊天请求层的自动压缩钩子（M4）。
 
     在 run_loop 之前检查会话历史：达到压缩阈值时先压缩再继续。
@@ -207,9 +219,19 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict
     if llm_config:
         from backend.core.legacy.llm_client import LLMClient, LLMConfig
 
-        llm_complete = LLMClient(LLMConfig(**llm_config)).complete
+        compaction_client = LLMClient(LLMConfig(**llm_config))
+        if retry_callback is None:
+            llm_complete = compaction_client.complete
+        else:
+
+            async def _complete_with_retry(prompt: str) -> str:
+                return await compaction_client.complete(
+                    prompt, retry_callback=retry_callback
+                )
+
+            llm_complete = _complete_with_retry
     else:
-        llm_complete = _build_compaction_llm_callable()
+        llm_complete = _build_compaction_llm_callable(retry_callback)
     if llm_complete is None:
         logger.info(
             "[M4] session=%s 达到压缩阈值但无 LLM 配置, 跳过自动压缩",

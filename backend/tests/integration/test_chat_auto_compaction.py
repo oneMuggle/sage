@@ -85,7 +85,7 @@ async def test_auto_compaction_before_chat_run_loop(client, monkeypatch):
 
     monkeypatch.setattr(
         "backend.api.chat_session_lifecycle._build_compaction_llm_callable",
-        lambda: fake_summary_llm,
+        lambda retry_callback=None: fake_summary_llm,
     )
 
     with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
@@ -135,7 +135,7 @@ async def test_auto_compaction_failure_never_blocks_chat(client, monkeypatch):
 
     monkeypatch.setattr(
         "backend.api.chat_session_lifecycle._build_compaction_llm_callable",
-        lambda: exploding_llm,
+        lambda retry_callback=None: exploding_llm,
     )
 
     with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
@@ -172,14 +172,14 @@ async def test_auto_compaction_prefers_request_llm_config(client, monkeypatch):
         def __init__(self, config):
             captured["config"] = config
 
-        async def complete(self, prompt: str) -> str:
+        async def complete(self, prompt: str, retry_callback=None) -> str:
             captured["prompt"] = prompt
             return DIGEST
 
     monkeypatch.setattr("backend.core.legacy.llm_client.LLMClient", FakeLLMClient)
     monkeypatch.setattr(
         "backend.api.chat_session_lifecycle._build_compaction_llm_callable",
-        lambda: pytest.fail("请求带 llm_config 时不应走 app_settings 回退"),
+        lambda retry_callback=None: pytest.fail("请求带 llm_config 时不应走 app_settings 回退"),
     )
 
     with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
