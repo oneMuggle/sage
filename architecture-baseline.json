@@ -82,6 +82,7 @@
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
     "backend/tools/config_tool.py": 976,
     "scripts/feedback_receiver.py": 1154,
-    "electron/preload.ts": 870
+    "src/shared/types/electron-api.d.ts": 809,
+    "electron/preload.ts": 885
   }
 }

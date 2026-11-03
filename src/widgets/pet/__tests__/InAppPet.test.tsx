@@ -5,7 +5,7 @@ import type { PetConfigBridge, PetSnapshotBridge } from '../../../shared/types/e
 import { InAppPet } from '../InAppPet';
 
 const BASE_CONFIG: PetConfigBridge = {
-  version: 2,
+  version: 3,
   enabled: true,
   displayMode: 'in-app',
   tempo: 'standard',
@@ -14,9 +14,16 @@ const BASE_CONFIG: PetConfigBridge = {
   soundScenes: { waiting: true, error: false, done: false },
   showSessionTitle: false,
   compatibilityMode: 'auto',
-  followActiveSession: true,
   externalApi: false,
-  pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
+  pets: [
+    {
+      id: 'default',
+      petPack: 'dafeiyu',
+      size: 'medium',
+      followMode: 'focus',
+      pinnedSessionId: null,
+    },
+  ],
 };
 
 const SNAPSHOT: PetSnapshotBridge = {
@@ -38,6 +45,14 @@ const SNAPSHOT: PetSnapshotBridge = {
   patCount: 3,
   bondDays: 2,
   activeSessions: 1,
+  attention: {
+    needsYou: 1,
+    failed: 0,
+    running: 1,
+    activeTasks: 0,
+    total: 2,
+    needsYouSessionIds: ['sess-1'],
+  },
   sessions: [
     {
       sessionId: 'sess-1',
@@ -66,6 +81,10 @@ function installBridge(config: PetConfigBridge) {
     getConfig: vi.fn().mockResolvedValue(config),
     getState: vi.fn().mockResolvedValue(SNAPSHOT),
     onState: vi.fn(() => () => undefined),
+    getStates: vi.fn(
+      async (): Promise<Record<string, PetSnapshotBridge>> => ({ default: SNAPSHOT }),
+    ),
+    onStates: vi.fn(() => () => undefined),
     onConfig: vi.fn(() => () => undefined),
     openSession: vi.fn(),
     openSettings: vi.fn(),
@@ -110,8 +129,20 @@ describe('InAppPet', () => {
     installBridge({
       ...BASE_CONFIG,
       pets: [
-        { id: 'default', petPack: 'dafeiyu', size: 'medium' },
-        { id: 'pet-2', petPack: 'dafeiyu', size: 'small' },
+        {
+          id: 'default',
+          petPack: 'dafeiyu',
+          size: 'medium',
+          followMode: 'focus',
+          pinnedSessionId: null,
+        },
+        {
+          id: 'pet-2',
+          petPack: 'dafeiyu',
+          size: 'small',
+          followMode: 'focus',
+          pinnedSessionId: null,
+        },
       ],
     });
     render(<InAppPet />);
@@ -119,5 +150,48 @@ describe('InAppPet', () => {
     expect(dock).toHaveAttribute('data-pet-count', '2');
     expect(screen.getAllByTestId('in-app-pet-item')).toHaveLength(2);
     expect(screen.getAllByRole('button', { name: /思考中|Thinking/ })).toHaveLength(2);
+  });
+
+  it('renders a different snapshot for each pet', async () => {
+    const second: PetSnapshotBridge = {
+      ...SNAPSHOT,
+      action: 'waiting',
+      sessionId: 'sess-2',
+      sessionTitle: '会话二',
+      attention: {
+        needsYou: 2,
+        failed: 1,
+        running: 1,
+        activeTasks: 0,
+        total: 4,
+        needsYouSessionIds: ['sess-1', 'sess-2'],
+      },
+    };
+    const config: PetConfigBridge = {
+      ...BASE_CONFIG,
+      pets: [
+        {
+          id: 'default',
+          petPack: 'dafeiyu',
+          size: 'medium',
+          followMode: 'focus',
+          pinnedSessionId: null,
+        },
+        {
+          id: 'pet-2',
+          petPack: 'dafeiyu',
+          size: 'small',
+          followMode: 'pinned',
+          pinnedSessionId: 'sess-2',
+        },
+      ],
+    };
+    const bridge = installBridge(config);
+    bridge.getStates.mockResolvedValue({ default: SNAPSHOT, 'pet-2': second });
+    render(<InAppPet />);
+    const items = await screen.findAllByTestId('in-app-pet-item');
+    expect(items[0]).toHaveAttribute('data-pet-id', 'default');
+    expect(items[1]).toHaveAttribute('data-pet-id', 'pet-2');
+    expect(await screen.findByRole('button', { name: /等待确认|Waiting/ })).toBeInTheDocument();
   });
 });

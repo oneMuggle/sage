@@ -7,6 +7,10 @@
  * v2 (2026-10-31): multiple pets. Each instance carries its own pack/size;
  * behavior settings (tempo/bubble/sound/...) stay global. v1 files migrate
  * to a single `default` pet on read.
+ *
+ * v3 (2026-11-02): each pet follows a session (`focus` / `urgent` /
+ * `pinned`). The v2 `followActiveSession` flag migrates per pet:
+ * false → 'urgent', true/absent → 'focus'.
  */
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -17,6 +21,7 @@ import type {
   PetCompatibilityMode,
   PetConfig,
   PetDisplayMode,
+  PetFollowMode,
   PetInstanceConfig,
   PetSize,
   PetTempo,
@@ -25,7 +30,7 @@ import type {
 export const MAX_PETS = 3;
 
 export const DEFAULT_PET_CONFIG: PetConfig = {
-  version: 2,
+  version: 3,
   enabled: false,
   displayMode: 'desktop',
   tempo: 'standard',
@@ -34,9 +39,16 @@ export const DEFAULT_PET_CONFIG: PetConfig = {
   soundScenes: { waiting: true, error: false, done: false },
   showSessionTitle: false,
   compatibilityMode: 'auto',
-  followActiveSession: true,
   externalApi: false,
-  pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
+  pets: [
+    {
+      id: 'default',
+      petPack: 'dafeiyu',
+      size: 'medium',
+      followMode: 'focus',
+      pinnedSessionId: null,
+    },
+  ],
 };
 
 const DISPLAY_MODES: PetDisplayMode[] = ['desktop', 'in-app', 'both', 'off'];
@@ -44,6 +56,7 @@ const SIZES: PetSize[] = ['mini', 'small', 'medium', 'large', 'huge'];
 const TEMPOS: PetTempo[] = ['quiet', 'standard', 'lively'];
 const BUBBLE_MODES: PetBubbleMode[] = ['important', 'always', 'off'];
 const COMPATIBILITY_MODES: PetCompatibilityMode[] = ['auto', 'on', 'off'];
+const FOLLOW_MODES: PetFollowMode[] = ['focus', 'urgent', 'pinned'];
 const PET_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -75,12 +88,20 @@ function nextPetId(used: Set<string>): string {
 }
 
 /**
- * Normalize the `pets` array (v2) or synthesize one pet from v1 top-level
+ * Normalize the `pets` array (v2/v3) or synthesize one pet from v1 top-level
  * `petPack`/`size`. Invalid/duplicate ids are replaced; the list is capped.
  */
 function normalizePets(source: Record<string, unknown>): PetInstanceConfig[] {
   const legacyPack = text(source.petPack) ?? DEFAULT_PET_CONFIG.pets[0]!.petPack;
   const legacySize = pick(source.size, SIZES, DEFAULT_PET_CONFIG.pets[0]!.size);
+  const rawMode = typeof source.followMode === 'string' ? source.followMode : '';
+  const legacyMode = (FOLLOW_MODES as readonly string[]).includes(rawMode)
+    ? (rawMode as PetFollowMode)
+    : null;
+  const legacyFollow = source.followActiveSession;
+  const defaultFollow: PetFollowMode =
+    legacyMode ??
+    (typeof legacyFollow === 'boolean' ? (legacyFollow ? 'focus' : 'urgent') : 'focus');
   const rawPets = Array.isArray(source.pets) ? source.pets : null;
   const candidates = rawPets ?? [{ id: 'default', petPack: legacyPack, size: legacySize }];
   const used = new Set<string>();
@@ -90,13 +111,21 @@ function normalizePets(source: Record<string, unknown>): PetInstanceConfig[] {
     if (!isRecord(raw)) continue;
     const pack = text(raw.petPack) ?? legacyPack;
     const size = pick(raw.size, SIZES, legacySize);
+    const followMode = pick(raw.followMode, FOLLOW_MODES, defaultFollow);
+    const pinnedSessionId = text(raw.pinnedSessionId);
     const claimed = text(raw.id)?.toLowerCase() ?? '';
     const id = PET_ID_PATTERN.test(claimed) && !used.has(claimed) ? claimed : nextPetId(used);
     used.add(id);
-    pets.push({ id, petPack: pack, size });
+    pets.push({ id, petPack: pack, size, followMode, pinnedSessionId });
   }
   if (pets.length === 0) {
-    pets.push({ id: 'default', petPack: legacyPack, size: legacySize });
+    pets.push({
+      id: 'default',
+      petPack: legacyPack,
+      size: legacySize,
+      followMode: defaultFollow,
+      pinnedSessionId: null,
+    });
   }
   return pets;
 }
@@ -105,7 +134,7 @@ export function normalizePetConfig(raw: unknown): PetConfig {
   const source = isRecord(raw) ? raw : {};
   const scenes = isRecord(source.soundScenes) ? source.soundScenes : {};
   return {
-    version: 2,
+    version: 3,
     enabled: pickBool(source.enabled, DEFAULT_PET_CONFIG.enabled),
     displayMode: pick(source.displayMode, DISPLAY_MODES, DEFAULT_PET_CONFIG.displayMode),
     tempo: pick(source.tempo, TEMPOS, DEFAULT_PET_CONFIG.tempo),
@@ -121,10 +150,6 @@ export function normalizePetConfig(raw: unknown): PetConfig {
       source.compatibilityMode,
       COMPATIBILITY_MODES,
       DEFAULT_PET_CONFIG.compatibilityMode,
-    ),
-    followActiveSession: pickBool(
-      source.followActiveSession,
-      DEFAULT_PET_CONFIG.followActiveSession,
     ),
     externalApi: pickBool(source.externalApi, DEFAULT_PET_CONFIG.externalApi),
     pets: normalizePets(source),

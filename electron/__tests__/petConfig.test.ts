@@ -13,7 +13,7 @@ import {
   writePetConfig,
 } from '../pet/config';
 
-describe('pet config v2', () => {
+describe('pet config v3', () => {
   it('returns defaults for garbage input', () => {
     expect(normalizePetConfig(null)).toEqual(DEFAULT_PET_CONFIG);
     expect(normalizePetConfig('nope')).toEqual(DEFAULT_PET_CONFIG);
@@ -29,13 +29,21 @@ describe('pet config v2', () => {
       compatibilityMode: 'on',
       pets: [{ id: 'default', petPack: '  custom  ', size: 'large' }],
     });
-    expect(config.version).toBe(2);
+    expect(config.version).toBe(3);
     expect(config.enabled).toBe(true);
     expect(config.displayMode).toBe('both');
     expect(config.tempo).toBe('lively');
     expect(config.bubbleMode).toBe('always');
     expect(config.compatibilityMode).toBe('on');
-    expect(config.pets).toEqual([{ id: 'default', petPack: 'custom', size: 'large' }]);
+    expect(config.pets).toEqual([
+      {
+        id: 'default',
+        petPack: 'custom',
+        size: 'large',
+        followMode: 'focus',
+        pinnedSessionId: null,
+      },
+    ]);
   });
 
   it('migrates a v1 single-pet config', () => {
@@ -46,8 +54,16 @@ describe('pet config v2', () => {
       size: 'small',
       tempo: 'quiet',
     });
-    expect(config.version).toBe(2);
-    expect(config.pets).toEqual([{ id: 'default', petPack: 'my-pack', size: 'small' }]);
+    expect(config.version).toBe(3);
+    expect(config.pets).toEqual([
+      {
+        id: 'default',
+        petPack: 'my-pack',
+        size: 'small',
+        followMode: 'focus',
+        pinnedSessionId: null,
+      },
+    ]);
     expect(config.tempo).toBe('quiet');
   });
 
@@ -68,8 +84,65 @@ describe('pet config v2', () => {
 
   it('falls back to one default pet when every entry is invalid', () => {
     expect(normalizePetConfig({ pets: [null, 1, 'x'] }).pets).toEqual([
-      { id: 'default', petPack: 'dafeiyu', size: 'medium' },
+      {
+        id: 'default',
+        petPack: 'dafeiyu',
+        size: 'medium',
+        followMode: 'focus',
+        pinnedSessionId: null,
+      },
     ]);
+  });
+
+  it('migrates followActiveSession=false to urgent for every pet', () => {
+    const config = normalizePetConfig({
+      version: 2,
+      followActiveSession: false,
+      pets: [
+        { id: 'default', petPack: 'dafeiyu', size: 'medium' },
+        { id: 'pet-2', petPack: 'dafeiyu', size: 'small' },
+      ],
+    });
+    expect(config.version).toBe(3);
+    expect(config.pets.map((pet) => pet.followMode)).toEqual(['urgent', 'urgent']);
+    expect(config.pets.map((pet) => pet.pinnedSessionId)).toEqual([null, null]);
+  });
+
+  it('migrates followActiveSession=true and v1 files to focus', () => {
+    expect(normalizePetConfig({ version: 2, followActiveSession: true }).pets[0]?.followMode).toBe(
+      'focus',
+    );
+    expect(normalizePetConfig({ petPack: 'dafeiyu', size: 'medium' }).pets[0]?.followMode).toBe(
+      'focus',
+    );
+  });
+
+  it('keeps a pinned session id and falls back to focus when it is invalid', () => {
+    const pinned = normalizePetConfig({
+      version: 3,
+      pets: [
+        {
+          id: 'default',
+          petPack: 'dafeiyu',
+          size: 'medium',
+          followMode: 'pinned',
+          pinnedSessionId: ' sess-a ',
+        },
+      ],
+    });
+    expect(pinned.pets[0]).toEqual({
+      id: 'default',
+      petPack: 'dafeiyu',
+      size: 'medium',
+      followMode: 'pinned',
+      pinnedSessionId: 'sess-a',
+    });
+
+    const invalid = normalizePetConfig({
+      version: 3,
+      pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium', followMode: 'sideways' }],
+    });
+    expect(invalid.pets[0]?.followMode).toBe('focus');
   });
 });
 
@@ -92,8 +165,20 @@ describe('mergePetConfig', () => {
       ],
     });
     const merged = mergePetConfig(base, { petPack: 'c', size: 'large' });
-    expect(merged.pets[0]).toEqual({ id: 'default', petPack: 'c', size: 'large' });
-    expect(merged.pets[1]).toEqual({ id: 'pet-2', petPack: 'b', size: 'small' });
+    expect(merged.pets[0]).toEqual({
+      id: 'default',
+      petPack: 'c',
+      size: 'large',
+      followMode: 'focus',
+      pinnedSessionId: null,
+    });
+    expect(merged.pets[1]).toEqual({
+      id: 'pet-2',
+      petPack: 'b',
+      size: 'small',
+      followMode: 'focus',
+      pinnedSessionId: null,
+    });
   });
 
   it('replaces the pets array and normalizes untrusted entries', () => {
@@ -104,7 +189,13 @@ describe('mergePetConfig', () => {
       ],
     });
     expect(merged.pets).toHaveLength(2);
-    expect(merged.pets[0]).toEqual({ id: 'a', petPack: 'one', size: 'huge' });
+    expect(merged.pets[0]).toEqual({
+      id: 'a',
+      petPack: 'one',
+      size: 'huge',
+      followMode: 'focus',
+      pinnedSessionId: null,
+    });
     expect(merged.pets[1]).toMatchObject({ petPack: 'two', size: 'medium' });
     expect(merged.pets[1]?.id).not.toBe('a');
   });

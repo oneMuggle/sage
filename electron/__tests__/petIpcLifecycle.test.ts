@@ -47,8 +47,8 @@ describe('pet IPC registration lifecycle', () => {
 
   it('registers every pet channel', () => {
     registerPetIpc(fakeController());
-    expect(handlers.size).toBe(8);
-    expect(listeners.size).toBe(13);
+    expect(handlers.size).toBe(9);
+    expect(listeners.size).toBe(16);
   });
 
   it('unregisters cleanly and allows a fresh registration', () => {
@@ -58,8 +58,24 @@ describe('pet IPC registration lifecycle', () => {
     expect(listeners.size).toBe(0);
 
     expect(() => registerPetIpc(fakeController())).not.toThrow();
-    expect(handlers.size).toBe(8);
-    expect(listeners.size).toBe(13);
+    expect(handlers.size).toBe(9);
+    expect(listeners.size).toBe(16);
+  });
+
+  it('routes get-state through the sender-specific snapshot', () => {
+    const controller = {
+      getStateForSender: vi.fn(() => ({ action: 'idle' })),
+      setFocusSession: vi.fn(),
+      pinSession: vi.fn(),
+      cycleFocus: vi.fn(),
+      isPetSender: () => true,
+      isMainSender: () => false,
+    } as unknown as PetController;
+    registerPetIpc(controller);
+    const handler = handlers.get('pet:get-state') as (event: unknown) => unknown;
+    const result = handler({ sender: { id: 1 } });
+    expect(controller.getStateForSender).toHaveBeenCalled();
+    expect(result).toEqual({ action: 'idle' });
   });
 
   it('still rejects a duplicate registration when dispose was skipped', () => {

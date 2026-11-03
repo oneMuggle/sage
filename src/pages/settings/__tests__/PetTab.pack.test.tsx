@@ -10,7 +10,7 @@ import type {
 import { PetTab } from '../PetTab';
 
 const BASE_CONFIG: PetConfigBridge = {
-  version: 2,
+  version: 3,
   enabled: true,
   displayMode: 'desktop',
   tempo: 'standard',
@@ -19,9 +19,16 @@ const BASE_CONFIG: PetConfigBridge = {
   soundScenes: { waiting: true, error: false, done: false },
   showSessionTitle: false,
   compatibilityMode: 'auto',
-  followActiveSession: true,
   externalApi: false,
-  pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
+  pets: [
+    {
+      id: 'default',
+      petPack: 'dafeiyu',
+      size: 'medium',
+      followMode: 'focus',
+      pinnedSessionId: null,
+    },
+  ],
 };
 
 const MANIFEST: PetPackManifestBridge = {
@@ -167,8 +174,20 @@ describe('PetTab animation packs', () => {
       config: {
         ...BASE_CONFIG,
         pets: [
-          { id: 'default', petPack: 'dafeiyu', size: 'medium' },
-          { id: 'pet-1', petPack: 'dafeiyu', size: 'medium' },
+          {
+            id: 'default',
+            petPack: 'dafeiyu',
+            size: 'medium',
+            followMode: 'focus',
+            pinnedSessionId: null,
+          },
+          {
+            id: 'pet-1',
+            petPack: 'dafeiyu',
+            size: 'medium',
+            followMode: 'focus',
+            pinnedSessionId: null,
+          },
         ],
       },
     });
@@ -178,8 +197,40 @@ describe('PetTab animation packs', () => {
     fireEvent.change(screen.getByTestId('pet-size-pet-1'), { target: { value: 'large' } });
     const patch = bridge.setConfig.mock.calls.at(-1)?.[0] as Partial<PetConfigBridge>;
     expect(patch.pets).toEqual([
-      { id: 'default', petPack: 'dafeiyu', size: 'medium' },
-      { id: 'pet-1', petPack: 'dafeiyu', size: 'large' },
+      {
+        id: 'default',
+        petPack: 'dafeiyu',
+        size: 'medium',
+        followMode: 'focus',
+        pinnedSessionId: null,
+      },
+      {
+        id: 'pet-1',
+        petPack: 'dafeiyu',
+        size: 'large',
+        followMode: 'focus',
+        pinnedSessionId: null,
+      },
     ]);
+  });
+
+  it('updates the per-pet follow mode', async () => {
+    const bridge = installBridge();
+    renderTab();
+    const select = await screen.findByTestId('pet-follow-default');
+    fireEvent.change(select, { target: { value: 'urgent' } });
+    await waitFor(() =>
+      expect(bridge.setConfig).toHaveBeenCalledWith({
+        pets: [
+          {
+            id: 'default',
+            petPack: 'dafeiyu',
+            size: 'medium',
+            followMode: 'urgent',
+            pinnedSessionId: null,
+          },
+        ],
+      }),
+    );
   });
 });

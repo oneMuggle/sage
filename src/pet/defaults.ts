@@ -23,13 +23,21 @@ export const EMPTY_SNAPSHOT: PetSnapshotBridge = {
   patCount: 0,
   bondDays: 1,
   activeSessions: 0,
+  attention: {
+    needsYou: 0,
+    failed: 0,
+    running: 0,
+    activeTasks: 0,
+    total: 0,
+    needsYouSessionIds: [],
+  },
   sessions: [],
   tasks: [],
   updatedAt: 0,
 };
 
 export const DEFAULT_CONFIG: PetConfigBridge = {
-  version: 2,
+  version: 3,
   enabled: true,
   displayMode: 'desktop',
   tempo: 'standard',
@@ -38,10 +46,19 @@ export const DEFAULT_CONFIG: PetConfigBridge = {
   soundScenes: { waiting: true, error: false, done: false },
   showSessionTitle: false,
   compatibilityMode: 'auto',
-  followActiveSession: true,
   externalApi: false,
-  pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
+  pets: [
+    {
+      id: 'default',
+      petPack: 'dafeiyu',
+      size: 'medium',
+      followMode: 'focus',
+      pinnedSessionId: null,
+    },
+  ],
   petId: 'default',
   petPack: 'dafeiyu',
   size: 'medium',
+  followMode: 'focus',
+  pinnedSessionId: null,
 };
