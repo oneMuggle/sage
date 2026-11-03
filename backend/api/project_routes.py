@@ -23,13 +23,16 @@ from fastapi import APIRouter, HTTPException
 
 from backend.api.project_schemas import (
     AddMaterialFromFileRequest,
+    BootstrapAppliedItem,
     BootstrapApplyRequest,
     BootstrapApplyResponse,
     BootstrapErrorModel,
     BootstrapPreviewRequest,
     BootstrapPreviewResponse,
     BootstrapScanResponse,
+    BootstrapSkippedItem,
     BootstrapSuggestResponse,
+    BootstrapVerification,
     ConstraintCreateRequest,
     ConstraintModel,
     ConstraintsResponse,
@@ -250,6 +253,17 @@ def bootstrap_apply(
         applied=result["applied"],
         skipped=result["skipped"],
         errors=[BootstrapErrorModel(**item) for item in result["errors"]],
+        applied_items=[
+            BootstrapAppliedItem(**item) for item in result.get("applied_items", [])
+        ],
+        skipped_items=[
+            BootstrapSkippedItem(**item) for item in result.get("skipped_items", [])
+        ],
+        verification=(
+            BootstrapVerification(**result["verification"])
+            if result.get("verification")
+            else None
+        ),
         git=result.get("git"),
     )
 

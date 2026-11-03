@@ -47,6 +47,8 @@ export interface ProjectSummary {
   vcsMode?: string;
   /** 自动检测的项目类型 */
   detectedType?: ProjectType | null;
+  /** M3: 初始化进度（bootstrap_state 解析结果） */
+  bootstrapState?: { applied: string[]; appliedAt: number | null } | null;
 }
 
 /** 项目类型枚举 */
@@ -304,6 +306,7 @@ export interface ProjectWire {
   project_stage?: string | null;
   vcs_mode?: string;
   detected_type?: string | null;
+  bootstrap_state?: string | null;
 }
 
 export interface ProjectListWire {
@@ -359,7 +362,26 @@ export function mapProject(p: ProjectWire): ProjectSummary {
     projectStage: p.project_stage ?? null,
     vcsMode: p.vcs_mode ?? 'builtin',
     detectedType: (p.detected_type as ProjectType) ?? null,
+    bootstrapState: parseBootstrapState(p.bootstrap_state),
   };
+}
+
+function parseBootstrapState(
+  raw?: string | null,
+): { applied: string[]; appliedAt: number | null } | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { applied?: unknown; applied_at?: unknown };
+    const applied = Array.isArray(parsed.applied)
+      ? parsed.applied.filter((item): item is string => typeof item === 'string')
+      : [];
+    return {
+      applied,
+      appliedAt: typeof parsed.applied_at === 'number' ? parsed.applied_at : null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -1493,11 +1515,35 @@ export interface BootstrapApplyPayload {
   initialCheckpoint?: boolean;
 }
 
+export interface BootstrapAppliedItem {
+  item: string;
+  label?: string | null;
+  id?: string | null;
+  location?: string | null;
+  contentPreview?: string | null;
+}
+
+export interface BootstrapSkippedItem {
+  item: string;
+  reason: string;
+  label?: string | null;
+  contentPreview?: string | null;
+}
+
+export interface BootstrapVerification {
+  sageMdExists: boolean;
+  rulesCountAfter: number;
+  milestonesCountAfter: number;
+}
+
 export interface BootstrapApplyResult {
   project: ProjectSummary;
   applied: string[];
   skipped: string[];
   errors: Array<{ item: string; message: string }>;
+  appliedItems: BootstrapAppliedItem[];
+  skippedItems: BootstrapSkippedItem[];
+  verification: BootstrapVerification | null;
   git: Record<string, unknown> | null;
 }
 

@@ -88,6 +88,12 @@ describe('ProjectBootstrapPanel', () => {
       project: preview.project,
       applied: ['sage_md', 'git_init'],
       skipped: [],
+      appliedItems: [
+        { item: 'sage_md', label: '项目说明（SAGE.md）', location: '/work/demo/SAGE.md' },
+        { item: 'git_init', label: 'Git 版本控制', location: '/work/demo' },
+      ],
+      skippedItems: [],
+      verification: { sageMdExists: true, rulesCountAfter: 1, milestonesCountAfter: 0 },
       errors: [],
       git: null,
     });
@@ -121,6 +127,12 @@ describe('ProjectBootstrapPanel', () => {
     expect(payload.milestones).toHaveLength(1);
     expect(onApplied).toHaveBeenCalledTimes(1);
     expect(await screen.findByTestId('bootstrap-result')).toHaveTextContent('已应用 2 项');
+    expect(screen.getByTestId('bootstrap-verification')).toHaveTextContent(
+      '项目规则 1 条 · 里程碑 0 项',
+    );
+    expect(screen.getByTestId('bootstrap-result-details')).toHaveTextContent(
+      '项目说明（SAGE.md）',
+    );
     // Applying refreshes the deterministic scan (existing counts).
     expect(scanMock).toHaveBeenCalledTimes(2);
   });

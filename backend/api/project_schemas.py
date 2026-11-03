@@ -717,6 +717,39 @@ class BootstrapErrorModel(BaseModel):
     message: str
 
 
+class BootstrapAppliedItem(BaseModel):
+    """bootstrap apply 中单个已落地项（M3 验证明细）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item: str
+    label: Optional[str] = None
+    id: Optional[str] = None
+    location: Optional[str] = None
+    content_preview: Optional[str] = None
+
+
+class BootstrapSkippedItem(BaseModel):
+    """bootstrap apply 中单个跳过项（M3 验证明细）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item: str
+    reason: str
+    label: Optional[str] = None
+    content_preview: Optional[str] = None
+
+
+class BootstrapVerification(BaseModel):
+    """bootstrap apply 之后对项目状态的复核结果。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sage_md_exists: bool
+    rules_count_after: int
+    milestones_count_after: int
+
+
 class BootstrapApplyResponse(BaseModel):
     """POST /projects/{id}/bootstrap/apply 的响应。"""
 
@@ -726,6 +759,9 @@ class BootstrapApplyResponse(BaseModel):
     applied: List[str] = Field(default_factory=list)
     skipped: List[str] = Field(default_factory=list)
     errors: List[BootstrapErrorModel] = Field(default_factory=list)
+    applied_items: List[BootstrapAppliedItem] = Field(default_factory=list)
+    skipped_items: List[BootstrapSkippedItem] = Field(default_factory=list)
+    verification: Optional[BootstrapVerification] = None
     git: Optional[Dict[str, Any]] = None
 
 
