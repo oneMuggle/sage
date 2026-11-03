@@ -190,7 +190,7 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
     # P119 Config Advisor (Phase 1.2): LLM 重试参数取值域校验 —— 复用后端
     # 单一真相源 RETRY_RANGES (与运行时回退 / HTTP 写入侧共用同一份定义,
     # 杜绝漂移).
-    _llm_retry_field_errors: list[str] = []
+    _llm_retry_field_errors: List[str] = []
     from backend.core.retry_defaults import RETRY_KEYS, validate_retry_values
 
     for key in RETRY_KEYS:
