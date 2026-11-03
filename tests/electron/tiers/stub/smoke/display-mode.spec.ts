@@ -117,7 +117,9 @@ test('display mode: header switch + message context submenu', async () => {
   // Right-click the assistant message bubble to open Radix context menu.
   // The ContextMenu wraps the inner bubble ([data-quote-scope="message-body"]),
   // NOT the outer testid wrapper (which includes the avatar and gap).
-  const assistantBubble = page.locator('[data-testid="chat-message-assistant"] [data-quote-scope="message-body"]').last();
+  const assistantBubble = page
+    .locator('[data-testid="chat-message-assistant"] [data-quote-scope="message-body"]')
+    .last();
   await expect(assistantBubble).toBeVisible({ timeout: 5_000 });
   const box = await assistantBubble.boundingBox();
   if (!box) throw new Error('assistant bubble has no bounding box');

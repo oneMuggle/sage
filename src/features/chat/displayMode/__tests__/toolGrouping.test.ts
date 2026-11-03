@@ -85,16 +85,16 @@ describe('canGroupToolCalls', () => {
 
 describe('toolGroupSummary', () => {
   it('returns empty string when cannot group', () => {
-    expect(toolGroupSummary([], false, 3)).toBe('');
+    expect(toolGroupSummary([], false)).toBe('');
   });
 
   it('summarizes tool counts', () => {
     const tools = [{ name: 'read' }, { name: 'write' }, { name: 'bash' }] as ToolCall[];
-    expect(toolGroupSummary(tools, true, 3)).toBe('read · write · bash');
+    expect(toolGroupSummary(tools, true)).toBe('read · write · bash');
   });
 
   it('shows count for repeated tools', () => {
     const tools = [{ name: 'read' }, { name: 'read' }, { name: 'write' }] as ToolCall[];
-    expect(toolGroupSummary(tools, true, 3)).toBe('read×2 · write');
+    expect(toolGroupSummary(tools, true)).toBe('read×2 · write');
   });
 });
