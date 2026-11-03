@@ -226,7 +226,7 @@ function InAppPetItem({
           {statusGlyph(snapshot.action)}
         </span>
         {needsYou > 0 ? (
-          <span className="absolute -bottom-1 -right-1 min-w-[15px] rounded-full bg-amber-400 px-1 text-center text-[10px] font-bold leading-4 text-slate-900">
+          <span className="absolute -bottom-1 -right-1 min-w-[15px] rounded-full bg-amber-400 px-1 text-center text-ui-2xs font-bold leading-4 text-slate-900">
             {Math.min(99, needsYou)}
           </span>
         ) : null}
