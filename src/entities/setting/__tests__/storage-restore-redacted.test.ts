@@ -28,6 +28,8 @@ function ep(id: string, apiKey: string, extra: Partial<AppSettings['endpoints'][
     localModelPath: '',
     discoveredModels: [],
     lastDiscoveredAt: null,
+    reasoningEffort: null,
+    thinkingBudget: null,
     ...extra,
   };
 }

@@ -459,6 +459,10 @@ export function useChat() {
         // TODO(PR-7a+): 给 EndpointConfig 加 provider 字段,这里直接读,
         // 不再靠 URL 启发式。详见 docs/plans/2026-06-17_thinking-passthrough.md
         provider: inferProviderFromBaseUrl(chatEndpoint.baseUrl),
+        // 2026-11-03: 思考过程参数 —— 端点级配置,透传到上游 LLM 请求体。
+        // undefined → chatApi 发 null → 后端不下发该键 → 上游不进入思考模式。
+        reasoningEffort: chatEndpoint.reasoningEffort ?? undefined,
+        thinkingBudget: chatEndpoint.thinkingBudget ?? undefined,
         // 由 /orchestrate /single 斜杠命令传入;普通消息 undefined → 后端 auto
         orchestrationMode,
         // Wave 3: resume 恢复流透传

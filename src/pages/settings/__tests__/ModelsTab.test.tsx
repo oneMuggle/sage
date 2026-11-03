@@ -23,6 +23,8 @@ const settings = {
         { id: 'model-1', capabilities: ['chat'] as ModelCapability[], endpointId: 'ep-1' },
       ],
       lastDiscoveredAt: null,
+      reasoningEffort: null,
+      thinkingBudget: null,
     },
   ],
   modelSelections: {

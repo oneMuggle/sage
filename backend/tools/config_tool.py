@@ -83,6 +83,9 @@ _ALLOWED_ENDPOINT_FIELDS = {
     "localModelPath",
     "discoveredModels",
     "lastDiscoveredAt",
+    # 2026-11-03: 思考过程参数 —— 与 settings_canonicalizer.LEGAL_ENDPOINT_KEYS 同步
+    "reasoningEffort",
+    "thinkingBudget",
 }
 
 # 2026-10-28: model_selection 更新白名单（与 settings_canonicalizer.LEGAL_MODEL_SELECTION_KEYS 对齐）
