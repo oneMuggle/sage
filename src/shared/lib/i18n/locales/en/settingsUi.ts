@@ -102,6 +102,17 @@ export const enSettingsUi = {
   'settings.endpoints.field.model_id': 'Model ID (advanced, optional)',
   'settings.endpoints.field.name': 'Name',
   'settings.endpoints.field.protocol': 'Protocol',
+  // 2026-11-03: thinking process parameters — per-endpoint, forwarded to upstream LLM.
+  'settings.endpoints.field.reasoning_effort': 'Reasoning effort',
+  'settings.endpoints.field.reasoning_effort.off': 'Off',
+  'settings.endpoints.field.reasoning_effort.low': 'Low',
+  'settings.endpoints.field.reasoning_effort.medium': 'Medium',
+  'settings.endpoints.field.reasoning_effort.high': 'High',
+  'settings.endpoints.field.reasoning_effort_hint':
+    'Effort level when asking the model to show its thinking',
+  'settings.endpoints.field.thinking_budget': 'Thinking budget (tokens)',
+  'settings.endpoints.field.thinking_budget_hint':
+    'Maximum tokens for the thinking process; 0 = off, empty = upstream default',
   'settings.endpoints.model_count': '{n} models',
   'settings.endpoints.model_id_hint': 'Model',
   'settings.endpoints.model_id_placeholder': 'Leave empty to use the selection on the Models tab',
