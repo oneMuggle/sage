@@ -24,6 +24,7 @@ import {
   Layers,
   Plus,
   Sparkles,
+  Terminal,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -84,6 +85,8 @@ export function PolymorphicArchetypeCards({
   const [pinnedPaths, setPinnedPaths] = useState<Record<string, boolean>>({});
   const [showContextPreview, setShowContextPreview] = useState(false);
   const [copiedContext, setCopiedContext] = useState(false);
+  const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
+  const [scaffoldingDirs, setScaffoldingDirs] = useState(false);
 
   const loadData = useCallback(async () => {
     const tasks: Promise<void>[] = [];
@@ -159,6 +162,35 @@ export function PolymorphicArchetypeCards({
       // ignore in test/offline mode
     } finally {
       setPinningPath(null);
+    }
+  };
+
+  const handleCopyCommand = async (command: string) => {
+    try {
+      await navigator.clipboard?.writeText(command);
+      setCopiedCommand(command);
+      setTimeout(() => setCopiedCommand(null), 1500);
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
+
+  const handleScaffoldDirs = async () => {
+    if (scaffoldingDirs || typeof projectApi?.scaffold !== 'function') return;
+    setScaffoldingDirs(true);
+    try {
+      await projectApi.scaffold(project.id, {
+        projectType,
+        createDirectories: true,
+        createSageMd: false,
+        importDefaultConstraints: false,
+        seedDefaultMilestones: false,
+      });
+      await loadData();
+    } catch {
+      // ignore in test/offline mode
+    } finally {
+      setScaffoldingDirs(false);
     }
   };
 
@@ -330,8 +362,34 @@ export function PolymorphicArchetypeCards({
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
+            {/* 项目结构 */}
             <div className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2">
-              <div className="text-xs font-medium text-foreground">工程标志文件与模块分布</div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  <FolderCheck className="h-3.5 w-3.5 text-blue-500" />
+                  项目结构
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    (overview?.directorySummary ?? []).length > 0
+                      ? void loadData()
+                      : void handleScaffoldDirs()
+                  }
+                  disabled={scaffoldingDirs}
+                  data-testid="coding-structure-action"
+                  className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted disabled:opacity-50"
+                >
+                  {(overview?.directorySummary ?? []).length > 0
+                    ? '刷新'
+                    : scaffoldingDirs
+                      ? '补齐中…'
+                      : '补齐标准目录'}
+                </button>
+              </div>
+              <p className="text-ui-2xs text-muted-foreground">
+                工作区里的主要目录和工程标志文件。
+              </p>
               <div className="flex flex-wrap gap-1.5">
                 {(overview?.codingIndicators ?? []).length > 0 ? (
                   overview?.codingIndicators.map((ind) => (
@@ -344,26 +402,13 @@ export function PolymorphicArchetypeCards({
                   ))
                 ) : (
                   <span className="text-xs text-muted-foreground">
-                    点击上方「一键初始化目录与规范」即可生成标准工程骨架
+                    暂未识别到工程标志文件，可点击「补齐标准目录」生成标准骨架。
                   </span>
                 )}
               </div>
-              {(diagnoseInfo?.testCommands ?? []).length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="text-ui-2xs text-muted-foreground">常用命令（右键可复制）：</span>
-                  {diagnoseInfo?.testCommands.map((cmdStr: string) => (
-                    <span
-                      key={cmdStr}
-                      className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-ui-2xs text-emerald-600 dark:text-emerald-400"
-                    >
-                      {cmdStr}
-                    </span>
-                  ))}
-                </div>
-              )}
               {(overview?.directorySummary ?? []).length > 0 && (
                 <div className="flex flex-wrap gap-1.5 pt-1">
-                  {overview?.directorySummary.map((d) => (
+                  {(overview?.directorySummary ?? []).slice(0, 8).map((d) => (
                     <span
                       key={d.name}
                       className="rounded bg-background border border-border px-2 py-0.5 font-mono text-ui-2xs text-muted-foreground"
@@ -375,16 +420,53 @@ export function PolymorphicArchetypeCards({
               )}
             </div>
 
+            {/* 常用命令 */}
             <div className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                <Terminal className="h-3.5 w-3.5 text-emerald-500" />
+                常用命令
+              </div>
+              <p className="text-ui-2xs text-muted-foreground">
+                从项目配置里识别出的测试与构建命令，点击即可复制。
+              </p>
+              {(diagnoseInfo?.testCommands ?? []).length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {(diagnoseInfo?.testCommands ?? []).map((cmdStr: string) => (
+                    <button
+                      key={cmdStr}
+                      type="button"
+                      onClick={() => void handleCopyCommand(cmdStr)}
+                      data-testid="coding-command-copy"
+                      title="点击复制命令"
+                      className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-ui-2xs text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400"
+                    >
+                      {cmdStr}
+                      <Copy className="h-2.5 w-2.5" />
+                      {copiedCommand === cmdStr && <span>已复制</span>}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  暂未识别到常用命令。完善项目配置后可自动识别。
+                </span>
+              )}
+            </div>
+
+            {/* 技术决策 */}
+            <div className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2 md:col-span-2">
               <div className="text-xs font-medium text-foreground">
                 技术决策记录（会随每轮会话自动告知 AI）
               </div>
+              <p className="text-ui-2xs text-muted-foreground">
+                记录为什么这样选型，AI 在后续会话中会遵守这些约定。
+              </p>
               <div className="flex gap-1.5">
                 <input
                   type="text"
                   value={decisionInput}
                   onChange={(e) => setDecisionInput(e.target.value)}
-                  placeholder="新增架构/技术栈决策（如：采用 SQLite WAL + FTS5 索引）"
+                  placeholder="记录一个技术选型或约定（如：数据库用 SQLite 而不是 MySQL，因为…）"
                   className="flex-1 rounded border border-input bg-background px-2 py-1 text-xs"
                   data-testid="polymorphic-decision-input"
                 />
@@ -397,6 +479,23 @@ export function PolymorphicArchetypeCards({
                   <Plus className="mr-1 h-3 w-3" />
                   记录决策
                 </Button>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-ui-2xs text-muted-foreground">示例：</span>
+                {[
+                  '采用 SQLite WAL + FTS5 索引',
+                  '所有 API 走 REST 不走 GraphQL',
+                  '前端禁止使用 any',
+                ].map((example) => (
+                  <button
+                    key={example}
+                    type="button"
+                    onClick={() => setDecisionInput(example)}
+                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    {example}
+                  </button>
+                ))}
               </div>
               {decisions.length === 0 ? (
                 <div className="text-ui-2xs text-muted-foreground">
