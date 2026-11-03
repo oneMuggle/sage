@@ -589,6 +589,24 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # temperature=0 是合法值 (确定性输出), 不能用 or 兜底
                     "temperature": 0.7 if data.temperature is None else data.temperature,
                 }
+            else:
+                # M0 修复: 请求未带端点配置时,从全局设置加载 + profile 模型覆盖
+                # (与 legacy_chat_routes.py /chat 端点对齐)
+                from backend.orchestration.llm_factory import load_llm_config_for_chat
+
+                _profile_model_config = (agent.profile or {}).get("model_config")
+                _profile_model_config = (
+                    _profile_model_config if isinstance(_profile_model_config, dict) else {}
+                )
+                llm_config = load_llm_config_for_chat(
+                    session_id=data.session_id,
+                    profile_model=_profile_model_config.get("model"),
+                    profile_max_tokens=_profile_model_config.get("max_tokens"),
+                    task_type=data.task_type,
+                )
+                # M0: profile temperature 覆盖（如显式设置）
+                if llm_config and _profile_model_config.get("temperature") is not None:
+                    llm_config["temperature"] = _profile_model_config["temperature"]
                 # 推理参数:None 时不传,避免污染老 LLM
                 if data.reasoning_effort is not None:
                     llm_config["reasoning_effort"] = data.reasoning_effort
