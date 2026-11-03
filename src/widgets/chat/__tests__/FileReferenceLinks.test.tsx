@@ -80,4 +80,30 @@ describe('MarkdownChunk — 文件链接与外部链接', () => {
     expect(anchor?.getAttribute('href')).toBe('https://example.com/page');
     expect(anchor?.getAttribute('target')).toBe('_blank');
   });
+
+  // ---------- URL 编码修复（2026-11-03）----------
+  // mdast-util-to-hast 的 normalizeUri 把中文做了 percent-encoding，
+  // 点击回调必须传解码后的原始路径，否则后端 404。
+
+  it('中文路径 markdown 链接 → 点击后右栏拿到解码路径（非 percent-encoded）', () => {
+    // react-markdown 管线中 normalizeUri 会把 "算法.md" → "%E7%AE%97%E6%B3%95.md"
+    // 模拟 LLM 输出含中文文件路径的 markdown
+    render(<MarkdownChunk md={'已生成 [算法](output/算法.md)'} />);
+
+    const link = screen.getByTestId('markdown-file-link');
+    expect(link).toBeInTheDocument();
+
+    fireEvent.click(link);
+
+    const state = useRightPanelStore.getState();
+    // 关键断言：路径必须是解码后的中文，不能是 %E7%AE%97 之类的编码
+    expect(state.selectedFilePath).toBe('output/算法.md');
+    expect(state.selectedFilePath).not.toContain('%');
+  });
+
+  it('已编码的 href 也能被识别为本地文件路径', () => {
+    // normalizeUri 编码后的路径仍应被 isLocalFilePathHref 判定为文件链接
+    render(<MarkdownChunk md={'[文件](src/%E6%B5%8B%E8%AF%95/app.ts)'} />);
+    expect(screen.getByTestId('markdown-file-link')).toBeInTheDocument();
+  });
 });
