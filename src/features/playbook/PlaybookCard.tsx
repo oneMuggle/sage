@@ -28,6 +28,7 @@ import { PlaybookActivityPanel } from './PlaybookActivityPanel';
 import { PlaybookAuthorPanel } from './PlaybookAuthorPanel';
 import { PlaybookChecklist } from './PlaybookChecklist';
 import { PlaybookClassificationPanel } from './PlaybookClassificationPanel';
+import { PlaybookDocumentImportDialog } from './PlaybookDocumentImportDialog';
 import { PlaybookImportPreviewCard } from './PlaybookImportPreviewCard';
 import { PlaybookLibraryPanel } from './PlaybookLibraryPanel';
 import { PlaybookSpecEditor } from './PlaybookSpecEditor';
@@ -71,6 +72,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const [aggregate, setAggregate] = useState<PlaybookEventAggregate | null>(null);
   const [showActivity, setShowActivity] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showDocumentImport, setShowDocumentImport] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
@@ -390,6 +392,17 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       setNotice(t('playbook.notice.imported'));
     });
 
+  const handleDocumentImportConfirm = (spec: PlaybookSpec) =>
+    run('doc-import', async () => {
+      const data = await playbookApi.bind(projectId, {
+        spec,
+        source: 'document-import',
+      });
+      setCurrent(data);
+      setShowDocumentImport(false);
+      setNotice(t('playbook.notice.bound'));
+    });
+
   if (loading) {
     return (
       <div
@@ -585,6 +598,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           onCleanupRules={handleCleanupRules}
           onUnbind={handleUnbind}
           onImportClick={() => fileInputRef.current?.click()}
+          onDocumentImportClick={() => setShowDocumentImport(true)}
         />
         <input
           ref={fileInputRef}
@@ -737,6 +751,12 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       )}
 
       {showLibrary && <PlaybookLibraryPanel onClose={() => setShowLibrary(false)} />}
+
+      <PlaybookDocumentImportDialog
+        open={showDocumentImport}
+        onClose={() => setShowDocumentImport(false)}
+        onConfirm={handleDocumentImportConfirm}
+      />
 
       {(error || notice) && (
         <div

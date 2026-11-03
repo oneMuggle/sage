@@ -16,7 +16,9 @@ Mounted under ``/api/v1``:
 
 from __future__ import annotations
 
+import base64
 import logging
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -33,6 +35,8 @@ from backend.api.playbook_schemas import (
     PlaybookAuthorPreviewResponse,
     PlaybookBindRequest,
     PlaybookCurrentResponse,
+    PlaybookDocumentImportRequest,
+    PlaybookDocumentImportResponse,
     PlaybookEventAggregateResponse,
     PlaybookEventModel,
     PlaybookEventsResponse,
@@ -66,6 +70,7 @@ from backend.services.playbook_ai import audit_with_llm
 from backend.services.playbook_auditor import audit_playbook
 from backend.services.playbook_author import build_author_preview
 from backend.services.playbook_diff import diff_playbooks
+from backend.services.playbook_document_import import import_playbook_from_document
 from backend.services.playbook_library import (
     build_export_envelope,
     get_builtin,
@@ -761,6 +766,61 @@ def import_playbook(request: PlaybookImportRequest) -> PlaybookCurrentResponse:
         },
     )
     return _current_payload(project)
+
+
+@router.post(
+    "/playbooks/import/document",
+    response_model=PlaybookDocumentImportResponse,
+)
+async def import_playbook_from_document_endpoint(
+    request: PlaybookDocumentImportRequest,
+) -> PlaybookDocumentImportResponse:
+    """从 Word/PDF/Markdown 文档生成 Playbook 预览（不写库）。
+
+    前端上传 base64 编码的文档内容，后端解析后使用 LLM 生成
+    Playbook 草案。LLM 不可用时自动降级到确定性模板。
+    """
+    if request.project_id:
+        _project_or_404(request.project_id)
+
+    try:
+        file_bytes = base64.b64decode(request.content_base64)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="base64 解码失败") from exc
+
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="文档内容为空")
+
+    ext = Path(request.filename).suffix.lower()
+    allowed = {".docx", ".pdf", ".md", ".pptx", ".xlsx", ".html", ".txt"}
+    if ext not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件格式：{ext}，支持 {', '.join(sorted(allowed))}",
+        )
+
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        tmp.write(file_bytes)
+        tmp_path = Path(tmp.name)
+
+    try:
+        result = await import_playbook_from_document(
+            tmp_path,
+            request.filename,
+            use_llm=request.use_llm,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("document import failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="文档解析失败") from exc
+    finally:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+
+    return PlaybookDocumentImportResponse(**result.to_dict())
 
 
 @router.get(

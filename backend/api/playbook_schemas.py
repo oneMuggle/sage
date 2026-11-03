@@ -236,6 +236,25 @@ class PlaybookEventAggregateResponse(BaseModel):
     total: int = 0
 
 
+class PlaybookDocumentImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filename: str = Field(min_length=1, max_length=256)
+    content_base64: str
+    project_id: Optional[str] = Field(default=None, max_length=128)
+    use_llm: bool = True
+
+
+class PlaybookDocumentImportResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    playbook: Dict[str, Any]
+    source_doc: str
+    rationale: str
+    llm_available: bool
+    source: str
+
+
 __all__ = [
     "BuiltinPlaybookListResponse",
     "BuiltinPlaybookResponse",
@@ -247,6 +266,8 @@ __all__ = [
     "PlaybookAuthorPreviewResponse",
     "PlaybookBindRequest",
     "PlaybookCurrentResponse",
+    "PlaybookDocumentImportRequest",
+    "PlaybookDocumentImportResponse",
     "PlaybookEventAggregateResponse",
     "PlaybookEventModel",
     "PlaybookEventsResponse",
