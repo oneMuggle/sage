@@ -534,49 +534,28 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
       const slots = selectSessionSlots(prev, sessionId);
       if (!slots.streaming || slots.streaming.messageId !== messageId) return prev;
       // 2026-10-20: 非 retry 状态到达时自动清 retryInfo —— Banner 随之消失
-      // 2026-10-25: 改为延迟 3 秒隐藏，让用户能看见重试发生过。
-      // 保留 retryInfo 数据，仅记录 clearedAt 时间戳；3 秒后 setTimeout
-      // 才真正将 retryInfo 置 null。
+      // 2026-11-03: 改为立即清除（原 3s 延迟隐藏）。原因：
+      // - reasoning / content_delta 事件持续到达时，每次 setStreamingMeta 都会
+      //   重置延迟定时器，导致 banner 在用户看到"思考内容已出现"后仍停留 3s，
+      //   造成"出现思考内容后依然显示重试中"的体验错位。
+      // - Claude Code / 主流 AI 应用均在新内容到达时立即消失重试横幅。
+      // - retryInfoClearedAt 保留，供 useChat.ts 判定"本轮曾重试过"。
       const autoClearRetry =
         patch.state !== undefined && patch.state !== 'retry' && slots.streaming.retryInfo != null;
       if (autoClearRetry) {
-        // 清除旧的定时器（如有）
+        // 取消旧的隐藏定时器（如有）
         if (slots.streaming._retryHideTimer) {
           clearTimeout(slots.streaming._retryHideTimer);
         }
-        const clearedAt = Date.now();
         const nextStreaming = {
           ...slots.streaming,
           ...patch,
-          retryInfoClearedAt: clearedAt,
-          // 暂不清 retryInfo，保留给 selector 用
+          retryInfo: null,
+          retryInfoClearedAt: Date.now(),
+          _retryHideTimer: undefined,
         };
-        // 3 秒后真正清除 retryInfo
-        const timer = window.setTimeout(() => {
-          useChatStreamStore.setState((state) => {
-            const currentSlots = selectSessionSlots(state, sessionId);
-            if (
-              !currentSlots.streaming ||
-              currentSlots.streaming.messageId !== messageId ||
-              currentSlots.streaming.retryInfoClearedAt !== clearedAt
-            )
-              return state;
-            return {
-              sessions: writeSlots(state.sessions, sessionId, {
-                streaming: {
-                  ...currentSlots.streaming,
-                  retryInfo: null,
-                  retryInfoClearedAt: null,
-                  _retryHideTimer: undefined,
-                },
-              }),
-            };
-          });
-        }, 3000);
         return {
-          sessions: writeSlots(prev.sessions, sessionId, {
-            streaming: { ...nextStreaming, _retryHideTimer: timer },
-          }),
+          sessions: writeSlots(prev.sessions, sessionId, { streaming: nextStreaming }),
         };
       }
       const nextStreaming = { ...slots.streaming, ...patch };
