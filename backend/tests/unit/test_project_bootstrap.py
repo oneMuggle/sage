@@ -243,3 +243,48 @@ def test_apply_git_unavailable_records_error(
     result = project_bootstrap.apply_bootstrap(project, {"git_init": True})
 
     assert result["errors"] == [{"item": "git_init", "message": "本机未检测到 Git，已跳过"}]
+
+
+@pytest.mark.asyncio()
+async def test_scan_returns_only_deterministic_section(
+    project, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(project_bootstrap, "git_available", lambda: True)
+
+    result = await project_bootstrap.build_bootstrap_scan(project)
+
+    assert "scan" in result
+    assert "suggestions" not in result
+    assert result["scan"]["existing"]["rules_count"] == 0
+    assert result["scan"]["git"]["git_available"] is True
+
+
+@pytest.mark.asyncio()
+async def test_suggestions_report_ai_source_and_no_error(
+    project, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(project_bootstrap, "ProjectAnalysisAgent", FakeAgent)
+    monkeypatch.setattr(project_bootstrap, "ProjectRuleGenerator", FakeGenerator)
+    monkeypatch.setattr(project_bootstrap, "git_available", lambda: True)
+
+    result = await project_bootstrap.build_bootstrap_suggestions(project, use_llm=True)
+
+    assert result["llm_available"] is True
+    assert result["rule_source"] == "ai"
+    assert result["llm_error"] is None
+    assert result["suggestions"]["rules"][0]["content"] == "Use ruff for linting"
+
+
+@pytest.mark.asyncio()
+async def test_suggestions_use_template_source_without_llm(
+    project, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(project_bootstrap, "ProjectAnalysisAgent", FakeAgent)
+    monkeypatch.setattr(project_bootstrap, "git_available", lambda: True)
+
+    result = await project_bootstrap.build_bootstrap_suggestions(project, use_llm=False)
+
+    assert result["llm_available"] is False
+    assert result["rule_source"] == "template"
+    # Explicitly requesting no LLM is not a failure, so no fallback warning.
+    assert result["llm_error"] is None

@@ -1,16 +1,23 @@
 /**
  * ProjectBootstrapPanel — AI initialization suggestions for a project.
  *
- * Shows a deterministic scan (type, stack, Git state, files), then the
- * optional LLM-backed suggestions: SAGE.md draft, rules, milestones and
- * a Git-init recommendation. Everything is opt-in and applied in one
- * idempotent call; the panel never writes anything by itself.
+ * M2 (2026-11-03): two-step flow so the UI can show real progress:
+ *   1. deterministic scan (fast, no LLM) — renders scan results immediately
+ *   2. AI suggestions (LLM-backed, slower) — shows elapsed time and an
+ *      explicit fallback notice when the LLM is unavailable.
+ *
+ * Everything is opt-in and applied in one idempotent call; the panel never
+ * writes anything by itself.
  */
 import { AlertCircle, CheckCircle2, GitBranch, Loader2, Sparkles } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { projectApi } from '../../shared/api/projectApi';
-import type { BootstrapApplyResult, BootstrapPreviewResult } from '../../shared/api/projectApi';
+import type {
+  BootstrapApplyResult,
+  BootstrapScanSection,
+  BootstrapSuggestionSet,
+} from '../../shared/api/projectApi';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 
@@ -19,13 +26,20 @@ export interface ProjectBootstrapPanelProps {
   onApplied?: (result: BootstrapApplyResult) => void;
 }
 
+type BootstrapPhase = 'scanning' | 'suggesting' | 'ready' | 'error';
+
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
 export function ProjectBootstrapPanel({ projectId, onApplied }: ProjectBootstrapPanelProps) {
-  const [preview, setPreview] = useState<BootstrapPreviewResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [scan, setScan] = useState<BootstrapScanSection | null>(null);
+  const [projectName, setProjectName] = useState('');
+  const [suggestions, setSuggestions] = useState<BootstrapSuggestionSet | null>(null);
+  const [phase, setPhase] = useState<BootstrapPhase>('scanning');
+  const [llmAvailable, setLlmAvailable] = useState(false);
+  const [llmError, setLlmError] = useState<string | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BootstrapApplyResult | null>(null);
@@ -36,28 +50,59 @@ export function ProjectBootstrapPanel({ projectId, onApplied }: ProjectBootstrap
   const [acceptGitInit, setAcceptGitInit] = useState(false);
   const [acceptCheckpoint, setAcceptCheckpoint] = useState(true);
 
-  const load = async (useLlm: boolean) => {
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    try {
-      const data = await projectApi.bootstrapPreview(projectId, useLlm);
-      setPreview(data);
-      setAcceptSageMd(!data.suggestions.sageMd.exists);
-      setAcceptRules(new Set(data.suggestions.rules.map((_, index) => index)));
-      setAcceptMilestones(new Set(data.suggestions.milestones.map((_, index) => index)));
-      setAcceptGitInit(data.suggestions.gitInit.recommended);
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
+  const load = useCallback(
+    async (useLlm: boolean) => {
+      setError(null);
+      setResult(null);
+      setSuggestions(null);
+      setScan(null);
+      setLlmError(null);
+      setElapsedSec(0);
+      setPhase('scanning');
+      try {
+        const scanResult = await projectApi.bootstrapScan(projectId);
+        setScan(scanResult.scan);
+        setProjectName(scanResult.project.name);
+        setPhase('suggesting');
+        const suggestResult = await projectApi.bootstrapSuggest(projectId, useLlm);
+        setSuggestions(suggestResult.suggestions);
+        setLlmAvailable(suggestResult.llmAvailable);
+        setLlmError(suggestResult.llmError);
+        setAcceptSageMd(!suggestResult.suggestions.sageMd.exists);
+        setAcceptRules(new Set(suggestResult.suggestions.rules.map((_, index) => index)));
+        setAcceptMilestones(
+          new Set(suggestResult.suggestions.milestones.map((_, index) => index)),
+        );
+        setAcceptGitInit(suggestResult.suggestions.gitInit.recommended);
+        setPhase('ready');
+      } catch (err) {
+        setError(errorMessage(err));
+        setPhase('error');
+      }
+    },
+    [projectId],
+  );
 
   useEffect(() => {
     void load(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when project changes
-  }, [projectId]);
+  }, [load]);
+
+  // Elapsed timer for the AI suggestion step (a real wait, not a fake bar).
+  useEffect(() => {
+    if (phase !== 'suggesting') return;
+    const timer = window.setInterval(() => setElapsedSec((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [phase]);
+
+  /** After applying, refresh only the deterministic scan (existing counts). */
+  const refreshScan = async () => {
+    try {
+      const scanResult = await projectApi.bootstrapScan(projectId);
+      setScan(scanResult.scan);
+    } catch {
+      // keep previous scan; apply result is still shown
+    }
+  };
 
   const toggleIndex = (
     setter: React.Dispatch<React.SetStateAction<Set<number>>>,
@@ -72,21 +117,21 @@ export function ProjectBootstrapPanel({ projectId, onApplied }: ProjectBootstrap
   };
 
   const handleApply = async () => {
-    if (!preview || applying) return;
+    if (!scan || !suggestions || applying) return;
     setApplying(true);
     setError(null);
     try {
       const applied = await projectApi.bootstrapApply(projectId, {
         metadata: {
-          description: preview.scan.techStack.length
-            ? `${preview.project.name}（${preview.scan.techStack.slice(0, 4).join(' / ')}）`
+          description: scan.techStack.length
+            ? `${projectName || '项目'}（${scan.techStack.slice(0, 4).join(' / ')}）`
             : undefined,
-          projectType: (preview.scan.level1Type as never) ?? undefined,
-          projectSubType: preview.scan.subType,
+          projectType: (scan.level1Type as never) ?? undefined,
+          projectSubType: scan.subType,
         },
         sageMd: acceptSageMd,
-        sageMdContent: preview.suggestions.sageMd.content,
-        rules: preview.suggestions.rules
+        sageMdContent: suggestions.sageMd.content,
+        rules: suggestions.rules
           .filter((_, index) => acceptRules.has(index))
           .map((rule) => ({
             category: rule.category,
@@ -94,7 +139,7 @@ export function ProjectBootstrapPanel({ projectId, onApplied }: ProjectBootstrap
             triggerPattern: rule.triggerPattern,
             priority: rule.priority,
           })),
-        milestones: preview.suggestions.milestones
+        milestones: suggestions.milestones
           .filter((_, index) => acceptMilestones.has(index))
           .map((item) => ({
             title: item.title,
@@ -107,6 +152,7 @@ export function ProjectBootstrapPanel({ projectId, onApplied }: ProjectBootstrap
       });
       setResult(applied);
       onApplied?.(applied);
+      await refreshScan();
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -114,19 +160,19 @@ export function ProjectBootstrapPanel({ projectId, onApplied }: ProjectBootstrap
     }
   };
 
-  if (loading) {
+  if (phase === 'scanning' || (!scan && phase !== 'error')) {
     return (
       <div
         className="flex items-center gap-2 rounded-lg border border-border bg-card p-4 text-xs text-muted-foreground"
         data-testid="project-bootstrap-loading"
       >
         <Loader2 className="h-4 w-4 animate-spin" />
-        正在扫描项目并生成初始化建议…
+        第 1 步 / 共 2 步 · 正在扫描项目文件…
       </div>
     );
   }
 
-  if (error) {
+  if (phase === 'error' || !scan) {
     return (
       <div
         className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive"
@@ -134,18 +180,56 @@ export function ProjectBootstrapPanel({ projectId, onApplied }: ProjectBootstrap
       >
         <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <div className="space-y-1">
-          <div>{error}</div>
-          <Button size="sm" variant="secondary" onClick={() => void load(false)}>
-            重试（不调用 AI）
-          </Button>
+          <div>{error || '扫描失败'}</div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="secondary" onClick={() => void load(true)}>
+              重试（调用 AI）
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => void load(false)}>
+              仅扫描（不调用 AI）
+            </Button>
+          </div>
         </div>
       </div>
     );
   }
 
-  if (!preview) return null;
+  const scanSummary = (
+    <div className="flex flex-wrap gap-2 text-ui-2xs text-muted-foreground">
+      <span>
+        类型：{scan.level1Type ?? '未分类'}
+        {scan.subType ? ` / ${scan.subType}` : ''}
+      </span>
+      {scan.techStack.length > 0 && <span>技术栈：{scan.techStack.slice(0, 5).join('、')}</span>}
+      <span>源文件：{scan.sourceFiles.reduce((sum, item) => sum + item.count, 0)} 个</span>
+      <span className="inline-flex items-center gap-1">
+        <GitBranch className="h-3 w-3" />
+        {scan.git.isRepo ? `Git（${scan.git.dirtyFiles} 个未提交）` : '未启用 Git'}
+      </span>
+    </div>
+  );
 
-  const { scan, suggestions } = preview;
+  if (phase === 'suggesting' || !suggestions) {
+    return (
+      <div
+        className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4"
+        data-testid="project-bootstrap-panel"
+      >
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Sparkles className="h-4 w-4 text-primary" />
+          AI 初始化建议
+        </div>
+        {scanSummary}
+        <div
+          className="flex items-center gap-2 rounded-md border border-border bg-card p-3 text-xs text-muted-foreground"
+          data-testid="project-bootstrap-suggesting"
+        >
+          <Loader2 className="h-4 w-4 animate-spin" />
+          第 2 步 / 共 2 步 · AI 正在分析项目并生成建议（已用时 {elapsedSec}s，通常 10–30 秒）
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -156,27 +240,25 @@ export function ProjectBootstrapPanel({ projectId, onApplied }: ProjectBootstrap
         <div className="flex items-center gap-2 text-sm font-medium">
           <Sparkles className="h-4 w-4 text-primary" />
           AI 初始化建议
-          <Badge variant={preview.llmAvailable ? 'default' : 'secondary'}>
-            {preview.llmAvailable ? 'AI 分析' : '本地规则'}
+          <Badge variant={llmAvailable ? 'default' : 'secondary'}>
+            {llmAvailable ? 'AI 分析' : '本地推荐模板'}
           </Badge>
         </div>
-        <Button size="sm" variant="ghost" onClick={() => void load(false)}>
+        <Button size="sm" variant="ghost" onClick={() => void load(true)}>
           重新扫描
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-2 text-ui-2xs text-muted-foreground">
-        <span>
-          类型：{scan.level1Type ?? '未分类'}
-          {scan.subType ? ` / ${scan.subType}` : ''}
-        </span>
-        {scan.techStack.length > 0 && <span>技术栈：{scan.techStack.slice(0, 5).join('、')}</span>}
-        <span>源文件：{scan.sourceFiles.reduce((sum, item) => sum + item.count, 0)} 个</span>
-        <span className="inline-flex items-center gap-1">
-          <GitBranch className="h-3 w-3" />
-          {scan.git.isRepo ? `Git（${scan.git.dirtyFiles} 个未提交）` : '未启用 Git'}
-        </span>
-      </div>
+      {scanSummary}
+
+      {llmError && (
+        <div
+          className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-ui-2xs text-amber-700 dark:text-amber-300"
+          data-testid="bootstrap-llm-fallback"
+        >
+          {llmError}
+        </div>
+      )}
 
       <div className="space-y-2 rounded-md border border-border bg-card p-3">
         <div className="flex items-start gap-2 text-xs">

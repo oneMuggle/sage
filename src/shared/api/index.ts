@@ -119,6 +119,10 @@ export type {
   BootstrapApplyResult,
   BootstrapRuleSuggestion,
   BootstrapMilestoneSuggestion,
+  BootstrapScanSection,
+  BootstrapSuggestionSet,
+  BootstrapScanResult,
+  BootstrapSuggestResult,
   GitInitResult,
 } from './projectApi';
 export { officeApi } from './officeApi';
