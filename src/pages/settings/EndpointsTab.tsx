@@ -355,7 +355,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                     thinkingBudget → Anthropic ``thinking.budget_tokens`` / DeepSeek
                     ``thinking_budget``. 两者都是 null 时不发送该键。 */}
                 <div className="opacity-75">
-                  <label className="text-[11px] text-muted/80 block mb-1">
+                  <label className="text-ui-2xs text-muted/80 block mb-1">
                     {t('settings.endpoints.field.reasoning_effort')}
                   </label>
                   <select
@@ -368,7 +368,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                           null) as EndpointConfig['reasoningEffort'],
                       })
                     }
-                    className="w-full px-2 py-1 border border-border rounded-radius-sm text-[11px] bg-surface text-text"
+                    className="w-full px-2 py-1 border border-border rounded-radius-sm text-ui-2xs bg-surface text-text"
                   >
                     <option value="">{t('settings.endpoints.field.reasoning_effort.off')}</option>
                     <option value="low">
@@ -381,12 +381,12 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                       {t('settings.endpoints.field.reasoning_effort.high')}
                     </option>
                   </select>
-                  <p className="text-[10px] text-muted/70 mt-0.5">
+                  <p className="text-ui-xs text-muted/70 mt-0.5">
                     {t('settings.endpoints.field.reasoning_effort_hint')}
                   </p>
                 </div>
                 <div className="opacity-75">
-                  <label className="text-[11px] text-muted/80 block mb-1">
+                  <label className="text-ui-2xs text-muted/80 block mb-1">
                     {t('settings.endpoints.field.thinking_budget')}
                   </label>
                   <input
@@ -403,9 +403,9 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                         thinkingBudget: raw === '' ? null : Number(raw),
                       });
                     }}
-                    className="w-full px-2 py-1 border border-border rounded-radius-sm text-[11px] font-mono bg-surface text-text"
+                    className="w-full px-2 py-1 border border-border rounded-radius-sm text-ui-2xs font-mono bg-surface text-text"
                   />
-                  <p className="text-[10px] text-muted/70 mt-0.5">
+                  <p className="text-ui-xs text-muted/70 mt-0.5">
                     {t('settings.endpoints.field.thinking_budget_hint')}
                   </p>
                 </div>
