@@ -15,7 +15,8 @@ import json
 import logging
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from backend.agents.profiles import build_system_base, get_enabled_agent
+from backend.agents.profiles import get_enabled_agent
+from backend.chat.specialist_prompt_composer import compose_system_prompt
 from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.agent_state import AgentEvent
 from backend.domain.tool_policy import ToolPolicy
@@ -195,10 +196,8 @@ class SubagentRunner:
         if not isinstance(schema, dict):
             schema = None
 
-        child_system = build_system_base()
         profile = get_enabled_agent(agent_id)
-        if profile and profile.get("system_prompt"):
-            child_system += "\n\n" + profile["system_prompt"]
+        child_system = compose_system_prompt(specialist_profile=profile)
 
         user_content = goal
         if schema is not None:

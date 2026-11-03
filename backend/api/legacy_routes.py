@@ -787,10 +787,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 "session_id": data.session_id,
             }
 
-            # Build system prompt with optional diagram tool guidance
-            from backend.agents.profiles import build_system_base
+            # Build system prompt with specialist persona support (M0)
+            from backend.chat.specialist_prompt_composer import compose_system_prompt
 
-            system_content = build_system_base()
+            system_content = compose_system_prompt(specialist_profile=agent.profile)
 
             # PM1 (round8): 单 agent 计划模式 —— 只读调研 + 计划产出指令；
             # 与编排互斥（计划模式在主对话内调研，不派子代理），批准后由
