@@ -5,6 +5,7 @@ Tests TimezoneFormatter and set_log_timezone() in backend/utils/logging.py.
 from __future__ import annotations
 
 import logging
+from datetime import tzinfo
 
 import pytest
 
@@ -20,13 +21,21 @@ def _reset_timezone():
 class TestTimezoneFormatter:
     """TimezoneFormatter renders timestamps in the configured timezone."""
 
-    def test_default_local(self):
+    def test_default_local(self, monkeypatch: pytest.MonkeyPatch):
         """Default formatter produces local-time timestamps (fallback: Beijing).
 
-        系统本地时区为 Asia/Shanghai (中国自 1991 年起无夏令时),
-        所以默认输出应与北京时间一致.
+        CI 环境 ``local`` = UTC, 所以这里 monkeypatch ``local_timezone`` 固定返回
+        北京时间, 验证默认行为等同于 ``Asia/Shanghai`` 输出.
         """
+        from backend.utils import timezones as tz_mod
         from backend.utils.logging import TimezoneFormatter
+
+        def _fake_local() -> tzinfo:
+            from zoneinfo import ZoneInfo
+
+            return ZoneInfo("Asia/Shanghai")
+
+        monkeypatch.setattr(tz_mod, "local_timezone", _fake_local)
         fmt = TimezoneFormatter("%(asctime)s", "%Y-%m-%dT%H:%M:%S")
         record = logging.LogRecord(
             name="test", level=logging.INFO, pathname="", lineno=0,

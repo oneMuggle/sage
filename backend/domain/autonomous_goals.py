@@ -20,7 +20,7 @@ from backend.domain.execution_conditions import (
     ExecutionCondition,
     TriggerMode,
 )
-from backend.utils.timezones import LOCAL_TIMEZONE, ensure_utc, utc_now
+from backend.domain.time_utils import LOCAL_TIMEZONE, ensure_utc, utc_now
 
 
 class GoalStatus(str, Enum):

@@ -18,7 +18,16 @@ IANA 名       ``ZoneInfo(name)`` → 北京时间 → 固定 +08:00 偏移
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone, tzinfo
+
+from backend.domain.time_utils import (  # noqa: F401 — 向后兼容再导出
+    LOCAL_TIMEZONE,
+    ensure_utc,
+    utc_now,
+)
+
+_logger = logging.getLogger(__name__)
 
 try:
     from zoneinfo import ZoneInfo  # Python 3.9+  # py38-ok except ImportError 守卫 + backports 兜底
@@ -26,7 +35,6 @@ except ImportError:  # pragma: no cover — py38 compat
     from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
 
 # 时区别名
-LOCAL_TIMEZONE = "local"
 UTC_TIMEZONE = "UTC"
 
 # 北京时间回退. 中国自 1991 年起不再使用夏令时, 固定 +08:00 与 Asia/Shanghai
@@ -55,13 +63,13 @@ def local_timezone() -> tzinfo:
 
         return get_localzone()
     except Exception:  # noqa: BLE001 — tzlocal 缺失或平台不支持
-        pass
+        _logger.debug("tzlocal.get_localzone() 失败, 回落 astimezone() 当前偏移", exc_info=True)
     try:
         tz = datetime.now().astimezone().tzinfo
         if tz is not None:
             return tz
     except Exception:  # noqa: BLE001 — 本地时区不可用
-        pass
+        _logger.debug("astimezone() 取本地偏移失败, 回落到北京时间", exc_info=True)
     return beijing_timezone()
 
 
@@ -87,23 +95,3 @@ def resolve_timezone(name: str) -> tzinfo:
 def local_now() -> datetime:
     """当前本地时间 (带时区偏移, timezone-aware)."""
     return datetime.now(tz=local_timezone())
-
-
-def utc_now() -> datetime:
-    """当前 UTC 时间 (带时区偏移, timezone-aware).
-
-    替代已弃用的 ``datetime.utcnow()`` —— 后者返回 naive 值, 与 aware 值
-    混用会抛 ``TypeError``.
-    """
-    return datetime.now(tz=timezone.utc)  # noqa: UP017 — datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10, win7 跑 3.8
-
-
-def ensure_utc(dt: datetime) -> datetime:
-    """把 naive datetime 视为 UTC 并补上时区; 已带时区的原样返回.
-
-    用于读取历史数据 —— 旧版本落库的 ISO 串没有偏移后缀, 直接参与 aware
-    运算会抛 ``TypeError``.
-    """
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)  # noqa: UP017 — datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10, win7 跑 3.8
-    return dt
