@@ -81,6 +81,7 @@ export const zhPlaybook = {
   'playbook.card.detected': '检测到可能已进入「{stage}」阶段（置信度 {confidence}%）',
   'playbook.card.confirmStage': '确认推进',
   'playbook.card.keepStage': '保持当前',
+  'playbook.card.confirmSwitch': '切换到「{stage}」阶段？切换后会重新检查完整性。',
 
   'playbook.notice.bound': '已绑定项目规程',
   'playbook.notice.auditRefreshed': '完整性检查已刷新',
