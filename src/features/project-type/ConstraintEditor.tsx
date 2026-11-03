@@ -607,7 +607,7 @@ export function ConstraintEditor({
             }}
             className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
           >
-            {savedRuleL4 ? '已存 L4' : '存为 L4 资料'}
+            {savedRuleL4 ? '已保存' : '保存为项目资料'}
           </button>
           <button
             type="button"
@@ -624,7 +624,7 @@ export function ConstraintEditor({
                         content: content.trim() || '未命名约束规则',
                         importance: priority,
                         sourceMessageIds: [],
-                        reasoning: '约束编辑器同步沉淀至 L3 画像',
+                        reasoning: '约束编辑器同步保存到 AI 记忆',
                       },
                     ],
                   });
@@ -635,7 +635,7 @@ export function ConstraintEditor({
             }}
             className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
           >
-            {savedRuleL3 ? '已沉淀至 L3' : '同步沉淀至 L3'}
+            {savedRuleL3 ? '已保存到 AI 记忆' : '保存到 AI 记忆'}
           </button>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             取消
