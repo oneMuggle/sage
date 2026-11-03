@@ -250,7 +250,7 @@ export function SemanticSearchPanel({
                           content: `L4 资料向量索引统计：总材料 ${stats.totalMaterials}，已索引 ${stats.indexedMaterials}，总 chunks ${stats.totalChunks}`,
                           importance: 6,
                           sourceMessageIds: [],
-                          reasoning: 'M4 语义检索索引状态沉淀至 L3 画像',
+                          reasoning: 'M4 语义检索索引状态保存到 AI 记忆',
                         },
                       ],
                     });
@@ -556,7 +556,7 @@ export function SemanticSearchPanel({
                     }}
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                   >
-                    {savedBundleL4 ? '已存 L4 合集' : '存为 L4 合集'}
+                    {savedBundleL4 ? '已保存' : '保存为合集资料'}
                   </button>
                   <button
                     type="button"
@@ -623,17 +623,17 @@ export function SemanticSearchPanel({
                           onClick={() => void handleSaveHitToProfile(hit, idx)}
                           data-testid={`semantic-hit-save-profile-${idx}`}
                           className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10 disabled:opacity-60"
-                          title="将此片段沉淀至 L3 项目画像"
+                          title="将此片段保存到 AI 记忆"
                         >
                           {isSavedToProfile ? (
                             <>
                               <Check className="h-2.5 w-2.5 text-emerald-500" />
-                              已沉淀 L3
+                              已保存
                             </>
                           ) : (
                             <>
                               <BookmarkPlus className="h-2.5 w-2.5" />
-                              沉淀至 L3 画像
+                              保存到 AI 记忆
                             </>
                           )}
                         </button>
@@ -690,7 +690,7 @@ export function SemanticSearchPanel({
                           }}
                           className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
                         >
-                          {savedL4Indices.has(idx) ? '已存L4' : '+L4'}
+                          {savedL4Indices.has(idx) ? '已保存' : '+资料'}
                         </button>
                         <button
                           type="button"

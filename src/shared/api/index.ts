@@ -28,6 +28,7 @@ export { projectApi } from './projectApi';
 export { playbookApi } from './playbookApi';
 export type {
   PlaybookAction,
+  PlaybookDocumentImportResult,
   PlaybookActionsResult,
   PlaybookArtifactAudit,
   PlaybookArtifactSpec,
@@ -42,6 +43,8 @@ export type {
   PlaybookImportPreview,
   PlaybookLibraryItem,
   PlaybookMatch,
+  PlaybookShareLink,
+  PlaybookSharedPayload,
   PlaybookSpec,
   PlaybookStageAudit,
   PlaybookStageSpec,

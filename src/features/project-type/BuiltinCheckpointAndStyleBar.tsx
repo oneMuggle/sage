@@ -351,7 +351,7 @@ export function ResearchCitationAndToneBar({
           type="button"
           data-testid="research-save-style-l3-btn"
           onClick={async () => {
-            setAppliedHint('已沉淀学术规范至 L3');
+            setAppliedHint('已保存学术规范到 AI 记忆');
             if (typeof projectApi?.confirmKnowledge === 'function') {
               try {
                 await projectApi.confirmKnowledge(projectId, {
@@ -685,7 +685,7 @@ export function BusinessDocumentStyleBar({
           type="button"
           data-testid="business-save-style-l3-btn"
           onClick={async () => {
-            setAppliedHint('已沉淀文书规范至 L3');
+            setAppliedHint('已保存文书规范到 AI 记忆');
             if (typeof projectApi?.confirmKnowledge === 'function') {
               try {
                 await projectApi.confirmKnowledge(projectId, {
