@@ -262,7 +262,9 @@ async def test_trend_day_bucket_and_hit_rate(monkeypatch):
     assert len(out["series"]) == 7
     assert sum(p["requests"] for p in out["series"]) == 1
     point = next(p for p in out["series"] if p["requests"] == 1)
-    assert point["ts"].endswith("T00:00:00")
+    # ts 形如 2026-11-03T00:00:00+08:00 (本地 ISO, 带时区偏移后缀)
+    # 取前 19 字符 (datetime 部分) 验证日边界
+    assert point["ts"][:19].endswith("T00:00:00")
     assert point["prompt_tokens"] == 100
     assert point["completion_tokens"] == 50
     assert point["total_tokens"] == 150
@@ -344,7 +346,9 @@ async def test_trend_total_has_90_day_slots(monkeypatch):
     out = await ur.get_usage_trend(range="total", session_id=None)
     assert out["range"] == "total"
     assert len(out["series"]) == 90
-    assert out["series"][-1]["ts"].endswith("T00:00:00")
+    # ts 形如 2026-11-03T00:00:00+08:00 (本地 ISO, 带时区偏移后缀)
+    # 取前 19 字符 (datetime 部分) 验证日边界
+    assert out["series"][-1]["ts"][:19].endswith("T00:00:00")
 
 
 @pytest.mark.asyncio()

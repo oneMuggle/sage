@@ -34,6 +34,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import PlainTextResponse
 
 from backend.services.usage_tracker import usage_tracker
+from backend.utils.timezones import local_now
 
 router = APIRouter(prefix="/usage", tags=["usage"])
 
@@ -154,15 +155,19 @@ _RANGE_TO_DAYS = {
 
 
 def _trend_bucket_starts(range_: str, bucket: str) -> List[datetime]:
-    """趋势图完整时间槽起点（本地 naive datetime，升序）。
+    """趋势图完整时间槽起点（本地时区 aware datetime，升序）。
 
     - ``today``: 本地当天 00:00 起 24 个小时槽
     - ``7d`` / ``30d`` / ``total``: 含今天在内的最近 N 个自然日零点
 
     补齐空槽让前端 hover 有稳定的「时段」概念；否则只有有数据的桶，
     X 轴会被压缩，用户无法查看零用量时段。
+
+    2026-11-03: 改用 ``local_now()`` —— 之前的 naive ``datetime.now()``
+    依赖隐式本地时区，与 SQLite ``strftime(...,'localtime')`` 的分桶
+    靠巧合对齐；改成 aware 后偏移量显式携带，不再有 naive/aware 混用风险。
     """
-    now = datetime.now()
+    now = local_now()
     if bucket == "hour":
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         return [day_start + timedelta(hours=i) for i in range(24)]
@@ -172,9 +177,24 @@ def _trend_bucket_starts(range_: str, bucket: str) -> List[datetime]:
 
 
 def _ts_key(dt: datetime, bucket: str) -> str:
+    """桶的本地墙钟键 —— 必须与 SQLite ``strftime(...,'localtime')`` 逐字相同."""
     if bucket == "hour":
         return dt.strftime("%Y-%m-%dT%H:00:00")
     return dt.strftime("%Y-%m-%dT00:00:00")
+
+
+def _ts_iso(dt: datetime, bucket: str) -> str:
+    """桶起始的 ISO8601（带 UTC 偏移）—— 前端 ``new Date(ts)`` 可正确解析。
+
+    2026-11-03: 之前输出的是无时区后缀的 naive 本地串，跨时区消费者无从
+    判断时区。改为带偏移的 ISO 后仍是本地墙钟时刻，图表刻度不变。
+    """
+    if bucket == "hour":
+        normalized = dt.replace(minute=0, second=0, microsecond=0)
+    else:
+        normalized = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    # astimezone 同 tzinfo: 归一化 DST 切换边界处的偏移量。
+    return normalized.astimezone(normalized.tzinfo).isoformat()
 
 
 @router.get("/trend")
@@ -189,8 +209,8 @@ async def get_usage_trend(
     返回 ``{range, bucket, series: [{ts, requests, prompt_tokens,
     completion_tokens, total_tokens, cached_tokens, cache_read_tokens,
     cache_creation_tokens, cost_usd, cache_hit_rate, known_requests,
-    unknown_requests}]}``, ts 是桶起始**本地** ISO8601 (无时区后缀, 形如
-    "2026-09-09T07:00:00").
+    unknown_requests}]}``, ts 是桶起始**本地** ISO8601 (带 UTC 偏移, 形如
+    "2026-09-09T07:00:00+08:00").
 
     bucket=today → hour (固定 24 槽); 7d/30d/total → day (固定 7/30/90 槽)。
     无数据的时段补零槽，保证前端 hover 能定位每个时间段。
@@ -242,7 +262,7 @@ async def get_usage_trend(
             hit_rate = round(read / eligible, 4) if eligible > 0 else 0.0
             series.append(
                 {
-                    "ts": key,
+                    "ts": _ts_iso(slot, bucket),
                     "requests": int(row["requests"] or 0) if row else 0,
                     "prompt_tokens": prompt,
                     "completion_tokens": int(row["completion_tokens"] or 0) if row else 0,

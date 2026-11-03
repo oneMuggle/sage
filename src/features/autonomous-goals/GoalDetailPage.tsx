@@ -13,6 +13,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import * as goalApi from '../../entities/autonomous-goals/goalApi';
 import { useGoalStore } from '../../entities/autonomous-goals/goalStore';
 import type { Checkpoint, Goal, GoalStatus } from '../../entities/autonomous-goals/types';
+import { formatDateTime } from '../../shared/lib/timeFormatter';
 import { PageHeader } from '../../shared/ui';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
@@ -284,9 +285,13 @@ export function GoalDetailPage() {
 
         {/* Timestamps */}
         <div className="text-ui-xs text-text-muted space-y-1">
-          <p>创建时间: {formatDate(goal.created_at)}</p>
-          {goal.started_at && <p>启动时间: {formatDate(goal.started_at)}</p>}
-          {goal.completed_at && <p>完成时间: {formatDate(goal.completed_at)}</p>}
+          <p>创建时间: {formatDateTime(new Date(goal.created_at).getTime())}</p>
+          {goal.started_at && (
+            <p>启动时间: {formatDateTime(new Date(goal.started_at).getTime())}</p>
+          )}
+          {goal.completed_at && (
+            <p>完成时间: {formatDateTime(new Date(goal.completed_at).getTime())}</p>
+          )}
         </div>
       </div>
     </div>
@@ -349,14 +354,10 @@ function CheckpointItem({ checkpoint }: { checkpoint: Checkpoint }) {
   );
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString('zh-CN');
-}
+// formatDate 已统一到 src/shared/lib/timeFormatter#formatDateTime
+
 // eslint-disable-next-line react-refresh/only-export-components
-export function formatGoalDetailSummary(
-  status: GoalStatus | null,
-  checkpointCount = 0,
-): string {
+export function formatGoalDetailSummary(status: GoalStatus | null, checkpointCount = 0): string {
   const statusKey = status ?? 'none';
   const label = status ? STATUS_LABEL[status] : 'none';
   const safeCount = Math.max(0, Math.trunc(checkpointCount));
@@ -364,10 +365,7 @@ export function formatGoalDetailSummary(
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function formatGoalDetailJson(
-  status: GoalStatus | null,
-  checkpointCount = 0,
-): string {
+export function formatGoalDetailJson(status: GoalStatus | null, checkpointCount = 0): string {
   return JSON.stringify({
     status: status ?? null,
     label: status ? STATUS_LABEL[status] : null,

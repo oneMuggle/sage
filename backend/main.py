@@ -1367,8 +1367,8 @@ if __name__ == "__main__":
     setup_logging(log_level=_level)
 
     # 日志时区 (2026-09-17): 从 SAGE_LOG_TIMEZONE env 读取, 应用到 Python logger.
-    # 由 Electron main.ts 注入 (值来自用户设置 logTimezone). 默认 'UTC' 保持历史行为.
-    _log_tz = os.environ.get("SAGE_LOG_TIMEZONE", "UTC")
+    # 由 Electron main.ts 注入; 默认 'local' (取不到回落到北京时间).
+    _log_tz = os.environ.get("SAGE_LOG_TIMEZONE", "local")
     set_log_timezone(_log_tz)
 
     # uvicorn 自带 logger 默认 WARNING 且无 handler;显式放行到 INFO 并传播到
