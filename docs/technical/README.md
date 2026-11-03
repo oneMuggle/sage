@@ -102,3 +102,17 @@
 | 123  | [文档与验收信息架构：顶层 Tab + LaTeX 二级分组](./123-office-ia-tabs.md) | URL 为唯一事实源 + keep-alive 保状态 + 诊断收进「环境」popover；14 常驻区块 → 4 任务域 |
 | 124  | [Markdown 渲染器统一](./124-markdown-renderer.md) | 聊天/产物/Wiki 单一收敛点：minimal/chat 两档 + GFM/KaTeX 统一管线 + 表格复制与限高 + Shiki 降级 + 锚点前缀与 TOC 大纲 + 作用域 token 样式 |
 | 125  | [思考过程展示档位](./125-thinking-display-modes.md) | detail / trace / result 三档 + 消息/会话/全局三级作用域；`DisplayContract` 渲染契约 + `useSyncExternalStore` 订阅；三级存储（sessionStorage 双写 + preference singleton） |
+| 126  | [Playbook 文档导入与分享链接](./126-playbook-import-share.md) | Word/PDF/MD/PPTX → 解析 → LLM/确定性草案预览 → 确认绑定（`POST /playbooks/import/document` 只预览不写库）+ `playbook_shares` token 分享链路（只读 / 默认 7 天 / 过期 410）+ HashRouter 落地页 `/share/playbook/{token}` 导入或存库 + 术语去技术化（L1–L4 → 规则） |
+
+---
+
+## 与核心章节的关系
+
+| 关注层     | 文档                                                        |
+| ---------- | ----------------------------------------------------------- |
+| 用户价值层 | [01 概述](../01-overview.md) — [12 实施计划](../12-plan.md) |
+| 横切关注点 | 本目录（15-44）                                             |
+
+---
+
+_本目录文档命名规则：`XX-topic-name.md`（XX 为两位数字，topic-name 为 kebab-case）。_

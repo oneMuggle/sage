@@ -17,6 +17,7 @@ Mounted under ``/api/v1``:
 from __future__ import annotations
 
 import base64
+import contextlib
 import logging
 import tempfile
 from pathlib import Path
@@ -50,6 +51,9 @@ from backend.api.playbook_schemas import (
     PlaybookLibrarySaveRequest,
     PlaybookLibrarySaveResponse,
     PlaybookRuleCleanupResponse,
+    PlaybookSharedResponse,
+    PlaybookShareRequest,
+    PlaybookShareResponse,
     PlaybookStageConfirmRequest,
     PlaybookStateUpdateRequest,
     PlaybookVersionModel,
@@ -79,6 +83,13 @@ from backend.services.playbook_library import (
     render_markdown_handbook,
     suggested_builtin,
     validate_import_envelope,
+)
+from backend.services.playbook_share import (
+    PlaybookNotFoundError,
+    ShareTokenExpiredError,
+    ShareTokenInvalidError,
+    create_share_link,
+    resolve_share_token,
 )
 from backend.services.playbook_spec import (
     PlaybookValidationError,
@@ -309,6 +320,54 @@ def delete_playbook_from_library(library_id: str) -> Dict[str, bool]:
     if not removed:
         raise _error(404, "playbook_not_found", "规程库条目不存在")
     return {"removed": True}
+
+
+@router.post(
+    "/playbooks/library/{library_id}/share", response_model=PlaybookShareResponse
+)
+@with_db_lock
+def create_playbook_share_link(
+    library_id: str,
+    request: Optional[PlaybookShareRequest] = None,
+) -> PlaybookShareResponse:
+    """生成规程分享链接（带 token，默认 7 天有效）。"""
+    expiry_days = request.expiry_days if request else 7
+    try:
+        result = create_share_link(library_id, expiry_days=expiry_days)
+    except PlaybookNotFoundError as exc:
+        raise _error(404, "playbook_not_found", str(exc)) from exc
+
+    record_playbook_event(
+        f"library:{library_id}",
+        "library_share",
+        payload={
+            "library_id": library_id,
+            "expires_at": result.expires_at,
+        },
+    )
+    return PlaybookShareResponse(
+        token=result.token,
+        playbook_id=result.playbook_id,
+        playbook_name=result.playbook_name,
+        expires_at=result.expires_at,
+        share_url=result.share_url,
+    )
+
+
+@router.get("/playbooks/shared/{token}", response_model=PlaybookSharedResponse)
+@with_db_lock
+def get_shared_playbook(token: str) -> PlaybookSharedResponse:
+    """通过分享 token 获取规程内容（只读）。"""
+    try:
+        payload = resolve_share_token(token)
+    except ShareTokenExpiredError as exc:
+        raise _error(410, "share_expired", str(exc)) from exc
+    except ShareTokenInvalidError as exc:
+        raise _error(404, "share_invalid", str(exc)) from exc
+    except PlaybookNotFoundError as exc:
+        raise _error(404, "playbook_not_found", str(exc)) from exc
+
+    return PlaybookSharedResponse(**payload)
 
 
 @router.get(
@@ -815,10 +874,8 @@ async def import_playbook_from_document_endpoint(
         logger.warning("document import failed", exc_info=True)
         raise HTTPException(status_code=500, detail="文档解析失败") from exc
     finally:
-        try:
+        with contextlib.suppress(OSError):
             tmp_path.unlink()
-        except OSError:
-            pass
 
     return PlaybookDocumentImportResponse(**result.to_dict())
 

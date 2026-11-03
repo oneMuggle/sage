@@ -81,10 +81,8 @@ export function PlaybookDocumentImportDialog({
     onClose();
   };
 
-  const totalArtifacts = result?.playbook.stages.reduce(
-    (sum, stage) => sum + stage.artifacts.length,
-    0,
-  ) ?? 0;
+  const totalArtifacts =
+    result?.playbook.stages.reduce((sum, stage) => sum + stage.artifacts.length, 0) ?? 0;
   const totalRules = result?.playbook.global_rules.length ?? 0;
 
   return (

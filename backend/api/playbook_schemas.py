@@ -255,6 +255,32 @@ class PlaybookDocumentImportResponse(BaseModel):
     source: str
 
 
+class PlaybookShareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expiry_days: int = 7
+
+
+class PlaybookShareResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str
+    playbook_id: str
+    playbook_name: str
+    expires_at: int
+    share_url: str
+
+
+class PlaybookSharedResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    playbook_id: str
+    playbook_name: str
+    spec: Dict[str, Any]
+    shared_at: int
+    expires_at: int
+
+
 __all__ = [
     "BuiltinPlaybookListResponse",
     "BuiltinPlaybookResponse",
@@ -281,6 +307,9 @@ __all__ = [
     "PlaybookLibrarySaveRequest",
     "PlaybookLibrarySaveResponse",
     "PlaybookRuleCleanupResponse",
+    "PlaybookShareRequest",
+    "PlaybookShareResponse",
+    "PlaybookSharedResponse",
     "PlaybookStageConfirmRequest",
     "PlaybookStateUpdateRequest",
     "PlaybookVersionModel",

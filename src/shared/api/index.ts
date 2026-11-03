@@ -43,6 +43,8 @@ export type {
   PlaybookImportPreview,
   PlaybookLibraryItem,
   PlaybookMatch,
+  PlaybookShareLink,
+  PlaybookSharedPayload,
   PlaybookSpec,
   PlaybookStageAudit,
   PlaybookStageSpec,
