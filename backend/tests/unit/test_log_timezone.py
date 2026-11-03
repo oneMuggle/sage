@@ -31,9 +31,9 @@ class TestTimezoneFormatter:
         from backend.utils.logging import TimezoneFormatter
 
         def _fake_local() -> tzinfo:
-            from zoneinfo import ZoneInfo
+            from backend.utils.timezones import beijing_timezone
 
-            return ZoneInfo("Asia/Shanghai")
+            return beijing_timezone()
 
         monkeypatch.setattr(tz_mod, "local_timezone", _fake_local)
         fmt = TimezoneFormatter("%(asctime)s", "%Y-%m-%dT%H:%M:%S")
