@@ -32,6 +32,8 @@ const endpoint: EndpointConfig = {
   localModelPath: '',
   discoveredModels: [],
   lastDiscoveredAt: null,
+  reasoningEffort: null,
+  thinkingBudget: null,
 };
 
 const issue = (patch: Partial<EndpointIssue> = {}): EndpointIssue => ({

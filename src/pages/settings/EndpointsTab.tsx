@@ -59,7 +59,10 @@ function endpointFormDirty(form: Partial<EndpointConfig>, ep: EndpointConfig): b
     (form.apiKey ?? ep.apiKey) !== ep.apiKey ||
     (form.protocol ?? ep.protocol ?? 'openai-compatible') !==
       (ep.protocol ?? 'openai-compatible') ||
-    (form.modelId ?? ep.modelId ?? '') !== (ep.modelId ?? '')
+    (form.modelId ?? ep.modelId ?? '') !== (ep.modelId ?? '') ||
+    // 2026-11-03: 思考过程参数 —— null 视为等价（undefined 与 null 都表「不发送」）
+    (form.reasoningEffort ?? ep.reasoningEffort ?? null) !== (ep.reasoningEffort ?? null) ||
+    (form.thinkingBudget ?? ep.thinkingBudget ?? null) !== (ep.thinkingBudget ?? null)
   );
 }
 
@@ -95,6 +98,8 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
       apiKey: '',
       protocol: 'openai-compatible',
       modelId: '',
+      reasoningEffort: null,
+      thinkingBudget: null,
     });
   };
 
@@ -200,6 +205,9 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
         const apiKey = form.apiKey ?? ep.apiKey;
         const protocol: EndpointProtocol = form.protocol ?? ep.protocol ?? 'openai-compatible';
         const modelId = form.modelId ?? ep.modelId ?? '';
+        // 2026-11-03: 思考过程参数 —— null = 不发送（上游不进入思考模式）
+        const reasoningEffort = form.reasoningEffort ?? ep.reasoningEffort ?? null;
+        const thinkingBudget = form.thinkingBudget ?? ep.thinkingBudget ?? null;
         const result = testResult[ep.id];
         const probeResult = probeResults[ep.id];
         // 防御性检查: discoveredModels 可能在旧数据中缺失
@@ -242,6 +250,9 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                         apiKey: ep.apiKey,
                         protocol: ep.protocol,
                         modelId: ep.modelId,
+                        // 2026-11-03: 思考过程参数 —— 旧端点无此字段 → null（不发送）
+                        reasoningEffort: ep.reasoningEffort ?? null,
+                        thinkingBudget: ep.thinkingBudget ?? null,
                       });
                     }}
                     className="text-xs text-muted hover:text-text transition-colors"
@@ -337,6 +348,65 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                   />
                   <p className="text-[10px] text-muted/70 mt-0.5">
                     {t('settings.endpoints.model_id_hint')}
+                  </p>
+                </div>
+                {/* 2026-11-03: 思考过程参数 —— 透传到上游 LLM 请求体。
+                    reasoningEffort → OpenAI ``reasoning_effort``;
+                    thinkingBudget → Anthropic ``thinking.budget_tokens`` / DeepSeek
+                    ``thinking_budget``. 两者都是 null 时不发送该键。 */}
+                <div className="opacity-75">
+                  <label className="text-[11px] text-muted/80 block mb-1">
+                    {t('settings.endpoints.field.reasoning_effort')}
+                  </label>
+                  <select
+                    data-testid="endpoint-reasoning-effort-select"
+                    value={reasoningEffort ?? ''}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...form,
+                        reasoningEffort: (e.target.value ||
+                          null) as EndpointConfig['reasoningEffort'],
+                      })
+                    }
+                    className="w-full px-2 py-1 border border-border rounded-radius-sm text-[11px] bg-surface text-text"
+                  >
+                    <option value="">{t('settings.endpoints.field.reasoning_effort.off')}</option>
+                    <option value="low">
+                      {t('settings.endpoints.field.reasoning_effort.low')}
+                    </option>
+                    <option value="medium">
+                      {t('settings.endpoints.field.reasoning_effort.medium')}
+                    </option>
+                    <option value="high">
+                      {t('settings.endpoints.field.reasoning_effort.high')}
+                    </option>
+                  </select>
+                  <p className="text-[10px] text-muted/70 mt-0.5">
+                    {t('settings.endpoints.field.reasoning_effort_hint')}
+                  </p>
+                </div>
+                <div className="opacity-75">
+                  <label className="text-[11px] text-muted/80 block mb-1">
+                    {t('settings.endpoints.field.thinking_budget')}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={256}
+                    value={thinkingBudget ?? ''}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setEditForm({
+                        ...form,
+                        // 2026-11-03: 空 = 不发送该键 (上游用默认思考预算);
+                        // 0 = 显式关闭思考 (Gemini thinking_budget=0 语义)。
+                        thinkingBudget: raw === '' ? null : Number(raw),
+                      });
+                    }}
+                    className="w-full px-2 py-1 border border-border rounded-radius-sm text-[11px] font-mono bg-surface text-text"
+                  />
+                  <p className="text-[10px] text-muted/70 mt-0.5">
+                    {t('settings.endpoints.field.thinking_budget_hint')}
                   </p>
                 </div>
                 {/* 2026-08-26: localModelPath 输入已移除. 该字段在 EndpointConfig

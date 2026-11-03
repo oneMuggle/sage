@@ -87,6 +87,8 @@ describe('EndpointsTab dirty 提示', () => {
           localModelPath: '',
           discoveredModels: [],
           lastDiscoveredAt: 0,
+          reasoningEffort: null,
+          thinkingBudget: null,
         },
         {
           id: 'ep2',
@@ -98,6 +100,8 @@ describe('EndpointsTab dirty 提示', () => {
           localModelPath: '',
           discoveredModels: [],
           lastDiscoveredAt: 0,
+          reasoningEffort: null,
+          thinkingBudget: null,
         },
       ],
     };
