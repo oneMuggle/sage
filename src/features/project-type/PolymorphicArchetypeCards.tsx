@@ -1,9 +1,9 @@
 /**
- * Phase P2: 多形态项目专属工作台卡片与五层受控上下文水位卡 (2026-10-10)
+ * Phase P2: 多形态项目专属工作台卡片与项目上下文完整度卡 (2026-10-10)
  *
- * 1. ContextBudgetWatermarkCard — 五层受控上下文注入水位条 (L1 SAGE.md / L2 元数据与约束 / L3 项目画像 / L4 资料源 / L5 外部白名单)
+ * 1. ContextBudgetWatermarkCard — 项目上下文完整度（项目总纲 / 项目规则 / 项目记忆 / 项目资料 / 外部白名单）
  * 2. PolymorphicArchetypeCards — 按项目形态动态切换专属治理视图：
- *    - coding: 代码工程技术栈探测、规约状态与架构决策记录 (ADR)
+ *    - coding: 代码工程技术栈探测、规约状态与技术决策记录
  *    - business: 一般档案四分目录核验、Office 文书交付物台账 (.docx/.xlsx/.pptx/.pdf) 与审阅纪要
  *    - research: 科学研究核心问题 (RQ) 与实验假设矩阵、文献/实验产物台账 (.pdf/.bib/.ipynb/.csv)
  *    - personal: 个人知识空间目录分布与核心笔记沉淀
@@ -177,18 +177,18 @@ export function PolymorphicArchetypeCards({
 
   return (
     <div className="space-y-4" data-testid="polymorphic-archetype-cards">
-      {/* 1. 五层受控上下文注入水位条 */}
+      {/* 1. 项目上下文完整度 */}
       <Card className="p-3.5 space-y-2.5" data-testid="context-budget-watermark-card">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Activity className="h-4 w-4 text-primary" />
             <span className="text-xs font-semibold text-foreground">
-              五层受控上下文注入预算水位 (5-Layer Context Budget Watermark)
+              项目上下文完整度
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono text-muted-foreground">
-              总注入约 {totalChars.toLocaleString()} 字符 · L4 资料池上限 {capChars.toLocaleString()}{' '}
+              已收集约 {totalChars.toLocaleString()} 字符 · 参考资料上限 {capChars.toLocaleString()}{' '}
               字符 ({usagePct}%)
             </span>
             <button
@@ -212,32 +212,32 @@ export function PolymorphicArchetypeCards({
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 text-xs">
           <div className="rounded border border-border/70 bg-muted/20 px-2.5 py-1.5">
-            <div className="text-ui-2xs text-muted-foreground">L1 隐式规约 (SAGE.md)</div>
+            <div className="text-ui-2xs text-muted-foreground">项目总纲</div>
             <div className="font-mono font-medium text-foreground">
               {l1Chars.toLocaleString()} 字 {overview?.hasSageMd ? '· 已就绪' : '· 未创建'}
             </div>
           </div>
           <div className="rounded border border-border/70 bg-muted/20 px-2.5 py-1.5">
-            <div className="text-ui-2xs text-muted-foreground">L2 元数据与强约束</div>
+            <div className="text-ui-2xs text-muted-foreground">项目规则</div>
             <div className="font-mono font-medium text-foreground">
               {l2Chars.toLocaleString()} 字 · {budget?.enabledConstraintsCount ?? 0} 条规则
             </div>
           </div>
           <div className="rounded border border-border/70 bg-muted/20 px-2.5 py-1.5">
-            <div className="text-ui-2xs text-muted-foreground">L3 演化画像 (Profile)</div>
+            <div className="text-ui-2xs text-muted-foreground">项目记忆</div>
             <div className="font-mono font-medium text-foreground">
               {l3Chars.toLocaleString()} 字 · {decisions.length} 条记录
             </div>
           </div>
           <div className="rounded border border-border/70 bg-muted/20 px-2.5 py-1.5">
-            <div className="text-ui-2xs text-muted-foreground">L4 受控资料池 (Pinned)</div>
+            <div className="text-ui-2xs text-muted-foreground">项目资料</div>
             <div className="font-mono font-medium text-foreground">
               {l4Chars.toLocaleString()} 字 · {budget?.activeMaterialsCount ?? 0}/
               {budget?.totalMaterialsCount ?? 0} 启用
             </div>
           </div>
           <div className="rounded border border-border/70 bg-muted/20 px-2.5 py-1.5">
-            <div className="text-ui-2xs text-muted-foreground">L5 跨目录只读源</div>
+            <div className="text-ui-2xs text-muted-foreground">外部白名单</div>
             <div className="font-mono font-medium text-foreground">
               {project.allowedPaths?.length ?? 0} 个外部白名单
             </div>
@@ -251,7 +251,7 @@ export function PolymorphicArchetypeCards({
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-medium text-foreground">
-                五层受控上下文合成预览（随每轮会话自动注入 System Prompt）
+                项目上下文预览（随每轮会话自动告知 AI）
               </span>
               <button
                 type="button"
@@ -266,7 +266,7 @@ export function PolymorphicArchetypeCards({
                 className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
               >
                 <Copy className="h-3 w-3" />
-                {copiedContext ? '已复制' : '复制合成上下文'}
+                {copiedContext ? '已复制' : '复制上下文'}
               </button>
             </div>
             <pre
@@ -287,7 +287,7 @@ export function PolymorphicArchetypeCards({
             <div className="flex items-center gap-2">
               <Code2 className="h-4 w-4 text-blue-500" />
               <h3 className="text-xs font-semibold text-foreground">
-                代码工程专属工作台 · 工程栈探测与架构决策记录 (ADR)
+                工程概览 · 技术栈与架构决策
               </h3>
             </div>
             <div className="flex items-center gap-1.5 text-ui-2xs">
@@ -298,7 +298,7 @@ export function PolymorphicArchetypeCards({
                     : 'border-border bg-muted text-muted-foreground'
                 }`}
               >
-                SAGE.md {overview?.hasSageMd ? '已配置' : '待生成'}
+                项目总纲 {overview?.hasSageMd ? '已配置' : '待生成'}
               </span>
               <span
                 className={`rounded px-2 py-0.5 border ${
@@ -350,7 +350,7 @@ export function PolymorphicArchetypeCards({
               </div>
               {(diagnoseInfo?.testCommands ?? []).length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="text-ui-2xs text-muted-foreground">快捷命令入口：</span>
+                  <span className="text-ui-2xs text-muted-foreground">常用命令（右键可复制）：</span>
                   {diagnoseInfo?.testCommands.map((cmdStr: string) => (
                     <span
                       key={cmdStr}
@@ -377,7 +377,7 @@ export function PolymorphicArchetypeCards({
 
             <div className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2">
               <div className="text-xs font-medium text-foreground">
-                架构决策记录 (ADR · 注入 L3 项目画像)
+                技术决策记录（会随每轮会话自动告知 AI）
               </div>
               <div className="flex gap-1.5">
                 <input
@@ -395,12 +395,12 @@ export function PolymorphicArchetypeCards({
                   data-testid="polymorphic-decision-add"
                 >
                   <Plus className="mr-1 h-3 w-3" />
-                  记录 ADR
+                  记录决策
                 </Button>
               </div>
               {decisions.length === 0 ? (
                 <div className="text-ui-2xs text-muted-foreground">
-                  暂无架构决策记录，添加后将自动随会话注入系统上下文。
+                  暂无技术决策记录，添加后将自动随会话告知 AI。
                 </div>
               ) : (
                 <ul className="space-y-1 max-h-28 overflow-y-auto">
@@ -431,7 +431,7 @@ export function PolymorphicArchetypeCards({
             <div className="flex items-center gap-2">
               <Briefcase className="h-4 w-4 text-emerald-500" />
               <h3 className="text-xs font-semibold text-foreground">
-                一般档案项目专属工作台 · 案卷目录核验与 Office 交付物台账
+                文书项目概览 · 案卷目录与交付物
               </h3>
             </div>
             <div className="flex items-center gap-2">
@@ -531,7 +531,7 @@ export function PolymorphicArchetypeCards({
 
           <div className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2">
             <div className="text-xs font-medium text-foreground">
-              案卷审校纪要与口径约定登记 (注入 L3 项目画像)
+              审校纪要与口径约定（会随每轮会话自动告知 AI）
             </div>
             <div className="flex gap-1.5">
               <input
@@ -582,7 +582,7 @@ export function PolymorphicArchetypeCards({
             <div className="flex items-center gap-2">
               <FlaskConical className="h-4 w-4 text-purple-500" />
               <h3 className="text-xs font-semibold text-foreground">
-                科学研究专属工作台 · 核心研究问题 (RQ) 与文献/实验证据矩阵
+                科研项目概览 · 研究问题与证据矩阵
               </h3>
             </div>
             <span className="text-ui-2xs text-muted-foreground">
@@ -722,7 +722,7 @@ export function PolymorphicArchetypeCards({
             <div className="flex items-center gap-2">
               <Layers className="h-4 w-4 text-amber-500" />
               <h3 className="text-xs font-semibold text-foreground">
-                个人知识空间工作台 · 卡片盒目录与长期偏好沉淀
+                个人知识空间 · 卡片盒与偏好沉淀
               </h3>
             </div>
             <span className="text-ui-2xs text-muted-foreground">
@@ -744,7 +744,7 @@ export function PolymorphicArchetypeCards({
           </div>
           <div className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2">
             <div className="text-xs font-medium text-foreground">
-              个人写作偏好与常驻卡片约定 (注入 L3 项目画像)
+              个人写作偏好与卡片约定（会随每轮会话自动告知 AI）
             </div>
             <div className="flex gap-1.5">
               <input
