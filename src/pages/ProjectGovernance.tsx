@@ -540,7 +540,7 @@ export function ProjectGovernance() {
                     AI 拆解当前阶段
                   </Button>
                 </div>
-                <PlaybookCard projectId={project.id} compact />
+                <PlaybookCard projectId={project.id} />
                 <MilestoneProgressWidget projectId={project.id} projectType={activeProjectType} />
               </div>
 
