@@ -5,7 +5,7 @@
  */
 
 // API 模块
-export { agentsApi } from './agentsApi';
+export { agentsApi, AGENT_MIN_ITERATIONS, AGENT_MAX_ITERATIONS_CEILING } from './agentsApi';
 export { chatApi } from './chatApi';
 export {
   globalRulesApi,

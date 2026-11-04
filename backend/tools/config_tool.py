@@ -15,6 +15,11 @@ from typing import Any, Dict, List, Optional
 from backend.data.agent_repo import AgentRepository
 from backend.data.settings_canonicalizer import validate_settings_payload
 from backend.data.settings_repo import SettingsRepository
+from backend.domain.agent_limits import (
+    MAX_ITERATIONS_CEILING,
+    MIN_ITERATIONS,
+    is_valid_iteration_count,
+)
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
@@ -471,7 +476,7 @@ class UpdateSageConfigTool(BaseTool):
                         "description": (
                             "待更新的参数键值对：\n"
                             "- target='orch' 时允许: maxLaneIterations, maxSubagentIterations, maxConcurrentSubagents, maxRetries 等\n"
-                            "- target='agent' 时允许: max_iterations (1~50), temperature, system_prompt, description 等\n"
+                            f"- target='agent' 时允许: max_iterations ({MIN_ITERATIONS}~{MAX_ITERATIONS_CEILING}), temperature, system_prompt, description 等\n"
                             "- target='general' 时允许: temperature, streaming, autoMemory, confirmDelete 等\n"
                             "- target='endpoint' 且 action='create/update' 时允许: name, baseUrl, apiKey, protocol, modelId 等\n"
                             "- target='model_selection' 时允许: endpointId, modelId"
@@ -551,10 +556,13 @@ class UpdateSageConfigTool(BaseTool):
 
                 if "max_iterations" in updates:
                     val = updates["max_iterations"]
-                    if not isinstance(val, int) or isinstance(val, bool) or not (1 <= val <= 50):
+                    if not is_valid_iteration_count(val):
                         return ToolResult(
                             success=False,
-                            error=f"max_iterations 必须是 1 到 50 之间的整数，收到: {val}",
+                            error=(
+                                f"max_iterations 必须是 {MIN_ITERATIONS} 到 {MAX_ITERATIONS_CEILING} "
+                                f"之间的整数，收到: {val}"
+                            ),
                         )
                 if "temperature" in updates:
                     value = updates["temperature"]
