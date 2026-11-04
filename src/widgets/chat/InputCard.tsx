@@ -36,6 +36,9 @@ export interface FileAttachmentType {
   size: number;
   type: string;
   dataUrl?: string;
+  /** P1 (2026-11-04): 选中即上传状态（可选，向后兼容旧调用方）。 */
+  status?: 'reading' | 'ready' | 'uploading' | 'uploaded' | 'failed';
+  reason?: string;
 }
 
 export type ImageAttachmentType = FileAttachmentType;
@@ -503,10 +506,10 @@ function InputCardInner({
               name={file.name}
               size={file.size}
               type={file.type}
+              status={file.status}
+              reason={file.reason}
               onOcr={
-                file.type === 'application/pdf' && onOcrFile
-                  ? () => onOcrFile(idx)
-                  : undefined
+                file.type === 'application/pdf' && onOcrFile ? () => onOcrFile(idx) : undefined
               }
               onRemove={onRemoveFile ? () => onRemoveFile(idx) : undefined}
             />

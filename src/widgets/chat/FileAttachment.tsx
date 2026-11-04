@@ -1,4 +1,14 @@
-import { Copy, File, FileSearch, FileText, Image, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Copy,
+  File,
+  FileSearch,
+  FileText,
+  Image,
+  Loader2,
+  X,
+} from 'lucide-react';
 
 import { copyToClipboard } from '../../shared/lib/clipboard';
 import { useI18n } from '../../shared/lib/i18n';
@@ -11,10 +21,33 @@ interface FileAttachmentProps {
   onRemove?: () => void;
   /** PDF 附件：打开页级 OCR 预览 */
   onOcr?: () => void;
+  /**
+   * P1 (2026-11-04): 选中即上传状态。无 electronAPI 时保持 undefined/ready，
+   * 渲染与旧实现一致。failed 时 chip 标红并展示原因。
+   */
+  status?: 'reading' | 'ready' | 'uploading' | 'uploaded' | 'failed';
+  reason?: string;
 }
 
-export function FileAttachment({ name, size, type, onRemove, onOcr }: FileAttachmentProps) {
+export function FileAttachment({
+  name,
+  size,
+  type,
+  onRemove,
+  onOcr,
+  status,
+  reason,
+}: FileAttachmentProps) {
   const { t } = useI18n();
+  // P2 (2026-11-04): 预检失败原因映射为可读文案（未知原因原样展示）。
+  const reasonLabel = (() => {
+    if (!reason) return '';
+    const known = ['oversize', 'unsupported', 'count_exceeded', 'duplicate'];
+    if (known.includes(reason)) {
+      return t(`chat.attachment_status.reason.${reason}` as Parameters<typeof t>[0]);
+    }
+    return reason;
+  })();
   const menuItems = () => [
     {
       id: 'copy-file-name',
@@ -52,10 +85,40 @@ export function FileAttachment({ name, size, type, onRemove, onOcr }: FileAttach
 
   return (
     <ContextMenu items={menuItems}>
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-radius-sm bg-bg-muted text-xs text-text-secondary border border-border">
+      <span
+        data-testid="file-attachment-chip"
+        data-upload-status={status}
+        title={status === 'failed' && reasonLabel ? `${name} — ${reasonLabel}` : undefined}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-radius-sm text-xs border ${
+          status === 'failed'
+            ? 'bg-error/10 text-error border-error/40'
+            : 'bg-bg-muted text-text-secondary border-border'
+        }`}
+      >
         {getFileIcon(type)}
         <span className="truncate max-w-32">{name}</span>
         <span className="text-muted">({formatFileSize(size)})</span>
+        {status === 'uploading' && (
+          <Loader2
+            data-testid="file-upload-status"
+            className="w-3 h-3 animate-spin text-muted"
+            aria-label="上传中"
+          />
+        )}
+        {status === 'uploaded' && (
+          <CheckCircle2
+            data-testid="file-upload-status"
+            className="w-3 h-3 text-success"
+            aria-label="已上传"
+          />
+        )}
+        {status === 'failed' && (
+          <AlertTriangle
+            data-testid="file-upload-status"
+            className="w-3 h-3 text-error"
+            aria-label="上传失败"
+          />
+        )}
         {onOcr && (
           <button
             type="button"

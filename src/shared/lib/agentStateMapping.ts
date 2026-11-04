@@ -54,9 +54,7 @@ const EXACT_INTERMEDIATE_PLACEHOLDERS: ReadonlySet<string> = new Set([
 export function isIntermediatePlaceholderText(content?: string | null): boolean {
   if (!content) return false;
   if (EXACT_INTERMEDIATE_PLACEHOLDERS.has(content)) return true;
-  return (
-    content.startsWith(PLACEHOLDER_ACTING_TOOL_PREFIX) && content.endsWith('…')
-  );
+  return content.startsWith(PLACEHOLDER_ACTING_TOOL_PREFIX) && content.endsWith('…');
 }
 
 /**
@@ -100,6 +98,7 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
     case 'compact_triggered': // R38: 自动压缩插入系统消息,不进气泡占位
     case 'context_pressure': // TM2 (DSH 对标 R11): 水位写 store 供徽章渲染,不进气泡占位
     case 'attachment_rag_used': // r71: 附件检索溯源写入消息 rag_citations,不进气泡占位
+    case 'attachments_processed': // P0 (2026-11-04): 附件处理状态,不进气泡占位
     case 'workspace_changed': // right-panel R5: 变更信号进 changesListStore,不进气泡占位
     case 'sources_used': // R81: 参考来源写入消息 sources,不进气泡占位
       return null;
@@ -161,6 +160,7 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
     case 'skill_activated': // R38: 技能激活事件,无 UI 阶段展示
     case 'compact_triggered': // R38: 自动压缩事件,无 UI 阶段展示
     case 'attachment_rag_used': // r71: 附件检索溯源事件,无 UI 阶段展示
+    case 'attachments_processed': // P0 (2026-11-04): 附件处理状态事件,无 UI 阶段展示
     case 'sources_used': // R81: 参考来源事件,无 UI 阶段展示
       return null;
     case 'workspace_changed': // right-panel R5: 变更信号进 changesListStore,无 UI 阶段展示
