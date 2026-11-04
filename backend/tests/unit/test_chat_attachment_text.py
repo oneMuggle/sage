@@ -156,3 +156,49 @@ def test_get_text_endpoint_404_and_400(client):
     )
     audio_id = list(_FakeStore.saved.keys())[-1]
     assert client.get(f"/chat/attachments/{audio_id}/text").status_code == 400
+
+
+# ── P0 (2026-11-04): 真实 MediaStore 回归测试 ──────────────────────────────
+#
+# _FakeStore 掩盖了 MediaStore.load() 的类型误判（上传 kind 直接透传）。
+# 以下用例只替换 MEDIA_ROOT，保留真实 MediaStore，覆盖
+# 「上传 → 落盘 + sidecar → 按 id 重新读取」的完整链路。
+
+
+@pytest.fixture()
+def real_store_client(monkeypatch, tmp_path):
+    if not _HAS_MULTIPART:
+        pytest.skip("python-multipart not installed (本地环境)；CI 全量安装")
+    # 只换存储根，保留真实 MediaStore
+    monkeypatch.setattr(chat_attachment_routes, "MEDIA_ROOT", tmp_path)
+    app = FastAPI()
+    app.include_router(chat_attachment_routes.router)
+    return TestClient(app)
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "content_type"),
+    [
+        ("data.csv", b"col1,col2\n1,2\n", "text/csv"),
+        ("script.py", b"print('hello')\n", "text/x-python"),
+        ("config.json", b'{"hello": 1}', "application/json"),
+        ("app.ts", b"const hello = 1;\n", "text/plain"),
+        ("page.html", b"<p>hello</p>", "text/html"),
+        ("query.sql", b"SELECT 1;\n", "application/sql"),
+    ],
+)
+def test_upload_then_get_text_for_expanded_formats(
+    real_store_client, filename, content, content_type
+):
+    """扩展格式上传后,GET text 必须能读回全文(回归: 曾被 load() 误判为 AUDIO → 400)。"""
+    created = real_store_client.post(
+        "/chat/attachments",
+        files={"file": (filename, content, content_type)},
+    ).json()
+    assert "error" not in created, created
+    mid = created["media_ref"]["id"]
+
+    res = real_store_client.get(f"/chat/attachments/{mid}/text")
+    assert res.status_code == 200, f"{filename}: {res.status_code} {res.text}"
+    # 不同格式的内容不同，统一断言"上传的原始内容能被读回"。
+    assert content.decode() in res.json()["text"] or res.json()["text"] in content.decode()

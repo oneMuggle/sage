@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 import { useAtFileMenu } from '../../features/chat/useAtFileMenu';
 import type { PendingComposerOptions } from '../../features/send-message/pendingComposerOptions';
 import { useTypewriterPlaceholder } from '../../features/welcome/useTypewriterPlaceholder';
 import { skillsApi } from '../../shared/api';
 import type { ChatOfficeRef } from '../../shared/api/types';
-import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
+import { CHAT_DOCUMENT_EXTENSIONS, useFileUpload } from '../../shared/lib/hooks/useFileUpload';
+import { COMPOSER_DROP_EVENT } from '../../shared/lib/hooks/useGlobalFileDrop';
+import { useI18n } from '../../shared/lib/i18n';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 import { InputCard } from '../chat/InputCard';
 import {
@@ -77,6 +80,7 @@ export function WelcomeInputCard({
   onAtQueryActive,
   draft = null,
 }: WelcomeInputCardProps) {
+  const { t } = useI18n();
   const [value, setValue] = useState(initialValue);
   const [cursorPos, setCursorPos] = useState(initialValue.length);
   const [officeRefs, setOfficeRefs] = useState<readonly ChatOfficeRef[]>([]);
@@ -123,6 +127,21 @@ export function WelcomeInputCard({
     handlePaste,
     isDragOver,
   } = useFileUpload();
+
+  // P2 (2026-11-04): 监听 Welcome 页全局拖放派发的 sage:composer-drop 事件 ——
+  // 把落在输入卡之外的文件转给 useFileUpload，与输入卡内 drop 行为一致。
+  useEffect(() => {
+    const onComposerDrop = (e: Event) => {
+      const detail = (e as CustomEvent<{ files: File[] }>).detail;
+      if (!detail?.files?.length) return;
+      detail.files.forEach((file) => {
+        if (file.type.startsWith('image/')) addImage(file);
+        else addFile(file);
+      });
+    };
+    window.addEventListener(COMPOSER_DROP_EVENT, onComposerDrop);
+    return () => window.removeEventListener(COMPOSER_DROP_EVENT, onComposerDrop);
+  }, [addFile, addImage]);
 
   // 新会话页提交前没有会话；草稿会话创建后 provider 会回填 binding，
   // office 导入即可用。文件搜索本身由 AtFileMenu 通过 sessionId 完成。
@@ -196,9 +215,7 @@ export function WelcomeInputCard({
         .execute(skillName, { args: { query: args } })
         .then((result) => {
           const body =
-            typeof result.content === 'string'
-              ? result.content
-              : `/${skillName} ${args}`.trim();
+            typeof result.content === 'string' ? result.content : `/${skillName} ${args}`.trim();
           onSend?.(body);
           setValue('');
           setCursorPos(0);
@@ -261,6 +278,20 @@ export function WelcomeInputCard({
   const handleSubmit = () => {
     const trimmed = value.trim();
     if (!hasAttachments || !onSend) return;
+    // P1 (2026-11-04): 与 ChatInput 对齐 —— 不支持的类型必须诚实提示,
+    // 不能像旧实现那样在发送时静默丢弃。
+    const unsupportedFiles = files.filter((f) => {
+      const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+      return !CHAT_DOCUMENT_EXTENSIONS.has(ext);
+    });
+    if (unsupportedFiles.length > 0) {
+      toast.warning(
+        t('chat.attachment_not_sent').replace(
+          '{files}',
+          unsupportedFiles.map((f) => f.name).join('、'),
+        ),
+      );
+    }
     const options: PendingComposerOptions | undefined =
       files.length > 0 || images.length > 0 || officeRefs.length > 0
         ? {

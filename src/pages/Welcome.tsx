@@ -21,6 +21,7 @@ import { useTypewriterPlaceholder } from '../features/welcome/useTypewriterPlace
 import { projectApi } from '../shared/api/projectApi';
 import { sessionApi } from '../shared/api/sessionApi';
 import { worktreeApi, type BranchEntry, type SessionWorktree } from '../shared/api/worktreeApi';
+import { useGlobalFileDrop } from '../shared/lib/hooks/useGlobalFileDrop';
 import { useI18n, type TranslationKey } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import { AssistantRecommendations } from '../widgets/welcome/AssistantRecommendations';
@@ -104,7 +105,7 @@ export function formatWelcomePageJson(params: {
 }
 
 export function Welcome() {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const navigate = useNavigate();
   const { createSession, setCurrentSessionId } = useStore();
   const { settings } = useSettings();
@@ -142,6 +143,12 @@ export function Welcome() {
   });
   const [worktreeId, setWorktreeId] = useState<string | null>(() => {
     return localStorage.getItem(STORAGE_KEY_WORKTREE_ID);
+  });
+
+  // P2 (2026-11-04): 新对话页整页拖放 —— 拖到页面任意位置都被接收，
+  // drop 后由 WelcomeInputCard 消费 sage:composer-drop 事件。
+  const { isDragOver } = useGlobalFileDrop({
+    composerSelector: '[data-testid="welcome-input-card"]',
   });
 
   // Data loading state
@@ -456,6 +463,17 @@ export function Welcome() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+      {/* P2 (2026-11-04): 全局拖放 overlay —— 用户拖文件到页面任意位置时显示 */}
+      {isDragOver && (
+        <div
+          data-testid="welcome-global-drop-overlay"
+          className="fixed inset-0 z-50 bg-primary/15 border-4 border-dashed border-primary flex items-center justify-center pointer-events-none"
+        >
+          <div className="px-6 py-4 rounded-radius-md bg-surface border border-primary shadow-lg">
+            <p className="text-primary font-semibold text-lg">{t('chat.drop_files')}</p>
+          </div>
+        </div>
+      )}
       <div className="flex-1 flex flex-col items-center justify-start pt-[10vh] px-4 pb-8 gap-6">
         <WelcomeHero />
         {briefRecommendation && (

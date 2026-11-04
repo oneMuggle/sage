@@ -107,6 +107,7 @@
 | 128  | [默认本地时区](./128-timezone-default-local.md) | 日志/趋势/调度/前端渲染统一本地时区，失败回退 Asia/Shanghai (+08:00)；`localtime` 解析链（`tzlocal` → `astimezone()` 偏移 → 固定 +08:00）+ naive/aware 防御 + APScheduler `timezone=` + `formatLocalTime` 封装 |
 | 129  | [工作区绑定跳过机制](./129-workspace-binding-skip.md) | 新会话页"不绑定项目"语义贯穿前后端：`skip_workspace_binding` API 字段 + 解析链跳过 + 主流应用对标 |
 | 130  | [侧边栏 Git 面板上下文对齐](./130-sidebar-git-context.md) | 左栏 Git 面板与右栏变更 Tab 绑定同一目录（会话 workspace 优先，最近项目兜底）+ 非 git 空状态显示检查路径；`git status --porcelain=v1 -z -b` 共享解析器（`backend/tools/git_status_parser.py`）供 GitStatusTool 与 `GET /git/status` 共用 |
+| 131  | [聊天附件链路](./131-attachment-pipeline.md) | MediaStore sidecar 元数据 + 后缀回退表与上传 allowlist 同口径；R37 注入带 name/type + 逐附件 `ok/skipped/error` 状态双出口（`attachments_processed` 事件 + `client_meta.attachments_status` 落库）；`useFileUpload` 预检状态机 + 气泡附件卡片 + 整页拖放共享 hook |
 
 ---
 
