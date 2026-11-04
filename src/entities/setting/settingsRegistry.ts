@@ -440,6 +440,20 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     riskLevel: 'low',
     constraints: { type: 'boolean' },
   },
+  // 2026-11-04: 预算模式显式开关，取代 maxIterations==25 哨兵。
+  // auto = 任务分级 + 自动延长；fixed = maxIterations 作为硬上限。
+  'orch.budgetMode': enumSetting(
+    'orch.budgetMode',
+    '迭代预算模式',
+    'auto 按任务复杂度自动分级并在卡死时带证据停止；fixed 使用「Agent 迭代次数上限」硬顶',
+    'app_settings',
+    'auto',
+    [
+      { value: 'auto', label: '自动（推荐）' },
+      { value: 'fixed', label: '固定上限' },
+    ],
+    'next-run',
+  ),
   'orch.budgetSimple': orchNumber(
     'orch.budgetSimple',
     '简单任务初始预算',

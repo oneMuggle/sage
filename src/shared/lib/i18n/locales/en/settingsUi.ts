@@ -348,15 +348,21 @@ export const enSettingsUi = {
     'After this many consecutive unanswered questions in one session, the agent stops asking and proceeds with the task to avoid pestering the user',
   'settings.orch.max_consecutive_unanswered.label': 'Consecutive unanswered question limit',
   'settings.orch.max_iterations.desc':
-    'Maximum iterations for the primary agent (each iteration is one LLM call that may invoke multiple tools); when exceeded, the session ends with reason max_iterations_exceeded',
+    'In fixed mode, the maximum iterations for the primary agent (each iteration is one LLM call that may invoke multiple tools); when exceeded, the session ends with reason max_iterations_exceeded. In auto mode this value acts as a lower bound and the actual budget is tiered by task complexity',
   'settings.orch.max_iterations.label': 'Agent iteration limit (0 = default)',
   // 2026-11-01: dynamic iteration budget (P1 settings exposure).
   'settings.orch.section_dynamic_budget': 'Dynamic iteration budget',
   'settings.orch.dynamic_budget_intro':
     'Starts each task with a complexity-based iteration budget: simple tasks stay lean while complex/long tasks can auto-extend; repeated calls or long stretches without progress stop with evidence. Environment variables SAGE_DYNAMIC_BUDGET_* take precedence over these settings.',
-  'settings.orch.dynamic_budget_enabled.label': 'Enable dynamic iteration budget',
-  'settings.orch.dynamic_budget_enabled.desc':
-    'When off, falls back to the fixed “Agent iteration limit”',
+  // 2026-11-04: budget mode radio, replacing the dynamic-budget toggle (maxIterations==25 sentinel).
+  'settings.orch.budget_mode.label': 'Iteration budget mode',
+  'settings.orch.budget_mode.desc':
+    'Auto: budgets are tiered by task complexity, auto-extended after a progress audit at the limit, and stop with evidence when stuck. Fixed: uses “Agent iteration limit” directly',
+  'settings.orch.budget_mode.auto': 'Auto (recommended)',
+  'settings.orch.budget_mode.auto_desc':
+    'Initial budget tiered by task complexity, auto-extended after a progress audit at the limit',
+  'settings.orch.budget_mode.fixed': 'Fixed ceiling',
+  'settings.orch.budget_mode.fixed_desc': 'Uses “Agent iteration limit” directly, no auto-extension',
   'settings.orch.budget_simple.label': 'Simple task initial budget (steps)',
   'settings.orch.budget_simple.desc': 'Initial steps for short, attachment-free simple tasks',
   'settings.orch.budget_medium.label': 'Medium task initial budget (steps)',

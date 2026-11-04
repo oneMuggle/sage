@@ -208,6 +208,7 @@ def test_dynamic_budget_defaults_and_lower_bounds():
         repo_cls.return_value.get_json.return_value = None
         s = load_orch_settings()
     assert s.dynamic_budget_enabled is True
+    assert s.budget_mode == "auto"
     assert (s.budget_simple, s.budget_medium, s.budget_complex, s.budget_long) == (
         20,
         80,
@@ -231,3 +232,58 @@ def test_dynamic_budget_defaults_and_lower_bounds():
     assert s.budget_medium == 1
     assert s.budget_hard_cap == 1
     assert s.budget_max_extensions == 0
+
+
+# ---------------------------------------------------------------------------
+# 2026-11-04 — budgetMode 显式开关（取代 maxIterations == 25 哨兵）
+#
+# 旧逻辑用「编排页 maxIterations 恰好等于默认值 25」推断用户是否启用动态
+# 预算。用户把 25 改成任何其它值都会静默关闭动态预算（"任务未完成却报
+# 达到上限"的首要触发路径）。改为显式枚举字段，并保留老数据迁移：
+# budgetMode 缺失时由 dynamicBudgetEnabled 推导。
+# ---------------------------------------------------------------------------
+
+
+def test_budget_mode_override_wins_over_dynamic_budget_enabled():
+    """budgetMode 存在时以其为准，dynamicBudgetEnabled 不再参与判定。"""
+    with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
+        repo_cls.return_value.get_json.return_value = {
+            "orch": {"budgetMode": "fixed", "dynamicBudgetEnabled": True}
+        }
+        s = load_orch_settings()
+    assert s.budget_mode == "fixed"
+
+    with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
+        repo_cls.return_value.get_json.return_value = {
+            "orch": {"budgetMode": "auto", "dynamicBudgetEnabled": False}
+        }
+        s = load_orch_settings()
+    assert s.budget_mode == "auto"
+
+
+def test_budget_mode_migrates_from_dynamic_budget_enabled_when_absent():
+    """老数据没有 budgetMode 键 → 由 dynamicBudgetEnabled 推导。"""
+    with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
+        repo_cls.return_value.get_json.return_value = {
+            "orch": {"dynamicBudgetEnabled": False}
+        }
+        s = load_orch_settings()
+    assert s.budget_mode == "fixed"
+
+    # 老用户改了 maxIterations 但没碰开关 → 仍是 auto（修掉旧哨兵回归）
+    with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
+        repo_cls.return_value.get_json.return_value = {
+            "orch": {"maxIterations": 40}
+        }
+        s = load_orch_settings()
+    assert s.budget_mode == "auto"
+
+
+def test_budget_mode_invalid_value_falls_back_to_auto():
+    """非 auto/fixed 的值按枚举白名单回落 auto（与 subagentApprovalMode 同款）。"""
+    with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
+        repo_cls.return_value.get_json.return_value = {
+            "orch": {"budgetMode": "turbo"}
+        }
+        s = load_orch_settings()
+    assert s.budget_mode == "auto"

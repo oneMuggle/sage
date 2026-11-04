@@ -169,7 +169,9 @@ async def test_run_loop_uses_orch_settings_max_iterations():
     mock_tool.execute = MagicMock(return_value=MagicMock(success=True, content={}, error=None))
     agent.tool_registry.get = MagicMock(return_value=mock_tool)
 
-    settings_stub = SimpleNamespace(max_iterations=7)
+    # budget_mode="fixed" —— 本条测的是 fixed 模式下的上限优先级链
+    # （2026-11-04 budgetMode 引入后，缺省 auto 会忽略 max_iterations）。
+    settings_stub = SimpleNamespace(max_iterations=7, budget_mode="fixed")
     with patch(
         "backend.orchestration.orch_settings.load_orch_settings",
         return_value=settings_stub,
@@ -200,10 +202,10 @@ async def test_run_loop_failed_event_names_agent_and_source():
     mock_tool.execute = MagicMock(return_value=MagicMock(success=True, content={}, error=None))
     agent.tool_registry.get = MagicMock(return_value=mock_tool)
 
-    # orch.global = 0 → 优先级链落到 profile 分支
+    # orch.global = 0 → 优先级链落到 profile 分支（fixed 模式才读 max_iterations）
     with patch(
         "backend.orchestration.orch_settings.load_orch_settings",
-        return_value=SimpleNamespace(max_iterations=0),
+        return_value=SimpleNamespace(max_iterations=0, budget_mode="fixed"),
     ):
         events = [evt async for evt in agent.run_loop([{"role": "user", "content": "x"}])]
 

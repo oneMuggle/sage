@@ -214,6 +214,8 @@ export const SETTINGS_AUDIT_SECTIONS: readonly SettingsAuditSectionDef[] = [
         subagentApprovalMode: String(o.subagentApprovalMode),
         worktreeIsolation: Boolean(o.worktreeIsolation),
         scratchRoot: String(o.scratchRoot ?? ''),
+        // 2026-11-04: 预算模式（auto | fixed），缺省时由 dynamicBudgetEnabled 推导
+        budgetMode: o.budgetMode ?? (o.dynamicBudgetEnabled ? 'auto' : 'fixed'),
       };
       return {
         snapshot: formatOrchestrationTabAuditSnapshot(input),
