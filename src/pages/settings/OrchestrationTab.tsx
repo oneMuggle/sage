@@ -28,6 +28,8 @@ export interface OrchestrationTabAuditInput {
   subagentApprovalMode: string;
   worktreeIsolation: boolean;
   scratchRoot: string;
+  /** 2026-11-04: 迭代预算模式（auto | fixed）。可选 —— 缺省时不改变既有快照输出。 */
+  budgetMode?: string;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -45,6 +47,7 @@ export function formatOrchestrationTabAuditSnapshot(input: OrchestrationTabAudit
     `- 子代理审批模式: ${input.subagentApprovalMode}`,
     `- Worktree 隔离: ${input.worktreeIsolation ? '开启' : '关闭'}`,
     `- Scratch 根目录: ${input.scratchRoot || 'orch_scratch'}`,
+    ...(input.budgetMode === undefined ? [] : [`- 迭代预算模式: ${input.budgetMode}`]),
   ].join('\n');
 }
 
@@ -63,6 +66,7 @@ export function formatOrchestrationTabAuditJson(input: OrchestrationTabAuditInpu
       subagentApprovalMode: input.subagentApprovalMode,
       worktreeIsolation: input.worktreeIsolation,
       scratchRoot: input.scratchRoot || 'orch_scratch',
+      ...(input.budgetMode === undefined ? {} : { budgetMode: input.budgetMode }),
     },
     null,
     2,
@@ -167,6 +171,14 @@ export function OrchestrationTab() {
   const { t } = useI18n();
   const setOrch = (patch: Partial<typeof settings.orch>) =>
     updateSettings({ orch: { ...settings.orch, ...patch } });
+
+  // 2026-11-04: 预算模式显式开关（auto | fixed）。升级前写入的老设置没有
+  // budgetMode 字段 → 由 dynamicBudgetEnabled 推导，与后端 load_orch_settings
+  // 的迁移口径一致。切换时双写两键：老版本仍读 dynamicBudgetEnabled。
+  const budgetMode: 'auto' | 'fixed' =
+    settings.orch.budgetMode ?? (settings.orch.dynamicBudgetEnabled ? 'auto' : 'fixed');
+  const setBudgetMode = (mode: 'auto' | 'fixed') =>
+    setOrch({ budgetMode: mode, dynamicBudgetEnabled: mode === 'auto' });
 
   // 「恢复默认」统一从 registry 取 defaultValue —— 默认值只有一处来源，调用点不重复硬编码。
   const resetOrchKey = (key: keyof typeof settings.orch) => {
@@ -342,18 +354,44 @@ export function OrchestrationTab() {
         <p className="text-xs text-muted leading-relaxed mb-3">
           {t('settings.orch.dynamic_budget_intro')}
         </p>
+        {/* 2026-11-04: 预算模式单选，取代动态预算 Toggle。
+            auto = 任务分级 + 自动延长；fixed = maxIterations 硬顶。 */}
         <SettingRow
-          anchor="orch.dynamicBudgetEnabled"
-          label={t('settings.orch.dynamic_budget_enabled.label')}
-          desc={t('settings.orch.dynamic_budget_enabled.desc')}
-          value={settings.orch.dynamicBudgetEnabled}
-          onReset={() => resetOrchKey('dynamicBudgetEnabled')}
+          anchor="orch.budgetMode"
+          label={t('settings.orch.budget_mode.label')}
+          desc={t('settings.orch.budget_mode.desc')}
+          value={budgetMode}
+          onReset={() => {
+            const metadata = getSettingMetadata('orch.budgetMode');
+            if (metadata?.defaultValue === 'auto' || metadata?.defaultValue === 'fixed') {
+              setBudgetMode(metadata.defaultValue);
+            }
+          }}
         >
-          <Toggle
-            testId="orch-dynamic-budget-enabled"
-            value={settings.orch.dynamicBudgetEnabled}
-            onChange={(v) => setOrch({ dynamicBudgetEnabled: v })}
-          />
+          <fieldset className="space-y-1.5">
+            <legend className="sr-only">{t('settings.orch.budget_mode.label')}</legend>
+            {(['auto', 'fixed'] as const).map((mode) => (
+              <label key={mode} className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="orch-budget-mode"
+                  value={mode}
+                  data-testid={`orch-budget-mode-${mode}`}
+                  checked={budgetMode === mode}
+                  onChange={() => setBudgetMode(mode)}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="block text-xs text-text">
+                    {t(`settings.orch.budget_mode.${mode}`)}
+                  </span>
+                  <span className="block text-ui-2xs text-muted">
+                    {t(`settings.orch.budget_mode.${mode}_desc`)}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
         </SettingRow>
         <NumberField
           anchor="orch.budgetSimple"

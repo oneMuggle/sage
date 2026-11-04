@@ -312,12 +312,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'orch 编排 agent 迭代 上限 maxiterations',
   },
   // 2026-11-01: 动态迭代预算（P1 设置页暴露）。
+  // 2026-11-04: 锚点改为预算模式单选（取代动态预算 Toggle）。
   {
-    key: 'orch.dynamicBudgetEnabled',
+    key: 'orch.budgetMode',
     tab: 'orchestration',
-    label: '动态迭代预算',
-    labelEn: 'Dynamic iteration budget',
-    keywords: 'orch 编排 动态 迭代 预算 自动延长 dynamicbudgetenabled',
+    label: '迭代预算模式',
+    labelEn: 'Iteration budget mode',
+    keywords: 'orch 编排 动态 迭代 预算 模式 自动 固定 自动延长 budgetmode',
   },
   {
     key: 'orch.budgetSimple',

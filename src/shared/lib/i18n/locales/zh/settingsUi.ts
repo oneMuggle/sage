@@ -321,14 +321,20 @@ export const zhSettingsUi = {
     '同一轮会话内连续提问未获应答达到该次数后，agent 停止提问并直接推进任务，防止反复骚扰',
   'settings.orch.max_consecutive_unanswered.label': '连续未应答提问上限（次）',
   'settings.orch.max_iterations.desc':
-    'Primary agent 最大迭代次数（每次迭代 LLM 思考一次，可能调用多个工具），超限后会话终止并归因 max_iterations_exceeded',
+    '固定模式下 Primary agent 的最大迭代次数（每次迭代 LLM 思考一次，可能调用多个工具），超限后会话终止并归因 max_iterations_exceeded；自动模式下该值作为下限，实际预算按任务复杂度分级',
   'settings.orch.max_iterations.label': 'Agent 迭代次数上限（次，0=默认值）',
   // 2026-11-01: 动态迭代预算（P1 设置页暴露）。
   'settings.orch.section_dynamic_budget': '动态迭代预算',
   'settings.orch.dynamic_budget_intro':
     '按任务复杂度给初始迭代预算：简单任务省预算，复杂/长任务可自动延长；连续重复调用或长期无进展时带证据停止。环境变量 SAGE_DYNAMIC_BUDGET_* 优先于此处设置。',
-  'settings.orch.dynamic_budget_enabled.label': '启用动态迭代预算',
-  'settings.orch.dynamic_budget_enabled.desc': '关闭后回到固定「Agent 迭代次数上限」',
+  // 2026-11-04: 预算模式单选，取代动态预算 Toggle（maxIterations==25 哨兵）。
+  'settings.orch.budget_mode.label': '迭代预算模式',
+  'settings.orch.budget_mode.desc':
+    '自动：按任务复杂度分级给预算，到上限后按进度审计自动延长，卡死时带证据停止；固定：直接使用「Agent 迭代次数上限」',
+  'settings.orch.budget_mode.auto': '自动（推荐）',
+  'settings.orch.budget_mode.auto_desc': '按任务复杂度给初始预算，到上限后按进度审计自动延长',
+  'settings.orch.budget_mode.fixed': '固定上限',
+  'settings.orch.budget_mode.fixed_desc': '直接使用「Agent 迭代次数上限」，不自动延长',
   'settings.orch.budget_simple.label': '简单任务初始预算（步）',
   'settings.orch.budget_simple.desc': '短消息、无附件等简单任务的初始迭代步数',
   'settings.orch.budget_medium.label': '中等任务初始预算（步）',

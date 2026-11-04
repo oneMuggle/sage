@@ -65,7 +65,9 @@ describe('OrchestrationTab 渲染', () => {
     expect(screen.getByTestId('orch-worktree-isolation')).toBeInTheDocument();
     expect(screen.getByTestId('orch-scratch-root')).toBeInTheDocument();
     // 2026-11-01: 动态迭代预算（P1 设置页暴露）
-    expect(screen.getByTestId('orch-dynamic-budget-enabled')).toBeInTheDocument();
+    // 2026-11-04: 预算模式单选（取代动态预算 Toggle）
+    expect(screen.getByTestId('orch-budget-mode-auto')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-budget-mode-fixed')).toBeInTheDocument();
     expect(screen.getByTestId('orch-budget-simple')).toBeInTheDocument();
     expect(screen.getByTestId('orch-budget-medium')).toBeInTheDocument();
     expect(screen.getByTestId('orch-budget-complex')).toBeInTheDocument();
@@ -82,6 +84,53 @@ describe('OrchestrationTab 渲染', () => {
       '900',
     );
     expect((screen.getByTestId('orch-max-retry-of-chains') as HTMLInputElement).value).toBe('10');
+  });
+});
+
+// ============================================================================
+// 2026-11-04: 预算模式显式开关（auto | fixed），取代 maxIterations==25 哨兵
+// ============================================================================
+
+describe('OrchestrationTab — 预算模式 (2026-11-04)', () => {
+  it('默认推导为 auto', () => {
+    renderTab();
+    expect((screen.getByTestId('orch-budget-mode-auto') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId('orch-budget-mode-fixed') as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('老设置（无 budgetMode）在 dynamicBudgetEnabled=false 时推导为 fixed', () => {
+    mockSettings({ dynamicBudgetEnabled: false });
+    renderTab();
+    expect((screen.getByTestId('orch-budget-mode-fixed') as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('budgetMode 存在时优先于 dynamicBudgetEnabled', () => {
+    mockSettings({ budgetMode: 'fixed', dynamicBudgetEnabled: true });
+    renderTab();
+    expect((screen.getByTestId('orch-budget-mode-fixed') as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('切换到 fixed 时双写 budgetMode 与 dynamicBudgetEnabled，保留其余 orch 键', () => {
+    renderTab();
+
+    fireEvent.click(screen.getByTestId('orch-budget-mode-fixed'));
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({
+        budgetMode: 'fixed',
+        dynamicBudgetEnabled: false,
+        maxIterations: 25, // 保留其余键（部分更新契约）
+      }),
+    });
+  });
+
+  it('切回 auto 时同步 dynamicBudgetEnabled=true', () => {
+    mockSettings({ budgetMode: 'fixed', dynamicBudgetEnabled: false });
+    renderTab();
+
+    fireEvent.click(screen.getByTestId('orch-budget-mode-auto'));
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({ budgetMode: 'auto', dynamicBudgetEnabled: true }),
+    });
   });
 });
 
