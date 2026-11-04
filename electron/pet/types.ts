@@ -44,26 +44,107 @@ export type PetDisplayMode = 'desktop' | 'in-app' | 'both' | 'off';
 export type PetBubbleMode = 'important' | 'always' | 'off';
 export type PetCompatibilityMode = 'auto' | 'on' | 'off';
 
+export type PetFollowMode = 'focus' | 'urgent' | 'pinned';
+
+export interface PetAttentionSummary {
+  /** 需要用户处理的会话数（waiting + awaiting_approval 任务）。未截断。 */
+  needsYou: number;
+  /** 最近 10 分钟内失败的会话/任务数。未截断。 */
+  failed: number;
+  /** 正在运行的会话数，不含 waiting。未截断。 */
+  running: number;
+  /** running/queued/paused/awaiting_approval 后台任务数。 */
+  activeTasks: number;
+  /** needsYou + failed + running + activeTasks。 */
+  total: number;
+  /** 按最近更新排序，最多 20 个；只含会话。 */
+  needsYouSessionIds: string[];
+}
+
 export interface PetSoundScenes {
   waiting: boolean;
   error: boolean;
   done: boolean;
 }
 
+/** One desktop pet instance. Global behavior settings live on PetConfig. */
+export interface PetInstanceConfig {
+  /** Stable id; also names the window-position file. */
+  id: string;
+  petPack: string;
+  size: PetSize;
+  followMode: PetFollowMode;
+  pinnedSessionId: string | null;
+}
+
 export interface PetConfig {
-  version: 1;
+  version: 3;
   enabled: boolean;
   displayMode: PetDisplayMode;
-  size: PetSize;
   tempo: PetTempo;
   reduceMotion: boolean;
   bubbleMode: PetBubbleMode;
   soundScenes: PetSoundScenes;
   showSessionTitle: boolean;
   compatibilityMode: PetCompatibilityMode;
-  petPack: string;
-  followActiveSession: boolean;
+  /** Opt-in read-only local HTTP status API (loopback + bearer token). */
+  externalApi: boolean;
+  /** 1–3 pets, each with its own pack and size. */
+  pets: PetInstanceConfig[];
 }
+
+/**
+ * Per-window view of PetConfig: globals plus this instance's identity, pack
+ * and size. The renderer only needs `petId` / `petPack` / `size` from this.
+ */
+export interface PetRenderConfig extends PetConfig {
+  petId: string;
+  petPack: string;
+  size: PetSize;
+  followMode: PetFollowMode;
+  pinnedSessionId: string | null;
+}
+
+/**
+ * Normalized user pack manifest (validated from `userData/pets/<id>/pack.json`).
+ * Built-in packs live in the renderer bundle and never pass through here.
+ */
+export interface PetPackManifest {
+  id: string;
+  name: string;
+  version: string;
+  license: string;
+  source?: string;
+  canvas: { width: number; height: number };
+  anchor: { x: number; y: number };
+  actions: Record<string, string[]>;
+}
+
+export type PetTaskStatus =
+  | 'queued'
+  | 'running'
+  | 'awaiting_approval'
+  | 'paused'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
+
+/** A Task Center entry reported by the main window renderer. */
+export interface PetTaskReport {
+  id: string;
+  kind: string;
+  title: string;
+  status: PetTaskStatus;
+  phase?: string | null;
+  percent?: number | null;
+  sessionId?: string | null;
+  runId?: string | null;
+  error?: string | null;
+  startedAt?: number | null;
+  finishedAt?: number | null;
+}
+
+export type PetTaskSummary = PetTaskReport;
 
 /** One active/recent session row shown in the pet panel. */
 export interface PetSessionSummary {
@@ -106,6 +187,9 @@ export interface PetSnapshot {
   activeSessions: number;
   /** Active/recent sessions, highest priority first (panel only). */
   sessions: PetSessionSummary[];
+  /** Background tasks reported by the main window Task Center. */
+  tasks: PetTaskSummary[];
+  attention: PetAttentionSummary;
   updatedAt: number;
 }
 

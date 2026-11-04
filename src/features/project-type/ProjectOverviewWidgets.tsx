@@ -1,8 +1,8 @@
 /**
- * 项目概览 Widget (2026-09-25; Phase P14 多态版本保护与阶段状态卡片 2026-10-12; Phase P20 L1 宪章就绪度与一键快照留痕 2026-10-12; Phase P28 快捷任务拆解入口与概览导出; Phase P32 阶段快捷切换胶囊与 L1 宪章一键初始化 2026-10-13)
+ * 项目概览 Widget (2026-09-25; Phase P14 多态版本保护与阶段状态卡片 2026-10-12; Phase P20 项目总纲就绪度与一键快照留痕 2026-10-12; Phase P28 快捷任务拆解入口与概览导出; Phase P32 阶段快捷切换胶囊与 项目总纲一键初始化 2026-10-13)
  *
  * 项目类型分类系统 - Phase 4.3 & Phase P32
- * 根据项目类型与版本控制策略显示对应的概览 Widget、L1 宪章就绪状态与一键初始化、阶段快捷切换、快捷快照按钮、AI 任务拆解入口及概览 Markdown 复制
+ * 根据项目类型与版本控制策略显示对应的概览 Widget、项目总纲就绪状态与一键初始化、阶段快捷切换、快捷快照按钮、AI 任务拆解入口及概览 Markdown 复制
  */
 
 import { FileText, History, Layers, Plus, RefreshCw, Sparkles } from 'lucide-react';
@@ -164,7 +164,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                 data-testid="workspace-charter-status-badge"
               >
                 <FileText className="h-2.5 w-2.5" />
-                {hasSageMd ? 'L1 SAGE.md 已就绪' : 'L1 SAGE.md 待初始化'}
+                {hasSageMd ? '项目总纲已就绪' : '项目总纲待初始化'}
               </span>
             )}
             {hasSageMd === false && (
@@ -271,7 +271,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                               content: `项目阶段快照 [${project.name}]：形态=${blueprint.label}，当前阶段=${stageLabel}，L1宪章=${hasSageMd ? '已就绪' : '待初始化'}，快照数=${checkpointCount}`,
                               importance: 7,
                               sourceMessageIds: [],
-                              reasoning: '概览阶段状态沉淀至 L3 画像',
+                              reasoning: '概览阶段状态保存到 AI 记忆',
                             },
                           ],
                         });
@@ -282,7 +282,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                 >
-                  {savedStageProfile ? '已存阶段至 L3' : '沉淀阶段至 L3'}
+                  {savedStageProfile ? '已存到项目记忆' : '保存到项目记忆'}
                 </button>
                 <button
                   type="button"
@@ -293,7 +293,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                     if (typeof projectApi?.addMaterial === 'function') {
                       try {
                         await projectApi.addMaterial(project.id, {
-                          content: `# 项目治理概览快照：${project.name}\n- 形态：${blueprint.label}\n- 当前阶段：${stageLabel}\n- L1 宪章：${hasSageMd ? '已就绪' : '待初始化'}\n- 快照数：${checkpointCount}`,
+                          content: `# 项目治理概览快照：${project.name}\n- 形态：${blueprint.label}\n- 当前阶段：${stageLabel}\n- 项目总纲：${hasSageMd ? '已就绪' : '待初始化'}\n- 快照数：${checkpointCount}`,
                         });
                       } catch {
                         // ignore in test/offline mode
@@ -302,7 +302,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                 >
-                  {savedOverviewL4 ? '已存概览 L4' : '存概览至 L4'}
+                  {savedOverviewL4 ? '已存为参考资料' : '存为参考资料'}
                 </button>
                 <button
                   type="button"
@@ -347,7 +347,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                 >
-                  {createdStageConstraint ? '已设阶段约束' : '当前阶段设 L2 约束'}
+                  {createdStageConstraint ? '已设阶段约束' : '设为项目规则'}
                 </button>
                 <button
                   type="button"
@@ -446,7 +446,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                 >
-                  {convertedPillarsL2 ? '已转支柱L2' : '支柱转 L2 约束'}
+                  {convertedPillarsL2 ? '已升级为规则' : '升级为项目规则'}
                 </button>
                 <button
                   type="button"
@@ -462,7 +462,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                             content: pillar,
                             importance: 8,
                             sourceMessageIds: [],
-                            reasoning: '概览组件护栏支柱一键沉淀至 L3 画像',
+                            reasoning: '概览组件护栏支柱一键保存到 AI 记忆',
                           })),
                         });
                       } catch {
@@ -472,7 +472,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                 >
-                  {savedPillarsL3 ? '已存支柱L3' : '支柱存 L3 画像'}
+                  {savedPillarsL3 ? '已存到项目记忆' : '存到项目记忆'}
                 </button>
                 <button
                   type="button"
@@ -492,7 +492,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                 >
-                  {savedPillarsL4 ? '已存支柱L4' : '支柱存 L4 资料'}
+                  {savedPillarsL4 ? '已存为参考资料' : '存为参考资料'}
                 </button>
                 <button
                   type="button"
@@ -573,7 +573,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                           content: `${blueprint.label} 阶段管线 (${project.name})：${blueprint.stages.map((s) => (s.id === activeStageId ? `[${s.label}*]` : s.label)).join(' → ')}`,
                           importance: 7,
                           sourceMessageIds: [],
-                          reasoning: '项目概览阶段推进管线一键沉淀至 L3 画像',
+                          reasoning: '项目概览阶段推进管线一键保存到 AI 记忆',
                         },
                       ],
                     });
@@ -584,7 +584,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               }}
               className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              {savedStagesL3 ? '已存管线L3' : '阶段管线存L3'}
+              {savedStagesL3 ? '已存到项目记忆' : '存到项目记忆'}
             </button>
             <button
               type="button"
@@ -604,7 +604,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               }}
               className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              {savedStagesL4 ? '已存管线L4' : '阶段管线存L4'}
+              {savedStagesL4 ? '已存为参考资料' : '存为参考资料'}
             </button>
             <button
               type="button"
@@ -627,7 +627,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               }}
               className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              {convertedStagesL2 ? '已转管线L2' : '阶段管线转L2'}
+              {convertedStagesL2 ? '已升级为规则' : '升级为项目规则'}
             </button>
             {(() => {
               const idx = blueprint.stages.findIndex((s) => s.id === activeStageId);

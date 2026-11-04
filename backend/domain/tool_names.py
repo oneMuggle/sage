@@ -91,11 +91,29 @@ OFFICE_TOOLS = (
     "office_parse_bibtex",
     # 2026-09-11 Round 10 格式 Linter：对照 FormatSpec 校验 docx（READ）
     "office_lint_word",
+    # 2026-11-01 M6 规则包工具：审校/修复/抽取/修订/批量/渲染
+    "office_audit_word",
+    "office_fix_word",
+    "office_extract_rules",
+    "office_revise_word",
+    "office_batch_audit",
+    "office_render_audit",
     # 2026-10-31 LaTeX 读取：.tex 项目 → 结构化预览（READ，不编译 TeX）
     "office_read_latex",
     # 2026-10-31 LaTeX 模板：槽位/样式分析（READ）与填充（WRITE_LOCAL）
     "office_analyze_latex_template",
     "office_fill_latex_template",
+    # 2026-10-31 LaTeX 源码审校（READ）
+    "office_audit_latex",
+    # 2026-10-31 PDF 版式/字体/DPI 审计（READ，不修改 PDF）
+    "office_audit_latex_pdf",
+    # 2026-10-31 投稿合规检查：源码 + 可选 PDF（READ）
+    "office_check_latex_compliance",
+    # 2026-10-31 LaTeX 可选编译 / 红字版（WRITE_LOCAL）
+    "office_compile_latex",
+    "office_latexdiff",
+    # 2026-10-31 LaTeX 项目 zip 导入（WRITE_LOCAL，安全解压）
+    "office_extract_latex_project",
     # 2026-09-12 Round 12 自动修复：lint→修复→复检（WRITE_LOCAL）
     "office_repair_word",
     # 2026-09-18 Round 39 目录真页码：Word COM 刷新 TOC 域（WRITE_LOCAL，
@@ -169,7 +187,13 @@ SKILL_TOOLS = ("skill", "skill_save")
 
 # 多模态工具（2026-09-12 multimodal capabilities）：TTS 文本转语音 /
 # ASR 语音识别 / 图像生成。全部 EXTERNAL（调用外部 API），requires_tool_context=True。
-MULTIMODAL_TOOLS = ("text_to_speech", "speech_to_text", "generate_image")
+# 2026-10-31 本地 OCR：ocr_image 为 READ（本地推理，不调用外部 API）。
+MULTIMODAL_TOOLS = (
+    "text_to_speech",
+    "speech_to_text",
+    "generate_image",
+    "ocr_image",
+)
 
 # 循环内编排：子代理委派 / 任务清单 / 结构化输出 / 用户提问
 ORCH_TOOLS = ("agent", "todo_write", "structured_output", "ask_user_question")

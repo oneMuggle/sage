@@ -23,7 +23,24 @@ _TOKEN_ENV = "SAGE_LOCAL_AUTH_TOKEN"
 _OWNERSHIP_TOKEN_ENV = "SAGE_BACKEND_OWNERSHIP_TOKEN"
 _OWNERSHIP_HEADER = "x-sage-backend-ownership"
 _TOKEN_BYTES = 32
-_PUBLIC_PATHS = frozenset({"/health", "/health/proof", "/api/v1/scheduled/health"})
+_PUBLIC_PATHS = frozenset(
+    {
+        "/health",
+        "/health/proof",
+        "/api/v1/scheduled/health",
+        # Browser-extension I/O cannot carry the Electron-injected capability
+        # (the extension lives in the user's daily browser).  These exact
+        # paths authenticate with a per-device token; pairing uses a
+        # single-use code from an authenticated settings endpoint.  Keep this
+        # list explicit so a future route added under the same prefix stays
+        # protected by default.
+        "/api/v1/web-access/extension/pair",
+        "/api/v1/web-access/extension/poll",
+        "/api/v1/web-access/extension/result",
+        "/api/v1/web-access/extension/detach",
+        "/api/v1/web-access/extension/sync-session",
+    }
+)
 _local_auth_token: Optional[str] = None
 
 
@@ -85,7 +102,7 @@ def is_local_auth_valid(request: Request) -> bool:
 
 
 def is_public_path(path: str) -> bool:
-    """Return whether a path is needed by a supervisor before authentication."""
+    """Return whether a path is needed by a supervisor/extension before auth."""
     return path in _PUBLIC_PATHS
 
 

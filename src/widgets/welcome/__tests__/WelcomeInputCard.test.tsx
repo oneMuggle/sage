@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { skillsApi } from '../../../shared/api';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import {
   WelcomeInputCard,
@@ -13,6 +14,12 @@ const renderWithI18n = (ui: React.ReactElement) => {
 };
 
 describe('WelcomeInputCard', () => {
+  beforeEach(() => {
+    vi.spyOn(skillsApi, 'list').mockResolvedValue([]);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   it('renders with placeholder', () => {
     renderWithI18n(<WelcomeInputCard placeholder="测试占位符" />);
     expect(screen.getByPlaceholderText('测试占位符')).toBeInTheDocument();
@@ -111,5 +118,28 @@ describe('WelcomeInputCard', () => {
     expect(parsed.disabled).toBe(true);
 
     renderWithI18n(<WelcomeInputCard placeholder="测试" />);
+  });
+
+  it('opens the slash menu on "/" and sends /help output', () => {
+    const onSend = vi.fn();
+    renderWithI18n(<WelcomeInputCard placeholder="测试" onSend={onSend} />);
+    const textarea = screen.getByPlaceholderText('测试');
+
+    fireEvent.change(textarea, { target: { value: '/' } });
+    const helpItem = screen.getByText('/help').closest('button');
+    expect(helpItem).not.toBeNull();
+
+    fireEvent.mouseDown(helpItem as HTMLButtonElement);
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(String(onSend.mock.calls[0][0])).toContain('可用命令列表');
+  });
+
+  it('closes the slash menu when the query matches nothing', () => {
+    renderWithI18n(<WelcomeInputCard placeholder="测试" />);
+    const textarea = screen.getByPlaceholderText('测试');
+    fireEvent.change(textarea, { target: { value: '/' } });
+    expect(screen.getByText('/help')).toBeInTheDocument();
+    fireEvent.change(textarea, { target: { value: '/zzzz-no-command' } });
+    expect(screen.queryByText('/help')).toBeNull();
   });
 });

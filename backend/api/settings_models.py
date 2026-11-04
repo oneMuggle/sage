@@ -106,6 +106,11 @@ class EndpointPayload(BaseModel):
     localModelPath: Optional[str] = None  # noqa: N815
     discoveredModels: Optional[List[dict]] = None  # noqa: N815
     lastDiscoveredAt: Optional[int] = None  # noqa: N815
+    # 2026-11-03: 思考过程参数 —— per-endpoint 配置, 前端读到后放进 ChatConfig
+    # 随聊天请求透传上游 LLM。值域校验下沉到 canonicalizer
+    # (validate_reasoning_effort / validate_thinking_budget)。
+    reasoningEffort: Optional[str] = None  # noqa: N815
+    thinkingBudget: Optional[int] = None  # noqa: N815
 
 
 # --------------------------------------------------------------------------
@@ -147,7 +152,7 @@ class SettingsPayload(BaseModel):
     orch: Optional[dict] = None
 
     # ----- LLM 重试配置 (2026-10-13) -----
-    # 最大重试次数（0 = 禁用重试）
+    # 最大尝试次数（含首次请求）；0 或 1 = 禁用自动重试
     llmRetryMaxAttempts: Optional[int] = None  # noqa: N815
     # 退避基数（秒）：第一次重试前的等待时间
     llmRetryBaseDelayS: Optional[float] = None  # noqa: N815
@@ -217,7 +222,7 @@ class LegacySettingsPayload(BaseModel):
     orch: Optional[dict] = None
 
     # ----- LLM 重试配置 (2026-10-13) -----
-    # 最大重试次数（0 = 禁用重试）
+    # 最大尝试次数（含首次请求）；0 或 1 = 禁用自动重试
     llmRetryMaxAttempts: Optional[int] = None  # noqa: N815
     # 退避基数（秒）：第一次重试前的等待时间
     llmRetryBaseDelayS: Optional[float] = None  # noqa: N815

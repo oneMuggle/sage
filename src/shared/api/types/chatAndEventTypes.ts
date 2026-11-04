@@ -172,11 +172,20 @@ export interface MessageDisplayOfficeRef {
   workspace_path?: string;
 }
 
+export interface MessageDisplayImageOcrText {
+  /** 图片文件名（与 images 对齐） */
+  name: string;
+  /** OCR 文本（展示用，已截断到 meta 预算内） */
+  text: string;
+}
+
 export interface MessageDisplayMeta {
   /** 随消息上传的文档附件（名称/大小/类型，不含 dataUrl） */
   attachments?: MessageDisplayAttachment[];
   /** 聊天图片（同上，不含 dataUrl） */
   images?: MessageDisplayAttachment[];
+  /** 本地 OCR / 用户编辑后的图片文字（仅展示，不参与 LLM 上下文） */
+  image_ocr_texts?: MessageDisplayImageOcrText[];
   /** 从消息正文提取的 `@path` 文件引用 */
   file_refs?: MessageDisplayFileRef[];
   /** `@` 菜单选择的 Office 文档 */
@@ -283,6 +292,9 @@ export type AgentState =
   // 2026-09 step-by-step: 每次 ReAct 迭代结束（OBSERVING 之后）由后端产出,
   // 前端据此把当前 streaming 气泡快照为已完成 step + 准备下一步占位。
   | 'step_done'
+  // 2026-10-31: 动态迭代预算检查点 — 到达软预算且进度审计判定仍在推进时,
+  // 后端自动提高上限并推送 budget_info（已延长次数 / 新上限 / 审计信号）。
+  | 'iteration_checkpoint'
   // Multi-Agent Orchestration (2026-08-11)
   | 'task_plan'
   | 'task_status'
@@ -619,6 +631,21 @@ export interface RetryInfo {
   error_type: string;
   error_message: string;
   delay: number;
+  /** 2026-11-02: 重试总时长预算（秒）；0/缺省 = 不限 */
+  budget_total_s?: number;
+  /** 2026-11-02: 本次等待结束后剩余的预算秒数（后端可省略） */
+  budget_remaining_s?: number;
+  /**
+   * 2026-11-03: 重试阶段 —— backoff = 退避等待中（等 delay 秒后重试）；
+   * in_flight = 重试请求已发出、在途等待上游响应。缺省按 backoff 处理。
+   */
+  phase?: 'backoff' | 'in_flight';
+  /** 2026-11-03: 本次重试链路已累计耗时（秒，含在途请求与退避） */
+  elapsed_s?: number;
+  /** 2026-11-03: 本次尝试的请求超时上限（秒）—— in_flight 阶段用于提示还剩多久判超时 */
+  attempt_timeout_s?: number;
+  /** 2026-11-03: 事件来源（如 compaction = 会话压缩触发的后台调用） */
+  source?: string;
 }
 
 /** 流式聊天事件 (NDJSON 协议的一行) */
@@ -668,6 +695,17 @@ export interface AgentEvent {
   // 2026-10-28: Plan Mode 增强 Phase 3 — 步骤确认卡点。
   // state === 'awaiting_step_confirm' 时携带的步骤信息。
   step_confirm?: import('./planModeTypes').StepConfirmInfo;
+  // 2026-10-31: 动态迭代预算检查点载荷。
+  // state === 'iteration_checkpoint' 时携带已延长的预算与审计信号。
+  budget_info?: {
+    level?: string;
+    previous_budget?: number;
+    next_budget?: number;
+    extensions?: number;
+    stuck_score?: number;
+    progress_signals?: number;
+    reasons?: string[];
+  };
   // Multi-Agent Orchestration (2026-08-11): 宽松字段（与 llmStream.ts AgentEvent 同步）
   run_id?: string;
   plan?: TaskPlanItem[];

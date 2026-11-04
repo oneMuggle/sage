@@ -7,9 +7,13 @@
 
 import { useEffect, useState } from 'react';
 
+import { DEFAULT_SETTINGS, RETRY_LIMITS } from '../../entities/setting/types';
+import type { DisplayMode } from '../../features/chat/displayMode/types';
+import { useConfirmedPreference } from '../../features/manage-settings/useConfirmedPreference';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { getInputHistorySize, setInputHistorySize } from '../../shared/lib/hooks/useInputHistory';
 import { useI18n } from '../../shared/lib/i18n';
+import { NumberField as NumberInput } from '../../shared/ui/NumberField';
 
 import { AttachmentRagCard } from './AttachmentRagCard';
 import { ContextTurnLimitSelect } from './ContextTurnLimitSelect';
@@ -17,7 +21,7 @@ import { DemoModeSection } from './DemoModeSection';
 import { FontSettingsSection } from './FontSettingsSection';
 import { ResetDefaultsSection } from './ResetDefaultsSection';
 import { ThemeSelector } from './ThemeSelector';
-import { AdvancedSection, SettingRow, Toggle } from './components';
+import { SettingRow, Toggle } from './components';
 
 export interface BasicTabAuditInput {
   streaming: boolean;
@@ -32,15 +36,20 @@ export interface BasicTabAuditInput {
   demoMode: boolean;
 }
 
+/** 2026-11-03: 审计快照标注每个重试项的来源（当前值 vs 后端默认值）。 */
+function retrySourceLabel(value: number, defaultValue: number): string {
+  return value === defaultValue ? '默认' : '已自定义';
+}
+
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatBasicTabAuditSnapshot(input: BasicTabAuditInput): string {
   return [
     `# 基础设置审计快照`,
     `- 流式输出: ${input.streaming ? '开启' : '关闭'}`,
-    `- LLM 最大重试次数: ${input.llmRetryMaxAttempts}`,
-    `- 退避基数(秒): ${input.llmRetryBaseDelayS}`,
-    `- 最大退避(秒): ${input.llmRetryMaxDelayS}`,
-    `- 重试总时长预算(秒): ${input.llmRetryTotalBudgetS === 0 ? '不限' : input.llmRetryTotalBudgetS}`,
+    `- LLM 最大尝试次数: ${input.llmRetryMaxAttempts}（来源：${retrySourceLabel(input.llmRetryMaxAttempts, DEFAULT_SETTINGS.llmRetryMaxAttempts)}）`,
+    `- 退避基数(秒): ${input.llmRetryBaseDelayS}（来源：${retrySourceLabel(input.llmRetryBaseDelayS, DEFAULT_SETTINGS.llmRetryBaseDelayS)}）`,
+    `- 最大退避(秒): ${input.llmRetryMaxDelayS}（来源：${retrySourceLabel(input.llmRetryMaxDelayS, DEFAULT_SETTINGS.llmRetryMaxDelayS)}）`,
+    `- 重试总时长预算(秒): ${input.llmRetryTotalBudgetS === 0 ? '不限' : input.llmRetryTotalBudgetS}（来源：${retrySourceLabel(input.llmRetryTotalBudgetS, DEFAULT_SETTINGS.llmRetryTotalBudgetS)}）`,
     `- LLM 任务上限(秒): ${input.llmTotalTimeoutS === 0 ? '不限' : input.llmTotalTimeoutS}`,
     `- LLM 代理超时(秒): ${input.llmProxyTimeoutS}`,
     `- IANA 时区: ${input.timezone || '默认'}`,
@@ -66,6 +75,22 @@ export function formatBasicTabAuditJson(input: BasicTabAuditInput): string {
     },
     null,
     2,
+  );
+}
+
+/** 重试参数来源徽标：与后端默认值一致 → 「默认」，否则「已自定义」。 */
+function RetrySourceBadge({ value, defaultValue }: { value: number; defaultValue: number }) {
+  const { t } = useI18n();
+  const isDefault = value === defaultValue;
+  return (
+    <span
+      data-testid="setting-retry-source"
+      className={`rounded px-1.5 py-0.5 text-ui-xs font-medium ${
+        isDefault ? 'bg-bg-muted text-muted' : 'bg-primary/10 text-primary'
+      }`}
+    >
+      {t(isDefault ? 'settings.basic.retry_source.default' : 'settings.basic.retry_source.custom')}
+    </span>
   );
 }
 
@@ -138,6 +163,15 @@ export function BasicTab() {
   const [inputHistorySize, setInputHistorySizeState] = useState(getInputHistorySize());
   const [proxyTimeoutDraft, setProxyTimeoutDraft] = useState(String(settings.llmProxyTimeoutS));
 
+  const displayModePref = useConfirmedPreference<DisplayMode>({
+    key: 'chat_display_mode',
+    initial: 'trace',
+    parse: (value) =>
+      value === 'detail' || value === 'trace' || value === 'result' ? value : 'trace',
+    serialize: (value) => value,
+    category: 'ui',
+  });
+
   useEffect(() => {
     setProxyTimeoutDraft(String(settings.llmProxyTimeoutS));
   }, [settings.llmProxyTimeoutS]);
@@ -178,6 +212,21 @@ export function BasicTab() {
         >
           <Toggle value={settings.streaming} onChange={(v) => updateSettings({ streaming: v })} />
         </SettingRow>
+        <SettingRow
+          anchor="chat_display_mode"
+          label={t('settings.basic.chat_display_mode_label')}
+          desc={t('settings.basic.chat_display_mode_desc')}
+        >
+          <select
+            value={displayModePref.value}
+            onChange={(e) => displayModePref.update(e.target.value as DisplayMode)}
+            className="px-2 py-1 text-ui-xs border rounded-radius-sm outline-none"
+          >
+            <option value="detail">{t('chat.displayMode.detail')}</option>
+            <option value="trace">{t('chat.displayMode.trace')}</option>
+            <option value="result">{t('chat.displayMode.result')}</option>
+          </select>
+        </SettingRow>
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.basic.conversation')}</h3>
@@ -192,15 +241,12 @@ export function BasicTab() {
           label={t('settings.basic.history_size_label')}
           desc={t('settings.basic.history_size_desc')}
         >
-          <input
-            type="number"
-            data-testid="settings-input-history-size"
+          <NumberInput
+            value={inputHistorySize}
             min={1}
             max={200}
-            value={inputHistorySize}
-            onChange={(e) => {
-              const raw = parseInt(e.target.value, 10);
-              const v = Number.isFinite(raw) ? Math.max(1, Math.min(200, raw)) : 50;
+            testId="settings-input-history-size"
+            onChange={(v) => {
               setInputHistorySize(v);
               setInputHistorySizeState(v);
             }}
@@ -215,16 +261,55 @@ export function BasicTab() {
           label={t('settings.basic.retry_max_label')}
           desc={t('settings.basic.retry_max_desc')}
         >
-          <input
-            type="number"
-            data-testid="settings-llm-retry-max-attempts"
-            min={0}
-            max={10}
+          <RetrySourceBadge
             value={settings.llmRetryMaxAttempts}
-            onChange={(e) => {
-              const v = Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0));
-              updateSettings({ llmRetryMaxAttempts: v });
-            }}
+            defaultValue={DEFAULT_SETTINGS.llmRetryMaxAttempts}
+          />
+          <NumberInput
+            value={settings.llmRetryMaxAttempts}
+            min={RETRY_LIMITS.llmRetryMaxAttempts.min}
+            max={RETRY_LIMITS.llmRetryMaxAttempts.max}
+            testId="settings-llm-retry-max-attempts"
+            onChange={(v) => updateSettings({ llmRetryMaxAttempts: v })}
+            className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+          />
+        </SettingRow>
+        <SettingRow
+          anchor="llmRetryBaseDelayS"
+          label={t('settings.basic.retry_base_label')}
+          desc={t('settings.basic.retry_base_desc')}
+        >
+          <RetrySourceBadge
+            value={settings.llmRetryBaseDelayS}
+            defaultValue={DEFAULT_SETTINGS.llmRetryBaseDelayS}
+          />
+          <NumberInput
+            value={settings.llmRetryBaseDelayS}
+            min={RETRY_LIMITS.llmRetryBaseDelayS.min}
+            max={RETRY_LIMITS.llmRetryBaseDelayS.max}
+            step={0.5}
+            integer={false}
+            testId="settings-llm-retry-base-delay"
+            onChange={(v) => updateSettings({ llmRetryBaseDelayS: v })}
+            className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+          />
+        </SettingRow>
+        <SettingRow
+          anchor="llmRetryMaxDelayS"
+          label={t('settings.basic.llm_retry.max_delay.label')}
+          desc={t('settings.basic.llm_retry.max_delay.desc')}
+        >
+          <RetrySourceBadge
+            value={settings.llmRetryMaxDelayS}
+            defaultValue={DEFAULT_SETTINGS.llmRetryMaxDelayS}
+          />
+          <NumberInput
+            value={settings.llmRetryMaxDelayS}
+            min={RETRY_LIMITS.llmRetryMaxDelayS.min}
+            max={RETRY_LIMITS.llmRetryMaxDelayS.max}
+            step={1}
+            testId="settings-llm-retry-max-delay"
+            onChange={(v) => updateSettings({ llmRetryMaxDelayS: v })}
             className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
           />
         </SettingRow>
@@ -233,61 +318,20 @@ export function BasicTab() {
           label={t('settings.basic.retry_total_budget_label')}
           desc={t('settings.basic.retry_total_budget_desc')}
         >
-          <input
-            type="number"
-            data-testid="settings-llm-retry-total-budget"
-            min={0}
-            max={1800}
-            step={10}
+          <RetrySourceBadge
             value={settings.llmRetryTotalBudgetS}
-            onChange={(e) => {
-              const v = Math.max(0, Math.min(1800, parseInt(e.target.value, 10) || 0));
-              updateSettings({ llmRetryTotalBudgetS: v });
-            }}
+            defaultValue={DEFAULT_SETTINGS.llmRetryTotalBudgetS}
+          />
+          <NumberInput
+            value={settings.llmRetryTotalBudgetS}
+            min={RETRY_LIMITS.llmRetryTotalBudgetS.min}
+            max={RETRY_LIMITS.llmRetryTotalBudgetS.max}
+            step={10}
+            testId="settings-llm-retry-total-budget"
+            onChange={(v) => updateSettings({ llmRetryTotalBudgetS: v })}
             className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
           />
         </SettingRow>
-        <AdvancedSection
-          title={t('settings.basic.advanced_title')}
-          description={t('settings.basic.advanced_desc')}
-        >
-          <SettingRow
-            anchor="llmRetryBaseDelayS"
-            label={t('settings.basic.retry_base_label')}
-            desc={t('settings.basic.retry_base_desc')}
-          >
-            <input
-              type="number"
-              data-testid="settings-llm-retry-base-delay"
-              min={0.1}
-              step={0.5}
-              value={settings.llmRetryBaseDelayS}
-              onChange={(e) => {
-                const v = Math.max(0.1, parseFloat(e.target.value) || 1.0);
-                updateSettings({ llmRetryBaseDelayS: v });
-              }}
-              className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
-            />
-          </SettingRow>
-          <SettingRow
-            anchor="llmRetryMaxDelayS"
-            label={t('settings.basic.llm_retry.max_delay.label')}
-            desc={t('settings.basic.llm_retry.max_delay.desc')}
-          >
-            <input
-              type="number"
-              data-testid="settings-llm-retry-max-delay"
-              min={1}
-              step={1}
-              value={settings.llmRetryMaxDelayS}
-              onChange={(e) => {
-                const v = Math.max(1, parseInt(e.target.value, 10) || 30);
-                updateSettings({ llmRetryMaxDelayS: v });
-              }}
-              className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
-            />
-          </SettingRow>
-        </AdvancedSection>
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">
@@ -298,16 +342,12 @@ export function BasicTab() {
           label={t('settings.basic.llm_total_limit.label')}
           desc={t('settings.basic.llm_total_limit.desc')}
         >
-          <input
-            type="number"
-            data-testid="settings-llm-total-timeout"
+          <NumberInput
+            value={settings.llmTotalTimeoutS}
             min={0}
             step={60}
-            value={settings.llmTotalTimeoutS}
-            onChange={(e) => {
-              const v = Math.max(0, parseInt(e.target.value, 10) || 0);
-              updateSettings({ llmTotalTimeoutS: v });
-            }}
+            testId="settings-llm-total-timeout"
+            onChange={(v) => updateSettings({ llmTotalTimeoutS: v })}
             className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
           />
         </SettingRow>

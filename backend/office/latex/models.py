@@ -159,7 +159,7 @@ class LatexTemplateSlot:
 
     name: str
     kind: str  # command_arg | environment_body | placeholder | comment
-    type: str = "text"  # text | rich_text | date | list
+    type: str = "text"  # text | rich_text | date | list | image
     required: bool = False
     description: str = ""
     current_value: str = ""

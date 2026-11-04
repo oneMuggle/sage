@@ -32,7 +32,12 @@ import type {
   OfficeManagedRef,
   PickedOfficeFile,
   PetConfigBridge,
+  PetApiInfoBridge,
   PetElectronApiBridge,
+  PetPackDeleteResultBridge,
+  PetPackExportResultBridge,
+  PetPackImportResultBridge,
+  PetPackManifestBridge,
   PetSnapshotBridge,
   ProvidersElectronApiBridge,
   PtyElectronApiBridge,
@@ -242,6 +247,9 @@ const electronAPI = {
       files?: { name: string; sha256: string }[];
     }) => ipcRenderer.invoke('models:embedder:download', payload ?? {}),
     cancel: (dirName: string) => ipcRenderer.invoke('models:embedder:cancel', dirName),
+    downloadOcr: () => ipcRenderer.invoke('models:ocr:download', {}),
+    cancelOcr: () => ipcRenderer.invoke('models:ocr:cancel', 'rapidocr'),
+    resetOcr: () => ipcRenderer.invoke('models:ocr:reset'),
   },
 
   /**
@@ -771,6 +779,14 @@ const electronAPI = {
     getConfig: () => ipcRenderer.invoke('pet:get-config') as Promise<PetConfigBridge>,
     setConfig: (patch) => ipcRenderer.invoke('pet:set-config', patch) as Promise<PetConfigBridge>,
     getState: () => ipcRenderer.invoke('pet:get-state') as Promise<PetSnapshotBridge>,
+    getStates: () =>
+      ipcRenderer.invoke('pet:get-states') as Promise<Record<string, PetSnapshotBridge>>,
+    onStates: (handler: (states: Record<string, PetSnapshotBridge>) => void): UnlistenFn => {
+      const listener = (_e: IpcRendererEvent, payload: Record<string, PetSnapshotBridge>) =>
+        handler(payload);
+      ipcRenderer.on('pet:states', listener);
+      return () => ipcRenderer.off('pet:states', listener);
+    },
     onState: (handler: (snapshot: PetSnapshotBridge) => void): UnlistenFn => {
       const listener = (_e: IpcRendererEvent, payload: PetSnapshotBridge) => handler(payload);
       ipcRenderer.on('pet:state', listener);
@@ -786,6 +802,15 @@ const electronAPI = {
     },
     openSession: (sessionId) => {
       ipcRenderer.send('pet:open-session', { sessionId });
+    },
+    reportFocusSession: (sessionId: string | null) => {
+      ipcRenderer.send('pet:focus-session', { sessionId });
+    },
+    pinSession: (sessionId: string | null) => {
+      ipcRenderer.send('pet:pin-session', { sessionId });
+    },
+    cycleFocus: () => {
+      ipcRenderer.send('pet:cycle-focus');
     },
     openSettings: () => {
       ipcRenderer.send('pet:open-settings');
@@ -808,12 +833,25 @@ const electronAPI = {
     setPanel: (open: boolean) => {
       ipcRenderer.send('pet:set-panel', { open });
     },
+    togglePanel: () => {
+      ipcRenderer.send('pet:toggle-panel');
+    },
     pat: () => {
       ipcRenderer.send('pet:pat');
+    },
+    reportTasks: (tasks) => {
+      ipcRenderer.send('pet:report-tasks', tasks);
     },
     hide: () => {
       ipcRenderer.send('pet:hide');
     },
+    listPacks: () => ipcRenderer.invoke('pet:list-packs') as Promise<PetPackManifestBridge[]>,
+    getApiInfo: () => ipcRenderer.invoke('pet:api-info') as Promise<PetApiInfoBridge>,
+    importPack: () => ipcRenderer.invoke('pet:import-pack') as Promise<PetPackImportResultBridge>,
+    exportPack: (id) =>
+      ipcRenderer.invoke('pet:export-pack', { id }) as Promise<PetPackExportResultBridge>,
+    deletePack: (id) =>
+      ipcRenderer.invoke('pet:delete-pack', { id }) as Promise<PetPackDeleteResultBridge>,
   } satisfies PetElectronApiBridge,
 
   /**

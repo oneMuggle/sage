@@ -37,6 +37,7 @@ class ProjectModel(BaseModel):
     detected_type: Optional[str] = None
     project_sub_type: Optional[str] = None
     bootstrap_state: Optional[str] = None
+    playbook_state: Optional[str] = None
     session_count: int = 0
     last_session_id: Optional[str] = None
 
@@ -195,6 +196,7 @@ class ConstraintModel(BaseModel):
     trigger_pattern: Optional[str]
     priority: int
     enabled: bool
+    source: str = "user"
     created_at: int
     updated_at: int
 
@@ -631,6 +633,28 @@ class BootstrapPreviewResponse(BaseModel):
     scan: Dict[str, Any]
     suggestions: Dict[str, Any]
     llm_available: bool
+    llm_error: Optional[str] = None
+    rule_source: Optional[str] = None
+
+
+class BootstrapScanResponse(BaseModel):
+    """POST /projects/{id}/bootstrap/scan 的响应（确定性扫描，不调用 LLM）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project: ProjectModel
+    scan: Dict[str, Any]
+
+
+class BootstrapSuggestResponse(BaseModel):
+    """POST /projects/{id}/bootstrap/suggest 的响应（AI 建议阶段）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    suggestions: Dict[str, Any]
+    llm_available: bool
+    llm_error: Optional[str] = None
+    rule_source: Optional[str] = None
 
 
 class BootstrapMetadataInput(BaseModel):
@@ -693,6 +717,39 @@ class BootstrapErrorModel(BaseModel):
     message: str
 
 
+class BootstrapAppliedItem(BaseModel):
+    """bootstrap apply 中单个已落地项（M3 验证明细）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item: str
+    label: Optional[str] = None
+    id: Optional[str] = None
+    location: Optional[str] = None
+    content_preview: Optional[str] = None
+
+
+class BootstrapSkippedItem(BaseModel):
+    """bootstrap apply 中单个跳过项（M3 验证明细）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item: str
+    reason: str
+    label: Optional[str] = None
+    content_preview: Optional[str] = None
+
+
+class BootstrapVerification(BaseModel):
+    """bootstrap apply 之后对项目状态的复核结果。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sage_md_exists: bool
+    rules_count_after: int
+    milestones_count_after: int
+
+
 class BootstrapApplyResponse(BaseModel):
     """POST /projects/{id}/bootstrap/apply 的响应。"""
 
@@ -702,6 +759,9 @@ class BootstrapApplyResponse(BaseModel):
     applied: List[str] = Field(default_factory=list)
     skipped: List[str] = Field(default_factory=list)
     errors: List[BootstrapErrorModel] = Field(default_factory=list)
+    applied_items: List[BootstrapAppliedItem] = Field(default_factory=list)
+    skipped_items: List[BootstrapSkippedItem] = Field(default_factory=list)
+    verification: Optional[BootstrapVerification] = None
     git: Optional[Dict[str, Any]] = None
 
 

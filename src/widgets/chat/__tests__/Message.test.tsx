@@ -168,6 +168,37 @@ describe('ThinkingPanel', () => {
     expect(container.textContent).not.toContain('思考过程');
   });
 
+  it('shows a folded preview and keeps expanded state across remount (id replacement)', () => {
+    const reasoning = '第一行思考摘要\n第二行更详细的推理内容';
+    const msg: MessageType = {
+      id: 'temp-id',
+      session_id: 's',
+      role: 'assistant',
+      content: '答案',
+      created_at: 0,
+      reasoning_content: reasoning,
+    };
+    const { container, unmount } = renderWithI18n(<Message message={msg} />);
+
+    // 默认折叠：头部有首行预览，正文不展示
+    expect(screen.getByTestId('thinking-preview').textContent).toContain('第一行思考摘要');
+    expect(container.textContent).not.toContain('第二行更详细的推理内容');
+
+    fireEvent.click(screen.getByRole('button', { name: /思考过程/ }));
+    expect(screen.getByRole('button', { name: /思考过程/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(container.textContent).toContain('第二行更详细的推理内容');
+
+    // 模拟流结束后的服务端 id 替换：组件重挂载，展开态应保留
+    unmount();
+    const { container: remounted } = renderWithI18n(
+      <Message message={{ ...msg, id: 'server-id' }} />,
+    );
+    expect(remounted.textContent).toContain('第二行更详细的推理内容');
+  });
+
   it('expands thinking panel on click', () => {
     const msg: MessageType = {
       id: '1',
@@ -175,18 +206,19 @@ describe('ThinkingPanel', () => {
       role: 'assistant',
       content: '答案',
       created_at: 0,
-      reasoning_content: '这是思考内容',
+      reasoning_content: '这是思考内容\n这是隐藏细节',
     };
     const { container } = renderWithI18n(<Message message={msg} />);
     // 点击展开
     const button = container.querySelector('button');
     expect(button).toBeInTheDocument();
-    // 初始状态：思考内容不可见（折叠）
-    expect(container.textContent).not.toContain('这是思考内容');
+    // 初始状态：折叠；头部只显示首行预览，正文细节不可见
+    expect(container.textContent).toContain('这是思考内容');
+    expect(container.textContent).not.toContain('这是隐藏细节');
     // 点击按钮
     fireEvent.click(button!);
-    // 展开后：思考内容可见
-    expect(container.textContent).toContain('这是思考内容');
+    // 展开后：完整思考内容可见
+    expect(container.textContent).toContain('这是隐藏细节');
   });
 });
 

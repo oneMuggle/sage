@@ -8,11 +8,16 @@
 //
 // 预算（实测留 ~10% 余量，超限即失败）：
 //   - dist/assets 总体积   ≤ 12MB   （2026-09-24 实测 ~9.9MB）
-//   - 最大单个 .js chunk   ≤ 1.8MB  （2026-10-30 实测 1704KB）
+//   - 最大单个 .js chunk   ≤ 1.85MB （2026-11-03 实测 1839KB，CI 1843KB）
 //
 // 2026-10-30 棘轮上调：设置页 IA 收敛（#2657）把设置项 i18n 词典拆入
 // settingsUi.ts 并随默认语言包静态加载，主 chunk 由 1.45MB 增至 1.70MB，
 // 超过原 1.6MB 上限 66KB（总量仍在 11/12MB 内）。按棘轮协议仅上调该项。
+//
+// 2026-11-03 棘轮上调：端点思考参数 UI（reasoningEffort / thinkingBudget，
+// win7 #2831 / main #2834）在 settingsUi.ts 新增中英双语表单项文案与
+// EndpointsTab 表单 JSX，主 chunk 实测 1839KB、CI 实测 1843KB，卡在原
+// 1.8MB 边界（本地通过、CI 恰好超限）。按棘轮协议仅上调该项至 1.85MB。
 //
 // 用法：npm run build 之后执行 `node scripts/check-bundle-size.mjs`。
 // 退出码：0 = 全部预算内；1 = 超限或 dist 不存在。
@@ -25,7 +30,7 @@ const ASSETS = 'dist/assets';
 
 const BUDGETS = [
   { name: 'dist/assets 总体积', max: 12 * 1024 * 1024 },
-  { name: '最大单个 .js chunk', max: 1.8 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
+  { name: '最大单个 .js chunk', max: 1.85 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
 ];
 
 if (!readdirSync('.').includes('dist')) {

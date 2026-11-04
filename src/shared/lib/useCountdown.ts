@@ -46,6 +46,31 @@ export function useCountdown(initialSeconds: number, resetKey?: string | number)
   return remaining;
 }
 
+/**
+ * useElapsed — 已等待秒数递增计时器。
+ *
+ * 2026-11-03: LLM 重试计时可见性。退避倒计时归零后，重试请求进入"在途"
+ * 阶段（等上游响应），此时没有可倒数的目标，只知道已经等了多久。
+ * 本 hook 提供从 resetKey 变化起单调递增的秒数，供横幅显示"本次已等待 Ns"。
+ *
+ * @param resetKey 重置信号（通常是 attempt 或 attempt+phase）。变化即归零重来。
+ * @param tickMs  步进间隔（毫秒），默认 1000。
+ * @returns 已等待秒数（整数，>= 0）
+ */
+export function useElapsed(resetKey?: string | number, tickMs = 1000): number {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    setElapsed(0);
+    const timer = setInterval(() => {
+      setElapsed((prev) => prev + 1);
+    }, tickMs);
+    return () => clearInterval(timer);
+  }, [resetKey, tickMs]);
+
+  return elapsed;
+}
+
 export function formatCountdownSummary(
   initialSeconds: number,
   remaining: number,

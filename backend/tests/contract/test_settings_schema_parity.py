@@ -73,7 +73,8 @@ def test_legal_top_keys_matches_appsettings_interface() -> None:
 
 
 def test_legal_endpoint_keys_is_stable() -> None:
-    """LEGAL_ENDPOINT_KEYS 是 EndpointConfig 9 字段 (含 Task 1 新增 protocol / modelId / localModelPath)."""
+    """LEGAL_ENDPOINT_KEYS 是 EndpointConfig 11 字段 (含 Task 1 新增 protocol / modelId /
+    localModelPath + 2026-11-03 新增 reasoningEffort / thinkingBudget)."""
     assert (
         frozenset(
             {
@@ -86,6 +87,9 @@ def test_legal_endpoint_keys_is_stable() -> None:
                 "localModelPath",
                 "discoveredModels",
                 "lastDiscoveredAt",
+                # 2026-11-03: 思考过程参数
+                "reasoningEffort",
+                "thinkingBudget",
             }
         )
         == LEGAL_ENDPOINT_KEYS
@@ -134,7 +138,7 @@ def test_legal_model_selections_obj_keys_is_stable() -> None:
 
 
 def test_legal_orch_keys_is_stable() -> None:
-    """LEGAL_ORCH_KEYS 必须与前端 OrchSettings interface 19 键逐字同步.
+    """LEGAL_ORCH_KEYS 必须与前端 OrchSettings interface 26 键逐字同步.
 
     历史事故两次: 2026-09 漏 worktreeIsolation / subagentApprovalMode /
     runTokenBudget, RD15 后又漏 runWallClockLimitMinutes /
@@ -177,6 +181,14 @@ def test_legal_orch_keys_is_stable() -> None:
             "maxOptionsPerQuestion",
             "maxClarifyQuestionsInPrompt",
             "maxClarifyQuestionsPerRound",
+            # 2026-11-01 动态迭代预算（P1 设置页暴露）
+            "dynamicBudgetEnabled",
+            "budgetSimple",
+            "budgetMedium",
+            "budgetComplex",
+            "budgetLong",
+            "budgetHardCap",
+            "budgetMaxExtensions",
         }
     ) == LEGAL_ORCH_KEYS
 

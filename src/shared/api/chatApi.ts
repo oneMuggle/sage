@@ -93,6 +93,8 @@ export const chatApi = {
     clientMessageId?: string,
     /** 用户消息展示元数据（附件 / @ 文件引用 / office 引用），随 user 行落库 */
     messageMeta?: MessageDisplayMeta,
+    /** 前端预览/编辑后的本地 OCR 文本，与 images 一一对应 */
+    imageOcrTexts?: string[],
   ): Promise<{ streamId: string; cancel: () => void }> {
     // 消息原文直传,理由同 chat()。
     if (!handlers || typeof handlers.onEvent !== 'function') {
@@ -151,6 +153,8 @@ export const chatApi = {
       context_reset: config?.contextReset ?? false,
       // R23-D2: 聊天图片输入 —— 后端 ChatRequest.images（data URL 列表）
       images: images ?? [],
+      // 2026-10-31: 前端确认/编辑后的 OCR 文本（与 images 对齐）
+      image_ocr_texts: imageOcrTexts ?? [],
       attachment_media_ids: attachmentMediaIds ?? [],
       // r67: 附件检索注入（键已 snake，桥接原样透传）
       attachment_rag: attachmentRag ?? null,

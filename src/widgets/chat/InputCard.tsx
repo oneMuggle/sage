@@ -103,6 +103,8 @@ export interface InputCardProps {
   officeRefs?: readonly OfficeRefChipType[];
   audioAttachments?: readonly AudioAttachmentChipType[];
   onRemoveFile?: (idx: number) => void;
+  /** PDF 附件页级 OCR 入口 */
+  onOcrFile?: (idx: number) => void;
   onRemoveImage?: (idx: number) => void;
   onRemoveKnowledge?: (idx: number) => void;
   onRemoveOfficeRef?: (docId: string) => void;
@@ -189,6 +191,7 @@ function InputCardInner({
   officeRefs = [],
   audioAttachments = [],
   onRemoveFile,
+  onOcrFile,
   onRemoveImage,
   onRemoveKnowledge,
   onRemoveOfficeRef,
@@ -500,6 +503,11 @@ function InputCardInner({
               name={file.name}
               size={file.size}
               type={file.type}
+              onOcr={
+                file.type === 'application/pdf' && onOcrFile
+                  ? () => onOcrFile(idx)
+                  : undefined
+              }
               onRemove={onRemoveFile ? () => onRemoveFile(idx) : undefined}
             />
           ))}

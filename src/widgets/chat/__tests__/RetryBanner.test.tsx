@@ -100,11 +100,33 @@ describe('RetryBanner', () => {
     expect(getByTestId('retry-banner-reason').textContent).toContain('Request timed out');
   });
 
+  it('shows the remaining total-budget when the backend reports it', () => {
+    const { getByTestId } = renderBanner(
+      makeInfo({ budget_total_s: 180, budget_remaining_s: 140 }),
+    );
+    expect(getByTestId('retry-banner-budget').textContent).toContain('剩余预算 140 秒');
+  });
+
+  it('hides the budget line when the backend omits budget fields', () => {
+    const { queryByTestId } = renderBanner(makeInfo());
+    expect(queryByTestId('retry-banner-budget')).toBeNull();
+  });
+
   it('formats RetryBanner audit summary and JSON (Phase P119)', async () => {
     const { formatRetryBannerSummary, formatRetryBannerJson } = await import('../RetryBanner');
-    const info = makeInfo({ attempt: 2, max_attempts: 3, error_type: 'timeout', delay: 4 });
+    const info = makeInfo({
+      attempt: 2,
+      max_attempts: 3,
+      error_type: 'timeout',
+      delay: 4,
+      phase: 'in_flight',
+      elapsed_s: 12,
+      attempt_timeout_s: 86,
+      budget_total_s: 180,
+      budget_remaining_s: 113,
+    });
     expect(formatRetryBannerSummary(info)).toBe(
-      'attempt=2/3 · type=timeout · severity=warning · delay=4s',
+      'attempt=2/3 · type=timeout · severity=warning · delay=4s · phase=in_flight · elapsed=12s · timeout=86s · budget=113s',
     );
     expect(JSON.parse(formatRetryBannerJson(info))).toEqual({
       attempt: 2,
@@ -112,6 +134,74 @@ describe('RetryBanner', () => {
       errorType: 'timeout',
       severity: 'warning',
       delay: 4,
+      phase: 'in_flight',
+      elapsedS: 12,
+      attemptTimeoutS: 86,
+      budgetTotalS: 180,
+      budgetRemainingS: 113,
+      source: null,
     });
+  });
+
+  // 2026-11-03: 双阶段渲染 —— in_flight 阶段用 Loader2 图标 + 在途提示 + 单次上限
+  it('renders Loader2 spinner and in-flight hint when phase is in_flight', () => {
+    const { getByTestId, queryByTestId, container } = renderBanner(
+      makeInfo({
+        phase: 'in_flight',
+        attempt_timeout_s: 86,
+        elapsed_s: 12,
+        budget_total_s: 180,
+        budget_remaining_s: 113,
+      }),
+    );
+    // 横幅 data-phase 属性标记 in_flight
+    expect(getByTestId('retry-banner').getAttribute('data-phase')).toBe('in_flight');
+    // in_flight 阶段副标题 = "重试请求已发出"（非倒计时）
+    expect(getByTestId('retry-banner-subtitle').textContent).toContain('重试请求已发出');
+    // 单次上限字段
+    expect(getByTestId('retry-banner-attempt-timeout').textContent).toContain('单次上限 86 秒');
+    // 累计已等待
+    expect(getByTestId('retry-banner-elapsed').textContent).toContain('已等待 12 秒');
+    // 预算
+    expect(getByTestId('retry-banner-budget').textContent).toContain('剩余预算 113 秒');
+    // 退避期倒计时字段不应出现在 in_flight
+    expect(queryByTestId('retry-banner-countdown')).toBeNull();
+    void container;
+  });
+
+  // 2026-11-03: 退避期保留原 countdown 显示
+  it('keeps the countdown in backoff phase and hides attempt-timeout fields', () => {
+    const { getByTestId, queryByTestId } = renderBanner(makeInfo({ phase: 'backoff', delay: 5 }));
+    expect(getByTestId('retry-banner').getAttribute('data-phase')).toBe('backoff');
+    expect(getByTestId('retry-banner-countdown')).toBeInTheDocument();
+    expect(getByTestId('retry-banner-subtitle').textContent).toContain('将在');
+    expect(queryByTestId('retry-banner-attempt-elapsed')).toBeNull();
+    expect(queryByTestId('retry-banner-attempt-timeout')).toBeNull();
+  });
+
+  // 2026-11-03: 累计已等待必须是"活的" —— 后端快照是事件时刻的值，
+  // 叠加本地计时后数字才随时间推进（否则在途 60s 里数字完全静止）。
+  it('advances the cumulative elapsed counter over time', () => {
+    const { getByTestId } = renderBanner(makeInfo({ phase: 'in_flight', elapsed_s: 10 }));
+    expect(getByTestId('retry-banner-elapsed').textContent).toContain('已等待 10 秒');
+
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(getByTestId('retry-banner-elapsed').textContent).toContain('已等待 13 秒');
+  });
+
+  // 2026-11-03: source 字段 —— compaction 来源时显示"正在压缩上下文"前缀
+  it('renders compaction source label when info.source is compaction', () => {
+    const { getByTestId } = renderBanner(makeInfo({ source: 'compaction' }));
+    expect(getByTestId('retry-banner-source').textContent).toContain('正在压缩上下文');
+  });
+
+  // 2026-11-03: phase 默认为 backoff（旧后端未推送 phase 字段时）
+  it('defaults to backoff phase when info.phase is omitted', () => {
+    const info = makeInfo();
+    delete (info as { phase?: string }).phase;
+    const { getByTestId } = renderBanner(info);
+    expect(getByTestId('retry-banner').getAttribute('data-phase')).toBe('backoff');
   });
 });

@@ -10,6 +10,7 @@ from __future__ import annotations
 from backend.data.settings_repo import SettingsRepository
 from backend.orchestration.llm_factory import (
     DEFAULT_MODEL,
+    build_httpx_adapter_from_settings,
     build_llm_client_from_settings,
     load_llm_config_from_settings,
     resolve_model_from_settings,
@@ -245,3 +246,65 @@ class TestBuildClient:
 
     def test_none_when_unconfigured(self):
         assert build_llm_client_from_settings() is None
+
+
+class TestBuildHttpxAdapter:
+    """Background memory extraction must never fall back to a default
+    ``api.openai.com`` adapter with an empty key — that stalled chat
+    completion for 136s (three 60s timeouts) before DONE was queued."""
+
+    def test_none_when_unconfigured(self):
+        assert build_httpx_adapter_from_settings() is None
+
+    def test_binds_persisted_endpoint(self):
+        _seed_settings(
+            {
+                "endpoints": [
+                    {
+                        "id": "e1",
+                        "name": "local",
+                        "protocol": "openai-compatible",
+                        "baseUrl": "http://127.0.0.1:1234/v1",
+                        "apiKey": "k",
+                        "discoveredModels": [{"id": "local-model"}],
+                    }
+                ],
+                "modelSelections": {"chatModel": {"endpointId": "e1", "modelId": "local-model"}},
+            }
+        )
+
+        adapter = build_httpx_adapter_from_settings()
+        assert adapter is not None
+        assert adapter._client.config.base_url == "http://127.0.0.1:1234/v1"
+        assert adapter._client.config.api_key == "k"
+        assert adapter._client.config.model == "local-model"
+
+    def test_endpoint_without_api_key_yields_none(self):
+        # protocol 缺失（默认 openai-compatible 只在 protocol 字段存在时被
+        # 显式放行）→ 无法确定端点可用，降级关键词抽取。
+        _seed_settings(
+            {"endpoints": [{"id": "e1", "name": "x", "baseUrl": "http://a"}]}
+        )
+        assert build_httpx_adapter_from_settings() is None
+
+    def test_keyless_local_endpoint_builds_adapter(self):
+        # ollama / 本地 openai-compatible 允许无 apiKey；此前 ``endpoint["apiKey"]``
+        # 直接下标会在启动期抛 KeyError，让后端 lifespan 起不来。
+        _seed_settings(
+            {
+                "endpoints": [
+                    {
+                        "id": "e1",
+                        "name": "ollama",
+                        "protocol": "ollama",
+                        "baseUrl": "http://127.0.0.1:11434",
+                    }
+                ],
+                "modelSelections": {"chatModel": {"endpointId": "e1", "modelId": "qwen3"}},
+            }
+        )
+
+        adapter = build_httpx_adapter_from_settings()
+        assert adapter is not None
+        assert adapter._client.config.api_key == ""
+        assert adapter._client.config.base_url == "http://127.0.0.1:11434"

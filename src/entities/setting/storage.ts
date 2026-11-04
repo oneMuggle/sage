@@ -15,6 +15,7 @@ import {
   DEFAULT_SETTINGS,
   EndpointConfig,
   ModelSelections,
+  RETRY_LIMITS,
   SETTINGS_STORAGE_KEY,
   SETTINGS_VERSION,
 } from './types';
@@ -71,6 +72,10 @@ const ENDPOINT_KEYS: ReadonlySet<keyof EndpointConfig> = new Set([
   'modelId',
   'discoveredModels',
   'lastDiscoveredAt',
+  // 2026-11-03: 思考过程参数 —— 漏了会被 sanitizeForBackend 静默丢弃，
+  // 前端配置永远到不了后端，上游模型不会进入思考模式。
+  'reasoningEffort',
+  'thinkingBudget',
   // 'localModelPath' 不在此白名单内 — UI 已隐藏, 后端白名单已收紧.
 ]);
 const SNAKE_KEYS_TO_DROP: ReadonlySet<string> = new Set([
@@ -93,6 +98,8 @@ function sanitizeForBackend<T extends Partial<AppSettings>>(partial: T): T {
   // 防御性拷贝 + 字段级净化:
   // 1) 顶层: 只保留白名单内 key, 丢弃 snake_case 残留 (含 known-bad list).
   // 2) endpoints[*]: 同样只保留白名单内字段.
+  // 3) 重试参数: 按 RETRY_LIMITS clamp, 防止历史 localStorage 里的非法值
+  //    (如 llmRetryMaxAttempts=0) 绕过 NumberInput 直接进入后端.
   // 不修改入参, 返回新对象.
   if (!partial || typeof partial !== 'object') return partial;
   const out: Record<string, unknown> = {};
@@ -110,12 +117,22 @@ function sanitizeForBackend<T extends Partial<AppSettings>>(partial: T): T {
         }
         return cleanEp;
       });
+    } else if (RETRY_LIMIT_KEYS.has(k) && typeof v === 'number' && Number.isFinite(v)) {
+      const limits = RETRY_LIMITS[k as keyof typeof RETRY_LIMITS];
+      out[k] = Math.max(limits.min, Math.min(limits.max, v));
     } else {
       out[k] = v;
     }
   }
   return out as T;
 }
+
+const RETRY_LIMIT_KEYS = new Set<string>([
+  'llmRetryMaxAttempts',
+  'llmRetryBaseDelayS',
+  'llmRetryMaxDelayS',
+  'llmRetryTotalBudgetS',
+]);
 
 // 暴露给单测 (vitest) 验证 canonical 净化行为.
 export const __test__sanitizeForBackend = sanitizeForBackend;
@@ -346,9 +363,12 @@ export async function loadSettings(): Promise<AppSettings> {
 }
 
 /**
- * 同步写 local cache + 异步推后端
+ * 同步写 local cache + 异步推后端（strict 通道）。
+ *
+ * 2026-11-02: 返回 boolean 让调用方感知后端 PUT 是否成功，失败时由
+ * settingsStore 弹 toast 通知用户（此前静默吞掉，用户重启后值回滚）。
  */
-export async function saveSettings(partial: Partial<AppSettings>): Promise<void> {
+export async function saveSettings(partial: Partial<AppSettings>): Promise<boolean> {
   const current = readLocalCacheSync() ?? DEFAULT_SETTINGS;
   // Partial 展开后所有字段 T|undefined，但 current 提供兜底，所以断言为完整 AppSettings
   const merged = {
@@ -361,9 +381,12 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<void>
   writeLocalCacheSync(merged);
   try {
     // 2026-08-26: 同样净化 PUT 载荷, 防止带历史字段的 partial 触发 400.
-    await settingsClient.setSettings(sanitizeForBackend(partial));
-  } catch {
-    // settingsClient 内部已 warn
+    // 2026-11-02: 改用 strict 通道，失败时抛异常让调用方可见。
+    await settingsClient.setSettingsStrict(sanitizeForBackend(partial));
+    return true;
+  } catch (err) {
+    console.warn('[settings] 后端保存失败，本地缓存已更新，重启后可能回滚:', err);
+    return false;
   }
 }
 
@@ -417,6 +440,7 @@ export async function resetPreferencesToDefaults(): Promise<void> {
     settingsClient.setPreference('auto_checkpoint', '1'),
     settingsClient.setPreference('spend_limit_usd', '0', 'general'),
     settingsClient.setPreference('hooks', '[]', 'general'),
+    settingsClient.setPreference('chat_display_mode', 'trace', 'ui'),
   ]);
 }
 

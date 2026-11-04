@@ -23,6 +23,12 @@
 #
 #   diff backend/requirements.txt backend/requirements-bundled.txt
 #
+# 2026-10-31 exception: the local OCR engine (rapidocr / onnxruntime /
+# opencv-python-headless / Pillow) is bundled here for an out-of-box
+# installer, but intentionally NOT added to requirements.txt so dev/CI
+# installs stay light. Manual dev setup is documented in
+# backend/requirements-optional.txt.
+#
 # If you add a new dep to requirements.txt, decide whether it needs bundling
 # (most pure-Python / wheel-shippers: yes) or runtime-install only
 # (anything with a C extension and no win wheel: put in
@@ -73,6 +79,16 @@ networkx>=3.2.0
 #   - networkx (transitive runtime dep)
 # Pinned here to match the bundled Python 3.11 (see scripts/bundle-python-main.ps1).
 numpy>=1.24,<2
+
+# Local OCR engine (main installer, 2026-10-31)
+# Bundled so the installed app has local OCR out of the box. The dev/CI
+# install stays light: these live in requirements-optional.txt for manual
+# setup. numpy<2 above forces opencv-python-headless 4.11.x (4.12+ requires
+# numpy>=2 for Python >= 3.9). Pillow is a rapidocr runtime dependency.
+rapidocr==3.10.0
+onnxruntime==1.19.2
+opencv-python-headless==4.11.0.86
+Pillow>=10.0
 
 # MCP (Model Context Protocol) - 可选依赖
 # 与 httpx==0.26.0 存在 starlette 版本冲突，需要 mcp 时手动安装：

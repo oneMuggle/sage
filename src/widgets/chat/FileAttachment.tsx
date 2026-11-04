@@ -1,4 +1,4 @@
-import { Copy, File, FileText, Image, X } from 'lucide-react';
+import { Copy, File, FileSearch, FileText, Image, X } from 'lucide-react';
 
 import { copyToClipboard } from '../../shared/lib/clipboard';
 import { useI18n } from '../../shared/lib/i18n';
@@ -9,9 +9,11 @@ interface FileAttachmentProps {
   size: number;
   type: string;
   onRemove?: () => void;
+  /** PDF 附件：打开页级 OCR 预览 */
+  onOcr?: () => void;
 }
 
-export function FileAttachment({ name, size, type, onRemove }: FileAttachmentProps) {
+export function FileAttachment({ name, size, type, onRemove, onOcr }: FileAttachmentProps) {
   const { t } = useI18n();
   const menuItems = () => [
     {
@@ -24,6 +26,16 @@ export function FileAttachment({ name, size, type, onRemove }: FileAttachmentPro
           errorMessage: t('contextMenu.common.copyFailed'),
         }),
     },
+    ...(onOcr
+      ? [
+          {
+            id: 'file-ocr',
+            label: t('chat.pdf_ocr_action'),
+            icon: FileSearch,
+            onSelect: onOcr,
+          },
+        ]
+      : []),
     ...(onRemove
       ? [
           { id: 'file-remove-sep', kind: 'separator' as const },
@@ -44,6 +56,18 @@ export function FileAttachment({ name, size, type, onRemove }: FileAttachmentPro
         {getFileIcon(type)}
         <span className="truncate max-w-32">{name}</span>
         <span className="text-muted">({formatFileSize(size)})</span>
+        {onOcr && (
+          <button
+            type="button"
+            data-testid="file-ocr-action"
+            aria-label={t('chat.pdf_ocr_action')}
+            title={t('chat.pdf_ocr_action')}
+            onClick={onOcr}
+            className="ml-1 hover:text-text transition-colors"
+          >
+            <FileSearch className="w-3 h-3" />
+          </button>
+        )}
         {onRemove && (
           <button className="ml-1 hover:text-text transition-colors" onClick={onRemove}>
             <X className="w-3 h-3" />

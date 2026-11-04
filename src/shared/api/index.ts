@@ -25,6 +25,35 @@ export { messageApi } from './messageApi';
 export { promptApi } from './promptApi';
 export type { PromptTemplate } from './promptApi';
 export { projectApi } from './projectApi';
+export { playbookApi } from './playbookApi';
+export type {
+  PlaybookAction,
+  PlaybookDocumentImportResult,
+  PlaybookActionsResult,
+  PlaybookArtifactAudit,
+  PlaybookArtifactSpec,
+  PlaybookAudit,
+  PlaybookAuthorPreview,
+  PlaybookBindPayload,
+  PlaybookContentCheck,
+  PlaybookCurrent,
+  PlaybookEvent,
+  PlaybookEventAggregate,
+  PlaybookExportResult,
+  PlaybookImportPreview,
+  PlaybookLibraryItem,
+  PlaybookMatch,
+  PlaybookShareLink,
+  PlaybookSharedPayload,
+  PlaybookSpec,
+  PlaybookStageAudit,
+  PlaybookStageSpec,
+  PlaybookState,
+  PlaybookStatePatch,
+  PlaybookSummary,
+  PlaybookVersion,
+  PlaybookWikiExportResult,
+} from './playbookApi';
 export type {
   ProjectOpenResult,
   ProjectSummary,
@@ -88,8 +117,15 @@ export type {
   BootstrapPreviewResult,
   BootstrapApplyPayload,
   BootstrapApplyResult,
+  BootstrapAppliedItem,
+  BootstrapSkippedItem,
+  BootstrapVerification,
   BootstrapRuleSuggestion,
   BootstrapMilestoneSuggestion,
+  BootstrapScanSection,
+  BootstrapSuggestionSet,
+  BootstrapScanResult,
+  BootstrapSuggestResult,
   GitInitResult,
 } from './projectApi';
 export { officeApi } from './officeApi';

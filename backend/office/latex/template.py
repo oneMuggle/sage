@@ -77,6 +77,8 @@ _COMMENT_PATTERN = re.compile(
 )
 _TODO_COMMAND = re.compile(r"\\todo\s*\{([^{}]{1,200})\}")
 
+_IMAGE_HINTS = ("placeholder", "example-image", "example_image", "dummy")
+
 _MACRO_RE = re.compile(
     r"\\(newcommand|renewcommand|providecommand)\s*\{?\s*\\([A-Za-z@]+)\s*\}?"
     r"(?:\s*\[(\d+)\])?(?:\s*\[([^\]]*)\])?\s*\{",
@@ -128,6 +130,91 @@ def _add_slot(profile: LatexTemplateProfile, slot: LatexTemplateSlot) -> None:
         ):
             return
     profile.slots.append(slot)
+
+
+def _placeholder_label(value: str) -> Optional[str]:
+    for pattern in _PLACEHOLDER_PATTERNS:
+        match = pattern.search(value)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def _image_needs_fill(value: str) -> bool:
+    text = value.strip()
+    if not text:
+        return True
+    if _placeholder_label(text) is not None:
+        return True
+    lowered = text.lower()
+    return any(hint in lowered for hint in _IMAGE_HINTS)
+
+
+def _image_exists(target: str, template_dir: Path, root: Path) -> bool:
+    value = target.strip()
+    if not value:
+        return False
+    candidate = Path(value)
+    paths = [candidate] if candidate.is_absolute() else [template_dir / candidate, root / candidate]
+    for path in paths:
+        try:
+            resolved = path.resolve()
+        except OSError:
+            continue
+        if is_within(root, resolved) and resolved.is_file():
+            return True
+    return False
+
+
+def _bibliography_exists(target: str, template_dir: Path, root: Path) -> bool:
+    value = target.strip()
+    if not value:
+        return False
+    names = [item.strip() for item in value.split(",") if item.strip()]
+    if not names:
+        return False
+    for name in names:
+        candidate = Path(name)
+        if candidate.suffix.lower() != ".bib":
+            candidate = Path(str(candidate) + ".bib")
+        paths = (
+            [candidate]
+            if candidate.is_absolute()
+            else [template_dir / candidate, root / candidate]
+        )
+        found = False
+        for path in paths:
+            try:
+                resolved = path.resolve()
+            except OSError:
+                continue
+            if is_within(root, resolved) and resolved.is_file():
+                found = True
+                break
+        if not found:
+            return False
+    return True
+
+
+def _inside_command_argument(
+    raw: str, pos: int, command_names: Tuple[str, ...]
+) -> bool:
+    """True when ``pos`` sits inside one of the command's ``{...}`` arguments."""
+    for name in command_names:
+        start = raw.rfind("\\" + name, 0, pos)
+        if start < 0:
+            continue
+        name_end = start + 1 + len(name)
+        if name_end < len(raw) and (
+            raw[name_end].isalpha() or raw[name_end] == "@"
+        ):
+            continue
+        brace = raw.find("{", name_end)
+        if brace < 0 or brace > pos:
+            continue
+        if "}" not in raw[brace:pos]:
+            return True
+    return False
 
 
 def _anchor(file_path: Path, root: Path, text: str, pos: int) -> LatexAnchor:
@@ -238,6 +325,8 @@ def _scan_slots(
 ) -> None:
     pos = 0
     n = len(clean)
+    image_index = 0
+    bib_index = 0
     while pos < n:
         idx = clean.find("\\", pos)
         if idx < 0:
@@ -283,6 +372,81 @@ def _scan_slots(
                     confidence=0.7,
                 ),
             )
+        elif cmd.name == "includegraphics" and spans:
+            start, end = spans[0]
+            target = clean[start:end].strip()
+            placeholder_label = _placeholder_label(target)
+            needs_fill = _image_needs_fill(target)
+            exists = _image_exists(target, file_path.parent, root)
+            if needs_fill or not exists:
+                image_index += 1
+                label = placeholder_label or (
+                    Path(target).stem if target else ""
+                ) or "figure"
+                _add_slot(
+                    profile,
+                    LatexTemplateSlot(
+                        name=f"image_{_slug(label, image_index)}",
+                        kind="command_arg",
+                        type="image",
+                        required=needs_fill,
+                        description=(
+                            "图片：填写工作区内图片路径"
+                            "（将复制到 <输出名>_assets/）"
+                        ),
+                        current_value=target,
+                        command=cmd.name,
+                        anchor=_anchor(file_path, root, clean, cmd.start),
+                        start=start,
+                        end=end,
+                        confidence=0.9 if needs_fill else 0.6,
+                    ),
+                )
+                if not needs_fill and not exists:
+                    profile.warnings.append(
+                        LatexWarning(
+                            "missing_image",
+                            f"图片不存在: {target}",
+                            _anchor(file_path, root, clean, cmd.start),
+                        )
+                    )
+        elif cmd.name in ("bibliography", "addbibresource") and spans:
+            start, end = spans[0]
+            target = clean[start:end].strip()
+            placeholder_label = _placeholder_label(target)
+            needs_fill = not target or placeholder_label is not None
+            exists = _bibliography_exists(target, file_path.parent, root)
+            if needs_fill or not exists:
+                bib_index += 1
+                first = target.split(",")[0].strip()
+                label = placeholder_label or (Path(first).stem if first else "") or "refs"
+                _add_slot(
+                    profile,
+                    LatexTemplateSlot(
+                        name=f"bibliography_{_slug(label, bib_index)}",
+                        kind="command_arg",
+                        type="bibliography",
+                        required=needs_fill,
+                        description=(
+                            "文献：填写工作区内 .bib 路径"
+                            "（将复制到 <输出名>_assets/）"
+                        ),
+                        current_value=target,
+                        command=cmd.name,
+                        anchor=_anchor(file_path, root, clean, cmd.start),
+                        start=start,
+                        end=end,
+                        confidence=0.9 if needs_fill else 0.6,
+                    ),
+                )
+                if not needs_fill and not exists:
+                    profile.warnings.append(
+                        LatexWarning(
+                            "missing_bibliography",
+                            f"文献文件不存在: {target}",
+                            _anchor(file_path, root, clean, cmd.start),
+                        )
+                    )
         elif cmd.name == "begin" and cmd.args:
             env = cmd.args[0].strip()
             if env in _ENV_SLOTS:
@@ -309,6 +473,12 @@ def _scan_slots(
 
     for pattern in _PLACEHOLDER_PATTERNS:
         for index, match in enumerate(pattern.finditer(raw), start=1):
+            if _inside_command_argument(
+                raw,
+                match.start(),
+                ("includegraphics", "bibliography", "addbibresource"),
+            ):
+                continue
             label = match.group(1).strip()
             _add_slot(
                 profile,

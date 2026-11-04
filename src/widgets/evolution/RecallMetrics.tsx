@@ -12,6 +12,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { invoke } from '../../shared/api/desktopInvoke';
+import { formatLocalString } from '../../shared/lib/timeFormatter';
 
 export interface RecallVariantBucket {
   total: number;
@@ -116,13 +117,7 @@ export function findVariantWeights(recent: RecentRecallEvent[], variant: string)
   return hit?.weights_json ?? null;
 }
 
-const formatTime = (timestamp: number): string => {
-  try {
-    return new Date(timestamp * 1000).toLocaleString('zh-CN');
-  } catch {
-    return String(timestamp);
-  }
-};
+// formatTime 已统一到 src/shared/lib/timeFormatter#formatLocalString
 
 const formatRate = (rate: number): string => `${(rate * 100).toFixed(1)}%`;
 
@@ -285,7 +280,8 @@ export const RecallMetrics: React.FC = () => {
                           {event.weights_json ? ` · ${event.weights_json}` : ''}
                         </div>
                         <div className="text-xs text-muted mt-1">
-                          {formatTime(event.created_at)} · {event.result_count ?? 0} 条结果
+                          {formatLocalString(event.created_at * 1000)} · {event.result_count ?? 0}{' '}
+                          条结果
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">

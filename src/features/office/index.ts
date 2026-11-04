@@ -1,12 +1,12 @@
 export { useOfficeDocuments } from './useOfficeDocuments';
-export type { OfficeReadResult, OfficeListView } from './useOfficeDocuments';;
+export type { OfficeReadResult, OfficeListView } from './useOfficeDocuments';
 export { OfficeFilePicker } from './OfficeFilePicker';
 export { OfficePreviewPanel } from './OfficePreviewPanel';
 export type { OfficePreviewData } from './OfficePreviewPanel';
+export { DocumentAuditPanel } from './DocumentAuditPanel';
 export { OfficeDocumentList } from './OfficeDocumentList';
 export { OfficeSnapshotPanel } from './OfficeSnapshotPanel';
 export { OfficeEditPreviewDialog } from './OfficeEditPreviewDialog';
-;
 export { buildUpdateOps } from './OfficeEditPreviewDialog';
 export { OfficeGenerateForm } from './OfficeGenerateForm';
 export { OfficeCapabilityBar } from './OfficeCapabilityBar';
@@ -26,6 +26,7 @@ export function auditOfficeFeatureBarrel(): OfficeFeatureBarrelAuditReport {
     'useOfficeDocuments',
     'OfficeFilePicker',
     'OfficePreviewPanel',
+    'DocumentAuditPanel',
     'OfficeDocumentList',
     'OfficeSnapshotPanel',
     'OfficeEditPreviewDialog',

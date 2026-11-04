@@ -49,7 +49,7 @@ from backend.chat.history_context import (
 )
 from backend.chat.sources_extractor import extract_sources_from_tool, merge_sources
 from backend.core.errors import LLMError
-from backend.core.legacy.agent import SageAgent
+from backend.core.legacy.agent import SageAgent, _retry_info_from_event
 from backend.core.legacy.llm_total_timeout import llm_total_timeout_or_none
 from backend.data import answer_version_repo as answer_versions
 from backend.data.database import get_database
@@ -74,6 +74,27 @@ from backend.services.scheduler import get_scheduler_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# 收尾后台任务强引用集合：asyncio 只持弱引用，不保留强引用时任务可能被 GC。
+_POST_TURN_TASKS: Set[asyncio.Task] = set()
+
+
+def _spawn_post_turn_task(coro) -> None:
+    """Fire-and-forget 收尾任务（stop hooks / 记忆抽取）。
+
+    这些是 best-effort 工作，绝不能阻塞 DONE：旧实现同步 await，记忆抽取
+    打向不可达的默认 endpoint 时实测让光标停住 136s。
+    """
+    task = asyncio.create_task(coro)
+    _POST_TURN_TASKS.add(task)
+    task.add_done_callback(_POST_TURN_TASKS.discard)
+
+
+async def drain_post_turn_tasks(timeout: float = 5.0) -> None:
+    """等待未完成的收尾任务（测试 / 关停用）。"""
+    pending = [t for t in _POST_TURN_TASKS if not t.done()]
+    if pending:
+        await asyncio.wait(pending, timeout=timeout)
 
 
 def _event_repo():
@@ -1468,7 +1489,16 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug(f"[REQ {request_id}] attachment media inject skipped: {r37_att_err}")
             # ===== R37 文本文档附件注入 END =====
 
-            attachment_block = await resolve_attachments(data.message, data.workspace_path or "")
+            # 项目 allowed_paths 命中的工作区外文件允许注入；未命中按
+            # skipped 原因透出给模型（见 attachment_resolver 模块文档）。
+            from backend.office.allowed_paths import get_session_allowed_paths
+
+            attachment_block = await resolve_attachments(
+                data.message,
+                data.workspace_path or "",
+                allowed_paths=get_session_allowed_paths(data.session_id),
+                project_root=data.workspace_path,
+            )
 
             # ===== S3 实体引用 (@memory:/@wiki:/@skill:/@agent:) BEGIN =====
             # 对标 S3（统一入口）：把消息里的实体引用解析为 <references> 块，
@@ -1513,7 +1543,25 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 历史,而历史马上会注入本轮 LLM 请求(见下)。
             compact_result = None
             try:
-                compact_result = await _maybe_auto_compact_session(data.session_id, llm_config)
+                # 2026-11-03: 压缩本身也走 LLM 重试；把重试状态透出到聊天流，
+                # 避免压缩期间（实测可达 2 分钟）用户只看到"思考中"。
+                def _compact_retry_cb(retry_evt: Any) -> None:
+                    try:
+                        retry_info = _retry_info_from_event(retry_evt)
+                        retry_info["source"] = "compaction"
+                        entry.queue.put_nowait({
+                            "state": "retry",
+                            "session_id": data.session_id,
+                            "retry_info": retry_info,
+                        })
+                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞压缩
+                        logger.debug(
+                            f"[REQ {request_id}] compaction retry event push failed, ignored"
+                        )
+
+                compact_result = await _maybe_auto_compact_session(
+                    data.session_id, llm_config, retry_callback=_compact_retry_cb
+                )
             except Exception as compact_err:
                 logger.warning(
                     f"[REQ {request_id}] 自动压缩失败(忽略, 继续未压缩聊天): {compact_err}"
@@ -1866,7 +1914,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # G6 (2026-09-06): 图片附件处理。
             # 智能降级：优先使用 chatModel 的原生 vision 能力，不足时降级到 visionModel。
             if data.images:
-                messages = await agent._prepare_messages_with_images(messages, data.images)
+                messages = await agent._prepare_messages_with_images(
+                    messages, data.images, data.image_ocr_texts or None
+                )
 
             # Task 5 (round 2): explicit reject when the assembled request
             # exceeds the catalog-resolved window. History was already
@@ -2082,6 +2132,14 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         evt.step_index = evt.iteration
                         done_event = evt
                         run_outcome = "completed"
+                    elif evt.state.value == "reasoning_delta" and evt.reasoning:
+                        # 2026-11-02: 适配器已按增量下发思考内容，这里只累积
+                        # 供落库，并原样直通事件（不再二次切块 / sleep）。
+                        if done_reasoning is None:
+                            done_reasoning = evt.reasoning
+                        else:
+                            done_reasoning += evt.reasoning
+                        await entry.queue.put(evt.to_dict())
                     elif evt.state.value == "reasoning" and evt.reasoning:
                         # PR-7b: 累积 reasoning 事件,持久化时一起写入 DB
                         if done_reasoning is None:
@@ -2335,34 +2393,51 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 # 提取（落盘失败则跳过, 避免产生无对应消息的脏记忆）。
                 # best-effort + autoMemory 开关, 失败只 warning, 不影响流。
                 if assistant_persisted:
-                    # ===== L11 stop 钩子 (批次 C-2, observe-only) =====
-                    # run 正常结束通知; deny/modify 无语义, 一律忽略。
-                    try:
-                        import backend.data.settings_repo as _settings_repo_mod
-                        from backend.hooks.config import load_hooks as _load_hooks_fn
-                        from backend.hooks.runner import run_event_hooks as _run_hooks_fn
 
-                        _stop_hooks = _load_hooks_fn(_settings_repo_mod.SettingsRepository())
-                        if _stop_hooks:
-                            _capped = done_content[:4096]
-                            await _run_hooks_fn(
-                                _stop_hooks,
-                                "stop",
-                                "",
-                                {
-                                    "hook_event_name": "stop",
-                                    "session_id": data.session_id,
-                                    "final_content": _capped,
-                                },
+                    async def _run_post_turn_side_effects() -> None:
+                        # ===== L11 stop 钩子 (批次 C-2, observe-only) =====
+                        # run 正常结束通知; deny/modify 无语义, 一律忽略。
+                        try:
+                            import backend.data.settings_repo as _settings_repo_mod
+                            from backend.hooks.config import load_hooks as _load_hooks_fn
+                            from backend.hooks.runner import run_event_hooks as _run_hooks_fn
+
+                            _stop_hooks = _load_hooks_fn(
+                                _settings_repo_mod.SettingsRepository()
                             )
-                    except Exception as l11_stop_err:
-                        logger.debug(
-                            f"[REQ {request_id}] stop hooks skipped: {l11_stop_err}"
-                        )
-                    if not memory_off:
-                        await _extract_legacy_chat_memory(
-                            request_id, data.session_id, data.message, done_content
-                        )
+                            if _stop_hooks:
+                                _capped = done_content[:4096]
+                                await _run_hooks_fn(
+                                    _stop_hooks,
+                                    "stop",
+                                    "",
+                                    {
+                                        "hook_event_name": "stop",
+                                        "session_id": data.session_id,
+                                        "final_content": _capped,
+                                    },
+                                )
+                        except Exception as l11_stop_err:
+                            logger.debug(
+                                f"[REQ {request_id}] stop hooks skipped: {l11_stop_err}"
+                            )
+                        if not memory_off:
+                            # 对标 S2: 临时聊天（memory_mode='off'）不提取记忆
+                            try:
+                                await _extract_legacy_chat_memory(
+                                    request_id,
+                                    data.session_id,
+                                    data.message,
+                                    done_content,
+                                )
+                            except Exception as exc:
+                                logger.warning(
+                                    f"[REQ {request_id}] legacy memory extraction failed: {exc}"
+                                )
+
+                    # 收尾工作移出 DONE 关键路径：钩子/记忆抽取是 best-effort，
+                    # 让 done 立即入队，避免前端光标长时间不结束。
+                    _spawn_post_turn_task(_run_post_turn_side_effects())
                 # win7 分支同款防御 (回流): sess 先初始化为 None。否则
                 # session_repo.get 抛错时 except 吞掉后, 下方标题生成判断行
                 # `if done_event and sess` 触发 UnboundLocalError, 一路冒穿

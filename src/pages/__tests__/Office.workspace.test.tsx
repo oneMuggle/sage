@@ -17,6 +17,7 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockBind = vi.fn();
@@ -74,6 +75,21 @@ vi.mock('../../features/office', () => ({
   }),
 }));
 
+// 2026-11 IA restructure: Office page now renders nested sub-panels via
+// OfficeLatexTab / WordRuleExtractionPanel / JournalPanel. Stub them all
+// to keep this file focused on workspace lifecycle (the sub-panels pull
+// their own data from backend, which would otherwise need mocking too).
+vi.mock('../office/OfficeLatexTab', () => ({
+  OfficeLatexTab: () => <div data-testid="office-latex-tab-stub" />,
+}));
+vi.mock('../../features/office/WordRuleExtractionPanel', () => ({
+  WordRuleExtractionPanel: () => <div data-testid="office-rules-stub" />,
+}));
+vi.mock('../../features/journal', () => ({
+  JournalPanel: () => <div data-testid="office-journal-stub" />,
+}));
+
+
 import { SessionWorkspaceProvider } from '../../app/providers/SessionWorkspaceProvider';
 import { I18nProvider } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
@@ -91,13 +107,15 @@ afterEach(() => {
   useStore.setState({ currentSessionId: null });
 });
 
-function renderWithProvider() {
+function renderWithProvider(initialEntries: string[] = ['/office']) {
   return render(
-    <I18nProvider defaultLocale="zh">
-      <SessionWorkspaceProvider>
-        <Office />
-      </SessionWorkspaceProvider>
-    </I18nProvider>,
+    <MemoryRouter initialEntries={initialEntries}>
+      <I18nProvider defaultLocale="zh">
+        <SessionWorkspaceProvider>
+          <Office />
+        </SessionWorkspaceProvider>
+      </I18nProvider>
+    </MemoryRouter>,
   );
 }
 

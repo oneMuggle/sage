@@ -195,3 +195,34 @@ def test_preferences_get_and_put(monkeypatch):
     )
     assert out.value == json.dumps({"order": ["ddg"]})
     assert json.loads(saved["search_config"])["order"] == ["ddg"]
+
+
+@pytest.mark.parametrize("bad_value", [0.5, float("nan")])
+def test_preferences_app_settings_rejects_invalid_retry_value(monkeypatch, bad_value):
+    """2026-11-03: 偏好写入绕不过重试取值域校验（NaN 曾可致 sleep 挂死）."""
+    import backend.data.settings_repo as repo_mod
+
+    class _KVRepo:
+        KEYS = frozenset({"search_config", "app_settings"})
+
+        def get(self, key):
+            return None
+
+        def set(self, key, value, value_type=None, category=None):
+            raise AssertionError("非法重试参数不应落库")
+
+    monkeypatch.setattr(repo_mod, "SettingsRepository", _KVRepo)
+    from fastapi import HTTPException
+
+    from backend.api.legacy_skills_routes import LegacyPreferenceItem
+
+    payload = json.dumps({"llmRetryMaxDelayS": bad_value})
+    with pytest.raises(HTTPException) as excinfo:
+        lsr.legacy_put_preference("app_settings", LegacyPreferenceItem(value=payload))
+
+    assert excinfo.value.status_code == 422
+    detail = excinfo.value.detail
+    assert detail["field"] == "llmRetryMaxDelayS"
+    # 响应不得回显用户提交的原始值
+    assert "0.5" not in json.dumps(detail, ensure_ascii=False)
+    assert "NaN" not in json.dumps(detail, ensure_ascii=False)

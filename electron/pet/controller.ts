@@ -6,21 +6,34 @@
  * state.ts; the renderer only receives a small PetSnapshot.
  */
 
-import { Menu, type WebContents } from 'electron';
+import type { WebContents } from 'electron';
 import { join } from 'node:path';
 
 import { fetchCompat } from '../fetchCompat';
 import type { WebContentsLike } from '../relay';
 import { relayChatStream } from '../relay';
 import { logger } from '../logger';
+import { liveSessionIds, nextInCycle } from './attention';
+import { mapOrchestrationLanes, mapScheduledTasks } from './backgroundTasks';
 import { mergePetConfig, readPetConfig, writePetConfig } from './config';
+import { shouldShowDesktop, shouldShowInApp } from './display';
+import { buildPetMenu } from './menu';
 import {
-  bondDays,
+  deleteUserPack,
+  exportPackZip,
+  importPackZip,
+  listUserPacks,
+  petPacksDir,
+  type DeleteResult,
+  type ExportResult,
+} from './packStore';
+import {
   readPetProfile,
   recordPat as incrementPat,
   writePetProfile,
   type PetProfile,
 } from './profile';
+import { buildSnapshotBundle, type SnapshotBundle } from './snapshots';
 import {
   applyEvent,
   applyMeta,
@@ -30,15 +43,26 @@ import {
   type PetAgentEvent,
   type PetSessionState,
 } from './state';
+import { PetStatusServer, type StatusServerInfo } from './statusServer';
+import { mergeTaskReports, normalizeTaskReports } from './tasks';
 import { PetWindow } from './windows';
 import type {
-  PetBubbleMode,
   PetConfig,
+  PetInstanceConfig,
+  PetPackManifest,
+  PetRenderConfig,
   PetSessionMeta,
-  PetSize,
   PetSnapshot,
-  PetTempo,
+  PetTaskReport,
 } from './types';
+
+export interface PetPackImportResponse {
+  ok: boolean;
+  canceled?: boolean;
+  error?: string;
+  manifest?: PetPackManifest;
+  config?: PetConfig;
+}
 
 export interface PetControllerOptions {
   backendUrl: string;
@@ -49,42 +73,38 @@ export interface PetControllerOptions {
   userDataDir: string;
 }
 
-const SIZE_LABELS: Record<PetSize, string> = {
-  mini: '迷你',
-  small: '小',
-  medium: '中',
-  large: '大',
-  huge: '特大',
-};
-
-const TEMPO_LABELS: Record<PetTempo, string> = {
-  quiet: '安静',
-  standard: '标准',
-  lively: '活泼',
-};
-
-const BUBBLE_LABELS: Record<PetBubbleMode, string> = {
-  important: '仅重要状态',
-  always: '常驻',
-  off: '隐藏',
-};
+/** Orchestration/scheduled sources are polled while the pet is visible. */
+const BACKGROUND_POLL_MS = 20_000;
+const BACKGROUND_FETCH_TIMEOUT_MS = 5_000;
 
 export class PetController {
   private config: PetConfig;
   private sessions: PetSessionState = createEmptyState();
   private snapshot: PetSnapshot;
-  private window: PetWindow | null = null;
+  private readonly windows = new Map<string, PetWindow>();
   private readonly configFile: string;
   private readonly profileFile: string;
+  private readonly packsDir: string;
   private profile: PetProfile;
+  private reportedTasks: PetTaskReport[] = [];
+  private remoteTasks: PetTaskReport[] = [];
+  private statusServer: PetStatusServer | null = null;
+  private statusGeneration = 0;
+  private statusError: string | null = null;
+  private backgroundTimer: ReturnType<typeof setInterval> | null = null;
+  private backgroundInFlight = false;
   private readonly streams = new Map<string, AbortController>();
   private readonly titles = new Map<string, string>();
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private lastSent = '';
+  private focusSessionId: string | null = null;
+  private readonly lastSentByPet = new Map<string, string>();
+  private readonly snapshotByPet = new Map<string, PetSnapshot>();
 
   constructor(private readonly options: PetControllerOptions) {
     this.configFile = join(options.userDataDir, 'pet-config.json');
     this.profileFile = join(options.userDataDir, 'pet-profile.json');
+    this.packsDir = petPacksDir(options.userDataDir);
     this.config = readPetConfig(this.configFile);
     this.profile = readPetProfile(this.profileFile, Date.now());
     this.snapshot = selectSnapshot(this.sessions, Date.now());
@@ -92,8 +112,15 @@ export class PetController {
 
   init(): void {
     writePetProfile(this.profileFile, this.profile);
-    this.syncWindow();
+    this.syncWindows();
+    this.broadcastConfig();
     this.tickTimer = setInterval(() => this.onTick(), 500);
+    this.backgroundTimer = setInterval(
+      () => void this.refreshBackgroundTasks(),
+      BACKGROUND_POLL_MS,
+    );
+    void this.refreshBackgroundTasks();
+    if (this.config.externalApi) void this.startStatusServer();
     this.emit(true);
   }
 
@@ -102,10 +129,15 @@ export class PetController {
       clearInterval(this.tickTimer);
       this.tickTimer = null;
     }
+    if (this.backgroundTimer) {
+      clearInterval(this.backgroundTimer);
+      this.backgroundTimer = null;
+    }
     for (const abort of this.streams.values()) abort.abort();
     this.streams.clear();
-    this.window?.destroy();
-    this.window = null;
+    this.stopStatusServer();
+    for (const window of this.windows.values()) window.destroy();
+    this.windows.clear();
   }
 
   getConfig(): PetConfig {
@@ -116,19 +148,89 @@ export class PetController {
     return this.snapshot;
   }
 
+  getStateForSender(sender: WebContents): PetSnapshot {
+    const pet = this.petForSender(sender);
+    if (!pet) return this.snapshot;
+    return this.snapshotByPet.get(pet.id) ?? this.snapshot;
+  }
+
+  getStates(): Record<string, PetSnapshot> {
+    const states: Record<string, PetSnapshot> = {};
+    for (const pet of this.config.pets) {
+      states[pet.id] = this.snapshotByPet.get(pet.id) ?? this.snapshot;
+    }
+    return states;
+  }
+
+  setFocusSession(sessionId: string | null): void {
+    const next = typeof sessionId === 'string' && sessionId.trim() ? sessionId.trim() : null;
+    if (next === this.focusSessionId) return;
+    this.focusSessionId = next;
+    this.emit(true);
+  }
+
+  pinSession(sender: WebContents, sessionId: string | null): void {
+    const pet = this.petForSender(sender);
+    if (!pet) return;
+    const target = sessionId && this.sessions[sessionId] ? sessionId : null;
+    const same = pet.followMode === 'pinned' && pet.pinnedSessionId === target;
+    const followMode = same ? 'focus' : 'pinned';
+    const pinnedSessionId = same ? null : target;
+    this.setConfig({
+      pets: this.config.pets.map((item) =>
+        item.id === pet.id ? { ...item, followMode, pinnedSessionId } : item,
+      ),
+    });
+  }
+
+  cycleFocus(sender: WebContents): void {
+    const pet = this.petForSender(sender);
+    const tasks = mergeTaskReports(this.reportedTasks, this.remoteTasks);
+    const attention = buildSnapshotBundle({
+      sessions: this.sessions,
+      tasks,
+      config: this.config,
+      focusSessionId: this.focusSessionId,
+      profile: this.profile,
+      now: Date.now(),
+    }).global.attention;
+    const candidates =
+      attention.needsYouSessionIds.length > 0
+        ? attention.needsYouSessionIds
+        : liveSessionIds(this.sessions);
+    const currentId = pet
+      ? (this.snapshotByPet.get(pet.id)?.sessionId ?? null)
+      : this.snapshot.sessionId;
+    const nextId = nextInCycle(candidates, currentId);
+    if (nextId) this.openSession(nextId);
+  }
+
   getMainWindow(): Electron.BrowserWindow | null {
     return this.options.getMainWindow();
   }
 
+  getApiInfo(): StatusServerInfo {
+    const info = this.statusServer?.getInfo() ?? { enabled: false, port: null };
+    return { ...info, error: this.statusError };
+  }
+
   setConfig(patch: unknown): PetConfig {
-    const next = mergePetConfig(this.config, patch);
+    const previous = this.config;
+    const next = mergePetConfig(previous, patch);
     this.config = next;
     if (!writePetConfig(this.configFile, next)) {
       logger.warn('pet: config save failed');
     }
-    this.syncWindow();
-    this.window?.sendConfig(next);
+    this.syncWindows();
+    this.broadcastConfig();
     this.emit(true);
+    if (next.enabled !== previous.enabled || next.displayMode !== previous.displayMode) {
+      void this.refreshBackgroundTasks();
+    }
+    if (next.externalApi !== previous.externalApi) {
+      if (next.externalApi) void this.startStatusServer();
+      else this.stopStatusServer();
+    }
     return next;
   }
 
@@ -181,8 +283,12 @@ export class PetController {
       });
   }
 
-  setPanelOpen(open: boolean): void {
-    this.window?.setPanelOpen(open);
+  setPanelOpen(sender: WebContents, open: boolean): void {
+    (this.windowForSender(sender) ?? this.panelForSender(sender))?.setPanelOpen(open);
+  }
+
+  togglePanel(sender: WebContents): void {
+    (this.windowForSender(sender) ?? this.panelForSender(sender))?.togglePanel();
   }
 
   recordPat(): void {
@@ -193,12 +299,133 @@ export class PetController {
     this.emit(true);
   }
 
+  reportTasks(input: unknown): void {
+    this.reportedTasks = normalizeTaskReports(input);
+    this.emit(true);
+  }
+
+  /** Installed user packs. Built-in packs are bundled with the renderer. */
+  listPacks(): PetPackManifest[] {
+    return listUserPacks(this.packsDir).map((pack) => pack.manifest);
+  }
+
+  /**
+   * Import a pack from a zip and select it. On failure the previous pack
+   * stays active; the config is only written after extraction succeeded.
+   */
+  importPack(zipPath: string): PetPackImportResponse {
+    const result = importPackZip(this.packsDir, zipPath);
+    if (!result.ok) return { ok: false, error: result.error };
+    const config = this.setConfig({ petPack: result.manifest.id });
+    return { ok: true, manifest: result.manifest, config };
+  }
+
+  exportPack(id: string, destPath: string): ExportResult {
+    return exportPackZip(this.packsDir, id, destPath);
+  }
+
+  /** Delete a user pack; any pet using it falls back to the built-in pack. */
+  deletePack(id: string): DeleteResult {
+    const result = deleteUserPack(this.packsDir, id);
+    if (result.ok && this.config.pets.some((pet) => pet.petPack === id)) {
+      this.setConfig({
+        pets: this.config.pets.map((pet) =>
+          pet.petPack === id ? { ...pet, petPack: 'dafeiyu' } : pet,
+        ),
+      });
+    }
+    return result;
+  }
+
+  private async startStatusServer(): Promise<void> {
+    if (this.statusServer) return;
+    this.statusError = null;
+    const server = new PetStatusServer({ userDataDir: this.options.userDataDir });
+    server.update(this.snapshot, this.config);
+    this.statusServer = server;
+    const generation = ++this.statusGeneration;
+    try {
+      await server.start();
+      if (
+        generation !== this.statusGeneration ||
+        !this.config.externalApi ||
+        this.statusServer !== server
+      ) {
+        server.stop();
+        if (this.statusServer === server) this.statusServer = null;
+      }
+    } catch (error) {
+      if (this.statusServer === server) this.statusServer = null;
+      if (generation === this.statusGeneration) {
+        this.statusError = error instanceof Error ? error.message : String(error);
+      }
+      logger.warn('pet: status API start failed', {
+        err: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private stopStatusServer(): void {
+    this.statusGeneration += 1;
+    this.statusServer?.stop();
+    this.statusServer = null;
+    this.statusError = null;
+  }
+
   private authHeaders(): Record<string, string> {
     const token = this.options.getAuthToken();
     return {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
+  }
+
+  private async fetchJson(path: string): Promise<unknown> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), BACKGROUND_FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetchCompat(`${this.options.backendUrl}${path}`, {
+        method: 'GET',
+        headers: this.authHeaders(),
+        signal: controller.signal,
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as unknown;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Poll orchestration lanes and scheduled tasks while the pet is visible.
+   * Best-effort: a down/slow backend keeps the previous snapshot.
+   */
+  private async refreshBackgroundTasks(): Promise<void> {
+    if (this.backgroundInFlight) return;
+    if (!this.config.enabled || this.config.displayMode === 'off') {
+      if (this.remoteTasks.length > 0) {
+        this.remoteTasks = [];
+        this.emit();
+      }
+      return;
+    }
+    this.backgroundInFlight = true;
+    try {
+      const [lanes, scheduled] = await Promise.all([
+        this.fetchJson('/api/v1/orchestration/lanes?limit=20'),
+        this.fetchJson('/api/v1/scheduled/tasks'),
+      ]);
+      const now = Date.now();
+      this.remoteTasks = mergeTaskReports(
+        mapOrchestrationLanes(lanes, now),
+        mapScheduledTasks(scheduled, now),
+      );
+      this.emit();
+    } catch {
+      // Background sources are optional; keep the last known snapshot.
+    } finally {
+      this.backgroundInFlight = false;
+    }
   }
 
   private async fetchSessionTitle(sessionId: string, key: string): Promise<void> {
@@ -246,9 +473,25 @@ export class PetController {
     }
   }
 
-  windowReady(): void {
-    this.window?.show();
-    this.window?.sendConfig(this.config);
+  /** Full config for the settings window; per-pet view for a pet window. */
+  getConfigForSender(sender: WebContents): PetConfig | PetRenderConfig {
+    const pet = this.petForSender(sender);
+    return pet ? this.renderConfig(pet) : this.config;
+  }
+
+  windowReady(sender: WebContents): void {
+    const panelWindow = this.panelForSender(sender);
+    if (panelWindow) {
+      const pet = this.petForSender(sender);
+      panelWindow.sendPanelState((pet && this.snapshotByPet.get(pet.id)) || this.snapshot);
+      if (pet) panelWindow.sendPanelConfig(this.renderConfig(pet));
+      return;
+    }
+    const pet = this.petForSender(sender);
+    if (!pet) return;
+    this.windows.get(pet.id)?.show();
+    this.windows.get(pet.id)?.sendConfig(this.renderConfig(pet));
+    this.windows.get(pet.id)?.sendState(this.snapshotByPet.get(pet.id) ?? this.snapshot);
     this.emit(true);
   }
 
@@ -261,18 +504,26 @@ export class PetController {
   }
 
   toggleVisible(): void {
-    if (!this.window) {
-      this.setConfig({
-        enabled: true,
-        ...(this.config.displayMode === 'off' ? { displayMode: 'desktop' } : {}),
-      });
+    if (this.windows.size > 0) {
+      const anyVisible = [...this.windows.values()].some((window) => window.isVisible());
+      for (const window of this.windows.values()) {
+        if (anyVisible) window.hide();
+        else window.show();
+      }
       return;
     }
-    this.window.toggleVisible();
+    if (shouldShowInApp(this.config)) {
+      this.setConfig({ enabled: !this.config.enabled });
+      return;
+    }
+    this.setConfig({
+      enabled: true,
+      ...(this.config.displayMode === 'off' ? { displayMode: 'desktop' } : {}),
+    });
   }
 
   resetPosition(): void {
-    this.window?.resetPosition();
+    for (const window of this.windows.values()) window.resetPosition();
   }
 
   openSession(sessionId: string | null): void {
@@ -295,74 +546,55 @@ export class PetController {
     main.webContents.send('sage:event:open-settings', { tab: 'pet' });
   }
 
-  startDrag(): void {
-    this.window?.startDrag();
+  startDrag(sender: WebContents): void {
+    this.windowForSender(sender)?.startDrag();
   }
 
-  moveDrag(): void {
-    this.window?.moveDrag();
+  moveDrag(sender: WebContents): void {
+    this.windowForSender(sender)?.moveDrag();
   }
 
-  endDrag(): void {
-    this.window?.endDrag();
+  endDrag(sender: WebContents): void {
+    this.windowForSender(sender)?.endDrag();
   }
 
-  hideForNow(): void {
-    this.window?.hide();
+  hideForNow(sender: WebContents): void {
+    this.windowForSender(sender)?.hide();
   }
 
-  showMenu(): void {
-    if (!this.window) return;
-    const sizes = Object.keys(SIZE_LABELS) as PetSize[];
-    const tempos = Object.keys(TEMPO_LABELS) as PetTempo[];
-    const bubbles = Object.keys(BUBBLE_LABELS) as PetBubbleMode[];
-    const menu = Menu.buildFromTemplate([
-      {
-        label: '大小',
-        submenu: sizes.map((size) => ({
-          label: SIZE_LABELS[size],
-          type: 'radio' as const,
-          checked: this.config.size === size,
-          click: () => this.setConfig({ size }),
-        })),
-      },
-      {
-        label: '节奏',
-        submenu: tempos.map((tempo) => ({
-          label: TEMPO_LABELS[tempo],
-          type: 'radio' as const,
-          checked: this.config.tempo === tempo,
-          click: () => this.setConfig({ tempo }),
-        })),
-      },
-      {
-        label: '减少动态',
-        type: 'checkbox' as const,
-        checked: this.config.reduceMotion,
-        click: () => this.setConfig({ reduceMotion: !this.config.reduceMotion }),
-      },
-      {
-        label: '气泡',
-        submenu: bubbles.map((bubbleMode) => ({
-          label: BUBBLE_LABELS[bubbleMode],
-          type: 'radio' as const,
-          checked: this.config.bubbleMode === bubbleMode,
-          click: () => this.setConfig({ bubbleMode }),
-        })),
-      },
-      { type: 'separator' as const },
-      { label: '打开会话', click: () => this.openSession(this.snapshot.sessionId) },
-      { label: '回到初始位置', click: () => this.resetPosition() },
-      { label: '宠物设置…', click: () => this.openSettings() },
-      { label: '本次隐藏', click: () => this.hideForNow() },
-      { type: 'separator' as const },
-      { label: '关闭桌宠', click: () => this.setConfig({ enabled: false }) },
-    ]);
-    this.window.popupMenu(menu);
+  showMenu(sender: WebContents): void {
+    const pet = this.petForSender(sender);
+    if (!pet) return;
+    const window = this.windows.get(pet.id);
+    if (!window) return;
+    const render = this.renderConfig(pet);
+    window.popupMenu(
+      buildPetMenu({
+        config: render,
+        snapshot: this.snapshotByPet.get(pet.id) ?? this.snapshot,
+        setPetSize: (size) =>
+          this.setConfig({
+            pets: this.config.pets.map((item) => (item.id === pet.id ? { ...item, size } : item)),
+          }),
+        setGlobal: (patch) => this.setConfig(patch),
+        setFollow: (patch) =>
+          this.setConfig({
+            pets: this.config.pets.map((item) =>
+              item.id === pet.id ? { ...item, ...patch } : item,
+            ),
+          }),
+        openSession: (sessionId) => this.openSession(sessionId),
+        cycleFocus: () => this.cycleFocus(sender),
+        resetPosition: () => window.resetPosition(),
+        openSettings: () => this.openSettings(),
+        hide: () => window.hide(),
+        disable: () => this.setConfig({ enabled: false }),
+      }),
+    );
   }
 
   isPetSender(sender: WebContents): boolean {
-    return this.window?.ownsSender(sender) ?? false;
+    return Boolean(this.petForSender(sender));
   }
 
   isMainSender(sender: WebContents): boolean {
@@ -370,63 +602,147 @@ export class PetController {
     return Boolean(main && !main.isDestroyed() && main.webContents === sender);
   }
 
+  private windowForSender(sender: WebContents): PetWindow | null {
+    for (const window of this.windows.values()) {
+      if (window.ownsSender(sender)) return window;
+    }
+    return null;
+  }
+
+  /** Panel windows are owned by their pet window but speak the same IPC. */
+  private panelForSender(sender: WebContents): PetWindow | null {
+    for (const window of this.windows.values()) {
+      if (window.panelOwnsSender(sender)) return window;
+    }
+    return null;
+  }
+
+  private petForSender(sender: WebContents): PetInstanceConfig | null {
+    for (const [id, window] of this.windows) {
+      if (!window.ownsSender(sender) && !window.panelOwnsSender(sender)) continue;
+      return this.config.pets.find((pet) => pet.id === id) ?? null;
+    }
+    return null;
+  }
+
   private onTick(): void {
     this.sessions = tick(this.sessions, Date.now());
     this.emit();
   }
 
-  private syncWindow(): void {
-    if (this.window && this.window.needsRecreate(this.config)) {
-      this.window.destroy();
-      this.window = null;
+  private syncWindows(): void {
+    const desired = shouldShowDesktop(this.config) ? this.config.pets : [];
+    const desiredIds = new Set(desired.map((pet) => pet.id));
+    for (const [id, window] of [...this.windows]) {
+      if (desiredIds.has(id)) continue;
+      window.destroy();
+      this.windows.delete(id);
     }
-    if (!PetWindow.shouldShow(this.config)) {
-      this.window?.destroy();
-      this.window = null;
-      return;
-    }
-    if (!this.window) {
-      this.window = new PetWindow({
-        config: this.config,
+    desired.forEach((pet, index) => {
+      const render = this.renderConfig(pet);
+      const existing = this.windows.get(pet.id);
+      if (existing) {
+        if (existing.needsRecreate(render)) {
+          existing.destroy();
+          this.windows.delete(pet.id);
+        } else {
+          existing.applyConfig(render);
+          return;
+        }
+      }
+      const window = new PetWindow({
+        config: render,
+        petId: pet.id,
+        instanceIndex: index,
         devUrl: this.options.devUrl,
         isPackaged: this.options.isPackaged,
         userDataDir: this.options.userDataDir,
       });
-      this.window.create();
-      return;
-    }
-    this.window.applyConfig(this.config);
+      this.windows.set(pet.id, window);
+      window.create();
+    });
+  }
+
+  private renderConfig(pet: PetInstanceConfig): PetRenderConfig {
+    return {
+      ...this.config,
+      petId: pet.id,
+      petPack: pet.petPack,
+      size: pet.size,
+      followMode: pet.followMode,
+      pinnedSessionId: pet.pinnedSessionId,
+    };
   }
 
   private emit(force = false): void {
     const now = Date.now();
-    const base = selectSnapshot(this.sessions, now);
-    const snapshot = this.applyBubbleMode({
-      ...base,
-      patCount: this.profile.patCount,
-      bondDays: bondDays(this.profile, now),
+    const tasks = mergeTaskReports(this.reportedTasks, this.remoteTasks);
+    const bundle: SnapshotBundle = buildSnapshotBundle({
+      sessions: this.sessions,
+      tasks,
+      config: this.config,
+      focusSessionId: this.focusSessionId,
+      profile: this.profile,
+      now,
     });
+
     // Ignore updatedAt for dedupe: an idle snapshot's updatedAt changes on
     // every tick and would otherwise push IPC every 500ms forever.
-    const key = JSON.stringify({ ...snapshot, updatedAt: 0 });
-    if (!force && key === this.lastSent) return;
-    this.lastSent = key;
-    this.snapshot = snapshot;
-    this.window?.sendState(snapshot);
+    const globalKey = JSON.stringify({ ...bundle.global, updatedAt: 0 });
+    if (force || globalKey !== this.lastSent) {
+      this.lastSent = globalKey;
+      this.snapshot = bundle.global;
+      this.statusServer?.update(bundle.global, this.config);
+      if (shouldShowInApp(this.config)) this.sendToMain('pet:state', bundle.global);
+    }
+
+    let statesChanged = false;
+    const live = new Set(this.config.pets.map((pet) => pet.id));
+    for (const id of [...this.lastSentByPet.keys()]) {
+      if (live.has(id)) continue;
+      this.lastSentByPet.delete(id);
+      this.snapshotByPet.delete(id);
+      statesChanged = true;
+    }
+
+    for (const pet of this.config.pets) {
+      const snapshot = bundle.byPet[pet.id];
+      if (!snapshot) continue;
+      const key = JSON.stringify({ ...snapshot, updatedAt: 0 });
+      const changed = force || key !== this.lastSentByPet.get(pet.id);
+      if (changed) {
+        this.lastSentByPet.set(pet.id, key);
+        this.snapshotByPet.set(pet.id, snapshot);
+        statesChanged = true;
+      }
+      const window = this.windows.get(pet.id);
+      if (!window) continue;
+      if (changed) {
+        window.sendState(snapshot);
+        window.sendPanelState(snapshot);
+      }
+    }
+
+    // Stream events call emit() per NDJSON event; only push the multi-pet map
+    // to the in-app dock when a snapshot actually changed, mirroring the
+    // global dedupe above.
+    if (statesChanged && shouldShowInApp(this.config)) {
+      this.sendToMain('pet:states', this.getStates());
+    }
   }
 
-  private applyBubbleMode(snapshot: PetSnapshot): PetSnapshot {
-    if (this.config.bubbleMode === 'off') {
-      return { ...snapshot, bubbleKey: null, bubbleKind: null };
+  private sendToMain(channel: string, payload: unknown): void {
+    const main = this.options.getMainWindow();
+    if (!main || main.isDestroyed()) return;
+    main.webContents.send(channel, payload);
+  }
+
+  private broadcastConfig(): void {
+    for (const pet of this.config.pets) {
+      const window = this.windows.get(pet.id);
+      window?.sendConfig(this.renderConfig(pet));
+      window?.sendPanelConfig(this.renderConfig(pet));
     }
-    if (
-      this.config.bubbleMode === 'important' &&
-      snapshot.action !== 'waiting' &&
-      snapshot.action !== 'error' &&
-      snapshot.action !== 'done'
-    ) {
-      return { ...snapshot, bubbleKey: null, bubbleKind: null };
-    }
-    return snapshot;
+    this.sendToMain('pet:config', this.config);
   }
 }

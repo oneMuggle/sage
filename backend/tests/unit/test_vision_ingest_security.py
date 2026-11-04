@@ -140,6 +140,146 @@ def test_bounded_read_rejects_hardlink_to_outside(tmp_path: Path):
     assert outside.read_bytes() == b"outside secret"
 
 
+@pytest.mark.asyncio()
+async def test_ocr_fallback_when_vision_model_missing(tmp_path, monkeypatch):
+    from backend.services.ocr import (
+        OcrConfig,
+        OcrLine,
+        OcrResult,
+        OcrService,
+        init_ocr_service,
+        reset_ocr_service,
+    )
+
+    class _FakeEngine:
+        name = "fake-ocr"
+
+        def available(self):
+            return True, ""
+
+        def recognize(self, image_bytes, opts):
+            return OcrResult(
+                text="图片里的文字",
+                lines=(OcrLine(text="图片里的文字", confidence=0.9),),
+                engine=self.name,
+            )
+
+    init_ocr_service(
+        OcrService(
+            engines=[_FakeEngine()],
+            config_provider=lambda: OcrConfig(enabled=True, engine="auto"),
+        )
+    )
+    try:
+        config = VisionIngestConfig(
+            ingest_config=IngestConfig(
+                "http://llm.test", "key", "model", "http://embed.test", "key", "embed"
+            ),
+            vision_config=None,
+            project_root=tmp_path,
+            auto_caption=True,
+        )
+        source = tmp_path / "source.md"
+        source.write_bytes(b"source")
+        monkeypatch.setattr(
+            "backend.wiki.file_parser.parse_document", lambda *a, **k: "文档正文"
+        )
+        monkeypatch.setattr(
+            "backend.wiki.file_parser.extract_images",
+            lambda *a, **k: [(b"fake-image", "png")],
+        )
+        captured = {}
+
+        async def fake_ingest_source(**kwargs):
+            captured.update(kwargs)
+            return "ok"
+
+        monkeypatch.setattr(
+            "backend.wiki.vision_ingest.ingest_source", fake_ingest_source
+        )
+
+        result = await ingest_with_vision(config, source, AsyncMock(), AsyncMock())
+
+        assert result == "ok"
+        assert "[本地 OCR]" in captured["processed_content"]
+        assert "图片里的文字" in captured["processed_content"]
+    finally:
+        reset_ocr_service()
+
+
+@pytest.mark.asyncio()
+async def test_ocr_fallback_when_caption_fails(tmp_path, monkeypatch):
+    from backend.services.ocr import (
+        OcrConfig,
+        OcrLine,
+        OcrResult,
+        OcrService,
+        init_ocr_service,
+        reset_ocr_service,
+    )
+
+    class _FakeEngine:
+        name = "fake-ocr"
+
+        def available(self):
+            return True, ""
+
+        def recognize(self, image_bytes, opts):
+            return OcrResult(
+                text="兜底文字",
+                lines=(OcrLine(text="兜底文字", confidence=0.9),),
+                engine=self.name,
+            )
+
+    init_ocr_service(
+        OcrService(
+            engines=[_FakeEngine()],
+            config_provider=lambda: OcrConfig(enabled=True, engine="auto"),
+        )
+    )
+    try:
+        config = VisionIngestConfig(
+            ingest_config=IngestConfig(
+                "http://llm.test", "key", "model", "http://embed.test", "key", "embed"
+            ),
+            vision_config=VisionConfig(
+                VisionProvider.OLLAMA, "http://vision.test", "key", "vision"
+            ),
+            project_root=tmp_path,
+            auto_caption=True,
+        )
+        source = tmp_path / "source.md"
+        source.write_bytes(b"source")
+        monkeypatch.setattr(
+            "backend.wiki.file_parser.parse_document", lambda *a, **k: "文档正文"
+        )
+        monkeypatch.setattr(
+            "backend.wiki.file_parser.extract_images",
+            lambda *a, **k: [(b"fake-image", "png")],
+        )
+
+        async def fail_caption(**kwargs):
+            raise RuntimeError("vision down")
+
+        monkeypatch.setattr(vision_ingest, "caption_image", fail_caption)
+        captured = {}
+
+        async def fake_ingest_source(**kwargs):
+            captured.update(kwargs)
+            return "ok"
+
+        monkeypatch.setattr(
+            "backend.wiki.vision_ingest.ingest_source", fake_ingest_source
+        )
+
+        result = await ingest_with_vision(config, source, AsyncMock(), AsyncMock())
+
+        assert result == "ok"
+        assert "兜底文字" in captured["processed_content"]
+    finally:
+        reset_ocr_service()
+
+
 def test_bounded_read_fails_closed_when_no_follow_is_unavailable(monkeypatch, tmp_path):
     source = tmp_path / "source.md"
     source.write_bytes(b"source")

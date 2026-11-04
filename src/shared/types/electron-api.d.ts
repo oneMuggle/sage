@@ -442,19 +442,66 @@ export interface ProjectElectronApiBridge {
  * Desktop pet bridge. Keep in sync with `electron/pet/types.ts`.
  * Available in both the main window (settings page) and the pet window.
  */
+export type PetFollowModeBridge = 'focus' | 'urgent' | 'pinned';
+
+export interface PetInstanceBridge {
+  id: string;
+  petPack: string;
+  size: 'mini' | 'small' | 'medium' | 'large' | 'huge';
+  followMode: PetFollowModeBridge;
+  pinnedSessionId: string | null;
+}
+
 export interface PetConfigBridge {
-  version: 1;
+  version: 3;
   enabled: boolean;
   displayMode: 'desktop' | 'in-app' | 'both' | 'off';
-  size: 'mini' | 'small' | 'medium' | 'large' | 'huge';
   tempo: 'quiet' | 'standard' | 'lively';
   reduceMotion: boolean;
   bubbleMode: 'important' | 'always' | 'off';
   soundScenes: { waiting: boolean; error: boolean; done: boolean };
   showSessionTitle: boolean;
   compatibilityMode: 'auto' | 'on' | 'off';
-  petPack: string;
-  followActiveSession: boolean;
+  externalApi: boolean;
+  pets: PetInstanceBridge[];
+  /** Present only in the pet window's per-instance view. */
+  petId?: string;
+  petPack?: string;
+  size?: 'mini' | 'small' | 'medium' | 'large' | 'huge';
+  followMode?: PetFollowModeBridge;
+  pinnedSessionId?: string | null;
+}
+
+export interface PetAttentionBridge {
+  needsYou: number;
+  failed: number;
+  running: number;
+  activeTasks: number;
+  total: number;
+  needsYouSessionIds: string[];
+}
+
+export type PetTaskStatus =
+  | 'queued'
+  | 'running'
+  | 'awaiting_approval'
+  | 'paused'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
+
+export interface PetTaskReportBridge {
+  id: string;
+  kind: string;
+  title: string;
+  status: PetTaskStatus;
+  phase?: string | null;
+  percent?: number | null;
+  sessionId?: string | null;
+  runId?: string | null;
+  error?: string | null;
+  startedAt?: number | null;
+  finishedAt?: number | null;
 }
 
 export interface PetSessionSummaryBridge {
@@ -495,17 +542,65 @@ export interface PetSnapshotBridge {
   bondDays: number;
   activeSessions: number;
   sessions: PetSessionSummaryBridge[];
+  tasks: PetTaskReportBridge[];
+  attention: PetAttentionBridge;
   updatedAt: number;
+}
+
+/**
+ * A user-imported pet pack manifest (validated in the main process).
+ * Built-in packs are bundled with the renderer and are not returned here.
+ */
+export interface PetPackManifestBridge {
+  id: string;
+  name: string;
+  version: string;
+  license: string;
+  source?: string;
+  canvas: { width: number; height: number };
+  anchor: { x: number; y: number };
+  actions: Record<string, string[]>;
+}
+
+export interface PetPackImportResultBridge {
+  ok: boolean;
+  canceled?: boolean;
+  error?: string;
+  manifest?: PetPackManifestBridge;
+  config?: PetConfigBridge;
+}
+
+export interface PetPackExportResultBridge {
+  ok: boolean;
+  canceled?: boolean;
+  error?: string;
+  path?: string;
+}
+
+export interface PetPackDeleteResultBridge {
+  ok: boolean;
+  error?: string;
+}
+
+export interface PetApiInfoBridge {
+  enabled: boolean;
+  port: number | null;
+  error?: string | null;
 }
 
 export interface PetElectronApiBridge {
   getConfig: () => Promise<PetConfigBridge>;
   setConfig: (patch: Partial<PetConfigBridge>) => Promise<PetConfigBridge>;
   getState: () => Promise<PetSnapshotBridge>;
+  getStates: () => Promise<Record<string, PetSnapshotBridge>>;
+  onStates: (handler: (states: Record<string, PetSnapshotBridge>) => void) => UnlistenFn;
   onState: (handler: (snapshot: PetSnapshotBridge) => void) => UnlistenFn;
   onConfig: (handler: (config: PetConfigBridge) => void) => UnlistenFn;
   ready: () => void;
   openSession: (sessionId: string | null) => void;
+  reportFocusSession: (sessionId: string | null) => void;
+  pinSession: (sessionId: string | null) => void;
+  cycleFocus: () => void;
   openSettings: () => void;
   showMenu: () => void;
   dragStart: () => void;
@@ -513,8 +608,16 @@ export interface PetElectronApiBridge {
   dragEnd: () => void;
   resetPosition: () => void;
   setPanel: (open: boolean) => void;
+  togglePanel: () => void;
   pat: () => void;
+  reportTasks: (tasks: PetTaskReportBridge[]) => void;
   hide: () => void;
+  /** Installed user packs (does not include built-in packs). */
+  listPacks: () => Promise<PetPackManifestBridge[]>;
+  getApiInfo: () => Promise<PetApiInfoBridge>;
+  importPack: () => Promise<PetPackImportResultBridge>;
+  exportPack: (id: string) => Promise<PetPackExportResultBridge>;
+  deletePack: (id: string) => Promise<PetPackDeleteResultBridge>;
 }
 
 export interface ElectronAPI {
@@ -540,6 +643,11 @@ export interface ElectronAPI {
       files?: { name: string; sha256: string }[];
     }) => Promise<{ ok: boolean; totalBytes?: number; error?: string }>;
     cancel: (dirName: string) => Promise<{ ok: boolean }>;
+    /** RapidOCR PP-OCRv6 tiny det/rec → userData/models/rapidocr */
+    downloadOcr: () => Promise<{ ok: boolean; totalBytes?: number; error?: string }>;
+    cancelOcr: () => Promise<{ ok: boolean }>;
+    /** 删除受管的 userData/models/rapidocr，恢复包内默认模型 */
+    resetOcr: () => Promise<{ ok: boolean; error?: string }>;
   };
   /** P13/P17: sage-file 工作区注册表 —— 渲染端绑定工作区时登记/注销到主进程白名单。 */
   sageFile?: {

@@ -44,6 +44,11 @@ ALIASES: Dict[str, str] = {
     "api_key": "apiKey",
     "discovered_models": "discoveredModels",
     "last_discovered_at": "lastDiscoveredAt",
+    # 2026-11-03: 思考过程参数 —— relay 的 camelToSnakeKeys 会把 endpoint 内的
+    # camelCase 键整体转 snake, 缺别名时翻不回 camel → validate_settings_shape
+    # 报 400, 前端 saveSettings 静默吞掉, 用户看到"改了没生效"。
+    "reasoning_effort": "reasoningEffort",
+    "thinking_budget": "thinkingBudget",
     # 2026-09-14: local_model_path 历史残留 (win7 安装包迁移数据), 不翻译会导致
     # validate_settings_shape 报 400 (field 不在 LEGAL_ENDPOINT_KEYS 白名单).
     "local_model_path": "localModelPath",
@@ -85,6 +90,15 @@ ALIASES: Dict[str, str] = {
     # - logTimezone / useFolderPicker: 通用 Tab / Wiki Tab 保存 400
     #   (同类 pre-existing 回归, 一并补齐)。
     "max_iterations": "maxIterations",
+    # 2026-11-01: 动态迭代预算（OrchSettings P1）。relay 会把 orch 子层整体
+    # 转 snake，缺别名时保存 400 被前端静默吞掉。
+    "dynamic_budget_enabled": "dynamicBudgetEnabled",
+    "budget_simple": "budgetSimple",
+    "budget_medium": "budgetMedium",
+    "budget_complex": "budgetComplex",
+    "budget_long": "budgetLong",
+    "budget_hard_cap": "budgetHardCap",
+    "budget_max_extensions": "budgetMaxExtensions",
     "log_timezone": "logTimezone",
     "use_folder_picker": "useFolderPicker",
     # 2026-10-25: LLM 重试参数 — 前端发送 camelCase，但某些中间层可能转成 snake_case，
@@ -167,6 +181,13 @@ LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
         # catalog-first 读取方应改用 model-catalog (Task 12)，本键仍留在白名单以兼容旧数据.
         "discoveredModels",
         "lastDiscoveredAt",
+        # 2026-11-03: 思考过程参数 —— per-endpoint 配置, 前端读到后放进
+        # ChatConfig 随聊天请求透传上游 LLM。
+        # - reasoningEffort: 'low' | 'medium' | 'high' (OpenAI reasoning_effort)
+        # - thinkingBudget: int (Anthropic thinking.budget_tokens / DeepSeek thinking_budget)
+        # 两者缺省 = 不发送该键 (上游不进入思考模式)。
+        "reasoningEffort",
+        "thinkingBudget",
     }
 )
 LEGAL_MODEL_SELECTION_KEYS: FrozenSet[str] = frozenset(
@@ -226,6 +247,14 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "maxRetryOfChains",
         # 2026-10-20 全局迭代上限 (0=按各 agent 分别设置)
         "maxIterations",
+        # 2026-11-01: 动态迭代预算（P1 设置页暴露）。
+        "dynamicBudgetEnabled",
+        "budgetSimple",
+        "budgetMedium",
+        "budgetComplex",
+        "budgetLong",
+        "budgetHardCap",
+        "budgetMaxExtensions",
         # 2026-10-27: 单 run 工具调用上限 (已在 OrchSettings/UI/ALIASES, 白名单
         # 漏加 → 编排段任一保存 400) + 计划前置/Planner 迭代预算。
         "maxToolCallsPerRun",
@@ -731,6 +760,49 @@ def validate_protocol(value: Any) -> Any:
     return value
 
 
+# 2026-11-03: Endpoint.reasoningEffort 合法值 (与前端 types.ts 的
+# 'low' | 'medium' | 'high' | null 同步). 透传给上游 OpenAI ``reasoning_effort``.
+LEGAL_REASONING_EFFORTS: FrozenSet[str] = frozenset({"low", "medium", "high"})
+
+
+def validate_reasoning_effort(value: Any) -> Any:
+    """Endpoint.reasoningEffort 枚举校验.
+
+    - ``None`` / 空字符串视为"未设置" —— 不发送该键, 上游不进入思考模式.
+    - 非字符串 / 不在白名单 → ValueError (handler 翻译 422).
+    """
+    if value is None or value == "":
+        return value
+    if not isinstance(value, str):
+        raise ValueError(
+            f"reasoningEffort must be a string, got {type(value).__name__}"
+        )
+    if value not in LEGAL_REASONING_EFFORTS:
+        raise ValueError(
+            f"invalid reasoningEffort {value!r}; "
+            f"allowed: {sorted(LEGAL_REASONING_EFFORTS)}"
+        )
+    return value
+
+
+def validate_thinking_budget(value: Any) -> Any:
+    """Endpoint.thinkingBudget 整数校验.
+
+    - ``None`` 视为"未设置" —— 不发送该键, 上游用默认思考预算.
+    - 非整数 / 小于 -1 → ValueError (handler 翻译 422).
+    - ``0`` = 关闭思考, ``-1`` = 动态预算 (与 ``LLMConfig.thinking_budget`` 语义一致).
+    """
+    if value is None:
+        return value
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(
+            f"thinkingBudget must be an integer, got {type(value).__name__}"
+        )
+    if value < -1:
+        raise ValueError(f"thinkingBudget must be >= -1, got {value}")
+    return value
+
+
 def validate_local_model_path(value: Any, platform: str | None = None) -> Any:
     """Endpoint.localModelPath 平台路径分隔符校验.
 
@@ -772,7 +844,8 @@ def validate_local_model_path(value: Any, platform: str | None = None) -> Any:
 
 
 def validate_endpoint_payload(ep: Any, platform: str | None = None) -> Any:
-    """单条 endpoint dict 的全部字段语义校验 (protocol / localModelPath).
+    """单条 endpoint dict 的全部字段语义校验 (protocol / localModelPath /
+    reasoningEffort / thinkingBudget).
 
     在 ``validate_settings_shape`` 之前调用 — 后者只锁白名单 key, 不锁 value.
     返回原 dict (校验通过), 失败抛 ValueError.
@@ -785,6 +858,9 @@ def validate_endpoint_payload(ep: Any, platform: str | None = None) -> Any:
         raise ValueError(f"endpoint payload must be a dict, got {type(ep).__name__}")
     validate_protocol(ep.get("protocol"))
     validate_local_model_path(ep.get("localModelPath"), platform=platform)
+    # 2026-11-03: 思考过程参数 —— 值域校验, 防止非法值被原样透传给上游。
+    validate_reasoning_effort(ep.get("reasoningEffort"))
+    validate_thinking_budget(ep.get("thinkingBudget"))
     return ep
 
 
@@ -816,22 +892,52 @@ def validate_settings_payload(
                 raise ValueError(f"endpoints[{i}]: {exc}") from exc
 
 
+def validate_retry_settings_payload(settings: Any, effective_settings: Any = None) -> None:
+    """校验本次提交的 LLM 重试参数取值域（只查本次 payload，不查存量）。
+
+    刻意不并入 ``validate_settings_payload`` —— 后者拿到的是与存量合并后的
+    整棵树，历史存量的非法值会把用户锁死在设置页外（改一个无关字段也
+    提交不了）。取值域定义见 ``backend.core.retry_defaults.RETRY_RANGES``，
+    与运行时回退共用同一份定义。
+
+    ``effective_settings`` 是合并后的整棵树，仅用于 ``base_delay <= max_delay``
+    交叉校验的另一半：用户只改基数时也能发现它与存量上限冲突。
+
+    Raises:
+        RetrySettingsValueError: 越界 / 类型非法（``.field`` 指出错的键）。
+    """
+    if not isinstance(settings, dict):
+        return
+    from backend.core.retry_defaults import validate_retry_values
+
+    validate_retry_values(settings, effective_settings)
+
+
 def classify_settings_validation_error(exc: ValueError) -> str:
     """Return a non-sensitive field category for a settings validation error.
 
     Validation exceptions remain detailed for internal callers; HTTP handlers
     must not serialize those messages because they can contain user-controlled
     protocols, paths, or other secrets.
+
+    Exceptions carrying an explicit ``field`` attribute (e.g. retry range
+    violations) report that field name directly — it is a fixed literal from
+    our own code, never user input.
     """
+    field = getattr(exc, "field", None)
+    if isinstance(field, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", field):
+        return field
     message = str(exc)
-    if "timezone" in message:
-        return "timezone"
-    if "logTimezone" in message:
-        return "logTimezone"
-    if "protocol" in message:
-        return "protocol"
-    if "localModelPath" in message:
-        return "localModelPath"
+    for field in (
+        "timezone",
+        "logTimezone",
+        "protocol",
+        "localModelPath",
+        "reasoningEffort",
+        "thinkingBudget",
+    ):
+        if field in message:
+            return field
     return "value"
 
 
@@ -861,3 +967,45 @@ def classify_settings_shape_field(exc: ValueError) -> str:
     if match and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,63}", match.group(1)):
         return match.group(1)
     return classify_settings_shape_error(exc)
+
+
+def preserve_endpoint_api_keys(
+    merged: Dict[Any, Any], existing: Dict[str, Any]
+) -> Dict[Any, Any]:
+    """Keep stored endpoint apiKeys when a PUT blanks them.
+
+    GET responses redact ``apiKey`` to ``""`` (``hasApiKey`` marks presence),
+    so a client that edits any other endpoint field round-trips an empty
+    apiKey. Treat empty/missing as "unchanged" here; otherwise the redacted
+    round-trip would erase the credential from the database.
+    """
+    if not isinstance(merged, dict) or not isinstance(existing, dict):
+        return merged
+    merged_eps = merged.get("endpoints")
+    existing_eps = existing.get("endpoints")
+    if not isinstance(merged_eps, list) or not isinstance(existing_eps, list):
+        return merged
+    stored: Dict[Any, str] = {}
+    for ep in existing_eps:
+        if not isinstance(ep, dict):
+            continue
+        key = ep.get("apiKey")
+        if isinstance(key, str) and key.strip():
+            stored[ep.get("id")] = key
+    if not stored:
+        return merged
+    preserved: List[Any] = []
+    changed = False
+    for ep in merged_eps:
+        if not isinstance(ep, dict):
+            preserved.append(ep)
+            continue
+        key = ep.get("apiKey")
+        if (key is None or key == "") and ep.get("id") in stored:
+            preserved.append({**ep, "apiKey": stored[ep.get("id")]})
+            changed = True
+        else:
+            preserved.append(ep)
+    if not changed:
+        return merged
+    return {**merged, "endpoints": preserved}

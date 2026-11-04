@@ -1,4 +1,4 @@
-import { Globe, LogIn, ShieldCheck, Trash2 } from 'lucide-react';
+import { Globe, LogIn, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -9,9 +9,11 @@ import {
   isHttpUrl,
   isLoginInProgressError,
   startSiteLogin,
+  verifySiteSession,
   waitForSiteLogin,
   type SiteLoginTemplate,
   type SiteSession,
+  type SiteSessionVerify,
 } from '../../shared/api/webAccessClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
@@ -52,6 +54,8 @@ export function SiteSessionsSection({ pollIntervalMs = 2000 }: SiteSessionsSecti
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
+  const [verifying, setVerifying] = useState('');
+  const [health, setHealth] = useState<Record<string, SiteSessionVerify>>({});
 
   const reload = (): void => {
     fetchSiteSessions()
@@ -97,6 +101,42 @@ export function SiteSessionsSection({ pollIntervalMs = 2000 }: SiteSessionsSecti
       );
     } finally {
       setBusy(false);
+    }
+  };
+
+  const runVerify = async (site: SiteSession): Promise<void> => {
+    setVerifying(site.domain);
+    try {
+      const result = await verifySiteSession(site.domain);
+      setHealth((prev) => ({ ...prev, [site.domain]: result }));
+      if (result.error) {
+        toast.error(fill(t('settings.network.sites.check_failed'), { error: result.error }));
+      }
+    } catch (error) {
+      toast.error(
+        fill(t('settings.network.sites.check_failed'), { error: errorText(error) }),
+      );
+    } finally {
+      setVerifying('');
+    }
+  };
+
+  const statusOf = (site: SiteSession): SiteSessionVerify['status'] | 'expired' => {
+    const checked = health[site.domain]?.status;
+    if (checked) return checked;
+    return site.status === 'logged_in' ? 'logged_in' : 'expired';
+  };
+
+  const statusLabel = (site: SiteSession): TranslationKey => {
+    switch (statusOf(site)) {
+      case 'logged_in':
+        return 'settings.network.sites.status.logged_in';
+      case 'login_required':
+        return 'settings.network.sites.status.login_required';
+      case 'unknown':
+        return 'settings.network.sites.status.unknown';
+      default:
+        return 'settings.network.sites.status.expired';
     }
   };
 
@@ -184,17 +224,15 @@ export function SiteSessionsSection({ pollIntervalMs = 2000 }: SiteSessionsSecti
               </span>
               <span
                 className={
-                  site.status === 'logged_in'
+                  statusOf(site) === 'logged_in'
                     ? 'px-1.5 py-0.5 rounded bg-success/10 text-success'
-                    : 'px-1.5 py-0.5 rounded bg-warning/10 text-warning'
+                    : statusOf(site) === 'unknown'
+                      ? 'px-1.5 py-0.5 rounded bg-bg-muted text-text-secondary'
+                      : 'px-1.5 py-0.5 rounded bg-warning/10 text-warning'
                 }
                 data-testid={`site-status-${site.domain}`}
               >
-                {t(
-                  site.status === 'logged_in'
-                    ? 'settings.network.sites.status.logged_in'
-                    : 'settings.network.sites.status.expired',
-                )}
+                {t(statusLabel(site))}
               </span>
               {site.has_local_storage && (
                 <span className="inline-flex items-center gap-1 text-text-secondary">
@@ -204,6 +242,24 @@ export function SiteSessionsSection({ pollIntervalMs = 2000 }: SiteSessionsSecti
               )}
               <span className="text-text-secondary">{savedAgo(site, t)}</span>
               <span className="ml-auto flex items-center gap-1">
+                {site.kind === 'cookie' && (
+                  <button
+                    type="button"
+                    data-testid={`site-check-${site.domain}`}
+                    disabled={verifying === site.domain}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-muted disabled:opacity-50"
+                    onClick={() => void runVerify(site)}
+                  >
+                    <RefreshCw
+                      className={`w-3 h-3 ${verifying === site.domain ? 'animate-spin' : ''}`}
+                    />
+                    {t(
+                      verifying === site.domain
+                        ? 'settings.network.sites.checking'
+                        : 'settings.network.sites.check',
+                    )}
+                  </button>
+                )}
                 {site.kind === 'cookie' && (
                   <button
                     type="button"

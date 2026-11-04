@@ -6,8 +6,16 @@
  * sees the selected PetSnapshot.
  */
 
+import {
+  ACTION_PRIORITY,
+  ACTIVE_ACTIONS,
+  computeAttention,
+  resolveFollowTarget,
+  type PetFollowOptions,
+} from './attention';
 import type {
   PetAction,
+  PetAttentionSummary,
   PetBubbleKey,
   PetBubbleKind,
   PetDetail,
@@ -59,25 +67,24 @@ export interface SessionPetState {
 
 export type PetSessionState = Record<string, SessionPetState>;
 
-export const ACTION_PRIORITY: Record<PetAction, number> = {
-  waiting: 100,
-  error: 90,
-  // Terminal completion must not mask active work in another session:
-  // thinking/acting/retry stay above done so the pet keeps showing "running".
-  thinking: 40,
-  acting: 60,
-  retry: 50,
-  done: 35,
-  observing: 30,
-  idle: 0,
-  sleeping: 0,
-};
-
 const TERMINAL_DECAY_MS = 45_000;
 const SLEEP_AFTER_MS = 120_000;
 const SESSION_TTL_MS = 10 * 60_000;
 const PANEL_SESSION_LIMIT = 5;
-const ACTIVE_ACTIONS = new Set<PetAction>(['thinking', 'acting', 'waiting', 'retry', 'observing']);
+
+const ZERO_ATTENTION: PetAttentionSummary = {
+  needsYou: 0,
+  failed: 0,
+  running: 0,
+  activeTasks: 0,
+  total: 0,
+  needsYouSessionIds: [],
+};
+
+export interface PetSnapshotOptions {
+  follow?: PetFollowOptions;
+  attention?: PetAttentionSummary;
+}
 
 interface Step {
   action: PetAction;
@@ -467,50 +474,68 @@ function emptySnapshot(now: number): PetSnapshot {
     bondDays: 1,
     activeSessions: 0,
     sessions: [],
+    tasks: [],
+    attention: ZERO_ATTENTION,
     updatedAt: now,
   };
 }
 
 /**
- * Pick the highest-priority session; ties go to the most recently updated.
- * The snapshot also carries up to five sessions for the pet panel.
+ * Pick the session this pet portrays. Without a follow target the pet keeps
+ * the historical behaviour (highest priority, ties to most recent); with one,
+ * the resolved session wins even while idle so the click-through and panel
+ * card stay stable. The snapshot also carries up to five sessions for the
+ * pet panel and untruncated global attention counts.
  */
-export function selectSnapshot(state: PetSessionState, now: number): PetSnapshot {
+export function selectSnapshot(
+  state: PetSessionState,
+  now: number,
+  options: PetSnapshotOptions = {},
+): PetSnapshot {
   const sorted = Object.entries(state)
     .map(([sessionId, session]) => ({ sessionId, session }))
     .sort(
       (a, b) =>
         b.session.priority - a.session.priority || b.session.updatedAt - a.session.updatedAt,
     );
-  if (sorted.length === 0) return emptySnapshot(now);
+  const attention = options.attention ?? computeAttention(state, [], now);
+  if (sorted.length === 0) return { ...emptySnapshot(now), attention };
   const activeSessions = sorted.filter(({ session }) => ACTIVE_ACTIONS.has(session.action)).length;
-  const sessions = sorted
-    .slice(0, PANEL_SESSION_LIMIT)
-    .map(({ sessionId, session }) => toSummary(sessionId, session));
-  const best = sorted[0];
-  const session = best.session;
-  const selected =
-    session.action === 'idle' || session.action === 'sleeping' ? null : best.sessionId;
+  const targetId = options.follow
+    ? resolveFollowTarget(state, options.follow)
+    : (sorted[0]?.sessionId ?? null);
+  const target = targetId ? state[targetId] : undefined;
+  if (!target || !targetId) return { ...emptySnapshot(now), attention };
+  const top = sorted.slice(0, PANEL_SESSION_LIMIT);
+  if (!top.some(({ sessionId }) => sessionId === targetId)) {
+    const targetEntry = sorted.find(({ sessionId }) => sessionId === targetId);
+    if (targetEntry) top[top.length - 1] = targetEntry;
+  }
+  const sessions = top.map(({ sessionId, session }) => toSummary(sessionId, session));
   return {
-    action: session.action,
-    detail: session.detail,
-    sessionId: selected,
-    sessionTitle: session.sessionTitle,
-    toolName: session.toolName,
-    bubbleKey: session.bubbleKey,
-    bubbleKind: session.bubbleKind,
-    todoDone: session.todoDone,
-    todoTotal: session.todoTotal,
-    todoActive: session.todoActive,
-    progressKind: session.progressKind,
-    contextUsed: session.contextUsed,
-    contextMax: session.contextMax,
-    lastTerminalAction: session.lastTerminalAction,
-    lastTerminalAt: session.lastTerminalAt,
+    action: target.action,
+    detail: target.detail,
+    // Keep the resolved id even when idle: pinned/focused sessions stay
+    // addressable for click-through and the panel's current-session card.
+    sessionId: targetId,
+    sessionTitle: target.sessionTitle,
+    toolName: target.toolName,
+    bubbleKey: target.bubbleKey,
+    bubbleKind: target.bubbleKind,
+    todoDone: target.todoDone,
+    todoTotal: target.todoTotal,
+    todoActive: target.todoActive,
+    progressKind: target.progressKind,
+    contextUsed: target.contextUsed,
+    contextMax: target.contextMax,
+    lastTerminalAction: target.lastTerminalAction,
+    lastTerminalAt: target.lastTerminalAt,
     patCount: 0,
     bondDays: 1,
     activeSessions,
     sessions,
-    updatedAt: session.updatedAt,
+    tasks: [],
+    attention,
+    updatedAt: target.updatedAt,
   };
 }

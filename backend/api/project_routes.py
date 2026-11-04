@@ -15,6 +15,7 @@ Claude Code 项目 → 会话归属）。路由面涵盖：
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -22,11 +23,16 @@ from fastapi import APIRouter, HTTPException
 
 from backend.api.project_schemas import (
     AddMaterialFromFileRequest,
+    BootstrapAppliedItem,
     BootstrapApplyRequest,
     BootstrapApplyResponse,
     BootstrapErrorModel,
     BootstrapPreviewRequest,
     BootstrapPreviewResponse,
+    BootstrapScanResponse,
+    BootstrapSkippedItem,
+    BootstrapSuggestResponse,
+    BootstrapVerification,
     ConstraintCreateRequest,
     ConstraintModel,
     ConstraintsResponse,
@@ -98,13 +104,19 @@ from backend.data.project_repo import (
     open_project,
 )
 from backend.data.session_repo import MessageRepository
+from backend.office.allowed_paths import default_allowed_paths
 from backend.office.errors import OfficePathError
 from backend.office.session_workspace import get_workspace_binding
 from backend.office.storage import validate_workspace
 from backend.services.default_workspace import DefaultWorkspaceResolver
 from backend.services.git_integration import GitIntegration
 from backend.services.project_archetype_scaffold import execute_project_scaffold
-from backend.services.project_bootstrap import apply_bootstrap, build_bootstrap_preview
+from backend.services.project_bootstrap import (
+    apply_bootstrap,
+    build_bootstrap_preview,
+    build_bootstrap_scan,
+    build_bootstrap_suggestions,
+)
 from backend.services.project_git_init import init_project_git
 from backend.services.project_type_detector import (
     DetectionResult,
@@ -166,6 +178,39 @@ def get_project_location(project_id: str) -> ProjectLocationResponse:
 
 
 @router.post(
+    "/{project_id}/bootstrap/scan", response_model=BootstrapScanResponse
+)
+@with_db_lock
+async def bootstrap_scan(project_id: str) -> BootstrapScanResponse:
+    """确定性扫描项目（不调用 LLM），供初始化向导立即展示扫描结果。"""
+    project = _get_project_or_404(project_id)
+    data = await build_bootstrap_scan(project)
+    repo = ProjectRepository()
+    return BootstrapScanResponse(
+        project=_with_stats(project, repo.session_stats()),
+        scan=data["scan"],
+    )
+
+
+@router.post(
+    "/{project_id}/bootstrap/suggest", response_model=BootstrapSuggestResponse
+)
+@with_db_lock
+async def bootstrap_suggest(
+    project_id: str, request: BootstrapPreviewRequest
+) -> BootstrapSuggestResponse:
+    """生成 AI 初始化建议（LLM 可用时），供初始化向导第二步调用。"""
+    project = _get_project_or_404(project_id)
+    data = await build_bootstrap_suggestions(project, use_llm=request.use_llm)
+    return BootstrapSuggestResponse(
+        suggestions=data["suggestions"],
+        llm_available=data["llm_available"],
+        llm_error=data.get("llm_error"),
+        rule_source=data.get("rule_source"),
+    )
+
+
+@router.post(
     "/{project_id}/bootstrap/preview", response_model=BootstrapPreviewResponse
 )
 @with_db_lock
@@ -181,6 +226,8 @@ async def bootstrap_preview(
         scan=data["scan"],
         suggestions=data["suggestions"],
         llm_available=data["llm_available"],
+        llm_error=data.get("llm_error"),
+        rule_source=data.get("rule_source"),
     )
 
 
@@ -206,6 +253,17 @@ def bootstrap_apply(
         applied=result["applied"],
         skipped=result["skipped"],
         errors=[BootstrapErrorModel(**item) for item in result["errors"]],
+        applied_items=[
+            BootstrapAppliedItem(**item) for item in result.get("applied_items", [])
+        ],
+        skipped_items=[
+            BootstrapSkippedItem(**item) for item in result.get("skipped_items", [])
+        ],
+        verification=(
+            BootstrapVerification(**result["verification"])
+            if result.get("verification")
+            else None
+        ),
         git=result.get("git"),
     )
 
@@ -252,9 +310,15 @@ def register_project(request: ProjectRegisterRequest) -> ProjectModel:
             detected_type = result.project_type
             project_type = detected_type
 
+        # 未显式提供 allowed_paths（None）时预填常用文档目录，减少工作区外
+        # 读写审批；显式 [] 表示用户选择清空，保持不变。
+        allowed_paths = request.allowed_paths
+        if allowed_paths is None:
+            allowed_paths = default_allowed_paths()
+
         project = ProjectRepository().register(
             request.path,
-            allowed_paths=request.allowed_paths,
+            allowed_paths=allowed_paths,
             project_type=project_type,
             detected_type=detected_type,
         )
@@ -282,6 +346,36 @@ def update_project(project_id: str, request: ProjectUpdateRequest) -> ProjectMod
         repo.update_project_type(project_id, request.project_type)
     if "project_stage" in fields_set:
         repo.update_project_stage(project_id, request.project_stage)
+        # Keep playbook state/history and projected rules consistent when the
+        # legacy stage selector is used.
+        try:
+            from backend.data.playbook_repo import PlaybookRepository
+            from backend.services.playbook_actions import project_playbook_rules
+
+            playbook_repo = PlaybookRepository()
+            snapshot = playbook_repo.get_active(project_id)
+            if snapshot is not None:
+                state = playbook_repo.get_state(project_id)
+                history = list(state.get("stage_history") or [])
+                history.append(
+                    {
+                        "from": state.get("current_stage"),
+                        "to": request.project_stage,
+                        "at": int(time.time() * 1000),
+                        "source": "project_update",
+                    }
+                )
+                state["current_stage"] = request.project_stage
+                state["stage_history"] = history[-100:]
+                playbook_repo.update_state(project_id, state)
+                if request.project_stage:
+                    project_playbook_rules(
+                        project_id, snapshot.spec, stage_id=request.project_stage
+                    )
+        except Exception:  # noqa: BLE001 — stage update must not fail on playbook sync
+            logging.getLogger(__name__).warning(
+                "failed to sync playbook stage for %s", project_id, exc_info=True
+            )
     if "project_sub_type" in fields_set:
         repo.update_project_sub_type(project_id, request.project_sub_type)
     if "vcs_mode" in fields_set and request.vcs_mode:

@@ -22,6 +22,7 @@ from backend.domain.autonomous_goals import (
     GoalStatus,
     TimeWindow,
 )
+from backend.utils.timezones import ensure_utc
 
 logger = logging.getLogger(__name__)
 
@@ -203,9 +204,11 @@ class GoalRepository:
             checkpoints=[Checkpoint.from_dict(c) for c in checkpoints_data],
             rounds=[ExecutionRound.from_dict(r) for r in rounds_data],
             current_round=row["current_round"],
-            created_at=datetime.fromisoformat(row["created_at"]),
-            started_at=datetime.fromisoformat(row["started_at"]) if row["started_at"] else None,
-            completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
+            # 历史行落库时没有偏移后缀 (naive); 统一补 UTC, 防止与 aware
+            # 的 utc_now() 做差时抛 TypeError.
+            created_at=ensure_utc(datetime.fromisoformat(row["created_at"])),
+            started_at=ensure_utc(datetime.fromisoformat(row["started_at"])) if row["started_at"] else None,
+            completed_at=ensure_utc(datetime.fromisoformat(row["completed_at"])) if row["completed_at"] else None,
             total_tokens_used=row["total_tokens_used"],
             completion_percentage=row["completion_percentage"],
             degradation_level=DegradationLevel(row["degradation_level"]),

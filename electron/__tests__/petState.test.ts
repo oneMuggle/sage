@@ -37,7 +37,7 @@ describe('pet state reducer', () => {
     expect(snapshot.bubbleKey).toBe('waiting');
   });
 
-  it('prefers error over done and acting', () => {
+  it('active work outranks a terminal error', () => {
     let state = createEmptyState();
     state = applyEvent(
       state,
@@ -47,7 +47,17 @@ describe('pet state reducer', () => {
     );
     state = applyEvent(state, 's2', { state: 'done' }, T0 + 1);
     state = applyEvent(state, 's3', { state: 'failed' }, T0 + 2);
-    expect(selectSnapshot(state, T0 + 2).action).toBe('error');
+    const snapshot = selectSnapshot(state, T0 + 2);
+    expect(snapshot.action).toBe('acting');
+    expect(snapshot.sessionId).toBe('s1');
+    expect(snapshot.attention).toMatchObject({ needsYou: 0, failed: 1, running: 1 });
+  });
+
+  it('error still outranks done when both are terminal', () => {
+    let state = createEmptyState();
+    state = applyEvent(state, 's2', { state: 'done' }, T0);
+    state = applyEvent(state, 's3', { state: 'failed' }, T0 + 1);
+    expect(selectSnapshot(state, T0 + 1).action).toBe('error');
   });
 
   it('decays terminal actions to idle after 45 seconds and keeps the last result', () => {
@@ -153,5 +163,51 @@ describe('pet state reducer', () => {
     let state = applyEvent(createEmptyState(), 'old', { state: 'thinking' }, T0);
     state = applyEvent(state, 'new', { state: 'reasoning' }, T0 + 5);
     expect(selectSnapshot(state, T0 + 5).sessionId).toBe('new');
+  });
+
+  it('carries untruncated attention counts along with the winning session', () => {
+    let state = createEmptyState();
+    state = applyEvent(state, 'a', { state: 'thinking' }, T0);
+    state = applyEvent(state, 'b', { state: 'permission_request' }, T0 + 1);
+    state = applyEvent(state, 'c', { state: 'failed' }, T0 + 2);
+    const snapshot = selectSnapshot(state, T0 + 2);
+    expect(snapshot.attention).toEqual({
+      needsYou: 1,
+      failed: 1,
+      running: 1,
+      activeTasks: 0,
+      total: 3,
+      needsYouSessionIds: ['b'],
+    });
+  });
+
+  it('follows a requested session and keeps it as sessionId when idle', () => {
+    let state = createEmptyState();
+    state = applyEvent(state, 'a', { state: 'acting' }, T0);
+    state = applyEvent(state, 'b', { state: 'thinking' }, T0 + 1);
+    const followed = selectSnapshot(state, T0 + 2, {
+      follow: { mode: 'focus', focusSessionId: 'b', pinnedSessionId: null },
+    });
+    expect(followed.action).toBe('thinking');
+    expect(followed.sessionId).toBe('b');
+
+    const idleState = tick(state, T0 + 10 * 60_000);
+    const idle = selectSnapshot(idleState, T0 + 10 * 60_000, {
+      follow: { mode: 'focus', focusSessionId: 'b', pinnedSessionId: null },
+    });
+    expect(idle.sessionId).toBe('b');
+    expect(idle.sessionTitle).toBeNull();
+  });
+
+  it('keeps the followed session inside the five-session panel slice', () => {
+    let state = createEmptyState();
+    for (let i = 0; i < 6; i++) {
+      state = applyEvent(state, `s${i}`, { state: 'acting' }, T0 + i);
+    }
+    const snapshot = selectSnapshot(state, T0 + 10, {
+      follow: { mode: 'pinned', focusSessionId: null, pinnedSessionId: 's0' },
+    });
+    expect(snapshot.sessions).toHaveLength(5);
+    expect(snapshot.sessions.map((item) => item.sessionId)).toContain('s0');
   });
 });

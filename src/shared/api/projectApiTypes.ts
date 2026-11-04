@@ -47,6 +47,8 @@ export interface ProjectSummary {
   vcsMode?: string;
   /** 自动检测的项目类型 */
   detectedType?: ProjectType | null;
+  /** M3: 初始化进度（bootstrap_state 解析结果） */
+  bootstrapState?: { applied: string[]; appliedAt: number | null } | null;
 }
 
 /** 项目类型枚举 */
@@ -304,6 +306,7 @@ export interface ProjectWire {
   project_stage?: string | null;
   vcs_mode?: string;
   detected_type?: string | null;
+  bootstrap_state?: string | null;
 }
 
 export interface ProjectListWire {
@@ -359,7 +362,26 @@ export function mapProject(p: ProjectWire): ProjectSummary {
     projectStage: p.project_stage ?? null,
     vcsMode: p.vcs_mode ?? 'builtin',
     detectedType: (p.detected_type as ProjectType) ?? null,
+    bootstrapState: parseBootstrapState(p.bootstrap_state),
   };
+}
+
+function parseBootstrapState(
+  raw?: string | null,
+): { applied: string[]; appliedAt: number | null } | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { applied?: unknown; applied_at?: unknown };
+    const applied = Array.isArray(parsed.applied)
+      ? parsed.applied.filter((item): item is string => typeof item === 'string')
+      : [];
+    return {
+      applied,
+      appliedAt: typeof parsed.applied_at === 'number' ? parsed.applied_at : null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -1419,31 +1441,51 @@ export interface BootstrapMilestoneSuggestion {
   estimatedDays: number | null;
 }
 
+export interface BootstrapScanSection {
+  level1Type: string | null;
+  subType: string | null;
+  techStack: string[];
+  sourceFiles: BootstrapSourceFileCount[];
+  git: BootstrapGitInfo;
+  existing: {
+    sageMd: boolean;
+    rulesCount: number;
+    milestonesCount: number;
+    materialsCount: number;
+  };
+}
+
+export interface BootstrapSuggestionSet {
+  sageMd: { content: string; rationale: string; exists: boolean };
+  rules: BootstrapRuleSuggestion[];
+  milestones: BootstrapMilestoneSuggestion[];
+  allowedPaths: string[];
+  gitInit: { recommended: boolean; reason: string; blockers: string[] };
+  wiki?: { recommended: boolean; estimatedPages: number };
+  firstPrompt: string;
+}
+
 export interface BootstrapPreviewResult {
   project: ProjectSummary;
-  scan: {
-    level1Type: string | null;
-    subType: string | null;
-    techStack: string[];
-    sourceFiles: BootstrapSourceFileCount[];
-    git: BootstrapGitInfo;
-    existing: {
-      sageMd: boolean;
-      rulesCount: number;
-      milestonesCount: number;
-      materialsCount: number;
-    };
-  };
-  suggestions: {
-    sageMd: { content: string; rationale: string; exists: boolean };
-    rules: BootstrapRuleSuggestion[];
-    milestones: BootstrapMilestoneSuggestion[];
-    allowedPaths: string[];
-    gitInit: { recommended: boolean; reason: string; blockers: string[] };
-    wiki: { recommended: boolean; estimatedPages: number };
-    firstPrompt: string;
-  };
+  scan: BootstrapScanSection;
+  suggestions: BootstrapSuggestionSet;
   llmAvailable: boolean;
+  llmError?: string | null;
+  ruleSource?: string | null;
+}
+
+/** M2: 两步初始化——第一步确定性扫描结果。 */
+export interface BootstrapScanResult {
+  project: ProjectSummary;
+  scan: BootstrapScanSection;
+}
+
+/** M2: 两步初始化——第二步 AI 建议结果。 */
+export interface BootstrapSuggestResult {
+  suggestions: BootstrapSuggestionSet;
+  llmAvailable: boolean;
+  llmError: string | null;
+  ruleSource: string | null;
 }
 
 export interface BootstrapApplyPayload {
@@ -1473,11 +1515,35 @@ export interface BootstrapApplyPayload {
   initialCheckpoint?: boolean;
 }
 
+export interface BootstrapAppliedItem {
+  item: string;
+  label?: string | null;
+  id?: string | null;
+  location?: string | null;
+  contentPreview?: string | null;
+}
+
+export interface BootstrapSkippedItem {
+  item: string;
+  reason: string;
+  label?: string | null;
+  contentPreview?: string | null;
+}
+
+export interface BootstrapVerification {
+  sageMdExists: boolean;
+  rulesCountAfter: number;
+  milestonesCountAfter: number;
+}
+
 export interface BootstrapApplyResult {
   project: ProjectSummary;
   applied: string[];
   skipped: string[];
   errors: Array<{ item: string; message: string }>;
+  appliedItems: BootstrapAppliedItem[];
+  skippedItems: BootstrapSkippedItem[];
+  verification: BootstrapVerification | null;
   git: Record<string, unknown> | null;
 }
 

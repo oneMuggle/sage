@@ -88,6 +88,15 @@ export const projectRoutes: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/projects/${projectId(a)}/bootstrap/preview`,
     body: (a) => ({ use_llm: a.useLlm ?? a.use_llm ?? true }),
   },
+  projects_bootstrap_scan: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/bootstrap/scan`,
+  },
+  projects_bootstrap_suggest: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/bootstrap/suggest`,
+    body: (a) => ({ use_llm: a.useLlm ?? a.use_llm ?? true }),
+  },
   projects_bootstrap_apply: {
     method: 'POST',
     path: (a) => `/api/v1/projects/${projectId(a)}/bootstrap/apply`,

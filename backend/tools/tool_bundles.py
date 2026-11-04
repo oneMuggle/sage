@@ -67,6 +67,7 @@ from .git_tool import (
 )
 from .image_gen_tool import ImageGenerationTool
 from .memory_tool import MemorySaveTool, MemorySearchTool
+from .ocr_image_tool import OcrImageTool
 from .office_analyze_tool import OfficeAnalyzeTool
 from .office_archive_tool import OfficeArchiveTool
 from .office_bibtex_tool import OfficeBibTexTool
@@ -78,6 +79,11 @@ from .office_journal_tool import (
     OfficeJournalParseTemplateTool,
     OfficeJournalValidateTool,
 )
+from .office_latex_audit_tool import OfficeAuditLatexTool
+from .office_latex_build_tool import OfficeCompileLatexTool, OfficeLatexdiffTool
+from .office_latex_compliance_tool import OfficeCheckLatexComplianceTool
+from .office_latex_pdf_tool import OfficeAuditLatexPdfTool
+from .office_latex_project_tool import OfficeExtractLatexProjectTool
 from .office_latex_template_tool import (
     OfficeAnalyzeLatexTemplateTool,
     OfficeFillLatexTemplateTool,
@@ -103,6 +109,14 @@ from .office_template_tool import (
 from .office_toc_refresh_tool import OfficeRefreshTocTool
 from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
+from .office_word_intelligence_tools import (
+    OfficeAuditWordTool,
+    OfficeBatchAuditTool,
+    OfficeExtractRulesTool,
+    OfficeFixWordTool,
+    OfficeRenderAuditTool,
+    OfficeReviseWordTool,
+)
 from .patch_tool import ApplyPatchTool
 from .project_diagnose import ProjectDiagnoseTool
 from .repl_tool import ReplTool
@@ -228,9 +242,22 @@ def _install_office_quality(ctx: ToolInstallContext) -> None:
     # Round 9 引用体系 / Round 10 格式 Linter / Round 12 自动修复 / Round 39 目录页码
     ctx.registry.register(OfficeBibTexTool(policy=policy))
     ctx.registry.register(OfficeLintWordTool(policy=policy))
+    # 2026-11-01 M6: rule-pack audit / fix / extract / revise tools.
+    ctx.registry.register(OfficeAuditWordTool(policy=policy))
+    ctx.registry.register(OfficeFixWordTool(policy=policy))
+    ctx.registry.register(OfficeExtractRulesTool(policy=policy))
+    ctx.registry.register(OfficeReviseWordTool(policy=policy))
+    ctx.registry.register(OfficeBatchAuditTool(policy=policy))
+    ctx.registry.register(OfficeRenderAuditTool(policy=policy))
     ctx.registry.register(OfficeReadLatexTool(policy=policy))
     ctx.registry.register(OfficeAnalyzeLatexTemplateTool(policy=policy))
     ctx.registry.register(OfficeFillLatexTemplateTool(policy=policy))
+    ctx.registry.register(OfficeAuditLatexTool(policy=policy))
+    ctx.registry.register(OfficeAuditLatexPdfTool(policy=policy))
+    ctx.registry.register(OfficeCheckLatexComplianceTool(policy=policy))
+    ctx.registry.register(OfficeCompileLatexTool(policy=policy))
+    ctx.registry.register(OfficeLatexdiffTool(policy=policy))
+    ctx.registry.register(OfficeExtractLatexProjectTool(policy=policy))
     ctx.registry.register(OfficeRepairWordTool(policy=policy))
     ctx.registry.register(OfficeRefreshTocTool(policy=policy))
 
@@ -343,6 +370,8 @@ def _install_multimodal(ctx: ToolInstallContext) -> None:
     ctx.registry.register(TextToSpeechTool(policy=policy))
     ctx.registry.register(SpeechToTextTool(policy=policy))
     ctx.registry.register(ImageGenerationTool(policy=policy))
+    # 本地 OCR（READ，本地推理；无引擎时 execute 返回可读失败）
+    ctx.registry.register(OcrImageTool(policy=policy))
 
 
 def _install_sage_config(ctx: ToolInstallContext) -> None:

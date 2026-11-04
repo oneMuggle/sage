@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from backend.domain.risk import RiskClass
 
 from .base import BaseTool, ToolResult, ToolSchema
+from .git_status_parser import parse_status_porcelain_v1_z
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +48,6 @@ _UNTRACKED_READ_CAP = 8 * 1024 * 1024
 #: %x1f = ASCII Unit Separator —— 字段分隔符，杜绝提交信息内嵌分隔歧义
 _LOG_FIELD_SEP = "\x1f"
 _LOG_PRETTY = f"%H{_LOG_FIELD_SEP}%an{_LOG_FIELD_SEP}%ci{_LOG_FIELD_SEP}%s"
-
-_BRANCH_RE = re.compile(r"^## (?P<branch>[^\s.]+)(?:\.\.\.(?P<upstream>\S+))?(?:\s+\[(?P<track>[^\]]+)\])?")
 
 
 def _run_git(
@@ -315,52 +314,15 @@ class GitStatusTool(GitToolBase):
         if error is not None:
             return ToolResult(success=False, error=error)
 
-        records = stdout.split("\0")
-        entries: List[Dict[str, str]] = []
-        branch = ""
-        upstream = ""
-        ahead = 0
-        behind = 0
-        index = 0
-        while index < len(records):
-            record = records[index]
-            index += 1
-            if not record:
-                continue
-            if record.startswith("##"):
-                match = _BRANCH_RE.match(record)
-                if match:
-                    branch = match.group("branch") or ""
-                    upstream = match.group("upstream") or ""
-                    track = match.group("track") or ""
-                    ahead_match = re.search(r"ahead (\d+)", track)
-                    behind_match = re.search(r"behind (\d+)", track)
-                    ahead = int(ahead_match.group(1)) if ahead_match else 0
-                    behind = int(behind_match.group(1)) if behind_match else 0
-                continue
-            # porcelain v1 -z: "XY <path>"；rename/copy 的下一段是旧路径
-            index_status = record[:1].strip()
-            worktree_status = record[1:2].strip()
-            entry: Dict[str, str] = {
-                "index_status": index_status,
-                "worktree_status": worktree_status,
-                "path": record[3:],
-            }
-            if (
-                (index_status in ("R", "C") or worktree_status in ("R", "C"))
-                and index < len(records)
-                and records[index]
-            ):
-                entry["old_path"] = records[index]
-                index += 1
-            entries.append(entry)
+        parsed = parse_status_porcelain_v1_z(stdout)
+        entries = parsed["entries"]
         return ToolResult(
             success=True,
             content={
-                "branch": branch,
-                "upstream": upstream,
-                "ahead": ahead,
-                "behind": behind,
+                "branch": parsed["branch"],
+                "upstream": parsed["upstream"],
+                "ahead": parsed["ahead"],
+                "behind": parsed["behind"],
                 "changes": entries,
                 "clean": not entries,
             },

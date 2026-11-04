@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type {
   OfficeExcelReadResult,
@@ -196,18 +196,41 @@ export function PdfPreview({ data }: { data: OfficePdfReadResult }) {
   );
 }
 
-export function WordPreview({ data }: { data: OfficeWordReadResult }) {
+export function WordPreview({
+  data,
+  highlightParagraphIndex = null,
+}: {
+  data: OfficeWordReadResult;
+  highlightParagraphIndex?: number | null;
+}) {
   const { t } = useI18n();
   // Round C P7: read results already carry the FULL document (the backend
   // never truncates) — the old hard slice was purely a render guard. 加载
   // 更多 grows the render window instead of hiding the tail forever.
   const [renderCap, setRenderCap] = useState(PARAGRAPH_RENDER_CAP);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (highlightParagraphIndex == null) return;
+    if (highlightParagraphIndex >= renderCap) {
+      setRenderCap(highlightParagraphIndex + 1);
+      return;
+    }
+    const container = containerRef.current;
+    const target = container?.querySelector<HTMLElement>(
+      `[data-paragraph-index="${highlightParagraphIndex}"]`,
+    );
+    target?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, [highlightParagraphIndex, renderCap]);
   const shown = data.paragraphs.slice(0, renderCap);
   const hidden = data.paragraphs.length - shown.length;
   const headersFooters = data.headers_footers ?? [];
   const tocFields = data.toc_fields ?? [];
+  const highlightClass = (index: number) =>
+    index === highlightParagraphIndex
+      ? 'rounded-sm bg-primary/10 ring-2 ring-primary px-1 -mx-1'
+      : '';
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" ref={containerRef} data-testid="office-word-preview">
       <p className="text-xs text-muted">
         {data.paragraphs.length} {t('office.preview.paragraphCount')} · {data.tables.length}{' '}
         {t('office.preview.tableCount')} · {data.images} {t('office.preview.imageCount')}
@@ -216,7 +239,11 @@ export function WordPreview({ data }: { data: OfficeWordReadResult }) {
         {shown.map((para, i) => {
           if (para.level > 0) {
             return (
-              <div key={i} className={`mt-3 ${headingClass(para.level)}`}>
+              <div
+                key={i}
+                data-paragraph-index={i}
+                className={`mt-3 ${headingClass(para.level)} ${highlightClass(i)}`}
+              >
                 {para.text}
               </div>
             );
@@ -225,14 +252,22 @@ export function WordPreview({ data }: { data: OfficeWordReadResult }) {
           const isListItem = /list/i.test(para.style);
           if (isListItem) {
             return (
-              <div key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+              <div
+                key={i}
+                data-paragraph-index={i}
+                className={`flex items-start gap-2 text-sm text-text-secondary ${highlightClass(i)}`}
+              >
                 <span className="mt-[7px] w-1 h-1 rounded-full bg-current shrink-0" aria-hidden />
                 <span className="min-w-0">{renderInlineMarks(para.text)}</span>
               </div>
             );
           }
           return (
-            <p key={i} className="text-sm text-text-secondary leading-relaxed">
+            <p
+              key={i}
+              data-paragraph-index={i}
+              className={`text-sm text-text-secondary leading-relaxed ${highlightClass(i)}`}
+            >
               {renderInlineMarks(para.text)}
             </p>
           );

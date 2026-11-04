@@ -25,7 +25,7 @@ export const enSettingsUi = {
   'settings.basic.llm_proxy_timeout.label': 'Upstream read timeout (s)',
   'settings.basic.llm_retry': 'LLM retry',
   'settings.basic.llm_retry.max_delay.desc':
-    'Upper bound for a single retry wait, preventing excessively long exponential backoff',
+    'Upper bound for a single retry wait, preventing excessively long exponential backoff. Range 1-3600 s, and not less than the backoff base.',
   'settings.basic.llm_retry.max_delay.label': 'Max backoff (s)',
   'settings.basic.llm_total_limit.desc':
     'Total time limit for a single task (LLM calls + tool execution + subagents); the task is terminated when exceeded. 0 = no limit; when set, takes precedence over the SAGE_LLM_TOTAL_TIMEOUT_S environment variable',
@@ -36,14 +36,19 @@ export const enSettingsUi = {
   'settings.basic.log_timezone.local': 'Local system timezone',
   'settings.basic.log_timezone.utc': 'UTC (legacy default)',
   'settings.basic.retry_base_desc':
-    'Wait before the first retry; subsequent retries grow exponentially (base × 2^(attempt-1))',
+    'Wait before the first retry; subsequent retries grow exponentially (base × 2^(attempt-1)). Range 0-600 s.',
   'settings.basic.retry_base_label': 'Backoff base (s)',
   'settings.basic.retry_max_desc':
-    'Maximum automatic retries after a failed LLM request. Set to 0 to disable automatic retries.',
-  'settings.basic.retry_max_label': 'Max retries',
+    'Total attempt count for LLM requests (including the first request). For example, 10 means up to 10 attempts (first + 9 retries). Range 1-100.',
+  'settings.basic.retry_max_label': 'Max attempts',
+  'settings.basic.retry_source.custom': 'Customized',
+  'settings.basic.retry_source.default': 'Default',
   'settings.basic.retry_total_budget_desc':
-    'Total time spent waiting since the first attempt. Once this budget is exhausted, automatic retries stop. 0 = unlimited.',
+    'Total time spent waiting since the first attempt. Once this budget is exhausted, automatic retries stop. Range 0-86400; 0 = unlimited.',
   'settings.basic.retry_total_budget_label': 'Total retry budget (s)',
+  // 2026-11-02: save failure toast — after saveSettings switched to strict channel,
+  // settingsStore toasts on backend PUT failure
+  'settings.save_failed_sync': 'Failed to sync settings to backend; may rollback on restart',
   'settings.basic.section.data': 'Data',
   'settings.basic.section.demo': 'Demo',
   'settings.basic.section.llm_proxy_timeout': 'LLM proxy timeout',
@@ -89,6 +94,8 @@ export const enSettingsUi = {
   'settings.endpoints.add': '+ Add endpoint',
   'settings.endpoints.api_key_hint':
     'OpenAI-compatible and Ollama protocols may leave this empty (for local services or internal proxies without a key)',
+  'settings.endpoints.api_key_saved_hint':
+    'A key is already stored on the backend (never echoed back); leaving this empty keeps it',
   'settings.endpoints.api_key_placeholder_local': 'Can be empty for local/intranet proxies',
   'settings.endpoints.cancel': 'Cancel',
   'settings.endpoints.delete': 'Delete',
@@ -97,6 +104,17 @@ export const enSettingsUi = {
   'settings.endpoints.field.model_id': 'Model ID (advanced, optional)',
   'settings.endpoints.field.name': 'Name',
   'settings.endpoints.field.protocol': 'Protocol',
+  // 2026-11-03: thinking process parameters — per-endpoint, forwarded to upstream LLM.
+  'settings.endpoints.field.reasoning_effort': 'Reasoning effort',
+  'settings.endpoints.field.reasoning_effort.off': 'Off',
+  'settings.endpoints.field.reasoning_effort.low': 'Low',
+  'settings.endpoints.field.reasoning_effort.medium': 'Medium',
+  'settings.endpoints.field.reasoning_effort.high': 'High',
+  'settings.endpoints.field.reasoning_effort_hint':
+    'Effort level when asking the model to show its thinking',
+  'settings.endpoints.field.thinking_budget': 'Thinking budget (tokens)',
+  'settings.endpoints.field.thinking_budget_hint':
+    'Maximum tokens for the thinking process; 0 = off, empty = upstream default',
   'settings.endpoints.model_count': '{n} models',
   'settings.endpoints.model_id_hint': 'Model',
   'settings.endpoints.model_id_placeholder': 'Leave empty to use the selection on the Models tab',
@@ -237,6 +255,48 @@ export const enSettingsUi = {
   'settings.models.fixed_use_above': 'Fixed (use value above)',
   'settings.models.image_gen_model': 'Image generation',
   'settings.models.image_gen_model_desc': 'Used for text-to-image (optional)',
+  'settings.ocr.title': 'Local OCR',
+  'settings.ocr.desc':
+    'Recognize text from images on this device when no vision model is available; images are not uploaded',
+  'settings.ocr.available': 'Available ({engine})',
+  'settings.ocr.unavailable': 'Unavailable',
+  'settings.ocr.engine_none': 'No engine detected',
+  'settings.ocr.install_hint':
+    'Install rapidocr + onnxruntime or Tesseract to enable; you can also place models manually',
+  'settings.ocr.engine': 'OCR engine',
+  'settings.ocr.engine_auto': 'Auto (prefer RapidOCR)',
+  'settings.ocr.lang': 'Recognition language',
+  'settings.ocr.lang_auto': 'Auto (Chinese + English)',
+  'settings.ocr.lang_ch': 'Chinese',
+  'settings.ocr.lang_en': 'English',
+  'settings.ocr.prefer_local': 'Prefer local OCR even with a vision model',
+  'settings.ocr.prefer_local_desc':
+    'Faster and cheaper for text screenshots; falls back to the vision model on failure',
+  'settings.ocr.office_enabled': 'Also OCR scanned PDF / Office pages',
+  'settings.ocr.office_enabled_desc':
+    'Only applies to pages with no text layer; increases processing time noticeably',
+  'settings.ocr.model_title': 'OCR model',
+  'settings.ocr.model_hint':
+    'The tiny model is smaller and faster; the default small model ships with the installer',
+  'settings.ocr.model_download': 'Download fast model (~6MB)',
+  'settings.ocr.model_downloading': 'Downloading…',
+  'settings.ocr.model_cancel': 'Cancel download',
+  'settings.ocr.model_cancelling': 'Cancelling…',
+  'settings.ocr.model_cancelled': 'Download cancelled',
+  'settings.ocr.jobs_cleanup': 'Clear batch records',
+  'settings.ocr.jobs_cleaning': 'Clearing…',
+  'settings.ocr.jobs_cleaned': 'Cleared {count} record(s)',
+  'settings.ocr.jobs_cleanup_failed': 'Cleanup failed: {error}',
+  'settings.ocr.model_done': 'Tiny model enabled',
+  'settings.ocr.model_reset': 'Restore default model',
+  'settings.ocr.model_reset_done': 'Default model restored',
+  'settings.ocr.model_failed': 'Model operation failed: {error}',
+  'settings.ocr.model_unsupported': 'Model download is not supported in this environment',
+  'settings.ocr.saving': 'Saving…',
+  'settings.ocr.test': 'Test recognition',
+  'settings.ocr.testing': 'Recognizing…',
+  'settings.ocr.test_empty': 'No text recognized',
+  'settings.ocr.test_failed': 'Recognition failed: {error}',
   'settings.models.max_context': 'Max context length',
   'settings.models.max_context_desc':
     'Maximum tokens sent to the model per conversation; ignored in automatic mode',
@@ -290,6 +350,27 @@ export const enSettingsUi = {
   'settings.orch.max_iterations.desc':
     'Maximum iterations for the primary agent (each iteration is one LLM call that may invoke multiple tools); when exceeded, the session ends with reason max_iterations_exceeded',
   'settings.orch.max_iterations.label': 'Agent iteration limit (0 = default)',
+  // 2026-11-01: dynamic iteration budget (P1 settings exposure).
+  'settings.orch.section_dynamic_budget': 'Dynamic iteration budget',
+  'settings.orch.dynamic_budget_intro':
+    'Starts each task with a complexity-based iteration budget: simple tasks stay lean while complex/long tasks can auto-extend; repeated calls or long stretches without progress stop with evidence. Environment variables SAGE_DYNAMIC_BUDGET_* take precedence over these settings.',
+  'settings.orch.dynamic_budget_enabled.label': 'Enable dynamic iteration budget',
+  'settings.orch.dynamic_budget_enabled.desc':
+    'When off, falls back to the fixed “Agent iteration limit”',
+  'settings.orch.budget_simple.label': 'Simple task initial budget (steps)',
+  'settings.orch.budget_simple.desc': 'Initial steps for short, attachment-free simple tasks',
+  'settings.orch.budget_medium.label': 'Medium task initial budget (steps)',
+  'settings.orch.budget_medium.desc': 'Default tier when complexity cannot be determined',
+  'settings.orch.budget_complex.label': 'Complex task initial budget (steps)',
+  'settings.orch.budget_complex.desc':
+    'Initial steps for tasks with refactor/migration/design signals or many files',
+  'settings.orch.budget_long.label': 'Long task initial budget (steps)',
+  'settings.orch.budget_long.desc': 'Initial steps for long-task mode (raise as needed)',
+  'settings.orch.budget_hard_cap.label': 'Auto-extension hard cap (steps)',
+  'settings.orch.budget_hard_cap.desc': 'Maximum iteration steps allowed in any case',
+  'settings.orch.budget_max_extensions.label': 'Max auto extensions',
+  'settings.orch.budget_max_extensions.desc':
+    '0 = never auto-extend; stop as soon as the soft budget is reached',
   'settings.orch.max_lane_iterations.label': 'Lane iteration limit',
   'settings.orch.max_options_per_question.desc':
     'Maximum options the agent may offer per question; must not be less than the minimum options per question',

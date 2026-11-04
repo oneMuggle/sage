@@ -47,6 +47,10 @@ class _FakeJobs:
         return self.jobs.get(job_id)
 
 
+def _decision(allowed: bool, needs_approval: bool = False, reason: str = "ok"):
+    return SimpleNamespace(allowed=allowed, needs_approval=needs_approval, reason=reason)
+
+
 async def test_site_templates_lists_cnki(client):
     resp = await client.get("/api/v1/web-access/site-templates")
     assert resp.status_code == 200
@@ -126,8 +130,10 @@ async def test_start_login_returns_409_when_another_login_active(client, monkeyp
             raise ValueError("login_in_progress")
 
     monkeypatch.setattr(routes, "site_login_jobs", _BusyJobs())
+    monkeypatch.setattr(routes, "_login_permission_decision", lambda url: _decision(True))
     resp = await client.post(
-        "/api/v1/web-access/sites/login", json={"url": "https://kns.cnki.net/"}
+        "/api/v1/web-access/sites/login",
+        json={"url": "https://kns.cnki.net/", "approved": True},
     )
     assert resp.status_code == 409
 
@@ -169,9 +175,15 @@ async def test_start_login_returns_job_id_and_job_can_be_polled(client, monkeypa
     )
     fake_jobs = _FakeJobs()
     monkeypatch.setattr(routes, "site_login_jobs", fake_jobs)
+    monkeypatch.setattr(
+        routes,
+        "_login_permission_decision",
+        lambda url: _decision(False, needs_approval=True, reason="requires approval"),
+    )
 
     resp = await client.post(
-        "/api/v1/web-access/sites/login", json={"url": "https://kns.cnki.net/"}
+        "/api/v1/web-access/sites/login",
+        json={"url": "https://kns.cnki.net/", "approved": True},
     )
     assert resp.status_code == 200
     assert resp.json()["job_id"] == "j-1"
@@ -185,8 +197,171 @@ async def test_start_login_returns_job_id_and_job_can_be_polled(client, monkeypa
     assert missing.status_code == 404
 
 
+async def test_start_login_requires_explicit_approval(client, monkeypatch):
+    from backend.tools import network_config
+
+    monkeypatch.setattr(
+        network_config,
+        "load_network_policy",
+        lambda: SimpleNamespace(check_host=lambda url: None),
+    )
+    monkeypatch.setattr(
+        routes,
+        "_login_permission_decision",
+        lambda url: _decision(False, needs_approval=True, reason="requires approval"),
+    )
+    monkeypatch.setattr(
+        routes,
+        "site_login_jobs",
+        SimpleNamespace(start=lambda url: (_ for _ in ()).throw(AssertionError("must not start"))),
+    )
+    resp = await client.post(
+        "/api/v1/web-access/sites/login", json={"url": "https://kns.cnki.net/"}
+    )
+    assert resp.status_code == 202
+    assert resp.json()["approval_required"] is True
+
+
+async def test_start_login_denied_in_read_only_mode(client, monkeypatch):
+    from backend.tools import network_config
+
+    monkeypatch.setattr(
+        network_config,
+        "load_network_policy",
+        lambda: SimpleNamespace(check_host=lambda url: None),
+    )
+    monkeypatch.setattr(
+        routes,
+        "_login_permission_decision",
+        lambda url: _decision(False, needs_approval=False, reason="discuss mode is read-only"),
+    )
+    resp = await client.post(
+        "/api/v1/web-access/sites/login",
+        json={"url": "https://kns.cnki.net/", "approved": True},
+    )
+    assert resp.status_code == 403
+    assert "permission_denied" in resp.json()["error"]
+
+
+async def test_start_login_auto_mode_starts_without_approval(client, monkeypatch):
+    from backend.tools import network_config
+
+    monkeypatch.setattr(
+        network_config,
+        "load_network_policy",
+        lambda: SimpleNamespace(check_host=lambda url: None),
+    )
+    monkeypatch.setattr(routes, "_login_permission_decision", lambda url: _decision(True))
+    monkeypatch.setattr(routes, "site_login_jobs", _FakeJobs())
+    resp = await client.post(
+        "/api/v1/web-access/sites/login", json={"url": "https://kns.cnki.net/"}
+    )
+    assert resp.status_code == 200
+
+
 async def test_sites_origin_guard(client):
     resp = await client.get(
         "/api/v1/web-access/sites", headers={"Origin": "https://evil.example"}
     )
     assert resp.status_code == 403
+
+
+def test_login_permission_decision_uses_enforcer(monkeypatch):
+    calls = []
+
+    class _Enforcer:
+        def check(self, tool_name, args):
+            calls.append((tool_name, args))
+            return _decision(True)
+
+    monkeypatch.setattr(
+        "backend.tools.permissions.load_enforcer_from_settings",
+        lambda *a, **kw: _Enforcer(),
+    )
+    decision = routes._login_permission_decision("https://kns.cnki.net/")
+    assert decision.allowed is True
+    assert calls == [("browser_login", {"url": "https://kns.cnki.net/"})]
+
+
+def test_login_permission_denies_in_read_only_mode(monkeypatch):
+    from backend.tools.permissions import PermissionEnforcer, PermissionMode
+
+    monkeypatch.setattr(
+        "backend.tools.permissions.load_enforcer_from_settings",
+        lambda *a, **kw: PermissionEnforcer(mode=PermissionMode.READ_ONLY, rules=[]),
+    )
+    decision = routes._login_permission_decision("https://kns.cnki.net/")
+    assert decision.allowed is False
+    assert decision.needs_approval is False
+
+
+def test_login_permission_asks_in_prompt_mode(monkeypatch):
+    from backend.tools.permissions import PermissionEnforcer, PermissionMode
+
+    monkeypatch.setattr(
+        "backend.tools.permissions.load_enforcer_from_settings",
+        lambda *a, **kw: PermissionEnforcer(mode=PermissionMode.PROMPT, rules=[]),
+    )
+    decision = routes._login_permission_decision("https://kns.cnki.net/")
+    assert decision.allowed is False
+    assert decision.needs_approval is True
+
+
+async def test_verify_site_not_found(client, monkeypatch):
+    monkeypatch.setattr(routes, "list_credentials", lambda: [])
+    resp = await client.post("/api/v1/web-access/sites/verify", json={"domain": ".cnki.net"})
+    assert resp.status_code == 404
+
+
+async def test_verify_site_logged_in(client, monkeypatch):
+    monkeypatch.setattr(routes, "list_credentials", lambda: [_record()])
+    from backend.tools import web_render
+
+    monkeypatch.setattr(
+        web_render,
+        "render_page",
+        lambda *a, **kw: {"login_wall": False, "content": "欢迎回来 退出登录"},
+    )
+    resp = await client.post("/api/v1/web-access/sites/verify", json={"domain": ".cnki.net"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "logged_in"
+    assert body["domain"] == ".cnki.net"
+    assert body["url"].startswith("https://")
+    assert isinstance(body["checked_at"], int)
+
+
+async def test_verify_site_login_required(client, monkeypatch):
+    monkeypatch.setattr(routes, "list_credentials", lambda: [_record()])
+    from backend.tools import web_render
+
+    monkeypatch.setattr(
+        web_render,
+        "render_page",
+        lambda *a, **kw: {"login_wall": False, "content": "请登录后查看全文"},
+    )
+    resp = await client.post("/api/v1/web-access/sites/verify", json={"domain": ".cnki.net"})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "login_required"
+
+
+async def test_verify_site_render_error_is_unknown(client, monkeypatch):
+    monkeypatch.setattr(routes, "list_credentials", lambda: [_record()])
+    from backend.tools import web_render
+
+    def _boom(*a, **kw):
+        raise web_render.RenderError("browser missing")
+
+    monkeypatch.setattr(web_render, "render_page", _boom)
+    resp = await client.post("/api/v1/web-access/sites/verify", json={"domain": ".cnki.net"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "unknown"
+    assert "browser missing" in body["error"]
+
+
+async def test_verify_site_rejects_header_credential(client, monkeypatch):
+    monkeypatch.setattr(routes, "list_credentials", lambda: [_record(kind="header")])
+    resp = await client.post("/api/v1/web-access/sites/verify", json={"domain": ".cnki.net"})
+    assert resp.status_code == 422
+    assert resp.json()["error"] == "unsupported_credential_kind"

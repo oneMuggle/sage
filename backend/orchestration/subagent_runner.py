@@ -61,6 +61,13 @@ def run_loop_accepts_session_id(agent: Any) -> bool:
     return func_accepts_kwarg(agent.run_loop, "session_id")
 
 
+def run_loop_accepts_dynamic_budget(agent: Any) -> bool:
+    """探测 agent 的 ``run_loop`` 是否接受动态预算参数（2026-11-01）。"""
+    return func_accepts_kwarg(
+        agent.run_loop, "dynamic_budget"
+    ) and func_accepts_kwarg(agent.run_loop, "initial_iteration_budget")
+
+
 def run_lane_accepts_backoff(fn: Any) -> bool:
     """探测（可能被 mock.patch 包装的）``run_lane_with_retry`` 是否接受
     ``backoff_secs`` kwarg（RT10 兼容层）。

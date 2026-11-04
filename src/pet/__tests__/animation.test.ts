@@ -66,4 +66,34 @@ describe('pet animation selection', () => {
     expect(bubbleText(null)).toBeNull();
     expect(bubbleText('unknown')).toBeNull();
   });
+
+  it('rotates idle variants and plays each one once', () => {
+    const pack = {
+      ...PACK,
+      actions: { ...PACK.actions, idle: ['idle-a.webm', 'idle-b.webm'] },
+    };
+    expect(resolveAnimation({ action: 'idle', detail: null }, pack, 0)).toEqual({
+      file: 'idle-a.webm',
+      loop: false,
+    });
+    expect(resolveAnimation({ action: 'idle', detail: null }, pack, 3)).toEqual({
+      file: 'idle-b.webm',
+      loop: false,
+    });
+  });
+
+  it('picks a random click response', () => {
+    const pack = {
+      ...PACK,
+      actions: { ...PACK.actions, click: ['click-a.webm', 'click-b.webm'] },
+    };
+    expect(resolveInteraction(pack, 'click', () => 0)).toEqual({
+      file: 'click-a.webm',
+      loop: false,
+    });
+    expect(resolveInteraction(pack, 'click', () => 0.9)).toEqual({
+      file: 'click-b.webm',
+      loop: false,
+    });
+  });
 });

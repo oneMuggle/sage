@@ -291,3 +291,63 @@ win7 分支的 `bundle-python.ps1` 相对 main 的 `bundle-python-main.ps1` 长�
 - 双构建使 win7 发布耗时约翻倍（Source + Cython 各一次 Windows 交叉编译）
 - Cython 模式为实验性，不保证与 Source 模式行为完全一致
 - `upload-artifact@v4` 用 `**` 通配时需注意 globstar 语义，否则会漏传产物
+
+## 12. 覆盖安装关闭流程与自动重启（2026-11 起）
+
+> 归档自 `docs/plans/2026-11-03_installer-overwrite-ux.md`（2026-11-03 实施）。
+
+### 12.1 问题
+
+覆盖安装时安装器弹窗「Sage 无法关闭，请手动关闭」，手动结束进程后重试仍失败，
+必须先卸载旧版本才能安装。三个叠加根因：
+
+1. electron-builder 内置 `CHECK_APP_RUNNING` 只强杀自身 PID 树，残留的子进程与
+   `$INSTDIR` 下 Sage 拉起的 Python 后端继续占用文件；两次强杀失败即弹
+   `$(appCannotBeClosed)` 并 `Quit`。
+2. `updateManager.ts` 在启动安装包后立即 `app.relaunch(); app.exit(0)`，旧版本马上
+   重启并与安装器争抢安装目录；同时安装器没有拿到 `--force-run`，静默安装完成后
+   不会拉起新版本。
+3. 关闭窗口期间安装页没有任何反馈，用户误以为卡死。
+
+### 12.2 `build/installer.nsh`：`customCheckAppRunning`
+
+覆盖 electron-builder 内置宏。该宏在安装区段、`uninstallOldVersion` 之前执行，
+此时 `$INSTDIR` 已确定、安装器 CWD 尚未进入安装目录、进度页可见（`DetailPrint`
+可刷新状态行）。
+
+| 步骤 | 行为 |
+| --- | --- |
+| 1 | `tasklist` 探测 `Sage.exe`，未运行则跳过关闭 |
+| 2 | `DetailPrint "正在关闭 Sage，请稍候…"` + 英文行 |
+| 3 | `taskkill /IM "Sage.exe" /T`（不带 `/F`，走 WM_CLOSE 触发 `before-quit` 正常释放） |
+| 4 | 每 500 ms 复查，最多 10 次（约 5 秒） |
+| 5 | 仍存活 → `DetailPrint` 提示 + `taskkill /F /IM "Sage.exe" /T` |
+| 6 | 后端兜底：`wmic process where "name='python.exe' and commandline like '%-m backend.main%'" call terminate`（`wmic` 缺失则跳过） |
+| 7 | 交互安装仍存活 → 复用 `$(appCannotBeClosed)` 的 Retry/Cancel；静默安装继续 |
+| 8 | `!ifndef BUILD_UNINSTALLER` 下执行 `.prepare-rollback.bat`（旧目录移 `.prev`） |
+
+原 `customInit` 已删除：它运行在 `.onInit`（目录页之前），既无法显示进度，
+`$INSTDIR` 也可能尚未确定；回滚暂存职责并入第 8 步。
+
+### 12.3 `electron/updateManager.ts`：标准安装契约
+
+provider 安装路径与 `reinstallFromPackage()` 统一为 electron-updater 契约：
+
+```
+Sage-Setup-x.y.z.exe --updated /S --force-run /D=<installDir>
+```
+
+- `--updated` 标记升级、`/S` 静默、`--force-run` 让辅助安装器结束时拉起新版本。
+- 去掉 `app.relaunch()`：旧版本立即重启正是覆盖冲突来源，新版本交给安装器拉起。
+- 只等待 `spawn`/`error` 事件而非 `exit`：安装器会主动结束当前进程，等待 `exit`
+  会死锁；spawn 失败（文件缺失/无权限）仍同步抛错并回滚状态。
+- 手动双击安装无需额外处理：完成页默认勾选「运行 Sage」（`runAfterFinish`）。
+
+### 12.4 验证与残留风险
+
+- 已通过：`tsc --noEmit`、`eslint`、全量 vitest（6368 passed / 6 skipped）、
+  `architecture-check`（三条目按棘轮协议上调：`updateManager.ts` 1518、
+  两个测试文件 1823 / 881）。
+- **Linux 无法编译/验证 NSIS 安装器**。发版前必须在 Win7 实机做一次覆盖安装冒烟：
+  运行中的 Sage（含托盘模式）→ 覆盖安装 → 状态行出现关闭提示 → 安装完成自动拉起新版。
+- 托盘模式（`closeToTray`）会拦截 WM_CLOSE，5 秒后走强杀；这是预期行为。

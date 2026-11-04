@@ -23,6 +23,8 @@ const settings = {
         { id: 'model-1', capabilities: ['chat'] as ModelCapability[], endpointId: 'ep-1' },
       ],
       lastDiscoveredAt: null,
+      reasoningEffort: null,
+      thinkingBudget: null,
     },
   ],
   modelSelections: {
@@ -146,8 +148,9 @@ describe('ModelsTab routing mode (Task 11)', () => {
 
   it('auto mode keeps the other five capability selectors', () => {
     // 6 个能力选择器 (手动: chat/vision/embedding/tts/asr/image_gen) → 自动模式
-    // 隐藏 chat 选择器剩 5 个。无其它 <select> 干扰, 直接全量计数。
-    const capabilitySelects = (container: HTMLElement) => container.querySelectorAll('select');
+    // 隐藏 chat 选择器剩 5 个；排除本地 OCR 的引擎/语言下拉（非模型能力选择器）。
+    const capabilitySelects = (container: HTMLElement) =>
+      container.querySelectorAll('select:not([data-testid^="settings-ocr-"])');
 
     const manual = renderTab();
     expect(capabilitySelects(manual.container)).toHaveLength(6);

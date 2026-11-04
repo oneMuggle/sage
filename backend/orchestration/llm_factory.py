@@ -100,7 +100,9 @@ def load_llm_config_from_settings() -> Optional[Dict[str, Any]]:
 
     result = {
         "provider": "custom",
-        "api_key": endpoint["apiKey"],
+        # ollama / 本地 openai-compatible 端点可以没有 apiKey（上方守卫允许）,
+        # 直接下标会在启动期抛 KeyError 让后端起不来。
+        "api_key": endpoint.get("apiKey") or "",
         "base_url": endpoint["baseUrl"],
         "model": model_id,
         "temperature": 0.3,
@@ -271,6 +273,28 @@ def build_llm_client_from_settings() -> Optional[Any]:
         return LLMClient(LLMConfig(**cfg))
     except Exception as exc:
         logger.warning("llm_factory: failed to build LLMClient: %s", exc)
+        return None
+
+
+def build_httpx_adapter_from_settings() -> Optional[Any]:
+    """Build an ``HttpxLLMAdapter`` bound to the persisted endpoint, or ``None``.
+
+    ``None`` means "no usable endpoint configured" — callers pass it straight
+    to ``MemoryExtractor``, which then degrades to keyword extraction without
+    touching the network. Returning a default-configured adapter instead (the
+    old behaviour) made background memory extraction hit an unreachable
+    ``api.openai.com`` with an empty key and stall for minutes.
+    """
+    try:
+        cfg = load_llm_config_from_settings()
+        if cfg is None:
+            return None
+        from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
+
+        return HttpxLLMAdapter(**cfg)
+    except Exception as exc:
+        # 解析设置失败不应拖垮启动期（lifespan 里同步调用）。
+        logger.warning("llm_factory: failed to build HttpxLLMAdapter: %s", exc)
         return None
 
 

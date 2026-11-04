@@ -2,20 +2,32 @@
 // Fix #2 (2026-09-06): PlanCard 已移至 Chat.tsx 主对话区域,此处仅保留状态摘要 + 任务树。
 // UI 优化 2026-10-14: 顶部增加 sub-tab 切换「实时进度 / 完整轨迹」。
 // 轨迹原为独立 RightPanel Tab，合并入此组件作为第二个 sub-tab 视图。
+// 2026-11-02 进度面板优化: sub-tab 三切分「概览 / 任务 / 轨迹」。
+// 此前一个视图里同时塞了任务清单 + 编排计划 + 子代理执行情况，信息密度过高、
+// 需要滚动才能找到重点。切分后：
+//   概览 = StatusBar(常驻顶栏) + 焦点卡 + 任务清单 + 历史运行
+//   任务 = 任务树（点击行 → 整面板切到 TaskDetailView 看实时运行情况）
+//   轨迹 = 完整轨迹（原样保留）
 import { useState } from 'react';
 
-import { useChatStreamStore, selectSessionSlots } from '../../../features/send-message/chatStreamStore';
+import {
+  useChatStreamStore,
+  selectSessionSlots,
+} from '../../../features/send-message/chatStreamStore';
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { ToolCall } from '../../../shared/lib/store';
 import { TrajectoryPane } from '../TrajectoryPane';
 
 // Multi-Agent Orchestration: 编排任务板聚合状态
+import { CurrentTaskFocus } from './CurrentTaskFocus';
 import { SessionRunHistory } from './SessionRunHistory';
+import { StatusBar } from './StatusBar';
+import { TaskDetailView } from './TaskDetailView';
 import { TaskTreeSection } from './TaskTreeSection';
 // P1 todo 接线 (2026-08-21): agent 自维护任务清单
 import { TodoListSection } from './TodoListSection';
 
-type ProgressSubTab = 'live' | 'trajectory';
+type ProgressSubTab = 'overview' | 'tasks' | 'trajectory';
 
 interface ProgressSectionProps {
   iteration: number;
@@ -111,117 +123,118 @@ export function ProgressSection({
   onRetryTask,
   onSelectRun,
 }: ProgressSectionProps) {
-  // UI 优化 2026-10-14: sub-tab 切换「实时进度 / 完整轨迹」。
-  // 默认激活「实时进度」；轨迹 Tab 从独立 RightPanel Tab 降级而来。
-  const [subTab, setSubTab] = useState<ProgressSubTab>('live');
+  // 2026-11-02 进度面板优化: sub-tab 三切分 + 常驻状态栏 + 整面板任务详情。
+  const [subTab, setSubTab] = useState<ProgressSubTab>('overview');
+  // 打开任务详情（整面板替换）；null = 回到任务列表。
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   // P1 todo 接线: agent 自维护清单快照（组件内直取 store，减少 prop drilling）。
   // S2: 按会话键控 —— 显示的是当前打开会话的清单。
   const todos = useChatStreamStore((s) => selectSessionSlots(s, sessionId).todos);
-  const stateLabel = streamingState ? (STATE_LABELS[streamingState] ?? streamingState) : null;
-  // 进度可视化 P0-2 (2026-08-12): 编排进行中有 taskBoard 时,用 5 元组
-  // 摘要替代"等待输入"占位文,避免误导用户以为主进程空闲。
-  // C3 (2026-08-15): 三态 —— 仅已派发(dispatchedAt)显示 5 元组;
-  // 未派发显示「计划待执行」;无 taskBoard 回落原状态机文案。
-  const progress = taskBoard?.progress;
-  const hasTaskBoard = taskBoard != null;
-  const isDispatched = hasTaskBoard && taskBoard.dispatchedAt != null;
-  const showProgress = isDispatched && progress != null;
-  // 进度可视化 M2 修正 (2026-08-12): "进行中"口径与 TaskTreeSection 一致
-  // （queued + running 都算未完成），避免同一面板两行文案数字矛盾。
-  const inFlight = (progress?.queued ?? 0) + (progress?.running ?? 0);
 
-  /* v8 ignore start */
-
-  /* v8 ignore stop */
+  const openTaskDetail = (taskId: string) => setSelectedTaskId(taskId);
+  const closeTaskDetail = () => setSelectedTaskId(null);
 
   return (
-    <div className="flex flex-col h-full">
-      {/* UI 优化 2026-10-14: sub-tab 切换行 */}
-      <div className="flex border-b border-border shrink-0">
-        <button
-          type="button"
-          className={`flex-1 py-2 text-xs font-medium transition-colors ${
-            subTab === 'live'
-              ? 'text-primary border-b-2 border-primary'
-              : 'text-text-secondary hover:text-text'
-          }`}
-          onClick={() => setSubTab('live')}
-          data-testid="progress-subtab-live"
-        >
-          实时进度
-        </button>
-        <button
-          type="button"
-          className={`flex-1 py-2 text-xs font-medium transition-colors ${
-            subTab === 'trajectory'
-              ? 'text-primary border-b-2 border-primary'
-              : 'text-text-secondary hover:text-text'
-          }`}
-          onClick={() => setSubTab('trajectory')}
-          data-testid="progress-subtab-trajectory"
-        >
-          完整轨迹
-        </button>
-      </div>
+    <div className="flex flex-col h-full min-h-0">
+      {/* 常驻顶栏 —— 状态 / 进度条 / run 级汇总与操作，任何视图下都可见。 */}
+      <StatusBar
+        streamingState={streamingState}
+        isLoading={isLoading}
+        iteration={iteration}
+        board={taskBoard ?? null}
+        onCancel={taskBoard ? () => onCancelExecution?.(taskBoard.runId) : undefined}
+      />
 
-      {subTab === 'trajectory' ? (
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <TrajectoryPane sessionId={sessionId ?? null} />
+      {selectedTaskId && taskBoard ? (
+        /* 任务详情 —— 整面板替换。旧的 SubagentDetailDrawer 嵌在右栏里宽度被裁切，
+           且从编排 store 解析聊天任务恒为 undefined（点了没反应）；此处占满面板。 */
+        <div className="flex-1 min-h-0">
+          <TaskDetailView
+            board={taskBoard}
+            taskId={selectedTaskId}
+            onBack={closeTaskDetail}
+            onRetryTask={onRetryTask}
+          />
         </div>
       ) : (
-        <div className="p-3 space-y-2 text-sm overflow-y-auto flex-1 min-h-0">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              {isLoading && stateLabel && (
-                <span className="text-primary font-medium">{stateLabel}</span>
-              )}
-              {iteration > 0 && <span className="text-text-secondary">第 {iteration} 轮</span>}
-              {showProgress && progress && (
-                <span className="text-primary" data-testid="task-progress-summary">
-                  编排任务 {progress.done}/{progress.total} 完成
-                  {inFlight > 0 && <span className="text-text-secondary"> · {inFlight} 个进行中</span>}
-                  {progress.failed > 0 && (
-                    <span className="text-error ml-1">({progress.failed} 失败)</span>
-                  )}
-                  {progress.cancelled > 0 && (
-                    <span className="text-text-secondary ml-1">({progress.cancelled} 已取消)</span>
-                  )}
-                </span>
-              )}
-              {hasTaskBoard && !isDispatched && (
-                <span className="text-primary" data-testid="plan-pending-label">
-                  计划待执行
-                </span>
-              )}
-              {!hasTaskBoard && !showProgress && !isLoading && !stateLabel && (
-                <span className="text-muted">等待输入...</span>
-              )}
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-            </div>
+        <>
+          {/* sub-tab 切换行 —— 概览 / 任务 / 轨迹 */}
+          <div className="flex border-b border-border shrink-0">
+            <button
+              type="button"
+              className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                subTab === 'overview'
+                  ? 'text-primary border-b-2 border-primary'
+                  : 'text-text-secondary hover:text-text'
+              }`}
+              onClick={() => setSubTab('overview')}
+              data-testid="progress-subtab-overview"
+            >
+              概览
+            </button>
+            <button
+              type="button"
+              className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                subTab === 'tasks'
+                  ? 'text-primary border-b-2 border-primary'
+                  : 'text-text-secondary hover:text-text'
+              }`}
+              onClick={() => setSubTab('tasks')}
+              data-testid="progress-subtab-tasks"
+            >
+              任务
+            </button>
+            <button
+              type="button"
+              className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                subTab === 'trajectory'
+                  ? 'text-primary border-b-2 border-primary'
+                  : 'text-text-secondary hover:text-text'
+              }`}
+              onClick={() => setSubTab('trajectory')}
+              data-testid="progress-subtab-trajectory"
+            >
+              完整轨迹
+            </button>
           </div>
 
-          {/* P1 todo 接线: agent 自维护任务清单 + PR-C 编排计划镜像 */}
-          <TodoListSection todos={todos} taskBoard={taskBoard} />
-
-          {/* Fix #2 (2026-09-06): PlanCard 已移至 Chat.tsx 主对话区域。
-             侧边栏仅展示已派发的任务树。 */}
-          {taskBoard?.dispatchedAt && (
-            <TaskTreeSection
-              board={taskBoard}
-              onCancel={() => onCancelExecution?.(taskBoard.runId)}
-              onRerunFailed={() => onRerunFailed?.(taskBoard.runId)}
-              onRetryTask={onRetryTask}
-            />
+          {subTab === 'trajectory' ? (
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <TrajectoryPane sessionId={sessionId ?? null} />
+            </div>
+          ) : (
+            <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+              {subTab === 'overview' && (
+                <>
+                  {/* 焦点卡 —— 回答"现在到底在做什么"，把正在跑的那一个子任务提到最上面。 */}
+                  <CurrentTaskFocus board={taskBoard ?? null} onOpenTask={openTaskDetail} />
+                  {/* 任务清单 —— agent 自维护；编排计划已由「任务」子视图统一承载。 */}
+                  <TodoListSection todos={todos} />
+                  {sessionId && onSelectRun && (
+                    <SessionRunHistory
+                      sessionId={sessionId}
+                      onSelectRun={onSelectRun}
+                      excludeRunId={taskBoard?.runId}
+                    />
+                  )}
+                </>
+              )}
+              {subTab === 'tasks' &&
+                (taskBoard?.dispatchedAt ? (
+                  <TaskTreeSection
+                    board={taskBoard}
+                    onRerunFailed={() => onRerunFailed?.(taskBoard.runId)}
+                    onRetryTask={onRetryTask}
+                    onSelectTask={openTaskDetail}
+                  />
+                ) : (
+                  <div className="text-xs text-text-tertiary" data-testid="task-tree-empty">
+                    暂无已派发的编排任务
+                  </div>
+                ))}
+            </div>
           )}
-          {sessionId && onSelectRun && (
-            <SessionRunHistory
-              sessionId={sessionId}
-              onSelectRun={onSelectRun}
-              excludeRunId={taskBoard?.runId}
-            />
-          )}
-        </div>
+        </>
       )}
     </div>
   );

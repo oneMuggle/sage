@@ -210,6 +210,9 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
                 onOpen={() => void openProject(project)}
                 onNewSession={() => void handleNewChatInProject(project)}
                 onSettings={() => navigate(`/projects/governance/${project.id}`)}
+                onCheckPlaybook={() =>
+                  navigate(`/projects/governance/${project.id}?focus=playbook`)
+                }
                 onRemove={() => void handleRemoveProject(project)}
               >
                 <div

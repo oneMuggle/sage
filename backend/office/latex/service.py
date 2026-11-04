@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from backend.office.errors import (
     OfficeFileNotFoundError,
@@ -19,8 +19,21 @@ from backend.office.errors import (
 )
 from backend.office.path_safety import is_within, resolve_within
 
+from .audit import audit_latex_file
+from .compile import compile_latex, detect_tools
+from .compliance import check_latex_compliance
+from .diff import latexdiff_files
 from .filler import fill_latex_template
 from .parser import LatexLimits, parse_latex_project
+from .pdf_audit import DEFAULT_MAX_PDF_BYTES, audit_pdf
+from .profile_extract import extract_latex_profile
+from .profile_store import (
+    delete_latex_profile,
+    list_latex_profiles,
+    load_latex_profile,
+    save_latex_profile,
+)
+from .project import extract_latex_project_zip
 from .template import analyze_latex_template
 
 #: Raw source returned alongside the structured preview (characters).
@@ -168,6 +181,227 @@ def fill_latex_template_file(
     )
 
 
+def audit_latex_file_service(
+    file_path: Path,
+    *,
+    workspace: Path,
+    required_sections: Optional[List[str]] = None,
+    max_bytes: int = DEFAULT_MAX_FILE_BYTES,
+    limits: Optional[LatexLimits] = None,
+) -> Dict[str, Any]:
+    """Workspace-safe deterministic LaTeX audit."""
+    workspace_path = Path(workspace)
+    if not workspace_path.is_dir():
+        raise OfficeParseError("工作区目录不存在")
+    source = Path(file_path)
+    if not source.is_file():
+        raise OfficeFileNotFoundError(source)
+    if source.suffix.lower() not in (".tex", ".ltx"):
+        raise OfficeParseError("仅支持 .tex 审校")
+    resolved = resolve_within(workspace_path, source)
+    size = resolved.stat().st_size
+    if size > max_bytes:
+        raise OfficeSizeLimitError(size, max_bytes)
+    return audit_latex_file(
+        resolved,
+        root=workspace_path,
+        required_sections=required_sections,
+        limits=limits,
+    )
+
+
+def compile_latex_file(
+    file_path: Path,
+    *,
+    workspace: Path,
+    output_filename: Optional[str] = None,
+    engine: Optional[str] = None,
+    timeout_s: int = 60,
+    max_bytes: int = DEFAULT_MAX_FILE_BYTES,
+    limits: Optional[LatexLimits] = None,
+) -> Dict[str, Any]:
+    """Workspace-safe optional TeX compile."""
+    workspace_path = Path(workspace)
+    if not workspace_path.is_dir():
+        raise OfficeParseError("工作区目录不存在")
+    source = Path(file_path)
+    if not source.is_file():
+        raise OfficeFileNotFoundError(source)
+    resolved = resolve_within(workspace_path, source)
+    size = resolved.stat().st_size
+    if size > max_bytes:
+        raise OfficeSizeLimitError(size, max_bytes)
+    return compile_latex(
+        resolved,
+        root=workspace_path,
+        output_filename=output_filename,
+        engine=engine,
+        timeout_s=timeout_s,
+        limits=limits,
+    )
+
+
+def latexdiff_files_service(
+    original_path: Path,
+    revised_path: Path,
+    *,
+    workspace: Path,
+    output_filename: str = "",
+    compile_pdf: bool = False,
+    engine: Optional[str] = None,
+    timeout_s: int = 60,
+    max_bytes: int = DEFAULT_MAX_FILE_BYTES,
+    limits: Optional[LatexLimits] = None,
+) -> Dict[str, Any]:
+    """Workspace-safe latexdiff (optional PDF compile)."""
+    workspace_path = Path(workspace)
+    if not workspace_path.is_dir():
+        raise OfficeParseError("工作区目录不存在")
+    for path in (original_path, revised_path):
+        source = Path(path)
+        if not source.is_file():
+            raise OfficeFileNotFoundError(source)
+        resolved = resolve_within(workspace_path, source)
+        if resolved.stat().st_size > max_bytes:
+            raise OfficeSizeLimitError(resolved.stat().st_size, max_bytes)
+    return latexdiff_files(
+        Path(original_path),
+        Path(revised_path),
+        root=workspace_path,
+        output_filename=output_filename,
+        compile_pdf=compile_pdf,
+        engine=engine,
+        timeout_s=timeout_s,
+        limits=limits,
+    )
+
+
+def extract_latex_project_service(
+    zip_path: Path,
+    *,
+    workspace: Path,
+    output_dir_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Workspace-safe LaTeX project zip import (extract only, never compile)."""
+    workspace_path = Path(workspace)
+    if not workspace_path.is_dir():
+        raise OfficeParseError("工作区目录不存在")
+    return extract_latex_project_zip(
+        Path(zip_path),
+        workspace=workspace_path,
+        output_dir_name=output_dir_name,
+    )
+
+
+def audit_latex_pdf_service(
+    file_path: Path,
+    *,
+    workspace: Path,
+    required_min_pages: Optional[int] = None,
+    required_max_pages: Optional[int] = None,
+    min_image_dpi: float = 150.0,
+    max_bytes: int = DEFAULT_MAX_PDF_BYTES,
+) -> Dict[str, Any]:
+    """Workspace-safe read-only PDF layout/font audit."""
+    workspace_path = Path(workspace)
+    if not workspace_path.is_dir():
+        raise OfficeParseError("工作区目录不存在")
+    source = Path(file_path)
+    if not source.is_file():
+        raise OfficeFileNotFoundError(source)
+    if source.suffix.lower() != ".pdf":
+        raise OfficeParseError("仅支持 .pdf 审计")
+    resolved = resolve_within(workspace_path, source)
+    return audit_pdf(
+        resolved,
+        root=workspace_path,
+        required_min_pages=required_min_pages,
+        required_max_pages=required_max_pages,
+        min_image_dpi=min_image_dpi,
+        max_bytes=max_bytes,
+    )
+
+
+def check_latex_compliance_service(
+    tex_path: Path,
+    *,
+    workspace: Path,
+    pdf_path: Optional[Path] = None,
+    profile: Optional[Dict[str, Any]] = None,
+    limits: Optional[LatexLimits] = None,
+) -> Dict[str, Any]:
+    """Workspace-safe source + optional PDF compliance check."""
+    workspace_path = Path(workspace)
+    if not workspace_path.is_dir():
+        raise OfficeParseError("工作区目录不存在")
+    tex = Path(tex_path)
+    if not tex.is_file():
+        raise OfficeFileNotFoundError(tex)
+    resolved_tex = resolve_within(workspace_path, tex)
+    resolved_pdf: Optional[Path] = None
+    if pdf_path is not None:
+        pdf = Path(pdf_path)
+        if not pdf.is_file():
+            raise OfficeFileNotFoundError(pdf)
+        if pdf.suffix.lower() != ".pdf":
+            raise OfficeParseError("仅支持 .pdf 合规检查")
+        resolved_pdf = resolve_within(workspace_path, pdf)
+    return check_latex_compliance(
+        resolved_tex,
+        root=workspace_path,
+        pdf_path=resolved_pdf,
+        profile=profile,
+        limits=limits,
+    )
+
+
+def latex_capabilities() -> Dict[str, Any]:
+    """Return available TeX engines and latexdiff."""
+    return detect_tools()
+
+
+def list_latex_profiles_service(workspace: Path) -> Dict[str, Any]:
+    """List workspace-scoped compliance profiles."""
+    return list_latex_profiles(Path(workspace))
+
+
+def load_latex_profile_service(workspace: Path, name: str) -> Dict[str, Any]:
+    """Load one workspace-scoped compliance profile."""
+    return load_latex_profile(Path(workspace), name)
+
+
+def save_latex_profile_service(
+    workspace: Path,
+    name: str,
+    profile: Dict[str, Any],
+    *,
+    source: str = "",
+    evidence: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Create/update a workspace-scoped compliance profile."""
+    return save_latex_profile(
+        Path(workspace),
+        name,
+        profile,
+        source=source,
+        evidence=evidence,
+    )
+
+
+def delete_latex_profile_service(workspace: Path, name: str) -> Dict[str, Any]:
+    """Delete a workspace-scoped compliance profile."""
+    return delete_latex_profile(Path(workspace), name)
+
+
+def extract_latex_profile_service(
+    source_path: Path,
+    *,
+    workspace: Path,
+) -> Dict[str, Any]:
+    """Extract a candidate profile from a guideline document."""
+    return extract_latex_profile(Path(source_path), workspace=Path(workspace))
+
+
 def is_within_root(path: Path, root: Path) -> bool:
     try:
         return is_within(Path(root).resolve(), Path(path).resolve())
@@ -186,10 +420,22 @@ __all__ = [
     "DEFAULT_MAX_FILE_BYTES",
     "MAX_SOURCE_CHARS",
     "analyze_latex_template_file",
+    "audit_latex_file_service",
+    "audit_latex_pdf_service",
+    "check_latex_compliance_service",
+    "compile_latex_file",
+    "delete_latex_profile_service",
+    "extract_latex_project_service",
+    "extract_latex_profile_service",
     "fill_latex_template_file",
     "is_latex_path",
     "is_within_root",
+    "latex_capabilities",
+    "latexdiff_files_service",
+    "list_latex_profiles_service",
+    "load_latex_profile_service",
     "read_latex_file",
     "read_latex_path",
     "safe_relative",
+    "save_latex_profile_service",
 ]

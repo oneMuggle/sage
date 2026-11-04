@@ -347,7 +347,7 @@ export function KnowledgeExtractionPanel({
                               content: `[M2 对话知识提取思路 (${sessionId})] ${reasoning}`,
                               importance: 6,
                               sourceMessageIds: [],
-                              reasoning: 'M2 对话知识提取思路沉淀至 L3 画像',
+                              reasoning: 'M2 对话知识提取思路保存到 AI 记忆',
                             },
                           ],
                         });
@@ -358,7 +358,7 @@ export function KnowledgeExtractionPanel({
                   }}
                   className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                 >
-                  {savedReasoningL3 ? '已存 L3' : '思路存为 L3'}
+                  {savedReasoningL3 ? '已保存' : '保存思路到 AI 记忆'}
                 </button>
                 <button
                   type="button"
@@ -378,7 +378,7 @@ export function KnowledgeExtractionPanel({
                   }}
                   className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                 >
-                  {savedReasoningL4 ? '已存 L4 资料' : '思路存为 L4 资料'}
+                  {savedReasoningL4 ? '已保存' : '保存思路为资料'}
                 </button>
               </div>
             </div>
@@ -441,7 +441,7 @@ export function KnowledgeExtractionPanel({
                     className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
                   >
                     <ShieldPlus className="h-3 w-3" />
-                    选中项同步转 L2 约束
+                    选中项同步转 项目规则
                   </button>
                   <button
                     type="button"
@@ -504,7 +504,7 @@ export function KnowledgeExtractionPanel({
                     }}
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                   >
-                    选中项转 L4 资料
+                    选中项转 项目资料
                   </button>
                   <button
                     type="button"
@@ -676,7 +676,7 @@ export function KnowledgeExtractionPanel({
                           }}
                           className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                         >
-                          {convertedL4Indices.has(idx) ? '已存L4' : '+L4'}
+                          {convertedL4Indices.has(idx) ? '已保存' : '+资料'}
                         </button>
                         <button
                           type="button"
@@ -687,10 +687,10 @@ export function KnowledgeExtractionPanel({
                           void handleConvertToConstraint(entry, idx);
                         }}
                         className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                        title="将此知识条目同步固化为 L2 项目约束"
+                        title="将此知识条目同步固化为项目规则"
                       >
                         <ShieldPlus className="h-3 w-3 text-primary" />
-                        {convertedConstraintIndices.has(idx) ? '已转 L2 约束' : '转 L2 约束'}
+                        {convertedConstraintIndices.has(idx) ? '已转为项目规则' : '转 项目规则'}
                         </button>
                       </div>
                     </div>

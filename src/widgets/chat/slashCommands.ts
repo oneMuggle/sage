@@ -164,7 +164,7 @@ export const slashCommands: SlashCommand[] = [
     description: '打开 Office 文档工作台',
     icon: FileSpreadsheet,
     mode: 'navigate',
-    route: '/office',
+    route: '/office?tab=documents',
   },
   {
     name: 'journal',
@@ -172,7 +172,7 @@ export const slashCommands: SlashCommand[] = [
     description: '打开 Office 工作台的日志面板',
     icon: BookText,
     mode: 'navigate',
-    route: '/office',
+    route: '/office?tab=generate',
   },
   {
     name: 'schedule',

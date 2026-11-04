@@ -8,19 +8,15 @@
 
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 
-import { chatReadingEn, chatReadingZh } from './chatReading';
-import { en } from './en';
-import { zh, type TranslationKey as CoreTranslationKey } from './zh';
+import {
+  loadStoredLocale,
+  LOCALE_STORAGE_KEY,
+  translations,
+  type Locale,
+  type TranslationKey,
+} from './translations';
 
-export type Locale = 'zh' | 'en';
-
-/** 核心词典（zh.ts）+ 按功能拆出的词典模块（见 chatReading.ts 的说明） */
-export type TranslationKey = CoreTranslationKey | keyof typeof chatReadingZh;
-
-const translations: Record<Locale, Record<TranslationKey, string>> = {
-  zh: { ...zh, ...chatReadingZh },
-  en: { ...en, ...chatReadingEn },
-};
+export type { Locale, TranslationKey };
 
 interface I18nContextValue {
   locale: Locale;
@@ -33,19 +29,6 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 interface I18nProviderProps {
   children: ReactNode;
   defaultLocale?: Locale;
-}
-
-// U10 (批次 C): locale 持久化 —— localStorage 优先于默认值
-const LOCALE_STORAGE_KEY = 'sage.locale';
-
-function loadStoredLocale(defaultLocale: Locale): Locale {
-  try {
-    const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
-    if (stored === 'zh' || stored === 'en') return stored;
-  } catch {
-    /* localStorage 不可用 (隐私模式等) → 默认 */
-  }
-  return defaultLocale;
 }
 
 export function I18nProvider({ children, defaultLocale = 'zh' }: I18nProviderProps) {

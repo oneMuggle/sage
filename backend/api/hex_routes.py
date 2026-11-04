@@ -125,9 +125,15 @@ async def chat(
 
     # Office @-mention: 与 legacy /chat/stream 对齐, 调用 resolve_attachments
     # (含路径安全校验 + 50MiB 上限 + 失败 mention 静默 skip — 这些已在 Task 3
-    # 落地到 attachment_resolver.process 本身).
+    # 落地到 attachment_resolver.process 本身). 项目 allowed_paths 命中的
+    # 工作区外文件允许注入, 未命中仍按 skipped 原因告知模型.
+    from backend.office.allowed_paths import get_session_allowed_paths
+
     attachment_block = await resolve_attachments(
-        req.message, req.workspace_path or ""
+        req.message,
+        req.workspace_path or "",
+        allowed_paths=get_session_allowed_paths(req.session_id),
+        project_root=req.workspace_path,
     )
     # T4.M2 closure: 附件块只在当前 LLM 调用中生效, 不持久化.
     # 旧实现用 svc.storage.append_message(...) 会让后续 turn 重发同一块,
@@ -227,8 +233,10 @@ async def update_settings(
     from backend.data.settings_canonicalizer import (
         classify_settings_shape_field,
         classify_settings_validation_error,
+        preserve_endpoint_api_keys,
         strip_unknown_fields,
         to_camel,
+        validate_retry_settings_payload,
         validate_settings_payload,
         validate_settings_shape,
     )
@@ -247,8 +255,30 @@ async def update_settings(
     # payload 侧的未知字段仍原样保留并触发 400 —— 静默净化历史残留，严格拒绝新提交。
     camel_existing = strip_unknown_fields(to_camel(existing))
     camel_merged = {**camel_existing, **to_camel(canonical_payload)}
+    # 2026-11-01: 空 apiKey 表示"保持不变"，避免脱敏回传把已存 key 覆盖为空.
+    camel_merged = preserve_endpoint_api_keys(camel_merged, camel_existing)
     # Task 1 (2026-08-23): 旧 endpoints 写入前补 protocol 默认值, 与 GET 路径对齐.
     _migrate_default_protocol(camel_merged)
+    # 2026-11-03: 重试参数取值域校验 —— 只查本次 payload, 不查合并后的存量树
+    # (否则历史存量的非法值会让用户改任何字段都提交不了). 但 base<=max 交叉
+    # 校验需要存量另一半, 否则用户只改基数时冲突会被运行时静默回退.
+    try:
+        validate_retry_settings_payload(canonical_payload, camel_merged)
+    except ValueError as exc:
+        field = classify_settings_validation_error(exc)
+        logger.warning(
+            "[HEX REQ %s] /settings rejected: error_type=invalid_settings_payload field=%s",
+            request_id,
+            field,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_settings_payload",
+                "message": "设置内容无效，请检查字段格式",
+                "field": field,
+            },
+        ) from exc
     # Task 1 round 1 (2026-08-24): 显式跑 timezone / protocol / localModelPath
     # value 校验 (Pydantic 装饰器不可用, 这里下沉到 canonicalizer 层).
     try:
@@ -408,8 +438,10 @@ async def get_preference(key: str) -> PreferenceItem:
 async def put_preference(key: str, item: PreferenceItem) -> PreferenceItem:
     """通用 KV 写入（白名单限定 key）。"""
     from backend.data.settings_canonicalizer import (
+        classify_settings_validation_error,
         parse_app_settings_object,
         redact_secrets_json,
+        validate_retry_settings_payload,
     )
     from backend.data.settings_repo import SettingsRepository
 
@@ -417,9 +449,27 @@ async def put_preference(key: str, item: PreferenceItem) -> PreferenceItem:
         raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
     if key == "app_settings" and item.value is not None:
         try:
-            parse_app_settings_object(item.value)
+            parsed = parse_app_settings_object(item.value)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="app_settings must be a JSON object") from exc
+        # 2026-11-03: 偏好写入同样落在 app_settings, 必须与 /settings 一样校验
+        # 重试取值域 —— 否则可绕过 422 校验直写 NaN / 越界值。
+        try:
+            validate_retry_settings_payload(parsed)
+        except ValueError as exc:
+            field = classify_settings_validation_error(exc)
+            logger.warning(
+                "/preferences rejected: error_type=invalid_settings_payload field=%s",
+                field,
+            )
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "type": "invalid_settings_payload",
+                    "message": "设置内容无效，请检查字段格式",
+                    "field": field,
+                },
+            ) from exc
     if item.value is not None:
         SettingsRepository().set(
             key, item.value, value_type=item.value_type, category=item.category

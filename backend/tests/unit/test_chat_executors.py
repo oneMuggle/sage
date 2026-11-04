@@ -55,7 +55,7 @@ async def test_resolve_attachments_calls_process_with_correct_args():
     ) as mock_process:
         result = await resolve_attachments("see @file.md", "/workspace")
 
-    mock_process.assert_called_once_with("see @file.md", "/workspace")
+    mock_process.assert_called_once_with("see @file.md", "/workspace", None, None)
     assert result == "<attachments>content</attachments>"
 
 
@@ -71,7 +71,7 @@ async def test_resolve_attachments_empty_workspace_skips():
         result = await resolve_attachments("no mentions here", "")
 
     # attachment_resolver.process handles empty workspace internally
-    mock_process.assert_called_once_with("no mentions here", "")
+    mock_process.assert_called_once_with("no mentions here", "", None, None)
     assert result == ""
 
 

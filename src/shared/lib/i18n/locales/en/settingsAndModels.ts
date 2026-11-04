@@ -434,7 +434,7 @@ export const enSettingsAndModels = {
   'office.staging.review': 'Old import with no live owner — manual review only',
   'office.staging.untracked': 'No trustworthy staging evidence — retain',
   'office.staging.unreadable': 'Evidence unavailable — retain',
-  'office.title': 'Office Documents',
+  'office.title': 'Documents and Review',
   'office.selectWorkspace': 'Select Workspace',
   'office.emptyState': 'Select a workspace directory to get started',
   'office.section.pickFile': 'Select File',
@@ -479,6 +479,27 @@ export const enSettingsAndModels = {
   'office.generate.button': 'Generate',
   'office.generate.generating': 'Generating...',
   'office.generate.success': 'Generated',
+
+  // ─── 2026-11 IA restructure: section tabs / LaTeX sub-tabs / env popover ─────
+  'office.tabs.label': 'Document workspace sections',
+  'office.tab.documents': 'Documents',
+  'office.tab.generate': 'Generate',
+  'office.tab.rules': 'Review & Rules',
+  'office.tab.latex': 'LaTeX',
+  'office.latex.tabs.label': 'LaTeX sections',
+  'office.latex.project': 'Project & Build',
+  'office.latex.templates': 'Templates & Profiles',
+  'office.latex.audit': 'Review & Compliance',
+  'office.env.title': 'Environment',
+  'office.env.capabilities': 'Local capabilities',
+  'office.env.staging': 'Staging directory (read-only)',
+  'office.generate.journal.title': 'Journal template assistant',
+  'office.generate.journal.hint':
+    'Pick a .docx template → fill content → generate or validate',
+  'office.rules.guide.title': 'Where is Word review?',
+  'office.rules.guide.body':
+    'Import a document, then review, revise and export PDF from the preview panel under Documents. This section turns spec / template files into reusable rule packs.',
+  'office.rules.guide.action': 'Go to Documents',
 };
 
 export function formatEnSettingsAndModelsSummary(): string {

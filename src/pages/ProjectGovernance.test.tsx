@@ -16,6 +16,7 @@ const mockListMilestones = vi.fn();
 const mockGetProjectProfile = vi.fn();
 const mockCreateProjectProfile = vi.fn();
 const mockDeleteProjectProfile = vi.fn();
+const mockOpen = vi.fn();
 
 vi.mock('../shared/api', () => ({
   projectApi: {
@@ -24,6 +25,7 @@ vi.mock('../shared/api', () => ({
     scaffold: (...args: unknown[]) => mockScaffold(...args),
     updateAllowedPaths: (...args: unknown[]) => mockUpdateAllowedPaths(...args),
     listMilestones: (...args: unknown[]) => mockListMilestones(...args),
+    open: (...args: unknown[]) => mockOpen(...args),
   },
   memoryApi: {
     getProjectProfile: (...args: unknown[]) => mockGetProjectProfile(...args),
@@ -39,6 +41,10 @@ vi.mock('../features/project-type', () => ({
   PolymorphicArchetypeCards: () => <div data-testid="archetype-cards-stub" />,
   ProjectOverviewWidgets: () => <div data-testid="overview-widgets-stub" />,
   ProjectBootstrapPanel: () => <div data-testid="bootstrap-panel-stub" />,
+  MilestoneProgressWidget: () => <div data-testid="milestone-progress-stub" />,
+  GitStatusWidget: () => <div data-testid="git-widget-stub" />,
+  WikiGenerationPanel: () => <div data-testid="wiki-panel-stub" />,
+  TaskDecomposeDialog: () => <div data-testid="task-decompose-stub" />,
   ProjectTypeBadge: ({ type }: { type: string }) => <span data-testid="type-badge">{type}</span>,
   GovernanceRulesPanel: () => <div data-testid="rules-panel-stub" />,
 }));
@@ -47,6 +53,10 @@ vi.mock('../features/project-type/StudioMaterialsAndProfilePanels', () => ({
   StudioCharterTabPanel: () => <div data-testid="charter-panel-stub" />,
   StudioMaterialsTabPanel: () => <div data-testid="materials-panel-stub" />,
   StudioProfileTabPanel: () => <div data-testid="profile-panel-stub" />,
+}));
+
+vi.mock('../features/playbook/PlaybookCard', () => ({
+  PlaybookCard: () => <div data-testid="playbook-card-stub" />,
 }));
 
 vi.mock('../features/project-type/archetypeBlueprints', () => ({
@@ -132,6 +142,7 @@ describe('ProjectGovernance', () => {
       mockGetProjectProfile,
       mockCreateProjectProfile,
       mockDeleteProjectProfile,
+      mockOpen,
     ].forEach((m) => m.mockReset());
     mockList.mockResolvedValue([testProject]);
     mockListMilestones.mockResolvedValue([]);
@@ -165,13 +176,60 @@ describe('ProjectGovernance', () => {
     expect(screen.getByTestId('governance-tab-settings')).toBeInTheDocument();
   });
 
-  it('defaults to overview tab showing archetype cards', async () => {
+  it('defaults to overview tab showing the project home and domain cards', async () => {
     renderAt('proj-1');
     await waitFor(() => {
       expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
     });
+    expect(screen.getByTestId('project-home-summary')).toBeInTheDocument();
+    expect(screen.getByTestId('project-current-stage-section')).toBeInTheDocument();
     expect(screen.getByTestId('archetype-cards-stub')).toBeInTheDocument();
+    expect(screen.getByTestId('playbook-card-stub')).toBeInTheDocument();
+    // Heavy advanced widgets are no longer on the overview tab.
+    expect(screen.queryByTestId('overview-widgets-stub')).not.toBeInTheDocument();
+  });
+
+  it('moves the initialization wizard and advanced widgets into settings', async () => {
+    renderAt('proj-1');
+    await waitFor(() => {
+      expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('governance-tab-settings'));
+    expect(screen.getByTestId('bootstrap-panel-stub')).toBeInTheDocument();
     expect(screen.getByTestId('overview-widgets-stub')).toBeInTheDocument();
+  });
+
+  it('continues initialization from the home CTA when incomplete', async () => {
+    renderAt('proj-1');
+    await waitFor(() => {
+      expect(screen.getByTestId('project-home-summary')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('project-home-cta')).toHaveTextContent('继续初始化');
+    fireEvent.click(screen.getByTestId('project-home-cta'));
+    expect(screen.getByTestId('bootstrap-panel-stub')).toBeInTheDocument();
+  });
+
+  it('starts a session from the home CTA when initialization is complete', async () => {
+    mockList.mockResolvedValue([
+      {
+        ...testProject,
+        bootstrapState: {
+          applied: ['metadata.description', 'sage_md', 'rule', 'milestones', 'git_init'],
+          appliedAt: 1,
+        },
+      },
+    ]);
+    mockOpen.mockResolvedValue({
+      project: testProject,
+      session: { id: 'session-1' },
+      created: true,
+    });
+    renderAt('proj-1');
+    await waitFor(() => {
+      expect(screen.getByTestId('project-home-cta')).toHaveTextContent('开始会话');
+    });
+    fireEvent.click(screen.getByTestId('project-home-cta'));
+    await waitFor(() => expect(mockOpen).toHaveBeenCalledWith('proj-1'));
   });
 
   it('switches to rules sub-tab under project knowledge', async () => {

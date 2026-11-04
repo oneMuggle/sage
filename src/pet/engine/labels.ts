@@ -76,10 +76,62 @@ export function progressLabel(kind: string | null): string {
   return isZh() ? '待办' : 'Todos';
 }
 
+export function taskStatusLabel(status: string): string {
+  const labels: Record<string, { zh: string; en: string }> = {
+    queued: { zh: '排队中', en: 'Queued' },
+    running: { zh: '运行中', en: 'Running' },
+    awaiting_approval: { zh: '等待审批', en: 'Waiting' },
+    paused: { zh: '已暂停', en: 'Paused' },
+    failed: { zh: '失败', en: 'Failed' },
+    succeeded: { zh: '已完成', en: 'Done' },
+    cancelled: { zh: '已取消', en: 'Cancelled' },
+  };
+  const label = labels[status];
+  if (!label) return status;
+  return isZh() ? label.zh : label.en;
+}
+
+export function taskKindLabel(kind: string): string {
+  if (kind === 'office') return 'Office';
+  if (kind === 'wiki') return 'Wiki';
+  if (kind === 'orchestration') return isZh() ? '编排' : 'Orchestration';
+  if (kind === 'scheduled') return isZh() ? '定时' : 'Scheduled';
+  return isZh() ? '任务' : 'Task';
+}
+
+export function taskAction(status: string): string {
+  if (status === 'awaiting_approval') return 'waiting';
+  if (status === 'failed') return 'error';
+  if (status === 'running' || status === 'queued' || status === 'paused') return 'acting';
+  return 'idle';
+}
+
 const ACTIVE_ACTIONS = new Set(['thinking', 'acting', 'waiting', 'retry', 'observing']);
 
 export function isActiveAction(action: string): boolean {
   return ACTIVE_ACTIONS.has(action);
+}
+
+export function statusGlyph(action: string): string {
+  switch (action) {
+    case 'waiting':
+    case 'error':
+      return '!';
+    case 'done':
+      return '✓';
+    case 'acting':
+      return '▶';
+    case 'thinking':
+      return '…';
+    case 'retry':
+      return '↻';
+    case 'observing':
+      return '◇';
+    case 'sleeping':
+      return 'z';
+    default:
+      return '·';
+  }
 }
 
 export function relativeTime(timestamp: number | null, now = Date.now()): string {

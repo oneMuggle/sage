@@ -7,7 +7,15 @@
  * renderer never passes a raw path.
  */
 import * as ContextMenuPrimitive from '@radix-ui/react-context-menu';
-import { Copy, FolderMinus, FolderOpen, MessageSquarePlus, Play, Settings } from 'lucide-react';
+import {
+  ClipboardCheck,
+  Copy,
+  FolderMinus,
+  FolderOpen,
+  MessageSquarePlus,
+  Play,
+  Settings,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 
@@ -19,6 +27,7 @@ export interface ProjectContextMenuProps {
   onOpen: () => void;
   onNewSession: () => void;
   onSettings: () => void;
+  onCheckPlaybook: () => void;
   onRemove: () => void;
 }
 
@@ -48,6 +57,7 @@ export function ProjectContextMenu({
   onOpen,
   onNewSession,
   onSettings,
+  onCheckPlaybook,
   onRemove,
 }: ProjectContextMenuProps) {
   const handleCopyPath = async () => {
@@ -94,6 +104,10 @@ export function ProjectContextMenu({
           <ContextMenuPrimitive.Item className={itemClass} onSelect={onSettings}>
             <Settings className="h-3.5 w-3.5" />
             项目设置与 AI 初始化…
+          </ContextMenuPrimitive.Item>
+          <ContextMenuPrimitive.Item className={itemClass} onSelect={onCheckPlaybook}>
+            <ClipboardCheck className="h-3.5 w-3.5" />
+            检查项目完整性
           </ContextMenuPrimitive.Item>
           <ContextMenuPrimitive.Item className={itemClass} onSelect={() => void handleCopyPath()}>
             <Copy className="h-3.5 w-3.5" />
