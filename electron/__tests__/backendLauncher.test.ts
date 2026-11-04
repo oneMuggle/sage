@@ -127,7 +127,7 @@ describe('resolveBackendLaunchCommand', () => {
           // built-in default 8765 regardless of override → ECONNREFUSED).
           PYTHON_BACKEND_PORT: '8765',
           // 2026-09-17: log timezone env injection (default UTC)
-          SAGE_LOG_TIMEZONE: 'UTC',
+          SAGE_LOG_TIMEZONE: 'local',
         });
         expect(plan.extraEnv).not.toHaveProperty('PYTHONPATH');
       }
@@ -163,7 +163,7 @@ describe('resolveBackendLaunchCommand', () => {
           SAGE_USER_DATA_DIR: '/mock/userData',
           SAGE_RUNTIME_PYTHON: '/opt/anaconda3/envs/sage-backend/bin/python',
           PYTHON_BACKEND_PORT: '8765',
-          SAGE_LOG_TIMEZONE: 'UTC',
+          SAGE_LOG_TIMEZONE: 'local',
         });
         // CRITICAL: must NOT include `run`, `-n`, or `sage-backend` —
         // that's the legacy conda-wrapper shape and it would re-introduce
@@ -256,7 +256,7 @@ describe('resolveBackendLaunchCommand', () => {
           SAGE_USER_DATA_DIR: '/mock/userData',
           SAGE_RUNTIME_PYTHON: 'python3',
           PYTHON_BACKEND_PORT: '8765',
-          SAGE_LOG_TIMEZONE: 'UTC',
+          SAGE_LOG_TIMEZONE: 'local',
         });
         expect(plan.extraEnv).not.toHaveProperty('PYTHONPATH');
       }
@@ -316,7 +316,7 @@ describe('resolveBackendLaunchCommand', () => {
           // test env has no SAGE_LOG_LEVEL set → `?? 'info'` fallback applies
           SAGE_LOG_LEVEL: 'info',
           // 2026-09-17: log timezone (default UTC)
-          SAGE_LOG_TIMEZONE: 'UTC',
+          SAGE_LOG_TIMEZONE: 'local',
           SAGE_RUNTIME_PYTHON: join('/mock', 'resources', 'python', 'python.exe'),
           // Win uses ';' as PYTHONPATH separator
           PYTHONPATH: [
