@@ -14,6 +14,7 @@ const getSessionSummariesMock = vi.fn();
 const searchMemoriesMock = vi.fn();
 const deleteMemoryMock = vi.fn();
 const navigateMock = vi.fn();
+const agentsListMock = vi.fn();
 
 vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-router-dom')>();
@@ -26,6 +27,12 @@ vi.mock('../../../shared/api', () => ({
     getSessionSummaries: (...args: unknown[]) => getSessionSummariesMock(...args),
     searchMemories: (...args: unknown[]) => searchMemoriesMock(...args),
     deleteMemory: (...args: unknown[]) => deleteMemoryMock(...args),
+  },
+}));
+
+vi.mock('../../../shared/api/agentsApi', () => ({
+  agentsApi: {
+    list: () => agentsListMock(),
   },
 }));
 
@@ -69,6 +76,7 @@ beforeEach(() => {
   getSessionSummariesMock.mockResolvedValue({ items: [], source_breakdown: BREAKDOWN, total: 0 });
   searchMemoriesMock.mockResolvedValue([]);
   deleteMemoryMock.mockResolvedValue(undefined);
+  agentsListMock.mockResolvedValue([]);
 });
 
 describe('MemoryBrowser 加载与列表', () => {
@@ -131,6 +139,62 @@ describe('MemoryBrowser 筛选', () => {
     fireEvent.click(projectFilter);
     await waitFor(() => expect(screen.queryByText('用户记忆')).not.toBeInTheDocument());
     expect(screen.getAllByText('项目记忆').length).toBeGreaterThan(0);
+  }, 20000);
+
+  // M3-Task 6: 专家归属筛选走后端 agent_id 精确过滤。
+  it('专家归属下拉渲染共享层与专家项，切换后按 agentId 重新拉取', async () => {
+    agentsListMock.mockResolvedValue([{ id: 'specialist-x', name: '文献专家' }]);
+    renderBrowser();
+    await screen.findAllByText('记忆内容A', {}, { timeout: 5000 });
+    // 专家列表异步到达后下拉出现（下拉是 button，徽标是 span，用 role 区分）
+    const sharedBtn = await screen.findByRole('button', { name: '共享层' }, { timeout: 5000 });
+    expect(sharedBtn).toBeInTheDocument();
+    const specialistBtn = screen.getByRole('button', { name: '文献专家' });
+    expect(specialistBtn).toBeInTheDocument();
+
+    fireEvent.click(specialistBtn);
+    await waitFor(() => {
+      expect(getMemoriesMock).toHaveBeenLastCalledWith(
+        undefined,
+        1,
+        100,
+        expect.objectContaining({ agentId: 'specialist-x' }),
+      );
+    });
+  }, 20000);
+
+  it('共享层筛选透传 agentId=shared', async () => {
+    agentsListMock.mockResolvedValue([{ id: 'specialist-x', name: '文献专家' }]);
+    renderBrowser();
+    await screen.findAllByText('记忆内容A', {}, { timeout: 5000 });
+    const sharedBtn = await screen.findByRole('button', { name: '共享层' }, { timeout: 5000 });
+
+    fireEvent.click(sharedBtn);
+    await waitFor(() => {
+      expect(getMemoriesMock).toHaveBeenLastCalledWith(
+        undefined,
+        1,
+        100,
+        expect.objectContaining({ agentId: 'shared' }),
+      );
+    });
+  }, 20000);
+
+  it('专家归属徽标区分共享层/主助手/专家私有', async () => {
+    getMemoriesMock.mockResolvedValue({
+      items: [
+        mem({ id: 'm1', content: '共享记忆', agent_id: undefined }),
+        mem({ id: 'm2', content: '主助手记忆', agent_id: 'primary' }),
+        mem({ id: 'm3', content: '专家记忆', agent_id: 'specialist-x' }),
+      ],
+      source_breakdown: BREAKDOWN,
+      total: 3,
+    });
+    renderBrowser();
+    await screen.findAllByText('共享记忆', {}, { timeout: 5000 });
+    expect(screen.getAllByText('共享').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('主助手').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('specialist-x').length).toBeGreaterThan(0);
   }, 20000);
 });
 

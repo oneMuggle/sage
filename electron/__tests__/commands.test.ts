@@ -826,6 +826,23 @@ describe('memory IPC routes (PR-C §5.4)', () => {
     expect(url.searchParams.get('offset')).toBeNull();
   });
 
+  // M3-Task 6: 专家归属过滤 —— agentId → agent_id query
+  it('get_memories forwards agent_id query param when provided', () => {
+    const r = COMMAND_ROUTES.get_memories;
+    const url = new URL(
+      `http://x${r.path({ page: 1, pageSize: 20, offset: null, sessionId: null, memoryType: null, agentId: 'specialist-x' })}`,
+    );
+    expect(url.searchParams.get('agent_id')).toBe('specialist-x');
+  });
+
+  it('get_memories omits agent_id when not provided', () => {
+    const r = COMMAND_ROUTES.get_memories;
+    const url = new URL(
+      `http://x${r.path({ page: 1, pageSize: 20, offset: null, sessionId: null, memoryType: null })}`,
+    );
+    expect(url.searchParams.get('agent_id')).toBeNull();
+  });
+
   it('has get_session_summaries route posting to /api/v1/memory/summaries', () => {
     const r = COMMAND_ROUTES.get_session_summaries;
     expect(r).toBeDefined();

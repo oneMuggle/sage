@@ -172,6 +172,7 @@ function coerceMemoryItem(raw: unknown): Memory {
       ? (scopeRaw as NonNullable<Memory['scope']>)
       : undefined;
   const projectKey = asOptionalString(raw.project_key);
+  const agentId = asOptionalString(raw.agent_id);
   const statusRaw = asOptionalString(raw.status);
   const status =
     statusRaw && VALID_SUMMARY_STATUSES.has(statusRaw as NonNullable<Memory['status']>)
@@ -195,6 +196,7 @@ function coerceMemoryItem(raw: unknown): Memory {
     source_turn_id: sourceTurnId,
     scope,
     project_key: projectKey,
+    agent_id: agentId,
     status,
     error_message: errorMessage,
     importance: asNumber(raw.importance, 0),
@@ -380,7 +382,12 @@ export const memoryApi = {
     memoryType?: 'episodic' | 'semantic' | 'working' | 'session_summary' | 'all',
     page: number = 1,
     pageSize: number = 20,
-    options?: { offset?: number; sessionId?: string | null; signal?: AbortSignal },
+    options?: {
+      offset?: number;
+      sessionId?: string | null;
+      agentId?: string | null;
+      signal?: AbortSignal;
+    },
   ): Promise<MemoryListResponse> {
     // 验证分页参数
     const safePage = Math.max(1, Number(page) || 1);
@@ -392,6 +399,11 @@ export const memoryApi = {
     const safeSessionId =
       options?.sessionId && typeof options.sessionId === 'string' && options.sessionId.trim()
         ? options.sessionId.trim()
+        : null;
+    // M3-Task 6: agent 维度过滤（管理视图精确匹配，透传给 Electron → 后端 agent_id query）
+    const safeAgentId =
+      options?.agentId && typeof options.agentId === 'string' && options.agentId.trim()
+        ? options.agentId.trim()
         : null;
 
     return withRetry(async () => {
@@ -405,6 +417,7 @@ export const memoryApi = {
           pageSize: safePageSize,
           offset: safeOffset,
           sessionId: safeSessionId,
+          agentId: safeAgentId,
         });
         if (options?.signal?.aborted) {
           throw new DOMException('Aborted', 'AbortError');

@@ -90,6 +90,8 @@ export interface Memory {
   scope?: 'user' | 'project' | 'global';
   /** scope='project' 时的项目目录 (规范化绝对路径)。 */
   project_key?: string;
+  /** M3 专家归属轴 (2026-11-04): NULL=共享 / 'primary'=默认助手私有 / 'specialist-x'=专家私有。 */
+  agent_id?: string;
 }
 
 /**

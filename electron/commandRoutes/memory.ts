@@ -33,6 +33,8 @@ export const memoryRoutes: Record<string, CommandRoute> = {
       const memoryType = a?.memoryType as string | null;
       const offset = a?.offset as number | null;
       const sessionId = a?.sessionId as string | null;
+      // M3-Task 6: agent 维度过滤（前端 memoryApi.getMemories 传 agentId，透传给后端 agent_id query）
+      const agentId = a?.agentId as string | null;
       const params = new URLSearchParams({
         page: String(page),
         page_size: String(pageSize),
@@ -46,6 +48,9 @@ export const memoryRoutes: Record<string, CommandRoute> = {
       }
       if (sessionId) {
         params.set('session_id', sessionId);
+      }
+      if (agentId) {
+        params.set('agent_id', agentId);
       }
       return `/api/v1/memory/list?${params.toString()}`;
     },

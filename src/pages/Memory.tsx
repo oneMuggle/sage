@@ -21,6 +21,8 @@ export function Memory() {
   // P0-6: 来自聊天气泡内记忆引用的深链定位（Chat 跳 /memory?focus=<id>）。
   const [searchParams] = useSearchParams();
   const focusMemoryId = searchParams.get('focus') ?? undefined;
+  // M3-Task 6: 导出范围跟随内存浏览器的专家归属筛选(null = 全部)。
+  const [exportAgentId, setExportAgentId] = useState<string | null>(null);
 
   const handleExport = async () => {
     setExporting(true);
@@ -35,6 +37,8 @@ export function Memory() {
           undefined,
           page,
           MEMORY_EXPORT_PAGE_SIZE,
+          // M3-Task 6: 按当前专家归属筛选导出，避免导出范围与列表所见不一致。
+          exportAgentId ? { agentId: exportAgentId } : undefined,
         );
         // Early check: backend clamps page>10 → 10, declaring total from the
         // first response lets us bail out before issuing 10 doomed round-trips.
@@ -131,7 +135,12 @@ export function Memory() {
       {/* P2 scope 轴: 项目级 MEMORY.md */}
       <ProjectProfileCard />
 
-      <MemoryBrowser initialType="all" refreshKey={refreshKey} focusMemoryId={focusMemoryId} />
+      <MemoryBrowser
+        initialType="all"
+        refreshKey={refreshKey}
+        focusMemoryId={focusMemoryId}
+        onAgentFilterChange={setExportAgentId}
+      />
       </div>
     </div>
   );

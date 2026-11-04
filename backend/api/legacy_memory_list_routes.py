@@ -55,6 +55,29 @@ _MEMORY_LIST_MAX_PAGE = _MEMORY_LIST_MAX_FETCH // _MEMORY_LIST_MAX_PAGE_SIZE
 
 router = APIRouter()
 
+
+def _filter_items_by_agent(
+    items: List[Dict[str, Any]],
+    agent_id: Optional[str],
+) -> List[Dict[str, Any]]:
+    """按 agent 维度精确过滤列表（M3-Task 6 管理视图）。
+
+    精确匹配（与存储层的"私有 ∪ 共享"语义不同，管理视图要能定位某专家私有行）：
+
+    - ``agent_id is None``：不过滤（默认管理口径，全量返回）。
+    - ``agent_id == 'shared'``：仅返回 ``agent_id IS NULL`` 的共享行。
+    - 其它字符串：仅返回 ``agent_id == <value>`` 的私有行。
+
+    工作记忆 / 摘要行无 ``agent_id`` 字段：按 ``get('agent_id')`` 取到
+    None，匹配共享语义； specialist-x 精确匹配时会被剔除（符合管理视图预期）。
+    """
+    if agent_id is None:
+        return items
+    if agent_id == "shared":
+        return [it for it in items if not it.get("agent_id")]
+    return [it for it in items if it.get("agent_id") == agent_id]
+
+
 # ==================== 记忆 list/summaries API（C1 第一刀第二片）=====
 @router.get("/memory/list")
 @with_db_lock
@@ -64,6 +87,7 @@ def list_memories(
     offset: Optional[int] = None,
     type: Optional[str] = None,
     session_id: Optional[str] = None,
+    agent_id: Optional[str] = None,
 ):
     """获取记忆列表（带 layer / source / 分页 envelope）。
 
@@ -118,12 +142,20 @@ def list_memories(
             episodic_items = mm.episodic.get_recent(
                 limit=fetch_limit, session_id=session_id
             )
-            items = _enrich_memory_records(
-                episodic_items, layer="episodic", source="episodic"
+            items = _filter_items_by_agent(
+                _enrich_memory_records(
+                    episodic_items, layer="episodic", source="episodic"
+                ),
+                agent_id,
             )
             # step 5: session_id 给定时,total 必须按会话统计,否则分页 envelope
             # 会把其它会话的内存以 total 形式泄漏给 UI
-            total = mm.episodic.count(session_id=session_id)
+            # M3-Task 6: agent_id 过滤时 total 以过滤后条数为准
+            total = (
+                len(items)
+                if agent_id is not None
+                else mm.episodic.count(session_id=session_id)
+            )
             source_breakdown = {
                 "working": 0,
                 "session_summary": 0,
@@ -134,10 +166,17 @@ def list_memories(
             semantic_items = mm.semantic.get_recent(
                 limit=fetch_limit, session_id=session_id
             )
-            items = _enrich_memory_records(
-                semantic_items, layer="semantic", source="semantic"
+            items = _filter_items_by_agent(
+                _enrich_memory_records(
+                    semantic_items, layer="semantic", source="semantic"
+                ),
+                agent_id,
             )
-            total = mm.semantic.count(session_id=session_id)
+            total = (
+                len(items)
+                if agent_id is not None
+                else mm.semantic.count(session_id=session_id)
+            )
             source_breakdown = {
                 "working": 0,
                 "session_summary": 0,
@@ -148,7 +187,10 @@ def list_memories(
             working_items = mm.working.get_context(
                 session_id=session_id, limit=fetch_limit
             ) if session_id else list(mm.working.messages)[-fetch_limit:]
-            items = _enrich_working_records(working_items, session_id=session_id)
+            items = _filter_items_by_agent(
+                _enrich_working_records(working_items, session_id=session_id),
+                agent_id,
+            )
             total = len(items)
             source_breakdown = {
                 "working": len(items),
@@ -167,8 +209,11 @@ def list_memories(
                     session_id=session_id,
                     limit=fetch_limit,
                 )
-                items = _enrich_summary_records(summaries)
-                total = len(summaries)
+                items = _filter_items_by_agent(
+                    _enrich_summary_records(summaries),
+                    agent_id,
+                )
+                total = len(items)
             source_breakdown = {
                 "working": 0,
                 "session_summary": total,
@@ -213,29 +258,53 @@ def list_memories(
             )
             merged.extend(_enrich_working_records(working_items, session_id=session_id))
             merged.extend(_enrich_summary_records(summaries))
+            # M3-Task 6: agent_id 精确过滤（管理视图，与存储层的私有∪共享语义不同）
+            merged = _filter_items_by_agent(merged, agent_id)
             # 按 created_at_ms / timestamp 倒序
             merged.sort(
                 key=lambda x: x.get("created_at_ms", x.get("timestamp_ms", 0)),
                 reverse=True,
             )
             items = merged
-            try:
-                # step 5: total 必须按 session 隔离,否则 envelope 会把其它
-                # 会话的条目数泄漏给当前会话的 UI
-                total = (
-                    mm.episodic.count(session_id=session_id)
-                    + mm.semantic.count(session_id=session_id)
-                    + len(working_items)
-                    + len(summaries)
-                )
-            except Exception:
+            # M3-Task 6: agent_id 给定时 total 以过滤后条数为准
+            if agent_id is not None:
                 total = len(items)
-            source_breakdown = {
-                "working": len(working_items),
-                "session_summary": len(summaries),
-                "episodic": len(episodic_items),
-                "semantic": len(semantic_items),
-            }
+            else:
+                try:
+                    # step 5: total 必须按 session 隔离,否则 envelope 会把其它
+                    # 会话的条目数泄漏给当前会话的 UI
+                    total = (
+                        mm.episodic.count(session_id=session_id)
+                        + mm.semantic.count(session_id=session_id)
+                        + len(working_items)
+                        + len(summaries)
+                    )
+                except Exception:
+                    total = len(items)
+            if agent_id is not None:
+                # M3-Task 6: 过滤态下 source_breakdown 必须与 filtered total 同源，
+                # 否则计数会把其它专家的私有行数量泄漏给当前 UI。
+                source_breakdown = {
+                    "working": sum(
+                        1 for it in items if it.get("source") == "working"
+                    ),
+                    "session_summary": sum(
+                        1 for it in items if it.get("source") == "session_summary"
+                    ),
+                    "episodic": sum(
+                        1 for it in items if it.get("source") == "episodic"
+                    ),
+                    "semantic": sum(
+                        1 for it in items if it.get("source") == "semantic"
+                    ),
+                }
+            else:
+                source_breakdown = {
+                    "working": len(working_items),
+                    "session_summary": len(summaries),
+                    "episodic": len(episodic_items),
+                    "semantic": len(semantic_items),
+                }
 
         # 3. 分页 slice
         page_items = items[safe_offset : safe_offset + safe_page_size]
