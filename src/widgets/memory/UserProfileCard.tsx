@@ -151,7 +151,7 @@ export function UserProfileCard() {
   const handleCreate = (s: EditorState) =>
     run(async () => {
       const created = await memoryApi.createUserProfile(s.content, s.category, s.importance);
-      if (!created) throw new Error('内容为空或与现有画像重复');
+      if (!created) throw new Error('内容为空或与现有记忆条目重复');
       setAdding(false);
     }, '新增画像失败');
 

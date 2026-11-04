@@ -587,7 +587,7 @@ export function MilestoneEditor({
             }}
             className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
           >
-            {convertedConstraint ? '已转 L2 约束' : '转 L2 交付约束'}
+            {convertedConstraint ? '已转为项目规则' : '转 交付规则'}
           </button>
           <button
             type="button"

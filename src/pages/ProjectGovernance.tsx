@@ -14,12 +14,16 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { PlaybookCard } from '../features/playbook/PlaybookCard';
 import {
+  GitStatusWidget,
   MilestoneManager,
+  MilestoneProgressWidget,
   PolymorphicArchetypeCards,
   ProjectBootstrapPanel,
   ProjectOverviewWidgets,
   ProjectTypeBadge,
   GovernanceRulesPanel,
+  TaskDecomposeDialog,
+  WikiGenerationPanel,
 } from '../features/project-type';
 import {
   StudioCharterTabPanel,
@@ -41,6 +45,7 @@ import {
 } from '../shared/api';
 import type { ProjectProfileEntry } from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
+import { useStore } from '../shared/lib/store';
 import { Button } from '../shared/ui/Button';
 import { Card } from '../shared/ui/Card';
 
@@ -81,6 +86,30 @@ export function formatProjectGovernanceAuditJson(opts: {
   });
 }
 
+function computeBootstrapProgress(project: ProjectSummary): {
+  steps: Array<{ id: string; label: string; done: boolean }>;
+  done: number;
+  total: number;
+} {
+  const applied = project.bootstrapState?.applied ?? [];
+  const steps = [
+    {
+      id: 'metadata',
+      label: '基本信息',
+      done: applied.some((item) => item.startsWith('metadata.')) || Boolean(project.description),
+    },
+    { id: 'sage_md', label: '项目说明', done: applied.includes('sage_md') },
+    { id: 'rule', label: '项目规则', done: applied.includes('rule') },
+    { id: 'milestones', label: '里程碑', done: applied.includes('milestones') },
+    {
+      id: 'git',
+      label: '版本控制',
+      done: applied.includes('git_init') || project.vcsMode === 'git',
+    },
+  ];
+  return { steps, done: steps.filter((step) => step.done).length, total: steps.length };
+}
+
 export function ProjectGovernance() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -92,6 +121,10 @@ export function ProjectGovernance() {
   const [scaffolding, setScaffolding] = useState(false);
   const [scaffoldResult, setScaffoldResult] = useState<ProjectScaffoldResult | null>(null);
   const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
+  const [startingSession, setStartingSession] = useState(false);
+  const [decomposeOpen, setDecomposeOpen] = useState(false);
+  const [decomposeReq, setDecomposeReq] = useState('');
+  const [decomposeCtx, setDecomposeCtx] = useState('');
 
   const [profileEntries, setProfileEntries] = useState<ProjectProfileEntry[]>([]);
   const [profileCategory, setProfileCategory] = useState<string>('convention');
@@ -159,7 +192,6 @@ export function ProjectGovernance() {
     project?.detectedType ??
     'business') as ProjectType;
   const activeBlueprint = getArchetypeBlueprint(activeProjectType);
-
   const upcomingDeadline = (() => {
     const withDue = milestones
       .filter((m) => m.status !== 'completed' && m.dueDate)
@@ -224,6 +256,23 @@ export function ProjectGovernance() {
       // ignore
     } finally {
       setScaffolding(false);
+    }
+  };
+
+  const handleStartSession = async () => {
+    if (!project || startingSession) return;
+    setStartingSession(true);
+    try {
+      const opened = await projectApi.open(project.id);
+      const sessionId = opened.session?.id;
+      if (sessionId) {
+        useStore.getState().setCurrentSessionId(sessionId);
+        navigate('/chat');
+      }
+    } catch {
+      // ignore in test/offline mode
+    } finally {
+      setStartingSession(false);
     }
   };
 
@@ -329,6 +378,11 @@ export function ProjectGovernance() {
     );
   }
 
+  const bootstrapProgress = computeBootstrapProgress(project);
+  const activeStageLabel =
+    activeBlueprint.stages.find((stage) => stage.id === project.projectStage)?.label ?? '未设置';
+  const bootstrapComplete = bootstrapProgress.done === bootstrapProgress.total;
+
   return (
     <div
       className="flex-1 flex flex-col min-h-0 overflow-hidden"
@@ -422,10 +476,82 @@ export function ProjectGovernance() {
         <Card className="p-4 space-y-4">
           {activeTab === 'overview' && (
             <div className="space-y-4">
-              <ProjectBootstrapPanel projectId={project.id} />
-              <PlaybookCard projectId={project.id} />
-              <PolymorphicArchetypeCards project={project} projectType={activeProjectType} />
-              <ProjectOverviewWidgets project={project} />
+              {/* 项目主页：状态 + 主行动 */}
+              <div
+                className="space-y-3 rounded-lg border border-border bg-card p-4"
+                data-testid="project-home-summary"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="text-sm font-semibold text-foreground">项目状态</div>
+                    <div className="flex flex-wrap items-center gap-2 text-ui-2xs text-muted-foreground">
+                      <span>类型：{activeBlueprint.label}</span>
+                      <span>当前阶段：{activeStageLabel}</span>
+                      <span>
+                        初始化进度：{bootstrapProgress.done}/{bootstrapProgress.total}
+                      </span>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      bootstrapComplete
+                        ? void handleStartSession()
+                        : setActiveTab('settings')
+                    }
+                    disabled={startingSession}
+                    data-testid="project-home-cta"
+                  >
+                    {bootstrapComplete
+                      ? startingSession
+                        ? '正在打开…'
+                        : '开始会话'
+                      : '继续初始化'}
+                  </Button>
+                </div>
+                {!bootstrapComplete && (
+                  <div className="flex flex-wrap items-center gap-2 text-ui-2xs">
+                    {bootstrapProgress.steps.map((step) => (
+                      <span
+                        key={step.id}
+                        className={step.done ? 'text-emerald-600' : 'text-muted-foreground'}
+                      >
+                        {step.done ? '✓' : '○'} {step.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 当前阶段 */}
+              <div className="space-y-2" data-testid="project-current-stage-section">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs font-semibold text-foreground">当前阶段</div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setDecomposeReq(`完成「${activeStageLabel}」阶段核心交付与核查`);
+                      setDecomposeCtx(`项目类型：${activeBlueprint.label}`);
+                      setDecomposeOpen(true);
+                    }}
+                    data-testid="project-current-stage-decompose"
+                  >
+                    AI 拆解当前阶段
+                  </Button>
+                </div>
+                <PlaybookCard projectId={project.id} />
+                <MilestoneProgressWidget projectId={project.id} projectType={activeProjectType} />
+              </div>
+
+              {/* 工程 / 领域快览 */}
+              <div className="space-y-2" data-testid="project-domain-section">
+                <div className="text-xs font-semibold text-foreground">
+                  {activeProjectType === 'coding' ? '工程概览' : '项目快览'}
+                </div>
+                <PolymorphicArchetypeCards project={project} projectType={activeProjectType} />
+              </div>
+
               <details className="rounded-lg border border-border bg-card/50">
                 <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
                   里程碑（可选）
@@ -434,6 +560,21 @@ export function ProjectGovernance() {
                   <MilestoneManager projectId={project.id} projectType={activeProjectType} />
                 </div>
               </details>
+
+              <TaskDecomposeDialog
+                open={decomposeOpen}
+                onOpenChange={setDecomposeOpen}
+                projectId={project.id}
+                projectType={activeProjectType}
+                initialRequirement={decomposeReq}
+                initialContext={decomposeCtx}
+                onApplied={() => {
+                  void projectApi
+                    .listMilestones(project.id)
+                    .then((items) => setMilestones(Array.isArray(items) ? items : []))
+                    .catch(() => undefined);
+                }}
+              />
             </div>
           )}
 
@@ -485,11 +626,20 @@ export function ProjectGovernance() {
               )}
 
               {knowledgeTab === 'materials' && (
-                <StudioMaterialsTabPanel
-                  projectId={project.id}
-                  projectPath={project.path}
-                  projectType={activeProjectType}
-                />
+                <div className="space-y-3">
+                  <StudioMaterialsTabPanel
+                    projectId={project.id}
+                    projectPath={project.path}
+                    projectType={activeProjectType}
+                  />
+                  {(activeProjectType === 'coding' || project.vcsMode === 'git') && (
+                    <GitStatusWidget projectId={project.id} />
+                  )}
+                  <WikiGenerationPanel
+                    projectId={project.id}
+                    projectType={activeProjectType}
+                  />
+                </div>
               )}
 
               {knowledgeTab === 'profile' && (
@@ -513,6 +663,7 @@ export function ProjectGovernance() {
 
           {activeTab === 'settings' && (
             <div className="space-y-4">
+              <ProjectBootstrapPanel projectId={project.id} />
               <StudioCharterTabPanel
                 projectId={project.id}
                 projectPath={project.path}
@@ -613,6 +764,18 @@ export function ProjectGovernance() {
                   </Button>
                 </div>
               </div>
+
+              <details
+                className="rounded-lg border border-border bg-card/50"
+                data-testid="governance-advanced-widgets"
+              >
+                <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+                  高级项目操作（类型转换 / 快照 / 规则沉淀 / 任务拆解 / Git / Wiki）
+                </summary>
+                <div className="px-3 pb-3">
+                  <ProjectOverviewWidgets project={project} />
+                </div>
+              </details>
 
               <div className="flex flex-wrap items-center gap-2">
                 <span

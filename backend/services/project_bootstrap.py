@@ -176,35 +176,8 @@ def _first_prompt(project_type: Optional[str]) -> str:
     return "请先了解这个项目，总结它的目标、现状和下一步最值得做的事。"
 
 
-async def build_bootstrap_preview(
-    project: Project,
-    *,
-    use_llm: bool = True,
-) -> Dict[str, Any]:
-    """Build a read-only initialization proposal for a project."""
-    profile = profile_project(project.path)
-
-    agent = ProjectAnalysisAgent()
-    report = await agent.analyze(profile, allow_llm=use_llm)
-
-    existing_constraints = ProjectConstraintRepository().list_by_project(project.id)
-    existing_contents = [item.content for item in existing_constraints]
-
-    generated = None
-    if use_llm:
-        try:
-            generated = await ProjectRuleGenerator().generate(
-                profile,
-                report,
-                existing_contents=existing_contents,
-            )
-        except Exception:  # LLM/parse failure must not break preview
-            logger.warning("rule generation failed during bootstrap preview", exc_info=True)
-
-    rules = _collect_rules(report, generated, existing_contents)
-    milestones = _collect_milestones(generated, profile.level1_type)
-    sage_md = _sage_md_draft(report, project)
-
+def _scan_payload(project: Project, profile: Any) -> Dict[str, Any]:
+    """Assemble the deterministic scan section from a codebase profile."""
     try:
         scanned = ProjectWikiGenerator().scan_files(
             project_root=project.path,
@@ -225,26 +198,84 @@ async def build_bootstrap_preview(
     root = Path(project.path)
     materials = ProjectMaterialRepository().list_by_project(project.id)
     milestones_count = len(ProjectMilestoneRepository().list_by_project(project.id))
+    existing_constraints = ProjectConstraintRepository().list_by_project(project.id)
 
     return {
-        "project": project.to_dict(),
-        "scan": {
-            "level1_type": profile.level1_type,
-            "sub_type": profile.sub_type,
-            "tech_stack": list(profile.tech_stack),
-            "frameworks": list(profile.frameworks),
-            "source_files": [
-                {"language": language, "count": count}
-                for language, count in sorted(language_counts.items())
-            ],
-            "git": {**git_stats, "git_available": has_git},
-            "existing": {
-                "sage_md": (root / "SAGE.md").is_file(),
-                "rules_count": len(existing_constraints),
-                "milestones_count": milestones_count,
-                "materials_count": len(materials),
-            },
+        "level1_type": profile.level1_type,
+        "sub_type": profile.sub_type,
+        "tech_stack": list(profile.tech_stack),
+        "frameworks": list(profile.frameworks),
+        "source_files": [
+            {"language": language, "count": count}
+            for language, count in sorted(language_counts.items())
+        ],
+        "git": {**git_stats, "git_available": has_git},
+        "existing": {
+            "sage_md": (root / "SAGE.md").is_file(),
+            "rules_count": len(existing_constraints),
+            "milestones_count": milestones_count,
+            "materials_count": len(materials),
         },
+    }
+
+
+async def build_bootstrap_scan(project: Project) -> Dict[str, Any]:
+    """Deterministic, fast project scan (no LLM).
+
+    Returns immediately so the UI can render scan results while the
+    slower suggestion step is still running.
+    """
+    profile = profile_project(project.path)
+    return {
+        "project": project.to_dict(),
+        "scan": _scan_payload(project, profile),
+    }
+
+
+async def build_bootstrap_suggestions(
+    project: Project,
+    *,
+    use_llm: bool = True,
+) -> Dict[str, Any]:
+    """Build initialization suggestions (LLM-backed when available)."""
+    profile = profile_project(project.path)
+
+    agent = ProjectAnalysisAgent()
+    report = await agent.analyze(profile, allow_llm=use_llm)
+
+    existing_constraints = ProjectConstraintRepository().list_by_project(project.id)
+    existing_contents = [item.content for item in existing_constraints]
+
+    generated = None
+    llm_error: Optional[str] = None
+    if use_llm:
+        try:
+            generated = await ProjectRuleGenerator().generate(
+                profile,
+                report,
+                existing_contents=existing_contents,
+            )
+        except Exception as exc:  # LLM/parse failure must not break preview
+            llm_error = str(exc)
+            logger.warning("rule generation failed during bootstrap preview", exc_info=True)
+
+    rules = _collect_rules(report, generated, existing_contents)
+    milestones = _collect_milestones(generated, profile.level1_type)
+    sage_md = _sage_md_draft(report, project)
+    root = Path(project.path)
+    git_stats = profile.git_stats.to_dict()
+    has_git = git_available()
+
+    llm_available = bool(getattr(report, "llm_available", False) and use_llm)
+    rule_source = (
+        "ai"
+        if generated is not None and getattr(generated, "llm_available", False)
+        else "template"
+    )
+    if use_llm and not llm_available and llm_error is None:
+        llm_error = "LLM 未配置或请求失败，已改用本地推荐模板"
+
+    return {
         "suggestions": {
             "sage_md": {
                 "content": sage_md,
@@ -267,34 +298,89 @@ async def build_bootstrap_preview(
                 ),
                 "blockers": [] if has_git else ["git_not_available"],
             },
-            "wiki": {
-                "recommended": len(scanned) > 0,
-                "estimated_pages": max(3, min(20, (len(scanned) + 11) // 12))
-                if scanned
-                else 0,
-            },
             "first_prompt": _first_prompt(profile.level1_type),
         },
-        "llm_available": bool(getattr(report, "llm_available", False) and use_llm),
+        "llm_available": llm_available,
+        "llm_error": llm_error,
+        "rule_source": rule_source,
+    }
+
+
+async def build_bootstrap_preview(
+    project: Project,
+    *,
+    use_llm: bool = True,
+) -> Dict[str, Any]:
+    """Build a read-only initialization proposal for a project.
+
+    Kept for backward compatibility; new clients should call the scan and
+    suggest endpoints separately so progress can be shown.
+    """
+    scan_data = await build_bootstrap_scan(project)
+    suggest_data = await build_bootstrap_suggestions(project, use_llm=use_llm)
+    return {
+        "project": scan_data["project"],
+        "scan": scan_data["scan"],
+        "suggestions": suggest_data["suggestions"],
+        "llm_available": suggest_data["llm_available"],
+        "llm_error": suggest_data["llm_error"],
+        "rule_source": suggest_data["rule_source"],
     }
 
 
 def _update_metadata(
-    repo: ProjectRepository, project_id: str, metadata: Dict[str, Any]
+    repo: ProjectRepository,
+    project_id: str,
+    metadata: Dict[str, Any],
+    applied_items: List[Dict[str, Any]],
 ) -> List[str]:
     applied: List[str] = []
+    labels = {
+        "description": "项目描述",
+        "instructions": "项目指令",
+        "project_type": "项目类型",
+        "project_sub_type": "项目子类型",
+    }
     if "description" in metadata:
         repo.update_description(project_id, metadata.get("description"))
         applied.append("metadata.description")
+        applied_items.append(
+            {
+                "item": "metadata.description",
+                "label": labels["description"],
+                "location": "项目设置",
+            }
+        )
     if "instructions" in metadata:
         repo.update_instructions(project_id, metadata.get("instructions"))
         applied.append("metadata.instructions")
+        applied_items.append(
+            {
+                "item": "metadata.instructions",
+                "label": labels["instructions"],
+                "location": "项目设置",
+            }
+        )
     if "project_type" in metadata:
         repo.update_project_type(project_id, metadata.get("project_type"))
         applied.append("metadata.project_type")
+        applied_items.append(
+            {
+                "item": "metadata.project_type",
+                "label": labels["project_type"],
+                "location": "项目设置",
+            }
+        )
     if "project_sub_type" in metadata:
         repo.update_project_sub_type(project_id, metadata.get("project_sub_type"))
         applied.append("metadata.project_sub_type")
+        applied_items.append(
+            {
+                "item": "metadata.project_sub_type",
+                "label": labels["project_sub_type"],
+                "location": "项目设置",
+            }
+        )
     return applied
 
 
@@ -304,21 +390,39 @@ def apply_bootstrap(project: Project, accept: Dict[str, Any]) -> Dict[str, Any]:
     applied: List[str] = []
     skipped: List[str] = []
     errors: List[Dict[str, str]] = []
+    applied_items: List[Dict[str, Any]] = []
+    skipped_items: List[Dict[str, Any]] = []
     git_result: Optional[Dict[str, Any]] = None
 
     metadata = accept.get("metadata") or {}
     if metadata:
-        applied.extend(_update_metadata(repo, project.id, metadata))
+        applied.extend(
+            _update_metadata(repo, project.id, metadata, applied_items)
+        )
 
     if accept.get("sage_md"):
         content = accept.get("sage_md_content")
         root = Path(project.path)
         if (root / "SAGE.md").exists() and not accept.get("overwrite_sage_md"):
             skipped.append("sage_md")
+            skipped_items.append(
+                {
+                    "item": "sage_md",
+                    "reason": "exists",
+                    "label": "项目说明（SAGE.md）",
+                }
+            )
         else:
             try:
                 write_project_charter(project, str(content or "")[:MAX_SAGE_MD_CHARS])
                 applied.append("sage_md")
+                applied_items.append(
+                    {
+                        "item": "sage_md",
+                        "label": "项目说明（SAGE.md）",
+                        "location": str(root / "SAGE.md"),
+                    }
+                )
             except ValueError as exc:
                 errors.append({"item": "sage_md", "message": str(exc)})
 
@@ -334,8 +438,16 @@ def apply_bootstrap(project: Project, accept: Dict[str, Any]) -> Dict[str, Any]:
         normalized = _normalize(content)
         if normalized in existing:
             skipped.append("rule")
+            skipped_items.append(
+                {
+                    "item": "rule",
+                    "reason": "duplicate",
+                    "label": "项目规则",
+                    "content_preview": content[:120],
+                }
+            )
             continue
-        constraint_repo.create(
+        created_rule = constraint_repo.create(
             project_id=project.id,
             category=str(rule.get("category") or "coding_style"),
             content=content,
@@ -344,6 +456,15 @@ def apply_bootstrap(project: Project, accept: Dict[str, Any]) -> Dict[str, Any]:
         )
         existing.add(normalized)
         applied.append("rule")
+        applied_items.append(
+            {
+                "item": "rule",
+                "id": getattr(created_rule, "id", None),
+                "label": "项目规则",
+                "location": "项目规则列表",
+                "content_preview": content[:120],
+            }
+        )
 
     milestones = []
     for item in (accept.get("milestones") or [])[:MAX_MILESTONES_PER_APPLY]:
@@ -361,10 +482,24 @@ def apply_bootstrap(project: Project, accept: Dict[str, Any]) -> Dict[str, Any]:
     if milestones:
         ProjectMilestoneRepository().create_batch(project.id, milestones)
         applied.append("milestones")
+        applied_items.append(
+            {
+                "item": "milestones",
+                "label": "里程碑",
+                "location": "里程碑列表",
+            }
+        )
 
     if accept.get("allowed_paths") is not None:
         repo.update_allowed_paths(project.id, list(accept.get("allowed_paths") or []))
         applied.append("allowed_paths")
+        applied_items.append(
+            {
+                "item": "allowed_paths",
+                "label": "外部目录白名单",
+                "location": "项目设置",
+            }
+        )
 
     if accept.get("git_init"):
         if not git_available():
@@ -374,6 +509,13 @@ def apply_bootstrap(project: Project, accept: Dict[str, Any]) -> Dict[str, Any]:
             if git_result.get("initialized") or git_result.get("already_repo"):
                 repo.update_vcs_mode(project.id, "git")
                 applied.append("git_init")
+                applied_items.append(
+                    {
+                        "item": "git_init",
+                        "label": "Git 版本控制",
+                        "location": project.path,
+                    }
+                )
             elif git_result.get("error"):
                 errors.append({"item": "git_init", "message": str(git_result["error"])})
 
@@ -381,6 +523,13 @@ def apply_bootstrap(project: Project, accept: Dict[str, Any]) -> Dict[str, Any]:
         try:
             create_project_checkpoint(project, "AI 初始化基线快照")
             applied.append("initial_checkpoint")
+            applied_items.append(
+                {
+                    "item": "initial_checkpoint",
+                    "label": "基线快照",
+                    "location": ".sage/checkpoints",
+                }
+            )
         except ValueError as exc:
             errors.append({"item": "initial_checkpoint", "message": str(exc)})
 
@@ -397,12 +546,24 @@ def apply_bootstrap(project: Project, accept: Dict[str, Any]) -> Dict[str, Any]:
     }
     repo.update_bootstrap_state(project.id, json.dumps(state, ensure_ascii=False))
 
+    root = Path(project.path)
+    verification = {
+        "sage_md_exists": (root / "SAGE.md").is_file(),
+        "rules_count_after": len(constraint_repo.list_by_project(project.id)),
+        "milestones_count_after": len(
+            ProjectMilestoneRepository().list_by_project(project.id)
+        ),
+    }
+
     updated = repo.get(project.id) or project
     return {
         "project": updated.to_dict(),
         "applied": applied,
         "skipped": skipped,
+        "applied_items": applied_items,
+        "skipped_items": skipped_items,
         "errors": errors,
+        "verification": verification,
         "git": git_result,
     }
 

@@ -409,7 +409,7 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                     }}
                     className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                   >
-                    {batchSavedMilestonesL3 ? '已批量存 L3' : `批量存 L3 (${filteredMilestones.length})`}
+                    {batchSavedMilestonesL3 ? '已批量存项目记忆' : `批量存项目记忆 (${filteredMilestones.length})`}
                   </button>
                 )}
                 {filteredMilestones.length > 0 && (
@@ -433,7 +433,7 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                     }}
                     className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                   >
-                    {batchSavedMilestonesL4 ? '已批量存 L4' : `批量存 L4 (${filteredMilestones.length})`}
+                    {batchSavedMilestonesL4 ? '已批量存为资料' : `批量存为资料 (${filteredMilestones.length})`}
                   </button>
                 )}
                 {filteredMilestones.length > 0 && (
@@ -459,7 +459,7 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                     }}
                     className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                   >
-                    {batchConvertedConstraints ? '已批量转 L2' : `批量转 L2 (${filteredMilestones.length})`}
+                    {batchConvertedConstraints ? '已批量转为规则' : `批量转为规则 (${filteredMilestones.length})`}
                   </button>
                 )}
                 {inProgressMilestones.length > 0 && (
@@ -579,7 +579,7 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                         }
                       }}
                       className="rounded border border-border bg-background px-1.5 py-1 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                      title="沉淀该里程碑节点至 L3 项目画像"
+                      title="保存该里程碑节点到项目记忆"
                     >
                       {promotedMilestoneIds.has(milestone.id) ? '已保存' : '+记忆'}
                     </button>
@@ -602,9 +602,9 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                         }
                       }}
                       className="rounded border border-border bg-background px-1.5 py-1 text-ui-2xs text-primary hover:bg-primary/10"
-                      title="将该里程碑转化为 L2 交付约束"
+                      title="将该里程碑转化为 交付规则"
                     >
-                      {constraintMilestoneIds.has(milestone.id) ? '已保存' : '+L2 约束'}
+                      {constraintMilestoneIds.has(milestone.id) ? '已保存' : '+项目规则'}
                     </button>
                     <button
                       type="button"

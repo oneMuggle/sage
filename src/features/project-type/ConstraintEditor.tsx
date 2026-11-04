@@ -598,7 +598,7 @@ export function ConstraintEditor({
               if (typeof projectApi?.addMaterial === 'function') {
                 try {
                   await projectApi.addMaterial(projectId, {
-                    content: `# L2 约束规范档案 (${category || 'convention'})\n- 优先级: P${priority}\n- 触发范围: ${triggerPattern.trim() || 'always'}\n\n${content.trim() || '未命名约束规则'}`,
+                    content: `# 项目规则规范档案 (${category || 'convention'})\n- 优先级: P${priority}\n- 触发范围: ${triggerPattern.trim() || 'always'}\n\n${content.trim() || '未命名约束规则'}`,
                   });
                 } catch {
                   // ignore in test/offline mode

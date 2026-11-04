@@ -222,7 +222,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
               }}
               className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              {savedProgressL3 ? '已存进度 L3' : '沉淀进度至 L3'}
+              {savedProgressL3 ? '已存进度到项目记忆' : '进度存项目记忆'}
             </button>
             <button
               type="button"
@@ -267,7 +267,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
               }}
               className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              {convertedActiveL2 ? '已转 L2' : '未完转 L2'}
+              {convertedActiveL2 ? '已转为规则' : '未完成转规则'}
             </button>
             {(blocked > 0 || overdueCount > 0) && (
               <button
@@ -297,7 +297,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                 }}
                 className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-ui-2xs font-medium text-amber-600 hover:bg-amber-500/20"
               >
-                {convertedRiskL2 ? '已转风险L2' : `风险项转L2 (${blocked + overdueCount})`}
+                {convertedRiskL2 ? '已转风险为规则' : `风险项转规则 (${blocked + overdueCount})`}
               </button>
             )}
             {(blocked > 0 || overdueCount > 0) && (
@@ -320,7 +320,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                           content: `[里程碑风险预警] ${rm.title}${rm.dueDate ? ` (截止: ${rm.dueDate})` : ''}`,
                           importance: 9,
                           sourceMessageIds: [],
-                          reasoning: '阻塞/逾期里程碑一键沉淀至 L3 风险画像',
+                          reasoning: '阻塞/逾期里程碑一键保存到项目记忆',
                         })),
                       });
                     } catch {
@@ -330,7 +330,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                 }}
                 className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-ui-2xs font-medium text-amber-600 hover:bg-amber-500/20"
               >
-                {convertedRiskL3 ? '已存风险L3' : '风险项存L3'}
+                {convertedRiskL3 ? '已存风险到项目记忆' : '风险项存项目记忆'}
               </button>
             )}
             {(blocked > 0 || overdueCount > 0) && (
@@ -362,7 +362,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                 }}
                 className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-ui-2xs font-medium text-amber-600 hover:bg-amber-500/20"
               >
-                {convertedRiskL4 ? '已存风险L4' : '风险项存L4'}
+                {convertedRiskL4 ? '已存风险为资料' : '风险项存为资料'}
               </button>
             )}
             {completed > 0 && (
@@ -391,7 +391,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                 }}
                 className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
               >
-                {convertedCompletedL3 ? '已存完成L3' : `已完成存L3 (${completed})`}
+                {convertedCompletedL3 ? '已存完成到项目记忆' : `已完成存项目记忆 (${completed})`}
               </button>
             )}
             {completed > 0 && (
@@ -416,7 +416,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                 }}
                 className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
               >
-                {convertedCompletedL4 ? '已存完成L4' : `已完成存L4 (${completed})`}
+                {convertedCompletedL4 ? '已存完成为资料' : `已完成存为资料 (${completed})`}
               </button>
             )}
             <button
@@ -505,7 +505,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
               }}
               className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              {savedStagesDistL3 ? '已存分布L3' : '阶段分布存L3'}
+              {savedStagesDistL3 ? '已存分布到项目记忆' : '阶段分布存项目记忆'}
             </button>
             <button
               type="button"
@@ -525,7 +525,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
               }}
               className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              {savedStagesDistL4 ? '已存分布L4' : '阶段分布存L4'}
+              {savedStagesDistL4 ? '已存分布为资料' : '阶段分布存为资料'}
             </button>
           </div>
         )}
@@ -649,7 +649,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                         }}
                         className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
                       >
-                        {promotedConstraintIds.has(milestone.id) ? '已保存' : '+L2'}
+                        {promotedConstraintIds.has(milestone.id) ? '已保存' : '+规则'}
                       </button>
                       <button
                         type="button"

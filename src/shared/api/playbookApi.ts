@@ -346,8 +346,8 @@ export const playbookApi = {
     return response.playbook;
   },
 
-  async getCurrent(projectId: string): Promise<PlaybookCurrent> {
-    return invoke<PlaybookCurrent>('playbook_get_current', { projectId });
+  async getCurrent(projectId: string, withAudit = true): Promise<PlaybookCurrent> {
+    return invoke<PlaybookCurrent>('playbook_get_current', { projectId, withAudit });
   },
 
   async bind(projectId: string, payload: PlaybookBindPayload): Promise<PlaybookCurrent> {

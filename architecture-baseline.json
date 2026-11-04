@@ -7,7 +7,7 @@
     "backend/api/llm_proxy_routes.py": 1216,
     "backend/api/orchestration_router.py": 807,
     "backend/api/permission_routes.py": 855,
-    "backend/api/playbook_routes.py": 931,
+    "backend/api/playbook_routes.py": 934,
     "backend/api/wiki_routes.py": 1764,
     "backend/application/services/chat_service.py": 1142,
     "backend/core/legacy/agent.py": 3573,
@@ -63,8 +63,8 @@
     "backend/services/arena_draw_engine.py": 1054,
     "backend/tools/web_render.py": 928,
     "backend/api/project_ai_routes.py": 859,
-    "src/shared/api/projectApi.ts": 1342,
-    "src/shared/api/projectApiTypes.ts": 1498,
+    "src/shared/api/projectApi.ts": 1463,
+    "src/shared/api/projectApiTypes.ts": 1564,
     "src/widgets/chat/ChatInput.tsx": 892,
     "src/widgets/chat/Message.tsx": 807,
     "src/features/send-message/useChat.ts": 1047,
@@ -77,12 +77,15 @@
     "src/pages/settings/PluginsTab.tsx": 687,
     "backend/tests/unit/test_design_routes.py": 975,
     "backend/adapters/out/skill/inproc.py": 949,
-    "backend/api/project_routes.py": 1099,
+    "backend/api/project_routes.py": 1155,
     "backend/services/project_wiki_generator.py": 902,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
     "backend/tools/config_tool.py": 979,
     "scripts/feedback_receiver.py": 1154,
     "src/shared/types/electron-api.d.ts": 809,
-    "electron/preload.ts": 885
+    "electron/preload.ts": 885,
+    "src/features/playbook/PlaybookCard.tsx": 825,
+    "src/features/project-type/PolymorphicArchetypeCards.tsx": 879,
+    "src/pages/ProjectGovernance.tsx": 852
   }
 }
