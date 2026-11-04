@@ -1347,6 +1347,10 @@ function createMainWindow(): void {
 
   win.on('closed', () => {
     setMainWindow(null);
+    // Clean up pet windows to allow window-all-closed to fire properly.
+    // Without this, pet windows (focusable:false, skipTaskbar:true) block
+    // the event and prevent the app from exiting in dev mode.
+    disposePet();
   });
 }
 
