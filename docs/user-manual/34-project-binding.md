@@ -1,4 +1,4 @@
-# 27 · 新会话页项目绑定
+# 34 · 新会话页项目绑定
 
 > 2026-11-04
 
@@ -67,4 +67,4 @@
 - **前端参数**：`createSession(skipBinding = true)`
 - **解析链跳过**：`DefaultWorkspaceResolver` 不被调用
 
-详见 [技术文档 129](../technical/129-workspace-binding-skip.md)。
+详见 [技术文档 130](../technical/130-workspace-binding-skip.md)。

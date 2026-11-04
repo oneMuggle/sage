@@ -1,4 +1,4 @@
-# 115 · 新会话页工作区绑定跳过机制
+# 130 · 新会话页工作区绑定跳过机制
 
 > 2026-11-04 · fix/skip-workspace-binding-when-none
 
