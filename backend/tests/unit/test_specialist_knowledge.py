@@ -1,7 +1,8 @@
-"""M2-Task 4 — 专家知识检索注入与引用输出测试。
+"""M2-Task 4/5 — 专家知识检索注入、引用输出与无命中拒答测试。
 
 覆盖：profile → 绑定的提取、上下文块格式与两级截断、sources_used 条目
-形状（``kind="knowledge"`` + loc 字段）、无绑定短路、检索异常 fail-open。
+形状（``kind="knowledge"`` + loc 字段）、无绑定短路、检索异常 fail-open、
+无命中拒答提示（``no_hit_hint``）、日志 span 可观测。
 不触碰真实存储：检索器全部注入 fake。
 """
 
@@ -166,38 +167,100 @@ class TestRetrieveKnowledgeContext:
     async def test_no_bindings_short_circuits(self):
         retriever = RecordingRetriever([_chunk()])
 
-        block, sources = await retrieve_knowledge_context(
+        block, sources, no_hit_hint = await retrieve_knowledge_context(
             {"knowledge_bindings": []}, "查询", retriever=retriever
         )
 
         assert block == ""
         assert sources == []
+        assert no_hit_hint == ""
         assert retriever.calls == []
 
     async def test_returns_context_and_sources(self):
         retriever = RecordingRetriever([_chunk()])
 
-        block, sources = await retrieve_knowledge_context(
+        block, sources, no_hit_hint = await retrieve_knowledge_context(
             _profile(), "分层架构?", retriever=retriever
         )
 
         assert "<knowledge_context>" in block
         assert sources[0]["kind"] == "knowledge"
+        assert no_hit_hint == ""
         assert retriever.calls[0]["query"] == "分层架构?"
         assert retriever.calls[0]["bindings"][0]["id"] == "kb_1"
 
     async def test_retriever_failure_is_fail_open(self):
         retriever = RecordingRetriever([], error=RuntimeError("嵌入端点不可用"))
 
-        block, sources = await retrieve_knowledge_context(_profile(), "查询", retriever=retriever)
+        block, sources, no_hit_hint = await retrieve_knowledge_context(
+            _profile(), "查询", retriever=retriever
+        )
 
         assert block == ""
         assert sources == []
+        # 检索异常属 fail-open，不触发拒答提示（避免误拦）
+        assert no_hit_hint == ""
 
     async def test_no_hits_yields_empty(self):
         retriever = RecordingRetriever([])
 
-        block, sources = await retrieve_knowledge_context(_profile(), "查询", retriever=retriever)
+        block, sources, no_hit_hint = await retrieve_knowledge_context(
+            _profile(), "查询", retriever=retriever
+        )
 
         assert block == ""
         assert sources == []
+        # M2-Task 5: 有绑定但无命中 → 返回拒答提示
+        assert no_hit_hint != ""
+        assert "知识库" in no_hit_hint
+        assert "无相关内容" in no_hit_hint
+
+    async def test_no_hit_hint_mentions_binding_names(self):
+        """拒答提示应包含绑定名，让用户知道查了哪些库。"""
+        retriever = RecordingRetriever([])
+
+        _, _, no_hit_hint = await retrieve_knowledge_context(
+            _profile(), "查询", retriever=retriever
+        )
+
+        assert "项目 Wiki" in no_hit_hint
+
+    async def test_empty_query_no_hit_hint_is_empty(self):
+        """空查询不触发拒答（用户还没问问题）。"""
+        retriever = RecordingRetriever([])
+
+        _, _, no_hit_hint = await retrieve_knowledge_context(
+            _profile(), "", retriever=retriever
+        )
+
+        assert no_hit_hint == ""
+
+    async def test_logs_observability_span(self, caplog):
+        """M2-Task 5 可观测：命中/无命中/异常均输出 [SPECIALIST_KNOWLEDGE] span。"""
+        import logging
+
+        with caplog.at_level(logging.INFO, logger="backend.chat.specialist_knowledge"):
+            await retrieve_knowledge_context(
+                _profile(), "查询", retriever=RecordingRetriever([_chunk()])
+            )
+            await retrieve_knowledge_context(
+                _profile(), "查询", retriever=RecordingRetriever([])
+            )
+
+        spans = [r.message for r in caplog.records if "[SPECIALIST_KNOWLEDGE]" in r.message]
+        assert any("status=hit" in m for m in spans)
+        assert any("status=no_hit" in m for m in spans)
+        assert all("elapsed_ms=" in m for m in spans)
+
+    async def test_logs_error_span_on_retriever_failure(self, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="backend.chat.specialist_knowledge"):
+            await retrieve_knowledge_context(
+                _profile(),
+                "查询",
+                retriever=RecordingRetriever([], error=RuntimeError("boom")),
+            )
+
+        spans = [r.message for r in caplog.records if "[SPECIALIST_KNOWLEDGE]" in r.message]
+        assert any("status=error" in m for m in spans)

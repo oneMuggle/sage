@@ -1775,29 +1775,34 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         f"[REQ {request_id}] memory_used event push failed, ignored"
                     )
             # ===== R17-E 记忆召回展示事件 END =====
-            # ===== M2-Task 4 专家知识检索注入 BEGIN =====
+            # ===== M2-Task 4/5 专家知识检索注入 BEGIN =====
             # 专家绑定的知识库（wiki / project_material / specialist_private）
             # 在每轮对话前检索 top-k：上下文块并入 dynamic_context_parts，
             # 来源条目以 kind="knowledge" 进入统一引用管道。无绑定 / 检索
             # 失败一律 fail-open（返回空），绝不阻断对话主流程。
+            # M2-Task 5：有绑定但 0 命中时注入 no_hit_hint（拒答引导）。
             r81_knowledge_sources: list = []
             try:
                 from backend.chat.specialist_knowledge import (
                     retrieve_knowledge_context,
                 )
 
-                l14_knowledge_block, r81_knowledge_sources = (
-                    await retrieve_knowledge_context(
-                        getattr(agent, "profile", None), data.message
-                    )
+                (
+                    l14_knowledge_block,
+                    r81_knowledge_sources,
+                    l14_knowledge_no_hit_hint,
+                ) = await retrieve_knowledge_context(
+                    getattr(agent, "profile", None), data.message
                 )
                 if l14_knowledge_block:
                     dynamic_context_parts.append(l14_knowledge_block)
+                if l14_knowledge_no_hit_hint:
+                    dynamic_context_parts.append(l14_knowledge_no_hit_hint)
             except Exception as l14_knowledge_err:
                 logger.debug(
                     f"[REQ {request_id}] specialist knowledge skipped: {l14_knowledge_err}"
                 )
-            # ===== M2-Task 4 专家知识检索注入 END =====
+            # ===== M2-Task 4/5 专家知识检索注入 END =====
             # Task 5 (2026-09-15): catalog-based context budget.
             # Resolve effective window from model catalog, then compute budget
             # as window - reserve. Old >=20000 gate removed.

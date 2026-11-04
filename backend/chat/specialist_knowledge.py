@@ -1,22 +1,27 @@
-"""M2-Task 4 — 专家知识检索注入与引用输出。
+"""M2-Task 4/5 — 专家知识检索注入、引用输出与无命中拒答。
 
 把 :class:`backend.agents.knowledge_retriever.KnowledgeRetriever` 的融合结果
-桥接进聊天主流程的两条管道：
+桥接进聊天主流程的三条管道：
 
 1. **动态上下文**：:func:`build_knowledge_context` 生成 ``<knowledge_context>``
    块，由 producer 追加进 ``dynamic_context_parts``（受统一预算裁剪）；
 2. **引用来源**：:func:`knowledge_sources_from_chunks` 生成
    ``kind="knowledge"`` 的来源条目，随 ``sources_used`` 流事件推送并落盘，
-   前端据此渲染可点击定位的引用 chip。
+   前端据此渲染可点击定位的引用 chip；
+3. **无命中拒答提示**：当存在绑定但检索返回 0 命中时，返回结构化
+   ``no_hit_hint``，引导 LLM 告知用户「知识库无相关内容」。
 
 设计约束：
 
 - **fail-open**：无绑定 / 空查询直接短路；检索异常记 warning 返回空，
-  绝不阻断对话主流程（对齐 R17-E 降级铁律）。
+  绝不阻断对话主流程（对齐 R17-E 降级铁律）。检索异常**不触发拒答提示**
+  （避免误拦——检索挂了不等于知识库里真的没有）。
 - **两级截断**：单块正文 ``KNOWLEDGE_CHUNK_MAX_CHARS``，整块
   ``KNOWLEDGE_CONTEXT_MAX_CHARS``，防上下文膨胀。
 - **定位字段**：``loc`` 原样透传（page_path / material_id / chunk_index /
   project_id），来源条目同时拍平常用字段供前端直接读取。
+- **可观测**：检索耗时通过 ``time.monotonic()`` 计算，以 ``logger.info``
+  输出 ``[SPECIALIST_KNOWLEDGE]`` 前缀 span，便于生产排查。
 
 Python 3.8 兼容：``typing`` 泛型，无 PEP 604。
 """
@@ -24,6 +29,7 @@ Python 3.8 兼容：``typing`` 泛型，无 PEP 604。
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -39,6 +45,13 @@ KNOWLEDGE_SOURCE_SNIPPET_CHARS = 160
 
 #: 每轮注入/引用的命中条数上限。
 DEFAULT_KNOWLEDGE_LIMIT = 5
+
+#: 无命中时注入的拒答提示模板（``{bindings}`` 为逗号分隔的绑定名）。
+NO_HIT_HINT_TEMPLATE = (
+    "知识库无相关内容：专家绑定的知识源（{bindings}）中未检索到与当前问题相关的资料。"
+    "请在回答中明确告知用户知识库暂无相关内容，建议其补充参考资料或调整问题；"
+    "不要编造知识库内容。"
+)
 
 
 def knowledge_bindings_from_profile(profile: Any) -> List[Dict[str, Any]]:
@@ -170,14 +183,24 @@ def knowledge_sources_from_chunks(chunks: List[Any]) -> List[Dict[str, Any]]:
     return sources
 
 
+def _binding_display_names(bindings: List[Dict[str, Any]]) -> str:
+    """绑定名列表 → 人读字符串（去重、保序、缺名回落 source_type）。"""
+    seen: List[str] = []
+    for binding in bindings:
+        name = str(binding.get("name") or binding.get("source_type") or "").strip()
+        if name and name not in seen:
+            seen.append(name)
+    return "、".join(seen)
+
+
 async def retrieve_knowledge_context(
     profile: Any,
     query: str,
     *,
     retriever: Optional[Any] = None,
     limit: int = DEFAULT_KNOWLEDGE_LIMIT,
-) -> Tuple[str, List[Dict[str, Any]]]:
-    """检索专家绑定知识并产出（上下文块, 来源条目）。
+) -> Tuple[str, List[Dict[str, Any]], str]:
+    """检索专家绑定知识并产出（上下文块, 来源条目, 无命中拒答提示）。
 
     Args:
         profile: ``agent.profile``（dict；无绑定视为普通助手）。
@@ -187,26 +210,52 @@ async def retrieve_knowledge_context(
         limit: 最终命中条数。
 
     Returns:
-        ``(block, sources)``；无绑定 / 空查询 / 无命中 / 检索异常时返回
-        ``("", [])``，调用方无需额外判空。
+        ``(block, sources, no_hit_hint)``：
+
+        - 正常命中：``(上下文块, 来源条目, "")``；
+        - **有绑定但 0 命中**（M2-Task 5 拒答）：``("", [], 拒答提示)``，
+          提示包含绑定名，引导 LLM 明确告知「知识库无相关内容」；
+        - 无绑定 / 空查询 / 检索异常（fail-open）：``("", [], "")``，
+          不触发拒答，调用方无需额外判空。
     """
     bindings = knowledge_bindings_from_profile(profile)
     if not bindings:
-        return "", []
+        return "", [], ""
     if not query or not str(query).strip():
-        return "", []
+        return "", [], ""
 
     if retriever is None:
         from backend.agents.knowledge_retriever import KnowledgeRetriever
 
         retriever = KnowledgeRetriever()
 
+    started = time.monotonic()
     try:
         chunks = await retriever.retrieve(bindings, query, limit=limit)
     except Exception as exc:  # noqa: BLE001 — 检索属增强，失败必须 fail-open
-        logger.warning("专家知识检索失败，跳过注入: %s", exc)
-        return "", []
-    if not chunks:
-        return "", []
+        elapsed_ms = (time.monotonic() - started) * 1000.0
+        logger.warning(
+            "[SPECIALIST_KNOWLEDGE] span retrieve status=error elapsed_ms=%.1f "
+            "bindings=%d error=%s",
+            elapsed_ms,
+            len(bindings),
+            exc,
+        )
+        return "", [], ""
 
-    return build_knowledge_context(chunks), knowledge_sources_from_chunks(chunks)
+    elapsed_ms = (time.monotonic() - started) * 1000.0
+    logger.info(
+        "[SPECIALIST_KNOWLEDGE] span retrieve status=%s elapsed_ms=%.1f "
+        "bindings=%d hits=%d query_chars=%d",
+        "hit" if chunks else "no_hit",
+        elapsed_ms,
+        len(bindings),
+        len(chunks),
+        len(str(query)),
+    )
+
+    if not chunks:
+        hint = NO_HIT_HINT_TEMPLATE.format(bindings=_binding_display_names(bindings))
+        return "", [], hint
+
+    return build_knowledge_context(chunks), knowledge_sources_from_chunks(chunks), ""
