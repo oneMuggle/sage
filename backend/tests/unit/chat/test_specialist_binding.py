@@ -150,7 +150,7 @@ def test_validate_specialist_id_rejects_unknown_or_disabled(monkeypatch):
         agent_rows={"retired": DISABLED_ROW},
         session=None,
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="专家不存在或已禁用"):
         validate_specialist_id("ghost")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="专家不存在或已禁用"):
         validate_specialist_id("retired")

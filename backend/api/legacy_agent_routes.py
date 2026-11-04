@@ -120,7 +120,7 @@ def update_agent(agent_id: str, data: AgentUpdate):
             },
         )
 
-    # M1: 权限模式白名单
+    # M1 — 权限模式白名单
     if data.permission_mode is not None and data.permission_mode not in _VALID_PERMISSION_MODES:
         raise HTTPException(
             status_code=422,

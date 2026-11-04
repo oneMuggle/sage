@@ -46,8 +46,7 @@ class _FakeAgentRepo:
 
     def delete(self, agent_id):
         # M0 (2026-11-03): 删除 / 复制专家测试支撑
-        existed = self._agents.pop(agent_id, None) is not None
-        return existed
+        return self._agents.pop(agent_id, None) is not None
 
     def upsert(self, payload):
         self._agents[payload["id"]] = payload

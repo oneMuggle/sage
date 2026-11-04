@@ -67,11 +67,11 @@ def compose_system_prompt(
         完整的 system prompt 字符串
     """
     from backend.agents.profiles import (
-        _OFFICE_CREATE_CAPABILITY_PROMPT,
-        _TODO_GUIDANCE_PROMPT,
-        _FILE_REFERENCE_LINK_PROMPT,
         _CODE_EXECUTION_CAPABILITY_PROMPT,
         _CONFIG_CAPABILITY_PROMPT,
+        _FILE_REFERENCE_LINK_PROMPT,
+        _OFFICE_CREATE_CAPABILITY_PROMPT,
+        _TODO_GUIDANCE_PROMPT,
         _build_clarify_guidance,
         _windows_env_snapshot,
         format_agents_for_prompt,
