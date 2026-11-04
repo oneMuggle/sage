@@ -8,6 +8,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { invoke } from '../../shared/api/desktopInvoke';
+import { formatLocalString } from '../../shared/lib/timeFormatter';
 
 interface EvolutionLog {
   id: string;
@@ -67,8 +68,8 @@ export const EvolutionPanel: React.FC = () => {
             这与技能演化实际需要人审批（草稿 approve/reject）直接矛盾,
             也与 PHILOSOPHY 的「透明可控」相悖。改为如实分两层陈述。 */}
         <p className="text-sm text-muted mt-1">
-          5 个维护任务由后台自动调度(SchedulerService cron 触发),无需手动干预:
-          每日摘要 / 记忆修剪 / 偏好学习 / 重要性重评估 / 记忆合并。
+          5 个维护任务由后台自动调度(SchedulerService cron 触发),无需手动干预: 每日摘要 / 记忆修剪 /
+          偏好学习 / 重要性重评估 / 记忆合并。
         </p>
         <p className="text-sm text-muted mt-1">
           但技能演化不一样 —— 它只产出草稿,不会自行改动你的技能。
@@ -105,7 +106,7 @@ export const EvolutionPanel: React.FC = () => {
                 </div>
                 <p className="text-xs text-muted mt-1">{log.description}</p>
                 <p className="text-xs text-muted mt-1">
-                  {new Date(log.created_at).toLocaleString('zh-CN')}
+                  {formatLocalString(log.created_at * 1000)}
                 </p>
               </li>
             ))}

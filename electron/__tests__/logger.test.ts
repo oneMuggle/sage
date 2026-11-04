@@ -32,12 +32,20 @@ async function importLogger() {
   return mod.logger;
 }
 
+// 日志文件名按"日志时区"的日期切分, 默认 local —— 不能固定用 UTC 日期,
+// 否则 UTC+X 的凌晨时段会断言到明天的文件.
+function localToday(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 describe('logger', () => {
   it('writes NDJSON line with required fields', async () => {
     const logger = await importLogger();
     logger.info('hello world', { foo: 'bar' });
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const file = join(tmpDir, 'logs', `sage-${today}.ndjson`);
     expect(existsSync(file)).toBe(true);
 
@@ -51,7 +59,8 @@ describe('logger', () => {
       msg: 'hello world',
       meta: { foo: 'bar' },
     });
-    expect(obj.ts).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    // 默认 local 时区 → ISO-like 带本机偏移 (CI 为 +00:00, 东八区为 +08:00).
+    expect(obj.ts).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}(?:Z|[+-]\d{2}:\d{2})$/);
   });
 
   it('respects SAGE_LOG_LEVEL filtering', async () => {
@@ -63,7 +72,7 @@ describe('logger', () => {
     logger.warn('yes-warn');
     logger.error('yes-error');
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const file = join(tmpDir, 'logs', `sage-${today}.ndjson`);
     if (!existsSync(file)) return;
 
@@ -82,7 +91,7 @@ describe('logger', () => {
 
     logger.error('circular', circular);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const file = join(tmpDir, 'logs', `sage-${today}.ndjson`);
     const lines = readFileSync(file, 'utf-8').trim().split('\n');
     const obj = JSON.parse(lines[0]);
@@ -98,7 +107,7 @@ describe('logger', () => {
     const logger = await importLogger();
     logger.info('no meta');
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const file = join(tmpDir, 'logs', `sage-${today}.ndjson`);
     const obj = JSON.parse(readFileSync(file, 'utf-8').trim());
 
@@ -109,7 +118,7 @@ describe('logger', () => {
   it('appends to existing file (does not overwrite)', async () => {
     const logsDir = join(tmpDir, 'logs');
     mkdirSync(logsDir, { recursive: true });
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const file = join(logsDir, `sage-${today}.ndjson`);
     appendFileSync(file, '{"existing":true}\n', 'utf-8');
 
@@ -130,7 +139,7 @@ describe('logger', () => {
     mod.logger.info('hidden-info');
     mod.logger.error('shown-error');
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const file = join(tmpDir, 'logs', `sage-${today}.ndjson`);
     if (!existsSync(file)) throw new Error('no NDJSON written');
 
@@ -145,7 +154,7 @@ describe('logger', () => {
     mod.setLogLevel('bogus' as never);
     mod.logger.error('still-visible-error');
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const file = join(tmpDir, 'logs', `sage-${today}.ndjson`);
     if (!existsSync(file)) throw new Error('no NDJSON written');
     const lines = readFileSync(file, 'utf-8').trim().split('\n').filter(Boolean);

@@ -12,12 +12,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-try:
-    from zoneinfo import ZoneInfo  # Python 3.9+  # py38-ok except ImportError 守卫 + backports 兜底
-except ImportError:  # pragma: no cover — py38 compat
-    from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
-
 from opentelemetry import trace
+
+from backend.utils.timezones import resolve_timezone
 
 # 日志格式
 LOG_FORMAT = "%(asctime)s [%(levelname)s] [trace=%(trace_id)s] %(name)s: %(message)s"
@@ -35,8 +32,9 @@ LOG_LEVELS = {
 # 默认日志级别
 DEFAULT_LOG_LEVEL = "INFO"
 
-# 默认日志时区 (2026-09-17): 'UTC' 保持历史行为.
-DEFAULT_LOG_TIMEZONE = "UTC"
+# 默认日志时区 (2026-11-03): 'local' —— 跟随系统本地时区.
+# 取不到本地时区时回退北京时间 (见 backend.utils.timezones.resolve_timezone).
+DEFAULT_LOG_TIMEZONE = "local"
 
 # 日志文件保留天数
 LOG_FILE_MAX_DAYS = 7
@@ -85,15 +83,12 @@ _CURRENT_LOG_TIMEZONE: str = DEFAULT_LOG_TIMEZONE
 
 
 def _resolve_log_timezone(tz: str):
-    """把 logTimezone 字符串解析为 tzinfo 对象. 失败回落 UTC."""
-    if not tz or tz == "UTC":
-        return timezone.utc  # noqa: UP017 — datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10, win7 跑 3.8
-    if tz == "local":
-        return None  # None 表示用本地时间 (Formatter 特殊处理)
-    try:
-        return ZoneInfo(tz)
-    except Exception:  # noqa: BLE001 — 非法 IANA → 回落 UTC
-        return timezone.utc  # noqa: UP017 — datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10, win7 跑 3.8
+    """把 logTimezone 字符串解析为 tzinfo 对象.
+
+    回退链 (2026-11-03): 'local' → 系统本地时区 → 北京时间; 非法 IANA →
+    北京时间; 空值 → UTC.
+    """
+    return resolve_timezone(tz)
 
 
 class TimezoneFormatter(logging.Formatter):
@@ -101,14 +96,14 @@ class TimezoneFormatter(logging.Formatter):
 
     通过读取模块级 ``_CURRENT_LOG_TIMEZONE`` 决定时间戳格式化的时区:
 
-    - 'UTC': UTC 时间 (默认, 历史行为)
-    - 'local': 系统本地时间
+    - 'local': 系统本地时间 (默认, 2026-11-03)
+    - 'UTC': UTC 时间
     - IANA 时区字符串: 该时区的时间
 
     设计要点:
 
     - 与 ``logging.Formatter`` 接口兼容, 无需修改调用方.
-    - 时区解析失败时回落 UTC, 不会因为坏设置导致日志系统崩溃.
+    - 时区解析失败时回落北京时间, 不会因为坏设置导致日志系统崩溃.
     - 通过 ``set_log_timezone()`` 切换后, 新生成的 record 立即使用新时区.
     """
 
@@ -126,11 +121,7 @@ class TimezoneFormatter(logging.Formatter):
 
         # record.created 是 POSIX 时间戳 (秒, UTC).
         utc_dt = datetime.fromtimestamp(record.created, tz=timezone.utc)  # noqa: UP017 — datetime.UTC 是 Py 3.11+, sage-backend 跑 3.10, win7 跑 3.8
-        if self._cached_tzinfo is None:
-            # 'local': 转本地时区
-            local_dt = utc_dt.astimezone()
-        else:
-            local_dt = utc_dt.astimezone(self._cached_tzinfo)
+        local_dt = utc_dt.astimezone(self._cached_tzinfo)
         if datefmt:
             return local_dt.strftime(datefmt)
         return local_dt.isoformat()
@@ -239,13 +230,8 @@ class SageLogger:
             配置好的 FileHandler
         """
         # 生成日志文件名 — 按日期 — 使用当前 logTimezone 切分.
-        tz = _CURRENT_LOG_TIMEZONE
-        tzinfo = _resolve_log_timezone(tz)
-        if tzinfo is None:
-            # tzinfo 为空表示用本地时间
-            date_str = datetime.now().strftime("%Y%m%d")
-        else:
-            date_str = datetime.now(tz=tzinfo).strftime("%Y%m%d")
+        tzinfo = _resolve_log_timezone(_CURRENT_LOG_TIMEZONE)
+        date_str = datetime.now(tz=tzinfo).strftime("%Y%m%d")
         log_file = self._log_dir / f"sage_{date_str}.log"
 
         handler = logging.FileHandler(log_file, encoding="utf-8")
@@ -366,7 +352,7 @@ def set_log_timezone(tz: str) -> None:
         - 设置后立即生效; 新写入的日志使用新时区.
         - 不会重新创建 FileHandler; 文件名按下次创建 handler 时确定.
         - 已有 handler 的 Formatter 内部缓存会自我刷新, 无需重建.
-        - 非法 IANA 时区字符串会被内部回落到 UTC, 不会抛错.
+        - 非法 IANA 时区字符串会被内部回落到北京时间, 不会抛错.
     """
     global _CURRENT_LOG_TIMEZONE
     if not tz or not isinstance(tz, str):

@@ -5,6 +5,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { invoke } from '../../shared/api/desktopInvoke';
+import { formatLocalString } from '../../shared/lib/timeFormatter';
 
 // 进化日志类型
 interface EvolutionLog {
@@ -87,15 +88,7 @@ export const EvolutionLog: React.FC = () => {
     setPage((prev) => prev + 1);
   };
 
-  // 格式化时间戳
-  const formatTime = (timestamp: number): string => {
-    try {
-      const date = new Date(timestamp * 1000);
-      return date.toLocaleString('zh-CN');
-    } catch {
-      return String(timestamp);
-    }
-  };
+  // formatTime 已统一到 src/shared/lib/timeFormatter#formatLocalString
 
   // 格式化执行耗时（P0-1：duration_ms）
   const formatDuration = (ms: number): string => {
@@ -199,8 +192,10 @@ export const EvolutionLog: React.FC = () => {
 
                   {/* 时间信息 */}
                   <div className="mt-2 flex items-center gap-4 text-xs text-muted">
-                    <span>创建: {formatTime(log.created_at)}</span>
-                    {log.completed_at && <span>完成: {formatTime(log.completed_at)}</span>}
+                    <span>创建: {formatLocalString(log.created_at * 1000)}</span>
+                    {log.completed_at && (
+                      <span>完成: {formatLocalString(log.completed_at * 1000)}</span>
+                    )}
                     {log.tokens_used && <span>消耗 Token: {log.tokens_used}</span>}
                     {log.duration_ms != null && (
                       <span>耗时: {formatDuration(log.duration_ms)}</span>

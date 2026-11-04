@@ -439,7 +439,7 @@ try {
 }
 
 // 日志时区 (2026-09-17): 从 userData JSON 读取, 应用到 Electron logger + 传给 Python 后端.
-let logTimezoneFromSettings = 'UTC';
+let logTimezoneFromSettings = 'local';
 try {
   logTimezoneFromSettings = readLogTimezone();
   setLogTimezone(logTimezoneFromSettings);
@@ -1728,7 +1728,7 @@ async function registerIpcHandlers(): Promise<void> {
   // 立即应用到 Electron logger, 同时写盘供下次启动读取. Python 后端通过 env 变量接收.
   ipcMain.handle('sage:log-timezone:get', (evt) => {
     if (!isTrustedRenderer(evt.sender)) {
-      return { logTimezone: 'UTC' };
+      return { logTimezone: 'local' };
     }
     return { logTimezone: logTimezoneFromSettings };
   });
@@ -1737,7 +1737,7 @@ async function registerIpcHandlers(): Promise<void> {
     if (!isTrustedRenderer(evt.sender)) {
       return { ok: false, error: '未授权的窗口请求' };
     }
-    const tz = typeof payload?.logTimezone === 'string' ? payload.logTimezone : 'UTC';
+    const tz = typeof payload?.logTimezone === 'string' ? payload.logTimezone : 'local';
     try {
       setLogTimezone(tz);
       process.env.SAGE_LOG_TIMEZONE = tz;

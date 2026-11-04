@@ -3,6 +3,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import type { BlockedAction, Message } from '../../shared/lib/store';
+import { formatRelativeTime } from '../../shared/lib/timeFormatter';
 
 import { Message as MessageComponent } from './Message';
 import { getTurnSummary, getTurnToolCallCount, isTurnCollapsible } from './turnGrouping';
@@ -107,7 +108,9 @@ function TurnGroupComponent({
                 {messages.filter((m) => m.role === 'assistant').length} 条回复
               </span>
               {lastMessage && (
-                <span className="ml-auto text-ui-xs">{formatTurnTime(lastMessage.created_at)}</span>
+                <span className="ml-auto text-ui-xs">
+                  {formatRelativeTime(lastMessage.created_at * 1000)}
+                </span>
               )}
             </div>
           </div>
@@ -166,18 +169,7 @@ function TurnGroupComponent({
 const TURN_JUMP_FLASH_CLASS =
   'rounded-radius-sm ring-2 ring-primary/50 bg-primary/5 transition-shadow';
 
-function formatTurnTime(ts: number): string {
-  if (!ts) return '';
-  const date = new Date(ts * 1000);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return '刚刚';
-  if (diffMins < 60) return `${diffMins} 分钟前`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours} 小时前`;
-  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
-}
+// formatTurnTime 已统一到 src/shared/lib/timeFormatter#formatRelativeTime
 
 export const TurnGroup = memo(TurnGroupComponent);
 

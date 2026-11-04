@@ -47,6 +47,7 @@ from backend.domain.scheduler import (
     ScheduledTaskValidationError,
 )
 from backend.services.scheduler_repository import ScheduledTaskRepository
+from backend.utils.timezones import local_timezone
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +129,10 @@ class SchedulerService:
         self._lock = threading.Lock()
         self._tasks: Dict[str, ScheduledTask] = {}
         self._running = set()
-        self._scheduler = BackgroundScheduler(daemon=True)
+        # 显式设置本地时区, 让 cron/interval 触发时间与日志、趋势图一致
+        # (2026-11-03). 不设置时 APScheduler 用其内部默认 (系统本地),
+        # 但行为依赖 tzlocal 是否可用, 显式传入更稳.
+        self._scheduler = BackgroundScheduler(daemon=True, timezone=local_timezone())
         self._evolution_tasks: Dict[str, "BaseEvolutionTask"] = {}  # noqa: UP037
         self._repository = ScheduledTaskRepository(db) if db is not None else None
         if self._repository is None:

@@ -6,6 +6,7 @@
 
 import type { RunEvent } from '../../../shared/api/orchEvents';
 import { isStepEvent, isTaskEvent } from '../../../shared/api/orchEvents';
+import { formatTimeOfDay } from '../../../shared/lib/timeFormatter';
 
 interface EventTimelineProps {
   events: RunEvent[];
@@ -53,15 +54,7 @@ function eventColor(event: RunEvent): string {
   return 'text-text-secondary';
 }
 
-function formatTime(msTimestamp: number): string {
-  const d = new Date(msTimestamp);
-  return d.toLocaleTimeString('zh-CN', {
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-}
+// formatTime 已统一到 src/shared/lib/timeFormatter#formatTimeOfDay
 
 /** RD22 (round50): 相对首事件的偏移量（+0.0s 起），便于一眼读出步骤间隔。 */
 function formatOffset(ms: number): string {
@@ -111,7 +104,7 @@ export function EventTimeline({ events, maxEvents = 200 }: EventTimelineProps) {
             className="flex items-start gap-2 px-2 py-0.5 text-xs hover:bg-bg-hover rounded"
           >
             <span className="text-text-tertiary shrink-0 w-16 tabular-nums">
-              {formatTime(event.occurred_at)}
+              {formatTimeOfDay(event.occurred_at)}
             </span>
             <span
               className="text-primary shrink-0 w-12 tabular-nums text-ui-xs"
