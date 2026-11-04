@@ -16,6 +16,10 @@ from typing import Any, Dict, List, Optional
 
 from backend.data.database import get_database
 from backend.memory.episodic import sync_fts_row_for_id
+from backend.memory.preference_labels import (
+    PREFERENCE_VALUE_LABELS,
+    format_preference,
+)
 from backend.memory.vector_store import prune_orphan_vectors
 from backend.scheduler.evolution_log import elapsed_ms, record_evolution_log
 
@@ -609,7 +613,9 @@ class PreferenceLearningTask(BaseEvolutionTask):
             return 0
 
         # 3. 保存到语义记忆
-        profile_text = "\n".join([f"{k}: {v}" for k, v in preferences.items()])
+        profile_text = "\n".join(
+            [format_preference(k, v) for k, v in preferences.items()]
+        )
         memory_id = str(uuid.uuid4())
         now_ts = int(time.time())
 
@@ -621,10 +627,11 @@ class PreferenceLearningTask(BaseEvolutionTask):
         """,
             (
                 memory_id,
-                f"用户偏好总结: {profile_text}",
-                f"用户偏好: {preferences.get('response_length', 'medium')}, "
-                f"风格: {preferences.get('tone', 'friendly')}, "
-                f"详细度: {preferences.get('detail_level', 'medium')}",
+                f"用户偏好总结:\n{profile_text}",
+                "用户偏好: "
+                f"回复长度={PREFERENCE_VALUE_LABELS.get('response_length', {}).get(preferences.get('response_length', 'medium'), preferences.get('response_length', 'medium'))}, "
+                f"交互风格={PREFERENCE_VALUE_LABELS.get('tone', {}).get(preferences.get('tone', 'friendly'), preferences.get('tone', 'friendly'))}, "
+                f"详细程度={PREFERENCE_VALUE_LABELS.get('detail_level', {}).get(preferences.get('detail_level', 'medium'), preferences.get('detail_level', 'medium'))}",
                 '["user_preference", "evolution"]',
                 now_ts,
             ),
@@ -655,7 +662,7 @@ class PreferenceLearningTask(BaseEvolutionTask):
             profile_store.load()
             for key, value in preferences.items():
                 profile_store.add(
-                    content=f"用户偏好 {key}: {value}",
+                    content=format_preference(key, value),
                     category="preference",
                     importance=6,
                 )
