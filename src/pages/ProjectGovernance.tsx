@@ -90,24 +90,25 @@ export function ProjectGovernance() {
   const [searchParams] = useSearchParams();
 
   const [project, setProject] = useState<ProjectSummary | null>(null);
-  const [activeTab, setActiveTab] = useState<GovernanceTab>(
-    () => {
-      const fromUrl = searchParams.get('tab');
-      if (fromUrl === 'overview' || fromUrl === 'knowledge' || fromUrl === 'settings' || fromUrl === 'playbook') {
-        return fromUrl as GovernanceTab;
-      }
-      return 'overview';
-    },
-  );
-  const [knowledgeTab, setKnowledgeTab] = useState<KnowledgeTab>(
-    () => {
-      const fromUrl = searchParams.get('knowledge');
-      if (fromUrl === 'rules' || fromUrl === 'wiki' || fromUrl === 'materials') {
-        return fromUrl as KnowledgeTab;
-      }
-      return 'rules';
-    },
-  );
+  const [activeTab, setActiveTab] = useState<GovernanceTab>(() => {
+    const fromUrl = searchParams.get('tab');
+    if (
+      fromUrl === 'overview' ||
+      fromUrl === 'knowledge' ||
+      fromUrl === 'settings' ||
+      fromUrl === 'playbook'
+    ) {
+      return fromUrl as GovernanceTab;
+    }
+    return 'overview';
+  });
+  const [knowledgeTab, setKnowledgeTab] = useState<KnowledgeTab>(() => {
+    const fromUrl = searchParams.get('knowledge');
+    if (fromUrl === 'rules' || fromUrl === 'wiki' || fromUrl === 'materials') {
+      return fromUrl as KnowledgeTab;
+    }
+    return 'rules';
+  });
   const [scaffolding, setScaffolding] = useState(false);
   const [scaffoldResult, setScaffoldResult] = useState<ProjectScaffoldResult | null>(null);
   const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
