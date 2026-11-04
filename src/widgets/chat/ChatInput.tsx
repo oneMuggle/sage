@@ -18,6 +18,7 @@ import type { ChatOfficeRef } from '../../shared/api/types';
 import { worktreeApi } from '../../shared/api/worktreeApi';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
 import { CHAT_DOCUMENT_EXTENSIONS } from '../../shared/lib/hooks/useFileUpload';
+import { COMPOSER_DROP_EVENT } from '../../shared/lib/hooks/useGlobalFileDrop';
 import { useInputHistory } from '../../shared/lib/hooks/useInputHistory';
 import { useSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { useI18n } from '../../shared/lib/i18n';
@@ -347,6 +348,21 @@ function ChatInputInner({
     handlePaste,
     isDragOver,
   } = useFileUpload();
+
+  // P2 (2026-11-04): 监听 Chat 页全局拖放派发的 sage:composer-drop 事件 ——
+  // 把落在 composer 之外的文件转给 useFileUpload，与输入卡内 drop 行为一致。
+  useEffect(() => {
+    const onComposerDrop = (e: Event) => {
+      const detail = (e as CustomEvent<{ files: File[] }>).detail;
+      if (!detail?.files?.length) return;
+      detail.files.forEach((file) => {
+        if (file.type.startsWith('image/')) addImage(file);
+        else addFile(file);
+      });
+    };
+    window.addEventListener(COMPOSER_DROP_EVENT, onComposerDrop);
+    return () => window.removeEventListener(COMPOSER_DROP_EVENT, onComposerDrop);
+  }, [addFile, addImage]);
 
   const handleFileOcr = useCallback(
     (index: number) => {

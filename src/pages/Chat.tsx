@@ -28,6 +28,8 @@ import { loadAttachmentRagConfig } from '../shared/api/attachmentRagConfig';
 import { orchRunControlClient } from '../shared/api/orchRunControlClient';
 // RD20 (round43): 历史 run → 任务板恢复映射。
 import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
+import { useGlobalFileDrop } from '../shared/lib/hooks/useGlobalFileDrop';
+import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
@@ -106,7 +108,13 @@ export function Chat() {
     removeMessage,
   } = useStore();
   const [tempChatSessions, setTempChatSessions] = useSessionMemoryPause(currentSessionId);
+  const { t } = useI18n();
   const [orchMode, setOrchMode] = useState<string>('auto');
+  // P2 (2026-11-04): 全局拖放 —— 用户在页面任意位置拖入文件都触发 overlay，
+  // drop 后派发到当前 composer（ChatInput 监听 sage:composer-drop）。
+  const { isDragOver } = useGlobalFileDrop({
+    composerSelector: '[data-testid="chat-input"]',
+  });
 
   // 崩溃恢复）后长任务输出不再丢失。内部有会话级去重守卫。
   useEffect(() => {
@@ -564,6 +572,17 @@ export function Chat() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
+      {/* P2 (2026-11-04): 全局拖放 overlay —— 用户拖文件到聊天页任意位置时显示 */}
+      {isDragOver && (
+        <div
+          data-testid="chat-global-drop-overlay"
+          className="fixed inset-0 z-50 bg-primary/15 border-4 border-dashed border-primary flex items-center justify-center pointer-events-none"
+        >
+          <div className="px-6 py-4 rounded-radius-md bg-surface border border-primary shadow-lg">
+            <p className="text-primary font-semibold text-lg">{t('chat.drop_files')}</p>
+          </div>
+        </div>
+      )}
       <ChatHeaderBar
         workspacePath={workspacePath}
         currentSessionId={currentSessionId}

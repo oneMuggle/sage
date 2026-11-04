@@ -158,7 +158,9 @@
 - [x] 2.3 前端预检：`useFileUpload` 加 `preflightAttachment()`，在 selection 阶段拒绝超过 25MB / 10 个 / 不支持扩展名 / 同名重复的附件，红标 chip 显示原因；粘贴扩展为同时接收图片与文档文件。
 - [ ] 2.1 PDF 视觉通道（视觉模型）+ 扫描 PDF 自动 OCR。
 - [ ] 2.2 上下文计量：`ContextMeter` 显示附件占 token，超 100k 截断时给 inline 提示。
-- [ ] 2.4 拖放范围扩大到聊天页根容器。
+- [x] 2.4 拖放范围扩大到页面根容器 —— 新增共享 hook `useGlobalFileDrop`（document capture 监听 +
+       `sage:composer-drop` CustomEvent 分发），Chat 页与新对话页（Welcome）均接入，
+       拖到页面任意位置都会显示遮罩并把文件交给对应 composer。
 - [ ] 2.5 编排/插话路径的附件语义。
 
 ## 风险评估
