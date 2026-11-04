@@ -38,7 +38,6 @@ FALLBACK_DOCUMENT_SUFFIXES: frozenset[str] = frozenset(
         ".dockerfile", ".gitignore", ".properties",
         # 日志
         ".log",
-        # 二进制文档(需后端提取文本)
         ".pdf", ".docx", ".xlsx",
     }
 )
@@ -91,20 +90,13 @@ class MediaStore:
 
     # ── sidecar 元数据读写 ──────────────────────────────────────────────
     #
-    # save() 在写媒体字节的同时写一份 <id>.meta.json,持久化 kind/mime/
-    # original_filename/source/metadata/created_at。load() 优先读 sidecar,
-    # 缺失时回退到后缀推断(表与上传 allowlist 同口径),保证历史数据零迁移。
+    # save() 在写媒体字节的同时写一份 <id>.meta.json，持久化 kind / mime /
+    # original_filename / source / metadata / created_at。load() 优先读 sidecar，
+    # 缺失时回退到后缀推断（表与上传 allowlist 同口径），保证历史数据零迁移。
     #
-    # Sidecar 字段(示例):
-    # {
-    #   "id": "abc123456789",
-    #   "kind": "document",
-    #   "mime_type": "text/x-python",
-    #   "original_filename": "app.py",
-    #   "source": "chat_upload",
-    #   "metadata": {"original_filename": "app.py"},
-    #   "created_at": "2026-11-04T12:34:56.789012+00:00"
-    # }
+    # Sidecar 字段 —— id: str / kind: document|image|audio / mime_type: str /
+    # original_filename: str / source: chat_upload / metadata: dict /
+    # created_at: ISO-8601（如 2026-11-04T12:34:56.789012+00:00）。
 
     def _read_sidecar(self, media_file: Path) -> Optional[dict]:
         """读 sidecar;失败/不存在返回 None。"""

@@ -1,8 +1,8 @@
 /**
  * English translations (aggregator entry, domain dictionaries under ./locales/en/)
  */
-import { enChatAndSider } from './locales/en/chatAndSider';
 import { enAttachmentStatus } from './locales/en/attachmentStatus';
+import { enChatAndSider } from './locales/en/chatAndSider';
 import { enChatDisplayMode } from './locales/en/chatDisplayMode';
 import { enChatPdfOcr } from './locales/en/chatPdfOcr';
 import { enContextMenu } from './locales/en/contextMenu';

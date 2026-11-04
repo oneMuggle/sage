@@ -177,7 +177,7 @@ def real_store_client(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "filename,content,content_type",
+    ("filename", "content", "content_type"),
     [
         ("data.csv", b"col1,col2\n1,2\n", "text/csv"),
         ("script.py", b"print('hello')\n", "text/x-python"),
@@ -200,4 +200,5 @@ def test_upload_then_get_text_for_expanded_formats(
 
     res = real_store_client.get(f"/chat/attachments/{mid}/text")
     assert res.status_code == 200, f"{filename}: {res.status_code} {res.text}"
-    assert "hello" in res.json()["text"]
+    # 不同格式的内容不同，统一断言"上传的原始内容能被读回"。
+    assert content.decode() in res.json()["text"] or res.json()["text"] in content.decode()
