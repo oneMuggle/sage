@@ -295,10 +295,14 @@ class ChatService:
                         await self._lifecycle.is_memory_retrieval_enabled()
                     )
                 if retrieval_enabled:
+                    # M3-Task 4: 按会话专家的私有层 ∪ 共享层 过滤召回
+                    from backend.chat.specialist_binding import resolve_bound_specialist
+
                     memory_context = await self.memory.retrieve(
                         query=user_message.content,
                         session_id=session_id,
                         limit=5,
+                        agent_id=resolve_bound_specialist(session_id),
                     )
                     span.set_attribute("memory.has_memories", memory_context.has_memories)
             except Exception as e:
@@ -778,6 +782,7 @@ class ChatService:
         assistant_message: Message,
         user_message_id: Optional[str] = None,
         assistant_message_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> None:
         """从对话中提取关键信息并存入记忆系统
 
@@ -790,9 +795,17 @@ class ChatService:
             assistant_message: 助手消息
             user_message_id: 已持久化的用户消息 id（Gap E，可追溯性）
             assistant_message_id: 已持久化的助手消息 id（Gap E，可追溯性）
+            agent_id: M3-Task 4 新增；记忆写入归会话专家的私有层。缺省时
+                按 ``resolve_bound_specialist(session_id)`` 自动解析。
         """
         if not self.memory:
             return
+
+        # M3-Task 4: 缺省按会话绑定专家归属（fail-safe 回落 'primary'）
+        if agent_id is None:
+            from backend.chat.specialist_binding import resolve_bound_specialist
+
+            agent_id = resolve_bound_specialist(session_id)
 
         from backend.memory.extractor import MemoryExtractor
 
@@ -831,6 +844,7 @@ class ChatService:
                 # data-turn-id={message.id} instead of being a silent no-op.
                 # Prefer the assistant reply; fall back to the user message.
                 source_message_id=assistant_message_id or user_message_id,
+                agent_id=agent_id,
             )
 
         if facts:
@@ -1190,6 +1204,7 @@ async def extract_and_store_memory(
     session_id: Optional[str],
     enabled: bool,
     tool_observations: str = "",
+    agent_id: Optional[str] = None,
 ) -> int:
     """从一轮对话中提取原子事实并写入记忆系统（best-effort，绝不外抛）。
 
@@ -1210,6 +1225,8 @@ async def extract_and_store_memory(
         assistant_text: 助手回复文本。
         session_id:     关联会话 ID，原样透传给 ``memory_port.store``；可为 None。
         enabled:        autoMemory 开关；False → 跳过（返回 0）。
+        agent_id:       M3-Task 4 新增；写入归该专家的私有层。None → 共享层。
+            调用方（legacy 异步队列 / hex 路径）应按会话专家身份显式传入。
 
     Returns:
         实际写入记忆条数（失败 / 跳过时为 0）。
@@ -1305,6 +1322,7 @@ async def extract_and_store_memory(
                     session_id=session_id,
                     importance=fact.get("importance", 5),
                     tags=fact.get("tags", ["conversation"]),
+                    agent_id=agent_id,
                 )
                 stored += 1
                 _ledger_record(mid, KIND_MEMORY, fact, "auto")

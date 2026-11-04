@@ -198,7 +198,11 @@ class MemorySearchTool(BaseTool):
                 return ToolResult(success=False, error="不支持的检索作用域")
             cross_session = normalized_scope != "session"
 
-            search_kwargs: Dict[str, Any] = {"session_id": context.session_id}
+            search_kwargs: Dict[str, Any] = {
+                "session_id": context.session_id,
+                # M3-Task 4: 透传专家身份，让存储层按 agent_id ∪ shared 过滤
+                "agent_id": context.agent_id,
+            }
             if cross_session:
                 search_kwargs["scope"] = normalized_scope
             results = self.memory.search_memories(
@@ -356,7 +360,11 @@ class MemorySaveTool(BaseTool):
         forwarded_tags = list(tags) if tags is not None else None
 
         # ``auto`` 不显式传 scope —— 保持旧调用形态, 由存储层自动判定。
-        memorize_kwargs: Dict[str, Any] = {"session_id": effective_session_id}
+        memorize_kwargs: Dict[str, Any] = {
+            "session_id": effective_session_id,
+            # M3-Task 4: 透传专家身份，让存储层按 agent_id 写入私有/共享层
+            "agent_id": context.agent_id,
+        }
         if normalized_scope != "auto":
             memorize_kwargs["scope"] = normalized_scope
 

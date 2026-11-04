@@ -507,6 +507,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
         # authorization so Office tools can read the session's binding.
         # set/reset around ``agent.run_loop`` via try/finally so the
         # ContextVar never leaks across producer invocations.
+        # M3-Task 4: 解析会话绑定的专家身份，贯穿到工具上下文与记忆写入
+        from backend.chat.specialist_binding import resolve_bound_specialist
         from backend.tools.context import (
             ToolExecutionContext,
             reset_tool_context,
@@ -520,6 +522,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 stream_id=stream_id,
                 binding_generation=_auth_result.binding_generation,
                 office_doc_scope=_auth_result.office_doc_scope,
+                agent_id=resolve_bound_specialist(_auth_result.session_id),
             )
         else:
             # F2 (2026-08-12): 普通聊天（无 office 授权）也设置上下文 —— 否则
@@ -532,6 +535,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 stream_id=stream_id,
                 binding_generation=0,
                 office_doc_scope=frozenset(),
+                agent_id=resolve_bound_specialist(data.session_id),
             )
         _tool_ctx_token = set_tool_context(_tool_ctx)
         # live-events P2 (2026-09-07) / P1 todo 接线 / S7 产物 / right-panel R5:
@@ -2526,6 +2530,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                         {"role": "assistant", "content": done_content},
                                     ],
                                     source_message_id=assistant_db_id,
+                                    # M3-Task 4: 记忆写入归会话专家的私有层
+                                    agent_id=resolve_bound_specialist(data.session_id),
                                 )
                             except Exception as exc:
                                 logger.warning(
@@ -2539,6 +2545,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     data.session_id,
                                     data.message,
                                     done_content,
+                                    agent_id=resolve_bound_specialist(data.session_id),
                                 )
                             except Exception as exc:
                                 logger.warning(

@@ -39,6 +39,7 @@ from backend.api.settings_models import SettingsPayload, model_dump_compat
 from backend.application.services.chat_service import ChatService
 from backend.application.services.session_service import SessionService
 from backend.chat.executors import resolve_attachments
+from backend.chat.specialist_binding import resolve_bound_specialist
 from backend.tools.context import (
     ToolExecutionContext,
     reset_tool_context,
@@ -159,6 +160,8 @@ async def chat(
             stream_id=request_id,
             binding_generation=0,
             office_doc_scope=frozenset(),
+            # M3-Task 4: 会话专家身份贯穿到工具上下文，驱动 memory 工具/自动抽取的私有层归属
+            agent_id=resolve_bound_specialist(req.session_id),
         )
     )
     try:
