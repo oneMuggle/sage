@@ -27,6 +27,7 @@ import {
   SETTINGS_VERSION,
 } from '../../../entities/setting/types';
 import { useSettingsStore } from '../../../features/manage-settings/settingsStore';
+import { isIntermediatePlaceholderText } from '../../../shared/lib/agentStateMapping';
 import { useStore, type Message } from '../../../shared/lib/store';
 import { selectSessionSlots, useChatStreamStore } from '../chatStreamStore';
 import { useChat } from '../useChat';
@@ -265,5 +266,122 @@ describe('useChat — step-by-step 流式显示 (2026-10-21)', () => {
       (m) => m.step_index === 0,
     );
     expect(stepZero).toHaveLength(1);
+  });
+
+  // 2026-11-04: 非流式多步 run 的两个占位残留缺陷（win7 安装包用户报告）。
+  it('does not snapshot an intermediate placeholder as step content (non-streaming)', async () => {
+    const result = await startStream();
+
+    // 非流式：步骤之间没有 content_delta，气泡停在「👀 观察结果…」
+    await emitEvent({ state: 'thinking', iteration: 0 });
+    await emitEvent({
+      state: 'acting',
+      iteration: 0,
+      tool_call: { function: { name: 'read_file' } },
+    });
+    await emitEvent({ state: 'observing', iteration: 0 });
+    await emitEvent({ state: 'step_done', iteration: 0, step_index: 0 });
+
+    const slots = selectSessionSlots(useChatStreamStore.getState(), SESSION_ID);
+    expect(slots.completedSteps).toHaveLength(1);
+    expect(slots.completedSteps[0].content).toBe('');
+
+    const stepRow = result.current.messages.find((m) => m.step_index === 0);
+    expect(stepRow?.content).toBe('');
+    // 已完成步骤不得把「👀 观察结果…」当正文渲染（当前步的「🤔 思考中…」实时占位除外）
+    expect(result.current.messages.some((m) => m.content === '👀 观察结果…')).toBe(false);
+  });
+
+  it('leaves no placeholder assistant rows after a non-streaming multi-step run', async () => {
+    const result = await startStream();
+
+    await emitEvent({
+      state: 'acting',
+      iteration: 0,
+      tool_call: { function: { name: 'read_file' } },
+    });
+    await emitEvent({ state: 'observing', iteration: 0 });
+    await emitEvent({ state: 'step_done', iteration: 0, step_index: 0 });
+
+    await emitEvent({ state: 'content_delta', iteration: 1, content: '最终答案' });
+
+    serverMessages = [
+      {
+        id: 'u-1',
+        session_id: SESSION_ID,
+        role: 'user',
+        content: 'ping',
+        created_at: 1,
+      },
+      {
+        id: 's-0',
+        session_id: SESSION_ID,
+        role: 'assistant',
+        content: '',
+        reasoning_content: null,
+        step_index: 0,
+        created_at: 2,
+      },
+      {
+        id: 's-1',
+        session_id: SESSION_ID,
+        role: 'assistant',
+        content: '最终答案',
+        reasoning_content: null,
+        step_index: 1,
+        created_at: 3,
+      },
+    ];
+    await emitEvent({ state: 'done', iteration: 1, content: '最终答案', message_id: 's-1' });
+
+    await waitFor(() => {
+      expect(result.current.messages.some((m) => m.content === '最终答案')).toBe(true);
+    });
+
+    // 旧实现：最初的「🤔 思考中…」行因 step_done 换了 uuid 而永远对不上，
+    // 残留在 messages 末尾，切会话再切回才被服务端数据冲掉。
+    const assistants = assistantMessages(result.current.messages);
+    expect(assistants).toHaveLength(2);
+    expect(assistants.every((m) => !isIntermediatePlaceholderText(m.content))).toBe(true);
+    expect(assistants[0].content).toBe('');
+  });
+
+  it('sweeps the trailing placeholder row when the run ends without final content', async () => {
+    const result = await startStream();
+
+    await emitEvent({ state: 'reasoning_delta', iteration: 0, reasoning: '步骤一' });
+    await emitEvent({ state: 'step_done', iteration: 0, step_index: 0 });
+
+    serverMessages = [
+      {
+        id: 'u-1',
+        session_id: SESSION_ID,
+        role: 'user',
+        content: 'ping',
+        created_at: 1,
+      },
+      {
+        id: 's-0',
+        session_id: SESSION_ID,
+        role: 'assistant',
+        content: '',
+        reasoning_content: '步骤一',
+        step_index: 0,
+        created_at: 2,
+      },
+    ];
+    await emitEvent({ state: 'done', iteration: 1, content: '' });
+
+    await waitFor(() => {
+      const slots = selectSessionSlots(useChatStreamStore.getState(), SESSION_ID);
+      expect(slots.streaming).toBeNull();
+    });
+
+    // step_done 后新建的下一步占位行没有产出真实内容 → finishStream 必须清扫。
+    await waitFor(() => {
+      expect(
+        result.current.messages.every((m) => !isIntermediatePlaceholderText(m.content)),
+      ).toBe(true);
+    });
   });
 });

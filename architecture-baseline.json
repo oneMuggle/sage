@@ -72,7 +72,7 @@
     "src/pages/settings/settingsSearchEntries.ts": 851,
     "src/features/send-message/__tests__/useChat.streamingAndGates.test.ts": 957,
     "src/features/send-message/chatStreamStore.ts": 855,
-    "src/features/send-message/useChat.ts": 1052,
+    "src/features/send-message/useChat.ts": 1099,
     "src/pages/settings/PluginsTab.tsx": 820,
     "backend/tests/unit/test_design_routes.py": 975,
     "backend/adapters/out/skill/inproc.py": 949,
