@@ -5,8 +5,13 @@
  * 检测到「流式中 + content 等于哨兵值」时渲染 shimmer 骨架而非 markdown 文本，
  * 避免「🤔 思考中…」以静态文本形式出现。agent 中间态文案（思考/调用工具等）
  * 会覆盖占位值，覆盖后自然回退 markdown 渲染。
+ *
+ * 2026-11-04: 值来自 agentStateMapping 的占位常量（单一真相源），避免两处
+ * 字符串漂移。
  */
-export const THINKING_PLACEHOLDER = '🤔 思考中…';
+import { PLACEHOLDER_THINKING } from '../../shared/lib/agentStateMapping';
+
+export const THINKING_PLACEHOLDER = PLACEHOLDER_THINKING;
 
 /* v8 ignore start */
 export function isThinkingPlaceholder(content?: string | null): boolean {

@@ -67,7 +67,7 @@
     "src/shared/api/projectApiTypes.ts": 1564,
     "src/widgets/chat/ChatInput.tsx": 892,
     "src/widgets/chat/Message.tsx": 807,
-    "src/features/send-message/useChat.ts": 1047,
+    "src/features/send-message/useChat.ts": 1094,
     "src/features/send-message/chatStreamStore.ts": 855,
     "src/pages/Chat.tsx": 831,
     "src/shared/api/types/chatAndEventTypes.ts": 871,
