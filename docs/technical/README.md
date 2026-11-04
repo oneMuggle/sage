@@ -91,6 +91,7 @@
 | 112  | [会话状态徽章](./112-session-status-badges.md) | 侧栏徽章优先级 / 重试中与后台运行中 / run_status 写入链路与已知限制 |
 | 113  | [设置页信息架构整理](./113-settings-ia-consolidation.md) | 单一 tab registry 派生导航/分组/别名/类型 + 平铺分组 + 搜索索引守卫（anchor/归属/tab 数）+ 审计导出集中 + `AdvancedSection` 折叠边界与每行「恢复默认」+ i18n/CJK 守卫 |
 | 114  | [桌面宠物（大肥鱼）](./114-desktop-pet.md) | 透明置顶窗 + 点击穿透/拖拽/多屏 + Agent 事件状态映射 + 窄 `pet:*` IPC 信任边界 + dsh-pet 素材一次性移植与 MIT 出处 |
+| 115  | [工作区绑定跳过机制](./115-workspace-binding-skip.md) | 新会话页"不绑定项目"语义贯穿前后端：`skip_workspace_binding` API 字段 + 解析链跳过 + 主流应用对标 |
 
 ---
 
