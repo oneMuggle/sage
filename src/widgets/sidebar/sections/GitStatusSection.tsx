@@ -2,9 +2,11 @@
  * GitStatusSection — 侧边栏 Git 状态面板（VSCode 风格）。
  *
  * 显示当前分支 + 变更文件列表，支持按状态过滤，点击文件打开 diff 视图。
- * 数据来源: projectApi.list() 第一个（最近打开的）项目的 path。
+ * 数据源优先级:
+ *   1. 当前会话绑定的 workspace（useCurrentWorkspace）
+ *   2. 最近打开的项目（projectApi.list() 按 lastOpenedAt 排序）
  * 自动刷新: 30 秒轮询（组件可见时）。
- * 非 git 目录静默降级（不显示 section 内容）。
+ * 非 git 目录显示空状态 + 目录路径（便于排查上下文错位）。
  */
 
 import { GitBranch, MoreVertical, RefreshCw } from 'lucide-react';
@@ -18,6 +20,7 @@ import {
 import { projectApi, type ProjectSummary } from '../../../shared/api/projectApi';
 import { copyToClipboard } from '../../../shared/lib/clipboard';
 import { type TranslationKey, useI18n } from '../../../shared/lib/i18n';
+import { useCurrentWorkspace } from '../../../shared/lib/workspaceContext';
 import { ContextMenu } from '../../../shared/ui/ContextMenu/ContextMenu';
 import { SiderSection } from '../SiderSection';
 
@@ -99,8 +102,16 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
   const [diffTarget, setDiffTarget] = useState<{ path: string; status: string } | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // 获取第一个项目的路径
-  const resolveProjectPath = useCallback(async () => {
+  // 获取当前上下文路径：优先当前会话 workspace，否则最近打开的项目
+  const currentWorkspace = useCurrentWorkspace();
+  const resolveContextPath = useCallback(async () => {
+    // 1. 优先当前会话绑定的 workspace（已在渲染前通过 hook 读取）
+    if (currentWorkspace) {
+      setProjectPath(currentWorkspace);
+      return currentWorkspace;
+    }
+
+    // 2. 兜底：最近打开的项目
     try {
       const projects: ProjectSummary[] = await projectApi.list();
       if (projects.length > 0) {
@@ -113,13 +124,13 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
     }
     setProjectPath(null);
     return null;
-  }, []);
+  }, [currentWorkspace]);
 
   // 拉取 git status
   const fetchStatus = useCallback(async () => {
     let path = projectPath;
     if (!path) {
-      path = await resolveProjectPath();
+      path = await resolveContextPath();
     }
     if (!path) return;
 
@@ -132,7 +143,7 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
     } finally {
       setLoading(false);
     }
-  }, [projectPath, resolveProjectPath]);
+  }, [projectPath, resolveContextPath]);
 
   // 初始加载 + 定时刷新
   useEffect(() => {
@@ -211,7 +222,7 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
     setMoreMenuOpen(false);
   }, []);
 
-  // 非 git 仓库或无项目 → 不渲染内容
+  // 非 git 仓库 → 显示空状态 + 目录路径（便于排查上下文错位）
   if (!loading && status && !status.is_git_repo) {
     return (
       <SiderSection
@@ -221,7 +232,17 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
         collapsed={collapsed}
         onToggleCollapsed={onToggleCollapsed}
         render={() => (
-          <p className="text-ui-xs text-text-muted px-2 py-1 italic">{t('git.not_a_repo')}</p>
+          <div className="px-2 py-1">
+            <p className="text-ui-xs text-text-muted italic">{t('git.not_a_repo')}</p>
+            {projectPath && (
+              <p
+                className="mt-1 font-mono text-[10px] text-text-muted/70 truncate"
+                title={projectPath}
+              >
+                {projectPath}
+              </p>
+            )}
+          </div>
         )}
       />
     );

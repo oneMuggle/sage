@@ -21,6 +21,8 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 
+from backend.tools.git_status_parser import parse_status_porcelain_v1_z
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/git", tags=["git"])
@@ -124,27 +126,25 @@ def _parse_porcelain_line(line: str) -> GitFileChange | None:
     return GitFileChange(path=raw_path, status=status)
 
 
-def _get_branch_info(cwd: str) -> tuple[Optional[str], int, int]:
-    """获取当前分支名和 ahead/behind 数。"""
-    # 分支名
-    rc, out = _run_git(cwd, ["rev-parse", "--abbrev-ref", "HEAD"])
-    branch = out.strip() if rc == 0 else None
-    if branch == "HEAD":
-        branch = None  # detached HEAD
+def _semantic_status(index_status: str, worktree_status: str) -> Optional[str]:
+    """把 porcelain 的 XY 两位状态映射成面板语义状态。
 
-    # ahead/behind (需要 upstream)
-    ahead, behind = 0, 0
-    if branch:
-        rc2, out2 = _run_git(cwd, ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"])
-        if rc2 == 0:
-            parts = out2.strip().split("\t")
-            if len(parts) == 2:
-                try:
-                    ahead = int(parts[0])
-                    behind = int(parts[1])
-                except ValueError:
-                    pass
-    return branch, ahead, behind
+    优先级: conflicted > staged (index) > working tree > untracked。
+    """
+    if (
+        index_status == "U"
+        or worktree_status == "U"
+        or (index_status == "A" and worktree_status == "A")
+        or (index_status == "D" and worktree_status == "D")
+    ):
+        return "conflicted"
+    if index_status not in {"", "?"}:
+        return "staged"
+    if worktree_status not in {"", "?"}:
+        return _STATUS_MAP.get(worktree_status, "modified")
+    if index_status == "?":
+        return "untracked"
+    return None
 
 
 @router.get("/status", response_model=GitStatusResponse)
@@ -164,19 +164,24 @@ def get_git_status(
     if rc != 0:
         return GitStatusResponse(is_git_repo=False, files=[])
 
-    # 分支信息
-    branch, ahead, behind = _get_branch_info(str(workspace))
-
-    # 文件状态
-    rc2, out = _run_git(str(workspace), ["status", "--porcelain"])
+    # 分支 + ahead/behind + 文件状态一次拿全（-z 保留中文/空格路径）
+    rc2, out = _run_git(
+        str(workspace),
+        ["-c", "core.quotepath=false", "status", "--porcelain=v1", "-z", "-b"],
+    )
     if rc2 != 0:
-        return GitStatusResponse(branch=branch, ahead=ahead, behind=behind, files=[])
+        return GitStatusResponse(files=[])
+
+    parsed = parse_status_porcelain_v1_z(out)
+    branch: Optional[str] = parsed["branch"] or None
+    if branch == "HEAD":  # detached HEAD
+        branch = None
 
     files: list[GitFileChange] = []
-    for line in out.splitlines():
-        change = _parse_porcelain_line(line)
-        if change:
-            files.append(change)
+    for entry in parsed["entries"]:
+        status = _semantic_status(entry["index_status"], entry["worktree_status"])
+        if status:
+            files.append(GitFileChange(path=entry["path"], status=status))
 
     # 排序优先级——conflicted 最前, renamed 最后
     status_order = {"conflicted": 0, "staged": 1, "modified": 2, "untracked": 3, "deleted": 4, "renamed": 5}
@@ -184,8 +189,8 @@ def get_git_status(
 
     return GitStatusResponse(
         branch=branch,
-        ahead=ahead,
-        behind=behind,
+        ahead=parsed["ahead"],
+        behind=parsed["behind"],
         files=files,
         is_git_repo=True,
     )
