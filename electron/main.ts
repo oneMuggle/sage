@@ -67,6 +67,7 @@ import { readLogTimezone, writeLogTimezone } from './logTimezone';
 import { setLogTimezone } from './logger';
 import { detectProjectRoot } from './projectDetector';
 import { registerProjectIpc } from './projectIpc';
+import { installPermissionPolicy } from './permissionPolicy';
 logger.info('main: process started', {
   pid: process.pid,
   electronVer: process.versions.electron,
@@ -2685,6 +2686,9 @@ async function isPortReleased(port: number, timeoutMs: number): Promise<void> {
 app.whenReady().then(async () => {
   // Step 3: prune log files older than 7 days on every cold start
   cleanupOlderThan(7);
+  // 2026-11-04: 默认拒绝权限请求 —— 必须在任何 webContents 创建之前注册，
+  // 否则主窗口/srcdoc iframe/BrowserView 会沿用 Electron 的"自动批准"默认。
+  installPermissionPolicy();
   // P9/P13 (2026-09-14): sage-file:// 协议 —— 工作区本地图片经白名单
   // 校验后安全渲染（MarkdownImage 生成 sage-file://p/<enc> URL）。
   // 必须在窗口加载页面前注册。
