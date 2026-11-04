@@ -232,30 +232,81 @@ async def _analyze_preferences_with_llm(self, llm, messages) -> Tuple[Dict, List
 #### 2.2.3 改进去重机制（引入向量相似度）
 
 **文件**：`backend/memory/conflict.py` - `MemoryConflictResolver`
+**状态**：✅ 已实施（Task 2.4）—— 实施细节与初稿有偏差，原因见下
 
-**优化：混合相似度（字面 + 语义）**
-```python
-def _calculate_similarity(self, content1: str, content2: str) -> float:
-    """混合相似度：字面 + 语义"""
-    
-    # 1. 字面相似度（原有）
-    literal_sim = SequenceMatcher(None, content1, content2).ratio()
-    
-    # 2. 语义相似度（新增）
-    try:
-        emb1 = self.embedder.embed(content1)
-        emb2 = self.embedder.embed(content2)
-        semantic_sim = cosine_similarity(emb1, emb2)
-    except Exception:
-        semantic_sim = 0.0
-    
-    # 3. 加权组合（中文场景语义权重更高）
-    return 0.3 * literal_sim + 0.7 * semantic_sim
+**最终设计：三条独立判定带**
 
-# 调整阈值
-NOOP_THRESHOLD = 0.88  # 从 0.97 降低（语义相似度高）
-UPDATE_THRESHOLD = 0.75  # 从 0.78 降低
-```
+| 带 | 条件 | 判定 | 语义 |
+|---|---|---|---|
+| NOOP | 字面 ≥ 0.97 | 丢弃新事实，复用旧 ID | 字面近重复必然是同一条事实 |
+| UPDATE | 字面 ∈ [0.78, 0.97) | 写新行 + 旧行失效 | 同一事实的不同措辞 |
+| UPDATE | 语义 ≥ 0.90 | 写新行 + 旧行失效 | 语义等价但措辞迥异 |
+| ADD | 其余 | 写新行 | — |
+
+关键约束：**语义相似只触发 UPDATE，永不触发 NOOP**。
+语义近但取值相反的一对（"用户住在上海市浦东区" / "用户住在北京市朝阳区"）
+判 NOOP 会把过时事实留在库里；判 UPDATE 才能让最新事实生效。
+UPDATE 同时完成了去重（两条塌缩成一条有效记忆）。
+
+**为什么否掉初稿的加权公式**
+
+初稿是 `0.3 * literal + 0.7 * semantic`，NOOP 0.88 / UPDATE 0.75。
+代入实测字面相似度：
+
+| 记忆对 | 字面 | 语义 | 加权 | 初稿判定 | 正确判定 |
+|---|---|---|---|---|---|
+| 用户喜欢使用 ruff 格式化 / 用户**不**喜欢使用 ruff 格式化 | 0.968 | 0.95 | 0.955 | NOOP ❌ | UPDATE |
+| 用户住在上海市浦东区 / 用户住在北京市朝阳区 | 0.600 | 1.00 | 0.880 | NOOP ❌ | UPDATE |
+| 用户喜欢简洁回答 / 用户偏好简短回复 | 0.500 | 0.85 | 0.745 | ADD ❌ | UPDATE |
+
+两处失效：
+
+1. **NOOP 被语义污染（致命）** —— 前两行取值相反却判 NOOP，新事实被丢弃、
+   过时事实留在库里。单一加权值无法区分"同一事实的不同措辞"和
+   "取值相反的事实"；这是数据正确性问题，不是阈值调参能解决的。
+2. **去重召回不稳** —— 第三行要语义 ≥ 0.857 才够得着 UPDATE 阈值
+   （`0.3×0.5 + 0.7s ≥ 0.75`），真实改述常在 0.85 上下，临界；
+   同时 NOOP 带从 0.97 外扩到 0.88，"字面中等 + 语义高"的一整类记忆
+   都会被判 NOOP。
+
+改为三条独立带后：字面带阈值完全不动（0.97 / 0.78，行为零变更），
+语义另开一条只管 UPDATE 的带，语义与字面互不干扰。
+
+**辅助方法**
+
+- `_calculate_similarity(a, b)` —— 混合相似度，取 `max(字面, 语义)`。
+  保留初稿的调用形态，满足验收用例 `>= 0.88`（语义命中时）。
+- `_annotate_semantic(content, candidates)` —— 批量编码（1 次新内容 +
+  1 次 `encode_batch` 候选），余弦写入 `Candidate.semantic_similarity`。
+
+**opt-in：缺省零行为变更**
+
+语义路径只在 `embedder.is_semantic == True` 时开启。
+缺省 `HashEmbedder.is_semantic == False` → 整条语义路径关闭，
+判定结果与改造前逐位一致。只有用户显式配置 ONNX（`SAGE_EMBEDDER=onnx`）
+或 HTTP 模型端点（`SAGE_EMBEDDER=model`）时语义去重才真正生效。
+
+**嵌入器共享**
+
+ONNX 语义模型约 40 MB，`MemoryAdapter` 与冲突消解器各自
+`create_embedder()` 会把同一份模型加载两遍。新增
+`embedder_factory.get_shared_embedder()` / `set_shared_embedder()` 进程级单例；
+`MemoryManager` 侧传**工厂函数引用**而非实例 —— 用户热切换嵌入模式后
+resolver 下次判定立即用上新实例，无需重建。
+
+**已知限制**
+
+1. 候选召回仍是 FTS5（OR 分词查询），改述对靠共同 token
+   （如"用户"）召回；召回排序不按相关度，真改述排在候选窗口外的情形
+   本轮不覆盖。
+2. **字面 NOOP 带会被「否定词插入」骗过**（本轮未修，属既有行为）：
+   长句插一个字只损失 2/(2n+1) 相似度，31 字句插「不」实测字面
+   0.984 ≥ 0.97 → 判 NOOP，新事实被丢弃、旧事实留存。
+   实测：`用户在项目里约定所有代码使用ruff格式化并且强制要求类型注解` /
+   `……不使用ruff……` → 0.984。语义带也救不了 —— 否定句的余弦同样很高
+   （≈0.95），字面/语义两个信号都分辨不出"否定"。
+   可行的修法是 NOOP 前加否定词一致性校验（两侧否定词集合相同才 NOOP），
+   但它会推翻"字面带阈值与行为零变更"的约定，故留作独立任务评估。
 
 ### 2.3 阶段 3：增强记忆整合能力（P2，2 周）
 
@@ -495,8 +546,54 @@ async def _prune_low_quality_memories(self):
     嵌套/扁平格式解析、自由文本校验与截断、仅自由文本也落库、
     关键词 6 维命中、无信号返回空）+ 既有 39 条偏好相关测试全绿；
     evolution + memory 套件 112 条全绿；ruff 全绿
-- [ ] **Task 2.4**：改进去重机制（引入向量相似度）
-- [ ] **Task 2.5**：编写集成测试验证效果
+- [x] **Task 2.4**：改进去重机制（引入向量相似度）
+  - 语义相似度只触发 UPDATE（绝不 NOOP）—— NOOP 会把"上海/北京"这类
+    取值相反的事实判成重复，过时数据留在库里；UPDATE 既取代旧事实
+    又完成去重
+  - 否掉初稿的 `0.3/0.7` 加权 + NOOP 0.88/UPDATE 0.75：
+    加权公式下"用户住在上海市浦东区"/"用户住在北京市朝阳区"
+    得 0.880 → 判 NOOP（过时事实留存）；改述对字面 0.5 时要语义 ≥ 0.857
+    才够得着 UPDATE 阈值。改为三条独立带，字面阈值零变更
+  - `conflict.py`：`SEMANTIC_UPDATE_THRESHOLD = 0.90` +
+    `SEMANTIC_TARGET_MARGIN = 0.02` + `_cosine_similarity`
+    + `_calculate_similarity`（max(字面, 语义)）+ `_annotate_semantic`；
+    `Candidate.semantic_similarity`。裕度是评审期补的：语义分对模板化
+    短句普遍偏高（"喜欢用 Python"/"喜欢用 Rust" 常 >0.90），不设裕度
+    会一次失效多条互不相关的事实 —— 只塌缩与最高分相差 ≤0.02 的近似并列候选。
+  - 字面 NOOP 在 `_annotate_semantic` 之前短路（省掉整批编码，HTTP 端点下最贵），
+    但配了 `llm_decide` 时不短路（LLM 钩子可把近重复升级为 UPDATE）
+  - `adapters/out/memory/adapter.py`：`_resolve_conflict` 的同步冲突判定
+    移到 `run_in_executor` —— `SAGE_EMBEDDER=model` 时嵌入走 HTTP，
+    阻塞调用会卡满事件循环（默认 10s 超时）；与
+    `aremember_with_conflict_check` 的做法一致
+  - `embedder_factory.py`：`get_shared_embedder()` /
+    `set_shared_embedder()` 进程级单例（ONNX 模型 40 MB，避免重复加载）
+  - `embedder.py`：`ModelEmbedder` 补 `is_semantic = True` —— 原缺此标记，
+    HTTP 嵌入端点的部署形态语义去重与向量检索**双双失效**
+  - 接线：`MemoryManager(embedder=...)` → resolver；`registry.py` 与
+    `core/legacy/agent.py` 传工厂函数引用（支持热切换）；
+    `adapters/out/memory/adapter.py` 改用共享实例并在 `reconfigure` 时替换
+  - `_current_embedder` 先认实例形态（`hasattr(source, "encode")`）再退回
+    按工厂调用 —— Mock 的自动属性也可调用，先 `callable()` 会误路由
+  - opt-in：`HashEmbedder.is_semantic == False` → 语义路径整条关闭，
+    缺省配置行为与改造前逐位一致
+  - 新增 21 条专项测试（`test_memory_conflict_semantic.py`：语义改述
+    → UPDATE、NOOP 带不被语义污染、嵌入器异常降级、工厂函数热切换、
+    HashEmbedder 不开启语义路径、ModelEmbedder 语义标记、端到端换行 +
+    supersedes 链、阈值上下沿、近似并列候选只塌缩最高分、余弦边界、
+    `encode_batch` 条数不符时整体放弃）；conflict + memory 相邻套件
+    945 条全绿（`-k "memory or conflict or lifecycle or preference"`）；
+    preference/recall 集成套件 29 条全绿；ruff 全绿
+- [x] **Task 2.5**：编写集成测试验证效果
+  - 新增 `backend/tests/integration/test_memory_quality_pipeline.py`（7 条），
+    驱动真实写入链 `MemoryLifecycleManager.on_turn_complete` → `MemoryManager`
+    → SQLite，验证跨任务组合后的用户可见效果：
+    语义改述跨轮次塌缩成一条（碎片化收敛）、取值相反事实判 UPDATE 且
+    最新事实生效、缺省 HashEmbedder 下两条并存（opt-in 行为零变更）、
+    嵌入器故障仍逐条落库、无关事实不被误合并、Task 2.2 的已知事实
+    进入下一轮 `existing_facts`
+  - 夹具对先断言字面相似度 < 0.78 —— 保证用例确实在测语义路径，
+    而不是被字面 UPDATE 带顺带通过
 
 ### Phase 3：增强记忆整合（2 周）
 - [ ] **Task 3.1**：强化 MemoryReflectionTask（增加分组大小 + 内容长度）
@@ -594,16 +691,17 @@ def test_skip_low_value_memory():
     assert len(facts) == 0
 ```
 
-**去重测试**：
+**去重测试**（Task 2.4 落地后 —— 语义命中时混合相似度 ≥ 0.88；
+语义路径仅在 `is_semantic=True` 的嵌入器下开启）:
 ```python
 def test_semantic_deduplication():
     """测试语义去重"""
     memory1 = "用户喜欢简洁回答"
     memory2 = "用户偏好简短回复"
-    
+
     similarity = resolver._calculate_similarity(memory1, memory2)
-    
-    assert similarity >= 0.88  # NOOP_THRESHOLD
+
+    assert similarity >= 0.88
 ```
 
 **偏好学习测试**：

@@ -69,6 +69,7 @@ class MemoryManager:
         episodic: EpisodicMemory,
         semantic: SemanticMemory,
         summary_store: Optional[SessionSummaryStore] = None,
+        embedder=None,
     ):
         """
         初始化记忆管理器
@@ -80,11 +81,15 @@ class MemoryManager:
             summary_store: 会话摘要 store（批次三 step 5）；可选，向后兼容
                 未注入 store 的旧调用方；没有 store 时 ``get_context`` 不
                 注入 ``【会话摘要】`` 段。
+            embedder: 语义嵌入器实例，或返回实例的可调用（``() -> Embedder``）；
+                透传给冲突消解器做语义去重判定。缺省 / 非语义嵌入器时
+                冲突消解退化为纯字面判定（行为与改造前一致）。
         """
         self.working = working
         self.episodic = episodic
         self.semantic = semantic
         self.summary_store = summary_store
+        self.embedder = embedder
         # Lazily-created ConsolidationPipeline (F2) — built on first use so
         # the constructor stays lightweight and test-friendly.
         self._consolidation_pipeline = None
@@ -409,7 +414,9 @@ class MemoryManager:
         if self._conflict_resolver is None:
             from backend.memory.conflict import MemoryConflictResolver
 
-            self._conflict_resolver = MemoryConflictResolver(self.episodic, self.semantic)
+            self._conflict_resolver = MemoryConflictResolver(
+                self.episodic, self.semantic, embedder=self.embedder
+            )
         return self._conflict_resolver
 
     def resolve_conflicts(

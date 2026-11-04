@@ -10,6 +10,7 @@ import logging
 from typing import Optional
 
 from backend.data.database import get_database
+from backend.memory.embedder_factory import get_shared_embedder
 from backend.memory.episodic import EpisodicMemory
 from backend.memory.manager import MemoryManager
 from backend.memory.semantic import SemanticMemory
@@ -42,6 +43,9 @@ def get_memory_manager() -> MemoryManager:
             episodic=EpisodicMemory(db),
             semantic=SemanticMemory(db),
             summary_store=SessionSummaryStore(db),
+            # 冲突消解的语义去重要用的嵌入器 —— 传工厂函数（而非实例），
+            # 用户热切换嵌入模式后 resolver 立即用上新实例，无需重建。
+            embedder=get_shared_embedder,
         )
         logger.info(
             "全局 MemoryManager 单例已创建（WorkingMemory 持久化已启用，按 session_id 隔离）"
