@@ -113,7 +113,12 @@ class MemoryPolicy(BaseModel):
 1. `ToolExecutionContext` 增加 `agent_id: str = "primary"`（frozen dataclass 加默认值，避免改动全部构造点的类型错误）；构造点从会话绑定解析传入。
 2. `MemoryAdapter.store/retrieve` 增加 `agent_id` 可选参数，显式传参优先于 context。
 3. ChatService 自动抽取路径：`resolve` 会话专家 → `memory.store(agent_id=...)`。
-4. **子代理继承**：`subagent_runner` 创建子会话时显式 `specialist_id = 父会话.specialist_id`（查现有子会话创建路径，默认值 'primary' 会导致私有记忆泄漏到 primary 可见层——必须显式覆盖）。
+4. **子代理继承**（2026-11-04 调查修正）：实际**不存在子会话** —— `SubagentRunner`
+   直接把父会话的 `session_id` 传给 `child.run_loop`（LLM 用量归因用），且
+   `__call__(task, agent_id)` 的 `agent_id` 是编排角色（researcher/coder…），
+   与记忆归属是不同命名空间。因此改为：构造参数新增 `agent_id`，缺省时
+   从父会话 `sessions.specialist_id` 解析，再改写子代理运行期的
+   `ToolExecutionContext.agent_id`（见 Task 5 实施记录）。
 5. memory 工具：`MemorySaveTool` 写 `agent_id=context.agent_id`；`MemorySearchTool` 读 own ∪ shared。
 
 ### 4. 提升为共享 / 级联删除
@@ -133,7 +138,7 @@ class MemoryPolicy(BaseModel):
 - [x] **M3-Task 2** 存储层过滤：`EpisodicMemory` / `SemanticMemory` 的 save/search 增加 agent 条件；测试：跨 agent 不可见、共享可见 — 完成 2026-11-04；`scope.py` 新增 `agent_visibility_sql`（`agent_id = ? OR agent_id IS NULL`，falsy 返回空片段）+ `is_row_visible` 增加 `current_agent_id` 维度；两存储 `save/_search_fts/_search_like/get_recent` 全路径加可选 `agent_id`（None=不限制，向后兼容）；新增 12 个隔离单测（own/shared/cross × episodic/semantic × fts/like/save/get_recent），memory 全域 66 测试绿，ruff + py38 门禁通过。向量 payload 确认无 agent_id（vec0 仅 embedding/memory_id/memory_type/session_id）——旁路过滤留待 Task 4 在 `is_row_visible` 融合后处理
 - [x] **M3-Task 3** `MemoryManager` API 扩展 + `MemoryPolicy` 模型 — 完成 2026-11-04；新增 `backend/agents/memory_policy.py`（pydantic v1/v2 双兼容 `class Config: extra='forbid'`；`parse_memory_policy` fail-safe；`resolve_write_agent_id`/`includes_private_reads` 辅助）；`manager.py` 构造注入 `memory_policy`，`remember/aremember/memorize/compress/recall/get_context*/search_memories/resolve_conflicts/memorize_with_conflict_check` 全路径透传 `agent_id`+`include_private`；`delete_memory` 跨专家私有行保护（agent_id 给定 ≠ 行归属时拒绝）；`conflict.py` `resolve/_find_candidates` 加 agent_id 防跨专家误伤；`semantic._init_fts` 补 `agent_id TEXT` ALTER 兜底（与 `database.init_db` 同款幂等）+ CREATE TABLE 主声明同步加列；新增 20 个单测覆盖（policy 默认/extra=forbid/parse 四态/bad JSON/invalid enum/helper 双态、manager 写默认/写 honor agent、recall 三方集差/get_context 集差/search 三方、policy 写私有/读剔私有/write_scope=user 共享、delete 跨专家拒绝/共享管理路径、resolve_conflicts 同归属）；memory 全域 237 测试绿；ruff + py38 门禁通过
 - [x] **M3-Task 4** 身份贯穿：`ToolExecutionContext.agent_id` + ChatService 自动抽取 + memory 工具 + 构造点；测试：会话专家自动归属 — 完成 2026-11-04；`ToolExecutionContext` 增加 `agent_id: str = "primary"`（frozen dataclass 带默认值，构造点零破坏）；`MemoryPort.store/retrieve` 协议签名扩展 `agent_id: Optional[str] = None`，`MemoryAdapter` 透传给 `manager.memorize/recall`，向量召回路径在 RRF 融合后按 `is_row_visible(current_agent_id=agent_id)` 二次过滤（向量 payload 无 agent_id 维度，只能事后过滤）；`ChatService._extract_and_store_memory` 与模块级 `extract_and_store_memory` 在 `agent_id is None` 时用 `resolve_bound_specialist(session_id)` 解析会话绑定专家，显式传参优先；`MemoryExtractionQueue` 的 `ExtractionRequest` 带 `agent_id` 并透传给抽取函数；`MemorySaveTool/MemorySearchTool` 从 tool context 取 `agent_id` 转发给 `memorize/search_memories`；构造点 `legacy_routes.py`（`producer` 内）+ `hex_routes.py` + `chat_session_lifecycle.py` 从会话绑定注入 `agent_id`；新增 10 个身份归属单测（`backend/tests/memory/test_m3_agent_attribution.py`：抽取透传 / None 保留共享层 / 禁用跳过 / 绑定专家自动归属 / 显式优先 / 向量跨专家过滤 / manager 透传 / 工具透传 ×2）；同步 4 个测试文件的 stale 断言（`test_memory_tool.py` 6 处、`test_async_extractor.py` 4 处 fake 签名、`test_env_memory.py` 2 处 fake store 签名、`test_chat_service_memory.py` 1 处 retrieve 断言）；memory 全域 171 测试 + legacy/hex 路由 32 测试 + lifecycle 25 测试全绿，ruff 通过
-- [ ] **M3-Task 5** 子代理继承：子会话 `specialist_id` 跟随父会话；测试：subagent 写入归属父专家
+- [x] **M3-Task 5** 子代理继承：子会话 `specialist_id` 跟随父会话；测试：subagent 写入归属父专家 — 完成 2026-11-04；`subagent_runner.py` 新增构造参数 `agent_id`（显式记忆归属，`__call__` 的 `agent_id` 是编排角色，命名空间不同）与 `_resolve_memory_agent_id()`（优先级：显式 > 父会话 `resolve_bound_specialist` > 环境工具上下文 > `primary`）；`_bind_child_tool_context()` 用 `dataclasses.replace` 改写**已有**上下文的 `agent_id`，**不凭空构造**上下文（office/file 等按 `ctx.session_id` 授权的工具保持后台路径 fail-closed；无上下文时 memory 工具本就读写拒绝，无跨专家泄漏）；`__call__` 中 bind/reset 置于 try/finally，token 不泄漏到后续调用；新增 7 个单测（父绑定同步上下文 / memory_save 归属父专家 / 显式参数优先 / 无会话回落环境上下文 / 无上下文不造假 / 记忆工具 fail-closed / 结束后上下文复原）；相邻 subagent + orchestration 回归 135 测试全绿，ruff + py38 门禁通过
 - [ ] **M3-Task 6** HTTP + 前端：`/memory/list` agent 过滤、`memoryApi`、MemoryBrowser 筛选/徽标/导出过滤；测试：路由参数 + 组件
 - [ ] **M3-Task 7** 提升为共享 + 专家删除级联清理；测试：promote 审计、级联删除
 - [ ] **M3 验收** E2E：两专家私有记忆互不可见；共享偏好可见；删专家清私有记忆
