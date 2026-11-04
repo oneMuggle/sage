@@ -118,8 +118,7 @@ query
 
 ## 实施步骤（分可独立验证的里程碑，2026-11-04 更新）
 
-- [ ] **M2-Task 1** 数据模型：`KnowledgeBinding` pydantic 模型；`AgentProfile.knowledge_bindings` 字段扩展；专家私有向量库 `specialist_vectorstore.py`（复用 VectorStore，路径 `~/.sage/specialists/<id>/vectors.json`）
-  - ~~不再需要 SQLite migration~~：现有向量层不动，专家私有库是新 JSON 文件
+- [x] **M2-Task 1** 数据模型：`KnowledgeBinding` pydantic 模型（`class Config: extra='forbid'` 双兼容）+ 专家私有向量库 `specialist_vectorstore.py`（复用 VectorStore，路径 `~/.sage/specialists/<id>/vectors.json`）— 完成 2026-11-04；`AgentProfile.knowledge_bindings` 字段已在 M1-A 就位（`List[Dict]`），`KnowledgeBinding` 通过 `model_dump()` / `model_validate()` 与之互转；32 个新增单测 + 106 个相邻测试全绿
 - [ ] **M2-Task 2** CRUD 端点：`GET/POST/DELETE /api/v1/specialists/{id}/knowledge`；前端 `specialistKnowledgeApi`；专家页「知识」Tab 编辑 UI
 - [ ] **M2-Task 3** 检索编排 + RRF：`knowledge_retriever.py` 路由层按 binding.source_type 扇出；`rrf.py` 纯函数融合；单元测试覆盖三路源（wiki/project_material/specialist_private）
 - [ ] **M2-Task 4** 引用输出：检索结果带 `loc` 字段（page_path + chunk_index / material_id + chunk_index / file_path + line）；聊天消息引用 chip 点击跳转
