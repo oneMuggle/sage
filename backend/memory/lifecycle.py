@@ -272,14 +272,41 @@ class MemoryLifecycleManager:
         fact: dict,
         source_message_id: Optional[str] = None,
     ) -> Optional[str]:
-        """Persist one extracted fact through the real ``MemoryManager.aremember``.
+        """Persist one extracted fact via conflict-aware path.
 
-        Returns the persisted memory id (or ``None`` if the memory object has
-        no ``aremember`` / the store produced no id). ``source_turn_id`` and
-        ``memory_category`` ride along so the episodic row is traceable;
-        ``source_message_id`` (Task 6) lets the UI highlight the exact
-        producing message.
+        之前直接走 ``aremember`` 会无条件 append，是碎片化的直接根因。
+        现在改走 ``aremember_with_conflict_check``：NOOP 复用既有 id 不写、
+        UPDATE 取代旧行、ADD 正常追加。sqlite 调用整体在 executor，
+        不阻塞事件循环。
+
+        Returns:
+            新写入 / 复用 / 取代后的 memory id；冲突消解返回 NOOP 时返回
+            既有 id（不丢信息，也不增冗余）。
         """
+        conflict_aware = getattr(self._memory, "aremember_with_conflict_check", None)
+        if conflict_aware is not None:
+            try:
+                mid, op = await conflict_aware(
+                    content=fact.get("content", ""),
+                    session_id=session_id,
+                    source_turn_id=self._current_turn_id,
+                    source_message_id=source_message_id,
+                    memory_category=fact.get("category", "project_fact"),
+                    metadata={"importance": fact.get("importance", 5)},
+                    importance=fact.get("importance", 5),
+                )
+                if op != "add":
+                    logger.debug(
+                        "_persist_fact: conflict resolution op=%s mid=%s (skipped append)",
+                        op,
+                        mid or "<existing>",
+                    )
+                return mid or None
+            except Exception:  # noqa: BLE001 — 冲突路径失败退回 aremember，不丢事实
+                logger.exception(
+                    "_persist_fact: aremember_with_conflict_check failed; falling back to aremember"
+                )
+
         aremember = getattr(self._memory, "aremember", None)
         if aremember is None:
             logger.warning(

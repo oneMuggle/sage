@@ -453,6 +453,19 @@ async def _prune_low_quality_memories(self):
 `legacy_memory_routes.py`（更新侧）都需要同一份映射，内联会重复且易漂移。
 
 ### Phase 2：提升记忆质量（2 周）
+- [x] **Task 2.0**：写入路径接入冲突消解（根因修复）
+  - `MemoryManager` 新增 `aremember_with_conflict_check` 异步方法：
+    冲突判定（`resolve_conflicts`）与 `apply_update` 整体放进 `run_in_executor`，
+    不阻塞事件循环；ADD 路径回落 `aremember` 以保留 `source_turn_id` /
+    `source_message_id` / `memory_category` 溯源字段
+  - `lifecycle._persist_fact` 改走新方法：NOOP 复用既有 id、UPDATE 取代旧行、
+    ADD 正常追加；sqlite 异常时退回 `aremember` 不丢事实
+  - 新增 6 条专项回归测试（`test_aremember_with_conflict_check.py`）：
+    ADD / NOOP / UPDATE / 短内容直写 / resolve 失败兜底 / traceability 透传
+  - 既有 79 条记忆相关测试全绿；ruff 全绿
+  - **实施偏差**：原计划下调阈值（0.97→0.88 / 0.78→0.75），
+    调查后发现字面相似度对中文语义不敏感（jieba-token Dice 约 0.25），
+    改为仅在语义 embedder 可用时启用混合相似度（Task 2.4）
 - [ ] **Task 2.1**：改进记忆提取策略（提高门槛 + 重要性过滤）
 - [ ] **Task 2.2**：改用向量检索找相关已知事实
 - [ ] **Task 2.3**：增强偏好学习（扩展维度 + 自由文本）
