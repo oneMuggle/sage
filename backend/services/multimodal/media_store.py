@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import FrozenSet, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ MEDIA_ROOT = Path("data/media")
 # 回退表必须与 chat_attachment_routes 的 ALLOWED_TEXT_EXTENSIONS | ALLOWED_DOC_EXTENSIONS
 # 同口径,否则上传时合法的文本文档在读取时被误判为 AUDIO 并被注入循环静默跳过。
 # 历史回归来源: commit 0fb10c4bb (#2001) 只给 load() 加了 .xlsx,其余格式仍走 AUDIO 分支。
-FALLBACK_DOCUMENT_SUFFIXES: frozenset[str] = frozenset(
+FALLBACK_DOCUMENT_SUFFIXES: FrozenSet[str] = frozenset(
     {
         # 基础文本
         ".txt", ".md", ".csv",
@@ -42,7 +42,7 @@ FALLBACK_DOCUMENT_SUFFIXES: frozenset[str] = frozenset(
     }
 )
 
-FALLBACK_IMAGE_SUFFIXES: frozenset[str] = frozenset(
+FALLBACK_IMAGE_SUFFIXES: FrozenSet[str] = frozenset(
     {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}
 )
 
