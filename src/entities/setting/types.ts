@@ -135,6 +135,11 @@ export interface OrchSettings {
   // 2026-11-01: 动态迭代预算（与后端 OrchSettings camelCase 对齐）。
   // 关闭后回到固定 maxIterations 行为。
   dynamicBudgetEnabled: boolean; // true
+  // 2026-11-04: 预算模式显式开关（auto | fixed），取代旧版
+  // 「maxIterations == 25」哨兵。可选且刻意不进 DEFAULT_ORCH_SETTINGS：
+  // 缺失表示升级前写入的老设置，由 dynamicBudgetEnabled 推导
+  // （true → auto / false → fixed），后端 load_orch_settings 同款迁移。
+  budgetMode?: 'auto' | 'fixed'; // 'auto'
   // 各档初始预算；到软预算后由进度审计决定自动延长或停止。
   budgetSimple: number; // 20
   budgetMedium: number; // 80

@@ -1755,10 +1755,24 @@ class SageAgent:
         except Exception:  # noqa: BLE001 — settings 读取失败回落 env/默认
             _orch_settings = None
         _budget_config = BudgetConfig.from_settings(_orch_settings)
+        # 2026-11-04: 预算模式（auto | fixed）取代旧哨兵
+        # ``_orch_settings_max == DEFAULT_ORCH_MAX_ITERATIONS`` —— 用户把编排页
+        # maxIterations 改成任何其它值都会静默关闭动态预算。老版 OrchSettings
+        # / 测试替身没有 budget_mode 字段 → 回退到 dynamic_budget_enabled 语义；
+        # 设置读取失败（None）→ 回落固定的 profile/default 路径。
+        _budget_mode = getattr(_orch_settings, "budget_mode", None)
+        if _orch_settings is None:
+            _budget_mode = "fixed"
+        elif _budget_mode not in ("auto", "fixed"):
+            _budget_mode = (
+                "auto"
+                if bool(getattr(_orch_settings, "dynamic_budget_enabled", True))
+                else "fixed"
+            )
         _dynamic_budget_enabled = (
             dynamic_budget is not False
             and _dynamic_budget_env_enabled
-            and bool(getattr(_orch_settings, "dynamic_budget_enabled", True))
+            and _budget_mode == "auto"
         )
         _budget_level: BudgetLevel = "medium"
         _dynamic_budget_active = False
@@ -1771,12 +1785,14 @@ class SageAgent:
 
         # 阶段 1: max_iterations 优先级：
         # 1. 显式传入的 max_iterations 参数（最高优先级，硬上限，不自动延长）
-        # 2. OrchSettings.max_iterations：
-        #    - 0    → 按 profile 分别设置（沿用旧语义，不自动延长）
-        #    - 25   → 默认值 = 用户未显式配置，启用动态预算
-        #    - 其他 → 用户显式设置，作为硬上限，不自动延长
-        # 3. AgentProfile.max_iterations
-        # 4. DEFAULT_MAX_ITERATIONS（兜底值 10）
+        # 2. budget_mode == "auto" → 按任务分级给初始预算（profile 值作为下限
+        #    profile_floor），到检查点再按进度自动延长；orch.global
+        #    maxIterations 在此模式下不参与（由用户显式选择 auto 表达）。
+        # 3. budget_mode == "fixed" → OrchSettings.max_iterations：
+        #    - 0   → 按 profile 分别设置（沿用旧语义，不自动延长）
+        #    - > 0 → 用户显式设置的硬上限，不自动延长
+        # 4. AgentProfile.max_iterations
+        # 5. DEFAULT_MAX_ITERATIONS（兜底值 10）
         #
         # ``_limit_source`` 记录本次上限来自哪一层，随 FAILED 事件下发给前端，
         # 让用户知道该改哪个配置而不是只看到一个数字。
@@ -1794,10 +1810,7 @@ class SageAgent:
             )
 
             _force_dynamic = dynamic_budget is True
-            if _force_dynamic or (
-                _dynamic_budget_enabled
-                and _orch_settings_max == DEFAULT_ORCH_MAX_ITERATIONS
-            ):
+            if _force_dynamic or _dynamic_budget_enabled:
                 if (
                     isinstance(initial_iteration_budget, int)
                     and not isinstance(initial_iteration_budget, bool)
@@ -1808,8 +1821,8 @@ class SageAgent:
                     )
                     _budget_level = "medium"
                 else:
-                    # OrchSettings 的默认值（25）= 用户未显式配置迭代上限 →
-                    # 按任务分级给初始预算，到检查点再按进度自动延长。
+                    # budget_mode == "auto" → 按任务分级给初始预算，
+                    # 到检查点再按进度自动延长。
                     _user_message = ""
                     for _m in reversed(messages):
                         if (
