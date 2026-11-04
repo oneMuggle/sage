@@ -13,6 +13,7 @@ const getMemoriesMock = vi.fn();
 const getSessionSummariesMock = vi.fn();
 const searchMemoriesMock = vi.fn();
 const deleteMemoryMock = vi.fn();
+const promoteMemoryMock = vi.fn();
 const navigateMock = vi.fn();
 const agentsListMock = vi.fn();
 
@@ -27,6 +28,7 @@ vi.mock('../../../shared/api', () => ({
     getSessionSummaries: (...args: unknown[]) => getSessionSummariesMock(...args),
     searchMemories: (...args: unknown[]) => searchMemoriesMock(...args),
     deleteMemory: (...args: unknown[]) => deleteMemoryMock(...args),
+    promoteMemory: (...args: unknown[]) => promoteMemoryMock(...args),
   },
 }));
 
@@ -76,6 +78,12 @@ beforeEach(() => {
   getSessionSummariesMock.mockResolvedValue({ items: [], source_breakdown: BREAKDOWN, total: 0 });
   searchMemoriesMock.mockResolvedValue([]);
   deleteMemoryMock.mockResolvedValue(undefined);
+  promoteMemoryMock.mockResolvedValue({
+    status: 'promoted',
+    memory_id: 'm1',
+    memory_type: 'episodic',
+    previous_agent_id: 'specialist-x',
+  });
   agentsListMock.mockResolvedValue([]);
 });
 
@@ -337,6 +345,102 @@ describe('MemoryBrowser 删除（P0-1）', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalled(), { timeout: 5000 });
     // 关键：失败的行不得从列表消失（PHILOSOPHY「静默失败」反模式）
     expect(screen.getAllByText('记忆内容A').length).toBeGreaterThan(0);
+  }, 20000);
+});
+
+/** M3-Task 7（2026-11-04）：私有记忆提升为共享层。 */
+describe('MemoryBrowser 提升为共享（M3-Task 7）', () => {
+  it('仅私有记忆渲染提升按钮，共享层记忆不渲染', async () => {
+    getMemoriesMock.mockResolvedValue({
+      items: [
+        mem({ id: 'shared-1', content: '共享记忆', agent_id: undefined }),
+        mem({ id: 'priv-1', content: '专家私有记忆', agent_id: 'specialist-x' }),
+      ],
+      source_breakdown: BREAKDOWN,
+      total: 2,
+    });
+    renderBrowser();
+    await screen.findAllByText('专家私有记忆', {}, { timeout: 5000 });
+
+    expect(screen.getByTestId('memory-promote-priv-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('memory-promote-shared-1')).not.toBeInTheDocument();
+  }, 20000);
+
+  it('两步确认后才调用 promoteMemory 并把归属翻转为共享', async () => {
+    getMemoriesMock.mockResolvedValue({
+      items: [mem({ id: 'priv-1', content: '专家私有记忆', agent_id: 'specialist-x' })],
+      source_breakdown: BREAKDOWN,
+      total: 1,
+    });
+    renderBrowser();
+    await screen.findAllByText('专家私有记忆', {}, { timeout: 5000 });
+    expect(screen.getAllByText('specialist-x').length).toBeGreaterThan(0);
+
+    // 第一步：进入确认态，不发请求
+    fireEvent.click(screen.getByTestId('memory-promote-priv-1'));
+    expect(promoteMemoryMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId('memory-promote-priv-1').getAttribute('data-state')).toBe('armed');
+
+    // 第二步：确认后调用，并把该行 agent_id 置空（徽标翻转为共享）
+    fireEvent.click(screen.getByTestId('memory-promote-priv-1'));
+    await waitFor(() => expect(promoteMemoryMock).toHaveBeenCalledWith('priv-1'), {
+      timeout: 5000,
+    });
+    await waitFor(() => expect(screen.queryByText('specialist-x')).not.toBeInTheDocument(), {
+      timeout: 5000,
+    });
+    expect(screen.getAllByText('共享').length).toBeGreaterThan(0);
+    // 提升后不再是私有行 → 按钮消失
+    expect(screen.queryByTestId('memory-promote-priv-1')).not.toBeInTheDocument();
+    expect(toast.success).toHaveBeenCalled();
+  }, 20000);
+
+  it('已在共享层的幂等结果给出明确提示', async () => {
+    promoteMemoryMock.mockResolvedValue({
+      status: 'already_shared',
+      memory_id: 'priv-1',
+      memory_type: 'episodic',
+      previous_agent_id: null,
+    });
+    getMemoriesMock.mockResolvedValue({
+      items: [mem({ id: 'priv-1', content: '专家私有记忆', agent_id: 'specialist-x' })],
+      source_breakdown: BREAKDOWN,
+      total: 1,
+    });
+    renderBrowser();
+    await screen.findAllByText('专家私有记忆', {}, { timeout: 5000 });
+
+    fireEvent.click(screen.getByTestId('memory-promote-priv-1'));
+    fireEvent.click(screen.getByTestId('memory-promote-priv-1'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalled(), { timeout: 5000 });
+    // 归属翻转后徽标变「共享」、提升按钮随之消失（覆盖 Promise 微任务里的 setState）
+    await waitFor(() => expect(screen.getAllByText('共享').length).toBeGreaterThan(0), {
+      timeout: 5000,
+    });
+    expect(screen.queryByTestId('memory-promote-priv-1')).not.toBeInTheDocument();
+  }, 20000);
+
+  it('提升失败时保留专家归属并明确提示，不静默翻转', async () => {
+    promoteMemoryMock.mockRejectedValue(new Error('db down'));
+    getMemoriesMock.mockResolvedValue({
+      items: [mem({ id: 'priv-1', content: '专家私有记忆', agent_id: 'specialist-x' })],
+      source_breakdown: BREAKDOWN,
+      total: 1,
+    });
+    renderBrowser();
+    await screen.findAllByText('专家私有记忆', {}, { timeout: 5000 });
+
+    fireEvent.click(screen.getByTestId('memory-promote-priv-1'));
+    fireEvent.click(screen.getByTestId('memory-promote-priv-1'));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled(), { timeout: 5000 });
+    // pending 态落回 idle（覆盖 Promise 微任务里的 setState）后再断言归属未变
+    await waitFor(() =>
+      expect(screen.getByTestId('memory-promote-priv-1').textContent).toContain('提升为共享'),
+    );
+    // 归属不变：专家徽标仍在，提升按钮仍可用
+    expect(screen.getAllByText('specialist-x').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('memory-promote-priv-1')).toBeInTheDocument();
   }, 20000);
 });
 

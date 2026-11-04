@@ -91,6 +91,17 @@ class MemoryDeleteRequest(BaseModel):
         return self.memory_id or self.id
 
 
+class MemoryPromoteRequest(BaseModel):
+    """M3-Task 7:把一条私有记忆提升到共享层。
+
+    ``memory_type`` 缺省时后端在情景层/语义层依次探测;``reason`` 记入
+    审计行 ``memories_evolution_log.reason``。
+    """
+
+    memory_type: Optional[str] = None
+    reason: str = "user_promote"
+
+
 # ---- 对标 S2（2026-09-13）：记忆写入台账 / 撤销 / 用户画像 CRUD ---------
 
 
@@ -655,3 +666,54 @@ def delete_memory(data: MemoryDeleteRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+#: M3-Task 7:可提升的记忆层白名单。
+_PROMOTABLE_MEMORY_TYPES = ("episodic", "semantic")
+
+
+@router.post("/memory/{memory_id}/promote")
+@with_db_lock
+def promote_memory(memory_id: str, data: Optional[MemoryPromoteRequest] = None):
+    """把一条私有记忆提升到共享层（M3-Task 7）。
+
+    归属从 ``agent_id = <专家>`` 改为 ``NULL``（共享层），提升后所有专家
+    都可读。同事务写一条 ``memories_evolution_log`` 审计行
+    （``operation = promote``）；审计写失败则整个提升回滚 —— 审计行丢失
+    意味着"谁在何时把哪条记忆公开"不可追溯。
+
+    - 200 + ``{status, memory_id, memory_type, previous_agent_id}``
+      —— ``status`` ∈ ``promoted`` / ``already_shared``
+    - 404 + ``type: memory_not_found`` —— id 不存在
+    - 422 + ``type: invalid_memory_type`` —— memory_type 非 episodic/semantic
+    """
+    payload = data or MemoryPromoteRequest()
+    mtype = (payload.memory_type or "").strip() or None
+    if mtype is not None and mtype not in _PROMOTABLE_MEMORY_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_memory_type",
+                "message": (
+                    f"memory_type must be one of {list(_PROMOTABLE_MEMORY_TYPES)}, got {mtype!r}"
+                ),
+            },
+        )
+
+    try:
+        mm = get_memory_manager()
+        result = mm.promote_to_shared(memory_id, mtype, payload.reason)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if result.get("status") == "not_found":
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "type": "memory_not_found",
+                "message": f"记忆 {memory_id!r} 不存在或无法提升",
+            },
+        )
+    return result

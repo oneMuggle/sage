@@ -10,11 +10,15 @@ legacy_routes（同被聊天路径引用）。
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException
 
 from backend.api.legacy_models import AgentCreate, AgentToggle, AgentUpdate
 from backend.api.settings_models import model_dump_compat
 from backend.data.database import make_with_db_lock
+
+logger = logging.getLogger(__name__)
 
 
 def with_db_lock(func):
@@ -263,9 +267,15 @@ def create_agent(data: AgentCreate):
 def delete_agent(agent_id: str):
     """删除一个 agent（M0 2026-11-03）。
 
+    M3-Task 7：删除专家前先级联清理它的私有记忆（``agent_id = <该专家>``
+    的情景层/语义层行 + 全部向量表条目）。共享层（``agent_id IS NULL``）
+    与其它专家的记忆不动。清理失败 → 500 且**不删专家**（不留下"专家没了
+    但记忆还在"的半状态）。
+
     - 200 + ``{ok: true, id: "<id>"}``
     - 400 + ``type: protected_agent`` —— ``primary`` 等内置专家不可删
     - 404 + ``type: agent_not_found`` —— id 不存在
+    - 500 + ``type: memory_purge_failed`` —— 私有记忆清理失败
     """
     from backend.data.agent_repo import AgentRepository
 
@@ -287,6 +297,30 @@ def delete_agent(agent_id: str):
                 "message": f"agent {agent_id!r} 不存在",
             },
         )
+
+    # M3-Task 7: 级联清理该专家的私有记忆（共享层不受影响）。
+    try:
+        from backend.memory import get_memory_manager
+
+        purged = get_memory_manager().purge_agent_memories(agent_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("级联清理专家私有记忆失败 (agent=%s): %s", agent_id, exc)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "type": "memory_purge_failed",
+                "message": f"清理 agent {agent_id!r} 的私有记忆失败: {exc}",
+            },
+        )
+    logger.info(
+        "删除专家并级联清理私有记忆 (agent=%s, episodic=%s, semantic=%s, vector=%s)",
+        agent_id,
+        purged.get("episodic"),
+        purged.get("semantic"),
+        purged.get("vector"),
+    )
 
     repo.delete(agent_id)
     return {"ok": True, "id": agent_id}

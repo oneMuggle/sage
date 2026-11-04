@@ -221,6 +221,7 @@
     "projects_wiki_generate": { "method": "POST", "path": "/api/v1/projects/{projectId}/ai/wiki/generate" },
     "projects_wiki_scan_files": { "method": "GET", "path": "/api/v1/projects/{projectId}/ai/wiki/scan-files" },
     "projects_workspace_overview": { "method": "GET", "path": "/api/v1/projects/{projectId}/workspace-overview" },
+    "promote_memory": { "method": "POST", "path": "/api/v1/memory/{id}/promote" },
     "prompts_create": { "method": "POST", "path": "/api/v1/prompts/templates" },
     "prompts_delete": { "method": "DELETE", "path": "/api/v1/prompts/templates/{id}" },
     "prompts_export": { "method": "GET", "path": "/api/v1/prompts/templates/export" },

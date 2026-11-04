@@ -25,6 +25,7 @@ import type {
   Memory,
   MemoryConsolidationResult,
   MemoryListResponse,
+  MemoryPromoteResult,
   MemorySummariesListResponse,
   MemoryWriteRecord,
   MemoryWritesResponse,
@@ -361,6 +362,31 @@ export const memoryApi = {
     return withRetry(async () => {
       try {
         await invoke('delete_memory', { id });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * 把一条私有记忆提升到共享层（M3-Task 7）。
+   *
+   * 后端把该行的 ``agent_id`` 置 NULL（共享层）并写一条审计行；归属变更
+   * 与审计同事务提交 —— 审计写失败则整体回滚，不会留下"已公开但无记录"
+   * 的记忆。已在共享层的记忆走幂等分支（``already_shared``）。
+   */
+  async promoteMemory(id: string): Promise<MemoryPromoteResult> {
+    if (!id || typeof id !== 'string') {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的记忆ID',
+        details: { memoryId: id },
+      });
+    }
+
+    return withRetry(async () => {
+      try {
+        return await invoke<MemoryPromoteResult>('promote_memory', { id });
       } catch (error) {
         throw handleApiError(error);
       }

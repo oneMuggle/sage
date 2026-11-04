@@ -79,6 +79,15 @@ export const memoryRoutes: Record<string, CommandRoute> = {
     },
   },
   delete_memory: { method: 'POST', path: () => '/api/v1/memory/delete' },
+  // M3-Task 7: 把一条私有记忆提升到共享层（agent_id → NULL）+ 审计行。
+  promote_memory: {
+    method: 'POST',
+    path: (a) => `/api/v1/memory/${encodeURIComponent(String(a?.id ?? ''))}/promote`,
+    body: (a) => ({
+      memoryType: a?.memoryType as string | undefined,
+      reason: a?.reason as string | undefined,
+    }),
+  },
   // 对标 S2 (2026-09-13): 记忆写入台账（内联"记住了"提示 + 撤销）
   get_recent_memory_writes: {
     method: 'GET',

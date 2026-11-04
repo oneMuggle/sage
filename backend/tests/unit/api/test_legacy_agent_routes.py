@@ -52,8 +52,31 @@ class _FakeAgentRepo:
         self._agents[payload["id"]] = payload
 
 
+class _FakeMemoryManager:
+    """M3-Task 7: 专家删除级联清理的记忆管理器替身。"""
+
+    def __init__(self, error=None):
+        self.error = error
+        self.purged = []
+
+    def purge_agent_memories(self, agent_id):
+        self.purged.append(agent_id)
+        if self.error is not None:
+            raise self.error
+        return {"episodic": 1, "semantic": 2, "vector": 3, "memory_ids": ["m1", "m2", "m3"]}
+
+
 @pytest.fixture()
-def fake_repo(monkeypatch):
+def fake_memory_manager(monkeypatch):
+    """替换全局记忆管理器单例 —— 路由内 ``from backend.memory import
+    get_memory_manager`` 在调用时解析模块属性，故须打在 ``backend.memory`` 上。"""
+    manager = _FakeMemoryManager()
+    monkeypatch.setattr("backend.memory.get_memory_manager", lambda: manager)
+    return manager
+
+
+@pytest.fixture()
+def fake_repo(monkeypatch, fake_memory_manager):
     agents = {
         "primary": {"id": "primary", "name": "Primary", "enabled": True},
         "coder": {"id": "coder", "name": "Coder", "enabled": True},
@@ -159,6 +182,52 @@ def test_delete_agent_not_found_404(fake_repo):
         delete_agent("ghost")
     assert excinfo.value.status_code == 404
     assert excinfo.value.detail["type"] == "agent_not_found"
+
+
+# ---------------------------------------------------------------------------
+# delete_agent（M3-Task 7 2026-11-04）级联清理私有记忆
+# ---------------------------------------------------------------------------
+
+
+def test_delete_agent_cascades_private_memory_purge(fake_repo, fake_memory_manager):
+    out = delete_agent("coder")
+
+    assert out == {"ok": True, "id": "coder"}
+    # 私有记忆先清理，再删专家行
+    assert fake_memory_manager.purged == ["coder"]
+    assert "coder" not in fake_repo._agents
+
+
+def test_delete_agent_purge_failure_keeps_agent(fake_repo, monkeypatch):
+    """清理失败 → 500 且专家不删 —— 不留"专家没了但记忆还在"的半状态。"""
+    monkeypatch.setattr(
+        "backend.memory.get_memory_manager",
+        lambda: _FakeMemoryManager(error=RuntimeError("db down")),
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        delete_agent("coder")
+
+    assert excinfo.value.status_code == 500
+    assert excinfo.value.detail["type"] == "memory_purge_failed"
+    assert "coder" in fake_repo._agents
+
+
+def test_delete_agent_primary_protected_skips_purge(fake_repo, fake_memory_manager):
+    """受保护专家（primary）不触发清理 —— 校验早于级联。"""
+    with pytest.raises(HTTPException) as excinfo:
+        delete_agent("primary")
+
+    assert excinfo.value.status_code == 400
+    assert fake_memory_manager.purged == []
+
+
+def test_delete_agent_not_found_skips_purge(fake_repo, fake_memory_manager):
+    with pytest.raises(HTTPException) as excinfo:
+        delete_agent("ghost")
+
+    assert excinfo.value.status_code == 404
+    assert fake_memory_manager.purged == []
 
 
 # ---------------------------------------------------------------------------

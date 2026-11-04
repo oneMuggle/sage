@@ -654,6 +654,20 @@ describe('COMMAND_ROUTES', () => {
     expect(COMMAND_ROUTES.delete_memory.path({})).toBe('/api/v1/memory/delete');
   });
 
+  // M3-Task 7 (2026-11-04): 私有记忆提升为共享层。
+  it('builds promote_memory as POST /api/v1/memory/{id}/promote', () => {
+    const r = COMMAND_ROUTES.promote_memory;
+    expect(r.method).toBe('POST');
+    expect(r.path({ id: 'm1' })).toBe('/api/v1/memory/m1/promote');
+    // 路径段必须编码，避免 id 中的特殊字符破坏 URL。
+    expect(r.path({ id: 'a/b c' })).toBe('/api/v1/memory/a%2Fb%20c/promote');
+    expect(r.body?.({ id: 'm1' })).toEqual({ memoryType: undefined, reason: undefined });
+    expect(r.body?.({ id: 'm1', memoryType: 'episodic', reason: 'keep' })).toEqual({
+      memoryType: 'episodic',
+      reason: 'keep',
+    });
+  });
+
   it('builds orchestration_create_lane as POST /api/v1/orchestration/lanes (M5)', () => {
     const r = COMMAND_ROUTES.orchestration_create_lane;
     expect(r.method).toBe('POST');

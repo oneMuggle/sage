@@ -95,6 +95,20 @@ export interface Memory {
 }
 
 /**
+ * M3-Task 7 (2026-11-04): 提升为共享的结果。
+ *
+ * - `promoted`: 归属已从私有专家改为共享层（所有专家可见）
+ * - `already_shared`: 本就在共享层，幂等无操作
+ * - `not_found`: 记忆不存在或不可提升
+ */
+export interface MemoryPromoteResult {
+  status: 'promoted' | 'already_shared' | 'not_found';
+  memory_id: string;
+  memory_type: string;
+  previous_agent_id: string | null;
+}
+
+/**
  * ``/memory/list`` 返回的 envelope,Task 2 起替换裸 list 契约。
  * 旧 caller 拿 ``resp.json()`` 直接当数组用 — 现在必须读 ``.items``。
  *

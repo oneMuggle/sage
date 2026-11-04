@@ -9,6 +9,9 @@ import asyncio
 import contextlib
 import functools
 import logging
+import sqlite3
+import time
+import uuid
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from backend.agents.memory_policy import (
@@ -1069,6 +1072,226 @@ class MemoryManager:
         else:
             logger.warning(f"不支持删除记忆类型: {memory_type}")
             return False
+
+    # ------------------------------------------------------------------ #
+    # M3-Task 7 (2026-11-04): 提升为共享 / 专家删除级联清理
+    # ------------------------------------------------------------------ #
+
+    #: ``memories_evolution_log.operation`` 的提升取值（与进化任务同白名单）。
+    PROMOTE_OPERATION = "promote"
+
+    #: 可提升的记忆层 → 主表名。``working`` 不落库（仅会话内），不参与。
+    _PROMOTABLE_TABLES = (
+        ("episodic", "memories_episodic"),
+        ("semantic", "memories_semantic"),
+    )
+
+    def promote_to_shared(
+        self,
+        memory_id: str,
+        memory_type: Optional[str] = None,
+        reason: str = "user_promote",
+    ) -> Dict[str, Any]:
+        """把一条私有记忆提升到共享层（M3-Task 7）。
+
+        归属从 ``agent_id = <专家>`` 改为 ``NULL``（共享层），提升后所有
+        专家都能读到。**归属变更与审计行同事务提交** —— 审计行丢失意味着
+        "谁在何时把哪条记忆公开" 不可追溯，因此这里不做 best-effort：
+        审计写入失败则整个提升回滚并向上抛错。
+
+        Args:
+            memory_id: 记忆 ID
+            memory_type: ``episodic`` / ``semantic``；``None`` = 两层都探测
+            reason: 审计原因，写入 ``memories_evolution_log.reason``
+
+        Returns:
+            ``{"status": "promoted" | "already_shared" | "not_found", ...}``
+            ``status`` 为 ``not_found`` 时其余字段仅供定位。
+        """
+        not_found = {
+            "status": "not_found",
+            "memory_id": memory_id,
+            "memory_type": memory_type or "",
+            "previous_agent_id": None,
+        }
+        if not memory_id:
+            return not_found
+
+        conn = self.episodic.db.get_connection()
+        for mtype, table in self._PROMOTABLE_TABLES:
+            if memory_type and mtype != memory_type:
+                continue
+            row = self._fetch_promote_row(conn, table, memory_id)
+            if row is None:
+                continue
+            current_agent = row["agent_id"]
+            if not current_agent:
+                return {
+                    "status": "already_shared",
+                    "memory_id": memory_id,
+                    "memory_type": mtype,
+                    "previous_agent_id": None,
+                }
+            content = row["content"] or ""
+            try:
+                conn.execute(
+                    f"UPDATE {table} SET agent_id = NULL WHERE id = ?",
+                    (memory_id,),
+                )
+                conn.execute(
+                    "INSERT INTO memories_evolution_log "
+                    "(id, memory_type, memory_id, operation, before_content, "
+                    "after_content, reason, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(uuid.uuid4()),
+                        mtype,
+                        memory_id,
+                        self.PROMOTE_OPERATION,
+                        content,
+                        content,
+                        f"{reason} (agent_id: {current_agent} → NULL)",
+                        int(time.time() * 1000),
+                    ),
+                )
+                conn.commit()
+            except sqlite3.DatabaseError as exc:
+                conn.rollback()
+                logger.error("提升记忆为共享失败 (memory_id=%s): %s", memory_id, exc)
+                raise
+            logger.info(
+                "记忆已提升为共享 (memory_id=%s, type=%s, 原归属=%s)",
+                memory_id,
+                mtype,
+                current_agent,
+            )
+            return {
+                "status": "promoted",
+                "memory_id": memory_id,
+                "memory_type": mtype,
+                "previous_agent_id": current_agent,
+            }
+
+        return not_found
+
+    def purge_agent_memories(self, agent_id: str) -> Dict[str, Any]:
+        """清理某专家的全部私有记忆（M3-Task 7：删除专家时级联清理）。
+
+        删除语义沿用各存储层既有约定 —— 情景层软删除（``is_valid = 0``，
+        全部读路径按 ``is_valid = 1 AND invalid_at IS NULL`` 过滤掉），
+        语义层硬删除（连带 FTS 行）。向量条目另按 ``memories_vec%`` 全表
+        清扫：存储层的 ``delete`` 只清 ``memories_vec``，其它嵌入维度的
+        向量表会残留孤儿条目。
+
+        ``working`` 层不参与：它按 ``session_id`` 隔离且不落 agent 维度。
+
+        Args:
+            agent_id: 专家 ID
+
+        Returns:
+            ``{"episodic": n, "semantic": n, "vector": n, "memory_ids": [...]}``
+        """
+        if not agent_id:
+            return {"episodic": 0, "semantic": 0, "vector": 0, "memory_ids": []}
+
+        conn = self.episodic.db.get_connection()
+        episodic_ids = self._collect_agent_memory_ids(conn, "memories_episodic", agent_id)
+        semantic_ids = self._collect_agent_memory_ids(conn, "memories_semantic", agent_id)
+
+        for memory_id in episodic_ids:
+            self.episodic.delete(memory_id)
+        for memory_id in semantic_ids:
+            self.semantic.delete(memory_id)
+
+        all_ids = episodic_ids + semantic_ids
+        vector_removed = self._purge_vectors_for_ids(conn, all_ids)
+        logger.info(
+            "级联清理专家私有记忆: agent=%s episodic=%d semantic=%d vector=%d",
+            agent_id,
+            len(episodic_ids),
+            len(semantic_ids),
+            vector_removed,
+        )
+        return {
+            "episodic": len(episodic_ids),
+            "semantic": len(semantic_ids),
+            "vector": vector_removed,
+            "memory_ids": all_ids,
+        }
+
+    @staticmethod
+    def _fetch_promote_row(conn: Any, table: str, memory_id: str) -> Optional[Any]:
+        """读取待提升记忆的 ``content`` / ``agent_id``；表或列缺失时返回 None。"""
+        try:
+            return conn.execute(
+                f"SELECT content, agent_id FROM {table} WHERE id = ?",
+                (memory_id,),
+            ).fetchone()
+        except sqlite3.DatabaseError as exc:
+            logger.warning("读取 %s 失败: %s", table, exc)
+            return None
+
+    @staticmethod
+    def _collect_agent_memory_ids(conn: Any, table: str, agent_id: str) -> List[str]:
+        """收集某表内归属该专家的记忆 id（表或列缺失时返回空列表）。"""
+        try:
+            rows = conn.execute(
+                f"SELECT id FROM {table} WHERE agent_id = ?", (agent_id,)
+            ).fetchall()
+        except sqlite3.DatabaseError as exc:
+            logger.warning("读取 %s 私有记忆失败: %s", table, exc)
+            return []
+        return [row["id"] for row in rows]
+
+    @staticmethod
+    def _table_has_column(conn: Any, table: str, column: str) -> bool:
+        """检查表是否含指定列（vec0 影子表无 ``memory_id``，须跳过）。"""
+        try:
+            rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        except sqlite3.DatabaseError as exc:
+            logger.warning("读取 %s 表结构失败: %s", table, exc)
+            return False
+        return any(row["name"] == column for row in rows)
+
+    @staticmethod
+    def _purge_vectors_for_ids(conn: Any, memory_ids: List[str]) -> int:
+        """按 memory_id 清扫全部 ``memories_vec*`` 向量表。
+
+        存储层的 ``delete`` 只清 ``memories_vec``；多嵌入维度（如
+        ``memories_vec_512``）的向量表会残留孤儿条目，故在此统一补齐。
+        """
+        if not memory_ids:
+            return 0
+        try:
+            tables = [
+                row["name"]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' "
+                    "AND name LIKE 'memories_vec%'"
+                ).fetchall()
+            ]
+        except sqlite3.DatabaseError as exc:
+            logger.warning("枚举向量表失败: %s", exc)
+            return 0
+
+        removed = 0
+        for table in tables:
+            if not MemoryManager._table_has_column(conn, table, "memory_id"):
+                continue
+            try:
+                for memory_id in memory_ids:
+                    cursor = conn.execute(
+                        f"DELETE FROM {table} WHERE memory_id = ?", (memory_id,)
+                    )
+                    if cursor.rowcount > 0:
+                        removed += cursor.rowcount
+            except sqlite3.DatabaseError as exc:
+                logger.warning("清理向量表 %s 失败: %s", table, exc)
+        try:
+            conn.commit()
+        except sqlite3.DatabaseError as exc:
+            logger.warning("向量清理提交失败: %s", exc)
+        return removed
 
     def get_stats(self) -> Dict[str, Any]:
         """

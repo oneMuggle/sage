@@ -16,8 +16,10 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-import { agentsApi } from '../../shared/api/agentsApi';
 import { memoryApi, Memory } from '../../shared/api';
+import { agentsApi } from '../../shared/api/agentsApi';
+
+import { MemoryPromoteButton } from './MemoryPromoteButton';
 
 // Constants
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -342,6 +344,27 @@ export function MemoryBrowser({
     }
   }, []);
 
+  // M3-Task 7: 把一条私有记忆提升到共享层。归属从专家私有改为共享
+  // (agent_id → NULL),所有专家此后都能读到。失败时保留该行并明确告知,
+  // 与删除路径同一原则 —— 不做"看起来公开了"的静默状态翻转。
+  const handlePromoteMemory = useCallback(async (memory: Memory) => {
+    try {
+      const result = await memoryApi.promoteMemory(memory.id);
+      setMemories((prev) =>
+        prev.map((m) => (m.id === memory.id ? { ...m, agent_id: undefined } : m)),
+      );
+      toast.success(
+        result.status === 'already_shared' ? '该记忆已在共享层' : '记忆已提升为共享',
+        {
+          description: (memory.content || memory.summary || '').split('\n')[0].slice(0, 40),
+        },
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '提升失败';
+      toast.error('提升为共享失败', { description: `${message}（该条记忆归属未变）` });
+    }
+  }, []);
+
   // 作用域为纯前端过滤(后端 list 契约不变)。缺 scope 的旧行按 DB 默认
   // 'user' 处理,与后端 visibility 规则一致。
   const visibleMemories = useMemo(() => {
@@ -502,6 +525,7 @@ export function MemoryBrowser({
               memory={memory}
               onJumpToSession={handleJumpToSession}
               onDelete={handleDeleteMemory}
+              onPromote={handlePromoteMemory}
               focused={memory.id === focusMemoryId}
             />
           ))}
@@ -524,11 +548,14 @@ function MemoryItemCard({
   memory,
   onJumpToSession,
   onDelete,
+  onPromote,
   focused = false,
 }: {
   memory: Memory;
   onJumpToSession: (sessionId: string | undefined) => void;
   onDelete: (memory: Memory) => void | Promise<void>;
+  /** M3-Task 7: 把私有记忆提升到共享层。 */
+  onPromote?: (memory: Memory) => void | Promise<void>;
   /** P0-6: 深链定位命中态 —— 高亮 + 滚入视区。 */
   focused?: boolean;
 }) {
@@ -672,6 +699,10 @@ function MemoryItemCard({
           </button>
         )}
         <span className="ml-auto flex items-center gap-2">
+          {/* M3-Task 7: 仅私有记忆可提升为共享（已在共享层的行不渲染）。 */}
+          {agentId && onPromote ? (
+            <MemoryPromoteButton memoryId={memory.id} onPromote={() => onPromote(memory)} />
+          ) : null}
           {confirming ? (
             <>
               <span className="text-error">确认删除？</span>
