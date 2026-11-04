@@ -220,6 +220,25 @@ describe('useFileUpload', () => {
     expect(overflow.reason).toBe('count_exceeded');
   });
 
+  it('同一批次内连续 addFile 也能执行数量上限（不依赖 effect 同步 ref）', () => {
+    // 回归：filesRef 的 effect 同步要等渲染，批次内 addFile 串行调用会读到
+    // 陈旧计数 → 绕过 MAX_ATTACHMENT_COUNT。修复后 ref 在每条 addFile 内
+    // 同步更新，批次中第 11 条起应被拒绝。
+    mockFileReader();
+    const { result } = renderHook(() => useFileUpload());
+    act(() => {
+      for (let i = 0; i < MAX_ATTACHMENT_COUNT + 5; i += 1) {
+        result.current.addFile(makeFile(`batch${i}.txt`, 'text/plain'));
+      }
+    });
+    // 10 个 ok + 5 个 count_exceeded，总共 15 条（失败条目也占位以便用户看到原因）
+    expect(result.current.files).toHaveLength(MAX_ATTACHMENT_COUNT + 5);
+    const okCount = result.current.files.filter((f) => f.status !== 'failed').length;
+    const failedCount = result.current.files.filter((f) => f.reason === 'count_exceeded').length;
+    expect(okCount).toBe(MAX_ATTACHMENT_COUNT);
+    expect(failedCount).toBe(5);
+  });
+
   it('addFile 同名文件替换旧条目（静默）', () => {
     const flush = mockFileReader();
     const { result } = renderHook(() => useFileUpload());
@@ -259,6 +278,41 @@ describe('useFileUpload', () => {
     expect(result.current.files).toHaveLength(2);
     expect(result.current.files[1].status).toBe('failed');
     expect(result.current.files[1].reason).toBe('count_exceeded');
+  });
+
+  // H4 回归：FileReader.onerror 应把条目标为 failed + read_failed，
+  // 而不是让 chip 永远停在 ready 状态。
+  it('FileReader 读取出错 → status=failed, reason=read_failed', () => {
+    // FileReader mock：同步触发 onerror 而非 onload
+    class ErrorFileReader {
+      onerror: (() => void) | null = null;
+      onload: (() => void) | null = null;
+      result: null = null;
+      readAsDataURL() {
+        // 异步触发 onerror，模拟真实 FileReader 行为
+        queueMicrotask(() => this.onerror?.());
+      }
+    }
+    vi.stubGlobal('FileReader', ErrorFileReader);
+
+    const { result } = renderHook(() => useFileUpload());
+    act(() => {
+      result.current.addFile(makeFile('broken.txt', 'text/plain'));
+    });
+    // 初始状态：stub 已加入，status='ready'
+    expect(result.current.files).toHaveLength(1);
+    expect(result.current.files[0].status).toBe('ready');
+
+    // 等待 queueMicrotask flush（readAsDataURL 内 onerror 异步触发）
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        // 让 React 状态更新 flush
+        act(() => {});
+        expect(result.current.files[0].status).toBe('failed');
+        expect(result.current.files[0].reason).toBe('read_failed');
+        resolve();
+      }, 0);
+    });
   });
 });
 

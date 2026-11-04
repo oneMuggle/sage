@@ -61,6 +61,10 @@ export function useGlobalFileDrop({ composerSelector }: GlobalFileDropOptions): 
     };
     const onDrop = (e: DragEvent) => {
       if (!carriesFiles(e)) return;
+      // drop 完成时浏览器不会再为 drop target 触发 dragleave —— 任何 drop 分支
+      // 都要重置计数器与遮罩状态，否则计数器 ≥1，遮罩会卡在页面上。
+      dragCounterRef.current = 0;
+      setIsDragOver(false);
       const composer = document.querySelector(composerSelector);
       if (composer && e.target && composer.contains(e.target as Node)) {
         // composer 内的 drop 由 composer 自己的 React onDrop 处理；这里放行。
@@ -71,8 +75,6 @@ export function useGlobalFileDrop({ composerSelector }: GlobalFileDropOptions): 
       const files = Array.from(e.dataTransfer?.files ?? []);
       if (files.length === 0) return;
       window.dispatchEvent(new CustomEvent(COMPOSER_DROP_EVENT, { detail: { files } }));
-      dragCounterRef.current = 0;
-      setIsDragOver(false);
     };
 
     document.addEventListener('dragenter', onDragEnter, true);

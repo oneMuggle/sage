@@ -1563,7 +1563,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 "state": "attachments_processed",
                                 "session_id": data.session_id,
                                 "user_message_id": _ap_user_id,
-                                "attachments": list(r_attachments_status),
+                                "attachments_status": list(r_attachments_status),
                             }
                         )
                     except Exception:

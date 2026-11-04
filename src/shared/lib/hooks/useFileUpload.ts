@@ -197,6 +197,31 @@ export function useFileUpload(): UseFileUploadReturn {
     status: 'ready',
   });
 
+  /**
+   * 创建 FileReader：成功 → 写入 dataUrl 并触发 afterLoad 回调（用于启动 eager 上传）；
+   * 失败 → 把对应条目标为 failed + reason=read_failed（避免 chip 卡在 ready）。
+   */
+  const readAsDataURLWithStatus = (
+    file: File,
+    stubId: string,
+    setTarget: React.Dispatch<React.SetStateAction<AttachedFile[]>>,
+    afterLoad?: () => void,
+  ) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      setTarget((prev) =>
+        prev.map((f) => (f.id === stubId ? { ...f, dataUrl: reader.result as string } : f)),
+      );
+      afterLoad?.();
+    };
+    reader.onerror = () => {
+      setTarget((prev) =>
+        prev.map((f) => (f.id === stubId ? { ...f, status: 'failed', reason: 'read_failed' } : f)),
+      );
+    };
+    reader.readAsDataURL(file);
+  };
+
   /** 触发 P1 选中即上传（仅 Electron 环境）；失败时把该条目标为 failed。 */
   const startEagerUpload = (
     file: File,
@@ -244,40 +269,34 @@ export function useFileUpload(): UseFileUploadReturn {
         // 同名文件替换 —— 主流应用行为。避免在 setState updater 内产生副作用
         // （StrictMode 会双调用 updater），FileReader 放在外面。
         const stub = makeReadyStub(file);
+        // ref 同步更新：一次 drop 多个文件时 addFile 会在同一批次内连续调用，
+        // 而 filesRef 的 effect 同步要等渲染后才执行 —— 只依赖 effect 会让
+        // 批次内每次预检都读到陈旧计数，绕过数量上限。
+        filesRef.current = [...filesRef.current.filter((f) => f.name !== file.name), stub];
         setFiles((prev) => [...prev.filter((f) => f.name !== file.name), stub]);
-        const reader = new FileReader();
-        reader.onload = () => {
-          setFiles((p) =>
-            p.map((f) => (f.id === stub.id ? { ...f, dataUrl: reader.result as string } : f)),
-          );
-          startEagerUpload(file, stub.id as string, setFiles);
-        };
-        reader.readAsDataURL(file);
+        readAsDataURLWithStatus(file, stub.id as string, setFiles, () =>
+          startEagerUpload(file, stub.id as string, setFiles),
+        );
         return;
       }
-      setFiles((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          status: 'failed',
-          reason: check.reason,
-        },
-      ]);
+      const failedEntry: AttachedFile = {
+        id: crypto.randomUUID(),
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        status: 'failed',
+        reason: check.reason,
+      };
+      filesRef.current = [...filesRef.current, failedEntry];
+      setFiles((prev) => [...prev, failedEntry]);
       return;
     }
     const stub = makeReadyStub(file);
+    filesRef.current = [...filesRef.current, stub];
     setFiles((prev) => [...prev, stub]);
-    const reader = new FileReader();
-    reader.onload = () => {
-      setFiles((prev) =>
-        prev.map((f) => (f.id === stub.id ? { ...f, dataUrl: reader.result as string } : f)),
-      );
-      startEagerUpload(file, stub.id as string, setFiles);
-    };
-    reader.readAsDataURL(file);
+    readAsDataURLWithStatus(file, stub.id as string, setFiles, () =>
+      startEagerUpload(file, stub.id as string, setFiles),
+    );
   }, []);
 
   const addImage = useCallback((file: File) => {
@@ -288,38 +307,28 @@ export function useFileUpload(): UseFileUploadReturn {
     if (!check.ok) {
       if (check.reason === 'duplicate') {
         const stub = makeReadyStub(file);
+        // ref 同步更新 —— 与 addFile 同因，避免批次内预检读到陈旧计数。
+        imagesRef.current = [...imagesRef.current.filter((f) => f.name !== file.name), stub];
         setImages((prev) => [...prev.filter((f) => f.name !== file.name), stub]);
-        const reader = new FileReader();
-        reader.onload = () => {
-          setImages((p) =>
-            p.map((f) => (f.id === stub.id ? { ...f, dataUrl: reader.result as string } : f)),
-          );
-        };
-        reader.readAsDataURL(file);
+        readAsDataURLWithStatus(file, stub.id as string, setImages);
         return;
       }
-      setImages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          status: 'failed',
-          reason: check.reason,
-        },
-      ]);
+      const failedEntry: AttachedFile = {
+        id: crypto.randomUUID(),
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        status: 'failed',
+        reason: check.reason,
+      };
+      imagesRef.current = [...imagesRef.current, failedEntry];
+      setImages((prev) => [...prev, failedEntry]);
       return;
     }
     const stub = makeReadyStub(file);
+    imagesRef.current = [...imagesRef.current, stub];
     setImages((prev) => [...prev, stub]);
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImages((prev) =>
-        prev.map((f) => (f.id === stub.id ? { ...f, dataUrl: reader.result as string } : f)),
-      );
-    };
-    reader.readAsDataURL(file);
+    readAsDataURLWithStatus(file, stub.id as string, setImages);
   }, []);
 
   const removeFile = useCallback((index: number) => {

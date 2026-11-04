@@ -19,5 +19,6 @@ export const zhAttachmentStatus = {
   'chat.attachment_status.reason.unsupported': '不支持的文件类型',
   'chat.attachment_status.reason.count_exceeded': '最多上传 10 个附件',
   'chat.attachment_status.reason.duplicate': '同名文件已存在',
+  'chat.attachment_status.reason.read_failed': '文件读取失败，请重试',
   'chat.attachment_upload_failed': '以下附件预上传失败，发送时将重试：{files}',
 } as const;
