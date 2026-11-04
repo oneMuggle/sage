@@ -593,13 +593,13 @@ async def import_specialist(file: UploadFile) -> dict:
 **目标**：专家私有记忆 + 共享显式提升
 
 **任务**：
-- [ ] 记忆表 / 向量表增加 `agent_id` 维度与索引
-- [ ] 读写策略（默认 `write_scope=specialist`）
-- [ ] 身份贯穿（`ToolExecutionContext.agent_id` → `MemoryManager`）
-- [ ] 子代理默认继承当前专家
-- [ ] 记忆浏览器筛选 / 导出 / 级联删除
-- [ ] 显式"提升为共享"按钮
-- [ ] 迁移：历史数据 `agent_id IS NULL` → 视为共享层
+- [x] 记忆表 / 向量表增加 `agent_id` 维度与索引（**落地偏离**：仅 `memories_episodic` / `memories_semantic` 加列 + 索引；sqlite-vec 向量表 payload 无 agent 维度，改为 RRF 融合后按主表行 `is_row_visible` 二次过滤，见 M3 计划文档）
+- [x] 读写策略（默认 `write_scope=specialist`）
+- [x] 身份贯穿（`ToolExecutionContext.agent_id` → `MemoryManager`）
+- [x] 子代理默认继承当前专家
+- [x] 记忆浏览器筛选 / 导出 / 级联删除
+- [x] 显式"提升为共享"按钮
+- [x] 迁移：历史数据 `agent_id IS NULL` → 视为共享层
 
 **验收**：写作专家与编码专家的私有记忆互不可见；共享用户偏好双方可见；删除专家级联清理私有记忆。
 
