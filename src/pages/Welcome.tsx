@@ -374,7 +374,10 @@ export function Welcome() {
         } else {
           sessionId = effectiveProjectId
             ? (await projectApi.createSession(effectiveProjectId)).session.id
-            : await createSession();
+            : // 2026-11-04 (fix/skip-workspace-binding): effectiveProjectId === null
+              // 表示用户在新会话页明确选择"不绑定项目"，传 skipBinding=true 跳过工作区解析链。
+              // 语义对齐主流 AI 应用 (Cursor / Cline / Windsurf) 的"显式选择 > 自动推断"原则。
+              await createSession(effectiveProjectId === null);
         }
         draftSessionRef.current = null;
 
