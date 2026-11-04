@@ -179,6 +179,17 @@ def test_apply_writes_sage_md_rules_and_milestones(
     assert "sage_md" in state["applied"]
     assert "git_init" in state["applied"]
     assert result["errors"] == []
+    # M3: structured per-item results + verification
+    applied_kinds = {item["item"] for item in result["applied_items"]}
+    assert {"sage_md", "rule", "milestones", "git_init"} <= applied_kinds
+    rule_item = next(item for item in result["applied_items"] if item["item"] == "rule")
+    assert rule_item["id"]
+    assert rule_item["content_preview"] == "Use black for formatting"
+    assert result["verification"] == {
+        "sage_md_exists": True,
+        "rules_count_after": 1,
+        "milestones_count_after": 1,
+    }
 
 
 def test_apply_does_not_overwrite_existing_sage_md(
@@ -219,6 +230,15 @@ def test_apply_dedupes_existing_rule_content(project) -> None:
     constraints = ProjectConstraintRepository().list_by_project(project.id)
     assert len(constraints) == 1
     assert "rule" in result["skipped"]
+    # M3: skipped items explain why and keep a preview of the duplicate.
+    assert result["skipped_items"] == [
+        {
+            "item": "rule",
+            "reason": "duplicate",
+            "label": "项目规则",
+            "content_preview": "Use   black for formatting",
+        }
+    ]
 
 
 def test_apply_git_init_is_opt_in(project, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -243,3 +263,48 @@ def test_apply_git_unavailable_records_error(
     result = project_bootstrap.apply_bootstrap(project, {"git_init": True})
 
     assert result["errors"] == [{"item": "git_init", "message": "本机未检测到 Git，已跳过"}]
+
+
+@pytest.mark.asyncio()
+async def test_scan_returns_only_deterministic_section(
+    project, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(project_bootstrap, "git_available", lambda: True)
+
+    result = await project_bootstrap.build_bootstrap_scan(project)
+
+    assert "scan" in result
+    assert "suggestions" not in result
+    assert result["scan"]["existing"]["rules_count"] == 0
+    assert result["scan"]["git"]["git_available"] is True
+
+
+@pytest.mark.asyncio()
+async def test_suggestions_report_ai_source_and_no_error(
+    project, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(project_bootstrap, "ProjectAnalysisAgent", FakeAgent)
+    monkeypatch.setattr(project_bootstrap, "ProjectRuleGenerator", FakeGenerator)
+    monkeypatch.setattr(project_bootstrap, "git_available", lambda: True)
+
+    result = await project_bootstrap.build_bootstrap_suggestions(project, use_llm=True)
+
+    assert result["llm_available"] is True
+    assert result["rule_source"] == "ai"
+    assert result["llm_error"] is None
+    assert result["suggestions"]["rules"][0]["content"] == "Use ruff for linting"
+
+
+@pytest.mark.asyncio()
+async def test_suggestions_use_template_source_without_llm(
+    project, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(project_bootstrap, "ProjectAnalysisAgent", FakeAgent)
+    monkeypatch.setattr(project_bootstrap, "git_available", lambda: True)
+
+    result = await project_bootstrap.build_bootstrap_suggestions(project, use_llm=False)
+
+    assert result["llm_available"] is False
+    assert result["rule_source"] == "template"
+    # Explicitly requesting no LLM is not a failure, so no fallback warning.
+    assert result["llm_error"] is None

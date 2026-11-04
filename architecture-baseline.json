@@ -7,7 +7,7 @@
     "backend/api/llm_proxy_routes.py": 1216,
     "backend/api/orchestration_router.py": 807,
     "backend/api/permission_routes.py": 855,
-    "backend/api/playbook_routes.py": 931,
+    "backend/api/playbook_routes.py": 934,
     "backend/api/wiki_routes.py": 1764,
     "backend/application/services/chat_service.py": 1263,
     "backend/core/legacy/agent.py": 3574,
@@ -40,7 +40,6 @@
     "backend/tests/unit/test_settings_canonicalizer.py": 844,
     "backend/tests/unit/test_skill_md_importer.py": 806,
     "backend/tests/unit/test_skill_md_script_runner.py": 824,
-
     "backend/tests/unit/test_web_tool.py": 1806,
     "backend/tools/browser_cdp.py": 1150,
     "backend/tools/browser_tool.py": 1577,
@@ -55,7 +54,7 @@
     "backend/zotero/client.py": 1195,
     "electron/__tests__/commands.test.ts": 1210,
     "electron/main.ts": 3167,
-    "electron/preload.ts": 867,
+    "electron/preload.ts": 885,
     "electron/tests/updateIntegration.test.ts": 882,
     "electron/tests/updateManager.test.ts": 1839,
     "electron/updateManager.ts": 1519,
@@ -65,8 +64,8 @@
     "backend/services/arena_draw_engine.py": 1054,
     "backend/tools/web_render.py": 931,
     "backend/api/project_ai_routes.py": 862,
-    "src/shared/api/projectApi.ts": 1342,
-    "src/shared/api/projectApiTypes.ts": 1498,
+    "src/shared/api/projectApi.ts": 1463,
+    "src/shared/api/projectApiTypes.ts": 1564,
     "src/widgets/chat/ChatInput.tsx": 892,
     "src/widgets/chat/Message.tsx": 826,
     "src/entities/setting/settingsRegistry.ts": 812,
@@ -77,7 +76,7 @@
     "src/pages/settings/PluginsTab.tsx": 820,
     "backend/tests/unit/test_design_routes.py": 975,
     "backend/adapters/out/skill/inproc.py": 949,
-    "backend/api/project_routes.py": 1099,
+    "backend/api/project_routes.py": 1155,
     "backend/services/project_wiki_generator.py": 903,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
     "backend/tools/config_tool.py": 994,
@@ -86,6 +85,8 @@
     "src/shared/api/types/chatAndEventTypes.ts": 877,
     "scripts/feedback_receiver.py": 1154,
     "src/shared/types/electron-api.d.ts": 811,
-    "electron/preload.ts": 885
+    "src/features/playbook/PlaybookCard.tsx": 825,
+    "src/features/project-type/PolymorphicArchetypeCards.tsx": 879,
+    "src/pages/ProjectGovernance.tsx": 852
   }
 }

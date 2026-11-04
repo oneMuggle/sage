@@ -115,7 +115,7 @@ beforeEach(() => {
   mockListConstraints.mockResolvedValue([]);
   mockGetAdvice.mockResolvedValue({
     healthScore: 86,
-    summary: '项目五层上下文结构完整，里程碑推进正常。',
+    summary: '项目上下文结构完整，里程碑推进正常。',
     risks: [],
     suggestions: [{ priority: 'medium', action: '补充二审归档快照', reason: '定稿前保护' }],
   });
@@ -443,22 +443,22 @@ describe('ProjectArchetypeStudio', () => {
     fireEvent.click(screen.getByTestId('studio-seed-recommended-milestones-btn'));
     expect(screen.getByTestId('studio-seed-recommended-milestones-btn')).toHaveTextContent('已播种里程碑');
     fireEvent.click(screen.getByTestId('studio-blueprint-to-constraint-btn'));
-    expect(screen.getByTestId('studio-blueprint-to-constraint-btn')).toHaveTextContent('已转蓝图L2');
+    expect(screen.getByTestId('studio-blueprint-to-constraint-btn')).toHaveTextContent('已转蓝图规则');
     fireEvent.click(screen.getByTestId('studio-blueprint-to-milestone-btn'));
     expect(screen.getByTestId('studio-blueprint-to-milestone-btn')).toHaveTextContent('已建蓝图里程碑');
     fireEvent.click(screen.getByTestId('overview-pillars-to-milestone-btn'));
     expect(screen.getByTestId('overview-pillars-to-milestone-btn')).toHaveTextContent('已转支柱里程碑');
     fireEvent.click(screen.getByTestId('overview-stages-to-l3-btn'));
-    expect(screen.getByTestId('overview-stages-to-l3-btn')).toHaveTextContent('已存管线L3');
+    expect(screen.getByTestId('overview-stages-to-l3-btn')).toHaveTextContent('已存到项目记忆');
     fireEvent.click(screen.getByTestId('overview-stages-to-l4-btn'));
-    expect(screen.getByTestId('overview-stages-to-l4-btn')).toHaveTextContent('已存管线L4');
+    expect(screen.getByTestId('overview-stages-to-l4-btn')).toHaveTextContent('已存为参考资料');
     fireEvent.click(screen.getByTestId('overview-stages-to-constraint-btn'));
-    expect(screen.getByTestId('overview-stages-to-constraint-btn')).toHaveTextContent('已转管线L2');
+    expect(screen.getByTestId('overview-stages-to-constraint-btn')).toHaveTextContent('已升级为规则');
     fireEvent.click(screen.getByTestId('studio-copy-active-path-btn'));
     fireEvent.click(screen.getByTestId('studio-save-blueprint-l4-btn'));
-    expect(screen.getByTestId('studio-save-blueprint-l4-btn')).toHaveTextContent('已存蓝图 L4');
+    expect(screen.getByTestId('studio-save-blueprint-l4-btn')).toHaveTextContent('已存蓝图到资料');
     fireEvent.click(screen.getByTestId('studio-save-blueprint-l3-btn'));
-    expect(screen.getByTestId('studio-save-blueprint-l3-btn')).toHaveTextContent('已存蓝图 L3');
+    expect(screen.getByTestId('studio-save-blueprint-l3-btn')).toHaveTextContent('已存蓝图到项目记忆');
     fireEvent.click(screen.getByTestId('wiki-preview-btn'));
     expect(await screen.findByTestId('wiki-copy-preview-btn')).toBeInTheDocument();
     expect(screen.getByTestId('wiki-symbol-preview-list')).toHaveTextContent('bootstrap');
@@ -568,9 +568,9 @@ describe('ProjectArchetypeStudio', () => {
     );
 
     fireEvent.click(await screen.findByTestId('semantic-stats-save-l3-btn'));
-    expect(screen.getByTestId('semantic-stats-save-l3-btn')).toHaveTextContent('已存统计 L3');
+    expect(screen.getByTestId('semantic-stats-save-l3-btn')).toHaveTextContent('已存统计到项目记忆');
     fireEvent.click(screen.getByTestId('semantic-stats-save-l4-btn'));
-    expect(screen.getByTestId('semantic-stats-save-l4-btn')).toHaveTextContent('已存统计 L4');
+    expect(screen.getByTestId('semantic-stats-save-l4-btn')).toHaveTextContent('已存统计为资料');
 
     fireEvent.click(screen.getByTestId('semantic-pillar-query-0'));
     await waitFor(() => {
@@ -589,9 +589,9 @@ describe('ProjectArchetypeStudio', () => {
       '初始画像规范；SAGE.md：核心研究问题 (RQ)、科学假设与数学符号规范表 (Notation)',
     );
     fireEvent.click(screen.getByTestId('studio-profile-pillars-to-l4-btn'));
-    expect(screen.getByTestId('studio-profile-pillars-to-l4-btn')).toHaveTextContent('已存支柱 L4');
+    expect(screen.getByTestId('studio-profile-pillars-to-l4-btn')).toHaveTextContent('已存支柱为资料');
     fireEvent.click(screen.getByTestId('studio-profile-cats-to-l4-btn'));
-    expect(screen.getByTestId('studio-profile-cats-to-l4-btn')).toHaveTextContent('已存分布L4');
+    expect(screen.getByTestId('studio-profile-cats-to-l4-btn')).toHaveTextContent('已存分布为资料');
     const copySessionBtn = await screen.findByTestId('knowledge-copy-session-id-btn');
     fireEvent.click(copySessionBtn);
     fireEvent.click(screen.getByTestId('knowledge-extract-btn'));

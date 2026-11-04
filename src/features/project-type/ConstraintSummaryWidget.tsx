@@ -171,7 +171,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
-                  {savedSummaryL3 ? '已存高优 L3' : '沉淀高优至 L3'}
+                  {savedSummaryL3 ? '已保存高优到项目记忆' : '保存高优到项目记忆'}
                 </button>
                 <button
                   type="button"
@@ -182,7 +182,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                     if (typeof projectApi?.addMaterial === 'function') {
                       try {
                         await projectApi.addMaterial(projectId, {
-                          content: `# L2 生效约束规则快照 (${enabledConstraints.length} 条)\n${enabledConstraints.map((c) => `- [P${c.priority} · ${c.category}] ${c.content}`).join('\n')}`,
+                          content: `# 项目规则快照 (${enabledConstraints.length} 条)\n${enabledConstraints.map((c) => `- [P${c.priority} · ${c.category}] ${c.content}`).join('\n')}`,
                         });
                       } catch {
                         // ignore in test/offline mode
@@ -204,7 +204,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                         try {
                           await projectApi.createMilestone(projectId, {
                             title: `[高优约束验收] ${rule.content.slice(0, 60)}`,
-                            description: `来自 L2 高优规则 P${rule.priority} (${rule.category})`,
+                            description: `来自高优规则 P${rule.priority} (${rule.category})`,
                             status: 'pending',
                           });
                         } catch {
@@ -329,7 +329,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                   }}
                   className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
-                  {savedGlobL3 ? '已存Glob至L3' : 'Glob规则存L3'}
+                  {savedGlobL3 ? '已存 Glob 到项目记忆' : 'Glob 规则存项目记忆'}
                 </button>
                 <button
                   type="button"
@@ -356,7 +356,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                   }}
                   className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
-                  {savedGlobL4 ? '已存Glob至L4' : 'Glob规则存L4'}
+                  {savedGlobL4 ? '已存 Glob 为资料' : 'Glob 规则存为资料'}
                 </button>
                 <button
                   type="button"
@@ -402,7 +402,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                           entries: [
                             {
                               category: 'convention',
-                              content: `L2 约束类别分布：${Array.from(categoryCount.entries())
+                              content: `项目规则类别分布：${Array.from(categoryCount.entries())
                                 .map(
                                   ([cat, cnt]) =>
                                     `${CONSTRAINT_CATEGORY_LABELS[cat] ?? cat}(${cnt}条)`,
@@ -410,7 +410,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                                 .join('、')}`,
                               importance: 6,
                               sourceMessageIds: [],
-                              reasoning: 'L2 约束类别分布快照保存到 AI 记忆',
+                              reasoning: '项目规则类别分布快照保存到 AI 记忆',
                             },
                           ],
                         });
@@ -421,7 +421,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                   }}
                   className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
-                  {savedCatsL3 ? '已存分布L3' : '分布存 L3'}
+                  {savedCatsL3 ? '已存分布到项目记忆' : '分布存项目记忆'}
                 </button>
                 <button
                   type="button"
@@ -433,7 +433,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                       try {
                         await projectApi.addMaterial(projectId, {
                           content: [
-                            '# L2 约束类别分布统计',
+                            '# 项目规则类别分布统计',
                             ...Array.from(categoryCount.entries()).map(
                               ([cat, cnt]) =>
                                 `- **${CONSTRAINT_CATEGORY_LABELS[cat] ?? cat} (${cat})**: ${cnt} 条`,
@@ -447,7 +447,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                   }}
                   className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
-                  {savedCatsL4 ? '已存分布L4' : '分布存 L4'}
+                  {savedCatsL4 ? '已存分布为资料' : '分布存为资料'}
                 </button>
               </div>
               {selectedCategory && (
@@ -581,7 +581,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                             try {
                               await projectApi.createMilestone(projectId, {
                                 title: `[规则验收] ${rule.content.slice(0, 60)}`,
-                                description: `来自 L2 高优规则 P${rule.priority} (${rule.category})`,
+                                description: `来自高优规则 P${rule.priority} (${rule.category})`,
                                 status: 'pending',
                               });
                             } catch {

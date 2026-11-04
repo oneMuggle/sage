@@ -371,11 +371,11 @@ export function ProjectCreationWizard({
                         `- **子类型**: ${subTypeLabel}`,
                         `- **检测置信度**: ${confidenceLine}`,
                         `- **VCS 模式**: ${vcsMode}`,
-                        `- **L2 目标**: ${projectDescription || '未填写'}`,
-                        `- **L2 系统指令**: ${projectInstructions || '未填写'}`,
+                        `- **项目目标**: ${projectDescription || '未填写'}`,
+                        `- **项目系统指令**: ${projectInstructions || '未填写'}`,
                         `- **预设规则包**: ${selectedTemplateKeys.join(', ') || '无'}`,
                         `- **采纳治理建议**: ${recsLine}`,
-                        `- **L5 只读白名单**: ${selectedAllowedPaths.join(', ') || '无'}`,
+                        `- **外部目录白名单**: ${selectedAllowedPaths.join(', ') || '无'}`,
                       ].join('\n');
                       try {
                         void navigator.clipboard?.writeText(md);
@@ -431,7 +431,7 @@ export function ProjectCreationWizard({
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap items-center justify-between gap-1">
                     <label className="block text-xs font-medium text-muted-foreground">
-                      L2 项目核心目标与系统指令（可选，注入五层上下文管线）：
+                      项目目标与系统指令（可选，注入项目上下文管线）：
                     </label>
                     <div
                       className="flex flex-wrap items-center gap-1"
@@ -465,7 +465,7 @@ export function ProjectCreationWizard({
                     type="text"
                     value={projectInstructions}
                     onChange={(e) => setProjectInstructions(e.target.value)}
-                    placeholder="L2 系统高优指令（如：严格遵循 GB/T 9704 公文规范，所有金额必须双写核验）"
+                    placeholder="项目系统指令（如：严格遵循 GB/T 9704 公文规范，所有金额必须双写核验）"
                     data-testid="wizard-instructions-input"
                     className="w-full rounded border border-input bg-background px-2.5 py-1 text-xs"
                   />
@@ -572,7 +572,7 @@ export function ProjectCreationWizard({
                     <div className="space-y-1 pt-1" data-testid="wizard-allowed-paths-presets">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-muted-foreground">
-                          L5 跨目录只读参考白名单挂载（可选，严禁 AI 写入）：
+                          外部目录只读参考白名单挂载（可选，严禁 AI 写入）：
                         </span>
                         <button
                           type="button"

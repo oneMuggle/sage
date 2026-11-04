@@ -135,7 +135,7 @@ def _ensure_state(project_id: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     return state
 
 
-def _current_payload(project: Project) -> PlaybookCurrentResponse:
+def _current_payload(project: Project, *, with_audit: bool = True) -> PlaybookCurrentResponse:
     repo = PlaybookRepository()
     snapshot = repo.get_active(project.id)
     state = repo.get_state(project.id)
@@ -150,7 +150,8 @@ def _current_payload(project: Project) -> PlaybookCurrentResponse:
         payload.source = snapshot.source
         payload.version = snapshot.version
         payload.spec_hash = snapshot.spec_hash
-        payload.audit = audit_playbook(project, snapshot.spec, state=state)
+        if with_audit:
+            payload.audit = audit_playbook(project, snapshot.spec, state=state)
     return payload
 
 
@@ -374,9 +375,11 @@ def get_shared_playbook(token: str) -> PlaybookSharedResponse:
     "/projects/{project_id}/playbook", response_model=PlaybookCurrentResponse
 )
 @with_db_lock
-def get_project_playbook(project_id: str) -> PlaybookCurrentResponse:
+def get_project_playbook(
+    project_id: str, with_audit: bool = True
+) -> PlaybookCurrentResponse:
     project = _project_or_404(project_id)
-    return _current_payload(project)
+    return _current_payload(project, with_audit=with_audit)
 
 
 @router.put(

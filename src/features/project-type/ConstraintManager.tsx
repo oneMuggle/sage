@@ -311,7 +311,7 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                           content: c.content,
                           importance: c.priority,
                           sourceMessageIds: [],
-                          reasoning: '约束管理器批量沉淀规则至 L3 画像',
+                          reasoning: '约束管理器批量保存规则到项目记忆',
                         })),
                       });
                     } catch {
@@ -321,7 +321,7 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                 }}
                 className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground hover:bg-muted"
               >
-                {batchPromotedL3 ? '已批量存 L3' : `批量存 L3 (${filteredConstraints.length})`}
+                {batchPromotedL3 ? '已批量存项目记忆' : `批量存项目记忆 (${filteredConstraints.length})`}
               </button>
               <button
                 type="button"
@@ -332,7 +332,7 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                   if (typeof projectApi?.addMaterial === 'function') {
                     try {
                       await projectApi.addMaterial(projectId, {
-                        content: `# ${blueprint.label} · L2 约束合集 (${filteredConstraints.length} 条)\n${filteredConstraints
+                        content: `# ${blueprint.label} · 项目规则合集 (${filteredConstraints.length} 条)\n${filteredConstraints
                           .map((c) => `- [P${c.priority} · ${c.category}] (${c.triggerPattern || 'always'}) ${c.content}`)
                           .join('\n')}`,
                       });
@@ -343,7 +343,7 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                 }}
                 className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground hover:bg-muted"
               >
-                {batchSavedL4 ? '已批量存 L4' : `批量存 L4 (${filteredConstraints.length})`}
+                {batchSavedL4 ? '已批量存为资料' : `批量存为资料 (${filteredConstraints.length})`}
               </button>
               <button
                 type="button"
@@ -620,7 +620,7 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                                   content: constraint.content,
                                   importance: constraint.priority,
                                   sourceMessageIds: [],
-                                  reasoning: 'L2 约束同步保存到 AI 记忆',
+                                  reasoning: '项目规则同步保存到 AI 记忆',
                                 },
                               ],
                             });
@@ -666,7 +666,7 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                         if (typeof projectApi?.addMaterial === 'function') {
                           try {
                             await projectApi.addMaterial(projectId, {
-                              content: `# L2 约束规范 [${constraint.category} · P${constraint.priority}]\n- 触发: ${constraint.triggerPattern || 'always'}\n\n${constraint.content}`,
+                              content: `# 项目规则规范 [${constraint.category} · P${constraint.priority}]\n- 触发: ${constraint.triggerPattern || 'always'}\n\n${constraint.content}`,
                             });
                           } catch {
                             // ignore in test/offline mode
