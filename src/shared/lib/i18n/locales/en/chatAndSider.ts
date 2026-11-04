@@ -130,6 +130,11 @@ export const enChatAndSider = {
   'chat.sources_group_wiki': 'Knowledge base',
   'chat.sources_group_web': 'Web',
   'chat.sources_group_tool': 'Tools',
+  // M2-Task 4: Specialist knowledge citations
+  'chat.sources_group_knowledge': 'Specialist knowledge',
+  'chat.sources_open_knowledge_wiki': 'View in project Wiki',
+  'chat.sources_open_knowledge_material': 'View in project materials',
+  'chat.sources_open_knowledge_private': 'Private specialist knowledge (not yet openable)',
   // R38: Skill activation display
   'chat.skills_activated': 'skills activated',
   'chat.skills_toggle': 'View activated skills',
@@ -309,7 +314,8 @@ export const enChatAndSider = {
 
   // ─── Settings ─────────────────────
   'settings.title': 'Settings',
-  'settings.page_description': 'Manage settings for "{tab}". Changes follow each setting\'s apply rules.',
+  'settings.page_description':
+    'Manage settings for "{tab}". Changes follow each setting\'s apply rules.',
   'settings.tab.general': 'General',
   'settings.tab.basic': 'Basic',
   'settings.tab.tools-connections': 'Permissions & Tools',

@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { saveCurrentSessionId } from '../../entities/session/storage';
 import { invoke } from '../api/desktopInvoke';
 import type { GenerationStats, MessageDisplayMeta, MessageSource, RagCitation } from '../api/types';
+export type { MessageSource } from '../api/types';
 import { clientLogger } from '../log/client';
 
 // Re-export API modules for convenience

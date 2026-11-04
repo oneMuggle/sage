@@ -10,7 +10,7 @@
 
 import { ArrowLeft, CheckCircle2, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { PlaybookCard } from '../features/playbook/PlaybookCard';
 import {
@@ -85,10 +85,29 @@ export function ProjectGovernance() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const { locale } = useI18n();
+  // M2-Task 4: 支持从聊天知识引用 chip 深链跳转
+  // ?tab=knowledge&knowledge=wiki|materials|rules
+  const [searchParams] = useSearchParams();
 
   const [project, setProject] = useState<ProjectSummary | null>(null);
-  const [activeTab, setActiveTab] = useState<GovernanceTab>('overview');
-  const [knowledgeTab, setKnowledgeTab] = useState<KnowledgeTab>('rules');
+  const [activeTab, setActiveTab] = useState<GovernanceTab>(
+    () => {
+      const fromUrl = searchParams.get('tab');
+      if (fromUrl === 'overview' || fromUrl === 'knowledge' || fromUrl === 'settings' || fromUrl === 'playbook') {
+        return fromUrl as GovernanceTab;
+      }
+      return 'overview';
+    },
+  );
+  const [knowledgeTab, setKnowledgeTab] = useState<KnowledgeTab>(
+    () => {
+      const fromUrl = searchParams.get('knowledge');
+      if (fromUrl === 'rules' || fromUrl === 'wiki' || fromUrl === 'materials') {
+        return fromUrl as KnowledgeTab;
+      }
+      return 'rules';
+    },
+  );
   const [scaffolding, setScaffolding] = useState(false);
   const [scaffoldResult, setScaffoldResult] = useState<ProjectScaffoldResult | null>(null);
   const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);

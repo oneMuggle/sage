@@ -6,6 +6,7 @@ import { useArtifacts } from '../../features/artifacts/useArtifacts';
 import { BtwOverlay } from '../../features/chat';
 import { useMessageJump } from '../../features/chat/useMessageJump';
 import type { BlockedAction, Message as MessageType } from '../../shared/lib/store';
+import type { MessageSource } from '../../shared/api/types/chatAndEventTypes';
 
 import { ChatFindBar } from './ChatFindBar';
 import { Message } from './Message';
@@ -71,6 +72,8 @@ interface MessageListProps {
   onSaveToMemory?: (message: MessageType) => void;
   /** P0-6: 打开记忆浏览器并定位到该条记忆 */
   onOpenMemory?: (memoryId: string) => void;
+  /** M2-Task 4: 打开专家知识引用（按 source_type 跳 Wiki / 项目资料 / toast） */
+  onOpenKnowledgeSource?: (source: MessageSource) => void;
   /** R44: 空态建议提示词点击回调 */
   onSuggestionClick?: (prompt: string) => void;
   /** R19-W1: 网页访问拦截卡片动作回调（透传给 Message → BlockedCard） */
@@ -97,6 +100,7 @@ export function MessageList({
   onQuoteSelection,
   onSaveToMemory,
   onOpenMemory,
+  onOpenKnowledgeSource,
   onSuggestionClick,
   onBlockedAction,
   onContinue,
@@ -294,6 +298,7 @@ export function MessageList({
                     onQuoteSelection={onQuoteSelection}
                     onSaveToMemory={onSaveToMemory}
                     onOpenMemory={onOpenMemory}
+                    onOpenKnowledgeSource={onOpenKnowledgeSource}
                     artifactsByToolCall={artifactsByToolCall}
                     onBlockedAction={onBlockedAction}
                     onContinue={
@@ -331,6 +336,7 @@ export function MessageList({
                 onQuoteSelection={onQuoteSelection}
                 onSaveToMemory={onSaveToMemory}
                 onOpenMemory={onOpenMemory}
+                onOpenKnowledgeSource={onOpenKnowledgeSource}
                 onBlockedAction={onBlockedAction}
                 onContinue={
                   item.messages[item.messages.length - 1]?.id === lastId && !streamingMessageId

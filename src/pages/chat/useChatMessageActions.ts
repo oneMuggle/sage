@@ -13,6 +13,7 @@ import {
   waitForSiteLogin,
 } from '../../shared/api/webAccessClient';
 import { useI18n } from '../../shared/lib/i18n';
+import type { MessageSource } from '../../shared/api/types/chatAndEventTypes';
 import type { BlockedAction, Message as MessageType } from '../../shared/lib/store';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
@@ -286,6 +287,28 @@ export function useChatMessageActions({
     [navigate],
   );
 
+  /** M2-Task 4: 打开专家知识引用 —— 按 source_type 分发：
+   * - wiki_project → navigate 到 /knowledge（Wiki 页面），用户自行选项目
+   * - project_material → navigate 到项目治理页 knowledge tab 的 materials 子 tab
+   * - specialist_private → toast 提示（暂未支持打开） */
+  const handleOpenKnowledgeSource = useCallback(
+    (source: MessageSource) => {
+      if (source.source_type === 'wiki_project') {
+        navigate('/knowledge');
+      } else if (source.source_type === 'project_material') {
+        const projectId = source.project_id || source.source_id || '';
+        if (projectId) {
+          navigate(
+            `/projects/${encodeURIComponent(projectId)}/governance?tab=knowledge&knowledge=materials`,
+          );
+        }
+      } else {
+        toast.info(t('chat.sources_open_knowledge_private'));
+      }
+    },
+    [navigate, t],
+  );
+
   /** 单飞保护：同一 URL 的登录轮询只允许一个（双击/重复点击不重复发消息）。 */
   const siteLoginInFlight = useRef<string | null>(null);
 
@@ -403,6 +426,7 @@ export function useChatMessageActions({
     handleQuote,
     handleSaveToMemory,
     handleOpenMemory,
+    handleOpenKnowledgeSource,
     handleBlockedAction,
     handleCancelRun,
     handleRerunFailed,

@@ -127,6 +127,11 @@ export const zhChatAndSider = {
   'chat.sources_group_wiki': '知识库',
   'chat.sources_group_web': '网页',
   'chat.sources_group_tool': '工具',
+  // M2-Task 4: 专家知识引用（知识绑定检索命中）
+  'chat.sources_group_knowledge': '专家知识',
+  'chat.sources_open_knowledge_wiki': '在项目 Wiki 中查看此文档',
+  'chat.sources_open_knowledge_material': '在项目资料中查看',
+  'chat.sources_open_knowledge_private': '专家私有知识（暂未支持打开）',
   // R38: 技能激活展示
   'chat.skills_activated': '个技能已激活',
   'chat.skills_toggle': '查看激活的技能',

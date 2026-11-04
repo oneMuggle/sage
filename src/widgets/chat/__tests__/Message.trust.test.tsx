@@ -154,6 +154,58 @@ describe('Message — R17 信任感交互', () => {
     expect(list).toHaveTextContent('[3]');
   });
 
+  // M2-Task 4: 专家知识引用 —— knowledge 分组渲染 + 点击回调
+  it('M2-Task 4: 专家知识来源渲染为独立分组，点击触发 onOpenKnowledgeSource', () => {
+    const onOpen = vi.fn();
+    const msg = makeMsg({
+      sources: [
+        {
+          kind: 'knowledge',
+          source_type: 'wiki_project',
+          source_id: 'proj_1',
+          binding_id: 'kb_1',
+          binding_name: '项目 Wiki',
+          path: 'wiki/arch.md',
+          chunk_index: 0,
+          title: 'wiki/arch.md',
+          snippet: '分层架构说明',
+          score: 0.87,
+          loc: { page_path: 'wiki/arch.md', chunk_index: 0 },
+        },
+        {
+          kind: 'knowledge',
+          source_type: 'project_material',
+          source_id: 'proj_1',
+          binding_id: 'kb_2',
+          binding_name: '项目资料',
+          material_id: 'mat_9',
+          chunk_index: 0,
+          title: 'spec.pdf',
+          snippet: '需求规格',
+          score: 0.72,
+        },
+        { kind: 'web', title: '例站', url: 'https://example.com' },
+      ],
+    });
+    renderWithI18n(<Message message={msg} onOpenKnowledgeSource={onOpen} />);
+    expect(screen.getByTestId('message-sources-toggle')).toHaveTextContent('3');
+    fireEvent.click(screen.getByTestId('message-sources-toggle'));
+    const list = screen.getByTestId('message-sources-list');
+    // 专家知识分组标题
+    expect(list).toHaveTextContent('专家知识');
+    // 两条知识 + 一条网页
+    expect(list).toHaveTextContent('分层架构说明');
+    expect(list).toHaveTextContent('spec.pdf');
+    expect(list).toHaveTextContent('例站');
+    // 绑定名 chip 显示
+    expect(list).toHaveTextContent('项目 Wiki');
+    expect(list).toHaveTextContent('项目资料');
+    // 点击知识 chip 触发回调
+    fireEvent.click(screen.getByTestId('message-knowledge-ref-0'));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onOpen.mock.calls[0][0].source_type).toBe('wiki_project');
+  });
+
   // R38: 技能激活与上下文压缩透明度测试
   it('R38: activated_skills 存在时显示可展开的技能激活开关', () => {
     const msg = makeMsg({

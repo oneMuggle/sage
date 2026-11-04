@@ -1775,6 +1775,29 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         f"[REQ {request_id}] memory_used event push failed, ignored"
                     )
             # ===== R17-E 记忆召回展示事件 END =====
+            # ===== M2-Task 4 专家知识检索注入 BEGIN =====
+            # 专家绑定的知识库（wiki / project_material / specialist_private）
+            # 在每轮对话前检索 top-k：上下文块并入 dynamic_context_parts，
+            # 来源条目以 kind="knowledge" 进入统一引用管道。无绑定 / 检索
+            # 失败一律 fail-open（返回空），绝不阻断对话主流程。
+            r81_knowledge_sources: list = []
+            try:
+                from backend.chat.specialist_knowledge import (
+                    retrieve_knowledge_context,
+                )
+
+                l14_knowledge_block, r81_knowledge_sources = (
+                    await retrieve_knowledge_context(
+                        getattr(agent, "profile", None), data.message
+                    )
+                )
+                if l14_knowledge_block:
+                    dynamic_context_parts.append(l14_knowledge_block)
+            except Exception as l14_knowledge_err:
+                logger.debug(
+                    f"[REQ {request_id}] specialist knowledge skipped: {l14_knowledge_err}"
+                )
+            # ===== M2-Task 4 专家知识检索注入 END =====
             # Task 5 (2026-09-15): catalog-based context budget.
             # Resolve effective window from model catalog, then compute budget
             # as window - reserve. Old >=20000 gate removed.
@@ -2099,6 +2122,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             r81_turn_sources: list = []
             # R86: @memory:/@wiki: 实体引用命中并入统一来源（按 url/path/title 去重）
             r81_turn_sources[:] = merge_sources(r81_turn_sources, r81_entity_sources)
+            # M2-Task 4: 专家知识命中并入统一来源（按源类型/源 ID/文档/片段去重）
+            r81_turn_sources[:] = merge_sources(
+                r81_turn_sources, r81_knowledge_sources
+            )
             # R83 增量推送: 每个 STEP_DONE 边界把已累积来源快照推给前端（长
             # run 中"先搜索后长文写作"时用户不必等 DONE 才看到来源）。记录
             # 上次推送时的条数,仅在有新增时推,避免逐 step 空转刷事件。
