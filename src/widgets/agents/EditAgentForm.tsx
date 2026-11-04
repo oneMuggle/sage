@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 
-import type { AgentProfile, AgentUpdate } from '../../shared/api';
+import {
+  AGENT_MAX_ITERATIONS_CEILING,
+  AGENT_MIN_ITERATIONS,
+  type AgentProfile,
+  type AgentUpdate,
+} from '../../shared/api';
 import {
   describePermission,
   pluginClient,
@@ -9,6 +14,7 @@ import {
   type PublishedPluginTool,
 } from '../../shared/api/pluginClient';
 import { Button } from '../../shared/ui/Button';
+import { NumberField } from '../../shared/ui/NumberField';
 
 /**
  * 工具白名单文本解析（R92）：按空白/逗号切分，去空白与重复项并保持
@@ -545,23 +551,18 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
         <label htmlFor="agent-max-iterations" className="block text-sm font-medium mb-1">
           最大迭代次数
         </label>
-        <input
+        <NumberField
           id="agent-max-iterations"
-          type="number"
-          min="1"
-          max="50"
-          step="1"
-          value={value('max_iterations')}
-          onChange={(e) =>
-            onChange({
-              ...form,
-              max_iterations: Math.max(1, parseInt(e.target.value || '1', 10) || 1),
-            })
-          }
+          value={value('max_iterations') ?? AGENT_MIN_ITERATIONS}
+          onChange={(next) => onChange({ ...form, max_iterations: next })}
+          min={AGENT_MIN_ITERATIONS}
+          max={AGENT_MAX_ITERATIONS_CEILING}
+          step={1}
           className="w-full rounded-lg border border-border px-3 py-2 bg-surface dark:bg-surface-elevated"
         />
         <p className="text-xs text-muted mt-1">
-          单轮 ReAct 循环允许的最大步数；任务超出该上限会被标记为迭代超限
+          固定预算模式下这是单轮 ReAct 循环的硬上限；自动预算模式下这是初始预算的下限，
+          撞到上限后先做完成判定，任务未完成可续跑
         </p>
       </div>
 

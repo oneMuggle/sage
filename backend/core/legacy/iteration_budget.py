@@ -18,6 +18,8 @@ import re
 from dataclasses import dataclass, replace
 from typing import Any, Dict, List, Literal, Optional, Sequence, Set, Tuple
 
+from backend.domain.agent_limits import MAX_ITERATIONS_CEILING
+
 BudgetLevel = Literal["simple", "medium", "complex", "long"]
 BudgetAction = Literal["extend", "stop"]
 BudgetStopReason = Literal["stuck", "no_progress", "extension_limit", "hard_cap"]
@@ -95,7 +97,7 @@ class BudgetConfig:
     medium_budget: int = 80
     complex_budget: int = 200
     long_budget: int = 400
-    hard_cap: int = 1000
+    hard_cap: int = MAX_ITERATIONS_CEILING
     extension_ratio: float = 0.5
     min_extension: int = 30
     max_extension: int = 200
@@ -155,7 +157,7 @@ class BudgetConfig:
             medium_budget=_env_int("SAGE_DYNAMIC_BUDGET_MEDIUM", 80),
             complex_budget=_env_int("SAGE_DYNAMIC_BUDGET_COMPLEX", 200),
             long_budget=_env_int("SAGE_DYNAMIC_BUDGET_LONG", 400),
-            hard_cap=_env_int("SAGE_DYNAMIC_BUDGET_HARD_CAP", 1000),
+            hard_cap=_env_int("SAGE_DYNAMIC_BUDGET_HARD_CAP", MAX_ITERATIONS_CEILING),
             extension_ratio=_env_float("SAGE_DYNAMIC_BUDGET_EXTENSION_RATIO", 0.5),
             min_extension=_env_int("SAGE_DYNAMIC_BUDGET_MIN_EXTENSION", 30),
             max_extension=_env_int("SAGE_DYNAMIC_BUDGET_MAX_EXTENSION", 200),

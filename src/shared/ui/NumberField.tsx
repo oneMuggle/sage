@@ -28,6 +28,8 @@ export interface NumberFieldProps {
    */
   clampOnChange?: boolean;
   testId?: string;
+  /** 供外层 `<label htmlFor>` 关联控件用。 */
+  id?: string;
   ariaLabel?: string;
   className?: string;
 }
@@ -48,6 +50,7 @@ export function NumberField({
   integer = true,
   clampOnChange = true,
   testId,
+  id,
   ariaLabel,
   className,
 }: NumberFieldProps) {
@@ -81,6 +84,7 @@ export function NumberField({
       min={min}
       max={max}
       step={step}
+      id={id}
       data-testid={testId}
       aria-label={ariaLabel}
       className={className}
