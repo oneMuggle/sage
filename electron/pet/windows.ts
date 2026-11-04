@@ -375,6 +375,8 @@ export class PetWindow {
     try {
       this.win.setAlwaysOnTop(true, 'floating');
       this.win.showInactive();
+      // Sync ignore state after showing to ensure correct click-through behavior
+      this.syncIgnoreState();
     } catch (err) {
       logger.warn('pet: show failed', {
         err: err instanceof Error ? err.message : String(err),
@@ -443,7 +445,8 @@ export class PetWindow {
     this.dragStartPosition = null;
     this.savePosition();
     this.syncPanelPosition();
-    if (this.clickThroughActive()) this.setIgnoreMouse(true);
+    // Sync ignore state after drag ends to restore correct click-through behavior
+    this.syncIgnoreState();
   }
 
   resetPosition(): void {
@@ -526,21 +529,23 @@ export class PetWindow {
   }
 
   private pollPointer(): void {
-    if (this.compatibility || this.dragging || this.pointerFallbackBroken) return;
+    if (this.compatibility || this.dragging) return;
     if (!this.win || this.win.isDestroyed() || !this.win.isVisible()) return;
     try {
       const cursor = screen.getCursorScreenPoint();
       const bounds = this.win.getBounds();
       const inside = isPointInRect(cursor, petHitBox(bounds));
       this.setIgnoreMouse(!inside);
+      // Success: reset fallback flag to allow future retries
+      this.pointerFallbackBroken = false;
     } catch (err) {
       // Wayland / headless sessions may not expose a global cursor. Keep the
       // window fully interactive rather than leaving it permanently click-through.
-      this.pointerFallbackBroken = true;
-      this.setIgnoreMouse(false);
-      logger.warn('pet: cursor polling unavailable; keeping window interactive', {
+      // Allow retry on next poll instead of permanently disabling.
+      logger.warn('pet: cursor polling failed, will retry', {
         err: err instanceof Error ? err.message : String(err),
       });
+      this.setIgnoreMouse(false);
     }
   }
 
@@ -553,6 +558,32 @@ export class PetWindow {
    */
   private clickThroughActive(): boolean {
     return !this.compatibility && !this.pointerFallbackBroken;
+  }
+
+  /**
+   * Synchronize ignore state at key lifecycle points (show, endDrag).
+   * Ensures the window's mouse ignore state matches the current cursor position
+   * and click-through mode, preventing stale state from blocking clicks.
+   */
+  private syncIgnoreState(): void {
+    if (!this.win || this.win.isDestroyed()) return;
+    if (!this.clickThroughActive()) {
+      // Non click-through mode: ensure we're not ignoring mouse
+      if (this.ignoring) {
+        this.setIgnoreMouse(false);
+      }
+      return;
+    }
+    // Click-through mode: sync based on cursor position
+    try {
+      const cursor = screen.getCursorScreenPoint();
+      const bounds = this.win.getBounds();
+      const inside = isPointInRect(cursor, petHitBox(bounds));
+      this.setIgnoreMouse(!inside);
+    } catch {
+      // Polling failed; keep window interactive
+      this.setIgnoreMouse(false);
+    }
   }
 
   private setIgnoreMouse(ignore: boolean): void {
