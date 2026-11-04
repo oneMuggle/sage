@@ -580,11 +580,11 @@ async def import_specialist(file: UploadFile) -> dict:
 **目标**：专家可绑定多个知识源，统一检索
 
 **任务**：
-- [ ] `KnowledgeBinding` 数据模型与 UI
-- [ ] Wiki / Zotero / 项目资料 / 工作区 / 专家私有目录接入
-- [ ] 向量表增加 `agent_id` 列 + 索引
-- [ ] 统一检索编排 + RRF + 引用输出
-- [ ] 无命中拒答策略与可观测日志
+- [x] `KnowledgeBinding` 数据模型与 UI
+- [x] Wiki / Zotero / 项目资料 / 工作区 / 专家私有目录接入（已接 wiki_project / project_material / specialist_private；zotero_collection 与 workspace_fts 待上游返回集合元数据后接入，见 M2 计划文档）
+- [x] 向量表增加 `agent_id` 列 + 索引（**策略调整**：不修改现有三层存储 schema，改为路由层 `knowledge_retriever.py` 扇出 + 独立专家私有向量库 `~/.sage/specialists/<id>/vectors.json`，理由与替代方案见 `docs/plans/2026-11-03_m2-knowledge-binding.md`）
+- [x] 统一检索编排 + RRF + 引用输出
+- [x] 无命中拒答策略与可观测日志
 
 **验收**：研究专家只引用绑定的 Zotero 集合与 Wiki 空间；引用可点击定位。
 
