@@ -196,65 +196,38 @@ async def extract(self, user_message, assistant_message, existing_facts, ...):
 
 **优化 1：扩展偏好维度**
 ```python
-# 扩展偏好维度
-PREFERENCE_DIMENSIONS = {
-    # 原有维度
-    "response_length": {"label": "回复长度", "values": ["简短", "适中", "详细"]},
-    "tone": {"label": "交互风格", "values": ["友好", "专业", "幽默", "严肃"]},
-    "detail_level": {"label": "详细程度", "values": ["简洁", "适中", "全面"]},
-    
+# 扩展偏好维度（标签与合法取值统一收敛到 backend/memory/preference_labels.py）
+PREFERENCE_DIMENSION_LABELS = {
+    "response_length": "回复长度",
+    "tone": "交互风格",
+    "detail_level": "详细程度",
     # 新增维度
-    "code_style": {"label": "代码风格", "values": ["函数式", "面向对象", "混合"]},
-    "comment_preference": {"label": "注释偏好", "values": ["无注释", "关键注释", "详细注释"]},
-    "explanation_depth": {"label": "解释深度", "values": ["直接给答案", "简要说明", "详细推导"]},
+    "code_style": "代码风格",
+    "comment_preference": "注释偏好",
+    "explanation_depth": "解释深度",
 }
 ```
 
 **优化 2：允许自由文本偏好**
 ```python
-async def _extract_preferences_with_llm(self, messages):
+async def _analyze_preferences_with_llm(self, llm, messages) -> Tuple[Dict, List[Dict]]:
     prompt = """
     分析用户的反馈，提取偏好。输出 JSON：
     {
-      "structured": {
-        "response_length": "详细",
-        "tone": "专业"
-      },
+      "structured": {"response_length": "short"},
       "free_text": [
-        {"category": "代码风格", "preference": "偏好函数式编程，避免 class"},
-        {"category": "注释", "preference": "关键函数需要 docstring"}
+        {"category": "代码风格", "preference": "偏好函数式编程，避免 class"}
       ]
     }
     """
-    
-    # 处理自由文本偏好
-    for pref in result.get("free_text", []):
-        profile_store.add(
-            content=f"用户偏好{pref['category']}: {pref['preference']}",
-            category="preference",
-            importance=6,
-            metadata={
-                "source_session": session_id,
-                "learned_at": now_ts,
-            }
-        )
+    # 返回 (structured, free_text)
 ```
 
-**优化 3：存储来源上下文**
-```python
-# 修改写入逻辑，增加元数据
-profile_store.add(
-    content=f"用户偏好{label}: {value}",
-    category="preference",
-    importance=6,
-    metadata={
-        "source_session": session_id,
-        "source_turn": turn_id,
-        "learned_at": now_ts,
-        "confidence": confidence,
-    }
-)
-```
+**优化 3：存储来源上下文** — ❌ **未实施**
+`UserProfileStore.add()` 没有 `metadata` 参数（签名固定为
+`content / category / importance`），无法逐条挂溯源字段。
+溯源改由语义记忆层的 `source_session_id` / `source_turn_id` /
+`memory_category` 承担（见 Task 2.0）。
 
 #### 2.2.3 改进去重机制（引入向量相似度）
 
@@ -498,7 +471,30 @@ async def _prune_low_quality_memories(self):
     embedder 是 `HashEmbedder`（`is_semantic=False`），向量路在该配置下会被
     直接跳过。改用 `MemoryManager.recall` 的 FTS5 关键词路，语义 embedder
     可用时 `recall` 内部会自动叠加向量召回，无需另开分支
-- [ ] **Task 2.3**：增强偏好学习（扩展维度 + 自由文本）
+- [x] **Task 2.3**：增强偏好学习（扩展维度 + 自由文本）
+  - **维度扩展**：3 → 6，新增 `code_style`（函数式/面向对象/混合）、
+    `comment_preference`（无注释/关键注释/详细注释）、
+    `explanation_depth`（直接给答案/简要说明/详细推导）；
+    标签与合法取值统一收敛到 `backend/memory/preference_labels.py`
+    （单一真相源），parser 白名单由 `PREFERENCE_VALUE_LABELS` 派生，
+    不再各写一份（曾因两处不同步漏掉新维度）
+  - **自由文本偏好**：LLM 输出改为嵌套格式
+    `{"structured": {...}, "free_text": [{"category", "preference"}]}`，
+    `_parse_preference_json` 同时兼容旧扁平格式；
+    自由文本条目做必填校验 + 截断（category ≤20 字 / preference ≤120 字），
+    写入 `memories_semantic`（content + summary）与 `user_profile`
+    （category="preference"）
+  - **关键词路径**：`_analyze_preferences` 覆盖 6 个维度的关键词，
+    只返回**有证据**的维度（无命中即不落库）
+  - **实施偏差**：原计划保留 3 维基线默认值，改为「仅证据」策略 ——
+    `preferences` 表是 `ON CONFLICT(key) DO UPDATE`，写入默认值会覆盖
+    用户此前学到的偏好（如曾说「回答简短点」的用户会被重置为 medium）。
+    `legacy_memory_routes.py` 按 `key LIKE 'pref_%'` 读取，缺失维度不显示，
+    无需补默认值
+  - 新增 13 条专项测试（`test_preference_learning_llm.py`：
+    嵌套/扁平格式解析、自由文本校验与截断、仅自由文本也落库、
+    关键词 6 维命中、无信号返回空）+ 既有 39 条偏好相关测试全绿；
+    evolution + memory 套件 112 条全绿；ruff 全绿
 - [ ] **Task 2.4**：改进去重机制（引入向量相似度）
 - [ ] **Task 2.5**：编写集成测试验证效果
 

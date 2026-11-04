@@ -12,11 +12,12 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.data.database import get_database
 from backend.memory.episodic import sync_fts_row_for_id
 from backend.memory.preference_labels import (
+    PREFERENCE_DIMENSION_LABELS,
     PREFERENCE_VALUE_LABELS,
     format_preference,
 )
@@ -579,24 +580,28 @@ class PreferenceLearningTask(BaseEvolutionTask):
         # 1b. LLM 路: 近 7 天用户消息采样（不受关键词预过滤, 语义化理解）
         llm = self._resolve_llm()
         llm_preferences: Dict[str, str] = {}
+        llm_free_text: List[Dict[str, str]] = []
         if llm is not None:
             recent_messages = self._fetch_recent_user_messages(cursor)
-            llm_preferences = await self._analyze_preferences_with_llm(
+            llm_preferences, llm_free_text = await self._analyze_preferences_with_llm(
                 llm, recent_messages
             )
-            if llm_preferences:
-                logger.info(f"LLM 偏好抽取命中 {len(llm_preferences)} 个维度")
+            if llm_preferences or llm_free_text:
+                logger.info(
+                    f"LLM 偏好抽取命中 {len(llm_preferences)} 个维度 / "
+                    f"{len(llm_free_text)} 条自由文本"
+                )
         else:
             logger.debug("LLM 不可用，偏好学习仅走关键词路径")
 
-        # 2. 分析偏好模式: 关键词基线 + LLM 结果覆盖
+        # 2. 分析偏好模式: 关键词结果 + LLM 结果覆盖
         preferences = self._analyze_preferences(feedback_messages)
         preferences.update(llm_preferences)
 
         # 证据门槛: 关键词与 LLM 采样均无信号时不落库 ——
-        # _analyze_preferences 恒返回默认基线, 无证据也写入会每天
-        # 生成一条无信息量的"用户偏好总结"（语义记忆噪音）。
-        if not feedback_messages and not llm_preferences:
+        # 关键词路径只返回**有命中**的维度（无证据也写入会用默认值
+        # 覆盖用户此前学到的偏好，preferences 表是 ON CONFLICT DO UPDATE）。
+        if not feedback_messages and not llm_preferences and not llm_free_text:
             logger.info("没有发现新的反馈（关键词与 LLM 采样均无信号），跳过")
             await self._emit_evolution_completed(
                 items_processed=0,
@@ -604,7 +609,7 @@ class PreferenceLearningTask(BaseEvolutionTask):
             )
             return 0
 
-        if not preferences:
+        if not preferences and not llm_free_text:
             logger.info("无法分析出明确偏好")
             await self._emit_evolution_completed(
                 items_processed=0,
@@ -613,11 +618,22 @@ class PreferenceLearningTask(BaseEvolutionTask):
             return 0
 
         # 3. 保存到语义记忆
-        profile_text = "\n".join(
-            [format_preference(k, v) for k, v in preferences.items()]
+        profile_lines = [format_preference(k, v) for k, v in preferences.items()]
+        profile_lines.extend(
+            f"用户偏好{item['category']}: {item['preference']}" for item in llm_free_text
         )
+        profile_text = "\n".join(profile_lines)
         memory_id = str(uuid.uuid4())
         now_ts = int(time.time())
+
+        summary_parts = [
+            f"{PREFERENCE_DIMENSION_LABELS.get(key, key)}="
+            f"{PREFERENCE_VALUE_LABELS.get(key, {}).get(value, value)}"
+            for key, value in preferences.items()
+        ]
+        summary_parts.extend(
+            f"{item['category']}: {item['preference']}" for item in llm_free_text
+        )
 
         cursor.execute(
             """
@@ -628,10 +644,7 @@ class PreferenceLearningTask(BaseEvolutionTask):
             (
                 memory_id,
                 f"用户偏好总结:\n{profile_text}",
-                "用户偏好: "
-                f"回复长度={PREFERENCE_VALUE_LABELS.get('response_length', {}).get(preferences.get('response_length', 'medium'), preferences.get('response_length', 'medium'))}, "
-                f"交互风格={PREFERENCE_VALUE_LABELS.get('tone', {}).get(preferences.get('tone', 'friendly'), preferences.get('tone', 'friendly'))}, "
-                f"详细程度={PREFERENCE_VALUE_LABELS.get('detail_level', {}).get(preferences.get('detail_level', 'medium'), preferences.get('detail_level', 'medium'))}",
+                "用户偏好: " + ", ".join(summary_parts),
                 '["user_preference", "evolution"]',
                 now_ts,
             ),
@@ -666,37 +679,52 @@ class PreferenceLearningTask(BaseEvolutionTask):
                     category="preference",
                     importance=6,
                 )
+            for item in llm_free_text:
+                profile_store.add(
+                    content=f"用户偏好{item['category']}: {item['preference']}",
+                    category="preference",
+                    importance=6,
+                )
         except Exception as exc:  # noqa: BLE001 — 偏好写 user_profile 是旁路，不阻断主流程
             logger.warning(f"偏好写入 user_profile 失败（旁路）: {exc}")
 
-        logger.info(f"偏好学习完成: {preferences}")
+        logger.info(f"偏好学习完成: {preferences} + {len(llm_free_text)} 条自由文本")
 
         # 记录进化日志
         record_evolution_log(
             self.db,
             evolution_type="preference_learning",
-            description=f"偏好学习完成，分析出 {len(preferences)} 个偏好维度",
+            description=(
+                f"偏好学习完成，分析出 {len(preferences)} 个偏好维度"
+                f" / {len(llm_free_text)} 条自由文本偏好"
+            ),
             status="success",
             after_state=profile_text,
             duration_ms=elapsed_ms(_started),
-            metrics={"preferences_learned": len(preferences)},
+            metrics={
+                "preferences_learned": len(preferences),
+                "free_text_preferences": len(llm_free_text),
+            },
         )
 
-        return len(preferences)
+        return len(preferences) + len(llm_free_text)
 
     def _analyze_preferences(self, feedback_messages: List[dict]) -> Dict[str, str]:
-        """
-        分析用户偏好
+        """关键词路径分析用户偏好。
+
+        只返回**有证据**的维度 —— 没有命中关键词的维度不落库，避免用
+        默认值覆盖用户此前学到的偏好（``preferences`` 表是
+        ``ON CONFLICT(key) DO UPDATE``，写入即覆盖）。
 
         Args:
             feedback_messages: 反馈消息列表
 
         Returns:
-            偏好字典
+            偏好字典（键 → 机器值），可能为空
         """
-        preferences = {"response_length": "medium", "tone": "friendly", "detail_level": "medium"}
+        preferences: Dict[str, str] = {}
 
-        # 简单的关键词分析
+        # 各维度独立关键词 → 取值映射
         length_prefs = {"太短": "long", "太长": "short", "简短": "short", "详细": "detailed"}
         tone_prefs = {
             "友好": "friendly",
@@ -705,6 +733,27 @@ class PreferenceLearningTask(BaseEvolutionTask):
             "严肃": "formal",
         }
         detail_prefs = {"详细": "detailed", "简单": "brief", "复杂": "comprehensive"}
+        code_style_prefs = {
+            "函数式": "functional",
+            "面向对象": "oop",
+            "OOP": "oop",
+            "functional": "functional",
+        }
+        comment_prefs = {
+            "别加注释": "none",
+            "不用加注释": "none",
+            "不要注释": "none",
+            "加注释": "detailed",
+            "详细注释": "detailed",
+            "关键注释": "minimal",
+        }
+        explanation_prefs = {
+            "详细推导": "detailed",
+            "详细解释": "detailed",
+            "直接给答案": "direct",
+            "直接给结果": "direct",
+            "简要说明": "brief",
+        }
 
         for msg in feedback_messages:
             content = msg["content"]
@@ -720,6 +769,18 @@ class PreferenceLearningTask(BaseEvolutionTask):
             for keyword, pref in detail_prefs.items():
                 if keyword in content:
                     preferences["detail_level"] = pref
+
+            for keyword, pref in code_style_prefs.items():
+                if keyword in content:
+                    preferences["code_style"] = pref
+
+            for keyword, pref in comment_prefs.items():
+                if keyword in content:
+                    preferences["comment_preference"] = pref
+
+            for keyword, pref in explanation_prefs.items():
+                if keyword in content:
+                    preferences["explanation_depth"] = pref
 
         return preferences
 
@@ -765,15 +826,19 @@ class PreferenceLearningTask(BaseEvolutionTask):
 
     async def _analyze_preferences_with_llm(
         self, llm, recent_messages: List[dict]
-    ) -> Dict[str, str]:
+    ) -> Tuple[Dict[str, str], List[Dict[str, str]]]:
         """LLM 抽取稳定偏好（只输出有明确证据的维度，宽容解析）
 
         Returns:
-            形如 {"response_length": "short", ...} 的偏好字典；
-            LLM 失败 / 输出不可解析 / 无证据时返回 {}。
+            ``(structured, free_text)``：
+            * structured —— 形如 ``{"response_length": "short", ...}`` 的枚举维度；
+            * free_text —— 形如 ``[{"category": "代码风格", "preference": "..."}]``
+              的自由文本偏好（枚举维度覆盖不了的具体要求）。
+
+            LLM 失败 / 输出不可解析 / 无证据时返回 ``({}, [])``。
         """
         if llm is None or not recent_messages:
-            return {}
+            return {}, []
 
         # 消息截断: 单条 200 字符足够表达偏好, 控制提示词体积
         # （recent_messages 为 sqlite3.Row 或 dict, 统一用下标访问）
@@ -786,18 +851,27 @@ class PreferenceLearningTask(BaseEvolutionTask):
             if content:
                 lines.append(f"- {content[:200]}")
         if not lines:
-            return {}
+            return {}, []
 
         prompt = (
             "以下是用户最近与 AI 助手的对话消息采样。请从中提取用户的稳定偏好，"
-            "只关注以下三个维度（取值约定）:\n"
+            "只关注以下维度（取值约定）:\n"
             "- response_length: short / medium / long / detailed（用户对回复长度的要求）\n"
             "- tone: friendly / professional / humorous / formal（用户期望的语气）\n"
-            "- detail_level: brief / medium / comprehensive（用户期望的详细程度）\n\n"
+            "- detail_level: brief / medium / comprehensive（用户期望的详细程度）\n"
+            "- code_style: functional / oop / mixed（用户偏好的代码风格）\n"
+            "- comment_preference: none / minimal / detailed（用户对代码注释的偏好）\n"
+            "- explanation_depth: direct / brief / detailed（用户期望的解释深度）\n\n"
             "严格要求:\n"
-            "1. 只输出用户**明确表达过**的偏好（例如『回答简短点』『正式一些』）；\n"
+            "1. 只输出用户**明确表达过**的偏好（例如『回答简短点』『用函数式风格』『别加注释』）；\n"
             "2. 没有证据的维度直接省略，不要猜测；\n"
-            '3. 只输出 JSON 对象，无其他文字。示例: {"response_length": "short"}\n\n'
+            "3. 只输出 JSON 对象，无其他文字。\n\n"
+            "输出格式:\n"
+            '{"structured": {"response_length": "short"}, '
+            '"free_text": [{"category": "代码风格", "preference": "偏好函数式编程，避免 class"}]}\n'
+            "structured 放能归入上述枚举维度的偏好；free_text 放枚举维度覆盖不了的"
+            "具体要求（例如『关键函数需要 docstring』『回复里先给结论再给推导』），"
+            "没有就写空数组 []。\n\n"
             "用户消息采样:\n" + "\n".join(lines)
         )
 
@@ -824,16 +898,27 @@ class PreferenceLearningTask(BaseEvolutionTask):
                 )
         except Exception as exc:  # noqa: BLE001 — LLM 故障降级, 不抛出
             logger.warning(f"偏好学习 LLM 调用失败，忽略本轮 LLM 信号: {exc}")
-            return {}
+            return {}, []
 
         return self._parse_preference_json(content if isinstance(content, str) else "")
 
-    def _parse_preference_json(self, raw: str) -> Dict[str, str]:
-        """宽容解析 LLM 输出的偏好 JSON（容忍代码围栏与多余文字）"""
+    def _parse_preference_json(
+        self, raw: str
+    ) -> Tuple[Dict[str, str], List[Dict[str, str]]]:
+        """宽容解析 LLM 输出的偏好 JSON（容忍代码围栏与多余文字）。
+
+        兼容两种输出形态：
+        * 嵌套式 ``{"structured": {...}, "free_text": [...]}``（当前 prompt）
+        * 扁平式 ``{"response_length": "short"}``（旧 prompt / 保守模型）
+
+        Returns:
+            ``(structured, free_text)`` —— 结构化维度字典 + 自由文本偏好列表。
+            解析失败时返回 ``({}, [])``。
+        """
         import json
 
         if not raw:
-            return {}
+            return {}, []
         text = raw.strip()
         # 剥离 ```json ... ``` 围栏
         if text.startswith("```"):
@@ -843,24 +928,45 @@ class PreferenceLearningTask(BaseEvolutionTask):
         # 截取首个 { 到末个 } 之间
         start, end = text.find("{"), text.rfind("}")
         if start == -1 or end <= start:
-            return {}
+            return {}, []
         try:
             data = json.loads(text[start : end + 1])
         except json.JSONDecodeError:
-            return {}
+            return {}, []
         if not isinstance(data, dict):
-            return {}
-        allowed = {
-            "response_length": {"short", "medium", "long", "detailed"},
-            "tone": {"friendly", "professional", "humorous", "formal"},
-            "detail_level": {"brief", "medium", "comprehensive"},
-        }
-        result: Dict[str, str] = {}
+            return {}, []
+
+        # 白名单从 PREFERENCE_VALUE_LABELS 派生 —— 维度与合法取值的
+        # 单一真相源在 backend/memory/preference_labels.py，
+        # 这里不再各写一份（曾因两处不同步漏掉新维度）。
+        allowed = {key: set(values) for key, values in PREFERENCE_VALUE_LABELS.items()}
+
+        # 嵌套式取 structured 子对象；扁平式整个对象就是结构化偏好
+        raw_structured = data.get("structured")
+        if not isinstance(raw_structured, dict):
+            raw_structured = data
+
+        structured: Dict[str, str] = {}
         for key, allowed_values in allowed.items():
-            value = data.get(key)
+            value = raw_structured.get(key)
             if isinstance(value, str) and value.lower() in allowed_values:
-                result[key] = value.lower()
-        return result
+                structured[key] = value.lower()
+
+        free_text: List[Dict[str, str]] = []
+        raw_free_text = data.get("free_text")
+        if isinstance(raw_free_text, list):
+            for item in raw_free_text:
+                if not isinstance(item, dict):
+                    continue
+                category = str(item.get("category", "")).strip()
+                preference = str(item.get("preference", "")).strip()
+                if not category or not preference:
+                    continue
+                free_text.append(
+                    {"category": category[:20], "preference": preference[:120]}
+                )
+
+        return structured, free_text
 
 
 class ImportanceReevaluationTask(BaseEvolutionTask):

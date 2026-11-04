@@ -15,6 +15,10 @@ PREFERENCE_DIMENSION_LABELS: Dict[str, str] = {
     "response_length": "回复长度",
     "tone": "交互风格",
     "detail_level": "详细程度",
+    # 新增维度（Task 2.3）—— LLM 抽取时按这些维度提取偏好
+    "code_style": "代码风格",
+    "comment_preference": "注释偏好",
+    "explanation_depth": "解释深度",
 }
 
 PREFERENCE_VALUE_LABELS: Dict[str, Dict[str, str]] = {
@@ -34,6 +38,21 @@ PREFERENCE_VALUE_LABELS: Dict[str, Dict[str, str]] = {
         "brief": "简洁",
         "medium": "适中",
         "comprehensive": "全面",
+    },
+    "code_style": {
+        "functional": "函数式",
+        "oop": "面向对象",
+        "mixed": "混合",
+    },
+    "comment_preference": {
+        "none": "无注释",
+        "minimal": "关键注释",
+        "detailed": "详细注释",
+    },
+    "explanation_depth": {
+        "direct": "直接给答案",
+        "brief": "简要说明",
+        "detailed": "详细推导",
     },
 }
 

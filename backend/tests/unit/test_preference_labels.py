@@ -37,8 +37,15 @@ class TestFormatPreference:
 
 class TestLabelTables:
     def test_dimension_labels_cover_all_preference_dimensions(self):
-        """三个已知维度都必须有中文标签，否则会退回英文键。"""
-        for key in ("response_length", "tone", "detail_level"):
+        """所有已知维度都必须有中文标签，否则会退回英文键。"""
+        for key in (
+            "response_length",
+            "tone",
+            "detail_level",
+            "code_style",
+            "comment_preference",
+            "explanation_depth",
+        ):
             assert key in PREFERENCE_DIMENSION_LABELS
             assert PREFERENCE_DIMENSION_LABELS[key] != key
 
@@ -48,6 +55,9 @@ class TestLabelTables:
             "response_length": {"short", "medium", "long", "detailed"},
             "tone": {"friendly", "professional", "humorous", "formal"},
             "detail_level": {"brief", "medium", "comprehensive"},
+            "code_style": {"functional", "oop", "mixed"},
+            "comment_preference": {"none", "minimal", "detailed"},
+            "explanation_depth": {"direct", "brief", "detailed"},
         }
         for dimension, values in expected.items():
             assert dimension in PREFERENCE_VALUE_LABELS
