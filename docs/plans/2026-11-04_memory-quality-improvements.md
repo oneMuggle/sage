@@ -466,7 +466,23 @@ async def _prune_low_quality_memories(self):
   - **实施偏差**：原计划下调阈值（0.97→0.88 / 0.78→0.75），
     调查后发现字面相似度对中文语义不敏感（jieba-token Dice 约 0.25），
     改为仅在语义 embedder 可用时启用混合相似度（Task 2.4）
-- [ ] **Task 2.1**：改进记忆提取策略（提高门槛 + 重要性过滤）
+- [x] **Task 2.1**：改进记忆提取策略（提高门槛 + 重要性过滤）
+  - `MemoryExtractor._should_extract(user_message, assistant_message)` 双向
+    门槛：类属性 `_USER_MSG_THRESHOLD = 30` / `_ASSISTANT_MSG_THRESHOLD = 80`
+    两侧都低于阈值时默认跳过（纯寒暄不再浪费提取器），但命中
+    `HIGH_VALUE_KEYWORDS`（用户身份 / 禁令 / 决策 / 显式偏好 等 40+ 关键词）
+    时强制放行——既压住"好的谢谢"式的碎片，又不误伤"我喜欢 ruff"这类
+    短但高价值的信息
+  - `HIGH_VALUE_KEYWORDS` 用子串匹配（不用正则）：中文分词边界不稳定，
+    正则 `\b` 反而漏；子串匹配性能更好、更鲁棒
+  - 新增 10 条专项测试（`test_memory_extractor.py::TestExtractionGate`），
+    覆盖：短寒暄跳过 / 短+高价值放行 / 助手侧信号放行 / 禁令放行 /
+    长消息放行 / 单侧长放行 / 空消息跳过 / 子串匹配 / 端到端短路 LLM /
+    端到端仍进 LLM
+  - 既有 79 条记忆相关测试全绿；ruff 全绿
+  - **实施偏差**：原计划把阈值一次性从 20/50 抬到 50/100（激进策略），
+    改为温和 30/80；高价值信号检测原计划用正则，改为子串匹配——中文
+    场景正则边界不稳定反而漏
 - [x] **Task 2.2**：抽取时提供相关已知事实（替代原「向量检索」方案）
   - `lifecycle._collect_known_facts`：用 `MemoryManager.recall`（FTS5 + jieba）
     按本轮用户消息取 top-8 的 episodic/semantic 事实，`run_in_executor` 不阻塞
