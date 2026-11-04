@@ -119,7 +119,7 @@ query
 ## 实施步骤（分可独立验证的里程碑，2026-11-04 更新）
 
 - [x] **M2-Task 1** 数据模型：`KnowledgeBinding` pydantic 模型（`class Config: extra='forbid'` 双兼容）+ 专家私有向量库 `specialist_vectorstore.py`（复用 VectorStore，路径 `~/.sage/specialists/<id>/vectors.json`）— 完成 2026-11-04；`AgentProfile.knowledge_bindings` 字段已在 M1-A 就位（`List[Dict]`），`KnowledgeBinding` 通过 `model_dump()` / `model_validate()` 与之互转；32 个新增单测 + 106 个相邻测试全绿
-- [ ] **M2-Task 2** CRUD 端点：`GET/POST/DELETE /api/v1/specialists/{id}/knowledge`；前端 `specialistKnowledgeApi`；专家页「知识」Tab 编辑 UI
+- [x] **M2-Task 2** CRUD 端点：`GET/POST/DELETE /api/v1/specialists/{id}/knowledge`；前端 `specialistKnowledgeApi`；专家页「知识」Tab 编辑 UI — 完成 2026-11-04；端点并入现有 `backend/api/specialist_routes.py`（未新建文件）；新增 `src/shared/api/specialistKnowledgeApi.ts`、`src/widgets/specialists/KnowledgeBindingsEditor.tsx`，`SpecialistCard` 增加「知识」按钮；后端 13 个新增路由测试 + 前端 4 个组件测试全绿，`tsc --noEmit` 通过
 - [ ] **M2-Task 3** 检索编排 + RRF：`knowledge_retriever.py` 路由层按 binding.source_type 扇出；`rrf.py` 纯函数融合；单元测试覆盖三路源（wiki/project_material/specialist_private）
 - [ ] **M2-Task 4** 引用输出：检索结果带 `loc` 字段（page_path + chunk_index / material_id + chunk_index / file_path + line）；聊天消息引用 chip 点击跳转
 - [ ] **M2-Task 5** 拒答策略 + 可观测：无命中时返回结构化 `no_hit` 响应 + 日志 span

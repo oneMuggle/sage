@@ -12,6 +12,7 @@ import { useStore } from '../shared/lib/store';
 import { Button, PageHeader } from '../shared/ui';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
+import { KnowledgeBindingsEditor } from '../widgets/specialists/KnowledgeBindingsEditor';
 import { SpecialistCard } from '../widgets/specialists/SpecialistCard';
 import { SpecialistWizard } from '../widgets/specialists/SpecialistWizard';
 
@@ -32,6 +33,7 @@ export function Specialists() {
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentProfile | null>(null);
+  const [knowledgeAgent, setKnowledgeAgent] = useState<AgentProfile | null>(null);
   const navigate = useNavigate();
 
   const loadAgents = useCallback(async () => {
@@ -94,6 +96,10 @@ export function Specialists() {
     setWizardOpen(true);
   }
 
+  function handleKnowledge(agent: AgentProfile) {
+    setKnowledgeAgent(agent);
+  }
+
   async function handleStartChat(agent: AgentProfile) {
     try {
       const sid = await useStore.getState().createSession();
@@ -154,6 +160,7 @@ export function Specialists() {
                 agent={agent}
                 onChat={handleStartChat}
                 onEdit={handleEdit}
+                onKnowledge={handleKnowledge}
                 onExport={handleExport}
                 exporting={exportingId === agent.id}
               />
@@ -170,6 +177,15 @@ export function Specialists() {
         }}
         editingAgent={editingAgent ?? undefined}
         onSaved={loadAgents}
+      />
+
+      <KnowledgeBindingsEditor
+        open={knowledgeAgent !== null}
+        onOpenChange={(open) => {
+          if (!open) setKnowledgeAgent(null);
+        }}
+        agent={knowledgeAgent}
+        onChanged={loadAgents}
       />
     </div>
   );

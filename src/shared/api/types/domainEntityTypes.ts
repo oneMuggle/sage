@@ -369,6 +369,42 @@ export interface AgentProfile {
 }
 
 /**
+ * 知识源类型（与后端 `backend/agents/knowledge_binding.py` 的
+ * `KnowledgeSourceType` 字面量严格对齐，M2-Task 1/2）。
+ */
+export type KnowledgeSourceType =
+  | 'wiki_project'
+  | 'zotero_collection'
+  | 'project_material'
+  | 'workspace_fts'
+  | 'specialist_private';
+
+/** 专家知识绑定（GET /api/v1/specialists/{id}/knowledge 单项）。 */
+export interface KnowledgeBinding {
+  /** 绑定唯一 ID（后端生成的 12 位 hex 短 hash） */
+  id: string;
+  agent_id: string;
+  source_type: KnowledgeSourceType;
+  /** 源标识：project_id / collection_key / workspace_path / agent_id */
+  source_id: string;
+  /** 展示名 */
+  name: string;
+  /** 可选过滤（tag / 路径前缀），当前 UI 不暴露 */
+  filters: Record<string, unknown>;
+  /** Unix 秒 */
+  created_at: number;
+}
+
+/** POST /api/v1/specialists/{id}/knowledge 请求体。 */
+export interface KnowledgeBindingCreate {
+  agent_id: string;
+  source_type: KnowledgeSourceType;
+  source_id: string;
+  name: string;
+  filters?: Record<string, unknown>;
+}
+
+/**
  * PR-4 `update_agent` 命令的部分更新 payload。
  *
  * 字段全为可选 — 仅传需要修改的字段, 缺省字段保留原值 (PATCH 语义)。

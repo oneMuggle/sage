@@ -19,12 +19,26 @@ import logging
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Any, Dict
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
+
+from backend.agents.knowledge_binding import (
+    KnowledgeBinding,
+    KnowledgeSourceType,
+)
+from backend.api.settings_models import model_dump_compat, model_validate_compat
+from backend.data.database import make_with_db_lock
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def with_db_lock(func):
+    """装饰器：包在全局 ``_SQLITE_LOCK`` 内（D3 make_with_db_lock 模式）。"""
+    return make_with_db_lock(globals())(func)
 
 
 @router.get("/specialists/{agent_id}/export")
@@ -106,6 +120,149 @@ def import_specialist_package(file: UploadFile = File(...)):
         return result
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+# =====================================================================
+# M2-Task 2 — 知识绑定 CRUD（spec §6.1）
+# =====================================================================
+
+
+class KnowledgeBindingCreatePayload(BaseModel):
+    """``POST /specialists/{agent_id}/knowledge`` 请求体。
+
+    与 ``KnowledgeBinding`` 的区别：不含 ``id`` / ``created_at``——两者
+    由服务端生成，客户端不能指定（``extra='forbid'`` 会拒绝多余字段）。
+    """
+
+    agent_id: str = Field(min_length=1, max_length=64)
+    source_type: KnowledgeSourceType
+    source_id: str = Field(min_length=1, max_length=1024)
+    name: str = Field(min_length=1, max_length=200)
+    filters: Dict[str, Any] = Field(default_factory=dict)
+
+    class Config:  # noqa: D401 — Pydantic v1/v2 双兼容配置
+        extra = "forbid"
+
+
+def _get_specialist_profile(repo: Any, agent_id: str) -> Dict[str, Any]:
+    """取专家 profile；不存在 → 404。"""
+    profile = repo.get(agent_id)
+    if profile is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "agent_not_found", "message": f"agent {agent_id} not found"},
+        )
+    return profile
+
+
+def _bump_version(profile: Dict[str, Any]) -> int:
+    return int(profile.get("version", 1)) + 1
+
+
+def _parse_bindings(raw_bindings: Any) -> list:
+    """把 DB 里的原始 dict 列表反序列化为 ``KnowledgeBinding``。
+
+    脏数据（历史遗留 / 手改 DB）单条跳过并记 warning，避免整列表 500。
+    """
+    parsed = []
+    for raw in raw_bindings or []:
+        try:
+            parsed.append(model_validate_compat(KnowledgeBinding, raw))
+        except Exception as exc:  # noqa: BLE001 — 单条脏数据不拖垮整个列表
+            logger.warning("跳过非法知识绑定 %r: %s", raw, exc)
+    return parsed
+
+
+@router.get("/specialists/{agent_id}/knowledge")
+@with_db_lock
+def list_specialist_knowledge(agent_id: str):
+    """列出专家的知识绑定（按 ``created_at`` 升序）。
+
+    - 200 + ``[KnowledgeBinding, ...]``
+    - 404 — 专家不存在
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    profile = _get_specialist_profile(AgentRepository(), agent_id)
+    parsed = _parse_bindings(profile.get("knowledge_bindings"))
+    parsed.sort(key=lambda b: b.created_at)
+    return [model_dump_compat(b) for b in parsed]
+
+
+@router.post("/specialists/{agent_id}/knowledge", status_code=201)
+@with_db_lock
+def create_specialist_knowledge(agent_id: str, data: KnowledgeBindingCreatePayload):
+    """新增一条知识绑定。
+
+    - 201 + 新建的 ``KnowledgeBinding``（含生成的 ``id`` / ``created_at``）
+    - 404 — 专家不存在
+    - 422 — 字段校验失败 / body ``agent_id`` 与路径不一致
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    if data.agent_id != agent_id:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "agent_id_mismatch",
+                "message": (
+                    f"body agent_id {data.agent_id!r} does not match path "
+                    f"{agent_id!r}"
+                ),
+            },
+        )
+
+    repo = AgentRepository()
+    profile = _get_specialist_profile(repo, agent_id)
+
+    binding = KnowledgeBinding(
+        agent_id=agent_id,
+        source_type=data.source_type,
+        source_id=data.source_id,
+        name=data.name,
+        filters=dict(data.filters),
+    )
+    bindings = list(profile.get("knowledge_bindings") or [])
+    bindings.append(model_dump_compat(binding))
+
+    repo.update(
+        agent_id,
+        {"knowledge_bindings": bindings, "version": _bump_version(profile)},
+    )
+    return model_dump_compat(binding)
+
+
+@router.delete("/specialists/{agent_id}/knowledge/{binding_id}", status_code=204)
+@with_db_lock
+def delete_specialist_knowledge(agent_id: str, binding_id: str):
+    """删除一条知识绑定。
+
+    - 204 — 删除成功
+    - 404 — 专家不存在 / binding_id 不归属该专家
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    repo = AgentRepository()
+    profile = _get_specialist_profile(repo, agent_id)
+
+    bindings = list(profile.get("knowledge_bindings") or [])
+    remaining = [b for b in bindings if b.get("id") != binding_id]
+    if len(remaining) == len(bindings):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "type": "binding_not_found",
+                "message": (
+                    f"binding {binding_id!r} not found for agent {agent_id!r}"
+                ),
+            },
+        )
+
+    repo.update(
+        agent_id,
+        {"knowledge_bindings": remaining, "version": _bump_version(profile)},
+    )
+    return Response(status_code=204)
 
 
 __all__ = ["router"]

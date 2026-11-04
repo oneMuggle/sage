@@ -24,6 +24,8 @@ interface SpecialistCardProps {
   agent: AgentProfile;
   onChat: (agent: AgentProfile) => void;
   onEdit: (agent: AgentProfile) => void;
+  /** M2-Task 2: 打开「知识」编辑器（绑定知识源）。 */
+  onKnowledge: (agent: AgentProfile) => void;
   onExport: (agent: AgentProfile) => void;
   /** 导出进行中（按钮禁用，避免重复弹保存框）。 */
   exporting?: boolean;
@@ -44,6 +46,7 @@ export function SpecialistCard({
   agent,
   onChat,
   onEdit,
+  onKnowledge,
   onExport,
   exporting = false,
 }: SpecialistCardProps) {
@@ -107,6 +110,13 @@ export function SpecialistCard({
           className="rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
         >
           编辑
+        </button>
+        <button
+          type="button"
+          onClick={() => onKnowledge(agent)}
+          className="rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
+        >
+          知识
         </button>
         <button
           type="button"
