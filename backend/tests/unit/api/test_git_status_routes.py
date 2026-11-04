@@ -156,6 +156,21 @@ def test_status_path_with_spaces(git_repo):
     assert "my file.py" in paths
 
 
+def test_status_unicode_path_verbatim(git_repo):
+    # -z + core.quotepath=false：中文路径不应被 C-quote 成八进制
+    (git_repo / "中文文件.py").write_text("new")
+    out = get_git_status(path=str(git_repo))
+    paths = [f.path for f in out.files]
+    assert "中文文件.py" in paths
+
+
+def test_status_dotted_branch_name(git_repo):
+    _git(git_repo, "commit", "--allow-empty", "-m", "init")
+    _git(git_repo, "checkout", "-b", "release/v0.5.4")
+    out = get_git_status(path=str(git_repo))
+    assert out.branch == "release/v0.5.4"
+
+
 # ---------------------------------------------------------------------------
 # get_git_diff（真实仓库）
 # ---------------------------------------------------------------------------
