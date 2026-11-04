@@ -178,7 +178,7 @@ git commit -m "feat(security): default-deny permission policy for default sessio
 
 **Steps:**
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```typescript
 // src/widgets/chat/preview/HtmlPreviewHost.test.tsx
@@ -220,7 +220,7 @@ describe('HtmlPreviewHost', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 ```bash
 npx vitest run src/widgets/chat/preview/HtmlPreviewHost.test.tsx
@@ -228,7 +228,7 @@ npx vitest run src/widgets/chat/preview/HtmlPreviewHost.test.tsx
 
 预期：FAIL（模块不存在）。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 ```typescript
 // src/widgets/chat/preview/HtmlPreviewHost.tsx
@@ -405,7 +405,7 @@ export function HtmlPreviewHost({ html, name, reloadKey = 0, className = '', max
 }
 ```
 
-- [ ] **Step 4: 运行测试验证通过**
+- [x] **Step 4: 运行测试验证通过**
 
 ```bash
 npx vitest run src/widgets/chat/preview/HtmlPreviewHost.test.tsx
@@ -413,7 +413,7 @@ npx vitest run src/widgets/chat/preview/HtmlPreviewHost.test.tsx
 
 预期：PASS。
 
-- [ ] **Step 5: 在 FileContentRenderer.tsx 中替换 HTML 分支**
+- [x] **Step 5: 在 FileContentRenderer.tsx 中替换 HTML 分支**
 
 ```typescript
 // src/widgets/chat/preview/FileContentRenderer.tsx:157-169
@@ -433,7 +433,7 @@ if (content.kind === 'html') {
 }
 ```
 
-- [ ] **Step 6: 在 HtmlCodeBlock.tsx 中替换预览模式**
+- [x] **Step 6: 在 HtmlCodeBlock.tsx 中替换预览模式**
 
 ```typescript
 // src/widgets/chat/HtmlCodeBlock.tsx (预览分支)
@@ -445,7 +445,7 @@ if (mode === 'preview') {
 }
 ```
 
-- [ ] **Step 7: 在 ArtifactViewer.tsx 中替换 HTML 分支**
+- [x] **Step 7: 在 ArtifactViewer.tsx 中替换 HTML 分支**
 
 ```typescript
 // src/widgets/chat/artifacts/ArtifactViewer.tsx (HTML 分支)
@@ -465,7 +465,7 @@ if (content.kind === 'html') {
 }
 ```
 
-- [ ] **Step 8: 运行全量测试验证无回归**
+- [x] **Step 8: 运行全量测试验证无回归**
 
 ```bash
 npx vitest run src/widgets/chat/
@@ -473,7 +473,7 @@ npx vitest run src/widgets/chat/
 
 预期：PASS，无新增失败。
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```bash
 git add src/widgets/chat/preview/HtmlPreviewHost.tsx src/widgets/chat/preview/HtmlPreviewHost.test.tsx
@@ -481,6 +481,19 @@ git add src/widgets/chat/preview/FileContentRenderer.tsx src/widgets/chat/HtmlCo
 git add src/widgets/chat/artifacts/ArtifactViewer.tsx
 git commit -m "feat(preview): unified HtmlPreviewHost with error bridge, toolbar, fullscreen"
 ```
+
+**实施偏差（2026-11-04）**
+
+- 组件 props 用 `heightClassName`（Tailwind 类名）替代计划里的 `maxHeight`（CSS 长度）——
+  与项目内 `FileContentRenderer` / `ArtifactViewer` 的既有 class 约定一致，避免内联样式。
+- `ArtifactViewer.tsx` **未直接改动**：HTML 分支统一收敛在 `FileContentRenderer.tsx`；
+  ArtifactViewer 已把 `htmlReloadKey` 透传下去，宿主内部以 `reloadKey` 参与 iframe key，
+  刷新语义不变（既有 `artifact-html-refresh` 测试通过）。
+- 新增 `sage-preview://` 自定义协议（`electron/previewProtocol.ts`）+ preload `preview` 桥：
+  解决"srcdoc 继承父文档 CSP，导致生产构建里内联/CDN 脚本被拦截"的既有缺陷。
+  Web 端与测试环境无此桥 → 透明退回 srcDoc 内联预览。
+- 渲染层 CSP 新增 `frame-src 'self' file: sage-preview:`（`vite.config.ts`），
+  否则 iframe 会被 `default-src 'self'` 默认规则拦截。
 
 ---
 

@@ -52,6 +52,11 @@ import { setupTrayAndGlobalShortcut } from './tray';
 import { disposePet, getPetController, initPet } from './pet';
 import { registerPetPackProtocol, registerPetPackScheme } from './pet/packProtocol';
 import { petPacksDir } from './pet/packStore';
+import {
+  registerPreviewIpc,
+  registerPreviewProtocol,
+  registerPreviewScheme,
+} from './previewProtocol';
 import { closeSplashWindow, createSplashWindow, updateSplashStage } from './splash';
 import {
   registerSageFileProtocol,
@@ -337,6 +342,9 @@ if (isLegacyWindows()) {
 // Scheme privileges must be declared before `app.whenReady()` resolves; the
 // handler itself is registered inside the whenReady chain below.
 registerPetPackScheme();
+// 2026-11-04: sage-preview:// scheme 特权声明（在 app.whenReady 之前），
+// 协议处理器与 IPC 在 whenReady 链里注册。
+registerPreviewScheme();
 
 let backendProc: ChildProcess | null = null;
 let backendGeneration = 0;
@@ -2696,6 +2704,17 @@ app.whenReady().then(async () => {
   // 2026-10-31: user-imported pet packs — serve <userData>/pets/<id>/ assets
   // to both the overlay and the in-app pet via sage-pet://.
   registerPetPackProtocol(petPacksDir(resolveSageUserDataDir()));
+  // 2026-11-04: sage-preview:// —— HTML 预览独立源。
+  // 预览 IPC 限制到信任窗口（主窗口），与 pet/office 等敏感 IPC 同策略。
+  registerPreviewProtocol();
+  registerPreviewIpc((channel, handler) => {
+    ipcMain.handle(channel, (evt, ...args) => {
+      if (!isTrustedRenderer(evt.sender)) {
+        throw new Error('未授权的预览 IPC 请求');
+      }
+      return handler(evt, ...args);
+    });
+  });
   ipcMain.handle('sage-file:register-root', (_evt, root: string) => {
     return registerWorkspaceRoot(String(root ?? ''));
   });
