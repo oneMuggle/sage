@@ -12,13 +12,35 @@ event emission via ``HookRegistry``.
 
 from __future__ import annotations
 
+import asyncio
+import functools
+import inspect
 import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+# 注入 LLM 提取器的「已知事实」条数上限——太少去重不生效，太多撑爆 prompt。
+KNOWN_FACTS_RECALL_LIMIT = 8
+
+
+def _supports_kwarg(func: Any, name: str) -> bool:
+    """Whether ``func`` accepts the keyword argument ``name``.
+
+    用于兼容旧的 extractor 实现——它们的 ``extract`` 只有两参签名，
+    直接传 ``existing_facts=`` 会抛 TypeError 并中断整轮事实抽取。
+    """
+    try:
+        sig = inspect.signature(func)
+    except (TypeError, ValueError):
+        return False
+    if name in sig.parameters:
+        return True
+    return any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+
 
 
 def utcnow() -> datetime:
@@ -184,6 +206,57 @@ class MemoryLifecycleManager:
     # caller (ChatService / EvolutionScheduler / session watchdog) is never
     # blocked by a memory hiccup.
 
+    async def _collect_known_facts(self, user_msg: str) -> List[str]:
+        """检索与本轮相关的已知事实，供提取器去重。
+
+        之前 ``on_turn_complete`` 调用提取器时从不传 ``existing_facts``，
+        导致 prompt 里的「已知事实（避免重复）」槽恒为「（无）」——LLM
+        看不到已记住的内容，每轮都把同一件事当成新事实写一遍，这是记忆
+        碎片化的第二个直接根因。
+
+        这里用 ``MemoryManager.recall``（FTS5 + jieba 分词）按本轮查询
+        取回最相关的 episodic / semantic 事实；``recall`` 是同步 sqlite
+        调用，放进 executor 以免阻塞事件循环。任何失败都静默降级为空列表
+        ——去重是锦上添花，绝不能因此中断记忆写入。
+        """
+        memory = self._memory
+        if memory is None:
+            return []
+        recall = getattr(memory, "recall", None)
+        if recall is None:
+            return []
+        query = (user_msg or "").strip()[:200]
+        if not query:
+            return []
+
+        try:
+            loop = asyncio.get_running_loop()
+            results = await loop.run_in_executor(
+                None,
+                functools.partial(
+                    recall,
+                    query,
+                    limit=KNOWN_FACTS_RECALL_LIMIT,
+                    memory_types=["episodic", "semantic"],
+                ),
+            )
+        except Exception:  # noqa: BLE001 — 去重失败可容忍，退回空列表
+            logger.warning("on_turn_complete: recall known facts failed", exc_info=True)
+            return []
+
+        if not isinstance(results, dict):
+            return []
+
+        facts: List[str] = []
+        for layer in ("semantic", "episodic"):
+            for row in results.get(layer) or []:
+                if not isinstance(row, dict):
+                    continue
+                content = str(row.get("content") or "").strip()
+                if content:
+                    facts.append(content)
+        return facts
+
     async def on_turn_complete(
         self,
         session_id: str,
@@ -205,12 +278,16 @@ class MemoryLifecycleManager:
         Memory page's click-to-trace can highlight the exact producing
         message (Chat renders ``data-turn-id={message.id}``) — same
         capability the legacy ``_extract_and_store_memory`` path had.
+
+        Task 2.2: 与本轮相关的已知事实被检索出来一并交给提取器，
+        让 LLM 能真正看到「已经记住什么」，从而避免重复抽取。
         """
         if not await self.is_auto_memory_enabled():
             return
         user_msg, assistant_msg = self._split_messages(messages)
+        existing_facts = await self._collect_known_facts(user_msg)
         try:
-            facts = await self._extractor.extract(user_msg, assistant_msg)
+            facts = await self._extract_facts(user_msg, assistant_msg, existing_facts)
         except Exception as exc:  # noqa: BLE001 — never raise into caller
             logger.exception("on_turn_complete: fact extraction failed", exc_info=exc)
             return
@@ -241,6 +318,25 @@ class MemoryLifecycleManager:
                 logger.exception(
                     "on_turn_complete: emit memory_written failed", exc_info=exc
                 )
+
+    async def _extract_facts(
+        self,
+        user_msg: str,
+        assistant_msg: str,
+        existing_facts: List[str],
+    ) -> list:
+        """调用提取器，兼容不支持 ``existing_facts`` 的旧实现。
+
+        自定义 / 测试用的 extractor 可能仍是两参签名；直接传
+        ``existing_facts=`` 会抛 TypeError 并连带中断整轮事实抽取。
+        这里先探测签名，不支持时退回两参调用。
+        """
+        extract = self._extractor.extract
+        if existing_facts and _supports_kwarg(extract, "existing_facts"):
+            return await extract(
+                user_msg, assistant_msg, existing_facts=existing_facts
+            )
+        return await extract(user_msg, assistant_msg)
 
     def _split_messages(self, messages: list) -> Tuple[str, str]:
         """Derive the last user and assistant message texts from a turn.

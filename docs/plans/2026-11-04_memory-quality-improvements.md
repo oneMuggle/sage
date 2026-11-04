@@ -467,7 +467,21 @@ async def _prune_low_quality_memories(self):
     调查后发现字面相似度对中文语义不敏感（jieba-token Dice 约 0.25），
     改为仅在语义 embedder 可用时启用混合相似度（Task 2.4）
 - [ ] **Task 2.1**：改进记忆提取策略（提高门槛 + 重要性过滤）
-- [ ] **Task 2.2**：改用向量检索找相关已知事实
+- [x] **Task 2.2**：抽取时提供相关已知事实（替代原「向量检索」方案）
+  - `lifecycle._collect_known_facts`：用 `MemoryManager.recall`（FTS5 + jieba）
+    按本轮用户消息取 top-8 的 episodic/semantic 事实，`run_in_executor` 不阻塞
+    事件循环；任何异常静默降级为空列表，绝不中断记忆写入
+  - `lifecycle._extract_facts`：签名探测 `existing_facts` kwarg，旧的两参
+    extractor（如 `test_lifecycle.py` 的 `BrokenExtractor`）自动回退两参调用
+  - `extractor._select_existing_facts`：token 相关性过滤（无交集丢弃）+
+    `EXISTING_FACTS_CHAR_BUDGET=1200` 字符预算（单条超长截断加省略号，
+    不突破预算）
+  - 新增 11 条专项测试（`test_lifecycle_known_facts.py`）；既有 76 条记忆
+    相关测试全绿；ruff 全绿
+  - **实施偏差**：原计划用「向量检索 + `min_similarity=0.7`」，但项目默认
+    embedder 是 `HashEmbedder`（`is_semantic=False`），向量路在该配置下会被
+    直接跳过。改用 `MemoryManager.recall` 的 FTS5 关键词路，语义 embedder
+    可用时 `recall` 内部会自动叠加向量召回，无需另开分支
 - [ ] **Task 2.3**：增强偏好学习（扩展维度 + 自由文本）
 - [ ] **Task 2.4**：改进去重机制（引入向量相似度）
 - [ ] **Task 2.5**：编写集成测试验证效果
