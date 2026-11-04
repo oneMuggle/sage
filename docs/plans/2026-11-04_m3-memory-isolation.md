@@ -129,7 +129,7 @@ class MemoryPolicy(BaseModel):
 
 ## 实施步骤（分可独立验证的里程碑）
 
-- [ ] **M3-Task 1** DB 迁移 v11 + 幂等兜底 + 索引；测试：旧库迁移幂等、列与索引存在、NULL 语义
+- [x] **M3-Task 1** DB 迁移 v11 + 幂等兜底 + 索引；测试：旧库迁移幂等、列与索引存在、NULL 语义 — 完成 2026-11-04；`runner.py` 新增 v11 `memory_agent_columns`（PRAGMA 幂等补 `agent_id TEXT` + 复合索引 `(agent_id, scope, project_key)`），`database.py` 两表 ALTER 兜底 + 索引；存量行不回填（NULL=共享层）；新增 6 个迁移单测（全新库/索引/账本/幂等/旧行可读/v10→v11 升级），`test_schema_migrations` 版本集合同步 11；38 个 memory 测试全绿，ruff + py38 门禁通过
 - [ ] **M3-Task 2** 存储层过滤：`EpisodicMemory` / `SemanticMemory` 的 save/search 增加 agent 条件；测试：跨 agent 不可见、共享可见
 - [ ] **M3-Task 3** `MemoryManager` API 扩展 + `MemoryPolicy` 模型；测试：写默认、读过滤、policy 覆盖
 - [ ] **M3-Task 4** 身份贯穿：`ToolExecutionContext.agent_id` + ChatService 自动抽取 + memory 工具 + 构造点；测试：会话专家自动归属

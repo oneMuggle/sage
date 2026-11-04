@@ -364,6 +364,37 @@ def _v10_feedback_conversations_tag(conn: Any) -> None:
 register_migration(10, "feedback_conversations_tag", _v10_feedback_conversations_tag)
 
 
+def _v11_memory_agent_columns(conn: Any) -> None:
+    """v11：记忆表增加 agent_id 维度（M3 专家私有记忆隔离）。
+
+    ``agent_id IS NULL`` = 共享层（存量行不回填，保持既有可见性）；
+    非空 = 该专家私有。复合索引支撑「私有 ∪ 共享」过滤
+    ``(agent_id = ? OR agent_id IS NULL)`` 与作用域组合查询。
+    幂等：PRAGMA 检查列存在性，已存在则跳过。
+    """
+    for table, index_name in (
+        ("memories_episodic", "idx_episodic_agent"),
+        ("memories_semantic", "idx_semantic_agent"),
+    ):
+        cursor = conn.cursor()
+        cursor.execute(f"PRAGMA table_info({table})")
+        columns = {row[1] for row in cursor.fetchall()}
+        if not columns:
+            # 表不存在（极老库尚未建表）——交由 init_db DDL 负责，跳过。
+            continue
+        if "agent_id" not in columns:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN agent_id TEXT")
+            conn.commit()
+        cursor.execute(
+            f"CREATE INDEX IF NOT EXISTS {index_name} "
+            f"ON {table}(agent_id, scope, project_key)"
+        )
+    conn.commit()
+
+
+register_migration(11, "memory_agent_columns", _v11_memory_agent_columns)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(

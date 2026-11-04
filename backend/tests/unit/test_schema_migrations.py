@@ -114,10 +114,10 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
 
     db = Database(db_path=str(tmp_path / "fresh.db"))
     try:
-        db.init_db()  # v1-v10 自动注册（runner.py 模块级）
+        db.init_db()  # v1-v11 自动注册（runner.py 模块级）
         versions = applied_versions(db.get_connection())
-        # v1 基线 + v2-v10 迁移（runner.py 模块级注册，含 v10 反馈会话标签）
-        assert versions == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+        # v1 基线 + v2-v11 迁移（runner.py 模块级注册，含 v11 记忆专家维度）
+        assert versions == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
         # schema_version 表已建（账本就绪）
     finally:
         db.close()

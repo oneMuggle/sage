@@ -776,9 +776,19 @@ class Database:
             cursor.execute(
                 "ALTER TABLE memories_episodic ADD COLUMN supersedes_id TEXT"
             )
+        # M3 (2026-11-04): 记忆专家维度。NULL = 共享层（存量行保持原样），
+        # 非空 = 该专家私有；读取过滤为「私有 ∪ 共享」。
+        if "agent_id" not in _episodic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_episodic ADD COLUMN agent_id TEXT"
+            )
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_episodic_scope_project
             ON memories_episodic(scope, project_key)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_episodic_agent
+            ON memories_episodic(agent_id, scope, project_key)
         """)
 
         # win7-only（Task 4 / Gap A）：补 source_turn_id 等三列，见 _migrate_memory_traceability。
@@ -1604,9 +1614,18 @@ class Database:
             cursor.execute(
                 "ALTER TABLE memories_semantic ADD COLUMN supersedes_id TEXT"
             )
+        # M3 (2026-11-04): 记忆专家维度，同 memories_episodic。
+        if "agent_id" not in _semantic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN agent_id TEXT"
+            )
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_semantic_scope_project
             ON memories_semantic(scope, project_key)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_semantic_agent
+            ON memories_semantic(agent_id, scope, project_key)
         """)
 
         # FTS5 独立虚拟表用于语义记忆全文搜索（jieba 分词文本）。
