@@ -236,7 +236,7 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
             <p className="text-ui-xs text-text-muted italic">{t('git.not_a_repo')}</p>
             {projectPath && (
               <p
-                className="mt-1 font-mono text-[10px] text-text-muted/70 truncate"
+                className="mt-1 font-mono text-ui-xs text-text-muted/70 truncate"
                 title={projectPath}
               >
                 {projectPath}
