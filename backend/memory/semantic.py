@@ -69,7 +69,8 @@ class SemanticMemory:
                 session_id TEXT,
                 created_at INTEGER NOT NULL,
                 scope TEXT DEFAULT 'user',
-                project_key TEXT
+                project_key TEXT,
+                agent_id TEXT
             )
         """)
         columns = {
@@ -104,6 +105,11 @@ class SemanticMemory:
         if "supersedes_id" not in columns:
             cursor.execute(
                 "ALTER TABLE memories_semantic ADD COLUMN supersedes_id TEXT"
+            )
+        # M3 专家维度（幂等；agent_id NULL = 共享层，非空 = 私有）
+        if "agent_id" not in columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN agent_id TEXT"
             )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_semantic_session_created "
@@ -224,6 +230,7 @@ class SemanticMemory:
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
         agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         搜索语义记忆
@@ -240,16 +247,23 @@ class SemanticMemory:
             project_key: scope='project' 时必填，限定项目目录
             agent_id: M3 当前专家。给定时读取语义 = 私有 ∪ 共享；
                 None 不限制（历史调用 / 管理视图）
+            include_private: 策略收窄——False 时仅返回共享行
 
         Returns:
             匹配的记忆列表
         """
         if not query or query.strip() == "":
-            return self.get_recent(limit, session_id=session_id, agent_id=agent_id)
+            return self.get_recent(
+                limit,
+                session_id=session_id,
+                agent_id=agent_id,
+                include_private=include_private,
+            )
 
         fts_results = self._search_fts(
             query, limit, tags, session_id=session_id,
             scope=scope, project_key=project_key, agent_id=agent_id,
+            include_private=include_private,
         )
         if fts_results:
             return fts_results
@@ -258,6 +272,7 @@ class SemanticMemory:
         return self._search_like(
             query, limit, tags, session_id=session_id,
             scope=scope, project_key=project_key, agent_id=agent_id,
+            include_private=include_private,
         )
 
     def _scope_conditions(
@@ -291,6 +306,7 @@ class SemanticMemory:
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
         agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         走 FTS5 全文索引搜索（jieba 分词 + OR MATCH）。
@@ -331,7 +347,7 @@ class SemanticMemory:
             params.append(session_id)
 
         agent_sql, agent_params = memory_scope.agent_visibility_sql(
-            agent_id, prefix="ms."
+            agent_id, prefix="ms.", include_private=include_private
         )
         if agent_sql:
             sql_parts.append(agent_sql)
@@ -378,6 +394,7 @@ class SemanticMemory:
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
         agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         LIKE + jieba 回退搜索（FTS 索引不可用或无命中时使用）
@@ -427,7 +444,9 @@ class SemanticMemory:
             sql_parts.append("AND session_id = ?")
             params.append(session_id)
 
-        agent_sql, agent_params = memory_scope.agent_visibility_sql(agent_id)
+        agent_sql, agent_params = memory_scope.agent_visibility_sql(
+            agent_id, include_private=include_private
+        )
         if agent_sql:
             sql_parts.append(agent_sql)
             params.extend(agent_params)
@@ -465,6 +484,7 @@ class SemanticMemory:
         limit: int = 20,
         session_id: Optional[str] = None,
         agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         获取最近的语义记忆
@@ -473,6 +493,7 @@ class SemanticMemory:
             limit: 返回数量限制
             session_id: 可选，按会话 ID 筛选
             agent_id: M3 当前专家（私有 ∪ 共享）；None 不限制
+            include_private: 策略收窄——False 时仅返回共享行
 
         Returns:
             记忆列表
@@ -485,7 +506,9 @@ class SemanticMemory:
         if session_id is not None:
             where_parts.append("AND session_id = ?")
             params.append(session_id)
-        agent_sql, agent_params = memory_scope.agent_visibility_sql(agent_id)
+        agent_sql, agent_params = memory_scope.agent_visibility_sql(
+            agent_id, include_private=include_private
+        )
         if agent_sql:
             where_parts.append(agent_sql)
             params.extend(agent_params)

@@ -272,6 +272,7 @@ class EpisodicMemory:
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
         agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         搜索情景记忆
@@ -291,17 +292,24 @@ class EpisodicMemory:
             project_key: scope='project' 时必填，限定项目目录
             agent_id: M3 当前专家。给定时读取语义 = 私有 ∪ 共享；
                 None 不限制（历史调用 / 管理视图）
+            include_private: 策略收窄——False 时仅返回共享行
 
         Returns:
             匹配的记忆列表
         """
         if not query or query.strip() == "":
-            return self.get_recent(limit, session_id=session_id, agent_id=agent_id)
+            return self.get_recent(
+                limit,
+                session_id=session_id,
+                agent_id=agent_id,
+                include_private=include_private,
+            )
 
         # 优先走 FTS5
         fts_results = self._search_fts(
             query, limit, min_importance, memory_type, session_id=session_id,
             scope=scope, project_key=project_key, agent_id=agent_id,
+            include_private=include_private,
         )
         if fts_results:
             return fts_results
@@ -310,6 +318,7 @@ class EpisodicMemory:
         return self._search_like(
             query, limit, min_importance, memory_type, session_id=session_id,
             scope=scope, project_key=project_key, agent_id=agent_id,
+            include_private=include_private,
         )
 
     def _search_fts(
@@ -322,6 +331,7 @@ class EpisodicMemory:
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
         agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> List[Dict[str, Any]]:
         """走 FTS5 全文索引搜索（jieba 分词 + OR MATCH）。
 
@@ -375,7 +385,7 @@ class EpisodicMemory:
             params.append(session_id)
 
         agent_sql, agent_params = memory_scope.agent_visibility_sql(
-            agent_id, prefix="me."
+            agent_id, prefix="me.", include_private=include_private
         )
         if agent_sql:
             sql_parts.append(agent_sql)
@@ -425,6 +435,7 @@ class EpisodicMemory:
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
         agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> List[Dict[str, Any]]:
         """LIKE + jieba 回退搜索（FTS 索引不可用或无命中时使用）。
 
@@ -492,7 +503,9 @@ class EpisodicMemory:
             where_parts.append("AND session_id = ?")
             params.append(session_id)
 
-        agent_sql, agent_params = memory_scope.agent_visibility_sql(agent_id)
+        agent_sql, agent_params = memory_scope.agent_visibility_sql(
+            agent_id, include_private=include_private
+        )
         if agent_sql:
             where_parts.append(agent_sql)
             params.extend(agent_params)
@@ -524,6 +537,7 @@ class EpisodicMemory:
         limit: int = 10,
         session_id: Optional[str] = None,
         agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         获取最近的记忆
@@ -532,6 +546,7 @@ class EpisodicMemory:
             limit: 返回数量限制
             session_id: 可选，按会话 ID 筛选
             agent_id: M3 当前专家（私有 ∪ 共享）；None 不限制
+            include_private: 策略收窄——False 时仅返回共享行
 
         Returns:
             记忆列表
@@ -544,7 +559,9 @@ class EpisodicMemory:
         if session_id:
             where_parts.append("AND session_id = ?")
             params.append(session_id)
-        agent_sql, agent_params = memory_scope.agent_visibility_sql(agent_id)
+        agent_sql, agent_params = memory_scope.agent_visibility_sql(
+            agent_id, include_private=include_private
+        )
         if agent_sql:
             where_parts.append(agent_sql)
             params.extend(agent_params)

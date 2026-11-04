@@ -11,6 +11,11 @@ import functools
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
+from backend.agents.memory_policy import (
+    includes_private_reads,
+    parse_memory_policy,
+    resolve_write_agent_id,
+)
 from backend.memory import scope as memory_scope
 from backend.memory.episodic import EpisodicMemory
 from backend.memory.semantic import SemanticMemory
@@ -70,6 +75,7 @@ class MemoryManager:
         semantic: SemanticMemory,
         summary_store: Optional[SessionSummaryStore] = None,
         allowed_tiers: Optional[Iterable[str]] = None,
+        memory_policy: Optional[Any] = None,
     ):
         """
         初始化记忆管理器
@@ -85,6 +91,10 @@ class MemoryManager:
                 记忆层（``working`` / ``episodic`` / ``semantic``）。
                 ``None``（默认）= **不限制**，保持既有行为不变；
                 空列表 = **禁止一切记忆读取**（专家显式声明"无记忆权限"）。
+            memory_policy: M3 (2026-11-04) 专家记忆策略（dict / JSON 字符串
+                / ``MemoryPolicy``）。``None``（默认）= 不限制，保持既有
+                行为不变。给定时读侧按 ``read_scopes`` 收窄、写侧按
+                ``write_scope`` 决定私有/共享归属。
         """
         self.working = working
         self.episodic = episodic
@@ -94,6 +104,12 @@ class MemoryManager:
         self.allowed_tiers: Optional[Set[str]] = (
             {str(t).strip().lower() for t in allowed_tiers if str(t).strip()}
             if allowed_tiers is not None
+            else None
+        )
+        # M3 (2026-11-04): 专家记忆策略。None = 未配置（历史行为）。
+        self.memory_policy = (
+            parse_memory_policy(memory_policy)
+            if memory_policy is not None
             else None
         )
         # Lazily-created ConsolidationPipeline (F2) — built on first use so
@@ -127,13 +143,46 @@ class MemoryManager:
             return True
         return tier.lower() in self.allowed_tiers
 
-    def remember(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
+    # ------------------------------------------------------------------ #
+    # M3 (2026-11-04): 专家记忆策略（memory_policy）
+    # ------------------------------------------------------------------ #
+
+    def set_memory_policy(self, policy: Optional[Any]) -> None:
+        """注入 / 清除专家记忆策略。``None`` = 不限制（历史行为）。"""
+        self.memory_policy = (
+            parse_memory_policy(policy) if policy is not None else None
+        )
+
+    def _resolve_write_agent(self, agent_id: Optional[str]) -> Optional[str]:
+        """写归属按策略归一：``write_scope != specialist`` 时强制共享。
+
+        未配置策略（historical path）或 ``agent_id`` 为空时原样返回
+        —— 显式 ``None`` 永远保持共享，策略不会凭空捏造私有归属。
+        """
+        if not agent_id:
+            return None
+        return resolve_write_agent_id(self.memory_policy, agent_id)
+
+    def _read_include_private(self, include_private: bool) -> bool:
+        """读收窄的单一判定点：调用方显式关闭 **或** 策略缺 specialist。"""
+        if not include_private:
+            return False
+        return includes_private_reads(self.memory_policy)
+
+    def remember(
+        self,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        agent_id: Optional[str] = None,
+    ) -> str:
         """
         将内容存入情景记忆
 
         Args:
             content: 记忆内容
             metadata: 额外元数据
+            agent_id: M3 归属专家。``None``（默认）= 共享层；
+                给定时按 ``memory_policy.write_scope`` 决定私有/共享。
 
         Returns:
             生成的记忆 ID
@@ -153,6 +202,7 @@ class MemoryManager:
             metadata=metadata,
             session_id=session_id,
             memory_type=memory_type,
+            agent_id=self._resolve_write_agent(agent_id),
         )
 
     async def aremember(
@@ -165,6 +215,7 @@ class MemoryManager:
         source_turn_id: Optional[str] = None,
         source_message_id: Optional[str] = None,
         memory_category: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> str:
         """Async remember() — Task 4 / Gap A entry point used by the
         MemoryLifecycleManager.
@@ -207,6 +258,7 @@ class MemoryManager:
         # values the caller intended — defensive against any mutation
         # between scheduling and execution.
         episodic = self.episodic
+        write_agent_id = self._resolve_write_agent(agent_id)
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None,
@@ -220,6 +272,7 @@ class MemoryManager:
                 source_turn_id=source_turn_id,
                 source_message_id=source_message_id,
                 memory_category=memory_category,
+                agent_id=write_agent_id,
             ),
         )
 
@@ -270,6 +323,7 @@ class MemoryManager:
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
         supersedes_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> Optional[str]:
         """
         通用记忆存储接口
@@ -289,6 +343,8 @@ class MemoryManager:
             project_key: 项目目录（scope='project' 时生效）
             supersedes_id: P3 冲突消解——本条记忆取代的旧记忆 ID
                 （旧条由调用方先行 invalidate()）
+            agent_id: M3 归属专家。``None``（默认）= 共享层；
+                给定时按 ``memory_policy.write_scope`` 决定私有/共享。
 
         Returns:
             记忆 ID：
@@ -297,6 +353,7 @@ class MemoryManager:
         """
         # 统一分类（模块级函数，与 MemoryAdapter 同一套规则）
         resolved = classify_memory_type(memory_type, importance, content)
+        write_agent_id = self._resolve_write_agent(agent_id)
 
         if resolved == "working":
             seq = self.working.add(
@@ -325,6 +382,7 @@ class MemoryManager:
                 scope=scope,
                 project_key=project_key,
                 supersedes_id=supersedes_id,
+                agent_id=write_agent_id,
             )
 
         elif resolved == "semantic":
@@ -337,6 +395,7 @@ class MemoryManager:
                 scope=scope,
                 project_key=project_key,
                 supersedes_id=supersedes_id,
+                agent_id=write_agent_id,
             )
 
         else:
@@ -359,13 +418,20 @@ class MemoryManager:
         session_id: Optional[str] = None,
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ):
         """只判定不写入：返回 ``Decision``（op + targets）。
 
         供 API / P4 反思任务在真正落库前探测冲突；异常原样上抛由调用方兜底。
+        ``agent_id`` 限制候选范围（私有 ∪ 共享），防止一个专家的写入
+        UPDATE/NOOP 掉另一个专家的私有记忆。
         """
         return self.get_conflict_resolver().resolve(
-            content, session_id=session_id, scope=scope, project_key=project_key
+            content,
+            session_id=session_id,
+            scope=scope,
+            project_key=project_key,
+            agent_id=agent_id,
         )
 
     def memorize_with_conflict_check(
@@ -378,6 +444,7 @@ class MemoryManager:
         session_id: Optional[str] = None,
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> Tuple[str, str]:
         """带 P3 冲突消解的记忆写入。
 
@@ -402,11 +469,16 @@ class MemoryManager:
                 session_id=session_id,
                 scope=scope,
                 project_key=project_key,
+                agent_id=agent_id,
             )
             return mid or "", OP_ADD
 
         decision = self.resolve_conflicts(
-            content, session_id=session_id, scope=scope, project_key=project_key
+            content,
+            session_id=session_id,
+            scope=scope,
+            project_key=project_key,
+            agent_id=agent_id,
         )
         if decision.op == OP_NOOP:
             return (decision.targets[0].id if decision.targets else ""), OP_NOOP
@@ -420,6 +492,7 @@ class MemoryManager:
                 tags=tags,
                 metadata=metadata,
                 session_id=session_id,
+                agent_id=agent_id,
             )
             return new_id or "", op
 
@@ -432,6 +505,7 @@ class MemoryManager:
             session_id=session_id,
             scope=scope,
             project_key=project_key,
+            agent_id=agent_id,
         )
         return mid or "", OP_ADD
 
@@ -454,6 +528,8 @@ class MemoryManager:
         limit: int = 5,
         memory_types: Optional[List[str]] = None,
         session_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         检索记忆
@@ -463,11 +539,14 @@ class MemoryManager:
             limit: 每种记忆类型的返回数量
             memory_types: 要检索的记忆类型列表，None 表示全部
             session_id: 可选会话 ID，限定工作记忆的检索范围
+            agent_id: M3 当前专家（私有 ∪ 共享）；None 不限制（历史行为）
+            include_private: 策略收窄——False 时仅返回共享行
 
         Returns:
             包含各类记忆检索结果的字典
         """
         results = {"working": [], "episodic": [], "semantic": []}
+        read_include_private = self._read_include_private(include_private)
 
         # 确定要检索的类型
         if memory_types is None:
@@ -501,6 +580,8 @@ class MemoryManager:
                 query=query,
                 limit=limit * 2,  # 放宽候选数量
                 session_id=None,  # 不按 session 严格过滤
+                agent_id=agent_id,
+                include_private=read_include_private,
             )
 
         # 语义记忆 - FTS5 全文搜索（软过滤：跨会话召回）
@@ -511,6 +592,8 @@ class MemoryManager:
                 query=query,
                 limit=limit * 2,  # 放宽候选数量
                 session_id=None,  # 不按 session 严格过滤
+                agent_id=agent_id,
+                include_private=read_include_private,
             )
 
         return results
@@ -520,10 +603,18 @@ class MemoryManager:
         limit: int = 10,
         session_id: Optional[str] = None,
         segment_id: Optional[int] = None,
+        agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> str:
         """获取上下文用于 Agent（仅文本；需结构化命中用
         :meth:`get_context_with_hits`）。"""
-        text, _ = self.get_context_with_hits(limit, session_id, segment_id)
+        text, _ = self.get_context_with_hits(
+            limit,
+            session_id,
+            segment_id,
+            agent_id=agent_id,
+            include_private=include_private,
+        )
         return text
 
     def get_context_with_hits(
@@ -531,6 +622,8 @@ class MemoryManager:
         limit: int = 10,
         session_id: Optional[str] = None,
         segment_id: Optional[int] = None,
+        agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> Tuple[str, List[Dict[str, str]]]:
         """
         获取上下文用于 Agent，同时返回实际注入的结构化记忆命中。
@@ -545,12 +638,15 @@ class MemoryManager:
             segment_id: 可选段 id（Task 14 context-isolation）。
                 透传给 :meth:`WorkingMemory.get_context`，仅返回该段消息。
                 ``None`` → 返回该会话全部段（向后兼容）。
+            agent_id: M3 当前专家（私有 ∪ 共享）；None 不限制（历史行为）
+            include_private: 策略收窄——False 时仅返回共享行
 
         Returns:
             ``(格式化的上下文字符串, 实际注入的结构化记忆命中列表)`` ——
             命中条目形如 ``{"id": str, "memory_type": str, "preview": str}``。
         """
         parts = []
+        read_include_private = self._read_include_private(include_private)
         # R99: 与 parts 同步收集实际注入的记忆条目（id 缺失的来源合成稳定 id，
         # 前端 memory_used 校验要求每项有字符串 id）。
         hits: List[Dict[str, str]] = []
@@ -635,7 +731,12 @@ class MemoryManager:
         # M0: episodic 层权限闸门。
         try:
             recent_episodic = (
-                self.episodic.get_recent(limit=3, session_id=session_id)
+                self.episodic.get_recent(
+                    limit=3,
+                    session_id=session_id,
+                    agent_id=agent_id,
+                    include_private=read_include_private,
+                )
                 if self._tier_allowed("episodic")
                 else []
             )
@@ -660,7 +761,12 @@ class MemoryManager:
         # M0: semantic 层权限闸门。
         try:
             recent_semantic = (
-                self.semantic.get_recent(limit=3, session_id=session_id)
+                self.semantic.get_recent(
+                    limit=3,
+                    session_id=session_id,
+                    agent_id=agent_id,
+                    include_private=read_include_private,
+                )
                 if self._tier_allowed("semantic")
                 else []
             )
@@ -687,6 +793,7 @@ class MemoryManager:
         self,
         session_id: Optional[str] = None,
         segment_id: Optional[int] = None,
+        agent_id: Optional[str] = None,
     ) -> None:
         """
         压缩指定会话的工作记忆
@@ -697,6 +804,7 @@ class MemoryManager:
             segment_id: 上下文段 id（PF-3 context-isolation）。若指定，则仅压缩
                 并清空该段的工作记忆（使用 ``clear_segment``）；若为 None，则
                 维持默认行为，清空整个会话的工作记忆（向后兼容）。
+            agent_id: M3 归属专家（None → 共享层）
         """
         messages = self.working.get_context(
             session_id, segment_id=segment_id
@@ -715,6 +823,7 @@ class MemoryManager:
                 importance=5,
                 metadata={"source": "auto_compress", "message_count": len(messages)},
                 session_id=session_id,
+                agent_id=self._resolve_write_agent(agent_id),
             )
 
             # 清空工作记忆：段级或会话级
@@ -764,6 +873,8 @@ class MemoryManager:
         limit: int = 20,
         session_id: Optional[str] = None,
         scope: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         搜索记忆的统一接口
@@ -780,13 +891,22 @@ class MemoryManager:
             scope: P1 作用域轴跨会话检索 ('user'|'project'|'global')。
                 'project' 时以 session_id 解析当前项目目录做过滤；
                 给定时不叠加 session 隔离（工作记忆无作用域概念，跳过）
+            agent_id: M3 当前专家（私有 ∪ 共享）；None 不限制（历史行为）
+            include_private: 策略收窄——False 时仅返回共享行
 
         Returns:
             记忆列表
         """
+        read_include_private = self._read_include_private(include_private)
         if scope in memory_scope.VALID_SCOPES:
             return self._search_by_scope(
-                query, memory_type, limit, session_id, scope
+                query,
+                memory_type,
+                limit,
+                session_id,
+                scope,
+                agent_id=agent_id,
+                include_private=read_include_private,
             )
 
         # M0 (2026-11-03): 读层权限闸门 —— 指定了无权读取的层直接返回空，
@@ -799,12 +919,20 @@ class MemoryManager:
             return []
 
         if memory_type == "episodic":
-            return self.episodic.search(query, limit=limit, session_id=session_id)
+            return self.episodic.search(
+                query,
+                limit=limit,
+                session_id=session_id,
+                agent_id=agent_id,
+                include_private=read_include_private,
+            )
         elif memory_type == "semantic":
             return self.semantic.search(
                 query,
                 limit=limit,
                 session_id=session_id,
+                agent_id=agent_id,
+                include_private=read_include_private,
             )
 
         results: List[Dict[str, Any]] = []
@@ -827,11 +955,23 @@ class MemoryManager:
         # memory_type 为 None：搜索所有持久层并与工作记忆合并
         if self._tier_allowed("episodic"):
             results.extend(
-                self.episodic.search(query, limit=limit, session_id=session_id)
+                self.episodic.search(
+                    query,
+                    limit=limit,
+                    session_id=session_id,
+                    agent_id=agent_id,
+                    include_private=read_include_private,
+                )
             )
         if self._tier_allowed("semantic"):
             results.extend(
-                self.semantic.search(query, limit=limit, session_id=session_id)
+                self.semantic.search(
+                    query,
+                    limit=limit,
+                    session_id=session_id,
+                    agent_id=agent_id,
+                    include_private=read_include_private,
+                )
             )
         return results[:limit]
 
@@ -842,6 +982,8 @@ class MemoryManager:
         limit: int,
         session_id: Optional[str],
         scope: str,
+        agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> List[Dict[str, Any]]:
         """作用域轴跨会话检索（P1）。工作记忆无作用域概念，直接跳过。"""
         project_key = None
@@ -857,31 +999,63 @@ class MemoryManager:
         if memory_type in (None, "episodic") and self._tier_allowed("episodic"):
             results.extend(
                 self.episodic.search(
-                    query, limit=limit, scope=scope, project_key=project_key
+                    query,
+                    limit=limit,
+                    scope=scope,
+                    project_key=project_key,
+                    agent_id=agent_id,
+                    include_private=include_private,
                 )
             )
         if memory_type in (None, "semantic") and self._tier_allowed("semantic"):
             results.extend(
                 self.semantic.search(
-                    query, limit=limit, scope=scope, project_key=project_key
+                    query,
+                    limit=limit,
+                    scope=scope,
+                    project_key=project_key,
+                    agent_id=agent_id,
+                    include_private=include_private,
                 )
             )
         return results[:limit]
 
-    def delete_memory(self, memory_id: str, memory_type: str) -> bool:
+    def delete_memory(  # noqa: PLR0911 — 防御性分支返回
+        self,
+        memory_id: str,
+        memory_type: str,
+        agent_id: Optional[str] = None,
+    ) -> bool:
         """
         删除记忆
 
         Args:
             memory_id: 记忆 ID
             memory_type: 记忆类型
+            agent_id: M3 当前专家。给定时**拒绝**删除属于其他专家的
+                私有行（跨专家保护）；``None`` = 管理口径，可删任意行
+                （历史行为）。
 
         Returns:
             是否删除成功
         """
+        store = None
         if memory_type == "episodic":
-            return self.episodic.delete(memory_id)
+            store = self.episodic
         elif memory_type == "semantic":
+            store = self.semantic
+
+        if store is not None and agent_id:
+            row = store.get_by_id(memory_id)
+            if row is not None and row.get("agent_id") not in (None, str(agent_id)):
+                logger.warning(
+                    f"拒绝删除其他专家的私有记忆: {memory_type}/{memory_id}"
+                )
+                return False
+
+        if store is self.episodic:
+            return self.episodic.delete(memory_id)
+        elif store is self.semantic:
             return self.semantic.delete(memory_id)
         elif memory_type == "working":
             parts = memory_id.split(":")
