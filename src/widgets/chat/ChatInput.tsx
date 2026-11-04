@@ -24,12 +24,7 @@ import { useI18n } from '../../shared/lib/i18n';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 
 import { ImageOcrPreview } from './ImageOcrPreview';
-import {
-  InputCard,
-  type AudioAttachmentChipType,
-  type InputCardProps,
-  type KnowledgeDocType,
-} from './InputCard';
+import { InputCard, type InputCardProps, type KnowledgeDocType } from './InputCard';
 import { PdfOcrPreview, type PdfOcrTarget } from './PdfOcrPreview';
 import { extractTemplateVars, TemplateFillDialog } from './TemplateFillDialog';
 import {
@@ -62,7 +57,14 @@ interface ChatInputProps extends Pick<InputCardProps, 'composerControls'> {
       /** PM1 (round8): 计划模式 —— 只读调研 + 计划产出（/plan 命令）。 */
       planMode?: boolean;
       knowledgeRefs?: { id: string; title: string }[];
-      attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
+      attachments?: {
+        name: string;
+        size: number;
+        type: string;
+        dataUrl?: string;
+        /** P1: 选中即上传得到的 media id（存在时发送侧不再重复上传）。 */
+        mediaId?: string;
+      }[];
       images?: { name: string; size: number; type: string; dataUrl?: string }[];
       /** 2026-10-31: 前端确认/编辑后的本地 OCR 文本（与 images 对齐） */
       imageOcrTexts?: string[];
@@ -246,7 +248,9 @@ function ChatInputInner({
     },
     [onOrchestrationModeChange],
   );
-  const [audioAttachments, setAudioAttachments] = useState<AudioAttachmentChipType[]>([]);
+  // P0 (2026-11-04): 音频附件通道尚未接入发送侧（audioAttachments 不进 onSend
+  // options，后端也没有对应 ASR 注入），先隐藏上传入口，避免"显示但没发"的
+  // 误导。后续单独实现 ASR 通道时恢复。
 
   // Phase 6: @文件提及 + /btw 补充消息
   const btw = useBtwCommand();
@@ -356,9 +360,7 @@ function ChatInputInner({
   const handleRemoveFile = useCallback(
     (index: number) => {
       const file = files[index];
-      setPdfOcrTarget((prev) =>
-        prev && file?.dataUrl === prev.dataUrl ? null : prev,
-      );
+      setPdfOcrTarget((prev) => (prev && file?.dataUrl === prev.dataUrl ? null : prev));
       removeFile(index);
     },
     [files, removeFile],
@@ -395,8 +397,7 @@ function ChatInputInner({
       files.length === 0 &&
       images.length === 0 &&
       knowledgeRefs.length === 0 &&
-      officeRefs.length === 0 &&
-      audioAttachments.length === 0
+      officeRefs.length === 0
     )
       return;
     // R37/r75 后 files（txt/md/pdf/docx）会随消息上传注入——仅对其余
@@ -410,6 +411,17 @@ function ChatInputInner({
         t('chat.attachment_not_sent').replace(
           '{files}',
           unsupportedFiles.map((f) => f.name).join('、'),
+        ),
+      );
+    }
+    // P1 (2026-11-04): 预上传失败的文件仍会被发送路径兜底重试 ——
+    // 诚实提示而不是让用户以为附件已经就绪。
+    const failedUploads = files.filter((f) => f.status === 'failed');
+    if (failedUploads.length > 0) {
+      toast.warning(
+        t('chat.attachment_upload_failed').replace(
+          '{files}',
+          failedUploads.map((f) => f.name).join('、'),
         ),
       );
     }
@@ -433,7 +445,6 @@ function ChatInputInner({
     setValue('');
     setKnowledgeRefs([]);
     setOfficeRefs([]);
-    setAudioAttachments([]);
     setPdfOcrTarget(null);
     clearAll();
   };
@@ -681,27 +692,8 @@ function ChatInputInner({
     e.target.value = '';
   };
 
-  // Phase 4 (2026-09-12): audio attachment upload handler — 落入可移除音频附件 Chip 列表
-  const handleAudioAttachment = useCallback(
-    (attachment: {
-      mediaRef: { id: string; mime_type: string; file_size: number };
-      apiUrl: string;
-    }) => {
-      setAudioAttachments((prev) => [
-        ...prev,
-        {
-          id: attachment.mediaRef.id,
-          mimeType: attachment.mediaRef.mime_type,
-          fileSize: attachment.mediaRef.file_size,
-          apiUrl: attachment.apiUrl,
-        },
-      ]);
-    },
-    [],
-  );
-  const removeAudioAttachment = useCallback((id: string) => {
-    setAudioAttachments((prev) => prev.filter((a) => a.id !== id));
-  }, []);
+  // P0 (2026-11-04): 音频附件 handler 已移除 —— 该通道从未进入发送参数,
+  // 上传 chipped 也会误导用户。恢复入口时需同时补齐 onSend options 与后端 ASR。
 
   const toggleKnowledgeRef = (doc: KnowledgeDocType) => {
     setKnowledgeRefs((prev) =>
@@ -799,10 +791,7 @@ function ChatInputInner({
         enabled={ocrPreviewEnabled}
         onTextsChange={handleOcrTextsChange}
       />
-      <PdfOcrPreview
-        target={pdfOcrTarget}
-        onClose={() => setPdfOcrTarget(null)}
-      />
+      <PdfOcrPreview target={pdfOcrTarget} onClose={() => setPdfOcrTarget(null)} />
       <InputCard
         value={value}
         onChange={handleChange}
@@ -817,13 +806,11 @@ function ChatInputInner({
         images={images}
         knowledgeRefs={knowledgeRefs}
         officeRefs={officeRefs}
-        audioAttachments={audioAttachments}
         onRemoveFile={handleRemoveFile}
         onOcrFile={handleFileOcr}
         onRemoveImage={removeImage}
         onRemoveKnowledge={(idx) => setKnowledgeRefs((prev) => prev.filter((_, i) => i !== idx))}
         onRemoveOfficeRef={removeOfficeRef}
-        onRemoveAudioAttachment={removeAudioAttachment}
         knowledgeDocs={knowledgeDocs}
         showKnowledgeSelector={showKnowledgeSelector}
         onToggleKnowledgeSelector={setShowKnowledgeSelector}
@@ -833,7 +820,6 @@ function ChatInputInner({
         }}
         onImageSelect={visionUploadDisabled ? undefined : handleImageSelect}
         onFileSelect={handleFileSelect}
-        onAudioAttachment={handleAudioAttachment}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onPaste={handlePaste}

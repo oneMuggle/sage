@@ -4,7 +4,16 @@
 // 优先读取消息自带的 client_meta（刷新后由 get_messages 回读），兼容旧调用
 // 方通过 MessageList props 传入的 knowledgeRefs / attachments 映射。
 // 每个 chip 提供右键菜单（复制路径/文件名、Office 打开与定位、查看大图）。
-import { BookOpen, Copy, Eye, FileText, Maximize2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  BookOpen,
+  CheckCircle2,
+  Copy,
+  Eye,
+  FileText,
+  Maximize2,
+  XCircle,
+} from 'lucide-react';
 import { useState } from 'react';
 
 import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
@@ -56,6 +65,24 @@ export function MessageClientMeta({
   const fileRefs = meta?.file_refs ?? [];
   const officeRefs = meta?.office_refs ?? [];
   const imageOcrTexts = meta?.image_ocr_texts ?? [];
+  // P0 (2026-11-04): 附件处理状态（attachments_processed 事件回写）——
+  // 用于在气泡上显示"已读取/已跳过/失败"以及汇总行。
+  const attachmentsStatus = meta?.attachments_status ?? [];
+  const statusByName = new Map(attachmentsStatus.map((s) => [s.filename, s]));
+  const okAttachments = attachmentsStatus.filter((s) => s.status === 'ok');
+  const okChars = okAttachments.reduce((acc, s) => acc + (s.chars ?? 0), 0);
+  const hasTruncated = attachmentsStatus.some((s) => s.mode === 'truncated');
+  const reasonText = (reason?: string): string => {
+    if (!reason) return '';
+    if (reason.startsWith('extract_failed')) {
+      return t('chat.attachment_status.reason.extract_failed');
+    }
+    const known = ['not_document', 'not_utf8', 'empty_text', 'load_failed', 'context_build_failed'];
+    const base = reason.split('(')[0];
+    return known.includes(base)
+      ? t(`chat.attachment_status.reason.${base}` as Parameters<typeof t>[0])
+      : reason;
+  };
   if (!hasAnyRefs(meta, effectiveKnowledge.length, effectiveAttachments.length)) return null;
 
   const copy = (text: string) =>
@@ -119,68 +146,114 @@ export function MessageClientMeta({
 
   return (
     <>
+      {attachmentsStatus.length > 0 && okAttachments.length > 0 && (
+        <div
+          data-testid="message-attachment-status-summary"
+          className={`mb-1 text-ui-2xs text-muted ${isUser ? 'text-right' : ''}`}
+        >
+          {t('chat.attachment_status.summary')
+            .replace('{ok}', String(okAttachments.length))
+            .replace('{chars}', okChars.toLocaleString())}
+          {hasTruncated && ` · ${t('chat.attachment_status.truncated')}`}
+        </div>
+      )}
       <div
         data-testid="message-client-meta"
         className={`flex flex-wrap gap-1.5 mb-1 ${isUser ? 'justify-end' : ''}`}
       >
-      {fileRefs.map((ref) => (
-        <ContextMenu key={`file-${ref.path}`} items={() => fileRefMenu(ref)}>
-          <button
-            type="button"
-            data-testid="message-file-ref"
-            title={`${ref.path}（点击预览）`}
-            onClick={() => useRightPanelStore.getState().openFilePreview(ref.path)}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-ui-2xs border border-border bg-bg-subtle text-text-secondary hover:text-text hover:border-primary/40 hover:bg-bg-hover transition-colors cursor-pointer"
-          >
-            <FileText className="w-3 h-3 shrink-0" />
-            <span className="truncate max-w-48">{ref.path}</span>
-          </button>
-        </ContextMenu>
-      ))}
-      {officeRefs.map((ref) => (
-        <OfficeRefChip
-          key={`office-${ref.doc_id}`}
-          chip={{
-            docId: ref.doc_id,
-            docType: ref.doc_type,
-            filename: ref.filename,
-            workspacePath: ref.workspace_path,
-          }}
-          variant="message"
-        />
-      ))}
-      {effectiveKnowledge.map((ref) => (
-        <ContextMenu key={`knowledge-${ref.id}`} items={() => knowledgeMenu(ref.title)}>
-          <span
-            data-testid="message-knowledge-ref"
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs bg-primary/10 text-primary"
-          >
-            <BookOpen className="w-2.5 h-2.5" />
-            {ref.title}
-          </span>
-        </ContextMenu>
-      ))}
-      {effectiveAttachments.map((file, idx) => (
-        <ContextMenu key={`attachment-${file.name}-${idx}`} items={() => attachmentMenu(file)}>
-          <span
-            data-testid="message-attachment-ref"
-            title={file.name}
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-ui-2xs border ${
-              isUser
-                ? 'bg-text-inverse/15 border-text-inverse/20 text-text-inverse'
-                : 'bg-bg-subtle border-border text-text-secondary'
-            }`}
-          >
-            {file.type.startsWith('image/') && file.dataUrl ? (
-              <img src={file.dataUrl} alt="" className="w-4 h-4 rounded object-cover" />
-            ) : (
+        {fileRefs.map((ref) => (
+          <ContextMenu key={`file-${ref.path}`} items={() => fileRefMenu(ref)}>
+            <button
+              type="button"
+              data-testid="message-file-ref"
+              title={`${ref.path}（点击预览）`}
+              onClick={() => useRightPanelStore.getState().openFilePreview(ref.path)}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-ui-2xs border border-border bg-bg-subtle text-text-secondary hover:text-text hover:border-primary/40 hover:bg-bg-hover transition-colors cursor-pointer"
+            >
               <FileText className="w-3 h-3 shrink-0" />
-            )}
-            <span className="truncate max-w-48">{file.name}</span>
-          </span>
-        </ContextMenu>
-      ))}
-      {lightboxSrc && <Lightbox src={lightboxSrc} alt="" onClose={() => setLightboxSrc(null)} />}
+              <span className="truncate max-w-48">{ref.path}</span>
+            </button>
+          </ContextMenu>
+        ))}
+        {officeRefs.map((ref) => (
+          <OfficeRefChip
+            key={`office-${ref.doc_id}`}
+            chip={{
+              docId: ref.doc_id,
+              docType: ref.doc_type,
+              filename: ref.filename,
+              workspacePath: ref.workspace_path,
+            }}
+            variant="message"
+          />
+        ))}
+        {effectiveKnowledge.map((ref) => (
+          <ContextMenu key={`knowledge-${ref.id}`} items={() => knowledgeMenu(ref.title)}>
+            <span
+              data-testid="message-knowledge-ref"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs bg-primary/10 text-primary"
+            >
+              <BookOpen className="w-2.5 h-2.5" />
+              {ref.title}
+            </span>
+          </ContextMenu>
+        ))}
+        {effectiveAttachments.map((file, idx) => {
+          const fileStatus = statusByName.get(file.name);
+          const statusTitle = fileStatus
+            ? fileStatus.status === 'ok'
+              ? t('chat.attachment_status.ok')
+              : fileStatus.status === 'skipped'
+                ? `${t('chat.attachment_status.skipped')}${
+                    fileStatus.reason ? `：${reasonText(fileStatus.reason)}` : ''
+                  }`
+                : `${t('chat.attachment_status.error')}${
+                    fileStatus.reason ? `：${reasonText(fileStatus.reason)}` : ''
+                  }`
+            : undefined;
+          return (
+            <ContextMenu key={`attachment-${file.name}-${idx}`} items={() => attachmentMenu(file)}>
+              <span
+                data-testid="message-attachment-ref"
+                data-attachment-status={fileStatus?.status}
+                title={statusTitle ? `${file.name} — ${statusTitle}` : file.name}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-ui-2xs border ${
+                  isUser
+                    ? 'bg-text-inverse/15 border-text-inverse/20 text-text-inverse'
+                    : 'bg-bg-subtle border-border text-text-secondary'
+                }`}
+              >
+                {file.type.startsWith('image/') && file.dataUrl ? (
+                  <img src={file.dataUrl} alt="" className="w-4 h-4 rounded object-cover" />
+                ) : (
+                  <FileText className="w-3 h-3 shrink-0" />
+                )}
+                <span className="truncate max-w-48">{file.name}</span>
+                {fileStatus &&
+                  (fileStatus.status === 'ok' ? (
+                    <CheckCircle2
+                      data-testid="attachment-status-ok"
+                      className="w-3 h-3 shrink-0 text-success"
+                      aria-label={t('chat.attachment_status.ok')}
+                    />
+                  ) : fileStatus.status === 'skipped' ? (
+                    <AlertTriangle
+                      data-testid="attachment-status-skipped"
+                      className="w-3 h-3 shrink-0 text-warning"
+                      aria-label={t('chat.attachment_status.skipped')}
+                    />
+                  ) : (
+                    <XCircle
+                      data-testid="attachment-status-error"
+                      className="w-3 h-3 shrink-0 text-error"
+                      aria-label={t('chat.attachment_status.error')}
+                    />
+                  ))}
+              </span>
+            </ContextMenu>
+          );
+        })}
+        {lightboxSrc && <Lightbox src={lightboxSrc} alt="" onClose={() => setLightboxSrc(null)} />}
       </div>
       {imageOcrTexts.length > 0 && (
         <details

@@ -104,6 +104,17 @@ export interface AttachedFile {
   size: number;
   type: string;
   dataUrl?: string;
+  /**
+   * P1 (2026-11-04): 选中即上传得到的 media id（Electron 环境）。
+   * 无 electronAPI 时保持 undefined，由发送路径兜底上传（向后兼容）。
+   */
+  mediaId?: string;
+  /** P1: 上传状态；无 electronAPI 时停留在 'ready'。 */
+  status?: 'reading' | 'ready' | 'uploading' | 'uploaded' | 'failed';
+  /** P1: 上传失败原因（仅 status='failed' 时）。 */
+  reason?: string;
+  /** P1: 内部标识，用于异步上传完成时精确更新对应条目。 */
+  id?: string;
 }
 
 interface UseFileUploadReturn {
@@ -127,12 +138,51 @@ export function useFileUpload(): UseFileUploadReturn {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const addFile = useCallback((file: File) => {
+    const id = crypto.randomUUID();
     const reader = new FileReader();
     reader.onload = () => {
       setFiles((prev) => [
         ...prev,
-        { name: file.name, size: file.size, type: file.type, dataUrl: reader.result as string },
+        {
+          id,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          dataUrl: reader.result as string,
+          status: 'ready',
+        },
       ]);
+      // P1 (2026-11-04): 选中即上传（仅 Electron 环境）。无 electronAPI 时
+      // 保持 'ready'，由发送路径兜底上传 —— 与原行为兼容。
+      const upload = window.electronAPI?.media?.uploadAttachment;
+      if (!upload) return;
+      const contentType = file.type || 'application/octet-stream';
+      setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: 'uploading' } : f)));
+      void (async () => {
+        try {
+          const buffer = await file.arrayBuffer();
+          const res = (await upload(buffer, file.name, contentType)) as
+            | { media_ref?: { id?: string } }
+            | undefined;
+          const mediaId = res?.media_ref?.id;
+          if (!mediaId) throw new Error('上传响应缺少 media_ref.id');
+          setFiles((prev) =>
+            prev.map((f) => (f.id === id ? { ...f, status: 'uploaded', mediaId } : f)),
+          );
+        } catch (err) {
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === id
+                ? {
+                    ...f,
+                    status: 'failed',
+                    reason: err instanceof Error ? err.message : String(err),
+                  }
+                : f,
+            ),
+          );
+        }
+      })();
     };
     reader.readAsDataURL(file);
   }, []);

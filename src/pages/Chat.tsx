@@ -254,7 +254,14 @@ export function Chat() {
       content: string,
       options?: {
         knowledgeRefs?: { id: string; title: string }[];
-        attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
+        attachments?: {
+          name: string;
+          size: number;
+          type: string;
+          dataUrl?: string;
+          /** P1: 选中即上传得到的 media id（存在时不再重复上传）。 */
+          mediaId?: string;
+        }[];
         images?: { name: string; size: number; type: string; dataUrl?: string }[];
         /** 2026-10-31: 前端确认/编辑后的本地 OCR 文本（与 images 对齐） */
         imageOcrTexts?: string[];
@@ -306,6 +313,12 @@ export function Chat() {
         if (!att.dataUrl) continue;
         const ext = att.name.split('.').pop()?.toLowerCase() ?? '';
         if (!CHAT_DOCUMENT_EXTENSIONS.has(ext)) continue;
+        // P1 (2026-11-04): 选中即上传已完成 → 直接复用 media id，避免重复上传。
+        if (att.mediaId) {
+          attachmentMediaIds.push(att.mediaId);
+          maybeIndexAttachment(att.mediaId);
+          continue;
+        }
         try {
           const bytes = atob(att.dataUrl.split(',')[1] ?? '');
           const buffer = new Uint8Array(bytes.length);
