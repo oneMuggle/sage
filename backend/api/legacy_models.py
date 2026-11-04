@@ -263,7 +263,7 @@ class AgentUpdate(BaseModel):
         None  # 字段名避开 Pydantic 保留名, 路由层映射到 model_config
     )
 
-    max_iterations: Optional[int] = None  # 路由层校验 1..50
+    max_iterations: Optional[int] = None  # 路由层校验 1..1000
 
     enabled: Optional[bool] = None
 

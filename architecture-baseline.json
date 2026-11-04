@@ -80,7 +80,7 @@
     "backend/api/project_routes.py": 1155,
     "backend/services/project_wiki_generator.py": 902,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
-    "backend/tools/config_tool.py": 979,
+    "backend/tools/config_tool.py": 980,
     "scripts/feedback_receiver.py": 1154,
     "src/shared/types/electron-api.d.ts": 809,
     "electron/preload.ts": 885,
