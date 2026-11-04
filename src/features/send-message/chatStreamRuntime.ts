@@ -217,6 +217,22 @@ export function applyTransparencyAndToolEvents(
       updateMessage(assistantId, { rag_citations: merged });
     }
   }
+  // P0 (2026-11-04): 附件处理结果 —— 更新 user 消息的 client_meta.attachments_status,
+  // 让气泡上的附件 chip 能显示"已读取 / 已跳过 / 失败"状态。
+  // fail-safe: 载荷畸形时丢弃,不阻断聊天。
+  if (evt.state === 'attachments_processed' && evt.attachments_status?.length) {
+    const userId = evt.user_message_id ?? `u-${clientMessageId}`;
+    const existingMsg = useStore.getState().messages.find((m) => m.id === userId);
+    if (existingMsg) {
+      const existingMeta = existingMsg.client_meta ?? {};
+      updateMessage(userId, {
+        client_meta: {
+          ...existingMeta,
+          attachments_status: evt.attachments_status,
+        },
+      });
+    }
+  }
   // R81: 统一参考来源 —— 检索类工具命中（web/wiki/MCP）done 前
   // 一次性推送。载荷校验对齐 MEDIUM-2: 数组且每项 kind 合法
   // （R92: 校验收敛到 transparencyPayload.ts，主/重接/btw 三路径共用）。
@@ -505,6 +521,21 @@ export function useChatReattachAndBtw(params: {
                     else merged.push(c);
                   }
                   updateMessage(messageId, { rag_citations: merged });
+                }
+              }
+              // P0 (2026-11-04): 重接路径同主路径 —— 附件处理状态回写到 user 消息
+              if (evt.state === 'attachments_processed' && evt.attachments_status?.length) {
+                const userId = evt.user_message_id;
+                if (userId) {
+                  const existingMsg = useStore.getState().messages.find((m) => m.id === userId);
+                  if (existingMsg) {
+                    updateMessage(userId, {
+                      client_meta: {
+                        ...(existingMsg.client_meta ?? {}),
+                        attachments_status: evt.attachments_status,
+                      },
+                    });
+                  }
                 }
               }
               // R81: 重接路径同主路径 —— 统一参考来源回放
