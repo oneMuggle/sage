@@ -105,6 +105,7 @@
 | 127  | [端点思考参数透传](./127-reasoning-params-passthrough.md) | per-endpoint `reasoningEffort`/`thinkingBudget` 九节点链路：表单 → 前后端双白名单 → useChat → relay snake 往返 → llm_client 上游请求体；值域语义（null/0/-1）+ 契约测试反漂移 |
 | 128  | [默认本地时区](./128-timezone-default-local.md) | 日志/趋势/调度/前端渲染统一本地时区，失败回退 Asia/Shanghai (+08:00)；`localtime` 解析链（`tzlocal` → `astimezone()` 偏移 → 固定 +08:00）+ naive/aware 防御 + APScheduler `timezone=` + `formatLocalTime` 封装 |
 | 129  | [侧边栏 Git 面板上下文对齐](./129-sidebar-git-context.md) | 左栏 Git 面板与右栏变更 Tab 绑定同一目录（会话 workspace 优先，最近项目兜底）+ 非 git 空状态显示检查路径；`git status --porcelain=v1 -z -b` 共享解析器（`backend/tools/git_status_parser.py`）供 GitStatusTool 与 `GET /git/status` 共用 |
+| 130  | [工作区绑定跳过机制](./130-workspace-binding-skip.md) | 新会话页"不绑定项目"语义贯穿前后端：`skip_workspace_binding` API 字段 + 解析链跳过 + 主流应用对标 |
 
 ---
 
