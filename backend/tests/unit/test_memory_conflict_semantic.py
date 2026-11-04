@@ -19,6 +19,7 @@ import pytest
 
 from backend.data.database import Database
 from backend.memory.conflict import (
+    NOOP_THRESHOLD,
     OP_ADD,
     OP_NOOP,
     OP_UPDATE,
@@ -27,6 +28,7 @@ from backend.memory.conflict import (
     UPDATE_THRESHOLD,
     MemoryConflictResolver,
     _cosine_similarity,
+    _has_negation,
     _similarity,
 )
 from backend.memory.embedder import HashEmbedder
@@ -48,6 +50,8 @@ OTHER = "用户最近在尝试使用 Rust 编写分布式调度组件"
 LITERAL_UPDATE = "用户喜欢非常简洁的回答"
 LITERAL_NOOP = "用户在项目里约定所有 Python 代码使用 ruff 格式化并且强制要求类型注解"
 LITERAL_NOOP_DUP = LITERAL_NOOP + "。"
+#: 只插入一个"不"：字面 0.988（>= 0.97）但事实相反
+NEGATED_NOOP = "用户在项目里约定所有 Python 代码不使用 ruff 格式化并且强制要求类型注解"
 
 VEC_CONCISE = [1.0, 0.0, 0.0, 0.0]
 #: 与 VEC_CONCISE 的余弦分别为 0.905 / 0.895 / 0.95（阈值 0.90 的两侧）
@@ -196,6 +200,60 @@ def test_literal_near_duplicate_still_noop_with_semantic_embedder(db: Database) 
         LITERAL_NOOP, memory_type="episodic", importance=6, session_id="s1"
     )
     decision = manager.get_conflict_resolver().resolve(LITERAL_NOOP_DUP, session_id="s1")
+    assert decision.op == OP_NOOP
+
+
+# ---------- 否定极性 ----------
+
+
+def test_literal_negation_still_within_noop_band() -> None:
+    """前提：只插入一个"不"的字面相似度仍 >= 0.97 —— 这正是要修的缺陷。"""
+    assert _similarity(LITERAL_NOOP, NEGATED_NOOP) >= NOOP_THRESHOLD
+
+
+def test_has_negation_markers() -> None:
+    """中英文否定词识别。"""
+    assert _has_negation("用户不喜欢冗长回答")
+    assert _has_negation("I do not prefer long answers")
+    assert _has_negation("The user doesn't like verbose replies")
+    assert not _has_negation("用户喜欢简洁回答")
+
+
+def test_flipped_negation_is_not_noop(db: Database) -> None:
+    """字面近重复但否定极性相反 → UPDATE，不能 NOOP 丢新事实。"""
+    manager = _manager(db)
+    old_id = manager.memorize(
+        LITERAL_NOOP, memory_type="episodic", importance=6, session_id="s1"
+    )
+    decision = manager.get_conflict_resolver().resolve(NEGATED_NOOP, session_id="s1")
+    assert decision.op == OP_UPDATE
+    assert decision.superseded_ids == [old_id]
+
+
+def test_flipped_negation_write_path_swaps_rows(db: Database) -> None:
+    """端到端：否定事实落库，旧行失效，检索只剩新事实。"""
+    manager = _manager(db)
+    id1, _ = manager.memorize_with_conflict_check(
+        LITERAL_NOOP, memory_type="episodic", importance=6, session_id="s1"
+    )
+    id2, op = manager.memorize_with_conflict_check(
+        NEGATED_NOOP, memory_type="episodic", importance=6, session_id="s1"
+    )
+    assert op == OP_UPDATE
+    assert manager.episodic.get_by_id(id1)["invalid_at"] is not None
+    assert manager.episodic.get_by_id(id2)["supersedes_id"] == id1
+    assert manager.episodic.count() == 1
+
+
+def test_same_negation_polarity_duplicate_still_noop(db: Database) -> None:
+    """两边都含否定词 → 极性相同，近重复仍判 NOOP（不误伤去重）。"""
+    manager = _manager(db)
+    manager.memorize(
+        NEGATED_NOOP, memory_type="episodic", importance=6, session_id="s1"
+    )
+    decision = manager.get_conflict_resolver().resolve(
+        NEGATED_NOOP + "。", session_id="s1"
+    )
     assert decision.op == OP_NOOP
 
 

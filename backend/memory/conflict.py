@@ -21,12 +21,16 @@ Embedder）时，候选额外带一路语义相似度（余弦）。语义近邻
 **触发 UPDATE**（写新行 + 旧行失效），不触发 NOOP —— 语义相近但取值
 不同的两条记忆（如"用户住在上海" vs "用户住在北京"）必须让新事实取代
 旧事实，NOOP 会把过时事实留在库里。
+
+同一理由，字面 NOOP 带额外拒绝**否定极性相反**的候选：只插入一个"不"
+的句子字面仍有 0.98 以上，但事实相反，此时改判 UPDATE。
 """
 
 from __future__ import annotations
 
 import logging
 import math
+import re
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
@@ -50,6 +54,24 @@ SEMANTIC_UPDATE_THRESHOLD = 0.90
 #: 普遍偏高（"喜欢用 Python"/"喜欢用 Rust" 常 >0.90），不设裕度会一次
 #: 失效多条互不相关的事实。只塌缩近似并列的候选。
 SEMANTIC_TARGET_MARGIN = 0.02
+
+#: 否定词 —— 插入一个"不"就能反转事实，而字面相似度仍可能 >= 0.97
+#: （长句"…使用 ruff…" vs "…不使用 ruff…" 实测 0.988）。中文按字符匹配，
+#: "非常/无论/未来"这类词会误报；误报只会把 NOOP 降级成 UPDATE（多一次
+#: 取代），比把新事实当重复丢掉安全。
+_NEGATION_RE = re.compile(
+    r"不|没|无|非|未|别|勿|\b(?:not|no|never|without|none|nobody|nothing)\b|n['’]t",
+    re.IGNORECASE,
+)
+
+
+def _has_negation(text: str) -> bool:
+    return bool(text) and _NEGATION_RE.search(text) is not None
+
+
+def _negation_flipped(a: str, b: str) -> bool:
+    """两边否定极性不同（一边含否定词、另一边不含）。"""
+    return _has_negation(a) != _has_negation(b)
 
 
 def _similarity(a: str, b: str) -> float:
@@ -99,12 +121,21 @@ class Decision:
         return [c.id for c in self.targets]
 
 
-def _literal_noop_decision(candidates: List[Candidate]) -> Optional[Decision]:
+def _literal_noop_decision(
+    content: str, candidates: List[Candidate]
+) -> Optional[Decision]:
     """字面近重复（>= NOOP_THRESHOLD）→ NOOP 决策；无命中返回 None。
 
     NOOP 只认字面近重复：语义近但取值不同的事实必须让新事实取代旧事实。
+    否定极性相反的近重复（"…使用 ruff…" vs "…不使用 ruff…"）字面仍有
+    0.98 以上但事实相反，同样禁止 NOOP。
     """
-    hits = [c for c in candidates if c.similarity >= NOOP_THRESHOLD]
+    hits = [
+        c
+        for c in candidates
+        if c.similarity >= NOOP_THRESHOLD
+        and not _negation_flipped(content, c.content)
+    ]
     if not hits:
         return None
     return Decision(op=OP_NOOP, targets=[max(hits, key=lambda c: c.similarity)])
@@ -233,7 +264,7 @@ class MemoryConflictResolver:
         # 整批编码（HTTP 端点下是最贵的一步）。配了 LLM 钩子时仍让钩子
         # 先裁决（钩子可把近重复升级为 UPDATE），不短路。
         if self.llm_decide is None:
-            noop = _literal_noop_decision(candidates)
+            noop = _literal_noop_decision(content, candidates)
             if noop is not None:
                 return noop
 
@@ -250,13 +281,15 @@ class MemoryConflictResolver:
             except Exception as exc:  # noqa: BLE001 — LLM 失败不阻塞写入
                 logger.debug(f"冲突消解 LLM 决策失败，回退启发式: {exc}")
 
-        return self._heuristic_decision(candidates)
+        return self._heuristic_decision(content, candidates)
 
-    def _heuristic_decision(self, candidates: List[Candidate]) -> Decision:
+    def _heuristic_decision(
+        self, content: str, candidates: List[Candidate]
+    ) -> Decision:
         """启发式判定：三条独立带（字面 NOOP / 字面 UPDATE / 语义 UPDATE）。"""
         # NOOP 只认字面近重复（≥0.97）—— 语义近但取值不同的事实必须让
         # 新事实取代旧事实，NOOP 会留下过时数据。
-        noop = _literal_noop_decision(candidates)
+        noop = _literal_noop_decision(content, candidates)
         if noop is not None:
             return noop
         # 语义取代只塌缩近似并列的候选（见 SEMANTIC_TARGET_MARGIN）：
@@ -271,6 +304,12 @@ class MemoryConflictResolver:
             c
             for c in candidates
             if UPDATE_THRESHOLD <= c.similarity < NOOP_THRESHOLD
+            # 否定极性相反的字面近重复：NOOP 被否决后必须落 UPDATE，
+            # 否则会掉到 ADD 产生两条并存。
+            or (
+                c.similarity >= NOOP_THRESHOLD
+                and _negation_flipped(content, c.content)
+            )
             or (
                 c.semantic_similarity is not None
                 and c.semantic_similarity >= semantic_floor
