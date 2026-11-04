@@ -79,7 +79,7 @@
     "backend/api/project_routes.py": 1155,
     "backend/services/project_wiki_generator.py": 903,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
-    "backend/tools/config_tool.py": 994,
+    "backend/tools/config_tool.py": 995,
     "backend/scheduler/evolution.py": 1739,
     "src/pages/Chat.tsx": 847,
     "src/shared/api/types/chatAndEventTypes.ts": 907,

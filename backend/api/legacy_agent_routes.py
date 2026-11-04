@@ -15,6 +15,11 @@ from fastapi import APIRouter, HTTPException
 from backend.api.legacy_models import AgentCreate, AgentToggle, AgentUpdate
 from backend.api.settings_models import model_dump_compat
 from backend.data.database import make_with_db_lock
+from backend.domain.agent_limits import (
+    MAX_ITERATIONS_CEILING,
+    MIN_ITERATIONS,
+    is_valid_iteration_count,
+)
 
 
 def with_db_lock(func):
@@ -102,12 +107,15 @@ def update_agent(agent_id: str, data: AgentUpdate):
         )
 
     # 字段级校验: max_iterations 范围
-    if data.max_iterations is not None and not (1 <= data.max_iterations <= 50):
+    if data.max_iterations is not None and not is_valid_iteration_count(data.max_iterations):
         raise HTTPException(
             status_code=422,
             detail={
                 "type": "invalid_max_iterations",
-                "message": f"max_iterations must be in 1..50, got {data.max_iterations}",
+                "message": (
+                    f"max_iterations must be in {MIN_ITERATIONS}..{MAX_ITERATIONS_CEILING}, "
+                    f"got {data.max_iterations}"
+                ),
             },
         )
 
@@ -183,12 +191,15 @@ def create_agent(data: AgentCreate):
             },
         )
 
-    if data.max_iterations is not None and not (1 <= data.max_iterations <= 50):
+    if data.max_iterations is not None and not is_valid_iteration_count(data.max_iterations):
         raise HTTPException(
             status_code=422,
             detail={
                 "type": "invalid_max_iterations",
-                "message": f"max_iterations must be in 1..50, got {data.max_iterations}",
+                "message": (
+                    f"max_iterations must be in {MIN_ITERATIONS}..{MAX_ITERATIONS_CEILING}, "
+                    f"got {data.max_iterations}"
+                ),
             },
         )
 
