@@ -14,5 +14,10 @@ export const zhAttachmentStatus = {
   'chat.attachment_status.reason.load_failed': '附件不存在或读取失败',
   'chat.attachment_status.reason.context_build_failed': '上下文构建失败',
   'chat.attachment_status.reason.extract_failed': '文档解析失败',
+  // P2 预检失败原因
+  'chat.attachment_status.reason.oversize': '文件超过 25MB 上限',
+  'chat.attachment_status.reason.unsupported': '不支持的文件类型',
+  'chat.attachment_status.reason.count_exceeded': '最多上传 10 个附件',
+  'chat.attachment_status.reason.duplicate': '同名文件已存在',
   'chat.attachment_upload_failed': '以下附件预上传失败，发送时将重试：{files}',
 } as const;

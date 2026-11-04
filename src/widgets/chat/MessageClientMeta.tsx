@@ -77,7 +77,17 @@ export function MessageClientMeta({
     if (reason.startsWith('extract_failed')) {
       return t('chat.attachment_status.reason.extract_failed');
     }
-    const known = ['not_document', 'not_utf8', 'empty_text', 'load_failed', 'context_build_failed'];
+    const known = [
+      'not_document',
+      'not_utf8',
+      'empty_text',
+      'load_failed',
+      'context_build_failed',
+      'oversize',
+      'unsupported',
+      'count_exceeded',
+      'duplicate',
+    ];
     const base = reason.split('(')[0];
     return known.includes(base)
       ? t(`chat.attachment_status.reason.${base}` as Parameters<typeof t>[0])

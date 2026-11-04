@@ -4,10 +4,18 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CHAT_DOCUMENT_EXTENSIONS, formatFileUploadJson, formatFileUploadSummary, useFileUpload } from '../useFileUpload';
+import {
+  CHAT_DOCUMENT_EXTENSIONS,
+  MAX_ATTACHMENT_COUNT,
+  MAX_ATTACHMENT_SIZE,
+  formatFileUploadJson,
+  formatFileUploadSummary,
+  preflightAttachment,
+  useFileUpload,
+} from '../useFileUpload';
 
-function makeFile(name: string, type: string) {
-  return { name, size: 100, type } as File;
+function makeFile(name: string, type: string, size = 100) {
+  return { name, size, type } as File;
 }
 
 /** FileReader 在 jsdom 读 data URL 异步且依赖实现——mock 之，同步触发 onload */
@@ -94,7 +102,7 @@ describe('useFileUpload', () => {
     expect(dt.preventDefault).toHaveBeenCalled();
   });
 
-  it('handlePaste 只取剪贴板中的图片项', async () => {
+  it('handlePaste 同时接收图片与文档文件', async () => {
     const flush = mockFileReader();
     const { result } = renderHook(() => useFileUpload());
     const imgItem = {
@@ -102,8 +110,13 @@ describe('useFileUpload', () => {
       type: 'image/png',
       getAsFile: () => makeFile('p.png', 'image/png'),
     };
+    const docItem = {
+      kind: 'file',
+      type: 'text/plain',
+      getAsFile: () => makeFile('d.txt', 'text/plain'),
+    };
     const textItem = { kind: 'string', type: 'text/plain', getAsFile: () => null };
-    const clipboardData = { items: [imgItem, textItem] };
+    const clipboardData = { items: [imgItem, docItem, textItem] };
     const evt = { preventDefault: vi.fn(), clipboardData } as unknown as React.ClipboardEvent;
     act(() => {
       result.current.handlePaste(evt);
@@ -112,6 +125,7 @@ describe('useFileUpload', () => {
       flush();
     });
     expect(result.current.images.map((f) => f.name)).toEqual(['p.png']);
+    expect(result.current.files.map((f) => f.name)).toEqual(['d.txt']);
     expect(evt.preventDefault).toHaveBeenCalled();
   });
 
@@ -160,6 +174,117 @@ describe('useFileUpload', () => {
     expect(result.current.isDragOver).toBe(true);
     expect(evt.preventDefault).toHaveBeenCalled();
   });
+
+  // ── P2 (2026-11-04): 预检 ──────────────────────────────────────────────
+
+  it('addFile 超过大小上限 → status=failed, reason=oversize', () => {
+    mockFileReader();
+    const { result } = renderHook(() => useFileUpload());
+    act(() => {
+      result.current.addFile(makeFile('huge.py', 'text/plain', MAX_ATTACHMENT_SIZE + 1));
+    });
+    expect(result.current.files).toHaveLength(1);
+    expect(result.current.files[0].status).toBe('failed');
+    expect(result.current.files[0].reason).toBe('oversize');
+  });
+
+  it('addFile 不支持的扩展名 → status=failed, reason=unsupported', () => {
+    mockFileReader();
+    const { result } = renderHook(() => useFileUpload());
+    act(() => {
+      result.current.addFile(makeFile('evil.exe', 'application/octet-stream'));
+    });
+    expect(result.current.files).toHaveLength(1);
+    expect(result.current.files[0].status).toBe('failed');
+    expect(result.current.files[0].reason).toBe('unsupported');
+  });
+
+  it('addFile 超过数量上限 → status=failed, reason=count_exceeded', () => {
+    const flush = mockFileReader();
+    const { result } = renderHook(() => useFileUpload());
+    act(() => {
+      for (let i = 0; i < MAX_ATTACHMENT_COUNT; i += 1) {
+        result.current.addFile(makeFile(`a${i}.txt`, 'text/plain'));
+      }
+    });
+    act(() => {
+      flush();
+    });
+    expect(result.current.files).toHaveLength(MAX_ATTACHMENT_COUNT);
+    act(() => {
+      result.current.addFile(makeFile('overflow.txt', 'text/plain'));
+    });
+    expect(result.current.files).toHaveLength(MAX_ATTACHMENT_COUNT + 1);
+    const overflow = result.current.files[MAX_ATTACHMENT_COUNT];
+    expect(overflow.status).toBe('failed');
+    expect(overflow.reason).toBe('count_exceeded');
+  });
+
+  it('addFile 同名文件替换旧条目（静默）', () => {
+    const flush = mockFileReader();
+    const { result } = renderHook(() => useFileUpload());
+    act(() => {
+      result.current.addFile(makeFile('dup.txt', 'text/plain'));
+    });
+    act(() => {
+      flush();
+    });
+    const firstId = result.current.files[0].id;
+    act(() => {
+      result.current.addFile(makeFile('dup.txt', 'text/plain'));
+    });
+    expect(result.current.files).toHaveLength(1);
+    expect(result.current.files[0].id).not.toBe(firstId);
+    expect(result.current.files[0].status).not.toBe('failed');
+  });
+
+  it('images 和 files 共享计数上限', () => {
+    const flush = mockFileReader();
+    const { result } = renderHook(() => useFileUpload());
+    act(() => {
+      // 9 张图片 + 1 个文档 = 10
+      for (let i = 0; i < MAX_ATTACHMENT_COUNT - 1; i += 1) {
+        result.current.addImage(makeFile(`p${i}.png`, 'image/png'));
+      }
+      result.current.addFile(makeFile('d.txt', 'text/plain'));
+    });
+    act(() => {
+      flush();
+    });
+    expect(result.current.images).toHaveLength(MAX_ATTACHMENT_COUNT - 1);
+    expect(result.current.files).toHaveLength(1);
+    act(() => {
+      result.current.addFile(makeFile('extra.txt', 'text/plain'));
+    });
+    expect(result.current.files).toHaveLength(2);
+    expect(result.current.files[1].status).toBe('failed');
+    expect(result.current.files[1].reason).toBe('count_exceeded');
+  });
+});
+
+describe('preflightAttachment', () => {
+  it('oversize / unsupported / duplicate / count_exceeded 各返回对应 reason', () => {
+    const big = makeFile('big.txt', 'text/plain', MAX_ATTACHMENT_SIZE + 1);
+    expect(preflightAttachment(big, [], 'file', 0)).toMatchObject({
+      ok: false,
+      reason: 'oversize',
+    });
+    const bad = makeFile('a.exe', 'application/octet-stream');
+    expect(preflightAttachment(bad, [], 'file', 0)).toMatchObject({
+      ok: false,
+      reason: 'unsupported',
+    });
+    const dup = makeFile('a.txt', 'text/plain');
+    expect(preflightAttachment(dup, [{ name: 'a.txt' }], 'file', 0)).toMatchObject({
+      ok: false,
+      reason: 'duplicate',
+    });
+    expect(preflightAttachment(dup, [], 'file', MAX_ATTACHMENT_COUNT)).toMatchObject({
+      ok: false,
+      reason: 'count_exceeded',
+    });
+    expect(preflightAttachment(dup, [], 'file', 0)).toEqual({ ok: true });
+  });
 });
 
 describe('CHAT_DOCUMENT_EXTENSIONS', () => {
@@ -190,9 +315,7 @@ describe('CHAT_DOCUMENT_EXTENSIONS', () => {
 
 describe('formatFileUploadSummary / formatFileUploadJson', () => {
   it('formats file upload state summary and JSON payload', () => {
-    expect(formatFileUploadSummary([], [], false)).toBe(
-      'upload: 0 files · 0 images · 0 B · idle',
-    );
+    expect(formatFileUploadSummary([], [], false)).toBe('upload: 0 files · 0 images · 0 B · idle');
     const files = [{ name: 'doc.md', size: 120, type: 'text/markdown' }];
     const images = [{ name: 'pic.png', size: 380, type: 'image/png' }];
     expect(formatFileUploadSummary(files, images, true)).toBe(

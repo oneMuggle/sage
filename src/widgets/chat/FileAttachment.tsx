@@ -39,6 +39,15 @@ export function FileAttachment({
   reason,
 }: FileAttachmentProps) {
   const { t } = useI18n();
+  // P2 (2026-11-04): 预检失败原因映射为可读文案（未知原因原样展示）。
+  const reasonLabel = (() => {
+    if (!reason) return '';
+    const known = ['oversize', 'unsupported', 'count_exceeded', 'duplicate'];
+    if (known.includes(reason)) {
+      return t(`chat.attachment_status.reason.${reason}` as Parameters<typeof t>[0]);
+    }
+    return reason;
+  })();
   const menuItems = () => [
     {
       id: 'copy-file-name',
@@ -79,7 +88,7 @@ export function FileAttachment({
       <span
         data-testid="file-attachment-chip"
         data-upload-status={status}
-        title={status === 'failed' && reason ? `${name} — ${reason}` : undefined}
+        title={status === 'failed' && reasonLabel ? `${name} — ${reasonLabel}` : undefined}
         className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-radius-sm text-xs border ${
           status === 'failed'
             ? 'bg-error/10 text-error border-error/40'
