@@ -105,6 +105,7 @@
 | 126  | [Playbook 文档导入与分享链接](./126-playbook-import-share.md) | Word/PDF/MD/PPTX → 解析 → LLM/确定性草案预览 → 确认绑定（`POST /playbooks/import/document` 只预览不写库）+ `playbook_shares` token 分享链路（只读 / 默认 7 天 / 过期 410）+ HashRouter 落地页 `/share/playbook/{token}` 导入或存库 + 术语去技术化（L1–L4 → 规则） |
 | 127  | [端点思考参数透传](./127-reasoning-params-passthrough.md) | per-endpoint `reasoningEffort`/`thinkingBudget` 九节点链路：表单 → 前后端双白名单 → useChat → relay snake 往返 → llm_client 上游请求体；值域语义（null/0/-1）+ 契约测试反漂移 |
 | 128  | [默认本地时区](./128-timezone-default-local.md) | 日志/趋势/调度/前端渲染统一本地时区，失败回退 Asia/Shanghai (+08:00)；`localtime` 解析链（`tzlocal` → `astimezone()` 偏移 → 固定 +08:00）+ naive/aware 防御 + APScheduler `timezone=` + `formatLocalTime` 封装 |
+| 129  | [工作区绑定跳过机制](./129-workspace-binding-skip.md) | 新会话页"不绑定项目"语义贯穿前后端：`skip_workspace_binding` API 字段 + 解析链跳过 + 主流应用对标 |
 
 ---
 
