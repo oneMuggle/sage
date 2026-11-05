@@ -14,7 +14,7 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { toast } from 'sonner';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockExportPdf = vi.fn();
 const mockReadPdfData = vi.fn();
@@ -39,15 +39,40 @@ import {
   OfficePreviewPanel,
   PARAGRAPH_RENDER_CAP,
   ROW_RENDER_CAP,
-  formatOfficePreviewPanelAuditJson,
-  formatOfficePreviewPanelAuditSnapshot,
   type OfficePreviewData,
 } from '../OfficePreviewPanel';
+import {
+  formatOfficePreviewPanelAuditJson,
+  formatOfficePreviewPanelAuditSnapshot,
+} from '../officePreviewPanelAudit';
 
 const toastMock = toast as unknown as {
   success: ReturnType<typeof vi.fn>;
   error: ReturnType<typeof vi.fn>;
 };
+
+// ── blob URL 桩 ──────────────────────────────────────────────────────────────
+// 面板把后端返回的 `data:application/pdf;base64,…` 转成 blob: URL 再喂给
+// Chromium 内置 PDF viewer（data URL 在 iframe 里常空白/触发下载）。
+// jsdom 既不实现 URL.createObjectURL，也不支持 fetch(data:)，所以这里打桩。
+const BLOB_URL = 'blob:mock-pdf';
+const originalCreateObjectURL = URL.createObjectURL;
+const originalRevokeObjectURL = URL.revokeObjectURL;
+
+beforeEach(() => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(new Blob([new Uint8Array([0x41])]))),
+  );
+  URL.createObjectURL = (() => BLOB_URL) as typeof URL.createObjectURL;
+  URL.revokeObjectURL = (() => undefined) as typeof URL.revokeObjectURL;
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  URL.createObjectURL = originalCreateObjectURL;
+  URL.revokeObjectURL = originalRevokeObjectURL;
+});
 
 const WORD_SUMMARY = {
   id: 'doc-word',
@@ -285,7 +310,7 @@ describe('OfficePreviewPanel — rich rendering (item 2.6)', () => {
 
   // ── F3 (office-p0): PDF 原文预览开关（data URL + iframe）─────────
 
-  it('pdf: 原文预览 toggle loads the data URL and renders the iframe', async () => {
+  it('pdf: 原文预览 toggle converts the data URL to a blob URL and renders the iframe', async () => {
     mockReadPdfData.mockResolvedValueOnce({
       ok: true,
       data_url: 'data:application/pdf;base64,AAAA',
@@ -301,8 +326,11 @@ describe('OfficePreviewPanel — rich rendering (item 2.6)', () => {
         file_path: '/tmp/ws/office/pdf/doc-pdf/scan.pdf',
       });
     });
-    const frame = await screen.findByTestId('office-pdf-original-frame');
-    expect(frame).toHaveAttribute('src', 'data:application/pdf;base64,AAAA');
+    const frame = await screen.findByTestId('office-pdf-original-frame', undefined, {
+      timeout: 3000,
+    });
+    // data URL → blob URL：Chromium PDF viewer 对 data URL 支持不稳定。
+    expect(frame).toHaveAttribute('src', BLOB_URL);
 
     // 再点一次回到结构视图
     fireEvent.click(screen.getByTestId('office-pdf-original-toggle'));
@@ -400,7 +428,10 @@ describe('OfficePreviewPanel — export PDF button (item 2.7)', () => {
     expect(button).toBeDisabled();
     fireEvent.click(button);
     expect(mockExportPdf).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('office-fidelity-toggle')).toBeNull();
+    // 高保真入口始终可见（用户能从 [环境] 浮层看到安装指引），
+    // 但在没有本机转换器时 disabled —— 而不是整条链路消失。
+    const fidelity = screen.getByTestId('office-fidelity-toggle');
+    expect(fidelity).toBeDisabled();
   });
 
   it('keeps native Word preview while disabling PDF export without a converter', () => {

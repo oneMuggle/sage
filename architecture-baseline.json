@@ -2,7 +2,7 @@
   "version": 1,
   "files": {
     "backend/agents/profiles.py": 1118,
-    "backend/api/office_routes.py": 819,
+    "backend/api/office_routes.py": 822,
     "backend/api/legacy_routes.py": 2847,
     "backend/api/llm_proxy_routes.py": 1216,
     "backend/api/orchestration_router.py": 807,
@@ -54,7 +54,7 @@
     "backend/zotero/client.py": 1195,
     "electron/__tests__/commands.test.ts": 1210,
     "electron/main.ts": 3194,
-    "electron/preload.ts": 897,
+    "electron/preload.ts": 907,
     "electron/tests/updateIntegration.test.ts": 882,
     "electron/tests/updateManager.test.ts": 1839,
     "electron/updateManager.ts": 1519,
@@ -84,7 +84,7 @@
     "src/pages/Chat.tsx": 847,
     "src/shared/api/types/chatAndEventTypes.ts": 907,
     "scripts/feedback_receiver.py": 1154,
-    "src/shared/types/electron-api.d.ts": 831,
+    "src/shared/types/electron-api.d.ts": 871,
     "src/features/playbook/PlaybookCard.tsx": 825,
     "src/features/project-type/PolymorphicArchetypeCards.tsx": 879,
     "src/pages/ProjectGovernance.tsx": 852

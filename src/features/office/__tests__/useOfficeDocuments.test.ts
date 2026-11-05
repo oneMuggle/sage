@@ -16,15 +16,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockListDocuments = vi.fn();
 const mockReadPpt = vi.fn();
+const mockReadWord = vi.fn();
+const mockCheckDuplicates = vi.fn();
+const mockSetDocumentLineage = vi.fn();
 const mockArchiveDocument = vi.fn();
 const mockRestoreDocument = vi.fn();
 vi.mock('../../../shared/api/officeApi', () => ({
   officeApi: {
     listDocuments: (...args: unknown[]) => mockListDocuments(...args),
     readPpt: (...args: unknown[]) => mockReadPpt(...args),
-    readWord: vi.fn(),
+    readWord: (...args: unknown[]) => mockReadWord(...args),
     readExcel: vi.fn(),
     readPdf: vi.fn(),
+    checkDuplicates: (...args: unknown[]) => mockCheckDuplicates(...args),
+    setDocumentLineage: (...args: unknown[]) => mockSetDocumentLineage(...args),
     archiveDocument: (...args: unknown[]) => mockArchiveDocument(...args),
     restoreDocument: (...args: unknown[]) => mockRestoreDocument(...args),
     listSnapshots: vi.fn(),
@@ -32,12 +37,14 @@ vi.mock('../../../shared/api/officeApi', () => ({
   },
 }));
 
-import { useOfficeDocuments } from '../useOfficeDocuments';
+import type { OfficeDocumentSummary } from '../../../shared/api/types';
+import { useOfficeDocuments, type OfficeMultiImportResult } from '../useOfficeDocuments';
 
 const mockPickAndImport = vi.fn();
 const mockCompleteImport = vi.fn();
 const mockDiscardImport = vi.fn();
 const mockSweepOrphanStaging = vi.fn();
+const mockImportDroppedMulti = vi.fn();
 
 interface FakeWindow {
   electronAPI?: {
@@ -46,6 +53,7 @@ interface FakeWindow {
       completeOfficeImport: typeof mockCompleteImport;
       discardOfficeImport: typeof mockDiscardImport;
       sweepOrphanStaging: typeof mockSweepOrphanStaging;
+      importDroppedMultiOfficeFiles: typeof mockImportDroppedMulti;
     };
   };
 }
@@ -64,24 +72,32 @@ const IMPORT_PAYLOAD = {
 beforeEach(() => {
   mockListDocuments.mockReset();
   mockReadPpt.mockReset();
+  mockReadWord.mockReset();
+  mockCheckDuplicates.mockReset();
+  mockSetDocumentLineage.mockReset();
   mockArchiveDocument.mockReset();
   mockRestoreDocument.mockReset();
   mockPickAndImport.mockReset();
   mockCompleteImport.mockReset();
   mockDiscardImport.mockReset();
   mockSweepOrphanStaging.mockReset();
+  mockImportDroppedMulti.mockReset();
   mockListDocuments.mockResolvedValue({ documents: [] });
   mockArchiveDocument.mockResolvedValue({ ok: true, summary: {} });
   mockRestoreDocument.mockResolvedValue({ ok: true, summary: {} });
   mockCompleteImport.mockResolvedValue(undefined);
   mockDiscardImport.mockResolvedValue(undefined);
   mockSweepOrphanStaging.mockResolvedValue({ swept: 0 });
+  // Default: no staged file is a duplicate, so batches import straight away.
+  mockCheckDuplicates.mockResolvedValue({ files: [] });
+  mockSetDocumentLineage.mockResolvedValue({ updated: true });
   (window as unknown as FakeWindow).electronAPI = {
     office: {
       pickAndImportOfficeFile: mockPickAndImport,
       completeOfficeImport: mockCompleteImport,
       discardOfficeImport: mockDiscardImport,
       sweepOrphanStaging: mockSweepOrphanStaging,
+      importDroppedMultiOfficeFiles: mockImportDroppedMulti,
     },
   };
 });
@@ -383,5 +399,201 @@ describe('useOfficeDocuments — batch archive/restore (round-3 N5)', () => {
     expect(parsed.total).toBe(3);
     expect(parsed.succeededCount).toBe(2);
     expect(parsed.failedCount).toBe(1);
+  });
+});
+
+describe('useOfficeDocuments — import duplicate gate (AI workbench Phase 0)', () => {
+  const EXISTING_DOC: OfficeDocumentSummary = {
+    id: 'doc-existing',
+    workspace_path: '/tmp/ws',
+    doc_type: 'word',
+    original_filename: 'dup.docx',
+    generated_filename: 'doc-existing.docx',
+    status: 'parsed',
+    created_at: 1700000000,
+    updated_at: 1700000000,
+    metadata: { file_size_bytes: 10 },
+    derived_from: null,
+    archived_at: null,
+  };
+
+  function makeStaged(index: number) {
+    const token = `tok-${index}`;
+    return {
+      workspacePath: '/tmp/ws',
+      docType: 'word' as const,
+      documentId: token,
+      filename: `f${index}.docx`,
+      managedPath: `/tmp/ws/office/word/${token}/f${index}.docx`,
+      originalName: `f${index}.docx`,
+      sizeBytes: 10,
+      importToken: token,
+    };
+  }
+
+  function duplicateCheck(fileIndex: number) {
+    return {
+      files: [
+        {
+          file_path: `/tmp/ws/office/word/tok-${fileIndex}/f${fileIndex}.docx`,
+          content_hash: 'sha256:' + 'a'.repeat(64),
+          duplicates: [EXISTING_DOC],
+        },
+      ],
+    };
+  }
+
+  /**
+   * Start a batch that is expected to pause on the duplicate gate.
+   *
+   * The batch promise is handed back inside an object on purpose: an
+   * `async` helper that RETURNED the promise would await it before
+   * resolving, which deadlocks — the batch only finishes once the user
+   * picks a duplicate action, and that choice cannot be made until this
+   * helper returns.
+   */
+  async function startPausedBatch(result: {
+    current: ReturnType<typeof useOfficeDocuments>;
+  }): Promise<{ batch: Promise<OfficeMultiImportResult> }> {
+    let batch!: Promise<OfficeMultiImportResult>;
+    await act(async () => {
+      batch = result.current.readDroppedMulti(['/tmp/src/f0.docx']);
+      // Let the pre-flight settle: stage → hash check → dialog state.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await waitFor(() => expect(result.current.pendingDuplicate).not.toBeNull());
+    return { batch };
+  }
+
+  it('pauses on a duplicate and opens the existing doc without re-reading or importing', async () => {
+    mockImportDroppedMulti.mockResolvedValue({ imported: [makeStaged(0)], skipped: [] });
+    mockCheckDuplicates.mockResolvedValueOnce(duplicateCheck(0));
+
+    const { result } = renderHook(() => useOfficeDocuments('/tmp/ws'));
+    await waitFor(() => expect(mockListDocuments).toHaveBeenCalled());
+
+    const { batch } = await startPausedBatch(result);
+    expect(result.current.pendingDuplicate?.filename).toBe('f0.docx');
+    expect(result.current.pendingDuplicate?.duplicates[0].id).toBe('doc-existing');
+    expect(result.current.pendingDuplicate?.contentHash).toBe('sha256:' + 'a'.repeat(64));
+
+    act(() => {
+      result.current.resolvePendingDuplicate('open-existing');
+    });
+    const out = await batch;
+    expect(mockCheckDuplicates).toHaveBeenCalledWith('/tmp/ws', [
+      '/tmp/ws/office/word/tok-0/f0.docx',
+    ]);
+    // Open-existing: staged copy discarded, nothing read or finalized.
+    expect(mockDiscardImport).toHaveBeenCalledWith('tok-0');
+    expect(mockReadWord).not.toHaveBeenCalled();
+    expect(mockCompleteImport).not.toHaveBeenCalled();
+    expect(out.imported).toEqual([]);
+    expect(out.openedExisting.map((doc) => doc.id)).toEqual(['doc-existing']);
+    expect(out.skipped).toEqual([
+      { filename: 'f0.docx', reason: 'duplicate-open-existing', message: 'dup.docx' },
+    ]);
+    expect(result.current.pendingDuplicate).toBeNull();
+  });
+
+  it('new-version imports normally and records lineage to the existing doc', async () => {
+    mockImportDroppedMulti.mockResolvedValue({ imported: [makeStaged(0)], skipped: [] });
+    mockCheckDuplicates.mockResolvedValueOnce(duplicateCheck(0));
+    const readResult = { paragraphs: [] };
+    mockReadWord.mockResolvedValueOnce(readResult);
+
+    const { result } = renderHook(() => useOfficeDocuments('/tmp/ws'));
+    await waitFor(() => expect(mockListDocuments).toHaveBeenCalled());
+
+    const { batch } = await startPausedBatch(result);
+
+    let out!: OfficeMultiImportResult;
+    await act(async () => {
+      result.current.resolvePendingDuplicate('new-version');
+      out = await batch;
+    });
+
+    expect(mockReadWord).toHaveBeenCalledWith({
+      workspace_path: '/tmp/ws',
+      file_path: '/tmp/ws/office/word/tok-0/f0.docx',
+    });
+    expect(mockCompleteImport).toHaveBeenCalledWith('tok-0');
+    expect(mockDiscardImport).not.toHaveBeenCalled();
+    expect(mockSetDocumentLineage).toHaveBeenCalledWith('tok-0', 'doc-existing');
+    expect(out.imported).toHaveLength(1);
+    expect(out.imported[0].readResult).toBe(readResult);
+    expect(out.openedExisting).toEqual([]);
+  });
+
+  it('keep-copy imports the file without lineage or discard', async () => {
+    mockImportDroppedMulti.mockResolvedValue({ imported: [makeStaged(0)], skipped: [] });
+    mockCheckDuplicates.mockResolvedValueOnce(duplicateCheck(0));
+    mockReadWord.mockResolvedValueOnce({ paragraphs: [] });
+
+    const { result } = renderHook(() => useOfficeDocuments('/tmp/ws'));
+    await waitFor(() => expect(mockListDocuments).toHaveBeenCalled());
+
+    const { batch } = await startPausedBatch(result);
+
+    let out!: OfficeMultiImportResult;
+    await act(async () => {
+      result.current.resolvePendingDuplicate('keep-copy');
+      out = await batch;
+    });
+
+    expect(mockCompleteImport).toHaveBeenCalledWith('tok-0');
+    expect(mockDiscardImport).not.toHaveBeenCalled();
+    expect(mockSetDocumentLineage).not.toHaveBeenCalled();
+    expect(out.imported).toHaveLength(1);
+    expect(out.openedExisting).toEqual([]);
+  });
+
+  it('imports straight away when no duplicate matches (no pause)', async () => {
+    mockImportDroppedMulti.mockResolvedValue({ imported: [makeStaged(0)], skipped: [] });
+    mockCheckDuplicates.mockResolvedValueOnce({
+      files: [
+        {
+          file_path: '/tmp/ws/office/word/tok-0/f0.docx',
+          content_hash: 'sha256:' + 'b'.repeat(64),
+          duplicates: [],
+        },
+      ],
+    });
+    mockReadWord.mockResolvedValueOnce({ paragraphs: [] });
+
+    const { result } = renderHook(() => useOfficeDocuments('/tmp/ws'));
+    await waitFor(() => expect(mockListDocuments).toHaveBeenCalled());
+
+    let out!: OfficeMultiImportResult;
+    await act(async () => {
+      out = await result.current.readDroppedMulti(['/tmp/src/f0.docx']);
+    });
+
+    expect(result.current.pendingDuplicate).toBeNull();
+    expect(mockCompleteImport).toHaveBeenCalledWith('tok-0');
+    expect(out.imported).toHaveLength(1);
+    expect(out.openedExisting).toEqual([]);
+  });
+
+  it('chunks the duplicate pre-flight at the backend cap (50 per request)', async () => {
+    const staged = Array.from({ length: 51 }, (_, index) => makeStaged(index));
+    mockImportDroppedMulti.mockResolvedValue({ imported: staged, skipped: [] });
+    mockCheckDuplicates.mockImplementation(async (_ws: string, paths: string[]) => ({
+      files: paths.map((path) => ({ file_path: path, content_hash: null, duplicates: [] })),
+    }));
+    mockReadWord.mockResolvedValue({ paragraphs: [] });
+
+    const { result } = renderHook(() => useOfficeDocuments('/tmp/ws'));
+    await waitFor(() => expect(mockListDocuments).toHaveBeenCalled());
+
+    let out!: OfficeMultiImportResult;
+    await act(async () => {
+      out = await result.current.readDroppedMulti(['/tmp/src']);
+    });
+
+    expect(mockCheckDuplicates).toHaveBeenCalledTimes(2);
+    expect(mockCheckDuplicates.mock.calls[0][1]).toHaveLength(50);
+    expect(mockCheckDuplicates.mock.calls[1][1]).toHaveLength(1);
+    expect(out.imported).toHaveLength(51);
   });
 });

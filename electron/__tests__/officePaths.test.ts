@@ -20,7 +20,13 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { buildManagedPath, isPathWithinWorkspace, getOpenDialogFilters } from '../officePaths';
+import {
+  buildManagedPath,
+  docTypeFromExtension,
+  getAllOpenDialogFilters,
+  getOpenDialogFilters,
+  isPathWithinWorkspace,
+} from '../officePaths';
 
 const REF_PPT = {
   workspacePath: '/workspace',
@@ -156,5 +162,83 @@ describe('dialog filter catalog (modern + legacy, P1-C)', () => {
   it('maps excel filter to modern + legacy extensions', () => {
     const filters = getOpenDialogFilters();
     expect(filters.excel.extensions).toEqual(['xlsx', 'xls']);
+  });
+});
+
+describe('docTypeFromExtension (Phase 0 unified intake)', () => {
+  it('maps modern OOXML extensions to their docType', () => {
+    expect(docTypeFromExtension('report.docx')).toBe('word');
+    expect(docTypeFromExtension('deck.pptx')).toBe('ppt');
+    expect(docTypeFromExtension('budget.xlsx')).toBe('excel');
+    expect(docTypeFromExtension('scan.pdf')).toBe('pdf');
+  });
+
+  it('is case-insensitive', () => {
+    expect(docTypeFromExtension('Report.DOCX')).toBe('word');
+    expect(docTypeFromExtension('DECK.Pptx')).toBe('ppt');
+  });
+
+  it('maps legacy binary extensions to the same docType (P1-C)', () => {
+    expect(docTypeFromExtension('old.doc')).toBe('word');
+    expect(docTypeFromExtension('old.xls')).toBe('excel');
+    expect(docTypeFromExtension('old.ppt')).toBe('ppt');
+  });
+
+  it('maps extra allowed extensions (.csv → excel)', () => {
+    expect(docTypeFromExtension('data.csv')).toBe('excel');
+  });
+
+  it('accepts a bare extension without a filename', () => {
+    expect(docTypeFromExtension('docx')).toBe('word');
+    expect(docTypeFromExtension('.docx')).toBe('word');
+  });
+
+  it('returns null for unrecognised extensions', () => {
+    expect(docTypeFromExtension('readme.txt')).toBeNull();
+    expect(docTypeFromExtension('image.png')).toBeNull();
+    expect(docTypeFromExtension('archive.zip')).toBeNull();
+    expect(docTypeFromExtension('noextension')).toBeNull();
+  });
+
+  it('returns null for empty / whitespace input', () => {
+    expect(docTypeFromExtension('')).toBeNull();
+    expect(docTypeFromExtension('   ')).toBeNull();
+  });
+
+  it('handles filenames with multiple dots (uses last extension)', () => {
+    expect(docTypeFromExtension('archive.2026.11.final.docx')).toBe('word');
+    expect(docTypeFromExtension('weird..docx')).toBe('word');
+  });
+});
+
+describe('getAllOpenDialogFilters (Phase 0 unified intake)', () => {
+  it('returns a combined "Office 文档" entry as the first filter', () => {
+    const all = getAllOpenDialogFilters();
+    expect(all.length).toBeGreaterThanOrEqual(1);
+    const combined = all[0]!;
+    expect(combined.name).toContain('Office 文档');
+    // Combined entry must include modern + legacy + extra extensions.
+    for (const ext of ['pptx', 'docx', 'xlsx', 'pdf', 'ppt', 'doc', 'xls', 'csv']) {
+      expect(combined.extensions, `missing ${ext}`).toContain(ext);
+    }
+  });
+
+  it('does not list "*" wildcard filter (security: dialog must not allow arbitrary extensions)', () => {
+    const all = getAllOpenDialogFilters();
+    for (const f of all) {
+      const extensionsJoined = f.extensions.join(',');
+      expect(extensionsJoined, f.name).not.toContain('*');
+    }
+  });
+
+  it('also exposes the per-type entries after the combined one', () => {
+    const all = getAllOpenDialogFilters();
+    // first is combined; remaining 4 are per-type
+    expect(all.length).toBe(5);
+    const names = all.slice(1).map((f) => f.name);
+    expect(names.some((n) => n.includes('Word'))).toBe(true);
+    expect(names.some((n) => n.includes('PowerPoint'))).toBe(true);
+    expect(names.some((n) => n.includes('Excel'))).toBe(true);
+    expect(names.some((n) => n.includes('PDF'))).toBe(true);
   });
 });
