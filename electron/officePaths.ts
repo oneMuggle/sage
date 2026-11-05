@@ -295,3 +295,73 @@ export function isAllowedExtensionForDocType(docType: OfficeDocType, ext: string
     (DOC_TYPE_EXTRA_EXTENSIONS[docType]?.includes(lowered) ?? false)
   );
 }
+
+// ----------------------------------------------------------------------------
+// Reverse mapping: extension → docType (Phase 0 unified intake)
+// ----------------------------------------------------------------------------
+
+/**
+ * Resolve a filename's extension to the `OfficeDocType` that should own
+ * its import. Returns `null` for unrecognised / unsupported extensions
+ * (the caller treats those as "skip with a warning").
+ *
+ * Recognition order (first match wins):
+ *   1. Modern OOXML / PDF extension → direct mapping.
+ *   2. Legacy binary extension (`.doc`/`.xls`/`.ppt`) → same docType the
+ *      per-type picker would have staged; the backend converts in place
+ *      after staging (`/office/import/convert-legacy`).
+ *   3. Extra allowed extension (`.csv` → excel) → same docType.
+ *
+ * The mapping is the inverse of `extensionForDocType` +
+ * `DOC_TYPE_LEGACY_EXTENSIONS` + `DOC_TYPE_EXTRA_EXTENSIONS` combined,
+ * so adding a new recognised extension touches exactly one table.
+ */
+export function docTypeFromExtension(filenameOrExt: string): OfficeDocType | null {
+  const raw = filenameOrExt.trim();
+  if (!raw) return null;
+  const ext = raw.includes('.')
+    ? raw.slice(raw.lastIndexOf('.') + 1).toLowerCase()
+    : raw.toLowerCase();
+  if (!ext) return null;
+  // 1. modern
+  for (const docType of ['ppt', 'word', 'excel', 'pdf'] as const) {
+    if (ext === DOC_TYPE_EXTENSION[docType]) return docType;
+  }
+  // 2. legacy
+  for (const docType of ['ppt', 'word', 'excel'] as const) {
+    if (DOC_TYPE_LEGACY_EXTENSIONS[docType]?.includes(ext)) return docType;
+  }
+  // 3. extra (.csv → excel, …)
+  for (const docType of ['excel'] as const) {
+    if (DOC_TYPE_EXTRA_EXTENSIONS[docType]?.includes(ext)) return docType;
+  }
+  return null;
+}
+
+/**
+ * Combined dialog filter for the unified intake picker: one "Office
+ * 文档" entry listing every accepted extension (modern + legacy +
+ * extra), plus the per-type entries for discoverability. The renderer
+ * uses this as the `filters` array for `showOpenDialog` when the user
+ * hasn't pre-selected a specific docType.
+ *
+ * `multiSelections: true` is a `properties` flag, not a filter — the
+ * caller is responsible for setting it on the dialog options.
+ */
+export function getAllOpenDialogFilters(): OfficeDialogFilter[] {
+  const allExtensions: string[] = [];
+  for (const docType of ['ppt', 'word', 'excel', 'pdf'] as const) {
+    allExtensions.push(DOC_TYPE_EXTENSION[docType]);
+    const legacy = DOC_TYPE_LEGACY_EXTENSIONS[docType];
+    if (legacy) allExtensions.push(...legacy);
+    const extra = DOC_TYPE_EXTRA_EXTENSIONS[docType];
+    if (extra) allExtensions.push(...extra);
+  }
+  return [
+    { name: 'Office 文档 (.pptx, .docx, .xlsx, .pdf, .ppt, .doc, .xls, .csv)', extensions: allExtensions },
+    PPTX_FILTER,
+    DOCX_FILTER,
+    XLSX_FILTER,
+    PDF_FILTER,
+  ];
+}

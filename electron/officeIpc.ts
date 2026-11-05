@@ -40,7 +40,9 @@ import { randomUUID } from 'crypto';
 
 import {
   buildManagedPath,
+  docTypeFromExtension,
   extensionForDocType,
+  getAllOpenDialogFilters,
   getOpenDialogFilters,
   isAllowedExtensionForDocType,
   isLegacyExtensionForDocType,
@@ -49,6 +51,8 @@ import {
   type OfficeDocType,
   type OfficeManagedRef,
 } from './officePaths';
+
+import type { MultiOfficeImportResult } from '../src/shared/types/electron-api';
 
 import { previewOfficeStaging, recordCompletedImport, recordStagedImport } from './officeStaging';
 
@@ -264,6 +268,68 @@ export function registerOfficeIpc(register: RegisterIpcHandler): void {
     return imported;
   }) as (...args: unknown[]) => unknown);
 
+  // ── office:pick-and-import-multi ──────────────────────────────────────
+  // Phase 0 unified intake: ONE dialog, any supported Office extension,
+  // multiple files at once. Each file's docType is auto-detected from
+  // its extension (`docTypeFromExtension`) — the user no longer has to
+  // route the file into the right one of four separate boxes.
+  //
+  // Files with an unrecognised extension are reported in `skipped`
+  // rather than aborting the batch: importing three good decks and
+  // one README should still work, and the UI tells the user what was
+  // left out instead of silently dropping it.
+  register('office:pick-and-import-multi', (async (
+    _event: unknown,
+    opts: { workspacePath: string },
+  ): Promise<MultiOfficeImportResult> => {
+    const focused = focusedWindow();
+    const dialogOpts = {
+      title: '选择 Office 文档',
+      filters: getAllOpenDialogFilters(),
+      properties: ['openFile', 'multiSelections'] as ('openFile' | 'multiSelections')[],
+    };
+    const result = await dialog.showOpenDialog(focused ?? undefined!, dialogOpts);
+    if (result.canceled || result.filePaths.length === 0) {
+      return { imported: [], skipped: [] };
+    }
+    const imported: ImportedOfficeFile[] = [];
+    const skipped: MultiOfficeImportResult['skipped'] = [];
+    for (const sourcePath of result.filePaths) {
+      const filename = path.basename(sourcePath);
+      const docType = docTypeFromExtension(filename);
+      if (!docType) {
+        skipped.push({ filename, reason: 'unsupported-extension' });
+        continue;
+      }
+      try {
+        const importToken = randomUUID();
+        const staged = await stageImportedFile(
+          opts.workspacePath,
+          docType,
+          sourcePath,
+          importToken,
+        );
+        pendingImports.set(importToken, {
+          managedPath: staged.managedPath,
+          stagingDir: path.dirname(staged.managedPath),
+          originalName: staged.originalName,
+          sizeBytes: staged.sizeBytes,
+          workspacePath: staged.workspacePath,
+        });
+        imported.push(staged);
+      } catch (e) {
+        // One unreadable file must not lose the whole batch — the
+        // successfully staged ones are still returned.
+        skipped.push({
+          filename,
+          reason: 'staging-failed',
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+    return { imported, skipped };
+  }) as (...args: unknown[]) => unknown);
+
   // ── office:import-dropped ─────────────────────────────────────────────
   // Renderer already has sourcePath (drag/drop handler did the JSON
   // serialization). Same atomic copy logic as pick-and-import.
@@ -286,6 +352,51 @@ export function registerOfficeIpc(register: RegisterIpcHandler): void {
       workspacePath: imported.workspacePath,
     });
     return imported;
+  }) as (...args: unknown[]) => unknown);
+
+  // ── office:import-dropped-multi ──────────────────────────────────────
+  // Drag/drop sibling of `office:pick-and-import-multi`: the renderer
+  // already holds the OS source paths (DataTransfer), the main process
+  // still owns the extension → docType detection so the app has exactly
+  // one mapping table.
+  register('office:import-dropped-multi', (async (
+    _event: unknown,
+    opts: { workspacePath: string; sourcePaths: string[] },
+  ): Promise<MultiOfficeImportResult> => {
+    const imported: ImportedOfficeFile[] = [];
+    const skipped: MultiOfficeImportResult['skipped'] = [];
+    for (const sourcePath of opts.sourcePaths ?? []) {
+      const filename = path.basename(sourcePath);
+      const docType = docTypeFromExtension(filename);
+      if (!docType) {
+        skipped.push({ filename, reason: 'unsupported-extension' });
+        continue;
+      }
+      try {
+        const importToken = randomUUID();
+        const staged = await stageImportedFile(
+          opts.workspacePath,
+          docType,
+          sourcePath,
+          importToken,
+        );
+        pendingImports.set(importToken, {
+          managedPath: staged.managedPath,
+          stagingDir: path.dirname(staged.managedPath),
+          originalName: staged.originalName,
+          sizeBytes: staged.sizeBytes,
+          workspacePath: staged.workspacePath,
+        });
+        imported.push(staged);
+      } catch (e) {
+        skipped.push({
+          filename,
+          reason: 'staging-failed',
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+    return { imported, skipped };
   }) as (...args: unknown[]) => unknown);
 
   // ── office:complete-import ────────────────────────────────────────────

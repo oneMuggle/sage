@@ -262,6 +262,35 @@ export const officeRoutes: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/office/documents/${encodeURIComponent(String(a.docId))}`,
   },
+  // Import duplicate detection (AI workbench, Phase 0). The renderer asks
+  // "which imported documents hold the same bytes as the file I am about to
+  // import?" and offers the user 打开已有 / 新版本 / 副本.
+  // OfficeDuplicateCheckRequest is extra="forbid" — send ONLY workspace_path +
+  // file_paths, spelled out snake_case (rawBody skips the camelCase pass).
+  office_check_duplicates: {
+    method: 'POST',
+    path: () => '/api/v1/office/documents/duplicates',
+    rawBody: true,
+    body: (a) => {
+      const requested = a.filePaths ?? a.file_paths;
+      return {
+        workspace_path: String(a.workspacePath ?? a.workspace_path ?? ''),
+        file_paths: Array.isArray(requested) ? requested.map((p) => String(p)) : [],
+      };
+    },
+  },
+  // Lineage write-back for the "import as a new version" branch of the
+  // duplicate dialog: the new document keeps its own bytes but points at the
+  // document it supersedes (office_documents.derived_from).
+  office_set_document_lineage: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/office/documents/${encodeURIComponent(String(a.docId ?? a.doc_id))}/lineage`,
+    rawBody: true,
+    body: (a) => ({
+      derived_from: (a.derivedFrom ?? a.derived_from ?? null) as string | null,
+    }),
+  },
   // Phase 1.4 (2026-07-16): Office generate endpoints (plan §4.1.4 step 19).
   office_ppt_generate: { method: 'POST', path: () => '/api/v1/office/ppt/generate' },
   office_word_generate: { method: 'POST', path: () => '/api/v1/office/word/generate' },

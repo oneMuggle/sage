@@ -169,6 +169,24 @@ export interface PickedOfficeFile {
   sizeBytes: number;
 }
 
+/**
+ * Outcome of the Phase 0 unified multi-file intake.
+ *
+ * `imported` holds one entry per file that was atomically staged into
+ * the workspace (each carrying its own `importToken` the renderer must
+ * complete or discard). `skipped` lists files that could not be
+ * staged — most commonly an unsupported extension — so the UI can tell
+ * the user what was left out instead of silently dropping it.
+ */
+export interface MultiOfficeImportResult {
+  imported: ImportedOfficeFile[];
+  skipped: Array<{
+    filename: string;
+    reason: 'unsupported-extension' | 'staging-failed';
+    message?: string;
+  }>;
+}
+
 export interface SavedOfficeFile {
   savedPath: string;
 }
@@ -206,12 +224,34 @@ export interface OfficeElectronApiBridge {
     workspacePath: string,
     docType: OfficeDocType,
   ) => Promise<ImportedOfficeFile | null>;
+  /**
+   * Phase 0 unified intake: multi-select dialog accepting any supported
+   * Office extension (modern + legacy + .csv). Each file's `docType` is
+   * auto-detected from its extension by the main process
+   * (`docTypeFromExtension`). Returns one `ImportedOfficeFile` per
+   * successfully staged file; files with unrecognised extensions are
+   * reported in `skipped` rather than aborting the whole batch. Returns
+   * empty `imported` when the user cancels the dialog.
+   */
+  pickAndImportMultiOfficeFiles?: (
+    workspacePath: string,
+  ) => Promise<MultiOfficeImportResult>;
   /** Drag/drop variant — renderer already has sourcePath from DataTransfer. */
   importDroppedOfficeFile: (
     workspacePath: string,
     docType: OfficeDocType,
     sourcePath: string,
   ) => Promise<ImportedOfficeFile>;
+  /**
+   * Phase 0 unified intake, drag/drop sibling of
+   * `pickAndImportMultiOfficeFiles`. The renderer hands over the OS
+   * source paths it already holds; the main process detects each file's
+   * `docType` from its extension and stages every recognised file.
+   */
+  importDroppedMultiOfficeFiles?: (
+    workspacePath: string,
+    sourcePaths: string[],
+  ) => Promise<MultiOfficeImportResult>;
   /** Finalize an import; the staged file becomes permanent and the token is consumed. */
   completeOfficeImport: (importToken: string) => Promise<void>;
   /** Discard an import; the staged file is deleted. Idempotent on unknown tokens. */
@@ -620,6 +660,21 @@ export interface PetElectronApiBridge {
   deletePack: (id: string) => Promise<PetPackDeleteResultBridge>;
 }
 
+/**
+ * HTML 预览独立源桥（2026-11-04）—— 渲染层把 HTML 原文投递到主进程，
+ * 换取 `sage-preview://<id>/index.html` 可加载 URL。
+ *
+ * 存在的理由：srcdoc 文档继承父文档 CSP，生产构建的 CSP 不含
+ * 'unsafe-inline'，导致预览页里的内联/CDN 脚本被拦截。独立源让预览文档
+ * 拥有自己的 CSP 上下文。Web 端无此桥，`window.electronAPI.preview` 为 undefined。
+ */
+export interface PreviewElectronApiBridge {
+  /** 投递 HTML，返回预览 id 与可加载 URL */
+  publish: (html: string) => Promise<{ id: string; url: string }>;
+  /** 丢弃不再需要的预览（主进程淘汰对应内容） */
+  revoke: (id: string) => Promise<boolean>;
+}
+
 export interface ElectronAPI {
   /** Authenticated renderer-to-backend request; main injects the local capability. */
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
@@ -676,6 +731,11 @@ export interface ElectronAPI {
   project: ProjectElectronApiBridge;
   /** Desktop pet window + settings bridge (2026-10-30). */
   pet?: PetElectronApiBridge;
+  /**
+   * HTML 预览独立源桥（2026-11-04）—— 仅桌面端可用；Web 端为 undefined，
+   * 渲染层据此退回 srcDoc 内联预览。
+   */
+  preview?: PreviewElectronApiBridge;
   media: MediaElectronApiBridge;
   journal: JournalElectronApiBridge;
   updates: UpdateElectronApiBridge;
