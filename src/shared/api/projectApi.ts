@@ -114,6 +114,15 @@ import {
   type ProjectTemplateSummary,
   type ProjectTree,
   type ProjectTreeWire,
+  // P5 (2026-11-05): 文件引用
+  mapProjectReference,
+  mapProjectReferenceList,
+  mapProjectReferenceScan,
+  type ProjectReference,
+  type ProjectReferenceListWire,
+  type ProjectReferenceScanResult,
+  type ProjectReferenceScanWire,
+  type ProjectReferenceWire,
 } from './projectApiTypes';
 /* eslint-enable import/order */
 
@@ -418,6 +427,10 @@ export type {
   SubTypeDefinition,
   SubTypesCatalog,
   GenerateRulesOptions,
+  // P5 (2026-11-05): 文件引用
+  ProjectReference,
+  ProjectReferenceScanResult,
+  ProjectReferenceKind,
 } from './projectApiTypes';
 import type { Session } from './types';
 import { handleApiError } from './utils';
@@ -535,6 +548,72 @@ export const projectApi = {
         refresh,
       });
       return mapProjectTree(response);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P5 (2026-11-05): 列出项目的文件引用（设计 §9.7）。
+   */
+  async listReferences(projectId: string): Promise<ProjectReference[]> {
+    try {
+      const response = await invoke<ProjectReferenceListWire>('projects_list_references', {
+        id: projectId,
+      });
+      return mapProjectReferenceList(response);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P5 (2026-11-05): 新建文件/目录引用。
+   */
+  async createReference(
+    projectId: string,
+    input: {
+      relPath: string;
+      targetPath: string;
+      kind: 'file' | 'directory';
+      aliasName?: string;
+    },
+  ): Promise<ProjectReference> {
+    try {
+      const response = await invoke<ProjectReferenceWire>('projects_create_reference', {
+        id: projectId,
+        relPath: input.relPath,
+        targetPath: input.targetPath,
+        kind: input.kind,
+        aliasName: input.aliasName,
+      });
+      return mapProjectReference(response);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P5 (2026-11-05): 删除引用（不删除磁盘文件）。
+   */
+  async deleteReference(projectId: string, referenceId: string): Promise<void> {
+    try {
+      await invoke<{ removed: boolean }>('projects_delete_reference', {
+        id: projectId,
+        referenceId,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P5 (2026-11-05): 重新扫描项目目录（刷新项目树 + 同步文件引用）。
+   */
+  async scanProject(projectId: string): Promise<ProjectReferenceScanResult> {
+    try {
+      const response = await invoke<ProjectReferenceScanWire>('projects_scan', { id: projectId });
+      return mapProjectReferenceScan(response);
     } catch (error) {
       throw handleApiError(error);
     }

@@ -388,13 +388,21 @@ v1 走结构化日志（应用 logger，带 `project_id` / `ref_id` / `target` /
 
 按依赖顺序，每期独立可交付：
 
-| 期次 | 内容 | 依赖 | 交付价值 |
-|------|------|------|----------|
-| **P1 模板系统** | `project_template.py` + 内置模板泛化 + 项目创建选模板 | — | 能按自定义结构建项目 |
-| **P2 目录扫描** | `workspace_scanner.py` + `parent_id` + 树 API | P1 | 侧边栏出现子项目 |
-| **P3 前端树形** | 侧边栏树 + 模板选择器 + 来源徽章 | P2 | 层级可见可折叠 |
-| **P4 上下文级联** | `project_context.py` 扩展为链式收集 | P2 | 子项目继承父级规则 |
-| **P5 文件引用** | `virtual_fs.py` + 授权层第 3 层 + UI | P2 | 快捷方式可用 |
+| 期次 | 内容 | 依赖 | 交付价值 | 状态 |
+|------|------|------|----------|------|
+| **P1 模板系统** | `project_template.py` + 内置模板泛化 + 项目创建选模板 | — | 能按自定义结构建项目 | ✅ 完成 |
+| **P2 目录扫描** | `workspace_scanner.py` + `parent_id` + 树 API | P1 | 侧边栏出现子项目 | ✅ 完成 |
+| **P3 前端树形** | 侧边栏树 + 模板选择器 + 来源徽章 | P2 | 层级可见可折叠 | ✅ 完成 |
+| **P4 上下文级联** | `project_context.py` 扩展为链式收集 | P2 | 子项目继承父级规则 | ✅ 完成 |
+| **P5 文件引用** | `virtual_fs.py` + 授权层第 3 层 + UI | P2 | 快捷方式可用 | ✅ 完成 |
+
+**验收记录（2026-11-05）**
+
+- P1：`backend/tests/unit/test_project_template.py` 绿
+- P2：`backend/tests/unit/test_workspace_scanner.py` + `test_project_tree_routes.py` 绿
+- P3：`SidebarProjectList.test.tsx` / `WorkbenchProjectList.test.tsx` 绿
+- P4：`backend/tests/unit/test_project_context_cascade.py` 绿
+- P5：后端引用相关 45 项 + 前端 `ReferenceManager.test.tsx` / `projectApi.references.test.ts` / `ProjectGovernance.test.tsx` 绿
 
 P1–P3 是"项目结构"主线，P4 是"上下文"主线，P5 是"文件"主线。三条线可并行，但建议按序落地。
 

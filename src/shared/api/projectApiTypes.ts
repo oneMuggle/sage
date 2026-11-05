@@ -450,6 +450,79 @@ export function mapProjectTree(w: ProjectTreeWire): ProjectTree {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// 文件引用 (P5, 2026-11-05 项目管理增强 §9)
+// ─────────────────────────────────────────────────────────────────────
+
+export type ProjectReferenceKind = 'file' | 'directory' | 'symlink';
+
+export interface ProjectReferenceWire {
+  id: string;
+  project_id: string;
+  alias_name: string;
+  rel_path: string;
+  target_path: string;
+  kind: ProjectReferenceKind;
+  created_at: number;
+}
+
+export interface ProjectReferenceListWire {
+  references: ProjectReferenceWire[];
+}
+
+export interface ProjectReferenceScanWire {
+  project_id: string;
+  scanned: boolean;
+  created_project_ids: string[];
+  reference_count: number;
+}
+
+export interface ProjectReference {
+  id: string;
+  projectId: string;
+  aliasName: string;
+  relPath: string;
+  targetPath: string;
+  kind: ProjectReferenceKind;
+  createdAt: number;
+}
+
+export interface ProjectReferenceScanResult {
+  projectId: string;
+  scanned: boolean;
+  createdProjectIds: string[];
+  referenceCount: number;
+}
+
+export function mapProjectReference(w: ProjectReferenceWire): ProjectReference {
+  return {
+    id: w.id,
+    projectId: w.project_id,
+    aliasName: w.alias_name,
+    relPath: w.rel_path,
+    targetPath: w.target_path,
+    kind: w.kind,
+    createdAt: w.created_at,
+  };
+}
+
+export function mapProjectReferenceList(
+  w: ProjectReferenceListWire,
+): ProjectReference[] {
+  return (w.references ?? []).map(mapProjectReference);
+}
+
+export function mapProjectReferenceScan(
+  w: ProjectReferenceScanWire,
+): ProjectReferenceScanResult {
+  return {
+    projectId: w.project_id,
+    scanned: Boolean(w.scanned),
+    createdProjectIds: w.created_project_ids ?? [],
+    referenceCount: w.reference_count ?? 0,
+  };
+}
+
 export interface ProjectMaterialWire {
   id: string;
   project_id: string;

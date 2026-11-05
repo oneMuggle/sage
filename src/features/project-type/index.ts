@@ -84,6 +84,9 @@ export type { GovernanceRulesPanelProps } from './GovernanceRulesPanel';
 export { useStudioState } from './useStudioState';
 export type { UseStudioStateReturn } from './useStudioState';
 
+export { ReferenceManager } from './ReferenceManager';
+export type { ReferenceManagerProps } from './ReferenceManager';
+
 export interface ProjectTypeFeatureBarrelAuditReport {
   schemaVersion: '1.0';
   module: 'src/features/project-type/index.ts';

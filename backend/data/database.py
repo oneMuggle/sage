@@ -1098,6 +1098,26 @@ class Database:
             cursor.execute(
                 "ALTER TABLE projects ADD COLUMN discovery_source TEXT"
             )
+        # File references (2026-11-05 P5): 项目内虚拟路径别名 → 真实目标。
+        # rel_path 是项目内可见位置（POSIX 风格、无前导斜杠），target_path
+        # 是绝对路径（可指向工作区外，经 _enforce_workspace 第 3 层放行只读）。
+        # kind: file | directory | symlink。UNIQUE(project_id, rel_path) 防重。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS file_references (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                alias_name TEXT NOT NULL,
+                rel_path TEXT NOT NULL,
+                target_path TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                UNIQUE(project_id, rel_path)
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_file_references_project "
+            "ON file_references(project_id)"
+        )
         conn.commit()
 
         # Project constraints (2026-09-24): 结构化项目约束，替代纯文本
