@@ -42,7 +42,7 @@ async def test_watcher_cleanup_on_normal_completion():
     # Mock the agent and run_loop
     with patch("backend.orchestration.subagent_runner.SageAgent") as MockAgent, \
          patch("backend.orchestration.subagent_runner.get_enabled_agent", return_value={"system_prompt": "test"}), \
-         patch("backend.orchestration.subagent_runner.build_system_base", return_value=""):
+         patch("backend.orchestration.subagent_runner.compose_system_prompt", return_value=""):
 
         mock_child = Mock()
         mock_child.interrupt = Mock()
@@ -77,7 +77,7 @@ async def test_watcher_cleanup_on_exception():
 
     with patch("backend.orchestration.subagent_runner.SageAgent") as MockAgent, \
          patch("backend.orchestration.subagent_runner.get_enabled_agent", return_value={"system_prompt": "test"}), \
-         patch("backend.orchestration.subagent_runner.build_system_base", return_value=""):
+         patch("backend.orchestration.subagent_runner.compose_system_prompt", return_value=""):
 
         mock_child = Mock()
         mock_child.interrupt = Mock()
@@ -108,7 +108,7 @@ async def test_watcher_cancelled_error_handling():
 
     with patch("backend.orchestration.subagent_runner.SageAgent") as MockAgent, \
          patch("backend.orchestration.subagent_runner.get_enabled_agent", return_value={"system_prompt": "test"}), \
-         patch("backend.orchestration.subagent_runner.build_system_base", return_value=""):
+         patch("backend.orchestration.subagent_runner.compose_system_prompt", return_value=""):
 
         mock_child = Mock()
 
@@ -155,7 +155,7 @@ async def test_watcher_no_interrupt_event():
 
     with patch("backend.orchestration.subagent_runner.SageAgent") as MockAgent, \
          patch("backend.orchestration.subagent_runner.get_enabled_agent", return_value={"system_prompt": "test"}), \
-         patch("backend.orchestration.subagent_runner.build_system_base", return_value=""):
+         patch("backend.orchestration.subagent_runner.compose_system_prompt", return_value=""):
 
         mock_child = Mock()
         mock_child.interrupt = Mock()
@@ -188,7 +188,7 @@ async def test_watcher_cleanup_on_multiple_exceptions():
 
     with patch("backend.orchestration.subagent_runner.SageAgent") as MockAgent, \
          patch("backend.orchestration.subagent_runner.get_enabled_agent", return_value={"system_prompt": "test"}), \
-         patch("backend.orchestration.subagent_runner.build_system_base", return_value=""):
+         patch("backend.orchestration.subagent_runner.compose_system_prompt", return_value=""):
 
         mock_child = Mock()
         mock_child.interrupt = Mock()

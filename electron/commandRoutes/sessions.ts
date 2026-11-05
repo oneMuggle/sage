@@ -234,6 +234,8 @@ export const sessionRoutes: Record<string, CommandRoute> = {
       if (a.isArchived != null) body.is_archived = a.isArchived;
       // title 缺省不下发 —— PATCH 只更新显式传入的字段
       if (a.title != null) body.title = a.title;
+      // M0 (2026-11-03): 会话级专家绑定 —— 空串 = 解绑回主助手，需显式下发。
+      if (a.specialistId != null) body.specialist_id = a.specialistId;
       return body;
     },
   },

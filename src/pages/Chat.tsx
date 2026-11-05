@@ -468,6 +468,7 @@ export function Chat() {
     handleQuote,
     handleSaveToMemory,
     handleOpenMemory,
+    handleOpenKnowledgeSource,
     handleBlockedAction,
     handleCancelRun,
     handleRerunFailed,
@@ -654,6 +655,7 @@ export function Chat() {
                 onQuoteSelection={quoteText}
                 onSaveToMemory={handleSaveToMemory}
                 onOpenMemory={handleOpenMemory}
+                onOpenKnowledgeSource={handleOpenKnowledgeSource}
                 onBlockedAction={handleBlockedAction}
               />
             )}

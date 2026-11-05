@@ -110,6 +110,7 @@ import {
 } from './relay';
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
+import { registerSpecialistIpc } from './specialistIpc';
 import { registerOfficeIpc } from './officeIpc';
 import { isPathWithinWorkspace } from './officePaths';
 import { registerRemoteMcpIpc, type RemoteMcpController } from './remoteMcpIpc';
@@ -1986,6 +1987,20 @@ async function registerIpcHandlers(): Promise<void> {
   //   skills:rescan     → POST /api/v1/skills/rescan
   //   skills:import     → POST /api/v1/skills/import (multipart)
   registerSkillsIpc(
+    (channel, handler) => {
+      ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+        if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+        if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+        return handler(evt, ...args);
+      });
+    },
+    () => backendAuthToken ?? undefined,
+  );
+
+  // ─── M1-E: 专家包 (.sage) 导入/导出 IPC ───────────────────────────────
+  //   specialists:import → native picker + multipart POST /api/v1/specialists/import
+  //   specialists:export → binary GET /api/v1/specialists/{id}/export + save dialog
+  registerSpecialistIpc(
     (channel, handler) => {
       ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
         if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');

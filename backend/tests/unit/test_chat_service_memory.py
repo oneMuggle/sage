@@ -133,6 +133,7 @@ class TestChatServiceMemoryRetrieval:
             query="我想吃火锅",
             session_id="session-123",
             limit=5,
+            agent_id="primary",
         )
 
     @pytest.mark.asyncio()

@@ -2,6 +2,7 @@ import { ChevronRight, MessageSquare, Wrench } from 'lucide-react';
 import { memo, useEffect, useRef, useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
+import type { MessageSource } from '../../shared/api/types/chatAndEventTypes';
 import type { BlockedAction, Message } from '../../shared/lib/store';
 import { formatRelativeTime } from '../../shared/lib/timeFormatter';
 
@@ -30,6 +31,8 @@ interface TurnGroupProps {
   onSaveToMemory?: (message: Message) => void;
   /** P0-6: 打开记忆浏览器并定位到该条记忆 */
   onOpenMemory?: (memoryId: string) => void;
+  /** M2-Task 4: 打开专家知识引用（按 source_type 跳 Wiki / 项目资料 / toast） */
+  onOpenKnowledgeSource?: (source: MessageSource) => void;
   onBlockedAction?: (action: BlockedAction) => void;
   onContinue?: () => void;
   onAnswerVersionChange?: () => void;
@@ -52,6 +55,7 @@ function TurnGroupComponent({
   onQuoteSelection,
   onSaveToMemory,
   onOpenMemory,
+  onOpenKnowledgeSource,
   onBlockedAction,
   onContinue,
   onAnswerVersionChange,
@@ -154,6 +158,7 @@ function TurnGroupComponent({
             onQuoteSelection={onQuoteSelection}
             onSaveToMemory={onSaveToMemory}
             onOpenMemory={onOpenMemory}
+            onOpenKnowledgeSource={onOpenKnowledgeSource}
             artifactsByToolCall={artifactsByToolCall}
             onBlockedAction={onBlockedAction}
             onContinue={idx === lastAssistantIdx ? onContinue : undefined}

@@ -60,12 +60,18 @@ class ToolExecutionContext:
             to load into the LLM context. Empty frozenset means "no
             Office docs authorized" (not "all docs" -- callers must
             intersect with the active binding to widen).
+        agent_id: Identity of the active specialist for memory isolation.
+            ``"primary"`` (default) = default assistant private layer;
+            ``"specialist-x"`` = specialist-x private layer. Memory rows
+            written through tools using this context inherit this id;
+            shared rows (``agent_id IS NULL``) remain visible to all.
     """
 
     session_id: str
     stream_id: str
     binding_generation: int
     office_doc_scope: FrozenSet[str]
+    agent_id: str = "primary"
 
 
 #: The active ``ToolExecutionContext`` for the current asyncio task or

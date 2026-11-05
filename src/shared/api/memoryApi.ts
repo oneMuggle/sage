@@ -26,6 +26,7 @@ import type {
   Memory,
   MemoryConsolidationResult,
   MemoryListResponse,
+  MemoryPromoteResult,
   MemoryQualityCandidate,
   MemorySummariesListResponse,
   MemoryWriteRecord,
@@ -174,6 +175,7 @@ function coerceMemoryItem(raw: unknown): Memory {
       ? (scopeRaw as NonNullable<Memory['scope']>)
       : undefined;
   const projectKey = asOptionalString(raw.project_key);
+  const agentId = asOptionalString(raw.agent_id);
   const statusRaw = asOptionalString(raw.status);
   const status =
     statusRaw && VALID_SUMMARY_STATUSES.has(statusRaw as NonNullable<Memory['status']>)
@@ -197,6 +199,7 @@ function coerceMemoryItem(raw: unknown): Memory {
     source_turn_id: sourceTurnId,
     scope,
     project_key: projectKey,
+    agent_id: agentId,
     status,
     error_message: errorMessage,
     importance: asNumber(raw.importance, 0),
@@ -368,6 +371,31 @@ export const memoryApi = {
   },
 
   /**
+   * 把一条私有记忆提升到共享层（M3-Task 7）。
+   *
+   * 后端把该行的 ``agent_id`` 置 NULL（共享层）并写一条审计行；归属变更
+   * 与审计同事务提交 —— 审计写失败则整体回滚，不会留下"已公开但无记录"
+   * 的记忆。已在共享层的记忆走幂等分支（``already_shared``）。
+   */
+  async promoteMemory(id: string): Promise<MemoryPromoteResult> {
+    if (!id || typeof id !== 'string') {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的记忆ID',
+        details: { memoryId: id },
+      });
+    }
+
+    return withRetry(async () => {
+      try {
+        return await invoke<MemoryPromoteResult>('promote_memory', { id });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
    * Task 4.3: 拉取质量分低于阈值的候选记忆 (最差优先)。
    *
    * 后端 GET /memory/quality-candidates 只返 is_valid=1 / invalid_at IS NULL 的
@@ -390,20 +418,18 @@ export const memoryApi = {
           threshold: safeThreshold,
         });
         if (!isRecord(raw) || !Array.isArray(raw.items)) return [];
-        return (raw.items as unknown[]).filter(isRecord).map(
-          (r): MemoryQualityCandidate => {
-            const memoryTypeRaw = asOptionalString(r.memory_type);
-            return {
-              id: asOptionalString(r.id) ?? '',
-              content: asOptionalString(r.content) ?? '',
-              memory_type: memoryTypeRaw === 'semantic' ? 'semantic' : 'episodic',
-              importance: asNumber(r.importance, 0),
-              quality_score: asNumber(r.quality_score, 0),
-              created_at_ms: asNumber(r.created_at_ms, 0),
-              access_count: asNumber(r.access_count, 0),
-            };
-          },
-        );
+        return (raw.items as unknown[]).filter(isRecord).map((r): MemoryQualityCandidate => {
+          const memoryTypeRaw = asOptionalString(r.memory_type);
+          return {
+            id: asOptionalString(r.id) ?? '',
+            content: asOptionalString(r.content) ?? '',
+            memory_type: memoryTypeRaw === 'semantic' ? 'semantic' : 'episodic',
+            importance: asNumber(r.importance, 0),
+            quality_score: asNumber(r.quality_score, 0),
+            created_at_ms: asNumber(r.created_at_ms, 0),
+            access_count: asNumber(r.access_count, 0),
+          };
+        });
       } catch (error) {
         throw handleApiError(error);
       }
@@ -463,7 +489,12 @@ export const memoryApi = {
     memoryType?: 'episodic' | 'semantic' | 'working' | 'session_summary' | 'all',
     page: number = 1,
     pageSize: number = 20,
-    options?: { offset?: number; sessionId?: string | null; signal?: AbortSignal },
+    options?: {
+      offset?: number;
+      sessionId?: string | null;
+      agentId?: string | null;
+      signal?: AbortSignal;
+    },
   ): Promise<MemoryListResponse> {
     // 验证分页参数
     const safePage = Math.max(1, Number(page) || 1);
@@ -475,6 +506,11 @@ export const memoryApi = {
     const safeSessionId =
       options?.sessionId && typeof options.sessionId === 'string' && options.sessionId.trim()
         ? options.sessionId.trim()
+        : null;
+    // M3-Task 6: agent 维度过滤（管理视图精确匹配，透传给 Electron → 后端 agent_id query）
+    const safeAgentId =
+      options?.agentId && typeof options.agentId === 'string' && options.agentId.trim()
+        ? options.agentId.trim()
         : null;
 
     return withRetry(async () => {
@@ -488,6 +524,7 @@ export const memoryApi = {
           pageSize: safePageSize,
           offset: safeOffset,
           sessionId: safeSessionId,
+          agentId: safeAgentId,
         });
         if (options?.signal?.aborted) {
           throw new DOMException('Aborted', 'AbortError');
@@ -795,7 +832,12 @@ export const memoryApi = {
         ...(options.reason ? { reason: options.reason } : {}),
       });
       if (!isRecord(raw)) {
-        return { status: 'ok', memory_id: memoryId, memory_type: options.memoryType ?? 'episodic', feedback };
+        return {
+          status: 'ok',
+          memory_id: memoryId,
+          memory_type: options.memoryType ?? 'episodic',
+          feedback,
+        };
       }
       return {
         status: asOptionalString(raw.status) ?? 'ok',

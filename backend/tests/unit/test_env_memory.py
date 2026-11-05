@@ -161,7 +161,7 @@ class FullFakePort:
         self.stored = []
         self.profiles = []
 
-    async def store(self, content, session_id=None, importance=5, tags=None):
+    async def store(self, content, session_id=None, importance=5, tags=None, agent_id=None):
         self.stored.append({"content": content, "importance": importance, "tags": tags})
         return "m-" + content[:4]
 
@@ -179,7 +179,7 @@ class BarePort:
     def __init__(self):
         self.stored = []
 
-    async def store(self, content, session_id=None, importance=5, tags=None):
+    async def store(self, content, session_id=None, importance=5, tags=None, agent_id=None):
         self.stored.append(content)
         return "m1"
 

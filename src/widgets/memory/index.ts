@@ -4,6 +4,7 @@
 export { MemoryBrowser } from './MemoryBrowser';
 export { MemoryUsageHint } from './MemoryUsageHint';
 export { MemoryItem } from './MemoryItem';
+export { MemoryPromoteButton } from './MemoryPromoteButton';
 export { NewMemoryModal } from './NewMemoryModal';
 export { ProjectProfileCard } from './ProjectProfileCard';
 export { UserProfileCard } from './UserProfileCard';

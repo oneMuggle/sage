@@ -241,11 +241,16 @@ class MemoryConflictResolver:
         session_id: Optional[str] = None,
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> Decision:
         """对新写入内容给出 ADD / UPDATE / NOOP 决策。
 
         scope/project_key 未显式给出时按存储层同款规则（finalize_scope）
         推导，保证候选归属与真正落库时一致。
+
+        ``agent_id``（M3）限定候选范围 = 私有 ∪ 共享，防止一个专家的
+        写入 NOOP/UPDATE 掉另一个专家的私有记忆；``None`` 不限制（历史
+        调用 / 管理口径）。
         """
         content = (content or "").strip()
         if not content:
@@ -256,7 +261,9 @@ class MemoryConflictResolver:
             db, scope, project_key, session_id
         )
 
-        candidates = self._find_candidates(content, write_scope, write_key)
+        candidates = self._find_candidates(
+            content, write_scope, write_key, agent_id=agent_id
+        )
         if not candidates:
             return Decision(op=OP_ADD)
 
@@ -324,7 +331,11 @@ class MemoryConflictResolver:
         return Decision(op=OP_ADD)
 
     def _find_candidates(
-        self, content: str, write_scope: str, write_key: Optional[str]
+        self,
+        content: str,
+        write_scope: str,
+        write_key: Optional[str],
+        agent_id: Optional[str] = None,
     ) -> List[Candidate]:
         """在同归属的活跃记忆中找候选（episodic + semantic 两路）。"""
         query = content[:80]
@@ -336,7 +347,10 @@ class MemoryConflictResolver:
         ):
             try:
                 rows = store.search(
-                    query, limit=self.candidate_limit, session_id=None
+                    query,
+                    limit=self.candidate_limit,
+                    session_id=None,
+                    agent_id=agent_id,
                 )
             except Exception as exc:  # noqa: BLE001 — 检索失败按无候选处理
                 logger.debug(f"冲突候选检索失败({memory_type}): {exc}")

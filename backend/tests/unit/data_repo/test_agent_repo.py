@@ -135,6 +135,93 @@ def test_updated_at_bumps_on_update(repo: AgentRepository) -> None:
 
 
 # ---------------------------------------------------------------------------
+# delete（M0 2026-11-03）
+# ---------------------------------------------------------------------------
+
+
+def test_delete_existing_agent_returns_true(repo: AgentRepository) -> None:
+    repo.upsert(_profile())
+    assert repo.delete("coder") is True
+    assert repo.get("coder") is None
+
+
+def test_delete_missing_agent_returns_false(repo: AgentRepository) -> None:
+    assert repo.delete("ghost") is False
+
+
+def test_delete_is_idempotent_on_second_call(repo: AgentRepository) -> None:
+    repo.upsert(_profile())
+    assert repo.delete("coder") is True
+    assert repo.delete("coder") is False
+
+
+# ---------------------------------------------------------------------------
+# M1 (2026-11-03) 专家卡扩展字段
+# ---------------------------------------------------------------------------
+
+
+def test_upsert_roundtrips_specialist_fields(repo: AgentRepository) -> None:
+    repo.upsert(
+        _profile(
+            skills=["writing", "plugin__zotero__*"],
+            knowledge_bindings=[{"type": "wiki_project", "project_id": "proj_123"}],
+            memory_policy={"read_scopes": ["specialist", "project"], "write_scope": "specialist"},
+            persona_ui={"avatar": "📝", "tagline": "写作助手"},
+            permission_mode="read_only",
+            version=3,
+            source="imported",
+        )
+    )
+    loaded = repo.get("coder")
+    assert loaded is not None
+    assert loaded["skills"] == ["writing", "plugin__zotero__*"]
+    assert loaded["knowledge_bindings"] == [{"type": "wiki_project", "project_id": "proj_123"}]
+    assert loaded["memory_policy"]["write_scope"] == "specialist"
+    assert loaded["persona_ui"]["avatar"] == "📝"
+    assert loaded["permission_mode"] == "read_only"
+    assert loaded["version"] == 3
+    assert loaded["source"] == "imported"
+
+
+def test_upsert_defaults_for_absent_specialist_fields(repo: AgentRepository) -> None:
+    repo.upsert({"id": "minimal-m1", "name": "M", "role": "r"})
+    loaded = repo.get("minimal-m1")
+    assert loaded is not None
+    assert loaded["skills"] == []
+    assert loaded["knowledge_bindings"] == []
+    assert loaded["memory_policy"] == {}
+    assert loaded["persona_ui"] == {}
+    assert loaded["permission_mode"] == "workspace_write"
+    assert loaded["version"] == 1
+    assert loaded["source"] == "user"
+
+
+def test_update_serializes_specialist_fields(repo: AgentRepository) -> None:
+    repo.upsert(_profile())
+    assert (
+        repo.update(
+            "coder",
+            {
+                "skills": ["research"],
+                "persona_ui": {"tagline": "研究员"},
+                "permission_mode": "prompt",
+                "version": 2,
+            },
+        )
+        is True
+    )
+    loaded = repo.get("coder")
+    assert loaded is not None
+    assert loaded["skills"] == ["research"]
+    assert loaded["persona_ui"] == {"tagline": "研究员"}
+    assert loaded["permission_mode"] == "prompt"
+    assert loaded["version"] == 2
+    # 未传字段保持不变
+    assert loaded["knowledge_bindings"] == []
+    assert loaded["source"] == "user"
+
+
+# ---------------------------------------------------------------------------
 # seed
 # ---------------------------------------------------------------------------
 

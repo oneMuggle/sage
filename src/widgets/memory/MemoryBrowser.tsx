@@ -17,8 +17,10 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { memoryApi, Memory } from '../../shared/api';
+import { agentsApi } from '../../shared/api/agentsApi';
 import { formatDate, formatRelativeTime } from '../../shared/lib/timeFormatter';
 
+import { MemoryPromoteButton } from './MemoryPromoteButton';
 import { useSessionInfo } from './useSessionInfo';
 
 // Constants
@@ -31,6 +33,9 @@ type MemoryFilter = 'all' | 'episodic' | 'semantic' | 'working' | 'session_summa
 type ViewMode = 'all' | 'summaries';
 // P1 (spec §4.3 scope 轴): 作用域筛选为纯前端过滤,不打扰后端分页契约。
 type ScopeFilter = 'all' | 'user' | 'project' | 'global';
+// M3-Task 6 (2026-11-04 专家归属轴): agent 维度走后端精确匹配,
+// 'all' = 不过滤 / 'shared' = agent_id IS NULL / 其它 = 精确专家 id。
+type AgentFilter = 'all' | 'shared' | string;
 
 interface MemoryBrowserProps {
   initialType?: MemoryFilter;
@@ -46,6 +51,11 @@ interface MemoryBrowserProps {
    * 可视区 —— 用户点「这条记忆凭什么影响我的答案」后需要立刻看到它。
    */
   focusMemoryId?: string;
+  /**
+   * M3-Task 6: 专家归属筛选变化回调 —— 父页面（Memory.tsx）导出时按当前
+   * 筛选收窄范围。``null`` 表示'全部'（不过滤）。
+   */
+  onAgentFilterChange?: (agentId: string | null) => void;
 }
 
 const FILTER_LABELS: Record<MemoryFilter, string> = {
@@ -96,10 +106,18 @@ const SCOPE_BADGE_LABEL: Record<string, string> = {
   global: '全局',
 };
 
+// M3-Task 6 专家归属徽标 —— 共享层(muted)与私有(primary)用颜色对比区分。
+const AGENT_BADGE_CLASSES: Record<string, string> = {
+  shared: 'bg-muted/20 text-muted',
+  primary: 'bg-info/10 text-info',
+  specialist: 'bg-primary/10 text-primary',
+};
+
 export function MemoryBrowser({
   initialType = 'all',
   refreshKey,
   focusMemoryId,
+  onAgentFilterChange,
 }: MemoryBrowserProps) {
   const navigate = useNavigate();
   const [memories, setMemories] = useState<Memory[]>([]);
@@ -107,6 +125,12 @@ export function MemoryBrowser({
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<MemoryFilter>(initialType);
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('all');
+  // M3-Task 6: 专家归属筛选(走后端 agent_id 精确过滤)。'all' = 管理口径不过滤。
+  const [agentFilter, setAgentFilter] = useState<AgentFilter>('all');
+  // 专家下拉候选 —— 组件挂载时拉一次;下拉只显示 id + display_name。
+  const [agentOptions, setAgentOptions] = useState<{ id: string; name: string }[]>(() => [
+    { id: 'shared', name: '共享层' },
+  ]);
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [summarySessionId, setSummarySessionId] = useState<string>('');
   // P0-1: 记忆检索。此前 ``memoryApi.searchMemories`` 已实现但全仓零调用。
@@ -137,11 +161,42 @@ export function MemoryBrowser({
   const requestGenRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
 
+  // M3-Task 6: 归属筛选变化时通知父页面（导出范围跟随当前筛选）。
+  useEffect(() => {
+    onAgentFilterChange?.(agentFilter === 'all' ? null : agentFilter);
+  }, [agentFilter, onAgentFilterChange]);
+
   // P0-1: 输入防抖后再触发检索,避免每敲一个字打一次后端。
   useEffect(() => {
     const timer = setTimeout(() => setSearchQuery(searchInput.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [searchInput]);
+
+  // M3-Task 6: 拉取专家列表填充筛选下拉(共享层固定首项)。失败静默降级
+  // 为只有"全部/共享层"两项,不阻塞主功能。
+  useEffect(() => {
+    let cancelled = false;
+    agentsApi
+      .list()
+      .then((profiles) => {
+        if (cancelled) return;
+        const options = [{ id: 'shared', name: '共享层' }];
+        for (const p of profiles || []) {
+          if (!p?.id) continue;
+          options.push({
+            id: p.id,
+            name: p.name || p.id,
+          });
+        }
+        setAgentOptions(options);
+      })
+      .catch(() => {
+        /* ignore */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -180,6 +235,9 @@ export function MemoryBrowser({
       }
       const response = await memoryApi.getMemories(type, 1, MEMORY_PAGE_SIZE, {
         signal: ac.signal,
+        // M3-Task 6: 专家归属过滤。'all' = 不过滤（管理口径全量返回），
+        // 其它值原样透传给后端 agent_id query（'shared' 映射 IS NULL）。
+        agentId: agentFilter === 'all' ? null : agentFilter,
       });
       // 代际失配(用户已切到其他视图/筛选):丢弃本次响应
       if (gen !== requestGenRef.current) return;
@@ -210,7 +268,7 @@ export function MemoryBrowser({
         setLoading(false);
       }
     }
-  }, [filterType, searchQuery]);
+  }, [filterType, searchQuery, agentFilter]);
 
   // 加载摘要视图(批次三 step 6 新增) — 需要指定 session_id。
   const loadSummaries = useCallback(
@@ -351,6 +409,24 @@ export function MemoryBrowser({
     }
   }, []);
 
+  // M3-Task 7: 把一条私有记忆提升到共享层。归属从专家私有改为共享
+  // (agent_id → NULL),所有专家此后都能读到。失败时保留该行并明确告知,
+  // 与删除路径同一原则 —— 不做"看起来公开了"的静默状态翻转。
+  const handlePromoteMemory = useCallback(async (memory: Memory) => {
+    try {
+      const result = await memoryApi.promoteMemory(memory.id);
+      setMemories((prev) =>
+        prev.map((m) => (m.id === memory.id ? { ...m, agent_id: undefined } : m)),
+      );
+      toast.success(result.status === 'already_shared' ? '该记忆已在共享层' : '记忆已提升为共享', {
+        description: (memory.content || memory.summary || '').split('\n')[0].slice(0, 40),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '提升失败';
+      toast.error('提升为共享失败', { description: `${message}（该条记忆归属未变）` });
+    }
+  }, []);
+
   // Task 4.3: 选择模式 —— 只有 episodic / semantic / working 可批量删除,
   // session_summary 不在 MemoryManager.delete_memory 的路由内。
   const toggleSelect = useCallback((memory: Memory) => {
@@ -390,9 +466,7 @@ export function MemoryBrowser({
     try {
       const res = await memoryApi.batchDeleteMemories(items);
       const failedIds = new Set(res.failed.map((f) => f.id));
-      const deletedIds = new Set(
-        items.map((i) => i.id).filter((id) => !failedIds.has(id)),
-      );
+      const deletedIds = new Set(items.map((i) => i.id).filter((id) => !failedIds.has(id)));
       setMemories((prev) => prev.filter((m) => !deletedIds.has(m.id)));
       setSelectedIds(new Set());
       setBatchConfirming(false);
@@ -416,7 +490,6 @@ export function MemoryBrowser({
       setBatchDeleting(false);
     }
   }, [memories, selectedIds, qualityMode, loadQualityCandidates]);
-
   // 作用域为纯前端过滤(后端 list 契约不变)。缺 scope 的旧行按 DB 默认
   // 'user' 处理,与后端 visibility 规则一致。
   const visibleMemories = useMemo(() => {
@@ -575,6 +648,27 @@ export function MemoryBrowser({
         </div>
       )}
 
+      {/* M3-Task 6: 专家归属筛选(后端精确过滤)。'all' 显示全部管理口径。 */}
+      {viewMode === 'all' && (
+        <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+          <span className="text-ui-2xs text-muted font-mono mr-1">归属</span>
+          {agentOptions.map((opt) => (
+            <button
+              key={opt.id}
+              className={`px-3 py-1 border border-border rounded-radius-sm text-xs cursor-pointer font-mono ${
+                agentFilter === opt.id
+                  ? 'bg-primary/10 text-primary border-primary'
+                  : 'bg-surface text-muted hover:text-text'
+              }`}
+              onClick={() => setAgentFilter(opt.id)}
+              title={opt.id === 'shared' ? '共享层（所有专家可见）' : `专家 ${opt.name}`}
+            >
+              {opt.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Task 4.3: 低质量候选说明条 */}
       {viewMode === 'all' && qualityMode && !loading && !error && (
         <div className="mb-3 px-3 py-2 border border-error/30 bg-error/5 rounded-radius-sm text-xs text-error">
@@ -647,7 +741,9 @@ export function MemoryBrowser({
         </div>
       ) : visibleMemories.length === 0 ? (
         <div className="text-center text-muted py-12 text-sm">
-          {memories.length > 0 && scopeFilter !== 'all' ? '当前作用域下暂无记忆' : '暂无记忆'}
+          {memories.length > 0 && (scopeFilter !== 'all' || agentFilter !== 'all')
+            ? '当前筛选下暂无记忆'
+            : '暂无记忆'}
         </div>
       ) : (
         <div className="flex flex-col gap-2">
@@ -657,6 +753,7 @@ export function MemoryBrowser({
               memory={memory}
               onJumpToSession={handleJumpToSession}
               onDelete={handleDeleteMemory}
+              onPromote={handlePromoteMemory}
               focused={memory.id === focusMemoryId}
               selectable={selectMode && resolveSelectableType(memory) !== null}
               selected={selectedIds.has(memory.id)}
@@ -697,14 +794,8 @@ function StatCard({
 function QualityBar({ score }: { score: number }) {
   const clamped = Math.max(0, Math.min(1, score));
   const percent = Math.round(clamped * 100);
-  const colorClass =
-    clamped >= 0.6
-      ? 'bg-success'
-      : clamped >= 0.3
-        ? 'bg-warning'
-        : 'bg-error';
-  const label =
-    clamped >= 0.6 ? '高质量' : clamped >= 0.3 ? '中等质量' : '低质量';
+  const colorClass = clamped >= 0.6 ? 'bg-success' : clamped >= 0.3 ? 'bg-warning' : 'bg-error';
+  const label = clamped >= 0.6 ? '高质量' : clamped >= 0.3 ? '中等质量' : '低质量';
   return (
     <div
       className="mt-1.5 flex items-center gap-2"
@@ -721,9 +812,7 @@ function QualityBar({ score }: { score: number }) {
           aria-label={`质量分 ${percent}%`}
         />
       </div>
-      <span className="text-ui-2xs font-mono text-muted tabular-nums">
-        {clamped.toFixed(2)}
-      </span>
+      <span className="text-ui-2xs font-mono text-muted tabular-nums">{clamped.toFixed(2)}</span>
     </div>
   );
 }
@@ -732,6 +821,7 @@ function MemoryItemCard({
   memory,
   onJumpToSession,
   onDelete,
+  onPromote,
   focused = false,
   selectable = false,
   selected = false,
@@ -740,6 +830,8 @@ function MemoryItemCard({
   memory: Memory;
   onJumpToSession: (sessionId: string | undefined) => void;
   onDelete: (memory: Memory) => void | Promise<void>;
+  /** M3-Task 7: 把私有记忆提升到共享层。 */
+  onPromote?: (memory: Memory) => void | Promise<void>;
   /** P0-6: 深链定位命中态 —— 高亮 + 滚入视区。 */
   focused?: boolean;
   /** Task 4.3: 批量清理选择模式。 */
@@ -821,6 +913,20 @@ function MemoryItemCard({
       ? `作用域: 项目 ${memory.project_key}`
       : `作用域: ${scope}`;
 
+  // M3-Task 6 专家归属徽标: NULL = 共享 / 'primary' = 默认助手 / 'specialist-x' = 专家。
+  const agentId = memory.agent_id;
+  const agentLabel = !agentId ? '共享' : agentId === 'primary' ? '主助手' : agentId;
+  const agentClass = !agentId
+    ? AGENT_BADGE_CLASSES.shared
+    : agentId === 'primary'
+      ? AGENT_BADGE_CLASSES.primary
+      : AGENT_BADGE_CLASSES.specialist;
+  const agentTitle = !agentId
+    ? '共享层（所有专家可见）'
+    : agentId === 'primary'
+      ? '默认助手私有记忆'
+      : `专家私有记忆: ${agentId}`;
+
   const content = memory.content || memory.summary || '无内容';
   const title = (content.split('\n')[0] || '无标题').substring(0, 30);
   const status = memory.status;
@@ -882,6 +988,12 @@ function MemoryItemCard({
         <span className="font-semibold text-sm text-text truncate flex-1">{title}</span>
         <div className="flex items-center gap-1.5">
           <span
+            className={`text-ui-2xs px-2 py-0.5 rounded font-mono ${agentClass}`}
+            title={agentTitle}
+          >
+            {agentLabel}
+          </span>
+          <span
             className={`text-ui-2xs px-2 py-0.5 rounded font-mono ${scopeClass}`}
             title={scopeTitle}
           >
@@ -914,9 +1026,7 @@ function MemoryItemCard({
       </div>
       {/* Task 4.4 质量可视化:4px 高分段条 + 数字。quality_score 缺失(working/
           session_summary)时不渲染,避免误导。 */}
-      {typeof memory.quality_score === 'number' && (
-        <QualityBar score={memory.quality_score} />
-      )}
+      {typeof memory.quality_score === 'number' && <QualityBar score={memory.quality_score} />}
       <div className="text-ui-2xs text-muted mt-1.5 font-mono flex items-center gap-2 flex-wrap">
         <span>
           创建于 {formatDate(timestampMs)} · 引用 {accessCount} 次 · 置信度{' '}
@@ -941,6 +1051,10 @@ function MemoryItemCard({
           </button>
         )}
         <span className="ml-auto flex items-center gap-2">
+          {/* M3-Task 7: 仅私有记忆可提升为共享（已在共享层的行不渲染）。 */}
+          {agentId && onPromote ? (
+            <MemoryPromoteButton memoryId={memory.id} onPromote={() => onPromote(memory)} />
+          ) : null}
           {feedbackable && (
             <span className="flex items-center gap-1" data-testid={`memory-feedback-${memory.id}`}>
               <button
@@ -1074,9 +1188,7 @@ function MemoryItemCard({
 }
 
 /** Task 4.3: 批量删除只支持 MemoryManager.delete_memory 有路由的三类。 */
-function resolveSelectableType(
-  memory: Memory,
-): 'episodic' | 'semantic' | 'working' | null {
+function resolveSelectableType(memory: Memory): 'episodic' | 'semantic' | 'working' | null {
   const t = memory.memory_type;
   if (t === 'episodic' || t === 'semantic' || t === 'working') return t;
   const s = memory.source ?? memory.layer;

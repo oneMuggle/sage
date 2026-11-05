@@ -191,7 +191,13 @@ class MemoryAdapter:
         ).start()
         logger.info("检测到存量记忆缺向量，已启动后台回填（上限 %d 条）", max_backfill)
 
-    async def retrieve(self, query: str, session_id: str, limit: int = 5) -> MemoryContext:
+    async def retrieve(
+        self,
+        query: str,
+        session_id: str,
+        limit: int = 5,
+        agent_id: Optional[str] = None,
+    ) -> MemoryContext:
         """检索相关记忆
 
         多路检索 + RRF 融合：
@@ -204,6 +210,8 @@ class MemoryAdapter:
             query: 查询文本,用于匹配相关记忆
             session_id: 会话 ID,透传给 recall 用于工作记忆的会话级过滤
             limit: 每种记忆类型的返回数量限制,默认 5
+            agent_id: M3-Task 4 新增；按专家身份 ∪ 共享层过滤召回。
+                None = 不限制（管理口径）；'primary' = 默认助手私有 ∪ 共享。
 
         Returns:
             MemoryContext: 包含分层记忆的上下文对象
@@ -222,7 +230,9 @@ class MemoryAdapter:
         )
 
         # 1. 关键词检索（MemoryManager，工作记忆按 session 隔离）
-        keyword_results = self.memory_manager.recall(query, limit=limit, session_id=session_id)
+        keyword_results = self.memory_manager.recall(
+            query, limit=limit, session_id=session_id, agent_id=agent_id
+        )
         keyword_items = keyword_results.get("episodic", []) + keyword_results.get("semantic", [])
 
         # 2. 向量检索（VectorStore, 软过滤策略：跨会话知识可召回）
@@ -288,7 +298,7 @@ class MemoryAdapter:
         # （keyword 路径在存储层已按 session 过滤，这里是统一防线）
         fused = [
             item for item in fused
-            if memory_scope.is_row_visible(item, current_project_key)
+            if memory_scope.is_row_visible(item, current_project_key, current_agent_id=agent_id)
         ]
 
         # P4 四因子重排：RRF 只回答"像不像"。composite_score 在此基础上
@@ -317,7 +327,7 @@ class MemoryAdapter:
                         if mem is None:
                             mem = self.memory_manager.semantic.get_by_id(mem_id)
                         if mem is not None and memory_scope.is_row_visible(
-                            mem, current_project_key
+                            mem, current_project_key, current_agent_id=agent_id
                         ):
                             # boost 分数 * 0.1（弱于 RRF 分数，避免压过主路）
                             mem["rrf_score"] = hit["score"] * 0.1
@@ -429,6 +439,7 @@ class MemoryAdapter:
         source_turn_id: Optional[str] = None,
         source_message_id: Optional[str] = None,
         memory_category: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> str:
         """存储记忆
 
@@ -445,6 +456,8 @@ class MemoryAdapter:
             source_message_id: 该事实来源的 message ID（Task 4 / Gap A）
             memory_category: 事实分类（user_pref / project_fact / task_summary /
                 cross_session_pattern — 由调用方/extractor 决定）
+            agent_id: M3-Task 4 新增；写入归该专家的私有层。
+                None = 共享层；'primary' = 默认助手私有；'specialist-x' = 专家私有。
 
         Returns:
             str: 生成的记忆 ID。episodic/semantic 为持久 ID;
@@ -495,6 +508,7 @@ class MemoryAdapter:
             tags=tags,
             metadata=metadata,
             session_id=session_id,
+            agent_id=agent_id,
         )
 
         # 向量化存储（仅持久层记忆:工作记忆合成 id 不入向量库）

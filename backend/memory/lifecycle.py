@@ -262,6 +262,7 @@ class MemoryLifecycleManager:
         session_id: str,
         messages: list,
         source_message_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> None:
         """End-of-turn hook: extract facts and emit ``memory_written``.
 
@@ -279,6 +280,9 @@ class MemoryLifecycleManager:
         message (Chat renders ``data-turn-id={message.id}``) — same
         capability the legacy ``_extract_and_store_memory`` path had.
 
+        M3-Task 4: ``agent_id`` 记忆归属维度 —— 非空时写入该专家私有层，
+        None 保持共享层语义（与 ``MemoryManager.aremember`` 对齐）。
+
         Task 2.2: 与本轮相关的已知事实被检索出来一并交给提取器，
         让 LLM 能真正看到「已经记住什么」，从而避免重复抽取。
         """
@@ -294,7 +298,10 @@ class MemoryLifecycleManager:
         for fact in facts or []:
             try:
                 memory_id = await self._persist_fact(
-                    session_id, fact, source_message_id=source_message_id
+                    session_id,
+                    fact,
+                    source_message_id=source_message_id,
+                    agent_id=agent_id,
                 )
             except Exception as exc:  # noqa: BLE001 — one bad fact must not stop the rest
                 logger.exception("on_turn_complete: persist failed", exc_info=exc)
@@ -367,8 +374,16 @@ class MemoryLifecycleManager:
         session_id: str,
         fact: dict,
         source_message_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> Optional[str]:
         """Persist one extracted fact via conflict-aware path.
+
+        Returns the persisted memory id (or ``None`` if the memory object has
+        no ``aremember`` / the store produced no id). ``source_turn_id`` and
+        ``memory_category`` ride along so the episodic row is traceable;
+        ``source_message_id`` (Task 6) lets the UI highlight the exact
+        producing message; ``agent_id`` (M3-Task 4) routes the write into the
+        会话专家的私有记忆层。
 
         之前直接走 ``aremember`` 会无条件 append，是碎片化的直接根因。
         现在改走 ``aremember_with_conflict_check``：NOOP 复用既有 id 不写、
@@ -390,6 +405,7 @@ class MemoryLifecycleManager:
                     memory_category=fact.get("category", "project_fact"),
                     metadata={"importance": fact.get("importance", 5)},
                     importance=fact.get("importance", 5),
+                    agent_id=agent_id,
                 )
                 if op != "add":
                     logger.debug(
@@ -416,6 +432,7 @@ class MemoryLifecycleManager:
             source_message_id=source_message_id,
             memory_category=fact.get("category", "project_fact"),
             metadata={"importance": fact.get("importance", 5)},
+            agent_id=agent_id,
         )
 
     async def on_session_end(self, session_id: str) -> None:

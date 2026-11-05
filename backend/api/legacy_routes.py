@@ -307,6 +307,13 @@ from backend.api.legacy_agent_routes import (  # noqa: F401 — 经 include 挂�
 
 router.include_router(legacy_agent_routes_router)
 
+# M1-D (2026-11-03): 专家包导入/导出 zip API 独立成组。
+from backend.api.specialist_routes import (  # noqa: F401 — 经 include 挂载
+    router as specialist_routes_router,
+)
+
+router.include_router(specialist_routes_router)
+
 # C1 第二刀 (DSH 对标 R15): 技能 API 迁出至 legacy_skills_routes.py
 # （纯物理拆分，路径/行为零变更；与 orch_routes 同款 include 模式）。
 from backend.api.legacy_skills_routes import (  # noqa: F401 — skills handler 引用 _get_skill_adapter
@@ -500,6 +507,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
         # authorization so Office tools can read the session's binding.
         # set/reset around ``agent.run_loop`` via try/finally so the
         # ContextVar never leaks across producer invocations.
+        # M3-Task 4: 解析会话绑定的专家身份，贯穿到工具上下文与记忆写入
+        from backend.chat.specialist_binding import resolve_bound_specialist
         from backend.tools.context import (
             ToolExecutionContext,
             reset_tool_context,
@@ -513,6 +522,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 stream_id=stream_id,
                 binding_generation=_auth_result.binding_generation,
                 office_doc_scope=_auth_result.office_doc_scope,
+                agent_id=resolve_bound_specialist(_auth_result.session_id),
             )
         else:
             # F2 (2026-08-12): 普通聊天（无 office 授权）也设置上下文 —— 否则
@@ -525,6 +535,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 stream_id=stream_id,
                 binding_generation=0,
                 office_doc_scope=frozenset(),
+                agent_id=resolve_bound_specialist(data.session_id),
             )
         _tool_ctx_token = set_tool_context(_tool_ctx)
         # live-events P2 (2026-09-07) / P1 todo 接线 / S7 产物 / right-panel R5:
@@ -549,6 +560,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             run_outcome = "failed"
             # S1 (2026-09-06): 失败原因摘要 —— finally 落库 sessions.last_error。
             _producer_error: Optional[str] = None
+            # P0-4 扩展 (2026-11-05): run_id/dispatcher 同样前置初始化。
+            # 二者原先在 spend-limit 块之前才绑定，该点之前的任何异常都会
+            # 让 finally 读取未绑定变量（UnboundLocalError），掩盖原始失败。
+            run_id: Optional[str] = None
+            dispatcher = None
 
             # S1 (2026-09-06): 会话运行态落库（running）。写库点收敛两处：
             # 此处置 running，finally 落终态；失败 fail-open 只 debug，不影响主流。
@@ -589,6 +605,42 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # temperature=0 是合法值 (确定性输出), 不能用 or 兜底
                     "temperature": 0.7 if data.temperature is None else data.temperature,
                 }
+            else:
+                # M0 修复: 请求未带端点配置时,从全局设置加载 + profile 模型覆盖
+                # (与 legacy_chat_routes.py /chat 端点对齐)
+                from backend.chat.specialist_binding import resolve_effective_agent_id
+                from backend.data.agent_repo import AgentRepository
+                from backend.orchestration.llm_factory import load_llm_config_for_chat
+
+                # 此时 SageAgent 尚未构造（下方 line ~761），直接按会话/请求
+                # 解析出的 agent_id 读 agents 表取 model_config。
+                _profile_row = (
+                    AgentRepository().get(
+                        resolve_effective_agent_id(data.session_id, data.agent_id)
+                    )
+                    or {}
+                )
+                _profile_model_config = _profile_row.get("model_config")
+                _profile_model_config = (
+                    _profile_model_config if isinstance(_profile_model_config, dict) else {}
+                )
+                llm_config = load_llm_config_for_chat(
+                    session_id=data.session_id,
+                    profile_model=_profile_model_config.get("model"),
+                    profile_max_tokens=_profile_model_config.get("max_tokens"),
+                    task_type=data.task_type,
+                )
+                # M0: profile temperature 覆盖（如显式设置）
+                if (
+                    llm_config is not None
+                    and _profile_model_config.get("temperature") is not None
+                ):
+                    llm_config["temperature"] = _profile_model_config["temperature"]
+
+            # 推理参数 / fallback / endpoint / 日志 —— 请求自带端点与「全局设置」
+            # 两条来源共用。load_llm_config_for_chat 无可用端点时返回 None
+            # （调用方降级），以下覆盖项不得对 None 下标。
+            if llm_config is not None:
                 # 推理参数:None 时不传,避免污染老 LLM
                 if data.reasoning_effort is not None:
                     llm_config["reasoning_effort"] = data.reasoning_effort
@@ -624,8 +676,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     except Exception:
                         pass  # fail-open: endpoint_id is best-effort
                 logger.info(
-                    f"[REQ {request_id}] /chat/stream producer using custom LLM: "
+                    f"[REQ {request_id}] /chat/stream producer LLM config: "
                     f"model={_safe_log_field(llm_config['model'])}"
+                )
+            else:
+                logger.info(
+                    f"[REQ {request_id}] /chat/stream producer: "
+                    "no LLM endpoint configured; deferring to agent defaults"
                 )
 
             # Task 9 (2026-10-28): 智能路由 —— 仅 routing.mode == "auto" 且会话
@@ -687,10 +744,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             # F5 花费限额 (批次 C): 今日已花费(持久化估算, 重启不丢)达到
             # 限额时拒绝本次聊天。限额 0/未配置 = 不限。DB 故障 fail-open
-            # (today_cost_usd 返回 0 → 永不拦截)。注: run_id/dispatcher 前置
-            # 初始化 —— 此处可能提前 return, finally 无条件读取它们 (P0-4)。
-            run_id: Optional[str] = None
-            dispatcher = None
+            # (today_cost_usd 返回 0 → 永不拦截)。注: run_id/dispatcher 已在
+            # producer 顶部前置初始化（P0-4），此处提前 return 不会让 finally
+            # 读到未绑定变量。
             try:
                 from backend.data.settings_repo import SettingsRepository
                 from backend.services.usage_tracker import usage_tracker as _usage_tracker
@@ -729,8 +785,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     return
 
+            # M0 (2026-11-03): 会话级专家绑定 —— 请求未显式指定 agent_id 时
+            # 取会话绑定的专家（不存在/已禁用回落主助手）。
+            from backend.chat.specialist_binding import resolve_effective_agent_id
+
             agent = SageAgent(
-                agent_id=data.agent_id or "primary",
+                agent_id=resolve_effective_agent_id(data.session_id, data.agent_id),
                 scheduler_service_getter=get_scheduler_service,
             )
             # 2026-10-28: 输出长度 —— 请求自带端点配置时, 上方 llm_config 直接由
@@ -787,10 +847,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 "session_id": data.session_id,
             }
 
-            # Build system prompt with optional diagram tool guidance
-            from backend.agents.profiles import build_system_base
+            # Build system prompt with specialist persona support (M0)
+            from backend.chat.specialist_prompt_composer import compose_system_prompt
 
-            system_content = build_system_base()
+            system_content = compose_system_prompt(specialist_profile=agent.profile)
 
             # PM1 (round8): 单 agent 计划模式 —— 只读调研 + 计划产出指令；
             # 与编排互斥（计划模式在主对话内调研，不派子代理），批准后由
@@ -1302,6 +1362,30 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # build_request_messages(trailing_system=...) 注入到历史之后的
             # 尾部独立 system 消息,让"稳定 system + 追加式历史"保持缓存前缀。
             dynamic_context_parts: List[str] = []
+            # 专家技能允许集（M1，spec §5.1）：从 agent.profile 解析一次，
+            # L5 技能清单 + R38 自动激活共用。None = 不受限（主助手）。
+            # 首次调用 _get_skill_adapter 会同步扫盘，用 to_thread 包裹。
+            _skill_allowed: Optional[set] = None
+            try:
+                from backend.domain.skill_scope import resolve_skill_allowlist
+
+                _skill_patterns = (
+                    (agent.profile or {}).get("skills")
+                    if isinstance(agent.profile, dict)
+                    else None
+                )
+                if _skill_patterns:
+                    _scope_adapter = await to_thread(_get_skill_adapter)
+                    _available_names = [
+                        s.name for s in _scope_adapter.list_skills()
+                    ]
+                    _skill_allowed = resolve_skill_allowlist(
+                        _skill_patterns, _available_names
+                    )
+            except Exception as _scope_err:
+                logger.debug(
+                    f"[REQ {request_id}] specialist skill scope skipped: {_scope_err}"
+                )
             # 对标 S2：临时聊天 —— 本轮跳过记忆注入 / 召回事件 / 事后提取。
             memory_off = (data.memory_mode or "on") == "off"
             try:
@@ -1328,7 +1412,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 config_block = build_configuration_summary_block()
                 if config_block:
                     dynamic_context_parts.append(config_block)
-                skills_block = build_skills_block()
+                # 专家技能作用域（M1，spec §5.1）：使用上方解析的允许集，
+                # None / 空 → 不受限（主助手）；非空 → fail-closed 过滤。
+                skills_block = build_skills_block(allowed=_skill_allowed)
                 if skills_block:
                     # 技能清单仅在注册表变化时变 —— 相对稳定,留头部前缀。
                     system_content += "\n\n" + skills_block
@@ -1354,7 +1440,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
                 r38_skills_port = await to_thread(_get_skill_adapter)
                 r38_block, r38_activated_skill_list = _skill_activation_block(
-                    data.message or "", r38_skills_port
+                    data.message or "", r38_skills_port, allowed=_skill_allowed
                 )
                 if r38_block:
                     dynamic_context_parts.append(r38_block)
@@ -1813,6 +1899,34 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         f"[REQ {request_id}] memory_used event push failed, ignored"
                     )
             # ===== R17-E 记忆召回展示事件 END =====
+            # ===== M2-Task 4/5 专家知识检索注入 BEGIN =====
+            # 专家绑定的知识库（wiki / project_material / specialist_private）
+            # 在每轮对话前检索 top-k：上下文块并入 dynamic_context_parts，
+            # 来源条目以 kind="knowledge" 进入统一引用管道。无绑定 / 检索
+            # 失败一律 fail-open（返回空），绝不阻断对话主流程。
+            # M2-Task 5：有绑定但 0 命中时注入 no_hit_hint（拒答引导）。
+            r81_knowledge_sources: list = []
+            try:
+                from backend.chat.specialist_knowledge import (
+                    retrieve_knowledge_context,
+                )
+
+                (
+                    l14_knowledge_block,
+                    r81_knowledge_sources,
+                    l14_knowledge_no_hit_hint,
+                ) = await retrieve_knowledge_context(
+                    getattr(agent, "profile", None), data.message
+                )
+                if l14_knowledge_block:
+                    dynamic_context_parts.append(l14_knowledge_block)
+                if l14_knowledge_no_hit_hint:
+                    dynamic_context_parts.append(l14_knowledge_no_hit_hint)
+            except Exception as l14_knowledge_err:
+                logger.debug(
+                    f"[REQ {request_id}] specialist knowledge skipped: {l14_knowledge_err}"
+                )
+            # ===== M2-Task 4/5 专家知识检索注入 END =====
             # Task 5 (2026-09-15): catalog-based context budget.
             # Resolve effective window from model catalog, then compute budget
             # as window - reserve. Old >=20000 gate removed.
@@ -2142,6 +2256,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             r81_turn_sources: list = []
             # R86: @memory:/@wiki: 实体引用命中并入统一来源（按 url/path/title 去重）
             r81_turn_sources[:] = merge_sources(r81_turn_sources, r81_entity_sources)
+            # M2-Task 4: 专家知识命中并入统一来源（按源类型/源 ID/文档/片段去重）
+            r81_turn_sources[:] = merge_sources(
+                r81_turn_sources, r81_knowledge_sources
+            )
             # R83 增量推送: 每个 STEP_DONE 边界把已累积来源快照推给前端（长
             # run 中"先搜索后长文写作"时用户不必等 DONE 才看到来源）。记录
             # 上次推送时的条数,仅在有新增时推,避免逐 step 空转刷事件。
@@ -2537,6 +2655,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                         {"role": "assistant", "content": done_content},
                                     ],
                                     source_message_id=assistant_db_id,
+                                    # M3-Task 4: 记忆写入归会话专家的私有层
+                                    agent_id=resolve_bound_specialist(data.session_id),
                                 )
                             except Exception as exc:
                                 logger.warning(
@@ -2550,6 +2670,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     data.session_id,
                                     data.message,
                                     done_content,
+                                    agent_id=resolve_bound_specialist(data.session_id),
                                 )
                             except Exception as exc:
                                 logger.warning(
