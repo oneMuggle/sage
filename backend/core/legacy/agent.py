@@ -73,6 +73,7 @@ from backend.memory import (
     SessionSummaryStore,
     WorkingMemory,
 )
+from backend.orchestration.complexity_classifier import estimate_budget_level
 from backend.services.permission_gate import (
     DEFAULT_APPROVAL_TIMEOUT_S,
     ApprovalAnswer,
@@ -1842,12 +1843,52 @@ class SageAgent:
                         for _m in messages
                         if isinstance(_m, dict)
                     )
-                    effective_max_iterations, _budget_level = estimate_initial_budget(
-                        _user_message,
-                        has_attachments=_has_attachments,
-                        profile_floor=_profile_max_iterations,
-                        config=_budget_config,
+                    # M4 · W4: 先尝试 LLM 预算分级，失败回落启发式
+                    _context_signals_parts = []
+                    if session_id:
+                        _context_signals_parts.append("- 已绑定到项目工作区")
+                        _project_bound = True
+                    else:
+                        _project_bound = False
+                    if _has_attachments:
+                        _context_signals_parts.append("- 用户提供了附件（文件/图片）")
+                    if len(_user_message) > 500:
+                        _context_signals_parts.append(
+                            f"- 用户消息较长（{len(_user_message)} 字符），可能包含详细需求"
+                        )
+                    _context_signals_str = (
+                        "\n".join(_context_signals_parts) if _context_signals_parts else None
                     )
+                    _llm_budget = await estimate_budget_level(
+                        _user_message, context_signals=_context_signals_str
+                    )
+                    if _llm_budget is not None:
+                        _budget_level = _llm_budget[0]
+                        _level_budget_map = {
+                            "simple": _budget_config.simple_budget,
+                            "medium": _budget_config.medium_budget,
+                            "complex": _budget_config.complex_budget,
+                            "long": _budget_config.long_budget,
+                        }
+                        effective_max_iterations = max(
+                            _profile_max_iterations or 0,
+                            _level_budget_map.get(_budget_level, _budget_config.medium_budget),
+                        )
+                        effective_max_iterations = min(
+                            int(effective_max_iterations), _budget_config.hard_cap
+                        )
+                        logger.info(
+                            "LLM 预算分级: level=%s reasoning=%s → budget=%s",
+                            _budget_level, _llm_budget[1], effective_max_iterations,
+                        )
+                    else:
+                        effective_max_iterations, _budget_level = estimate_initial_budget(
+                            _user_message,
+                            has_attachments=_has_attachments,
+                            project_bound=_project_bound,
+                            profile_floor=_profile_max_iterations,
+                            config=_budget_config,
+                        )
                 _dynamic_budget_active = True
                 _limit_source = "dynamic"
             elif _orch_settings_max is not None and _orch_settings_max > 0:
