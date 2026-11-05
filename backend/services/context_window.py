@@ -12,7 +12,7 @@ services→api 的链会点亮 lint-imports hexagonal-architecture 违规。
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Optional
 
 
 def resolve_effective_window(  # noqa: PLR0911 — Task 5 priority cascade, each branch is a distinct user-facing mode

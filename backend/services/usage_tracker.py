@@ -714,9 +714,9 @@ class UsageTracker:
         eff_window = None
         if last and last.get("model"):
             try:
-                from backend.services.context_window import resolve_effective_window
                 from backend.data.settings_canonicalizer import to_camel
                 from backend.data.settings_repo import SettingsRepository
+                from backend.services.context_window import resolve_effective_window
 
                 raw = SettingsRepository().get_json("app_settings")
                 settings = to_camel(raw) if isinstance(raw, dict) else {}
