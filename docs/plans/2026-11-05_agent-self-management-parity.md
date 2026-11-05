@@ -435,6 +435,19 @@ Sage 已经有一个**窄而深**的自管理核心（配置 / 编排 / 定时 /
   - `backend/agents/profiles.py` 1123 → 1130
   - `backend/tools/permissions.py` 882 → 886
   - `backend/tools/config_tool.py` 980 → 1097
+- `backend/services/context_window.py`（新建，CI 红灯修复）
+  - 把 `resolve_effective_window`（Task 5 上下文窗口解析级联）从
+    `backend.api.chat_request_policy` 下沉到 services 层。原因：M1.4
+    `sage_usage_tool` → `usage_tracker` 原本 lazy import
+    `backend.api.legacy_routes._resolve_effective_window`，导致
+    adapters → tools → services → api 逆向依赖链，`lint-imports`
+    hexagonal-architecture 合约红灯。
+  - `chat_request_policy.py` 保留 `_resolve_effective_window` 再导出别名，
+    存量 import 路径（legacy_routes / main.py / 测试）无感。
+- `backend/tools/tool_bundles.py`
+  - 新增 `self_status` bundle（`SageSelfStatusTool` / `SageDoctorTool` /
+    `SageUsageTool`，全部 READ）；所有 preset 默认选中 → `test_cli_harness.py`
+    四处硬编码 bundle 计数 +1 同步（32→33 / 24→25 / 31→32 / 23→24）。
 
 ### 10.3 测试结果
 
@@ -443,6 +456,10 @@ Sage 已经有一个**窄而深**的自管理核心（配置 / 编排 / 定时 /
 - `slashCommands.test.ts` → **11 passed**（含 3 个 M1.5 新测试）
 - `test_self_status_tool.py` → **16 passed**（M1.1 扩展）
 - **M1 阶段合计 ≥ 202 tests green**（含 overlap：`test_tool_capabilities.py` 与 M0 共享）
+- CI 红灯修复后本地复验：`lint-imports` KEPT（1 contract, 0 broken）；
+  `test_chat_request_policy` / `test_model_catalog_context` / `test_usage_tracker` /
+  `test_self_status_tool` 合计 93 passed；`test_cli_harness.py` 10 passed；
+  harness 全家桶（7 文件）78 passed。
 
 ### 10.4 M1.7 推迟理由（详见 §2.4 escape hatch）
 
