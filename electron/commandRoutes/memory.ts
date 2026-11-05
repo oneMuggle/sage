@@ -74,6 +74,22 @@ export const memoryRoutes: Record<string, CommandRoute> = {
     },
   },
   delete_memory: { method: 'POST', path: () => '/api/v1/memory/delete' },
+  // Task 4.3: 批量清理低质量记忆
+  get_quality_candidates: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams({
+        limit: String((a?.limit as number) ?? 50),
+        threshold: String((a?.threshold as number) ?? 0.3),
+      });
+      return `/api/v1/memory/quality-candidates?${params.toString()}`;
+    },
+  },
+  batch_delete_memories: {
+    method: 'POST',
+    path: () => '/api/v1/memory/batch-delete',
+    body: (a) => ({ items: a.items }),
+  },
   // 对标 S2 (2026-09-13): 记忆写入台账（内联"记住了"提示 + 撤销）
   get_recent_memory_writes: {
     method: 'GET',
@@ -188,5 +204,16 @@ export const memoryRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: () => '/api/v1/memory/recall/feedback',
     body: (a) => ({ log_id: a.logId, feedback: a.feedback }),
+  },
+  // Task 4.5: 记忆级反馈（👍/👎/neutral）—— 按 memory_id 落 memories_feedback，
+  // 与 submit_recall_feedback（按 log_id 回填 memory_recall_log）正交
+  submit_memory_feedback: {
+    method: 'POST',
+    path: (a) => `/api/v1/memory/${encodeURIComponent(String(a?.memoryId ?? ''))}/feedback`,
+    body: (a) => ({
+      feedback: a.feedback,
+      memory_type: a.memoryType ?? 'episodic',
+      ...(a.reason ? { reason: a.reason } : {}),
+    }),
   },
 };
