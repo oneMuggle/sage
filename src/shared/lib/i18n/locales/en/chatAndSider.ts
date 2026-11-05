@@ -73,6 +73,12 @@ export const enChatAndSider = {
   'chat.orchMode.forceMulti': 'Force orchestration (LLM decomposes)',
   'chat.orchMode.templateResearchWrite': 'Template: research & write',
   'chat.orchMode.templateGatherAnalyzeReport': 'Template: gather-analyze-report',
+  // M0 (2026-11-03): session-level specialist picker
+  'chat.specialist.label': 'Specialist',
+  'chat.specialist.primary': 'Main assistant',
+  'chat.specialist.hint': 'Specialist for this session (affects subsequent turns only)',
+  'chat.specialist.switched': 'This session now uses {name}',
+  'chat.specialist.switchFailed': 'Failed to switch specialist',
   'chat.stop': 'Stop',
   'chat.config_warning': 'API endpoint or chat model not configured',
   'chat.config_warning_action': 'Go to Settings',
@@ -124,6 +130,11 @@ export const enChatAndSider = {
   'chat.sources_group_wiki': 'Knowledge base',
   'chat.sources_group_web': 'Web',
   'chat.sources_group_tool': 'Tools',
+  // M2-Task 4: Specialist knowledge citations
+  'chat.sources_group_knowledge': 'Specialist knowledge',
+  'chat.sources_open_knowledge_wiki': 'View in project Wiki',
+  'chat.sources_open_knowledge_material': 'View in project materials',
+  'chat.sources_open_knowledge_private': 'Private specialist knowledge (not yet openable)',
   // R38: Skill activation display
   'chat.skills_activated': 'skills activated',
   'chat.skills_toggle': 'View activated skills',

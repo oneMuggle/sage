@@ -40,11 +40,7 @@ function renderMemory() {
   );
 }
 
-function response(
-  items: Array<{ id: string }>,
-  page: number,
-  total: number,
-) {
+function response(items: Array<{ id: string }>, page: number, total: number) {
   return {
     items,
     page,
@@ -85,8 +81,8 @@ describe('Memory export pagination', () => {
     screen.getByRole('button', { name: '导出' }).click();
 
     await waitFor(() => expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledOnce());
-    expect(getMemoriesMock).toHaveBeenNthCalledWith(1, undefined, 1, 100);
-    expect(getMemoriesMock).toHaveBeenNthCalledWith(2, undefined, 2, 100);
+    expect(getMemoriesMock).toHaveBeenNthCalledWith(1, undefined, 1, 100, undefined);
+    expect(getMemoriesMock).toHaveBeenNthCalledWith(2, undefined, 2, 100, undefined);
     expect(createObjectUrlMock).toHaveBeenCalledOnce();
   });
 

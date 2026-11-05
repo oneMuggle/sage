@@ -46,6 +46,9 @@ import type {
   RescanResult,
   SavedOfficeFile,
   SkillsElectronApiBridge,
+  SpecialistPackageExportResult,
+  SpecialistPackageImportResult,
+  SpecialistsElectronApiBridge,
   UpdateElectronApiBridge,
 } from '../src/shared/types/electron-api';
 import type {
@@ -336,6 +339,17 @@ const electronAPI = {
     importSkillDirectory: (pickedPath: string) =>
       ipcRenderer.invoke('skills:import-directory', pickedPath) as Promise<ImportResult>,
   } satisfies SkillsElectronApiBridge,
+
+  /**
+   * M1-E: 专家包 (.sage) 导入/导出桥。
+   * - importPackage: 原生选择器 + multipart → { id, name } | null（取消）
+   * - exportPackage: 二进制下载 + 另存为 → { ok, path } | null（取消）
+   */
+  specialists: {
+    importPackage: () => ipcRenderer.invoke('specialists:import') as Promise<SpecialistPackageImportResult | null>,
+    exportPackage: (agentId: string) =>
+      ipcRenderer.invoke('specialists:export', agentId) as Promise<SpecialistPackageExportResult | null>,
+  } satisfies SpecialistsElectronApiBridge,
 
   /** Workspace MCP Server (M4): tunnel, emergency stop, copy URL to clipboard. */
   remoteMcp: {

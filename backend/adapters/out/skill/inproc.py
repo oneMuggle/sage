@@ -28,13 +28,31 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 
 from sage_core import SkillResult, SkillSpec
 from sage_core.repositories import SkillPort  # noqa: F401  (structural typing target)
 
 from backend.skills.notifications import get_notification_hub
 from backend.skills.registry import SkillRegistry as _SkillRegistry
+from backend.skills.specialist_skills import (
+    SPECIALIST_SKILL_PREFIX,
+    agent_id_from_private_skill,
+    discover_specialist_skill_dirs,
+    resolve_specialist_allowlist,
+    skill_name_prefix,
+)
 from backend.tools.bash_validation import validate_bash
 from backend.tools.permissions import (
     DEFAULT_PERMISSION_MODE,
@@ -108,6 +126,9 @@ class InprocSkillAdapter:
         self._script_runner = None
         self._settings_repo = None  # requires.config 门控注入点 (Task 1)
         self._skill_md_loader = None  # 持久持有 loader (缺口 #12): rescan 复用哈希缓存
+        # 专家私有技能 loader（M1，spec §5.2）：每个 agent 一个带名字前缀的
+        # loader，共享同一 registry；前缀形如 ``specialist__<agent_id>__``。
+        self._private_loaders: List[Tuple[str, Any]] = []
         # rescan 在 FastAPI threadpool 中运行; 串行化共享可变状态 (_dirs / _gating_ctx /
         # loader.skipped / loader._loaded_this_scan) 的读写, 避免并发 rescan 互相污染返回值。
         self._scan_lock = threading.Lock()
@@ -172,6 +193,9 @@ class InprocSkillAdapter:
             )
             with self._scan_lock:
                 self._skill_md_loader.scan_and_load()
+                # 专家私有技能与全局技能共享同一 registry（M1，spec §5.2），
+                # 私有技能名带 ``specialist__<agent_id>__`` 前缀避免互覆。
+                self._sync_private_loaders(list(skill_dirs))
         except Exception as exc:  # noqa: BLE001 — adapter 构造必须容错
             import logging
 
@@ -212,10 +236,114 @@ class InprocSkillAdapter:
 
     # ========== SkillPort 协议方法 ==========
 
-    def list_skills(self) -> List[SkillSpec]:
-        """返回所有已注册技能的 spec(按注册顺序)。"""
+    def resolve_allowlist(self, patterns: Optional[Iterable[str]]) -> Optional[Set[str]]:
+        """把专家 ``skills`` 模式列表解析为具体技能名集合（M1，spec §5.1）。
+
+        ``None`` / 空列表 → ``None``（不受限）；通配模式按当前注册表里的
+        **公开**技能名做前缀展开（私有技能必须经 ``resolve_agent_allowlist``
+        显式并入，避免 ``*`` 意外放行他人私有技能）。解析在调用侧完成一次，
+        随后作为 ``allowed`` 传入四个入口，避免每入口重复扫描。
+        """
+        from backend.domain.skill_scope import resolve_skill_allowlist
+
+        return resolve_skill_allowlist(patterns, self._public_skill_names())
+
+    def resolve_agent_allowlist(
+        self, patterns: Optional[Iterable[str]], agent_id: Optional[str]
+    ) -> Optional[Set[str]]:
+        """专家会话的技能允许集：公开技能 + 本人私有技能（M1，spec §5.2）。
+
+        与 ``resolve_allowlist`` 的差异：把 ``specialist__<agent_id>__*``
+        私有技能按短名参与模式匹配并并入结果；同名时私有遮蔽全局。
+        ``agent_id`` 为空/非法 → 退化为公开技能解析。
+        """
+        return resolve_specialist_allowlist(
+            patterns, self._registry.list_names(), agent_id
+        )
+
+    def _public_skill_names(self) -> List[str]:
+        """注册表中的公开技能名（排除所有专家私有技能）。"""
+        return [
+            name
+            for name in self._registry.list_names()
+            if not name.startswith(SPECIALIST_SKILL_PREFIX)
+        ]
+
+    @staticmethod
+    def _scope_denies(name: str, allowed: Optional[Set[str]]) -> bool:
+        """技能作用域判定（M1，spec §5.1/§5.2）。
+
+        - 公开技能：``allowed is None`` 不受限，否则必须在集合内；
+        - 私有技能：即使 ``allowed is None`` 也不可见 —— 必须由
+          ``resolve_agent_allowlist`` 显式并入本人私有技能名。
+        """
+        if agent_id_from_private_skill(name) is not None:
+            return allowed is None or name not in allowed
+        return allowed is not None and name not in allowed
+
+    def is_scope_denied(self, name: str, allowed: Optional[Set[str]]) -> bool:
+        """供路由/工具层复用的作用域判定（含私有技能默认遮罩）。"""
+        return self._scope_denies(name, allowed)
+
+    def _sync_private_loaders(self, script_dirs: List[Path]) -> None:
+        """同步 ``~/.sage/specialists/*/skills`` 私有技能 loader（M1，spec §5.2）。
+
+        调用方需持有 ``_scan_lock``。目录消失的专家会注销其私有技能，
+        避免 stale 可见；单个目录故障不影响其他专家。
+        """
+        from backend.skills.skill_md.loader import (
+            SkillMdHotLoader,
+            build_gating_context_for_dirs,
+        )
+
+        existing = dict(self._private_loaders)
+        private_dirs = discover_specialist_skill_dirs()
+        loaders: List[Tuple[str, Any]] = []
+        for agent_id, skills_dir in private_dirs:
+            loader = existing.pop(agent_id, None)
+            gating_ctx = build_gating_context_for_dirs(
+                [skills_dir], settings_repo=self._settings_repo
+            )
+            if loader is None:
+                loader = SkillMdHotLoader(
+                    self._registry,
+                    dirs=[skills_dir],
+                    gating_ctx=gating_ctx,
+                    script_runner=self._script_runner,
+                    name_prefix=skill_name_prefix(agent_id),
+                )
+            else:
+                loader._dirs = [skills_dir]
+                loader._gating_ctx = gating_ctx
+            try:
+                loader.scan_and_load()
+            except Exception as exc:  # noqa: BLE001 — 单个专家失败不阻断其他专家
+                logging.getLogger(__name__).warning(
+                    "专家私有技能扫描失败 (%s): %s", agent_id, exc
+                )
+            loaders.append((agent_id, loader))
+        # 已删除的专家目录：注销其私有技能
+        for agent_id in existing:
+            prefix = skill_name_prefix(agent_id)
+            for name in list(self._registry.list_names()):
+                if name.startswith(prefix):
+                    self._registry.unregister(name)
+        self._private_loaders = loaders
+        if self._script_runner is not None:
+            # 私有技能目录与用户技能目录同属本地信任域，允许其脚本执行。
+            self._script_runner._allowed_roots = list(script_dirs) + [
+                d for _, d in private_dirs
+            ]
+
+    def list_skills(self, allowed: Optional[Set[str]] = None) -> List[SkillSpec]:
+        """返回所有已注册技能的 spec(按注册顺序)。
+
+        ``allowed`` 非 None 时只返回允许集内的技能（专家技能作用域）。
+        """
         specs: List[SkillSpec] = []
         for schema in self._registry.list():
+            if self._scope_denies(schema.name, allowed):
+                continue
             specs.append(
                 SkillSpec(
                     name=schema.name,
@@ -232,9 +360,12 @@ class InprocSkillAdapter:
         name: str,
         action: str,
         args: Dict[str, Any],
+        allowed: Optional[Set[str]] = None,
     ) -> SkillResult:
         """执行技能。
 
+        - ``allowed`` 非 None 且技能不在允许集内 → ``success=False``
+          （专家技能作用域，fail-closed；先于存在性检查，不泄漏技能名）
         - 技能不存在 → success=False
         - 技能 disabled → success=False
         - 工具未注入(context={}) 大多数 builtin 会返回 success=False
@@ -242,16 +373,9 @@ class InprocSkillAdapter:
         - **成功路径自动记使用**（bump_usage + DB 持久化）——
           覆盖 REST / SkillTool / 任何走本方法的调用方。
         """
-        if not self._registry.exists(name):
-            return SkillResult(
-                success=False,
-                error=f"skill '{name}' not found",
-            )
-        if not self.is_available(name):
-            return SkillResult(
-                success=False,
-                error=f"skill '{name}' is disabled or archived",
-            )
+        denial = self._execution_denial(name, allowed)
+        if denial is not None:
+            return denial
         # BaseSkill.execute 接收 (params, context); action 当前未用
         # (BaseSkill 是单动作技能, action 留给未来的 multi-action skill)
         skill = self._registry.get(name)
@@ -294,6 +418,32 @@ class InprocSkillAdapter:
             metadata=dict(raw.metadata),
             error=raw.error,
         )
+
+    def _execution_denial(
+        self, name: str, allowed: Optional[Set[str]]
+    ) -> Optional[SkillResult]:
+        """执行前闸口：允许集 / 存在性 / 可用性。
+
+        专家技能作用域（M1，spec §5.1）fail-closed —— 允许集外的技能在
+        存在性检查之前就拒绝，不泄漏"该技能是否存在"。
+        """
+        if self._scope_denies(name, allowed):
+            return SkillResult(
+                success=False,
+                error=f"skill '{name}' is not permitted for this specialist",
+                metadata={"permission_denied": True},
+            )
+        if not self._registry.exists(name):
+            return SkillResult(
+                success=False,
+                error=f"skill '{name}' not found",
+            )
+        if not self.is_available(name):
+            return SkillResult(
+                success=False,
+                error=f"skill '{name}' is disabled or archived",
+            )
+        return None
 
     def _is_script_dispatch(self, skill: Any, args: Dict[str, Any]) -> bool:
         """Return true only for SKILL.md's external-script execution path."""
@@ -504,7 +654,11 @@ class InprocSkillAdapter:
 
     # ========== A16: Skill Auto-Activation ==========
 
-    def auto_activate(self, message: str) -> AutoActivationResult:
+    def auto_activate(
+        self,
+        message: str,
+        allowed: Optional[Set[str]] = None,
+    ) -> AutoActivationResult:
         """按用户消息自动匹配 SKILL.md 的 ``when_to_use``, 返回注入上下文块。
 
         聊天层 (``ChatService._run_turn_inner`` 步骤 2.6) 在组装本轮
@@ -516,6 +670,7 @@ class InprocSkillAdapter:
           - enabled (``set_enabled(False)`` 的技能不参与)
           - ``dispatch.disable_model_invocation`` 为 False (v2 元数据:
             作者显式声明"禁止模型自动触发"时尊重该意图)
+          - 在 ``allowed`` 内 (专家技能作用域, M1;``None`` = 不受限)
 
         Returns:
             ``AutoActivationResult`` (``names`` + ``context_block``)。
@@ -536,6 +691,8 @@ class InprocSkillAdapter:
         try:
             docs = []
             for schema in self._registry.list():
+                if self._scope_denies(schema.name, allowed):
+                    continue
                 skill = self._registry.get(schema.name)
                 if not isinstance(skill, SkillMdSkill):
                     continue
@@ -565,6 +722,7 @@ class InprocSkillAdapter:
         self,
         command: str,
         args: Union[List[str], Tuple[str, ...]] = (),
+        allowed: Optional[Set[str]] = None,
     ) -> SkillResult:
         """通过 slash command 触发 SKILL.md 技能 (M10)。
 
@@ -577,17 +735,27 @@ class InprocSkillAdapter:
         （``_enforce_permission``）生效** —— 与 REST ``POST /skills/{name}/execute``
         同一权限模型，防止 slash 路径绕过权限检查。
 
+        ``allowed`` 非 None 时，对应技能必须落在允许集内，否则抛
+        ``LookupError``（路由层 → 404；与未知命令同构，不泄漏存在性）。
+
         Args:
             command: slash command 名 (带或不带 ``/``)
             args: 命令参数列表 (透传给 execute_v2 params)
+            allowed: 专家技能作用域（M1，spec §5.1）；None = 不受限
 
         Returns:
             SkillResult: 成功时 ``content`` 是 SKILL.md body
 
         Raises:
-            LookupError: 命令未注册 (路由层转 404)
+            LookupError: 命令未注册或不在允许集内（路由层转 404）
         """
         if self._command_unavailable(command):
+            raise LookupError(f"slash command unavailable: {command!r}")
+        # 专家技能作用域（M1）：与未知命令同构处理，避免泄漏技能存在性
+        resolved_scope = self._slash_registry.resolve(command)
+        if resolved_scope is not None and self._scope_denies(
+            resolved_scope.name, allowed
+        ):
             raise LookupError(f"slash command unavailable: {command!r}")
 
         # T-2: 检测 args 中的 script=<path> 前缀 → 走权限闸口分发
@@ -602,6 +770,7 @@ class InprocSkillAdapter:
                 resolved.name,
                 "",
                 {"script": script_path, "args": rest_args},
+                allowed=allowed,
             )
 
         result = await self._slash_registry.execute_command(
@@ -645,16 +814,20 @@ class InprocSkillAdapter:
                 return script_path, list(args[1:])
         return None, list(args)
 
-    def list_slash_commands(self) -> List[str]:
-        """列出所有已注册的 slash command (M10)，排除已归档技能。
+    def list_slash_commands(self, allowed: Optional[Set[str]] = None) -> List[str]:
+        """列出所有已注册的 slash command (M10)，排除已归档/不可用技能。
 
-        用于前端自动补全 / chat 输入提示。
+        ``allowed`` 非 None 时仅返回允许集内的命令（专家技能作用域，M1）。
         """
-        return [
-            cmd
-            for cmd in self._slash_registry.list_commands()
-            if not self._command_unavailable(cmd)
-        ]
+        commands = []
+        for cmd in self._slash_registry.list_commands():
+            if self._command_unavailable(cmd):
+                continue
+            resolved = self._slash_registry.resolve(cmd)
+            if resolved is not None and self._scope_denies(resolved.name, allowed):
+                continue
+            commands.append(cmd)
+        return commands
 
     def _command_unavailable(self, command: str) -> bool:
         """Return true when command's skill is disabled or archived."""
@@ -779,6 +952,8 @@ class InprocSkillAdapter:
             )
 
             self._skill_md_loader.scan_and_load()
+            # 专家私有技能目录可能随导入/审批新增，每次重扫同步（M1，spec §5.2）。
+            self._sync_private_loaders(list(skill_dirs))
             self._rebuild_slash_registry()
             # 返回本次 scan 中**新加载 + 刷新**的名字 (来自 _loaded_this_scan)。
             # total_loaded 保持"本次 scan 加载数"这一既有 REST/IPC 契约:
@@ -867,9 +1042,10 @@ class InprocSkillAdapter:
 
     # ========== 扩展序列化 (PR-8 SKILL.md 适配层) ==========
 
-    def list_skills_extended(self) -> List[Dict[str, Any]]:
+    def list_skills_extended(self, allowed: Optional[Set[str]] = None) -> List[Dict[str, Any]]:
         """列出所有技能 + 扩展字段 (供路由层序列化到前端)。
 
+        ``allowed`` 非 None 时仅返回允许集内的技能（专家技能作用域，M1）。
         返回的 dict 包含 SkillSpec 全字段 + 扩展字段:
           - ``source`` (str): ``"builtin"`` 或 ``"skillmd"``
           - ``body`` (str | None): 仅 SKILL.md 有值, 是 markdown body
@@ -889,6 +1065,8 @@ class InprocSkillAdapter:
         lifecycles = self.lifecycle_map()
         result: List[Dict[str, Any]] = []
         for schema in self._registry.list():
+            if self._scope_denies(schema.name, allowed):
+                continue
             skill = self._registry.get(schema.name)
             assert skill is not None  # list() 与 get() 同源, exists 已 guard
             is_skillmd = isinstance(skill, SkillMdSkill)

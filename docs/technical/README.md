@@ -108,6 +108,7 @@
 | 130  | [工作区绑定跳过机制](./130-workspace-binding-skip.md) | 新会话页"不绑定项目"语义贯穿前后端：`skip_workspace_binding` API 字段 + 解析链跳过 + 主流应用对标 |
 | 131  | [聊天附件链路](./131-attachment-pipeline.md) | MediaStore sidecar 元数据 + 后缀回退表与上传 allowlist 同口径；R37 注入带 name/type + 逐附件 `ok/skipped/error` 状态双出口（`attachments_processed` 事件 + `client_meta.attachments_status` 落库）；`useFileUpload` 预检状态机 + 气泡附件卡片 + 整页拖放共享 hook |
 | 132  | [记忆质量优化（Phase 1–4）](./132-memory-quality-optimization.md) | 提取门槛 + 冲突消解 + 偏好标签 + `MemoryQualityScorer` + 主题簇巩固；前端侧质量条/批量清理/来源会话/👍👎 反馈/使用提示 |
+| 133  | [专家（数字员工）系统](./133-specialist-persona.md) | M0–M4 全量：AgentProfile 运行时接线 / 技能作用域 fail-closed / 知识绑定 RRF / 记忆 agent_id 隔离 / 包格式 v2 + 模板库 + 版本回滚 + 黄金任务评测（win7 编号避让 130/131 上游 + 132 预占） |
 
 ---
 

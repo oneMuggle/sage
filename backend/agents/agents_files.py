@@ -207,6 +207,19 @@ def import_agents_from_files(directory: Optional[Path] = None) -> Dict[str, List
         existing = repo.get(agent_id)
         if existing is not None:
             profile["enabled"] = bool(existing.get("enabled", True))
+            # M1 (2026-11-03): markdown 档案不含专家卡扩展字段，导入时从 DB
+            # 现值继承，避免 upsert 用默认值把这些字段清空。
+            for field in (
+                "skills",
+                "knowledge_bindings",
+                "memory_policy",
+                "persona_ui",
+                "permission_mode",
+                "version",
+                "source",
+            ):
+                if field in existing:
+                    profile[field] = existing[field]
         current = _profile_from_repo_row(existing) if existing else None
         differs = current is None or any(
             current.get(field) != profile.get(field) for field in _COMPARE_FIELDS

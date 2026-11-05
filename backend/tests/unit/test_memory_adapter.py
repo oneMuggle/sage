@@ -79,7 +79,9 @@ class TestMemoryAdapterRetrieve:
         await adapter.retrieve("火锅", "session-456", limit=3)
 
         # Assert
-        mock_memory_manager.recall.assert_called_once_with("火锅", limit=3, session_id="session-456")
+        mock_memory_manager.recall.assert_called_once_with(
+            "火锅", limit=3, session_id="session-456", agent_id=None
+        )
 
     @pytest.mark.asyncio()
     async def test_retrieve_handles_empty_results(self, adapter, mock_memory_manager):
@@ -130,6 +132,7 @@ class TestMemoryAdapterStore:
                 "memory_category": None,
             },
             session_id="session-123",
+            agent_id=None,
         )
         assert memory_id == "memory-id-123"
 

@@ -348,6 +348,7 @@ async def _extract_legacy_chat_memory(
     session_id: str,
     user_text: str,
     assistant_text: str,
+    agent_id: str = "primary",
 ) -> None:
     """legacy /chat/stream 在 assistant 消息落盘后 best-effort 提取记忆。
 
@@ -364,6 +365,7 @@ async def _extract_legacy_chat_memory(
     - 函数保持 async 签名（调用点 await 不变），但 submit 非阻塞,
       装配完立即返回。
     - 任何异常只 warning 绝不外抛——记忆写入不得影响已完成的流式响应。
+    - ``agent_id``：M3-Task 4 新增；记忆写入归会话专家的私有层。
     """
     try:
         from backend.data.settings_repo import SettingsRepository
@@ -396,6 +398,7 @@ async def _extract_legacy_chat_memory(
                 session_id=session_id,
                 enabled=True,
                 tool_observations=_pop_env_observations(session_id),
+                agent_id=agent_id,
             )
         )
     except Exception as exc:

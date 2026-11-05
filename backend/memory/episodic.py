@@ -176,6 +176,7 @@ class EpisodicMemory:
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
         supersedes_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> str:
         """
         保存情景记忆
@@ -196,6 +197,8 @@ class EpisodicMemory:
             scope: 作用域 ('user'|'project'|'global')，None → 按会话
                 workspace 绑定自动判定（见 backend.memory.scope）
             project_key: 项目目录（scope='project' 时生效）
+            agent_id: M3 专家维度。None（默认）= 共享层，所有专家可见；
+                非空 = 该专家私有（读取过滤为「私有 ∪ 共享」）
 
         Returns:
             生成的记忆 ID
@@ -227,8 +230,8 @@ class EpisodicMemory:
             INSERT INTO memories_episodic
             (id, content, summary, session_id, memory_type, importance, tags,
              created_at, is_valid, scope, project_key, supersedes_id,
-             source_turn_id, source_message_id, memory_category)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+             source_turn_id, source_message_id, memory_category, agent_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 memory_id,
@@ -245,6 +248,7 @@ class EpisodicMemory:
                 source_turn_id,
                 source_message_id,
                 memory_category,
+                agent_id,
             ),
         )
 
@@ -267,6 +271,8 @@ class EpisodicMemory:
         session_id: Optional[str] = None,
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         搜索情景记忆
@@ -284,17 +290,26 @@ class EpisodicMemory:
             scope: P1 作用域过滤（'user'|'project'|'global'）。给定时
                 不做 session 隔离 —— 用于同项目跨会话 / 用户级跨会话检索
             project_key: scope='project' 时必填，限定项目目录
+            agent_id: M3 当前专家。给定时读取语义 = 私有 ∪ 共享；
+                None 不限制（历史调用 / 管理视图）
+            include_private: 策略收窄——False 时仅返回共享行
 
         Returns:
             匹配的记忆列表
         """
         if not query or query.strip() == "":
-            return self.get_recent(limit, session_id=session_id)
+            return self.get_recent(
+                limit,
+                session_id=session_id,
+                agent_id=agent_id,
+                include_private=include_private,
+            )
 
         # 优先走 FTS5
         fts_results = self._search_fts(
             query, limit, min_importance, memory_type, session_id=session_id,
-            scope=scope, project_key=project_key,
+            scope=scope, project_key=project_key, agent_id=agent_id,
+            include_private=include_private,
         )
         if fts_results:
             return fts_results
@@ -302,7 +317,8 @@ class EpisodicMemory:
         # FTS 无命中（如索引尚未回填）或异常 → 回退 LIKE+jieba
         return self._search_like(
             query, limit, min_importance, memory_type, session_id=session_id,
-            scope=scope, project_key=project_key,
+            scope=scope, project_key=project_key, agent_id=agent_id,
+            include_private=include_private,
         )
 
     def _search_fts(
@@ -314,6 +330,8 @@ class EpisodicMemory:
         session_id: Optional[str] = None,
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> List[Dict[str, Any]]:
         """走 FTS5 全文索引搜索（jieba 分词 + OR MATCH）。
 
@@ -366,6 +384,13 @@ class EpisodicMemory:
             sql_parts.append("AND me.session_id = ?")
             params.append(session_id)
 
+        agent_sql, agent_params = memory_scope.agent_visibility_sql(
+            agent_id, prefix="me.", include_private=include_private
+        )
+        if agent_sql:
+            sql_parts.append(agent_sql)
+            params.extend(agent_params)
+
         sql_parts.append("ORDER BY me.importance DESC, me.access_count DESC, me.created_at DESC LIMIT ?")
         params.append(limit)
 
@@ -409,6 +434,8 @@ class EpisodicMemory:
         session_id: Optional[str] = None,
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        include_private: bool = True,
     ) -> List[Dict[str, Any]]:
         """LIKE + jieba 回退搜索（FTS 索引不可用或无命中时使用）。
 
@@ -419,6 +446,7 @@ class EpisodicMemory:
             memory_type: 可选，按记忆类型筛选
             scope: 可选，P1 作用域过滤（跨会话）
             project_key: scope='project' 时限定项目目录
+            agent_id: M3 当前专家（私有 ∪ 共享）；None 不限制
 
         Returns:
             匹配的记忆列表
@@ -475,6 +503,13 @@ class EpisodicMemory:
             where_parts.append("AND session_id = ?")
             params.append(session_id)
 
+        agent_sql, agent_params = memory_scope.agent_visibility_sql(
+            agent_id, include_private=include_private
+        )
+        if agent_sql:
+            where_parts.append(agent_sql)
+            params.extend(agent_params)
+
         # 排序 + 限制
         where_parts.append("ORDER BY importance DESC, access_count DESC, created_at DESC LIMIT ?")
         params.append(limit)
@@ -497,13 +532,21 @@ class EpisodicMemory:
 
         return results
 
-    def get_recent(self, limit: int = 10, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_recent(
+        self,
+        limit: int = 10,
+        session_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        include_private: bool = True,
+    ) -> List[Dict[str, Any]]:
         """
         获取最近的记忆
 
         Args:
             limit: 返回数量限制
             session_id: 可选，按会话 ID 筛选
+            agent_id: M3 当前专家（私有 ∪ 共享）；None 不限制
+            include_private: 策略收窄——False 时仅返回共享行
 
         Returns:
             记忆列表
@@ -511,26 +554,24 @@ class EpisodicMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
+        where_parts = ["is_valid = 1 AND invalid_at IS NULL"]
+        params: List[Any] = []
         if session_id:
-            cursor.execute(
-                """
-                SELECT * FROM memories_episodic
-                WHERE session_id = ? AND is_valid = 1 AND invalid_at IS NULL
-                ORDER BY created_at DESC
-                LIMIT ?
-            """,
-                (session_id, limit),
-            )
-        else:
-            cursor.execute(
-                """
-                SELECT * FROM memories_episodic
-                WHERE is_valid = 1 AND invalid_at IS NULL
-                ORDER BY created_at DESC
-                LIMIT ?
-            """,
-                (limit,),
-            )
+            where_parts.append("AND session_id = ?")
+            params.append(session_id)
+        agent_sql, agent_params = memory_scope.agent_visibility_sql(
+            agent_id, include_private=include_private
+        )
+        if agent_sql:
+            where_parts.append(agent_sql)
+            params.extend(agent_params)
+        params.append(limit)
+
+        cursor.execute(
+            "SELECT * FROM memories_episodic WHERE " + " ".join(where_parts)
+            + " ORDER BY created_at DESC LIMIT ?",
+            params,
+        )
 
         results = []
         for row in cursor.fetchall():

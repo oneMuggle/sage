@@ -4,7 +4,7 @@ name: Ops Coworker
 icon: wrench
 tagline: Operate and investigate — runbooks, logs, infrastructure
 description: An operations-focused persona for investigating incidents, running runbooks, and producing operational deliverables.
-tools: [terminal, read_file, list_dir, write_file, web_search, web_fetch]
+tools: [bash, read_file, list_dir, write_file, web_search, web_fetch]
 connectors: true
 recommended_models: [claude-sonnet-4-5, gpt-4-1]
 default_mode: prompt

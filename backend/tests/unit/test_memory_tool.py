@@ -31,7 +31,7 @@ pytestmark = pytest.mark.unit
 def _trusted_context():
     token = set_tool_context(
         ToolExecutionContext(
-            session_id="sess-test",
+            session_id="sess-test", agent_id="primary",
             stream_id="stream-test",
             binding_generation=0,
             office_doc_scope=frozenset(),
@@ -238,7 +238,7 @@ def test_memory_save_tool_uses_memorize_without_event_loop(real_memory_manager):
         memory_type="episodic",
         importance=5,
         tags=[],
-        session_id="sess-test",
+        session_id="sess-test", agent_id="primary",
     )
     assert result.success is True
     # output is the actual memory ID — surfaced for the LLM tool loop.
@@ -248,7 +248,7 @@ def test_memory_save_tool_uses_memorize_without_event_loop(real_memory_manager):
         "episodic",
         5,
         [],
-        session_id="sess-test",
+        session_id="sess-test", agent_id="primary",
     )
 
 
@@ -262,7 +262,7 @@ def test_memory_search_tool_calls_search_memories_not_remember(memory_manager_sp
         query="UTC", memory_type="all", limit=5
     )
     memory_manager_spy.search_memories.assert_called_once_with(
-        "UTC", None, 5, session_id="sess-test"
+        "UTC", None, 5, session_id="sess-test", agent_id="primary"
     )
 
 
@@ -275,7 +275,7 @@ def test_memory_search_tool_maps_all_to_none_and_clamps_limit(memory_manager_spy
         query="x", memory_type="all", limit=999
     )
     memory_manager_spy.search_memories.assert_called_once_with(
-        "x", None, 100, session_id="sess-test"
+        "x", None, 100, session_id="sess-test", agent_id="primary"
     )
 
 
@@ -285,7 +285,7 @@ def test_memory_search_tool_normalises_empty_string_type(memory_manager_spy):
         query="x", memory_type="", limit=3
     )
     memory_manager_spy.search_memories.assert_called_once_with(
-        "x", None, 3, session_id="sess-test"
+        "x", None, 3, session_id="sess-test", agent_id="primary"
     )
 
 
@@ -295,7 +295,7 @@ def test_memory_search_tool_clamps_limit_to_min_one(memory_manager_spy):
         query="x", memory_type="all", limit=0
     )
     memory_manager_spy.search_memories.assert_called_once_with(
-        "x", None, 1, session_id="sess-test"
+        "x", None, 1, session_id="sess-test", agent_id="primary"
     )
 
 
@@ -305,7 +305,7 @@ def test_memory_search_tool_passes_through_specific_type(memory_manager_spy):
         query="x", memory_type="episodic", limit=2
     )
     memory_manager_spy.search_memories.assert_called_once_with(
-        "x", "episodic", 2, session_id="sess-test"
+        "x", "episodic", 2, session_id="sess-test", agent_id="primary"
     )
 
 
