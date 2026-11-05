@@ -525,7 +525,7 @@ interface TitleModelSelectorProps {
  * 2026-10-27: 会话标题专用模型选择器。
  *
  * 与 `ModelSelector` 的区别：存的是**裸模型 id**（`AppSettings.titleModelId`），
- * 不是 `{endpointId, modelId}` —— 后端 `title_generator.load_title_llm_config`
+ * 不是 `{endpointId, modelId}` —— 后端 `title_model_factory.load_title_llm_config`
  * 复用聊天端点的 base_url / api_key，只覆盖 `model` 字段。
  *
  * 因此候选**只列出聊天端点自己已发现的 chat 模型**：换一个端点的模型 id 会

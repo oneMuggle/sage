@@ -246,7 +246,7 @@ export interface AppSettings {
   routing: RoutingSettings;
 
   // 2026-10-27: 会话标题生成专用模型 id（顶层扁平键，与 chatModel 同风格）。
-  // 留空表示回退到聊天模型；后端 title_generator.load_title_llm_config 读取。
+  // 留空表示回退到聊天模型；后端 title_model_factory.load_title_llm_config 读取。
   titleModelId: string;
 
   // 演示模式开关 (2026-08-27): 启用后 Electron main 进程跳过 Python 后端

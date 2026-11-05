@@ -12,7 +12,8 @@ Sage 的每个会话在创建时都有一个占位标题「新对话」（SQLite
 
 | 模块 | 职责 |
 |---|---|
-| `backend/chat/title_generator.py` | 单次标题生成：`TitleGenerator.generate()`、`fallback_title()`、`needs_title()`、`load_title_llm_config()` |
+| `backend/chat/title_generator.py` | 单次标题生成：`TitleGenerator.generate()`、`fallback_title()`、`needs_title()` |
+| `backend/orchestration/title_model_factory.py` | 标题模型客户端工厂：`load_title_llm_config()`、`TitleModelFactory.build()`（需依赖 adapters，故不在 chat 层） |
 | `backend/scheduler/title_backfill.py` | 启动后回补：`TitleBackfill` 调度历史未命名会话批量重生成 |
 | `backend/tools/config_tool.py` | LLM 配置入口：`target="general"` 允许写 `titleModelId` |
 | `src/pages/settings/ModelsTab.tsx` | 用户界面入口：`TitleModelSelector` 下拉（模型 Tab） |
@@ -30,7 +31,7 @@ Sage 的每个会话在创建时都有一个占位标题「新对话」（SQLite
         ├─ 用户消息+助手消息字符数 < MIN_CONTENT_FOR_LLM (= 20)?
         │     └─ 是 → 走启发式 fallback_title() → 落库 → 返回
         │
-        └─ load_title_llm_config() 拿配置 → TitleModelFactory.build()
+        └─ title_model_factory.load_title_llm_config() 拿配置 → TitleModelFactory.build()
               ├─ 配置为空 / 端点不可用 → 走启发式
               └─ 有 → async LLM 调用 → 解析 → 清洗 → 落库（失败 → 启发式）
 ```
