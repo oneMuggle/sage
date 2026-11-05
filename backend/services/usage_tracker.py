@@ -708,19 +708,19 @@ class UsageTracker:
             else:
                 model_latency_stats = []
         # Task 5: resolve effective context window for the last used model.
-        # 复用 legacy_routes 的完整解析级联——尊重用户的 autoContext 开关与
+        # 复用 context_window 服务的完整解析级联——尊重用户的 autoContext 开关与
         # 手动 maxContext 钉值;此前此处硬写 automatic=True,手动模式用户的
         # 百分比按 catalog 窗口算,与请求实际使用的预算不一致。
         eff_window = None
         if last and last.get("model"):
             try:
-                from backend.api.legacy_routes import _resolve_effective_window
+                from backend.services.context_window import resolve_effective_window
                 from backend.data.settings_canonicalizer import to_camel
                 from backend.data.settings_repo import SettingsRepository
 
                 raw = SettingsRepository().get_json("app_settings")
                 settings = to_camel(raw) if isinstance(raw, dict) else {}
-                eff_window = _resolve_effective_window(
+                eff_window = resolve_effective_window(
                     model_id=last["model"],
                     max_context=settings.get("maxContext"),
                     auto_context=settings.get("autoContext"),
