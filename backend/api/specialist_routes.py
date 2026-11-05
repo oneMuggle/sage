@@ -86,7 +86,9 @@ def export_specialist_package(agent_id: str):
 def import_specialist_package(file: UploadFile = File(...)):
     """从上传的 ``.sage`` zip 包导入专家（spec §8.3 导入）。
 
-    - 200 + ``{"id": <new_id>, "name": <display_name>}``
+    - 200 + ``{"id": <new_id>, "name": <display_name>, "dropped_bindings": <int>}``
+      其中 ``dropped_bindings`` 为跨机器不可移植（非 ``specialist_private``）而
+      被丢弃的知识绑定数量
     - 400 — 格式非法 / persona.md 缺失 / 安全扫描失败 / 大小超限
     """
     from backend.services.specialist_importer import import_specialist
@@ -120,6 +122,51 @@ def import_specialist_package(file: UploadFile = File(...)):
         return result
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+# =====================================================================
+# M4-Task 2 — 内置模板库（spec §9）
+# =====================================================================
+
+
+@router.get("/specialists/templates")
+def list_specialist_templates():
+    """返回内置专家模板元数据列表（spec §M4 模板库）。
+
+    响应: ``{"templates": [{id, name, tagline, avatar, description, skill_count}]}``
+    顺序由 ``specialist_templates._TEMPLATE_ORDER`` 决定。不含 system_prompt 正文。
+    """
+    from backend.services.specialist_templates import list_templates
+
+    return {"templates": list_templates()}
+
+
+@router.post(
+    "/specialists/templates/{template_id}/instantiate",
+    status_code=201,
+)
+def instantiate_specialist_template(template_id: str):
+    """从内置模板一键创建专家（spec §M4 模板库）。
+
+    - 201 + ``{"id", "name", "template_id", "dropped_bindings"}``
+    - 404 — 模板不存在 / id 非法
+    - 400 — 物化失败（agents 行冲突、注入扫描失败等）
+    """
+    from backend.services.specialist_templates import instantiate_template
+
+    try:
+        return instantiate_template(template_id)
+    except ValueError as exc:
+        message = str(exc)
+        if "模板不存在" in message:
+            raise HTTPException(
+                status_code=404,
+                detail={"type": "template_not_found", "message": message},
+            )
+        raise HTTPException(
+            status_code=400,
+            detail={"type": "template_instantiate_failed", "message": message},
+        )
 
 
 # =====================================================================

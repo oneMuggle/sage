@@ -1,11 +1,11 @@
 /**
- * Sage API - Specialist packages (.sage 导入/导出, M1-E)
+ * Sage API - Specialist packages (.sage 导入/导出, M1-E) + 内置模板库 (M4-T2)
  *
  * 二进制 zip 不能走通用 `invoke` 通道（`invokeBackend` 总是 `res.json()`），
  * 因此导入/导出走 preload 暴露的 `window.electronAPI.specialists` 桥
  * （主进程 `electron/specialistIpc.ts` 处理原生对话框 + 文件落盘）。
  *
- * 列表/创建/编辑仍用 `agentsApi`，本模块只封装包传输能力。
+ * 列表/创建/编辑仍用 `agentsApi`，本模块只封装包传输能力 + 模板库。
  */
 
 import type {
@@ -13,7 +13,43 @@ import type {
   SpecialistPackageImportResult,
 } from '../types/electron-api';
 
+import { invoke } from './desktopInvoke';
+import type { AgentProfile } from './types/domainEntityTypes';
+
 type SpecialistsBridge = NonNullable<Window['electronAPI']>['specialists'];
+
+/** 模板元数据（不含 system_prompt）。对应后端 list_templates()。 */
+export interface SpecialistTemplateMeta {
+  id: string;
+  name: string;
+  tagline: string;
+  avatar: string;
+  description: string;
+  skill_count: number;
+}
+
+/** 模板实例化响应。 */
+export interface InstantiateTemplateResult {
+  id: string;
+  name: string;
+  template_id: string;
+  dropped_bindings: number;
+}
+
+/** 版本快照元数据（GET /agents/{id}/versions 单项，M4-T3）。 */
+export interface SpecialistVersionMeta {
+  version: number;
+  reason: 'create' | 'update' | 'rollback';
+  /** 毫秒级 Unix 时间戳 */
+  created_at: number;
+}
+
+/** 字段级 diff（GET /agents/{id}/versions/diff 单项）。 */
+export interface SpecialistVersionDiff {
+  field: string;
+  before: unknown;
+  after: unknown;
+}
 
 function getBridge(): SpecialistsBridge | null {
   if (typeof window === 'undefined') return null;
@@ -48,5 +84,74 @@ export const specialistApi = {
     const bridge = getBridge();
     if (!bridge) throw new Error('专家包导出仅桌面端可用');
     return bridge.exportPackage(agentId);
+  },
+
+  /**
+   * 返回内置专家模板元数据列表（不含 system_prompt）。
+   *
+   * @returns 模板数组（按 writing/research/coding/presentation/office 顺序）
+   * @throws 桌面端不可用（必须走 Electron IPC）
+   */
+  async listTemplates(): Promise<SpecialistTemplateMeta[]> {
+    const resp = await invoke<{ templates: SpecialistTemplateMeta[] }>(
+      'list_specialist_templates',
+    );
+    return resp?.templates ?? [];
+  },
+
+  /**
+   * 一键从内置模板创建专家。
+   *
+   * @returns 新专家的 `{ id, name, template_id, dropped_bindings }`
+   * @throws 模板不存在 / 物化失败
+   */
+  async instantiateTemplate(
+    templateId: string,
+  ): Promise<InstantiateTemplateResult> {
+    return invoke<InstantiateTemplateResult>('instantiate_specialist_template', {
+      templateId,
+    });
+  },
+
+  /**
+   * 列出专家的版本快照元数据（version DESC）。
+   *
+   * @returns `[{ version, reason, created_at }]`；无快照时为空数组
+   * @throws 专家不存在（404）
+   */
+  async listVersions(agentId: string): Promise<SpecialistVersionMeta[]> {
+    const resp = await invoke<SpecialistVersionMeta[]>('list_agent_versions', {
+      agentId,
+    });
+    return resp ?? [];
+  },
+
+  /**
+   * 两个版本之间的字段级 diff（仅后端白名单字段）。
+   *
+   * @returns `[{ field, before, after }]`；无差异时为空数组
+   * @throws 专家不存在 / 任一版本不存在（404）
+   */
+  async diffVersions(
+    agentId: string,
+    fromVersion: number,
+    toVersion: number,
+  ): Promise<SpecialistVersionDiff[]> {
+    const resp = await invoke<SpecialistVersionDiff[]>('diff_agent_versions', {
+      agentId,
+      fromVersion,
+      toVersion,
+    });
+    return resp ?? [];
+  },
+
+  /**
+   * 回滚专家到指定版本（新版本号 = 当前 + 1，reason=rollback）。
+   *
+   * @returns 回滚后的完整 profile
+   * @throws 专家不存在 / 目标版本不存在（404）
+   */
+  async rollbackAgent(agentId: string, version: number): Promise<AgentProfile> {
+    return invoke<AgentProfile>('rollback_agent', { agentId, version });
   },
 };

@@ -285,6 +285,17 @@ class AgentUpdate(BaseModel):
     version: Optional[int] = None
 
 
+class AgentRollback(BaseModel):
+    """POST /agents/{id}/rollback 请求体（M4-T3）。
+
+    必填 ``version``：要回滚到的目标版本号（必须存在于 ``agent_versions``
+    表中）。路由读快照后，以 ``current_version + 1`` 作为新版本写入
+    ``agents`` 表，并在 ``agent_versions`` 留一条 ``reason='rollback'`` 记录。
+    """
+
+    version: int = Field(..., ge=1, description="要回滚到的目标版本号")
+
+
 class AgentCreate(BaseModel):
     """POST /agents 请求体（US-4 角色可扩展）。
 

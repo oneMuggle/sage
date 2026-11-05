@@ -2,12 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-import {
-  agentsApi,
-  sessionApi,
-  specialistApi,
-  type AgentProfile,
-} from '../shared/api';
+import { agentsApi, sessionApi, specialistApi, type AgentProfile } from '../shared/api';
 import { useStore } from '../shared/lib/store';
 import { Button, PageHeader } from '../shared/ui';
 import { ErrorState } from '../shared/ui/ErrorState';
@@ -15,6 +10,8 @@ import { LoadingState } from '../shared/ui/LoadingState';
 import { KnowledgeBindingsEditor } from '../widgets/specialists/KnowledgeBindingsEditor';
 import { SpecialistCard } from '../widgets/specialists/SpecialistCard';
 import { SpecialistWizard } from '../widgets/specialists/SpecialistWizard';
+import { TemplateGalleryDialog } from '../widgets/specialists/TemplateGalleryDialog';
+import { VersionHistoryDialog } from '../widgets/specialists/VersionHistoryDialog';
 
 /**
  * /specialists 画廊页（M1-E）。
@@ -34,6 +31,8 @@ export function Specialists() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentProfile | null>(null);
   const [knowledgeAgent, setKnowledgeAgent] = useState<AgentProfile | null>(null);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [versionsAgent, setVersionsAgent] = useState<AgentProfile | null>(null);
   const navigate = useNavigate();
 
   const loadAgents = useCallback(async () => {
@@ -100,6 +99,10 @@ export function Specialists() {
     setKnowledgeAgent(agent);
   }
 
+  function handleVersions(agent: AgentProfile) {
+    setVersionsAgent(agent);
+  }
+
   async function handleStartChat(agent: AgentProfile) {
     try {
       const sid = await useStore.getState().createSession();
@@ -135,6 +138,9 @@ export function Specialists() {
         subtitle="生产力型专家，每个专家拥有独立的人设、技能与权限。"
         actions={
           <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setTemplateOpen(true)}>
+              从模板创建
+            </Button>
             {specialistApi.isAvailable() && (
               <Button variant="secondary" size="sm" onClick={handleImport}>
                 导入专家包
@@ -162,6 +168,7 @@ export function Specialists() {
                 onEdit={handleEdit}
                 onKnowledge={handleKnowledge}
                 onExport={handleExport}
+                onVersions={handleVersions}
                 exporting={exportingId === agent.id}
               />
             ))}
@@ -186,6 +193,21 @@ export function Specialists() {
         }}
         agent={knowledgeAgent}
         onChanged={loadAgents}
+      />
+
+      <TemplateGalleryDialog
+        open={templateOpen}
+        onOpenChange={setTemplateOpen}
+        onCreated={() => void loadAgents()}
+      />
+
+      <VersionHistoryDialog
+        open={versionsAgent !== null}
+        onOpenChange={(open) => {
+          if (!open) setVersionsAgent(null);
+        }}
+        agent={versionsAgent}
+        onRolledBack={() => void loadAgents()}
       />
     </div>
   );

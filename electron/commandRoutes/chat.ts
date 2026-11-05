@@ -43,6 +43,33 @@ export const chatRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/agents/${encodeURIComponent(String(a.id))}/duplicate`,
   },
+  // M4-T2: 内置模板库（spec §9）
+  list_specialist_templates: {
+    method: 'GET',
+    path: () => '/api/v1/specialists/templates',
+  },
+  instantiate_specialist_template: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/specialists/templates/${encodeURIComponent(String(a.templateId))}/instantiate`,
+  },
+  // M4-T3: 专家版本历史 / diff / 回滚（agent_versions 快照）
+  list_agent_versions: {
+    method: 'GET',
+    path: (a) => `/api/v1/agents/${encodeURIComponent(String(a.agentId))}/versions`,
+  },
+  diff_agent_versions: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/agents/${encodeURIComponent(String(a.agentId))}/versions/diff` +
+      `?from=${encodeURIComponent(String(a.fromVersion))}` +
+      `&to=${encodeURIComponent(String(a.toVersion))}`,
+  },
+  rollback_agent: {
+    method: 'POST',
+    path: (a) => `/api/v1/agents/${encodeURIComponent(String(a.agentId))}/rollback`,
+    body: (a) => ({ version: a.version }),
+  },
   attach_chat_stream: {
     method: 'GET',
     path: (a) => `/api/v1/chat/stream/${encodeURIComponent(String(a.streamId))}`,

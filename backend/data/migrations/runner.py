@@ -395,6 +395,50 @@ def _v11_memory_agent_columns(conn: Any) -> None:
 register_migration(11, "memory_agent_columns", _v11_memory_agent_columns)
 
 
+def _v12_agent_version_and_eval_tables(conn: Any) -> None:
+    """M4-T3：专家人设快照表 + 评测记录表。
+
+    - ``agent_versions``：完整 profile JSON 快照，主键 ``(agent_id, version)``。
+      配合 ``legacy_agent_routes`` 的创建/更新/回滚钩子，提供 diff 与回滚能力。
+    - ``agent_eval_runs``：黄金任务集评测结果（M4-T4），按 run_id 主键。
+
+    两张表均用 ``CREATE TABLE IF NOT EXISTS``，幂等；新库与老库行为一致。
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agent_versions (
+            agent_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            profile TEXT NOT NULL,
+            reason TEXT NOT NULL DEFAULT 'update',
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY (agent_id, version)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_agent_versions_agent "
+        "ON agent_versions(agent_id, version DESC)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agent_eval_runs (
+            id TEXT PRIMARY KEY,
+            agent_id TEXT NOT NULL,
+            template_id TEXT,
+            created_at INTEGER NOT NULL,
+            report TEXT NOT NULL
+        )
+        """
+    )
+    conn.commit()
+
+
+register_migration(
+    12, "agent_version_and_eval_tables", _v12_agent_version_and_eval_tables
+)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(

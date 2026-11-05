@@ -1580,6 +1580,37 @@ class Database:
             if _col not in _agent_columns:
                 cursor.execute(_ddl)
 
+        # M4-T3 (2026-11-05) 专家人设版本快照 + 评测记录。
+        # 与 v12 migration 镜像：新库由 DDL 直接建出，老库由 migration 补齐。
+        # 表结构见 docs/plans/2026-11-05_m4-distribution-quality.md §3.3。
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_versions (
+                agent_id TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                profile TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT 'update',
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY (agent_id, version)
+            )
+            """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agent_versions_agent "
+            "ON agent_versions(agent_id, version DESC)"
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_eval_runs (
+                id TEXT PRIMARY KEY,
+                agent_id TEXT NOT NULL,
+                template_id TEXT,
+                created_at INTEGER NOT NULL,
+                report TEXT NOT NULL
+            )
+            """
+        )
+
         # 语义记忆表（用于 FTS5 全文搜索）
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS memories_semantic (
