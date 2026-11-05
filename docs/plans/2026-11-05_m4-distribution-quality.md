@@ -217,10 +217,10 @@ CREATE TABLE IF NOT EXISTS agent_eval_runs (
 
 ### Task 4：黄金任务集评测
 
-- [ ] `golden_tasks.json`（5 模板 ≥ 2 任务/模板）
-- [ ] 确定性评分器 + 可注入 runner + 默认 LLM runner
-- [ ] eval 路由 + 结果持久化 + 假 runner 路由测试
-- [ ] 前端评测 Dialog + 组件测试
+- [x] `golden_tasks.json`（5 模板 ≥ 2 任务/模板）
+- [x] 确定性评分器 + 可注入 runner + 默认 LLM runner
+- [x] eval 路由 + 结果持久化 + 假 runner 路由测试
+- [x] 前端评测 Dialog + 组件测试
 
 ### Task 5：验收、双分支兼容与文档
 

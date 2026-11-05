@@ -29,6 +29,8 @@ interface SpecialistCardProps {
   onExport: (agent: AgentProfile) => void;
   /** M4-T3: 打开版本历史（列表 / diff / 回滚）。 */
   onVersions: (agent: AgentProfile) => void;
+  /** M4-T4: 打开黄金任务集评测。 */
+  onEval: (agent: AgentProfile) => void;
   /** 导出进行中（按钮禁用，避免重复弹保存框）。 */
   exporting?: boolean;
 }
@@ -51,6 +53,7 @@ export function SpecialistCard({
   onKnowledge,
   onExport,
   onVersions,
+  onEval,
   exporting = false,
 }: SpecialistCardProps) {
   const avatar = readUiString(agent.persona_ui, 'avatar') || DEFAULT_AVATAR;
@@ -127,6 +130,13 @@ export function SpecialistCard({
           className="rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
         >
           版本
+        </button>
+        <button
+          type="button"
+          onClick={() => onEval(agent)}
+          className="rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
+        >
+          评测
         </button>
         <button
           type="button"

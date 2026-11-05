@@ -19,7 +19,7 @@ import logging
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
@@ -167,6 +167,133 @@ def instantiate_specialist_template(template_id: str):
             status_code=400,
             detail={"type": "template_instantiate_failed", "message": message},
         )
+
+
+# =====================================================================
+# M4-Task 4 — 黄金任务集评测（spec §11）
+# =====================================================================
+
+
+class SpecialistEvalRequest(BaseModel):
+    """``POST /specialists/{agent_id}/eval`` 请求体。
+
+    空 body / 空 ``task_ids`` 均视为「跑全部任务」。
+    """
+
+    task_ids: Optional[List[str]] = None
+
+    class Config:  # noqa: D401 — Pydantic v1/v2 双兼容配置
+        extra = "forbid"
+
+
+@router.get("/specialists/golden-tasks")
+def list_specialist_golden_tasks():
+    """返回黄金任务集目录（spec §M4 评测）。
+
+    响应: ``{"tasks": [...], "template_ids": [...]}``
+    """
+    from backend.services.specialist_golden_eval import (
+        all_template_ids,
+        load_golden_tasks,
+    )
+
+    try:
+        tasks = load_golden_tasks()
+    except ValueError as exc:
+        logger.error("黄金任务集加载失败: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"type": "golden_tasks_invalid", "message": str(exc)},
+        )
+    return {"tasks": tasks, "template_ids": all_template_ids(tasks)}
+
+
+@with_db_lock
+def _read_agent_profile_for_eval(agent_id: str) -> Optional[Dict[str, Any]]:
+    """短事务读取 profile（LLM 调用在锁外进行，避免长时间持 SQLite 锁）。"""
+    from backend.data.agent_repo import AgentRepository
+
+    return AgentRepository().get(agent_id)
+
+
+@with_db_lock
+def _persist_eval_run(
+    run_id: str, agent_id: str, template_id: str, report: Dict[str, Any]
+) -> None:
+    """短事务写入 ``agent_eval_runs``（created_at 为毫秒时间戳）。"""
+    import json
+    import time
+
+    from backend.data.database import get_database
+
+    conn = get_database().get_connection()
+    conn.execute(
+        "INSERT INTO agent_eval_runs "
+        "(id, agent_id, template_id, created_at, report) VALUES (?, ?, ?, ?, ?)",
+        (
+            run_id,
+            agent_id,
+            template_id,
+            int(time.time() * 1000),
+            json.dumps(report, ensure_ascii=False),
+        ),
+    )
+    conn.commit()
+
+
+@router.post("/specialists/{agent_id}/eval")
+async def run_specialist_eval(
+    agent_id: str, data: Optional[SpecialistEvalRequest] = None
+):
+    """执行黄金任务集评测（spec §M4 评测）。
+
+    - 200 + ``{"run_id": <32hex>, "report": {...}}``
+    - 404 — 专家不存在
+    - 400 — 非模板实例化（无法推断 template_id）
+    - 500 — golden_tasks.json 缺失 / schema 非法
+
+    未配置 LLM 不返回 5xx：单任务 runner 异常记入 ``error``，
+    ``errored`` 计数反映失败任务数。
+    """
+    from backend.services.specialist_golden_eval import (
+        new_run_id,
+        run_golden_eval,
+        template_id_from_agent_id,
+    )
+
+    profile = _read_agent_profile_for_eval(agent_id)
+    if profile is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "agent_not_found", "message": f"agent {agent_id} not found"},
+        )
+
+    template_id = template_id_from_agent_id(agent_id)
+    if template_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "type": "agent_not_template_instantiated",
+                "message": (
+                    f"agent {agent_id} 不是内置模板实例化（无法推断 template_id）；"
+                    "仅模板创建的专家可运行黄金任务集评测"
+                ),
+            },
+        )
+
+    task_ids = data.task_ids if data else None
+    try:
+        report = await run_golden_eval(profile, task_ids=task_ids)
+    except ValueError as exc:
+        logger.error("黄金任务集运行失败: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"type": "golden_tasks_invalid", "message": str(exc)},
+        )
+
+    run_id = new_run_id()
+    _persist_eval_run(run_id, agent_id, template_id, report)
+    return {"run_id": run_id, "report": report}
 
 
 # =====================================================================

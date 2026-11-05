@@ -70,6 +70,19 @@ export const chatRoutes: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/agents/${encodeURIComponent(String(a.agentId))}/rollback`,
     body: (a) => ({ version: a.version }),
   },
+  // M4-T4: 黄金任务集评测（spec §11）
+  list_specialist_golden_tasks: {
+    method: 'GET',
+    path: () => '/api/v1/specialists/golden-tasks',
+  },
+  run_specialist_eval: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/specialists/${encodeURIComponent(String(a.agentId))}/eval`,
+    // body 是 extra="forbid"：agentId 已在路径，未指定 taskIds 时发空对象
+    body: (a) =>
+      Array.isArray(a.taskIds) && a.taskIds.length ? { taskIds: a.taskIds } : {},
+  },
   attach_chat_stream: {
     method: 'GET',
     path: (a) => `/api/v1/chat/stream/${encodeURIComponent(String(a.streamId))}`,

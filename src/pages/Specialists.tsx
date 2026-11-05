@@ -9,6 +9,7 @@ import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { KnowledgeBindingsEditor } from '../widgets/specialists/KnowledgeBindingsEditor';
 import { SpecialistCard } from '../widgets/specialists/SpecialistCard';
+import { SpecialistEvalDialog } from '../widgets/specialists/SpecialistEvalDialog';
 import { SpecialistWizard } from '../widgets/specialists/SpecialistWizard';
 import { TemplateGalleryDialog } from '../widgets/specialists/TemplateGalleryDialog';
 import { VersionHistoryDialog } from '../widgets/specialists/VersionHistoryDialog';
@@ -33,6 +34,7 @@ export function Specialists() {
   const [knowledgeAgent, setKnowledgeAgent] = useState<AgentProfile | null>(null);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [versionsAgent, setVersionsAgent] = useState<AgentProfile | null>(null);
+  const [evalAgent, setEvalAgent] = useState<AgentProfile | null>(null);
   const navigate = useNavigate();
 
   const loadAgents = useCallback(async () => {
@@ -103,6 +105,10 @@ export function Specialists() {
     setVersionsAgent(agent);
   }
 
+  function handleEval(agent: AgentProfile) {
+    setEvalAgent(agent);
+  }
+
   async function handleStartChat(agent: AgentProfile) {
     try {
       const sid = await useStore.getState().createSession();
@@ -169,6 +175,7 @@ export function Specialists() {
                 onKnowledge={handleKnowledge}
                 onExport={handleExport}
                 onVersions={handleVersions}
+                onEval={handleEval}
                 exporting={exportingId === agent.id}
               />
             ))}
@@ -208,6 +215,14 @@ export function Specialists() {
         }}
         agent={versionsAgent}
         onRolledBack={() => void loadAgents()}
+      />
+
+      <SpecialistEvalDialog
+        open={evalAgent !== null}
+        onOpenChange={(open) => {
+          if (!open) setEvalAgent(null);
+        }}
+        agent={evalAgent}
       />
     </div>
   );
