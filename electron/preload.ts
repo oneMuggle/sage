@@ -39,6 +39,7 @@ import type {
   PetPackImportResultBridge,
   PetPackManifestBridge,
   PetSnapshotBridge,
+  PreviewElectronApiBridge,
   ProvidersElectronApiBridge,
   PtyElectronApiBridge,
   RescanResult,
@@ -853,6 +854,17 @@ const electronAPI = {
     deletePack: (id) =>
       ipcRenderer.invoke('pet:delete-pack', { id }) as Promise<PetPackDeleteResultBridge>,
   } satisfies PetElectronApiBridge,
+
+  /**
+   * HTML 预览独立源桥（2026-11-04）—— 渲染层投递 HTML，主进程发布到
+   * `sage-preview://<id>/index.html` 供 iframe 加载，绕过父文档 CSP。
+   * Web 端 / 测试环境没有此桥 → 渲染层透明退回 srcDoc 内联预览。
+   */
+  preview: {
+    publish: (html: string) =>
+      ipcRenderer.invoke('preview:publish', html) as Promise<{ id: string; url: string }>,
+    revoke: (id: string) => ipcRenderer.invoke('preview:revoke', id) as Promise<boolean>,
+  } satisfies PreviewElectronApiBridge,
 
   /**
    * 开发期右键「检查元素」—— 仅非打包环境主进程会执行（见 electron/main.ts）。

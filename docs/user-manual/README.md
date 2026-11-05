@@ -12,7 +12,7 @@
 | 04   | [SKILL.md 编写指南](./04-skill-md-authoring.md)          | 自定义技能: frontmatter 字段 / scripts/ 脚本 / gating 条件 / dispatch   |
 | 05   | [从 builtin 迁移到 SKILL.md](./05-skill-md-migration.md) | 内置技能转 SKILL.md 的路径与限制                                        |
 | 06   | [诊断与日志](./06-diagnostics.md)                       | 日志文件位置 / 查看方式 / 反馈问题步骤 / 保留策略 / 隐私说明            |
-| 07   | [产物面板 (Artifacts Panel)](./07-artifacts-panel.md) | Chat 右侧抽屉 Artifacts Tab：write_file 写盘追踪 / 多格式预览 / 在文件管理器中定位 |
+| 07   | [产物面板 (Artifacts Panel)](./07-artifacts-panel.md) | Chat 右侧抽屉 Artifacts Tab：write_file 写盘追踪 / 多格式预览 / 交互式预览（HTML 工具条、Mermaid 平移缩放） / 在文件管理器中定位 |
 | 08   | [技能生命周期 (Skills Lifecycle)](./08-skill-lifecycle.md) | 技能 active/stale/archived 三态徽章 / 手动归档与取消归档 / 与删除的区别 |
 | 09   | [Office 文档管理](./09-office.md) | 在 Sage 中用自然语言增删改查 docx/xlsx/pptx 文档：创建 / 修改 / 归档 / 恢复 / chat 内 @文件名引用 + write_file 二进制防护 |
 | 10   | [用量与缓存面板](./10-usage-and-cache.md) | 设置 → 使用统计：请求/Token/成本汇总 + 缓存命中率 + 4 个 range tab + 请求明细分页 + 可悬停时段详情的堆叠柱趋势图 + CSV 导出（UTF-8 BOM，Excel 双击不乱码）；今日数据重启不丢 |

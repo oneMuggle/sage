@@ -43,6 +43,9 @@ function cspInjectionPlugin(): Plugin {
         "img-src 'self' file: data: blob: https: http:",
         "font-src 'self' file: data:",
         "connect-src 'self' file: ws://localhost:* ws://127.0.0.1:* http://127.0.0.1:* http://localhost:*",
+        // 2026-11-04: HTML 预览独立源（sage-preview://）走 iframe 加载，
+        // 必须在渲染层 CSP 显式放行，否则被 default-src 'self' 默认规则拦截。
+        "frame-src 'self' file: sage-preview:",
         "object-src 'none'",
         "base-uri 'none'",
         "form-action 'none'",
