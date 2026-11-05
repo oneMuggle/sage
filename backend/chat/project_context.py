@@ -31,6 +31,16 @@ logger = logging.getLogger(__name__)
 PER_FILE_CHAR_CAP = 8_000
 TOTAL_CHAR_CAP = 16_000
 
+# P4 上下文级联 (2026-11-05 项目管理增强, 设计 §8.4): 单文件仍用
+# PER_FILE_CHAR_CAP; 每层保底 2000 防止某层被完全挤掉; 总预算 20000
+# 约 5k token。超预算从最外层开始截断。
+CASCADE_PER_LAYER_FLOOR = 2_000
+CASCADE_TOTAL_CHAR_CAP = 20_000
+CASCADE_HEADER = "项目上下文级联 (父 → 子, 越靠后优先级越高):"
+CASCADE_LEVEL_ROOT = "root"
+CASCADE_LEVEL_PROJECT = "project"
+CASCADE_PROJECT_LOOKUP_LIMIT = 1_000
+
 SOURCE_SAGE_MD = "sage_md"
 SOURCE_CLAUDE_MD = "claude_md"
 SOURCE_AGENTS_MD = "agents_md"
@@ -100,7 +110,9 @@ def _iter_candidates(root: Path) -> Iterator[Tuple[Path, str]]:
             yield directory / filename, source
 
 
-def _user_level_entries(seen_hashes: set, total_chars: int) -> Tuple[List[ContextEntry], int]:
+def _user_level_entries(
+    seen_hashes: set, total_chars: int, total_cap: int = TOTAL_CHAR_CAP
+) -> Tuple[List[ContextEntry], int]:
     """F6 (批次 C): 用户级规则 ~/.sage/SAGE.md —— 跨工作区生效的全局层。
 
     排在工作区条目之前 (全局约定先于项目约定)。同样遵守单文件/总量
@@ -124,7 +136,7 @@ def _user_level_entries(seen_hashes: set, total_chars: int) -> Tuple[List[Contex
         if len(capped) > PER_FILE_CHAR_CAP:
             capped = capped[:PER_FILE_CHAR_CAP]
             truncated = True
-        remaining = TOTAL_CHAR_CAP - total_chars
+        remaining = total_cap - total_chars
         if len(capped) > remaining:
             capped = capped[: max(remaining, 0)]
             truncated = True
@@ -141,6 +153,31 @@ def _user_level_entries(seen_hashes: set, total_chars: int) -> Tuple[List[Contex
     except Exception as exc:  # noqa: BLE001 — 全局规则读取失败静默省略
         logger.debug("user-level SAGE.md skip: %s", exc)
     return entries, total_chars
+
+
+def _read_candidate_text(candidate: Path) -> Optional[str]:
+    """读取单个候选指令文件; 不存在/越界/不可读 → None。
+
+    审查加固: 拒绝符号链接越界 —— 恶意仓库可用 SAGE.md →
+    ``~/.ssh/id_rsa`` 把任意文件注入 LLM 提示词。解析后的真实路径必须
+    仍落在被扫描目录内 (工作区内互链放行)。
+    """
+    try:
+        if not candidate.is_file():
+            return None
+        resolved = Path(os.path.realpath(str(candidate)))
+        scan_dir = Path(os.path.realpath(str(candidate.parent)))
+        if resolved.parent != scan_dir:
+            logger.debug(
+                "project context: skip symlink escape %s -> %s",
+                candidate,
+                resolved,
+            )
+            return None
+        return resolved.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.debug("project context: skip %s: %s", candidate, exc)
+        return None
 
 
 def discover_project_context(workspace_root: Union[str, Path]) -> ProjectContext:
@@ -163,24 +200,8 @@ def discover_project_context(workspace_root: Union[str, Path]) -> ProjectContext
             if total_chars >= TOTAL_CHAR_CAP:
                 logger.debug("project context: total cap reached, stop at %s", candidate)
                 break
-            try:
-                if not candidate.is_file():
-                    continue
-                # 审查加固: 拒绝符号链接越界 —— 恶意仓库可用
-                # SAGE.md → ~/.ssh/id_rsa 把任意文件注入 LLM 提示词。
-                # 解析后的真实路径必须仍落在被扫描目录内 (工作区内互链放行)。
-                resolved = Path(os.path.realpath(str(candidate)))
-                scan_dir = Path(os.path.realpath(str(candidate.parent)))
-                if resolved.parent != scan_dir:
-                    logger.debug(
-                        "project context: skip symlink escape %s -> %s",
-                        candidate,
-                        resolved,
-                    )
-                    continue
-                content = resolved.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as exc:
-                logger.debug("project context: skip %s: %s", candidate, exc)
+            content = _read_candidate_text(candidate)
+            if content is None:
                 continue
 
             digest = hashlib.sha256(content.strip().encode("utf-8", "replace")).hexdigest()
