@@ -104,6 +104,14 @@ class OfficeDocumentSummary(BaseModel):
             "list_documents(include_archived=False) hides the row."
         ),
     )
+    # M2.5: 文档级规范书绑定。NULL 表示跟随工作区默认规范书。
+    active_spec_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "ID of the bound spec document (office_spec_documents.id). "
+            "NULL → workspace default applies."
+        ),
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
