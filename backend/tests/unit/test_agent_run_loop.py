@@ -112,7 +112,10 @@ async def test_run_loop_respects_max_iterations():
     # 2026-10-22: 错误串携带生效上限，前端据此提示用户该调到多少
     # 2026-10-29: 追加 source=，让前端能指出该去哪个设置项调；
     #             无 profile 且无 agent_id 时省略 agent= 字段
-    assert failed[0].error == "max_iterations_exceeded (limit=2, source=explicit)"
+    # 2026-11-05: 追加 reason=，说明预算为何停止（fixed_budget = 固定模式硬上限）
+    assert failed[0].error == (
+        "max_iterations_exceeded (limit=2, source=explicit, reason=fixed_budget)"
+    )
 
 
 @pytest.mark.asyncio()
@@ -148,8 +151,9 @@ async def test_run_loop_default_budget_is_10(profile, label):
     assert len(failed) == 1, label
     # FAILED 事件的 iteration 字段携带生效的上限
     assert failed[0].iteration == 10, label
-    # LLM 恰好被调用 10 次（每轮一次），证明预算真实生效
-    assert agent.llm_client.chat.await_count == 10, label
+    # LLM 调用 10 次预算步 + 1 次判定轮（2026-11-05 M3：撞上限先给模型
+    # 一次收尾机会，模型仍调工具才判失败）
+    assert agent.llm_client.chat.await_count == 11, label
 
 
 @pytest.mark.asyncio()
@@ -181,7 +185,8 @@ async def test_run_loop_uses_orch_settings_max_iterations():
     failed = [e for e in events if e.state == AgentState.FAILED]
     assert len(failed) == 1
     assert failed[0].iteration == 7
-    assert agent.llm_client.chat.await_count == 7
+    # 7 次预算步 + 1 次判定轮
+    assert agent.llm_client.chat.await_count == 8
 
 
 @pytest.mark.asyncio()
@@ -213,7 +218,8 @@ async def test_run_loop_failed_event_names_agent_and_source():
     assert len(failed) == 1
     assert (
         failed[0].error
-        == "max_iterations_exceeded (limit=2, agent=writer, source=profile)"
+        == "max_iterations_exceeded "
+        "(limit=2, agent=writer, source=profile, reason=fixed_budget)"
     )
 
 
@@ -476,10 +482,50 @@ async def test_run_loop_max_iterations_exceeded_yields_failed_event():
     states = [e.state for e in events]
     assert AgentState.FAILED in states
     failed = next(e for e in events if e.state == AgentState.FAILED)
-    assert failed.error == "max_iterations_exceeded (limit=1, source=explicit)"
+    assert failed.error == (
+        "max_iterations_exceeded (limit=1, source=explicit, reason=fixed_budget)"
+    )
     # FAILED 后不应有 DONE
     failed_idx = states.index(AgentState.FAILED)
     assert AgentState.DONE not in states[failed_idx + 1 :]
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_final_step_completion_yields_done():
+    """撞上限时先发判定轮：模型直接给出最终答案 → DONE 而非 FAILED。
+
+    2026-11-05 M3：此前上限检查先 break，模型永远没机会收尾，导致
+    「任务确实完成却报达到上限」的伪失败。判定轮向 messages 注入收尾
+    提醒，不改变生效上限（FAILED 的 limit= 仍等于配置值）。
+    """
+    tool_call = LLMToolCall(id="c", name="loop", arguments="{}")
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        side_effect=[
+            _make_response(tool_calls=[tool_call]),
+            _make_response(content="任务已完成，总结如下"),
+        ]
+    )
+
+    mock_tool = MagicMock()
+    mock_tool.execute = MagicMock(return_value=MagicMock(success=True, content={}, error=None))
+    agent.tool_registry.get = MagicMock(return_value=mock_tool)
+
+    events = []
+    async for evt in agent.run_loop([{"role": "user", "content": "x"}], max_iterations=1):
+        events.append(evt)
+
+    states = [e.state for e in events]
+    assert AgentState.FAILED not in states
+    assert states[-1] == AgentState.DONE
+    assert events[-1].content == "任务已完成，总结如下"
+    # 判定轮的 LLM 调用前已注入收尾 system 提醒
+    second_messages = agent.llm_client.chat.await_args_list[1].args[0]
+    assert any(
+        m.get("role") == "system" and "已达当前迭代上限" in str(m.get("content", ""))
+        for m in second_messages
+    )
 
 
 @pytest.mark.asyncio()
