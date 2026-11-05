@@ -76,7 +76,7 @@
     "src/pages/settings/PluginsTab.tsx": 820,
     "backend/tests/unit/test_design_routes.py": 975,
     "backend/adapters/out/skill/inproc.py": 949,
-    "backend/api/project_routes.py": 1155,
+    "backend/api/project_routes.py": 1220,
     "backend/services/project_wiki_generator.py": 903,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
     "backend/tools/config_tool.py": 995,
