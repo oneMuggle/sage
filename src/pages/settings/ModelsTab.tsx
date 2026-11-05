@@ -459,6 +459,7 @@ function ContextLengthSetting({
   onChange: (tokens: number) => void;
   disabled?: boolean;
 }) {
+  const { t } = useI18n();
   const matched = CONTEXT_PRESETS.find((p) => p.tokens === value);
   // customDraft=null 且值未命中预设 → 从当前值派生初值 (旧数据 8000 等)
   const [customDraft, setCustomDraft] = useState<{ text: string; unit: TokenUnit } | null>(null);
@@ -478,7 +479,7 @@ function ContextLengthSetting({
     <div className="flex flex-col items-end gap-1" data-testid="settings-context-length">
       <div className="flex items-center gap-2">
         <select
-          aria-label="最大上下文长度档位"
+          aria-label={t('settings.models.context_length.aria_preset')}
           disabled={disabled}
           value={isCustom ? 'custom' : String(value)}
           onChange={(e) => {
@@ -497,21 +498,21 @@ function ContextLengthSetting({
               {p.label}
             </option>
           ))}
-          <option value="custom">自定义…</option>
+          <option value="custom">{t('settings.models.context_length.custom')}</option>
         </select>
         {isCustom && (
           <>
             <input
               type="number"
               min={0}
-              aria-label="上下文长度数值"
+              aria-label={t('settings.models.context_length.aria_value')}
               disabled={disabled}
               value={draft.text}
               onChange={(e) => applyCustom(e.target.value, draft.unit)}
               className={`${selectStyle} w-24`}
             />
             <select
-              aria-label="上下文长度单位"
+              aria-label={t('settings.models.context_length.aria_unit')}
               disabled={disabled}
               value={draft.unit}
               onChange={(e) => applyCustom(draft.text, e.target.value as TokenUnit)}

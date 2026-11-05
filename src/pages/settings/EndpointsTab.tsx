@@ -694,6 +694,7 @@ function QuotaEditor({
   quota: EndpointQuota;
   onChange: (q: EndpointQuota) => void;
 }) {
+  const { t } = useI18n();
   const derive = (n: number | undefined) => (n ? deriveTokenInput(n) : null);
   const [tokensText, setTokensText] = useState(() => derive(quota.dailyTokens)?.text ?? '');
   const [tokenUnit, setTokenUnit] = useState<TokenUnit>(
@@ -720,15 +721,17 @@ function QuotaEditor({
       className="pt-3 border-t border-dashed border-border space-y-2"
       data-testid="endpoint-quota-editor"
     >
-      <label className="text-xs text-muted block">限额（选填，用于用量预警）</label>
+      <label className="text-xs text-muted block">{t('settings.endpoints.quota.section')}</label>
       <div className="flex items-center gap-2">
-        <span className="text-xs text-muted w-20">日 token 限额</span>
+        <span className="text-xs text-muted w-20">
+          {t('settings.endpoints.quota.daily_tokens')}
+        </span>
         <input
           type="number"
           min={0}
-          aria-label="日 token 限额数值"
+          aria-label={t('settings.endpoints.quota.aria_daily_tokens')}
           value={tokensText}
-          placeholder="不限"
+          placeholder={t('settings.endpoints.quota.unlimited')}
           onChange={(e) => {
             setTokensText(e.target.value);
             commit({ text: e.target.value, unit: tokenUnit, budget: budgetText });
@@ -736,7 +739,7 @@ function QuotaEditor({
           className={`${inputCls} w-24`}
         />
         <select
-          aria-label="日 token 限额单位"
+          aria-label={t('settings.endpoints.quota.aria_daily_unit')}
           value={tokenUnit}
           onChange={(e) => {
             const unit = e.target.value as TokenUnit;
@@ -753,14 +756,16 @@ function QuotaEditor({
         </select>
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-xs text-muted w-20">月预算 (USD)</span>
+        <span className="text-xs text-muted w-20">
+          {t('settings.endpoints.quota.monthly_budget')}
+        </span>
         <input
           type="number"
           min={0}
           step={0.5}
-          aria-label="月预算金额"
+          aria-label={t('settings.endpoints.quota.aria_budget')}
           value={budgetText}
-          placeholder="不限"
+          placeholder={t('settings.endpoints.quota.unlimited')}
           onChange={(e) => {
             setBudgetText(e.target.value);
             commit({ text: tokensText, unit: tokenUnit, budget: e.target.value });
