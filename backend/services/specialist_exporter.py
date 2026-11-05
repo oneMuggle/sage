@@ -1,13 +1,21 @@
 # ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容
-"""专家包导出服务（M1-D，spec §8.3）。
+"""专家包导出服务（M1-D / M4-T1，spec §8.3）。
 
 将专家数据打包为 ``.sage`` zip 格式（实际 MIME 为 ``application/zip``，
 扩展名 ``.sage`` 仅作标识），包含:
 
-- ``persona.md`` — Markdown frontmatter + 系统提示词正文
+- ``persona.md`` — Markdown frontmatter（格式 v2：完整 profile）+ 系统提示词正文
 - ``avatar.png`` — 头像（可选，≤512KB）
 - ``skills/`` — 专家私有技能目录（可选）
 - ``knowledge/`` — 专家私有知识目录（可选，≤50MB）
+
+格式版本:
+
+- v1（M1）frontmatter 只有 ``name / version / source``；
+- v2（M4）增加 ``description / tagline / avatar / skills / knowledge_bindings /
+  memory_policy / persona_ui / permission_mode / model_config / max_iterations /
+  memory_access / tools / enabled / format_version``，使包可跨机器完整还原专家配置。
+  导入端同时兼容 v1 与 v2。
 
 导出逻辑 fail-safe：任何文件缺失/权限错误都降级为空或部分结果，绝不外抛。
 """
@@ -30,6 +38,9 @@ MAX_AVATAR_BYTES = 512 * 1024  # 512 KB
 
 #: 知识目录总大小上限（字节）
 MAX_KNOWLEDGE_BYTES = 50 * 1024 * 1024  # 50 MB
+
+#: persona.md frontmatter 格式版本（M4 起写 v2，导入端兼容 v1）
+PACKAGE_FORMAT_VERSION = 2
 
 
 def export_specialist(agent_id: str) -> Path:
@@ -87,13 +98,29 @@ def export_specialist(agent_id: str) -> Path:
 
 
 def _write_persona_md(zf: zipfile.ZipFile, row: Dict[str, Any]) -> None:
-    """生成 persona.md（frontmatter + 系统提示词正文）。"""
+    """生成 persona.md（v2 完整 profile frontmatter + 系统提示词正文）。"""
     import yaml
 
+    persona_ui = row.get("persona_ui") or {}
+    description = row.get("description") or ""
     frontmatter = {
+        "format_version": PACKAGE_FORMAT_VERSION,
         "name": row.get("name") or row.get("id"),
-        "version": 1,
+        "tagline": persona_ui.get("tagline") or description,
+        "description": description,
+        "version": int(row.get("version") or 1),
         "source": row.get("source") or "user",
+        "avatar": persona_ui.get("avatar") or "",
+        "skills": row.get("skills") or [],
+        "knowledge_bindings": row.get("knowledge_bindings") or [],
+        "memory_policy": row.get("memory_policy") or {},
+        "persona_ui": persona_ui,
+        "permission_mode": row.get("permission_mode") or "workspace_write",
+        "model_config": row.get("model_config") or {},
+        "max_iterations": int(row.get("max_iterations") or 10),
+        "memory_access": row.get("memory_access") or [],
+        "tools": row.get("tools") or [],
+        "enabled": bool(row.get("enabled", True)),
     }
     system_prompt = row.get("system_prompt") or ""
 
@@ -145,4 +172,4 @@ def _write_knowledge(zf: zipfile.ZipFile, knowledge_dir: Path) -> None:
             zf.write(file, f"knowledge/{rel}")
 
 
-__all__ = ["export_specialist", "MAX_AVATAR_BYTES", "MAX_KNOWLEDGE_BYTES"]
+__all__ = ["export_specialist", "MAX_AVATAR_BYTES", "MAX_KNOWLEDGE_BYTES", "PACKAGE_FORMAT_VERSION"]
