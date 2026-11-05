@@ -608,11 +608,11 @@ async def import_specialist(file: UploadFile) -> dict:
 **目标**：专家包稳定 + 内置模板库
 
 **任务**：
-- [ ] 专家包格式稳定（zip: persona.md + avatar + skills + knowledge）
-- [ ] 内置模板库（写作 / 研究 / 编码 / 演示 / Office）
-- [ ] 版本 diff / 回滚
-- [ ] 黄金任务集评测
-- [ ] Win7 双侧同步与文档归档
+- [x] 专家包格式稳定（zip: persona.md + avatar + skills + knowledge）
+- [x] 内置模板库（写作 / 研究 / 编码 / 演示 / Office）
+- [x] 版本 diff / 回滚
+- [x] 黄金任务集评测
+- [x] Win7 双侧同步与文档归档
 
 **验收**：用户可从模板库一键创建写作专家；专家包可导出并导入到另一台机器。
 
