@@ -201,8 +201,8 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
           </h3>
           <SettingRow
             anchor="title_model"
-            label="会话标题模型"
-            desc="生成会话标题时使用的模型（选填）。留空则沿用对话模型；专用小模型通常更快更省"
+            label={t('settings.models.title_model')}
+            desc={t('settings.models.title_model_desc')}
           >
             <TitleModelSelector
               groupedModels={chatModels}
@@ -537,6 +537,7 @@ function TitleModelSelector({
   value,
   onChange,
 }: TitleModelSelectorProps) {
+  const { t } = useI18n();
   const candidates = groupedModels.filter((gm) => gm.endpointId === chatEndpointId);
   const known = candidates.some((gm) => gm.model.id === value);
   // 用户可能通过 config_tool 写入了一个未在端点发现列表里的模型 id ——
@@ -550,7 +551,7 @@ function TitleModelSelector({
       onChange={(e) => onChange(e.target.value)}
       className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
     >
-      <option value="">-- 沿用对话模型 --</option>
+      <option value="">-- {t('settings.models.title_model_inherit')} --</option>
       {orphan && <option value={orphan}>{orphan}</option>}
       {candidates.map((gm) => (
         <option key={gm.model.id} value={gm.model.id}>

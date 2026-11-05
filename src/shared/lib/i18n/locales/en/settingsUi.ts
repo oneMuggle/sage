@@ -255,6 +255,10 @@ export const enSettingsUi = {
   'settings.models.fixed_use_above': 'Fixed (use value above)',
   'settings.models.image_gen_model': 'Image generation',
   'settings.models.image_gen_model_desc': 'Used for text-to-image (optional)',
+  'settings.models.title_model': 'Session title model',
+  'settings.models.title_model_desc':
+    'Model used when generating session titles (optional). Leave empty to reuse the chat model; a dedicated small model is usually faster and cheaper',
+  'settings.models.title_model_inherit': 'Use chat model',
   'settings.ocr.title': 'Local OCR',
   'settings.ocr.desc':
     'Recognize text from images on this device when no vision model is available; images are not uploaded',

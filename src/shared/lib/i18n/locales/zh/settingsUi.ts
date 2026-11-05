@@ -237,6 +237,10 @@ export const zhSettingsUi = {
   'settings.models.fixed_use_above': '固定 (使用上方值)',
   'settings.models.image_gen_model': '图像生成',
   'settings.models.image_gen_model_desc': '用于文本生成图像（选填）',
+  'settings.models.title_model': '会话标题模型',
+  'settings.models.title_model_desc':
+    '生成会话标题时使用的模型（选填）。留空则沿用对话模型；专用小模型通常更快更省',
+  'settings.models.title_model_inherit': '沿用对话模型',
   'settings.ocr.title': '本地 OCR',
   'settings.ocr.desc': '无视觉模型时，在本机识别图片文字；图片不上传',
   'settings.ocr.available': '可用（{engine}）',
