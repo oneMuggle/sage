@@ -236,3 +236,48 @@ def test_history_respects_limit(conn, workspace: Path):
         record("doc-1", scope="full", issue_count=i, conn=conn)
     result = ai_review_history_endpoint("doc-1", limit=2)
     assert len(result.runs) == 2
+
+
+# ── cross-workspace isolation (security review H2) ────────────────────
+
+
+@pytest.fixture()
+def workspace2(tmp_path: Path) -> Path:
+    ws2 = tmp_path / "ws2"
+    ws2.mkdir()
+    return ws2
+
+
+async def test_review_rejects_doc_from_other_workspace(
+    conn, workspace: Path, workspace2: Path
+):
+    """doc 登记在 ws1，却以 ws2 发起审校 → 拒绝，不写历史."""
+    from backend.office.errors import OfficeParseError
+
+    docx = _write_docx(workspace2 / "draft.docx")
+    _seed_document(conn, doc_id="doc-1", workspace=str(workspace))
+    with pytest.raises(OfficeParseError):
+        await ai_review_endpoint(
+            AiReviewRequest(
+                workspace_path=str(workspace2),
+                file_path=str(docx),
+                doc_id="doc-1",
+                use_llm=False,
+            )
+        )
+    count = conn.execute("SELECT COUNT(*) FROM office_ai_reviews").fetchone()[0]
+    assert count == 0
+
+
+def test_history_hides_other_workspace_doc(conn, workspace: Path, workspace2: Path):
+    """跨工作区查历史 → 空列表（不暴露文档存在性）."""
+    from backend.office.ai_review_history import record
+
+    _seed_document(conn, doc_id="doc-1", workspace=str(workspace))
+    record("doc-1", scope="full", issue_count=1, conn=conn)
+    hidden = ai_review_history_endpoint(
+        "doc-1", workspace_path=str(workspace2)
+    )
+    assert hidden.runs == []
+    visible = ai_review_history_endpoint("doc-1", workspace_path=str(workspace))
+    assert len(visible.runs) == 1

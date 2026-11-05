@@ -37,15 +37,15 @@ export const officeSpecApi = {
     }
   },
 
-  /** 取规范书元数据 + live 规则包。 */
+  /** 取规范书元数据 + live 规则包（workspacePath 必填：规范书按工作区隔离）。 */
   async getSpec(
     specId: string,
-    workspacePath?: string | null,
+    workspacePath: string,
   ): Promise<OfficeSpecDetailResult> {
     try {
       return await invoke<OfficeSpecDetailResult>('office_specs_get', {
         specId,
-        ...(workspacePath ? { workspacePath } : {}),
+        workspacePath,
       });
     } catch (error) {
       throw handleApiError(error);

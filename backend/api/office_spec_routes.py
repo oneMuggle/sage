@@ -93,7 +93,9 @@ class SpecExtractRequest(BaseModel):
     pack_id: str = Field(default="extracted-spec-pack", min_length=1, max_length=80)
     pack_name: Optional[str] = Field(default=None, max_length=200)
     use_llm: bool = False
-    max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
+    max_size_bytes: int = Field(
+        default=50 * 1024 * 1024, ge=1024, le=200 * 1024 * 1024
+    )
 
 
 class SpecActivateRequest(BaseModel):
@@ -167,17 +169,16 @@ def list_specs_endpoint(
 
 @router.get("/specs/{spec_id}", response_model=OfficeSpecDetailResult)
 def get_spec_endpoint(
-    spec_id: str, workspace_path: Optional[str] = None
+    spec_id: str, workspace_path: str
 ) -> OfficeSpecDetailResult:
-    """取一行规范书元数据 + 对应的 live rule pack."""
-    row = get_spec(_conn(), spec_id)
+    """取一行规范书元数据 + 对应的 live rule pack.
+
+    ``workspace_path`` 必填：规范书按工作区隔离，跨工作区查询一律 404。
+    """
+    workspace = validate_workspace(Path(workspace_path))
+    row = get_spec(_conn(), spec_id, workspace_path=str(workspace))
     if row is None:
         raise OfficeParseError(f"规范书不存在: {spec_id}")
-    workspace = (
-        validate_workspace(Path(workspace_path))
-        if workspace_path
-        else validate_workspace(Path(row["workspace_path"]))
-    )
     return _build_detail(workspace, row)
 
 
@@ -228,6 +229,7 @@ def update_spec_endpoint(
     updated = update_spec(
         _conn(),
         spec_id,
+        workspace_path=str(workspace),
         name=req.name,
         rulepack_id=rulepack_id,
         source_file_path=req.source_file_path,
@@ -258,10 +260,10 @@ def delete_spec_endpoint(
 ) -> dict:
     """删除一行规范书元数据；不删除其规则包文件（规则包可在「审校与规范」页复用）."""
     workspace = validate_workspace(Path(workspace_path))
-    row = get_spec(_conn(), spec_id)
+    row = get_spec(_conn(), spec_id, workspace_path=str(workspace))
     if row is None:
         raise OfficeParseError(f"规范书不存在: {spec_id}")
-    deleted = delete_spec(_conn(), spec_id)
+    deleted = delete_spec(_conn(), spec_id, workspace_path=str(workspace))
     return {"ok": deleted, "spec_id": spec_id, "workspace_path": str(workspace)}
 
 
@@ -325,7 +327,9 @@ def get_doc_spec_endpoint(
 ) -> OfficeSpecBindingResult:
     """查询文档级规范书绑定 + 当前生效规范书."""
     workspace = validate_workspace(Path(workspace_path))
-    bound = get_document_spec_id(_conn(), doc_id)
+    bound = get_document_spec_id(
+        _conn(), doc_id, workspace_path=str(workspace)
+    )
     effective = resolve_effective_spec(
         _conn(),
         workspace_path=str(workspace),
@@ -350,7 +354,9 @@ def bind_doc_spec_endpoint(
 ) -> OfficeSpecBindingResult:
     """设置/解除文档级规范书绑定（spec_id=None 解绑，跟随工作区默认）."""
     workspace = validate_workspace(Path(req.workspace_path))
-    update_document_spec(_conn(), doc_id, req.spec_id)
+    update_document_spec(
+        _conn(), doc_id, req.spec_id, workspace_path=str(workspace)
+    )
     effective = resolve_effective_spec(
         _conn(),
         workspace_path=str(workspace),

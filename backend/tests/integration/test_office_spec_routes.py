@@ -299,6 +299,111 @@ def test_bind_nonexistent_spec_raises(conn, workspace: Path):
         )
 
 
+# ── cross-workspace isolation (security review H1/H2) ────────────────
+
+
+@pytest.fixture()
+def workspace2(tmp_path: Path) -> Path:
+    ws = tmp_path / "ws2"
+    ws.mkdir()
+    return ws
+
+
+def test_get_spec_cross_workspace_raises(conn, workspace: Path, workspace2: Path):
+    from backend.office.errors import OfficeParseError
+
+    created = create_spec_endpoint(
+        SpecSaveRequest(
+            workspace_path=str(workspace),
+            name="WS1 Spec",
+            rulepack_id="general-quality",
+        )
+    )
+    with pytest.raises(OfficeParseError):
+        get_spec_endpoint(created.spec.id, workspace_path=str(workspace2))
+
+
+def test_update_spec_cross_workspace_raises(
+    conn, workspace: Path, workspace2: Path
+):
+    from backend.office.errors import OfficeParseError
+
+    created = create_spec_endpoint(
+        SpecSaveRequest(
+            workspace_path=str(workspace),
+            name="WS1 Spec",
+            rulepack_id="general-quality",
+        )
+    )
+    with pytest.raises(OfficeParseError):
+        update_spec_endpoint(
+            created.spec.id,
+            SpecUpdateRequest(workspace_path=str(workspace2), name="Hacked"),
+        )
+    detail = get_spec_endpoint(created.spec.id, workspace_path=str(workspace))
+    assert detail.spec.name == "WS1 Spec"
+
+
+def test_delete_spec_cross_workspace_raises(
+    conn, workspace: Path, workspace2: Path
+):
+    from backend.office.errors import OfficeParseError
+
+    created = create_spec_endpoint(
+        SpecSaveRequest(
+            workspace_path=str(workspace),
+            name="WS1 Spec",
+            rulepack_id="general-quality",
+        )
+    )
+    with pytest.raises(OfficeParseError):
+        delete_spec_endpoint(created.spec.id, workspace_path=str(workspace2))
+    detail = get_spec_endpoint(created.spec.id, workspace_path=str(workspace))
+    assert detail.spec.id == created.spec.id
+
+
+def test_bind_doc_in_other_workspace_rejected(
+    conn, workspace: Path, workspace2: Path
+):
+    from backend.office.errors import OfficeParseError
+
+    created = create_spec_endpoint(
+        SpecSaveRequest(
+            workspace_path=str(workspace2),
+            name="WS2 Spec",
+            rulepack_id="general-quality",
+        )
+    )
+    _seed_document(conn, doc_id="doc-ws1", workspace=str(workspace))
+    with pytest.raises(OfficeParseError):
+        bind_doc_spec_endpoint(
+            "doc-ws1",
+            SpecBindRequest(
+                workspace_path=str(workspace), spec_id=created.spec.id
+            ),
+        )
+    got = get_doc_spec_endpoint("doc-ws1", workspace_path=str(workspace))
+    assert got.spec_id is None
+
+
+def test_get_doc_spec_cross_workspace_hides_binding(
+    conn, workspace: Path, workspace2: Path
+):
+    created = create_spec_endpoint(
+        SpecSaveRequest(
+            workspace_path=str(workspace),
+            name="WS1 Spec",
+            rulepack_id="general-quality",
+        )
+    )
+    _seed_document(
+        conn, doc_id="doc-ws1", workspace=str(workspace), spec_id=created.spec.id
+    )
+    got = get_doc_spec_endpoint("doc-ws1", workspace_path=str(workspace2))
+    assert got.spec_id is None
+    assert got.effective_spec is None
+
+
 # ── extract ───────────────────────────────────────────────────────────
 
 

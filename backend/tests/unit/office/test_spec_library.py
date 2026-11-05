@@ -28,6 +28,7 @@ from backend.office.spec_library import (
 )
 
 WORKSPACE = "/home/tester/ws"
+WORKSPACE_2 = "/home/tester/ws2"
 
 
 @pytest.fixture()
@@ -217,6 +218,151 @@ def test_resolve_falls_back_to_workspace_default(conn):
 
 def test_resolve_returns_none_when_nothing_bound(conn):
     assert resolve_effective_spec(conn, workspace_path=WORKSPACE) is None
+
+
+# ── cross-workspace isolation (security review H1/H2) ────────────────
+
+
+def test_get_spec_scoped_by_workspace(conn):
+    """spec 元数据不能凭 id 跨工作区读取."""
+    row = _make_spec(conn, spec_id="spec-ws1")
+    assert get_spec(conn, row["id"], workspace_path=WORKSPACE) is not None
+    assert get_spec(conn, row["id"], workspace_path=WORKSPACE_2) is None
+
+
+def test_update_spec_scoped_by_workspace(conn):
+    """跨工作区 update 返回 None 且不改原行."""
+    row = _make_spec(conn, name="Original", spec_id="spec-ws1")
+    assert (
+        update_spec(conn, "spec-ws1", workspace_path=WORKSPACE_2, name="Hacked")
+        is None
+    )
+    assert get_spec(conn, row["id"], workspace_path=WORKSPACE)["name"] == "Original"
+
+
+def test_delete_spec_scoped_by_workspace(conn):
+    """跨工作区 delete 返回 False 且不清理他工作区文档绑定."""
+    _make_spec(conn, spec_id="spec-ws1")
+    conn.execute(
+        "INSERT INTO office_documents "
+        "(id, workspace_path, doc_type, original_filename, "
+        "generated_filename, status, created_at, updated_at, metadata, "
+        "active_spec_id) "
+        "VALUES (?, ?, 'word', 'd.docx', 'd.docx', 'managed', 1, 1, '{}', ?)",
+        ("doc-ws1", WORKSPACE, "spec-ws1"),
+    )
+    conn.commit()
+
+    assert delete_spec(conn, "spec-ws1", workspace_path=WORKSPACE_2) is False
+    assert get_spec(conn, "spec-ws1", workspace_path=WORKSPACE) is not None
+    assert get_document_spec_id(
+        conn, "doc-ws1", workspace_path=WORKSPACE
+    ) == "spec-ws1"
+
+
+def test_delete_spec_does_not_clear_other_workspace_bindings(conn):
+    """删除 ws1 的 spec 只清理 ws1 文档绑定，不动 ws2 文档."""
+    _make_spec(conn, spec_id="spec-ws1")
+    for doc_id, workspace in (
+        ("doc-ws1", WORKSPACE),
+        ("doc-ws2", WORKSPACE_2),
+    ):
+        conn.execute(
+            "INSERT INTO office_documents "
+            "(id, workspace_path, doc_type, original_filename, "
+            "generated_filename, status, created_at, updated_at, metadata, "
+            "active_spec_id) "
+            "VALUES (?, ?, 'word', 'd.docx', 'd.docx', 'managed', 1, 1, '{}', ?)",
+            (doc_id, workspace, "spec-ws1"),
+        )
+    conn.commit()
+
+    assert delete_spec(conn, "spec-ws1", workspace_path=WORKSPACE) is True
+    assert get_document_spec_id(conn, "doc-ws1") is None
+    assert get_document_spec_id(conn, "doc-ws2") == "spec-ws1"
+
+
+def test_update_document_spec_rejects_cross_workspace_doc(conn):
+    """doc 不在给定工作区时绑定被拒绝."""
+    spec = _make_spec(conn, spec_id="spec-ws1")
+    conn.execute(
+        "INSERT INTO office_documents "
+        "(id, workspace_path, doc_type, original_filename, "
+        "generated_filename, status, created_at, updated_at, metadata) "
+        "VALUES (?, ?, 'word', 'd.docx', 'd.docx', 'managed', 1, 1, '{}')",
+        ("doc-ws1", WORKSPACE),
+    )
+    conn.commit()
+    with pytest.raises(OfficeParseError):
+        update_document_spec(
+            conn, "doc-ws1", spec["id"], workspace_path=WORKSPACE_2
+        )
+
+
+def test_update_document_spec_rejects_cross_workspace_spec(conn):
+    """spec 不在给定工作区时绑定被拒绝."""
+    _make_spec(conn, spec_id="spec-ws1")
+    conn.execute(
+        "INSERT INTO office_documents "
+        "(id, workspace_path, doc_type, original_filename, "
+        "generated_filename, status, created_at, updated_at, metadata) "
+        "VALUES (?, ?, 'word', 'd.docx', 'd.docx', 'managed', 1, 1, '{}')",
+        ("doc-ws2", WORKSPACE_2),
+    )
+    conn.commit()
+    with pytest.raises(OfficeParseError):
+        update_document_spec(
+            conn, "doc-ws2", "spec-ws1", workspace_path=WORKSPACE_2
+        )
+
+
+def test_resolve_ignores_cross_workspace_spec_id(conn):
+    """显式 spec_id 属于其它工作区时解析不到（也不回落其它区默认）."""
+    _make_spec(conn, name="Default", is_default=True, spec_id="spec-default")
+    _make_spec(conn, name="Other", spec_id="spec-other")
+
+    # spec-other 属于 WORKSPACE，从 WORKSPACE_2 解析 → None
+    assert (
+        resolve_effective_spec(
+            conn, workspace_path=WORKSPACE_2, spec_id="spec-other"
+        )
+        is None
+    )
+    resolved = resolve_effective_spec(
+        conn, workspace_path=WORKSPACE, spec_id="spec-other"
+    )
+    assert resolved["id"] == "spec-other"
+
+
+def test_resolve_ignores_cross_workspace_doc_binding(conn):
+    """doc 属于其它工作区时，其绑定的规范书不参与解析."""
+    create_spec(
+        conn,
+        workspace_path=WORKSPACE_2,
+        name="Other WS",
+        rulepack_id="general-quality",
+        spec_id="spec-ws2",
+    )
+    conn.execute(
+        "INSERT INTO office_documents "
+        "(id, workspace_path, doc_type, original_filename, "
+        "generated_filename, status, created_at, updated_at, metadata, "
+        "active_spec_id) "
+        "VALUES (?, ?, 'word', 'd.docx', 'd.docx', 'managed', 1, 1, '{}', ?)",
+        ("doc-ws2", WORKSPACE_2, "spec-ws2"),
+    )
+    conn.commit()
+
+    assert (
+        resolve_effective_spec(
+            conn, workspace_path=WORKSPACE, doc_id="doc-ws2"
+        )
+        is None
+    )
+    resolved = resolve_effective_spec(
+        conn, workspace_path=WORKSPACE_2, doc_id="doc-ws2"
+    )
+    assert resolved["id"] == "spec-ws2"
 
 
 # ── missing table (defensive) ────────────────────────────────────────

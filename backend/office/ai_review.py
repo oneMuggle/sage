@@ -56,6 +56,16 @@ MAX_ISSUES_CAP = 300
 
 _SEVERITY_RANK = {"error": 0, "warning": 1, "info": 2}
 _ALLOWED_SEVERITIES = frozenset(_SEVERITY_RANK)
+
+
+def _redact_local_paths(text: str, workspace_path: Optional[str]) -> str:
+    """去掉用户可见警告文本中的工作区/家目录绝对路径（防信息泄漏）."""
+    redacted = text
+    for base in (workspace_path, str(Path.home())):
+        if base:
+            replacement = "<workspace>" if base == workspace_path else "~"
+            redacted = redacted.replace(base, replacement)
+    return redacted
 _ALLOWED_CATEGORIES = frozenset(
     {
         "page",
@@ -230,9 +240,12 @@ def _validate_llm_issue(
     rationale = str(item.get("rationale") or "").strip()[:1000]
     location: Optional[AiReviewLocation] = None
     raw_index = item.get("paragraph_index")
-    if isinstance(raw_index, int) and not isinstance(raw_index, bool):
-        if raw_index in paragraph_indices or 0 <= raw_index < MAX_LLM_PARAGRAPHS:
-            location = AiReviewLocation(paragraph_index=raw_index)
+    if (
+        isinstance(raw_index, int)
+        and not isinstance(raw_index, bool)
+        and (raw_index in paragraph_indices or 0 <= raw_index < MAX_LLM_PARAGRAPHS)
+    ):
+        location = AiReviewLocation(paragraph_index=raw_index)
     return AiReviewIssue(
         id=f"llm:{index}",
         severity=severity,  # type: ignore[arg-type]
@@ -254,13 +267,12 @@ async def _run_llm_review(
     warnings: List[Dict[str, str]],
 ) -> Tuple[List[AiReviewIssue], Optional[str]]:
     """Run the LLM semantic pass. Returns (issues, model_name)."""
-    if not use_llm:
-        return [], None
-    client = build_llm_client_from_settings()
+    client = build_llm_client_from_settings() if use_llm else None
     if client is None:
-        warnings.append(
-            {"code": "llm_unavailable", "message": "未配置 LLM 模型，仅执行规则审校"}
-        )
+        if use_llm:
+            warnings.append(
+                {"code": "llm_unavailable", "message": "未配置 LLM 模型，仅执行规则审校"}
+            )
         return [], None
     try:
         paragraphs, _rel, _warnings = load_spec_paragraphs(
@@ -270,7 +282,8 @@ async def _run_llm_review(
         warnings.append(
             {
                 "code": "llm_unsupported_format",
-                "message": f"该文档格式不支持 AI 语义审校: {exc}",
+                "message": "该文档格式不支持 AI 语义审校: "
+                + _redact_local_paths(str(exc), workspace_path),
             }
         )
         return [], None
@@ -288,7 +301,11 @@ async def _run_llm_review(
         text = await client.complete(prompt)
     except Exception as exc:  # noqa: BLE001 — LLM 失败必须降级为规则结果
         warnings.append(
-            {"code": "llm_failed", "message": f"LLM 审校调用失败: {str(exc)[:300]}"}
+            {
+                "code": "llm_failed",
+                "message": "LLM 审校调用失败: "
+                + _redact_local_paths(str(exc)[:300], workspace_path),
+            }
         )
         return [], None
     try:
