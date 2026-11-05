@@ -94,6 +94,23 @@ export const zhSettingsAndModels = {
   'sider.project.add_failed': '添加项目失败：{message}',
   'sider.project.open_failed': '打开项目失败：{message}',
   'sider.project.remove_failed': '移除项目失败：{message}',
+  // 嵌套项目 + 目录模板 (P3, 2026-11-05)
+  'sider.project.source_manual': '手动',
+  'sider.project.source_template': '模板发现',
+  'sider.project.source_context_file': '上下文文件',
+  'sider.project.add_dialog_title': '添加项目',
+  'sider.project.directory_label': '项目目录',
+  'sider.project.pick_directory': '选择目录',
+  'sider.project.change_directory': '更换目录',
+  'sider.project.directory_unset': '尚未选择目录',
+  'sider.project.confirm_add': '添加',
+  'sider.project.template_label': '目录模板（可选）',
+  'sider.project.template_loading': '正在加载模板…',
+  'sider.project.template_none': '不使用模板',
+  'sider.project.template_none_desc': '仅登记现有目录，不创建任何文件',
+  'sider.project.template_builtin': '内置',
+  'sider.project.template_global': '全局',
+  'sider.project.template_meta': '{dirs} 个目录 · {files} 个文件',
   // allowed_paths 扩展 (P1, 2026-09-17)
   'sider.project.allowed_paths_label': '额外允许访问',
   'sider.project.allowed_paths_empty': '未配置额外可访问路径',
@@ -437,8 +454,7 @@ export const zhSettingsAndModels = {
   'office.toast.intakePartial': '已导入 {imported} 个文档，跳过 {skipped} 个文件',
   'office.toast.duplicateOpened': '已打开已有文档：{filename}',
   'office.duplicate.title': '发现重复文件',
-  'office.duplicate.description':
-    '「{filename}」与已有文档的内容完全相同。请选择处理方式：',
+  'office.duplicate.description': '「{filename}」与已有文档的内容完全相同。请选择处理方式：',
   'office.duplicate.existingLabel': '已有文档',
   'office.duplicate.existingMeta': '{type} · 更新于 {time}',
   'office.duplicate.moreCount': '另有 {count} 个文档包含相同内容',
@@ -495,6 +511,10 @@ export const zhSettingsAndModels = {
   'office.env.staging': '暂存目录（只读诊断）',
   'office.generate.journal.title': '期刊模板助手',
   'office.generate.journal.hint': '选择 .docx 期刊模板 → 填写内容 → 一键生成或校验格式',
+  'office.rules.guide.title': 'Word 审校在哪？',
+  'office.rules.guide.body':
+    '导入文档后在「文档」Tab 下的预览面板里完成审校、修订与 PDF 导出。本节把规范 / 模板文件转化为可复用的规程包。',
+  'office.rules.guide.action': '前往文档',
 } as const;
 
 export function formatZhSettingsAndModelsSummary(): string {

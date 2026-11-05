@@ -24,6 +24,7 @@ import {
   GovernanceRulesPanel,
   TaskDecomposeDialog,
   WikiGenerationPanel,
+  ReferenceManager,
 } from '../features/project-type';
 import {
   StudioCharterTabPanel,
@@ -49,7 +50,7 @@ import { useStore } from '../shared/lib/store';
 import { Button } from '../shared/ui/Button';
 import { Card } from '../shared/ui/Card';
 
-type GovernanceTab = 'overview' | 'knowledge' | 'settings';
+type GovernanceTab = 'overview' | 'knowledge' | 'references' | 'settings';
 type KnowledgeTab = 'rules' | 'materials' | 'profile';
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -473,6 +474,10 @@ export function ProjectGovernance() {
                 ? `Project knowledge (${profileEntries.length})`
                 : `项目知识（${project.allowedPaths?.length ?? 0} 条规则 · ${profileEntries.length} 条记忆）`,
           },
+          {
+            id: 'references' as GovernanceTab,
+            label: locale === 'en' ? 'References' : '文件引用',
+          },
           { id: 'settings' as GovernanceTab, label: locale === 'en' ? 'Settings' : '设置' },
         ].map((tab) => (
           <button
@@ -679,6 +684,10 @@ export function ProjectGovernance() {
                 />
               )}
             </div>
+          )}
+
+          {activeTab === 'references' && (
+            <ReferenceManager projectId={project.id} />
           )}
 
           {activeTab === 'settings' && (

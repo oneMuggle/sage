@@ -313,9 +313,16 @@ class ReadFileTool(BaseTool):
         2026-09-17: ``enforce_workspace`` 模式下，路径不在 workspace 内时
             检查当前项目的 ``allowed_paths`` 规则。
         """
+        # P5 文件引用：权限检查前先把项目内虚拟路径翻译成真实目标
+        path, via_reference = self._translate_virtual_path(path)
+
         # allowed_paths 扩展：使用统一的读取权限检查
-        blocked = _check_read_access(
-            path, self._policy.workspace_root, self._enforce_read_workspace
+        blocked = (
+            None
+            if via_reference
+            else _check_read_access(
+                path, self._policy.workspace_root, self._enforce_read_workspace
+            )
         )
         if blocked is not None:
             return blocked
@@ -591,9 +598,16 @@ class ListDirTool(BaseTool):
         2026-09-17: ``enforce_workspace`` 模式下，路径不在 workspace 内时
             检查当前项目的 ``allowed_paths`` 规则。
         """
+        # P5 文件引用：权限检查前先把项目内虚拟路径翻译成真实目标
+        path, via_reference = self._translate_virtual_path(path)
+
         # allowed_paths 扩展：使用统一的读取权限检查
-        blocked = _check_read_access(
-            path, self._policy.workspace_root, self._enforce_read_workspace
+        blocked = (
+            None
+            if via_reference
+            else _check_read_access(
+                path, self._policy.workspace_root, self._enforce_read_workspace
+            )
         )
         if blocked is not None:
             return blocked

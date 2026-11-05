@@ -100,6 +100,23 @@ export const enSettingsAndModels = {
   'sider.project.add_failed': 'Failed to add project: {message}',
   'sider.project.open_failed': 'Failed to open project: {message}',
   'sider.project.remove_failed': 'Failed to remove project: {message}',
+  // Nested projects + directory templates (P3, 2026-11-05)
+  'sider.project.source_manual': 'Manual',
+  'sider.project.source_template': 'Template',
+  'sider.project.source_context_file': 'Context file',
+  'sider.project.add_dialog_title': 'Add Project',
+  'sider.project.directory_label': 'Project folder',
+  'sider.project.pick_directory': 'Choose folder',
+  'sider.project.change_directory': 'Change folder',
+  'sider.project.directory_unset': 'No folder selected',
+  'sider.project.confirm_add': 'Add',
+  'sider.project.template_label': 'Directory template (optional)',
+  'sider.project.template_loading': 'Loading templates…',
+  'sider.project.template_none': 'No template',
+  'sider.project.template_none_desc': 'Register the existing folder as-is',
+  'sider.project.template_builtin': 'Built-in',
+  'sider.project.template_global': 'Global',
+  'sider.project.template_meta': '{dirs} dirs · {files} files',
   // allowed_paths extension (P1, 2026-09-17)
   'sider.project.allowed_paths_label': 'Extra allowed paths',
   'sider.project.allowed_paths_empty': 'No extra paths configured',
@@ -511,6 +528,10 @@ export const enSettingsAndModels = {
   'office.generate.journal.title': 'Journal template assistant',
   'office.generate.journal.hint':
     'Pick a .docx template → fill content → generate or validate',
+  'office.rules.guide.title': 'Where is Word review?',
+  'office.rules.guide.body':
+    'Import a document, then review, revise and export PDF from the preview panel under Documents. This section turns spec / template files into reusable rule packs.',
+  'office.rules.guide.action': 'Go to Documents',
 };
 
 export function formatEnSettingsAndModelsSummary(): string {
