@@ -6,6 +6,7 @@ import {
   type InstantiateTemplateResult,
   type SpecialistTemplateMeta,
 } from '../../shared/api/specialistApi';
+import { Button } from '../../shared/ui/Button';
 import {
   Dialog,
   DialogContent,
@@ -13,7 +14,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../shared/ui/Dialog';
-import { Button } from '../../shared/ui/Button';
 
 interface TemplateGalleryDialogProps {
   open: boolean;

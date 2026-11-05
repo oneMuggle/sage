@@ -1,9 +1,10 @@
-import type { AgentProfile } from '../../shared/api';
 import {
   PERSONA_SECTIONS,
   serializePersonaSections,
   type PersonaSections,
 } from '../../entities/specialist/personaSections';
+import type { AgentProfile } from '../../shared/api';
+
 import { PERMISSION_MODE_LABELS } from './SpecialistCard';
 
 interface SpecialistPreviewProps {

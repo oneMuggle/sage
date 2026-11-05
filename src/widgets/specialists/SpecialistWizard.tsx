@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../shared/ui/Dialog';
+
 import { PersonaEditor } from './PersonaEditor';
 import { PERMISSION_MODE_LABELS } from './SpecialistCard';
 import { SpecialistPreview } from './SpecialistPreview';

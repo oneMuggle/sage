@@ -5,8 +5,8 @@ import type { Artifact } from '../../features/artifacts/artifactApi';
 import { useArtifacts } from '../../features/artifacts/useArtifacts';
 import { BtwOverlay } from '../../features/chat';
 import { useMessageJump } from '../../features/chat/useMessageJump';
-import type { BlockedAction, Message as MessageType } from '../../shared/lib/store';
 import type { MessageSource } from '../../shared/api/types/chatAndEventTypes';
+import type { BlockedAction, Message as MessageType } from '../../shared/lib/store';
 
 import { ChatFindBar } from './ChatFindBar';
 import { Message } from './Message';
