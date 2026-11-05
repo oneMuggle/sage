@@ -306,6 +306,11 @@ class ModelEmbedder:
       （test_event_loop_blocking 的 500ms 延迟门禁）。
     """
 
+    #: HTTP 嵌入端点返回的是真实语义向量（同 OnnxEmbedder）。
+    #: 缺此标记会让检索融合与冲突消解把它当字面嵌入器处理 ——
+    #: 向量照写不误，却从不被检索。
+    is_semantic = True
+
     _CIRCUIT_THRESHOLD = 3
     _CIRCUIT_COOLDOWN_S = 300.0
     # 单批上限：OpenAI 限制单请求 input 数组，超限分批

@@ -16,7 +16,10 @@ from typing import Any, Dict, List, Optional
 from backend.domain.memory import MemoryContext
 from backend.memory import ConsolidationPipeline, MemoryManager
 from backend.memory.auto_tag import extract_tags
-from backend.memory.embedder_factory import create_embedder
+from backend.memory.embedder_factory import (
+    get_shared_embedder,
+    set_shared_embedder,
+)
 from backend.memory.manager import classify_memory_type
 from backend.memory.vector_store import VectorStore
 
@@ -72,7 +75,9 @@ class MemoryAdapter:
         # E9-1 (P9) + Round 1: 嵌入器工厂 —— 缺省 HashEmbedder (零依赖);
         # SAGE_EMBEDDER=onnx 且模型文件就位时升级为 ONNX 语义嵌入 (512 维);
         # SAGE_EMBEDDER=model 且端点配置时升级为 HTTP 语义嵌入 (ModelEmbedder)。
-        self.embedder = create_embedder()
+        # 走进程级共享单例 —— 冲突消解的语义判定要用同一个实例，
+        # 否则 ONNX 模型会被重复加载一份（~40 MB）。
+        self.embedder = get_shared_embedder()
         # Round 1: 向量回填线程一次性标志（防重入）
         self._backfill_started = False
         # 用户画像（USER.md 概念）: 缺省惰性取全局单例,失败时降级为 None
@@ -127,8 +132,12 @@ class MemoryAdapter:
 
         Hash(256) 与 Onnx(512) 维度不同、各用独立表 —— 重配置后旧表的
         向量不迁移 (嵌入语义变更后旧向量无迁移价值), 新写入进新表。
+
+        新嵌入器同时替换进程级共享单例 —— 冲突消解的语义判定随即
+        用上新嵌入器（无需重建 resolver）。
         """
         self.embedder = embedder
+        set_shared_embedder(embedder)
         table_name = (
             "memories_vec"
             if embedder.dimensions == 256
@@ -522,12 +531,19 @@ class MemoryAdapter:
         from backend.memory.conflict import OP_NOOP
 
         try:
-            memory_id, op = mm.memorize_with_conflict_check(
-                content=content,
-                memory_type=memory_type,
-                importance=importance,
-                metadata=metadata,
-                session_id=session_id,
+            # 冲突消解内部可能走语义嵌入（ONNX 推理 / HTTP embedding 端点），
+            # 属阻塞调用 —— 必须在执行器里跑，否则 SAGE_EMBEDDER=model 时
+            # 一次写入会把事件循环卡满 HTTP 超时（默认 10s）。
+            loop = asyncio.get_running_loop()
+            memory_id, op = await loop.run_in_executor(
+                None,
+                lambda: mm.memorize_with_conflict_check(
+                    content=content,
+                    memory_type=memory_type,
+                    importance=importance,
+                    metadata=metadata,
+                    session_id=session_id,
+                ),
             )
         except Exception as exc:  # noqa: BLE001 — 消解失败不阻塞写入
             logger.warning(f"冲突消解失败, 退回直接写入: {exc}")

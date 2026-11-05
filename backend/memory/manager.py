@@ -69,6 +69,7 @@ class MemoryManager:
         episodic: EpisodicMemory,
         semantic: SemanticMemory,
         summary_store: Optional[SessionSummaryStore] = None,
+        embedder=None,
     ):
         """
         初始化记忆管理器
@@ -80,11 +81,15 @@ class MemoryManager:
             summary_store: 会话摘要 store（批次三 step 5）；可选，向后兼容
                 未注入 store 的旧调用方；没有 store 时 ``get_context`` 不
                 注入 ``【会话摘要】`` 段。
+            embedder: 语义嵌入器实例，或返回实例的可调用（``() -> Embedder``）；
+                透传给冲突消解器做语义去重判定。缺省 / 非语义嵌入器时
+                冲突消解退化为纯字面判定（行为与改造前一致）。
         """
         self.working = working
         self.episodic = episodic
         self.semantic = semantic
         self.summary_store = summary_store
+        self.embedder = embedder
         # Lazily-created ConsolidationPipeline (F2) — built on first use so
         # the constructor stays lightweight and test-friendly.
         self._consolidation_pipeline = None
@@ -187,6 +192,100 @@ class MemoryManager:
                 memory_category=memory_category,
             ),
         )
+
+    async def aremember_with_conflict_check(
+        self,
+        content: str,
+        *,
+        session_id: Optional[str] = None,
+        source_turn_id: Optional[str] = None,
+        source_message_id: Optional[str] = None,
+        memory_category: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        importance: int = 5,
+        tags: Optional[List[str]] = None,
+        scope: Optional[str] = None,
+        project_key: Optional[str] = None,
+    ) -> Tuple[str, str]:
+        """Async conflict-aware remember — auto-memory 写入的唯一入口。
+
+        与 ``memorize_with_conflict_check`` 的差异：
+        * 接受 ``source_turn_id`` / ``source_message_id`` / ``memory_category``，
+          在 ADD 路径下经 ``aremember`` 透传到 ``EpisodicMemory.save``，保留溯源；
+        * 冲突判定与 ``apply_update`` 的 sqlite 调用整体放进
+          ``run_in_executor``，避免阻塞事件循环。
+
+        Returns:
+            ``(memory_id, op)``，op ∈ {add, update, noop}。NOOP 返回既有 id，
+            调用方可据此决定是否跳过后续处理。
+        """
+        from backend.memory.conflict import OP_ADD, OP_NOOP, OP_UPDATE
+
+        resolved_metadata = metadata or {}
+        resolved_importance = importance or resolved_metadata.get("importance", 5)
+
+        resolved = classify_memory_type("auto", resolved_importance, content)
+        if resolved not in ("episodic", "semantic"):
+            # working / 直接透传：不走冲突消解，保留 traceability
+            mid = await self.aremember(
+                content=content,
+                session_id=session_id,
+                source_turn_id=source_turn_id,
+                source_message_id=source_message_id,
+                memory_category=memory_category,
+                metadata={**resolved_metadata, "importance": resolved_importance},
+            )
+            return mid or "", OP_ADD
+
+        loop = asyncio.get_event_loop()
+        try:
+            decision = await loop.run_in_executor(
+                None,
+                functools.partial(
+                    self.resolve_conflicts,
+                    content,
+                    session_id=session_id,
+                    scope=scope,
+                    project_key=project_key,
+                ),
+            )
+        except Exception:  # noqa: BLE001 — 冲突判定失败时退回 ADD，不要丢记忆
+            logger.exception("aremember_with_conflict_check: resolve failed; falling back to ADD")
+            decision = None
+
+        if decision is not None and decision.op == OP_NOOP:
+            return (decision.targets[0].id if decision.targets else ""), OP_NOOP
+
+        if decision is not None and decision.op == OP_UPDATE:
+            def _apply_update() -> Tuple[Optional[str], str]:
+                return self.get_conflict_resolver().apply_update(
+                    decision,
+                    self.memorize,
+                    content=content,
+                    memory_type=resolved,
+                    importance=resolved_importance,
+                    tags=tags,
+                    metadata=resolved_metadata,
+                    session_id=session_id,
+                )
+
+            try:
+                new_id, op = await loop.run_in_executor(None, _apply_update)
+                return new_id or "", op
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "aremember_with_conflict_check: apply_update failed; falling back to ADD"
+                )
+
+        mid = await self.aremember(
+            content=content,
+            session_id=session_id,
+            source_turn_id=source_turn_id,
+            source_message_id=source_message_id,
+            memory_category=memory_category,
+            metadata={**resolved_metadata, "importance": resolved_importance},
+        )
+        return mid or "", OP_ADD
 
     async def consolidate(self, session_id: Optional[str] = None) -> Any:
         """Async session-end consolidation (F2).
@@ -315,7 +414,9 @@ class MemoryManager:
         if self._conflict_resolver is None:
             from backend.memory.conflict import MemoryConflictResolver
 
-            self._conflict_resolver = MemoryConflictResolver(self.episodic, self.semantic)
+            self._conflict_resolver = MemoryConflictResolver(
+                self.episodic, self.semantic, embedder=self.embedder
+            )
         return self._conflict_resolver
 
     def resolve_conflicts(

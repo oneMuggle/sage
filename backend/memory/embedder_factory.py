@@ -137,3 +137,33 @@ def create_embedder(preferred_mode: Optional[str] = None) -> Embedder:
         )
 
     return HashEmbedder(dimensions=256)
+
+
+#: 进程级共享嵌入器（懒创建；见 get_shared_embedder）
+_shared_embedder: Optional[Embedder] = None
+
+
+def get_shared_embedder() -> Embedder:
+    """进程级共享嵌入器（首次调用时创建，之后复用同一实例）。
+
+    记忆子系统有多处要用嵌入器：MemoryAdapter 的向量检索、冲突消解的
+    语义判定。ONNX 语义模型约 40 MB，各自 ``create_embedder()`` 会把
+    同一份模型重复加载进内存 —— 共享单例即可。
+    """
+    global _shared_embedder
+    if _shared_embedder is None:
+        try:
+            _shared_embedder = create_embedder()
+        except Exception as exc:  # noqa: BLE001 — 工厂本已内部降级，此处兜底
+            logger.warning("共享嵌入器创建失败，降级 HashEmbedder: %s", exc)
+            _shared_embedder = HashEmbedder(dimensions=256)
+    return _shared_embedder
+
+
+def set_shared_embedder(embedder: Optional[Embedder]) -> None:
+    """替换共享嵌入器（用户热切换嵌入模式时调用）。
+
+    传 None 表示重置 —— 下次 ``get_shared_embedder()`` 会重新按配置创建。
+    """
+    global _shared_embedder
+    _shared_embedder = embedder
