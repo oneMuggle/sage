@@ -254,7 +254,7 @@ export function ReferenceManager({ projectId, className }: ReferenceManagerProps
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 text-sm">
                 <span className="font-medium">{ref.aliasName}</span>
-                <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <span className="rounded-sm bg-muted px-1.5 py-0.5 text-ui-xs text-muted-foreground">
                   {kindLabel(ref.kind)}
                 </span>
                 <span className="truncate text-xs text-muted-foreground" title={ref.relPath}>
@@ -268,7 +268,7 @@ export function ReferenceManager({ projectId, className }: ReferenceManagerProps
               >
                 → {ref.targetPath}
               </div>
-              <div className="text-[10px] text-muted-foreground/70">
+              <div className="text-ui-xs text-muted-foreground/70">
                 created {formatCreatedAt(ref.createdAt)}
               </div>
             </div>
