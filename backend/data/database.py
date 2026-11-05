@@ -1233,6 +1233,63 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_office_self_checks_doc "
             "ON office_self_checks(doc_id, created_at)"
         )
+
+        # M2.5: 格式规范书库 — 每行是一份从说明文件（Word/PDF/Markdown 等）
+        # 提取的规则包元数据，与 word_rulepacks 文件系统 JSON 一对一关联。
+        # 支持工作区默认绑定（is_default）+ 文档级绑定（office_documents.active_spec_id）。
+        # Additive + idempotent, 同 office_documents 迁移模式.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS office_spec_documents (
+                id TEXT PRIMARY KEY,
+                workspace_path TEXT NOT NULL,
+                name TEXT NOT NULL,
+                source_file_path TEXT,
+                source_content_hash TEXT,
+                rulepack_id TEXT NOT NULL,
+                is_default INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_office_spec_workspace "
+            "ON office_spec_documents(workspace_path)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_office_spec_default "
+            "ON office_spec_documents(workspace_path, is_default)"
+        )
+
+        # M2.5: 文档 → 规范书绑定列（可空，NULL = 跟随工作区默认）.
+        # 幂等迁移，复用 derived_from/archived_at 的 PRAGMA 模式.
+        cursor.execute("PRAGMA table_info(office_documents)")
+        _office_spec_columns = {row["name"] for row in cursor.fetchall()}
+        if "active_spec_id" not in _office_spec_columns:
+            cursor.execute(
+                "ALTER TABLE office_documents ADD COLUMN active_spec_id TEXT"
+            )
+
+        # M3: AI 审校历史 — 每次 AI 审校运行追加一行，记录使用的规范书、
+        # LLM 模型、问题数、耗时、token 用量，便于追溯与成本可见.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS office_ai_reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doc_id TEXT NOT NULL,
+                spec_id TEXT,
+                model TEXT,
+                scope TEXT NOT NULL,
+                issue_count INTEGER NOT NULL DEFAULT 0,
+                summary TEXT,
+                duration_ms INTEGER,
+                prompt_tokens INTEGER,
+                completion_tokens INTEGER,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_office_ai_reviews_doc "
+            "ON office_ai_reviews(doc_id, created_at)"
+        )
         conn.commit()
 
         # 进化日志表

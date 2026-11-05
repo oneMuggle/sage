@@ -1,7 +1,7 @@
 {
   "name": "sage",
   "private": true,
-  "version": "0.4.9-alpha.76",
+  "version": "0.4.9-alpha.77",
   "type": "module",
   "main": "dist-electron/electron/main.js",
   "scripts": {
@@ -11,8 +11,8 @@
     "prebuild": "npm run build:electron",
     "build:analyze": "vite build --mode production && npx vite-bundle-visualizer",
     "preview": "vite preview",
-    "lint": "eslint . --ignore-pattern dist-electron --ignore-pattern \"backend/**/export_assets\" --ignore-pattern \"extension/**\"",
-    "lint:fix": "eslint . --fix --ignore-pattern dist-electron --ignore-pattern \"extension/**\"",
+    "lint": "eslint . --ignore-pattern dist-electron --ignore-pattern \"backend/**/export_assets\" --ignore-pattern \"extension/**\" --ignore-pattern \".worktrees/**\"",
+    "lint:fix": "eslint . --fix --ignore-pattern dist-electron --ignore-pattern \"extension/**\" --ignore-pattern \".worktrees/**\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",

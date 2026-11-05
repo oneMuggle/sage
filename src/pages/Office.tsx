@@ -45,6 +45,8 @@ import {
   type OfficePreviewData,
   type OfficeReadResult,
 } from '../features/office';
+import { OfficeAiAssistantPanel } from '../features/office/OfficeAiAssistantPanel';
+import { OfficeSpecLibrary } from '../features/office/OfficeSpecLibrary';
 import { WordBatchAuditPanel } from '../features/office/WordBatchAuditPanel';
 import { WordRuleExtractionPanel } from '../features/office/WordRuleExtractionPanel';
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
@@ -512,6 +514,12 @@ export function Office() {
 
   const renderRulesTab = () => (
     <div className="space-y-4">
+      {/* M2.5: 格式规范书库（工作区默认 / 文档级绑定 / 从说明文件提取）。 */}
+      <OfficeSpecLibrary workspacePath={workspacePath} />
+
+      {/* M3: 规范书规则 + LLM 语义建议的合并审校。 */}
+      <OfficeAiAssistantPanel workspacePath={workspacePath} />
+
       <WordRuleExtractionPanel workspacePath={workspacePath} />
 
       {/* M5c: 工作区批量审校（glob + 规则包 → 汇总 + Markdown 报告）。 */}

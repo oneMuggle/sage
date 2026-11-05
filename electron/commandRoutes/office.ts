@@ -168,6 +168,145 @@ export const officeRoutes: Record<string, CommandRoute> = {
       pack: a.pack,
     }),
   },
+  // M2.5 (2026-11-05): 格式规范书库（CRUD/提取/激活/绑定）。
+  // GET/DELETE 的 query 不经过桥自动翻译 —— workspace_path 在此手工序列化；
+  // 带 pack 的 POST/PATCH 用 rawBody，保持嵌套规则 params 的用户数据原样。
+  office_specs_list: {
+    method: 'GET',
+    path: (a) => {
+      const ws = a.workspacePath ?? a.workspace_path;
+      return `/api/v1/office/specs${ws ? `?workspace_path=${encodeURIComponent(String(ws))}` : ''}`;
+    },
+  },
+  office_specs_get: {
+    method: 'GET',
+    path: (a) => {
+      const ws = a.workspacePath ?? a.workspace_path;
+      const base = `/api/v1/office/specs/${encodeURIComponent(String(a.specId ?? a.spec_id))}`;
+      return ws ? `${base}?workspace_path=${encodeURIComponent(String(ws))}` : base;
+    },
+  },
+  office_specs_create: {
+    method: 'POST',
+    path: () => '/api/v1/office/specs',
+    rawBody: true,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      name: a.name,
+      ...(a.pack ? { pack: a.pack } : {}),
+      ...((a.rulepackId ?? a.rulepack_id)
+        ? { rulepack_id: a.rulepackId ?? a.rulepack_id }
+        : {}),
+      ...((a.sourceFilePath ?? a.source_file_path)
+        ? { source_file_path: a.sourceFilePath ?? a.source_file_path }
+        : {}),
+      ...((a.sourceContentHash ?? a.source_content_hash)
+        ? { source_content_hash: a.sourceContentHash ?? a.source_content_hash }
+        : {}),
+      is_default: Boolean(a.isDefault ?? a.is_default),
+    }),
+  },
+  office_specs_update: {
+    method: 'PATCH',
+    path: (a) =>
+      `/api/v1/office/specs/${encodeURIComponent(String(a.specId ?? a.spec_id))}`,
+    rawBody: true,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      ...(a.name !== undefined ? { name: a.name } : {}),
+      ...(a.pack ? { pack: a.pack } : {}),
+      ...((a.sourceFilePath ?? a.source_file_path) !== undefined
+        ? { source_file_path: a.sourceFilePath ?? a.source_file_path }
+        : {}),
+      ...((a.sourceContentHash ?? a.source_content_hash) !== undefined
+        ? { source_content_hash: a.sourceContentHash ?? a.source_content_hash }
+        : {}),
+    }),
+  },
+  office_specs_delete: {
+    method: 'DELETE',
+    path: (a) => {
+      const ws = a.workspacePath ?? a.workspace_path;
+      return `/api/v1/office/specs/${encodeURIComponent(String(a.specId ?? a.spec_id))}?workspace_path=${encodeURIComponent(String(ws))}`;
+    },
+  },
+  office_specs_extract: {
+    method: 'POST',
+    path: () => '/api/v1/office/specs/extract',
+    rawBody: true,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      file_path: a.filePath ?? a.file_path,
+      ...((a.packId ?? a.pack_id) ? { pack_id: a.packId ?? a.pack_id } : {}),
+      ...((a.packName ?? a.pack_name) ? { pack_name: a.packName ?? a.pack_name } : {}),
+      use_llm: Boolean(a.useLlm ?? a.use_llm),
+      ...((a.maxSizeBytes ?? a.max_size_bytes)
+        ? { max_size_bytes: a.maxSizeBytes ?? a.max_size_bytes }
+        : {}),
+    }),
+  },
+  office_specs_activate: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/office/specs/${encodeURIComponent(String(a.specId ?? a.spec_id))}/activate`,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+    }),
+  },
+  office_specs_clear_default: {
+    method: 'DELETE',
+    path: (a) => {
+      const ws = a.workspacePath ?? a.workspace_path;
+      return `/api/v1/office/specs/default?workspace_path=${encodeURIComponent(String(ws))}`;
+    },
+  },
+  office_doc_spec_get: {
+    method: 'GET',
+    path: (a) => {
+      const ws = a.workspacePath ?? a.workspace_path;
+      return `/api/v1/office/doc/${encodeURIComponent(String(a.docId ?? a.doc_id))}/spec?workspace_path=${encodeURIComponent(String(ws))}`;
+    },
+  },
+  office_doc_spec_bind: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/office/doc/${encodeURIComponent(String(a.docId ?? a.doc_id))}/spec`,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      spec_id: a.specId ?? a.spec_id ?? null,
+    }),
+  },
+  // M3 (2026-11-05): 「规范书规则 + LLM」合并审校 + 历史。审校请求体
+  // snake_case 直传；历史为只读 GET。
+  office_ai_review: {
+    method: 'POST',
+    path: () => '/api/v1/office/ai/review',
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      file_path: a.filePath ?? a.file_path,
+      ...((a.docId ?? a.doc_id) ? { doc_id: a.docId ?? a.doc_id } : {}),
+      ...((a.specId ?? a.spec_id) ? { spec_id: a.specId ?? a.spec_id } : {}),
+      ...(a.scope ? { scope: a.scope } : {}),
+      use_llm: a.useLlm !== false,
+      ...((a.maxIssues ?? a.max_issues)
+        ? { max_issues: a.maxIssues ?? a.max_issues }
+        : {}),
+      ...((a.maxSizeBytes ?? a.max_size_bytes)
+        ? { max_size_bytes: a.maxSizeBytes ?? a.max_size_bytes }
+        : {}),
+    }),
+  },
+  office_doc_ai_reviews: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      const ws = a.workspacePath ?? a.workspace_path;
+      if (ws) params.set('workspace_path', String(ws));
+      if (a.limit) params.set('limit', String(a.limit));
+      const qs = params.toString();
+      return `/api/v1/office/doc/${encodeURIComponent(String(a.docId ?? a.doc_id))}/ai-reviews${qs ? `?${qs}` : ''}`;
+    },
+  },
   // M4c: native tracked revisions (w:ins/w:del + comments). rawBody keeps
   // explicit change payloads and nested rule-pack params untouched.
   office_word_revise: {

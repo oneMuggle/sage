@@ -450,4 +450,40 @@ describe('chatStreamStore', () => {
       expect(parsed.messageId).toBe('msg-99');
     });
   });
+
+  describe('budgetCheckpoint (M5 动态预算自动延长)', () => {
+    const INFO = { extensions: 1, nextBudget: 280, previousBudget: 200 };
+
+    it('setBudgetCheckpoint 写入后可按会话读取;传 null 清除', () => {
+      useChatStreamStore.getState().setBudgetCheckpoint(SESS, INFO);
+      expect(slots().budgetCheckpoint).toEqual(INFO);
+      useChatStreamStore.getState().setBudgetCheckpoint(SESS, null);
+      expect(slots().budgetCheckpoint).toBeNull();
+    });
+
+    it('startStream 清掉上一轮残留的检查点（避免跨 run 串显）', () => {
+      useChatStreamStore.getState().setBudgetCheckpoint(SESS, INFO);
+      useChatStreamStore.getState().startStream(SESS, 'msg-2', { initialContent: '' });
+      expect(slots().budgetCheckpoint).toBeNull();
+    });
+
+    it('clearStream 匹配消息时清掉检查点;不匹配时保留', () => {
+      useChatStreamStore.getState().startStream(SESS, 'msg-1', { initialContent: '' });
+      useChatStreamStore.getState().setBudgetCheckpoint(SESS, INFO);
+      useChatStreamStore.getState().clearStream(SESS, 'msg-OTHER');
+      expect(slots().budgetCheckpoint).toEqual(INFO);
+      useChatStreamStore.getState().clearStream(SESS, 'msg-1');
+      expect(slots().budgetCheckpoint).toBeNull();
+    });
+
+    it('检查点按会话隔离,不串到并行会话', () => {
+      useChatStreamStore.getState().setBudgetCheckpoint('sess-A', INFO);
+      expect(selectSessionSlots(useChatStreamStore.getState(), 'sess-A').budgetCheckpoint).toEqual(
+        INFO,
+      );
+      expect(
+        selectSessionSlots(useChatStreamStore.getState(), 'sess-B').budgetCheckpoint,
+      ).toBeNull();
+    });
+  });
 });
