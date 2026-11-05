@@ -15,8 +15,10 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
+# win7 py38 钉 pydantic 1.10，v2 专有符号必须走兼容垫片（2.x 下为 no-op）。
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import get_database
 from backend.office.ai_review import run_review_async
 from backend.office.ai_review_history import list_for_document, record
