@@ -6,7 +6,12 @@ import { memoryApi } from '../shared/api';
 import type { Memory } from '../shared/api/types';
 import { PageHeader } from '../shared/ui';
 import { ErrorState } from '../shared/ui/ErrorState';
-import { MemoryBrowser, NewMemoryModal, ProjectProfileCard, UserProfileCard } from '../widgets/memory';
+import {
+  MemoryBrowser,
+  NewMemoryModal,
+  ProjectProfileCard,
+  UserProfileCard,
+} from '../widgets/memory';
 
 const MEMORY_EXPORT_PAGE_SIZE = 100;
 const MEMORY_EXPORT_MAX_ITEMS = 1000;
@@ -88,59 +93,58 @@ export function Memory() {
         title="记忆库"
         actions={
           <div className="flex gap-2">
-          <button
-            data-testid="memory-add"
-            onClick={handleNewMemory}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-text-inverse text-xs rounded-radius-sm hover:bg-primary-hover transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            新建记忆
-          </button>
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-border text-xs rounded-radius-sm bg-surface text-text-secondary hover:text-text transition-colors disabled:opacity-50"
-          >
-            <Download className="w-3.5 h-3.5" />
-            {exporting ? '导出中...' : '导出'}
-          </button>
+            <button
+              data-testid="memory-add"
+              onClick={handleNewMemory}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-text-inverse text-xs rounded-radius-sm hover:bg-primary-hover transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              新建记忆
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-border text-xs rounded-radius-sm bg-surface text-text-secondary hover:text-text transition-colors disabled:opacity-50"
+            >
+              <Download className="w-3.5 h-3.5" />
+              {exporting ? '导出中...' : '导出'}
+            </button>
           </div>
         }
       />
       <div className="flex-1 overflow-y-auto p-5">
+        {exportError && (
+          <div className="mb-4">
+            <ErrorState
+              title="导出失败"
+              message={exportError}
+              onRetry={() => {
+                setExportError(null);
+                void handleExport();
+              }}
+              retryLabel="重新导出"
+            />
+          </div>
+        )}
 
-      {exportError && (
-        <div className="mb-4">
-          <ErrorState
-            title="导出失败"
-            message={exportError}
-            onRetry={() => {
-              setExportError(null);
-              void handleExport();
-            }}
-            retryLabel="重新导出"
-          />
-        </div>
-      )}
+        <NewMemoryModal
+          isOpen={showNewMemory}
+          onClose={() => setShowNewMemory(false)}
+          onSaved={() => setRefreshKey((k) => k + 1)}
+        />
 
-      <NewMemoryModal
-        isOpen={showNewMemory}
-        onClose={() => setShowNewMemory(false)}
-        onSaved={() => setRefreshKey((k) => k + 1)}
-      />
+        {/* 对标 S2 (2026-09-13): 可编辑的用户画像卡片 */}
+        <UserProfileCard />
 
-      {/* 对标 S2 (2026-09-13): 可编辑的用户画像卡片 */}
-      <UserProfileCard />
+        {/* P2 scope 轴: 项目级 MEMORY.md */}
+        <ProjectProfileCard />
 
-      {/* P2 scope 轴: 项目级 MEMORY.md */}
-      <ProjectProfileCard />
-
-      <MemoryBrowser
-        initialType="all"
-        refreshKey={refreshKey}
-        focusMemoryId={focusMemoryId}
-        onAgentFilterChange={setExportAgentId}
-      />
+        <MemoryBrowser
+          initialType="all"
+          refreshKey={refreshKey}
+          focusMemoryId={focusMemoryId}
+          onAgentFilterChange={setExportAgentId}
+        />
       </div>
     </div>
   );

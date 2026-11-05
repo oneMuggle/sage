@@ -77,11 +77,7 @@ describe('MemoryItem 提升为共享（M3-Task 7）', () => {
 
   it('共享层记忆（无 agent_id）不渲染提升按钮', () => {
     render(
-      <MemoryItem
-        memory={baseMemory}
-        onDelete={() => undefined}
-        onPromote={() => undefined}
-      />,
+      <MemoryItem memory={baseMemory} onDelete={() => undefined} onPromote={() => undefined} />,
     );
     expect(screen.queryByTestId('memory-promote-mem-1')).not.toBeInTheDocument();
   });

@@ -126,9 +126,9 @@ export function MemoryBrowser({
   // M3-Task 6: 专家归属筛选(走后端 agent_id 精确过滤)。'all' = 管理口径不过滤。
   const [agentFilter, setAgentFilter] = useState<AgentFilter>('all');
   // 专家下拉候选 —— 组件挂载时拉一次;下拉只显示 id + display_name。
-  const [agentOptions, setAgentOptions] = useState<
-    { id: string; name: string }[]
-  >(() => [{ id: 'shared', name: '共享层' }]);
+  const [agentOptions, setAgentOptions] = useState<{ id: string; name: string }[]>(() => [
+    { id: 'shared', name: '共享层' },
+  ]);
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [summarySessionId, setSummarySessionId] = useState<string>('');
   // P0-1: 记忆检索。此前 ``memoryApi.searchMemories`` 已实现但全仓零调用。
@@ -209,7 +209,8 @@ export function MemoryBrowser({
       // searchMemories 只接受 episodic/semantic —— working/session_summary
       // 归为 undefined 交由后端全量匹配,避免静默收窄结果集。
       if (searchQuery) {
-        const searchType = filterType === 'episodic' || filterType === 'semantic' ? filterType : undefined;
+        const searchType =
+          filterType === 'episodic' || filterType === 'semantic' ? filterType : undefined;
         const hits = await memoryApi.searchMemories(searchQuery, searchType);
         if (gen !== requestGenRef.current) return;
         setMemories(hits);
@@ -353,12 +354,9 @@ export function MemoryBrowser({
       setMemories((prev) =>
         prev.map((m) => (m.id === memory.id ? { ...m, agent_id: undefined } : m)),
       );
-      toast.success(
-        result.status === 'already_shared' ? '该记忆已在共享层' : '记忆已提升为共享',
-        {
-          description: (memory.content || memory.summary || '').split('\n')[0].slice(0, 40),
-        },
-      );
+      toast.success(result.status === 'already_shared' ? '该记忆已在共享层' : '记忆已提升为共享', {
+        description: (memory.content || memory.summary || '').split('\n')[0].slice(0, 40),
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : '提升失败';
       toast.error('提升为共享失败', { description: `${message}（该条记忆归属未变）` });

@@ -96,7 +96,9 @@ describe('MemoryBrowser 加载与列表', () => {
 
   it('加载完成渲染标题、来源徽章与统计卡', async () => {
     renderBrowser();
-    await waitFor(() => expect(screen.getByTestId('memory-episodic-item')).toBeInTheDocument(), { timeout: 10000 });
+    await waitFor(() => expect(screen.getByTestId('memory-episodic-item')).toBeInTheDocument(), {
+      timeout: 10000,
+    });
     expect(screen.getByTestId('memory-episodic-item').textContent).toContain('用户');
     expect(screen.getAllByText('情景').length).toBeGreaterThan(0); // source 徽章
     expect(screen.getByText('本周新增')).toBeInTheDocument(); // 统计卡
@@ -231,13 +233,17 @@ describe('MemoryBrowser 摘要视图', () => {
     renderBrowser();
     fireEvent.click(screen.getByText('按会话查看摘要'));
     fireEvent.click(screen.getByText('刷新'));
-    expect(await screen.findByText('请输入会话 ID 以查看摘要', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(
+      await screen.findByText('请输入会话 ID 以查看摘要', {}, { timeout: 5000 }),
+    ).toBeInTheDocument();
     expect(getSessionSummariesMock).not.toHaveBeenCalled();
   }, 20000);
 
   it('输入 session_id 后刷新拉取摘要', async () => {
     getSessionSummariesMock.mockResolvedValue({
-      items: [mem({ id: 's1', source: 'session_summary', content: '会话摘要内容', status: 'ready' })],
+      items: [
+        mem({ id: 's1', source: 'session_summary', content: '会话摘要内容', status: 'ready' }),
+      ],
       source_breakdown: BREAKDOWN,
       total: 1,
     });
