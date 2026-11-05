@@ -1,8 +1,22 @@
-# 记忆质量优化方案
+# 记忆质量优化（Phase 1–4）
 
-> 日期：2026-11-04  
-> 分支：fix/memory-quality-improvements  
-> 状态：进行中
+> 日期：2026-11-04 起草 / 2026-11-05 归档  
+> 分支：`fix/memory-quality-improvements`  
+> 状态：**已完成**  
+> PR：
+> - win7 [#2878](https://github.com/oneMuggle/sage/pull/2878)（Phase 1–4 全套，release/win7 基线）
+> - main 待 port（依赖 `backend/memory/lifecycle.py` / `hooks.py` / `embedding_queue.py` 等 win7-only 模块，需结构适配后再合入）
+
+## 实施结果摘要
+
+| Phase | 交付内容 | 核心 commit / PR |
+|---|---|---|
+| Phase 1 | 提取门槛升级（对话长度 / 重要性评分）+ 否定词插入 NOOP 修复 | `2a90a9628` |
+| Phase 2 | 冲突消解（`aremember_with_conflict_check`）+ 已知事实过滤 | `feature/memory-quality-improvements` early commits |
+| Phase 3 | 主题簇巩固 + 低质量记忆软失效 + `MemoryQualityScorer` | `19629a2da` |
+| Phase 4 | 质量可视化 / 批量清理 / 来源追踪 / 反馈 / 使用提示 | `9a2db1ff3` |
+| 同步 | 合并上游 release/win7 28 个 commit，解决 4 处冲突 | `b6080a431` |
+
 
 ## 一、背景与目标
 
