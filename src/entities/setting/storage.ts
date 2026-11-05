@@ -61,6 +61,9 @@ const TOP_KEYS: ReadonlySet<keyof AppSettings> = new Set([
   // Task 9 (2026-10-28) 智能路由模式 —— 漏了会被 sanitizeForBackend 丢弃，
   // 后端 llm_factory.load_routing_config 永远读不到配置。
   'routing',
+  // 2026-10-27: 会话标题专用模型 id — 同样会被 sanitizeForBackend 静默丢弃，
+  // 漏了后端 title_generator 永远读不到配置。
+  'titleModelId',
   // 'memoryServerSync' 不在此白名单内 — 后端已下线该字段, 前端发出去会 400.
 ]);
 const ENDPOINT_KEYS: ReadonlySet<keyof EndpointConfig> = new Set([
