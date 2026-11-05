@@ -19,6 +19,34 @@ class ProjectRegisterRequest(BaseModel):
         pattern="^(coding|research|business|personal)$",
         description="项目类型。null = 使用自动检测结果",
     )
+    # P3 (2026-11-05): 用户在创建对话框里选择的模板名。匹配顺序：
+    # 全局模板库（load_global_templates）→ 内置模板（get_built_in_templates，
+    # 按 project_type 匹配）。提供后会调用 scaffold_project 把目录/文件骨架
+    # 写入项目根目录（幂等：已存在同名文件/目录跳过）。
+    template_name: Optional[str] = Field(default=None, max_length=128)
+
+
+class ProjectTemplateSummary(BaseModel):
+    """``GET /projects/templates`` 单条。
+
+    给前端模板选择器用，只暴露展示所需的元信息 + 目录/文件清单（不暴露
+    file.content，避免响应过大；前端预览时按需走 preview 端点，v1 暂不实现）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    description: str
+    source: str  # "built_in" | "global"
+    project_type: Optional[str] = None  # 内置模板对应 project_type；全局模板为 None
+    directory_count: int = 0
+    file_count: int = 0
+    directories: List[str] = Field(default_factory=list)
+    files: List[str] = Field(default_factory=list)
+
+
+class ProjectTemplateListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    templates: List[ProjectTemplateSummary]
 
 
 class ProjectModel(BaseModel):
