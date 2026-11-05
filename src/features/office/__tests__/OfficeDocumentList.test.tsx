@@ -57,6 +57,96 @@ const sampleDocs: OfficeDocumentSummary[] = [
   },
 ];
 
+describe('OfficeDocumentList — clickable history rows (open preview)', () => {
+  it('opens the preview when the filename control is clicked', () => {
+    const onPreview = vi.fn();
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList documents={sampleDocs} loading={false} onPreview={onPreview} />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('office-doc-open-doc-1'));
+
+    expect(onPreview).toHaveBeenCalledTimes(1);
+    expect(onPreview).toHaveBeenCalledWith('doc-1');
+  });
+
+  it('opens the preview when the row itself is clicked', () => {
+    const onPreview = vi.fn();
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList documents={sampleDocs} loading={false} onPreview={onPreview} />
+      </I18nProvider>,
+    );
+
+    const row = screen.getByTestId('office-doc-open-doc-2').closest('li');
+    expect(row).not.toBeNull();
+    fireEvent.click(row as HTMLElement);
+
+    expect(onPreview).toHaveBeenCalledTimes(1);
+    expect(onPreview).toHaveBeenCalledWith('doc-2');
+  });
+
+  it('does NOT open the preview when a row action button is clicked', () => {
+    const onPreview = vi.fn();
+    const onArchive = vi.fn();
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList
+          documents={sampleDocs}
+          loading={false}
+          onPreview={onPreview}
+          onArchive={onArchive}
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getAllByRole('button', { name: /archive|归档/i })[0]);
+
+    expect(onArchive).toHaveBeenCalledWith('doc-1');
+    expect(onPreview).not.toHaveBeenCalled();
+  });
+
+  it('exposes the filename as a native button and keeps the row free of a button role', () => {
+    // A role="button" <li> would nest a checkbox and action buttons
+    // inside an interactive role — a screen-reader/a11y violation. The
+    // row stays a plain listitem and the filename carries the native
+    // button semantics (focusable, Enter/Space activated by the
+    // browser — jsdom does not synthesize the click for key events).
+    const onPreview = vi.fn();
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList documents={sampleDocs} loading={false} onPreview={onPreview} />
+      </I18nProvider>,
+    );
+
+    const filenameControl = screen.getByTestId('office-doc-open-doc-1');
+    expect(filenameControl.tagName).toBe('BUTTON');
+    expect(filenameControl).toHaveAttribute('type', 'button');
+    expect(filenameControl).not.toBeDisabled();
+
+    const row = filenameControl.closest('li');
+    expect(row).not.toBeNull();
+    expect(row).not.toHaveAttribute('role');
+    expect(row).not.toHaveAttribute('tabindex');
+
+    // Focusable, so keyboard users can reach the row control.
+    (filenameControl as HTMLButtonElement).focus();
+    expect(document.activeElement).toBe(filenameControl);
+  });
+
+  it('disables the filename control when no preview handler is wired', () => {
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList documents={sampleDocs} loading={false} />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByTestId('office-doc-open-doc-1')).toBeDisabled();
+  });
+});
+
 describe('OfficeDocumentList — gateway action callbacks', () => {
   it('forwards the document ID to the Save As callback', () => {
     const onSaveAs = vi.fn();

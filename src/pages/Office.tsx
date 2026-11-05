@@ -24,7 +24,7 @@
  *   - `auditOfficePageGovernance` 导出（Help 页 P142 检查依赖）。
  */
 
-import { FileSpreadsheet, FileText, FileType, FolderOpen, Presentation } from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -33,13 +33,15 @@ import { useWorkspaceContext } from '../app/providers/SessionWorkspaceProvider';
 import { JournalPanel } from '../features/journal';
 import {
   OfficeDocumentList,
+  OfficeDuplicateDialog,
   OfficeEditPreviewDialog,
-  OfficeFilePicker,
   OfficeGenerateForm,
+  OfficeIntake,
   OfficePreviewPanel,
   OfficeSnapshotPanel,
   useOfficeDocuments,
   type OfficeListView,
+  type OfficeMultiImportResult,
   type OfficePreviewData,
   type OfficeReadResult,
 } from '../features/office';
@@ -48,6 +50,7 @@ import { WordRuleExtractionPanel } from '../features/office/WordRuleExtractionPa
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
 import { WorkspaceBindModal } from '../features/workspace';
 import type { OfficeCapabilities, OfficeDocType } from '../shared/api/types';
+import { fillTemplate } from '../shared/lib/fillTemplate';
 import { useI18n, type TranslationKey } from '../shared/lib/i18n';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shared/ui/Tabs';
@@ -138,8 +141,8 @@ export function Office() {
     refresh,
     view,
     setView,
-    importAndRead,
-    readDropped,
+    importAndReadMulti,
+    readDroppedMulti,
     saveAs,
     open,
     showInFolder,
@@ -148,6 +151,8 @@ export function Office() {
     batchArchive,
     batchRestore,
     readDocument,
+    pendingDuplicate,
+    resolvePendingDuplicate,
   } = useOfficeDocuments(workspacePath);
 
   // Item 1.7: 历史版本 panel
@@ -175,7 +180,68 @@ export function Office() {
     data: data as never,
   });
 
-  const handleImportAndRead = (docType: OfficeDocType) => async () => {
+  // 多文件导入的两个入口（文件选择器 / 拖拽）共享结果后处理：先预览第一个
+  // 成功导入的文档，再刷新列表并汇总 toast。选择「打开已有文档」的文件没有
+  // 重新导入，因此单独提示；它们不计入 intakePartial 的 skipped 数。
+  const settleMultiImport = async (result: OfficeMultiImportResult, myReadId: number) => {
+    if (myReadId !== readIdRef.current) return;
+
+    for (const existing of result.openedExisting) {
+      toast.info(
+        fillTemplate(t('office.toast.duplicateOpened'), {
+          filename: existing.original_filename ?? existing.generated_filename,
+        }),
+      );
+    }
+
+    const first = result.imported[0];
+    if (first) setPreview(toPreview(first.docType, first.readResult));
+
+    await refresh();
+    if (myReadId !== readIdRef.current) return;
+
+    const importedCount = result.imported.length;
+    const openedCount = result.openedExisting.length;
+    const failedCount = result.skipped.length - openedCount;
+    if (importedCount === 0 && openedCount === 0) {
+      toast.error(t('office.toast.intakeNothingImported'));
+      return;
+    }
+    if (failedCount > 0) {
+      toast.warning(
+        fillTemplate(t('office.toast.intakePartial'), {
+          imported: importedCount,
+          skipped: failedCount,
+        }),
+      );
+    } else if (importedCount > 1) {
+      toast.success(
+        fillTemplate(t('office.toast.intakeMultiSuccess'), { count: importedCount }),
+      );
+    } else if (importedCount === 1) {
+      toast.success(t('office.toast.readSuccess'));
+    }
+
+    // 整批都是「打开已有文档」时没有新导入的文档，把最后打开的已有文档
+    // 加载进预览面板，而不是留下空白预览。
+    const existingPreview = result.openedExisting[result.openedExisting.length - 1];
+    if (!first && existingPreview) {
+      const existingReadId = ++readIdRef.current;
+      try {
+        const data = await readDocument(existingPreview.id);
+        if (existingReadId !== readIdRef.current) return;
+        setPreview(toPreview(existingPreview.doc_type, data));
+      } catch (e) {
+        if (existingReadId !== readIdRef.current) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        toast.error(`${t('office.toast.readFailed')}: ${msg}`);
+      }
+    }
+  };
+
+  // Phase 0 (plan §M1): 单一导入入口，多文件。第一个成功导入的文档更新预览，
+  // 其他文件仅触发列表刷新；错误用聚合 toast 一次性展示。
+  const handleImportAndReadMulti = async () => {
     if (!workspacePath) {
       toast.error(t('office.toast.selectWorkspace'));
       return;
@@ -183,13 +249,9 @@ export function Office() {
     const myReadId = ++readIdRef.current;
     setEditDialogOpen(false);
     try {
-      const data = await importAndRead(docType);
-      if (data === null) return;
-      if (myReadId !== readIdRef.current) return;
-      setPreview(toPreview(docType, data));
-      await refresh();
-      if (myReadId !== readIdRef.current) return;
-      toast.success(t('office.toast.readSuccess'));
+      const result = await importAndReadMulti();
+      if (!result) return;
+      await settleMultiImport(result, myReadId);
     } catch (e) {
       if (myReadId !== readIdRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
@@ -198,7 +260,7 @@ export function Office() {
     }
   };
 
-  const handleReadDropped = (docType: OfficeDocType) => async (sourcePath: string) => {
+  const handleReadDroppedMulti = async (sourcePaths: string[]) => {
     if (!workspacePath) {
       toast.error(t('office.toast.selectWorkspace'));
       return;
@@ -206,12 +268,8 @@ export function Office() {
     const myReadId = ++readIdRef.current;
     setEditDialogOpen(false);
     try {
-      const data = await readDropped(docType, sourcePath);
-      if (myReadId !== readIdRef.current) return;
-      setPreview(toPreview(docType, data));
-      await refresh();
-      if (myReadId !== readIdRef.current) return;
-      toast.success(t('office.toast.readSuccess'));
+      const result = await readDroppedMulti(sourcePaths);
+      await settleMultiImport(result, myReadId);
     } catch (e) {
       if (myReadId !== readIdRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
@@ -284,6 +342,26 @@ export function Office() {
     }
   };
 
+  // M1 (Phase 0): 历史列表行点击 → 加载文档到预览面板。复用 readDocument
+  // 读取受管路径，与快照恢复/编辑应用同一 stale-read guard，避免切文档时
+  // 旧结果覆盖新预览。
+  const handlePreviewDocument = async (docId: string) => {
+    const doc = documents.find((d) => d.id === docId);
+    if (!doc) return;
+    const myReadId = ++readIdRef.current;
+    setEditDialogOpen(false);
+    try {
+      const data = await readDocument(docId);
+      if (myReadId !== readIdRef.current) return;
+      setPreview(toPreview(doc.doc_type, data));
+    } catch (e) {
+      if (myReadId !== readIdRef.current) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`${t('office.toast.readFailed')}: ${msg}`);
+      setPreview(null);
+    }
+  };
+
   const handleEditApplied = async (docId: string) => {
     const doc = documents.find((d) => d.id === docId);
     await refresh();
@@ -310,55 +388,17 @@ export function Office() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: file pickers */}
+        {/* Left: unified intake (Phase 0, plan §M1) */}
         <div className="space-y-3">
           <h2 className="text-sm font-medium text-text-secondary">
             {t('office.section.pickFile')}
           </h2>
-          <OfficeFilePicker
-            docType="ppt"
+          <OfficeIntake
             workspacePath={workspacePath}
-            onPick={handleImportAndRead('ppt')}
-            onDropFile={handleReadDropped('ppt')}
+            onPick={handleImportAndReadMulti}
+            onDropFiles={handleReadDroppedMulti}
             disabled={loading}
-          >
-            <span className="flex items-center gap-1.5">
-              <Presentation className="w-3.5 h-3.5" /> {t('office.pick.ppt')}
-            </span>
-          </OfficeFilePicker>
-          <OfficeFilePicker
-            docType="word"
-            workspacePath={workspacePath}
-            onPick={handleImportAndRead('word')}
-            onDropFile={handleReadDropped('word')}
-            disabled={loading}
-          >
-            <span className="flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5" /> {t('office.pick.word')}
-            </span>
-          </OfficeFilePicker>
-          <OfficeFilePicker
-            docType="excel"
-            workspacePath={workspacePath}
-            onPick={handleImportAndRead('excel')}
-            onDropFile={handleReadDropped('excel')}
-            disabled={loading}
-          >
-            <span className="flex items-center gap-1.5">
-              <FileSpreadsheet className="w-3.5 h-3.5" /> {t('office.pick.excel')}
-            </span>
-          </OfficeFilePicker>
-          <OfficeFilePicker
-            docType="pdf"
-            workspacePath={workspacePath}
-            onPick={handleImportAndRead('pdf')}
-            onDropFile={handleReadDropped('pdf')}
-            disabled={loading}
-          >
-            <span className="flex items-center gap-1.5">
-              <FileType className="w-3.5 h-3.5" /> {t('office.pick.pdf')}
-            </span>
-          </OfficeFilePicker>
+          />
         </div>
 
         {/* Right: preview + edit preview dialog */}
@@ -430,6 +470,7 @@ export function Office() {
           onArchive={handleArchive}
           onRestore={handleRestore}
           onViewSnapshots={(docId) => setSnapshotDocId(docId)}
+          onPreview={handlePreviewDocument}
           onBatchArchive={batchArchive}
           onBatchRestore={batchRestore}
         />
@@ -570,6 +611,11 @@ export function Office() {
           ))}
         </Tabs>
       )}
+
+      <OfficeDuplicateDialog
+        pending={pendingDuplicate}
+        onChoose={resolvePendingDuplicate}
+      />
 
       <WorkspaceBindModal
         isOpen={isBindModalOpen}

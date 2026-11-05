@@ -27,6 +27,7 @@ import type {
   ImportResult,
   ImportedOfficeFile,
   JournalElectronApiBridge,
+  MultiOfficeImportResult,
   OfficeDocType,
   OfficeElectronApiBridge,
   OfficeManagedRef,
@@ -386,12 +387,21 @@ const electronAPI = {
         workspacePath,
         docType,
       }) as Promise<ImportedOfficeFile | null>,
+    pickAndImportMultiOfficeFiles: (workspacePath: string) =>
+      ipcRenderer.invoke('office:pick-and-import-multi', {
+        workspacePath,
+      }) as Promise<MultiOfficeImportResult>,
     importDroppedOfficeFile: (workspacePath: string, docType: OfficeDocType, sourcePath: string) =>
       ipcRenderer.invoke('office:import-dropped', {
         workspacePath,
         docType,
         sourcePath,
       }) as Promise<ImportedOfficeFile>,
+    importDroppedMultiOfficeFiles: (workspacePath: string, sourcePaths: string[]) =>
+      ipcRenderer.invoke('office:import-dropped-multi', {
+        workspacePath,
+        sourcePaths,
+      }) as Promise<MultiOfficeImportResult>,
     completeOfficeImport: (importToken: string) =>
       ipcRenderer.invoke('office:complete-import', { importToken }) as Promise<void>,
     discardOfficeImport: (importToken: string) =>

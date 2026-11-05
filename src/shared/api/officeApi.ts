@@ -22,7 +22,9 @@ import type {
   OfficeDocRevisionResponse,
   OfficeDocUpdateRequest,
   OfficeDocUpdateResponse,
+  OfficeDocumentLineageResponse,
   OfficeDocumentListResponse,
+  OfficeDuplicateCheckResult,
   OfficeExcelGenerateRequest,
   OfficeExcelReadResult,
   OfficeExportPdfRequest,
@@ -272,6 +274,47 @@ export const officeApi = {
   async deleteDocument(docId: string): Promise<OfficeDeleteResponse> {
     try {
       return await invoke<OfficeDeleteResponse>('office_delete_document', { docId });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Ask the backend which imported documents hold the same bytes as the
+   * files about to be imported (AI workbench, Phase 0).
+   *
+   * The digest is computed server-side — the renderer never supplies a
+   * hash we would have to trust.
+   */
+  async checkDuplicates(
+    workspacePath: string,
+    filePaths: string[],
+  ): Promise<OfficeDuplicateCheckResult> {
+    try {
+      return await invoke<OfficeDuplicateCheckResult>('office_check_duplicates', {
+        workspacePath,
+        filePaths,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Record that a document was derived from another one — the "import as
+   * a new version" branch of the duplicate dialog.
+   *
+   * Side-effecting (writes `office_documents.derived_from`), so no retry.
+   */
+  async setDocumentLineage(
+    docId: string,
+    derivedFrom: string | null,
+  ): Promise<OfficeDocumentLineageResponse> {
+    try {
+      return await invoke<OfficeDocumentLineageResponse>('office_set_document_lineage', {
+        docId,
+        derivedFrom,
+      });
     } catch (error) {
       throw handleApiError(error);
     }

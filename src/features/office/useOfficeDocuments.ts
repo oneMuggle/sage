@@ -24,12 +24,13 @@
  * /office page is single-instance and documents are scoped to a workspace).
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { officeApi } from '../../shared/api/officeApi';
 import type {
   OfficeDocType,
   OfficeDocumentSummary,
+  OfficeDuplicateCheckEntry,
   OfficeExcelReadResult,
   OfficePdfReadResult,
   OfficePptReadResult,
@@ -37,7 +38,14 @@ import type {
 } from '../../shared/api/types';
 
 import type { OfficeBatchResult } from './OfficeDocumentList';
-import { importOfficeByType } from './importOfficeReference';
+import { importOfficeByType, readStagedOfficeFile } from './importOfficeReference';
+
+/**
+ * The duplicate-check route caps one request at 50 files; larger import
+ * batches are checked in chunks of this size (mirrors
+ * `MAX_DUPLICATE_CHECK_FILES` in backend/api/office_dedup_routes.py).
+ */
+const DUPLICATE_CHECK_CHUNK = 50;
 
 /** Read result union — OfficePreviewPanel is doc-type-agnostic. */
 export type OfficeReadResult =
@@ -45,6 +53,70 @@ export type OfficeReadResult =
   | OfficeWordReadResult
   | OfficeExcelReadResult
   | OfficePdfReadResult;
+
+/**
+ * One successfully imported + parsed file in a multi-file batch.
+ */
+export interface OfficeMultiImportEntry {
+  /** Managed docId (from the gateway's `documentId`). */
+  documentId: string;
+  /** Doc type resolved by the main process from the file extension. */
+  docType: OfficeDocType;
+  /** Original filename — for display in the skipped/summary toast. */
+  filename: string;
+  /** Parsed read result. */
+  readResult: OfficeReadResult;
+}
+
+/**
+ * A file the batch could NOT import. `reason` distinguishes:
+ *   - `unsupported-extension`  — the extension is not a known Office type
+ *   - `staging-failed`         — the managed copy could not be written
+ *   - `read-failed`            — staging worked but the parser rejected it
+ *   - `duplicate-open-existing` — the user chose to open the existing
+ *                                document instead of importing a copy
+ */
+export interface OfficeMultiImportSkipped {
+  filename: string;
+  reason:
+    | 'unsupported-extension'
+    | 'staging-failed'
+    | 'read-failed'
+    | 'duplicate-open-existing';
+  message?: string;
+}
+
+/**
+ * What the user can do about an import whose bytes match an existing
+ * document (AI workbench, Phase 0).
+ */
+export type OfficeDuplicateChoice = 'open-existing' | 'new-version' | 'keep-copy';
+
+/**
+ * A staged file waiting for the duplicate decision. `duplicates[0]` is the
+ * oldest existing document holding the same bytes — the one the dialog
+ * offers to open.
+ */
+export interface OfficePendingDuplicate {
+  /** Staged file's display name (original when known). */
+  filename: string;
+  /** Live documents that hold the same bytes, oldest first. */
+  duplicates: OfficeDocumentSummary[];
+  /** `sha256:<64 hex>` digest shared by the staged file and duplicates. */
+  contentHash: string | null;
+}
+
+/**
+ * Outcome of a unified (multi-file) import. `imported` and `skipped`
+ * together account for every file the user handed over — nothing is
+ * silently dropped. `openedExisting` lists the documents the user chose
+ * to open instead of importing a duplicate.
+ */
+export interface OfficeMultiImportResult {
+  imported: OfficeMultiImportEntry[];
+  skipped: OfficeMultiImportSkipped[];
+  openedExisting: OfficeDocumentSummary[];
+}
 
 /** Which slice of the document lifecycle the list renders (item 1.7). */
 export type OfficeListView = 'live' | 'archived';
@@ -70,6 +142,35 @@ export interface UseOfficeDocumentsReturn {
    * Cancellation: returns `null` if the user cancels the dialog.
    */
   importAndRead: (docType: OfficeDocType) => Promise<OfficeReadResult | null>;
+  /**
+   * Unified (multi-file) import via the native dialog: ONE dialog for
+   * every supported Office extension, `multiSelections` enabled. The
+   * Electron main process resolves each file's docType from its
+   * extension, stages it, and reports the files it could not stage.
+   *
+   * Cancellation: returns `null` if the user cancels the dialog.
+   */
+  importAndReadMulti: () => Promise<OfficeMultiImportResult | null>;
+  /**
+   * Drag-and-drop variant of `importAndReadMulti`: the caller already
+   * has the OS source paths of the dropped files. Same per-file
+   * lifecycle (legacy convert → read → complete/discard).
+   */
+  readDroppedMulti: (sourcePaths: string[]) => Promise<OfficeMultiImportResult>;
+  /**
+   * The staged file currently waiting for a duplicate decision, or null
+   * when the batch is not paused. While non-null the import promise is
+   * pending — `OfficeDuplicateDialog` renders this and calls
+   * `resolvePendingDuplicate` when the user picks an action.
+   */
+  pendingDuplicate: OfficePendingDuplicate | null;
+  /**
+   * Resolve the paused import with the user's choice:
+   *   - `open-existing` — drop the staged copy, preview the existing doc
+   *   - `new-version`   — import, then link the new doc to the existing one
+   *   - `keep-copy`     — import as an independent copy
+   */
+  resolvePendingDuplicate: (choice: OfficeDuplicateChoice) => void;
   /**
    * Drag-and-drop variant: caller already has the sourcePath. Same
    * import + read + complete/discard lifecycle as `importAndRead`.
@@ -134,6 +235,41 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
   const [error, setError] = useState<string | null>(null);
   // Item 1.7: 'live' (default) vs 'archived' list slice.
   const [view, setView] = useState<OfficeListView>('live');
+  // Phase 0 duplicate gate: the staged file the batch is paused on, plus
+  // the resolver that hands the user's choice back to the batch loop.
+  const [pendingDuplicate, setPendingDuplicate] = useState<OfficePendingDuplicate | null>(null);
+  const duplicateResolverRef = useRef<((choice: OfficeDuplicateChoice) => void) | null>(null);
+
+  const requestDuplicateChoice = useCallback(
+    (pending: OfficePendingDuplicate): Promise<OfficeDuplicateChoice> =>
+      new Promise<OfficeDuplicateChoice>((resolve) => {
+        const previous = duplicateResolverRef.current;
+        duplicateResolverRef.current = resolve;
+        setPendingDuplicate(pending);
+        // Two overlapping batches must not leave the earlier promise
+        // dangling — its file imports as an independent copy.
+        if (previous) previous('keep-copy');
+      }),
+    [],
+  );
+
+  const resolvePendingDuplicate = useCallback((choice: OfficeDuplicateChoice): void => {
+    const resolve = duplicateResolverRef.current;
+    duplicateResolverRef.current = null;
+    setPendingDuplicate(null);
+    if (resolve) resolve(choice);
+  }, []);
+
+  // Unmounting mid-batch must not strand the import promise: settle it
+  // with the default action so the staged files finish importing.
+  useEffect(
+    () => () => {
+      const resolve = duplicateResolverRef.current;
+      duplicateResolverRef.current = null;
+      if (resolve) resolve('keep-copy');
+    },
+    [],
+  );
 
   const fetchDocuments = useCallback(
     async (currentView: OfficeListView): Promise<OfficeDocumentSummary[]> => {
@@ -222,40 +358,30 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     [workspacePath],
   );
 
-  const safeDiscard = useCallback(async (importToken: string) => {
-    try {
-      await window.electronAPI?.office.discardOfficeImport(importToken);
-    } catch {
-      // Best-effort: a failed discard just leaves the staging file on
-      // disk. The next pick-and-import uses a fresh token, so the
-      // orphan is bounded.
-    }
-  }, []);
-
   const importAndRead = useCallback(
     async (docType: OfficeDocType): Promise<OfficeReadResult | null> => {
       if (!workspacePath) {
         throw new Error('No workspace selected');
       }
-      const imported = await window.electronAPI?.office.pickAndImportOfficeFile(
-        workspacePath,
-        docType,
-      );
-      if (!imported) return null; // user cancelled
-      try {
-        const result = await readByType(docType, imported.managedPath);
-        // Read succeeded → finalize the import; the staging file is
-        // now permanent and the token is consumed.
-        await window.electronAPI?.office.completeOfficeImport(imported.importToken);
-        return result;
-      } catch (e) {
-        // Read failed → discard the staging file so we don't leak
-        // half-imported bytes onto disk.
-        await safeDiscard(imported.importToken);
-        throw e;
+      const bridge = window.electronAPI?.office;
+      if (!bridge) {
+        throw new Error('useOfficeDocuments: electron.office bridge unavailable');
       }
+      const imported = await bridge.pickAndImportOfficeFile(workspacePath, docType);
+      if (!imported) return null; // user cancelled
+      // The staged → read → complete/discard tail is shared with the
+      // unified multi-file path via `readStagedOfficeFile`, so both
+      // entries own the import token the same way.
+      const { readResult } = await readStagedOfficeFile(bridge, workspacePath, {
+        documentId: imported.documentId,
+        importToken: imported.importToken,
+        managedPath: imported.managedPath,
+        docType,
+        originalName: imported.originalName,
+      });
+      return readResult;
     },
-    [workspacePath, readByType, safeDiscard],
+    [workspacePath],
   );
 
   const readDropped = useCallback(
@@ -271,6 +397,163 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
       return readResult;
     },
     [workspacePath],
+  );
+
+  // Phase 0 dedup pre-flight. The backend answers positionally, so entry
+  // *i* pairs with staged[i] no matter how it resolves symlinks. Batches
+  // are chunked to stay under the route's per-request cap.
+  const checkBatchDuplicates = useCallback(
+    async (
+      wsPath: string,
+      staged: ReadonlyArray<{ managedPath: string }>,
+    ): Promise<OfficeDuplicateCheckEntry[]> => {
+      const checks: OfficeDuplicateCheckEntry[] = [];
+      for (let start = 0; start < staged.length; start += DUPLICATE_CHECK_CHUNK) {
+        const chunk = staged.slice(start, start + DUPLICATE_CHECK_CHUNK);
+        const result = await officeApi.checkDuplicates(
+          wsPath,
+          chunk.map((file) => file.managedPath),
+        );
+        checks.push(...result.files);
+      }
+      return checks;
+    },
+    [],
+  );
+
+  // Phase 0 unified intake: read a batch of ALREADY-STAGED files.
+  //
+  // The staging half lives in the Electron main process (it resolves the
+  // docType from the extension and copies the bytes into the managed
+  // directory). This function owns the read half: duplicate gate →
+  // legacy conversion → type-specific read → complete/discard, one file
+  // at a time.
+  //
+  // A file that fails to read is reported in `skipped` (reason
+  // `read-failed`) rather than aborting the whole batch — one corrupt
+  // file must not cost the user the other nine.
+  const readStagedBatch = useCallback(
+    async (
+      wsPath: string,
+      staged: ReadonlyArray<{
+        documentId: string;
+        importToken: string;
+        managedPath: string;
+        docType: OfficeDocType;
+        originalName?: string;
+        filename?: string;
+      }>,
+      skipped: OfficeMultiImportSkipped[],
+    ): Promise<OfficeMultiImportResult> => {
+      const gateway = window.electronAPI?.office;
+      if (!gateway) {
+        throw new Error('useOfficeDocuments: electron.office bridge unavailable');
+      }
+      const duplicateChecks = await checkBatchDuplicates(wsPath, staged);
+      const imported: OfficeMultiImportEntry[] = [];
+      const openedExisting: OfficeDocumentSummary[] = [];
+
+      for (let index = 0; index < staged.length; index += 1) {
+        const file = staged[index];
+        const filename = file.originalName ?? file.filename ?? file.managedPath;
+        const check = duplicateChecks[index];
+        const existing = check?.duplicates[0];
+        // Pause on a match until the user picks an action. No match (or
+        // no check result) imports straight away as before.
+        let choice: OfficeDuplicateChoice = 'keep-copy';
+        if (existing) {
+          choice = await requestDuplicateChoice({
+            filename,
+            duplicates: check.duplicates,
+            contentHash: check.content_hash,
+          });
+          if (choice === 'open-existing') {
+            openedExisting.push(existing);
+            try {
+              await gateway.discardOfficeImport(file.importToken);
+            } catch {
+              // A leaked staging copy is swept up by sweep-orphan-staging;
+              // the user's decision to open the existing doc still holds.
+            }
+            skipped.push({
+              filename,
+              reason: 'duplicate-open-existing',
+              message: existing.original_filename ?? existing.generated_filename,
+            });
+            continue;
+          }
+        }
+        try {
+          const { readResult } = await readStagedOfficeFile(gateway, wsPath, {
+            documentId: file.documentId,
+            importToken: file.importToken,
+            managedPath: file.managedPath,
+            docType: file.docType,
+            originalName: filename,
+          });
+          imported.push({
+            documentId: file.documentId,
+            docType: file.docType,
+            filename,
+            readResult,
+          });
+          if (choice === 'new-version' && existing) {
+            try {
+              await officeApi.setDocumentLineage(file.documentId, existing.id);
+            } catch {
+              // Lineage is metadata: the import itself succeeded, so a
+              // linking failure must not turn it into a failed file.
+            }
+          }
+        } catch (e) {
+          skipped.push({
+            filename,
+            reason: 'read-failed',
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+      return { imported, skipped, openedExisting };
+    },
+    [checkBatchDuplicates, requestDuplicateChoice],
+  );
+
+  const importAndReadMulti = useCallback(async (): Promise<OfficeMultiImportResult | null> => {
+    if (!workspacePath) {
+      throw new Error('No workspace selected');
+    }
+    const bridge = window.electronAPI?.office;
+    if (!bridge?.pickAndImportMultiOfficeFiles) {
+      throw new Error('useOfficeDocuments: unified import unavailable');
+    }
+    const result = await bridge.pickAndImportMultiOfficeFiles(workspacePath);
+    if (!result) return null; // user cancelled
+    const skipped: OfficeMultiImportSkipped[] = result.skipped.map((entry) => ({
+      filename: entry.filename,
+      reason: entry.reason,
+      message: entry.message,
+    }));
+    return readStagedBatch(workspacePath, result.imported, skipped);
+  }, [workspacePath, readStagedBatch]);
+
+  const readDroppedMulti = useCallback(
+    async (sourcePaths: string[]): Promise<OfficeMultiImportResult> => {
+      if (!workspacePath) {
+        throw new Error('No workspace selected');
+      }
+      const bridge = window.electronAPI?.office;
+      if (!bridge?.importDroppedMultiOfficeFiles) {
+        throw new Error('useOfficeDocuments: unified import unavailable');
+      }
+      const result = await bridge.importDroppedMultiOfficeFiles(workspacePath, sourcePaths);
+      const skipped: OfficeMultiImportSkipped[] = result.skipped.map((entry) => ({
+        filename: entry.filename,
+        reason: entry.reason,
+        message: entry.message,
+      }));
+      return readStagedBatch(workspacePath, result.imported, skipped);
+    },
+    [workspacePath, readStagedBatch],
   );
 
   const saveAs = useCallback(
@@ -409,7 +692,11 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     view,
     setView,
     importAndRead,
+    importAndReadMulti,
     readDropped,
+    readDroppedMulti,
+    pendingDuplicate,
+    resolvePendingDuplicate,
     saveAs,
     open,
     showInFolder,
