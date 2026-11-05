@@ -6,6 +6,7 @@ import { regenerateInPlace } from '../../features/chat/answerVersions';
 import { useQuoteDraft } from '../../features/chat/useQuoteDraft';
 import { sessionApi, learnApi, messageApi, memoryApi } from '../../shared/api';
 import { orchRunClient } from '../../shared/api/orchRunClient';
+import type { MessageSource } from '../../shared/api/types/chatAndEventTypes';
 import {
   isHttpUrl,
   isLoginInProgressError,
@@ -13,7 +14,6 @@ import {
   waitForSiteLogin,
 } from '../../shared/api/webAccessClient';
 import { useI18n } from '../../shared/lib/i18n';
-import type { MessageSource } from '../../shared/api/types/chatAndEventTypes';
 import type { BlockedAction, Message as MessageType } from '../../shared/lib/store';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
