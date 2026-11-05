@@ -2,7 +2,8 @@
 """R81：bundle-only 工具装配的黄金快照与 preset 选择证据。
 
 R80 曾用 legacy/bundle 双跑对照证明两条装配路径等价；R81 删除 legacy
-后，本文件把当时实测得到的 ONLINE 94 个工具名及顺序钉成黄金快照。
+后，本文件把当时实测得到的 ONLINE 94 个工具名及顺序钉成黄金快照（后续
+新增 bundle 时同步追加，当前 114 项）。
 无 ``harness.yaml`` 时必须逐项命中这份清单——这是「删配置即回默认」
 的兼容承诺。预设只能从这份全量清单中按原顺序删减，不能重排。
 """
@@ -138,6 +139,9 @@ _EXPECTED_ONLINE = [
     "design_generate",
     "design_iterate",
     "design_export",
+    "sage_self_status",
+    "sage_doctor",
+    "sage_usage",
 ]
 
 
@@ -222,6 +226,9 @@ _EXPECTED_SCHEMA_NAMES = [
     "design_generate",
     "design_iterate",
     "design_export",
+    "sage_self_status",
+    "sage_doctor",
+    "sage_usage",
 ]
 _EXPECTED_BUNDLE_NAMES = (
     "shell",
@@ -256,6 +263,7 @@ _EXPECTED_BUNDLE_NAMES = (
     "plugins",
     "todo",
     "design",
+    "self_status",
 )
 
 _FOCUS_BUNDLES = (
@@ -282,6 +290,7 @@ _FOCUS_BUNDLES = (
     "mcp",
     "plugins",
     "todo",
+    "self_status",
 )
 
 
@@ -388,7 +397,7 @@ def test_standard_online_matches_golden_snapshot() -> None:
     registry = _install_via_facade()
 
     assert registry.list_names() == _EXPECTED_ONLINE
-    assert len(registry.list_names()) == len(set(registry.list_names())) == 111
+    assert len(registry.list_names()) == len(set(registry.list_names())) == 114
 
 
 def test_standard_risks_and_schemas_align_with_golden_snapshot() -> None:
@@ -412,7 +421,7 @@ def test_network_gating_counts_and_differences() -> None:
     intranet = _install_via_facade(NetworkMode.INTRANET).list_names()
     offline = _install_via_facade(NetworkMode.OFFLINE).list_names()
 
-    assert (len(online), len(intranet), len(offline)) == (111, 110, 106)
+    assert (len(online), len(intranet), len(offline)) == (114, 113, 109)
     assert set(online) - set(intranet) == {"web_search"}
     assert set(intranet) - set(offline) == {
         "web_fetch",
@@ -462,7 +471,7 @@ def test_bundle_selection_for_standard_focus_headless_and_dev() -> None:
     assert tuple(b.name for b in select_bundle_objects(_harness("focus"))) == _FOCUS_BUNDLES
 
     headless = tuple(b.name for b in select_bundle_objects(_harness("headless")))
-    assert len(headless) == 31
+    assert len(headless) == 32
     assert "ask_user" not in headless
     assert [name for name in _EXPECTED_BUNDLE_NAMES if name in set(headless)] == list(headless)
 
@@ -482,7 +491,7 @@ def test_focus_install_excludes_heavy_tool_surfaces() -> None:
     registry = _install_bundles(_harness("focus"))
     names = registry.list_names()
 
-    assert len(names) == 54
+    assert len(names) == 57
     assert not any(name.startswith("office_") for name in names)
     assert not any(name.startswith("browser_") for name in names)
     assert not any(name.startswith("design_") for name in names)
@@ -495,7 +504,7 @@ def test_headless_install_excludes_ask_user_only() -> None:
     registry = _install_bundles(_harness("headless"))
     names = registry.list_names()
 
-    assert len(names) == 110
+    assert len(names) == 113
     assert "ask_user_question" not in names
     assert set(_EXPECTED_ONLINE) - set(names) == {"ask_user_question"}
     _assert_subsequence(names)
@@ -532,7 +541,7 @@ def test_register_all_tools_reads_project_harness(tmp_path: Path) -> None:
 
     registry = _install_via_facade()
 
-    assert len(registry.list_names()) == 110
+    assert len(registry.list_names()) == 113
     assert "ask_user_question" not in registry.list_names()
 
 

@@ -15,6 +15,9 @@ import {
   FileSpreadsheet,
   BookText,
   GitBranch,
+  Activity,
+  Stethoscope,
+  Settings,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -198,6 +201,31 @@ export const slashCommands: SlashCommand[] = [
     mode: 'navigate',
     route: '/memory',
   },
+  // 2026-11-05 M1.5 自透明对等：/status /doctor /config —— 对标 Claude Code 的
+  // /status 与 Codex 的自检命令，把后端 sage_self_status / sage_doctor /
+  // read_sage_config 工具包成低门槛入口。mode='prompt' 让 LLM 调用对应工具
+  // 并以人类可读形式呈现。
+  {
+    name: 'status',
+    label: '运行状态',
+    description: '一次查看版本 / 生效模型 / 权限 / MCP / 插件 / 今日用量 / 健康',
+    icon: Activity,
+    mode: 'prompt',
+  },
+  {
+    name: 'doctor',
+    label: '后端巡检',
+    description: '运行 18 项后端健康检查（含子进程探测），输出 CRITICAL / WARN / INFO 报告',
+    icon: Stethoscope,
+    mode: 'prompt',
+  },
+  {
+    name: 'config',
+    label: '查看配置',
+    description: '列出 Sage 当前的编排上限 / 模型绑定 / 端点 / 智能路由 / 偏好 / 版本号',
+    icon: Settings,
+    mode: 'prompt',
+  },
 ];
 
 /** 根据输入前缀过滤命令 */
@@ -312,6 +340,30 @@ export function commandToPrompt(cmd: SlashCommand, args: string): string {
       );
     case 'translate':
       return '请将上一条消息翻译成英文（如果原文是英文则翻译成中文）。';
+    case 'status':
+      // 2026-11-05 M1.5: 调用 sage_self_status 工具，把 8 维运行时状态
+      // 用简洁中文呈现；要求模型重点突出"实际生效模型 + 今日用量成本 + 异常维度"。
+      return (
+        '请调用 sage_self_status 工具，然后把返回的 8 维运行时状态用简洁中文呈现给我。' +
+        '重点突出：1) 实际生效模型与端点；2) 今日用量与估算成本；3) 任何维度如果返回 ' +
+        'error 或异常请醒目提示。'
+      );
+    case 'doctor':
+      // 2026-11-05 M1.5: 调用 sage_doctor 工具（含子进程探测），按
+      // CRITICAL > WARN > INFO 优先级整理；每条异常附上修复建议。
+      return (
+        '请调用 sage_doctor 工具（开启 include_subprocess_probe=true）做一次完整的后端' +
+        '健康巡检，把结果按 CRITICAL > WARN > INFO 的优先级整理成报告。每条异常都要' +
+        '附上具体修复建议（命令或配置路径）。如果全部通过，只给一行"全部通过 + 检查项数"。'
+      );
+    case 'config':
+      // 2026-11-05 M1.5: 调用 read_sage_config section='all'，把关键配置
+      // 整理成易读报告；凭证已脱敏，可直接展示。
+      return (
+        "请调用 read_sage_config 工具（section='all'），把 Sage 当前的关键配置整理成" +
+        '易读的中文报告。必须包含：编排上限、各智能体迭代上限、实际绑定的模型与端点、' +
+        '智能路由模式、用户偏好（主题、权限模式等）、版本号。'
+      );
     default:
       return args || `/${cmd.name}`;
   }

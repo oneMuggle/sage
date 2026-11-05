@@ -122,12 +122,15 @@ from .project_diagnose import ProjectDiagnoseTool
 from .repl_tool import ReplTool
 from .runtime_exec import RuntimeExecTool
 from .runtime_probe import RuntimeProbeTool
+from .sage_doctor_tool import SageDoctorTool
+from .sage_usage_tool import SageUsageTool
 from .schedule_tool import (
     CancelScheduledTaskTool,
     ListScheduledTasksTool,
     ScheduleTaskTool,
 )
 from .search_tools import GlobSearchTool, GrepSearchTool
+from .self_status_tool import SageSelfStatusTool
 from .session_search_tool import SessionSearchTool
 from .skill_save_tool import SkillSaveTool
 from .skill_tool import SkillTool
@@ -383,6 +386,14 @@ def _install_sage_config(ctx: ToolInstallContext) -> None:
     ctx.registry.register(DiagnoseSageConfigTool(policy=policy))
 
 
+def _install_self_status(ctx: ToolInstallContext) -> None:
+    # 自透明三件套（M1）：全部 READ —— 只读运行时状态，不进 SELF_MODIFY_TOOLS。
+    policy = ctx.policy
+    ctx.registry.register(SageSelfStatusTool(policy=policy))
+    ctx.registry.register(SageDoctorTool(policy=policy))
+    ctx.registry.register(SageUsageTool(policy=policy))
+
+
 def _install_schedule(ctx: ToolInstallContext) -> None:
     # 定时任务派发工具：list 为 READ；schedule / cancel 为 WRITE_LOCAL。
     policy = ctx.policy
@@ -471,6 +482,7 @@ BUNDLES: Tuple[ToolBundle, ...] = (
     ToolBundle("plugins", _install_plugins, critical=False),
     ToolBundle("todo", _install_todo),
     ToolBundle("design", _install_design),
+    ToolBundle("self_status", _install_self_status),
 )
 
 
