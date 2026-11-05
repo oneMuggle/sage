@@ -1,8 +1,10 @@
 """M1.3 ``sage_doctor`` 工具 —— 把后端 doctor 的检查注册表暴露给 LLM。
 
 复用 ``backend.cli.doctor`` 的检查注册表（``ALL_CHECKS`` / ``_run_one`` /
-``_summarize`` / ``_import_all_checks``），跳过 ``run_doctor`` 子进程探测
-（慢、且对 LLM 无意义 —— LLM 关心的是检查结果本身而非 probe 启动耗时）。
+``_summarize`` / ``_import_all_checks``），运行全部已注册检查（含
+``backend_health`` 的 1 秒 /health HTTP 探测）。真正的"子进程 import 探测"
+（``_try_import_backend``）只属于 ``run_doctor`` 的打包验证路径，对 LLM
+诊断无意义，不在本工具内执行。
 
 对应 Claude Code 的 ``/doctor`` 命令。
 """
@@ -40,23 +42,13 @@ class SageDoctorTool(BaseTool):
             ),
             parameters={
                 "type": "object",
-                "properties": {
-                    "include_subprocess_probe": {
-                        "type": "boolean",
-                        "description": (
-                            "是否包含子进程启动探测（启动一次后端 Python 进程验证）。"
-                            "默认 false（跳过，可省 5-10 秒）。仅在明确需要验证后端"
-                            "启动链路时设为 true。"
-                        ),
-                        "default": False,
-                    }
-                },
+                "properties": {},
             },
         )
 
-    def execute(self, include_subprocess_probe: bool = False, **kwargs: Any) -> ToolResult:
+    def execute(self, **kwargs: Any) -> ToolResult:
         try:
-            results, summary = self._run_checks(include_subprocess_probe)
+            results, summary = self._run_checks()
         except Exception as exc:  # noqa: BLE001
             logger.exception("sage_doctor 执行失败")
             return ToolResult(
@@ -75,7 +67,7 @@ class SageDoctorTool(BaseTool):
         )
 
     @staticmethod
-    def _run_checks(include_subprocess_probe: bool):
+    def _run_checks():
         from backend.cli.doctor import (
             ALL_CHECKS,
             _import_all_checks,
@@ -86,12 +78,9 @@ class SageDoctorTool(BaseTool):
         # 触发 @register 装饰器填充 ALL_CHECKS
         _import_all_checks()
 
+        # 全量执行：接口/环境检查都是轻量只读探测（backend_health 超时 1 秒），
+        # 不做任何过滤，避免"默认丢掉健康检查"的静默降级。
         results = [_run_one(cls) for cls in ALL_CHECKS]
-
-        # 子进程探测默认跳过（LLM 不需要，且耗时）
-        if not include_subprocess_probe:
-            results = [r for r in results if r.name != "backend_health"]
-
         summary = _summarize(results)
         return results, summary
 

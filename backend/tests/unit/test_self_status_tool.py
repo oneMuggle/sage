@@ -76,16 +76,29 @@ def test_gather_permission_mode_fallback():
 
 
 def test_gather_effective_model_uses_llm_factory():
-    """实际生效模型走 load_llm_config_for_chat() 解析，含路由 overlay。"""
-    fake_config = MagicMock()
-    fake_config.model = "gpt-4o"
-    fake_config.provider = "openai"
-    fake_config.endpoint_id = "ep-123"
+    """实际生效模型走 load_llm_config_for_chat() 解析（返回 LLMConfig 兼容 **dict**）。"""
+    # 用真实 dict 而不是 MagicMock —— load_llm_config_for_chat 返回 dict，
+    # MagicMock 会掩盖 getattr 在 dict 上永远返回 None 的 bug。
+    fake_config = {
+        "model": "gpt-4o",
+        "provider": "custom",
+        "api_key": "sk-***",
+        "base_url": "https://api.example.com/v1",
+        "endpoint_id": "ep-123",
+        "temperature": 0.3,
+    }
     with patch.object(ss_module, "load_llm_config_for_chat", return_value=fake_config):
         data = gather_self_status()
     assert data["effective_model"]["model"] == "gpt-4o"
-    assert data["effective_model"]["provider"] == "openai"
+    assert data["effective_model"]["provider"] == "custom"
     assert data["effective_model"]["endpoint_id"] == "ep-123"
+
+
+def test_gather_effective_model_empty_config_is_error():
+    """LLM 配置为空 dict / None（无可用端点）→ 有效 error 字段而不是抛异常。"""
+    with patch.object(ss_module, "load_llm_config_for_chat", return_value=None):
+        data = gather_self_status()
+    assert "error" in data["effective_model"]
 
 
 def test_gather_effective_model_fallback_on_error():
@@ -97,21 +110,33 @@ def test_gather_effective_model_fallback_on_error():
 
 
 def test_gather_mcp_list_returns_list_of_entries():
-    """MCP 清单读 mcp pool 单例的 status_report()。"""
-    fake_entry = MagicMock()
-    fake_entry.name = "drawio"
-    fake_entry.state = "ready"
-    fake_entry.tool_count = 3
-    fake_entry.last_error = None
-    fake_report = MagicMock()
-    fake_report.servers = [fake_entry]
+    """MCP 清单读 mcp pool 单例的 status_report()。
+
+    用真实 dataclass 而不是 MagicMock —— ServerStatusEntry.since 是 float
+    （time.time 纪元秒），MagicMock 会让任何属性访问都成功，掩盖
+    datetime.fromtimestamp(float).isoformat() 的真实调用路径。
+    """
+    from backend.mcp.pool import McpStatusReport, ServerStatusEntry
+
+    entry = ServerStatusEntry(
+        name="drawio",
+        state="ready",
+        tool_count=3,
+        last_error=None,
+        since=1700000000.0,  # 真实 float 纪元秒
+        required=False,
+    )
+    report = McpStatusReport(generated_at=1700000000.0, servers=(entry,))
     with patch.object(ss_module, "get_mcp_pool") as mock_pool:
-        mock_pool.return_value.status_report.return_value = fake_report
+        mock_pool.return_value.status_report.return_value = report
         data = gather_self_status()
     assert len(data["mcp"]) == 1
     assert data["mcp"][0]["name"] == "drawio"
     assert data["mcp"][0]["state"] == "ready"
     assert data["mcp"][0]["tool_count"] == 3
+    # since 被转成 ISO-8601 字符串（UTC）
+    since_str = data["mcp"][0]["since"]
+    assert isinstance(since_str, str) and since_str.endswith("+00:00") or "T" in since_str
 
 
 def test_gather_mcp_list_fallback():
@@ -145,13 +170,13 @@ def test_gather_plugin_list_fallback():
 
 
 def test_gather_usage_summary_returns_today():
-    """今日用量来自 usage_tracker.summary_with_range()。"""
+    """今日用量来自 usage_tracker.summary_with_range()，且 estimated_cost_usd=None 不崩。"""
     fake_summary = {
         "today": {
             "requests": 12,
             "prompt_tokens": 50000,
             "completion_tokens": 10000,
-            "estimated_cost_usd": 0.05,
+            "estimated_cost_usd": None,  # 模型定价未知 —— 不应 :.4f TypeError
         }
     }
     with patch.object(ss_module, "get_usage_summary", return_value=fake_summary):
@@ -164,6 +189,70 @@ def test_gather_usage_summary_fallback():
         data = gather_self_status()
     assert isinstance(data["usage"], dict)
     assert "error" in data["usage"] or data["usage"] == {}
+
+
+def test_gather_health_db_ok():
+    """_gather_health 走 get_database().get_connection().execute('SELECT 1')。
+
+    不能用 MagicMock 替代 get_database：Database 类本身没有 execute()，
+    真实路径必须经 _LockedConnection.execute 内部持有 _SQLITE_LOCK。
+    """
+    mock_conn = MagicMock()
+    mock_conn.execute.return_value = (1,)
+    mock_db = MagicMock()
+    mock_db.get_connection.return_value = mock_conn
+    # _gather_health 内部 `from backend.data.database import get_database`
+    # —— 必须 patch 该模块上的名字才能生效。
+    with patch("backend.data.database.get_database", return_value=mock_db):
+        data = ss_module._gather_health()
+    assert data["backend_ok"] is True
+    assert data["db_ok"] is True
+    mock_conn.execute.assert_called_once_with("SELECT 1")
+
+
+def test_gather_health_db_failure():
+    """DB execute 抛异常时 db_ok=False 但 backend_ok 仍 True（后端进程还活着）。"""
+    mock_conn = MagicMock()
+    mock_conn.execute.side_effect = RuntimeError("locked")
+    mock_db = MagicMock()
+    mock_db.get_connection.return_value = mock_conn
+    with patch("backend.data.database.get_database", return_value=mock_db):
+        data = ss_module._gather_health()
+    assert data["backend_ok"] is True
+    assert data["db_ok"] is False
+
+
+def test_build_summary_cost_none_path():
+    """_build_summary 在 estimated_cost_usd=None 时输出 '未知' 而不是 '$0.0000'。"""
+    from backend.tools.self_status_tool import SageSelfStatusTool
+
+    data = {
+        "version": "0.4.9",
+        "effective_model": {"model": "gpt-4o", "provider": "openai", "endpoint_id": "ep-1"},
+        "permission_mode": "workspace_write",
+        "mcp": [],
+        "plugins": [],
+        "usage": {"today": {"requests": 1, "prompt_tokens": 10, "completion_tokens": 2,
+                            "estimated_cost_usd": None}},
+        "health": {"backend_ok": True, "db_ok": True},
+        "context": {},
+    }
+    lines = SageSelfStatusTool._build_summary(data)
+    joined = "\n".join(lines)
+    assert "未知" in joined
+    assert "$0.0000" not in joined
+
+
+def test_sage_usage_unresolved_session_is_failure():
+    """scope=session 且无 session_id → success=False（不是空结果）。"""
+    from backend.tools.sage_usage_tool import SageUsageTool
+
+    tool = SageUsageTool()
+    # current_tool_context() 在测试环境默认返回 None → session_id 解析失败
+    with patch("backend.tools.sage_usage_tool.usage_tracker", create=True) as _mock_tracker:
+        # 直接走 _session_scope 的 no-session-id 路径（不走 tracker）
+        data, _text = tool._session_scope(session_id=None)
+    assert "error" in data
 
 
 # ---------------------------------------------------------------------------

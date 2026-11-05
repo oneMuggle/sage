@@ -100,6 +100,11 @@ class SageUsageTool(BaseTool):
             logger.exception("sage_usage 执行失败 (scope=%s)", scope)
             return ToolResult(success=False, error=f"用量查询失败: {exc}")
 
+        # 会话无法解析属于"无法回答"而非"空结果" —— 与上面的参数校验分支
+        # 保持一致，用 success=False 让调用方/LLM 能区分。
+        if isinstance(data, dict) and "error" in data:
+            return ToolResult(success=False, error=str(data["error"]))
+
         return ToolResult(success=True, content=data, output=summary_text)
 
     # ------------------------------------------------------------------

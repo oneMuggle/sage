@@ -349,12 +349,12 @@ export function commandToPrompt(cmd: SlashCommand, args: string): string {
         'error 或异常请醒目提示。'
       );
     case 'doctor':
-      // 2026-11-05 M1.5: 调用 sage_doctor 工具（含子进程探测），按
+      // 2026-11-05 M1.5: 调用 sage_doctor 工具（运行全部 doctor 检查），按
       // CRITICAL > WARN > INFO 优先级整理；每条异常附上修复建议。
       return (
-        '请调用 sage_doctor 工具（开启 include_subprocess_probe=true）做一次完整的后端' +
-        '健康巡检，把结果按 CRITICAL > WARN > INFO 的优先级整理成报告。每条异常都要' +
-        '附上具体修复建议（命令或配置路径）。如果全部通过，只给一行"全部通过 + 检查项数"。'
+        '请调用 sage_doctor 工具做一次完整的后端健康巡检，把结果按 ' +
+        'CRITICAL > WARN > INFO 的优先级整理成报告。每条异常都要附上具体修复' +
+        '建议（命令或配置路径）。如果全部通过，只给一行"全部通过 + 检查项数"。'
       );
     case 'config':
       // 2026-11-05 M1.5: 调用 read_sage_config section='all'，把关键配置

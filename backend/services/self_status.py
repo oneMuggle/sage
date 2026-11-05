@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
@@ -80,16 +81,19 @@ def read_version() -> str:
 def _gather_effective_model() -> Dict[str, Any]:
     """实际生效模型 —— 经 ``load_llm_config_for_chat`` 解析后含路由 overlay。
 
-    返回字段：model / provider / endpoint_id / endpoint_name。任何字段缺失
-    时保留 None（UI 侧负责兜底展示）。
+    ``load_llm_config_for_chat()`` 返回的是 ``LLMConfig`` 兼容 **dict**
+    （键：model / provider / api_key / base_url / temperature / endpoint_id /
+    max_tokens），不是对象 —— 必须用 ``.get()`` 取值。字段缺失时保留 None
+    （UI 侧负责兜底展示）。
     """
     try:
         config = load_llm_config_for_chat()
+        if not config:
+            return {"error": "未配置可用的 LLM 端点"}
         return {
-            "model": getattr(config, "model", None),
-            "provider": getattr(config, "provider", None),
-            "endpoint_id": getattr(config, "endpoint_id", None),
-            "endpoint_name": getattr(config, "endpoint_name", None),
+            "model": config.get("model"),
+            "provider": config.get("provider"),
+            "endpoint_id": config.get("endpoint_id"),
         }
     except Exception as exc:  # noqa: BLE001
         return {"error": f"加载 LLM 配置失败: {exc}"}
@@ -115,7 +119,14 @@ def _gather_mcp() -> Union[List[Dict[str, Any]], Dict[str, str]]:
                 "state": entry.state,
                 "tool_count": entry.tool_count,
                 "last_error": entry.last_error,
-                "since": entry.since.isoformat() if entry.since else None,
+                # ServerStatusEntry.since 是 float（time.time() 纪元秒），
+                # 不是 datetime —— 直接 .isoformat() 会 AttributeError 拖垮
+                # 整个维度。转成 UTC ISO-8601 便于 LLM / UI 展示。
+                "since": (
+                    datetime.fromtimestamp(entry.since, tz=timezone.utc).isoformat()  # noqa: UP017 - py38: datetime.UTC 是 3.11+
+                    if entry.since
+                    else None
+                ),
                 "required": entry.required,
             }
             for entry in report.servers
@@ -133,8 +144,11 @@ def _gather_plugins() -> Union[List[Dict[str, Any]], Dict[str, str]]:
             {
                 "name": record.name,
                 "version": record.version,
-                "status": record.status,
-                "plugin_type": record.plugin_type,
+                # PluginRecord 字段是 str-Enum；JSON 序列化时 str 子类自动
+                # 落值，但 f-string 会渲染成 "PluginStatus.ENABLED" —— 统一
+                # 取 .value，保证两种消费方式一致。
+                "status": getattr(record.status, "value", record.status),
+                "plugin_type": getattr(record.plugin_type, "value", record.plugin_type),
             }
             for record in records
         ]
@@ -156,12 +170,14 @@ def _gather_usage() -> Dict[str, Any]:
 def _gather_health() -> Dict[str, Any]:
     """后端基础健康检查 —— 不做子进程探测，只验证主进程存活 + DB 连通。"""
     try:
-        from backend.data.database import Database
+        from backend.data.database import get_database
 
-        db = Database()
+        # 必须走 get_database() 单例：Database 类本身没有 execute()，
+        # 新建实例还会多开一条永不关闭的 SQLite 连接。get_connection()
+        # 返回的 _LockedConnection.execute 内部已持有 _SQLITE_LOCK。
         db_ok = True
         try:
-            db.execute("SELECT 1")
+            get_database().get_connection().execute("SELECT 1")
         except Exception as exc:  # noqa: BLE001
             logger.debug("DB 健康检查失败: %s", exc)
             db_ok = False

@@ -17,6 +17,7 @@ from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
 from backend.services import self_status as self_status_service
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
+from backend.tools.sage_usage_tool import _fmt_cost
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,9 @@ class SageSelfStatusTool(BaseTool):
                 f"【今日用量】请求数={today.get('requests', 0)}, "
                 f"输入 tokens={today.get('prompt_tokens', 0)}, "
                 f"输出 tokens={today.get('completion_tokens', 0)}, "
-                f"估算成本=${today.get('estimated_cost_usd', 0):.4f}"
+                # estimated_cost_usd 可能为 None（模型定价未知 / 全新安装）,
+                # 直接 :.4f 会 TypeError —— 复用 sage_usage 的 None-aware 格式化。
+                f"估算成本={_fmt_cost(today.get('estimated_cost_usd'))}"
             )
         else:
             lines.append("【今日用量】(无数据)")
