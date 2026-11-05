@@ -2838,9 +2838,15 @@ from backend.api.legacy_skill_draft_routes import router as legacy_skill_draft_r
 router.include_router(legacy_skill_draft_routes_router)
 # C1 第一刀 (DSH 对标 R14): 记忆 API 迁出至 legacy_memory_routes.py
 # （纯物理拆分，路径/行为零变更；与 orch_routes 同款 include 模式）。
+from backend.api.legacy_memory_feedback_routes import (
+    router as legacy_memory_feedback_routes_router,
+)
 from backend.api.legacy_memory_list_routes import router as legacy_memory_list_routes_router
+from backend.api.legacy_memory_quality_routes import router as legacy_memory_quality_routes_router
 from backend.api.legacy_memory_routes import router as legacy_memory_routes_router
 
 router.include_router(legacy_memory_routes_router)
 router.include_router(legacy_memory_list_routes_router)
+router.include_router(legacy_memory_quality_routes_router)
+router.include_router(legacy_memory_feedback_routes_router)
 router.include_router(orch_routes_router)

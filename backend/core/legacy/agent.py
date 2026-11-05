@@ -73,6 +73,7 @@ from backend.memory import (
     SessionSummaryStore,
     WorkingMemory,
 )
+from backend.memory.embedder_factory import get_shared_embedder
 from backend.orchestration.complexity_classifier import estimate_budget_level
 from backend.services.permission_gate import (
     DEFAULT_APPROVAL_TIMEOUT_S,
@@ -497,6 +498,8 @@ class SageAgent:
                 episodic,
                 semantic,
                 summary_store=SessionSummaryStore(db),
+                # 冲突消解的语义去重 —— 传工厂函数以便热切换嵌入模式
+                embedder=get_shared_embedder,
             )
 
             # 初始化工具注册表
