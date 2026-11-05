@@ -196,7 +196,6 @@ class _MissingRegistry:
 
     def get(self, name: str):
         self.calls.append(name)
-        return None
 
 
 def _call_rpc(

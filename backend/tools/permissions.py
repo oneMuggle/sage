@@ -574,7 +574,7 @@ class PermissionEnforcer:
             return _deny(f"{risk_reason}：read_only 模式禁止执行")
         return _ask(f"{risk_reason}：即使在 {self._mode.value} 模式下也必须经用户确认")
 
-    def _mode_decision(
+    def _mode_decision(  # noqa: PLR0911 — 自管理闸增加 2 个分支，7 个 return 皆必要
         self, tool_name: str, capability: ToolCapability, bash_result: Optional[Any]
     ) -> PermissionDecision:
         """无规则命中时的模式矩阵兜底（每个分支带可读 reason）。"""
