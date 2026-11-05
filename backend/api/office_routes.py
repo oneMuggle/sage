@@ -149,7 +149,7 @@ def _build_summary_for_generated(
         updated_at=now_ms,
         metadata=OfficeDocumentMetadata(file_size_bytes=file_path.stat().st_size),
     )
-    save_document(_db().get_connection(), summary)
+    save_document(_db().get_connection(), summary, content_file_path=file_path)
     return summary
 
 
@@ -304,7 +304,7 @@ def _persist_read_summary(
             derived_from=summary.derived_from,
             archived_at=summary.archived_at,
         )
-    save_document(conn, persisted)
+    save_document(conn, persisted, content_file_path=file_path)
     # Patch the returned summary so the caller sees the same id/filename
     # that was persisted (otherwise the reader's default ``file_path.stem``
     # id leaks out, breaking the contract that ``id == managed dir name``).
@@ -752,6 +752,10 @@ from backend.api.office_word_audit_routes import (  # noqa: E402
 )
 
 router.include_router(_word_audit_router)
+
+from backend.api.office_dedup_routes import router as _dedup_router  # noqa: E402
+
+router.include_router(_dedup_router)
 
 __all__ = [
     "router",

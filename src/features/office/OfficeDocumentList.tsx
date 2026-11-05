@@ -72,6 +72,11 @@ export interface OfficeDocumentListProps {
   /** Open the 历史版本 (snapshots) panel for the row. */
   onViewSnapshots?: (docId: string) => void | Promise<void>;
   /**
+   * M1 (Phase 0): 点击行加载预览。整行可点击/可键盘聚焦（Enter/Space），
+   * 与右侧图标按钮并存；点击操作按钮不触发预览。
+   */
+  onPreview?: (docId: string) => void | Promise<void>;
+  /**
    * Batch-archive the selected live rows (round-3 N5, variant="live").
    * Resolves with the per-item outcome so the toolbar can show a
    * counted summary toast. When absent the checkboxes/toolbar hide.
@@ -136,6 +141,7 @@ export function OfficeDocumentList({
   onArchive,
   onRestore,
   onViewSnapshots,
+  onPreview,
   onBatchArchive,
   onBatchRestore,
 }: OfficeDocumentListProps) {
@@ -318,16 +324,18 @@ export function OfficeDocumentList({
           <li
             key={doc.id}
             ref={doc.id === highlightedId ? highlightRef : undefined}
+            onClick={onPreview ? () => void onPreview(doc.id) : undefined}
             data-testid={doc.id === highlightedId ? 'office-doc-highlighted' : undefined}
             className={`flex items-center gap-3 p-3 border border-border rounded-lg bg-surface ${
-              doc.id === highlightedId ? 'ring-2 ring-primary bg-primary/5' : ''
-            }`}
+              onPreview ? 'cursor-pointer hover:bg-bg-hover transition-colors' : ''
+            } ${doc.id === highlightedId ? 'ring-2 ring-primary bg-primary/5' : ''}`}
           >
             {batchAction && (
               <input
                 type="checkbox"
                 checked={selected.has(doc.id)}
                 onChange={() => toggleDoc(doc.id)}
+                onClick={(event) => event.stopPropagation()}
                 disabled={batchBusy}
                 data-testid={`office-doc-select-${doc.id}`}
                 aria-label={t('office.batch.selectRow')}
@@ -335,7 +343,25 @@ export function OfficeDocumentList({
               />
             )}
             <div className="text-muted">{DOC_TYPE_ICONS[doc.doc_type]}</div>
-            <div className="flex-1 min-w-0">
+            {/*
+              The filename block is the row's real control: a native
+              <button> so it is focusable, announces as a button, and
+              activates on Enter/Space without hand-rolled key handling.
+              The <li> keeps a plain click handler so the whole row stays
+              mouse-friendly, but carries no interactive role — a
+              role="button" <li> wrapping a checkbox and action buttons
+              nests interactive controls and breaks screen readers.
+            */}
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                void onPreview?.(doc.id);
+              }}
+              disabled={!onPreview}
+              className="flex-1 min-w-0 text-left disabled:cursor-default"
+              data-testid={`office-doc-open-${doc.id}`}
+            >
               <div className="text-sm font-medium text-text truncate">
                 {doc.original_filename ?? doc.generated_filename}
               </div>
@@ -356,8 +382,11 @@ export function OfficeDocumentList({
                   </>
                 )}
               </div>
-            </div>
-            <div className="flex items-center gap-1">
+            </button>
+            <div
+              className="flex items-center gap-1"
+              onClick={(event) => event.stopPropagation()}
+            >
               {variant === 'live' && onArchive && (
                 <button
                   type="button"

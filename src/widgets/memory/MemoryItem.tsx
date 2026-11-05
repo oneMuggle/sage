@@ -3,6 +3,7 @@
  * 显示记忆内容、重要性星级、标签和删除按钮
  */
 import { Memory } from '../../shared/api';
+import { formatDateTime } from '../../shared/lib/timeFormatter';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 interface MemoryItemProps {
@@ -25,17 +26,7 @@ function ImportanceStars({ importance }: { importance: number }) {
   );
 }
 
-// 格式化时间戳
-function formatTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+// formatTime 已统一到 src/shared/lib/timeFormatter#formatDateTime
 
 export function MemoryItem({ memory, onDelete }: MemoryItemProps) {
   const tags = memory.tags || [];
@@ -70,7 +61,7 @@ export function MemoryItem({ memory, onDelete }: MemoryItemProps) {
         )}
 
         {/* 时间 */}
-        <div className="memory-time">{formatTime(memory.created_at)}</div>
+        <div className="memory-time">{formatDateTime(memory.created_at)}</div>
       </div>
 
       {/* 删除按钮 — U12: 两步式确认，不弹 modal */}

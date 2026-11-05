@@ -106,6 +106,11 @@ class EndpointPayload(BaseModel):
     localModelPath: Optional[str] = None  # noqa: N815
     discoveredModels: Optional[List[dict]] = None  # noqa: N815
     lastDiscoveredAt: Optional[int] = None  # noqa: N815
+    # 2026-11-03: 思考过程参数 —— per-endpoint 配置, 前端读到后放进 ChatConfig
+    # 随聊天请求透传上游 LLM。值域校验下沉到 canonicalizer
+    # (validate_reasoning_effort / validate_thinking_budget)。
+    reasoningEffort: Optional[str] = None  # noqa: N815
+    thinkingBudget: Optional[int] = None  # noqa: N815
 
 
 # --------------------------------------------------------------------------

@@ -12,7 +12,7 @@
 | 04   | [SKILL.md 编写指南](./04-skill-md-authoring.md)          | 自定义技能: frontmatter 字段 / scripts/ 脚本 / gating 条件 / dispatch   |
 | 05   | [从 builtin 迁移到 SKILL.md](./05-skill-md-migration.md) | 内置技能转 SKILL.md 的路径与限制                                        |
 | 06   | [诊断与日志](./06-diagnostics.md)                       | 日志文件位置 / 查看方式 / 反馈问题步骤 / 保留策略 / 隐私说明            |
-| 07   | [产物面板 (Artifacts Panel)](./07-artifacts-panel.md) | Chat 右侧抽屉 Artifacts Tab：write_file 写盘追踪 / 多格式预览 / 在文件管理器中定位 |
+| 07   | [产物面板 (Artifacts Panel)](./07-artifacts-panel.md) | Chat 右侧抽屉 Artifacts Tab：write_file 写盘追踪 / 多格式预览 / 交互式预览（HTML 工具条、Mermaid 平移缩放） / 在文件管理器中定位 |
 | 08   | [技能生命周期 (Skills Lifecycle)](./08-skill-lifecycle.md) | 技能 active/stale/archived 三态徽章 / 手动归档与取消归档 / 与删除的区别 |
 | 09   | [Office 文档管理](./09-office.md) | 在 Sage 中用自然语言增删改查 docx/xlsx/pptx 文档：创建 / 修改 / 归档 / 恢复 / chat 内 @文件名引用 + write_file 二进制防护 |
 | 10   | [用量与缓存面板](./10-usage-and-cache.md) | 设置 → 使用统计：请求/Token/成本汇总 + 缓存命中率 + 4 个 range tab + 请求明细分页 + 可悬停时段详情的堆叠柱趋势图 + CSV 导出（UTF-8 BOM，Excel 双击不乱码）；今日数据重启不丢 |
@@ -22,12 +22,7 @@
 | 14   | [可插拔更新源](./14-update-providers.md) | 设置 → 更新源 tab：添加 GitHub/Gitee/GitLab/自建 HTTP 源 + 设为默认 + 测试连接 + 删除；token 用 safeStorage 加密存储，IPC 返回自动 mask |
 | 15   | [出错时如何导出诊断包](./15-diagnostic-export.md) | 一键导出最近 50 次 LLM 调用为 zip 发给支持人员（托盘菜单 / 设置页入口 + 脱敏说明 + Win7 注意） |
 | 16   | [项目上下文（description/instructions/资料）](./16-project-context.md) | 侧边栏项目区:项目说明 + 项目指令 + 资料管理(添加/删除/保存当前回答) + 三态 status 徽章 + 优先级链说明 + 跨会话保留上下文场景 |
-<<<<<<< HEAD
 | 17   | [额外访问路径（Allowed Paths）](./16-allowed-paths.md) | 配置额外只读路径让 agent 访问 workspace 之外的文件；首次未授权路径会弹出审批对话框（拒绝/允许/项目级允许） |
-=======
-| 17   | [额外访问路径（Allowed Paths）](./16-allowed-paths.md) | 工作区边界规则：读取任意路径无需审批；工作区外写入命中 allowed_paths 自动放行，未命中弹审批（拒绝/允许/项目级允许）；新建项目预填常用文档目录；@-mention 工作区外文件按白名单读取 |
-| 27   | [LaTeX 文档预览](./27-latex-preview.md) | 工作区/产物中的 .tex 语义预览（章节/公式/图/表/引用/参考文献 + 源码切换）+ 模板填充 + 源码审校 + 项目 zip 导入 + PDF 版式审计 + 投稿合规检查 + 期刊规范档案 + 可选本机编译 |
->>>>>>> 9d444d43e (feat: 工作区外文件访问放宽（读任意路径 + 写审批制） (#2800))
 | 18   | [浏览器环境诊断](./18-browser-environments.md) | 检测本机浏览器可用性、Win7 必备补丁（KB4474419 / VC++ 2019）与 CDP 握手状态；Firefox 115 ESR 备选方案 |
 | 19   | [网页访问与登录态](./19-web-access.md) | 三条出网通道 / 网站凭据管理（含 header 型新增）/ 登录态自动刷新 / 浏览器健康 / 出网指标 / 常见错误出路 |
 | 20   | [设置治理与生效说明](./20-settings.md) | 设置分组、搜索与最近访问、默认值与逐行恢复默认、生效时机、高级配置、审计导出、输出长度上限与上限类错误提示（带具体数值）、更新回滚与恢复默认说明 |
@@ -40,6 +35,11 @@
 | 27   | [桌面宠物（大肥鱼）](./27-desktop-pet.md) | 桌宠开关与显示位置 / 状态面板与徽章 / 摸头与提示音 / 自定义动画包导入导出 |
 | 29   | [本地 OCR（图片文字识别）](./29-local-ocr.md) | 无视觉模型时本机识别图片文字 / 设置与测试 / 聊天预览与编辑 / 安装、隐私与故障排查 |
 | 30   | [文档与验收页面导航](./30-office-tabs.md) | 页面按任务分 2 个页签（文档处理/文档生成）+ 地址栏直达 + 切页签不丢输入；审校与规范 / LaTeX 分区待功能同步后补齐 |
+| 31   | [思考过程展示档位](./31-thinking-display-modes.md) | 三档控制思考过程与工具调用展示密度（详细思考/仅执行/仅结果）/ 消息级、会话级、全局默认三级覆盖 / 设置页修改全局默认 |
+| 32   | [端点思考参数](./32-reasoning-params.md) | 每个端点单独配置推理强度（关闭/低/中/高）与思考预算（留空/0/正整数）/ 与展示档位的分工 / 改了没生效的排查 |
+| 33   | [侧边栏 Git 面板](./33-sidebar-git-panel.md) | 侧边栏 Git 折叠分区：分支名 + 变更文件列表 + 状态徽章与筛选 / 面板看的是"当前上下文"目录（会话工作区优先，最近项目兜底）/ 非仓库时显示检查路径 / Diff 抽屉 / 复制路径与 Markdown 清单 |
+| 34   | [新会话页项目绑定](./34-project-binding.md) | 新会话页工具栏"项目选择器"：选择项目绑定或"不绑定项目"；工具调用限制与主流应用对标 |
+| 35   | [聊天附件](./35-attachment-capability.md) | 拖入/选择/粘贴三种方式 + 整页拖放 / 支持格式与 25MB、10 个上限 / 气泡附件卡状态含义（已读取/已跳过/截断/检索注入）/ 常见问题 |
 
 ---
 

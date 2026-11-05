@@ -35,4 +35,9 @@ export const enPetPack = {
   'settings.pet.pack_exported': 'Exported: ',
   'settings.pet.pack_deleted': 'Pack deleted',
   'settings.pet.pack_failed': 'Action failed',
+  'settings.pet.follow': 'Follow mode',
+  'settings.pet.follow_focus': 'Follow focused session',
+  'settings.pet.follow_urgent': 'Urgent first',
+  'settings.pet.follow_pinned': 'Pinned session',
+  'settings.pet.follow_pinned_hint': 'Use the star in the pet panel to pin a session.',
 } as const;

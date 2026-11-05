@@ -1,10 +1,10 @@
 /**
- * M4: 语义检索面板 (2026-10-12 / Phase P22 跨项目同步 / Phase P25 四形态检索词预设与全量结果导出 / Phase P31 M4→L3 画像沉淀与相似度阈值过滤)
+ * M4: 语义检索面板 (2026-10-12 / Phase P22 跨项目同步 / Phase P25 四形态检索词预设与全量结果导出 / Phase P31 M4→项目记忆沉淀与相似度阈值过滤)
  *
  * 嵌入 StudioMaterialsTabPanel，提供语义检索入口：
  * - 四形态快捷检索词预设胶囊：一键触发当前形态高频语义查询
  * - 输入框 + 搜索按钮：调用后端语义检索 API
- * - 结果展示：显示匹配的 chunks（按相关性排序），支持相似度阈值过滤、单条复制、一键沉淀至 L3 项目画像与全量结果 Markdown 导出
+ * - 结果展示：显示匹配的 chunks（按相关性排序），支持相似度阈值过滤、单条复制、一键保存到项目记忆与全量结果 Markdown 导出
  * - 索引状态：随项目切换自动同步索引统计，支持手动刷新统计
  */
 
@@ -125,7 +125,7 @@ export function SemanticSearchPanel({
     }
   };
 
-  /** M4 -> L3: 将高价值检索片段一键沉淀至 L3 项目画像 */
+  /** M4 -> L3: 将高价值检索片段一键保存到项目记忆 */
   const handleSaveHitToProfile = async (hit: SemanticSearchHit, idx: number) => {
     if (savedProfileIndices.has(idx) || typeof projectApi?.confirmKnowledge !== 'function') return;
     try {
@@ -247,10 +247,10 @@ export function SemanticSearchPanel({
                       entries: [
                         {
                           category: 'architecture',
-                          content: `L4 资料向量索引统计：总材料 ${stats.totalMaterials}，已索引 ${stats.indexedMaterials}，总 chunks ${stats.totalChunks}`,
+                          content: `项目资料向量索引统计：总材料 ${stats.totalMaterials}，已索引 ${stats.indexedMaterials}，总 chunks ${stats.totalChunks}`,
                           importance: 6,
                           sourceMessageIds: [],
-                          reasoning: 'M4 语义检索索引状态沉淀至 L3 画像',
+                          reasoning: 'M4 语义检索索引状态保存到 AI 记忆',
                         },
                       ],
                     });
@@ -261,7 +261,7 @@ export function SemanticSearchPanel({
               }}
               className="ml-auto rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
             >
-              {savedStatsL3 ? '已存统计 L3' : '索引统计存 L3'}
+              {savedStatsL3 ? '已存统计到项目记忆' : '索引统计存到项目记忆'}
             </button>
             <button
               type="button"
@@ -281,7 +281,7 @@ export function SemanticSearchPanel({
               }}
               className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
             >
-              {savedStatsL4 ? '已存统计 L4' : '索引统计存 L4'}
+              {savedStatsL4 ? '已存统计为资料' : '索引统计存为资料'}
             </button>
           </div>
           {stats.embedderType && stats.embedderType !== 'unavailable' && (
@@ -467,7 +467,7 @@ export function SemanticSearchPanel({
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                   >
                     <ShieldPlus className="h-3 w-3 text-primary" />
-                    批量转 L2 约束 ({filteredResults.filter((_, idx) => !savedConstraintIndices.has(idx)).length})
+                    批量转 项目规则 ({filteredResults.filter((_, idx) => !savedConstraintIndices.has(idx)).length})
                   </button>
                   <button
                     type="button"
@@ -532,7 +532,7 @@ export function SemanticSearchPanel({
                     className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
                   >
                     <BookmarkPlus className="h-3 w-3" />
-                    批量沉淀 L3 ({filteredResults.filter((_, idx) => !savedProfileIndices.has(idx)).length})
+                    批量保存到项目记忆 ({filteredResults.filter((_, idx) => !savedProfileIndices.has(idx)).length})
                   </button>
                   <button
                     type="button"
@@ -556,7 +556,7 @@ export function SemanticSearchPanel({
                     }}
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                   >
-                    {savedBundleL4 ? '已存 L4 合集' : '存为 L4 合集'}
+                    {savedBundleL4 ? '已保存' : '保存为合集资料'}
                   </button>
                   <button
                     type="button"
@@ -623,17 +623,17 @@ export function SemanticSearchPanel({
                           onClick={() => void handleSaveHitToProfile(hit, idx)}
                           data-testid={`semantic-hit-save-profile-${idx}`}
                           className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10 disabled:opacity-60"
-                          title="将此片段沉淀至 L3 项目画像"
+                          title="将此片段保存到 AI 记忆"
                         >
                           {isSavedToProfile ? (
                             <>
                               <Check className="h-2.5 w-2.5 text-emerald-500" />
-                              已沉淀 L3
+                              已保存
                             </>
                           ) : (
                             <>
                               <BookmarkPlus className="h-2.5 w-2.5" />
-                              沉淀至 L3 画像
+                              保存到 AI 记忆
                             </>
                           )}
                         </button>
@@ -643,10 +643,10 @@ export function SemanticSearchPanel({
                           onClick={() => void handleSaveHitToConstraint(hit, idx)}
                           data-testid={`semantic-hit-to-constraint-${idx}`}
                           className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
-                          title="将此检索片段固化为 L2 强约束规则"
+                          title="将此检索片段固化为 项目规则"
                         >
                           <ShieldPlus className="h-2.5 w-2.5 text-primary" />
-                          {savedConstraintIndices.has(idx) ? '已转 L2 约束' : '转 L2 约束'}
+                          {savedConstraintIndices.has(idx) ? '已转为项目规则' : '转 项目规则'}
                         </button>
                         <button
                           type="button"
@@ -690,7 +690,7 @@ export function SemanticSearchPanel({
                           }}
                           className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
                         >
-                          {savedL4Indices.has(idx) ? '已存L4' : '+L4'}
+                          {savedL4Indices.has(idx) ? '已保存' : '+资料'}
                         </button>
                         <button
                           type="button"

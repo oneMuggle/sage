@@ -28,6 +28,7 @@ import { PlaybookActivityPanel } from './PlaybookActivityPanel';
 import { PlaybookAuthorPanel } from './PlaybookAuthorPanel';
 import { PlaybookChecklist } from './PlaybookChecklist';
 import { PlaybookClassificationPanel } from './PlaybookClassificationPanel';
+import { PlaybookDocumentImportDialog } from './PlaybookDocumentImportDialog';
 import { PlaybookImportPreviewCard } from './PlaybookImportPreviewCard';
 import { PlaybookLibraryPanel } from './PlaybookLibraryPanel';
 import { PlaybookSpecEditor } from './PlaybookSpecEditor';
@@ -52,6 +53,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const [library, setLibrary] = useState<PlaybookLibraryItem[]>([]);
   const [selectedPlaybook, setSelectedPlaybook] = useState('');
   const [loading, setLoading] = useState(true);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -71,13 +73,26 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
   const [aggregate, setAggregate] = useState<PlaybookEventAggregate | null>(null);
   const [showActivity, setShowActivity] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showDocumentImport, setShowDocumentImport] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const loadAudit = useCallback(async () => {
+    setAuditLoading(true);
+    try {
+      const audit = await playbookApi.audit(projectId);
+      if (audit) setCurrent((prev) => (prev ? { ...prev, audit } : prev));
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [projectId]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await playbookApi.getCurrent(projectId);
+      const data = await playbookApi.getCurrent(projectId, false);
       setCurrent(data);
       if (!data.bound) {
         const [list, items] = await Promise.all([
@@ -94,13 +109,16 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
               ? `library:${items[0].id}`
               : '';
         setSelectedPlaybook((prev) => prev || defaultSelection);
+      } else if (!data.audit) {
+        // M2: audit runs after the card renders, so the page is not blocked.
+        void loadAudit();
       }
     } catch (err) {
       setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, loadAudit]);
 
   useEffect(() => {
     void refresh();
@@ -390,6 +408,17 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       setNotice(t('playbook.notice.imported'));
     });
 
+  const handleDocumentImportConfirm = (spec: PlaybookSpec) =>
+    run('doc-import', async () => {
+      const data = await playbookApi.bind(projectId, {
+        spec,
+        source: 'document-import',
+      });
+      setCurrent(data);
+      setShowDocumentImport(false);
+      setNotice(t('playbook.notice.bound'));
+    });
+
   if (loading) {
     return (
       <div
@@ -585,6 +614,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           onCleanupRules={handleCleanupRules}
           onUnbind={handleUnbind}
           onImportClick={() => fileInputRef.current?.click()}
+          onDocumentImportClick={() => setShowDocumentImport(true)}
         />
         <input
           ref={fileInputRef}
@@ -610,6 +640,28 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         />
       )}
 
+      {/* M2: audit runs in the background after the card renders. */}
+      {auditLoading && !audit && (
+        <div
+          className="flex items-center gap-2 text-xs text-muted-foreground"
+          data-testid="playbook-audit-loading"
+        >
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          正在检查规程完整性…
+        </div>
+      )}
+      {!auditLoading && !audit && (
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 p-2 text-xs text-muted-foreground"
+          data-testid="playbook-audit-pending"
+        >
+          <span>尚未检查规程完整性。</span>
+          <Button size="sm" variant="secondary" onClick={() => void loadAudit()}>
+            立即检查
+          </Button>
+        </div>
+      )}
+
       {/* 阶段条 */}
       <div className="flex flex-wrap items-center gap-1.5" data-testid="playbook-stepper">
         {stages.map((stage, index) => {
@@ -617,13 +669,25 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           const isDone = stage.progress >= 100;
           return (
             <div key={stage.id} className="flex items-center gap-1.5">
-              <div
-                className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs ${
+              <button
+                type="button"
+                onClick={() => {
+                  if (isCurrent) return;
+                  if (
+                    window.confirm(
+                      tf('playbook.card.confirmSwitch', { stage: stage.label }),
+                    )
+                  ) {
+                    void handleConfirmStage(stage.id);
+                  }
+                }}
+                className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors ${
                   isCurrent
                     ? 'border-primary/40 bg-primary/10 text-primary'
-                    : 'border-border text-muted-foreground'
+                    : 'border-border text-muted-foreground hover:border-primary/30 hover:text-foreground'
                 }`}
                 data-testid={`playbook-stage-${stage.id}`}
+                aria-current={isCurrent ? 'step' : undefined}
               >
                 {isDone ? (
                   <CheckCircle2 className="h-3.5 w-3.5" />
@@ -632,7 +696,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
                 )}
                 {stage.label}
                 <span className="text-ui-2xs opacity-70">{stage.progress}%</span>
-              </div>
+              </button>
               {index < stages.length - 1 && <span className="text-muted-foreground">→</span>}
             </div>
           );
@@ -737,6 +801,12 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
       )}
 
       {showLibrary && <PlaybookLibraryPanel onClose={() => setShowLibrary(false)} />}
+
+      <PlaybookDocumentImportDialog
+        open={showDocumentImport}
+        onClose={() => setShowDocumentImport(false)}
+        onConfirm={handleDocumentImportConfirm}
+      />
 
       {(error || notice) && (
         <div

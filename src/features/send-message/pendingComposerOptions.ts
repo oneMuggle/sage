@@ -7,7 +7,14 @@ import type { ChatOfficeRef } from '../../shared/api/types';
 
 export interface PendingComposerOptions {
   /** 待上传的文档附件（含 dataUrl；发送后由 Chat 上传为 media id） */
-  attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
+  attachments?: {
+    name: string;
+    size: number;
+    type: string;
+    dataUrl?: string;
+    /** P1: 选中即上传得到的 media id（存在时发送侧不再重复上传）。 */
+    mediaId?: string;
+  }[];
   /** 聊天图片（base64 data URL；后端限 4 张 / 单张 5MiB） */
   images?: { name: string; size: number; type: string; dataUrl?: string }[];
   /** `@` 菜单选择的 Office 引用 */

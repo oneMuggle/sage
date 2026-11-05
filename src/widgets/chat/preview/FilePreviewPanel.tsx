@@ -4,7 +4,7 @@
 // 数据源：GET /sessions/{id}/workspace/preview（工作区边界由后端校验）。
 // 内容渲染复用 FileContentRenderer，与产物预览同一套分发。
 import { ArrowLeft, ClipboardCopy, ExternalLink, RefreshCw } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { workspaceApi } from '../../../shared/api/workspaceApi';
 
@@ -23,7 +23,17 @@ function fileNameOf(path: string): string {
   return idx >= 0 ? normalized.slice(idx + 1) : normalized;
 }
 
-export function FilePreviewPanel({ sessionId, path, onBack }: FilePreviewPanelProps) {
+export function FilePreviewPanel({ sessionId, path: rawPath, onBack }: FilePreviewPanelProps) {
+  // 防御性兜底：上游（markdown 渲染管线）已修复 URL 解码，但历史消息/
+  // 其他入口仍可能传入 percent-encoded 路径。在此统一解码，保证后端
+  // 拿到的始终是原始路径（含中文），避免 "文件不存在" 404。
+  const path = useMemo(() => {
+    try {
+      return decodeURIComponent(rawPath);
+    } catch {
+      return rawPath;
+    }
+  }, [rawPath]);
   const [content, setContent] = useState<PreviewContentPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

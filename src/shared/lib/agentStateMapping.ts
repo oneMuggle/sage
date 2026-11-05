@@ -25,6 +25,39 @@ function assertNever(x: never): never {
 }
 
 /**
+ * 中间态占位文案（单一真相源）。
+ *
+ * 这些文案只用于流式期间的临时气泡，**不得**作为消息正文持久化，也不应
+ * 出现在已完成步骤（completedSteps）或最终 assistant 行里。useChat 的
+ * step_done / finishStream 通过 isIntermediatePlaceholderText 过滤快照内容。
+ */
+export const PLACEHOLDER_THINKING = '🤔 思考中…';
+export const PLACEHOLDER_ACTING = '🔧 行动中…';
+export const PLACEHOLDER_OBSERVING = '👀 观察结果…';
+export const PLACEHOLDER_FAILED = '❌ 失败';
+/** 「调工具 xxx…」的动态前缀；后缀固定为省略号。 */
+export const PLACEHOLDER_ACTING_TOOL_PREFIX = '🔧 调工具 ';
+
+const EXACT_INTERMEDIATE_PLACEHOLDERS: ReadonlySet<string> = new Set([
+  PLACEHOLDER_THINKING,
+  PLACEHOLDER_ACTING,
+  PLACEHOLDER_OBSERVING,
+  PLACEHOLDER_FAILED,
+]);
+
+/**
+ * 判断 content 是否只是某个中间态占位文案。
+ *
+ * 非流式 run 的步骤之间没有 content_delta，streaming.content 会停留在最后一个
+ * 中间态文案上 —— 若直接快照成步骤正文，用户会看到「👀 观察结果…」一直挂着。
+ */
+export function isIntermediatePlaceholderText(content?: string | null): boolean {
+  if (!content) return false;
+  if (EXACT_INTERMEDIATE_PLACEHOLDERS.has(content)) return true;
+  return content.startsWith(PLACEHOLDER_ACTING_TOOL_PREFIX) && content.endsWith('…');
+}
+
+/**
  * 流式阶段文本(用于内容占位符,显示在消息气泡内)
  * 保留 emoji 前缀是占位文本的视觉锚点,与 ActiveAgentIndicator 的图标分离。
  * 注意:deltas (reasoning_delta / content_delta) 不返回占位文本 — 它们是真实内容
@@ -33,9 +66,9 @@ function assertNever(x: never): never {
 export function agentStateToText(state: AgentState, toolName?: string): string | null {
   switch (state) {
     case 'thinking':
-      return '🤔 思考中…';
+      return PLACEHOLDER_THINKING;
     case 'acting':
-      return toolName ? `🔧 调工具 ${toolName}…` : '🔧 行动中…';
+      return toolName ? `${PLACEHOLDER_ACTING_TOOL_PREFIX}${toolName}…` : PLACEHOLDER_ACTING;
     case 'permission_request':
       // M1: 审批卡点 — 占位文本由 ApprovalDialog 模态框承载,
       // 消息气泡内保留上一个中间态占位,不覆盖
@@ -45,9 +78,9 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
       // 与审批卡点同理,不覆盖消息气泡占位
       return null;
     case 'observing':
-      return '👀 观察结果…';
+      return PLACEHOLDER_OBSERVING;
     case 'failed':
-      return '❌ 失败';
+      return PLACEHOLDER_FAILED;
     case 'reasoning':
     case 'reasoning_delta':
     case 'reasoning_final': // 2026-09-02: 全量对齐事件,不渲染占位文本(同 reasoning_delta)
@@ -65,6 +98,7 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
     case 'compact_triggered': // R38: 自动压缩插入系统消息,不进气泡占位
     case 'context_pressure': // TM2 (DSH 对标 R11): 水位写 store 供徽章渲染,不进气泡占位
     case 'attachment_rag_used': // r71: 附件检索溯源写入消息 rag_citations,不进气泡占位
+    case 'attachments_processed': // P0 (2026-11-04): 附件处理状态,不进气泡占位
     case 'workspace_changed': // right-panel R5: 变更信号进 changesListStore,不进气泡占位
     case 'sources_used': // R81: 参考来源写入消息 sources,不进气泡占位
       return null;
@@ -126,6 +160,7 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
     case 'skill_activated': // R38: 技能激活事件,无 UI 阶段展示
     case 'compact_triggered': // R38: 自动压缩事件,无 UI 阶段展示
     case 'attachment_rag_used': // r71: 附件检索溯源事件,无 UI 阶段展示
+    case 'attachments_processed': // P0 (2026-11-04): 附件处理状态事件,无 UI 阶段展示
     case 'sources_used': // R81: 参考来源事件,无 UI 阶段展示
       return null;
     case 'workspace_changed': // right-panel R5: 变更信号进 changesListStore,无 UI 阶段展示

@@ -14,10 +14,10 @@
 | 18   | [六边形架构](./18-hexagonal.md)                      | 五层职责 / 6 个 Protocol / 双轨策略 / import-linter 约束                                              |
 | 19   | [ghm 外部计算集成](./19-ghm-integration.md)          | LLM 工具调用桥接 ghm CLI / ExecutableResolver / HTTP 升级预留                                         |
 | 20   | [Electron 21 桌面壳](./20-electron.md)               | Tauri → Electron 21 迁移理由 / 7 个 Win7 启动开关 / CI 流水线 / Phase 5 真机烟测 SOP                  |
-| 31   | [Win7 LTS 维护](./31-win7-lts.md)                    | 18 个月归档时间表 / Win7 用户 Web 化迁移 / 真机烟测 SOP / 风险声明                                    |
+| 31   | [Win7 LTS 维护](./31-win7-lts.md)                    | 18 个月归档时间表 / Win7 用户 Web 化迁移 / 真机烟测 SOP / 覆盖安装关闭流程与自动重启 / 风险声明      |
 | 21   | [LLM 代理路由](./21-llm-proxy.md)                    | `/api/v1/llm/*` 透传上游,绕开浏览器到 Ollama/OpenAI 的 CORS 拦截                                      |
 | 22   | [Agents CRUD 端到端](./22-agents-crud.md)            | list/update/toggle 三层链路 (后端路由 → Electron IPC → 前端 API → UI)                                 |
-| 23   | [Chat 流式响应端到端](./23-chat-streaming.md)        | NDJSON 协议 + Electron IPC event 桥接 + NDJSON relay + chatStream 中间态文案 + 迭代上限错误定位/reasoning 即时流式 + DONE 收尾解耦 |
+| 23   | [Chat 流式响应端到端](./23-chat-streaming.md)        | NDJSON 协议 + Electron IPC event 桥接 + NDJSON relay + chatStream 中间态文案 + 迭代上限错误定位/reasoning 可见性 |
 | 24   | [Skills 系统端到端](./24-skills-system.md)           | InprocSkillAdapter + 9 个 Skills API 端点 + 4 builtin + SKILL.md v2（gating/scripts/dispatch/slash command）+ 使用跟踪/Nudge |
 | 25   | [LLM Wiki 集成 (PR-8)](./25-llm-wiki-integration.md) | 4 LLM provider 抽象 + prompt 模板 + LanceDB RAG + 知识图谱 8 阶段实施                                 |
 | 26   | [跨平台打包矩阵](./26-packaging-matrix.md)            | Win7/10/11 NSIS + VCRedist bundling 与 Ubuntu deb 覆盖,用户安装指南                                  |
@@ -78,7 +78,7 @@
 | 98   | [FTS5 vs LIKE 性能基准](./98-memory-fts5-benchmark.md) | 10k 语料实测：FTS5 空命中 85×/中文 32×/低频词 29× 加速，高频英文 token 1.5-2×；recall 差异与 fallback 策略 |
 | 102  | [Agent 上限类错误透出具体上限值](./102-agent-error-limit-details.md) | `<code> (limit=N)` wire format + nonlocal 落库丢失修复 + 前端单一渲染点（聊天内联错误条 / 侧栏 tooltip）+ 兼容性与回滚 |
 | 100  | [自进化可观测性与反馈闭环](./100-self-evolution-observability.md) | P0-1 进化日志结构化（duration/metrics）/ P0-2 偏好注入 user_profile（hermes 冻结语义）/ P0-3 召回反馈落库 + A/B 变体对比 |
-| 101  | [LLM 错误分类与重试](./101-llm-error-classification-retry.md) | httpx 异常→LLMErrorType 分类表 / RemoteProtocolError 归 NETWORK 修复 / 首字后不重试契约 / 重试参数与退避策略 / 代理超时可配置（llmProxyTimeoutS）/ 流式开关真正生效 / 重试预算与次数可见性 / 设置保存失败提示 |
+| 101  | [LLM 错误分类与重试](./101-llm-error-classification-retry.md) | httpx 异常→LLMErrorType 分类表 / RemoteProtocolError 归 NETWORK 修复 / 首字后不重试契约 / 重试参数与退避策略 / 代理超时可配置（llmProxyTimeoutS）/ 流式开关真正生效 |
 | 102  | [全局规则 UI（~/.sage/SAGE.md）](./102-global-rules.md) | G1/P0：设置页读写全局规则文件 / 路径硬编码 + 原子写 + 符号链接拒写 / 扫描 level=all 护栏 / 8000 字符截断 + 64KB 保存上限 / win7 零适配 |
 | 104  | [Zotero → LLM 集成](./104-zotero-llm-integration.md) | 四层可见性阻断修复（白名单/路径/prompt/索引）/ ZoteroIngestor 向量索引 + 语义检索降级 / wiki 沉淀与零改动图谱 / 设置页同步面板 |
 | 103  | [多浏览器支持](./103-multi-browser-support.md) | 浏览器自动发现/调度/诊断 + CDP 连接池 + 多浏览器并行抓取 |
@@ -95,6 +95,18 @@
 | 117  | [桌面宠物](./117-desktop-pet.md) | 透明置顶窗 / AgentState 状态映射与面板 / 应用内形态 / Task Center + 编排 lanes + 定时失败聚合 / 自定义动画包（zip + sage-pet://）/ Win7 兼容模式 |
 | 118  | [文档与验收信息架构：按任务域分组的顶层 Tab](./118-office-ia-tabs.md) | URL 为唯一事实源 + keep-alive 保状态 + 诊断收进「环境」popover；十余个常驻区块 → 2 任务域（win7 编号避让 117=桌面宠物；LaTeX 与审校与规范分区待对应功能同步后补齐） |
 | 119  | [Markdown 渲染器统一](./119-markdown-renderer.md) | 聊天/产物/Wiki 单一收敛点：minimal/chat 两档 + GFM/KaTeX 统一管线 + 表格复制与限高 + Shiki 降级 + 锚点前缀与 TOC 大纲 + 作用域 token 样式（win7 编号避让 118=office IA；main 对应 §124） |
+| 120  | [思考过程展示档位](./120-thinking-display-modes.md) | detail / trace / result 三档 + 消息/会话/全局三级作用域；`DisplayContract` 渲染契约 + `useSyncExternalStore` 订阅；三级存储（sessionStorage 双写 + preference singleton） |
+| 121  | [Word 渲染级校验](./121-word-render-audit.md) | DOCX→PDF（LibreOffice/Word COM）+ PyMuPDF 检查页面尺寸/页边距/字体/页码；无转换器降级；渲染审计 REST；批量审校与 Markdown 报告 |
+| 122  | [Word 规则包 LLM 工具](./122-word-rule-tools.md) | `office_audit_word/fix_word/extract_rules/revise_word/batch_audit/render_audit`；工具上下文/工作区围栏/输出截断；bundle/profile/tool_names 反漂移同步 |
+| 123  | [文档与验收信息架构：顶层 Tab + LaTeX 二级分组](./123-office-ia-tabs.md) | URL 为唯一事实源 + keep-alive 保状态 + 诊断收进「环境」popover；14 常驻区块 → 4 任务域 |
+| 124  | [Markdown 渲染器统一](./124-markdown-renderer.md) | 聊天/产物/Wiki 单一收敛点：minimal/chat 两档 + GFM/KaTeX 统一管线 + 表格复制与限高 + Shiki 降级 + 锚点前缀与 TOC 大纲 + 作用域 token 样式 |
+| 125  | [思考过程展示档位](./125-thinking-display-modes.md) | detail / trace / result 三档 + 消息/会话/全局三级作用域；`DisplayContract` 渲染契约 + `useSyncExternalStore` 订阅；三级存储（sessionStorage 双写 + preference singleton） |
+| 126  | [Playbook 文档导入与分享链接](./126-playbook-import-share.md) | Word/PDF/MD/PPTX → 解析 → LLM/确定性草案预览 → 确认绑定（`POST /playbooks/import/document` 只预览不写库）+ `playbook_shares` token 分享链路（只读 / 默认 7 天 / 过期 410）+ HashRouter 落地页 `/share/playbook/{token}` 导入或存库 + 术语去技术化（L1–L4 → 规则） |
+| 127  | [端点思考参数透传](./127-reasoning-params-passthrough.md) | per-endpoint `reasoningEffort`/`thinkingBudget` 九节点链路：表单 → 前后端双白名单 → useChat → relay snake 往返 → llm_client 上游请求体；值域语义（null/0/-1）+ 契约测试反漂移 |
+| 128  | [默认本地时区](./128-timezone-default-local.md) | 日志/趋势/调度/前端渲染统一本地时区，失败回退 Asia/Shanghai (+08:00)；`localtime` 解析链（`tzlocal` → `astimezone()` 偏移 → 固定 +08:00）+ naive/aware 防御 + APScheduler `timezone=` + `formatLocalTime` 封装 |
+| 129  | [侧边栏 Git 面板上下文对齐](./129-sidebar-git-context.md) | 左栏 Git 面板与右栏变更 Tab 绑定同一目录（会话 workspace 优先，最近项目兜底）+ 非 git 空状态显示检查路径；`git status --porcelain=v1 -z -b` 共享解析器（`backend/tools/git_status_parser.py`）供 GitStatusTool 与 `GET /git/status` 共用 |
+| 130  | [工作区绑定跳过机制](./130-workspace-binding-skip.md) | 新会话页"不绑定项目"语义贯穿前后端：`skip_workspace_binding` API 字段 + 解析链跳过 + 主流应用对标 |
+| 131  | [聊天附件链路](./131-attachment-pipeline.md) | MediaStore sidecar 元数据 + 后缀回退表与上传 allowlist 同口径；R37 注入带 name/type + 逐附件 `ok/skipped/error` 状态双出口（`attachments_processed` 事件 + `client_meta.attachments_status` 落库）；`useFileUpload` 预检状态机 + 气泡附件卡片 + 整页拖放共享 hook |
 
 ---
 

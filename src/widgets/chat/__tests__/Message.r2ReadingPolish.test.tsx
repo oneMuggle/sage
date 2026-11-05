@@ -20,7 +20,7 @@ const renderWithI18n = (ui: React.ReactElement) =>
   );
 
 describe('UI-R2-P0 Chat Header, Activity Panels & Message Reading Polish', () => {
-  it('auto-collapses >= 3 completed tool calls into a group summary and expands on click', () => {
+  it('defaults trace-mode tool-group to expanded and collapses on click', () => {
     const msg: MessageType = {
       id: 'm-tools-3',
       session_id: 's1',
@@ -37,15 +37,16 @@ describe('UI-R2-P0 Chat Header, Activity Panels & Message Reading Polish', () =>
     renderWithI18n(<Message message={msg} />);
 
     const toggle = screen.getByTestId('tool-calls-group-toggle');
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    // trace 档位默认展开组（toolGroupDefaultExpanded=true）
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(toggle).toHaveTextContent('已执行 3 步工具调用');
     expect(toggle).toHaveTextContent('read_file×2 · web_search');
-    expect(screen.queryByText('a.ts')).not.toBeInTheDocument();
+    expect(screen.getByText('a.ts')).toBeInTheDocument();
 
     fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('a.ts')).toBeInTheDocument();
-    expect(screen.getByText('b.ts')).toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('a.ts')).not.toBeInTheDocument();
+    expect(screen.queryByText('b.ts')).not.toBeInTheDocument();
   });
 
   it('renders markdown table with copy-as-TSV button', async () => {

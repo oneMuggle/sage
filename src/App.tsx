@@ -24,6 +24,7 @@ import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
 import { ApprovalDialog, RemoteApprovalBridge } from './widgets/permission';
 import { InAppPet } from './widgets/pet/InAppPet';
+import { PetFocusBridge } from './widgets/pet/PetFocusBridge';
 import { TaskCenterPetBridge } from './widgets/pet/TaskCenterPetBridge';
 import { QuestionDialog } from './widgets/question';
 import { BackendStatusBanner } from './widgets/system/BackendStatusBanner';
@@ -64,6 +65,10 @@ const TodoPage = lazy(() => import('./pages/TodoPage').then((m) => ({ default: m
 // Scheme 1 (2026-10-18): 项目治理页 — 分层渐进式披露，7 个治理 Tab 从工作台独立路由
 const ProjectGovernance = lazy(() =>
   import('./pages/ProjectGovernance').then((m) => ({ default: m.ProjectGovernance })),
+);
+// 2026-11-03: 规程分享落地页 — 接收方打开分享链接后预览并导入
+const PlaybookSharePage = lazy(() =>
+  import('./pages/PlaybookSharePage').then((m) => ({ default: m.PlaybookSharePage })),
 );
 
 // 2026-10-17: 闲时自主目标执行系统 — 列表页 + 详情页
@@ -253,7 +258,17 @@ function App() {
         <SessionNotifyBridge />
         <FeedbackMenuBridge />
         <PetSettingsBridge />
+        <PetFocusBridge />
         <Routes>
+          {/* 2026-11-03: 规程分享落地页 — 接收方无需先进入工作台即可预览/导入 */}
+          <Route
+            path="/share/playbook/:token"
+            element={
+              <Suspense fallback={<div className="flex-1" />}>
+                <PlaybookSharePage />
+              </Suspense>
+            }
+          />
           <Route
             path="/"
             element={

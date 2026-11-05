@@ -65,7 +65,12 @@ export interface ImportOfficeReferenceResult {
  * keep this helper independent of that ambient declaration and easier
  * to mock from tests.
  */
-interface ImportGateway {
+export interface StagedOfficeGateway {
+  completeOfficeImport(importToken: string): Promise<void>;
+  discardOfficeImport(importToken: string): Promise<void>;
+}
+
+export interface ImportGateway extends StagedOfficeGateway {
   importDroppedOfficeFile(
     workspacePath: string,
     docType: OfficeDocType,
@@ -79,8 +84,23 @@ interface ImportGateway {
     workspacePath: string;
     docType: OfficeDocType;
   }>;
-  completeOfficeImport(importToken: string): Promise<void>;
-  discardOfficeImport(importToken: string): Promise<void>;
+}
+
+/**
+ * A file that has ALREADY been staged into the managed directory by the
+ * Electron gateway.
+ *
+ * `docType` is resolved by the main process (extension → docType), so
+ * callers never re-derive it from the filename — the mapping table
+ * lives in exactly one place (`electron/officePaths.docTypeFromExtension`).
+ */
+export interface StagedOfficeFile {
+  documentId: string;
+  importToken: string;
+  managedPath: string;
+  docType: OfficeDocType;
+  /** Original filename (before the managed-path copy) — for display. */
+  originalName?: string;
 }
 
 /**
@@ -116,13 +136,56 @@ async function readByType(
   return officeApi.readExcel(req);
 }
 
-async function safeDiscard(gateway: ImportGateway, importToken: string): Promise<void> {
+async function safeDiscard(gateway: StagedOfficeGateway, importToken: string): Promise<void> {
   try {
     await gateway.discardOfficeImport(importToken);
   } catch {
     // Best-effort: a failed discard just leaves the staging file on
     // disk. The next pick-and-import uses a fresh token, so the orphan
     // is bounded.
+  }
+}
+
+/**
+ * Finish the import lifecycle for an ALREADY-STAGED file:
+ *
+ *   1. P1-C: legacy `.doc`/`.xls`/`.ppt` are staged as-is → convert them
+ *      in place to the modern format before reading.
+ *   2. Read the (converted) managed file through the type-specific
+ *      backend parser.
+ *   3. On success → `completeOfficeImport(importToken)` (the staged file
+ *      becomes permanent). On any failure → `discardOfficeImport(importToken)`
+ *      (best effort) and re-throw so the caller can surface a message.
+ *
+ * This is the single owner of the "staged → readable → finalized" tail.
+ * Both the single-file path (`importOfficeByType`) and the unified
+ * multi-file path (`useOfficeDocuments.importAndReadMulti`) route through
+ * it, so the token lifecycle cannot drift between them.
+ */
+export async function readStagedOfficeFile(
+  gateway: StagedOfficeGateway,
+  workspacePath: string,
+  staged: StagedOfficeFile,
+): Promise<ImportOfficeReferenceResult> {
+  try {
+    let managedPath = staged.managedPath;
+    const stagedExt = managedPath.slice(managedPath.lastIndexOf('.') + 1).toLowerCase();
+    if (LEGACY_EXTENSIONS.has(stagedExt)) {
+      const converted = await officeApi.convertLegacyImport({
+        workspace_path: workspacePath,
+        file_path: managedPath,
+      });
+      if (!converted.ok || !converted.converted_path) {
+        throw new Error(converted.error ?? 'legacy import conversion failed');
+      }
+      managedPath = converted.converted_path;
+    }
+    const readResult = await readByType(staged.docType, workspacePath, managedPath);
+    await gateway.completeOfficeImport(staged.importToken);
+    return { documentId: staged.documentId, readResult };
+  } catch (e) {
+    await safeDiscard(gateway, staged.importToken);
+    throw e;
   }
 }
 
@@ -142,28 +205,13 @@ export async function importOfficeByType(
   }
 
   const imported = await gateway.importDroppedOfficeFile(workspacePath, docType, sourcePath);
-  try {
-    // P1-C (office-p1c): 旧格式 (.doc/.xls/.ppt) 已原样暂存 —— 就地转换为
-    // 现代格式后再读取；转换失败走 discard 并把错误抛给调用方。
-    let managedPath = imported.managedPath;
-    const stagedExt = managedPath.slice(managedPath.lastIndexOf('.') + 1).toLowerCase();
-    if (LEGACY_EXTENSIONS.has(stagedExt)) {
-      const converted = await officeApi.convertLegacyImport({
-        workspace_path: workspacePath,
-        file_path: managedPath,
-      });
-      if (!converted.ok || !converted.converted_path) {
-        throw new Error(converted.error ?? 'legacy import conversion failed');
-      }
-      managedPath = converted.converted_path;
-    }
-    const readResult = await readByType(docType, workspacePath, managedPath);
-    await gateway.completeOfficeImport(imported.importToken);
-    return { documentId: imported.documentId, readResult };
-  } catch (e) {
-    await safeDiscard(gateway, imported.importToken);
-    throw e;
-  }
+  return readStagedOfficeFile(gateway, workspacePath, {
+    documentId: imported.documentId,
+    importToken: imported.importToken,
+    managedPath: imported.managedPath,
+    docType,
+    originalName: imported.originalName,
+  });
 }
 
 /**

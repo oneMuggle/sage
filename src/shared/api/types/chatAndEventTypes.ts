@@ -197,6 +197,20 @@ export interface MessageDisplayMeta {
   office_refs?: MessageDisplayOfficeRef[];
   /** 知识库引用（当前仅展示） */
   knowledge_refs?: { id: string; title: string }[];
+  /**
+   * P0 (2026-11-04): 后端 attachments_processed 事件回写的每附件处理状态。
+   * 仅内存态（流式事件更新），用于气泡上渲染"已读取/已跳过/失败"。
+   * 与 attachments 按 media_id 对齐（filename 匹配兜底）。
+   */
+  attachments_status?: {
+    media_id: string;
+    filename: string;
+    mime_type: string;
+    status: 'ok' | 'skipped' | 'error';
+    reason?: string;
+    mode?: string;
+    chars?: number;
+  }[];
 }
 
 export interface WorkspaceRevokeResponse {
@@ -334,6 +348,9 @@ export type AgentState =
   | 'context_pressure'
   // Task 10 (2026-09-17): 自动话题检测 — 切换 segment 时由 producer 推送。
   | 'topic_shifted'
+  // P0 (2026-11-04): 附件处理结果 —— 每个 attachment_media_id 注入/跳过的状态,
+  // 前端据此在消息气泡上渲染 per-file 状态(已读取/已跳过/失败),载荷见 AgentEvent.attachments_status。
+  | 'attachments_processed'
   // Round 3 (2026-09-19): 编排拆解前置进度（需求澄清/事实侦察）,
   // 载荷见 AgentEvent.preflight_phase。先于 task_plan 到达。
   | 'orch_preflight'
@@ -641,6 +658,17 @@ export interface RetryInfo {
   budget_total_s?: number;
   /** 2026-11-02: 本次等待结束后剩余的预算秒数（后端可省略） */
   budget_remaining_s?: number;
+  /**
+   * 2026-11-03: 重试阶段 —— backoff = 退避等待中（等 delay 秒后重试）；
+   * in_flight = 重试请求已发出、在途等待上游响应。缺省按 backoff 处理。
+   */
+  phase?: 'backoff' | 'in_flight';
+  /** 2026-11-03: 本次重试链路已累计耗时（秒，含在途请求与退避） */
+  elapsed_s?: number;
+  /** 2026-11-03: 本次尝试的请求超时上限（秒）—— in_flight 阶段用于提示还剩多久判超时 */
+  attempt_timeout_s?: number;
+  /** 2026-11-03: 事件来源（如 compaction = 会话压缩触发的后台调用） */
+  source?: string;
 }
 
 /** 流式聊天事件 (NDJSON 协议的一行) */
@@ -724,6 +752,8 @@ export interface AgentEvent {
   // P1 todo 接线: todo_snapshot 全量快照字段,与 llmStream.ts 双处一致。
   todos?: TodoItem[];
   session_id?: string;
+  // P0 (2026-11-04): attachments_processed 事件关联的 user 消息 id（u-<cmid>）。
+  user_message_id?: string | null;
   // Task 10 (2026-09-17): topic_shifted 事件载荷 — 自动切换 segment 时推送。
   segment_id?: number;
   reason?: string;
@@ -763,6 +793,17 @@ export interface AgentEvent {
     mode: string;
     chunks?: { index: number; score: number }[];
     filename?: string;
+  }[];
+  // P0 (2026-11-04): attachments_processed 事件载荷 —— 每附件处理状态,
+  // 前端据此在用户消息气泡上渲染 per-file 状态。
+  attachments_status?: {
+    media_id: string;
+    filename: string;
+    mime_type: string;
+    status: 'ok' | 'skipped' | 'error';
+    reason?: string;
+    mode?: string;
+    chars?: number;
   }[];
   // right-panel R5 (2026-09-19): workspace_changed 事件载荷（写文件工具
   // 落盘后经活跃流推送；path 为工具视角路径，刷新语义以 git status 为准）。

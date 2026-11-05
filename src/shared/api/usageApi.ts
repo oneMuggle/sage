@@ -190,8 +190,9 @@ export async function fetchSessionUsage(sessionId: string): Promise<SessionUsage
 
 /** L8 PR-C (2026-09-09): 趋势图时序点 (单桶聚合) */
 export interface UsageTrendPoint {
-  /** 桶起始本地 ISO8601 (无时区后缀), 形如 "2026-09-09T07:00:00" (hour) 或 "2026-09-09T00:00:00" (day).
-   *  JS Date.parse 对无时区 ISO 按 local 解析, 与后端 strftime(..., 'localtime') 一致. */
+  /** 桶起始本地 ISO8601 (带时区偏移), 形如 "2026-11-03T19:00:00+08:00" (hour)
+   *  或 "2026-11-03T00:00:00+08:00" (day).
+   *  时区跟随系统本地, 失败回退到 Asia/Shanghai (+08:00). */
   ts: string;
   requests: number;
   prompt_tokens: number;

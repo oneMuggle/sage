@@ -5,7 +5,7 @@
  * 测试范围：
  * 1. LLM 重试 section 渲染（默认值、输入控件、data-testid）
  * 2. 输入变更触发 updateSettings
- * 3. AdvancedSection 折叠/展开交互
+ * 3. 退避参数在主区直接可见（2026-11-03 从 AdvancedSection 提升）
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -79,56 +79,63 @@ describe('BasicTab — LLM 重试 section', () => {
     // section 标题
     expect(screen.getByText('LLM 重试')).toBeTruthy();
 
-    // 最大尝试次数 input 存在且默认值为 3
+    // 最大尝试次数 input 存在且默认值为 5（2026-11-03 与后端 RETRY_DEFAULTS 对齐）
     const maxAttemptsInput = screen.getByTestId('settings-llm-retry-max-attempts');
     expect(maxAttemptsInput).toBeTruthy();
-    expect((maxAttemptsInput as HTMLInputElement).value).toBe('3');
+    expect((maxAttemptsInput as HTMLInputElement).value).toBe('5');
 
     // 描述文本 —— 2026-11-02：语义修正为「总尝试次数（含首次请求）」
     expect(screen.getByText(/LLM 请求的总尝试次数（含首次请求）/)).toBeTruthy();
+
+    // 2026-11-03: 每个重试字段都带来源徽标；默认值下 4 个均为「默认」
+    const badges = screen.getAllByTestId('setting-retry-source');
+    expect(badges).toHaveLength(4);
+    for (const badge of badges) {
+      expect(badge.textContent).toBe('默认');
+    }
   });
 
   it('修改最大尝试次数触发 updateSettings', async () => {
     renderTab();
 
     const input = screen.getByTestId('settings-llm-retry-max-attempts');
-    fireEvent.change(input, { target: { value: '5' } });
+    fireEvent.change(input, { target: { value: '8' } });
 
     await waitFor(() => {
-      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryMaxAttempts: 5 });
+      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryMaxAttempts: 8 });
     });
   });
 
-  it('设为 0 表示禁用重试', async () => {
+  it('输入 0 被 clamp 到 1（2026-11-03 起 0 不再表示禁用）', async () => {
     renderTab();
 
     const input = screen.getByTestId('settings-llm-retry-max-attempts');
     fireEvent.change(input, { target: { value: '0' } });
 
     await waitFor(() => {
-      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryMaxAttempts: 0 });
+      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryMaxAttempts: 1 });
     });
   });
 
-  it('输入超过 10 被 clamp 到 10', async () => {
+  it('输入超过 100 被 clamp 到 100', async () => {
     renderTab();
 
     const input = screen.getByTestId('settings-llm-retry-max-attempts');
-    fireEvent.change(input, { target: { value: '99' } });
+    fireEvent.change(input, { target: { value: '1000' } });
 
     await waitFor(() => {
-      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryMaxAttempts: 10 });
+      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryMaxAttempts: 100 });
     });
   });
 
-  it('输入负数被 clamp 到 0', async () => {
+  it('输入负数被 clamp 到 1', async () => {
     renderTab();
 
     const input = screen.getByTestId('settings-llm-retry-max-attempts');
     fireEvent.change(input, { target: { value: '-5' } });
 
     await waitFor(() => {
-      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryMaxAttempts: 0 });
+      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryMaxAttempts: 1 });
     });
   });
 
@@ -136,66 +143,38 @@ describe('BasicTab — LLM 重试 section', () => {
     renderTab();
 
     const input = screen.getByTestId('settings-llm-retry-total-budget');
-    fireEvent.change(input, { target: { value: '300' } });
+    fireEvent.change(input, { target: { value: '600' } });
 
     await waitFor(() => {
-      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryTotalBudgetS: 300 });
+      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryTotalBudgetS: 600 });
     });
   });
 
-  it('重试总时长预算超过 1800 被 clamp 到 1800', async () => {
+  it('重试总时长预算超过 86400 被 clamp 到 86400', async () => {
     renderTab();
 
     const input = screen.getByTestId('settings-llm-retry-total-budget');
-    fireEvent.change(input, { target: { value: '9999' } });
+    fireEvent.change(input, { target: { value: '999999' } });
 
     await waitFor(() => {
-      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryTotalBudgetS: 1800 });
+      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryTotalBudgetS: 86400 });
     });
   });
 
-  it('AdvancedSection 默认折叠，高级参数不可见', () => {
+  it('退避参数在主区直接可见（不再折叠于高级选项）', () => {
     renderTab();
 
-    // "高级选项" 按钮存在
-    const advancedButton = screen.getByText('高级选项');
-    expect(advancedButton).toBeTruthy();
+    // 2026-11-03: 两个退避参数从 <AdvancedSection> 提升到主区
+    expect(screen.queryByText('高级选项')).toBeNull();
 
-    // 折叠状态下，退避基数/最大退避 input 在 DOM 中但 hidden
-    const baseDelayInput = screen.queryByTestId('settings-llm-retry-base-delay');
-    const maxDelayInput = screen.queryByTestId('settings-llm-retry-max-delay');
-
-    // hidden 元素仍在 DOM 中但被 [hidden] 祖先包裹
-    if (baseDelayInput) {
-      expect(baseDelayInput.closest('[hidden]')).toBeTruthy();
-    }
-    if (maxDelayInput) {
-      expect(maxDelayInput.closest('[hidden]')).toBeTruthy();
-    }
+    const baseDelayInput = screen.getByTestId('settings-llm-retry-base-delay');
+    const maxDelayInput = screen.getByTestId('settings-llm-retry-max-delay');
+    expect((baseDelayInput as HTMLInputElement).value).toBe('2');
+    expect((maxDelayInput as HTMLInputElement).value).toBe('60');
   });
 
-  it('点击"高级选项"展开后，退避参数可见', async () => {
+  it('修改退避基数触发 updateSettings', async () => {
     renderTab();
-
-    const advancedButton = screen.getByText('高级选项');
-    fireEvent.click(advancedButton);
-
-    await waitFor(() => {
-      // 展开后 hidden 属性移除
-      const baseDelayInput = screen.getByTestId('settings-llm-retry-base-delay');
-      const maxDelayInput = screen.getByTestId('settings-llm-retry-max-delay');
-      expect(baseDelayInput).toBeTruthy();
-      expect(maxDelayInput).toBeTruthy();
-      expect((baseDelayInput as HTMLInputElement).value).toBe('1');
-      expect((maxDelayInput as HTMLInputElement).value).toBe('30');
-    });
-  });
-
-  it('展开后修改退避基数触发 updateSettings', async () => {
-    renderTab();
-
-    // 先展开
-    fireEvent.click(screen.getByText('高级选项'));
 
     const baseDelayInput = screen.getByTestId('settings-llm-retry-base-delay');
     fireEvent.change(baseDelayInput, { target: { value: '2.5' } });
@@ -205,17 +184,14 @@ describe('BasicTab — LLM 重试 section', () => {
     });
   });
 
-  it('展开后修改最大退避触发 updateSettings', async () => {
+  it('修改最大退避触发 updateSettings', async () => {
     renderTab();
 
-    // 先展开
-    fireEvent.click(screen.getByText('高级选项'));
-
     const maxDelayInput = screen.getByTestId('settings-llm-retry-max-delay');
-    fireEvent.change(maxDelayInput, { target: { value: '60' } });
+    fireEvent.change(maxDelayInput, { target: { value: '120' } });
 
     await waitFor(() => {
-      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryMaxDelayS: 60 });
+      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryMaxDelayS: 120 });
     });
   });
 
@@ -236,6 +212,9 @@ describe('BasicTab — LLM 重试 section', () => {
     expect(snapshot).toContain('流式输出: 开启');
     expect(snapshot).toContain('IANA 时区: Asia/Shanghai');
     expect(snapshot).toContain('LLM 任务上限(秒): 1800');
+    // 2026-11-03: 重试项标注来源（3/1/30/180 均非后端默认 5/2/60/300）
+    expect(snapshot).toContain('- LLM 最大尝试次数: 3（来源：已自定义）');
+    expect(snapshot).toContain('- 退避基数(秒): 1（来源：已自定义）');
 
     const json = JSON.parse(
       formatBasicTabAuditJson({

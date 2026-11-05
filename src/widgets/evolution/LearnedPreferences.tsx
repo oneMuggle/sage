@@ -14,6 +14,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { invoke } from '../../shared/api/desktopInvoke';
+import { formatLocalString } from '../../shared/lib/timeFormatter';
 
 interface LearnedPreference {
   key: string;
@@ -33,13 +34,7 @@ interface ProfileRefreshResponse {
   snapshot_chars: number;
 }
 
-const formatTime = (timestamp: number): string => {
-  try {
-    return new Date(timestamp * 1000).toLocaleString('zh-CN');
-  } catch {
-    return String(timestamp);
-  }
-};
+// formatTime 已统一到 src/shared/lib/timeFormatter#formatLocalString
 
 export const LearnedPreferences: React.FC = () => {
   const [items, setItems] = useState<LearnedPreference[]>([]);
@@ -164,7 +159,7 @@ export const LearnedPreferences: React.FC = () => {
                     <div className="mt-1 text-text break-words">{item.value}</div>
                   )}
                   <div className="mt-1 text-xs text-muted">
-                    更新于 {formatTime(item.updated_at)}
+                    更新于 {formatLocalString(item.updated_at * 1000)}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

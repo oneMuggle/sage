@@ -15,6 +15,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from backend.data.agent_repo import AgentRepository
 from backend.data.settings_canonicalizer import validate_settings_payload
 from backend.data.settings_repo import SettingsRepository
+from backend.domain.agent_limits import (
+    MAX_ITERATIONS_CEILING,
+    MIN_ITERATIONS,
+    is_valid_iteration_count,
+)
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
@@ -83,6 +88,9 @@ _ALLOWED_ENDPOINT_FIELDS = {
     "localModelPath",
     "discoveredModels",
     "lastDiscoveredAt",
+    # 2026-11-03: 思考过程参数 —— 与 settings_canonicalizer.LEGAL_ENDPOINT_KEYS 同步
+    "reasoningEffort",
+    "thinkingBudget",
 }
 
 # 2026-10-28: model_selection 更新白名单（与 settings_canonicalizer.LEGAL_MODEL_SELECTION_KEYS 对齐）
@@ -187,27 +195,20 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
         value = updates[key]
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 10_000_000:
             return f"{key} 必须是 1 到 10000000 之间的整数，收到: {value!r}"
-    # P119 Config Advisor (Phase 1.2): LLM 重试 / 超时字段类型与范围校验
+    # P119 Config Advisor (Phase 1.2): LLM 重试参数取值域校验 —— 复用后端
+    # 单一真相源 RETRY_RANGES (与运行时回退 / HTTP 写入侧共用同一份定义,
+    # 杜绝漂移).
     _llm_retry_field_errors: List[str] = []
-    if "llmRetryMaxAttempts" in updates:
-        v = updates["llmRetryMaxAttempts"]
-        if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 20:
-            _llm_retry_field_errors.append(
-                f"llmRetryMaxAttempts 必须是 0 到 20 之间的整数，收到: {v!r}"
-            )
-    for k in ("llmRetryBaseDelayS", "llmRetryMaxDelayS"):
-        if k in updates:
-            v = updates[k]
-            if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 < v <= 600:  # noqa: UP038
-                _llm_retry_field_errors.append(
-                    f"{k} 必须是大于 0 且不超过 600 的数字，收到: {v!r}"
-                )
-    if "llmRetryTotalBudgetS" in updates:
-        v = updates["llmRetryTotalBudgetS"]
-        if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 1800:
-            _llm_retry_field_errors.append(
-                f"llmRetryTotalBudgetS 必须是 0 到 1800 之间的整数（0=不限），收到: {v!r}"
-            )
+    from backend.core.retry_defaults import RETRY_KEYS, validate_retry_values
+
+    for key in RETRY_KEYS:
+        if key in updates:
+            try:
+                validate_retry_values({key: updates[key]})
+            except ValueError as exc:
+                # RetrySettingsValueError 消息已含字段名和原始值 (LLM 自己提交),
+                # 直接拼入错误串.
+                _llm_retry_field_errors.append(str(exc))
     if "llmTotalTimeoutS" in updates:
         v = updates["llmTotalTimeoutS"]
         if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 86400:
@@ -489,7 +490,7 @@ class UpdateSageConfigTool(BaseTool):
                         "description": (
                             "待更新的参数键值对：\n"
                             "- target='orch' 时允许: maxLaneIterations, maxSubagentIterations, maxConcurrentSubagents, maxRetries 等\n"
-                            "- target='agent' 时允许: max_iterations (1~50), temperature, system_prompt, description 等\n"
+                            f"- target='agent' 时允许: max_iterations ({MIN_ITERATIONS}~{MAX_ITERATIONS_CEILING}), temperature, system_prompt, description 等\n"
                             "- target='general' 时允许: temperature, streaming, autoMemory, confirmDelete 等\n"
                             "- target='general' 时允许: titleModelId (会话标题专用模型 id，空串=回退聊天模型)\n"
                             "- target='endpoint' 且 action='create/update' 时允许: name, baseUrl, apiKey, protocol, modelId 等\n"
@@ -570,10 +571,13 @@ class UpdateSageConfigTool(BaseTool):
 
                 if "max_iterations" in updates:
                     val = updates["max_iterations"]
-                    if not isinstance(val, int) or isinstance(val, bool) or not (1 <= val <= 50):
+                    if not is_valid_iteration_count(val):
                         return ToolResult(
                             success=False,
-                            error=f"max_iterations 必须是 1 到 50 之间的整数，收到: {val}",
+                            error=(
+                                f"max_iterations 必须是 {MIN_ITERATIONS} 到 {MAX_ITERATIONS_CEILING} "
+                                f"之间的整数，收到: {val}"
+                            ),
                         )
                 if "temperature" in updates:
                     value = updates["temperature"]

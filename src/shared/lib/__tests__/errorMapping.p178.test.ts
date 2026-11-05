@@ -25,3 +25,13 @@ describe('errorMapping P178 governance audit', () => {
     expect(JSON.parse(formatLLMErrorJson(err)).statusCode).toBe(401);
   });
 });
+
+describe('errorMapping — 动态预算 source (M5)', () => {
+  it('source=dynamic 时展示「动态预算」标签并指引到预算模式设置', () => {
+    const text = mapAgentErrorToText('max_iterations_exceeded (limit=280, source=dynamic)');
+    expect(text).toContain('上限来源：动态预算');
+    expect(text).toContain('「设置 → 编排 → 预算模式」');
+    // 不应把用户引到错误的"迭代次数上限"设置项
+    expect(text).not.toContain('Agent 迭代次数上限」调高');
+  });
+});

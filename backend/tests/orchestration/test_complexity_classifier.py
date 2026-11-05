@@ -220,3 +220,163 @@ class TestComplexityClassificationToDict:
             "research_needed": False,
             "reasoning": "test reasoning",
         }
+
+
+# ---------------------------------------------------------------------------
+# M4 · W4: estimate_budget_level
+# ---------------------------------------------------------------------------
+
+
+class TestEstimateBudgetLevel:
+    """测试 estimate_budget_level() —— LLM 预算分级。"""
+
+    @pytest.mark.asyncio()
+    async def test_llm_success_simple(self):
+        """LLM 返回 simple → 正确解析。"""
+        from backend.orchestration.complexity_classifier import estimate_budget_level
+
+        mock_client = AsyncMock()
+        mock_client.complete = AsyncMock(
+            return_value=json.dumps({"level": "simple", "reasoning": "单文件小改"})
+        )
+        with patch(
+            "backend.orchestration.llm_factory.build_llm_client_from_settings",
+            return_value=mock_client,
+        ):
+            result = await estimate_budget_level("修复 typo")
+            assert result is not None
+            assert result[0] == "simple"
+            assert "单文件小改" in result[1]
+
+    @pytest.mark.asyncio()
+    async def test_llm_success_long(self):
+        """LLM 返回 long → 正确解析。"""
+        from backend.orchestration.complexity_classifier import estimate_budget_level
+
+        mock_client = AsyncMock()
+        mock_client.complete = AsyncMock(
+            return_value=json.dumps({"level": "long", "reasoning": "端到端迁移"})
+        )
+        with patch(
+            "backend.orchestration.llm_factory.build_llm_client_from_settings",
+            return_value=mock_client,
+        ):
+            result = await estimate_budget_level("批量迁移 100 个文件")
+            assert result is not None
+            assert result[0] == "long"
+
+    @pytest.mark.asyncio()
+    async def test_no_llm_config_returns_none(self):
+        """无 LLM 配置 → 返回 None（回落启发式）。"""
+        from backend.orchestration.complexity_classifier import estimate_budget_level
+
+        with patch(
+            "backend.orchestration.llm_factory.build_llm_client_from_settings",
+            return_value=None,
+        ):
+            result = await estimate_budget_level("test")
+            assert result is None
+
+    @pytest.mark.asyncio()
+    async def test_llm_timeout_returns_none(self):
+        """LLM 超时 → 返回 None。"""
+        import asyncio
+
+        from backend.orchestration.complexity_classifier import estimate_budget_level
+
+        mock_client = AsyncMock()
+
+        async def slow_complete(prompt):
+            await asyncio.sleep(10)
+            return '{"level": "medium", "reasoning": "test"}'
+
+        mock_client.complete = slow_complete
+        with patch(
+            "backend.orchestration.llm_factory.build_llm_client_from_settings",
+            return_value=mock_client,
+        ):
+            result = await estimate_budget_level("test", timeout_s=0.1)
+            assert result is None
+
+    @pytest.mark.asyncio()
+    async def test_llm_exception_returns_none(self):
+        """LLM 调用异常 → 返回 None。"""
+        from backend.orchestration.complexity_classifier import estimate_budget_level
+
+        mock_client = AsyncMock()
+        mock_client.complete = AsyncMock(side_effect=RuntimeError("网络错误"))
+        with patch(
+            "backend.orchestration.llm_factory.build_llm_client_from_settings",
+            return_value=mock_client,
+        ):
+            result = await estimate_budget_level("test")
+            assert result is None
+
+    @pytest.mark.asyncio()
+    async def test_invalid_json_returns_none(self):
+        """JSON 解析失败 → 返回 None。"""
+        from backend.orchestration.complexity_classifier import estimate_budget_level
+
+        mock_client = AsyncMock()
+        mock_client.complete = AsyncMock(return_value="not json")
+        with patch(
+            "backend.orchestration.llm_factory.build_llm_client_from_settings",
+            return_value=mock_client,
+        ):
+            result = await estimate_budget_level("test")
+            assert result is None
+
+    @pytest.mark.asyncio()
+    async def test_invalid_level_returns_none(self):
+        """非法 level 值 → 返回 None。"""
+        from backend.orchestration.complexity_classifier import estimate_budget_level
+
+        mock_client = AsyncMock()
+        mock_client.complete = AsyncMock(
+            return_value=json.dumps({"level": "invalid", "reasoning": "test"})
+        )
+        with patch(
+            "backend.orchestration.llm_factory.build_llm_client_from_settings",
+            return_value=mock_client,
+        ):
+            result = await estimate_budget_level("test")
+            assert result is None
+
+    @pytest.mark.asyncio()
+    async def test_empty_response_returns_none(self):
+        """空响应 → 返回 None。"""
+        from backend.orchestration.complexity_classifier import estimate_budget_level
+
+        mock_client = AsyncMock()
+        mock_client.complete = AsyncMock(return_value="")
+        with patch(
+            "backend.orchestration.llm_factory.build_llm_client_from_settings",
+            return_value=mock_client,
+        ):
+            result = await estimate_budget_level("test")
+            assert result is None
+
+    @pytest.mark.asyncio()
+    async def test_context_signals_passed_to_prompt(self):
+        """context_signals 被正确替换到 prompt。"""
+        from backend.orchestration.complexity_classifier import estimate_budget_level
+
+        mock_client = AsyncMock()
+        mock_client.complete = AsyncMock(
+            return_value=json.dumps({"level": "complex", "reasoning": "test"})
+        )
+        with patch(
+            "backend.orchestration.llm_factory.build_llm_client_from_settings",
+            return_value=mock_client,
+        ):
+            result = await estimate_budget_level(
+                "重构认证系统",
+                context_signals="- 已绑定到项目工作区\n- 用户提供了附件",
+            )
+            assert result is not None
+            assert result[0] == "complex"
+            # 验证 prompt 里包含了 context_signals
+            call_args = mock_client.complete.call_args
+            prompt = call_args[0][0]
+            assert "已绑定到项目工作区" in prompt
+            assert "用户提供了附件" in prompt

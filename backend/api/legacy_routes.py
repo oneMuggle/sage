@@ -61,7 +61,7 @@ from backend.chat.title_generator import (
     needs_title,
 )
 from backend.core.errors import LLMError
-from backend.core.legacy.agent import SageAgent
+from backend.core.legacy.agent import SageAgent, _retry_info_from_event
 from backend.core.legacy.llm_total_timeout import llm_total_timeout_or_none
 from backend.data import answer_version_repo as answer_versions
 from backend.data.database import get_database
@@ -1397,8 +1397,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 尾部 dynamic 块。fail-safe：单条失败跳过，绝不阻断聊天。
             # R81 (2026-09-19): r71 citations 除推事件外还要随 assistant 行
             # 落盘（重载后引用区块不丢）；capture 后挂首条 assistant 行。
+            # P0 修复(2026-11-04): 每附件处理结果记录到 r_attachments_status,
+            # 推 attachments_processed 事件让前端能展示"已读取/已跳过/失败";
+            # <attached_document> 块带 name/type 属性,模型能识别文件名与类型。
             r81_rag_citations: list = []
             r81_rag_citations_written = False
+            r_attachments_status: list = []
             try:
                 from backend.api import chat_attachment_routes as _r66_car
                 from backend.services.attachment_context import (
@@ -1426,14 +1430,42 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                 r66_store_path = attachment_vector_store_path(MEDIA_ROOT.parent)
                 for r37_mid in data.attachment_media_ids[:10]:
+                    # 每条状态记录:前端据此渲染 per-file 状态
+                    r37_filename: str = r37_mid  # 兜底显示 media id
+                    r37_mime: str = "application/octet-stream"
+                    r37_status_entry = {
+                        "media_id": r37_mid,
+                        "filename": r37_filename,
+                        "mime_type": r37_mime,
+                        "status": "error",
+                        "reason": "load_failed",
+                    }
                     try:
                         _r37_loaded = r37_store.load(r37_mid)
-                    except Exception:
+                    except Exception as r37_load_err:
+                        logger.debug(
+                            f"[REQ {request_id}] attachment %s load failed: %s",
+                            r37_mid, r37_load_err,
+                        )
                         _r37_loaded = None
                     if _r37_loaded is None:
+                        r_attachments_status.append(r37_status_entry)
                         continue
                     _r37_ref, r37_bytes = _r37_loaded
+                    r37_filename = (
+                        (_r37_ref.metadata or {}).get("original_filename") or r37_mid
+                    )
+                    r37_mime = _r37_ref.mime_type or r37_mime
+                    r37_status_entry["filename"] = r37_filename
+                    r37_status_entry["mime_type"] = r37_mime
                     if _r37_ref.kind != MediaKind.DOCUMENT:
+                        # P0: 历史遗留媒体被误判为 AUDIO 时给明确的 skipped 原因,
+                        # 不再静默 continue —— 让前端能告诉用户"文件类型不支持,请重新上传"。
+                        r37_status_entry["status"] = "skipped"
+                        r37_status_entry["reason"] = (
+                            f"not_document(got={_r37_ref.kind.value})"
+                        )
+                        r_attachments_status.append(r37_status_entry)
                         continue
                     # 全文提取（txt 直读；pdf/docx 复用 r39 提取器），不在此截断。
                     # pdf/docx 提取是秒级同步 CPU 活，放线程池避免卡事件循环（r68）。
@@ -1452,9 +1484,30 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             )
                         else:
                             r37_text = r37_bytes.decode("utf-8")
-                    except Exception:
+                    except UnicodeDecodeError as r37_ud_err:
+                        r37_status_entry["status"] = "skipped"
+                        r37_status_entry["reason"] = "not_utf8"
+                        logger.debug(
+                            f"[REQ {request_id}] attachment %s not utf-8: %s",
+                            r37_mid, r37_ud_err,
+                        )
+                        r_attachments_status.append(r37_status_entry)
+                        continue
+                    except Exception as r37_extract_err:
+                        r37_status_entry["status"] = "error"
+                        r37_status_entry["reason"] = (
+                            f"extract_failed:{type(r37_extract_err).__name__}"
+                        )
+                        logger.debug(
+                            f"[REQ {request_id}] attachment %s extract failed: %s",
+                            r37_mid, r37_extract_err,
+                        )
+                        r_attachments_status.append(r37_status_entry)
                         continue
                     if not r37_text.strip():
+                        r37_status_entry["status"] = "skipped"
+                        r37_status_entry["reason"] = "empty_text"
+                        r_attachments_status.append(r37_status_entry)
                         continue
                     # r66: 注入决策（全文 ≤100k 现状注入；超长且配置 rag →
                     # 检索 top_k；否则截断前 100k）。fail-safe。
@@ -1467,15 +1520,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         query_embedder=embed_query_via_http if r66_rag else None,
                     )
                     if r37_ctx is None:
+                        r37_status_entry["status"] = "skipped"
+                        r37_status_entry["reason"] = "context_build_failed"
+                        r_attachments_status.append(r37_status_entry)
                         continue
                     # r71: RAG 检索注入发生 → 推引用溯源事件（气泡内展示）
                     if r37_ctx.mode == "rag":
                         r81_citation = {
                             "media_id": r37_mid,
-                            "filename": (
-                                (_r37_ref.metadata or {}).get("original_filename")
-                                or r37_mid
-                            ),
+                            "filename": r37_filename,
                             "mode": "rag",
                             "chunks": [
                                 {"index": c.index, "score": round(c.score, 2)}
@@ -1493,10 +1546,42 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             )
                         except Exception:
                             logger.debug(f"[REQ {request_id}] rag_used event push failed, ignored")
+                    # P0: 注入块带 filename/type,模型能识别附件身份
                     dynamic_context_parts.append(
-                        "<attached_document id=" + repr(r37_mid) + ">" + chr(10)
-                        + r37_ctx.text + chr(10) + "</attached_document>"
+                        "<attached_document"
+                        + f" id={repr(r37_mid)}"
+                        + f" name={repr(r37_filename)}"
+                        + f" type={repr(r37_mime)}"
+                        + ">" + chr(10)
+                        + r37_ctx.text + chr(10)
+                        + "</attached_document>"
                     )
+                    r37_status_entry["status"] = "ok"
+                    r37_status_entry["mode"] = r37_ctx.mode
+                    r37_status_entry["chars"] = len(r37_ctx.text)
+                    r37_status_entry.pop("reason", None)
+                    r_attachments_status.append(r37_status_entry)
+                # P0: 推 attachments_processed 事件,前端据此渲染 per-file 状态
+                if r_attachments_status:
+                    try:
+                        # 关联到具体 user 消息 —— 前端据此 updateMessage 更新气泡
+                        _ap_user_id = (
+                            f"u-{data.client_message_id}"
+                            if data.client_message_id
+                            else None
+                        )
+                        entry.queue.put_nowait(
+                            {
+                                "state": "attachments_processed",
+                                "session_id": data.session_id,
+                                "user_message_id": _ap_user_id,
+                                "attachments_status": list(r_attachments_status),
+                            }
+                        )
+                    except Exception:
+                        logger.debug(
+                            f"[REQ {request_id}] attachments_processed event push failed, ignored"
+                        )
             except Exception as r37_att_err:
                 logger.debug(f"[REQ {request_id}] attachment media inject skipped: {r37_att_err}")
             # ===== R37 文本文档附件注入 END =====
@@ -1555,7 +1640,25 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 历史,而历史马上会注入本轮 LLM 请求(见下)。
             compact_result = None
             try:
-                compact_result = await _maybe_auto_compact_session(data.session_id, llm_config)
+                # 2026-11-03: 压缩本身也走 LLM 重试；把重试状态透出到聊天流，
+                # 避免压缩期间（实测可达 2 分钟）用户只看到"思考中"。
+                def _compact_retry_cb(retry_evt: Any) -> None:
+                    try:
+                        retry_info = _retry_info_from_event(retry_evt)
+                        retry_info["source"] = "compaction"
+                        entry.queue.put_nowait({
+                            "state": "retry",
+                            "session_id": data.session_id,
+                            "retry_info": retry_info,
+                        })
+                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞压缩
+                        logger.debug(
+                            f"[REQ {request_id}] compaction retry event push failed, ignored"
+                        )
+
+                compact_result = await _maybe_auto_compact_session(
+                    data.session_id, llm_config, retry_callback=_compact_retry_cb
+                )
             except Exception as compact_err:
                 logger.warning(
                     f"[REQ {request_id}] 自动压缩失败(忽略, 继续未压缩聊天): {compact_err}"
@@ -1956,9 +2059,14 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 只用于气泡回显，不参与 LLM 上下文；序列化失败或超 32 KiB 时
             # 丢弃展示元数据，但不影响消息本身落库。
             user_client_meta_json: Optional[str] = None
-            if data.message_meta:
+            # P0 (2026-11-04): 把附件处理状态并入 user 消息 client_meta 落库 ——
+            # 刷新会话后气泡仍能显示"已读取/已跳过/失败"，而不是只在流式期间可见。
+            _meta_payload = dict(data.message_meta) if data.message_meta else {}
+            if r_attachments_status:
+                _meta_payload["attachments_status"] = list(r_attachments_status)
+            if _meta_payload:
                 try:
-                    serialized_meta = json.dumps(data.message_meta, ensure_ascii=False)
+                    serialized_meta = json.dumps(_meta_payload, ensure_ascii=False)
                     if len(serialized_meta.encode("utf-8")) <= 32768:
                         user_client_meta_json = serialized_meta
                     else:

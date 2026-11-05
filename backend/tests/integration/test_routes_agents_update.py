@@ -6,7 +6,7 @@ update_agent 路由集成测试 — 覆盖 PATCH /api/v1/agents/{id} 端点。
 - PATCH 不存在 id → 404 + 结构化 detail
 - PATCH 空 body → 200 (no-op, updated_at 不动)
 - PATCH 校验: role 必须是白名单成员 (coordinator/researcher/coder/memory_manager)
-- PATCH 校验: max_iterations 在 1..50
+- PATCH 校验: max_iterations 在 1..1000
 - PATCH 不传字段: 保留原值 (partial update)
 - updated_at 字段在更新后被刷新
 """
@@ -47,16 +47,40 @@ async def test_update_agent_role_validates_against_whitelist(client):
 
 @pytest.mark.asyncio()
 async def test_update_agent_max_iterations_in_range(client):
-    """PATCH max_iterations 必须在 1..50."""
+    """PATCH max_iterations 必须在 1..1000 (与 ``backend.domain.agent_limits`` 单一真相源对齐)."""
     ok = await client.patch(f"{PREFIX}/agents/coder", json={"max_iterations": 25})
     assert ok.status_code == 200
     assert ok.json()["max_iterations"] == 25
 
+    lower_bound_ok = await client.patch(
+        f"{PREFIX}/agents/coder", json={"max_iterations": 1}
+    )
+    assert lower_bound_ok.status_code == 200
+
+    upper_bound_ok = await client.patch(
+        f"{PREFIX}/agents/coder", json={"max_iterations": 1000}
+    )
+    assert upper_bound_ok.status_code == 200
+    assert upper_bound_ok.json()["max_iterations"] == 1000
+
+    # 历史遗留边界: 51 在 1..1000 内应放行, 不应再被误拒.
+    was_previously_rejected = await client.patch(
+        f"{PREFIX}/agents/coder", json={"max_iterations": 51}
+    )
+    assert was_previously_rejected.status_code == 200
+
     too_low = await client.patch(f"{PREFIX}/agents/coder", json={"max_iterations": 0})
     assert too_low.status_code == 422
 
-    too_high = await client.patch(f"{PREFIX}/agents/coder", json={"max_iterations": 51})
+    too_high = await client.patch(
+        f"{PREFIX}/agents/coder", json={"max_iterations": 1001}
+    )
     assert too_high.status_code == 422
+
+    # bool 的「防御在深度」: 路由层通过 Pydantic lax 模式会把 ``True`` 强转为
+    # ``1`` 再交给业务, 所以 bool 在 PATCH /agents/{id} 不会暴露到本校验.
+    # 真正的 bool 拦截发生在 ``update_sage_config`` 工具直接调用层, 由
+    # ``test_agent_limits.py::TestIsValidIterationCount`` 覆盖.
 
 
 @pytest.mark.asyncio()

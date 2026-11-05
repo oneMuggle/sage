@@ -20,6 +20,8 @@ import { langFromPath } from '../../../shared/lib/fileLang';
 import { Markdown } from '../../markdown';
 import { ShikiCodeBlock } from '../ShikiCodeBlock';
 
+import { HtmlPreviewHost } from './HtmlPreviewHost';
+
 /** artifact content 与 workspace preview 的公共响应形状（后端同一套字段） */
 export interface PreviewContentPayload {
   ok: boolean;
@@ -155,15 +157,15 @@ export function FileContentRenderer({
     );
   }
   if (content.kind === 'html') {
-    // 沙盒 iframe：允许脚本但阻止跨域/顶层导航/表单提交
+    // 沙盒 iframe：允许脚本但阻止跨域/顶层导航/表单提交。
+    // 统一宿主提供工具条（重跑/停止/全屏/复制/下载）与错误桥。
     return (
-      <iframe
-        key={htmlReloadKey}
-        srcDoc={content.content ?? ''}
-        sandbox="allow-scripts"
-        title={name}
-        className="w-full h-full min-h-[24rem] rounded border border-border bg-white"
-        data-testid="html-artifact-preview"
+      <HtmlPreviewHost
+        html={content.content ?? ''}
+        name={name}
+        reloadKey={htmlReloadKey}
+        frameTestId="html-artifact-preview"
+        heightClassName="min-h-[24rem]"
       />
     );
   }

@@ -8,6 +8,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { invoke } from '../../shared/api/desktopInvoke';
+import { formatLocalString } from '../../shared/lib/timeFormatter';
 
 interface EvolutionLog {
   id: string;
@@ -120,7 +121,7 @@ export const EvolutionPanel: React.FC = () => {
                 </div>
                 <p className="text-xs text-muted mt-1">{log.description}</p>
                 <p className="text-xs text-muted mt-1">
-                  {new Date(log.created_at * 1000).toLocaleString('zh-CN')}
+                  {formatLocalString(log.created_at * 1000)}
                 </p>
               </li>
             ))}

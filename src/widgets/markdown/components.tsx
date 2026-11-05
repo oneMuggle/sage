@@ -22,7 +22,7 @@ import { MarkdownImage } from '../chat/MarkdownImage';
 import { MermaidBlock } from '../chat/MermaidBlock';
 import { ShikiCodeBlock } from '../chat/ShikiCodeBlock';
 
-import { isLocalFilePathHref } from './links';
+import { isLocalFilePathHref, safeDecodeUri } from './links';
 import { extractHeadings, headingIdForLine, type RawHeading } from './outline';
 import { useMdI18n } from './useMdI18n';
 
@@ -98,15 +98,19 @@ export function createMarkdownComponents(opts: MarkdownComponentsOptions): Compo
 
     a: ({ href, children }) => {
       if (isLocalFilePathHref(href)) {
+        // mdast-util-to-hast 调 normalizeUri 把中文等非 ASCII 字符做了
+        // percent-encoding（如 "算法.md" → "%E7%AE%97%E6%B3%95.md"）。
+        // 回调和 title 必须用解码后的原始路径，否则后端按字面值找不到文件 → 404。
+        const decodedHref = safeDecodeUri(href!);
         if (onLocalFileClick) {
           return (
             <a
               href={href}
               onClick={(e) => {
                 e.preventDefault();
-                onLocalFileClick(href!);
+                onLocalFileClick(decodedHref);
               }}
-              title={href}
+              title={decodedHref}
               data-local-file="true"
               data-testid="markdown-file-link"
             >
@@ -130,28 +134,14 @@ export function createMarkdownComponents(opts: MarkdownComponentsOptions): Compo
         <img src={src} alt={alt || ''} loading="lazy" />
       ),
 
-    table: ({ children }) => (
-      <MarkdownTable maxHeight={tableMaxHeight}>{children}</MarkdownTable>
-    ),
+    table: ({ children }) => <MarkdownTable maxHeight={tableMaxHeight}>{children}</MarkdownTable>,
 
     th: ({ children }) => <th>{children}</th>,
     td: ({ children }) => <td>{children}</td>,
 
-    ul: ({ children, ...rest }) => (
-      <ul {...rest}>
-        {children}
-      </ul>
-    ),
-    ol: ({ children, ...rest }) => (
-      <ol {...rest}>
-        {children}
-      </ol>
-    ),
-    li: ({ children, ...rest }) => (
-      <li {...rest}>
-        {children}
-      </li>
-    ),
+    ul: ({ children, ...rest }) => <ul {...rest}>{children}</ul>,
+    ol: ({ children, ...rest }) => <ol {...rest}>{children}</ol>,
+    li: ({ children, ...rest }) => <li {...rest}>{children}</li>,
     input: ({ ...rest }) => <input readOnly {...rest} />,
 
     blockquote: ({ children }) => <blockquote>{children}</blockquote>,
@@ -211,13 +201,7 @@ export function createMarkdownComponents(opts: MarkdownComponentsOptions): Compo
  * 表格 —— 包一层 .md-table-wrap 容器，加复制按钮 + 限高 + 右键菜单。
  * 复制输出 TSV（与历史 MessageMarkdownParts 行为一致）。
  */
-function MarkdownTable({
-  children,
-  maxHeight,
-}: {
-  children: ReactNode;
-  maxHeight: string;
-}) {
+function MarkdownTable({ children, maxHeight }: { children: ReactNode; maxHeight: string }) {
   const t = useMdI18n();
   const globalI18n = useOptionalI18n();
   const tableRef = useRef<HTMLTableElement | null>(null);

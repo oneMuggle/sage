@@ -1,5 +1,4 @@
-import { act } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { selectSessionSlots, useChatStreamStore } from '../chatStreamStore';
 
@@ -376,23 +375,17 @@ describe('chatStreamStore', () => {
       expect(slots().streaming?.retryInfo).toEqual(info);
     });
 
-    it('非 retry 状态到达时延迟 3 秒清空 retryInfo', () => {
-      vi.useFakeTimers();
-      try {
-        const store = useChatStreamStore.getState();
-        store.startStream(SESS, 'msg-1', { initialContent: '' });
-        store.setRetryInfo(SESS, 'msg-1', info);
-        store.setStreamingMeta(SESS, 'msg-1', { state: 'acting' });
-        // 3 秒内 retryInfo 仍然保留（延迟隐藏）
-        expect(slots().streaming?.retryInfo).toEqual(info);
-        // 推进 3 秒后定时器触发，retryInfo 被清 null
-        act(() => {
-          vi.advanceTimersByTime(3000);
-        });
-        expect(slots().streaming?.retryInfo).toBeNull();
-      } finally {
-        vi.useRealTimers();
-      }
+    // 2026-11-03: 非 retry 状态到达时立即清空（旧逻辑延迟 3 秒，会让 reasoning
+    // 事件反复重设定时器导致横幅永不消失——见 chatStreamRuntime 重挂路径同步修复）。
+    it('非 retry 状态到达时立即清空 retryInfo', () => {
+      const store = useChatStreamStore.getState();
+      store.startStream(SESS, 'msg-1', { initialContent: '' });
+      store.setRetryInfo(SESS, 'msg-1', info);
+      expect(slots().streaming?.retryInfo).toEqual(info);
+      store.setStreamingMeta(SESS, 'msg-1', { state: 'acting' });
+      // 立即清 null，无需等定时器
+      expect(slots().streaming?.retryInfo).toBeNull();
+      expect(slots().streaming?.retryInfoClearedAt).toBeTypeOf('number');
     });
 
     it('retry 状态自身不清空 retryInfo', () => {
@@ -455,6 +448,42 @@ describe('chatStreamStore', () => {
       const parsed = JSON.parse(formatChatStreamSessionJson(SESS));
       expect(parsed.streaming).toBe(true);
       expect(parsed.messageId).toBe('msg-99');
+    });
+  });
+
+  describe('budgetCheckpoint (M5 动态预算自动延长)', () => {
+    const INFO = { extensions: 1, nextBudget: 280, previousBudget: 200 };
+
+    it('setBudgetCheckpoint 写入后可按会话读取;传 null 清除', () => {
+      useChatStreamStore.getState().setBudgetCheckpoint(SESS, INFO);
+      expect(slots().budgetCheckpoint).toEqual(INFO);
+      useChatStreamStore.getState().setBudgetCheckpoint(SESS, null);
+      expect(slots().budgetCheckpoint).toBeNull();
+    });
+
+    it('startStream 清掉上一轮残留的检查点（避免跨 run 串显）', () => {
+      useChatStreamStore.getState().setBudgetCheckpoint(SESS, INFO);
+      useChatStreamStore.getState().startStream(SESS, 'msg-2', { initialContent: '' });
+      expect(slots().budgetCheckpoint).toBeNull();
+    });
+
+    it('clearStream 匹配消息时清掉检查点;不匹配时保留', () => {
+      useChatStreamStore.getState().startStream(SESS, 'msg-1', { initialContent: '' });
+      useChatStreamStore.getState().setBudgetCheckpoint(SESS, INFO);
+      useChatStreamStore.getState().clearStream(SESS, 'msg-OTHER');
+      expect(slots().budgetCheckpoint).toEqual(INFO);
+      useChatStreamStore.getState().clearStream(SESS, 'msg-1');
+      expect(slots().budgetCheckpoint).toBeNull();
+    });
+
+    it('检查点按会话隔离,不串到并行会话', () => {
+      useChatStreamStore.getState().setBudgetCheckpoint('sess-A', INFO);
+      expect(selectSessionSlots(useChatStreamStore.getState(), 'sess-A').budgetCheckpoint).toEqual(
+        INFO,
+      );
+      expect(
+        selectSessionSlots(useChatStreamStore.getState(), 'sess-B').budgetCheckpoint,
+      ).toBeNull();
     });
   });
 });

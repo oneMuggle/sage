@@ -32,9 +32,10 @@ async function importLogTimezone() {
 }
 
 describe('logTimezone', () => {
-  it('readLogTimezone returns UTC when file does not exist', async () => {
+  it('readLogTimezone returns local when file does not exist', async () => {
     const { readLogTimezone } = await importLogTimezone();
-    expect(readLogTimezone()).toBe('UTC');
+    // 默认值已从 'UTC' 切换到 'local' (跟随系统本地时区, 失败回退到北京时间)
+    expect(readLogTimezone()).toBe('local');
   });
 
   it('readLogTimezone returns stored value', async () => {
@@ -51,23 +52,23 @@ describe('logTimezone', () => {
     }
   });
 
-  it('readLogTimezone returns UTC for malformed JSON', async () => {
+  it('readLogTimezone returns local for malformed JSON', async () => {
     const { readLogTimezone } = await importLogTimezone();
     const filePath = join(tmpDir, 'sage-log-timezone.json');
     try {
       writeFileSync(filePath, 'not json', 'utf-8');
-      expect(readLogTimezone()).toBe('UTC');
+      expect(readLogTimezone()).toBe('local');
     } finally {
       rmSync(filePath, { force: true });
     }
   });
 
-  it('readLogTimezone returns UTC when field is empty string', async () => {
+  it('readLogTimezone returns local when field is empty string', async () => {
     const { readLogTimezone } = await importLogTimezone();
     const filePath = join(tmpDir, 'sage-log-timezone.json');
     try {
       writeFileSync(filePath, JSON.stringify({ logTimezone: '' }), 'utf-8');
-      expect(readLogTimezone()).toBe('UTC');
+      expect(readLogTimezone()).toBe('local');
     } finally {
       rmSync(filePath, { force: true });
     }

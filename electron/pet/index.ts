@@ -23,7 +23,8 @@ export function getPetController(): PetController | null {
 }
 
 export function disposePet(): void {
-  controller?.dispose();
+  if (!controller) return; // Idempotent: safe to call multiple times
+  controller.dispose();
   controller = null;
   // A later initPet() (e.g. macOS activate after the window was closed) must
   // be able to register the same channels again.

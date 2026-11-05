@@ -21,6 +21,10 @@ class SessionCreate(BaseModel):
     # 2026-10-29 (feat/workspace-optimization): Electron 启动时从 cwd 嗅探到的
     # 项目根。仅作为决策链的低优先级参考输入（低于用户显式偏好），不会被记住。
     detected_root: Optional[str] = None
+    # 2026-11-04 (fix/skip-workspace-binding): 用户在新会话页明确选择"不绑定项目"
+    # 时，前端传 True 跳过工作区解析链，不绑定任何工作区。语义对齐主流 AI 应用
+    # (Cursor / Cline / Windsurf) 的"显式选择 > 自动推断"原则。
+    skip_workspace_binding: bool = False
 
 
 class SessionUpdate(BaseModel):
@@ -259,7 +263,7 @@ class AgentUpdate(BaseModel):
         None  # 字段名避开 Pydantic 保留名, 路由层映射到 model_config
     )
 
-    max_iterations: Optional[int] = None  # 路由层校验 1..50
+    max_iterations: Optional[int] = None  # 路由层校验 1..1000
 
     enabled: Optional[bool] = None
 
