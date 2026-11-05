@@ -602,11 +602,11 @@ async def _prune_low_quality_memories(self):
     记忆/冲突/生命周期/偏好相邻套件 1109 passed / 21 skipped
 
 ### Phase 3：增强记忆整合（2 周）
-- [ ] **Task 3.1**：强化 MemoryReflectionTask（增加分组大小 + 内容长度）
-- [ ] **Task 3.2**：引入记忆巩固机制（主题簇 + 摘要生成）
-- [ ] **Task 3.3**：增加记忆质量评分器
-- [ ] **Task 3.4**：集成到 MemoryPruningTask
-- [ ] **Task 3.5**：编写端到端测试验证效果
+- [x] **Task 3.1**：强化 MemoryReflectionTask（增加分组大小 + 内容长度）
+- [x] **Task 3.2**：引入记忆巩固机制（主题簇 + 摘要生成）
+- [x] **Task 3.3**：增加记忆质量评分器
+- [x] **Task 3.4**：集成到 MemoryPruningTask
+- [x] **Task 3.5**：编写端到端测试验证效果
 
 ### Phase 4：优化用户体验（1 周）
 - [ ] **Task 4.1**：在记忆库页面显示"如何使用"提示
