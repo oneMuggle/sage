@@ -125,6 +125,50 @@ describe('ChatSessionNotices — 会话失败横幅 (Issue 1)', () => {
   });
 });
 
+describe('ChatSessionNotices — 预算延长横幅 (M5)', () => {
+  beforeEach(() => {
+    resetProps();
+  });
+
+  it('budgetCheckpoint 存在时渲染持久横幅,展示次数与上限区间', () => {
+    render(
+      <ChatSessionNotices
+        {...BASE_PROPS}
+        budgetCheckpoint={{ extensions: 2, previousBudget: 200, nextBudget: 360 }}
+      />,
+    );
+    const banner = screen.getByTestId('budget-checkpoint-banner');
+    expect(banner).toBeInTheDocument();
+    expect(banner.textContent).toContain('第 2 次');
+    expect(banner.textContent).toContain('200 → 360');
+  });
+
+  it('缺少 previousBudget 时只展示当前上限', () => {
+    render(
+      <ChatSessionNotices {...BASE_PROPS} budgetCheckpoint={{ extensions: 1, nextBudget: 280 }} />,
+    );
+    expect(screen.getByTestId('budget-checkpoint-banner').textContent).toContain('280');
+  });
+
+  it('点击关闭调用 onClearBudgetCheckpoint', () => {
+    const onClear = vi.fn();
+    render(
+      <ChatSessionNotices
+        {...BASE_PROPS}
+        budgetCheckpoint={{ extensions: 1, nextBudget: 280 }}
+        onClearBudgetCheckpoint={onClear}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('budget-checkpoint-dismiss'));
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it('budgetCheckpoint 为 null 时不渲染横幅', () => {
+    render(<ChatSessionNotices {...BASE_PROPS} budgetCheckpoint={null} />);
+    expect(screen.queryByTestId('budget-checkpoint-banner')).not.toBeInTheDocument();
+  });
+});
+
 describe('ChatSessionNotices — 重试最后一条 user 消息', () => {
   beforeEach(() => {
     resetProps();
