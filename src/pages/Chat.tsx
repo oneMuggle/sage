@@ -173,6 +173,11 @@ export function Chat() {
   const iterationOffset = useChatStreamStore((s) =>
     currentSessionId != null ? selectSessionSlots(s, currentSessionId).iterationOffset : 0,
   );
+  // 2026-11-05 M5: 动态预算自动延长 —— iteration_checkpoint 事件写入 store，
+  // 由 ChatSessionNotices 渲染为持久横幅（取代原先 3 秒即消失的 toast）。
+  const budgetCheckpoint = useChatStreamStore((s) =>
+    currentSessionId != null ? selectSessionSlots(s, currentSessionId).budgetCheckpoint : null,
+  );
   const handleStepConfirm = useCallback(
     async (action: StepConfirmAction) => {
       if (!currentSessionId || !stepConfirm) return;
@@ -616,6 +621,12 @@ export function Chat() {
             messages={messages}
             shiftInfo={shiftInfo}
             isLoading={isLoading}
+            budgetCheckpoint={budgetCheckpoint}
+            onClearBudgetCheckpoint={() => {
+              if (currentSessionId) {
+                useChatStreamStore.getState().setBudgetCheckpoint(currentSessionId, null);
+              }
+            }}
             onClearError={clearError}
             onSendMessage={sendMessage}
             onRetreat={() => void handleRetreat()}

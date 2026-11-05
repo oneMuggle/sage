@@ -14,8 +14,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import type { BudgetCheckpointInfo } from '../../features/send-message/chatStreamStore';
 import type { Message } from '../../shared/lib/store';
 
+import { BudgetCheckpointBanner } from './BudgetCheckpointBanner';
 import { ChatInlineError } from './ChatInlineError';
 import { CHAT_NOTICE_PRIORITY, ChatNoticeStack } from './ChatNoticeStack';
 import { INTERRUPTED_RUN_ERROR, InterruptedRunBanner } from './InterruptedRunBanner';
@@ -39,6 +41,9 @@ interface ChatSessionNoticesProps {
   shiftInfo: { reason: string } | null;
   /** 正在流式输出时隐藏话题切换横幅（迁移前行为） */
   isLoading: boolean;
+  /** 2026-11-05 M5: 动态预算自动延长信息（iteration_checkpoint 事件），null 表示无 */
+  budgetCheckpoint?: BudgetCheckpointInfo | null;
+  onClearBudgetCheckpoint?: () => void;
   onClearError: () => void;
   onSendMessage: (content: string, sessionId?: string) => void;
   onRetreat: () => void;
@@ -52,6 +57,8 @@ export function ChatSessionNotices({
   messages,
   shiftInfo,
   isLoading,
+  budgetCheckpoint,
+  onClearBudgetCheckpoint,
   onClearError,
   onSendMessage,
   onRetreat,
@@ -136,6 +143,17 @@ export function ChatSessionNotices({
               onDismiss={() =>
                 setDismissedInterrupts((prev) => new Set(prev).add(currentSessionId ?? ''))
               }
+            />
+          ),
+        },
+        // 2026-11-05 M5: 动态预算自动延长提示（持久，run 结束后由 store 清空）
+        budgetCheckpoint != null && {
+          key: 'budget-checkpoint',
+          priority: CHAT_NOTICE_PRIORITY.iterationCheckpoint,
+          node: (
+            <BudgetCheckpointBanner
+              info={budgetCheckpoint}
+              onDismiss={() => onClearBudgetCheckpoint?.()}
             />
           ),
         },

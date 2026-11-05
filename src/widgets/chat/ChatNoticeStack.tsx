@@ -17,12 +17,14 @@ export interface ChatNotice {
   node: ReactNode;
 }
 
-/** 预置优先级：错误 > 会话失败 > 中断 > 话题切换 */
+/** 预置优先级：错误 > 会话失败 > 中断 > 预算延长 > 话题切换 */
 export const CHAT_NOTICE_PRIORITY = {
   error: 30,
   /** Issue 1 (2026-10-29): 会话级失败终态 —— 低于本次会话内的临时错误，高于中断提示 */
   sessionFailed: 25,
   interrupted: 20,
+  /** 2026-11-05 M5: 动态预算自动延长提示 —— 信息性提示，低于中断、高于话题切换 */
+  iterationCheckpoint: 15,
   topicShift: 10,
 } as const;
 

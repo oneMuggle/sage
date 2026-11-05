@@ -201,6 +201,18 @@ export interface ExecutionModeRecommendation {
   reasoning: string;
 }
 
+/**
+ * 2026-11-05 M5: 动态迭代预算检查点载荷（后端 `iteration_checkpoint` 事件）。
+ * 前端写入槽位供 BudgetCheckpointBanner 渲染——取代原本 3 秒即消失的 toast，
+ * 让用户在整个 run 期间都能看到"已自动延长到第 N 次、当前上限 M 步"。
+ */
+export interface BudgetCheckpointInfo {
+  extensions: number;
+  nextBudget: number;
+  previousBudget?: number;
+  reasons?: string[];
+}
+
 /** 单个会话的流式槽位（S2 键控） */
 export interface SessionStreamSlots {
   streaming: StreamingState | null;
@@ -252,6 +264,11 @@ export interface SessionStreamSlots {
    */
   stepConfirm: StepConfirmInfo | null;
   /**
+   * 2026-11-05 M5: 动态迭代预算检查点。`iteration_checkpoint` 事件到达时写入，
+   * run 收尾（clearStream）或用户关闭横幅时清空。取代原先的瞬时 toast。
+   */
+  budgetCheckpoint: BudgetCheckpointInfo | null;
+  /**
    * U5 队列（2026-09-18 从 useChat 的 component-local ref 迁入）：
    * 会话忙时用户继续发送的消息在此排队，当前 run 自然结束后 flush。
    * 放 store 而非 ref 的两个理由：①UI 需要渲染并可操作队列；
@@ -284,6 +301,7 @@ const EMPTY_SLOTS: SessionStreamSlots = {
   executionModeRecommendation: null,
   researchReport: null,
   stepConfirm: null,
+  budgetCheckpoint: null,
   pendingQueue: [],
   queuePaused: false,
   iterationOffset: 0,
@@ -376,6 +394,8 @@ interface ChatStreamStoreState {
    * 用户响应后传 null 清空。
    */
   setStepConfirm: (sessionId: string, info: StepConfirmInfo | null) => void;
+  /** 2026-11-05 M5: 写入/清空动态预算检查点（iteration_checkpoint 事件驱动）。 */
+  setBudgetCheckpoint: (sessionId: string, info: BudgetCheckpointInfo | null) => void;
   updateTaskBoard: (
     sessionId: string,
     runId: string,
@@ -476,6 +496,8 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
         // 2026-10-28 (Plan Mode 增强 Phase 3): 新一轮清掉步骤确认对话框态
         // —— 避免上一轮的确认信息在新 run 开始时残留。
         stepConfirm: null,
+        // 2026-11-05 M5: 新一轮清掉上一轮的动态预算检查点提示
+        budgetCheckpoint: null,
       }),
     })),
 
@@ -602,6 +624,8 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
         sessions: writeSlots(prev.sessions, sessionId, {
           streaming: null,
           iterationOffset: nextOffset,
+          // M5: run 收尾后延长提示失去意义（不再有进行中的迭代），随流一起清掉
+          budgetCheckpoint: null,
         }),
       };
     }),
@@ -642,6 +666,13 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
     set((prev) => ({
       sessions: writeSlots(prev.sessions, sessionId, {
         stepConfirm: info,
+      }),
+    })),
+
+  setBudgetCheckpoint: (sessionId, info) =>
+    set((prev) => ({
+      sessions: writeSlots(prev.sessions, sessionId, {
+        budgetCheckpoint: info,
       }),
     })),
 

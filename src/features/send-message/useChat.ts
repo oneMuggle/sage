@@ -714,11 +714,16 @@ export function useChat() {
 
               // 2026-10-31: 动态迭代预算自动延长 —— 不打断流，只提示用户
               // 当前上限已提高（后端已依据进度审计决定继续）。
+              // 2026-11-05 M5: 瞬时 toast → 持久 notice（ChatSessionNotices 渲染），
+              // 让用户在整个 run 期间都能看到延长记录，而非一闪而过。
               if (evt.state === 'iteration_checkpoint') {
                 const info = evt.budget_info;
-                const extensions = info?.extensions ?? 0;
-                const nextBudget = info?.next_budget ?? 0;
-                toast.info(`已自动延长迭代预算（第 ${extensions} 次，当前上限 ${nextBudget} 步）`);
+                useChatStreamStore.getState().setBudgetCheckpoint(sid, {
+                  extensions: info?.extensions ?? 0,
+                  nextBudget: info?.next_budget ?? 0,
+                  previousBudget: info?.previous_budget,
+                  reasons: info?.reasons,
+                });
                 return;
               }
 
