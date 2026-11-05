@@ -87,7 +87,8 @@ def db_conn() -> sqlite3.Connection:
             updated_at INTEGER NOT NULL,
             metadata TEXT,
             derived_from TEXT,
-            archived_at INTEGER
+            archived_at INTEGER,
+            active_spec_id TEXT
         )
         """
     )

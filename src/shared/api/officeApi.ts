@@ -14,6 +14,7 @@
  */
 
 import { invoke } from './desktopInvoke';
+import { officeSpecApi } from './officeSpecApi';
 import { wordAuditApi } from './officeWordAuditApi';
 import type {
   OfficeArchiveResponse,
@@ -62,6 +63,7 @@ import { handleApiError, withRetry } from './utils';
 
 export const officeApi = {
   ...wordAuditApi,
+  ...officeSpecApi,
   /**
    * Read a .pptx file → OfficePptReadResult (slides + summary).
    *

@@ -126,6 +126,7 @@ def _summary_to_row(summary: OfficeDocumentSummary) -> tuple:
         metadata_json,
         summary.derived_from,
         summary.archived_at,
+        summary.active_spec_id,
     )
 
 
@@ -147,8 +148,8 @@ def save_document(
         INSERT OR REPLACE INTO office_documents (
             id, workspace_path, doc_type, original_filename,
             generated_filename, status, created_at, updated_at, metadata,
-            derived_from, archived_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            derived_from, archived_at, active_spec_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         row,
     )
@@ -165,10 +166,10 @@ def _row_to_summary(row: sqlite3.Row) -> OfficeDocumentSummary:
     )
 
     metadata_dict = json.loads(row["metadata"]) if row["metadata"] else {}
-    # ``derived_from`` / ``archived_at`` are nullable columns added by the
-    # M0 Task 3 migration. ``row.keys()`` lets us safely read rows from a
-    # pre-migration test fixture (or a legacy DB during the brief window
-    # before init_db runs again).
+    # ``derived_from`` / ``archived_at`` / ``active_spec_id`` are nullable
+    # columns added by migrations (M0 Task 3, M2.5). ``row.keys()`` lets
+    # us safely read rows from a pre-migration test fixture (or a legacy
+    # DB during the brief window before init_db runs again).
     row_keys = set(row.keys())
     return OfficeDocumentSummary(
         id=row["id"],
@@ -182,6 +183,7 @@ def _row_to_summary(row: sqlite3.Row) -> OfficeDocumentSummary:
         metadata=OfficeDocumentMetadata(**metadata_dict),
         derived_from=row["derived_from"] if "derived_from" in row_keys else None,
         archived_at=row["archived_at"] if "archived_at" in row_keys else None,
+        active_spec_id=row["active_spec_id"] if "active_spec_id" in row_keys else None,
     )
 
 
@@ -203,7 +205,7 @@ def list_documents(
         sql = """
             SELECT id, workspace_path, doc_type, original_filename,
                    generated_filename, status, created_at, updated_at, metadata,
-                   derived_from, archived_at
+                   derived_from, archived_at, active_spec_id
             FROM office_documents
             WHERE workspace_path = ?
             ORDER BY created_at DESC
@@ -213,7 +215,7 @@ def list_documents(
         sql = """
             SELECT id, workspace_path, doc_type, original_filename,
                    generated_filename, status, created_at, updated_at, metadata,
-                   derived_from, archived_at
+                   derived_from, archived_at, active_spec_id
             FROM office_documents
             WHERE workspace_path = ? AND archived_at IS NULL
             ORDER BY created_at DESC
@@ -238,7 +240,7 @@ def get_document(
         """
         SELECT id, workspace_path, doc_type, original_filename,
                generated_filename, status, created_at, updated_at, metadata,
-               derived_from, archived_at
+               derived_from, archived_at, active_spec_id
         FROM office_documents
         WHERE id = ?
         """,
@@ -394,7 +396,7 @@ def find_documents_by_hash(
             """
             SELECT d.id, d.workspace_path, d.doc_type, d.original_filename,
                    d.generated_filename, d.status, d.created_at, d.updated_at,
-                   d.metadata, d.derived_from, d.archived_at
+                   d.metadata, d.derived_from, d.archived_at, d.active_spec_id
             FROM office_documents d
             JOIN office_document_hashes h ON h.id = d.id
             WHERE h.content_hash = ? AND d.workspace_path = ?
