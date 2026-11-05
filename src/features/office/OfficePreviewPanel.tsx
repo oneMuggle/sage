@@ -62,6 +62,8 @@ import {
   WordPreview,
 } from './OfficeStructuredPreviews';
 import { PdfFormFillDialog } from './PdfFormFillDialog';
+import { dataUrlToBlobUrl, safeRevokeBlobUrl } from './officePreviewBlobUrl';
+import { formatOfficePreviewPanelAuditJson, formatOfficePreviewPanelAuditSnapshot } from './officePreviewPanelAudit';
 import { pollOfficeProgress } from './officeProgress';
 import { buildPreviewCacheKey, isCurrentKey } from './previewRevision';
 
@@ -107,38 +109,6 @@ function isEditableDocType(docType: OfficeDocType): boolean {
   return docType === 'word' || docType === 'excel' || docType === 'ppt';
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
-export function formatOfficePreviewPanelAuditSnapshot(input: {
-  docType: OfficeDocType;
-  filename: string;
-  sizeBytes: number;
-  fidelityOn: boolean;
-  exporting: boolean;
-}): string {
-  const name = input.filename.trim() || '未命名';
-  const sizeKb = (Math.max(0, input.sizeBytes) / 1024).toFixed(1);
-  const viewLabel = input.fidelityOn ? '高保真视图' : '结构化视图';
-  const exportLabel = input.exporting ? '导出中' : '就绪';
-  return `文档预览 · ${input.docType.toUpperCase()} · ${name} · ${sizeKb}KB · ${viewLabel} · ${exportLabel}`;
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function formatOfficePreviewPanelAuditJson(input: {
-  docType: OfficeDocType;
-  filename: string;
-  sizeBytes: number;
-  fidelityOn: boolean;
-  exporting: boolean;
-}): string {
-  return JSON.stringify({
-    docType: input.docType,
-    filename: input.filename.trim() || '未命名',
-    sizeBytes: Math.max(0, Math.trunc(input.sizeBytes)),
-    fidelityOn: Boolean(input.fidelityOn),
-    exporting: Boolean(input.exporting),
-  });
-}
-
 export function OfficePreviewPanel({
   preview,
   workspacePath,
@@ -154,13 +124,17 @@ export function OfficePreviewPanel({
   const taskPercent = useTaskCenterStore((s) =>
     exporting ? (s.tasks['office:export']?.percent ?? null) : null,
   );
-  // F3 (office-p0): PDF 原文预览 —— data URL + iframe（Chromium 内置
-  // viewer）。懒加载：点开关才请求 base64；切文档自动回落结构视图。
+  // F3 (office-p0): PDF 原文预览 —— blob URL + iframe（Chromium 内置
+  // viewer）。懒加载：点开关才请求并转换；切文档自动回落结构视图。
   const [originalPdfUrl, setOriginalPdfUrl] = useState<string | null>(null);
   const [loadingOriginal, setLoadingOriginal] = useState(false);
   const summaryId = preview?.data.summary.id;
   useEffect(() => {
-    setOriginalPdfUrl(null);
+    // 切文档时先释放上一份 blob URL，避免长期占内存。
+    setOriginalPdfUrl((prev) => {
+      safeRevokeBlobUrl(prev);
+      return null;
+    });
     setLoadingOriginal(false);
   }, [summaryId]);
 
@@ -226,19 +200,48 @@ export function OfficePreviewPanel({
   };
 
   // Round A P1: 高保真视图（docx/xlsx/pptx → 缓存 PDF → 内嵌 viewer）。
-  // data URL 以 summary.id + updated_at 为 key 缓存在组件状态里 —— 文档
-  // 一变 key 即不同，重开视图会重新拉取（后端另有 mtime 级缓存兜底）。
+  // 状态里存的是 blob URL（由 data URL 转换而来）—— 文档一变 key 即不同，
+  // 重开视图会重新拉取（后端另有 mtime 级缓存兜底）。
+  //
+  // 生命周期清理：
+  //   - 切文档（summaryId 变化）→ 上方 effect revoke 并置空；
+  //   - 切换 / 重新拉取 → handleToggleFidelity 里先 revoke 旧值再 set 新值；
+  //   - 组件卸载 → 下方 unmount effect 通过 ref 读最新值 revoke（空依赖
+  //     闭包捕获初始值会拿到 null，所以必须走 ref）。
   const [fidelityOn, setFidelityOn] = useState(false);
   const [fidelityLoading, setFidelityLoading] = useState(false);
   const [fidelityUrl, setFidelityUrl] = useState<string | null>(null);
   const [fidelityKey, setFidelityKey] = useState<string | null>(null);
+  const fidelityUrlRef = useRef<string | null>(null);
+  const originalPdfUrlRef = useRef<string | null>(null);
+  // 同步 ref ↔ state，便于 unmount cleanup 拿到最新值。
+  useEffect(() => {
+    fidelityUrlRef.current = fidelityUrl;
+  }, [fidelityUrl]);
+  useEffect(() => {
+    originalPdfUrlRef.current = originalPdfUrl;
+  }, [originalPdfUrl]);
   // M2c: Word 规则审校面板 + 段落定位高亮。
   const [auditOpen, setAuditOpen] = useState(false);
   const [highlightParagraphIndex, setHighlightParagraphIndex] = useState<number | null>(null);
   useEffect(() => {
     setAuditOpen(false);
     setHighlightParagraphIndex(null);
+    // 切文档时释放上一份高保真 blob URL。
+    setFidelityUrl((prev) => {
+      safeRevokeBlobUrl(prev);
+      return null;
+    });
+    setFidelityKey(null);
+    setFidelityOn(false);
   }, [summaryId]);
+  // 组件卸载时清理未释放的 blob URL（通过 ref 读最新值）。
+  useEffect(() => {
+    return () => {
+      safeRevokeBlobUrl(fidelityUrlRef.current);
+      safeRevokeBlobUrl(originalPdfUrlRef.current);
+    };
+  }, []);
   const [copiedSummary, setCopiedSummary] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
   const fidelityElapsed = useElapsedSeconds(fidelityLoading);
@@ -299,10 +302,24 @@ export function OfficePreviewPanel({
         return;
       }
       if (res.ok && res.data_url) {
-        setFidelityUrl(res.data_url);
-        setFidelityKey(currentFidelityKey);
-        setFidelityOn(true);
-        return;
+        // 转 blob URL：Chromium PDF viewer 对 data: URL 支持不稳定（典型
+        // 表现为 iframe 空白或触发下载），blob: URL 才可靠。转换失败时
+        // 回落结构化视图并 toast 提示，不阻断主流程。
+        try {
+          const blobUrl = await dataUrlToBlobUrl(res.data_url);
+          if (!isCurrentKey(currentFidelityKey, currentFidelityKeyRef.current)) {
+            safeRevokeBlobUrl(blobUrl);
+            return;
+          }
+          safeRevokeBlobUrl(fidelityUrl);
+          setFidelityUrl(blobUrl);
+          setFidelityKey(currentFidelityKey);
+          setFidelityOn(true);
+          return;
+        } catch (convErr) {
+          const msg = convErr instanceof Error ? convErr.message : String(convErr);
+          toast.error(`${t('office.fidelity.failed')}: ${msg}`);
+        }
       }
       const noConverter = typeof res.error === 'string' && res.error.includes('soffice');
       toast.error(
@@ -322,6 +339,7 @@ export function OfficePreviewPanel({
   // 的 office→pdf 转换；pdf 源直接取原始字节，同 20MB 上限口径）。
   const handleToggleOriginalPdf = async () => {
     if (originalPdfUrl) {
+      safeRevokeBlobUrl(originalPdfUrl);
       setOriginalPdfUrl(null);
       return;
     }
@@ -338,7 +356,14 @@ export function OfficePreviewPanel({
         file_path: filePath,
       });
       if (res.ok && res.data_url) {
-        setOriginalPdfUrl(res.data_url);
+        // 同高保真 iframe：data URL → blob URL，避免 iframe 空白。
+        try {
+          const blobUrl = await dataUrlToBlobUrl(res.data_url);
+          setOriginalPdfUrl(blobUrl);
+        } catch (convErr) {
+          const msg = convErr instanceof Error ? convErr.message : String(convErr);
+          toast.error(`${t('office.preview.originalFailed')}: ${msg}`);
+        }
       } else {
         toast.error(`${t('office.preview.originalFailed')}: ${res.error ?? ''}`.trimEnd());
       }
@@ -530,39 +555,50 @@ export function OfficePreviewPanel({
         )}
         {isEditableDocType(preview.docType) && (
           <div className="flex items-center gap-1 shrink-0">
-            {/* P2-B: word 无 soffice 时开关仍可用 —— 走 docx-preview 原生渲染 */}
-            {(fidelityAvailable || preview.docType === 'word') && (
-              <button
-                type="button"
-                onClick={() => void handleToggleFidelity()}
-                disabled={fidelityLoading}
-                className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors disabled:opacity-50 ${
-                  fidelityOn
-                    ? 'border-primary text-primary bg-primary/10'
-                    : 'border-border text-text-secondary hover:bg-bg-hover'
-                }`}
-                data-testid="office-fidelity-toggle"
-                aria-pressed={fidelityOn}
-                aria-label={t('office.fidelity.toggle')}
-              >
-                {fidelityLoading ? (
-                  <>
-                    <span
-                      className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"
-                      aria-hidden
-                    />
-                    <span className="tabular-nums">
-                      {t('office.fidelity.loading')} · {fidelityElapsed}s
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <Eye className="w-3.5 h-3.5" />
-                    {t('office.fidelity.toggle')}
-                  </>
-                )}
-              </button>
-            )}
+            {/* P2-B / M2 改造：高保真入口始终可见。word 走 docx-preview
+                原生渲染永远可用；excel/ppt 在无本机转换器时 disabled，
+                title 给出原因（用户可从 [环境] 浮层查看安装指引）。 */}
+            {(() => {
+              const wordNative = preview.docType === 'word';
+              const unavailable = !fidelityAvailable && !wordNative;
+              return (
+                <button
+                  type="button"
+                  onClick={() => void handleToggleFidelity()}
+                  disabled={fidelityLoading || unavailable}
+                  title={
+                    unavailable
+                      ? t('office.fidelity.unavailable')
+                      : undefined
+                  }
+                  className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors disabled:opacity-50 ${
+                    fidelityOn
+                      ? 'border-primary text-primary bg-primary/10'
+                      : 'border-border text-text-secondary hover:bg-bg-hover'
+                  }`}
+                  data-testid="office-fidelity-toggle"
+                  aria-pressed={fidelityOn}
+                  aria-label={t('office.fidelity.toggle')}
+                >
+                  {fidelityLoading ? (
+                    <>
+                      <span
+                        className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"
+                        aria-hidden
+                      />
+                      <span className="tabular-nums">
+                        {t('office.fidelity.loading')} · {fidelityElapsed}s
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="w-3.5 h-3.5" />
+                      {t('office.fidelity.toggle')}
+                    </>
+                  )}
+                </button>
+              );
+            })()}
             {preview.docType === 'word' && Boolean(workspacePath ?? summary.workspace_path) && (
               <button
                 type="button"

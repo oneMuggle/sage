@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { auditOfficePreviewPanelGovernance } from '../OfficePreviewPanel';
 import {
-  auditOfficePreviewPanelGovernance,
   formatOfficePreviewPanelAuditJson,
   formatOfficePreviewPanelAuditSnapshot,
-} from '../OfficePreviewPanel';
+} from '../officePreviewPanelAudit';
 
 describe('OfficePreviewPanel governance audit (P164)', () => {
   it('returns ready governance status for OfficePreviewPanel', () => {

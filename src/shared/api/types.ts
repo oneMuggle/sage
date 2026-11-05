@@ -656,6 +656,45 @@ export interface OfficeDeleteResponse {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Import duplicate detection (AI workbench, Phase 0)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * One staged file plus the imported documents whose bytes it duplicates.
+ *
+ * Backend counterpart: `OfficeDuplicateCheckEntry` in
+ * `backend/api/office_dedup_routes.py` (POST /office/documents/duplicates).
+ */
+export interface OfficeDuplicateCheckEntry {
+  /** Absolute path of the staged file that was checked (resolved). */
+  file_path: string;
+  /** `sha256:<64 hex>` digest of the staged file's bytes; null if missing. */
+  content_hash: string | null;
+  /** Live documents in the same workspace that hold the same bytes. */
+  duplicates: OfficeDocumentSummary[];
+}
+
+/**
+ * Response of POST /office/documents/duplicates.
+ *
+ * POSITIONAL: entry *i* answers request file *i* — pair staged files with
+ * their result by index, not by path string.
+ */
+export interface OfficeDuplicateCheckResult {
+  files: OfficeDuplicateCheckEntry[];
+}
+
+/**
+ * Response of POST /office/documents/{doc_id}/lineage — records that the
+ * document was derived from another one (`derived_from` cleared when null).
+ */
+export interface OfficeDocumentLineageResponse {
+  document_id: string;
+  derived_from: string | null;
+  updated: boolean;
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Archive / restore + snapshot types (Office parity batch 1, item 1.7)
 // ──────────────────────────────────────────────────────────────────────
 

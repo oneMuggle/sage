@@ -2,7 +2,7 @@
   "version": 1,
   "files": {
     "backend/agents/profiles.py": 1115,
-    "backend/api/office_routes.py": 818,
+    "backend/api/office_routes.py": 822,
     "backend/api/legacy_routes.py": 2802,
     "backend/api/llm_proxy_routes.py": 1216,
     "backend/api/orchestration_router.py": 807,
@@ -82,8 +82,8 @@
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
     "backend/tools/config_tool.py": 980,
     "scripts/feedback_receiver.py": 1154,
-    "src/shared/types/electron-api.d.ts": 829,
-    "electron/preload.ts": 897,
+    "src/shared/types/electron-api.d.ts": 869,
+    "electron/preload.ts": 907,
     "src/features/playbook/PlaybookCard.tsx": 825,
     "src/features/project-type/PolymorphicArchetypeCards.tsx": 879,
     "src/pages/ProjectGovernance.tsx": 852
