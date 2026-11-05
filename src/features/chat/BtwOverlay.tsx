@@ -1,11 +1,10 @@
 import { BookOpen, ChevronDown, X, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import rehypeKatex from 'rehype-katex';
-import remarkGfm from 'remark-gfm';
 
 import { useBtwState } from '../../entities/chat/btwState';
 import { useI18n } from '../../shared/lib/i18n';
+import { MD_REHYPE_PLUGINS, MD_REMARK_PLUGINS } from '../../widgets/markdown/plugins';
 
 import { useBtwCommand } from './useBtwCommand';
 
@@ -189,7 +188,7 @@ export function BtwOverlay() {
             data-testid="btw-answer"
             className="text-sm text-text [&_p]:mb-2 [&_p:last-child]:mb-0 [&_code]:px-1 [&_code]:py-0.5 [&_code]:bg-bg-subtle [&_code]:rounded [&_code]:text-xs [&_pre]:bg-bg-subtle [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_a]:text-primary [&_a]:underline [&_ul]:list-disc [&_ul]:ml-5 [&_ol]:list-decimal [&_ol]:ml-5"
           >
-            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeKatex]}>
+            <ReactMarkdown remarkPlugins={MD_REMARK_PLUGINS} rehypePlugins={MD_REHYPE_PLUGINS}>
               {answer}
             </ReactMarkdown>
           </div>
