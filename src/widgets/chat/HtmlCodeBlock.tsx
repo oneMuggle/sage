@@ -10,6 +10,7 @@ import { Eye, FileCode2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { ShikiCodeBlock } from './ShikiCodeBlock';
+import { HtmlPreviewHost } from './preview/HtmlPreviewHost';
 
 type View = 'code' | 'preview';
 
@@ -17,7 +18,10 @@ export function HtmlCodeBlock({ code }: { code: string }) {
   const [view, setView] = useState<View>('code');
 
   return (
-    <div className="my-2 rounded-md overflow-hidden border border-border" data-testid="html-code-block">
+    <div
+      className="my-2 rounded-md overflow-hidden border border-border"
+      data-testid="html-code-block"
+    >
       {/* tab 栏配色对齐 ShikiCodeBlock 头部 (#282c34) */}
       <div className="flex items-center gap-1 px-2 py-1 bg-[#282c34] text-xs">
         <button
@@ -60,13 +64,8 @@ export function HtmlCodeBlock({ code }: { code: string }) {
       ) : (
         // sandbox 不含 allow-same-origin: 内容运行在 opaque origin，
         // 与 ArtifactViewer 的 HTML 产物预览同一防线（无 DOMPurify 需求）。
-        <iframe
-          sandbox="allow-scripts"
-          srcDoc={code}
-          title="HTML 预览"
-          className="w-full h-96 bg-white border-0"
-          data-testid="html-preview-frame"
-        />
+        // 统一宿主另提供工具条与错误桥（桌面端走 sage-preview:// 独立源）。
+        <HtmlPreviewHost html={code} name="preview.html" frameTestId="html-preview-frame" />
       )}
     </div>
   );
@@ -120,9 +119,7 @@ export function evaluateHtmlCodeBlockAudit(
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function exportHtmlCodeBlockAuditJson(
-  input: HtmlCodeBlockAuditInput,
-): string {
+export function exportHtmlCodeBlockAuditJson(input: HtmlCodeBlockAuditInput): string {
   return JSON.stringify(evaluateHtmlCodeBlockAudit(input));
 }
 // eslint-disable-next-line react-refresh/only-export-components

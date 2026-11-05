@@ -620,6 +620,21 @@ export interface PetElectronApiBridge {
   deletePack: (id: string) => Promise<PetPackDeleteResultBridge>;
 }
 
+/**
+ * HTML 预览独立源桥（2026-11-04）—— 渲染层把 HTML 原文投递到主进程，
+ * 换取 `sage-preview://<id>/index.html` 可加载 URL。
+ *
+ * 存在的理由：srcdoc 文档继承父文档 CSP，生产构建的 CSP 不含
+ * 'unsafe-inline'，导致预览页里的内联/CDN 脚本被拦截。独立源让预览文档
+ * 拥有自己的 CSP 上下文。Web 端无此桥，`window.electronAPI.preview` 为 undefined。
+ */
+export interface PreviewElectronApiBridge {
+  /** 投递 HTML，返回预览 id 与可加载 URL */
+  publish: (html: string) => Promise<{ id: string; url: string }>;
+  /** 丢弃不再需要的预览（主进程淘汰对应内容） */
+  revoke: (id: string) => Promise<boolean>;
+}
+
 export interface ElectronAPI {
   /** Authenticated renderer-to-backend request; main injects the local capability. */
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
@@ -676,6 +691,11 @@ export interface ElectronAPI {
   project: ProjectElectronApiBridge;
   /** Desktop pet window + settings bridge (2026-10-30). */
   pet?: PetElectronApiBridge;
+  /**
+   * HTML 预览独立源桥（2026-11-04）—— 仅桌面端可用；Web 端为 undefined，
+   * 渲染层据此退回 srcDoc 内联预览。
+   */
+  preview?: PreviewElectronApiBridge;
   media: MediaElectronApiBridge;
   journal: JournalElectronApiBridge;
   updates: UpdateElectronApiBridge;

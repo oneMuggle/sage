@@ -147,6 +147,28 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_session
 - 头部挂载 `RightPanelToggle`，`rightPanelOpen` state 控制开合；
 - `ChatInput` 之后挂载 `RightPanel`，透传 `iteration` / `streamingState` / `streamingToolCalls ?? []`（防御性默认）/ `isLoading` / `currentSessionId`。
 
+### 4.5 HTML 预览宿主（2026-11-04，rich-preview-rendering Task 2）
+
+聊天与产物侧共用 `src/widgets/chat/preview/HtmlPreviewHost.tsx`（统一宿主），承载 `kind === 'html'` 的产物预览与消息内 ` ```html ` 代码块的"预览"Tab。统一设计要点：
+
+- **沙盒**：`sandbox="allow-scripts"`（不含 `allow-same-origin`）——HTML 内可能含任意脚本，隔离在 opaque origin，无法读写应用 cookie/storage，无需 DOMPurify。
+- **独立源**：Electron 桌面端走 `sage-preview://` 自定义 scheme（`electron/main/preload/previewProtocol.ts`），srcDoc 回退到 `srcDoc={html}`（Web / jsdom 测试）。独立源让预览内容与主应用 CSP 解耦，避免继承的 CSP 阻塞内嵌脚本。
+- **工具条**（`data-testid` 前缀 `html-preview-*`）：重跑（rerun）/ 停止（stop，卸载 iframe）/ 全屏（portal）/ 复制（原文，不含桥接脚本）/ 下载（`name` 或 `artifactId` 推断文件名）。
+- **错误桥**：宿主注入一段纯 ES5 桥接脚本（`src/shared/lib/htmlPreviewBridge.ts`，`PREVIEW_BRIDGE_CHANNEL`），预览页内的 `window.onerror` / `unhandledrejection` 通过 `postMessage` 上报；宿主根据 `source === frame.contentWindow` 与 `channel` 过滤，命中后在工具条下方显示错误横幅（可清除）。脚本使用 `string` 字面量（无 `</script>` 闭合序列），避免注入点破坏预览页 DOM。
+- **刷新语义**：`reloadKey` 变化强制重挂载 iframe（srcDoc 同值也刷新）；停止/重跑显式控制 iframe 生命周期，便于排查"脚本卡死"场景。
+- **安全审计**：`HtmlPreviewHost` 不参与 HTML 净化决策；上游（`HtmlCodeBlock`）在启用预览前调用 `evaluateHtmlCodeBlockAudit` 检查 `sandboxed === true`，未沙盒化时拒绝启用预览。
+
+| testid | 用途 |
+| --- | --- |
+| `html-preview-host` | 宿主根节点 |
+| `html-preview-rerun` / `-stop` | 重跑 / 停止 |
+| `html-preview-fullscreen-toggle` / `-fullscreen` | 全屏开 / portal |
+| `html-preview-copy` / `-download` | 复制原文 / 下载文件 |
+| `html-preview-errors` / `-errors-clear` | 错误横幅 / 清除 |
+| `html-preview-stopped` | 停止占位 |
+
+测试覆盖：`src/widgets/chat/preview/__tests__/HtmlPreviewHost.test.tsx`（9 tests，工具条 / srcDoc 回退 / reloadKey 重挂载 / 停止重跑 / 错误桥 / 消息过滤 / 全屏 / 复制 / 下载）+ `src/shared/lib/__tests__/htmlPreviewBridge.test.ts`（6 tests，注入位置 / ES5 语法 / 无 `</script>` 序列 / 空字符串幂等 / 不修改入参）。
+
 ## 5. Kind 检测规则与限制
 
 ### 5.1 扩展名 → kind（`detect_artifact_kind`）
@@ -205,8 +227,10 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_session
 | `src/widgets/chat/__tests__/ArtifactsSection.test.tsx` | 4 |
 | `src/widgets/chat/__tests__/ArtifactViewer.test.tsx` | 6 |
 | `src/widgets/chat/__tests__/RightPanel.test.tsx` | 2 |
+| `src/widgets/chat/preview/__tests__/HtmlPreviewHost.test.tsx` | 9 |
+| `src/shared/lib/__tests__/htmlPreviewBridge.test.ts` | 6 |
 
-完整仓库 suite：`npx vitest run` → 1173 passed / 2 skipped，0 failed；`npx tsc --noEmit` 0 type error。
+完整仓库 suite：`npx vitest run` → 1767 passed / 3 skipped，0 failed；`npx tsc --noEmit` 0 type error。
 
 ## 8. 未来迭代
 

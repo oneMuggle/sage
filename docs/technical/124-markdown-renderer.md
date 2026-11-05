@@ -111,3 +111,43 @@ src/widgets/markdown/
 - `minimal` 档不渲染 Mermaid（按纯代码块展示），需要图表预览请用 `chat` 档。
 - TOC 仅产物面板接入；聊天消息与 Wiki 暂不显示大纲。
 - 表格复制输出 TSV，与原聊天行为一致；不支持复制为 Markdown 源码。
+
+## 13. Mermaid 交互式图表（2026-11-04，rich-preview-rendering Task 3）
+
+```mermaid 代码块在 `chat` 档走 `MermaidDiagram` 组件（从原 `MermaidBlock` 抽出交互逻辑），
+提供对标 ChatGPT / Claude / Typora 的图表交互：
+
+| 交互 | 行为 |
+| --- | --- |
+| 拖拽平移 | `pointerdown → pointermove → pointerup` + `setPointerCapture` |
+| Ctrl+滚轮缩放 | 范围 0.4–3.0，步进 1.25；原生非 passive `wheel` 监听（React `onWheel` 默认 passive 无法 `preventDefault`），回调 ref 持有 viewport 元素让事件监听跨重挂载存活 |
+| 双击画布 | 复位到 100%（`scale(1)` 并清空 `translate`） |
+| 工具条 | 放大 / 缩小 / 适应屏幕（按 SVG viewBox 与容器比计算缩放）/ 实际大小 / 源码视图切换 / 下载 PNG / 下载 SVG / 复制源码 / 全屏 |
+| 全屏 | `createPortal` 到 `document.body`，ESC / 背景点击 / × 按钮关闭；portal 模式工具条独立（bar variant，按钮更大） |
+| 错误详情 | 先 `await mermaid.parse(code)` 预检，抛错后渲染 `mermaid-fallback` + `mermaid-error-detail`（含具体行号）+ `ShikiCodeBlock` 源码 |
+
+**模块拆分**：
+
+- `src/widgets/chat/MermaidDiagram.tsx`（550 行，新）：所有渲染 / 交互 / 审计逻辑；
+  `MermaidBlockAuditInput` / `formatMermaidBlockAuditSnapshot` / `formatMermaidBlockAuditJson` 在此定义，向后兼容地 re-export。
+- `src/widgets/chat/MermaidBlock.tsx`（38 行，薄包装器）：主题跟随（`MutationObserver` 观察 `html.dark`）+ `<MermaidDiagram code theme />`。
+- mermaid 仍走动态 `import()` 独立 chunk，不打开含图表的会话不加载，主包零增长。
+
+**DOM 契约**（与历史测试一致）：`mermaid-loading` / `mermaid-fallback` / `mermaid-figure`（承载 `data-mermaid-block-audit` 快照）/ `mermaid-canvas`（承载 `transform`）/ `mermaid-viewport`（指针/滚轮交互宿主）/ `mermaid-toolbar`（hover variant + bar variant）/ `mermaid-source-textarea`（只读源码）/ `mermaid-fullscreen`（portal）/ `mermaid-block-audit-copy` / `mermaid-block-audit-copy-json`（sr-only 审计控制）。全屏态 portal 独占 DOM，避免与 inline view 的 `getByLabelText` 歧义。
+
+**测试覆盖**（10 单测 + 4 旧单测）：
+
+- 工具条 9 个入口（`mermaid-zoom-in/out` / `mermaid-fit` / `mermaid-actual-size` / `mermaid-toggle-source` / `mermaid-download-png` / `mermaid-download-svg` / `mermaid-copy-source` / `mermaid-fullscreen-open`）
+- 源码切换：点击后显示 `textarea` 带原文，再次点击恢复 `mermaid-figure`
+- 解析失败：`mermaid.parse` reject → `mermaid-fallback` + `mermaid-error-detail` 含原始错误信息
+- 拖拽平移：`pointerDown(10,10) → pointerMove(30,40) → pointerUp` → transform 含 `translate(20px, 30px)`
+- Ctrl+滚轮缩放：`ctrlKey=true` 时 `deltaY<0` 放大到 125%，`ctrlKey=false` 无变化
+- 双击复位：drag 后再双击 → transform 仅含 `scale(1)` 无 translate
+- 工具条缩放按钮与实际大小 / 适应屏幕复位
+- 下载 SVG：`URL.createObjectURL` 的 blob type 含 `image/svg+xml`，size > 0
+- 复制源码：`navigator.clipboard.writeText` 写入原文
+- 全屏：`mermaid-fullscreen-open` → portal，ESC → portal 关闭，inline `mermaid-figure` 恢复
+- 卸载清理：`copiedTimerRef` 在组件卸载时 `clearTimeout`，避免残留 `setState`
+
+`MermaidBlock.test.tsx` 与 `MermaidBlock.toolbar.test.tsx` 全部保持绿（契约零破坏）。
+```
