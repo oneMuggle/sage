@@ -14,8 +14,8 @@
  */
 
 import { invoke } from './desktopInvoke';
-import { wordAuditApi } from './officeWordAuditApi';
 import { officeSpecApi } from './officeSpecApi';
+import { wordAuditApi } from './officeWordAuditApi';
 import type {
   OfficeArchiveResponse,
   OfficeCapabilities,
