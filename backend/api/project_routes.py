@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException
 
@@ -67,6 +67,7 @@ from backend.api.project_schemas import (
     ProjectScaffoldRequest,
     ProjectScaffoldResponse,
     ProjectSessionsResponse,
+    ProjectTreeResponse,
     ProjectTypeConfigResponse,
     ProjectTypeDetectRequest,
     ProjectTypeDetectResponse,
@@ -118,6 +119,7 @@ from backend.services.project_bootstrap import (
     build_bootstrap_suggestions,
 )
 from backend.services.project_git_init import init_project_git
+from backend.services.project_template import load_project_template
 from backend.services.project_type_detector import (
     DetectionResult,
     detect_project_type,
@@ -133,6 +135,11 @@ from backend.services.project_workspace_inspector import (
     read_project_charter,
     restore_project_checkpoint,
     write_project_charter,
+)
+from backend.services.workspace_scanner import (
+    ProjectTree,
+    scan_project,
+    sync_projects_from_tree,
 )
 
 logger = logging.getLogger(__name__)
@@ -163,6 +170,58 @@ def _get_project_or_404(project_id: str) -> Project:
     if project is None:
         raise _error(404, "project_not_found", "项目不存在")
     return project
+
+
+def _scan_and_sync(
+    project: Project, *, force: bool = False
+) -> Tuple[Optional[ProjectTree], List[str]]:
+    """扫描项目目录并把发现的子项目同步进注册表。
+
+    嵌套关系属于派生数据：扫描失败只记日志，不影响注册/打开主流程。
+    """
+    root = Path(project.path)
+    try:
+        template = load_project_template(root)
+        tree = scan_project(root, template, force=force)
+        created = sync_projects_from_tree(project.id, tree)
+        return tree, created
+    except Exception as exc:  # noqa: BLE001 — 扫描失败不阻断主流程
+        logger.info("project scan skipped for %s: %s", root, exc)
+        return None, []
+
+
+def _attach_project_ids(node: Dict[str, Any], repo: ProjectRepository) -> None:
+    """给扫描树节点补上已注册项目的 id（容器/未注册节点为 None）。"""
+    project = None
+    if node.get("role") in ("root", "project"):
+        project = repo.get_project_for_workspace(node["path"])
+    node["id"] = project.id if project is not None else None
+    for child in node.get("children", []):
+        _attach_project_ids(child, repo)
+
+
+@router.get("/{project_id}/tree", response_model=ProjectTreeResponse)
+@with_db_lock
+def get_project_tree(project_id: str, refresh: bool = False) -> ProjectTreeResponse:
+    """返回项目目录树（含扫描发现的子项目）。
+
+    ``refresh=true`` 强制重扫（绕过 30s 缓存），供前端手动刷新按钮使用。
+    每次调用都会把扫描到的子项目幂等同步进注册表（只增不删）。
+    """
+    project = _get_project_or_404(project_id)
+    tree, created = _scan_and_sync(project, force=refresh)
+    if tree is None:
+        raise _error(410, "project_path_missing", "项目目录不存在或无法读取")
+    payload = tree.to_dict()
+    _attach_project_ids(payload["root"], ProjectRepository())
+    return ProjectTreeResponse(
+        project_id=project.id,
+        root=payload["root"],
+        symlinks=payload["symlinks"],
+        truncated=payload["truncated"],
+        scanned_at=payload["scanned_at"],
+        created_project_ids=created,
+    )
 
 
 @router.get("/{project_id}/location", response_model=ProjectLocationResponse)
@@ -324,6 +383,8 @@ def register_project(request: ProjectRegisterRequest) -> ProjectModel:
         )
     except OfficePathError as exc:
         raise _error(400, "invalid_workspace_path", "项目路径无效或目录不存在") from exc
+    # 设计 §7.4：注册时首次扫描，发现并登记子项目（失败忽略）
+    _scan_and_sync(project)
     stats = ProjectRepository().session_stats()
     return _with_stats(project, stats)
 
@@ -643,6 +704,8 @@ def open_project_route(project_id: str) -> ProjectOpenResponse:
     except ProjectPathMissingError as exc:
         raise _error(410, "project_path_missing", "项目目录不存在或已被移动") from exc
     _remember_workspace_fail_open(project.path)
+    # 设计 §7.4：打开时增量刷新子项目（30s 缓存内不重复扫描）
+    _scan_and_sync(project)
     stats = ProjectRepository().session_stats()
     return ProjectOpenResponse(
         project=_with_stats(project, stats),
@@ -662,6 +725,8 @@ def create_project_session_route(project_id: str) -> ProjectOpenResponse:
     except ProjectPathMissingError as exc:
         raise _error(410, "project_path_missing", "项目目录不存在或已被移动") from exc
     _remember_workspace_fail_open(project.path)
+    # 设计 §7.4：新建会话时增量刷新子项目
+    _scan_and_sync(project)
     stats = ProjectRepository().session_stats()
     return ProjectOpenResponse(
         project=_with_stats(project, stats),

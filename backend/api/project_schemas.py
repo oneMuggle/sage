@@ -38,6 +38,8 @@ class ProjectModel(BaseModel):
     project_sub_type: Optional[str] = None
     bootstrap_state: Optional[str] = None
     playbook_state: Optional[str] = None
+    parent_id: Optional[str] = None
+    discovery_source: Optional[str] = None
     session_count: int = 0
     last_session_id: Optional[str] = None
 
@@ -774,3 +776,22 @@ class GitInitResponse(BaseModel):
     already_repo: bool = False
     git_available: bool = True
     error: Optional[str] = None
+
+
+class ProjectTreeResponse(BaseModel):
+    """GET /projects/{id}/tree 的响应。
+
+    ``root`` 是扫描得到的树（结构见 workspace_scanner.ScannedNode.to_dict：
+    path / name / rel_path / role / discovery_source / children，另由路由补充
+    已注册项目的 ``id``）。``role == "folder"`` 的节点仅作为容器存在，不对应
+    项目行。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    root: Dict[str, Any]
+    symlinks: List[Dict[str, Any]] = Field(default_factory=list)
+    truncated: List[str] = Field(default_factory=list)
+    scanned_at: float
+    created_project_ids: List[str] = Field(default_factory=list)
