@@ -189,6 +189,7 @@ class MemoryLifecycleManager:
         session_id: str,
         messages: list,
         source_message_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> None:
         """End-of-turn hook: extract facts and emit ``memory_written``.
 
@@ -205,6 +206,9 @@ class MemoryLifecycleManager:
         Memory page's click-to-trace can highlight the exact producing
         message (Chat renders ``data-turn-id={message.id}``) — same
         capability the legacy ``_extract_and_store_memory`` path had.
+
+        M3-Task 4: ``agent_id`` 记忆归属维度 —— 非空时写入该专家私有层，
+        None 保持共享层语义（与 ``MemoryManager.aremember`` 对齐）。
         """
         if not await self.is_auto_memory_enabled():
             return
@@ -217,7 +221,10 @@ class MemoryLifecycleManager:
         for fact in facts or []:
             try:
                 memory_id = await self._persist_fact(
-                    session_id, fact, source_message_id=source_message_id
+                    session_id,
+                    fact,
+                    source_message_id=source_message_id,
+                    agent_id=agent_id,
                 )
             except Exception as exc:  # noqa: BLE001 — one bad fact must not stop the rest
                 logger.exception("on_turn_complete: persist failed", exc_info=exc)
@@ -271,6 +278,7 @@ class MemoryLifecycleManager:
         session_id: str,
         fact: dict,
         source_message_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> Optional[str]:
         """Persist one extracted fact through the real ``MemoryManager.aremember``.
 
@@ -278,7 +286,8 @@ class MemoryLifecycleManager:
         no ``aremember`` / the store produced no id). ``source_turn_id`` and
         ``memory_category`` ride along so the episodic row is traceable;
         ``source_message_id`` (Task 6) lets the UI highlight the exact
-        producing message.
+        producing message; ``agent_id`` (M3-Task 4) routes the write into the
+        会话专家的私有记忆层。
         """
         aremember = getattr(self._memory, "aremember", None)
         if aremember is None:
@@ -293,6 +302,7 @@ class MemoryLifecycleManager:
             source_message_id=source_message_id,
             memory_category=fact.get("category", "project_fact"),
             metadata={"importance": fact.get("importance", 5)},
+            agent_id=agent_id,
         )
 
     async def on_session_end(self, session_id: str) -> None:

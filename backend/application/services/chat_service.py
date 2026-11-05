@@ -573,10 +573,14 @@ class ChatService:
         if self.memory:
             if self._lifecycle is not None:
                 try:
+                    # M3-Task 4: 写入与召回同口径，归入会话专家的私有记忆层
+                    from backend.chat.specialist_binding import resolve_bound_specialist
+
                     await self._lifecycle.on_turn_complete(
                         session_id,
                         [user_message, response],
                         source_message_id=assistant_message_id or user_message_id,
+                        agent_id=resolve_bound_specialist(session_id),
                     )
                 except Exception as e:  # noqa: BLE001 — never break the turn
                     logger.warning(f"on_turn_complete failed: {e}")

@@ -560,6 +560,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             run_outcome = "failed"
             # S1 (2026-09-06): 失败原因摘要 —— finally 落库 sessions.last_error。
             _producer_error: Optional[str] = None
+            # P0-4 扩展 (2026-11-05): run_id/dispatcher 同样前置初始化。
+            # 二者原先在 spend-limit 块之前才绑定，该点之前的任何异常都会
+            # 让 finally 读取未绑定变量（UnboundLocalError），掩盖原始失败。
+            run_id: Optional[str] = None
+            dispatcher = None
 
             # S1 (2026-09-06): 会话运行态落库（running）。写库点收敛两处：
             # 此处置 running，finally 落终态；失败 fail-open 只 debug，不影响主流。
@@ -626,8 +631,16 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     task_type=data.task_type,
                 )
                 # M0: profile temperature 覆盖（如显式设置）
-                if llm_config and _profile_model_config.get("temperature") is not None:
+                if (
+                    llm_config is not None
+                    and _profile_model_config.get("temperature") is not None
+                ):
                     llm_config["temperature"] = _profile_model_config["temperature"]
+
+            # 推理参数 / fallback / endpoint / 日志 —— 请求自带端点与「全局设置」
+            # 两条来源共用。load_llm_config_for_chat 无可用端点时返回 None
+            # （调用方降级），以下覆盖项不得对 None 下标。
+            if llm_config is not None:
                 # 推理参数:None 时不传,避免污染老 LLM
                 if data.reasoning_effort is not None:
                     llm_config["reasoning_effort"] = data.reasoning_effort
@@ -663,8 +676,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     except Exception:
                         pass  # fail-open: endpoint_id is best-effort
                 logger.info(
-                    f"[REQ {request_id}] /chat/stream producer using custom LLM: "
+                    f"[REQ {request_id}] /chat/stream producer LLM config: "
                     f"model={_safe_log_field(llm_config['model'])}"
+                )
+            else:
+                logger.info(
+                    f"[REQ {request_id}] /chat/stream producer: "
+                    "no LLM endpoint configured; deferring to agent defaults"
                 )
 
             # Task 9 (2026-10-28): 智能路由 —— 仅 routing.mode == "auto" 且会话
@@ -726,10 +744,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             # F5 花费限额 (批次 C): 今日已花费(持久化估算, 重启不丢)达到
             # 限额时拒绝本次聊天。限额 0/未配置 = 不限。DB 故障 fail-open
-            # (today_cost_usd 返回 0 → 永不拦截)。注: run_id/dispatcher 前置
-            # 初始化 —— 此处可能提前 return, finally 无条件读取它们 (P0-4)。
-            run_id: Optional[str] = None
-            dispatcher = None
+            # (today_cost_usd 返回 0 → 永不拦截)。注: run_id/dispatcher 已在
+            # producer 顶部前置初始化（P0-4），此处提前 return 不会让 finally
+            # 读到未绑定变量。
             try:
                 from backend.data.settings_repo import SettingsRepository
                 from backend.services.usage_tracker import usage_tracker as _usage_tracker
