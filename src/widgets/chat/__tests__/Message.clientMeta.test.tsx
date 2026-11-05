@@ -59,4 +59,64 @@ describe('Message — user client_meta refs', () => {
     );
     expect(screen.getByText('legacy.docx')).toBeInTheDocument();
   });
+
+  it('renders per-attachment status icons and summary from client_meta.attachments_status', () => {
+    renderWithI18n(
+      <Message
+        message={makeUserMsg({
+          client_meta: {
+            attachments: [
+              { name: 'app.py', size: 128, type: 'text/x-python' },
+              { name: 'data.csv', size: 64, type: 'text/csv' },
+            ],
+            attachments_status: [
+              {
+                media_id: 'm1',
+                filename: 'app.py',
+                mime_type: 'text/x-python',
+                status: 'ok',
+                mode: 'full',
+                chars: 1234,
+              },
+              {
+                media_id: 'm2',
+                filename: 'data.csv',
+                mime_type: 'text/csv',
+                status: 'skipped',
+                reason: 'empty_text',
+              },
+            ],
+          },
+        })}
+      />,
+    );
+
+    const summary = screen.getByTestId('message-attachment-status-summary');
+    expect(summary).toHaveTextContent('1');
+    expect(summary).toHaveTextContent('1,234');
+    expect(screen.getByTestId('attachment-status-ok')).toBeInTheDocument();
+    expect(screen.getByTestId('attachment-status-skipped')).toBeInTheDocument();
+  });
+
+  it('shows failed status for error entries', () => {
+    renderWithI18n(
+      <Message
+        message={makeUserMsg({
+          client_meta: {
+            attachments: [{ name: 'broken.docx', size: 64, type: 'application/msword' }],
+            attachments_status: [
+              {
+                media_id: 'm3',
+                filename: 'broken.docx',
+                mime_type: 'application/msword',
+                status: 'error',
+                reason: 'extract_failed:ValueError',
+              },
+            ],
+          },
+        })}
+      />,
+    );
+    expect(screen.getByTestId('attachment-status-error')).toBeInTheDocument();
+  });
 });

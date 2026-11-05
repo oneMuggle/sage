@@ -351,7 +351,7 @@ export function ResearchCitationAndToneBar({
           type="button"
           data-testid="research-save-style-l3-btn"
           onClick={async () => {
-            setAppliedHint('已沉淀学术规范至 L3');
+            setAppliedHint('已保存学术规范到 AI 记忆');
             if (typeof projectApi?.confirmKnowledge === 'function') {
               try {
                 await projectApi.confirmKnowledge(projectId, {
@@ -360,7 +360,7 @@ export function ResearchCitationAndToneBar({
                     content: `[科研引用与文风规范] 引用格式=${citationStyle} · 学术文风=${writingTone}`,
                     importance: 8,
                     sourceMessageIds: [],
-                    reasoning: '科研工作台一键沉淀学术规范至 L3 画像',
+                    reasoning: '科研工作台一键保存学术规范到项目记忆',
                   }],
                 });
               } catch {
@@ -370,7 +370,7 @@ export function ResearchCitationAndToneBar({
           }}
           className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-1 text-ui-2xs text-primary hover:bg-primary/10"
         >
-          沉淀规范至 L3
+          保存规范到项目记忆
         </button>
       </div>
     </div>
@@ -560,7 +560,7 @@ export function PersonalZettelkastenFooter({
                 }}
                 className="shrink-0 rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
               >
-                {promotedCardConstraintIds.has(d.id) ? '已转L2' : '+L2'}
+                {promotedCardConstraintIds.has(d.id) ? '已转规则' : '+规则'}
               </button>
             </li>
           ))}
@@ -685,7 +685,7 @@ export function BusinessDocumentStyleBar({
           type="button"
           data-testid="business-save-style-l3-btn"
           onClick={async () => {
-            setAppliedHint('已沉淀文书规范至 L3');
+            setAppliedHint('已保存文书规范到 AI 记忆');
             if (typeof projectApi?.confirmKnowledge === 'function') {
               try {
                 await projectApi.confirmKnowledge(projectId, {
@@ -694,7 +694,7 @@ export function BusinessDocumentStyleBar({
                     content: `[文书版式与审校规范] 版式=${docFormat} · 审校等级=${reviewLevel}`,
                     importance: 8,
                     sourceMessageIds: [],
-                    reasoning: '档案文书工作台一键沉淀版式规范至 L3 画像',
+                    reasoning: '档案文书工作台一键保存版式规范到项目记忆',
                   }],
                 });
               } catch {
@@ -704,7 +704,7 @@ export function BusinessDocumentStyleBar({
           }}
           className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-1 text-ui-2xs text-primary hover:bg-primary/10"
         >
-          沉淀规范至 L3
+          保存规范到项目记忆
         </button>
       </div>
     </div>

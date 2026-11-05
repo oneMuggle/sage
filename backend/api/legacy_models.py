@@ -23,6 +23,10 @@ class SessionCreate(BaseModel):
     detected_root: Optional[str] = None
     # M0 (2026-11-03): 会话级专家绑定。指向 agents.id；缺省 → 'primary'（主助手）。
     specialist_id: Optional[str] = None
+    # 2026-11-04 (fix/skip-workspace-binding): 用户在新会话页明确选择"不绑定项目"
+    # 时，前端传 True 跳过工作区解析链，不绑定任何工作区。语义对齐主流 AI 应用
+    # (Cursor / Cline / Windsurf) 的"显式选择 > 自动推断"原则。
+    skip_workspace_binding: bool = False
 
 
 class SessionUpdate(BaseModel):
@@ -264,7 +268,7 @@ class AgentUpdate(BaseModel):
         None  # 字段名避开 Pydantic 保留名, 路由层映射到 model_config
     )
 
-    max_iterations: Optional[int] = None  # 路由层校验 1..50
+    max_iterations: Optional[int] = None  # 路由层校验 1..1000
 
     enabled: Optional[bool] = None
 

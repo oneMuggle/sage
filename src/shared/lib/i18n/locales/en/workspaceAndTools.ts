@@ -201,6 +201,8 @@ export const enWorkspaceAndTools = {
   'office.fidelity.toggle': 'High fidelity',
   'office.fidelity.loading': 'Converting…',
   'office.fidelity.failed': 'High-fidelity preview failed',
+  'office.fidelity.unavailable':
+    'No local converter detected for this format (LibreOffice covers DOCX/XLSX/PPTX; MS Word covers DOCX only). Word uses the built-in native renderer and is unaffected. Click [Environment] at the top right to re-detect or see install hints',
   'office.caps.detected': 'Converter detected; runtime health not verified',
   'office.caps.pdf': 'PDF export',
   'office.caps.image': 'Image compression',

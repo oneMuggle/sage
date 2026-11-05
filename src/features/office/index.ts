@@ -1,6 +1,14 @@
 export { useOfficeDocuments } from './useOfficeDocuments';
-export type { OfficeReadResult, OfficeListView } from './useOfficeDocuments';;
-export { OfficeFilePicker } from './OfficeFilePicker';
+export type {
+  OfficeReadResult,
+  OfficeListView,
+  OfficeMultiImportResult,
+  OfficeMultiImportEntry,
+  OfficeMultiImportSkipped,
+  OfficeDuplicateChoice,
+  OfficePendingDuplicate,
+} from './useOfficeDocuments';
+export { OfficeIntake } from './OfficeIntake';
 export { OfficePreviewPanel } from './OfficePreviewPanel';
 export type { OfficePreviewData } from './OfficePreviewPanel';
 export { OfficeDocumentList } from './OfficeDocumentList';
@@ -8,6 +16,7 @@ export { OfficeSnapshotPanel } from './OfficeSnapshotPanel';
 export { OfficeEditPreviewDialog } from './OfficeEditPreviewDialog';
 ;
 export { buildUpdateOps } from './OfficeEditPreviewDialog';
+export { OfficeDuplicateDialog } from './OfficeDuplicateDialog';
 export { OfficeGenerateForm } from './OfficeGenerateForm';
 export { OfficeCapabilityBar } from './OfficeCapabilityBar';
 // Round B P3: structured sub-previews shared with the chat ArtifactViewer.
@@ -24,12 +33,13 @@ export interface OfficeFeatureBarrelAuditReport {
 export function auditOfficeFeatureBarrel(): OfficeFeatureBarrelAuditReport {
   const exportedSymbols = [
     'useOfficeDocuments',
-    'OfficeFilePicker',
+    'OfficeIntake',
     'OfficePreviewPanel',
     'OfficeDocumentList',
     'OfficeSnapshotPanel',
     'OfficeEditPreviewDialog',
     'buildUpdateOps',
+    'OfficeDuplicateDialog',
     'OfficeGenerateForm',
     'OfficeCapabilityBar',
     'WordPreview',

@@ -587,7 +587,7 @@ export function MilestoneEditor({
             }}
             className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
           >
-            {convertedConstraint ? '已转 L2 约束' : '转 L2 交付约束'}
+            {convertedConstraint ? '已转为项目规则' : '转 交付规则'}
           </button>
           <button
             type="button"
@@ -607,7 +607,7 @@ export function MilestoneEditor({
             }}
             className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
           >
-            {savedMilestoneL4 ? '已存 L4' : '存为 L4 资料'}
+            {savedMilestoneL4 ? '已保存' : '保存为项目资料'}
           </button>
           <button
             type="button"
@@ -624,7 +624,7 @@ export function MilestoneEditor({
                         content: `里程碑目标 [${title.trim() || '未命名'}] (${stage || '默认阶段'})：${description.trim() || '无'}`,
                         importance: 7,
                         sourceMessageIds: [],
-                        reasoning: '里程碑编辑器同步沉淀至 L3 画像',
+                        reasoning: '里程碑编辑器同步保存到 AI 记忆',
                       },
                     ],
                   });
@@ -635,7 +635,7 @@ export function MilestoneEditor({
             }}
             className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
           >
-            {savedMilestoneL3 ? '已沉淀 L3' : '沉淀至 L3'}
+            {savedMilestoneL3 ? '已保存' : '保存到 AI 记忆'}
           </button>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             取消

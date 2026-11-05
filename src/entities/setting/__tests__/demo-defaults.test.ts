@@ -13,6 +13,8 @@ function makeEndpoint(id: string, baseUrl: string) {
     localModelPath: '',
     discoveredModels: [],
     lastDiscoveredAt: null,
+    reasoningEffort: null,
+    thinkingBudget: null,
   };
 }
 

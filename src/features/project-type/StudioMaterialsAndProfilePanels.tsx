@@ -1,5 +1,5 @@
 /**
- * Phase P9 & P10: 多态项目工作台 L1 项目总纲 (SAGE.md) + L4 受控资料库 + L3 项目记忆画像 + L5 只读白名单面板
+ * Phase P9 & P10: 多态项目工作台 项目总纲 (SAGE.md) + 项目资料 + L3 项目记忆画像 + 外部目录白名单面板
  */
 
 import { Check, CheckCircle2, Copy, Eye, FilePlus2, FileText, FolderLock, History, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
@@ -82,7 +82,7 @@ export function StudioCharterTabPanel({
   };
 
   const handleCopyCharterMarkdown = async () => {
-    const lines = [`# L1 项目总纲 (${projectPath}/SAGE.md)`, '', draft || '（未填写）', '', '## L2 项目目标与高优系统指令', `- **项目目标**: ${descriptionDraft || '（未设置）'}`, `- **系统指令**: ${instructionsDraft || '（未设置）'}`];
+    const lines = [`# 项目总纲 (${projectPath}/SAGE.md)`, '', draft || '（未填写）', '', '## 项目目标与系统指令', `- **项目目标**: ${descriptionDraft || '（未设置）'}`, `- **系统指令**: ${instructionsDraft || '（未设置）'}`];
     try {
       await navigator.clipboard?.writeText(lines.join('\n'));
       setCopiedCharter(true);
@@ -130,7 +130,7 @@ export function StudioCharterTabPanel({
         instructions: inst,
       });
       onMetadataUpdated?.({ description: desc, instructions: inst });
-      setMetaSavedHint('已保存 L2 目标与系统指令');
+      setMetaSavedHint('已保存项目目标与系统指令');
     } catch {
       // ignore in test/offline mode
     } finally {
@@ -146,7 +146,7 @@ export function StudioCharterTabPanel({
             <div className="flex items-center gap-1.5 font-medium text-foreground">
               <FileText className="h-3.5 w-3.5 text-primary" />
               <span>
-                L1 项目本地规范总纲（<code className="font-mono">{projectPath}/SAGE.md</code>）
+                项目本地规范总纲（<code className="font-mono">{projectPath}/SAGE.md</code>）
               </span>
               <span
                 className={`rounded px-1.5 py-0.5 text-ui-2xs ${
@@ -159,7 +159,7 @@ export function StudioCharterTabPanel({
               </span>
             </div>
             <p className="text-muted-foreground">
-              作为五层上下文注入体系的第 1
+              作为项目上下文注入体系的第 1
               层（最高优先级），用于定义代码工程规范、一般档案封面元数据或科研课题总纲与符号表。
             </p>
           </div>
@@ -233,10 +233,10 @@ export function StudioCharterTabPanel({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="font-medium text-foreground">
-              L2 项目目标与高优系统指令（Description & System Instructions）
+              项目目标与系统指令（Description & System Instructions）
             </div>
             <p className="text-ui-2xs text-muted-foreground">
-              注入五层上下文管线第 2
+              注入项目上下文管线第 2
               层，优先级高于全局风格偏好，适合定义本项目的角色定位、审校红线或答复体裁。
             </p>
           </div>
@@ -355,7 +355,7 @@ export function StudioAllowedPathsTabPanel({
   const presets = ALLOWED_PATH_PRESETS[projectType] ?? ALLOWED_PATH_PRESETS.coding;
 
   const handleCopyAllowedPaths = async () => {
-    const lines = [`# L5 跨目录只读白名单 (${projectPath})`, '', ...allowedPaths.map((p) => `- \`${p}\``)];
+    const lines = [`# 外部目录只读白名单 (${projectPath})`, '', ...allowedPaths.map((p) => `- \`${p}\``)];
     try {
       await navigator.clipboard?.writeText(lines.join('\n'));
       setCopiedPaths(true);
@@ -487,7 +487,7 @@ export function StudioMaterialsTabPanel({
 
   const handleCopyMaterialsMarkdown = async () => {
     const enabledItems = materials.filter((m) => m.enabled !== false);
-    const lines = [`# L4 生效受控资料摘要 (${projectPath})`, '', ...enabledItems.map((m, i) => `### ${i + 1}. ${m.id}\n${m.content}`)];
+    const lines = [`# 项目资料摘要 (${projectPath})`, '', ...enabledItems.map((m, i) => `### ${i + 1}. ${m.id}\n${m.content}`)];
     try {
       await navigator.clipboard?.writeText(lines.join('\n\n'));
       setCopiedMaterials(true);
@@ -605,7 +605,7 @@ export function StudioMaterialsTabPanel({
     <div className="space-y-3" data-testid="project-materials-studio-panel">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
         <div>
-          L4 授信隔离资料与文献语料池（绑定工作区 <code className="font-mono">{projectPath}</code>
+          项目资料与文献语料池（绑定工作区 <code className="font-mono">{projectPath}</code>
           ）：支持工作区文件提取或纯文本条款/摘要入库，按需勾选参与本轮对话上下文（Source-Grounded Toggle）。
         </div>
         {materials.length > 0 && (

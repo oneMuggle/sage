@@ -24,6 +24,8 @@ const remoteClean: AppSettings = {
         },
       ],
       lastDiscoveredAt: 1000,
+      reasoningEffort: null,
+      thinkingBudget: null,
     },
   ],
   modelSelections: {
@@ -70,6 +72,8 @@ describe('deepMerge', () => {
           localModelPath: '',
           discoveredModels: [],
           lastDiscoveredAt: 0,
+          reasoningEffort: null,
+          thinkingBudget: null,
         },
       ],
     };
@@ -93,6 +97,8 @@ describe('deepMerge', () => {
           localModelPath: '',
           discoveredModels: [],
           lastDiscoveredAt: 0,
+          reasoningEffort: null,
+          thinkingBudget: null,
         },
       ],
     };
@@ -144,6 +150,8 @@ describe('deepMerge', () => {
           localModelPath: '',
           discoveredModels: [],
           lastDiscoveredAt: null,
+          reasoningEffort: null,
+          thinkingBudget: null,
         },
       ],
     };

@@ -7,7 +7,7 @@ import { getRoutingTaskType } from '../../entities/routing/taskType';
 import { resolveEndpoint } from '../../entities/setting/types';
 import { ApiException, type ChatConfig, type ChatOfficeRef } from '../../shared/api';
 import type { GenerationStats } from '../../shared/api/types';
-import { agentStateToText } from '../../shared/lib/agentStateMapping';
+import { agentStateToText, isIntermediatePlaceholderText } from '../../shared/lib/agentStateMapping';
 import {
   mapAgentErrorToText,
   mapLLMErrorToText,
@@ -81,8 +81,15 @@ export function useChat() {
   const [errorSessionId, setErrorSessionId] = useState<string | null>(null);
   // PM2 (round8): 计划模式完成的会话 ID —— 非空时 Chat 渲染"按计划执行"批准条。
   const [planApprovalFor, setPlanApprovalFor] = useState<string | null>(null);
-  const { messages, addMessage, updateMessage, replaceMessageId, currentSessionId, loadMessages } =
-    useStore();
+  const {
+    messages,
+    addMessage,
+    updateMessage,
+    replaceMessageId,
+    removeMessage,
+    currentSessionId,
+    loadMessages,
+  } = useStore();
   const { settings } = useSettings();
 
   // U5 (对标增强第二轮批次 B): 流式中用户继续发送 → 入队,当前回复自然
@@ -182,12 +189,15 @@ export function useChat() {
     const persistedStepIndexes = new Set<number>(
       messages.filter((m) => m.step_index != null).map((m) => m.step_index as number),
     );
-    const visibleSteps =
-      persistedStepIndexes.size > 0
-        ? completedSteps.filter(
-            (m) => m.step_index == null || !persistedStepIndexes.has(m.step_index),
-          )
-        : completedSteps;
+    // 2026-11-04: step_done 会把已完成步骤实体化进 store.messages（同一 id，
+    // completedSteps 仍保留一份用于服务端回读前的兜底）。渲染时按 id 去重，
+    // 否则同一个气泡会出现两次；服务端行落库后仍按 step_index 兜底去重。
+    const storeMessageIds = new Set<string>(messages.map((m) => m.id));
+    const visibleSteps = completedSteps.filter(
+      (m) =>
+        !storeMessageIds.has(m.id) &&
+        (m.step_index == null || !persistedStepIndexes.has(m.step_index)),
+    );
 
     if (!streamingMessageId) {
       return visibleSteps.length > 0 ? [...messages, ...visibleSteps] : messages;
@@ -428,6 +438,9 @@ export function useChat() {
         created_at: Date.now(),
       };
       addMessage(assistantMessage);
+      // 2026-11-04: 本轮所有乐观 assistant id —— step_done 会切换到新 id 并
+      // 添加新的占位行；finishStream 据此清扫仍未产出真实内容的残留占位行。
+      const optimisticAssistantIds = new Set<string>([assistantId]);
       // startStream 内部已重置该会话槽位的 content/reasoning/streamingToolCalls/
       // taskBoard — 流式进度全部走 store,跨路由切换保留(2026-08-19)。
       // S2: 只重置本会话槽位,并行会话互不覆盖。
@@ -459,6 +472,10 @@ export function useChat() {
         // TODO(PR-7a+): 给 EndpointConfig 加 provider 字段,这里直接读,
         // 不再靠 URL 启发式。详见 docs/plans/2026-06-17_thinking-passthrough.md
         provider: inferProviderFromBaseUrl(chatEndpoint.baseUrl),
+        // 2026-11-03: 思考过程参数 —— 端点级配置,透传到上游 LLM 请求体。
+        // undefined → chatApi 发 null → 后端不下发该键 → 上游不进入思考模式。
+        reasoningEffort: chatEndpoint.reasoningEffort ?? undefined,
+        thinkingBudget: chatEndpoint.thinkingBudget ?? undefined,
         // 由 /orchestrate /single 斜杠命令传入;普通消息 undefined → 后端 auto
         orchestrationMode,
         // Wave 3: resume 恢复流透传
@@ -611,6 +628,17 @@ export function useChat() {
         if (lastDoneMessageId && lastDoneMessageId !== assistantId) {
           replaceMessageId(assistantId, lastDoneMessageId);
         }
+        // 2026-11-04: 兜底清扫本轮遗留的占位行。step_done 已把步骤实体化,
+        // 但最后一步若无正文/推理/工具调用,上面的 updateMessage 会被跳过,
+        // 该行仍停留在「🤔 思考中…」。只删占位行,有真实内容的步骤留给
+        // loadMessages 对账。
+        {
+          const rows = useStore.getState().messages;
+          for (const id of optimisticAssistantIds) {
+            const row = rows.find((m) => m.id === id);
+            if (row && isIntermediatePlaceholderText(row.content)) removeMessage(id);
+          }
+        }
         // 2026-08-19: 精准重置流式 state + toolCalls,**不清 taskBoard**
         // (与原 commit 一致:finishStream 旧实现只 setStreaming(null) + 清 ref,
         //  taskBoard 留到下条消息 startStream 触发重置。
@@ -686,11 +714,16 @@ export function useChat() {
 
               // 2026-10-31: 动态迭代预算自动延长 —— 不打断流，只提示用户
               // 当前上限已提高（后端已依据进度审计决定继续）。
+              // 2026-11-05 M5: 瞬时 toast → 持久 notice（ChatSessionNotices 渲染），
+              // 让用户在整个 run 期间都能看到延长记录，而非一闪而过。
               if (evt.state === 'iteration_checkpoint') {
                 const info = evt.budget_info;
-                const extensions = info?.extensions ?? 0;
-                const nextBudget = info?.next_budget ?? 0;
-                toast.info(`已自动延长迭代预算（第 ${extensions} 次，当前上限 ${nextBudget} 步）`);
+                useChatStreamStore.getState().setBudgetCheckpoint(sid, {
+                  extensions: info?.extensions ?? 0,
+                  nextBudget: info?.next_budget ?? 0,
+                  previousBudget: info?.previous_budget,
+                  reasons: info?.reasons,
+                });
                 return;
               }
 
@@ -703,23 +736,45 @@ export function useChat() {
                 const streamSnapshot = slots.streaming;
                 const toolCallsSnapshot = slots.streamingToolCalls;
                 // 优先用 lastDoneContent(本步 done.content 全量),否则退回 streaming 累积
-                // 2026-09 step-by-step: 过滤 THINKING_PLACEHOLDER — 若该步无 content_delta,
-                // streaming.content 仍是初始占位 '🤔 思考中…',不应作为静态内容渲染到气泡
+                // 2026-11-04: 过滤**所有**中间态占位文案 —— 非流式 run 的步骤之间没有
+                // content_delta,streaming.content 会停留在「👀 观察结果…」等占位文案上,
+                // 若快照成步骤正文,下一条命令执行期间会一直显示该占位。
                 const rawContent = lastDoneContent ?? streamSnapshot?.content ?? '';
-                const stepContent = rawContent === THINKING_PLACEHOLDER ? '' : rawContent;
+                const stepContent = isIntermediatePlaceholderText(rawContent) ? '' : rawContent;
                 const stepReasoning = streamSnapshot?.reasoning ?? '';
-                const completedMessage: Message = {
+                const stepIndex = typeof evt.step_index === 'number' ? evt.step_index : null;
+                const stepToolCalls =
+                  toolCallsSnapshot.length > 0 ? toolCallsSnapshot : undefined;
+                const stepPatch: Partial<Message> = {
+                  content: stepContent,
+                  reasoning_content: stepReasoning || null,
+                  tool_calls: stepToolCalls,
+                  step_index: stepIndex,
+                };
+                // 实体化进 store.messages:后续 DONE 的 updateMessage/
+                // replaceMessageId 必须命中真实行,否则最终回复落在不存在的 id
+                // 上、最初的「🤔 思考中…」占位行残留到对账之后。
+                updateMessage(assistantId, stepPatch);
+                useChatStreamStore.getState().addCompletedStep(sid, assistantId, {
                   id: assistantId,
                   session_id: sid,
                   role: 'assistant',
                   content: stepContent,
                   reasoning_content: stepReasoning || null,
-                  tool_calls: toolCallsSnapshot.length > 0 ? toolCallsSnapshot : undefined,
+                  tool_calls: stepToolCalls,
                   created_at: Date.now(),
-                  step_index: typeof evt.step_index === 'number' ? evt.step_index : null,
-                };
-                useChatStreamStore.getState().addCompletedStep(sid, assistantId, completedMessage);
+                  step_index: stepIndex,
+                });
                 const nextAssistantId = crypto.randomUUID();
+                // 下一步的占位行也必须有实体(与起始占位同理)。
+                addMessage({
+                  id: nextAssistantId,
+                  session_id: sid,
+                  role: 'assistant',
+                  content: THINKING_PLACEHOLDER,
+                  created_at: Date.now(),
+                });
+                optimisticAssistantIds.add(nextAssistantId);
                 useChatStreamStore.getState().finalizeStep(sid, assistantId, nextAssistantId);
                 assistantId = nextAssistantId;
                 // 下一步有独立的 done.content;重置避免上一步的值污染
@@ -878,6 +933,7 @@ export function useChat() {
       deliverWhileBusy,
       updateMessage,
       replaceMessageId,
+      removeMessage,
       markStreamActive,
       markStreamIdle,
       flushNextQueued,

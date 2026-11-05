@@ -10,6 +10,7 @@ import { SessionSpecialistPicker } from '../../widgets/chat/SessionSpecialistPic
 import { SessionUsageBadge } from '../../widgets/chat/SessionUsageBadge';
 import { WorkspaceBranchPicker } from '../../widgets/chat/WorkspaceBranchPicker';
 
+import { DisplayModeSwitch } from './DisplayModeSwitch';
 import { SessionSessionMenu } from './SessionSessionMenu';
 import { SessionSettingsMenu } from './SessionSettingsMenu';
 
@@ -55,7 +56,11 @@ export function ChatHeaderBar({
     >
       <div className="flex items-center gap-2 min-w-0 flex-wrap">
         <h2 className="text-ui-sm font-semibold text-text shrink-0">对话</h2>
-        <WorkspaceSwitcher workspacePath={workspacePath} sessionId={currentSessionId} onOpenWorkbench={() => navigate('/projects')} />
+        <WorkspaceSwitcher
+          workspacePath={workspacePath}
+          sessionId={currentSessionId}
+          onOpenWorkbench={() => navigate('/projects')}
+        />
         <WorkspaceBranchPicker sessionId={currentSessionId} />
         <SessionUsageBadge sessionId={currentSessionId} />
         <SessionIdBadge sessionId={currentSessionId} />
@@ -96,6 +101,7 @@ export function ChatHeaderBar({
             </option>
           </select>
         </div>
+        <DisplayModeSwitch sessionId={currentSessionId} />
         {/* UI 优化 2026-10-14: 会话级设置收纳进齿轮浮层 */}
         <SessionSettingsMenu sessionId={currentSessionId} />
         {/* UI 优化 2026-10-14: 新对话/新话题/临时聊天合并进 + 下拉菜单 */}
@@ -126,6 +132,7 @@ export function auditChatHeaderBarGovernance(): {
   topHeaderControls: readonly [
     'SessionModelPicker',
     'OrchModeSelect',
+    'DisplayModeSwitch',
     'SessionSettingsMenu',
     'SessionSessionMenu',
     'RightPanelToggle',
@@ -139,6 +146,7 @@ export function auditChatHeaderBarGovernance(): {
     topHeaderControls: [
       'SessionModelPicker',
       'OrchModeSelect',
+      'DisplayModeSwitch',
       'SessionSettingsMenu',
       'SessionSessionMenu',
       'RightPanelToggle',

@@ -201,6 +201,18 @@ export interface ExecutionModeRecommendation {
   reasoning: string;
 }
 
+/**
+ * 2026-11-05 M5: 动态迭代预算检查点载荷（后端 `iteration_checkpoint` 事件）。
+ * 前端写入槽位供 BudgetCheckpointBanner 渲染——取代原本 3 秒即消失的 toast，
+ * 让用户在整个 run 期间都能看到"已自动延长到第 N 次、当前上限 M 步"。
+ */
+export interface BudgetCheckpointInfo {
+  extensions: number;
+  nextBudget: number;
+  previousBudget?: number;
+  reasons?: string[];
+}
+
 /** 单个会话的流式槽位（S2 键控） */
 export interface SessionStreamSlots {
   streaming: StreamingState | null;
@@ -252,6 +264,11 @@ export interface SessionStreamSlots {
    */
   stepConfirm: StepConfirmInfo | null;
   /**
+   * 2026-11-05 M5: 动态迭代预算检查点。`iteration_checkpoint` 事件到达时写入，
+   * run 收尾（clearStream）或用户关闭横幅时清空。取代原先的瞬时 toast。
+   */
+  budgetCheckpoint: BudgetCheckpointInfo | null;
+  /**
    * U5 队列（2026-09-18 从 useChat 的 component-local ref 迁入）：
    * 会话忙时用户继续发送的消息在此排队，当前 run 自然结束后 flush。
    * 放 store 而非 ref 的两个理由：①UI 需要渲染并可操作队列；
@@ -284,6 +301,7 @@ const EMPTY_SLOTS: SessionStreamSlots = {
   executionModeRecommendation: null,
   researchReport: null,
   stepConfirm: null,
+  budgetCheckpoint: null,
   pendingQueue: [],
   queuePaused: false,
   iterationOffset: 0,
@@ -376,6 +394,8 @@ interface ChatStreamStoreState {
    * 用户响应后传 null 清空。
    */
   setStepConfirm: (sessionId: string, info: StepConfirmInfo | null) => void;
+  /** 2026-11-05 M5: 写入/清空动态预算检查点（iteration_checkpoint 事件驱动）。 */
+  setBudgetCheckpoint: (sessionId: string, info: BudgetCheckpointInfo | null) => void;
   updateTaskBoard: (
     sessionId: string,
     runId: string,
@@ -476,6 +496,8 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
         // 2026-10-28 (Plan Mode 增强 Phase 3): 新一轮清掉步骤确认对话框态
         // —— 避免上一轮的确认信息在新 run 开始时残留。
         stepConfirm: null,
+        // 2026-11-05 M5: 新一轮清掉上一轮的动态预算检查点提示
+        budgetCheckpoint: null,
       }),
     })),
 
@@ -534,49 +556,28 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
       const slots = selectSessionSlots(prev, sessionId);
       if (!slots.streaming || slots.streaming.messageId !== messageId) return prev;
       // 2026-10-20: 非 retry 状态到达时自动清 retryInfo —— Banner 随之消失
-      // 2026-10-25: 改为延迟 3 秒隐藏，让用户能看见重试发生过。
-      // 保留 retryInfo 数据，仅记录 clearedAt 时间戳；3 秒后 setTimeout
-      // 才真正将 retryInfo 置 null。
+      // 2026-11-03: 改为立即清除（原 3s 延迟隐藏）。原因：
+      // - reasoning / content_delta 事件持续到达时，每次 setStreamingMeta 都会
+      //   重置延迟定时器，导致 banner 在用户看到"思考内容已出现"后仍停留 3s，
+      //   造成"出现思考内容后依然显示重试中"的体验错位。
+      // - Claude Code / 主流 AI 应用均在新内容到达时立即消失重试横幅。
+      // - retryInfoClearedAt 保留，供 useChat.ts 判定"本轮曾重试过"。
       const autoClearRetry =
         patch.state !== undefined && patch.state !== 'retry' && slots.streaming.retryInfo != null;
       if (autoClearRetry) {
-        // 清除旧的定时器（如有）
+        // 取消旧的隐藏定时器（如有）
         if (slots.streaming._retryHideTimer) {
           clearTimeout(slots.streaming._retryHideTimer);
         }
-        const clearedAt = Date.now();
         const nextStreaming = {
           ...slots.streaming,
           ...patch,
-          retryInfoClearedAt: clearedAt,
-          // 暂不清 retryInfo，保留给 selector 用
+          retryInfo: null,
+          retryInfoClearedAt: Date.now(),
+          _retryHideTimer: undefined,
         };
-        // 3 秒后真正清除 retryInfo
-        const timer = window.setTimeout(() => {
-          useChatStreamStore.setState((state) => {
-            const currentSlots = selectSessionSlots(state, sessionId);
-            if (
-              !currentSlots.streaming ||
-              currentSlots.streaming.messageId !== messageId ||
-              currentSlots.streaming.retryInfoClearedAt !== clearedAt
-            )
-              return state;
-            return {
-              sessions: writeSlots(state.sessions, sessionId, {
-                streaming: {
-                  ...currentSlots.streaming,
-                  retryInfo: null,
-                  retryInfoClearedAt: null,
-                  _retryHideTimer: undefined,
-                },
-              }),
-            };
-          });
-        }, 3000);
         return {
-          sessions: writeSlots(prev.sessions, sessionId, {
-            streaming: { ...nextStreaming, _retryHideTimer: timer },
-          }),
+          sessions: writeSlots(prev.sessions, sessionId, { streaming: nextStreaming }),
         };
       }
       const nextStreaming = { ...slots.streaming, ...patch };
@@ -623,6 +624,8 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
         sessions: writeSlots(prev.sessions, sessionId, {
           streaming: null,
           iterationOffset: nextOffset,
+          // M5: run 收尾后延长提示失去意义（不再有进行中的迭代），随流一起清掉
+          budgetCheckpoint: null,
         }),
       };
     }),
@@ -663,6 +666,13 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
     set((prev) => ({
       sessions: writeSlots(prev.sessions, sessionId, {
         stepConfirm: info,
+      }),
+    })),
+
+  setBudgetCheckpoint: (sessionId, info) =>
+    set((prev) => ({
+      sessions: writeSlots(prev.sessions, sessionId, {
+        budgetCheckpoint: info,
       }),
     })),
 

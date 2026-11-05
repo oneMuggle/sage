@@ -69,10 +69,9 @@ const LOG_DIR = resolveLogDir();
 let CURRENT_LEVEL = resolveLevel();
 
 // 日志时区 (2026-09-17): 用户可选择日志时间戳使用的时区.
-// 'UTC' = 使用 UTC 时间 (历史默认), 'local' = 使用系统本地时区, 其他 IANA 字符串.
-// 默认 'UTC' 保持向后兼容; 由 Electron main 进程在读取 settings 后调用
-// setLogTimezone() 更新此值.
-let CURRENT_LOG_TIMEZONE: string = process.env.SAGE_LOG_TIMEZONE || 'UTC';
+// 'local' = 使用系统本地时区 (默认), 'UTC' = 使用 UTC 时间, 其他 IANA 字符串.
+// 由 Electron main 进程在读取 settings 后调用 setLogTimezone() 更新此值.
+let CURRENT_LOG_TIMEZONE: string = process.env.SAGE_LOG_TIMEZONE || 'local';
 
 try {
   mkdirSync(LOG_DIR, { recursive: true });

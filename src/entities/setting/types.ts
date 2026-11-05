@@ -55,6 +55,14 @@ export interface EndpointConfig {
   discoveredModels: DiscoveredModel[];
   lastDiscoveredAt: number | null;
   /**
+   * 2026-11-03: 思考过程参数 —— per-endpoint 配置,透传到上游 LLM 请求体。
+   * reasoningEffort 对应 OpenAI reasoning_effort ('low'|'medium'|'high');
+   * thinkingBudget 对应 Anthropic thinking.budget_tokens / DeepSeek thinking_budget。
+   * null = 不发送该参数(上游模型不进入思考模式)。
+   */
+  reasoningEffort: 'low' | 'medium' | 'high' | null;
+  thinkingBudget: number | null;
+  /**
    * 2026-08-26 (OWASP A02:2021): 后端 redact_secrets 在 GET 响应里把
    * apiKey 置为 "" 并打这个 flag. 客户端按 id 在 localStorage 中找回真实 key.
    * sanitizeForBackend 不在白名单里, 不会回写; 仅在 GET → loadSettings 路径消费.
@@ -127,6 +135,11 @@ export interface OrchSettings {
   // 2026-11-01: 动态迭代预算（与后端 OrchSettings camelCase 对齐）。
   // 关闭后回到固定 maxIterations 行为。
   dynamicBudgetEnabled: boolean; // true
+  // 2026-11-04: 预算模式显式开关（auto | fixed），取代旧版
+  // 「maxIterations == 25」哨兵。可选且刻意不进 DEFAULT_ORCH_SETTINGS：
+  // 缺失表示升级前写入的老设置，由 dynamicBudgetEnabled 推导
+  // （true → auto / false → fixed），后端 load_orch_settings 同款迁移。
+  budgetMode?: 'auto' | 'fixed'; // 'auto'
   // 各档初始预算；到软预算后由进度审计决定自动延长或停止。
   budgetSimple: number; // 20
   budgetMedium: number; // 80
@@ -212,13 +225,14 @@ export interface AppSettings {
   orch: OrchSettings;
 
   // 2026-10-13: LLM 自动重试参数（与后端 SettingsPayload.llmRetry* 对齐）。
-  // maxAttempts=0 表示禁用重试，无需额外开关。
-  llmRetryMaxAttempts: number; // 3
-  llmRetryBaseDelayS: number; // 1.0 (秒)
-  llmRetryMaxDelayS: number; // 30.0 (秒)
+  // 2026-11-03: 默认值/取值域统一到后端 RETRY_DEFAULTS / RETRY_RANGES
+  // （backend/core/retry_defaults.py）；maxAttempts 最小 1，0 不再合法。
+  llmRetryMaxAttempts: number; // 5（含首次尝试）
+  llmRetryBaseDelayS: number; // 2.0 (秒)
+  llmRetryMaxDelayS: number; // 60.0 (秒)
   // 2026-10-30: 自动重试总时长预算（秒）。0 = 不限。
-  // 从首次尝试起算，退避前累计耗时超过预算即停止（后端 _retry_settings() 读取）。
-  llmRetryTotalBudgetS: number; // 180
+  // 从首次尝试起算，退避前累计耗时超过预算即停止（后端 resolve_retry_settings() 读取）。
+  llmRetryTotalBudgetS: number; // 300
 
   // 2026-10-22: 整轮任务 wall-clock 上限（秒）。0 = 不限。
   // 与后端 SettingsPayload.llmTotalTimeoutS 对齐；后端函数式读取，改后立即生效。
@@ -253,6 +267,8 @@ export const DEFAULT_ENDPOINT: EndpointConfig = {
   localModelPath: '',
   discoveredModels: [],
   lastDiscoveredAt: null,
+  reasoningEffort: null,
+  thinkingBudget: null,
 };
 
 const DEFAULT_MODEL_SELECTION: ModelSelection = {
@@ -349,12 +365,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Wave 3 P2-9
   orch: DEFAULT_ORCH_SETTINGS,
 
-  // 2026-10-13: LLM 自动重试默认值（与后端 _retry_settings() 默认值对齐）。
-  llmRetryMaxAttempts: 3,
-  llmRetryBaseDelayS: 1.0,
-  llmRetryMaxDelayS: 30.0,
-  // 2026-10-30: 自动重试总时长预算默认 180s（与后端 _LLM_RETRY_TOTAL_BUDGET_S 对齐）。
-  llmRetryTotalBudgetS: 180,
+  // 2026-10-13: LLM 自动重试默认值（2026-11-03 与后端 RETRY_DEFAULTS 对齐）。
+  llmRetryMaxAttempts: 5,
+  llmRetryBaseDelayS: 2.0,
+  llmRetryMaxDelayS: 60.0,
+  // 2026-10-30: 自动重试总时长预算默认 300s（与后端 RETRY_DEFAULTS 对齐）。
+  llmRetryTotalBudgetS: 300,
 
   // 2026-10-22: 整轮任务 wall-clock 默认上限（秒）= 2 × subagentTaskTimeoutS 默认 900s。
   llmTotalTimeoutS: 1800,
@@ -374,6 +390,21 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Internal
   version: SETTINGS_VERSION,
 };
+
+// 2026-11-03: LLM 重试参数取值域（与后端 RETRY_RANGES 对齐）。
+// 单一真相源: BasicTab NumberInput 的 min/max 与后端写入侧校验都从此处派生,
+// 合同测试 ``test_retry_defaults_contract.py`` 强制前端此常量与后端同步。
+export const RETRY_LIMITS: {
+  readonly [K in 'llmRetryMaxAttempts' | 'llmRetryBaseDelayS' | 'llmRetryMaxDelayS' | 'llmRetryTotalBudgetS']: {
+    readonly min: number;
+    readonly max: number;
+  };
+} = {
+  llmRetryMaxAttempts: { min: 1, max: 100 },
+  llmRetryBaseDelayS: { min: 0, max: 600 },
+  llmRetryMaxDelayS: { min: 1, max: 3600 },
+  llmRetryTotalBudgetS: { min: 0, max: 86400 },
+} as const;
 
 /**
  * Resolve the endpoint that backs a given model selection.
@@ -424,6 +455,8 @@ function createDemoEndpoint(): EndpointConfig {
     localModelPath: '',
     discoveredModels: [...DEMO_ENDPOINT_MODELS],
     lastDiscoveredAt: Date.now() - 2 * 60 * 60 * 1000,
+    reasoningEffort: null,
+    thinkingBudget: null,
   };
 }
 

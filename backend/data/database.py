@@ -1128,6 +1128,23 @@ class Database:
         )
         conn.commit()
 
+        # Playbook shares (2026-11-03): 规程分享链接，支持通过 token 生成可访
+        # 问的 URL 分享规程给其他用户。有效期默认 7 天。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS playbook_shares (
+                id TEXT PRIMARY KEY,
+                playbook_id TEXT NOT NULL,
+                token TEXT NOT NULL UNIQUE,
+                expires_at INTEGER NOT NULL,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_playbook_shares_token "
+            "ON playbook_shares(token)"
+        )
+        conn.commit()
+
         # Project constraints (2026-09-24): 结构化项目约束，替代纯文本
         # instructions。按类别分类（coding_style/security/testing 等），支持
         # 触发模式匹配（glob）和优先级排序。注入到系统提示词影响 AI 行为。

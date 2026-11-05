@@ -329,7 +329,7 @@ export function TaskDecomposeDialog({
                     }}
                     className="shrink-0 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60"
                   >
-                    {savedReasoning ? '已沉淀至 L3' : '沉淀思路至 L3 画像'}
+                    {savedReasoning ? '已保存到 AI 记忆' : '保存思路到 AI 记忆'}
                   </button>
                 </div>
               )}
@@ -400,7 +400,7 @@ export function TaskDecomposeDialog({
                       }}
                       className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground hover:bg-muted"
                     >
-                      {batchConvertedL2 ? '已转 L2 约束' : '选中转 L2 约束'}
+                      {batchConvertedL2 ? '已转为项目规则' : '选中转为项目规则'}
                     </button>
                     <button
                       type="button"
@@ -418,7 +418,7 @@ export function TaskDecomposeDialog({
                                 content: `分解里程碑目标 [${node.title}]：${node.description || '按期完成分解节点交付'}`,
                                 importance: 7,
                                 sourceMessageIds: [],
-                                reasoning: 'M1 任务分解方案选中节点批量沉淀至 L3 画像',
+                                reasoning: 'M1 任务分解方案选中节点批量保存到 AI 记忆',
                               })),
                             });
                           } catch {
@@ -428,7 +428,7 @@ export function TaskDecomposeDialog({
                       }}
                       className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground hover:bg-muted"
                     >
-                      {batchSavedL3 ? '已批量存 L3' : '选中存 L3 画像'}
+                      {batchSavedL3 ? '已批量存项目记忆' : '选中存到项目记忆'}
                     </button>
                     <button
                       type="button"
@@ -448,7 +448,7 @@ export function TaskDecomposeDialog({
                       }}
                       className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground hover:bg-muted"
                     >
-                      {savedPlanL4 ? '已存为 L4' : '方案存为 L4'}
+                      {savedPlanL4 ? '已保存' : '保存方案为资料'}
                     </button>
                   </div>
                 </div>
@@ -544,7 +544,7 @@ export function TaskDecomposeDialog({
                           }}
                           className="mt-1 shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
                         >
-                          {constraintNodeIndices.has(idx) ? '已转 L2' : '+L2 约束'}
+                          {constraintNodeIndices.has(idx) ? '已转为规则' : '+项目规则'}
                         </button>
                         <button
                           type="button"
@@ -561,7 +561,7 @@ export function TaskDecomposeDialog({
                                       content: `分解里程碑目标 [${ms.title}]：${ms.description || '阶段核心交付项'}`,
                                       importance: 7,
                                       sourceMessageIds: [],
-                                      reasoning: 'M1 任务分解节点同步沉淀至 L3 画像',
+                                      reasoning: 'M1 任务分解节点同步保存到 AI 记忆',
                                     },
                                   ],
                                 });
@@ -572,7 +572,7 @@ export function TaskDecomposeDialog({
                           }}
                           className="mt-1 shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                         >
-                          {l3NodeIndices.has(idx) ? '已存L3' : '+L3'}
+                          {l3NodeIndices.has(idx) ? '已保存' : '+记忆'}
                         </button>
                         <button
                           type="button"
@@ -592,7 +592,7 @@ export function TaskDecomposeDialog({
                           }}
                           className="mt-1 shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                         >
-                          {l4NodeIndices.has(idx) ? '已存L4' : '+L4'}
+                          {l4NodeIndices.has(idx) ? '已保存' : '+资料'}
                         </button>
                       </div>
                     ),

@@ -124,9 +124,18 @@ def test_update_agent_invalid_role_422(fake_repo):
 
 
 def test_update_agent_max_iterations_out_of_range_422(fake_repo):
+    # 上限已从 50 提到 1000（backend.domain.agent_limits 单一真相源），
+    # 越界值必须超过 MAX_ITERATIONS_CEILING 才算越界。
     with pytest.raises(HTTPException) as excinfo:
-        update_agent("primary", AgentUpdate(max_iterations=99))
+        update_agent("primary", AgentUpdate(max_iterations=1001))
     assert excinfo.value.status_code == 422
+    assert excinfo.value.detail["type"] == "invalid_max_iterations"
+
+
+def test_update_agent_max_iterations_previously_rejected_now_ok(fake_repo):
+    # 99 在旧上限 (50) 下会被 422 拒掉；新上限 1000 下必须放行。
+    out = update_agent("primary", AgentUpdate(max_iterations=99))
+    assert out["max_iterations"] == 99
 
 
 def test_update_agent_not_found_404(fake_repo):

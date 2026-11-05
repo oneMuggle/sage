@@ -12,7 +12,7 @@
 | 04   | [SKILL.md 编写指南](./04-skill-md-authoring.md)          | 自定义技能: frontmatter 字段 / scripts/ 脚本 / gating 条件 / dispatch   |
 | 05   | [从 builtin 迁移到 SKILL.md](./05-skill-md-migration.md) | 内置技能转 SKILL.md 的路径与限制                                        |
 | 06   | [诊断与日志](./06-diagnostics.md)                       | 日志文件位置 / 查看方式 / 反馈问题步骤 / 保留策略 / 隐私说明            |
-| 07   | [产物面板 (Artifacts Panel)](./07-artifacts-panel.md) | Chat 右侧抽屉 Artifacts Tab：write_file 写盘追踪 / 多格式预览 / 在文件管理器中定位 |
+| 07   | [产物面板 (Artifacts Panel)](./07-artifacts-panel.md) | Chat 右侧抽屉 Artifacts Tab：write_file 写盘追踪 / 多格式预览 / 交互式预览（HTML 工具条、Mermaid 平移缩放） / 在文件管理器中定位 |
 | 08   | [技能生命周期 (Skills Lifecycle)](./08-skill-lifecycle.md) | 技能 active/stale/archived 三态徽章 / 手动归档与取消归档 / 与删除的区别 |
 | 09   | [Office 文档管理](./09-office.md) | 在 Sage 中用自然语言增删改查 docx/xlsx/pptx 文档：创建 / 修改 / 归档 / 恢复 / chat 内 @文件名引用 + write_file 二进制防护 |
 | 10   | [用量与缓存面板](./10-usage-and-cache.md) | 设置 → 使用统计：请求/Token/成本汇总 + 缓存命中率 + 4 个 range tab + 请求明细分页 + 可悬停时段详情的堆叠柱趋势图 + CSV 导出（UTF-8 BOM，Excel 双击不乱码）；今日数据重启不丢 |
@@ -35,6 +35,11 @@
 | 27   | [桌面宠物（大肥鱼）](./27-desktop-pet.md) | 桌宠开关与显示位置 / 状态面板与徽章 / 摸头与提示音 / 自定义动画包导入导出 |
 | 29   | [本地 OCR（图片文字识别）](./29-local-ocr.md) | 无视觉模型时本机识别图片文字 / 设置与测试 / 聊天预览与编辑 / 安装、隐私与故障排查 |
 | 30   | [文档与验收页面导航](./30-office-tabs.md) | 页面按任务分 2 个页签（文档处理/文档生成）+ 地址栏直达 + 切页签不丢输入；审校与规范 / LaTeX 分区待功能同步后补齐 |
+| 31   | [思考过程展示档位](./31-thinking-display-modes.md) | 三档控制思考过程与工具调用展示密度（详细思考/仅执行/仅结果）/ 消息级、会话级、全局默认三级覆盖 / 设置页修改全局默认 |
+| 32   | [端点思考参数](./32-reasoning-params.md) | 每个端点单独配置推理强度（关闭/低/中/高）与思考预算（留空/0/正整数）/ 与展示档位的分工 / 改了没生效的排查 |
+| 33   | [侧边栏 Git 面板](./33-sidebar-git-panel.md) | 侧边栏 Git 折叠分区：分支名 + 变更文件列表 + 状态徽章与筛选 / 面板看的是"当前上下文"目录（会话工作区优先，最近项目兜底）/ 非仓库时显示检查路径 / Diff 抽屉 / 复制路径与 Markdown 清单 |
+| 34   | [新会话页项目绑定](./34-project-binding.md) | 新会话页工具栏"项目选择器"：选择项目绑定或"不绑定项目"；工具调用限制与主流应用对标 |
+| 35   | [聊天附件](./35-attachment-capability.md) | 拖入/选择/粘贴三种方式 + 整页拖放 / 支持格式与 25MB、10 个上限 / 气泡附件卡状态含义（已读取/已跳过/截断/检索注入）/ 常见问题 |
 | 36   | [专家（数字员工）](./36-specialist-persona.md) | 专家卡 / 模板一键建 / 六段人设 / 技能·知识·记忆配置 / 聊天中使用 / 导入导出 / 版本回滚 / 黄金任务评测 / 常见问题 |
 
 ---

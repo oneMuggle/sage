@@ -57,8 +57,9 @@ vi.mock('../../features/office', () => ({
   // stub it out (probe IPC is irrelevant to the workspace lifecycle).
   OfficeCapabilityBar: () => <div data-testid="office-capability-bar" />,
   OfficeDocumentList: () => <div data-testid="office-document-list" />,
-  OfficeFilePicker: ({ children }: { children?: ReactNode }) => (
-    <div data-testid="office-file-picker">{children}</div>
+  OfficeDuplicateDialog: () => null,
+  OfficeIntake: ({ children }: { children?: ReactNode }) => (
+    <div data-testid="office-intake">{children}</div>
   ),
   OfficeGenerateForm: () => <div data-testid="office-generate-form" />,
   OfficePreviewPanel: () => <div data-testid="office-preview-panel" />,
@@ -67,11 +68,13 @@ vi.mock('../../features/office', () => ({
     loading: false,
     error: null,
     refresh: vi.fn(),
-    importAndRead: vi.fn(),
-    readDropped: vi.fn(),
+    importAndReadMulti: vi.fn(),
+    readDroppedMulti: vi.fn(),
     saveAs: vi.fn(),
     open: vi.fn(),
     showInFolder: vi.fn(),
+    pendingDuplicate: null,
+    resolvePendingDuplicate: vi.fn(),
   }),
 }));
 

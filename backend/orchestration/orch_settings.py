@@ -43,6 +43,9 @@ _RAW_KEYS = {
     # 2026-11-01: 动态迭代预算（P1 设置页暴露）。键名与前端
     # OrchSettings 逐字一致；漏加映射会导致 UI 保存后不生效。
     "dynamicBudgetEnabled": "dynamic_budget_enabled",
+    # 2026-11-04: 预算模式显式开关（auto | fixed），取代旧版
+    # 「maxIterations == 25」哨兵。老数据无此键时由 dynamicBudgetEnabled 推导。
+    "budgetMode": "budget_mode",
     "budgetSimple": "budget_simple",
     "budgetMedium": "budget_medium",
     "budgetComplex": "budget_complex",
@@ -87,6 +90,13 @@ _INT_MIN_BOUNDS = {
     "budget_hard_cap": 1,
     "budget_max_extensions": 0,
 }
+
+#: str 枚举字段 —— 不走 ``_sanitize_scratch_root``（该清洗面向目录名，
+#: 枚举语义由 load_orch_settings 末尾的白名单校验兜底）。
+_STR_ENUM_FIELDS = frozenset({"subagent_approval_mode", "budget_mode"})
+
+#: 预算模式值域：auto = 任务分级 + 自动延长；fixed = max_iterations 硬上限。
+BUDGET_MODES = ("auto", "fixed")
 
 
 @dataclass
@@ -142,6 +152,11 @@ class OrchSettings:
     #: 2026-11-01: 动态迭代预算总开关（P1 设置页暴露）。
     #: 关闭后 run_loop 回到固定 max_iterations 行为（仍可用 env 强制关闭）。
     dynamic_budget_enabled: bool = True
+    #: 2026-11-04: 预算模式显式开关（auto | fixed），取代旧版
+    #: 「maxIterations == 25」哨兵 —— 用户改任何其它值都会静默关闭动态预算。
+    #: auto = 按任务分级给初始预算、到上限后再按进度审计自动延长；
+    #: fixed = 直接采用 max_iterations 作为硬上限。
+    budget_mode: str = "auto"
     #: 各档初始预算（simple/medium/complex/long）。到软预算后由进度审计
     #: 决定自动延长或带原因停止；见 backend/core/legacy/iteration_budget.py。
     budget_simple: int = 20
@@ -215,10 +230,24 @@ def load_orch_settings() -> OrchSettings:
                 value = lower_bound
             settings = replace(settings, **{field_name: value})
         elif isinstance(current, str) and isinstance(value, str):
-            settings = replace(settings, **{field_name: _sanitize_scratch_root(value, current)})
+            if field_name in _STR_ENUM_FIELDS:
+                settings = replace(settings, **{field_name: value})
+            else:
+                settings = replace(
+                    settings, **{field_name: _sanitize_scratch_root(value, current)}
+                )
     # live-events P1: 审批模式白名单校验（str 分支通用清洗不覆盖枚举语义）。
     if settings.subagent_approval_mode not in ("ask", "auto"):
         settings = replace(settings, subagent_approval_mode="ask")
+    # 2026-11-04: 预算模式白名单 + 老数据迁移。budgetMode 缺失（升级前写入
+    # 的设置）时由 dynamicBudgetEnabled 推导，保持升级前语义不变。
+    if settings.budget_mode not in BUDGET_MODES:
+        settings = replace(settings, budget_mode="auto")
+    if "budgetMode" not in orch:
+        settings = replace(
+            settings,
+            budget_mode="auto" if settings.dynamic_budget_enabled else "fixed",
+        )
     return settings
 
 

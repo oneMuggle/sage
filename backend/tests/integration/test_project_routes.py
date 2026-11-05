@@ -227,6 +227,32 @@ async def test_bootstrap_preview_returns_suggestions(
 
 
 @pytest.mark.asyncio()
+async def test_bootstrap_scan_and_suggest_endpoints(
+    client: httpx.AsyncClient, project_dir: Path
+) -> None:
+    (project_dir / "main.py").write_text("print('hi')", encoding="utf-8")
+    project = await _register(client, project_dir)
+
+    scan = await client.post(f"/api/v1/projects/{project['id']}/bootstrap/scan")
+    assert scan.status_code == 200, scan.text
+    scan_body = scan.json()
+    assert scan_body["project"]["id"] == project["id"]
+    assert "existing" in scan_body["scan"]
+    assert "suggestions" not in scan_body
+
+    suggest = await client.post(
+        f"/api/v1/projects/{project['id']}/bootstrap/suggest",
+        json={"use_llm": False},
+    )
+    assert suggest.status_code == 200, suggest.text
+    suggest_body = suggest.json()
+    assert "git_init" in suggest_body["suggestions"]
+    assert "sage_md" in suggest_body["suggestions"]
+    assert suggest_body["llm_available"] is False
+    assert suggest_body["rule_source"] == "template"
+
+
+@pytest.mark.asyncio()
 async def test_bootstrap_apply_is_idempotent(
     client: httpx.AsyncClient, project_dir: Path
 ) -> None:

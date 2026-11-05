@@ -31,7 +31,10 @@ export const playbookRoutes: Record<string, CommandRoute> = {
   },
   playbook_get_current: {
     method: 'GET',
-    path: (a) => `/api/v1/projects/${projectId(a)}/playbook`,
+    path: (a) =>
+      `/api/v1/projects/${projectId(a)}/playbook?with_audit=${
+        a.withAudit ?? a.with_audit ?? true
+      }`,
   },
   playbook_bind: {
     method: 'PUT',
@@ -129,6 +132,16 @@ export const playbookRoutes: Record<string, CommandRoute> = {
       save_to_library: a.saveToLibrary ?? a.save_to_library ?? false,
     }),
   },
+  playbook_import_document: {
+    method: 'POST',
+    path: () => '/api/v1/playbooks/import/document',
+    body: (a) => ({
+      filename: a.filename,
+      content_base64: a.contentBase64 ?? a.content_base64,
+      project_id: a.projectId ?? a.project_id,
+      use_llm: a.useLlm ?? a.use_llm ?? true,
+    }),
+  },
   playbooks_library_list: {
     method: 'GET',
     path: () => '/api/v1/playbooks/library',
@@ -154,6 +167,17 @@ export const playbookRoutes: Record<string, CommandRoute> = {
   playbooks_library_delete: {
     method: 'DELETE',
     path: (a) => `/api/v1/playbooks/library/${enc(a.libraryId ?? a.library_id)}`,
+  },
+  playbooks_share_create: {
+    method: 'POST',
+    path: (a) => `/api/v1/playbooks/library/${enc(a.libraryId ?? a.library_id)}/share`,
+    body: (a) => ({
+      expiry_days: a.expiryDays ?? a.expiry_days ?? 7,
+    }),
+  },
+  playbooks_share_resolve: {
+    method: 'GET',
+    path: (a) => `/api/v1/playbooks/shared/${enc(a.token)}`,
   },
   playbooks_events_list: {
     method: 'GET',

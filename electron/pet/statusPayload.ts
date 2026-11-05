@@ -27,6 +27,14 @@ export interface PetStatusPayload {
   lastTerminal: { action: 'done' | 'error'; at: number | null } | null;
   companion: { bondDays: number; patCount: number };
   activeSessions: number;
+  attention: {
+    needsYou: number;
+    failed: number;
+    running: number;
+    activeTasks: number;
+    total: number;
+    needsYouSessionIds: string[];
+  };
   sessions: Array<{
     sessionId: string;
     sessionTitle: string | null;
@@ -45,7 +53,13 @@ export interface PetStatusPayload {
     percent: number | null;
     sessionId: string | null;
   }>;
-  pets: Array<{ id: string; petPack: string; size: string }>;
+  pets: Array<{
+    id: string;
+    petPack: string;
+    size: string;
+    followMode: string;
+    pinnedSessionId: string | null;
+  }>;
   config: {
     enabled: boolean;
     displayMode: string;
@@ -57,10 +71,7 @@ export interface PetStatusPayload {
   };
 }
 
-export function buildStatusPayload(
-  snapshot: PetSnapshot,
-  config: PetConfig,
-): PetStatusPayload {
+export function buildStatusPayload(snapshot: PetSnapshot, config: PetConfig): PetStatusPayload {
   return {
     version: 1,
     updatedAt: snapshot.updatedAt,
@@ -82,6 +93,10 @@ export function buildStatusPayload(
       : null,
     companion: { bondDays: snapshot.bondDays, patCount: snapshot.patCount },
     activeSessions: snapshot.activeSessions,
+    attention: {
+      ...snapshot.attention,
+      needsYouSessionIds: snapshot.attention.needsYouSessionIds.slice(0, 20),
+    },
     sessions: snapshot.sessions.slice(0, MAX_SESSIONS).map((session) => ({
       sessionId: session.sessionId,
       sessionTitle: session.sessionTitle,
@@ -100,7 +115,13 @@ export function buildStatusPayload(
       percent: task.percent ?? null,
       sessionId: task.sessionId ?? null,
     })),
-    pets: config.pets.map((pet) => ({ id: pet.id, petPack: pet.petPack, size: pet.size })),
+    pets: config.pets.map((pet) => ({
+      id: pet.id,
+      petPack: pet.petPack,
+      size: pet.size,
+      followMode: pet.followMode,
+      pinnedSessionId: pet.pinnedSessionId,
+    })),
     config: {
       enabled: config.enabled,
       displayMode: config.displayMode,

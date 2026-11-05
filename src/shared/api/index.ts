@@ -5,7 +5,7 @@
  */
 
 // API 模块
-export { agentsApi } from './agentsApi';
+export { agentsApi, AGENT_MIN_ITERATIONS, AGENT_MAX_ITERATIONS_CEILING } from './agentsApi';
 export { chatApi } from './chatApi';
 export {
   globalRulesApi,
@@ -28,6 +28,7 @@ export { projectApi } from './projectApi';
 export { playbookApi } from './playbookApi';
 export type {
   PlaybookAction,
+  PlaybookDocumentImportResult,
   PlaybookActionsResult,
   PlaybookArtifactAudit,
   PlaybookArtifactSpec,
@@ -42,6 +43,8 @@ export type {
   PlaybookImportPreview,
   PlaybookLibraryItem,
   PlaybookMatch,
+  PlaybookShareLink,
+  PlaybookSharedPayload,
   PlaybookSpec,
   PlaybookStageAudit,
   PlaybookStageSpec,
@@ -114,8 +117,15 @@ export type {
   BootstrapPreviewResult,
   BootstrapApplyPayload,
   BootstrapApplyResult,
+  BootstrapAppliedItem,
+  BootstrapSkippedItem,
+  BootstrapVerification,
   BootstrapRuleSuggestion,
   BootstrapMilestoneSuggestion,
+  BootstrapScanSection,
+  BootstrapSuggestionSet,
+  BootstrapScanResult,
+  BootstrapSuggestResult,
   GitInitResult,
 } from './projectApi';
 export { officeApi } from './officeApi';

@@ -97,6 +97,10 @@ def create_session(data: SessionCreate, repo: SessionRepository = Depends(get_se
     project_path → session_binding → user_preference → detected_root → scratch → None。
     解析失败（连 scratch 都不可用）时响应里 ``workspace_binding`` 为 null，
     前端据此渲染"选择文件夹"引导，不会阻塞会话创建。
+
+    2026-11-04: 当 ``skip_workspace_binding=True`` 时跳过工作区解析链，不绑定任何
+    工作区。用于前端用户明确选择"不绑定项目"的场景，语义对齐主流 AI 应用
+    (Cursor / Cline / Windsurf) 的"显式选择 > 自动推断"原则。
     """
     # M0 (2026-11-03): 会话级专家绑定。校验失败整体拒绝，不写半截数据。
     try:
@@ -110,22 +114,23 @@ def create_session(data: SessionCreate, repo: SessionRepository = Depends(get_se
     )
 
     workspace_binding: Optional[Dict[str, Any]] = None
-    try:
-        resolver = DefaultWorkspaceResolver()
-        resolution = resolver.resolve_default_workspace(detected_root=data.detected_root)
-        if resolution is not None:
-            conn = get_database().get_connection()
-            bind_session_workspace(conn, session.id, resolution.path)
-            workspace_binding = {
-                "path": resolution.path,
-                "source": resolution.source.value,
-                "is_fallback": resolution.is_fallback,
-            }
-    except Exception as exc:  # noqa: BLE001 — 工作区解析失败不能阻塞会话创建
-        logger.warning(
-            "create_session: workspace resolution/bind failed (fail-open)",
-            extra={"session_id": session.id, "reason": str(exc)},
-        )
+    if not data.skip_workspace_binding:
+        try:
+            resolver = DefaultWorkspaceResolver()
+            resolution = resolver.resolve_default_workspace(detected_root=data.detected_root)
+            if resolution is not None:
+                conn = get_database().get_connection()
+                bind_session_workspace(conn, session.id, resolution.path)
+                workspace_binding = {
+                    "path": resolution.path,
+                    "source": resolution.source.value,
+                    "is_fallback": resolution.is_fallback,
+                }
+        except Exception as exc:  # noqa: BLE001 — 工作区解析失败不能阻塞会话创建
+            logger.warning(
+                "create_session: workspace resolution/bind failed (fail-open)",
+                extra={"session_id": session.id, "reason": str(exc)},
+            )
 
     # Phase 2: session_start 生命周期钩子 (observe-only, fail-open)
     _fire_session_hook("session_start", session.id, title=session.title)

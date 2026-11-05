@@ -34,6 +34,7 @@ const cases: Array<[AgentState, string | null, string?]> = [
   ['skill_activated', null],
   ['compact_triggered', null],
   ['attachment_rag_used', null],
+  ['attachments_processed', null],
   ['workspace_changed', null],
   ['sources_used', null],
   ['suspended', null],

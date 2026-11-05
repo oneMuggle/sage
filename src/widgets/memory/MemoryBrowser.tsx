@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 
 import { memoryApi, Memory } from '../../shared/api';
 import { agentsApi } from '../../shared/api/agentsApi';
+import { formatDate } from '../../shared/lib/timeFormatter';
 
 import { MemoryPromoteButton } from './MemoryPromoteButton';
 
@@ -752,15 +753,7 @@ function MemoryItemCard({
   );
 }
 
-function formatDate(timestampMs: number): string {
-  if (!Number.isFinite(timestampMs) || timestampMs <= 0) return '—';
-  const date = new Date(timestampMs);
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-}
+// formatDate 已统一到 src/shared/lib/timeFormatter
 
 function truncate(s: string, max: number): string {
   if (s.length <= max) return s;

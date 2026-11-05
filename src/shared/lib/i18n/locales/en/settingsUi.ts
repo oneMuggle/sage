@@ -25,7 +25,7 @@ export const enSettingsUi = {
   'settings.basic.llm_proxy_timeout.label': 'Upstream read timeout (s)',
   'settings.basic.llm_retry': 'LLM retry',
   'settings.basic.llm_retry.max_delay.desc':
-    'Upper bound for a single retry wait, preventing excessively long exponential backoff',
+    'Upper bound for a single retry wait, preventing excessively long exponential backoff. Range 1-3600 s, and not less than the backoff base.',
   'settings.basic.llm_retry.max_delay.label': 'Max backoff (s)',
   'settings.basic.llm_total_limit.desc':
     'Total time limit for a single task (LLM calls + tool execution + subagents); the task is terminated when exceeded. 0 = no limit; when set, takes precedence over the SAGE_LLM_TOTAL_TIMEOUT_S environment variable',
@@ -36,13 +36,15 @@ export const enSettingsUi = {
   'settings.basic.log_timezone.local': 'Local system timezone',
   'settings.basic.log_timezone.utc': 'UTC (legacy default)',
   'settings.basic.retry_base_desc':
-    'Wait before the first retry; subsequent retries grow exponentially (base × 2^(attempt-1))',
+    'Wait before the first retry; subsequent retries grow exponentially (base × 2^(attempt-1)). Range 0-600 s.',
   'settings.basic.retry_base_label': 'Backoff base (s)',
   'settings.basic.retry_max_desc':
-    'Total attempt count for LLM requests (including the first request). For example, 10 means up to 10 attempts (first + 9 retries). Set to 0 or 1 to disable automatic retries.',
+    'Total attempt count for LLM requests (including the first request). For example, 10 means up to 10 attempts (first + 9 retries). Range 1-100.',
   'settings.basic.retry_max_label': 'Max attempts',
+  'settings.basic.retry_source.custom': 'Customized',
+  'settings.basic.retry_source.default': 'Default',
   'settings.basic.retry_total_budget_desc':
-    'Cumulative wait between the first attempt and the next retry; retrying stops once this budget is exceeded. 0 = no limit.',
+    'Total time spent waiting since the first attempt. Once this budget is exhausted, automatic retries stop. Range 0-86400; 0 = unlimited.',
   'settings.basic.retry_total_budget_label': 'Total retry budget (s)',
   // 2026-11-02: save failure toast — after saveSettings switched to strict channel,
   // settingsStore toasts on backend PUT failure
@@ -102,6 +104,17 @@ export const enSettingsUi = {
   'settings.endpoints.field.model_id': 'Model ID (advanced, optional)',
   'settings.endpoints.field.name': 'Name',
   'settings.endpoints.field.protocol': 'Protocol',
+  // 2026-11-03: thinking process parameters — per-endpoint, forwarded to upstream LLM.
+  'settings.endpoints.field.reasoning_effort': 'Reasoning effort',
+  'settings.endpoints.field.reasoning_effort.off': 'Off',
+  'settings.endpoints.field.reasoning_effort.low': 'Low',
+  'settings.endpoints.field.reasoning_effort.medium': 'Medium',
+  'settings.endpoints.field.reasoning_effort.high': 'High',
+  'settings.endpoints.field.reasoning_effort_hint':
+    'Effort level when asking the model to show its thinking',
+  'settings.endpoints.field.thinking_budget': 'Thinking budget (tokens)',
+  'settings.endpoints.field.thinking_budget_hint':
+    'Maximum tokens for the thinking process; 0 = off, empty = upstream default',
   'settings.endpoints.model_count': '{n} models',
   'settings.endpoints.model_id_hint': 'Model',
   'settings.endpoints.model_id_placeholder': 'Leave empty to use the selection on the Models tab',
@@ -339,15 +352,21 @@ export const enSettingsUi = {
     'After this many consecutive unanswered questions in one session, the agent stops asking and proceeds with the task to avoid pestering the user',
   'settings.orch.max_consecutive_unanswered.label': 'Consecutive unanswered question limit',
   'settings.orch.max_iterations.desc':
-    'Maximum iterations for the primary agent (each iteration is one LLM call that may invoke multiple tools); when exceeded, the session ends with reason max_iterations_exceeded',
+    'In fixed mode, the maximum iterations for the primary agent (each iteration is one LLM call that may invoke multiple tools); when exceeded, the session ends with reason max_iterations_exceeded. In auto mode this value acts as a lower bound and the actual budget is tiered by task complexity',
   'settings.orch.max_iterations.label': 'Agent iteration limit (0 = default)',
   // 2026-11-01: dynamic iteration budget (P1 settings exposure).
   'settings.orch.section_dynamic_budget': 'Dynamic iteration budget',
   'settings.orch.dynamic_budget_intro':
     'Starts each task with a complexity-based iteration budget: simple tasks stay lean while complex/long tasks can auto-extend; repeated calls or long stretches without progress stop with evidence. Environment variables SAGE_DYNAMIC_BUDGET_* take precedence over these settings.',
-  'settings.orch.dynamic_budget_enabled.label': 'Enable dynamic iteration budget',
-  'settings.orch.dynamic_budget_enabled.desc':
-    'When off, falls back to the fixed “Agent iteration limit”',
+  // 2026-11-04: budget mode radio, replacing the dynamic-budget toggle (maxIterations==25 sentinel).
+  'settings.orch.budget_mode.label': 'Iteration budget mode',
+  'settings.orch.budget_mode.desc':
+    'Auto: budgets are tiered by task complexity, auto-extended after a progress audit at the limit, and stop with evidence when stuck. Fixed: uses “Agent iteration limit” directly',
+  'settings.orch.budget_mode.auto': 'Auto (recommended)',
+  'settings.orch.budget_mode.auto_desc':
+    'Initial budget tiered by task complexity, auto-extended after a progress audit at the limit',
+  'settings.orch.budget_mode.fixed': 'Fixed ceiling',
+  'settings.orch.budget_mode.fixed_desc': 'Uses “Agent iteration limit” directly, no auto-extension',
   'settings.orch.budget_simple.label': 'Simple task initial budget (steps)',
   'settings.orch.budget_simple.desc': 'Initial steps for short, attachment-free simple tasks',
   'settings.orch.budget_medium.label': 'Medium task initial budget (steps)',

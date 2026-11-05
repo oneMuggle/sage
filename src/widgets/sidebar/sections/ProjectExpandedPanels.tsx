@@ -426,7 +426,7 @@ export function ProjectMaterialsPanel({
         >
           <div className="flex items-center justify-between text-ui-2xs text-text-secondary">
             <span>
-              受控注入源 · 已启用 {activeReadyMaterials.length}/{readyMaterials.length}
+              资料源 · 已启用 {activeReadyMaterials.length}/{readyMaterials.length}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -523,8 +523,8 @@ export function ProjectMaterialsPanel({
                   type="button"
                   data-testid="project-material-toggle"
                   aria-pressed={enabled}
-                  aria-label={enabled ? '暂停注入此资料' : '启用注入此资料'}
-                  title={enabled ? '已参与本轮上下文注入（点击暂停）' : '已暂停注入（点击启用）'}
+                  aria-label={enabled ? '暂停使用此资料' : '启用此资料'}
+                  title={enabled ? '已参与当前对话的上下文（点击暂停）' : '已暂停参与上下文（点击启用）'}
                   disabled={togglingId === m.id}
                   onClick={() => void handleToggleMaterial(m)}
                   className="mt-0.5 shrink-0 inline-flex items-center justify-center text-muted hover:text-primary disabled:opacity-40"

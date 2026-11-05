@@ -18,6 +18,7 @@ const confirmStageMock = vi.fn();
 const exportMock = vi.fn();
 const wikiExportMock = vi.fn();
 const updateStateMock = vi.fn();
+
 const unbindMock = vi.fn();
 const versionsMock = vi.fn();
 const listEventsMock = vi.fn();
@@ -175,6 +176,8 @@ beforeEach(() => {
 });
 
 describe('PlaybookCard', () => {
+  const openMore = () => fireEvent.click(screen.getByTestId('playbook-more-menu-btn'));
+  const openExport = () => fireEvent.click(screen.getByTestId('playbook-export-menu-btn'));
   it('未绑定时显示推荐规程并可绑定', async () => {
     getCurrentMock.mockResolvedValue(unbound);
     bindMock.mockResolvedValue({ ...bound, version: 2 });
@@ -274,6 +277,8 @@ describe('PlaybookCard', () => {
       updated: false,
     });
     render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-card');
+    openExport();
     await screen.findByTestId('playbook-wiki-export');
     fireEvent.click(screen.getByTestId('playbook-wiki-export'));
     await waitFor(() => expect(wikiExportMock).toHaveBeenCalledWith('p1'));
@@ -403,6 +408,8 @@ describe('PlaybookCard', () => {
     getCurrentMock.mockResolvedValue(bound);
     bindMock.mockResolvedValue({ ...bound, version: 2 });
     render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-card');
+    openMore();
     await screen.findByTestId('playbook-edit-btn');
     fireEvent.click(screen.getByTestId('playbook-edit-btn'));
     await screen.findByTestId('playbook-editor-form');
@@ -424,6 +431,8 @@ describe('PlaybookCard', () => {
     getCurrentMock.mockResolvedValue(bound);
     bindMock.mockResolvedValue({ ...bound, version: 2 });
     render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-card');
+    openMore();
     await screen.findByTestId('playbook-edit-btn');
     fireEvent.click(screen.getByTestId('playbook-edit-btn'));
     const nameInput = await screen.findByTestId('playbook-editor-name');
@@ -441,6 +450,8 @@ describe('PlaybookCard', () => {
     getCurrentMock.mockResolvedValue(bound);
     bindMock.mockResolvedValue({ ...bound, version: 2 });
     render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-card');
+    openMore();
     await screen.findByTestId('playbook-edit-btn');
     fireEvent.click(screen.getByTestId('playbook-edit-btn'));
 
@@ -518,6 +529,8 @@ describe('PlaybookCard', () => {
       },
     ]);
     render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-card');
+    openMore();
     await screen.findByTestId('playbook-versions-btn');
     fireEvent.click(screen.getByTestId('playbook-versions-btn'));
     await waitFor(() => expect(versionsMock).toHaveBeenCalledWith('p1'));
@@ -543,6 +556,8 @@ describe('PlaybookCard', () => {
       total: 4,
     });
     render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-card');
+    openMore();
     await screen.findByTestId('playbook-activity-btn');
     fireEvent.click(screen.getByTestId('playbook-activity-btn'));
     await waitFor(() => expect(listEventsMock).toHaveBeenCalledWith('p1'));
@@ -557,6 +572,8 @@ describe('PlaybookCard', () => {
     unbindMock.mockResolvedValue({ bound: false, state: {} });
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-card');
+    openMore();
     await screen.findByTestId('playbook-unbind');
     fireEvent.click(screen.getByTestId('playbook-unbind'));
     await waitFor(() => expect(unbindMock).toHaveBeenCalledWith('p1'));
@@ -573,6 +590,8 @@ describe('PlaybookCard', () => {
       audit,
     });
     render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-card');
+    openMore();
     await screen.findByTestId('playbook-seed-milestones');
     fireEvent.click(screen.getByTestId('playbook-seed-milestones'));
     await waitFor(() =>
@@ -617,6 +636,8 @@ describe('PlaybookCard', () => {
   it('可打开全局规程库面板并关闭', async () => {
     getCurrentMock.mockResolvedValue(bound);
     render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-card');
+    openMore();
     await screen.findByTestId('playbook-open-library');
     fireEvent.click(screen.getByTestId('playbook-open-library'));
     expect(await screen.findByTestId('playbook-library-panel')).toBeInTheDocument();
@@ -636,6 +657,8 @@ describe('PlaybookCard', () => {
     });
     saveLibraryMock.mockResolvedValue({ id: 'lib-2', name: '科研课题' });
     render(<PlaybookCard projectId="p1" />);
+    await screen.findByTestId('playbook-card');
+    openMore();
     await screen.findByTestId('playbook-save-library');
     fireEvent.click(screen.getByTestId('playbook-save-library'));
     await waitFor(() =>

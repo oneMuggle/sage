@@ -1,5 +1,5 @@
 // src/widgets/memory/__tests__/UserProfileCard.test.tsx
-// 对标 S2: "关于我" 可编辑画像卡片 + Phase P28 ProjectProfileCard 四类原型画像预设与搜索导出 —— memoryApi 全 mock。
+// 对标 S2: "关于我" 可编辑画像卡片 + Phase P28 ProjectProfileCard 四类推荐记忆预设与搜索导出 —— memoryApi 全 mock。
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -148,7 +148,7 @@ describe('ProjectProfileCard (Phase P28)', () => {
     vi.clearAllMocks();
   });
 
-  it('支持四类原型画像预设填入、关键词/类别筛选与一键复制 Markdown', async () => {
+  it('支持四类推荐记忆预设填入、关键词/类别筛选与一键复制 Markdown', async () => {
     getProjectProfile.mockResolvedValue({
       project_key: '/workspace/sage',
       projects: ['/workspace/sage'],

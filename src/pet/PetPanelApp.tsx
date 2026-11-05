@@ -54,6 +54,17 @@ export function PetPanelApp(): JSX.Element {
     pet?.openSettings();
   }, [pet]);
 
+  const pinSession = useCallback(
+    (sessionId: string) => {
+      pet?.pinSession(sessionId);
+    },
+    [pet],
+  );
+
+  const cycleFocus = useCallback(() => {
+    pet?.cycleFocus();
+  }, [pet]);
+
   return (
     <PetPanel
       snapshot={snapshot}
@@ -61,6 +72,8 @@ export function PetPanelApp(): JSX.Element {
       onClose={closePanel}
       onOpenSession={openSession}
       onOpenSettings={openSettings}
+      onPinSession={pinSession}
+      onCycleFocus={cycleFocus}
     />
   );
 }

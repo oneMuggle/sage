@@ -68,8 +68,8 @@ export function Agents() {
       setSelectedAgent(updated);
       setEditing(false);
       setEditForm({});
-    } catch {
-      setError('保存失败');
+    } catch (err) {
+      setError(`保存失败: ${err instanceof Error ? err.message : '未知错误'}`);
     }
   };
 

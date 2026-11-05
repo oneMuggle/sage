@@ -28,6 +28,8 @@ import { loadAttachmentRagConfig } from '../shared/api/attachmentRagConfig';
 import { orchRunControlClient } from '../shared/api/orchRunControlClient';
 // RD20 (round43): 历史 run → 任务板恢复映射。
 import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
+import { useGlobalFileDrop } from '../shared/lib/hooks/useGlobalFileDrop';
+import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
@@ -106,7 +108,13 @@ export function Chat() {
     removeMessage,
   } = useStore();
   const [tempChatSessions, setTempChatSessions] = useSessionMemoryPause(currentSessionId);
+  const { t } = useI18n();
   const [orchMode, setOrchMode] = useState<string>('auto');
+  // P2 (2026-11-04): 全局拖放 —— 用户在页面任意位置拖入文件都触发 overlay，
+  // drop 后派发到当前 composer（ChatInput 监听 sage:composer-drop）。
+  const { isDragOver } = useGlobalFileDrop({
+    composerSelector: '[data-testid="chat-input"]',
+  });
 
   // 崩溃恢复）后长任务输出不再丢失。内部有会话级去重守卫。
   useEffect(() => {
@@ -164,6 +172,11 @@ export function Chat() {
   // 显示时用 offset + 当前 run 的 iteration，实现"接着上次继续"。
   const iterationOffset = useChatStreamStore((s) =>
     currentSessionId != null ? selectSessionSlots(s, currentSessionId).iterationOffset : 0,
+  );
+  // 2026-11-05 M5: 动态预算自动延长 —— iteration_checkpoint 事件写入 store，
+  // 由 ChatSessionNotices 渲染为持久横幅（取代原先 3 秒即消失的 toast）。
+  const budgetCheckpoint = useChatStreamStore((s) =>
+    currentSessionId != null ? selectSessionSlots(s, currentSessionId).budgetCheckpoint : null,
   );
   const handleStepConfirm = useCallback(
     async (action: StepConfirmAction) => {
@@ -254,7 +267,14 @@ export function Chat() {
       content: string,
       options?: {
         knowledgeRefs?: { id: string; title: string }[];
-        attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
+        attachments?: {
+          name: string;
+          size: number;
+          type: string;
+          dataUrl?: string;
+          /** P1: 选中即上传得到的 media id（存在时不再重复上传）。 */
+          mediaId?: string;
+        }[];
         images?: { name: string; size: number; type: string; dataUrl?: string }[];
         /** 2026-10-31: 前端确认/编辑后的本地 OCR 文本（与 images 对齐） */
         imageOcrTexts?: string[];
@@ -306,6 +326,12 @@ export function Chat() {
         if (!att.dataUrl) continue;
         const ext = att.name.split('.').pop()?.toLowerCase() ?? '';
         if (!CHAT_DOCUMENT_EXTENSIONS.has(ext)) continue;
+        // P1 (2026-11-04): 选中即上传已完成 → 直接复用 media id，避免重复上传。
+        if (att.mediaId) {
+          attachmentMediaIds.push(att.mediaId);
+          maybeIndexAttachment(att.mediaId);
+          continue;
+        }
         try {
           const bytes = atob(att.dataUrl.split(',')[1] ?? '');
           const buffer = new Uint8Array(bytes.length);
@@ -552,6 +578,17 @@ export function Chat() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
+      {/* P2 (2026-11-04): 全局拖放 overlay —— 用户拖文件到聊天页任意位置时显示 */}
+      {isDragOver && (
+        <div
+          data-testid="chat-global-drop-overlay"
+          className="fixed inset-0 z-50 bg-primary/15 border-4 border-dashed border-primary flex items-center justify-center pointer-events-none"
+        >
+          <div className="px-6 py-4 rounded-radius-md bg-surface border border-primary shadow-lg">
+            <p className="text-primary font-semibold text-lg">{t('chat.drop_files')}</p>
+          </div>
+        </div>
+      )}
       <ChatHeaderBar
         workspacePath={workspacePath}
         currentSessionId={currentSessionId}
@@ -585,6 +622,12 @@ export function Chat() {
             messages={messages}
             shiftInfo={shiftInfo}
             isLoading={isLoading}
+            budgetCheckpoint={budgetCheckpoint}
+            onClearBudgetCheckpoint={() => {
+              if (currentSessionId) {
+                useChatStreamStore.getState().setBudgetCheckpoint(currentSessionId, null);
+              }
+            }}
             onClearError={clearError}
             onSendMessage={sendMessage}
             onRetreat={() => void handleRetreat()}

@@ -33,4 +33,9 @@ export const zhPetPack = {
   'settings.pet.pack_exported': '已导出：',
   'settings.pet.pack_deleted': '已删除动画包',
   'settings.pet.pack_failed': '操作失败',
+  'settings.pet.follow': '跟随方式',
+  'settings.pet.follow_focus': '跟随焦点会话',
+  'settings.pet.follow_urgent': '紧急优先',
+  'settings.pet.follow_pinned': '钉住会话',
+  'settings.pet.follow_pinned_hint': '在桌宠面板里点星标，选择要钉住的会话。',
 } as const;

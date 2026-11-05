@@ -38,6 +38,14 @@ function snapshot(): PetSnapshot {
     activeSessions: 1,
     sessions: [],
     tasks: [],
+    attention: {
+      needsYou: 0,
+      failed: 0,
+      running: 1,
+      activeTasks: 0,
+      total: 1,
+      needsYouSessionIds: [],
+    },
     updatedAt: NOW,
   };
 }
@@ -51,7 +59,12 @@ interface HttpResponse {
 function call(
   port: number,
   path: string,
-  options: { method?: string; token?: string; host?: string; headers?: Record<string, string> } = {},
+  options: {
+    method?: string;
+    token?: string;
+    host?: string;
+    headers?: Record<string, string>;
+  } = {},
 ): Promise<HttpResponse> {
   return new Promise((resolve, reject) => {
     const req = httpRequest(
@@ -183,9 +196,9 @@ describe('PetStatusServer', () => {
 
     expect((await call(port, '/v1/status')).status).toBe(401);
     expect((await call(port, '/v1/status', { token: 'wrong' })).status).toBe(401);
-    expect((await call(port, '/v1/status', { method: 'POST', token: tokenFile.token })).status).toBe(
-      405,
-    );
+    expect(
+      (await call(port, '/v1/status', { method: 'POST', token: tokenFile.token })).status,
+    ).toBe(405);
     expect(
       (await call(port, '/v1/status', { token: tokenFile.token, host: 'evil.example' })).status,
     ).toBe(403);
@@ -244,8 +257,9 @@ describe('PetStatusServer', () => {
     await first.start();
     const second = makeServer(dir);
     await second.start();
-    const secondToken = (JSON.parse(readFileSync(statusTokenFile(dir), 'utf8')) as { token: string })
-      .token;
+    const secondToken = (
+      JSON.parse(readFileSync(statusTokenFile(dir), 'utf8')) as { token: string }
+    ).token;
 
     first.stop();
     const stillThere = JSON.parse(readFileSync(statusTokenFile(dir), 'utf8')) as { token: string };

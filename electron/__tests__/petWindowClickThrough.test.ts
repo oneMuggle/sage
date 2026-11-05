@@ -73,7 +73,7 @@ vi.mock('../logger', () => ({
 
 function makeConfig(overrides: Partial<PetRenderConfig> = {}): PetRenderConfig {
   return {
-    version: 2,
+    version: 3,
     enabled: true,
     displayMode: 'desktop',
     tempo: 'standard',
@@ -82,12 +82,21 @@ function makeConfig(overrides: Partial<PetRenderConfig> = {}): PetRenderConfig {
     soundScenes: { waiting: true, error: false, done: false },
     showSessionTitle: false,
     compatibilityMode: 'auto',
-    followActiveSession: true,
     externalApi: false,
-    pets: [{ id: 'default', petPack: 'dafeiyu', size: 'medium' }],
+    pets: [
+      {
+        id: 'default',
+        petPack: 'dafeiyu',
+        size: 'medium',
+        followMode: 'focus',
+        pinnedSessionId: null,
+      },
+    ],
     petId: 'default',
     petPack: 'dafeiyu',
     size: 'medium',
+    followMode: 'focus',
+    pinnedSessionId: null,
     ...overrides,
   };
 }

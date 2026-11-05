@@ -1,5 +1,5 @@
 /**
- * AI 代码→Wiki 生成面板 (M5, 2026-10-12 / Phase P22 多形态适配 / Phase P24 M5→L4 入库闭环与清单导出 / Phase P31 全量批量纳入 L4 与扫描文件过滤)
+ * AI 代码→Wiki 生成面板 (M5, 2026-10-12 / Phase P22 多形态适配 / Phase P24 M5→L4 入库闭环与清单导出 / Phase P31 全量批量保存为资料 与扫描文件过滤)
  *
  * 嵌入项目工作台，用户可预览将被扫描的文件与提取的符号（支持按文件路径/语言筛选），
  * 一键调用 LLM 生成 Wiki 文档写入 wiki/ 目录，并支持单页或全量批量将生成的 Wiki 页面纳入 L4 受控资料池。
@@ -285,12 +285,12 @@ export function WikiGenerationPanel({
                   {allIngested ? (
                     <>
                       <Check className="h-3 w-3" />
-                      已全部纳入 L4
+                      已全部保存为资料
                     </>
                   ) : (
                     <>
                       <FilePlus2 className="h-3 w-3" />
-                      全部纳入 L4 资料池
+                      全部保存为资料
                     </>
                   )}
                 </button>
@@ -310,7 +310,7 @@ export function WikiGenerationPanel({
                             content: `M5 Wiki 生成索引（共 ${result.wikiPaths.length} 页）：${result.wikiPaths.join('、')}`,
                             importance: 7,
                             sourceMessageIds: [],
-                            reasoning: 'M5 Wiki 文档清单沉淀至 L3 项目画像',
+                            reasoning: 'M5 Wiki 文档清单保存到项目记忆',
                           },
                         ],
                       });
@@ -321,7 +321,7 @@ export function WikiGenerationPanel({
                 }}
                 className="inline-flex items-center gap-1 rounded border border-green-300 bg-white/80 px-2 py-0.5 text-ui-2xs font-medium text-green-700 hover:bg-white"
               >
-                {savedManifestL3 ? '已沉淀至 L3' : '沉淀清单至 L3'}
+                {savedManifestL3 ? '已保存到 AI 记忆' : '保存清单到 AI 记忆'}
               </button>
               <button
                 type="button"
@@ -351,7 +351,7 @@ export function WikiGenerationPanel({
           {result.wikiPaths.length > 0 && (
             <div className="space-y-1">
               <span className="text-xs text-green-700">
-                生成的文件（可一键纳入 L4 受控资料池）：
+                生成的文件（可一键保存为资料）：
               </span>
               <div className="max-h-32 overflow-y-auto space-y-1">
                 {result.wikiPaths.map((p, idx) => {
@@ -375,12 +375,12 @@ export function WikiGenerationPanel({
                         {isIngested ? (
                           <>
                             <Check className="h-2.5 w-2.5" />
-                            已纳入 L4
+                            已保存为资料
                           </>
                         ) : (
                           <>
                             <FilePlus2 className="h-2.5 w-2.5" />
-                            纳入 L4 资料
+                            保存为资料
                           </>
                         )}
                       </button>
@@ -521,7 +521,7 @@ export function WikiGenerationPanel({
                     }}
                     className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs text-primary hover:bg-primary/10 disabled:opacity-60"
                   >
-                    {savedSymbolsProfile ? '已沉淀符号至 L3' : '沉淀符号摘要至 L3'}
+                    {savedSymbolsProfile ? '已保存符号到 AI 记忆' : '保存符号摘要到 AI 记忆'}
                   </button>
                 </div>
               )}
@@ -598,7 +598,7 @@ export function WikiGenerationPanel({
                           }}
                           className="rounded border border-border bg-background px-1 py-0 text-ui-2xs text-primary hover:bg-primary/10"
                         >
-                          {guardedSymbolIndices.has(idx) ? '已护栏' : '+L2'}
+                          {guardedSymbolIndices.has(idx) ? '已护栏' : '+规则'}
                         </button>
                         <button
                           type="button"
@@ -637,7 +637,7 @@ export function WikiGenerationPanel({
                                       content: `核心符号 [${KIND_LABELS[s.kind] ?? s.kind}] ${s.name} (${s.filePath}:${s.lineno})`,
                                       importance: 7,
                                       sourceMessageIds: [],
-                                      reasoning: 'M5 Wiki 单条核心符号沉淀至 L3 画像',
+                                      reasoning: 'M5 Wiki 单条核心符号保存到 AI 记忆',
                                     },
                                   ],
                                 });
@@ -648,7 +648,7 @@ export function WikiGenerationPanel({
                           }}
                           className="rounded border border-border bg-background px-1 py-0 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                         >
-                          {l3SymbolIndices.has(idx) ? '已存L3' : '+L3'}
+                          {l3SymbolIndices.has(idx) ? '已保存' : '+记忆'}
                         </button>
                       </div>
                     </div>
@@ -695,7 +695,7 @@ export function WikiGenerationPanel({
                         }}
                         className="rounded border border-border bg-background px-1 py-0 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                       >
-                        {ingestedPaths.has(f.path) ? '已入库L4' : '+L4'}
+                        {ingestedPaths.has(f.path) ? '已入库' : '+资料'}
                       </button>
                     </div>
                   </div>

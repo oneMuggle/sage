@@ -27,6 +27,7 @@ import type {
   ImportResult,
   ImportedOfficeFile,
   JournalElectronApiBridge,
+  MultiOfficeImportResult,
   OfficeDocType,
   OfficeElectronApiBridge,
   OfficeManagedRef,
@@ -39,6 +40,7 @@ import type {
   PetPackImportResultBridge,
   PetPackManifestBridge,
   PetSnapshotBridge,
+  PreviewElectronApiBridge,
   ProvidersElectronApiBridge,
   PtyElectronApiBridge,
   RescanResult,
@@ -399,12 +401,21 @@ const electronAPI = {
         workspacePath,
         docType,
       }) as Promise<ImportedOfficeFile | null>,
+    pickAndImportMultiOfficeFiles: (workspacePath: string) =>
+      ipcRenderer.invoke('office:pick-and-import-multi', {
+        workspacePath,
+      }) as Promise<MultiOfficeImportResult>,
     importDroppedOfficeFile: (workspacePath: string, docType: OfficeDocType, sourcePath: string) =>
       ipcRenderer.invoke('office:import-dropped', {
         workspacePath,
         docType,
         sourcePath,
       }) as Promise<ImportedOfficeFile>,
+    importDroppedMultiOfficeFiles: (workspacePath: string, sourcePaths: string[]) =>
+      ipcRenderer.invoke('office:import-dropped-multi', {
+        workspacePath,
+        sourcePaths,
+      }) as Promise<MultiOfficeImportResult>,
     completeOfficeImport: (importToken: string) =>
       ipcRenderer.invoke('office:complete-import', { importToken }) as Promise<void>,
     discardOfficeImport: (importToken: string) =>
@@ -793,6 +804,14 @@ const electronAPI = {
     getConfig: () => ipcRenderer.invoke('pet:get-config') as Promise<PetConfigBridge>,
     setConfig: (patch) => ipcRenderer.invoke('pet:set-config', patch) as Promise<PetConfigBridge>,
     getState: () => ipcRenderer.invoke('pet:get-state') as Promise<PetSnapshotBridge>,
+    getStates: () =>
+      ipcRenderer.invoke('pet:get-states') as Promise<Record<string, PetSnapshotBridge>>,
+    onStates: (handler: (states: Record<string, PetSnapshotBridge>) => void): UnlistenFn => {
+      const listener = (_e: IpcRendererEvent, payload: Record<string, PetSnapshotBridge>) =>
+        handler(payload);
+      ipcRenderer.on('pet:states', listener);
+      return () => ipcRenderer.off('pet:states', listener);
+    },
     onState: (handler: (snapshot: PetSnapshotBridge) => void): UnlistenFn => {
       const listener = (_e: IpcRendererEvent, payload: PetSnapshotBridge) => handler(payload);
       ipcRenderer.on('pet:state', listener);
@@ -808,6 +827,15 @@ const electronAPI = {
     },
     openSession: (sessionId) => {
       ipcRenderer.send('pet:open-session', { sessionId });
+    },
+    reportFocusSession: (sessionId: string | null) => {
+      ipcRenderer.send('pet:focus-session', { sessionId });
+    },
+    pinSession: (sessionId: string | null) => {
+      ipcRenderer.send('pet:pin-session', { sessionId });
+    },
+    cycleFocus: () => {
+      ipcRenderer.send('pet:cycle-focus');
     },
     openSettings: () => {
       ipcRenderer.send('pet:open-settings');
@@ -850,6 +878,17 @@ const electronAPI = {
     deletePack: (id) =>
       ipcRenderer.invoke('pet:delete-pack', { id }) as Promise<PetPackDeleteResultBridge>,
   } satisfies PetElectronApiBridge,
+
+  /**
+   * HTML 预览独立源桥（2026-11-04）—— 渲染层投递 HTML，主进程发布到
+   * `sage-preview://<id>/index.html` 供 iframe 加载，绕过父文档 CSP。
+   * Web 端 / 测试环境没有此桥 → 渲染层透明退回 srcDoc 内联预览。
+   */
+  preview: {
+    publish: (html: string) =>
+      ipcRenderer.invoke('preview:publish', html) as Promise<{ id: string; url: string }>,
+    revoke: (id: string) => ipcRenderer.invoke('preview:revoke', id) as Promise<boolean>,
+  } satisfies PreviewElectronApiBridge,
 
   /**
    * 开发期右键「检查元素」—— 仅非打包环境主进程会执行（见 electron/main.ts）。

@@ -346,7 +346,11 @@ async def test_explicit_max_iterations_never_extends(monkeypatch):
     assert AgentState.ITERATION_CHECKPOINT not in [e.state for e in events]
     failed = [e for e in events if e.state == AgentState.FAILED]
     assert len(failed) == 1
-    assert failed[0].error == "max_iterations_exceeded (limit=1, source=explicit)"
+    # 2026-11-05 M3: 固定模式到达上限先发判定轮（响应 b 仍是工具调用），
+    # 之后才判失败；reason 说明属于固定预算硬上限。
+    assert failed[0].error == (
+        "max_iterations_exceeded (limit=1, source=explicit, reason=fixed_budget)"
+    )
 
 
 @pytest.mark.asyncio()
@@ -532,10 +536,14 @@ async def test_iteration_budget_question_auto_continue_extends_and_completes():
 
 @pytest.mark.asyncio()
 async def test_iteration_budget_question_stop_yields_failed():
-    """预算到期询问 → 用户选「停止」→ 带 user_stopped 原因结束。"""
+    """预算到期询问 → 用户选「停止」→ 带 user_stopped 原因结束。
+
+    2026-11-05 M3: 判定轮先执行一次（响应 c 仍调工具）→ 判定仍未完成
+    → 才弹询问。
+    """
     gate = _FakeBudgetGate(["停止"])
     agent = _make_agent(
-        [_tool_response("a"), _tool_response("b"), _text_response("完成")]
+        [_tool_response("a"), _tool_response("b"), _tool_response("c")]
     )
     with patch(
         "backend.orchestration.orch_settings.load_orch_settings",
@@ -562,3 +570,109 @@ async def test_iteration_budget_question_stop_yields_failed():
     failed = [e for e in events if e.state == AgentState.FAILED]
     assert len(failed) == 1
     assert "reason=user_stopped" in (failed[0].error or "")
+
+
+# ---------------------------------------------------------------------------
+# 2026-11-04 — budgetMode 显式开关（M2 · W3）
+#
+# 旧逻辑：动态预算仅在 OrchSettings.max_iterations == 25（默认值）时启用，
+# 用户把它改成任何其它值 → 动态预算整体失效 → 到上限直接 FAILED。这是
+#「任务未完成却报达到上限」的首要触发路径。改用显式 budgetMode 后，auto 模式
+# 与 maxIterations 取值无关；fixed 模式才把 maxIterations 当硬上限。
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_auto_budget_mode_ignores_custom_max_iterations():
+    """budgetMode=auto → 编排页 maxIterations 不再关闭动态预算（哨兵回归）。"""
+    settings = SimpleNamespace(
+        max_iterations=40,
+        budget_mode="auto",
+        budget_simple=2,
+        budget_medium=2,
+        budget_complex=2,
+        budget_long=2,
+        budget_hard_cap=10,
+        budget_max_extensions=2,
+    )
+    agent = _make_agent(
+        [
+            _tool_response("a"),
+            _tool_response("b"),
+            _tool_response("c"),
+            _text_response("完成"),
+        ]
+    )
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=settings,
+    ):
+        events = await _collect(agent)
+
+    checkpoint = next(
+        (e for e in events if e.state == AgentState.ITERATION_CHECKPOINT), None
+    )
+    assert checkpoint is not None
+    assert checkpoint.budget_info is not None
+    assert checkpoint.budget_info["previous_budget"] == 2
+    assert AgentState.DONE in [e.state for e in events]
+    assert AgentState.FAILED not in [e.state for e in events]
+
+
+@pytest.mark.asyncio()
+async def test_fixed_budget_mode_uses_max_iterations():
+    """budgetMode=fixed → 按编排页 maxIterations 走固定预算，无检查点。
+
+    2026-11-05 M3: 到达上限先发判定轮（响应 c 仍调工具）→ 仍未完成
+    → FAILED，reason=fixed_budget。
+    """
+    settings = SimpleNamespace(max_iterations=2, budget_mode="fixed")
+    agent = _make_agent(
+        [_tool_response("a"), _tool_response("b"), _tool_response("c")]
+    )
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=settings,
+    ):
+        events = await _collect(agent)
+
+    assert AgentState.ITERATION_CHECKPOINT not in [e.state for e in events]
+    failed = [e for e in events if e.state == AgentState.FAILED]
+    assert len(failed) == 1
+    assert failed[0].error == (
+        "max_iterations_exceeded (limit=2, source=orch.global, reason=fixed_budget)"
+    )
+
+
+@pytest.mark.asyncio()
+async def test_legacy_settings_without_budget_mode_derive_from_toggle():
+    """老版设置（无 budget_mode 字段）→ 回退到 dynamic_budget_enabled 语义。"""
+    settings = SimpleNamespace(
+        max_iterations=40,
+        dynamic_budget_enabled=True,
+        budget_simple=2,
+        budget_medium=2,
+        budget_complex=2,
+        budget_long=2,
+        budget_hard_cap=10,
+        budget_max_extensions=2,
+    )
+    agent = _make_agent(
+        [
+            _tool_response("a"),
+            _tool_response("b"),
+            _tool_response("c"),
+            _text_response("完成"),
+        ]
+    )
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=settings,
+    ):
+        events = await _collect(agent)
+
+    checkpoint = next(
+        (e for e in events if e.state == AgentState.ITERATION_CHECKPOINT), None
+    )
+    assert checkpoint is not None
+    assert AgentState.DONE in [e.state for e in events]

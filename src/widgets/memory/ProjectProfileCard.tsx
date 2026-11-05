@@ -1,6 +1,6 @@
 // src/widgets/memory/ProjectProfileCard.tsx
 //
-// P2 scope 轴: "项目画像" —— 项目级 MEMORY.md 的可编辑卡片 (Phase P28 四类原型预设、检索筛选与一键导出 Markdown)。
+// P2 scope 轴: "项目记忆" —— 项目级 MEMORY.md 的可编辑卡片 (Phase P28 四类原型预设、检索筛选与一键导出 Markdown)。
 // 与 UserProfileCard("关于我") 同构，但按 project_key(工作区绝对路径)分组：
 // 只有会话绑定了同一项目时，这些条目才会以冻结快照注入 system prompt。
 //
@@ -100,7 +100,7 @@ export function ProjectProfileCard() {
       if (res.categories.length > 0) setCategories(res.categories);
       if (!projectKey && res.project_key) setProjectKey(res.project_key);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载项目画像失败');
+      setError(err instanceof Error ? err.message : '加载项目记忆失败');
     } finally {
       setLoading(false);
     }
@@ -153,8 +153,8 @@ export function ProjectProfileCard() {
         category: draft.category,
         importance: draft.importance,
       });
-      if (!created) throw new Error('内容为空或与现有画像重复');
-    }, '新增项目画像失败');
+      if (!created) throw new Error('内容为空或与现有记忆条目重复');
+    }, '新增项目记忆失败');
     if (ok) {
       setAdding(false);
       setDraft({ content: '', category: draft.category, importance: 5 });
@@ -162,7 +162,7 @@ export function ProjectProfileCard() {
   };
 
   const handleDelete = (id: string) =>
-    run(() => memoryApi.deleteProjectProfile(id), '删除项目画像失败');
+    run(() => memoryApi.deleteProjectProfile(id), '删除项目记忆失败');
 
   return (
     <section
@@ -172,9 +172,9 @@ export function ProjectProfileCard() {
       <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
           <FolderGit2 className="w-4 h-4 text-primary shrink-0" aria-hidden />
-          <h3 className="text-sm font-semibold text-text">项目画像</h3>
+          <h3 className="text-sm font-semibold text-text">项目记忆</h3>
           <span className="text-xs text-text-secondary truncate">
-            每个项目一份 MEMORY.md，仅在该项目的会话中注入
+            每个项目一份 MEMORY.md，仅在该项目的对话中生效
           </span>
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
@@ -197,8 +197,8 @@ export function ProjectProfileCard() {
             disabled={loading || busy}
             className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-bg-hover disabled:opacity-50"
             data-testid="project-profile-refresh-btn"
-            title="刷新项目画像"
-            aria-label="刷新项目画像"
+            title="刷新项目记忆"
+            aria-label="刷新项目记忆"
           >
             <RefreshCw className="w-3 h-3" aria-hidden />
           </button>
@@ -231,7 +231,7 @@ export function ProjectProfileCard() {
           >
             <span className="inline-flex items-center gap-1 text-ui-2xs text-text-secondary">
               <Sparkles className="w-3 h-3 text-primary" aria-hidden />
-              四类原型画像预设：
+              四类推荐记忆预设：
             </span>
             {PROJECT_PROFILE_PRESETS.map((preset, idx) => (
               <button
@@ -320,7 +320,7 @@ export function ProjectProfileCard() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索项目画像内容或类别..."
+              placeholder="搜索项目记忆内容或类别..."
               data-testid="project-profile-search-input"
               className="w-full rounded border border-border bg-bg pl-7 pr-2 py-1 text-xs text-text focus:outline-none focus:border-primary"
             />
@@ -362,12 +362,12 @@ export function ProjectProfileCard() {
       ) : items.length === 0 && !adding ? (
         <p className="text-xs text-text-secondary" data-testid="project-profile-empty">
           {projectKey
-            ? '该项目还没有画像条目。约定、架构决策等"项目级长期记忆"适合写在这里。'
-            : '选择项目后即可查看/维护该项目的画像。'}
+            ? '该项目还没有记忆条目。约定、架构决策等"项目级长期记忆"适合写在这里。'
+            : '选择项目后即可查看/维护该项目的记忆。'}
         </p>
       ) : filteredItems.length === 0 ? (
         <div className="flex items-center justify-between text-xs text-text-secondary py-2">
-          <span>未找到匹配当前筛选条件的项目画像条目</span>
+          <span>未找到匹配当前筛选条件的项目记忆条目</span>
           <button
             type="button"
             data-testid="project-profile-clear-filter"

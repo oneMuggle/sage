@@ -164,7 +164,7 @@ interface StoreState {
   sessionsLoadingMore: boolean;
   loadMoreSessions: () => Promise<void>;
   setCurrentSessionId: (id: string | null) => void;
-  createSession: () => Promise<string>;
+  createSession: (skipBinding?: boolean) => Promise<string>;
   deleteSession: (id: string) => Promise<void>;
   /** U4': 原地更新会话元数据 (如重命名),避免整表 reload 抖动 */
   updateSession: (id: string, patch: Partial<Session>) => void;
@@ -298,22 +298,29 @@ export const useStore = create<StoreState>((set, _get) => ({
   },
 
   // 创建会话
-  createSession: async () => {
+  // 2026-11-04 (fix/skip-workspace-binding): skipBinding=true 时跳过工作区解析链，
+  // 不绑定任何工作区。用于前端用户明确选择"不绑定项目"的场景，语义对齐主流 AI 应用
+  // (Cursor / Cline / Windsurf) 的"显式选择 > 自动推断"原则。
+  createSession: async (skipBinding = false) => {
     try {
       // 2026-10-29 (feat/workspace-optimization): 把 Electron 嗅探到的 cwd 项目根
       // 作为决策链的低优先级参考输入传给后端；后端统一走 DefaultWorkspaceResolver，
       // 前端不再自行推导或 auto-bind。
       let detectedRoot: string | null = null;
-      try {
-        detectedRoot = (await window.electronAPI?.getDetectedProjectRoot?.()) ?? null;
-      } catch (err: unknown) {
-        clientLogger.warn('store.createSession: getDetectedProjectRoot failed', {
-          error: String(err),
-        });
+      if (!skipBinding) {
+        // skipBinding=true 时不嗅探，避免 detected_root 触发自动绑定
+        try {
+          detectedRoot = (await window.electronAPI?.getDetectedProjectRoot?.()) ?? null;
+        } catch (err: unknown) {
+          clientLogger.warn('store.createSession: getDetectedProjectRoot failed', {
+            error: String(err),
+          });
+        }
       }
       const session = await invoke<Session>('create_session', {
         title: '新对话',
         detectedRoot,
+        skipWorkspaceBinding: skipBinding,
       });
       set((state) => ({
         sessions: [session, ...state.sessions],

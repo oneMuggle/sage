@@ -6,6 +6,19 @@ import { invoke } from './desktopInvoke';
 import type { AgentCreate, AgentProfile, AgentUpdate } from './types';
 import { handleApiError, withRetry } from './utils';
 
+/**
+ * 单个 agent profile 的迭代次数上下界。
+ *
+ * 与后端 `backend/domain/agent_limits.py` 的 `MIN_ITERATIONS` /
+ * `MAX_ITERATIONS_CEILING` 一一对应 —— 后端是权威源，这里是同一上限的
+ * 前端镜像，供表单钳制使用，避免用户填出后端必然 422 的值。
+ *
+ * 上限对齐动态预算硬顶（`budget_hard_cap`）：单个 agent 的固定上限与
+ * 动态预算能自动延长到的天花板处在同一量级。
+ */
+export const AGENT_MIN_ITERATIONS = 1;
+export const AGENT_MAX_ITERATIONS_CEILING = 1000;
+
 export const agentsApi = {
   async list(): Promise<AgentProfile[]> {
     return withRetry(async () => {
@@ -44,7 +57,7 @@ export const agentsApi = {
    *
    * 后端 Pydantic 校验:
    * - role 必须 ∈ {coordinator, researcher, coder, memory_manager} 否则 422
-   * - max_iterations 必须 ∈ [1, 50] 否则 422
+   * - max_iterations 必须 ∈ [1, 1000] 否则 422
    * - 空 body 视为 no-op, 200 返回当前 profile, updated_at 不刷新
    *
    * @throws 后端 404 / 422 经 handleApiError 包装

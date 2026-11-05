@@ -11,14 +11,30 @@ import {
   Trash2,
 } from 'lucide-react';
 
+import { displayModeStore } from '../../features/chat/displayMode/displayModeStore';
+import type { DisplayMode } from '../../features/chat/displayMode/types';
 import type { TranslationKey } from '../../shared/lib/i18n';
 import type { Message } from '../../shared/lib/store';
 import type { ContextMenuItemSpec } from '../../shared/ui/ContextMenu/types';
 
 type MessageMenuMessage = Pick<Message, 'id' | 'role' | 'content'>;
 
+/**
+ * 档位 → 翻译键的显式映射。
+ *
+ * `TranslationKey` 是闭合联合类型，模板字符串 `` t(`chat.displayMode.${mode}`) ``
+ * 无法通过类型检查，必须用这张静态表。
+ */
+const MODE_KEYS = {
+  detail: 'chat.displayMode.detail',
+  trace: 'chat.displayMode.trace',
+  result: 'chat.displayMode.result',
+} as const satisfies Record<DisplayMode, TranslationKey>;
+
 export interface MessageContextMenuParams {
   message: MessageMenuMessage;
+  /** 所属会话 id（用于解析「跟随会话」档位）。 */
+  sessionId?: string;
   t: (key: TranslationKey) => string;
   isStreaming?: boolean;
   /** 右键打开菜单时落在气泡内的选中文本（无选区为 null）。 */
@@ -47,6 +63,7 @@ export interface MessageContextMenuParams {
  */
 export function buildMessageContextMenuItems({
   message,
+  sessionId,
   t,
   isStreaming = false,
   selectionText = null,
@@ -181,6 +198,50 @@ export function buildMessageContextMenuItems({
       icon: Brain,
       disabled: isStreaming,
       onSelect: onSaveToMemory,
+    });
+  }
+
+  if (isAssistant) {
+    const currentMode = displayModeStore.getMessage(message.id);
+    const sessionMode = sessionId ? displayModeStore.getSession(sessionId) : null;
+
+    items.push({
+      id: 'display-mode-submenu',
+      label: t('chat.displayMode.label'),
+      icon: Brain,
+      submenu: [
+        {
+          id: 'display-mode-detail',
+          label: t('chat.displayMode.detail'),
+          kind: 'checkbox',
+          checked: currentMode === 'detail',
+          onCheckedChange: () => displayModeStore.setMessage(message.id, 'detail'),
+        },
+        {
+          id: 'display-mode-trace',
+          label: t('chat.displayMode.trace'),
+          kind: 'checkbox',
+          checked: currentMode === 'trace',
+          onCheckedChange: () => displayModeStore.setMessage(message.id, 'trace'),
+        },
+        {
+          id: 'display-mode-result',
+          label: t('chat.displayMode.result'),
+          kind: 'checkbox',
+          checked: currentMode === 'result',
+          onCheckedChange: () => displayModeStore.setMessage(message.id, 'result'),
+        },
+        { id: 'display-mode-sep', kind: 'separator' },
+        {
+          id: 'display-mode-follow-session',
+          label: sessionMode
+            ? `${t('chat.displayMode.followSession')} (${t(MODE_KEYS[sessionMode])})`
+            : t('chat.displayMode.followGlobal'),
+          kind: 'checkbox',
+          checked: currentMode === null,
+          onCheckedChange: () => displayModeStore.clearMessage(message.id),
+        },
+      ],
     });
   }
 
