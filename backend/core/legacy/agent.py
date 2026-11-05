@@ -39,8 +39,13 @@ from backend.core.legacy.iteration_budget import (
     audit_window,
     build_budget_info,
     build_step_record,
-    decide_budget,
     estimate_initial_budget,
+)
+from backend.core.legacy.iteration_ceiling import (
+    FINAL_STEP_NOTICE,
+    build_ceiling_question,
+    parse_ceiling_answer,
+    plan_ceiling,
 )
 from backend.core.legacy.llm_client import (
     LLMClient,
@@ -1910,15 +1915,16 @@ class SageAgent:
                 f"如需其余部分请用更精确的查询/offset 重试]"
             )
 
-        _loop_hard_cap = (
-            max(int(effective_max_iterations), _budget_config.hard_cap)
-            if _dynamic_budget_active
-            else int(effective_max_iterations)
-        )
+        # 2026-11-05 M3: auto / fixed 共用一条「到达上限」路径 —— 审计 →
+        # plan_ceiling → 延长 / 判定轮 / 询问 / 停止。判定轮需要额外一步，
+        # 固定模式还允许用户续跑，故循环上界始终预留 +1 并用硬顶兜底。
+        _loop_hard_cap = max(int(effective_max_iterations), _budget_config.hard_cap) + 1
         _step_history: List[Any] = []
         _seen_result_hashes: set = set()
-        _budget_extensions = 0
+        _auto_extensions = 0
+        _manual_extensions = 0
         _auto_continue = False
+        _final_step_granted = False
         _budget_stop_reason: Optional[str] = None
         _iter_message_start: Optional[int] = None
 
@@ -1935,86 +1941,65 @@ class SageAgent:
                         )
                     )
                 if i >= effective_max_iterations:
-                    if not _dynamic_budget_active:
-                        break
                     _audit = audit_window(
                         _step_history[-_budget_config.window :], _budget_config
                     )
-                    _decision = decide_budget(
-                        int(effective_max_iterations),
-                        _audit,
-                        _budget_extensions,
-                        _budget_config,
+                    _plan = plan_ceiling(
+                        current_budget=int(effective_max_iterations),
+                        dynamic_active=_dynamic_budget_active,
+                        config=_budget_config,
+                        audit=_audit,
+                        auto_extensions=_auto_extensions,
+                        final_step_granted=_final_step_granted,
+                        force_extend=_auto_continue,
+                        ask_available=get_question_gate() is not None,
                     )
-                    _chunk = max(
-                        _budget_config.min_extension,
-                        min(
-                            _budget_config.max_extension,
-                            int(effective_max_iterations * _budget_config.extension_ratio),
-                        ),
-                    )
-                    _next_budget = min(
-                        _budget_config.hard_cap,
-                        max(
-                            int(effective_max_iterations) + 1,
-                            int(effective_max_iterations) + _chunk,
-                        ),
-                    )
-                    if _decision.action == "extend" or _auto_continue:
-                        if _next_budget <= effective_max_iterations:
-                            _budget_stop_reason = "hard_cap"
-                            break
+                    if _plan.action == "extend":
                         _previous_budget = int(effective_max_iterations)
-                        effective_max_iterations = _next_budget
-                        _budget_extensions += 1
+                        effective_max_iterations = _plan.next_budget
+                        _auto_extensions += 1
+                        _final_step_granted = False
                         _info = build_budget_info(
                             level=_budget_level,
                             previous_budget=_previous_budget,
                             next_budget=effective_max_iterations,
-                            extensions=_budget_extensions,
+                            extensions=_auto_extensions + _manual_extensions,
                             audit=_audit,
                         )
-                        _info["action"] = "auto_extend" if _auto_continue else "extend"
+                        _info["action"] = (
+                            "auto_extend" if _plan.automatic else "extend"
+                        )
                         yield AgentEvent(
                             state=AgentState.ITERATION_CHECKPOINT,
                             iteration=i,
                             agent_id=self.agent_id,
                             budget_info=_info,
                         )
-                    else:
-                        # 2026-11-01 P1: 交互式「继续 / 自动继续 / 停止」。
-                        # 复用 ask_user_question 闸口与 QuestionDialog —— 仅主
-                        # agent 在闸口可用时询问；子代理/无人值守直接停止。
-                        _can_ask = (
-                            _decision.reason != "hard_cap"
-                            and str(self.agent_id or "") in ("", "primary")
-                            and get_question_gate() is not None
-                            and _next_budget > effective_max_iterations
+                    elif _plan.action == "final_step":
+                        # 判定轮：本步照常执行，但先提醒模型收尾；若直接给出
+                        # 最终答案则走既有 DONE 路径，不再误报「达到上限」。
+                        _final_step_granted = True
+                        logger.info(
+                            "迭代预算用尽，发放判定轮 (iteration=%s, reason=%s)",
+                            i,
+                            _plan.reason,
                         )
-                        if not _can_ask:
-                            _budget_stop_reason = _decision.reason
-                            break
+                        messages.append(
+                            {"role": "system", "content": FINAL_STEP_NOTICE}
+                        )
+                    elif _plan.action == "ask_user":
+                        # 2026-11-01 P1 / 2026-11-05 M3: 交互式「继续 / 自动
+                        # 继续 / 停止」。闸口不可用时 plan_ceiling 已落回
+                        # STOP，不会挂起子代理 / 无人值守运行。
+                        _payload = build_ceiling_question(
+                            int(effective_max_iterations),
+                            _plan.next_budget,
+                            _plan.reason,
+                        )
                         _question = QuestionRequest.create(
-                            question=(
-                                f"动态迭代预算已用完（当前上限 "
-                                f"{int(effective_max_iterations)} 步；"
-                                f"原因：{_decision.reason}）。是否继续执行？"
-                            ),
-                            options=[
-                                {
-                                    "label": "继续 Continue（再延长一次）",
-                                    "description": f"上限提高到 {_next_budget} 步",
-                                },
-                                {
-                                    "label": "自动继续 Auto-continue",
-                                    "description": "后续自动延长直到硬顶，不再询问",
-                                },
-                                {
-                                    "label": "停止 Stop",
-                                    "description": "保留当前进度并结束本次运行",
-                                },
-                            ],
-                            header="迭代预算",
+                            question=_payload["question"],
+                            options=_payload["options"],
+                            header=_payload["header"],
                         )
                         yield AgentEvent(
                             state=AgentState.ASK_USER_QUESTION,
@@ -2023,31 +2008,35 @@ class SageAgent:
                             user_question=_question.to_dict(),
                         )
                         _answer = await self._await_question_answer(_question)
-                        _labels = [str(label).strip() for label in _answer.answers]
-                        _auto = any("自动" in label for label in _labels)
-                        _go = _auto or any("继续" in label for label in _labels)
-                        if not _go:
+                        _choice = parse_ceiling_answer(_answer.answers)
+                        if _choice == "stop":
                             _budget_stop_reason = "user_stopped"
                             break
                         _previous_budget = int(effective_max_iterations)
-                        effective_max_iterations = _next_budget
-                        _budget_extensions += 1
-                        if _auto:
+                        effective_max_iterations = _plan.next_budget
+                        _manual_extensions += 1
+                        _final_step_granted = False
+                        if _choice == "auto":
                             _auto_continue = True
                         _info = build_budget_info(
                             level=_budget_level,
                             previous_budget=_previous_budget,
                             next_budget=effective_max_iterations,
-                            extensions=_budget_extensions,
+                            extensions=_auto_extensions + _manual_extensions,
                             audit=_audit,
                         )
-                        _info["action"] = "auto_extend" if _auto else "user_extend"
+                        _info["action"] = (
+                            "auto_extend" if _choice == "auto" else "user_extend"
+                        )
                         yield AgentEvent(
                             state=AgentState.ITERATION_CHECKPOINT,
                             iteration=i,
                             agent_id=self.agent_id,
                             budget_info=_info,
                         )
+                    else:
+                        _budget_stop_reason = _plan.reason
+                        break
                 # P0-1 (2026-08-20): 中断检查 —— 每轮迭代顶部消费一次中断信号（one-shot）。
                 # 此前 interrupt() 只置标志位、is_interrupted() 零调用者，run_loop 从不读，
                 # 中断请求完全无效。现在最迟在下一轮迭代开头终止：发 FAILED 事件，
@@ -2952,8 +2941,9 @@ class SageAgent:
                     agent_id=self.agent_id,
                 )
 
-            # 动态预算: 若循环因 hard cap 自然结束（未显式决定停止），补原因。
-            if _dynamic_budget_active and _budget_stop_reason is None:
+            # 预算收尾: 循环自然结束（判定轮已用尽且无进一步动作可做）时
+            # 只可能是走到了硬顶，补原因。
+            if _budget_stop_reason is None:
                 _budget_stop_reason = "hard_cap"
             # agent= 只在能识别出 agent 时下发；空值会渲染成 "agent=, source=…"
             # 这种畸形装饰，前端解析器虽能容忍，但日志里很难看。
@@ -2961,8 +2951,9 @@ class SageAgent:
             _budget_reason_part = (
                 f", reason={_budget_stop_reason}" if _budget_stop_reason else ""
             )
+            _extensions_total = _auto_extensions + _manual_extensions
             _budget_extension_part = (
-                f", extensions={_budget_extensions}" if _budget_extensions else ""
+                f", extensions={_extensions_total}" if _extensions_total else ""
             )
             yield AgentEvent(
                 state=AgentState.FAILED,
