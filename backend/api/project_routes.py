@@ -67,6 +67,8 @@ from backend.api.project_schemas import (
     ProjectScaffoldRequest,
     ProjectScaffoldResponse,
     ProjectSessionsResponse,
+    ProjectTemplateListResponse,
+    ProjectTemplateSummary,
     ProjectTreeResponse,
     ProjectTypeConfigResponse,
     ProjectTypeDetectRequest,
@@ -119,7 +121,13 @@ from backend.services.project_bootstrap import (
     build_bootstrap_suggestions,
 )
 from backend.services.project_git_init import init_project_git
-from backend.services.project_template import load_project_template
+from backend.services.project_template import (
+    get_built_in_templates,
+    load_global_templates,
+    load_project_template,
+    resolve_template,
+    scaffold_project as _scaffold_project,
+)
 from backend.services.project_type_detector import (
     DetectionResult,
     detect_project_type,
@@ -198,6 +206,52 @@ def _attach_project_ids(node: Dict[str, Any], repo: ProjectRepository) -> None:
     node["id"] = project.id if project is not None else None
     for child in node.get("children", []):
         _attach_project_ids(child, repo)
+
+
+@router.get("/templates", response_model=ProjectTemplateListResponse)
+def list_project_templates() -> ProjectTemplateListResponse:
+    """列出可用于项目创建的模板（内置 + 用户全局库）。
+
+    P3 (2026-11-05)：前端模板选择器消费。只返回元信息 + 目录/文件路径清单，
+    不暴露 file.content 以避免响应过大。内置模板带 ``project_type`` 便于前端
+    按项目类型筛选；全局模板 ``project_type=None``。
+    """
+    summaries: List[ProjectTemplateSummary] = []
+
+    # ① 内置模板（按 project_type 排序，稳定顺序）
+    for project_type, template in sorted(get_built_in_templates().items()):
+        summaries.append(
+            ProjectTemplateSummary(
+                name=template.name,
+                description=template.description,
+                source="built_in",
+                project_type=project_type,
+                directory_count=len(template.directories),
+                file_count=len(template.files),
+                directories=[d.path for d in template.directories],
+                files=[f.path for f in template.files],
+            )
+        )
+
+    # ② 用户全局模板（来自 ~/.sage/templates/*.json）
+    for template in load_global_templates():
+        # 与内置同名时跳过，避免前端重复展示（内置优先）
+        if any(s.name == template.name for s in summaries):
+            continue
+        summaries.append(
+            ProjectTemplateSummary(
+                name=template.name,
+                description=template.description,
+                source="global",
+                project_type=None,
+                directory_count=len(template.directories),
+                file_count=len(template.files),
+                directories=[d.path for d in template.directories],
+                files=[f.path for f in template.files],
+            )
+        )
+
+    return ProjectTemplateListResponse(templates=summaries)
 
 
 @router.get("/{project_id}/tree", response_model=ProjectTreeResponse)
@@ -383,6 +437,26 @@ def register_project(request: ProjectRegisterRequest) -> ProjectModel:
         )
     except OfficePathError as exc:
         raise _error(400, "invalid_workspace_path", "项目路径无效或目录不存在") from exc
+
+    # P3 (2026-11-05): 用户在创建对话框里选了模板 → 在扫描前执行脚手架，
+    # 让 scanner 能看到模板生成的目录/文件（例如 SAGE.md 触发 context_file
+    # 子项目发现）。scaffold 本身幂等（已存在同名条目跳过），失败不阻断
+    # 注册主流程——降级为普通空项目，让 UI 后续手动触发。
+    if request.template_name:
+        try:
+            template = resolve_template(
+                project_type=project_type,
+                project_root=Path(project.path),
+                template_name=request.template_name,
+            )
+            _scaffold_project(
+                template=template,
+                project_root=Path(project.path),
+                project_name=project.name,
+            )
+        except Exception as exc:  # noqa: BLE001 — scaffold 失败不阻断注册
+            logger.info("project scaffold skipped for %s: %s", project.path, exc)
+
     # 设计 §7.4：注册时首次扫描，发现并登记子项目（失败忽略）
     _scan_and_sync(project)
     stats = ProjectRepository().session_stats()
