@@ -453,13 +453,44 @@ Sage 已经有一个**窄而深**的自管理核心（配置 / 编排 / 定时 /
 
 - `test_config_tool.py` → **61 passed**（含 7 个 M1.2 新测试）
 - `test_tool_bundles_parity.py` 等 11 个 parity 文件 → **114 passed**（baseline 已抬）
-- `slashCommands.test.ts` → **11 passed**（含 3 个 M1.5 新测试）
-- `test_self_status_tool.py` → **16 passed**（M1.1 扩展）
+- `slashCommands.test.ts` → **14 passed**（含 3 个 M1.5 新测试）
+- `test_self_status_tool.py` → **21 passed**（M1.1 扩展 + review-fix 新增）
 - **M1 阶段合计 ≥ 202 tests green**（含 overlap：`test_tool_capabilities.py` 与 M0 共享）
 - CI 红灯修复后本地复验：`lint-imports` KEPT（1 contract, 0 broken）；
   `test_chat_request_policy` / `test_model_catalog_context` / `test_usage_tracker` /
   `test_self_status_tool` 合计 93 passed；`test_cli_harness.py` 10 passed；
   harness 全家桶（7 文件）78 passed。
+
+### 10.3.1 Code review 修复轮（commit 74ae37680，2026-11-05）
+
+code-reviewer agent 发现 4 HIGH + 2 MEDIUM + 1 LOW 缺陷，全部被 MagicMock
+测试替身掩盖（MagicMock 让任意属性访问都成功，掩盖了真实合约不匹配）：
+
+| 级别 | 缺陷 | 修复 |
+|---|---|---|
+| HIGH | `load_llm_config_for_chat` 返回 **dict** 不是对象；`getattr(config, "model")` 永远 None | `config.get("model")` + 空配置返回 `{"error": "未配置可用的 LLM 端点"}` |
+| HIGH | `ServerStatusEntry.since` 是 **float**（time.time 纪元秒）；`.isoformat()` → AttributeError | `datetime.fromtimestamp(since, tz=timezone.utc).isoformat()` |
+| HIGH | `Database` 类没有 `execute()`；新建实例还会多开永不关闭的 SQLite 连接 | 改走 `get_database()` 单例 `.get_connection().execute("SELECT 1")`（`_LockedConnection` 内部持锁） |
+| HIGH | `estimated_cost_usd` 可能 `None`（模型定价未知）；`:.4f` → TypeError | 复用 `sage_usage_tool._fmt_cost`（None → "未知（模型定价缺失）"） |
+| MEDIUM | unresolved session 返回"空结果"而非失败 | `sage_usage` 检测 `{"error": ...}` → `success=False` |
+| MEDIUM | `sage_doctor` 的 `include_subprocess_probe` 参数误导（该探测只属于 CLI `run_doctor`，LLM 工具内从未执行） | 删除参数，schema `parameters` 收为 `{}` |
+| LOW | `PluginRecord.status/plugin_type` f-string 可能渲染 `PluginStatus.ENABLED` | `getattr(x, "value", x)` 兜底（`use_enum_values=True` 下已为 str，双保险） |
+
+测试同步改用真实合约：LLM config **dict**、真实 `ServerStatusEntry` dataclass
+（`since=1700000000.0` float）、`estimated_cost_usd=None` 用例、`get_database`
+单例 mock；新增 `test_gather_effective_model_empty_config_is_error` /
+`test_gather_health_db_ok` / `test_gather_health_db_failure` /
+`test_build_summary_cost_none_path` / `test_sage_usage_unresolved_session_is_failure`
+共 5 个测试。
+
+复验：`test_self_status_tool.py` 21 passed、`test_cli_harness.py` +
+`test_tool_bundles_parity.py` 25 passed、`slashCommands.test.ts` 14 passed、
+ruff 全绿（`UP017` 按 py38 约定 `# noqa`）。
+
+**CI 全绿**：run 42025189740 @ 74ae37680，13/13 必需 job pass
+（Architecture / Backend py310 / Backend collect py38 / Dependency audit /
+Electron build ubuntu+windows / Electron smoke / Frontend / count-lines /
+live-boot / stub-smoke / stub-deep / legacy smoke）。
 
 ### 10.4 M1.7 推迟理由（详见 §2.4 escape hatch）
 
