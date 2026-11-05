@@ -22,10 +22,12 @@
 import { isDemoMode } from './demoFlag';
 import { invoke } from './desktopInvoke';
 import type {
+  BatchDeleteResponse,
   Memory,
   MemoryConsolidationResult,
   MemoryListResponse,
   MemoryPromoteResult,
+  MemoryQualityCandidate,
   MemorySummariesListResponse,
   MemoryWriteRecord,
   MemoryWritesResponse,
@@ -394,6 +396,85 @@ export const memoryApi = {
   },
 
   /**
+   * Task 4.3: 拉取质量分低于阈值的候选记忆 (最差优先)。
+   *
+   * 后端 GET /memory/quality-candidates 只返 is_valid=1 / invalid_at IS NULL 的
+   * episodic + semantic 行。threshold 默认 0.3, limit 默认 50 (上限 200)。
+   */
+  async getQualityCandidates(
+    limit: number = 50,
+    threshold: number = 0.3,
+  ): Promise<MemoryQualityCandidate[]> {
+    const safeLimit = Math.min(200, Math.max(1, Math.floor(Number(limit) || 50)));
+    const rawThreshold = Number(threshold);
+    const safeThreshold = Number.isFinite(rawThreshold)
+      ? Math.min(1, Math.max(0, rawThreshold))
+      : 0.3;
+
+    return withRetry(async () => {
+      try {
+        const raw = await invoke<unknown>('get_quality_candidates', {
+          limit: safeLimit,
+          threshold: safeThreshold,
+        });
+        if (!isRecord(raw) || !Array.isArray(raw.items)) return [];
+        return (raw.items as unknown[]).filter(isRecord).map((r): MemoryQualityCandidate => {
+          const memoryTypeRaw = asOptionalString(r.memory_type);
+          return {
+            id: asOptionalString(r.id) ?? '',
+            content: asOptionalString(r.content) ?? '',
+            memory_type: memoryTypeRaw === 'semantic' ? 'semantic' : 'episodic',
+            importance: asNumber(r.importance, 0),
+            quality_score: asNumber(r.quality_score, 0),
+            created_at_ms: asNumber(r.created_at_ms, 0),
+            access_count: asNumber(r.access_count, 0),
+          };
+        });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * Task 4.3: 批量删除用户选中的记忆 (上限 50 条)。
+   *
+   * 全部走 MemoryManager.delete_memory:episodic 软删除 / semantic 硬删除,
+   * 并写 memories_evolution_log 审计 (operation='batch_delete')。
+   */
+  async batchDeleteMemories(
+    items: Array<{ id: string; memory_type: 'episodic' | 'semantic' | 'working' }>,
+  ): Promise<BatchDeleteResponse> {
+    if (!Array.isArray(items) || items.length === 0) {
+      return { deleted: 0, failed: [] };
+    }
+    if (items.length > 50) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '单次批量删除上限 50 条',
+        details: { count: items.length },
+      });
+    }
+
+    return withRetry(async () => {
+      try {
+        const raw = await invoke<unknown>('batch_delete_memories', { items });
+        if (!isRecord(raw)) return { deleted: 0, failed: [] };
+        const failedRaw = Array.isArray(raw.failed) ? (raw.failed as unknown[]) : [];
+        return {
+          deleted: asNonNegativeInteger(raw.deleted, 0),
+          failed: failedRaw.filter(isRecord).map((r) => ({
+            id: asOptionalString(r.id) ?? '',
+            reason: asOptionalString(r.reason) ?? '',
+          })),
+        };
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
    * 获取记忆列表(Task 2 起返回 envelope;step 6 起支持 offset / sessionId)。
    *
    * Backwards-compat:如果后端误返回旧 flat list,自动包成 envelope,避免
@@ -708,6 +789,62 @@ export const memoryApi = {
   async deleteProjectProfile(id: string): Promise<void> {
     try {
       await invoke('delete_project_profile', { id });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Task 4.5 —— 用户对一条记忆标记 👍/👎/neutral。
+   *
+   * 与 submitRecallFeedback 的区别:
+   * - submitRecallFeedback: 按一次召回 log_id 回填 memory_recall_log (A/B 指标)
+   * - submitMemoryFeedback: 按一条记忆落 memories_feedback (记忆本身是否有用)
+   *
+   * reason 可选,自由文本,上限 500 字 (后端截断)。
+   */
+  async submitMemoryFeedback(
+    memoryId: string,
+    feedback: 'up' | 'down' | 'neutral',
+    options: {
+      memoryType?: 'episodic' | 'semantic';
+      reason?: string;
+    } = {},
+  ): Promise<{ status: string; memory_id: string; memory_type: string; feedback: string }> {
+    if (!memoryId) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: 'memoryId 必填',
+      });
+    }
+    if (!['up', 'down', 'neutral'].includes(feedback)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: `非法 feedback: ${feedback}`,
+        details: { feedback },
+      });
+    }
+    try {
+      const raw = await invoke<unknown>('submit_memory_feedback', {
+        memoryId,
+        feedback,
+        memoryType: options.memoryType ?? 'episodic',
+        ...(options.reason ? { reason: options.reason } : {}),
+      });
+      if (!isRecord(raw)) {
+        return {
+          status: 'ok',
+          memory_id: memoryId,
+          memory_type: options.memoryType ?? 'episodic',
+          feedback,
+        };
+      }
+      return {
+        status: asOptionalString(raw.status) ?? 'ok',
+        memory_id: asOptionalString(raw.memory_id) ?? memoryId,
+        memory_type: asOptionalString(raw.memory_type) ?? options.memoryType ?? 'episodic',
+        feedback: asOptionalString(raw.feedback) ?? feedback,
+      };
     } catch (error) {
       throw handleApiError(error);
     }

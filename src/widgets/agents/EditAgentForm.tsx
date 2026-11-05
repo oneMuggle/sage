@@ -72,10 +72,7 @@ export function findPluginToolWildcardCover(
 ): string | undefined {
   if (!pluginName) return undefined;
   const ownNamespace = `${PLUGIN_TOOL_PREFIX}${pluginName}__`;
-  if (
-    !toolName.startsWith(ownNamespace) ||
-    toolName.length <= ownNamespace.length
-  ) {
+  if (!toolName.startsWith(ownNamespace) || toolName.length <= ownNamespace.length) {
     return undefined;
   }
 
@@ -232,9 +229,7 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
   // tools 用本地文本态承接逐字输入（允许写到一半的名字/重复行存在），
   // 每次变更把解析后的数组同步回 form 草稿；直接用 value('tools') 回显
   // 会在输入过程中被去重/重排打断光标。
-  const [toolsText, setToolsText] = useState<string>(() =>
-    formatAgentToolsInput(value('tools')),
-  );
+  const [toolsText, setToolsText] = useState<string>(() => formatAgentToolsInput(value('tools')));
   useEffect(() => {
     setToolsText(formatAgentToolsInput(agent.tools));
   }, [agent]);
@@ -382,8 +377,8 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
           className="w-full rounded-lg border border-border px-3 py-2 bg-surface dark:bg-surface-elevated font-mono text-xs"
         />
         <p className="text-xs text-muted mt-1">
-          每行一项（也可用逗号分隔），保存时自动去空白与重复项；清空表示该
-          Agent 不暴露任何工具。插件工具可写完整名（如
+          每行一项（也可用逗号分隔），保存时自动去空白与重复项；清空表示该 Agent
+          不暴露任何工具。插件工具可写完整名（如
           <code> plugin__demo__hello</code>），或用 <code>plugin__demo__*</code>{' '}
           放行该插件的全部能力（包含其将来新增的能力）、
           <code>plugin__*</code> 放行全部插件。通配只决定可见性，插件调用仍
@@ -410,8 +405,7 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
             <p className="mt-3 text-xs text-muted">正在加载运行中插件工具…</p>
           ) : pluginToolsError ? (
             <p className="mt-3 text-xs text-error" role="alert">
-              加载运行中插件工具失败：{pluginToolsError}。可点击刷新重试，
-              或继续手动编辑上方文本。
+              加载运行中插件工具失败：{pluginToolsError}。可点击刷新重试， 或继续手动编辑上方文本。
             </p>
           ) : publishedPluginTools.length === 0 ? (
             <p className="mt-3 text-xs text-muted">
@@ -433,7 +427,9 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
                   : tool.description;
                 const permissionSummary =
                   tool.permissions.length > 0
-                    ? tool.permissions.map((permission) => describePermission(permission)).join('、')
+                    ? tool.permissions
+                        .map((permission) => describePermission(permission))
+                        .join('、')
                     : '未声明权限（按外部进程执行处理）';
                 return (
                   <div key={tool.tool_name} className="flex items-start gap-2">

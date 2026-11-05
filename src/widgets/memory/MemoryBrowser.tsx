@@ -18,9 +18,10 @@ import { toast } from 'sonner';
 
 import { memoryApi, Memory } from '../../shared/api';
 import { agentsApi } from '../../shared/api/agentsApi';
-import { formatDate } from '../../shared/lib/timeFormatter';
+import { formatDate, formatRelativeTime } from '../../shared/lib/timeFormatter';
 
 import { MemoryPromoteButton } from './MemoryPromoteButton';
+import { useSessionInfo } from './useSessionInfo';
 
 // Constants
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -142,7 +143,16 @@ export function MemoryBrowser({
     semantic: 0,
     working: 0,
     session_summary: 0,
+    /** Task 4.4: quality_score < 0.3 的计数(仅 episodic/semantic 有语义)。 */
+    lowQuality: 0,
   });
+
+  // Task 4.3: 选择模式 + 批量清理低质量记忆。
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [qualityMode, setQualityMode] = useState(false);
+  const [batchConfirming, setBatchConfirming] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
 
   // 请求代际 + AbortController:
   // 快速切换 filter / viewMode 时旧响应可能晚到,把新响应覆盖。
@@ -217,7 +227,10 @@ export function MemoryBrowser({
         setMemories(hits);
         // 检索结果没有 source_breakdown,只更新"当前显示"总数,
         // 其余分类计数保持上一轮全量口径,避免展示成 0 误导。
-        setStats((prev) => ({ ...prev, total: hits.length }));
+        const lowQuality = hits.filter(
+          (m) => typeof m.quality_score === 'number' && m.quality_score < 0.3,
+        ).length;
+        setStats((prev) => ({ ...prev, total: hits.length, lowQuality }));
         return;
       }
       const response = await memoryApi.getMemories(type, 1, MEMORY_PAGE_SIZE, {
@@ -229,6 +242,11 @@ export function MemoryBrowser({
       // 代际失配(用户已切到其他视图/筛选):丢弃本次响应
       if (gen !== requestGenRef.current) return;
       setMemories(response.items);
+      // Task 4.4: 低质量计数 —— 只在 episodic/semantic 行上有 quality_score,
+      // working/session_summary 行为 null, 不计入。
+      const lowQuality = response.items.filter(
+        (m) => typeof m.quality_score === 'number' && m.quality_score < 0.3,
+      ).length;
       // 用 envelope 的 source_breakdown 替换旧的 two-call fallback,更准。
       const breakdown = response.source_breakdown;
       setStats((prev) => ({
@@ -238,6 +256,7 @@ export function MemoryBrowser({
         working: breakdown.working,
         session_summary: breakdown.session_summary,
         total: response.total,
+        lowQuality,
       }));
     } catch (err) {
       if (ac.signal.aborted || gen !== requestGenRef.current) return;
@@ -293,11 +312,55 @@ export function MemoryBrowser({
     [summarySessionId],
   );
 
+  // Task 4.3: 低质量候选 —— 走 /memory/quality-candidates (最差优先)。
+  // 映射为 Memory 形状,复用 MemoryItemCard 渲染;选择模式可直接批量删除。
+  const loadQualityCandidates = useCallback(async () => {
+    const gen = ++requestGenRef.current;
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    setLoading(true);
+    setError(null);
+    try {
+      const candidates = await memoryApi.getQualityCandidates(50, 0.3);
+      if (gen !== requestGenRef.current) return;
+      const mapped: Memory[] = candidates.map((c) => ({
+        id: c.id,
+        content: c.content,
+        memory_type: c.memory_type,
+        layer: c.memory_type,
+        source: c.memory_type,
+        importance: c.importance,
+        tags: [],
+        created_at: Math.floor((c.created_at_ms || 0) / 1000),
+        created_at_ms: c.created_at_ms,
+        access_count: c.access_count,
+        quality_score: c.quality_score,
+      }));
+      setMemories(mapped);
+      setSelectedIds(new Set());
+      setStats((prev) => ({ ...prev, total: mapped.length, lowQuality: mapped.length }));
+    } catch (err) {
+      if (ac.signal.aborted || gen !== requestGenRef.current) return;
+      const message = err instanceof Error ? err.message : '加载失败';
+      setError(message);
+      setMemories([]);
+    } finally {
+      if (gen === requestGenRef.current) {
+        setLoading(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
-    if (viewMode === 'all') {
+    if (viewMode !== 'all') return;
+    if (qualityMode) {
+      void loadQualityCandidates();
+    } else {
       void loadMemories();
     }
-  }, [viewMode, loadMemories]);
+  }, [viewMode, qualityMode, loadQualityCandidates, loadMemories]);
 
   useEffect(() => {
     if (viewMode !== 'all') return;
@@ -313,9 +376,9 @@ export function MemoryBrowser({
   // Parent (Memory.tsx) bumps refreshKey after a successful save to
   // re-fetch the list without a full page reload.
   useEffect(() => {
-    if (refreshKey === undefined || viewMode !== 'all') return;
+    if (refreshKey === undefined || viewMode !== 'all' || qualityMode) return;
     void loadMemories();
-  }, [refreshKey, viewMode, loadMemories]);
+  }, [refreshKey, viewMode, qualityMode, loadMemories]);
 
   const handleJumpToSession = useCallback(
     (sessionId: string | undefined) => {
@@ -364,6 +427,69 @@ export function MemoryBrowser({
     }
   }, []);
 
+  // Task 4.3: 选择模式 —— 只有 episodic / semantic / working 可批量删除,
+  // session_summary 不在 MemoryManager.delete_memory 的路由内。
+  const toggleSelect = useCallback((memory: Memory) => {
+    if (!resolveSelectableType(memory)) return;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(memory.id)) {
+        next.delete(memory.id);
+      } else {
+        next.add(memory.id);
+      }
+      return next;
+    });
+  }, []);
+
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setBatchConfirming(false);
+  }, []);
+
+  // Task 4.3: 批量删除 —— 两步确认后逐条交给后端 batch-delete。
+  // 失败条目保留在列表里并汇总告知(不静默移除)。
+  const handleBatchDelete = useCallback(async () => {
+    const selected = memories.filter((m) => selectedIds.has(m.id));
+    const items: Array<{ id: string; memory_type: 'episodic' | 'semantic' | 'working' }> = [];
+    for (const m of selected) {
+      const t = resolveSelectableType(m);
+      if (t) items.push({ id: m.id, memory_type: t });
+    }
+    if (items.length === 0) {
+      setBatchConfirming(false);
+      return;
+    }
+
+    setBatchDeleting(true);
+    try {
+      const res = await memoryApi.batchDeleteMemories(items);
+      const failedIds = new Set(res.failed.map((f) => f.id));
+      const deletedIds = new Set(items.map((i) => i.id).filter((id) => !failedIds.has(id)));
+      setMemories((prev) => prev.filter((m) => !deletedIds.has(m.id)));
+      setSelectedIds(new Set());
+      setBatchConfirming(false);
+      setStats((prev) => ({ ...prev, total: Math.max(0, prev.total - res.deleted) }));
+      if (res.failed.length > 0) {
+        toast.warning(`已删除 ${res.deleted} 条，${res.failed.length} 条失败`, {
+          description: res.failed
+            .slice(0, 3)
+            .map((f) => `${truncate(f.id, 12)}: ${f.reason}`)
+            .join('；'),
+        });
+      } else {
+        toast.success(`已删除 ${res.deleted} 条记忆`);
+      }
+      // 候选模式下重新拉取,补足被删条目空出的名额并保持排序一致。
+      if (qualityMode) void loadQualityCandidates();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '批量删除失败';
+      toast.error('批量删除失败', { description: `${message}（未删除任何记忆）` });
+    } finally {
+      setBatchDeleting(false);
+    }
+  }, [memories, selectedIds, qualityMode, loadQualityCandidates]);
   // 作用域为纯前端过滤(后端 list 契约不变)。缺 scope 的旧行按 DB 默认
   // 'user' 处理,与后端 visibility 规则一致。
   const visibleMemories = useMemo(() => {
@@ -373,7 +499,7 @@ export function MemoryBrowser({
 
   return (
     <div>
-      {/* 统计卡片 — step 6 起展示 4 个 source 计数。 */}
+      {/* 统计卡片 — step 6 起展示 4 个 source 计数。Task 4.4 起加"低质量"。 */}
       <div className="flex gap-3 mb-5">
         <StatCard value={stats.total} label="当前显示" />
         <StatCard value={stats.thisWeek} label="本周新增" />
@@ -381,6 +507,11 @@ export function MemoryBrowser({
         <StatCard value={stats.semantic} label="语义" />
         <StatCard value={stats.working} label="工作" />
         <StatCard value={stats.session_summary} label="摘要" />
+        <StatCard
+          value={stats.lowQuality}
+          label="低质量"
+          variant={stats.lowQuality > 0 ? 'error' : 'neutral'}
+        />
       </div>
 
       {/* 视图模式切换 */}
@@ -408,6 +539,27 @@ export function MemoryBrowser({
         >
           全部记忆
         </button>
+        {viewMode === 'all' && (
+          <button
+            data-testid="memory-select-mode-toggle"
+            className={`px-3 py-1 border border-border rounded-radius-sm text-xs cursor-pointer font-mono ${
+              selectMode
+                ? 'bg-primary/10 text-primary border-primary'
+                : 'bg-surface text-muted hover:text-text'
+            }`}
+            onClick={() => {
+              if (selectMode) {
+                exitSelectMode();
+              } else {
+                setSelectMode(true);
+                setSelectedIds(new Set());
+                setBatchConfirming(false);
+              }
+            }}
+          >
+            {selectMode ? '退出选择' : '选择'}
+          </button>
+        )}
         <button
           className={`px-3 py-1 border border-border rounded-radius-sm text-xs cursor-pointer font-mono ${
             viewMode === 'summaries'
@@ -444,15 +596,35 @@ export function MemoryBrowser({
             <button
               key={key}
               className={`px-3 py-1 border border-border rounded-radius-sm text-xs cursor-pointer font-mono ${
-                filterType === key
+                !qualityMode && filterType === key
                   ? 'bg-primary/10 text-primary border-primary'
                   : 'bg-surface text-muted hover:text-text'
               }`}
-              onClick={() => setFilterType(key as MemoryFilter)}
+              onClick={() => {
+                setFilterType(key as MemoryFilter);
+                setQualityMode(false);
+                setBatchConfirming(false);
+              }}
             >
               {label}
             </button>
           ))}
+          {/* Task 4.3: 低质量候选 —— 只看质量分 < 0.3 的记忆,最差优先 */}
+          <button
+            data-testid="memory-quality-candidates-toggle"
+            className={`px-3 py-1 border border-border rounded-radius-sm text-xs cursor-pointer font-mono ${
+              qualityMode
+                ? 'bg-error/10 text-error border-error'
+                : 'bg-surface text-muted hover:text-text'
+            }`}
+            onClick={() => {
+              setQualityMode((v) => !v);
+              setBatchConfirming(false);
+            }}
+            title="只看质量分低于 0.3 的记忆（按最差优先）"
+          >
+            低质量候选
+          </button>
         </div>
       )}
 
@@ -497,6 +669,63 @@ export function MemoryBrowser({
         </div>
       )}
 
+      {/* Task 4.3: 低质量候选说明条 */}
+      {viewMode === 'all' && qualityMode && !loading && !error && (
+        <div className="mb-3 px-3 py-2 border border-error/30 bg-error/5 rounded-radius-sm text-xs text-error">
+          低质量候选 · {memories.length} 条（质量分 &lt; 0.3，按最差优先）
+          {!selectMode && ' — 点「选择」后可批量清理'}
+        </div>
+      )}
+
+      {/* Task 4.3: 选择模式计数栏 + 两步确认批量删除 */}
+      {viewMode === 'all' && selectMode && (
+        <div className="flex items-center gap-3 mb-3 px-3 py-2 border border-primary/20 bg-primary/5 rounded-radius-sm flex-wrap">
+          <span className="text-xs font-mono text-text">已选 {selectedIds.size} 条</span>
+          {batchConfirming ? (
+            <>
+              <span className="text-xs text-error">
+                即将删除 {selectedIds.size} 条记忆（不可撤销）
+              </span>
+              <button
+                type="button"
+                data-testid="memory-batch-confirm"
+                disabled={batchDeleting}
+                onClick={() => void handleBatchDelete()}
+                className="px-3 py-1 border border-error rounded-radius-sm text-xs text-error hover:bg-error/10 disabled:opacity-50"
+              >
+                {batchDeleting ? '删除中…' : '确认批量删除'}
+              </button>
+              <button
+                type="button"
+                data-testid="memory-batch-cancel"
+                disabled={batchDeleting}
+                onClick={() => setBatchConfirming(false)}
+                className="px-3 py-1 border border-border rounded-radius-sm text-xs text-muted hover:text-text disabled:opacity-50"
+              >
+                取消
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              data-testid="memory-batch-delete"
+              disabled={selectedIds.size === 0}
+              onClick={() => setBatchConfirming(true)}
+              className="px-3 py-1 border border-error rounded-radius-sm text-xs text-error hover:bg-error/10 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              批量删除
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={exitSelectMode}
+            className="ml-auto px-3 py-1 border border-border rounded-radius-sm text-xs text-muted hover:text-text"
+          >
+            退出选择
+          </button>
+        </div>
+      )}
+
       {/* 记忆列表 */}
       {loading ? (
         <div className="text-center text-muted py-12 text-sm">加载中...</div>
@@ -526,6 +755,9 @@ export function MemoryBrowser({
               onDelete={handleDeleteMemory}
               onPromote={handlePromoteMemory}
               focused={memory.id === focusMemoryId}
+              selectable={selectMode && resolveSelectableType(memory) !== null}
+              selected={selectedIds.has(memory.id)}
+              onToggleSelect={toggleSelect}
             />
           ))}
         </div>
@@ -534,11 +766,53 @@ export function MemoryBrowser({
   );
 }
 
-function StatCard({ value, label }: { value: number; label: string }) {
+function StatCard({
+  value,
+  label,
+  variant = 'neutral',
+}: {
+  value: number;
+  label: string;
+  /** Task 4.4 起:error 变体用于低质量等告警类指标。 */
+  variant?: 'neutral' | 'error';
+}) {
+  const bg = variant === 'error' ? 'bg-error/10 border-error/30' : 'bg-surface border-border';
+  const fg = variant === 'error' ? 'text-error' : 'text-text';
   return (
-    <div className="flex-1 p-3.5 border border-border rounded-radius-sm bg-surface">
-      <div className="text-xl font-bold font-mono text-text">{value}</div>
+    <div className={`flex-1 p-3.5 border border-border rounded-radius-sm ${bg}`}>
+      <div className={`text-xl font-bold font-mono ${fg}`}>{value}</div>
       <div className="text-xs text-muted mt-1">{label}</div>
+    </div>
+  );
+}
+
+/**
+ * Task 4.4 质量条:4px 高彩色进度条 + 两位小数分数。
+ * 阈值沿用后端 LOW_QUALITY_THRESHOLD=0.3 与高分阈值 0.6。
+ * working / session_summary 行不传 score,由调用方判断 typeof 后决定是否渲染。
+ */
+function QualityBar({ score }: { score: number }) {
+  const clamped = Math.max(0, Math.min(1, score));
+  const percent = Math.round(clamped * 100);
+  const colorClass = clamped >= 0.6 ? 'bg-success' : clamped >= 0.3 ? 'bg-warning' : 'bg-error';
+  const label = clamped >= 0.6 ? '高质量' : clamped >= 0.3 ? '中等质量' : '低质量';
+  return (
+    <div
+      className="mt-1.5 flex items-center gap-2"
+      title={`${label}: ${clamped.toFixed(3)}(清晰度·重要性·新鲜度·使用频率·独特性 加权)`}
+    >
+      <div className="flex-1 h-1 rounded-full bg-muted/20 overflow-hidden">
+        <div
+          className={`h-full ${colorClass} transition-[width]`}
+          style={{ width: `${percent}%` }}
+          role="progressbar"
+          aria-valuenow={percent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`质量分 ${percent}%`}
+        />
+      </div>
+      <span className="text-ui-2xs font-mono text-muted tabular-nums">{clamped.toFixed(2)}</span>
     </div>
   );
 }
@@ -549,6 +823,9 @@ function MemoryItemCard({
   onDelete,
   onPromote,
   focused = false,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
 }: {
   memory: Memory;
   onJumpToSession: (sessionId: string | undefined) => void;
@@ -557,11 +834,62 @@ function MemoryItemCard({
   onPromote?: (memory: Memory) => void | Promise<void>;
   /** P0-6: 深链定位命中态 —— 高亮 + 滚入视区。 */
   focused?: boolean;
+  /** Task 4.3: 批量清理选择模式。 */
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (memory: Memory) => void;
 }) {
   // P0-1: 删除走内联两步确认 —— 破坏性操作先摆出内容首行让用户核对,
   // 再要求显式确认;不用 window.confirm(与项目内两步确认惯例一致)。
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Task 4.5: 记忆级反馈（👍/👎）—— 本地状态跟随提交结果,失败时回退到原始值。
+  // 只允许 episodic / semantic 行反馈;working / session_summary 的 feedback 按钮不渲染。
+  const feedbackable =
+    (memory.source || memory.layer || memory.memory_type) === 'episodic' ||
+    (memory.source || memory.layer || memory.memory_type) === 'semantic';
+  const [feedback, setFeedback] = useState<'up' | 'down' | 'neutral' | null>(
+    memory.user_feedback ?? null,
+  );
+  const [feedbackBusy, setFeedbackBusy] = useState(false);
+  const [showReason, setShowReason] = useState(false);
+  const [reasonText, setReasonText] = useState('');
+
+  const submitFeedback = useCallback(
+    async (value: 'up' | 'down' | 'neutral', options: { toggle?: boolean } = {}) => {
+      if (!feedbackable || feedbackBusy) return;
+      // 按钮点击:再次点击同一按钮 → 撤销为 neutral;原因提交 (toggle=false) 强制用 value。
+      const toggle = options.toggle ?? true;
+      const target: 'up' | 'down' | 'neutral' =
+        toggle && feedback === value && value !== 'neutral' ? 'neutral' : value;
+      const previous = feedback;
+      setFeedbackBusy(true);
+      setFeedback(target);
+      try {
+        const memoryTypeSource = memory.source || memory.layer || memory.memory_type;
+        const memoryType: 'episodic' | 'semantic' =
+          memoryTypeSource === 'semantic' ? 'semantic' : 'episodic';
+        await memoryApi.submitMemoryFeedback(memory.id, target, {
+          memoryType,
+          reason: target === 'down' && reasonText.trim() ? reasonText.trim() : undefined,
+        });
+        if (target === 'neutral') {
+          setShowReason(false);
+          setReasonText('');
+        } else if (target === 'down') {
+          setShowReason(true);
+        }
+      } catch (err) {
+        // 失败回退
+        setFeedback(previous);
+        const message = err instanceof Error ? err.message : '提交失败';
+        toast.error('反馈提交失败', { description: message });
+      } finally {
+        setFeedbackBusy(false);
+      }
+    },
+    [feedbackable, feedbackBusy, feedback, memory, reasonText],
+  );
   // P0-6: 命中深链时滚入视区（列表可能很长，用户看不到自己点的那条）。
   const cardRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -611,6 +939,8 @@ function MemoryItemCard({
   const sessionId =
     typeof rawSessionId === 'string' && rawSessionId.trim() ? rawSessionId.trim() : undefined;
   const showSessionLink = Boolean(sessionId);
+  // Task 4.2: 来源会话标题 + 相对日期；标题缺失时降级为截断 ID。
+  const sessionInfo = useSessionInfo(showSessionLink ? sessionId : undefined);
 
   // 时间戳兜底:毫秒缺失但秒在 → 转毫秒;两者皆无 → 0(由 formatDate 兜底为 '—')。
   const timestampMs =
@@ -633,13 +963,28 @@ function MemoryItemCard({
       ref={focused ? cardRef : undefined}
       data-testid={memory.source === 'episodic' ? 'memory-episodic-item' : 'memory-item'}
       data-focused={focused || undefined}
+      data-selected={selectable && selected ? 'true' : undefined}
+      onClick={selectable ? () => onToggleSelect?.(memory) : undefined}
       className={
         focused
           ? 'p-3 border-2 border-primary rounded-radius-sm bg-surface ring-1 ring-primary/30'
-          : 'p-3 border border-border rounded-radius-sm bg-surface cursor-pointer hover:border-primary transition-colors'
+          : `p-3 border rounded-radius-sm bg-surface cursor-pointer hover:border-primary transition-colors ${
+              selectable && selected ? 'border-primary bg-primary/5' : 'border-border'
+            }`
       }
     >
       <div className="flex items-center justify-between mb-1 gap-2">
+        {selectable && (
+          <input
+            type="checkbox"
+            data-testid={`memory-select-${memory.id}`}
+            checked={selected}
+            onChange={() => onToggleSelect?.(memory)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label="选择这条记忆"
+            className="h-3.5 w-3.5 cursor-pointer shrink-0"
+          />
+        )}
         <span className="font-semibold text-sm text-text truncate flex-1">{title}</span>
         <div className="flex items-center gap-1.5">
           <span
@@ -679,6 +1024,9 @@ function MemoryItemCard({
       <div className="text-xs text-muted leading-relaxed">
         {content.length > 80 ? content.substring(0, 80) + '...' : content}
       </div>
+      {/* Task 4.4 质量可视化:4px 高分段条 + 数字。quality_score 缺失(working/
+          session_summary)时不渲染,避免误导。 */}
+      {typeof memory.quality_score === 'number' && <QualityBar score={memory.quality_score} />}
       <div className="text-ui-2xs text-muted mt-1.5 font-mono flex items-center gap-2 flex-wrap">
         <span>
           创建于 {formatDate(timestampMs)} · 引用 {accessCount} 次 · 置信度{' '}
@@ -694,7 +1042,12 @@ function MemoryItemCard({
             className="text-primary hover:underline"
             title={`跳转到会话 ${sessionId}`}
           >
-            ↳ 会话 {truncate(sessionId, 12)}
+            {sessionInfo.title
+              ? `↳ 「${truncate(sessionInfo.title, 20)}」`
+              : `↳ 会话 ${truncate(sessionId, 12)}`}
+            {sessionInfo.createdAtMs ? (
+              <span className="text-muted"> · {formatRelativeTime(sessionInfo.createdAtMs)}</span>
+            ) : null}
           </button>
         )}
         <span className="ml-auto flex items-center gap-2">
@@ -702,6 +1055,46 @@ function MemoryItemCard({
           {agentId && onPromote ? (
             <MemoryPromoteButton memoryId={memory.id} onPromote={() => onPromote(memory)} />
           ) : null}
+          {feedbackable && (
+            <span className="flex items-center gap-1" data-testid={`memory-feedback-${memory.id}`}>
+              <button
+                type="button"
+                data-testid={`memory-feedback-up-${memory.id}`}
+                disabled={feedbackBusy}
+                aria-pressed={feedback === 'up'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void submitFeedback('up');
+                }}
+                className={`px-1.5 py-0.5 border rounded text-ui-2xs disabled:opacity-50 ${
+                  feedback === 'up'
+                    ? 'border-success text-success bg-success/10'
+                    : 'border-border text-muted hover:text-success hover:border-success'
+                }`}
+                title={feedback === 'up' ? '已标记有用（再点撤销）' : '标记为有用'}
+              >
+                👍
+              </button>
+              <button
+                type="button"
+                data-testid={`memory-feedback-down-${memory.id}`}
+                disabled={feedbackBusy}
+                aria-pressed={feedback === 'down'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void submitFeedback('down');
+                }}
+                className={`px-1.5 py-0.5 border rounded text-ui-2xs disabled:opacity-50 ${
+                  feedback === 'down'
+                    ? 'border-error text-error bg-error/10'
+                    : 'border-border text-muted hover:text-error hover:border-error'
+                }`}
+                title={feedback === 'down' ? '已标记不准确（再点撤销）' : '标记为不准确'}
+              >
+                👎
+              </button>
+            </span>
+          )}
           {confirming ? (
             <>
               <span className="text-error">确认删除？</span>
@@ -749,8 +1142,58 @@ function MemoryItemCard({
           )}
         </span>
       </div>
+      {/* Task 4.5: 点 👎 后展开的可选原因输入 —— 回车提交,空串即跳过。 */}
+      {feedbackable && showReason && feedback === 'down' && (
+        <div
+          className="mt-1.5 flex items-center gap-2"
+          onClick={(e) => e.stopPropagation()}
+          data-testid={`memory-feedback-reason-${memory.id}`}
+        >
+          <input
+            type="text"
+            value={reasonText}
+            maxLength={500}
+            onChange={(e) => setReasonText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void submitFeedback('down', { toggle: false });
+              } else if (e.key === 'Escape') {
+                setShowReason(false);
+              }
+            }}
+            placeholder="原因（可选，回车提交）"
+            aria-label="反馈原因（可选）"
+            className="flex-1 min-w-0 bg-transparent border border-border rounded px-2 py-0.5 text-ui-2xs"
+          />
+          <button
+            type="button"
+            disabled={feedbackBusy}
+            onClick={() => void submitFeedback('down', { toggle: false })}
+            className="px-2 py-0.5 border border-border rounded text-ui-2xs text-muted hover:text-text disabled:opacity-50"
+          >
+            提交
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowReason(false)}
+            className="px-2 py-0.5 border border-border rounded text-ui-2xs text-muted hover:text-text"
+          >
+            取消
+          </button>
+        </div>
+      )}
     </div>
   );
+}
+
+/** Task 4.3: 批量删除只支持 MemoryManager.delete_memory 有路由的三类。 */
+function resolveSelectableType(memory: Memory): 'episodic' | 'semantic' | 'working' | null {
+  const t = memory.memory_type;
+  if (t === 'episodic' || t === 'semantic' || t === 'working') return t;
+  const s = memory.source ?? memory.layer;
+  if (s === 'episodic' || s === 'semantic' || s === 'working') return s;
+  return null;
 }
 
 // formatDate 已统一到 src/shared/lib/timeFormatter

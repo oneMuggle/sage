@@ -1696,6 +1696,24 @@ class Database:
             )
         """)
 
+        # Task 4.5: 记忆级用户反馈（👍/👎）。一条记忆一条最新反馈，
+        # id = "{memory_type}:{memory_id}" 做 upsert 主键 —— 省掉额外唯一索引，
+        # 且同时兼容 py3.8 捆绑的旧版 SQLite（不依赖 ON CONFLICT 语法）。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS memories_feedback (
+                id TEXT PRIMARY KEY,
+                memory_id TEXT NOT NULL,
+                memory_type TEXT NOT NULL,
+                feedback TEXT NOT NULL,
+                reason TEXT,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_mem_feedback_memory
+            ON memories_feedback(memory_id, memory_type)
+        """)
+
         # 工作记忆快照表（持久化 WorkingMemory 的 deque 内容）
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS working_memory_snapshot (

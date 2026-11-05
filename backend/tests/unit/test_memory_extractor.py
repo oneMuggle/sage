@@ -197,3 +197,96 @@ async def test_llm_extract_normalizes_category_vocabulary():
     assert "task_summary" in cats
     # old vocabulary must never leak through
     assert not (cats & {"preference", "fact", "goal", "event"})
+
+
+# ----------------------------------------------------------------------------
+# Task 2.1 — 双向提取门槛（短消息跳过 + 高价值信号放行）
+# ----------------------------------------------------------------------------
+
+
+class TestExtractionGate:
+    """覆盖 ``_should_extract`` / ``_has_high_value_signal``。
+
+    设计目标：
+    * 纯寒暄（"好的谢谢" / "收到"）不再浪费提取器一轮；
+    * 但因门槛上调而被原阈值放过的短消息（"我喜欢 ruff"）必须仍被提取。
+    """
+
+    def test_short_chitchat_is_skipped(self):
+        extractor = MemoryExtractor(llm_client=None)
+        assert extractor._should_extract("好的谢谢", "不客气，还有问题随时问") is False
+
+    def test_short_message_with_high_value_signal_passes(self):
+        extractor = MemoryExtractor(llm_client=None)
+        # 用户消息远低于 30 字，但命中「我喜欢」
+        assert extractor._should_extract("我喜欢 ruff", "好的") is True
+
+    def test_high_value_signal_in_assistant_also_passes(self):
+        extractor = MemoryExtractor(llm_client=None)
+        # 用户消息很短且无信号；助手侧命中「我们决定」
+        assert extractor._should_extract("嗯", "那么我们决定改用 TypeScript") is True
+
+    def test_strong_negative_preference_passes(self):
+        extractor = MemoryExtractor(llm_client=None)
+        # 禁令类信号（「永远不」）也应放行
+        assert extractor._should_extract("以后永远不用 class", "明白") is True
+
+    def test_long_messages_always_pass(self):
+        extractor = MemoryExtractor(llm_client=None)
+        user_msg = "x" * extractor._USER_MSG_THRESHOLD
+        assistant_msg = "y" * extractor._ASSISTANT_MSG_THRESHOLD
+        assert extractor._should_extract(user_msg, assistant_msg) is True
+
+    def test_one_side_long_enough_passes(self):
+        extractor = MemoryExtractor(llm_client=None)
+        # 用户短、助手长 → 不满足「两侧都短」，仍应提取
+        assert extractor._should_extract("嗯", "y" * extractor._ASSISTANT_MSG_THRESHOLD) is True
+
+    def test_empty_messages_are_skipped(self):
+        extractor = MemoryExtractor(llm_client=None)
+        assert extractor._should_extract("", "") is False
+        assert extractor._has_high_value_signal("", "") is False
+
+    def test_high_value_keywords_match_substring(self):
+        """关键词是子串匹配——不要求整句，也不依赖中文词边界。"""
+        assert MemoryExtractor._has_high_value_signal(
+            "我们决定用 pnpm 作为包管理器", ""
+        )
+        assert MemoryExtractor._has_high_value_signal("我习惯用 4 空格缩进", "")
+        assert not MemoryExtractor._has_high_value_signal("今天天气不错", "明天也不错")
+
+    @pytest.mark.asyncio()
+    async def test_extract_skips_chitchat_end_to_end(self):
+        """端到端：短寒暄不进入 LLM 路径，返回空列表。"""
+
+        class ExplodingLLM:
+            async def chat(self, messages, **kwargs):  # pragma: no cover
+                raise AssertionError("chitchat should never reach the LLM")
+
+        extractor = MemoryExtractor(llm_client=ExplodingLLM())
+        assert await extractor.extract("收到", "好的") == []
+
+    @pytest.mark.asyncio()
+    async def test_extract_short_high_value_reaches_llm(self):
+        """端到端：短消息但因高价值信号仍被送入提取器。"""
+
+        class RecordingLLM:
+            def __init__(self):
+                self.called = False
+
+            async def chat(self, messages, **kwargs):
+                from backend.domain.message import Message
+
+                self.called = True
+                return Message(
+                    role="assistant",
+                    content='[{"content":"用户偏好使用 ruff","importance":7,'
+                    '"category":"user_pref","tags":["tooling"]}]',
+                )
+
+        llm = RecordingLLM()
+        extractor = MemoryExtractor(llm_client=llm)
+        facts = await extractor.extract("我喜欢 ruff", "好的")
+        assert llm.called is True
+        assert len(facts) == 1
+        assert facts[0]["category"] == "user_pref"

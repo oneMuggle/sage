@@ -26,6 +26,10 @@ from pydantic import BaseModel, Field
 
 from backend.data.database import get_database
 from backend.memory import get_memory_manager
+from backend.memory.preference_labels import (
+    PREFERENCE_DIMENSION_LABELS,
+    format_preference,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -359,15 +363,17 @@ def update_learned_preference(data: LearnedPreferenceUpdate):
         )
         conn.commit()
         short_key = key[len("pref_") :]
-        prefix = f"用户偏好 {short_key}:"
+        # 兼容旧条目（英文键）与新条目（中文标签）两种前缀，确保清理时
+        # 都能被命中 —— 避免 user_profile 里堆积相互冲突的偏好
+        legacy_prefix = f"用户偏好 {short_key}:"
+        new_prefix = f"用户偏好{PREFERENCE_DIMENSION_LABELS.get(short_key, short_key)}:"
         profile = get_user_profile()
-        # 清理同 key 旧条目 —— 避免 user_profile 里堆积相互冲突的偏好
         for item in profile.list():
             content = item.get("content") or ""
-            if content.startswith(prefix):
+            if content.startswith(legacy_prefix) or content.startswith(new_prefix):
                 profile.delete(item["id"])
         profile.add(
-            content=f"用户偏好 {short_key}: {value}",
+            content=format_preference(short_key, value),
             category="preference",
             importance=6,
         )

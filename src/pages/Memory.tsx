@@ -8,6 +8,7 @@ import { PageHeader } from '../shared/ui';
 import { ErrorState } from '../shared/ui/ErrorState';
 import {
   MemoryBrowser,
+  MemoryUsageHint,
   NewMemoryModal,
   ProjectProfileCard,
   UserProfileCard,
@@ -132,6 +133,9 @@ export function Memory() {
           onClose={() => setShowNewMemory(false)}
           onSaved={() => setRefreshKey((k) => k + 1)}
         />
+
+        {/* Task 4.1: 页首"如何使用"提示（可折叠，关闭后不再自动展示） */}
+        <MemoryUsageHint />
 
         {/* 对标 S2 (2026-09-13): 可编辑的用户画像卡片 */}
         <UserProfileCard />

@@ -66,9 +66,17 @@ def _make_episodic_row(
     return row
 
 
+class _FakeDb:
+    """无 memories_feedback 表的最小 db: attach_feedback 会降级为未反馈。"""
+
+    def get_connection(self) -> Any:
+        raise RuntimeError("fake db has no memories_feedback table")
+
+
 class _FakeEpisodicStore:
     def __init__(self, rows: List[Dict[str, Any]]) -> None:
         self._rows = rows
+        self.db = _FakeDb()
 
     def get_recent(self, *, limit: int, session_id: str | None = None) -> List[Dict[str, Any]]:
         return self._rows[:limit]

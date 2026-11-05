@@ -14,6 +14,10 @@ const getSessionSummariesMock = vi.fn();
 const searchMemoriesMock = vi.fn();
 const deleteMemoryMock = vi.fn();
 const promoteMemoryMock = vi.fn();
+const getQualityCandidatesMock = vi.fn();
+const batchDeleteMemoriesMock = vi.fn();
+const submitMemoryFeedbackMock = vi.fn();
+const getSessionMock = vi.fn();
 const navigateMock = vi.fn();
 const agentsListMock = vi.fn();
 
@@ -29,6 +33,12 @@ vi.mock('../../../shared/api', () => ({
     searchMemories: (...args: unknown[]) => searchMemoriesMock(...args),
     deleteMemory: (...args: unknown[]) => deleteMemoryMock(...args),
     promoteMemory: (...args: unknown[]) => promoteMemoryMock(...args),
+    getQualityCandidates: (...args: unknown[]) => getQualityCandidatesMock(...args),
+    batchDeleteMemories: (...args: unknown[]) => batchDeleteMemoriesMock(...args),
+    submitMemoryFeedback: (...args: unknown[]) => submitMemoryFeedbackMock(...args),
+  },
+  sessionApi: {
+    get: (...args: unknown[]) => getSessionMock(...args),
   },
 }));
 
@@ -39,10 +49,11 @@ vi.mock('../../../shared/api/agentsApi', () => ({
 }));
 
 vi.mock('sonner', () => ({
-  toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() },
+  toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }));
 
 import { MemoryBrowser } from '../../../widgets/memory/MemoryBrowser';
+import { clearSessionInfoCache } from '../useSessionInfo';
 
 function mem(overrides: Record<string, unknown> = {}) {
   return {
@@ -70,6 +81,8 @@ function renderBrowser(props: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  clearSessionInfoCache();
+  getSessionMock.mockRejectedValue(new Error('session not found'));
   getMemoriesMock.mockResolvedValue({
     items: [mem()],
     source_breakdown: BREAKDOWN,
@@ -85,6 +98,14 @@ beforeEach(() => {
     previous_agent_id: 'specialist-x',
   });
   agentsListMock.mockResolvedValue([]);
+  getQualityCandidatesMock.mockResolvedValue([]);
+  batchDeleteMemoriesMock.mockResolvedValue({ deleted: 0, failed: [] });
+  submitMemoryFeedbackMock.mockResolvedValue({
+    status: 'ok',
+    memory_id: 'm1',
+    memory_type: 'episodic',
+    feedback: 'up',
+  });
 });
 
 describe('MemoryBrowser 加载与列表', () => {
@@ -225,6 +246,32 @@ describe('MemoryBrowser 会话跳转', () => {
     renderBrowser();
     await screen.findAllByText('记忆内容A', {}, { timeout: 5000 });
     expect(screen.queryByTitle(/跳转到会话/)).not.toBeInTheDocument();
+  }, 20000);
+
+  it('Task 4.2: 显示会话标题与相对日期', async () => {
+    const sessionId = '4a4f6f2e-1111-4222-8333-944455556666';
+    getSessionMock.mockResolvedValue({
+      id: sessionId,
+      title: '用户配置偏好',
+      created_at: Math.floor((Date.now() - 3 * 24 * 60 * 60 * 1000) / 1000),
+    });
+    getMemoriesMock.mockResolvedValue({
+      items: [mem({ session_id: sessionId })],
+      source_breakdown: BREAKDOWN,
+      total: 1,
+    });
+    renderBrowser();
+
+    const jump = await screen.findByTitle(`跳转到会话 ${sessionId}`);
+    expect(jump.textContent).toContain('↳ 「用户配置偏好」');
+    expect(jump.textContent).toContain('3 天前');
+  }, 20000);
+
+  it('Task 4.2: 会话不存在时降级显示截断 ID', async () => {
+    renderBrowser();
+    const jump = await screen.findByTitle('跳转到会话 sess-9');
+    await waitFor(() => expect(jump.textContent).toContain('↳ 会话 sess-9'), { timeout: 5000 });
+    expect(jump.textContent).not.toContain('天前');
   }, 20000);
 });
 
@@ -482,5 +529,198 @@ describe('MemoryBrowser 深链定位（P0-6）', () => {
     await screen.findAllByText('被引用的那条', {}, { timeout: 5000 });
     const cards = screen.getAllByTestId('memory-episodic-item');
     expect(cards.filter((c) => c.getAttribute('data-focused') === 'true')).toHaveLength(0);
+  }, 20000);
+});
+
+/** Task 4.3：选择模式 + 批量清理低质量记忆。 */
+describe('MemoryBrowser 批量清理（Task 4.3）', () => {
+  beforeEach(() => {
+    getMemoriesMock.mockResolvedValue({
+      items: [
+        mem({ id: 'm1', content: '低质量A', quality_score: 0.2 }),
+        mem({ id: 'm2', content: '低质量B', quality_score: 0.25 }),
+      ],
+      source_breakdown: BREAKDOWN,
+      total: 2,
+    });
+  });
+
+  it('选择模式显示复选框，选中后两步确认批量删除', async () => {
+    batchDeleteMemoriesMock.mockResolvedValue({ deleted: 2, failed: [] });
+    renderBrowser();
+    await screen.findAllByText('低质量A', {}, { timeout: 5000 });
+
+    // 未进入选择模式时没有复选框
+    expect(screen.queryByTestId('memory-select-m1')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('memory-select-mode-toggle'));
+    fireEvent.click(screen.getByTestId('memory-select-m1'));
+    fireEvent.click(screen.getByTestId('memory-select-m2'));
+    expect(screen.getByText('已选 2 条')).toBeInTheDocument();
+
+    // 第一步：仅进入确认态，不发请求
+    fireEvent.click(screen.getByTestId('memory-batch-delete'));
+    expect(batchDeleteMemoriesMock).not.toHaveBeenCalled();
+    expect(screen.getByText('即将删除 2 条记忆（不可撤销）')).toBeInTheDocument();
+
+    // 第二步：确认后按所选类型批量提交
+    fireEvent.click(screen.getByTestId('memory-batch-confirm'));
+    await waitFor(() => expect(batchDeleteMemoriesMock).toHaveBeenCalledTimes(1), {
+      timeout: 5000,
+    });
+    expect(batchDeleteMemoriesMock).toHaveBeenCalledWith([
+      { id: 'm1', memory_type: 'episodic' },
+      { id: 'm2', memory_type: 'episodic' },
+    ]);
+    await waitFor(() => expect(screen.queryAllByText('低质量A').length).toBe(0), {
+      timeout: 5000,
+    });
+    expect(screen.queryAllByText('低质量B').length).toBe(0);
+    expect(toast.success).toHaveBeenCalled();
+  }, 20000);
+
+  it('取消批量确认不发请求', async () => {
+    renderBrowser();
+    await screen.findAllByText('低质量A', {}, { timeout: 5000 });
+    fireEvent.click(screen.getByTestId('memory-select-mode-toggle'));
+    fireEvent.click(screen.getByTestId('memory-select-m1'));
+    fireEvent.click(screen.getByTestId('memory-batch-delete'));
+    fireEvent.click(screen.getByTestId('memory-batch-cancel'));
+
+    expect(batchDeleteMemoriesMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId('memory-batch-delete')).toBeInTheDocument();
+    expect(screen.getAllByText('低质量A').length).toBeGreaterThan(0);
+  }, 20000);
+
+  it('部分失败时保留失败条目并汇总提示', async () => {
+    batchDeleteMemoriesMock.mockResolvedValue({
+      deleted: 1,
+      failed: [{ id: 'm2', reason: 'store returned False (not found)' }],
+    });
+    renderBrowser();
+    await screen.findAllByText('低质量A', {}, { timeout: 5000 });
+    fireEvent.click(screen.getByTestId('memory-select-mode-toggle'));
+    fireEvent.click(screen.getByTestId('memory-select-m1'));
+    fireEvent.click(screen.getByTestId('memory-select-m2'));
+    fireEvent.click(screen.getByTestId('memory-batch-delete'));
+    fireEvent.click(screen.getByTestId('memory-batch-confirm'));
+
+    await waitFor(() => expect(toast.warning).toHaveBeenCalled(), { timeout: 5000 });
+    expect(screen.queryAllByText('低质量A').length).toBe(0);
+    expect(screen.getAllByText('低质量B').length).toBeGreaterThan(0);
+  }, 20000);
+
+  it('低质量候选按钮调用 getQualityCandidates 并渲染候选', async () => {
+    getQualityCandidatesMock.mockResolvedValue([
+      {
+        id: 'q1',
+        content: '候选内容',
+        memory_type: 'episodic',
+        importance: 1,
+        quality_score: 0.1,
+        created_at_ms: 1700000000000,
+        access_count: 0,
+      },
+    ]);
+    renderBrowser();
+    await screen.findAllByText('低质量A', {}, { timeout: 5000 });
+
+    fireEvent.click(screen.getByTestId('memory-quality-candidates-toggle'));
+    await waitFor(() => expect(getQualityCandidatesMock).toHaveBeenCalled(), { timeout: 5000 });
+    expect(getQualityCandidatesMock).toHaveBeenCalledWith(50, 0.3);
+    expect(await screen.findByText(/低质量候选 · 1 条/)).toBeInTheDocument();
+    expect(screen.getAllByText('候选内容').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('低质量A').length).toBe(0);
+  }, 20000);
+});
+
+describe('MemoryBrowser 记忆级反馈（Task 4.5）', () => {
+  it('episodic 行渲染 👍/👎，工作记忆行不渲染', async () => {
+    getMemoriesMock.mockResolvedValue({
+      items: [mem({ id: 'e1' }), mem({ id: 'w1', source: 'working', memory_type: 'working' })],
+      source_breakdown: BREAKDOWN,
+      total: 2,
+    });
+    renderBrowser();
+    await waitFor(() => expect(screen.getByTestId('memory-feedback-e1')).toBeInTheDocument(), {
+      timeout: 5000,
+    });
+    expect(screen.getAllByTestId('memory-feedback-e1').length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('memory-feedback-w1')).not.toBeInTheDocument();
+  }, 20000);
+
+  it('点击 👍 调用 submitMemoryFeedback("up")', async () => {
+    renderBrowser();
+    const upBtn = await screen.findByTestId('memory-feedback-up-m1', {}, { timeout: 5000 });
+    fireEvent.click(upBtn);
+    await waitFor(() => expect(submitMemoryFeedbackMock).toHaveBeenCalled(), { timeout: 5000 });
+    expect(submitMemoryFeedbackMock).toHaveBeenCalledWith('m1', 'up', {
+      memoryType: 'episodic',
+      reason: undefined,
+    });
+    await waitFor(() => expect(upBtn.getAttribute('aria-pressed')).toBe('true'));
+  }, 20000);
+
+  it('再次点击同一 👍 撤销为 neutral', async () => {
+    renderBrowser();
+    const upBtn = await screen.findByTestId('memory-feedback-up-m1', {}, { timeout: 5000 });
+    fireEvent.click(upBtn);
+    await waitFor(() => expect(upBtn.getAttribute('aria-pressed')).toBe('true'), { timeout: 5000 });
+    fireEvent.click(upBtn);
+    await waitFor(() => expect(submitMemoryFeedbackMock).toHaveBeenCalledTimes(2), {
+      timeout: 5000,
+    });
+    expect(submitMemoryFeedbackMock).toHaveBeenLastCalledWith('m1', 'neutral', {
+      memoryType: 'episodic',
+      reason: undefined,
+    });
+    await waitFor(() => expect(upBtn.getAttribute('aria-pressed')).toBe('false'));
+  }, 20000);
+
+  it('点击 👎 后展开原因输入，回车带上 reason 提交', async () => {
+    renderBrowser();
+    const downBtn = await screen.findByTestId('memory-feedback-down-m1', {}, { timeout: 5000 });
+    fireEvent.click(downBtn);
+    await waitFor(() => expect(submitMemoryFeedbackMock).toHaveBeenCalledTimes(1), {
+      timeout: 5000,
+    });
+    expect(submitMemoryFeedbackMock).toHaveBeenLastCalledWith('m1', 'down', {
+      memoryType: 'episodic',
+      reason: undefined,
+    });
+
+    const input = await screen.findByLabelText('反馈原因（可选）', {}, { timeout: 5000 });
+    fireEvent.change(input, { target: { value: '内容过时' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(submitMemoryFeedbackMock).toHaveBeenCalledTimes(2), {
+      timeout: 5000,
+    });
+    expect(submitMemoryFeedbackMock).toHaveBeenLastCalledWith('m1', 'down', {
+      memoryType: 'episodic',
+      reason: '内容过时',
+    });
+  }, 20000);
+
+  it('列表带 user_feedback 时按钮呈现已反馈态', async () => {
+    getMemoriesMock.mockResolvedValue({
+      items: [mem({ id: 'm1', user_feedback: 'down' })],
+      source_breakdown: BREAKDOWN,
+      total: 1,
+    });
+    renderBrowser();
+    const downBtn = await screen.findByTestId('memory-feedback-down-m1', {}, { timeout: 5000 });
+    expect(downBtn.getAttribute('aria-pressed')).toBe('true');
+    const upBtn = screen.getByTestId('memory-feedback-up-m1');
+    expect(upBtn.getAttribute('aria-pressed')).toBe('false');
+  }, 20000);
+
+  it('提交失败时回退状态并提示', async () => {
+    submitMemoryFeedbackMock.mockRejectedValue(new Error('network'));
+    renderBrowser();
+    const upBtn = await screen.findByTestId('memory-feedback-up-m1', {}, { timeout: 5000 });
+    fireEvent.click(upBtn);
+    await waitFor(() => expect(toast.error).toHaveBeenCalled(), { timeout: 5000 });
+    await waitFor(() => expect(upBtn.getAttribute('aria-pressed')).toBe('false'));
   }, 20000);
 });
