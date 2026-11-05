@@ -27,6 +27,8 @@ export interface Session {
   /** 2026-10-29 (feat/workspace-optimization): create_session 响应里附带的工作区绑定信息。
    *  后端在创建会话时同步解析默认工作区并绑定，前端不再自行推导。null = 连 scratch 都失败。 */
   workspace_binding?: SessionWorkspaceInfo | null;
+  /** M0 (2026-11-03): 会话绑定的专家（agents.id）；'primary' = 主助手。 */
+  specialist_id?: string;
 }
 
 /** 2026-10-29 (feat/workspace-optimization): create_session 响应里的工作区信息。 */
@@ -243,8 +245,10 @@ export interface Message {
 
 /** R81: 统一参考来源条目 —— backend/chat/sources_extractor.py 的提取产物。 */
 export interface MessageSource {
-  /** R86: 新增 'memory' —— @memory: 实体引用命中（渲染进记忆分组）。 */
-  kind: 'web' | 'wiki' | 'tool' | 'memory';
+  /** R86: 新增 'memory' —— @memory: 实体引用命中（渲染进记忆分组）。
+   * M2-Task 4: 新增 'knowledge' —— 专家绑定的知识库检索命中，带 loc 字段
+   * 可点击跳转到对应 Wiki 页面 / 项目资料 / 专家私有知识。 */
+  kind: 'web' | 'wiki' | 'tool' | 'memory' | 'knowledge';
   title?: string;
   url?: string;
   snippet?: string;
@@ -254,6 +258,16 @@ export interface MessageSource {
   server?: string;
   tool?: string;
   preview?: string;
+  /** M2-Task 4 专家知识引用字段：绑定源类型、源 ID、文档标识、片段序号。 */
+  source_type?: string;
+  source_id?: string;
+  binding_id?: string;
+  binding_name?: string;
+  agent_id?: string;
+  chunk_index?: number | null;
+  material_id?: string | null;
+  project_id?: string | null;
+  loc?: Record<string, unknown> | null;
 }
 
 /** R81: 附件检索溯源（r71，原 inline 形状收敛为此类型）。 */

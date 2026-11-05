@@ -132,6 +132,10 @@ export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';
 export { skillDraftsApi } from './skillDraftsApi';
 export { skillsApi } from './skillsApi';
+// M1-E (2026-11-03): 专家包导入/导出走专用 preload 桥（不重复走 invoke）
+export { specialistApi } from './specialistApi';
+// M2-Task 2 (2026-11-04): 专家知识绑定 CRUD（backendRequest 直连）
+export { specialistKnowledgeApi } from './specialistKnowledgeApi';
 import * as windowControlsClient from './windowControlsClient';
 export const windowControls = windowControlsClient.windowControls;
 export const getWindowControlsBridge = windowControlsClient.getWindowControlsBridge;
@@ -159,6 +163,9 @@ export type {
   ConsolidationSuggestion,
   FreshnessSummaryInfo,
   KnowledgeDoc,
+  KnowledgeBinding,
+  KnowledgeBindingCreate,
+  KnowledgeSourceType,
   LearnResponse,
   LaneBoardEntry,
   LaneBoardSnapshot,

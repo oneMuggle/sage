@@ -25,6 +25,7 @@ import type {
   Memory,
   MemoryConsolidationResult,
   MemoryListResponse,
+  MemoryPromoteResult,
   MemorySummariesListResponse,
   MemoryWriteRecord,
   MemoryWritesResponse,
@@ -172,6 +173,7 @@ function coerceMemoryItem(raw: unknown): Memory {
       ? (scopeRaw as NonNullable<Memory['scope']>)
       : undefined;
   const projectKey = asOptionalString(raw.project_key);
+  const agentId = asOptionalString(raw.agent_id);
   const statusRaw = asOptionalString(raw.status);
   const status =
     statusRaw && VALID_SUMMARY_STATUSES.has(statusRaw as NonNullable<Memory['status']>)
@@ -195,6 +197,7 @@ function coerceMemoryItem(raw: unknown): Memory {
     source_turn_id: sourceTurnId,
     scope,
     project_key: projectKey,
+    agent_id: agentId,
     status,
     error_message: errorMessage,
     importance: asNumber(raw.importance, 0),
@@ -366,6 +369,31 @@ export const memoryApi = {
   },
 
   /**
+   * 把一条私有记忆提升到共享层（M3-Task 7）。
+   *
+   * 后端把该行的 ``agent_id`` 置 NULL（共享层）并写一条审计行；归属变更
+   * 与审计同事务提交 —— 审计写失败则整体回滚，不会留下"已公开但无记录"
+   * 的记忆。已在共享层的记忆走幂等分支（``already_shared``）。
+   */
+  async promoteMemory(id: string): Promise<MemoryPromoteResult> {
+    if (!id || typeof id !== 'string') {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的记忆ID',
+        details: { memoryId: id },
+      });
+    }
+
+    return withRetry(async () => {
+      try {
+        return await invoke<MemoryPromoteResult>('promote_memory', { id });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
    * 获取记忆列表(Task 2 起返回 envelope;step 6 起支持 offset / sessionId)。
    *
    * Backwards-compat:如果后端误返回旧 flat list,自动包成 envelope,避免
@@ -380,7 +408,12 @@ export const memoryApi = {
     memoryType?: 'episodic' | 'semantic' | 'working' | 'session_summary' | 'all',
     page: number = 1,
     pageSize: number = 20,
-    options?: { offset?: number; sessionId?: string | null; signal?: AbortSignal },
+    options?: {
+      offset?: number;
+      sessionId?: string | null;
+      agentId?: string | null;
+      signal?: AbortSignal;
+    },
   ): Promise<MemoryListResponse> {
     // 验证分页参数
     const safePage = Math.max(1, Number(page) || 1);
@@ -392,6 +425,11 @@ export const memoryApi = {
     const safeSessionId =
       options?.sessionId && typeof options.sessionId === 'string' && options.sessionId.trim()
         ? options.sessionId.trim()
+        : null;
+    // M3-Task 6: agent 维度过滤（管理视图精确匹配，透传给 Electron → 后端 agent_id query）
+    const safeAgentId =
+      options?.agentId && typeof options.agentId === 'string' && options.agentId.trim()
+        ? options.agentId.trim()
         : null;
 
     return withRetry(async () => {
@@ -405,6 +443,7 @@ export const memoryApi = {
           pageSize: safePageSize,
           offset: safeOffset,
           sessionId: safeSessionId,
+          agentId: safeAgentId,
         });
         if (options?.signal?.aborted) {
           throw new DOMException('Aborted', 'AbortError');

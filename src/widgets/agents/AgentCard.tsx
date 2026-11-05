@@ -7,6 +7,9 @@ const ROLE_LABELS: Record<string, string> = {
   memory_manager: '记忆管理',
   writer: '文档写作',
   'slide-deck-creator': '演示文稿',
+  // M1-E (2026-11-03): 专家画廊的 role 标签，保持与 SpecialistCard 同一词表。
+  specialist: '专家',
+  reviewer: '审校',
 };
 
 const ROLE_COLORS: Record<string, string> = {

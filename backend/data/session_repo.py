@@ -66,6 +66,9 @@ class Session:
     run_status: str = "idle"
     last_error: Optional[str] = None
     last_run_at: Optional[int] = None
+    # M0 (2026-11-03): 会话级专家绑定。指向 agents.id；'primary' = 主助手。
+    # 存量会话迁移时回填为 'primary'，行为与引入前一致。
+    specialist_id: str = "primary"
 
     @property
     def duration_minutes(self) -> Optional[int]:
@@ -100,6 +103,8 @@ class Session:
             run_status=row["run_status"] or "idle",
             last_error=row["last_error"],
             last_run_at=row["last_run_at"],
+            # M0 (2026-11-03): 专家绑定。存量行为 NULL（迁移前 DB）→ 兜底 primary
+            specialist_id=row["specialist_id"] or "primary",
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -121,6 +126,8 @@ class Session:
             "run_status": self.run_status,
             "last_error": self.last_error,
             "last_run_at": self.last_run_at,
+            # M0 (2026-11-03): 会话绑定的专家 id（'primary' = 主助手）
+            "specialist_id": self.specialist_id,
             # 2026-10-28: 性能统计 - 会话用时（分钟）
             "duration_minutes": self.duration_minutes,
         }
@@ -132,20 +139,30 @@ class SessionRepository:
     def __init__(self):
         self.db = get_database()
 
-    def create(self, title: str = "新对话", parent_id: Optional[str] = None) -> Session:
-        """创建新会话"""
+    def create(
+        self,
+        title: str = "新对话",
+        parent_id: Optional[str] = None,
+        specialist_id: Optional[str] = None,
+    ) -> Session:
+        """创建新会话。
+
+        ``specialist_id``: M0 (2026-11-03) 会话级专家绑定，指向 agents.id；
+        None/空 → 'primary'（主助手）。
+        """
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
         now = int(time.time() * 1000)
         session_id = str(uuid.uuid4())
+        bound_specialist = specialist_id or "primary"
 
         cursor.execute(
             """
-            INSERT INTO sessions (id, title, created_at, updated_at, parent_id)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO sessions (id, title, created_at, updated_at, parent_id, specialist_id)
+            VALUES (?, ?, ?, ?, ?, ?)
         """,
-            (session_id, title, now, now, parent_id),
+            (session_id, title, now, now, parent_id, bound_specialist),
         )
 
         conn.commit()
@@ -156,6 +173,7 @@ class SessionRepository:
             created_at=now,
             updated_at=now,
             parent_id=parent_id,
+            specialist_id=bound_specialist,
         )
 
     def get(self, session_id: str) -> Session | None:
@@ -575,8 +593,8 @@ def fork_session(
     try:
         cursor.execute(
             """
-            INSERT INTO sessions (id, title, created_at, updated_at, last_message_at, message_count, fork_root, forked_at_message_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (id, title, created_at, updated_at, last_message_at, message_count, fork_root, forked_at_message_id, specialist_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 new_session_id,
@@ -587,6 +605,9 @@ def fork_session(
                 len(prefix),
                 source.id,
                 at_message_id,
+                # M0 (2026-11-03): fork 继承源会话的专家绑定 —— 分叉的是
+                # 同一段工作在另一条分支上的延续，换专家会污染上下文语义。
+                source.specialist_id or "primary",
             ),
         )
         # 逐条复制：插入顺序 = 源顺序，messages 表

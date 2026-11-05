@@ -36,6 +36,8 @@ class ExtractionRequest:
     enabled: bool
     #: 本轮工具执行观察到的环境事实文本（如 shell 降级提示），可为空串。
     tool_observations: str = ""
+    #: M3-Task 4: 会话专家的 agent_id；默认 "primary" 回落默认助手私有层。
+    agent_id: str = "primary"
 
 
 class MemoryExtractionQueue:
@@ -143,6 +145,7 @@ class MemoryExtractionQueue:
             session_id=request.session_id,
             enabled=request.enabled,
             tool_observations=request.tool_observations,
+            agent_id=request.agent_id,
         )
 
 
