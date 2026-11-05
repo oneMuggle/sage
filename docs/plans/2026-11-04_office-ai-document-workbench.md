@@ -1,6 +1,9 @@
 # 文档与验收：AI 文档工作台重构方案
 
-> 状态：Phase 0 ✅ 已交付（main #2869 / win7 #2876，2026-11-05）；**Phase 1 实施中**（M2.5 规范书库 + M3 AI 审校与修改）
+> 状态：Phase 0 ✅ 已交付（main #2869 / win7 #2876，2026-11-05）；
+> Phase 1 M2.5+M3 已在 main 合入（#2881）并 cherry-pick 到 `feat/office-ai-phase1-win7`
+> （pydantic v1 兼容 + 前端依赖补齐 + 「审校与规范」文案；3 commits 待 PR）；
+> Phase 1 剩余：文档库搜索/筛选/排序/重复清理、Word 修订痕迹应用 + 自动快照。
 > 基线：`origin/main`（功能分支 `feat/office-ai-phase1`），
 > 对照 `origin/main` 的「审校与规范」能力。
 > 目标分支：main 先行，再按项目双分支策略 cherry-pick / 适配到 release/win7。
