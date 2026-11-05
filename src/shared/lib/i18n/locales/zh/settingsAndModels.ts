@@ -511,6 +511,10 @@ export const zhSettingsAndModels = {
   'office.env.staging': '暂存目录（只读诊断）',
   'office.generate.journal.title': '期刊模板助手',
   'office.generate.journal.hint': '选择 .docx 期刊模板 → 填写内容 → 一键生成或校验格式',
+  'office.rules.guide.title': 'Word 审校在哪？',
+  'office.rules.guide.body':
+    '导入文档后在「文档」Tab 下的预览面板里完成审校、修订与 PDF 导出。本节把规范 / 模板文件转化为可复用的规程包。',
+  'office.rules.guide.action': '前往文档',
 } as const;
 
 export function formatZhSettingsAndModelsSummary(): string {
