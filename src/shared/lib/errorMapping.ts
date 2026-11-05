@@ -91,6 +91,9 @@ const ITERATION_LIMIT_SOURCE_LABELS: Record<string, string> = {
   'orch.global': '编排全局设置',
   profile: 'Agent 默认配置',
   default: '系统默认值',
+  // 2026-11-05 M5: 动态预算分支（budget_mode=auto）耗尽后发的 source。
+  // 指向编排页「预算模式」而非「迭代次数上限」，避免把用户引到错误的设置项。
+  dynamic: '动态预算',
 };
 
 /** 上限来源层级 → 用户该去哪调。 */
@@ -102,6 +105,8 @@ const ITERATION_LIMIT_HINTS: Record<string, string> = {
   explicit: '该上限由本次调用指定，可拆分任务减少往返后重试。',
   default:
     '可在「设置 → 编排 → Agent 迭代次数上限」调高后重试，或拆分任务减少往返。',
+  dynamic:
+    '自动预算已用完且进度审计未通过。可在「设置 → 编排 → 预算模式」调高各档预算或切换为固定模式后重试，也可直接回复「继续」沿用当前预算续跑。',
 };
 
 const DEFAULT_ITERATION_HINT =
