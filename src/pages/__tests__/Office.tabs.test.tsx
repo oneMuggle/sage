@@ -50,8 +50,9 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 vi.mock('../../features/office', () => ({
   OfficeCapabilityBar: () => <div data-testid="office-capability-bar" />,
   OfficeDocumentList: () => <div data-testid="office-document-list" />,
-  OfficeFilePicker: ({ children }: { children?: ReactNode }) => (
-    <div data-testid="office-file-picker">{children}</div>
+  OfficeDuplicateDialog: () => null,
+  OfficeIntake: ({ children }: { children?: ReactNode }) => (
+    <div data-testid="office-intake">{children}</div>
   ),
   OfficeGenerateForm: () => <div data-testid="office-generate-form" />,
   OfficePreviewPanel: () => <div data-testid="office-preview-panel" />,
@@ -62,8 +63,8 @@ vi.mock('../../features/office', () => ({
     refresh: vi.fn(),
     view: 'live',
     setView: vi.fn(),
-    importAndRead: vi.fn(),
-    readDropped: vi.fn(),
+    importAndReadMulti: vi.fn(),
+    readDroppedMulti: vi.fn(),
     saveAs: vi.fn(),
     open: vi.fn(),
     showInFolder: vi.fn(),
@@ -72,6 +73,8 @@ vi.mock('../../features/office', () => ({
     batchArchive: vi.fn(),
     batchRestore: vi.fn(),
     readDocument: vi.fn(),
+    pendingDuplicate: null,
+    resolvePendingDuplicate: vi.fn(),
   }),
 }));
 

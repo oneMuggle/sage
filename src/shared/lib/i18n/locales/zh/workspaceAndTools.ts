@@ -193,6 +193,8 @@ export const zhWorkspaceAndTools = {
   'office.fidelity.toggle': '高保真',
   'office.fidelity.loading': '转换中…',
   'office.fidelity.failed': '高保真预览失败',
+  'office.fidelity.unavailable':
+    '当前格式未检测到本机转换器（LibreOffice 支持 DOCX/XLSX/PPTX；MS Word 仅支持 DOCX）。Word 已内置原生渲染，不受影响；可点击右上角 [环境] 重新检测或查看安装指引',
   'office.caps.detected': '已发现转换组件，尚未验证运行',
   'office.caps.pdf': 'PDF 导出',
   'office.caps.image': '图片压缩',

@@ -171,6 +171,24 @@ export interface PickedOfficeFile {
   sizeBytes: number;
 }
 
+/**
+ * Outcome of the Phase 0 unified multi-file intake.
+ *
+ * `imported` holds one entry per file that was atomically staged into
+ * the workspace (each carrying its own `importToken` the renderer must
+ * complete or discard). `skipped` lists files that could not be
+ * staged — most commonly an unsupported extension — so the UI can tell
+ * the user what was left out instead of silently dropping it.
+ */
+export interface MultiOfficeImportResult {
+  imported: ImportedOfficeFile[];
+  skipped: Array<{
+    filename: string;
+    reason: 'unsupported-extension' | 'staging-failed';
+    message?: string;
+  }>;
+}
+
 export interface SavedOfficeFile {
   savedPath: string;
 }
@@ -208,12 +226,34 @@ export interface OfficeElectronApiBridge {
     workspacePath: string,
     docType: OfficeDocType,
   ) => Promise<ImportedOfficeFile | null>;
+  /**
+   * Phase 0 unified intake: multi-select dialog accepting any supported
+   * Office extension (modern + legacy + .csv). Each file's `docType` is
+   * auto-detected from its extension by the main process
+   * (`docTypeFromExtension`). Returns one `ImportedOfficeFile` per
+   * successfully staged file; files with unrecognised extensions are
+   * reported in `skipped` rather than aborting the whole batch. Returns
+   * empty `imported` when the user cancels the dialog.
+   */
+  pickAndImportMultiOfficeFiles?: (
+    workspacePath: string,
+  ) => Promise<MultiOfficeImportResult>;
   /** Drag/drop variant — renderer already has sourcePath from DataTransfer. */
   importDroppedOfficeFile: (
     workspacePath: string,
     docType: OfficeDocType,
     sourcePath: string,
   ) => Promise<ImportedOfficeFile>;
+  /**
+   * Phase 0 unified intake, drag/drop sibling of
+   * `pickAndImportMultiOfficeFiles`. The renderer hands over the OS
+   * source paths it already holds; the main process detects each file's
+   * `docType` from its extension and stages every recognised file.
+   */
+  importDroppedMultiOfficeFiles?: (
+    workspacePath: string,
+    sourcePaths: string[],
+  ) => Promise<MultiOfficeImportResult>;
   /** Finalize an import; the staged file becomes permanent and the token is consumed. */
   completeOfficeImport: (importToken: string) => Promise<void>;
   /** Discard an import; the staged file is deleted. Idempotent on unknown tokens. */

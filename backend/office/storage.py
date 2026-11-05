@@ -32,9 +32,10 @@ import time
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from .errors import OfficePathError
+from .errors import OfficeFileNotFoundError, OfficePathError
 from .models import OfficeDocType, OfficeDocumentSummary, OfficeSnapshotInfo
 from .path_safety import managed_document_directory, resolve_within, validate_doc_id
+from .revision import compute_file_revision
 
 logger = logging.getLogger(__name__)
 
@@ -131,8 +132,15 @@ def _summary_to_row(summary: OfficeDocumentSummary) -> tuple:
 def save_document(
     conn: sqlite3.Connection,
     summary: OfficeDocumentSummary,
+    content_file_path: Optional[Path] = None,
 ) -> OfficeDocumentSummary:
-    """INSERT OR REPLACE an office_documents row. Returns the saved summary."""
+    """INSERT OR REPLACE an office_documents row. Returns the saved summary.
+
+    Also refreshes the document's content digest (the import duplicate
+    detector reads it). ``content_file_path`` lets the caller pass the
+    exact file it just wrote — the managed layout path is derived from the
+    summary when it is omitted.
+    """
     row = _summary_to_row(summary)
     conn.execute(
         """
@@ -145,6 +153,7 @@ def save_document(
         row,
     )
     conn.commit()
+    record_content_hash(conn, summary, file_path=content_file_path)
     return summary
 
 
@@ -267,6 +276,152 @@ def document_path(summary: OfficeDocumentSummary) -> Path:
 def delete_document(conn: sqlite3.Connection, doc_id: str) -> bool:
     """DELETE a document by id. Returns True if a row was removed."""
     cursor = conn.execute("DELETE FROM office_documents WHERE id = ?", (doc_id,))
+    conn.commit()
+    delete_content_hash(conn, doc_id)
+    return cursor.rowcount > 0
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Content hash + lineage (import duplicate detection)
+# ──────────────────────────────────────────────────────────────────────
+#
+# The digest of each managed document lives in a side table rather than in
+# a column on ``office_documents``: save_document() writes with
+# ``INSERT OR REPLACE``, so a column on that table would be wiped by every
+# re-save. A side table keyed by the document id keeps the digest
+# independent of how the main row happens to be written.
+
+
+def ensure_content_hash_table(conn: sqlite3.Connection) -> None:
+    """Create the content-hash side table + lookup index (idempotent)."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS office_document_hashes (
+            id TEXT PRIMARY KEY,
+            workspace_path TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_office_doc_hashes_ws_hash
+        ON office_document_hashes (workspace_path, content_hash)
+        """
+    )
+    conn.commit()
+
+
+def record_content_hash(
+    conn: sqlite3.Connection,
+    summary: OfficeDocumentSummary,
+    file_path: Optional[Path] = None,
+) -> Optional[str]:
+    """Hash the document's bytes and remember them for duplicate detection.
+
+    Best-effort by design: a document whose file is not on disk yet (a row
+    saved before the writer flushed) simply has no digest and therefore
+    does not take part in duplicate detection. Documents imported before
+    this feature existed behave the same way — they are never reported as
+    duplicates.
+
+    Returns the stored digest, or None when it could not be computed.
+    """
+    target: Optional[Path]
+    if file_path is not None:
+        target = Path(file_path)
+    else:
+        try:
+            target = document_path(summary)
+        except (OfficePathError, OSError) as exc:
+            logger.debug("content hash skipped for %s: %s", summary.id, exc)
+            return None
+    try:
+        content_hash = compute_file_revision(target)
+    except (OfficeFileNotFoundError, OSError) as exc:
+        logger.debug("content hash skipped for %s: %s", summary.id, exc)
+        return None
+    ensure_content_hash_table(conn)
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO office_document_hashes
+            (id, workspace_path, content_hash, created_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (summary.id, summary.workspace_path, content_hash, summary.updated_at),
+    )
+    conn.commit()
+    return content_hash
+
+
+def get_content_hash(conn: sqlite3.Connection, doc_id: str) -> Optional[str]:
+    """Return the stored content digest of a document, if it has one."""
+    try:
+        row = conn.execute(
+            "SELECT content_hash FROM office_document_hashes WHERE id = ?",
+            (doc_id,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        # The side table has not been created yet on a fresh database.
+        return None
+    return row[0] if row is not None else None
+
+
+def delete_content_hash(conn: sqlite3.Connection, doc_id: str) -> None:
+    """Forget a document's content digest (called when its row is deleted)."""
+    try:
+        conn.execute("DELETE FROM office_document_hashes WHERE id = ?", (doc_id,))
+    except sqlite3.OperationalError:
+        # No side table yet — nothing to clean up.
+        return
+    conn.commit()
+
+
+def find_documents_by_hash(
+    conn: sqlite3.Connection,
+    workspace_path: str,
+    content_hash: str,
+) -> List[OfficeDocumentSummary]:
+    """Return the live documents in a workspace whose bytes match a digest.
+
+    Archived rows are excluded — an archived document is not something the
+    user should be warned about when importing the same file again.
+    """
+    ensure_content_hash_table(conn)
+    try:
+        rows = conn.execute(
+            """
+            SELECT d.id, d.workspace_path, d.doc_type, d.original_filename,
+                   d.generated_filename, d.status, d.created_at, d.updated_at,
+                   d.metadata, d.derived_from, d.archived_at
+            FROM office_documents d
+            JOIN office_document_hashes h ON h.id = d.id
+            WHERE h.content_hash = ? AND d.workspace_path = ?
+              AND d.archived_at IS NULL
+            ORDER BY d.created_at ASC
+            """,
+            (content_hash, workspace_path),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        # A legacy database without the archive column — nothing to match.
+        return []
+    return [_row_to_summary(row) for row in rows]
+
+
+def set_document_lineage(
+    conn: sqlite3.Connection,
+    doc_id: str,
+    derived_from: Optional[str],
+) -> bool:
+    """Point a document at the document it was derived from.
+
+    Returns True iff a row matched the id.
+    """
+    cursor = conn.execute(
+        "UPDATE office_documents SET derived_from = ? WHERE id = ?",
+        (derived_from, doc_id),
+    )
     conn.commit()
     return cursor.rowcount > 0
 
