@@ -141,7 +141,7 @@ async def test_feedback_invalid_memory_type_rejected(client):
 @pytest.mark.asyncio()
 async def test_feedback_to_soft_deleted_episodic_returns_404(client):
     memory_id = await _save_episodic(client, "待删除记忆")
-    # 软删除 (is_valid=0)
+    # 标记为软删除，is_valid 置 0
     from backend.memory import get_memory_manager
     mm = get_memory_manager()
     assert mm.delete_memory(memory_id, "episodic") is True

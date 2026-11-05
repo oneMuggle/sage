@@ -124,9 +124,8 @@ async def test_all_mode_mixed_quality_score(client):
         layer = item.get("layer")
         score = item.get("quality_score")
         if layer in ("episodic", "semantic"):
-            assert score is not None and 0.0 <= score <= 1.0, (
-                f"layer={layer} 应有 quality_score"
-            )
+            assert score is not None, f"layer={layer} 应有 quality_score"
+            assert 0.0 <= score <= 1.0, f"layer={layer} score={score} 越界"
         elif layer in ("working", "session_summary"):
             assert score is None, f"layer={layer} 不应有 quality_score"
 
@@ -149,7 +148,7 @@ async def test_quality_scorer_corpus_is_per_request(client):
     resp1 = await client.get(f"{PREFIX}/memory/list", params={"type": "episodic"})
     score1 = resp1.json()["items"][0]["quality_score"]
 
-    # 第二轮: 新增一条高度重复的内容
+    # 第二轮新增一条高度重复的内容
     await client.post(
         f"{PREFIX}/memory/save",
         json={
