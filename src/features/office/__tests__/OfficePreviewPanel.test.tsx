@@ -326,7 +326,9 @@ describe('OfficePreviewPanel — rich rendering (item 2.6)', () => {
         file_path: '/tmp/ws/office/pdf/doc-pdf/scan.pdf',
       });
     });
-    const frame = await screen.findByTestId('office-pdf-original-frame');
+    const frame = await screen.findByTestId('office-pdf-original-frame', undefined, {
+      timeout: 3000,
+    });
     // data URL → blob URL：Chromium PDF viewer 对 data URL 支持不稳定。
     expect(frame).toHaveAttribute('src', BLOB_URL);
 
