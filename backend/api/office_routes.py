@@ -757,6 +757,22 @@ from backend.api.office_dedup_routes import router as _dedup_router  # noqa: E40
 
 router.include_router(_dedup_router)
 
+# ──────────────────────────────────────────────────────────────────────
+# M2.5 spec library + M3 AI review (office_spec_routes / office_ai_review_routes)
+# ──────────────────────────────────────────────────────────────────────
+
+from backend.api.office_spec_routes import (  # noqa: E402
+    router as _spec_router,
+)
+
+router.include_router(_spec_router)
+
+from backend.api.office_ai_review_routes import (  # noqa: E402
+    router as _ai_review_router,
+)
+
+router.include_router(_ai_review_router)
+
 __all__ = [
     "router",
     "register_office_exception_handlers",
