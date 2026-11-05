@@ -1126,6 +1126,16 @@ class Database:
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_playbook_shares_token "
             "ON playbook_shares(token)"
         )
+        # Project nesting (2026-11-05): 父项目缓存 + 发现来源。parent_id 是
+        # 派生缓存（真相源永远是文件系统路径），扫描时由 workspace_scanner 重新
+        # 计算并写入。discovery_source 标记子项目被发现的方式（manual/template/
+        # context_file），供 UI 展示来源徽章。旧行兼容（NULL 允许）。
+        if "parent_id" not in _projects_columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN parent_id TEXT")
+        if "discovery_source" not in _projects_columns:
+            cursor.execute(
+                "ALTER TABLE projects ADD COLUMN discovery_source TEXT"
+            )
         conn.commit()
 
         # Project constraints (2026-09-24): 结构化项目约束，替代纯文本
