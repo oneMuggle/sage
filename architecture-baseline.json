@@ -1,7 +1,7 @@
 {
   "version": 1,
   "files": {
-    "backend/agents/profiles.py": 1115,
+    "backend/agents/profiles.py": 1123,
     "backend/api/office_routes.py": 822,
     "backend/api/legacy_routes.py": 2802,
     "backend/api/llm_proxy_routes.py": 1216,
@@ -48,6 +48,7 @@
     "backend/tools/git_tool.py": 834,
     "backend/tools/office_analyze_tool.py": 981,
     "backend/tools/office_create_tool.py": 1625,
+    "backend/tools/permissions.py": 882,
     "backend/tools/web_tool.py": 1531,
     "backend/wiki/files.py": 927,
     "backend/wiki/ingest.py": 828,
