@@ -76,6 +76,7 @@ describe('memoryApi.getMemories response normalization', () => {
       pageSize: 100,
       offset: null,
       sessionId: null,
+      agentId: null,
     });
   });
 
@@ -93,6 +94,7 @@ describe('memoryApi.getMemories response normalization', () => {
       pageSize: 20,
       offset: 40,
       sessionId: 'sess-1',
+      agentId: null,
     });
   });
 });

@@ -57,7 +57,9 @@ export function SessionSpecialistPicker() {
   const options = useMemo<SpecialistOption[]>(() => {
     const rest = agents
       .filter((agent) => agent.id !== PRIMARY_AGENT_ID)
-      .sort((a, b) => a.name.localeCompare(b.name));
+      // 固定 collation：默认 locale 在 CI（en-US）与本地（zh_CN）间不一致，
+      // 中文名会落到码点序（写 < 分）。zh-Hans 下中文按拼音、拉丁名按字母序。
+      .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans'));
     const primary = agents.find((agent) => agent.id === PRIMARY_AGENT_ID);
     return [primary ?? { id: PRIMARY_AGENT_ID, name: t('chat.specialist.primary') }, ...rest];
   }, [agents, t]);
