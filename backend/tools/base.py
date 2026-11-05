@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
@@ -132,15 +132,17 @@ class BaseTool(ABC):
         返回 ``ToolResult(success=False, ...)`` 表示拒绝（调用方应直接
         return 该结果）；返回 ``None`` 表示放行（继续正常流程）。
 
-        四层判定（由内到外）：
+        五层判定（由内到外）：
 
         1. 路径在 ``workspace_root`` 内 → 放行；
         2. 路径命中当前 session 绑定项目的 ``allowed_paths`` 白名单 → 放行
            （用户显式授权的额外路径，如 ``~/Documents/**``）；
-        3. 路径落在当前调用的已审批路径作用域内 → 放行（用户刚刚批准过
+        3. **仅 READ**：路径落在当前项目已登记的 ``file_references`` 目标内
+           → 放行（P5 文件引用，v1 只读；写入仍被拒绝）；
+        4. 路径落在当前调用的已审批路径作用域内 → 放行（用户刚刚批准过
            的工作区外写入；由 ``backend.tools.context.set_approved_paths``
            在调用外层注入）；
-        4. 其余 → 拒绝。
+        5. 其余 → 拒绝。
 
         本方法有意不检查 ``path`` 是否存在——只检查路径是否在 workspace
         内；不存在的合法路径（例如写入新文件）应被允许，后续 ``exists /
@@ -154,6 +156,9 @@ class BaseTool(ABC):
         # 工作区外：用户显式授权的项目白名单（allowed_paths）优先放行。
         if self._is_path_allowed(path, root):
             return None
+        # P5 文件引用第 3 层：已登记引用目标放行读取（写入不在此列）。
+        if self.risk == RiskClass.READ and self._is_path_reference_readable(path):
+            return None
         # 工作区外 + 不在白名单：刚被用户批准的写入（per-call scope）放行。
         if self._is_path_approved(path):
             return None
@@ -161,6 +166,47 @@ class BaseTool(ABC):
             success=False,
             error=f"path_outside_workspace: resolved path is not under {root}",
         )
+
+    @staticmethod
+    def _translate_virtual_path(path: str) -> Tuple[str, bool]:
+        """把项目内虚拟路径翻译为最近引用目标下的真实路径。
+
+        Returns:
+            ``(路径, 是否命中引用)``。未命中 / 无项目 / 解析失败 → 原样返回
+            ``(path, False)``，由既有权限层级决定放行或拒绝（fail-closed）。
+        """
+        try:
+            from backend.services.virtual_fs import (
+                current_project_id,
+                resolve_virtual,
+            )
+
+            project_id = current_project_id()
+            if not project_id:
+                return path, False
+            resolved, hit = resolve_virtual(project_id, path)
+            if hit is None:
+                return path, False
+            return str(resolved), True
+        except Exception:  # noqa: BLE001 — 翻译失败退回原路径
+            return path, False
+
+    @staticmethod
+    def _is_path_reference_readable(path: str) -> bool:
+        """路径是否落在当前项目已登记的文件引用目标内（第 3 层，只读）。"""
+        try:
+            from backend.services.virtual_fs import (
+                current_project_id,
+                resolve_virtual,
+            )
+
+            project_id = current_project_id()
+            if not project_id:
+                return False
+            _, hit = resolve_virtual(project_id, path)
+            return hit is not None
+        except Exception:  # noqa: BLE001 — 查询失败按未授权处理
+            return False
 
     @staticmethod
     def _is_path_approved(path: str) -> bool:

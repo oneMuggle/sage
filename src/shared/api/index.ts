@@ -127,6 +127,10 @@ export type {
   BootstrapScanResult,
   BootstrapSuggestResult,
   GitInitResult,
+  // P5 (2026-11-05): 文件引用
+  ProjectReference,
+  ProjectReferenceKind,
+  ProjectReferenceScanResult,
 } from './projectApi';
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';

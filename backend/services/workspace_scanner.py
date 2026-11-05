@@ -574,6 +574,94 @@ def sync_projects_from_tree(
     return created
 
 
+def _owner_project_for_symlink(
+    symlink_rel: str, project_nodes: List[Tuple[str, str]]
+) -> Optional[Tuple[str, str]]:
+    """找出符号链接所属的最近项目节点 (最长 rel_path 前缀)。
+
+    返回 ``(项目内相对路径, project_id)``; 无归属项目 → None。
+    """
+    best: Optional[Tuple[str, str, str]] = None  # (node_rel, project_id, relative)
+    for node_rel, project_id in project_nodes:
+        if node_rel == "":
+            relative = symlink_rel
+        elif symlink_rel == node_rel:
+            continue  # 符号链接占用了项目目录本身, 不归属该项目
+        elif symlink_rel.startswith(node_rel + "/"):
+            relative = symlink_rel[len(node_rel) + 1 :]
+        else:
+            continue
+        if best is None or len(node_rel) > len(best[0]):
+            best = (node_rel, project_id, relative)
+    if best is None:
+        return None
+    return best[2], best[1]
+
+
+def sync_file_references_from_tree(
+    root_project_id: str,
+    tree: ProjectTree,
+) -> List[str]:
+    """把扫描到的符号链接登记为 ``file_references`` (kind='symlink')。
+
+    - 归属最近的已注册项目 (按 rel_path 最长前缀);
+    - ``upsert_symlink`` 幂等: 同 rel_path 已存在则只更新目标;
+    - **从不删除**引用 (磁盘上消失的符号链接保留记录, 由用户手动清理)。
+
+    Returns:
+        本次创建或更新的引用 id 列表。
+    """
+    if not tree.symlinks:
+        return []
+    # 延迟导入 —— 避免测试导入本模块时初始化数据库单例
+    from backend.data.file_reference_repo import FileReferenceRepository
+    from backend.data.project_repo import ProjectRepository
+
+    project_repo = ProjectRepository()
+    if project_repo.get(root_project_id) is None:
+        logger.warning(
+            "sync_file_references_from_tree: root project %s not found",
+            root_project_id,
+        )
+        return []
+
+    project_nodes: List[Tuple[str, str]] = [("", root_project_id)]
+
+    def walk(node: ScannedNode) -> None:
+        if node is not tree.root and node.is_project:
+            project = project_repo.get_project_for_workspace(node.path)
+            if project is not None:
+                project_nodes.append((node.rel_path, project.id))
+        for child in node.children:
+            walk(child)
+
+    walk(tree.root)
+
+    reference_repo = FileReferenceRepository()
+    touched: List[str] = []
+    for symlink in tree.symlinks:
+        owner = _owner_project_for_symlink(symlink.rel_path, project_nodes)
+        if owner is None:
+            continue
+        rel_path, project_id = owner
+        if not rel_path:
+            continue
+        try:
+            reference = reference_repo.upsert_symlink(
+                project_id,
+                rel_path,
+                symlink.target_path,
+                alias_name=symlink.name,
+            )
+        except Exception as exc:  # noqa: BLE001 — 单条失败不阻断整树
+            logger.info(
+                "Cannot persist symlink reference %s: %s", symlink.rel_path, exc
+            )
+            continue
+        touched.append(reference.id)
+    return touched
+
+
 __all__ = [
     "CONTEXT_FILE_NAMES",
     "DEFAULT_EXCLUDES",
@@ -592,5 +680,6 @@ __all__ = [
     "is_ignored",
     "load_ignore_patterns",
     "scan_project",
+    "sync_file_references_from_tree",
     "sync_projects_from_tree",
 ]

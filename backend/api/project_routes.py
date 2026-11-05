@@ -147,6 +147,7 @@ from backend.services.project_workspace_inspector import (
 from backend.services.workspace_scanner import (
     ProjectTree,
     scan_project,
+    sync_file_references_from_tree,
     sync_projects_from_tree,
 )
 
@@ -192,6 +193,7 @@ def _scan_and_sync(
         template = load_project_template(root)
         tree = scan_project(root, template, force=force)
         created = sync_projects_from_tree(project.id, tree)
+        sync_file_references_from_tree(project.id, tree)
         return tree, created
     except Exception as exc:  # noqa: BLE001 — 扫描失败不阻断主流程
         logger.info("project scan skipped for %s: %s", root, exc)

@@ -185,6 +185,34 @@ export const projectRoutes: Record<string, CommandRoute> = {
     method: 'GET',
     path: (a) => `/api/v1/projects/${projectId(a)}/tree${a.refresh ? '?refresh=true' : ''}`,
   },
+  // P5 (2026-11-05): 文件引用 CRUD + 重新扫描（设计 §9.7）
+  projects_list_references: {
+    method: 'GET',
+    path: (a) => `/api/v1/projects/${projectId(a)}/references`,
+  },
+  projects_create_reference: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/references`,
+    body: (a) =>
+      pick(a, {
+        rel_path: ['relPath', 'rel_path'],
+        target_path: ['targetPath', 'target_path'],
+        kind: ['kind'],
+        alias_name: ['aliasName', 'alias_name'],
+      }),
+  },
+  projects_delete_reference: {
+    method: 'DELETE',
+    path: (a) =>
+      `/api/v1/projects/${projectId(a)}/references/${encodeURIComponent(
+        String(a.referenceId ?? a.reference_id ?? ''),
+      )}`,
+  },
+  projects_scan: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/scan`,
+    body: () => ({}),
+  },
   projects_remove: {
     method: 'DELETE',
     path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}`,
