@@ -227,7 +227,7 @@ async def test_sage_agent_profile_max_iterations_used_when_not_overridden():
     mock_tool.execute = MagicMock(return_value=MagicMock(success=True, content={}, error=None))
     agent.tool_registry.get = MagicMock(return_value=mock_tool)
 
-    settings_stub = SimpleNamespace(max_iterations=0)
+    settings_stub = SimpleNamespace(max_iterations=0, budget_mode="fixed")
     with patch(
         "backend.orchestration.orch_settings.load_orch_settings",
         return_value=settings_stub,

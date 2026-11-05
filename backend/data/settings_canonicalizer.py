@@ -93,6 +93,9 @@ ALIASES: Dict[str, str] = {
     # 2026-11-01: 动态迭代预算（OrchSettings P1）。relay 会把 orch 子层整体
     # 转 snake，缺别名时保存 400 被前端静默吞掉。
     "dynamic_budget_enabled": "dynamicBudgetEnabled",
+    # 2026-11-04: 预算模式显式开关 —— 漏别名时 relay snake 往返 400
+    # （test_legal_keys_survive_relay_snake_roundtrip 自动派生 snake 名兜底）。
+    "budget_mode": "budgetMode",
     "budget_simple": "budgetSimple",
     "budget_medium": "budgetMedium",
     "budget_complex": "budgetComplex",
@@ -267,6 +270,8 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "maxIterations",
         # 2026-11-01: 动态迭代预算（P1 设置页暴露）。
         "dynamicBudgetEnabled",
+        # 2026-11-04: 预算模式显式开关（auto | fixed），取代 maxIterations==25 哨兵。
+        "budgetMode",
         "budgetSimple",
         "budgetMedium",
         "budgetComplex",
