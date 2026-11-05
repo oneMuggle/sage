@@ -346,7 +346,11 @@ async def test_explicit_max_iterations_never_extends(monkeypatch):
     assert AgentState.ITERATION_CHECKPOINT not in [e.state for e in events]
     failed = [e for e in events if e.state == AgentState.FAILED]
     assert len(failed) == 1
-    assert failed[0].error == "max_iterations_exceeded (limit=1, source=explicit)"
+    # 2026-11-05 M3: 固定模式到达上限先发判定轮（响应 b 仍是工具调用），
+    # 之后才判失败；reason 说明属于固定预算硬上限。
+    assert failed[0].error == (
+        "max_iterations_exceeded (limit=1, source=explicit, reason=fixed_budget)"
+    )
 
 
 @pytest.mark.asyncio()
@@ -532,10 +536,14 @@ async def test_iteration_budget_question_auto_continue_extends_and_completes():
 
 @pytest.mark.asyncio()
 async def test_iteration_budget_question_stop_yields_failed():
-    """预算到期询问 → 用户选「停止」→ 带 user_stopped 原因结束。"""
+    """预算到期询问 → 用户选「停止」→ 带 user_stopped 原因结束。
+
+    2026-11-05 M3: 判定轮先执行一次（响应 c 仍调工具）→ 判定仍未完成
+    → 才弹询问。
+    """
     gate = _FakeBudgetGate(["停止"])
     agent = _make_agent(
-        [_tool_response("a"), _tool_response("b"), _text_response("完成")]
+        [_tool_response("a"), _tool_response("b"), _tool_response("c")]
     )
     with patch(
         "backend.orchestration.orch_settings.load_orch_settings",
@@ -613,10 +621,14 @@ async def test_auto_budget_mode_ignores_custom_max_iterations():
 
 @pytest.mark.asyncio()
 async def test_fixed_budget_mode_uses_max_iterations():
-    """budgetMode=fixed → 按编排页 maxIterations 走固定预算，无检查点。"""
+    """budgetMode=fixed → 按编排页 maxIterations 走固定预算，无检查点。
+
+    2026-11-05 M3: 到达上限先发判定轮（响应 c 仍调工具）→ 仍未完成
+    → FAILED，reason=fixed_budget。
+    """
     settings = SimpleNamespace(max_iterations=2, budget_mode="fixed")
     agent = _make_agent(
-        [_tool_response("a"), _tool_response("b"), _text_response("完成")]
+        [_tool_response("a"), _tool_response("b"), _tool_response("c")]
     )
     with patch(
         "backend.orchestration.orch_settings.load_orch_settings",
@@ -627,7 +639,9 @@ async def test_fixed_budget_mode_uses_max_iterations():
     assert AgentState.ITERATION_CHECKPOINT not in [e.state for e in events]
     failed = [e for e in events if e.state == AgentState.FAILED]
     assert len(failed) == 1
-    assert failed[0].error == "max_iterations_exceeded (limit=2, source=orch.global)"
+    assert failed[0].error == (
+        "max_iterations_exceeded (limit=2, source=orch.global, reason=fixed_budget)"
+    )
 
 
 @pytest.mark.asyncio()
