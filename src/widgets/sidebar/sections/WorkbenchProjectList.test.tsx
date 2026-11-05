@@ -9,9 +9,19 @@ import { useStore } from '../../../shared/lib/store';
 
 import { WorkbenchProjectList } from './WorkbenchProjectList';
 
+// jsdom does not implement ResizeObserver but @headlessui Dialog uses it
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+
 /* ── Mock API surface ─────────────────────────────────────────────── */
 
 const listMock = vi.fn();
+const listTemplatesMock = vi.fn().mockResolvedValue([]);
 const registerMock = vi.fn();
 const removeMock = vi.fn();
 const openMock = vi.fn();
@@ -28,6 +38,7 @@ const updateMaterialMock = vi.fn();
 vi.mock('../../../shared/api/projectApi', () => ({
   projectApi: {
     list: (...args: unknown[]) => listMock(...args),
+    listTemplates: (...args: unknown[]) => listTemplatesMock(...args),
     register: (...args: unknown[]) => registerMock(...args),
     remove: (...args: unknown[]) => removeMock(...args),
     open: (...args: unknown[]) => openMock(...args),
@@ -227,9 +238,24 @@ describe('WorkbenchProjectList', () => {
       await waitFor(() => screen.getByTestId('project-add-button'));
       fireEvent.click(screen.getByTestId('project-add-button'));
 
+      // Modal opens — click "选择目录" button inside the dialog
+      await waitFor(() => screen.getByText('选择目录'));
+      fireEvent.click(screen.getByText('选择目录'));
+
       await waitFor(() => {
         expect(selectDirectory).toHaveBeenCalledWith({ intent: 'open' });
-        expect(registerMock).toHaveBeenCalledWith('C:\\work\\picked');
+      });
+
+      // After path is set, the footer "添加" button becomes enabled — click it
+      const confirmButton = await waitFor<HTMLButtonElement>(() => {
+        const btn = screen.getByText('添加') as HTMLButtonElement;
+        expect(btn).not.toBeDisabled();
+        return btn;
+      });
+      fireEvent.click(confirmButton);
+
+      await waitFor(() => {
+        expect(registerMock).toHaveBeenCalledWith('C:\\work\\picked', undefined);
       });
     } finally {
       delete (window as unknown as { electronAPI?: unknown }).electronAPI;
