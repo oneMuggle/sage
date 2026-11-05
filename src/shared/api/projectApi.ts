@@ -107,6 +107,13 @@ import {
   type BootstrapSuggestResult,
   type BootstrapVerification,
   type GitInitResult,
+  // P3 (2026-11-05): 模板目录 + 目录树
+  mapProjectTree,
+  mapTemplateSummary,
+  type ProjectTemplateListWire,
+  type ProjectTemplateSummary,
+  type ProjectTree,
+  type ProjectTreeWire,
 } from './projectApiTypes';
 /* eslint-enable import/order */
 
@@ -430,6 +437,9 @@ export type {
   ProjectScaffoldResult,
   ProjectSummary,
   ProjectType,
+  // P3 (2026-11-05)
+  ProjectTemplateSummary,
+  ProjectTree,
   ProjectTypeDetectionResult,
   ProjectUpdatePatch,
   ProjectWorkspaceOverview,
@@ -482,17 +492,49 @@ export const projectApi = {
    */
   async register(
     path: string,
-    options?: { allowedPaths?: string[]; projectType?: ProjectType },
+    options?: {
+      allowedPaths?: string[];
+      projectType?: ProjectType;
+      /** P3 (2026-11-05): 创建时选模板 → 后端先脚手架化目录/文件再扫描 */
+      templateName?: string;
+    },
   ): Promise<ProjectSummary> {
     try {
       const project = await invoke<ProjectWire>('projects_register', {
         path,
         allowed_paths: options?.allowedPaths,
         project_type: options?.projectType,
+        template_name: options?.templateName,
       });
       const mapped = mapProject(project);
       void syncAllowedPathsToMain(mapped.id, mapped.allowedPaths);
       return mapped;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** P3: 模板目录（内置 + ~/.sage/templates/*.json），供创建对话框选择器使用。 */
+  async listTemplates(): Promise<ProjectTemplateSummary[]> {
+    try {
+      const response = await invoke<ProjectTemplateListWire>('projects_list_templates');
+      return response.templates.map(mapTemplateSummary);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P2/P3: 项目目录树（含扫描发现的子项目）。`refresh=true` 绕过后端 30s 缓存。
+   * 目录已消失时抛 410。
+   */
+  async getTree(projectId: string, refresh = false): Promise<ProjectTree> {
+    try {
+      const response = await invoke<ProjectTreeWire>('projects_get_tree', {
+        id: projectId,
+        refresh,
+      });
+      return mapProjectTree(response);
     } catch (error) {
       throw handleApiError(error);
     }

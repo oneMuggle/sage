@@ -252,21 +252,31 @@ export function useProjectSectionData({ onOpenSession }: UseProjectSectionDataPr
     ],
   );
 
-  const handleAddProject = useCallback(async () => {
-    const api = typeof window !== 'undefined' ? window.electronAPI : undefined;
-    if (!api) {
-      toast.error(t('sider.project.add_failed').replace('{message}', 'IPC 桥接不可用'));
-      return;
-    }
-    try {
-      const picked = await api.selectDirectory({ intent: 'open' });
-      if (!picked) return; // 用户取消
-      const project = await projectApi.register(picked);
-      await openProject(project);
-    } catch (err) {
-      toast.error(t('sider.project.add_failed').replace('{message}', errorMessage(err)));
-    }
-  }, [openProject, t]);
+  // ===== P3 (2026-11-05): 添加项目对话框（目录 + 可选模板） =====
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+
+  const handleAddProject = useCallback(() => {
+    setAddDialogOpen(true);
+  }, []);
+
+  const closeAddDialog = useCallback(() => setAddDialogOpen(false), []);
+
+  /** 对话框确认：登记目录（可按模板脚手架化）→ 打开项目。失败 toast 并抛出，由对话框保持打开。 */
+  const handleRegisterProject = useCallback(
+    async ({ path, templateName }: { path: string; templateName?: string }) => {
+      try {
+        const project = await projectApi.register(
+          path,
+          templateName ? { templateName } : undefined,
+        );
+        await openProject(project);
+      } catch (err) {
+        toast.error(t('sider.project.add_failed').replace('{message}', errorMessage(err)));
+        throw err;
+      }
+    },
+    [openProject, t],
+  );
 
   const handleNewChatInProject = useCallback(
     async (project: ProjectSummary) => {
@@ -495,6 +505,7 @@ export function useProjectSectionData({ onOpenSession }: UseProjectSectionDataPr
     overviewDraft,
     overviewSavingId,
     currentSessionId,
+    addDialogOpen,
     // Setters
     setDropActive,
     setMaterialDraft,
@@ -504,6 +515,8 @@ export function useProjectSectionData({ onOpenSession }: UseProjectSectionDataPr
     toggleExpand,
     openProject,
     handleAddProject,
+    closeAddDialog,
+    handleRegisterProject,
     handleNewChatInProject,
     handleRemoveProject,
     handleDeleteSessionInProject,

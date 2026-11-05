@@ -49,6 +49,10 @@ export interface ProjectSummary {
   detectedType?: ProjectType | null;
   /** M3: 初始化进度（bootstrap_state 解析结果） */
   bootstrapState?: { applied: string[]; appliedAt: number | null } | null;
+  /** P2 (2026-11-05): 嵌套项目的父项目 id（后端按文件系统路径派生） */
+  parentId?: string | null;
+  /** P2: 子项目发现方式 'manual' | 'template' | 'context_file' */
+  discoverySource?: string | null;
 }
 
 /** 项目类型枚举 */
@@ -307,6 +311,9 @@ export interface ProjectWire {
   vcs_mode?: string;
   detected_type?: string | null;
   bootstrap_state?: string | null;
+  // P2 (2026-11-05): 嵌套项目
+  parent_id?: string | null;
+  discovery_source?: string | null;
 }
 
 export interface ProjectListWire {
@@ -321,6 +328,126 @@ export interface ProjectOpenWire {
 
 export interface ProjectSessionsWire {
   sessions: Session[];
+}
+
+// ── P3 (2026-11-05): 模板目录 + 项目目录树 ────────────────────────────
+
+/** GET /projects/templates 单条模板（渲染端消费，camelCase）。 */
+export interface ProjectTemplateSummary {
+  name: string;
+  description: string;
+  /** 'built_in' = 应用内置；'global' = ~/.sage/templates/*.json */
+  source: 'built_in' | 'global';
+  /** 内置模板关联的项目类型；全局模板为 null */
+  projectType: string | null;
+  directoryCount: number;
+  fileCount: number;
+  directories: string[];
+  files: string[];
+}
+
+export interface ProjectTemplateSummaryWire {
+  name: string;
+  description: string;
+  source: string;
+  project_type?: string | null;
+  directory_count?: number;
+  file_count?: number;
+  directories?: string[];
+  files?: string[];
+}
+
+export interface ProjectTemplateListWire {
+  templates: ProjectTemplateSummaryWire[];
+}
+
+export function mapTemplateSummary(w: ProjectTemplateSummaryWire): ProjectTemplateSummary {
+  return {
+    name: w.name,
+    description: w.description,
+    source: w.source === 'global' ? 'global' : 'built_in',
+    projectType: w.project_type ?? null,
+    directoryCount: w.directory_count ?? 0,
+    fileCount: w.file_count ?? 0,
+    directories: w.directories ?? [],
+    files: w.files ?? [],
+  };
+}
+
+/** 目录树节点（role: root=用户登记的项目根；project=扫描发现的子项目；folder=仅容器） */
+export interface ProjectTreeNode {
+  /** 已注册项目行的 id（root/project 节点才有） */
+  id?: string;
+  path: string;
+  name: string;
+  /** 相对扫描根的 POSIX 路径（根为空字符串） */
+  relPath: string;
+  role: 'root' | 'project' | 'folder';
+  /** project 节点的发现方式：'template' | 'context_file'；root 为 'manual' */
+  discoverySource: string | null;
+  children: ProjectTreeNode[];
+}
+
+export interface ProjectTreeNodeWire {
+  id?: string;
+  path: string;
+  name: string;
+  rel_path: string;
+  role: string;
+  discovery_source?: string | null;
+  children?: ProjectTreeNodeWire[];
+}
+
+export interface ProjectSymlink {
+  relPath: string;
+  name: string;
+  targetPath: string;
+}
+
+export interface ProjectTree {
+  projectId: string;
+  root: ProjectTreeNode;
+  symlinks: ProjectSymlink[];
+  truncated: string[];
+  scannedAt: number;
+  createdProjectIds: string[];
+}
+
+export interface ProjectTreeWire {
+  project_id: string;
+  root: ProjectTreeNodeWire;
+  symlinks?: { rel_path: string; name: string; target_path: string }[];
+  truncated?: string[];
+  scanned_at: number;
+  created_project_ids?: string[];
+}
+
+function mapTreeNode(w: ProjectTreeNodeWire): ProjectTreeNode {
+  const role = w.role === 'root' || w.role === 'project' ? w.role : 'folder';
+  return {
+    ...(w.id !== undefined ? { id: w.id } : {}),
+    path: w.path,
+    name: w.name,
+    relPath: w.rel_path,
+    role,
+    discoverySource: w.discovery_source ?? null,
+    children: (w.children ?? []).map(mapTreeNode),
+  };
+}
+
+export function mapProjectTree(w: ProjectTreeWire): ProjectTree {
+  return {
+    projectId: w.project_id,
+    root: mapTreeNode(w.root),
+    symlinks: (w.symlinks ?? []).map((s) => ({
+      relPath: s.rel_path,
+      name: s.name,
+      targetPath: s.target_path,
+    })),
+    truncated: w.truncated ?? [],
+    scannedAt: w.scanned_at,
+    createdProjectIds: w.created_project_ids ?? [],
+  };
 }
 
 export interface ProjectMaterialWire {
@@ -363,6 +490,8 @@ export function mapProject(p: ProjectWire): ProjectSummary {
     vcsMode: p.vcs_mode ?? 'builtin',
     detectedType: (p.detected_type as ProjectType) ?? null,
     bootstrapState: parseBootstrapState(p.bootstrap_state),
+    parentId: p.parent_id ?? null,
+    discoverySource: p.discovery_source ?? null,
   };
 }
 
