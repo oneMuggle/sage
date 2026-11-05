@@ -328,7 +328,10 @@ class ReviewQueue:
                 from backend.data.session_repo import MessageRepository
 
                 message_repo = MessageRepository()
-                db_messages = message_repo.get_by_session(event.session_id)
+                # 2026-11-05: 只喂模型可见上下文（压缩展示行已由
+                # get_active_segment 过滤，且不再受 get_by_session 默认
+                # limit=100（取最旧 100 条）截断）。
+                db_messages = message_repo.get_active_segment(event.session_id)
                 # Serialize to {role, content} dicts — ReviewService dumps the
                 # whole context as JSON into the prompt template, so anything
                 # we put here is visible to the LLM.

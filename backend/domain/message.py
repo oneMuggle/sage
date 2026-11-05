@@ -55,3 +55,6 @@ class Message:
     content: str
     tool_calls: List[ToolCall] = field(default_factory=list)
     tool_call_id: Optional[str] = None
+    # 2026-11-05 非破坏性压缩: 非空（epoch ms）= 已压缩进摘要的展示历史，
+    # 不进入 LLM 上下文；None = 正常消息。
+    compacted_at: Optional[int] = None

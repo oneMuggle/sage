@@ -558,6 +558,10 @@ class Database:
                 -- 2026-10-28: 用户消息展示元数据（附件 / @ 文件引用 / office 引用）。
                 -- JSON-in-TEXT，只用于气泡回显，不参与 LLM 上下文。
                 client_meta TEXT,
+                -- 2026-11-05: 非破坏性压缩标记（epoch ms）。
+                -- NULL = 正常消息（进入 LLM 上下文）；非空 = 已压缩进摘要的
+                -- 展示历史（保留给会话页面完整显示，不进入 LLM 上下文）。
+                compacted_at INTEGER,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
         """)
@@ -622,11 +626,19 @@ class Database:
                 conn.commit()
             except sqlite3.OperationalError:
                 pass
+        # 2026-11-05: 非破坏性压缩标记（老库补列；数据回填由迁移 v11 负责）。
+        if "compacted_at" not in columns:
+            try:
+                cursor.execute("ALTER TABLE messages ADD COLUMN compacted_at INTEGER")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
 
         # DSH 对标 R1 (SE1, 2026-09-23): 会话事件日志 —— append-only 的
         # 会话事实源（对标 deepseek-harness "Model-visible ⟺ logged"）。
-        # messages 表会被 compaction 就地删行（replace_prefix_with_continuation），
-        # 依赖"从历史重建"的能力（投影/审计/回放）需要一份只增不删的日志。
+        # 2026-11-05 起 compaction 不再物理删行（改为 compacted_at 标记，
+        # 仅移出模型上下文），事件日志仍是投影/审计/回放的唯一事实源：
+        # 压缩折叠由 compaction.performed.deleted_ids 表达。
         # - (session_id, seq) UNIQUE：per-session 单调 seq，投影按 seq 升序回放；
         # - surface_op：SE2 预留 —— compaction 以 replace(start_seq, end_seq)
         #   的 surface 操作落日志，而非旁路改历史；
@@ -2487,6 +2499,17 @@ class Database:
         except Exception:
             logger.exception("schema 迁移失败")
             raise
+
+        # 2026-11-05: 压缩历史回填重试 —— 迁移 v11 负责首次回填；若上次
+        # 有单行失败（needs_restore 仍为 1），每次启动再补一次（幂等）。
+        try:
+            from backend.data.session_lineage import restore_compacted_history
+
+            restored = restore_compacted_history(conn)
+            if restored:
+                logger.info("启动回填压缩历史: %s 条", restored)
+        except Exception as exc:  # noqa: BLE001 — 回填是增强能力
+            logger.warning("启动回填压缩历史失败(忽略): %s", exc)
 
         logger.info("数据库初始化完成: %s", self.db_path)  # D4 (P6): 遗留 print 收敛到 logging
 

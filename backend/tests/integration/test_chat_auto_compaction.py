@@ -95,17 +95,20 @@ async def test_auto_compaction_before_chat_run_loop(client, monkeypatch):
     rows = MessageRepository().get_by_session(session_id)
     contents = [r.content for r in rows]
 
-    # 压缩结果: 1 续接 + 6 保留历史
+    # 2026-11-05 非破坏压缩：14 条历史全部保留（前 8 条标记 compacted_at），
+    # 另加 1 条续接摘要；会话页面可见完整记录。
     assert any(c.startswith("[上下文已压缩] 此前对话摘要：") for c in contents)
-    assert sum(1 for c in contents if c.startswith("历史消息内容")) == 6
+    assert sum(1 for c in contents if c.startswith("历史消息内容")) == 14
+    compacted = [r for r in rows if getattr(r, "compacted_at", None) is not None]
+    assert len(compacted) == 8
     # 本轮对话正常完成
     assert "压缩后继续聊天" in contents  # user
     assert "压缩后的新回复" in contents  # assistant
-    # 总数 = 7 (压缩后) + 2 (本轮) = 9
-    assert len(rows) == 9
+    # 总数 = 14 (保留历史) + 1 (续接) + 2 (本轮) = 17
+    assert len(rows) == 17
 
     sess = SessionRepository().get(session_id)
-    assert sess.message_count == 9
+    assert sess.message_count == 17
 
     # R38 (2026-09-18): 续接行携带 compact_info，重载后前端据此渲染压缩横幅。
     continuation = next(

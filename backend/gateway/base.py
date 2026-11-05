@@ -246,10 +246,13 @@ class BaseGateway:
             created_at=int(time.time() * 1000)  # 2026-09 修复: 全库毫秒口径 (原 //1000 退化为秒, 排序错乱),
         )
         repo.save(user_msg)
-        # 2026-09 修复: get_by_session 是 ORDER BY created_at ASC LIMIT ?,
-        # 直接 limit=_MAX_HISTORY 取到的是"最旧 N 条" —— 会话超过 N 条后,
-        # LLM 每轮只能看到开头的历史。取全量再切尾部。
-        all_history = repo.get_by_session(session_id, limit=100000)
+        # 2026-11-05: 取最近尾部（非破坏压缩后会话可无限增长），并剔除
+        # compacted_at 展示行 —— 压缩前缀只用于会话页面展示，不进 LLM。
+        all_history = [
+            m
+            for m in repo.get_recent_messages(session_id, limit=100000)
+            if m.compacted_at is None
+        ]
         history = all_history[-_MAX_HISTORY:] if len(all_history) > _MAX_HISTORY else all_history
         kept, omitted = history_budget(history)
         history = kept
