@@ -140,7 +140,7 @@ async def get_usage_by_endpoint() -> Dict[str, Any]:
     try:
         from backend.data.database import _SQLITE_LOCK, get_database
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)  # noqa: UP017 — datetime.UTC 是 Py 3.11+，main 跑 3.10
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         month_start = day_start.replace(day=1)
         day_ms = int(day_start.timestamp() * 1000)

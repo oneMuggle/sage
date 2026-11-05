@@ -3,8 +3,8 @@
  */
 
 import { clsx } from 'clsx';
-import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { ROUTING_TASK_TYPES } from '../../entities/routing/taskType';
 import {
@@ -12,8 +12,6 @@ import {
   TASK_TYPE_TIER_MAP,
   TIER_LABELS,
 } from '../../entities/routing/taskTypeTierMap';
-import type { DiscoveredModel, ModelSelection } from '../../entities/setting/types';
-import { useI18n } from '../../shared/lib/i18n';
 import {
   CONTEXT_PRESETS,
   TOKEN_UNITS,
@@ -22,6 +20,8 @@ import {
   parseTokenInput,
   type TokenUnit,
 } from '../../entities/setting/contextPresets';
+import type { DiscoveredModel, ModelSelection } from '../../entities/setting/types';
+import { useI18n } from '../../shared/lib/i18n';
 
 import { ArenaAccountsToggle } from './ArenaAccountsToggle';
 import { LocalOcrCard } from './LocalOcrCard';

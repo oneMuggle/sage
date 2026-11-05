@@ -8,18 +8,18 @@ import { useMemo, useState } from 'react';
 import { getProtocolOptions } from '../../entities/endpoint/providerRegistry';
 import { bindDiscoveredModels } from '../../entities/model-catalog/api';
 import {
-  DEFAULT_ENDPOINT,
-  type EndpointConfig,
-  type EndpointProtocol,
-  type EndpointQuota,
-} from '../../entities/setting/types';
-import {
   TOKEN_UNITS,
   TOKEN_UNIT_MULTIPLIERS,
   deriveTokenInput,
   formatTokens,
   type TokenUnit,
 } from '../../entities/setting/contextPresets';
+import {
+  DEFAULT_ENDPOINT,
+  type EndpointConfig,
+  type EndpointProtocol,
+  type EndpointQuota,
+} from '../../entities/setting/types';
 import {
   type ConnectionTestResult,
   type ProbeResult,
