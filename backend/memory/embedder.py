@@ -311,6 +311,11 @@ class ModelEmbedder:
     # 单批上限：OpenAI 限制单请求 input 数组，超限分批
     _MAX_BATCH = 64
 
+    #: HTTP 嵌入端点返回的是真实语义向量（同 OnnxEmbedder）。
+    #: 缺此标记会让检索融合与冲突消解把它当字面嵌入器处理 ——
+    #: 向量照写不误，却从不被检索。
+    is_semantic = True
+
     def __init__(
         self,
         base_url: str,
