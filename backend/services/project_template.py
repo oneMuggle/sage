@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -145,7 +144,7 @@ class ProjectTemplate:
         *,
         built_in: bool = False,
         source: str = "built_in",
-    ) -> "ProjectTemplate":
+    ) -> ProjectTemplate:
         """从 dict 构造模板。
 
         宽容解析：缺失的可选字段使用默认值，多余字段忽略。
@@ -190,7 +189,7 @@ class ProjectTemplate:
         *,
         built_in: bool = False,
         source: str = "built_in",
-    ) -> "ProjectTemplate":
+    ) -> ProjectTemplate:
         """从 JSON 字符串加载模板（失败抛 ``ValueError``）。"""
         try:
             data = json.loads(text)
@@ -435,7 +434,7 @@ def _is_safe_relative(rel_path: str) -> bool:
     """判断相对路径不含路径逃逸（``..`` 段 / 绝对路径）。"""
     if not rel_path or _PATH_ESCAPE_RE.search(rel_path):
         return False
-    if os.path.isabs(rel_path):
+    if Path(rel_path).is_absolute():
         return False
     return True
 

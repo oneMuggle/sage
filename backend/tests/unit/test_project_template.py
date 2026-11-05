@@ -7,12 +7,10 @@ dry_run 模式、overwrite 行为。
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
 from backend.services.project_template import (
-    GLOBAL_TEMPLATE_DIR,
     ProjectTemplate,
     ScaffoldResult,
     TemplateDirectory,
@@ -24,7 +22,6 @@ from backend.services.project_template import (
     save_project_template,
     scaffold_project,
 )
-
 
 # ─────────────────────────────────────────────────────────────────────
 # 数据模型：构造与校验
@@ -167,7 +164,8 @@ class TestRenderContent:
         assert "Date: " in result
         parts = result.split("Date: ", 1)[1]
         assert len(parts) == 10  # YYYY-MM-DD
-        assert parts[4] == "-" and parts[7] == "-"
+        assert parts[4] == "-"
+        assert parts[7] == "-"
 
     def test_datetime_substitution(self):
         tpl = ProjectTemplate(name="T")
@@ -175,7 +173,9 @@ class TestRenderContent:
         ts = result.split("TS: ", 1)[1]
         # YYYY-MM-DD HH:MM:SS
         assert len(ts) == 19
-        assert ts[10] == " " and ts[13] == ":" and ts[16] == ":"
+        assert ts[10] == " "
+        assert ts[13] == ":"
+        assert ts[16] == ":"
 
     def test_user_substitution(self):
         tpl = ProjectTemplate(name="T")
