@@ -16,9 +16,8 @@ import type { AgentProfile } from '../../../shared/api/types/domainEntityTypes';
 import { VersionHistoryDialog } from '../VersionHistoryDialog';
 
 const mockListVersions = vi.fn<(agentId: string) => Promise<SpecialistVersionMeta[]>>();
-const mockDiffVersions = vi.fn<
-  (agentId: string, from: number, to: number) => Promise<SpecialistVersionDiff[]>
->();
+const mockDiffVersions =
+  vi.fn<(agentId: string, from: number, to: number) => Promise<SpecialistVersionDiff[]>>();
 const mockRollback = vi.fn<(agentId: string, version: number) => Promise<AgentProfile>>();
 
 vi.mock('../../../shared/api/specialistApi', () => ({
@@ -26,8 +25,7 @@ vi.mock('../../../shared/api/specialistApi', () => ({
     listVersions: (agentId: string) => mockListVersions(agentId),
     diffVersions: (agentId: string, from: number, to: number) =>
       mockDiffVersions(agentId, from, to),
-    rollbackAgent: (agentId: string, version: number) =>
-      mockRollback(agentId, version),
+    rollbackAgent: (agentId: string, version: number) => mockRollback(agentId, version),
   },
 }));
 
@@ -72,9 +70,7 @@ describe('VersionHistoryDialog (M4-T3)', () => {
   });
 
   it('loads versions on open and renders labels', async () => {
-    render(
-      <VersionHistoryDialog open onOpenChange={vi.fn()} agent={agent} />,
-    );
+    render(<VersionHistoryDialog open onOpenChange={vi.fn()} agent={agent} />);
 
     await waitFor(() => expect(mockListVersions).toHaveBeenCalledWith('spec-a'));
     expect(await screen.findByText('v2')).toBeInTheDocument();
@@ -86,33 +82,25 @@ describe('VersionHistoryDialog (M4-T3)', () => {
 
   it('shows loading state initially', () => {
     mockListVersions.mockReturnValue(new Promise(() => {}));
-    render(
-      <VersionHistoryDialog open onOpenChange={vi.fn()} agent={agent} />,
-    );
+    render(<VersionHistoryDialog open onOpenChange={vi.fn()} agent={agent} />);
     expect(screen.getByText('加载版本…')).toBeInTheDocument();
   });
 
   it('shows empty state when no versions', async () => {
     mockListVersions.mockResolvedValue([]);
-    render(
-      <VersionHistoryDialog open onOpenChange={vi.fn()} agent={agent} />,
-    );
+    render(<VersionHistoryDialog open onOpenChange={vi.fn()} agent={agent} />);
     expect(await screen.findByText(/暂无版本快照/)).toBeInTheDocument();
   });
 
   it('shows error state on load failure', async () => {
     mockListVersions.mockRejectedValue(new Error('backend down'));
-    render(
-      <VersionHistoryDialog open onOpenChange={vi.fn()} agent={agent} />,
-    );
+    render(<VersionHistoryDialog open onOpenChange={vi.fn()} agent={agent} />);
     expect(await screen.findByText(/加载版本失败/)).toBeInTheDocument();
     expect(screen.getByText(/backend down/)).toBeInTheDocument();
   });
 
   it('diffs a historical version against the latest', async () => {
-    render(
-      <VersionHistoryDialog open onOpenChange={vi.fn()} agent={agent} />,
-    );
+    render(<VersionHistoryDialog open onOpenChange={vi.fn()} agent={agent} />);
 
     // DESC 列表：第 0 个是当前版本（对比禁用），第 1 个是 v1
     const diffButtons = await screen.findAllByRole('button', { name: '对比' });
@@ -120,17 +108,13 @@ describe('VersionHistoryDialog (M4-T3)', () => {
     expect(diffButtons[0]).toBeDisabled();
     fireEvent.click(diffButtons[1]);
 
-    await waitFor(() =>
-      expect(mockDiffVersions).toHaveBeenCalledWith('spec-a', 1, 2),
-    );
+    await waitFor(() => expect(mockDiffVersions).toHaveBeenCalledWith('spec-a', 1, 2));
     expect(await screen.findByText('人设提示词')).toBeInTheDocument();
     expect(screen.getByText('旧提示词')).toBeInTheDocument();
     expect(screen.getByText('新提示词')).toBeInTheDocument();
     // 再次点击收起
     fireEvent.click(screen.getByRole('button', { name: '收起对比' }));
-    await waitFor(() =>
-      expect(screen.queryByText('人设提示词')).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByText('人设提示词')).not.toBeInTheDocument());
   });
 
   it('rolls back in two steps with confirm', async () => {
@@ -152,9 +136,7 @@ describe('VersionHistoryDialog (M4-T3)', () => {
     expect(mockRollback).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '确认回滚' }));
 
-    await waitFor(() =>
-      expect(mockRollback).toHaveBeenCalledWith('spec-a', 1),
-    );
+    await waitFor(() => expect(mockRollback).toHaveBeenCalledWith('spec-a', 1));
     await waitFor(() => expect(onRolledBack).toHaveBeenCalledWith(rolledProfile));
     expect(mockToastSuccess).toHaveBeenCalled();
     // 回滚后重新加载列表（初始 1 次 + 回滚后 1 次）
@@ -162,24 +144,18 @@ describe('VersionHistoryDialog (M4-T3)', () => {
   });
 
   it('cancels pending rollback without calling backend', async () => {
-    render(
-      <VersionHistoryDialog open onOpenChange={vi.fn()} agent={agent} />,
-    );
+    render(<VersionHistoryDialog open onOpenChange={vi.fn()} agent={agent} />);
 
     fireEvent.click((await screen.findAllByRole('button', { name: '回滚' }))[0]);
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
 
     expect(mockRollback).not.toHaveBeenCalled();
-    expect(
-      screen.queryByRole('button', { name: '确认回滚' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '确认回滚' })).not.toBeInTheDocument();
   });
 
   it('shows toast on rollback failure', async () => {
     mockRollback.mockRejectedValue(new Error('version not found'));
-    render(
-      <VersionHistoryDialog open onOpenChange={vi.fn()} agent={agent} />,
-    );
+    render(<VersionHistoryDialog open onOpenChange={vi.fn()} agent={agent} />);
 
     fireEvent.click((await screen.findAllByRole('button', { name: '回滚' }))[0]);
     fireEvent.click(screen.getByRole('button', { name: '确认回滚' }));

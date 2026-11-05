@@ -53,13 +53,7 @@ export interface SpecialistVersionDiff {
 
 /** 黄金任务检查器（golden_tasks.json 单项，M4-T4）。 */
 export interface SpecialistGoldenTaskCheck {
-  kind:
-    | 'keywords_all'
-    | 'keywords_any'
-    | 'forbidden'
-    | 'refusal'
-    | 'regex'
-    | 'max_chars';
+  kind: 'keywords_all' | 'keywords_any' | 'forbidden' | 'refusal' | 'regex' | 'max_chars';
   value?: string[] | number;
   pattern?: string;
 }
@@ -171,9 +165,7 @@ export const specialistApi = {
    * @throws 桌面端不可用（必须走 Electron IPC）
    */
   async listTemplates(): Promise<SpecialistTemplateMeta[]> {
-    const resp = await invoke<{ templates: SpecialistTemplateMeta[] }>(
-      'list_specialist_templates',
-    );
+    const resp = await invoke<{ templates: SpecialistTemplateMeta[] }>('list_specialist_templates');
     return resp?.templates ?? [];
   },
 
@@ -183,9 +175,7 @@ export const specialistApi = {
    * @returns 新专家的 `{ id, name, template_id, dropped_bindings }`
    * @throws 模板不存在 / 物化失败
    */
-  async instantiateTemplate(
-    templateId: string,
-  ): Promise<InstantiateTemplateResult> {
+  async instantiateTemplate(templateId: string): Promise<InstantiateTemplateResult> {
     return invoke<InstantiateTemplateResult>('instantiate_specialist_template', {
       templateId,
     });
@@ -239,9 +229,7 @@ export const specialistApi = {
    * @throws 数据文件缺失 / schema 非法（500）
    */
   async listGoldenTasks(): Promise<SpecialistGoldenTasksResult> {
-    const resp = await invoke<SpecialistGoldenTasksResult>(
-      'list_specialist_golden_tasks',
-    );
+    const resp = await invoke<SpecialistGoldenTasksResult>('list_specialist_golden_tasks');
     return { tasks: resp?.tasks ?? [], template_ids: resp?.template_ids ?? [] };
   },
 
@@ -253,10 +241,7 @@ export const specialistApi = {
    * @returns `{ run_id, report }`
    * @throws 专家不存在（404）/ 非模板实例化（400）/ 数据文件非法（500）
    */
-  async runEval(
-    agentId: string,
-    taskIds?: string[],
-  ): Promise<SpecialistEvalRunResult> {
+  async runEval(agentId: string, taskIds?: string[]): Promise<SpecialistEvalRunResult> {
     return invoke<SpecialistEvalRunResult>('run_specialist_eval', {
       agentId,
       taskIds,

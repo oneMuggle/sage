@@ -93,9 +93,7 @@ describe('TemplateGalleryDialog (M4-T2)', () => {
   it('loads templates on open', async () => {
     const onOpenChange = vi.fn();
     const onCreated = vi.fn();
-    render(
-      <TemplateGalleryDialog open onOpenChange={onOpenChange} onCreated={onCreated} />,
-    );
+    render(<TemplateGalleryDialog open onOpenChange={onOpenChange} onCreated={onCreated} />);
 
     await waitFor(() => expect(mockListTemplates).toHaveBeenCalled());
     for (const tpl of templates) {
@@ -116,9 +114,7 @@ describe('TemplateGalleryDialog (M4-T2)', () => {
 
   it('calls instantiateTemplate and onCreated on click', async () => {
     const onCreated = vi.fn();
-    render(
-      <TemplateGalleryDialog open onOpenChange={vi.fn()} onCreated={onCreated} />,
-    );
+    render(<TemplateGalleryDialog open onOpenChange={vi.fn()} onCreated={onCreated} />);
 
     // 点击写作专家卡片的「创建」按钮
     const createButtons = await screen.findAllByRole('button', { name: '创建' });

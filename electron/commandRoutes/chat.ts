@@ -77,11 +77,9 @@ export const chatRoutes: Record<string, CommandRoute> = {
   },
   run_specialist_eval: {
     method: 'POST',
-    path: (a) =>
-      `/api/v1/specialists/${encodeURIComponent(String(a.agentId))}/eval`,
+    path: (a) => `/api/v1/specialists/${encodeURIComponent(String(a.agentId))}/eval`,
     // body 是 extra="forbid"：agentId 已在路径，未指定 taskIds 时发空对象
-    body: (a) =>
-      Array.isArray(a.taskIds) && a.taskIds.length ? { taskIds: a.taskIds } : {},
+    body: (a) => (Array.isArray(a.taskIds) && a.taskIds.length ? { taskIds: a.taskIds } : {}),
   },
   attach_chat_stream: {
     method: 'GET',

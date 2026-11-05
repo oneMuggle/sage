@@ -130,13 +130,9 @@ describe('SpecialistEvalDialog (M4-T4)', () => {
   });
 
   it('disables run for non-template agents with a hint', async () => {
-    render(
-      <SpecialistEvalDialog open onOpenChange={vi.fn()} agent={nonTemplateAgent} />,
-    );
+    render(<SpecialistEvalDialog open onOpenChange={vi.fn()} agent={nonTemplateAgent} />);
 
-    expect(
-      await screen.findByText(/仅通过内置模板创建的专家支持评测/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/仅通过内置模板创建的专家支持评测/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '运行评测' })).toBeDisabled();
   });
 
@@ -146,9 +142,7 @@ describe('SpecialistEvalDialog (M4-T4)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '运行评测' }));
 
-    await waitFor(() =>
-      expect(mockRunEval).toHaveBeenCalledWith('specialist-writing-abcdef'),
-    );
+    await waitFor(() => expect(mockRunEval).toHaveBeenCalledWith('specialist-writing-abcdef'));
     expect(await screen.findByText(/通过 1\/2（50%）/)).toBeInTheDocument();
     expect(screen.getByText('短文润色')).toBeInTheDocument();
     expect(screen.getByText('量子密码')).toBeInTheDocument();

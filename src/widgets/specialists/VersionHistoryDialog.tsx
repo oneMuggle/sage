@@ -135,11 +135,7 @@ export function VersionHistoryDialog({
       setDiffError(null);
       setDiffLoading(true);
       try {
-        const changes = await specialistApi.diffVersions(
-          agentId,
-          meta.version,
-          latest,
-        );
+        const changes = await specialistApi.diffVersions(agentId, meta.version, latest);
         setDiffs(changes);
       } catch (err) {
         setDiffError(err instanceof Error ? err.message : String(err));
@@ -216,9 +212,7 @@ export function VersionHistoryDialog({
                           当前
                         </span>
                       )}
-                      <span className="text-xs text-muted">
-                        {formatTimestamp(meta.created_at)}
-                      </span>
+                      <span className="text-xs text-muted">{formatTimestamp(meta.created_at)}</span>
                       <div className="ml-auto flex items-center gap-2">
                         <Button
                           size="sm"
