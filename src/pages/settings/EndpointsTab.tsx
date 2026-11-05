@@ -70,7 +70,10 @@ function endpointFormDirty(form: Partial<EndpointConfig>, ep: EndpointConfig): b
     (form.modelId ?? ep.modelId ?? '') !== (ep.modelId ?? '') ||
     // 2026-11-03: 思考过程参数 —— null 视为等价（undefined 与 null 都表「不发送」）
     (form.reasoningEffort ?? ep.reasoningEffort ?? null) !== (ep.reasoningEffort ?? null) ||
-    (form.thinkingBudget ?? ep.thinkingBudget ?? null) !== (ep.thinkingBudget ?? null)
+    (form.thinkingBudget ?? ep.thinkingBudget ?? null) !== (ep.thinkingBudget ?? null) ||
+    // 2026-09-18 P0-B: 限额改动同样要解锁「保存」
+    (form.quota?.dailyTokens ?? null) !== (ep.quota?.dailyTokens ?? null) ||
+    (form.quota?.monthlyBudgetUsd ?? null) !== (ep.quota?.monthlyBudgetUsd ?? null)
   );
 }
 
