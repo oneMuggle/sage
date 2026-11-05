@@ -11,6 +11,7 @@ import {
 import { useResizableSidebar } from '../../shared/lib/useResizableSidebar';
 import { PageSkeleton } from '../../shared/ui';
 import { EndpointStatusBanner } from '../system/EndpointStatusBanner';
+import { TaskbarAttentionBridge } from '../system/TaskbarAttentionBridge';
 import { DeliveryDrawerHost } from '../task-center/DeliveryDrawerHost';
 import { TaskCenterWidget } from '../task-center/TaskCenterWidget';
 
@@ -202,6 +203,8 @@ export function Layout() {
       </div>
       {/* P4: 全局任务中心胶囊 —— 跨页面聚合 office/wiki 等长任务与后台聊天流 */}
       <TaskCenterWidget />
+      {/* 2026-11-05: 等待审批/提问 → 任务栏闪烁 / dock badge */}
+      <TaskbarAttentionBridge />
       {/* A4: 全局交付抽屉（lane / office 验收） */}
       <DeliveryDrawerHost />
     </div>
