@@ -10,14 +10,14 @@ describe('office feature barrel audit diagnostics', () => {
     const report = auditOfficeFeatureBarrel();
     expect(report.schemaVersion).toBe('1.0');
     expect(report.module).toBe('src/features/office/index.ts');
-    expect(report.symbolCount).toBe(13);
+    expect(report.symbolCount).toBe(14);
     expect(report.exportedSymbols).toContain('OfficeCapabilityBar');
     expect(report.exportedSymbols).toContain('OfficeDuplicateDialog');
   });
 
   it('exports serialized JSON payload', () => {
     const parsed = JSON.parse(exportOfficeFeatureBarrelAuditJson());
-    expect(parsed.symbolCount).toBe(13);
+    expect(parsed.symbolCount).toBe(14);
     expect(parsed.exportedAt).toBe('2026-10-22');
   });
 });
