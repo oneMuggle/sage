@@ -82,6 +82,7 @@
 | 102  | [全局规则 UI（~/.sage/SAGE.md）](./102-global-rules.md) | G1/P0：设置页读写全局规则文件 / 路径硬编码 + 原子写 + 符号链接拒写 / 扫描 level=all 护栏 / 8000 字符截断 + 64KB 保存上限 / win7 零适配 |
 | 104  | [Zotero → LLM 集成](./104-zotero-llm-integration.md) | 四层可见性阻断修复（白名单/路径/prompt/索引）/ ZoteroIngestor 向量索引 + 语义检索降级 / wiki 沉淀与零改动图谱 / 设置页同步面板 |
 | 103  | [多浏览器支持](./103-multi-browser-support.md) | 浏览器自动发现/调度/诊断 + CDP 连接池 + 多浏览器并行抓取 |
+| 140  | [LaTeX 读取与语义预览](./140-latex-read-render.md) | 零依赖 LaTeX 扫描/项目解析（include/循环/越界）/ 结构化 blocks + KaTeX 预览 / artifact 与工作区预览接入 / office_read_latex / Win7 可用（不编译 TeX）（win7 编号避让 105=LLM 定时任务工具） |
 | 107  | [会话标题生成机制](./107-session-title-generation.md) | 标题 LLM 生成流程 / `title_attempts` 计数器 / 启动回补调度器 / 专用标题模型配置 |
 | 108  | [Plan Mode 增强](./108-plan-mode-enhancement.md) | 复杂度分类（simple/medium/complex）/ 执行模式推荐（single/multi/ask_user）/ scout_deep 深度调研 + ResearchSummaryCard / confirm_marker 规则引擎 + 步骤级确认（continue/skip/abort） |
 | 109  | [文件引用输入（新会话页拖拽 / @ 菜单 / 会话内回显）](./109-file-reference-composer.md) | 共享 useAtFileMenu / 草稿会话懒创建 / Welcome→Chat 首条消息附件透传 / messages.client_meta 持久化与消息 chips（main #2639 同步，win7 编号 109 避开 104=Zotero） |
@@ -93,14 +94,9 @@
 | 115  | [项目规程 Playbook](./115-project-playbook.md) | 阶段/交付物规格 + 项目级快照 + 确定性审计与阶段识别 + 目录/骨架/规则/里程碑动作 + 全局规程库（详情/导出/删除）+ 导入逐项 diff + 未知文件批量归类/撤销 + JSON/Markdown/AGENTS 导出与导入冲突策略 |
 | 116  | [本地 OCR](./116-local-ocr.md) | RapidOCR/Tesseract 双引擎 + 聊天兜底/预览编辑 + Office/PDF/Wiki/工具接入 + 配置、性能与 Win7 边界 |
 | 117  | [桌面宠物](./117-desktop-pet.md) | 透明置顶窗 / AgentState 状态映射与面板 / 应用内形态 / Task Center + 编排 lanes + 定时失败聚合 / 自定义动画包（zip + sage-pet://）/ Win7 兼容模式 |
-| 118  | [文档与验收信息架构：按任务域分组的顶层 Tab](./118-office-ia-tabs.md) | URL 为唯一事实源 + keep-alive 保状态 + 诊断收进「环境」popover；十余个常驻区块 → 2 任务域（win7 编号避让 117=桌面宠物；LaTeX 与审校与规范分区待对应功能同步后补齐） |
+| 118  | [文档与验收信息架构：按任务域分组的顶层 Tab](./118-office-ia-tabs.md) | URL 为唯一事实源 + keep-alive 保状态 + 诊断收进「环境」popover；十余个常驻区块 → 4 任务域（文档处理 / 文档生成 / 审校与规范 / LaTeX，LaTeX 内含项目与编译 / 模板与规范 / 审校与合规三个子页签）（win7 编号避让 117=桌面宠物） |
 | 119  | [Markdown 渲染器统一](./119-markdown-renderer.md) | 聊天/产物/Wiki 单一收敛点：minimal/chat 两档 + GFM/KaTeX 统一管线 + 表格复制与限高 + Shiki 降级 + 锚点前缀与 TOC 大纲 + 作用域 token 样式（win7 编号避让 118=office IA；main 对应 §124） |
 | 120  | [思考过程展示档位](./120-thinking-display-modes.md) | detail / trace / result 三档 + 消息/会话/全局三级作用域；`DisplayContract` 渲染契约 + `useSyncExternalStore` 订阅；三级存储（sessionStorage 双写 + preference singleton） |
-| 121  | [Word 渲染级校验](./121-word-render-audit.md) | DOCX→PDF（LibreOffice/Word COM）+ PyMuPDF 检查页面尺寸/页边距/字体/页码；无转换器降级；渲染审计 REST；批量审校与 Markdown 报告 |
-| 122  | [Word 规则包 LLM 工具](./122-word-rule-tools.md) | `office_audit_word/fix_word/extract_rules/revise_word/batch_audit/render_audit`；工具上下文/工作区围栏/输出截断；bundle/profile/tool_names 反漂移同步 |
-| 123  | [文档与验收信息架构：顶层 Tab + LaTeX 二级分组](./123-office-ia-tabs.md) | URL 为唯一事实源 + keep-alive 保状态 + 诊断收进「环境」popover；14 常驻区块 → 4 任务域 |
-| 124  | [Markdown 渲染器统一](./124-markdown-renderer.md) | 聊天/产物/Wiki 单一收敛点：minimal/chat 两档 + GFM/KaTeX 统一管线 + 表格复制与限高 + Shiki 降级 + 锚点前缀与 TOC 大纲 + 作用域 token 样式 |
-| 125  | [思考过程展示档位](./125-thinking-display-modes.md) | detail / trace / result 三档 + 消息/会话/全局三级作用域；`DisplayContract` 渲染契约 + `useSyncExternalStore` 订阅；三级存储（sessionStorage 双写 + preference singleton） |
 | 126  | [Playbook 文档导入与分享链接](./126-playbook-import-share.md) | Word/PDF/MD/PPTX → 解析 → LLM/确定性草案预览 → 确认绑定（`POST /playbooks/import/document` 只预览不写库）+ `playbook_shares` token 分享链路（只读 / 默认 7 天 / 过期 410）+ HashRouter 落地页 `/share/playbook/{token}` 导入或存库 + 术语去技术化（L1–L4 → 规则） |
 | 127  | [端点思考参数透传](./127-reasoning-params-passthrough.md) | per-endpoint `reasoningEffort`/`thinkingBudget` 九节点链路：表单 → 前后端双白名单 → useChat → relay snake 往返 → llm_client 上游请求体；值域语义（null/0/-1）+ 契约测试反漂移 |
 | 128  | [默认本地时区](./128-timezone-default-local.md) | 日志/趋势/调度/前端渲染统一本地时区，失败回退 Asia/Shanghai (+08:00)；`localtime` 解析链（`tzlocal` → `astimezone()` 偏移 → 固定 +08:00）+ naive/aware 防御 + APScheduler `timezone=` + `formatLocalTime` 封装 |
@@ -109,6 +105,12 @@
 | 131  | [聊天附件链路](./131-attachment-pipeline.md) | MediaStore sidecar 元数据 + 后缀回退表与上传 allowlist 同口径；R37 注入带 name/type + 逐附件 `ok/skipped/error` 状态双出口（`attachments_processed` 事件 + `client_meta.attachments_status` 落库）；`useFileUpload` 预检状态机 + 气泡附件卡片 + 整页拖放共享 hook |
 | 132  | [记忆质量优化（Phase 1–4）](./132-memory-quality-optimization.md) | 提取门槛 + 冲突消解 + 偏好标签 + `MemoryQualityScorer` + 主题簇巩固；前端侧质量条/批量清理/来源会话/👍👎 反馈/使用提示 |
 | 133  | [专家（数字员工）系统](./133-specialist-persona.md) | M0–M4 全量：AgentProfile 运行时接线 / 技能作用域 fail-closed / 知识绑定 RRF / 记忆 agent_id 隔离 / 包格式 v2 + 模板库 + 版本回滚 + 黄金任务评测（win7 编号避让 130/131 上游 + 132 预占） |
+| 134  | [Word 文档画像](./134-word-document-profile.md) | 只读 DocumentProfile：页面设置 / 样式级联 / 段落与 run 格式 / 编号 / 表格合并 / 书签 / 域 / 锚点；旧 read 契约不变 |
+| 135  | [Word 模板 Profile 与填充](./135-word-template-profile.md) | 内容控件 / 书签 / 占位符 / 图片 / Jinja 统一槽位；页眉页脚；控制流混合渲染；保格式填充、必填校验、residual 检查 |
+| 136  | [Word 规则包、确定性审校与修复](./136-word-rulepack-audit.md) | RulePack/Rule 三层存储 + GB/T 9704 通用参数与通用质量内置包；15 类确定性检查器（含日期格式/术语/必备表述）；带 scope/anchor 的 issue；确定性修复 + 自动复检；原生修订写入（w:ins/w:del + 批注）与前端修订生成入口；`/office` 审校面板与一键修复 |
+| 137  | [Word 规范/范本文档规则抽取](./137-word-rule-extraction.md) | 规范条文与范本主导值 → 候选规则；置信度、来源强制、去重与冲突标记；可选 LLM 语义候选 + 确定性后校验；抽取/保存 REST；`/office` 复核面板 |
+| 138  | [Word 渲染级校验](./138-word-render-audit.md) | DOCX→PDF（LibreOffice/Word COM）+ PyMuPDF 检查页面尺寸/页边距/字体/页码；无转换器降级；渲染审计 REST；批量审校与 Markdown 报告 |
+| 139  | [Word 规则包 LLM 工具](./139-word-rule-tools.md) | `office_audit_word/fix_word/extract_rules/revise_word/batch_audit/render_audit`；工具上下文/工作区围栏/输出截断；bundle/profile/tool_names 反漂移同步 |
 
 ---
 

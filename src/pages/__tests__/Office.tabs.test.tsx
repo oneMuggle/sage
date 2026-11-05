@@ -4,15 +4,12 @@
  * 覆盖：
  *   - 默认 tab 是 `documents`，URL 无参数时显示 documents 面板；
  *   - 顶层 tab 切换把 URL 的 `tab` 参数同步到正确的值；
- *   - 深度链接 `?tab=generate` 直接落地对应 tab；
+ *   - 深度链接 `?tab=generate` / `?tab=latex&latex=templates` 直接落地对应 tab；
  *   - 未知 tab 值回落到 documents，避免空白面板；
  *   - TabContent 的 keep-alive：切换过的 panel 保持 mounted；
  *   - a11y：tablist / tab / tabpanel 角色与 aria 属性；
  *   - JournalPanel 在 generate tab 中折叠在 <details> 内；
- *   - 切回默认 tab 时 URL 中的 `tab` 参数被清掉。
- *
- * win7 说明：main 侧还有「审校与规范」「LaTeX」两个任务域，依赖尚未同步到
- * release/win7 的 Word 文档智能 / LaTeX 功能栈，因此这里只覆盖两个分区。
+ *   - 顶层 tab 切出 latex 后，URL 中的 `latex` 参数被清掉。
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -78,6 +75,12 @@ vi.mock('../../features/office', () => ({
   }),
 }));
 
+vi.mock('../office/OfficeLatexTab', () => ({
+  OfficeLatexTab: () => <div data-testid="office-latex-tab-stub" />,
+}));
+vi.mock('../../features/office/WordRuleExtractionPanel', () => ({
+  WordRuleExtractionPanel: () => <div data-testid="office-rules-stub" />,
+}));
 vi.mock('../../features/journal', () => ({
   JournalPanel: () => <div data-testid="office-journal-stub" />,
 }));
@@ -142,11 +145,11 @@ describe('Office — default tab and a11y roles', () => {
     expect(screen.getByTestId('office-panel-documents')).toBeInTheDocument();
     // 默认 URL 没有 tab 参数（默认值不写回 URL，避免污染书签）
     expect(probe().getAttribute('data-search')).toBe('');
-    // tablist role + 2 triggers
+    // tablist role + 4 triggers
     const tablist = screen.getByRole('tablist', { name: /文档|tabs|office/i });
     expect(tablist).toBeInTheDocument();
     const tabs = screen.getAllByRole('tab');
-    expect(tabs).toHaveLength(2);
+    expect(tabs).toHaveLength(4);
   });
 
   it('marks the active tab with aria-selected=true and its panel visible', async () => {
@@ -172,10 +175,30 @@ describe('Office — tab switching syncs URL', () => {
     expect(screen.getByTestId('office-panel-generate').getAttribute('hidden')).toBeNull();
   });
 
-  it('switching back to the default tab clears the `tab` param from the URL', async () => {
-    renderOffice(['/office?tab=generate']);
+  it('clicking the rules trigger shows the rules stub', async () => {
+    renderOffice();
     await waitFor(() => screen.getByTestId('office-page'));
-    expect(probe().getAttribute('data-search')).toBe('?tab=generate');
+    activateTab(screen.getByTestId('office-tab-rules'));
+    await waitFor(() =>
+      expect(probe().getAttribute('data-search')).toBe('?tab=rules'),
+    );
+    expect(screen.getByTestId('office-rules-stub')).toBeInTheDocument();
+  });
+
+  it('clicking the latex trigger pins ?tab=latex', async () => {
+    renderOffice();
+    await waitFor(() => screen.getByTestId('office-page'));
+    activateTab(screen.getByTestId('office-tab-latex'));
+    await waitFor(() =>
+      expect(probe().getAttribute('data-search')).toBe('?tab=latex'),
+    );
+    expect(screen.getByTestId('office-latex-tab-stub')).toBeInTheDocument();
+  });
+
+  it('switching away from latex clears the `latex` sub-param from the URL', async () => {
+    renderOffice(['/office?tab=latex&latex=templates']);
+    await waitFor(() => screen.getByTestId('office-page'));
+    expect(probe().getAttribute('data-search')).toBe('?tab=latex&latex=templates');
     activateTab(screen.getByTestId('office-tab-documents'));
     await waitFor(() =>
       expect(probe().getAttribute('data-search')).toBe(''),
@@ -191,6 +214,13 @@ describe('Office — deep links', () => {
     expect(active.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('office-panel-generate').getAttribute('hidden')).toBeNull();
     expect(screen.getByTestId('office-generate-form')).toBeInTheDocument();
+  });
+
+  it('?tab=latex&latex=templates activates the templates sub-tab inside latex', async () => {
+    renderOffice(['/office?tab=latex&latex=templates']);
+    await waitFor(() => screen.getByTestId('office-page'));
+    expect(screen.getByTestId('office-tab-latex').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('office-latex-tab-stub')).toBeInTheDocument();
   });
 
   it('?tab=bogus falls back to documents so the page is never blank', async () => {
@@ -234,11 +264,11 @@ describe('Office — keyboard navigation', () => {
   it('Enter on a tab trigger activates that tab', async () => {
     renderOffice();
     await waitFor(() => screen.getByTestId('office-page'));
-    const trigger = screen.getByTestId('office-tab-generate');
+    const trigger = screen.getByTestId('office-tab-rules');
     trigger.focus();
     fireEvent.keyDown(trigger, { key: 'Enter' });
     await waitFor(() =>
-      expect(probe().getAttribute('data-search')).toBe('?tab=generate'),
+      expect(probe().getAttribute('data-search')).toBe('?tab=rules'),
     );
   });
 });

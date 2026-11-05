@@ -5,21 +5,18 @@
  *   ┌──────────────────────────────────────────┐
  *   │ Header: H1 "文档与验收" + [环境] + 工作区  │
  *   ├──────────────────────────────────────────┤
- *   │ 顶层 Tabs (2 个任务域, keep-alive):      │
- *   │   [文档处理] [文档生成]                   │
+ *   │ 顶层 Tabs (4 个任务域, keep-alive):      │
+ *   │   [文档处理] [文档生成] [审校与规范] [LaTeX]│
  *   ├──────────────────────────────────────────┤
  *   │ 当前 tab 的内容 (lazy + forceMount)       │
  *   └──────────────────────────────────────────┘
  *
  * 与原版本相比：
  *   - OfficeCapabilityBar / OfficeStagingInspector 收进页头 [环境] 浮层；
+ *   - 7 个 LaTeX 面板收进 latex tab 内 3 个子 tab；
  *   - JournalPanel 收进 generate tab 的可折叠 <details>；
- *   - 通过 URL search params 驱动 tab，支持深度链接。
- *
- * win7 说明：main 侧还有「审校与规范」「LaTeX」两个任务域，依赖 Word 文档智能
- * 系列（main #2733–#2791）与 LaTeX 功能栈（`office_latex_routes` + 7 个面板），
- * 尚未同步到 release/win7，因此这里只暴露已具备功能的两个分区，其余分区随
- * 对应功能同步一并恢复。
+ *   - WordRuleExtractionPanel 移到 rules tab；
+ *   - 通过 URL search params 驱动 tab / 子 tab，支持深度链接。
  *
  * 保留不变：
  *   - 工作区绑定流程 (useCurrentWorkspace + WorkspaceBindModal)；
@@ -48,6 +45,8 @@ import {
   type OfficePreviewData,
   type OfficeReadResult,
 } from '../features/office';
+import { WordBatchAuditPanel } from '../features/office/WordBatchAuditPanel';
+import { WordRuleExtractionPanel } from '../features/office/WordRuleExtractionPanel';
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
 import { WorkspaceBindModal } from '../features/workspace';
 import type { OfficeCapabilities, OfficeDocType } from '../shared/api/types';
@@ -57,18 +56,25 @@ import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shared/ui/Tabs';
 
 import { OfficeEnvironmentButton } from './office/OfficeEnvironmentButton';
+import { OfficeLatexTab } from './office/OfficeLatexTab';
 import {
+  DEFAULT_OFFICE_LATEX_TAB,
   DEFAULT_OFFICE_TAB,
+  OFFICE_LATEX_PARAM,
   OFFICE_TAB_IDS,
   OFFICE_TAB_PARAM,
+  parseOfficeLatexTab,
   parseOfficeTab,
   useKeepAliveTabs,
+  type OfficeLatexTabId,
   type OfficeTabId,
 } from './office/officeTabs';
 
 const TOP_TAB_LABEL_KEYS: Record<OfficeTabId, TranslationKey> = {
   documents: 'office.tab.documents',
   generate: 'office.tab.generate',
+  rules: 'office.tab.rules',
+  latex: 'office.tab.latex',
 };
 
 export function Office() {
@@ -80,14 +86,34 @@ export function Office() {
   // URL search params 是 tab / 子 tab 的单一事实来源。缺失或非法值走默认，
   // 这样旧书签、手工编辑 URL 都能落到可用 tab 而不是空白面板。
   const activeTab: OfficeTabId = parseOfficeTab(searchParams.get(OFFICE_TAB_PARAM));
+  const activeLatexTab: OfficeLatexTabId = parseOfficeLatexTab(
+    searchParams.get(OFFICE_LATEX_PARAM),
+  );
   const mounted = useKeepAliveTabs(activeTab);
 
+  // 切到非 latex 顶层 tab 时，latex 子 tab 参数从 URL 里清掉，避免
+  // 用户回到 latex 时被一个"不属于当前分区"的旧子 tab 值干扰。
   const setTab = (next: OfficeTabId) => {
     setSearchParams(
       (prev) => {
         const updated = new URLSearchParams(prev);
         if (next === DEFAULT_OFFICE_TAB) updated.delete(OFFICE_TAB_PARAM);
         else updated.set(OFFICE_TAB_PARAM, next);
+        if (next !== 'latex') updated.delete(OFFICE_LATEX_PARAM);
+        return updated;
+      },
+      { replace: true },
+    );
+  };
+
+  // LaTeX 子 tab 切换同时把顶层 tab 锁到 'latex'，保证 URL 一致性。
+  const setLatexTab = (next: OfficeLatexTabId) => {
+    setSearchParams(
+      (prev) => {
+        const updated = new URLSearchParams(prev);
+        updated.set(OFFICE_TAB_PARAM, 'latex');
+        if (next === DEFAULT_OFFICE_LATEX_TAB) updated.delete(OFFICE_LATEX_PARAM);
+        else updated.set(OFFICE_LATEX_PARAM, next);
         return updated;
       },
       { replace: true },
@@ -470,9 +496,7 @@ export function Office() {
       <details className="rounded-lg border border-border bg-bg-subtle">
         <summary className="cursor-pointer select-none list-none px-4 py-3 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-medium text-text">
-              {t('office.generate.journal.title')}
-            </h3>
+            <h3 className="text-sm font-medium text-text">{t('office.generate.journal.title')}</h3>
             <p className="text-xs text-muted mt-0.5">{t('office.generate.journal.hint')}</p>
           </div>
           <span className="text-xs text-text-secondary">▶</span>
@@ -484,15 +508,36 @@ export function Office() {
     </div>
   );
 
+  const renderRulesTab = () => (
+    <div className="space-y-4">
+      <WordRuleExtractionPanel workspacePath={workspacePath} />
+
+      {/* M5c: 工作区批量审校（glob + 规则包 → 汇总 + Markdown 报告）。 */}
+      <WordBatchAuditPanel workspacePath={workspacePath ?? ''} />
+
+      <article className="rounded-lg border border-border bg-bg-subtle p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-sm font-medium text-text">{t('office.rules.guide.title')}</h3>
+          <p className="text-xs text-muted mt-1">{t('office.rules.guide.body')}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setTab('documents')}
+          data-testid="office-rules-goto-documents"
+          className="shrink-0 px-3 py-1.5 rounded text-sm border border-border text-text-secondary hover:bg-bg-hover"
+        >
+          {t('office.rules.guide.action')}
+        </button>
+      </article>
+    </div>
+  );
+
   return (
     <div className="flex-1 flex flex-col gap-4 p-6 overflow-y-auto" data-testid="office-page">
       {/* Header */}
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-semibold text-text">{t('office.title')}</h1>
-        <OfficeEnvironmentButton
-          workspacePath={workspacePath}
-          onCapabilities={setCapabilities}
-        />
+        <OfficeEnvironmentButton workspacePath={workspacePath} onCapabilities={setCapabilities} />
         <div className="ml-auto flex items-center gap-2 text-sm text-muted">
           <FolderOpen className="w-4 h-4" />
           {workspacePath ? (
@@ -548,7 +593,15 @@ export function Office() {
               data-testid={`office-panel-${id}`}
             >
               {mounted.includes(id) &&
-                (id === 'documents' ? renderDocumentsTab() : renderGenerateTab())}
+                (id === 'documents' ? (
+                  renderDocumentsTab()
+                ) : id === 'generate' ? (
+                  renderGenerateTab()
+                ) : id === 'rules' ? (
+                  renderRulesTab()
+                ) : (
+                  <OfficeLatexTab active={activeLatexTab} onChange={setLatexTab} />
+                ))}
             </TabsContent>
           ))}
         </Tabs>

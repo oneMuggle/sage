@@ -13,6 +13,7 @@ export type ArtifactKind =
   | 'docx' // C-2 (round5 批次 C): 后端转换 HTML 内嵌预览
   | 'xlsx'
   | 'pptx'
+  | 'latex' // 2026-10-31: .tex 结构化预览（blocks + KaTeX）
   | 'text';
 
 export interface Artifact {
