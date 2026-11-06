@@ -262,3 +262,10 @@ POST /api/v1/office/ai/revise
 - 所有 pydantic 模型同时满足 v1 / v2（项目内 `pydantic_compat` 垫片）。
 - 前端功能不依赖 main 独有的能力；`OfficeAiAssistantPanel` 的 props 未改动，`Office.tsx` 无需同步修改。
 - 同步后重跑 `npm run ipc:manifest`，并核对 `backend/tests` 中的工作区路径断言。
+
+## 9. 后续路线图（Phase 2–4，未实现）
+
+- **Phase 2 AI 起草**：`AiDraftWizard`（需求 → 规范书 → 参考资料 → 大纲 → 分节流式生成 → 组装导出 → 规范书交付检查）；后端 `office_ai_draft_routes.py`（`/office/ai/outline`、`/office/ai/draft/section` SSE、`/office/ai/assemble`、`/office/ai/fill-template`）；草稿会话持久化与任务中心集成。
+- **Phase 3 版式渲染与批量能力**：Excel SheetJS 网格预览、PPT 版式预览（前端库 vs 后端缩略图，需先 spike）、批量 AI 审校、包体积与架构基线评估。
+- **Phase 4 win7 同步**：cherry-pick + pydantic v1 / Python 3.8 适配；评估「审校与规范」「LaTeX」tab 的同步范围；双分支测试与安装包冒烟。
+- **Phase 0 遗留**：真机验证 Chromium 106 下 `data:` vs `blob:` PDF iframe 行为；Playwright 冒烟。
