@@ -1760,6 +1760,13 @@ class SageAgent:
         self._run_loop_active = True
         # L7: 每-run 工具调用计数（跨迭代累计,超 ToolPolicy.max_tool_calls_per_run 终止）
         tool_calls_used = 0
+        # M1 技能页草稿链路修复: Background Review 自动入队的辅助维度 ——
+        # 统计本次 run 用到的工具名集合，若整轮都只围绕技能/学习工具（skill /
+        # skill_save / learn）则跳过入队（类比 hex 路径的 activation_block 排除:
+        # 整轮被单一技能吸收,不值得再抽一个新技能草稿）。非技能工具只要出现
+        # 一个就视为复杂回合候选,最终是否成稿由 ReviewService LLM 初筛决定。
+        _tools_used_names: set = set()
+        _REVIEW_SKIP_TOOL_NAMES = frozenset({"skill", "skill_save", "learn"})
         # B1 空响应守卫配置（对标 hermes turn_empty_response）
         # 切片 B: env 解析收敛到共享件 backend.chat.empty_response_guard
         empty_response_max = empty_response_max_retries()
@@ -2363,6 +2370,38 @@ class SageAgent:
                             "content": response.content,
                         }
                     )
+                    # M1: Background Review 复杂回合入队（对齐 hex ChatService 行为）。
+                    # 阈值与 hex 一致:工具调用数 >= REVIEW_ENQUEUE_TOOL_CALL_THRESHOLD(2)
+                    # 且本轮未只围绕技能/学习工具;失败保持 best-effort 静默降级,
+                    # 绝不阻塞主对话 DONE 路径。ReviewQueue 自身 worker 调用
+                    # ReviewService 做 LLM 初筛,决定是否真正生成 SkillDraft。
+                    if (
+                        session_id
+                        and tool_calls_used >= 2
+                        and (_tools_used_names - _REVIEW_SKIP_TOOL_NAMES)
+                    ):
+                        try:
+                            from backend.skills.review_queue import get_review_queue
+
+                            _tool_calls_serialized = [
+                                {"name": tc.name, "args": tc.args}
+                                for tc in (response.tool_calls or [])
+                            ]
+                            get_review_queue().enqueue(
+                                trigger_type="complex_turn",
+                                session_id=session_id,
+                                context={
+                                    "tool_calls": _tool_calls_serialized,
+                                    "tool_call_count": tool_calls_used,
+                                    "threshold": 4,  # SKILL_NUDGE_TOOL_CALL_THRESHOLD 对齐
+                                    "needs_screening": tool_calls_used < 4,
+                                    "api_mode": "legacy",
+                                },
+                            )
+                        except Exception as exc:  # noqa: BLE001 — best-effort
+                            logger.debug(
+                                "Background Review 入队失败 (legacy 路径): %s", exc
+                            )
                     yield AgentEvent(
                         state=AgentState.DONE,
                         iteration=i,
@@ -2431,6 +2470,8 @@ class SageAgent:
                         # 耗时从串行叠加降为最慢单工具。事件与消息仍按原顺序产出,
                         # 对 LLM 与前端完全透明。不满足池条件即被规划器切成串行屏障。
                         tool_calls_used += len(group_tcs)
+                        with contextlib.suppress(Exception):
+                            _tools_used_names.update(tc.name for tc in group_tcs)
 
                         def _run_one(tc: Any) -> Tuple[str, bool]:
                             try:
@@ -2581,6 +2622,8 @@ class SageAgent:
                         # legacy run_loop 无刹车。超限时终止本次 run（与前端
                         # mapAgentErrorToText 的 "tool_budget_exceeded" 文案对齐）。
                         tool_calls_used += 1
+                        with contextlib.suppress(Exception):
+                            _tools_used_names.add(tc.name)
                         max_tool_calls = self._effective_max_tool_calls_per_run()
                         if tool_calls_used > max_tool_calls:
                             yield AgentEvent(

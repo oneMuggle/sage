@@ -636,7 +636,7 @@ export const zhChatAndSider = {
     '启用后，SKILL.md 中的脚本（如 Bash/PowerShell）可被分发执行。关闭时所有脚本分发请求均被拒绝。',
   'settings.skills.directory.label': '技能目录',
   'settings.skills.directory.desc':
-    'SKILL.md 文件的搜索目录（绝对路径）。留空表示使用缺省路径 ~/.sage/skills。',
+    'SKILL.md 文件的搜索目录（绝对路径）。留空表示使用缺省路径 ~/.sage/skills。用户目录中的技能在应用升级后仍会保留；请勿指向应用安装目录。',
 
   // ─── 设置页 · 全局规则 (G1) ───────
   'settings.global_rules.title': '全局规则',
