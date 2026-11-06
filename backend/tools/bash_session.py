@@ -11,7 +11,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .subprocess_util import (
     MAX_OUTPUT_CAP_BYTES,
@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 MAX_BACKGROUND_SESSIONS: int = 32
 STATUS_RUNNING = "running"
 STATUS_EXITED = "exited"
+#: 退出观察器扫描间隔（Phase 1 wake_on_background 依赖）。
+EXIT_WATCH_POLL_SECONDS = 5.0
 
 
 class SessionLimitExceeded(RuntimeError):  # noqa: N818
@@ -102,6 +104,12 @@ class BashSessionRegistry:
         self._sessions: Dict[str, BashSession] = {}
         self._pending_cleanup: List[_PendingCleanup] = []
         self._lock = threading.RLock()
+        # 2026-11-06 Phase 1：退出观察器（wake_on_background 等工具登记回调，
+        # daemon 线程每 5s 扫一次，检测 running → exited 转换并触发）。
+        self._exit_watches: Dict[str, List[Callable[[str, Optional[int]], None]]] = {}
+        self._exited_seen: set = set()
+        self._watcher_thread: Optional[threading.Thread] = None
+        self._watcher_stop = threading.Event()
 
     @property
     def max_sessions(self) -> int:
@@ -199,6 +207,159 @@ class BashSessionRegistry:
     def get(self, shell_id: str) -> Optional[BashSession]:
         with self._lock:
             return self._sessions.get(shell_id)
+
+    # ---------- 2026-11-06 Phase 1: 退出观察器 ----------
+
+    def register_watcher(
+        self,
+        shell_id: str,
+        callback: Callable[[str, Optional[int]], None],
+    ) -> bool:
+        """为后台 shell 登记退出回调。
+
+        - shell 不存在 → 返回 ``False``；
+        - shell 已退出 → 立即同步触发一次（exit_code 可能为 None）；
+        - 否则登记并由 daemon 线程在检测到 running → exited 时触发。
+
+        回调异常被隔离，不影响其它观察者或 watcher 线程。
+        """
+        with self._lock:
+            session = self._sessions.get(shell_id)
+            if session is None:
+                return False
+            fired_already = shell_id in self._exited_seen
+            if fired_already:
+                pending: List[Callable[[str, Optional[int]], None]] = [callback]
+            else:
+                pending = self._exit_watches.setdefault(shell_id, [])
+                pending.append(callback)
+                self._ensure_watcher()
+            already_exited = fired_already or session.status() == STATUS_EXITED
+            if already_exited:
+                self._exited_seen.add(shell_id)
+                self._exit_watches.pop(shell_id, None)
+            else:
+                pending = []
+        if already_exited:
+            exit_code = observe_process_exit_code(session.process, 0.0)
+            for cb in pending:
+                self._safe_invoke(cb, shell_id, exit_code)
+        return True
+
+    def unregister_watcher(
+        self,
+        shell_id: str,
+        callback: Optional[Callable[[str, Optional[int]], None]] = None,
+    ) -> None:
+        """移除某 shell 的全部（或指定）退出回调。"""
+        with self._lock:
+            if callback is None:
+                self._exit_watches.pop(shell_id, None)
+                return
+            pending = self._exit_watches.get(shell_id)
+            if not pending:
+                return
+            if callback in pending:
+                pending.remove(callback)
+            if not pending:
+                self._exit_watches.pop(shell_id, None)
+
+    def register_exit_notification(
+        self, shell_id: str, session_id: Optional[str] = None
+    ) -> bool:
+        """登记默认退出通知：完成时推入后台任务通知队列（Phase 1）。
+
+        Electron 主进程轮询 drain 端点后转成 OS 通知；与定时任务/待办提醒
+        共用同一消费节奏。
+        """
+        session = self.get(shell_id)
+        if session is None:
+            return False
+        command = session.command
+
+        def _notify(finished_shell_id: str, exit_code: Optional[int]) -> None:
+            try:
+                from backend.services.background_notifications import (
+                    get_background_notification_queue,
+                )
+
+                get_background_notification_queue().push(
+                    shell_id=finished_shell_id,
+                    command=command,
+                    exit_code=exit_code,
+                    session_id=session_id,
+                )
+            except Exception:  # noqa: BLE001 — 通知失败不影响唤醒链
+                logger.exception("后台 shell 完成通知入队失败: %s", finished_shell_id)
+
+        return self.register_watcher(shell_id, _notify)
+
+    def _ensure_watcher(self) -> None:
+        """首次登记时启动 daemon 线程（调用方需持有 self._lock）。"""
+        if self._watcher_thread is not None and self._watcher_thread.is_alive():
+            return
+        self._watcher_stop.clear()
+        thread = threading.Thread(
+            target=self._run_watcher,
+            daemon=True,
+            name="bash-session-watcher",
+        )
+        self._watcher_thread = thread
+        thread.start()
+
+    def _run_watcher(self) -> None:
+        while not self._watcher_stop.wait(EXIT_WATCH_POLL_SECONDS):
+            try:
+                self._poll_watches()
+            except Exception:  # noqa: BLE001 — watcher 线程不得因单次异常退出
+                logger.exception("后台 shell 退出观察器 tick 失败")
+
+    def _poll_watches(self) -> None:
+        with self._lock:
+            shell_ids = list(self._exit_watches)
+        for shell_id in shell_ids:
+            session = self.get(shell_id)
+            if session is None:
+                # 会话已被 terminate/clear 移除：按"已结束（无退出码）"触发，
+                # 避免 COMPLETION wake 永远停留在 PENDING。
+                with self._lock:
+                    if shell_id in self._exited_seen:
+                        self._exit_watches.pop(shell_id, None)
+                        continue
+                    self._exited_seen.add(shell_id)
+                    callbacks = self._exit_watches.pop(shell_id, [])
+                for cb in callbacks:
+                    self._safe_invoke(cb, shell_id, None)
+                continue
+            if session.status() != STATUS_EXITED:
+                continue
+            with self._lock:
+                if shell_id in self._exited_seen:
+                    continue
+                self._exited_seen.add(shell_id)
+                callbacks = self._exit_watches.pop(shell_id, [])
+            exit_code = observe_process_exit_code(session.process, 0.0)
+            for cb in callbacks:
+                self._safe_invoke(cb, shell_id, exit_code)
+
+    @staticmethod
+    def _safe_invoke(
+        callback: Callable[[str, Optional[int]], None],
+        shell_id: str,
+        exit_code: Optional[int],
+    ) -> None:
+        try:
+            callback(shell_id, exit_code)
+        except Exception:  # noqa: BLE001 — 单个回调失败不阻断其它观察者
+            logger.exception("后台 shell 退出回调失败: %s", shell_id)
+
+    def shutdown(self, timeout_s: float = 1.0) -> None:
+        """停止退出观察器线程（幂等）。"""
+        self._watcher_stop.set()
+        thread = self._watcher_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=timeout_s)
+        self._watcher_thread = None
 
     def read_increment(self, shell_id: str, cap: int) -> Optional[Dict[str, Any]]:
         _validate_cap(cap)
@@ -372,6 +533,7 @@ class BashSessionRegistry:
         return any(bool(collector.is_alive) for collector in collectors or ())
 
     def clear(self) -> None:
+        self.shutdown()
         with self._lock:
             self._retry_pending_cleanup()
             for shell_id in list(self._sessions):
@@ -381,6 +543,8 @@ class BashSessionRegistry:
                     # 继续处理其余会话；失败项由 terminate 保留以便重试。
                     logger.warning("后台 shell 收尾失败: %s", shell_id)
             self._retry_pending_cleanup()
+            self._exit_watches.clear()
+            self._exited_seen.clear()
 
     def _drain(self, session: BashSession, cap: int) -> Dict[str, Any]:
         stdout, out_truncated, out_offset = read_capped_output(

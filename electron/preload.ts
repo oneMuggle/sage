@@ -46,6 +46,9 @@ import type {
   RescanResult,
   SavedOfficeFile,
   SkillsElectronApiBridge,
+  SpecialistPackageExportResult,
+  SpecialistPackageImportResult,
+  SpecialistsElectronApiBridge,
   UpdateElectronApiBridge,
 } from '../src/shared/types/electron-api';
 import type {
@@ -336,6 +339,21 @@ const electronAPI = {
     importSkillDirectory: (pickedPath: string) =>
       ipcRenderer.invoke('skills:import-directory', pickedPath) as Promise<ImportResult>,
   } satisfies SkillsElectronApiBridge,
+
+  /**
+   * M1-E: 专家包 (.sage) 导入/导出桥。
+   * - importPackage: 原生选择器 + multipart → { id, name } | null（取消）
+   * - exportPackage: 二进制下载 + 另存为 → { ok, path } | null（取消）
+   */
+  specialists: {
+    importPackage: () =>
+      ipcRenderer.invoke('specialists:import') as Promise<SpecialistPackageImportResult | null>,
+    exportPackage: (agentId: string) =>
+      ipcRenderer.invoke(
+        'specialists:export',
+        agentId,
+      ) as Promise<SpecialistPackageExportResult | null>,
+  } satisfies SpecialistsElectronApiBridge,
 
   /** Workspace MCP Server (M4): tunnel, emergency stop, copy URL to clipboard. */
   remoteMcp: {
@@ -687,6 +705,35 @@ const electronAPI = {
       ok: boolean;
       enabled: boolean;
     }>;
+  },
+
+  /** 2026-11-05: 通知偏好读取（总开关 + 后台任务通知）。 */
+  getNotificationPrefs(): Promise<{ enabled: boolean; backgroundTasks: boolean }> {
+    return ipcRenderer.invoke('sage:notification-prefs:get') as Promise<{
+      enabled: boolean;
+      backgroundTasks: boolean;
+    }>;
+  },
+
+  /** 2026-11-05: 通知偏好写入（主进程落 JSON）。 */
+  setNotificationPrefs(prefs: {
+    enabled: boolean;
+    backgroundTasks: boolean;
+  }): Promise<{ ok: boolean; enabled: boolean; backgroundTasks: boolean }> {
+    return ipcRenderer.invoke('sage:notification-prefs:set', prefs) as Promise<{
+      ok: boolean;
+      enabled: boolean;
+      backgroundTasks: boolean;
+    }>;
+  },
+
+  /** 2026-11-05: 任务栏注意力提示（等待审批时闪烁 / macOS dock badge）。 */
+  setTaskbarAttention(input: {
+    awaitingApproval?: number;
+    failed?: number;
+    completed?: number;
+  }): Promise<boolean> {
+    return ipcRenderer.invoke('sage:notify:set-attention', input) as Promise<boolean>;
   },
 
   /**

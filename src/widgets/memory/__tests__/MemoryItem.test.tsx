@@ -4,7 +4,7 @@
  * - U12 两步式确认：第一次点击 armed，第二次点击触发 onDelete
  * - 单次点击（仅 armed）不调用 onDelete
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Memory } from '../../../shared/api';
@@ -48,5 +48,47 @@ describe('MemoryItem', () => {
     render(<MemoryItem memory={baseMemory} onDelete={onDelete} />);
     fireEvent.click(screen.getByTitle('删除记忆'));
     expect(onDelete).not.toHaveBeenCalled();
+  });
+});
+
+/** M3-Task 7（2026-11-04）：私有记忆可提升为共享层。 */
+describe('MemoryItem 提升为共享（M3-Task 7）', () => {
+  it('私有记忆在传入 onPromote 时渲染提升按钮，两步确认后回调', async () => {
+    const onPromote = vi.fn();
+    render(
+      <MemoryItem
+        memory={{ ...baseMemory, agent_id: 'specialist-x' }}
+        onDelete={() => undefined}
+        onPromote={onPromote}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('memory-promote-mem-1'));
+    expect(onPromote).not.toHaveBeenCalled();
+    expect(screen.getByTestId('memory-promote-mem-1').getAttribute('data-state')).toBe('armed');
+
+    fireEvent.click(screen.getByTestId('memory-promote-mem-1'));
+    await waitFor(() => expect(onPromote).toHaveBeenCalledWith('mem-1'));
+    // 等 pending 态落回 idle —— 覆盖 Promise 微任务里的 setState
+    await waitFor(() =>
+      expect(screen.getByTestId('memory-promote-mem-1').textContent).toContain('提升为共享'),
+    );
+  });
+
+  it('共享层记忆（无 agent_id）不渲染提升按钮', () => {
+    render(
+      <MemoryItem memory={baseMemory} onDelete={() => undefined} onPromote={() => undefined} />,
+    );
+    expect(screen.queryByTestId('memory-promote-mem-1')).not.toBeInTheDocument();
+  });
+
+  it('未传 onPromote 时不渲染提升按钮（向后兼容）', () => {
+    render(
+      <MemoryItem
+        memory={{ ...baseMemory, agent_id: 'specialist-x' }}
+        onDelete={() => undefined}
+      />,
+    );
+    expect(screen.queryByTestId('memory-promote-mem-1')).not.toBeInTheDocument();
   });
 });

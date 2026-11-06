@@ -68,6 +68,9 @@ class Session:
     last_run_at: Optional[int] = None
     # 2026-10-27: 标题生成尝试次数（达到上限后不再重试）
     title_attempts: int = 0
+    # M0 (2026-11-03): 会话级专家绑定。指向 agents.id；'primary' = 主助手。
+    # 存量会话迁移时回填为 'primary'，行为与引入前一致。
+    specialist_id: str = "primary"
 
     @property
     def duration_minutes(self) -> Optional[int]:
@@ -104,6 +107,8 @@ class Session:
             last_run_at=row["last_run_at"],
             # 2026-10-27: 标题生成重试计数，存量行为 NULL → 兜底 0
             title_attempts=row["title_attempts"] or 0,
+            # M0 (2026-11-03): 专家绑定。存量行为 NULL（迁移前 DB）→ 兜底 primary
+            specialist_id=row["specialist_id"] or "primary",
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -125,6 +130,8 @@ class Session:
             "run_status": self.run_status,
             "last_error": self.last_error,
             "last_run_at": self.last_run_at,
+            # M0 (2026-11-03): 会话绑定的专家 id（'primary' = 主助手）
+            "specialist_id": self.specialist_id,
             # 2026-10-28: 性能统计 - 会话用时（分钟）
             "duration_minutes": self.duration_minutes,
             # 2026-10-27: 标题生成重试计数
@@ -138,20 +145,30 @@ class SessionRepository:
     def __init__(self):
         self.db = get_database()
 
-    def create(self, title: str = "新对话", parent_id: Optional[str] = None) -> Session:
-        """创建新会话"""
+    def create(
+        self,
+        title: str = "新对话",
+        parent_id: Optional[str] = None,
+        specialist_id: Optional[str] = None,
+    ) -> Session:
+        """创建新会话。
+
+        ``specialist_id``: M0 (2026-11-03) 会话级专家绑定，指向 agents.id；
+        None/空 → 'primary'（主助手）。
+        """
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
         now = int(time.time() * 1000)
         session_id = str(uuid.uuid4())
+        bound_specialist = specialist_id or "primary"
 
         cursor.execute(
             """
-            INSERT INTO sessions (id, title, created_at, updated_at, parent_id)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO sessions (id, title, created_at, updated_at, parent_id, specialist_id)
+            VALUES (?, ?, ?, ?, ?, ?)
         """,
-            (session_id, title, now, now, parent_id),
+            (session_id, title, now, now, parent_id, bound_specialist),
         )
 
         conn.commit()
@@ -162,6 +179,7 @@ class SessionRepository:
             created_at=now,
             updated_at=now,
             parent_id=parent_id,
+            specialist_id=bound_specialist,
         )
 
     def get(self, session_id: str) -> Session | None:
@@ -409,6 +427,9 @@ class Message:
     # 2026-10-28: 用户消息展示元数据 JSON-in-TEXT（附件 / @ 文件引用 / office 引用）。
     # 只用于气泡回显，不参与 LLM 上下文；写入端 json.dumps，读端解析为 dict。
     client_meta: Optional[str] = None
+    # 2026-11-05 非破坏性压缩: 该消息已被压缩进摘要（epoch ms），仅保留用于
+    # 会话页面完整展示；非空 = 不再进入 LLM 上下文。NULL = 正常消息。
+    compacted_at: Optional[int] = None
 
     @classmethod
     def from_row(cls, row) -> Message:
@@ -441,6 +462,7 @@ class Message:
                 row["generation_stats"] if "generation_stats" in row_keys else None
             ),
             client_meta=row["client_meta"] if "client_meta" in row_keys else None,
+            compacted_at=row["compacted_at"] if "compacted_at" in row_keys else None,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -469,6 +491,8 @@ class Message:
             "generation_stats": _parse_json_column(self.generation_stats, dict),
             # 2026-10-28: 用户消息展示元数据（畸形值降级 None，前端视为无引用）。
             "client_meta": _parse_json_column(self.client_meta, dict),
+            # 2026-11-05: 非空 = 已压缩的展示历史（不进入 LLM 上下文）。
+            "compacted_at": self.compacted_at,
         }
 
 
@@ -508,8 +532,8 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
     new_message_id = f"msg-{uuid.uuid4().hex[:12]}"  # 新 id，避免与源消息主键冲突
     cursor.execute(
         """
-        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, finish_reason, generation_stats, client_meta, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, finish_reason, generation_stats, client_meta, compacted_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
             new_message_id,
@@ -531,6 +555,9 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
             src_msg.finish_reason,  # B2: 截断标记随 fork 复制
             src_msg.generation_stats,  # C1: 生成统计随 fork 复制
             src_msg.client_meta,  # 2026-10-28: 用户消息引用信息随 fork 复制
+            # 2026-11-05: 压缩展示标记随 fork 复制（fork 的历史同样完整，
+            # 但压缩前缀不进入模型上下文）
+            src_msg.compacted_at,
             src_msg.created_at,  # 保留原时间戳 → ORDER BY created_at ASC 保序
         ),
     )
@@ -608,8 +635,8 @@ def fork_session(
     try:
         cursor.execute(
             """
-            INSERT INTO sessions (id, title, created_at, updated_at, last_message_at, message_count, fork_root, forked_at_message_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (id, title, created_at, updated_at, last_message_at, message_count, fork_root, forked_at_message_id, specialist_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 new_session_id,
@@ -620,6 +647,9 @@ def fork_session(
                 len(prefix),
                 source.id,
                 at_message_id,
+                # M0 (2026-11-03): fork 继承源会话的专家绑定 —— 分叉的是
+                # 同一段工作在另一条分支上的延续，换专家会污染上下文语义。
+                source.specialist_id or "primary",
             ),
         )
         # 逐条复制：插入顺序 = 源顺序，messages 表
@@ -645,6 +675,8 @@ def fork_session(
                     "subtype": None,
                     "segment_id": 0,
                     "tool_calls": src_msg.tool_calls,
+                    # 2026-11-05: 压缩展示历史在 fork 中同样不进模型上下文
+                    "compacted_at": src_msg.compacted_at,
                     "created_at": src_msg.created_at,
                 },
             )
@@ -717,8 +749,8 @@ class MessageRepository:
 
         cursor.execute(
             """
-            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, created_at, segment_id, subtype, finish_reason, generation_stats, client_meta)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, created_at, segment_id, subtype, finish_reason, generation_stats, client_meta, compacted_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 message.id,
@@ -742,6 +774,7 @@ class MessageRepository:
                 message.finish_reason,
                 message.generation_stats,
                 message.client_meta,
+                message.compacted_at,
             ),
         )
 
@@ -759,6 +792,8 @@ class MessageRepository:
                 "subtype": message.subtype,
                 "segment_id": seg,
                 "tool_calls": message.tool_calls,
+                # 2026-11-05: 事件投影据此过滤压缩展示行（与 DB 列对齐）
+                "compacted_at": message.compacted_at,
                 "created_at": message.created_at,
             },
         )
@@ -783,22 +818,21 @@ class MessageRepository:
     def replace_prefix_with_continuation(
         self,
         session_id: str,
-        delete_message_ids: List[str],
+        compacted_message_ids: List[str],
         continuation_message: Message,
-        new_message_count: int,
     ) -> None:
-        """原子地用续接消息替换被压缩的消息前缀（M4，CRITICAL-1）。
+        """原子地压缩消息前缀：标记展示历史 + 插入续接摘要（M4 非破坏版）。
 
-        三个动作——删除被替代的消息行、插入续接摘要行、更新会话
-        ``message_count``——在**同一事务**中落盘。任何一步失败整体
-        回滚，杜绝旧逐条提交流程中"历史已删、摘要未写入"的崩溃窗口
-        （那会永久丢失历史且没有摘要兜底）。
+        2026-11-05 起压缩不再物理删除历史：前缀行只写 ``compacted_at``
+        标记（保留给会话页面完整展示），LLM 上下文由
+        ``get_active_segment`` / ``db_rows_to_history`` 过滤该标记。
+        同一事务内完成：标记前缀、归档副本、插入续接行、更新
+        ``sessions.message_count``（实际行数）。任何一步失败整体回滚。
 
         Args:
             session_id: 目标会话 id
-            delete_message_ids: 要被摘要替代的消息 id 列表（压缩前缀）
+            compacted_message_ids: 被摘要替代的消息 id 列表（压缩前缀）
             continuation_message: 续接摘要消息（id 由调用方生成）
-            new_message_count: 压缩后的消息总数（写入 sessions.message_count）
 
         Raises:
             Exception: 任一 SQL 失败时抛出；事务已回滚，DB 保持调用前状态。
@@ -807,25 +841,29 @@ class MessageRepository:
         cursor = conn.cursor()
         now = int(time.time() * 1000)
         try:
-            # Round 4 (压缩谱系): 删除前把前缀消息归档进派生会话 ——
-            # 同 cursor 同事务，与压缩同生共死；「历史已删、归档未写」
-            # 与「历史已删、摘要未写」同为不可接受的永久丢失窗口。
+            # Round 4 (压缩谱系): 前缀归档进派生会话 —— 同 cursor 同事务。
+            # 非破坏压缩后原文仍在主会话，归档仅保留既有「查看压缩前原文」
+            # 入口与旧数据兼容；needs_restore=False 防止启动回填重复复制。
             try:
                 from backend.data.session_lineage import archive_prefix_in_transaction
 
                 archive_prefix_in_transaction(
                     cursor,
                     session_id,
-                    delete_message_ids,
+                    compacted_message_ids,
                     reason="compaction",
                     now_ms=now,
+                    needs_restore=False,
                 )
             except Exception:
                 raise  # 归档失败 → 整体回滚（与压缩强一致）
             # sqlite3 默认在首个 DML 处隐式 BEGIN，commit() 前所有语句
-            # 同属一个事务；循环逐条 DELETE 避免 IN (?) 占位符数量上限。
-            for message_id in delete_message_ids:
-                cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+            # 同属一个事务；循环逐条 UPDATE 避免 IN (?) 占位符数量上限。
+            for message_id in compacted_message_ids:
+                cursor.execute(
+                    "UPDATE messages SET compacted_at = ? WHERE id = ?",
+                    (now, message_id),
+                )
             cursor.execute(
                 """
                 INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, created_at, segment_id, client_meta)
@@ -852,14 +890,20 @@ class MessageRepository:
                     getattr(continuation_message, "client_meta", None),
                 ),
             )
+            # message_count 语义改为「会话实际消息行数」——历史行不再删除。
+            actual_count = int(
+                cursor.execute(
+                    "SELECT COUNT(*) FROM messages WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()[0]
+            )
             cursor.execute(
                 "UPDATE sessions SET message_count = ?, updated_at = ? WHERE id = ?",
-                (new_message_count, now, session_id),
+                (actual_count, now, session_id),
             )
-            # SE1 压缩事件：前缀删除以一等事件落日志（而非旁路消失），
-            # 与删除/续接插入同事务，杜绝"历史已删、事件未记"窗口。
-            # 续接消息本身也是模型可见行，同样落 message.appended 事件
-            # （它不走 save()，必须在此显式补事件）。
+            # SE1 压缩事件：deleted_ids 语义 = 移出模型可见上下文的 id
+            # （行仍保留用于展示，事件投影据此折叠）。续接行同样落
+            # message.appended 事件（它不走 save()，必须在此显式补事件）。
             from backend.data.session_event_repo import (
                 EVENT_COMPACTION_PERFORMED,
                 EVENT_MESSAGE_APPENDED,
@@ -870,10 +914,11 @@ class MessageRepository:
                 session_id,
                 EVENT_COMPACTION_PERFORMED,
                 payload={
-                    "deleted_ids": list(delete_message_ids),
+                    "deleted_ids": list(compacted_message_ids),
                     "continuation_id": continuation_message.id,
-                    "removed_count": len(delete_message_ids),
+                    "removed_count": len(compacted_message_ids),
                     "reason": "compaction",
+                    "retained": True,
                     "created_at": now,
                 },
             )
@@ -919,13 +964,39 @@ class MessageRepository:
             """
             SELECT * FROM messages
             WHERE session_id = ?
-            ORDER BY created_at ASC
+            ORDER BY created_at ASC, (compacted_at IS NULL) ASC, rowid ASC
             LIMIT ? OFFSET ?
         """,
             (session_id, limit, offset),
         )
 
         return [Message.from_row(row) for row in cursor.fetchall()]
+
+    def get_recent_messages(
+        self, session_id: str, limit: int = 100000
+    ) -> List[Message]:
+        """返回时间正序的**最近** ``limit`` 条消息（尾部窗口）。
+
+        与 ``get_by_session``（`created_at ASC LIMIT`，取最旧 N 条）不同：
+        非破坏压缩后消息量不再有上界，LLM 上下文/网关历史必须取尾部，
+        否则超长会话会丢掉最新的对话。实现为 DESC 取尾 + 反转保序。
+        """
+        if limit <= 0:
+            return []
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM messages
+            WHERE session_id = ?
+            ORDER BY created_at DESC, rowid DESC
+            LIMIT ?
+        """,
+            (session_id, limit),
+        )
+        rows = [Message.from_row(row) for row in cursor.fetchall()]
+        rows.reverse()
+        return rows
 
     def get(self, message_id: str) -> Message | None:
         """获取单条消息"""
@@ -1037,14 +1108,20 @@ class MessageRepository:
         return {"id": message_id}
 
     def get_active_segment(self, session_id: str) -> List[Message]:
-        """Return messages after the last topic_separator (context-isolation)."""
-        all_msgs = self.get_by_session(session_id, limit=100000)
+        """Return messages after the last topic_separator (context-isolation).
+
+        2026-11-05 非破坏性压缩：``compacted_at`` 非空的行只用于会话页面
+        完整展示，不再进入 LLM 上下文，这里统一剔除。
+        """
+        all_msgs = self.get_recent_messages(session_id, limit=100000)
         last_sep_idx = -1
         for i in range(len(all_msgs) - 1, -1, -1):
             if all_msgs[i].subtype == "topic_separator":
                 last_sep_idx = i
                 break
-        return all_msgs[last_sep_idx + 1:]
+        return [
+            m for m in all_msgs[last_sep_idx + 1:] if m.compacted_at is None
+        ]
 
     def get_active_segment_id(self, session_id: str) -> int:
         """获取当前会话最新的 segment_id（如果不存在消息则返回 0）。

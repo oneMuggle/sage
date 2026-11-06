@@ -93,6 +93,41 @@ export const agentsApi = {
       }
     });
   },
+
+  /**
+   * M0 (2026-11-03): 删除一个 agent。
+   *
+   * 后端 `DELETE /api/v1/agents/{id}`：200 + `{ok, id}`；400 primary 保护；404 不存在。
+   *
+   * @throws 后端 400 / 404 经 handleApiError 包装
+   */
+  async delete(id: string): Promise<{ ok: boolean; id: string }> {
+    return withRetry(async () => {
+      try {
+        return await invoke<{ ok: boolean; id: string }>('delete_agent', { id });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * M0 (2026-11-03): 复制一个 agent（含 system_prompt / tools / model_config 等）。
+   *
+   * 后端 `POST /api/v1/agents/{id}/duplicate`：200 + 完整新 profile
+   * （id = `${原id}-copy-${ms}`, name = `${原name} (副本)`, enabled = false）。
+   *
+   * @throws 后端 404 经 handleApiError 包装
+   */
+  async duplicate(id: string): Promise<AgentProfile> {
+    return withRetry(async () => {
+      try {
+        return await invoke<AgentProfile>('duplicate_agent', { id });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
 };
 
 export function auditAgentsApiGovernance(
@@ -111,7 +146,7 @@ export function auditAgentsApiGovernance(
   const endpointCount =
     typeof state.endpointCount === 'number' && Number.isFinite(state.endpointCount)
       ? Math.max(0, Math.trunc(state.endpointCount))
-      : 5;
+      : 7;
   const timeoutMs =
     typeof state.timeoutMs === 'number' && Number.isFinite(state.timeoutMs)
       ? Math.max(1000, Math.trunc(state.timeoutMs))

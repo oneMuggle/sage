@@ -483,6 +483,7 @@ class Database:
                 run_status TEXT DEFAULT 'idle',
                 last_error TEXT,
                 last_run_at INTEGER,
+                specialist_id TEXT DEFAULT 'primary',
                 FOREIGN KEY (parent_id) REFERENCES sessions(id)
             )
         """)
@@ -527,6 +528,10 @@ class Database:
                 -- 2026-10-28: 用户消息展示元数据（附件 / @ 文件引用 / office 引用）。
                 -- JSON-in-TEXT，只用于气泡回显，不参与 LLM 上下文。
                 client_meta TEXT,
+                -- 2026-11-05: 非破坏性压缩标记（epoch ms）。
+                -- NULL = 正常消息（进入 LLM 上下文）；非空 = 已压缩进摘要的
+                -- 展示历史（保留给会话页面完整显示，不进入 LLM 上下文）。
+                compacted_at INTEGER,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
         """)
@@ -591,11 +596,19 @@ class Database:
                 conn.commit()
             except sqlite3.OperationalError:
                 pass
+        # 2026-11-05: 非破坏性压缩标记（老库补列；数据回填由迁移 v13 负责）。
+        if "compacted_at" not in columns:
+            try:
+                cursor.execute("ALTER TABLE messages ADD COLUMN compacted_at INTEGER")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
 
         # DSH 对标 R1 (SE1, 2026-09-23): 会话事件日志 —— append-only 的
         # 会话事实源（对标 deepseek-harness "Model-visible ⟺ logged"）。
-        # messages 表会被 compaction 就地删行（replace_prefix_with_continuation），
-        # 依赖"从历史重建"的能力（投影/审计/回放）需要一份只增不删的日志。
+        # 2026-11-05 起 compaction 不再物理删行（改为 compacted_at 标记，
+        # 仅移出模型上下文），事件日志仍是投影/审计/回放的唯一事实源：
+        # 压缩折叠由 compaction.performed.deleted_ids 表达。
         # - (session_id, seq) UNIQUE：per-session 单调 seq，投影按 seq 升序回放；
         # - surface_op：SE2 预留 —— compaction 以 replace(start_seq, end_seq)
         #   的 surface 操作落日志，而非旁路改历史；
@@ -690,6 +703,12 @@ class Database:
         # 用 title == '新对话' AND title_attempts == 0 作为"未生成"信号。
         if "title_attempts" not in session_columns:
             cursor.execute("ALTER TABLE sessions ADD COLUMN title_attempts INTEGER DEFAULT 0")
+        # M0 (2026-11-03): 会话级专家绑定。指向 agents.id；'primary' = 主助手。
+        # 存量会话回填为 'primary'（保持既有行为）。
+        if "specialist_id" not in session_columns:
+            cursor.execute(
+                "ALTER TABLE sessions ADD COLUMN specialist_id TEXT DEFAULT 'primary'"
+            )
         conn.commit()
 
         # 情景记忆表
@@ -739,9 +758,38 @@ class Database:
             cursor.execute(
                 "ALTER TABLE memories_episodic ADD COLUMN supersedes_id TEXT"
             )
+        # M3 (2026-11-04): 记忆专家维度。NULL = 共享层（存量行保持原样），
+        # 非空 = 该专家私有；读取过滤为「私有 ∪ 共享」。
+        if "agent_id" not in _episodic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_episodic ADD COLUMN agent_id TEXT"
+            )
+        # M3-Task 4 / Gap A: 记忆可追溯性三列（来源 turn/message + 分类）。
+        # 与 win7 #2878 同口径；存量行保持 NULL。
+        for _col, _typedef in (
+            ("source_turn_id", "TEXT"),
+            ("source_message_id", "TEXT"),
+            ("memory_category", "TEXT"),
+        ):
+            if _col not in _episodic_columns:
+                cursor.execute(
+                    f"ALTER TABLE memories_episodic ADD COLUMN {_col} {_typedef}"
+                )
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_episodic_scope_project
             ON memories_episodic(scope, project_key)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_episodic_agent
+            ON memories_episodic(agent_id, scope, project_key)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_mem_episodic_session_turn
+            ON memories_episodic(session_id, source_turn_id)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_mem_episodic_category
+            ON memories_episodic(memory_category)
         """)
 
         # 技能定义不再由 SQLite ``skills`` 表承载。
@@ -1592,12 +1640,78 @@ class Database:
                 max_iterations INTEGER NOT NULL DEFAULT 10,
                 enabled INTEGER NOT NULL DEFAULT 1,
                 description TEXT NOT NULL DEFAULT '',
+                skills TEXT NOT NULL DEFAULT '[]',
+                knowledge_bindings TEXT NOT NULL DEFAULT '[]',
+                memory_policy TEXT NOT NULL DEFAULT '{}',
+                persona_ui TEXT NOT NULL DEFAULT '{}',
+                permission_mode TEXT NOT NULL DEFAULT 'workspace_write',
+                version INTEGER NOT NULL DEFAULT 1,
+                source TEXT NOT NULL DEFAULT 'user',
                 updated_at INTEGER NOT NULL
             )
         """)
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_agents_role ON agents(role)
         """)
+        # M1 (2026-11-03) 专家卡扩展字段: 技能允许集 / 知识绑定 / 记忆策略 /
+        # 卡片 UI / 权限模式 / 版本 / 来源。新库由上表直接带出；存量库走
+        # 幂等 ALTER 补齐。全部带默认值，存量行无需回填。
+        cursor.execute("PRAGMA table_info(agents)")
+        _agent_columns = {row["name"] for row in cursor.fetchall()}
+        for _col, _ddl in (
+            ("skills", "ALTER TABLE agents ADD COLUMN skills TEXT NOT NULL DEFAULT '[]'"),
+            (
+                "knowledge_bindings",
+                "ALTER TABLE agents ADD COLUMN knowledge_bindings TEXT NOT NULL DEFAULT '[]'",
+            ),
+            (
+                "memory_policy",
+                "ALTER TABLE agents ADD COLUMN memory_policy TEXT NOT NULL DEFAULT '{}'",
+            ),
+            (
+                "persona_ui",
+                "ALTER TABLE agents ADD COLUMN persona_ui TEXT NOT NULL DEFAULT '{}'",
+            ),
+            (
+                "permission_mode",
+                "ALTER TABLE agents ADD COLUMN permission_mode TEXT NOT NULL DEFAULT 'workspace_write'",
+            ),
+            ("version", "ALTER TABLE agents ADD COLUMN version INTEGER NOT NULL DEFAULT 1"),
+            ("source", "ALTER TABLE agents ADD COLUMN source TEXT NOT NULL DEFAULT 'user'"),
+        ):
+            if _col not in _agent_columns:
+                cursor.execute(_ddl)
+
+        # M4-T3 (2026-11-05) 专家人设版本快照 + 评测记录。
+        # 与 v12 migration 镜像：新库由 DDL 直接建出，老库由 migration 补齐。
+        # 表结构见 docs/plans/2026-11-05_m4-distribution-quality.md §3.3。
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_versions (
+                agent_id TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                profile TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT 'update',
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY (agent_id, version)
+            )
+            """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agent_versions_agent "
+            "ON agent_versions(agent_id, version DESC)"
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_eval_runs (
+                id TEXT PRIMARY KEY,
+                agent_id TEXT NOT NULL,
+                template_id TEXT,
+                created_at INTEGER NOT NULL,
+                report TEXT NOT NULL
+            )
+            """
+        )
 
         # 语义记忆表（用于 FTS5 全文搜索）
         cursor.execute("""
@@ -1633,9 +1747,18 @@ class Database:
             cursor.execute(
                 "ALTER TABLE memories_semantic ADD COLUMN supersedes_id TEXT"
             )
+        # M3 (2026-11-04): 记忆专家维度，同 memories_episodic。
+        if "agent_id" not in _semantic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN agent_id TEXT"
+            )
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_semantic_scope_project
             ON memories_semantic(scope, project_key)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_semantic_agent
+            ON memories_semantic(agent_id, scope, project_key)
         """)
 
         # FTS5 独立虚拟表用于语义记忆全文搜索（jieba 分词文本）。
@@ -1914,6 +2037,10 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC)"
         )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_pinned ON sessions(is_pinned)")
+        # M0 (2026-11-03): 会话级专家绑定查询（按专家列出会话）
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_specialist ON sessions(specialist_id)"
+        )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at)"
         )
@@ -2360,6 +2487,17 @@ class Database:
         except Exception:
             logger.exception("schema 迁移失败")
             raise
+
+        # 2026-11-05: 压缩历史回填重试 —— 迁移 v13 负责首次回填；若上次
+        # 有单行失败（needs_restore 仍为 1），每次启动再补一次（幂等）。
+        try:
+            from backend.data.session_lineage import restore_compacted_history
+
+            restored = restore_compacted_history(conn)
+            if restored:
+                logger.info("启动回填压缩历史: %s 条", restored)
+        except Exception as exc:  # noqa: BLE001 — 回填是增强能力
+            logger.warning("启动回填压缩历史失败(忽略): %s", exc)
 
         logger.info("数据库初始化完成: %s", self.db_path)  # D4 (P6): 遗留 print 收敛到 logging
 

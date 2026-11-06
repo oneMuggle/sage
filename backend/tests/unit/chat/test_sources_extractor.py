@@ -256,3 +256,40 @@ def test_merge_enrich_does_not_mutate_inputs():
     merge_sources([existing], [incoming])
     assert existing["snippet"] == ""
     assert incoming["snippet"] == "s"
+
+
+# ── M2-Task 4: 专家知识引用（kind="knowledge"）───────────────────────
+
+
+def _knowledge(**patch):
+    base = {
+        "kind": "knowledge",
+        "source_type": "wiki_project",
+        "source_id": "proj_1",
+        "binding_id": "kb_1",
+        "path": "wiki/a.md",
+        "chunk_index": 0,
+    }
+    base.update(patch)
+    return base
+
+
+def test_merge_knowledge_dedups_same_chunk_and_enriches_snippet():
+    acc = [_knowledge(snippet="")]
+    merged = merge_sources(acc, [_knowledge(snippet="补全")])
+
+    assert len(merged) == 1
+    assert merged[0]["snippet"] == "补全"
+
+
+def test_merge_knowledge_keeps_distinct_chunks_and_sources():
+    acc = [_knowledge(chunk_index=0)]
+    incoming = [
+        _knowledge(chunk_index=1),
+        _knowledge(source_id="proj_2", binding_id="kb_2"),
+        _knowledge(source_type="project_material", material_id="mat_9", path=None),
+    ]
+    merged = merge_sources(acc, incoming)
+
+    assert len(merged) == 4
+

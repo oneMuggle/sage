@@ -271,7 +271,6 @@ def test_r38_compact_info_survives_prefix_replacement(setup_test_db):
             created_at=99,
             compact_info=json.dumps({"before": 3, "after": 2, "removed": 2}),
         ),
-        new_message_count=2,
     )
 
     rows = repo.get_by_session(session.id)

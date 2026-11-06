@@ -107,6 +107,8 @@ def _data_to_domain_message(row: _DataMessage) -> Message:
         content=row.content or "",
         tool_calls=_deserialize_tool_calls(row.tool_calls),
         tool_call_id=row.tool_call_id,
+        # 2026-11-05: 压缩展示标记透传，ChatService 拉历史时据此过滤
+        compacted_at=getattr(row, "compacted_at", None),
     )
 
 

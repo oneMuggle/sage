@@ -213,7 +213,19 @@ CONFIG_TOOLS = ("read_sage_config", "update_sage_config", "diagnose_sage_config"
 # WRITE_LOCAL 走权限审批（持久化副作用 + 未来向会话注入消息）。
 # 仅赋给 primary 主助手；子代理白名单严禁纳入 —— 防止被委派的子任务自行注册
 # 长期定时行为（与 CONFIG_TOOLS 同样的 coordinator-only 边界）。
-SCHEDULE_TOOLS = ("schedule_task", "list_scheduled_tasks", "cancel_scheduled_task")
+SCHEDULE_TOOLS = (
+    "schedule_task",
+    "list_scheduled_tasks",
+    "cancel_scheduled_task",
+    # 2026-11-05: 会话唤醒（A4 Suspend-Resume 的 LLM 面）—— 同属"让会话
+    # 在未来某个时刻自行继续"的定时面，复用 WakeStore 而非 APScheduler。
+    "wake_session_at",
+)
+
+# 2026-11-06 Phase 1：后台任务一等公民 —— 与 BashSessionRegistry 协同。
+# ``wake_on_background`` 登记退出唤醒（WRITE，进 SELF_MODIFY_TOOLS 审批闸）；
+# ``wait_background`` 短窗口等待（READ，自动放行）。
+BACKGROUND_TASK_TOOLS = ("wake_on_background", "wait_background")
 
 # 待办子系统（2026-09-21 todolist-subsystem）：五个 LLM 工具面（add / list /
 # update / complete / delete），均挂 TodoService（SQLite 持久化 + 会话 ID
@@ -241,6 +253,12 @@ DESIGN_TOOLS = (
     "design_export",
 )
 
+# 自透明三件套（2026-11-05 feat/agent-self-transparency M1）：
+# ``sage_self_status`` 一次聚合 8 维运行时状态；``sage_doctor`` 暴露安装/
+# 环境检查注册表；``sage_usage`` 暴露用量与成本。三件均为 READ。
+# 仅赋给 primary 主助手；子代理白名单不得纳入 —— 与 CONFIG_TOOLS 同一边界。
+SELF_STATUS_TOOLS = ("sage_self_status", "sage_doctor", "sage_usage")
+
 #: 全部静态注册的内置工具名（排序去重）。新增内置工具时把名字加进对应
 #: 分组即可；tests/unit/test_tool_names.py 会对照 register_all_tools 的
 #: 实际注册面校验本清单无遗漏、无多余。
@@ -266,8 +284,10 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(SANDBOX_TOOLS)
         | set(CONFIG_TOOLS)
         | set(SCHEDULE_TOOLS)
+        | set(BACKGROUND_TASK_TOOLS)
         | set(TODO_TOOLS)
         | set(DESIGN_TOOLS)
+        | set(SELF_STATUS_TOOLS)
     )
 )
 
@@ -538,6 +558,7 @@ __all__ = [
     "RUNTIME_TOOLS",
     "SANDBOX_TOOLS",
     "SCHEDULE_TOOLS",
+    "SELF_STATUS_TOOLS",
     "SKILL_TOOLS",
     "SYMBOL_TOOLS",
     "TODO_TOOLS",

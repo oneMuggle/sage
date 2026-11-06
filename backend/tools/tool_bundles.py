@@ -122,12 +122,15 @@ from .project_diagnose import ProjectDiagnoseTool
 from .repl_tool import ReplTool
 from .runtime_exec import RuntimeExecTool
 from .runtime_probe import RuntimeProbeTool
+from .sage_doctor_tool import SageDoctorTool
+from .sage_usage_tool import SageUsageTool
 from .schedule_tool import (
     CancelScheduledTaskTool,
     ListScheduledTasksTool,
     ScheduleTaskTool,
 )
 from .search_tools import GlobSearchTool, GrepSearchTool
+from .self_status_tool import SageSelfStatusTool
 from .session_search_tool import SessionSearchTool
 from .skill_save_tool import SkillSaveTool
 from .skill_tool import SkillTool
@@ -135,6 +138,9 @@ from .structured_output_tool import StructuredOutputTool
 from .symbol_search_tool import SymbolSearchTool
 from .todo_tool import TodoWriteTool
 from .tts_tool import TextToSpeechTool
+from .wait_background_tool import WaitBackgroundTool
+from .wake_on_background_tool import WakeOnBackgroundTool
+from .wake_tool import WakeSessionAtTool
 from .web_tool import WebFetchTool, WebSearchTool
 
 # ===== 安装函数：每个函数体内部的顺序即该 bundle 的注册顺序 =====
@@ -147,6 +153,9 @@ def _install_shell(ctx: ToolInstallContext) -> None:
     # 轮询与终止。bash_output 归 READ（只读已捕获输出），kill_shell 归 WRITE。
     ctx.registry.register(BashOutputTool(policy=policy))
     ctx.registry.register(KillShellTool(policy=policy))
+    # 2026-11-06 Phase 1: 后台任务一等公民 —— 完成唤醒 + 短窗口等待
+    ctx.registry.register(WakeOnBackgroundTool(policy=policy))
+    ctx.registry.register(WaitBackgroundTool(policy=policy))
 
 
 def _install_file(ctx: ToolInstallContext) -> None:
@@ -383,6 +392,14 @@ def _install_sage_config(ctx: ToolInstallContext) -> None:
     ctx.registry.register(DiagnoseSageConfigTool(policy=policy))
 
 
+def _install_self_status(ctx: ToolInstallContext) -> None:
+    # 自透明三件套（M1）：全部 READ —— 只读运行时状态，不进 SELF_MODIFY_TOOLS。
+    policy = ctx.policy
+    ctx.registry.register(SageSelfStatusTool(policy=policy))
+    ctx.registry.register(SageDoctorTool(policy=policy))
+    ctx.registry.register(SageUsageTool(policy=policy))
+
+
 def _install_schedule(ctx: ToolInstallContext) -> None:
     # 定时任务派发工具：list 为 READ；schedule / cancel 为 WRITE_LOCAL。
     policy = ctx.policy
@@ -390,6 +407,9 @@ def _install_schedule(ctx: ToolInstallContext) -> None:
     ctx.registry.register(ScheduleTaskTool(policy=policy, service_getter=getter))
     ctx.registry.register(ListScheduledTasksTool(policy=policy, service_getter=getter))
     ctx.registry.register(CancelScheduledTaskTool(policy=policy, service_getter=getter))
+    # 2026-11-05: 会话唤醒（A4 Suspend-Resume 的 LLM 面）—— 注册 TIMER wake，
+    # 到点由 WakeScheduler 恢复会话。复用 WakeStore 单例，无额外装配依赖。
+    ctx.registry.register(WakeSessionAtTool(policy=policy))
 
 
 def _install_mcp(ctx: ToolInstallContext) -> None:
@@ -471,6 +491,7 @@ BUNDLES: Tuple[ToolBundle, ...] = (
     ToolBundle("plugins", _install_plugins, critical=False),
     ToolBundle("todo", _install_todo),
     ToolBundle("design", _install_design),
+    ToolBundle("self_status", _install_self_status),
 )
 
 

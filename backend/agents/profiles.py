@@ -28,6 +28,7 @@ from backend.domain.tool_names import (
     RUNTIME_EXEC_TOOLS,
     RUNTIME_PROBE_TOOLS,
     SCHEDULE_TOOLS,
+    SELF_STATUS_TOOLS,
     SKILL_TOOLS,
     SYMBOL_TOOLS,
     TODO_TOOLS,
@@ -62,6 +63,15 @@ class AgentProfile:
     max_iterations: int = 10
     enabled: bool = True
     description: str = ""
+    # M1 (2026-11-03) 专家卡扩展字段。全部带默认可空值 —— 旧种子 / 旧调用方
+    # 不传时行为与 M0 一致（无技能限制 / 无知识绑定 / 默认记忆策略）。
+    skills: List[str] = field(default_factory=list)
+    knowledge_bindings: List[Dict[str, Any]] = field(default_factory=list)
+    memory_policy: Dict[str, Any] = field(default_factory=dict)
+    persona_ui: Dict[str, Any] = field(default_factory=dict)
+    permission_mode: str = "workspace_write"
+    version: int = 1
+    source: str = "user"
 
     def to_dict(self) -> Dict[str, Any]:
         """导出为字典"""
@@ -76,6 +86,13 @@ class AgentProfile:
             "max_iterations": self.max_iterations,
             "enabled": self.enabled,
             "description": self.description,
+            "skills": self.skills,
+            "knowledge_bindings": self.knowledge_bindings,
+            "memory_policy": self.memory_policy,
+            "persona_ui": self.persona_ui,
+            "permission_mode": self.permission_mode,
+            "version": self.version,
+            "source": self.source,
         }
 
     @classmethod
@@ -175,6 +192,11 @@ _PRIMARY_SEED_TOOLS = (
     # 显式返回 {status: pending}）。子代理白名单（subagent_approval）不含
     # 此两件套，与 CONFIG_TOOLS / SCHEDULE_TOOLS 同模式 coordinator-only。
     *SKILL_TOOLS,
+    # 2026-11-05 自透明对等 M1：sage_self_status / sage_doctor / sage_usage
+    # 三件只读自省工具（版本、实际生效模型、权限模式、MCP/插件清单、用量
+    # 成本、安装环境检查）。全部 READ，零持久化副作用；与 CONFIG_TOOLS /
+    # SCHEDULE_TOOLS 同模式 coordinator-only，子代理白名单不纳入。
+    *SELF_STATUS_TOOLS,
     # 2026-10-27 feat/zotero-llm-visible: MCP 工具命名空间通配。primary 作为
     # 用户交互入口，必须能看见运行期注册的 MCP 工具（Zotero 文献库 /
     # drawio 图表等）—— 此前白名单只认内置精确名与插件通配，``mcp__*``
@@ -929,11 +951,42 @@ def get_enabled_agent(agent_id: str) -> Dict[str, Any] | None:
 
 
 def format_agents_for_prompt() -> str:
-    """格式化已启用 Agent 列表，供注入 system prompt。"""
-    agents = [a for a in list_agents() if a.enabled]
-    if not agents:
+    """格式化已启用 Agent 列表，供注入 system prompt。
+
+    M0 (2026-11-03): 改读 SQLite —— 用户在 Agent 管理页禁用某个专家后，
+    system prompt 必须立刻不再把它列为"可用"。此前只读内存注册表
+    (``get_agent_registry()``)，注册表在进程启动时播种，禁用状态不回流，
+    LLM 仍会把已停用的专家推荐给用户。
+
+    DB 不可用（首次启动 / 表未建）时降级回内存注册表 —— prompt 组装
+    永不因 DB 故障而抛错。
+    """
+    entries = []
+    try:
+        from backend.data.agent_repo import AgentRepository
+
+        for row in AgentRepository().list_all():
+            if not row.get("enabled", True):
+                continue
+            entries.append(
+                (
+                    row.get("name") or row.get("id") or "",
+                    row.get("id") or "",
+                    row.get("description") or row.get("role") or "",
+                )
+            )
+    except Exception as exc:  # noqa: BLE001 — 降级不阻塞 prompt 组装
+        logger.warning("读取 agents 表失败, 退回内存注册表: %s", exc)
+        entries = []
+
+    if not entries:
+        for agent in list_agents():
+            if agent.enabled:
+                entries.append((agent.name, agent.id, agent.description or agent.role))
+
+    if not entries:
         return ""
-    lines = [f"- {a.name} ({a.id}): {a.description or a.role}" for a in agents]
+    lines = [f"- {name} ({agent_id}): {desc}" for name, agent_id, desc in entries]
     return "\n\n你可以向用户介绍以下可用 Agent：\n" + "\n".join(lines)
 
 

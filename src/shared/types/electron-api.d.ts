@@ -128,6 +128,33 @@ export interface SkillsElectronApiBridge {
   importSkillDirectory: (pickedPath: string) => Promise<ImportResult>;
 }
 
+/** M1-E: result of importing a `.sage` package (backend `import_specialist`). */
+export interface SpecialistPackageImportResult {
+  /** Newly generated agent id (sanitized + unique suffix). */
+  id: string;
+  /** Display name parsed from persona.md frontmatter. */
+  name: string;
+}
+
+/** M1-E: result of exporting a `.sage` package to disk. */
+export interface SpecialistPackageExportResult {
+  ok: true;
+  /** Absolute path written by the save dialog. */
+  path: string;
+}
+
+/**
+ * Shape of `window.electronAPI.specialists` — populated by the preload bridge.
+ * Binary zip transport lives in the main process because the generic
+ * `invoke` path always parses JSON (see electron/specialistIpc.ts).
+ */
+export interface SpecialistsElectronApiBridge {
+  /** Native picker + multipart POST /api/v1/specialists/import. Null on cancel. */
+  importPackage: () => Promise<SpecialistPackageImportResult | null>;
+  /** Binary GET export + save dialog. Null on cancel. */
+  exportPackage: (agentId: string) => Promise<SpecialistPackageExportResult | null>;
+}
+
 /**
  * Phase 1.3 (2026-07-16): Office document bridge for the /office page.
  *
@@ -233,9 +260,7 @@ export interface OfficeElectronApiBridge {
    * reported in `skipped` rather than aborting the whole batch. Returns
    * empty `imported` when the user cancels the dialog.
    */
-  pickAndImportMultiOfficeFiles?: (
-    workspacePath: string,
-  ) => Promise<MultiOfficeImportResult>;
+  pickAndImportMultiOfficeFiles?: (workspacePath: string) => Promise<MultiOfficeImportResult>;
   /** Drag/drop variant — renderer already has sourcePath from DataTransfer. */
   importDroppedOfficeFile: (
     workspacePath: string,
@@ -724,6 +749,8 @@ export interface ElectronAPI {
   ): Promise<UnlistenFn>;
   windowControls: WindowControlsBridge;
   skills: SkillsElectronApiBridge;
+  /** M1-E: 专家包 (.sage) 导入/导出桥。 */
+  specialists: SpecialistsElectronApiBridge;
   /** Workspace MCP Server (M4) — optional: absent in web / older preloads. */
   remoteMcp?: RemoteMcpElectronApiBridge;
   arenaToken: ArenaTokenElectronApiBridge;
@@ -824,6 +851,18 @@ export interface ElectronAPI {
   /** E-2 (round5 批次 E): 关闭即隐藏到托盘偏好读写 */
   getCloseToTray?: () => Promise<{ enabled: boolean }>;
   setCloseToTray?: (enabled: boolean) => Promise<{ ok: boolean; enabled: boolean }>;
+  /** 2026-11-05: 通知偏好（总开关 + 后台任务通知） */
+  getNotificationPrefs?: () => Promise<{ enabled: boolean; backgroundTasks: boolean }>;
+  setNotificationPrefs?: (prefs: {
+    enabled: boolean;
+    backgroundTasks: boolean;
+  }) => Promise<{ ok: boolean; enabled: boolean; backgroundTasks: boolean }>;
+  /** 2026-11-05: 任务栏注意力提示（等待审批时闪烁 / macOS dock badge） */
+  setTaskbarAttention?: (input: {
+    awaitingApproval?: number;
+    failed?: number;
+    completed?: number;
+  }) => Promise<boolean>;
   /** 日志时区 (2026-09-17): 读写日志时间戳时区设置 */
   getLogTimezone?: () => Promise<{ logTimezone: string }>;
   setLogTimezone?: (logTimezone: string) => Promise<{ ok: boolean; error?: string }>;

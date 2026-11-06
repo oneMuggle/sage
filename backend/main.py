@@ -89,7 +89,7 @@ from backend.api.export_routes import router as export_router
 from backend.api.feedback_routes import router as feedback_router
 from backend.api.git_status_routes import router as git_status_router
 from backend.api.harness_routes import router as harness_router
-from backend.api.hex_routes import router as hex_router
+from backend.api.hex_routes import get_chat_service, router as hex_router
 from backend.api.hooks_routes import router as hooks_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
@@ -125,6 +125,7 @@ from backend.api.theme_router import router as theme_router
 from backend.api.todo_router import build_router as build_todo_router
 from backend.api.usage_routes import router as usage_router
 from backend.api.v1 import updates as updates_router_module
+from backend.api.wake_router import build_router as build_wake_router
 from backend.api.web_access_routes import router as web_access_router
 from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_default_routes import router as workspace_default_router
@@ -1319,6 +1320,10 @@ app.include_router(embedder_router, prefix="/api/v1")
 
 # Phase 8: scheduled tasks — mounted for both API modes (independent feature)
 app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v1")
+
+# 2026-11-05: 会话唤醒 REST（A4 Suspend-Resume 的非 LLM 入口）。
+# 与 LLM 工具 wake_session_at 共用 WakeStore 单一事实源。
+app.include_router(build_wake_router(get_chat_service), prefix="/api/v1")
 
 # Todo personal task management
 app.include_router(build_todo_router(get_todo_service), prefix="/api/v1")

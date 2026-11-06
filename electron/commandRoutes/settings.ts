@@ -197,6 +197,11 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/scheduled/tasks/${encodeURIComponent(String(a.id))}/run`,
   },
+  // 2026-11-05: 主进程通知轮询器排空后端内存队列（定时任务 + 待办提醒）。
+  scheduled_pending_notifications: {
+    method: 'GET',
+    path: () => '/api/v1/scheduled/notifications/pending',
+  },
   // R17-B: evolution 任务（固化/巡检等）手动触发面 —— APScheduler 侧 job，
   // 不在 JSON 持久化的用户任务表里，走独立路由。
   scheduled_evolution_tasks: {
@@ -317,6 +322,11 @@ export const settingsRoutes: Record<string, CommandRoute> = {
       if (typeof sid === 'string' && sid) url += `&session_id=${encodeURIComponent(sid)}`;
       return url;
     },
+  },
+  // P0-B (2026-09-18): 端点限额面板 — 按 endpoint_id 聚合今日/本月用量
+  usage_by_endpoint: {
+    method: 'GET',
+    path: () => '/api/v1/usage/by-endpoint',
   },
   // L8 PR-C (2026-09-09): 趋势图时序 (按桶聚合)
   usage_trend: {

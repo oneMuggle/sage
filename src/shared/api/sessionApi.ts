@@ -88,7 +88,7 @@ export const sessionApi = {
     });
   },
 
-  async getMessages(sessionId: string): Promise<Message[]> {
+  async getMessages(sessionId: string, limit = 100000): Promise<Message[]> {
     // 验证会话ID
     if (!isValidSessionId(sessionId)) {
       throw new ApiException({
@@ -100,7 +100,9 @@ export const sessionApi = {
 
     return withRetry(async () => {
       try {
-        return await invoke<Message[]>('get_messages', { sessionId });
+        // 2026-11-05: 后端缺省 limit=100 会按 created_at ASC 截断（归档视图
+        // 只能看到最早 100 条且无翻页）；与 store.loadMessages 同口径全量读取。
+        return await invoke<Message[]>('get_messages', { sessionId, limit });
       } catch (error) {
         throw handleApiError(error);
       }
@@ -229,6 +231,29 @@ export const sessionApi = {
     return withRetry(async () => {
       try {
         return await invoke<Session>('session_update', { sessionId, isArchived: archived });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * M0 (2026-11-03): 切换会话绑定的专家。
+   *
+   * 只影响后续轮次的 persona / 工具白名单 / 模型 / 记忆策略，不触碰历史消息。
+   * `specialistId` 传 `'primary'`（或空串）即解绑回主助手。
+   */
+  async setSpecialist(sessionId: string, specialistId: string): Promise<Session> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    return withRetry(async () => {
+      try {
+        return await invoke<Session>('session_update', { sessionId, specialistId });
       } catch (error) {
         throw handleApiError(error);
       }

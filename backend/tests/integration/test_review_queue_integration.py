@@ -255,7 +255,7 @@ def test_worker_loop_processes_events(temp_db, mock_llm_provider):
 
 def test_explicit_learn_worker_loads_messages_from_db(temp_db, mock_llm_provider):
     """explicit_learn trigger: worker replaces messages=[] with rows loaded from
-    MessageRepository.get_by_session(session_id).
+    MessageRepository.get_active_segment(session_id)。
 
     Verifies the LLM prompt sees the loaded messages, not the empty list.
     """
@@ -280,13 +280,14 @@ def test_explicit_learn_worker_loads_messages_from_db(temp_db, mock_llm_provider
     )
 
     # Fake MessageRepository — return two rows when the worker calls
-    # get_by_session("session_explicit_learn").
+    # get_active_segment("session_explicit_learn") —— 2026-11-05 起审阅
+    # 只喂模型可见上下文（压缩展示行已被过滤）。
     fake_messages = [
         Mock(role="user", content="Hello, please review this code"),
         Mock(role="assistant", content="Sure, I see a Python file with bugs."),
     ]
     mock_message_repo = Mock()
-    mock_message_repo.get_by_session.return_value = fake_messages
+    mock_message_repo.get_active_segment.return_value = fake_messages
 
     # Enqueue an explicit_learn event with the empty messages placeholder
     # (matches what /learn actually sends today).
@@ -306,7 +307,7 @@ def test_explicit_learn_worker_loads_messages_from_db(temp_db, mock_llm_provider
         queue._process_event(event)
 
     # Worker must have asked MessageRepository for this session's history.
-    mock_message_repo.get_by_session.assert_called_once_with(
+    mock_message_repo.get_active_segment.assert_called_once_with(
         "session_explicit_learn"
     )
 
@@ -337,7 +338,7 @@ def test_complex_turn_does_not_load_messages(temp_db, mock_llm_provider):
     queue.draft_store = draft_store
 
     mock_message_repo = Mock()
-    mock_message_repo.get_by_session.return_value = []  # would be a bug if called
+    mock_message_repo.get_active_segment.return_value = []  # would be a bug if called
 
     queue.enqueue(
         trigger_type="complex_turn",
@@ -360,7 +361,7 @@ def test_complex_turn_does_not_load_messages(temp_db, mock_llm_provider):
 
     # Must NOT touch MessageRepository for complex_turn — that would waste
     # DB I/O and token budget (the LLM only needs tool-call metadata here).
-    mock_message_repo.get_by_session.assert_not_called()
+    mock_message_repo.get_active_segment.assert_not_called()
 
 
 def test_explicit_learn_load_failure_is_swallowed(temp_db, mock_llm_provider):

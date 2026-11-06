@@ -112,11 +112,12 @@ def _persist_compaction(
     new_messages: List[Any],
     removed_count: int,
 ) -> int:
-    """把压缩结果落盘：删除被摘要替代的消息行 + 插入续接消息 + 更新计数。
+    """把压缩结果落盘：标记被摘要替代的消息 + 插入续接消息 + 更新计数。
 
-    CRITICAL-1: 全部动作经 ``MessageRepository.replace_prefix_with_continuation``
-    在**单事务**中完成——旧流程逐条自动提交，若在"删完历史"与"写入摘要"
-    之间崩溃会永久丢失历史且没有摘要兜底；现在任何一步失败整体回滚。
+    2026-11-05 非破坏性压缩：前缀行保留（``compacted_at`` 标记），会话页面
+    仍展示完整历史；LLM 上下文由 ``get_active_segment`` 过滤标记行。
+    全部动作经 ``MessageRepository.replace_prefix_with_continuation``
+    在**单事务**中完成，任何一步失败整体回滚。
 
     续接消息的 created_at 取第一条保留消息的时间戳 -1ms，保证
     ORDER BY created_at ASC 下排在保留尾部之前、旧消息之后的位置。
@@ -128,7 +129,7 @@ def _persist_compaction(
         removed_count: 被替代的消息数（= messages 前缀长度）
 
     Returns:
-        压缩后的消息总数
+        压缩后的上下文消息数（before - removed + 1，含续接行）
 
     Raises:
         Exception: 落盘事务失败时抛出（DB 已回滚，保持压缩前状态）。
@@ -151,7 +152,13 @@ def _persist_compaction(
         role=summary["role"],
         content=summary["content"],
         compact_info=json.dumps(
-            {"before": before, "after": after, "removed": removed_count},
+            {
+                "before": before,
+                "after": after,
+                "removed": removed_count,
+                # 前端据此知道压缩前原文仍留在会话时间线（无需跳归档）
+                "retained": True,
+            },
             ensure_ascii=False,
         ),
         created_at=created_at,
@@ -162,7 +169,6 @@ def _persist_compaction(
         session_id,
         [stale.id for stale in messages[:removed_count]],
         continuation,
-        after,
     )
     # WS-C P0-3: 压缩失效点 — 压缩事务提交后, 通知 hex 路径 ChatService
     # 实例失效该 session 的 system prompt 快照 (下一轮 run_turn 重建)。
@@ -318,6 +324,7 @@ async def _extract_legacy_chat_memory(
     session_id: str,
     user_text: str,
     assistant_text: str,
+    agent_id: str = "primary",
 ) -> None:
     """legacy /chat/stream 在 assistant 消息落盘后 best-effort 提取记忆。
 
@@ -334,6 +341,7 @@ async def _extract_legacy_chat_memory(
     - 函数保持 async 签名（调用点 await 不变），但 submit 非阻塞,
       装配完立即返回。
     - 任何异常只 warning 绝不外抛——记忆写入不得影响已完成的流式响应。
+    - ``agent_id``：M3-Task 4 新增；记忆写入归会话专家的私有层。
     """
     try:
         from backend.data.settings_repo import SettingsRepository
@@ -366,6 +374,7 @@ async def _extract_legacy_chat_memory(
                 session_id=session_id,
                 enabled=True,
                 tool_observations=_pop_env_observations(session_id),
+                agent_id=agent_id,
             )
         )
     except Exception as exc:

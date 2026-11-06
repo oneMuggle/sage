@@ -121,17 +121,56 @@ def visibility_sql(
     )
 
 
-def is_row_visible(row: Dict[str, Any], current_project_key: Optional[str]) -> bool:
-    """对已取出的行做与 :func:`visibility_sql` 等价的内存过滤。
+def is_row_visible(
+    row: Dict[str, Any],
+    current_project_key: Optional[str],
+    current_agent_id: Optional[str] = None,
+    include_private: bool = True,
+) -> bool:
+    """对已取出的行做与 :func:`visibility_sql` / :func:`agent_visibility_sql`
+    等价的内存过滤。
 
     P3 起同时兜底"时间有效区"：``invalid_at`` 非空的行（已被更新事实
     取代）不可见——存储层读路径大多已过滤, 这里覆盖向量检索等旁路。
+    M3 起兜底专家维度：私有行（``agent_id`` 非空）仅对其所属专家可见，
+    ``agent_id IS NULL`` 的共享行对所有专家可见；``current_agent_id``
+    缺省（None）不限制，保持历史调用 / 管理视图行为。
+    ``include_private=False`` 时私有行对任何专家都不可见（策略收窄）。
     """
     if row.get("invalid_at") is not None:
+        return False
+    if not include_private and row.get("agent_id") is not None:
+        return False
+    if current_agent_id and row.get("agent_id") not in (None, str(current_agent_id)):
         return False
     if (row.get("scope") or SCOPE_USER) != SCOPE_PROJECT:
         return True
     return bool(current_project_key) and row.get("project_key") == current_project_key
+
+
+def agent_visibility_sql(
+    current_agent_id: Optional[str],
+    prefix: str = "",
+    include_private: bool = True,
+) -> Tuple[str, List[Any]]:
+    """构造"当前专家可见"的 SQL 条件片段（含前导 `` AND ``）。
+
+    读取语义 = 私有 ∪ 共享：``agent_id = :current OR agent_id IS NULL``。
+    ``current_agent_id`` 为空（历史调用 / 管理视图 / 全局单例路径未注入
+    专家身份）时返回空片段，不限制——与 M3 前的可见性完全一致。
+
+    ``include_private=False``（MemoryPolicy.read_scopes 未含 specialist）
+    时仅返回共享行（``agent_id IS NULL``），与是否注入当前专家无关。
+    """
+    p = prefix
+    if not include_private:
+        return f" AND {p}agent_id IS NULL", []
+    if not current_agent_id:
+        return "", []
+    return (
+        f" AND ({p}agent_id = ? OR {p}agent_id IS NULL)",
+        [str(current_agent_id)],
+    )
 
 
 __all__ = [
@@ -144,5 +183,6 @@ __all__ = [
     "derive_write_scope",
     "finalize_scope",
     "visibility_sql",
+    "agent_visibility_sql",
     "is_row_visible",
 ]

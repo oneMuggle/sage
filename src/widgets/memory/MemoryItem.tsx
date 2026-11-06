@@ -6,9 +6,16 @@ import { Memory } from '../../shared/api';
 import { formatDateTime } from '../../shared/lib/timeFormatter';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
+import { MemoryPromoteButton } from './MemoryPromoteButton';
+
 interface MemoryItemProps {
   memory: Memory;
   onDelete: (id: string) => void;
+  /**
+   * M3-Task 7: 把私有记忆提升到共享层。可选 —— 不传则不渲染提升按钮,
+   * 行为与旧版一致（共享层的记忆本来也不需要提升）。
+   */
+  onPromote?: (id: string) => void | Promise<void>;
 }
 
 // 重要性星级显示
@@ -28,7 +35,7 @@ function ImportanceStars({ importance }: { importance: number }) {
 
 // formatTime 已统一到 src/shared/lib/timeFormatter#formatDateTime
 
-export function MemoryItem({ memory, onDelete }: MemoryItemProps) {
+export function MemoryItem({ memory, onDelete, onPromote }: MemoryItemProps) {
   const tags = memory.tags || [];
   const memoryType = memory.memory_type || 'episodic';
 
@@ -71,6 +78,15 @@ export function MemoryItem({ memory, onDelete }: MemoryItemProps) {
         armedLabel="确认删除?"
         onConfirm={() => onDelete(memory.id)}
       />
+
+      {/* M3-Task 7: 私有记忆可提升为共享（共享层的行不渲染）。 */}
+      {memory.agent_id && onPromote ? (
+        <MemoryPromoteButton
+          className="memory-promote-btn"
+          memoryId={memory.id}
+          onPromote={onPromote}
+        />
+      ) : null}
     </div>
   );
 }

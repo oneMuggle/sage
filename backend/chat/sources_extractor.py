@@ -209,6 +209,16 @@ def _dedup_key(source: Dict[str, Any]) -> tuple:
     if kind == "memory":
         # R86: @memory: 实体引用命中（title = @memory:query [类型]）
         return ("memory", str(source.get("title") or ""))
+    if kind == "knowledge":
+        # M2-Task 4: 专家知识引用 —— 同一绑定源的不同文档/片段是不同来源，
+        # 去重键需落到 (源类型, 源 ID, 文档标识, 片段序号)。
+        return (
+            "knowledge",
+            str(source.get("source_type") or ""),
+            str(source.get("source_id") or ""),
+            str(source.get("material_id") or source.get("path") or ""),
+            str(source.get("chunk_index") if source.get("chunk_index") is not None else ""),
+        )
     return ("tool", str(source.get("server") or ""), str(source.get("tool") or ""))
 
 
