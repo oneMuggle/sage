@@ -157,6 +157,74 @@ function CloseToTrayCard(): JSX.Element {
   );
 }
 
+/**
+ * 桌面通知偏好——状态由 Electron 主进程持有（sage-notification-prefs.json），
+ * 与 CloseToTrayCard 同模式：renderer 只做 UI，主进程负责门控 OS 通知。
+ */
+function NotificationPrefsCard(): JSX.Element {
+  const { t } = useI18n();
+  const [prefs, setPrefs] = useState<{ enabled: boolean; backgroundTasks: boolean } | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    window.electronAPI
+      ?.getNotificationPrefs?.()
+      .then((resp) => {
+        if (mounted) {
+          setPrefs({
+            enabled: resp.enabled === true,
+            backgroundTasks: resp.backgroundTasks === true,
+          });
+        }
+      })
+      .catch(() => {
+        if (mounted) setPrefs({ enabled: true, backgroundTasks: true });
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const update = (patch: Partial<{ enabled: boolean; backgroundTasks: boolean }>): void => {
+    if (!prefs) return;
+    const next = { ...prefs, ...patch };
+    setPrefs(next);
+    window.electronAPI?.setNotificationPrefs?.(next).catch(() => undefined);
+  };
+
+  return (
+    <section data-testid="notification-prefs-section">
+      <h3 className="text-sm font-semibold text-text mb-3">{t('settings.basic.notifications')}</h3>
+      <SettingRow
+        anchor="notifications_enabled"
+        label={t('settings.basic.notifications_enabled_label')}
+        desc={t('settings.basic.notifications_enabled_desc')}
+      >
+        {prefs === null ? (
+          <span className="text-xs text-muted">…</span>
+        ) : (
+          <Toggle value={prefs.enabled} onChange={(v) => update({ enabled: v })} />
+        )}
+      </SettingRow>
+      <SettingRow
+        anchor="notifications_background"
+        label={t('settings.basic.notifications_background_label')}
+        desc={t('settings.basic.notifications_background_desc')}
+      >
+        {prefs === null ? (
+          <span className="text-xs text-muted">…</span>
+        ) : (
+          <Toggle
+            value={prefs.enabled && prefs.backgroundTasks}
+            onChange={(v) => update({ backgroundTasks: v })}
+            disabled={!prefs.enabled}
+          />
+        )}
+      </SettingRow>
+    </section>
+  );
+}
+
 export function BasicTab() {
   const { t } = useI18n();
   const { settings, updateSettings } = useSettings();
@@ -418,6 +486,7 @@ export function BasicTab() {
         </SettingRow>
       </section>
       <CloseToTrayCard />
+      <NotificationPrefsCard />
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.basic.section.demo')}</h3>
         <DemoModeSection />

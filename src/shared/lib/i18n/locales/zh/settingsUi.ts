@@ -10,6 +10,12 @@ export const zhSettingsUi = {
   'settings.basic.close_to_tray_desc':
     '点关闭按钮时隐藏到系统托盘而非退出；从托盘图标或 Alt+Shift+S 恢复',
   'settings.basic.close_to_tray_label': '关闭时隐藏到托盘',
+  'settings.basic.notifications': '通知',
+  'settings.basic.notifications_enabled_label': '启用桌面通知',
+  'settings.basic.notifications_enabled_desc':
+    '会话完成/失败、审批等待时弹出系统通知（最小化或隐藏到托盘后仍有效）',
+  'settings.basic.notifications_background_label': '后台任务通知',
+  'settings.basic.notifications_background_desc': '定时任务触发、待办到期、后台任务完成时提醒',
   'settings.basic.conversation': '对话',
   'settings.basic.history_size_desc': '输入框按上下键可调出的最近发送记录数量（每会话独立，1–200）',
   'settings.basic.history_size_label': '历史条数上限',
@@ -109,7 +115,8 @@ export const zhSettingsUi = {
   'settings.endpoints.field.reasoning_effort.high': '高',
   'settings.endpoints.field.reasoning_effort_hint': '请求模型输出思考过程时的力度',
   'settings.endpoints.field.thinking_budget': '思考预算 (tokens)',
-  'settings.endpoints.field.thinking_budget_hint': '思考过程的最大 token 数；0 = 关闭，留空 = 用上游默认',
+  'settings.endpoints.field.thinking_budget_hint':
+    '思考过程的最大 token 数；0 = 关闭，留空 = 用上游默认',
   'settings.endpoints.model_count': '{n} 个模型',
   'settings.endpoints.model_id_hint': '模型',
   'settings.endpoints.model_id_placeholder': '留空走 ModelsTab 选择',
