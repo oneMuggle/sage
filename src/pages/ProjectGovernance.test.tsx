@@ -47,6 +47,7 @@ vi.mock('../features/project-type', () => ({
   TaskDecomposeDialog: () => <div data-testid="task-decompose-stub" />,
   ProjectTypeBadge: ({ type }: { type: string }) => <span data-testid="type-badge">{type}</span>,
   GovernanceRulesPanel: () => <div data-testid="rules-panel-stub" />,
+  ReferenceManager: () => <div data-testid="reference-manager-stub" />,
 }));
 
 vi.mock('../features/project-type/StudioMaterialsAndProfilePanels', () => ({
@@ -166,14 +167,24 @@ describe('ProjectGovernance', () => {
     expect(screen.getByText('/home/user/project')).toBeInTheDocument();
   });
 
-  it('renders 3 governance tabs', async () => {
+  it('renders 4 governance tabs', async () => {
     renderAt('proj-1');
     await waitFor(() => {
       expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
     });
     expect(screen.getByTestId('governance-tab-overview')).toBeInTheDocument();
     expect(screen.getByTestId('governance-tab-knowledge')).toBeInTheDocument();
+    expect(screen.getByTestId('governance-tab-references')).toBeInTheDocument();
     expect(screen.getByTestId('governance-tab-settings')).toBeInTheDocument();
+  });
+
+  it('opens the file references manager from its tab', async () => {
+    renderAt('proj-1');
+    await waitFor(() => {
+      expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('governance-tab-references'));
+    expect(screen.getByTestId('reference-manager-stub')).toBeInTheDocument();
   });
 
   it('defaults to overview tab showing the project home and domain cards', async () => {

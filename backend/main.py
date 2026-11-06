@@ -113,6 +113,7 @@ from backend.api.permission_routes import router as permission_router
 from backend.api.playbook_routes import router as playbook_router
 from backend.api.plugin_routes import router as plugin_router
 from backend.api.project_ai_routes import router as project_ai_router
+from backend.api.project_reference_routes import router as project_reference_router
 from backend.api.project_routes import router as project_router
 from backend.api.prompt_routes import router as prompt_router
 from backend.api.question_routes import router as question_router
@@ -1198,6 +1199,8 @@ app.include_router(git_status_router, prefix="/api/v1")
 app.include_router(worktree_router, prefix="/api/v1")
 # 项目模块 P1 (2026-09-13): /api/v1/projects 最近项目注册表 + 项目内会话
 app.include_router(project_router, prefix="/api/v1")
+# 文件引用 P5 (2026-11-05): /api/v1/projects/{id}/references + /scan
+app.include_router(project_reference_router, prefix="/api/v1")
 # AI 增强 M1 (2026-10-12): /api/v1/projects/{id}/ai/decompose-tasks/*
 app.include_router(project_ai_router, prefix="/api/v1")
 # 项目规程 (2026-10-31): /api/v1/playbooks/* 与 /api/v1/projects/{id}/playbook/*

@@ -12,10 +12,10 @@
     "backend/application/services/chat_service.py": 1145,
     "backend/core/legacy/agent.py": 3619,
     "backend/core/legacy/llm_client.py": 1457,
-    "backend/data/database.py": 2327,
+    "backend/data/database.py": 2357,
     "backend/data/session_repo.py": 1120,
     "backend/data/settings_canonicalizer.py": 1023,
-    "backend/main.py": 1404,
+    "backend/main.py": 1407,
     "backend/mcp/pool.py": 915,
     "backend/office/edit.py": 1297,
     "backend/office/excel.py": 1003,
@@ -64,8 +64,8 @@
     "backend/services/arena_draw_engine.py": 1054,
     "backend/tools/web_render.py": 928,
     "backend/api/project_ai_routes.py": 859,
-    "src/shared/api/projectApi.ts": 1463,
-    "src/shared/api/projectApiTypes.ts": 1564,
+    "src/shared/api/projectApi.ts": 1584,
+    "src/shared/api/projectApiTypes.ts": 1766,
     "src/widgets/chat/ChatInput.tsx": 894,
     "src/widgets/chat/Message.tsx": 807,
     "src/features/send-message/useChat.ts": 1104,
@@ -78,7 +78,8 @@
     "src/pages/settings/PluginsTab.tsx": 687,
     "backend/tests/unit/test_design_routes.py": 975,
     "backend/adapters/out/skill/inproc.py": 949,
-    "backend/api/project_routes.py": 1155,
+    "backend/api/project_routes.py": 1296,
+    "backend/api/project_schemas.py": 826,
     "backend/services/project_wiki_generator.py": 902,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
     "backend/tools/config_tool.py": 995,
@@ -87,6 +88,6 @@
     "electron/preload.ts": 907,
     "src/features/playbook/PlaybookCard.tsx": 825,
     "src/features/project-type/PolymorphicArchetypeCards.tsx": 879,
-    "src/pages/ProjectGovernance.tsx": 852
+    "src/pages/ProjectGovernance.tsx": 861
   }
 }

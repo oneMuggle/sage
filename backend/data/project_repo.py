@@ -73,6 +73,11 @@ class Project:
     bootstrap_state: Optional[str] = None
     # 2026-10-31: 项目规程状态 JSON（当前阶段、阶段历史、豁免项、忽略建议）。
     playbook_state: Optional[str] = None
+    # 2026-11-05: 项目嵌套（P2 of 2026-11-05 设计）。parent_id 是派生缓存
+    # （真相源是文件系统路径），由 workspace_scanner 扫描时计算并写入。
+    # discovery_source 标记子项目被发现的方式：'manual' | 'template' | 'context_file'。
+    parent_id: Optional[str] = None
+    discovery_source: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -91,6 +96,8 @@ class Project:
             "project_sub_type": self.project_sub_type,
             "bootstrap_state": self.bootstrap_state,
             "playbook_state": self.playbook_state,
+            "parent_id": self.parent_id,
+            "discovery_source": self.discovery_source,
         }
 
 
@@ -119,6 +126,8 @@ def _row_to_project(row) -> Project:  # noqa: ANN001 — sqlite3.Row
         project_sub_type=row["project_sub_type"] if "project_sub_type" in row.keys() else None,  # noqa: SIM118
         bootstrap_state=row["bootstrap_state"] if "bootstrap_state" in row.keys() else None,  # noqa: SIM118
         playbook_state=row["playbook_state"] if "playbook_state" in row.keys() else None,  # noqa: SIM118
+        parent_id=row["parent_id"] if "parent_id" in row.keys() else None,  # noqa: SIM118
+        discovery_source=row["discovery_source"] if "discovery_source" in row.keys() else None,  # noqa: SIM118
     )
 
 
@@ -412,6 +421,26 @@ class ProjectRepository:
         cursor.execute(
             "UPDATE projects SET playbook_state = ? WHERE id = ?",
             (state_json, project_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def update_nesting(
+        self,
+        project_id: str,
+        parent_id: Optional[str],
+        discovery_source: Optional[str],
+    ) -> bool:
+        """更新项目嵌套关系（parent_id + discovery_source）。
+
+        由 workspace_scanner 在扫描时调用，写入派生的父子关系和发现来源。
+        不存在返回 False。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET parent_id = ?, discovery_source = ? WHERE id = ?",
+            (parent_id, discovery_source, project_id),
         )
         conn.commit()
         return cursor.rowcount > 0

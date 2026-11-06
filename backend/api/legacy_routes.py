@@ -1229,14 +1229,14 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 绑定 workspace 时注入; 任何失败静默跳过 (见 backend/chat/
             # project_context.py)。独立标记块, rebase 友好。
             try:
-                from backend.chat.project_context import discover_project_context
+                from backend.chat import project_context_cascade
                 from backend.office.session_workspace import get_workspace_binding
 
                 m6_binding = get_workspace_binding(
                     get_database().get_connection(), data.session_id
                 )
                 if m6_binding is not None and m6_binding.workspace_path:
-                    m6_context_block = discover_project_context(
+                    m6_context_block = project_context_cascade.discover_project_context_cascade(
                         m6_binding.workspace_path
                     ).render()
                     if m6_context_block:
