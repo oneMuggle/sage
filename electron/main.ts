@@ -451,6 +451,7 @@ let notificationPrefs: NotificationPrefs = {
   backgroundTasks: true,
   webhookUrl: '',
   slackWebhookUrl: '',
+  webhookSecret: '',
 };
 try {
   notificationPrefs = readNotificationPrefs(
@@ -1642,6 +1643,8 @@ async function registerIpcHandlers(): Promise<void> {
         webhookUrl: typeof payload?.webhookUrl === 'string' ? payload.webhookUrl.trim() : '',
         slackWebhookUrl:
           typeof payload?.slackWebhookUrl === 'string' ? payload.slackWebhookUrl.trim() : '',
+        webhookSecret:
+          typeof payload?.webhookSecret === 'string' ? payload.webhookSecret.trim() : '',
       };
       try {
         writeNotificationPrefs(
@@ -2126,12 +2129,13 @@ async function registerIpcHandlers(): Promise<void> {
           silent: false,
         }).show();
       },
-      // 2026-11-06 Phase 3: 每条通知额外投递 Webhook / Slack（fire-and-forget）
-      deliver: createWebhookDeliver(
-        () => notificationPrefs,
-        fetch as unknown as Parameters<typeof createWebhookDeliver>[1],
-        (event, details) => logger.warn(event, details),
-      ),
+      // 2026-11-06 Phase 3/4: 每条通知额外投递 Webhook / Slack（fire-and-forget）
+      deliver: createWebhookDeliver(() => notificationPrefs, {
+        fetchImpl: fetch as unknown as NonNullable<
+          Parameters<typeof createWebhookDeliver>[1]
+        >['fetchImpl'],
+        log: (event, details) => logger.warn(event, details),
+      }),
       intervalMs: SCHEDULER_NOTIFICATION_POLL_MS,
       log: (event, details) => logger.warn(event, details),
     });

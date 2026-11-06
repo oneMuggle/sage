@@ -26,6 +26,7 @@ from backend.tools.bash_session_persistence import StoredSessionRecord  # noqa: 
 from backend.tools.subprocess_util import (  # noqa: E402
     file_identity,
     make_temp_output_file,
+    process_start_token,
     spawn_verified,
 )
 
@@ -83,7 +84,7 @@ def _kill(verified) -> None:
         verified.process.wait(timeout=5)
 
 
-def _record(shell_id, verified, stdout_path, stderr_path, *, pgid_offset=0, identity=None):
+def _record(shell_id, verified, stdout_path, stderr_path, *, pgid_offset=0, identity=None, start_token=None):
     return StoredSessionRecord(
         shell_id=shell_id,
         pid=verified.process.pid,
@@ -96,6 +97,11 @@ def _record(shell_id, verified, stdout_path, stderr_path, *, pgid_offset=0, iden
         stdout_offset=0,
         stderr_offset=0,
         started_at=int(time.time()),
+        start_token=(
+            start_token
+            if start_token is not None
+            else process_start_token(verified.process.pid)
+        ),
     )
 
 
@@ -152,6 +158,28 @@ class TestRestore:
         try:
             assert registry.restore() == 0
             assert store.removed == ["sh-recycled"]
+        finally:
+            _kill(verified)
+            registry.shutdown()
+
+    def test_start_token_mismatch_treated_as_exited(self, fresh_queue) -> None:
+        verified, stdout_path, stderr_path = _spawn_live()
+        store = FakeStore(
+            [
+                _record(
+                    "sh-reused",
+                    verified,
+                    stdout_path,
+                    stderr_path,
+                    start_token="bogus:token",
+                )
+            ]
+        )
+        registry = BashSessionRegistry(store_getter=lambda: store)
+        try:
+            assert registry.restore() == 0
+            assert store.removed == ["sh-reused"]
+            assert len(fresh_queue.drain()) == 1
         finally:
             _kill(verified)
             registry.shutdown()

@@ -99,6 +99,89 @@ def _windows_process_alive(pid: int) -> bool:
     return alive
 
 
+def _read_linux_start_ticks(pid: int) -> Optional[str]:
+    """读取 /proc/<pid>/stat 的 starttime（字段 22）并附带 boot_id。"""
+    try:
+        with open("/proc/sys/kernel/random/boot_id", encoding="utf-8") as handle:
+            boot_id = handle.read().strip()
+    except OSError:
+        boot_id = ""
+    try:
+        with open(f"/proc/{int(pid)}/stat", encoding="utf-8") as handle:
+            stat_line = handle.read()
+    except OSError:
+        return None
+    # comm (字段 2) 可能含空格/括号：以最后一个 ')' 为界切出后续字段。
+    tail = stat_line.rpartition(")")[2].strip().split()
+    # tail[0] = 字段 3 (state)；starttime 是字段 22 → tail[19]
+    if len(tail) <= 19:
+        return None
+    return f"{boot_id}:{tail[19]}"
+
+
+def _ps_start_token(pid: int) -> Optional[str]:
+    """macOS/BSD 后备：ps -o lstart= 输出。"""
+    try:
+        completed = subprocess.run(
+            ["ps", "-o", "lstart=", "-p", str(int(pid))],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        token = (completed.stdout or "").strip()
+        return f"ps:{token}" if token else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _windows_start_token(pid: int) -> Optional[str]:
+    """Windows：wmic 读取进程 CreationDate（Win7 可用）。"""
+    try:
+        completed = subprocess.run(
+            [
+                "wmic",
+                "process",
+                "where",
+                f"ProcessId={int(pid)}",
+                "get",
+                "CreationDate",
+                "/value",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=(
+                getattr(subprocess, "CREATE_NO_WINDOW", 0) if _IS_WINDOWS else 0
+            ),
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in (completed.stdout or "").splitlines():
+        stripped = line.strip()
+        if stripped.lower().startswith("creationdate="):
+            value = stripped.split("=", 1)[1].strip()
+            return f"wmic:{value}" if value else None
+    return None
+
+
+def process_start_token(pid: int) -> Optional[str]:
+    """返回进程启动标识（用于跨重启校验 PID 复用）。
+
+    - Linux：``<boot_id>:<starttime ticks>``（/proc/<pid>/stat 第 22 字段）
+    - macOS/BSD：``ps:<lstart>``
+    - Windows：``wmic:<CreationDate>``
+    - 读取失败 → ``None``（恢复路径按 fail-closed 处理）
+    """
+    if _IS_WINDOWS:
+        return _windows_start_token(pid)
+    linux_token = _read_linux_start_ticks(pid)
+    if linux_token is not None:
+        return linux_token
+    return _ps_start_token(pid)
+
+
 @dataclass(frozen=True)
 class VerifiedProcess:
     process: Any
@@ -125,26 +208,32 @@ class ResurrectedProcess:
 
     pid: int
     pgid: int
+    start_token: Optional[str] = None
     returncode: Optional[int] = None
+
+    def _alive(self) -> bool:
+        if _IS_WINDOWS:
+            # Windows 无 os.getpgid：tasklist 探测存活即可。
+            return _windows_process_alive(self.pid)
+        try:
+            return os.getpgid(self.pid) == self.pgid
+        except (ProcessLookupError, OSError):
+            return False
 
     def poll(self) -> Optional[int]:
         if self.returncode is not None:
             return self.returncode
-        if _IS_WINDOWS:
-            # Windows 无 os.getpgid：tasklist 探测存活即可（PID 复用检测弱于
-            # POSIX，可接受 —— taskkill /T 仍能安全终止进程树）。
-            if not _windows_process_alive(self.pid):
+        if not self._alive():
+            # 进程不存在 / PID 被复用为其它进程组 —— 我们登记的进程已结束。
+            self.returncode = UNKNOWN_EXIT_CODE
+            return self.returncode
+        if self.start_token is not None:
+            # 2026-11-06 Phase 4：强校验进程启动标识，防 PID 复用误认。
+            # 读取失败或与登记值不符 → fail-closed 视为已退出。
+            current = process_start_token(self.pid)
+            if current is None or current != self.start_token:
                 self.returncode = UNKNOWN_EXIT_CODE
-            return self.returncode
-        try:
-            current_pgid = os.getpgid(self.pid)
-        except (ProcessLookupError, OSError):
-            self.returncode = UNKNOWN_EXIT_CODE
-            return self.returncode
-        if current_pgid != self.pgid:
-            # PID 被复用为其它进程组 —— 我们登记的进程已经结束。
-            self.returncode = UNKNOWN_EXIT_CODE
-            return self.returncode
+                return self.returncode
         return None
 
     def wait(self, timeout: Optional[float] = None) -> int:
