@@ -28,7 +28,7 @@ export interface DocumentCanvasProps {
   fidelityAvailable?: boolean;
   /** 就地修改（公式缓存重算 / PDF 表单填充）后重新读取当前文档。 */
   onRefresh?: () => void;
-  /** 导入进行中时禁用空态的再次导入。 */
+  /** 导入进行中时禁用空态导入与画布拖放替换。 */
   disabled?: boolean;
 }
 
@@ -53,13 +53,16 @@ export function DocumentCanvas({
   const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+    if (disabled) return;
     if (!isDragging) setIsDragging(true);
   };
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    // 导入进行中不接受拖放：不 preventDefault，浏览器就显示"禁止"光标。
+    if (disabled) return;
     // 不 preventDefault 浏览器会拒绝 drop。
     e.preventDefault();
-    e.stopPropagation();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
     if (!isDragging) setIsDragging(true);
   };
@@ -76,6 +79,7 @@ export function DocumentCanvas({
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
+    if (disabled) return;
     const sourcePaths = Array.from(e.dataTransfer?.files ?? [])
       .map((file) => (file as File & { path?: string }).path)
       .filter((p): p is string => Boolean(p));

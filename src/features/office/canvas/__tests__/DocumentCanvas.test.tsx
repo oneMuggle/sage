@@ -5,6 +5,7 @@
  *  - 空态渲染 OfficeIntake，有文档时渲染 OfficePreviewPanel；
  *  - 有文档时把文件拖到画布上 → 显示替换遮罩；
  *  - 拖放文件 → onDropFiles 收到操作系统源路径；
+ *  - 划过子元素不误关遮罩，落点后遮罩消失，导入进行中忽略拖放；
  *  - fidelityAvailable / onRefresh / disabled 等透传不丢失。
  */
 
@@ -112,6 +113,52 @@ describe('DocumentCanvas', () => {
 
     expect(onDropFiles).toHaveBeenCalledWith(['/tmp/dropped.docx']);
     expect(screen.queryByTestId('office-document-canvas-drop-overlay')).not.toBeInTheDocument();
+  });
+
+  it('keeps the overlay when the pointer merely moves onto a child element', () => {
+    renderCanvas({ preview: makePreview() });
+    const root = screen.getByTestId('office-document-canvas');
+    fireEvent.dragEnter(root, { dataTransfer: { files: [] } });
+    expect(screen.getByTestId('office-document-canvas-drop-overlay')).toBeInTheDocument();
+
+    // relatedTarget 仍在画布内部 → 只是划过子元素，不是真正离开
+    const child = screen.getByTestId('office-preview-panel');
+    const leaveEvent = new Event('dragleave', { bubbles: true, cancelable: true });
+    Object.defineProperty(leaveEvent, 'relatedTarget', { value: child });
+    fireEvent(root, leaveEvent);
+
+    expect(screen.getByTestId('office-document-canvas-drop-overlay')).toBeInTheDocument();
+  });
+
+  it('hides the overlay once the drop lands', () => {
+    const onDropFiles = vi.fn();
+    renderCanvas({ preview: makePreview(), onDropFiles });
+    const root = screen.getByTestId('office-document-canvas');
+
+    fireEvent.dragEnter(root, { dataTransfer: { files: [] } });
+    expect(screen.getByTestId('office-document-canvas-drop-overlay')).toBeInTheDocument();
+
+    fireEvent.drop(root, {
+      dataTransfer: { files: [makeDroppedFile('dropped.docx', '/tmp/dropped.docx')] },
+    });
+
+    expect(onDropFiles).toHaveBeenCalledWith(['/tmp/dropped.docx']);
+    expect(screen.queryByTestId('office-document-canvas-drop-overlay')).not.toBeInTheDocument();
+  });
+
+  it('ignores a drop while an import is already in flight', () => {
+    const onDropFiles = vi.fn();
+    renderCanvas({ preview: makePreview(), onDropFiles, disabled: true });
+    const root = screen.getByTestId('office-document-canvas');
+
+    fireEvent.dragEnter(root, { dataTransfer: { files: [] } });
+    expect(screen.queryByTestId('office-document-canvas-drop-overlay')).not.toBeInTheDocument();
+
+    fireEvent.drop(root, {
+      dataTransfer: { files: [makeDroppedFile('dropped.docx', '/tmp/dropped.docx')] },
+    });
+
+    expect(onDropFiles).not.toHaveBeenCalled();
   });
 
   it('does not call onDropFiles when no dropped file carries an OS path', () => {
