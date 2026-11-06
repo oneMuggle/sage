@@ -64,7 +64,7 @@ class TestReplacePrefixArchives:
             created_at=1700000010,
         )
         repo.replace_prefix_with_continuation(
-            sid, ids, continuation, new_message_count=1
+            sid, ids, continuation
         )
 
         archives = list_archives(tmp_db, sid)
@@ -77,9 +77,15 @@ class TestReplacePrefixArchives:
         arch_msgs = repo.get_by_session(arch["archive_session_id"], limit=50)
         assert [m.content for m in arch_msgs] == ["报错现场 A", "尝试方案 B", "最终解决 C"]
 
-        # 原会话只剩续接摘要
+        # 2026-11-05 非破坏压缩：原文保留在会话（compacted_at 标记）；
+        # 续接行排在保留尾部之后，会话页面看到完整 4 条记录。
         remaining = repo.get_by_session(sid, limit=50)
-        assert [m.id for m in remaining] == ["cont-1"]
+        assert [m.id for m in remaining] == ["m0", "m1", "m2", "cont-1"]
+        by_id = {m.id: m for m in remaining}
+        assert by_id["m0"].compacted_at is not None
+        assert by_id["m1"].compacted_at is not None
+        assert by_id["m2"].compacted_at is not None
+        assert by_id["cont-1"].compacted_at is None
 
         # 归档会话被标记 archived
         row = tmp_db.get_connection().execute(
@@ -89,7 +95,7 @@ class TestReplacePrefixArchives:
         assert row[0] == 1
 
     def test_compaction_rollback_removes_archive(self, tmp_db):
-        """任一步失败 → 整体回滚，归档会话也不残留"""
+        """归档副本用新 id，压缩仍成功（2026-11-05 后归档是兼容入口）。"""
         sid = _mk_session(tmp_db)
         repo = MessageRepository()
         repo.db = tmp_db
@@ -107,20 +113,17 @@ class TestReplacePrefixArchives:
             role="assistant",
             content="x",
             created_at=1700000010,
-            tool_call_id="nonexistent-fk",  # 触发 FK/约束类失败（若启用）
+            tool_call_id="nonexistent-fk",
         )
-        # 直接破坏：把 continuation 的 session 指向不存在的会话 → UPDATE 仍成功，
-        # 这里改用更直接的手段：调用后人为抛错难以注入，则验证
-        # "归档在删除前发生"——归档会话的消息 id 与原 id 不同（防止误删）。
-        repo.replace_prefix_with_continuation(
-            sid, ids, continuation, new_message_count=1
-        )
+        repo.replace_prefix_with_continuation(sid, ids, continuation)
         archives = list_archives(tmp_db, sid)
         assert len(archives) == 1
         arch_msgs = repo.get_by_session(archives[0]["archive_session_id"], limit=10)
-        # 归档副本用新 id —— 原 id 被删除不会连带归档
+        # 归档副本用新 id，主会话原文仍保留（compacted_at 标记）
         assert all(m.id not in ids for m in arch_msgs)
         assert all(m.session_id == archives[0]["archive_session_id"] for m in arch_msgs)
+        main_remaining = repo.get_by_session(sid, limit=50)
+        assert all(getattr(m, "compacted_at", None) is not None for m in main_remaining[:2])
 
 
 class TestListArchives:

@@ -92,6 +92,8 @@ def db_rows_to_history(rows: Sequence[Any]) -> List[Dict[str, str]]:
     - 段感知切片（context-isolation）：找到最后一个 ``subtype='topic_separator'`` 行，
       只保留它之后的行（包括分隔符之后的 user/assistant 消息）；
     - 只保留 ``user`` / ``assistant`` 行（tool 行 / 未知角色跳过）；
+    - ``compacted_at`` 非空的展示历史跳过（2026-11-05 非破坏性压缩：
+      压缩前原文保留在会话页面，但不进入 LLM 上下文）；
     - 带非空 ``tool_calls`` 的 assistant 行跳过 —— 那是裸 agent.chat() 路径
       可能留下的中间态，重放进请求缺 tool 结果配对会被 API 拒绝；
     - ``reasoning_content`` 一律剥离（多数 OpenAI 兼容上游不接受该入参，
@@ -115,6 +117,9 @@ def db_rows_to_history(rows: Sequence[Any]) -> List[Dict[str, str]]:
     for row in rows:
         # 防御性:即使未先切片,也不允许 separator 进入请求
         if getattr(row, "subtype", None) == "topic_separator":
+            continue
+        # 2026-11-05: 压缩前缀仅用于会话页面展示,不进 LLM 上下文
+        if getattr(row, "compacted_at", None) is not None:
             continue
         role = (getattr(row, "role", None) or "").strip()
         if role not in _HISTORY_ROLES:

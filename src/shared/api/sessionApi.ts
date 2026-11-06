@@ -88,7 +88,7 @@ export const sessionApi = {
     });
   },
 
-  async getMessages(sessionId: string): Promise<Message[]> {
+  async getMessages(sessionId: string, limit = 100000): Promise<Message[]> {
     // 验证会话ID
     if (!isValidSessionId(sessionId)) {
       throw new ApiException({
@@ -100,7 +100,9 @@ export const sessionApi = {
 
     return withRetry(async () => {
       try {
-        return await invoke<Message[]>('get_messages', { sessionId });
+        // 2026-11-05: 后端缺省 limit=100 会按 created_at ASC 截断（归档视图
+        // 只能看到最早 100 条且无翻页）；与 store.loadMessages 同口径全量读取。
+        return await invoke<Message[]>('get_messages', { sessionId, limit });
       } catch (error) {
         throw handleApiError(error);
       }

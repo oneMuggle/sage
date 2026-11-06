@@ -61,6 +61,8 @@ def _message_event_payload(row: Dict[str, Any]) -> Dict[str, Any]:
         "subtype": row.get("subtype"),
         "segment_id": row.get("segment_id"),
         "tool_calls": row.get("tool_calls"),
+        # 2026-11-05: 与 messages.compacted_at 对齐（事件投影折叠依赖）
+        "compacted_at": row.get("compacted_at"),
         "created_at": row.get("created_at"),
     }
 

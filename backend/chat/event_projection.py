@@ -84,6 +84,9 @@ def events_to_history(events: Sequence[Any]) -> List[Dict[str, str]]:
             continue
         if str(payload_i.get("id")) in excluded_ids:
             continue
+        # 2026-11-05: 已压缩的展示行不参与切段（与 db_rows_to_history 对齐）
+        if payload_i.get("compacted_at") is not None:
+            continue
         last_sep_idx = i
         break
     events = events[last_sep_idx + 1:]
@@ -99,6 +102,10 @@ def events_to_history(events: Sequence[Any]) -> List[Dict[str, str]]:
         payload = _event_payload(event)
         # 已被删除/压缩折叠的消息不进当前视图
         if str(payload.get("id")) in excluded_ids:
+            continue
+        # 2026-11-05: fork 等复制路径的事件 payload 携带 compacted_at ——
+        # 压缩前缀仅用于展示，不进入模型上下文（与 db_rows_to_history 对齐）
+        if payload.get("compacted_at") is not None:
             continue
         # 防御性：即使未先切片，也不允许 separator 进入请求
         if payload.get("subtype") == "topic_separator":
