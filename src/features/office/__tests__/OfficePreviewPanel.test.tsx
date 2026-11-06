@@ -472,6 +472,7 @@ describe('OfficePreviewPanel — export PDF button (item 2.7)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('converter-guide-dialog')).toBeInTheDocument();
     });
+    expect(mockExportPdf).not.toHaveBeenCalled();
     expect(screen.getByTestId('office-fidelity-toggle')).toBeEnabled();
   });
 

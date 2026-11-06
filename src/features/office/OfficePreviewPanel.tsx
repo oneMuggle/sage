@@ -182,7 +182,7 @@ export function OfficePreviewPanel({
 
   // P2-D (office-p2d): PDF AcroForm 表单填写对话框
   const [formDialogOpen, setFormDialogOpen] = useState(false);
-  // Task 4: converter guide dialog (shown when export PDF is clicked without a converter)
+  // P1: 转换器安装引导对话框（无本机转换器时点击导出 PDF 触发）
   const [converterGuideOpen, setConverterGuideOpen] = useState(false);
   // P2-C (office-p2c): excel 公式缓存重算（soffice 重算回写，重算前服务端自动快照）
   const [recalcing, setRecalcing] = useState(false);
@@ -758,10 +758,7 @@ export function OfficePreviewPanel({
         </div>
       )}
 
-      <ConverterGuideDialog
-        open={converterGuideOpen}
-        onOpenChange={setConverterGuideOpen}
-      />
+      <ConverterGuideDialog open={converterGuideOpen} onOpenChange={setConverterGuideOpen} />
 
       {/* Round A P1: 高保真开 → 内嵌 Chromium PDF viewer；关 → 结构化预览。
           F3 (office-p0): pdf 源文件另有原文开关（/pdf/data，高保真管线
