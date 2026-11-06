@@ -34,6 +34,7 @@ from .frontmatter import (
     _is_valid_name,
     _split_frontmatter,
     _strip_bom,
+    dump,
     parse,
 )
 from .resources import ALLOWED_RESOURCE_DIRS
@@ -392,7 +393,8 @@ class SkillMdImporter:
 
             # 写盘；辅助同时检查 root、技能目录和目标文件的 symlink。
             try:
-                write_skill_file(skills_dir, name, content, overwrite=False)
+                content_to_write = _with_import_provenance(meta, body, content)
+                write_skill_file(skills_dir, name, content_to_write, overwrite=False)
             except FileExistsError:
                 skipped.append({"name": name, "reason": "already_exists"})
                 continue
@@ -490,7 +492,7 @@ class SkillMdImporter:
             )
 
         try:
-            meta, _body = parse_file_from_bytes(entry_content, fallback_name="SKILL.md")
+            meta, entry_body = parse_file_from_bytes(entry_content, fallback_name="SKILL.md")
         except Exception as exc:  # noqa: BLE001
             # 与单文件导入共用同一分类口径：显式非法的 name → invalid_name，
             # 其余解析失败 → parse_error。
@@ -502,6 +504,7 @@ class SkillMdImporter:
         name = meta.get("name", "")
         if not _is_valid_name(name):
             raise SkillDirectoryImportError("invalid_name", "SKILL.md 的 name 字段非法")
+        entry_content = _with_import_provenance(meta, entry_body, entry_content)
 
         if self._registry.exists(name):
             return {
@@ -702,6 +705,23 @@ def _strip_md_extension(filename: str) -> str:
     if filename.lower().endswith(".md"):
         return filename[:-3]
     return filename
+
+
+def _with_import_provenance(meta: Dict[str, Any], body: str, original: Any) -> Any:
+    """Return SKILL.md bytes with ``metadata.provenance=user-imported``.
+
+    M2/M3 来源枚举依赖 provenance 区分「用户导入」与「AI 生成」。注入失败
+    （frontmatter 异常极端情况）保留原内容，不阻断导入。
+    """
+    try:
+        metadata = meta.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+        metadata.setdefault("provenance", "user-imported")
+        meta["metadata"] = metadata
+        return dump(meta, body).encode("utf-8")
+    except Exception:  # noqa: BLE001 — provenance 是展示增强，失败保留原文
+        return original
 
 
 def parse_file_from_bytes(

@@ -128,6 +128,14 @@ export interface SkillsElectronApiBridge {
    *  `pickedPath` 必须与上一次 pick 返回的路径一致（主进程会比对 recentPickedDirectory）；
    *  不一致 → 抛出「directory selection changed, please pick again」。 */
   importSkillDirectory: (pickedPath: string) => Promise<ImportResult>;
+  /** M3: open the effective writable skills directory in the OS file manager. */
+  openSkillDirectory: () => Promise<{ success: true }>;
+  /** M3: reveal a SKILL.md skill's real directory in the OS file manager. */
+  showSkillInFolder: (name: string) => Promise<{ success: true }>;
+  /** M4: export a single skill folder as a zip (save dialog). null = cancelled. */
+  exportSkill: (name: string) => Promise<{ ok: true; path: string } | null>;
+  /** M4: export all "my skills" as one zip (save dialog). null = cancelled. */
+  exportMySkills: () => Promise<{ ok: true; path: string } | null>;
 }
 
 /** M1-E: result of importing a `.sage` package (backend `import_specialist`). */

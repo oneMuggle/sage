@@ -15,6 +15,13 @@ import { useI18n } from '../../shared/lib/i18n';
 
 import SkillDraftDetail from './SkillDraftDetail';
 
+export interface SkillDraftListProps {
+  /** M1 空态入口: 由父页面实现「从最近会话生成」动作 */
+  onGenerateFromSession?: () => Promise<void> | void;
+  /** M1 空态入口: 由父页面实现「扫描冷技能」动作 */
+  onScanColdSkills?: () => Promise<void> | void;
+}
+
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
 function fill(template: string, vars: Record<string, string | number>): string {
   return Object.entries(vars).reduce(
@@ -25,7 +32,10 @@ function fill(template: string, vars: Record<string, string | number>): string {
 
 const POLL_INTERVAL_MS = 10000;
 
-const SkillDraftList: React.FC = () => {
+const SkillDraftList: React.FC<SkillDraftListProps> = ({
+  onGenerateFromSession,
+  onScanColdSkills,
+}) => {
   const [drafts, setDrafts] = useState<SkillDraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +44,6 @@ const SkillDraftList: React.FC = () => {
   const { t } = useI18n();
 
   /* v8 ignore start */
-
 
   /* v8 ignore stop */
 
@@ -109,16 +118,53 @@ const SkillDraftList: React.FC = () => {
 
   if (drafts.length === 0) {
     return (
-      <div className="text-center py-8">
-        <p className="text-muted">{t('skill_draft.no_drafts')}</p>
+      <div className="max-w-2xl mx-auto py-10 px-6">
+        <h2 className="text-base font-semibold text-text mb-3">
+          {t('skills_page.drafts_empty_title')}
+        </h2>
+        <p className="text-sm text-text-secondary mb-4">{t('skills_page.drafts_empty_intro')}</p>
+        <ul className="space-y-2 mb-5 text-sm text-text-secondary">
+          <li className="flex gap-2">
+            <span className="text-primary flex-shrink-0">1.</span>
+            <span>{t('skills_page.drafts_explainer_item_1')}</span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-primary flex-shrink-0">2.</span>
+            <span>{t('skills_page.drafts_explainer_item_2')}</span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-primary flex-shrink-0">3.</span>
+            <span>{t('skills_page.drafts_explainer_item_3')}</span>
+          </li>
+        </ul>
+        <p className="text-xs text-muted mb-5">{t('skills_page.drafts_require_llm')}</p>
+        <div className="flex flex-wrap gap-2">
+          {onGenerateFromSession && (
+            <button
+              type="button"
+              onClick={() => void onGenerateFromSession()}
+              className="px-3 py-1.5 text-sm rounded-radius-sm bg-primary text-white hover:bg-primary/90 transition-colors"
+            >
+              {t('skills_page.drafts_cta_generate_from_session')}
+            </button>
+          )}
+          {onScanColdSkills && (
+            <button
+              type="button"
+              onClick={() => void onScanColdSkills()}
+              className="px-3 py-1.5 text-sm rounded-radius-sm border border-border text-text-secondary hover:text-text hover:bg-bg-subtle transition-colors"
+            >
+              {t('skills_page.drafts_cta_scan_cold')}
+            </button>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-end gap-2">
-      </div>
+      <div className="flex items-center justify-end gap-2"></div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {drafts.map((draft) => (
           <div

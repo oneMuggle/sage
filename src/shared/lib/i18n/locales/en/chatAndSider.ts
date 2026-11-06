@@ -589,7 +589,7 @@ export const enChatAndSider = {
     'When enabled, scripts in SKILL.md (e.g. Bash/PowerShell) may be dispatched for execution. When disabled, all script dispatch requests are denied.',
   'settings.skills.directory.label': 'Skills directory',
   'settings.skills.directory.desc':
-    'Directory for SKILL.md files (absolute path). Empty = default path ~/.sage/skills.',
+    'Directory for SKILL.md files (absolute path). Empty = default path ~/.sage/skills. User skills survive app upgrades — do not point this at the app install directory.',
 
   // ─── Settings · Global rules (G1) ─
   'settings.global_rules.title': 'Global rules',
