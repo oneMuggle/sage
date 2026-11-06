@@ -120,6 +120,7 @@ from backend.api.question_routes import router as question_router
 from backend.api.request_body_limit import MaxRequestBodyMiddleware
 from backend.api.runtime_routes import router as runtime_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
+from backend.api.shell_routes import router as shell_router
 from backend.api.system_routes import router as system_router
 from backend.api.theme_router import router as theme_router
 from backend.api.todo_router import build_router as build_todo_router
@@ -1285,6 +1286,9 @@ app.include_router(embedder_router, prefix="/api/v1")
 
 # Phase 8: scheduled tasks — mounted for both API modes (independent feature)
 app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v1")
+
+# 2026-11-06 Phase 3: 后台 shell 列表 + 输出流（NDJSON）
+app.include_router(shell_router, prefix="/api/v1")
 
 # 2026-11-05: 会话唤醒 REST（A4 Suspend-Resume 的非 LLM 入口）。
 # 与 LLM 工具 wake_session_at 共用 WakeStore 单一事实源。

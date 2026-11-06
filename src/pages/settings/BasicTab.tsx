@@ -161,9 +161,19 @@ function CloseToTrayCard(): JSX.Element {
  * 桌面通知偏好——状态由 Electron 主进程持有（sage-notification-prefs.json），
  * 与 CloseToTrayCard 同模式：renderer 只做 UI，主进程负责门控 OS 通知。
  */
+type NotificationPrefsState = {
+  enabled: boolean;
+  backgroundTasks: boolean;
+  webhookUrl: string;
+  slackWebhookUrl: string;
+};
+
+/** 桌面通知偏好——状态由 Electron 主进程持有（sage-notification-prefs.json），
+ * 与 CloseToTrayCard 同模式：renderer 只做 UI，主进程负责门控 OS 通知与 Webhook 外发。
+ */
 function NotificationPrefsCard(): JSX.Element {
   const { t } = useI18n();
-  const [prefs, setPrefs] = useState<{ enabled: boolean; backgroundTasks: boolean } | null>(null);
+  const [prefs, setPrefs] = useState<NotificationPrefsState | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -174,23 +184,49 @@ function NotificationPrefsCard(): JSX.Element {
           setPrefs({
             enabled: resp.enabled === true,
             backgroundTasks: resp.backgroundTasks === true,
+            webhookUrl: resp.webhookUrl ?? '',
+            slackWebhookUrl: resp.slackWebhookUrl ?? '',
           });
         }
       })
       .catch(() => {
-        if (mounted) setPrefs({ enabled: true, backgroundTasks: true });
+        if (mounted) {
+          setPrefs({
+            enabled: true,
+            backgroundTasks: true,
+            webhookUrl: '',
+            slackWebhookUrl: '',
+          });
+        }
       });
     return () => {
       mounted = false;
     };
   }, []);
 
-  const update = (patch: Partial<{ enabled: boolean; backgroundTasks: boolean }>): void => {
+  const update = (patch: Partial<NotificationPrefsState>): void => {
     if (!prefs) return;
     const next = { ...prefs, ...patch };
     setPrefs(next);
     window.electronAPI?.setNotificationPrefs?.(next).catch(() => undefined);
   };
+
+  const urlInput = (
+    value: string,
+    onChange: (value: string) => void,
+    testId: string,
+    disabled = false,
+  ): JSX.Element => (
+    <input
+      type="url"
+      className="w-full rounded border border-border bg-bg px-2 py-1 text-xs text-text"
+      placeholder="https://"
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+      data-testid={testId}
+    />
+  );
 
   return (
     <section data-testid="notification-prefs-section">
@@ -219,6 +255,38 @@ function NotificationPrefsCard(): JSX.Element {
             onChange={(v) => update({ backgroundTasks: v })}
             disabled={!prefs.enabled}
           />
+        )}
+      </SettingRow>
+      <SettingRow
+        anchor="notifications_webhook"
+        label={t('settings.basic.notifications_webhook_label')}
+        desc={t('settings.basic.notifications_webhook_desc')}
+      >
+        {prefs === null ? (
+          <span className="text-xs text-muted">…</span>
+        ) : (
+          urlInput(
+            prefs.webhookUrl,
+            (v) => update({ webhookUrl: v }),
+            'notification-webhook-url',
+            !prefs.enabled,
+          )
+        )}
+      </SettingRow>
+      <SettingRow
+        anchor="notifications_slack"
+        label={t('settings.basic.notifications_slack_label')}
+        desc={t('settings.basic.notifications_slack_desc')}
+      >
+        {prefs === null ? (
+          <span className="text-xs text-muted">…</span>
+        ) : (
+          urlInput(
+            prefs.slackWebhookUrl,
+            (v) => update({ slackWebhookUrl: v }),
+            'notification-slack-url',
+            !prefs.enabled,
+          )
         )}
       </SettingRow>
     </section>

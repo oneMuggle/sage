@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
 import uuid
@@ -144,6 +143,11 @@ class BashSessionRegistry:
     def count(self) -> int:
         with self._lock:
             return len(self._sessions)
+
+    def list_sessions(self) -> List[BashSession]:
+        """返回当前注册表快照（供 ``GET /api/v1/shells`` 使用）。"""
+        with self._lock:
+            return list(self._sessions.values())
 
     def register(
         self,
@@ -392,17 +396,13 @@ class BashSessionRegistry:
     def restore(self) -> int:
         """从持久化恢复存活 shell；返回恢复数量。
 
-        - 仍存活（pgid 匹配）→ 加入注册表并登记默认退出通知；
+        - 仍存活（POSIX: pgid 匹配；Windows: tasklist 探测）→ 加入注册表并
+          登记默认退出通知；
         - 已结束 / PID 被复用 / 输出文件身份不匹配 → 删除记录并推一条
-          「未知退出码」完成通知（用户重启后仍能感知任务已结束）；
-        - Windows 上不做恢复（pgid 语义不同）：清理记录并返回 0。
+          「未知退出码」完成通知（用户重启后仍能感知任务已结束）。
         """
         store = self._get_store()
         if store is None:
-            return 0
-        if os.name == "nt":
-            for rec in store.list_all():
-                self._store_remove(rec.shell_id)
             return 0
         restored = 0
         for rec in store.list_all():
@@ -709,22 +709,18 @@ def get_registry() -> BashSessionRegistry:
         # 函数内 import：bash_config 仅标准库，但保持与消费方同一注入时点
         from .bash_config import load_bash_config
 
-        store_getter: Optional[Callable[[], Any]] = None
-        if os.name != "nt":
-            # 2026-11-06 Phase 2：POSIX 下接入 SQLite 持久化（延迟 import，
-            # 避免 import 期触碰数据库）。
-            from .bash_session_persistence import get_bash_session_store
+        # 2026-11-06 Phase 3：两平台都接入 SQLite 持久化（Windows 恢复通过
+        # tasklist 探测存活；延迟 import，避免 import 期触碰数据库）。
+        from .bash_session_persistence import get_bash_session_store
 
-            store_getter = get_bash_session_store
         _REGISTRY = BashSessionRegistry(
             max_sessions=load_bash_config().max_sessions,
-            store_getter=store_getter,
+            store_getter=get_bash_session_store,
         )
-        if store_getter is not None:
-            try:
-                _REGISTRY.restore()
-            except Exception:  # noqa: BLE001 — 恢复失败按纯内存模式继续
-                logger.exception("后台 shell 重启恢复失败")
+        try:
+            _REGISTRY.restore()
+        except Exception:  # noqa: BLE001 — 恢复失败按纯内存模式继续
+            logger.exception("后台 shell 重启恢复失败")
     return _REGISTRY
 
 
