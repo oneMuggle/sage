@@ -2,7 +2,11 @@
  * Skills Widgets - Skill list & card UI components
  */
 export { default as SkillList } from './SkillList';
+export type { SkillViewMode } from './SkillList';
 export { default as SkillCard } from './SkillCard';
+export { default as SkillRow } from './SkillRow';
+export { default as SkillDetailDrawer } from './SkillDetailDrawer';
+export { default as SkillOriginBadge } from './SkillOriginBadge';
 export { default as SkillDraftList } from './SkillDraftList';
 export { default as SkillAuditDrawer } from './SkillAuditDrawer';
 
