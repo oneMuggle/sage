@@ -129,7 +129,7 @@ export default function SkillDetailDrawer({
               <h2 className="text-lg font-semibold text-text truncate">{name}</h2>
               <SkillOriginBadge origin={origin} />
               {version && (
-                <span className="px-1.5 py-0.5 text-[11px] rounded-full bg-bg-subtle text-text-secondary">
+                <span className="px-1.5 py-0.5 text-ui-2xs rounded-full bg-bg-subtle text-text-secondary">
                   v{version}
                 </span>
               )}

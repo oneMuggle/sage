@@ -34,7 +34,7 @@ export default function SkillOriginBadge({ origin, className = '' }: SkillOrigin
   const tKey = ORIGIN_KEY[resolved] as Parameters<typeof t>[0];
   return (
     <span
-      className={`px-1.5 py-0.5 text-[11px] leading-none rounded-full whitespace-nowrap ${ORIGIN_STYLE[resolved]} ${className}`}
+      className={`px-1.5 py-0.5 text-ui-2xs leading-none rounded-full whitespace-nowrap ${ORIGIN_STYLE[resolved]} ${className}`}
     >
       {t(tKey)}
     </span>

@@ -128,12 +128,12 @@ export default function SkillRow({
               </span>
             )}
             {lifecycle === 'archived' && (
-              <span className="text-[11px] text-accent flex-shrink-0">
+              <span className="text-ui-2xs text-accent flex-shrink-0">
                 {t('skills_page.lifecycle_archived')}
               </span>
             )}
             {lifecycle === 'stale' && (
-              <span className="text-[11px] text-muted flex-shrink-0">
+              <span className="text-ui-2xs text-muted flex-shrink-0">
                 {t('skills_page.lifecycle_stale')}
               </span>
             )}
@@ -143,7 +143,7 @@ export default function SkillRow({
           </p>
         </button>
 
-        <span className="text-[11px] text-muted flex-shrink-0 hidden sm:inline">
+        <span className="text-ui-2xs text-muted flex-shrink-0 hidden sm:inline">
           {t('skills_page.usage_count').replace('{count}', String(usage_count))}
         </span>
 
