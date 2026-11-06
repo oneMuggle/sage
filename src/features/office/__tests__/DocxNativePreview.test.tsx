@@ -3,9 +3,21 @@
  * 去 script/iframe/object/embed/link 节点、javascript: 链接、on* 内联事件。
  */
 
-import { describe, expect, it } from 'vitest';
+import { act, render } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { formatDocxPreviewMetaJson, formatDocxPreviewMetaMarkdown, sanitizeRenderedDocx } from '../DocxNativePreview';
+import { officeApi } from '../../../shared/api/officeApi';
+import { I18nProvider } from '../../../shared/lib/i18n';
+import {
+  DocxNativePreview,
+  formatDocxPreviewMetaJson,
+  formatDocxPreviewMetaMarkdown,
+  sanitizeRenderedDocx,
+} from '../DocxNativePreview';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function makeContainer(html: string): HTMLElement {
   const div = document.createElement('div');
@@ -71,5 +83,35 @@ describe('sanitizeRenderedDocx', () => {
     );
     expect(parsed.managedPath).toBe('report.docx');
     expect(parsed.revision).toBe('rev1');
+  });
+});
+
+describe('DocxNativePreview — onError lifecycle', () => {
+  it('does not call onError when the load resolves after unmount', async () => {
+    let resolveRead: (value: unknown) => void = () => {};
+    vi.spyOn(officeApi, 'readWordData').mockReturnValue(
+      new Promise((resolve) => {
+        resolveRead = resolve;
+      }) as unknown as ReturnType<typeof officeApi.readWordData>,
+    );
+    const onError = vi.fn();
+
+    const { unmount } = render(
+      <I18nProvider defaultLocale="zh">
+        <DocxNativePreview
+          workspacePath="/tmp/ws"
+          managedPath="/tmp/ws/office/word/doc-word/report.docx"
+          onError={onError}
+        />
+      </I18nProvider>,
+    );
+
+    // Unmount before the read settles: the in-flight request is now cancelled.
+    unmount();
+    await act(async () => {
+      resolveRead({ ok: false, data_url: null, error: 'boom' });
+    });
+
+    expect(onError).not.toHaveBeenCalled();
   });
 });
