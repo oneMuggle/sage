@@ -88,6 +88,7 @@
     "electron/preload.ts": 936,
     "src/features/playbook/PlaybookCard.tsx": 825,
     "src/features/project-type/PolymorphicArchetypeCards.tsx": 879,
-    "src/pages/ProjectGovernance.tsx": 861
+    "src/pages/ProjectGovernance.tsx": 861,
+    "src/features/office/OfficePreviewPanel.tsx": 842
   }
 }
