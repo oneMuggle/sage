@@ -203,10 +203,11 @@ class ProjectKnowledgeExtractor:
             session_id, limit=10000, offset=0
         )
 
-        # 过滤 user/assistant，取最近 N 条
+        # 过滤 user/assistant，并剔除压缩展示行（非破坏压缩后原文仍在会话）；
+        # 取最近 N 条。
         filtered = [
             m for m in all_msgs
-            if m.role in ("user", "assistant")
+            if m.role in ("user", "assistant") and m.compacted_at is None
         ]
         recent = filtered[-limit:] if len(filtered) > limit else filtered
 

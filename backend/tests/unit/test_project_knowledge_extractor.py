@@ -475,3 +475,34 @@ class TestExtract:
                     project_id="proj-1",
                     session_id="session-1",
                 )
+
+
+def test_load_messages_excludes_compacted_rows(setup_test_db, mock_llm):
+    """2026-11-05 非破坏压缩：知识提取不得把压缩展示行当作新对话内容。"""
+    from backend.data.session_repo import Message, MessageRepository, SessionRepository
+
+    extractor = ProjectKnowledgeExtractor(llm_client=mock_llm)
+    session = SessionRepository().create(title="pke-retention")
+    repo = MessageRepository()
+    repo.save(
+        Message(
+            id="old-pke",
+            session_id=session.id,
+            role="user",
+            content="压缩前的旧内容",
+            created_at=1700000000000,
+            compacted_at=1700000005000,
+        )
+    )
+    repo.save(
+        Message(
+            id="new-pke",
+            session_id=session.id,
+            role="assistant",
+            content="保留的新内容",
+            created_at=1700000001000,
+        )
+    )
+
+    messages = extractor._load_messages(session.id)
+    assert [m["content"] for m in messages] == ["保留的新内容"]
