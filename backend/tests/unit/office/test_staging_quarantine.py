@@ -24,7 +24,7 @@ CREATE TABLE office_documents (
     id TEXT PRIMARY KEY, workspace_path TEXT NOT NULL, doc_type TEXT NOT NULL,
     original_filename TEXT, generated_filename TEXT NOT NULL, status TEXT NOT NULL,
     created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, metadata TEXT,
-    derived_from TEXT, archived_at INTEGER);
+    derived_from TEXT, archived_at INTEGER, active_spec_id TEXT);
 CREATE TABLE office_self_checks (
     id INTEGER PRIMARY KEY AUTOINCREMENT, doc_id TEXT NOT NULL, action TEXT NOT NULL,
     ok INTEGER NOT NULL, summary TEXT, created_at INTEGER NOT NULL);
@@ -60,6 +60,7 @@ def _make_db(path: Path, registered_workspace: Optional[Path]) -> None:
                 None,
                 None,
                 None,
+                None,
             ),
             (
                 "doc-child",
@@ -72,6 +73,7 @@ def _make_db(path: Path, registered_workspace: Optional[Path]) -> None:
                 now,
                 None,
                 "doc-derived",
+                None,
                 None,
             ),
             (
@@ -86,9 +88,12 @@ def _make_db(path: Path, registered_workspace: Optional[Path]) -> None:
                 None,
                 None,
                 now,
+                None,
             ),
         ]
-        conn.executemany("INSERT INTO office_documents VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
+        conn.executemany(
+            "INSERT INTO office_documents VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows
+        )
         conn.execute(
             "INSERT INTO office_self_checks (doc_id, action, ok, summary, created_at) "
             "VALUES (?,?,?,?,?)",

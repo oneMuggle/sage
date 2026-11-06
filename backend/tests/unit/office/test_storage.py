@@ -69,7 +69,8 @@ def db_conn() -> sqlite3.Connection:
             updated_at INTEGER NOT NULL,
             metadata TEXT,
             derived_from TEXT,
-            archived_at INTEGER
+            archived_at INTEGER,
+            active_spec_id TEXT
         )
         """
     )
@@ -321,6 +322,7 @@ def test_init_db_migration_adds_derived_from_and_archived_at(tmp_path: Path) -> 
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(office_documents)").fetchall()]
     assert "derived_from" in cols
     assert "archived_at" in cols
+    assert "active_spec_id" in cols
 
     # Legacy row is preserved.
     row = conn.execute(
