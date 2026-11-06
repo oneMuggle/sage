@@ -92,7 +92,7 @@ interface NavItem {
 
 // Scheme 2 (P1): 侧栏 rail 导航分 3 组 ——
 //   核心（始终展开）：对话 / 项目工作台 / 待办 / 记忆
-//   工具（可折叠）：文档与验收 / 知识库 / 定时任务 / 技能
+//   工具（可折叠）：文档工作台 / 知识库 / 定时任务 / 技能
 //   高级（可折叠，默认收起）：智能体 / 编排 / Arena / 帮助
 // 设置固定在底部，不属于任何组。
 interface NavGroupDef {
@@ -111,7 +111,7 @@ const coreNavItems: NavItem[] = [
   { path: '/memory', label: '记忆', icon: Brain },
 ];
 const toolsNavItems: NavItem[] = [
-  { path: '/office', label: '文档与验收', icon: FileSpreadsheet },
+  { path: '/office', label: '文档工作台', icon: FileSpreadsheet },
   { path: '/knowledge', label: '知识库', icon: BookOpen },
   { path: '/scheduled', label: '定时任务', icon: CalendarClock },
   { path: '/skills', label: '技能', icon: Sparkles },

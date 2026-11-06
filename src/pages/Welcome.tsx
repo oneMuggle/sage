@@ -528,7 +528,7 @@ export function Welcome() {
             onClick={() => navigate('/office')}
             className="px-3 py-2 rounded border border-border"
           >
-            {locale === 'en' ? 'Documents and review' : '文档与验收'}
+            {locale === 'en' ? 'Document workbench' : '文档工作台'}
           </button>
         </div>
         <AssistantRecommendations

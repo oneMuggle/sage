@@ -1,4 +1,5 @@
 import { useI18n } from '../../../shared/lib/i18n';
+import { Button } from '../../../shared/ui/Button';
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,9 @@ export function ConverterGuideDialog({ open, onOpenChange }: ConverterGuideDialo
           <DialogDescription>{t('office.converter.guide.body')}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            {t('office.converter.guide.close')}
+          </Button>
           <a
             href={libreOfficeUrl}
             target="_blank"

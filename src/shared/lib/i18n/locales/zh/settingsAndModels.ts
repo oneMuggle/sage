@@ -431,7 +431,7 @@ export const zhSettingsAndModels = {
   'office.staging.review': '过期暂存且归属进程不在运行 — 仅供人工核查',
   'office.staging.untracked': '无可信暂存记录 — 保留',
   'office.staging.unreadable': '无法读取暂存记录 — 保留',
-  'office.title': '文档与验收',
+  'office.title': '文档工作台',
   'office.selectWorkspace': '选择工作区',
   'office.emptyState': '请先选择工作区目录以开始使用',
   'office.section.pickFile': '选择文件',
@@ -501,10 +501,10 @@ export const zhSettingsAndModels = {
   'office.preview.empty': '选择一个文件以预览',
 
   // ─── 2026-11 信息架构整理: 分区 tab / LaTeX 子 tab / 环境浮层 ─────
-  'office.tabs.label': '文档与验收功能分区',
-  'office.tab.documents': '文档处理',
+  'office.tabs.label': '文档工作台功能分区',
+  'office.tab.documents': '文档',
   'office.tab.generate': '文档生成',
-  'office.tab.rules': '审校与规范',
+  'office.tab.rules': '规则',
   'office.tab.latex': 'LaTeX',
   'office.latex.tabs.label': 'LaTeX 功能分区',
   'office.latex.project': '项目与编译',

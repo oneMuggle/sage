@@ -485,6 +485,7 @@ export const zhWorkspaceAndTools = {
   'office.converter.guide.body':
     '导出 PDF 需要安装 LibreOffice 或 Microsoft Word 作为转换器。安装后重启应用即可使用导出功能。',
   'office.converter.guide.download': '下载 LibreOffice',
+  'office.converter.guide.close': '关闭',
 } as const;
 
 export function formatZhWorkspaceAndToolsSummary(): string {

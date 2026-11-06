@@ -498,6 +498,7 @@ export const enWorkspaceAndTools = {
   'office.converter.guide.body':
     'PDF export requires LibreOffice or Microsoft Word as a converter. Restart the app after installation to enable export.',
   'office.converter.guide.download': 'Download LibreOffice',
+  'office.converter.guide.close': 'Close',
 };
 
 export function formatEnWorkspaceAndToolsSummary(): string {
