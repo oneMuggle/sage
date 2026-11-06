@@ -240,6 +240,10 @@ export function OfficePreviewPanel({
   // M2c: Word 规则审校面板 + 段落定位高亮。
   const [auditOpen, setAuditOpen] = useState(false);
   const [highlightParagraphIndex, setHighlightParagraphIndex] = useState<number | null>(null);
+  // Declared before the reset effect so closing and reopening the same document
+  // can clear the dedupe key; otherwise the auto-load effect short-circuits on
+  // the stale key and never refetches the blob URL the reset just revoked.
+  const autoLoadKeyRef = useRef<string | null>(null);
   useEffect(() => {
     setAuditOpen(false);
     setHighlightParagraphIndex(null);
@@ -250,6 +254,7 @@ export function OfficePreviewPanel({
     });
     setFidelityKey(null);
     setFidelityOn(resolveDefaultFidelity(preview?.docType, fidelityAvailable, defaultFidelity));
+    autoLoadKeyRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [summaryId]);
   // 组件卸载时清理未释放的 blob URL（通过 ref 读最新值）。
@@ -282,7 +287,6 @@ export function OfficePreviewPanel({
   // loadFidelityRef breaks the use-before-define cycle: the effect is declared
   // above (before the early return) while loadFidelity needs the resolved
   // summary below, so the effect invokes the latest handler through a ref.
-  const autoLoadKeyRef = useRef<string | null>(null);
   const loadFidelityRef = useRef<() => void>(() => {});
   useEffect(() => {
     if (!preview || fidelityLoading) return;
@@ -314,9 +318,9 @@ export function OfficePreviewPanel({
   const buildManagedPath = (ws: string) =>
     [ws, 'office', summary.doc_type, summary.id, summary.generated_filename].join('/');
 
-  const fallbackToStructured = () => {
+  const fallbackToStructured = (notify = true) => {
     setFidelityOn(false);
-    toast.error(t('office.fidelity.fallback'));
+    if (notify) toast.error(t('office.fidelity.fallback'));
   };
 
   const loadFidelity = async () => {
@@ -370,6 +374,8 @@ export function OfficePreviewPanel({
         } catch (convErr) {
           const msg = convErr instanceof Error ? convErr.message : String(convErr);
           toast.error(`${t('office.fidelity.failed')}: ${msg}`);
+          fallbackToStructured(false);
+          return;
         }
       }
       // Conversion failed or returned error → fall back to structured view
@@ -377,7 +383,8 @@ export function OfficePreviewPanel({
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.fidelity.failed')}: ${msg}`);
-      fallbackToStructured();
+      // 失败详情已经在上面提示过，避免再弹一条兜底 toast。
+      fallbackToStructured(false);
     } finally {
       setFidelityLoading(false);
     }

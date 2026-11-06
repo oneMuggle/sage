@@ -653,6 +653,39 @@ describe('OfficePreviewPanel — fidelity defaults & auto-load (Task 2)', () => 
     expect(screen.getByTestId('office-preview-structured')).toBeInTheDocument();
   });
 
+  it('re-fetches Excel fidelity after the document is closed and reopened', async () => {
+    // Closing the preview revokes the blob URL. Reopening the same document
+    // must refetch it: the auto-load dedupe key has to be cleared alongside
+    // the URL, or the effect short-circuits against the stale key.
+    mockPdfPreview.mockResolvedValue({
+      ok: true,
+      data_url: 'data:application/pdf;base64,AAAA',
+      error: null,
+    });
+    const { rerender, unmount } = render(
+      <I18nProvider defaultLocale="zh">
+        <OfficePreviewPanel preview={EXCEL_PREVIEW} workspacePath="/tmp/ws" />
+      </I18nProvider>,
+    );
+    await waitFor(() => expect(mockPdfPreview).toHaveBeenCalledTimes(1));
+    await screen.findByTestId('office-preview-fidelity-iframe', undefined, { timeout: 3000 });
+
+    rerender(
+      <I18nProvider defaultLocale="zh">
+        <OfficePreviewPanel preview={null} workspacePath="/tmp/ws" />
+      </I18nProvider>,
+    );
+    rerender(
+      <I18nProvider defaultLocale="zh">
+        <OfficePreviewPanel preview={EXCEL_PREVIEW} workspacePath="/tmp/ws" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(mockPdfPreview).toHaveBeenCalledTimes(2));
+    await screen.findByTestId('office-preview-fidelity-iframe', undefined, { timeout: 3000 });
+    unmount();
+  });
+
   it('falls back to the structured view when the native Word preview fails', async () => {
     // readWordData resolves ok:false (beforeEach default) → DocxNativePreview
     // throws, invokes onError, and the panel toasts + downgrades to structured.
