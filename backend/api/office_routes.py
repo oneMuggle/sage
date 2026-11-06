@@ -420,9 +420,13 @@ def read_excel_endpoint(req: OfficeReadRequest) -> OfficeExcelReadResult:
 
 @router.get("/documents", response_model=OfficeDocumentListResponse)
 def list_documents_endpoint(
-    workspace_path: str, include_archived: bool = False
+    workspace_path: str,
+    include_archived: bool = False,
+    q: Optional[str] = None,
+    doc_type: Optional[OfficeDocType] = None,
+    sort: Optional[str] = None,
 ) -> OfficeDocumentListResponse:
-    """List all office documents in a workspace.
+    """List office documents in a workspace, with search/filter/sort.
 
     Canonicalizes ``workspace_path`` so callers that pass ``/tmp/./ws``
     or symlink-resolved variants still hit the same rows. The persisted
@@ -432,10 +436,20 @@ def list_documents_endpoint(
 
     ``include_archived``（Item 1.7 归档 UI）：True 时包含软删除行，
     前端「归档文档」视图用；默认只返回 live 文档。
+
+    Phase 1 Item A（文档库搜索/筛选/排序）：
+    - ``q`` 按文件名子串匹配（original_filename 或 generated_filename）
+    - ``doc_type`` 按文档类型过滤（非法值由 FastAPI 返回 422）
+    - ``sort`` 支持 created_at / updated_at / name / size，``-`` 前缀降序
     """
     canonical_workspace = str(Path(workspace_path).resolve())
     documents = list_documents(
-        _db().get_connection(), canonical_workspace, include_archived=include_archived
+        _db().get_connection(),
+        canonical_workspace,
+        include_archived=include_archived,
+        q=q,
+        doc_type=doc_type.value if doc_type is not None else None,
+        sort=sort,
     )
     return OfficeDocumentListResponse(documents=documents, total=len(documents))
 

@@ -210,7 +210,10 @@ describe('useOfficeDocuments — workspace entry sweep', () => {
     });
     // Item 1.7: listDocuments now carries the include_archived flag
     // (false on the default live view).
-    expect(mockListDocuments).toHaveBeenCalledWith('/tmp/ws', { includeArchived: false });
+    expect(mockListDocuments).toHaveBeenCalledWith('/tmp/ws', {
+      includeArchived: false,
+      sort: '-updated_at',
+    });
     expect(mockSweepOrphanStaging).not.toHaveBeenCalled();
   });
 
@@ -251,7 +254,10 @@ describe('useOfficeDocuments — workspace entry sweep', () => {
       result.current.setView('archived');
     });
     await waitFor(() => {
-      expect(mockListDocuments).toHaveBeenCalledWith('/tmp/ws', { includeArchived: true });
+      expect(mockListDocuments).toHaveBeenCalledWith('/tmp/ws', {
+        includeArchived: true,
+        sort: '-updated_at',
+      });
     });
     await waitFor(() => {
       expect(result.current.documents.map((d) => d.id)).toEqual(['doc-arch']);
@@ -390,9 +396,8 @@ describe('useOfficeDocuments — batch archive/restore (round-3 N5)', () => {
   });
 
   it('formats office documents batch summary and JSON (Phase P110)', async () => {
-    const { formatOfficeDocumentsBatchSummary, formatOfficeDocumentsBatchJson } = await import(
-      '../useOfficeDocuments'
-    );
+    const { formatOfficeDocumentsBatchSummary, formatOfficeDocumentsBatchJson } =
+      await import('../useOfficeDocuments');
     const res = { succeeded: ['doc-a', 'doc-c'], failed: ['doc-b'] };
     expect(formatOfficeDocumentsBatchSummary(res)).toBe('succeeded=2 · failed=1');
     const parsed = JSON.parse(formatOfficeDocumentsBatchJson(res));

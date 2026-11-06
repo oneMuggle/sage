@@ -285,6 +285,11 @@ export function createDemoOfficeAndSystemHandlers(): Record<string, (args: Recor
   return {
   office_list_documents: () => ({ documents: [...demoOfficeDocs], total: demoOfficeDocs.length }),
 
+  // Phase 1 Item A: duplicate grouping is advisory. Demo mode returns an
+  // empty result so the badge never appears; the E2E list-refresh path
+  // still must not throw, otherwise `setDocuments([])` clears the list.
+  office_list_duplicate_groups: () => ({ groups: [], total: 0 }),
+
   office_delete_document: (args) => {
     const docId = asStr(args.docId) || asStr(args.id);
     demoOfficeDocs = demoOfficeDocs.filter((d) => d.id !== docId);

@@ -18,12 +18,16 @@ import pytest
 
 from backend.api import office_ai_review_routes
 from backend.api.office_ai_review_routes import (
+    AiReviewIssue,
     AiReviewRequest,
+    AiReviseRequest,
     ai_review_endpoint,
     ai_review_history_endpoint,
+    ai_revise_endpoint,
 )
 from backend.data import database as db_mod
 from backend.data.database import Database
+from backend.office.ai_review_models import AiReviewSource
 
 pytestmark = pytest.mark.integration
 
@@ -72,8 +76,8 @@ def _seed_document(conn, *, doc_id="doc-1", workspace: str):
         "INSERT INTO office_documents "
         "(id, workspace_path, doc_type, original_filename, "
         "generated_filename, status, created_at, updated_at, metadata) "
-        "VALUES (?, ?, 'word', 'draft.docx', 'draft.docx', 'managed', "
-        "1000, 1000, '{}')",
+        "VALUES (?, ?, 'word', 'draft.docx', 'draft.docx', 'parsed', "
+        "1000, 1000, '{\"file_size_bytes\": 1234}')",
         (doc_id, workspace),
     )
     conn.commit()
@@ -281,3 +285,144 @@ def test_history_hides_other_workspace_doc(conn, workspace: Path, workspace2: Pa
     assert hidden.runs == []
     visible = ai_review_history_endpoint("doc-1", workspace_path=str(workspace))
     assert len(visible.runs) == 1
+
+
+# ── revise ────────────────────────────────────────────────────────────
+
+
+def _make_issue(
+    *,
+    actual: str,
+    expected: str,
+    message: str = "fix",
+    suggestion: str = "",
+) -> AiReviewIssue:
+    return AiReviewIssue(
+        id="iss-1",
+        severity="warning",
+        category="wording",
+        message=message,
+        suggestion=suggestion,
+        rationale="",
+        expected=expected,
+        actual=actual,
+        fixable=True,
+        location=None,
+        source=AiReviewSource(
+            kind="llm",
+            spec_id=None,
+            spec_name=None,
+            rule_id=None,
+            rule_pack_id=None,
+        ),
+    )
+
+
+def test_revise_applies_tracked_changes_and_snapshots(
+    conn, workspace: Path
+):
+    """有 doc_id 的可修复 issue → 应用修订 + 落 pre-edit 快照."""
+    # 写入 managed 路径，这样 snapshot_pre_edit 能找到文件
+    managed_dir = workspace / "office" / "word" / "doc-1"
+    managed_dir.mkdir(parents=True)
+    docx = _write_docx(managed_dir / "draft.docx")
+    _seed_document(conn, workspace=str(workspace))
+
+    result = ai_revise_endpoint(
+        AiReviseRequest(
+            workspace_path=str(workspace),
+            file_path=str(docx),
+            doc_id="doc-1",
+            issues=[_make_issue(actual="占位符【待补充】", expected="已填写内容")],
+        )
+    )
+
+    assert result.ok is True
+    assert result.doc_id == "doc-1"
+    assert result.applied >= 1
+    assert result.snapshot_path, "expected pre-edit snapshot"
+    assert Path(result.snapshot_path).is_file()
+    # 输出 docx 含 w:ins / w:del 标签 → 真修订痕迹
+    from docx import Document
+
+    out_path = Path(result.output_path)
+    if not out_path.is_absolute():
+        out_path = workspace / out_path
+    out_doc = Document(str(out_path))
+    xml = out_doc.element.xml
+    assert "w:ins" in xml
+    assert "w:del" in xml
+
+
+def test_revise_without_doc_id_skips_snapshot(conn, workspace: Path):
+    """无 doc_id 时仍然应用修订，但不产生快照."""
+    docx = _write_docx(workspace / "draft.docx")
+
+    result = ai_revise_endpoint(
+        AiReviseRequest(
+            workspace_path=str(workspace),
+            file_path=str(docx),
+            issues=[_make_issue(actual="占位符【待补充】", expected="已填写")],
+        )
+    )
+
+    assert result.ok is True
+    assert result.doc_id is None
+    assert result.snapshot_path is None
+    assert result.applied >= 1
+
+
+def test_revise_rejects_cross_workspace_doc(conn, workspace: Path, workspace2: Path):
+    """doc_id 不在本工作区 → OfficeParseError."""
+    from backend.office.errors import OfficeParseError
+
+    docx = _write_docx(workspace2 / "draft.docx")
+    _seed_document(conn, doc_id="doc-1", workspace=str(workspace))
+
+    with pytest.raises(OfficeParseError):
+        ai_revise_endpoint(
+            AiReviseRequest(
+                workspace_path=str(workspace2),
+                file_path=str(docx),
+                doc_id="doc-1",
+                issues=[_make_issue(actual="占位符【待补充】", expected="已填写")],
+            )
+        )
+
+
+def test_revise_no_fixable_issues_raises(conn, workspace: Path):
+    """所有 issue 都无 actual/expected → OfficeParseError."""
+    from backend.office.errors import OfficeParseError
+
+    docx = _write_docx(workspace / "draft.docx")
+    _seed_document(conn, workspace=str(workspace))
+
+    with pytest.raises(OfficeParseError):
+        ai_revise_endpoint(
+            AiReviseRequest(
+                workspace_path=str(workspace),
+                file_path=str(docx),
+                doc_id="doc-1",
+                issues=[
+                    AiReviewIssue(
+                        id="iss-x",
+                        severity="info",
+                        category="style",
+                        message="no anchor",
+                        suggestion="",
+                        rationale="",
+                        expected=None,
+                        actual=None,
+                        fixable=False,
+                        location=None,
+                        source=AiReviewSource(
+                            kind="llm",
+                            spec_id=None,
+                            spec_name=None,
+                            rule_id=None,
+                            rule_pack_id=None,
+                        ),
+                    )
+                ],
+            )
+        )
