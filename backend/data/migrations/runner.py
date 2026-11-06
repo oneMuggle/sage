@@ -414,10 +414,11 @@ def _v11_compacted_history_retention(conn: Any) -> None:
 
 register_migration(
     11, "compacted_history_retention", _v11_compacted_history_retention
+)
 
 
 def _v12_memory_agent_columns(conn: Any) -> None:
-    """v11：记忆表增加 agent_id 维度（M3 专家私有记忆隔离）。
+    """v12：记忆表增加 agent_id 维度（M3 专家私有记忆隔离）。
 
     ``agent_id IS NULL`` = 共享层（存量行不回填，保持既有可见性）；
     非空 = 该专家私有。复合索引支撑「私有 ∪ 共享」过滤
