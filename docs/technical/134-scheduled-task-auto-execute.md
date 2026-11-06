@@ -55,9 +55,14 @@ APScheduler 后台线程
 
 ## 4. 六边形边界与依赖注入
 
-`backend/services/scheduler.py` **不导入** `ChatService`、LLM 或 agent，只声明接口：
+契约类型下沉到领域层 `backend/domain/scheduler.py`（`backend.services.scheduler`
+保持 re-export，旧导入路径仍可用）：
 
 ```python
+@dataclass
+class ScheduledTask:          # 领域实体：服务层与应用层共用
+    ...
+
 @dataclass(frozen=True)
 class RunOutcome:
     status: Literal["succeeded", "failed"]
@@ -65,10 +70,17 @@ class RunOutcome:
     duration_ms: int = 0
     error: Optional[str] = None      # 永远为脱敏固定文案
 
-TaskRunner = Callable[["ScheduledTask"], RunOutcome]
+TaskRunner = Callable[[ScheduledTask], RunOutcome]
 ```
 
+`backend/services/scheduler.py` **不导入** `ChatService`、LLM 或 agent，只消费上述类型
 并提供 `SchedulerService.set_executor(runner) -> None`。
+
+为什么类型必须放在 domain：`backend.application` 位于 import-linter 层级契约中
+`backend.services` 之上；若应用层的执行器直接从 `backend.services.scheduler` 导入，
+会经该模块的传递依赖（`scheduler.evolution → skills.consolidator → api.legacy_routes`）
+触发 `application is not allowed to import backend.api` 违规。下沉到 domain 后，
+服务层与应用层都只依赖领域层，契约保持 KEPT。
 
 为什么必须用**后置 setter**：`init_scheduler_service()` 在 lifespan 早段执行，
 此时 `ChatService` 还没构建（它依赖 LLM 配置、工具注册、存储等），构造期无法传参。

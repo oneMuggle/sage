@@ -73,8 +73,13 @@ APScheduler 后台线程
 
 ### 3.2 六边形边界与依赖注入
 
-- `backend/services/scheduler.py` **不 import** `ChatService` / LLM / agent，只声明：
+- 契约类型放在 `backend/domain/scheduler.py`（`ScheduledTask`、`RunOutcome`、`TaskRunner`），
+  `backend/services/scheduler.py` re-export 保持旧导入路径可用：
   ```python
+  @dataclass
+  class ScheduledTask:
+      ...  # 领域实体，服务层与应用层共用
+
   @dataclass(frozen=True)
   class RunOutcome:
       status: Literal["succeeded", "failed"]
@@ -82,9 +87,14 @@ APScheduler 后台线程
       duration_ms: int = 0
       error: Optional[str] = None
 
-  TaskRunner = Callable[["ScheduledTask"], RunOutcome]
+  TaskRunner = Callable[[ScheduledTask], RunOutcome]
   ```
   并提供 `set_executor(runner: TaskRunner) -> None`。
+- **为什么下沉到 domain**：`backend/application` 在 import-linter 层级中高于
+  `backend.services`；执行器若直接从 `backend.services.scheduler` 导入，会经其传递依赖
+  （`scheduler.evolution → skills.consolidator → api.legacy_routes`）触发
+  `application is not allowed to import backend.api`，契约 BREAK。
+- `backend/services/scheduler.py` **不 import** `ChatService` / LLM / agent；应用层执行器只依赖 domain。
 - 新增 `backend/application/services/scheduled_task_executor.py`：把 `ChatService` + 主事件循环包装成 `TaskRunner`，负责超时、异常脱敏、耗时统计。该模块属于应用层，允许依赖 `ChatService`。
 - `backend/main.py` 在 lifespan 内、`app.state.chat_service = _build_chat_service()` 之后调用：
   ```python

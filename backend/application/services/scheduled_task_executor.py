@@ -15,11 +15,10 @@ from typing import TYPE_CHECKING
 
 from sage_core import Message, Role
 
-from backend.services.scheduler import RunOutcome, ScheduledTask
+from backend.domain.scheduler import RunOutcome, ScheduledTask, TaskRunner
 
 if TYPE_CHECKING:
     from backend.application.services.chat_service import ChatService
-    from backend.services.scheduler import TaskRunner
 
 logger = logging.getLogger(__name__)
 
