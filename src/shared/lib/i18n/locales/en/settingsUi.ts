@@ -10,6 +10,13 @@ export const enSettingsUi = {
   'settings.basic.close_to_tray_desc':
     'Hides to the system tray instead of quitting when the close button is clicked; restore from the tray icon or with Alt+Shift+S',
   'settings.basic.close_to_tray_label': 'Hide to tray on close',
+  'settings.basic.notifications': 'Notifications',
+  'settings.basic.notifications_enabled_label': 'Enable desktop notifications',
+  'settings.basic.notifications_enabled_desc':
+    'Show system notifications when a session completes, fails, or waits for approval (works while minimized or hidden to the tray)',
+  'settings.basic.notifications_background_label': 'Background task notifications',
+  'settings.basic.notifications_background_desc':
+    'Notify when scheduled tasks fire, todos become due, or background tasks finish',
   'settings.basic.conversation': 'Conversation',
   'settings.basic.history_size_desc':
     'Number of recent inputs recallable with the up/down arrow keys in the composer (per session, 1-200)',
@@ -366,7 +373,8 @@ export const enSettingsUi = {
   'settings.orch.budget_mode.auto_desc':
     'Initial budget tiered by task complexity, auto-extended after a progress audit at the limit',
   'settings.orch.budget_mode.fixed': 'Fixed ceiling',
-  'settings.orch.budget_mode.fixed_desc': 'Uses “Agent iteration limit” directly, no auto-extension',
+  'settings.orch.budget_mode.fixed_desc':
+    'Uses “Agent iteration limit” directly, no auto-extension',
   'settings.orch.budget_simple.label': 'Simple task initial budget (steps)',
   'settings.orch.budget_simple.desc': 'Initial steps for short, attachment-free simple tasks',
   'settings.orch.budget_medium.label': 'Medium task initial budget (steps)',

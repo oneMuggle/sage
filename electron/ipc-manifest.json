@@ -293,6 +293,7 @@
     "scheduled_evolution_run": { "method": "POST", "path": "/api/v1/scheduled/evolution/{name}/run" },
     "scheduled_evolution_tasks": { "method": "GET", "path": "/api/v1/scheduled/evolution/tasks" },
     "scheduled_list_tasks": { "method": "GET", "path": "/api/v1/scheduled/tasks" },
+    "scheduled_pending_notifications": { "method": "GET", "path": "/api/v1/scheduled/notifications/pending" },
     "scheduled_run_task": { "method": "POST", "path": "/api/v1/scheduled/tasks/{id}/run" },
     "scheduled_update_task": { "method": "PATCH", "path": "/api/v1/scheduled/tasks/{id}" },
     "search_memory": { "method": "GET", "path": "/api/v1/memory/search" },

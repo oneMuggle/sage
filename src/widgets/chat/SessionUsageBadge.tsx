@@ -7,6 +7,10 @@
 import { Coins } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import {
+  useChatStreamStore,
+  selectSessionSlots,
+} from '../../features/send-message/chatStreamStore';
 import { fetchSessionUsage, type SessionUsage } from '../../shared/api/usageApi';
 import { useI18n } from '../../shared/lib/i18n';
 
@@ -52,6 +56,9 @@ export function formatSessionUsageJson(usage: SessionUsage | null): string {
 export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBadgeProps) {
   const { t } = useI18n();
   const [usage, setUsage] = useState<SessionUsage | null>(null);
+  // 2026-11-05: 仅流式活跃时启用 60s 轮询。空闲会话只在挂载/sessionId 变化/
+  // refreshKey 时拉一次,避免主会话持续产生无效刷新。
+  const streaming = useChatStreamStore((s) => selectSessionSlots(s, sessionId).streaming !== null);
 
   useEffect(() => {
     if (!sessionId) {
@@ -69,12 +76,13 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
         });
     };
     load();
+    if (!streaming) return;
     const timer = window.setInterval(load, 60_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [sessionId, refreshKey]);
+  }, [sessionId, refreshKey, streaming]);
 
   if (!sessionId || !usage || usage.requests === 0) return null;
 

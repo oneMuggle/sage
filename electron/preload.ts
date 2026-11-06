@@ -703,6 +703,35 @@ const electronAPI = {
     }>;
   },
 
+  /** 2026-11-05: 通知偏好读取（总开关 + 后台任务通知）。 */
+  getNotificationPrefs(): Promise<{ enabled: boolean; backgroundTasks: boolean }> {
+    return ipcRenderer.invoke('sage:notification-prefs:get') as Promise<{
+      enabled: boolean;
+      backgroundTasks: boolean;
+    }>;
+  },
+
+  /** 2026-11-05: 通知偏好写入（主进程落 JSON）。 */
+  setNotificationPrefs(prefs: {
+    enabled: boolean;
+    backgroundTasks: boolean;
+  }): Promise<{ ok: boolean; enabled: boolean; backgroundTasks: boolean }> {
+    return ipcRenderer.invoke('sage:notification-prefs:set', prefs) as Promise<{
+      ok: boolean;
+      enabled: boolean;
+      backgroundTasks: boolean;
+    }>;
+  },
+
+  /** 2026-11-05: 任务栏注意力提示（等待审批时闪烁 / macOS dock badge）。 */
+  setTaskbarAttention(input: {
+    awaitingApproval?: number;
+    failed?: number;
+    completed?: number;
+  }): Promise<boolean> {
+    return ipcRenderer.invoke('sage:notify:set-attention', input) as Promise<boolean>;
+  },
+
   /**
    * 日志时区 (2026-09-17): 用户在 Settings → 通用 下拉框选择.
    * 写入 <userData>/sage-log-timezone.json, 同时更新 main 进程 logger 时区.
