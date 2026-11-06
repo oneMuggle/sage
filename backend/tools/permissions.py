@@ -26,7 +26,7 @@ from contextvars import Token
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple
 
 from backend.domain.tool_names import (
     PLUGIN_TOOL_PREFIX,
@@ -89,6 +89,14 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     # 2026-11-06 Phase 1: 后台任务工具（win7 无 SELF_MODIFY 闸，保留能力分类）
     "wake_on_background": ToolCapability.WRITE,
     "wait_background": ToolCapability.READ,
+    # 2026-11-06 Phase 3 (win7): 自管理工具能力登记 —— 与 main M0 对齐的
+    # 最小集合；逐次审批由下方 SELF_MODIFY_TOOLS 闸承担。
+    "read_sage_config": ToolCapability.READ,
+    "update_sage_config": ToolCapability.WRITE,
+    "list_scheduled_tasks": ToolCapability.READ,
+    "schedule_task": ToolCapability.WRITE,
+    "cancel_scheduled_task": ToolCapability.WRITE,
+    "wake_session_at": ToolCapability.WRITE,
     # --- 命令执行 ---
     "bash": ToolCapability.EXECUTE,
     "bash_output": ToolCapability.EXECUTE,  # 读取后台 shell 输出也算执行面扩展
@@ -112,6 +120,22 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
 
 #: 未知工具默认能力（fail-safe）
 DEFAULT_TOOL_CAPABILITY = ToolCapability.WRITE
+
+#: 自管理工具集合：修改 Sage 自身持久行为（配置 / 定时调度 / 唤醒）。
+#:
+#: 2026-11-06（win7，对齐 main M0.5 语义）：`_mode_decision` 在模式矩阵前
+#: 强制升级 —— READ_ONLY 拒绝，WORKSPACE_WRITE / PROMPT 逐次审批，
+#: FULL_ACCESS 放行。显式 allow 规则仍可放行（规则层先于模式矩阵裁决，
+#: 那是用户的持久授权，视为知情同意）。
+SELF_MODIFY_TOOLS: FrozenSet[str] = frozenset(
+    {
+        "update_sage_config",
+        "schedule_task",
+        "cancel_scheduled_task",
+        "wake_session_at",
+        "wake_on_background",
+    }
+)
 
 # R90 进程外插件工具的 LLM 命名空间前缀 PLUGIN_TOOL_PREFIX 单一来源在
 # backend.domain.tool_names；本模块导入后再导出，classify_tool 用它把
@@ -427,12 +451,23 @@ class PermissionEnforcer:
             return _deny(f"{risk_reason}：read_only 模式禁止执行")
         return _ask(f"{risk_reason}：即使在 {self._mode.value} 模式下也必须经用户确认")
 
-    def _mode_decision(
+    def _mode_decision(  # noqa: PLR0911 — 模式矩阵多出口
         self, tool_name: str, capability: ToolCapability, bash_result: Optional[Any]
     ) -> PermissionDecision:
         """无规则命中时的模式矩阵兜底（每个分支带可读 reason）。"""
         if self._mode is PermissionMode.FULL_ACCESS:
             return _allow(f"full_access 模式：放行 {tool_name} 工具")
+        # 2026-11-06（win7）：自管理工具在非 FULL_ACCESS 下强制升级审批/
+        # 拒绝，先于能力矩阵 —— WORKSPACE_WRITE 默认放行 WRITE，若不前置，
+        # schedule_task / update_sage_config 会被静默放行（main M0.5 同义）。
+        if tool_name in SELF_MODIFY_TOOLS:
+            if self._mode is PermissionMode.READ_ONLY:
+                return _deny(
+                    f"read_only 模式：禁止自管理工具 {tool_name}（会修改 Sage 自身持久行为）"
+                )
+            return _ask(
+                f"{self._mode.value} 模式：自管理工具 {tool_name} 需要用户逐次确认"
+            )
         if self._mode is PermissionMode.WORKSPACE_WRITE and capability in (
             ToolCapability.READ,
             ToolCapability.WRITE,
