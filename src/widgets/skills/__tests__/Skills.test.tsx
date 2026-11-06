@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import Skills from '../../../pages/Skills';
 import { skillsApi } from '../../../shared/api';
+import { I18nProvider } from '../../../shared/lib/i18n';
 
 // ---- Mock the skillsApi module ------------------------------------------
 vi.mock('../../../shared/api', () => ({
@@ -66,10 +67,10 @@ beforeEach(() => {
 const renderWithToast = () =>
   render(
     <MemoryRouter>
-      <>
+      <I18nProvider defaultLocale="zh">
         <Skills />
         <Toaster />
-      </>
+      </I18nProvider>
     </MemoryRouter>,
   );
 

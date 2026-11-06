@@ -338,6 +338,16 @@ const electronAPI = {
     pickSkillDirectory: () => ipcRenderer.invoke('skills:pick-directory') as Promise<string | null>,
     importSkillDirectory: (pickedPath: string) =>
       ipcRenderer.invoke('skills:import-directory', pickedPath) as Promise<ImportResult>,
+    // M3: 存储可见性 — 打开真实技能目录 / 在文件管理器中定位某个技能
+    openSkillDirectory: () =>
+      ipcRenderer.invoke('skills:open-directory') as Promise<{ success: true }>,
+    showSkillInFolder: (name: string) =>
+      ipcRenderer.invoke('skills:show-in-folder', name) as Promise<{ success: true }>,
+    // M4: 导出技能 — name 为空/缺省时批量导出「我的技能」
+    exportSkill: (name: string) =>
+      ipcRenderer.invoke('skills:export', { name }) as Promise<{ ok: true; path: string } | null>,
+    exportMySkills: () =>
+      ipcRenderer.invoke('skills:export', {}) as Promise<{ ok: true; path: string } | null>,
   } satisfies SkillsElectronApiBridge,
 
   /**

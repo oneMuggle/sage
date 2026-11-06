@@ -636,3 +636,10 @@ class LegacyPreferenceItem(BaseModel):
     category: str = "general"
 
 
+# ==================== M3/M4: 技能存储与导出 ====================
+# 抽离到独立模块，避免本文件越过 800 行架构上限。
+from backend.api.skill_storage_export_routes import (
+    router as _skill_storage_export_router,  # noqa: E402
+)
+
+router.include_router(_skill_storage_export_router)

@@ -1042,6 +1042,22 @@ class InprocSkillAdapter:
 
     # ========== 扩展序列化 (PR-8 SKILL.md 适配层) ==========
 
+    def skill_location(self, name: str) -> Optional[str]:
+        """返回 SKILL.md 技能的真实磁盘目录（仅主进程 IPC 使用）。
+
+        builtin（代码实现）或技能不存在返回 ``None``。``list_skills_extended``
+        对客户端脱敏 ``base_dir``，打开目录/在文件夹中显示需要真实路径，
+        因此单独提供只读方法，由路由层做 realpath 白名单校验。
+        """
+        from backend.skills.skill_md.skill import SkillMdSkill
+
+        skill = self._registry.get(name)
+        if not isinstance(skill, SkillMdSkill):
+            return None
+        doc = getattr(skill, "_doc", None)
+        base_dir = getattr(doc, "base_dir", None)
+        return str(base_dir) if base_dir is not None else None
+
     def list_skills_extended(self, allowed: Optional[Set[str]] = None) -> List[Dict[str, Any]]:
         """列出所有技能 + 扩展字段 (供路由层序列化到前端)。
 
@@ -1061,6 +1077,39 @@ class InprocSkillAdapter:
         # 延迟导入避免循环 (skill_md 依赖 base, base 在更早的初始化阶段)
         from backend.skills.skill_md.skill import SkillMdSkill
 
+        # M2: 来源枚举 —— 让前端能分组「内置 / 推荐模板 / 我的技能」。
+        # shipped 目录是随包只读模板; 用户目录里的 SKILL.md 再按
+        # frontmatter metadata.provenance 区分 AI 生成 / 用户导入。
+        try:
+            from backend.skills.skill_md.loader import _discover_shipped_dir
+
+            _shipped_dir = _discover_shipped_dir()
+            _shipped_resolved = _shipped_dir.resolve() if _shipped_dir is not None else None
+        except Exception:  # noqa: BLE001 — origin 是展示增强,失败回退 user
+            _shipped_resolved = None
+
+        def _classify_origin(doc: Any) -> str:
+            base = getattr(doc, "base_dir", None)
+            if base is not None and _shipped_resolved is not None:
+                try:
+                    base_resolved = Path(base).resolve()
+                    if (
+                        base_resolved == _shipped_resolved
+                        or _shipped_resolved in base_resolved.parents
+                    ):
+                        return "shipped"
+                except OSError:
+                    pass
+            metadata = getattr(doc, "metadata", None)
+            provenance = (
+                metadata.get("provenance") if isinstance(metadata, dict) else None
+            )
+            if provenance == "agent-created":
+                return "generated"
+            if provenance == "user-imported":
+                return "imported"
+            return "user"
+
         # 生命周期态一次性批量计算（active/stale 读时算，archived 取内存缓存）
         lifecycles = self.lifecycle_map()
         result: List[Dict[str, Any]] = []
@@ -1077,10 +1126,12 @@ class InprocSkillAdapter:
                 "parameters": dict(schema.parameters),
                 "examples": list(schema.examples),
                 "source": "skillmd" if is_skillmd else "builtin",
+                "origin": "builtin",
             }
             if is_skillmd:
                 # 仅在 SKILL.md 时输出扩展字段
                 doc = skill._doc  # type: ignore[attr-defined]
+                item["origin"] = _classify_origin(doc)
                 item["body"] = doc.body
                 # A16: 自动激活触发场景原文，空串表示不参与自动激活
                 item["when_to_use"] = doc.when_to_use

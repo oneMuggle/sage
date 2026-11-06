@@ -234,7 +234,13 @@ export interface Skill {
   usage_count: number;
   // SKILL.md 适配层 (PR-8) 新增字段 — builtin 时不存在
   source?: 'builtin' | 'skillmd';
+  // M2 来源枚举: 让技能页按「内置 / 推荐模板 / 我的技能」分组。
+  // builtin=代码实现; shipped=随包只读模板; generated=AI 审批生成;
+  // imported=用户导入; user=历史/手工放置(无法区分导入与手写)。
+  origin?: 'builtin' | 'shipped' | 'generated' | 'imported' | 'user';
   body?: string;
+  // A16: SKILL.md frontmatter ``when_to_use`` 原文（自动激活触发场景）
+  when_to_use?: string;
   scripts?: string[];
   base_dir?: string;
   version?: string;
