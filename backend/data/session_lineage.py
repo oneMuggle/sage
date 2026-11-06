@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 import time
 import uuid
 from typing import Any, Dict, List, Optional
@@ -56,7 +57,7 @@ def ensure_lineage_schema(conn: Any) -> None:
                     "ALTER TABLE session_lineage "
                     "ADD COLUMN needs_restore INTEGER DEFAULT 1"
                 )
-        except Exception:  # noqa: BLE001 — 列已存在/并发迁移
+        except sqlite3.OperationalError:  # noqa: BLE001 — 列已存在/并发迁移
             pass
     except Exception as exc:  # noqa: BLE001
         logger.warning("session_lineage 建表失败: %s", exc)

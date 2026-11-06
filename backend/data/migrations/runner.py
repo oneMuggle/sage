@@ -446,23 +446,37 @@ def _v13_compacted_history_retention(conn: Any) -> None:
     2. ``session_lineage`` 补 ``needs_restore``（旧式破坏性压缩的归档待回填；
        新式非破坏压缩创建的归档写 0，跳过回填）；
     3. 把旧式归档前缀复制回父会话（仅展示），幂等 —— 回填完成后置 0。
+
+    幂等容错：``messages`` 或 ``session_lineage`` 不存在时（单元测试 fixture
+    仅建部分表）静默跳过，交由后续 init_db 建表兜底。
     """
     cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(messages)")
-    columns = {row[1] for row in cursor.fetchall()}
-    if "compacted_at" not in columns:
-        cursor.execute("ALTER TABLE messages ADD COLUMN compacted_at INTEGER")
-        conn.commit()
+
+    existing_tables = {
+        row[0]
+        for row in cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    if "messages" in existing_tables:
+        cursor.execute("PRAGMA table_info(messages)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "compacted_at" not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN compacted_at INTEGER")
+            conn.commit()
 
     from backend.data.session_lineage import (
         ensure_lineage_schema,
         restore_compacted_history,
     )
 
+    # ensure_lineage_schema 会建 session_lineage；fixture 未建 sessions 时
+    # 回填 SQL 的 JOIN 会失败，交由 restore 内部 try/except 兜底（不抛）。
     ensure_lineage_schema(conn)
     conn.commit()
     lineage_cols = {
-        row[1] for row in conn.execute("PRAGMA table_info(session_lineage)").fetchall()
+        row[1]
+        for row in conn.execute("PRAGMA table_info(session_lineage)").fetchall()
     }
     if "needs_restore" not in lineage_cols:
         # fail-fast：列没补上就不能吞掉回填（否则 v13 会被记账为已应用）
