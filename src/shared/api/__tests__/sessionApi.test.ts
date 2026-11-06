@@ -23,13 +23,18 @@ import { sessionApi } from '../sessionApi';
 const SID = '12345678-1234-1234-1234-123456789abc';
 const SESSION = { id: SID, title: 'test', created_at: 1, updated_at: 1 };
 
-beforeEach(() => { mockInvoke.mockReset(); });
+beforeEach(() => {
+  mockInvoke.mockReset();
+});
 
 describe('sessionApi', () => {
   it('create() passes title', async () => {
     mockInvoke.mockResolvedValueOnce(SESSION);
     const r = await sessionApi.create('新对话');
-    expect(mockInvoke).toHaveBeenCalledWith('create_session', expect.objectContaining({ title: '新对话' }));
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'create_session',
+      expect.objectContaining({ title: '新对话' }),
+    );
     expect(r).toEqual(SESSION);
   });
 
@@ -66,32 +71,46 @@ describe('sessionApi', () => {
     expect(mockInvoke).toHaveBeenCalledWith('delete_session', expect.objectContaining({ id: SID }));
   });
 
-  it('getMessages() passes sessionId', async () => {
+  it('getMessages() passes sessionId and full-history limit', async () => {
     mockInvoke.mockResolvedValueOnce([]);
     await sessionApi.getMessages(SID);
-    expect(mockInvoke).toHaveBeenCalledWith('get_messages', expect.objectContaining({ sessionId: SID }));
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'get_messages',
+      expect.objectContaining({ sessionId: SID, limit: 100000 }),
+    );
   });
 
   it('rename() passes id and title', async () => {
     mockInvoke.mockResolvedValueOnce(SESSION);
     await sessionApi.rename(SID, 'renamed');
-    expect(mockInvoke).toHaveBeenCalledWith('session_update', expect.objectContaining({ sessionId: SID, title: 'renamed' }));
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'session_update',
+      expect.objectContaining({ sessionId: SID, title: 'renamed' }),
+    );
   });
 
   it('setPinned() passes id and pinned', async () => {
     mockInvoke.mockResolvedValueOnce(SESSION);
     await sessionApi.setPinned(SID, true);
-    expect(mockInvoke).toHaveBeenCalledWith('session_update', expect.objectContaining({ sessionId: SID, isPinned: true }));
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'session_update',
+      expect.objectContaining({ sessionId: SID, isPinned: true }),
+    );
   });
 
   it('setArchived() passes id and archived', async () => {
     mockInvoke.mockResolvedValueOnce(SESSION);
     await sessionApi.setArchived(SID, true);
-    expect(mockInvoke).toHaveBeenCalledWith('session_update', expect.objectContaining({ sessionId: SID, isArchived: true }));
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'session_update',
+      expect.objectContaining({ sessionId: SID, isArchived: true }),
+    );
   });
 
   it('propagates invoke errors', async () => {
     mockInvoke.mockRejectedValueOnce(new Error('session not found'));
-    await expect(sessionApi.get('12345678-1234-1234-1234-123456789abc')).rejects.toThrow('session not found');
+    await expect(sessionApi.get('12345678-1234-1234-1234-123456789abc')).rejects.toThrow(
+      'session not found',
+    );
   });
 });

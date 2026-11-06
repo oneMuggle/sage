@@ -143,7 +143,7 @@ def test_compaction_event_written_and_ignored_by_projection(setup_test_db):
         created_at=now + 100,
     )
     repo.replace_prefix_with_continuation(
-        sid, kept_prefix_ids, continuation, new_message_count=2
+        sid, kept_prefix_ids, continuation
     )
 
     # 1) 压缩事件已落日志，payload 完整

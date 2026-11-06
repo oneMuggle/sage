@@ -51,7 +51,9 @@ def test_lineage_endpoint_lists_archives(tmp_path, client, monkeypatch):
         ids.append(mid)
     conn.commit()
 
-    archive_prefix_in_transaction(cursor, "sess-p", ids, reason="compaction")
+    archive_prefix_in_transaction(
+        cursor, "sess-p", ids, reason="compaction", needs_restore=True
+    )
     conn.commit()
 
     # 让 MessageRepository 走同一个 db —— 通过 monkeypatch 单例

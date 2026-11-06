@@ -66,6 +66,15 @@ logger = logging.getLogger(__name__)
 # 默认拉取的历史消息窗口大小（最新 N 条）
 _DEFAULT_HISTORY_LIMIT = 20
 
+
+def _model_visible_history(history: Any) -> Any:
+    """剔除仅用于展示的压缩历史（``compacted_at`` 非空），保留模型可见上下文。
+
+    2026-11-05 非破坏性压缩：压缩前原文保留在会话页面，但不得进入 LLM 请求。
+    """
+    return [m for m in history if getattr(m, "compacted_at", None) is None]
+
+
 # 默认 LLM 调用计数 label
 _DEFAULT_MODEL_LABEL = "default"
 
@@ -287,6 +296,7 @@ class ChatService:
             session_id,
             limit=_DEFAULT_HISTORY_LIMIT,
         )
+        history = _model_visible_history(history)
         span.set_attribute("history.size", len(history))
 
         # WS-C P0-3: frozen snapshot — system prompt 拆成「静态段 + 动态段」：

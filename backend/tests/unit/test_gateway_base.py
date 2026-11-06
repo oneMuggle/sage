@@ -87,6 +87,48 @@ class TestMinimalSubclassContract:
     def test_stats_type_shared(self):
         assert isinstance(GatewayStats(), GatewayStats)
 
+    def test_history_context_excludes_compacted_rows(self, tmp_db):
+        """2026-11-05 非破坏压缩：网关拼历史时不得回放压缩展示行。"""
+        from backend.data.session_repo import Message, MessageRepository
+
+        captured: dict = {}
+
+        class _CapturingLLM:
+            async def chat(self, messages):
+                captured["messages"] = messages
+                return SimpleNamespace(content="ok")
+
+        gw = MinimalGateway(tmp_db)
+        gw._llm_factory = lambda sid: _CapturingLLM()
+        sid = gw._session_for_chat("111")
+        repo = MessageRepository()
+        repo.save(
+            Message(
+                id="old-1",
+                session_id=sid,
+                role="user",
+                content="压缩前的旧消息",
+                created_at=1700000000000,
+                compacted_at=1700000005000,
+            )
+        )
+        repo.save(
+            Message(
+                id="new-1",
+                session_id=sid,
+                role="assistant",
+                content="保留的新消息",
+                created_at=1700000001000,
+            )
+        )
+
+        gw.process_message("111", "hello")
+
+        contents = [m["content"] for m in captured["messages"]]
+        assert "压缩前的旧消息" not in contents
+        assert "保留的新消息" in contents
+        assert "hello" in contents
+
 
 class TestHistoryBudget:
     def test_short_history_untouched(self):

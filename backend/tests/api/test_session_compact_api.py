@@ -89,7 +89,11 @@ async def test_compact_below_token_threshold_is_noop(client, monkeypatch):
 
 @pytest.mark.asyncio()
 async def test_compact_success_replaces_rows_and_preserves_tail(client, monkeypatch):
-    """14 条 → 摘要替代前 8 条, 保留后 6 条; 续接消息排在保留尾部之前。"""
+    """14 条 → 前 8 条标记 compacted_at 仅展示；续接行插在保留尾部之前。
+
+    2026-11-05 非破坏压缩：原文不删，会话页面看到完整 15 条记录
+    （8 条压缩标记 + 1 条续接 + 6 条保留尾部）。
+    """
     monkeypatch.setenv("SAGE_COMPACT_THRESHOLD", "100")
     sess = _seed_session_with_messages(14)
     _patch_llm(monkeypatch, _fake_llm_ok)
@@ -106,17 +110,23 @@ async def test_compact_success_replaces_rows_and_preserves_tail(client, monkeypa
     }
 
     rows = MessageRepository().get_by_session(sess.id)
-    assert len(rows) == 7
-    # 第一条是续接摘要
-    assert rows[0].content.startswith(CONTINUATION_PREFIX)
-    assert "完成 M4 压缩测试" in rows[0].content
-    assert rows[0].role == "assistant"
+    # 14 条原 + 1 条续接 = 15 行
+    assert len(rows) == 15
+    # 前 8 条是原始 seed-0..7（压缩标记）
+    assert [r.id for r in rows[:8]] == [f"seed-{i}" for i in range(8)]
+    assert all(r.compacted_at is not None for r in rows[:8])
+    # 续接摘要插在保留尾部之前
+    assert rows[8].content.startswith(CONTINUATION_PREFIX)
+    assert "完成 M4 压缩测试" in rows[8].content
+    assert rows[8].role == "assistant"
+    assert rows[8].compacted_at is None
     # 续接消息时间戳排在首条保留消息之前（正确排序）
-    assert rows[0].created_at < rows[1].created_at
-    # 尾部 6 条是原始 seed-8..seed-13（id/内容原样保留）
-    assert [r.id for r in rows[1:]] == [f"seed-{i}" for i in range(8, 14)]
-    # session.message_count 同步更新
-    assert SessionRepository().get(sess.id).message_count == 7
+    assert rows[8].created_at < rows[9].created_at
+    # 尾部 6 条是原始 seed-8..seed-13（id/内容原样保留，未压缩）
+    assert [r.id for r in rows[9:]] == [f"seed-{i}" for i in range(8, 14)]
+    assert all(r.compacted_at is None for r in rows[8:])
+    # session.message_count 同步更新（= 实际行数）
+    assert SessionRepository().get(sess.id).message_count == 15
 
 
 @pytest.mark.asyncio()
