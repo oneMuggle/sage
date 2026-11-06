@@ -165,12 +165,14 @@ export const memoryRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: () => '/api/v1/memory/save',
     // Body 字段: content (required), memory_type?, importance?, tags?
+    // agent_id: 资产中心手动追加专家私有记忆（缺省 = 共享层）
     body: (a) => ({
       content: a.content,
       memory_type: a.memoryType,
       importance: a.importance,
       tags: a.tags,
       ...(a.sessionId ? { session_id: a.sessionId } : {}),
+      ...(a.agentId ? { agent_id: a.agentId } : {}),
     }),
   },
   // P0-2: 进化任务学到的偏好（preferences 表 pref_* 键）+ 画像快照刷新
