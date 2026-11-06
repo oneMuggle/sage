@@ -249,16 +249,29 @@ export const officeApi = {
    * `includeArchived` (item 1.7): also return soft-deleted rows
    * (`archived_at` set) so the archive-restore UI can list them. The
    * backend default keeps them hidden.
+   *
+   * Phase 1 Item A: server-side search / type filter / sort.
+   *   - `q`: substring match on original/generated filename
+   *   - `docType`: restrict to a single Office doc type (ppt/word/excel/pdf)
+   *   - `sort`: e.g. `updated_at` / `-updated_at` / `name` / `-name` / `size` / `-size`
    */
   async listDocuments(
     workspacePath: string,
-    opts?: { includeArchived?: boolean },
+    opts?: {
+      includeArchived?: boolean;
+      q?: string;
+      docType?: string;
+      sort?: string;
+    },
   ): Promise<OfficeDocumentListResponse> {
     return withRetry(async () => {
       try {
         return await invoke<OfficeDocumentListResponse>('office_list_documents', {
           workspacePath,
           includeArchived: opts?.includeArchived ?? false,
+          q: opts?.q,
+          docType: opts?.docType,
+          sort: opts?.sort,
         });
       } catch (error) {
         throw handleApiError(error);
@@ -770,29 +783,4 @@ export const officeApi = {
   },
 };
 
-export function formatOfficeWordLintSummary(res: OfficeWordLintResult): string {
-  const status = res.ok ? 'OK' : 'ISSUES';
-  return `${status} · ${res.error_count} errors · ${res.warning_count} warnings · ${res.checked_rules.length} rules`;
-}
-
-export function formatOfficeWordLintJson(res: OfficeWordLintResult): string {
-  return JSON.stringify(
-    {
-      schema: 'sage.shared.office_word_lint.v1',
-      ok: res.ok,
-      issueCount: res.issue_count,
-      errorCount: res.error_count,
-      warningCount: res.warning_count,
-      checkedRules: res.checked_rules,
-    },
-    null,
-    2,
-  );
-}
-export function auditOfficeApiGovernance(): string {
-  return JSON.stringify({
-    module: 'office-api',
-    phase: 'P188',
-    audited: true,
-  });
-}
+export { auditOfficeApiGovernance, formatOfficeWordLintJson, formatOfficeWordLintSummary } from './officeApiFormatters';
