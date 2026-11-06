@@ -32,6 +32,8 @@ export const enWorkspaceAndTools = {
   'office.doc.snapshots': 'Version History',
   'office.doc.archivedAt': 'Archived',
   'office.section.archived': 'Archived Documents',
+  'office.section.library': 'Document Library',
+  'office.section.canvas': 'Document Canvas',
   'office.view.live': 'All Documents',
   'office.view.archived': 'Archived',
   'office.toast.archived': 'Archived',
@@ -45,6 +47,8 @@ export const enWorkspaceAndTools = {
   'office.snapshot.restoreSuccess': 'Restored to selected version',
   'office.snapshot.restoreFailed': 'Failed to restore',
   'office.snapshot.close': 'Close',
+  // Document canvas: dropping a file onto the open document replaces it
+  'office.canvas.dropToReplace': 'Drop to replace the current document',
 
   // ─── Office parity batch 2: rich preview rendering (item 2.6) ─────
   'office.preview.headings': 'headings',
@@ -201,6 +205,7 @@ export const enWorkspaceAndTools = {
   'office.fidelity.toggle': 'High fidelity',
   'office.fidelity.loading': 'Converting…',
   'office.fidelity.failed': 'High-fidelity preview failed',
+  'office.fidelity.fallback': 'High-fidelity preview unavailable; switched to structured view',
   'office.fidelity.unavailable':
     'No local converter detected for this format (LibreOffice covers DOCX/XLSX/PPTX; MS Word covers DOCX only). Word uses the built-in native renderer and is unaffected. Click [Environment] at the top right to re-detect or see install hints',
   'office.caps.detected': 'Converter detected; runtime health not verified',
@@ -565,6 +570,11 @@ export const enWorkspaceAndTools = {
   'workspace.switcher.unusable': 'Current workspace is unusable',
   'workspace.switcher.scratchHint':
     "Using a scratch directory — files won't be saved to your project",
+  'office.converter.guide.title': 'PDF export requires a converter',
+  'office.converter.guide.body':
+    'PDF export requires LibreOffice or Microsoft Word as a converter. Restart the app after installation to enable export.',
+  'office.converter.guide.download': 'Download LibreOffice',
+  'office.converter.guide.close': 'Close',
 };
 
 export function formatEnWorkspaceAndToolsSummary(): string {

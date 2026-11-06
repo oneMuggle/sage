@@ -62,8 +62,13 @@ import {
   WordPreview,
 } from './OfficeStructuredPreviews';
 import { PdfFormFillDialog } from './PdfFormFillDialog';
+import { ConverterGuideDialog } from './canvas/ConverterGuideDialog';
+import { resolveDefaultFidelity, shouldAutoLoadFidelity } from './officeFidelity';
 import { dataUrlToBlobUrl, safeRevokeBlobUrl } from './officePreviewBlobUrl';
-import { formatOfficePreviewPanelAuditJson, formatOfficePreviewPanelAuditSnapshot } from './officePreviewPanelAudit';
+import {
+  formatOfficePreviewPanelAuditJson,
+  formatOfficePreviewPanelAuditSnapshot,
+} from './officePreviewPanelAudit';
 import { pollOfficeProgress } from './officeProgress';
 import { buildPreviewCacheKey, isCurrentKey } from './previewRevision';
 
@@ -102,6 +107,12 @@ export interface OfficePreviewPanelProps {
    * a new managed copy). Absent → recalc/form buttons are hidden.
    */
   onRefresh?: () => void;
+  /**
+   * Initial fidelity state override. When omitted, defaults to
+   * shouldDefaultFidelityOn(docType, fidelityAvailable). Tests pass
+   * false to preserve structured-view assertions.
+   */
+  defaultFidelity?: boolean;
 }
 
 /** Docs that can be exported to PDF (item 2.7) and edited (item 2.5). */
@@ -115,6 +126,7 @@ export function OfficePreviewPanel({
   onEditPreview,
   onRefresh,
   fidelityAvailable = true,
+  defaultFidelity,
 }: OfficePreviewPanelProps) {
   const { t } = useI18n();
   const [exporting, setExporting] = useState(false);
@@ -170,6 +182,8 @@ export function OfficePreviewPanel({
 
   // P2-D (office-p2d): PDF AcroForm 表单填写对话框
   const [formDialogOpen, setFormDialogOpen] = useState(false);
+  // P1: 转换器安装引导对话框（无本机转换器时点击导出 PDF 触发）
+  const [converterGuideOpen, setConverterGuideOpen] = useState(false);
   // P2-C (office-p2c): excel 公式缓存重算（soffice 重算回写，重算前服务端自动快照）
   const [recalcing, setRecalcing] = useState(false);
   const handleRecalcExcel = async () => {
@@ -208,7 +222,9 @@ export function OfficePreviewPanel({
   //   - 切换 / 重新拉取 → handleToggleFidelity 里先 revoke 旧值再 set 新值；
   //   - 组件卸载 → 下方 unmount effect 通过 ref 读最新值 revoke（空依赖
   //     闭包捕获初始值会拿到 null，所以必须走 ref）。
-  const [fidelityOn, setFidelityOn] = useState(false);
+  const [fidelityOn, setFidelityOn] = useState(() =>
+    resolveDefaultFidelity(preview?.docType, fidelityAvailable, defaultFidelity),
+  );
   const [fidelityLoading, setFidelityLoading] = useState(false);
   const [fidelityUrl, setFidelityUrl] = useState<string | null>(null);
   const [fidelityKey, setFidelityKey] = useState<string | null>(null);
@@ -224,6 +240,10 @@ export function OfficePreviewPanel({
   // M2c: Word 规则审校面板 + 段落定位高亮。
   const [auditOpen, setAuditOpen] = useState(false);
   const [highlightParagraphIndex, setHighlightParagraphIndex] = useState<number | null>(null);
+  // Declared before the reset effect so closing and reopening the same document
+  // can clear the dedupe key; otherwise the auto-load effect short-circuits on
+  // the stale key and never refetches the blob URL the reset just revoked.
+  const autoLoadKeyRef = useRef<string | null>(null);
   useEffect(() => {
     setAuditOpen(false);
     setHighlightParagraphIndex(null);
@@ -233,7 +253,9 @@ export function OfficePreviewPanel({
       return null;
     });
     setFidelityKey(null);
-    setFidelityOn(false);
+    setFidelityOn(resolveDefaultFidelity(preview?.docType, fidelityAvailable, defaultFidelity));
+    autoLoadKeyRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [summaryId]);
   // 组件卸载时清理未释放的 blob URL（通过 ref 读最新值）。
   useEffect(() => {
@@ -246,6 +268,43 @@ export function OfficePreviewPanel({
   const [copiedJson, setCopiedJson] = useState(false);
   const fidelityElapsed = useElapsedSeconds(fidelityLoading);
 
+  // F2: content-revision cache identity (falls back to the legacy
+  // updated_at/size triple when the revision probe failed). Computed before
+  // the empty-state early return so the auto-load hook below stays among the
+  // other hooks (Rules of Hooks: no hooks after a conditional return).
+  const currentFidelityKey = preview
+    ? buildPreviewCacheKey({
+        docId: preview.data.summary.id,
+        revision: docRevision,
+        updatedAt: preview.data.summary.updated_at,
+        sizeBytes: preview.data.summary.metadata.file_size_bytes,
+      }).key
+    : '';
+  currentFidelityKeyRef.current = currentFidelityKey;
+
+  // Auto-load fidelity for Excel/PPT when converter is available.
+  // Uses a ref key (autoLoadKeyRef) to prevent StrictMode double-request.
+  // loadFidelityRef breaks the use-before-define cycle: the effect is declared
+  // above (before the early return) while loadFidelity needs the resolved
+  // summary below, so the effect invokes the latest handler through a ref.
+  const loadFidelityRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!preview || fidelityLoading) return;
+    if (!shouldAutoLoadFidelity(preview.docType, fidelityAvailable)) return;
+    const autoLoadKey = `${preview.data.summary.id}:${currentFidelityKey}`;
+    if (autoLoadKeyRef.current === autoLoadKey) return;
+    autoLoadKeyRef.current = autoLoadKey;
+    // Do not gate on `fidelityOn`: Excel/PPT default to fidelity mode on, so
+    // the toggle may already read "on" while no PDF has been fetched yet.
+    // Load whenever the current key has no cached URL.
+    if (fidelityUrl && fidelityKey === currentFidelityKey) return;
+    loadFidelityRef.current();
+    // `fidelityLoading` must be a dep: switching documents mid-conversion
+    // returns early here, and this dep re-runs the effect once the in-flight
+    // load settles so the new document still auto-loads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preview?.docType, fidelityAvailable, summaryId, currentFidelityKey, fidelityLoading]);
+
   if (!preview) {
     return (
       <div className="flex items-center justify-center p-12 text-muted text-sm border border-dashed border-border rounded-lg">
@@ -255,38 +314,34 @@ export function OfficePreviewPanel({
   }
 
   const summary = preview.data.summary;
-  // F2: content-revision cache identity (falls back to the legacy
-  // updated_at/size triple when the revision probe failed).
-  const currentFidelityKey = buildPreviewCacheKey({
-    docId: summary.id,
-    revision: docRevision,
-    updatedAt: summary.updated_at,
-    sizeBytes: summary.metadata.file_size_bytes,
-  }).key;
-  currentFidelityKeyRef.current = currentFidelityKey;
 
   const buildManagedPath = (ws: string) =>
     [ws, 'office', summary.doc_type, summary.id, summary.generated_filename].join('/');
 
-  const handleToggleFidelity = async () => {
+  const fallbackToStructured = (notify = true) => {
+    setFidelityOn(false);
+    if (notify) toast.error(t('office.fidelity.fallback'));
+  };
+
+  const loadFidelity = async () => {
     if (fidelityLoading) return;
-    if (fidelityOn) {
-      setFidelityOn(false);
-      return;
-    }
-    // P2-B: word + 无本机转换器 → 原生渲染模式（不请求 soffice 转换）。
-    if (!fidelityAvailable && preview?.docType === 'word') {
+    // Word always uses the native docx-preview (no soffice request). Do not
+    // route Word through PDF conversion even when a converter is available:
+    // the render branch never shows the PDF for Word, so conversion would be
+    // wasted, and a conversion failure would wrongly downgrade the healthy
+    // native preview to the structured view.
+    if (preview?.docType === 'word') {
       setFidelityOn(true);
       return;
     }
-    // Cached data URL for the same doc state → instant toggle.
+    // Cached data URL for the same doc state → instant toggle
     if (fidelityUrl && fidelityKey === currentFidelityKey) {
       setFidelityOn(true);
       return;
     }
     const ws = workspacePath ?? summary.workspace_path;
     if (!ws) {
-      toast.error(t('office.fidelity.failed'));
+      fallbackToStructured();
       return;
     }
     setFidelityLoading(true);
@@ -319,20 +374,32 @@ export function OfficePreviewPanel({
         } catch (convErr) {
           const msg = convErr instanceof Error ? convErr.message : String(convErr);
           toast.error(`${t('office.fidelity.failed')}: ${msg}`);
+          fallbackToStructured(false);
+          return;
         }
       }
-      const noConverter = typeof res.error === 'string' && res.error.includes('soffice');
-      toast.error(
-        noConverter
-          ? t('office.export.noConverter')
-          : `${t('office.fidelity.failed')}: ${res.error ?? ''}`.trimEnd(),
-      );
+      // Conversion failed or returned error → fall back to structured view
+      fallbackToStructured();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.fidelity.failed')}: ${msg}`);
+      // 失败详情已经在上面提示过，避免再弹一条兜底 toast。
+      fallbackToStructured(false);
     } finally {
       setFidelityLoading(false);
     }
+  };
+
+  // Keep the auto-load effect (declared above the early return) pointed at
+  // the latest loadFidelity closure.
+  loadFidelityRef.current = loadFidelity;
+
+  const handleToggleFidelity = () => {
+    if (fidelityOn) {
+      setFidelityOn(false);
+      return;
+    }
+    void loadFidelity();
   };
 
   // F3 (office-p0): pdf 源文件的原文预览（高保真管线仅覆盖 docx/xlsx/pptx
@@ -376,7 +443,11 @@ export function OfficePreviewPanel({
   };
 
   const handleExportPdf = async () => {
-    if (exporting || !fidelityAvailable) return;
+    if (exporting) return;
+    if (!fidelityAvailable) {
+      setConverterGuideOpen(true);
+      return;
+    }
     const ws = workspacePath ?? summary.workspace_path;
     if (!ws) {
       toast.error(t('office.export.failed'));
@@ -470,7 +541,7 @@ export function OfficePreviewPanel({
 
   return (
     <div
-      className="border border-border rounded-lg bg-surface overflow-hidden"
+      className="border border-border rounded-lg bg-surface overflow-hidden flex flex-col"
       data-testid="office-preview-panel"
     >
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border bg-bg-subtle">
@@ -566,11 +637,7 @@ export function OfficePreviewPanel({
                   type="button"
                   onClick={() => void handleToggleFidelity()}
                   disabled={fidelityLoading || unavailable}
-                  title={
-                    unavailable
-                      ? t('office.fidelity.unavailable')
-                      : undefined
-                  }
+                  title={unavailable ? t('office.fidelity.unavailable') : undefined}
                   className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors disabled:opacity-50 ${
                     fidelityOn
                       ? 'border-primary text-primary bg-primary/10'
@@ -646,7 +713,7 @@ export function OfficePreviewPanel({
             <button
               type="button"
               onClick={() => void handleExportPdf()}
-              disabled={exporting || !fidelityAvailable}
+              disabled={exporting}
               title={!fidelityAvailable ? t('office.export.noConverter') : undefined}
               className="flex items-center gap-1 px-2 py-1 rounded border border-border text-xs text-text-secondary hover:bg-bg-hover transition-colors disabled:opacity-50"
               data-testid="office-export-pdf-button"
@@ -698,46 +765,53 @@ export function OfficePreviewPanel({
         </div>
       )}
 
+      <ConverterGuideDialog open={converterGuideOpen} onOpenChange={setConverterGuideOpen} />
+
       {/* Round A P1: 高保真开 → 内嵌 Chromium PDF viewer；关 → 结构化预览。
           F3 (office-p0): pdf 源文件另有原文开关（/pdf/data，高保真管线
           不覆盖 pdf 源）。 */}
-      {fidelityOn && fidelityUrl ? (
-        <iframe
-          src={fidelityUrl}
-          title={summary.generated_filename}
-          className="w-full h-[32rem] border-0"
-          data-testid="office-fidelity-frame"
-        />
-      ) : fidelityOn && preview.docType === 'word' ? (
-        <DocxNativePreview
-          workspacePath={workspacePath ?? summary.workspace_path ?? ''}
-          managedPath={buildManagedPath(workspacePath ?? summary.workspace_path ?? '')}
-          revision={docRevision}
-        />
-      ) : (
-        <div className="p-4 max-h-96 overflow-y-auto">
-          {preview.docType === 'pdf' && originalPdfUrl ? (
-            <iframe
-              src={originalPdfUrl}
-              title={summary.generated_filename}
-              className="w-full h-96 border border-border rounded bg-white"
-              data-testid="office-pdf-original-frame"
-            />
-          ) : (
-            <>
-              {preview.docType === 'ppt' && <PptPreview data={preview.data} />}
-              {preview.docType === 'word' && (
-                <WordPreview
-                  data={preview.data}
-                  highlightParagraphIndex={highlightParagraphIndex}
-                />
-              )}
-              {preview.docType === 'excel' && <ExcelPreview key={summary.id} data={preview.data} />}
-              {preview.docType === 'pdf' && <PdfPreview data={preview.data} />}
-            </>
-          )}
-        </div>
-      )}
+      <div className="max-h-[70vh] overflow-y-auto" data-testid="office-preview-scroll">
+        {fidelityOn && fidelityUrl && preview.docType !== 'word' ? (
+          <iframe
+            src={fidelityUrl}
+            title="High-fidelity preview"
+            className="w-full h-[70vh] min-h-[32rem] border-0"
+            data-testid="office-preview-fidelity-iframe"
+          />
+        ) : fidelityOn && preview.docType === 'word' ? (
+          <DocxNativePreview
+            workspacePath={workspacePath ?? summary.workspace_path ?? ''}
+            managedPath={buildManagedPath(workspacePath ?? summary.workspace_path ?? '')}
+            revision={docRevision ?? undefined}
+            onError={() => fallbackToStructured()}
+          />
+        ) : (
+          <div className="p-4" data-testid="office-preview-structured">
+            {preview.docType === 'pdf' && originalPdfUrl ? (
+              <iframe
+                src={originalPdfUrl}
+                title={summary.generated_filename}
+                className="w-full h-96 border border-border rounded bg-white"
+                data-testid="office-pdf-original-frame"
+              />
+            ) : (
+              <>
+                {preview.docType === 'ppt' && <PptPreview data={preview.data} />}
+                {preview.docType === 'word' && (
+                  <WordPreview
+                    data={preview.data}
+                    highlightParagraphIndex={highlightParagraphIndex}
+                  />
+                )}
+                {preview.docType === 'excel' && (
+                  <ExcelPreview key={summary.id} data={preview.data} />
+                )}
+                {preview.docType === 'pdf' && <PdfPreview data={preview.data} />}
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {auditOpen && preview.docType === 'word' && (
         <div className="border-t border-border p-4" data-testid="office-word-audit-host">

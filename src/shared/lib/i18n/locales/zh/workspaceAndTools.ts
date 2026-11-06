@@ -27,6 +27,8 @@ export const zhWorkspaceAndTools = {
   'office.doc.snapshots': '历史版本',
   'office.doc.archivedAt': '归档于',
   'office.section.archived': '归档文档',
+  'office.section.library': '文档库',
+  'office.section.canvas': '文档画布',
   'office.view.live': '全部文档',
   'office.view.archived': '归档文档',
   'office.toast.archived': '已归档',
@@ -40,6 +42,8 @@ export const zhWorkspaceAndTools = {
   'office.snapshot.restoreSuccess': '已恢复到此版本',
   'office.snapshot.restoreFailed': '恢复失败',
   'office.snapshot.close': '关闭',
+  // 文档画布：把文件拖到已打开的文档上 → 替换当前文档
+  'office.canvas.dropToReplace': '松开以替换当前文档',
 
   // ─── Office parity batch 2: 预览富渲染 (item 2.6) ─────
   'office.preview.headings': '标题',
@@ -193,6 +197,7 @@ export const zhWorkspaceAndTools = {
   'office.fidelity.toggle': '高保真',
   'office.fidelity.loading': '转换中…',
   'office.fidelity.failed': '高保真预览失败',
+  'office.fidelity.fallback': '高保真预览不可用，已切换到结构化视图',
   'office.fidelity.unavailable':
     '当前格式未检测到本机转换器（LibreOffice 支持 DOCX/XLSX/PPTX；MS Word 仅支持 DOCX）。Word 已内置原生渲染，不受影响；可点击右上角 [环境] 重新检测或查看安装指引',
   'office.caps.detected': '已发现转换组件，尚未验证运行',
@@ -550,6 +555,11 @@ export const zhWorkspaceAndTools = {
   'workspace.switcher.workbench': '工作台',
   'workspace.switcher.unusable': '当前工作区不可用',
   'workspace.switcher.scratchHint': '当前使用的是草稿目录，文件不会保存到你的项目里',
+  'office.converter.guide.title': '导出 PDF 需要安装转换器',
+  'office.converter.guide.body':
+    '导出 PDF 需要安装 LibreOffice 或 Microsoft Word 作为转换器。安装后重启应用即可使用导出功能。',
+  'office.converter.guide.download': '下载 LibreOffice',
+  'office.converter.guide.close': '关闭',
 } as const;
 
 export function formatZhWorkspaceAndToolsSummary(): string {

@@ -78,9 +78,9 @@ describe('Sidebar — progressive disclosure (U10, P1-7 灰态可见)', () => {
     expect(screen.getByText('Arena')).toBeInTheDocument();
     expect(isLocked('orchestration')).toBe(true);
     expect(isLocked('arena')).toBe(true);
-    // 文档与验收（/office）保留上游的一次性解锁门控，但已提升进一级导航：
+    // 文档工作台（/office）保留上游的一次性解锁门控，但已提升进一级导航：
     // 未解锁时同样灰态可见（不是隐藏），点击给出用途说明后进入。
-    expect(screen.getByText('文档与验收')).toBeInTheDocument();
+    expect(screen.getByText('文档工作台')).toBeInTheDocument();
     expect(isLocked('office')).toBe(true);
     // 项目工作台是常规入口，不受门控
     expect(screen.getByText('项目工作台')).toBeInTheDocument();
@@ -115,8 +115,8 @@ describe('Sidebar — progressive disclosure (U10, P1-7 灰态可见)', () => {
     );
     renderSidebarAt('/chat');
     expect(screen.getByText('编排')).toBeInTheDocument();
-    // 文档与验收已提升为一级入口, 解锁与否都可见
-    expect(screen.getByText('文档与验收')).toBeInTheDocument();
+    // 文档工作台已提升为一级入口, 解锁与否都可见
+    expect(screen.getByText('文档工作台')).toBeInTheDocument();
     // P5：入口并入 /arena 三页签控制台，label 从「Arena 账号」改为「Arena」
     expect(screen.getByText('Arena')).toBeInTheDocument();
     expect(screen.queryByTestId(/^sidebar-locked-/)).toBeNull();

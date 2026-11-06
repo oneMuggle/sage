@@ -442,7 +442,7 @@ export const zhSettingsAndModels = {
   'office.staging.review': '过期暂存且归属进程不在运行 — 仅供人工核查',
   'office.staging.untracked': '无可信暂存记录 — 保留',
   'office.staging.unreadable': '无法读取暂存记录 — 保留',
-  'office.title': '文档与验收',
+  'office.title': '文档工作台',
   'office.selectWorkspace': '选择工作区',
   'office.emptyState': '请先选择工作区目录以开始使用',
   'office.section.pickFile': '选择文件',
@@ -512,10 +512,10 @@ export const zhSettingsAndModels = {
   'office.preview.empty': '选择一个文件以预览',
 
   // ─── 2026-11 信息架构整理: 分区 tab / LaTeX 子 tab / 环境浮层 ─────
-  'office.tabs.label': '文档与验收功能分区',
-  'office.tab.documents': '文档处理',
+  'office.tabs.label': '文档工作台功能分区',
+  'office.tab.documents': '文档',
   'office.tab.generate': '文档生成',
-  'office.tab.rules': '审校与规范',
+  'office.tab.rules': '规则',
   'office.tab.latex': 'LaTeX',
   'office.latex.tabs.label': 'LaTeX 功能分区',
   'office.latex.project': '项目与编译',
@@ -528,8 +528,8 @@ export const zhSettingsAndModels = {
   'office.generate.journal.hint': '选择 .docx 期刊模板 → 填写内容 → 一键生成或校验格式',
   'office.rules.guide.title': 'Word 文档审校入口',
   'office.rules.guide.body':
-    '导入文档后，在「文档处理」的预览面板里进行 Word 审校、修订与导出 PDF；此分区用于把规范 / 范本文档抽取为可复用的规则包。',
-  'office.rules.guide.action': '去文档处理',
+    '导入文档后，在「文档」的预览面板里进行 Word 审校、修订与导出 PDF；此分区用于把规范 / 范本文档抽取为可复用的规则包。',
+  'office.rules.guide.action': '去文档',
 } as const;
 
 export function formatZhSettingsAndModelsSummary(): string {

@@ -43,6 +43,8 @@ export interface DocxNativePreviewProps {
    * and part of the late-response guard below.
    */
   revision?: string | null;
+  /** Optional callback when docx-preview fails. Used by parent to fall back to structured view. */
+  onError?: () => void;
 }
 
 /**
@@ -117,6 +119,7 @@ export function DocxNativePreview({
   workspacePath,
   managedPath,
   revision,
+  onError,
 }: DocxNativePreviewProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -140,12 +143,18 @@ export function DocxNativePreview({
         await renderDocxDataUrl(container, res.data_url);
         if (!cancelled) setState('ok');
       } catch {
-        if (!cancelled) setState('error');
+        if (!cancelled) {
+          setState('error');
+          onError?.();
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
+    // `onError` is intentionally omitted: parents pass a fresh closure each
+    // render, so including it would re-run the docx render on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspacePath, managedPath, revision]);
 
   if (state === 'error') {
@@ -171,7 +180,7 @@ export function DocxNativePreview({
           />
         </div>
       )}
-      <div ref={containerRef} className="min-h-24 p-4" />
+      <div ref={containerRef} className="p-4" />
     </div>
   );
 }
