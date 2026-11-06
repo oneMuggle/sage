@@ -45,6 +45,8 @@ export const enWorkspaceAndTools = {
   'office.snapshot.restoreSuccess': 'Restored to selected version',
   'office.snapshot.restoreFailed': 'Failed to restore',
   'office.snapshot.close': 'Close',
+  // Document canvas: dropping a file onto the open document replaces it
+  'office.canvas.dropToReplace': 'Drop to replace the current document',
 
   // ─── Office parity batch 2: rich preview rendering (item 2.6) ─────
   'office.preview.headings': 'headings',

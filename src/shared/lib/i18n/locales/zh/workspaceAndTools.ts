@@ -40,6 +40,8 @@ export const zhWorkspaceAndTools = {
   'office.snapshot.restoreSuccess': '已恢复到此版本',
   'office.snapshot.restoreFailed': '恢复失败',
   'office.snapshot.close': '关闭',
+  // 文档画布：把文件拖到已打开的文档上 → 替换当前文档
+  'office.canvas.dropToReplace': '松开以替换当前文档',
 
   // ─── Office parity batch 2: 预览富渲染 (item 2.6) ─────
   'office.preview.headings': '标题',
