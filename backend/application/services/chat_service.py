@@ -249,11 +249,40 @@ class ChatService:
         with _tracer.start_as_current_span("chat.run_turn") as span:
             span.set_attribute("session.id", session_id)
             span.set_attribute("message.role", user_message.role.value)
+            messages, _assistant_id = await self._run_turn_inner(
+                session_id,
+                user_message,
+                span,
+                extra_system_messages,
+            )
+            return messages
+
+    async def run_turn_tracked(
+        self,
+        session_id: str,
+        user_message: Message,
+        extra_system_messages: Optional[List[Message]] = None,
+        *,
+        max_iterations: int = 1,
+    ) -> Tuple[List[Message], Optional[str]]:
+        """执行对话并返回最后一条 assistant 消息 id，供跳转定位。
+
+        与 ``run_turn`` 行为一致（含多轮 ReAct），但额外返回最终 assistant
+        消息的 storage id，便于下游把"查看结果"入口直接指向该消息。
+
+        ``max_iterations`` 默认 1（零回归，等价于 ``run_turn`` 的单轮语义）；
+        定时任务等后台场景可传 ``8`` 开启完整 ReAct 多轮循环。
+        """
+        with _tracer.start_as_current_span("chat.run_turn_tracked") as span:
+            span.set_attribute("session.id", session_id)
+            span.set_attribute("message.role", user_message.role.value)
+            span.set_attribute("llm.max_iterations", int(max_iterations))
             return await self._run_turn_inner(
                 session_id,
                 user_message,
                 span,
                 extra_system_messages,
+                max_iterations=max_iterations,
             )
 
     async def _run_turn_inner(
@@ -262,8 +291,14 @@ class ChatService:
         user_message: Message,
         span: Any,
         extra_system_messages: Optional[List[Message]] = None,
-    ) -> List[Message]:
-        """``run_turn`` 的实际实现，调用方需已开好 OTel span。"""
+        *,
+        max_iterations: int = 1,
+    ) -> Tuple[List[Message], Optional[str]]:
+        """``run_turn`` 的实际实现，调用方需已开好 OTel span。
+
+        返回 ``(本轮所有消息, 最后一条 assistant 消息 id)``。
+        ``max_iterations`` 控制 ReAct 多轮循环上限，默认 1（保持单轮行为）。
+        """
         # M1: run-lifecycle 事件作用域（稳定 run_id + 单调 seq）
         run = RunEventScope(self.events, uuid.uuid4().hex)
         run.emit("run_start", session_id=session_id)
@@ -379,108 +414,53 @@ class ChatService:
         if extra_system_messages:
             history = list(history) + list(extra_system_messages)
 
-        # 3) 调 LLM（单次调用；错误时记 metric + event 后透传）
-        # 埋点：LLM 调用计数（9 指标之一）
-        self.metrics.counter(
-            _LLM_CALLS_METRIC,
-            {
-                "model": _DEFAULT_MODEL_LABEL,
-                "provider": "default",
-                "outcome": "started",
-            },
-        )
-        start = time.monotonic()
-        try:
-            # Build tool schemas for LLM (OpenAI function-calling format)
-            llm_tools = None
-            if self.tools:
-                tool_specs = self.tools.list_tools()
-                logger.info(f"[ChatService] ToolPort.list_tools() returned {len(tool_specs)} tools")
-                if tool_specs:
-                    llm_tools = [
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": ts.name,
-                                "description": ts.description,
-                                "parameters": ts.parameters,
-                            },
-                        }
-                        for ts in tool_specs
-                    ]
-                    logger.info(
-                        f"[ChatService] Passing {len(llm_tools)} tools to LLM: {[t['function']['name'] for t in llm_tools]}"
-                    )
-                else:
-                    logger.warning("[ChatService] ToolPort.list_tools() returned empty list!")
-            else:
-                logger.warning("[ChatService] self.tools is None!")
+        # 3) 构建 LLM 工具 schema（循环外一次性快照，跨轮不变）
+        llm_tools = self._build_llm_tools(span)
 
-            response = await self.llm.chat(history, tools=llm_tools)
-        except LLMError as exc:
-            duration = time.monotonic() - start
-            # 失败也记直方图，便于看错误率 / 失败延迟分布
-            self.metrics.histogram(
-                _LLM_CALL_DURATION_METRIC,
-                duration,
-                {"model": _DEFAULT_MODEL_LABEL},
-            )
-            self.metrics.counter(
-                _LLM_CALLS_METRIC,
-                {
-                    "model": _DEFAULT_MODEL_LABEL,
-                    "provider": "default",
-                    "outcome": "error",
-                },
-            )
-            self.events.emit(
-                "llm_error",
-                {"session_id": session_id, "type": exc.type.value},
-            )
-            self.metrics.counter(
-                _ERRORS_METRIC,
-                {"layer": "llm", "error_type": exc.type.value},
-            )
-            span.set_attribute("error", True)
-            span.set_attribute("error.type", exc.type.value)
-            run.emit("run_end", session_id=session_id, status="error", error_type=exc.type.value)
-            raise
-
-        # 成功路径：直方图 + 成功 outcome
-        duration = time.monotonic() - start
-        self.metrics.histogram(
-            _LLM_CALL_DURATION_METRIC,
-            duration,
-            {"model": _DEFAULT_MODEL_LABEL},
-        )
-        self.metrics.counter(
-            _LLM_CALLS_METRIC,
-            {
-                "model": _DEFAULT_MODEL_LABEL,
-                "provider": "default",
-                "outcome": "success",
-            },
-        )
-        span.set_attribute("llm.duration_ms", int(duration * 1000))
-        span.set_attribute("response.has_tool_calls", bool(response.tool_calls))
-
-        # Round 14: 空响应守卫（与 legacy B1 同语义）—— 空白回复先重试
-        if (not response.tool_calls) and (not (response.content or "").strip()):
-            retried = await self._retry_empty_response(history, llm_tools)
-            if retried is not None:
-                response = retried
-                span.set_attribute("response.empty_retried", True)
-
-        # 4) 执行模型发起的 tool_calls（PG2.9：单轮执行；不触发二次 LLM）
+        # 4) ReAct 多轮循环（默认 max_iterations=1 → 单轮行为等价）
+        final_response: Optional[Message] = None
+        final_assistant_message_id: Optional[str] = None
+        iterations = 0
+        total_tool_call_count = 0
+        # 单次 run 内已执行的 tool_call 累计数，跨轮共享
+        # ``ToolPolicy.max_tool_calls_per_run`` 预算（否则每轮重置 → 预算失效）。
+        total_executed = 0
         budget_exceeded = False
-        if response.tool_calls:
-            # 专家技能作用域（M1，spec §5.1）：hex 路径的 tools 适配器是
-            # 跨会话共享的，不感知会话绑定 —— 执行前把本轮允许集写入
-            # ContextVar，让 in-loop ``SkillTool`` 按专家作用域 fail-closed。
-            budget_exceeded = await self._execute_tool_calls_scoped(
-                session_id, response.tool_calls, run, skill_allowed
+
+        while iterations < max_iterations:
+            iterations += 1
+
+            response = await self._chat_once(
+                history=history,
+                llm_tools=llm_tools,
+                span=span,
+                run=run,
+                session_id=session_id,
             )
-            # 埋点：ReAct 步数（9 指标之一）— 本轮触发的 tool_call 数
+
+            if not response.tool_calls:
+                # 终止条件 A：模型未发起工具调用 → 最终响应
+                self._apply_skill_signals(
+                    response=response,
+                    session_id=session_id,
+                    activation_block=activation_block,
+                    span=span,
+                    run=run,
+                    total_tool_call_count=total_tool_call_count,
+                )
+                final_assistant_message_id = await self.storage.append_message(
+                    session_id, response
+                )
+                self.events.emit(
+                    "chat_response_completed",
+                    {"session_id": session_id},
+                )
+                final_response = response
+                break
+
+            # 终止条件 B 检查：先落 assistant(tool_calls)，再落 tool 结果，
+            # 保证历史顺序正确（OpenAI API 要求 assistant→tool 配对）。
+            total_tool_call_count += len(response.tool_calls)
             self.metrics.histogram(
                 _REACT_STEPS_METRIC,
                 float(len(response.tool_calls)),
@@ -488,71 +468,80 @@ class ChatService:
             )
             span.set_attribute("tool_calls.count", len(response.tool_calls))
 
-        # 4.5) 技能 Nudge（best-effort）: 单轮工具调用 ≥ 阈值且未自动激活技能
-        #      时, 在 assistant 回复末尾追加"建议保存为技能"的提示。
-        #      仅在 response 有正文时生效; 任何异常降级跳过, 不破坏对话轮次。
-        #
-        #      4.5.1) Background Review 信号检测：同一条件触发
-        #      review event enqueue（complex_turn），供后台 worker 分析
-        #      并可能生成新技能草稿。best-effort：review queue 不可用时
-        #      静默降级，不影响对话热路径。
-        try:
-            tool_call_count = len(response.tool_calls or [])
-            is_complex_turn = (
-                tool_call_count >= SKILL_NUDGE_TOOL_CALL_THRESHOLD
-                and not activation_block
+            # 关键：先落 assistant（带 tool_calls），再落 tool 结果
+            assistant_message_id = await self.storage.append_message(
+                session_id, response
             )
-            # Round 2: 低阈值入队（2~3 次工具调用）→ 需要 LLM 初筛
-            should_enqueue_review = (
-                tool_call_count >= REVIEW_ENQUEUE_TOOL_CALL_THRESHOLD
-                and not activation_block
+            if final_assistant_message_id is None:
+                final_assistant_message_id = assistant_message_id
+
+            budget_exceeded, tool_messages = await self._execute_tool_calls_scoped(
+                session_id,
+                response.tool_calls,
+                run,
+                skill_allowed,
+                already_called=total_executed,
             )
-            needs_screening = (
-                tool_call_count < SKILL_NUDGE_TOOL_CALL_THRESHOLD
-            )
+            for tm in tool_messages:
+                await self.storage.append_message(session_id, tm)
+            # 未超预算时全部 tool_call 均被执行 → 累加进 run 级预算
+            if not budget_exceeded:
+                total_executed += len(response.tool_calls)
 
-            if response.content and is_complex_turn:
-                response.content = (response.content or "") + SKILL_NUDGE_SUFFIX
-                span.set_attribute("skills.nudge_applied", True)
-
-            # 4.5.1) Background Review: enqueue complex_turn signal
-            if should_enqueue_review:
-                from backend.skills.review_queue import get_review_queue
-
-                review_queue = get_review_queue()
-                # ToolCall 数据类不可直接 JSON 序列化，转为 dict
-                tool_calls_serialized = [
-                    {"name": tc.name, "args": tc.args}
-                    for tc in (response.tool_calls or [])
-                ]
-                review_queue.enqueue(
-                    trigger_type="complex_turn",
+            is_final = budget_exceeded or iterations >= max_iterations
+            if is_final:
+                self._apply_skill_signals(
+                    response=response,
                     session_id=session_id,
-                    context={
-                        "tool_calls": tool_calls_serialized,
-                        "tool_call_count": tool_call_count,
-                        "threshold": SKILL_NUDGE_TOOL_CALL_THRESHOLD,
-                        "needs_screening": needs_screening,
-                    },
+                    activation_block=activation_block,
+                    span=span,
+                    run=run,
+                    total_tool_call_count=total_tool_call_count,
                 )
-                span.set_attribute("review.complex_turn_enqueued", True)
-        except Exception as exc:  # noqa: BLE001 - best-effort 契约
-            logger.debug(f"Skill nudge / review signal skipped: {exc}")
+                self.events.emit(
+                    "chat_response_completed",
+                    {"session_id": session_id},
+                )
+                final_response = response
+                break
 
-        # 5) 持久化 assistant response（即使触发了 tool_calls，
-        #    仍把 LLM 原始的 assistant message 落库）
-        # Gap E — capture the persisted assistant message id for source_message_id.
-        assistant_message_id = await self.storage.append_message(session_id, response)
-        self.events.emit(
-            "chat_response_completed",
-            {"session_id": session_id},
-        )
+            # 还有余量：重新读取历史作为下一轮上下文
+            next_history = await self.storage.get_messages(
+                session_id, limit=_DEFAULT_HISTORY_LIMIT
+            )
+            history = [Message(role=Role.SYSTEM, content=system_content)] + list(
+                next_history
+            )
+            if extra_system_messages:
+                history = list(history) + list(extra_system_messages)
+
+        # safety: loop invariant violation (iterations == 0) — defensive
+        if final_response is None:  # pragma: no cover - 理论不可达
+            final_response = Message(role=Role.ASSISTANT, content="")
+
+        # 5.5) Repeated Pattern Signal (2026-09-14): 检测当前会话是否
+        #      出现了同一工具签名的重复调用（>= 3 次）。命中则入队
+        #      ``repeated_pattern`` review event, 由后台 worker 起草 skill.
+        #      best-effort：异常仅 logger.debug, 不影响 chat 主路径.
+        #      复用 history + 当前 response, 不额外查 DB.
+        try:
+            from backend.skills.repeated_pattern_signal import (
+                detect_and_enqueue as _detect_repeated_pattern,
+            )
+
+            _detect_repeated_pattern(
+                session_id=session_id,
+                history_messages=[*history, final_response],
+                span=span,
+            )
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            logger.debug(f"Repeated pattern signal skipped: {exc}")
 
         # 6) 埋点：token 消耗（9 指标之一）— 仅在响应携带 usage 时记录
         # MetricPort 的 counter 只能 inc(1)；此处用 Counter 表示
         # "至少发生了一次 token 消耗" 的事件计数。精确的 token 总数
         # 在 LLM 客户端 / 适配器层独立记录（不在 P3.1 范围）。
-        usage = getattr(response, "usage", None)
+        usage = getattr(final_response, "usage", None)
         if isinstance(usage, dict) and usage:
             model_label = str(usage.get("model", _DEFAULT_MODEL_LABEL))
             prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
@@ -588,8 +577,10 @@ class ChatService:
 
                     await self._lifecycle.on_turn_complete(
                         session_id,
-                        [user_message, response],
-                        source_message_id=assistant_message_id or user_message_id,
+                        [user_message, final_response],
+                        source_message_id=(
+                            final_assistant_message_id or user_message_id
+                        ),
                         agent_id=resolve_bound_specialist(session_id),
                     )
                 except Exception as e:  # noqa: BLE001 — never break the turn
@@ -609,9 +600,9 @@ class ChatService:
                         await self._extract_and_store_memory(
                             session_id=session_id,
                             user_message=user_message,
-                            assistant_message=response,
+                            assistant_message=final_response,
                             user_message_id=user_message_id,
-                            assistant_message_id=assistant_message_id,
+                            assistant_message_id=final_assistant_message_id,
                         )
                     except Exception as e:
                         logger.warning(f"Failed to store memory: {e}")
@@ -623,9 +614,9 @@ class ChatService:
                     await self._extract_and_store_memory(
                         session_id=session_id,
                         user_message=user_message,
-                        assistant_message=response,
+                        assistant_message=final_response,
                         user_message_id=user_message_id,
-                        assistant_message_id=assistant_message_id,
+                        assistant_message_id=final_assistant_message_id,
                     )
                 except Exception as e:
                     logger.warning(f"Failed to store memory: {e}")
@@ -640,7 +631,7 @@ class ChatService:
                     from backend.chat.title_generator import TitleGenerator
 
                     title = await TitleGenerator(self.llm).generate(
-                        user_message.content or "", response.content or ""
+                        user_message.content or "", final_response.content or ""
                     )
                     attempts = int(session_data.get("title_attempts") or 0) + 1
                     await self.storage.update_session(
@@ -654,7 +645,7 @@ class ChatService:
             session_id=session_id,
             status="tool_budget_exceeded" if budget_exceeded else "ok",
         )
-        return [user_message, response]
+        return [user_message, final_response], final_assistant_message_id
 
     # ------------------------------------------------------------------ #
     # 内部辅助：system prompt 组装 (WS-C P0-3 frozen snapshot)
@@ -964,6 +955,158 @@ class ChatService:
     # 内部辅助：执行 tool_calls
     # ------------------------------------------------------------------ #
 
+    def _build_llm_tools(self, span: Any) -> Optional[List[Dict[str, Any]]]:
+        """把 ``ToolPort.list_tools()`` 翻译成 OpenAI function-calling schema。
+
+        在 ReAct 循环外调用一次，跨轮不变。返回 ``None`` 表示无工具可用。
+        """
+        if not self.tools:
+            logger.warning("[ChatService] self.tools is None!")
+            return None
+        tool_specs = self.tools.list_tools()
+        logger.info(f"[ChatService] ToolPort.list_tools() returned {len(tool_specs)} tools")
+        if not tool_specs:
+            logger.warning("[ChatService] ToolPort.list_tools() returned empty list!")
+            return None
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": ts.name,
+                    "description": ts.description,
+                    "parameters": ts.parameters,
+                },
+            }
+            for ts in tool_specs
+        ]
+
+    async def _chat_once(
+        self,
+        history: List[Message],
+        llm_tools: Optional[List[Dict[str, Any]]],
+        span: Any,
+        run: RunEventScope,
+        session_id: str,
+    ) -> Message:
+        """单次 LLM 调用 + metrics + 空响应重试。
+
+        被 ``_run_turn_inner`` 的 ReAct 循环调用，每次迭代一次。
+        """
+        self.metrics.counter(
+            _LLM_CALLS_METRIC,
+            {
+                "model": _DEFAULT_MODEL_LABEL,
+                "provider": "default",
+                "outcome": "started",
+            },
+        )
+        start = time.monotonic()
+        try:
+            response = await self.llm.chat(history, tools=llm_tools)
+        except LLMError as exc:
+            duration = time.monotonic() - start
+            self.metrics.histogram(
+                _LLM_CALL_DURATION_METRIC,
+                duration,
+                {"model": _DEFAULT_MODEL_LABEL},
+            )
+            self.metrics.counter(
+                _LLM_CALLS_METRIC,
+                {
+                    "model": _DEFAULT_MODEL_LABEL,
+                    "provider": "default",
+                    "outcome": "error",
+                },
+            )
+            self.events.emit(
+                "llm_error",
+                {"session_id": session_id, "type": exc.type.value},
+            )
+            self.metrics.counter(
+                _ERRORS_METRIC,
+                {"layer": "llm", "error_type": exc.type.value},
+            )
+            span.set_attribute("error", True)
+            span.set_attribute("error.type", exc.type.value)
+            run.emit("run_end", session_id=session_id, status="error", error_type=exc.type.value)
+            raise
+
+        duration = time.monotonic() - start
+        self.metrics.histogram(
+            _LLM_CALL_DURATION_METRIC,
+            duration,
+            {"model": _DEFAULT_MODEL_LABEL},
+        )
+        self.metrics.counter(
+            _LLM_CALLS_METRIC,
+            {
+                "model": _DEFAULT_MODEL_LABEL,
+                "provider": "default",
+                "outcome": "success",
+            },
+        )
+        span.set_attribute("llm.duration_ms", int(duration * 1000))
+        span.set_attribute("response.has_tool_calls", bool(response.tool_calls))
+
+        if (not response.tool_calls) and (not (response.content or "").strip()):
+            retried = await self._retry_empty_response(history, llm_tools)
+            if retried is not None:
+                response = retried
+                span.set_attribute("response.empty_retried", True)
+        return response
+
+    def _apply_skill_signals(
+        self,
+        response: Message,
+        session_id: str,
+        activation_block: str,
+        span: Any,
+        run: RunEventScope,
+        *,
+        total_tool_call_count: int,
+    ) -> None:
+        """技能 Nudge + Background Review 信号检测（best-effort）。
+
+        在最终响应（不再继续迭代）上调用一次。
+        ``total_tool_call_count`` 累计跨多轮的 tool_calls 数。
+        """
+        try:
+            is_complex_turn = (
+                total_tool_call_count >= SKILL_NUDGE_TOOL_CALL_THRESHOLD
+                and not activation_block
+            )
+            should_enqueue_review = (
+                total_tool_call_count >= REVIEW_ENQUEUE_TOOL_CALL_THRESHOLD
+                and not activation_block
+            )
+            needs_screening = total_tool_call_count < SKILL_NUDGE_TOOL_CALL_THRESHOLD
+
+            if response.content and is_complex_turn:
+                response.content = (response.content or "") + SKILL_NUDGE_SUFFIX
+                span.set_attribute("skills.nudge_applied", True)
+
+            if should_enqueue_review:
+                from backend.skills.review_queue import get_review_queue
+
+                review_queue = get_review_queue()
+                tool_calls_serialized = [
+                    {"name": tc.name, "args": tc.args}
+                    for tc in (response.tool_calls or [])
+                ]
+                review_queue.enqueue(
+                    trigger_type="complex_turn",
+                    session_id=session_id,
+                    context={
+                        "tool_calls": tool_calls_serialized,
+                        "tool_call_count": total_tool_call_count,
+                        "threshold": SKILL_NUDGE_TOOL_CALL_THRESHOLD,
+                        "needs_screening": needs_screening,
+                    },
+                )
+                span.set_attribute("review.complex_turn_enqueued", True)
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            logger.debug(f"Skill nudge / review signal skipped: {exc}")
+
     async def _retry_empty_response(
         self, history: List[Message], llm_tools: Optional[List[Dict[str, Any]]]
     ) -> Optional[Message]:
@@ -997,13 +1140,18 @@ class ChatService:
         tool_calls: List[ToolCall],
         run: RunEventScope,
         skill_allowed: Optional[set],
-    ) -> bool:
+        *,
+        already_called: int = 0,
+    ) -> Tuple[bool, List[Message]]:
         """以本轮技能作用域执行 tool_calls（M1，spec §5.1）。
 
         hex 路径的 tools 适配器在进程内跨会话共享，构造期注入无法表达
         "本轮是哪个专家"；改为在执行期间把解析好的允许集写入 ContextVar，
         工具线程（``py_compat.to_thread`` 复制上下文）内的 ``SkillTool``
         读取后按专家作用域 fail-closed。
+
+        ``already_called`` 透传到 ``_execute_tool_calls`` 用于 ReAct 跨轮预算
+        累计（M2）。
         """
         from backend.tools.skill_tool import (
             reset_turn_skill_allowlist,
@@ -1012,7 +1160,9 @@ class ChatService:
 
         token = set_turn_skill_allowlist(skill_allowed)
         try:
-            return await self._execute_tool_calls(session_id, tool_calls, run)
+            return await self._execute_tool_calls(
+                session_id, tool_calls, run, already_called=already_called
+            )
         finally:
             reset_turn_skill_allowlist(token)
 
@@ -1021,21 +1171,25 @@ class ChatService:
         session_id: str,
         tool_calls: List[ToolCall],
         run: RunEventScope,
-    ) -> bool:
-        """执行模型返回的 tool_calls，依次 emit 事件 / 计数 / 持久化。
+        *,
+        already_called: int = 0,
+    ) -> Tuple[bool, List[Message]]:
+        """执行模型返回的 tool_calls，依次 emit 事件 / 计数。
 
         PG2.9 简化：每个 tool_call 都立即执行（不并发）、执行结果
-        作为 ``role=TOOL`` 消息追加到会话历史，但不重新调 LLM。
-        这样 P3+ 在此基础上扩展 ReAct 多轮循环时，行为是"在末尾
-        加一层循环"，向后兼容。
+        作为 ``role=TOOL`` 消息构建但**不持久化**——由调用方
+        ``_run_turn_inner`` 在 assistant 消息之后顺序落库，保证
+        OpenAI API 要求的 assistant→tool 历史配对。
 
-        M2 工具调用预算守卫：单次 run 内 tool_call 累计超
-        ``tool_policy.max_tool_calls_per_run`` 时停止执行；返回 ``True`` 让
-        上层把 ``run_end`` 标记为 ``status="tool_budget_exceeded"``（对齐
-        ``core/legacy/agent.py:611`` 的 ``max_iterations_exceeded`` 语义）。
+        M2 工具调用预算守卫：单次 run 内 tool_call **累计**超
+        ``tool_policy.max_tool_calls_per_run`` 时停止执行。``already_called``
+        传入本轮 run 此前已执行的次数，使多轮 ReAct 共享同一预算
+        （否则每轮重置会让 8 轮 × 上限成为实际上限）。
 
         Returns:
-            ``True`` 当预算被超额；否则 ``False``。
+            ``(budget_exceeded, tool_messages)`` —— ``tool_messages`` 为
+            本次执行产生的 TOOL 消息（含权限拒绝 / 预算跳过的 synthetic
+            消息），调用方负责按序 ``append_message`` 持久化。
         """
         # 实时解析：env > UI 设置 (OrchSettings) > 快照 policy。
         # 快照仍是默认值 → 查 UI 设置（UI 改大不重启即生效）；
@@ -1046,10 +1200,21 @@ class ChatService:
             if policy_budget == DEFAULT_MAX_TOOL_CALLS_PER_RUN
             else policy_budget
         )
-        called = 0
-        for tc in tool_calls:
+        called = already_called
+        tool_messages: List[Message] = []
+        for index, tc in enumerate(tool_calls):
             if called >= budget:
-                # 预算用尽：剩余 tool_calls 不再执行，直接 break。
+                # 预算用尽：剩余 tool_calls 不再执行；为它们生成 synthetic
+                # TOOL 消息保持 assistant→tool 配对（历史有效性），随后 break。
+                for skipped in tool_calls[index:]:
+                    tool_messages.append(Message(
+                        role=Role.TOOL,
+                        content=(
+                            "tool call not executed: run tool-call budget "
+                            f"({budget}) exhausted"
+                        ),
+                        tool_call_id=skipped.id,
+                    ))
                 break
             self.events.emit(
                 "tool_invoked",
@@ -1066,13 +1231,16 @@ class ChatService:
             action = AgentAction(action_type=tc.name, target=target, parameters=dict(tc.args))
             decision = "allowed" if self._permission.check(action) else "denied"
             if decision == "denied":
+                denial_text = (
+                    f"permission_denied: action not permitted by "
+                    f"{self._permission.preset.value} preset"
+                )
                 run.emit(
                     "tool_result",
                     session_id=session_id,
                     tool=tc.name,
                     success=False,
-                    error="permission_denied: action not permitted by "
-                    f"{self._permission.preset.value} preset",
+                    error=denial_text,
                     permission_decision="denied",
                     resolved_path=target,
                 )
@@ -1080,10 +1248,17 @@ class ChatService:
                     _TOOL_INVOCATIONS_METRIC,
                     {"tool": tc.name, "outcome": "denied"},
                 )
+                # 为被拒的 tool_call 生成 synthetic TOOL 消息，保证
+                # assistant(tool_calls) → tool 历史配对（OpenAI API 要求）。
+                tool_messages.append(Message(
+                    role=Role.TOOL,
+                    content=denial_text,
+                    tool_call_id=tc.id,
+                ))
                 called += 1
                 continue
             result = await self.tools.execute(tc.name, tc.args)
-            # 把工具结果作为 TOOL 消息回写会话历史
+            # 构建 TOOL 消息（不持久化，由调用方落库）
             tool_message = Message(
                 role=Role.TOOL,
                 content=(
@@ -1095,7 +1270,7 @@ class ChatService:
                 else (result.error or ""),
                 tool_call_id=tc.id,
             )
-            await self.storage.append_message(session_id, tool_message)
+            tool_messages.append(tool_message)
             called += 1
             # M1: 对称的 tool_result 事件（与 tool_invoked 成对，带 run_id + seq）
             run.emit(
@@ -1129,7 +1304,8 @@ class ChatService:
                     _TOOL_INVOCATIONS_METRIC,
                     {"tool": tc.name, "outcome": "success"},
                 )
-        return called >= budget and len(tool_calls) > budget
+        budget_exceeded = already_called + len(tool_calls) > budget
+        return budget_exceeded, tool_messages
 
 
 # --------------------------------------------------------------------------- #

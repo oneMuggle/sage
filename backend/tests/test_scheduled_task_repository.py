@@ -26,6 +26,10 @@ def task(**overrides):
         "last_error": None,
         "run_count": 0,
         "max_runs": None,
+        # M2 新增（参见方案 docs/plans/2026-11-06_scheduled-task-auto-execute.md §3.4）
+        "mode": "deliver",
+        "last_result_message_id": None,
+        "last_duration_ms": None,
     }
     row.update(overrides)
     return row
