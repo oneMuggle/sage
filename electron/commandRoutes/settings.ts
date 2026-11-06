@@ -202,6 +202,11 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     method: 'GET',
     path: () => '/api/v1/scheduled/notifications/pending',
   },
+  // 2026-11-06 Phase 3: 后台 shell 列表（ProgressSection 后台任务区块）
+  shell_list: {
+    method: 'GET',
+    path: () => '/api/v1/shells',
+  },
   // R17-B: evolution 任务（固化/巡检等）手动触发面 —— APScheduler 侧 job，
   // 不在 JSON 持久化的用户任务表里，走独立路由。
   scheduled_evolution_tasks: {

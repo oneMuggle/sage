@@ -17,6 +17,12 @@ export const enSettingsUi = {
   'settings.basic.notifications_background_label': 'Background task notifications',
   'settings.basic.notifications_background_desc':
     'Notify when scheduled tasks fire, todos become due, or background tasks finish',
+  'settings.basic.notifications_webhook_label': 'Generic webhook',
+  'settings.basic.notifications_webhook_desc':
+    'POST each notification as JSON to this URL (custom bots/automation platforms); leave empty to disable',
+  'settings.basic.notifications_slack_label': 'Slack webhook',
+  'settings.basic.notifications_slack_desc':
+    'Slack Incoming Webhook URL; notifications are sent as text messages. Leave empty to disable',
   'settings.basic.conversation': 'Conversation',
   'settings.basic.history_size_desc':
     'Number of recent inputs recallable with the up/down arrow keys in the composer (per session, 1-200)',
