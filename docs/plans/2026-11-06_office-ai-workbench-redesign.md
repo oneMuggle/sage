@@ -1,6 +1,6 @@
 # 文档工作台（AI 文档工作台）重构方案
 
-> 状态：设计已确认，待实施
+> 状态：P1 已交付（2026-11-06），P2 / P3 待实施
 > 日期：2026-11-06
 > 分支：`worktree-office-ai-workbench`（基于 main）
 > 定位：**AI 文档工作台**（参考 Cursor / ChatGPT Canvas / Notion AI）
@@ -135,6 +135,8 @@
 | Excel | 无内置版式渲染 | ⬜ 有 LibreOffice/Word 才开 | 结构化视图 + 工具栏「安装转换器」引导（不显示为高保真失败） |
 | PPT | 无内置版式渲染 | ⬜ 有 LibreOffice/Word 才开 | 同上 |
 
+> P1 实现备注：Word 已按上表默认高保真；PDF 仍走结构化视图 + 手动「原始 PDF」开关，默认开启排在 P2（`officeFidelity.ts` 的 `DEFAULT_ON` 目前不含 pdf）。
+
 - iframe 容器：`flex-1 min-h-0 overflow-y-auto`，iframe `w-full h-full min-h-[32rem]`（替换固定 `h-[32rem]`）。
 - 已声明可高保真但渲染失败（`onError` / 加载后空白 / 5s 超时）→ 自动降级结构化视图 + toast「已切换到结构视图」。
 - 结构化视图容器同样 `flex-1 min-h-0 overflow-y-auto`，保证长文档可滚动。
@@ -236,7 +238,7 @@ interface RulePack {
 - [ ] `officeWorkspaceStore` 基础状态。
   - _延期到 P2（AI 侧栏）一起实现——侧栏需要工作区感知状态，届时再引入。_
 
-**验证**：文档 Tab 功能全通；高保真默认、长文档可滚动、导出引导可用；E2E 通过。
+**验证**：文档 Tab 功能全通；高保真默认、长文档可滚动、导出引导可用；单元 / 集成测试通过，E2E / UI 冒烟待 reviewer 本地确认。
   - _UI 冒烟需启动 Electron 桌面端；本 worktree 未安装 `node_modules`（仅含 vitest 所需依赖），无法在会话内启动。单元 / 集成测试覆盖了 5 条冒烟项：默认高保真 (`OfficePreviewPanel`)、长文档可滚动 (`OfficePreviewPanel.test`)、拖入替换 (`DocumentCanvas.test`)、导出引导 (`ConverterGuideDialog.test`)、左栏切换中栏预览 (`Office.tabs.test` + `OfficeLayout`)。UI 冒烟留给 PR 合并前由 reviewer 本地运行。_
 
 ### P2：AI 侧栏
