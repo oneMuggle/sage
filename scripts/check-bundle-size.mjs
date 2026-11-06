@@ -19,6 +19,13 @@
 // EndpointsTab 表单 JSX，主 chunk 实测 1839KB、CI 实测 1843KB，卡在原
 // 1.8MB 边界（本地通过、CI 恰好超限）。按棘轮协议仅上调该项至 1.85MB。
 //
+// 2026-11-06 棘轮上调：定时任务自动执行（#2898）在 ScheduledTasks 列表
+// 新增模式徽章 / 状态 / 查看结果按钮（Zap + Bell 图标，lucide 树摇后
+// 仍带 1–2 KB 辅助函数），CreateTaskModal 增模式切换单选，i18n 新增
+// scheduled.mode.* / view_result* / executing / duration_ms 文案。CI
+// 实测 1895KB，卡在原 1.85MB（1894KB）边界 1KB。按棘轮协议仅上调
+// 至 1.86MB。
+//
 // 用法：npm run build 之后执行 `node scripts/check-bundle-size.mjs`。
 // 退出码：0 = 全部预算内；1 = 超限或 dist 不存在。
 // 若为有意的功能增长导致超限，更新本文件 BUDGETS 并在 PR 说明依据
@@ -30,7 +37,7 @@ const ASSETS = 'dist/assets';
 
 const BUDGETS = [
   { name: 'dist/assets 总体积', max: 12 * 1024 * 1024 },
-  { name: '最大单个 .js chunk', max: 1.85 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
+  { name: '最大单个 .js chunk', max: 1.86 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
 ];
 
 if (!readdirSync('.').includes('dist')) {
