@@ -1,6 +1,6 @@
 # 技术专题文档总览
 
-> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-132；本索引以目录中的实际文件为准。
+> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-134；本索引以目录中的实际文件为准。
 
 ---
 
@@ -110,6 +110,7 @@
 | 131  | [聊天附件链路](./131-attachment-pipeline.md)                                           | MediaStore sidecar 元数据 + 后缀回退表与上传 allowlist 同口径；R37 注入带 name/type + 逐附件 `ok/skipped/error` 状态双出口（`attachments_processed` 事件 + `client_meta.attachments_status` 落库）；`useFileUpload` 预检状态机 + 气泡附件卡片 + 整页拖放共享 hook                                                                                                             |
 | 132  | [会话标题生成机制](./132-session-title-generation.md)                                  | 标题 LLM 生成流程 / `title_attempts` 计数器 / 启动回补调度器 / 专用标题模型配置                                                                                                                                                                                                                                                                                               |
 | 133  | [专家（数字员工）系统](./133-specialist-persona.md)                                    | M0–M4 全量：AgentProfile 运行时接线 / 技能作用域 fail-closed / 知识绑定 RRF / 记忆 agent_id 隔离 / 包格式 v2 + 模板库 + 版本回滚 + 黄金任务评测                                                                                                                                                                                                                               |
+| 134  | [技能页面优化](./134-skills-page-optimization.md)                                       | legacy 草稿链路修复 / 三组来源（内置·模板·我的）/ 紧凑列表 + 详情抽屉 / origin 枚举 / 打开目录与定位 / zip 导出 / 软链边界 / 汉化                                                                                                                                                                                                                                             |
 
 ---
 
@@ -118,7 +119,7 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 用户价值层 | [01 概述](../01-overview.md) — [12 实施计划](../12-plan.md) |
-| 横切关注点 | 本目录（15-132）                                            |
+| 横切关注点 | 本目录（15-134）                                            |
 
 ---
 
