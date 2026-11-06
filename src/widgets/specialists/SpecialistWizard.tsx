@@ -133,13 +133,16 @@ export function SpecialistWizard({
   }, [id, name, isEdit]);
 
   const step2Error = useMemo(() => {
-    if (isPersonaEmpty(sections)) return '至少填写「身份」一段';
+    if (isPersonaEmpty(sections))
+      return '至少填写一段人设（身份 / 职责 / 工作方式 / 风格 / 行为边界 / 输出模板任意一项）';
     return '';
   }, [sections]);
 
+  // 当前步骤的下一步可用条件；保存按钮需同时无 step1/step2 错误。
+  const canAdvance = step === 0 ? !step1Error : step === 1 ? !step2Error : true;
+
   function advanceStep() {
-    if (step === 0 && step1Error) return;
-    if (step === 1 && step2Error) return;
+    if (!canAdvance) return;
     setStep((s) => (s + 1 > 3 ? 3 : ((s + 1) as WizardStep)));
   }
   function backStep() {
@@ -253,8 +256,8 @@ export function SpecialistWizard({
                     className="rounded-radius-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
                   />
                   <p className="text-ui-xs text-faint">
-                    以小写字母/数字开头，仅含字母数字 <code>.</code> <code>_</code>{' '}
-                    <code>-</code>。ID 一旦创建不可修改。
+                    以小写字母/数字开头，仅含字母数字 <code>.</code> <code>_</code> <code>-</code>
+                    。ID 一旦创建不可修改。
                   </p>
                 </div>
               )}
@@ -300,10 +303,30 @@ export function SpecialistWizard({
                   />
                 </div>
               </div>
+              {step1Error && (
+                <p
+                  className="text-ui-xs text-destructive"
+                  data-testid="specialist-wizard-step1-error"
+                >
+                  {step1Error}
+                </p>
+              )}
             </>
           )}
 
-          {step === 1 && <PersonaEditor sections={sections} onChange={setSections} />}
+          {step === 1 && (
+            <div className="flex flex-col gap-2">
+              <PersonaEditor sections={sections} onChange={setSections} />
+              {step2Error && (
+                <p
+                  className="text-ui-xs text-destructive"
+                  data-testid="specialist-wizard-step2-error"
+                >
+                  {step2Error}
+                </p>
+              )}
+            </div>
+          )}
 
           {step === 2 && (
             <>
@@ -408,7 +431,7 @@ export function SpecialistWizard({
             <button
               type="button"
               onClick={advanceStep}
-              disabled={!!step1Error || !!step2Error}
+              disabled={!canAdvance}
               className="rounded-radius-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               下一步
