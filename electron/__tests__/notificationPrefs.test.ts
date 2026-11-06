@@ -38,10 +38,17 @@ describe('notificationPrefs', () => {
 
   it('写入后能原样读回', () => {
     const path = join(dir, 'prefs.json');
-    writeNotificationPrefs(path, { enabled: false, backgroundTasks: true });
+    writeNotificationPrefs(path, {
+      enabled: false,
+      backgroundTasks: true,
+      webhookUrl: 'https://hook.example/x',
+      slackWebhookUrl: 'https://hooks.slack.com/y',
+    });
     expect(readNotificationPrefs(path)).toEqual({
       enabled: false,
       backgroundTasks: true,
+      webhookUrl: 'https://hook.example/x',
+      slackWebhookUrl: 'https://hooks.slack.com/y',
     });
   });
 
@@ -51,6 +58,8 @@ describe('notificationPrefs', () => {
     expect(readNotificationPrefs(path)).toEqual({
       enabled: false,
       backgroundTasks: true,
+      webhookUrl: '',
+      slackWebhookUrl: '',
     });
   });
 

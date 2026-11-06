@@ -19,6 +19,7 @@ import type { ToolCall } from '../../../shared/lib/store';
 import { TrajectoryPane } from '../TrajectoryPane';
 
 // Multi-Agent Orchestration: 编排任务板聚合状态
+import { BackgroundShellsSection } from './BackgroundShellsSection';
 import { CurrentTaskFocus } from './CurrentTaskFocus';
 import { SessionRunHistory } from './SessionRunHistory';
 import { StatusBar } from './StatusBar';
@@ -210,6 +211,8 @@ export function ProgressSection({
                   <CurrentTaskFocus board={taskBoard ?? null} onOpenTask={openTaskDetail} />
                   {/* 任务清单 —— agent 自维护；编排计划已由「任务」子视图统一承载。 */}
                   <TodoListSection todos={todos} />
+                  {/* 2026-11-06 Phase 3: 后台 shell 列表 + 实时输出 */}
+                  <BackgroundShellsSection />
                   {sessionId && onSelectRun && (
                     <SessionRunHistory
                       sessionId={sessionId}

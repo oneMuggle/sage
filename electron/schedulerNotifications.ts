@@ -14,6 +14,10 @@ export interface PendingNotificationItem {
   body?: string;
   status?: string;
   urgency?: string;
+  /** 2026-11-06 Phase 3: webhook 载荷补充字段 */
+  kind?: string;
+  session_id?: string;
+  created_at?: string;
 }
 
 export interface PendingNotificationsPayload {
@@ -27,6 +31,8 @@ export interface SchedulerNotificationPollerDeps {
   fetchPending: () => Promise<PendingNotificationsPayload>;
   isEnabled: () => boolean;
   notify: (title: string, body: string) => void;
+  /** 2026-11-06 Phase 3: 每条通知额外投递（Webhook / Slack），可选。 */
+  deliver?: (item: PendingNotificationItem) => void;
   intervalMs?: number;
   log?: (event: string, details?: Record<string, unknown>) => void;
 }
@@ -65,6 +71,8 @@ export function startSchedulerNotificationPoller(
       const payload = await deps.fetchPending();
       for (const item of collectNotificationItems(payload)) {
         deps.notify(item.title ?? '', item.body ?? '');
+        // fire-and-forget 外发；deliver 内部自行隔离异常
+        deps.deliver?.(item);
       }
     } catch (err) {
       deps.log?.('scheduler-notifications: poll failed', { error: String(err) });
