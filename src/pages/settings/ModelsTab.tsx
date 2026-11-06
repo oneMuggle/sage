@@ -527,7 +527,7 @@ function ContextLengthSetting({
           </>
         )}
       </div>
-      <span className="text-[11px] text-muted" data-testid="settings-context-length-resolved">
+      <span className="text-ui-2xs text-muted" data-testid="settings-context-length-resolved">
         → {formatTokens(value)} ({value.toLocaleString()} tokens)
       </span>
     </div>

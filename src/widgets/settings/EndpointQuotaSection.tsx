@@ -94,12 +94,12 @@ function ProgressBar({
           style={{ width: `${Math.min(ratio * 100, 100)}%` }}
         />
       </div>
-      <span className="text-[11px] font-mono text-muted whitespace-nowrap">
+      <span className="text-ui-2xs font-mono text-muted whitespace-nowrap">
         {format(used)} / {format(limit)}
       </span>
       {statusLabel(ratio) && (
         <span
-          className={`text-[11px] whitespace-nowrap ${ratio >= 1 ? 'text-red-500' : 'text-yellow-600'}`}
+          className={`text-ui-2xs whitespace-nowrap ${ratio >= 1 ? 'text-red-500' : 'text-yellow-600'}`}
         >
           {statusLabel(ratio)}
         </span>
@@ -137,7 +137,7 @@ export function EndpointQuotaSection({ refreshToken = 0 }: { refreshToken?: numb
   return (
     <div className="space-y-2" data-testid="endpoint-quota-section">
       <h4 className="text-xs font-semibold text-text">按端点限额用量</h4>
-      <p className="text-[11px] text-muted">
+      <p className="text-ui-2xs text-muted">
         日限额按 UTC 日、月预算按 UTC 月聚合; 达 80% 黄色预警、100% 红色超限。
       </p>
       {error && (
@@ -167,12 +167,12 @@ export function EndpointQuotaSection({ refreshToken = 0 }: { refreshToken?: numb
                   limit={r.quota.dailyTokens}
                   format={(n) => formatTokens(n)}
                 />
-                <span className="text-[11px] text-muted">tokens/日</span>
+                <span className="text-ui-2xs text-muted">tokens/日</span>
               </div>
             ) : null}
             {r.quota.monthlyBudgetUsd ? (
               r.row?.month_cost_usd == null ? (
-                <span className="text-[11px] text-muted">
+                <span className="text-ui-2xs text-muted">
                   月预算 ${r.quota.monthlyBudgetUsd} — 本月成本未知
                 </span>
               ) : (
@@ -184,7 +184,7 @@ export function EndpointQuotaSection({ refreshToken = 0 }: { refreshToken?: numb
               )
             ) : null}
             {!r.quota.dailyTokens && !r.quota.monthlyBudgetUsd && (
-              <span className="text-[11px] text-muted/70">未设限额</span>
+              <span className="text-ui-2xs text-muted/70">未设限额</span>
             )}
           </div>
         ))}
