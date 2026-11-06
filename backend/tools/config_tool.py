@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -22,6 +23,7 @@ from backend.domain.agent_limits import (
 )
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
+from backend.services import self_status as self_status_service
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 
 logger = logging.getLogger(__name__)
@@ -73,6 +75,8 @@ _ALLOWED_GENERAL_FIELDS = {
     # 2026-10-28: LLM 代理上游超时（秒）—— 企业网关卡顿 / 关闭流式输出时的长回复
     # 需要它配合调大，否则 60s 硬编码会中断整段生成。
     "llmProxyTimeoutS",
+    # 2026-10-27: 会话标题生成专用模型 id —— 空串表示回退到聊天模型。
+    "titleModelId",
 }
 
 # 2026-10-28: endpoint CRUD 白名单（与 settings_canonicalizer.LEGAL_ENDPOINT_KEYS 对齐）
@@ -94,7 +98,81 @@ _ALLOWED_ENDPOINT_FIELDS = {
 # 2026-10-28: model_selection 更新白名单（与 settings_canonicalizer.LEGAL_MODEL_SELECTION_KEYS 对齐）
 _ALLOWED_MODEL_SELECTION_FIELDS = {"endpointId", "modelId"}
 
-_VALID_READ_SECTIONS = {"all", "orch", "agents", "general", "model_selections", "endpoints"}
+# 2026-11-05 M1.2 自透明对等：新增 version / routing / preferences / self 四个只读 section。
+# - self 不进 "all"：它会聚合 MCP / 插件 / 用量 / 健康等多路运行时状态，
+#   成本明显高于纯配置读取，需显式请求（或直接用 sage_self_status 工具）。
+_VALID_READ_SECTIONS = {
+    "all",
+    "orch",
+    "agents",
+    "general",
+    "model_selections",
+    "endpoints",
+    "routing",
+    "preferences",
+    "version",
+    "self",
+}
+
+# preferences 表 KV 中允许暴露给 LLM 的只读白名单。凭证类键
+# （search_config / web_proxy / browser_credential_vault / arena_master_key）
+# 与 app_settings（体积大、已由其他 section 覆盖）一律不在此列。
+_VISIBLE_PREFERENCE_KEYS = (
+    "theme_mode",
+    "theme_preset",
+    "font_ui",
+    "font_code",
+    "font_size_ui",
+    "font_size_code",
+    "permission_mode",
+    "permission_rules",
+    "compact_threshold_tokens",
+    "network_policy",
+    "bash_config",
+    "auto_checkpoint",
+    "fallback_model",
+    "embedding_mode",
+    "ocr_config",
+    "context_turn_limit",
+    "auto_topic_detection",
+    "topic_detection_threshold",
+    "allow_skill_scripts",
+    "skills_dir",
+    "last_workspace_path",
+    "chat_display_mode",
+    "spend_limit_usd",
+)
+
+
+def _read_visible_preferences() -> Dict[str, Any]:
+    """读取白名单内的 preferences KV；JSON 值自动解析，失败保留原字符串。
+
+    fail-open：仓储没有 ``get``（测试替身）或单项读取异常时跳过该项，
+    不影响其他 section。
+    """
+    repo = SettingsRepository()
+    getter = getattr(repo, "get", None)
+    if getter is None:
+        return {}
+    prefs: Dict[str, Any] = {}
+    for key in _VISIBLE_PREFERENCE_KEYS:
+        try:
+            raw = getter(key)
+        except Exception as exc:  # noqa: BLE001 —— 单项失败不拖垮整个 section
+            logger.debug("读取 preference %s 失败: %s", key, exc)
+            continue
+        if raw is None:
+            continue
+        if isinstance(raw, str):
+            try:
+                prefs[key] = json.loads(raw)
+            except (ValueError, TypeError):
+                prefs[key] = raw
+        else:
+            prefs[key] = raw
+    return _redact_settings(prefs)
+
+
 _ORCH_INTEGER_RANGES = {
     "maxConcurrentSubagents": (1, 32),
     "maxAggregateChars": (1, 10_000_000),
@@ -230,6 +308,18 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
         )
     if _llm_retry_field_errors:
         return "; ".join(_llm_retry_field_errors)
+    return _validate_title_model_id(updates)
+
+
+def _validate_title_model_id(updates: Dict[str, Any]) -> Optional[str]:
+    """会话标题专用模型 id —— 必须是字符串；空串 = 回退到聊天模型。"""
+    if "titleModelId" not in updates:
+        return None
+    v = updates["titleModelId"]
+    if not isinstance(v, str):
+        return f"titleModelId 必须是字符串，收到: {v!r}"
+    if len(v) > 200:
+        return f"titleModelId 长度不能超过 200，收到: {len(v)}"
     return None
 
 
@@ -320,22 +410,39 @@ class ReadSageConfigTool(BaseTool):
             description=(
                 "查询 Sage 系统的实际当前配置与运行参数，包括编排迭代上限（maxLaneIterations / "
                 "maxSubagentIterations）、各智能体（primary, coder, reviewer, writer 等）"
-                "的迭代上限与设定、通用设置、API 端点列表等。敏感凭证已自动脱敏。"
+                "的迭代上限与设定、通用设置、API 端点列表、智能路由模式、用户偏好 KV、"
+                "应用版本，以及可选的完整运行时自省状态（self）。敏感凭证已自动脱敏。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "section": {
                         "type": "string",
-                        "enum": ["all", "orch", "agents", "general", "model_selections", "endpoints"],
+                        "enum": [
+                            "all",
+                            "orch",
+                            "agents",
+                            "general",
+                            "model_selections",
+                            "endpoints",
+                            "routing",
+                            "preferences",
+                            "version",
+                            "self",
+                        ],
                         "description": (
                             "要查询的配置分类：\n"
                             "- 'orch': 编排参数（泳道迭代上限、子代理迭代上限、并发上限等）\n"
                             "- 'agents': 所有智能体档案列表（含每个智能体的最大迭代步数、角色与提示词）\n"
-                            "- 'general': 通用应用设置（流式、记忆、温度、时区等）\n"
+                            "- 'general': 通用应用设置（流式、记忆、温度、时区等，不含 routing）\n"
                             "- 'model_selections': 各任务当前绑定的模型配置\n"
                             "- 'endpoints': API 端点列表（apiKey 已脱敏）\n"
-                            "- 'all': 包含以上全部配置"
+                            "- 'routing': 智能路由配置（mode=auto/manual）\n"
+                            "- 'preferences': 用户偏好 KV（主题、权限模式、网络策略等，凭证类键不暴露）\n"
+                            "- 'version': 应用版本号（与 package.json 一致）\n"
+                            "- 'self': 完整运行时自省状态（版本/实际生效模型/权限/MCP/插件/用量/健康），"
+                            "开销高于其他 section，仅显式请求；等价于 sage_self_status 工具\n"
+                            "- 'all': 包含以上除 'self' 外的全部配置"
                         ),
                     }
                 },
@@ -384,7 +491,7 @@ class ReadSageConfigTool(BaseTool):
                 general = {
                     k: v
                     for k, v in clean_settings.items()
-                    if k not in {"orch", "endpoints", "modelSelections"}
+                    if k not in {"orch", "endpoints", "modelSelections", "routing"}
                 }
                 result_data["general"] = general
                 summary_lines.append(f"【通用设置 (general)】{general}")
@@ -403,6 +510,30 @@ class ReadSageConfigTool(BaseTool):
                     for ep in endpoints
                 ]
                 summary_lines.append(f"【API 端点 (endpoints)】共 {len(endpoints)} 个：{'; '.join(endpoint_summaries)}")
+
+            # 2026-11-05 M1.2: routing / preferences / version / self
+            if section in {"all", "routing"}:
+                routing = clean_settings.get("routing", {})
+                result_data["routing"] = routing
+                summary_lines.append(f"【智能路由 (routing)】mode={routing.get('mode', 'manual')}")
+
+            if section in {"all", "preferences"}:
+                preferences = _read_visible_preferences()
+                result_data["preferences"] = preferences
+                summary_lines.append(f"【用户偏好 (preferences)】共 {len(preferences)} 项：{preferences}")
+
+            if section in {"all", "version"}:
+                version = self_status_service.read_version()
+                result_data["version"] = version
+                summary_lines.append(f"【版本 (version)】{version}")
+
+            if section == "self":
+                status = self_status_service.gather_self_status()
+                result_data["self"] = status
+                summary_lines.append(
+                    f"【运行时自省 (self)】版本={status.get('version')}, "
+                    f"权限模式={status.get('permission_mode')}"
+                )
 
             if section == "all":
                 result_data["settings"] = clean_settings
@@ -478,6 +609,7 @@ class UpdateSageConfigTool(BaseTool):
                             "- target='orch' 时允许: maxLaneIterations, maxSubagentIterations, maxConcurrentSubagents, maxRetries 等\n"
                             f"- target='agent' 时允许: max_iterations ({MIN_ITERATIONS}~{MAX_ITERATIONS_CEILING}), temperature, system_prompt, description 等\n"
                             "- target='general' 时允许: temperature, streaming, autoMemory, confirmDelete 等\n"
+                            "- target='general' 时允许: titleModelId (会话标题专用模型 id，空串=回退聊天模型)\n"
                             "- target='endpoint' 且 action='create/update' 时允许: name, baseUrl, apiKey, protocol, modelId 等\n"
                             "- target='model_selection' 时允许: endpointId, modelId"
                         ),

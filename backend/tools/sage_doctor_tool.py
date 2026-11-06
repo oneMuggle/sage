@@ -1,0 +1,105 @@
+"""M1.3 ``sage_doctor`` 工具 —— 把后端 doctor 的检查注册表暴露给 LLM。
+
+复用 ``backend.cli.doctor`` 的检查注册表（``ALL_CHECKS`` / ``_run_one`` /
+``_summarize`` / ``_import_all_checks``），运行全部已注册检查（含
+``backend_health`` 的 1 秒 /health HTTP 探测）。真正的"子进程 import 探测"
+（``_try_import_backend``）只属于 ``run_doctor`` 的打包验证路径，对 LLM
+诊断无意义，不在本工具内执行。
+
+对应 Claude Code 的 ``/doctor`` 命令。
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List, Optional
+
+from backend.domain.risk import RiskClass
+from backend.domain.tool_policy import ToolPolicy
+from backend.tools.base import BaseTool, ToolResult, ToolSchema
+
+logger = logging.getLogger(__name__)
+
+
+class SageDoctorTool(BaseTool):
+    """运行 Sage 安装/环境检查（复用 doctor CLI 的检查注册表）。"""
+
+    risk: RiskClass = RiskClass.READ
+
+    def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
+        super().__init__(policy=policy)
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="sage_doctor",
+            description=(
+                "运行 Sage 安装与环境自检（doctor 检查注册表），包括：Python/Node "
+                "版本、conda 环境、数据库可写性、配置文件完整性、端口占用、LLM 配置、"
+                "MCP 服务器状态、重型依赖、日志目录大小、网络策略、密钥存储、"
+                "agent 档案文件结构、运行时环境等。结果按 CRITICAL/WARN/INFO 分级，"
+                "附 fix_hint 修复建议。用于回答'Sage 环境哪里有问题'、'为什么 MCP "
+                "连不上'、'密钥加密配置正确吗'等诊断类问题。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {},
+            },
+        )
+
+    def execute(self, **kwargs: Any) -> ToolResult:
+        try:
+            results, summary = self._run_checks()
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("sage_doctor 执行失败")
+            return ToolResult(
+                success=False,
+                error=f"doctor 执行失败: {exc}",
+            )
+
+        summary_text = self._build_summary_text(results, summary)
+        return ToolResult(
+            success=True,
+            content={
+                "checks": [r.to_dict() for r in results],
+                "summary": summary,
+            },
+            output=summary_text,
+        )
+
+    @staticmethod
+    def _run_checks():
+        from backend.cli.doctor import (
+            ALL_CHECKS,
+            _import_all_checks,
+            _run_one,
+            _summarize,
+        )
+
+        # 触发 @register 装饰器填充 ALL_CHECKS
+        _import_all_checks()
+
+        # 全量执行：接口/环境检查都是轻量只读探测（backend_health 超时 1 秒），
+        # 不做任何过滤，避免"默认丢掉健康检查"的静默降级。
+        results = [_run_one(cls) for cls in ALL_CHECKS]
+        summary = _summarize(results)
+        return results, summary
+
+    @staticmethod
+    def _build_summary_text(results: list, summary: Dict[str, int]) -> str:
+        lines: List[str] = []
+        lines.append(
+            f"Sage Doctor 完成: 共 {len(results)} 项检查 "
+            f"(CRITICAL: {summary['critical']}, WARN: {summary['warn']}, "
+            f"INFO: {summary['info']})"
+        )
+        # 优先展示 CRITICAL 和 WARN，INFO 只列名
+        for r in results:
+            if r.severity.value in {"critical", "warn"}:
+                tag = f"[{r.severity.value.upper():>8}]"
+                lines.append(f"{tag} {r.name:<22} {r.message}")
+                if r.fix_hint:
+                    lines.append(f"           fix: {r.fix_hint}")
+        info_names = [r.name for r in results if r.severity.value == "info"]
+        if info_names:
+            lines.append(f"INFO 项 ({len(info_names)}): {', '.join(info_names)}")
+        return "\n".join(lines)

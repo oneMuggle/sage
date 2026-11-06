@@ -228,6 +228,10 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "design_generate": ToolCapability.WRITE,
     "design_iterate": ToolCapability.WRITE,
     "design_export": ToolCapability.WRITE,
+    # --- 自透明只读（M1）：只读运行时状态，不进 SELF_MODIFY_TOOLS ---
+    "sage_self_status": ToolCapability.READ,
+    "sage_doctor": ToolCapability.READ,
+    "sage_usage": ToolCapability.READ,
     # --- 命令执行 ---
     "bash": ToolCapability.EXECUTE,
     "bash_output": ToolCapability.EXECUTE,  # 读取后台 shell 输出也算执行面扩展

@@ -27,6 +27,8 @@ export interface Session {
   /** 2026-10-29 (feat/workspace-optimization): create_session 响应里附带的工作区绑定信息。
    *  后端在创建会话时同步解析默认工作区并绑定，前端不再自行推导。null = 连 scratch 都失败。 */
   workspace_binding?: SessionWorkspaceInfo | null;
+  /** 标题生成尝试次数 (后端 `sessions.title_attempts`)；用于侧栏显示"生成标题中…"过渡态 */
+  title_attempts?: number;
   /** M0 (2026-11-03): 会话绑定的专家（agents.id）；'primary' = 主助手。 */
   specialist_id?: string;
 }

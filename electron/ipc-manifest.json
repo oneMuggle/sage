@@ -5,14 +5,8 @@
     "approve_skill_draft": { "method": "POST", "path": "/api/v1/skill-drafts/{draft_id}/approve" },
     "archive_skill": { "method": "POST", "path": "/api/v1/skills/{name}/archive" },
     "attach_chat_stream": { "method": "GET", "path": "/api/v1/chat/stream/{streamId}" },
-    "attachment_rag_delete_index": {
-      "method": "DELETE",
-      "path": "/api/v1/chat/attachments/{mediaId}/index"
-    },
-    "attachment_rag_index": {
-      "method": "POST",
-      "path": "/api/v1/chat/attachments/{mediaId}/index"
-    },
+    "attachment_rag_delete_index": { "method": "DELETE", "path": "/api/v1/chat/attachments/{mediaId}/index" },
+    "attachment_rag_index": { "method": "POST", "path": "/api/v1/chat/attachments/{mediaId}/index" },
     "attachment_rag_search": { "method": "POST", "path": "/api/v1/chat/attachments/search" },
     "chat_steer": { "method": "POST", "path": "/api/v1/chat/steer" },
     "chat_stream_active": { "method": "GET", "path": "/api/v1/chat/stream/active" },
@@ -36,16 +30,10 @@
     "export_session_markdown": { "method": "POST", "path": "/api/v1/sessions/{sessionId}/export" },
     "feedback_conversation_create": { "method": "POST", "path": "/api/v1/feedback/conversations" },
     "feedback_conversation_get": { "method": "GET", "path": "/api/v1/feedback/conversations/{id}" },
-    "feedback_conversation_status_update": {
-      "method": "PATCH",
-      "path": "/api/v1/feedback/conversations/{id}/status"
-    },
+    "feedback_conversation_status_update": { "method": "PATCH", "path": "/api/v1/feedback/conversations/{id}/status" },
     "feedback_conversations": { "method": "GET", "path": "/api/v1/feedback/conversations" },
     "feedback_log_tail": { "method": "GET", "path": "/api/v1/feedback/log-tail" },
-    "feedback_message_append": {
-      "method": "POST",
-      "path": "/api/v1/feedback/conversations/{conversationId}/messages"
-    },
+    "feedback_message_append": { "method": "POST", "path": "/api/v1/feedback/conversations/{conversationId}/messages" },
     "feedback_search": { "method": "GET", "path": "/api/v1/feedback/search" },
     "get_agent": { "method": "GET", "path": "/api/v1/agents/{id}" },
     "get_evolution_logs": { "method": "GET", "path": "/api/v1/evolution/logs" },
@@ -64,14 +52,8 @@
     "global_rules_delete": { "method": "DELETE", "path": "/api/v1/settings/global-rules" },
     "global_rules_get": { "method": "GET", "path": "/api/v1/settings/global-rules" },
     "global_rules_save": { "method": "PUT", "path": "/api/v1/settings/global-rules" },
-    "global_rules_templates": {
-      "method": "GET",
-      "path": "/api/v1/settings/global-rules/templates"
-    },
-    "instantiate_specialist_template": {
-      "method": "POST",
-      "path": "/api/v1/specialists/templates/{templateId}/instantiate"
-    },
+    "global_rules_templates": { "method": "GET", "path": "/api/v1/settings/global-rules/templates" },
+    "instantiate_specialist_template": { "method": "POST", "path": "/api/v1/specialists/templates/{templateId}/instantiate" },
     "interrupt_agent": { "method": "POST", "path": "/api/v1/interrupt" },
     "list_agent_versions": { "method": "GET", "path": "/api/v1/agents/{agentId}/versions" },
     "list_agents": { "method": "GET", "path": "/api/v1/agents" },
@@ -105,23 +87,11 @@
     "office_excel_recalc": { "method": "POST", "path": "/api/v1/office/excel/recalc" },
     "office_export_pdf": { "method": "POST", "path": "/api/v1/office/export-pdf" },
     "office_get_progress": { "method": "GET", "path": "/api/v1/office/progress/{taskId}" },
-    "office_import_convert_legacy": {
-      "method": "POST",
-      "path": "/api/v1/office/import/convert-legacy"
-    },
-    "office_journal_fill_from_content": {
-      "method": "POST",
-      "path": "/api/v1/office/journal/fill-from-content"
-    },
-    "office_journal_get_spec": {
-      "method": "GET",
-      "path": "/api/v1/office/journal/specs/{spec_id}"
-    },
+    "office_import_convert_legacy": { "method": "POST", "path": "/api/v1/office/import/convert-legacy" },
+    "office_journal_fill_from_content": { "method": "POST", "path": "/api/v1/office/journal/fill-from-content" },
+    "office_journal_get_spec": { "method": "GET", "path": "/api/v1/office/journal/specs/{spec_id}" },
     "office_journal_list_specs": { "method": "GET", "path": "/api/v1/office/journal/specs" },
-    "office_journal_parse_template": {
-      "method": "POST",
-      "path": "/api/v1/office/journal/parse-template"
-    },
+    "office_journal_parse_template": { "method": "POST", "path": "/api/v1/office/journal/parse-template" },
     "office_journal_validate": { "method": "POST", "path": "/api/v1/office/journal/validate" },
     "office_list_documents": { "method": "GET", "path": "/api/v1/office/documents" },
     "office_list_snapshots": { "method": "GET", "path": "/api/v1/office/doc/{docId}/snapshots" },
@@ -135,18 +105,9 @@
     "office_ppt_generate": { "method": "POST", "path": "/api/v1/office/ppt/generate" },
     "office_ppt_read": { "method": "POST", "path": "/api/v1/office/ppt/read" },
     "office_restore_document": { "method": "POST", "path": "/api/v1/office/doc/{docId}/restore" },
-    "office_restore_snapshot": {
-      "method": "POST",
-      "path": "/api/v1/office/doc/{docId}/snapshots/{snapshotId}/restore"
-    },
-    "office_set_document_lineage": {
-      "method": "POST",
-      "path": "/api/v1/office/documents/{docId}/lineage"
-    },
-    "office_snapshot_diff": {
-      "method": "GET",
-      "path": "/api/v1/office/doc/{docId}/snapshots/{snapshotId}/diff"
-    },
+    "office_restore_snapshot": { "method": "POST", "path": "/api/v1/office/doc/{docId}/snapshots/{snapshotId}/restore" },
+    "office_set_document_lineage": { "method": "POST", "path": "/api/v1/office/documents/{docId}/lineage" },
+    "office_snapshot_diff": { "method": "GET", "path": "/api/v1/office/doc/{docId}/snapshots/{snapshotId}/diff" },
     "office_specs_activate": { "method": "POST", "path": "/api/v1/office/specs/{specId}/activate" },
     "office_specs_clear_default": { "method": "DELETE", "path": "/api/v1/office/specs/default" },
     "office_specs_create": { "method": "POST", "path": "/api/v1/office/specs" },
@@ -156,10 +117,7 @@
     "office_specs_list": { "method": "GET", "path": "/api/v1/office/specs" },
     "office_specs_update": { "method": "PATCH", "path": "/api/v1/office/specs/{specId}" },
     "office_template_thumbnail": { "method": "POST", "path": "/api/v1/office/templates/thumbnail" },
-    "office_templates_instantiate": {
-      "method": "POST",
-      "path": "/api/v1/office/templates/instantiate"
-    },
+    "office_templates_instantiate": { "method": "POST", "path": "/api/v1/office/templates/instantiate" },
     "office_update_preview": { "method": "POST", "path": "/api/v1/office/update/preview" },
     "office_word_audit": { "method": "POST", "path": "/api/v1/office/word/audit" },
     "office_word_audit_batch": { "method": "POST", "path": "/api/v1/office/word/audit/batch" },
@@ -171,331 +129,136 @@
     "office_word_read": { "method": "POST", "path": "/api/v1/office/word/read" },
     "office_word_repair": { "method": "POST", "path": "/api/v1/office/word/repair" },
     "office_word_revise": { "method": "POST", "path": "/api/v1/office/word/audit/revise" },
-    "office_word_rulepack_get": {
-      "method": "GET",
-      "path": "/api/v1/office/word/rulepacks/{packId}"
-    },
-    "office_word_rulepacks_extract": {
-      "method": "POST",
-      "path": "/api/v1/office/word/rulepacks/extract"
-    },
-    "office_word_rulepacks_extract_save": {
-      "method": "POST",
-      "path": "/api/v1/office/word/rulepacks/extract/save"
-    },
+    "office_word_rulepack_get": { "method": "GET", "path": "/api/v1/office/word/rulepacks/{packId}" },
+    "office_word_rulepacks_extract": { "method": "POST", "path": "/api/v1/office/word/rulepacks/extract" },
+    "office_word_rulepacks_extract_save": { "method": "POST", "path": "/api/v1/office/word/rulepacks/extract/save" },
     "office_word_rulepacks_list": { "method": "GET", "path": "/api/v1/office/word/rulepacks" },
     "orchestration_board": { "method": "GET", "path": "/api/v1/orchestration/board" },
-    "orchestration_cancel_lane": {
-      "method": "POST",
-      "path": "/api/v1/orchestration/lanes/{lane_id}/cancel"
-    },
+    "orchestration_cancel_lane": { "method": "POST", "path": "/api/v1/orchestration/lanes/{lane_id}/cancel" },
     "orchestration_cancel_run": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/cancel" },
-    "orchestration_cancel_run_control": {
-      "method": "POST",
-      "path": "/api/v1/orch/runs/{run_id}/cancel"
-    },
-    "orchestration_cancel_run_task": {
-      "method": "POST",
-      "path": "/api/v1/orch/runs/{run_id}/tasks/{task_id}/cancel"
-    },
+    "orchestration_cancel_run_control": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/cancel" },
+    "orchestration_cancel_run_task": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/tasks/{task_id}/cancel" },
     "orchestration_confirm_run": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/confirm" },
     "orchestration_create_lane": { "method": "POST", "path": "/api/v1/orchestration/lanes" },
     "orchestration_get_lane": { "method": "GET", "path": "/api/v1/orchestration/lanes/{lane_id}" },
     "orchestration_get_run": { "method": "GET", "path": "/api/v1/orch/runs/{run_id}" },
-    "orchestration_get_run_snapshot": {
-      "method": "GET",
-      "path": "/api/v1/orch/runs/{run_id}/snapshot"
-    },
-    "orchestration_lane_decision": {
-      "method": "POST",
-      "path": "/api/v1/orchestration/lanes/{lane_id}/decision"
-    },
-    "orchestration_list_lane_events": {
-      "method": "GET",
-      "path": "/api/v1/orchestration/lanes/{lane_id}/events"
-    },
+    "orchestration_get_run_snapshot": { "method": "GET", "path": "/api/v1/orch/runs/{run_id}/snapshot" },
+    "orchestration_lane_decision": { "method": "POST", "path": "/api/v1/orchestration/lanes/{lane_id}/decision" },
+    "orchestration_list_lane_events": { "method": "GET", "path": "/api/v1/orchestration/lanes/{lane_id}/events" },
     "orchestration_list_lanes": { "method": "GET", "path": "/api/v1/orchestration/lanes" },
     "orchestration_list_session_runs": { "method": "GET", "path": "/api/v1/orch/runs" },
     "orchestration_plan_items": { "method": "POST", "path": "/api/v1/orch/plan-items" },
-    "orchestration_rerun_failed": {
-      "method": "POST",
-      "path": "/api/v1/orch/runs/{run_id}/rerun-failed"
-    },
-    "orchestration_set_approval_mode": {
-      "method": "POST",
-      "path": "/api/v1/orch/runs/{run_id}/approval-mode"
-    },
-    "orchestration_steer_task": {
-      "method": "POST",
-      "path": "/api/v1/orch/runs/{run_id}/tasks/{task_id}/steer"
-    },
-    "orchestration_step_confirm": {
-      "method": "POST",
-      "path": "/api/v1/orch/runs/{run_id}/step-confirm"
-    },
+    "orchestration_rerun_failed": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/rerun-failed" },
+    "orchestration_set_approval_mode": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/approval-mode" },
+    "orchestration_steer_task": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/tasks/{task_id}/steer" },
+    "orchestration_step_confirm": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/step-confirm" },
     "orchestration_update_plan": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/plan" },
     "permissions_answer": { "method": "POST", "path": "/api/v1/permissions/{requestId}/answer" },
     "permissions_clear_rules": { "method": "POST", "path": "/api/v1/permissions/rules/clear" },
-    "permissions_clear_session_rules": {
-      "method": "POST",
-      "path": "/api/v1/permissions/session/{sessionId}/remembered-rules/clear"
-    },
-    "permissions_delete_orphan_rules": {
-      "method": "POST",
-      "path": "/api/v1/permissions/rules/delete-orphans"
-    },
+    "permissions_clear_session_rules": { "method": "POST", "path": "/api/v1/permissions/session/{sessionId}/remembered-rules/clear" },
+    "permissions_delete_orphan_rules": { "method": "POST", "path": "/api/v1/permissions/rules/delete-orphans" },
     "permissions_delete_rule": { "method": "POST", "path": "/api/v1/permissions/rules/delete" },
-    "permissions_delete_rules_by_plugin": {
-      "method": "POST",
-      "path": "/api/v1/permissions/rules/delete-by-plugin"
-    },
-    "permissions_delete_session_rule": {
-      "method": "POST",
-      "path": "/api/v1/permissions/session/{sessionId}/remembered-rules/delete"
-    },
+    "permissions_delete_rules_by_plugin": { "method": "POST", "path": "/api/v1/permissions/rules/delete-by-plugin" },
+    "permissions_delete_session_rule": { "method": "POST", "path": "/api/v1/permissions/session/{sessionId}/remembered-rules/delete" },
     "permissions_get_preset": { "method": "GET", "path": "/api/v1/permissions/preset" },
     "permissions_get_trust_policy": { "method": "GET", "path": "/api/v1/permissions/trust-policy" },
     "permissions_list_rules": { "method": "GET", "path": "/api/v1/permissions/rules" },
-    "permissions_list_session_rules": {
-      "method": "GET",
-      "path": "/api/v1/permissions/session/{sessionId}/remembered-rules"
-    },
+    "permissions_list_session_rules": { "method": "GET", "path": "/api/v1/permissions/session/{sessionId}/remembered-rules" },
     "permissions_pending": { "method": "GET", "path": "/api/v1/permissions/pending" },
-    "permissions_session_auto_approvals": {
-      "method": "GET",
-      "path": "/api/v1/permissions/session/{sessionId}/auto-approvals"
-    },
+    "permissions_session_auto_approvals": { "method": "GET", "path": "/api/v1/permissions/session/{sessionId}/auto-approvals" },
     "permissions_set_preset": { "method": "POST", "path": "/api/v1/permissions/preset" },
-    "permissions_set_trust_policy": {
-      "method": "POST",
-      "path": "/api/v1/permissions/trust-policy"
-    },
+    "permissions_set_trust_policy": { "method": "POST", "path": "/api/v1/permissions/trust-policy" },
     "pin_skill": { "method": "POST", "path": "/api/v1/skills/{name}/pin" },
-    "playbook_actions_apply": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/playbook/actions/apply"
-    },
+    "playbook_actions_apply": { "method": "POST", "path": "/api/v1/projects/{projectId}/playbook/actions/apply" },
     "playbook_audit": { "method": "GET", "path": "/api/v1/projects/{projectId}/playbook/audit" },
-    "playbook_audit_ai": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/playbook/audit/ai"
-    },
-    "playbook_author_preview": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/playbook/author/preview"
-    },
+    "playbook_audit_ai": { "method": "POST", "path": "/api/v1/projects/{projectId}/playbook/audit/ai" },
+    "playbook_author_preview": { "method": "POST", "path": "/api/v1/projects/{projectId}/playbook/author/preview" },
     "playbook_bind": { "method": "PUT", "path": "/api/v1/projects/{projectId}/playbook" },
     "playbook_export": { "method": "GET", "path": "/api/v1/projects/{projectId}/playbook/export" },
     "playbook_get_current": { "method": "GET", "path": "/api/v1/projects/{projectId}/playbook" },
     "playbook_import": { "method": "POST", "path": "/api/v1/playbooks/import" },
     "playbook_import_document": { "method": "POST", "path": "/api/v1/playbooks/import/document" },
     "playbook_import_preview": { "method": "POST", "path": "/api/v1/playbooks/import/preview" },
-    "playbook_rules_cleanup": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/playbook/rules/cleanup"
-    },
-    "playbook_stage_confirm": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/playbook/stage/confirm"
-    },
-    "playbook_state_update": {
-      "method": "PATCH",
-      "path": "/api/v1/projects/{projectId}/playbook/state"
-    },
+    "playbook_rules_cleanup": { "method": "POST", "path": "/api/v1/projects/{projectId}/playbook/rules/cleanup" },
+    "playbook_stage_confirm": { "method": "POST", "path": "/api/v1/projects/{projectId}/playbook/stage/confirm" },
+    "playbook_state_update": { "method": "PATCH", "path": "/api/v1/projects/{projectId}/playbook/state" },
     "playbook_unbind": { "method": "DELETE", "path": "/api/v1/projects/{projectId}/playbook" },
-    "playbook_versions": {
-      "method": "GET",
-      "path": "/api/v1/projects/{projectId}/playbook/versions"
-    },
-    "playbook_wiki_export": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/playbook/wiki/export"
-    },
+    "playbook_versions": { "method": "GET", "path": "/api/v1/projects/{projectId}/playbook/versions" },
+    "playbook_wiki_export": { "method": "POST", "path": "/api/v1/projects/{projectId}/playbook/wiki/export" },
     "playbooks_builtin_get": { "method": "GET", "path": "/api/v1/playbooks/builtin/{playbookId}" },
     "playbooks_builtin_list": { "method": "GET", "path": "/api/v1/playbooks/builtin" },
     "playbooks_events_aggregate": { "method": "GET", "path": "/api/v1/playbooks/events/aggregate" },
-    "playbooks_events_list": {
-      "method": "GET",
-      "path": "/api/v1/projects/{projectId}/playbook/events"
-    },
-    "playbooks_library_delete": {
-      "method": "DELETE",
-      "path": "/api/v1/playbooks/library/{libraryId}"
-    },
-    "playbooks_library_export": {
-      "method": "GET",
-      "path": "/api/v1/playbooks/library/{libraryId}/export"
-    },
+    "playbooks_events_list": { "method": "GET", "path": "/api/v1/projects/{projectId}/playbook/events" },
+    "playbooks_library_delete": { "method": "DELETE", "path": "/api/v1/playbooks/library/{libraryId}" },
+    "playbooks_library_export": { "method": "GET", "path": "/api/v1/playbooks/library/{libraryId}/export" },
     "playbooks_library_get": { "method": "GET", "path": "/api/v1/playbooks/library/{libraryId}" },
     "playbooks_library_list": { "method": "GET", "path": "/api/v1/playbooks/library" },
     "playbooks_library_save": { "method": "POST", "path": "/api/v1/playbooks/library" },
-    "playbooks_share_create": {
-      "method": "POST",
-      "path": "/api/v1/playbooks/library/{libraryId}/share"
-    },
+    "playbooks_share_create": { "method": "POST", "path": "/api/v1/playbooks/library/{libraryId}/share" },
     "playbooks_share_resolve": { "method": "GET", "path": "/api/v1/playbooks/shared/{token}" },
     "projects_add_material": { "method": "POST", "path": "/api/v1/projects/{id}/materials" },
-    "projects_add_material_from_file": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/materials/from-file"
-    },
+    "projects_add_material_from_file": { "method": "POST", "path": "/api/v1/projects/{projectId}/materials/from-file" },
     "projects_analyze": { "method": "POST", "path": "/api/v1/projects/analyze" },
-    "projects_bootstrap_apply": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/bootstrap/apply"
-    },
-    "projects_bootstrap_preview": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/bootstrap/preview"
-    },
-    "projects_bootstrap_scan": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/bootstrap/scan"
-    },
-    "projects_bootstrap_suggest": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/bootstrap/suggest"
-    },
-    "projects_confirm_knowledge": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/ai/extract-knowledge/confirm"
-    },
-    "projects_context_budget": {
-      "method": "GET",
-      "path": "/api/v1/projects/{projectId}/context-budget"
-    },
-    "projects_create_checkpoint": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/checkpoints"
-    },
-    "projects_create_constraint": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/constraints"
-    },
-    "projects_create_milestone": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/milestones"
-    },
+    "projects_bootstrap_apply": { "method": "POST", "path": "/api/v1/projects/{projectId}/bootstrap/apply" },
+    "projects_bootstrap_preview": { "method": "POST", "path": "/api/v1/projects/{projectId}/bootstrap/preview" },
+    "projects_bootstrap_scan": { "method": "POST", "path": "/api/v1/projects/{projectId}/bootstrap/scan" },
+    "projects_bootstrap_suggest": { "method": "POST", "path": "/api/v1/projects/{projectId}/bootstrap/suggest" },
+    "projects_confirm_knowledge": { "method": "POST", "path": "/api/v1/projects/{projectId}/ai/extract-knowledge/confirm" },
+    "projects_context_budget": { "method": "GET", "path": "/api/v1/projects/{projectId}/context-budget" },
+    "projects_create_checkpoint": { "method": "POST", "path": "/api/v1/projects/{projectId}/checkpoints" },
+    "projects_create_constraint": { "method": "POST", "path": "/api/v1/projects/{projectId}/constraints" },
+    "projects_create_milestone": { "method": "POST", "path": "/api/v1/projects/{projectId}/milestones" },
+    "projects_create_reference": { "method": "POST", "path": "/api/v1/projects/{projectId}/references" },
     "projects_create_session": { "method": "POST", "path": "/api/v1/projects/{id}/sessions" },
-    "projects_decompose_apply": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/ai/decompose-tasks/apply"
-    },
-    "projects_decompose_preview": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/ai/decompose-tasks/preview"
-    },
-    "projects_delete_checkpoint": {
-      "method": "DELETE",
-      "path": "/api/v1/projects/{projectId}/checkpoints/{checkpointId}"
-    },
-    "projects_delete_constraint": {
-      "method": "DELETE",
-      "path": "/api/v1/projects/{projectId}/constraints/{constraintId}"
-    },
-    "projects_delete_milestone": {
-      "method": "DELETE",
-      "path": "/api/v1/projects/{projectId}/milestones/{milestoneId}"
-    },
+    "projects_decompose_apply": { "method": "POST", "path": "/api/v1/projects/{projectId}/ai/decompose-tasks/apply" },
+    "projects_decompose_preview": { "method": "POST", "path": "/api/v1/projects/{projectId}/ai/decompose-tasks/preview" },
+    "projects_delete_checkpoint": { "method": "DELETE", "path": "/api/v1/projects/{projectId}/checkpoints/{checkpointId}" },
+    "projects_delete_constraint": { "method": "DELETE", "path": "/api/v1/projects/{projectId}/constraints/{constraintId}" },
+    "projects_delete_milestone": { "method": "DELETE", "path": "/api/v1/projects/{projectId}/milestones/{milestoneId}" },
+    "projects_delete_reference": { "method": "DELETE", "path": "/api/v1/projects/{projectId}/references/{referenceId}" },
     "projects_detect_type": { "method": "POST", "path": "/api/v1/projects/detect-type" },
     "projects_diagnose": { "method": "GET", "path": "/api/v1/projects/{projectId}/diagnose" },
-    "projects_extract_knowledge": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/ai/extract-knowledge"
-    },
+    "projects_extract_knowledge": { "method": "POST", "path": "/api/v1/projects/{projectId}/ai/extract-knowledge" },
     "projects_generate_rules": { "method": "POST", "path": "/api/v1/projects/generate-rules" },
     "projects_get_advice": { "method": "GET", "path": "/api/v1/projects/{projectId}/ai/advice" },
     "projects_get_charter": { "method": "GET", "path": "/api/v1/projects/{projectId}/charter" },
-    "projects_get_checkpoint": {
-      "method": "GET",
-      "path": "/api/v1/projects/{projectId}/checkpoints/{checkpointId}"
-    },
+    "projects_get_checkpoint": { "method": "GET", "path": "/api/v1/projects/{projectId}/checkpoints/{checkpointId}" },
+    "projects_get_tree": { "method": "GET", "path": "/api/v1/projects/{projectId}/tree" },
     "projects_git_init": { "method": "POST", "path": "/api/v1/projects/{projectId}/git/init" },
     "projects_git_status": { "method": "GET", "path": "/api/v1/projects/{projectId}/git-status" },
-    "projects_import_constraints": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/constraints/import-template"
-    },
+    "projects_import_constraints": { "method": "POST", "path": "/api/v1/projects/{projectId}/constraints/import-template" },
     "projects_list": { "method": "GET", "path": "/api/v1/projects" },
-    "projects_list_constraints": {
-      "method": "GET",
-      "path": "/api/v1/projects/{projectId}/constraints"
-    },
+    "projects_list_constraints": { "method": "GET", "path": "/api/v1/projects/{projectId}/constraints" },
     "projects_list_materials": { "method": "GET", "path": "/api/v1/projects/{id}/materials" },
-    "projects_list_milestones": {
-      "method": "GET",
-      "path": "/api/v1/projects/{projectId}/milestones"
-    },
+    "projects_list_milestones": { "method": "GET", "path": "/api/v1/projects/{projectId}/milestones" },
+    "projects_list_references": { "method": "GET", "path": "/api/v1/projects/{projectId}/references" },
     "projects_list_sessions": { "method": "GET", "path": "/api/v1/projects/{id}/sessions" },
-    "projects_material_reindex": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/ai/materials/{materialId}/index"
-    },
-    "projects_materials_indexing_stats": {
-      "method": "GET",
-      "path": "/api/v1/projects/{projectId}/ai/materials/indexing-stats"
-    },
-    "projects_materials_search": {
-      "method": "GET",
-      "path": "/api/v1/projects/{projectId}/ai/materials/search"
-    },
+    "projects_list_templates": { "method": "GET", "path": "/api/v1/projects/templates" },
+    "projects_material_reindex": { "method": "POST", "path": "/api/v1/projects/{projectId}/ai/materials/{materialId}/index" },
+    "projects_materials_indexing_stats": { "method": "GET", "path": "/api/v1/projects/{projectId}/ai/materials/indexing-stats" },
+    "projects_materials_search": { "method": "GET", "path": "/api/v1/projects/{projectId}/ai/materials/search" },
     "projects_open": { "method": "POST", "path": "/api/v1/projects/{id}/open" },
     "projects_profile": { "method": "POST", "path": "/api/v1/projects/profile" },
-    "projects_refresh_advice": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/ai/advice/refresh"
-    },
+    "projects_refresh_advice": { "method": "POST", "path": "/api/v1/projects/{projectId}/ai/advice/refresh" },
     "projects_register": { "method": "POST", "path": "/api/v1/projects" },
     "projects_remove": { "method": "DELETE", "path": "/api/v1/projects/{id}" },
-    "projects_remove_material": {
-      "method": "DELETE",
-      "path": "/api/v1/projects/{id}/materials/{materialId}"
-    },
-    "projects_restore_checkpoint": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/checkpoints/{checkpointId}/restore"
-    },
-    "projects_save_answer": {
-      "method": "POST",
-      "path": "/api/v1/projects/{id}/materials/save-answer"
-    },
+    "projects_remove_material": { "method": "DELETE", "path": "/api/v1/projects/{id}/materials/{materialId}" },
+    "projects_restore_checkpoint": { "method": "POST", "path": "/api/v1/projects/{projectId}/checkpoints/{checkpointId}/restore" },
+    "projects_save_answer": { "method": "POST", "path": "/api/v1/projects/{id}/materials/save-answer" },
     "projects_scaffold": { "method": "POST", "path": "/api/v1/projects/{projectId}/scaffold" },
+    "projects_scan": { "method": "POST", "path": "/api/v1/projects/{projectId}/scan" },
     "projects_sub_types": { "method": "GET", "path": "/api/v1/projects/sub-types" },
     "projects_update": { "method": "PATCH", "path": "/api/v1/projects/{id}" },
-    "projects_update_allowed_paths": {
-      "method": "PUT",
-      "path": "/api/v1/projects/{id}/allowed-paths"
-    },
+    "projects_update_allowed_paths": { "method": "PUT", "path": "/api/v1/projects/{id}/allowed-paths" },
     "projects_update_charter": { "method": "PUT", "path": "/api/v1/projects/{projectId}/charter" },
-    "projects_update_constraint": {
-      "method": "PATCH",
-      "path": "/api/v1/projects/{projectId}/constraints/{constraintId}"
-    },
-    "projects_update_material": {
-      "method": "PATCH",
-      "path": "/api/v1/projects/{id}/materials/{materialId}"
-    },
-    "projects_update_milestone": {
-      "method": "PATCH",
-      "path": "/api/v1/projects/{projectId}/milestones/{milestoneId}"
-    },
+    "projects_update_constraint": { "method": "PATCH", "path": "/api/v1/projects/{projectId}/constraints/{constraintId}" },
+    "projects_update_material": { "method": "PATCH", "path": "/api/v1/projects/{id}/materials/{materialId}" },
+    "projects_update_milestone": { "method": "PATCH", "path": "/api/v1/projects/{projectId}/milestones/{milestoneId}" },
     "projects_update_type": { "method": "PATCH", "path": "/api/v1/projects/{id}" },
-    "projects_wiki_extract_symbols": {
-      "method": "GET",
-      "path": "/api/v1/projects/{projectId}/ai/wiki/extract-symbols"
-    },
-    "projects_wiki_generate": {
-      "method": "POST",
-      "path": "/api/v1/projects/{projectId}/ai/wiki/generate"
-    },
-    "projects_wiki_scan_files": {
-      "method": "GET",
-      "path": "/api/v1/projects/{projectId}/ai/wiki/scan-files"
-    },
-    "projects_workspace_overview": {
-      "method": "GET",
-      "path": "/api/v1/projects/{projectId}/workspace-overview"
-    },
+    "projects_wiki_extract_symbols": { "method": "GET", "path": "/api/v1/projects/{projectId}/ai/wiki/extract-symbols" },
+    "projects_wiki_generate": { "method": "POST", "path": "/api/v1/projects/{projectId}/ai/wiki/generate" },
+    "projects_wiki_scan_files": { "method": "GET", "path": "/api/v1/projects/{projectId}/ai/wiki/scan-files" },
+    "projects_workspace_overview": { "method": "GET", "path": "/api/v1/projects/{projectId}/workspace-overview" },
     "promote_memory": { "method": "POST", "path": "/api/v1/memory/{id}/promote" },
     "prompts_create": { "method": "POST", "path": "/api/v1/prompts/templates" },
     "prompts_delete": { "method": "DELETE", "path": "/api/v1/prompts/templates/{id}" },
@@ -513,18 +276,9 @@
     "remote_mcp_resume": { "method": "POST", "path": "/api/v1/remote-mcp/resume" },
     "remote_mcp_state": { "method": "GET", "path": "/api/v1/remote-mcp/state" },
     "remote_mcp_workspace_create": { "method": "POST", "path": "/api/v1/remote-mcp/workspaces" },
-    "remote_mcp_workspace_delete": {
-      "method": "DELETE",
-      "path": "/api/v1/remote-mcp/workspaces/{id}"
-    },
-    "remote_mcp_workspace_rotate": {
-      "method": "POST",
-      "path": "/api/v1/remote-mcp/workspaces/{id}/rotate"
-    },
-    "remote_mcp_workspace_update": {
-      "method": "PATCH",
-      "path": "/api/v1/remote-mcp/workspaces/{id}"
-    },
+    "remote_mcp_workspace_delete": { "method": "DELETE", "path": "/api/v1/remote-mcp/workspaces/{id}" },
+    "remote_mcp_workspace_rotate": { "method": "POST", "path": "/api/v1/remote-mcp/workspaces/{id}/rotate" },
+    "remote_mcp_workspace_update": { "method": "PATCH", "path": "/api/v1/remote-mcp/workspaces/{id}" },
     "rollback_agent": { "method": "POST", "path": "/api/v1/agents/{agentId}/rollback" },
     "run_specialist_eval": { "method": "POST", "path": "/api/v1/specialists/{agentId}/eval" },
     "runtime_diagnose": { "method": "POST", "path": "/api/v1/runtime/diagnose" },
@@ -533,10 +287,7 @@
     "save_memory": { "method": "POST", "path": "/api/v1/memory/save" },
     "scheduled_create_task": { "method": "POST", "path": "/api/v1/scheduled/tasks" },
     "scheduled_delete_task": { "method": "DELETE", "path": "/api/v1/scheduled/tasks/{id}" },
-    "scheduled_evolution_run": {
-      "method": "POST",
-      "path": "/api/v1/scheduled/evolution/{name}/run"
-    },
+    "scheduled_evolution_run": { "method": "POST", "path": "/api/v1/scheduled/evolution/{name}/run" },
     "scheduled_evolution_tasks": { "method": "GET", "path": "/api/v1/scheduled/evolution/tasks" },
     "scheduled_list_tasks": { "method": "GET", "path": "/api/v1/scheduled/tasks" },
     "scheduled_run_task": { "method": "POST", "path": "/api/v1/scheduled/tasks/{id}/run" },
@@ -549,25 +300,16 @@
     "session_get_model": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/model" },
     "session_lineage": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/lineage" },
     "session_purge_archived": { "method": "POST", "path": "/api/v1/sessions/purge-archived" },
-    "session_retreat_segment": {
-      "method": "POST",
-      "path": "/api/v1/sessions/{sessionId}/segments/retreat"
-    },
+    "session_retreat_segment": { "method": "POST", "path": "/api/v1/sessions/{sessionId}/segments/retreat" },
     "session_set_model": { "method": "PUT", "path": "/api/v1/sessions/{sessionId}/model" },
     "session_update": { "method": "PATCH", "path": "/api/v1/sessions/{sessionId}" },
     "set_preference": { "method": "PUT", "path": "/api/v1/preferences/{key}" },
     "set_settings": { "method": "PUT", "path": "/api/v1/settings" },
     "skill_audit": { "method": "GET", "path": "/api/v1/skills/{name}/audit" },
     "skill_rollback": { "method": "POST", "path": "/api/v1/skills/{name}/rollback" },
-    "skills_consolidation_accept": {
-      "method": "POST",
-      "path": "/api/v1/skills/consolidation/accept"
-    },
+    "skills_consolidation_accept": { "method": "POST", "path": "/api/v1/skills/consolidation/accept" },
     "skills_consolidation_scan": { "method": "POST", "path": "/api/v1/skills/consolidation/scan" },
-    "skills_consolidation_suggestions": {
-      "method": "GET",
-      "path": "/api/v1/skills/consolidation/suggestions"
-    },
+    "skills_consolidation_suggestions": { "method": "GET", "path": "/api/v1/skills/consolidation/suggestions" },
     "submit_recall_feedback": { "method": "POST", "path": "/api/v1/memory/recall/feedback" },
     "system_backup_create": { "method": "POST", "path": "/api/v1/system/backups" },
     "system_backup_restore": { "method": "POST", "path": "/api/v1/system/backups/{name}/restore" },
@@ -598,72 +340,30 @@
     "usage_summary": { "method": "GET", "path": "/api/v1/usage" },
     "usage_trend": { "method": "GET", "path": "/api/v1/usage/trend" },
     "workspace_bind": { "method": "PUT", "path": "/api/v1/sessions/{sessionId}/workspace" },
-    "workspace_create_checkpoint": {
-      "method": "POST",
-      "path": "/api/v1/sessions/{sessionId}/workspace/checkpoints"
-    },
+    "workspace_create_checkpoint": { "method": "POST", "path": "/api/v1/sessions/{sessionId}/workspace/checkpoints" },
     "workspace_default": { "method": "GET", "path": "/api/v1/workspace/default" },
     "workspace_forget_preference": { "method": "DELETE", "path": "/api/v1/workspace/preference" },
     "workspace_get": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/workspace" },
-    "workspace_get_change_file": {
-      "method": "GET",
-      "path": "/api/v1/sessions/{sessionId}/workspace/changes/file"
-    },
-    "workspace_get_changes": {
-      "method": "GET",
-      "path": "/api/v1/sessions/{sessionId}/workspace/changes"
-    },
-    "workspace_get_changes_diff": {
-      "method": "GET",
-      "path": "/api/v1/sessions/{sessionId}/workspace/changes/diff"
-    },
+    "workspace_get_change_file": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/workspace/changes/file" },
+    "workspace_get_changes": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/workspace/changes" },
+    "workspace_get_changes_diff": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/workspace/changes/diff" },
     "workspace_health": { "method": "GET", "path": "/api/v1/workspace/health" },
-    "workspace_list_checkpoints": {
-      "method": "GET",
-      "path": "/api/v1/sessions/{sessionId}/workspace/checkpoints"
-    },
+    "workspace_list_checkpoints": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/workspace/checkpoints" },
     "workspace_migrate_preference": { "method": "POST", "path": "/api/v1/workspace/migrate" },
-    "workspace_preview_file": {
-      "method": "GET",
-      "path": "/api/v1/sessions/{sessionId}/workspace/preview"
-    },
-    "workspace_resolve_files": {
-      "method": "POST",
-      "path": "/api/v1/sessions/{sessionId}/workspace/resolve"
-    },
-    "workspace_restore_checkpoint": {
-      "method": "POST",
-      "path": "/api/v1/sessions/{sessionId}/workspace/checkpoints/restore"
-    },
-    "workspace_revert_change_hunks": {
-      "method": "POST",
-      "path": "/api/v1/sessions/{sessionId}/workspace/changes/revert-hunks"
-    },
-    "workspace_revert_changes": {
-      "method": "POST",
-      "path": "/api/v1/sessions/{sessionId}/workspace/changes/revert"
-    },
+    "workspace_preview_file": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/workspace/preview" },
+    "workspace_resolve_files": { "method": "POST", "path": "/api/v1/sessions/{sessionId}/workspace/resolve" },
+    "workspace_restore_checkpoint": { "method": "POST", "path": "/api/v1/sessions/{sessionId}/workspace/checkpoints/restore" },
+    "workspace_revert_change_hunks": { "method": "POST", "path": "/api/v1/sessions/{sessionId}/workspace/changes/revert-hunks" },
+    "workspace_revert_changes": { "method": "POST", "path": "/api/v1/sessions/{sessionId}/workspace/changes/revert" },
     "workspace_revoke": { "method": "DELETE", "path": "/api/v1/sessions/{sessionId}/workspace" },
-    "workspace_search_files": {
-      "method": "GET",
-      "path": "/api/v1/sessions/{sessionId}/workspace/files"
-    },
+    "workspace_search_files": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/workspace/files" },
     "workspace_set_preference": { "method": "POST", "path": "/api/v1/workspace/preference" },
-    "worktree_branches": {
-      "method": "GET",
-      "path": "/api/v1/sessions/{sessionId}/worktree/branches"
-    },
+    "worktree_branches": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/worktree/branches" },
     "worktree_create": { "method": "POST", "path": "/api/v1/sessions/{sessionId}/worktree" },
-    "worktree_delete": {
-      "method": "DELETE",
-      "path": "/api/v1/sessions/{sessionId}/worktree/{worktreeId}"
-    },
+    "worktree_delete": { "method": "DELETE", "path": "/api/v1/sessions/{sessionId}/worktree/{worktreeId}" },
     "worktree_list": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/worktree" },
     "worktree_merge": { "method": "POST", "path": "/api/v1/sessions/{sessionId}/worktree/merge" },
-    "zotero_annotations": {
-      "method": "GET",
-      "path": "/api/v1/zotero/items/{item_key}/annotations"
-    },
+    "zotero_annotations": { "method": "GET", "path": "/api/v1/zotero/items/{item_key}/annotations" },
     "zotero_collections": { "method": "GET", "path": "/api/v1/zotero/collections" },
     "zotero_item": { "method": "GET", "path": "/api/v1/zotero/items/{item_key}" },
     "zotero_search": { "method": "GET", "path": "/api/v1/zotero/search" },

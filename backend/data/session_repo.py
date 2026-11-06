@@ -66,6 +66,8 @@ class Session:
     run_status: str = "idle"
     last_error: Optional[str] = None
     last_run_at: Optional[int] = None
+    # 2026-10-27: 标题生成尝试次数（达到上限后不再重试）
+    title_attempts: int = 0
     # M0 (2026-11-03): 会话级专家绑定。指向 agents.id；'primary' = 主助手。
     # 存量会话迁移时回填为 'primary'，行为与引入前一致。
     specialist_id: str = "primary"
@@ -103,6 +105,8 @@ class Session:
             run_status=row["run_status"] or "idle",
             last_error=row["last_error"],
             last_run_at=row["last_run_at"],
+            # 2026-10-27: 标题生成重试计数，存量行为 NULL → 兜底 0
+            title_attempts=row["title_attempts"] or 0,
             # M0 (2026-11-03): 专家绑定。存量行为 NULL（迁移前 DB）→ 兜底 primary
             specialist_id=row["specialist_id"] or "primary",
         )
@@ -130,6 +134,8 @@ class Session:
             "specialist_id": self.specialist_id,
             # 2026-10-28: 性能统计 - 会话用时（分钟）
             "duration_minutes": self.duration_minutes,
+            # 2026-10-27: 标题生成重试计数
+            "title_attempts": self.title_attempts,
         }
 
 
@@ -211,6 +217,33 @@ class SessionRepository:
             (1 if archived else 0, limit, offset),
         )
 
+        return [Session.from_row(row) for row in cursor.fetchall()]
+
+    def list_untitled(
+        self,
+        placeholder_title: str,
+        max_attempts: int,
+        limit: int = 100,
+    ) -> List[Session]:
+        """列出仍需生成标题的会话（占位标题 + 未达重试上限 + 有消息）。
+
+        ``placeholder_title`` 由调用方传入（当前为 ``title_generator.DEFAULT_TITLE``），
+        避免数据层反向依赖 chat 层。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM sessions
+            WHERE is_archived = 0
+              AND message_count > 0
+              AND (title IS NULL OR title = ?)
+              AND COALESCE(title_attempts, 0) < ?
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,
+            (placeholder_title, max_attempts, limit),
+        )
         return [Session.from_row(row) for row in cursor.fetchall()]
 
     def search(self, query: str, limit: int = 10) -> List[Session]:

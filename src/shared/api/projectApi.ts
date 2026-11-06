@@ -107,6 +107,22 @@ import {
   type BootstrapSuggestResult,
   type BootstrapVerification,
   type GitInitResult,
+  // P3 (2026-11-05): 模板目录 + 目录树
+  mapProjectTree,
+  mapTemplateSummary,
+  type ProjectTemplateListWire,
+  type ProjectTemplateSummary,
+  type ProjectTree,
+  type ProjectTreeWire,
+  // P5 (2026-11-05): 文件引用
+  mapProjectReference,
+  mapProjectReferenceList,
+  mapProjectReferenceScan,
+  type ProjectReference,
+  type ProjectReferenceListWire,
+  type ProjectReferenceScanResult,
+  type ProjectReferenceScanWire,
+  type ProjectReferenceWire,
 } from './projectApiTypes';
 /* eslint-enable import/order */
 
@@ -411,6 +427,10 @@ export type {
   SubTypeDefinition,
   SubTypesCatalog,
   GenerateRulesOptions,
+  // P5 (2026-11-05): 文件引用
+  ProjectReference,
+  ProjectReferenceScanResult,
+  ProjectReferenceKind,
 } from './projectApiTypes';
 import type { Session } from './types';
 import { handleApiError } from './utils';
@@ -430,6 +450,9 @@ export type {
   ProjectScaffoldResult,
   ProjectSummary,
   ProjectType,
+  // P3 (2026-11-05)
+  ProjectTemplateSummary,
+  ProjectTree,
   ProjectTypeDetectionResult,
   ProjectUpdatePatch,
   ProjectWorkspaceOverview,
@@ -482,17 +505,115 @@ export const projectApi = {
    */
   async register(
     path: string,
-    options?: { allowedPaths?: string[]; projectType?: ProjectType },
+    options?: {
+      allowedPaths?: string[];
+      projectType?: ProjectType;
+      /** P3 (2026-11-05): 创建时选模板 → 后端先脚手架化目录/文件再扫描 */
+      templateName?: string;
+    },
   ): Promise<ProjectSummary> {
     try {
       const project = await invoke<ProjectWire>('projects_register', {
         path,
         allowed_paths: options?.allowedPaths,
         project_type: options?.projectType,
+        template_name: options?.templateName,
       });
       const mapped = mapProject(project);
       void syncAllowedPathsToMain(mapped.id, mapped.allowedPaths);
       return mapped;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** P3: 模板目录（内置 + ~/.sage/templates/*.json），供创建对话框选择器使用。 */
+  async listTemplates(): Promise<ProjectTemplateSummary[]> {
+    try {
+      const response = await invoke<ProjectTemplateListWire>('projects_list_templates');
+      return response.templates.map(mapTemplateSummary);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P2/P3: 项目目录树（含扫描发现的子项目）。`refresh=true` 绕过后端 30s 缓存。
+   * 目录已消失时抛 410。
+   */
+  async getTree(projectId: string, refresh = false): Promise<ProjectTree> {
+    try {
+      const response = await invoke<ProjectTreeWire>('projects_get_tree', {
+        id: projectId,
+        refresh,
+      });
+      return mapProjectTree(response);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P5 (2026-11-05): 列出项目的文件引用（设计 §9.7）。
+   */
+  async listReferences(projectId: string): Promise<ProjectReference[]> {
+    try {
+      const response = await invoke<ProjectReferenceListWire>('projects_list_references', {
+        id: projectId,
+      });
+      return mapProjectReferenceList(response);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P5 (2026-11-05): 新建文件/目录引用。
+   */
+  async createReference(
+    projectId: string,
+    input: {
+      relPath: string;
+      targetPath: string;
+      kind: 'file' | 'directory';
+      aliasName?: string;
+    },
+  ): Promise<ProjectReference> {
+    try {
+      const response = await invoke<ProjectReferenceWire>('projects_create_reference', {
+        id: projectId,
+        relPath: input.relPath,
+        targetPath: input.targetPath,
+        kind: input.kind,
+        aliasName: input.aliasName,
+      });
+      return mapProjectReference(response);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P5 (2026-11-05): 删除引用（不删除磁盘文件）。
+   */
+  async deleteReference(projectId: string, referenceId: string): Promise<void> {
+    try {
+      await invoke<{ removed: boolean }>('projects_delete_reference', {
+        id: projectId,
+        referenceId,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P5 (2026-11-05): 重新扫描项目目录（刷新项目树 + 同步文件引用）。
+   */
+  async scanProject(projectId: string): Promise<ProjectReferenceScanResult> {
+    try {
+      const response = await invoke<ProjectReferenceScanWire>('projects_scan', { id: projectId });
+      return mapProjectReferenceScan(response);
     } catch (error) {
       throw handleApiError(error);
     }

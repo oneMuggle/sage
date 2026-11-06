@@ -63,6 +63,8 @@ EXPECTED_TOP_KEYS = frozenset(
         "llmProxyTimeoutS",
         # 2026-10-28: 智能路由模式 {"mode": "auto"|"manual"}
         "routing",
+        # 2026-10-27: 会话标题生成专用模型 id（顶层扁平键）
+        "titleModelId",
     }
 )
 

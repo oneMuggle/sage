@@ -686,6 +686,11 @@ class Database:
             cursor.execute("ALTER TABLE sessions ADD COLUMN last_error TEXT")
         if "last_run_at" not in session_columns:
             cursor.execute("ALTER TABLE sessions ADD COLUMN last_run_at INTEGER")
+        # 2026-10-27: 标题生成重试计数。用于区分"未尝试"与"已放弃"。
+        # SQLite 不支持 ALTER COLUMN 修改 nullability，保留 title NOT NULL，
+        # 用 title == '新对话' AND title_attempts == 0 作为"未生成"信号。
+        if "title_attempts" not in session_columns:
+            cursor.execute("ALTER TABLE sessions ADD COLUMN title_attempts INTEGER DEFAULT 0")
         # M0 (2026-11-03): 会话级专家绑定。指向 agents.id；'primary' = 主助手。
         # 存量会话回填为 'primary'（保持既有行为）。
         if "specialist_id" not in session_columns:
@@ -1123,6 +1128,36 @@ class Database:
         cursor.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_playbook_shares_token "
             "ON playbook_shares(token)"
+        )
+        # Project nesting (2026-11-05): 父项目缓存 + 发现来源。parent_id 是
+        # 派生缓存（真相源永远是文件系统路径），扫描时由 workspace_scanner 重新
+        # 计算并写入。discovery_source 标记子项目被发现的方式（manual/template/
+        # context_file），供 UI 展示来源徽章。旧行兼容（NULL 允许）。
+        if "parent_id" not in _projects_columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN parent_id TEXT")
+        if "discovery_source" not in _projects_columns:
+            cursor.execute(
+                "ALTER TABLE projects ADD COLUMN discovery_source TEXT"
+            )
+        # File references (2026-11-05 P5): 项目内虚拟路径别名 → 真实目标。
+        # rel_path 是项目内可见位置（POSIX 风格、无前导斜杠），target_path
+        # 是绝对路径（可指向工作区外，经 _enforce_workspace 第 3 层放行只读）。
+        # kind: file | directory | symlink。UNIQUE(project_id, rel_path) 防重。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS file_references (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                alias_name TEXT NOT NULL,
+                rel_path TEXT NOT NULL,
+                target_path TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                UNIQUE(project_id, rel_path)
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_file_references_project "
+            "ON file_references(project_id)"
         )
         conn.commit()
 
