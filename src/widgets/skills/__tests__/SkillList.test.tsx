@@ -40,7 +40,7 @@ const SAMPLE_SKILLS: Skill[] = [
 ];
 
 describe('SkillList (PR-7)', () => {
-  it('renders all skills with name/description/triggers/usage_count', () => {
+  it('renders all skills with name/description/usage_count and groups', () => {
     render(<SkillList skills={SAMPLE_SKILLS} onToggle={() => undefined} />);
 
     // 2 个 skill 名称都渲染
@@ -49,13 +49,14 @@ describe('SkillList (PR-7)', () => {
     // description
     expect(screen.getByText('搜索网络信息并整理结果')).toBeInTheDocument();
     expect(screen.getByText('帮助撰写文章')).toBeInTheDocument();
-    // triggers
-    expect(screen.getByText('搜索')).toBeInTheDocument();
-    expect(screen.getByText('查一下')).toBeInTheDocument();
-    expect(screen.getByText('写')).toBeInTheDocument();
     // usage_count
     expect(screen.getByText('已使用 12 次')).toBeInTheDocument();
     expect(screen.getByText('已使用 0 次')).toBeInTheDocument();
+    // M2: 无 origin/source 的历史数据归入「我的技能」分组
+    expect(screen.getByText('我的技能')).toBeInTheDocument();
+    // M2: 触发词已移入详情抽屉，紧凑列表不再渲染
+    expect(screen.queryByText('查一下')).not.toBeInTheDocument();
+    expect(screen.queryByText('写')).not.toBeInTheDocument();
   });
 
   it('calls onToggle with (name, newEnabled) when switch clicked', () => {
