@@ -92,7 +92,7 @@ class TestRunTurnGuardIntegration:
         service.storage.get_messages.return_value = []
         service.tools.list_tools.return_value = []
 
-        messages = await service._run_turn_inner(
+        messages, _assistant_id = await service._run_turn_inner(
             session_id="sess-guard",
             user_message=Message(role=Role.USER, content="hi"),
             span=MagicMock(),

@@ -2197,6 +2197,26 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run "
             "ON scheduled_tasks(next_run) WHERE next_run IS NOT NULL"
         )
+        # ── M2 字段迁移（2026-11-06）：定时任务自动执行模式 + 执行结果字段 ──
+        # 幂等：PRAGMA table_info 检查列名存在才 ALTER。与 messages/sessions 等
+        # 现有迁移模式一致（参见本文件 535-590 行 messages 迁移）。
+        scheduled_cols = {
+            row["name"]
+            for row in cursor.execute("PRAGMA table_info(scheduled_tasks)").fetchall()
+        }
+        if "mode" not in scheduled_cols:
+            cursor.execute(
+                "ALTER TABLE scheduled_tasks "
+                "ADD COLUMN mode TEXT NOT NULL DEFAULT 'deliver'"
+            )
+        if "last_result_message_id" not in scheduled_cols:
+            cursor.execute(
+                "ALTER TABLE scheduled_tasks ADD COLUMN last_result_message_id TEXT"
+            )
+        if "last_duration_ms" not in scheduled_cols:
+            cursor.execute(
+                "ALTER TABLE scheduled_tasks ADD COLUMN last_duration_ms INTEGER"
+            )
         # 迁移完成标记。仅凭 scheduled_tasks 是否为空来判断会导致「用户删光任务 →
         # 重启后被陈旧 JSON 备份复活」,故显式记账。每个源路径一行。
         cursor.execute("""

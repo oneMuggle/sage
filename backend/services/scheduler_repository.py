@@ -23,6 +23,8 @@ _COLUMNS = (
     "id", "name", "type", "schedule", "session_id", "content", "enabled",
     "created_at", "last_run", "next_run", "last_attempt", "last_status",
     "last_error", "run_count", "max_runs",
+    # M2 新增（参见方案 docs/plans/2026-11-06_scheduled-task-auto-execute.md §3.4）
+    "mode", "last_result_message_id", "last_duration_ms",
 )
 
 # ``schedule`` is stored as JSON text; every other column maps 1:1.
@@ -53,6 +55,10 @@ class ScheduledTaskRepository:
         for column in _JSON_COLUMNS:
             row[column] = json.dumps(row[column], ensure_ascii=False)
         row["enabled"] = 1 if row["enabled"] else 0
+        # 旧行（JSON 迁移或测试 fixture）缺少 M2 字段时，用列默认值兜底。
+        # mode 是 NOT NULL，缺失时回落到 'deliver'（存量行为不变）。
+        if row["mode"] is None:
+            row["mode"] = "deliver"
         return row
 
     @staticmethod

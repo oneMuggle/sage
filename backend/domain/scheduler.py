@@ -24,6 +24,8 @@ class SchedulerServicePort(Protocol):
         session_id: str,
         content: str,
         enabled: bool = True,
+        max_runs: Optional[int] = None,
+        mode: str = "execute",
     ) -> Any:
         ...
 

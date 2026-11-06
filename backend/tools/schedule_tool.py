@@ -140,8 +140,9 @@ class ScheduleTaskTool(BaseTool):
         return ToolSchema(
             name="schedule_task",
             description=(
-                "创建定时任务：在指定时间或按周期，自动向当前对话会话注入一条消息"
-                "（可理解为「到点自动提醒/自动触发一次对话」）。"
+                "创建定时任务：在指定时间或按周期，自动在当前对话会话执行一次对话"
+                "（LLM + 工具调用，可理解为「到点自动执行一次任务并返回结果」），"
+                "或仅注入一条提醒消息（deliver 模式）。"
                 "适用于周期性检查（如「每 5 分钟检查部署状态」）与一次性提醒"
                 "（如「明天下午 3 点提醒我提交报告」）。"
                 "任务创建后出现在前端的定时任务列表中，用户可查看、停用或删除。"
@@ -189,6 +190,15 @@ class ScheduleTaskTool(BaseTool):
                             "若填写则必须与当前会话一致，否则会被拒绝。"
                         ),
                     },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["execute", "deliver"],
+                        "description": (
+                            "执行模式，默认 'execute'。"
+                            "'execute' = 到点跑一轮真实对话（LLM + 工具），结果写入会话；"
+                            "'deliver' = 仅注入一条提醒消息，不调用 LLM（纯提醒，不消耗算力）。"
+                        ),
+                    },
                 },
                 "required": ["name", "prompt", "schedule_kind"],
             },
@@ -202,6 +212,7 @@ class ScheduleTaskTool(BaseTool):
         cron: Optional[str] = None,
         at: Any = None,
         session_id: Optional[str] = None,
+        mode: str = "execute",
         **kwargs: Any,
     ) -> ToolResult:
         if not isinstance(name, str) or not name.strip():
@@ -215,6 +226,10 @@ class ScheduleTaskTool(BaseTool):
         if schedule_kind not in ("once", "recurring"):
             return ToolResult(
                 success=False, error="schedule_kind 必须是 'once' 或 'recurring'。"
+            )
+        if mode not in ("execute", "deliver"):
+            return ToolResult(
+                success=False, error="mode 必须是 'execute' 或 'deliver'。"
             )
 
         resolved_session, session_error = _resolve_session_id(session_id)
@@ -253,6 +268,7 @@ class ScheduleTaskTool(BaseTool):
                 schedule=schedule,
                 session_id=resolved_session,
                 content=prompt.strip(),
+                mode=mode,  # type: ignore[arg-type]
             )
         except ScheduledTaskValidationError as exc:
             return ToolResult(success=False, error=f"创建定时任务失败：{exc}")
@@ -266,9 +282,10 @@ class ScheduleTaskTool(BaseTool):
             if task.type == "recurring"
             else f"一次性 at={task.schedule.get('at')}"
         )
+        mode_desc = "自动执行" if task.mode == "execute" else "仅提醒"
         summary = (
             f"已创建定时任务 {task.id}（{task.name}）：{schedule_desc}，"
-            f"目标会话 {task.session_id}，下次触发 {task.next_run}。"
+            f"模式 {mode_desc}，目标会话 {task.session_id}，下次触发 {task.next_run}。"
         )
         return ToolResult(
             success=True,
@@ -278,6 +295,7 @@ class ScheduleTaskTool(BaseTool):
                 "type": task.type,
                 "schedule": task.schedule,
                 "session_id": task.session_id,
+                "mode": task.mode,
                 "next_run": task.next_run,
             },
             output=summary,
@@ -348,6 +366,7 @@ class ListScheduledTasksTool(BaseTool):
                 "schedule": t.schedule,
                 "next_run": t.next_run,
                 "enabled": t.enabled,
+                "mode": getattr(t, "mode", "deliver"),
                 "last_status": t.last_status,
                 "last_error": t.last_error,
             }
@@ -355,6 +374,7 @@ class ListScheduledTasksTool(BaseTool):
         ]
         lines = [
             f"- {t.id} | {t.name} | {t.type} | {t.schedule} | "
+            f"mode={getattr(t, 'mode', 'deliver')} | "
             f"next_run={t.next_run} | enabled={t.enabled} | last={t.last_status}"
             for t in tasks
         ]

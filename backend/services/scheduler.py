@@ -22,7 +22,7 @@ from contextlib import suppress
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Optional
 
 if TYPE_CHECKING:
     from backend.scheduler.evolution import BaseEvolutionTask
@@ -56,6 +56,23 @@ TaskNotFoundError = ScheduledTaskNotFoundError
 ValidationError = ScheduledTaskValidationError
 
 
+@dataclass(frozen=True)
+class RunOutcome:
+    """执行结果，由注入的 ``TaskRunner`` 返回。
+
+    ``error`` 永远为脱敏固定文案，不携带原始异常文本，避免路径/类名/
+    凭据泄露（参见方案 §3.8）。
+    """
+
+    status: Literal["succeeded", "failed"]
+    message_id: Optional[str] = None
+    duration_ms: int = 0
+    error: Optional[str] = None
+
+
+TaskRunner = Callable[["ScheduledTask"], RunOutcome]
+
+
 @dataclass
 class ScheduledTask:
     """Public dataclass used by router and store tests.
@@ -78,6 +95,9 @@ class ScheduledTask:
     last_error: Optional[str] = None
     run_count: int = 0
     max_runs: Optional[int] = None
+    mode: Literal["execute", "deliver"] = "deliver"
+    last_result_message_id: Optional[str] = None
+    last_duration_ms: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -100,6 +120,9 @@ class ScheduledTask:
             last_error=raw.get("last_error"),
             run_count=int(raw.get("run_count", 0) or 0),
             max_runs=int(raw["max_runs"]) if raw.get("max_runs") is not None else None,
+            mode=raw.get("mode", "deliver"),  # type: ignore[arg-type]
+            last_result_message_id=raw.get("last_result_message_id"),
+            last_duration_ms=int(raw["last_duration_ms"]) if raw.get("last_duration_ms") is not None else None,
         )
 
 
@@ -133,12 +156,25 @@ class SchedulerService:
         self._scheduler = BackgroundScheduler(daemon=True, timezone=local_timezone())
         self._evolution_tasks: Dict[str, "BaseEvolutionTask"] = {}  # noqa: UP037
         self._repository = ScheduledTaskRepository(db) if db is not None else None
+        # 注入的任务执行器（由 main.py lifespan 装配后调用 ``set_executor``
+        # 填入）。为 ``None`` 时 ``_fire`` 降级到 ``deliver`` 行为，保证启动
+        # 顺序不影响基础功能。
+        self._executor: Optional[TaskRunner] = None
         if self._repository is None:
             self._load_from_disk()
         else:
             self._migrate_from_json()
             self._load_from_repo()
         self._reschedule_all()
+
+    def set_executor(self, runner: Optional[TaskRunner]) -> None:
+        """注入任务执行器（由 ``main.py`` 装配期调用）。
+
+        ``runner`` 必须是同步可调用对象，由调度线程直接调用；内部负责把
+        异步的 ``ChatService.run_turn_tracked`` 桥接到主事件循环并返回
+        ``RunOutcome``。传 ``None`` 清除注入（仅测试使用）。
+        """
+        self._executor = runner
 
     # ---------- public API ----------
 
@@ -207,6 +243,7 @@ class SchedulerService:
         content: str,
         enabled: bool = True,
         max_runs: Optional[int] = None,
+        mode: Literal["execute", "deliver"] = "execute",
     ) -> ScheduledTask:
         if not name or not name.strip():
             raise ValidationError("name must not be empty")
@@ -216,6 +253,8 @@ class SchedulerService:
             raise ValidationError("enabled must be bool")
         if max_runs is not None and (isinstance(max_runs, bool) or not isinstance(max_runs, int) or max_runs < 1):
             raise ValidationError("max_runs must be a positive integer")
+        if mode not in ("execute", "deliver"):
+            raise ValidationError("mode must be 'execute' or 'deliver'")
         if not self._session_repo_exists(session_id):
             raise ValidationError(f"session not found: {session_id}")
         validated_schedule = self._validate_schedule(task_type, schedule)
@@ -224,13 +263,13 @@ class SchedulerService:
             schedule=validated_schedule, session_id=session_id, content=content,
             enabled=enabled, created_at=int(time.time() * 1000),
             next_run=self._next_run_for(validated_schedule, enabled),
-            max_runs=max_runs,
+            max_runs=max_runs, mode=mode,
         )
         with self._lock:
             self._tasks[task.id] = task
             self._persist(task)
             self._schedule_job(task)
-        logger.info("scheduled task added: %s (%s)", task.id, task.type)
+        logger.info("scheduled task added: %s (%s, mode=%s)", task.id, task.type, task.mode)
         return task
 
     def update_task(self, task_id: str, **changes: Any) -> ScheduledTask:
@@ -240,7 +279,7 @@ class SchedulerService:
             if task_id in self._running:
                 raise ValidationError("task is running; retry editing after it finishes")
             current = self._tasks[task_id]
-            allowed = {"name", "enabled", "type", "schedule", "content", "session_id", "max_runs"}
+            allowed = {"name", "enabled", "type", "schedule", "content", "session_id", "max_runs", "mode"}
             if set(changes) - allowed:
                 raise ValidationError("unknown task field")
             new_name = changes.get("name", current.name)
@@ -250,6 +289,7 @@ class SchedulerService:
             new_type = changes.get("type", current.type)
             schedule = changes.get("schedule", current.schedule)
             new_max_runs = changes.get("max_runs", current.max_runs)
+            new_mode = changes.get("mode", current.mode)
             if not isinstance(new_name, str) or not new_name.strip():
                 raise ValidationError("name must not be empty")
             if not isinstance(new_content, str) or not new_content.strip():
@@ -258,6 +298,8 @@ class SchedulerService:
                 raise ValidationError("enabled must be bool")
             if new_max_runs is not None and (isinstance(new_max_runs, bool) or not isinstance(new_max_runs, int) or new_max_runs < 1):
                 raise ValidationError("max_runs must be a positive integer")
+            if new_mode not in ("execute", "deliver"):
+                raise ValidationError("mode must be 'execute' or 'deliver'")
             if new_session != current.session_id and not self._session_repo_exists(new_session):
                 raise ValidationError(f"session not found: {new_session}")
             if not isinstance(schedule, dict):
@@ -271,7 +313,7 @@ class SchedulerService:
                 current, name=new_name.strip(), enabled=new_enabled, type=new_type,
                 schedule=validated, content=new_content, session_id=new_session,
                 next_run=self._next_run_for(validated, new_enabled),
-                max_runs=new_max_runs,
+                max_runs=new_max_runs, mode=new_mode,
             )
             self._tasks[task_id] = updated
             self._persist(updated)
@@ -504,9 +546,35 @@ class SchedulerService:
                 return
             self._running.add(task.id)
         error = None
+        outcome_message_id: Optional[str] = None
+        outcome_duration_ms: Optional[int] = None
         try:
             if not self._session_repo_exists(task.session_id):
                 error = "Target session no longer exists. Select a valid session before retrying."
+            elif task.mode == "execute":
+                if self._executor is None:
+                    # 启动期 ChatService 尚未装配：降级到 deliver，保证用户提醒
+                    # 不丢（方案 §3.8）。
+                    logger.warning(
+                        "task %s is mode='execute' but no executor injected; "
+                        "degrading to deliver",
+                        task.id,
+                    )
+                    self._message_repo.insert(
+                        session_id=task.session_id, role="system", content=task.content,
+                        created_at=int(time.time() * 1000),
+                    )
+                else:
+                    outcome = self._executor(task)
+                    outcome_message_id = outcome.message_id
+                    outcome_duration_ms = outcome.duration_ms
+                    if outcome.status == "failed":
+                        error = outcome.error or "Execution failed"
+                    else:
+                        logger.info(
+                            "task %s executed in %dms (message=%s)",
+                            task.id, outcome.duration_ms, outcome.message_id,
+                        )
             else:
                 self._message_repo.insert(
                     session_id=task.session_id, role="system", content=task.content,
@@ -518,12 +586,22 @@ class SchedulerService:
             error = "Delivery failed. Check the target session and backend logs before retrying."
         finally:
             try:
-                self._record_run(task, error)
+                self._record_run(
+                    task, error,
+                    message_id=outcome_message_id, duration_ms=outcome_duration_ms,
+                )
             finally:
                 with self._lock:
                     self._running.discard(task.id)
 
-    def _record_run(self, task: ScheduledTask, error: Optional[str] = None) -> None:
+    def _record_run(
+        self,
+        task: ScheduledTask,
+        error: Optional[str] = None,
+        *,
+        message_id: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+    ) -> None:
         with self._lock:
             if task.id not in self._tasks:
                 return
@@ -544,6 +622,8 @@ class SchedulerService:
                 last_error=error, last_run=current.last_run if error else now,
                 next_run=self._next_run_for(current.schedule, enabled),
                 run_count=new_run_count,
+                last_result_message_id=message_id,
+                last_duration_ms=duration_ms,
             )
             if current.type == "once" or budget_reached:
                 with suppress(JobLookupError):
