@@ -527,7 +527,7 @@ export function OfficePreviewPanel({
 
   return (
     <div
-      className="border border-border rounded-lg bg-surface overflow-hidden"
+      className="border border-border rounded-lg bg-surface overflow-hidden flex flex-col"
       data-testid="office-preview-panel"
     >
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border bg-bg-subtle">
@@ -754,44 +754,46 @@ export function OfficePreviewPanel({
       {/* Round A P1: 高保真开 → 内嵌 Chromium PDF viewer；关 → 结构化预览。
           F3 (office-p0): pdf 源文件另有原文开关（/pdf/data，高保真管线
           不覆盖 pdf 源）。 */}
-      {fidelityOn && fidelityUrl && preview.docType !== 'word' ? (
-        <iframe
-          src={fidelityUrl}
-          title="High-fidelity preview"
-          className="w-full h-[70vh] min-h-[32rem] border-0"
-          data-testid="office-preview-fidelity-iframe"
-        />
-      ) : fidelityOn && preview.docType === 'word' ? (
-        <DocxNativePreview
-          workspacePath={workspacePath ?? summary.workspace_path ?? ''}
-          managedPath={buildManagedPath(workspacePath ?? summary.workspace_path ?? '')}
-          revision={docRevision ?? undefined}
-          onError={() => fallbackToStructured()}
-        />
-      ) : (
-        <div className="p-4 max-h-96 overflow-y-auto" data-testid="office-preview-structured">
-          {preview.docType === 'pdf' && originalPdfUrl ? (
-            <iframe
-              src={originalPdfUrl}
-              title={summary.generated_filename}
-              className="w-full h-96 border border-border rounded bg-white"
-              data-testid="office-pdf-original-frame"
-            />
-          ) : (
-            <>
-              {preview.docType === 'ppt' && <PptPreview data={preview.data} />}
-              {preview.docType === 'word' && (
-                <WordPreview
-                  data={preview.data}
-                  highlightParagraphIndex={highlightParagraphIndex}
-                />
-              )}
-              {preview.docType === 'excel' && <ExcelPreview key={summary.id} data={preview.data} />}
-              {preview.docType === 'pdf' && <PdfPreview data={preview.data} />}
-            </>
-          )}
-        </div>
-      )}
+      <div className="max-h-[70vh] overflow-y-auto" data-testid="office-preview-scroll">
+        {fidelityOn && fidelityUrl && preview.docType !== 'word' ? (
+          <iframe
+            src={fidelityUrl}
+            title="High-fidelity preview"
+            className="w-full h-[70vh] min-h-[32rem] border-0"
+            data-testid="office-preview-fidelity-iframe"
+          />
+        ) : fidelityOn && preview.docType === 'word' ? (
+          <DocxNativePreview
+            workspacePath={workspacePath ?? summary.workspace_path ?? ''}
+            managedPath={buildManagedPath(workspacePath ?? summary.workspace_path ?? '')}
+            revision={docRevision ?? undefined}
+            onError={() => fallbackToStructured()}
+          />
+        ) : (
+          <div className="p-4" data-testid="office-preview-structured">
+            {preview.docType === 'pdf' && originalPdfUrl ? (
+              <iframe
+                src={originalPdfUrl}
+                title={summary.generated_filename}
+                className="w-full h-96 border border-border rounded bg-white"
+                data-testid="office-pdf-original-frame"
+              />
+            ) : (
+              <>
+                {preview.docType === 'ppt' && <PptPreview data={preview.data} />}
+                {preview.docType === 'word' && (
+                  <WordPreview
+                    data={preview.data}
+                    highlightParagraphIndex={highlightParagraphIndex}
+                  />
+                )}
+                {preview.docType === 'excel' && <ExcelPreview key={summary.id} data={preview.data} />}
+                {preview.docType === 'pdf' && <PdfPreview data={preview.data} />}
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {auditOpen && preview.docType === 'word' && (
         <div className="border-t border-border p-4" data-testid="office-word-audit-host">

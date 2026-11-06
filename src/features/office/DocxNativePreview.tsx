@@ -180,7 +180,7 @@ export function DocxNativePreview({
           />
         </div>
       )}
-      <div ref={containerRef} className="min-h-24 p-4" />
+      <div ref={containerRef} className="p-4" />
     </div>
   );
 }
