@@ -176,7 +176,10 @@ describe('OfficeDeliveryDrawer (A4b)', () => {
     renderDrawer();
 
     await waitFor(() => expect(screen.getByTestId('delivery-preview')).toBeTruthy());
-    expect(screen.getByText('hello delivery')).toBeTruthy();
+    // Word defaults to high-fidelity (native docx-preview); the readWordData
+    // mock yields nothing, so the panel falls back to the structured view
+    // asynchronously — await that fallback before asserting the text.
+    await waitFor(() => expect(screen.getByText('hello delivery')).toBeTruthy());
   });
 
   it('accept archives the entry and hides the decision zone', async () => {

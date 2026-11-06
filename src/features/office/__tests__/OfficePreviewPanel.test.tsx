@@ -22,6 +22,11 @@ vi.mock('../../../shared/api/officeApi', () => ({
   officeApi: {
     exportPdf: (...args: unknown[]) => mockExportPdf(...args),
     readPdfData: (...args: unknown[]) => mockReadPdfData(...args),
+    // Task 2: fidelity is ON by default for Word and auto-loads for
+    // Excel/PPT. Returning ok:false keeps the structured view reachable so
+    // the existing structured-view assertions stay valid.
+    pdfPreview: vi.fn(async () => ({ ok: false })),
+    readWordData: vi.fn(async () => ({ ok: false })),
   },
 }));
 
@@ -175,7 +180,12 @@ const PDF_PREVIEW: OfficePreviewData = {
 function renderPanel(preview: OfficePreviewData | null, onEditPreview?: () => void) {
   return render(
     <I18nProvider defaultLocale="zh">
-      <OfficePreviewPanel preview={preview} workspacePath="/tmp/ws" onEditPreview={onEditPreview} />
+      <OfficePreviewPanel
+        preview={preview}
+        workspacePath="/tmp/ws"
+        onEditPreview={onEditPreview}
+        defaultFidelity={false}
+      />
     </I18nProvider>,
   );
 }

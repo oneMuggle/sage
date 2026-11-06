@@ -43,6 +43,8 @@ export interface DocxNativePreviewProps {
    * and part of the late-response guard below.
    */
   revision?: string | null;
+  /** Optional callback when docx-preview fails. Used by parent to fall back to structured view. */
+  onError?: () => void;
 }
 
 /**
@@ -117,6 +119,7 @@ export function DocxNativePreview({
   workspacePath,
   managedPath,
   revision,
+  onError,
 }: DocxNativePreviewProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -141,6 +144,7 @@ export function DocxNativePreview({
         if (!cancelled) setState('ok');
       } catch {
         if (!cancelled) setState('error');
+        if (onError) onError();
       }
     })();
     return () => {
