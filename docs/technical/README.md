@@ -112,7 +112,8 @@
 | 138  | [Word 渲染级校验](./138-word-render-audit.md) | DOCX→PDF（LibreOffice/Word COM）+ PyMuPDF 检查页面尺寸/页边距/字体/页码；无转换器降级；渲染审计 REST；批量审校与 Markdown 报告 |
 | 139  | [Word 规则包 LLM 工具](./139-word-rule-tools.md) | `office_audit_word/fix_word/extract_rules/revise_word/batch_audit/render_audit`；工具上下文/工作区围栏/输出截断；bundle/profile/tool_names 反漂移同步 |
 | 141  | [技能页面优化](./141-skills-page-optimization.md) | legacy 草稿链路修复 / 三组来源（内置·模板·我的）/ 紧凑列表 + 详情抽屉 / origin 枚举 / 打开目录与定位 / zip 导出 / 软链边界 / 汉化（win7 编号避让 134–140 Word/LaTeX；main 对应 §134） |
-| 142  | [AI 文档工作台](./142-office-ai-workbench.md) | 文档库搜索/筛选/排序 / 内容哈希去重与一键清理 / 格式规范书库（提取/激活/绑定）/ AI 合并审校（规范书规则 + LLM）/ 将问题应用为 Word 修订痕迹 + pre-edit 快照 |
+| 142 | [专家资产中心](./142-specialist-asset-hub.md) | 专家视角统一管理私有记忆 / 知识绑定 / 技能；手动追加私有记忆的 `agent_id` 全链路（save_memory → memorize）；提升共享与删除 |
+| 143 | [专家资产中心](./143-specialist-asset-hub.md) | 专家视角统一管理私有记忆 / 知识绑定 / 技能；手动追加私有记忆的 `agent_id` 全链路（save_memory → memorize）；提升共享与删除 |
 
 ---
 

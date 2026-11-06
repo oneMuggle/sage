@@ -31,6 +31,8 @@ interface SpecialistCardProps {
   onVersions: (agent: AgentProfile) => void;
   /** M4-T4: 打开黄金任务集评测。 */
   onEval: (agent: AgentProfile) => void;
+  /** M3-Task 7 资产中心: 打开专家私有记忆 / 知识绑定 / 技能总览。 */
+  onAssets: (agent: AgentProfile) => void;
   /** 导出进行中（按钮禁用，避免重复弹保存框）。 */
   exporting?: boolean;
 }
@@ -54,6 +56,7 @@ export function SpecialistCard({
   onExport,
   onVersions,
   onEval,
+  onAssets,
   exporting = false,
 }: SpecialistCardProps) {
   const avatar = readUiString(agent.persona_ui, 'avatar') || DEFAULT_AVATAR;
@@ -123,6 +126,13 @@ export function SpecialistCard({
           className="rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
         >
           知识
+        </button>
+        <button
+          type="button"
+          onClick={() => onAssets(agent)}
+          className="rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
+        >
+          资产
         </button>
         <button
           type="button"
