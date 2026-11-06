@@ -16,6 +16,12 @@ export const zhSettingsUi = {
     '会话完成/失败、审批等待时弹出系统通知（最小化或隐藏到托盘后仍有效）',
   'settings.basic.notifications_background_label': '后台任务通知',
   'settings.basic.notifications_background_desc': '定时任务触发、待办到期、后台任务完成时提醒',
+  'settings.basic.notifications_webhook_label': '通用 Webhook',
+  'settings.basic.notifications_webhook_desc':
+    '每条通知以 JSON 形式 POST 到该地址（可对接自建机器人/自动化平台）；留空关闭',
+  'settings.basic.notifications_slack_label': 'Slack Webhook',
+  'settings.basic.notifications_slack_desc':
+    'Slack Incoming Webhook 地址，通知以 text 消息发送；留空关闭',
   'settings.basic.conversation': '对话',
   'settings.basic.history_size_desc': '输入框按上下键可调出的最近发送记录数量（每会话独立，1–200）',
   'settings.basic.history_size_label': '历史条数上限',

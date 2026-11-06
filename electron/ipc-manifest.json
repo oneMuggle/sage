@@ -309,6 +309,7 @@
     "session_update": { "method": "PATCH", "path": "/api/v1/sessions/{sessionId}" },
     "set_preference": { "method": "PUT", "path": "/api/v1/preferences/{key}" },
     "set_settings": { "method": "PUT", "path": "/api/v1/settings" },
+    "shell_list": { "method": "GET", "path": "/api/v1/shells" },
     "skill_audit": { "method": "GET", "path": "/api/v1/skills/{name}/audit" },
     "skill_rollback": { "method": "POST", "path": "/api/v1/skills/{name}/rollback" },
     "skills_consolidation_accept": { "method": "POST", "path": "/api/v1/skills/consolidation/accept" },
