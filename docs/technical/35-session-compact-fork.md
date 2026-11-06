@@ -13,7 +13,8 @@
 ## 1. 压缩模块（backend/chat/compaction.py）
 
 对 DB 纯净：只接受消息序列（`session_repo.Message` 对象或 `{"role","content"}` dict），
-返回新列表。删除旧行 / 插入续接消息 / 更新计数全部由 `legacy_routes.py` 的落盘编排完成，
+返回新列表。标记旧行 / 插入续接消息 / 更新计数全部由
+`MessageRepository.replace_prefix_with_continuation` 的落盘编排完成，
 因此压缩逻辑可被单测完整覆盖而不触碰 SQLite。
 
 | 函数 | 职责 |
@@ -32,6 +33,43 @@
 
 **保序保证**：续接消息 `created_at` = 首条保留消息 −1 ms。LLM 摘要失败则整体跳过，
 不留半成品；手动路由失败时 DB 零改动。
+
+### 1.1 非破坏性压缩（2026-11-05）
+
+早期实现会物理删除被摘要的前缀行，只保留最近 6 条 + 摘要，导致长对话的
+会话页面看不到完整记录（原文仅存在于 `is_archived=1` 的压缩归档会话）。
+
+现在压缩改为**非破坏**：
+
+| 项 | 语义 |
+| --- | --- |
+| `messages.compacted_at` | 非空 = 已压缩进摘要；行保留用于会话页面完整展示 |
+| LLM 上下文 | legacy：`get_active_segment` / `db_rows_to_history` 剔除 `compacted_at` 行，`events_to_history` 按 `compaction.performed.deleted_ids` 折叠；hex：`ChatService._model_visible_history` 过滤（`domain.Message.compacted_at` 由 storage 适配器透传）；网关 `_chat` / `review_queue` / `ProjectKnowledgeExtractor` 同样剔除 |
+| `sessions.message_count` | 改为「会话实际消息行数」（含压缩展示行） |
+| `compact_info` | `{before, after, removed}` 口径不变（上下文条数），新增 `retained: true` |
+| 压缩归档 / 谱系 | 保留（兼容「查看压缩前原文」入口）；新式归档 `needs_restore=0` |
+| fork | 复制 `compacted_at`，事件 payload 携带该字段 → fork 历史完整且上下文不膨胀 |
+
+**存量回填**：schema 迁移 v13 为旧式（破坏性）压缩的归档行追加
+`session_lineage.needs_restore=1`，启动时 `restore_compacted_history` 把归档消息
+复制回父会话（新 id、保留原 `created_at`、`compacted_at` 记为谱系创建时间），
+回填后置 0 —— 幂等，重复启动不重复复制；回填行不写 `message.appended` 事件
+（展示行，非模型可见历史）。
+
+### 1.2 排序与尾部窗口
+
+非破坏压缩后会话可无限增长，所有需要「当前上下文」的读取路径（`get_active_segment`
+/ `gateway.base._chat` 等）改用 `MessageRepository.get_recent_messages(session_id, limit)`
+—— `ORDER BY created_at DESC, rowid DESC LIMIT ?` 取尾部再反转。原
+`get_by_session` 保留为「按时间正序读完整记录」语义（UI/导出/fork 用），排序为
+`created_at ASC, (compacted_at IS NULL) ASC, rowid ASC` —— 同一毫秒内压缩展示行
+排在续接摘要之前（回填/连续毫秒场景），`rowid` 保证行序稳定。
+
+### 1.3 事件投影 parity
+
+`MessageRepository.save()` 与 `answer_version_repo._message_event_payload` 的
+`message.appended` 事件 payload 都携带 `compacted_at`；`events_to_history`
+据此折叠，与 `db_rows_to_history` 的 DB 列过滤保持逐字对齐。
 
 ## 2. 自动压缩挂在请求层
 
@@ -70,7 +108,7 @@ PRAGMA table_info + ALTER 模式，对新库与存量库一致生效）：
 
 | 场景 | 状态码 | body |
 | --- | --- | --- |
-| 压缩成功 | 200 | `{"ok": true, "compacted": true, "before": N, "after": M, "removed": ...}` |
+| 成功 | 200 | `{"ok": true, "compacted": true, "before": N, "after": M, "removed": ...}`（before/after 为上下文条数；会话 `message_count` 为实际行数） |
 | 低于地板（<12 条或 token 未达阈值） | 200 | `{"ok": true, "compacted": false, "reason": "below_message_floor" \| "below_token_threshold", ...}` |
 | 会话不存在 | 404 | FastAPI detail |
 | 无 LLM 配置 / 摘要失败 | 502 | `{"ok": false, "error": "llm_not_configured" \| "compaction_failed", ...}`，**DB 不动** |
@@ -125,5 +163,6 @@ body `{"at_message_id"?: str, "title"?: str}`
 | 单元 | `backend/tests/unit/chat/test_compaction.py` | 15 例：估算 / 阈值 / 提示构造 / 续接 / 失败路径 |
 | API | `backend/tests/api/test_session_compact_api.py` | 6 例：成功 / 双跳过原因 / 404 / 502 双分支 |
 | API | `backend/tests/api/test_session_fork_api.py` | 7 例：全量复制 / 分叉点 / 结构化 404 |
-| 集成 | `backend/tests/integration/test_chat_auto_compaction.py` | 2 例：成功压缩 + 失败不阻塞聊天 |
+| 集成 | `backend/tests/integration/test_chat_auto_compaction.py` | 成功压缩（保留完整历史）+ 失败不阻塞聊天 |
+| 单元 | `backend/tests/unit/test_session_history_retention.py` | 非破坏保留 / 上下文过滤 / 事件投影 / 迁移列 / 归档回填幂等 |
 | 前端 | `Chat.compact-fork.test.tsx`、`ChatInput.compact.test.tsx`、`Message.fork.test.tsx`、`SessionItem.fork-badge.test.tsx` | slash action / fork payload+导航 / 徽标渲染 / toast |
