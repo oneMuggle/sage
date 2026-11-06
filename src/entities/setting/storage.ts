@@ -73,6 +73,9 @@ const ENDPOINT_KEYS: ReadonlySet<keyof EndpointConfig> = new Set([
   'apiKey',
   'protocol',
   'modelId',
+  // 2026-09-18 端点限额: 嵌套 {dailyTokens?, monthlyBudgetUsd?} 整树透传,
+  // 键名语义校验在后端 canonicalizer validate_quota。
+  'quota',
   'discoveredModels',
   'lastDiscoveredAt',
   // 2026-11-03: 思考过程参数 —— 漏了会被 sanitizeForBackend 静默丢弃，
