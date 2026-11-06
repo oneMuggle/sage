@@ -707,11 +707,18 @@ const electronAPI = {
     }>;
   },
 
-  /** 2026-11-05: 通知偏好读取（总开关 + 后台任务通知）。 */
-  getNotificationPrefs(): Promise<{ enabled: boolean; backgroundTasks: boolean }> {
+  /** 2026-11-05: 通知偏好读取（总开关 + 后台任务通知 + Webhook）。 */
+  getNotificationPrefs(): Promise<{
+    enabled: boolean;
+    backgroundTasks: boolean;
+    webhookUrl: string;
+    slackWebhookUrl: string;
+  }> {
     return ipcRenderer.invoke('sage:notification-prefs:get') as Promise<{
       enabled: boolean;
       backgroundTasks: boolean;
+      webhookUrl: string;
+      slackWebhookUrl: string;
     }>;
   },
 
@@ -719,11 +726,21 @@ const electronAPI = {
   setNotificationPrefs(prefs: {
     enabled: boolean;
     backgroundTasks: boolean;
-  }): Promise<{ ok: boolean; enabled: boolean; backgroundTasks: boolean }> {
+    webhookUrl?: string;
+    slackWebhookUrl?: string;
+  }): Promise<{
+    ok: boolean;
+    enabled: boolean;
+    backgroundTasks: boolean;
+    webhookUrl: string;
+    slackWebhookUrl: string;
+  }> {
     return ipcRenderer.invoke('sage:notification-prefs:set', prefs) as Promise<{
       ok: boolean;
       enabled: boolean;
       backgroundTasks: boolean;
+      webhookUrl: string;
+      slackWebhookUrl: string;
     }>;
   },
 
