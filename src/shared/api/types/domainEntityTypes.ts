@@ -515,6 +515,14 @@ export interface AgentCreate {
 export type ScheduleKind = 'once' | 'recurring';
 
 export type Schedule = { kind: 'once'; at: number } | { kind: 'recurring'; cron: string };
+
+/**
+ * 定时任务执行模式（参见方案 docs/plans/2026-11-06_scheduled-task-auto-execute.md §2）：
+ * - `execute`：到点调用 ChatService 跑一轮真实对话，assistant 回复写入目标会话
+ * - `deliver`：保持旧行为，仅插入 `role="system"` 提醒消息
+ */
+export type ScheduledTaskMode = 'execute' | 'deliver';
+
 export interface ScheduledTask {
   id: string;
   name: string;
@@ -526,11 +534,17 @@ export interface ScheduledTask {
   last_run?: number | null;
   next_run?: number | null;
   last_attempt?: number | null;
-  last_status?: 'never' | 'succeeded' | 'failed';
+  last_status?: 'never' | 'running' | 'succeeded' | 'failed';
   last_error?: string | null;
   run_count?: number;
   max_runs?: number | null;
   created_at: number;
+  /** 执行模式（M2 新增）。缺省按 `deliver` 处理，兼容旧 API/旧行。 */
+  mode?: ScheduledTaskMode;
+  /** 最近一次 execute 模式产出的 assistant 消息 id，用于「查看结果」跳转。 */
+  last_result_message_id?: string | null;
+  /** 最近一次 execute 模式执行耗时（毫秒）。 */
+  last_duration_ms?: number | null;
 }
 
 export interface CreateTaskInput {
@@ -541,6 +555,8 @@ export interface CreateTaskInput {
   content: string;
   enabled?: boolean;
   max_runs?: number | null;
+  /** 执行模式，默认 `execute`（由后端 CreateTaskIn 决定）。 */
+  mode?: ScheduledTaskMode;
 }
 
 export interface UpdateTaskInput {
@@ -551,6 +567,7 @@ export interface UpdateTaskInput {
   session_id?: string;
   content?: string;
   max_runs?: number | null;
+  mode?: ScheduledTaskMode;
 }
 
 // Multi-agent orchestration types (Phase 4)

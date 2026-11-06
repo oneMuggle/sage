@@ -64,3 +64,94 @@ def test_shutdown_repl_cleanups_swallows_cleanup_failure(monkeypatch):
     )
 
     _shutdown_repl_cleanups()
+
+
+# ---------- M4: scheduled task executor wiring ----------
+
+
+def test_wire_scheduler_executor_returns_false_when_scheduler_missing():
+    """scheduler 缺失时 helper 不抛异常，只返回 False（启动不阻塞）。"""
+    import asyncio
+    from types import SimpleNamespace
+
+    from backend.main import _wire_scheduler_executor
+
+    app = SimpleNamespace(state=SimpleNamespace())
+
+    loop = asyncio.new_event_loop()
+    try:
+        assert _wire_scheduler_executor(app, loop) is False
+    finally:
+        loop.close()
+
+
+def test_wire_scheduler_executor_returns_false_when_chat_service_missing():
+    """chat_service 缺失但 scheduler 存在 → 返回 False，set_executor 不被调用。"""
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from backend.main import _wire_scheduler_executor
+
+    state = SimpleNamespace(scheduler=MagicMock())
+
+    loop = asyncio.new_event_loop()
+    try:
+        assert _wire_scheduler_executor(SimpleNamespace(state=state), loop) is False
+        state.scheduler.set_executor.assert_not_called()
+    finally:
+        loop.close()
+
+
+def test_wire_scheduler_executor_sets_executor_when_both_ready():
+    """两端都就绪 → 调用 set_executor，传入一个 callable。"""
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from backend.main import _wire_scheduler_executor
+
+    state = SimpleNamespace(scheduler=MagicMock(), chat_service=MagicMock())
+
+    loop = asyncio.new_event_loop()
+    try:
+        assert _wire_scheduler_executor(SimpleNamespace(state=state), loop) is True
+        state.scheduler.set_executor.assert_called_once()
+        executor = state.scheduler.set_executor.call_args.args[0]
+        assert callable(executor)
+    finally:
+        loop.close()
+
+
+def test_wire_scheduler_executor_callable_returns_failed_on_bad_loop():
+    """装配后的 executor 在 loop 关闭情况下返回 failed RunOutcome，不抛异常。"""
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from backend.main import _wire_scheduler_executor
+
+    scheduler_mock = MagicMock()
+    chat_mock = MagicMock()
+    chat_mock.run_turn_tracked = MagicMock(
+        side_effect=AssertionError("never called")
+    )
+    state = SimpleNamespace(scheduler=scheduler_mock, chat_service=chat_mock)
+
+    loop = asyncio.new_event_loop()
+    try:
+        _wire_scheduler_executor(SimpleNamespace(state=state), loop)
+        executor = scheduler_mock.set_executor.call_args.args[0]
+    finally:
+        loop.close()
+
+    fake_task = MagicMock()
+    fake_task.session_id = "sess-x"
+    fake_task.content = "prompt"
+    fake_task.id = "task-x"
+
+    outcome = executor(fake_task)
+
+    assert outcome.status == "failed"
+    assert outcome.message_id is None
+    assert outcome.duration_ms >= 0
