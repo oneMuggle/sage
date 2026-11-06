@@ -83,8 +83,10 @@ class AgentRepository:
             """
             INSERT OR REPLACE INTO agents (
                 id, name, role, system_prompt, tools, memory_access,
-                model_config, max_iterations, enabled, description, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                model_config, max_iterations, enabled, description,
+                skills, knowledge_bindings, memory_policy, persona_ui,
+                permission_mode, version, source, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 profile["id"],
@@ -97,6 +99,13 @@ class AgentRepository:
                 int(profile.get("max_iterations", 10)),
                 1 if profile.get("enabled", True) else 0,
                 profile.get("description", ""),
+                json.dumps(profile.get("skills", []), ensure_ascii=False),
+                json.dumps(profile.get("knowledge_bindings", []), ensure_ascii=False),
+                json.dumps(profile.get("memory_policy", {}), ensure_ascii=False),
+                json.dumps(profile.get("persona_ui", {}), ensure_ascii=False),
+                profile.get("permission_mode", "workspace_write"),
+                int(profile.get("version", 1)),
+                profile.get("source", "user"),
                 int(time.time() * 1000),
             ),
         )
@@ -113,12 +122,35 @@ class AgentRepository:
         conn.commit()
         return cursor.rowcount > 0
 
+    def delete(self, agent_id: str) -> bool:
+        """按 id 删除一个 agent。M0 (2026-11-03) 复制/删除 UI 后端支撑。
+
+        返回 True 当且仅当影响了 1 行。上层路由负责保护 ``primary`` 等内置
+        专家不被误删 —— repo 层不做语义校验, 只忠实执行 SQL。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
     def update(self, agent_id: str, profile: Dict[str, Any]) -> bool:
         """部分更新 (PR-4 用)。仅写传入的字段, id 不可改。
 
         支持字段: name / role / system_prompt / tools / memory_access /
-        model_config / max_iterations / enabled / description。
+        model_config / max_iterations / enabled / description，以及 M1
+        专家卡字段 skills / knowledge_bindings / memory_policy / persona_ui /
+        permission_mode / version / source。
         """
+        _json_columns = (
+            "tools",
+            "memory_access",
+            "model_config",
+            "skills",
+            "knowledge_bindings",
+            "memory_policy",
+            "persona_ui",
+        )
         column_setters: List[Tuple[str, Any]] = []
         for col in (
             "name",
@@ -130,11 +162,18 @@ class AgentRepository:
             "max_iterations",
             "enabled",
             "description",
+            "skills",
+            "knowledge_bindings",
+            "memory_policy",
+            "persona_ui",
+            "permission_mode",
+            "version",
+            "source",
         ):
             if col not in profile:
                 continue
             value = profile[col]
-            if col in ("tools", "memory_access", "model_config") and not isinstance(value, str):
+            if col in _json_columns and not isinstance(value, str):
                 value = json.dumps(value, ensure_ascii=False)
             elif col == "enabled":
                 value = 1 if value else 0
@@ -198,5 +237,14 @@ class AgentRepository:
             "max_iterations": int(row["max_iterations"]),
             "enabled": bool(row["enabled"]),
             "description": row["description"] or "",
+            "skills": json.loads(row["skills"]) if row["skills"] else [],
+            "knowledge_bindings": (
+                json.loads(row["knowledge_bindings"]) if row["knowledge_bindings"] else []
+            ),
+            "memory_policy": json.loads(row["memory_policy"]) if row["memory_policy"] else {},
+            "persona_ui": json.loads(row["persona_ui"]) if row["persona_ui"] else {},
+            "permission_mode": row["permission_mode"] or "workspace_write",
+            "version": int(row["version"] or 1),
+            "source": row["source"] or "user",
             "updated_at": int(row["updated_at"]),
         }

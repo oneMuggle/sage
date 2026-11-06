@@ -417,6 +417,81 @@ register_migration(
 )
 
 
+def _v12_memory_agent_columns(conn: Any) -> None:
+    """v12：记忆表增加 agent_id 维度（M3 专家私有记忆隔离）。
+
+    ``agent_id IS NULL`` = 共享层（存量行不回填，保持既有可见性）；
+    非空 = 该专家私有。复合索引支撑「私有 ∪ 共享」过滤
+    ``(agent_id = ? OR agent_id IS NULL)`` 与作用域组合查询。
+    幂等：PRAGMA 检查列存在性，已存在则跳过。
+    """
+    for table, index_name in (
+        ("memories_episodic", "idx_episodic_agent"),
+        ("memories_semantic", "idx_semantic_agent"),
+    ):
+        cursor = conn.cursor()
+        cursor.execute(f"PRAGMA table_info({table})")
+        columns = {row[1] for row in cursor.fetchall()}
+        if not columns:
+            # 表不存在（极老库尚未建表）——交由 init_db DDL 负责，跳过。
+            continue
+        if "agent_id" not in columns:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN agent_id TEXT")
+            conn.commit()
+        cursor.execute(
+            f"CREATE INDEX IF NOT EXISTS {index_name} "
+            f"ON {table}(agent_id, scope, project_key)"
+        )
+    conn.commit()
+
+
+register_migration(12, "memory_agent_columns", _v12_memory_agent_columns)
+
+
+def _v13_agent_version_and_eval_tables(conn: Any) -> None:
+    """M4-T3：专家人设快照表 + 评测记录表。
+
+    - ``agent_versions``：完整 profile JSON 快照，主键 ``(agent_id, version)``。
+      配合 ``legacy_agent_routes`` 的创建/更新/回滚钩子，提供 diff 与回滚能力。
+    - ``agent_eval_runs``：黄金任务集评测结果（M4-T4），按 run_id 主键。
+
+    两张表均用 ``CREATE TABLE IF NOT EXISTS``，幂等；新库与老库行为一致。
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agent_versions (
+            agent_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            profile TEXT NOT NULL,
+            reason TEXT NOT NULL DEFAULT 'update',
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY (agent_id, version)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_agent_versions_agent "
+        "ON agent_versions(agent_id, version DESC)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agent_eval_runs (
+            id TEXT PRIMARY KEY,
+            agent_id TEXT NOT NULL,
+            template_id TEXT,
+            created_at INTEGER NOT NULL,
+            report TEXT NOT NULL
+        )
+        """
+    )
+    conn.commit()
+
+
+register_migration(
+    13, "agent_version_and_eval_tables", _v13_agent_version_and_eval_tables
+)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(

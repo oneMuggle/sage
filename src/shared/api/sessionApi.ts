@@ -238,6 +238,29 @@ export const sessionApi = {
   },
 
   /**
+   * M0 (2026-11-03): 切换会话绑定的专家。
+   *
+   * 只影响后续轮次的 persona / 工具白名单 / 模型 / 记忆策略，不触碰历史消息。
+   * `specialistId` 传 `'primary'`（或空串）即解绑回主助手。
+   */
+  async setSpecialist(sessionId: string, specialistId: string): Promise<Session> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    return withRetry(async () => {
+      try {
+        return await invoke<Session>('session_update', { sessionId, specialistId });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
    * 自动归档 sweep（对标 ZCode taskAutoArchive）：归档 N 天未活跃的
    * 未置顶会话，返回归档数量。幂等（重复调用安全）→ 可走 withRetry。
    */

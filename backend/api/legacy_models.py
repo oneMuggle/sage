@@ -21,6 +21,8 @@ class SessionCreate(BaseModel):
     # 2026-10-29 (feat/workspace-optimization): Electron 启动时从 cwd 嗅探到的
     # 项目根。仅作为决策链的低优先级参考输入（低于用户显式偏好），不会被记住。
     detected_root: Optional[str] = None
+    # M0 (2026-11-03): 会话级专家绑定。指向 agents.id；缺省 → 'primary'（主助手）。
+    specialist_id: Optional[str] = None
     # 2026-11-04 (fix/skip-workspace-binding): 用户在新会话页明确选择"不绑定项目"
     # 时，前端传 True 跳过工作区解析链，不绑定任何工作区。语义对齐主流 AI 应用
     # (Cursor / Cline / Windsurf) 的"显式选择 > 自动推断"原则。
@@ -34,6 +36,9 @@ class SessionUpdate(BaseModel):
 
     # 手动归档/恢复（侧栏会话条目菜单）。None = 不更新。
     is_archived: Optional[bool] = None
+
+    # M0 (2026-11-03): 切换会话绑定的专家。None = 不更新；空串 = 解绑回主助手。
+    specialist_id: Optional[str] = None
 
 
 class ChatRequest(BaseModel):
@@ -269,6 +274,31 @@ class AgentUpdate(BaseModel):
 
     description: Optional[str] = None
 
+    # M1 (2026-11-03) 专家卡字段。permission_mode 由路由层白名单校验；
+    # version 缺省时由路由层在 persona 相关字段变更时自动 +1。
+    skills: Optional[List[str]] = None
+
+    knowledge_bindings: Optional[List[dict]] = None
+
+    memory_policy: Optional[dict] = None
+
+    persona_ui: Optional[dict] = None
+
+    permission_mode: Optional[str] = None
+
+    version: Optional[int] = None
+
+
+class AgentRollback(BaseModel):
+    """POST /agents/{id}/rollback 请求体（M4-T3）。
+
+    必填 ``version``：要回滚到的目标版本号（必须存在于 ``agent_versions``
+    表中）。路由读快照后，以 ``current_version + 1`` 作为新版本写入
+    ``agents`` 表，并在 ``agent_versions`` 留一条 ``reason='rollback'`` 记录。
+    """
+
+    version: int = Field(..., ge=1, description="要回滚到的目标版本号")
+
 
 class AgentCreate(BaseModel):
     """POST /agents 请求体（US-4 角色可扩展）。
@@ -289,6 +319,12 @@ class AgentCreate(BaseModel):
     max_iterations: Optional[int] = None
     enabled: Optional[bool] = None
     description: Optional[str] = None
+    # M1 (2026-11-03) 专家卡字段，默认值见 database.py 表定义 / 路由层。
+    skills: Optional[List[str]] = None
+    knowledge_bindings: Optional[List[dict]] = None
+    memory_policy: Optional[dict] = None
+    persona_ui: Optional[dict] = None
+    permission_mode: Optional[str] = None
 
 
 

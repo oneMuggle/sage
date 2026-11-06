@@ -11,11 +11,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import json
 import logging
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from backend.agents.profiles import build_system_base, get_enabled_agent
+from backend.agents.profiles import get_enabled_agent
+from backend.chat.specialist_binding import PRIMARY_AGENT_ID, resolve_bound_specialist
+from backend.chat.specialist_prompt_composer import compose_system_prompt
 from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.agent_state import AgentEvent
 from backend.domain.tool_policy import ToolPolicy
@@ -131,6 +134,7 @@ class SubagentRunner:
         session_id: Optional[str] = None,
         context_repo: Optional[Any] = None,
         context_task_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> None:
         self._llm_config = llm_config
         # P0-3 (2026-08-20): 取消事件 —— ChatDispatcher._cancelled 传入，
@@ -155,6 +159,10 @@ class SubagentRunner:
         # 不是 lane 的 "task-<id>" 前缀空间。
         self._context_repo = context_repo
         self._context_task_id = context_task_id
+        # M3-Task 5: 记忆归属专家 —— 子代理的私有记忆写入应落在父会话
+        # 绑定的专家层，而非上下文缺省值 "primary"。显式传入优先；
+        # 为 None 时按「父会话绑定 > 环境工具上下文」解析。
+        self._agent_id = agent_id
 
     async def __call__(self, task: Any, agent_id: Optional[str]) -> Dict[str, Any]:
         """Run one subtask via SageAgent.run_loop; return executor-usable dict.
@@ -195,10 +203,8 @@ class SubagentRunner:
         if not isinstance(schema, dict):
             schema = None
 
-        child_system = build_system_base()
         profile = get_enabled_agent(agent_id)
-        if profile and profile.get("system_prompt"):
-            child_system += "\n\n" + profile["system_prompt"]
+        child_system = compose_system_prompt(specialist_profile=profile)
 
         user_content = goal
         if schema is not None:
@@ -268,6 +274,11 @@ class SubagentRunner:
 
             watcher = asyncio.create_task(_watch())
 
+        # M3-Task 5: 子代理的记忆归属跟随父专家 —— 改写工具上下文的
+        # agent_id，使子代理的 memory 工具写入父专家的私有层而非
+        # primary。token 必须在 finally 里 reset，避免泄漏到后续调用。
+        ctx_token = self._bind_child_tool_context()
+
         try:
             async for evt in child.run_loop(messages, **run_kwargs):
                 # live-events P0: 中间事件投影转发（acting/observing/审批/
@@ -288,6 +299,10 @@ class SubagentRunner:
                 elif evt.state.value == "failed" and evt.error:
                     last_error = evt.error
         finally:
+            if ctx_token is not None:
+                from backend.tools.context import reset_tool_context
+
+                reset_tool_context(ctx_token)
             if watcher is not None:
                 watcher.cancel()
                 # 等待 cancel 完成，避免任务泄漏
@@ -306,6 +321,56 @@ class SubagentRunner:
             "output": structured if structured is not None else raw_output,
             "messages": messages,
         }
+
+    def _resolve_memory_agent_id(self) -> str:
+        """解析子代理的记忆归属专家 id（M3-Task 5）。
+
+        优先级：显式 ``agent_id`` > 父会话绑定专家 > 环境工具上下文 > 主助手。
+
+        父会话绑定优先于环境上下文 —— 后者的 ``agent_id`` 缺省是
+        ``"primary"``（构造点漏解析时静默归到主助手），以会话绑定为准
+        才能保证专家的私有记忆不被误写进 primary 层。
+        """
+        if self._agent_id:
+            return self._agent_id
+        if self._session_id:
+            try:
+                return resolve_bound_specialist(self._session_id)
+            except Exception as exc:  # noqa: BLE001 — 解析失败降级，不阻塞子任务
+                logger.debug("解析父会话专家绑定失败（回落环境上下文）: %s", exc)
+        from backend.tools.context import current_tool_context
+
+        ctx = current_tool_context()
+        if ctx is not None and ctx.agent_id:
+            return ctx.agent_id
+        return PRIMARY_AGENT_ID
+
+    def _bind_child_tool_context(self) -> Optional[Any]:
+        """把父专家身份绑进子代理的工具上下文（M3-Task 5）。
+
+        只在**已有**上下文时改写 —— 不凭空造一个上下文：凭空造会让
+        office / file 等按 ``ctx.session_id`` 授权的工具在原本 fail-closed
+        的后台路径上拿到授权。无上下文时 memory 工具本就会拒绝读写，
+        不存在跨专家泄漏。
+
+        Returns:
+            ``set_tool_context`` 的 token（调用方需在 finally 里 reset）；
+            无需改写时返回 None。
+        """
+        from backend.tools.context import current_tool_context, set_tool_context
+
+        ctx = current_tool_context()
+        if ctx is None:
+            return None
+        agent_id = self._resolve_memory_agent_id()
+        if ctx.agent_id == agent_id:
+            return None
+        try:
+            rebound = dataclasses.replace(ctx, agent_id=agent_id)
+        except (AttributeError, TypeError) as exc:
+            logger.warning("子代理工具上下文改写失败（沿用原上下文）: %s", exc)
+            return None
+        return set_tool_context(rebound)
 
     def _deliver_pending_context(self, messages: List[Dict[str, Any]]) -> None:
         """O1 (2026-09-08): 拉取 pending steering 消息注入子代理上下文。

@@ -95,8 +95,12 @@ async def chat(
 
         # 2026-07-30: chat 默认加载 primary profile,让 profile.tools 白名单生效
         # (memory_manager 之类窄权限 agent 才不会拿到 list_dir/read_file 全部工具)
+        # M0 (2026-11-03): 会话级专家绑定 —— 请求未显式指定 agent_id 时取
+        # 会话绑定的专家（不存在/已禁用回落主助手）。
+        from backend.chat.specialist_binding import resolve_effective_agent_id
+
         agent = SageAgent(
-            agent_id=data.agent_id or "primary",
+            agent_id=resolve_effective_agent_id(data.session_id, data.agent_id),
             scheduler_service_getter=get_scheduler_service,
         )
         # G5 (2026-09-06): 请求未显式带端点配置时，用「全局端点 + 会话覆盖/

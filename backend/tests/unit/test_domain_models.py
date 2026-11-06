@@ -283,6 +283,8 @@ class TestDomainPurity:
             "uuid",
             "datetime",
             # A23: event bus 异步发布 + 事件时间戳, 纯异步原语与纪元秒, 也无 I/O
+            # M1 specialist: async 上下文传播，跟踪当前执行技能（类似 asyncio 原语）
+            "contextvars",
             "asyncio",
             "time",
         }

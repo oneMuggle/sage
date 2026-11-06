@@ -105,15 +105,21 @@ def build_environment_block(workspace_path: Optional[str] = None) -> str:
     return "<environment>\n{}\n</environment>".format("\n".join(lines))
 
 
-def build_skills_block() -> str:
+def build_skills_block(allowed: Optional[set] = None) -> str:
     """构造可用技能清单块（名称 + 一行描述，双预算截断）。
+
+    Args:
+        allowed: 专家技能允许集（M1，spec §5.1）。``None`` 表示不受限（主助手
+            / 未配置专家）；非空集合时只显示集合内的技能，fail-closed。
 
     技能注册表不可用时返回空串（不注入块）。
     """
     try:
         from backend.adapters.out.skill.inproc import get_singleton
 
-        specs = get_singleton().list_skills()
+        # 不受限路径不传 allowed —— 与不含该参数的旧 adapter/测试替身保持兼容
+        list_kwargs = {"allowed": allowed} if allowed is not None else {}
+        specs = get_singleton().list_skills(**list_kwargs)
     except Exception as exc:  # noqa: BLE001 — 技能清单失败绝不影响聊天
         logger.debug("技能清单注入跳过: %s", exc)
         return ""
