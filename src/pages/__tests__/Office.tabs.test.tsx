@@ -29,9 +29,13 @@ vi.mock('../../shared/api/workspaceApi', () => ({
     setPreference: vi.fn().mockResolvedValue({ path: '/tmp', stored: true }),
     forgetPreference: vi.fn().mockResolvedValue({ cleared: true }),
     getDefault: vi.fn().mockResolvedValue({ path: null, source: 'scratch', isFallback: true }),
-    getHealth: vi
-      .fn()
-      .mockResolvedValue({ path: '/tmp', health: 'healthy', detail: null, writable: true, isUsable: true }),
+    getHealth: vi.fn().mockResolvedValue({
+      path: '/tmp',
+      health: 'healthy',
+      detail: null,
+      writable: true,
+      isUsable: true,
+    }),
   },
 }));
 
@@ -173,9 +177,7 @@ describe('Office — tab switching syncs URL', () => {
     renderOffice();
     await waitForTabs();
     activateTab(screen.getByTestId('office-tab-generate'));
-    await waitFor(() =>
-      expect(probe().getAttribute('data-search')).toBe('?tab=generate'),
-    );
+    await waitFor(() => expect(probe().getAttribute('data-search')).toBe('?tab=generate'));
     expect(screen.getByTestId('office-generate-form')).toBeInTheDocument();
     expect(screen.getByTestId('office-journal-stub')).toBeInTheDocument();
     expect(screen.getByTestId('office-panel-generate').getAttribute('hidden')).toBeNull();
@@ -185,9 +187,7 @@ describe('Office — tab switching syncs URL', () => {
     renderOffice();
     await waitForTabs();
     activateTab(screen.getByTestId('office-tab-rules'));
-    await waitFor(() =>
-      expect(probe().getAttribute('data-search')).toBe('?tab=rules'),
-    );
+    await waitFor(() => expect(probe().getAttribute('data-search')).toBe('?tab=rules'));
     expect(screen.getByTestId('office-rules-stub')).toBeInTheDocument();
   });
 
@@ -195,9 +195,7 @@ describe('Office — tab switching syncs URL', () => {
     renderOffice();
     await waitForTabs();
     activateTab(screen.getByTestId('office-tab-latex'));
-    await waitFor(() =>
-      expect(probe().getAttribute('data-search')).toBe('?tab=latex'),
-    );
+    await waitFor(() => expect(probe().getAttribute('data-search')).toBe('?tab=latex'));
     expect(screen.getByTestId('office-latex-tab-stub')).toBeInTheDocument();
   });
 
@@ -206,9 +204,7 @@ describe('Office — tab switching syncs URL', () => {
     await waitForTabs();
     expect(probe().getAttribute('data-search')).toBe('?tab=latex&latex=templates');
     activateTab(screen.getByTestId('office-tab-documents'));
-    await waitFor(() =>
-      expect(probe().getAttribute('data-search')).toBe(''),
-    );
+    await waitFor(() => expect(probe().getAttribute('data-search')).toBe(''));
   });
 });
 
@@ -273,8 +269,6 @@ describe('Office — keyboard navigation', () => {
     const trigger = screen.getByTestId('office-tab-rules');
     trigger.focus();
     fireEvent.keyDown(trigger, { key: 'Enter' });
-    await waitFor(() =>
-      expect(probe().getAttribute('data-search')).toBe('?tab=rules'),
-    );
+    await waitFor(() => expect(probe().getAttribute('data-search')).toBe('?tab=rules'));
   });
 });
