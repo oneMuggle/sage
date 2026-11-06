@@ -143,6 +143,14 @@ export function Office() {
     refresh,
     view,
     setView,
+    q,
+    setQ,
+    docType,
+    setDocType,
+    sort,
+    setSort,
+    duplicateGroups,
+    archiveAllButNewest,
     importAndReadMulti,
     readDroppedMulti,
     saveAs,
@@ -217,9 +225,7 @@ export function Office() {
         }),
       );
     } else if (importedCount > 1) {
-      toast.success(
-        fillTemplate(t('office.toast.intakeMultiSuccess'), { count: importedCount }),
-      );
+      toast.success(fillTemplate(t('office.toast.intakeMultiSuccess'), { count: importedCount }));
     } else if (importedCount === 1) {
       toast.success(t('office.toast.readSuccess'));
     }
@@ -475,6 +481,14 @@ export function Office() {
           onPreview={handlePreviewDocument}
           onBatchArchive={batchArchive}
           onBatchRestore={batchRestore}
+          q={q}
+          onQChange={setQ}
+          docType={docType}
+          onDocTypeChange={setDocType}
+          sort={sort}
+          onSortChange={setSort}
+          duplicateGroups={duplicateGroups}
+          onArchiveAllButNewest={archiveAllButNewest}
         />
         {snapshotDoc && (
           <div className="mt-3">
@@ -615,10 +629,7 @@ export function Office() {
         </Tabs>
       )}
 
-      <OfficeDuplicateDialog
-        pending={pendingDuplicate}
-        onChoose={resolvePendingDuplicate}
-      />
+      <OfficeDuplicateDialog pending={pendingDuplicate} onChoose={resolvePendingDuplicate} />
 
       <WorkspaceBindModal
         isOpen={isBindModalOpen}
