@@ -488,7 +488,8 @@ export const enWorkspaceAndTools = {
   'workspace.switcher.copyPath': 'Copy workspace path',
   'workspace.switcher.workbench': 'Workbench',
   'workspace.switcher.unusable': 'Current workspace is unusable',
-  'workspace.switcher.scratchHint': 'Using a scratch directory — files won\'t be saved to your project',
+  'workspace.switcher.scratchHint':
+    "Using a scratch directory — files won't be saved to your project",
 };
 
 export function formatEnWorkspaceAndToolsSummary(): string {

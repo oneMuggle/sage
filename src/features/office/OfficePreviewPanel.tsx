@@ -63,11 +63,11 @@ import {
 } from './OfficeStructuredPreviews';
 import { PdfFormFillDialog } from './PdfFormFillDialog';
 import { dataUrlToBlobUrl, safeRevokeBlobUrl } from './officePreviewBlobUrl';
+import { resolveDefaultFidelity, shouldAutoLoadFidelity } from './officeFidelity';
 import {
-  resolveDefaultFidelity,
-  shouldAutoLoadFidelity,
-} from './officeFidelity';
-import { formatOfficePreviewPanelAuditJson, formatOfficePreviewPanelAuditSnapshot } from './officePreviewPanelAudit';
+  formatOfficePreviewPanelAuditJson,
+  formatOfficePreviewPanelAuditSnapshot,
+} from './officePreviewPanelAudit';
 import { pollOfficeProgress } from './officeProgress';
 import { buildPreviewCacheKey, isCurrentKey } from './previewRevision';
 
@@ -282,11 +282,15 @@ export function OfficePreviewPanel({
   const autoLoadKeyRef = useRef<string | null>(null);
   const loadFidelityRef = useRef<() => void>(() => {});
   useEffect(() => {
-    if (!preview || fidelityOn || fidelityLoading) return;
+    if (!preview || fidelityLoading) return;
     if (!shouldAutoLoadFidelity(preview.docType, fidelityAvailable)) return;
     const autoLoadKey = `${preview.data.summary.id}:${currentFidelityKey}`;
     if (autoLoadKeyRef.current === autoLoadKey) return;
     autoLoadKeyRef.current = autoLoadKey;
+    // Do not gate on `fidelityOn`: Excel/PPT default to fidelity mode on, so
+    // the toggle may already read "on" while no PDF has been fetched yet.
+    // Load whenever the current key has no cached URL.
+    if (fidelityUrl && fidelityKey === currentFidelityKey) return;
     loadFidelityRef.current();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview?.docType, fidelityAvailable, summaryId, currentFidelityKey]);
@@ -311,8 +315,12 @@ export function OfficePreviewPanel({
 
   const loadFidelity = async () => {
     if (fidelityLoading) return;
-    // Word + no converter → native docx-preview (no soffice request)
-    if (!fidelityAvailable && preview?.docType === 'word') {
+    // Word always uses the native docx-preview (no soffice request). Do not
+    // route Word through PDF conversion even when a converter is available:
+    // the render branch never shows the PDF for Word, so conversion would be
+    // wasted, and a conversion failure would wrongly downgrade the healthy
+    // native preview to the structured view.
+    if (preview?.docType === 'word') {
       setFidelityOn(true);
       return;
     }
@@ -612,11 +620,7 @@ export function OfficePreviewPanel({
                   type="button"
                   onClick={() => void handleToggleFidelity()}
                   disabled={fidelityLoading || unavailable}
-                  title={
-                    unavailable
-                      ? t('office.fidelity.unavailable')
-                      : undefined
-                  }
+                  title={unavailable ? t('office.fidelity.unavailable') : undefined}
                   className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors disabled:opacity-50 ${
                     fidelityOn
                       ? 'border-primary text-primary bg-primary/10'

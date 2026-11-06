@@ -143,8 +143,10 @@ export function DocxNativePreview({
         await renderDocxDataUrl(container, res.data_url);
         if (!cancelled) setState('ok');
       } catch {
-        if (!cancelled) setState('error');
-        if (onError) onError();
+        if (!cancelled) {
+          setState('error');
+          onError?.();
+        }
       }
     })();
     return () => {

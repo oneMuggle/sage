@@ -13,10 +13,19 @@ vi.mock('../../../shared/api/desktopInvoke', () => ({
 }));
 
 import { invoke } from '../../../shared/api/desktopInvoke';
-import type { OfficeDocumentSummary, OfficeWordLintResult, OfficeWordReadResult, WordFormatSpec } from '../../../shared/api/types';
+import type {
+  OfficeDocumentSummary,
+  OfficeWordLintResult,
+  OfficeWordReadResult,
+  WordFormatSpec,
+} from '../../../shared/api/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { useTaskCenterStore } from '../../task-center/taskCenterStore';
-import { OfficeDeliveryDrawer, formatOfficeDeliveryJson, formatOfficeDeliveryMarkdown } from '../OfficeDeliveryDrawer';
+import {
+  OfficeDeliveryDrawer,
+  formatOfficeDeliveryJson,
+  formatOfficeDeliveryMarkdown,
+} from '../OfficeDeliveryDrawer';
 
 const invokeMock = invoke as unknown as ReturnType<typeof vi.fn>;
 
@@ -144,10 +153,7 @@ describe('OfficeDeliveryDrawer (A4b)', () => {
     renderDrawer(null);
 
     await waitFor(() => expect(screen.getByTestId('lint-skipped')).toBeTruthy());
-    expect(invokeMock).not.toHaveBeenCalledWith(
-      'office_word_lint',
-      expect.objectContaining({}),
-    );
+    expect(invokeMock).not.toHaveBeenCalledWith('office_word_lint', expect.objectContaining({}));
     // Preview still loads; decisions still available.
     await waitFor(() => expect(screen.getByText('hello delivery')).toBeTruthy());
     expect(screen.getByTestId('decision-zone')).toBeTruthy();
@@ -166,9 +172,7 @@ describe('OfficeDeliveryDrawer (A4b)', () => {
     fireEvent.click(screen.getByTestId('lint-retry'));
 
     await waitFor(() =>
-      expect(
-        invokeMock.mock.calls.filter(([cmd]) => cmd === 'office_word_lint'),
-      ).toHaveLength(2),
+      expect(invokeMock.mock.calls.filter(([cmd]) => cmd === 'office_word_lint')).toHaveLength(2),
     );
   });
 
@@ -311,7 +315,12 @@ describe('OfficeDeliveryDrawer 自动修复（P0-2）', () => {
     error_count: 1,
     warning_count: 0,
     issues: [
-      { rule_id: 'page/margins', severity: 'error', message: 'margin 1cm vs 2.54cm', fix_hint: '调页边距' },
+      {
+        rule_id: 'page/margins',
+        severity: 'error',
+        message: 'margin 1cm vs 2.54cm',
+        fix_hint: '调页边距',
+      },
     ],
   });
 

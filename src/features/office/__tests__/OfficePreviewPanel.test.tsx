@@ -18,15 +18,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockExportPdf = vi.fn();
 const mockReadPdfData = vi.fn();
+const mockPdfPreview = vi.fn();
+const mockReadWordData = vi.fn();
 vi.mock('../../../shared/api/officeApi', () => ({
   officeApi: {
     exportPdf: (...args: unknown[]) => mockExportPdf(...args),
     readPdfData: (...args: unknown[]) => mockReadPdfData(...args),
     // Task 2: fidelity is ON by default for Word and auto-loads for
-    // Excel/PPT. Returning ok:false keeps the structured view reachable so
-    // the existing structured-view assertions stay valid.
-    pdfPreview: vi.fn(async () => ({ ok: false })),
-    readWordData: vi.fn(async () => ({ ok: false })),
+    // Excel/PPT. Each describe's beforeEach installs the default ok:false so
+    // the structured view stays reachable; individual tests override it.
+    pdfPreview: (...args: unknown[]) => mockPdfPreview(...args),
+    readWordData: (...args: unknown[]) => mockReadWordData(...args),
   },
 }));
 
@@ -194,6 +196,10 @@ describe('OfficePreviewPanel — rich rendering (item 2.6)', () => {
   beforeEach(() => {
     mockExportPdf.mockReset();
     mockReadPdfData.mockReset();
+    mockPdfPreview.mockReset();
+    mockPdfPreview.mockResolvedValue({ ok: false });
+    mockReadWordData.mockReset();
+    mockReadWordData.mockResolvedValue({ ok: false });
     toastMock.success.mockReset();
     toastMock.error.mockReset();
   });
@@ -418,6 +424,10 @@ describe('OfficePreviewPanel — export PDF button (item 2.7)', () => {
   beforeEach(() => {
     mockExportPdf.mockReset();
     mockReadPdfData.mockReset();
+    mockPdfPreview.mockReset();
+    mockPdfPreview.mockResolvedValue({ ok: false });
+    mockReadWordData.mockReset();
+    mockReadWordData.mockResolvedValue({ ok: false });
     toastMock.success.mockReset();
     toastMock.error.mockReset();
   });
@@ -428,21 +438,24 @@ describe('OfficePreviewPanel — export PDF button (item 2.7)', () => {
     expect(screen.queryByTestId('office-edit-preview-button')).toBeNull();
   });
 
-  it.each([EXCEL_PREVIEW, PPT_PREVIEW])('blocks PDF actions when this format has no converter', (preview) => {
-    render(
-      <I18nProvider defaultLocale="zh">
-        <OfficePreviewPanel preview={preview} fidelityAvailable={false} />
-      </I18nProvider>,
-    );
-    const button = screen.getByTestId('office-export-pdf-button');
-    expect(button).toBeDisabled();
-    fireEvent.click(button);
-    expect(mockExportPdf).not.toHaveBeenCalled();
-    // 高保真入口始终可见（用户能从 [环境] 浮层看到安装指引），
-    // 但在没有本机转换器时 disabled —— 而不是整条链路消失。
-    const fidelity = screen.getByTestId('office-fidelity-toggle');
-    expect(fidelity).toBeDisabled();
-  });
+  it.each([EXCEL_PREVIEW, PPT_PREVIEW])(
+    'blocks PDF actions when this format has no converter',
+    (preview) => {
+      render(
+        <I18nProvider defaultLocale="zh">
+          <OfficePreviewPanel preview={preview} fidelityAvailable={false} />
+        </I18nProvider>,
+      );
+      const button = screen.getByTestId('office-export-pdf-button');
+      expect(button).toBeDisabled();
+      fireEvent.click(button);
+      expect(mockExportPdf).not.toHaveBeenCalled();
+      // 高保真入口始终可见（用户能从 [环境] 浮层看到安装指引），
+      // 但在没有本机转换器时 disabled —— 而不是整条链路消失。
+      const fidelity = screen.getByTestId('office-fidelity-toggle');
+      expect(fidelity).toBeDisabled();
+    },
+  );
 
   it('keeps native Word preview while disabling PDF export without a converter', () => {
     render(
@@ -570,5 +583,80 @@ describe('OfficePreviewPanel — export PDF button (item 2.7)', () => {
     expect(summaryBtn.textContent).toBe('已复制');
     fireEvent.click(jsonBtn);
     expect(jsonBtn.textContent).toBe('已复制');
+  });
+});
+
+describe('OfficePreviewPanel — fidelity defaults & auto-load (Task 2)', () => {
+  beforeEach(() => {
+    mockExportPdf.mockReset();
+    mockReadPdfData.mockReset();
+    mockPdfPreview.mockReset();
+    mockPdfPreview.mockResolvedValue({ ok: false });
+    mockReadWordData.mockReset();
+    mockReadWordData.mockResolvedValue({ ok: false });
+    toastMock.success.mockReset();
+    toastMock.error.mockReset();
+  });
+
+  it('auto-loads Excel fidelity and renders the iframe when a converter is available', async () => {
+    // Default fidelity is ON for Excel with a converter, but no PDF has been
+    // fetched yet — the auto-load effect must still run (regression guard for
+    // the "default on cancels auto-load" bug).
+    mockPdfPreview.mockResolvedValueOnce({
+      ok: true,
+      data_url: 'data:application/pdf;base64,AAAA',
+      error: null,
+    });
+    const { unmount } = render(
+      <I18nProvider defaultLocale="zh">
+        <OfficePreviewPanel preview={EXCEL_PREVIEW} workspacePath="/tmp/ws" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(mockPdfPreview).toHaveBeenCalledWith({
+        workspace_path: '/tmp/ws',
+        file_path: '/tmp/ws/office/excel/doc-excel/data.xlsx',
+      });
+    });
+    const frame = await screen.findByTestId('office-preview-fidelity-iframe', undefined, {
+      timeout: 3000,
+    });
+    expect(frame).toHaveAttribute('src', BLOB_URL);
+    expect(screen.queryByTestId('office-preview-structured')).toBeNull();
+    // Unmount while the blob-URL stub is still installed: the panel revokes
+    // the cached blob URL on unmount, and jsdom's original revokeObjectURL is
+    // undefined. RTL's automatic cleanup would run after afterEach restored it.
+    unmount();
+  });
+
+  it('does not auto-load Excel fidelity when no converter is available', () => {
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficePreviewPanel
+          preview={EXCEL_PREVIEW}
+          workspacePath="/tmp/ws"
+          fidelityAvailable={false}
+        />
+      </I18nProvider>,
+    );
+    expect(mockPdfPreview).not.toHaveBeenCalled();
+    expect(screen.getByTestId('office-preview-structured')).toBeInTheDocument();
+  });
+
+  it('falls back to the structured view when the native Word preview fails', async () => {
+    // readWordData resolves ok:false (beforeEach default) → DocxNativePreview
+    // throws, invokes onError, and the panel toasts + downgrades to structured.
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficePreviewPanel preview={WORD_PREVIEW} workspacePath="/tmp/ws" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith('高保真预览不可用，已切换到结构化视图');
+    });
+    expect(screen.getByTestId('office-preview-structured')).toBeInTheDocument();
+    expect(screen.getByText('正文段落。')).toBeInTheDocument();
   });
 });
