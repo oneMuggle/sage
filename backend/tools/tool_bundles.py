@@ -135,6 +135,8 @@ from .structured_output_tool import StructuredOutputTool
 from .symbol_search_tool import SymbolSearchTool
 from .todo_tool import TodoWriteTool
 from .tts_tool import TextToSpeechTool
+from .wait_background_tool import WaitBackgroundTool
+from .wake_on_background_tool import WakeOnBackgroundTool
 from .wake_tool import WakeSessionAtTool
 from .web_tool import WebFetchTool, WebSearchTool
 
@@ -148,6 +150,9 @@ def _install_shell(ctx: ToolInstallContext) -> None:
     # 轮询与终止。bash_output 归 READ（只读已捕获输出），kill_shell 归 WRITE。
     ctx.registry.register(BashOutputTool(policy=policy))
     ctx.registry.register(KillShellTool(policy=policy))
+    # 2026-11-06 Phase 1: 后台任务一等公民 —— 完成唤醒 + 短窗口等待
+    ctx.registry.register(WakeOnBackgroundTool(policy=policy))
+    ctx.registry.register(WaitBackgroundTool(policy=policy))
 
 
 def _install_file(ctx: ToolInstallContext) -> None:
