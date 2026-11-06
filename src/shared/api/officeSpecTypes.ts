@@ -171,3 +171,36 @@ export interface AiReviewRequest {
   max_issues?: number;
   max_size_bytes?: number;
 }
+
+/** POST /office/ai/revise request — apply selected issues as tracked revisions. */
+export interface AiReviseRequest {
+  workspace_path: string;
+  file_path: string;
+  doc_id?: string;
+  issues: AiReviewIssue[];
+  output_filename?: string;
+  author?: string;
+  add_comments?: boolean;
+}
+
+/** POST /office/ai/revise result. */
+export interface AiReviseResult {
+  ok: boolean;
+  doc_id: string | null;
+  snapshot_path: string | null;
+  source_path: string;
+  output_path: string;
+  overwritten: boolean;
+  planned: number;
+  applied: number;
+  skipped: number;
+  changes: Array<{
+    rule_id: string | null;
+    find: string;
+    replace: string;
+    comment: string;
+    applied: boolean;
+    reason: string;
+  }>;
+  warnings: Array<Record<string, string>>;
+}

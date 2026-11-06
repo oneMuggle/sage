@@ -320,12 +320,7 @@ export interface WordPageSetupSpec {
   orientation?: 'portrait' | 'landscape';
   margins_cm?: WordPageMarginsSpec;
   // Round 53：节内页码格式/起始号（论文前置罗马页码场景）
-  page_number_format?:
-    | 'decimal'
-    | 'upperRoman'
-    | 'lowerRoman'
-    | 'upperLetter'
-    | 'lowerLetter';
+  page_number_format?: 'decimal' | 'upperRoman' | 'lowerRoman' | 'upperLetter' | 'lowerLetter';
   page_number_start?: number;
   // Round 58：该节脚注编号每节重排（分章脚注场景）
   footnote_restart_each_section?: boolean;
@@ -397,7 +392,7 @@ export interface WordFormatSpec {
   toc?: WordTocSpec;
   // Round 42：图目录/表目录（TOF 域，收录 SEQ 题注）
   figure_index?: WordIndexSpec;
-  table_index?: WordIndexSpec;  // Round 33：首页不同页眉页脚（封面页场景）
+  table_index?: WordIndexSpec; // Round 33：首页不同页眉页脚（封面页场景）
   first_page_different?: boolean;
   first_page_header?: WordHeaderFooterSpec;
   first_page_footer?: WordHeaderFooterSpec;
@@ -649,6 +644,10 @@ export interface OfficeDocumentListResponse {
   documents: OfficeDocumentSummary[];
   total: number;
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Duplicate-group listing types live in officeDuplicateTypes.ts
+// ──────────────────────────────────────────────────────────────────────
 
 export interface OfficeDeleteResponse {
   id: string;

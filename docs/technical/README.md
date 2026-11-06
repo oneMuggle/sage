@@ -1,6 +1,6 @@
 # 技术专题文档总览
 
-> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-134；本索引以目录中的实际文件为准。
+> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-135；本索引以目录中的实际文件为准。
 
 ---
 
@@ -88,6 +88,7 @@
 | 109  | [用户反馈转发脚本部署](./109-feedback-relay-deployment.md)                             | 管理员侧单文件中继（纯标准库）：先落库再转发 + 消息 id 幂等 + GET 裸数组契约 / Jira·GitLab·SMTP 三选一 + webhook 回流 / 内置 BASIC 鉴权管理页 / systemd 与 Win7 计划任务部署                                                                                                                                                                                                  |
 | 110  | [会话列表滚动、分页与归档](./110-session-list-scroll-archive.md)                       | 侧栏独立滚动面板 + 触底分页 + 手动/自动归档闭环；legacy/hex 双路径 `archived` 过滤（main #2655 / win7 #2662）                                                                                                                                                                                                                                                                 |
 | 111  | [右键上下文菜单体系](./111-context-menu.md)                                            | Radix ContextMenu 基座 + 声明式菜单 spec（打开时求值）/ 会话·消息·代码块·引用 chip·Wiki 树·变更卡·产物 接入 / Electron 原生编辑菜单 + 开发期检查元素 / 选区联动与危险动作统一确认                                                                                                                                                                                             |
+
 | 112  | [会话状态徽章](./112-session-status-badges.md)                                         | 侧栏徽章优先级 / 重试中与后台运行中 / run_status 写入链路与已知限制                                                                                                                                                                                                                                                                                                           |
 | 113  | [设置页信息架构整理](./113-settings-ia-consolidation.md)                               | 单一 tab registry 派生导航/分组/别名/类型 + 平铺分组 + 搜索索引守卫（anchor/归属/tab 数）+ 审计导出集中 + `AdvancedSection` 折叠边界与每行「恢复默认」+ i18n/CJK 守卫                                                                                                                                                                                                         |
 | 114  | [桌面宠物（大肥鱼）](./114-desktop-pet.md)                                             | 透明置顶窗 + 点击穿透/拖拽/多屏 + Agent 事件状态映射 + 窄 `pet:*` IPC 信任边界 + dsh-pet 素材一次性移植与 MIT 出处                                                                                                                                                                                                                                                            |
@@ -110,7 +111,8 @@
 | 131  | [聊天附件链路](./131-attachment-pipeline.md)                                           | MediaStore sidecar 元数据 + 后缀回退表与上传 allowlist 同口径；R37 注入带 name/type + 逐附件 `ok/skipped/error` 状态双出口（`attachments_processed` 事件 + `client_meta.attachments_status` 落库）；`useFileUpload` 预检状态机 + 气泡附件卡片 + 整页拖放共享 hook                                                                                                             |
 | 132  | [会话标题生成机制](./132-session-title-generation.md)                                  | 标题 LLM 生成流程 / `title_attempts` 计数器 / 启动回补调度器 / 专用标题模型配置                                                                                                                                                                                                                                                                                               |
 | 133  | [专家（数字员工）系统](./133-specialist-persona.md)                                    | M0–M4 全量：AgentProfile 运行时接线 / 技能作用域 fail-closed / 知识绑定 RRF / 记忆 agent_id 隔离 / 包格式 v2 + 模板库 + 版本回滚 + 黄金任务评测                                                                                                                                                                                                                               |
-| 134  | [技能页面优化](./134-skills-page-optimization.md)                                       | legacy 草稿链路修复 / 三组来源（内置·模板·我的）/ 紧凑列表 + 详情抽屉 / origin 枚举 / 打开目录与定位 / zip 导出 / 软链边界 / 汉化                                                                                                                                                                                                                                             |
+| 134  | [AI 文档工作台](./134-office-ai-workbench.md)                                        | 文档库搜索/筛选/排序契约 + 内容哈希重复检测与清理 + 规范书库（提取/激活/绑定，优先级解析）+ AI 合并审校（规则包 → LLM，来源标注）+ 应用到 Word 修订痕迹 + pre-edit 快照 + 审校历史与成本记录                                                                                                                   |
+| 135  | [技能页面优化](./135-skills-page-optimization.md)                                       | legacy 草稿链路修复 / 三组来源（内置·模板·我的）/ 紧凑列表 + 详情抽屉 / origin 枚举 / 打开目录与定位 / zip 导出 / 软链边界 / 汉化                                                                                                                                                                                                                                             |
 
 ---
 
@@ -119,7 +121,7 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 用户价值层 | [01 概述](../01-overview.md) — [12 实施计划](../12-plan.md) |
-| 横切关注点 | 本目录（15-134）                                            |
+| 横切关注点 | 本目录（15-135）                                            |
 
 ---
 

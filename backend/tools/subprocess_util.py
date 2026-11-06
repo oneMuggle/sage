@@ -62,6 +62,54 @@ class VerifiedProcess:
     process_group_id: int
 
 
+#: 重启后无法获得真实退出码时的哨兵值（Popen.returncode 语义：非 None = 已退出）。
+UNKNOWN_EXIT_CODE = -1
+
+
+@dataclass
+class ResurrectedProcess:
+    """后端重启后重新附着到存活后台进程的轻量句柄（Phase 2）。
+
+    与 ``subprocess.Popen`` 的 ``poll()`` / ``wait()`` 接口对齐，供
+    ``BashSession.status()`` / ``reap_process()`` 使用。由于重启后的进程
+    不再是本进程的子进程，``waitid`` 不可用，因此通过 ``os.getpgid(pid)``
+    校验进程组归属：
+
+    - pgid 匹配 → 仍存活（``poll()`` 返回 ``None``）；
+    - 进程不存在 / pgid 不匹配（PID 被复用）→ 视为已退出，
+      ``returncode`` 置为 ``UNKNOWN_EXIT_CODE``（无法得知真实退出码）。
+    """
+
+    pid: int
+    pgid: int
+    returncode: Optional[int] = None
+
+    def poll(self) -> Optional[int]:
+        if self.returncode is not None:
+            return self.returncode
+        try:
+            current_pgid = os.getpgid(self.pid)
+        except (ProcessLookupError, OSError):
+            self.returncode = UNKNOWN_EXIT_CODE
+            return self.returncode
+        if current_pgid != self.pgid:
+            # PID 被复用为其它进程组 —— 我们登记的进程已经结束。
+            self.returncode = UNKNOWN_EXIT_CODE
+            return self.returncode
+        return None
+
+    def wait(self, timeout: Optional[float] = None) -> int:
+        """仿 ``Popen.wait``：轮询到退出；超时抛 ``TimeoutExpired``。"""
+        deadline = None if timeout is None else time.monotonic() + max(timeout, 0.0)
+        while True:
+            code = self.poll()
+            if code is not None:
+                return code
+            if deadline is not None and time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(self.pid, timeout)
+            time.sleep(0.05)
+
+
 class ProcessGroupVerificationError(RuntimeError):  # noqa: N818
     def __init__(
         self,

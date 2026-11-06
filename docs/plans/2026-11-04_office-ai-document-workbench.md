@@ -1,6 +1,6 @@
 # 文档与验收：AI 文档工作台重构方案
 
-> 状态：Phase 0 ✅ 已交付（main #2869 / win7 #2876，2026-11-05）；**Phase 1 实施中**（M2.5 规范书库 + M3 AI 审校与修改）
+> 状态：Phase 0 ✅ 已交付（main #2869 / win7 #2876）；**Phase 1 ✅ 已交付**（M1 文档库、M2.5 规范书库、M3 AI 审校与修订，已归档至技术手册 §133 / 用户手册 §36）；Phase 2–4 未开始，本文件继续作为后续路线图保留。
 > 基线：`origin/main`（功能分支 `feat/office-ai-phase1`），
 > 对照 `origin/main` 的「审校与规范」能力。
 > 目标分支：main 先行，再按项目双分支策略 cherry-pick / 适配到 release/win7。
@@ -285,12 +285,12 @@
 ### Phase 1：文档库、规范书库与 AI 审校（2–3 周）
 
 - [x] `office_documents.content_hash` 迁移与回填策略（Phase 0 去重 MVP 中落地）；
-- [ ] 文档库搜索/筛选/排序/重复清理；
+- [x] 文档库搜索/筛选/排序/重复清理（list 端点 `q`/`doc_type`/`sort` + `duplicate-groups` 端点；前端搜索栏 / 类型下拉 / 排序下拉 / 重复徽标 / 一键清理归档）；
 - [x] **M2.5 规范书库 MVP**：`office_spec_documents` 表、规范书库 UI（`OfficeSpecLibrary`）、LLM 辅助提取（复用 `extract_word_rules` 的 `use_llm` 路径）、工作区默认绑定、文档级绑定；
-- [x] `office_ai_review_routes.py`：审校 + 历史（修订端点留待后续阶段）；
-- [x] `OfficeAiAssistantPanel`：问题列表、来源徽章（规范书 vs AI）、来源过滤；定位高亮 / diff / 接受拒绝留后续阶段；
+- [x] `office_ai_review_routes.py`：审校 + 历史 + **修订端点（`POST /office/ai/revise`）**；
+- [x] `OfficeAiAssistantPanel`：问题列表、来源徽章（规范书 vs AI）、来源过滤、逐项勾选 + 「应用到文档」确认对话框；
 - [x] 审校流程接入 M2.5 规范书：有绑定时先跑规范书规则，再跑 LLM 补充（`run_review_async` 合并去重）；
-- [ ] Word 修订痕迹应用 + 自动快照；
+- [x] Word 修订痕迹应用 + 自动快照（`apply_word_revisions` 写 `w:ins`/`w:del`；`snapshot_pre_edit` 落 `.snapshots/<epoch_ms>-<filename>`）；
 - [x] 审计历史（`office_ai_reviews`）与成本记录（token 数入历史行）；
 - [x] 安全评审：提示注入、路径、大小、未确认写入（H1/H2 跨工作区越权已修，M1–M6/L2 同步修复）。
 

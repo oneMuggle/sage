@@ -187,12 +187,32 @@ def _row_to_summary(row: sqlite3.Row) -> OfficeDocumentSummary:
     )
 
 
+#: Sort fields accepted by :func:`list_documents` (``sort=``). The value is a
+#: key function over :class:`OfficeDocumentSummary` — sorting happens in Python
+#: after the SQL fetch so no user input ever reaches the ORDER BY clause and
+#: ``json_extract`` (absent on some bundled SQLite builds) is not required.
+_SORT_KEYS = {
+    "created_at": lambda doc: doc.created_at,
+    "updated_at": lambda doc: doc.updated_at,
+    "name": lambda doc: (doc.original_filename or doc.generated_filename).lower(),
+    "size": lambda doc: doc.metadata.file_size_bytes,
+}
+
+
+def _escape_like(value: str) -> str:
+    """Escape ``%`` / ``_`` / ``\\`` so user search text is a literal substring."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def list_documents(
     conn: sqlite3.Connection,
     workspace_path: str,
     include_archived: bool = False,
+    q: Optional[str] = None,
+    doc_type: Optional[str] = None,
+    sort: Optional[str] = None,
 ) -> List[OfficeDocumentSummary]:
-    """SELECT all documents for the given workspace.
+    """SELECT documents for the given workspace, optionally filtered/sorted.
 
     Args:
         conn: SQLite connection.
@@ -200,29 +220,48 @@ def list_documents(
         include_archived: When ``False`` (default) rows with ``archived_at``
             non-NULL are filtered out so the M0 management view only shows
             "live" documents. Set ``True`` for archive-restore UIs.
+        q: Filename substring search. Matches ``original_filename`` OR
+            ``generated_filename`` (SQLite ``LIKE``, case-insensitive for
+            ASCII). Blank/whitespace-only values are ignored.
+        doc_type: Restrict to one :class:`OfficeDocType` value
+            (``word`` / ``excel`` / ``ppt`` / ``pdf``). Unknown values
+            yield an empty list rather than an error.
+        sort: One of ``created_at`` / ``updated_at`` / ``name`` / ``size``,
+            optionally prefixed with ``-`` for descending order. Unknown
+            values fall back to the default ``created_at DESC``.
     """
-    if include_archived:
-        sql = """
-            SELECT id, workspace_path, doc_type, original_filename,
-                   generated_filename, status, created_at, updated_at, metadata,
-                   derived_from, archived_at, active_spec_id
-            FROM office_documents
-            WHERE workspace_path = ?
-            ORDER BY created_at DESC
-        """
-        params: tuple = (workspace_path,)
-    else:
-        sql = """
-            SELECT id, workspace_path, doc_type, original_filename,
-                   generated_filename, status, created_at, updated_at, metadata,
-                   derived_from, archived_at, active_spec_id
-            FROM office_documents
-            WHERE workspace_path = ? AND archived_at IS NULL
-            ORDER BY created_at DESC
-        """
-        params = (workspace_path,)
-    cursor = conn.execute(sql, params)
-    return [_row_to_summary(row) for row in cursor.fetchall()]
+    where = ["workspace_path = ?"]
+    params: List[object] = [workspace_path]
+    if not include_archived:
+        where.append("archived_at IS NULL")
+    if q is not None and q.strip():
+        pattern = f"%{_escape_like(q.strip())}%"
+        where.append(
+            "(COALESCE(original_filename, '') LIKE ? ESCAPE '\\'"
+            " OR generated_filename LIKE ? ESCAPE '\\')"
+        )
+        params.extend([pattern, pattern])
+    if doc_type is not None and str(doc_type).strip():
+        where.append("doc_type = ?")
+        params.append(str(doc_type).strip().lower())
+    sql = f"""
+        SELECT id, workspace_path, doc_type, original_filename,
+               generated_filename, status, created_at, updated_at, metadata,
+               derived_from, archived_at, active_spec_id
+        FROM office_documents
+        WHERE {" AND ".join(where)}
+        ORDER BY created_at DESC
+    """
+    cursor = conn.execute(sql, tuple(params))
+    documents = [_row_to_summary(row) for row in cursor.fetchall()]
+
+    if sort is not None:
+        descending = sort.startswith("-")
+        key = _SORT_KEYS.get(sort.lstrip("-"))
+        if key is not None:
+            # Stable sort: equal keys keep the SQL default order.
+            documents.sort(key=key, reverse=descending)
+    return documents
 
 
 def get_document(
@@ -409,6 +448,56 @@ def find_documents_by_hash(
         # A legacy database without the archive column — nothing to match.
         return []
     return [_row_to_summary(row) for row in rows]
+
+
+def list_duplicate_groups(
+    conn: sqlite3.Connection,
+    workspace_path: str,
+) -> List[Tuple[str, List[OfficeDocumentSummary]]]:
+    """Group live documents in a workspace by identical content digest.
+
+    Returns ``(content_hash, documents)`` pairs, only for digests shared by
+    two or more live documents. Documents without a stored digest (imported
+    before hashing existed, or whose file vanished) never appear.
+
+    Members are ordered newest-first so the UI can offer "keep newest,
+    archive the rest"; groups themselves are ordered by their newest member.
+    """
+    ensure_content_hash_table(conn)
+    try:
+        rows = conn.execute(
+            """
+            SELECT d.id, d.workspace_path, d.doc_type, d.original_filename,
+                   d.generated_filename, d.status, d.created_at, d.updated_at,
+                   d.metadata, d.derived_from, d.archived_at, d.active_spec_id,
+                   h.content_hash
+            FROM office_documents d
+            JOIN office_document_hashes h ON h.id = d.id
+            WHERE d.workspace_path = ? AND d.archived_at IS NULL
+            ORDER BY h.content_hash, d.created_at DESC
+            """,
+            (workspace_path,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        # A legacy database without the archive column — nothing to group.
+        return []
+
+    groups: List[Tuple[str, List[OfficeDocumentSummary]]] = []
+    current_hash: Optional[str] = None
+    current_docs: List[OfficeDocumentSummary] = []
+    for row in rows:
+        digest = row["content_hash"]
+        if digest != current_hash:
+            if current_hash is not None and len(current_docs) > 1:
+                groups.append((current_hash, current_docs))
+            current_hash = digest
+            current_docs = []
+        current_docs.append(_row_to_summary(row))
+    if current_hash is not None and len(current_docs) > 1:
+        groups.append((current_hash, current_docs))
+    # Newest group first (members are already newest-first within a group).
+    groups.sort(key=lambda group: group[1][0].created_at, reverse=True)
+    return groups
 
 
 def set_document_lineage(
