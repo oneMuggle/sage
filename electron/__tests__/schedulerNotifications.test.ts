@@ -68,6 +68,25 @@ describe('startSchedulerNotificationPoller', () => {
     stop();
   });
 
+  it('逐条通知额外调用 deliver 外发（Webhook/Slack）', async () => {
+    const fetchPending = vi.fn().mockResolvedValue({
+      background_tasks: [{ title: 'C', body: 'exit=0', kind: 'background_task' }],
+    });
+    const deliver = vi.fn();
+    const stop = startSchedulerNotificationPoller({
+      fetchPending,
+      isEnabled: () => true,
+      notify: vi.fn(),
+      deliver,
+      intervalMs: 1000,
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(deliver).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'C', kind: 'background_task' }),
+    );
+    stop();
+  });
+
   it('拉取失败只记日志并继续下一轮', async () => {
     const fetchPending = vi
       .fn()

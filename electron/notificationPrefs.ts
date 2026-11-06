@@ -16,11 +16,17 @@ import { join } from 'node:path';
 export interface NotificationPrefs {
   enabled: boolean;
   backgroundTasks: boolean;
+  /** 2026-11-06 Phase 3: 通用 Webhook（JSON POST），空 = 关闭。 */
+  webhookUrl: string;
+  /** 2026-11-06 Phase 3: Slack Incoming Webhook，空 = 关闭。 */
+  slackWebhookUrl: string;
 }
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   enabled: true,
   backgroundTasks: true,
+  webhookUrl: '',
+  slackWebhookUrl: '',
 };
 
 export function getNotificationPrefsPath(
@@ -40,6 +46,9 @@ export function readNotificationPrefs(path: string): NotificationPrefs {
     return {
       enabled: parsed.enabled !== false,
       backgroundTasks: parsed.backgroundTasks !== false,
+      webhookUrl: typeof parsed.webhookUrl === 'string' ? parsed.webhookUrl : '',
+      slackWebhookUrl:
+        typeof parsed.slackWebhookUrl === 'string' ? parsed.slackWebhookUrl : '',
     };
   } catch {
     // 文件不存在/JSON 损坏 → 默认开（保持既有"默认提醒"预期）

@@ -234,6 +234,50 @@ export async function relayChatStream(
 }
 
 /**
+ * Subscribe to a background shell output stream and forward to renderer.
+ *
+ * Flow:
+ *   1. renderer calls listen('shell-stream-{shellId}', handler)
+ *   2. main process opens GET /api/v1/shells/{shellId}/stream (NDJSON)
+ *   3. Each NDJSON line ({type:'output'|'exit'}) is forwarded via webContents.send
+ *   4. renderer unsubscribes → abort signal → fetch destroyed
+ */
+export async function relayShellStream(
+  webContents: WebContentsLike,
+  eventName: string,
+  shellId: string,
+  backendUrl: string,
+  signal: AbortSignal,
+  authToken?: string,
+): Promise<void> {
+  let res: import('node-fetch').Response;
+  try {
+    res = await fetch(`${backendUrl}/api/v1/shells/${encodeURIComponent(shellId)}/stream`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/x-ndjson',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      signal,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') return;
+    // 其它网络错误静默吞掉,不要把 main 进程炸了
+    return;
+  }
+
+  if (!res.ok) return;
+
+  await parseNdjsonStream(
+    res.body,
+    (event) => {
+      if (canSend(webContents)) webContents.send(`sage:event:${eventName}`, event);
+    },
+    signal,
+  );
+}
+
+/**
  * Subscribe to orchestration run events and forward to renderer.
  *
  * Flow:
