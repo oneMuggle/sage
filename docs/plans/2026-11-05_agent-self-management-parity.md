@@ -264,13 +264,13 @@ Sage 已经有一个**窄而深**的自管理核心（配置 / 编排 / 定时 /
 
 ### M1 自透明补齐
 
-- [ ] M1.1 `sage_self_status`
-- [ ] M1.2 `read_sage_config` 扩展（含 Q2）
-- [ ] M1.3 `sage_doctor`（含 Q3）
-- [ ] M1.4 `sage_usage`（含 Q4）
-- [ ] M1.5 slash 三命令（含 Q5）
+- [x] ~~M1.1 `sage_self_status`~~（2026-11-05 feat/agent-self-transparency：8 维聚合 + `backend/services/self_status.py` + `sage_self_status_tool.py`）
+- [x] ~~M1.2 `read_sage_config` 扩展~~（2026-11-05 新增 version / routing / preferences / self 四个只读 section；`_VISIBLE_PREFERENCE_KEYS` 白名单 + JSON 自动解析 + 凭证脱敏）
+- [x] ~~M1.3 `sage_doctor`~~（2026-11-05 复用 `backend/cli/doctor.py` 18 项检查，含可选子进程探测）
+- [x] ~~M1.4 `sage_usage`~~（2026-11-05 global/session 作用域，today/7d/30d/total 范围，nullable cost 显式标注"未知"）
+- [x] ~~M1.5 slash 三命令~~（2026-11-05 `/status` `/doctor` `/config` 均 `mode='prompt'`，指示 LLM 调用对应工具并人类可读呈现）
 - [x] ~~M1.6 env_context 漏项~~（2026-11-03 已通过 `_retry_config_lines()` 完成）
-- [ ] M1.7 app_settings 变更广播
+- [ ] M1.7 app_settings 变更广播 —— **推迟到 M3**（理由见 §10）
 
 ### M2 设置全域对等
 
@@ -388,4 +388,128 @@ Sage 已经有一个**窄而深**的自管理核心（配置 / 编排 / 定时 /
 
 - 针对性测试 `test_tool_capabilities.py` + `test_permissions_enforcer.py` + `test_profiles_default_tools.py` + `test_execute_code.py` + `test_tool_names.py` + `test_tool_bundles_parity.py` → **169 passed**
 - 全仓 unit 测试 `pytest backend/tests/unit/` → **exit 0**（后台任务 `biq6uasbx` 完成，无回归）
+
+---
+
+## 10. M1 实施记录（2026-11-05）
+
+### 10.1 与原计划的关键偏离
+
+| 项 | 原计划 | 最终决策 | 原因 |
+|---|---|---|---|
+| M1.1 聚合服务位置 | 直接扩 `sage_self_status` 工具 | 新建 `backend/services/self_status.py` 纯函数模块 | 工具层不应散落对 `mcp.pool` / `PluginLifecycleManager` / `usage_tracker` 的 import；REST 路由 / 未来 SSE / 新工具都可复用 |
+| M1.2 `self` 进 `all` | 隐含 | **`all` 不触发自省**，需显式 `section="self"` | `gather_self_status` 聚合 8 维、含多次 LLM/MCP/DB 读取；"查所有配置"时隐式触发会让慢请求雪崩 |
+| M1.5 slash 命令实现方式 | 新建 `mode: 'action'` 直接前端执行 | 复用 `mode: 'prompt'` + LLM 调工具 | 工具已是 REST 级聚合入口；LLM 调用后人类可读呈现比硬 UI 更灵活 |
+| M1.7 跨进程广播 | 本里程碑落地 | **推迟到 M3** | 需要 backend→Electron IPC→frontend event bus 三进程桥；M3 的 `sage_admin` 统一命令注册表会让广播自然同源，避免双轨 IPC |
+
+### 10.2 落地改动清单
+
+- `backend/services/self_status.py`（新建）
+  - 8 维 `_gather_*` 函数（version / effective_model / permission_mode / mcp / plugins / usage / health / context）
+  - `gather_self_status()` 聚合入口（fail-open 但 fail 可见）
+  - `read_version()` 公开别名（供 `read_sage_config` 复用）
+  - 测试友好别名 `get_mcp_pool` / `get_plugin_lifecycle_manager` / `get_usage_summary` / `load_enforcer_from_settings` / `load_llm_config_for_chat`（lazy import + 便于 monkeypatch）
+- `backend/tools/self_status_tool.py`（重写）
+  - 瘦工具层 —— 只包 `gather_self_status()`，不再直接聚合
+  - 失败维度在 `output` 文本里高亮（`⚠ ` 前缀）
+- `backend/tools/config_tool.py`
+  - `_VALID_READ_SECTIONS` 从 6 项扩到 10 项（+version / +routing / +preferences / +self）
+  - 新增 `_VISIBLE_PREFERENCE_KEYS`（23 项白名单）+ `_read_visible_preferences()` 助手
+  - `section="all"` 含新三节但**不**含 `self`；`general` 不再重复 `routing`
+  - apiKey 脱敏逻辑保持不变（`_redact_settings` 已覆盖新 section）
+- `src/widgets/chat/slashCommands.ts`
+  - 新增 `/status` / `/doctor` / `/config` 三条（`mode: 'prompt'`，分别调用 `sage_self_status` / `sage_doctor` / `read_sage_config(all)`）
+  - 图标选 lucide-react 现成：`Activity` / `Stethoscope` / `Settings`
+- `backend/tests/unit/test_self_status_tool.py`（扩展）
+  - 16 个测试覆盖服务层 + 工具层
+  - 8 个维度逐个 mock + fail-open 验证
+  - `gather_self_status` 全绿路径 + 部分失败路径
+  - `read_version` 别名正确性
+  - 工具层调用 `gather_self_status`，不直接聚合
+  - 失败维度在 output 中高亮
+- `backend/tests/unit/test_config_tool.py`
+  - 新增 7 个 M1.2 测试（routing / version / preferences 白名单 + 脱敏 / self / all 不含 self / 未知 section 拒绝）
+- `src/widgets/chat/__tests__/slashCommands.test.ts`
+  - 新增 3 个命令注册 + prompt 渲染测试
+- `architecture-baseline.json`
+  - `backend/agents/profiles.py` 1123 → 1130
+  - `backend/tools/permissions.py` 882 → 886
+  - `backend/tools/config_tool.py` 980 → 1097
+- `backend/services/context_window.py`（新建，CI 红灯修复）
+  - 把 `resolve_effective_window`（Task 5 上下文窗口解析级联）从
+    `backend.api.chat_request_policy` 下沉到 services 层。原因：M1.4
+    `sage_usage_tool` → `usage_tracker` 原本 lazy import
+    `backend.api.legacy_routes._resolve_effective_window`，导致
+    adapters → tools → services → api 逆向依赖链，`lint-imports`
+    hexagonal-architecture 合约红灯。
+  - `chat_request_policy.py` 保留 `_resolve_effective_window` 再导出别名，
+    存量 import 路径（legacy_routes / main.py / 测试）无感。
+- `backend/tools/tool_bundles.py`
+  - 新增 `self_status` bundle（`SageSelfStatusTool` / `SageDoctorTool` /
+    `SageUsageTool`，全部 READ）；所有 preset 默认选中 → `test_cli_harness.py`
+    四处硬编码 bundle 计数 +1 同步（32→33 / 24→25 / 31→32 / 23→24）。
+
+### 10.3 测试结果
+
+- `test_config_tool.py` → **61 passed**（含 7 个 M1.2 新测试）
+- `test_tool_bundles_parity.py` 等 11 个 parity 文件 → **114 passed**（baseline 已抬）
+- `slashCommands.test.ts` → **14 passed**（含 3 个 M1.5 新测试）
+- `test_self_status_tool.py` → **21 passed**（M1.1 扩展 + review-fix 新增）
+- **M1 阶段合计 ≥ 202 tests green**（含 overlap：`test_tool_capabilities.py` 与 M0 共享）
+- CI 红灯修复后本地复验：`lint-imports` KEPT（1 contract, 0 broken）；
+  `test_chat_request_policy` / `test_model_catalog_context` / `test_usage_tracker` /
+  `test_self_status_tool` 合计 93 passed；`test_cli_harness.py` 10 passed；
+  harness 全家桶（7 文件）78 passed。
+
+### 10.3.1 Code review 修复轮（commit 74ae37680，2026-11-05）
+
+code-reviewer agent 发现 4 HIGH + 2 MEDIUM + 1 LOW 缺陷，全部被 MagicMock
+测试替身掩盖（MagicMock 让任意属性访问都成功，掩盖了真实合约不匹配）：
+
+| 级别 | 缺陷 | 修复 |
+|---|---|---|
+| HIGH | `load_llm_config_for_chat` 返回 **dict** 不是对象；`getattr(config, "model")` 永远 None | `config.get("model")` + 空配置返回 `{"error": "未配置可用的 LLM 端点"}` |
+| HIGH | `ServerStatusEntry.since` 是 **float**（time.time 纪元秒）；`.isoformat()` → AttributeError | `datetime.fromtimestamp(since, tz=timezone.utc).isoformat()` |
+| HIGH | `Database` 类没有 `execute()`；新建实例还会多开永不关闭的 SQLite 连接 | 改走 `get_database()` 单例 `.get_connection().execute("SELECT 1")`（`_LockedConnection` 内部持锁） |
+| HIGH | `estimated_cost_usd` 可能 `None`（模型定价未知）；`:.4f` → TypeError | 复用 `sage_usage_tool._fmt_cost`（None → "未知（模型定价缺失）"） |
+| MEDIUM | unresolved session 返回"空结果"而非失败 | `sage_usage` 检测 `{"error": ...}` → `success=False` |
+| MEDIUM | `sage_doctor` 的 `include_subprocess_probe` 参数误导（该探测只属于 CLI `run_doctor`，LLM 工具内从未执行） | 删除参数，schema `parameters` 收为 `{}` |
+| LOW | `PluginRecord.status/plugin_type` f-string 可能渲染 `PluginStatus.ENABLED` | `getattr(x, "value", x)` 兜底（`use_enum_values=True` 下已为 str，双保险） |
+
+测试同步改用真实合约：LLM config **dict**、真实 `ServerStatusEntry` dataclass
+（`since=1700000000.0` float）、`estimated_cost_usd=None` 用例、`get_database`
+单例 mock；新增 `test_gather_effective_model_empty_config_is_error` /
+`test_gather_health_db_ok` / `test_gather_health_db_failure` /
+`test_build_summary_cost_none_path` / `test_sage_usage_unresolved_session_is_failure`
+共 5 个测试。
+
+复验：`test_self_status_tool.py` 21 passed、`test_cli_harness.py` +
+`test_tool_bundles_parity.py` 25 passed、`slashCommands.test.ts` 14 passed、
+ruff 全绿（`UP017` 按 py38 约定 `# noqa`）。
+
+**CI 全绿**：run 42025189740 @ 74ae37680，13/13 必需 job pass
+（Architecture / Backend py310 / Backend collect py38 / Dependency audit /
+Electron build ubuntu+windows / Electron smoke / Frontend / count-lines /
+live-boot / stub-smoke / stub-deep / legacy smoke）。
+
+### 10.4 M1.7 推迟理由（详见 §2.4 escape hatch）
+
+**当前状态**：`update_sage_config` 写入即持久化到 SQLite `settings` 表，但：
+
+- Electron 主进程（settings UI）不监听 backend 写事件 → UI 不实时刷新
+- 其他进程（如并行的 worktree 后端）各自读 DB，写入后对其他进程可见（DB 即总线），但 UI 层仍要手动 reload
+- Claude 自己改完配置后看到的结果与用户看到的不一致，直到用户刷新或重启
+
+**为什么不在 M1 修**：跨进程广播需要：
+
+1. backend `update_sage_config` 写后触发事件（`asyncio.Queue` 或 WebSocket 推送）
+2. Electron 主进程订阅事件 → 通过 `webContents.send` 广播到所有 renderer
+3. renderer 的 `useSettingsStore` 订阅 IPC → 触发 React 状态刷新
+
+这是三进程、两套事件总线（backend asyncio + Electron IPC）的桥接工程，与 M3 `sage_admin` 统一命令注册表的"命令即事件源"设计高度重合。在 M1 先做一套 ad-hoc IPC，M3 还要重做 —— 属于"双轨"浪费。
+
+**临时缓解**：M1.5 的 `/config` slash 命令让用户主动查询即可感知变更；`update_sage_config` 工具返回的 output 会列出新值，agent 可直接告诉用户"已改为 X，刷新设置页可见"。
+
+**M3 落地路径**：`sage_admin` 注册表统一所有"管理类命令"（config / permission / schedule / cancel / self_status 等），注册时声明 `broadcast: true` → 框架自动走 backend→Electron→renderer 广播链路；M1.7 的缺口自然被填上。
+
 

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "files": {
-    "backend/agents/profiles.py": 1123,
+    "backend/agents/profiles.py": 1129,
     "backend/api/office_routes.py": 838,
     "backend/api/legacy_routes.py": 2827,
     "backend/api/llm_proxy_routes.py": 1216,
@@ -48,7 +48,7 @@
     "backend/tools/git_tool.py": 834,
     "backend/tools/office_analyze_tool.py": 981,
     "backend/tools/office_create_tool.py": 1625,
-    "backend/tools/permissions.py": 882,
+    "backend/tools/permissions.py": 886,
     "backend/tools/web_tool.py": 1531,
     "backend/wiki/files.py": 927,
     "backend/wiki/ingest.py": 828,
@@ -82,7 +82,7 @@
     "backend/api/project_schemas.py": 826,
     "backend/services/project_wiki_generator.py": 902,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
-    "backend/tools/config_tool.py": 995,
+    "backend/tools/config_tool.py": 1112,
     "scripts/feedback_receiver.py": 1154,
     "src/shared/types/electron-api.d.ts": 869,
     "electron/preload.ts": 907,

@@ -241,6 +241,12 @@ DESIGN_TOOLS = (
     "design_export",
 )
 
+# 自透明三件套（2026-11-05 feat/agent-self-transparency M1）：
+# ``sage_self_status`` 一次聚合 8 维运行时状态；``sage_doctor`` 暴露安装/
+# 环境检查注册表；``sage_usage`` 暴露用量与成本。三件均为 READ。
+# 仅赋给 primary 主助手；子代理白名单不得纳入 —— 与 CONFIG_TOOLS 同一边界。
+SELF_STATUS_TOOLS = ("sage_self_status", "sage_doctor", "sage_usage")
+
 #: 全部静态注册的内置工具名（排序去重）。新增内置工具时把名字加进对应
 #: 分组即可；tests/unit/test_tool_names.py 会对照 register_all_tools 的
 #: 实际注册面校验本清单无遗漏、无多余。
@@ -268,6 +274,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(SCHEDULE_TOOLS)
         | set(TODO_TOOLS)
         | set(DESIGN_TOOLS)
+        | set(SELF_STATUS_TOOLS)
     )
 )
 
@@ -538,6 +545,7 @@ __all__ = [
     "RUNTIME_TOOLS",
     "SANDBOX_TOOLS",
     "SCHEDULE_TOOLS",
+    "SELF_STATUS_TOOLS",
     "SKILL_TOOLS",
     "SYMBOL_TOOLS",
     "TODO_TOOLS",
