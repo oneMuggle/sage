@@ -62,6 +62,7 @@ import {
   WordPreview,
 } from './OfficeStructuredPreviews';
 import { PdfFormFillDialog } from './PdfFormFillDialog';
+import { ConverterGuideDialog } from './canvas/ConverterGuideDialog';
 import { resolveDefaultFidelity, shouldAutoLoadFidelity } from './officeFidelity';
 import { dataUrlToBlobUrl, safeRevokeBlobUrl } from './officePreviewBlobUrl';
 import {
@@ -181,6 +182,8 @@ export function OfficePreviewPanel({
 
   // P2-D (office-p2d): PDF AcroForm 表单填写对话框
   const [formDialogOpen, setFormDialogOpen] = useState(false);
+  // Task 4: converter guide dialog (shown when export PDF is clicked without a converter)
+  const [converterGuideOpen, setConverterGuideOpen] = useState(false);
   // P2-C (office-p2c): excel 公式缓存重算（soffice 重算回写，重算前服务端自动快照）
   const [recalcing, setRecalcing] = useState(false);
   const handleRecalcExcel = async () => {
@@ -433,7 +436,11 @@ export function OfficePreviewPanel({
   };
 
   const handleExportPdf = async () => {
-    if (exporting || !fidelityAvailable) return;
+    if (exporting) return;
+    if (!fidelityAvailable) {
+      setConverterGuideOpen(true);
+      return;
+    }
     const ws = workspacePath ?? summary.workspace_path;
     if (!ws) {
       toast.error(t('office.export.failed'));
@@ -699,7 +706,7 @@ export function OfficePreviewPanel({
             <button
               type="button"
               onClick={() => void handleExportPdf()}
-              disabled={exporting || !fidelityAvailable}
+              disabled={exporting}
               title={!fidelityAvailable ? t('office.export.noConverter') : undefined}
               className="flex items-center gap-1 px-2 py-1 rounded border border-border text-xs text-text-secondary hover:bg-bg-hover transition-colors disabled:opacity-50"
               data-testid="office-export-pdf-button"
@@ -751,6 +758,11 @@ export function OfficePreviewPanel({
         </div>
       )}
 
+      <ConverterGuideDialog
+        open={converterGuideOpen}
+        onOpenChange={setConverterGuideOpen}
+      />
+
       {/* Round A P1: 高保真开 → 内嵌 Chromium PDF viewer；关 → 结构化预览。
           F3 (office-p0): pdf 源文件另有原文开关（/pdf/data，高保真管线
           不覆盖 pdf 源）。 */}
@@ -787,7 +799,9 @@ export function OfficePreviewPanel({
                     highlightParagraphIndex={highlightParagraphIndex}
                   />
                 )}
-                {preview.docType === 'excel' && <ExcelPreview key={summary.id} data={preview.data} />}
+                {preview.docType === 'excel' && (
+                  <ExcelPreview key={summary.id} data={preview.data} />
+                )}
                 {preview.docType === 'pdf' && <PdfPreview data={preview.data} />}
               </>
             )}

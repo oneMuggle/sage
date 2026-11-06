@@ -490,6 +490,10 @@ export const enWorkspaceAndTools = {
   'workspace.switcher.unusable': 'Current workspace is unusable',
   'workspace.switcher.scratchHint':
     "Using a scratch directory — files won't be saved to your project",
+  'office.converter.guide.title': 'PDF export requires a converter',
+  'office.converter.guide.body':
+    'PDF export requires LibreOffice or Microsoft Word as a converter. Restart the app after installation to enable export.',
+  'office.converter.guide.download': 'Download LibreOffice',
 };
 
 export function formatEnWorkspaceAndToolsSummary(): string {

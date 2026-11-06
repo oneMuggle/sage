@@ -477,6 +477,10 @@ export const zhWorkspaceAndTools = {
   'workspace.switcher.workbench': '工作台',
   'workspace.switcher.unusable': '当前工作区不可用',
   'workspace.switcher.scratchHint': '当前使用的是草稿目录，文件不会保存到你的项目里',
+  'office.converter.guide.title': '导出 PDF 需要安装转换器',
+  'office.converter.guide.body':
+    '导出 PDF 需要安装 LibreOffice 或 Microsoft Word 作为转换器。安装后重启应用即可使用导出功能。',
+  'office.converter.guide.download': '下载 LibreOffice',
 } as const;
 
 export function formatZhWorkspaceAndToolsSummary(): string {

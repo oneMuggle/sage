@@ -439,16 +439,19 @@ describe('OfficePreviewPanel — export PDF button (item 2.7)', () => {
   });
 
   it.each([EXCEL_PREVIEW, PPT_PREVIEW])(
-    'blocks PDF actions when this format has no converter',
-    (preview) => {
+    'opens converter guide on export click when this format has no converter',
+    async (preview) => {
       render(
         <I18nProvider defaultLocale="zh">
           <OfficePreviewPanel preview={preview} fidelityAvailable={false} />
         </I18nProvider>,
       );
       const button = screen.getByTestId('office-export-pdf-button');
-      expect(button).toBeDisabled();
+      expect(button).toBeEnabled();
       fireEvent.click(button);
+      await waitFor(() => {
+        expect(screen.getByTestId('converter-guide-dialog')).toBeInTheDocument();
+      });
       expect(mockExportPdf).not.toHaveBeenCalled();
       // 高保真入口始终可见（用户能从 [环境] 浮层看到安装指引），
       // 但在没有本机转换器时 disabled —— 而不是整条链路消失。
@@ -457,13 +460,18 @@ describe('OfficePreviewPanel — export PDF button (item 2.7)', () => {
     },
   );
 
-  it('keeps native Word preview while disabling PDF export without a converter', () => {
+  it('keeps native Word preview and opens converter guide on export click without a converter', async () => {
     render(
       <I18nProvider defaultLocale="zh">
         <OfficePreviewPanel preview={WORD_PREVIEW} fidelityAvailable={false} />
       </I18nProvider>,
     );
-    expect(screen.getByTestId('office-export-pdf-button')).toBeDisabled();
+    const button = screen.getByTestId('office-export-pdf-button');
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    await waitFor(() => {
+      expect(screen.getByTestId('converter-guide-dialog')).toBeInTheDocument();
+    });
     expect(screen.getByTestId('office-fidelity-toggle')).toBeEnabled();
   });
 
