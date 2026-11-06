@@ -8,6 +8,7 @@ import { Button, PageHeader } from '../shared/ui';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { KnowledgeBindingsEditor } from '../widgets/specialists/KnowledgeBindingsEditor';
+import { SpecialistAssetsDialog } from '../widgets/specialists/SpecialistAssetsDialog';
 import { SpecialistCard } from '../widgets/specialists/SpecialistCard';
 import { SpecialistEvalDialog } from '../widgets/specialists/SpecialistEvalDialog';
 import { SpecialistWizard } from '../widgets/specialists/SpecialistWizard';
@@ -32,6 +33,7 @@ export function Specialists() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentProfile | null>(null);
   const [knowledgeAgent, setKnowledgeAgent] = useState<AgentProfile | null>(null);
+  const [assetsAgent, setAssetsAgent] = useState<AgentProfile | null>(null);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [versionsAgent, setVersionsAgent] = useState<AgentProfile | null>(null);
   const [evalAgent, setEvalAgent] = useState<AgentProfile | null>(null);
@@ -99,6 +101,10 @@ export function Specialists() {
 
   function handleKnowledge(agent: AgentProfile) {
     setKnowledgeAgent(agent);
+  }
+
+  function handleAssets(agent: AgentProfile) {
+    setAssetsAgent(agent);
   }
 
   function handleVersions(agent: AgentProfile) {
@@ -173,6 +179,7 @@ export function Specialists() {
                 onChat={handleStartChat}
                 onEdit={handleEdit}
                 onKnowledge={handleKnowledge}
+                onAssets={handleAssets}
                 onExport={handleExport}
                 onVersions={handleVersions}
                 onEval={handleEval}
@@ -200,6 +207,18 @@ export function Specialists() {
         }}
         agent={knowledgeAgent}
         onChanged={loadAgents}
+      />
+
+      <SpecialistAssetsDialog
+        open={assetsAgent !== null}
+        onOpenChange={(open) => {
+          if (!open) setAssetsAgent(null);
+        }}
+        agent={assetsAgent}
+        onManageKnowledge={(agent) => {
+          setAssetsAgent(null);
+          setKnowledgeAgent(agent);
+        }}
       />
 
       <TemplateGalleryDialog
