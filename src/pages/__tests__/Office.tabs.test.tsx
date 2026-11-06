@@ -138,10 +138,16 @@ function activateTab(trigger: HTMLElement) {
   fireEvent.mouseDown(trigger, { button: 0, ctrlKey: false });
 }
 
+// 页头 `office-page` 先于 workspace 解析渲染，tablist 要等 workspacePath 就绪。
+// 只等 office-page 会让随后同步的 getByTestId('office-tab-*') 偶发找不到。
+async function waitForTabs() {
+  await waitFor(() => expect(screen.getByTestId('office-tab-documents')).toBeInTheDocument());
+}
+
 describe('Office — default tab and a11y roles', () => {
   it('lands on `documents` when no tab param is present', async () => {
     renderOffice();
-    await waitFor(() => expect(screen.getByTestId('office-page')).toBeInTheDocument());
+    await waitForTabs();
     expect(screen.getByTestId('office-panel-documents')).toBeInTheDocument();
     // 默认 URL 没有 tab 参数（默认值不写回 URL，避免污染书签）
     expect(probe().getAttribute('data-search')).toBe('');
@@ -154,8 +160,8 @@ describe('Office — default tab and a11y roles', () => {
 
   it('marks the active tab with aria-selected=true and its panel visible', async () => {
     renderOffice();
-    await waitFor(() => screen.getByTestId('office-page'));
-    const active = screen.getByTestId('office-tab-documents');
+    // 页头先于 workspace 解析渲染；tablist 要等 workspacePath 就绪，故等 trigger 本身。
+    const active = await waitFor(() => screen.getByTestId('office-tab-documents'));
     expect(active.getAttribute('aria-selected')).toBe('true');
     // 非激活 panel 的 hidden 由我们控制
     expect(screen.getByTestId('office-panel-generate').getAttribute('hidden')).not.toBeNull();
@@ -165,7 +171,7 @@ describe('Office — default tab and a11y roles', () => {
 describe('Office — tab switching syncs URL', () => {
   it('clicking the generate trigger updates ?tab=generate and renders JournalPanel', async () => {
     renderOffice();
-    await waitFor(() => screen.getByTestId('office-page'));
+    await waitForTabs();
     activateTab(screen.getByTestId('office-tab-generate'));
     await waitFor(() =>
       expect(probe().getAttribute('data-search')).toBe('?tab=generate'),
@@ -177,7 +183,7 @@ describe('Office — tab switching syncs URL', () => {
 
   it('clicking the rules trigger shows the rules stub', async () => {
     renderOffice();
-    await waitFor(() => screen.getByTestId('office-page'));
+    await waitForTabs();
     activateTab(screen.getByTestId('office-tab-rules'));
     await waitFor(() =>
       expect(probe().getAttribute('data-search')).toBe('?tab=rules'),
@@ -187,7 +193,7 @@ describe('Office — tab switching syncs URL', () => {
 
   it('clicking the latex trigger pins ?tab=latex', async () => {
     renderOffice();
-    await waitFor(() => screen.getByTestId('office-page'));
+    await waitForTabs();
     activateTab(screen.getByTestId('office-tab-latex'));
     await waitFor(() =>
       expect(probe().getAttribute('data-search')).toBe('?tab=latex'),
@@ -197,7 +203,7 @@ describe('Office — tab switching syncs URL', () => {
 
   it('switching away from latex clears the `latex` sub-param from the URL', async () => {
     renderOffice(['/office?tab=latex&latex=templates']);
-    await waitFor(() => screen.getByTestId('office-page'));
+    await waitForTabs();
     expect(probe().getAttribute('data-search')).toBe('?tab=latex&latex=templates');
     activateTab(screen.getByTestId('office-tab-documents'));
     await waitFor(() =>
@@ -209,7 +215,7 @@ describe('Office — tab switching syncs URL', () => {
 describe('Office — deep links', () => {
   it('?tab=generate deep link activates the generate tab on mount', async () => {
     renderOffice(['/office?tab=generate']);
-    await waitFor(() => screen.getByTestId('office-page'));
+    await waitForTabs();
     const active = screen.getByTestId('office-tab-generate');
     expect(active.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('office-panel-generate').getAttribute('hidden')).toBeNull();
@@ -218,14 +224,14 @@ describe('Office — deep links', () => {
 
   it('?tab=latex&latex=templates activates the templates sub-tab inside latex', async () => {
     renderOffice(['/office?tab=latex&latex=templates']);
-    await waitFor(() => screen.getByTestId('office-page'));
+    await waitForTabs();
     expect(screen.getByTestId('office-tab-latex').getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('office-latex-tab-stub')).toBeInTheDocument();
   });
 
   it('?tab=bogus falls back to documents so the page is never blank', async () => {
     renderOffice(['/office?tab=bogus']);
-    await waitFor(() => screen.getByTestId('office-page'));
+    await waitForTabs();
     expect(screen.getByTestId('office-tab-documents').getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('office-panel-documents').getAttribute('hidden')).toBeNull();
   });
@@ -234,7 +240,7 @@ describe('Office — deep links', () => {
 describe('Office — keep-alive behaviour', () => {
   it('switching away from generate keeps the generate panel mounted (hidden)', async () => {
     renderOffice();
-    await waitFor(() => screen.getByTestId('office-page'));
+    await waitForTabs();
     activateTab(screen.getByTestId('office-tab-generate'));
     await waitFor(() => expect(screen.getByTestId('office-generate-form')).toBeInTheDocument());
     activateTab(screen.getByTestId('office-tab-documents'));
@@ -250,7 +256,7 @@ describe('Office — keep-alive behaviour', () => {
 describe('Office — journal in generate tab is collapsed by default', () => {
   it('renders JournalPanel inside a collapsed <details> element', async () => {
     renderOffice(['/office?tab=generate']);
-    await waitFor(() => screen.getByTestId('office-page'));
+    await waitForTabs();
     const details = screen
       .getByTestId('office-generate-form')
       .parentElement!.querySelector('details');
@@ -263,7 +269,7 @@ describe('Office — journal in generate tab is collapsed by default', () => {
 describe('Office — keyboard navigation', () => {
   it('Enter on a tab trigger activates that tab', async () => {
     renderOffice();
-    await waitFor(() => screen.getByTestId('office-page'));
+    await waitForTabs();
     const trigger = screen.getByTestId('office-tab-rules');
     trigger.focus();
     fireEvent.keyDown(trigger, { key: 'Enter' });
