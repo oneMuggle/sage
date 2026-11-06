@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 
 import { listShells, type ShellInfo } from '../../../shared/api/shellApi';
+
 import { ShellStreamPanel } from './ShellStreamPanel';
 
 export const SHELL_LIST_POLL_MS = 3_000;

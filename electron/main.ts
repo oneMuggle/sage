@@ -1639,12 +1639,9 @@ async function registerIpcHandlers(): Promise<void> {
       notificationPrefs = {
         enabled: payload?.enabled !== false,
         backgroundTasks: payload?.backgroundTasks !== false,
-        webhookUrl:
-          typeof payload?.webhookUrl === 'string' ? payload.webhookUrl.trim() : '',
+        webhookUrl: typeof payload?.webhookUrl === 'string' ? payload.webhookUrl.trim() : '',
         slackWebhookUrl:
-          typeof payload?.slackWebhookUrl === 'string'
-            ? payload.slackWebhookUrl.trim()
-            : '',
+          typeof payload?.slackWebhookUrl === 'string' ? payload.slackWebhookUrl.trim() : '',
       };
       try {
         writeNotificationPrefs(

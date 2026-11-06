@@ -42,7 +42,6 @@ function canSend(webContents: WebContentsLike): boolean {
   }
 }
 
-
 export type WebContentsLike = {
   send: (channel: string, payload: unknown) => void;
 };
@@ -162,12 +161,14 @@ export async function relayNdjsonToEvent(
     body,
     (rawEvent: unknown) => {
       if (typeof rawEvent !== 'object' || rawEvent === null) {
-        if (canSend(webContents)) webContents.send(`sage:event:${eventPrefix}-error`, WIKI_STREAM_ERROR);
+        if (canSend(webContents))
+          webContents.send(`sage:event:${eventPrefix}-error`, WIKI_STREAM_ERROR);
         return;
       }
       const ev = (rawEvent as { event?: unknown }).event;
       if (typeof ev !== 'string') {
-        if (canSend(webContents)) webContents.send(`sage:event:${eventPrefix}-error`, WIKI_STREAM_ERROR);
+        if (canSend(webContents))
+          webContents.send(`sage:event:${eventPrefix}-error`, WIKI_STREAM_ERROR);
         return;
       }
       let result: { suffix: string; data: unknown } | null;
@@ -182,7 +183,8 @@ export async function relayNdjsonToEvent(
         };
       }
       if (!result) return;
-      if (canSend(webContents)) webContents.send(`sage:event:${eventPrefix}${result.suffix}`, result.data);
+      if (canSend(webContents))
+        webContents.send(`sage:event:${eventPrefix}${result.suffix}`, result.data);
     },
     signal,
   );
@@ -371,7 +373,11 @@ export async function relaySkillNotifications(
     res.body,
     (event) => {
       // 心跳空行 → 跳过 (iter_ndjson 偶发 yield "{}\n")
-      if (typeof event === 'object' && event !== null && Object.keys(event as object).length === 0) {
+      if (
+        typeof event === 'object' &&
+        event !== null &&
+        Object.keys(event as object).length === 0
+      ) {
         return;
       }
       if (canSend(webContents)) webContents.send(`sage:event:${eventName}`, event);

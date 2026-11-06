@@ -51,11 +51,9 @@ describe('listenShellStream', () => {
       return unlisten;
     });
     const unsubscribe = await listenShellStream('sh-1', handler);
-    expect(listenMock).toHaveBeenCalledWith(
-      'shell-stream-sh-1',
-      expect.any(Function),
-      { streamId: 'sh-1' },
-    );
+    expect(listenMock).toHaveBeenCalledWith('shell-stream-sh-1', expect.any(Function), {
+      streamId: 'sh-1',
+    });
     expect(handler).toHaveBeenCalledWith({
       type: 'output',
       stream: 'stdout',

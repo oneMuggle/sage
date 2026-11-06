@@ -46,9 +46,7 @@ describe('BackgroundShellsSection', () => {
     ]);
     render(<BackgroundShellsSection />);
 
-    await waitFor(() =>
-      expect(screen.getByTestId('background-shell-sh-1')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByTestId('background-shell-sh-1')).toBeInTheDocument());
     expect(screen.getByText('pytest -q')).toBeInTheDocument();
     expect(screen.getByText(/运行中 · 42s/)).toBeInTheDocument();
     expect(screen.getByText(/已结束 · 7s/)).toBeInTheDocument();

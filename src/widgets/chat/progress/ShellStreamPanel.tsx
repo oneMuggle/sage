@@ -63,7 +63,10 @@ export function ShellStreamPanel({ shellId, onClose }: ShellStreamPanelProps) {
         : `已结束 · exit=${exitCode}`;
 
   return (
-    <section data-testid="shell-stream-panel" className="rounded border border-border p-2 space-y-2">
+    <section
+      data-testid="shell-stream-panel"
+      className="rounded border border-border p-2 space-y-2"
+    >
       <header className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-text truncate" title={shellId}>
           {statusText}

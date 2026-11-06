@@ -47,8 +47,7 @@ export function readNotificationPrefs(path: string): NotificationPrefs {
       enabled: parsed.enabled !== false,
       backgroundTasks: parsed.backgroundTasks !== false,
       webhookUrl: typeof parsed.webhookUrl === 'string' ? parsed.webhookUrl : '',
-      slackWebhookUrl:
-        typeof parsed.slackWebhookUrl === 'string' ? parsed.slackWebhookUrl : '',
+      slackWebhookUrl: typeof parsed.slackWebhookUrl === 'string' ? parsed.slackWebhookUrl : '',
     };
   } catch {
     // 文件不存在/JSON 损坏 → 默认开（保持既有"默认提醒"预期）

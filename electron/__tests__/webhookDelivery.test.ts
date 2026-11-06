@@ -1,11 +1,7 @@
 // webhookDelivery 测试（2026-11-06 Phase 3）
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  buildSlackPayload,
-  buildWebhookPayload,
-  createWebhookDeliver,
-} from '../webhookDelivery';
+import { buildSlackPayload, buildWebhookPayload, createWebhookDeliver } from '../webhookDelivery';
 
 const ITEM = {
   kind: 'scheduled_task',
@@ -66,7 +62,10 @@ describe('createWebhookDeliver', () => {
   it('posts to both generic and Slack urls', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true });
     const deliver = createWebhookDeliver(
-      () => ({ webhookUrl: 'https://hook.example/generic', slackWebhookUrl: 'https://hooks.slack.com/x' }),
+      () => ({
+        webhookUrl: 'https://hook.example/generic',
+        slackWebhookUrl: 'https://hooks.slack.com/x',
+      }),
       fetchImpl,
     );
     deliver(ITEM);
@@ -95,7 +94,10 @@ describe('createWebhookDeliver', () => {
       .mockResolvedValueOnce({ ok: true });
     const log = vi.fn();
     const deliver = createWebhookDeliver(
-      () => ({ webhookUrl: 'https://hook.example/generic', slackWebhookUrl: 'https://hooks.slack.com/x' }),
+      () => ({
+        webhookUrl: 'https://hook.example/generic',
+        slackWebhookUrl: 'https://hooks.slack.com/x',
+      }),
       fetchImpl,
       log,
     );
@@ -112,7 +114,10 @@ describe('createWebhookDeliver', () => {
   it('re-reads prefs on each delivery', async () => {
     let url = '';
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true });
-    const deliver = createWebhookDeliver(() => ({ webhookUrl: url, slackWebhookUrl: '' }), fetchImpl);
+    const deliver = createWebhookDeliver(
+      () => ({ webhookUrl: url, slackWebhookUrl: '' }),
+      fetchImpl,
+    );
 
     deliver(ITEM);
     await flushAsync();
