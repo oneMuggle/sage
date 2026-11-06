@@ -218,6 +218,10 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "cancel_scheduled_task": ToolCapability.WRITE,
     # 2026-11-05: 会话唤醒 —— 注册未来自我恢复（WakeStore 持久化副作用）。
     "wake_session_at": ToolCapability.WRITE,
+    # 2026-11-06 Phase 1: 后台任务一等公民 —— wake_on_background 登记 COMPLETION
+    # 唤醒（持久化副作用，SELF_MODIFY 闸）；wait_background 纯轮询读。
+    "wake_on_background": ToolCapability.WRITE,
+    "wait_background": ToolCapability.READ,
     # --- 待办 ---
     "list_todos": ToolCapability.READ,
     "add_todo": ToolCapability.WRITE,
@@ -260,6 +264,7 @@ SELF_MODIFY_TOOLS: FrozenSet[str] = frozenset(
         "schedule_task",
         "cancel_scheduled_task",
         "wake_session_at",
+        "wake_on_background",
     }
 )
 

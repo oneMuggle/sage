@@ -19,6 +19,8 @@ export interface PendingNotificationItem {
 export interface PendingNotificationsPayload {
   scheduled_tasks?: PendingNotificationItem[];
   todo_reminders?: PendingNotificationItem[];
+  /** 2026-11-06 Phase 1: 后台 Bash 任务完成通知 */
+  background_tasks?: PendingNotificationItem[];
 }
 
 export interface SchedulerNotificationPollerDeps {
@@ -35,7 +37,11 @@ export const SCHEDULER_NOTIFICATION_POLL_MS = 15_000;
 export function collectNotificationItems(
   payload: PendingNotificationsPayload | null | undefined,
 ): PendingNotificationItem[] {
-  const items = [...(payload?.scheduled_tasks ?? []), ...(payload?.todo_reminders ?? [])];
+  const items = [
+    ...(payload?.scheduled_tasks ?? []),
+    ...(payload?.todo_reminders ?? []),
+    ...(payload?.background_tasks ?? []),
+  ];
   return items.filter((item) => typeof item.title === 'string' && item.title.length > 0);
 }
 
