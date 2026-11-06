@@ -62,8 +62,8 @@ import {
   WordPreview,
 } from './OfficeStructuredPreviews';
 import { PdfFormFillDialog } from './PdfFormFillDialog';
-import { dataUrlToBlobUrl, safeRevokeBlobUrl } from './officePreviewBlobUrl';
 import { resolveDefaultFidelity, shouldAutoLoadFidelity } from './officeFidelity';
+import { dataUrlToBlobUrl, safeRevokeBlobUrl } from './officePreviewBlobUrl';
 import {
   formatOfficePreviewPanelAuditJson,
   formatOfficePreviewPanelAuditSnapshot,
@@ -292,8 +292,11 @@ export function OfficePreviewPanel({
     // Load whenever the current key has no cached URL.
     if (fidelityUrl && fidelityKey === currentFidelityKey) return;
     loadFidelityRef.current();
+    // `fidelityLoading` must be a dep: switching documents mid-conversion
+    // returns early here, and this dep re-runs the effect once the in-flight
+    // load settles so the new document still auto-loads.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preview?.docType, fidelityAvailable, summaryId, currentFidelityKey]);
+  }, [preview?.docType, fidelityAvailable, summaryId, currentFidelityKey, fidelityLoading]);
 
   if (!preview) {
     return (

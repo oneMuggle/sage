@@ -152,6 +152,9 @@ export function DocxNativePreview({
     return () => {
       cancelled = true;
     };
+    // `onError` is intentionally omitted: parents pass a fresh closure each
+    // render, so including it would re-run the docx render on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspacePath, managedPath, revision]);
 
   if (state === 'error') {
