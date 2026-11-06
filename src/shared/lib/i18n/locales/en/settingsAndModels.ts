@@ -517,7 +517,7 @@ export const enSettingsAndModels = {
   'office.generate.success': 'Generated',
 
   // ─── 2026-11 IA restructure: section tabs / LaTeX sub-tabs / env popover ─────
-  'office.tabs.label': 'Document workspace sections',
+  'office.tabs.label': 'Tabs for the document workbench',
   'office.tab.documents': 'Documents',
   'office.tab.generate': 'Generate',
   'office.tab.rules': 'Rules',
