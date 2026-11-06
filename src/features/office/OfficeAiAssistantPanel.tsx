@@ -497,14 +497,14 @@ export function OfficeAiAssistantPanel({ workspacePath }: OfficeAiAssistantPanel
                   {reviseResult.snapshot_path ? (
                     <p>
                       快照已保存：
-                      <span className="text-muted font-mono text-[11px]">
+                      <span className="text-muted font-mono text-ui-2xs">
                         {reviseResult.snapshot_path}
                       </span>
                     </p>
                   ) : null}
                   <p>
                     输出文件：
-                    <span className="text-muted font-mono text-[11px]">
+                    <span className="text-muted font-mono text-ui-2xs">
                       {reviseResult.output_path}
                     </span>
                     {reviseResult.overwritten ? '（已覆盖原文件）' : ''}

@@ -26,7 +26,6 @@ import type {
   OfficeDocumentLineageResponse,
   OfficeDocumentListResponse,
   OfficeDuplicateCheckResult,
-  OfficeDuplicateGroupsResult,
   OfficeExcelGenerateRequest,
   OfficeExcelReadResult,
   OfficeExportPdfRequest,
@@ -278,24 +277,6 @@ export const officeApi = {
         throw handleApiError(error);
       }
     });
-  },
-
-  /**
-   * List groups of live documents that share identical bytes within a
-   * workspace (Phase 1 Item A). Powers the "重复" badge on duplicate
-   * rows and the bulk cleanup action.
-   *
-   * No retry — read-only but cheap; the UI re-queries explicitly after
-   * mutations that might introduce new duplicates.
-   */
-  async listDuplicateGroups(workspacePath: string): Promise<OfficeDuplicateGroupsResult> {
-    try {
-      return await invoke<OfficeDuplicateGroupsResult>('office_list_duplicate_groups', {
-        workspacePath,
-      });
-    } catch (error) {
-      throw handleApiError(error);
-    }
   },
 
   /**
@@ -802,29 +783,4 @@ export const officeApi = {
   },
 };
 
-export function formatOfficeWordLintSummary(res: OfficeWordLintResult): string {
-  const status = res.ok ? 'OK' : 'ISSUES';
-  return `${status} · ${res.error_count} errors · ${res.warning_count} warnings · ${res.checked_rules.length} rules`;
-}
-
-export function formatOfficeWordLintJson(res: OfficeWordLintResult): string {
-  return JSON.stringify(
-    {
-      schema: 'sage.shared.office_word_lint.v1',
-      ok: res.ok,
-      issueCount: res.issue_count,
-      errorCount: res.error_count,
-      warningCount: res.warning_count,
-      checkedRules: res.checked_rules,
-    },
-    null,
-    2,
-  );
-}
-export function auditOfficeApiGovernance(): string {
-  return JSON.stringify({
-    module: 'office-api',
-    phase: 'P188',
-    audited: true,
-  });
-}
+export { auditOfficeApiGovernance, formatOfficeWordLintJson, formatOfficeWordLintSummary } from './officeApiFormatters';

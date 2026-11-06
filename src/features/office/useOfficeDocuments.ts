@@ -27,11 +27,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { officeApi } from '../../shared/api/officeApi';
+import type { OfficeDuplicateGroup } from '../../shared/api/officeDuplicateTypes';
 import type {
   OfficeDocType,
   OfficeDocumentSummary,
   OfficeDuplicateCheckEntry,
-  OfficeDuplicateGroup,
   OfficeExcelReadResult,
   OfficePdfReadResult,
   OfficePptReadResult,
@@ -40,6 +40,7 @@ import type {
 
 import type { OfficeBatchResult } from './OfficeDocumentList';
 import { importOfficeByType, readStagedOfficeFile } from './importOfficeReference';
+import { useOfficeDuplicateGroups } from './useOfficeDuplicateGroups';
 
 /**
  * The duplicate-check route caps one request at 50 files; larger import
@@ -147,12 +148,11 @@ export interface UseOfficeDocumentsReturn {
   setSort: (value: string) => void;
   /**
    * Phase 1 Item A: live documents grouped by content hash. Populated
-   * by `loadDuplicateGroups()` for the `'live'` view and empty for
-   * `'archived'`. Used by the list component to render the "重复" badge
-   * and to drive the "archive all but newest" cleanup.
+   * for the `'live'` view and empty for `'archived'`. Used by the list
+   * component to render the "重复" badge and to drive the "archive all
+   * but newest" cleanup.
    */
   duplicateGroups: OfficeDuplicateGroup[];
-  loadDuplicateGroups: () => Promise<void>;
   /**
    * Archive every group member except the newest one. Resolves with
    * the per-doc archive outcome; the caller drives the toast.
@@ -266,8 +266,13 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
   const [q, setQ] = useState('');
   const [docType, setDocType] = useState('');
   const [sort, setSort] = useState('-updated_at');
-  // Phase 1 Item A: duplicate groups for the live view.
-  const [duplicateGroups, setDuplicateGroups] = useState<OfficeDuplicateGroup[]>([]);
+  // Phase 1 Item A: duplicate groups for the live view. Advisory only —
+  // a grouping failure never clears the document list.
+  const {
+    duplicateGroups,
+    reload: reloadDuplicateGroups,
+    clear: clearDuplicateGroups,
+  } = useOfficeDuplicateGroups(workspacePath, view === 'live');
   // Phase 0 duplicate gate: the staged file the batch is paused on, plus
   // the resolver that hands the user's choice back to the batch loop.
   const [pendingDuplicate, setPendingDuplicate] = useState<OfficePendingDuplicate | null>(null);
@@ -323,50 +328,28 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     [workspacePath, q, docType, sort],
   );
 
-  // Phase 1 Item A: reload duplicate groups whenever the live view is
-  // active and any filter changes. Archived view has no duplicate badge.
-  const loadDuplicateGroups = useCallback(async () => {
-    if (!workspacePath || view !== 'live') {
-      setDuplicateGroups([]);
-      return;
-    }
-    try {
-      const result = await officeApi.listDuplicateGroups(workspacePath);
-      setDuplicateGroups(result.groups);
-    } catch {
-      // Duplicate grouping is advisory — a failure hides the badge but
-      // must not break the document list itself.
-      setDuplicateGroups([]);
-    }
-  }, [workspacePath, view]);
-
   const refresh = useCallback(async () => {
     if (!workspacePath) {
       setDocuments([]);
-      setDuplicateGroups([]);
+      clearDuplicateGroups();
       return;
     }
     setLoading(true);
     setError(null);
     try {
       setDocuments(await fetchDocuments(view));
-      // Duplicate grouping runs in parallel with the list fetch only in
-      // the initial effect; here it is sequential because `refresh` is
-      // called after mutations that may change both lists.
-      if (view === 'live') {
-        const result = await officeApi.listDuplicateGroups(workspacePath);
-        setDuplicateGroups(result.groups);
-      } else {
-        setDuplicateGroups([]);
-      }
+      // Sequential: `refresh` runs after mutations that may change both
+      // lists. `reloadDuplicateGroups` never throws, so a grouping miss
+      // cannot drag the document list into the error path.
+      await reloadDuplicateGroups();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setDocuments([]);
-      setDuplicateGroups([]);
+      clearDuplicateGroups();
     } finally {
       setLoading(false);
     }
-  }, [workspacePath, fetchDocuments, view]);
+  }, [workspacePath, fetchDocuments, view, reloadDuplicateGroups, clearDuplicateGroups]);
 
   // Workspace entry is read-only. Filtered views must never drive file deletion.
   // Cancellation guard prevents a stale resolution from a prior
@@ -374,7 +357,7 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
   useEffect(() => {
     if (!workspacePath) {
       setDocuments([]);
-      setDuplicateGroups([]);
+      clearDuplicateGroups();
       setLoading(false);
       setError(null);
       return;
@@ -382,29 +365,19 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     let cancelled = false;
     setLoading(true);
     setError(null);
+    // Advisory grouping runs independently of the list fetch: a
+    // grouping failure hides the badge but never blocks the list.
+    void reloadDuplicateGroups();
     void (async () => {
       try {
         const documents = await fetchDocuments(view);
         if (cancelled) return;
         setDocuments(documents);
-        // Duplicate grouping runs alongside the list fetch — both
-        // queries target the same workspace so they can share the
-        // cancellation guard.
-        if (view === 'live') {
-          try {
-            const result = await officeApi.listDuplicateGroups(workspacePath);
-            if (!cancelled) setDuplicateGroups(result.groups);
-          } catch {
-            // Advisory: a grouping failure must not block the list render.
-          }
-        } else if (!cancelled) {
-          setDuplicateGroups([]);
-        }
       } catch (listErr) {
         if (cancelled) return;
         setError(listErr instanceof Error ? listErr.message : String(listErr));
         setDocuments([]);
-        setDuplicateGroups([]);
+        clearDuplicateGroups();
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -412,7 +385,7 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     return () => {
       cancelled = true;
     };
-  }, [workspacePath, fetchDocuments, view]);
+  }, [workspacePath, fetchDocuments, view, reloadDuplicateGroups, clearDuplicateGroups]);
 
   const findDocument = useCallback(
     (docId: string) => documents.find((d) => d.id === docId),
@@ -795,7 +768,6 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     sort,
     setSort,
     duplicateGroups,
-    loadDuplicateGroups,
     archiveAllButNewest,
     importAndRead,
     importAndReadMulti,
@@ -815,38 +787,8 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
   };
 }
 
-export function formatOfficeDocumentsBatchSummary(result: {
-  succeeded: string[];
-  failed: string[];
-}): string {
-  return `succeeded=${result.succeeded.length} · failed=${result.failed.length}`;
-}
-
-export function formatOfficeDocumentsBatchJson(result: {
-  succeeded: string[];
-  failed: string[];
-}): string {
-  return JSON.stringify(
-    {
-      total: result.succeeded.length + result.failed.length,
-      succeededCount: result.succeeded.length,
-      failedCount: result.failed.length,
-      succeeded: result.succeeded,
-      failed: result.failed,
-    },
-    null,
-    2,
-  );
-}
-
-export function auditUseOfficeDocumentsGovernance(): {
-  moduleId: string;
-  phase: string;
-  status: 'ready';
-} {
-  return {
-    moduleId: 'src/features/office/useOfficeDocuments.ts',
-    phase: 'P165',
-    status: 'ready',
-  };
-}
+export {
+  auditUseOfficeDocumentsGovernance,
+  formatOfficeDocumentsBatchJson,
+  formatOfficeDocumentsBatchSummary,
+} from './officeDocumentsBatchFormat';

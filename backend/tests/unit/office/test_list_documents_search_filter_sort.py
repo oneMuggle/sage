@@ -26,7 +26,6 @@ from backend.office.models import (
 )
 from backend.office.storage import list_documents
 
-
 # ──────────────────────────────────────────────────────────────────────
 # Fixtures
 # ──────────────────────────────────────────────────────────────────────
@@ -122,7 +121,7 @@ def _seed(conn: sqlite3.Connection, doc: OfficeDocumentSummary) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Search (q)
+# Search — 按 q 关键词匹配 original_filename / generated_filename
 # ──────────────────────────────────────────────────────────────────────
 
 
@@ -200,7 +199,7 @@ class TestListDocumentsSearch:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Filter (doc_type)
+# Filter — 按 doc_type 筛选（word / excel / ppt / pdf）
 # ──────────────────────────────────────────────────────────────────────
 
 

@@ -25,9 +25,9 @@ from backend.api.office_ai_review_routes import (
     ai_review_history_endpoint,
     ai_revise_endpoint,
 )
-from backend.office.ai_review_models import AiReviewSource
 from backend.data import database as db_mod
 from backend.data.database import Database
+from backend.office.ai_review_models import AiReviewSource
 
 pytestmark = pytest.mark.integration
 

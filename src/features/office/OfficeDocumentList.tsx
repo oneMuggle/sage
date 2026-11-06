@@ -39,10 +39,10 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import type { OfficeDuplicateGroup } from '../../shared/api/officeDuplicateTypes';
 import type {
   OfficeDocType,
   OfficeDocumentSummary,
-  OfficeDuplicateGroup,
 } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 import { useTaskCenterStore } from '../task-center/taskCenterStore';
@@ -547,7 +547,7 @@ export function OfficeDocumentList({
                 )}
                 {/* T4: "重复" badge when this doc is the older copy in a duplicate group (Item A). */}
                 {duplicateDocIds.has(doc.id) && (
-                  <span className="px-1 py-0.5 text-[10px] rounded bg-amber-400/20 text-amber-700 dark:text-amber-300 border border-amber-400/40">
+                  <span className="px-1 py-0.5 text-ui-xs rounded bg-amber-400/20 text-amber-700 dark:text-amber-300 border border-amber-400/40">
                     {t('office.doclib.duplicateBadge')}
                   </span>
                 )}
