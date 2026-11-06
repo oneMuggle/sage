@@ -86,6 +86,10 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "office_update": ToolCapability.WRITE,
     "office_delete": ToolCapability.WRITE,
     "edit_file": ToolCapability.WRITE,
+    # 2026-11-06 Phase 1: 后台任务工具（win7 无 SELF_MODIFY 闸，保留能力分类）
+    "wake_on_background": ToolCapability.WRITE,
+    "wait_background": ToolCapability.READ,
+    # --- 命令执行 ---
     "bash": ToolCapability.EXECUTE,
     "bash_output": ToolCapability.EXECUTE,  # 读取后台 shell 输出也算执行面扩展
     "kill_shell": ToolCapability.EXECUTE,   # 终止后台进程：执行面副作用

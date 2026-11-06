@@ -222,6 +222,11 @@ SCHEDULE_TOOLS = (
     "wake_session_at",
 )
 
+# 2026-11-06 Phase 1：后台任务一等公民 —— 与 BashSessionRegistry 协同。
+# ``wake_on_background`` 登记退出唤醒（WRITE，进 SELF_MODIFY_TOOLS 审批闸）；
+# ``wait_background`` 短窗口等待（READ，自动放行）。
+BACKGROUND_TASK_TOOLS = ("wake_on_background", "wait_background")
+
 # 待办子系统（2026-09-21 todolist-subsystem）：五个 LLM 工具面（add / list /
 # update / complete / delete），均挂 TodoService（SQLite 持久化 + 会话 ID
 # 隔离）。与 SCHEDULE_TOOLS 同模式：工具无条件注册（对 LLM 可见），
@@ -273,6 +278,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(SANDBOX_TOOLS)
         | set(CONFIG_TOOLS)
         | set(SCHEDULE_TOOLS)
+        | set(BACKGROUND_TASK_TOOLS)
         | set(TODO_TOOLS)
         | set(DESIGN_TOOLS)
     )
