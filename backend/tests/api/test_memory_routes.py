@@ -55,6 +55,7 @@ def test_save_memory_forwards_session_id_and_returns_stable_envelope(monkeypatch
             "tags": ["preference"],
             "session_id": "session-1",
             "scope": None,
+            "agent_id": None,
         }
     ]
 

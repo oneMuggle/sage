@@ -318,6 +318,9 @@ export const memoryApi = {
 
   /**
    * 保存记忆
+   *
+   * ``agentId``: M3-Task 7 资产中心手动追加 —— 给定时写入该专家私有层；
+   * 缺省/null = 共享层（历史行为不变）。
    */
   async saveMemory(
     content: string,
@@ -325,6 +328,7 @@ export const memoryApi = {
     importance: number = 5,
     tags?: string[],
     sessionId?: string,
+    agentId?: string | null,
   ): Promise<MemorySaveResponse> {
     // 内容/标签原文直传: 记忆会进入 LLM 上下文并落库, 转义是数据污染
     // (XSS 由渲染层 React 转义负责, 不在此处处理)。
@@ -339,6 +343,7 @@ export const memoryApi = {
           importance: safeImportance,
           tags: Array.isArray(tags) ? tags : [],
           sessionId: sessionId || null,
+          agentId: agentId || null,
         });
       } catch (error) {
         throw handleApiError(error);
