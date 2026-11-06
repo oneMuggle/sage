@@ -248,8 +248,8 @@ APScheduler 后台线程
   - [x] Vitest：模式选择、查看结果调用 `requestMessageJump`、deliver 时按钮禁用（`ScheduledTasks.mode.test.tsx` 6 例 + `CreateTaskModal.mode.test.tsx` 4 例）
 
 - [ ] **M6：文档与双分支**
-  - [x] `docs/technical/134-scheduled-task-auto-execute.md` + README 索引
-  - [x] `docs/user-manual/37-scheduled-tasks.md` + README 索引
+  - [x] `docs/technical/135-scheduled-task-auto-execute.md` + README 索引
+  - [x] `docs/user-manual/38-scheduled-tasks.md` + README 索引
   - [ ] main 合并后 cherry-pick 到 `release/win7`，适配 pydantic 1.x / Python 3.8（`Literal` 导入、`tuple[...]` 改 `Tuple[...]`、`asyncio` API 确认）
 
 ## 5. 测试计划

@@ -275,6 +275,25 @@ export const enWorkspaceAndTools = {
   'office.batch.selectedCount': '{n} selected',
   'office.batch.selectRow': 'Select document',
 
+  // ─── Office doc library search/filter/sort/duplicate cleanup (Phase 1 Item A) ─────
+  'office.doclib.search': 'Search filename',
+  'office.doclib.searchClear': 'Clear search',
+  'office.doclib.filter.allTypes': 'All types',
+  'office.doclib.sort.updatedDesc': 'Recently updated',
+  'office.doclib.sort.updatedAsc': 'Least recently updated',
+  'office.doclib.sort.createdDesc': 'Recently created',
+  'office.doclib.sort.nameAsc': 'Name A→Z',
+  'office.doclib.sort.nameDesc': 'Name Z→A',
+  'office.doclib.sort.sizeDesc': 'Size: largest first',
+  'office.doclib.sort.sizeAsc': 'Size: smallest first',
+  'office.doclib.duplicateBadge': 'Duplicate',
+  'office.doclib.duplicateBanner': '{n} duplicate group(s) found',
+  'office.doclib.duplicateBannerHint':
+    'Identical content was imported more than once. Cleaning up archives the older copy in each group — archived rows can be restored at any time.',
+  'office.doclib.duplicateCleanup': 'Clean up (keep newest)',
+  'office.doclib.duplicateCleanupDone': 'Archived {n} duplicate(s)',
+  'office.doclib.duplicateCleanupFailed': 'Duplicate cleanup failed',
+
   // ─── A4b Office delivery acceptance ─────
   'office.delivery.title': 'Delivery acceptance',
   'office.delivery.close': 'Close',
@@ -487,7 +506,8 @@ export const enWorkspaceAndTools = {
   'workspace.switcher.copyPath': 'Copy workspace path',
   'workspace.switcher.workbench': 'Workbench',
   'workspace.switcher.unusable': 'Current workspace is unusable',
-  'workspace.switcher.scratchHint': 'Using a scratch directory — files won\'t be saved to your project',
+  'workspace.switcher.scratchHint':
+    "Using a scratch directory — files won't be saved to your project",
 };
 
 export function formatEnWorkspaceAndToolsSummary(): string {

@@ -11,6 +11,8 @@ import type {
   AiReviewHistoryResult,
   AiReviewRequest,
   AiReviewResult,
+  AiReviseRequest,
+  AiReviseResult,
   OfficeSpecBindingResult,
   OfficeSpecCreateRequest,
   OfficeSpecDetailResult,
@@ -25,9 +27,7 @@ import type { WordRuleExtractionResult } from './wordAuditTypes';
 
 export const officeSpecApi = {
   /** 列出工作区所有规范书（默认规范书排最前）。 */
-  async listSpecs(
-    params: { workspacePath?: string | null } = {},
-  ): Promise<OfficeSpecListResult> {
+  async listSpecs(params: { workspacePath?: string | null } = {}): Promise<OfficeSpecListResult> {
     try {
       return await invoke<OfficeSpecListResult>('office_specs_list', {
         ...(params.workspacePath ? { workspacePath: params.workspacePath } : {}),
@@ -38,10 +38,7 @@ export const officeSpecApi = {
   },
 
   /** 取规范书元数据 + live 规则包（workspacePath 必填：规范书按工作区隔离）。 */
-  async getSpec(
-    specId: string,
-    workspacePath: string,
-  ): Promise<OfficeSpecDetailResult> {
+  async getSpec(specId: string, workspacePath: string): Promise<OfficeSpecDetailResult> {
     try {
       return await invoke<OfficeSpecDetailResult>('office_specs_get', {
         specId,
@@ -61,9 +58,7 @@ export const officeSpecApi = {
         ...(req.pack ? { pack: req.pack } : {}),
         ...(req.rulepack_id ? { rulepackId: req.rulepack_id } : {}),
         ...(req.source_file_path ? { sourceFilePath: req.source_file_path } : {}),
-        ...(req.source_content_hash
-          ? { sourceContentHash: req.source_content_hash }
-          : {}),
+        ...(req.source_content_hash ? { sourceContentHash: req.source_content_hash } : {}),
         isDefault: Boolean(req.is_default),
       });
     } catch (error) {
@@ -72,19 +67,14 @@ export const officeSpecApi = {
   },
 
   /** 部分更新规范书；带 pack 时先另存一份新规则包再绑定。 */
-  async updateSpec(
-    specId: string,
-    req: OfficeSpecUpdateRequest,
-  ): Promise<OfficeSpecSaveResult> {
+  async updateSpec(specId: string, req: OfficeSpecUpdateRequest): Promise<OfficeSpecSaveResult> {
     try {
       return await invoke<OfficeSpecSaveResult>('office_specs_update', {
         specId,
         workspacePath: req.workspace_path,
         ...(req.name !== undefined ? { name: req.name } : {}),
         ...(req.pack ? { pack: req.pack } : {}),
-        ...(req.source_file_path !== undefined
-          ? { sourceFilePath: req.source_file_path }
-          : {}),
+        ...(req.source_file_path !== undefined ? { sourceFilePath: req.source_file_path } : {}),
         ...(req.source_content_hash !== undefined
           ? { sourceContentHash: req.source_content_hash }
           : {}),
@@ -110,9 +100,7 @@ export const officeSpecApi = {
   },
 
   /** 从说明文件提取草稿规则包（LLM 可选），不落库。 */
-  async extractSpec(
-    req: OfficeSpecExtractRequest,
-  ): Promise<WordRuleExtractionResult> {
+  async extractSpec(req: OfficeSpecExtractRequest): Promise<WordRuleExtractionResult> {
     try {
       return await invoke<WordRuleExtractionResult>('office_specs_extract', {
         workspacePath: req.workspace_path,
@@ -140,9 +128,7 @@ export const officeSpecApi = {
   },
 
   /** 清除工作区默认规范书。 */
-  async clearDefaultSpec(
-    workspacePath: string,
-  ): Promise<{ ok: boolean; default: unknown }> {
+  async clearDefaultSpec(workspacePath: string): Promise<{ ok: boolean; default: unknown }> {
     try {
       return await invoke('office_specs_clear_default', { workspacePath });
     } catch (error) {
@@ -151,10 +137,7 @@ export const officeSpecApi = {
   },
 
   /** 查询文档级绑定 + 生效规范书。 */
-  async getDocSpec(
-    docId: string,
-    workspacePath: string,
-  ): Promise<OfficeSpecBindingResult> {
+  async getDocSpec(docId: string, workspacePath: string): Promise<OfficeSpecBindingResult> {
     try {
       return await invoke<OfficeSpecBindingResult>('office_doc_spec_get', {
         docId,
@@ -209,6 +192,23 @@ export const officeSpecApi = {
         docId,
         ...(params.workspacePath ? { workspacePath: params.workspacePath } : {}),
         ...(params.limit ? { limit: params.limit } : {}),
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 将选中的审校问题应用为 Word 修订痕迹（自动快照前置）。 */
+  async reviseAiIssues(req: AiReviseRequest): Promise<AiReviseResult> {
+    try {
+      return await invoke<AiReviseResult>('office_ai_revise', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+        ...(req.doc_id ? { docId: req.doc_id } : {}),
+        issues: req.issues,
+        ...(req.output_filename ? { outputFilename: req.output_filename } : {}),
+        ...(req.author ? { author: req.author } : {}),
+        addComments: req.add_comments !== false,
       });
     } catch (error) {
       throw handleApiError(error);
