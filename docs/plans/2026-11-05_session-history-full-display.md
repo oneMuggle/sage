@@ -102,7 +102,7 @@
 
 ## 实施结果（2026-11-05）
 
-- 后端：新增 `messages.compacted_at`（迁移 v11）+ `session_lineage.needs_restore`；
+- 后端：新增 `messages.compacted_at`（迁移 v13）+ `session_lineage.needs_restore`；
   压缩改为标记保留；legacy/hex 两条 LLM 历史路径均过滤压缩展示行。
 - 存量数据验证（真实 `data/sage.db` 副本）：会话 `ce21ad04…` 由 14 条恢复为
   24 条（10 条 `compacted_at` 展示行），活跃上下文仍为 14 条；二次启动行数不变（幂等）。

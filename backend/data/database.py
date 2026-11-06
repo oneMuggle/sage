@@ -626,7 +626,7 @@ class Database:
                 conn.commit()
             except sqlite3.OperationalError:
                 pass
-        # 2026-11-05: 非破坏性压缩标记（老库补列；数据回填由迁移 v11 负责）。
+        # 2026-11-05: 非破坏性压缩标记（老库补列；数据回填由迁移 v13 负责）。
         if "compacted_at" not in columns:
             try:
                 cursor.execute("ALTER TABLE messages ADD COLUMN compacted_at INTEGER")
@@ -2500,7 +2500,7 @@ class Database:
             logger.exception("schema 迁移失败")
             raise
 
-        # 2026-11-05: 压缩历史回填重试 —— 迁移 v11 负责首次回填；若上次
+        # 2026-11-05: 压缩历史回填重试 —— 迁移 v13 负责首次回填；若上次
         # 有单行失败（needs_restore 仍为 1），每次启动再补一次（幂等）。
         try:
             from backend.data.session_lineage import restore_compacted_history
