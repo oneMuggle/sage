@@ -26,6 +26,7 @@ import type {
   OfficeDocumentLineageResponse,
   OfficeDocumentListResponse,
   OfficeDuplicateCheckResult,
+  OfficeDuplicateGroupsResult,
   OfficeExcelGenerateRequest,
   OfficeExcelReadResult,
   OfficeExportPdfRequest,
@@ -249,21 +250,52 @@ export const officeApi = {
    * `includeArchived` (item 1.7): also return soft-deleted rows
    * (`archived_at` set) so the archive-restore UI can list them. The
    * backend default keeps them hidden.
+   *
+   * Phase 1 Item A: server-side search / type filter / sort.
+   *   - `q`: substring match on original/generated filename
+   *   - `docType`: restrict to a single Office doc type (ppt/word/excel/pdf)
+   *   - `sort`: e.g. `updated_at` / `-updated_at` / `name` / `-name` / `size` / `-size`
    */
   async listDocuments(
     workspacePath: string,
-    opts?: { includeArchived?: boolean },
+    opts?: {
+      includeArchived?: boolean;
+      q?: string;
+      docType?: string;
+      sort?: string;
+    },
   ): Promise<OfficeDocumentListResponse> {
     return withRetry(async () => {
       try {
         return await invoke<OfficeDocumentListResponse>('office_list_documents', {
           workspacePath,
           includeArchived: opts?.includeArchived ?? false,
+          q: opts?.q,
+          docType: opts?.docType,
+          sort: opts?.sort,
         });
       } catch (error) {
         throw handleApiError(error);
       }
     });
+  },
+
+  /**
+   * List groups of live documents that share identical bytes within a
+   * workspace (Phase 1 Item A). Powers the "重复" badge on duplicate
+   * rows and the bulk cleanup action.
+   *
+   * No retry — read-only but cheap; the UI re-queries explicitly after
+   * mutations that might introduce new duplicates.
+   */
+  async listDuplicateGroups(workspacePath: string): Promise<OfficeDuplicateGroupsResult> {
+    try {
+      return await invoke<OfficeDuplicateGroupsResult>('office_list_duplicate_groups', {
+        workspacePath,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
   },
 
   /**

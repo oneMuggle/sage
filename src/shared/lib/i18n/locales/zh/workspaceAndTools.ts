@@ -266,6 +266,25 @@ export const zhWorkspaceAndTools = {
   'office.batch.selectedCount': '已选 {n} 项',
   'office.batch.selectRow': '选择该文档',
 
+  // ─── Office 文档库搜索/筛选/排序/重复清理 (Phase 1 Item A) ─────
+  'office.doclib.search': '搜索文件名',
+  'office.doclib.searchClear': '清除搜索',
+  'office.doclib.filter.allTypes': '全部类型',
+  'office.doclib.sort.updatedDesc': '最近更新',
+  'office.doclib.sort.updatedAsc': '最早更新',
+  'office.doclib.sort.createdDesc': '最近创建',
+  'office.doclib.sort.nameAsc': '名称 A→Z',
+  'office.doclib.sort.nameDesc': '名称 Z→A',
+  'office.doclib.sort.sizeDesc': '从大到小',
+  'office.doclib.sort.sizeAsc': '从小到大',
+  'office.doclib.duplicateBadge': '重复',
+  'office.doclib.duplicateBanner': '发现 {n} 组重复文档',
+  'office.doclib.duplicateBannerHint':
+    '相同的文件内容被重复导入。清理会归档每组中较旧的副本，可随时恢复。',
+  'office.doclib.duplicateCleanup': '清理重复（保留最新）',
+  'office.doclib.duplicateCleanupDone': '已归档 {n} 个重复副本',
+  'office.doclib.duplicateCleanupFailed': '重复清理失败',
+
   // ─── A4b Office 交付包验收 ─────
   'office.delivery.title': '交付包验收',
   'office.delivery.close': '关闭',

@@ -320,12 +320,7 @@ export interface WordPageSetupSpec {
   orientation?: 'portrait' | 'landscape';
   margins_cm?: WordPageMarginsSpec;
   // Round 53：节内页码格式/起始号（论文前置罗马页码场景）
-  page_number_format?:
-    | 'decimal'
-    | 'upperRoman'
-    | 'lowerRoman'
-    | 'upperLetter'
-    | 'lowerLetter';
+  page_number_format?: 'decimal' | 'upperRoman' | 'lowerRoman' | 'upperLetter' | 'lowerLetter';
   page_number_start?: number;
   // Round 58：该节脚注编号每节重排（分章脚注场景）
   footnote_restart_each_section?: boolean;
@@ -397,7 +392,7 @@ export interface WordFormatSpec {
   toc?: WordTocSpec;
   // Round 42：图目录/表目录（TOF 域，收录 SEQ 题注）
   figure_index?: WordIndexSpec;
-  table_index?: WordIndexSpec;  // Round 33：首页不同页眉页脚（封面页场景）
+  table_index?: WordIndexSpec; // Round 33：首页不同页眉页脚（封面页场景）
   first_page_different?: boolean;
   first_page_header?: WordHeaderFooterSpec;
   first_page_footer?: WordHeaderFooterSpec;
@@ -647,6 +642,37 @@ export interface OfficeExcelGenerateRequest {
 
 export interface OfficeDocumentListResponse {
   documents: OfficeDocumentSummary[];
+  total: number;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Duplicate-group listing (Phase 1 Item A: 文档库重复清理)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Live documents in one workspace that share identical bytes. The
+ * backend groups by `office_document_hashes.content_hash`; members
+ * within a group are returned newest-first so the UI can offer
+ * "keep newest, archive the rest" without additional sorting.
+ *
+ * Backend counterpart: `OfficeDuplicateGroup` in
+ * `backend/api/office_dedup_routes.py` (GET /office/documents/duplicate-groups).
+ */
+export interface OfficeDuplicateGroup {
+  /** `sha256:<64 hex>` digest shared by every document in the group. */
+  content_hash: string;
+  /** Live documents that hold the same bytes, newest first. */
+  documents: OfficeDocumentSummary[];
+}
+
+/**
+ * Response of GET /office/documents/duplicate-groups — every group of
+ * live documents whose content hash collides, newest group first.
+ * Singleton groups are never returned; documents without a stored
+ * hash (imported before content hashing existed) are excluded.
+ */
+export interface OfficeDuplicateGroupsResult {
+  groups: OfficeDuplicateGroup[];
   total: number;
 }
 
