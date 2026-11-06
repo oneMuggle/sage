@@ -931,7 +931,7 @@ class ChatService:
         history: List[Message],
         llm_tools: Optional[List[Dict[str, Any]]],
         span: Any,
-        run: "RunEventScope",
+        run: RunEventScope,
         session_id: str,
     ) -> Message:
         """单次 LLM 调用 + metrics + 空响应重试。
@@ -1007,7 +1007,7 @@ class ChatService:
         session_id: str,
         activation_block: str,
         span: Any,
-        run: "RunEventScope",
+        run: RunEventScope,
         *,
         total_tool_call_count: int,
     ) -> None:

@@ -29,12 +29,12 @@ _GENERIC_ERROR = "Execution failed; see backend logs for details"
 
 
 def make_threadsafe_runner(
-    chat_service: "ChatService",
+    chat_service: ChatService,
     main_loop: asyncio.AbstractEventLoop,
     *,
     timeout: int = 300,
     max_iterations: int = 8,
-) -> "TaskRunner":
+) -> TaskRunner:
     """返回同步 callable，APScheduler 后台线程直接调用。
 
     - 内部把 ``run_turn_tracked`` 调度到 ``main_loop``，并 ``.result(timeout)``
