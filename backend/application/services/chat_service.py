@@ -959,7 +959,7 @@ class ChatService:
         工具线程（``py_compat.to_thread`` 复制上下文）内的 ``SkillTool``
         读取后按专家作用域 fail-closed。
         """
-        from backend.tools.skill_tool import (
+        from backend.domain.skill_scope import (
             reset_turn_skill_allowlist,
             set_turn_skill_allowlist,
         )
