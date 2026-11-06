@@ -27,6 +27,8 @@ export const zhWorkspaceAndTools = {
   'office.doc.snapshots': '历史版本',
   'office.doc.archivedAt': '归档于',
   'office.section.archived': '归档文档',
+  'office.section.library': '文档库',
+  'office.section.canvas': '文档画布',
   'office.view.live': '全部文档',
   'office.view.archived': '归档文档',
   'office.toast.archived': '已归档',

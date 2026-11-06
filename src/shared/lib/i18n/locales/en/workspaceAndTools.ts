@@ -32,6 +32,8 @@ export const enWorkspaceAndTools = {
   'office.doc.snapshots': 'Version History',
   'office.doc.archivedAt': 'Archived',
   'office.section.archived': 'Archived Documents',
+  'office.section.library': 'Document Library',
+  'office.section.canvas': 'Document Canvas',
   'office.view.live': 'All Documents',
   'office.view.archived': 'Archived',
   'office.toast.archived': 'Archived',

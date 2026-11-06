@@ -36,8 +36,6 @@ import {
   OfficeDuplicateDialog,
   OfficeEditPreviewDialog,
   OfficeGenerateForm,
-  OfficeIntake,
-  OfficePreviewPanel,
   OfficeSnapshotPanel,
   useOfficeDocuments,
   type OfficeListView,
@@ -49,6 +47,7 @@ import { OfficeAiAssistantPanel } from '../features/office/OfficeAiAssistantPane
 import { OfficeSpecLibrary } from '../features/office/OfficeSpecLibrary';
 import { WordBatchAuditPanel } from '../features/office/WordBatchAuditPanel';
 import { WordRuleExtractionPanel } from '../features/office/WordRuleExtractionPanel';
+import { DocumentCanvas } from '../features/office/canvas/DocumentCanvas';
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
 import { WorkspaceBindModal } from '../features/workspace';
 import type { OfficeCapabilities, OfficeDocType } from '../shared/api/types';
@@ -59,6 +58,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shared/ui/Tabs';
 
 import { OfficeEnvironmentButton } from './office/OfficeEnvironmentButton';
 import { OfficeLatexTab } from './office/OfficeLatexTab';
+import { OfficeLayout } from './office/OfficeLayout';
 import {
   DEFAULT_OFFICE_LATEX_TAB,
   DEFAULT_OFFICE_TAB,
@@ -217,9 +217,7 @@ export function Office() {
         }),
       );
     } else if (importedCount > 1) {
-      toast.success(
-        fillTemplate(t('office.toast.intakeMultiSuccess'), { count: importedCount }),
-      );
+      toast.success(fillTemplate(t('office.toast.intakeMultiSuccess'), { count: importedCount }));
     } else if (importedCount === 1) {
       toast.success(t('office.toast.readSuccess'));
     }
@@ -380,7 +378,7 @@ export function Office() {
     }
   };
 
-  // 文档处理 tab 内各区块渲染（pickers + preview + list + snapshot）。
+  // 文档处理 tab：左侧文档库（列表 + 快照），右侧文档画布（导入 / 预览 + 编辑对话框）。
   const renderDocumentsTab = () => (
     <div className="space-y-6">
       {error && (
@@ -389,103 +387,94 @@ export function Office() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: unified intake (Phase 0, plan §M1) */}
-        <div className="space-y-3">
-          <h2 className="text-sm font-medium text-text-secondary">
-            {t('office.section.pickFile')}
-          </h2>
-          <OfficeIntake
-            workspacePath={workspacePath}
-            onPick={handleImportAndReadMulti}
-            onDropFiles={handleReadDroppedMulti}
-            disabled={loading}
-          />
-        </div>
-
-        {/* Right: preview + edit preview dialog */}
-        <div>
-          <h2 className="text-sm font-medium text-text-secondary mb-3">
-            {t('office.section.preview')}
-          </h2>
-          <OfficePreviewPanel
-            preview={preview}
-            workspacePath={workspacePath ?? undefined}
-            fidelityAvailable={pdfAvailableForDocument(capabilities, preview?.docType)}
-            onRefresh={() => void refresh()}
-            onEditPreview={
-              preview && preview.docType !== 'pdf' ? () => setEditDialogOpen(true) : undefined
-            }
-          />
-          {editDialogOpen && editDoc && preview?.docType !== 'pdf' && (
-            <div className="mt-3">
-              <OfficeEditPreviewDialog
-                workspacePath={workspacePath ?? ''}
-                doc={editDoc}
-                sheetNames={editSheetNames}
-                onApplied={handleEditApplied}
-                onClose={() => setEditDialogOpen(false)}
-              />
+      <OfficeLayout
+        left={
+          <>
+            {/* Document list — live / archived toggle */}
+            <div className="flex items-center gap-3 mb-3">
+              <h2 className="text-sm font-medium text-text-secondary">
+                {t('office.section.library')} ({documents.length})
+              </h2>
+              <div className="ml-auto flex gap-2">
+                {(
+                  [
+                    ['live', t('office.view.live')],
+                    ['archived', t('office.view.archived')],
+                  ] as [OfficeListView, string][]
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setView(value)}
+                    data-testid={`office-view-${value}`}
+                    className={[
+                      'px-3 py-1.5 rounded text-sm border',
+                      view === value
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-text-secondary hover:bg-bg-hover',
+                    ].join(' ')}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Document list — live / archived toggle */}
-      <div>
-        <div className="flex items-center gap-3 mb-3">
-          <h2 className="text-sm font-medium text-text-secondary">
-            {view === 'live' ? t('office.section.history') : t('office.section.archived')} (
-            {documents.length})
-          </h2>
-          <div className="ml-auto flex gap-2">
-            {(
-              [
-                ['live', t('office.view.live')],
-                ['archived', t('office.view.archived')],
-              ] as [OfficeListView, string][]
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setView(value)}
-                data-testid={`office-view-${value}`}
-                className={[
-                  'px-3 py-1.5 rounded text-sm border',
-                  view === value
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border text-text-secondary hover:bg-bg-hover',
-                ].join(' ')}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <OfficeDocumentList
-          documents={documents}
-          loading={loading}
-          variant={view}
-          onSaveAs={handleSaveAs}
-          onOpen={handleOpen}
-          onShowInFolder={handleShowInFolder}
-          onArchive={handleArchive}
-          onRestore={handleRestore}
-          onViewSnapshots={(docId) => setSnapshotDocId(docId)}
-          onPreview={handlePreviewDocument}
-          onBatchArchive={batchArchive}
-          onBatchRestore={batchRestore}
-        />
-        {snapshotDoc && (
-          <div className="mt-3">
-            <OfficeSnapshotPanel
-              doc={snapshotDoc}
-              onClose={() => setSnapshotDocId(null)}
-              onRestored={handleSnapshotRestored}
+            <OfficeDocumentList
+              documents={documents}
+              loading={loading}
+              variant={view}
+              onSaveAs={handleSaveAs}
+              onOpen={handleOpen}
+              onShowInFolder={handleShowInFolder}
+              onArchive={handleArchive}
+              onRestore={handleRestore}
+              onViewSnapshots={(docId) => setSnapshotDocId(docId)}
+              onPreview={handlePreviewDocument}
+              onBatchArchive={batchArchive}
+              onBatchRestore={batchRestore}
             />
-          </div>
-        )}
-      </div>
+            {snapshotDoc && (
+              <div className="mt-3">
+                <OfficeSnapshotPanel
+                  doc={snapshotDoc}
+                  onClose={() => setSnapshotDocId(null)}
+                  onRestored={handleSnapshotRestored}
+                />
+              </div>
+            )}
+          </>
+        }
+        center={
+          <>
+            <h2 className="text-sm font-medium text-text-secondary mb-3">
+              {t('office.section.canvas')}
+            </h2>
+            <DocumentCanvas
+              preview={preview}
+              workspacePath={workspacePath}
+              onPick={handleImportAndReadMulti}
+              onDropFiles={handleReadDroppedMulti}
+              onEditPreview={
+                preview && preview.docType !== 'pdf' ? () => setEditDialogOpen(true) : undefined
+              }
+              fidelityAvailable={pdfAvailableForDocument(capabilities, preview?.docType)}
+              onRefresh={() => void refresh()}
+              disabled={loading}
+            />
+            {editDialogOpen && editDoc && preview?.docType !== 'pdf' && (
+              <div className="mt-3">
+                <OfficeEditPreviewDialog
+                  workspacePath={workspacePath ?? ''}
+                  doc={editDoc}
+                  sheetNames={editSheetNames}
+                  onApplied={handleEditApplied}
+                  onClose={() => setEditDialogOpen(false)}
+                />
+              </div>
+            )}
+          </>
+        }
+      />
     </div>
   );
 
@@ -498,9 +487,7 @@ export function Office() {
       <details className="rounded-lg border border-border bg-bg-subtle">
         <summary className="cursor-pointer select-none list-none px-4 py-3 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-medium text-text">
-              {t('office.generate.journal.title')}
-            </h3>
+            <h3 className="text-sm font-medium text-text">{t('office.generate.journal.title')}</h3>
             <p className="text-xs text-muted mt-0.5">{t('office.generate.journal.hint')}</p>
           </div>
           <span className="text-xs text-text-secondary">▶</span>
@@ -527,9 +514,7 @@ export function Office() {
 
       <article className="rounded-lg border border-border bg-bg-subtle p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-sm font-medium text-text">
-            {t('office.rules.guide.title')}
-          </h3>
+          <h3 className="text-sm font-medium text-text">{t('office.rules.guide.title')}</h3>
           <p className="text-xs text-muted mt-1">{t('office.rules.guide.body')}</p>
         </div>
         <button
@@ -549,10 +534,7 @@ export function Office() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-semibold text-text">{t('office.title')}</h1>
-        <OfficeEnvironmentButton
-          workspacePath={workspacePath}
-          onCapabilities={setCapabilities}
-        />
+        <OfficeEnvironmentButton workspacePath={workspacePath} onCapabilities={setCapabilities} />
         <div className="ml-auto flex items-center gap-2 text-sm text-muted">
           <FolderOpen className="w-4 h-4" />
           {workspacePath ? (
@@ -608,22 +590,21 @@ export function Office() {
               data-testid={`office-panel-${id}`}
             >
               {mounted.includes(id) &&
-                (id === 'documents'
-                  ? renderDocumentsTab()
-                  : id === 'generate'
-                    ? renderGenerateTab()
-                    : id === 'rules'
-                      ? renderRulesTab()
-                      : <OfficeLatexTab active={activeLatexTab} onChange={setLatexTab} />)}
+                (id === 'documents' ? (
+                  renderDocumentsTab()
+                ) : id === 'generate' ? (
+                  renderGenerateTab()
+                ) : id === 'rules' ? (
+                  renderRulesTab()
+                ) : (
+                  <OfficeLatexTab active={activeLatexTab} onChange={setLatexTab} />
+                ))}
             </TabsContent>
           ))}
         </Tabs>
       )}
 
-      <OfficeDuplicateDialog
-        pending={pendingDuplicate}
-        onChoose={resolvePendingDuplicate}
-      />
+      <OfficeDuplicateDialog pending={pendingDuplicate} onChoose={resolvePendingDuplicate} />
 
       <WorkspaceBindModal
         isOpen={isBindModalOpen}
