@@ -227,14 +227,17 @@ interface RulePack {
 
 ### P1：画布 + 布局（基础）
 
-- [ ] 新增 `OfficeLayout` 三栏布局壳（左栏 + 主区 + AI 侧栏占位）。
-- [ ] 新增 `DocumentCanvas` / `DocumentEmptyState` / `DocumentPreview` / `DocumentToolbar`，合并选择+预览。
-- [ ] 高保真默认 + 滚动修复 + 渲染失败自动降级。
-- [ ] `ConverterGuideDialog` 导出 PDF 无转换器引导。
-- [ ] 拖入新文件替换当前文档。
+- [x] 新增 `OfficeLayout` 三栏布局壳（左栏 + 主区 + AI 侧栏占位）。
+- [x] 新增 `DocumentCanvas` / `DocumentEmptyState` / `DocumentPreview` / `DocumentToolbar`，合并选择+预览。
+  - _注：空态 / 预览 / 工具条分别落在已有的 `OfficeIntake` / `OfficePreviewPanel` / 工具条 JSX，`DocumentCanvas` 是统一入口；`DocumentEmptyState` / `DocumentPreview` / `DocumentToolbar` 三个组件被合并进画布与现有入口，不再作为独立文件存在。_
+- [x] 高保真默认 + 滚动修复 + 渲染失败自动降级。
+- [x] `ConverterGuideDialog` 导出 PDF 无转换器引导。
+- [x] 拖入新文件替换当前文档。
 - [ ] `officeWorkspaceStore` 基础状态。
+  - _延期到 P2（AI 侧栏）一起实现——侧栏需要工作区感知状态，届时再引入。_
 
 **验证**：文档 Tab 功能全通；高保真默认、长文档可滚动、导出引导可用；E2E 通过。
+  - _UI 冒烟需启动 Electron 桌面端；本 worktree 未安装 `node_modules`（仅含 vitest 所需依赖），无法在会话内启动。单元 / 集成测试覆盖了 5 条冒烟项：默认高保真 (`OfficePreviewPanel`)、长文档可滚动 (`OfficePreviewPanel.test`)、拖入替换 (`DocumentCanvas.test`)、导出引导 (`ConverterGuideDialog.test`)、左栏切换中栏预览 (`Office.tabs.test` + `OfficeLayout`)。UI 冒烟留给 PR 合并前由 reviewer 本地运行。_
 
 ### P2：AI 侧栏
 
