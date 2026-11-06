@@ -18,11 +18,12 @@ import logging
 import threading
 import time
 import uuid
+from collections import deque
 from contextlib import suppress
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Deque, Dict, List, Literal, Optional
 
 if TYPE_CHECKING:
     from backend.scheduler.evolution import BaseEvolutionTask
@@ -50,6 +51,9 @@ from backend.utils.timezones import local_timezone
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
+
+#: Undrained desktop notifications are capped so a missing consumer cannot leak memory.
+MAX_PENDING_NOTIFICATIONS = 100
 
 
 TaskNotFoundError = ScheduledTaskNotFoundError
@@ -127,6 +131,11 @@ class SchedulerService:
         self._lock = threading.Lock()
         self._tasks: Dict[str, ScheduledTask] = {}
         self._running = set()
+        # Desktop-notification payloads for fired tasks. Electron drains this
+        # via the pending-notifications endpoint; nothing here is persisted.
+        self._pending_notifications: Deque[Dict[str, Any]] = deque(
+            maxlen=MAX_PENDING_NOTIFICATIONS
+        )
         # 显式设置本地时区, 让 cron/interval 触发时间与日志、趋势图一致
         # (2026-11-03). 不设置时 APScheduler 用其内部默认 (系统本地),
         # 但行为依赖 tzlocal 是否可用, 显式传入更稳.
@@ -522,6 +531,40 @@ class SchedulerService:
             finally:
                 with self._lock:
                     self._running.discard(task.id)
+                self._push_notification(task, error)
+
+    def _push_notification(self, task: ScheduledTask, error: Optional[str]) -> None:
+        """Queue a desktop-notification payload for this fire (best effort).
+
+        Delivery is Electron's job: the main process drains
+        ``GET /api/v1/scheduled/notifications/pending`` on a timer and posts
+        an OS notification, gated by the user's notification preferences.
+        """
+        body = (error or task.content or "")[:120]
+        with self._lock:
+            self._pending_notifications.append(
+                {
+                    "kind": "scheduled_task",
+                    "task_id": task.id,
+                    "task_name": task.name,
+                    "session_id": task.session_id,
+                    "status": "failed" if error else "succeeded",
+                    "title": (
+                        f"❌ 定时任务失败：{task.name}"
+                        if error
+                        else f"✅ 定时任务已完成：{task.name}"
+                    ),
+                    "body": body,
+                    "created_at": datetime.now().isoformat(),
+                }
+            )
+
+    def drain_pending_notifications(self) -> List[Dict[str, Any]]:
+        """Drain and return queued desktop-notification payloads."""
+        with self._lock:
+            pending = list(self._pending_notifications)
+            self._pending_notifications.clear()
+            return pending
 
     def _record_run(self, task: ScheduledTask, error: Optional[str] = None) -> None:
         with self._lock:

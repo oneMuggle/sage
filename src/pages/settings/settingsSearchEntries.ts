@@ -159,6 +159,20 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'tray 托盘 关闭 最小化',
   },
   {
+    key: 'notifications_enabled',
+    tab: 'basic',
+    label: '启用桌面通知',
+    labelEn: 'Enable desktop notifications',
+    keywords: 'notification 通知 桌面 os 提醒 完成 失败 审批',
+  },
+  {
+    key: 'notifications_background',
+    tab: 'basic',
+    label: '后台任务通知',
+    labelEn: 'Background task notifications',
+    keywords: 'notification 通知 后台任务 定时任务 待办 提醒',
+  },
+  {
     key: 'demoMode',
     tab: 'basic',
     label: '演示模式',

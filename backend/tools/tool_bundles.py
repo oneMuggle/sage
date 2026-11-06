@@ -138,6 +138,7 @@ from .structured_output_tool import StructuredOutputTool
 from .symbol_search_tool import SymbolSearchTool
 from .todo_tool import TodoWriteTool
 from .tts_tool import TextToSpeechTool
+from .wake_tool import WakeSessionAtTool
 from .web_tool import WebFetchTool, WebSearchTool
 
 # ===== 安装函数：每个函数体内部的顺序即该 bundle 的注册顺序 =====
@@ -401,6 +402,9 @@ def _install_schedule(ctx: ToolInstallContext) -> None:
     ctx.registry.register(ScheduleTaskTool(policy=policy, service_getter=getter))
     ctx.registry.register(ListScheduledTasksTool(policy=policy, service_getter=getter))
     ctx.registry.register(CancelScheduledTaskTool(policy=policy, service_getter=getter))
+    # 2026-11-05: 会话唤醒（A4 Suspend-Resume 的 LLM 面）—— 注册 TIMER wake，
+    # 到点由 WakeScheduler 恢复会话。复用 WakeStore 单例，无额外装配依赖。
+    ctx.registry.register(WakeSessionAtTool(policy=policy))
 
 
 def _install_mcp(ctx: ToolInstallContext) -> None:

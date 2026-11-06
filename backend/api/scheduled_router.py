@@ -220,4 +220,26 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
         result = svc.run_evolution_task_now(name)
         return {"name": name, "ok": result is not None, "result": result or {}}
 
+    # ---------- desktop notifications (2026-11-05) ----------
+    # Electron 主进程每 15s 轮询本端点,把排空的通知转成 OS 通知。
+    # 两类来源共用同一个消费节奏:定时任务触发/失败 + 待办提醒。
+
+    @router.get("/scheduled/notifications/pending")
+    def drain_pending_notifications(
+        svc: SchedulerService = Depends(service_dep),
+    ) -> Dict[str, Any]:
+        # 局部导入:todo_reminder 依赖 todo_service,避免模块加载顺序耦合。
+        from backend.scheduler.todo_reminder import get_todo_reminder_scheduler
+
+        reminder_scheduler = get_todo_reminder_scheduler()
+        todo_items = (
+            reminder_scheduler.get_pending_notifications()
+            if reminder_scheduler is not None
+            else []
+        )
+        return {
+            "scheduled_tasks": svc.drain_pending_notifications(),
+            "todo_reminders": todo_items,
+        }
+
     return router
