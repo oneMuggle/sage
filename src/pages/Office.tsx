@@ -143,6 +143,14 @@ export function Office() {
     refresh,
     view,
     setView,
+    q,
+    setQ,
+    docType,
+    setDocType,
+    sort,
+    setSort,
+    duplicateGroups,
+    archiveAllButNewest,
     importAndReadMulti,
     readDroppedMulti,
     saveAs,
@@ -217,9 +225,7 @@ export function Office() {
         }),
       );
     } else if (importedCount > 1) {
-      toast.success(
-        fillTemplate(t('office.toast.intakeMultiSuccess'), { count: importedCount }),
-      );
+      toast.success(fillTemplate(t('office.toast.intakeMultiSuccess'), { count: importedCount }));
     } else if (importedCount === 1) {
       toast.success(t('office.toast.readSuccess'));
     }
@@ -475,6 +481,14 @@ export function Office() {
           onPreview={handlePreviewDocument}
           onBatchArchive={batchArchive}
           onBatchRestore={batchRestore}
+          q={q}
+          onQChange={setQ}
+          docType={docType}
+          onDocTypeChange={setDocType}
+          sort={sort}
+          onSortChange={setSort}
+          duplicateGroups={duplicateGroups}
+          onArchiveAllButNewest={archiveAllButNewest}
         />
         {snapshotDoc && (
           <div className="mt-3">
@@ -498,9 +512,7 @@ export function Office() {
       <details className="rounded-lg border border-border bg-bg-subtle">
         <summary className="cursor-pointer select-none list-none px-4 py-3 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-medium text-text">
-              {t('office.generate.journal.title')}
-            </h3>
+            <h3 className="text-sm font-medium text-text">{t('office.generate.journal.title')}</h3>
             <p className="text-xs text-muted mt-0.5">{t('office.generate.journal.hint')}</p>
           </div>
           <span className="text-xs text-text-secondary">▶</span>
@@ -527,9 +539,7 @@ export function Office() {
 
       <article className="rounded-lg border border-border bg-bg-subtle p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-sm font-medium text-text">
-            {t('office.rules.guide.title')}
-          </h3>
+          <h3 className="text-sm font-medium text-text">{t('office.rules.guide.title')}</h3>
           <p className="text-xs text-muted mt-1">{t('office.rules.guide.body')}</p>
         </div>
         <button
@@ -549,10 +559,7 @@ export function Office() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-semibold text-text">{t('office.title')}</h1>
-        <OfficeEnvironmentButton
-          workspacePath={workspacePath}
-          onCapabilities={setCapabilities}
-        />
+        <OfficeEnvironmentButton workspacePath={workspacePath} onCapabilities={setCapabilities} />
         <div className="ml-auto flex items-center gap-2 text-sm text-muted">
           <FolderOpen className="w-4 h-4" />
           {workspacePath ? (
@@ -608,22 +615,21 @@ export function Office() {
               data-testid={`office-panel-${id}`}
             >
               {mounted.includes(id) &&
-                (id === 'documents'
-                  ? renderDocumentsTab()
-                  : id === 'generate'
-                    ? renderGenerateTab()
-                    : id === 'rules'
-                      ? renderRulesTab()
-                      : <OfficeLatexTab active={activeLatexTab} onChange={setLatexTab} />)}
+                (id === 'documents' ? (
+                  renderDocumentsTab()
+                ) : id === 'generate' ? (
+                  renderGenerateTab()
+                ) : id === 'rules' ? (
+                  renderRulesTab()
+                ) : (
+                  <OfficeLatexTab active={activeLatexTab} onChange={setLatexTab} />
+                ))}
             </TabsContent>
           ))}
         </Tabs>
       )}
 
-      <OfficeDuplicateDialog
-        pending={pendingDuplicate}
-        onChoose={resolvePendingDuplicate}
-      />
+      <OfficeDuplicateDialog pending={pendingDuplicate} onChoose={resolvePendingDuplicate} />
 
       <WorkspaceBindModal
         isOpen={isBindModalOpen}
