@@ -8,12 +8,13 @@ import {
 } from '../schedulerNotifications';
 
 describe('collectNotificationItems', () => {
-  it('合并定时任务与待办提醒两路队列', () => {
+  it('合并定时任务、待办提醒与后台任务三路队列', () => {
     const payload: PendingNotificationsPayload = {
       scheduled_tasks: [{ title: '✅ 定时任务已完成：日报', body: '内容' }],
       todo_reminders: [{ title: '⏰ 待办紧急', body: '写周报' }],
+      background_tasks: [{ title: '✅ 后台任务完成：pytest -q', body: 'exit=0' }],
     };
-    expect(collectNotificationItems(payload)).toHaveLength(2);
+    expect(collectNotificationItems(payload)).toHaveLength(3);
   });
 
   it('丢弃没有标题的条目，容忍空载荷', () => {

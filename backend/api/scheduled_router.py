@@ -228,8 +228,12 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
     def drain_pending_notifications(
         svc: SchedulerService = Depends(service_dep),
     ) -> Dict[str, Any]:
-        # 局部导入:todo_reminder 依赖 todo_service,避免模块加载顺序耦合。
+        # 局部导入:todo_reminder / background_notifications 依赖工具层,
+        # 避免模块加载顺序耦合。
         from backend.scheduler.todo_reminder import get_todo_reminder_scheduler
+        from backend.services.background_notifications import (
+            get_background_notification_queue,
+        )
 
         reminder_scheduler = get_todo_reminder_scheduler()
         todo_items = (
@@ -240,6 +244,8 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
         return {
             "scheduled_tasks": svc.drain_pending_notifications(),
             "todo_reminders": todo_items,
+            # 2026-11-06 Phase 1: 后台 Bash 任务完成通知
+            "background_tasks": get_background_notification_queue().drain(),
         }
 
     return router
