@@ -517,8 +517,8 @@ export const zhSettingsAndModels = {
   'office.generate.journal.hint': '选择 .docx 期刊模板 → 填写内容 → 一键生成或校验格式',
   'office.rules.guide.title': 'Word 文档审校入口',
   'office.rules.guide.body':
-    '导入文档后，在「文档处理」的预览面板里进行 Word 审校、修订与导出 PDF；此分区用于把规范 / 范本文档抽取为可复用的规则包。',
-  'office.rules.guide.action': '去文档处理',
+    '导入文档后，在「文档」的预览面板里进行 Word 审校、修订与导出 PDF；此分区用于把规范 / 范本文档抽取为可复用的规则包。',
+  'office.rules.guide.action': '去文档',
 } as const;
 
 export function formatZhSettingsAndModelsSummary(): string {
