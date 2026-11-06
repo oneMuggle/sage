@@ -452,7 +452,7 @@ export const enSettingsAndModels = {
   'office.staging.review': 'Old import with no live owner — manual review only',
   'office.staging.untracked': 'No trustworthy staging evidence — retain',
   'office.staging.unreadable': 'Evidence unavailable — retain',
-  'office.title': 'Documents and Review',
+  'office.title': 'Document Workbench',
   'office.selectWorkspace': 'Select Workspace',
   'office.emptyState': 'Select a workspace directory to get started',
   'office.section.pickFile': 'Select File',
@@ -518,10 +518,10 @@ export const enSettingsAndModels = {
   'office.generate.success': 'Generated',
 
   // ─── 2026-11 IA restructure: section tabs / LaTeX sub-tabs / env popover ─────
-  'office.tabs.label': 'Document workspace sections',
+  'office.tabs.label': 'Tabs for the document workbench',
   'office.tab.documents': 'Documents',
   'office.tab.generate': 'Generate',
-  'office.tab.rules': 'Review & Rules',
+  'office.tab.rules': 'Rules',
   'office.tab.latex': 'LaTeX',
   'office.latex.tabs.label': 'LaTeX sections',
   'office.latex.project': 'Project & Build',

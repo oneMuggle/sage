@@ -77,6 +77,7 @@
     "src/features/playbook/PlaybookCard.tsx": 825,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
     "src/features/project-type/PolymorphicArchetypeCards.tsx": 879,
+    "src/features/office/OfficePreviewPanel.tsx": 846,
     "src/features/send-message/__tests__/useChat.streamingAndGates.test.ts": 957,
     "src/features/send-message/chatStreamStore.ts": 865,
     "src/features/send-message/useChat.ts": 1112,
