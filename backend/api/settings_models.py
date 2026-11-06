@@ -111,6 +111,9 @@ class EndpointPayload(BaseModel):
     # (validate_reasoning_effort / validate_thinking_budget)。
     reasoningEffort: Optional[str] = None  # noqa: N815
     thinkingBudget: Optional[int] = None  # noqa: N815
+    # 2026-09-18 (端点限额): 可选 {dailyTokens, monthlyBudgetUsd};
+    # 值校验下沉到 canonicalizer validate_quota.
+    quota: Optional[dict] = None
 
 
 # --------------------------------------------------------------------------

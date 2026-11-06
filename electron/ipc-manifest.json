@@ -335,6 +335,7 @@
     "update_agent": { "method": "PATCH", "path": "/api/v1/agents/{id}" },
     "update_learned_preference": { "method": "PUT", "path": "/api/v1/memory/preferences/learned" },
     "update_user_profile": { "method": "PUT", "path": "/api/v1/memory/profile/{id}" },
+    "usage_by_endpoint": { "method": "GET", "path": "/api/v1/usage/by-endpoint" },
     "usage_export_csv": { "method": "GET", "path": "/api/v1/usage/export.csv" },
     "usage_get_session": { "method": "GET", "path": "/api/v1/usage/session/{sessionId}" },
     "usage_list_requests": { "method": "GET", "path": "/api/v1/usage/requests" },
