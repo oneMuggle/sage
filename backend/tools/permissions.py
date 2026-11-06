@@ -216,6 +216,8 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "list_scheduled_tasks": ToolCapability.READ,
     "schedule_task": ToolCapability.WRITE,
     "cancel_scheduled_task": ToolCapability.WRITE,
+    # 2026-11-05: 会话唤醒 —— 注册未来自我恢复（WakeStore 持久化副作用）。
+    "wake_session_at": ToolCapability.WRITE,
     # --- 待办 ---
     "list_todos": ToolCapability.READ,
     "add_todo": ToolCapability.WRITE,
@@ -257,6 +259,7 @@ SELF_MODIFY_TOOLS: FrozenSet[str] = frozenset(
         "update_sage_config",
         "schedule_task",
         "cancel_scheduled_task",
+        "wake_session_at",
     }
 )
 

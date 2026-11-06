@@ -213,7 +213,14 @@ CONFIG_TOOLS = ("read_sage_config", "update_sage_config", "diagnose_sage_config"
 # WRITE_LOCAL 走权限审批（持久化副作用 + 未来向会话注入消息）。
 # 仅赋给 primary 主助手；子代理白名单严禁纳入 —— 防止被委派的子任务自行注册
 # 长期定时行为（与 CONFIG_TOOLS 同样的 coordinator-only 边界）。
-SCHEDULE_TOOLS = ("schedule_task", "list_scheduled_tasks", "cancel_scheduled_task")
+SCHEDULE_TOOLS = (
+    "schedule_task",
+    "list_scheduled_tasks",
+    "cancel_scheduled_task",
+    # 2026-11-05: 会话唤醒（A4 Suspend-Resume 的 LLM 面）—— 同属"让会话
+    # 在未来某个时刻自行继续"的定时面，复用 WakeStore 而非 APScheduler。
+    "wake_session_at",
+)
 
 # 待办子系统（2026-09-21 todolist-subsystem）：五个 LLM 工具面（add / list /
 # update / complete / delete），均挂 TodoService（SQLite 持久化 + 会话 ID

@@ -7,7 +7,10 @@ import { getRoutingTaskType } from '../../entities/routing/taskType';
 import { resolveEndpoint } from '../../entities/setting/types';
 import { ApiException, type ChatConfig, type ChatOfficeRef } from '../../shared/api';
 import type { GenerationStats } from '../../shared/api/types';
-import { agentStateToText, isIntermediatePlaceholderText } from '../../shared/lib/agentStateMapping';
+import {
+  agentStateToText,
+  isIntermediatePlaceholderText,
+} from '../../shared/lib/agentStateMapping';
 import {
   mapAgentErrorToText,
   mapLLMErrorToText,
@@ -661,9 +664,15 @@ export function useChat() {
         void useStore.getState().loadSessions();
         // 2026-09: 标题转为后台生成 (DONE 先行) —— 首轮标题尚未就绪时
         // 延迟补刷两次, 覆盖 LLM 生成/重试的常见耗时区间。
+        // 2026-11-05: 补刷前检查标题是否已被 session_updated 增量更新;
+        // 已生成则跳过,避免流结束后两次无效的全量 /sessions 拉取。
         if (lastDoneTitlePending) {
-          window.setTimeout(() => void useStore.getState().loadSessions(), 8000);
-          window.setTimeout(() => void useStore.getState().loadSessions(), 16000);
+          const refreshIfUntitled = (): void => {
+            const session = useStore.getState().sessions.find((s) => s.id === sid);
+            if (!session?.title) void useStore.getState().loadSessions();
+          };
+          window.setTimeout(refreshIfUntitled, 8000);
+          window.setTimeout(refreshIfUntitled, 16000);
         }
         // R25-D5: 消息对账 —— 网关/scheduler 等外部写库方不经本渲染进程，
         // 流结束后以服务端为准刷新一次，消除"开着会话看不到新消息"的窗口
@@ -695,7 +704,7 @@ export function useChat() {
               // 会话标题更新事件 (producer 在 DONE 前推送)
               // 精确更新单个会话标题，避免全量 reload 抖动
               if (evt.type === 'session_updated') {
-                if (evt.subtype === 'title_updated' && evt.title) {
+                if (evt.subtype === 'title_updated' && typeof evt.title === 'string') {
                   useStore.getState().updateSession(sid, { title: evt.title });
                 } else {
                   // 其它 session_updated 子类型仍走全量刷新
@@ -743,8 +752,7 @@ export function useChat() {
                 const stepContent = isIntermediatePlaceholderText(rawContent) ? '' : rawContent;
                 const stepReasoning = streamSnapshot?.reasoning ?? '';
                 const stepIndex = typeof evt.step_index === 'number' ? evt.step_index : null;
-                const stepToolCalls =
-                  toolCallsSnapshot.length > 0 ? toolCallsSnapshot : undefined;
+                const stepToolCalls = toolCallsSnapshot.length > 0 ? toolCallsSnapshot : undefined;
                 const stepPatch: Partial<Message> = {
                   content: stepContent,
                   reasoning_content: stepReasoning || null,

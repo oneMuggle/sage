@@ -68,6 +68,18 @@ import {
 import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deepLink';
 import { loadFileWithRetry } from './loadFileRetry';
 import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
+import {
+  getNotificationPrefsPath,
+  readNotificationPrefs,
+  writeNotificationPrefs,
+  type NotificationPrefs,
+} from './notificationPrefs';
+import {
+  SCHEDULER_NOTIFICATION_POLL_MS,
+  startSchedulerNotificationPoller,
+  type PendingNotificationsPayload,
+} from './schedulerNotifications';
+import { applyTaskbarAttention, decideTaskbarAttention } from './notifyOverlay';
 import { readLogTimezone, writeLogTimezone } from './logTimezone';
 import { setLogTimezone } from './logger';
 import { detectProjectRoot } from './projectDetector';
@@ -428,6 +440,17 @@ try {
   );
 } catch {
   closeToTrayEnabled = false;
+}
+
+// 2026-11-05: 通知偏好（主进程持有 JSON，同 closeToTray）。读取失败保持默认开启，
+// 升级用户不会被静默静音。发 OS 通知前统一读这个内存态。
+let notificationPrefs: NotificationPrefs = { enabled: true, backgroundTasks: true };
+try {
+  notificationPrefs = readNotificationPrefs(
+    getNotificationPrefsPath(app.isPackaged, app.getPath('userData'), process.cwd()),
+  );
+} catch {
+  // 保持 DEFAULT（全开）
 }
 
 let demoModeFromSettings = false;
@@ -1043,6 +1066,10 @@ function createMainWindow(): void {
       // (SUID 限制); 现代平台启用 Chromium sandbox —— preload 仅用
       // contextBridge/ipcRenderer, 满足 sandboxed preload 约束。
       sandbox: !NEEDS_NO_SANDBOX,
+      // 2026-11-05: 主窗口隐藏/最小化后不再被 Chromium 节流到 1/min,
+      // 否则后台 SSE 事件流、1s tick、重试倒计时全部被拖慢,导致"任务挂
+      // 后台后通知延迟/丢失"。仅影响隐藏期间 CPU 占用略升。
+      backgroundThrottling: false,
       // 演示模式 (2026-08-27): 同步把演示标志传给 renderer (preload 读 argv
       // 暴露)。首屏请求早于 loadSettings 完成, renderer 的 isDemoMode() 若
       // 只读 settings store 会竞态漏拦截 → 请求打到已跳过的后端报错。
@@ -1051,6 +1078,14 @@ function createMainWindow(): void {
   });
   setMainWindow(win);
   ensurePetInitialized();
+
+  // 2026-11-05: 窗口重新聚焦 → 清除任务栏注意力信号（闪烁/dock badge）。
+  win.on('focus', () => {
+    applyTaskbarAttention(
+      { count: 0, kind: null },
+      { win, setDockBadge: (text) => app.dock?.setBadge(text) },
+    );
+  });
 
   // 主窗口关闭时一并回收内置浏览器窗口与桌宠窗口：否则残留的可见/隐藏窗口
   // 会让 window-all-closed 永不触发，进程在无 UI 状态下继续存活（桌宠是
@@ -1563,6 +1598,32 @@ async function registerIpcHandlers(): Promise<void> {
     return { ok: true, enabled: closeToTrayEnabled };
   });
 
+  // 2026-11-05: 通知偏好读写（设置页 → 主进程）。与 close-to-tray 同模式：
+  // 状态由主进程持有并落 JSON，renderer 只做 UI。
+  ipcMain.handle('sage:notification-prefs:get', () => ({ ...notificationPrefs }));
+
+  ipcMain.handle(
+    'sage:notification-prefs:set',
+    (evt, payload: Partial<NotificationPrefs> | undefined) => {
+      if (!isTrustedRenderer(evt.sender)) {
+        throw new Error('未授权的窗口请求');
+      }
+      notificationPrefs = {
+        enabled: payload?.enabled !== false,
+        backgroundTasks: payload?.backgroundTasks !== false,
+      };
+      try {
+        writeNotificationPrefs(
+          getNotificationPrefsPath(app.isPackaged, app.getPath('userData'), process.cwd()),
+          notificationPrefs,
+        );
+      } catch (err) {
+        logger.warn('main: 写入通知偏好失败:', err);
+      }
+      return { ok: true, ...notificationPrefs };
+    },
+  );
+
   ipcMain.handle('sage:demo-mode:set', (evt, payload: { demoMode: boolean }) => {
     if (!isTrustedRenderer(evt.sender)) {
       return { ok: false, error: '未授权的窗口请求' };
@@ -1718,6 +1779,7 @@ async function registerIpcHandlers(): Promise<void> {
     (evt, payload: { sessionId: string; title?: string; body?: string }) => {
       if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
       if (!Notification.isSupported()) return { shown: false };
+      if (!notificationPrefs.enabled) return { shown: false, reason: 'disabled' };
       const { sessionId } = payload;
       if (!sessionId) return { shown: false };
 
@@ -1757,6 +1819,7 @@ async function registerIpcHandlers(): Promise<void> {
   ipcMain.handle('sage:notify:approval', (evt, payload: { title?: string; body?: string }) => {
     if (!isTrustedRenderer(evt.sender)) return { ok: false, reason: 'untrusted' };
     if (!Notification.isSupported()) return { ok: false, reason: 'unsupported' };
+    if (!notificationPrefs.enabled) return { ok: false, reason: 'disabled' };
     const title = String(payload?.title ?? 'Sage 需要你的审批').slice(0, 120);
     const body = String(payload?.body ?? '').slice(0, 300);
     const notification = new Notification({ title, body, silent: false });
@@ -1770,6 +1833,25 @@ async function registerIpcHandlers(): Promise<void> {
     notification.show();
     return { ok: true };
   });
+
+  // 2026-11-05: 任务栏注意力（等待审批/失败的轻量信号）。窗口聚焦时自动清除。
+  ipcMain.handle(
+    'sage:notify:set-attention',
+    (
+      evt,
+      input: { awaitingApproval?: number; failed?: number; completed?: number } | undefined,
+    ) => {
+      if (!isTrustedRenderer(evt.sender)) return false;
+      if (!notificationPrefs.enabled) return false;
+      const state = decideTaskbarAttention(input ?? {});
+      const win = getSenderWindow(evt) ?? mainWindow;
+      applyTaskbarAttention(state, {
+        win,
+        setDockBadge: (text) => app.dock?.setBadge(text),
+      });
+      return true;
+    },
+  );
 
   ipcMain.handle('sage:window-controls:capture-page', async (evt) => {
     if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
@@ -1973,6 +2055,7 @@ async function registerIpcHandlers(): Promise<void> {
     // Win7/老系统 Notification 不可用时静默降级（isSupported 守卫）。
     onRepliesReceived: (info) => {
       if (!Notification.isSupported()) return;
+      if (!notificationPrefs.enabled) return;
       const notification = new Notification({
         title: `管理员回复了你的反馈 · ${info.title}`,
         body: info.lastBody.slice(0, 160),
@@ -1989,6 +2072,34 @@ async function registerIpcHandlers(): Promise<void> {
       notification.show();
     },
   });
+
+  // 2026-11-05: 后台任务通知轮询 —— 定时任务触发/待办提醒由后端内存队列
+  // 累积,主进程每 15s 排空一次。不依赖 renderer,关闭到托盘后仍可提醒。
+  if (!isDemoProcess()) {
+    startSchedulerNotificationPoller({
+      fetchPending: async () => {
+        const result = await invokeBackend(
+          'scheduled_pending_notifications',
+          {},
+          BACKEND_URL,
+          backendAuthToken ?? undefined,
+        );
+        return (result ?? {}) as PendingNotificationsPayload;
+      },
+      isEnabled: () => notificationPrefs.enabled && notificationPrefs.backgroundTasks,
+      notify: (title, body) => {
+        if (!Notification.isSupported()) return;
+        new Notification({
+          title: title.slice(0, 120),
+          body: body.slice(0, 200),
+          silent: false,
+        }).show();
+      },
+      intervalMs: SCHEDULER_NOTIFICATION_POLL_MS,
+      log: (event, details) => logger.warn(event, details),
+    });
+  }
+
   registerFeedbackIpc(
     (channel, handler) => {
       ipcMain.handle(channel, async (evt, ...args: unknown[]) => {

@@ -783,3 +783,4 @@ class TestGetEvolutionTaskNames:
                 name=n, task=MagicMock(), cron_expr="0 3 * * *"
             )
         assert set(scheduler.get_evolution_task_names()) == {"a", "b", "c"}
+

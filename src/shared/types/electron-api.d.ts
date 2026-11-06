@@ -851,6 +851,18 @@ export interface ElectronAPI {
   /** E-2 (round5 批次 E): 关闭即隐藏到托盘偏好读写 */
   getCloseToTray?: () => Promise<{ enabled: boolean }>;
   setCloseToTray?: (enabled: boolean) => Promise<{ ok: boolean; enabled: boolean }>;
+  /** 2026-11-05: 通知偏好（总开关 + 后台任务通知） */
+  getNotificationPrefs?: () => Promise<{ enabled: boolean; backgroundTasks: boolean }>;
+  setNotificationPrefs?: (prefs: {
+    enabled: boolean;
+    backgroundTasks: boolean;
+  }) => Promise<{ ok: boolean; enabled: boolean; backgroundTasks: boolean }>;
+  /** 2026-11-05: 任务栏注意力提示（等待审批时闪烁 / macOS dock badge） */
+  setTaskbarAttention?: (input: {
+    awaitingApproval?: number;
+    failed?: number;
+    completed?: number;
+  }) => Promise<boolean>;
   /** 日志时区 (2026-09-17): 读写日志时间戳时区设置 */
   getLogTimezone?: () => Promise<{ logTimezone: string }>;
   setLogTimezone?: (logTimezone: string) => Promise<{ ok: boolean; error?: string }>;

@@ -129,6 +129,7 @@ _EXPECTED_ONLINE = [
     "schedule_task",
     "list_scheduled_tasks",
     "cancel_scheduled_task",
+    "wake_session_at",
     "add_todo",
     "list_todos",
     "complete_todo",
@@ -216,6 +217,7 @@ _EXPECTED_SCHEMA_NAMES = [
     "schedule_task",
     "list_scheduled_tasks",
     "cancel_scheduled_task",
+    "wake_session_at",
     "add_todo",
     "list_todos",
     "complete_todo",
@@ -397,7 +399,7 @@ def test_standard_online_matches_golden_snapshot() -> None:
     registry = _install_via_facade()
 
     assert registry.list_names() == _EXPECTED_ONLINE
-    assert len(registry.list_names()) == len(set(registry.list_names())) == 114
+    assert len(registry.list_names()) == len(set(registry.list_names())) == 115
 
 
 def test_standard_risks_and_schemas_align_with_golden_snapshot() -> None:
@@ -421,7 +423,7 @@ def test_network_gating_counts_and_differences() -> None:
     intranet = _install_via_facade(NetworkMode.INTRANET).list_names()
     offline = _install_via_facade(NetworkMode.OFFLINE).list_names()
 
-    assert (len(online), len(intranet), len(offline)) == (114, 113, 109)
+    assert (len(online), len(intranet), len(offline)) == (115, 114, 110)
     assert set(online) - set(intranet) == {"web_search"}
     assert set(intranet) - set(offline) == {
         "web_fetch",
@@ -491,7 +493,7 @@ def test_focus_install_excludes_heavy_tool_surfaces() -> None:
     registry = _install_bundles(_harness("focus"))
     names = registry.list_names()
 
-    assert len(names) == 57
+    assert len(names) == 58
     assert not any(name.startswith("office_") for name in names)
     assert not any(name.startswith("browser_") for name in names)
     assert not any(name.startswith("design_") for name in names)
@@ -504,7 +506,7 @@ def test_headless_install_excludes_ask_user_only() -> None:
     registry = _install_bundles(_harness("headless"))
     names = registry.list_names()
 
-    assert len(names) == 113
+    assert len(names) == 114
     assert "ask_user_question" not in names
     assert set(_EXPECTED_ONLINE) - set(names) == {"ask_user_question"}
     _assert_subsequence(names)
@@ -541,7 +543,7 @@ def test_register_all_tools_reads_project_harness(tmp_path: Path) -> None:
 
     registry = _install_via_facade()
 
-    assert len(registry.list_names()) == 113
+    assert len(registry.list_names()) == 114
     assert "ask_user_question" not in registry.list_names()
 
 
@@ -581,15 +583,19 @@ def _forwarded(bundle_name: str) -> Tuple[bool, int]:
     assert recorder.tools, f"{bundle_name} 未注册任何工具"
 
     wanted = scheduler_getter if bundle_name == "schedule" else todo_getter
+    # wake_session_at 不依赖 scheduler getter（直接复用 WakeStore 单例），
+    # 只校验确实持有 getter 的实例。
+    skip = {"wake_session_at"} if bundle_name == "schedule" else set()
+    checked = [tool for tool in recorder.tools if getattr(tool, "name", None) not in skip]
     return (
-        all(_has_attr_value(tool, wanted) for tool in recorder.tools),
+        all(_has_attr_value(tool, wanted) for tool in checked),
         len(recorder.tools),
     )
 
 
 @pytest.mark.parametrize(
     ("bundle_name", "expected_count"),
-    [("schedule", 3), ("todo", 5)],
+    [("schedule", 4), ("todo", 5)],
 )
 def test_service_getter_is_forwarded(bundle_name: str, expected_count: int) -> None:
     all_forwarded, count = _forwarded(bundle_name)
