@@ -462,17 +462,19 @@ async def test_execute_tool_calls_scoped_sets_and_restores_allowlist(monkeypatch
     service = _make_chat_service()
     captured = {}
 
-    async def _fake_execute(session_id, tool_calls, run):
+    async def _fake_execute(session_id, tool_calls, run, *, already_called=0):
         captured["value"] = skill_scope.peek_turn_skill_allowlist()[1]
-        return False
+        captured["already_called"] = already_called
+        return False, []
 
     monkeypatch.setattr(service, "_execute_tool_calls", _fake_execute)
 
     result = await service._execute_tool_calls_scoped(
-        "s1", [], None, {"zz-write-report"}
+        "s1", [], None, {"zz-write-report"}, already_called=2
     )
 
-    assert result is False
+    assert result == (False, [])
+    assert captured["already_called"] == 2
     assert captured["value"] == frozenset({"zz-write-report"})
     assert skill_scope.peek_turn_skill_allowlist()[0] is False
 

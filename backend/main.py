@@ -320,6 +320,34 @@ def _build_chat_service() -> ChatService:
     )
 
 
+def _wire_scheduler_executor(app: Any, main_loop: asyncio.AbstractEventLoop) -> bool:
+    """把 ChatService 暴露给 APScheduler 后台线程（execute 模式任务的入口）。
+
+    调用方需确保 ``app.state.scheduler`` 与 ``app.state.chat_service`` 已装配。
+    任一缺失 → 写 warning 并返回 ``False``，不抛异常（启动期不得因该装配
+    失败被阻塞；存量 ``deliver`` 模式任务仍不受影响）。
+    """
+    scheduler = getattr(app.state, "scheduler", None)
+    chat_service = getattr(app.state, "chat_service", None)
+    if scheduler is None or chat_service is None:
+        logger.warning(
+            "ScheduledTask executor 未装配：scheduler=%s chat_service=%s；"
+            "execute 模式任务将降级为 deliver",
+            scheduler is not None,
+            chat_service is not None,
+        )
+        return False
+    from backend.application.services.scheduled_task_executor import (
+        make_threadsafe_runner,
+    )
+
+    scheduler.set_executor(make_threadsafe_runner(chat_service, main_loop))
+    logger.info(
+        "ScheduledTask executor 已装配（execute 模式任务将运行真实对话）"
+    )
+    return True
+
+
 def _resolve_default_context_window() -> Optional[int]:
     """hex 路径的有效窗口：按已保存设置解析（与 legacy 同一实现）；失败返回 None。"""
     try:
@@ -336,6 +364,10 @@ async def lifespan(app: FastAPI):
     # Local desktop capability: resolve the token before serving any sensitive route.
     # The value is intentionally never logged or returned by the health endpoint.
     initialize_local_auth_token()
+
+    # 捕获主事件循环：_wire_scheduler_executor 需要它把协程调度到 lifespan 所在的
+    # 线程执行；APScheduler 后台线程通过 run_coroutine_threadsafe 跨过来。
+    main_loop = asyncio.get_running_loop()
 
     # R84: 已采用的 fileized harness lock 必须在任何 DB/恢复副作用前通过。
     from backend.application.kernel.harness_files import assert_adopted_harness_files_valid
@@ -869,6 +901,9 @@ async def lifespan(app: FastAPI):
     # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
     # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
     app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
+    # M4: 定时任务 execute 模式装配 —— 把 ChatService 桥接到 APScheduler 后台线程。
+    # 任一依赖缺失会降级为 deliver（不阻塞启动）。
+    _wire_scheduler_executor(app, main_loop)
 
     # M7 (2026-10-21): Harness 自进化埋点装配——工具/技能每次调用写入
     # harness_components 累积 effectiveness 指标（usage_count / success_rate
