@@ -66,6 +66,80 @@ def _get_skill_adapter():
     return get_singleton()
 
 
+def _skill_scope_denied(
+    adapter, name: str, allowed: Optional[Set[str]]
+) -> bool:
+    """技能是否越出作用域（M1）。
+
+    adapter 实现 ``is_scope_denied`` 时使用其完整语义（含专家私有技能
+    默认可遮罩）；旧 adapter / fake 退回纯允许集判定。
+    """
+    check = getattr(adapter, "is_scope_denied", None)
+    if callable(check):
+        return check(name, allowed)
+    return allowed is not None and name not in allowed
+
+
+def _resolve_specialist_scope(adapter, effective: str) -> Optional[Set[str]]:
+    """已判定请求指向专家 ``effective`` —— 解析其技能作用域。
+
+    无 ``skills`` 配置且 adapter 未实现 owner 解析 → ``None``（不受限）；
+    读取 / 解析异常 → 空集（fail-closed，拒绝全部技能）。
+    """
+    try:
+        from backend.data.agent_repo import AgentRepository
+
+        row = AgentRepository().get(effective)
+        patterns = (row or {}).get("skills") if row else None
+        resolve_agent = getattr(adapter, "resolve_agent_allowlist", None)
+        if callable(resolve_agent):
+            return resolve_agent(patterns, effective)
+        if not patterns:
+            return None
+        resolve_allowlist = getattr(adapter, "resolve_allowlist", None)
+        if callable(resolve_allowlist):
+            return resolve_allowlist(patterns)
+        from backend.domain.skill_scope import resolve_skill_allowlist
+
+        names = [s.name for s in adapter.list_skills()]
+        return resolve_skill_allowlist(patterns, names)
+    except Exception as exc:  # noqa: BLE001 — 已知专家 + 解析失败 → 拒绝全部
+        logger.warning("专家技能作用域解析失败（拒绝全部技能）: %s", exc)
+        return set()
+
+
+def _resolve_request_skill_allowlist(
+    adapter,
+    session_id: Optional[str] = None,
+    agent_id: Optional[str] = None,
+) -> Optional[Set[str]]:
+    """解析当前请求关联专家的技能允许集（M1，spec §5.1/§5.2）。
+
+    - ``session_id`` / ``agent_id`` 都缺省 → 主助手，返回 ``None``（不受限）；
+    - 专家无 ``skills`` 配置且无私有技能 → ``None``（不受限）；
+    - 否则 → adapter 的 owner 解析（公开技能按模式过滤 + 本人私有技能）。
+
+    fail-closed（安全审查 HIGH）：已判定请求指向某个专家后，解析任何
+    异常都返回空集（拒绝全部技能）—— 降级为 ``None`` 会把完整技能库
+    放给该专家。主助手路径不受影响。
+    """
+    if not session_id and not agent_id:
+        return None
+    try:
+        from backend.chat.specialist_binding import (
+            PRIMARY_AGENT_ID,
+            resolve_effective_agent_id_strict,
+        )
+
+        effective = resolve_effective_agent_id_strict(session_id or "", agent_id)
+    except Exception as exc:  # noqa: BLE001 — 无法判定归属 → 拒绝全部技能
+        logger.warning("请求专家归属解析失败（拒绝全部技能）: %s", exc)
+        return set()
+    if effective == PRIMARY_AGENT_ID:
+        return None
+    return _resolve_specialist_scope(adapter, effective)
+
+
 def _skill_to_dict(
     ext: dict, enabled: bool, usage_count: int, pinned: Optional[bool] = None
 ) -> dict:
@@ -98,9 +172,16 @@ def _get_pinned_names() -> Set[str]:
 
 @router.get("/skills")
 @with_db_lock
-def list_skills():
-    """列出所有已注册技能 (含 disabled 与 usage_count + SKILL.md 扩展字段)。"""
+def list_skills(
+    session_id: Optional[str] = None, agent_id: Optional[str] = None
+):
+    """列出所有已注册技能 (含 disabled 与 usage_count + SKILL.md 扩展字段)。
+
+    ``session_id`` / ``agent_id`` 用于解析会话绑定专家的技能允许集（M1，
+    spec §5.1）：提供时仅返回允许集内的技能（fail-closed）。
+    """
     adapter = _get_skill_adapter()
+    allowed = _resolve_request_skill_allowlist(adapter, session_id, agent_id)
     pinned_names = _get_pinned_names()
     return [
         _skill_to_dict(
@@ -109,7 +190,7 @@ def list_skills():
             adapter.usage_count(ext["name"]),
             pinned=ext["name"] in pinned_names,
         )
-        for ext in adapter.list_skills_extended()
+        for ext in adapter.list_skills_extended(allowed=allowed)
     ]
 
 
@@ -231,23 +312,46 @@ class SkillExecuteRequest(BaseModel):
 
 
 @router.post("/skills/{name}/execute")
-async def execute_skill(name: str, data: SkillExecuteRequest):
+async def execute_skill(
+    name: str,
+    data: SkillExecuteRequest,
+    session_id: Optional[str] = None,
+    agent_id: Optional[str] = None,
+):
     """执行技能 (PR-7)。
 
     - 200 + SkillResult (success / content / metadata / error)
+    - 403 + 结构化 detail (技能不在专家允许集内 — 越权执行，fail-closed)
     - 404 + 结构化 detail (技能名不存在 — 资源不存在的标准 REST 语义)
     - 422 (FastAPI 自动) — args 类型错等
     - execute 内部失败(技能 disabled / builtin 工具不可用)→ 200 + success=False,
       **不抛 4xx/5xx**,由前端按 success 字段判定。
+
+    ``session_id`` / ``agent_id`` 用于解析会话绑定专家的技能允许集（M1，
+    spec §5.1）：提供时拒绝允许集外的技能执行。
     """
     adapter = _get_skill_adapter()
+    # 解析含同步 SQLite 读取，放线程池避免阻塞事件循环（M1 review）。
+    from backend.utils.py_compat import to_thread
+
+    allowed = await to_thread(
+        _resolve_request_skill_allowlist, adapter, session_id, agent_id
+    )
+    if _skill_scope_denied(adapter, name, allowed):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "type": "skill_not_allowed",
+                "message": f"skill '{name}' is not permitted for this specialist",
+            },
+        )
     # 资源不存在 → 404 (与 disabled 走 200 + success=False 区分开)
     if not adapter.has_skill(name):
         raise HTTPException(
             status_code=404,
             detail={"type": "skill_not_found", "message": f"skill '{name}' not found"},
         )
-    result = await adapter.execute(name, data.action, data.args)
+    result = await adapter.execute(name, data.action, data.args, allowed=allowed)
     # 使用计数已由 adapter.execute() 成功路径自动 bump（含 DB 持久化）
     return {
         "success": result.success,
@@ -272,21 +376,35 @@ class SkillCommandRequest(BaseModel):
 
 
 @router.post("/skills/command")
-async def execute_slash_command(data: SkillCommandRequest):
+async def execute_slash_command(
+    data: SkillCommandRequest,
+    session_id: Optional[str] = None,
+    agent_id: Optional[str] = None,
+):
     """执行 slash command (M10)。
 
     - 200 + SkillResult (success / content / metadata / error)
       - success=True → content 是 SKILL.md body,供聊天层注入 system prompt
       - success=False → 内部执行失败(脚本异常等),前端按 success 字段判定
     - 404 + 结构化 detail — command 未注册 (无 user_invocable 技能匹配)
+      或不在专家允许集内（fail-closed，不泄漏命令存在性）
     - 422 (FastAPI 自动) — command 缺失或类型错
 
     设计: chat 层剥离 ``/`` 前缀后 POST 此端点;不需要再走 SkillRegistry.exists()
     (slash registry 本身就是 user_invocable 技能的子集,索引已构建完成)。
+
+    ``session_id`` / ``agent_id`` 用于解析会话绑定专家的技能允许集（M1，
+    spec §5.1）。
     """
     adapter = _get_skill_adapter()
+    # 解析含同步 SQLite 读取，放线程池避免阻塞事件循环（M1 review）。
+    from backend.utils.py_compat import to_thread
+
+    allowed = await to_thread(
+        _resolve_request_skill_allowlist, adapter, session_id, agent_id
+    )
     try:
-        result = await adapter.execute_command(data.command, data.args)
+        result = await adapter.execute_command(data.command, data.args, allowed=allowed)
     except LookupError as exc:
         # 命令未注册 → 404 (与 skill_not_found 语义一致)
         raise HTTPException(
@@ -303,14 +421,20 @@ async def execute_slash_command(data: SkillCommandRequest):
 
 @router.get("/skills/commands")
 @with_db_lock
-def list_slash_commands():
+def list_slash_commands(
+    session_id: Optional[str] = None, agent_id: Optional[str] = None
+):
     """列出所有已注册的 slash command (M10)。
 
     用于前端自动补全 / chat 输入提示。
     返回命令名列表 (带 ``/`` 前缀,如 ``["/review", "/commit"]``)。
+
+    ``session_id`` / ``agent_id`` 用于解析会话绑定专家的技能允许集（M1，
+    spec §5.1）：提供时仅返回允许集内的命令。
     """
     adapter = _get_skill_adapter()
-    return {"commands": adapter.list_slash_commands()}
+    allowed = _resolve_request_skill_allowlist(adapter, session_id, agent_id)
+    return {"commands": adapter.list_slash_commands(allowed=allowed)}
 
 
 # ========== PR-A: Skills management - 物理删除 SKILL.md ==========
@@ -512,3 +636,10 @@ class LegacyPreferenceItem(BaseModel):
     category: str = "general"
 
 
+# ==================== M3/M4: 技能存储与导出 ====================
+# 抽离到独立模块，避免本文件越过 800 行架构上限。
+from backend.api.skill_storage_export_routes import (
+    router as _skill_storage_export_router,  # noqa: E402
+)
+
+router.include_router(_skill_storage_export_router)

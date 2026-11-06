@@ -126,6 +126,41 @@ export interface SkillsElectronApiBridge {
    *  `pickedPath` 必须与上一次 pick 返回的路径一致（主进程会比对 recentPickedDirectory）；
    *  不一致 → 抛出「directory selection changed, please pick again」。 */
   importSkillDirectory: (pickedPath: string) => Promise<ImportResult>;
+  /** M3: open the effective writable skills directory in the OS file manager. */
+  openSkillDirectory: () => Promise<{ success: true }>;
+  /** M3: reveal a SKILL.md skill's real directory in the OS file manager. */
+  showSkillInFolder: (name: string) => Promise<{ success: true }>;
+  /** M4: export a single skill folder as a zip (save dialog). null = cancelled. */
+  exportSkill: (name: string) => Promise<{ ok: true; path: string } | null>;
+  /** M4: export all "my skills" as one zip (save dialog). null = cancelled. */
+  exportMySkills: () => Promise<{ ok: true; path: string } | null>;
+}
+
+/** M1-E: result of importing a `.sage` package (backend `import_specialist`). */
+export interface SpecialistPackageImportResult {
+  /** Newly generated agent id (sanitized + unique suffix). */
+  id: string;
+  /** Display name parsed from persona.md frontmatter. */
+  name: string;
+}
+
+/** M1-E: result of exporting a `.sage` package to disk. */
+export interface SpecialistPackageExportResult {
+  ok: true;
+  /** Absolute path written by the save dialog. */
+  path: string;
+}
+
+/**
+ * Shape of `window.electronAPI.specialists` — populated by the preload bridge.
+ * Binary zip transport lives in the main process because the generic
+ * `invoke` path always parses JSON (see electron/specialistIpc.ts).
+ */
+export interface SpecialistsElectronApiBridge {
+  /** Native picker + multipart POST /api/v1/specialists/import. Null on cancel. */
+  importPackage: () => Promise<SpecialistPackageImportResult | null>;
+  /** Binary GET export + save dialog. Null on cancel. */
+  exportPackage: (agentId: string) => Promise<SpecialistPackageExportResult | null>;
 }
 
 /**
@@ -722,6 +757,8 @@ export interface ElectronAPI {
   ): Promise<UnlistenFn>;
   windowControls: WindowControlsBridge;
   skills: SkillsElectronApiBridge;
+  /** M1-E: 专家包 (.sage) 导入/导出桥。 */
+  specialists: SpecialistsElectronApiBridge;
   /** Workspace MCP Server (M4) — optional: absent in web / older preloads. */
   remoteMcp?: RemoteMcpElectronApiBridge;
   arenaToken: ArenaTokenElectronApiBridge;
@@ -822,12 +859,25 @@ export interface ElectronAPI {
   /** E-2 (round5 批次 E): 关闭即隐藏到托盘偏好读写 */
   getCloseToTray?: () => Promise<{ enabled: boolean }>;
   setCloseToTray?: (enabled: boolean) => Promise<{ ok: boolean; enabled: boolean }>;
-  /** 2026-11-05: 通知偏好（总开关 + 后台任务通知） */
-  getNotificationPrefs?: () => Promise<{ enabled: boolean; backgroundTasks: boolean }>;
+  /** 2026-11-05: 通知偏好（总开关 + 后台任务通知 + Webhook） */
+  getNotificationPrefs?: () => Promise<{
+    enabled: boolean;
+    backgroundTasks: boolean;
+    webhookUrl: string;
+    slackWebhookUrl: string;
+  }>;
   setNotificationPrefs?: (prefs: {
     enabled: boolean;
     backgroundTasks: boolean;
-  }) => Promise<{ ok: boolean; enabled: boolean; backgroundTasks: boolean }>;
+    webhookUrl?: string;
+    slackWebhookUrl?: string;
+  }) => Promise<{
+    ok: boolean;
+    enabled: boolean;
+    backgroundTasks: boolean;
+    webhookUrl: string;
+    slackWebhookUrl: string;
+  }>;
   /** 2026-11-05: 任务栏注意力提示（等待审批时闪烁 / macOS dock badge） */
   setTaskbarAttention?: (input: {
     awaitingApproval?: number;

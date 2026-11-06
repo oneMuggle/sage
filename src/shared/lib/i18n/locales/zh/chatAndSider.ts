@@ -71,6 +71,12 @@ export const zhChatAndSider = {
   'chat.orchMode.forceMulti': '强制编排（LLM 拆解）',
   'chat.orchMode.templateResearchWrite': '模板：调研与写作',
   'chat.orchMode.templateGatherAnalyzeReport': '模板：收集-分析-报告',
+  // M0 (2026-11-03): 会话级专家选择器
+  'chat.specialist.label': '专家',
+  'chat.specialist.primary': '主助手',
+  'chat.specialist.hint': '当前会话使用的专家（仅影响本会话后续轮次）',
+  'chat.specialist.switched': '本会话专家已切换为 {name}',
+  'chat.specialist.switchFailed': '切换专家失败',
   'chat.stop': '停止',
   'chat.config_warning': '未配置 API 端点或对话模型',
   'chat.config_warning_action': '前往设置',
@@ -121,6 +127,11 @@ export const zhChatAndSider = {
   'chat.sources_group_wiki': '知识库',
   'chat.sources_group_web': '网页',
   'chat.sources_group_tool': '工具',
+  // M2-Task 4: 专家知识引用（知识绑定检索命中）
+  'chat.sources_group_knowledge': '专家知识',
+  'chat.sources_open_knowledge_wiki': '在项目 Wiki 中查看此文档',
+  'chat.sources_open_knowledge_material': '在项目资料中查看',
+  'chat.sources_open_knowledge_private': '专家私有知识（暂未支持打开）',
   // R38: 技能激活展示
   'chat.skills_activated': '个技能已激活',
   'chat.skills_toggle': '查看激活的技能',
@@ -625,7 +636,7 @@ export const zhChatAndSider = {
     '启用后，SKILL.md 中的脚本（如 Bash/PowerShell）可被分发执行。关闭时所有脚本分发请求均被拒绝。',
   'settings.skills.directory.label': '技能目录',
   'settings.skills.directory.desc':
-    'SKILL.md 文件的搜索目录（绝对路径）。留空表示使用缺省路径 ~/.sage/skills。',
+    'SKILL.md 文件的搜索目录（绝对路径）。留空表示使用缺省路径 ~/.sage/skills。用户目录中的技能在应用升级后仍会保留；请勿指向应用安装目录。',
 
   // ─── 设置页 · 全局规则 (G1) ───────
   'settings.global_rules.title': '全局规则',

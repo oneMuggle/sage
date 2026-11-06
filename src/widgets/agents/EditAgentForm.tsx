@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
+import { listModels } from '../../entities/model-catalog/api';
+import type { CandidateModel } from '../../entities/model-catalog/types';
+import { useSettings } from '../../features/manage-settings/useSettings';
 import {
   AGENT_MAX_ITERATIONS_CEILING,
   AGENT_MIN_ITERATIONS,
@@ -69,10 +72,7 @@ export function findPluginToolWildcardCover(
 ): string | undefined {
   if (!pluginName) return undefined;
   const ownNamespace = `${PLUGIN_TOOL_PREFIX}${pluginName}__`;
-  if (
-    !toolName.startsWith(ownNamespace) ||
-    toolName.length <= ownNamespace.length
-  ) {
+  if (!toolName.startsWith(ownNamespace) || toolName.length <= ownNamespace.length) {
     return undefined;
   }
 
@@ -229,12 +229,38 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
   // tools 用本地文本态承接逐字输入（允许写到一半的名字/重复行存在），
   // 每次变更把解析后的数组同步回 form 草稿；直接用 value('tools') 回显
   // 会在输入过程中被去重/重排打断光标。
-  const [toolsText, setToolsText] = useState<string>(() =>
-    formatAgentToolsInput(value('tools')),
-  );
+  const [toolsText, setToolsText] = useState<string>(() => formatAgentToolsInput(value('tools')));
   useEffect(() => {
     setToolsText(formatAgentToolsInput(agent.tools));
   }, [agent]);
+
+  // M0 (2026-11-03): 模型字段改为目录下拉 —— 候选来自 model catalog，
+  // 拉取失败/无端点时回退为自由文本输入，绝不阻塞编辑。
+  const { settings } = useSettings();
+  const chatEndpointId = settings.modelSelections.chatModel.endpointId;
+  const [modelCatalog, setModelCatalog] = useState<CandidateModel[]>([]);
+  useEffect(() => {
+    setModelCatalog([]);
+    if (!chatEndpointId) return;
+    let cancelled = false;
+    listModels({ endpointId: chatEndpointId, limit: 100, offset: 0 })
+      .then((data) => {
+        if (!cancelled) setModelCatalog(data.items);
+      })
+      .catch(() => {
+        if (!cancelled) setModelCatalog([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chatEndpointId]);
+  const modelOptions = useMemo(() => {
+    const ids = modelCatalog.map((m) => m.model_key.model_id);
+    // 当前值不在 catalog 中也保留，允许用户看到并修改已保存的模型
+    const current = value('model_config').model;
+    if (current && !ids.includes(current)) ids.unshift(current);
+    return ids;
+  }, [modelCatalog, value('model_config').model]);
 
   const [publishedPluginTools, setPublishedPluginTools] = useState<PublishedPluginTool[]>([]);
   const [pluginToolsLoading, setPluginToolsLoading] = useState(true);
@@ -351,8 +377,8 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
           className="w-full rounded-lg border border-border px-3 py-2 bg-surface dark:bg-surface-elevated font-mono text-xs"
         />
         <p className="text-xs text-muted mt-1">
-          每行一项（也可用逗号分隔），保存时自动去空白与重复项；清空表示该
-          Agent 不暴露任何工具。插件工具可写完整名（如
+          每行一项（也可用逗号分隔），保存时自动去空白与重复项；清空表示该 Agent
+          不暴露任何工具。插件工具可写完整名（如
           <code> plugin__demo__hello</code>），或用 <code>plugin__demo__*</code>{' '}
           放行该插件的全部能力（包含其将来新增的能力）、
           <code>plugin__*</code> 放行全部插件。通配只决定可见性，插件调用仍
@@ -379,8 +405,7 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
             <p className="mt-3 text-xs text-muted">正在加载运行中插件工具…</p>
           ) : pluginToolsError ? (
             <p className="mt-3 text-xs text-error" role="alert">
-              加载运行中插件工具失败：{pluginToolsError}。可点击刷新重试，
-              或继续手动编辑上方文本。
+              加载运行中插件工具失败：{pluginToolsError}。可点击刷新重试， 或继续手动编辑上方文本。
             </p>
           ) : publishedPluginTools.length === 0 ? (
             <p className="mt-3 text-xs text-muted">
@@ -402,7 +427,9 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
                   : tool.description;
                 const permissionSummary =
                   tool.permissions.length > 0
-                    ? tool.permissions.map((permission) => describePermission(permission)).join('、')
+                    ? tool.permissions
+                        .map((permission) => describePermission(permission))
+                        .join('、')
                     : '未声明权限（按外部进程执行处理）';
                 return (
                   <div key={tool.tool_name} className="flex items-start gap-2">
@@ -486,18 +513,40 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
           <label htmlFor="agent-model" className="block text-sm font-medium mb-1">
             模型
           </label>
-          <input
-            id="agent-model"
-            type="text"
-            value={value('model_config').model}
-            onChange={(e) =>
-              onChange({
-                ...form,
-                model_config: { ...value('model_config'), model: e.target.value },
-              })
-            }
-            className="w-full rounded-lg border border-border px-3 py-2 bg-surface dark:bg-surface-elevated"
-          />
+          {modelOptions.length > 0 ? (
+            <select
+              id="agent-model"
+              value={value('model_config').model}
+              onChange={(e) =>
+                onChange({
+                  ...form,
+                  model_config: { ...value('model_config'), model: e.target.value },
+                })
+              }
+              className="w-full rounded-lg border border-border px-3 py-2 bg-surface dark:bg-surface-elevated"
+            >
+              <option value="">（跟随全局模型）</option>
+              {modelOptions.map((modelId) => (
+                <option key={modelId} value={modelId}>
+                  {modelId}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id="agent-model"
+              type="text"
+              value={value('model_config').model}
+              onChange={(e) =>
+                onChange({
+                  ...form,
+                  model_config: { ...value('model_config'), model: e.target.value },
+                })
+              }
+              placeholder="跟随全局"
+              className="w-full rounded-lg border border-border px-3 py-2 bg-surface dark:bg-surface-elevated"
+            />
+          )}
         </div>
         <div>
           <label htmlFor="agent-temperature" className="block text-sm font-medium mb-1">

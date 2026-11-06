@@ -90,6 +90,22 @@ export interface Memory {
   scope?: 'user' | 'project' | 'global';
   /** scope='project' 时的项目目录 (规范化绝对路径)。 */
   project_key?: string;
+  /** M3 专家归属轴 (2026-11-04): NULL=共享 / 'primary'=默认助手私有 / 'specialist-x'=专家私有。 */
+  agent_id?: string;
+}
+
+/**
+ * M3-Task 7 (2026-11-04): 提升为共享的结果。
+ *
+ * - `promoted`: 归属已从私有专家改为共享层（所有专家可见）
+ * - `already_shared`: 本就在共享层，幂等无操作
+ * - `not_found`: 记忆不存在或不可提升
+ */
+export interface MemoryPromoteResult {
+  status: 'promoted' | 'already_shared' | 'not_found';
+  memory_id: string;
+  memory_type: string;
+  previous_agent_id: string | null;
 }
 
 /**
@@ -183,7 +199,13 @@ export interface Skill {
   usage_count: number;
   // SKILL.md 适配层 (PR-8) 新增字段 — builtin 时不存在
   source?: 'builtin' | 'skillmd';
+  // M2 来源枚举: 让技能页按「内置 / 推荐模板 / 我的技能」分组。
+  // builtin=代码实现; shipped=随包只读模板; generated=AI 审批生成;
+  // imported=用户导入; user=历史/手工放置(无法区分导入与手写)。
+  origin?: 'builtin' | 'shipped' | 'generated' | 'imported' | 'user';
   body?: string;
+  // A16: SKILL.md frontmatter ``when_to_use`` 原文（自动激活触发场景）
+  when_to_use?: string;
   scripts?: string[];
   base_dir?: string;
   version?: string;
@@ -352,6 +374,56 @@ export interface AgentProfile {
   enabled: boolean;
   /** 后端 PR-3 起返回; PR-4 PATCH 后被刷新 */
   updated_at?: number;
+  /** M1 (2026-11-03) 专家卡扩展字段 — 技能允许集（支持 `plugin__<name>__*` 通配） */
+  skills?: string[];
+  /** M1 知识绑定列表（M2 启用检索） */
+  knowledge_bindings?: Array<Record<string, unknown>>;
+  /** M1 记忆读写策略 */
+  memory_policy?: Record<string, unknown>;
+  /** M1 卡片 UI：头像 / tagline / 开场白 / 推荐提示 */
+  persona_ui?: Record<string, unknown>;
+  /** M1 权限模式 */
+  permission_mode?: 'read_only' | 'workspace_write' | 'prompt' | 'full_access';
+  /** M1 专家版本号（人设/知识绑定变更时 +1） */
+  version?: number;
+  /** M1 来源：builtin / user / imported */
+  source?: 'builtin' | 'user' | 'imported';
+}
+
+/**
+ * 知识源类型（与后端 `backend/agents/knowledge_binding.py` 的
+ * `KnowledgeSourceType` 字面量严格对齐，M2-Task 1/2）。
+ */
+export type KnowledgeSourceType =
+  | 'wiki_project'
+  | 'zotero_collection'
+  | 'project_material'
+  | 'workspace_fts'
+  | 'specialist_private';
+
+/** 专家知识绑定（GET /api/v1/specialists/{id}/knowledge 单项）。 */
+export interface KnowledgeBinding {
+  /** 绑定唯一 ID（后端生成的 12 位 hex 短 hash） */
+  id: string;
+  agent_id: string;
+  source_type: KnowledgeSourceType;
+  /** 源标识：project_id / collection_key / workspace_path / agent_id */
+  source_id: string;
+  /** 展示名 */
+  name: string;
+  /** 可选过滤（tag / 路径前缀），当前 UI 不暴露 */
+  filters: Record<string, unknown>;
+  /** Unix 秒 */
+  created_at: number;
+}
+
+/** POST /api/v1/specialists/{id}/knowledge 请求体。 */
+export interface KnowledgeBindingCreate {
+  agent_id: string;
+  source_type: KnowledgeSourceType;
+  source_id: string;
+  name: string;
+  filters?: Record<string, unknown>;
 }
 
 /**
@@ -361,7 +433,7 @@ export interface AgentProfile {
  * 形状匹配 Tauri `AgentUpdateRequest` (src-tauri/src/models.rs:134),
  * 后端再映射到 Pydantic `AgentUpdate` 做白名单/范围校验。
  *
- * 注: 仅暴露 9 个允许字段，不含 `id` (id 不可变, 见 agent_repo.py 注释)
+ * 注: 仅暴露允许字段，不含 `id` (id 不可变, 见 agent_repo.py 注释)
  * 与 `updated_at` (DB 自动维护)。
  */
 export interface AgentUpdate {
@@ -374,6 +446,13 @@ export interface AgentUpdate {
   max_iterations?: number;
   enabled?: boolean;
   description?: string;
+  // M1 (2026-11-03) 专家卡字段
+  skills?: string[];
+  knowledge_bindings?: Array<Record<string, unknown>>;
+  memory_policy?: Record<string, unknown>;
+  persona_ui?: Record<string, unknown>;
+  permission_mode?: AgentProfile['permission_mode'];
+  version?: number;
 }
 
 /** POST /agents 请求体（US-4 角色可扩展）。 */
@@ -388,6 +467,12 @@ export interface AgentCreate {
   maxIterations?: number;
   enabled?: boolean;
   description?: string;
+  // M1 (2026-11-03) 专家卡字段
+  skills?: string[];
+  knowledgeBindings?: Array<Record<string, unknown>>;
+  memoryPolicy?: Record<string, unknown>;
+  personaUi?: Record<string, unknown>;
+  permissionMode?: AgentProfile['permission_mode'];
 }
 
 // ─── Scheduled Tasks (Phase 8) ───────────────────────────────

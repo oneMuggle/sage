@@ -10,16 +10,20 @@ legacy_routes（同被聊天路径引用）。
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+import logging
 
-from backend.api.legacy_models import AgentCreate, AgentToggle, AgentUpdate
+from fastapi import APIRouter, HTTPException, Query
+
+from backend.api.legacy_models import AgentCreate, AgentRollback, AgentToggle, AgentUpdate
 from backend.api.settings_models import model_dump_compat
-from backend.data.database import make_with_db_lock
+from backend.data.database import get_database, make_with_db_lock
 from backend.domain.agent_limits import (
     MAX_ITERATIONS_CEILING,
     MIN_ITERATIONS,
     is_valid_iteration_count,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def with_db_lock(func):
@@ -38,7 +42,16 @@ _VALID_AGENT_ROLES = {
     "writer",
     "slide-deck-creator",
     "reviewer",
+    # M1-E (2026-11-03): 专家画廊创建向导使用 role=specialist；
+    # 导入器（specialist_importer.py）已直接写入该值。
+    "specialist",
 }
+
+#: M1 (2026-11-03) 专家权限模式白名单。
+_VALID_PERMISSION_MODES = {"read_only", "workspace_write", "prompt", "full_access"}
+
+#: 触发专家版本号 +1 的人设/配置字段（spec §2.1：每次修改人设/知识绑定 +1）。
+_PERSONA_VERSIONED_FIELDS = ("system_prompt", "persona_ui", "knowledge_bindings", "skills")
 
 
 
@@ -119,6 +132,19 @@ def update_agent(agent_id: str, data: AgentUpdate):
             },
         )
 
+    # M1 — 权限模式白名单
+    if data.permission_mode is not None and data.permission_mode not in _VALID_PERMISSION_MODES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_permission_mode",
+                "message": (
+                    f"permission_mode must be one of {sorted(_VALID_PERMISSION_MODES)}, "
+                    f"got {data.permission_mode!r}"
+                ),
+            },
+        )
+
     repo = AgentRepository()
 
     # 不存在 → 404 (update 返回 0 时区分"没字段改"和"id 不存在")
@@ -133,8 +159,38 @@ def update_agent(agent_id: str, data: AgentUpdate):
     if "model_config_data" in update_payload:
         update_payload["model_config"] = update_payload.pop("model_config_data")
 
+    # M1: 人设/配置字段变更且调用方未显式指定 version → 自动 +1（spec §2.1）。
+    if "version" not in update_payload and any(
+        field in update_payload for field in _PERSONA_VERSIONED_FIELDS
+    ):
+        current = repo.get(agent_id)
+        update_payload["version"] = int(current.get("version", 1)) + 1
+
+    # M4-T3 (2026-11-05)：更新前幂等存「当前版本」快照，保证 v1 等历史版本
+    # 在 agent_versions 中有记录可回滚。失败不阻断主流程（快照是辅助审计数据）。
+    pre_profile = repo.get(agent_id)
+    try:
+        from backend.data.agent_version_repo import AgentVersionRepository
+
+        AgentVersionRepository().snapshot(
+            agent_id, pre_profile, reason="update", overwrite=False
+        )
+    except Exception as exc:
+        logger.warning("M4-T3 pre-update snapshot 失败 (agent=%s): %s", agent_id, exc)
+
     repo.update(agent_id, update_payload)
-    return repo.get(agent_id)
+    new_profile = repo.get(agent_id)
+
+    # M4-T3：更新后若版本号变化，再存新版本快照（reason='update'）。
+    try:
+        if int(new_profile.get("version", 1)) != int(pre_profile.get("version", 1)):
+            from backend.data.agent_version_repo import AgentVersionRepository
+
+            AgentVersionRepository().snapshot(agent_id, new_profile, reason="update")
+    except Exception as exc:
+        logger.warning("M4-T3 post-update snapshot 失败 (agent=%s): %s", agent_id, exc)
+
+    return new_profile
 
 
 @router.patch("/agents/{agent_id}/toggle")
@@ -203,6 +259,19 @@ def create_agent(data: AgentCreate):
             },
         )
 
+    # M1: 权限模式白名单（与 PATCH 共用）
+    if data.permission_mode is not None and data.permission_mode not in _VALID_PERMISSION_MODES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_permission_mode",
+                "message": (
+                    f"permission_mode must be one of {sorted(_VALID_PERMISSION_MODES)}, "
+                    f"got {data.permission_mode!r}"
+                ),
+            },
+        )
+
     repo = AgentRepository()
     if repo.get(data.id) is not None:
         raise HTTPException(
@@ -224,7 +293,280 @@ def create_agent(data: AgentCreate):
     payload.setdefault("description", "")
 
     repo.upsert(payload)
-    return repo.get(data.id)
+    created = repo.get(data.id)
+
+    # M4-T3 (2026-11-05)：创建成功后写 v1 快照（reason=create），后续 PATCH
+    # 之前无需再补 v1。失败不阻断创建（快照是辅助审计数据）。
+    try:
+        from backend.data.agent_version_repo import AgentVersionRepository
+
+        AgentVersionRepository().snapshot(data.id, created, reason="create")
+    except Exception as exc:
+        logger.warning("M4-T3 create snapshot 失败 (agent=%s): %s", data.id, exc)
+
+    return created
+
+
+@router.delete("/agents/{agent_id}")
+@with_db_lock
+def delete_agent(agent_id: str):
+    """删除一个 agent（M0 2026-11-03）。
+
+    M3-Task 7：删除专家前先级联清理它的私有记忆（``agent_id = <该专家>``
+    的情景层/语义层行 + 全部向量表条目）。共享层（``agent_id IS NULL``）
+    与其它专家的记忆不动。清理失败 → 500 且**不删专家**（不留下"专家没了
+    但记忆还在"的半状态）。
+
+    - 200 + ``{ok: true, id: "<id>"}``
+    - 400 + ``type: protected_agent`` —— ``primary`` 等内置专家不可删
+    - 404 + ``type: agent_not_found`` —— id 不存在
+    - 500 + ``type: memory_purge_failed`` —— 私有记忆清理失败
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    if agent_id == "primary":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "type": "protected_agent",
+                "message": "主助手 (primary) 不可删除",
+            },
+        )
+
+    repo = AgentRepository()
+    if repo.get(agent_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "type": "agent_not_found",
+                "message": f"agent {agent_id!r} 不存在",
+            },
+        )
+
+    # M3-Task 7: 级联清理该专家的私有记忆（共享层不受影响）。
+    try:
+        from backend.memory import get_memory_manager
+
+        purged = get_memory_manager().purge_agent_memories(agent_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("级联清理专家私有记忆失败 (agent=%s): %s", agent_id, exc)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "type": "memory_purge_failed",
+                "message": f"清理 agent {agent_id!r} 的私有记忆失败: {exc}",
+            },
+        )
+    logger.info(
+        "删除专家并级联清理私有记忆 (agent=%s, episodic=%s, semantic=%s, vector=%s)",
+        agent_id,
+        purged.get("episodic"),
+        purged.get("semantic"),
+        purged.get("vector"),
+    )
+
+    # M4-T3/T4 (2026-11-05)：级联删除版本快照与评测记录（同事务外，
+    # 与记忆级联同一路由内；失败不阻断删除，属辅助审计数据）。
+    try:
+        from backend.data.agent_version_repo import AgentVersionRepository
+
+        versions_deleted = AgentVersionRepository().delete_all_for_agent(agent_id)
+        logger.info("级联删除专家版本快照 (agent=%s, count=%s)", agent_id, versions_deleted)
+    except Exception as exc:
+        logger.warning("级联删除专家版本快照失败 (agent=%s): %s", agent_id, exc)
+
+    try:
+        conn = get_database().get_connection()
+        cursor = conn.execute("DELETE FROM agent_eval_runs WHERE agent_id = ?", (agent_id,))
+        conn.commit()
+        if cursor.rowcount:
+            logger.info("级联删除专家评测记录 (agent=%s, count=%s)", agent_id, cursor.rowcount)
+    except Exception as exc:
+        logger.warning("级联删除专家评测记录失败 (agent=%s): %s", agent_id, exc)
+
+    repo.delete(agent_id)
+    return {"ok": True, "id": agent_id}
+
+
+# ==================== M4-T3 (2026-11-05) 版本 diff / 回滚 ====================
+#
+# 依赖 agent_versions 表（migration v12）。快照由 create_agent / update_agent
+# / rollback_agent 写入；本组路由只做读与回滚。
+
+
+@router.get("/agents/{agent_id}/versions")
+@with_db_lock
+def list_agent_versions(agent_id: str):
+    """列出某专家的所有版本快照（version DESC）。
+
+    - 200 + ``[{version, reason, created_at}]``（无快照时为空列表）
+    - 404 + ``type: agent_not_found`` —— 专家 id 不存在
+    """
+    from backend.data.agent_repo import AgentRepository
+    from backend.data.agent_version_repo import AgentVersionRepository
+
+    if AgentRepository().get(agent_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "agent_not_found", "message": f"agent {agent_id!r} 不存在"},
+        )
+    return AgentVersionRepository().list_versions(agent_id)
+
+
+@router.get("/agents/{agent_id}/versions/diff")
+@with_db_lock
+def diff_agent_versions(
+    agent_id: str,
+    from_version: int = Query(..., alias="from", ge=1),
+    to_version: int = Query(..., alias="to", ge=1),
+):
+    """字段级 diff（仅白名单字段）。
+
+    - 200 + ``[{field, before, after}]``；无差异为空列表
+    - 404 + ``type: agent_not_found`` —— 专家 id 不存在
+    - 404 + ``type: version_not_found`` —— 任一版本不存在
+    """
+    from backend.data.agent_repo import AgentRepository
+    from backend.data.agent_version_repo import AgentVersionRepository
+
+    if AgentRepository().get(agent_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "agent_not_found", "message": f"agent {agent_id!r} 不存在"},
+        )
+    try:
+        return AgentVersionRepository().diff(agent_id, from_version, to_version)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "version_not_found", "message": str(exc)},
+        )
+
+
+@router.get("/agents/{agent_id}/versions/{version}")
+@with_db_lock
+def get_agent_version(agent_id: str, version: int):
+    """读取某版本的完整 profile 快照。
+
+    - 200 + 完整 profile dict
+    - 404 + ``type: agent_not_found`` / ``type: version_not_found``
+    """
+    from backend.data.agent_repo import AgentRepository
+    from backend.data.agent_version_repo import AgentVersionRepository
+
+    if AgentRepository().get(agent_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "agent_not_found", "message": f"agent {agent_id!r} 不存在"},
+        )
+    snapshot = AgentVersionRepository().read_version(agent_id, version)
+    if snapshot is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "type": "version_not_found",
+                "message": f"agent {agent_id!r} 没有版本 {version}",
+            },
+        )
+    return snapshot
+
+
+@router.post("/agents/{agent_id}/rollback")
+@with_db_lock
+def rollback_agent(agent_id: str, data: AgentRollback):
+    """回滚到指定版本。
+
+    流程：
+    1. 读目标版本完整 profile 快照
+    2. 以「当前版本号 + 1」重写 agents 表
+    3. 新版本写快照（``reason='rollback'``）
+
+    ``version`` 会被重置为当前+1（而非目标 version），保证历史单调递增，
+    并避免与既有快照主键冲突。
+
+    - 200 + 回滚后的新 profile
+    - 404 + ``type: agent_not_found`` / ``type: version_not_found``
+    """
+    from backend.data.agent_repo import AgentRepository
+    from backend.data.agent_version_repo import AgentVersionRepository
+
+    repo = AgentRepository()
+    current = repo.get(agent_id)
+    if current is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "agent_not_found", "message": f"agent {agent_id!r} 不存在"},
+        )
+
+    version_repo = AgentVersionRepository()
+    target = version_repo.read_version(agent_id, data.version)
+    if target is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "type": "version_not_found",
+                "message": f"agent {agent_id!r} 没有版本 {data.version}",
+            },
+        )
+
+    # 目标版本可能来自较早 commit，id 字段以当前为准（防跨专家误覆盖）。
+    rollback_profile = dict(target)
+    rollback_profile["id"] = agent_id
+    rollback_profile["version"] = int(current.get("version", 1)) + 1
+    rollback_profile.pop("updated_at", None)
+    repo.update(agent_id, rollback_profile)
+
+    new_profile = repo.get(agent_id)
+    try:
+        version_repo.snapshot(agent_id, new_profile, reason="rollback")
+    except Exception as exc:
+        logger.warning("M4-T3 rollback snapshot 失败 (agent=%s): %s", agent_id, exc)
+
+    return new_profile
+
+
+@router.post("/agents/{agent_id}/duplicate")
+@with_db_lock
+def duplicate_agent(agent_id: str):
+    """复制一个 agent（M0 2026-11-03）。
+
+    新 id = ``{原id}-copy-{毫秒时间戳}``；新 name = ``{原name} (副本)``；
+    默认 ``enabled=False``（避免新专家立刻进入聊天选择器）；其余字段
+    （system_prompt / tools / memory_access / model_config / max_iterations /
+    role / description）原样复制。
+
+    - 200 + 完整新 profile
+    - 404 + ``type: agent_not_found`` —— 源 id 不存在
+    """
+    import time as _time
+
+    from backend.data.agent_repo import AgentRepository
+
+    repo = AgentRepository()
+    source = repo.get(agent_id)
+    if source is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "type": "agent_not_found",
+                "message": f"agent {agent_id!r} 不存在",
+            },
+        )
+
+    suffix = int(_time.time() * 1000)
+    new_id = f"{agent_id}-copy-{suffix}"
+    new_profile = {
+        **source,
+        "id": new_id,
+        "name": f"{source.get('name', agent_id)} (副本)",
+        "enabled": False,
+    }
+    # 清掉源 updated_at —— upsert 会自动填新的
+    new_profile.pop("updated_at", None)
+    repo.upsert(new_profile)
+    return repo.get(new_id)
 
 
 @router.post("/agents/import-files")
@@ -237,6 +579,7 @@ def import_agents_files():
     - 解析失败的单文件计入 errors，绝不 5xx
     """
     from backend.agents.agents_files import import_agents_from_files
+
 
     result = import_agents_from_files()
     return {"ok": True, **result}

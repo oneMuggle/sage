@@ -180,6 +180,7 @@ def _make_adapter(tmp_path: Path, initial_dirs: list) -> InprocSkillAdapter:
     adapter._script_runner._allowed_roots = list(initial_dirs)
     adapter._skill_dirs = list(initial_dirs)
     adapter._scan_lock = threading.Lock()
+    adapter._private_loaders = []
     adapter._skill_md_loader = SkillMdHotLoader(adapter._registry, dirs=initial_dirs)
     adapter._skill_md_loader.scan_and_load()
     return adapter

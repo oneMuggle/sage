@@ -27,10 +27,10 @@
  *     as the Error message so the renderer can show a friendly toast
  *     that maps 1:1 to backend reason codes.
  */
-import { lstatSync, readFileSync, readdirSync, realpathSync } from 'fs';
-import { basename, join, resolve } from 'path';
+import { lstatSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'fs';
+import { basename, join, resolve, sep } from 'path';
 import { randomBytes } from 'crypto';
-import { BrowserWindow, dialog } from 'electron';
+import { BrowserWindow, dialog, shell } from 'electron';
 import { fetchCompat } from './fetchCompat';
 
 /** Default backend base URL; PYTHON_BACKEND_URL overrides (used in CI). */
@@ -237,6 +237,23 @@ function buildMultipart(paths: string[]): { body: Buffer; contentType: string } 
   return { body: Buffer.concat(chunks), contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
+export interface SkillsStorageInfo {
+  writable_root: string;
+  writable_source: 'env' | 'preference' | 'default';
+  roots: { path: string; writable: boolean }[];
+  shipped_root: string | null;
+  installed_app_dir: string;
+  writable_in_app_dir: boolean;
+}
+
+async function fetchSkillsStorage(baseUrl: string, token?: string): Promise<SkillsStorageInfo> {
+  const resp = await fetchCompat(`${baseUrl}/api/v1/skills/storage`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!resp.ok) throw new Error(`skills storage lookup failed: HTTP ${resp.status}`);
+  return (await resp.json()) as SkillsStorageInfo;
+}
+
 export function registerSkillsIpc(register: RegisterIpcHandler, authToken?: SkillsAuthToken): void {
   let recentPickedFiles = new Set<string>();
   // T-4b: 上次 pick-directory 选中的目录绝对路径（realpath），null 表示未选/取消。
@@ -371,5 +388,87 @@ export function registerSkillsIpc(register: RegisterIpcHandler, authToken?: Skil
       );
     }
     return resp.json();
+  }) as (...args: unknown[]) => unknown);
+
+  // ── skills:open-directory（M3）────────────────────────────────────────
+  // 主进程向后端查询真实可写技能根目录，再交给 shell.openPath 打开。
+  // 路径不在渲染层落地，避免把本机目录结构暴露给普通页面代码。
+  register('skills:open-directory', async () => {
+    const storage = await fetchSkillsStorage(getBackendBaseUrl(), resolveAuthToken(authToken));
+    const target = storage.writable_root;
+    if (!target) throw new Error('技能目录不可用');
+    const openError = await shell.openPath(target);
+    if (openError) throw new Error(`打开技能目录失败：${openError}`);
+    return { success: true };
+  });
+
+  // ── skills:show-in-folder（M3）────────────────────────────────────────
+  // 渲染层只传技能名；主进程查询真实路径，realpath 后校验仍在
+  // 允许根（可写根 / discover roots / shipped）之内，再 showItemInFolder。
+  register('skills:show-in-folder', (async (_event: unknown, name: unknown) => {
+    if (typeof name !== 'string' || !name.trim()) throw new Error('invalid skill name');
+    const baseUrl = getBackendBaseUrl();
+    const token = resolveAuthToken(authToken);
+    const storage = await fetchSkillsStorage(baseUrl, token);
+    const resp = await fetchCompat(
+      `${baseUrl}/api/v1/skills/${encodeURIComponent(name)}/location`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    );
+    if (!resp.ok) {
+      throw new Error(`查询技能位置失败：HTTP ${resp.status}`);
+    }
+    const data = (await resp.json()) as { path?: string };
+    if (!data.path) throw new Error('技能没有磁盘目录');
+    const target = realpathSync(data.path);
+    const allowedRoots = [
+      storage.writable_root,
+      ...storage.roots.map((root: { path: string }) => root.path),
+      storage.shipped_root,
+    ].filter((p: string | null): p is string => Boolean(p));
+    const withinAllowed = allowedRoots.some((root) => {
+      try {
+        const canonicalRoot = realpathSync(root);
+        return target === canonicalRoot || target.startsWith(`${canonicalRoot}${sep}`);
+      } catch {
+        return false;
+      }
+    });
+    if (!withinAllowed) throw new Error('技能目录不在允许范围内，已拒绝打开');
+    shell.showItemInFolder(target);
+    return { success: true };
+  }) as (...args: unknown[]) => unknown);
+
+  // ── skills:export（M4）────────────────────────────────────────────────
+  // 后端把技能目录（SKILL.md + scripts/references/assets/templates）打成 zip；
+  // 主进程用保存对话框选择落盘位置。name 为空 → 批量导出「我的技能」。
+  register('skills:export', (async (_event: unknown, opts: unknown) => {
+    const name =
+      typeof opts === 'object' &&
+      opts !== null &&
+      typeof (opts as { name?: unknown }).name === 'string'
+        ? (opts as { name: string }).name || undefined
+        : undefined;
+    const baseUrl = getBackendBaseUrl();
+    const token = resolveAuthToken(authToken);
+    const url = name
+      ? `${baseUrl}/api/v1/skills/${encodeURIComponent(name)}/export`
+      : `${baseUrl}/api/v1/skills/export?scope=mine`;
+    const resp = await fetchCompat(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!resp.ok) {
+      throw new Error(`导出技能失败：HTTP ${resp.status}`);
+    }
+    const focusedWindow = BrowserWindow.getFocusedWindow();
+    const result = await dialog.showSaveDialog(focusedWindow ?? undefined!, {
+      title: name ? `导出技能 ${name}` : '导出我的技能',
+      defaultPath: name ? `${name}.zip` : 'sage-skills.zip',
+      filters: [{ name: 'ZIP', extensions: ['zip'] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    const buffer = Buffer.from(await resp.arrayBuffer());
+    writeFileSync(result.filePath, buffer);
+    shell.showItemInFolder(result.filePath);
+    return { ok: true, path: result.filePath };
   }) as (...args: unknown[]) => unknown);
 }

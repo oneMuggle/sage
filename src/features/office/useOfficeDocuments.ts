@@ -27,6 +27,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { officeApi } from '../../shared/api/officeApi';
+import type { OfficeDuplicateGroup } from '../../shared/api/officeDuplicateTypes';
 import type {
   OfficeDocType,
   OfficeDocumentSummary,
@@ -39,6 +40,7 @@ import type {
 
 import type { OfficeBatchResult } from './OfficeDocumentList';
 import { importOfficeByType, readStagedOfficeFile } from './importOfficeReference';
+import { useOfficeDuplicateGroups } from './useOfficeDuplicateGroups';
 
 /**
  * The duplicate-check route caps one request at 50 files; larger import
@@ -78,11 +80,7 @@ export interface OfficeMultiImportEntry {
  */
 export interface OfficeMultiImportSkipped {
   filename: string;
-  reason:
-    | 'unsupported-extension'
-    | 'staging-failed'
-    | 'read-failed'
-    | 'duplicate-open-existing';
+  reason: 'unsupported-extension' | 'staging-failed' | 'read-failed' | 'duplicate-open-existing';
   message?: string;
 }
 
@@ -133,6 +131,33 @@ export interface UseOfficeDocumentsReturn {
    */
   view: OfficeListView;
   setView: (view: OfficeListView) => void;
+  /**
+   * Phase 1 Item A: search/filter/sort state — driven from the document
+   * library's toolbar and forwarded server-side on every fetch. All
+   * three setters trigger a refetch (the effect below depends on them).
+   *
+   *   - `q`: substring match on original/generated filename
+   *   - `docType`: restrict to a single Office doc type (empty = all)
+   *   - `sort`: `updated_at` / `-updated_at` / `name` / `-name` / `size` / `-size`
+   */
+  q: string;
+  setQ: (value: string) => void;
+  docType: string;
+  setDocType: (value: string) => void;
+  sort: string;
+  setSort: (value: string) => void;
+  /**
+   * Phase 1 Item A: live documents grouped by content hash. Populated
+   * for the `'live'` view and empty for `'archived'`. Used by the list
+   * component to render the "重复" badge and to drive the "archive all
+   * but newest" cleanup.
+   */
+  duplicateGroups: OfficeDuplicateGroup[];
+  /**
+   * Archive every group member except the newest one. Resolves with
+   * the per-doc archive outcome; the caller drives the toast.
+   */
+  archiveAllButNewest: (group: OfficeDuplicateGroup) => Promise<OfficeBatchResult>;
   /**
    * Pick a file via the native dialog, import it into the managed
    * directory, run the type-specific read, then call
@@ -235,6 +260,19 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
   const [error, setError] = useState<string | null>(null);
   // Item 1.7: 'live' (default) vs 'archived' list slice.
   const [view, setView] = useState<OfficeListView>('live');
+  // Phase 1 Item A: server-side search / type filter / sort. Empty
+  // strings mean "no filter"; every setter triggers a refetch via the
+  // effect below (fetchDocuments picks them up as deps).
+  const [q, setQ] = useState('');
+  const [docType, setDocType] = useState('');
+  const [sort, setSort] = useState('-updated_at');
+  // Phase 1 Item A: duplicate groups for the live view. Advisory only —
+  // a grouping failure never clears the document list.
+  const {
+    duplicateGroups,
+    reload: reloadDuplicateGroups,
+    clear: clearDuplicateGroups,
+  } = useOfficeDuplicateGroups(workspacePath, view === 'live');
   // Phase 0 duplicate gate: the staged file the batch is paused on, plus
   // the resolver that hands the user's choice back to the batch loop.
   const [pendingDuplicate, setPendingDuplicate] = useState<OfficePendingDuplicate | null>(null);
@@ -276,6 +314,9 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
       if (!workspacePath) return [];
       const result = await officeApi.listDocuments(workspacePath, {
         includeArchived: currentView === 'archived',
+        q: q || undefined,
+        docType: docType || undefined,
+        sort: sort || undefined,
       });
       // include_archived=true returns live + archived rows; the archived
       // view only wants the soft-deleted slice.
@@ -284,25 +325,31 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
       }
       return result.documents;
     },
-    [workspacePath],
+    [workspacePath, q, docType, sort],
   );
 
   const refresh = useCallback(async () => {
     if (!workspacePath) {
       setDocuments([]);
+      clearDuplicateGroups();
       return;
     }
     setLoading(true);
     setError(null);
     try {
       setDocuments(await fetchDocuments(view));
+      // Sequential: `refresh` runs after mutations that may change both
+      // lists. `reloadDuplicateGroups` never throws, so a grouping miss
+      // cannot drag the document list into the error path.
+      await reloadDuplicateGroups();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setDocuments([]);
+      clearDuplicateGroups();
     } finally {
       setLoading(false);
     }
-  }, [workspacePath, fetchDocuments, view]);
+  }, [workspacePath, fetchDocuments, view, reloadDuplicateGroups, clearDuplicateGroups]);
 
   // Workspace entry is read-only. Filtered views must never drive file deletion.
   // Cancellation guard prevents a stale resolution from a prior
@@ -310,6 +357,7 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
   useEffect(() => {
     if (!workspacePath) {
       setDocuments([]);
+      clearDuplicateGroups();
       setLoading(false);
       setError(null);
       return;
@@ -317,6 +365,9 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     let cancelled = false;
     setLoading(true);
     setError(null);
+    // Advisory grouping runs independently of the list fetch: a
+    // grouping failure hides the badge but never blocks the list.
+    void reloadDuplicateGroups();
     void (async () => {
       try {
         const documents = await fetchDocuments(view);
@@ -326,6 +377,7 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
         if (cancelled) return;
         setError(listErr instanceof Error ? listErr.message : String(listErr));
         setDocuments([]);
+        clearDuplicateGroups();
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -333,7 +385,7 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     return () => {
       cancelled = true;
     };
-  }, [workspacePath, fetchDocuments, view]);
+  }, [workspacePath, fetchDocuments, view, reloadDuplicateGroups, clearDuplicateGroups]);
 
   const findDocument = useCallback(
     (docId: string) => documents.find((d) => d.id === docId),
@@ -660,6 +712,24 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     [runBatch],
   );
 
+  // Phase 1 Item A: archive every duplicate except the newest one. The
+  // backend orders group members newest-first, so the first entry is the
+  // one to keep. Reuses `runBatch` so the summary toast + single refetch
+  // behavior match the other batch actions.
+  const archiveAllButNewest = useCallback(
+    (group: OfficeDuplicateGroup): Promise<OfficeBatchResult> => {
+      const [, ...older] = group.documents;
+      if (older.length === 0) {
+        return Promise.resolve({ succeeded: [], failed: [] });
+      }
+      return runBatch(
+        older.map((d) => d.id),
+        (id) => officeApi.archiveDocument(id),
+      );
+    },
+    [runBatch],
+  );
+
   /**
    * Re-read a document's managed file (snapshot-restore follow-up).
    * The managed layout `<workspace>/office/<docType>/<docId>/<filename>`
@@ -691,6 +761,14 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     refresh,
     view,
     setView,
+    q,
+    setQ,
+    docType,
+    setDocType,
+    sort,
+    setSort,
+    duplicateGroups,
+    archiveAllButNewest,
     importAndRead,
     importAndReadMulti,
     readDropped,
@@ -709,38 +787,8 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
   };
 }
 
-export function formatOfficeDocumentsBatchSummary(result: {
-  succeeded: string[];
-  failed: string[];
-}): string {
-  return `succeeded=${result.succeeded.length} · failed=${result.failed.length}`;
-}
-
-export function formatOfficeDocumentsBatchJson(result: {
-  succeeded: string[];
-  failed: string[];
-}): string {
-  return JSON.stringify(
-    {
-      total: result.succeeded.length + result.failed.length,
-      succeededCount: result.succeeded.length,
-      failedCount: result.failed.length,
-      succeeded: result.succeeded,
-      failed: result.failed,
-    },
-    null,
-    2,
-  );
-}
-
-export function auditUseOfficeDocumentsGovernance(): {
-  moduleId: string;
-  phase: string;
-  status: 'ready';
-} {
-  return {
-    moduleId: 'src/features/office/useOfficeDocuments.ts',
-    phase: 'P165',
-    status: 'ready',
-  };
-}
+export {
+  auditUseOfficeDocumentsGovernance,
+  formatOfficeDocumentsBatchJson,
+  formatOfficeDocumentsBatchSummary,
+} from './officeDocumentsBatchFormat';

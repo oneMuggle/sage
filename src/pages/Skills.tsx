@@ -1,15 +1,35 @@
-import { FolderOpen, RefreshCw, RotateCw, ScanSearch, Upload } from 'lucide-react';
+import {
+  Download,
+  FolderOpen,
+  FolderSearch,
+  RefreshCw,
+  RotateCw,
+  ScanSearch,
+  Upload,
+} from 'lucide-react';
 import React, { useCallback, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
-import { skillsApi, type ConsolidationSuggestion, type Skill } from '../shared/api';
+import {
+  learnApi,
+  sessionApi,
+  skillsApi,
+  type ConsolidationSuggestion,
+  type Skill,
+} from '../shared/api';
+import { useI18n } from '../shared/lib/i18n';
 import { PageHeader } from '../shared/ui';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { RetryButton } from '../shared/ui/RetryButton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shared/ui/Tabs';
-import { SkillDraftList, SkillList } from '../widgets/skills';
+import {
+  SkillDetailDrawer,
+  SkillDraftList,
+  SkillList,
+  type SkillViewMode,
+} from '../widgets/skills';
 
 export interface SkillsAuditInput {
   activeTab: string;
@@ -54,6 +74,7 @@ export function formatSkillsAuditJson(input: SkillsAuditInput): string {
 }
 
 const Skills: React.FC = () => {
+  const { t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -70,6 +91,13 @@ const Skills: React.FC = () => {
   const [acceptingNames, setAcceptingNames] = useState<string | null>(null);
   const [copiedAudit, setCopiedAudit] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
+  // M2: 视图 / 筛选 / 详情抽屉
+  const [viewMode, setViewMode] = useState<SkillViewMode>('compact');
+  const [originFilter, setOriginFilter] = useState<'all' | 'builtin' | 'shipped' | 'mine'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled' | 'archived'>(
+    'all',
+  );
+  const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
 
   // Task 12 (2026-08-03): Read initial tab from URL search params.
   // Supports cross-page navigation (e.g. /learn in Chat → /skills?tab=drafts).
@@ -313,13 +341,67 @@ const Skills: React.FC = () => {
     }
   };
 
-  const filteredSkills = skills.filter(
-    (skill) =>
-      skill.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      skill.description.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+  // M3: 打开技能存储目录（主进程解析真实路径后 shell.openPath）。
+  const handleOpenDirectory = async () => {
+    try {
+      await window.electronAPI?.skills?.openSkillDirectory();
+    } catch (error) {
+      toast.error(`打开技能目录失败：${(error as Error).message}`);
+    }
+  };
+
+  // M4: 导出「我的技能」为 zip（保存对话框由主进程弹出）。
+  const handleExportMySkills = async () => {
+    try {
+      const result = await window.electronAPI?.skills?.exportMySkills();
+      if (result?.ok) toast.success(`已导出到 ${result.path}`);
+    } catch (error) {
+      toast.error(`导出失败：${(error as Error).message}`);
+    }
+  };
+
+  // M1: 待审草稿空态入口 —— 取最近一个会话并触发 /learn 显式沉淀。
+  // 后端 review_queue 会入队一个 explicit_learn 事件,绕过 LLM 初筛直接起稿。
+  const handleGenerateFromSession = async () => {
+    try {
+      const sessions = await sessionApi.list({ limit: 1 });
+      if (!sessions || sessions.length === 0) {
+        toast.error('暂无会话可生成草稿，请先与 AI 对话后再试');
+        return;
+      }
+      const result = await learnApi.trigger(sessions[0].id);
+      toast.success(result.message || '已提交技能草稿生成');
+    } catch (error) {
+      toast.error(`生成失败：${(error as Error).message}`);
+    }
+  };
+
+  const filteredSkills = skills.filter((skill) => {
+    const query = searchTerm.trim().toLowerCase();
+    const matchesSearch =
+      !query ||
+      skill.name.toLowerCase().includes(query) ||
+      skill.description.toLowerCase().includes(query) ||
+      (skill.triggers ?? []).some((trigger) => trigger.toLowerCase().includes(query));
+    if (!matchesSearch) return false;
+
+    const origin = skill.origin ?? (skill.source === 'builtin' ? 'builtin' : ('user' as const));
+    const originGroup =
+      origin === 'builtin' ? 'builtin' : origin === 'shipped' ? 'shipped' : 'mine';
+    if (originFilter !== 'all' && originGroup !== originFilter) return false;
+
+    if (statusFilter === 'enabled' && !skill.enabled) return false;
+    if (statusFilter === 'disabled' && skill.enabled) return false;
+    if (statusFilter === 'archived' && skill.lifecycle !== 'archived') return false;
+
+    return true;
+  });
 
   const enabledCount = skills.filter((s) => s.enabled).length;
+  const mineCount = skills.filter((s) => {
+    const origin = s.origin ?? (s.source === 'builtin' ? 'builtin' : 'user');
+    return origin !== 'builtin' && origin !== 'shipped';
+  }).length;
   const totalUsage = skills.reduce((sum, s) => sum + s.usage_count, 0);
 
   /* v8 ignore start */
@@ -457,6 +539,24 @@ const Skills: React.FC = () => {
             >
               <FolderOpen className={`w-4 h-4 ${directoryImportLoading ? 'animate-pulse' : ''}`} />
             </button>
+            <button
+              type="button"
+              onClick={() => void handleOpenDirectory()}
+              aria-label={t('skills_page.open_directory')}
+              title={t('skills_page.open_directory')}
+              className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <FolderSearch className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExportMySkills()}
+              aria-label={t('skills_page.export_mine')}
+              title={t('skills_page.export_mine')}
+              className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <Download className="w-4 h-4" />
+            </button>
           </div>
         }
       />
@@ -469,7 +569,7 @@ const Skills: React.FC = () => {
         <div className="px-5 pt-3 border-b border-border bg-surface flex-shrink-0">
           <TabsList>
             <TabsTrigger value="skills">技能</TabsTrigger>
-            <TabsTrigger value="drafts">Pending Drafts</TabsTrigger>
+            <TabsTrigger value="drafts">{t('skills_page.tab_pending_drafts')}</TabsTrigger>
           </TabsList>
         </div>
 
@@ -490,38 +590,37 @@ const Skills: React.FC = () => {
             </div>
           )}
 
-          {/* 统计信息 */}
-          <div className="flex gap-3 mb-5">
-            <div className="flex-1 p-3.5 border border-border rounded-radius-sm bg-surface">
-              <p className="text-xs text-muted">已启用技能</p>
-              <p className="text-xl font-bold font-mono text-primary mt-1">
-                {enabledCount} / {skills.length}
-              </p>
-            </div>
-            <div className="flex-1 p-3.5 border border-border rounded-radius-sm bg-surface">
-              <p className="text-xs text-muted">总使用次数</p>
-              <p className="text-xl font-bold font-mono text-success mt-1">{totalUsage}</p>
-            </div>
-            <div className="flex-1 p-3.5 border border-border rounded-radius-sm bg-surface flex flex-col justify-between">
-              <p className="text-xs text-muted">固化巡检</p>
-              <button
-                type="button"
-                onClick={() => void handleConsolidationScan('full')}
-                disabled={scanLoading}
-                className="mt-1 px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text-secondary hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed self-start"
-              >
-                <ScanSearch className="w-3.5 h-3.5 inline mr-1" />
-                {scanLoading ? '巡检中...' : '扫描冷技能'}
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleConsolidationScan('auto')}
-                disabled={scanLoading}
-                className="mt-1 px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text-secondary hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed self-start"
-              >
-                {scanLoading ? '巡检中...' : '增量巡检'}
-              </button>
-            </div>
+          {/* M2: 统计 chips（替代三张统计卡，压缩首屏占用） */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <span className="px-2.5 py-1 text-xs rounded-full bg-bg-subtle text-text-secondary">
+              {t('skills_page.stats_total')} {skills.length}
+            </span>
+            <span className="px-2.5 py-1 text-xs rounded-full bg-primary/10 text-primary">
+              {t('skills_page.stats_enabled')} {enabledCount}
+            </span>
+            <span className="px-2.5 py-1 text-xs rounded-full bg-warning/10 text-warning">
+              {t('skills_page.stats_mine')} {mineCount}
+            </span>
+            <span className="px-2.5 py-1 text-xs rounded-full bg-bg-subtle text-muted">
+              使用 {totalUsage} 次
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleConsolidationScan('full')}
+              disabled={scanLoading}
+              className="px-2.5 py-1 text-xs rounded-full border border-border text-text-secondary hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ScanSearch className="w-3 h-3 inline mr-1" />
+              {scanLoading ? '巡检中...' : '扫描冷技能'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleConsolidationScan('auto')}
+              disabled={scanLoading}
+              className="px-2.5 py-1 text-xs rounded-full border border-border text-text-secondary hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {scanLoading ? '巡检中...' : '增量巡检'}
+            </button>
           </div>
 
           {/* R17-A1 巡检建议列表 */}
@@ -560,15 +659,67 @@ const Skills: React.FC = () => {
             </details>
           )}
 
-          {/* 搜索框 */}
-          <div className="mb-4">
+          {/* M2: 搜索 + 来源/状态筛选 + 视图切换 */}
+          <div className="mb-4 flex flex-wrap items-center gap-2">
             <input
               type="text"
               placeholder="搜索技能..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full max-w-[320px] px-3 py-1.5 border border-border rounded-radius-sm text-sm bg-surface text-text"
+              className="flex-1 min-w-[200px] max-w-[320px] px-3 py-1.5 border border-border rounded-radius-sm text-sm bg-surface text-text"
             />
+            <select
+              aria-label={t('skills_page.filter_origin_all')}
+              value={originFilter}
+              onChange={(e) =>
+                setOriginFilter(e.target.value as 'all' | 'builtin' | 'shipped' | 'mine')
+              }
+              className="px-2 py-1.5 border border-border rounded-radius-sm text-xs bg-surface text-text"
+            >
+              <option value="all">{t('skills_page.filter_origin_all')}</option>
+              <option value="builtin">{t('skills_page.origin_builtin')}</option>
+              <option value="shipped">{t('skills_page.origin_shipped')}</option>
+              <option value="mine">{t('skills_page.group_mine')}</option>
+            </select>
+            <select
+              aria-label={t('skills_page.filter_status_all')}
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as 'all' | 'enabled' | 'disabled' | 'archived')
+              }
+              className="px-2 py-1.5 border border-border rounded-radius-sm text-xs bg-surface text-text"
+            >
+              <option value="all">{t('skills_page.filter_status_all')}</option>
+              <option value="enabled">{t('skills_page.filter_enabled')}</option>
+              <option value="disabled">{t('skills_page.filter_disabled')}</option>
+              <option value="archived">{t('skills_page.filter_archived')}</option>
+            </select>
+            <div className="flex items-center rounded-radius-sm border border-border overflow-hidden">
+              <button
+                type="button"
+                aria-pressed={viewMode === 'compact'}
+                onClick={() => setViewMode('compact')}
+                className={`px-2.5 py-1.5 text-xs transition-colors ${
+                  viewMode === 'compact'
+                    ? 'bg-primary text-white'
+                    : 'text-text-secondary hover:bg-bg-subtle'
+                }`}
+              >
+                {t('skills_page.view_compact')}
+              </button>
+              <button
+                type="button"
+                aria-pressed={viewMode === 'grid'}
+                onClick={() => setViewMode('grid')}
+                className={`px-2.5 py-1.5 text-xs transition-colors border-l border-border ${
+                  viewMode === 'grid'
+                    ? 'bg-primary text-white'
+                    : 'text-text-secondary hover:bg-bg-subtle'
+                }`}
+              >
+                {t('skills_page.view_grid')}
+              </button>
+            </div>
           </div>
 
           {/* 技能列表 */}
@@ -579,13 +730,30 @@ const Skills: React.FC = () => {
             onArchive={handleArchive}
             onPin={handlePin}
             onRolledBack={loadSkills}
+            viewMode={viewMode}
+            onOpenDetails={setSelectedSkill}
           />
         </TabsContent>
 
         <TabsContent value="drafts" className="flex-1 overflow-y-auto p-5">
-          <SkillDraftList />
+          <SkillDraftList
+            onGenerateFromSession={handleGenerateFromSession}
+            onScanColdSkills={() => void handleConsolidationScan('full')}
+          />
         </TabsContent>
       </Tabs>
+
+      {/* M2: 技能详情抽屉 — 列表行点击后打开 */}
+      <SkillDetailDrawer
+        skill={selectedSkill}
+        open={selectedSkill !== null}
+        onClose={() => setSelectedSkill(null)}
+        onToggle={handleToggle}
+        onDelete={handleDelete}
+        onArchive={handleArchive}
+        onPin={handlePin}
+        onRolledBack={loadSkills}
+      />
     </div>
   );
 };

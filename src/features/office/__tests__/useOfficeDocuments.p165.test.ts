@@ -10,7 +10,7 @@ describe('useOfficeDocuments governance audit (P165)', () => {
   it('returns ready governance status for useOfficeDocuments', () => {
     const snap = auditUseOfficeDocumentsGovernance();
     expect(snap).toEqual({
-      moduleId: 'src/features/office/useOfficeDocuments.ts',
+      moduleId: 'src/features/office/officeDocumentsBatchFormat.ts',
       phase: 'P165',
       status: 'ready',
     });

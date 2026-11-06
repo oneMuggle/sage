@@ -7,7 +7,8 @@ describe('agentsApi P143 governance audit', () => {
     const res = auditAgentsApiGovernance();
     expect(res.module).toBe('src/shared/api/agentsApi.ts');
     expect(res.phase).toBe('P143');
-    expect(res.endpointCount).toBe(5);
+    // M0 (2026-11-03): delete + duplicate 两个新端点 → 7
+    expect(res.endpointCount).toBe(7);
     expect(res.timeoutMs).toBe(30000);
     expect(res.healthy).toBe(true);
   });

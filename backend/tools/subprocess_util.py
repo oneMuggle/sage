@@ -55,11 +55,108 @@ _WINDOWS_CREATE_NEW_PROCESS_GROUP = getattr(
     subprocess, "CREATE_NEW_PROCESS_GROUP", 0
 )
 
+#: 平台常量（模块级，便于单测 monkeypatch）。
+_IS_WINDOWS = os.name == "nt"
+
+#: Windows 存活探测缓存 TTL（秒）。
+_WINDOWS_ALIVE_CACHE_TTL = 2.0
+
+_windows_alive_cache: Dict[int, Tuple[float, bool]] = {}
+_windows_alive_cache_lock = threading.Lock()
+
+
+def _windows_process_alive(pid: int) -> bool:
+    """Windows 下用 ``tasklist`` 探测 PID 是否存活（带 2s TTL 缓存）。
+
+    tasklist 不可用/超时：fail-closed 视为已退出 —— 恢复路径宁可放弃
+    一条记录，也不留下无法管理的"幽灵"会话。
+    """
+    now = time.monotonic()
+    with _windows_alive_cache_lock:
+        cached = _windows_alive_cache.get(pid)
+        if cached is not None and now - cached[0] < _WINDOWS_ALIVE_CACHE_TTL:
+            return cached[1]
+    alive = False
+    try:
+        completed = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {int(pid)}", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=(
+                getattr(subprocess, "CREATE_NO_WINDOW", 0) if _IS_WINDOWS else 0
+            ), check=False,
+        )
+        output = (completed.stdout or "").lower()
+        alive = f'"{int(pid)}"' in output
+    except (OSError, subprocess.SubprocessError):
+        logger.debug("tasklist 探测失败: pid=%s", pid, exc_info=True)
+        alive = False
+    with _windows_alive_cache_lock:
+        _windows_alive_cache[pid] = (now, alive)
+        if len(_windows_alive_cache) > 256:
+            _windows_alive_cache.clear()
+    return alive
+
 
 @dataclass(frozen=True)
 class VerifiedProcess:
     process: Any
     process_group_id: int
+
+
+#: 重启后无法获得真实退出码时的哨兵值（Popen.returncode 语义：非 None = 已退出）。
+UNKNOWN_EXIT_CODE = -1
+
+
+@dataclass
+class ResurrectedProcess:
+    """后端重启后重新附着到存活后台进程的轻量句柄（Phase 2）。
+
+    与 ``subprocess.Popen`` 的 ``poll()`` / ``wait()`` 接口对齐，供
+    ``BashSession.status()`` / ``reap_process()`` 使用。由于重启后的进程
+    不再是本进程的子进程，``waitid`` 不可用，因此通过 ``os.getpgid(pid)``
+    校验进程组归属：
+
+    - pgid 匹配 → 仍存活（``poll()`` 返回 ``None``）；
+    - 进程不存在 / pgid 不匹配（PID 被复用）→ 视为已退出，
+      ``returncode`` 置为 ``UNKNOWN_EXIT_CODE``（无法得知真实退出码）。
+    """
+
+    pid: int
+    pgid: int
+    returncode: Optional[int] = None
+
+    def poll(self) -> Optional[int]:
+        if self.returncode is not None:
+            return self.returncode
+        if _IS_WINDOWS:
+            # Windows 无 os.getpgid：tasklist 探测存活即可（PID 复用检测弱于
+            # POSIX，可接受 —— taskkill /T 仍能安全终止进程树）。
+            if not _windows_process_alive(self.pid):
+                self.returncode = UNKNOWN_EXIT_CODE
+            return self.returncode
+        try:
+            current_pgid = os.getpgid(self.pid)
+        except (ProcessLookupError, OSError):
+            self.returncode = UNKNOWN_EXIT_CODE
+            return self.returncode
+        if current_pgid != self.pgid:
+            # PID 被复用为其它进程组 —— 我们登记的进程已经结束。
+            self.returncode = UNKNOWN_EXIT_CODE
+            return self.returncode
+        return None
+
+    def wait(self, timeout: Optional[float] = None) -> int:
+        """仿 ``Popen.wait``：轮询到退出；超时抛 ``TimeoutExpired``。"""
+        deadline = None if timeout is None else time.monotonic() + max(timeout, 0.0)
+        while True:
+            code = self.poll()
+            if code is not None:
+                return code
+            if deadline is not None and time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(self.pid, timeout)
+            time.sleep(0.05)
 
 
 class ProcessGroupVerificationError(RuntimeError):  # noqa: N818

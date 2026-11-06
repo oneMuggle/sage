@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from .subprocess_util import (
     MAX_OUTPUT_CAP_BYTES,
     BoundedOutputCollector,
+    ResurrectedProcess,
     VerifiedProcess,
     file_identity,
     kill_process_tree,
@@ -97,7 +98,11 @@ class _PendingCleanup:
 class BashSessionRegistry:
     """线程安全的后台会话表；shell_id 永不用于构造文件路径。"""
 
-    def __init__(self, max_sessions: Optional[int] = None) -> None:
+    def __init__(
+        self,
+        max_sessions: Optional[int] = None,
+        store_getter: Optional[Callable[[], Any]] = None,
+    ) -> None:
         # max_sessions=None → 模块默认（PR-2 前的硬编码行为）。经 get_registry()
         # 创建的实例由 load_bash_config() 供给配置值；直接构造（多数单测）不变。
         self._max_sessions = MAX_BACKGROUND_SESSIONS if max_sessions is None else int(max_sessions)
@@ -110,6 +115,26 @@ class BashSessionRegistry:
         self._exited_seen: set = set()
         self._watcher_thread: Optional[threading.Thread] = None
         self._watcher_stop = threading.Event()
+        # 2026-11-06 Phase 2：SQLite 持久化（None = 纯内存，单测默认）。
+        self._store_getter = store_getter
+
+    def _get_store(self) -> Optional[Any]:
+        if self._store_getter is None:
+            return None
+        try:
+            return self._store_getter()
+        except Exception:  # noqa: BLE001 — 持久化不可用不阻断内存路径
+            logger.exception("后台 shell 持久化仓储不可用")
+            return None
+
+    def _store_remove(self, shell_id: str) -> None:
+        store = self._get_store()
+        if store is None:
+            return
+        try:
+            store.remove(shell_id)
+        except Exception:  # noqa: BLE001 — 删除失败不阻断清理
+            logger.exception("后台 shell 持久化删除失败: %s", shell_id)
 
     @property
     def max_sessions(self) -> int:
@@ -118,6 +143,11 @@ class BashSessionRegistry:
     def count(self) -> int:
         with self._lock:
             return len(self._sessions)
+
+    def list_sessions(self) -> List[BashSession]:
+        """返回当前注册表快照（供 ``GET /api/v1/shells`` 使用）。"""
+        with self._lock:
+            return list(self._sessions.values())
 
     def register(
         self,
@@ -157,7 +187,13 @@ class BashSessionRegistry:
             self._sessions[session.shell_id] = session
             # 不记录 command：它可能含有凭据或其他用户秘密。
             logger.info("注册后台 shell: %s", session.shell_id)
-            return session
+        store = self._get_store()
+        if store is not None:
+            try:
+                store.persist(session)
+            except Exception:  # noqa: BLE001 — 持久化失败不阻断注册
+                logger.exception("后台 shell 持久化失败: %s", session.shell_id)
+        return session
 
     def _reject_over_limit(
         self,
@@ -328,6 +364,7 @@ class BashSessionRegistry:
                         continue
                     self._exited_seen.add(shell_id)
                     callbacks = self._exit_watches.pop(shell_id, [])
+                self._store_remove(shell_id)
                 for cb in callbacks:
                     self._safe_invoke(cb, shell_id, None)
                 continue
@@ -338,6 +375,7 @@ class BashSessionRegistry:
                     continue
                 self._exited_seen.add(shell_id)
                 callbacks = self._exit_watches.pop(shell_id, [])
+            self._store_remove(shell_id)
             exit_code = observe_process_exit_code(session.process, 0.0)
             for cb in callbacks:
                 self._safe_invoke(cb, shell_id, exit_code)
@@ -352,6 +390,75 @@ class BashSessionRegistry:
             callback(shell_id, exit_code)
         except Exception:  # noqa: BLE001 — 单个回调失败不阻断其它观察者
             logger.exception("后台 shell 退出回调失败: %s", shell_id)
+
+    # ---------- 2026-11-06 Phase 2: 重启恢复 ----------
+
+    def restore(self) -> int:
+        """从持久化恢复存活 shell；返回恢复数量。
+
+        - 仍存活（POSIX: pgid 匹配；Windows: tasklist 探测）→ 加入注册表并
+          登记默认退出通知；
+        - 已结束 / PID 被复用 / 输出文件身份不匹配 → 删除记录并推一条
+          「未知退出码」完成通知（用户重启后仍能感知任务已结束）。
+        """
+        store = self._get_store()
+        if store is None:
+            return 0
+        restored = 0
+        for rec in store.list_all():
+            proc = ResurrectedProcess(pid=rec.pid, pgid=rec.pgid)
+            if proc.poll() is not None:
+                self._notify_restored_exit(rec)
+                self._store_remove(rec.shell_id)
+                continue
+            if not self._restored_files_match(rec):
+                logger.warning("后台 shell 输出文件身份不匹配，放弃恢复: %s", rec.shell_id)
+                self._notify_restored_exit(rec)
+                self._store_remove(rec.shell_id)
+                continue
+            session = BashSession(
+                shell_id=rec.shell_id,
+                process=proc,
+                command=rec.command,
+                stdout_path=rec.stdout_path,
+                stderr_path=rec.stderr_path,
+                stdout_identity=rec.stdout_identity,
+                stderr_identity=rec.stderr_identity,
+                stdout_offset=rec.stdout_offset,
+                stderr_offset=rec.stderr_offset,
+                process_group_id=rec.pgid,
+            )
+            with self._lock:
+                # 恢复路径不执行 max_sessions 检查：这些进程已经存在，
+                # 拒绝恢复只会让它们变成不可管理的孤儿。
+                self._sessions[rec.shell_id] = session
+            self.register_exit_notification(rec.shell_id)
+            restored += 1
+            logger.info("恢复后台 shell: %s (pid=%s)", rec.shell_id, rec.pid)
+        return restored
+
+    @staticmethod
+    def _restored_files_match(rec: Any) -> bool:
+        if rec.stdout_identity is None or rec.stderr_identity is None:
+            return False
+        return (
+            file_identity(rec.stdout_path) == rec.stdout_identity
+            and file_identity(rec.stderr_path) == rec.stderr_identity
+        )
+
+    def _notify_restored_exit(self, rec: Any) -> None:
+        try:
+            from backend.services.background_notifications import (
+                get_background_notification_queue,
+            )
+
+            get_background_notification_queue().push(
+                shell_id=rec.shell_id,
+                command=rec.command,
+                exit_code=None,
+            )
+        except Exception:  # noqa: BLE001 — 通知失败不阻断恢复
+            logger.exception("恢复时后台任务完成通知入队失败: %s", rec.shell_id)
 
     def shutdown(self, timeout_s: float = 1.0) -> None:
         """停止退出观察器线程（幂等）。"""
@@ -370,6 +477,15 @@ class BashSessionRegistry:
         with session.operation_lock:
             payload = self._drain(session, cap)
         payload["shell_id"] = shell_id
+        # 2026-11-06 Phase 2：回写读取偏移，重启恢复后不重复吐旧输出。
+        store = self._get_store()
+        if store is not None:
+            try:
+                store.update_offsets(
+                    shell_id, session.stdout_offset, session.stderr_offset
+                )
+            except Exception:  # noqa: BLE001 — 偏移写回是增强信息
+                logger.exception("后台 shell 偏移持久化失败: %s", shell_id)
         return payload
 
     def terminate(self, shell_id: str, cap: int) -> Optional[Dict[str, Any]]:
@@ -412,6 +528,7 @@ class BashSessionRegistry:
                     drain_error = RuntimeError("后台 shell 输出文件清理失败")
                 raise drain_error
             self._sessions.pop(shell_id, None)
+            self._store_remove(shell_id)
             if drain_error is not None:
                 raise drain_error
             payload["shell_id"] = shell_id
@@ -592,7 +709,18 @@ def get_registry() -> BashSessionRegistry:
         # 函数内 import：bash_config 仅标准库，但保持与消费方同一注入时点
         from .bash_config import load_bash_config
 
-        _REGISTRY = BashSessionRegistry(max_sessions=load_bash_config().max_sessions)
+        # 2026-11-06 Phase 3：两平台都接入 SQLite 持久化（Windows 恢复通过
+        # tasklist 探测存活；延迟 import，避免 import 期触碰数据库）。
+        from .bash_session_persistence import get_bash_session_store
+
+        _REGISTRY = BashSessionRegistry(
+            max_sessions=load_bash_config().max_sessions,
+            store_getter=get_bash_session_store,
+        )
+        try:
+            _REGISTRY.restore()
+        except Exception:  # noqa: BLE001 — 恢复失败按纯内存模式继续
+            logger.exception("后台 shell 重启恢复失败")
     return _REGISTRY
 
 

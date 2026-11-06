@@ -12,7 +12,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = REPO_ROOT / "backend"
 SAGE_CORE_DIR = REPO_ROOT / "packages" / "sage-core" / "sage_core"
 
-datas = []
+datas = [
+    # M4-T5: 专家模板与黄金任务集是数据文件,PyInstaller 不跟踪静态资源,
+    # 必须显式打入 bundle,否则 specialist_templates / golden_tasks.json 在
+    # 发行包中不可见导致 list_templates / run_golden_eval 抛「文件缺失」。
+    (str(BACKEND_DIR / "services" / "specialist_templates"), "backend/services/specialist_templates"),
+    (str(BACKEND_DIR / "services" / "golden_tasks.json"), "backend/services"),
+]
 
 # Hidden imports that PyInstaller might miss due to dynamic loading in FastAPI/Uvicorn
 hidden_imports = [

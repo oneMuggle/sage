@@ -17,6 +17,7 @@ import {
   PanelLeftOpen,
   Search,
   PenSquare,
+  Users,
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
@@ -118,6 +119,7 @@ const toolsNavItems: NavItem[] = [
 ];
 const advancedNavItems: NavItem[] = [
   { path: '/agents', label: '智能体', labelKey: 'sidebar.nav.agents', icon: Bot },
+  { path: '/specialists', label: '专家', icon: Users },
   { path: '/orchestration', label: '编排', icon: Network },
   { path: '/arena', label: 'Arena', icon: UserCog },
   { path: '/help', label: '帮助', icon: HelpCircle },

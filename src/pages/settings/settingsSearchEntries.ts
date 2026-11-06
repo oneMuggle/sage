@@ -173,6 +173,20 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'notification 通知 后台任务 定时任务 待办 提醒',
   },
   {
+    key: 'notifications_webhook',
+    tab: 'basic',
+    label: '通用 Webhook',
+    labelEn: 'Generic webhook',
+    keywords: 'webhook 通知 http post json 自动化 机器人',
+  },
+  {
+    key: 'notifications_slack',
+    tab: 'basic',
+    label: 'Slack Webhook',
+    labelEn: 'Slack webhook',
+    keywords: 'slack webhook 通知 incoming 外发 提醒',
+  },
+  {
     key: 'demoMode',
     tab: 'basic',
     label: '演示模式',

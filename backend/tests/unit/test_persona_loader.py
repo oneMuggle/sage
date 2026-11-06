@@ -279,7 +279,11 @@ def test_builtin_ops_manifest_declares_ops_capabilities():
     manifest = load_manifest_file(builtin_personas_dir() / "ops.md", builtin=True)
 
     assert manifest.id == "ops"
-    assert "terminal" in manifest.tools
+    # 2026-11-03: TerminalTool 已重写为 BashTool(name="bash")，persona 白名单
+    # 里的 "terminal" 是死引用 —— 白名单匹配不到任何已注册工具，导致 ops
+    # persona 实际失去命令执行能力。
+    assert "bash" in manifest.tools
+    assert "terminal" not in manifest.tools
     assert manifest.connectors is True
     assert manifest.recommended_models
 

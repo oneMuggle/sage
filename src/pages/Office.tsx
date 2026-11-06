@@ -143,6 +143,14 @@ export function Office() {
     refresh,
     view,
     setView,
+    q,
+    setQ,
+    docType,
+    setDocType,
+    sort,
+    setSort,
+    duplicateGroups,
+    archiveAllButNewest,
     importAndReadMulti,
     readDroppedMulti,
     saveAs,
@@ -432,6 +440,14 @@ export function Office() {
               onPreview={handlePreviewDocument}
               onBatchArchive={batchArchive}
               onBatchRestore={batchRestore}
+              q={q}
+              onQChange={setQ}
+              docType={docType}
+              onDocTypeChange={setDocType}
+              sort={sort}
+              onSortChange={setSort}
+              duplicateGroups={duplicateGroups}
+              onArchiveAllButNewest={archiveAllButNewest}
             />
             {snapshotDoc && (
               <div className="mt-3">

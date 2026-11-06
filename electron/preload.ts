@@ -46,6 +46,9 @@ import type {
   RescanResult,
   SavedOfficeFile,
   SkillsElectronApiBridge,
+  SpecialistPackageExportResult,
+  SpecialistPackageImportResult,
+  SpecialistsElectronApiBridge,
   UpdateElectronApiBridge,
 } from '../src/shared/types/electron-api';
 import type {
@@ -335,7 +338,32 @@ const electronAPI = {
     pickSkillDirectory: () => ipcRenderer.invoke('skills:pick-directory') as Promise<string | null>,
     importSkillDirectory: (pickedPath: string) =>
       ipcRenderer.invoke('skills:import-directory', pickedPath) as Promise<ImportResult>,
+    // M3: 存储可见性 — 打开真实技能目录 / 在文件管理器中定位某个技能
+    openSkillDirectory: () =>
+      ipcRenderer.invoke('skills:open-directory') as Promise<{ success: true }>,
+    showSkillInFolder: (name: string) =>
+      ipcRenderer.invoke('skills:show-in-folder', name) as Promise<{ success: true }>,
+    // M4: 导出技能 — name 为空/缺省时批量导出「我的技能」
+    exportSkill: (name: string) =>
+      ipcRenderer.invoke('skills:export', { name }) as Promise<{ ok: true; path: string } | null>,
+    exportMySkills: () =>
+      ipcRenderer.invoke('skills:export', {}) as Promise<{ ok: true; path: string } | null>,
   } satisfies SkillsElectronApiBridge,
+
+  /**
+   * M1-E: 专家包 (.sage) 导入/导出桥。
+   * - importPackage: 原生选择器 + multipart → { id, name } | null（取消）
+   * - exportPackage: 二进制下载 + 另存为 → { ok, path } | null（取消）
+   */
+  specialists: {
+    importPackage: () =>
+      ipcRenderer.invoke('specialists:import') as Promise<SpecialistPackageImportResult | null>,
+    exportPackage: (agentId: string) =>
+      ipcRenderer.invoke(
+        'specialists:export',
+        agentId,
+      ) as Promise<SpecialistPackageExportResult | null>,
+  } satisfies SpecialistsElectronApiBridge,
 
   /** Workspace MCP Server (M4): tunnel, emergency stop, copy URL to clipboard. */
   remoteMcp: {
@@ -689,11 +717,18 @@ const electronAPI = {
     }>;
   },
 
-  /** 2026-11-05: 通知偏好读取（总开关 + 后台任务通知）。 */
-  getNotificationPrefs(): Promise<{ enabled: boolean; backgroundTasks: boolean }> {
+  /** 2026-11-05: 通知偏好读取（总开关 + 后台任务通知 + Webhook）。 */
+  getNotificationPrefs(): Promise<{
+    enabled: boolean;
+    backgroundTasks: boolean;
+    webhookUrl: string;
+    slackWebhookUrl: string;
+  }> {
     return ipcRenderer.invoke('sage:notification-prefs:get') as Promise<{
       enabled: boolean;
       backgroundTasks: boolean;
+      webhookUrl: string;
+      slackWebhookUrl: string;
     }>;
   },
 
@@ -701,11 +736,21 @@ const electronAPI = {
   setNotificationPrefs(prefs: {
     enabled: boolean;
     backgroundTasks: boolean;
-  }): Promise<{ ok: boolean; enabled: boolean; backgroundTasks: boolean }> {
+    webhookUrl?: string;
+    slackWebhookUrl?: string;
+  }): Promise<{
+    ok: boolean;
+    enabled: boolean;
+    backgroundTasks: boolean;
+    webhookUrl: string;
+    slackWebhookUrl: string;
+  }> {
     return ipcRenderer.invoke('sage:notification-prefs:set', prefs) as Promise<{
       ok: boolean;
       enabled: boolean;
       backgroundTasks: boolean;
+      webhookUrl: string;
+      slackWebhookUrl: string;
     }>;
   },
 

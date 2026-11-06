@@ -33,6 +33,8 @@ export const memoryRoutes: Record<string, CommandRoute> = {
       const memoryType = a?.memoryType as string | null;
       const offset = a?.offset as number | null;
       const sessionId = a?.sessionId as string | null;
+      // M3-Task 6: agent 维度过滤（前端 memoryApi.getMemories 传 agentId，透传给后端 agent_id query）
+      const agentId = a?.agentId as string | null;
       const params = new URLSearchParams({
         page: String(page),
         page_size: String(pageSize),
@@ -46,6 +48,9 @@ export const memoryRoutes: Record<string, CommandRoute> = {
       }
       if (sessionId) {
         params.set('session_id', sessionId);
+      }
+      if (agentId) {
+        params.set('agent_id', agentId);
       }
       return `/api/v1/memory/list?${params.toString()}`;
     },
@@ -74,6 +79,15 @@ export const memoryRoutes: Record<string, CommandRoute> = {
     },
   },
   delete_memory: { method: 'POST', path: () => '/api/v1/memory/delete' },
+  // M3-Task 7: 把一条私有记忆提升到共享层（agent_id → NULL）+ 审计行。
+  promote_memory: {
+    method: 'POST',
+    path: (a) => `/api/v1/memory/${encodeURIComponent(String(a?.id ?? ''))}/promote`,
+    body: (a) => ({
+      memoryType: a?.memoryType as string | undefined,
+      reason: a?.reason as string | undefined,
+    }),
+  },
   // 对标 S2 (2026-09-13): 记忆写入台账（内联"记住了"提示 + 撤销）
   get_recent_memory_writes: {
     method: 'GET',
@@ -151,12 +165,14 @@ export const memoryRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: () => '/api/v1/memory/save',
     // Body 字段: content (required), memory_type?, importance?, tags?
+    // agent_id: 资产中心手动追加专家私有记忆（缺省 = 共享层）
     body: (a) => ({
       content: a.content,
       memory_type: a.memoryType,
       importance: a.importance,
       tags: a.tags,
       ...(a.sessionId ? { session_id: a.sessionId } : {}),
+      ...(a.agentId ? { agent_id: a.agentId } : {}),
     }),
   },
   // P0-2: 进化任务学到的偏好（preferences 表 pref_* 键）+ 画像快照刷新

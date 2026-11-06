@@ -15,7 +15,12 @@ import { usePluginNames } from '../../shared/lib/hooks/usePluginNames';
 import { useI18n } from '../../shared/lib/i18n';
 import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownChunks';
 import { findPluginToolOwner } from '../../shared/lib/permissionInsights';
-import type { BlockedAction, Message as MessageType, ToolCall } from '../../shared/lib/store';
+import type {
+  BlockedAction,
+  Message as MessageType,
+  MessageSource,
+  ToolCall,
+} from '../../shared/lib/store';
 import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
@@ -66,6 +71,8 @@ interface MessageProps {
   onSaveToMemory?: (message: MessageType) => void;
   /** P0-6: 打开记忆浏览器并定位到该条记忆（来源可回溯） */
   onOpenMemory?: (memoryId: string) => void;
+  /** M2-Task 4: 打开专家知识引用（按 source_type 跳 Wiki / 项目资料 / toast） */
+  onOpenKnowledgeSource?: (source: MessageSource) => void;
   /** 第二轮 B2: 截断回答的「继续生成」（MessageList 只传给会话最后一条消息） */
   onContinue?: () => void;
   /** 第二轮 C2: 回答版本切换后的回调（MessageList 只传给会话最后一条消息） */
@@ -95,6 +102,7 @@ function MessageComponent({
   onQuoteSelection,
   onSaveToMemory,
   onOpenMemory,
+  onOpenKnowledgeSource,
   onContinue,
   onAnswerVersionChange,
   artifactsByToolCall,
@@ -224,6 +232,7 @@ function MessageComponent({
   const toolSources = message.sources ?? [];
   // R86: @memory: 实体引用命中（kind='memory'）——与记忆召回同渲染进记忆分组
   const memorySources = toolSources.filter((s) => s.kind === 'memory');
+  const knowledgeSources = toolSources.filter((s) => s.kind === 'knowledge');
   const wikiSources = toolSources.filter((s) => s.kind === 'wiki');
   const webSources = toolSources.filter((s) => s.kind === 'web');
   const mcpSources = toolSources.filter((s) => s.kind === 'tool');
@@ -231,7 +240,8 @@ function MessageComponent({
   // 各分组在统一编号里的起始偏移（列表带 [1][2]… 序号, 类文章引用）
   const ragOffset = memoryRefs.length + memorySources.length;
   const wikiOffset = ragOffset + ragCitations.length;
-  const webOffset = wikiOffset + wikiSources.length;
+  const knowledgeOffset = wikiOffset + wikiSources.length;
+  const webOffset = knowledgeOffset + knowledgeSources.length;
   const toolOffset = webOffset + webSources.length;
 
   // 右键菜单 spec 打开时求值（选区/流式状态取当下值），与渲染树解耦避免 token 路径重算。
@@ -667,6 +677,48 @@ function MessageComponent({
               </div>
             )}
 
+            {knowledgeSources.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-ui-xs font-medium text-muted uppercase tracking-wide">
+                  {t('chat.sources_group_knowledge')}
+                </div>
+                {knowledgeSources.map((s, i) => {
+                  const key = `k-${s.binding_id}-${s.source_type}-${s.path ?? s.material_id ?? i}`;
+                  const isPrivate = s.source_type === 'specialist_private';
+                  const hintKey = isPrivate
+                    ? 'chat.sources_open_knowledge_private'
+                    : s.source_type === 'project_material'
+                      ? 'chat.sources_open_knowledge_material'
+                      : 'chat.sources_open_knowledge_wiki';
+                  return (
+                    <div key={key} className="space-y-0.5">
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-muted flex-shrink-0 font-mono">
+                          [{knowledgeOffset + i + 1}]
+                        </span>
+                        <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
+                          {s.binding_name || s.source_type}
+                        </span>
+                        <button
+                          type="button"
+                          data-testid={`message-knowledge-ref-${i}`}
+                          onClick={() => onOpenKnowledgeSource?.(s)}
+                          className="text-left text-text-secondary font-mono break-all hover:text-primary hover:underline"
+                          title={t(hintKey)}
+                        >
+                          {s.title || s.path || s.material_id || s.binding_name}
+                        </button>
+                        {s.score != null && (
+                          <span className="text-muted flex-shrink-0">({s.score.toFixed(2)})</span>
+                        )}
+                      </div>
+                      {s.snippet && <div className="pl-5 text-muted break-all">{s.snippet}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {webSources.length > 0 && (
               <div className="space-y-1">
                 <div className="text-ui-xs font-medium text-muted uppercase tracking-wide">
@@ -794,6 +846,7 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.onQuote === next.onQuote &&
     prev.onQuoteSelection === next.onQuoteSelection &&
     prev.onSaveToMemory === next.onSaveToMemory &&
+    prev.onOpenKnowledgeSource === next.onOpenKnowledgeSource &&
     prev.artifactsByToolCall === next.artifactsByToolCall &&
     prev.onBlockedAction === next.onBlockedAction
   );

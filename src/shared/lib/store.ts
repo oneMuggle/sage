@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { saveCurrentSessionId } from '../../entities/session/storage';
 import { invoke } from '../api/desktopInvoke';
 import type { GenerationStats, MessageDisplayMeta, MessageSource, RagCitation } from '../api/types';
+export type { MessageSource } from '../api/types';
 import { clientLogger } from '../log/client';
 
 // Re-export API modules for convenience
@@ -45,6 +46,9 @@ export interface Session {
   } | null;
   /** 标题生成尝试次数 (后端 `sessions.title_attempts`)；用于侧栏显示"生成标题中…"过渡态 */
   title_attempts?: number;
+  /** M0 (2026-11-03): 会话绑定的专家（agents.id）；'primary' = 主助手。
+   *  只影响后续轮次的 persona / 工具白名单 / 模型 / 记忆策略，不触碰历史消息。 */
+  specialist_id?: string;
 }
 
 // 工具调用结构（与后端 AgentEvent 保持一致）

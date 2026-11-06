@@ -79,6 +79,7 @@ import {
   startSchedulerNotificationPoller,
   type PendingNotificationsPayload,
 } from './schedulerNotifications';
+import { createWebhookDeliver } from './webhookDelivery';
 import { applyTaskbarAttention, decideTaskbarAttention } from './notifyOverlay';
 import { readLogTimezone, writeLogTimezone } from './logTimezone';
 import { setLogTimezone } from './logger';
@@ -117,11 +118,13 @@ import {
   relayChatStream,
   relayNdjsonToEvent,
   relayOrchEventsStream,
+  relayShellStream,
   relaySkillNotifications,
   WIKI_STREAM_ERROR,
 } from './relay';
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
+import { registerSpecialistIpc } from './specialistIpc';
 import { registerRemoteMcpIpc, type RemoteMcpController } from './remoteMcpIpc';
 import { RemoteTunnel } from './remoteTunnel';
 import { registerOfficeIpc } from './officeIpc';
@@ -443,7 +446,12 @@ try {
 
 // 2026-11-05: 通知偏好（主进程持有 JSON，同 closeToTray）。读取失败保持默认开启，
 // 升级用户不会被静默静音。发 OS 通知前统一读这个内存态。
-let notificationPrefs: NotificationPrefs = { enabled: true, backgroundTasks: true };
+let notificationPrefs: NotificationPrefs = {
+  enabled: true,
+  backgroundTasks: true,
+  webhookUrl: '',
+  slackWebhookUrl: '',
+};
 try {
   notificationPrefs = readNotificationPrefs(
     getNotificationPrefsPath(app.isPackaged, app.getPath('userData'), process.cwd()),
@@ -1469,6 +1477,27 @@ async function registerIpcHandlers(): Promise<void> {
         return { ok: true, event };
       }
 
+      // shell-stream-{shellId}: 后台 shell 输出流（Phase 3）
+      const shellStreamMatch = event.match(/^shell-stream-(.+)$/);
+      if (shellStreamMatch) {
+        const shellId = shellStreamMatch[1];
+        const abort = new AbortController();
+        eventSubscriptions.set(event, abort);
+        relayShellStream(
+          senderWebContents,
+          event,
+          shellId,
+          BACKEND_URL,
+          abort.signal,
+          backendAuthToken ?? undefined,
+        ).catch((e) => {
+          if (e instanceof Error && e.name !== 'AbortError') {
+            logger.error('ipc: shell stream relay error', { event, err: e.message });
+          }
+        });
+        return { ok: true, event };
+      }
+
       // orch-events-{runId}-{afterSeq} dynamic events: relay orchestration run events
       // Format: orch-events-{runId} or orch-events-{runId}-seq-{afterSeq}
       const orchEventsMatch = parseOrchEventName(event);
@@ -1610,6 +1639,9 @@ async function registerIpcHandlers(): Promise<void> {
       notificationPrefs = {
         enabled: payload?.enabled !== false,
         backgroundTasks: payload?.backgroundTasks !== false,
+        webhookUrl: typeof payload?.webhookUrl === 'string' ? payload.webhookUrl.trim() : '',
+        slackWebhookUrl:
+          typeof payload?.slackWebhookUrl === 'string' ? payload.slackWebhookUrl.trim() : '',
       };
       try {
         writeNotificationPrefs(
@@ -1943,6 +1975,20 @@ async function registerIpcHandlers(): Promise<void> {
     () => backendAuthToken ?? undefined,
   );
 
+  // ─── M1-E: 专家包 (.sage) 导入/导出 IPC ───────────────────────────────
+  //   specialists:import → native picker + multipart POST /api/v1/specialists/import
+  //   specialists:export → binary GET /api/v1/specialists/{id}/export + save dialog
+  registerSpecialistIpc(
+    (channel, handler) => {
+      ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+        if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+        if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+        return handler(evt, ...args);
+      });
+    },
+    () => backendAuthToken ?? undefined,
+  );
+
   // Workspace MCP Server (M4): cloudflared tunnel, copy-url, emergency stop.
   //   remote-mcp:tunnel-state / tunnel-start / tunnel-stop / emergency-stop / copy-url
   // Ctrl+Alt+Esc shares emergencyStop() with the settings-page button.
@@ -2080,6 +2126,12 @@ async function registerIpcHandlers(): Promise<void> {
           silent: false,
         }).show();
       },
+      // 2026-11-06 Phase 3: 每条通知额外投递 Webhook / Slack（fire-and-forget）
+      deliver: createWebhookDeliver(
+        () => notificationPrefs,
+        fetch as unknown as Parameters<typeof createWebhookDeliver>[1],
+        (event, details) => logger.warn(event, details),
+      ),
       intervalMs: SCHEDULER_NOTIFICATION_POLL_MS,
       log: (event, details) => logger.warn(event, details),
     });
