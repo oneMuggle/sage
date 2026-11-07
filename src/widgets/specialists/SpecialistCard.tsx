@@ -51,10 +51,12 @@ interface SpecialistCardProps {
   selectable?: boolean;
   selected?: boolean;
   onSelectToggle?: () => void;
-  /** P2-c: 打开专家详情页（点击卡片头部触发）。 */
+  /** P2-c: 打开专家详情页（「更多」菜单）。 */
   onOpenDetail?: (agent: AgentProfile) => void;
   /** P2-d: 置顶该专家（更多菜单）。 */
   onPin?: (agent: AgentProfile) => void;
+  /** M1.1（私聊）：点击卡片头部直接发起私聊。 */
+  onStartChat?: (agent: AgentProfile) => void;
 }
 
 function readUiString(ui: Record<string, unknown> | undefined, key: string): string {
@@ -97,6 +99,7 @@ export function SpecialistCard({
   onSelectToggle,
   onOpenDetail,
   onPin,
+  onStartChat,
 }: SpecialistCardProps) {
   const avatar = readUiString(agent.persona_ui, 'avatar') || DEFAULT_AVATAR;
   const tagline = readUiString(agent.persona_ui, 'tagline') || agent.description;
@@ -137,15 +140,19 @@ export function SpecialistCard({
       className="flex flex-col rounded-xl border border-border p-4 transition-all hover:shadow-md"
       style={cardStyle}
     >
-      {/* 头部（点击进入详情页） */}
+      {/* 头部（点击发起私聊；无 onStartChat 时回退详情页） */}
       <div
-        className={`flex items-start gap-3 ${onOpenDetail ? 'cursor-pointer' : ''}`}
-        onClick={() => onOpenDetail?.(agent)}
+        className={`flex items-start gap-3 ${
+          onStartChat || onOpenDetail ? 'cursor-pointer' : ''
+        }`}
+        onClick={() => (onStartChat ?? onOpenDetail)?.(agent)}
         onKeyDown={(e) => {
-          if (onOpenDetail && (e.key === 'Enter' || e.key === ' ')) onOpenDetail(agent);
+          if ((onStartChat || onOpenDetail) && (e.key === 'Enter' || e.key === ' ')) {
+            (onStartChat ?? onOpenDetail)?.(agent);
+          }
         }}
-        role={onOpenDetail ? 'button' : undefined}
-        tabIndex={onOpenDetail ? 0 : undefined}
+        role={onStartChat || onOpenDetail ? 'button' : undefined}
+        tabIndex={onStartChat || onOpenDetail ? 0 : undefined}
       >
         {selectable && (
           <input
@@ -244,6 +251,9 @@ export function SpecialistCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {onOpenDetail && (
+              <DropdownMenuItem onClick={() => onOpenDetail(agent)}>查看详情</DropdownMenuItem>
+            )}
             {onPin && <DropdownMenuItem onClick={() => onPin(agent)}>置顶</DropdownMenuItem>}
             <DropdownMenuItem onClick={() => onVersions(agent)}>版本历史</DropdownMenuItem>
             <DropdownMenuItem onClick={() => onEval(agent)}>黄金任务评测</DropdownMenuItem>

@@ -537,6 +537,47 @@ def _v15_agents_sort_order(conn: Any) -> None:
 register_migration(15, "agents_sort_order", _v15_agents_sort_order)
 
 
+def _v16_group_chat_support(conn: Any) -> None:
+    """v16：群聊支持（M2 私聊/群聊）。
+
+    - ``sessions.conversation_type``：``'dm'``（默认）| ``'group'``；
+    - ``conversation_participants``：群聊参与者（含 host/member 与发言顺序）；
+    - ``messages.sender_agent_id``：assistant 行的实际发言专家（NULL = 用户/未标注）。
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(sessions)")
+    session_cols = {row[1] for row in cursor.fetchall()}
+    if session_cols and "conversation_type" not in session_cols:
+        cursor.execute(
+            "ALTER TABLE sessions ADD COLUMN conversation_type TEXT DEFAULT 'dm'"
+        )
+        conn.commit()
+
+    cursor.execute("PRAGMA table_info(messages)")
+    message_cols = {row[1] for row in cursor.fetchall()}
+    if message_cols and "sender_agent_id" not in message_cols:
+        cursor.execute("ALTER TABLE messages ADD COLUMN sender_agent_id TEXT")
+        conn.commit()
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS conversation_participants (
+            conversation_id TEXT NOT NULL,
+            agent_id        TEXT NOT NULL,
+            role            TEXT NOT NULL DEFAULT 'member',
+            speak_order     INTEGER NOT NULL DEFAULT 0,
+            enabled         INTEGER NOT NULL DEFAULT 1,
+            added_at        INTEGER NOT NULL,
+            PRIMARY KEY (conversation_id, agent_id)
+        )
+        """
+    )
+    conn.commit()
+
+
+register_migration(16, "group_chat_support", _v16_group_chat_support)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(
