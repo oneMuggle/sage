@@ -17,6 +17,7 @@ export interface AiSidebarProps {
   pending: boolean;
   errorText: string | null;
   disabled: boolean;
+  initialCommand?: string;
   onCommand: (value: string) => void;
   onApply: (messageId: string, suggestion: SuggestionCardData) => void;
   onSkip: (messageId: string, suggestionId: string) => void;
@@ -30,6 +31,7 @@ export function AiSidebar({
   pending,
   errorText,
   disabled,
+  initialCommand,
   onCommand,
   onApply,
   onSkip,
@@ -80,7 +82,12 @@ export function AiSidebar({
       )}
 
       {/* Command input */}
-      <CommandInput disabled={disabled} pending={pending} onSubmit={onCommand} />
+      <CommandInput
+        disabled={disabled}
+        pending={pending}
+        initialValue={initialCommand}
+        onSubmit={onCommand}
+      />
 
       {/* Floating selection bar (portal-rendered, passed in) */}
       {floatingBar}

@@ -24,6 +24,7 @@ export const officeAiSidebarZh = {
   'office.ai.sidebar.apply_failed': '应用失败：{message}',
   'office.ai.sidebar.request_failed': '请求失败：{message}',
   'office.ai.sidebar.apply_done': '已写入修订痕迹',
+  'office.ai.sidebar.unknown_command': '未知命令：{command}',
 
   // Selection toolbar
   'office.ai.selection.rewrite': '改写润色',
@@ -89,6 +90,7 @@ export const officeAiSidebarEn: Record<keyof typeof officeAiSidebarZh, string> =
   'office.ai.sidebar.apply_failed': 'Apply failed: {message}',
   'office.ai.sidebar.request_failed': 'Request failed: {message}',
   'office.ai.sidebar.apply_done': 'Applied as tracked changes',
+  'office.ai.sidebar.unknown_command': 'Unknown command: {command}',
 
   // Selection toolbar
   'office.ai.selection.rewrite': 'Rewrite',

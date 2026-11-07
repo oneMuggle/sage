@@ -1,16 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useI18n } from '../../../shared/lib/i18n';
 
 export interface CommandInputProps {
   disabled: boolean;
   pending: boolean;
+  initialValue?: string;
   onSubmit: (value: string) => void;
 }
 
-export function CommandInput({ disabled, pending, onSubmit }: CommandInputProps): JSX.Element {
+export function CommandInput({
+  disabled,
+  pending,
+  initialValue,
+  onSubmit,
+}: CommandInputProps): JSX.Element {
   const { t } = useI18n();
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState(initialValue ?? '');
+
+  // R12: when initialValue changes, replace the local draft.
+  useEffect(() => {
+    if (initialValue !== undefined) {
+      setValue(initialValue);
+    }
+  }, [initialValue]);
 
   const submit = () => {
     const trimmed = value.trim();

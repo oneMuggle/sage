@@ -132,6 +132,9 @@ export function Office() {
   // HIGH FIX: stale-read guard. Increments on every handleImportAndRead
   // invocation; setPreview checks the captured id before applying state.
   const readIdRef = useRef(0);
+  // R10: canvas root for the AI sidebar selection capture / paragraph
+  // collection. Attached to the wrapper around <DocumentCanvas>.
+  const canvasRootRef = useRef<HTMLDivElement>(null);
 
   const [isBindModalOpen, setIsBindModalOpen] = useState(false);
   // 浮层里的 OfficeCapabilityBar 通过回调把探测结果推到父组件，
@@ -467,18 +470,20 @@ export function Office() {
             <h2 className="text-sm font-medium text-text-secondary mb-3">
               {t('office.section.canvas')}
             </h2>
-            <DocumentCanvas
-              preview={preview}
-              workspacePath={workspacePath}
-              onPick={handleImportAndReadMulti}
-              onDropFiles={handleReadDroppedMulti}
-              onEditPreview={
-                preview && preview.docType !== 'pdf' ? () => setEditDialogOpen(true) : undefined
-              }
-              fidelityAvailable={pdfAvailableForDocument(capabilities, preview?.docType)}
-              onRefresh={() => void refresh()}
-              disabled={loading}
-            />
+            <div ref={canvasRootRef}>
+              <DocumentCanvas
+                preview={preview}
+                workspacePath={workspacePath}
+                onPick={handleImportAndReadMulti}
+                onDropFiles={handleReadDroppedMulti}
+                onEditPreview={
+                  preview && preview.docType !== 'pdf' ? () => setEditDialogOpen(true) : undefined
+                }
+                fidelityAvailable={pdfAvailableForDocument(capabilities, preview?.docType)}
+                onRefresh={() => void refresh()}
+                disabled={loading}
+              />
+            </div>
             {editDialogOpen && editDoc && preview?.docType !== 'pdf' && (
               <div className="mt-3">
                 <OfficeEditPreviewDialog
@@ -636,6 +641,8 @@ export function Office() {
         <OfficeAiSidebarHost
           activeTab={activeTab as QuickActionTab}
           onNavigateTab={(tab) => setTab(tab as OfficeTabId)}
+          workspacePath={workspacePath}
+          rootRef={canvasRootRef}
         />
       )}
     </div>

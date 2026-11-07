@@ -39,4 +39,23 @@ describe('CommandInput', () => {
 
     expect(onSubmit).not.toHaveBeenCalled();
   });
+
+  it('syncs the local draft when initialValue changes', () => {
+    const onSubmit = vi.fn();
+    const { rerender } = render(
+      <CommandInput disabled={false} pending={false} initialValue="old" onSubmit={onSubmit} />,
+    );
+    const textarea = screen.getByTestId('office-ai-command-input') as HTMLTextAreaElement;
+    expect(textarea.value).toBe('old');
+
+    rerender(
+      <CommandInput
+        disabled={false}
+        pending={false}
+        initialValue="new draft"
+        onSubmit={onSubmit}
+      />,
+    );
+    expect(textarea.value).toBe('new draft');
+  });
 });
