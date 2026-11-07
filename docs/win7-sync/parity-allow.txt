@@ -198,3 +198,6 @@ src/widgets/memory/index.ts
 # win7 CI 专用：pip-only 依赖审计脚本（main 版强制 --npm/--npm-prod，win7 流水线只跑 pip）
 scripts/check_dependency_audit.py
 scripts/tests/test_check_dependency_audit.py
+
+# win7 平台检测：内网服务禁用检测 + 修复文档打包 + 测试注入（main 无对应实现）
+electron/runtime-check.ts
