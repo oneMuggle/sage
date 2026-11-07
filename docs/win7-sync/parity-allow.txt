@@ -194,3 +194,7 @@ src/pages/__tests__/Memory.export.test.tsx
 src/widgets/chat/Message.tsx
 src/widgets/evolution/EvolutionPanel.tsx
 src/widgets/memory/index.ts
+
+# win7 CI 专用：pip-only 依赖审计脚本（main 版强制 --npm/--npm-prod，win7 流水线只跑 pip）
+scripts/check_dependency_audit.py
+scripts/tests/test_check_dependency_audit.py
