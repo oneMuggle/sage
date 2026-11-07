@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
@@ -79,8 +80,8 @@ def _insert_doc(
     doc_id: str,
     *,
     created_at: int = NOW_MS,
-    archived_at: int | None = None,
-    content_hash: str | None = None,
+    archived_at: Optional[int] = None,
+    content_hash: Optional[str] = None,
 ) -> None:
     canonical = str(workspace.resolve())
     conn.execute(

@@ -26,7 +26,7 @@
     export FEEDBACK_ADMIN_PASSWORD="change-me"
     python3 scripts/feedback_receiver.py
 
-完整部署说明见 docs/technical/111-feedback-relay-deployment.md。
+完整部署说明见 docs/technical/109-feedback-relay-deployment.md。
 """
 
 from __future__ import annotations

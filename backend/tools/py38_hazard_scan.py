@@ -35,7 +35,7 @@ FILE_EXEMPTS = {
     pathlib.PurePosixPath("backend/utils/py_compat.py"),
 }
 
-LINE_EXEMPT_MARK = "py38-ok"
+LINE_EXEMPT_MARKS = ("py38-ok", "py38: guarded")
 
 # 3.10+ 才有的 Path 方法（3.8 运行即 AttributeError）
 PY310_PATH_METHODS = {"hardlink_to"}
@@ -183,7 +183,7 @@ def scan_file(path, rel):
     tree = ast.parse(src)
     hits = []
     lines = src.splitlines()
-    exempt = {i + 1 for i, ln in enumerate(lines) if LINE_EXEMPT_MARK in ln}
+    exempt = {i + 1 for i, ln in enumerate(lines) if any(m in ln for m in LINE_EXEMPT_MARKS)}
     for node in ast.walk(tree):
         visit_node(node, rel, hits)
     return [h for h in hits if h[1] not in exempt]

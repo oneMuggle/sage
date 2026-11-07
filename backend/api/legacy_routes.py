@@ -57,7 +57,6 @@ from backend.chat.sources_extractor import extract_sources_from_tool, merge_sour
 from backend.chat.title_generator import (
     DEFAULT_TITLE,
     TitleGenerator,
-    TitleModelFactory,
     needs_title,
 )
 from backend.core.errors import LLMError
@@ -80,6 +79,7 @@ from backend.office.workspace_errors import (
 from backend.orchestration.chat_dispatcher import (
     _classify_orchestration_mode,
 )
+from backend.orchestration.title_model_factory import TitleModelFactory
 from backend.ports.llm import ModelCapabilities
 from backend.services.scheduler import get_scheduler_service
 

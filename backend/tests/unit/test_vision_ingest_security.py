@@ -129,8 +129,9 @@ def test_bounded_read_rejects_hardlink_to_outside(tmp_path: Path):
     linked = tmp_path / "source.md"
     outside.write_bytes(b"outside secret")
     try:
-        os.link(outside, linked)  # py3.8: 无 Path.hardlink_to（3.10+）
-    except (OSError, NotImplementedError):
+        linked.hardlink_to(outside)  # py38: guarded 上一行 except AttributeError 守卫已覆盖
+    except (OSError, NotImplementedError, AttributeError):
+        # py38 无 Path.hardlink_to（3.10+），AttributeError 一并视为不支持
         pytest.skip("hardlinks are not supported")
 
     with pytest.raises(OSError, match="多链接"):

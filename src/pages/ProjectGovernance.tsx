@@ -520,9 +520,7 @@ export function ProjectGovernance() {
                   <Button
                     size="sm"
                     onClick={() =>
-                      bootstrapComplete
-                        ? void handleStartSession()
-                        : setActiveTab('settings')
+                      bootstrapComplete ? void handleStartSession() : setActiveTab('settings')
                     }
                     disabled={startingSession}
                     data-testid="project-home-cta"
@@ -660,10 +658,7 @@ export function ProjectGovernance() {
                   {(activeProjectType === 'coding' || project.vcsMode === 'git') && (
                     <GitStatusWidget projectId={project.id} />
                   )}
-                  <WikiGenerationPanel
-                    projectId={project.id}
-                    projectType={activeProjectType}
-                  />
+                  <WikiGenerationPanel projectId={project.id} projectType={activeProjectType} />
                 </div>
               )}
 
@@ -686,9 +681,7 @@ export function ProjectGovernance() {
             </div>
           )}
 
-          {activeTab === 'references' && (
-            <ReferenceManager projectId={project.id} />
-          )}
+          {activeTab === 'references' && <ReferenceManager projectId={project.id} />}
 
           {activeTab === 'settings' && (
             <div className="space-y-4">

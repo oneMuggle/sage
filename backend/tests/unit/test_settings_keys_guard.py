@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from typing import Dict, List, Set
 
 import pytest
 
@@ -25,9 +26,9 @@ GET_METHODS = {"get", "get_json"}
 SET_METHODS = {"set", "set_json"}
 
 
-def _iter_py_files() -> list[Path]:
+def _iter_py_files() -> List[Path]:
     skip_parts = {"tests", "__pycache__", ".venv", "export_assets"}
-    out: list[Path] = []
+    out: List[Path] = []
     for p in BACKEND_ROOT.rglob("*.py"):
         if skip_parts & set(p.parts):
             continue
@@ -35,14 +36,14 @@ def _iter_py_files() -> list[Path]:
     return out
 
 
-def _extract_settings_keys(tree: ast.Module) -> set[str]:
+def _extract_settings_keys(tree: ast.Module) -> Set[str]:
     """收集 SettingsRepository 实例变量上的 get/set 字符串字面量键。
 
     只追踪 ``x = SettingsRepository()`` 直接赋值 —— `repo` 等通用变量名
     被 agent/run/project 仓储复用，按名追踪会大量误报。
     """
     repo_classes = {"SettingsRepository", "SettingsRepo"}
-    tracked: set[str] = set()
+    tracked: Set[str] = set()
     for node in ast.walk(tree):
         if (
             isinstance(node, (ast.Assign, ast.AnnAssign))  # noqa: UP038 — py38 运行时 isinstance 不支持 X | Y
@@ -62,7 +63,7 @@ def _extract_settings_keys(tree: ast.Module) -> set[str]:
                 if isinstance(target, ast.Name):
                     tracked.add(target.id)
 
-    keys: set[str] = set()
+    keys: Set[str] = set()
     for node in ast.walk(tree):
         if not (
             isinstance(node, ast.Call)
@@ -82,7 +83,7 @@ def _extract_settings_keys(tree: ast.Module) -> set[str]:
 
 
 def test_settings_keys_all_in_whitelist() -> None:
-    missing: dict[str, list[str]] = {}
+    missing: Dict[str, List[str]] = {}
     for path in _iter_py_files():
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         keys = _extract_settings_keys(tree)

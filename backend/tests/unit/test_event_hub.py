@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Dict, List
 
 import pytest
 
@@ -115,10 +116,10 @@ async def test_restore_runs_default_branch_replays_from_list_runs_returning_str_
     """
     class Repository:
         def __init__(self) -> None:
-            self.events: dict[str, list] = {"run-a": [], "run-b": []}
-            self.replayed: list[str] = []
+            self.events: Dict[str, list] = {"run-a": [], "run-b": []}
+            self.replayed: List[str] = []
 
-        def list_runs(self) -> list[str]:
+        def list_runs(self) -> List[str]:
             return ["run-a", "run-b"]
 
         def list_after(self, run_id: str, after_seq: int = 0, limit: int = 1000):

@@ -451,3 +451,103 @@ def test_update_general_rejects_invalid_retry_total_budget(monkeypatch):
     res = tool.execute(target="general", updates={"llmRetryTotalBudgetS": -1})
     assert res.success is False
     assert "llmRetryTotalBudgetS" in res.error
+
+
+# ---- M1.2 自透明对等：version / routing / preferences / self 四个只读 section ----
+
+
+def _install_read_repo(monkeypatch, prefs=None, app_settings=None):
+    """把 SettingsRepository 替身装上：get_json 供 app_settings，get 供 preferences。"""
+    prefs = prefs or {}
+    app_settings = app_settings if app_settings is not None else {
+        "temperature": 0.5,
+        "orch": {"maxLaneIterations": 8},
+        "routing": {"mode": "auto"},
+    }
+
+    class FakeRepo:
+        def get_json(self, key):
+            return app_settings if key == "app_settings" else None
+
+        def get(self, key):
+            return prefs.get(key)
+
+    monkeypatch.setattr("backend.tools.config_tool.SettingsRepository", FakeRepo)
+
+
+def test_read_sage_config_routing_section(monkeypatch):
+    _install_read_repo(monkeypatch)
+    res = ReadSageConfigTool().execute(section="routing")
+    assert res.success is True, res.error
+    assert res.content["data"]["routing"] == {"mode": "auto"}
+    assert "mode=auto" in res.output
+
+
+def test_read_sage_config_version_section(monkeypatch):
+    _install_read_repo(monkeypatch)
+    monkeypatch.setattr(
+        "backend.services.self_status.read_version", lambda: "9.9.9-test"
+    )
+    res = ReadSageConfigTool().execute(section="version")
+    assert res.success is True, res.error
+    assert res.content["data"]["version"] == "9.9.9-test"
+    assert "9.9.9-test" in res.output
+
+
+def test_read_sage_config_preferences_whitelist_and_redact(monkeypatch):
+    _install_read_repo(
+        monkeypatch,
+        prefs={
+            "theme_mode": "dark",
+            "network_policy": '{"mode": "online"}',
+            "bash_config": '{"timeout_s": 120}',
+            # 以下两项不在白名单，绝不能出现在输出里
+            "search_config": '{"engines": ["tavily"], "api_key": "sk-secret"}',
+            "arena_master_key": "super-secret",
+        },
+    )
+    res = ReadSageConfigTool().execute(section="preferences")
+    assert res.success is True, res.error
+    prefs = res.content["data"]["preferences"]
+    assert prefs["theme_mode"] == "dark"
+    assert prefs["network_policy"] == {"mode": "online"}
+    assert prefs["bash_config"] == {"timeout_s": 120}
+    assert "search_config" not in prefs
+    assert "arena_master_key" not in prefs
+    assert "sk-secret" not in str(res.content)
+
+
+def test_read_sage_config_self_section_reuses_aggregation(monkeypatch):
+    _install_read_repo(monkeypatch)
+    monkeypatch.setattr(
+        "backend.services.self_status.gather_self_status",
+        lambda: {"version": "1.2.3", "permission_mode": "workspace_write"},
+    )
+    res = ReadSageConfigTool().execute(section="self")
+    assert res.success is True, res.error
+    assert res.content["data"]["self"]["version"] == "1.2.3"
+    assert "运行时自省" in res.output
+
+
+def test_read_sage_config_all_includes_new_sections_but_not_self(monkeypatch):
+    _install_read_repo(monkeypatch, prefs={"theme_mode": "dark"})
+    monkeypatch.setattr(
+        "backend.services.self_status.read_version", lambda: "0.0.0-test"
+    )
+    res = ReadSageConfigTool().execute(section="all")
+    assert res.success is True, res.error
+    data = res.content["data"]
+    assert data["routing"] == {"mode": "auto"}
+    assert data["preferences"]["theme_mode"] == "dark"
+    assert data["version"] == "0.0.0-test"
+    # routing 不再重复出现在 general 中
+    assert "routing" not in data["general"]
+    # self 是重量级聚合，all 不隐式触发
+    assert "self" not in data
+
+
+def test_read_sage_config_rejects_unknown_section():
+    res = ReadSageConfigTool().execute(section="bogus")
+    assert res.success is False
+    assert "不支持的 section" in res.error
+    assert "preferences" in res.error

@@ -13,7 +13,7 @@ agent.run_loop() STEP_DONE 事件验证 (2026-09 step-by-step)
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -37,7 +37,7 @@ def _make_tool_call(call_id: str, name: str = "list_dir", args: str = '{"express
     return LLMToolCall(id=call_id, name=name, arguments=args)
 
 
-def _patch_tool_registry(agent: SageAgent, success: bool = True, content=None, error: str | None = None):
+def _patch_tool_registry(agent: SageAgent, success: bool = True, content=None, error: Optional[str] = None):
     """给 agent.tool_registry.get 装一个总是返回成功 ToolResult 的 mock。"""
     mock_tool = MagicMock()
     mock_tool.execute = MagicMock(

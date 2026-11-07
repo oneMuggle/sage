@@ -8,7 +8,6 @@ import ntpath
 import os
 import shutil
 import subprocess
-import sys
 from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -16,7 +15,7 @@ from typing import Optional, Tuple
 _POSIX_CANDIDATES: Tuple[Tuple[str, str], ...] = (("/bin/bash", "bash"), ("/bin/sh", "sh"))
 _GIT_BASH_RELATIVE = ntpath.join("Git", "bin", "bash.exe")
 _POWERSHELL_RELATIVE = ntpath.join("System32", "WindowsPowerShell", "v1.0", "powershell.exe")
-_SAGE_BUNDLED_BASH_RELATIVE = ntpath.join("resources", "tools", "git-bash", "usr", "bin", "bash.exe")
+_SAGE_BUNDLED_BASH_RELATIVE = ntpath.join("tools", "git-bash", "bin", "bash.exe")
 _PROGRAM_FILES_CSIDL = (0x0026, 0x002A)
 _FILE_READ_ATTRIBUTES = 0x0080
 _FILE_SHARE_ALL = 0x00000007
@@ -67,18 +66,6 @@ def _get_sage_install_root() -> Optional[str]:
     env = os.getenv("SAGE_INSTALL_DIR")
     if env and _is_local_windows_absolute(env) and _is_directory(env):
         return env
-    # Per-user/custom installs cannot be inferred from Program Files. Only trust
-    # the actual embedded interpreter layout, never CWD or an arbitrary PATH entry.
-    python_dir = ntpath.dirname(sys.executable)
-    resources = ntpath.dirname(python_dir)
-    install_root = ntpath.dirname(resources)
-    if (
-        ntpath.basename(python_dir).lower() == "python"
-        and ntpath.basename(resources).lower() == "resources"
-        and _is_local_windows_absolute(install_root)
-        and _is_regular_file(ntpath.join(resources, "tools", "git-bash", "usr", "bin", "bash.exe"))
-    ):
-        return install_root
     roots = _get_windows_program_files_roots()
     if roots:
         candidate = ntpath.join(roots[0], "Sage")

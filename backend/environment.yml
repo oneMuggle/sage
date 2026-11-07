@@ -7,12 +7,12 @@ dependencies:
   - pip
   - pip:
       # Core
-      - fastapi==0.109.0
+      - fastapi==0.109.1
       - uvicorn==0.27.0
       - pydantic==2.5.0
       # HTTP
       - httpx==0.26.0
-      - python-multipart==0.0.9  # required for FastAPI File() in api/legacy_routes.py
+      - python-multipart==0.0.32  # required for FastAPI File() in api/legacy_routes.py; >=0.0.18 fixes PYSEC-2026-1851/1852/3036-3040（与 requirements.txt 对齐，勿单独降版）
       # Observability
       - prometheus-client==0.25.0
       # Tracing
@@ -20,13 +20,17 @@ dependencies:
       - opentelemetry-sdk==1.27.0
       - opentelemetry-exporter-otlp-proto-grpc==1.27.0
       # Utils
-      - python-dotenv==1.0.0
+      - python-dotenv==1.2.2
       - pyyaml==6.0.1
       - croniter==2.0.1
       # Testing
       - pytest==7.4.4
       - pytest-asyncio==0.23.3
       - pytest-cov==5.0.0
+      # coverage 7.17.1 与 pytest-cov 5.0.0 的 combine 不兼容：
+      # INTERNALERROR sqlite3.OperationalError(readonly database / no such
+      # table: coverage_schema)，runner 上必现；7.17.0 为绿基线
+      - coverage==7.17.0
       # pytest.ini timeout=120 护栏依赖本插件; --strict-config 下缺插件直接报错
       - pytest-timeout==2.3.1
       # CI hex/legacy 步骤用 -n auto --dist loadfile 并行(见 ci.yml)

@@ -30,7 +30,9 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from backend.compat.win7.pydantic_compat import ConfigDict
 
 from .errors import OfficeError
 from .export_pdf import export_to_pdf

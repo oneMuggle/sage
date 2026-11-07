@@ -63,7 +63,7 @@
 
 **文档**
 - `docs/technical/115-project-playbook.md`（编号以实际最新为准）
-- `docs/user-manual/26-project-playbook.md`（编号以实际最新为准）
+- `docs/user-manual/27-project-playbook.md`（编号以实际最新为准）
 - 更新 `docs/technical/README.md`、`docs/user-manual/README.md`
 
 ---

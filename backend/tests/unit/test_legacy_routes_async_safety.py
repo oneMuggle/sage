@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from typing import List, Union
 
 import pytest
 
@@ -59,7 +60,7 @@ KEEP_ASYNC_HANDLERS = frozenset(
 )
 
 
-def _load_top_level_functions(src: str) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+def _load_top_level_functions(src: str) -> List[Union[ast.FunctionDef, ast.AsyncFunctionDef]]:
     """加载模块顶层函数定义。"""
     tree = ast.parse(src)
     return [
@@ -74,7 +75,7 @@ def _has_await(func: ast.AsyncFunctionDef) -> bool:
     return any(isinstance(node, ast.Await) for node in ast.walk(func))
 
 
-def _is_router_endpoint(func: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+def _is_router_endpoint(func: Union[ast.FunctionDef, ast.AsyncFunctionDef]) -> bool:
     """判断是否为 FastAPI 路由端点（顶层函数）。
 
     排除条件：函数名以 `_` 开头（私有 helper,不是 FastAPI 路由）。

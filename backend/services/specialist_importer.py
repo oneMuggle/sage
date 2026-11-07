@@ -438,7 +438,7 @@ def _sanitize_mapping(raw: Any) -> Dict[str, Any]:
         return {}
 
     def _clean(obj: Any) -> Any:
-        if obj is None or isinstance(obj, (bool, int, float, str)):
+        if obj is None or isinstance(obj, (bool, int, float, str)):  # noqa: UP038 — py38 运行时不支持 PEP 604 isinstance
             return obj
         if isinstance(obj, dict):
             out: Dict[str, Any] = {}
@@ -470,7 +470,7 @@ def _coerce_str(value: Any, *, default: str = "", max_len: int = 1024) -> str:
 def _coerce_int(
     value: Any, *, default: int, minimum: int, maximum: int
 ) -> int:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):  # noqa: UP038 — py38 运行时
         return default
     v = int(value)
     if v < minimum:

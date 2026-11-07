@@ -13,7 +13,7 @@ Date: 2026-09-26
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from pydantic import BaseModel, Field
 
@@ -65,10 +65,10 @@ class CapabilityRegistry:
     def __init__(self) -> None:
         """Initialize capability registry."""
         # Key: (capability_type, capability_name) -> RegisteredCapability
-        self._capabilities: Dict[tuple[str, str], RegisteredCapability] = {}
+        self._capabilities: Dict[Tuple[str, str], RegisteredCapability] = {}
 
         # Plugin index: plugin_name -> set of (type, name)
-        self._plugin_index: Dict[str, set[tuple[str, str]]] = {}
+        self._plugin_index: Dict[str, Set[Tuple[str, str]]] = {}
 
     def register(
         self,

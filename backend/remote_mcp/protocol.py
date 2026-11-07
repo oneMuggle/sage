@@ -180,10 +180,7 @@ class RemoteMcpService:
         with self._lock:
             if len(self._sessions) >= MAX_SESSIONS:
                 return 429, {}, {"error": "SESSION_LIMIT"}
-            params = message.get("params")
-            if params is not None and not isinstance(params, dict):
-                return 400, {}, _error(message.get("id"), -32602, "params must be an object")
-            requested = (params or {}).get("protocolVersion")
+            requested = (message.get("params") or {}).get("protocolVersion")
             protocol = requested if requested in SUPPORTED_PROTOCOLS else DEFAULT_PROTOCOL
             session = Session(id=str(uuid.uuid4()), workspace_id=workspace["id"], token=token,
                               owner=str(uuid.uuid4()), protocol=protocol)
@@ -249,9 +246,6 @@ class RemoteMcpService:
             if self.paused or active is None or active["id"] != workspace["id"] or (
                     tool.permission and not active.get("permissions", {}).get(tool.permission)):
                 return self._tool_error(req_id, "ACCESS_REVOKED")
-        # 最终校验：紧接工具执行前再查一次，缩小竞态窗口
-        if self.paused:
-            return self._tool_error(req_id, "ACCESS_REVOKED")
         started = time.time()
         try:
             data = tool.handler(ToolContext(active, session.owner, self.jobs), args)

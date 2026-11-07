@@ -1,6 +1,8 @@
-"""Basic token cost estimates, without cache discounts or currency conversion."""
-from decimal import Decimal
 from typing import Optional
+
+"""Basic token cost estimates, without cache discounts or currency conversion."""
+
+from decimal import Decimal
 
 from .schemas import Price
 

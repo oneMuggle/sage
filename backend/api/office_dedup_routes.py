@@ -26,8 +26,9 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import get_database
 from backend.office.errors import OfficeFileNotFoundError, OfficePathError
 from backend.office.models import OfficeDocumentSummary

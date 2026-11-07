@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import List
 
 import pytest
 
@@ -11,7 +12,7 @@ from backend.office.export_pdf import ExportPdfResult
 from backend.office.word_render_audit import audit_rendered_pdf, audit_word_render
 
 
-def _make_pdf(path: Path, pages: list[dict]) -> Path:
+def _make_pdf(path: Path, pages: List[dict]) -> Path:
     import fitz
 
     document = fitz.open()

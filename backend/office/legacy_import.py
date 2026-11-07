@@ -25,7 +25,9 @@ import tempfile
 from pathlib import Path
 from typing import Dict, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
+
+from backend.compat.win7.pydantic_compat import ConfigDict
 
 from .export_pdf import _EXPORT_LOCK, _locate_soffice
 from .path_safety import resolve_within

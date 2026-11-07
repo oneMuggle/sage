@@ -9,13 +9,13 @@
 
 ## 1. 设计决策（已确认）
 
-| 决策点 | 选择 | 理由 |
-|--------|------|------|
-| **定位** | 只做生产力「专家/数字员工」 | 专注工作场景，不做 Character.AI/SillyTavern 兼容 |
-| **记忆默认** | 角色私有 + 共享显式提升 | 强化隐私，默认 `write_scope=specialist` |
-| **知识绑定** | 允许专家私有知识目录 | 存储于 `~/.sage/specialists/<id>/knowledge/`，支持专家独有参考资料 |
-| **分发** | 本地文件导入导出（暂不做团队共享） | zip 包格式，不含网络分发 |
-| **多专家协作** | 首期单专家会话 | 不做 council/debate，多专家仍走现有编排 |
+| 决策点         | 选择                               | 理由                                                               |
+| -------------- | ---------------------------------- | ------------------------------------------------------------------ |
+| **定位**       | 只做生产力「专家/数字员工」        | 专注工作场景，不做 Character.AI/SillyTavern 兼容                   |
+| **记忆默认**   | 角色私有 + 共享显式提升            | 强化隐私，默认 `write_scope=specialist`                            |
+| **知识绑定**   | 允许专家私有知识目录               | 存储于 `~/.sage/specialists/<id>/knowledge/`，支持专家独有参考资料 |
+| **分发**       | 本地文件导入导出（暂不做团队共享） | zip 包格式，不含网络分发                                           |
+| **多专家协作** | 首期单专家会话                     | 不做 council/debate，多专家仍走现有编排                            |
 
 ---
 
@@ -38,15 +38,15 @@ ALTER TABLE agents ADD COLUMN source TEXT DEFAULT 'user';           -- 'builtin'
 
 **字段说明**：
 
-| 字段 | 类型 | 示例 | 说明 |
-|------|------|------|------|
-| `skills` | JSON array | `["writing", "research", "plugin__zotero__*"]` | 技能允许集，支持通配 |
-| `knowledge_bindings` | JSON array | `[{"type":"wiki_project","id":"proj_123"}, {"type":"specialist_dir","path":"~/.sage/specialists/sp_1/knowledge"}]` | 知识绑定列表 |
-| `memory_policy` | JSON object | `{"read_scopes":["specialist","project","user"],"write_scope":"specialist","auto_extract":true}` | 记忆读写策略 |
-| `persona_ui` | JSON object | `{"avatar":"📝","tagline":"写作助手","greeting":"你好，我是写作专家","suggested_prompts":["帮我润色这段"]}` | 卡片 UI 元素 |
-| `permission_mode` | TEXT | `'read_only' \| 'workspace_write' \| 'prompt' \| 'full_access'` | 权限模式 |
-| `version` | INTEGER | `1` | 专家版本号（每次修改人设/知识绑定 +1） |
-| `source` | TEXT | `'user'` | 来源：内置/用户创建/导入 |
+| 字段                 | 类型        | 示例                                                                                                               | 说明                                   |
+| -------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| `skills`             | JSON array  | `["writing", "research", "plugin__zotero__*"]`                                                                     | 技能允许集，支持通配                   |
+| `knowledge_bindings` | JSON array  | `[{"type":"wiki_project","id":"proj_123"}, {"type":"specialist_dir","path":"~/.sage/specialists/sp_1/knowledge"}]` | 知识绑定列表                           |
+| `memory_policy`      | JSON object | `{"read_scopes":["specialist","project","user"],"write_scope":"specialist","auto_extract":true}`                   | 记忆读写策略                           |
+| `persona_ui`         | JSON object | `{"avatar":"📝","tagline":"写作助手","greeting":"你好，我是写作专家","suggested_prompts":["帮我润色这段"]}`        | 卡片 UI 元素                           |
+| `permission_mode`    | TEXT        | `'read_only' \| 'workspace_write' \| 'prompt' \| 'full_access'`                                                    | 权限模式                               |
+| `version`            | INTEGER     | `1`                                                                                                                | 专家版本号（每次修改人设/知识绑定 +1） |
+| `source`             | TEXT        | `'user'`                                                                                                           | 来源：内置/用户创建/导入               |
 
 ### 2.2 专家私有知识目录
 
@@ -66,6 +66,7 @@ ALTER TABLE agents ADD COLUMN source TEXT DEFAULT 'user';           -- 'builtin'
 ```
 
 **索引策略**：
+
 - 复用现有 LanceDB 向量索引
 - 在向量表增加 `agent_id` 列（nullable）
 - 查询时按 `agent_id` 过滤：`WHERE agent_id = ? OR agent_id IS NULL`（专家私有 ∪ 全局共享）
@@ -85,6 +86,7 @@ CREATE INDEX idx_memories_semantic_agent ON memories_semantic(agent_id);
 ```
 
 **可见性规则**：
+
 - 当前专家私有：`WHERE agent_id = ?`
 - 共享层（用户/项目）：`WHERE agent_id IS NULL`
 - 完整查询：`WHERE agent_id = ? OR agent_id IS NULL`
@@ -128,7 +130,7 @@ def compose_system_prompt(
 ) -> str:
     """
     组装 system prompt。
-    
+
     优先级：
     1. 系统安全规则（硬编码）
     2. 基座能力（按 specialist.skills 条件渲染）
@@ -140,47 +142,48 @@ def compose_system_prompt(
     8. 环境与技能清单
     """
     parts = []
-    
+
     # [1] 系统安全规则
     parts.append(SYSTEM_SAFETY_RULES)
-    
+
     # [2] 基座能力（按技能白名单条件注入）
     capability_block = render_capability_block(specialist.skills)
     if capability_block:
         parts.append(capability_block)
-    
+
     # [3] 专家人设（受保护层）
     if specialist.system_prompt:
         parts.append(f"## 专家身份\n\n{specialist.system_prompt}")
     if specialist.persona_ui.get("guardrails"):
         parts.append(f"## 行为边界\n\n{specialist.persona_ui['guardrails']}")
-    
+
     # [4] 场景块
     if scenario.get("plan_mode"):
         parts.append(PLAN_MODE_BLOCK)
     if scenario.get("orchestration"):
         parts.append(ORCHESTRATION_BLOCK)
-    
+
     # [5] 知识上下文
     if knowledge_context:
         parts.append(f"## 知识库参考\n\n{knowledge_context}")
-    
+
     # [6] 记忆上下文
     if memory_context:
         parts.append(f"## 相关记忆\n\n{memory_context}")
-    
+
     # [7] 项目规则
     project_context = discover_project_context(scenario.get("project_id"))
     if project_context:
         parts.append(project_context)
-    
+
     # [8] 环境与技能清单
     parts.append(render_skill_inventory(specialist.skills))
-    
+
     return "\n\n".join(parts)
 ```
 
 **关键修复**：
+
 - `/chat/stream` 必须使用 `compose_system_prompt()`，而不是忽略 `specialist.system_prompt`
 - 基座能力块按 `specialist.skills` 条件渲染：没有 Office 工具就不注入 Office 长文
 
@@ -200,6 +203,7 @@ CREATE INDEX idx_sessions_specialist ON sessions(specialist_id);
 ### 4.2 API 扩展
 
 **创建会话**：
+
 ```typescript
 POST /api/v1/sessions
 {
@@ -209,6 +213,7 @@ POST /api/v1/sessions
 ```
 
 **切换专家**：
+
 ```typescript
 POST /api/v1/sessions/{id}/switch-specialist
 {
@@ -222,14 +227,17 @@ POST /api/v1/sessions/{id}/switch-specialist
 ### 4.3 前端体验
 
 **新会话页**：
+
 - 专家卡片网格（头像 + tagline + 推荐任务）
 - 点击卡片 → 创建会话并绑定专家
 
 **聊天头部**：
+
 - 显示当前专家徽章（头像 + 名称）
 - 点击 → 打开专家选择器（默认"新建会话"，可选"带上下文切换"）
 
 **侧栏**：
+
 - 会话列表按专家分组（可折叠）
 - 每个会话显示专家小头像
 
@@ -251,17 +259,17 @@ class SkillRegistry:
             allowed = self._resolve_skill_pattern(specialist.skills)
             return [s for s in all_skills if s.name in allowed]
         return all_skills
-    
+
     def auto_activate(self, specialist: Optional[AgentProfile], ...) -> list[Skill]:
         """自动激活（按专家允许集过滤）。"""
         candidates = self.list_skills(specialist)
         return [s for s in candidates if s.should_auto_activate(...)]
-    
+
     def slash_commands(self, specialist: Optional[AgentProfile] = None) -> list[SlashCommand]:
         """slash 命令索引（按专家允许集过滤）。"""
         skills = self.list_skills(specialist)
         return [SlashCommand.from_skill(s) for s in skills if s.slash_enabled]
-    
+
     def execute(self, specialist: Optional[AgentProfile], skill_name: str, ...):
         """执行技能（fail-closed）。"""
         if specialist and specialist.skills:
@@ -272,6 +280,7 @@ class SkillRegistry:
 ```
 
 **通配解析**：
+
 ```python
 def _resolve_skill_pattern(self, patterns: list[str]) -> set[str]:
     """解析技能允许集（支持 plugin__<name>__* 通配）。"""
@@ -302,6 +311,7 @@ def _resolve_skill_pattern(self, patterns: list[str]) -> set[str]:
 ```
 
 **加载逻辑**：
+
 - `SkillRegistry.__init__()` 扫描 `~/.sage/specialists/*/skills/`
 - 按 `agent_id` 分组，仅在对应专家会话中可见
 - 同名冲突：专家私有 > 全局（但日志 warn）
@@ -320,21 +330,21 @@ class KnowledgeBinding(BaseModel):
     project_id: Optional[str]  # wiki_project
     collection_id: Optional[str]  # zotero_collection
     path: Optional[str]  # workspace_path / specialist_dir / file
-    
+
     class Config:
         extra = "forbid"
 ```
 
 **类型说明**：
 
-| type | 说明 | 存储位置 |
-|------|------|---------|
-| `wiki_project` | Wiki 项目 | 现有 LanceDB 索引 |
-| `zotero_collection` | Zotero 集合 | 现有 Zotero 向量索引 |
-| `project_material` | 项目资料 | 现有 `project_materials` 表 |
-| `workspace_path` | 工作区路径 | 现有工作区索引 |
-| `specialist_dir` | 专家私有目录 | `~/.sage/specialists/<id>/knowledge/` |
-| `file` | 单个文件 | 按需索引 |
+| type                | 说明         | 存储位置                              |
+| ------------------- | ------------ | ------------------------------------- |
+| `wiki_project`      | Wiki 项目    | 现有 LanceDB 索引                     |
+| `zotero_collection` | Zotero 集合  | 现有 Zotero 向量索引                  |
+| `project_material`  | 项目资料     | 现有 `project_materials` 表           |
+| `workspace_path`    | 工作区路径   | 现有工作区索引                        |
+| `specialist_dir`    | 专家私有目录 | `~/.sage/specialists/<id>/knowledge/` |
+| `file`              | 单个文件     | 按需索引                              |
 
 ### 6.2 检索编排
 
@@ -349,7 +359,7 @@ class KnowledgeRetriever:
     ) -> list[KnowledgeChunk]:
         """
         按专家知识绑定检索。
-        
+
         流程：
         1. 遍历 specialist.knowledge_bindings
         2. 按 type 扇出到对应检索器
@@ -359,7 +369,7 @@ class KnowledgeRetriever:
         6. 带引用注入
         """
         chunks_by_source = {}
-        
+
         for binding in specialist.knowledge_bindings:
             if binding.type == "wiki_project":
                 chunks = await self._retrieve_wiki(binding.project_id, query, top_k)
@@ -368,17 +378,18 @@ class KnowledgeRetriever:
             elif binding.type == "specialist_dir":
                 chunks = await self._retrieve_specialist_dir(specialist.id, query, top_k)
             # ... 其他 type
-            
+
             chunks_by_source[binding.type] = chunks
-        
+
         # RRF 融合
         fused = reciprocal_rank_fusion(chunks_by_source)
-        
+
         # 预算截断
         return fused[:top_k]
 ```
 
 **无命中拒答**：
+
 ```python
 if not chunks:
     return "知识库无相关内容，建议补充参考资料或调整问题。"
@@ -397,12 +408,13 @@ class MemoryPolicy(BaseModel):
     write_scope: Literal["specialist", "project", "user"] = "specialist"
     auto_extract: bool = True
     retention_days: Optional[int] = None
-    
+
     class Config:
         extra = "forbid"
 ```
 
 **默认策略**：
+
 - `read_scopes = ["specialist", "project", "user"]`：专家私有 ∪ 项目 ∪ 用户
 - `write_scope = "specialist"`：默认写入专家私有层
 - `auto_extract = True`：自动从对话抽取事实
@@ -415,13 +427,14 @@ class ToolExecutionContext:
     agent_id: str  # 当前专家 ID
     session_id: str
     project_id: Optional[str]
-    
+
     def get_memory_manager(self) -> MemoryManager:
         """返回绑定当前专家的记忆管理器。"""
         return MemoryManager(agent_id=self.agent_id, project_id=self.project_id)
 ```
 
 **子代理继承**：
+
 ```python
 # backend/orchestration/subagent_runner.py
 class SubagentRunner:
@@ -437,6 +450,7 @@ class SubagentRunner:
 ### 7.3 显式提升为共享
 
 前端 UI：
+
 ```typescript
 // src/components/MemoryPromoteButton.tsx
 <Button onClick={() => promoteToShared(memoryId)}>
@@ -445,6 +459,7 @@ class SubagentRunner:
 ```
 
 后端 API：
+
 ```python
 # backend/api/memory_routes.py
 @router.post("/memories/{id}/promote")
@@ -453,7 +468,7 @@ async def promote_memory(id: str, target_scope: Literal["user", "project"]):
     memory = await memory_repo.get(id)
     if memory.agent_id is None:
         raise BadRequest("已是共享记忆")
-    
+
     # 清除 agent_id → 变为共享
     await memory_repo.update(id, {"agent_id": None, "scope": target_scope})
 ```
@@ -513,6 +528,7 @@ source: user
 ### 8.3 导入/导出 API
 
 **导出**：
+
 ```python
 # backend/api/specialist_routes.py
 @router.get("/specialists/{id}/export")
@@ -524,6 +540,7 @@ async def export_specialist(id: str) -> FileResponse:
 ```
 
 **导入**：
+
 ```python
 @router.post("/specialists/import")
 async def import_specialist(file: UploadFile) -> dict:
@@ -539,6 +556,7 @@ async def import_specialist(file: UploadFile) -> dict:
 ```
 
 **安全校验**：
+
 - 不自动执行 `skills/*/scripts/*.py`
 - 扫描 `persona.md` 中的提示词注入模式（如 "ignore previous instructions"）
 - 包内不得含密钥（正则扫描 `API_KEY`、`SECRET`、`TOKEN`）
@@ -552,6 +570,7 @@ async def import_specialist(file: UploadFile) -> dict:
 **目标**：让 `AgentProfile` 真正驱动运行时
 
 **任务**：
+
 - [x] 实现 `compose_system_prompt()` + `/chat/stream` 使用
 - [x] stream 链路接通 profile 模型 / temperature / max_tokens
 - [x] 会话级专家绑定 + 聊天角色选择器
@@ -567,6 +586,7 @@ async def import_specialist(file: UploadFile) -> dict:
 **目标**：专家画廊 + 技能作用域 fail-closed
 
 **任务**：
+
 - [x] `agents` 表扩展字段 + migration 版本化
 - [x] `/specialists` 画廊、创建向导、六段编辑器、预览与试聊
 - [x] 技能允许集在四个入口 fail-closed
@@ -580,6 +600,7 @@ async def import_specialist(file: UploadFile) -> dict:
 **目标**：专家可绑定多个知识源，统一检索
 
 **任务**：
+
 - [x] `KnowledgeBinding` 数据模型与 UI
 - [x] Wiki / Zotero / 项目资料 / 工作区 / 专家私有目录接入（已接 wiki_project / project_material / specialist_private；zotero_collection 与 workspace_fts 待上游返回集合元数据后接入，见 M2 计划文档）
 - [x] 向量表增加 `agent_id` 列 + 索引（**策略调整**：不修改现有三层存储 schema，改为路由层 `knowledge_retriever.py` 扇出 + 独立专家私有向量库 `~/.sage/specialists/<id>/vectors.json`，理由与替代方案见 `docs/plans/2026-11-03_m2-knowledge-binding.md`）
@@ -593,6 +614,7 @@ async def import_specialist(file: UploadFile) -> dict:
 **目标**：专家私有记忆 + 共享显式提升
 
 **任务**：
+
 - [x] 记忆表 / 向量表增加 `agent_id` 维度与索引（**落地偏离**：仅 `memories_episodic` / `memories_semantic` 加列 + 索引；sqlite-vec 向量表 payload 无 agent 维度，改为 RRF 融合后按主表行 `is_row_visible` 二次过滤，见 M3 计划文档）
 - [x] 读写策略（默认 `write_scope=specialist`）
 - [x] 身份贯穿（`ToolExecutionContext.agent_id` → `MemoryManager`）
@@ -608,6 +630,7 @@ async def import_specialist(file: UploadFile) -> dict:
 **目标**：专家包稳定 + 内置模板库
 
 **任务**：
+
 - [x] 专家包格式稳定（zip: persona.md + avatar + skills + knowledge）
 - [x] 内置模板库（写作 / 研究 / 编码 / 演示 / Office）
 - [x] 版本 diff / 回滚
@@ -620,15 +643,15 @@ async def import_specialist(file: UploadFile) -> dict:
 
 ## 10. 风险与缓解
 
-| 风险 | 缓解 |
-|------|------|
-| 在断链上盖楼 | M0 先行，作为硬前置 |
-| 提示词膨胀 | 条件能力块 + 预算裁剪 + 受保护层白名单 |
-| 记忆碎片化 | 共享用户/项目层 + 显式提升机制 |
-| 知识幻觉 | 引用强制 + 阈值 + 无命中拒答 |
-| 角色数量膨胀 | 模板画廊 + 场景标签 + 使用统计 + 归档 |
-| 包安全 | 不自动执行 + 注入扫描 + 权限确认 |
-| 双分支成本 | 纯 SQLite / 文件实现，避免新重依赖；按 M0–M4 分批同步 |
+| 风险         | 缓解                                                  |
+| ------------ | ----------------------------------------------------- |
+| 在断链上盖楼 | M0 先行，作为硬前置                                   |
+| 提示词膨胀   | 条件能力块 + 预算裁剪 + 受保护层白名单                |
+| 记忆碎片化   | 共享用户/项目层 + 显式提升机制                        |
+| 知识幻觉     | 引用强制 + 阈值 + 无命中拒答                          |
+| 角色数量膨胀 | 模板画廊 + 场景标签 + 使用统计 + 归档                 |
+| 包安全       | 不自动执行 + 注入扫描 + 权限确认                      |
+| 双分支成本   | 纯 SQLite / 文件实现，避免新重依赖；按 M0–M4 分批同步 |
 
 ---
 

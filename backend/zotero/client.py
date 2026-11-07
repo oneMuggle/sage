@@ -20,7 +20,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Set
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
 from backend.zotero.exceptions import (
     ZoteroCollectionNotFoundError,
@@ -89,7 +89,7 @@ class ZoteroClient:
         :class:`ZoteroDatabaseLockedError` if the timeout elapses.
     """
 
-    def __init__(self, db_path: Optional[Path] = None, timeout: float = 10.0) -> None:
+    def __init__(self, db_path: Optional[Union[Path, str]] = None, timeout: float = 10.0) -> None:
         self._resolved_path = _resolve_db_path(Path(db_path) if db_path else None)
         self._timeout = timeout
 
@@ -121,7 +121,7 @@ class ZoteroClient:
         finally:
             conn.close()
 
-    def _execute(self, query: str, params: tuple = ()) -> List[sqlite3.Row]:
+    def _execute(self, query: str, params: Union[tuple, Tuple[()]] = ()) -> List[sqlite3.Row]:
         """Execute a query and return all rows."""
         with self._connect() as conn:
             cursor = conn.execute(query, params)

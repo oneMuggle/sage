@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
+from typing import Optional
 
 import pytest
 
@@ -63,12 +64,12 @@ WORKSPACE = "/tmp/test-ws"
 def _make_doc(
     *,
     doc_type: OfficeDocType = OfficeDocType.WORD,
-    original_filename: str | None = None,
-    generated_filename: str | None = None,
+    original_filename: Optional[str] = None,
+    generated_filename: Optional[str] = None,
     created_at: int = 1000,
     updated_at: int = 1000,
     file_size_bytes: int = 1024,
-    archived_at: int | None = None,
+    archived_at: Optional[int] = None,
 ) -> OfficeDocumentSummary:
     """Build a minimal OfficeDocumentSummary for seeding."""
     return OfficeDocumentSummary(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from typing import List
 
 import pytest
 from docx import Document
@@ -21,7 +22,7 @@ from backend.office.word_rule_extract_llm import (
 class FakeClient:
     def __init__(self, response: str) -> None:
         self.response = response
-        self.prompts: list[str] = []
+        self.prompts: List[str] = []
 
     async def complete(self, prompt: str) -> str:
         self.prompts.append(prompt)
@@ -33,7 +34,7 @@ class FailingClient:
         raise RuntimeError("upstream timeout")
 
 
-def _spec_doc(path: Path, texts: list[str]) -> Path:
+def _spec_doc(path: Path, texts: List[str]) -> Path:
     document = Document()
     for text in texts:
         document.add_paragraph(text)
@@ -41,7 +42,7 @@ def _spec_doc(path: Path, texts: list[str]) -> Path:
     return path
 
 
-def _paragraphs(texts: list[str]) -> list[dict]:
+def _paragraphs(texts: List[str]) -> List[dict]:
     return [{"index": index, "text": text} for index, text in enumerate(texts)]
 
 
@@ -94,7 +95,7 @@ def test_propose_candidates_accepts_valid_and_rejects_invalid() -> None:
    "params":{"font_east_asia":"仿宋","size_pt":16},"confidence":1.5}
 ]
 ```"""
-    warnings: list[dict] = []
+    warnings: List[dict] = []
     candidates = asyncio.run(
         propose_llm_candidates(
             "spec.docx",

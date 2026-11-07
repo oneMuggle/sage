@@ -8,10 +8,10 @@
       "topic": "AI 对教育的影响短文润色",
       "prompt": "请对以下关于 AI 对教育影响的短文进行润色，突出三个关键论点，保持学术语感但提升可读性：\n\n「AI 正在影响教育领域。学生用 AI 写作业。老师用 AI 批改。这对教育是好是坏还不清楚。我们需要思考怎么用 AI 来辅助教学。」\n\n字数控制在 300–500 字。",
       "checks": [
-        {"kind": "keywords_all", "value": ["教育", "AI", "教学"]},
-        {"kind": "max_chars", "value": 1500},
-        {"kind": "refusal"},
-        {"kind": "forbidden", "value": ["不知道", "无法回答", "抱歉", "我没有办法"]}
+        { "kind": "keywords_all", "value": ["教育", "AI", "教学"] },
+        { "kind": "max_chars", "value": 1500 },
+        { "kind": "refusal" },
+        { "kind": "forbidden", "value": ["不知道", "无法回答", "抱歉", "我没有办法"] }
       ]
     },
     {
@@ -20,10 +20,10 @@
       "topic": "客户投诉邮件回复",
       "prompt": "为一封客户投诉邮件撰写一封专业、礼貌、带共情的回复。客户反馈：「你们的产品根本不能用，订单号 2026-042，等了一周还没发货！」。回复需表达歉意、承认问题、给出解决方案与时间线，150–250 字。",
       "checks": [
-        {"kind": "keywords_any", "value": ["抱歉", "理解", "感谢", "歉意", "给您带来不便"]},
-        {"kind": "forbidden", "value": ["这是你的问题", "没办法", "不可能"]},
-        {"kind": "max_chars", "value": 800},
-        {"kind": "refusal"}
+        { "kind": "keywords_any", "value": ["抱歉", "理解", "感谢", "歉意", "给您带来不便"] },
+        { "kind": "forbidden", "value": ["这是你的问题", "没办法", "不可能"] },
+        { "kind": "max_chars", "value": 800 },
+        { "kind": "refusal" }
       ]
     },
     {
@@ -32,10 +32,13 @@
       "topic": "量子计算对密码学的潜在威胁",
       "prompt": "请概述量子计算在现代密码学（尤其是 RSA 与椭圆曲线）领域的潜在威胁，并给出至少三种已有的应对方案（如后量子密码、量子密钥分发等）。引用具体算法/协议名称。",
       "checks": [
-        {"kind": "keywords_all", "value": ["量子计算", "密码"]},
-        {"kind": "keywords_any", "value": ["后量子", "Shor", "Grover", "NIST", "格密码", "量子密钥分发"]},
-        {"kind": "max_chars", "value": 4000},
-        {"kind": "refusal"}
+        { "kind": "keywords_all", "value": ["量子计算", "密码"] },
+        {
+          "kind": "keywords_any",
+          "value": ["后量子", "Shor", "Grover", "NIST", "格密码", "量子密钥分发"]
+        },
+        { "kind": "max_chars", "value": 4000 },
+        { "kind": "refusal" }
       ]
     },
     {
@@ -44,10 +47,10 @@
       "topic": "React/Vue/Svelte 对比",
       "prompt": "系统对比 React、Vue、Svelte 三个主流前端框架的核心差异，从响应式机制、编译时 vs 运行时、生态规模、学习曲线、适用场景五个维度展开。每个维度给出具体的技术判断，不要泛泛而谈。",
       "checks": [
-        {"kind": "keywords_all", "value": ["React", "Vue", "Svelte"]},
-        {"kind": "regex", "pattern": "响应式|编译|运行时|生态|学习曲线"},
-        {"kind": "max_chars", "value": 5000},
-        {"kind": "refusal"}
+        { "kind": "keywords_all", "value": ["React", "Vue", "Svelte"] },
+        { "kind": "regex", "pattern": "响应式|编译|运行时|生态|学习曲线" },
+        { "kind": "max_chars", "value": 5000 },
+        { "kind": "refusal" }
       ]
     },
     {
@@ -56,10 +59,10 @@
       "topic": "Python LRU Cache 实现",
       "prompt": "用 Python 实现一个 LRU Cache 类，要求：\n- 支持 get(key) 和 put(key, value) 操作\n- get / put 均为 O(1) 时间复杂度\n- 容量超限时淘汰最久未使用的条目\n- 给出完整可运行的代码，包括类型注解与一个使用示例。",
       "checks": [
-        {"kind": "regex", "pattern": "def get|def put"},
-        {"kind": "keywords_any", "value": ["O(1)", "时间复杂度", "OrderedDict", "双向链表"]},
-        {"kind": "regex", "pattern": "class \\w+LRU|class LRU|class LRUCache"},
-        {"kind": "refusal"}
+        { "kind": "regex", "pattern": "def get|def put" },
+        { "kind": "keywords_any", "value": ["O(1)", "时间复杂度", "OrderedDict", "双向链表"] },
+        { "kind": "regex", "pattern": "class \\w+LRU|class LRU|class LRUCache" },
+        { "kind": "refusal" }
       ]
     },
     {
@@ -68,10 +71,10 @@
       "topic": "SQL：过去 30 天每用户消费前 3 名订单",
       "prompt": "写一段 SQL 查询（PostgreSQL 语法），从 orders 表中找出过去 30 天每个用户消费金额的前三名订单。返回 user_id、order_id、amount、rank。使用窗口函数实现。",
       "checks": [
-        {"kind": "keywords_any", "value": ["SELECT", "select"]},
-        {"kind": "regex", "pattern": "ROW_NUMBER|DENSE_RANK|RANK|窗口函数"},
-        {"kind": "keywords_any", "value": ["orders", "ORDER BY"]},
-        {"kind": "refusal"}
+        { "kind": "keywords_any", "value": ["SELECT", "select"] },
+        { "kind": "regex", "pattern": "ROW_NUMBER|DENSE_RANK|RANK|窗口函数" },
+        { "kind": "keywords_any", "value": ["orders", "ORDER BY"] },
+        { "kind": "refusal" }
       ]
     },
     {
@@ -80,10 +83,10 @@
       "topic": "SaaS 产品 B 轮融资 pitch 大纲",
       "prompt": "为一款 SaaS 产品设计一个 5 分钟 B 轮融资 pitch 大纲，需包含：开场钩子、市场规模、核心产品价值、差异化壁垒、增长数据、团队、融资用途。每个部分给出 1-2 句核心要点。",
       "checks": [
-        {"kind": "keywords_all", "value": ["融资", "产品", "市场"]},
-        {"kind": "keywords_any", "value": ["增长", "壁垒", "差异化", "团队"]},
-        {"kind": "max_chars", "value": 2000},
-        {"kind": "refusal"}
+        { "kind": "keywords_all", "value": ["融资", "产品", "市场"] },
+        { "kind": "keywords_any", "value": ["增长", "壁垒", "差异化", "团队"] },
+        { "kind": "max_chars", "value": 2000 },
+        { "kind": "refusal" }
       ]
     },
     {
@@ -92,10 +95,10 @@
       "topic": "技术分享开场白",
       "prompt": "为一场 30 分钟的技术分享准备开场白（2-3 分钟），主题是「大模型在代码审查中的应用」。开场白需包含自我介绍、痛点引入、分享议程、听众预期收获。",
       "checks": [
-        {"kind": "keywords_any", "value": ["大模型", "代码审查", "LLM"]},
-        {"kind": "keywords_any", "value": ["议程", "分享", "收获", "今天"]},
-        {"kind": "max_chars", "value": 800},
-        {"kind": "refusal"}
+        { "kind": "keywords_any", "value": ["大模型", "代码审查", "LLM"] },
+        { "kind": "keywords_any", "value": ["议程", "分享", "收获", "今天"] },
+        { "kind": "max_chars", "value": 800 },
+        { "kind": "refusal" }
       ]
     },
     {
@@ -104,10 +107,10 @@
       "topic": "Word 报告执行摘要",
       "prompt": "为一篇关于「远程办公对生产力影响」的 Word 报告撰写执行摘要，约 200 字。需包含：核心发现（至少 2 点）、关键数据引用（可用占位符）、建议行动。",
       "checks": [
-        {"kind": "keywords_all", "value": ["远程", "生产力"]},
-        {"kind": "keywords_any", "value": ["建议", "发现", "数据", "影响"]},
-        {"kind": "max_chars", "value": 800},
-        {"kind": "refusal"}
+        { "kind": "keywords_all", "value": ["远程", "生产力"] },
+        { "kind": "keywords_any", "value": ["建议", "发现", "数据", "影响"] },
+        { "kind": "max_chars", "value": 800 },
+        { "kind": "refusal" }
       ]
     },
     {
@@ -116,10 +119,10 @@
       "topic": "季度销售追踪 Excel 模板设计",
       "prompt": "设计一个 Excel 表格模板，用于追踪季度销售数据。需列出：列名、字段含义、建议的数据验证规则、建议的透视表结构。模板需支持按地区/产品/销售人员分组。",
       "checks": [
-        {"kind": "keywords_any", "value": ["季度", "销售", "Excel"]},
-        {"kind": "keywords_any", "value": ["地区", "产品", "销售人员"]},
-        {"kind": "regex", "pattern": "列|字段|行"},
-        {"kind": "refusal"}
+        { "kind": "keywords_any", "value": ["季度", "销售", "Excel"] },
+        { "kind": "keywords_any", "value": ["地区", "产品", "销售人员"] },
+        { "kind": "regex", "pattern": "列|字段|行" },
+        { "kind": "refusal" }
       ]
     }
   ]

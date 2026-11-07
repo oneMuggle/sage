@@ -6,6 +6,8 @@ ZoteroClient 以模块级单例注入：测试用 fake client 替换 ``zotero_ro
 
 from __future__ import annotations
 
+from typing import Optional
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -21,7 +23,7 @@ class _FakeClient:
 
     db_path = "/fake/zotero.sqlite"
 
-    def __init__(self, calls: dict | None = None):
+    def __init__(self, calls: Optional[dict] = None):
         self.calls = calls if calls is not None else {}
 
     def get_stats(self):

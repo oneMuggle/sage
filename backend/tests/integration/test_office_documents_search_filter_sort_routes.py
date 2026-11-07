@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
@@ -72,8 +73,8 @@ def _insert(
     doc_id: str,
     *,
     doc_type: str = "word",
-    original_filename: str | None = None,
-    generated_filename: str | None = None,
+    original_filename: Optional[str] = None,
+    generated_filename: Optional[str] = None,
     created_at: int = 1000,
     updated_at: int = 1000,
     file_size_bytes: int = 1024,

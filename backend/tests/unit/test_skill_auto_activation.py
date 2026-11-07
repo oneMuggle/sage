@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import List, Optional
 
 import pytest
 from sage_core import Message, Role
@@ -454,7 +455,7 @@ class TestInprocAutoActivate:
 class _FakeActivationResult:
     """模拟 AutoActivationResult 的鸭子类型。"""
 
-    def __init__(self, block: str, matches: dict | None = None) -> None:
+    def __init__(self, block: str, matches: Optional[dict] = None) -> None:
         self.names = ("fake-skill",) if block else ()
         self.context_block = block
         # matches 字段可选（测试 duck-type 兼容性）
@@ -465,10 +466,10 @@ class _FakeActivationResult:
 class _FakeSkillPort:
     """带 auto_activate 扩展的假 skills port。"""
 
-    def __init__(self, block: str = "", raise_exc: Exception | None = None) -> None:
+    def __init__(self, block: str = "", raise_exc: Optional[Exception] = None) -> None:
         self._block = block
         self._raise = raise_exc
-        self.calls: list[str] = []
+        self.calls: List[str] = []
 
     def list_skills(self):
         return []

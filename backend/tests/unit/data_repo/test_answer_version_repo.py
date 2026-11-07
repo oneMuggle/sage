@@ -7,6 +7,8 @@ producer 接线（excluded ids、drop_excluded、ArchiveOnFirstSave）。
 
 from __future__ import annotations
 
+from typing import List
+
 import pytest
 
 from backend.data.answer_version_repo import (
@@ -267,7 +269,7 @@ def test_archive_on_first_save_archives_once(session: str) -> None:
     repo = MessageRepository()
     anchor = _seed_turn(session, answer="旧回答")
 
-    calls: list[str] = []
+    calls: List[str] = []
     real_archive = AnswerVersionRepository.archive_turn
 
     def _spy(self, sid: str, aid: str) -> int:

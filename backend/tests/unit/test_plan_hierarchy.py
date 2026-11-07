@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 import pytest
 
 from backend.orchestration.plan_hierarchy import (
@@ -9,7 +11,7 @@ from backend.orchestration.plan_hierarchy import (
 )
 
 
-def task(task_id: str, parent_task_id: str | None = None) -> dict:
+def task(task_id: str, parent_task_id: Optional[str] = None) -> dict:
     value = {"task_id": task_id, "agent_id": "agent", "goal": task_id}
     if parent_task_id is not None:
         value["parent_task_id"] = parent_task_id

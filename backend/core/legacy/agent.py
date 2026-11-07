@@ -73,7 +73,6 @@ from backend.memory import (
     SessionSummaryStore,
     WorkingMemory,
 )
-from backend.memory.embedder_factory import get_shared_embedder
 from backend.orchestration.complexity_classifier import estimate_budget_level
 from backend.services.permission_gate import (
     DEFAULT_APPROVAL_TIMEOUT_S,
@@ -91,11 +90,7 @@ from backend.services.todo_service import get_todo_service
 from backend.tools import ToolRegistry, register_all_tools
 from backend.tools.ask_user_tool import ASK_USER_QUESTION_TOOL_NAME, validate_ask_user_args
 from backend.tools.base import ToolResult
-from backend.tools.executor import (
-    TIMEOUT_EXCEPTIONS,
-    tool_timeout_message,
-    validate_required_args,
-)
+from backend.tools.executor import TIMEOUT_EXCEPTIONS, tool_timeout_message
 
 if TYPE_CHECKING:  # 仅类型标注用，避免 core → ports 的运行期导入边
     from backend.ports.llm import ModelCapabilities
@@ -498,8 +493,6 @@ class SageAgent:
                 episodic,
                 semantic,
                 summary_store=SessionSummaryStore(db),
-                # 冲突消解的语义去重 —— 传工厂函数以便热切换嵌入模式
-                embedder=get_shared_embedder,
             )
             # M0 (2026-11-03): 专家记忆读权限 —— 把 profile.memory_access
             # 下发到记忆层闸门（read-layer filtering）。
@@ -2486,14 +2479,6 @@ class SageAgent:
                                 tool_p = self.tool_registry.get(tc.name)
                                 if tool_p is None:
                                     return f"[错误] 工具不存在: {tc.name}", True
-                                # alpha.36 (Bug #1): 并发池分发前先过 required 校验
-                                # （与 hex InprocToolAdapter / 串行路径同 helper——共用
-                                # backend.tools.executor.validate_required_args），
-                                # 缺 required 时不再让 execute() 抛 TypeError 把 Python
-                                # 内部错误文本泄漏到 LLM 输出。
-                                required_error = validate_required_args(tool_p, args_p)
-                                if required_error is not None:
-                                    return required_error, True
                                 result_p = tool_p.execute(**args_p)
                                 if hasattr(result_p, "success") and hasattr(result_p, "content"):
                                     if result_p.success:
@@ -3526,15 +3511,26 @@ class SageAgent:
         LLM 拿到的是 Python 异常堆栈而非友好错误。现在分发前校验
         required 字段,缺失则返回明确错误消息。
 
-        alpha.36 (Bug #1)：实现下沉到 ``backend.tools.executor.validate_required_args``
-        公共 helper（hex InprocToolAdapter 与并行只读批次同样用），避免两份
-        校验逻辑漂移。SageAgent 内部调用路径（execute_tool / _await_tool_execution）
-        保留原方法签名，错误文案模板由公共 helper 统一。
-
         Returns:
             None 表示通过;否则返回错误消息字符串(调用方应直接返回失败)。
         """
-        return validate_required_args(tool, dict(parameters))
+        schema = getattr(tool, "schema", None)
+        if schema is None:
+            return None
+        params_schema = getattr(schema, "parameters", None)
+        if not isinstance(params_schema, dict):
+            return None
+        required = params_schema.get("required")
+        if not required:
+            return None
+        # required 应该是字符串列表
+        if not isinstance(required, (list, tuple)):  # noqa: UP038 — py38 运行时 isinstance 不支持 PEP604 union
+            return None
+        missing = [name for name in required if name not in parameters]
+        if not missing:
+            return None
+        names = ", ".join(missing)
+        return f"工具 {tool.name} 缺少必需参数: {names}"
 
     def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """

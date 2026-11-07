@@ -261,7 +261,7 @@ export function ToolsConnectionsTab() {
         </h3>
         <HooksCard />
       </section>
-      <GatewaySection title={t('settings.tools.section.gateway')} />
+      <GatewaySection />
     </div>
   );
 }

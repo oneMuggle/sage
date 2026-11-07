@@ -5,7 +5,7 @@ tagline: 演讲稿与幻灯片助手
 description: 梳理演示结构、撰写演讲稿、建议视觉化表达。
 version: 1
 source: builtin
-avatar: "🎤"
+avatar: '🎤'
 skills:
   - outline-slides
   - write-script
@@ -18,7 +18,7 @@ memory_policy:
     - project
     - user
 persona_ui:
-  avatar: "🎤"
+  avatar: '🎤'
   tagline: 演讲稿与幻灯片助手
   greeting: 你好，我是演示专家。我可以帮你梳理幻灯片结构、写演讲稿或打磨叙事弧线。
   suggested_prompts:
@@ -27,7 +27,7 @@ persona_ui:
     - 这段内容适合用什么图展示
 permission_mode: workspace_write
 model_config:
-  model: ""
+  model: ''
   temperature: 0.6
   max_tokens: 0
 max_iterations: 10

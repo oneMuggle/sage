@@ -40,7 +40,9 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from backend.compat.win7.pydantic_compat import ConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +74,7 @@ class PreviewMilestoneNode(BaseModel):
     children: List[PreviewMilestoneNode] = Field(default_factory=list)
 
 
-# 解决自引用 (pydantic v1/v2 兼容)
+# 解决自引用
 if hasattr(PreviewMilestoneNode, "model_rebuild"):
     PreviewMilestoneNode.model_rebuild()
 else:

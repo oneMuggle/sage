@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pytest
 
@@ -70,10 +70,10 @@ class _FakeClient:
 
     def __init__(
         self,
-        tagged_summaries: List[Dict[str, Any]] | None = None,
-        full_items: Dict[str, Dict[str, Any]] | None = None,
-        annotations: Dict[str, List[Dict[str, Any]]] | None = None,
-        fail_keys: set | None = None,
+        tagged_summaries: Optional[List[Dict[str, Any]]] = None,
+        full_items: Optional[Dict[str, Dict[str, Any]]] = None,
+        annotations: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+        fail_keys: Optional[set] = None,
     ):
         self.summaries = tagged_summaries or []
         self.full = full_items or {}

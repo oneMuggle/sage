@@ -8,12 +8,13 @@
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import logging
 import os
 import re
 import sys
-from typing import Any, Dict, FrozenSet, List, Optional
+from typing import Any, Dict, FrozenSet, List
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,9 @@ ALIASES: Dict[str, str] = {
     # 2026-09-14: local_model_path 历史残留 (win7 安装包迁移数据), 不翻译会导致
     # validate_settings_shape 报 400 (field 不在 LEGAL_ENDPOINT_KEYS 白名单).
     "local_model_path": "localModelPath",
+    # quota 子层 (2026-09-18 端点限额): 与前端 EndpointQuota 字段同步.
+    "daily_tokens": "dailyTokens",
+    "monthly_budget_usd": "monthlyBudgetUsd",
     # ModelSelection 子层
     "endpoint_id": "endpointId",
     "model_id": "modelId",
@@ -104,12 +108,6 @@ ALIASES: Dict[str, str] = {
     "budget_max_extensions": "budgetMaxExtensions",
     "log_timezone": "logTimezone",
     "use_folder_picker": "useFolderPicker",
-    # win7 专属: OrchSettings 已含四个 profile 迭代上限键 (前端整体 spread
-    # 提交时必带上, 不翻译/不白名单则编排段任一保存 400)。
-    "max_primary_iterations": "maxPrimaryIterations",
-    "max_coder_iterations": "maxCoderIterations",
-    "max_reviewer_iterations": "maxReviewerIterations",
-    "max_writer_iterations": "maxWriterIterations",
     # 2026-10-25: LLM 重试参数 — 前端发送 camelCase，但某些中间层可能转成 snake_case，
     # 需要 ALIASES 映射回 camelCase 以通过白名单校验。
     "llm_retry_max_attempts": "llmRetryMaxAttempts",
@@ -118,17 +116,17 @@ ALIASES: Dict[str, str] = {
     # 2026-10-30: 自动重试总时长预算（秒，0 = 不限）。
     "llm_retry_total_budget_s": "llmRetryTotalBudgetS",
     "llm_total_timeout_s": "llmTotalTimeoutS",
-    # 2026-10-27: 会话标题专用模型 id — 与后端 title_generator.load_title_llm_config 对齐。
-    "title_model_id": "titleModelId",
-    # 2026-10-28: LLM 代理上游超时（秒）— 前端「LLM 代理超时」设置。
-    # 缺别名时 relay 的 camelToSnake 往返后翻不回 camel，保存 400 被静默吞掉。
-    "llm_proxy_timeout_s": "llmProxyTimeoutS",
     # 2026-10-28: ask_user_question 工具的可配置限制。
     "max_consecutive_unanswered_questions": "maxConsecutiveUnansweredQuestions",
     "min_options_per_question": "minOptionsPerQuestion",
     "max_options_per_question": "maxOptionsPerQuestion",
     "max_clarify_questions_in_prompt": "maxClarifyQuestionsInPrompt",
     "max_clarify_questions_per_round": "maxClarifyQuestionsPerRound",
+    # 2026-10-28: LLM 代理上游超时（秒）— 前端「LLM 代理超时」设置。
+    # 缺别名时 relay 的 camelToSnake 往返后翻不回 camel，保存 400 被静默吞掉。
+    "llm_proxy_timeout_s": "llmProxyTimeoutS",
+    # 2026-10-27: 会话标题专用模型 id — 与后端 title_model_factory.load_title_llm_config 对齐。
+    "title_model_id": "titleModelId",
 }
 
 # AppSettings (src/entities/setting/types.ts) 锁死的白名单
@@ -165,16 +163,16 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         # 2026-10-22: 整轮任务 wall-clock 上限（秒）— 0 = 不限；函数式读取
         # 立即生效，无须重启后端。前端 DEFAULT_SETTINGS = 1800。
         "llmTotalTimeoutS",
-        # 2026-10-27: 会话标题生成专用模型 id（顶层扁平键，与 chatModel 同风格）。
-        # 值为模型 id 字符串；留空表示回退到聊天模型。后端
-        # title_generator.load_title_llm_config() 读取此键。
-        "titleModelId",
         # 2026-10-28: LLM 代理上游超时（秒）。backend/api/llm_proxy_routes.py
         # 函数式读取，改后下一个请求即生效。
         "llmProxyTimeoutS",
         # Task 9 (2026-10-28): 智能路由模式 {'mode': 'auto' | 'manual'}。
         # 缺省 = manual（现行为）。llm_factory.load_routing_config() 读取。
         "routing",
+        # 2026-10-27: 会话标题生成专用模型 id（顶层扁平键，与 chatModel 同风格）。
+        # 值为模型 id 字符串；留空表示回退到聊天模型。后端
+        # title_model_factory.load_title_llm_config() 读取此键。
+        "titleModelId",
     }
 )
 LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
@@ -203,6 +201,15 @@ LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
         # 两者缺省 = 不发送该键 (上游不进入思考模式)。
         "reasoningEffort",
         "thinkingBudget",
+        # 2026-09-18 (端点限额): 可选嵌套配额对象 {dailyTokens, monthlyBudgetUsd}.
+        "quota",
+    }
+)
+# EndpointConfig.quota 子层白名单 (2026-09-18). 值语义校验见 validate_quota.
+LEGAL_QUOTA_KEYS: FrozenSet[str] = frozenset(
+    {
+        "dailyTokens",
+        "monthlyBudgetUsd",
     }
 )
 LEGAL_MODEL_SELECTION_KEYS: FrozenSet[str] = frozenset(
@@ -260,13 +267,7 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "runWallClockLimitMinutes",
         "subagentTaskTimeoutS",
         "maxRetryOfChains",
-        # win7 专属: 四个 profile 迭代上限已在 OrchSettings (types.ts), 前端
-        # 部分更新 spread 必带上, 白名单不跟则编排段任一保存 400。
-        "maxPrimaryIterations",
-        "maxCoderIterations",
-        "maxReviewerIterations",
-        "maxWriterIterations",
-        # 2026-10-20 全局迭代上限 (Win7 适配: 0=按各 agent 分别设置)
+        # 2026-10-20 全局迭代上限 (0=按各 agent 分别设置)
         "maxIterations",
         # 2026-11-01: 动态迭代预算（P1 设置页暴露）。
         "dynamicBudgetEnabled",
@@ -312,7 +313,7 @@ def to_camel(value: Any) -> Any:
 
 def from_camel(value: Any) -> Any:
     """反向: ALIASES 仅翻译已知 snake↔camel 对; 其它 camelCase key 原样保留."""
-    if not isinstance(value, (dict, list)):
+    if not isinstance(value, (dict, list)):  # noqa: UP038 — py38 运行时 isinstance 不支持 union
         return value
     inverse = {v: k for k, v in ALIASES.items()}
     if isinstance(value, dict):
@@ -347,6 +348,16 @@ def validate_settings_shape(settings: dict) -> None:
         discovered_models = ep.get("discoveredModels")
         if discovered_models is not None and not isinstance(discovered_models, list):
             raise ValueError(f"endpoints[{i}].discoveredModels must be a list")
+        quota = ep.get("quota")
+        if quota is not None and not isinstance(quota, dict):
+            raise ValueError(f"endpoints[{i}].quota must be an object")
+        if isinstance(quota, dict):
+            bad_quota = [k for k in quota if k not in LEGAL_QUOTA_KEYS]
+            if bad_quota:
+                raise ValueError(
+                    f"unknown quota field {bad_quota[0]!r} at endpoints[{i}].quota; "
+                    f"allowed: {sorted(LEGAL_QUOTA_KEYS)}"
+                )
         for j, model in enumerate(discovered_models or []):
             if not isinstance(model, dict):
                 raise ValueError(f"endpoints[{i}].discoveredModels[{j}] is not a dict")
@@ -583,6 +594,11 @@ def strip_unknown_fields(settings: Any) -> Any:
                 cleaned_eps.append(ep)
                 continue
             clean_ep = {k: v for k, v in ep.items() if k in LEGAL_ENDPOINT_KEYS}
+            quota = clean_ep.get("quota")
+            if isinstance(quota, dict):
+                clean_ep["quota"] = {
+                    k: v for k, v in quota.items() if k in LEGAL_QUOTA_KEYS
+                }
             models = clean_ep.get("discoveredModels")
             if isinstance(models, list):
                 clean_models: List[Any] = []
@@ -698,7 +714,7 @@ def validate_log_timezone(value: Any) -> Any:
         return value
     try:
         # 延迟导入 zoneinfo — Python 3.9+ 标准库; Win7 走 backports.zoneinfo.
-        from zoneinfo import ZoneInfo  # py38-ok 守卫/降级已覆盖（win7 适配写法）
+        from zoneinfo import ZoneInfo  # py38-ok except ImportError 守卫 + backports 兜底
     except ImportError:  # pragma: no cover — py3.9+ always has zoneinfo
         try:
             from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
@@ -729,7 +745,7 @@ def validate_timezone(value: Any) -> Any:
         raise ValueError(f"timezone must be a string, got {type(value).__name__}")
     try:
         # 延迟导入 zoneinfo — Python 3.9+ 标准库; Win7 走 backports.zoneinfo.
-        from zoneinfo import ZoneInfo  # py38-ok 守卫/降级已覆盖（win7 适配写法）
+        from zoneinfo import ZoneInfo  # py38-ok except ImportError 守卫 + backports 兜底
     except ImportError:  # pragma: no cover — py3.9+ always has zoneinfo
         try:
             from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
@@ -826,6 +842,27 @@ def validate_thinking_budget(value: Any) -> Any:
     return value
 
 
+def validate_quota(value: Any) -> Any:
+    """Endpoint.quota 值语义校验 (2026-09-18 端点限额).
+
+    - ``None`` 视为"未配置限额", 直接返回。
+    - 必须是 dict; 每个已知字段值必须是 None 或非负数字 (bool 拒收)。
+    - 未知键抛 ValueError (白名单最终由 validate_settings_shape 兜底)。
+    """
+    if value is None:
+        return value
+    if not isinstance(value, dict):
+        raise ValueError(f"quota must be an object, got {type(value).__name__}")
+    for k, v in value.items():
+        if k not in LEGAL_QUOTA_KEYS:
+            raise ValueError(f"unknown quota field {k!r}; allowed: {sorted(LEGAL_QUOTA_KEYS)}")
+        if v is None:
+            continue
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0:
+            raise ValueError(f"quota.{k} must be a non-negative number, got {v!r}")
+    return value
+
+
 def validate_local_model_path(value: Any, platform: Optional[str] = None) -> Any:
     """Endpoint.localModelPath 平台路径分隔符校验.
 
@@ -884,6 +921,7 @@ def validate_endpoint_payload(ep: Any, platform: Optional[str] = None) -> Any:
     # 2026-11-03: 思考过程参数 —— 值域校验, 防止非法值被原样透传给上游。
     validate_reasoning_effort(ep.get("reasoningEffort"))
     validate_thinking_budget(ep.get("thinkingBudget"))
+    validate_quota(ep.get("quota"))
     return ep
 
 

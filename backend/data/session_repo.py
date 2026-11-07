@@ -4,6 +4,7 @@
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import json
 import logging
@@ -137,14 +138,14 @@ class Session:
             "run_status": self.run_status,
             "last_error": self.last_error,
             "last_run_at": self.last_run_at,
-            # 2026-10-27: 标题生成重试计数
-            "title_attempts": self.title_attempts,
             # M0 (2026-11-03): 会话绑定的专家 id（'primary' = 主助手）
             "specialist_id": self.specialist_id,
             # 2026-11-07 M2: 会话类型（dm / group）
             "conversation_type": self.conversation_type,
             # 2026-10-28: 性能统计 - 会话用时（分钟）
             "duration_minutes": self.duration_minutes,
+            # 2026-10-27: 标题生成重试计数
+            "title_attempts": self.title_attempts,
         }
 
 
@@ -753,13 +754,19 @@ class MessageRepository:
         self.db = get_database()
 
     def save(self, message: Message) -> Message:
-        """保存消息"""
+        """保存消息。
+
+        context-isolation (2026-09): 调用方未显式指定 ``segment_id`` 时,
+        自动解析当前活跃段 id 落库,确保新消息和 WorkingMemory 的段过滤
+        保持一致 (get_active_segment_id 与 message.segment_id 对齐)。
+        """
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        # Task 1 (2026-09-17): 写入时绑定当前活跃 segment_id,
-        # 保证 advance_segment() 后的消息落在新段上
-        active_segment_id = self.get_active_segment_id(message.session_id)
+        # 默认取当前活跃段;显式传入 (含 0) 的调用方保持其语义
+        seg = message.segment_id
+        if seg == 0 and message.subtype != "topic_separator":
+            seg = self.get_active_segment_id(message.session_id)
 
         cursor.execute(
             """
@@ -783,7 +790,7 @@ class MessageRepository:
                 message.rag_citations,
                 message.sources,
                 message.created_at,
-                active_segment_id,
+                seg,
                 message.subtype,
                 message.finish_reason,
                 message.generation_stats,
@@ -792,9 +799,7 @@ class MessageRepository:
             ),
         )
 
-        # SE1 同事务事件双写（best-effort，失败仅告警）。
-        # win7 分支注：变量是 active_segment_id（win7 的 save() 为无条件
-        # 解析变体，与 main 的 seg 条件解析不同 —— R23 教训实例）。
+        # SE1 同事务事件双写（best-effort，失败仅告警）
         from backend.data.session_event_repo import EVENT_MESSAGE_APPENDED
 
         _append_session_event(
@@ -806,7 +811,7 @@ class MessageRepository:
                 "role": message.role,
                 "content": message.content,
                 "subtype": message.subtype,
-                "segment_id": active_segment_id,
+                "segment_id": seg,
                 "tool_calls": message.tool_calls,
                 # 2026-11-05: 事件投影据此过滤压缩展示行（与 DB 列对齐）
                 "compacted_at": message.compacted_at,
@@ -1070,7 +1075,7 @@ class MessageRepository:
         role: str,
         content: str,
         created_at: int,
-        segment_id: Optional[int] = None,
+        segment_id: int = 0,
         subtype: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Insert a new message row and return the inserted record.
@@ -1079,22 +1084,18 @@ class MessageRepository:
         into the target session. We deliberately bypass the LLM/agent path
         because scheduled messages are pre-formed (no streaming).
 
-        SE1 (win7 对齐 main 语义): ``segment_id`` / ``subtype`` 可选 ——
-        不传则绑定当前活跃段（旧行为不变）；advance_segment 传显式值以
-        单事务落标记，消除 INSERT→UPDATE 两步之间的崩溃窗口。
+        context-isolation (2026-09): ``segment_id`` / ``subtype`` 可选,
+        便于 ``advance_segment`` 在同一事务里插入已标记的 topic_separator,
+        避免 INSERT→UPDATE 之间的崩溃窗口。
         """
         message_id = f"msg-{uuid.uuid4().hex[:12]}"
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        # Task 1 (2026-09-17): 写入时绑定当前活跃 segment_id
-        active_segment_id = self.get_active_segment_id(session_id)
-        seg = active_segment_id if segment_id is None else segment_id
-
         cursor.execute(
             "INSERT INTO messages (id, session_id, role, content, created_at, segment_id, subtype) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (message_id, session_id, role, content, created_at, seg, subtype),
+            (message_id, session_id, role, content, created_at, segment_id, subtype),
         )
 
         # SE1 同事务事件双写（best-effort，失败仅告警）
@@ -1109,7 +1110,7 @@ class MessageRepository:
                 "role": role,
                 "content": content,
                 "subtype": subtype,
-                "segment_id": seg,
+                "segment_id": segment_id,
                 "tool_calls": None,
                 "created_at": created_at,
             },
@@ -1168,7 +1169,7 @@ class MessageRepository:
     def advance_segment(self, session_id: str) -> int:
         """Insert a topic_separator message and return the new segment_id.
 
-        SE1 (win7 对齐 main 单事务语义): 直接 INSERT 一条带
+        context-isolation (2026-09, 单事务化): 直接 INSERT 一条带
         ``segment_id=new_seg, subtype='topic_separator'`` 的 system 消息。
         旧实现分 INSERT → UPDATE 两步,中间进程崩溃会留下没标记的 system
         消息,下一次 ``get_active_segment()`` 无法识别本次上下文重置。
@@ -1187,7 +1188,6 @@ class MessageRepository:
             segment_id=new_seg,
             subtype="topic_separator",
         )
-        return new_seg
         return new_seg
 
     def retreat_segment(self, session_id: str) -> bool:

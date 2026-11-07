@@ -188,7 +188,11 @@ Radix 同时提供了 `--radix-select-trigger-width`（= `--radix-popper-anchor-
   - **下拉面板宽度**：viewportElWidth 226px / contentWidth 228px << 窗口 1440px
   - **chip 回填**：4 个 chip（写报告/整理资料/分析表格/写代码），点击「写报告」后 textarea.value = "根据指定资料生成一份可交付的报告"、`focused=true`、光标在末尾（selectionStart=16 = value.length）
   - **弹窗背景**：`backgroundColor: rgb(255,255,255)` 实色（修复前透明）、`borderColor: rgb(229,231,235)`、`opacity: 1`
-- [ ] 步骤 9：cherry-pick 到 `release/win7`（前端纯改动，无 py3.8 适配需求）
+- [x] 步骤 9：cherry-pick 到 `release/win7`（前端纯改动，无 py3.8 适配需求）
+  - 冲突：`WelcomeInputCard.tsx`（win7 无 file-reference，需手工剔除 `onAtQueryActive`/`useFileUpload`/`useOptionalWorkspaceContext`/`useAtFileMenu`/`officeRefs`/`cursorPos`，仅保留 `draft` + `focusSeq` chip 回填逻辑）
+  - 其余 12 文件自动合并成功
+  - 提交：`release/win7` `6abd95adb fix(welcome): 欢迎页四项 UX 缺陷修复`
+  - 验证：`tsc --noEmit` 0 error / vitest 3 文件 21/21 / eslint 4 文件 0 error 4 pre-existing warning
 
 ## 风险评估与依赖
 

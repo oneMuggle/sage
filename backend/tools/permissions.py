@@ -26,7 +26,17 @@ from contextvars import Token
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    FrozenSet,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 from backend.domain.tool_names import (
     PLUGIN_TOOL_PREFIX,
@@ -62,71 +72,192 @@ class ToolCapability(str, Enum):
     EXECUTE = "execute"
 
 
-#: 内置工具能力分类表。新增工具时应在此登记；
-#: 未登记工具默认 WRITE（fail-safe：既不静默放行执行，也不过度拦截读）。
+#: 内置工具能力分类表 —— 必须覆盖 ``ALL_BUILTIN_TOOL_NAMES`` 全部工具。
+#:
+#: 2026-11-05 自管理对等 M0.1：此前只登记 24 个工具，其余 ~87 个内置
+#: 工具全部回退 ``DEFAULT_TOOL_CAPABILITY``（WRITE），在默认
+#: WORKSPACE_WRITE 模式下被静默放行 —— 含 update_sage_config /
+#: schedule_task / git_commit / apply_patch / checkpoint_restore 与
+#: 大量 office 写工具。现按工具真实副作用逐条登记；
+#: ``tests/unit/test_tool_capabilities.py`` 断言本表与
+#: ``ALL_BUILTIN_TOOL_NAMES`` 精确相等，新增内置工具漏登记会直接 CI 红灯。
+#:
+#: 分类口径：
+#: - READ：无本地副作用（含纯读取型网络工具 web_search / web_fetch）；
+#: - WRITE：修改本地状态或工作区（配置、git、office、todo、设计产物等）；
+#: - EXECUTE：执行代码/命令，或对机器外产生不可撤销动作
+#:   （浏览器登录/导航、office_delete 等不可逆删除）。
+#:
 #: R90 的动态插件工具无法逐一枚举，统一以 ``plugin__`` 前缀归 EXECUTE：
 #: 调用 handler 即执行第三方代码，manifest 权限只是声明、不是沙箱。
 TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
+    # --- 文件 / 代码探索 ---
     "read_file": ToolCapability.READ,
     "list_dir": ToolCapability.READ,
-    "memory_search": ToolCapability.READ,
-    "web_search": ToolCapability.READ,
-    "web_fetch": ToolCapability.READ,
-    "office_list": ToolCapability.READ,
-    "office_read": ToolCapability.READ,
-    # M2 agent 工具面扩展（移植 claw-code tool surface）
     "glob_search": ToolCapability.READ,
     "grep_search": ToolCapability.READ,
+    "file_summary": ToolCapability.READ,
+    "codebase_search": ToolCapability.READ,
+    "symbol_search": ToolCapability.READ,
+    "write_file": ToolCapability.WRITE,
+    "edit_file": ToolCapability.WRITE,
+    "apply_patch": ToolCapability.WRITE,
+    # --- 网络 ---
+    "web_search": ToolCapability.READ,
+    "web_fetch": ToolCapability.READ,
+    "http_download": ToolCapability.WRITE,
+    "download_status": ToolCapability.WRITE,
+    "download_cancel": ToolCapability.WRITE,
+    # --- 记忆 / 会话检索 ---
+    "memory_search": ToolCapability.READ,
+    "memory_save": ToolCapability.WRITE,
+    "session_search": ToolCapability.READ,
+    # --- Office 只读面 ---
+    "office_list": ToolCapability.READ,
+    "office_read": ToolCapability.READ,
+    "office_read_pdf": ToolCapability.READ,
+    "office_read_pdf_form": ToolCapability.READ,
+    "office_read_latex": ToolCapability.READ,
+    "office_analyze": ToolCapability.READ,
+    "office_analyze_word_template": ToolCapability.READ,
+    "office_analyze_ppt_template": ToolCapability.READ,
+    "office_analyze_latex_template": ToolCapability.READ,
+    "office_parse_bibtex": ToolCapability.READ,
+    "office_lint_word": ToolCapability.READ,
+    "office_audit_word": ToolCapability.READ,
+    "office_audit_latex": ToolCapability.READ,
+    "office_audit_latex_pdf": ToolCapability.READ,
+    "office_check_latex_compliance": ToolCapability.READ,
+    "office_extract_rules": ToolCapability.READ,
+    "office_batch_audit": ToolCapability.READ,
+    "office_journal_parse_template": ToolCapability.READ,
+    "office_journal_validate": ToolCapability.READ,
+    # --- Office 写入面（可撤销/可恢复的本地写） ---
+    "office_create": ToolCapability.WRITE,
+    "office_update": ToolCapability.WRITE,
+    "office_restore": ToolCapability.WRITE,
+    "office_archive": ToolCapability.WRITE,
+    "office_generate_pdf": ToolCapability.WRITE,
+    "office_fill_pdf_form": ToolCapability.WRITE,
+    "office_fill_word_template": ToolCapability.WRITE,
+    "office_fill_ppt_template": ToolCapability.WRITE,
+    "office_fill_latex_template": ToolCapability.WRITE,
+    "office_fix_word": ToolCapability.WRITE,
+    "office_repair_word": ToolCapability.WRITE,
+    "office_revise_word": ToolCapability.WRITE,
+    "office_render_audit": ToolCapability.WRITE,
+    "office_refresh_toc": ToolCapability.WRITE,
+    "office_compile_latex": ToolCapability.WRITE,
+    "office_latexdiff": ToolCapability.WRITE,
+    "office_extract_latex_project": ToolCapability.WRITE,
+    "office_journal_fill_from_content": ToolCapability.WRITE,
+    "office_journal_generate_article": ToolCapability.WRITE,
+    # 2026-11-05 M0.3：删除是不可逆动作，归执行面 —— 默认模式下逐次审批。
+    "office_delete": ToolCapability.EXECUTE,
+    # --- 运行时诊断 / 执行 ---
+    "runtime_probe": ToolCapability.READ,
+    "project_diagnose": ToolCapability.READ,
+    "runtime_exec": ToolCapability.EXECUTE,
+    "repl": ToolCapability.EXECUTE,
+    # execute_code 与 bash 同级：子进程可执行任意代码（RPC 禁止面见
+    # execute_code_tool._rpc_denial_reason）。
+    "execute_code": ToolCapability.EXECUTE,
+    # --- Git ---
+    "git_branch": ToolCapability.READ,
+    "git_commit_message": ToolCapability.READ,
+    "git_diff": ToolCapability.READ,
+    "git_log": ToolCapability.READ,
+    "git_status": ToolCapability.READ,
+    "git_checkout": ToolCapability.WRITE,
+    "git_commit": ToolCapability.WRITE,
+    "git_stash": ToolCapability.WRITE,
+    # --- 检查点 ---
+    "checkpoint_create": ToolCapability.READ,
+    "checkpoint_list": ToolCapability.READ,
+    "checkpoint_restore": ToolCapability.WRITE,
+    # --- 浏览器 ---
+    "browser_launch": ToolCapability.EXECUTE,
+    "browser_login": ToolCapability.EXECUTE,
+    "browser_navigate": ToolCapability.EXECUTE,
+    "browser_snapshot": ToolCapability.READ,
+    "browser_screenshot": ToolCapability.READ,
+    "browser_downloads": ToolCapability.READ,
+    "browser_interact": ToolCapability.WRITE,
+    "browser_cookies": ToolCapability.WRITE,
+    "browser_close": ToolCapability.WRITE,
+    # --- 技能 ---
+    # skill 可编排任意工具调用, SKILL.md 脚本更直接跑子进程(script_runner
+    # 沙箱内), 语义上是"执行任意动作"——按最严格能力对待。
+    "skill": ToolCapability.EXECUTE,
+    # skill_save 只产出 pending 草稿, 生效仍需用户在 UI 审批, 属本地写。
+    "skill_save": ToolCapability.WRITE,
+    # --- 多模态 ---
+    "text_to_speech": ToolCapability.WRITE,
+    "generate_image": ToolCapability.WRITE,
+    "speech_to_text": ToolCapability.READ,
+    "ocr_image": ToolCapability.READ,
+    # --- 编排 / 会话内状态 ---
     # todo_write 归 READ：仅维护 agent 会话内的内部草稿状态（内存桶），
     # 对用户数据零副作用——与 claw-code 将 TodoWrite 视为非敏感工具一致。
     "todo_write": ToolCapability.READ,
     "structured_output": ToolCapability.READ,
-    "write_file": ToolCapability.WRITE,
-    "office_create": ToolCapability.WRITE,
-    "office_update": ToolCapability.WRITE,
-    "office_delete": ToolCapability.WRITE,
-    "edit_file": ToolCapability.WRITE,
-    # 2026-11-06 Phase 1: 后台任务工具（win7 无 SELF_MODIFY 闸，保留能力分类）
-    "wake_on_background": ToolCapability.WRITE,
-    "wait_background": ToolCapability.READ,
-    # 2026-11-06 Phase 3 (win7): 自管理工具能力登记 —— 与 main M0 对齐的
-    # 最小集合；逐次审批由下方 SELF_MODIFY_TOOLS 闸承担。
+    # ask_user_question 归 READ —— 零副作用(仅渲染问题卡片 + 等待用户输入);
+    # run_loop 在分发前特判该工具名并走提问闸口, 不过权限执行器,
+    # 不存在双重审批。
+    "ask_user_question": ToolCapability.READ,
+    # agent 归 EXECUTE —— 派生的子代理是一个自主 LLM 循环（最多 6 轮
+    # run_loop、发网络请求、占 worker 线程至多 SUBAGENT_TIMEOUT_S），
+    # 开放性比 skill 更强。
+    "agent": ToolCapability.EXECUTE,
+    # --- 自管理（生效面受 SELF_MODIFY_TOOLS 逐次审批约束） ---
     "read_sage_config": ToolCapability.READ,
+    "diagnose_sage_config": ToolCapability.READ,
     "update_sage_config": ToolCapability.WRITE,
     "list_scheduled_tasks": ToolCapability.READ,
     "schedule_task": ToolCapability.WRITE,
     "cancel_scheduled_task": ToolCapability.WRITE,
+    # 2026-11-05: 会话唤醒 —— 注册未来自我恢复（WakeStore 持久化副作用）。
     "wake_session_at": ToolCapability.WRITE,
+    # 2026-11-06 Phase 1: 后台任务一等公民 —— wake_on_background 登记 COMPLETION
+    # 唤醒（持久化副作用，SELF_MODIFY 闸）；wait_background 纯轮询读。
+    "wake_on_background": ToolCapability.WRITE,
+    "wait_background": ToolCapability.READ,
+    # --- 待办 ---
+    "list_todos": ToolCapability.READ,
+    "add_todo": ToolCapability.WRITE,
+    "update_todo": ToolCapability.WRITE,
+    "complete_todo": ToolCapability.WRITE,
+    "delete_todo": ToolCapability.WRITE,
+    # --- 设计 ---
+    "design_list_systems": ToolCapability.READ,
+    "design_list_templates": ToolCapability.READ,
+    "design_generate": ToolCapability.WRITE,
+    "design_iterate": ToolCapability.WRITE,
+    "design_export": ToolCapability.WRITE,
+    # --- 自透明只读（M1）：只读运行时状态，不进 SELF_MODIFY_TOOLS ---
+    "sage_self_status": ToolCapability.READ,
+    "sage_doctor": ToolCapability.READ,
+    "sage_usage": ToolCapability.READ,
     # --- 命令执行 ---
     "bash": ToolCapability.EXECUTE,
     "bash_output": ToolCapability.EXECUTE,  # 读取后台 shell 输出也算执行面扩展
     "kill_shell": ToolCapability.EXECUTE,   # 终止后台进程：执行面副作用
-    "repl": ToolCapability.EXECUTE,
-    # M2 part B: skill 归 EXECUTE —— 技能可编排任意工具调用, SKILL.md 脚本
-    # 更直接跑子进程(script_runner 沙箱内), 语义上是"执行任意动作",
-    # 故按最严格能力对待, 由 M1 审批闸口按模式矩阵逐次拦截。
-    "skill": ToolCapability.EXECUTE,
-    # M2 part B: ask_user_question 归 READ —— 零副作用(仅渲染问题卡片 +
-    # 等待用户输入); run_loop 在分发前特判该工具名并走提问闸口, 不过
-    # 权限执行器, 不存在双重审批。
-    "ask_user_question": ToolCapability.READ,
-    # M5: agent 归 EXECUTE —— 派生的子代理是一个自主 LLM 循环（最多 6 轮
-    # run_loop、发网络请求、占 worker 线程至多 SUBAGENT_TIMEOUT_S），开放性
-    # 强于 skill。虽然子代理自身只拿只读白名单
-    # （agent_tool.SUBAGENT_TOOL_WHITELIST），但"派生一个自主体"这个动作本身
-    # 按最严格能力对待，与上面 skill 的口径一致。
-    "agent": ToolCapability.EXECUTE,
 }
 
-#: 未知工具默认能力（fail-safe）
+#: 未知工具默认能力（fail-safe：既不静默放行执行，也不过度拦截读）。
+#: 保持 WRITE 而非 EXECUTE —— 动态 MCP / 每会话编排工具未登记时若按
+#: EXECUTE 处理，会导致每次调用都要求审批；内置工具的全量覆盖由
+#: ``test_tool_capabilities.py`` 守卫，插件工具由 ``plugin__`` 前缀单独归
+#: EXECUTE，不依赖这个兜底。
 DEFAULT_TOOL_CAPABILITY = ToolCapability.WRITE
 
-#: 自管理工具集合：修改 Sage 自身持久行为（配置 / 定时调度 / 唤醒）。
+#: 自管理工具集合：修改 Sage 自身持久行为（配置 / 定时调度）。
 #:
-#: 2026-11-06（win7，对齐 main M0.5 语义）：`_mode_decision` 在模式矩阵前
-#: 强制升级 —— READ_ONLY 拒绝，WORKSPACE_WRITE / PROMPT 逐次审批，
-#: FULL_ACCESS 放行。显式 allow 规则仍可放行（规则层先于模式矩阵裁决，
-#: 那是用户的持久授权，视为知情同意）。
+#: 2026-11-05 M0.5：这个集合在 ``_mode_decision`` 里强制升级为审批 ——
+#: WORKSPACE_WRITE（默认模式）下逐次确认，READ_ONLY 拒绝，FULL_ACCESS
+#: 维持放行（与模式矩阵一致）。显式 allow 规则仍可放行：那是用户的
+#: 持久授权，视为知情同意。子代理白名单本就不含这些工具，此处是主循环
+#: 的最后一道闸。
 SELF_MODIFY_TOOLS: FrozenSet[str] = frozenset(
     {
         "update_sage_config",
@@ -146,7 +277,11 @@ _VALID_RULE_DECISIONS = ("allow", "deny", "ask")
 
 
 def classify_tool(tool_name: str) -> ToolCapability:
-    """查表返回工具能力；未登记工具回退 ``WRITE``（fail-safe）。"""
+    """查表返回工具能力；内置工具由覆盖守卫保证全部登记。
+
+    未登记工具回退 ``WRITE``（fail-safe）；``plugin__`` 前缀的动态插件
+    工具统一归 ``EXECUTE``。
+    """
     if tool_name.startswith(PLUGIN_TOOL_PREFIX):
         return ToolCapability.EXECUTE
     return TOOL_CAPABILITIES.get(tool_name, DEFAULT_TOOL_CAPABILITY)
@@ -451,23 +586,22 @@ class PermissionEnforcer:
             return _deny(f"{risk_reason}：read_only 模式禁止执行")
         return _ask(f"{risk_reason}：即使在 {self._mode.value} 模式下也必须经用户确认")
 
-    def _mode_decision(  # noqa: PLR0911 — 模式矩阵多出口
+    def _mode_decision(  # noqa: PLR0911 — 自管理闸增加 2 个分支，7 个 return 皆必要
         self, tool_name: str, capability: ToolCapability, bash_result: Optional[Any]
     ) -> PermissionDecision:
         """无规则命中时的模式矩阵兜底（每个分支带可读 reason）。"""
+        # 自管理升级闸（M0.5）：改 Sage 自身配置/调度在非 FULL_ACCESS
+        # 下必须逐次审批；READ_ONLY 直接拒绝。显式 allow 规则在上游
+        # 第 3 步已放行（用户持久授权 = 知情同意），deny 永远胜出。
+        if tool_name in SELF_MODIFY_TOOLS and self._mode is not PermissionMode.FULL_ACCESS:
+            if self._mode is PermissionMode.READ_ONLY:
+                return _deny(f"read_only 模式：禁止自管理操作 {tool_name}")
+            return _ask(
+                f"自管理操作 {tool_name} 会修改 Sage 自身配置/调度，"
+                f"在 {self._mode.value} 模式下必须经用户逐次确认"
+            )
         if self._mode is PermissionMode.FULL_ACCESS:
             return _allow(f"full_access 模式：放行 {tool_name} 工具")
-        # 2026-11-06（win7）：自管理工具在非 FULL_ACCESS 下强制升级审批/
-        # 拒绝，先于能力矩阵 —— WORKSPACE_WRITE 默认放行 WRITE，若不前置，
-        # schedule_task / update_sage_config 会被静默放行（main M0.5 同义）。
-        if tool_name in SELF_MODIFY_TOOLS:
-            if self._mode is PermissionMode.READ_ONLY:
-                return _deny(
-                    f"read_only 模式：禁止自管理工具 {tool_name}（会修改 Sage 自身持久行为）"
-                )
-            return _ask(
-                f"{self._mode.value} 模式：自管理工具 {tool_name} 需要用户逐次确认"
-            )
         if self._mode is PermissionMode.WORKSPACE_WRITE and capability in (
             ToolCapability.READ,
             ToolCapability.WRITE,
@@ -740,6 +874,7 @@ __all__ = [
     "PermissionRule",
     "PermissionEnforcer",
     "TOOL_CAPABILITIES",
+    "SELF_MODIFY_TOOLS",
     "DEFAULT_TOOL_CAPABILITY",
     "SETTINGS_KEY_MODE",
     "SETTINGS_KEY_RULES",
