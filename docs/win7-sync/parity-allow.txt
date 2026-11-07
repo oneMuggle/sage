@@ -204,3 +204,10 @@ electron/runtime-check.ts
 
 # win7 依赖审计策略：含 win7 Python 3.8 production path（main 的策略仅覆盖 main 3.11）
 .github/dependency-audit-policy.json
+
+# win7 更新链路：provider 走 request.ts（offline/intranet 闸），健康检查放宽 Win7 超时
+electron/update/providers/genericHttp.ts
+electron/update/providers/gitee.ts
+electron/update/providers/github.ts
+electron/update/providers/gitlab.ts
+electron/updateHealthChecker.ts
