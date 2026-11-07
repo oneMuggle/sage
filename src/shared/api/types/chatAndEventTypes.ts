@@ -32,6 +32,23 @@ export interface Session {
   workspace_binding?: SessionWorkspaceInfo | null;
   /** M0 (2026-11-03): 会话绑定的专家（agents.id）；'primary' = 主助手。 */
   specialist_id?: string;
+  /** M2 (2026-11-07): 会话类型 —— 'dm'（私聊，默认）| 'group'（群聊）。 */
+  conversation_type?: 'dm' | 'group';
+}
+
+/** M2 (2026-11-07): 群聊参与者（GET /sessions/{id}/participants 单项）。 */
+export interface ConversationParticipant {
+  conversation_id: string;
+  agent_id: string;
+  /** 展示名（agents.name；缺失回退 agent_id） */
+  name: string;
+  /** 头像 emoji（persona_ui.avatar；缺失回退 🤖） */
+  avatar: string;
+  role: 'host' | 'member';
+  speak_order: number;
+  enabled: boolean;
+  /** 加入时间（毫秒 Unix 时间戳） */
+  added_at: number;
 }
 
 /** 2026-10-29 (feat/workspace-optimization): create_session 响应里的工作区信息。 */
@@ -234,6 +251,8 @@ export interface Message {
    */
   tool_calls?: ToolCall[] | string | null;
   tool_call_id?: string;
+  /** M2 (2026-11-07): assistant 行的实际发言专家（群聊）；NULL = 用户/未标注。 */
+  sender_agent_id?: string | null;
   /** 2026-09 step-by-step: assistant 行的步序号（0 起；多步 run 时每步一行）。 */
   step_index?: number | null;
   /** alpha.36 (Bug #4): 同一 message 行内携带的 LLM 推理过程（持久化在 DB）。 */

@@ -49,6 +49,8 @@ export interface Session {
   /** M0 (2026-11-03): 会话绑定的专家（agents.id）；'primary' = 主助手。
    *  只影响后续轮次的 persona / 工具白名单 / 模型 / 记忆策略，不触碰历史消息。 */
   specialist_id?: string;
+  /** M2 (2026-11-07): 会话类型 —— 'dm'（私聊，默认）| 'group'（群聊）。 */
+  conversation_type?: 'dm' | 'group';
 }
 
 // 工具调用结构（与后端 AgentEvent 保持一致）
@@ -105,6 +107,8 @@ export interface Message {
   /** wire 上是 JSON 字符串 (session_repo 原样存取), 流式路径是数组 */
   tool_calls?: ToolCall[] | string | null;
   tool_call_id?: string;
+  /** M2 (2026-11-07): assistant 行的实际发言专家（群聊气泡显示头像/名字）。 */
+  sender_agent_id?: string | null;
   memory_applied?: number;
   /** R17-E: 记忆召回明细（memory_used 流事件携带，可展开查看） */
   memory_refs?: { id: string; memory_type: string; preview: string }[];
@@ -164,7 +168,14 @@ interface StoreState {
   sessionsLoadingMore: boolean;
   loadMoreSessions: () => Promise<void>;
   setCurrentSessionId: (id: string | null) => void;
-  createSession: (skipBinding?: boolean) => Promise<string>;
+  createSession: (
+    skipBinding?: boolean,
+    options?: {
+      participantIds?: string[];
+      conversationType?: 'dm' | 'group';
+      title?: string;
+    },
+  ) => Promise<string>;
   deleteSession: (id: string) => Promise<void>;
   /** U4': 原地更新会话元数据 (如重命名),避免整表 reload 抖动 */
   updateSession: (id: string, patch: Partial<Session>) => void;
@@ -301,7 +312,10 @@ export const useStore = create<StoreState>((set, _get) => ({
   // 2026-11-04 (fix/skip-workspace-binding): skipBinding=true 时跳过工作区解析链，
   // 不绑定任何工作区。用于前端用户明确选择"不绑定项目"的场景，语义对齐主流 AI 应用
   // (Cursor / Cline / Windsurf) 的"显式选择 > 自动推断"原则。
-  createSession: async (skipBinding = false) => {
+  createSession: async (
+    skipBinding = false,
+    options?: { participantIds?: string[]; conversationType?: 'dm' | 'group'; title?: string },
+  ) => {
     try {
       // 2026-10-29 (feat/workspace-optimization): 把 Electron 嗅探到的 cwd 项目根
       // 作为决策链的低优先级参考输入传给后端；后端统一走 DefaultWorkspaceResolver，
@@ -318,9 +332,15 @@ export const useStore = create<StoreState>((set, _get) => ({
         }
       }
       const session = await invoke<Session>('create_session', {
-        title: '新对话',
+        title: options?.title ?? '新对话',
         detectedRoot,
         skipWorkspaceBinding: skipBinding,
+        ...(options?.participantIds?.length
+          ? { participant_ids: options.participantIds }
+          : {}),
+        ...(options?.conversationType
+          ? { conversation_type: options.conversationType }
+          : {}),
       });
       set((state) => ({
         sessions: [session, ...state.sessions],

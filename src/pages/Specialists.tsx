@@ -7,6 +7,7 @@ import { useStore } from '../shared/lib/store';
 import { Button, PageHeader } from '../shared/ui';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
+import { GroupChatDialog } from '../widgets/specialists/GroupChatDialog';
 import { KnowledgeBindingsEditor } from '../widgets/specialists/KnowledgeBindingsEditor';
 import { SpecialistAssetsDialog } from '../widgets/specialists/SpecialistAssetsDialog';
 import { SpecialistCard } from '../widgets/specialists/SpecialistCard';
@@ -51,6 +52,7 @@ export function Specialists() {
   const [knowledgeAgent, setKnowledgeAgent] = useState<AgentProfile | null>(null);
   const [assetsAgent, setAssetsAgent] = useState<AgentProfile | null>(null);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [groupChatOpen, setGroupChatOpen] = useState(false);
   const [versionsAgent, setVersionsAgent] = useState<AgentProfile | null>(null);
   const [evalAgent, setEvalAgent] = useState<AgentProfile | null>(null);
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
@@ -250,6 +252,9 @@ export function Specialists() {
         subtitle="生产力型专家，每个专家拥有独立的人设、技能与权限。"
         actions={
           <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setGroupChatOpen(true)}>
+              新建群聊
+            </Button>
             <Button variant="secondary" size="sm" onClick={() => setTemplateOpen(true)}>
               从模板创建
             </Button>
@@ -401,6 +406,7 @@ export function Specialists() {
                     onSelectToggle={() => toggleSelect(agent.id)}
                     onOpenDetail={(next) => navigate(`/specialists/${next.id}`)}
                     onPin={(next) => void handlePin(next)}
+                    onStartChat={(next) => void handleStartChat(next)}
                   />
                 ))}
               </div>
@@ -444,6 +450,12 @@ export function Specialists() {
         open={templateOpen}
         onOpenChange={setTemplateOpen}
         onCreated={() => void loadAgents()}
+      />
+
+      <GroupChatDialog
+        open={groupChatOpen}
+        onOpenChange={setGroupChatOpen}
+        onCreated={() => navigate('/chat')}
       />
 
       <VersionHistoryDialog
