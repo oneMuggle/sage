@@ -300,3 +300,81 @@ def test_plugin_name_forwarded_to_base(trust_env):
 def test_tool_capability_classification_is_unchanged():
     """sanity：包装器依赖的分类入口存在且行为稳定。"""
     assert classify_tool("write_file") is ToolCapability.WRITE
+
+
+# ── 白名单回归（真实 SettingsRepository）────────────────────────────────
+
+
+def test_load_trust_policy_with_real_settings_repo(monkeypatch):
+    """缺陷 F 回归守卫：用真实 SettingsRepository 替代 _StubRepo，
+    验证 load_trust_policy 与 build_trust_enforcer 在 KEYS 登记后能读到写入值。
+
+    如果未来有人把 trust_escalation_enabled / trust_escalation_threshold
+    从 SettingsRepository.KEYS 移除，本用例会立刻失败。
+    """
+    from unittest.mock import MagicMock
+
+    from backend.data.settings_repo import SettingsRepository
+
+    db = MagicMock()
+    conn = MagicMock()
+    db.get_connection.return_value = conn
+
+    # 模拟存储：set() 写内存 → get() 从内存读（绕过 SQL，但走完整 KEYS 闸门）
+    store: dict[str, str] = {}
+
+    def fake_execute(sql, params=()):
+        # 只拦截 SELECT value / SELECT key 两种读取
+        if sql.startswith("SELECT value FROM preferences WHERE key = ?"):
+            key = params[0]
+            return _FakeCursor(None if key not in store else {"value": store[key]})
+        if sql.startswith("SELECT key FROM preferences WHERE key = ?"):
+            key = params[0]
+            return _FakeCursor(None if key not in store else {"key": key})
+        return _FakeCursor(None)
+
+    conn.execute.side_effect = fake_execute
+
+    def set_with_memory(self, key, value, value_type="string", category="general"):
+        # 复用 KEYS 校验（白名单闸门）；绕过 SQL 写入
+        if key not in self.KEYS:
+            raise ValueError(f"key {key!r} not in whitelist")
+        store[key] = value
+
+    monkeypatch.setattr(SettingsRepository, "set", set_with_memory)
+    # SettingsRepository 在 trust_escalation 中是函数内 import，
+    # 必须 monkeypatch 其源模块（backend.data.settings_repo）的类本身。
+    monkeypatch.setattr(
+        "backend.data.settings_repo.SettingsRepository",
+        lambda db=db: SettingsRepository(db=db),
+    )
+
+    # 写入 → 读取 → 决策
+    repo = SettingsRepository(db=db)
+    repo.set(te.SETTINGS_KEY_ENABLED, "1", category="permissions")
+    repo.set(te.SETTINGS_KEY_THRESHOLD, "5", category="permissions")
+
+    enabled, threshold = load_trust_policy()
+    assert enabled is True
+    assert threshold == 5
+
+    # 确认 build_trust_enforcer 不再返回 None（前提：base enforcer 可构造）
+    from backend.tools.bash_validation import validate_bash
+    from backend.tools.permissions import PermissionEnforcer, PermissionMode
+
+    base = PermissionEnforcer(mode=PermissionMode.WORKSPACE_WRITE, rules=(), bash_validator=validate_bash)
+    wrapped = build_trust_enforcer(base)
+    assert isinstance(wrapped, TrustEscalationEnforcer)
+
+
+class _FakeCursor:
+    """最小 DB 游标替身：支持 .fetchone() / fetchall() 迭代。"""
+
+    def __init__(self, row):
+        self._row = row
+
+    def fetchone(self):
+        return self._row
+
+    def fetchall(self):
+        return [self._row] if self._row else []
