@@ -14,6 +14,10 @@ export const zhChatAndSider = {
   'taskCenter.laneFallback': '编排任务',
   'taskCenter.finishedCount': '最近完成 {n} 项',
   'taskCenter.cancelFailed': '取消失败，请重试',
+  // 2026-11-07 Phase 5: 后台 shell 抽屉
+  'taskCenter.shellTerminate': '终止',
+  'taskCenter.shellTerminating': '终止中…',
+  'taskCenter.shellClose': '关闭',
   // ─── 侧边栏 ───────────────────────
   'sidebar.brand': 'Sage',
   'sidebar.nav.chat': '对话',

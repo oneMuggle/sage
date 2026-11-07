@@ -16,6 +16,10 @@ export const enChatAndSider = {
   'taskCenter.laneFallback': 'Orchestration task',
   'taskCenter.finishedCount': '{n} recently finished',
   'taskCenter.cancelFailed': 'Cancel failed, please retry',
+  // 2026-11-07 Phase 5: background shell drawer
+  'taskCenter.shellTerminate': 'Terminate',
+  'taskCenter.shellTerminating': 'Terminating…',
+  'taskCenter.shellClose': 'Close',
   // ─── Sidebar ──────────────────────
   'sidebar.brand': 'Sage',
   'sidebar.nav.chat': 'Chat',
