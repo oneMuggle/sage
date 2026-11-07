@@ -1,0 +1,8 @@
+{
+  "real": 245,
+  "main_only": 29,
+  "actionable": 274,
+  "updated_at": "2026-11-07",
+  "updated_by": "initial baseline after P0 unblock (run 42325984735)",
+  "note": "actionable = real + main-only。棘轮：超过该值 CI fail；收敛后请下调本文件。"
+}
