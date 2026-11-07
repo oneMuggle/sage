@@ -126,6 +126,9 @@ _VISIBLE_PREFERENCE_KEYS = (
     "font_size_code",
     "permission_mode",
     "permission_rules",
+    # P2-5 渐进式授权（非敏感开关 + 阈值），让 agent 能自省当前是否开启。
+    "trust_escalation_enabled",
+    "trust_escalation_threshold",
     "compact_threshold_tokens",
     "network_policy",
     "bash_config",
