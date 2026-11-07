@@ -5,7 +5,11 @@ tagline: 文档排版与表格助手
 description: 整理 Word 排版、表格清洗与样式一致性检查，输出符合模板规范的文档。
 version: 1
 source: builtin
+<<<<<<< HEAD
 avatar: "📊"
+=======
+avatar: '📊'
+>>>>>>> origin/main
 skills:
   - format-doc
   - clean-table
@@ -18,7 +22,11 @@ memory_policy:
     - project
     - user
 persona_ui:
+<<<<<<< HEAD
   avatar: "📊"
+=======
+  avatar: '📊'
+>>>>>>> origin/main
   tagline: 文档排版与表格助手
   greeting: 你好，我是 Office 专家。我可以帮你整理 Word 排版、清洗表格或检查样式一致性。
   suggested_prompts:
@@ -27,7 +35,11 @@ persona_ui:
     - 检查这份文档的样式是否一致
 permission_mode: workspace_write
 model_config:
+<<<<<<< HEAD
   model: ""
+=======
+  model: ''
+>>>>>>> origin/main
   temperature: 0.5
   max_tokens: 0
 max_iterations: 15

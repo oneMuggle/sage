@@ -6,7 +6,11 @@ import { useI18n } from '../../shared/lib/i18n';
 import { RightPanelToggle } from '../../widgets/chat/RightPanelToggle';
 import { SessionIdBadge } from '../../widgets/chat/SessionIdBadge';
 import { SessionModelPicker } from '../../widgets/chat/SessionModelPicker';
+<<<<<<< HEAD
 import { SessionSpecialistPicker } from '../../widgets/chat/SessionSpecialistPicker';
+=======
+import { SessionParticipantsStrip } from '../../widgets/chat/SessionParticipantsStrip';
+>>>>>>> origin/main
 import { SessionUsageBadge } from '../../widgets/chat/SessionUsageBadge';
 import { WorkspaceBranchPicker } from '../../widgets/chat/WorkspaceBranchPicker';
 
@@ -66,7 +70,11 @@ export function ChatHeaderBar({
         <SessionIdBadge sessionId={currentSessionId} />
       </div>
       <div className="flex items-center gap-1.5 flex-wrap" data-testid="chat-header-controls">
+<<<<<<< HEAD
         <SessionSpecialistPicker />
+=======
+        <SessionParticipantsStrip />
+>>>>>>> origin/main
         <SessionModelPicker sessionId={currentSessionId} placement="bottom" />
         <div className="flex items-center gap-1 text-ui-xs">
           <label

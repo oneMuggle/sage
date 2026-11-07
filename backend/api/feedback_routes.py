@@ -12,7 +12,11 @@
 - GET    /feedback/log-tail                      采集脱敏后的日志尾部
 
 受 LocalAuthMiddleware 保护(仅监听 127.0.0.1 + SAGE_LOCAL_AUTH_TOKEN)。
+<<<<<<< HEAD
 设计见 docs/technical/111-feedback-relay-deployment.md §11.2。
+=======
+设计见 docs/technical/109-feedback-relay-deployment.md §11.2。
+>>>>>>> origin/main
 
 字段命名:snake_case, 与仓库其它 HTTP DTO (Todo / Session) 一致 —— 前端
 经 invoke.ts 桥时 camelCase 请求体会被翻译成 snake_case, 响应保持原样返回,

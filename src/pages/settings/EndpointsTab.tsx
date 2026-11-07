@@ -7,10 +7,21 @@ import { useMemo, useState } from 'react';
 
 import { getProtocolOptions } from '../../entities/endpoint/providerRegistry';
 import { bindDiscoveredModels } from '../../entities/model-catalog/api';
+<<<<<<< HEAD
+=======
+import {
+  TOKEN_UNITS,
+  TOKEN_UNIT_MULTIPLIERS,
+  deriveTokenInput,
+  formatTokens,
+  type TokenUnit,
+} from '../../entities/setting/contextPresets';
+>>>>>>> origin/main
 import {
   DEFAULT_ENDPOINT,
   type EndpointConfig,
   type EndpointProtocol,
+  type EndpointQuota,
 } from '../../entities/setting/types';
 import {
   type ConnectionTestResult,
@@ -62,7 +73,14 @@ function endpointFormDirty(form: Partial<EndpointConfig>, ep: EndpointConfig): b
     (form.modelId ?? ep.modelId ?? '') !== (ep.modelId ?? '') ||
     // 2026-11-03: 思考过程参数 —— null 视为等价（undefined 与 null 都表「不发送」）
     (form.reasoningEffort ?? ep.reasoningEffort ?? null) !== (ep.reasoningEffort ?? null) ||
+<<<<<<< HEAD
     (form.thinkingBudget ?? ep.thinkingBudget ?? null) !== (ep.thinkingBudget ?? null)
+=======
+    (form.thinkingBudget ?? ep.thinkingBudget ?? null) !== (ep.thinkingBudget ?? null) ||
+    // 2026-09-18 P0-B: 限额改动同样要解锁「保存」
+    (form.quota?.dailyTokens ?? null) !== (ep.quota?.dailyTokens ?? null) ||
+    (form.quota?.monthlyBudgetUsd ?? null) !== (ep.quota?.monthlyBudgetUsd ?? null)
+>>>>>>> origin/main
   );
 }
 
@@ -100,6 +118,10 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
       modelId: '',
       reasoningEffort: null,
       thinkingBudget: null,
+<<<<<<< HEAD
+=======
+      quota: {},
+>>>>>>> origin/main
     });
   };
 
@@ -253,6 +275,10 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                         // 2026-11-03: 思考过程参数 —— 旧端点无此字段 → null（不发送）
                         reasoningEffort: ep.reasoningEffort ?? null,
                         thinkingBudget: ep.thinkingBudget ?? null,
+<<<<<<< HEAD
+=======
+                        quota: ep.quota ?? {},
+>>>>>>> origin/main
                       });
                     }}
                     className="text-xs text-muted hover:text-text transition-colors"
@@ -414,6 +440,10 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                     读取旧设置; UI 不再询问本地 .gguf 路径, 因为 LM Studio 等本地
                     OpenAI-compatible 服务完全通过 baseUrl + modelId 路由, 不需要
                     该字段. plan §4. */}
+                <QuotaEditor
+                  quota={form.quota ?? ep.quota ?? {}}
+                  onChange={(q) => setEditForm({ ...form, quota: q })}
+                />
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleSave(ep.id)}
@@ -547,6 +577,25 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                       {t('settings.endpoints.result.model')}: {ep.modelId}
                     </span>
                   )}
+<<<<<<< HEAD
+=======
+                  {ep.quota?.dailyTokens ? (
+                    <span>
+                      {t('settings.endpoints.result.quota_tokens').replace(
+                        '{tokens}',
+                        formatTokens(ep.quota.dailyTokens),
+                      )}
+                    </span>
+                  ) : null}
+                  {ep.quota?.monthlyBudgetUsd ? (
+                    <span>
+                      {t('settings.endpoints.result.quota_budget').replace(
+                        '{usd}',
+                        String(ep.quota.monthlyBudgetUsd),
+                      )}
+                    </span>
+                  ) : null}
+>>>>>>> origin/main
                 </div>
                 {probeResult && <ProbeStatusDisplay result={probeResult} />}
               </div>
@@ -650,3 +699,99 @@ export function auditEndpointsTabGovernance(): {
     compliant: true,
   };
 }
+<<<<<<< HEAD
+=======
+/**
+ * P0-B (2026-09-18): 端点限额编辑区 — 日 token 限额 (数值 + tokens/K/M 单位)
+ * 与月预算 (USD)。留空 = 不限额; 仅驱动用量面板的进度与预警, 不做请求侧熔断。
+ */
+function QuotaEditor({
+  quota,
+  onChange,
+}: {
+  quota: EndpointQuota;
+  onChange: (q: EndpointQuota) => void;
+}) {
+  const { t } = useI18n();
+  const derive = (n: number | undefined) => (n ? deriveTokenInput(n) : null);
+  const [tokensText, setTokensText] = useState(() => derive(quota.dailyTokens)?.text ?? '');
+  const [tokenUnit, setTokenUnit] = useState<TokenUnit>(
+    () => derive(quota.dailyTokens)?.unit ?? 'K',
+  );
+  const [budgetText, setBudgetText] = useState(() =>
+    quota.monthlyBudgetUsd ? String(quota.monthlyBudgetUsd) : '',
+  );
+
+  const commit = (next: { text: string; unit: TokenUnit; budget: string }) => {
+    const tokens = Number(next.text) * TOKEN_UNIT_MULTIPLIERS[next.unit];
+    const budget = Number(next.budget);
+    onChange({
+      ...(Number.isFinite(tokens) && tokens > 0 ? { dailyTokens: Math.round(tokens) } : {}),
+      ...(Number.isFinite(budget) && budget > 0 ? { monthlyBudgetUsd: budget } : {}),
+    });
+  };
+
+  const inputCls =
+    'px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text';
+
+  return (
+    <div
+      className="pt-3 border-t border-dashed border-border space-y-2"
+      data-testid="endpoint-quota-editor"
+    >
+      <label className="text-xs text-muted block">{t('settings.endpoints.quota.section')}</label>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted w-20">
+          {t('settings.endpoints.quota.daily_tokens')}
+        </span>
+        <input
+          type="number"
+          min={0}
+          aria-label={t('settings.endpoints.quota.aria_daily_tokens')}
+          value={tokensText}
+          placeholder={t('settings.endpoints.quota.unlimited')}
+          onChange={(e) => {
+            setTokensText(e.target.value);
+            commit({ text: e.target.value, unit: tokenUnit, budget: budgetText });
+          }}
+          className={`${inputCls} w-24`}
+        />
+        <select
+          aria-label={t('settings.endpoints.quota.aria_daily_unit')}
+          value={tokenUnit}
+          onChange={(e) => {
+            const unit = e.target.value as TokenUnit;
+            setTokenUnit(unit);
+            commit({ text: tokensText, unit, budget: budgetText });
+          }}
+          className={inputCls}
+        >
+          {TOKEN_UNITS.map((u) => (
+            <option key={u.value} value={u.value}>
+              {u.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted w-20">
+          {t('settings.endpoints.quota.monthly_budget')}
+        </span>
+        <input
+          type="number"
+          min={0}
+          step={0.5}
+          aria-label={t('settings.endpoints.quota.aria_budget')}
+          value={budgetText}
+          placeholder={t('settings.endpoints.quota.unlimited')}
+          onChange={(e) => {
+            setBudgetText(e.target.value);
+            commit({ text: tokensText, unit: tokenUnit, budget: e.target.value });
+          }}
+          className={`${inputCls} w-24`}
+        />
+      </div>
+    </div>
+  );
+}
+>>>>>>> origin/main

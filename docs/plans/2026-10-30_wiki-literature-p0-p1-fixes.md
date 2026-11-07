@@ -11,7 +11,11 @@
 
 **Tech Stack:** FastAPI (py3.8) / pytest；React 19 + TypeScript + Zustand + Vitest；Electron IPC（文件选择器）。
 
+<<<<<<< HEAD
 **Spec/依据:** 本次分析结论（2026-10-30）；相关文档 `docs/technical/25-llm-wiki-integration.md`、`docs/technical/104-zotero-llm-integration.md`、`docs/technical/106-wiki-completeness-optimization.md`。
+=======
+**Spec/依据:** 本次分析结论（2026-10-30）；相关文档 `docs/technical/25-llm-wiki-integration.md`、`docs/technical/103-zotero-llm-integration.md`、`docs/technical/50-wiki-completeness-optimization.md`。
+>>>>>>> origin/main
 
 ---
 
@@ -1152,7 +1156,11 @@ git commit -m "feat(wiki): 队列处理入口与入队 UI 闭环"
   npm run test:run -- src/widgets/wiki src/pages/settings/__tests__/ZoteroSyncPanel.test.tsx src/entities/wiki
   npm run typecheck
   ```
+<<<<<<< HEAD
 - [x] 文档：更新 `docs/technical/25-llm-wiki-integration.md`（来源导入、Research 面板、队列处理）、`docs/technical/104-zotero-llm-integration.md`（项目绑定 + 后台沉淀）、`docs/technical/106-wiki-completeness-optimization.md`（勾选对应项）。
+=======
+- [x] 文档：更新 `docs/technical/25-llm-wiki-integration.md`（来源导入、Research 面板、队列处理）、`docs/technical/103-zotero-llm-integration.md`（项目绑定 + 后台沉淀）、`docs/technical/50-wiki-completeness-optimization.md`（勾选对应项）。
+>>>>>>> origin/main
 - [x] 本计划文件保留在 `docs/plans/` 直至 PR 合并；合并后按文档规范并入技术手册并删除。
 - [x] 完成后提醒：cherry-pick 本分支到 `main`，验证 py3.10 + pydantic 2.x。
 

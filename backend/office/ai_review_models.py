@@ -15,10 +15,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
+<<<<<<< HEAD
 from pydantic import BaseModel, Field
 
 # win7 py38 钉 pydantic 1.10，v2 专有符号必须走兼容垫片（2.x 下为 no-op）。
 from backend.compat.win7.pydantic_compat import ConfigDict
+=======
+from pydantic import BaseModel, ConfigDict, Field
+>>>>>>> origin/main
 
 AiReviewSourceKind = Literal["spec", "llm", "builtin"]
 AiReviewSeverity = Literal["error", "warning", "info"]

@@ -35,6 +35,7 @@ import urllib.request
 import uuid
 from collections import deque
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional
 from urllib.parse import quote
@@ -83,6 +84,37 @@ class BrowserCDPError(RuntimeError):
     """CDP 命令失败（协议错误 / 目标丢失 / 命令报 errorText）。"""
 
 
+<<<<<<< HEAD
+=======
+#: 内置浏览器（Electron 主进程桥）的占位可执行文件名
+EMBEDDED_EXECUTABLE = "(embedded)"
+
+
+class BrowserType(str, Enum):
+    """浏览器类型（main：外部 Chromium / Electron 内置 / 用户日常浏览器扩展）。"""
+
+    CHROME = "chrome"
+    EMBEDDED = "embedded"
+    EXTERNAL = "external"
+
+
+def _discover_embedded_env() -> Optional[Dict[str, Any]]:
+    """读取 Electron 注入的内置浏览器环境（端口/token）；不完整返回 None。"""
+    if os.environ.get("SAGE_EMBEDDED_BROWSER", "").strip() != "1":
+        return None
+    raw_port = os.environ.get("SAGE_EMBEDDED_BROWSER_PORT", "").strip()
+    token = os.environ.get("SAGE_EMBEDDED_BROWSER_TOKEN", "").strip()
+    if not raw_port or not token:
+        return None
+    try:
+        port = int(raw_port)
+    except ValueError:
+        return None
+    if not 0 < port < 65536:
+        return None
+    return {"port": port, "token": token}
+
+>>>>>>> origin/main
 
 # ---------------------------------------------------------------------------
 # 浏览器可执行文件发现
@@ -110,11 +142,31 @@ def _windows_candidates() -> List[Path]:
 
 
 def discover_browser_executable() -> Optional[str]:
+<<<<<<< HEAD
     """按 环境变量 → 平台路径 → PATH 顺序找 Chromium / Firefox 系浏览器。"""
     cap = discover_and_select()
     if cap:
         return cap.executable
     return None
+=======
+    """按 环境变量 → 平台路径 → PATH 顺序找 Chromium 系浏览器。"""
+    if _discover_embedded_env():
+        return EMBEDDED_EXECUTABLE
+    env_override = os.environ.get("SAGE_BROWSER_PATH")
+    if env_override and Path(env_override).is_file():
+        return env_override
+    if os.name == "nt":
+        for candidate in _windows_candidates():
+            if candidate.is_file():
+                return str(candidate)
+        return None
+    # POSIX：Linux/WSL 走 PATH，macOS 走应用包路径
+    for name in _LINUX_CANDIDATES:
+        found = shutil.which(name)
+        if found:
+            return found
+    return _darwin_candidates()
+>>>>>>> origin/main
 
 
 def _darwin_candidates() -> Optional[str]:
@@ -149,8 +201,12 @@ class BrowserSession:
     persistent: bool = False
     #: 持久 profile 目录名（persistent=True 时记录；AU3 自动刷新按名复用）
     profile_name: str = ""
+<<<<<<< HEAD
 
     #: 浏览器类型（Chrome/Edge/Chromium/Firefox/Embedded）
+=======
+    #: 浏览器类型（main：chrome / embedded / external）
+>>>>>>> origin/main
     browser_type: BrowserType = BrowserType.CHROME
     #: Embedded：Electron 内置浏览器桥的鉴权 token（仅内存持有）
     bridge_token: str = ""
@@ -547,8 +603,37 @@ def launch_browser(
     Raises:
         BrowserCDPError: 找不到浏览器 / 启动超时 / 实例数超限。
     """
+<<<<<<< HEAD
     cap = discover_and_select()
     if not cap:
+=======
+    embedded = _discover_embedded_env()
+    if embedded:
+        session_id = browser_id or uuid.uuid4().hex[:12]
+        bridge_token = str(embedded["token"])
+        bridge_query = (
+            f"token={quote(bridge_token, safe='')}"
+            f"&session={quote(session_id, safe='')}"
+            f"&headless={'1' if headless else '0'}"
+        )
+        session = BrowserSession(
+            browser_id=session_id,
+            executable=EMBEDDED_EXECUTABLE,
+            headless=headless,
+            user_data_dir="",
+            process=_EmbeddedProcess(),
+            port=int(embedded["port"]),
+            ws_path=f"/devtools/browser/embedded?{bridge_query}",
+            persistent=True,
+            profile_name="embedded",
+            browser_type=BrowserType.EMBEDDED,
+            bridge_token=bridge_token,
+        )
+        get_browser_manager().register(session)
+        return session
+    executable = discover_browser_executable()
+    if not executable:
+>>>>>>> origin/main
         raise BrowserCDPError(
             "未找到 Chrome/Edge/Firefox 浏览器：请安装或用环境变量 SAGE_BROWSER_PATH / SAGE_FIREFOX_PATH 指定可执行文件路径"
         )
@@ -606,6 +691,7 @@ def launch_browser(
             _remove_dir_with_retry(user_data_dir)
         raise BrowserCDPError(f"浏览器启动失败: {exc}")
 
+<<<<<<< HEAD
     try:
         port, ws_path = launcher.wait_for_cdp(process, user_data_dir, timeout=LAUNCH_TIMEOUT_SECONDS)
         session = BrowserSession(
@@ -619,6 +705,44 @@ def launch_browser(
             persistent=persistent,
             profile_name=str(profile_name or "") if persistent else "",
             browser_type=cap.browser_type,
+=======
+    deadline = time.monotonic() + LAUNCH_TIMEOUT_SECONDS
+    port_file = Path(user_data_dir) / "DevToolsActivePort"
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            if not persistent:
+                _kill_process_tree(process)
+                _remove_dir_with_retry(user_data_dir)
+            raise BrowserCDPError(
+                f"浏览器进程提前退出（退出码 {process.returncode}）——可尝试 headless=false 排查"
+            )
+        if port_file.is_file():
+            try:
+                lines = port_file.read_text(encoding="ascii").splitlines()
+                port, ws_path = int(lines[0]), lines[1].strip()
+            except (OSError, ValueError, IndexError):
+                time.sleep(_LAUNCH_POLL_INTERVAL)
+                continue
+            if port > 0 and ws_path.startswith("/devtools/"):
+                session = BrowserSession(
+                    browser_id=browser_id or uuid.uuid4().hex[:12],
+                    executable=executable,
+                    headless=headless,
+                    user_data_dir=user_data_dir,
+                    process=process,
+                    port=port,
+                    ws_path=ws_path,
+                    persistent=persistent,
+                    profile_name=str(profile_name or "") if persistent else "",
+                )
+                get_browser_manager().register(session)
+                return session
+        time.sleep(_LAUNCH_POLL_INTERVAL)
+
+    _terminate_session(
+        BrowserSession(
+            "", executable, headless, user_data_dir, process, 0, "", persistent=persistent
+>>>>>>> origin/main
         )
         get_browser_manager().register(session)
         return session
@@ -1126,12 +1250,18 @@ __all__ = [
     "BrowserLauncher",
     "BrowserSession",
     "BrowserSessionManager",
+<<<<<<< HEAD
     "BrowserType",
     "CdpEventPump",
     "CDP_TIMEOUT_SECONDS",
     "ChromeLauncher",
     "EPHEMERAL_PREFIX",
     "FirefoxLauncher",
+=======
+    "CdpEventPump",
+    "CDP_TIMEOUT_SECONDS",
+    "EPHEMERAL_PREFIX",
+>>>>>>> origin/main
     "LAUNCH_TIMEOUT_SECONDS",
     "MAX_BROWSER_SESSIONS",
     "RESERVED_BROWSER_ID",
@@ -1140,10 +1270,18 @@ __all__ = [
     "apply_stealth",
     "browser_downloads_root",
     "cdp_command",
+<<<<<<< HEAD
     "discover_and_select",
+=======
+    "cdp_persistent_session",
+>>>>>>> origin/main
     "discover_browser_executable",
     "ensure_page_target",
     "get_browser_manager",
     "launch_browser",
+<<<<<<< HEAD
+=======
+    "PersistentCDPSession",
+>>>>>>> origin/main
     "sweep_stale_browser_dirs",
 ]

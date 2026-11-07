@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/wiki", tags=["wiki"])
 
 
-def _cleanup_temp_paths(*paths: Optional[Path], project_root: Optional[Path] = None) -> None:
+def _cleanup_temp_paths(*paths: Path | None, project_root: Path | None = None) -> None:
     """Best-effort cleanup that preserves the operation's original failure."""
     for path in paths:
         if path is not None:
@@ -205,7 +205,11 @@ def _create_wiki_structure(project_path: Path) -> None:
     from backend.wiki.wiki_templates import create_wiki_structure as _create_from_template
 
     # 尝试从项目注册表获取项目类型
+<<<<<<< HEAD
     project_type: Optional[str] = None
+=======
+    project_type: str | None = None
+>>>>>>> origin/main
     try:
         from backend.data.project_repo import ProjectRepository
         repo = ProjectRepository()

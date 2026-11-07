@@ -22,6 +22,10 @@ import type {
   ToolCall,
 } from '../../shared/lib/store';
 import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
+<<<<<<< HEAD
+=======
+import { useAgentDirectory } from '../../shared/lib/useAgentDirectory';
+>>>>>>> origin/main
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
 
@@ -112,6 +116,19 @@ function MessageComponent({
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
+<<<<<<< HEAD
+=======
+  // M2 (2026-11-07) 群聊：assistant 气泡显示实际发言专家的头像与名字。
+  const agentDirectory = useAgentDirectory();
+  const senderAgent = message.sender_agent_id
+    ? agentDirectory.get(message.sender_agent_id)
+    : undefined;
+  const senderAvatar = (() => {
+    const ui = senderAgent?.persona_ui as Record<string, unknown> | undefined;
+    const avatar = ui?.avatar;
+    return typeof avatar === 'string' && avatar.trim() ? avatar.trim() : '🤖';
+  })();
+>>>>>>> origin/main
   const isSystem = message.role === 'system';
   const isError = message.content?.startsWith('[错误') ?? false;
   // 2026-10-20: LLM 重试可视化 —— 从流式 store 读当前消息的重试信息。
@@ -309,6 +326,7 @@ function MessageComponent({
           isAssistant ? 'bg-primary/10 text-primary' : 'bg-bg text-muted border border-border'
         }`}
       >
+<<<<<<< HEAD
         {isAssistant ? 'S' : isSystem ? '⏰' : 'U'}
       </div>
 
@@ -327,6 +345,63 @@ function MessageComponent({
             {t('chat.steering_badge')}
           </span>
         )}
+
+        {/* 思考展示档位 —— detail/trace 直接渲染思考面板；result 收进汇总条，点一次展开明细 */}
+        <ThinkingDisplay
+          isAssistant={isAssistant}
+          reasoning={message.reasoning_content}
+          isStreaming={isStreaming}
+          mode={mode}
+          contract={contract}
+          resultDetailExpanded={resultDetailExpanded}
+          hiddenToolCount={hidesToolCalls ? toolCalls.length : 0}
+          onToggleResultDetail={() => setResultDetailExpanded((v) => !v)}
+        />
+
+        {/* 2026-10-20: LLM 重试横幅 —— 置于思考面板之下、工具调用之上。
+            重试期间气泡内仍是占位符，横幅承担"系统正在自动恢复"的告知职责。 */}
+        {isAssistant && retryInfo && <RetryBanner info={retryInfo} />}
+
+        {/* 用户消息引用信息（附件 / @ 文件 / office 文档 / 知识库）——
+            优先使用消息自带的 client_meta（刷新后由 get_messages 回读），
+            兼容旧调用方通过 props 传入的映射。 */}
+        <MessageClientMeta
+          message={message}
+          isUser={isUser}
+          knowledgeRefs={knowledgeRefs}
+          attachments={attachments}
+        />
+=======
+        {senderAgent ? senderAvatar : isAssistant ? 'S' : isSystem ? '⏰' : 'U'}
+      </div>
+
+      <div className={`flex-1 ${isUser ? 'flex flex-col items-end' : ''}`}>
+        {/* M2: 群聊发言者标注（仅群聊消息有 sender_agent_id） */}
+        {senderAgent && (
+          <div
+            className="mb-1 flex items-center gap-1 text-ui-xs text-muted"
+            data-testid={`message-sender-${message.sender_agent_id}`}
+          >
+            <span aria-hidden="true">{senderAvatar}</span>
+            <span className="truncate">{senderAgent.name}</span>
+          </div>
+        )}
+
+        {/* R38: 压缩续接行 —— 横幅置于气泡上方，摘要正文/Thinking/
+            copy/regenerate/delete 等正文与 affordance 全部保留。 */}
+        {message.compact_info && <CompactBanner info={message.compact_info} />}
+
+        {/* U5 (2026-09-18): 插话标注 —— 区分"新一轮提问"与"上一轮进行中补充"，
+            后者在下一迭代边界才进入 LLM 上下文，不标出来用户会以为它被忽略了。 */}
+        {message.subtype === 'steering' && (
+          <span
+            data-testid="steering-badge"
+            className="mb-1 px-1.5 py-0.5 rounded text-ui-2xs bg-primary/10 text-primary self-end"
+          >
+            {t('chat.steering_badge')}
+          </span>
+        )}
+>>>>>>> origin/main
 
         {/* 思考展示档位 —— detail/trace 直接渲染思考面板；result 收进汇总条，点一次展开明细 */}
         <ThinkingDisplay

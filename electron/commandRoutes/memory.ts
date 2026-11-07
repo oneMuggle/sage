@@ -88,6 +88,7 @@ export const memoryRoutes: Record<string, CommandRoute> = {
       reason: a?.reason as string | undefined,
     }),
   },
+<<<<<<< HEAD
   // Task 4.3: 批量清理低质量记忆
   get_quality_candidates: {
     method: 'GET',
@@ -104,6 +105,8 @@ export const memoryRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/memory/batch-delete',
     body: (a) => ({ items: a.items }),
   },
+=======
+>>>>>>> origin/main
   // 对标 S2 (2026-09-13): 记忆写入台账（内联"记住了"提示 + 撤销）
   get_recent_memory_writes: {
     method: 'GET',
@@ -221,6 +224,7 @@ export const memoryRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/memory/recall/feedback',
     body: (a) => ({ log_id: a.logId, feedback: a.feedback }),
   },
+<<<<<<< HEAD
   // Task 4.5: 记忆级反馈（👍/👎/neutral）—— 按 memory_id 落 memories_feedback，
   // 与 submit_recall_feedback（按 log_id 回填 memory_recall_log）正交
   submit_memory_feedback: {
@@ -232,4 +236,6 @@ export const memoryRoutes: Record<string, CommandRoute> = {
       ...(a.reason ? { reason: a.reason } : {}),
     }),
   },
+=======
+>>>>>>> origin/main
 };

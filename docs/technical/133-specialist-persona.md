@@ -2,7 +2,11 @@
 
 > 分支：`feat/specialist-persona`（切自 release/win7）
 > 设计依据：`docs/superpowers/specs/2026-11-03-specialist-persona-design.md`
+<<<<<<< HEAD
 > 编号说明：win7 上游已占 §129（侧边栏 Git 面板）/ §130（新会话跳过工作区绑定）/ §131（附件链路），§132 由并行的记忆质量专题预占，本专题取 §133 避让；主分支对应编号在其合并时另行确定。
+=======
+> 编号说明：win7 上游已占 §129–§131；main 上 §132 已由会话标题生成机制占用，本专题取 §133。
+>>>>>>> origin/main
 
 专家（specialist）是 Sage 中可独立配置**提示词、技能、知识源、记忆、模型与权限**的“数字员工”。与普通 agent 的差别不在数据结构，而在运行时接线：选了专家后，提示词、工具白名单、知识检索、记忆归属、模型参数全部按该专家的 profile 生效，切回主助手无残留。
 
@@ -12,6 +16,7 @@
 
 ## 1. 里程碑总览
 
+<<<<<<< HEAD
 | 里程碑 | 交付 | 提交锚点 |
 |---|---|---|
 | M0 接线修复 | `AgentProfile` 真正驱动运行时：提示词分层、模型参数、会话绑定、`memory_access` 读层过滤 | `76a31a104` 之前 |
@@ -19,6 +24,15 @@
 | M2 知识绑定 | `KnowledgeBinding`、路由层检索扇出、RRF 融合、引用深链、无命中拒答 | `8a82398ca` |
 | M3 记忆隔离 | `agent_id` 维度、`MemoryPolicy`、身份贯穿、子代理继承、提升为共享、级联删除 | `87993c2f9` |
 | M4 分发与质量 | 包格式 v2、内置模板库、版本 diff/回滚、黄金任务集评测 | `6f1b541e9` / `b8fc1140d` |
+=======
+| 里程碑            | 交付                                                                                                | 提交锚点                  |
+| ----------------- | --------------------------------------------------------------------------------------------------- | ------------------------- |
+| M0 接线修复       | `AgentProfile` 真正驱动运行时：提示词分层、模型参数、会话绑定、`memory_access` 读层过滤             | `76a31a104` 之前          |
+| M1 专家卡与技能库 | `/specialists` 画廊、创建向导、六段编辑器、技能作用域 fail-closed、专家私有技能目录、`.sage` 包雏形 | `76a31a104`               |
+| M2 知识绑定       | `KnowledgeBinding`、路由层检索扇出、RRF 融合、引用深链、无命中拒答                                  | `8a82398ca`               |
+| M3 记忆隔离       | `agent_id` 维度、`MemoryPolicy`、身份贯穿、子代理继承、提升为共享、级联删除                         | `87993c2f9`               |
+| M4 分发与质量     | 包格式 v2、内置模板库、版本 diff/回滚、黄金任务集评测                                               | `6f1b541e9` / `b8fc1140d` |
+>>>>>>> origin/main
 
 ---
 
@@ -28,6 +42,7 @@
 
 `AgentProfile`（`backend/agents/profiles.py`）在通用 agent 字段之外新增：
 
+<<<<<<< HEAD
 | 字段 | 类型 | 含义 |
 |---|---|---|
 | `role` | str | 专家固定为 `specialist`；主助手为 `primary` |
@@ -39,6 +54,19 @@
 | `skills` / `tools` / `memory_access` | JSON list | 技能允许集、工具允许集、记忆读取封顶 |
 | `model_config` | JSON | `{model, temperature, max_tokens}`，为空时回落到全局默认 |
 | `max_iterations` | int | 单次任务迭代上限 |
+=======
+| 字段                                 | 类型      | 含义                                                        |
+| ------------------------------------ | --------- | ----------------------------------------------------------- |
+| `role`                               | str       | 专家固定为 `specialist`；主助手为 `primary`                 |
+| `source`                             | str       | `user` / `builtin`（模板实例化）/ `imported`（外部包导入）  |
+| `persona_ui`                         | JSON      | 头像 emoji、标语、问候语、推荐问题等展示配置                |
+| `memory_policy`                      | JSON      | `{write_scope, read_scopes, auto_extract, retention_days}`  |
+| `permission_mode`                    | str       | 权限档位；导入时 `full_access` 强制降级为 `workspace_write` |
+| `knowledge_bindings`                 | JSON list | `KnowledgeBinding` 列表（见 §5）                            |
+| `skills` / `tools` / `memory_access` | JSON list | 技能允许集、工具允许集、记忆读取封顶                        |
+| `model_config`                       | JSON      | `{model, temperature, max_tokens}`，为空时回落到全局默认    |
+| `max_iterations`                     | int       | 单次任务迭代上限                                            |
+>>>>>>> origin/main
 
 `agents.version` 在人设字段变更时自动 +1，作为版本快照的版本号来源。
 
@@ -162,11 +190,19 @@ CREATE INDEX IF NOT EXISTS idx_episodic_agent ON memories_episodic(agent_id, sco
 CREATE INDEX IF NOT EXISTS idx_semantic_agent ON memories_semantic(agent_id, scope, project_key);
 ```
 
+<<<<<<< HEAD
 | `agent_id` | 含义 | 可见性 |
 |---|---|---|
 | `NULL` | 共享层（历史数据、用户偏好） | 所有专家可见 |
 | `'primary'` | 主助手私有 | 仅 primary |
 | `'specialist-x'` | 专家私有 | 仅 specialist-x |
+=======
+| `agent_id`       | 含义                         | 可见性          |
+| ---------------- | ---------------------------- | --------------- |
+| `NULL`           | 共享层（历史数据、用户偏好） | 所有专家可见    |
+| `'primary'`      | 主助手私有                   | 仅 primary      |
+| `'specialist-x'` | 专家私有                     | 仅 specialist-x |
+>>>>>>> origin/main
 
 读取语义 = 私有 ∪ 共享：`WHERE (agent_id = :current OR agent_id IS NULL)`；存储层 FTS 与 LIKE 两条路径都加过滤。存量行不回填（NULL 即共享，零迁移风险）。
 
@@ -202,6 +238,7 @@ tagline: 专业写作助手
 description: 专注润色、改写与结构化写作
 version: 3
 source: user
+<<<<<<< HEAD
 avatar: "📝"
 skills: ["writing", "polish-*"]
 knowledge_bindings: [...]
@@ -211,6 +248,17 @@ permission_mode: workspace_write
 model_config: {model: "", temperature: 0.7, max_tokens: 0}
 max_iterations: 20
 memory_access: ["user"]
+=======
+avatar: '📝'
+skills: ['writing', 'polish-*']
+knowledge_bindings: [...]
+memory_policy: { write_scope: specialist, read_scopes: [specialist, project, user] }
+persona_ui: { avatar: '📝', tagline: ..., greeting: ..., suggested_prompts: [...] }
+permission_mode: workspace_write
+model_config: { model: '', temperature: 0.7, max_tokens: 0 }
+max_iterations: 20
+memory_access: ['user']
+>>>>>>> origin/main
 tools: []
 enabled: true
 ```
@@ -251,6 +299,7 @@ zip 结构不变：`persona.md` + `avatar.png` + `skills/` + `knowledge/`。
 
 ## 8. API 一览
 
+<<<<<<< HEAD
 | 方法 | 路径 | 用途 |
 |---|---|---|
 | GET | `/api/v1/specialists/templates` | 列出内置模板元数据 |
@@ -268,6 +317,25 @@ zip 结构不变：`persona.md` + `avatar.png` + `skills/` + `knowledge/`。
 | POST | `/api/v1/agents/{agent_id}/rollback` | 回滚（body `{version}`） |
 | GET | `/api/v1/memory/list?agent_id=` | 记忆管理视图（精确匹配，`shared` 哨兵） |
 | POST | `/api/v1/memory/{memory_id}/promote` | 提升为共享 |
+=======
+| 方法   | 路径                                                      | 用途                                                |
+| ------ | --------------------------------------------------------- | --------------------------------------------------- |
+| GET    | `/api/v1/specialists/templates`                           | 列出内置模板元数据                                  |
+| POST   | `/api/v1/specialists/templates/{template_id}/instantiate` | 一键创建专家（201）                                 |
+| GET    | `/api/v1/specialists/{agent_id}/export`                   | 导出 `.sage` zip 字节流                             |
+| POST   | `/api/v1/specialists/import`                              | multipart 导入 zip → `{id, name, dropped_bindings}` |
+| GET    | `/api/v1/specialists/golden-tasks`                        | 黄金任务目录（10 任务 / 5 模板）                    |
+| POST   | `/api/v1/specialists/{agent_id}/eval`                     | 运行评测（可选 `task_ids`）                         |
+| GET    | `/api/v1/specialists/{agent_id}/knowledge`                | 知识绑定列表                                        |
+| POST   | `/api/v1/specialists/{agent_id}/knowledge`                | 新增绑定（201）                                     |
+| DELETE | `/api/v1/specialists/{agent_id}/knowledge/{binding_id}`   | 删除绑定（204）                                     |
+| GET    | `/api/v1/agents/{agent_id}/versions`                      | 版本列表（倒序）                                    |
+| GET    | `/api/v1/agents/{agent_id}/versions/{version}`            | 完整快照                                            |
+| GET    | `/api/v1/agents/{agent_id}/versions/diff?from=&to=`       | 字段级 diff                                         |
+| POST   | `/api/v1/agents/{agent_id}/rollback`                      | 回滚（body `{version}`）                            |
+| GET    | `/api/v1/memory/list?agent_id=`                           | 记忆管理视图（精确匹配，`shared` 哨兵）             |
+| POST   | `/api/v1/memory/{memory_id}/promote`                      | 提升为共享                                          |
+>>>>>>> origin/main
 
 路由路径均以 `/api/v1` 开头；Electron 桥接要求带 body 的路由提供显式 `body` 函数剥离路径参数键（pydantic `extra="forbid"` 否则 422）。
 
@@ -292,6 +360,7 @@ datas = [
 
 ## 10. 前端组件
 
+<<<<<<< HEAD
 | 组件 | 位置 | 职责 |
 |---|---|---|
 | `Specialists.tsx` | `src/pages/` | 画廊页；顶部「从模板创建」；空态内嵌模板网格 |
@@ -302,6 +371,18 @@ datas = [
 | `SpecialistEvalDialog.tsx` | 同上 | 黄金任务集评测 |
 | `KnowledgeBindingsEditor.tsx` | 同上 | 知识绑定编辑 |
 | `SessionSpecialistPicker.tsx` | `src/widgets/chat/` | 聊天头部专家选择器 |
+=======
+| 组件                          | 位置                       | 职责                                           |
+| ----------------------------- | -------------------------- | ---------------------------------------------- |
+| `Specialists.tsx`             | `src/pages/`               | 画廊页；顶部「从模板创建」；空态内嵌模板网格   |
+| `SpecialistCard.tsx`          | `src/widgets/specialists/` | 专家卡 + 动作（编辑/知识/版本/评测/导出/删除） |
+| `SpecialistWizard.tsx`        | 同上                       | 创建向导（六段人设）                           |
+| `TemplateGalleryDialog.tsx`   | 同上                       | 模板画廊一键创建                               |
+| `VersionHistoryDialog.tsx`    | 同上                       | 版本列表 / diff / 回滚                         |
+| `SpecialistEvalDialog.tsx`    | 同上                       | 黄金任务集评测                                 |
+| `KnowledgeBindingsEditor.tsx` | 同上                       | 知识绑定编辑                                   |
+| `SessionSpecialistPicker.tsx` | `src/widgets/chat/`        | 聊天头部专家选择器                             |
+>>>>>>> origin/main
 
 API 层：`src/shared/api/specialistApi.ts`（模板/评测/导入导出）、`specialistKnowledgeApi.ts`、`agentApi`（版本/回滚）。
 
@@ -309,6 +390,7 @@ API 层：`src/shared/api/specialistApi.ts`（模板/评测/导入导出）、`s
 
 ## 11. 测试矩阵
 
+<<<<<<< HEAD
 | 层 | 文件 | 覆盖 |
 |---|---|---|
 | 包格式 | `backend/tests/unit/test_specialist_package_v2.py` | 全字段往返、v1 向后兼容、导入钳制 |
@@ -320,5 +402,18 @@ API 层：`src/shared/api/specialistApi.ts`（模板/评测/导入导出）、`s
 | 验收 E2E | `backend/tests/e2e/test_m4_distribution_acceptance.py` | 模板建写作专家；导出→另一目录导入全字段一致 |
 | 记忆 E2E | `backend/tests/e2e/test_m3_memory_isolation_acceptance.py` | 两专家互不可见、共享可见、删除级联 |
 | 前端 | `src/widgets/specialists/__tests__/*` | 三个 Dialog + KnowledgeBindingsEditor（24 测试） |
+=======
+| 层       | 文件                                                                                                                      | 覆盖                                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| 包格式   | `backend/tests/unit/test_specialist_package_v2.py`                                                                        | 全字段往返、v1 向后兼容、导入钳制                |
+| 模板     | `backend/tests/unit/test_specialist_templates.py`                                                                         | 列表、实例化、失败回滚                           |
+| 版本     | `backend/tests/unit/data_repo/test_agent_version_repo.py` + `backend/tests/unit/api/test_legacy_agent_versions_routes.py` | 快照/列表/diff/回滚/裁剪/级联                    |
+| 评测     | `backend/tests/unit/test_specialist_golden_eval.py` + `backend/tests/unit/api/test_specialist_eval_routes.py`             | 六种检查器、聚合、假 runner 路由、落库           |
+| 知识     | `backend/tests/unit/test_knowledge_retriever.py` 等                                                                       | RRF、路由扇出、no_hit 拒答                       |
+| 记忆     | `backend/tests/memory/test_m3_*.py`                                                                                       | 隔离矩阵、promote、级联                          |
+| 验收 E2E | `backend/tests/e2e/test_m4_distribution_acceptance.py`                                                                    | 模板建写作专家；导出→另一目录导入全字段一致      |
+| 记忆 E2E | `backend/tests/e2e/test_m3_memory_isolation_acceptance.py`                                                                | 两专家互不可见、共享可见、删除级联               |
+| 前端     | `src/widgets/specialists/__tests__/*`                                                                                     | 三个 Dialog + KnowledgeBindingsEditor（24 测试） |
+>>>>>>> origin/main
 
 双环境验证（py310 + py38）M4 相关 117 测试 × 2 全绿；py38 静态门禁 0 违规；`tsc` + `npm run build` 通过。

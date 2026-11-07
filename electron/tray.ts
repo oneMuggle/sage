@@ -83,8 +83,7 @@ export function setupTrayAndGlobalShortcut(): void {
                 cancelId: 2,
                 title: '导出诊断包',
                 message: '将导出最近 50 次 LLM 调用为 zip 文件',
-                detail:
-                  '是否在导出中包含原始 prompt 内容（可能含业务敏感信息）？',
+                detail: '是否在导出中包含原始 prompt 内容（可能含业务敏感信息）？',
               });
               if (choice.response === 2) return;
               await runDiagnosticExport({

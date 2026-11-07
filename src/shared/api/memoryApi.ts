@@ -27,7 +27,10 @@ import type {
   MemoryConsolidationResult,
   MemoryListResponse,
   MemoryPromoteResult,
+<<<<<<< HEAD
   MemoryQualityCandidate,
+=======
+>>>>>>> origin/main
   MemorySummariesListResponse,
   MemoryWriteRecord,
   MemoryWritesResponse,
@@ -401,6 +404,7 @@ export const memoryApi = {
   },
 
   /**
+<<<<<<< HEAD
    * Task 4.3: 拉取质量分低于阈值的候选记忆 (最差优先)。
    *
    * 后端 GET /memory/quality-candidates 只返 is_valid=1 / invalid_at IS NULL 的
@@ -480,6 +484,8 @@ export const memoryApi = {
   },
 
   /**
+=======
+>>>>>>> origin/main
    * 获取记忆列表(Task 2 起返回 envelope;step 6 起支持 offset / sessionId)。
    *
    * Backwards-compat:如果后端误返回旧 flat list,自动包成 envelope,避免
@@ -798,6 +804,7 @@ export const memoryApi = {
       throw handleApiError(error);
     }
   },
+<<<<<<< HEAD
 
   /**
    * Task 4.5 —— 用户对一条记忆标记 👍/👎/neutral。
@@ -854,6 +861,8 @@ export const memoryApi = {
       throw handleApiError(error);
     }
   },
+=======
+>>>>>>> origin/main
 };
 
 function coerceProjectProfileEntry(r: Record<string, unknown>): ProjectProfileEntry {

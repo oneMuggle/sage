@@ -1,6 +1,10 @@
 # 30. 文档与验收页面导航
 
+<<<<<<< HEAD
 > 适用版本：Sage release/win7 @ 2026-11-02（`/office` 信息架构重构）
+=======
+> 适用版本：Sage main @ 2026-11-02（`/office` 信息架构重构）
+>>>>>>> origin/main
 > 用户入口：桌面端侧栏「文档与验收」（`/office`）
 
 ## 1. 为什么页面变了
@@ -85,5 +89,10 @@
 
 - 用户：[09-office.md](./09-office.md) —— Office 文档管理功能总览
 - 用户：[13-journal-template-panel.md](./13-journal-template-panel.md) —— 期刊模板面板
+<<<<<<< HEAD
 - 用户：[27-latex-preview.md](./28-latex-preview.md) —— LaTeX 预览与处理
 - 技术：[`docs/technical/118-office-ia-tabs.md`](../technical/118-office-ia-tabs.md) —— 本次重构的技术方案与实现要点
+=======
+- 用户：[27-latex-preview.md](./27-latex-preview.md) —— LaTeX 预览与处理
+- 技术：[`docs/technical/123-office-ia-tabs.md`](../technical/123-office-ia-tabs.md) —— 本次重构的技术方案与实现要点
+>>>>>>> origin/main

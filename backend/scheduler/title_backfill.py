@@ -55,7 +55,11 @@ MESSAGES_PER_SESSION = 10
 
 def _build_default_generator() -> Optional[Any]:
     """构建默认 LLM 客户端（专用标题模型优先，回退聊天模型）。"""
+<<<<<<< HEAD
     from backend.chat.title_generator import TitleModelFactory
+=======
+    from backend.orchestration.title_model_factory import TitleModelFactory
+>>>>>>> origin/main
 
     return TitleModelFactory.build()
 

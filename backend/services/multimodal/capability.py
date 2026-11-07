@@ -86,7 +86,7 @@ class AICapability(ABC):
             )
         return self.parse_response(resp, **kwargs)
 
-    def load_config(self) -> Optional[CapabilityConfig]:
+    def load_config(self) -> CapabilityConfig | None:
         """从 app_settings 读取本能力的端点配置"""
         from backend.data.settings_repo import SettingsRepository
         raw = SettingsRepository().get_json("app_settings")

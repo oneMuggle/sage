@@ -13,7 +13,11 @@ from __future__ import annotations
 import json
 from enum import Enum
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Any, Dict, List, Optional, Tuple, Union
+=======
+from typing import Any, Dict, List, Optional, Union
+>>>>>>> origin/main
 
 from pydantic import BaseModel, Field
 
@@ -31,6 +35,7 @@ except ImportError:
     PYDANTIC_V2 = False
 
 
+<<<<<<< HEAD
 def _list_length_kwargs(limit: int) -> Dict[str, int]:
     """列表长度上限：pydantic v1 用 ``max_items``，v2 用 ``max_length``。
 
@@ -40,6 +45,8 @@ def _list_length_kwargs(limit: int) -> Dict[str, int]:
     return {"max_length": limit} if PYDANTIC_V2 else {"max_items": limit}
 
 
+=======
+>>>>>>> origin/main
 class PluginType(str, Enum):
     """Plugin type classification."""
 
@@ -136,16 +143,26 @@ class PluginMetadata(BaseModel):
     repository: Optional[str] = Field(default=None, description="代码仓库 URL")
     license: str = Field(default="MIT", description="许可证")
     categories: List[str] = Field(
+<<<<<<< HEAD
         default_factory=list, description="分类标签", **_list_length_kwargs(10)
     )
     tags: List[str] = Field(
         default_factory=list, description="标签", **_list_length_kwargs(20)
     )
+=======
+        default_factory=list, description="分类标签", max_length=10
+    )
+    tags: List[str] = Field(default_factory=list, description="标签", max_length=20)
+>>>>>>> origin/main
 
     # 商店信息
     hero_image: Optional[str] = Field(default=None, description="商店页 Hero 图")
     example_prompts: List[str] = Field(
+<<<<<<< HEAD
         default_factory=list, description="示例提示词", **_list_length_kwargs(5)
+=======
+        default_factory=list, description="示例提示词", max_length=5
+>>>>>>> origin/main
     )
 
 
@@ -325,7 +342,11 @@ class PluginManifest(BaseModel):
             json.dump(self.to_dict(), f, indent=2, ensure_ascii=False)
 
 
+<<<<<<< HEAD
 def validate_plugin_manifest(manifest_path: Union[Path, str]) -> Tuple[bool, List[str]]:
+=======
+def validate_plugin_manifest(manifest_path: Union[Path, str]) -> tuple[bool, List[str]]:
+>>>>>>> origin/main
     """
     Validate a plugin manifest file.
 

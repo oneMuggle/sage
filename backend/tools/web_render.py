@@ -642,10 +642,14 @@ def refresh_credentials(  # noqa: PLR0911 — 各失败路径独立 return，扁
         if not target_id:
             return False, []
         if inject:
+<<<<<<< HEAD
             from .credential_vault import normalize_cookie_for_cdp
 
             normalized_inject = [normalize_cookie_for_cdp(c) for c in inject]
             cdp_command(session, "Storage.setCookies", {"cookies": normalized_inject})
+=======
+            cdp_command(session, "Storage.setCookies", {"cookies": inject})
+>>>>>>> origin/main
         apply_stealth(session, target_id, command=cdp_command)
         result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)
         if result.get("errorText"):

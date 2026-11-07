@@ -8,15 +8,20 @@
  *   2) Sage 启动时 Electron 自带的 Chromium 106 找不到运行库 → 主进程/子
  *      进程启动失败 → 闪退/白屏
  *
+<<<<<<< HEAD
  * 启动失败有两类不同根因, 本次检测同时覆盖:
  *
  * (A) 补丁 / VC++ 运行库缺失 — 微软官方下载链接, 用户手动装:
+=======
+ * 缺这些组件会导致 Sage 启动失败 / 闪退 / 白屏:
+>>>>>>> origin/main
  *   - Visual C++ 2015–2022 Redistributable (x64) — Electron / Chromium 必备
  *   - KB3033929 (SHA-256 证书支持补丁, wintrust.dll ≥ 6.1.7601.18741)
  *   - KB4474419 (SHA-2 签名支持)
  *   - KB4490628 (Servicing Stack Update)
  *   - KB2670838 (DirectWrite / D3D11) — recommended
  *
+<<<<<<< HEAD
  * (B) 企业组策略 / 管控软件禁用关键服务 — splash 后白屏 / 消失:
  *   - TrustedInstaller (Windows Modules Installer)
  *   - wuauserv (Windows Update)
@@ -26,13 +31,23 @@
  * 设计要点:
  *   - 每个 check < 2s 完成, 8 个 check 通过 Promise.all 并行跑
  *   - 注册表/wmic/sc 不可用时 fallback 到文件存在性 (弱信号, 转 warn 而非 critical)
+=======
+ * 设计要点:
+ *   - 每个 check < 2s 完成, 6 个 check 通过 Promise.all 并行跑
+ *   - 注册表/wmic 不可用时 fallback 到文件存在性 (弱信号, 转 warn 而非 critical)
+>>>>>>> origin/main
  *   - 任何 check 出错都不会 throw, 只会返回 severity='warn'/'critical'
  *   - 非 Win32 平台直接返回 ok 占位
  *
  * 调用方: electron/main.ts 的 app.whenReady() 阶段, 在 runDoctorCheck() 之前
+<<<<<<< HEAD
  * 同步调用 runRuntimeChecks()。如有 critical, 弹 showRuntimeMissingDialog 提示。
  * 对话框按钮按 missing 项类型动态增减 (补丁路径 / 服务禁用路径), fail-open:
  * 用户选「仍要启动」则继续。
+=======
+ * 同步调用 runRuntimeChecks()。如有 critical, 弹 showRuntimeMissingDialog 提示
+ * 用户安装, 提供微软官方下载链接。fail-open: 用户选「仍要启动」则继续。
+>>>>>>> origin/main
  */
 
 import { execFile } from 'node:child_process';
@@ -48,14 +63,24 @@ import { getLogDir } from './logPaths';
 // 顶层求值会抛 TypeError("original must be of type function"). 放到函数内
 // 第一次调用时再 promisify, 让 mock 测试可以顺利 import 本模块而不报错.
 // 生产环境下 execFile 永远存在, 单次 promisify 开销可忽略.
+<<<<<<< HEAD
 let execFilePCached:
   | ((file: string, args: string[], opts: unknown) => Promise<{ stdout: string }>)
   | null = null;
 function execFileP(file: string, args: string[], opts: unknown): Promise<{ stdout: string }> {
+=======
+let execFilePCached: ((file: string, args: string[], opts: unknown) => Promise<{ stdout: string }>) | null = null;
+function execFileP(
+  file: string,
+  args: string[],
+  opts: unknown,
+): Promise<{ stdout: string }> {
+>>>>>>> origin/main
   if (!execFilePCached) execFilePCached = promisify(execFile);
   return execFilePCached(file, args, opts);
 }
 
+<<<<<<< HEAD
 /**
  * TEST-ONLY: 注入自定义 execFileP 实现, 绕过真实 child_process + promisify 链.
  * 仅当 NODE_ENV === 'test' 或 VITEST 环境变量存在时生效, 生产构建是 no-op.
@@ -71,6 +96,8 @@ export function _setExecFilePForTesting(
   execFilePCached = fn;
 }
 
+=======
+>>>>>>> origin/main
 const DOWNLOAD_URLS = {
   vc_redist_x64: 'https://aka.ms/vc14/vc_redist.x64.exe',
   vc_redist_x86: 'https://aka.ms/vc14/vc_redist.x86.exe',
@@ -86,9 +113,13 @@ export interface RuntimeCheckResult {
   message: string;
   fix_hint: string;
   detected: boolean;
+<<<<<<< HEAD
   download_url?: string; // 补丁缺失: 微软官方下载链接
   doc_path?: string; // 服务禁用: 修复文档磁盘路径 (打包后 resources/win7-fix/)
   fix_script_path?: string; // 服务禁用: 修复脚本磁盘路径 (打包后 resources/win7-fix/fix.bat)
+=======
+  download_url?: string;
+>>>>>>> origin/main
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -277,6 +308,7 @@ async function checkKB2670838(): Promise<RuntimeCheckResult> {
   );
 }
 
+<<<<<<< HEAD
 // ── Win7 服务禁用检测 (内网企业组策略禁用 TrustedInstaller / wuauserv 路径) ──
 
 /**
@@ -357,6 +389,8 @@ function checkWuauservService(): Promise<RuntimeCheckResult> {
   });
 }
 
+=======
+>>>>>>> origin/main
 // ── public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -383,11 +417,14 @@ export async function runRuntimeChecks(): Promise<RuntimeCheckResult[]> {
     checkKB4474419(),
     checkKB4490628(),
     checkKB2670838(),
+<<<<<<< HEAD
     // Win7 服务禁用路径 (内网企业组策略常见): TrustedInstaller / wuauserv
     // 被禁用时 Sage 启动 splash 后白屏 / 消失。critical 时对话框引导用户
     // 在资源管理器定位到打包的 win7-fix/fix.bat, 右键以管理员身份运行。
     checkTrustedInstallerService(),
     checkWuauservService(),
+=======
+>>>>>>> origin/main
   ]);
   const elapsedMs = Date.now() - startedAt;
   for (const r of results) {
@@ -409,6 +446,7 @@ export async function runRuntimeChecks(): Promise<RuntimeCheckResult[]> {
 
 // ── user prompt ──────────────────────────────────────────────────────────────
 
+<<<<<<< HEAD
 export type RuntimeMissingChoice =
   | 'open-downloads'
   | 'open-fix-script'
@@ -425,6 +463,12 @@ export type RuntimeMissingChoice =
  *   - 任一项有 fix_script_path → 出现「打开修复脚本」+「查看修复文档」(服务禁用路径)
  *   - 固定按钮: 「查看日志目录」「仍要启动」「退出」
  *
+=======
+export type RuntimeMissingChoice = 'open-downloads' | 'open-logs' | 'continue' | 'quit';
+
+/**
+ * 当 runRuntimeChecks 返回 critical 项时, 弹窗告诉用户去装什么, 提供官方下载链接.
+>>>>>>> origin/main
  * CRITICAL: logger.error(...) 必须在 dialog.showMessageBox 之前调用, 这样即使
  * 对话框本身崩溃, 失败也已被记录.
  */
@@ -433,6 +477,7 @@ export async function showRuntimeMissingDialog(
 ): Promise<RuntimeMissingChoice> {
   // CRITICAL: log before dialog (so even if dialog crashes the failure is captured)
   logger.error('main: runtime missing, showing dialog', {
+<<<<<<< HEAD
     missing: missing.map((m) => ({
       name: m.name,
       message: m.message,
@@ -521,6 +566,46 @@ export async function showRuntimeMissingDialog(
             : result.response === idxContinue
               ? 'continue'
               : 'quit';
+=======
+    missing: missing.map((m) => ({ name: m.name, message: m.message, url: m.download_url })),
+  });
+
+  const logDir = getLogDir();
+  const lines: string[] = [];
+  for (const m of missing) {
+    lines.push(`❌ ${m.message}`);
+    if (m.download_url) lines.push(`   ${m.download_url}`);
+    lines.push('');
+  }
+  const detail =
+    '缺少这些组件会导致 Sage 启动失败、闪退或显示白屏。\n\n' +
+    '请按以下顺序操作:\n' +
+    '1. 点击「打开下载页」下载缺失项并安装\n' +
+    '2. 安装完成后重启 Sage\n' +
+    '3. 如果仍有问题, 点击「查看日志目录」获取诊断详情并附在反馈中\n\n' +
+    `日志目录: ${logDir}`;
+
+  const buttons = ['打开下载页', '查看日志目录', '仍要启动', '退出'];
+  const result = await dialog.showMessageBox({
+    type: 'error',
+    title: 'Sage 启动检查发现缺失组件',
+    message: `Sage 启动检查发现您的系统缺少 ${missing.length} 个关键运行环境组件：`,
+    detail: `${lines.join('\n')}\n${detail}`,
+    buttons,
+    defaultId: 0,
+    cancelId: 3,
+    noLink: true,
+  });
+
+  const choice: RuntimeMissingChoice =
+    result.response === 0
+      ? 'open-downloads'
+      : result.response === 1
+        ? 'open-logs'
+        : result.response === 2
+          ? 'continue'
+          : 'quit';
+>>>>>>> origin/main
 
   if (choice === 'open-downloads') {
     const urls = missing.map((m) => m.download_url).filter((u): u is string => !!u);
@@ -530,6 +615,7 @@ export async function showRuntimeMissingDialog(
         logger.error('main: shell.openExternal failed', { url, err: String(err) }),
       );
     }
+<<<<<<< HEAD
   } else if (choice === 'open-fix-script') {
     // 取第一个带 fix_script_path 的项 (所有服务 critical 项共享同一脚本路径)
     const scriptPath = missing.find((m) => m.fix_script_path)?.fix_script_path;
@@ -551,6 +637,8 @@ export async function showRuntimeMissingDialog(
         logger.error('main: shell.openPath failed', { docPath, err: String(err) }),
       );
     }
+=======
+>>>>>>> origin/main
   } else if (choice === 'open-logs') {
     logger.info('main: user chose open-logs after runtime missing');
     Promise.resolve(shell.openPath(logDir)).catch((err: unknown) =>

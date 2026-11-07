@@ -23,10 +23,17 @@ from typing import Any, Dict, Optional, Sequence
 from fastapi import HTTPException
 
 from backend.chat.compaction import estimate_messages_tokens
+<<<<<<< HEAD
+=======
+from backend.services.context_window import (  # noqa: F401 —— 再导出供 legacy_routes / main.py 沿用旧路径
+    _resolve_effective_window,
+)
+>>>>>>> origin/main
 
 __all__ = ["_check_request_within_window", "_resolve_effective_window"]
 
 
+<<<<<<< HEAD
 def _resolve_effective_window(  # noqa: PLR0911 — Task 5 priority cascade, each branch is a distinct user-facing mode
     model_id: Optional[str] = None,
     max_context: Optional[int] = None,
@@ -125,6 +132,8 @@ def _resolve_effective_window(  # noqa: PLR0911 — Task 5 priority cascade, eac
         return max_context if max_context else None
 
 
+=======
+>>>>>>> origin/main
 def _check_request_within_window(
     messages: Sequence[Dict[str, Any]],
     effective_window: Optional[int],

@@ -278,7 +278,11 @@ async function loadSessionsWithPolling() {
 ### Phase 4：配置与文档（0.5 天）
 
 - [x] 4.1 新增 `titleModelId` 配置项到 `backend/data/settings_repo.py`
+<<<<<<< HEAD
 - [x] 4.2 更新 `docs/technical/` 文档：会话标题生成机制（`docs/technical/107-session-title-generation.md` + README 注册）
+=======
+- [x] 4.2 更新 `docs/technical/` 文档：会话标题生成机制（`docs/technical/132-session-title-generation.md` + README 注册）
+>>>>>>> origin/main
 - [x] 4.3 更新用户手册：如何配置专用标题模型（`docs/user-manual/20-settings.md` 新增"会话标题模型"子节）
 
 ### Phase 5：测试与验证（1 天）

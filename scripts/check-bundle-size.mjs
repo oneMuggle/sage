@@ -19,9 +19,22 @@
 // EndpointsTab 表单 JSX，主 chunk 实测 1839KB、CI 实测 1843KB，卡在原
 // 1.8MB 边界（本地通过、CI 恰好超限）。按棘轮协议仅上调该项至 1.85MB。
 //
+<<<<<<< HEAD
 // 2026-11-06 棘轮上调：AI 文档工作台（文档库搜索/去重、规范书库、AI 审校，
 // main #2896）及同期合入的功能累积，使主 chunk CI 实测 1895KB，超出
 // 1.85MB 预算 1KB。按棘轮协议仅上调该项至 1.9MB（保留 ~50KB 余量）。
+=======
+// 2026-11-06 棘轮上调：定时任务自动执行（#2898）在 ScheduledTasks 列表
+// 新增模式徽章 / 状态 / 查看结果按钮（Zap + Bell 图标，lucide 树摇后
+// 仍带 1–2 KB 辅助函数），CreateTaskModal 增模式切换单选，i18n 新增
+// scheduled.mode.* / view_result* / executing / duration_ms 文案。CI
+// 实测 1895KB，卡在原 1.85MB（1894KB）边界 1KB。
+//
+// 2026-11-06 棘轮上调：AI 文档工作台（文档库搜索/去重、规范书库、AI 审校，
+// main #2896）及同期合入的功能累积，使主 chunk CI 实测 1895KB，超出
+// 1.85MB 预算 1KB。按棘轮协议仅上调该项至 1.9MB（保留 ~50KB 余量），
+// 已覆盖上述定时任务（#2898）的增长，无需再单独上调。
+>>>>>>> origin/main
 //
 // 用法：npm run build 之后执行 `node scripts/check-bundle-size.mjs`。
 // 退出码：0 = 全部预算内；1 = 超限或 dist 不存在。

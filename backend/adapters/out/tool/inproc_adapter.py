@@ -142,6 +142,7 @@ class InprocToolAdapter:
                 metadata=None,
             )
 
+<<<<<<< HEAD
         # alpha.36 (Bug #1): 分发前先过 schema.required 校验 —— 把
         # TypeError "execute() missing 1 required positional argument"
         # 收敛为中文 + tool_name 错误文案，不再泄漏 Python 内部错误到
@@ -234,6 +235,75 @@ class InprocToolAdapter:
 
             # backend.tools.base.ToolResult -> domain.tool.ToolResult
             return ToolResult(
+=======
+        probe = HarnessProbe("tool", name)
+        try:
+            with probe:
+                try:
+                    raw = await asyncio.wait_for(
+                        to_thread(tool.execute, **args),
+                        timeout=self._policy.timeout_seconds,
+                    )
+                    probe.result = raw  # 成功路径：让 probe 在 __exit__ 时读到 raw.success
+                except TIMEOUT_EXCEPTIONS:
+                    # probe.result 保持 None → __exit__ 视为失败
+                    return ToolResult(
+                        success=False,
+                        output="",
+                        error=tool_timeout_message(self._policy.timeout_seconds),
+                        metadata={
+                            "timeout_seconds": self._policy.timeout_seconds,
+                            "truncated": False,
+                        },
+                    )
+                except Exception as exc:  # noqa: BLE001  (按契约收敛所有错误)
+                    return ToolResult(
+                        success=False,
+                        output="",
+                        error=f"{type(exc).__name__}: {exc}",
+                        metadata=None,
+                    )
+
+            output_value = getattr(raw, "output", None)
+            if output_value is None:
+                output_value = raw.content
+
+            metadata: Optional[Dict[str, Any]] = None
+            json_bytes: Optional[int] = None
+            if isinstance(output_value, (dict, list)):  # noqa: UP038 — py38 运行时 isinstance 不支持 X | Y
+                try:
+                    structured_output = json.dumps(
+                        output_value,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                        default=str,
+                    )
+                except (TypeError, ValueError):
+                    # 循环引用等不可序列化结构 → 退回文本路径，绝不冒泡异常。
+                    json_bytes = None
+                else:
+                    json_bytes = len(structured_output.encode("utf-8"))
+                    if json_bytes <= self._policy.max_output_bytes:
+                        output = output_value
+                    else:
+                        metadata = {
+                            "truncated": True,
+                            "original_bytes": json_bytes,
+                            "max_output_bytes": self._policy.max_output_bytes,
+                        }
+                        output = dict(metadata)
+
+            if json_bytes is None:
+                output_str = "" if output_value is None else str(output_value)
+                output, truncation_meta = _truncate_output(
+                    output_str, self._policy.max_output_bytes
+                )
+                if truncation_meta:
+                    metadata = dict(truncation_meta)
+
+            # backend.tools.base.ToolResult -> domain.tool.ToolResult
+            return ToolResult(
+>>>>>>> origin/main
                 success=bool(raw.success),
                 output=output,
                 error=raw.error,

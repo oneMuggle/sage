@@ -2,13 +2,20 @@
 
 覆盖：build_command（argv + stdin_payload）、discover_manifests
 （pyproject requires_python / requirements 注释过滤 / Pipfile /
+<<<<<<< HEAD
 environment.yml）、diagnose 版本约束匹配、_parse_json_line、
 _candidate_paths 的 Windows / conda 发现路径。
+=======
+environment.yml）、diagnose 版本约束匹配、_parse_json_line。
+>>>>>>> origin/main
 """
 
 from __future__ import annotations
 
+<<<<<<< HEAD
 import sys
+=======
+>>>>>>> origin/main
 from pathlib import Path
 
 import pytest
@@ -19,7 +26,10 @@ from backend.domain.runtime import (
     RuntimeInfo,
     RuntimeSource,
 )
+<<<<<<< HEAD
 from backend.tools.adapters import python_adapter as pa
+=======
+>>>>>>> origin/main
 from backend.tools.adapters.python_adapter import PythonAdapter
 
 pytestmark = pytest.mark.unit
@@ -144,6 +154,7 @@ def test_diagnose_recommended_runtime(adapter):
     r2 = _make_runtime("3.12.0")
     diagnosis = adapter.diagnose(Path(), runtimes=[r1, r2], ctx=None)
     assert diagnosis.recommended_runtime is not None
+<<<<<<< HEAD
 
 
 # ---------------------------------------------------------------------------
@@ -213,3 +224,5 @@ def test_candidate_paths_finds_conda_base_outside_default_list(adapter, tmp_path
 
     paths = list(adapter._candidate_paths(()))
     assert str(env / "python.exe") in paths
+=======
+>>>>>>> origin/main

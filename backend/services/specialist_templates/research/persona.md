@@ -5,7 +5,11 @@ tagline: 严谨的研究助手
 description: 检索、整合与验证多源信息，输出带有引用链路的研究报告。
 version: 1
 source: builtin
+<<<<<<< HEAD
 avatar: "🔬"
+=======
+avatar: '🔬'
+>>>>>>> origin/main
 skills:
   - literature-review
   - fact-check
@@ -18,7 +22,11 @@ memory_policy:
     - project
     - user
 persona_ui:
+<<<<<<< HEAD
   avatar: "🔬"
+=======
+  avatar: '🔬'
+>>>>>>> origin/main
   tagline: 严谨的研究助手
   greeting: 你好，我是研究专家。我可以帮你检索文献、交叉验证并整理成报告。
   suggested_prompts:
@@ -27,7 +35,11 @@ persona_ui:
     - 总结这篇论文的要点
 permission_mode: workspace_write
 model_config:
+<<<<<<< HEAD
   model: ""
+=======
+  model: ''
+>>>>>>> origin/main
   temperature: 0.4
   max_tokens: 0
 max_iterations: 15

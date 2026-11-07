@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Dict, List
+=======
+>>>>>>> origin/main
 
 from backend.design.errors import DesignSystemNotFoundError
 from backend.design.models import DesignSystem
@@ -15,6 +18,7 @@ class DesignSystemRegistry:
     def __init__(self, content_dir: Path) -> None:
         self._content_dir = content_dir
         self._systems_dir = content_dir / "systems"
+<<<<<<< HEAD
         self._cache: Dict[str, DesignSystem] = {}
 
     def list_systems(self) -> List[DesignSystem]:
@@ -22,6 +26,15 @@ class DesignSystemRegistry:
         if not self._systems_dir.exists():
             return []
         systems: List[DesignSystem] = []
+=======
+        self._cache: dict[str, DesignSystem] = {}
+
+    def list_systems(self) -> list[DesignSystem]:
+        """List all available design systems."""
+        if not self._systems_dir.exists():
+            return []
+        systems: list[DesignSystem] = []
+>>>>>>> origin/main
         for system_dir in sorted(self._systems_dir.iterdir()):
             if system_dir.is_dir() and (system_dir / "manifest.json").exists():
                 systems.append(self._load_system(system_dir))
@@ -50,10 +63,17 @@ class DesignSystemRegistry:
         self._cache[system_id] = system
         return system
 
+<<<<<<< HEAD
     def search_systems(self, query: str) -> List[DesignSystem]:
         """Search design systems by name, description, or tags."""
         query_lower = query.lower()
         results: List[DesignSystem] = []
+=======
+    def search_systems(self, query: str) -> list[DesignSystem]:
+        """Search design systems by name, description, or tags."""
+        query_lower = query.lower()
+        results: list[DesignSystem] = []
+>>>>>>> origin/main
         for system in self.list_systems():
             if (
                 query_lower in system.name.lower()

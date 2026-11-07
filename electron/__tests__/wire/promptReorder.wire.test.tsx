@@ -1,6 +1,21 @@
+<<<<<<< HEAD
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+=======
+import {
+  cleanup,
+  fireEvent,
+  render as rtlRender,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { I18nProvider } from '../../../src/shared/lib/i18n';
+
+>>>>>>> origin/main
 vi.mock('node-fetch', async () => {
   const actual = await vi.importActual<typeof import('node-fetch')>('node-fetch');
   const { wireFetch } = await import('./fetchStub');
@@ -8,6 +23,7 @@ vi.mock('node-fetch', async () => {
 });
 
 import { PromptTemplatesTab } from '../../../src/pages/settings/PromptTemplatesTab';
+<<<<<<< HEAD
 import { I18nProvider } from '../../../src/shared/lib/i18n';
 
 import { received, releaseBackend, strictBody, useBackend } from './harness';
@@ -20,6 +36,21 @@ function renderTab() {
   );
 }
 
+=======
+
+import { received, releaseBackend, strictBody, useBackend } from './harness';
+
+function I18nWrapper({ children }: { children: React.ReactNode }) {
+  return <I18nProvider defaultLocale="zh">{children}</I18nProvider>;
+}
+
+const render = (ui: React.ReactElement, options?: Parameters<typeof rtlRender>[1]) =>
+  rtlRender(ui, { wrapper: I18nWrapper, ...options });
+
+function renderTab() {
+  return render(<PromptTemplatesTab />);
+}
+>>>>>>> origin/main
 const tpl = (id: string, name: string) => ({
   id,
   name,

@@ -13,7 +13,11 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Any, Optional
+=======
+from typing import Any
+>>>>>>> origin/main
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +25,11 @@ logger = logging.getLogger(__name__)
 SETTINGS_KEY_SKILLS_DIR = "skills_dir"
 
 
+<<<<<<< HEAD
 def read_skills_dir_preference(repo: Any = None) -> Optional[Path]:
+=======
+def read_skills_dir_preference(repo: Any = None) -> Path | None:
+>>>>>>> origin/main
     """读取 skills_dir preference，做基础校验。
 
     Args:

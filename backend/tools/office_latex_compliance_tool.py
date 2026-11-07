@@ -8,6 +8,10 @@ from typing import Any, Dict, List, Optional
 
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
+<<<<<<< HEAD
+=======
+from backend.tools.office_workspace_scope import workspace_for_policy
+>>>>>>> origin/main
 
 
 def _require_context() -> Optional[ToolResult]:
@@ -116,9 +120,12 @@ class OfficeCheckLatexComplianceTool(BaseTool):
             return blocked
         if not isinstance(tex_path, str) or not tex_path.strip():
             return ToolResult(success=False, error="tex_path_required")
+<<<<<<< HEAD
         blocked = self._enforce_workspace(tex_path)
         if blocked is not None:
             return blocked
+=======
+>>>>>>> origin/main
         tex = Path(tex_path).expanduser()
         if not tex.is_absolute():
             return ToolResult(success=False, error="tex_path_absolute_required")
@@ -129,9 +136,12 @@ class OfficeCheckLatexComplianceTool(BaseTool):
 
         pdf: Optional[Path] = None
         if isinstance(pdf_path, str) and pdf_path.strip():
+<<<<<<< HEAD
             blocked = self._enforce_workspace(pdf_path)
             if blocked is not None:
                 return blocked
+=======
+>>>>>>> origin/main
             pdf = Path(pdf_path).expanduser()
             if not pdf.is_absolute():
                 return ToolResult(success=False, error="pdf_path_absolute_required")
@@ -160,7 +170,11 @@ class OfficeCheckLatexComplianceTool(BaseTool):
         from backend.office.errors import OfficeError
         from backend.office.latex.service import check_latex_compliance_service
 
+<<<<<<< HEAD
         root = Path(self._policy.workspace_root or str(tex.parent))
+=======
+        root = workspace_for_policy(self._policy, tex, *((pdf,) if pdf is not None else ()))
+>>>>>>> origin/main
         try:
             result = check_latex_compliance_service(
                 tex,

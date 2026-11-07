@@ -77,6 +77,37 @@ def resolve_effective_agent_id(session_id: str, requested_agent_id: Optional[str
     return resolve_bound_specialist(session_id)
 
 
+<<<<<<< HEAD
+=======
+def resolve_effective_agent_id_for_message(
+    session_id: str,
+    requested_agent_id: Optional[str],
+    message: Optional[str],
+) -> str:
+    """M2 群聊：显式 agent_id > 消息内 @专家 > 会话绑定 > primary。
+
+    @ 解析仅在会话参与者中按名字精确匹配（最长优先）；任何解析异常都
+    回落到会话绑定，绝不阻塞聊天。
+    """
+    if requested_agent_id:
+        return _validated(requested_agent_id)
+    if message:
+        try:
+            from backend.data.database import get_database
+            from backend.data.participant_repo import resolve_mention_agent
+
+            mentioned = resolve_mention_agent(
+                get_database().get_connection(), session_id, message
+            )
+        except Exception as exc:  # noqa: BLE001 — @ 解析失败不阻塞对话
+            logger.debug("@ 解析失败（忽略）: %s", exc)
+            mentioned = None
+        if mentioned and _is_usable_agent(mentioned):
+            return mentioned
+    return resolve_bound_specialist(session_id)
+
+
+>>>>>>> origin/main
 def touch_specialist_usage(agent_id: Optional[str]) -> None:
     """P2-b：记录专家最近使用时间（``agents.last_used_at``，毫秒）。
 

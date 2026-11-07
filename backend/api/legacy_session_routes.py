@@ -38,6 +38,11 @@ from backend.chat.compaction import (
 from backend.chat.specialist_binding import validate_specialist_id
 from backend.data.answer_version_repo import AnswerVersionError, AnswerVersionRepository
 from backend.data.database import get_database, make_with_db_lock
+from backend.data.participant_repo import (
+    add_participants,
+    list_participants,
+    remove_participant,
+)
 from backend.data.session_repo import (
     ForkSourceNotFoundError,
     MessageRepository,
@@ -107,11 +112,36 @@ def create_session(data: SessionCreate, repo: SessionRepository = Depends(get_se
         bound_specialist = validate_specialist_id(data.specialist_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+<<<<<<< HEAD
+=======
+    # 2026-11-07 M2 群聊：participant_ids 非空（或显式 group）→ group 会话
+    participant_ids = [
+        pid for pid in (data.participant_ids or []) if isinstance(pid, str) and pid
+    ]
+    is_group = bool(participant_ids) or data.conversation_type == "group"
+>>>>>>> origin/main
     session = repo.create(
         title=data.title,
         parent_id=data.parent_id,
         specialist_id=bound_specialist,
+<<<<<<< HEAD
     )
+=======
+        conversation_type="group" if is_group else "dm",
+    )
+    if participant_ids:
+        from backend.data.agent_repo import AgentRepository
+
+        agent_repo = AgentRepository()
+        valid_ids = [pid for pid in participant_ids if agent_repo.get(pid) is not None]
+        conn = get_database().get_connection()
+        add_participants(
+            conn,
+            session.id,
+            valid_ids,
+            host_agent_id=bound_specialist if bound_specialist != "primary" else None,
+        )
+>>>>>>> origin/main
 
     workspace_binding: Optional[Dict[str, Any]] = None
     if not data.skip_workspace_binding:
@@ -602,3 +632,68 @@ def activate_answer_version(session_id: str, version_id: str):
             detail={"type": exc.kind, "message": str(exc)},
         ) from exc
     return {"ok": True, "restored": restored}
+<<<<<<< HEAD
+=======
+
+
+# ==================== M2 (2026-11-07) 群聊参与者 ====================
+
+
+class ParticipantAddRequest(BaseModel):
+    agent_ids: List[str] = []
+
+
+@router.get("/sessions/{session_id}/participants", response_model=dict)
+@with_db_lock
+def get_session_participants(session_id: str):
+    """列出群聊参与者（含头像 / 名字 / 角色 / 发言顺序）。"""
+    conn = get_database().get_connection()
+    return {"participants": list_participants(conn, session_id)}
+
+
+@router.post("/sessions/{session_id}/participants", response_model=dict)
+@with_db_lock
+def add_session_participants(session_id: str, data: ParticipantAddRequest):
+    """拉专家进群（幂等：已存在自动跳过）。
+
+    首个成员成为 host；会话 conversation_type 升级为 group。
+    - 404 —— 会话不存在
+    """
+    session = SessionRepository().get(session_id)
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "session_not_found", "message": f"会话 {session_id!r} 不存在"},
+        )
+
+    from backend.data.agent_repo import AgentRepository
+
+    agent_repo = AgentRepository()
+    valid_ids = [
+        aid for aid in data.agent_ids if isinstance(aid, str) and agent_repo.get(aid) is not None
+    ]
+    conn = get_database().get_connection()
+    participants = add_participants(conn, session_id, valid_ids)
+    conn.execute(
+        "UPDATE sessions SET conversation_type = 'group' WHERE id = ?", (session_id,)
+    )
+    conn.commit()
+    return {"participants": participants}
+
+
+@router.delete("/sessions/{session_id}/participants/{agent_id}", response_model=dict)
+@with_db_lock
+def remove_session_participant(session_id: str, agent_id: str):
+    """移除群聊成员。
+
+    - 200 + ``{ok: true}``
+    - 404 —— 该成员不存在
+    """
+    conn = get_database().get_connection()
+    if not remove_participant(conn, session_id, agent_id):
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "participant_not_found", "message": f"成员 {agent_id!r} 不在该会话中"},
+        )
+    return {"ok": True}
+>>>>>>> origin/main

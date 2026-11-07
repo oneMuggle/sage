@@ -117,4 +117,42 @@ describe('orchestration slash commands', () => {
     expect(parsed.skillCount).toBe(1);
     expect(parsed.names[0]).toBe('aihot');
   });
+<<<<<<< HEAD
+=======
+});
+
+// M1.5 (2026-11-05): /status /doctor /config —— 对标 Claude Code /status、
+// Codex /doctor 的低门槛后端自省入口。三个命令都走 mode='prompt'，
+// commandToPrompt 渲染给 LLM 的提示词里要包含对应工具名。
+describe('M1.5: /status /doctor /config self-transparency prompts', () => {
+  it('/status prompts sage_self_status with 8-dim rendering hints', () => {
+    const cmd = slashCommands.find((c) => c.name === 'status');
+    expect(cmd).toBeDefined();
+    expect(cmd!.mode).toBe('prompt');
+    const prompt = commandToPrompt(cmd!, '');
+    expect(prompt).toContain('sage_self_status');
+    expect(prompt).toMatch(/8 维|8维|运行时状态/);
+    expect(prompt).toMatch(/实际生效模型|成本/);
+  });
+
+  it('/doctor prompts sage_doctor with CRITICAL>WARN>INFO priority', () => {
+    const cmd = slashCommands.find((c) => c.name === 'doctor');
+    expect(cmd).toBeDefined();
+    expect(cmd!.mode).toBe('prompt');
+    const prompt = commandToPrompt(cmd!, '');
+    expect(prompt).toContain('sage_doctor');
+    expect(prompt).toMatch(/CRITICAL.*WARN.*INFO|后端健康巡检/);
+    // 不暴露 include_subprocess_probe 参数（已在 review-fix 中删除）
+    expect(prompt).not.toContain('include_subprocess_probe');
+  });
+
+  it('/config prompts read_sage_config with section=all', () => {
+    const cmd = slashCommands.find((c) => c.name === 'config');
+    expect(cmd).toBeDefined();
+    expect(cmd!.mode).toBe('prompt');
+    const prompt = commandToPrompt(cmd!, '');
+    expect(prompt).toContain('read_sage_config');
+    expect(prompt).toContain("section='all'");
+  });
+>>>>>>> origin/main
 });

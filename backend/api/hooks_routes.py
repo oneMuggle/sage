@@ -29,7 +29,10 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Optional
+=======
+>>>>>>> origin/main
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -113,7 +116,11 @@ class WorkspaceBody(BaseModel):
     workspace: str
 
 
+<<<<<<< HEAD
 def _validated_workspace(raw: str) -> Optional[str]:  # noqa: UP007 — 保持与仓库既有 py3.10 写法一致
+=======
+def _validated_workspace(raw: str) -> str | None:  # noqa: UP007 — 保持与仓库既有 py3.10 写法一致
+>>>>>>> origin/main
     """校验 workspace 为已存在的绝对路径目录; 非法返回 None。"""
     if not raw or not isinstance(raw, str):
         return None

@@ -1,8 +1,18 @@
+<<<<<<< HEAD
 """Pure snapshot field-selection helpers (no persistence or networking)."""
 import hashlib
 import json
 from datetime import datetime, timezone
 from typing import List, Optional
+=======
+from typing import List, Optional
+
+"""Pure snapshot field-selection helpers (no persistence or networking)."""
+
+import hashlib
+import json
+from datetime import datetime, timezone
+>>>>>>> origin/main
 
 from .schemas import CandidateModel
 

@@ -9,8 +9,14 @@
 from __future__ import annotations
 
 import copy
+<<<<<<< HEAD
 import logging
 from typing import Any, Dict, List, Optional, Tuple
+=======
+import json
+import logging
+from typing import Any, Dict, List, Optional
+>>>>>>> origin/main
 
 from backend.data.agent_repo import AgentRepository
 from backend.data.settings_canonicalizer import validate_settings_payload
@@ -22,6 +28,10 @@ from backend.domain.agent_limits import (
 )
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
+<<<<<<< HEAD
+=======
+from backend.services import self_status as self_status_service
+>>>>>>> origin/main
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 
 logger = logging.getLogger(__name__)
@@ -96,7 +106,85 @@ _ALLOWED_ENDPOINT_FIELDS = {
 # 2026-10-28: model_selection 更新白名单（与 settings_canonicalizer.LEGAL_MODEL_SELECTION_KEYS 对齐）
 _ALLOWED_MODEL_SELECTION_FIELDS = {"endpointId", "modelId"}
 
+<<<<<<< HEAD
 _VALID_READ_SECTIONS = {"all", "orch", "agents", "general", "model_selections", "endpoints"}
+=======
+# 2026-11-05 M1.2 自透明对等：新增 version / routing / preferences / self 四个只读 section。
+# - self 不进 "all"：它会聚合 MCP / 插件 / 用量 / 健康等多路运行时状态，
+#   成本明显高于纯配置读取，需显式请求（或直接用 sage_self_status 工具）。
+_VALID_READ_SECTIONS = {
+    "all",
+    "orch",
+    "agents",
+    "general",
+    "model_selections",
+    "endpoints",
+    "routing",
+    "preferences",
+    "version",
+    "self",
+}
+
+# preferences 表 KV 中允许暴露给 LLM 的只读白名单。凭证类键
+# （search_config / web_proxy / browser_credential_vault / arena_master_key）
+# 与 app_settings（体积大、已由其他 section 覆盖）一律不在此列。
+_VISIBLE_PREFERENCE_KEYS = (
+    "theme_mode",
+    "theme_preset",
+    "font_ui",
+    "font_code",
+    "font_size_ui",
+    "font_size_code",
+    "permission_mode",
+    "permission_rules",
+    "compact_threshold_tokens",
+    "network_policy",
+    "bash_config",
+    "auto_checkpoint",
+    "fallback_model",
+    "embedding_mode",
+    "ocr_config",
+    "context_turn_limit",
+    "auto_topic_detection",
+    "topic_detection_threshold",
+    "allow_skill_scripts",
+    "skills_dir",
+    "last_workspace_path",
+    "chat_display_mode",
+    "spend_limit_usd",
+)
+
+
+def _read_visible_preferences() -> Dict[str, Any]:
+    """读取白名单内的 preferences KV；JSON 值自动解析，失败保留原字符串。
+
+    fail-open：仓储没有 ``get``（测试替身）或单项读取异常时跳过该项，
+    不影响其他 section。
+    """
+    repo = SettingsRepository()
+    getter = getattr(repo, "get", None)
+    if getter is None:
+        return {}
+    prefs: Dict[str, Any] = {}
+    for key in _VISIBLE_PREFERENCE_KEYS:
+        try:
+            raw = getter(key)
+        except Exception as exc:  # noqa: BLE001 —— 单项失败不拖垮整个 section
+            logger.debug("读取 preference %s 失败: %s", key, exc)
+            continue
+        if raw is None:
+            continue
+        if isinstance(raw, str):
+            try:
+                prefs[key] = json.loads(raw)
+            except (ValueError, TypeError):
+                prefs[key] = raw
+        else:
+            prefs[key] = raw
+    return _redact_settings(prefs)
+
+
+>>>>>>> origin/main
 _ORCH_INTEGER_RANGES = {
     "maxConcurrentSubagents": (1, 32),
     "maxAggregateChars": (1, 10_000_000),
@@ -118,7 +206,11 @@ def _prepare_settings_update(
     current_settings: Any,
     updates: Dict[str, Any],
     target: str,
+<<<<<<< HEAD
 ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+=======
+) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+>>>>>>> origin/main
     """Return a validated copy of settings before persisting an update."""
     if not isinstance(current_settings, dict):
         return None, "当前 app_settings 不是有效的对象"
@@ -198,7 +290,11 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
     # P119 Config Advisor (Phase 1.2): LLM 重试参数取值域校验 —— 复用后端
     # 单一真相源 RETRY_RANGES (与运行时回退 / HTTP 写入侧共用同一份定义,
     # 杜绝漂移).
+<<<<<<< HEAD
     _llm_retry_field_errors: List[str] = []
+=======
+    _llm_retry_field_errors: list[str] = []
+>>>>>>> origin/main
     from backend.core.retry_defaults import RETRY_KEYS, validate_retry_values
 
     for key in RETRY_KEYS:
@@ -334,22 +430,54 @@ class ReadSageConfigTool(BaseTool):
             description=(
                 "查询 Sage 系统的实际当前配置与运行参数，包括编排迭代上限（maxLaneIterations / "
                 "maxSubagentIterations）、各智能体（primary, coder, reviewer, writer 等）"
+<<<<<<< HEAD
                 "的迭代上限与设定、通用设置、API 端点列表等。敏感凭证已自动脱敏。"
+=======
+                "的迭代上限与设定、通用设置、API 端点列表、智能路由模式、用户偏好 KV、"
+                "应用版本，以及可选的完整运行时自省状态（self）。敏感凭证已自动脱敏。"
+>>>>>>> origin/main
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "section": {
                         "type": "string",
+<<<<<<< HEAD
                         "enum": ["all", "orch", "agents", "general", "model_selections", "endpoints"],
+=======
+                        "enum": [
+                            "all",
+                            "orch",
+                            "agents",
+                            "general",
+                            "model_selections",
+                            "endpoints",
+                            "routing",
+                            "preferences",
+                            "version",
+                            "self",
+                        ],
+>>>>>>> origin/main
                         "description": (
                             "要查询的配置分类：\n"
                             "- 'orch': 编排参数（泳道迭代上限、子代理迭代上限、并发上限等）\n"
                             "- 'agents': 所有智能体档案列表（含每个智能体的最大迭代步数、角色与提示词）\n"
+<<<<<<< HEAD
                             "- 'general': 通用应用设置（流式、记忆、温度、时区等）\n"
                             "- 'model_selections': 各任务当前绑定的模型配置\n"
                             "- 'endpoints': API 端点列表（apiKey 已脱敏）\n"
                             "- 'all': 包含以上全部配置"
+=======
+                            "- 'general': 通用应用设置（流式、记忆、温度、时区等，不含 routing）\n"
+                            "- 'model_selections': 各任务当前绑定的模型配置\n"
+                            "- 'endpoints': API 端点列表（apiKey 已脱敏）\n"
+                            "- 'routing': 智能路由配置（mode=auto/manual）\n"
+                            "- 'preferences': 用户偏好 KV（主题、权限模式、网络策略等，凭证类键不暴露）\n"
+                            "- 'version': 应用版本号（与 package.json 一致）\n"
+                            "- 'self': 完整运行时自省状态（版本/实际生效模型/权限/MCP/插件/用量/健康），"
+                            "开销高于其他 section，仅显式请求；等价于 sage_self_status 工具\n"
+                            "- 'all': 包含以上除 'self' 外的全部配置"
+>>>>>>> origin/main
                         ),
                     }
                 },
@@ -398,7 +526,11 @@ class ReadSageConfigTool(BaseTool):
                 general = {
                     k: v
                     for k, v in clean_settings.items()
+<<<<<<< HEAD
                     if k not in {"orch", "endpoints", "modelSelections"}
+=======
+                    if k not in {"orch", "endpoints", "modelSelections", "routing"}
+>>>>>>> origin/main
                 }
                 result_data["general"] = general
                 summary_lines.append(f"【通用设置 (general)】{general}")
@@ -418,6 +550,33 @@ class ReadSageConfigTool(BaseTool):
                 ]
                 summary_lines.append(f"【API 端点 (endpoints)】共 {len(endpoints)} 个：{'; '.join(endpoint_summaries)}")
 
+<<<<<<< HEAD
+=======
+            # 2026-11-05 M1.2: routing / preferences / version / self
+            if section in {"all", "routing"}:
+                routing = clean_settings.get("routing", {})
+                result_data["routing"] = routing
+                summary_lines.append(f"【智能路由 (routing)】mode={routing.get('mode', 'manual')}")
+
+            if section in {"all", "preferences"}:
+                preferences = _read_visible_preferences()
+                result_data["preferences"] = preferences
+                summary_lines.append(f"【用户偏好 (preferences)】共 {len(preferences)} 项：{preferences}")
+
+            if section in {"all", "version"}:
+                version = self_status_service.read_version()
+                result_data["version"] = version
+                summary_lines.append(f"【版本 (version)】{version}")
+
+            if section == "self":
+                status = self_status_service.gather_self_status()
+                result_data["self"] = status
+                summary_lines.append(
+                    f"【运行时自省 (self)】版本={status.get('version')}, "
+                    f"权限模式={status.get('permission_mode')}"
+                )
+
+>>>>>>> origin/main
             if section == "all":
                 result_data["settings"] = clean_settings
 

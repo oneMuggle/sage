@@ -35,8 +35,11 @@ export interface Session {
   last_run_at?: number | null;
   /** P0-4 (UI 优化方案 2026-09-13): 最后一条 user/assistant 消息预览(截断 80 字符) */
   last_message_preview?: string | null;
+<<<<<<< HEAD
   /** 标题生成尝试次数 (后端 `sessions.title_attempts`)；用于侧栏显示"生成标题中…"过渡态 */
   title_attempts?: number;
+=======
+>>>>>>> origin/main
   /** 2026-10-28: 性能统计 - 会话总用时（分钟），从创建到最后一次消息 */
   duration_minutes?: number | null;
   /** 2026-10-29 (feat/workspace-optimization): create_session 响应里附带的工作区信息。
@@ -46,9 +49,19 @@ export interface Session {
     source: string;
     is_fallback: boolean;
   } | null;
+<<<<<<< HEAD
   /** M0 (2026-11-03): 会话绑定的专家（agents.id）；'primary' = 主助手。
    *  只影响后续轮次的 persona / 工具白名单 / 模型 / 记忆策略，不触碰历史消息。 */
   specialist_id?: string;
+=======
+  /** 标题生成尝试次数 (后端 `sessions.title_attempts`)；用于侧栏显示"生成标题中…"过渡态 */
+  title_attempts?: number;
+  /** M0 (2026-11-03): 会话绑定的专家（agents.id）；'primary' = 主助手。
+   *  只影响后续轮次的 persona / 工具白名单 / 模型 / 记忆策略，不触碰历史消息。 */
+  specialist_id?: string;
+  /** M2 (2026-11-07): 会话类型 —— 'dm'（私聊，默认）| 'group'（群聊）。 */
+  conversation_type?: 'dm' | 'group';
+>>>>>>> origin/main
 }
 
 // 工具调用结构（与后端 AgentEvent 保持一致）
@@ -105,6 +118,8 @@ export interface Message {
   /** wire 上是 JSON 字符串 (session_repo 原样存取), 流式路径是数组 */
   tool_calls?: ToolCall[] | string | null;
   tool_call_id?: string;
+  /** M2 (2026-11-07): assistant 行的实际发言专家（群聊气泡显示头像/名字）。 */
+  sender_agent_id?: string | null;
   memory_applied?: number;
   /** R17-E: 记忆召回明细（memory_used 流事件携带，可展开查看） */
   memory_refs?: { id: string; memory_type: string; preview: string }[];
@@ -164,7 +179,18 @@ interface StoreState {
   sessionsLoadingMore: boolean;
   loadMoreSessions: () => Promise<void>;
   setCurrentSessionId: (id: string | null) => void;
+<<<<<<< HEAD
   createSession: (skipBinding?: boolean) => Promise<string>;
+=======
+  createSession: (
+    skipBinding?: boolean,
+    options?: {
+      participantIds?: string[];
+      conversationType?: 'dm' | 'group';
+      title?: string;
+    },
+  ) => Promise<string>;
+>>>>>>> origin/main
   deleteSession: (id: string) => Promise<void>;
   /** U4': 原地更新会话元数据 (如重命名),避免整表 reload 抖动 */
   updateSession: (id: string, patch: Partial<Session>) => void;
@@ -301,7 +327,14 @@ export const useStore = create<StoreState>((set, _get) => ({
   // 2026-11-04 (fix/skip-workspace-binding): skipBinding=true 时跳过工作区解析链，
   // 不绑定任何工作区。用于前端用户明确选择"不绑定项目"的场景，语义对齐主流 AI 应用
   // (Cursor / Cline / Windsurf) 的"显式选择 > 自动推断"原则。
+<<<<<<< HEAD
   createSession: async (skipBinding = false) => {
+=======
+  createSession: async (
+    skipBinding = false,
+    options?: { participantIds?: string[]; conversationType?: 'dm' | 'group'; title?: string },
+  ) => {
+>>>>>>> origin/main
     try {
       // 2026-10-29 (feat/workspace-optimization): 把 Electron 嗅探到的 cwd 项目根
       // 作为决策链的低优先级参考输入传给后端；后端统一走 DefaultWorkspaceResolver，
@@ -318,9 +351,21 @@ export const useStore = create<StoreState>((set, _get) => ({
         }
       }
       const session = await invoke<Session>('create_session', {
+<<<<<<< HEAD
         title: '新对话',
         detectedRoot,
         skipWorkspaceBinding: skipBinding,
+=======
+        title: options?.title ?? '新对话',
+        detectedRoot,
+        skipWorkspaceBinding: skipBinding,
+        ...(options?.participantIds?.length
+          ? { participant_ids: options.participantIds }
+          : {}),
+        ...(options?.conversationType
+          ? { conversation_type: options.conversationType }
+          : {}),
+>>>>>>> origin/main
       });
       set((state) => ({
         sessions: [session, ...state.sessions],

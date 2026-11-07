@@ -146,6 +146,18 @@ export const zhSettingsUi = {
   'settings.endpoints.result.model': '模型(高级):',
   'settings.endpoints.result.protocol': '协议:',
   'settings.endpoints.result.quantization': '量化:',
+<<<<<<< HEAD
+=======
+  'settings.endpoints.quota.aria_budget': '月预算金额',
+  'settings.endpoints.quota.aria_daily_tokens': '日 token 限额数值',
+  'settings.endpoints.quota.aria_daily_unit': '日 token 限额单位',
+  'settings.endpoints.quota.daily_tokens': '日 token 限额',
+  'settings.endpoints.quota.monthly_budget': '月预算 (USD)',
+  'settings.endpoints.quota.section': '限额（选填，用于用量预警）',
+  'settings.endpoints.quota.unlimited': '不限',
+  'settings.endpoints.result.quota_budget': '预算: ${usd}/月',
+  'settings.endpoints.result.quota_tokens': '限额: {tokens} tokens/日',
+>>>>>>> origin/main
   'settings.endpoints.save': '保存',
   'settings.endpoints.test_connection': '测试连接',
   'settings.endpoints.testing': '测试中...',
@@ -247,12 +259,26 @@ export const zhSettingsUi = {
   'settings.models.chat_endpoint_unconfigured': '未配置（请先切回手动模式选择对话端点）',
   'settings.models.chat_model': '对话模型',
   'settings.models.chat_model_desc': '用于文本对话（必填）',
+<<<<<<< HEAD
+=======
+  'settings.models.context_length.aria_preset': '最大上下文长度档位',
+  'settings.models.context_length.aria_unit': '上下文长度单位',
+  'settings.models.context_length.aria_value': '上下文长度数值',
+  'settings.models.context_length.custom': '自定义…',
+>>>>>>> origin/main
   'settings.models.embedding_model': '向量/嵌入模型',
   'settings.models.embedding_model_desc': '用于向量化和语义搜索（选填）',
   'settings.models.endpoints_models_count': '{endpoints} 个端点，共 {models} 个模型',
   'settings.models.fixed_use_above': '固定 (使用上方值)',
   'settings.models.image_gen_model': '图像生成',
   'settings.models.image_gen_model_desc': '用于文本生成图像（选填）',
+<<<<<<< HEAD
+=======
+  'settings.models.title_model': '会话标题模型',
+  'settings.models.title_model_desc':
+    '生成会话标题时使用的模型（选填）。留空则沿用对话模型；专用小模型通常更快更省',
+  'settings.models.title_model_inherit': '沿用对话模型',
+>>>>>>> origin/main
   'settings.ocr.title': '本地 OCR',
   'settings.ocr.desc': '无视觉模型时，在本机识别图片文字；图片不上传',
   'settings.ocr.available': '可用（{engine}）',
@@ -318,10 +344,13 @@ export const zhSettingsUi = {
   'settings.models.routing_tier': '分档',
   'settings.models.temperature_desc':
     '控制输出的随机性：数值越高越随机；0 最稳定，2 最随机。实际效果取决于模型实现',
+<<<<<<< HEAD
   'settings.models.title_model': '会话标题模型',
   'settings.models.title_model_desc':
     '生成会话标题时使用的模型（选填）。留空则沿用对话模型；专用小模型通常更快更省',
   'settings.models.title_model_inherit': '-- 沿用对话模型 --',
+=======
+>>>>>>> origin/main
   'settings.models.tts_model': '语音合成 (TTS)',
   'settings.models.tts_model_desc': '用于文本转语音（选填）',
   'settings.models.vision_model': '视觉理解模型',

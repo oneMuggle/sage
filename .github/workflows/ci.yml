@@ -107,6 +107,7 @@ jobs:
         run: |
           conda run -n sage-backend-py38 ruff check backend/
 
+<<<<<<< HEAD
       # PEP 604 (`X | Y`) / PEP 585 (`list[T]`) guardrail — fails fast before
       # the 40-min pytest runs when a future cherry-pick leaks Py3.10+ syntax
       # into the win7 backend. Pure stdlib AST scan (no deps). See
@@ -122,8 +123,17 @@ jobs:
       # str.removeprefix / zoneinfo / graphlib / functools.cache /
       # dataclass slots,kw_only / datetime.UTC。与 regex 版 guardrail 双保险。
       - name: py38 runtime hazard AST scan
+=======
+      # xdist 并行:同 main backend job(见其注释)。test_event_loop_blocking
+      # 的 P99 延迟断言对 CPU 争用敏感,单独串行跑(--cov-append 保持覆盖率合并)
+      # 与 release/win7 侧 ci.yml 对齐 —— 此前 main 副本漏了这段并行化,
+      # 串行全量跑时单 pytest 步即 13~15 min(见 win7 分支同 job 实测)
+      - name: Pytest (py38, hex mode) with coverage
+>>>>>>> origin/main
         shell: bash -el {0}
+        timeout-minutes: 40
         run: |
+<<<<<<< HEAD
           conda run -n sage-backend-py38 python backend/tools/py38_hazard_scan.py backend
 
       # xdist 并行:同 main(见 backend job 注释)。test_event_loop_blocking
@@ -132,6 +142,8 @@ jobs:
         shell: bash -el {0}
         timeout-minutes: 40
         run: |
+=======
+>>>>>>> origin/main
           # durations 全量采集（≥1s），与 main backend hex 步骤对齐：
           # 为套件分片设计提供 per-file 耗时权重
           conda run -n sage-backend-py38 bash -c "cd backend && pytest -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80 --durations=500 --durations-min=1.0"
@@ -141,15 +153,20 @@ jobs:
         timeout-minutes: 10
         run: |
           conda run -n sage-backend-py38 bash -c "cd backend && pytest tests/integration/test_event_loop_blocking.py --cov --cov-append --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
+<<<<<<< HEAD
 
       - name: Dependency audit gate tests
         shell: bash -el {0}
         run: |
           conda run -n sage-backend-py38 pytest scripts/tests/test_check_dependency_audit.py
+=======
+>>>>>>> origin/main
 
       - name: Upload coverage
         if: always()
         uses: codecov/codecov-action@v4
+        # The pytest steps enforce coverage thresholds; Codecov is reporting-only.
+        continue-on-error: true
         with:
           file: backend/coverage.xml
           flags: backend-py38
@@ -194,6 +211,14 @@ jobs:
         shell: bash -el {0}
         run: |
           conda run -n sage-backend ruff check backend/
+
+      # R86：仓库内示例与静态插件索引必须与当前 manifest/host 契约同步；
+      # 定向单测随后仍会覆盖脚手架、索引模型与 CLI 退出码。
+      - name: Plugin ecosystem check (R86)
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend python -m backend.cli.plugin validate examples/plugins/hello-tool --strict
+          conda run -n sage-backend python -m backend.cli.plugin index validate plugins/index.json --check-local
 
       - name: Mypy (domain + ports)
         shell: bash -el {0}
@@ -243,6 +268,8 @@ jobs:
       - name: Upload coverage
         if: always()
         uses: codecov/codecov-action@v4
+        # The pytest steps enforce coverage thresholds; Codecov is reporting-only.
+        continue-on-error: true
         with:
           file: backend/coverage.xml
           flags: backend
@@ -256,6 +283,69 @@ jobs:
   # - 与 backend-windows-unit 一致：非门禁信号 job，不进 all-green needs
   # - 环境只需 requirements.txt + environment.yml 自带的 pytest 套件，
   #   不装 ruff/mypy/import-linter（本 job 不跑 lint/type）
+<<<<<<< HEAD
+=======
+  # ========== Backend (py38 collect gate): main PR 的 win7 地雷拦截 ==========
+  # - 只做 Python 3.8 下的「收集」（pytest --collect-only）+ backend.main 导入冒烟
+  #   —— 拦截 py39+/py310+ 语法（括号多上下文 with / PEP585 下标 / union 注解）
+  #     在合并进 main 前即失败，避免地雷随 win7 同步流到 release/win7
+  # - 不跑运行期断言：py38 行为差异由 release/win7 分支自己的 CI 兜底
+  # - 非 all-green 门禁依赖之外的信号 job（失败即合并前可见，无需 win7 回流修复）
+  backend-py38-collect:
+    name: Backend collect (Python 3.8, win7 mine-sweeper)
+    if: |
+      github.ref == 'refs/heads/main' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Miniconda + Python 3.8
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.8'
+          channels: conda-forge
+
+      - name: Create py38 env
+        shell: bash -el {0}
+        run: |
+          conda create -n sage-collect-py38 python=3.8 -y
+          conda run -n sage-collect-py38 pip install --upgrade pip
+
+      - name: Install backend deps (py38, locked)
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-collect-py38 pip install -r backend/requirements-py38.txt
+          # 只装收集所需的测试工具；dev 文件里的 import-linter/mypy 等不装
+          # （main 的 dev 钉版可能漂移出 py38 支持范围，与本门禁无关）
+          conda run -n sage-collect-py38 pip install pytest==7.4.4 pytest-asyncio==0.23.3 pytest-timeout==2.3.1 pytest-xdist==3.6.1 respx==0.21.1
+
+      - name: backend.main import smoke (py38)
+        shell: bash -el {0}
+        run: conda run -n sage-collect-py38 python -c "import backend.main; print('py38 import ok')"
+
+      # AST 扫描 py39+ 运行期写法（isinstance 联合 / asyncio.to_thread / zip strict=
+      # / Path.hardlink_to 等）——collect/import 拦不住函数体内的运行期地雷
+      - name: py38 runtime hazard AST scan
+        shell: bash -el {0}
+        run: conda run -n sage-collect-py38 python backend/tools/py38_hazard_scan.py backend
+
+      - name: Collect unit suite (py38) — zero collection errors
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-collect-py38 python -m pytest backend/tests/unit --collect-only -q -p no:cacheprovider
+
+      # integration/ 曾潜伏括号化 with（py39+ 语法）而 unit 收集网够不到；
+      # collect-only 只 import 不执行，能拦语法/导入期错误（见 T1 #1500）
+      - name: Collect integration suite (py38) — zero collection errors
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-collect-py38 python -m pytest backend/tests/integration --collect-only -q -p no:cacheprovider
+
+
+>>>>>>> origin/main
   backend-legacy:
     name: Backend legacy smoke (non-blocking)
     if: |
@@ -263,6 +353,60 @@ jobs:
       github.ref == 'refs/heads/develop' ||
       (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'develop'))
     runs-on: ubuntu-latest
+<<<<<<< HEAD
+=======
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          environment-file: backend/environment.yml
+          python-version: '3.11'
+          activate-environment: sage-backend
+          channels: conda-forge
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install backend deps
+        shell: bash -el {0}
+        run: |
+          # 从仓库根运行: requirements.txt 中 -e ./packages/sage-core 路径
+          conda run -n sage-backend pip install -r backend/requirements.txt
+
+      - name: Pytest legacy (smoke, no-cov)
+        shell: bash -el {0}
+        # 20 min 而非原来的 10：旧 backend job 里本步实测三次均为 613s 整
+        # （600s 超时 + 收尾），即 10 min 超时每次都把套件截断、再被 step 级
+        # continue-on-error 静默吞掉 —— 安全网从未完整跑完。拆出后失败会
+        # 显形为红 job，需给足真实运行时长（≥10.2 min，上限留一倍余量）。
+        timeout-minutes: 20
+        run: |
+          # durations 全量采集（≥1s），与 hex 步骤对齐（同样需要分片权重数据）。
+          # 本步实测：逐用例 gc.collect() 时 ~14-19 min，1.05 万用例时撞上 20 min
+          # 超时；2026-09-26 起 tests/conftest.py 的 tmp_db_path 按需 gc，~4.5 min。
+          conda run -n sage-backend bash -c "cd backend && API_MODE=legacy pytest --no-cov -q -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --durations=500 --durations-min=1.0"
+
+  # ========== Backend: Windows 本地 unit 基线（非阻塞信号） ==========
+  # 产品主平台是 Windows 桌面（Electron + win7 LTS），而上面两个 Backend job
+  # 都只跑 ubuntu。本 job 在 windows-latest 上跑 unit 套件，长期锁定
+  # #712/#715/#722 治理后的 Windows 基线（POSIX-only 簇已 skipif(nt)）。
+  # continue-on-error：信号不阻塞 PR；红 了说明有新的 Windows 回归。
+  # 仅 push main 触发（2026-09-17）：实测本 job ~16-18 min 且偶发 flaky
+  # （PR #924 两轮一绿一红），作为非门禁信号在每次 PR 上烧最贵的
+  # Windows runner 不划算 —— 回归在 merge 后的 main push 上仍会被捕获。
+  backend-windows-unit:
+    name: Backend unit (Windows, non-blocking)
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+>>>>>>> origin/main
     continue-on-error: true
 
     steps:
@@ -349,6 +493,12 @@ jobs:
         with:
           python-version: '3.11'
 
+      # environment.yml 是 conda 开发环境入口；其 pip 钉版若与
+      # requirements.txt 漂移，开发者会装到 CI 从未验证过的版本
+      # （曾发生：python-multipart 0.0.9 带着已修复的 PYSEC 公告）。
+      - name: Check environment.yml ↔ requirements.txt drift
+        run: python scripts/check_env_yml_drift.py
+
       - name: Create Python audit venv and install locked auditor
         id: python-install
         run: |
@@ -361,6 +511,11 @@ jobs:
         id: pip-audit
         if: always()
         run: |
+          if [ ! -x .venv-dependency-audit/bin/pip-audit ]; then
+            # 自愈：venv 存在但 pip-audit 入口偶发缺失（R74 实证）时重装一次
+            echo "pip-audit binary missing — attempting self-heal reinstall"
+            .venv-dependency-audit/bin/python -m pip install --disable-pip-version-check pip-audit==2.9.0 || true
+          fi
           if [ ! -x .venv-dependency-audit/bin/pip-audit ]; then
             printf '%s\n' '{"error":"pip-audit environment was not created"}' > pip-audit.json
             exit 1
@@ -428,9 +583,17 @@ jobs:
       - name: Build
         run: npm run build
 
+      # 渲染产物体积门禁（ZCode audit-bundle-size 思路）：#1401 砍掉的
+      # -44% 若被静默回潮（如 shiki 换回全量 bundle）在此拦截。
+      # 预算与棘轮协议见 scripts/check-bundle-size.mjs 头注释。
+      - name: Bundle size gate
+        run: node scripts/check-bundle-size.mjs
+
       - name: Upload coverage
         if: always()
         uses: codecov/codecov-action@v4
+        # The pytest steps enforce coverage thresholds; Codecov is reporting-only.
+        continue-on-error: true
         with:
           file: coverage/coverage-final.json
           flags: frontend
@@ -681,12 +844,22 @@ jobs:
         env:
           SAGE_SKIP_BACKEND: '1'
           CI: 'true'
+<<<<<<< HEAD
           # Skip Win32 runtime checks (VC++ Redist / KB patches / Win7 services).
           # windows-latest GitHub runner has VC++ Redist, but service state is
           # unpredictable; PR #1333's checkTrustedInstallerService() on CI
           # triggers dialog.showMessageBox() which blocks createMainWindow()
           # and causes firstWindow to time out / crash.
           # See run 35510214994 for evidence (firstWindow fails after 30s).
+=======
+          # Skip Win32 runtime checks (VC++ Redist / KB patches).
+          # GitHub's windows-latest runner has VC++ Redist preinstalled, so the
+          # checks currently pass — but if a runner image drifts (or if we later
+          # add service checks like release/win7 PR #1333), dialog.showMessageBox
+          # would block createMainWindow() and fail firstWindow. Opt out now to
+          # keep smoke focused on IPC bridge + frontend rendering only.
+          # See release/win7 run 35510214994 for the failure mode this prevents.
+>>>>>>> origin/main
           SAGE_RUNTIME_CHECK_ON_START: 'false'
         run: npx playwright test e2e/electron/smoke.spec.ts --reporter=line
 
@@ -715,7 +888,12 @@ jobs:
         with:
           node-version: '22.12'
       - run: node scripts/architecture-check.mjs
+<<<<<<< HEAD
       # 失败时把"现成可粘贴"的基线补账 JSON 行贴到 PR 评论（← main #1503）。
+=======
+      # 失败时把"现成可粘贴"的基线补账 JSON 行贴到 PR 评论——补账遗忘是
+      # 高频问题（连续多个 feature PR 带红 Architecture check 被合并）。
+>>>>>>> origin/main
       # 提示评论以 marker 开头，重复运行时先删旧提示再发新的（去重）。
       - name: Ratchet bump hint (comment on failure)
         if: failure() && github.event_name == 'pull_request'

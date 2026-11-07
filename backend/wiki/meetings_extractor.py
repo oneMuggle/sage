@@ -14,7 +14,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Dict, List, Optional
+=======
+from typing import List, Optional
+>>>>>>> origin/main
 
 
 @dataclass
@@ -196,7 +200,11 @@ def generate_meetings_index(
     lines.append(f"共 {len(entries)} 次会议记录。\n")
 
     # 按月份分组
+<<<<<<< HEAD
     by_month: Dict[str, List[MeetingEntry]] = {}
+=======
+    by_month: dict[str, List[MeetingEntry]] = {}
+>>>>>>> origin/main
     no_date: List[MeetingEntry] = []
     for entry in entries:
         if entry.date and len(entry.date) >= 7:

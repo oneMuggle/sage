@@ -22,7 +22,10 @@ _STREAMING_CHUNK_DELAY_S = 0.04
 # title_updated 事件在 SENTINEL 关闭流之前送达；超时则任务转入后台继续
 # （落库后由前端轮询兜底），不阻塞流收尾过久。
 _TITLE_WAIT_S = 3.0
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/main
 import json
 import logging
 import os
@@ -57,7 +60,10 @@ from backend.chat.sources_extractor import extract_sources_from_tool, merge_sour
 from backend.chat.title_generator import (
     DEFAULT_TITLE,
     TitleGenerator,
+<<<<<<< HEAD
     TitleModelFactory,
+=======
+>>>>>>> origin/main
     needs_title,
 )
 from backend.core.errors import LLMError
@@ -80,6 +86,10 @@ from backend.office.workspace_errors import (
 from backend.orchestration.chat_dispatcher import (
     _classify_orchestration_mode,
 )
+<<<<<<< HEAD
+=======
+from backend.orchestration.title_model_factory import TitleModelFactory
+>>>>>>> origin/main
 from backend.ports.llm import ModelCapabilities
 from backend.services.scheduler import get_scheduler_service
 
@@ -510,12 +520,21 @@ async def chat_stream_create(data: ChatRequest, request: Request):
         # M3-Task 4: 解析会话绑定的专家身份，贯穿到工具上下文与记忆写入
         from backend.chat.specialist_binding import (
             resolve_bound_specialist,
+<<<<<<< HEAD
+=======
+            resolve_effective_agent_id_for_message,
+>>>>>>> origin/main
             touch_specialist_usage,
         )
         from backend.tools.context import (
             ToolExecutionContext,
             reset_tool_context,
             set_tool_context,
+        )
+
+        # M2 (2026-11-07) 群聊：显式 agent_id > 消息内 @专家 > 会话绑定。
+        _effective_agent_id = resolve_effective_agent_id_for_message(
+            data.session_id, data.agent_id, data.message
         )
 
         _tool_ctx_token = None
@@ -611,6 +630,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             else:
                 # M0 修复: 请求未带端点配置时,从全局设置加载 + profile 模型覆盖
                 # (与 legacy_chat_routes.py /chat 端点对齐)
+<<<<<<< HEAD
                 from backend.chat.specialist_binding import resolve_effective_agent_id
                 from backend.data.agent_repo import AgentRepository
                 from backend.orchestration.llm_factory import load_llm_config_for_chat
@@ -623,6 +643,14 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     or {}
                 )
+=======
+                from backend.data.agent_repo import AgentRepository
+                from backend.orchestration.llm_factory import load_llm_config_for_chat
+
+                # 此时 SageAgent 尚未构造，直接按已解析的 agent_id 读
+                # agents 表取 model_config（M2 群聊 @ 已包含在 _effective_agent_id）。
+                _profile_row = AgentRepository().get(_effective_agent_id) or {}
+>>>>>>> origin/main
                 _profile_model_config = _profile_row.get("model_config")
                 _profile_model_config = (
                     _profile_model_config if isinstance(_profile_model_config, dict) else {}
@@ -788,12 +816,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     return
 
+<<<<<<< HEAD
             # M0 (2026-11-03): 会话级专家绑定 —— 请求未显式指定 agent_id 时
             # 取会话绑定的专家（不存在/已禁用回落主助手）。
             from backend.chat.specialist_binding import resolve_effective_agent_id
 
             agent = SageAgent(
                 agent_id=resolve_effective_agent_id(data.session_id, data.agent_id),
+=======
+            # M0/M2: 显式 agent_id > @专家 > 会话绑定（见 _effective_agent_id）
+            agent = SageAgent(
+                agent_id=_effective_agent_id,
+>>>>>>> origin/main
                 scheduler_service_getter=get_scheduler_service,
             )
             # 2026-10-28: 输出长度 —— 请求自带端点配置时, 上方 llm_config 直接由
@@ -2606,6 +2640,22 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         )
                     )
                     assistant_persisted = True
+<<<<<<< HEAD
+=======
+                    # M2 群聊：标注实际发言专家（best-effort，失败不影响流）
+                    if _effective_agent_id and _effective_agent_id != "primary":
+                        try:
+                            _sender_conn = get_database().get_connection()
+                            _sender_conn.execute(
+                                "UPDATE messages SET sender_agent_id = ? WHERE id = ?",
+                                (_effective_agent_id, assistant_db_id),
+                            )
+                            _sender_conn.commit()
+                        except Exception as sender_err:  # noqa: BLE001
+                            logger.debug(
+                                f"[REQ {request_id}] sender_agent_id 写入失败: {sender_err}"
+                            )
+>>>>>>> origin/main
                     if r38_memory_refs_json and not r38_memory_refs_written:
                         r38_memory_refs_written = True
                     if r81_rag_citations_json and not r81_rag_citations_written:
@@ -2644,6 +2694,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             logger.debug(
                                 f"[REQ {request_id}] stop hooks skipped: {l11_stop_err}"
                             )
+<<<<<<< HEAD
                         # Important-1 (win7 Task 6): when lifespan has installed a
                         # lifecycle manager, use it so memory_written hooks and
                         # traceability are emitted. Otherwise fall back to the
@@ -2666,6 +2717,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     f"[REQ {request_id}] lifecycle on_turn_complete failed: {exc}"
                                 )
                         elif not memory_off:
+=======
+                        if not memory_off:
+>>>>>>> origin/main
                             # 对标 S2: 临时聊天（memory_mode='off'）不提取记忆
                             try:
                                 await _extract_legacy_chat_memory(
@@ -2673,15 +2727,24 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     data.session_id,
                                     data.message,
                                     done_content,
+<<<<<<< HEAD
                                     agent_id=resolve_bound_specialist(data.session_id),
+=======
+                                    agent_id=_effective_agent_id,
+>>>>>>> origin/main
                                 )
                             except Exception as exc:
                                 logger.warning(
                                     f"[REQ {request_id}] legacy memory extraction failed: {exc}"
                                 )
 
+<<<<<<< HEAD
                     # P2-b: 记录专家最近使用时间（best-effort，单行 UPDATE）
                     touch_specialist_usage(resolve_bound_specialist(data.session_id))
+=======
+                    # P2-b: 记录专家最近使用时间（用实际发言者，群聊 @ 场景更准确）
+                    touch_specialist_usage(_effective_agent_id)
+>>>>>>> origin/main
 
                     # 收尾工作移出 DONE 关键路径：钩子/记忆抽取是 best-effort，
                     # 让 done 立即入队，避免前端光标长时间不结束。
@@ -2965,15 +3028,22 @@ from backend.api.legacy_skill_draft_routes import router as legacy_skill_draft_r
 router.include_router(legacy_skill_draft_routes_router)
 # C1 第一刀 (DSH 对标 R14): 记忆 API 迁出至 legacy_memory_routes.py
 # （纯物理拆分，路径/行为零变更；与 orch_routes 同款 include 模式）。
+<<<<<<< HEAD
 from backend.api.legacy_memory_feedback_routes import (
     router as legacy_memory_feedback_routes_router,
 )
 from backend.api.legacy_memory_list_routes import router as legacy_memory_list_routes_router
 from backend.api.legacy_memory_quality_routes import router as legacy_memory_quality_routes_router
+=======
+from backend.api.legacy_memory_list_routes import router as legacy_memory_list_routes_router
+>>>>>>> origin/main
 from backend.api.legacy_memory_routes import router as legacy_memory_routes_router
 
 router.include_router(legacy_memory_routes_router)
 router.include_router(legacy_memory_list_routes_router)
+<<<<<<< HEAD
 router.include_router(legacy_memory_quality_routes_router)
 router.include_router(legacy_memory_feedback_routes_router)
+=======
+>>>>>>> origin/main
 router.include_router(orch_routes_router)

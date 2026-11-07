@@ -69,6 +69,7 @@ def test_detects_pydantic_and_fastapi_runtime_annotations() -> None:
     assert any("FastAPI route `create_item` return annotation" in i for i in issues)
 
 
+<<<<<<< HEAD
 
 
 def test_detects_bare_model_rebuild_without_guard() -> None:
@@ -324,6 +325,8 @@ def test_ignores_removed_kwarg_names_outside_field_calls() -> None:
         hits = [i for i in gate.check_source(src, filename="t.py") if "pydantic v2 removed" in i]
         assert hits == [], (src, hits)
 
+=======
+>>>>>>> origin/main
 def test_repository_passes_py38_compat_gate() -> None:
     gate = _load_gate_module()
     targets = [REPO_ROOT / "backend", REPO_ROOT / "packages" / "sage-core"]

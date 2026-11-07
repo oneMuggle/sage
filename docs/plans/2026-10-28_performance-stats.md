@@ -1,7 +1,11 @@
 # 性能统计功能：会话用时 + 模型调用用时
 
 - **状态**：已完成（Phase 1 + Phase 2 + 后续优化 3/4 项）
+<<<<<<< HEAD
 - **分支**：`feat/win7-performance-stats`（同步自 main `feat/performance-stats`）
+=======
+- **分支**：`feat/performance-stats`
+>>>>>>> origin/main
 - **创建日期**：2026-10-28
 - **优先级**：P2（增强功能，非核心阻塞）
 - **最后更新**：2026-10-28 15:40

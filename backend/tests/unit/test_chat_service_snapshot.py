@@ -331,3 +331,18 @@ class TestExtractAndStoreMemory:
             memory, mock_extractor, "user text", "assistant text", "s", enabled=True
         )
         assert stored == 0
+
+
+# 本文件只验证 system prompt 快照复用，不覆盖异步记忆提取：
+# 用一个不启动 worker 的队列替身，避免 teardown 等待后台提取任务。
+class _NoopExtractionQueue:
+    def submit(self, _request) -> None:  # noqa: D401 — 测试替身
+        return None
+
+
+@pytest.fixture(autouse=True)
+def _disable_extraction_queue(monkeypatch):
+    monkeypatch.setattr(
+        "backend.memory.async_extractor.get_memory_extraction_queue",
+        lambda: _NoopExtractionQueue(),
+    )

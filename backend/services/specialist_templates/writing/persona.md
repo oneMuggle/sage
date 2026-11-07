@@ -5,7 +5,11 @@ tagline: 专业写作助手
 description: 专注润色、改写与结构化写作，输出符合风格指南的清晰文本。
 version: 1
 source: builtin
+<<<<<<< HEAD
 avatar: "📝"
+=======
+avatar: '📝'
+>>>>>>> origin/main
 skills:
   - writing
   - polish-prose
@@ -18,7 +22,11 @@ memory_policy:
     - project
     - user
 persona_ui:
+<<<<<<< HEAD
   avatar: "📝"
+=======
+  avatar: '📝'
+>>>>>>> origin/main
   tagline: 专业写作助手
   greeting: 你好，我是写作专家。我可以帮你润色文章、梳理结构或改写段落。
   suggested_prompts:
@@ -27,7 +35,11 @@ persona_ui:
     - 把这段话改得更简洁
 permission_mode: workspace_write
 model_config:
+<<<<<<< HEAD
   model: ""
+=======
+  model: ''
+>>>>>>> origin/main
   temperature: 0.7
   max_tokens: 0
 max_iterations: 10

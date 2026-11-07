@@ -22,6 +22,7 @@ import os
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
+<<<<<<< HEAD
 from pydantic import BaseModel, Field
 
 from backend.data.database import get_database
@@ -30,6 +31,12 @@ from backend.memory.preference_labels import (
     PREFERENCE_DIMENSION_LABELS,
     format_preference,
 )
+=======
+from pydantic import BaseModel, ConfigDict, Field
+
+from backend.data.database import get_database
+from backend.memory import get_memory_manager
+>>>>>>> origin/main
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +92,7 @@ class MemorySaveRequest(BaseModel):
 
 
 class MemoryDeleteRequest(BaseModel):
+<<<<<<< HEAD
     # Gap E (Task 5): 渲染器桥 (T1) 发 { memory_id }，preload 直传；
     # 兼容 legacy { id } 两种拼法，端到端打通 Memory 页删除。
     id: Optional[str] = None
@@ -95,6 +103,9 @@ class MemoryDeleteRequest(BaseModel):
         if self.memory_id and self.id and self.memory_id != self.id:
             raise HTTPException(status_code=422, detail="memory id mismatch")
         return self.memory_id or self.id
+=======
+    id: str
+>>>>>>> origin/main
 
 
 class MemoryPromoteRequest(BaseModel):
@@ -323,8 +334,12 @@ def list_learned_preferences():
 class LearnedPreferenceUpdate(BaseModel):
     """手动纠正已学偏好的请求体。"""
 
+<<<<<<< HEAD
     class Config:
         extra = "forbid"
+=======
+    model_config = ConfigDict(extra="forbid")
+>>>>>>> origin/main
 
     key: str = Field(min_length=1)
     value: str = Field(min_length=1)
@@ -365,6 +380,7 @@ def update_learned_preference(data: LearnedPreferenceUpdate):
         )
         conn.commit()
         short_key = key[len("pref_") :]
+<<<<<<< HEAD
         # 兼容旧条目（英文键）与新条目（中文标签）两种前缀，确保清理时
         # 都能被命中 —— 避免 user_profile 里堆积相互冲突的偏好
         legacy_prefix = f"用户偏好 {short_key}:"
@@ -376,6 +392,17 @@ def update_learned_preference(data: LearnedPreferenceUpdate):
                 profile.delete(item["id"])
         profile.add(
             content=format_preference(short_key, value),
+=======
+        prefix = f"用户偏好 {short_key}:"
+        profile = get_user_profile()
+        # 清理同 key 旧条目 —— 避免 user_profile 里堆积相互冲突的偏好
+        for item in profile.list():
+            content = item.get("content") or ""
+            if content.startswith(prefix):
+                profile.delete(item["id"])
+        profile.add(
+            content=f"用户偏好 {short_key}: {value}",
+>>>>>>> origin/main
             category="preference",
             importance=6,
         )
@@ -416,8 +443,12 @@ def refresh_user_profile():
 class RecallFeedbackRequest(BaseModel):
     """召回反馈上报体。"""
 
+<<<<<<< HEAD
     class Config:
         extra = "forbid"
+=======
+    model_config = ConfigDict(extra="forbid")
+>>>>>>> origin/main
 
     log_id: str = Field(min_length=1)
     feedback: str = Field(pattern="^(up|down)$")
@@ -665,11 +696,16 @@ def delete_memory(data: MemoryDeleteRequest):
     try:
         mm = get_memory_manager()
         # 尝试从所有类型中删除(working 通过合成 id 支持单条删除)
+<<<<<<< HEAD
         target_id = data.resolve_id()
         if not target_id:
             raise HTTPException(status_code=422, detail="memory id required")
         for mtype in ["episodic", "semantic", "working"]:
             if mm.delete_memory(target_id, mtype):
+=======
+        for mtype in ["episodic", "semantic", "working"]:
+            if mm.delete_memory(data.id, mtype):
+>>>>>>> origin/main
                 return {"status": "ok"}
         raise HTTPException(status_code=404, detail="记忆不存在")
     except HTTPException:

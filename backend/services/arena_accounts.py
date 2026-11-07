@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+<<<<<<< HEAD
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -83,12 +84,21 @@ def crypto_available() -> bool:
     """
     return _lazy_crypto() is not None
 
+=======
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+logger = logging.getLogger(__name__)
+
+>>>>>>> origin/main
 
 def derive_arena_key(token: str, machine_id: str) -> bytes:
     """Derive a Fernet-compatible key per Spec §7.1.
 
     Uses PBKDF2-HMAC-SHA256 with the machine_id as salt and 480,000 iterations,
     producing a 32-byte key that is urlsafe-base64 encoded for Fernet consumption.
+<<<<<<< HEAD
 
     Raises
     ------
@@ -104,6 +114,10 @@ def derive_arena_key(token: str, machine_id: str) -> bytes:
         )
     PBKDF2HMAC = crypto["PBKDF2HMAC"]
     hashes = crypto["hashes"]
+=======
+    """
+    import base64
+>>>>>>> origin/main
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -128,15 +142,19 @@ def get_or_create_master_key(settings_repo: Optional[Any] = None) -> bytes:
     sage (same tradeoff as app_settings apiKey encryption).
 
     ``settings_repo`` is injectable for tests; defaults to SettingsRepository.
+<<<<<<< HEAD
 
     Raises
     ------
     RuntimeError
         cryptography 不可用时抛出，调用方应捕获并降级（Arena 功能禁用）。
+=======
+>>>>>>> origin/main
     """
     from backend.data.settings_repo import SettingsRepository
     from backend.services.secret_box import decrypt_secret, encrypt_secret
 
+<<<<<<< HEAD
     crypto = _lazy_crypto()
     if crypto is None:
         raise RuntimeError(
@@ -144,6 +162,8 @@ def get_or_create_master_key(settings_repo: Optional[Any] = None) -> bytes:
         )
     Fernet = crypto["Fernet"]
 
+=======
+>>>>>>> origin/main
     repo = settings_repo or SettingsRepository()
     stored = repo.get(MASTER_KEY_PREFERENCE)
     if stored:
@@ -160,7 +180,11 @@ def get_or_create_master_key(settings_repo: Optional[Any] = None) -> bytes:
 
 
 def _utcnow_iso() -> str:
+<<<<<<< HEAD
     """Return naive UTC timestamp string (timezone-aware now, tzinfo stripped)."""
+=======
+    """Return naive UTC timestamp string. Py3.10 compatible (no datetime.UTC)."""
+>>>>>>> origin/main
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")  # noqa: UP017
 
 
@@ -248,12 +272,15 @@ class ArenaAccountService:
         encryption_key: bytes,
         failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
     ):
+<<<<<<< HEAD
         crypto = _lazy_crypto()
         if crypto is None:
             raise RuntimeError(
                 f"ArenaAccountService: cryptography 不可用（{_CRYPTO_LOAD_ERROR}）"
             )
         Fernet = crypto["Fernet"]
+=======
+>>>>>>> origin/main
         self._db_path = db_path
         self._fernet = Fernet(encryption_key)
         self._failure_threshold = failure_threshold

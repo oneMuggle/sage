@@ -4,6 +4,7 @@ import * as fs from 'fs/promises';
 import * as fssync from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import type { ChildProcess } from 'child_process';
 import { StateManager } from './updateState';
 import type { UpdateState } from './updateState';
 import { ConfigManager } from './updateConfig';
@@ -18,6 +19,7 @@ import { BUILTIN_GENERIC_CONFIG } from './update/featureFlag';
 import { createGenericHttpProvider } from './update/providers/genericHttp';
 import { logger } from './logger';
 import { clearRunOnce, registerRunOnceCommand } from './update/runOnce';
+<<<<<<< HEAD
 import type { ChildProcess } from 'child_process';
 
 /**
@@ -26,6 +28,13 @@ import type { ChildProcess } from 'child_process';
  *
  * Do NOT wait for `exit`: the installer closes this process before it finishes
  * copying files, so an exit-based await would deadlock the updater.
+=======
+
+/**
+ * Wait for the installer process to actually spawn. Waiting for 'exit' would
+ * deadlock: the assisted NSIS installer stops this very process before
+ * copying files, so an exit-based await never resolves in time.
+>>>>>>> origin/main
  */
 function waitForInstallerSpawn(installer: ChildProcess): Promise<void> {
   return new Promise<void>((resolve, reject) => {
