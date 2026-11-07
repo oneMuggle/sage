@@ -49,6 +49,8 @@ import { WordBatchAuditPanel } from '../features/office/WordBatchAuditPanel';
 import { WordRuleExtractionPanel } from '../features/office/WordRuleExtractionPanel';
 import { DocumentCanvas } from '../features/office/canvas/DocumentCanvas';
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
+import { OfficeAiSidebarHost } from '../features/office/sidebar/OfficeAiSidebarHost';
+import type { QuickActionTab } from '../features/office/sidebar/QuickActions';
 import { WorkspaceBindModal } from '../features/workspace';
 import type { OfficeCapabilities, OfficeDocType } from '../shared/api/types';
 import { fillTemplate } from '../shared/lib/fillTemplate';
@@ -629,6 +631,13 @@ export function Office() {
         bind={bind}
         revoke={revoke}
       />
+
+      {workspacePath && (
+        <OfficeAiSidebarHost
+          activeTab={activeTab as QuickActionTab}
+          onNavigateTab={(tab) => setTab(tab as OfficeTabId)}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-import { useI18n } from '../../../shared/lib/i18n';
+import { useI18n, type TranslationKey } from '../../../shared/lib/i18n';
 
 export type FloatingActionKind = 'rewrite' | 'chat' | 'edit' | 'audit';
 
@@ -11,7 +11,7 @@ export interface FloatingActionBarProps {
   onDismiss: () => void;
 }
 
-const ACTIONS: { kind: FloatingActionKind; labelKey: string; needsDocument: boolean }[] = [
+const ACTIONS: { kind: FloatingActionKind; labelKey: TranslationKey; needsDocument: boolean }[] = [
   { kind: 'rewrite', labelKey: 'office.ai.selection.rewrite', needsDocument: false },
   { kind: 'chat', labelKey: 'office.ai.selection.chat', needsDocument: false },
   { kind: 'edit', labelKey: 'office.ai.selection.edit', needsDocument: true },
@@ -41,6 +41,7 @@ export function FloatingActionBar({
     <div
       data-testid="office-floating-action-bar"
       role="toolbar"
+      aria-label={t('office.ai.selection.toolbarLabel')}
       className="fixed z-40 flex items-center gap-1 rounded-lg border border-border bg-surface px-1 py-1 shadow-lg"
       style={{ top: Math.max(anchorRect.top - 44, 8), left: Math.max(anchorRect.left, 8) }}
       onMouseDown={(event) => event.preventDefault()}
@@ -54,7 +55,7 @@ export function FloatingActionBar({
           className="rounded px-2 py-1 text-xs hover:bg-surface-hover disabled:opacity-40"
           onClick={() => onAction(action.kind)}
         >
-          {t(action.labelKey as never)}
+          {t(action.labelKey)}
         </button>
       ))}
       <button
@@ -63,7 +64,7 @@ export function FloatingActionBar({
         className="rounded px-2 py-1 text-xs text-text-muted hover:bg-surface-hover"
         onClick={onDismiss}
       >
-        {t('office.ai.selection.dismiss' as never)}
+        {t('office.ai.selection.dismiss')}
       </button>
     </div>
   );
