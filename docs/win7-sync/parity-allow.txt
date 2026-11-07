@@ -257,3 +257,28 @@ backend/memory/extractor.py
 
 # win7 子代理迭代预算常量（10）与 main（6）不同
 backend/tools/agent_tool.py
+
+# ==== 2026-11-07 P1 收敛批次 4：恢复 win7 必要差异后登记 ====
+architecture-baseline.json
+backend/adapters/out/tool/inproc_adapter.py
+backend/api/diagnostic_routes.py
+backend/api/legacy_agent_routes.py
+backend/chat/specialist_binding.py
+backend/data/agent_repo.py
+backend/data/migrations/runner.py
+backend/tests/integration/test_web_access_journey.py
+backend/tests/unit/test_credential_vault.py
+backend/tests/unit/test_inproc_tool_adapter.py
+backend/tests/unit/test_schema_migrations.py
+backend/tests/unit/test_web_cache.py
+backend/tests/unit/test_web_tool.py
+backend/tools/credential_vault.py
+backend/tools/py38_hazard_scan.py
+electron/commandRoutes/chat.ts
+electron/ipc-manifest.json
+scripts/silent-exceptions-baseline.json
+src/App.tsx
+src/pages/Specialists.tsx
+src/shared/api/agentsApi.ts
+src/shared/api/types/domainEntityTypes.ts
+src/widgets/specialists/SpecialistCard.tsx
