@@ -17,7 +17,9 @@ from pathlib import Path
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from backend.compat.win7.pydantic_compat import ConfigDict, PYDANTIC_V2
 
 from backend.data.database import get_database
 from backend.office.errors import OfficePathError
@@ -34,6 +36,11 @@ router = APIRouter(tags=["office"])
 MAX_TEXT_CHARS = 8000
 MAX_CONTEXT_CHARS = 4000
 MAX_HISTORY_ITEMS = 20
+# pydantic v1 用 max_items 限制列表长度；v2 用 max_length（v1 会把 max_length
+# 施加到每个元素上，语义不同）。
+_HISTORY_LEN_KW = (
+    {"max_length": MAX_HISTORY_ITEMS} if PYDANTIC_V2 else {"max_items": MAX_HISTORY_ITEMS}
+)
 MAX_HISTORY_CHARS = 4000
 
 Instruction = Literal[
@@ -86,7 +93,7 @@ class ChatRequest(BaseModel):
     workspace_path: str = Field(min_length=1)
     document_id: str = Field(min_length=1)
     message: str = Field(min_length=1, max_length=MAX_TEXT_CHARS)
-    history: List[ChatHistoryItem] = Field(default_factory=list, max_length=MAX_HISTORY_ITEMS)
+    history: List[ChatHistoryItem] = Field(default_factory=list, **_HISTORY_LEN_KW)
     document_context: Optional[str] = Field(default=None, max_length=MAX_CONTEXT_CHARS)
 
 

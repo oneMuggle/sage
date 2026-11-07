@@ -282,3 +282,6 @@ src/pages/Specialists.tsx
 src/shared/api/agentsApi.ts
 src/shared/api/types/domainEntityTypes.ts
 src/widgets/specialists/SpecialistCard.tsx
+
+# win7 迁移编号独立（v11-v15；main 的 v11/v12 与 win7 语义不同，不能互换）
+backend/data/migrations/runner.py
