@@ -50,6 +50,10 @@ const Skills = lazy(() => import('./pages/Skills').then((m) => ({ default: m.def
 const Specialists = lazy(() =>
   import('./pages/Specialists').then((m) => ({ default: m.Specialists })),
 );
+// P2-c (2026-11-07): 专家详情页（/specialists/:id）
+const SpecialistDetail = lazy(() =>
+  import('./pages/SpecialistDetail').then((m) => ({ default: m.SpecialistDetail })),
+);
 const Help = lazy(() => import('./pages/Help').then((m) => ({ default: m.Help })));
 // Phase 1.9 (2026-10-29): 用户反馈双向会话页
 const FeedbackHub = lazy(() =>
@@ -288,6 +292,7 @@ function App() {
             <Route path="memory" element={<Memory />} />
             <Route path="agents" element={<Agents />} />
             <Route path="specialists" element={<Specialists />} />
+            <Route path="specialists/:id" element={<SpecialistDetail />} />
             <Route path="skills" element={<Skills />} />
             <Route path="office" element={<Office />} />
             <Route path="projects/governance/:projectId" element={<ProjectGovernance />} />

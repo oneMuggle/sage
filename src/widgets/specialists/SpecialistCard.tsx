@@ -1,6 +1,8 @@
 import { MoreHorizontal } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import type { AgentProfile } from '../../shared/api';
+import { specialistKnowledgeApi } from '../../shared/api/specialistKnowledgeApi';
 import { Button } from '../../shared/ui/Button';
 import {
   DropdownMenu,
@@ -45,6 +47,14 @@ interface SpecialistCardProps {
   onAssets: (agent: AgentProfile) => void;
   /** 导出进行中（按钮禁用，避免重复弹保存框）。 */
   exporting?: boolean;
+  /** P2-a 批量操作：选择模式下显示复选框。 */
+  selectable?: boolean;
+  selected?: boolean;
+  onSelectToggle?: () => void;
+  /** P2-c: 打开专家详情页（点击卡片头部触发）。 */
+  onOpenDetail?: (agent: AgentProfile) => void;
+  /** P2-d: 置顶该专家（更多菜单）。 */
+  onPin?: (agent: AgentProfile) => void;
 }
 
 function readUiString(ui: Record<string, unknown> | undefined, key: string): string {
@@ -82,6 +92,11 @@ export function SpecialistCard({
   onEval,
   onAssets,
   exporting = false,
+  selectable = false,
+  selected = false,
+  onSelectToggle,
+  onOpenDetail,
+  onPin,
 }: SpecialistCardProps) {
   const avatar = readUiString(agent.persona_ui, 'avatar') || DEFAULT_AVATAR;
   const tagline = readUiString(agent.persona_ui, 'tagline') || agent.description;
@@ -89,6 +104,28 @@ export function SpecialistCard({
   const sourceLabel = SOURCE_LABELS[agent.source ?? 'user'] ?? agent.source ?? '';
   const version = agent.version ?? 1;
   const disabled = !agent.enabled;
+  // P2-b: 最近使用时间（天）
+  const lastUsedDaysAgo =
+    typeof agent.last_used_at === 'number' && agent.last_used_at > 0
+      ? Math.floor((Date.now() - agent.last_used_at) / (1000 * 60 * 60 * 24))
+      : null;
+
+  // P2-a: 知识绑定数（N+1 查询，MVP 可接受；P3 可改为后端聚合端点）
+  const [knowledgeCount, setKnowledgeCount] = useState<number>(0);
+  useEffect(() => {
+    let cancelled = false;
+    specialistKnowledgeApi
+      .list(agent.id)
+      .then((list) => {
+        if (!cancelled) setKnowledgeCount(list.length);
+      })
+      .catch(() => {
+        if (!cancelled) setKnowledgeCount(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agent.id]);
 
   const cardStyle = disabled
     ? { filter: 'grayscale(100%)', opacity: 0.7 }
@@ -100,8 +137,27 @@ export function SpecialistCard({
       className="flex flex-col rounded-xl border border-border p-4 transition-all hover:shadow-md"
       style={cardStyle}
     >
-      {/* 头部 */}
-      <div className="flex items-start gap-3">
+      {/* 头部（点击进入详情页） */}
+      <div
+        className={`flex items-start gap-3 ${onOpenDetail ? 'cursor-pointer' : ''}`}
+        onClick={() => onOpenDetail?.(agent)}
+        onKeyDown={(e) => {
+          if (onOpenDetail && (e.key === 'Enter' || e.key === ' ')) onOpenDetail(agent);
+        }}
+        role={onOpenDetail ? 'button' : undefined}
+        tabIndex={onOpenDetail ? 0 : undefined}
+      >
+        {selectable && (
+          <input
+            type="checkbox"
+            data-testid={`specialist-card-select-${agent.id}`}
+            checked={selected}
+            onChange={() => onSelectToggle?.()}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`选择 ${agent.name}`}
+            className="mt-1 h-4 w-4 shrink-0 cursor-pointer"
+          />
+        )}
         <span
           aria-hidden="true"
           className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/60 text-2xl dark:bg-black/20"
@@ -114,6 +170,14 @@ export function SpecialistCard({
             <span className="shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-ui-xs text-text-secondary dark:bg-black/30">
               v{version}
             </span>
+            {lastUsedDaysAgo !== null && (
+              <span
+                className="shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-ui-xs text-muted dark:bg-black/30"
+                title="最近一次与该专家对话"
+              >
+                {lastUsedDaysAgo === 0 ? '今天使用' : `${lastUsedDaysAgo} 天前使用`}
+              </span>
+            )}
             {disabled && (
               <span
                 className="shrink-0 rounded-full bg-warning/20 px-2 py-0.5 text-ui-xs text-warning"
@@ -127,6 +191,8 @@ export function SpecialistCard({
           <p className="mt-1 text-ui-xs text-faint">
             {sourceLabel} · {roleLabel}
             {agent.permission_mode ? ` · ${PERMISSION_MODE_LABELS[agent.permission_mode]}` : ''}
+            {agent.skills && agent.skills.length > 0 ? ` · ${agent.skills.length} 项技能` : ''}
+            {knowledgeCount > 0 ? ` · ${knowledgeCount} 条知识` : ''}
           </p>
         </div>
       </div>
@@ -178,6 +244,7 @@ export function SpecialistCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {onPin && <DropdownMenuItem onClick={() => onPin(agent)}>置顶</DropdownMenuItem>}
             <DropdownMenuItem onClick={() => onVersions(agent)}>版本历史</DropdownMenuItem>
             <DropdownMenuItem onClick={() => onEval(agent)}>黄金任务评测</DropdownMenuItem>
             <DropdownMenuSeparator />

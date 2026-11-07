@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -14,6 +14,22 @@ import { SpecialistEvalDialog } from '../widgets/specialists/SpecialistEvalDialo
 import { SpecialistWizard } from '../widgets/specialists/SpecialistWizard';
 import { TemplateGalleryDialog } from '../widgets/specialists/TemplateGalleryDialog';
 import { VersionHistoryDialog } from '../widgets/specialists/VersionHistoryDialog';
+
+type SourceFilter = 'all' | 'builtin' | 'user' | 'imported';
+
+const SOURCE_FILTERS: ReadonlyArray<{ key: SourceFilter; label: string }> = [
+  { key: 'all', label: '全部' },
+  { key: 'builtin', label: '内置' },
+  { key: 'user', label: '我的' },
+  { key: 'imported', label: '导入' },
+];
+
+/** 搜索匹配文本：名称 + 标语（persona_ui.tagline）+ 描述。 */
+function specialistSearchText(agent: AgentProfile): string {
+  const ui = agent.persona_ui as Record<string, unknown> | undefined;
+  const tagline = typeof ui?.tagline === 'string' ? ui.tagline : '';
+  return `${agent.name ?? ''} ${tagline} ${agent.description ?? ''}`.toLowerCase();
+}
 
 /**
  * /specialists 画廊页（M1-E）。
@@ -37,6 +53,12 @@ export function Specialists() {
   const [templateOpen, setTemplateOpen] = useState(false);
   const [versionsAgent, setVersionsAgent] = useState<AgentProfile | null>(null);
   const [evalAgent, setEvalAgent] = useState<AgentProfile | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  // P2-a: 批量操作选择模式
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchBusy, setBatchBusy] = useState(false);
   const navigate = useNavigate();
 
   const loadAgents = useCallback(async () => {
@@ -55,6 +77,23 @@ export function Specialists() {
   useEffect(() => {
     void loadAgents();
   }, [loadAgents]);
+
+  const filteredAgents = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return agents
+      .filter((agent) => {
+        if (sourceFilter !== 'all' && (agent.source ?? 'user') !== sourceFilter) return false;
+        if (!query) return true;
+        return specialistSearchText(agent).includes(query);
+      })
+      .sort((a, b) => {
+        const orderDiff = (a.sort_order ?? 0) - (b.sort_order ?? 0);
+        if (orderDiff !== 0) return orderDiff;
+        return a.name.localeCompare(b.name, 'zh-Hans');
+      });
+  }, [agents, sourceFilter, searchQuery]);
+
+  const hasActiveFilters = sourceFilter !== 'all' || searchQuery.trim() !== '';
 
   async function handleImport() {
     if (!specialistApi.isAvailable()) {
@@ -115,6 +154,67 @@ export function Specialists() {
     setEvalAgent(agent);
   }
 
+  // P2-a: 批量操作
+  function toggleSelectionMode() {
+    setSelectionMode((prev) => {
+      if (prev) setSelectedIds(new Set());
+      return !prev;
+    });
+  }
+
+  function toggleSelect(agentId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(agentId)) next.delete(agentId);
+      else next.add(agentId);
+      return next;
+    });
+  }
+
+  async function handleBatch(action: 'delete' | 'enable' | 'disable') {
+    if (selectedIds.size === 0) return;
+    if (action === 'delete') {
+      const confirmed = window.confirm(
+        `确定删除选中的 ${selectedIds.size} 位专家？此操作不可撤销。`,
+      );
+      if (!confirmed) return;
+    }
+    setBatchBusy(true);
+    try {
+      const result = await agentsApi.batch(action, Array.from(selectedIds));
+      const labels = { delete: '删除', enable: '启用', disable: '禁用' } as const;
+      if (result.failed.length === 0) {
+        toast.success(`已${labels[action]} ${result.succeeded.length} 位专家`);
+      } else {
+        toast.warning(
+          `已${labels[action]} ${result.succeeded.length} 位，${result.failed.length} 位失败`,
+        );
+      }
+      setSelectedIds(new Set());
+      setSelectionMode(false);
+      await loadAgents();
+    } catch (err) {
+      toast.error(`批量操作失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  // P2-d: 置顶（整序列重排后一次性提交）
+  async function handlePin(agent: AgentProfile) {
+    const orderedIds = [
+      agent.id,
+      ...filteredAgents.map((a) => a.id).filter((id) => id !== agent.id),
+    ];
+    try {
+      await agentsApi.reorder(orderedIds.map((id, index) => ({ id, sort_order: index })));
+      toast.success(`已将「${agent.name}」置顶`);
+      await loadAgents();
+    } catch (err) {
+      toast.error(`置顶失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   async function handleStartChat(agent: AgentProfile) {
     try {
       const sid = await useStore.getState().createSession();
@@ -167,26 +267,145 @@ export function Specialists() {
 
       <div className="mx-auto max-w-7xl px-6 py-6">
         {agents.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border bg-bg-subtle/40 p-8 text-center">
-            <p className="text-sm text-muted">还没有专家，点击「新建专家」创建第一位。</p>
+          <div className="rounded-xl border border-dashed border-border bg-bg-subtle/40 p-10 text-center">
+            <div className="text-4xl" aria-hidden="true">
+              🎨
+            </div>
+            <p className="mt-3 text-base font-medium">还没有专家</p>
+            <p className="mt-1 text-sm text-muted">
+              创建一个专家，让它帮你完成专业任务；也可以从模板一键开始。
+            </p>
+            <div className="mt-4 flex items-center justify-center gap-2">
+              <Button onClick={() => setTemplateOpen(true)}>✨ 从模板创建</Button>
+              <Button variant="secondary" onClick={handleOpenCreate}>
+                ➕ 新建专家
+              </Button>
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {agents.map((agent) => (
-              <SpecialistCard
-                key={agent.id}
-                agent={agent}
-                onChat={handleStartChat}
-                onEdit={handleEdit}
-                onKnowledge={handleKnowledge}
-                onAssets={handleAssets}
-                onExport={handleExport}
-                onVersions={handleVersions}
-                onEval={handleEval}
-                exporting={exportingId === agent.id}
+          <>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <div
+                role="tablist"
+                aria-label="按来源筛选专家"
+                className="flex items-center gap-1 rounded-lg border border-border bg-bg-subtle/50 p-1"
+              >
+                {SOURCE_FILTERS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={sourceFilter === key}
+                    onClick={() => setSourceFilter(key)}
+                    className={`rounded-md px-3 py-1 text-sm transition-colors ${
+                      sourceFilter === key
+                        ? 'bg-surface font-medium text-text shadow-sm'
+                        : 'text-muted hover:text-text'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="search"
+                data-testid="specialists-search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索专家名称或标语…"
+                aria-label="搜索专家"
+                className="min-w-0 flex-1 rounded-radius-md border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:border-primary sm:max-w-xs"
               />
-            ))}
-          </div>
+              <button
+                type="button"
+                onClick={toggleSelectionMode}
+                className="rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
+              >
+                {selectionMode ? '退出批量' : '批量管理'}
+              </button>
+            </div>
+
+            {selectionMode && (
+              <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+                <span className="text-sm text-muted">已选 {selectedIds.size} 位</span>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={batchBusy || selectedIds.size === 0}
+                  onClick={() => void handleBatch('enable')}
+                >
+                  启用
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={batchBusy || selectedIds.size === 0}
+                  onClick={() => void handleBatch('disable')}
+                >
+                  禁用
+                </Button>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  disabled={batchBusy || selectedIds.size === 0}
+                  onClick={() => void handleBatch('delete')}
+                >
+                  删除
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto"
+                  disabled={batchBusy}
+                  onClick={toggleSelectionMode}
+                >
+                  取消
+                </Button>
+              </div>
+            )}
+
+            {filteredAgents.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border bg-bg-subtle/40 p-8 text-center">
+                <p className="text-sm text-muted">
+                  {searchQuery.trim() ? '没有匹配的专家' : '该分类下暂无专家'}
+                </p>
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSourceFilter('all');
+                      setSearchQuery('');
+                    }}
+                    className="mt-3 rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
+                  >
+                    清除筛选
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredAgents.map((agent) => (
+                  <SpecialistCard
+                    key={agent.id}
+                    agent={agent}
+                    onChat={handleStartChat}
+                    onEdit={handleEdit}
+                    onKnowledge={handleKnowledge}
+                    onAssets={handleAssets}
+                    onExport={handleExport}
+                    onVersions={handleVersions}
+                    onEval={handleEval}
+                    exporting={exportingId === agent.id}
+                    selectable={selectionMode}
+                    selected={selectedIds.has(agent.id)}
+                    onSelectToggle={() => toggleSelect(agent.id)}
+                    onOpenDetail={(next) => navigate(`/specialists/${next.id}`)}
+                    onPin={(next) => void handlePin(next)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 

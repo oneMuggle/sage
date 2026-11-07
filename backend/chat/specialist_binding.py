@@ -77,6 +77,24 @@ def resolve_effective_agent_id(session_id: str, requested_agent_id: Optional[str
     return resolve_bound_specialist(session_id)
 
 
+def touch_specialist_usage(agent_id: Optional[str]) -> None:
+    """P2-b：记录专家最近使用时间（``agents.last_used_at``，毫秒）。
+
+    best-effort：任何失败只 warning，绝不阻塞聊天。主助手（primary）与
+    空值不记录（主助手不是"专家卡片"的使用对象）。
+    """
+    if not agent_id or agent_id == PRIMARY_AGENT_ID:
+        return
+    try:
+        import time
+
+        from backend.data.agent_repo import AgentRepository
+
+        AgentRepository().update(agent_id, {"last_used_at": int(time.time() * 1000)})
+    except Exception as exc:  # noqa: BLE001 — 统计字段，失败不影响对话
+        logger.warning("更新专家最近使用时间失败 (agent=%s): %s", agent_id, exc)
+
+
 # --------------------------------------------------------------------------- #
 # 严格解析（技能作用域 fail-closed 专用）
 #
