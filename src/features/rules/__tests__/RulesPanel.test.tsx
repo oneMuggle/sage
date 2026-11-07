@@ -72,7 +72,10 @@ beforeEach(() => {
   list.mockReset();
   effective.mockReset();
   list.mockResolvedValue(RULES);
-  effective.mockResolvedValue({ entries: RULES.filter((entry) => entry.enabled), conflicts: CONFLICTS });
+  effective.mockResolvedValue({
+    entries: RULES.filter((entry) => entry.enabled),
+    conflicts: CONFLICTS,
+  });
 });
 
 describe('RulesPanel', () => {
