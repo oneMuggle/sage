@@ -1,0 +1,268 @@
+# ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容
+"""Rules-management API routes (Office AI Workbench P3).
+
+CRUD for rule groups and rules, plus AI-assisted rule extraction from a
+.docx specification. Mounted under ``/api/v1/rules`` by ``backend/main.py``.
+
+All payloads are snake_case on the wire; the frontend converts to camelCase
+in ``rulePackSerialization.ts``.
+"""
+
+from __future__ import annotations
+
+import uuid
+from pathlib import Path
+from typing import List, Optional
+
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field
+
+from backend.data.database import Database, get_database
+from backend.office.errors import OfficePathError
+from backend.office.path_safety import resolve_within
+from backend.office.rule_models import Rule, RuleGroup
+from backend.office.rule_repo import (
+    create_group,
+    create_rule,
+    delete_group,
+    delete_rule,
+    get_group,
+    list_groups,
+    update_group,
+    update_rule,
+)
+from backend.office.storage import validate_workspace
+from backend.office.word_rule_extract import extract_word_rules_async
+from backend.office.word_rulepack_models import WordRuleSpec
+
+router = APIRouter(prefix="/rules", tags=["office"])
+
+_CATEGORY_TO_TYPE = {
+    "page": "format",
+    "style": "format",
+    "structure": "structure",
+    "content": "custom",
+    "table": "format",
+}
+
+_CATEGORY_TO_SCOPE = {
+    "page": "full",
+    "style": "body",
+    "structure": "heading",
+    "content": "body",
+    "table": "table",
+}
+
+
+def _db() -> Database:
+    """Return the shared global Database instance (same pattern as office_routes)."""
+    return get_database()
+
+
+def _not_found(exc: ValueError) -> HTTPException:
+    return HTTPException(status_code=404, detail=str(exc))
+
+
+class GroupCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str = ""
+    priority: int = 0
+
+
+class GroupUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    priority: Optional[int] = None
+
+
+class RuleCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1, max_length=200)
+    type: str = Field(..., pattern="^(format|terminology|citation|structure|custom)$")
+    severity: str = Field(..., pattern="^(error|warning|info)$")
+    scope: str = Field(..., pattern="^(full|heading|body|table|caption)$")
+    description: str = ""
+    check_mode: str = Field(..., pattern="^(regex|ai)$")
+    pattern: Optional[str] = None
+    ai_prompt: Optional[str] = None
+    enabled: bool = True
+
+
+class RuleUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    type: Optional[str] = Field(
+        default=None, pattern="^(format|terminology|citation|structure|custom)$"
+    )
+    severity: Optional[str] = Field(default=None, pattern="^(error|warning|info)$")
+    scope: Optional[str] = Field(default=None, pattern="^(full|heading|body|table|caption)$")
+    description: Optional[str] = None
+    check_mode: Optional[str] = Field(default=None, pattern="^(regex|ai)$")
+    pattern: Optional[str] = None
+    ai_prompt: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+class ExtractRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str
+    file_type: str = Field(default="spec", pattern="^(spec|template)$")
+    use_llm: bool = False
+
+
+class ExtractWarning(BaseModel):
+    code: str
+    message: str
+
+
+class ExtractResponse(BaseModel):
+    rules: List[Rule]
+    warnings: List[ExtractWarning]
+
+
+class DeleteResponse(BaseModel):
+    deleted: bool
+    id: str
+
+
+def _spec_to_rule(spec: WordRuleSpec) -> Rule:
+    """Map an extraction spec onto the editor's Rule shape.
+
+    Extracted rules are always AI-checked: the deterministic extractor
+    describes *what* to check, not a ready-to-run regex. ``group_id`` is
+    empty until the user adds the rule to a group.
+    """
+    category = str(spec.category)
+    detail = spec.description or spec.fix_hint or spec.title
+    params = ", ".join(f"{key}={value}" for key, value in sorted(spec.params.items()))
+    prompt = f"检查文档是否满足规则「{spec.title}」：{detail}"
+    if params:
+        prompt = f"{prompt}（判定参数：{params}）"
+    return Rule(
+        id=f"rule-{uuid.uuid4().hex[:8]}",
+        name=spec.title,
+        type=_CATEGORY_TO_TYPE.get(category, "custom"),
+        severity=spec.severity,
+        scope=_CATEGORY_TO_SCOPE.get(category, "body"),
+        description=spec.description,
+        check_mode="ai",
+        pattern=None,
+        ai_prompt=prompt,
+        enabled=True,
+        group_id="",
+    )
+
+
+@router.get("/groups", response_model=List[RuleGroup])
+def list_groups_endpoint() -> List[RuleGroup]:
+    return list_groups(_db().get_connection())
+
+
+@router.post("/groups", response_model=RuleGroup, status_code=status.HTTP_201_CREATED)
+def create_group_endpoint(req: GroupCreateRequest) -> RuleGroup:
+    return create_group(
+        _db().get_connection(),
+        name=req.name,
+        description=req.description,
+        priority=req.priority,
+    )
+
+
+@router.put("/groups/{group_id}", response_model=RuleGroup)
+def update_group_endpoint(group_id: str, req: GroupUpdateRequest) -> RuleGroup:
+    try:
+        return update_group(
+            _db().get_connection(),
+            group_id,
+            name=req.name,
+            description=req.description,
+            priority=req.priority,
+        )
+    except ValueError as exc:
+        raise _not_found(exc) from exc
+
+
+@router.delete("/groups/{group_id}", response_model=DeleteResponse)
+def delete_group_endpoint(group_id: str) -> DeleteResponse:
+    conn = _db().get_connection()
+    try:
+        get_group(conn, group_id)
+    except ValueError as exc:
+        raise _not_found(exc) from exc
+    delete_group(conn, group_id)
+    return DeleteResponse(deleted=True, id=group_id)
+
+
+@router.post(
+    "/groups/{group_id}/rules", response_model=Rule, status_code=status.HTTP_201_CREATED
+)
+def create_rule_endpoint(group_id: str, req: RuleCreateRequest) -> Rule:
+    conn = _db().get_connection()
+    try:
+        get_group(conn, group_id)
+    except ValueError as exc:
+        raise _not_found(exc) from exc
+    return create_rule(
+        conn,
+        group_id=group_id,
+        name=req.name,
+        type=req.type,
+        severity=req.severity,
+        scope=req.scope,
+        check_mode=req.check_mode,
+        description=req.description,
+        pattern=req.pattern,
+        ai_prompt=req.ai_prompt,
+        enabled=req.enabled,
+    )
+
+
+@router.put("/rules/{rule_id}", response_model=Rule)
+def update_rule_endpoint(rule_id: str, req: RuleUpdateRequest) -> Rule:
+    payload = req.model_dump(exclude_unset=True)
+    try:
+        return update_rule(_db().get_connection(), rule_id, **payload)
+    except ValueError as exc:
+        raise _not_found(exc) from exc
+
+
+@router.delete("/rules/{rule_id}", response_model=DeleteResponse)
+def delete_rule_endpoint(rule_id: str) -> DeleteResponse:
+    conn = _db().get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM office_rules WHERE id = ?", (rule_id,))
+    if cursor.fetchone() is None:
+        raise HTTPException(status_code=404, detail=f"Rule not found: {rule_id}")
+    delete_rule(conn, rule_id)
+    return DeleteResponse(deleted=True, id=rule_id)
+
+
+@router.post("/extract", response_model=ExtractResponse)
+async def extract_endpoint(req: ExtractRequest) -> ExtractResponse:
+    workspace = validate_workspace(Path(req.workspace_path))
+    source = resolve_within(workspace, Path(req.file_path))
+    if not source.is_file():
+        raise OfficePathError(
+            f"file_path is not a regular file: {req.file_path}", file_path=source
+        )
+    result = await extract_word_rules_async(
+        source,
+        file_type=req.file_type,
+        workspace_path=str(workspace),
+        use_llm=req.use_llm,
+    )
+    return ExtractResponse(
+        rules=[_spec_to_rule(spec) for spec in result.pack.rules],
+        warnings=[
+            ExtractWarning(code=item["code"], message=item["message"])
+            for item in result.warnings
+        ],
+    )
