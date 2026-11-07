@@ -129,3 +129,6 @@ scripts/win7/*
 # release/win7 侧 cherry 计划文档 + py3.8 hardlink 回退（2026-09-15 merge origin/release/win7）
 docs/plans/2026-09-15_win7-*.md
 backend/tests/unit/test_wiki_path_security.py
+
+# schedule-only workflow：只在默认分支（main）触发，win7 不需要存在（2026-11-07）
+.github/workflows/audit-watch.yml
