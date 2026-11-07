@@ -14,10 +14,13 @@ const getSessionSummariesMock = vi.fn();
 const searchMemoriesMock = vi.fn();
 const deleteMemoryMock = vi.fn();
 const promoteMemoryMock = vi.fn();
+<<<<<<< HEAD
 const getQualityCandidatesMock = vi.fn();
 const batchDeleteMemoriesMock = vi.fn();
 const submitMemoryFeedbackMock = vi.fn();
 const getSessionMock = vi.fn();
+=======
+>>>>>>> origin/main
 const navigateMock = vi.fn();
 const agentsListMock = vi.fn();
 
@@ -33,12 +36,15 @@ vi.mock('../../../shared/api', () => ({
     searchMemories: (...args: unknown[]) => searchMemoriesMock(...args),
     deleteMemory: (...args: unknown[]) => deleteMemoryMock(...args),
     promoteMemory: (...args: unknown[]) => promoteMemoryMock(...args),
+<<<<<<< HEAD
     getQualityCandidates: (...args: unknown[]) => getQualityCandidatesMock(...args),
     batchDeleteMemories: (...args: unknown[]) => batchDeleteMemoriesMock(...args),
     submitMemoryFeedback: (...args: unknown[]) => submitMemoryFeedbackMock(...args),
   },
   sessionApi: {
     get: (...args: unknown[]) => getSessionMock(...args),
+=======
+>>>>>>> origin/main
   },
 }));
 
@@ -49,11 +55,18 @@ vi.mock('../../../shared/api/agentsApi', () => ({
 }));
 
 vi.mock('sonner', () => ({
+<<<<<<< HEAD
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }));
 
 import { MemoryBrowser } from '../../../widgets/memory/MemoryBrowser';
 import { clearSessionInfoCache } from '../useSessionInfo';
+=======
+  toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() },
+}));
+
+import { MemoryBrowser } from '../../../widgets/memory/MemoryBrowser';
+>>>>>>> origin/main
 
 function mem(overrides: Record<string, unknown> = {}) {
   return {
@@ -81,8 +94,11 @@ function renderBrowser(props: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+<<<<<<< HEAD
   clearSessionInfoCache();
   getSessionMock.mockRejectedValue(new Error('session not found'));
+=======
+>>>>>>> origin/main
   getMemoriesMock.mockResolvedValue({
     items: [mem()],
     source_breakdown: BREAKDOWN,
@@ -98,6 +114,7 @@ beforeEach(() => {
     previous_agent_id: 'specialist-x',
   });
   agentsListMock.mockResolvedValue([]);
+<<<<<<< HEAD
   getQualityCandidatesMock.mockResolvedValue([]);
   batchDeleteMemoriesMock.mockResolvedValue({ deleted: 0, failed: [] });
   submitMemoryFeedbackMock.mockResolvedValue({
@@ -106,6 +123,8 @@ beforeEach(() => {
     memory_type: 'episodic',
     feedback: 'up',
   });
+=======
+>>>>>>> origin/main
 });
 
 describe('MemoryBrowser 加载与列表', () => {
@@ -247,6 +266,7 @@ describe('MemoryBrowser 会话跳转', () => {
     await screen.findAllByText('记忆内容A', {}, { timeout: 5000 });
     expect(screen.queryByTitle(/跳转到会话/)).not.toBeInTheDocument();
   }, 20000);
+<<<<<<< HEAD
 
   it('Task 4.2: 显示会话标题与相对日期', async () => {
     const sessionId = '4a4f6f2e-1111-4222-8333-944455556666';
@@ -273,6 +293,8 @@ describe('MemoryBrowser 会话跳转', () => {
     await waitFor(() => expect(jump.textContent).toContain('↳ 会话 sess-9'), { timeout: 5000 });
     expect(jump.textContent).not.toContain('天前');
   }, 20000);
+=======
+>>>>>>> origin/main
 });
 
 describe('MemoryBrowser 摘要视图', () => {
@@ -531,6 +553,7 @@ describe('MemoryBrowser 深链定位（P0-6）', () => {
     expect(cards.filter((c) => c.getAttribute('data-focused') === 'true')).toHaveLength(0);
   }, 20000);
 });
+<<<<<<< HEAD
 
 /** Task 4.3：选择模式 + 批量清理低质量记忆。 */
 describe('MemoryBrowser 批量清理（Task 4.3）', () => {
@@ -724,3 +747,5 @@ describe('MemoryBrowser 记忆级反馈（Task 4.5）', () => {
     await waitFor(() => expect(upBtn.getAttribute('aria-pressed')).toBe('false'));
   }, 20000);
 });
+=======
+>>>>>>> origin/main

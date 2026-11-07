@@ -13,7 +13,10 @@ import pytest
 
 from backend.tools import browser_cdp, web_render
 from backend.tools.browser_cdp import BrowserCDPError, BrowserSession, BrowserType
+<<<<<<< HEAD
 from backend.tools.browser_launcher import EmbeddedLauncher
+=======
+>>>>>>> origin/main
 
 pytestmark = pytest.mark.unit
 
@@ -38,6 +41,7 @@ def test_discover_embedded_from_env(monkeypatch):
     monkeypatch.setenv("SAGE_EMBEDDED_BROWSER", "1")
     monkeypatch.setenv("SAGE_EMBEDDED_BROWSER_PORT", "43210")
     monkeypatch.setenv("SAGE_EMBEDDED_BROWSER_TOKEN", "tok-123")
+<<<<<<< HEAD
     monkeypatch.delenv("SAGE_BROWSER_PATH", raising=False)
     monkeypatch.delenv("SAGE_FIREFOX_PATH", raising=False)
 
@@ -49,12 +53,16 @@ def test_discover_embedded_from_env(monkeypatch):
     assert cap.cdp_port == 43210
     assert isinstance(cap.launcher, EmbeddedLauncher)
     assert cap.launcher.token == "tok-123"
+=======
+    assert browser_cdp._discover_embedded_env() == {"port": 43210, "token": "tok-123"}
+>>>>>>> origin/main
 
 
 def test_discover_ignores_incomplete_embedded_env(monkeypatch):
     monkeypatch.setenv("SAGE_EMBEDDED_BROWSER", "1")
     monkeypatch.delenv("SAGE_EMBEDDED_BROWSER_PORT", raising=False)
     monkeypatch.delenv("SAGE_EMBEDDED_BROWSER_TOKEN", raising=False)
+<<<<<<< HEAD
     from backend.tools.browser_launcher import _discover_embedded
 
     assert _discover_embedded() is None
@@ -69,6 +77,15 @@ def test_launch_browser_embedded_skips_spawn(monkeypatch):
         launcher=EmbeddedLauncher(43210, "tok-123"),
     )
     monkeypatch.setattr(browser_cdp, "discover_and_select", lambda: cap)
+=======
+    assert browser_cdp._discover_embedded_env() is None
+
+
+def test_launch_browser_embedded_skips_spawn(monkeypatch):
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER", "1")
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER_PORT", "43210")
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER_TOKEN", "tok-123")
+>>>>>>> origin/main
     manager = browser_cdp.BrowserSessionManager()
     monkeypatch.setattr(browser_cdp, "_manager", manager)
 
@@ -158,6 +175,7 @@ def test_render_pool_uses_event_channel_for_embedded(monkeypatch):
 
 
 def test_launch_browser_embedded_ws_path_has_bridge_auth(monkeypatch):
+<<<<<<< HEAD
     cap = SimpleNamespace(
         browser_type=BrowserType.EMBEDDED,
         executable="(embedded)",
@@ -166,6 +184,11 @@ def test_launch_browser_embedded_ws_path_has_bridge_auth(monkeypatch):
         launcher=EmbeddedLauncher(43210, "tok-123"),
     )
     monkeypatch.setattr(browser_cdp, "discover_and_select", lambda: cap)
+=======
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER", "1")
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER_PORT", "43210")
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER_TOKEN", "tok-123")
+>>>>>>> origin/main
     monkeypatch.setattr(browser_cdp, "_manager", browser_cdp.BrowserSessionManager())
     session = browser_cdp.launch_browser(headless=True, browser_id="sess-1")
     assert session.ws_path.startswith("/devtools/browser/embedded?")

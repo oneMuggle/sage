@@ -102,6 +102,7 @@ def test_session_limit(env):
     assert status == 429
 
 
+<<<<<<< HEAD
 def test_initialize_params_must_be_object(env):
     """initialize 的 params 非对象 → 400 / -32602，不建会话。"""
     service, _, _, token, _ = env
@@ -128,6 +129,8 @@ def test_search_files_rejects_oversized_regex(env):
     assert not err
 
 
+=======
+>>>>>>> origin/main
 def test_unknown_method_and_parse_error(env):
     service, _, _, token, _ = env
     session, _ = init(service, token)
@@ -349,6 +352,7 @@ def _free_port():
         return s.getsockname()[1]
 
 
+<<<<<<< HEAD
 def test_listener_rejects_oversized_body_before_dispatch(env):
     from fastapi.testclient import TestClient
 
@@ -364,6 +368,8 @@ def test_listener_rejects_oversized_body_before_dispatch(env):
     assert client.post("/mcp/invalid", content=oversized).status_code == 404
 
 
+=======
+>>>>>>> origin/main
 def test_contract_with_sage_http_client(env):
     from backend.mcp.config import ServerConfig
     from backend.mcp.http_client import HttpClientMcpClient

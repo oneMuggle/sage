@@ -138,7 +138,10 @@ class ChatService:
         permission_allowed_paths: Optional[List[str]] = None,  # M3 允许的路径
         permission_denied_tools: Optional[List[str]] = None,  # M3 黑名单
         wake_store: Optional[WakeStore] = None,  # A4 Suspend-Resume 唤醒仓储
+<<<<<<< HEAD
         lifecycle: Optional[Any] = None,  # Task 4 / Gap A — optional MemoryLifecycleManager
+=======
+>>>>>>> origin/main
         context_window_resolver: Optional[Callable[[], Optional[int]]] = None,  # UX-IA R2-D
     ) -> None:
         self.llm = llm
@@ -327,6 +330,7 @@ class ChatService:
         memory_context: Optional[MemoryContext] = None
         if self.memory:
             try:
+<<<<<<< HEAD
                 # Important-2 (final review) — memory_retrieval preference
                 # gate. The Settings UI's "记忆检索注入" toggle drives this
                 # independently of auto_memory. Lifecycle exposes
@@ -349,6 +353,18 @@ class ChatService:
                         agent_id=resolve_bound_specialist(session_id),
                     )
                     span.set_attribute("memory.has_memories", memory_context.has_memories)
+=======
+                # M3-Task 4: 按会话专家的私有层 ∪ 共享层 过滤召回
+                from backend.chat.specialist_binding import resolve_bound_specialist
+
+                memory_context = await self.memory.retrieve(
+                    query=user_message.content,
+                    session_id=session_id,
+                    limit=5,
+                    agent_id=resolve_bound_specialist(session_id),
+                )
+                span.set_attribute("memory.has_memories", memory_context.has_memories)
+>>>>>>> origin/main
             except Exception as e:
                 logger.warning(f"Failed to retrieve memories: {e}")
                 span.set_attribute("memory.error", str(e))
@@ -581,6 +597,7 @@ class ChatService:
         #      source_message_id 可追溯字段（main 的后台提取队列
         #      MemoryExtractionQueue 仍由 legacy_routes 聊天路径使用）。
         if self.memory:
+<<<<<<< HEAD
             if self._lifecycle is not None:
                 try:
                     # M3-Task 4: 写入与召回同口径，归入会话专家的私有记忆层
@@ -635,6 +652,41 @@ class ChatService:
                 # 8) 压缩工作记忆 (Memory Integration)
                 await self._compress_working_memory(session_id, span)
 
+=======
+            # 记忆提取异步化：投递到后台队列由单 worker 串行消费，
+            # 不阻塞本轮聊天响应（提取含一次 LLM 调用）。
+            from backend.chat.specialist_binding import resolve_bound_specialist
+            from backend.memory.async_extractor import (
+                ExtractionRequest,
+                get_memory_extraction_queue,
+            )
+            from backend.memory.extractor import MemoryExtractor
+
+            get_memory_extraction_queue().submit(
+                ExtractionRequest(
+                    memory_port=self.memory,
+                    extractor=MemoryExtractor(llm_client=self.llm),
+                    user_text=user_message.content or "",
+                    # 剥离技能 nudge 后缀, 避免提示文本被提取为"记忆事实"（review LOW）
+                    assistant_text=(final_response.content or "").replace(
+                        SKILL_NUDGE_SUFFIX, ""
+                    ),
+                    session_id=session_id,
+                    enabled=True,  # hex 路径保持现状行为：有 memory 即写
+                    tool_observations=_pop_env_observations(session_id),
+                    # M3-Task 4: 记忆写入归会话专家的私有层
+                    agent_id=resolve_bound_specialist(session_id),
+                )
+            )
+
+            # 8) 压缩工作记忆 (Memory Integration)
+            try:
+                await self.memory.compress(session_id)
+            except Exception as e:
+                logger.warning(f"Failed to compress working memory: {e}")
+                span.set_attribute("memory.compress_error", str(e))
+
+>>>>>>> origin/main
             # 9) 标题自动生成：首轮对话后
             try:
                 session_data = await self.storage.get_session(session_id)
@@ -1164,7 +1216,11 @@ class ChatService:
         ``already_called`` 透传到 ``_execute_tool_calls`` 用于 ReAct 跨轮预算
         累计（M2）。
         """
+<<<<<<< HEAD
         from backend.tools.skill_tool import (
+=======
+        from backend.domain.skill_scope import (
+>>>>>>> origin/main
             reset_turn_skill_allowlist,
             set_turn_skill_allowlist,
         )
@@ -1485,8 +1541,11 @@ async def extract_and_store_memory(
         # 用户画像类事实类别（extractor 产出）→ 路由到 store_profile。
         # environment（本机工具链事实）进画像后随 USER PROFILE 快照置顶注入，
         # 绕开 episodic recency/decay 限制（PR 环境记忆化）。
+<<<<<<< HEAD
         # F4 new→old 分类兼容：extractor 输出 user_pref（新分类），路由需
         # 映射为 preference（UserProfileStore 接受的旧分类）。
+=======
+>>>>>>> origin/main
         profile_categories = ("preference", "goal", "environment")
         # 结构性探测 store_profile（MemoryPort 协议外的扩展方法）:
         # 用**类级** hasattr（而非实例 getattr）—— 无 spec 的 Mock 在实例上
@@ -1497,6 +1556,7 @@ async def extract_and_store_memory(
             else None
         )
         for fact in facts:
+<<<<<<< HEAD
             category = fact.get("category", "project_fact")
             # 防御：extractor 新分类 (user_pref / project_fact / decision /
             # task_summary / cross_session_pattern) 与 UserProfileStore 接
@@ -1505,6 +1565,13 @@ async def extract_and_store_memory(
             # 同时兼容 LLM 仍输出旧分类 "fact" / "preference" 的情况（F4
             # normalize 双向防御），统一 remap 到 profile 可接受的词汇。
             if category in ("user_pref", "fact"):
+=======
+            category = fact.get("category", "fact")
+            # 防御：LLM 仍可能输出 prompt 已禁止的 "fact" / "event" 类别。
+            # "fact" 几乎都是关于用户的事实（提取 prompt 的语义），remap 到
+            # "preference" 让其正确路由到 UserProfileStore，避免画像库长期饥饿。
+            if category == "fact":
+>>>>>>> origin/main
                 category = "preference"
                 fact["category"] = category
             if category in profile_categories and callable(store_profile):

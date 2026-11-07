@@ -356,9 +356,19 @@ const electronAPI = {
    * - exportPackage: 二进制下载 + 另存为 → { ok, path } | null（取消）
    */
   specialists: {
+<<<<<<< HEAD
     importPackage: () => ipcRenderer.invoke('specialists:import') as Promise<SpecialistPackageImportResult | null>,
     exportPackage: (agentId: string) =>
       ipcRenderer.invoke('specialists:export', agentId) as Promise<SpecialistPackageExportResult | null>,
+=======
+    importPackage: () =>
+      ipcRenderer.invoke('specialists:import') as Promise<SpecialistPackageImportResult | null>,
+    exportPackage: (agentId: string) =>
+      ipcRenderer.invoke(
+        'specialists:export',
+        agentId,
+      ) as Promise<SpecialistPackageExportResult | null>,
+>>>>>>> origin/main
   } satisfies SpecialistsElectronApiBridge,
 
   /** Workspace MCP Server (M4): tunnel, emergency stop, copy URL to clipboard. */

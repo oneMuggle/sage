@@ -6,7 +6,11 @@
 // 配置类命令（managerUrl / sharedSecret）不走 backend，直接在 main.ts 注册 IPC handler
 // （因为 sharedSecret 需要 Electron safeStorage 加密，存在 electron-store JSON 中）。
 //
+<<<<<<< HEAD
 // 设计见 docs/technical/111-feedback-relay-deployment.md §11.2。
+=======
+// 设计见 docs/technical/109-feedback-relay-deployment.md §11.2。
+>>>>>>> origin/main
 
 import type { CommandRoute } from '../commands';
 

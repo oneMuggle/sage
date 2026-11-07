@@ -1,7 +1,11 @@
 # 25 — 用户反馈
 
 > 面向最终用户的操作指南。管理员侧的转发脚本部署（共享密钥、Jira/GitLab/SMTP
+<<<<<<< HEAD
 > 对接、数据落盘）见 [111-feedback-relay-deployment.md](../technical/111-feedback-relay-deployment.md)。
+=======
+> 对接、数据落盘）见 [109-feedback-relay-deployment.md](../technical/109-feedback-relay-deployment.md)。
+>>>>>>> origin/main
 
 ---
 

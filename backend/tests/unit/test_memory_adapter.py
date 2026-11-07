@@ -123,6 +123,7 @@ class TestMemoryAdapterStore:
             memory_type="episodic",
             importance=7,
             tags=["preference", "food"],
+<<<<<<< HEAD
             metadata={
                 "session_id": "session-123",
                 "tags": ["preference", "food"],
@@ -131,6 +132,9 @@ class TestMemoryAdapterStore:
                 "source_message_id": None,
                 "memory_category": None,
             },
+=======
+            metadata={"session_id": "session-123", "tags": ["preference", "food"]},
+>>>>>>> origin/main
             session_id="session-123",
             agent_id=None,
         )

@@ -92,6 +92,7 @@ export interface Memory {
   project_key?: string;
   /** M3 专家归属轴 (2026-11-04): NULL=共享 / 'primary'=默认助手私有 / 'specialist-x'=专家私有。 */
   agent_id?: string;
+<<<<<<< HEAD
   /**
    * Task 4.4 质量评分 (0-1)。
    * - episodic / semantic 行: 后端用 MemoryQualityScorer 算出,≥0.6 高分 / 0.3-0.6 中 / <0.3 低质量。
@@ -104,6 +105,8 @@ export interface Memory {
    * - working / session_summary 行: 永远 null (不可反馈)。
    */
   user_feedback?: 'up' | 'down' | 'neutral' | null;
+=======
+>>>>>>> origin/main
 }
 
 /**
@@ -169,6 +172,7 @@ export interface MemoryConsolidationResult {
   total: number;
 }
 
+<<<<<<< HEAD
 /**
  * Task 4.3: 批量清理候选条目。
  * GET /memory/quality-candidates 返回的 items 元素。
@@ -192,6 +196,8 @@ export interface BatchDeleteResponse {
   failed: Array<{ id: string; reason: string }>;
 }
 
+=======
+>>>>>>> origin/main
 // ==================== Knowledge 类型定义 ====================
 
 export interface KnowledgeDoc {

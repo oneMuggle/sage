@@ -15,10 +15,14 @@ argument: 'doc_id'`。
 from __future__ import annotations
 
 import asyncio
+<<<<<<< HEAD
 import inspect
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend.tools.base import BaseTool
+=======
+from typing import Tuple
+>>>>>>> origin/main
 
 # Python 3.10: asyncio.TimeoutError ≠ builtin TimeoutError；3.11+ 为同一类，
 # 兼容两个名称（hex adapter 原内联写法收敛至此）。

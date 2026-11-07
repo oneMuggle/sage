@@ -11,7 +11,11 @@ from __future__ import annotations
 
 import logging
 import re
+<<<<<<< HEAD
 from typing import Any, Dict, Optional
+=======
+from typing import Any, Optional
+>>>>>>> origin/main
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +34,12 @@ MIN_CONTENT_FOR_LLM = 20
 #: 单会话标题生成尝试次数上限（防止失败会话每轮重试）。
 MAX_TITLE_ATTEMPTS = 3
 
+<<<<<<< HEAD
 #: 标题模型 temperature —— 低温度让输出更稳定、更收敛。
 TITLE_TEMPERATURE = 0.2
 
+=======
+>>>>>>> origin/main
 TITLE_PROMPT = """请根据以下对话内容，生成一个简短、具体的会话标题。
 
 要求：
@@ -86,6 +93,7 @@ def needs_title(session: Any) -> bool:
         return int(attempts) < MAX_TITLE_ATTEMPTS
     except (TypeError, ValueError):
         return True
+<<<<<<< HEAD
 
 
 def load_title_llm_config() -> Optional[Dict[str, Any]]:
@@ -146,6 +154,8 @@ class TitleModelFactory:
                 logger.warning("标题专用模型客户端构建失败，回退主模型: %s", exc)
 
         return build_llm_client_from_settings()
+=======
+>>>>>>> origin/main
 
 
 class TitleGenerator:

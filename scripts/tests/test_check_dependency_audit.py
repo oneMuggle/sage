@@ -238,6 +238,7 @@ def test_rejects_malformed_pip_advisory_id(tmp_path, vulnerability_id):
     assert "invalid vulnerability entry or advisory ID" in result.stdout
 
 
+<<<<<<< HEAD
 @pytest.mark.parametrize("aliases", [
     ["CVE-2026-1234", "GHSA-aaaa-bbbb-cccc", "X41-2026-002", "BIT-pillow-2026-42308"],
     [],
@@ -257,11 +258,14 @@ def test_accepts_pip_audit_aliases(tmp_path, aliases):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+=======
+>>>>>>> origin/main
 @pytest.mark.parametrize("aliases", [[""], ["GHSA-pip"], [1], "CVE-2024-1234"])
 def test_rejects_malformed_pip_aliases(tmp_path, aliases):
     pip = {"dependencies": [{"name": "demo", "version": "1.0", "vulns": [{"id": "CVE-2024-1234", "aliases": aliases}]}]}
     result = run_gate(tmp_path, pip=pip)
     assert result.returncode == 1
+<<<<<<< HEAD
     assert "aliases must be a valid string list" in result.stdout
 
 
@@ -285,6 +289,9 @@ def test_rejects_pip_alias_with_uppercase_package_name(tmp_path):
     result = run_gate(tmp_path, pip=pip)
     assert result.returncode == 1
     assert "aliases must be a valid string list" in result.stdout
+=======
+    assert "aliases must be a list of valid advisory IDs" in result.stdout
+>>>>>>> origin/main
 
 
 def test_accepts_pip_audit_object_format_and_exact_exception(tmp_path):
@@ -293,7 +300,7 @@ def test_accepts_pip_audit_object_format_and_exact_exception(tmp_path):
             {
                 "name": "demo",
                 "version": "1.0",
-                "vulns": [{"id": "GHSA-pip0-pip0-pip0"}],
+                "vulns": [{"id": "GHSA-pip0-pip0-pip0", "aliases": []}],
             }
         ]
     }
@@ -420,6 +427,76 @@ def test_accepts_npm_dependency_reference_strings(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_accepts_high_npm_meta_vulnerability_via_reported_dependency(tmp_path):
+    advisory = "GHSA-test-test-test"
+    report = {
+        "metadata": {
+            "vulnerabilities": {"low": 0, "moderate": 0, "high": 2, "critical": 0}
+        },
+        "vulnerabilities": {
+            "wrapper": {
+                "name": "wrapper",
+                "severity": "high",
+                "nodes": ["node_modules/wrapper"],
+                "via": ["braces"],
+            },
+            "braces": {
+                "name": "braces",
+                "severity": "high",
+                "nodes": ["node_modules/braces"],
+                "via": [
+                    {
+                        "url": f"https://github.com/advisories/{advisory}",
+                        "severity": "high",
+                    }
+                ],
+            },
+        },
+    }
+    package_lock = package_lock_data()
+    package_lock["packages"]["node_modules/wrapper"] = {"version": "1.0.0"}
+    package_lock["packages"]["node_modules/braces"] = {"version": "3.0.3"}
+    policy = base_policy()
+    policy["exceptions"].append(
+        {
+            "source": "npm",
+            "package": "braces",
+            "package_version": "3.0.3",
+            "advisory": advisory,
+            "advisory_url": f"https://github.com/advisories/{advisory}",
+            "affected_path": "node_modules/braces",
+            "actual_reachability": "test",
+            "controls": "test",
+            "owner": "Sage maintainers",
+            "review_by": "2099-01-01",
+        }
+    )
+    result = run_gate(
+        tmp_path,
+        policy=policy,
+        npm=report,
+        npm_prod=empty_npm(),
+        package_lock=package_lock,
+        NPM_AUDIT_ALL_OUTCOME="success",
+        NPM_AUDIT_PROD_OUTCOME="success",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_rejects_high_npm_meta_vulnerability_with_unresolved_reference(tmp_path):
+    report = npm_report()
+    report["vulnerabilities"]["electron"]["via"] = ["not-in-this-report"]
+    result = run_gate(
+        tmp_path,
+        npm=report,
+        npm_prod=empty_npm(),
+        NPM_AUDIT_ALL_OUTCOME="success",
+        NPM_AUDIT_PROD_OUTCOME="success",
+    )
+    assert result.returncode == 1
+    assert "lacks a matching valid advisory or dependency chain" in result.stdout
+
+
 def test_accepts_editable_pip_skip_entry(tmp_path):
     result = run_gate(tmp_path, pip={"dependencies": [{"name": "sage-core", "skip_reason": "editable local package"}]})
     assert result.returncode == 0, result.stdout + result.stderr
@@ -506,6 +583,34 @@ def test_rejects_npm_item_severity_without_matching_advisory(tmp_path, severity,
     ], env={**os.environ, "NPM_AUDIT_ALL_OUTCOME": "failure", "NPM_AUDIT_PROD_OUTCOME": "failure"}, capture_output=True, text=True, check=False)
     assert result.returncode == 1
     assert "report parse failure" in result.stdout
+
+
+def test_skips_moderate_item_absent_from_lockfile(tmp_path):
+    # R74: npm audit 会为 prune 掉的 optional/dev 嵌套树报 moderate
+    # （实测 node-gyp 嵌套 undici 不在 lockfile）——moderate/low 缺节点
+    # 按「未安装」跳过，门放行并打印跳过说明。
+    report = npm_report(advisory="GHSA-1111-1111-1111", severity="moderate")
+    report["vulnerabilities"]["electron"]["nodes"] = ["node_modules/node-gyp/node_modules/undici"]
+    report["metadata"]["vulnerabilities"]["moderate"] = 1
+    report["metadata"]["vulnerabilities"]["high"] = 0
+    result = run_gate(
+        tmp_path, npm=report, npm_prod=empty_npm(),
+        NPM_AUDIT_ALL_OUTCOME="success", NPM_AUDIT_PROD_OUTCOME="success",
+    )
+    assert result.returncode == 0
+    assert "absent from package-lock" in result.stdout
+    assert "not covered by policy" not in result.stdout
+
+
+def test_high_item_absent_from_lockfile_still_fails(tmp_path):
+    # high/critical 缺节点无法核实 → 维持失败（宁可误报不可漏报）
+    report = npm_report()
+    report["vulnerabilities"]["electron"]["nodes"] = ["node_modules/ghost"]
+    result = run_gate(tmp_path, npm=report, npm_prod=empty_npm())
+    assert result.returncode == 1
+    assert "nodes must exist in package-lock" in result.stdout
+
+
 def test_rejects_package_lock_declared_name_mismatch(tmp_path):
     lock = package_lock_data()
     lock["packages"]["node_modules/electron"]["name"] = "not-electron"

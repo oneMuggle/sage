@@ -28,6 +28,11 @@ from backend.domain.tool_names import (
     RUNTIME_EXEC_TOOLS,
     RUNTIME_PROBE_TOOLS,
     SCHEDULE_TOOLS,
+<<<<<<< HEAD
+=======
+    SELF_STATUS_TOOLS,
+    SKILL_TOOLS,
+>>>>>>> origin/main
     SYMBOL_TOOLS,
     TODO_TOOLS,
     WEB_FETCH_TOOLS,
@@ -183,6 +188,21 @@ _PRIMARY_SEED_TOOLS = (
     # 与 TODO_TOOLS / SCHEDULE_TOOLS / CONFIG_TOOLS 同模式 coordinator-only,
     # 子代理白名单严禁纳入。
     *DESIGN_TOOLS,
+<<<<<<< HEAD
+=======
+    # 2026-11-05 自管理对等 Q1：技能两件套（skill 按名执行 / skill_save 沉淀
+    # 草稿）此前只在 tool_names / 注册表里存在，未进任何默认 profile 种子，
+    # 用户无法通过会话调用已安装技能。skill 为 EXECUTE 走主循环审批；
+    # skill_save 产出的 SkillDraft 仍需用户在 UI 审批后才生效（skill_save_tool
+    # 显式返回 {status: pending}）。子代理白名单（subagent_approval）不含
+    # 此两件套，与 CONFIG_TOOLS / SCHEDULE_TOOLS 同模式 coordinator-only。
+    *SKILL_TOOLS,
+    # 2026-11-05 自透明对等 M1：sage_self_status / sage_doctor / sage_usage
+    # 三件只读自省工具（版本、实际生效模型、权限模式、MCP/插件清单、用量
+    # 成本、安装环境检查）。全部 READ，零持久化副作用；与 CONFIG_TOOLS /
+    # SCHEDULE_TOOLS 同模式 coordinator-only，子代理白名单不纳入。
+    *SELF_STATUS_TOOLS,
+>>>>>>> origin/main
     # 2026-10-27 feat/zotero-llm-visible: MCP 工具命名空间通配。primary 作为
     # 用户交互入口，必须能看见运行期注册的 MCP 工具（Zotero 文献库 /
     # drawio 图表等）—— 此前白名单只认内置精确名与插件通配，``mcp__*``
@@ -362,9 +382,12 @@ def create_default_agents() -> List[AgentProfile]:
                 "browser_cookies",
                 "browser_close",
                 "browser_login",
+<<<<<<< HEAD
                 # win7 保留 memory_save —— researcher 查到资料后必须能落地为记忆,
                 # 否则下次 session 找不到（PR #396 knowledge persistence 闭环）。
                 "memory_save",
+=======
+>>>>>>> origin/main
             ],
             memory_access=["episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.5),

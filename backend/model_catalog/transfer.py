@@ -29,7 +29,11 @@ import hashlib
 import hmac
 import json
 from datetime import datetime, timezone
+<<<<<<< HEAD
 from typing import List, Union
+=======
+from typing import List
+>>>>>>> origin/main
 
 from pydantic import ValidationError
 
@@ -130,7 +134,11 @@ def encode_bundle(records: List[CandidateModel], source: str) -> bytes:
     return raw
 
 
+<<<<<<< HEAD
 def decode_bundle(data: Union[bytes, str]) -> List[CandidateModel]:
+=======
+def decode_bundle(data: bytes | str) -> List[CandidateModel]:
+>>>>>>> origin/main
     """Verify the envelope and return the validated records."""
     if not isinstance(data, (bytes, str)):  # noqa: UP038 - Py3.8 win7 LTS requires tuple form
         raise BundleValidationError("bundle must be bytes or str")

@@ -512,6 +512,10 @@ describe('useChat taskBoard', () => {
       expect(assistant?.memory_applied).toBe(1);
     });
   });
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/main
   it('falls back to statuses-driven progress when no task_progress arrives', async () => {
     seedActiveEndpoint();
     invokeMock.mockResolvedValueOnce({ streamId: 'stream-4' });

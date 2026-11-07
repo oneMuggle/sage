@@ -481,9 +481,12 @@ class MemoryManager:
                 importance=importance,
                 metadata=meta,
                 session_id=sid,
+<<<<<<< HEAD
                 source_turn_id=meta.get("source_turn_id"),
                 source_message_id=meta.get("source_message_id"),
                 memory_category=meta.get("memory_category"),
+=======
+>>>>>>> origin/main
                 scope=scope,
                 project_key=project_key,
                 supersedes_id=supersedes_id,
@@ -496,7 +499,11 @@ class MemoryManager:
                 content=content,
                 summary=None,
                 tags=tags,
+<<<<<<< HEAD
                 session_id=session_id or meta.get("session_id"),
+=======
+                session_id=session_id,
+>>>>>>> origin/main
                 scope=scope,
                 project_key=project_key,
                 supersedes_id=supersedes_id,
@@ -514,9 +521,13 @@ class MemoryManager:
         if self._conflict_resolver is None:
             from backend.memory.conflict import MemoryConflictResolver
 
+<<<<<<< HEAD
             self._conflict_resolver = MemoryConflictResolver(
                 self.episodic, self.semantic, embedder=self.embedder
             )
+=======
+            self._conflict_resolver = MemoryConflictResolver(self.episodic, self.semantic)
+>>>>>>> origin/main
         return self._conflict_resolver
 
     def resolve_conflicts(

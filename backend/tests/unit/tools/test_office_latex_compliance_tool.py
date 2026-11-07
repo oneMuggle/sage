@@ -77,7 +77,12 @@ def test_compliance_rejects_non_tex(tmp_path: Path) -> None:
     assert result.error == "unsupported_file_type"
 
 
+<<<<<<< HEAD
 def test_compliance_rejects_outside_workspace(tmp_path: Path) -> None:
+=======
+def test_compliance_accepts_outside_workspace(tmp_path: Path) -> None:
+    """READ 工具对齐 read_file：接受任意绝对路径。"""
+>>>>>>> origin/main
     workspace = _workspace(tmp_path)
     outside = tmp_path / "outside.tex"
     outside.write_text(_GOOD_TEX, encoding="utf-8")
@@ -90,7 +95,11 @@ def test_compliance_rejects_outside_workspace(tmp_path: Path) -> None:
     finally:
         reset_tool_context(token)
 
+<<<<<<< HEAD
     assert result.success is False
+=======
+    assert result.success is True
+>>>>>>> origin/main
 
 
 def test_compliance_returns_checks(tmp_path: Path) -> None:

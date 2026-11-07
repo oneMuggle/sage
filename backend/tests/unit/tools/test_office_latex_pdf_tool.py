@@ -65,7 +65,12 @@ def test_pdf_audit_rejects_non_pdf(tmp_path: Path) -> None:
     assert result.error == "unsupported_file_type"
 
 
+<<<<<<< HEAD
 def test_pdf_audit_rejects_outside_workspace(tmp_path: Path) -> None:
+=======
+def test_pdf_audit_accepts_outside_workspace(tmp_path: Path) -> None:
+    """READ 工具对齐 read_file：接受任意绝对路径。"""
+>>>>>>> origin/main
     workspace = _workspace(tmp_path)
     outside = _pdf(tmp_path / "outside.pdf")
     tool = OfficeAuditLatexPdfTool(policy=ToolPolicy(workspace_root=str(workspace)))
@@ -75,7 +80,11 @@ def test_pdf_audit_rejects_outside_workspace(tmp_path: Path) -> None:
     finally:
         reset_tool_context(token)
 
+<<<<<<< HEAD
     assert result.success is False
+=======
+    assert result.success is True
+>>>>>>> origin/main
 
 
 def test_pdf_audit_returns_font_issue(tmp_path: Path) -> None:

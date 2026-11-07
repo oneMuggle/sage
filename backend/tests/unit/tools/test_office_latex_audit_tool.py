@@ -75,7 +75,12 @@ def test_audit_latex_returns_issues(tmp_path: Path) -> None:
     assert "LATEX-SECTION-REQUIRED" in rules
 
 
+<<<<<<< HEAD
 def test_audit_latex_rejects_outside_workspace(tmp_path: Path) -> None:
+=======
+def test_audit_latex_accepts_outside_workspace(tmp_path: Path) -> None:
+    """READ 工具对齐 read_file：接受任意绝对路径。"""
+>>>>>>> origin/main
     workspace, _ = _workspace(tmp_path)
     outside = tmp_path / "outside.tex"
     outside.write_text(_DOC, encoding="utf-8")
@@ -86,5 +91,9 @@ def test_audit_latex_rejects_outside_workspace(tmp_path: Path) -> None:
     finally:
         reset_tool_context(token)
 
+<<<<<<< HEAD
     assert result.success is False
     assert "path_outside_workspace" in (result.error or "")
+=======
+    assert result.success is True
+>>>>>>> origin/main

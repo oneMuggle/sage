@@ -13,7 +13,11 @@ Date: 2026-09-26
 from __future__ import annotations
 
 import logging
+<<<<<<< HEAD
 from typing import Any, Dict, List, Optional, Union
+=======
+from typing import Any, Optional
+>>>>>>> origin/main
 
 from pydantic import BaseModel, Field
 
@@ -65,10 +69,17 @@ class CapabilityRegistry:
     def __init__(self) -> None:
         """Initialize capability registry."""
         # Key: (capability_type, capability_name) -> RegisteredCapability
+<<<<<<< HEAD
         self._capabilities: Dict[tuple[str, str], RegisteredCapability] = {}
 
         # Plugin index: plugin_name -> set of (type, name)
         self._plugin_index: Dict[str, set[tuple[str, str]]] = {}
+=======
+        self._capabilities: dict[tuple[str, str], RegisteredCapability] = {}
+
+        # Plugin index: plugin_name -> set of (type, name)
+        self._plugin_index: dict[str, set[tuple[str, str]]] = {}
+>>>>>>> origin/main
 
     def register(
         self,
@@ -183,7 +194,11 @@ class CapabilityRegistry:
         return count
 
     def get(
+<<<<<<< HEAD
         self, capability_type: Union[CapabilityType, str], capability_name: str
+=======
+        self, capability_type: CapabilityType | str, capability_name: str
+>>>>>>> origin/main
     ) -> Optional[RegisteredCapability]:
         """
         Get a registered capability.
@@ -209,7 +224,11 @@ class CapabilityRegistry:
         return registered
 
     def get_handler(
+<<<<<<< HEAD
         self, capability_type: Union[CapabilityType, str], capability_name: str
+=======
+        self, capability_type: CapabilityType | str, capability_name: str
+>>>>>>> origin/main
     ) -> Optional[Any]:
         """
         Get the handler for a capability.
@@ -258,7 +277,11 @@ class CapabilityRegistry:
         self,
         plugin_name: Optional[str] = None,
         capability_type: Optional[CapabilityType | str] = None,
+<<<<<<< HEAD
     ) -> List[RegisteredCapability]:
+=======
+    ) -> list[RegisteredCapability]:
+>>>>>>> origin/main
         """
         List registered capabilities.
 
@@ -290,7 +313,11 @@ class CapabilityRegistry:
 
         return results
 
+<<<<<<< HEAD
     def list_plugins(self) -> List[str]:
+=======
+    def list_plugins(self) -> list[str]:
+>>>>>>> origin/main
         """
         List all plugins with registered capabilities.
 
@@ -300,7 +327,11 @@ class CapabilityRegistry:
         return list(self._plugin_index.keys())
 
     def has_capability(
+<<<<<<< HEAD
         self, capability_type: Union[CapabilityType, str], capability_name: str
+=======
+        self, capability_type: CapabilityType | str, capability_name: str
+>>>>>>> origin/main
     ) -> bool:
         """
         Check if a capability is registered.

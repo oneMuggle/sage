@@ -1,7 +1,16 @@
+<<<<<<< HEAD
 """Basic token cost estimates, without cache discounts or currency conversion."""
 from decimal import Decimal
 from typing import Optional
 
+=======
+from typing import Optional
+
+"""Basic token cost estimates, without cache discounts or currency conversion."""
+
+from decimal import Decimal
+
+>>>>>>> origin/main
 from .schemas import Price
 
 _TOKENS_PER_MILLION = Decimal("1000000")

@@ -43,7 +43,11 @@ def ast_unparse(node: ast.AST) -> str:
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):
+<<<<<<< HEAD
         parts = []
+=======
+        parts: list[str] = []
+>>>>>>> origin/main
         cur: ast.expr = node
         while isinstance(cur, ast.Attribute):
             parts.append(cur.attr)

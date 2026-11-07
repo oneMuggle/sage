@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+<<<<<<< HEAD
 ## Release Tier Definitions
 
 | Tier | Tag Format | Audience | Channel |
@@ -16,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
+=======
+>>>>>>> origin/main
 
 ## [Unreleased]
 
@@ -30,6 +33,536 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
   DOCX 原生预览随 revision 重渲染，迟到的转换响应按 key 丢弃；编辑对话框在 409 时提示
   并自动重新预览。**边界**：进程内锁不约束外部 Word/WPS（靠版本校验兜底），幂等台账
   不持久化，重启后退化为普通（仍做版本校验的）写入。
+<<<<<<< HEAD
+=======
+
+## [v0.4.9-alpha.61] - 2026-10-16
+
+### Added
+- feat: Provider 抽象层 + Vision Model Fallback 同步到 main (#2031)
+- feat(project): deliver Phase P34 checkpoint/notes export, M5 symbol filters & M3/M4->L2 constraint loop (#2029)
+- feat(project): deliver Phase P33 constraint/milestone filters & M2/L3->L2 constraint promotion (#2023)
+- feat(project): phase P32 overview stage switcher & SAGE.md init, git L4 ingest, M1 duration rollup & editor presets (#2021)
+- feat(ui): collapse right-panel tabs 6→4 and consolidate header controls (#2019)
+- feat(design): integrate OpenDesign as Design Studio subsystem (#2013)
+
+### Fixed
+- fix(orchestration): 工具调用预算 UI 设置实时生效 (#2027)
+- fix(endpoints): fallback to chat test when /v1/models returns 404 (#2014)
+
+## [v0.4.9-alpha.60] - 2026-10-14
+
+### Added
+- feat(chat): LLM 重试可见性 — 聊天流实时提示 + 设置 UI 暴露退避参数 (#2002)
+- feat(project): phase P31 — workbench toolbar、git status filters、M4→L3 profile save、M5 batch L4 ingest (#2008)
+- feat(project): P30 — constraint preview、milestone overdue alert、risk guard、sidebar presets (#2006)
+- feat(project): P29 — studio profile filter、knowledge export、type detection stage preview (#2004)
+- feat(chat): 文件附件扩展到 ~50 种格式 + xlsx (#1990)
+- feat(project): P28 — profile presets & filter、hook untrust、badge path copy、overview decompose (#1999)
+- feat(project): P27 — glob sample pills & rule search、milestone subtask decompose、selective AI plan apply (#1997)
+- feat(project): P26 — archetype rule & milestone templates、Git markdown export、wizard L2 instructions presets (#1995)
+- feat(project): P25 — M4 archetype semantic query presets & batch copy、L4 material reindex、localized overview widgets (#1993)
+- feat(project): P24 — M2 cross-project isolation & batch toggle、M5→L4 wiki-to-material ingestion、L1/L2/L4 markdown export (#1991)
+- feat(project): P23 — M3→M1 advisor task decompose closed-loop、archetype presets、L5 whitelist copy、sidebar stage pill (#1988)
+- feat(project): P22 — auto-refresh profile on knowledge confirm、reactive semantic search、multi-archetype wiki & chat header project stage badge (#1986)
+- feat(project): P21 — mount advisor/wiki panels、session selector in knowledge extractor、wizard allowed-paths presets (#1984)
+- feat(project): P20 — constraint glob tester、milestone stage filter、overview quick snapshot (#1982)
+- feat(project-ai): M1–M5 智能项目管理子系统 (#1976)
+- feat(project): P19 — builtin checkpoint presets、business document style bar (#1979)
+- feat(project): P18 — modularize L3 profile panel with archetype presets and selector governance badges (#1977)
+- feat(project): P17 — git status file drawer、detection blueprint preview、sidebar batch material toggle (#1974)
+- feat(project): P16 — archetype presets for constraint/milestone editors、sidebar quick checkpoint (#1972)
+- feat(projects): P15 — quick governance actions in constraint/milestone summary widgets、wizard baseline checkpointing (#1970)
+- feat(projects): P14 — L4 materials discovery/batch/preview、charter checkpointing、polymorphic VCS overview (#1968)
+- feat(projects): P13 — archive 5-layer context in checkpoints、checkpoint deletion、personal zettelkasten timeline (#1966)
+
+## [v0.4.9-alpha.56] - 2026-09-27
+
+### Added
+- feat(remote-mcp): 工作区 MCP Server M1-M3——只读/写入/命令三阶段（#1637）
+- feat(session): W2 会话分叉家族树面板——fork 徽标一键查看与跨分支切换（#1687）
+- feat(sessions): 会话自动归档 + 清空全部归档（#1655）
+- feat(chat): W1 消息级「回滚到此处」——对话 fork + 工作区快照恢复联动（#1652）
+- feat(frontend): ZCode 启发 Round 2 — Turn 折叠 + Surface 层级 + 使用统计 + 命令面板增强（#1705）
+- feat(frontend): ZCode 启发设计系统文档 + 字体 token 迁移（#1635）
+- feat(ui): ZCode 对标——设计系统 + Git 侧边栏 + Tool Call 渲染器（#1632）
+- feat: ZCode-inspired plugin system, skill discovery, MCP integration（#1621）
+- feat(chat): 对话阅读体验 P1——朗读/截断提示/搜索高亮/会话内查找（#1619）
+- feat(chat): 对话阅读体验 P2——生成速度统计/端点离线提示/回答版本切换（#1625）
+- feat(chat): 对话阅读导航与划词引用（#1580）
+- feat(chat): RD23 会话多 run 历史浏览器——SessionRunHistory（#1582）
+- feat(chat): RD24 历史编排行内消耗统计（#1604）
+- feat(orch): BU22/BU23 聚合头部子任务排行 + per-agent 工作量分布（#1596, #1691）
+- feat(orch): RT26 重派链历史持久化——orch_tasks 增 retry_of 列（#1488）
+- feat(permission): 审批拒绝附文字反馈——ZCode freeText 对标（#1704）
+- feat(data): DSH-R9/R20/R21 schema 版本化迁移框架 + ALTER 防御块收编（#1512, #1698, #1708）
+- feat(events): DSH-R1/R2 会话事件日志地基 + 读取切换（#1421, #1435）
+- feat(llm): DSH-R8 B3 LLM 流录制/回放（#1499）
+- feat(agent): DSH-R3 B2 声明式并行工具调度（#1451）
+- feat(tools): LocalBridge P0 安全修复 + 文件工具 parity（#1636）
+- feat: 简化浏览器登录流程（#1497）
+- feat(chat): R120 run 失败路径推送已收集参考来源（#1485）
+
+### Changed(perf)
+- **shiki 细粒度加载**：渲染产物 18MB/450 chunk → 10MB/178（-44%）（#1401）
+- **ArtifactViewer CodeMirror lazy**：index 主 chunk 1528KB → 1140KB（#1419）
+- **memory 注入与召回合一（R99）**：单次检索，芯片与注入严格同源（#1424）
+- **usage_events 复合索引（RT25）**：补 (session_id, task_id, created_at)（#1409）
+- **每个 worker 只建一次表**：后端 pytest 20min → 5min（#1640, #1631）
+
+> 🎯 **Arena 能力移植收口：ArenCard 协议快路径 P0-P6 全链路**（方案 `archive/mcp-aren-card-port-plan-2026-09-19.md`，验收 `docs/verification/2026-09-19-aren-card-port.md`）
+
+### Added(arena)
+- **后端协议快路径（P0-P4）**：`arena_keystore`（master.key 持久化，修复重启后凭据不可解密）、`arena_http`（TLS 指纹会话，curl_cffi 可选降级）、`arena_protocol` + `arena_registration`（注册 6 步协议 + 批量注册 job，真实冒烟 3/3、17s）、`arena_proxies` + `arena_proxy_relay`（本地 CONNECT 中继、一号一 IP）、`arena_token_cache`（V3 票缓存/熔断）、`arena_draw_engine`（抽卡 8 步 job 引擎，复用 run_trace_resolver 解析）；`/api/v1/arena/capabilities|proxies|token-window` 契约与 yaml 门控（默认全关）
+- **token 窗口（P3）**：`arenaTokenWindow` 次级隐藏窗口（Chromium 106 出 reCAPTCHA V3 被受理，S0-B 闭环）+ 反节流开关 + preload/main 模块化接线
+- **前端控制台（P5）**：`/arena` 三页签（账号池/批量注册/抽卡）+ JobConsole（2s 轮询 + after_seq 续传）+ 命令面板/侧边栏入口；`/arena-accounts` 并入重定向
+- **py38 对齐**：tenminmail 锁构造推迟到首 await、zip strict= 移除（#1228 惯例）；win7 全量 213 passed (#1383)
+- **P6 收口**：spec §1.4（批量注册限定用户显式发起）/§7.1（持久化 master.key）修订；审计 v1.1 增补 ArenCard 参考源；方案文档归档
+
+### Changed(perf)
+- **shiki 细粒度加载**：`import('shiki')` 全量 bundle → `shiki/core` + `@shikijs/langs|themes/*` 显式 26 语言 + JS 正则引擎（免 wasm）。渲染产物 dist/assets **18MB/450 chunk → 10MB/178**（-44%），Electron 安装包同步瘦身；语法包自带别名表，`js/ts/py/c++/sh` 等别名高亮行为不变
+
+> 🌐 **网页访问能力优化 Round 21：DL2 后台下载任务化**（方案 `docs/plans/2026-09-19_web-access-round21-dljobs.md`）
+
+### Added(web-access)
+- **后台下载任务（DL2）**：`http_download` 新增 `background: bool`——true 时提交后台任务立即返回 `job_id`（双 worker 线程池执行，pending 队列可排队）；新增 `download_status`（查单任务/全部）与 `download_cancel`（仅 pending 可取消；running 不可中断如实报错）工具；完成后结果保留供查询（含最终 path/bytes/sha256）；任务表进程内存态（重启清零），终态 LRU 淘汰 200 上限
+
+> 🌐 **网页访问能力优化 Round 22：渲染分支 Network 事件化**（方案 `docs/plans/2026-09-23_web-access-round22-netevents.md`）
+
+### Added(web-access)
+- **Network 跟踪基建（批次 1，#1403）**：browser_events 常驻 WS 增加 `NetworkResponseTracker`（线程安全按 sessionId 记录 type=Document 响应）与 `_EventChannel.attach_network`（flatten attach + Network.enable）
+- **render_page 集成（批次 2）**：createTarget 后 `ensure_network_tracking` attach 渲染标签页（幂等，同 target 复用 sessionId）；就绪后 `get_tracked_response` 优先取事件状态——重定向链每个 hop 的 Document 状态码可见（多跳 302 中间被反爬拦截不再只见最终 200），Navigation Timing 保留为兜底；渲染结束 `detach_network_session` 清理；常驻 WS 应答帧改经 `_dispatch` 等待队列路由（`_call`），消除 attach 握手与读循环抢帧
+
+> 🌐 **网页访问能力优化 Round 23：渲染池事件通道接线**（方案 `docs/plans/2026-09-23_web-access-round23-renderchan.md`）
+
+### Added(web-access)
+- **渲染池纯事件通道（R23）**：browser_events 新增 `start_event_channel`（跳过 `setDownloadBehavior` 的常驻 WS，只服务 Network 事件）；render_page 在 `_pool.acquire()` 后经 `_ensure_pool_channel` 尽力接线——修复 R22 批次 2 的生产缺口（渲染池不经 browser_launch 工具、此前从未建通道，事件状态始终回退 Navigation Timing）；通道失败不影响渲染，池重建后自动重连
+
+> 🌐 **网页访问能力优化 Round 24：渲染池生产化——多实例 + 事件命中率可观测**（方案 `docs/plans/2026-09-23_web-access-round24-pool.md`）
+
+### Added(web-access)
+- **多实例渲染池（R24）**：`_RendererPool` 扩为双槽 LRU（`RENDER_POOL_IDS`，槽 1 沿用保留 id、槽 2 `render-pool-2`）——并发渲染分散到不同浏览器实例，单实例崩溃不再波及全部 in-flight 渲染；首选槽启动失败按 LRU 序降级下一槽；`browser_cdp.get(None)` 用户实例解析同步排除 `render-pool-` 前缀槽位
+- **渲染事件命中率指标（R24）**：web_metrics 新增 `record_render_event`，`GET /api/v1/web-access/metrics` 快照增 `render_events`（renders/channel_ok/event_status_hits）——R22/R23 的事件状态接线效果生产可验证
+> 🌐 **网页访问能力优化 Round 25：事件命中率可视化 + 槽位配置化**（方案 `docs/plans/2026-09-23_web-access-round25-observ.md`）
+
+### Added(web-access)
+- **渲染事件命中率可视化（R25）**：修复 NetworkTab 把 metrics 快照的 `render_events` 全局键当域名行渲染的回归；新增独立命中率块（渲染数/通道就绪/事件命中），i18n 全量补键 + vitest 契约测试
+- **渲染池槽位配置化（R25）**：`web_access_config.render_pool_size`（钳 1..4，默认 2），acquire 懒增槽位；设置页新增下拉控件，前后端同口径
+
+> 🧹 **浏览器生命周期 R26：进程树回收时序修复**（方案 `docs/plans/2026-09-24_browser-treekill-order.md`）
+
+### Fixed(browser)
+- **进程树回收时序（R26）**：`_terminate_session` 先 terminate 父进程再 taskkill /T，父退出后子进程被重派生、`/T` 遍历不到树 —— crashpad/gpu 等孤儿进程锁住 profile 目录（单测每轮泄漏一棵进程树）。修复为父进程存活时先树杀、后优雅终止兜底；POSIX 行为不变
+
+> 🌐 **网页访问能力优化 Round 27：AB3 TLS/HTTP2 指纹**（方案 `docs/plans/2026-09-24_web-access-round27-tls-fingerprint.md`）
+
+### Added(web-access)
+- **TLS 指纹传输器（R27/AB3，可选依赖）**：新模块 `tls_transport`——`web_access_config.tls_fingerprint` 开启且 `curl_cffi` 可导入时，静态抓取经 httpx 自定义传输走 Chrome TLS/HTTP2 指纹（JA3 等握手指纹不再暴露脚本客户端），策略校验/重定向编排/AB5 重试零改动；curl_cffi 缺失或关闭时回落标准 httpx；requirements-optional 新增 `curl_cffi>=0.7`（release/win7 不装）；设置页实验性开关 + i18n
+
+> 🧹 **稳定收尾 R28：冷导入子进程超时加固 + AB3 使用计数可观测**（方案 `docs/plans/2026-09-24_stability-r28.md`）
+
+### Fixed(test)
+- **init_no_circular 子进程超时加固（R28）**：冷导入子进程超时 60→150s（-n auto 全量并发下 P99 逼近 60s，负载抖动误报为 issue #484 回归）；doctor 冒烟 30→90s
+
+### Added(web-access)
+- **AB3 使用计数（R28）**：tls_transport 增线程安全请求计数，`GET /api/v1/web-access/metrics` 快照增 `tls_fingerprint.requests` 键——指纹通道使用情况首次可观测
+
+> 🧹 **资源卫生 R29：抓取客户端泄漏 + 事件通道替换滞留**（方案 `docs/plans/2026-09-24_resource-r29.md`）
+
+### Fixed(web-access)
+- **抓取客户端泄漏（R29）**：`_get_with_redirects` 循环包 try/finally——`redirect_limit_exceeded` / `response_exceeds_limit` / 校验失败等异常路径此前不关闭 httpx client，高频抓取 + 反爬站点（常见 3xx 超限）下连接池稳定泄漏
+- **事件通道替换滞留（R29）**：`start_event_channel` / `start_download_tracking` 替换断连旧通道前先 `stop()`——此前旧读线程在 socket 半开态可无限期滞留（每轮泄漏一个守护线程 + fd）
+
+> 🌐 **网页访问 Round 30：渲染内容完整度可观测**（方案 `docs/plans/2026-09-24_waitfor-r30.md`）
+
+### Added(web-access)
+- **wait_for 完整度可观测（R30）**：`wait_page_ready` 返回 wait_for 选择器命中与否（settle 语义不变）；`render_page` 指定 wait_for 时在结果中暴露 `wait_for_satisfied` 布尔——调用方（及模型）首次能区分"选择器已出现"与"半截内容"
+
+> 🌐 **网页访问 Round 31：渲染分支瞬时 5xx 单次重试**（方案 `docs/plans/2026-09-24_render-retry-r31.md`）
+
+### Added(web-access)
+- **渲染 5xx 单次重试（R31）**：`render_page` 主文档状态 >= 500 时自动整链重试一次（换标签页重走导航；cookie 注入/回写同步重来）——对齐静态路径 AB5 语义；403 反爬盾页属持续态不重试（Round 5 口径）；重试仍失败如实返回第二次结果，重试自身异常保留首次结果并 note 注明
+
+> 🌐 **网页访问 Round 33：事件驱动就绪等待**（方案 `docs/plans/2026-09-24_pageload-r33.md`）
+
+### Added(web-access)
+- **Page.loadEventFired 就绪信号（R33）**：事件通道 attach 时加发 Page.enable 并按 sessionId 路由 loadEventFired；render_page 导航前布防（attach 先于导航，事件不漏）、导航后就绪等待优先等事件（典型 <2s），超时与未布防均回落 readyState 轮询——单次渲染省 0.3-0.9s 轮询开销
+
+> 🌐 **网页访问 Round 34：AB3 指纹使用按 host 细分**（总账 §3 P3 第二项）
+
+### Added(web-access)
+- **TLS 指纹使用按 host 细分（R34）**：`tls_fingerprint.requests` 之外增 `hosts` 映射（host → 次数，LRU 上限 100 超限清零保新弃旧）——可与 per-host 出网指标对照定位指纹受益站点
+
+> 🧹 **网页访问 Round 35：真实浏览器渲染链集成测试**（总账 §3 P3 第三项）
+
+### Added(web-access)
+- **真实渲染链 e2e（R35）**：本地 fixture HTTP 服务器（302 链 / wait_for 目标页 / 503）+ 真 Chrome/Edge 走完整渲染链——渲染池 → 事件通道 → 重定向 → wait_for 命中 → 状态码/完整度/503 重试 note 全部实测断言；无浏览器环境整体跳过（与 test_real_browser_smoke 同口径）；仅访问 127.0.0.1
+
+> 🌐 **网页访问 Round 37：懒加载滚动快路径跳过**（方案 `docs/plans/2026-09-25_lazyskip-r37.md`）
+
+### Added(web-access)
+- **懒加载滚动快路径（R37）**：`_scroll_for_lazy_load` 先探测页面是否存在懒加载指示器（lazy 图 / data-src / lazy 类）——无标记页面直接跳过全部触底滚动（每轮 0.4s 暂停，典型省 ~1.2s/渲染）；有标记或探测失败保守走原滚动路径，行为只更好不更坏
+
+> 🧹 **R39：todo 时钟精度去 flake（main 侧对齐 win7 的 0.02 标准）**
+
+### Fixed(test)
+- **todo 时钟精度（R39）**：main 的 test_todo_service 两处 sleep(0.01) 低于
+  Windows 15.6ms 时钟粒度，updated_at/completed_at 与 created_at 同 tick
+  相等会偶发断言失败（win7 分支已有 0.02 修复，本 PR 对齐 main）；本机
+  Windows 复现后验证 40/40 通过
+
+> 🌐 **网页访问 Round 42：渲染池默认配置自动扩槽**（总账 §3 第 7 项 P4 落地）
+
+### Added(web-access)
+- **渲染池自动扩槽（R42）**：用户未显式配置 render_pool_size 时，槽位上限自动为
+  RENDER_POOL_SIZE_MAX=4（持续使用下懒增）；显式配置则钉死为配置值——化解 R38
+  记录的"自动调优与显式配置语义冲突"。配置读取失败按非自动处理
+> 🧹 **R41：wiki 模板测试 Windows 路径归一化**（总账 §6 健康检查暴露项）
+
+### Fixed(test)
+- **wiki 模板测试 Windows 路径归一化（R41）**：`test_wiki_templates` /
+  `test_wiki_integration` 四例以 `"raw/sources"` 等正斜杠子串断言
+  `str(Path)`——Windows 下为反斜杠导致仅本地失败（CI ubuntu 不受影响，
+  #1394 同族）。归一化后再断言；生产代码无改动
+
+> 🧹 **R46：浏览器进程树收尾加固——crashpad 禁用 + profile 残留清扫**（总账 §4 收口）
+
+### Fixed(browser)
+- **crashpad 禁用参数（R46）**：`_build_launch_command` 增 `--disable-crashpad` /
+  `--disable-breakpad`（无头自动化无需崩溃上报；旧 Chrome 忽略未知开关，无害）
+- **profile 残留进程清扫（R46）**：`_terminate_session` 在树杀后按
+  user_data_dir 路径精确清扫脱离进程树的残留进程（crashpad-handler 等被
+  系统重派生后 taskkill /T 遍历不到，实测每轮全量单测泄漏一棵树并锁临时
+  目录）——E2E 实证 terminate 后临时目录即可删除；POSIX 不启用
+
+> 🧹 **R48：perf 预算测试 CI 环境容忍系数**（R44/R47 期 CI 实证收口）
+
+### Fixed(test)
+- **perf 预算 CI 容忍系数（R48）**：GitHub 共享 runner 性能方差大，绝对预算断言
+  在 CI 上系统性超限（事件投影 0.535s/0.735s vs 0.5s 预算，R44/R47 期反复实证）。
+  新增 tests/perf/conftest 的 \`budget()\`：CI 环境（GITHUB_ACTIONS）预算放宽 3 倍，
+  本地照常收紧——保留数值门禁语义，消除环境假阳性；三个 perf 文件全部接入
+
+> 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
+
+## [v0.4.9-alpha.47] - 2026-09-21
+
+### Added
+- feat(settings): 默认隐藏 Arena 账号入口，设置页提供显式开关 (#1347) (418148e2)
+- feat(ui): session list auto-sort — pinned > active > newest first (#1351) (8f0c0dac)
+
+### Fixed
+- fix(chat): subagent detail drawer no longer overlays RightPanel (#1352) (0245a091)
+- fix(win7): REPL 资源清理失败误报（Windows 正常退出路径）(#1345) (#1346) (c02c467b)
+
+## [v0.4.9-alpha.46] - 2026-09-20
+
+
+> 🧹 **Word 写作能力 Round 63：脚注/尾注引用一致性 lint**（方案 `docs/plans/2026-09-19_r63-ref-consistency-plan.md`）
+
+### Added(office)
+- **`footnote/broken_ref` / `endnote/broken_ref` lint 规则**：正文引用 run 的 id 对照 footnotes/endnotes part 的真实 note id 集合——损坏文档（引用无对应 note，Word 打开即报"内容有问题"）给出可定位的 error
+- 无引用文档零开销跳过；`ref_consistency` 无条件入 checked
+
+> 📝 **Word 写作能力 Round 62：用户手册补脚注/尾注/文档属性**（纯文档轮）
+
+### Changed(docs)
+- **用户手册 09-office.md**：图表与图片节补脚注（{{fn:}}）与尾注（{{en:}}）说明（含 office_update 追加续接编号）与文档属性（metadata）——R49-R61 能力的手册层收口
+
+> 📝 **Word 写作能力 Round 61：append_paragraphs 支持 {{fn:}}/{{en:}}**（方案 `docs/plans/2026-09-19_r61-append-fn-en-plan.md`）
+
+### Added(office)
+- **update 通路四类占位符全支持**：append_paragraphs 的 {{fn:}}/{{en:}} 写成 footnote/endnoteReference run 并把备注文本追加进对应 part——part 不存在时全量挂载（含样式注入），已存在时 blob 增补、编号从现有数+1 续接；与 fig/tbl 同段混用、预校验 all-or-nothing 语义不变
+
+> 🧹 **Word 写作能力 Round 60：residue 补全 + append_paragraphs 交叉引用**（方案 `docs/plans/2026-09-19_r60-residue-update-marks-plan.md`）
+
+### Fixed(office)
+- **`cross_ref/residue` lint 补 fn/en**：`{{fn:}}/{{en:}}` 残渍（R57/R59 引入）此前不告警——正则扩为四类占位符
+
+### Added(office)
+- **`append_paragraphs` 支持交叉引用占位符**（{{fig:}}/{{tbl:}} → REF 域）：追加段落复用生成期书签（题注扫描构建映射，`append_ref_field` 写 REF）；预校验 all-or-nothing——未知题注拒绝且零写入
+
+> 📝 **Word 写作能力 Round 59：尾注 endnotes（Phase C）**（方案 `docs/plans/2026-09-19_r59-endnotes-plan.md`）
+
+### Added(office)
+- **`{{en:备注文本}}` 内联尾注**：镜像脚注实现——`w:endnoteReference` run（id 按出现顺序 1..N）+ `word/endnotes.xml` part（含系统尾注）+ EndnoteText/EndnoteReference 样式注入（幂等）
+- **`read_docx` 回读 `endnotes: List[str]`**；脚注与尾注同段混用各自独立 part 与编号；无尾注文档不挂载 part（产物零变化）
+- 契约同步：schema content 描述补 `{{en:}}`；types.ts 读结果加 `endnotes?: string[]`；SKILL 补脚注/尾注选型说明
+
+> 🌐 **网页访问能力优化 Round 20：并行聚合搜索指标 + 诊断导出集成**（方案 `docs/plans/2026-09-18_web-access-optimization-round20.md`）
+
+### Changed(web-access)
+- **搜索指标收尾（S1）**：`_search_parallel` 并行聚合模式逐引擎埋点（伪域 `search:<engine>`；成功含 0 条结果记 ok、异常记 fail）——R18 遗留尾巴闭环
+- **诊断导出集成（X2 完整闭环）**：诊断包 zip 新增 `web-metrics.json`（per-host 出网指标快照，非空时写入；快照失败静默不影响诊断包）
+
+> 📝 **Word 写作能力 Round 58：脚注 Phase B——样式注入 + 每节重编**（方案 `docs/plans/2026-09-19_r58-footnote-phase-b-plan.md`）
+
+### Added(office)
+- **脚注样式注入**：挂载 footnotes part 时幂等注入 FootnoteText 段落样式（10pt）与 FootnoteReference 字符样式（上标）——脚注按 Word 惯例渲染，不再回退默认
+- **`footnote_restart_each_section`**（WordPageSetupSpec）：节级 `w:footnotePr/numRestart=eachSect` 开关——论文/书籍分章脚注编号每节从 1 重排；默认 False 零触碰
+- 契约同步：schema format_spec.page 增开关；types.ts WordPageSetupSpec 同步
+
+> 📝 **Word 写作能力 Round 57：内联脚注 Phase A**（方案 `docs/plans/2026-09-19_r57-footnotes-phase-a-plan.md`，设计稿 90 号）
+
+### Added(office)
+- **`{{fn:备注文本}}` 内联脚注**：正文占位符生成 `w:footnoteReference` run（id 按出现顺序 1..N），备注文本写入挂载的 `word/footnotes.xml` part（含 separator/continuationSeparator 系统脚注）——学术论文脚注支持的最小闭环
+- **`read_docx` 回读 `footnotes: List[str]`**（无脚注空表）；无脚注文档不挂载 part（产物零变化）
+
+> 📝 **Word 写作能力 Round 56：脚注/尾注设计评审稿**（设计文档，非实现）
+
+### Added(docs)
+- **`docs/technical/90-word-footnotes-design.md`**：脚注支持的设计评审稿——python-docx 无原生 API 的 OOXML 四件套结构分析（footnotes.xml part/relationship/content-type/系统脚注）、`{{fn:}}` 内联锚点选型、三期分期（Phase A 写侧最小闭环 ~1 轮）与风险清单（part 手术的半公开 API、WPS 兼容验证）
+
+> 📝 **Word 写作能力 Round 53：分节页码格式与起始号（w:pgNumType）**（方案 `docs/plans/2026-09-18_r53-pgnum-format-plan.md`）
+
+### Added(office)
+- **`page_number_format` / `page_number_start`**（WordPageSetupSpec）：节内页码格式（decimal/upperRoman/lowerRoman/upperLetter/lowerLetter）与起始号——论文前置目录罗马页码、正文阿拉伯从 1 的惯例一次成型；主节（format_spec.page）与分节新节（section_breaks.page_setup）同一路径生效，页脚 PAGE 域自动跟随节格式
+- **lint `page/numbering` 对偶**：spec 声明 fmt/start 时校验首节 pgNumType 实际值（缺失/不符报 error）
+
+> 📝 **Word 写作能力 Round 52：PPT core properties 三件套对称**（方案 `docs/plans/2026-09-18_r52-ppt-metadata-plan.md`）
+
+### Added(office)
+- **`OfficePptGenerateRequest.metadata`**（PptMetadataSpec 别名复用）+ **`OfficePptReadResult.metadata`** 回读——docx/xlsx/pptx 三件套文档属性能力收口；python-pptx 属性名与 python-docx 一致（author/subject/keywords/comments/category），仅显式传入才写
+
+> 📝 **Word 写作能力 Round 51：读侧 core properties 回读**（方案 `docs/plans/2026-09-18_r51-read-metadata-plan.md`）
+
+### Added(office)
+- **`read_docx` / `read_xlsx` 回读 `metadata`**（WordMetadataSpec，全空为 None）——R49/R50 写入的文档属性在读取侧可见，Sage 可回答"这篇文档的作者/关键词是什么"；读侧映射与写侧对偶（xlsx creator/description ↔ author/comments）
+
+> 📝 **Word 写作能力 Round 50：Excel core properties 对称支持**（方案 `docs/plans/2026-09-18_r50-excel-metadata-plan.md`）
+
+### Added(office)
+- **`OfficeExcelGenerateRequest.metadata`**（ExcelMetadataSpec = WordMetadataSpec 别名复用）：generate_xlsx 写 wb.properties（author→creator、comments→description 映射在生成器内完成）——台账/预算归档与 Word 同款文档属性；仅显式传入才写，不臆造作者
+- 契约同步：schema metadata 描述扩为 word/excel 通用；types.ts Excel 请求加 metadata；paper-writing 数据表附表节补说明
+
+> 📝 **Word 写作能力 Round 49：文档核心属性**（方案 `docs/plans/2026-09-18_r49-core-metadata-plan.md`）
+
+### Added(office)
+- **`metadata`（WordMetadataSpec）**：office_create word 请求支持 author/subject/keywords/comments/category → 写入 docx core properties（Word「文件 → 信息」面板可见）——期刊投稿/公文归档的常规要求；title 恒取请求标题，其余显式传入才写（不臆造作者）
+- 契约同步：schema content 层 metadata 对象 + types.ts WordMetadataSpec；paper-writing 第 4 步示例补 metadata
+ 诊断导出集成 per-host 指标)
+> 🧹 **Word 写作能力 Round 48：repair 补 index 域插入 + SEQ 题注重排兼容**（方案 `docs/plans/2026-09-18_r48-repair-index-plan.md`）
+
+### Added(office)
+- **repair 闭环 R44 规则**：spec 声明 figure_index/table_index 而文档缺失时，repair 从文档自身 SEQ 题注重建条目并插入对应 TOF 域（目录后/首段前），repaired_rules 记入 presence 规则
+- **`caption/duplicate` lint 警告**：同类题注文本重复提示（交叉引用按文本匹配指向首个），warning 级不阻断
+
+### Fixed(office)
+- **SEQ 题注重排摧毁域缺陷**：`_renumber_captions` 对携带 SEQ 的题注段不再整体重写 `para.text`（会抹掉 R42 的 SEQ 域与书签，重排触发即毁交叉引用/图表目录）——改为仅更新域内缓存编号 run，结构原样保留
+
+> 📝 **Word 写作能力 Round 47：论文场景能力可发现化收口**（方案 `docs/plans/2026-09-18_r47-paper-capabilities-plan.md`）
+
+### Changed(docs)
+- **paper-writing 技能补全 R39-R46 能力**：目录/图表目录（figure_index/table_index）/交叉引用占位符（{{fig:}}/{{tbl:}}）/真页码刷新（refresh_toc + office_refresh_toc）——论文场景才是这些能力的最大受益方，此前零覆盖；allowed-tools 补 office_refresh_toc
+- **用户手册 09-office.md**：目录描述从"打开后更新域生成"更新为真页码语义；图表与图片节补插图清单/表格清单与交叉引用说明
+- shipped 技能测试补论文场景可发现化断言（figure_index / {{fig:}} / office_refresh_toc）
+
+> 📝 **Word 写作能力 Round 46：交叉引用升级——REF 域 + 题注书签**（方案 `docs/plans/2026-09-18_r46-ref-fields-plan.md`）
+
+### Added(office)
+- **占位符产物原生化**：`{{fig:}}/{{tbl:}}` 不再写成纯文本"图N"，改为 `REF _RefFig{n} \h` 复杂域（缓存"图N"）+ 题注编号套书签——F9/COM 更新域后正文引用自动跟随题注重排；R39 COM 刷新通道（Fields.Update）零新增编排即覆盖
+- **零回归双路径**：有占位符的段落走分段写 run 路径（标题 numbering 前缀为首段），无占位符段落保持既有单次写入（产物逐字节不变）
+
+> 📝 **Word 写作能力 Round 45：交叉引用占位符**（方案 `docs/plans/2026-09-18_r45-cross-ref-plan.md`）
+
+### Added(office)
+- **`{{fig:图题注}}` / `{{tbl:表题注}}` 交叉引用占位符**：段落文本按题注文本引用插图/表格，生成时替换为"图N"/"表N"——LLM 不必猜编号，插图增删自动重排；未匹配题注即生成失败（fail-fast，与 citations 同哲学）
+- **题注编号映射前置**：编号映射与 R42 图/表目录条目共用同一来源，正文题注/目录条目/交叉引用三处编号严格一致
+- **`cross_ref/residue` lint 规则**：正文残留未解析占位符（手工编辑/外部导入）→ error 提示
+
+> 🧹 **Word 写作能力 Round 44：lint 面补强——index 域在位校验**（方案 `docs/plans/2026-09-18_r44-lint-index-plan.md`）
+
+### Added(office)
+- **`figure_index/presence` / `table_index/presence` lint 规则**：format_spec 声明了图/表目录即校验文档存在对应 `TOC \c` 域（字面"图N"文本不算——必须是 Word 可收录的域形态）
+- **toc/presence 精度修复**：TOF 的 instr 同含 "TOC" 前缀，目录域检测排除 `\c` 载体，R42 引入 TOF 后不再误满足
+- **lint schema 可检查子集白名单**：toc/figure_index/table_index 进 lint 工具 schema；对偶测试锁"声明=有规则的子集且 ⊆ 模型字段"
+
+> 🧹 **Word 写作能力 Round 43：office_create schema 漂移卫生修复**（方案 `docs/plans/2026-09-18_r43-schema-drift-plan.md`）
+
+### Fixed(office)
+- **schema 可发现化缺口**：format_spec 补 `toc`（R13 交付却从未进 LLM schema）与 `section_breaks`（R26 同病）声明——目录域与分节横排能力对模型可见；types.ts 补 `WordSectionBreakSpec` 接口与字段
+- **防漂移门禁**：新增对偶测试——工具 schema format_spec 属性集合与 WordFormatSpec 模型字段全等、types.ts 接口覆盖模型全部字段，今后单侧加字段即 CI 红
+
+> 📝 **Word 写作能力 Round 42：图目录/表目录（TOF 域 + SEQ 题注升级）**（方案 `docs/plans/2026-09-18_r42-caption-index-plan.md`）
+
+### Added(office)
+- **题注编号 SEQ 域化**：add_caption 的"图N/表N"编号改为 SEQ 复杂域（缓存编号显示不变）——Word 语义上成为可收录的题注条目，python-docx 回读文本与 lint 规则零改动
+- **`figure_index` / `table_index`**（format_spec 新增，WordIndexSpec）：插入图/表目录 TOF 域（`TOC \c`），缓存条目按正文编号顺序预收集（无题注不占号口径一致），各占一页；生成时带 `refresh_toc: true` 或事后 office_refresh_toc/office_update 刷新即得真页码
+- **COM 刷新扩展**：TOC 之外追加 Fields.Update（SEQ 重编号 + TOF 收录一次完成），纯 TOF 文档也落盘
+- **lint 兼容**：目录/图目录缓存行不再误判为题注重复（fldChar begin/end 之间的缓存段跳过 caption/sequence 规则）
+
+> 📝 **Word 写作能力 Round 41：office_update 修订后 TOC 刷新**（方案 `docs/plans/2026-09-18_r41-update-toc-refresh-plan.md`）
+
+### Added(office)
+- **`office_update` 新增 `refresh_toc` 标志**（word 专用）：修订成功后立即用 Word COM 刷新目录域为真页码——增删段落后的页码漂移一次性修复；doc_id 受管路径 upfront 非 word 守卫（修订尚未发生即拒绝，语义准确），file_path 路径同口径
+- **降级契约**：刷新失败/不可用时修订保持 success=True，仅附加 `toc_refresh: {ok: false, error}` 说明（与 R40 生成侧同口径）
+- **横排宽表场景文档（搭车）**：report-writing 技能补 R37 `section_breaks` 分节横排说明与组合示例（技能正文可发现化缺口）
+
+> 📝 **Word 写作能力 Round 40：office_create 一键 TOC 刷新**（方案 `docs/plans/2026-09-18_r40-create-toc-refresh-plan.md`）
+
+### Added(office)
+- **`office_create` 新增 `refresh_toc` 标志**（word 专用）：生成成功后立即用 Word COM 把目录域刷新为真页码并原地保存——带目录报告一步到位，省一次 LLM 往返；受管/legacy 双路径接线，受管路径维持「不回显绝对路径」不变式；非 word 传参显式报错（strict）
+- **降级契约**：Word COM/pywin32 不可用时生成照常成功，结果附加 `toc_refresh: {ok: false, error}` 安装引导说明，绝不因刷新失败回滚已落盘文档
+
+### Fixed(test)
+- **rollback 遥测测试竞态修复（搭车，test-only）**：`updateManager.test.ts` 的 fetch 断言包进 `vi.waitFor`——`rollback()` 刻意 fire-and-forget 发遥测，立即断言与微任务调度存在竞态（R38 轮 CI 实际 flake 一次）
+
+> 📝 **Word 写作能力 Round 39：目录真页码（Word COM 刷新域可选通道）**（方案 `docs/plans/2026-09-18_r39-toc-page-refresh-plan.md`）
+
+### Added(office)
+- **`office_refresh_toc` 工具**：把托管 .docx 的 TOC 域经 Word COM 刷新为真页码并落盘（TablesOfContents 逐个 Update + Save）——R29 静态缓存目录打开即真页码，无需用户手动 F9；WRITE_LOCAL 审批 + 工作区围栏，writer/primary 白名单可见
+- **降级契约**：无 Word/pywin32 时返回带安装引导的失败（`pip install pywin32` 或 Word 内 Ctrl+A → F9），绝不抛异常、绝不泄漏 WINWORD.EXE（finally Close/Quit + AutomationSecurity=3 禁宏）
+- **pywin32 进 requirements-optional.txt**（懒加载，与 Word COM 导出 PDF 共用通道；win7 手动启用钉 306）
+- report-writing 技能交付步骤接入刷新通道，并补上 R36 Word 表头行样式 header_style 的文档（搭车）
+
+> 🌐 **网页访问能力优化 Round 16：设置页展示 per-host 出网指标**（方案 `docs/plans/2026-09-17_web-access-optimization-round16.md`）
+
+### Added(web-access)
+- **出网指标展示（X2 UI）**：设置→网络凭据区块新增"出网指标（本进程内）"——消费 `GET /api/v1/web-access/metrics`，按域名渲染 成功/失败/升级渲染/均耗时，无数据不渲染；文案明示"进程内存态，重启清零"
+> 🌐 **网页访问能力优化 Round 15：per-host 出网指标 + 渲染 net 块**（方案 `docs/plans/2026-09-17_web-access-optimization-round15.md`）
+
+### Changed(web-access)
+- **per-host 出网指标（M1/M3）**：新增 `backend/tools/web_metrics.py`——线程安全滚动指标（每域名 deque 100 条、全局 LRU 200 域名、进程内递增序号定 LRU 序），异常全静默；web_fetch 成功/失败路径与 download attempt 出口/成功埋点；`GET /api/v1/web-access/metrics` + `PUT /web-access/metrics/reset`（Origin 守卫同口径）
+- **渲染耗时（X2 对齐）**：render_page 结果补 `net: {elapsed_ms}`（与 web_fetch net 口径对齐，不进缓存）
+
+
+> 🌐 **网页访问能力优化 Round 14：浏览器健康自检 + 凭据 UI header 型新增**（方案 `docs/plans/2026-09-17_web-access-optimization-round14.md`）
+
+### Added(web-access)
+- **浏览器健康自检（H1）**：`GET /api/v1/diagnostic/browser` 上报浏览器发现 / 本地版本 / UA 声明版本；低于 Chrome 120 给出升级或 `SAGE_BROWSER_PATH` 指定新内核的警告——win7（Chrome 109 封顶）老化监控落地；设置页凭据区块顶部直接可见
+- **header 型凭据新增入口（C1/C2）**：`POST /api/v1/web-access/credentials/header`（校验沿用 vault，非法 422）+ 设置页表单（域名 / 头名 / 头值，值输入框掩码）——Bearer / API key 型凭据不再只能靠对话设置
+> 🌐 **网页访问能力优化 Round 13：AB6 连接复用 + X2 出网可观测**（方案 `docs/plans/2026-09-17_web-access-optimization-round13.md`）
+
+### Changed(web-access)
+- **连接复用（AB6）**：`_get_with_redirects` 整链（含全部重定向 hop）复用同一个 httpx client——TLS 握手 / 代理隧道只建一次，keep-alive 生效；仅当某 hop 的 TLS 校验口径变化时才重建；异常路径经 finally 保证关闭
+- **出网可观测（X2）**：`web_fetch` 成功结果新增 `net: {elapsed_ms, bytes}`（不进缓存），为后续 per-host 调优提供数据
+> 🌐 **网页访问能力优化 Round 12：凭据管理 UI + humanize 工具名**（方案 `docs/plans/2026-09-16_web-access-optimization-round12.md`）
+
+### Added(web-access)
+- **凭据管理 UI**：设置→网络新增“网站凭据”区块——凭据列表（域 / 类型 / 剩余时效 / 加密标记 / 来源 profile，沿用脱敏口径不回显值）、删除（二次确认）、`render_persistent` / `auto_refresh_credentials` 两个开关直接可调；后端新路由 `GET|DELETE /api/v1/web-access/credentials` / `GET|PUT /api/v1/web-access/config`（复用 permission_routes 的 Origin 守卫，不回显任何凭据值）
+- **humanize 工具名**：browser_launch/navigate/snapshot/interact/screenshot/cookies/downloads/close 与 http_download 补齐显示名，审批弹窗与时间线不再显示生工具名
+> 🌐 **网页访问能力优化 Round 11：AU3 自动刷新回路 + AU 系列收尾**（方案 `docs/plans/2026-09-16_web-access-optimization-round11.md`）
+
+### Added(web-access)
+- **登录态自愈（AU3+AU6）**：`browser_cookies export` 在持久会话导出时在档案记录来源 profile（`BrowserSession` 新增 `profile_name` 字段）；`web_access_config.auto_refresh_credentials` 开启后（默认关），带凭据请求被踢到登录墙时自动用该 profile 静默重访原 URL（先注入旧 cookie 走 remember-me 续期），重导成功则重放请求并以 `credential_auto_refreshed` note 提示；失败严格回退原 `login_required` 语义；静态与下载通道均接入
+- **渲染通道登录墙检测（AU7）**：AU5 注入后渲染结果若仍是密码框页（且正文极短）→ 先走 AU3 自愈重渋一次，仍墙则报 `login_required`，不再把登录页当正文返回
+- **降级可观测（X4）**：平台加密不可用（scheme=none）时写入凭据档案会 `logger.warning`，`list_credentials` 每条增 `encrypted` 标记，明示哪些档案是明文落库
+> 🌐 **网页访问能力优化 Round 10：AU5 渲染池 ↔ 凭据档案双向互通**（方案 `docs/plans/2026-09-16_web-access-optimization-round10.md`）
+
+### Added(web-access)
+- **渲染通道登录态注入（AU5）**：`web_fetch credential_domain=` 命中 JS 壳渲染降级或反爬升级时，先把档案 cookie 经 `Storage.setCookies` 注入渲染浏览器（导航前生效，浏览器内重定向自动按域携带），渲染完成经 `Storage.getCookies` 按域取回并合并回档案（`credential_refreshed` note 提示）——“一次导出，静态 / 渲染 / 交互三条通道共用”成立；注入失败报 `RenderError`（宁失败不静默降级为未登录正文），回写失败静默（与 AU2 同口径）；header 型档案渲染通道不支持，跳过不报错
+- **`credential_vault`**：`CredentialResolution` 新增 `cookies` 槽（cookie 档案 ok 时带出过滤后逐条 cookie，供 CDP 逐条注入——host-only cookie 无法从 Cookie 头串重建）；新增 `merge_cdp_cookies`（`Storage.getCookies` dict → 档案，与 `merge_set_cookies` 同守卫：host 亲和 fail-closed / 归属域 ∈ 档案域 / 同 name+path 替换 / 过期删除 / 清空删档）
+
+### Changed(web-access)
+- `browser_cdp.cdp_command` 浏览器级方法前缀新增 `Storage.*`（免 attach，Chrome 97+）
+- `web_fetch` schema `credential_domain` 描述补渲染通道语义
+> 🌐 **网页访问能力优化 Round 5 批次 4：文件嗅探与浏览器下载跟踪**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.2 SN2/SN3）
+
+### Added(web-access)
+- **`web_fetch mode=files`（SN2，新模块 `backend/tools/file_links.py`）**：从静态或渲染后 DOM 抽取候选文件链接并打分——`<meta name=citation_pdf_url>` / `<link rel=alternate type=application/pdf>`（学术站标准位，最高分）、`<a href>` 文件后缀（pdf/zip/docx/xlsx/epub/csv/…）与 `download` 属性 / `type=application/pdf`、`<iframe|embed|object>`、`<meta http-equiv=refresh>`、「下载 / 全文 / PDF / attachment」锚文本；同 URL 去重合并 `sources`；对 top-5 候选做首块探测（不跟随重定向、逐个过 `check_host`）标 `probe=file|html|redirect|error` + `detected_type` / `content_type` / `content_length` / `suggested_filename`，`probe=html`（登录页 / 中转页）降权；SPA 壳自动渲染后把动态 DOM 候选与静态候选合并；结果 `files[]` 可直接喂 `http_download`
+- **浏览器下载跟踪（SN3，新模块 `backend/tools/browser_events.py` + 新工具 `browser_downloads`）**：`browser_launch` 后为会话建立一条常驻 CDP 事件 WS（守护线程），`Browser.setDownloadBehavior{eventsEnabled:true}` 订阅 `downloadWillBegin` / `downloadProgress`，落成线程安全的 `DownloadTracker`（url / 文件名 / 状态 / 字节 / 最终路径，完成时按 guid 或 suggestedFilename 解析落盘路径）；`browser_downloads(browser_id?, wait_for_complete, timeout)` 列出 / 阻塞等待全部完成，完成文件登记 artifact（只登记一次）；事件通道不可用时退化为下载目录列举（`.crdownload` = 进行中）并明示；`browser_close` / 后端退出时停通道
+
+### Changed(web-access)
+- `BROWSER_TOOLS` 新增 `browser_downloads`（READ）；coder 默认工具白名单经 `*BROWSER_TOOLS` 自动带上；`browser_launch` 结果新增 `download_tracking`
+
+
+
+## [v0.4.9-alpha.45] - 2026-09-19
+
+### Added
+- feat(chat): RD18 级联跳过根因徽章——任务树失败行直读 blocked_by_failed 根因 (#1208)
+- feat(office): Round 57 — 内联脚注 Phase A（{{fn:}} + footnotes part 挂载 + 回读） (#1204)
+- feat(right-panel): R4——版本互比 + 变更预取 + 产物类型过滤 (#1198)
+- feat(p11): client_message_id 幂等复用 + 标题后台生成的前端补刷 (#1196)
+- feat(orch): RT24 编排任务持久化携带用量与时长——orch_tasks 增 used_tokens/duration_ms (#1195)
+- feat(chat): 引用溯源展示增强——附件名优先 + 溯源明细完善（r80） (#1194)
+- feat(orch): BU17 聚合块任务级消耗标注——终态块标题带（消耗 N tokens） (#1188)
+- feat(office): Round 53 — 分节页码格式与起始号（w:pgNumType） (#1185)
+- feat(chat): 文件选择器 accept 过滤——从源头防误选（r78） (#1184)
+- feat(chat): BU16 run 级耗时与上限提示——进度行实时计时，终态冻结 (#1183)
+- feat(p10): 回滚语义重做 Round 1——last-known-good 回滚数据 + RunOnce 交换执行 (#1180)
+- feat(office): Round 52 — PPT core properties 三件套对称（generate/read metadata） (#1181)
+- feat(right-panel): R3 - version diff view + CodeMirror editing + changes count badge (#1172)
+- feat(office): Round 51 — 读侧 core properties 回读（read_docx/read_xlsx metadata） (#1174)
+- feat(chat): BU15 运行中子任务实时耗时——任务树 running 行计时徽章 (#1169)
+- feat(office): Round 50 — Excel core properties 对称支持（generate_xlsx metadata） (#1170)
+- feat(chat): 聊天文档附件支持 pdf/docx——打通 R39/RAG UI 断点（r75） (#1167)
+- feat(office): Round 49 — 文档核心属性（WordMetadataSpec → docx core properties） (#1164)
+- feat(rag): 附件上传后自动建立检索索引——opt-in fire-and-forget（r74） (#1161)
+- feat(orch): BU14/BD8 守门状态透出——快照带 wall_clock_exceeded，partial 归因触顶 (#1160)
+- feat(office): Round 48 — repair 补 index 域插入 + SEQ 题注重排兼容（缺陷修复） (#1159)
+- feat(p9): client_message_id 消息身份协议——根治乐观 id 与服务端 id 失配的重复显示 (#1155)
+- feat(rag): 引用溯源明细增强——chunk 索引/相关度进事件与气泡（r73） (#1156)
+- feat(right-panel): R2——预览升级 + overlay 抽屉三件套 + 信息密度打磨 (#1153)
+- feat(orch): RV4 单任务重试——rerun-failed 支持 task_ids 子集 + 任务树行内重试按钮 (#1150)
+- feat(office): Round 46 — 交叉引用升级（REF 域 + 题注书签） (#1143)
+- feat(office): office-p5b 批次——ppt 生成表单版式选择 (#1148)
+- feat(chat): RAG 引用溯源事件 + R17-E memory_used 接线收尾（r71） (#1115)
+- feat(usage): 上下文占用分类明细统计 + ContextMeter 弹层 (#1128)
+- feat(office): Word/PPT 专用角色收口——ppt-maker 种子 + PPT 模板工具面 + writer 门禁 prompt (#1129)
+- feat(arena): automation + model probe (27 commits, evidence/JWT/retry hardening) (#1030)
+- feat(context-isolation): 三层上下文隔离 (#1032)
+- feat: /agents 侧边栏入口与 Sage 自省/配置工具 (#1126)
+- feat: 用户通知透明度增强 - 技能激活与上下文压缩可见化 (#1122)
+- feat: protect Python backend code in release builds (#1124)
+- feat(settings): RD16 编排设置全量收口——worktree 隔离开关 + scratch 根目录名 (#1113)
+- feat(right-panel): R1——面板状态全局化 + 自动唤起/内联产物卡片 + 上下文持久化 + 全屏/宽度档位 (#1112)
+- feat(office): expose staging quarantine over HTTP (plan/run/report/restore) (#1111)
+- feat(office): Round 45 — 交叉引用占位符（{{fig:}}/{{tbl:}} → 图N/表N + residue lint） (#1109)
+- feat(workspace): 三阶段 AI 工作区优化（来源/产物/项目上下文） (#857)
+- feat(office): Round 44 — lint 面补强（index 域在位校验 + lint schema 子集白名单） (#1102)
+- feat(office): honour Electron import sentinels as a cross-process lease (#1101)
+- feat(settings): RD15 编排守门键透出设置页——墙钟上限/单任务超时/重派链上限 (#1099)
+- feat(web-access): Round 18——web_search 纳入 per-host 指标 + 指标 UI 刷新/重置 (#1092)
+- feat(office): Round 42 — 图目录/表目录（TOF 域 + SEQ 题注升级） (#1090)
+- feat(orchestration): BU13 任务级消耗准确性 + 时长可见性——终态事件 per-task 归因 (#1088)
+- feat(office): Round 41 — office_update 修订后 TOC 刷新（refresh_toc）+ 横排宽表场景文档 (#1085)
+- feat(rag): RAG 切片 4b——附件检索注入前端配置与请求接线（r67） (#1079)
+- feat(office): Round 40 — office_create 一键 TOC 刷新（refresh_toc）+ rollback 遥测测试竞态修复 (#1083)
+- feat(office): Round 39 — Word 目录真页码（Word COM 刷新域可选通道） (#1073)
+- feat(web-access): Round 16——设置页展示 per-host 出网指标 (#1077)
+- feat(rag): RAG 切片 4a——producer 超长附件检索注入（opt-in 请求级嵌入）（r66） (#1069)
+- feat(office): office-p5a 批次——PPT 模板占位符分析与填充 (#1071)
+- feat(web-access): Round 15——per-host 出网指标 + 渲染 net 块 (#1068)
+- feat(mcp): OAuth 状态可见化——has_oauth_token + 授权角标（r65） (#1066)
+- feat(office): office-p4b 批次——OCR 语言/精度扩展 (#1062)
+- feat(mcp): OAuth 收口——授权 API 路由 + IPC + McpTab 授权按钮（r64） (#1056)
+- feat(office): office-p4c 批次——ppt 插入图片 UI 入口 (#1052)
+- feat(mcp): OAuth 切片 3a——授权编排层（发现→注册→授权→交换）（r62） (#998) (#1049)
+- feat(web-access): Round 14——浏览器健康自检 + 凭据 UI header 型新增 (#1047)
+- feat(office): Word 表头行样式（header_style，与 Excel header_style 对称） (#1048)
+- feat(office): quarantine-based staging cleanup with recoverable moves (#1044)
+- feat(mcp): OAuth 切片 3b——loopback 回听 + 浏览器拉起编排（r63） (#1039)
+- feat(office): office-p4b 批次——OCR 能力徽章 + word 插图入口 (#1042)
+- feat(mcp): OAuth 切片 3a——授权编排层（发现→注册→授权→交换）（r62） (#998)
+
+### Fixed
+- fix(py38): legacy_routes 新增 to_thread 调用对齐 py_compat——预铺 win7 同步 (#1205)
+- fix(r38): 修复用户通知透明度合并后审查发现的 6 项缺陷 (#1140)
+- fix(test): office_create 审批链测试 Windows 适配——LLM JSON 模板路径经 json.dumps 转义 (#1192)
+- fix(chat): InputCard 文件选择器补 accept=".txt,.md,.pdf,.docx"（r79） (#1189)
+- fix(chat): 重接路径补 memory_used——重放不丢记忆明细（r77） (#1178)
+- fix(chat): 补回 #1167 丢失的 pdf/docx 白名单 + 修正过时附件提示（r76） (#1171)
+- fix(py38): zip strict= 形参残留清零——chat/topic_detection._cosine + model_catalog 并发测试 (#1162)
+- fix(chat): skill_activated 明细写错消息目标——userId→assistantId（r72） (#1151)
+- fix(chat): 段级工作记忆清空改为经 agent.memory_manager 共享实例 (#1139)
+- fix(packaging): 保护模式 .pyc 被 filter 剔除 + 源码泄漏修复 (#1136)
+- fix(win7): Windows bash/REPL spawn_verified + kill_process_tree (#855)
+- fix(projects): restore allowed_paths support lost in workspace optimization (#1120)
+- fix(tools): bash/repl 中文编码乱码 + repl 资源清理覆盖成功结果 (#1118)
+- fix(py38): Round 23——行为类遗留修复（事件循环生命周期 + TimeoutError 双型 + 测试竞态） (#1106)
+- fix(mcp): OAuth 401 自愈——失效 token 清理 + 错误面点名重授权（r70） (#1105)
+- fix(p7): 第七批收尾二——mock 响应不落库 / 标题生成移出 DONE 关键路径 / 长会话分页 / 信封统一收尾 (#1100)
+- fix(llm): 直连模式 base_url 带 /v1 后缀去重——不再请求 /v1/v1/… 404 路径（r69） (#1089)
+- fix(office): Round 43 — office_create schema 漂移卫生修复（toc/section_breaks 可发现化 + 三方防漂移门禁） (#1095)
+- fix(win7): 内网闪退三层防御 — 运行时检测 + Chromium 开关 + 崩溃事件 (#1040)
+- fix(chat): pdf/docx 附件提取挪线程池——避免卡聊天事件循环（r68） (#1086)
+- fix(py38): py39+ 标准库 API 兜底——to_thread 垫片 + hardlink_to/write_text(newline) 适配 (#1070)
+- fix(doctor): 端口占用检测 Windows 语义修复——SO_EXCLUSIVEADDRUSE + 平台化修复提示 (#1057)
+- fix(chat): ignore skill loads after input unmount (#1035)
+
+## [v0.4.9-alpha.43] - 2026-09-14
+>>>>>>> origin/main
 
 ## [v0.4.9-alpha.62-win7] - 2026-10-15
 
@@ -499,6 +1032,9 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 > 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
 
 ### Added(office)
+- **Office 配置化(Round 31)**: ExcelSheetSpec.freeze_panes(A1 记法冻结窗格,与 freeze_header 同给时优先)+ SAGE_IMAGE_OPTIMIZE_THRESHOLD_BYTES 环境变量配置 Pillow 压缩阈值(0=禁用);工具 schema + 前端契约同步
+- **Word 奇偶页页眉页脚(Round 34)**: format_spec.odd_even_pages+even_page_header/footer——书籍排版场景,偶数页独立页眉页脚(python-docx settings.odd_and_even_pages_header_footer 全局开关)
+- **Word 首页不同页眉页脚(Round 33)**: format_spec.first_page_different+first_page_header/first_page_footer——封面页独立页眉页脚(文本/PAGE 域),python-docx different_first_page_header_footer 原生开关
 - **Excel 打印页边距(Round 31)**: print_setup.margins_cm(上/下/左/右,厘米,openpyxl 英寸自动换算)——部分给定只动给定边;工具 schema + 前端契约同步
 - **journal 结构化文献清洗(Round 30)**: generate_article 自纠检查与最终校验前先原地清洗 structured_references——次品条目(缺 title/字段非法)剔除+warning、key 冲突自动补唯一后缀;全为次品时回退 references 纯文本;不再让单条次品拖垮整体校验
 - **TOC 静态缓存回填(Round 29)**: 目录域升级为 fldChar 复杂域——打开文档即见按文档标题生成的静态目录行(逐级缩进/levels 过滤),更新域后被真实带页码目录替换;Linter toc/presence 升级为双载体兼容检测
@@ -535,6 +1071,14 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 - **归档视图批量操作**;前端纳入 PDF 全流程
 
 ### Added(projects)
+<<<<<<< HEAD
+=======
+- **项目模块 P13**: 知识搜索范围支持"全部最近 wiki 项目"——knowledge_project 支持逗号分隔多根(逐根授权任一未授权 403 fail-closed;多根逐个 search_wiki 按 score 合并、root::path 去重、截取总 limit;单值向后兼容 P9),命令面板范围分组新增"全部最近 wiki 项目"选项(>=2 个项目时出现,选择持久化逗号拼接范围)(方案 docs/plans/2026-09-16_knowledge-multi-scope-plan.md)
+- **项目模块 P9**: 知识搜索默认域配置化——/search/global 新增可选 knowledge_project（经 authorize_registered_project 校验：未授权 403/非 wiki 404，与 wiki 域同契约），_search_knowledge 显式范围优先、缺省回退最近打开（默认行为零变化）；命令面板新增"知识范围"分组（默认+最近 wiki 项目 ≤5，localStorage 持久化 sage:knowledge-scope:v1，选择不关面板），搜索请求按范围携带参数(方案 docs/plans/2026-09-15_knowledge-scope-p9-plan.md)
+- **项目模块 P8**: wiki recent_projects 存储迁移到 projects 注册表(SQLite)——recent_projects.py 重写为只读投影适配器(公共 API 全保,消费方零改动);projects 表新增可空 intent 列(幂等迁移,NULL 读侧映射 open);MAX_RECENT 为投影截断而非注册表生命周期,save_recent 窗口重写只删上一窗口内行;旧 JSON 一次性导入后改名 .migrated 备份;单调毫秒保证同毫秒 record 顺序可判定;移除 wiki/files 平台原语依赖(方案 docs/plans/2026-09-15_wiki-recents-sqlite-p8-plan.md)
+- **项目模块 P7**: 全局搜索接入项目分组——/search/global 默认含 projects 组(ProjectRepository.search 按 name/path LIKE + 会话计数聚合,types=project 可单选),命令面板搜索模式命中项目名/路径片段可直达(复用 open 流,handleOpenProject 收敛为 {id} 签名)(方案 docs/plans/2026-09-14_projects-search-p7-plan.md)
+- **项目模块 W5**: wiki/files 全量 Windows 解锁——其余 12 个 secure_* 补 reparse-safe 分支(沿用 R32 原语),Windows 上 wiki 项目 create/open/list 从 500 恢复可用;修复两个 R32 原语缺陷(CREATE_ALWAYS 先截断后复核绕过多链接拒绝契约、校验失败句柄泄漏锁死同 inode 文件)+ secure_read_text `..` 逃逸缺口;测试解锁 path_security/security_final_paths/project_context/skill_md 回滚/P6 桥接集成的 Windows skip(symlink 夹具改能力探测);本机全量 unit 5539 过零新增失败(方案 docs/plans/2026-09-14_wiki-files-win-unlock-plan.md §7)
+>>>>>>> origin/main
 - **项目模块 P6**: wiki 授权桥接 projects 注册表(recents ∪ registry 并集,约 24 个 wiki 端点门禁 fail-closed 语义不变;MCP 授权面同样并集;wiki open/create 双登记进侧栏清单;前置 #760 解除 POSIX-only 阻塞;全局搜索默认域明确不改,依据 docs/plans/2026-09-14_wiki-projects-bridge-plan.md)
 - **项目模块 P5**: 侧栏项目区块局部拖拽登记——拖文件夹到项目分组即批量登记(拖拽不自动打开,与 + 按钮登记即打开区分;路径取 Electron File.path 与 OfficeFilePicker 同判据,目录有效性走既有 validate_workspace 校验,零新增 IPC;dragOver 高亮提示)(方案 docs/plans/2026-09-13_projects-p5-drag-plan.md;Electron>=32 需迁移 webUtils.getPathForFile,已留注记)
 - **项目模块 P4**: 项目子行就地删除会话(hover 两步确认,联动刷新子列表/计数/会话区)+ 项目清单自动刷新(订阅 store 会话数量变化,400ms 防抖重查后端聚合计数,消除跨区增删后的陈旧显示)(方案 docs/plans/2026-09-13_projects-p4-plan.md)
@@ -687,6 +1231,139 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 分支同步编排控制面、拓扑调度、agent todo、结构化返回、follow-up 续聊、worktree 隔离、legacy 清理和 LaneBoard 激活。
 
+<<<<<<< HEAD
+=======
+### Added
+
+#### 多 agent 编排(Chat-Native Multi-Agent Orchestration)
+- **feat: Chat-Native 多 agent 编排 (#296)** — `orchestration_mode` 接入 chat 链路,run 级 task_plan/task_progress/task_review/lanes 全套数据模型与 SSE 推送
+- **Wave 1 编排执行控制 (#314)** — retry 策略、reviewer 异步评审、scratch 草稿空间
+- **Wave 2 编排计划生命周期 (#315)** — 计划持久化 / resume 恢复流 / 计划卡 UI / `depends_on` 拓扑依赖 / `task_review` 阶段产物
+- **Wave 3 PR A (#316)** — P2-7 计划权威 `task_id` 全局递增、P2-8 模板库、P2-9 配置化重试次数、P2-11 run 级 cancel
+- **Wave 3 PR B (#317)** — P2-10 休眠层:review 模块化拆分、lanes 真实执行(LaneBoard 监控)、board 实时面板
+- **编排计划卡前端接线 (#318)** — 三态视图(规划中/执行中/已结束)、取消执行、模板选择器、resume 恢复流
+- **depends_on 拓扑调度 (#355)** — 分波执行(同一 wave 内并发,跨 wave 串行)+ 级联取消(上游 cancel → 下游全部 cancel)
+- **agent todo 清单全链路接线 (#356)** — `todo_write` 后端暴露 + SSE 快照推送 + 前端 `TodoListCard` 渲染
+- **前端 mirror 编排计划到 todo 卡 (#357)** — read-only 镜像,主区域只读,左侧 todo 卡可勾选
+- **编排 P2 五项 (#361)** — schema 结构化返回 / followup 续聊 / worktree 隔离 / legacy 清理 / LaneBoard 激活
+- **编排 P2 fast-follow 五项遗留 (#363)** — task_id 串号修复 + 残留 plan 双调用链清理 + 5 处 UX 修复
+- **编排 control plane P0 修复 (#353)** — task_review 提交竞态 + plan lock 死锁 + cancel 信号丢失
+
+#### Electron E2E 自动化基础设施
+- **feat(electron-e2e): tier-based E2E automation infrastructure (#376, 20 commits / 49 files / +3047/-959)** — `tests/electron/` 全新目录,3-tier 架构:
+  - **Tier 1 stub-smoke**:Playwright + 自带 stub backend,3 个 spec(chat / sidebar / settings),无 LLM 真实调用,CI 默认跑
+  - **Tier 2 deep**:Playwright + 真实后端 + 真实 SQLite,跳过 wiki/evolution(需 LLM),`run-deep` tag 触发
+  - **Tier 3 live**:真人手动 + `__TAURI__` IPC hook,本地验证用
+  - 含 `stub-backend.ts` + `_real_backend.py` 复用 main `python backend/main.py` 启动逻辑,IPC 契约对齐(`/memory/save`、`/memory/list`、`/orchestration/lanes`、`/orchestration/board`),`data-testid` 选择器全覆盖,Windows NSIS 安装包 CI 红 6 项修复(import/order + session upsert + DevTools 窗口过滤 + portable Python resolver + settingsStore 顺序 + AppStartupSettings 死代码)
+  - 详见 `docs/superpowers/specs/2026-08-25-electron-e2e-automation-design.md` + `docs/superpowers/plans/2026-08-25-electron-e2e-automation.md`
+
+#### §5 章节 wiring(scheduler / memory / background review)
+- **feat(scheduler): evolution 任务 lifespan 接入 (§5.1) (#342)** — evolution scheduler 任务跨请求存活,重启后从 SQLite 恢复运行状态
+- **fix(memory): wire review collaborators + memory IPC (§5.2 + §5.4) (#339)** — memory 模块审阅协作 + IPC 通道补全
+
+#### Doctor 二期扩容
+- **feat(doctor): §1.5 二期扩容 (#293)** — 从 8 个 check 扩到 13 个(新增 5 项:sqlite_writable / config_integrity / port_frontend / py_version_match / disk_space),CI 中 doctor 报错可视化
+- **feat: add sage doctor CLI for installation/env self-check** — `python -m backend.cli.doctor` 命令入口,8 项 CRITICAL / WARN / INFO 三级检查,`--json` 输出机器可读报告,electron 启动前自动跑(`SAGE_DOCTOR_ON_START=false` 可跳过)。详见 `docs/technical/41-sage-doctor.md` + `docs/user-manual/11-sage-doctor.md`。
+
+#### 后端 / 前端杂项
+- **feat(electron+frontend): backend 异常退出自动重启 + ECONNREFUSED 友好翻译 + UI 横幅 (PR-B)** — 防止 backend crash 后 UI 永久卡死;中文化错误提示
+- **feat(orch+agent): 配置化 max_iterations + 子代理预算 + 中文错误提示 (#333)** — `DEFAULT_MAX_ITERATIONS` 5→10 + 子代理 6 次上限 + AGENT_RUNTIME_MESSAGES 全中文化
+- **feat(rightpanel): 面板内添加 × 关闭按钮 (closes #298) (#299)** — 之前只能拖动整个面板,不能单独关
+- **feat(orchestration): 进度可视化 (#300)** — `task_progress` 5 元组(stage / current / total / eta / message)+ UI 编排摘要卡片
+
+#### Win7 LTS parity + base CI
+- **feat(win7): complete Task 0-3 platform parity + base CI fixes (#368)** — 平台差异 Py3.8/Py3.11 适配 6 项(PEP 604 in shared models + certifi 回归 + LM Studio protocol/modelId/localModelPath + Asia/Shanghai + pydantic 1/2 model_dump_compat + streaming teardown),后续已通过 PR #377 cherry-pick 到 release/win7
+
+### Fixed
+
+#### 事件循环阻塞根治(§1.2 PR-A + PR-B)
+- **fix(event-loop): §1.2 PR A (#294)** — `legacy_routes` 全部 `async→def`(34 handler)+ `threading.Lock` 替换 `asyncio.Lock` + jieba 热启动后台化
+- **fix(event-loop): §1.2 PR B (#295)** — `storage` 适配器改 `asyncio.to_thread` + 共享 `_SQLITE_LOCK`(`per-instance Lock` 会导致跨请求死锁)
+
+#### 日志 / 设置 / 编排 P0
+- **fix(logging): 日志基础设施修复 (#306)** — 6 类故障场景排查从 10-30min 降至 2-5min(`logging.py` 启动顺序 + SageLogger 路径优先级 + audit JSONL 落盘 + structured log JSON parse + threading name 标识 + NDJSON 启动日志)
+- **fix(settings): 恢复设置保存 + 测试连接用端点自身模型 (#323)** — `strip_unknown_fields` 净化残留 + `testEndpointConnection` 改用端点自身 model(避免空 model 422)
+- **fix(orchestration): task_id 全局递增修复 3/6 假象 + 普通聊天 artifacts 落库 (#302)** — 旧 `task_id = (run_id, sequence)` 导致同 run 内 hash 冲突;改为进程内单调递增 + DB 唯一约束
+- **fix(orch): §13.7 计划卡延后项收尾 (#322)** — 双击防重入 + 409 Conflict 区分 + resume 时 NULL plan_id 兜底
+- **fix(ci): remove stale Determine ARTIFACT_SUFFIX step in main's release-win7.yml (#352)** — main 分支 release workflow 残留 win7 死代码
+
+#### Chat 链路 + 后端 SSL / 内存
+- **fix(chat-stream): accept explicit null orchestration_mode from IPC (#297)** — 前端 `null` 被错误序列化为 `"null"` 字符串
+- **fix(chat-stream): CI 修复 (#345)** — `TS6133 runId` 未使用变量豁免 + import/order 空行修复
+- **fix(chat): 欢迎页/输入框/新对话 三处 UI 缺陷 (#305)** — 路由切换后欢迎页残留 + 输入框失焦 + 新对话按钮 race
+- **fix: preserve chat messages across route switches (#350)** — Memory / Wiki 路由切换时 Chat 缓存被清空
+- **fix(backend): inject memory manager + bootstrap SSL CA from certifi (#349)** — memory 模块未注入 manager 依赖 + certifi 缺失导致自签名 CA 校验失败
+- **fix(llm-proxy): dedupe /v1 when baseURL already ends with /v1 (#308)** — LM Studio 用户配置 `http://localhost:1234/v1` 时代理变成 `/v1/v1/chat/completions` 报 404
+
+#### 测试 / CI flake 治理
+- **fix(tests): bandaid two CI flakes (#299)** — Event-loop closed asyncio 警告 + §1.2 gate 阈值敏感度 100→200ms
+- **test: remove stale respx xfail markers (#310)** — 104 个测试从 mock fallback 改回真实验证(`respx` 升级后 httpx mock 行为变更)
+- **test(llm_client): align 2 chat_stream tests to LLMError (#309)** — 异常类型从 `httpx.HTTPError` 对齐到项目 `LLMError`
+- **test(event-loop): 5-round median P99 gate, 400ms threshold (CI-reality) (#312)** — §1.2 5 轮中位数 P99 守门,从单次 P99 升级
+- **fix(electron-e2e): portable Python resolver for stub_backend (CI ENOENT)** — Windows CI runner 无 `python` 在 PATH,resolver 走 `python.exe` 显式路径
+
+### Changed
+
+- **refactor(orch): M4 收口 — 删除 updatePlan 双调用链 (#321)** — `plan_router.update_plan` 与 `orchestration_service.update_plan` 双调用链收敛到单入口
+- **chore(plans): remove completed plan file (#334)** — `docs/plans/2026-08-13_orch-p0-execution-control.md` 已 merge 到 technical/42 §10,plans/ 不保留已完成
+- **chore(repo): §1.4 假功能/死设置清理 (#292)** — 30 文件删 + 12 改,清理未实现的假设置项
+
+### Documentation
+
+- **docs(orchestration): 归档编排修复 + 进度可视化 + Wave 3 编排 (#301+#303+#319+#320)** — 4 个 plans/ 文件删除,内容并入 `docs/technical/42-*.md` §9 / §10 / §11 / §13
+- **docs: 编排技术手册 §15(拓扑调度 + agent todo 全链路)+ README 章节简介更新 (#360)**
+- **docs(technical): §1.2 event-loop gate upgrade history — 5-round median P99 (#313)**
+- **docs(technical): 日志基础设施修复归档 (#307)** — 29 §修复记录 + 41 §日志路径优先级
+- **docs(spec): Electron E2E 自动化测试基础设施设计 + 实施计划 (15 任务) (#376 配套)**
+
+## [v0.4.9-alpha.37] - 2026-09-09
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**orchestration event-loop 修复** (#541):EventHub / SnapshotStore `__init__` 之前 eager 构造 `asyncio.Lock()`,在 Py3.8 (release/win7) 主线程无 running loop 时抛 `RuntimeError`;sync test fixture 用 `asyncio.get_event_loop().run_until_complete` 在 Py3.10+ 同样无 current loop。新 `backend/orchestration/_lazy_lock.py::LazyLock` descriptor 把 lock 构造延迟到第一次 `await`(此时 loop 已 active),并把 3 个测试文件 10 处 `run_until_complete` 迁到 `asyncio.run`。同时累积 #530/#535/#537/#538/#539/#540 主线工作(chat input UX、usage cache、office pandas、office_archive、alpha17 packaged-mode port、bundle pandas fix)。
+
+### Added
+- feat: 网络模式门禁（online/intranet/offline）+ 主机白名单，内网/气隙下搜索工具按模式不加载
+- feat: web_fetch 正文抽取（text/links/tables/raw 四模式）+ GBK/GB18030 编码嗅探，stdlib 栈式实现
+- feat: http_download 流式下载工具（工作区边界 + Content-Length/实际字节双重大小上限 + 文件名净化）
+
+### Fixed
+- fix(orchestration): #536 EventHub / SnapshotStore LazyLock descriptor + asyncio.run() in sync tests (#541)
+
+### Changed
+- chore(release): bump version to 0.4.9-alpha.37
+
+## [v0.4.9-alpha.40] - 2026-09-10
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**启动诊断 + 自动重试** (#586, port of release/win7 #585): 部分慢启动机器 (Win7 重灾区) 在 90s 健康检查超时内未响应 `python -m backend.main → uvicorn.run()`. 后端 ``[backend/main.py]`` 加 6 个 \`[sage-startup]\` stderr checkpoint (模块级 import 完成 / \`__main__\` 进入 / \`db.init_db()\` 完成 / \`lifespan\` 完成 / \`uvicorn.run()\` 调用), 由 \`__name__ == "__main__"\` 守护 (pytest 不触发). Electron `[electron/main.ts]` 在第一次 90s 超时后自动重试一次 (再等 90s), 日志记录 \`backendProc\` 状态 (pid/exitCode/signalCode) + \`currentBackend\` 代际, 对话框 detail 显示后端进程状态区分 crashed vs still-starting.
+
+### Fixed
+- fix(electron): startup diagnostics + auto-retry (port from win7 PR #585) (#586)
+
+### Changed
+- chore(release): bump version to 0.4.9-alpha.40
+
+
+
+## [v0.4.9-alpha.34] - 2026-09-09
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**Win7 安装包启动失败 P0 修复** (#513 → cherry-pick 到 win7 #514):doctor 自检在 packaged Win7 上误报 3 个 CRITICAL(SAGE_USER_DATA_DIR fallback 用了 `process.cwd()` 解析到 `C:\Program Files\Sage\` 只读目录),tray 图标因 `build/icon.ico` 不在 `electron-builder.yml` files 列表里而整个加载失败。新增 `electron/userDataPaths.ts` 统一 backend spawn + doctor spawn 的路径解析(6 vitest 测试);files 列表加 `build/icon.{ico,png}`,asar 内路径变 `<asar>/build/icon.ico` 与 `tray.ts` 期望一致。
+
+### Fixed
+- fix(electron): doctor spawn 改用 userData + tray 图标打包进 app.asar (#513)
+
+🔗 Milestone(s): Win7 启动崩溃 P0 修复
+
+## [v0.4.5-alpha.3] - 2026-07-11
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**SAGE_USER_DATA_DIR 修复**(PR #134):v0.4.5-alpha.2 NSIS installer 安装到 `C:\Program Files\Sage\` 后约 4-5 秒必崩(`PermissionError: [WinError 5] 拒绝访问`),因为 backend 写 themes/scheduled_tasks JSON/audit JSONL/logs 到 bundled `resources/backend/data/`,而程序目录对普通用户只读。新 `SAGE_USER_DATA_DIR` env 让 packaged Electron 注入 `<userData>` 作为运行时可变路径,dev 透传 `<project>/data`。4 个 backend 写路径(theme + scheduler JSON + audit JSONL + log)统一签名;`electron/main.ts` + `electron/backendLauncher.ts` 增加 `sageUserDataDir` 在所有 4 个 spawn 分支都注入。
+
+### Fixed
+- fix(scripts): v0.4.5-alpha.2 NSIS installer installs to `C:\Program Files\Sage\` (system-protected) crashed 4-5s after spawn with `PermissionError: [WinError 5] 拒绝访问: 'C:\Program Files\Sage\resources\backend\data\themes'`. Backend code wrote runtime-mutable files (themes, scheduled-tasks JSON, audit JSONL, logs) to the bundled `resources/backend/data/` directory, which is read-only when installed to a system directory. Introduced `SAGE_USER_DATA_DIR` env var; packaged Electron sets it to `<userData>` (`%AppData%/Sage`), dev mode sets it to `<project>/data`. Four runtime-mutable paths now honor the env: `backend/api/theme_router.py` (module-level `_storage = ThemeStorage()` no longer hardcodes `<services>/parent/data/themes`), `backend/services/theme_storage.py` (new `_default_storage_dir()` helper prefers `${SAGE_USER_DATA_DIR}/themes`, falls back to bundled), `backend/main.py:154` (lifespan scheduled_tasks.json resolves to `${SAGE_USER_DATA_DIR}/scheduled_tasks.json` when env set, else keeps the relative `backend/data/scheduled_tasks.json` dev convenience), `backend/utils/logging.py` (SageLogger.setup picks env-driven path when no log_dir/project_root is supplied), `backend/adapters/out/event/file_adapter.py` (new `_default_audit_log_path()` helper, `FileEventAdapter()` no longer hardcodes `backend/data/audit/audit.jsonl`; raised via AI review #H1 — same root cause class as the original PermissionError). Electron side: `electron/main.ts` computes `SAGE_USER_DATA_DIR` (`<userData>` in packaged, `<cwd>/data` in dev) and passes it through to the resolver; `electron/backendLauncher.ts` adds `sageUserDataDir` to `ResolveOpts` and includes it in `extraEnv` for all 4 spawn branches (dev-conda / dev-conda-overridden / packaged-win32 / packaged-linux). Caller-supplied `storage_dir=...` always wins (test/doc scenarios). 3 new unit tests in `TestThemeStorageDefaultDir` cover env-set / env-unset / explicit-overrides-env. All 18 theme tests + 13 backendLauncher tests + 691 vitest + backend pytest all pass; tsc clean.
+
+## [v0.4.5-alpha.2] - 2026-07-11
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**bundle python 修复 PR #132** 修复了 v0.4.5-alpha.1 NSIS installer 安装后启动 4-5 秒仍报 `ModuleNotFoundError: No module named 'sage_core'` 然后 30s "后端健康检查超时" 对话框的根因(7z 提取已确认每行 content 都是真正的 traceback)。
+
+>>>>>>> origin/main
 ### Fixed
 
 - fix(win7): 同步 orchestration control plane P0
@@ -859,3 +1536,8 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 [v0.1.2]: https://github.com/oneMuggle/sage/compare/v0.1.1...v0.1.2
 [v0.1.1]: https://github.com/oneMuggle/sage/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/oneMuggle/sage/releases/tag/v0.1.0
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> origin/main

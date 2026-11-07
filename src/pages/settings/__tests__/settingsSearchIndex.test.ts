@@ -45,7 +45,11 @@ describe('SETTINGS_SEARCH_INDEX 不变量', () => {
       'global-rules',
       'feedback',
       'audit-export', // P3 新增「审计导出」tab
+<<<<<<< HEAD
       'pet', // 2026-10-31 新增「桌宠」tab
+=======
+      'pet', // 2026-10-30 新增「桌宠」tab
+>>>>>>> origin/main
     ]);
     for (const e of SETTINGS_SEARCH_INDEX) {
       expect(knownTabs.has(e.tab), `tab of ${e.key}`).toBe(true);

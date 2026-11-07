@@ -49,6 +49,10 @@ export type SettingsTabKey =
   | 'mcp'
   | 'plugins-skills'
   | 'global-rules'
+<<<<<<< HEAD
+=======
+  | 'pet'
+>>>>>>> origin/main
   | 'memory'
   | 'zotero'
   | 'network'
@@ -58,9 +62,14 @@ export type SettingsTabKey =
   | 'runtime'
   | 'evolution'
   | 'harness'
+<<<<<<< HEAD
   // 2026-10-29: 用户反馈 Tab（管理员转发 + 双向会话，上游 #2669）
   | 'feedback'
   | 'pet'
+=======
+  // 2026-10-29: 用户反馈 Tab（管理员转发 + 双向会话，上游 #2654）
+  | 'feedback'
+>>>>>>> origin/main
   | 'audit-export';
 
 export type SettingsGroupId =

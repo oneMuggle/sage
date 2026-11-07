@@ -615,8 +615,9 @@ def test_path_boundary_resolver_exception_fails_closed(tmp_path):
 
 
 def test_office_update_delete_registered_as_write_capability():
+    # 2026-11-05 M0.3：office_delete 提级为 EXECUTE（不可逆删除必须逐次审批）。
     assert TOOL_CAPABILITIES["office_update"] is ToolCapability.WRITE
-    assert TOOL_CAPABILITIES["office_delete"] is ToolCapability.WRITE
+    assert TOOL_CAPABILITIES["office_delete"] is ToolCapability.EXECUTE
 
 
 def test_path_boundary_office_update_outside_workspace_asks(tmp_path, tmp_path_factory):
@@ -637,7 +638,9 @@ def test_path_boundary_office_update_outside_workspace_asks(tmp_path, tmp_path_f
 
 
 def test_path_boundary_office_delete_outside_workspace_asks(tmp_path, tmp_path_factory):
-    """office_delete 的 file_path 越界 → ask；工作区内放行。"""
+    """office_delete 归 EXECUTE：WORKSPACE_WRITE 下无论工作区内外都逐次审批
+    （不可逆删除不再依赖 path boundary 区分）。path boundary 仍登记此工具名
+    但 _mode_decision 已在上游返回 ask，本函数仅验证最终结论。"""
     workspace = tmp_path
     outside = tmp_path_factory.mktemp("outside")
     enforcer = PermissionEnforcer(
@@ -650,7 +653,8 @@ def test_path_boundary_office_delete_outside_workspace_asks(tmp_path, tmp_path_f
     assert decision.needs_approval is True
 
     inside = enforcer.check("office_delete", {"file_path": str(workspace / "a.xlsx")})
-    assert inside.allowed is True
+    assert inside.allowed is False
+    assert inside.needs_approval is True
 
 
 # ============================================================================

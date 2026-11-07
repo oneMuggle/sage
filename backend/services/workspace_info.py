@@ -16,7 +16,11 @@ import logging
 import subprocess
 from datetime import datetime
 from pathlib import Path
+<<<<<<< HEAD
 from typing import List, Optional, Union
+=======
+from typing import List, Optional
+>>>>>>> origin/main
 
 from pydantic import BaseModel, Field
 
@@ -71,7 +75,11 @@ class WorkspaceInfoService:
     """
 
     def get_workspace_info(
+<<<<<<< HEAD
         self, workspace_path: Union[Path, str], max_recent_files: int = 10
+=======
+        self, workspace_path: Path | str, max_recent_files: int = 10
+>>>>>>> origin/main
     ) -> WorkspaceInfo:
         """
         Get workspace information.

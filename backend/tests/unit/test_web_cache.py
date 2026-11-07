@@ -77,10 +77,17 @@ class TestAntibotGuidance:
             def search(self, query, limit, client):
                 raise RuntimeError("Client error '403 Forbidden'")
 
+<<<<<<< HEAD
         with patch(
                 "backend.tools.web_tool.resolve_engine_chain",
                 return_value=[_Forbidden()],
             ):
+=======
+        with patch(  # noqa: SIM117 — py38 不支持括号多上下文 with
+            "backend.tools.web_tool.resolve_engine_chain",
+            return_value=[_Forbidden()],
+        ):
+>>>>>>> origin/main
             with patch("backend.tools.web_tool.load_search_config", return_value=SearchConfig()):
                 result = WebSearchTool().execute(query="q")
 
@@ -209,7 +216,11 @@ class TestWebFetchCache:
         )
         import unittest.mock
 
+<<<<<<< HEAD
         with unittest.mock.patch("backend.data.settings_repo.SettingsRepository", return_value=repo):
+=======
+        with unittest.mock.patch("backend.data.settings_repo.SettingsRepository", return_value=repo):  # noqa: SIM117 — py38 不支持括号多上下文 with
+>>>>>>> origin/main
             with respx.mock(base_url="https://www.example.com", assert_all_called=False) as mock:
                 route = mock.get("/paper").mock(
                     return_value=Response(200, text=_HTML_OK, headers={"content-type": "text/html"})

@@ -15,6 +15,7 @@ Mem0 的核心经验：记忆写入不应该是无脑 append。新事实进来�
 判定策略默认是确定性的字符相似度（SequenceMatcher），零依赖零延迟；
 ``llm_decide`` 预留 LLM 决策钩子（返回 None 时回退启发式），供后续
 接 extractor 同款 LLM 客户端。
+<<<<<<< HEAD
 
 当进程内存在**语义嵌入器**（``is_semantic=True`` 的 Onnx/Model
 Embedder）时，候选额外带一路语义相似度（余弦）。语义近邻只用于
@@ -24,16 +25,24 @@ Embedder）时，候选额外带一路语义相似度（余弦）。语义近邻
 
 同一理由，字面 NOOP 带额外拒绝**否定极性相反**的候选：只插入一个"不"
 的句子字面仍有 0.98 以上，但事实相反，此时改判 UPDATE。
+=======
+>>>>>>> origin/main
 """
 
 from __future__ import annotations
 
 import logging
+<<<<<<< HEAD
 import math
 import re
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+=======
+from dataclasses import dataclass, field
+from difflib import SequenceMatcher
+from typing import Any, Callable, Dict, List, Optional, Tuple
+>>>>>>> origin/main
 
 from backend.memory import scope as memory_scope
 
@@ -47,6 +56,7 @@ OP_NOOP = "noop"
 NOOP_THRESHOLD = 0.97
 #: UPDATE_THRESHOLD <= 相似度 < NOOP_THRESHOLD 视为同一事实的更新（取代）
 UPDATE_THRESHOLD = 0.78
+<<<<<<< HEAD
 #: 语义相似度 >= SEMANTIC_UPDATE_THRESHOLD 视为同一事实的更新（取代）。
 #: 仅在语义嵌入器可用时生效；HashEmbedder（缺省）下整条语义路径关闭。
 SEMANTIC_UPDATE_THRESHOLD = 0.90
@@ -72,6 +82,8 @@ def _has_negation(text: str) -> bool:
 def _negation_flipped(a: str, b: str) -> bool:
     """两边否定极性不同（一边含否定词、另一边不含）。"""
     return _has_negation(a) != _has_negation(b)
+=======
+>>>>>>> origin/main
 
 
 def _similarity(a: str, b: str) -> float:
@@ -80,6 +92,7 @@ def _similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a[:400], b[:400]).ratio()
 
 
+<<<<<<< HEAD
 def _cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
     """余弦相似度；维度不符或零向量返回 0.0。"""
     if not a or not b or len(a) != len(b):
@@ -96,6 +109,8 @@ def _cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
     return dot / (math.sqrt(norm_a) * math.sqrt(norm_b))
 
 
+=======
+>>>>>>> origin/main
 @dataclass
 class Candidate:
     """一条与本次写入同归属、可能冲突的活跃记忆。"""
@@ -105,8 +120,11 @@ class Candidate:
     content: str
     similarity: float
     row: Dict[str, Any] = field(default_factory=dict)
+<<<<<<< HEAD
     #: 语义相似度（余弦）；无语义嵌入器或编码失败时为 None
     semantic_similarity: Optional[float] = None
+=======
+>>>>>>> origin/main
 
 
 @dataclass
@@ -121,6 +139,7 @@ class Decision:
         return [c.id for c in self.targets]
 
 
+<<<<<<< HEAD
 def _literal_noop_decision(
     content: str, candidates: List[Candidate]
 ) -> Optional[Decision]:
@@ -141,6 +160,8 @@ def _literal_noop_decision(
     return Decision(op=OP_NOOP, targets=[max(hits, key=lambda c: c.similarity)])
 
 
+=======
+>>>>>>> origin/main
 class MemoryConflictResolver:
     """写入前冲突消解（启发式默认可用；LLM 钩子可选）。"""
 
@@ -150,6 +171,7 @@ class MemoryConflictResolver:
         semantic,
         candidate_limit: int = 5,
         llm_decide: Optional[Callable[[str, List[Candidate]], Optional[List[Dict[str, Any]]]]] = None,
+<<<<<<< HEAD
         embedder=None,
     ) -> None:
         """
@@ -160,10 +182,14 @@ class MemoryConflictResolver:
                 缺省 / 非语义嵌入器（``is_semantic=False``）时整条语义
                 路径关闭，行为退化为纯字面判定。
         """
+=======
+    ) -> None:
+>>>>>>> origin/main
         self.episodic = episodic
         self.semantic = semantic
         self.candidate_limit = candidate_limit
         self.llm_decide = llm_decide
+<<<<<<< HEAD
         self.embedder = embedder
 
     # ---- 嵌入器 ------------------------------------------------------------
@@ -232,6 +258,8 @@ class MemoryConflictResolver:
         base = vectors[0]
         for cand, vec in zip(candidates, vectors[1:]):
             cand.semantic_similarity = _cosine_similarity(base, vec)
+=======
+>>>>>>> origin/main
 
     # ---- 判定 --------------------------------------------------------------
 
@@ -267,6 +295,7 @@ class MemoryConflictResolver:
         if not candidates:
             return Decision(op=OP_ADD)
 
+<<<<<<< HEAD
         # 字面近重复即可判 NOOP，语义编码对此毫无帮助 —— 先短路，省掉
         # 整批编码（HTTP 端点下是最贵的一步）。配了 LLM 钩子时仍让钩子
         # 先裁决（钩子可把近重复升级为 UPDATE），不短路。
@@ -278,6 +307,8 @@ class MemoryConflictResolver:
         # 语义近邻标注（仅语义嵌入器可用时生效）
         self._annotate_semantic(content, candidates)
 
+=======
+>>>>>>> origin/main
         # LLM 钩子（返回 None → 回退启发式）
         if self.llm_decide is not None:
             try:
@@ -288,6 +319,7 @@ class MemoryConflictResolver:
             except Exception as exc:  # noqa: BLE001 — LLM 失败不阻塞写入
                 logger.debug(f"冲突消解 LLM 决策失败，回退启发式: {exc}")
 
+<<<<<<< HEAD
         return self._heuristic_decision(content, candidates)
 
     def _heuristic_decision(
@@ -327,6 +359,18 @@ class MemoryConflictResolver:
                 key=lambda c: max(c.similarity, c.semantic_similarity or 0.0),
                 reverse=True,
             )
+=======
+        # 启发式：取每个候选的相似度；NOOP 优先于 UPDATE
+        noop_hits = [c for c in candidates if c.similarity >= NOOP_THRESHOLD]
+        if noop_hits:
+            best = max(noop_hits, key=lambda c: c.similarity)
+            return Decision(op=OP_NOOP, targets=[best])
+        update_hits = [
+            c for c in candidates if UPDATE_THRESHOLD <= c.similarity < NOOP_THRESHOLD
+        ]
+        if update_hits:
+            update_hits.sort(key=lambda c: c.similarity, reverse=True)
+>>>>>>> origin/main
             return Decision(op=OP_UPDATE, targets=update_hits)
         return Decision(op=OP_ADD)
 
@@ -467,7 +511,10 @@ __all__ = [
     "OP_ADD",
     "OP_NOOP",
     "OP_UPDATE",
+<<<<<<< HEAD
     "SEMANTIC_TARGET_MARGIN",
     "SEMANTIC_UPDATE_THRESHOLD",
+=======
+>>>>>>> origin/main
     "UPDATE_THRESHOLD",
 ]

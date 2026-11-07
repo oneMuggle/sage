@@ -69,7 +69,11 @@ def test_dump_config_defaults_to_standard(
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["preset"] == "standard"
+<<<<<<< HEAD
     assert len(payload["bundles"]["selected"]) == 32
+=======
+    assert len(payload["bundles"]["selected"]) == 33
+>>>>>>> origin/main
     assert payload["bundles"]["skipped"] == []
     assert payload["sources"] == ["builtin"]
     assert payload["warnings"] == []
@@ -90,7 +94,11 @@ def test_dump_config_reads_project_preset(
     selected = payload["bundles"]["selected"]
     skipped = {item["name"]: item["reason"] for item in payload["bundles"]["skipped"]}
     assert payload["preset"] == "focus"
+<<<<<<< HEAD
     assert len(selected) == 24
+=======
+    assert len(selected) == 25
+>>>>>>> origin/main
     assert "office_core" in selected
     assert skipped["browser"] == "preset"
 
@@ -105,7 +113,11 @@ def test_dump_config_preset_argument_overrides_file(
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["preset"] == "headless"
+<<<<<<< HEAD
     assert len(payload["bundles"]["selected"]) == 31
+=======
+    assert len(payload["bundles"]["selected"]) == 32
+>>>>>>> origin/main
     assert payload["bundles"]["skipped"] == [{"name": "ask_user", "reason": "preset"}]
 
 
@@ -134,7 +146,11 @@ def test_dump_config_text_contains_provenance(
 
     out = capsys.readouterr().out
     assert "preset: focus" in out
+<<<<<<< HEAD
     assert "selected bundles (23)" in out
+=======
+    assert "selected bundles (24)" in out
+>>>>>>> origin/main
     assert "browser (preset)" in out
     assert "sources:" in out
 

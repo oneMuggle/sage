@@ -50,7 +50,11 @@
 | 压缩归档 / 谱系 | 保留（兼容「查看压缩前原文」入口）；新式归档 `needs_restore=0` |
 | fork | 复制 `compacted_at`，事件 payload 携带该字段 → fork 历史完整且上下文不膨胀 |
 
+<<<<<<< HEAD
 **存量回填**：schema 迁移 v13 为旧式（破坏性）压缩的归档行追加
+=======
+**存量回填**：schema 迁移 v11（main）/ v13（release/win7）为旧式（破坏性）压缩的归档行追加
+>>>>>>> origin/main
 `session_lineage.needs_restore=1`，启动时 `restore_compacted_history` 把归档消息
 复制回父会话（新 id、保留原 `created_at`、`compacted_at` 记为谱系创建时间），
 回填后置 0 —— 幂等，重复启动不重复复制；回填行不写 `message.appended` 事件

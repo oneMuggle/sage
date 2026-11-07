@@ -163,10 +163,18 @@ def test_revise_tool_writes_tracked_changes(tmp_path: Path) -> None:
     assert result.content["remaining"]["ok"] is True
 
 
+<<<<<<< HEAD
 def test_tools_reject_outside_workspace(tmp_path: Path) -> None:
     token = _ctx(tmp_path)
     try:
         result = OfficeAuditWordTool(_policy(tmp_path)).execute(
+=======
+def test_write_tools_reject_outside_workspace(tmp_path: Path) -> None:
+    """WRITE 工具（OfficeFixWordTool）仍然拒绝工作区外路径。"""
+    token = _ctx(tmp_path)
+    try:
+        result = OfficeFixWordTool(_policy(tmp_path)).execute(
+>>>>>>> origin/main
             file_path="/etc/outside.docx", rulepack=_TERM_PACK
         )
     finally:

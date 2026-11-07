@@ -5,7 +5,11 @@ tagline: 全栈编码助手
 description: 写代码、查 bug、做重构，遵循工程规范并给出测试用例。
 version: 1
 source: builtin
+<<<<<<< HEAD
 avatar: "💻"
+=======
+avatar: '💻'
+>>>>>>> origin/main
 skills:
   - code-review
   - refactor
@@ -18,7 +22,11 @@ memory_policy:
     - project
     - user
 persona_ui:
+<<<<<<< HEAD
   avatar: "💻"
+=======
+  avatar: '💻'
+>>>>>>> origin/main
   tagline: 全栈编码助手
   greeting: 你好，我是编码专家。我可以帮你写代码、查 bug 或重构模块。
   suggested_prompts:
@@ -27,7 +35,11 @@ persona_ui:
     - 解释一下这个错误栈
 permission_mode: workspace_write
 model_config:
+<<<<<<< HEAD
   model: ""
+=======
+  model: ''
+>>>>>>> origin/main
   temperature: 0.3
   max_tokens: 0
 max_iterations: 20

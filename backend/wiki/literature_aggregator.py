@@ -10,7 +10,11 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Dict, List, Optional, Set
+=======
+from typing import List, Optional
+>>>>>>> origin/main
 
 
 @dataclass
@@ -157,7 +161,11 @@ def scan_literature_directory(project_root: Path) -> List[LiteratureEntry]:
     ]
 
     entries: List[LiteratureEntry] = []
+<<<<<<< HEAD
     seen_titles: Set[str] = set()
+=======
+    seen_titles: set[str] = set()
+>>>>>>> origin/main
     for source_dir in sources:
         if not source_dir.exists():
             continue
@@ -206,7 +214,11 @@ def generate_literature_review(
     lines.append(f"共 {len(entries)} 篇文献。\n")
 
     # 按年份分组
+<<<<<<< HEAD
     by_year: Dict[int, List[LiteratureEntry]] = {}
+=======
+    by_year: dict[int, List[LiteratureEntry]] = {}
+>>>>>>> origin/main
     no_year: List[LiteratureEntry] = []
     for entry in entries:
         if entry.year:

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # ruff: noqa: UP006, UP007, UP035
+=======
+# ruff: noqa: UP006, UP007, UP035, UP045
+>>>>>>> origin/main
 """四模式事件总线（emit / bail / serial / waterfall）。
 
 插件之间需要的不只是"广播"，而是四种**契约不同**的交互：

@@ -22,7 +22,10 @@ _STREAMING_CHUNK_DELAY_S = 0.04
 # title_updated 事件在 SENTINEL 关闭流之前送达；超时则任务转入后台继续
 # （落库后由前端轮询兜底），不阻塞流收尾过久。
 _TITLE_WAIT_S = 3.0
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/main
 import json
 import logging
 import os
@@ -57,7 +60,10 @@ from backend.chat.sources_extractor import extract_sources_from_tool, merge_sour
 from backend.chat.title_generator import (
     DEFAULT_TITLE,
     TitleGenerator,
+<<<<<<< HEAD
     TitleModelFactory,
+=======
+>>>>>>> origin/main
     needs_title,
 )
 from backend.core.errors import LLMError
@@ -80,6 +86,10 @@ from backend.office.workspace_errors import (
 from backend.orchestration.chat_dispatcher import (
     _classify_orchestration_mode,
 )
+<<<<<<< HEAD
+=======
+from backend.orchestration.title_model_factory import TitleModelFactory
+>>>>>>> origin/main
 from backend.ports.llm import ModelCapabilities
 from backend.services.scheduler import get_scheduler_service
 
@@ -2654,6 +2664,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             logger.debug(
                                 f"[REQ {request_id}] stop hooks skipped: {l11_stop_err}"
                             )
+<<<<<<< HEAD
                         # Important-1 (win7 Task 6): when lifespan has installed a
                         # lifecycle manager, use it so memory_written hooks and
                         # traceability are emitted. Otherwise fall back to the
@@ -2676,6 +2687,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     f"[REQ {request_id}] lifecycle on_turn_complete failed: {exc}"
                                 )
                         elif not memory_off:
+=======
+                        if not memory_off:
+>>>>>>> origin/main
                             # 对标 S2: 临时聊天（memory_mode='off'）不提取记忆
                             try:
                                 await _extract_legacy_chat_memory(
@@ -2975,15 +2989,22 @@ from backend.api.legacy_skill_draft_routes import router as legacy_skill_draft_r
 router.include_router(legacy_skill_draft_routes_router)
 # C1 第一刀 (DSH 对标 R14): 记忆 API 迁出至 legacy_memory_routes.py
 # （纯物理拆分，路径/行为零变更；与 orch_routes 同款 include 模式）。
+<<<<<<< HEAD
 from backend.api.legacy_memory_feedback_routes import (
     router as legacy_memory_feedback_routes_router,
 )
 from backend.api.legacy_memory_list_routes import router as legacy_memory_list_routes_router
 from backend.api.legacy_memory_quality_routes import router as legacy_memory_quality_routes_router
+=======
+from backend.api.legacy_memory_list_routes import router as legacy_memory_list_routes_router
+>>>>>>> origin/main
 from backend.api.legacy_memory_routes import router as legacy_memory_routes_router
 
 router.include_router(legacy_memory_routes_router)
 router.include_router(legacy_memory_list_routes_router)
+<<<<<<< HEAD
 router.include_router(legacy_memory_quality_routes_router)
 router.include_router(legacy_memory_feedback_routes_router)
+=======
+>>>>>>> origin/main
 router.include_router(orch_routes_router)

@@ -16,10 +16,14 @@ from typing import Any, Dict, List, Optional
 from backend.domain.memory import MemoryContext
 from backend.memory import ConsolidationPipeline, MemoryManager
 from backend.memory.auto_tag import extract_tags
+<<<<<<< HEAD
 from backend.memory.embedder_factory import (
     get_shared_embedder,
     set_shared_embedder,
 )
+=======
+from backend.memory.embedder_factory import create_embedder
+>>>>>>> origin/main
 from backend.memory.manager import classify_memory_type
 from backend.memory.vector_store import VectorStore
 
@@ -42,6 +46,10 @@ def _extract_query_tags(query: str, max_tags: int = 5) -> List[str]:
     """
     return extract_tags(query, max_tags)
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/main
 class MemoryAdapter:
     """记忆端口适配器 - 将 MemoryPort 适配到现有的 MemoryManager
 
@@ -498,6 +506,15 @@ class MemoryAdapter:
         if conflict_id is not None:
             return conflict_id
 
+        # P3 (Mem0 风格): 写入前冲突消解——NOOP 复用既有记忆 ID,
+        # UPDATE 写新行并使旧行失效;返回 None 表示按 ADD 走原路径。
+        # 消解的任何失败都不阻塞写入（退回普通 append）。
+        conflict_id = await self._resolve_conflict(
+            content, session_id, importance, metadata, memory_type
+        )
+        if conflict_id is not None:
+            return conflict_id
+
         # 调用 MemoryManager.memorize() 存储记忆（透传分类结果与会话 ID）
         # Phase 2 fix: 同时传 tags= 顶层参数 —— episodic 从 metadata["tags"] 读，
         # semantic 从 tags= 读。此前只走 metadata 导致 semantic 记忆丢失 tags。
@@ -545,6 +562,7 @@ class MemoryAdapter:
         from backend.memory.conflict import OP_NOOP
 
         try:
+<<<<<<< HEAD
             # 冲突消解内部可能走语义嵌入（ONNX 推理 / HTTP embedding 端点），
             # 属阻塞调用 —— 必须在执行器里跑，否则 SAGE_EMBEDDER=model 时
             # 一次写入会把事件循环卡满 HTTP 超时（默认 10s）。
@@ -558,6 +576,14 @@ class MemoryAdapter:
                     metadata=metadata,
                     session_id=session_id,
                 ),
+=======
+            memory_id, op = mm.memorize_with_conflict_check(
+                content=content,
+                memory_type=memory_type,
+                importance=importance,
+                metadata=metadata,
+                session_id=session_id,
+>>>>>>> origin/main
             )
         except Exception as exc:  # noqa: BLE001 — 消解失败不阻塞写入
             logger.warning(f"冲突消解失败, 退回直接写入: {exc}")

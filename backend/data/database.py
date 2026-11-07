@@ -794,6 +794,20 @@ class Database:
             cursor.execute(
                 "ALTER TABLE memories_episodic ADD COLUMN agent_id TEXT"
             )
+<<<<<<< HEAD
+=======
+        # M3-Task 4 / Gap A: 记忆可追溯性三列（来源 turn/message + 分类）。
+        # 与 win7 #2878 同口径；存量行保持 NULL。
+        for _col, _typedef in (
+            ("source_turn_id", "TEXT"),
+            ("source_message_id", "TEXT"),
+            ("memory_category", "TEXT"),
+        ):
+            if _col not in _episodic_columns:
+                cursor.execute(
+                    f"ALTER TABLE memories_episodic ADD COLUMN {_col} {_typedef}"
+                )
+>>>>>>> origin/main
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_episodic_scope_project
             ON memories_episodic(scope, project_key)
@@ -802,9 +816,20 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_episodic_agent
             ON memories_episodic(agent_id, scope, project_key)
         """)
+<<<<<<< HEAD
 
         # win7-only（Task 4 / Gap A）：补 source_turn_id 等三列，见 _migrate_memory_traceability。
         _migrate_memory_traceability(conn)
+=======
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_mem_episodic_session_turn
+            ON memories_episodic(session_id, source_turn_id)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_mem_episodic_category
+            ON memories_episodic(memory_category)
+        """)
+>>>>>>> origin/main
 
         # 技能定义不再由 SQLite ``skills`` 表承载。
         # 当前实现从 SkillRegistry / SKILL.md 文件加载；故新数据库不得创建
@@ -2450,7 +2475,11 @@ class Database:
         # ==================== 用户反馈系统（Phase 1: 本地会话） ====================
         # 双向会话：用户发起 + 管理员通过 Jira/GitLab/SMTP 回复，回复经转发脚本中继，
         # 客户端定期 GET 拉取。conversation_id 为客户端生成 UUID v4，全程不变。
+<<<<<<< HEAD
         # 详见 docs/technical/111-feedback-relay-deployment.md §11.1
+=======
+        # 详见 docs/technical/109-feedback-relay-deployment.md §11.1
+>>>>>>> origin/main
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS feedback_conversations (
                 id TEXT PRIMARY KEY,

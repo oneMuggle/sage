@@ -18,10 +18,16 @@ import { toast } from 'sonner';
 
 import { memoryApi, Memory } from '../../shared/api';
 import { agentsApi } from '../../shared/api/agentsApi';
+<<<<<<< HEAD
 import { formatDate, formatRelativeTime } from '../../shared/lib/timeFormatter';
 
 import { MemoryPromoteButton } from './MemoryPromoteButton';
 import { useSessionInfo } from './useSessionInfo';
+=======
+import { formatDate } from '../../shared/lib/timeFormatter';
+
+import { MemoryPromoteButton } from './MemoryPromoteButton';
+>>>>>>> origin/main
 
 // Constants
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -227,10 +233,14 @@ export function MemoryBrowser({
         setMemories(hits);
         // 检索结果没有 source_breakdown,只更新"当前显示"总数,
         // 其余分类计数保持上一轮全量口径,避免展示成 0 误导。
+<<<<<<< HEAD
         const lowQuality = hits.filter(
           (m) => typeof m.quality_score === 'number' && m.quality_score < 0.3,
         ).length;
         setStats((prev) => ({ ...prev, total: hits.length, lowQuality }));
+=======
+        setStats((prev) => ({ ...prev, total: hits.length }));
+>>>>>>> origin/main
         return;
       }
       const response = await memoryApi.getMemories(type, 1, MEMORY_PAGE_SIZE, {
@@ -426,6 +436,7 @@ export function MemoryBrowser({
       toast.error('提升为共享失败', { description: `${message}（该条记忆归属未变）` });
     }
   }, []);
+<<<<<<< HEAD
 
   // Task 4.3: 选择模式 —— 只有 episodic / semantic / working 可批量删除,
   // session_summary 不在 MemoryManager.delete_memory 的路由内。
@@ -490,6 +501,8 @@ export function MemoryBrowser({
       setBatchDeleting(false);
     }
   }, [memories, selectedIds, qualityMode, loadQualityCandidates]);
+=======
+>>>>>>> origin/main
   // 作用域为纯前端过滤(后端 list 契约不变)。缺 scope 的旧行按 DB 默认
   // 'user' 处理,与后端 visibility 规则一致。
   const visibleMemories = useMemo(() => {
@@ -726,6 +739,46 @@ export function MemoryBrowser({
         </div>
       )}
 
+      {/* P1 scope 轴:作用域筛选(前端过滤) */}
+      {viewMode === 'all' && (
+        <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+          <span className="text-ui-2xs text-muted font-mono mr-1">作用域</span>
+          {Object.entries(SCOPE_FILTER_LABELS).map(([key, label]) => (
+            <button
+              key={key}
+              className={`px-3 py-1 border border-border rounded-radius-sm text-xs cursor-pointer font-mono ${
+                scopeFilter === key
+                  ? 'bg-primary/10 text-primary border-primary'
+                  : 'bg-surface text-muted hover:text-text'
+              }`}
+              onClick={() => setScopeFilter(key as ScopeFilter)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* M3-Task 6: 专家归属筛选(后端精确过滤)。'all' 显示全部管理口径。 */}
+      {viewMode === 'all' && (
+        <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+          <span className="text-ui-2xs text-muted font-mono mr-1">归属</span>
+          {agentOptions.map((opt) => (
+            <button
+              key={opt.id}
+              className={`px-3 py-1 border border-border rounded-radius-sm text-xs cursor-pointer font-mono ${
+                agentFilter === opt.id
+                  ? 'bg-primary/10 text-primary border-primary'
+                  : 'bg-surface text-muted hover:text-text'
+              }`}
+              onClick={() => setAgentFilter(opt.id)}
+              title={opt.id === 'shared' ? '共享层（所有专家可见）' : `专家 ${opt.name}`}
+            >
+              {opt.name}
+            </button>
+          ))}
+        </div>
+      )}
       {/* 记忆列表 */}
       {loading ? (
         <div className="text-center text-muted py-12 text-sm">加载中...</div>
@@ -755,9 +808,12 @@ export function MemoryBrowser({
               onDelete={handleDeleteMemory}
               onPromote={handlePromoteMemory}
               focused={memory.id === focusMemoryId}
+<<<<<<< HEAD
               selectable={selectMode && resolveSelectableType(memory) !== null}
               selected={selectedIds.has(memory.id)}
               onToggleSelect={toggleSelect}
+=======
+>>>>>>> origin/main
             />
           ))}
         </div>
@@ -823,9 +879,12 @@ function MemoryItemCard({
   onDelete,
   onPromote,
   focused = false,
+<<<<<<< HEAD
   selectable = false,
   selected = false,
   onToggleSelect,
+=======
+>>>>>>> origin/main
 }: {
   memory: Memory;
   onJumpToSession: (sessionId: string | undefined) => void;
@@ -834,15 +893,19 @@ function MemoryItemCard({
   onPromote?: (memory: Memory) => void | Promise<void>;
   /** P0-6: 深链定位命中态 —— 高亮 + 滚入视区。 */
   focused?: boolean;
+<<<<<<< HEAD
   /** Task 4.3: 批量清理选择模式。 */
   selectable?: boolean;
   selected?: boolean;
   onToggleSelect?: (memory: Memory) => void;
+=======
+>>>>>>> origin/main
 }) {
   // P0-1: 删除走内联两步确认 —— 破坏性操作先摆出内容首行让用户核对,
   // 再要求显式确认;不用 window.confirm(与项目内两步确认惯例一致)。
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+<<<<<<< HEAD
   // Task 4.5: 记忆级反馈（👍/👎）—— 本地状态跟随提交结果,失败时回退到原始值。
   // 只允许 episodic / semantic 行反馈;working / session_summary 的 feedback 按钮不渲染。
   const feedbackable =
@@ -890,6 +953,8 @@ function MemoryItemCard({
     },
     [feedbackable, feedbackBusy, feedback, memory, reasonText],
   );
+=======
+>>>>>>> origin/main
   // P0-6: 命中深链时滚入视区（列表可能很长，用户看不到自己点的那条）。
   const cardRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -963,6 +1028,7 @@ function MemoryItemCard({
       ref={focused ? cardRef : undefined}
       data-testid={memory.source === 'episodic' ? 'memory-episodic-item' : 'memory-item'}
       data-focused={focused || undefined}
+<<<<<<< HEAD
       data-selected={selectable && selected ? 'true' : undefined}
       onClick={selectable ? () => onToggleSelect?.(memory) : undefined}
       className={
@@ -971,6 +1037,12 @@ function MemoryItemCard({
           : `p-3 border rounded-radius-sm bg-surface cursor-pointer hover:border-primary transition-colors ${
               selectable && selected ? 'border-primary bg-primary/5' : 'border-border'
             }`
+=======
+      className={
+        focused
+          ? 'p-3 border-2 border-primary rounded-radius-sm bg-surface ring-1 ring-primary/30'
+          : 'p-3 border border-border rounded-radius-sm bg-surface cursor-pointer hover:border-primary transition-colors'
+>>>>>>> origin/main
       }
     >
       <div className="flex items-center justify-between mb-1 gap-2">
@@ -1024,9 +1096,12 @@ function MemoryItemCard({
       <div className="text-xs text-muted leading-relaxed">
         {content.length > 80 ? content.substring(0, 80) + '...' : content}
       </div>
+<<<<<<< HEAD
       {/* Task 4.4 质量可视化:4px 高分段条 + 数字。quality_score 缺失(working/
           session_summary)时不渲染,避免误导。 */}
       {typeof memory.quality_score === 'number' && <QualityBar score={memory.quality_score} />}
+=======
+>>>>>>> origin/main
       <div className="text-ui-2xs text-muted mt-1.5 font-mono flex items-center gap-2 flex-wrap">
         <span>
           创建于 {formatDate(timestampMs)} · 引用 {accessCount} 次 · 置信度{' '}
@@ -1055,6 +1130,7 @@ function MemoryItemCard({
           {agentId && onPromote ? (
             <MemoryPromoteButton memoryId={memory.id} onPromote={() => onPromote(memory)} />
           ) : null}
+<<<<<<< HEAD
           {feedbackable && (
             <span className="flex items-center gap-1" data-testid={`memory-feedback-${memory.id}`}>
               <button
@@ -1095,6 +1171,8 @@ function MemoryItemCard({
               </button>
             </span>
           )}
+=======
+>>>>>>> origin/main
           {confirming ? (
             <>
               <span className="text-error">确认删除？</span>
@@ -1187,6 +1265,7 @@ function MemoryItemCard({
   );
 }
 
+<<<<<<< HEAD
 /** Task 4.3: 批量删除只支持 MemoryManager.delete_memory 有路由的三类。 */
 function resolveSelectableType(memory: Memory): 'episodic' | 'semantic' | 'working' | null {
   const t = memory.memory_type;
@@ -1195,6 +1274,9 @@ function resolveSelectableType(memory: Memory): 'episodic' | 'semantic' | 'worki
   if (s === 'episodic' || s === 'semantic' || s === 'working') return s;
   return null;
 }
+=======
+// formatDate 已统一到 src/shared/lib/timeFormatter
+>>>>>>> origin/main
 
 // formatDate 已统一到 src/shared/lib/timeFormatter
 

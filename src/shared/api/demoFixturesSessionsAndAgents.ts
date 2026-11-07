@@ -199,7 +199,11 @@ export const DEMO_EVOLUTION_LOGS: DemoEvolutionLog[] = [
     after_state: 'daily-summary-2026-08-26.md',
     trigger_type: 'scheduled',
     trigger_condition: 'cron 0 23 * * *',
+<<<<<<< HEAD
     status: 'success',
+=======
+    status: 'completed',
+>>>>>>> origin/main
     error_message: null,
     tokens_used: 1840,
     created_at: NOW_S - 3600 * 14,
@@ -213,7 +217,11 @@ export const DEMO_EVOLUTION_LOGS: DemoEvolutionLog[] = [
     after_state: '置信度 0.94 · 系统默认',
     trigger_type: 'conversation',
     trigger_condition: null,
+<<<<<<< HEAD
     status: 'success',
+=======
+    status: 'completed',
+>>>>>>> origin/main
     error_message: null,
     tokens_used: 960,
     created_at: NOW_S - 3600 * 5,
@@ -227,7 +235,11 @@ export const DEMO_EVOLUTION_LOGS: DemoEvolutionLog[] = [
     after_state: 'working 记忆 96 条',
     trigger_type: 'scheduled',
     trigger_condition: 'cron 0 3 * * *',
+<<<<<<< HEAD
     status: 'success',
+=======
+    status: 'completed',
+>>>>>>> origin/main
     error_message: null,
     tokens_used: null,
     created_at: NOW_S - 86400,
@@ -241,7 +253,11 @@ export const DEMO_EVOLUTION_LOGS: DemoEvolutionLog[] = [
     after_state: '平均 importance 5.0',
     trigger_type: 'scheduled',
     trigger_condition: null,
+<<<<<<< HEAD
     status: 'success',
+=======
+    status: 'completed',
+>>>>>>> origin/main
     error_message: null,
     tokens_used: 1210,
     created_at: NOW_S - 86400 * 2,
@@ -269,7 +285,11 @@ export const DEMO_EVOLUTION_LOGS: DemoEvolutionLog[] = [
     after_state: 'daily-summary-2026-08-24.md',
     trigger_type: 'scheduled',
     trigger_condition: 'cron 0 23 * * *',
+<<<<<<< HEAD
     status: 'success',
+=======
+    status: 'completed',
+>>>>>>> origin/main
     error_message: null,
     tokens_used: 1720,
     created_at: NOW_S - 86400 * 3 + 3600,

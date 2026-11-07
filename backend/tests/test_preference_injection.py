@@ -63,8 +63,13 @@ def test_preference_learning_writes_user_profile(tmp_db):
     ).fetchall()
     assert len(rows) >= 1
     assert all(r["category"] == "preference" for r in rows)
+<<<<<<< HEAD
     # 内容里应含偏好维度名（中文标签）
     assert any("回复长度" in r["content"] for r in rows)
+=======
+    # 内容里应含偏好维度名
+    assert any("response_length" in r["content"] for r in rows)
+>>>>>>> origin/main
 
 
 def test_preference_learning_does_not_invalidate_snapshot(tmp_db, monkeypatch):
@@ -158,7 +163,11 @@ def test_update_learned_preference_updates_both_stores(tmp_db, monkeypatch):
         "SELECT content, category FROM user_profile"
     ).fetchall()
     assert len(profile_rows) == 1
+<<<<<<< HEAD
     assert "专业" in profile_rows[0]["content"]
+=======
+    assert "professional" in profile_rows[0]["content"]
+>>>>>>> origin/main
     assert profile_rows[0]["category"] == "preference"
 
 
@@ -203,12 +212,20 @@ def test_update_learned_preference_replaces_old_user_profile_entry(tmp_db, monke
     )
 
     profile_rows = tmp_db.get_connection().execute(
+<<<<<<< HEAD
         "SELECT content FROM user_profile WHERE content LIKE '用户偏好交互风格:%'"
+=======
+        "SELECT content FROM user_profile WHERE content LIKE '用户偏好 tone:%'"
+>>>>>>> origin/main
     ).fetchall()
     contents = [r["content"] for r in profile_rows]
     # 只有最新的那条，旧的被替换
     assert len(contents) == 1
+<<<<<<< HEAD
     assert contents[0] == "用户偏好交互风格: casual"
+=======
+    assert contents[0] == "用户偏好 tone: casual"
+>>>>>>> origin/main
 
 
 # ---------- 路由：POST /memory/profile/refresh ----------

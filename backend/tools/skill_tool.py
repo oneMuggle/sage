@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 #: 工具名常量（注册 / 测试共用）
 SKILL_TOOL_NAME = "skill"
 
+<<<<<<< HEAD
 #: ContextVar 未设置哨兵 —— 区分「未设置」与「显式不受限（None）」。
 _UNSET = object()
 
@@ -65,6 +66,25 @@ def set_turn_skill_allowlist(allowed: Optional[Iterable[str]]) -> Any:
 def reset_turn_skill_allowlist(token: Any) -> None:
     """恢复 ``set_turn_skill_allowlist`` 之前的作用域。"""
     _TURN_SKILL_ALLOWLIST.reset(token)
+=======
+# 本轮技能作用域（M1，spec §5.1）原语在 domain 层定义，避免
+# application → tools 的静态依赖触发六边形架构违规；这里重导出供调用方
+# 与测试继续使用。
+from backend.domain.skill_scope import (  # noqa: E402 — 分组导入保持文件头整洁
+    peek_turn_skill_allowlist,
+    reset_turn_skill_allowlist,
+    set_turn_skill_allowlist,
+)
+
+# 供测试与调用方的模块级重导出（ContextVar 原语已下沉到 domain）。
+__all__ = [
+    "SkillTool",
+    "SKILL_TOOL_NAME",
+    "inject_skill_scope",
+    "set_turn_skill_allowlist",
+    "reset_turn_skill_allowlist",
+]
+>>>>>>> origin/main
 
 
 def inject_skill_scope(
@@ -128,8 +148,13 @@ class SkillTool(BaseTool):
         构造期注入的专家作用域（legacy SageAgent）＞ 无限制。
         """
         adapter = self._resolve_adapter()
+<<<<<<< HEAD
         turn_allowed = _TURN_SKILL_ALLOWLIST.get()
         if turn_allowed is not _UNSET:
+=======
+        allowlist_set, turn_allowed = peek_turn_skill_allowlist()
+        if allowlist_set:
+>>>>>>> origin/main
             return None if turn_allowed is None else set(turn_allowed)
         if self.agent_id:
             resolve_agent = getattr(adapter, "resolve_agent_allowlist", None)

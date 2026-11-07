@@ -1,6 +1,10 @@
 import type { LLMErrorResponse } from '../../lib/errorMapping';
+<<<<<<< HEAD
 
 import type { OfficeDocType } from './officeDocTypes';
+=======
+import type { OfficeDocType } from '../types';
+>>>>>>> origin/main
 
 /**
  * Sage API - 类型定义
@@ -23,13 +27,21 @@ export interface Session {
   forked_at_message_id?: string | null;
   /** P0-4 (UI 优化方案 2026-09-13): 最后一条 user/assistant 消息预览(截断 80 字符) */
   last_message_preview?: string | null;
+<<<<<<< HEAD
   /** 标题生成尝试次数 (后端 `sessions.title_attempts`)；用于侧栏显示"生成标题中…"过渡态 */
   title_attempts?: number;
+=======
+>>>>>>> origin/main
   /** 2026-10-28: 性能统计 - 会话总用时（分钟），从创建到最后一次消息 */
   duration_minutes?: number | null;
   /** 2026-10-29 (feat/workspace-optimization): create_session 响应里附带的工作区绑定信息。
    *  后端在创建会话时同步解析默认工作区并绑定，前端不再自行推导。null = 连 scratch 都失败。 */
   workspace_binding?: SessionWorkspaceInfo | null;
+<<<<<<< HEAD
+=======
+  /** 标题生成尝试次数 (后端 `sessions.title_attempts`)；用于侧栏显示"生成标题中…"过渡态 */
+  title_attempts?: number;
+>>>>>>> origin/main
   /** M0 (2026-11-03): 会话绑定的专家（agents.id）；'primary' = 主助手。 */
   specialist_id?: string;
   /** M2 (2026-11-07): 会话类型 —— 'dm'（私聊，默认）| 'group'（群聊）。 */
@@ -125,10 +137,15 @@ export type WorkspaceSearchKind =
   | 'office-word'
   | 'office-excel'
   | 'office-pdf'
+<<<<<<< HEAD
   // allowed_paths 搜索结果（与 main 对齐）：与上述 kind 同构但带 `allowed-` 前缀，
   // 前端据此区分「workspace 内」与「allowed_paths 只读」。后端
   // backend/api/workspace_routes.py 已按 kind="allowed-" + (doc_type or "file")
   // 产出，本联合此前漏登。
+=======
+  // Phase 3.4 (2026-09-17): allowed_paths 搜索结果 —— 与上述 kind 同构但
+  // 带 `allowed-` 前缀，前端据此区分"workspace 内"与"allowed_paths 只读"。
+>>>>>>> origin/main
   | 'allowed-file'
   | 'allowed-ppt'
   | 'allowed-word'
@@ -343,7 +360,10 @@ export type AgentState =
   | 'failed'
   // 2026-09 step-by-step: 每次 ReAct 迭代结束（OBSERVING 之后）由后端产出,
   // 前端据此把当前 streaming 气泡快照为已完成 step + 准备下一步占位。
+<<<<<<< HEAD
   // win7: 后端已同步 main 的 step-by-step 落库(AgentState.STEP_DONE + 事件产出)。
+=======
+>>>>>>> origin/main
   | 'step_done'
   // 2026-10-31: 动态迭代预算检查点 — 到达软预算且进度审计判定仍在推进时,
   // 后端自动提高上限并推送 budget_info（已延长次数 / 新上限 / 审计信号）。
@@ -381,15 +401,24 @@ export type AgentState =
   | 'context_pressure'
   // Task 10 (2026-09-17): 自动话题检测 — 切换 segment 时由 producer 推送。
   | 'topic_shifted'
+<<<<<<< HEAD
+=======
+  // r71: 附件检索注入溯源（引用块在气泡内可展开）,
+  // 载荷见 AgentEvent.citations。
+  | 'attachment_rag_used'
+>>>>>>> origin/main
   // P0 (2026-11-04): 附件处理结果 —— 每个 attachment_media_id 注入/跳过的状态,
   // 前端据此在消息气泡上渲染 per-file 状态(已读取/已跳过/失败),载荷见 AgentEvent.attachments_status。
   | 'attachments_processed'
   // Round 3 (2026-09-19): 编排拆解前置进度（需求澄清/事实侦察）,
   // 载荷见 AgentEvent.preflight_phase。先于 task_plan 到达。
   | 'orch_preflight'
+<<<<<<< HEAD
   // r71: 附件检索注入溯源（引用块在气泡内可展开）,
   // 载荷见 AgentEvent.citations。
   | 'attachment_rag_used'
+=======
+>>>>>>> origin/main
   // right-panel R5 (2026-09-19): 写文件工具落盘后经活跃流推送的变更信号,
   // 前端据此防抖刷新右侧变更列表,载荷见 AgentEvent.change。
   | 'workspace_changed'
@@ -460,7 +489,11 @@ export interface PermissionRequest {
   target_path?: string;
   /**
    * R95: 后端从 PluginToolBridge 已发布记录注入的权威插件名。
+<<<<<<< HEAD
    * 只有携带此字段的插件工具审批才提供"整个插件"记住范围；
+=======
+   * 只有携带此字段的插件工具审批才提供“整个插件”记住范围；
+>>>>>>> origin/main
    * 前端不按工具名字符串自行猜测插件名。
    */
   plugin_name?: string;
@@ -716,9 +749,15 @@ export interface AgentEvent {
   tool_result?: AgentToolResult;
   /** producer 失败信封: LLMError.to_dict() 为 dict; 旧路径/限额拦截为 str */
   error?: string | { type?: string; message?: string; status_code?: number };
+<<<<<<< HEAD
   /** client_message_id 协议 (同步 #1155): DONE 附带 assistant 消息的服务端 id */
   message_id?: string;
   /** 首轮对话标记: 标题将在后台生成, 前端稍后补刷侧栏 (同步 #1196) */
+=======
+  /** client_message_id 协议: DONE 附带 assistant 消息的服务端 id, 供前端替换占位 id */
+  message_id?: string;
+  /** 首轮对话标记: 标题将在后台生成, 前端稍后补刷侧栏 (2026-09) */
+>>>>>>> origin/main
   title_pending?: boolean;
   /** 第二轮 B2: DONE 携带的 LLM 终止原因（length = 触达输出上限被截断） */
   finish_reason?: string;

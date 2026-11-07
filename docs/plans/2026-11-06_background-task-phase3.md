@@ -101,12 +101,21 @@ Phase 0–2 已交付后台任务一等公民全链路（双分支）。剩余�
 ## 实施步骤
 
 - [x] M0: 本 plan 文档
+<<<<<<< HEAD
 - [x] M1: Item 1（Windows 持久化）+ 测试
 - [x] M2: Item 2（列表 + 流式）+ 测试
 - [x] M3: Item 3（Webhook）+ 测试
 - [x] M4: main 依次 PR → CI → 合并
 - [x] M5: win7 同步 PR（1–3）
 - [x] M6: win7 M0 闸 PR
+=======
+- [ ] M1: Item 1（Windows 持久化）+ 测试
+- [ ] M2: Item 2（列表 + 流式）+ 测试
+- [ ] M3: Item 3（Webhook）+ 测试
+- [ ] M4: main 依次 PR → CI → 合并
+- [ ] M5: win7 同步 PR（1–3）
+- [ ] M6: win7 M0 闸 PR
+>>>>>>> origin/main
 - [ ] M7: 全量验证与记忆更新
 
 ## 风险

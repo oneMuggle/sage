@@ -444,7 +444,11 @@ def build_parser() -> argparse.ArgumentParser:
 def _resolve_backend_context(
     args: argparse.Namespace,
     environ: Dict[str, str],
+<<<<<<< HEAD
 ) -> Tuple[Optional[list], Optional[str], Optional[dict]]:
+=======
+) -> Tuple[list | None, str | None, dict | None]:
+>>>>>>> origin/main
     """Resolve launcher-context overrides from CLI args or env vars.
 
     Round 2 (fast-follow E): Electron's supervisor serialises the

@@ -19,7 +19,10 @@ from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+<<<<<<< HEAD
 from backend.office.models import _constrained_list
+=======
+>>>>>>> origin/main
 from backend.services.attachment_rag import (
     AttachmentRagError,
     attachment_vector_store_path,
@@ -205,6 +208,7 @@ class AttachmentIndexIn(BaseModel):
 class AttachmentSearchIn(BaseModel):
     """查询向量由调用方嵌入后传入——路由自身不做嵌入网络调用。"""
 
+<<<<<<< HEAD
     # _constrained_list 是仓库既有的双版本安全范式（backend/office/models.py:21）：
     # 先试 v2 的 min_length，TypeError 时回退 v1 的 min_items。
     # 裸 conlist(float, min_items=1) 在 v2 下会 TypeError（本文件有
@@ -214,6 +218,9 @@ class AttachmentSearchIn(BaseModel):
     # 会拉起 backend.main，所以这一处在 v2 环境下会让整个
     # backend 测试套件都起不来。
     query_vector: _constrained_list(float, min_length=1)
+=======
+    query_vector: List[float] = Field(min_length=1)
+>>>>>>> origin/main
     dim: int = Field(ge=1, le=4096)
     media_ids: Optional[List[str]] = None
     limit: int = Field(default=5, ge=1, le=50)

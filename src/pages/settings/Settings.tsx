@@ -32,10 +32,41 @@ export type SettingsTab = SettingsTabKey;
 /** Cmd/Ctrl+K 的提示标签 —— 按平台显示，Windows/Linux 上不该出现 ⌘。 */
 const SEARCH_SHORTCUT_LABEL =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘K' : 'Ctrl+K';
+<<<<<<< HEAD
 
 export function Settings() {
   // R45: 记住上次访问的 tab —— localStorage 持久化，重开设置页恢复
   const [activeTab, setActiveTabState] = useState<SettingsTab>(() => {
+=======
+
+/**
+ * Deep-link tab (`/settings?tab=pet`).
+ *
+ * Read the hash/query directly instead of `useSearchParams()`: Settings is
+ * also rendered by unit tests without a Router, and a hard Router dependency
+ * would break those tests (and any future standalone embed).
+ */
+function readRequestedSettingsTab(): string | null {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash;
+  const queryIndex = hash.indexOf('?');
+  const query = queryIndex >= 0 ? hash.slice(queryIndex + 1) : window.location.search;
+  if (!query) return null;
+  return new URLSearchParams(query).get('tab');
+}
+
+export function Settings() {
+  // 2026-10-30: 深链 `?tab=pet`（桌宠右键「宠物设置…」）优先于上次访问的 tab。
+  const [requestedTab, setRequestedTab] = useState<string | null>(readRequestedSettingsTab);
+  useEffect(() => {
+    const onHashChange = (): void => setRequestedTab(readRequestedSettingsTab());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+  // R45: 记住上次访问的 tab —— localStorage 持久化，重开设置页恢复
+  const [activeTab, setActiveTabState] = useState<SettingsTab>(() => {
+    if (requestedTab) return initialSettingsTab(requestedTab);
+>>>>>>> origin/main
     try {
       const saved = localStorage.getItem('sage:settings-tab');
       // 历史 localStorage 值（旧 tab key、已下线 tab）由 initialSettingsTab
@@ -61,6 +92,14 @@ export function Settings() {
       /* ignore */
     }
   }, []);
+<<<<<<< HEAD
+=======
+
+  // 深链 tab 变化时（或已停留在设置页时收到事件）切换过去。
+  useEffect(() => {
+    if (requestedTab) setActiveTab(initialSettingsTab(requestedTab));
+  }, [requestedTab, setActiveTab]);
+>>>>>>> origin/main
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [searchFocused, setSearchFocused] = useState(false);

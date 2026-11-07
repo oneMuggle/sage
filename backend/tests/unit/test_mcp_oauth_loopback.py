@@ -39,6 +39,7 @@ class TestLoopbackServer:
             urllib.request.urlopen(f"http://127.0.0.1:{server.port}/other", timeout=5)
         assert exc_info.value.code == 404
 
+<<<<<<< HEAD
     def test_callback_prefix_path_404(self):
         """`/callback-evil` 是 `/callback` 的前缀扩展，必须 404 且不捕获。"""
         with LoopbackCallbackServer() as server, pytest.raises(urllib.error.HTTPError) as exc_info:
@@ -68,6 +69,8 @@ class TestLoopbackServer:
             assert exc_info.value.code == 404
             assert server.captured == first
 
+=======
+>>>>>>> origin/main
     def test_wait_timeout(self):
         with LoopbackCallbackServer() as server, pytest.raises(TimeoutError, match="超时"):
             asyncio.run(server.wait(timeout=0.2))
