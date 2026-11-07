@@ -6,8 +6,7 @@ import type { OfficeGenerateResult } from '../types';
 import { ApiException } from '../utils';
 
 vi.mock('../backendRequest', async () => {
-  const actual =
-    await vi.importActual<typeof import('../backendRequest')>('../backendRequest');
+  const actual = await vi.importActual<typeof import('../backendRequest')>('../backendRequest');
   return { ...actual, backendRequest: vi.fn() };
 });
 
