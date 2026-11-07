@@ -21,6 +21,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.data.database import get_database
 from backend.office.errors import OfficePathError
+
+# _constrained_list：pydantic v1/v2 双版本安全范式（v1 只认 min_items/max_items）。
+from backend.office.models import _constrained_list
 from backend.office.storage import validate_workspace
 from backend.orchestration.llm_factory import (
     build_llm_client_from_settings,
@@ -86,7 +89,9 @@ class ChatRequest(BaseModel):
     workspace_path: str = Field(min_length=1)
     document_id: str = Field(min_length=1)
     message: str = Field(min_length=1, max_length=MAX_TEXT_CHARS)
-    history: List[ChatHistoryItem] = Field(default_factory=list, max_length=MAX_HISTORY_ITEMS)
+    history: _constrained_list(ChatHistoryItem, max_length=MAX_HISTORY_ITEMS) = Field(
+        default_factory=list
+    )
     document_context: Optional[str] = Field(default=None, max_length=MAX_CONTEXT_CHARS)
 
 
