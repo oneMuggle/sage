@@ -89,7 +89,7 @@
     "src/shared/api/memoryApi.ts": 918,
     "src/shared/api/projectApi.ts": 1584,
     "src/shared/api/projectApiTypes.ts": 1766,
-    "src/shared/api/types/chatAndEventTypes.ts": 936,
+    "src/shared/api/types/chatAndEventTypes.ts": 940,
     "src/shared/api/types/domainEntityTypes.ts": 804,
     "src/shared/lib/i18n/locales/en/chatAndSider.ts": 810,
     "src/shared/lib/i18n/locales/zh/chatAndSider.ts": 811,
