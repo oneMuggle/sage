@@ -1,8 +1,7 @@
 /** 规则中心词典 — 中文（默认）。 */
 export const zhRules = {
   'rules.title': '规则中心',
-  'rules.subtitle':
-    '项目规则、规程要求、项目总纲与全局规则集中在这里，改动规则请从对应来源进入。',
+  'rules.subtitle': '项目规则、规程要求、项目总纲与全局规则集中在这里，改动规则请从对应来源进入。',
   'rules.search.placeholder': '搜索规则内容、分类或来源',
   'rules.filter.all': '全部',
   'rules.layer.constraint': '项目规则',
@@ -29,11 +28,9 @@ export const zhRules = {
   'rules.row.disabled': '已停用',
   'rules.row.openSource': '查看来源',
   'rules.drawer.title': '最终生效规则',
-  'rules.drawer.description':
-    '按 AI 注入顺序排列；同分类且触发词重叠时只提示冲突，不会自动合并。',
+  'rules.drawer.description': '按 AI 注入顺序排列；同分类且触发词重叠时只提示冲突，不会自动合并。',
   'rules.drawer.empty': '暂无生效规则',
-  'rules.drawer.order':
-    '注入顺序：全局规则 → 项目总纲 → 项目规则 → 当前阶段规程 → 内容检查',
+  'rules.drawer.order': '注入顺序：全局规则 → 项目总纲 → 项目规则 → 当前阶段规程 → 内容检查',
   'rules.drawer.checkLabel': '内容检查',
 } as const;
 

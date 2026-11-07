@@ -48,9 +48,7 @@ function RuleMeta({ entry }: { entry: RuleEntry }) {
   return (
     <div className="flex flex-wrap items-center gap-3 text-ui-2xs text-muted-foreground">
       <span>{entry.scope}</span>
-      {entry.trigger && (
-        <span>{t('rules.row.trigger').replace('{trigger}', entry.trigger)}</span>
-      )}
+      {entry.trigger && <span>{t('rules.row.trigger').replace('{trigger}', entry.trigger)}</span>}
       <span>{t('rules.row.priority').replace('{priority}', String(entry.priority))}</span>
       <span className={entry.enabled ? 'text-emerald-600' : undefined}>
         {entry.enabled ? t('rules.row.enabled') : t('rules.row.disabled')}
