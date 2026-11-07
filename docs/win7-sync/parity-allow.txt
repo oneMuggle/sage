@@ -288,3 +288,9 @@ backend/data/migrations/runner.py
 
 # schedule-only workflow：只在默认分支（main）触发，win7 不需要存在（2026-11-07）
 .github/workflows/audit-watch.yml
+
+# P1 收敛收尾（2026-11-07）：win7 必要差异
+# ai_routes: win7 用 _constrained_list 做列表长度约束（main 用 _HISTORY_LEN_KW）
+backend/api/ai_routes.py
+# commandRoutes/memory.ts: win7 独有 batch_delete_memories IPC
+electron/commandRoutes/memory.ts
