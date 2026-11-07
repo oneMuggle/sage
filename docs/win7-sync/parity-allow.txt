@@ -225,3 +225,14 @@ backend/api/chat_attachment_routes.py
 backend/api/office_ai_review_routes.py
 backend/office/ppt_template.py
 backend/api/workspace_routes.py
+
+# win7 pydantic v1 适配：列表长度 max_length → max_items（_list_length_kwargs）
+backend/plugins/manifest.py
+backend/plugins/index_catalog.py
+
+# win7 独有功能：语义冲突消解（SEMANTIC_TARGET_MARGIN）+ 工具必填参数校验（required_args_error）
+backend/memory/conflict.py
+backend/tools/executor.py
+
+# win7 独有：记忆 SSE / by-turn / session-summary 异步端点
+backend/api/legacy_memory_list_routes.py

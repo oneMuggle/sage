@@ -39,7 +39,7 @@ from backend.tools.credential_vault import (
 from backend.tools.download_tool import HttpDownloadTool
 from backend.tools.web_tool import WebFetchTool
 
-pytestmark = [pytest.mark.unit]
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("_online_network_settings")]
 
 
 @pytest.fixture(autouse=True)
@@ -52,8 +52,8 @@ def _no_http_sleep(monkeypatch):
 
 
 _COOKIES = [
-    {"name": "SID", "value": "s3cret", "domain": ".example.com", "path": "/"},
-    {"name": "AUTH", "value": "token1", "domain": ".example.com", "path": "/"},
+    {"name": "SID", "value": "s3cret", "domain": ".example.com", "path": "/", "sameSite": "Lax"},
+    {"name": "AUTH", "value": "token1", "domain": ".example.com", "path": "/", "sameSite": "Lax"},
 ]
 
 
@@ -67,7 +67,7 @@ class _MemRepo:
     """内存版 SettingsRepository（只实现 vault 相关语义）。"""
 
     def __init__(self):
-        self.data = {}
+        self.data = {"network_policy": '{"mode":"online"}'}
 
     def get(self, key):
         return self.data.get(key)
@@ -244,12 +244,12 @@ class TestDownloadCredential:
 
     def test_cookie_attached_on_download(self, tmp_path, repo):
         save_credential(".example.com", _COOKIES, repo=repo)
-        with patch_vault_repo(repo):  # noqa: SIM117 — py38 不支持括号多上下文 with
+        with patch_vault_repo(repo):
             with respx.mock(base_url="https://www.example.com") as mock:
                 route = mock.get("/a.pdf").mock(return_value=Response(200, content=b"%PDF-1.4 fake"))
                 result = self._tool(tmp_path).execute(
-                url="https://www.example.com/a.pdf", credential_domain=".example.com"
-            )
+                    url="https://www.example.com/a.pdf", credential_domain=".example.com"
+                )
 
         assert result.success is True
         assert route.calls.last.request.headers["Cookie"] == "SID=s3cret; AUTH=token1"
