@@ -216,7 +216,8 @@ jobs:
         run: |
           BR="${{ steps.sync.outputs.branch }}"
           git push -f origin "HEAD:$BR"
-          if gh pr view "$BR" --json number >/dev/null 2>&1; then
+          STATE=$(gh pr view "$BR" --json state --jq .state 2>/dev/null || echo NONE)
+          if [ "$STATE" = "OPEN" ]; then
             gh pr edit "$BR" --body-file sync-report.md
           else
             gh pr create --base release/win7 --head "$BR" \
@@ -238,12 +239,13 @@ jobs:
             echo "::warning::已回退 .github/workflows 冲突现场（缺 WIN7_SYNC_TOKEN）"
           fi
           git push -f origin "HEAD:$BR"
-          if ! gh pr view "$BR" --json number >/dev/null 2>&1; then
+          STATE=$(gh pr view "$BR" --json state --jq .state 2>/dev/null || echo NONE)
+          if [ "$STATE" = "OPEN" ]; then
+            gh pr edit "$BR" --body-file sync-report.md
+          else
             gh pr create --draft --base release/win7 --head "$BR" \
               --title "[需人工] win7-sync: main → release/win7 冲突 ($(date +%Y-%m-%d))" \
               --body-file sync-report.md --label win7-sync --label needs-human
-          else
-            gh pr edit "$BR" --body-file sync-report.md
           fi
           echo "::warning::合并存在冲突，已开 draft PR $BR"
 
