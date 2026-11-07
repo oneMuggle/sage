@@ -72,7 +72,7 @@ beforeEach(() => {
   list.mockReset();
   effective.mockReset();
   list.mockResolvedValue(RULES);
-  effective.mockResolvedValue({ entries: RULES, conflicts: CONFLICTS });
+  effective.mockResolvedValue({ entries: RULES.filter((entry) => entry.enabled), conflicts: CONFLICTS });
 });
 
 describe('RulesPanel', () => {
@@ -113,9 +113,11 @@ describe('RulesPanel', () => {
     expect(screen.getByTestId('rules-empty-filtered')).toBeInTheDocument();
   });
 
-  it('opens the effective drawer in injection order', async () => {
+  it('opens the effective drawer with only enabled rules in injection order', async () => {
     renderPanel();
     await screen.findByTestId('rules-group-global');
+
+    expect(screen.getByTestId('rule-row-constraint:2')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('rules-effective-open'));
 
@@ -124,9 +126,9 @@ describe('RulesPanel', () => {
       'rules-effective-row-global:#0',
       'rules-effective-row-doc:SAGE.md#0',
       'rules-effective-row-constraint:1',
-      'rules-effective-row-constraint:2',
       'rules-effective-row-playbook:s1:0',
     ]);
+    expect(screen.queryByTestId('rules-effective-row-constraint:2')).toBeNull();
     expect(screen.getByTestId('rules-effective-conflict-constraint:1')).toBeInTheDocument();
   });
 

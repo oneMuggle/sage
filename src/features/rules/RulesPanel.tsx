@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import {
-  rulesApi,
-  type RuleConflict,
-  type RuleEntry,
-} from '../../shared/api/rulesApi';
+import { rulesApi, type RuleConflict, type RuleEntry } from '../../shared/api/rulesApi';
 import { useI18n } from '../../shared/lib/i18n';
 import { Button } from '../../shared/ui/Button';
 import { Input } from '../../shared/ui/Input';
@@ -29,40 +25,53 @@ export interface RulesPanelProps {
 
 interface RulesData {
   rules: RuleEntry[];
+  effectiveEntries: RuleEntry[];
   conflicts: RuleConflict[];
   loading: boolean;
   error: string | null;
-  reload: () => Promise<void>;
+  reload: () => void;
 }
 
 function useRulesData(projectId: string): RulesData {
   const [rules, setRules] = useState<RuleEntry[]>([]);
+  const [effectiveEntries, setEffectiveEntries] = useState<RuleEntry[]>([]);
   const [conflicts, setConflicts] = useState<RuleConflict[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [list, effective] = await Promise.all([
-        rulesApi.list(projectId),
-        rulesApi.effective(projectId),
-      ]);
-      setRules(list);
-      setConflicts(effective.conflicts);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
+  const reload = useCallback(() => {
+    setReloadToken((token) => token + 1);
+  }, []);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    let active = true;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [list, effective] = await Promise.all([
+          rulesApi.list(projectId),
+          rulesApi.effective(projectId),
+        ]);
+        if (!active) return;
+        setRules(list);
+        setEffectiveEntries(effective.entries);
+        setConflicts(effective.conflicts);
+      } catch (err) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [projectId, reloadToken]);
 
-  return { rules, conflicts, loading, error, reload };
+  return { rules, effectiveEntries, conflicts, loading, error, reload };
 }
 
 function RulesHealthBadge({
@@ -155,6 +164,7 @@ function RulesFilterBar({ search, onSearch, layer, onLayer }: RulesFilterBarProp
         value={search}
         onChange={(event) => onSearch(event.target.value)}
         placeholder={t('rules.search.placeholder')}
+        aria-label={t('rules.search.placeholder')}
         className="max-w-xs"
         data-testid="rules-search"
       />
@@ -163,6 +173,7 @@ function RulesFilterBar({ search, onSearch, layer, onLayer }: RulesFilterBarProp
           key={id}
           type="button"
           onClick={() => onLayer(id)}
+          aria-pressed={layer === id}
           data-testid={`rules-filter-${id}`}
           className={`rounded-md px-2.5 py-1 text-ui-2xs font-medium transition-colors ${
             layer === id
@@ -207,11 +218,11 @@ function RulesEmpty() {
   );
 }
 
-function RulesEmptyFiltered({ filtered }: { filtered: boolean }) {
+function RulesEmptyFiltered() {
   const { t } = useI18n();
   return (
     <p className="px-1 text-ui-2xs text-muted-foreground" data-testid="rules-empty-filtered">
-      {filtered ? t('rules.empty.filtered') : t('rules.empty.title')}
+      {t('rules.empty.filtered')}
     </p>
   );
 }
@@ -255,7 +266,7 @@ function RuleGroupList({ groups, conflicted, onOpenSource }: RuleGroupListProps)
 
 export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
   const { t } = useI18n();
-  const { rules, conflicts, loading, error, reload } = useRulesData(projectId);
+  const { rules, effectiveEntries, conflicts, loading, error, reload } = useRulesData(projectId);
   const [search, setSearch] = useState('');
   const [layer, setLayer] = useState<LayerFilter>('all');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -265,7 +276,6 @@ export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
     [rules, search, layer],
   );
   const enabledCount = countEnabled(rules);
-  const filtered = search.trim().length > 0 || layer !== 'all';
   const hasRules = rules.length > 0;
 
   return (
@@ -275,7 +285,7 @@ export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
         conflictCount={conflicts.length}
         loading={loading}
         onOpenDrawer={() => setDrawerOpen(true)}
-        onRefresh={() => void reload()}
+        onRefresh={reload}
       />
       <RulesFilterBar search={search} onSearch={setSearch} layer={layer} onLayer={setLayer} />
       {loading && (
@@ -283,16 +293,14 @@ export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
           {t('rules.loading')}
         </p>
       )}
-      {error && <RulesErrorNotice message={error} onRetry={() => void reload()} />}
+      {error && <RulesErrorNotice message={error} onRetry={reload} />}
       {!loading && !error && !hasRules && <RulesEmpty />}
-      {!loading && !error && hasRules && groups.length === 0 && (
-        <RulesEmptyFiltered filtered={filtered} />
-      )}
+      {!loading && !error && hasRules && groups.length === 0 && <RulesEmptyFiltered />}
       <RuleGroupList groups={groups} conflicted={conflicted} onOpenSource={onOpenSource} />
       <EffectiveRulesDrawer
         isOpen={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        entries={rules}
+        entries={effectiveEntries}
         conflicts={conflicts}
       />
     </div>
