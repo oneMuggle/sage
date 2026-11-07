@@ -30,7 +30,9 @@ export type AgentState =
   // Task 10 (2026-09-17): 自动话题检测 — 切换 segment 时由 producer 推送。
   | 'topic_shifted'
   // 2026-10-31: 动态迭代预算检查点（与 types/chatAndEventTypes.ts 同步）。
-  | 'iteration_checkpoint';
+  | 'iteration_checkpoint'
+  // 2026-11-07: 插话消费回执（与 types/chatAndEventTypes.ts 同步）。
+  | 'steer_consumed';
 
 // 窄类型事件接口 —— useChat taskBoard 状态机的数据类型。
 // AgentState / AgentEvent（宽松字段）见 types.ts —— 双处保持一致。
@@ -168,6 +170,8 @@ export interface AgentEvent {
   reason?: string;
   // right-panel R5 (2026-09-19): workspace_changed 事件载荷（与 types.ts 同步）。
   change?: { path: string; kind?: string };
+  // 2026-11-07: state === 'steer_consumed' 时携带被消费的插话 id 列表。
+  steer_info?: { ids: string[] };
 }
 
 export async function* parseNDJSONStream(

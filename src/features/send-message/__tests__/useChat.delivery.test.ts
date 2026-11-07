@@ -17,6 +17,7 @@ import type { TaskSummary } from '../../../shared/api/orchEvents';
 import { type Message, useStore } from '../../../shared/lib/store';
 import { selectSessionSlots, useChatStreamStore } from '../chatStreamStore';
 import { steeringAnchorId, useChat } from '../useChat';
+import { createFakeStream, streamEvent } from './fixtures/fakeStream';
 
 // 必须使用工厂函数，vitest 才能正确 hoist
 // 默认 mockResolvedValue(undefined) 让未 mock 的 IPC 调用（如 useSettings
@@ -111,12 +112,17 @@ afterEach(() => {
 });
 
 // P1 (2026-09-20): 插话（steering）回显的落位与回退语义。
+// 2026-11-07: 改为暂存区语义 —— 发出后先进输入框上方 chip，不进聊天区；
+// 后端消费回执（steer_consumed）到达时才按 DB 顺序落到流式气泡之前。
 describe('useChat 插话回显', () => {
-  it('回显落在本轮流式 assistant 气泡之前（与 DB 顺序一致，避免流末跳位）', async () => {
+  it('插话先进暂存区，消费回执后才落到流式 assistant 气泡之前', async () => {
     seedActiveEndpoint();
     invokeMock.mockResolvedValueOnce({ streamId: 'stream-1' });
-    // 不发 done —— 流保持打开，会话维持"忙"
-    listenMock.mockImplementationOnce(async () => vi.fn());
+    const stream = createFakeStream(
+      [streamEvent('steer_consumed', { steer_info: { ids: ['steer-1'] } })],
+      { step: 'manual', closeWhenDone: false },
+    );
+    listenMock.mockImplementationOnce(stream.listen);
 
     const { result } = renderHook(() => useChat());
     await waitForSettingsLoaded();
@@ -126,7 +132,7 @@ describe('useChat 插话回显', () => {
     expect(result.current.isLoading).toBe(true);
 
     invokeMock.mockImplementation(async (cmd: string) =>
-      cmd === 'chat_steer' ? { ok: true } : undefined,
+      cmd === 'chat_steer' ? { ok: true, message_id: 'steer-1' } : undefined,
     );
     await act(async () => {
       await result.current.sendMessage('第二段太长了');
@@ -136,14 +142,28 @@ describe('useChat 插话回显', () => {
       'chat_steer',
       expect.objectContaining({ streamId: 'stream-1', content: '第二段太长了' }),
     );
+    // 尚未消费：不落聊天区，停留在暂存区
     expect(
       result.current.messages.map((m) => `${m.role}${m.subtype ? `:${m.subtype}` : ''}`),
-    ).toEqual(['user', 'user:steering', 'assistant']);
-    expect(result.current.messages[1].content).toBe('第二段太长了');
+    ).toEqual(['user', 'assistant']);
+    expect(result.current.pendingSteer).toEqual([
+      expect.objectContaining({ id: 'steer-1', content: '第二段太长了' }),
+    ]);
     // 插话成功即生效，不该同时进队列
     expect(
       selectSessionSlots(useChatStreamStore.getState(), VALID_SESSION_ID).pendingQueue,
     ).toEqual([]);
+
+    // 后端在迭代边界消费 → 回执把 chip 摘掉、按锚点落聊天区
+    await act(async () => {
+      stream.emitNext();
+      await Promise.resolve();
+    });
+    expect(
+      result.current.messages.map((m) => `${m.role}${m.subtype ? `:${m.subtype}` : ''}`),
+    ).toEqual(['user', 'user:steering', 'assistant']);
+    expect(result.current.messages[1].content).toBe('第二段太长了');
+    expect(result.current.pendingSteer).toEqual([]);
   });
 
   it('steer 被后端拒绝（409 不在运行窗口）时回退排队，且不产生回显', async () => {
@@ -221,7 +241,8 @@ async function startBusyStream(result: { current: ReturnType<typeof useChat> }):
   expect(result.current.isLoading).toBe(true);
 }
 
-const queueOf = () => selectSessionSlots(useChatStreamStore.getState(), VALID_SESSION_ID).pendingQueue;
+const queueOf = () =>
+  selectSessionSlots(useChatStreamStore.getState(), VALID_SESSION_ID).pendingQueue;
 
 // P2-a (2026-09-20): 会话忙时三条投递通道的分流。
 describe('useChat 投递通道 (P2-a)', () => {
@@ -287,7 +308,7 @@ describe('useChat 投递通道 (P2-a)', () => {
     const { result } = renderHook(() => useChat());
     await startBusyStream(result);
     invokeMock.mockImplementation(async (cmd: string) =>
-      cmd === 'chat_steer' ? { ok: true } : undefined,
+      cmd === 'chat_steer' ? { ok: true, message_id: 'steer-default' } : undefined,
     );
 
     await act(async () => {
@@ -298,7 +319,9 @@ describe('useChat 投递通道 (P2-a)', () => {
       'chat_steer',
       expect.objectContaining({ streamId: 'stream-1', content: '默认就是插话' }),
     );
+    // 插话成功 → 进暂存区等待消费，不进队列
     expect(queueOf()).toEqual([]);
+    expect(result.current.pendingSteer).toHaveLength(1);
     expect(invokeMock).not.toHaveBeenCalledWith('interrupt_agent', expect.anything());
   });
 });
