@@ -501,6 +501,9 @@ def _v14_agents_last_used_at(conn: Any) -> None:
     cursor = conn.cursor()
     cursor.execute("PRAGMA table_info(agents)")
     columns = {row[1] for row in cursor.fetchall()}
+    if not columns:
+        # 极老库尚未建 agents 表 —— 交由 init_db DDL 负责，跳过。
+        return
     if "last_used_at" not in columns:
         cursor.execute("ALTER TABLE agents ADD COLUMN last_used_at INTEGER")
         conn.commit()
@@ -518,6 +521,9 @@ def _v15_agents_sort_order(conn: Any) -> None:
     cursor = conn.cursor()
     cursor.execute("PRAGMA table_info(agents)")
     columns = {row[1] for row in cursor.fetchall()}
+    if not columns:
+        # 极老库尚未建 agents 表 —— 交由 init_db DDL 负责，跳过。
+        return
     if "sort_order" not in columns:
         cursor.execute("ALTER TABLE agents ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
         conn.commit()
