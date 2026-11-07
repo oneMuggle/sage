@@ -52,6 +52,14 @@ def _write_docx(path: Path) -> None:
     document.save(str(path))
 
 
+def _write_text_docx(path: Path, text: str) -> None:
+    from docx import Document as DocxDocument
+
+    document = DocxDocument()
+    document.add_paragraph(text)
+    document.save(str(path))
+
+
 def test_group_crud_roundtrip(client: TestClient) -> None:
     created = client.post("/api/v1/rules/groups", json=GROUP)
     assert created.status_code == 201
@@ -171,6 +179,10 @@ def test_update_rule_rejects_explicit_null_on_required_fields(client: TestClient
     assert rejected.status_code == 422
     assert "name" in rejected.json()["detail"]
 
+    enabled_rejected = client.put(f"/api/v1/rules/rules/{rule['id']}", json={"enabled": None})
+    assert enabled_rejected.status_code == 422
+    assert "enabled" in enabled_rejected.json()["detail"]
+
     # pattern is NULLable — an explicit null is accepted.
     nullable = client.put(f"/api/v1/rules/rules/{rule['id']}", json={"pattern": None})
     assert nullable.status_code == 200
@@ -193,3 +205,68 @@ def test_extract_rejects_symlink_escape(client: TestClient, tmp_path: Path) -> N
         json={"workspace_path": str(workspace), "file_path": str(link)},
     )
     assert response.status_code == 400
+
+
+def test_audit_runs_regex_rules(client: TestClient, tmp_path: Path) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+    rule = client.post(f"/api/v1/rules/groups/{group['id']}/rules", json=RULE).json()
+    _write_text_docx(tmp_path / "clean.docx", "这是一段干净的正文。")
+    clean = client.post(
+        "/api/v1/rules/audit",
+        json={
+            "workspace_path": str(tmp_path),
+            "file_path": str(tmp_path / "clean.docx"),
+            "rule_ids": [rule["id"]],
+        },
+    )
+    assert clean.status_code == 200
+    assert clean.json()["warning_count"] == 0
+
+    _write_text_docx(tmp_path / "dirty.docx", "这一行包含违禁词：待定。")
+    hit = client.post(
+        "/api/v1/rules/audit",
+        json={
+            "workspace_path": str(tmp_path),
+            "file_path": str(tmp_path / "dirty.docx"),
+            "rule_ids": [rule["id"]],
+        },
+    )
+    assert hit.status_code == 200
+    body = hit.json()
+    assert body["warning_count"] == 1
+    assert body["findings"][0]["rule_id"] == rule["id"]
+    assert body["findings"][0]["location"] == "第 1 段"
+
+
+def test_audit_ai_rule_without_llm_returns_503(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+    ai_rule = dict(RULE, name="AI 规则", check_mode="ai", pattern=None, ai_prompt="检查术语")
+    rule = client.post(f"/api/v1/rules/groups/{group['id']}/rules", json=ai_rule).json()
+    _write_text_docx(tmp_path / "doc.docx", "正文")
+    from backend.api import rules_routes
+
+    monkeypatch.setattr(rules_routes, "build_llm_client_from_settings", lambda: None)
+    response = client.post(
+        "/api/v1/rules/audit",
+        json={
+            "workspace_path": str(tmp_path),
+            "file_path": str(tmp_path / "doc.docx"),
+            "rule_ids": [rule["id"]],
+        },
+    )
+    assert response.status_code == 503
+
+
+def test_audit_unknown_rule_returns_404(client: TestClient, tmp_path: Path) -> None:
+    _write_text_docx(tmp_path / "doc.docx", "正文")
+    response = client.post(
+        "/api/v1/rules/audit",
+        json={
+            "workspace_path": str(tmp_path),
+            "file_path": str(tmp_path / "doc.docx"),
+            "rule_ids": ["rule-missing"],
+        },
+    )
+    assert response.status_code == 404

@@ -20,13 +20,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.data.database import Database, get_database
 from backend.office.errors import OfficePathError, OfficeSizeLimitError
 from backend.office.path_safety import resolve_within
-from backend.office.rule_models import Rule, RuleGroup
+from backend.office.rule_executor import run_audit
+from backend.office.rule_models import AuditResult, Rule, RuleGroup
 from backend.office.rule_repo import (
     create_group,
     create_rule,
     delete_group,
     delete_rule,
     get_group,
+    get_rule,
     list_groups,
     update_group,
     update_rule,
@@ -34,6 +36,7 @@ from backend.office.rule_repo import (
 from backend.office.storage import validate_workspace
 from backend.office.word_rule_extract import extract_word_rules_async
 from backend.office.word_rulepack_models import WordRuleSpec
+from backend.orchestration.llm_factory import build_llm_client_from_settings
 
 router = APIRouter(prefix="/rules", tags=["office"])
 
@@ -134,6 +137,15 @@ class DeleteResponse(BaseModel):
     id: str
 
 
+class AuditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str
+    rule_ids: List[str] = Field(..., min_length=1)
+    max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
+
+
 def _spec_to_rule(spec: WordRuleSpec) -> Rule:
     """Map an extraction spec onto the editor's Rule shape.
 
@@ -229,7 +241,15 @@ def create_rule_endpoint(group_id: str, req: RuleCreateRequest) -> Rule:
 @router.put("/rules/{rule_id}", response_model=Rule)
 def update_rule_endpoint(rule_id: str, req: RuleUpdateRequest) -> Rule:
     payload = req.model_dump(exclude_unset=True)
-    for field_name in ("name", "type", "severity", "scope", "check_mode", "description"):
+    for field_name in (
+        "name",
+        "type",
+        "severity",
+        "scope",
+        "check_mode",
+        "description",
+        "enabled",
+    ):
         if field_name in payload and payload[field_name] is None:
             raise HTTPException(status_code=422, detail=f"{field_name} cannot be null")
     try:
@@ -274,4 +294,37 @@ async def extract_endpoint(req: ExtractRequest) -> ExtractResponse:
             ExtractWarning(code=item["code"], message=item["message"])
             for item in result.warnings
         ],
+    )
+
+
+@router.post("/audit", response_model=AuditResult)
+async def audit_endpoint(req: AuditRequest) -> AuditResult:
+    conn = _db().get_connection()
+    rules: List[Rule] = []
+    for rule_id in req.rule_ids:
+        try:
+            rules.append(get_rule(conn, rule_id))
+        except ValueError as exc:
+            raise _not_found(exc) from exc
+
+    workspace = validate_workspace(Path(req.workspace_path))
+    source = resolve_within(workspace, Path(req.file_path))
+    if not source.is_file():
+        raise OfficePathError(
+            f"file_path is not a regular file: {req.file_path}", file_path=source
+        )
+    actual_size = source.stat().st_size
+    if actual_size > req.max_size_bytes:
+        raise OfficeSizeLimitError(
+            actual_size=actual_size, max_size=req.max_size_bytes, file_path=source
+        )
+
+    llm_client = None
+    if any(rule.enabled and rule.check_mode == "ai" for rule in rules):
+        llm_client = build_llm_client_from_settings()
+        if llm_client is None:
+            raise HTTPException(status_code=503, detail="LLM 客户端未配置")
+
+    return await run_audit(
+        rules, source, workspace_path=str(workspace), llm_client=llm_client
     )
