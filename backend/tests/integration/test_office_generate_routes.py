@@ -441,3 +441,189 @@ def test_template_chat_without_llm_returns_503(tmp_path: Path) -> None:
         )
 
     assert resp.status_code == 503, resp.text
+
+
+def _write_source_docx(workspace: Path, name: str, text: str) -> Path:
+    from docx import Document
+
+    path = workspace / name
+    doc = Document()
+    doc.add_paragraph(text)
+    doc.save(str(path))
+    return path
+
+
+def test_iterate_word_happy_path(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    source = _write_source_docx(workspace, "report.docx", "原始内容：第一版周报")
+    fake = _make_output(workspace, "word", "iter1", "report_v2.docx", b"v2")
+
+    llm = AsyncMock()
+    llm.complete.return_value = '{"title": "周报第二版", "paragraphs": [{"text": "修订后的内容"}]}'
+
+    with patch(  # noqa: SIM117 — py38 不支持括号多上下文 with
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        with patch(
+            "backend.api.office_generate_routes.generate_docx", return_value=fake
+        ) as mock_gen:
+            resp = _client().post(
+                "/api/v1/office/generate/iterate",
+                json={
+                    "workspace_path": str(workspace),
+                    "source_path": str(source),
+                    "instruction": "把语气改得更正式",
+                },
+            )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["filename"] == "report_v2.docx"
+    assert data["summary"]["id"] == "iter1"
+    assert data["summary"]["doc_type"] == "word"
+
+    request = mock_gen.call_args.args[0]
+    assert request.filename == "report_v2.docx"
+    assert request.workspace_path == str(workspace.resolve())
+    assert request.title == "周报第二版"
+
+    prompt = llm.complete.call_args.args[0]
+    assert "原始内容：第一版周报" in prompt
+    assert "把语气改得更正式" in prompt
+
+
+def test_iterate_increments_existing_version_suffix(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    source = _write_source_docx(workspace, "report_v2.docx", "第二版")
+    fake = _make_output(workspace, "word", "iter2", "report_v3.docx", b"v3")
+
+    llm = AsyncMock()
+    llm.complete.return_value = '{"title": "T", "paragraphs": [{"text": "b"}]}'
+
+    with patch(  # noqa: SIM117 — py38 不支持括号多上下文 with
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        with patch(
+            "backend.api.office_generate_routes.generate_docx", return_value=fake
+        ) as mock_gen:
+            resp = _client().post(
+                "/api/v1/office/generate/iterate",
+                json={
+                    "workspace_path": str(workspace),
+                    "source_path": str(source),
+                    "instruction": "继续修改",
+                },
+            )
+
+    assert resp.status_code == 200, resp.text
+    assert mock_gen.call_args.args[0].filename == "report_v3.docx"
+
+
+def test_iterate_rejects_source_outside_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    outside = _write_source_docx(tmp_path, "outside.docx", "secret")
+
+    llm = AsyncMock()
+    with patch(
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        resp = _client().post(
+            "/api/v1/office/generate/iterate",
+            json={
+                "workspace_path": str(workspace),
+                "source_path": str(outside),
+                "instruction": "x",
+            },
+        )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error_type"] == "OfficePathError"
+    llm.complete.assert_not_called()
+
+
+def test_iterate_rejects_non_docx_source(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    notes = workspace / "notes.txt"
+    notes.write_text("not a docx", encoding="utf-8")
+
+    resp = _client().post(
+        "/api/v1/office/generate/iterate",
+        json={
+            "workspace_path": str(workspace),
+            "source_path": str(notes),
+            "instruction": "x",
+        },
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error_type"] == "OfficePathError"
+
+
+def test_iterate_missing_source_returns_400(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    resp = _client().post(
+        "/api/v1/office/generate/iterate",
+        json={
+            "workspace_path": str(workspace),
+            "source_path": str(workspace / "nope.docx"),
+            "instruction": "x",
+        },
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error_type"] == "OfficePathError"
+
+
+def test_iterate_invalid_llm_json_returns_422(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    source = _write_source_docx(workspace, "report.docx", "正文")
+
+    llm = AsyncMock()
+    llm.complete.return_value = "not json"
+
+    with patch(
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        resp = _client().post(
+            "/api/v1/office/generate/iterate",
+            json={
+                "workspace_path": str(workspace),
+                "source_path": str(source),
+                "instruction": "x",
+            },
+        )
+
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["error_type"] == "OfficeParseError"
+
+
+def test_iterate_without_llm_returns_503(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    source = _write_source_docx(workspace, "report.docx", "正文")
+
+    with patch(
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=None,
+    ):
+        resp = _client().post(
+            "/api/v1/office/generate/iterate",
+            json={
+                "workspace_path": str(workspace),
+                "source_path": str(source),
+                "instruction": "x",
+            },
+        )
+
+    assert resp.status_code == 503, resp.text

@@ -31,6 +31,7 @@ from backend.office.errors import OfficeFileNotFoundError, OfficeParseError, Off
 from backend.office.excel import generate_xlsx
 from backend.office.generate_service import (
     build_nl_prompt,
+    next_iteration_filename,
     parse_llm_json_object,
     parse_llm_spec,
     to_excel_request,
@@ -311,6 +312,77 @@ async def template_chat_endpoint(req: TemplateChatRequest) -> NlGenerateResponse
             _db().get_connection(),
             file_path=output_path,
             doc_type=entry.doc_type,
+            workspace_path=str(workspace),
+        )
+        prog.report("完成", 100)
+
+    return NlGenerateResponse(
+        output_path=str(output_path),
+        filename=output_path.name,
+        file_size_bytes=output_path.stat().st_size,
+        summary=summary,
+    )
+
+
+class IterateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: Optional[str] = None
+    workspace_path: str
+    source_path: str
+    instruction: str = Field(..., min_length=1)
+
+
+def _resolve_source_docx(workspace: Path, raw_path: str) -> Path:
+    """Resolve an iterate source inside the workspace; .docx only."""
+    source = resolve_within(workspace, Path(raw_path))
+    if not source.is_file():
+        raise OfficePathError(f"source_path is not a regular file: {raw_path}", file_path=source)
+    if source.suffix.lower() != ".docx":
+        raise OfficePathError(
+            f"source_path only supports .docx files: {raw_path}", file_path=source
+        )
+    return source
+
+
+@router.post("/iterate", response_model=NlGenerateResponse)
+async def iterate_endpoint(req: IterateRequest) -> NlGenerateResponse:
+    """Rewrite an existing .docx according to an instruction."""
+    workspace = validate_workspace(Path(req.workspace_path))
+    source = _resolve_source_docx(workspace, req.source_path)
+    source_text = read_docx_text(source)
+
+    prompt = build_nl_prompt(
+        instruction=("在原有文档基础上按修改要求输出完整的新版本。" f"修改要求：{req.instruction}"),
+        doc_type="word",
+        reference_texts=[source_text],
+    )
+    client = build_llm_client_from_settings()
+    if client is None:
+        raise HTTPException(status_code=503, detail="LLM 客户端未配置")
+
+    task_id = req.task_id or uuid.uuid4().hex
+    with track(task_id, "迭代文档") as prog:
+        prog.report("调用 LLM 改写文档", 10)
+        llm_output = await client.complete(prompt)
+
+        prog.report("解析文档结构", 50)
+        try:
+            spec = parse_llm_spec(llm_output, "word")
+        except ValueError as exc:
+            raise OfficeParseError(str(exc)) from exc
+
+        prog.report("生成新版本", 70)
+        filename = validate_supported_filename(
+            next_iteration_filename(source.name), OfficeDocType.WORD
+        )
+        output_path = _generate_document(spec, OfficeDocType.WORD, workspace, filename)
+
+        prog.report("登记文档", 90)
+        summary = persist_generated_document(
+            _db().get_connection(),
+            file_path=output_path,
+            doc_type=OfficeDocType.WORD,
             workspace_path=str(workspace),
         )
         prog.report("完成", 100)
