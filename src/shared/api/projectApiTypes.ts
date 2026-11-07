@@ -506,15 +506,11 @@ export function mapProjectReference(w: ProjectReferenceWire): ProjectReference {
   };
 }
 
-export function mapProjectReferenceList(
-  w: ProjectReferenceListWire,
-): ProjectReference[] {
+export function mapProjectReferenceList(w: ProjectReferenceListWire): ProjectReference[] {
   return (w.references ?? []).map(mapProjectReference);
 }
 
-export function mapProjectReferenceScan(
-  w: ProjectReferenceScanWire,
-): ProjectReferenceScanResult {
+export function mapProjectReferenceScan(w: ProjectReferenceScanWire): ProjectReferenceScanResult {
   return {
     projectId: w.project_id,
     scanned: Boolean(w.scanned),

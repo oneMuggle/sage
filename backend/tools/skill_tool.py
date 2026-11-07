@@ -24,7 +24,6 @@ M1 审批闸口按模式矩阵拦截（workspace_write/prompt 下逐次确认）
 
 from __future__ import annotations
 
-import contextvars
 import logging
 import shlex
 from typing import Any, Iterable, List, Optional, Set
@@ -40,31 +39,23 @@ logger = logging.getLogger(__name__)
 #: 工具名常量（注册 / 测试共用）
 SKILL_TOOL_NAME = "skill"
 
-#: ContextVar 未设置哨兵 —— 区分「未设置」与「显式不受限（None）」。
-_UNSET = object()
-
-#: 当前 turn 的技能允许集（M1，spec §5.1）：hex ChatService 与多个会话
-#: 共享同一工具注册表，构造期注入无法表达"本轮是哪个专家"，因此由执行器
-#: 在执行 tool_calls 前把解析好的允许集写入 ContextVar，``SkillTool``
-#: 解析作用域时优先读取。ContextVar 随 ``py_compat.to_thread``
-#: （py38 走 copy_context）传入工具线程，并发会话互不串扰。
-_TURN_SKILL_ALLOWLIST: contextvars.ContextVar[Any] = contextvars.ContextVar(
-    "turn_skill_allowlist", default=_UNSET
+# 本轮技能作用域（M1，spec §5.1）原语在 domain 层定义，避免
+# application → tools 的静态依赖触发六边形架构违规；这里重导出供调用方
+# 与测试继续使用。
+from backend.domain.skill_scope import (  # noqa: E402 — 分组导入保持文件头整洁
+    peek_turn_skill_allowlist,
+    reset_turn_skill_allowlist,
+    set_turn_skill_allowlist,
 )
 
-
-def set_turn_skill_allowlist(allowed: Optional[Iterable[str]]) -> Any:
-    """设置本轮技能允许集，返回用于恢复的 token（配合 ``reset_*``）。
-
-    ``allowed=None`` 表示公开技能不受限（私有技能仍被遮罩）。
-    """
-    value = None if allowed is None else frozenset(allowed)
-    return _TURN_SKILL_ALLOWLIST.set(value)
-
-
-def reset_turn_skill_allowlist(token: Any) -> None:
-    """恢复 ``set_turn_skill_allowlist`` 之前的作用域。"""
-    _TURN_SKILL_ALLOWLIST.reset(token)
+# 供测试与调用方的模块级重导出（ContextVar 原语已下沉到 domain）。
+__all__ = [
+    "SkillTool",
+    "SKILL_TOOL_NAME",
+    "inject_skill_scope",
+    "set_turn_skill_allowlist",
+    "reset_turn_skill_allowlist",
+]
 
 
 def inject_skill_scope(
@@ -128,8 +119,8 @@ class SkillTool(BaseTool):
         构造期注入的专家作用域（legacy SageAgent）＞ 无限制。
         """
         adapter = self._resolve_adapter()
-        turn_allowed = _TURN_SKILL_ALLOWLIST.get()
-        if turn_allowed is not _UNSET:
+        allowlist_set, turn_allowed = peek_turn_skill_allowlist()
+        if allowlist_set:
             return None if turn_allowed is None else set(turn_allowed)
         if self.agent_id:
             resolve_agent = getattr(adapter, "resolve_agent_allowlist", None)

@@ -1,7 +1,6 @@
 {
   "description": "Per-subsystem ratchet ceiling for broad silent except-pass blocks in backend/.",
   "subsystems": {
-    "backend/__init__.py": 2,
     "backend/api": 6,
     "backend/application": 0,
     "backend/chat": 0,

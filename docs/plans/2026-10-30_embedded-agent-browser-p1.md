@@ -52,7 +52,7 @@ backend browser_cdp.cdp_command
 | `backend/api/diagnostic_routes.py` | 浏览器健康：embedded 时报告「Sage 内置浏览器」 |
 | `backend/skills/skill_md/shipped/cnki-research/SKILL.md` | 新建：知网检索/登录/PDF 下载 playbook |
 | `backend/skills/builtin/academic_adapters.py` | CNKI URL 切到 kns8s 检索页 + 说明 |
-| `docs/user-manual/19-web-access.md` | 内置浏览器说明（Win7） |
+| `docs/user-manual/18-web-access.md` | 内置浏览器说明（Win7） |
 | `backend/tests/unit/test_browser_cdp_embedded.py` | 新建：launcher 发现 / 命令路由 / 错误映射 |
 | `backend/tests/unit/test_academic_adapters.py`（如存在则扩展） | 新 URL 断言 |
 

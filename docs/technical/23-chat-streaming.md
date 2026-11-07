@@ -300,9 +300,8 @@ max_iterations_exceeded (limit=10, agent=writer, source=profile)
   - 安全性:`LLMClient` 的流式重试仅在 `nothing_yielded`(无 content 且无
     reasoning)时发生,已下发的 delta 不会因重试重复。
   - 回归:`backend/tests/unit/test_agent_streaming.py` 的
-    `test_run_loop_streaming_forwards_reasoning_delta_immediately`、
-    `backend/tests/integration/test_chat_stream_lifecycle.py` 的
-    `test_chat_stream_producer_passes_reasoning_delta_through`。
+    `test_run_loop_streaming_forwards_reasoning_delta_immediately`
+    (main 侧 producer 直通由既有流式集成用例覆盖)。
 
 ### 10.3 中间态占位符不得吞掉已流式正文
 
@@ -333,7 +332,7 @@ max_iterations_exceeded (limit=10, agent=writer, source=profile)
 136 秒)。
 
 根因:producer 在 assistant 消息落库后、`done` 入队前**同步 await** stop hooks
-与 `lifecycle.on_turn_complete`。后者的 `MemoryExtractor` 用无配置的
+与 `_extract_legacy_chat_memory`。后者的 `MemoryExtractor` 用无配置的
 `HttpxLLMAdapter()`(默认 `https://api.openai.com/v1`、空 key、timeout=60s),
 3 次尝试 ≈ 136s。期间生产者不发心跳,前端 watchdog 默认 1800s 也不会触发。
 
@@ -347,10 +346,9 @@ max_iterations_exceeded (limit=10, agent=writer, source=profile)
 - 记忆抽取改用 `backend/orchestration/llm_factory.py` 新增的
   `build_httpx_adapter_from_settings()`:按持久化 endpoint 构建适配器;无可用
   endpoint 返回 `None`,`MemoryExtractor` 降级为关键词抽取,零网络。
-  `main.py:_build_lifecycle_extractor()` 与
   `chat_session_lifecycle._extract_legacy_chat_memory` 同步替换。
 - **heartbeat / watchdog 语义不改动**:心跳只在重试退避期间发出,是合法的活性
   信号;卡顿根因是 `done` 被阻塞,不是 watchdog 阈值。
-- 回归:`test_chat_stream_done_not_blocked_by_slow_lifecycle`、
-  `test_llm_factory.py::TestBuildHttpxAdapter`、
-  `test_lifecycle_extractor_wiring.py` 的有/无 endpoint 两条分支。
+- 回归:
+  `test_chat_stream_done_not_blocked.py::test_done_arrives_while_post_turn_side_effects_still_running`、
+  `test_llm_factory.py::TestBuildHttpxAdapter` 的有/无 endpoint 两条分支。

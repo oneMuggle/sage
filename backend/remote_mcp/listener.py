@@ -11,14 +11,14 @@ import logging
 import socket
 import threading
 import time
-from typing import Dict, Optional
+from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from . import DEFAULT_PORT, SERVER_VERSION
-from .protocol import MAX_BODY_BYTES, RemoteMcpService
+from .protocol import RemoteMcpService
 
 logger = logging.getLogger(__name__)
 
@@ -38,25 +38,8 @@ def create_app(service: RemoteMcpService) -> FastAPI:
 
     @app.api_route("/mcp/{token}", methods=["GET", "POST", "DELETE"])
     async def mcp_endpoint(token: str, request: Request) -> Response:
+        body = await request.body()
         headers = {k.lower(): v for k, v in request.headers.items()}
-        error = _request_rejection(service, token, headers)
-        if error is not None:
-            return error
-        content_length = headers.get("content-length")
-        if content_length is not None:
-            try:
-                if int(content_length) > MAX_BODY_BYTES:
-                    return JSONResponse({"error": "BODY_TOO_LARGE"}, status_code=413)
-            except ValueError:
-                return JSONResponse({"error": "INVALID_CONTENT_LENGTH"}, status_code=400)
-        body_parts = []
-        body_size = 0
-        async for part in request.stream():
-            body_size += len(part)
-            if body_size > MAX_BODY_BYTES:
-                return JSONResponse({"error": "BODY_TOO_LARGE"}, status_code=413)
-            body_parts.append(part)
-        body = b"".join(body_parts)
         status, extra, payload = await run_in_threadpool(
             service.handle, request.method, token, headers, body
         )
@@ -65,18 +48,6 @@ def create_app(service: RemoteMcpService) -> FastAPI:
         return JSONResponse(payload, status_code=status, headers=extra)
 
     return app
-
-
-def _request_rejection(
-    service: RemoteMcpService, token: str, headers: Dict[str, str]
-) -> Optional[JSONResponse]:
-    if headers.get("origin"):
-        return JSONResponse({"error": "BROWSER_ORIGIN_DENIED"}, status_code=403)
-    if service.paused:
-        return JSONResponse({"error": "BRIDGE_PAUSED"}, status_code=503)
-    if service.store.find_by_token(token) is None:
-        return JSONResponse({"error": "NOT_FOUND"}, status_code=404)
-    return None
 
 
 class Listener:

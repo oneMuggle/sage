@@ -13,6 +13,8 @@ export interface ShellInfo {
   status: 'running' | 'exited';
   pid: number | null;
   age_seconds: number;
+  /** 2026-11-07 Phase 5: 已退出 shell 的退出码（未知为 null）。 */
+  exit_code?: number | null;
 }
 
 export type ShellStreamEvent =

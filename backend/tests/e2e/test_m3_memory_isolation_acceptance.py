@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+from typing import Dict, Set
+
 import pytest
 
 from backend.memory import get_memory_manager
@@ -37,19 +39,19 @@ async def _create_agent(client, agent_id: str, name: str) -> None:
     assert resp.status_code == 200, resp.text
 
 
-def _recalled_ids(manager, agent_id: str) -> set[str]:
+def _recalled_ids(manager, agent_id: str) -> Set[str]:
     """该专家通过读路径（私有 ∪ 共享）能看到的情景/语义记忆 ID 集合。"""
     result = manager.recall(
         QUERY, limit=20, memory_types=["episodic", "semantic"], agent_id=agent_id
     )
-    ids: set[str] = set()
+    ids: Set[str] = set()
     for kind in ("episodic", "semantic"):
         for row in result.get(kind) or []:
             ids.add(row["id"])
     return ids
 
 
-def _seed_private_and_shared(manager) -> dict[str, str]:
+def _seed_private_and_shared(manager) -> Dict[str, str]:
     """写入两个专家的私有记忆 + 一条共享偏好，返回 id 索引。"""
     return {
         "writer_episodic": manager.memorize(

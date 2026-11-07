@@ -31,15 +31,6 @@ except ImportError:
     PYDANTIC_V2 = False
 
 
-def _list_length_kwargs(limit: int) -> Dict[str, int]:
-    """列表长度上限：pydantic v1 用 ``max_items``，v2 用 ``max_length``。
-
-    v1 会把 ``max_length`` 施加到列表的每个元素（字符串长度）上，
-    与 v2 的「列表长度」语义不同，因此两个版本必须分开书写。
-    """
-    return {"max_length": limit} if PYDANTIC_V2 else {"max_items": limit}
-
-
 class PluginType(str, Enum):
     """Plugin type classification."""
 
@@ -136,16 +127,14 @@ class PluginMetadata(BaseModel):
     repository: Optional[str] = Field(default=None, description="代码仓库 URL")
     license: str = Field(default="MIT", description="许可证")
     categories: List[str] = Field(
-        default_factory=list, description="分类标签", **_list_length_kwargs(10)
+        default_factory=list, description="分类标签", max_length=10
     )
-    tags: List[str] = Field(
-        default_factory=list, description="标签", **_list_length_kwargs(20)
-    )
+    tags: List[str] = Field(default_factory=list, description="标签", max_length=20)
 
     # 商店信息
     hero_image: Optional[str] = Field(default=None, description="商店页 Hero 图")
     example_prompts: List[str] = Field(
-        default_factory=list, description="示例提示词", **_list_length_kwargs(5)
+        default_factory=list, description="示例提示词", max_length=5
     )
 
 

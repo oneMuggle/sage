@@ -10,6 +10,7 @@ Covers:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import List, Union
 
 import pytest
 
@@ -26,9 +27,9 @@ pytestmark = pytest.mark.unit
 
 
 class FakeLLM:
-    def __init__(self, payload: str | Exception) -> None:
+    def __init__(self, payload: Union[str, Exception]) -> None:
         self.payload = payload
-        self.prompts: list[str] = []
+        self.prompts: List[str] = []
 
     async def complete(self, prompt: str) -> str:
         self.prompts.append(prompt)

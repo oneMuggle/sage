@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).parents[1] / "check_dependency_audit.py"
-POLICY = SCRIPT.parents[1] / ".github" / "dependency-audit-policy.json"
 
 
 def write_json(path: Path, value):
@@ -73,123 +72,7 @@ def run_gate(tmp_path, *, policy=None, npm=None, npm_prod=None, pip=None, packag
     ], env=command_env, capture_output=True, text=True, check=False)
 
 
-def run_pip_only_gate(tmp_path, *, policy, pip, affected_path, unset_env=(), **env):
-    write_json(tmp_path / "policy.json", policy)
-    write_json(tmp_path / "pip.json", pip)
-    command_env = os.environ.copy()
-    command_env.update({
-        "PYTHON_INSTALL_OUTCOME": "success",
-        "PIP_INSTALL_OUTCOME": "success",
-        "PIP_AUDIT_OUTCOME": "success",
-        **env,
-    })
-    for name in unset_env:
-        command_env.pop(name, None)
-    return subprocess.run([
-        sys.executable, str(SCRIPT), "--pip", str(tmp_path / "pip.json"),
-        "--policy", str(tmp_path / "policy.json"), "--pip-only",
-        "--pip-affected-path", affected_path,
-    ], env=command_env, capture_output=True, text=True, check=False)
-
-
-def win7_pip_policy():
-    return {"default_action": "fail", "exceptions": [{
-        "source": "pip", "package": "python-multipart", "package_version": "0.0.20",
-        "advisory": "PYSEC-2026-1852",
-        "advisory_url": "https://osv.dev/vulnerability/PYSEC-2026-1852",
-        "affected_path": "Win7 LTS Python 3.8 production path",
-        "actual_reachability": "conditional", "controls": "test control",
-        "owner": "Sage maintainers", "review_by": "2099-01-01",
-    }]}
-
-
-def win7_pip_report():
-    return {"dependencies": [{
-        "name": "python-multipart", "version": "0.0.20",
-        "vulns": [{"id": "PYSEC-2026-1852"}],
-    }]}
-
-
-def test_pip_only_uses_explicit_affected_path_without_npm_inputs(tmp_path):
-    result = run_pip_only_gate(
-        tmp_path,
-        policy=win7_pip_policy(),
-        pip=win7_pip_report(),
-        affected_path="Win7 LTS Python 3.8 production path",
-        unset_env=("NPM_CI_OUTCOME", "NPM_AUDIT_ALL_OUTCOME", "NPM_AUDIT_PROD_OUTCOME"),
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "pip findings=1" in result.stdout
-
-
-def test_pip_only_rejects_wrong_affected_path(tmp_path):
-    result = run_pip_only_gate(
-        tmp_path,
-        policy=win7_pip_policy(),
-        pip=win7_pip_report(),
-        affected_path="main Python 3.11 production path",
-    )
-    assert result.returncode == 1
-    assert "not covered by policy" in result.stdout
-
-
-def test_pip_only_fails_closed_when_pip_outcome_is_missing(tmp_path):
-    result = run_pip_only_gate(
-        tmp_path,
-        policy=win7_pip_policy(),
-        pip=win7_pip_report(),
-        affected_path="Win7 LTS Python 3.8 production path",
-        unset_env=("PIP_AUDIT_OUTCOME",),
-    )
-    assert result.returncode == 1
-    assert "PIP_AUDIT_OUTCOME: unexpected outcome 'missing'" in result.stdout
-
-
-def test_win7_policy_covers_all_multipart_advisories(tmp_path):
-    policy = json.loads(POLICY.read_text(encoding="utf-8"))
-    advisories = [
-        exception["advisory"]
-        for exception in policy["exceptions"]
-        if exception["source"] == "pip"
-        and exception["package"] == "python-multipart"
-        and exception["package_version"] == "0.0.20"
-        and exception["affected_path"] == "Win7 LTS Python 3.8 production path"
-    ]
-    assert len(advisories) == 6
-    pip = {"dependencies": [{
-        "name": "python-multipart",
-        "version": "0.0.20",
-        "vulns": [{"id": advisory} for advisory in advisories],
-    }]}
-    result = run_pip_only_gate(
-        tmp_path,
-        policy=policy,
-        pip=pip,
-        affected_path="Win7 LTS Python 3.8 production path",
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "pip findings=6" in result.stdout
-
-
-def test_win7_policy_rejects_unlisted_multipart_advisory(tmp_path):
-    policy = json.loads(POLICY.read_text(encoding="utf-8"))
-    pip = {"dependencies": [{
-        "name": "python-multipart",
-        "version": "0.0.20",
-        "vulns": [{"id": "PYSEC-2026-1851"}],
-    }]}
-    result = run_pip_only_gate(
-        tmp_path,
-        policy=policy,
-        pip=pip,
-        affected_path="Win7 LTS Python 3.8 production path",
-    )
-    assert result.returncode == 1
-    assert "PYSEC-2026-1851" in result.stdout
-    assert "not covered by policy" in result.stdout
-
-
-def test_allows_npm_exit_one_when_findings(tmp_path):
+def test_allows_npm_exit_one_when_report_has_findings(tmp_path):
     result = run_gate(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "high=1" in result.stdout
@@ -238,53 +121,12 @@ def test_rejects_malformed_pip_advisory_id(tmp_path, vulnerability_id):
     assert "invalid vulnerability entry or advisory ID" in result.stdout
 
 
-@pytest.mark.parametrize("aliases", [
-    ["CVE-2026-1234", "GHSA-aaaa-bbbb-cccc", "X41-2026-002", "BIT-pillow-2026-42308"],
-    [],
-])
-def test_accepts_pip_audit_aliases(tmp_path, aliases):
-    pip = {"dependencies": [{"name": "demo", "version": "1.0", "vulns": [{"id": "PYSEC-2026-1", "aliases": aliases}]}]}
-    policy = base_policy()
-    policy["exceptions"].append({
-        "source": "pip", "package": "demo", "package_version": "1.0",
-        "advisory": "PYSEC-2026-1",
-        "advisory_url": "https://osv.dev/vulnerability/PYSEC-2026-1",
-        "affected_path": "main Python 3.11 production path",
-        "actual_reachability": "conditional", "controls": "test",
-        "owner": "Sage maintainers", "review_by": "2099-01-01",
-    })
-    result = run_gate(tmp_path, policy=policy, pip=pip)
-    assert result.returncode == 0, result.stdout + result.stderr
-
-
 @pytest.mark.parametrize("aliases", [[""], ["GHSA-pip"], [1], "CVE-2024-1234"])
 def test_rejects_malformed_pip_aliases(tmp_path, aliases):
     pip = {"dependencies": [{"name": "demo", "version": "1.0", "vulns": [{"id": "CVE-2024-1234", "aliases": aliases}]}]}
     result = run_gate(tmp_path, pip=pip)
     assert result.returncode == 1
-    assert "aliases must be a valid string list" in result.stdout
-
-
-def test_accepts_empty_pip_aliases(tmp_path):
-    pip = {"dependencies": [{"name": "demo", "version": "1.0", "vulns": [{"id": "GHSA-pip0-pip0-pip0", "aliases": []}]}]}
-    policy = base_policy()
-    policy["exceptions"].append({
-        "source": "pip", "package": "demo", "package_version": "1.0",
-        "advisory": "GHSA-pip0-pip0-pip0",
-        "advisory_url": "https://osv.dev/vulnerability/GHSA-pip0-pip0-pip0",
-        "affected_path": "main Python 3.11 production path",
-        "actual_reachability": "conditional", "controls": "test",
-        "owner": "Sage maintainers", "review_by": "2099-01-01",
-    })
-    result = run_gate(tmp_path, policy=policy, pip=pip)
-    assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_rejects_pip_alias_with_uppercase_package_name(tmp_path):
-    pip = {"dependencies": [{"name": "demo", "version": "1.0", "vulns": [{"id": "CVE-2024-1234", "aliases": ["BIT-Pillow-2026-42308"]}]}]}
-    result = run_gate(tmp_path, pip=pip)
-    assert result.returncode == 1
-    assert "aliases must be a valid string list" in result.stdout
+    assert "aliases must be a list of valid advisory IDs" in result.stdout
 
 
 def test_accepts_pip_audit_object_format_and_exact_exception(tmp_path):
@@ -293,7 +135,7 @@ def test_accepts_pip_audit_object_format_and_exact_exception(tmp_path):
             {
                 "name": "demo",
                 "version": "1.0",
-                "vulns": [{"id": "GHSA-pip0-pip0-pip0"}],
+                "vulns": [{"id": "GHSA-pip0-pip0-pip0", "aliases": []}],
             }
         ]
     }
@@ -420,6 +262,76 @@ def test_accepts_npm_dependency_reference_strings(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_accepts_high_npm_meta_vulnerability_via_reported_dependency(tmp_path):
+    advisory = "GHSA-test-test-test"
+    report = {
+        "metadata": {
+            "vulnerabilities": {"low": 0, "moderate": 0, "high": 2, "critical": 0}
+        },
+        "vulnerabilities": {
+            "wrapper": {
+                "name": "wrapper",
+                "severity": "high",
+                "nodes": ["node_modules/wrapper"],
+                "via": ["braces"],
+            },
+            "braces": {
+                "name": "braces",
+                "severity": "high",
+                "nodes": ["node_modules/braces"],
+                "via": [
+                    {
+                        "url": f"https://github.com/advisories/{advisory}",
+                        "severity": "high",
+                    }
+                ],
+            },
+        },
+    }
+    package_lock = package_lock_data()
+    package_lock["packages"]["node_modules/wrapper"] = {"version": "1.0.0"}
+    package_lock["packages"]["node_modules/braces"] = {"version": "3.0.3"}
+    policy = base_policy()
+    policy["exceptions"].append(
+        {
+            "source": "npm",
+            "package": "braces",
+            "package_version": "3.0.3",
+            "advisory": advisory,
+            "advisory_url": f"https://github.com/advisories/{advisory}",
+            "affected_path": "node_modules/braces",
+            "actual_reachability": "test",
+            "controls": "test",
+            "owner": "Sage maintainers",
+            "review_by": "2099-01-01",
+        }
+    )
+    result = run_gate(
+        tmp_path,
+        policy=policy,
+        npm=report,
+        npm_prod=empty_npm(),
+        package_lock=package_lock,
+        NPM_AUDIT_ALL_OUTCOME="success",
+        NPM_AUDIT_PROD_OUTCOME="success",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_rejects_high_npm_meta_vulnerability_with_unresolved_reference(tmp_path):
+    report = npm_report()
+    report["vulnerabilities"]["electron"]["via"] = ["not-in-this-report"]
+    result = run_gate(
+        tmp_path,
+        npm=report,
+        npm_prod=empty_npm(),
+        NPM_AUDIT_ALL_OUTCOME="success",
+        NPM_AUDIT_PROD_OUTCOME="success",
+    )
+    assert result.returncode == 1
+    assert "lacks a matching valid advisory or dependency chain" in result.stdout
+
+
 def test_accepts_editable_pip_skip_entry(tmp_path):
     result = run_gate(tmp_path, pip={"dependencies": [{"name": "sage-core", "skip_reason": "editable local package"}]})
     assert result.returncode == 0, result.stdout + result.stderr
@@ -506,6 +418,34 @@ def test_rejects_npm_item_severity_without_matching_advisory(tmp_path, severity,
     ], env={**os.environ, "NPM_AUDIT_ALL_OUTCOME": "failure", "NPM_AUDIT_PROD_OUTCOME": "failure"}, capture_output=True, text=True, check=False)
     assert result.returncode == 1
     assert "report parse failure" in result.stdout
+
+
+def test_skips_moderate_item_absent_from_lockfile(tmp_path):
+    # R74: npm audit 会为 prune 掉的 optional/dev 嵌套树报 moderate
+    # （实测 node-gyp 嵌套 undici 不在 lockfile）——moderate/low 缺节点
+    # 按「未安装」跳过，门放行并打印跳过说明。
+    report = npm_report(advisory="GHSA-1111-1111-1111", severity="moderate")
+    report["vulnerabilities"]["electron"]["nodes"] = ["node_modules/node-gyp/node_modules/undici"]
+    report["metadata"]["vulnerabilities"]["moderate"] = 1
+    report["metadata"]["vulnerabilities"]["high"] = 0
+    result = run_gate(
+        tmp_path, npm=report, npm_prod=empty_npm(),
+        NPM_AUDIT_ALL_OUTCOME="success", NPM_AUDIT_PROD_OUTCOME="success",
+    )
+    assert result.returncode == 0
+    assert "absent from package-lock" in result.stdout
+    assert "not covered by policy" not in result.stdout
+
+
+def test_high_item_absent_from_lockfile_still_fails(tmp_path):
+    # high/critical 缺节点无法核实 → 维持失败（宁可误报不可漏报）
+    report = npm_report()
+    report["vulnerabilities"]["electron"]["nodes"] = ["node_modules/ghost"]
+    result = run_gate(tmp_path, npm=report, npm_prod=empty_npm())
+    assert result.returncode == 1
+    assert "nodes must exist in package-lock" in result.stdout
+
+
 def test_rejects_package_lock_declared_name_mismatch(tmp_path):
     lock = package_lock_data()
     lock["packages"]["node_modules/electron"]["name"] = "not-electron"

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from typing import List
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -54,7 +55,7 @@ def _mock_plan(agent_hints=("researcher", "writer")):
     return _decompose
 
 
-async def _stream_events(ac: httpx.AsyncClient, payload: dict) -> list[dict]:
+async def _stream_events(ac: httpx.AsyncClient, payload: dict) -> List[dict]:
     create_resp = await ac.post(CHAT_STREAM_PATH, json=payload)
     assert create_resp.status_code == 200, create_resp.text
     stream_id = create_resp.json()["streamId"]

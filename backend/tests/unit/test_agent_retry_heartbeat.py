@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import json
+from typing import List
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -138,7 +139,7 @@ async def test_retry_with_12s_delay_emits_3_heartbeats(monkeypatch):
     )
     _wire_stream(client, [fail_ctx, ok_ctx])
 
-    slept: list[float] = []
+    slept: List[float] = []
 
     async def fake_sleep(delay: float) -> None:
         slept.append(delay)
@@ -187,7 +188,7 @@ async def test_retry_with_3s_delay_emits_1_heartbeat(monkeypatch):
     )
     _wire_stream(client, [fail_ctx, ok_ctx])
 
-    slept: list[float] = []
+    slept: List[float] = []
 
     async def fake_sleep(delay: float) -> None:
         slept.append(delay)

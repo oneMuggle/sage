@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Optional
 from unittest.mock import MagicMock
 
 import pytest
@@ -12,7 +13,7 @@ from backend.tools.wait_background_tool import WaitBackgroundTool
 pytestmark = pytest.mark.unit
 
 
-def _registry(status: str, payload: dict | None = None) -> MagicMock:
+def _registry(status: str, payload: Optional[dict] = None) -> MagicMock:
     registry = MagicMock()
     session = MagicMock()
     session.status.return_value = status

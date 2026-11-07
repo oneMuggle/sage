@@ -26,7 +26,7 @@ from backend.tools.credential_vault import (
 )
 from backend.tools.web_tool import WebFetchTool
 
-pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("_online_network_settings")]
+pytestmark = pytest.mark.unit
 
 _SPA_SHELL = (
     "<html><head><title>App</title></head><body><div id=root></div>"

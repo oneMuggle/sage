@@ -129,15 +129,14 @@ async def test_extract_prompt_has_environment_category_and_observations():
     facts = await extractor.extract(
         user_message="在 win7 上跑脚本又报 -Directory 不支持了" + "x" * 20,
         assistant_message="改用 PSIsContainer 写法后成功",
-        existing_facts=["已知事实：win7 上 -Directory 不支持，需改用 PSIsContainer"],
+        existing_facts=["已知事实甲"],
         tool_observations="未找到 bash，改用 Windows PowerShell 2.0 执行。",
     )
     assert facts == []
     assert "environment" in llm.prompt
     assert "工具执行观察" in llm.prompt
     assert "改用 Windows PowerShell 2.0 执行" in llm.prompt
-    # 与对话 token 相关的已知事实会被注入（无关事实则被过滤掉）
-    assert "已知事实：win7 上 -Directory 不支持" in llm.prompt
+    assert "已知事实甲" in llm.prompt
 
 
 # ---- extract_and_store_memory 路由与接线 ---------------------------------- #

@@ -92,18 +92,6 @@ export interface Memory {
   project_key?: string;
   /** M3 专家归属轴 (2026-11-04): NULL=共享 / 'primary'=默认助手私有 / 'specialist-x'=专家私有。 */
   agent_id?: string;
-  /**
-   * Task 4.4 质量评分 (0-1)。
-   * - episodic / semantic 行: 后端用 MemoryQualityScorer 算出,≥0.6 高分 / 0.3-0.6 中 / <0.3 低质量。
-   * - working / session_summary 行: 无 importance/recency 语义, 为 null。
-   */
-  quality_score?: number | null;
-  /**
-   * Task 4.5 用户反馈标记。
-   * - episodic / semantic 行: 用户已点过 👍/👎 时填对应值,未反馈填 null。
-   * - working / session_summary 行: 永远 null (不可反馈)。
-   */
-  user_feedback?: 'up' | 'down' | 'neutral' | null;
 }
 
 /**
@@ -167,29 +155,6 @@ export interface MemoryConsolidationResult {
   /** 衰减 importance 的条数 */
   decayed: number;
   total: number;
-}
-
-/**
- * Task 4.3: 批量清理候选条目。
- * GET /memory/quality-candidates 返回的 items 元素。
- * 按 quality_score 升序排列 (最差优先)。
- */
-export interface MemoryQualityCandidate {
-  id: string;
-  content: string;
-  memory_type: 'episodic' | 'semantic';
-  importance: number;
-  /** 0-1, 低于阈值的记忆才进入候选 */
-  quality_score: number;
-  /** 毫秒时间戳 */
-  created_at_ms: number;
-  access_count: number;
-}
-
-/** Task 4.3: POST /memory/batch-delete 响应 */
-export interface BatchDeleteResponse {
-  deleted: number;
-  failed: Array<{ id: string; reason: string }>;
 }
 
 // ==================== Knowledge 类型定义 ====================

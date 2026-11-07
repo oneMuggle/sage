@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import List
 
 import pytest
 from docx import Document
@@ -36,7 +37,7 @@ def _pack(*rules: WordRuleSpec) -> WordRulePack:
     return WordRulePack(id="semantic", name="Semantic", rules=list(rules))
 
 
-def _doc(path: Path, texts: list[str]) -> Path:
+def _doc(path: Path, texts: List[str]) -> Path:
     document = Document()
     for text in texts:
         document.add_paragraph(text)

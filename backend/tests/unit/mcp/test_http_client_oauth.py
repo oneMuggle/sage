@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
+from typing import Optional
 
 import httpx
 import pytest
@@ -83,7 +84,7 @@ def _by_method(seen, method):
     return [req for m, req in seen if m == method]
 
 
-def _rpc(result: dict, session_id: str | None = None) -> httpx.Response:
+def _rpc(result: dict, session_id: Optional[str] = None) -> httpx.Response:
     headers = {"mcp-session-id": session_id} if session_id else {}
     return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": result}, headers=headers)
 

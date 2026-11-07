@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import List
 
 import pytest
 from docx import Document
@@ -17,7 +18,7 @@ from backend.office.word_rulepack_models import (
 )
 
 
-def _doc(path: Path, texts: list[str]) -> Path:
+def _doc(path: Path, texts: List[str]) -> Path:
     document = Document()
     for text in texts:
         document.add_paragraph(text)

@@ -21,7 +21,7 @@
 - 显示「不可用」时，说明本机没有安装 OCR 引擎（见第 5 节）；
 - 点「测试识别」可确认引擎是否真的能工作。
 
-> Win7 安装包不含 OCR 引擎，需要安装 Tesseract 4.1（见第 5 节）；main 版本已内置 RapidOCR。开发环境可手动安装可选依赖。
+> main 安装包已内置 RapidOCR，无需额外安装。Win7 安装包不含 OCR 引擎，需安装 Tesseract 4.1（见第 5 节）；开发环境可手动安装可选依赖。
 
 ## 3. 设置项
 
@@ -55,7 +55,7 @@
 
 ### 推荐：RapidOCR（main / Win10+）
 
-**main 安装包已内置**；Win7 请使用 Tesseract 4.1（见下）。开发环境手动安装：
+**main 安装包已内置**，无需操作。开发环境手动安装：
 
 ```bash
 pip install "rapidocr>=3.10,<4" "onnxruntime==1.19.2"

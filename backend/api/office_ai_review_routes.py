@@ -15,10 +15,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-# win7 py38 钉 pydantic 1.10，v2 专有符号必须走兼容垫片（2.x 下为 no-op）。
-from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import get_database
 from backend.office.ai_review import run_review_async
 from backend.office.ai_review_history import list_for_document, record
@@ -28,9 +26,6 @@ from backend.office.ai_review_models import (
     AiReviewResult,
 )
 from backend.office.errors import OfficeParseError, OfficePathError
-
-# _constrained_list：pydantic v1/v2 双版本安全范式（v1 只认 min_items/max_items）。
-from backend.office.models import _constrained_list
 from backend.office.path_safety import resolve_within
 from backend.office.storage import get_document, snapshot_pre_edit, validate_workspace
 from backend.office.word_revision_writer import apply_word_revisions
@@ -53,7 +48,9 @@ class AiReviewRequest(BaseModel):
     scope: str = Field(default="full", max_length=20)
     use_llm: bool = True
     max_issues: int = Field(default=100, ge=1, le=300)
-    max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024, le=200 * 1024 * 1024)
+    max_size_bytes: int = Field(
+        default=50 * 1024 * 1024, ge=1024, le=200 * 1024 * 1024
+    )
 
 
 class AiReviseRequest(BaseModel):
@@ -69,7 +66,7 @@ class AiReviseRequest(BaseModel):
     workspace_path: str
     file_path: str = Field(min_length=1, max_length=2000)
     doc_id: Optional[str] = Field(default=None, max_length=80)
-    issues: _constrained_list(AiReviewIssue, min_length=1, max_length=200)
+    issues: List[AiReviewIssue] = Field(min_length=1, max_length=200)
     output_filename: Optional[str] = Field(default=None, max_length=500)
     author: str = Field(default="Sage", max_length=80)
     add_comments: bool = True
@@ -96,7 +93,9 @@ class AiReviseResult(BaseModel):
 # ── helpers ───────────────────────────────────────────────────────────
 
 
-def _doc_in_workspace(conn: sqlite3.Connection, doc_id: str, workspace: str) -> bool:
+def _doc_in_workspace(
+    conn: sqlite3.Connection, doc_id: str, workspace: str
+) -> bool:
     """文档必须登记在给定工作区内——防止跨工作区绑定/污染历史."""
     try:
         row = conn.execute(
@@ -126,7 +125,9 @@ async def ai_review_endpoint(req: AiReviewRequest) -> AiReviewResult:
             file_path=file_path,
         )
     if file_path.stat().st_size > req.max_size_bytes:
-        raise OfficeParseError(f"文档超过大小上限 {req.max_size_bytes} 字节")
+        raise OfficeParseError(
+            f"文档超过大小上限 {req.max_size_bytes} 字节"
+        )
     if req.doc_id and not _doc_in_workspace(
         get_database().get_connection(), req.doc_id, str(workspace)
     ):
@@ -165,7 +166,9 @@ async def ai_review_endpoint(req: AiReviewRequest) -> AiReviewResult:
     return result
 
 
-@router.get("/doc/{doc_id}/ai-reviews", response_model=AiReviewHistoryResult)
+@router.get(
+    "/doc/{doc_id}/ai-reviews", response_model=AiReviewHistoryResult
+)
 def ai_review_history_endpoint(
     doc_id: str,
     workspace_path: Optional[str] = None,

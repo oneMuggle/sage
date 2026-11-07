@@ -1,7 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import rehypeKatex from 'rehype-katex';
-import remarkGfm from 'remark-gfm';
 
 import chat from '../../content/help/chat.md?raw';
 import faq from '../../content/help/faq.md?raw';
@@ -13,6 +11,7 @@ import skills from '../../content/help/skills.md?raw';
 import troubleshooting from '../../content/help/troubleshooting.md?raw';
 import { HelpSidebar } from '../../widgets/help/HelpSidebar';
 import type { HelpItem } from '../../widgets/help/HelpSidebar';
+import { MD_REHYPE_PLUGINS, MD_REMARK_PLUGINS } from '../../widgets/markdown/plugins';
 
 // Import built-in help content
 
@@ -140,8 +139,8 @@ export function HelpTab() {
     }
     return (
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeKatex]}
+        remarkPlugins={MD_REMARK_PLUGINS}
+        rehypePlugins={MD_REHYPE_PLUGINS}
         components={{
           h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 text-text">{children}</h1>,
           h2: ({ children }) => (

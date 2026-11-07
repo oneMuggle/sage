@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 class StandaloneBundler:
@@ -13,7 +13,7 @@ class StandaloneBundler:
     def bundle(
         html: str,
         css: str,
-        assets: Optional[dict[str, str]] = None,
+        assets: Optional[Dict[str, str]] = None,
     ) -> str:
         """Bundle HTML with design system CSS and optional template assets.
 

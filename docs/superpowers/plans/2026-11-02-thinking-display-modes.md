@@ -1749,7 +1749,7 @@ tests (`DisplayModeSwitch`, `messageContextMenu`, `BasicTab`, `Message.displayMo
 - [x] **Step 6: Update documents**
 
 Per repo convention, the design spec `docs/plans/2026-11-02_thinking-display-modes.md`
-was merged into `docs/technical/120-thinking-display-modes.md` +
+was merged into `docs/technical/125-thinking-display-modes.md` +
 `docs/user-manual/31-thinking-display-modes.md` and then deleted.
 This execution plan is retained with all milestones marked complete.
 

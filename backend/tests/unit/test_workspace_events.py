@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import List
 
 import pytest
 
@@ -24,7 +25,7 @@ pytestmark = pytest.mark.unit
 @pytest.fixture()
 def listener():
     """注册一个事件收集器，测试结束自动注销。"""
-    events: list[dict] = []
+    events: List[dict] = []
     fn = workspace_events.add_workspace_listener(events.append)
     yield events
     workspace_events.remove_workspace_listener(fn)
@@ -70,7 +71,7 @@ def test_listener_exception_is_swallowed():
     def boom(_event: dict) -> None:
         raise RuntimeError("listener exploded")
 
-    events: list[dict] = []
+    events: List[dict] = []
     fn_bad = workspace_events.add_workspace_listener(boom)
     fn_good = workspace_events.add_workspace_listener(events.append)
     try:

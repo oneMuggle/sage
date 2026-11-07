@@ -2,7 +2,7 @@
 import type { UpdateProvider, NormalisedRelease, ProviderChannel } from './base';
 import type { GitlabConfig } from '../providerConfig';
 import { ProviderError } from './genericHttp';
-import { fetchUpdate as fetchCompat } from '../request';
+import { fetchCompat } from '../../fetchCompat';
 
 const CHANNELS: ProviderChannel[] = [
   { id: 'stable', label: 'Stable', description: '正式版（upcoming_release=false）' },

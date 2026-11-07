@@ -19,10 +19,8 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-# win7 LTS py38 环境钉 pydantic 1.10.13，ConfigDict 是 v2 专有 → 走兼容垫片（v2 下为 no-op）。
-from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.tools.git_status_parser import parse_status_porcelain_v1_z
 
 logger = logging.getLogger(__name__)

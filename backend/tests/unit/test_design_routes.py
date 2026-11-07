@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from typing import List, Tuple
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -102,11 +103,11 @@ def studio(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _sse_frames(raw: str) -> list[tuple[str, str]]:
+def _sse_frames(raw: str) -> List[Tuple[str, str]]:
     """Parse SSE text into [(event, data_str), ...] frames."""
-    frames: list[tuple[str, str]] = []
+    frames: List[Tuple[str, str]] = []
     event_type = None
-    data_lines: list[str] = []
+    data_lines: List[str] = []
     for line in raw.splitlines():
         if line.startswith("event: "):
             event_type = line[len("event: "):]

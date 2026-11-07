@@ -9,9 +9,7 @@ API 路由定义
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
-import json
 
 # I5: 流式视觉延迟 — DONE 事件的 content 拆成 chunk 逐个入队,
 # 让前端能逐字渲染 (避免 LLM 一次返回完整字符串时 "砰一下" 全显示)。
@@ -22,12 +20,9 @@ _STREAMING_CHUNK_DELAY_S = 0.04
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException
 
 from backend.memory import get_memory_manager
-from backend.memory.feedback_store import attach_feedback
-from backend.memory.quality_scorer import MemoryQualityScorer
 from backend.memory.summary import (
     list_summaries_for_session as _list_summaries_for_session,
 )
@@ -144,10 +139,9 @@ def list_memories(
             episodic_items = mm.episodic.get_recent(
                 limit=fetch_limit, session_id=session_id
             )
-            scorer = _build_quality_scorer(episodic_items)
             items = _filter_items_by_agent(
                 _enrich_memory_records(
-                    episodic_items, layer="episodic", source="episodic", scorer=scorer
+                    episodic_items, layer="episodic", source="episodic"
                 ),
                 agent_id,
             )
@@ -169,10 +163,9 @@ def list_memories(
             semantic_items = mm.semantic.get_recent(
                 limit=fetch_limit, session_id=session_id
             )
-            scorer = _build_quality_scorer(semantic_items)
             items = _filter_items_by_agent(
                 _enrich_memory_records(
-                    semantic_items, layer="semantic", source="semantic", scorer=scorer
+                    semantic_items, layer="semantic", source="semantic"
                 ),
                 agent_id,
             )
@@ -254,24 +247,11 @@ def list_memories(
                 )
 
             merged: List[Dict] = []
-            # all 视图里 episodic 与 semantic 互为独特性语料 —— 两层的
-            # 重复内容都该被识别,否则同一事实在两层各存一份仍打满分
-            scorer = _build_quality_scorer(episodic_items, semantic_items)
             merged.extend(
-                _enrich_memory_records(
-                    episodic_items,
-                    layer="episodic",
-                    source="episodic",
-                    scorer=scorer,
-                )
+                _enrich_memory_records(episodic_items, layer="episodic", source="episodic")
             )
             merged.extend(
-                _enrich_memory_records(
-                    semantic_items,
-                    layer="semantic",
-                    source="semantic",
-                    scorer=scorer,
-                )
+                _enrich_memory_records(semantic_items, layer="semantic", source="semantic")
             )
             merged.extend(_enrich_working_records(working_items, session_id=session_id))
             merged.extend(_enrich_summary_records(summaries))
@@ -325,8 +305,6 @@ def list_memories(
 
         # 3. 分页 slice
         page_items = items[safe_offset : safe_offset + safe_page_size]
-        # Task 4.5: 批量补 user_feedback（一次 IN 查询，避免卡片逐条打库）
-        attach_feedback(mm.episodic.db, page_items)
 
         # 4. Envelope
         return {
@@ -345,20 +323,14 @@ def list_memories(
 
 
 def _enrich_memory_records(
-    records: List[Dict[str, Any]],
-    layer: str,
-    source: str,
-    scorer: Optional[MemoryQualityScorer] = None,
+    records: List[Dict[str, Any]], layer: str, source: str
 ) -> List[Dict[str, Any]]:
-    """给每条记忆记录补 ``source`` / ``layer`` / ``created_at_ms`` / ``quality_score``。
+    """给每条记忆记录补 ``source`` / ``layer`` / ``created_at_ms``。
 
     字段约定:
     - ``id`` / ``content`` / ``memory_type`` / ``source`` / ``session_id``
       / ``importance`` / ``created_at_ms`` / ``summary``
     - ``created_at`` 字段若存在,映射成 ``created_at_ms``(毫秒)。
-    - ``quality_score`` 可选:Phase 4 起,scorer 传入时为 0-1 浮点数;
-      缺失 scorer 或 working/session_summary 等无 importance/recency
-      语义的行不设该字段(前端按 null 处理)。
 
     ``source`` 强制覆盖(不用 setdefault):DB 里 ``source`` 列存的是
     'auto'/'manual'/'review' 之类的"写入来源",而这里我们要的是"层来源"
@@ -376,28 +348,8 @@ def _enrich_memory_records(
             # 数据库列存的就是毫秒（int(time.time() * 1000)），原样复制
             with contextlib.suppress(TypeError, ValueError):
                 item["created_at_ms"] = int(ts)
-        if scorer is not None:
-            try:
-                item["quality_score"] = round(scorer.calculate_quality_score(item), 3)
-            except Exception:
-                # 评分失败不应让整条记录丢失 —— 前端按 None 处理
-                item["quality_score"] = None
         enriched.append(item)
     return enriched
-
-
-def _build_quality_scorer(
-    *record_lists: List[Dict[str, Any]],
-) -> MemoryQualityScorer:
-    """把若干层记录拼成语料,构建一个 MemoryQualityScorer。
-
-    独特性是 O(N*M) 比较,语料太大时 scorer 内部已 cap 到 ``MAX_CORPUS``。
-    空输入返回空语料 scorer(独特性恒 1.0,其他维度仍正常计算)。
-    """
-    corpus: List[Dict[str, Any]] = []
-    for records in record_lists:
-        corpus.extend(records or [])
-    return MemoryQualityScorer(corpus=corpus)
 
 
 def _enrich_working_records(
@@ -529,107 +481,3 @@ def list_session_summaries(
 # Wave 2 P1-4 (2026-08-14): 编排 run 读取/resume/计划更新端点挂载。
 # orch_routes 用独立 APIRouter(prefix="/orch")，经 include_router 并入
 # legacy_router → main.py 挂载后最终前缀 /api/v1/orch。
-
-
-# ==================== 记忆可追溯性 API (Gap E / Task 5) ====================
-
-
-def _get_memory_port(request: Request):
-    """返回 MemoryAdapter（MemoryPort 实现）。
-
-    生产路径：``main.py`` lifespan 把 adapter 挂在 ``app.state.memory_port``。
-    测试路径（不走 lifespan）：惰性构造一个绑定当前 MemoryManager 的
-    adapter —— conftest 已把 MemoryManager 重置到临时 DB，因此查询
-    打到测试库。
-    """
-    port = getattr(request.app.state, "memory_port", None)
-    if port is not None:
-        return port
-    from backend.adapters.out.memory.adapter import MemoryAdapter
-
-    return MemoryAdapter(get_memory_manager())
-
-
-@router.get("/memory/by-turn/{turn_id}")
-async def get_memories_by_turn(turn_id: str, request: Request):
-    """按来源 turn 查询记忆（可追溯性：从记忆点击跳回产生它的轮次）。"""
-    memory_port = _get_memory_port(request)
-    memories = await memory_port.find_by_turn(turn_id)
-    return {"memories": list(memories)}
-
-
-@router.get("/memory/summary/{session_id}")
-async def get_session_summary(session_id: str, request: Request):
-    """按会话聚合 task_summary 记忆（会话摘要 Tab）。"""
-    memory_port = _get_memory_port(request)
-    summaries = await memory_port.find_by_category_and_session("task_summary", session_id)
-    return {"summaries": list(summaries), "session_id": session_id}
-
-
-# ==================== 记忆 SSE 流 (Task 6) ====================
-
-
-@router.get("/memory/events")
-async def memory_events(request: Request):
-    """SSE 流：订阅 ``memory_written`` 生命周期事件 (Task 6)。
-
-    每个连接持有独立的 ``asyncio.Queue(maxsize=100)``；进程内
-    HookRegistry 触发 ``memory_written`` 时把事件序列化后推给连接。
-    15s 无事件时发心跳 ``: heartbeat`` 保持连接。客户端断开
-    (``request.is_disconnected()``) 或请求取消时在 ``finally`` 注销
-    监听器，避免 per-connection 闭包泄漏。
-
-    Electron 主进程 (``electron/main.ts``) 通过 EventSource 消费此流，
-    再通过 IPC ``sage:memory:event`` 转发给渲染进程。
-    """
-    from backend.memory.hooks import HookRegistry
-    from backend.memory.lifecycle import MemoryWriteEvent
-
-    hooks: HookRegistry = getattr(request.app.state, "hooks", None)
-    if hooks is None:
-        raise HTTPException(
-            status_code=503,
-            detail="memory hook registry not initialized",
-        )
-
-    queue: asyncio.Queue = asyncio.Queue(maxsize=100)
-
-    def on_memory_written(event: object) -> None:
-        """Hook 监听器（同步）：入队；队列满则丢弃并告警，绝不上抛。"""
-        try:
-            queue.put_nowait(event)
-        except asyncio.QueueFull:
-            logger.warning("memory events queue full, dropping event")
-
-    hooks.on("memory_written", on_memory_written)
-
-    async def event_stream():
-        try:
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
-                except asyncio.TimeoutError:  # noqa: UP041 — Py3.10 asyncio.TimeoutError
-                    yield ": heartbeat\n\n"
-                    continue
-                if not isinstance(event, MemoryWriteEvent):
-                    continue
-                payload = json.dumps(
-                    {
-                        "memory_id": event.memory_id,
-                        "content": event.content,
-                        "memory_type": event.memory_type,
-                        "memory_category": event.memory_category,
-                        "session_id": event.session_id,
-                        "turn_id": event.turn_id,
-                        "timestamp": event.timestamp.isoformat(),
-                    },
-                    ensure_ascii=False,
-                )
-                yield f"data: {payload}\n\n"
-        finally:
-            hooks.off("memory_written", on_memory_written)
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
-

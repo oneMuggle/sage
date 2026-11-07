@@ -3,6 +3,7 @@
  */
 
 import { clsx } from 'clsx';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { ROUTING_TASK_TYPES } from '../../entities/routing/taskType';
@@ -11,6 +12,14 @@ import {
   TASK_TYPE_TIER_MAP,
   TIER_LABELS,
 } from '../../entities/routing/taskTypeTierMap';
+import {
+  CONTEXT_PRESETS,
+  TOKEN_UNITS,
+  deriveTokenInput,
+  formatTokens,
+  parseTokenInput,
+  type TokenUnit,
+} from '../../entities/setting/contextPresets';
 import type { DiscoveredModel, ModelSelection } from '../../entities/setting/types';
 import { useI18n } from '../../shared/lib/i18n';
 
@@ -216,15 +225,10 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
             label={t('settings.models.max_context')}
             desc={t('settings.models.max_context_desc')}
           >
-            <input
-              type="number"
-              data-testid="settings-max-context"
-              min={256}
-              max={128000}
-              disabled={settings.autoContext}
+            <ContextLengthSetting
               value={settings.maxContext}
-              onChange={(e) => updateSettings({ maxContext: Number(e.target.value) })}
-              className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text disabled:opacity-50 disabled:cursor-not-allowed"
+              onChange={(n) => updateSettings({ maxContext: n })}
+              disabled={settings.autoContext}
             />
           </SettingRow>
           {/* Task 6 (2026-09-15): 自动上下文开关 — 保留固定值 / 未知显示未知 */}
@@ -301,12 +305,6 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
           </button>
         </SettingRow>
       </div>
-
-      {/* 原「通用」tab 的高级区块（2026-10-28 迁入）：Arena 账号池开关。 */}
-      <section>
-        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.models.arena_pool')}</h3>
-        <ArenaAccountsToggle />
-      </section>
     </>
   );
 
@@ -326,6 +324,12 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
       ) : (
         modelsBody
       )}
+
+      {/* 原「通用」tab 的高级区块（2026-10-28 迁入）：Arena 账号池开关。 */}
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">{t('settings.models.arena_pool')}</h3>
+        <ArenaAccountsToggle />
+      </section>
     </div>
   );
 }
@@ -441,51 +445,92 @@ function ChatEndpointReadOnly({ endpointName }: ChatEndpointReadOnlyProps) {
   );
 }
 
-interface TitleModelSelectorProps {
-  groupedModels: GroupedModel[];
-  chatEndpointId: string | null;
-  value: string;
-  onChange: (v: string) => void;
-}
-
 /**
- * 2026-10-27: 会话标题专用模型选择器。
- *
- * 与 `ModelSelector` 的区别：存的是**裸模型 id**（`AppSettings.titleModelId`），
- * 不是 `{endpointId, modelId}` —— 后端 `title_generator.load_title_llm_config`
- * 复用聊天端点的 base_url / api_key，只覆盖 `model` 字段。
- *
- * 因此候选**只列出聊天端点自己已发现的 chat 模型**：换一个端点的模型 id 会
- * 在同一个 base_url 上找不到。空串表示沿用对话模型（后端 fallback）。
+ * P0-A (2026-09-18): 上下文长度编辑器 — 档位下拉 (4K..2M) + 自定义
+ * (数值 + tokens/K/M 单位)。存储仍归一化为 token 数写回 maxContext。
+ * 值不在预设档时自动进入自定义形态。
  */
-function TitleModelSelector({
-  groupedModels,
-  chatEndpointId,
+function ContextLengthSetting({
   value,
   onChange,
-}: TitleModelSelectorProps) {
+  disabled = false,
+}: {
+  value: number;
+  onChange: (tokens: number) => void;
+  disabled?: boolean;
+}) {
   const { t } = useI18n();
-  const candidates = groupedModels.filter((gm) => gm.endpointId === chatEndpointId);
-  const known = candidates.some((gm) => gm.model.id === value);
-  // 用户可能通过 config_tool 写入了一个未在端点发现列表里的模型 id ——
-  // 保留为孤立选项，避免下拉回退到空串时把配置静默抹掉。
-  const orphan = value && !known ? value : null;
+  const matched = CONTEXT_PRESETS.find((p) => p.tokens === value);
+  // customDraft=null 且值未命中预设 → 从当前值派生初值 (旧数据 8000 等)
+  const [customDraft, setCustomDraft] = useState<{ text: string; unit: TokenUnit } | null>(null);
+  const isCustom = customDraft !== null || !matched;
+  const draft = customDraft ?? (matched ? { text: '', unit: 'K' as TokenUnit } : deriveTokenInput(value));
+
+  const applyCustom = (text: string, unit: TokenUnit) => {
+    setCustomDraft({ text, unit });
+    const tokens = parseTokenInput(text, unit);
+    if (tokens > 0) onChange(tokens);
+  };
+
+  const selectStyle =
+    'px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text';
 
   return (
-    <select
-      data-testid="settings-title-model"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
-    >
-      <option value="">{t('settings.models.title_model_inherit')}</option>
-      {orphan && <option value={orphan}>{orphan}</option>}
-      {candidates.map((gm) => (
-        <option key={gm.model.id} value={gm.model.id}>
-          {gm.model.id}
-        </option>
-      ))}
-    </select>
+    <div className="flex flex-col items-end gap-1" data-testid="settings-context-length">
+      <div className="flex items-center gap-2">
+        <select
+          aria-label={t('settings.models.context_length.aria_preset')}
+          disabled={disabled}
+          value={isCustom ? 'custom' : String(value)}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw === 'custom') {
+              setCustomDraft(deriveTokenInput(value));
+              return;
+            }
+            setCustomDraft(null);
+            onChange(Number(raw));
+          }}
+          className={selectStyle}
+        >
+          {CONTEXT_PRESETS.map((p) => (
+            <option key={p.tokens} value={p.tokens}>
+              {p.label}
+            </option>
+          ))}
+          <option value="custom">{t('settings.models.context_length.custom')}</option>
+        </select>
+        {isCustom && (
+          <>
+            <input
+              type="number"
+              min={0}
+              aria-label={t('settings.models.context_length.aria_value')}
+              disabled={disabled}
+              value={draft.text}
+              onChange={(e) => applyCustom(e.target.value, draft.unit)}
+              className={`${selectStyle} w-24`}
+            />
+            <select
+              aria-label={t('settings.models.context_length.aria_unit')}
+              disabled={disabled}
+              value={draft.unit}
+              onChange={(e) => applyCustom(draft.text, e.target.value as TokenUnit)}
+              className={selectStyle}
+            >
+              {TOKEN_UNITS.map((u) => (
+                <option key={u.value} value={u.value}>
+                  {u.label}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+      </div>
+      <span className="text-ui-2xs text-muted" data-testid="settings-context-length-resolved">
+        → {formatTokens(value)} ({value.toLocaleString()} tokens)
+      </span>
+    </div>
   );
 }
 
@@ -559,6 +604,54 @@ function ModelSelector({
         )}
       </div>
     </SettingRow>
+  );
+}
+
+interface TitleModelSelectorProps {
+  groupedModels: GroupedModel[];
+  chatEndpointId: string | null;
+  value: string;
+  onChange: (v: string) => void;
+}
+
+/**
+ * 2026-10-27: 会话标题专用模型选择器。
+ *
+ * 与 `ModelSelector` 的区别：存的是**裸模型 id**（`AppSettings.titleModelId`），
+ * 不是 `{endpointId, modelId}` —— 后端 `title_model_factory.load_title_llm_config`
+ * 复用聊天端点的 base_url / api_key，只覆盖 `model` 字段。
+ *
+ * 因此候选**只列出聊天端点自己已发现的 chat 模型**：换一个端点的模型 id 会
+ * 在同一个 base_url 上找不到。空串表示沿用对话模型（后端 fallback）。
+ */
+function TitleModelSelector({
+  groupedModels,
+  chatEndpointId,
+  value,
+  onChange,
+}: TitleModelSelectorProps) {
+  const { t } = useI18n();
+  const candidates = groupedModels.filter((gm) => gm.endpointId === chatEndpointId);
+  const known = candidates.some((gm) => gm.model.id === value);
+  // 用户可能通过 config_tool 写入了一个未在端点发现列表里的模型 id ——
+  // 保留为孤立选项，避免下拉回退到空串时把配置静默抹掉。
+  const orphan = value && !known ? value : null;
+
+  return (
+    <select
+      data-testid="settings-title-model"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
+    >
+      <option value="">-- {t('settings.models.title_model_inherit')} --</option>
+      {orphan && <option value={orphan}>{orphan}</option>}
+      {candidates.map((gm) => (
+        <option key={gm.model.id} value={gm.model.id}>
+          {gm.model.id}
+        </option>
+      ))}
+    </select>
   );
 }
 

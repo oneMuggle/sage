@@ -145,7 +145,7 @@ class TestAnalyze:
                     },
                     "profile_entry_count": 5,
                 },
-        ):
+            ):
             result = await advisor.analyze(project_id="proj-123")
 
         assert isinstance(result, AdviceResult)
@@ -202,7 +202,7 @@ class TestAnalyze:
                     },
                     "profile_entry_count": 0,
                 },
-        ):
+            ):
             result = await advisor.analyze(
                 project_id="proj-123", force_refresh=True
             )

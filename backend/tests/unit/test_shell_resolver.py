@@ -399,7 +399,7 @@ def test_get_bundled_python_path_returns_none_on_non_windows(monkeypatch):
 def test_find_windows_bash_prefers_sage_bundled_bash(monkeypatch):
     """Sage 自带 bash 路径作为第三优先级候选。"""
     roots = (r"C:\Program Files",)
-    sage_bash = r"C:\Program Files\Sage\resources\tools\git-bash\usr\bin\bash.exe"
+    sage_bash = r"C:\Program Files\Sage\tools\git-bash\bin\bash.exe"
     sage_root = r"C:\Program Files\Sage"
 
     # Mock: Git bash not found, Sage bundled bash found
@@ -416,7 +416,7 @@ def test_find_windows_bash_prefers_git_bash_over_sage_bundled(monkeypatch):
     """Git for Windows bash 优先级高于 Sage 自带 bash。"""
     roots = (r"C:\Program Files",)
     git_bash = r"C:\Program Files\Git\bin\bash.exe"
-    sage_bash = r"C:\Program Files\Sage\resources\tools\git-bash\usr\bin\bash.exe"
+    sage_bash = r"C:\Program Files\Sage\tools\git-bash\bin\bash.exe"
     sage_root = r"C:\Program Files\Sage"
 
     # Mock: both exist, Git bash should be preferred
@@ -483,21 +483,3 @@ def test_build_shell_fallback_note_with_explicit_version():
     note = shell_resolver.build_shell_fallback_note(ps_version="7.2.0")
     assert "PowerShell 7.2.0" in note
     assert "-Directory" not in note or "不支持" not in note
-
-
-@pytest.mark.parametrize("root", [r"C:\Users\中文 用户\AppData\Local\Programs\Sage", r"D:\Custom Apps\Sage"])
-def test_install_root_from_embedded_interpreter(monkeypatch, root):
-    _fake_os(monkeypatch, "nt", environ={})
-    monkeypatch.setattr(shell_resolver.sys, "executable", root + r"\resources\python\python.exe")
-    bash = root + r"\resources\tools\git-bash\usr\bin\bash.exe"
-    monkeypatch.setattr(shell_resolver, "_is_regular_file", lambda path: path == bash)
-    monkeypatch.setattr(shell_resolver, "_get_windows_program_files_roots", lambda: ())
-    assert shell_resolver._get_sage_install_root() == root
-
-
-def test_unrelated_python_layout_cannot_supply_install_root(monkeypatch):
-    _fake_os(monkeypatch, "nt", environ={})
-    monkeypatch.setattr(shell_resolver.sys, "executable", r"C:\Python38\python.exe")
-    monkeypatch.setattr(shell_resolver, "_is_regular_file", lambda path: True)
-    monkeypatch.setattr(shell_resolver, "_get_windows_program_files_roots", lambda: ())
-    assert shell_resolver._get_sage_install_root() is None

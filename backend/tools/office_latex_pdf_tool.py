@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
+from backend.tools.office_workspace_scope import workspace_for_policy
 
 
 def _require_context() -> Optional[ToolResult]:
@@ -79,9 +80,6 @@ class OfficeAuditLatexPdfTool(BaseTool):
             return blocked
         if not isinstance(file_path, str) or not file_path.strip():
             return ToolResult(success=False, error="file_path_required")
-        blocked = self._enforce_workspace(file_path)
-        if blocked is not None:
-            return blocked
         target = Path(file_path).expanduser()
         if not target.is_absolute():
             return ToolResult(success=False, error="file_path_absolute_required")
@@ -99,7 +97,7 @@ class OfficeAuditLatexPdfTool(BaseTool):
         from backend.office.errors import OfficeError
         from backend.office.latex.service import audit_latex_pdf_service
 
-        root = Path(self._policy.workspace_root or str(target.parent))
+        root = workspace_for_policy(self._policy, target)
         try:
             result = audit_latex_pdf_service(
                 target,

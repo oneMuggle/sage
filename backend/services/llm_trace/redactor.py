@@ -128,7 +128,7 @@ def redact_body(  # noqa: PLR0911
     body: Optional[Union[bytes, str, dict, list]],
     *,
     include_prompts: bool = False,
-) -> Tuple[Any, Optional[str]]:
+) -> Tuple[Any, str | None]:
     """脱敏 body。
 
     Returns:

@@ -6,6 +6,8 @@ MCP Streamable-HTTP 允许服务器回 JSON 或 SSE。r102 覆盖了 JSON 路径
 
 from __future__ import annotations
 
+from typing import Optional
+
 import httpx
 import pytest
 
@@ -44,7 +46,7 @@ class _FakeStore:
         pass
 
 
-def _sse(body: str, session_id: str | None = "SID-1") -> httpx.Response:
+def _sse(body: str, session_id: Optional[str] = "SID-1") -> httpx.Response:
     return httpx.Response(
         200,
         text=body,

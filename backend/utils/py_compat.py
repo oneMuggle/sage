@@ -11,7 +11,7 @@ import asyncio
 import contextvars
 import functools
 import sys
-from typing import Any, Callable
+from typing import Any, Callable, List
 
 _has_native_to_thread = sys.version_info >= (3, 9)
 
@@ -43,7 +43,7 @@ def ast_unparse(node: ast.AST) -> str:
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):
-        parts = []
+        parts: List[str] = []
         cur: ast.expr = node
         while isinstance(cur, ast.Attribute):
             parts.append(cur.attr)

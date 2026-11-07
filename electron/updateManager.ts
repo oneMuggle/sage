@@ -4,12 +4,13 @@ import * as fs from 'fs/promises';
 import * as fssync from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import type { ChildProcess } from 'child_process';
 import { StateManager } from './updateState';
 import type { UpdateState } from './updateState';
 import { ConfigManager } from './updateConfig';
 import type { UpdateChannel, UpdateConfig, UpdateStrategy } from './updateConfig';
 import { LauncherHealthChecker } from './updateHealthChecker';
-import { fetchUpdate as fetchCompat, updateDeploymentMode } from './update/request';
+import { fetchCompat } from './fetchCompat';
 // Task 1.7: pluggable update provider wiring.
 import type { UpdateProvider, NormalisedRelease } from './update/providers/base';
 import type { ProviderRegistry } from './update/providers/registry';
@@ -18,14 +19,11 @@ import { BUILTIN_GENERIC_CONFIG } from './update/featureFlag';
 import { createGenericHttpProvider } from './update/providers/genericHttp';
 import { logger } from './logger';
 import { clearRunOnce, registerRunOnceCommand } from './update/runOnce';
-import type { ChildProcess } from 'child_process';
 
 /**
- * Resolve once the detached installer has actually started, reject when it
- * could not be spawned (missing file, EACCES, ...).
- *
- * Do NOT wait for `exit`: the installer closes this process before it finishes
- * copying files, so an exit-based await would deadlock the updater.
+ * Wait for the installer process to actually spawn. Waiting for 'exit' would
+ * deadlock: the assisted NSIS installer stops this very process before
+ * copying files, so an exit-based await never resolves in time.
  */
 function waitForInstallerSpawn(installer: ChildProcess): Promise<void> {
   return new Promise<void>((resolve, reject) => {
@@ -599,12 +597,6 @@ export class UpdateManager {
     updateOverride?: CheckedUpdate,
     releaseNotesOverride?: string,
   ): Promise<void> {
-    const mode = updateDeploymentMode();
-    if (mode === 'offline' || (mode === 'intranet' && !this.activeProvider)) {
-      throw new Error(
-        'Download denied by deployment policy; use an approved provider or offline maintenance package',
-      );
-    }
     // Task 1.7: provider-delegating download path. When activeProvider is
     // set, route through provider.downloadAsset(). The publicKey source
     // comes from the provider's store config (GenericHttpConfig.publicKey)
@@ -1117,7 +1109,6 @@ export class UpdateManager {
     const timeout = setTimeout(() => controller.abort(), 2000);
     try {
       const config = await this.configManager.getConfig();
-      if (!config.enableTelemetry || updateDeploymentMode() !== 'online') return;
       await fetchCompat(`${config.updateServerUrl}/api/v1/updates/rollbacks`, {
         method: 'POST',
         signal: controller.signal,

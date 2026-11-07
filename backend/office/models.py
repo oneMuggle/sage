@@ -13,11 +13,7 @@ import logging
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, Field, conlist
-
-# win7 LTS 的 py38 环境钉 pydantic 1.10.13（2.x 要求 py3.9+），v2 专有符号
-# 必须走兼容垫片；pydantic 2.x 下该垫片是 no-op，因此与 main 共享同一份源码。
-from backend.compat.win7.pydantic_compat import ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, conlist, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -275,11 +271,10 @@ class WordImagePreview(BaseModel):
     )
 
 
-# pydantic v1（win7/py38 通道）用 update_forward_refs，v2 用 model_rebuild
-if hasattr(OfficeWordReadResult, "update_forward_refs"):
-    OfficeWordReadResult.update_forward_refs()
-elif hasattr(OfficeWordReadResult, "model_rebuild"):
+if hasattr(OfficeWordReadResult, "model_rebuild"):
     OfficeWordReadResult.model_rebuild()
+else:
+    OfficeWordReadResult.update_forward_refs()
 
 
 class ExcelSheetContent(BaseModel):
@@ -702,43 +697,6 @@ class WordHeaderFooterSpec(BaseModel):
     page_number: bool = False
 
 
-class WordSectionBreakSpec(BaseModel):
-    """分节设置（Round 26）：start_paragraph 前插入 NEW_PAGE 分节，
-    新节应用 page_setup（横排宽表/财务页场景）。复用 WordPageSetupSpec。
-
-    定义位置须在 ``WordFormatSpec`` 之前：pydantic v1 不支持字符串形式的
-    ``conlist`` item_type（会在解析注解时对 str 调 issubclass() → TypeError），
-    因此不能靠前向引用，必须真正先定义。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    start_paragraph: int = Field(ge=0, description="该 0-based 段落下标起进入新节")
-    page_setup: WordPageSetupSpec = Field(description="新节的页面设置")
-
-
-class WordIndexSpec(BaseModel):
-    r"""图目录/表目录设置（Round 42）。
-
-    TOF 域（``TOC \h \z \c "<图|表>"``）由 Word 收录 SEQ 题注段；
-    生成器插入域与静态缓存条目（无页码——由渲染器/COM 刷新域计算），
-    与 R13 目录域同一思路。
-
-    定义位置须在 ``WordFormatSpec`` 之前：pydantic v1 下
-    ``figure_index``/``table_index`` 若在此之前声明会留未解析的 ForwardRef，
-    首次使用时抛 ConfigError（“field \"figure_index\" not yet prepared”）。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    heading_text: str = Field(default="图目录", max_length=50)
-    placeholder_text: str = Field(
-        default='（图目录：在 Word 中按 F9 或右键"更新域"生成）',
-        max_length=200,
-        description="域未更新时的占位提示",
-    )
-
-
 class WordFormatSpec(BaseModel):
     """Word 文档版式规范。
 
@@ -782,12 +740,41 @@ class WordFormatSpec(BaseModel):
     even_page_footer: Optional[WordHeaderFooterSpec] = None
     # Round 26：横排/分节。每个 break 在 start_paragraph（0-based）前
     # 插入 NEW_PAGE 分节并对新节应用 page_setup；按列表顺序依次生效。
-    section_breaks: _constrained_list(WordSectionBreakSpec, max_length=20) = Field(
+    section_breaks: _constrained_list("WordSectionBreakSpec", max_length=20) = Field(
         default_factory=list
     )
     # Round 42：图目录/表目录（TOC \c 收录 SEQ 题注；None = 不插入）。
     figure_index: Optional[WordIndexSpec] = None
     table_index: Optional[WordIndexSpec] = None
+
+
+class WordIndexSpec(BaseModel):
+    r"""图目录/表目录设置（Round 42）。
+
+    TOF 域（``TOC \h \z \c "<图|表>"``）由 Word 收录 SEQ 题注段；
+    生成器插入域与静态缓存条目（无页码——由渲染器/COM 刷新域计算），
+    与 R13 目录域同一思路。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    heading_text: str = Field(default="图目录", max_length=50)
+    placeholder_text: str = Field(
+        default='（图目录：在 Word 中按 F9 或右键"更新域"生成）',
+        max_length=200,
+        description="域未更新时的占位提示",
+    )
+
+
+class WordSectionBreakSpec(BaseModel):
+    """分节设置（Round 26）：start_paragraph 前插入 NEW_PAGE 分节，
+    新节应用 page_setup（横排宽表/财务页场景）。复用 WordPageSetupSpec。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_paragraph: int = Field(ge=0, description="该 0-based 段落下标起进入新节")
+    page_setup: WordPageSetupSpec = Field(description="新节的页面设置")
 
 
 class OfficeWordGenerateRequest(BaseModel):
@@ -1011,6 +998,24 @@ class ExcelPrintMarginsSpec(BaseModel):
     bottom: Optional[float] = Field(default=None, ge=0.0, le=10.0)
     left: Optional[float] = Field(default=None, ge=0.0, le=10.0)
     right: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+
+
+# pydantic v1 在类创建时解析注解；以下模型引用了后置定义的类，
+# 需在全部类定义后显式解析前向引用（v2 走 model_rebuild，v1 走 update_forward_refs）。
+if hasattr(WordFormatSpec, "model_rebuild"):
+    WordFormatSpec.model_rebuild()
+else:
+    WordFormatSpec.update_forward_refs()
+
+if hasattr(ExcelSheetSpec, "model_rebuild"):
+    ExcelSheetSpec.model_rebuild()
+else:
+    ExcelSheetSpec.update_forward_refs()
+
+if hasattr(ExcelPrintSetupSpec, "model_rebuild"):
+    ExcelPrintSetupSpec.model_rebuild()
+else:
+    ExcelPrintSetupSpec.update_forward_refs()
 
 
 class ExcelCellRange(BaseModel):
@@ -1552,18 +1557,3 @@ class WordRepairRequest(BaseModel):
     max_size_bytes: int = Field(
         default=50 * 1024 * 1024, ge=1024, description="Reject files larger than this"
     )
-
-# ── Forward-reference resolution (pydantic v1 + `from __future__ import annotations`) ──
-#
-# ExcelSheetSpec (line 820) references ExcelDataValidationSpec /
-# ExcelConditionalFormatSpec / ExcelPrintSetupSpec which are defined AFTER it.
-# ExcelPrintSetupSpec (line 951) references ExcelPrintMarginsSpec (line 985).
-#
-# On pydantic v1 these annotations stay as unresolved ForwardRefs at class-
-# creation time → ConfigError on first model use.  v2 resolves lazily so the
-# call is a no-op (model_rebuild).  The guard keeps the code dual-version.
-for _cls in (ExcelSheetSpec, ExcelPrintSetupSpec):
-    if hasattr(_cls, "update_forward_refs"):
-        _cls.update_forward_refs()
-    elif hasattr(_cls, "model_rebuild"):
-        _cls.model_rebuild()

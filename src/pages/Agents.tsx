@@ -147,12 +147,12 @@ export function Agents() {
         />
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-4xl mx-auto">
-          <ErrorState
-            title="Agent 列表加载失败"
-            message={error}
-            onRetry={loadAgents}
-            retryLabel="重新加载"
-          />
+            <ErrorState
+              title="Agent 列表加载失败"
+              message={error}
+              onRetry={loadAgents}
+              retryLabel="重新加载"
+            />
           </div>
         </div>
       </div>
@@ -179,79 +179,78 @@ export function Agents() {
       />
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-4xl mx-auto">
-
-        {error && (
-          <div className="mb-4 p-3 rounded-lg bg-error/10 text-error text-sm flex items-center justify-between">
-            <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-error hover:underline">
-              关闭
-            </button>
-          </div>
-        )}
-
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <LoadingState label="加载 Agent 中..." />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {agents.map((agent) => (
-              <AgentCard
-                key={agent.id}
-                agent={agent}
-                isSelected={selectedAgent?.id === agent.id}
-                onSelect={() => {
-                  setSelectedAgent(agent);
-                  setEditing(false);
-                  setEditForm({});
-                }}
-                onToggle={handleToggleAgent}
-              />
-            ))}
-          </div>
-        )}
-
-        {selectedAgent && (
-          <div className="mt-6 p-6 rounded-lg border border-border bg-surface-elevated dark:bg-surface">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">{selectedAgent.name}</h2>
-              <div className="flex items-center gap-2">
-                {!editing && (
-                  <Button variant="secondary" onClick={() => setEditing(true)}>
-                    编辑
-                  </Button>
-                )}
-                <Button variant="secondary" onClick={handleDuplicate}>
-                  复制
-                </Button>
-                {selectedAgent.id !== 'primary' && (
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    className="px-3 py-1.5 text-sm rounded-radius-md border border-destructive/40 text-destructive hover:bg-destructive/10"
-                  >
-                    删除
-                  </button>
-                )}
-              </div>
+          {error && (
+            <div className="mb-4 p-3 rounded-lg bg-error/10 text-error text-sm flex items-center justify-between">
+              <span>{error}</span>
+              <button onClick={() => setError(null)} className="text-error hover:underline">
+                关闭
+              </button>
             </div>
+          )}
 
-            {editing ? (
-              <EditAgentForm
-                agent={selectedAgent}
-                form={editForm}
-                onChange={setEditForm}
-                onSave={handleSave}
-                onCancel={() => {
-                  setEditing(false);
-                  setEditForm({});
-                }}
-              />
-            ) : (
-              <AgentDetails agent={selectedAgent} />
-            )}
-          </div>
-        )}
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <LoadingState label="加载 Agent 中..." />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {agents.map((agent) => (
+                <AgentCard
+                  key={agent.id}
+                  agent={agent}
+                  isSelected={selectedAgent?.id === agent.id}
+                  onSelect={() => {
+                    setSelectedAgent(agent);
+                    setEditing(false);
+                    setEditForm({});
+                  }}
+                  onToggle={handleToggleAgent}
+                />
+              ))}
+            </div>
+          )}
+
+          {selectedAgent && (
+            <div className="mt-6 p-6 rounded-lg border border-border bg-surface-elevated dark:bg-surface">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">{selectedAgent.name}</h2>
+                <div className="flex items-center gap-2">
+                  {!editing && (
+                    <Button variant="secondary" onClick={() => setEditing(true)}>
+                      编辑
+                    </Button>
+                  )}
+                  <Button variant="secondary" onClick={handleDuplicate}>
+                    复制
+                  </Button>
+                  {selectedAgent.id !== 'primary' && (
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      className="px-3 py-1.5 text-sm rounded-radius-md border border-destructive/40 text-destructive hover:bg-destructive/10"
+                    >
+                      删除
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {editing ? (
+                <EditAgentForm
+                  agent={selectedAgent}
+                  form={editForm}
+                  onChange={setEditForm}
+                  onSave={handleSave}
+                  onCancel={() => {
+                    setEditing(false);
+                    setEditForm({});
+                  }}
+                />
+              ) : (
+                <AgentDetails agent={selectedAgent} />
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

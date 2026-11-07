@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Dict
 
 FIXTURE_PATH = Path(__file__).resolve().parent / "zotero.sqlite"
 
@@ -385,7 +386,7 @@ def build_fixture(path: Path = FIXTURE_PATH) -> Path:
 
         # Assign valueIDs and insert itemDataValues
         unique_values = sorted({row[2] for row in _ITEM_DATA})
-        value_to_id: dict[str, int] = {}
+        value_to_id: Dict[str, int] = {}
         for value_id, value in enumerate(unique_values, start=1):
             conn.execute(
                 "INSERT INTO itemDataValues (valueID, value) VALUES (?, ?)",
