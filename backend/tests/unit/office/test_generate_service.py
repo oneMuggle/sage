@@ -5,6 +5,7 @@ import pytest
 from backend.office.generate_service import (
     build_nl_prompt,
     next_iteration_filename,
+    parse_llm_json_object,
     parse_llm_spec,
     to_excel_request,
     to_pdf_request,
@@ -137,3 +138,21 @@ def test_next_iteration_filename() -> None:
     assert next_iteration_filename("report.docx") == "report_v2.docx"
     assert next_iteration_filename("report_v2.docx") == "report_v3.docx"
     assert next_iteration_filename("report_v10.pptx") == "report_v11.pptx"
+
+
+def test_parse_llm_json_object_plain() -> None:
+    assert parse_llm_json_object('{"a": "b"}') == {"a": "b"}
+
+
+def test_parse_llm_json_object_strips_fence() -> None:
+    assert parse_llm_json_object('```json\n{"a": 1}\n```') == {"a": 1}
+
+
+def test_parse_llm_json_object_rejects_non_object() -> None:
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        parse_llm_json_object("[1, 2]")
+
+
+def test_parse_llm_json_object_invalid_json() -> None:
+    with pytest.raises(ValueError, match="Failed to parse LLM output"):
+        parse_llm_json_object("nope")

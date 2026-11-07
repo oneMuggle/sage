@@ -48,10 +48,8 @@ def build_nl_prompt(
     return "\n\n".join(parts)
 
 
-def parse_llm_spec(text: str, doc_type: str) -> Dict[str, Any]:
-    """Parse LLM JSON output into a validated ``{kind, ...payload}`` dict."""
-    kind = _normalize_doc_type(doc_type)
-
+def parse_llm_json_object(text: str) -> Dict[str, Any]:
+    """Parse LLM output into a JSON object, stripping an optional code fence."""
     match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
     if match:
         text = match.group(1)
@@ -64,6 +62,14 @@ def parse_llm_spec(text: str, doc_type: str) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("LLM output must be a JSON object")
 
+    return data
+
+
+def parse_llm_spec(text: str, doc_type: str) -> Dict[str, Any]:
+    """Parse LLM JSON output into a validated ``{kind, ...payload}`` dict."""
+    kind = _normalize_doc_type(doc_type)
+
+    data = parse_llm_json_object(text)
     body_key = _REQUIRED_LIST_KEY[kind]
     body = data.get(body_key)
     if not isinstance(body, list) or not body:

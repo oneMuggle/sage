@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from backend.office.models import PdfGenerateResult
+from backend.office.models import PdfGenerateResult, WordTemplateFillResult
 
 _AUTH_HEADERS = {"Authorization": "Bearer test-local-auth-token"}
 
@@ -295,3 +295,149 @@ def test_generate_nl_unreadable_reference_returns_422(tmp_path: Path) -> None:
     assert resp.status_code == 422, resp.text
     assert resp.json()["error_type"] == "OfficeParseError"
     llm.complete.assert_not_called()
+
+
+def _fake_fill(workspace: Path, doc_id: str, name: str) -> WordTemplateFillResult:
+    fake = _make_output(workspace, "word", doc_id, name, b"filled")
+    return WordTemplateFillResult(
+        output_path=str(fake),
+        filename=name,
+        file_size_bytes=len(b"filled"),
+        filled_count=2,
+        unfilled_placeholders=[],
+    )
+
+
+def test_template_chat_happy_path(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    fill = _fake_fill(workspace, "abc123", "周报.docx")
+
+    llm = AsyncMock()
+    llm.complete.return_value = '{"title": "第 45 周周报", "highlights": "完成 P3 生成工作台"}'
+
+    with patch(  # noqa: SIM117 — py38 不支持括号多上下文 with
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        with patch(
+            "backend.api.office_generate_routes.instantiate_template",
+            return_value=fill,
+        ) as mock_instantiate:
+            resp = _client().post(
+                "/api/v1/office/generate/template-chat",
+                json={
+                    "workspace_path": str(workspace),
+                    "template_id": "weekly_report",
+                    "messages": [
+                        {"role": "user", "content": "帮我写第 45 周周报"},
+                        {"role": "assistant", "content": "本周有哪些亮点？"},
+                        {"role": "user", "content": "完成了 P3 生成工作台"},
+                    ],
+                },
+            )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["filename"] == "周报.docx"
+    assert data["summary"]["id"] == "abc123"
+    assert data["summary"]["doc_type"] == "word"
+
+    kwargs = mock_instantiate.call_args.kwargs
+    assert kwargs["template_id"] == "weekly_report"
+    assert kwargs["workspace_template"] is None
+    assert kwargs["filename"] == "周报.docx"
+    assert kwargs["data"] == {
+        "title": "第 45 周周报",
+        "highlights": "完成 P3 生成工作台",
+    }
+
+    prompt = llm.complete.call_args.args[0]
+    assert "周报" in prompt
+    assert "highlights" in prompt
+    assert "完成了 P3 生成工作台" in prompt
+
+
+def test_template_chat_unknown_template_returns_404(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    llm = AsyncMock()
+    with patch(
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        resp = _client().post(
+            "/api/v1/office/generate/template-chat",
+            json={
+                "workspace_path": str(workspace),
+                "template_id": "no_such_template",
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+        )
+
+    assert resp.status_code == 404, resp.text
+    assert resp.json()["error_type"] == "OfficeFileNotFoundError"
+    llm.complete.assert_not_called()
+
+
+def test_template_chat_rejects_two_template_sources(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    resp = _client().post(
+        "/api/v1/office/generate/template-chat",
+        json={
+            "workspace_path": str(workspace),
+            "template_id": "weekly_report",
+            "workspace_template": "my.docx",
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error_type"] == "OfficePathError"
+
+
+def test_template_chat_invalid_llm_json_returns_422(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    llm = AsyncMock()
+    llm.complete.return_value = "not json"
+
+    with patch(
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        resp = _client().post(
+            "/api/v1/office/generate/template-chat",
+            json={
+                "workspace_path": str(workspace),
+                "template_id": "weekly_report",
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+        )
+
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["error_type"] == "OfficeParseError"
+
+
+def test_template_chat_without_llm_returns_503(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    with patch(
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=None,
+    ):
+        resp = _client().post(
+            "/api/v1/office/generate/template-chat",
+            json={
+                "workspace_path": str(workspace),
+                "template_id": "weekly_report",
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+        )
+
+    assert resp.status_code == 503, resp.text

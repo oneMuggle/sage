@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 import uuid
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 from zipfile import BadZipFile
 
 from docx.opc.exceptions import PackageNotFoundError
@@ -27,10 +27,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.data.database import Database, get_database
 from backend.office.docx_text import read_docx_text
-from backend.office.errors import OfficeParseError, OfficePathError
+from backend.office.errors import OfficeFileNotFoundError, OfficeParseError, OfficePathError
 from backend.office.excel import generate_xlsx
 from backend.office.generate_service import (
     build_nl_prompt,
+    parse_llm_json_object,
     parse_llm_spec,
     to_excel_request,
     to_pdf_request,
@@ -38,12 +39,19 @@ from backend.office.generate_service import (
     to_word_request,
 )
 from backend.office.generated_store import persist_generated_document
-from backend.office.models import OfficeDocType, OfficeDocumentSummary, PdfGenerateResult
+from backend.office.models import (
+    OfficeDocType,
+    OfficeDocumentSummary,
+    PdfGenerateResult,
+    TemplateLibraryEntry,
+    WordTemplateFillResult,
+)
 from backend.office.path_safety import resolve_within, validate_supported_filename
 from backend.office.pdf import generate_pdf
 from backend.office.ppt import generate_ppt
 from backend.office.progress import track
 from backend.office.storage import validate_workspace
+from backend.office.template_library import instantiate_template, list_templates
 from backend.office.word import generate_docx
 from backend.orchestration.llm_factory import build_llm_client_from_settings
 
@@ -184,6 +192,125 @@ async def generate_nl_endpoint(req: NlGenerateRequest) -> NlGenerateResponse:
             _db().get_connection(),
             file_path=output_path,
             doc_type=doc_type,
+            workspace_path=str(workspace),
+        )
+        prog.report("完成", 100)
+
+    return NlGenerateResponse(
+        output_path=str(output_path),
+        filename=output_path.name,
+        file_size_bytes=output_path.stat().st_size,
+        summary=summary,
+    )
+
+
+class TemplateChatMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    content: str = Field(..., min_length=1)
+
+
+class TemplateChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: Optional[str] = None
+    workspace_path: str
+    template_id: Optional[str] = None
+    workspace_template: Optional[str] = None
+    messages: List[TemplateChatMessage] = Field(..., min_length=1)
+
+
+def _resolve_template_entry(
+    workspace: Path,
+    template_id: Optional[str],
+    workspace_template: Optional[str],
+) -> TemplateLibraryEntry:
+    """Find the library entry the chat will fill, mirroring instantiate rules."""
+    if template_id and workspace_template:
+        raise OfficePathError("template_id and workspace_template are mutually exclusive")
+    entries = list_templates(str(workspace)).templates
+    if template_id:
+        for entry in entries:
+            if entry.source == "builtin" and entry.id == template_id:
+                return entry
+        raise OfficeFileNotFoundError(Path(template_id))
+    if workspace_template:
+        for entry in entries:
+            if entry.source == "workspace" and entry.filename == workspace_template:
+                return entry
+        raise OfficeFileNotFoundError(Path(workspace_template))
+    raise OfficePathError("template_id or workspace_template is required")
+
+
+def _build_template_chat_prompt(
+    entry: TemplateLibraryEntry, messages: List[TemplateChatMessage]
+) -> str:
+    """Prompt the LLM to fill every placeholder from the conversation."""
+    lines: List[str] = [
+        f"你是一个模板填充助手。用户正在通过对话填写「{entry.name}」模板。",
+        entry.description.strip(),
+        "该模板包含以下占位符：",
+    ]
+    for placeholder in entry.placeholders:
+        description = f"：{placeholder.description}" if placeholder.description else ""
+        lines.append(f"- {placeholder.name}（{placeholder.type.value}{description}）")
+    lines.extend(
+        [
+            "请根据对话内容为每个占位符生成合适的中文内容。",
+            "只返回 JSON 对象，键为占位符名称，值为填充文本；不要任何解释。",
+            "对话记录：",
+        ]
+    )
+    for message in messages:
+        speaker = "用户" if message.role == "user" else "助手"
+        lines.append(f"{speaker}：{message.content}")
+    return "\n".join(line for line in lines if line)
+
+
+@router.post("/template-chat", response_model=NlGenerateResponse)
+async def template_chat_endpoint(req: TemplateChatRequest) -> NlGenerateResponse:
+    """Fill a library template from a chat conversation."""
+    workspace = validate_workspace(Path(req.workspace_path))
+    entry = _resolve_template_entry(workspace, req.template_id, req.workspace_template)
+    if entry.doc_type is OfficeDocType.PDF:
+        raise OfficePathError("PDF templates are not supported")
+
+    prompt = _build_template_chat_prompt(entry, req.messages)
+    client = build_llm_client_from_settings()
+    if client is None:
+        raise HTTPException(status_code=503, detail="LLM 客户端未配置")
+
+    task_id = req.task_id or uuid.uuid4().hex
+    with track(task_id, f"模板填充：{entry.name}") as prog:
+        prog.report("调用 LLM 填充模板", 10)
+        llm_output = await client.complete(prompt)
+
+        prog.report("解析填充内容", 50)
+        try:
+            data = parse_llm_json_object(llm_output)
+        except ValueError as exc:
+            raise OfficeParseError(str(exc)) from exc
+
+        prog.report("填充模板", 70)
+        extension = _DOC_TYPE_EXTENSIONS[entry.doc_type]
+        filename = validate_supported_filename(
+            f"{_safe_filename_stem(entry.name)}.{extension}", entry.doc_type
+        )
+        result: WordTemplateFillResult = instantiate_template(
+            str(workspace),
+            template_id=req.template_id,
+            workspace_template=req.workspace_template,
+            filename=filename,
+            data=data,
+        )
+        output_path = Path(result.output_path)
+
+        prog.report("登记文档", 90)
+        summary = persist_generated_document(
+            _db().get_connection(),
+            file_path=output_path,
+            doc_type=entry.doc_type,
             workspace_path=str(workspace),
         )
         prog.report("完成", 100)
