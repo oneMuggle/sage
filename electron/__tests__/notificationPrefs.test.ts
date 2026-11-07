@@ -43,12 +43,14 @@ describe('notificationPrefs', () => {
       backgroundTasks: true,
       webhookUrl: 'https://hook.example/x',
       slackWebhookUrl: 'https://hooks.slack.com/y',
+      webhookSecret: 'top-secret',
     });
     expect(readNotificationPrefs(path)).toEqual({
       enabled: false,
       backgroundTasks: true,
       webhookUrl: 'https://hook.example/x',
       slackWebhookUrl: 'https://hooks.slack.com/y',
+      webhookSecret: 'top-secret',
     });
   });
 
@@ -60,6 +62,7 @@ describe('notificationPrefs', () => {
       backgroundTasks: true,
       webhookUrl: '',
       slackWebhookUrl: '',
+      webhookSecret: '',
     });
   });
 

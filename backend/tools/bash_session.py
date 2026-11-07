@@ -22,6 +22,7 @@ from .subprocess_util import (
     kill_process_tree,
     observe_process_exit,
     observe_process_exit_code,
+    process_start_token,
     read_capped_output,
     reap_process,
     unlink_owned,
@@ -55,6 +56,8 @@ class BashSession:
     stderr_path: str
     stdout_identity: Optional[Tuple[int, int]] = None
     stderr_identity: Optional[Tuple[int, int]] = None
+    #: 2026-11-06 Phase 4：进程启动标识（跨重启强校验 PID 复用）。
+    start_token: Optional[str] = None
     stdout_offset: int = 0
     stderr_offset: int = 0
     started_at: float = field(default_factory=time.monotonic)
@@ -183,6 +186,7 @@ class BashSessionRegistry:
                 process_group_id=verified.process_group_id,
                 stdout_identity=file_identity(stdout_path),
                 stderr_identity=file_identity(stderr_path),
+                start_token=process_start_token(process.pid),
             )
             self._sessions[session.shell_id] = session
             # 不记录 command：它可能含有凭据或其他用户秘密。
@@ -406,7 +410,7 @@ class BashSessionRegistry:
             return 0
         restored = 0
         for rec in store.list_all():
-            proc = ResurrectedProcess(pid=rec.pid, pgid=rec.pgid)
+            proc = ResurrectedProcess(pid=rec.pid, pgid=rec.pgid, start_token=rec.start_token)
             if proc.poll() is not None:
                 self._notify_restored_exit(rec)
                 self._store_remove(rec.shell_id)

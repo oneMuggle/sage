@@ -865,18 +865,21 @@ export interface ElectronAPI {
     backgroundTasks: boolean;
     webhookUrl: string;
     slackWebhookUrl: string;
+    webhookSecret: string;
   }>;
   setNotificationPrefs?: (prefs: {
     enabled: boolean;
     backgroundTasks: boolean;
     webhookUrl?: string;
     slackWebhookUrl?: string;
+    webhookSecret?: string;
   }) => Promise<{
     ok: boolean;
     enabled: boolean;
     backgroundTasks: boolean;
     webhookUrl: string;
     slackWebhookUrl: string;
+    webhookSecret: string;
   }>;
   /** 2026-11-05: 任务栏注意力提示（等待审批时闪烁 / macOS dock badge） */
   setTaskbarAttention?: (input: {

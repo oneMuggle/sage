@@ -19,6 +19,9 @@ export const zhSettingsUi = {
   'settings.basic.notifications_webhook_label': '通用 Webhook',
   'settings.basic.notifications_webhook_desc':
     '每条通知以 JSON 形式 POST 到该地址（可对接自建机器人/自动化平台）；留空关闭',
+  'settings.basic.notifications_webhook_secret_placeholder': '签名密钥（可选）',
+  'settings.basic.notifications_webhook_secret_desc':
+    '填写后请求头附带 X-Sage-Signature（HMAC-SHA256），接收方可验签；留空不签名',
   'settings.basic.notifications_slack_label': 'Slack Webhook',
   'settings.basic.notifications_slack_desc':
     'Slack Incoming Webhook 地址，通知以 text 消息发送；留空关闭',
