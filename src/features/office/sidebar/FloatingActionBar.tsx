@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 import { useI18n } from '../../../shared/lib/i18n';
 
 export type FloatingActionKind = 'rewrite' | 'chat' | 'edit' | 'audit';
@@ -23,6 +25,16 @@ export function FloatingActionBar({
   onDismiss,
 }: FloatingActionBarProps): JSX.Element | null {
   const { t } = useI18n();
+
+  useEffect(() => {
+    if (!anchorRect) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onDismiss();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [anchorRect, onDismiss]);
+
   if (!anchorRect) return null;
 
   return (

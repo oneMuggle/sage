@@ -9,12 +9,10 @@ export function useSelectionCapture(rootRef: RefObject<HTMLElement>): void {
   const setSelection = useOfficeWorkspaceStore((s) => s.setSelection);
 
   useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-
     const handle = () => {
-      const selection = window.getSelection();
-      const normalized = normalizeSelection(root, selection);
+      const root = rootRef.current;
+      if (!root) return;
+      const normalized = normalizeSelection(root, window.getSelection());
       setSelection(normalized);
     };
 

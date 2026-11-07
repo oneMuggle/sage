@@ -26,8 +26,28 @@ describe('FloatingActionBar', () => {
       />,
     );
 
+    expect(screen.getByTestId('office-floating-action-rewrite')).toBeInTheDocument();
+    expect(screen.getByTestId('office-floating-action-chat')).toBeInTheDocument();
+    expect(screen.getByTestId('office-floating-action-edit')).toBeInTheDocument();
+    expect(screen.getByTestId('office-floating-action-audit')).toBeInTheDocument();
+
     fireEvent.click(screen.getByTestId('office-floating-action-audit'));
     expect(onAction).toHaveBeenCalledWith('audit');
+  });
+
+  it('dismisses on Escape', () => {
+    const onDismiss = vi.fn();
+    render(
+      <FloatingActionBar
+        anchorRect={{ top: 100, left: 40, width: 60 }}
+        canApply
+        onAction={vi.fn()}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
   it('disables apply-dependent actions when canApply is false', () => {
