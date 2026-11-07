@@ -787,6 +787,10 @@ from backend.api.office_ai_review_routes import (  # noqa: E402
 
 router.include_router(_ai_review_router)
 
+from backend.api.ai_routes import router as _ai_router  # noqa: E402
+
+router.include_router(_ai_router, prefix="/ai")
+
 __all__ = [
     "router",
     "register_office_exception_handlers",

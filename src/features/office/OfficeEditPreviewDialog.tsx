@@ -50,7 +50,6 @@ import type {
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { diffSpans } from '../../shared/lib/textDiff';
 
-
 export type OfficeEditPreviewPhase = 'compose' | 'previewing' | 'result' | 'applying' | 'applied';
 
 export interface OfficeEditPreviewDialogProps {
@@ -69,9 +68,9 @@ export interface OfficeEditPreviewDialogProps {
 }
 
 import { ExcelPptEditFormFields } from './ExcelPptEditFormFields';
+import { OfficeEditAiActions, officeEditAiProps } from './OfficeEditAiActions';
 import { WordEditFormFields } from './WordEditFormFields';
 import { isRevisionConflict } from './previewRevision';
-
 export type WordEditKind =
   | 'replace_text'
   | 'append_paragraphs'
@@ -455,6 +454,9 @@ export function OfficeEditPreviewDialog({
   const setField = (key: keyof ComposeState) => (value: string) =>
     setCompose((prev) => ({ ...prev, [key]: value }));
 
+  // R19 裁定：按 doc_type → compose.<kindField> → 主文本字段绑定 AI 改写。
+  const aiProps = officeEditAiProps(workspacePath, doc.id, doc.doc_type, compose, setField);
+
   const handlePreview = async () => {
     const ops = buildUpdateOps(doc.doc_type, compose);
     if (!ops) {
@@ -560,6 +562,8 @@ export function OfficeEditPreviewDialog({
         {showCompose && (
           <>
             <p className="text-xs text-muted">{t('office.edit.composeHint')}</p>
+
+            <OfficeEditAiActions {...aiProps} />
 
             {doc.doc_type === 'word' && (
               <WordEditFormFields

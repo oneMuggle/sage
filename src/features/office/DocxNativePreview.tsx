@@ -14,6 +14,8 @@ import { useEffect, useRef, useState } from 'react';
 import { officeApi } from '../../shared/api/officeApi';
 import { useI18n } from '../../shared/lib/i18n';
 
+import { annotateParagraphIndexes } from './sidebar/selectionAnchor';
+
 // eslint-disable-next-line react-refresh/only-export-components -- 消毒器与组件同文件便于内聚
 export function sanitizeRenderedDocx(container: HTMLElement): void {
   const dangerous = container.querySelectorAll('script, iframe, object, embed, link');
@@ -76,6 +78,7 @@ export async function renderDocxDataUrl(container: HTMLElement, dataUrl: string)
     FORBID_ATTR: ['srcset'],
   });
   sanitizeRenderedDocx(container);
+  annotateParagraphIndexes(container);
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

@@ -318,6 +318,40 @@ export const officeRoutes: Record<string, CommandRoute> = {
       add_comments: a.addComments !== false,
     }),
   },
+  // P2 (2026-11-07): AI 侧栏改写 / 对话。纯文本进出，不写文件。
+  office_ai_rewrite: {
+    method: 'POST',
+    path: () => '/api/v1/office/ai/rewrite',
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      document_id: a.documentId ?? a.document_id,
+      text: a.text,
+      instruction: a.instruction,
+      ...((a.targetLang ?? a.target_lang) ? { target_lang: a.targetLang ?? a.target_lang } : {}),
+      ...((a.customInstruction ?? a.custom_instruction)
+        ? { custom_instruction: a.customInstruction ?? a.custom_instruction }
+        : {}),
+      ...((a.contextBefore ?? a.context_before)
+        ? { context_before: a.contextBefore ?? a.context_before }
+        : {}),
+      ...((a.contextAfter ?? a.context_after)
+        ? { context_after: a.contextAfter ?? a.context_after }
+        : {}),
+    }),
+  },
+  office_ai_chat: {
+    method: 'POST',
+    path: () => '/api/v1/office/ai/chat',
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      document_id: a.documentId ?? a.document_id,
+      message: a.message,
+      history: Array.isArray(a.history) ? a.history : [],
+      ...((a.documentContext ?? a.document_context)
+        ? { document_context: a.documentContext ?? a.document_context }
+        : {}),
+    }),
+  },
   // M4c: native tracked revisions (w:ins/w:del + comments). rawBody keeps
   // explicit change payloads and nested rule-pack params untouched.
   office_word_revise: {
