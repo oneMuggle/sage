@@ -166,6 +166,7 @@ type NotificationPrefsState = {
   backgroundTasks: boolean;
   webhookUrl: string;
   slackWebhookUrl: string;
+  webhookSecret: string;
 };
 
 /** 桌面通知偏好——状态由 Electron 主进程持有（sage-notification-prefs.json），
@@ -186,6 +187,7 @@ function NotificationPrefsCard(): JSX.Element {
             backgroundTasks: resp.backgroundTasks === true,
             webhookUrl: resp.webhookUrl ?? '',
             slackWebhookUrl: resp.slackWebhookUrl ?? '',
+            webhookSecret: resp.webhookSecret ?? '',
           });
         }
       })
@@ -196,6 +198,7 @@ function NotificationPrefsCard(): JSX.Element {
             backgroundTasks: true,
             webhookUrl: '',
             slackWebhookUrl: '',
+            webhookSecret: '',
           });
         }
       });
@@ -265,12 +268,26 @@ function NotificationPrefsCard(): JSX.Element {
         {prefs === null ? (
           <span className="text-xs text-muted">…</span>
         ) : (
-          urlInput(
-            prefs.webhookUrl,
-            (v) => update({ webhookUrl: v }),
-            'notification-webhook-url',
-            !prefs.enabled,
-          )
+          <div className="space-y-2">
+            {urlInput(
+              prefs.webhookUrl,
+              (v) => update({ webhookUrl: v }),
+              'notification-webhook-url',
+              !prefs.enabled,
+            )}
+            <input
+              type="password"
+              className="w-full rounded border border-border bg-bg px-2 py-1 text-xs text-text"
+              placeholder={t('settings.basic.notifications_webhook_secret_placeholder')}
+              value={prefs.webhookSecret}
+              disabled={!prefs.enabled}
+              onChange={(e) => update({ webhookSecret: e.target.value })}
+              data-testid="notification-webhook-secret"
+            />
+            <span className="block text-ui-2xs text-text-tertiary">
+              {t('settings.basic.notifications_webhook_secret_desc')}
+            </span>
+          </div>
         )}
       </SettingRow>
       <SettingRow
