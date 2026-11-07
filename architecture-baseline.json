@@ -12,7 +12,7 @@
     "backend/api/playbook_routes.py": 934,
     "backend/api/project_ai_routes.py": 862,
     "backend/api/project_routes.py": 1296,
-    "backend/api/project_schemas.py": 826,
+    "backend/api/project_schemas.py": 827,
     "backend/api/wiki_routes.py": 1764,
     "backend/application/services/chat_service.py": 1578,
     "backend/core/legacy/agent.py": 3701,
