@@ -129,3 +129,68 @@ scripts/win7/*
 # release/win7 侧 cherry 计划文档 + py3.8 hardlink 回退（2026-09-15 merge origin/release/win7）
 docs/plans/2026-09-15_win7-*.md
 backend/tests/unit/test_wiki_path_security.py
+
+# ==== 2026-11-07 P1 一次性收敛审计登记 ====
+# 收敛后残留 real 逐项抽样审计：无陈旧代码，均为以下两类必要差异。
+# 后续可改进 parity 归一化（Union/X|Y、with(...) 回写等）以减少台账膨胀。
+
+# -- 本次收敛修正：pydantic v1/v2 守卫、py38 guarded 标记 --
+backend/api/project_ai_routes.py
+backend/api/worktree_routes.py
+backend/office/models.py
+backend/skills/skill_md/script_runner.py
+backend/skills/skill_md/validation.py
+backend/tests/unit/test_safe_writer.py
+backend/tests/unit/test_vision_ingest_security.py
+
+# -- win7 侧功能/适配/测试差异（main 未同步；已抽样确认非陈旧代码） --
+backend/api/mcp_routes.py
+backend/cli/checks/heavy_deps.py
+backend/cli/checks/network.py
+backend/memory/embedder.py
+backend/memory/embedder_factory.py
+backend/memory/registry.py
+backend/model_catalog/transfer.py
+backend/office/pdf_to_word.py
+backend/plugins/registry.py
+backend/services/scheduler.py
+backend/services/workspace_info.py
+backend/skills/skill_md/delete.py
+backend/tests/conftest.py
+backend/tests/integration/test_chat_stream.py
+backend/tests/integration/test_office_journal_routes.py
+backend/tests/integration/test_settings_route_hex.py
+backend/tests/integration/test_settings_route_legacy.py
+backend/tests/unit/cli/checks/test_heavy_deps.py
+backend/tests/unit/cli/checks/test_network.py
+backend/tests/unit/test_adapter_tag_graph.py
+backend/tests/unit/test_agent_tool.py
+backend/tests/unit/test_browser_tool.py
+backend/tests/unit/test_hooks.py
+backend/tests/unit/test_local_auth.py
+backend/tests/unit/test_network_config.py
+backend/tests/unit/test_permissions_enforcer.py
+backend/tests/unit/test_playbook_document_import.py
+backend/tests/unit/test_preference_learning_llm.py
+backend/tests/unit/test_project_advisor.py
+backend/tests/unit/test_project_knowledge_extractor.py
+backend/tests/unit/test_project_task_decomposer.py
+backend/tests/unit/test_review_stamp.py
+backend/tests/unit/test_risk.py
+backend/tests/unit/tools/test_office_journal_tool.py
+backend/tools/__init__.py
+backend/tools/adapters/python_adapter.py
+backend/tools/execute_code_tool.py
+backend/tools/network_config.py
+backend/zotero/client.py
+electron/buildManifest.ts
+electron/mediaIpc.ts
+electron/orphanBackendKiller.ts
+electron/showStartupFailureDialog.ts
+electron/tests/updateIntegration.test.ts
+electron/tests/updateManager.test.ts
+electron/updateHealthChecker.ts
+src/pages/__tests__/Memory.export.test.tsx
+src/widgets/chat/Message.tsx
+src/widgets/evolution/EvolutionPanel.tsx
+src/widgets/memory/index.ts
