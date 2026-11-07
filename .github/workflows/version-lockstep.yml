@@ -51,6 +51,16 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 只依赖标准库，无需 pip install
+      # 只依赖标准库，无需 pip install。
+      # PR 目标是 release/win7 时，HEAD 是 win7 侧，main 必须取 origin/main；
+      # 否则（PR 面向 main / push main）HEAD 是 main 侧。
       - name: Check version lockstep
-        run: python scripts/check_version_lockstep.py --tags
+        run: |
+          if [ "${{ github.base_ref }}" = "release/win7" ]; then
+            git fetch --no-tags origin main:refs/remotes/origin/main
+            python scripts/check_version_lockstep.py \
+              --main-ref origin/main --win7-ref HEAD --tags
+          else
+            python scripts/check_version_lockstep.py \
+              --main-ref HEAD --win7-ref origin/release/win7 --tags
+          fi
