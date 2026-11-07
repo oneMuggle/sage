@@ -106,6 +106,11 @@ def _triggers_overlap(left: Optional[str], right: Optional[str]) -> bool:
     return left in right or right in left
 
 
+def triggers_overlap(left: Optional[str], right: Optional[str]) -> bool:
+    """Public 别名：供 ``rules_transfer`` 等外部模块复用触发词重叠判定。"""
+    return _triggers_overlap(left, right)
+
+
 def detect_conflicts(entries: List[RuleEntry]) -> List[Dict[str, Any]]:
     """同 category + 触发词重叠 + 内容不同 → 提示冲突，不自动合并。"""
     active = [entry for entry in entries if entry.enabled]
@@ -240,6 +245,11 @@ def _safe_read(path: Path) -> Optional[str]:
     except (OSError, UnicodeDecodeError):
         logger.warning("rules: unreadable doc %s", path, exc_info=True)
         return None
+
+
+def safe_read(path: Path) -> Optional[str]:
+    """Public 别名：供 ``rules_transfer`` 等外部模块复用 ``_safe_read`` 的防护。"""
+    return _safe_read(path)
 
 
 def _playbook_check_entries(

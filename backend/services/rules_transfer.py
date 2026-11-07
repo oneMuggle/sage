@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,7 +16,12 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from backend.data.project_repo import Project
 from backend.services.playbook_library import build_export_envelope
-from backend.services.rules_registry import RuleEntry, global_rules_path
+from backend.services.rules_registry import (
+    RuleEntry,
+    global_rules_path,
+    safe_read,
+    triggers_overlap,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +32,6 @@ MAX_EXPORT_FILE_BYTES = 1_048_576  # 1 MiB
 # 导出时按该顺序探测项目总纲文件；导入时只接受同一组文件名（防路径穿越）。
 _DOC_FILENAMES: Tuple[str, ...] = ("SAGE.md", "CLAUDE.md", "AGENTS.md")
 _IMPORTABLE_DOC_FILENAMES = frozenset(_DOC_FILENAMES)
-_MARKDOWN_HEADING_RE = re.compile(r"^\s*#{1,6}\s+.*$")
 
 
 @dataclass
@@ -65,21 +68,8 @@ class RulesImportValidationError(ValueError):
 
 
 def _normalize_for_dedupe(value: str) -> str:
-    """约束去重：空白归一 + 大小写不敏感；不剥标点，避免误合。"""
+    """去重：空白归一 + 大小写不敏感；不剥标点，避免误合。"""
     return " ".join(str(value).split()).casefold()
-
-
-def _normalize_markdown_for_dedupe(value: str) -> str:
-    """文档去重：先丢弃标题行，再归一。
-
-    Task 20 之后 ``_markdown_entries`` 的 ``RuleEntry.content`` 只含小节正文
-    （不含 ``# 标题``），而信封里是整文件文本；不做标题剥离会把同一内容误判为
-    冲突。仅用于 ``project_docs`` / ``global_rules`` 两类比较。
-    """
-    kept = [
-        line for line in str(value).splitlines() if not _MARKDOWN_HEADING_RE.match(line)
-    ]
-    return _normalize_for_dedupe("\n".join(kept))
 
 
 def _project_meta(project: Project) -> Dict[str, Any]:
@@ -90,13 +80,9 @@ def _project_meta(project: Project) -> Dict[str, Any]:
 
 
 def _read_file_text(path: Path) -> str:
-    try:
-        return path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return ""
-    except (OSError, UnicodeDecodeError):
-        logger.warning("failed to read %s for rules export", path)
-        return ""
+    """导出专用：与 registry 共享符号链接 / 1 MiB 防护；读不到返回空串。"""
+    text = safe_read(path)
+    return "" if text is None else text
 
 
 def _constraint_payloads(entries: Iterable[RuleEntry]) -> List[Dict[str, Any]]:
@@ -118,7 +104,7 @@ def _constraint_payloads(entries: Iterable[RuleEntry]) -> List[Dict[str, Any]]:
 
 
 def _doc_payloads(project: Project) -> Dict[str, str]:
-    """项目总纲（SAGE.md / CLAUDE.md / AGENTS.md）直接读文件正文。"""
+    """项目总纲（SAGE.md / CLAUDE.md / AGENTS.md）直接读文件正文（含防护）。"""
     project_path = Path(project.path)
     docs: Dict[str, str] = {}
     for filename in _DOC_FILENAMES:
@@ -217,6 +203,11 @@ def render_rules_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
+# 仅这些层的 ``content`` 是一行一句的规则，可被 AGENTS.md 以 bullet 形式列出；
+# ``global`` / ``playbook`` 走独立的整段附加，避免重复渲染。
+_SUMMARIZABLE_LAYERS: Tuple[str, ...] = ("constraint", "doc")
+
+
 def render_rules_agents_md(
     project: Project,
     entries: Iterable[RuleEntry],
@@ -233,7 +224,11 @@ def render_rules_agents_md(
     if meta.get("type"):
         lines.append("项目类型：{}。".format(meta["type"]))
         lines.append("")
-    active = [entry for entry in entries if entry.enabled]
+    active = [
+        entry
+        for entry in entries
+        if entry.enabled and entry.layer in _SUMMARIZABLE_LAYERS
+    ]
     if active:
         lines.extend(["## 规则", ""])
         lines.extend(f"- {entry.content}" for entry in active)
@@ -323,58 +318,33 @@ def parse_rules_import(payload: Any) -> Dict[str, Any]:
     return {**parsed, "layers": layers}
 
 
-def _existing_key(entry: RuleEntry) -> Optional[Tuple[str, ...]]:
-    if entry.layer == "constraint":
-        return (
-            "constraint",
-            _normalize_for_dedupe(entry.category or ""),
-            _normalize_for_dedupe(entry.content or ""),
-        )
-    if entry.layer == "doc":
-        # id 形如 "doc:SAGE.md#0"
-        filename = str(entry.id).partition(":")[2].partition("#")[0]
-        return ("doc", filename)
-    if entry.layer == "global":
-        return ("global", "SAGE.md")
-    return None
-
-
-def _index_existing(
+def _index_constraints(
     existing_rules: Iterable[RuleEntry],
-) -> Tuple[Dict[Tuple[str, ...], RuleEntry], Dict[str, RuleEntry], Optional[RuleEntry]]:
-    constraint_index: Dict[Tuple[str, ...], RuleEntry] = {}
-    doc_index: Dict[str, RuleEntry] = {}
-    global_entry: Optional[RuleEntry] = None
+) -> Dict[str, List[RuleEntry]]:
+    """约束按归一化后的 category 分桶，便于同 category 内逐条扫描触发词重叠。"""
+    constraints_by_cat: Dict[str, List[RuleEntry]] = {}
     for entry in existing_rules:
-        key = _existing_key(entry)
-        if key is None:
+        if entry.layer != "constraint":
             continue
-        if key[0] == "constraint":
-            constraint_index[key] = entry
-        elif key[0] == "doc":
-            doc_index[key[1]] = entry
-        else:
-            global_entry = entry
-    return constraint_index, doc_index, global_entry
+        cat = _normalize_for_dedupe(entry.category or "")
+        constraints_by_cat.setdefault(cat, []).append(entry)
+    return constraints_by_cat
 
 
 def _constraint_status(
     category: str,
     content: str,
-    constraint_index: Dict[Tuple[str, ...], RuleEntry],
+    trigger: Optional[str],
+    constraints_by_cat: Dict[str, List[RuleEntry]],
 ) -> Tuple[str, Optional[str]]:
-    key = ("constraint", _normalize_for_dedupe(category), _normalize_for_dedupe(content))
-    matched = constraint_index.get(key)
-    if matched is not None:
-        return "duplicate", matched.id
-    wanted = _normalize_for_dedupe(category)
-    same_category = [
-        entry
-        for entry in constraint_index.values()
-        if _normalize_for_dedupe(entry.category or "") == wanted
-    ]
-    if same_category:
-        return "conflict", same_category[0].id
+    """同 category + 触发重叠 → duplicate/conflict；无重叠 → new。"""
+    norm_cat = _normalize_for_dedupe(category)
+    norm_content = _normalize_for_dedupe(content)
+    for entry in constraints_by_cat.get(norm_cat, []):
+        if triggers_overlap(trigger, entry.trigger):
+            if _normalize_for_dedupe(entry.content or "") == norm_content:
+                return "duplicate", entry.id
+            return "conflict", entry.id
     return "new", None
 
 
@@ -386,7 +356,8 @@ def _coerce_priority(value: Any) -> int:
 
 
 def _diff_constraints(
-    layers: Dict[str, Any], constraint_index: Dict[Tuple[str, ...], RuleEntry]
+    layers: Dict[str, Any],
+    constraints_by_cat: Dict[str, List[RuleEntry]],
 ) -> List[ImportCandidate]:
     candidates: List[ImportCandidate] = []
     for index, item in enumerate(layers.get("constraints") or []):
@@ -396,7 +367,9 @@ def _diff_constraints(
         content = str(item.get("content") or "").strip()
         if not content:
             continue
-        status, duplicate_of = _constraint_status(category, content, constraint_index)
+        status, duplicate_of = _constraint_status(
+            category, content, item.get("trigger_pattern"), constraints_by_cat
+        )
         candidates.append(
             ImportCandidate(
                 id=f"import-constraint-{index}",
@@ -414,29 +387,25 @@ def _diff_constraints(
     return candidates
 
 
-def _doc_status(
-    text: str, existing_entry: Optional[RuleEntry]
-) -> Tuple[str, Optional[str]]:
-    if existing_entry is None:
-        return "new", None
-    incoming = _normalize_markdown_for_dedupe(text)
-    current = _normalize_markdown_for_dedupe(existing_entry.content or "")
-    # 既有条目是小节正文；它出现在整文件正文里即视为重复（R43(b)）。
-    if current and (current == incoming or current in incoming):
-        return "duplicate", existing_entry.id
-    return "conflict", existing_entry.id
-
-
 def _diff_docs(
-    layers: Dict[str, Any], doc_index: Dict[str, RuleEntry]
+    envelope_docs: Dict[str, str], project: Optional[Project]
 ) -> List[ImportCandidate]:
+    """整文件读盘比对：避免按小节聚合时多节文件被错判为 conflict。"""
     candidates: List[ImportCandidate] = []
-    for filename, text in (layers.get("project_docs") or {}).items():
+    if project is None:
+        return candidates
+    for filename, text in (envelope_docs or {}).items():
         name = str(filename)
         body = str(text)
         if not name.strip() or not body.strip():
             continue
-        status, duplicate_of = _doc_status(body, doc_index.get(name))
+        existing_text = safe_read(Path(project.path) / name)
+        if not existing_text or not existing_text.strip():
+            status, duplicate_of = "new", None
+        elif _normalize_for_dedupe(existing_text) == _normalize_for_dedupe(body):
+            status, duplicate_of = "duplicate", f"doc:{name}"
+        else:
+            status, duplicate_of = "conflict", f"doc:{name}"
         candidates.append(
             ImportCandidate(
                 id=f"import-doc-{name}",
@@ -451,20 +420,18 @@ def _diff_docs(
     return candidates
 
 
-def _diff_global(
-    layers: Dict[str, Any], global_entry: Optional[RuleEntry]
-) -> List[ImportCandidate]:
-    text = str(layers.get("global_rules") or "").strip()
+def _diff_global(envelope_global_text: str) -> List[ImportCandidate]:
+    """整文件读盘比对：避免多节全局规则被错判为 conflict。"""
+    text = str(envelope_global_text or "").strip()
     if not text:
         return []
-    if global_entry is None:
+    existing_text = safe_read(global_rules_path())
+    if not existing_text or not existing_text.strip():
         status, duplicate_of = "new", None
-    elif _normalize_markdown_for_dedupe(
-        global_entry.content or ""
-    ) == _normalize_markdown_for_dedupe(text):
-        status, duplicate_of = "duplicate", global_entry.id
+    elif _normalize_for_dedupe(existing_text) == _normalize_for_dedupe(text):
+        status, duplicate_of = "duplicate", "global:SAGE.md"
     else:
-        status, duplicate_of = "conflict", global_entry.id
+        status, duplicate_of = "conflict", "global:SAGE.md"
     return [
         ImportCandidate(
             id="import-global-SAGE.md",
@@ -502,11 +469,11 @@ def diff_rules_import(
 ) -> List[ImportCandidate]:
     """预览导入：逐条与当前状态比对，标记 new / duplicate / conflict。"""
     layers = envelope.get("layers") or {}
-    constraint_index, doc_index, global_entry = _index_existing(existing_rules)
+    constraints_by_cat = _index_constraints(existing_rules)
     candidates: List[ImportCandidate] = []
-    candidates.extend(_diff_constraints(layers, constraint_index))
-    candidates.extend(_diff_docs(layers, doc_index))
-    candidates.extend(_diff_global(layers, global_entry))
+    candidates.extend(_diff_constraints(layers, constraints_by_cat))
+    candidates.extend(_diff_docs(layers.get("project_docs") or {}, project))
+    candidates.extend(_diff_global(layers.get("global_rules") or ""))
     candidates.extend(_diff_playbook(layers))
     return candidates
 

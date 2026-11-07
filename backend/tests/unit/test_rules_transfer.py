@@ -99,9 +99,11 @@ def test_build_envelope_includes_user_constraints_only():
     assert "constraints" in envelope["layers"]
     categories = [item["category"] for item in envelope["layers"]["constraints"]]
     assert "coding_style" in categories
-    # 规程投影不应被导出 —— 它属于规程包，规则包不重复打包
-    origins = [item.get("origin") for item in envelope["layers"]["constraints"]]
-    assert "playbook:requirements" not in origins
+    # 规程投影（editable != "full"）不应被导出 —— 它属于规程包，规则包不重复打包
+    constraints = envelope["layers"]["constraints"]
+    assert len(constraints) == 1
+    assert constraints[0]["category"] == "coding_style"
+    assert constraints[0]["content"] == "统一使用 ruff"
 
     # 导出范围开关：取消勾选「项目规则」时该层必须为空
     trimmed = build_rules_export_envelope(project, entries, include_constraints=False)
@@ -402,8 +404,33 @@ def test_diff_marks_conflict_when_category_matches_but_content_differs():
     assert candidates[0].duplicate_of == "constraint:u1"
 
 
-def test_diff_doc_same_content_is_duplicate():
+def test_render_rules_agents_md_does_not_duplicate_global():
+    # L3 回归：global 层条目不应被 per-line 渲染，只通过 global_rules_text 出现一次
     project = _FakeProject(id="p1", name="sage", path="/tmp/sage")
+    entries = [
+        _FakeEntry(
+            id="g:0",
+            layer="global",
+            source_label="全局规则",
+            scope="全局",
+            category="全局",
+            content="偏好。",
+        ),
+    ]
+
+    out = render_rules_agents_md(
+        project, entries, global_rules_text="# 全局\n\n偏好。\n"
+    )
+
+    assert out.count("偏好。") == 1
+
+
+def test_diff_doc_same_content_is_duplicate(tmp_path: Path):
+    project = _FakeProject(id="p1", name="sage", path=str(tmp_path))
+    # 整文件写入磁盘；H1 修复后 diff 改为整文件读盘比对，不再依赖 existing_rules
+    (tmp_path / "SAGE.md").write_text(
+        "# 项目规则\n\n跑 pytest。\n", encoding="utf-8"
+    )
     envelope = {
         "layers": {
             "constraints": [],
@@ -411,25 +438,18 @@ def test_diff_doc_same_content_is_duplicate():
             "global_rules": "",
         },
     }
-    existing = [
-        _FakeEntry(
-            id="doc:SAGE.md#0",
-            layer="doc",
-            source_label="SAGE.md",
-            scope="SAGE.md",
-            category="项目规则",
-            content="跑 pytest。",
-        ),
-    ]
 
-    candidates = diff_rules_import(envelope, project, existing)
+    candidates = diff_rules_import(envelope, project, [])
 
     doc_candidates = [c for c in candidates if c.kind == "doc"]
     assert doc_candidates[0].status == "duplicate"
 
 
-def test_diff_doc_different_content_is_conflict():
-    project = _FakeProject(id="p1", name="sage", path="/tmp/sage")
+def test_diff_doc_different_content_is_conflict(tmp_path: Path):
+    project = _FakeProject(id="p1", name="sage", path=str(tmp_path))
+    (tmp_path / "SAGE.md").write_text(
+        "# 项目规则\n\n跑 pytest。\n", encoding="utf-8"
+    )
     envelope = {
         "layers": {
             "constraints": [],
@@ -437,25 +457,43 @@ def test_diff_doc_different_content_is_conflict():
             "global_rules": "",
         },
     }
-    existing = [
-        _FakeEntry(
-            id="doc:SAGE.md#0",
-            layer="doc",
-            source_label="SAGE.md",
-            scope="SAGE.md",
-            category="项目规则",
-            content="跑 pytest。",
-        ),
-    ]
 
-    candidates = diff_rules_import(envelope, project, existing)
+    candidates = diff_rules_import(envelope, project, [])
 
     doc_candidates = [c for c in candidates if c.kind == "doc"]
     assert doc_candidates[0].status == "conflict"
 
 
-def test_diff_global_rules_status():
-    project = _FakeProject(id="p1", name="sage", path="/tmp/sage")
+def test_diff_doc_multisection_round_trip_is_duplicate(tmp_path: Path):
+    # H1 回归：多节文件按整文件比对，避免按小节聚合时把完整往返误判为 conflict
+    project = _FakeProject(id="p1", name="sage", path=str(tmp_path))
+    whole = "# 项目规则\n\n跑 pytest。\n\n## 提交\n\n一行一个 commit。\n"
+    (tmp_path / "SAGE.md").write_text(whole, encoding="utf-8")
+    envelope = {
+        "layers": {
+            "constraints": [],
+            "project_docs": {"SAGE.md": whole},
+            "global_rules": "",
+        },
+    }
+
+    candidates = diff_rules_import(envelope, project, [])
+
+    doc_candidates = [c for c in candidates if c.kind == "doc"]
+    assert len(doc_candidates) == 1
+    assert doc_candidates[0].status == "duplicate"
+
+
+def test_diff_global_rules_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # H1 修复后：global diff 改为整文件读盘比对，不再依赖 existing_rules
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    (home / ".sage").mkdir()
+    project = _FakeProject(id="p1", name="sage", path=str(tmp_path))
     envelope = {
         "layers": {
             "constraints": [],
@@ -464,42 +502,87 @@ def test_diff_global_rules_status():
         },
     }
 
+    # Case 1: 磁盘上无文件 → new
     candidates_no_existing = diff_rules_import(envelope, project, [])
     assert any(c.kind == "global" and c.status == "new" for c in candidates_no_existing)
 
-    candidates_same = diff_rules_import(
-        envelope,
-        project,
-        [
-            _FakeEntry(
-                id="global:SAGE.md",
-                layer="global",
-                source_label="全局规则",
-                scope="全局",
-                category="全局",
-                content="新偏好。",
-            )
-        ],
+    # Case 2: 磁盘整文件与导入整文件归一后相等 → duplicate
+    (home / ".sage" / "SAGE.md").write_text(
+        "# 全局\n\n新偏好。\n", encoding="utf-8"
     )
+    candidates_same = diff_rules_import(envelope, project, [])
     global_same = next(c for c in candidates_same if c.kind == "global")
     assert global_same.status == "duplicate"
 
-    candidates_diff = diff_rules_import(
-        envelope,
-        project,
-        [
-            _FakeEntry(
-                id="global:SAGE.md",
-                layer="global",
-                source_label="全局规则",
-                scope="全局",
-                category="全局",
-                content="旧偏好。",
-            )
-        ],
+    # Case 3: 磁盘整文件与导入归一后不等 → conflict
+    (home / ".sage" / "SAGE.md").write_text(
+        "# 全局\n\n旧偏好。\n", encoding="utf-8"
     )
+    candidates_diff = diff_rules_import(envelope, project, [])
     global_diff = next(c for c in candidates_diff if c.kind == "global")
     assert global_diff.status == "conflict"
+
+
+def test_diff_global_multisection_round_trip_is_duplicate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # H1 回归：多节全局规则按整文件比对，避免按小节聚合时把完整往返误判为 conflict
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    (home / ".sage").mkdir()
+    whole = "# 全局\n\n偏好。\n\n## 风格\n\n统一 ruff。\n"
+    (home / ".sage" / "SAGE.md").write_text(whole, encoding="utf-8")
+    project = _FakeProject(id="p1", name="sage", path=str(tmp_path))
+    envelope = {
+        "layers": {
+            "constraints": [],
+            "project_docs": {},
+            "global_rules": whole,
+        },
+    }
+
+    candidates = diff_rules_import(envelope, project, [])
+
+    global_candidate = next(c for c in candidates if c.kind == "global")
+    assert global_candidate.status == "duplicate"
+
+
+def test_diff_constraint_disjoint_triggers_is_new():
+    # M3：同 category 但触发词不重叠 → 不算冲突，标记为 new
+    project = _FakeProject(id="p1", name="sage", path="/tmp/sage")
+    envelope = {
+        "layers": {
+            "constraints": [
+                {
+                    "category": "风格",
+                    "content": "统一使用 black",
+                    "priority": 5,
+                    "enabled": True,
+                    "trigger_pattern": "js",
+                },
+            ],
+            "project_docs": {},
+            "global_rules": "",
+        },
+    }
+    existing = [
+        _FakeEntry(
+            id="constraint:u1",
+            layer="constraint",
+            source_label="项目规则",
+            scope="全局",
+            category="风格",
+            content="统一使用 ruff",
+            trigger="py",
+        ),
+    ]
+
+    candidates = diff_rules_import(envelope, project, existing)
+
+    assert candidates[0].status == "new"
+    assert candidates[0].duplicate_of is None
 
 
 def test_diff_playbook_always_new():
