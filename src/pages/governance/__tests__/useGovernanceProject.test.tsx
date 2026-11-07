@@ -11,7 +11,13 @@ vi.mock('../../../shared/api', async () => {
   const actual = await vi.importActual<typeof import('../../../shared/api')>('../../../shared/api');
   return {
     ...actual,
-    projectApi: { ...actual.projectApi, list, update, updateAllowedPaths, listMilestones: vi.fn().mockResolvedValue([]) },
+    projectApi: {
+      ...actual.projectApi,
+      list,
+      update,
+      updateAllowedPaths,
+      listMilestones: vi.fn().mockResolvedValue([]),
+    },
     memoryApi: { ...actual.memoryApi, getProjectProfile: vi.fn().mockResolvedValue({ items: [] }) },
   };
 });

@@ -28,7 +28,11 @@ export function computeBootstrapProgress(project: ProjectSummary): BootstrapProg
     { id: 'sage_md', label: '项目说明', done: applied.includes('sage_md') },
     { id: 'rule', label: '项目规则', done: applied.includes('rule') },
     { id: 'milestones', label: '里程碑', done: applied.includes('milestones') },
-    { id: 'git', label: '版本控制', done: applied.includes('git_init') || project.vcsMode === 'git' },
+    {
+      id: 'git',
+      label: '版本控制',
+      done: applied.includes('git_init') || project.vcsMode === 'git',
+    },
   ];
   return { steps, done: steps.filter((step) => step.done).length, total: steps.length };
 }
@@ -142,7 +146,9 @@ export function useGovernanceProject(projectId: string | undefined): GovernanceD
     if (!project) return;
     try {
       const nextStage = getArchetypeBlueprint(nextType).stages[0]?.id ?? null;
-      setProject(await projectApi.update(project.id, { project_type: nextType, project_stage: nextStage }));
+      setProject(
+        await projectApi.update(project.id, { project_type: nextType, project_stage: nextStage }),
+      );
     } catch {
       /* 保持旧值 */
     }
@@ -274,7 +280,9 @@ export function useGovernanceProject(projectId: string | undefined): GovernanceD
     milestones,
     profileEntries,
     activeProjectType,
-    bootstrapProgress: project ? computeBootstrapProgress(project) : { steps: [], done: 0, total: 0 },
+    bootstrapProgress: project
+      ? computeBootstrapProgress(project)
+      : { steps: [], done: 0, total: 0 },
     upcomingDeadline,
     scaffoldResult,
     scaffolding,
