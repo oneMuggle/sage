@@ -254,3 +254,6 @@ backend/services/project_wiki_generator.py
 
 # win7 memory extractor 大幅扩充（环境事实提取、prompt 模板）
 backend/memory/extractor.py
+
+# win7 子代理迭代预算常量（10）与 main（6）不同
+backend/tools/agent_tool.py
