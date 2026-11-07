@@ -214,3 +214,14 @@ electron/updateHealthChecker.ts
 
 # win7 更新管理器：request.ts 离线/内网闸 + 遥测抑制
 electron/updateManager.ts
+
+# win7 pydantic v1 适配：Annotated/AfterValidator → field_validator
+backend/model_catalog/schemas.py
+
+# win7 pydantic v1 适配：List Field(min_length) → _constrained_list
+backend/api/chat_attachment_routes.py
+
+# win7 pydantic v1 适配：List Field(min_length) → _constrained_list
+backend/api/office_ai_review_routes.py
+backend/office/ppt_template.py
+backend/api/workspace_routes.py

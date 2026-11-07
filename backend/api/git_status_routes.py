@@ -19,8 +19,9 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.tools.git_status_parser import parse_status_porcelain_v1_z
 
 logger = logging.getLogger(__name__)

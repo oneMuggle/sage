@@ -11,15 +11,21 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, ForwardRef, List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict, Field, conlist, field_validator
+from pydantic import BaseModel, Field, conlist
+
+from backend.compat.win7.pydantic_compat import ConfigDict, field_validator
 
 logger = logging.getLogger(__name__)
 
 
 def _constrained_list(item_type, *, min_length=None, max_length=None):
     """Build a list constraint compatible with Pydantic v1 and v2."""
+    # pydantic v1 的 conlist 不接受字符串类型；包装成 ForwardRef 延迟解析，
+    # 由模块末尾的 model_rebuild()/update_forward_refs() 守卫收口。
+    if isinstance(item_type, str):
+        item_type = ForwardRef(item_type)
     kwargs = {}
     if min_length is not None:
         kwargs["min_length"] = min_length

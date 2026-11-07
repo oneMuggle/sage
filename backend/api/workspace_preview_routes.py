@@ -16,8 +16,9 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data import artifact_reader, artifact_repo
 from backend.data.database import get_database
 from backend.office.models import _constrained_list

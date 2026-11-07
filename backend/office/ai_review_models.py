@@ -15,7 +15,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from backend.compat.win7.pydantic_compat import ConfigDict
 
 AiReviewSourceKind = Literal["spec", "llm", "builtin"]
 AiReviewSeverity = Literal["error", "warning", "info"]

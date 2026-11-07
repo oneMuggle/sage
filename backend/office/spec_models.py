@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from backend.compat.win7.pydantic_compat import ConfigDict
 
 from .word_rulepack_models import WordRulePack
 

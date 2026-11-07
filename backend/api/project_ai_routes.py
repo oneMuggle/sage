@@ -40,7 +40,9 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from backend.compat.win7.pydantic_compat import ConfigDict
 
 logger = logging.getLogger(__name__)
 

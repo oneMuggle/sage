@@ -6,8 +6,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.office.latex.service import (
     analyze_latex_template_file,
     audit_latex_file_service,

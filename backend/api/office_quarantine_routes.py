@@ -34,9 +34,10 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from backend.api.error_contract import error_json
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import get_database
 from backend.office.staging_quarantine import (
     DEFAULT_QUIET_HOURS,

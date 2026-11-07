@@ -13,8 +13,9 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import get_database
 from backend.office.errors import OfficeError, OfficeParseError, OfficePathError
 from backend.office.path_safety import resolve_within

@@ -33,7 +33,9 @@ import threading
 from pathlib import Path
 from typing import Literal, Optional, Tuple
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from backend.compat.win7.pydantic_compat import ConfigDict
 
 from .errors import OfficeError
 from .path_safety import resolve_within
