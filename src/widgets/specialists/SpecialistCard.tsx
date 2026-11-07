@@ -127,6 +127,7 @@ export function SpecialistCard({
           <p className="mt-1 text-ui-xs text-faint">
             {sourceLabel} · {roleLabel}
             {agent.permission_mode ? ` · ${PERMISSION_MODE_LABELS[agent.permission_mode]}` : ''}
+            {agent.skills && agent.skills.length > 0 ? ` · ${agent.skills.length} 项技能` : ''}
           </p>
         </div>
       </div>
