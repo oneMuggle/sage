@@ -349,3 +349,80 @@ Response: { reply: string }
 模板选择复用既有 `list_templates` / `instantiate_template`；`TemplateLibrary` 组件只消费 `officeApi.listTemplates`，不新增 IPC 命令。
 
 **与设计的差异（部分覆盖）**：设计稿要求右侧 60% 复用 `DocumentCanvas` 内联预览；当前实现为结果卡 +「在文档页打开」（走 `useOfficeDocuments().open`）。内联画布需要页面级预览数据装配，留待后续迭代。
+
+## 12. 规则管理（P3）
+
+「规则」tab 顶部是 `RulesWorkspace`（`src/features/office/rules/RulesWorkspace.tsx`），其下保留原有的 `OfficeSpecLibrary`、`OfficeAiAssistantPanel`、`WordRuleExtractionPanel`、`WordBatchAuditPanel`。工作台把规范书沉淀成可复用的「分组 + 规则」，并按规则审校当前打开的文档。
+
+### 12.1 数据模型（v17）
+
+`backend/data/migrations/v17_office_rules.py` 新建两张表：
+
+| 表 | 关键列 |
+|---|---|
+| `office_rule_groups` | `id` / `name` / `description` / `priority` / `builtin` / `created_at` / `updated_at` |
+| `office_rules` | `id` / `name` / `type` / `severity` / `scope` / `description` / `check_mode` / `pattern` / `ai_prompt` / `enabled` / `group_id` / 时间戳 |
+
+`type`、`severity`、`scope`、`check_mode` 均带 CHECK 约束，取值与 `src/features/office/rules/ruleTypes.ts` 的 `RULE_TYPES` / `RULE_SEVERITIES` / `RULE_SCOPES` / `RULE_CHECK_MODES` 一一对应。`group_id` 外键 `ON DELETE CASCADE`：删组即删组内规则。
+
+### 12.2 后端模块与端点
+
+| 模块 | 职责 |
+|---|---|
+| `backend/office/rule_models.py` | 传输层 pydantic 模型（snake_case） |
+| `backend/office/rule_repo.py` | 分组 / 规则 CRUD（参数化 SQL） |
+| `backend/office/rule_executor.py` | 审校执行：正则规则逐段匹配，AI 规则调 LLM |
+| `backend/office/rule_conflicts.py` | 组内规则冲突检测 |
+| `backend/office/rule_pack_io.py` | `.sage-rules` 包导出 / 导入 |
+| `backend/api/rules_routes.py` | `APIRouter(prefix="/rules")`，在 `backend/main.py` 以 `/api/v1` 前缀挂载 |
+
+| 方法 | 路径 | 作用 |
+|---|---|---|
+| GET | `/api/v1/rules/groups` | 列出全部分组（含规则） |
+| POST | `/api/v1/rules/groups` | 新建分组 |
+| PUT | `/api/v1/rules/groups/{group_id}` | 修改分组 |
+| DELETE | `/api/v1/rules/groups/{group_id}` | 删除分组（级联删规则） |
+| POST | `/api/v1/rules/groups/{group_id}/rules` | 组内新建规则 |
+| PUT | `/api/v1/rules/rules/{rule_id}` | 修改规则（增量补丁，见下） |
+| DELETE | `/api/v1/rules/rules/{rule_id}` | 删除规则 |
+| POST | `/api/v1/rules/extract` | 从文档抽取规则（LLM） |
+| POST | `/api/v1/rules/audit` | 按 `rule_ids` 审校文档 |
+| POST | `/api/v1/rules/check-conflicts` | 组内冲突检查（≥2 条规则） |
+| POST | `/api/v1/rules/export` | 导出 `.sage-rules` 包 |
+| POST | `/api/v1/rules/import` | 导入包并落库 |
+
+两个 DELETE 返回 `200 {"deleted": true, "id": "<id>"}`，**不是 204** —— Electron 的通用转发 `backendRequest` 在成功分支上无条件 `response.json()`，空响应体会直接抛错。
+
+### 12.3 增量的 PUT 语义
+
+`PUT /rules/{rule_id}` 按**增量补丁**处理：`ruleFieldsToWire` 只为值非 `undefined` 的字段生成键，`rule_repo.update_rule` 只写 kwargs 中出现的键。因此显式传 `""` 会清空旧值（前端把正则规则切成 AI 规则时会显式发 `pattern: ""`，反之发 `ai_prompt: ""`），而不传的键保持原值。前端 `handleUpdateRule` 会先与当前规则比对，只提交真正变化的字段。
+
+### 12.4 审校执行
+
+`POST /rules/audit` 先按 `rule_ids` 取规则（去重、上限见 `_MAX_AUDIT_RULES`），再解析目标文件，然后交给 `run_audit`：
+
+- `enabled` 为假的规则不参与（前端也只提交已启用规则的 id）；
+- `check_mode = "regex"` 的规则按 `scope` 取段落文本做正则匹配；
+- `check_mode = "ai"` 的规则需要 LLM 客户端，未配置时端点返回 `503`；
+- 返回值 `{findings, error_count, warning_count, info_count}`，每条 finding 带 `rule_id` / `rule_name` / `severity` / `message` / `location` / `suggestion`。
+
+审校是**只读**的：它不写文档、不产生修订痕迹，也不登记快照。写入路径仍然只有「AI 审校 → 应用到文档」。
+
+### 12.5 前端与测试
+
+| 文件 | 职责 |
+|---|---|
+| `src/shared/api/officeRulesApi.ts` | 12 个端点的客户端（走既有通用转发，无新增 IPC 命令） |
+| `src/shared/api/types/officeRulesTypes.ts` | 传输层类型（snake_case） |
+| `ruleMapping.ts` | 唯一做 snake_case ↔ camelCase 转换的模块 |
+| `rulePackSerialization.ts` | `.sage-rules` 的序列化 / 解析 / 校验 |
+| `RulesWorkspace.tsx` | 状态容器：加载、选中、CRUD、抽取、导入导出、冲突、审校 |
+| `RuleGroupList.tsx` | 分组列表 + 选中组内的规则列表 + 新建入口 |
+| `RuleDetailPanel.tsx` | 新建 / 编辑表单（正则 / AI 两种检查方式） |
+| `RulePackBar.tsx` | 导出 / 导入 / 冲突检查 |
+| `ConflictDialog.tsx` | 冲突结果对话框 |
+| `RuleAuditResults.tsx` | 审校结果卡片 |
+
+`RulesWorkspace` 在 `src/pages/Office.tsx` 的 `renderRulesTab` 中作为第一个子节点挂载，`workspacePath` 为空串兜底，`filePath` 由当前打开的文档（`preview`）推导；没有打开文档时「抽取」「审校」按钮禁用。
+
+`ruleI18nParity.test.ts` 守护 `office.rules.*` 命名空间：zh / en 键集合必须一致、每个键非空，并逐个校验由 `RULE_TYPES` 等枚举拼出的动态键（这些键在调用点用模板字面量构造，类型系统只保证它们是合法键，不保证有译文）。
