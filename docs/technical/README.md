@@ -117,6 +117,7 @@
 | 137 | [定时任务自动执行](./137-scheduled-task-auto-execute.md) | `execute` / `deliver` 双模式 + APScheduler 线程桥接主事件循环 + `run_turn_tracked` 多轮 ReAct（`max_iterations=8`）+ 三字段幂等迁移 + 执行结果跳转高亮 + 异常脱敏与一次性任务失败禁用 |
 | 138 | [专家页面交互（P0–P2）](./138-specialist-page-ux.md) | 卡片主操作/色调/禁用态 + 来源筛选/搜索/空态 + 知识数/批量操作/最近使用 + 详情页 `/specialists/:id` + 排序置顶（migration v14/v15） |
 | 139 | [专家私聊与群聊（M1 + M2）](./139-specialist-dm-group-chat.md) | 专家升格为 IM 联系人（卡片点击即私聊、会话项显示专家徽标）+ 群聊 MVP（migration v16 参与者表 + 参与者 CRUD + @ 显式调度 + 气泡发送者） |
+| 140 | [插话暂存区](./140-steer-staging-panel.md) | AI 忙碌时发送的补充消息进暂存条（可撤回）+ 消费回执事件 `STEER_CONSUMED` + 409 窗口修复 + 流末未消费转排队 |
 
 ---
 
