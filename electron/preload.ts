@@ -719,12 +719,14 @@ const electronAPI = {
     backgroundTasks: boolean;
     webhookUrl: string;
     slackWebhookUrl: string;
+    webhookSecret: string;
   }> {
     return ipcRenderer.invoke('sage:notification-prefs:get') as Promise<{
       enabled: boolean;
       backgroundTasks: boolean;
       webhookUrl: string;
       slackWebhookUrl: string;
+      webhookSecret: string;
     }>;
   },
 
@@ -734,12 +736,14 @@ const electronAPI = {
     backgroundTasks: boolean;
     webhookUrl?: string;
     slackWebhookUrl?: string;
+    webhookSecret?: string;
   }): Promise<{
     ok: boolean;
     enabled: boolean;
     backgroundTasks: boolean;
     webhookUrl: string;
     slackWebhookUrl: string;
+    webhookSecret: string;
   }> {
     return ipcRenderer.invoke('sage:notification-prefs:set', prefs) as Promise<{
       ok: boolean;
@@ -747,6 +751,7 @@ const electronAPI = {
       backgroundTasks: boolean;
       webhookUrl: string;
       slackWebhookUrl: string;
+      webhookSecret: string;
     }>;
   },
 

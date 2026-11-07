@@ -78,6 +78,55 @@ class TestResurrectedProcess:
         assert proc.wait(timeout=1) == UNKNOWN_EXIT_CODE
 
 
+class TestProcessStartToken:
+    def test_current_process_token_is_stable(self) -> None:
+        token = subprocess_util.process_start_token(os.getpid())
+        assert token
+        assert subprocess_util.process_start_token(os.getpid()) == token
+
+    def test_dead_pid_returns_none(self) -> None:
+        process = _spawn_sleep(0)
+        process.wait(timeout=5)
+        assert subprocess_util.process_start_token(process.pid) is None
+
+    def test_matching_token_keeps_process_alive(self) -> None:
+        process = _spawn_sleep()
+        try:
+            token = subprocess_util.process_start_token(process.pid)
+            assert token is not None
+            proc = ResurrectedProcess(
+                pid=process.pid, pgid=os.getpgid(process.pid), start_token=token
+            )
+            assert proc.poll() is None
+        finally:
+            _kill_group(process)
+
+    def test_mismatched_token_marks_dead(self) -> None:
+        process = _spawn_sleep()
+        try:
+            proc = ResurrectedProcess(
+                pid=process.pid,
+                pgid=os.getpgid(process.pid),
+                start_token="bogus:token",
+            )
+            assert proc.poll() == UNKNOWN_EXIT_CODE
+        finally:
+            _kill_group(process)
+
+    def test_token_read_failure_fails_closed(self, monkeypatch) -> None:
+        process = _spawn_sleep()
+        try:
+            monkeypatch.setattr(subprocess_util, "process_start_token", lambda pid: None)
+            proc = ResurrectedProcess(
+                pid=process.pid,
+                pgid=os.getpgid(process.pid),
+                start_token="expected",
+            )
+            assert proc.poll() == UNKNOWN_EXIT_CODE
+        finally:
+            _kill_group(process)
+
+
 class TestWindowsProbe:
     """Windows 存活探测（tasklist）——在 Linux 上通过 monkeypatch 覆盖。"""
 

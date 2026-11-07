@@ -20,6 +20,9 @@ export const enSettingsUi = {
   'settings.basic.notifications_webhook_label': 'Generic webhook',
   'settings.basic.notifications_webhook_desc':
     'POST each notification as JSON to this URL (custom bots/automation platforms); leave empty to disable',
+  'settings.basic.notifications_webhook_secret_placeholder': 'Signing secret (optional)',
+  'settings.basic.notifications_webhook_secret_desc':
+    'When set, requests carry X-Sage-Signature (HMAC-SHA256) for receiver verification; leave empty to disable signing',
   'settings.basic.notifications_slack_label': 'Slack webhook',
   'settings.basic.notifications_slack_desc':
     'Slack Incoming Webhook URL; notifications are sent as text messages. Leave empty to disable',

@@ -35,6 +35,8 @@ class StoredSessionRecord:
     stdout_offset: int
     stderr_offset: int
     started_at: int
+    #: 2026-11-06 Phase 4：进程启动标识（旧库为 None → 退化校验）。
+    start_token: Optional[str] = None
 
 
 def _identity_to_json(identity: Optional[Tuple[int, int]]) -> Optional[str]:
@@ -77,10 +79,18 @@ class BashSessionStore:
                     stderr_identity TEXT,
                     stdout_offset INTEGER NOT NULL DEFAULT 0,
                     stderr_offset INTEGER NOT NULL DEFAULT 0,
-                    started_at INTEGER NOT NULL
+                    started_at INTEGER NOT NULL,
+                    start_token TEXT
                 )
                 """
             )
+            # 2026-11-06 Phase 4：老库平滑迁移（幂等）。
+            columns = {
+                str(row[1])
+                for row in conn.execute(f"PRAGMA table_info({TABLE})").fetchall()
+            }
+            if "start_token" not in columns:
+                conn.execute(f"ALTER TABLE {TABLE} ADD COLUMN start_token TEXT")
             conn.commit()
 
     def persist(self, session: Any) -> None:
@@ -95,8 +105,8 @@ class BashSessionStore:
                 INSERT OR REPLACE INTO {TABLE}
                     (shell_id, pid, pgid, command, stdout_path, stderr_path,
                      stdout_identity, stderr_identity, stdout_offset,
-                     stderr_offset, started_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     stderr_offset, started_at, start_token)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     session.shell_id,
@@ -110,6 +120,7 @@ class BashSessionStore:
                     int(session.stdout_offset),
                     int(session.stderr_offset),
                     int(time.time()),
+                    getattr(session, "start_token", None),
                 ),
             )
             conn.commit()
@@ -139,7 +150,7 @@ class BashSessionStore:
                 f"""
                 SELECT shell_id, pid, pgid, command, stdout_path, stderr_path,
                        stdout_identity, stderr_identity, stdout_offset,
-                       stderr_offset, started_at
+                       stderr_offset, started_at, start_token
                 FROM {TABLE}
                 """
             ).fetchall()
@@ -156,6 +167,7 @@ class BashSessionStore:
                 stdout_offset=int(row[8]),
                 stderr_offset=int(row[9]),
                 started_at=int(row[10]),
+                start_token=str(row[11]) if row[11] else None,
             )
             for row in rows
         ]
