@@ -3,8 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ProjectSummary } from '../shared/api';
-import { I18nProvider } from '../shared/lib/i18n';
+import type { ProjectSummary } from '../../shared/api';
+import { I18nProvider } from '../../shared/lib/i18n';
 
 /* ── Mock API ─────────────────────────────────────────────────────── */
 
@@ -18,7 +18,7 @@ const mockCreateProjectProfile = vi.fn();
 const mockDeleteProjectProfile = vi.fn();
 const mockOpen = vi.fn();
 
-vi.mock('../shared/api', () => ({
+vi.mock('../../shared/api', () => ({
   projectApi: {
     list: (...args: unknown[]) => mockList(...args),
     update: (...args: unknown[]) => mockUpdate(...args),
@@ -36,7 +36,7 @@ vi.mock('../shared/api', () => ({
 
 /* ── Mock heavy child components ─────────────────────────────────── */
 
-vi.mock('../features/project-type', () => ({
+vi.mock('../../features/project-type', () => ({
   MilestoneManager: () => <div data-testid="milestone-manager-stub" />,
   PolymorphicArchetypeCards: () => <div data-testid="archetype-cards-stub" />,
   ProjectOverviewWidgets: () => <div data-testid="overview-widgets-stub" />,
@@ -50,17 +50,17 @@ vi.mock('../features/project-type', () => ({
   ReferenceManager: () => <div data-testid="reference-manager-stub" />,
 }));
 
-vi.mock('../features/project-type/StudioMaterialsAndProfilePanels', () => ({
+vi.mock('../../features/project-type/StudioMaterialsAndProfilePanels', () => ({
   StudioCharterTabPanel: () => <div data-testid="charter-panel-stub" />,
   StudioMaterialsTabPanel: () => <div data-testid="materials-panel-stub" />,
   StudioProfileTabPanel: () => <div data-testid="profile-panel-stub" />,
 }));
 
-vi.mock('../features/playbook/PlaybookCard', () => ({
+vi.mock('../../features/playbook/PlaybookCard', () => ({
   PlaybookCard: () => <div data-testid="playbook-card-stub" />,
 }));
 
-vi.mock('../features/project-type/archetypeBlueprints', () => ({
+vi.mock('../../features/project-type/archetypeBlueprints', () => ({
   ARCHETYPE_ORDER: ['coding', 'business', 'research', 'personal'],
   ARCHETYPE_BLUEPRINTS: {
     coding: {
@@ -93,11 +93,11 @@ vi.mock('../features/project-type/archetypeBlueprints', () => ({
 
 /* ── Import SUT after mocks ──────────────────────────────────────── */
 
+import { GovernanceShell } from './GovernanceShell';
 import {
-  ProjectGovernance,
   formatProjectGovernanceAuditJson,
   formatProjectGovernanceAuditSnapshot,
-} from './ProjectGovernance';
+} from './governanceAudit';
 
 /* ── Fixtures ─────────────────────────────────────────────────────── */
 
@@ -123,7 +123,7 @@ function renderAt(projectId: string) {
     <I18nProvider>
       <MemoryRouter initialEntries={[`/projects/governance/${projectId}`]}>
         <Routes>
-          <Route path="/projects/governance/:projectId" element={<ProjectGovernance />} />
+          <Route path="/projects/governance/:projectId" element={<GovernanceShell />} />
         </Routes>
       </MemoryRouter>
     </I18nProvider>,
@@ -132,7 +132,7 @@ function renderAt(projectId: string) {
 
 /* ── Tests ────────────────────────────────────────────────────────── */
 
-describe('ProjectGovernance', () => {
+describe('GovernanceShell (legacy)', () => {
   beforeEach(() => {
     [
       mockList,
@@ -167,14 +167,15 @@ describe('ProjectGovernance', () => {
     expect(screen.getByText('/home/user/project')).toBeInTheDocument();
   });
 
-  it('renders 4 governance tabs', async () => {
+  it('renders 5 governance tabs', async () => {
     renderAt('proj-1');
     await waitFor(() => {
       expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
     });
     expect(screen.getByTestId('governance-tab-overview')).toBeInTheDocument();
+    expect(screen.getByTestId('governance-tab-rules')).toBeInTheDocument();
     expect(screen.getByTestId('governance-tab-knowledge')).toBeInTheDocument();
-    expect(screen.getByTestId('governance-tab-references')).toBeInTheDocument();
+    expect(screen.getByTestId('governance-tab-files')).toBeInTheDocument();
     expect(screen.getByTestId('governance-tab-settings')).toBeInTheDocument();
   });
 
@@ -183,7 +184,7 @@ describe('ProjectGovernance', () => {
     await waitFor(() => {
       expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByTestId('governance-tab-references'));
+    fireEvent.click(screen.getByTestId('governance-tab-files'));
     expect(screen.getByTestId('reference-manager-stub')).toBeInTheDocument();
   });
 
@@ -272,7 +273,7 @@ describe('ProjectGovernance', () => {
       expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
     });
     fireEvent.click(screen.getByTestId('governance-tab-knowledge'));
-    expect(screen.getByTestId('governance-knowledge-rules')).toHaveTextContent('规则与约束 (1)');
+    expect(screen.getByTestId('governance-knowledge-rules')).toHaveTextContent('规则与约束');
   });
 
   it('type selector calls projectApi.update on change', async () => {
