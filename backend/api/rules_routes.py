@@ -23,7 +23,8 @@ from backend.office.errors import OfficePathError, OfficeSizeLimitError
 from backend.office.path_safety import resolve_within
 from backend.office.rule_conflicts import detect_conflicts
 from backend.office.rule_executor import run_audit
-from backend.office.rule_models import AuditResult, Rule, RuleGroup
+from backend.office.rule_models import AuditResult, Rule, RuleGroup, RulePack
+from backend.office.rule_pack_io import build_rule_pack, import_rule_pack
 from backend.office.rule_repo import (
     create_group,
     create_rule,
@@ -43,6 +44,7 @@ from backend.orchestration.llm_factory import build_llm_client_from_settings
 router = APIRouter(prefix="/rules", tags=["office"])
 
 _MAX_AUDIT_RULES = 50
+_MAX_EXPORT_GROUPS = 100
 
 _CATEGORY_TO_TYPE = {
     "page": "format",
@@ -371,3 +373,42 @@ def check_conflicts_endpoint(req: ConflictCheckRequest) -> ConflictListResponse:
             raise _not_found(exc) from exc
     conflicts = detect_conflicts(rules)
     return ConflictListResponse(conflicts=[ConflictModel(**asdict(c)) for c in conflicts])
+
+
+class ExportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    group_ids: List[str]
+    name: str = Field(..., min_length=1)
+    version: str = "1.0"
+
+
+class ImportResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    groups: int
+    imported_rules: int
+
+
+@router.post("/export", response_model=RulePack)
+async def export_endpoint(req: ExportRequest) -> RulePack:
+    conn = _db().get_connection()
+    # Dedupe group_ids preserving first-seen order.
+    deduped_ids = list(dict.fromkeys(req.group_ids))
+    if not deduped_ids:
+        raise HTTPException(422, "group_ids cannot be empty")
+    if len(deduped_ids) > _MAX_EXPORT_GROUPS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"group_ids cannot exceed {_MAX_EXPORT_GROUPS}",
+        )
+    try:
+        return build_rule_pack(conn, deduped_ids, name=req.name, version=req.version)
+    except ValueError as exc:
+        raise _not_found(exc) from exc
+
+
+@router.post("/import", response_model=ImportResponse)
+async def import_endpoint(pack: RulePack) -> ImportResponse:
+    report = import_rule_pack(_db().get_connection(), pack)
+    return ImportResponse(groups=report.groups, imported_rules=report.imported_rules)

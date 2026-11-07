@@ -381,3 +381,120 @@ def test_check_conflicts_rejects_invalid_rule_id_lists(client: TestClient) -> No
         json={"rule_ids": [f"rule-missing-{i}" for i in range(51)]},
     )
     assert too_many.status_code == 422
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Task 7: export / import endpoints
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_export_returns_pack_for_selected_group(client: TestClient) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+    client.post(f"/api/v1/rules/groups/{group['id']}/rules", json=RULE)
+    response = client.post(
+        "/api/v1/rules/export",
+        json={"group_ids": [group["id"]], "name": "我的规则包"},
+    )
+    assert response.status_code == 200
+    pack = response.json()
+    assert pack["name"] == "我的规则包"
+    assert pack["version"] == "1.0"
+    assert pack["exported_by"] == "local"
+    assert pack["exported_at"].endswith("+00:00")
+    assert len(pack["groups"]) == 1
+    assert pack["groups"][0]["rules"][0]["pattern"] == RULE["pattern"]
+
+
+def test_export_unknown_group_returns_404(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/rules/export",
+        json={"group_ids": ["group-missing"], "name": "x"},
+    )
+    assert response.status_code == 404
+
+
+def test_export_empty_group_ids_returns_422(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/rules/export",
+        json={"group_ids": [], "name": "x"},
+    )
+    assert response.status_code == 422
+
+
+def test_export_dedupes_group_ids(client: TestClient) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+    client.post(f"/api/v1/rules/groups/{group['id']}/rules", json=RULE)
+    # Send the same id twice — should succeed (deduped to one) not 422.
+    response = client.post(
+        "/api/v1/rules/export",
+        json={"group_ids": [group["id"], group["id"]], "name": "包"},
+    )
+    assert response.status_code == 200
+    pack = response.json()
+    assert len(pack["groups"]) == 1
+    assert pack["groups"][0]["id"] == group["id"]
+
+
+def test_export_too_many_group_ids_returns_422(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/rules/export",
+        json={"group_ids": [f"group-{i}" for i in range(101)], "name": "x"},
+    )
+    assert response.status_code == 422
+
+
+def test_import_creates_new_group_and_rules(client: TestClient) -> None:
+    pack = {
+        "name": "导入包",
+        "version": "1.0",
+        "exported_at": "2026-11-07T00:00:00+00:00",
+        "exported_by": "other-machine",
+        "groups": [
+            {
+                "id": "group-original",
+                "name": "导入组",
+                "description": "",
+                "priority": 0,
+                "builtin": False,
+                "rules": [
+                    {
+                        "id": "rule-original",
+                        "name": "禁用待定",
+                        "type": "terminology",
+                        "severity": "warning",
+                        "scope": "body",
+                        "description": "终稿不得出现占位词",
+                        "check_mode": "regex",
+                        "pattern": "待定",
+                        "ai_prompt": None,
+                        "enabled": True,
+                        "group_id": "group-original",
+                    }
+                ],
+            }
+        ],
+    }
+    response = client.post("/api/v1/rules/import", json=pack)
+    assert response.status_code == 200
+    assert response.json() == {"groups": 1, "imported_rules": 1}
+
+    groups = client.get("/api/v1/rules/groups").json()
+    imported = [group for group in groups if group["name"] == "导入组"][0]
+    assert imported["id"] != "group-original"
+    assert imported["rules"][0]["id"] != "rule-original"
+    assert imported["rules"][0]["group_id"] == imported["id"]
+    assert imported["rules"][0]["description"] == "终稿不得出现占位词"
+
+
+def test_import_rejects_empty_pack(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/rules/import",
+        json={
+            "name": "空",
+            "version": "1.0",
+            "exported_at": "2026-11-07T00:00:00+00:00",
+            "exported_by": "local",
+            "groups": [],
+        },
+    )
+    assert response.status_code == 422
