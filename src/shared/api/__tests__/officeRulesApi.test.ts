@@ -12,7 +12,7 @@ vi.mock('../backendRequest', async () => {
 
 const mockedRequest = vi.mocked(backendRequest);
 
-const RULE = {
+const RULE: WireRule = {
   id: 'rule-1',
   name: 'No passive voice',
   type: 'format',
@@ -24,24 +24,24 @@ const RULE = {
   ai_prompt: null,
   enabled: true,
   group_id: 'group-1',
-} as WireRule;
+};
 
-const GROUP = {
+const GROUP: WireRuleGroup = {
   id: 'group-1',
   name: 'Style',
   description: '',
   rules: [RULE],
   priority: 0,
   builtin: false,
-} as WireRuleGroup;
+};
 
-const PACK = {
+const PACK: WireRulePack = {
   name: 'house-style',
   version: '1.0',
   groups: [GROUP],
   exported_at: '2026-11-07T10:00:00Z',
   exported_by: 'local',
-} as WireRulePack;
+};
 
 describe('officeRulesApi', () => {
   beforeEach(() => {
@@ -148,7 +148,7 @@ describe('officeRulesApi', () => {
       body: { group_ids: ['group-1'], name: 'house-style' },
     });
 
-    mockedRequest.mockResolvedValue({ groups: [GROUP], imported_rules: 1 });
+    mockedRequest.mockResolvedValue({ groups: 1, imported_rules: 1 });
     await officeRulesApi.importPack(PACK);
     expect(mockedRequest).toHaveBeenLastCalledWith({
       path: '/api/v1/rules/import',

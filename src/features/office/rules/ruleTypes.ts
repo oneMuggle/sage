@@ -79,6 +79,7 @@ export interface RuleExtractWarning {
 }
 
 export interface RuleImportResult {
-  groups: RuleGroup[];
+  /** Number of groups created by the import. */
+  groups: number;
   importedRules: number;
 }

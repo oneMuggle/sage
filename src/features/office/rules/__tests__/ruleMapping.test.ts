@@ -4,6 +4,7 @@ import type { WireRule, WireRuleGroup, WireRulePack } from '../../../../shared/a
 import {
   auditResultFromWire,
   conflictsFromWire,
+  importResultFromWire,
   ruleFieldsToWire,
   ruleFromWire,
   ruleGroupFromWire,
@@ -99,6 +100,13 @@ describe('ruleMapping', () => {
     expect(rulePackFromWire(rulePackToWire(DESIGN_PACK))).toEqual(DESIGN_PACK);
   });
 
+  it('maps an import result where groups is a count, not a list', () => {
+    expect(importResultFromWire({ groups: 1, imported_rules: 1 })).toEqual({
+      groups: 1,
+      importedRules: 1,
+    });
+  });
+
   it('maps conflicts and audit results', () => {
     expect(
       conflictsFromWire([
@@ -110,7 +118,12 @@ describe('ruleMapping', () => {
         },
       ]),
     ).toEqual([
-      { ruleIds: ['rule-1', 'rule-2'], message: 'overlap', suggestion: 'keep one', severity: 'warning' },
+      {
+        ruleIds: ['rule-1', 'rule-2'],
+        message: 'overlap',
+        suggestion: 'keep one',
+        severity: 'warning',
+      },
     ]);
 
     expect(

@@ -102,11 +102,11 @@ export interface WireExportRequest {
   group_ids: string[];
   name: string;
   version?: string;
-  exported_by?: string;
 }
 
 export interface WireImportResult {
-  groups: WireRuleGroup[];
+  /** Number of groups created by the import (backend `ImportResponse.groups`). */
+  groups: number;
   imported_rules: number;
 }
 

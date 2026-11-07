@@ -136,7 +136,7 @@ export function auditResultFromWire(wire: WireAuditResult): RuleAuditResult {
 
 export function importResultFromWire(wire: WireImportResult): RuleImportResult {
   return {
-    groups: ruleGroupsFromWire(wire.groups),
+    groups: wire.groups,
     importedRules: wire.imported_rules,
   };
 }
