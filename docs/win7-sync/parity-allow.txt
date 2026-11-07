@@ -201,3 +201,6 @@ scripts/tests/test_check_dependency_audit.py
 
 # win7 平台检测：内网服务禁用检测 + 修复文档打包 + 测试注入（main 无对应实现）
 electron/runtime-check.ts
+
+# win7 依赖审计策略：含 win7 Python 3.8 production path（main 的策略仅覆盖 main 3.11）
+.github/dependency-audit-policy.json
