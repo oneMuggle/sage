@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.data.database import Database, get_database
-from backend.office.errors import OfficePathError
+from backend.office.errors import OfficePathError, OfficeSizeLimitError
 from backend.office.path_safety import resolve_within
 from backend.office.rule_models import Rule, RuleGroup
 from backend.office.rule_repo import (
@@ -116,6 +116,7 @@ class ExtractRequest(BaseModel):
     file_path: str
     file_type: str = Field(default="spec", pattern="^(spec|template)$")
     use_llm: bool = False
+    max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
 
 
 class ExtractWarning(BaseModel):
@@ -228,6 +229,9 @@ def create_rule_endpoint(group_id: str, req: RuleCreateRequest) -> Rule:
 @router.put("/rules/{rule_id}", response_model=Rule)
 def update_rule_endpoint(rule_id: str, req: RuleUpdateRequest) -> Rule:
     payload = req.model_dump(exclude_unset=True)
+    for field_name in ("name", "type", "severity", "scope", "check_mode", "description"):
+        if field_name in payload and payload[field_name] is None:
+            raise HTTPException(status_code=422, detail=f"{field_name} cannot be null")
     try:
         return update_rule(_db().get_connection(), rule_id, **payload)
     except ValueError as exc:
@@ -252,6 +256,11 @@ async def extract_endpoint(req: ExtractRequest) -> ExtractResponse:
     if not source.is_file():
         raise OfficePathError(
             f"file_path is not a regular file: {req.file_path}", file_path=source
+        )
+    actual_size = source.stat().st_size
+    if actual_size > req.max_size_bytes:
+        raise OfficeSizeLimitError(
+            actual_size=actual_size, max_size=req.max_size_bytes, file_path=source
         )
     result = await extract_word_rules_async(
         source,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -144,5 +145,51 @@ def test_extract_rejects_path_outside_workspace(client: TestClient, tmp_path: Pa
     response = client.post(
         "/api/v1/rules/extract",
         json={"workspace_path": str(tmp_path), "file_path": "../escape.docx"},
+    )
+    assert response.status_code == 400
+
+
+def test_extract_rejects_oversized_file(client: TestClient, tmp_path: Path) -> None:
+    oversized = tmp_path / "big.docx"
+    oversized.write_bytes(b"x" * 2048)
+    response = client.post(
+        "/api/v1/rules/extract",
+        json={
+            "workspace_path": str(tmp_path),
+            "file_path": str(oversized),
+            "max_size_bytes": 1024,
+        },
+    )
+    assert response.status_code == 413
+
+
+def test_update_rule_rejects_explicit_null_on_required_fields(client: TestClient) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+    rule = client.post(f"/api/v1/rules/groups/{group['id']}/rules", json=RULE).json()
+
+    rejected = client.put(f"/api/v1/rules/rules/{rule['id']}", json={"name": None})
+    assert rejected.status_code == 422
+    assert "name" in rejected.json()["detail"]
+
+    # pattern is NULLable — an explicit null is accepted.
+    nullable = client.put(f"/api/v1/rules/rules/{rule['id']}", json={"pattern": None})
+    assert nullable.status_code == 200
+    assert nullable.json()["pattern"] is None
+
+
+def test_extract_rejects_symlink_escape(client: TestClient, tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.docx"
+    _write_docx(outside)
+    link = workspace / "linked.docx"
+    try:
+        os.symlink(outside, link)
+    except OSError:
+        pytest.skip("symlink creation not supported on this platform")
+
+    response = client.post(
+        "/api/v1/rules/extract",
+        json={"workspace_path": str(workspace), "file_path": str(link)},
     )
     assert response.status_code == 400
