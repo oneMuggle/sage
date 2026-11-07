@@ -252,6 +252,7 @@ export const projectRoutes: Record<string, CommandRoute> = {
       else if (a.projectStage !== undefined) body.project_stage = a.projectStage;
       if (a.vcs_mode !== undefined) body.vcs_mode = a.vcs_mode;
       else if (a.vcsMode !== undefined) body.vcs_mode = a.vcsMode;
+      if (a.status !== undefined) body.status = a.status;
       return body;
     },
   },

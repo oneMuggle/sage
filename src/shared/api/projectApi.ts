@@ -34,6 +34,7 @@ import {
   type ProjectScaffoldOptions,
   type ProjectScaffoldResult,
   type ProjectSessionsWire,
+  type ProjectStatus,
   type ProjectSummary,
   type ProjectType,
   type ProjectTypeDetectionResult,
@@ -1097,6 +1098,12 @@ export const projectApi = {
     } catch (error) {
       throw handleApiError(error);
     }
+  },
+
+  /** 工作台总览：切换项目生命周期状态（active / archived）。 */
+  async setProjectStatus(id: string, status: ProjectStatus): Promise<ProjectSummary> {
+    const wire = await invoke<ProjectWire>('project_update', { id, status });
+    return mapProject(wire);
   },
 
   // ===== AI 治理分析 (2026-10-27) =====
