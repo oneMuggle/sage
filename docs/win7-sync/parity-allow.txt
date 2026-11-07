@@ -251,3 +251,6 @@ backend/tests/unit/test_env_memory.py
 backend/tests/unit/test_agent_tool.py
 backend/tests/test_preference_injection.py
 backend/services/project_wiki_generator.py
+
+# win7 memory extractor 大幅扩充（环境事实提取、prompt 模板）
+backend/memory/extractor.py
