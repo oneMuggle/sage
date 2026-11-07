@@ -184,6 +184,19 @@ def _rule_text(rule: Any) -> str:
     return ""
 
 
+def _section_content(section: MarkdownSection) -> str:
+    """投影到 ``RuleEntry.content`` 的「正文」—— ``body`` 含标题行，这里去掉。
+
+    写入侧 ``_render_section`` 会按 ``heading``/``level`` 重建标题，因此读侧
+    的 ``content`` 必须是纯正文，否则编辑一次就会把标题重复写进正文。
+    """
+    body = section.body
+    if section.heading:
+        _heading_line, _, rest = body.partition("\n")
+        body = rest
+    return body.strip()
+
+
 def _markdown_entries(
     content: str,
     *,
@@ -203,7 +216,7 @@ def _markdown_entries(
                 source_label=source_label,
                 scope=scope,
                 category=section.heading or "（开头）",
-                content=section.body.strip(),
+                content=_section_content(section),
                 editable=editable,
                 origin=origin,
             )
