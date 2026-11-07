@@ -1102,8 +1102,12 @@ export const projectApi = {
 
   /** 工作台总览：切换项目生命周期状态（active / archived）。 */
   async setProjectStatus(id: string, status: ProjectStatus): Promise<ProjectSummary> {
-    const wire = await invoke<ProjectWire>('project_update', { id, status });
-    return mapProject(wire);
+    try {
+      const wire = await invoke<ProjectWire>('projects_update', { id, status });
+      return mapProject(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
   },
 
   // ===== AI 治理分析 (2026-10-27) =====

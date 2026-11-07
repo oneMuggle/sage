@@ -18,14 +18,38 @@ vi.mock('../../shared/api', async () => {
 import { ProjectsOverview } from '../ProjectsOverview';
 
 const ROWS = [
-  { id: 'p-1', name: 'Sage', path: '/w/sage', projectType: 'coding', lastOpenedAt: 30,
-    createdAt: 1, sessionCount: 2, lastSessionId: null, allowedPaths: [], status: 'active' },
-  { id: 'p-2', name: 'Paper', path: '/w/paper', projectType: 'research', lastOpenedAt: 10,
-    createdAt: 1, sessionCount: 0, lastSessionId: null, allowedPaths: [], status: 'archived' },
+  {
+    id: 'p-1',
+    name: 'Sage',
+    path: '/w/sage',
+    projectType: 'coding',
+    lastOpenedAt: 30,
+    createdAt: 1,
+    sessionCount: 2,
+    lastSessionId: null,
+    allowedPaths: [],
+    status: 'active',
+  },
+  {
+    id: 'p-2',
+    name: 'Paper',
+    path: '/w/paper',
+    projectType: 'research',
+    lastOpenedAt: 10,
+    createdAt: 1,
+    sessionCount: 0,
+    lastSessionId: null,
+    allowedPaths: [],
+    status: 'archived',
+  },
 ];
 
 function renderPage() {
-  return render(<MemoryRouter><ProjectsOverview /></MemoryRouter>);
+  return render(
+    <MemoryRouter>
+      <ProjectsOverview />
+    </MemoryRouter>,
+  );
 }
 
 describe('ProjectsOverview', () => {
@@ -53,7 +77,9 @@ describe('ProjectsOverview', () => {
     list.mockResolvedValue(ROWS);
     setStatus.mockResolvedValue({ ...ROWS[0], status: 'archived' });
     renderPage();
-    await waitFor(() => expect(screen.getByTestId('projects-overview-row-p-1')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId('projects-overview-row-p-1')).toBeInTheDocument(),
+    );
     fireEvent.click(screen.getByTestId('projects-overview-select-p-1'));
     fireEvent.click(screen.getByTestId('projects-overview-archive'));
     await waitFor(() => expect(setStatus).toHaveBeenCalledWith('p-1', 'archived'));
