@@ -46,7 +46,6 @@ vi.mock('../../features/project-type', () => ({
   WikiGenerationPanel: () => <div data-testid="wiki-panel-stub" />,
   TaskDecomposeDialog: () => <div data-testid="task-decompose-stub" />,
   ProjectTypeBadge: ({ type }: { type: string }) => <span data-testid="type-badge">{type}</span>,
-  GovernanceRulesPanel: () => <div data-testid="rules-panel-stub" />,
   ReferenceManager: () => <div data-testid="reference-manager-stub" />,
 }));
 
@@ -54,6 +53,13 @@ vi.mock('../../features/project-type/StudioMaterialsAndProfilePanels', () => ({
   StudioCharterTabPanel: () => <div data-testid="charter-panel-stub" />,
   StudioMaterialsTabPanel: () => <div data-testid="materials-panel-stub" />,
   StudioProfileTabPanel: () => <div data-testid="profile-panel-stub" />,
+  StudioAllowedPathsTabPanel: () => <div data-testid="allowed-paths-stub" />,
+}));
+
+vi.mock('../../features/rules/RulesPanel', () => ({
+  RulesPanel: ({ projectId }: { projectId: string }) => (
+    <div data-testid="rules-panel-stub">{projectId}</div>
+  ),
 }));
 
 vi.mock('../../features/playbook/PlaybookCard', () => ({
@@ -118,10 +124,10 @@ const testProject: ProjectSummary = {
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
 
-function renderAt(projectId: string) {
+function renderAt(projectId: string, search = '') {
   return render(
     <I18nProvider>
-      <MemoryRouter initialEntries={[`/projects/governance/${projectId}`]}>
+      <MemoryRouter initialEntries={[`/projects/governance/${projectId}${search}`]}>
         <Routes>
           <Route path="/projects/governance/:projectId" element={<GovernanceShell />} />
         </Routes>
@@ -244,20 +250,6 @@ describe('GovernanceShell (legacy)', () => {
     await waitFor(() => expect(mockOpen).toHaveBeenCalledWith('proj-1'));
   });
 
-  it('switches to rules sub-tab under project knowledge', async () => {
-    renderAt('proj-1');
-    await waitFor(() => {
-      expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByTestId('governance-tab-knowledge'));
-    fireEvent.click(screen.getByTestId('governance-knowledge-rules'));
-    await waitFor(() => {
-      expect(screen.getByTestId('rules-panel-stub')).toBeInTheDocument();
-    });
-    expect(screen.queryByTestId('archetype-cards-stub')).not.toBeInTheDocument();
-  });
-
   it('keeps the milestone manager available in overview', async () => {
     renderAt('proj-1');
     await waitFor(() => {
@@ -267,13 +259,35 @@ describe('GovernanceShell (legacy)', () => {
     expect(screen.getByTestId('milestone-manager-stub')).toBeInTheDocument();
   });
 
-  it('rules sub-tab label shows allowed paths count', async () => {
+  it('moves the legacy knowledge=rules deep link to the rules tab', async () => {
+    renderAt('proj-1', '?tab=knowledge&knowledge=rules');
+    await waitFor(() => {
+      expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('rules-panel-stub')).toHaveTextContent('proj-1');
+  });
+
+  it('drops the rules sub-tab from the knowledge section', async () => {
     renderAt('proj-1');
     await waitFor(() => {
       expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
     });
     fireEvent.click(screen.getByTestId('governance-tab-knowledge'));
-    expect(screen.getByTestId('governance-knowledge-rules')).toHaveTextContent('规则与约束');
+    await waitFor(() => {
+      expect(screen.getByTestId('materials-panel-stub')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('governance-knowledge-rules')).toBeNull();
+  });
+
+  it('shows allowed paths under settings', async () => {
+    renderAt('proj-1');
+    await waitFor(() => {
+      expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('governance-tab-settings'));
+    await waitFor(() => {
+      expect(screen.getByTestId('allowed-paths-stub')).toBeInTheDocument();
+    });
   });
 
   it('type selector calls projectApi.update on change', async () => {

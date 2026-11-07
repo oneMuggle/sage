@@ -2,7 +2,10 @@ import { Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
 import { ProjectBootstrapPanel, ProjectOverviewWidgets } from '../../../features/project-type';
-import { StudioCharterTabPanel } from '../../../features/project-type/StudioMaterialsAndProfilePanels';
+import {
+  StudioAllowedPathsTabPanel,
+  StudioCharterTabPanel,
+} from '../../../features/project-type/StudioMaterialsAndProfilePanels';
 import {
   ARCHETYPE_BLUEPRINTS,
   ARCHETYPE_ORDER,
@@ -281,6 +284,23 @@ export function SettingsSection({ data, activeTab }: SettingsSectionProps) {
       />
       <PlaybookNote />
       <ProjectControls data={data} project={project} stages={stages} nextStage={nextStage} />
+      <div
+        className="space-y-3 rounded-lg border border-border p-3"
+        data-testid="settings-allowed-paths"
+      >
+        <div className="text-xs font-medium text-foreground">跨目录只读白名单</div>
+        <StudioAllowedPathsTabPanel
+          projectPath={project.path}
+          projectType={data.activeProjectType}
+          allowedPaths={project.allowedPaths ?? []}
+          newAllowedPath={data.newAllowedPath}
+          onNewAllowedPathChange={data.setNewAllowedPath}
+          savingPaths={data.savingPaths}
+          onAddAllowedPath={data.addAllowedPath}
+          onQuickAddPresetPath={data.quickAddPresetPath}
+          onRemoveAllowedPath={data.removeAllowedPath}
+        />
+      </div>
       <AdvancedWidgets project={project} />
       <AuditCopyRow data={data} project={project} activeTab={activeTab} />
     </div>

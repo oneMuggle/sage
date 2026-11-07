@@ -7,7 +7,7 @@ describe('project-type feature barrel audit diagnostics', () => {
     const report = auditProjectTypeFeatureBarrel();
     expect(report.schemaVersion).toBe('1.0');
     expect(report.module).toBe('src/features/project-type/index.ts');
-    expect(report.symbolCount).toBe(16);
+    expect(report.symbolCount).toBe(15);
     expect(report.exportedSymbols).toContain('ProjectArchetypeStudio');
     expect(report.exportedSymbols).toContain('ProjectAnalysisWizard');
     expect(report.exportedSymbols).toContain('ProjectAnalysisReport');
@@ -15,7 +15,7 @@ describe('project-type feature barrel audit diagnostics', () => {
 
   it('exports serialized JSON payload', () => {
     const parsed = JSON.parse(exportProjectTypeFeatureBarrelAuditJson());
-    expect(parsed.symbolCount).toBe(16);
+    expect(parsed.symbolCount).toBe(15);
     expect(parsed.exportedAt).toBe('2026-10-27');
   });
 });

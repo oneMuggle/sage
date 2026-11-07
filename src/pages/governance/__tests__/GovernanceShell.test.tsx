@@ -121,6 +121,12 @@ describe('GovernanceShell', () => {
     expect(screen.getByTestId('section-rules').textContent).toBe('p-1');
   });
 
+  it('redirects the legacy knowledge=rules deep link to the rules tab', () => {
+    renderAt('/projects/governance/p-1?tab=knowledge&knowledge=rules');
+    expect(screen.getByTestId('section-rules').textContent).toBe('p-1');
+    expect(screen.queryByTestId('section-knowledge')).toBeNull();
+  });
+
   it('shows the empty state when the project is missing', () => {
     governance.mockReturnValue({ ...makeGovernance(), project: null });
     renderAt('/projects/governance/p-1');

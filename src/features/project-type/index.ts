@@ -78,9 +78,6 @@ export type { ProjectArchetypeStudioProps } from './ProjectArchetypeStudio';
 export { PolymorphicArchetypeCards } from './PolymorphicArchetypeCards';
 export type { PolymorphicArchetypeCardsProps } from './PolymorphicArchetypeCards';
 
-export { GovernanceRulesPanel } from './GovernanceRulesPanel';
-export type { GovernanceRulesPanelProps } from './GovernanceRulesPanel';
-
 export { useStudioState } from './useStudioState';
 export type { UseStudioStateReturn } from './useStudioState';
 
@@ -111,7 +108,6 @@ export function auditProjectTypeFeatureBarrel(): ProjectTypeFeatureBarrelAuditRe
     'ProjectAnalysisReport',
     'ProjectArchetypeStudio',
     'PolymorphicArchetypeCards',
-    'GovernanceRulesPanel',
     'useStudioState',
   ] as const;
   return {

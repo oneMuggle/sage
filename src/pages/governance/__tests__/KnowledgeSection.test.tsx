@@ -3,7 +3,6 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../features/project-type', () => ({
-  GovernanceRulesPanel: () => <div data-testid="rules-panel" />,
   GitStatusWidget: () => <div data-testid="git-widget" />,
   WikiGenerationPanel: () => <div data-testid="wiki-panel" />,
 }));
@@ -26,12 +25,6 @@ const data = {
   },
   activeProjectType: 'coding',
   profileEntries: [{ id: 'm-1' }],
-  newAllowedPath: '',
-  setNewAllowedPath: vi.fn(),
-  savingPaths: false,
-  addAllowedPath: vi.fn(),
-  quickAddPresetPath: vi.fn(),
-  removeAllowedPath: vi.fn(),
   profileCategory: 'convention',
   setProfileCategory: vi.fn(),
   profileDraft: '',
@@ -51,9 +44,9 @@ function renderSection() {
 }
 
 describe('KnowledgeSection', () => {
-  it('defaults to the rules sub-tab', () => {
+  it('defaults to the materials sub-tab', () => {
     renderSection();
-    expect(screen.getByTestId('rules-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('materials-panel')).toBeInTheDocument();
   });
 
   it('switches to materials and renders git + wiki for git projects', () => {
@@ -68,5 +61,12 @@ describe('KnowledgeSection', () => {
     renderSection();
     fireEvent.click(screen.getByTestId('governance-knowledge-profile'));
     expect(screen.getByTestId('profile-panel')).toHaveTextContent('1');
+  });
+
+  it('no longer exposes a rules sub-tab', () => {
+    renderSection();
+    expect(screen.queryByTestId('governance-knowledge-rules')).toBeNull();
+    expect(screen.getByTestId('governance-knowledge-materials')).toBeInTheDocument();
+    expect(screen.getByTestId('governance-knowledge-profile')).toBeInTheDocument();
   });
 });

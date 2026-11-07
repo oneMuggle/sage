@@ -1,4 +1,5 @@
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { ProjectTypeBadge } from '../../features/project-type';
@@ -222,6 +223,15 @@ export function GovernanceShell() {
   const [searchParams] = useSearchParams();
   const data = useGovernanceProject(projectId);
   const activeTab = parseGovernanceTab(searchParams.get('tab'));
+  const navigate = useNavigate();
+  // 旧深链：规则子页已独立成章
+  const rawKnowledge = searchParams.get('knowledge');
+  useEffect(() => {
+    if (!projectId) return;
+    if (activeTab === 'knowledge' && rawKnowledge === 'rules') {
+      navigate(governanceHref(projectId, 'rules'), { replace: true });
+    }
+  }, [activeTab, navigate, projectId, rawKnowledge]);
   const { changeTab, openChat, goBack } = useGovernanceActions(projectId, data);
 
   if (!data.project) {

@@ -1,29 +1,22 @@
 import { useSearchParams } from 'react-router-dom';
 
-import {
-  GitStatusWidget,
-  GovernanceRulesPanel,
-  WikiGenerationPanel,
-} from '../../../features/project-type';
+import { GitStatusWidget, WikiGenerationPanel } from '../../../features/project-type';
 import {
   StudioMaterialsTabPanel,
   StudioProfileTabPanel,
 } from '../../../features/project-type/StudioMaterialsAndProfilePanels';
 import type { GovernanceData } from '../useGovernanceProject';
 
-type KnowledgeTab = 'rules' | 'materials' | 'profile';
+type KnowledgeTab = 'materials' | 'profile';
 type GovernanceProject = NonNullable<GovernanceData['project']>;
 
 const KNOWLEDGE_TABS: ReadonlyArray<{ id: KnowledgeTab; label: string }> = [
-  { id: 'rules', label: '规则与约束' },
   { id: 'materials', label: '项目资料' },
   { id: 'profile', label: 'AI 记忆' },
 ];
 
 function parseKnowledgeTab(raw: string | null): KnowledgeTab {
-  if (raw === 'wiki' || raw === 'materials') return 'materials';
-  if (raw === 'profile') return 'profile';
-  return 'rules';
+  return raw === 'profile' ? 'profile' : 'materials';
 }
 
 interface KnowledgeTabBarProps {
@@ -60,23 +53,6 @@ function KnowledgeTabBar({ activeTab, profileCount, onSelect }: KnowledgeTabBarP
 interface SubPanelProps {
   data: GovernanceData;
   project: GovernanceProject;
-}
-
-function RulesSubPanel({ data, project }: SubPanelProps) {
-  return (
-    <GovernanceRulesPanel
-      projectId={project.id}
-      projectPath={project.path}
-      projectType={data.activeProjectType}
-      allowedPaths={project.allowedPaths ?? []}
-      newAllowedPath={data.newAllowedPath}
-      onNewAllowedPathChange={data.setNewAllowedPath}
-      savingPaths={data.savingPaths}
-      onAddAllowedPath={data.addAllowedPath}
-      onQuickAddPresetPath={data.quickAddPresetPath}
-      onRemoveAllowedPath={data.removeAllowedPath}
-    />
-  );
 }
 
 function MaterialsSubPanel({ data, project }: SubPanelProps) {
@@ -131,13 +107,12 @@ export function KnowledgeSection({ data }: KnowledgeSectionProps) {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="knowledge-section">
       <KnowledgeTabBar
         activeTab={activeTab}
         profileCount={data.profileEntries.length}
         onSelect={selectTab}
       />
-      {activeTab === 'rules' && <RulesSubPanel data={data} project={project} />}
       {activeTab === 'materials' && <MaterialsSubPanel data={data} project={project} />}
       {activeTab === 'profile' && <ProfileSubPanel data={data} project={project} />}
     </div>
