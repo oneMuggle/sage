@@ -19,8 +19,7 @@ from typing import List, Literal, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from backend.compat.win7.pydantic_compat import ConfigDict, PYDANTIC_V2
-
+from backend.compat.win7.pydantic_compat import PYDANTIC_V2, ConfigDict
 from backend.data.database import get_database
 from backend.office.errors import OfficePathError
 from backend.office.storage import validate_workspace
