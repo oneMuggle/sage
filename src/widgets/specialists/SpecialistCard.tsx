@@ -1,4 +1,14 @@
+import { MoreHorizontal } from 'lucide-react';
+
 import type { AgentProfile } from '../../shared/api';
+import { Button } from '../../shared/ui/Button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../../shared/ui/DropdownMenu/DropdownMenu';
 
 /** agent.role → 中文标签（与 /agents 的 AgentCard 保持同一词表 + specialist）。 */
 const ROLE_LABELS: Record<string, string> = {
@@ -43,10 +53,24 @@ function readUiString(ui: Record<string, unknown> | undefined, key: string): str
 }
 
 /**
- * M1-E 专家卡片：头像（persona_ui.avatar emoji）+ 名称 + 标语 + 卡片级动作。
+ * 基于 avatar 首字符生成卡片色调（HSL 渐变）。
+ * 浅色模式：高饱和度 + 高亮度；深色模式通过 CSS 变量或外层 dark: 类降低。
+ */
+function generateCardTone(avatar: string): React.CSSProperties {
+  const hue = (avatar.charCodeAt(0) * 37) % 360;
+  return {
+    background: `linear-gradient(135deg, hsl(${hue} 80% 95%), hsl(${hue + 30} 80% 90%))`,
+  };
+}
+
+/**
+ * M1-E 专家卡片（P0 UX 优化）：主操作放大 + 色调 + 禁用态增强。
  *
- * 与 /agents 的 AgentCard 区别：本卡片面向「挑选专家去工作」，
- * 因此突出试聊入口与人设信息（头像/tagline/版本），不带启用开关与选中态。
+ * 结构：
+ * - 头部：头像 + 名称 + 徽标（版本/角色/禁用）
+ * - 正文：标语 + 权限模式
+ * - 主操作：「💬 开始试聊」大按钮（全宽）
+ * - 次操作：编辑/知识/资产 图标按钮 + 更多菜单（版本/评测/导出）
  */
 export function SpecialistCard({
   agent,
@@ -66,96 +90,102 @@ export function SpecialistCard({
   const version = agent.version ?? 1;
   const disabled = !agent.enabled;
 
+  const cardStyle = disabled
+    ? { filter: 'grayscale(100%)', opacity: 0.7 }
+    : generateCardTone(avatar);
+
   return (
     <div
       data-testid={`specialist-card-${agent.id}`}
-      className={`flex flex-col rounded-xl border border-border bg-surface p-4 transition-colors hover:border-border-hover ${
-        disabled ? 'opacity-60' : ''
-      }`}
+      className="flex flex-col rounded-xl border border-border p-4 transition-all hover:shadow-md"
+      style={cardStyle}
     >
+      {/* 头部 */}
       <div className="flex items-start gap-3">
         <span
           aria-hidden="true"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-bg-subtle text-2xl"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/60 text-2xl dark:bg-black/20"
         >
           {avatar}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="truncate font-medium">{agent.name}</h3>
-            <span className="shrink-0 rounded-full bg-bg-subtle px-2 py-0.5 text-ui-xs text-text-secondary">
-              {roleLabel}
-            </span>
-            <span className="shrink-0 rounded-full bg-bg-subtle px-2 py-0.5 text-ui-xs text-muted">
+            <span className="shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-ui-xs text-text-secondary dark:bg-black/30">
               v{version}
             </span>
             {disabled && (
-              <span className="shrink-0 rounded-full bg-warning/10 px-2 py-0.5 text-ui-xs text-warning">
-                已禁用
+              <span
+                className="shrink-0 rounded-full bg-warning/20 px-2 py-0.5 text-ui-xs text-warning"
+                title="请先在智能体页启用"
+              >
+                ⚠️ 已禁用
               </span>
             )}
           </div>
           <p className="mt-1 line-clamp-2 text-sm text-muted">{tagline || '尚未填写标语'}</p>
           <p className="mt-1 text-ui-xs text-faint">
-            {sourceLabel}
+            {sourceLabel} · {roleLabel}
             {agent.permission_mode ? ` · ${PERMISSION_MODE_LABELS[agent.permission_mode]}` : ''}
           </p>
         </div>
       </div>
 
-      <div className="mt-4 flex items-center gap-2">
-        <button
-          type="button"
+      {/* 主操作 */}
+      <div className="mt-4">
+        <Button
+          variant="primary"
+          size="lg"
+          className="w-full"
           disabled={disabled}
           onClick={() => onChat(agent)}
-          title={disabled ? '专家已禁用，请先在智能体页启用' : undefined}
-          className="rounded-radius-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+          title={disabled ? '请先在智能体页启用' : undefined}
         >
-          试聊
-        </button>
+          💬 开始试聊
+        </Button>
+      </div>
+
+      {/* 次操作 */}
+      <div className="mt-3 flex items-center gap-2">
         <button
           type="button"
           onClick={() => onEdit(agent)}
-          className="rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
+          className="flex-1 rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
+          title="编辑专家"
         >
           编辑
         </button>
         <button
           type="button"
           onClick={() => onKnowledge(agent)}
-          className="rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
+          className="flex-1 rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
+          title="管理知识绑定"
         >
           知识
         </button>
         <button
           type="button"
           onClick={() => onAssets(agent)}
-          className="rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
+          className="flex-1 rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
+          title="查看资产（记忆/知识/技能）"
         >
           资产
         </button>
-        <button
-          type="button"
-          onClick={() => onVersions(agent)}
-          className="rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
-        >
-          版本
-        </button>
-        <button
-          type="button"
-          onClick={() => onEval(agent)}
-          className="rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
-        >
-          评测
-        </button>
-        <button
-          type="button"
-          onClick={() => onExport(agent)}
-          disabled={exporting}
-          className="rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover disabled:opacity-50"
-        >
-          {exporting ? '导出中…' : '导出'}
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" title="更多操作">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onVersions(agent)}>版本历史</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onEval(agent)}>黄金任务评测</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onExport(agent)} disabled={exporting}>
+              {exporting ? '导出中…' : '导出专家包'}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
