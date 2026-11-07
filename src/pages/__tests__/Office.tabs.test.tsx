@@ -55,7 +55,9 @@ vi.mock('../../features/office', () => ({
   OfficeIntake: ({ children }: { children?: ReactNode }) => (
     <div data-testid="office-intake">{children}</div>
   ),
-  OfficeGenerateForm: () => <div data-testid="office-generate-form" />,
+  GenerateWorkspace: ({ documents }: { documents: unknown[] }) => (
+    <div data-testid="office-generate-workspace" data-doc-count={documents.length} />
+  ),
   OfficePreviewPanel: () => <div data-testid="office-preview-panel" />,
   useOfficeDocuments: () => ({
     documents: [],
@@ -178,7 +180,8 @@ describe('Office — tab switching syncs URL', () => {
     await waitForTabs();
     activateTab(screen.getByTestId('office-tab-generate'));
     await waitFor(() => expect(probe().getAttribute('data-search')).toBe('?tab=generate'));
-    expect(screen.getByTestId('office-generate-form')).toBeInTheDocument();
+    expect(screen.getByTestId('office-generate-workspace')).toBeInTheDocument();
+    expect(screen.getByTestId('office-generate-workspace')).toHaveAttribute('data-doc-count', '0');
     expect(screen.getByTestId('office-journal-stub')).toBeInTheDocument();
     expect(screen.getByTestId('office-panel-generate').getAttribute('hidden')).toBeNull();
   });
@@ -215,7 +218,7 @@ describe('Office — deep links', () => {
     const active = screen.getByTestId('office-tab-generate');
     expect(active.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('office-panel-generate').getAttribute('hidden')).toBeNull();
-    expect(screen.getByTestId('office-generate-form')).toBeInTheDocument();
+    expect(screen.getByTestId('office-generate-workspace')).toBeInTheDocument();
   });
 
   it('?tab=latex&latex=templates activates the templates sub-tab inside latex', async () => {
@@ -238,14 +241,16 @@ describe('Office — keep-alive behaviour', () => {
     renderOffice();
     await waitForTabs();
     activateTab(screen.getByTestId('office-tab-generate'));
-    await waitFor(() => expect(screen.getByTestId('office-generate-form')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId('office-generate-workspace')).toBeInTheDocument(),
+    );
     activateTab(screen.getByTestId('office-tab-documents'));
     await waitFor(() =>
       expect(screen.getByTestId('office-tab-documents').getAttribute('aria-selected')).toBe('true'),
     );
     const hiddenPanel = screen.getByTestId('office-panel-generate');
     expect(hiddenPanel.getAttribute('hidden')).not.toBeNull();
-    expect(screen.queryByTestId('office-generate-form')).toBeInTheDocument();
+    expect(screen.queryByTestId('office-generate-workspace')).toBeInTheDocument();
   });
 });
 
@@ -254,7 +259,7 @@ describe('Office — journal in generate tab is collapsed by default', () => {
     renderOffice(['/office?tab=generate']);
     await waitForTabs();
     const details = screen
-      .getByTestId('office-generate-form')
+      .getByTestId('office-generate-workspace')
       .parentElement!.querySelector('details');
     expect(details).not.toBeNull();
     expect(details!.hasAttribute('open')).toBe(false);

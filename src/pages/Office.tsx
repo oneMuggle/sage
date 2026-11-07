@@ -32,10 +32,10 @@ import { toast } from 'sonner';
 import { useWorkspaceContext } from '../app/providers/SessionWorkspaceProvider';
 import { JournalPanel } from '../features/journal';
 import {
+  GenerateWorkspace,
   OfficeDocumentList,
   OfficeDuplicateDialog,
   OfficeEditPreviewDialog,
-  OfficeGenerateForm,
   OfficeSnapshotPanel,
   useOfficeDocuments,
   type OfficeListView,
@@ -503,7 +503,12 @@ export function Office() {
 
   const renderGenerateTab = () => (
     <div className="space-y-6">
-      <OfficeGenerateForm workspacePath={workspacePath ?? ''} onGenerated={refresh} />
+      <GenerateWorkspace
+        workspacePath={workspacePath ?? ''}
+        documents={documents}
+        onGenerated={refresh}
+        onOpenDocument={open}
+      />
 
       {/* JournalPanel 从原来的顶层独立面板折叠到 <details> 内，
           与"生成新文档"共享同一个任务域但不再占用首屏空间。 */}

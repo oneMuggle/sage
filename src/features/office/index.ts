@@ -18,6 +18,8 @@ export { OfficeEditPreviewDialog } from './OfficeEditPreviewDialog';
 export { buildUpdateOps } from './OfficeEditPreviewDialog';
 export { OfficeDuplicateDialog } from './OfficeDuplicateDialog';
 export { OfficeGenerateForm } from './OfficeGenerateForm';
+export { GenerateWorkspace } from './GenerateWorkspace';
+export { TemplateLibrary } from './TemplateLibrary';
 export { OfficeCapabilityBar } from './OfficeCapabilityBar';
 // Round B P3: structured sub-previews shared with the chat ArtifactViewer.
 export { WordPreview, ExcelPreview, PptPreview } from './OfficePreviewPanel';
@@ -46,13 +48,15 @@ export function auditOfficeFeatureBarrel(): OfficeFeatureBarrelAuditReport {
     'WordPreview',
     'ExcelPreview',
     'PptPreview',
+    'GenerateWorkspace',
+    'TemplateLibrary',
   ] as const;
   return {
     schemaVersion: '1.0',
     module: 'src/features/office/index.ts',
     exportedSymbols,
     symbolCount: exportedSymbols.length,
-    exportedAt: '2026-10-22',
+    exportedAt: '2026-11-07',
   };
 }
 

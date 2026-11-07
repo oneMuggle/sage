@@ -332,3 +332,20 @@ Response: { reply: string }
 - **Phase 3 版式渲染与批量能力**：Excel SheetJS 网格预览、PPT 版式预览（前端库 vs 后端缩略图，需先 spike）、批量 AI 审校、包体积与架构基线评估。
 - **Phase 4 win7 同步**：cherry-pick + pydantic v1 / Python 3.8 适配；评估「审校与规范」「LaTeX」tab 的同步范围；双分支测试与安装包冒烟。
 - **Phase 0 遗留**：真机验证 Chromium 106 下 `data:` vs `blob:` PDF iframe 行为；Playwright 冒烟。
+
+## 11. 文档生成工作台（P3）
+
+生成 tab 由 `GenerateWorkspace`（`src/features/office/GenerateWorkspace.tsx`）承载，四种模式共用左侧表单 + 右侧结果卡：
+
+| 模式 | 前端调用 | 后端端点 |
+|---|---|---|
+| 自然语言 | `officeGenerateApi.generateFromNl` | `POST /api/v1/office/generate/nl` |
+| 参考文档 | 同上，附带 `reference_paths`（仅 `.docx`） | 同上（`_collect_reference_texts`） |
+| 模板对话 | `officeGenerateApi.generateFromTemplateChat` | `POST /api/v1/office/generate/template-chat` |
+| 迭代改写 | `officeGenerateApi.iterateDocument` | `POST /api/v1/office/generate/iterate`（仅 `.docx`） |
+
+三个端点统一返回 `{output_path, filename, file_size_bytes, summary}`，生成结果经 `persist_generated_document` 登记进文档库。进度经 `backend/office/progress.track` 暴露，前端 `pollOfficeProgress` 轮询并写入任务中心（`office:generate`）。
+
+模板选择复用既有 `list_templates` / `instantiate_template`；`TemplateLibrary` 组件只消费 `officeApi.listTemplates`，不新增 IPC 命令。
+
+**与设计的差异（部分覆盖）**：设计稿要求右侧 60% 复用 `DocumentCanvas` 内联预览；当前实现为结果卡 +「在文档页打开」（走 `useOfficeDocuments().open`）。内联画布需要页面级预览数据装配，留待后续迭代。
