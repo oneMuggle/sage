@@ -313,6 +313,24 @@ describe('RulesPanel', () => {
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
   });
 
+  it('reloads and reports a conflict instead of a generic delete failure', async () => {
+    remove.mockRejectedValueOnce(
+      Object.assign(new Error('规则已被修改（HTTP 409）'), { status_code: 409 }),
+    );
+    confirmDialog.mockResolvedValue(true);
+    renderPanel();
+
+    const trigger = await screen.findByTestId(`rule-menu-${CONSTRAINT_ENTRY.id}`);
+    fireEvent.pointerDown(trigger, { button: 0 });
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    fireEvent.click(await screen.findByTestId(`rule-menu-delete-${CONSTRAINT_ENTRY.id}`));
+
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledOnce());
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    expect(toast.error).toHaveBeenCalledWith('规则已被修改，列表已刷新，请重试');
+    expect(toast.error).not.toHaveBeenCalledWith(expect.stringContaining('删除失败'));
+  });
+
   it('copies rule content to the clipboard', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {

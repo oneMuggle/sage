@@ -397,59 +397,110 @@ function RuleGroupList({ groups, conflicted, onOpenSource, onAction }: RuleGroup
   );
 }
 
-export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
-  const { t } = useI18n();
-  const { rules, effectiveEntries, conflicts, loading, error, reload } = useRulesData(projectId);
-  const [search, setSearch] = useState('');
-  const [layer, setLayer] = useState<LayerFilter>('all');
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const { editorOpen, editTarget, openCreate, closeEditor, handleSaved, handleAction } =
-    useRuleWrites(projectId, reload);
-  const conflicted = useMemo(() => conflictedRuleIds(conflicts), [conflicts]);
-  const groups = useMemo(
-    () => buildRuleGroups(filterRules(rules, { search, layer })),
-    [rules, search, layer],
-  );
-  const enabledCount = countEnabled(rules);
-  const hasRules = rules.length > 0;
+interface RulesStatusNoticesProps {
+  loading: boolean;
+  error: string | null;
+  hasRules: boolean;
+  filteredEmpty: boolean;
+  onRetry: () => void;
+}
 
+function RulesStatusNotices({
+  loading,
+  error,
+  hasRules,
+  filteredEmpty,
+  onRetry,
+}: RulesStatusNoticesProps) {
+  const { t } = useI18n();
   return (
-    <div className="space-y-3" data-testid="rules-panel">
-      <RulesHeader
-        enabledCount={enabledCount}
-        conflictCount={conflicts.length}
-        loading={loading}
-        onOpenDrawer={() => setDrawerOpen(true)}
-        onRefresh={reload}
-        onCreate={openCreate}
-      />
-      <RulesFilterBar search={search} onSearch={setSearch} layer={layer} onLayer={setLayer} />
+    <>
       {loading && (
         <p className="text-ui-2xs text-muted-foreground" data-testid="rules-loading">
           {t('rules.loading')}
         </p>
       )}
-      {error && <RulesErrorNotice message={error} onRetry={reload} />}
+      {error && <RulesErrorNotice message={error} onRetry={onRetry} />}
       {!loading && !error && !hasRules && <RulesEmpty />}
-      {!loading && !error && hasRules && groups.length === 0 && <RulesEmptyFiltered />}
+      {!loading && !error && hasRules && filteredEmpty && <RulesEmptyFiltered />}
+    </>
+  );
+}
+
+function useRulesPanelState(projectId: string) {
+  const { rules, effectiveEntries, conflicts, loading, error, reload } = useRulesData(projectId);
+  const [search, setSearch] = useState('');
+  const [layer, setLayer] = useState<LayerFilter>('all');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const writes = useRuleWrites(projectId, reload);
+  const conflicted = useMemo(() => conflictedRuleIds(conflicts), [conflicts]);
+  const groups = useMemo(
+    () => buildRuleGroups(filterRules(rules, { search, layer })),
+    [rules, search, layer],
+  );
+  return {
+    rules,
+    effectiveEntries,
+    conflicts,
+    loading,
+    error,
+    reload,
+    search,
+    setSearch,
+    layer,
+    setLayer,
+    drawerOpen,
+    setDrawerOpen,
+    conflicted,
+    groups,
+    ...writes,
+  };
+}
+
+export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
+  const state = useRulesPanelState(projectId);
+
+  return (
+    <div className="space-y-3" data-testid="rules-panel">
+      <RulesHeader
+        enabledCount={countEnabled(state.rules)}
+        conflictCount={state.conflicts.length}
+        loading={state.loading}
+        onOpenDrawer={() => state.setDrawerOpen(true)}
+        onRefresh={state.reload}
+        onCreate={state.openCreate}
+      />
+      <RulesFilterBar
+        search={state.search}
+        onSearch={state.setSearch}
+        layer={state.layer}
+        onLayer={state.setLayer}
+      />
+      <RulesStatusNotices
+        loading={state.loading}
+        error={state.error}
+        hasRules={state.rules.length > 0}
+        filteredEmpty={state.groups.length === 0}
+        onRetry={state.reload}
+      />
       <RuleGroupList
-        groups={groups}
-        conflicted={conflicted}
+        groups={state.groups}
+        conflicted={state.conflicted}
         onOpenSource={onOpenSource}
-        onAction={(action, entry) => void handleAction(action, entry)}
+        onAction={(action, entry) => void state.handleAction(action, entry)}
       />
       <RuleEditorDialog
-        isOpen={editorOpen}
-        onClose={closeEditor}
+        isOpen={state.editorOpen}
+        onClose={state.closeEditor}
         projectId={projectId}
-        entry={editTarget}
-        onSaved={handleSaved}
+        entry={state.editTarget}
+        onSaved={state.handleSaved}
       />
       <EffectiveRulesDrawer
-        isOpen={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        entries={effectiveEntries}
-        conflicts={conflicts}
+        isOpen={state.drawerOpen}
+        onClose={() => state.setDrawerOpen(false)}
+        entries={state.effectiveEntries}
+        conflicts={state.conflicts}
       />
     </div>
   );

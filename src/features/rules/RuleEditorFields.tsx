@@ -7,7 +7,12 @@ import { Dialog, Transition } from '@headlessui/react';
 import { X } from 'lucide-react';
 import { Fragment, type ReactNode } from 'react';
 
-import type { CreatableRuleLayer, RawRulesResponse, RuleEntry } from '../../shared/api/rulesApi';
+import type {
+  CreatableRuleLayer,
+  RawRulesResponse,
+  RuleEntry,
+  RuleLayer,
+} from '../../shared/api/rulesApi';
 import { useI18n } from '../../shared/lib/i18n';
 import { Button } from '../../shared/ui/Button';
 import { Input } from '../../shared/ui/Input';
@@ -340,19 +345,26 @@ export function EditorFooter({
 
 interface ConflictNoticeProps {
   current: RuleEntry;
+  /** 冲突规则所属层；非约束层只展示分类与正文。 */
+  layer: RuleLayer;
   onUseServer: () => void;
 }
 
 /** 409 时展示服务器上的当前版本，允许一键以其为准。 */
-export function ConflictNotice({ current, onUseServer }: ConflictNoticeProps) {
+export function ConflictNotice({ current, layer, onUseServer }: ConflictNoticeProps) {
   const { t } = useI18n();
   const rows: Array<[string, string]> = [
     [t('rules.editor.category'), current.category],
     [t('rules.editor.content'), current.content],
-    [t('rules.editor.trigger'), current.trigger || t('rules.editor.triggerHint')],
-    [t('rules.editor.priority'), String(current.priority)],
-    [t('rules.editor.enabled'), current.enabled ? t('rules.row.enabled') : t('rules.row.disabled')],
   ];
+  if (layer === 'constraint') {
+    rows.push([t('rules.editor.trigger'), current.trigger || '—']);
+    rows.push([t('rules.editor.priority'), String(current.priority)]);
+    rows.push([
+      t('rules.editor.enabled'),
+      current.enabled ? t('rules.row.enabled') : t('rules.row.disabled'),
+    ]);
+  }
   return (
     <div
       className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2"

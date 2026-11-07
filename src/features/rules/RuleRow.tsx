@@ -72,6 +72,62 @@ interface RuleMenuProps {
   onAction: (action: RuleAction, entry: RuleEntry) => void;
 }
 
+function EditMenuItem({ entry, writable, onAction }: RuleMenuProps & { writable: boolean }) {
+  const { t } = useI18n();
+  if (!writable) {
+    return (
+      <DropdownMenuItem disabled data-testid={`rule-menu-edit-disabled-${entry.id}`}>
+        {t('rules.menu.edit')}
+      </DropdownMenuItem>
+    );
+  }
+  return (
+    <DropdownMenuItem
+      onSelect={() => onAction('edit', entry)}
+      data-testid={`rule-menu-edit-${entry.id}`}
+    >
+      {t('rules.menu.edit')}
+    </DropdownMenuItem>
+  );
+}
+
+function CopyMenuItem({ entry, onAction }: RuleMenuProps) {
+  const { t } = useI18n();
+  return (
+    <DropdownMenuItem
+      onSelect={() => onAction('copy', entry)}
+      data-testid={`rule-menu-copy-${entry.id}`}
+    >
+      {t('rules.menu.copy')}
+    </DropdownMenuItem>
+  );
+}
+
+function ToggleMenuItem({ entry, onAction }: RuleMenuProps) {
+  const { t } = useI18n();
+  return (
+    <DropdownMenuItem
+      onSelect={() => onAction('toggle', entry)}
+      data-testid={`rule-menu-toggle-${entry.id}`}
+    >
+      {entry.enabled ? t('rules.menu.disable') : t('rules.menu.enable')}
+    </DropdownMenuItem>
+  );
+}
+
+function DeleteMenuItem({ entry, onAction }: RuleMenuProps) {
+  const { t } = useI18n();
+  return (
+    <DropdownMenuItem
+      variant="destructive"
+      onSelect={() => onAction('delete', entry)}
+      data-testid={`rule-menu-delete-${entry.id}`}
+    >
+      {t('rules.menu.delete')}
+    </DropdownMenuItem>
+  );
+}
+
 /** 「···」菜单：只读行仅保留复制。 */
 function RuleMenu({ entry, onAction }: RuleMenuProps) {
   const { t } = useI18n();
@@ -91,42 +147,13 @@ function RuleMenu({ entry, onAction }: RuleMenuProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {writable ? (
-          <DropdownMenuItem
-            onSelect={() => onAction('edit', entry)}
-            data-testid={`rule-menu-edit-${entry.id}`}
-          >
-            {t('rules.menu.edit')}
-          </DropdownMenuItem>
-        ) : (
-          <DropdownMenuItem disabled data-testid={`rule-menu-edit-disabled-${entry.id}`}>
-            {t('rules.menu.edit')}
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuItem
-          onSelect={() => onAction('copy', entry)}
-          data-testid={`rule-menu-copy-${entry.id}`}
-        >
-          {t('rules.menu.copy')}
-        </DropdownMenuItem>
-        {canToggle && (
-          <DropdownMenuItem
-            onSelect={() => onAction('toggle', entry)}
-            data-testid={`rule-menu-toggle-${entry.id}`}
-          >
-            {entry.enabled ? t('rules.menu.disable') : t('rules.menu.enable')}
-          </DropdownMenuItem>
-        )}
+        <EditMenuItem entry={entry} writable={writable} onAction={onAction} />
+        <CopyMenuItem entry={entry} onAction={onAction} />
+        {canToggle && <ToggleMenuItem entry={entry} onAction={onAction} />}
         {writable && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="destructive"
-              onSelect={() => onAction('delete', entry)}
-              data-testid={`rule-menu-delete-${entry.id}`}
-            >
-              {t('rules.menu.delete')}
-            </DropdownMenuItem>
+            <DeleteMenuItem entry={entry} onAction={onAction} />
           </>
         )}
       </DropdownMenuContent>
