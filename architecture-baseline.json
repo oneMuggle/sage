@@ -6,7 +6,7 @@
     "backend/api/arena_routes.py": 878,
     "backend/api/legacy_routes.py": 2980,
     "backend/api/llm_proxy_routes.py": 1216,
-    "backend/api/office_routes.py": 852,
+    "backend/api/office_routes.py": 856,
     "backend/api/orchestration_router.py": 807,
     "backend/api/permission_routes.py": 855,
     "backend/api/playbook_routes.py": 934,
