@@ -8,7 +8,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { Projects } from '../../pages/Projects';
+import { ProjectsOverview } from '../../pages/ProjectsOverview';
 import { projectApi } from '../../shared/api';
 import { I18nProvider } from '../../shared/lib/i18n';
 import { GitStatusSection } from '../../widgets/sidebar/sections/GitStatusSection';
@@ -608,7 +608,7 @@ describe('ConstraintSummaryWidget', () => {
       <MemoryRouter>
         <I18nProvider>
           <GitStatusSection collapsed={false} onToggleCollapsed={vi.fn()} />
-          <Projects />
+          <ProjectsOverview />
         </I18nProvider>
       </MemoryRouter>,
     );
