@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useOfficeWorkspaceStore } from '../../../../entities/office/officeWorkspaceStore';
 import { aiApi } from '../../../../shared/api/aiApi';
 import * as officeSpecApi from '../../../../shared/api/officeSpecApi';
+import type { AiReviseResult } from '../../../../shared/api/officeSpecTypes';
+import type { OfficeDocumentSummary } from '../../../../shared/api/types';
 import { useAiCapabilities } from '../useAiCapabilities';
 
 vi.mock('../../../../shared/api/aiApi');
@@ -27,12 +29,44 @@ vi.mock('../../../../shared/lib/i18n', () => ({
 const mockAiApi = vi.mocked(aiApi);
 const mockOfficeSpecApi = vi.mocked(officeSpecApi.officeSpecApi);
 
-const doc = {
+const doc: OfficeDocumentSummary = {
   id: 'doc-123',
   workspace_path: '/workspace',
   generated_filename: 'test.docx',
   doc_type: 'word',
-} as never;
+  original_filename: 'test.docx',
+  status: 'parsed',
+  created_at: 0,
+  updated_at: 0,
+  metadata: { file_size_bytes: 0 },
+  derived_from: null,
+  archived_at: null,
+};
+
+function reviseResult(): AiReviseResult {
+  return {
+    ok: true,
+    doc_id: 'doc-123',
+    snapshot_path: null,
+    source_path: '/workspace/test.docx',
+    output_path: '/workspace/test.docx',
+    overwritten: true,
+    planned: 1,
+    applied: 1,
+    skipped: 0,
+    changes: [
+      {
+        rule_id: null,
+        find: 'old',
+        replace: 'new',
+        comment: '',
+        applied: true,
+        reason: '',
+      },
+    ],
+    warnings: [],
+  };
+}
 
 function makeRoot(html = ''): RefObject<HTMLElement> {
   const root = document.createElement('div');
@@ -135,6 +169,30 @@ describe('useAiCapabilities', () => {
     const messages = useOfficeWorkspaceStore.getState().conversation;
     expect(messages).toHaveLength(1);
     expect(messages[0].attachments).toHaveLength(0);
+  });
+
+  it('forwards customInstruction to aiApi.rewrite for instruction-based edits', async () => {
+    useOfficeWorkspaceStore.setState({ activeDocument: doc });
+    mockAiApi.rewrite.mockResolvedValue({ ok: true, result: 'Formal text', model: 'test-model' });
+
+    const { result } = renderCapabilities(makeRoot());
+
+    await act(async () => {
+      await result.current.runRewrite({
+        instruction: 'custom',
+        customInstruction: '改成正式语气',
+        text: '原始段落',
+        paraIndex: 0,
+      });
+    });
+
+    expect(mockAiApi.rewrite).toHaveBeenCalledWith({
+      workspacePath: '/workspace',
+      documentId: 'doc-123',
+      text: '原始段落',
+      instruction: 'custom',
+      customInstruction: '改成正式语气',
+    });
   });
 
   it('appends a system message and sets errorText on rewrite failure', async () => {
@@ -268,17 +326,7 @@ describe('useAiCapabilities', () => {
       ],
     });
 
-    mockOfficeSpecApi.reviseAiIssues.mockResolvedValue({
-      ok: true,
-      doc_id: 'doc-123',
-      snapshot_path: null,
-      source_path: '/workspace/test.docx',
-      output_path: '/workspace/test.docx',
-      overwritten: true,
-      planned: 1,
-      applied: 1,
-      skipped: [],
-    } as never);
+    mockOfficeSpecApi.reviseAiIssues.mockResolvedValue(reviseResult());
 
     const { result } = renderCapabilities(makeRoot());
 

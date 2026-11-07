@@ -71,6 +71,14 @@ describe('InstructionEditCard', () => {
     expect(screen.getByText('fixed second')).toBeTruthy();
   });
 
+  it('marks the original text as deleted and the suggestion as inserted', () => {
+    renderCard();
+    const deleted = screen.getByText('first');
+    const inserted = screen.getByText('fixed first');
+    expect(deleted.tagName).toBe('DEL');
+    expect(inserted.tagName).toBe('INS');
+  });
+
   it('forwards apply and skip clicks with the card payload', () => {
     const { onApply, onSkip } = renderCard();
 
@@ -92,7 +100,7 @@ describe('InstructionEditCard', () => {
     }
   });
 
-  it('renders apply-all only when more than one card is still pending', () => {
+  it('renders apply-all while at least one card is still pending', () => {
     const allPending = suggestions.map((suggestion) => ({
       ...suggestion,
       applied: 'pending' as const,
@@ -103,7 +111,7 @@ describe('InstructionEditCard', () => {
     fireEvent.click(screen.getByTestId('office-ai-audit-apply-all'));
     expect(allOn).toHaveBeenCalledWith('msg-1');
 
-    // Only one pending card — apply-all should disappear.
+    // R25: a single pending card still exposes apply-all.
     const onePending: SuggestionCardData[] = [
       { ...suggestions[0], applied: 'pending' },
       { ...suggestions[1], applied: 'skipped' },
@@ -119,7 +127,34 @@ describe('InstructionEditCard', () => {
         onApplyAll={vi.fn()}
       />,
     );
+    expect(screen.getByTestId('office-ai-audit-apply-all')).toBeTruthy();
+
+    // R25: nothing pending left — apply-all disappears.
+    rerender(
+      <InstructionEditCard
+        messageId="msg-1"
+        suggestions={suggestions.map((suggestion) => ({
+          ...suggestion,
+          applied: 'applied' as const,
+        }))}
+        busy={false}
+        onApply={vi.fn()}
+        onSkip={vi.fn()}
+        onApplyAll={vi.fn()}
+      />,
+    );
     expect(screen.queryByTestId('office-ai-audit-apply-all')).toBeNull();
+  });
+
+  it('disables apply-all while busy', () => {
+    const allPending = suggestions.map((suggestion) => ({
+      ...suggestion,
+      applied: 'pending' as const,
+    }));
+    renderCard({ suggestions: allPending, busy: true });
+    expect((screen.getByTestId('office-ai-audit-apply-all') as HTMLButtonElement).disabled).toBe(
+      true,
+    );
   });
 
   it('does not render apply-all when onApplyAll is not provided', () => {

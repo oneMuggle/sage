@@ -40,8 +40,8 @@ export function SuggestionCard({
           index: String(suggestion.paraIndex + 1),
         })}
       </div>
-      <div className="mb-1 text-text-muted line-through">{suggestion.originalText}</div>
-      <div className="mb-2 text-text">{suggestion.suggestedText}</div>
+      <del className="mb-1 block text-text-muted">{suggestion.originalText}</del>
+      <ins className="mb-2 block text-text no-underline">{suggestion.suggestedText}</ins>
       {statusLabel ? (
         <span className="text-text-muted">{statusLabel}</span>
       ) : (

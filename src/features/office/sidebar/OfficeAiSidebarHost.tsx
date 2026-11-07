@@ -131,6 +131,7 @@ export function OfficeAiSidebarHost({
     if (!selection || busy) return;
 
     if (kind === 'rewrite') {
+      setPendingEdit(null);
       void runRewrite({
         instruction: 'polish',
         text: selection.text,
@@ -140,6 +141,7 @@ export function OfficeAiSidebarHost({
     }
 
     if (kind === 'chat') {
+      setPendingEdit(null);
       setSidebarOpen(true);
       prefillInitialCommand(selection.rawContext);
       return;
@@ -158,6 +160,7 @@ export function OfficeAiSidebarHost({
       }
       const paragraphText = paragraphByIndex(selection.anchorParaIndex);
       if (!paragraphText) {
+        setSidebarOpen(true);
         appendMessage({
           id: nextMessageId(),
           role: 'system',
@@ -172,6 +175,7 @@ export function OfficeAiSidebarHost({
     }
 
     // kind === 'audit'
+    setPendingEdit(null);
     setSidebarOpen(true);
     void runAudit();
   };
@@ -180,27 +184,52 @@ export function OfficeAiSidebarHost({
     setSelection(null);
   };
 
+  const handleSlashCommand = async (command: string) => {
+    if (command === '/audit') {
+      setPendingEdit(null);
+      void runAudit();
+      return;
+    }
+    if (command === '/summarize') {
+      await runRewrite({ instruction: 'summarize', text: documentText() });
+      return;
+    }
+    if (command === '/translate') {
+      await runRewrite({ instruction: 'translate', targetLang: '中文', text: documentText() });
+      return;
+    }
+    if (command === '/rules') {
+      onNavigateTab('rules');
+      return;
+    }
+    appendMessage({
+      id: nextMessageId(),
+      role: 'system',
+      content: fillTemplate(t('office.ai.sidebar.unknown_command'), { command }),
+      createdAt: Date.now(),
+    });
+  };
+
   const handleCommand = async (value: string) => {
-    // If an edit instruction is pending, this submission is the edit command —
-    // route it through runRewrite({instruction:'custom', customInstruction}).
-    if (pendingEdit) {
-      const prefix = t('office.ai.edit.prefix');
-      const stripped = value.startsWith(prefix) ? value.slice(prefix.length).trim() : value.trim();
+    // M1: only a draft that still carries the edit prefix is an edit command.
+    const prefix = t('office.ai.edit.prefix');
+    if (pendingEdit && value.startsWith(prefix)) {
       const edit = pendingEdit;
+      const instruction = value.slice(prefix.length).trim();
       setPendingEdit(null);
       setInitialCommand(null);
-      if (!stripped) return;
+      if (!instruction) return;
       await runRewrite({
         instruction: 'custom',
-        customInstruction: stripped,
+        customInstruction: instruction,
         text: edit.paragraphText,
         paraIndex: edit.anchorParaIndex,
       });
       return;
     }
 
-    // Drop the prefilled draft once a command is actually submitted so the
-    // next chat action starts from a clean slate.
+    // Any other submission invalidates a previously prefilled edit draft.
+    setPendingEdit(null);
     setInitialCommand(null);
 
     if (!value.startsWith('/')) {
@@ -208,34 +237,7 @@ export function OfficeAiSidebarHost({
       return;
     }
 
-    const command = value.split(/\s+/)[0].toLowerCase();
-
-    if (command === '/audit') {
-      void runAudit();
-      return;
-    }
-
-    if (command === '/summarize') {
-      await runRewrite({ instruction: 'summarize', text: documentText() });
-      return;
-    }
-
-    if (command === '/translate') {
-      await runRewrite({ instruction: 'translate', targetLang: '中文', text: documentText() });
-      return;
-    }
-
-    if (command === '/rules') {
-      onNavigateTab('rules');
-      return;
-    }
-
-    appendMessage({
-      id: nextMessageId(),
-      role: 'system',
-      content: fillTemplate(t('office.ai.sidebar.unknown_command'), { command }),
-      createdAt: Date.now(),
-    });
+    await handleSlashCommand(value.split(/\s+/)[0].toLowerCase());
   };
 
   const handleApply = (messageId: string, suggestion: SuggestionCardData) => {

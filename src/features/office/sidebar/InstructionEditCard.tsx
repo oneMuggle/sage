@@ -9,7 +9,7 @@ export interface InstructionEditCardProps {
   busy: boolean;
   onApply: (messageId: string, suggestion: SuggestionCardData) => void;
   onSkip: (messageId: string, suggestionId: string) => void;
-  /** When provided and `pendingCount > 1`, renders the apply-all button. */
+  /** When provided and at least one card is pending, renders the apply-all button. */
   onApplyAll?: (messageId: string) => void;
   /** Defaults to `office-ai-instruction-edit`. */
   testIdPrefix?: string;
@@ -41,7 +41,7 @@ export function InstructionEditCard({
           disabled={busy}
         />
       ))}
-      {onApplyAll && pendingCount > 1 ? (
+      {onApplyAll && pendingCount > 0 ? (
         <button
           type="button"
           data-testid="office-ai-audit-apply-all"
