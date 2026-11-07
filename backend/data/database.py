@@ -1046,6 +1046,12 @@ class Database:
             cursor.execute("ALTER TABLE projects ADD COLUMN project_sub_type TEXT")
         if "bootstrap_state" not in _projects_columns:
             cursor.execute("ALTER TABLE projects ADD COLUMN bootstrap_state TEXT")
+        # 2026-11-07: 项目生命周期状态（工作台总览页「活跃/归档」）。
+        # 幂等迁移，旧行默认 active。
+        if "status" not in _projects_columns:
+            cursor.execute(
+                "ALTER TABLE projects ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
+            )
         # Project type classification (2026-09-24): 项目类型分类系统。
         # project_type 区分编码/科研/事务/个人项目，决定可用工具集和约束模板。
         # vcs_mode 控制版本管理策略（git/builtin/svn）。detected_type 保存自动
