@@ -1,6 +1,7 @@
 export * from './types/chatAndEventTypes';
 export * from './types/domainEntityTypes';
 export * from './types/templateAndTaskTypes';
+export * from './types/officeGenerateTypes';
 
 export type OfficeDocType = 'ppt' | 'word' | 'excel' | 'pdf';
 
