@@ -390,7 +390,7 @@ describe('selectionAnchor', () => {
 
   it('injects 0-based indices skipping empty and table paragraphs', () => {
     const root = buildRoot(
-      '<p>first</p><p>   </p><table><tr><td><p>cell</p></td></tr></table><p>second</p>',
+      '<header><p>页眉</p></header><p>first</p><p>   </p><table><tr><td><p>cell</p></td></tr></table><p>second</p><footer><p>页脚</p></footer>',
     )
 
     annotateParagraphIndexes(root)
@@ -485,7 +485,9 @@ export function annotateParagraphIndexes(root: HTMLElement): void {
   let next = 0
   root.querySelectorAll<HTMLElement>('p').forEach((el) => {
     el.removeAttribute(PARAGRAPH_ATTRIBUTE)
-    if (el.closest('table')) return
+    // docx-preview 0.3.5 默认 renderHeaders/renderFooters=true，
+    // 表格、页眉、页脚、脚注都会产出 <p>；后端 _extract_paragraphs 只数正文段落。
+    if (el.closest('table, header, footer, li')) return
     const text = el.textContent?.trim() ?? ''
     if (!text) return
     el.setAttribute(PARAGRAPH_ATTRIBUTE, String(next))
@@ -551,7 +553,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { FloatingActionBar } from '../FloatingActionBar'
 
-vi.mock('../../../shared/lib/i18n', () => ({
+vi.mock('../../../../shared/lib/i18n', () => ({
   useI18n: () => ({ t: (key: string) => key, locale: 'zh', setLocale: vi.fn() }),
 }))
 
@@ -684,15 +686,20 @@ export function useSelectionCapture(rootRef: RefObject<HTMLElement>): void {
 }
 ```
 
-- [ ] **Step 8: 在 `DocxNativePreview` 注入段落索引**
+- [ ] **Step 8: 在 docx 渲染管线注入段落索引**
 
-在 `src/features/office/DocxNativePreview.tsx` 的 `sanitizeRenderedDocx(container)` 之后加一行：
+在 `src/features/office/DocxNativePreview.tsx` 的 `renderDocxDataUrl()` 里，紧跟
+`sanitizeRenderedDocx(container)`（当前第 78 行）之后加一行：
 
 ```ts
-annotateParagraphIndexes(container)
+annotateParagraphIndexes(container);
 ```
 
-并在文件顶部加 `import { annotateParagraphIndexes } from './sidebar/selectionAnchor'`。
+并在文件顶部加 `import { annotateParagraphIndexes } from './sidebar/selectionAnchor';`。
+
+> 放在 `renderDocxDataUrl` 而不是组件里：`/office` 页与聊天产物面板复用同一渲染入口，
+> 两处都能拿到锚点，且锚点永远建立在消毒之后的 DOM 上（DOMPurify 不会剥离后加的
+> `data-*` 属性）。该文件用分号 + 2 空格缩进，沿用其既有风格（prettier 会管）。
 
 - [ ] **Step 9: 全量验证**
 
@@ -1226,7 +1233,8 @@ from fastapi import FastAPI  # noqa: E402
 @pytest.fixture()
 def client(tmp_path: Path) -> TestClient:
     app = FastAPI()
-    app.include_router(ai_router, prefix="/api/v1")
+    # 真实挂载点：office_routes.router（prefix="/office"）→ include(prefix="/ai") → main（prefix="/api/v1"）
+    app.include_router(ai_router, prefix="/api/v1/office/ai")
     return TestClient(app)
 
 
@@ -1381,6 +1389,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.data.database import get_database
+from backend.office.errors import OfficePathError
 from backend.office.storage import validate_workspace
 from backend.orchestration.llm_factory import build_llm_client_from_settings
 
@@ -1460,7 +1469,8 @@ def _error(status_code: int, code: str, message: str) -> HTTPException:
 def _validate_workspace(workspace_path: str) -> Path:
     try:
         return validate_workspace(Path(workspace_path))
-    except Exception as exc:  # noqa: BLE001 — 统一映射为 404，避免泄露本地路径
+    except OfficePathError as exc:
+        # 只吞「路径不合法」这一类；其余异常照常冒泡，避免掩盖真实故障。
         logger.warning("ai rewrite workspace rejected: %s", type(exc).__name__)
         raise _error(404, "workspace_not_found", "工作区不存在或不可访问") from exc
 
@@ -1480,11 +1490,11 @@ def _build_rewrite_prompt(req: RewriteRequest) -> str:
         task = (req.custom_instruction or "").strip()
         if not task:
             raise _error(422, "missing_custom_instruction", "custom 指令必须提供 custom_instruction")
-    else:
-        task = _INSTRUCTION_TASKS[req.instruction]
-    if req.instruction == "translate":
+    elif req.instruction == "translate":
         target = (req.target_lang or "").strip() or "中文"
         task = f"把这段文字翻译为{target}，只输出译文。"
+    else:
+        task = _INSTRUCTION_TASKS[req.instruction]
 
     parts = [task, "", "待处理文本：", "<<<", req.text, ">>>"]
     if req.context_before:
@@ -1688,7 +1698,7 @@ describe('aiApi', () => {
 
 ```ts
 import { invoke } from './desktopInvoke'
-import { handleApiError } from './errorUtils'
+import { handleApiError } from './utils'
 
 export type AiRewriteInstruction =
   | 'rewrite'
