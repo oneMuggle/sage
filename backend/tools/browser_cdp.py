@@ -109,8 +109,27 @@ def _windows_candidates() -> List[Path]:
     return [Path(base) / rel for base in bases if base for rel in (chrome_rel, edge_rel)]
 
 
+def _discover_embedded_env() -> Optional[Dict[str, Any]]:
+    """读取 Electron 注入的内置浏览器环境（端口/token）；不完整返回 None。"""
+    if os.environ.get("SAGE_EMBEDDED_BROWSER", "").strip() != "1":
+        return None
+    raw_port = os.environ.get("SAGE_EMBEDDED_BROWSER_PORT", "").strip()
+    token = os.environ.get("SAGE_EMBEDDED_BROWSER_TOKEN", "").strip()
+    if not raw_port or not token:
+        return None
+    try:
+        port = int(raw_port)
+    except ValueError:
+        return None
+    if not 0 < port < 65536:
+        return None
+    return {"port": port, "token": token}
+
+
 def discover_browser_executable() -> Optional[str]:
     """按 环境变量 → 平台路径 → PATH 顺序找 Chromium / Firefox 系浏览器。"""
+    if _discover_embedded_env():
+        return EMBEDDED_EXECUTABLE
     cap = discover_and_select()
     if cap:
         return cap.executable
