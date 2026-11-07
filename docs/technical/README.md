@@ -112,7 +112,7 @@
 | 138  | [Word 渲染级校验](./138-word-render-audit.md) | DOCX→PDF（LibreOffice/Word COM）+ PyMuPDF 检查页面尺寸/页边距/字体/页码；无转换器降级；渲染审计 REST；批量审校与 Markdown 报告 |
 | 139  | [Word 规则包 LLM 工具](./139-word-rule-tools.md) | `office_audit_word/fix_word/extract_rules/revise_word/batch_audit/render_audit`；工具上下文/工作区围栏/输出截断；bundle/profile/tool_names 反漂移同步 |
 | 141  | [技能页面优化](./141-skills-page-optimization.md) | legacy 草稿链路修复 / 三组来源（内置·模板·我的）/ 紧凑列表 + 详情抽屉 / origin 枚举 / 打开目录与定位 / zip 导出 / 软链边界 / 汉化（win7 编号避让 134–140 Word/LaTeX；main 对应 §134） |
-| 142  | [AI 文档工作台](./142-office-ai-workbench.md) | 文档库搜索/筛选/排序 / 内容哈希去重与一键清理 / 格式规范书库（提取/激活/绑定）/ AI 合并审校（规范书规则 + LLM）/ 将问题应用为 Word 修订痕迹 + pre-edit 快照 |
+| 142  | [AI 文档工作台](./142-office-ai-workbench.md) | 文档库搜索/筛选/排序 / 内容哈希去重与一键清理 / 格式规范书库（提取/激活/绑定）/ AI 合并审校（规范书规则 + LLM）/ 将问题应用为 Word 修订痕迹 + pre-edit 快照 / P2 AI 侧栏（选区改写/对话/审校/指令式修改 + 编辑预览对话框 AI 接入） |
 | 143  | [专家资产中心](./143-specialist-asset-hub.md) | 专家视角统一管理私有记忆 / 知识绑定 / 技能；手动追加私有记忆的 `agent_id` 全链路（save_memory → memorize）；提升共享与删除 |
 | 144  | [定时任务自动执行](./144-scheduled-task-auto-execute.md) | `execute` / `deliver` 双模式 + APScheduler 线程桥接主事件循环 + `run_turn_tracked` 多轮 ReAct（`max_iterations=8`）+ 三字段幂等迁移 + 执行结果跳转高亮 + 异常脱敏与一次性任务失败禁用（main 对应 §137） |
 | 145 | [专家页面交互（P0–P2）](./145-specialist-page-ux.md) | 卡片主操作/色调/禁用态 + 来源筛选/搜索/空态 + 知识数/批量操作/最近使用 + 详情页 /specialists/:id + 排序置顶（migration v14/v15） |
