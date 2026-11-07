@@ -22,6 +22,23 @@ def test_keys_whitelist():
     assert "current_session_id" in SettingsRepository.KEYS
 
 
+def test_trust_escalation_keys_whitelisted():
+    """缺陷 F 回归守卫：未登记 → get 返 None、set 抛 ValueError，渐进式授权整体失效。"""
+    assert "trust_escalation_enabled" in SettingsRepository.KEYS
+    assert "trust_escalation_threshold" in SettingsRepository.KEYS
+
+
+def test_trust_escalation_keys_are_writable(mock_db):
+    """白名单登记后 set() 必须不再抛 ValueError（mock DB 验证 SQL 调用路径）。"""
+    db, conn = mock_db
+    conn.execute.return_value.fetchone.return_value = None
+    repo = SettingsRepository(db=db)
+    repo.set("trust_escalation_enabled", "1", value_type="string", category="permissions")
+    repo.set("trust_escalation_threshold", "5", value_type="string", category="permissions")
+    assert conn.execute.call_count >= 2
+    conn.commit.assert_called()
+
+
 @pytest.mark.parametrize("key", ["font_ui", "font_code", "font_size_ui", "font_size_code"])
 def test_font_keys_whitelist(key):
     assert key in SettingsRepository.KEYS
