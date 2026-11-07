@@ -211,3 +211,6 @@ electron/update/providers/gitee.ts
 electron/update/providers/github.ts
 electron/update/providers/gitlab.ts
 electron/updateHealthChecker.ts
+
+# win7 更新管理器：request.ts 离线/内网闸 + 遥测抑制
+electron/updateManager.ts
