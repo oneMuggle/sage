@@ -37,6 +37,18 @@ export const chatRoutes: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/agents/${encodeURIComponent(String(a.id))}`,
   },
+  // P2-a: 批量操作专家（delete / enable / disable）
+  batch_agents: {
+    method: 'POST',
+    path: () => '/api/v1/agents/batch',
+    body: (a) => ({ action: a.action, ids: a.ids }),
+  },
+  // P2-d: 批量更新专家排序（置顶 / 上移 / 下移）
+  reorder_agents: {
+    method: 'POST',
+    path: () => '/api/v1/agents/reorder',
+    body: (a) => ({ items: a.items }),
+  },
   duplicate_agent: {
     method: 'POST',
     path: (a) => `/api/v1/agents/${encodeURIComponent(String(a.id))}/duplicate`,

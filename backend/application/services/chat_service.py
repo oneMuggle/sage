@@ -492,6 +492,17 @@ class ChatService:
         if final_response is None:  # pragma: no cover - 理论不可达
             final_response = Message(role=Role.ASSISTANT, content="")
 
+        # P2-b: 记录专家最近使用时间（best-effort，统计字段失败不影响对话）
+        try:
+            from backend.chat.specialist_binding import (
+                resolve_bound_specialist,
+                touch_specialist_usage,
+            )
+
+            touch_specialist_usage(resolve_bound_specialist(session_id))
+        except Exception:  # noqa: BLE001
+            logger.debug("touch_specialist_usage failed", exc_info=True)
+
         # 5.5) Repeated Pattern Signal (2026-09-14): 检测当前会话是否
         #      出现了同一工具签名的重复调用（>= 3 次）。命中则入队
         #      ``repeated_pattern`` review event, 由后台 worker 起草 skill.

@@ -492,6 +492,48 @@ register_migration(
 )
 
 
+def _v14_agents_last_used_at(conn: Any) -> None:
+    """v14：agents 增加最近使用时间（P2-b 专家卡片「N 天前使用」）。
+
+    毫秒 Unix 时间戳，与 sessions.updated_at 同口径；存量行保持 NULL
+    （视为从未使用）。由聊天路径在专家会话成功响应后 best-effort 更新。
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(agents)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "last_used_at" not in columns:
+        cursor.execute("ALTER TABLE agents ADD COLUMN last_used_at INTEGER")
+        conn.commit()
+
+
+register_migration(14, "agents_last_used_at", _v14_agents_last_used_at)
+
+
+def _v15_agents_sort_order(conn: Any) -> None:
+    """v15：agents 增加手动排序位（P2-d 置顶 / 排序）。
+
+    存量回填：按 ``updated_at`` 倒序（最近更新的排在前面），与原有
+    ``ORDER BY id`` 的观感接近。置顶 = 取更小的 sort_order。
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(agents)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "sort_order" not in columns:
+        cursor.execute("ALTER TABLE agents ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+        cursor.execute(
+            """
+            UPDATE agents SET sort_order = (
+                SELECT COUNT(*) FROM agents AS a2 WHERE a2.updated_at > agents.updated_at
+            )
+            """
+        )
+        conn.commit()
+
+
+register_migration(15, "agents_sort_order", _v15_agents_sort_order)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(

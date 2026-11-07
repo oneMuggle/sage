@@ -507,7 +507,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
         # set/reset around ``agent.run_loop`` via try/finally so the
         # ContextVar never leaks across producer invocations.
         # M3-Task 4: 解析会话绑定的专家身份，贯穿到工具上下文与记忆写入
-        from backend.chat.specialist_binding import resolve_bound_specialist
+        from backend.chat.specialist_binding import (
+            resolve_bound_specialist,
+            touch_specialist_usage,
+        )
         from backend.tools.context import (
             ToolExecutionContext,
             reset_tool_context,
@@ -2654,6 +2657,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 logger.warning(
                                     f"[REQ {request_id}] legacy memory extraction failed: {exc}"
                                 )
+
+                    # P2-b: 记录专家最近使用时间（best-effort，单行 UPDATE）
+                    touch_specialist_usage(resolve_bound_specialist(data.session_id))
 
                     # 收尾工作移出 DONE 关键路径：钩子/记忆抽取是 best-effort，
                     # 让 done 立即入队，避免前端光标长时间不结束。
