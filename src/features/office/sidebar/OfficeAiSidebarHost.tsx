@@ -13,8 +13,14 @@ import { AiSidebar } from './AiSidebar';
 import { FloatingActionBar, type FloatingActionKind } from './FloatingActionBar';
 import type { QuickActionTab } from './QuickActions';
 import { collectDocumentParagraphs } from './selectionAnchor';
-import { useAiCapabilities } from './useAiCapabilities';
+import { nextMessageId, useAiCapabilities } from './useAiCapabilities';
 import { useSelectionCapture } from './useSelectionCapture';
+
+/** Prefilled command draft. `seq` bumps on every prefill so equal text still re-syncs. */
+interface InitialCommand {
+  value: string;
+  seq: number;
+}
 
 export interface OfficeAiSidebarHostProps {
   activeTab: QuickActionTab;
@@ -48,7 +54,11 @@ export function OfficeAiSidebarHost({
   const appendMessage = useOfficeWorkspaceStore((s) => s.appendMessage);
 
   // Prefilled command draft (used by "就这段提问" in the floating bar).
-  const [initialCommand, setInitialCommand] = useState<string | undefined>(undefined);
+  const [initialCommand, setInitialCommand] = useState<InitialCommand | null>(null);
+
+  const prefillInitialCommand = (value: string) => {
+    setInitialCommand((prev) => ({ value, seq: (prev?.seq ?? 0) + 1 }));
+  };
 
   // R10: derive the absolute path of the active document from the workspace
   // root + generated filename. Office.tsx does not drill this through
@@ -62,7 +72,7 @@ export function OfficeAiSidebarHost({
   useSelectionCapture(rootRef);
 
   const { pending, errorText, runRewrite, runChat, applySuggestion, markSkipped } =
-    useAiCapabilities({ rootRef, filePath, onNavigateTab });
+    useAiCapabilities({ rootRef });
 
   // Anchor for the floating selection toolbar. Recomputed whenever the
   // normalized selection changes; the DOM rect is only meaningful while the
@@ -86,7 +96,9 @@ export function OfficeAiSidebarHost({
   };
 
   const handleFloatingAction = (kind: FloatingActionKind) => {
-    if (!selection) return;
+    // Ignore floating-bar actions while an AI request is in flight so rapid
+    // clicks cannot interleave awaits and desync `pending` / reply order.
+    if (!selection || pending) return;
 
     if (kind === 'rewrite') {
       void runRewrite({
@@ -99,7 +111,7 @@ export function OfficeAiSidebarHost({
 
     if (kind === 'chat') {
       setSidebarOpen(true);
-      setInitialCommand(selection.rawContext);
+      prefillInitialCommand(selection.rawContext);
       return;
     }
 
@@ -108,12 +120,12 @@ export function OfficeAiSidebarHost({
     // for audit so the user sees where the capability will land.
     setSidebarOpen(true);
     if (kind === 'edit') {
-      setInitialCommand(selection.rawContext);
+      prefillInitialCommand(selection.rawContext);
     } else {
       appendMessage({
-        id: `msg-${Date.now()}`,
+        id: nextMessageId(),
         role: 'system',
-        content: '审校功能将在 Task 6 实现',
+        content: t('office.ai.sidebar.task6_placeholder'),
         createdAt: Date.now(),
       });
     }
@@ -126,7 +138,7 @@ export function OfficeAiSidebarHost({
   const handleCommand = async (value: string) => {
     // Drop the prefilled draft once a command is actually submitted so the
     // next chat action starts from a clean slate.
-    setInitialCommand(undefined);
+    setInitialCommand(null);
 
     if (!value.startsWith('/')) {
       await runChat(value);
@@ -138,9 +150,9 @@ export function OfficeAiSidebarHost({
     if (command === '/audit') {
       // Task 6: full-document audit will replace this placeholder.
       appendMessage({
-        id: `msg-${Date.now()}`,
+        id: nextMessageId(),
         role: 'system',
-        content: '审校功能将在 Task 6 实现',
+        content: t('office.ai.sidebar.task6_placeholder'),
         createdAt: Date.now(),
       });
       return;
@@ -162,7 +174,7 @@ export function OfficeAiSidebarHost({
     }
 
     appendMessage({
-      id: `msg-${Date.now()}`,
+      id: nextMessageId(),
       role: 'system',
       content: fillTemplate(t('office.ai.sidebar.unknown_command'), { command }),
       createdAt: Date.now(),
@@ -198,11 +210,15 @@ export function OfficeAiSidebarHost({
           pending={pending}
           errorText={errorText}
           disabled={false}
-          initialCommand={initialCommand}
+          initialCommand={initialCommand?.value}
+          initialCommandKey={initialCommand?.seq}
           onCommand={handleCommand}
           onApply={handleApply}
           onSkip={handleSkip}
-          onClose={() => setSidebarOpen(false)}
+          onClose={() => {
+            setSidebarOpen(false);
+            setInitialCommand(null);
+          }}
           floatingBar={null}
         />
       ) : null}

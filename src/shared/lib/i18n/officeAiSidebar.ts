@@ -25,6 +25,8 @@ export const officeAiSidebarZh = {
   'office.ai.sidebar.request_failed': '请求失败：{message}',
   'office.ai.sidebar.apply_done': '已写入修订痕迹',
   'office.ai.sidebar.unknown_command': '未知命令：{command}',
+  'office.ai.sidebar.task6_placeholder': '审校功能将在 Task 6 实现',
+  'office.ai.revise.default_message': 'AI 改写',
 
   // Selection toolbar
   'office.ai.selection.rewrite': '改写润色',
@@ -91,6 +93,8 @@ export const officeAiSidebarEn: Record<keyof typeof officeAiSidebarZh, string> =
   'office.ai.sidebar.request_failed': 'Request failed: {message}',
   'office.ai.sidebar.apply_done': 'Applied as tracked changes',
   'office.ai.sidebar.unknown_command': 'Unknown command: {command}',
+  'office.ai.sidebar.task6_placeholder': 'Audit will be implemented in Task 6',
+  'office.ai.revise.default_message': 'AI rewrite',
 
   // Selection toolbar
   'office.ai.selection.rewrite': 'Rewrite',

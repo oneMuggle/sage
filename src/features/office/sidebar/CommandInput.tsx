@@ -6,6 +6,8 @@ export interface CommandInputProps {
   disabled: boolean;
   pending: boolean;
   initialValue?: string;
+  /** Bumped by the caller so an equal `initialValue` still re-syncs the draft. */
+  initialValueKey?: number;
   onSubmit: (value: string) => void;
 }
 
@@ -13,17 +15,19 @@ export function CommandInput({
   disabled,
   pending,
   initialValue,
+  initialValueKey,
   onSubmit,
 }: CommandInputProps): JSX.Element {
   const { t } = useI18n();
   const [value, setValue] = useState(initialValue ?? '');
 
-  // R12: when initialValue changes, replace the local draft.
+  // R12: when initialValue changes, replace the local draft. `initialValueKey`
+  // forces a re-sync even when the caller prefills the exact same text again.
   useEffect(() => {
     if (initialValue !== undefined) {
       setValue(initialValue);
     }
-  }, [initialValue]);
+  }, [initialValue, initialValueKey]);
 
   const submit = () => {
     const trimmed = value.trim();

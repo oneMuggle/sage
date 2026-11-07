@@ -1,6 +1,6 @@
-import { renderHook, act } from '@testing-library/react';
-import type { ReactNode } from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import type { RefObject } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useOfficeWorkspaceStore } from '../../../../entities/office/officeWorkspaceStore';
 import { aiApi } from '../../../../shared/api/aiApi';
@@ -27,13 +27,24 @@ vi.mock('../../../../shared/lib/i18n', () => ({
 const mockAiApi = vi.mocked(aiApi);
 const mockOfficeSpecApi = vi.mocked(officeSpecApi.officeSpecApi);
 
-function wrapper({ children }: { children: ReactNode }) {
-  return <div>{children}</div>;
+const doc = {
+  id: 'doc-123',
+  workspace_path: '/workspace',
+  generated_filename: 'test.docx',
+  doc_type: 'word',
+} as never;
+
+function makeRoot(html = ''): RefObject<HTMLElement> {
+  const root = document.createElement('div');
+  root.innerHTML = html;
+  return { current: root };
+}
+
+function renderCapabilities(rootRef: RefObject<HTMLElement>) {
+  return renderHook(() => useAiCapabilities({ rootRef }));
 }
 
 describe('useAiCapabilities', () => {
-  let rootRef: { current: HTMLElement | null };
-
   beforeEach(() => {
     vi.clearAllMocks();
     useOfficeWorkspaceStore.setState({
@@ -41,26 +52,13 @@ describe('useAiCapabilities', () => {
       conversation: [],
       selection: null,
     });
-    rootRef = { current: document.createElement('div') };
   });
 
   it('writes a system error when no activeDocument on runRewrite', async () => {
-    const { result } = renderHook(
-      () =>
-        useAiCapabilities({
-          rootRef: rootRef as React.RefObject<HTMLElement>,
-          filePath: null,
-          onNavigateTab: vi.fn(),
-        }),
-      { wrapper },
-    );
+    const { result } = renderCapabilities(makeRoot());
 
     await act(async () => {
-      await result.current.runRewrite({
-        instruction: 'polish',
-        text: 'test',
-        paraIndex: 0,
-      });
+      await result.current.runRewrite({ instruction: 'polish', text: 'test', paraIndex: 0 });
     });
 
     expect(mockAiApi.rewrite).not.toHaveBeenCalled();
@@ -70,31 +68,29 @@ describe('useAiCapabilities', () => {
     expect(messages[0].content).toBe('office.ai.sidebar.no_document');
   });
 
-  it('calls aiApi.rewrite and appends assistant message with suggestion card', async () => {
-    const mockDoc = {
-      id: 'doc-123',
-      workspace_path: '/workspace',
-      generated_filename: 'test.docx',
-      doc_type: 'word',
-    } as never;
+  it('writes a system error when no activeDocument on runChat', async () => {
+    const { result } = renderCapabilities(makeRoot());
 
-    useOfficeWorkspaceStore.setState({ activeDocument: mockDoc });
+    await act(async () => {
+      await result.current.runChat('hello');
+    });
 
+    expect(mockAiApi.chat).not.toHaveBeenCalled();
+    const messages = useOfficeWorkspaceStore.getState().conversation;
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe('system');
+    expect(messages[0].content).toBe('office.ai.sidebar.no_document');
+  });
+
+  it('calls aiApi.rewrite and appends an assistant message with a suggestion card', async () => {
+    useOfficeWorkspaceStore.setState({ activeDocument: doc });
     mockAiApi.rewrite.mockResolvedValue({
       ok: true,
       result: 'Rewritten text',
       model: 'test-model',
     });
 
-    const { result } = renderHook(
-      () =>
-        useAiCapabilities({
-          rootRef: rootRef as React.RefObject<HTMLElement>,
-          filePath: null,
-          onNavigateTab: vi.fn(),
-        }),
-      { wrapper },
-    );
+    const { result } = renderCapabilities(makeRoot());
 
     await act(async () => {
       await result.current.runRewrite({
@@ -120,27 +116,32 @@ describe('useAiCapabilities', () => {
     expect(messages[0].attachments?.[0].applied).toBe('pending');
   });
 
-  it('appends system message and sets errorText on rewrite failure', async () => {
-    const mockDoc = {
-      id: 'doc-123',
-      workspace_path: '/workspace',
-      generated_filename: 'test.docx',
-      doc_type: 'word',
-    } as never;
+  it('does not attach a suggestion for whole-document rewrites', async () => {
+    useOfficeWorkspaceStore.setState({ activeDocument: doc });
+    mockAiApi.rewrite.mockResolvedValue({ ok: true, result: 'Summary', model: 'test-model' });
 
-    useOfficeWorkspaceStore.setState({ activeDocument: mockDoc });
+    const { result } = renderCapabilities(makeRoot());
 
+    await act(async () => {
+      await result.current.runRewrite({ instruction: 'summarize', text: 'Full text' });
+    });
+
+    expect(mockAiApi.rewrite).toHaveBeenCalledWith({
+      workspacePath: '/workspace',
+      documentId: 'doc-123',
+      text: 'Full text',
+      instruction: 'summarize',
+    });
+    const messages = useOfficeWorkspaceStore.getState().conversation;
+    expect(messages).toHaveLength(1);
+    expect(messages[0].attachments).toHaveLength(0);
+  });
+
+  it('appends a system message and sets errorText on rewrite failure', async () => {
+    useOfficeWorkspaceStore.setState({ activeDocument: doc });
     mockAiApi.rewrite.mockRejectedValue(new Error('Network error'));
 
-    const { result } = renderHook(
-      () =>
-        useAiCapabilities({
-          rootRef: rootRef as React.RefObject<HTMLElement>,
-          filePath: null,
-          onNavigateTab: vi.fn(),
-        }),
-      { wrapper },
-    );
+    const { result } = renderCapabilities(makeRoot());
 
     await act(async () => {
       await result.current.runRewrite({
@@ -157,16 +158,9 @@ describe('useAiCapabilities', () => {
     expect(result.current.errorText).toContain('office.ai.sidebar.request_failed');
   });
 
-  it('builds history from conversation for runChat', async () => {
-    const mockDoc = {
-      id: 'doc-123',
-      workspace_path: '/workspace',
-      generated_filename: 'test.docx',
-      doc_type: 'word',
-    } as never;
-
+  it('builds history from conversation and sends joined document paragraphs', async () => {
     useOfficeWorkspaceStore.setState({
-      activeDocument: mockDoc,
+      activeDocument: doc,
       conversation: [
         { id: '1', role: 'user', content: 'Hello', createdAt: 1 },
         { id: '2', role: 'assistant', content: 'Hi there', createdAt: 2 },
@@ -180,15 +174,10 @@ describe('useAiCapabilities', () => {
       model: 'test-model',
     });
 
-    const { result } = renderHook(
-      () =>
-        useAiCapabilities({
-          rootRef: rootRef as React.RefObject<HTMLElement>,
-          filePath: null,
-          onNavigateTab: vi.fn(),
-        }),
-      { wrapper },
+    const rootRef = makeRoot(
+      '<p data-paragraph-index="0">第一段</p><p data-paragraph-index="1">第二段</p>',
     );
+    const { result } = renderCapabilities(rootRef);
 
     await act(async () => {
       await result.current.runChat('How are you?');
@@ -202,7 +191,7 @@ describe('useAiCapabilities', () => {
         { role: 'user', content: 'Hello' },
         { role: 'assistant', content: 'Hi there' },
       ],
-      documentContext: expect.any(String),
+      documentContext: '第一段\n第二段',
     });
 
     const messages = useOfficeWorkspaceStore.getState().conversation;
@@ -213,25 +202,30 @@ describe('useAiCapabilities', () => {
     expect(messages[4].content).toBe('Chat reply');
   });
 
-  it('rejects applySuggestion without a filePath', async () => {
-    const mockDoc = {
-      id: 'doc-123',
-      workspace_path: '/workspace',
-      generated_filename: 'test.docx',
-      doc_type: 'word',
-    } as never;
+  it('caps chat history at the last 20 non-system messages', async () => {
+    const seeded = Array.from({ length: 25 }, (_, index) => ({
+      id: `m-${index}`,
+      role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+      content: `message-${index}`,
+      createdAt: index,
+    }));
 
-    useOfficeWorkspaceStore.setState({ activeDocument: mockDoc });
+    useOfficeWorkspaceStore.setState({ activeDocument: doc, conversation: seeded });
+    mockAiApi.chat.mockResolvedValue({ ok: true, reply: 'ok', model: 'test-model' });
 
-    const { result } = renderHook(
-      () =>
-        useAiCapabilities({
-          rootRef: rootRef as React.RefObject<HTMLElement>,
-          filePath: null,
-          onNavigateTab: vi.fn(),
-        }),
-      { wrapper },
-    );
+    const { result } = renderCapabilities(makeRoot());
+
+    await act(async () => {
+      await result.current.runChat('next');
+    });
+
+    const call = mockAiApi.chat.mock.calls[0][0];
+    expect(call.history).toHaveLength(20);
+    expect(call.history).toEqual(seeded.slice(-20).map(({ role, content }) => ({ role, content })));
+  });
+
+  it('rejects applySuggestion without an active document', async () => {
+    const { result } = renderCapabilities(makeRoot());
 
     await act(async () => {
       await result.current.applySuggestion('msg-1', {
@@ -251,14 +245,7 @@ describe('useAiCapabilities', () => {
     expect(messages[0].content).toBe('office.ai.sidebar.apply_disabled');
   });
 
-  it('applies a suggestion and marks it applied (R11: doc_id is activeDocument.id)', async () => {
-    const mockDoc = {
-      id: 'doc-123',
-      workspace_path: '/workspace',
-      generated_filename: 'test.docx',
-      doc_type: 'word',
-    } as never;
-
+  it('derives file_path from the active document and marks the card applied', async () => {
     const suggestion = {
       id: 'sg-1',
       paraIndex: 0,
@@ -269,7 +256,7 @@ describe('useAiCapabilities', () => {
     };
 
     useOfficeWorkspaceStore.setState({
-      activeDocument: mockDoc,
+      activeDocument: doc,
       conversation: [
         {
           id: 'msg-1',
@@ -293,15 +280,7 @@ describe('useAiCapabilities', () => {
       skipped: [],
     } as never);
 
-    const { result } = renderHook(
-      () =>
-        useAiCapabilities({
-          rootRef: rootRef as React.RefObject<HTMLElement>,
-          filePath: '/workspace/test.docx',
-          onNavigateTab: vi.fn(),
-        }),
-      { wrapper },
-    );
+    const { result } = renderCapabilities(makeRoot());
 
     await act(async () => {
       await result.current.applySuggestion('msg-1', suggestion);
@@ -315,6 +294,9 @@ describe('useAiCapabilities', () => {
         add_comments: true,
       }),
     );
+
+    const call = mockOfficeSpecApi.reviseAiIssues.mock.calls[0][0];
+    expect(call.issues[0].message).toBe('office.ai.revise.default_message');
 
     const messages = useOfficeWorkspaceStore.getState().conversation;
     expect(messages[0].attachments?.[0].applied).toBe('applied');

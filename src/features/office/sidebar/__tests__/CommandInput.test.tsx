@@ -58,4 +58,33 @@ describe('CommandInput', () => {
     );
     expect(textarea.value).toBe('new draft');
   });
+
+  it('re-syncs an equal initialValue when the sync key changes', () => {
+    const onSubmit = vi.fn();
+    const { rerender } = render(
+      <CommandInput
+        disabled={false}
+        pending={false}
+        initialValue="same"
+        initialValueKey={1}
+        onSubmit={onSubmit}
+      />,
+    );
+    const textarea = screen.getByTestId('office-ai-command-input') as HTMLTextAreaElement;
+    expect(textarea.value).toBe('same');
+
+    fireEvent.change(textarea, { target: { value: 'edited' } });
+    expect(textarea.value).toBe('edited');
+
+    rerender(
+      <CommandInput
+        disabled={false}
+        pending={false}
+        initialValue="same"
+        initialValueKey={2}
+        onSubmit={onSubmit}
+      />,
+    );
+    expect(textarea.value).toBe('same');
+  });
 });

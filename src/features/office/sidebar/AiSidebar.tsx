@@ -18,6 +18,7 @@ export interface AiSidebarProps {
   errorText: string | null;
   disabled: boolean;
   initialCommand?: string;
+  initialCommandKey?: number;
   onCommand: (value: string) => void;
   onApply: (messageId: string, suggestion: SuggestionCardData) => void;
   onSkip: (messageId: string, suggestionId: string) => void;
@@ -32,6 +33,7 @@ export function AiSidebar({
   errorText,
   disabled,
   initialCommand,
+  initialCommandKey,
   onCommand,
   onApply,
   onSkip,
@@ -86,6 +88,7 @@ export function AiSidebar({
         disabled={disabled}
         pending={pending}
         initialValue={initialCommand}
+        initialValueKey={initialCommandKey}
         onSubmit={onCommand}
       />
 

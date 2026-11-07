@@ -7,10 +7,18 @@ import { aiApi, type AiRewriteInstruction } from '../../../shared/api/aiApi';
 import { officeSpecApi } from '../../../shared/api/officeSpecApi';
 import { fillTemplate } from '../../../shared/lib/fillTemplate';
 import { useI18n } from '../../../shared/lib/i18n';
+import { joinWorkspacePath } from '../latexPath';
 
-import type { QuickActionTab } from './QuickActions';
 import { collectDocumentParagraphs } from './selectionAnchor';
 import { suggestionFromRewrite, toReviseIssue } from './suggestionFactory';
+
+let messageSeq = 0;
+
+/** Module-level monotonic id: unique even when two messages land in the same millisecond. */
+export function nextMessageId(prefix = 'msg'): string {
+  messageSeq += 1;
+  return `${prefix}-${Date.now()}-${messageSeq}`;
+}
 
 export interface AiCapabilities {
   pending: boolean;
@@ -26,11 +34,7 @@ export interface AiCapabilities {
   markSkipped: (messageId: string, suggestionId: string) => void;
 }
 
-export function useAiCapabilities(deps: {
-  rootRef: RefObject<HTMLElement>;
-  filePath: string | null;
-  onNavigateTab: (tab: QuickActionTab) => void;
-}): AiCapabilities {
+export function useAiCapabilities(deps: { rootRef: RefObject<HTMLElement> }): AiCapabilities {
   const { t } = useI18n();
   const [pending, setPending] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -48,7 +52,7 @@ export function useAiCapabilities(deps: {
   }) => {
     if (!activeDocument) {
       appendMessage({
-        id: `msg-${Date.now()}`,
+        id: nextMessageId(),
         role: 'system',
         content: t('office.ai.sidebar.no_document'),
         createdAt: Date.now(),
@@ -81,7 +85,7 @@ export function useAiCapabilities(deps: {
           : [];
 
       appendMessage({
-        id: `msg-${Date.now()}`,
+        id: nextMessageId(),
         role: 'assistant',
         content: result.result,
         attachments,
@@ -92,7 +96,7 @@ export function useAiCapabilities(deps: {
       const errorMessage = fillTemplate(t('office.ai.sidebar.request_failed'), { message });
       setErrorText(errorMessage);
       appendMessage({
-        id: `msg-${Date.now()}`,
+        id: nextMessageId(),
         role: 'system',
         content: errorMessage,
         createdAt: Date.now(),
@@ -105,7 +109,7 @@ export function useAiCapabilities(deps: {
   const runChat = async (message: string) => {
     if (!activeDocument) {
       appendMessage({
-        id: `msg-${Date.now()}`,
+        id: nextMessageId(),
         role: 'system',
         content: t('office.ai.sidebar.no_document'),
         createdAt: Date.now(),
@@ -117,7 +121,7 @@ export function useAiCapabilities(deps: {
     setErrorText(null);
 
     appendMessage({
-      id: `msg-${Date.now()}-user`,
+      id: nextMessageId('msg-user'),
       role: 'user',
       content: message,
       createdAt: Date.now(),
@@ -146,7 +150,7 @@ export function useAiCapabilities(deps: {
       });
 
       appendMessage({
-        id: `msg-${Date.now()}-assistant`,
+        id: nextMessageId('msg-assistant'),
         role: 'assistant',
         content: result.reply,
         createdAt: Date.now(),
@@ -158,7 +162,7 @@ export function useAiCapabilities(deps: {
       });
       setErrorText(errorMessage);
       appendMessage({
-        id: `msg-${Date.now()}-system`,
+        id: nextMessageId('msg-system'),
         role: 'system',
         content: errorMessage,
         createdAt: Date.now(),
@@ -169,9 +173,25 @@ export function useAiCapabilities(deps: {
   };
 
   const applySuggestion = async (messageId: string, suggestion: SuggestionCardData) => {
-    if (!deps.filePath || !activeDocument) {
+    if (!activeDocument) {
       appendMessage({
-        id: `msg-${Date.now()}`,
+        id: nextMessageId(),
+        role: 'system',
+        content: t('office.ai.sidebar.apply_disabled'),
+        createdAt: Date.now(),
+      });
+      return;
+    }
+
+    // Derive file_path from the same root as workspace_path so the two can
+    // never diverge; the host's filePath is only used for `canApply`.
+    const filePath = joinWorkspacePath(
+      activeDocument.workspace_path ?? '',
+      activeDocument.generated_filename,
+    );
+    if (!filePath) {
+      appendMessage({
+        id: nextMessageId(),
         role: 'system',
         content: t('office.ai.sidebar.apply_disabled'),
         createdAt: Date.now(),
@@ -185,15 +205,15 @@ export function useAiCapabilities(deps: {
     try {
       await officeSpecApi.reviseAiIssues({
         workspace_path: activeDocument.workspace_path ?? '',
-        file_path: deps.filePath,
+        file_path: filePath,
         doc_id: activeDocument.id,
-        issues: [toReviseIssue(suggestion)],
+        issues: [toReviseIssue(suggestion, t('office.ai.revise.default_message'))],
         add_comments: true,
       });
 
       updateSuggestionStatus(messageId, suggestion.id, 'applied');
       appendMessage({
-        id: `msg-${Date.now()}`,
+        id: nextMessageId(),
         role: 'system',
         content: t('office.ai.sidebar.apply_done'),
         createdAt: Date.now(),
@@ -203,7 +223,7 @@ export function useAiCapabilities(deps: {
       const errorMessage = fillTemplate(t('office.ai.sidebar.apply_failed'), { message });
       setErrorText(errorMessage);
       appendMessage({
-        id: `msg-${Date.now()}`,
+        id: nextMessageId(),
         role: 'system',
         content: errorMessage,
         createdAt: Date.now(),

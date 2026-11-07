@@ -18,12 +18,15 @@ export function suggestionFromRewrite(params: {
   };
 }
 
-export function toReviseIssue(suggestion: SuggestionCardData): AiReviewIssue {
+export function toReviseIssue(
+  suggestion: SuggestionCardData,
+  defaultMessage: string,
+): AiReviewIssue {
   return {
     id: suggestion.id,
     severity: suggestion.severity,
     category: 'ai_rewrite',
-    message: suggestion.ruleName ?? 'AI 改写',
+    message: suggestion.ruleName ?? defaultMessage,
     suggestion: suggestion.suggestedText,
     rationale: '',
     expected: suggestion.suggestedText,
