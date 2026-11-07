@@ -6,6 +6,7 @@ import { rulesApi, type RuleConflict, type RuleEntry } from '../../shared/api/ru
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
+import { AiRulePatchDrawer } from './AiRulePatchDrawer';
 import { EffectiveRulesDrawer } from './EffectiveRulesDrawer';
 import { RuleEditorDialog } from './RuleEditorDialog';
 import { type RuleAction } from './RuleRow';
@@ -173,7 +174,11 @@ function useRuleEditor() {
 }
 
 /** 新建 / 编辑 / 复制 / 停用 / 删除的状态与副作用。 */
-function useRuleWrites(projectId: string, reload: () => void) {
+function useRuleWrites(
+  projectId: string,
+  reload: () => void,
+  openAi: (entry: RuleEntry | null) => void,
+) {
   const { t } = useI18n();
   const { editorOpen, editTarget, setEditTarget, setEditorOpen, openCreate, closeEditor } =
     useRuleEditor();
@@ -185,6 +190,10 @@ function useRuleWrites(projectId: string, reload: () => void) {
 
   const handleAction = useCallback(
     async (action: RuleAction, entry: RuleEntry) => {
+      if (action === 'ai') {
+        openAi(entry);
+        return;
+      }
       if (action === 'edit') {
         setEditTarget(entry);
         setEditorOpen(true);
@@ -196,7 +205,7 @@ function useRuleWrites(projectId: string, reload: () => void) {
         await deleteRule(projectId, entry, reload, t);
       }
     },
-    [projectId, reload, setEditTarget, setEditorOpen, t],
+    [openAi, projectId, reload, setEditTarget, setEditorOpen, t],
   );
 
   return { editorOpen, editTarget, openCreate, closeEditor, handleSaved, handleAction };
@@ -207,7 +216,15 @@ function useRulesPanelState(projectId: string) {
   const [search, setSearch] = useState('');
   const [layer, setLayer] = useState<LayerFilter>('all');
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const writes = useRuleWrites(projectId, reload);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiTarget, setAiTarget] = useState<RuleEntry | null>(null);
+
+  const openAi = useCallback((entry: RuleEntry | null = null) => {
+    setAiTarget(entry);
+    setAiOpen(true);
+  }, []);
+
+  const writes = useRuleWrites(projectId, reload, openAi);
   const conflicted = useMemo(() => conflictedRuleIds(conflicts), [conflicts]);
   const groups = useMemo(
     () => buildRuleGroups(filterRules(rules, { search, layer })),
@@ -226,6 +243,10 @@ function useRulesPanelState(projectId: string) {
     setLayer,
     drawerOpen,
     setDrawerOpen,
+    aiOpen,
+    aiTarget,
+    openAi,
+    setAiOpen,
     conflicted,
     groups,
     ...writes,
@@ -244,6 +265,7 @@ export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
         onOpenDrawer={() => state.setDrawerOpen(true)}
         onRefresh={state.reload}
         onCreate={state.openCreate}
+        onOpenAi={() => state.openAi(null)}
       />
       <RulesFilterBar
         search={state.search}
@@ -276,6 +298,25 @@ export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
         onClose={() => state.setDrawerOpen(false)}
         entries={state.effectiveEntries}
         conflicts={state.conflicts}
+      />
+      <AiRulePatchDrawer
+        isOpen={state.aiOpen}
+        onClose={() => state.setAiOpen(false)}
+        projectId={projectId}
+        focusEntry={state.aiTarget}
+        onApplied={state.reload}
+        onOpenPlaybook={
+          onOpenSource
+            ? () => {
+                const target =
+                  state.aiTarget?.layer === 'playbook'
+                    ? state.aiTarget
+                    : state.rules.find((entry) => entry.layer === 'playbook');
+                if (target) onOpenSource(target);
+                state.setAiOpen(false);
+              }
+            : undefined
+        }
       />
     </div>
   );

@@ -72,4 +72,22 @@ export const rulesRoutes: Record<string, CommandRoute> = {
       return `/api/v1/projects/${projectId(a)}/rules/raw?${params.toString()}`;
     },
   },
+  rules_patch_preview: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/rules/patches/preview`,
+    body: (a) => ({
+      instruction: a.instruction ?? '',
+      rule_id: a.ruleId ?? a.rule_id ?? null,
+    }),
+  },
+  rules_patch_apply: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/rules/patches/apply`,
+    // operations 里的 camelCase 键（opId/ruleId/expectedUpdatedAt）由
+    // invoke.ts 递归转 snake_case；before/after 内部键原样透传。
+    body: (a) => ({
+      instruction: a.instruction ?? '',
+      operations: a.operations ?? [],
+    }),
+  },
 };

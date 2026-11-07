@@ -74,6 +74,71 @@ export interface RawRulesResponse {
   truncated: boolean;
 }
 
+export type PatchAction = 'add' | 'update' | 'delete' | 'toggle';
+
+/** apply 的单条执行结果；`invalid` 与 `conflict` 都算未应用。 */
+export type PatchResultStatus = 'applied' | 'invalid' | 'conflict';
+
+export interface PatchOperation {
+  opId: string;
+  action: PatchAction;
+  layer: RuleLayer;
+  ruleId: string | null;
+  /** 可写层为条目快照；新增为空对象。 */
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  reason: string;
+  expectedUpdatedAt: number | null;
+  /** 预览阶段已判定的不可执行原因（readonly_layer / rule_not_found 等）。 */
+  error: string | null;
+}
+
+export interface PatchPreviewResponse {
+  llmAvailable: boolean;
+  message: string;
+  operations: PatchOperation[];
+}
+
+export interface PatchApplyResult {
+  opId: string;
+  status: PatchResultStatus;
+  message: string;
+  /** conflict 时附带的当前值。 */
+  current: Record<string, unknown> | null;
+}
+
+export interface PatchApplyResponse {
+  results: PatchApplyResult[];
+  applied: number;
+  failed: number;
+}
+
+interface PatchOperationWire {
+  op_id: string;
+  action: PatchAction;
+  layer: RuleLayer;
+  rule_id: string | null;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  reason: string;
+  expected_updated_at: number | null;
+  error: string | null;
+}
+
+function mapPatchOperation(wire: PatchOperationWire): PatchOperation {
+  return {
+    opId: wire.op_id,
+    action: wire.action,
+    layer: wire.layer,
+    ruleId: wire.rule_id ?? null,
+    before: wire.before ?? {},
+    after: wire.after ?? {},
+    reason: wire.reason ?? '',
+    expectedUpdatedAt: wire.expected_updated_at ?? null,
+    error: wire.error ?? null,
+  };
+}
+
 interface RuleEntryWire {
   id: string;
   layer: RuleLayer;
@@ -145,6 +210,65 @@ export const rulesApi = {
       path: response.path ?? '',
       content: response.content ?? '',
       truncated: Boolean(response.truncated),
+    };
+  },
+
+  async previewPatch(
+    projectId: string,
+    input: { instruction: string; ruleId?: string | null },
+  ): Promise<PatchPreviewResponse> {
+    const response = await invoke<{
+      llm_available: boolean;
+      message: string;
+      operations: PatchOperationWire[];
+    }>('rules_patch_preview', {
+      projectId,
+      instruction: input.instruction,
+      ruleId: input.ruleId ?? null,
+    });
+    return {
+      llmAvailable: Boolean(response.llm_available),
+      message: response.message ?? '',
+      operations: (response.operations ?? []).map(mapPatchOperation),
+    };
+  },
+
+  async applyPatch(
+    projectId: string,
+    input: { instruction: string; operations: PatchOperation[] },
+  ): Promise<PatchApplyResponse> {
+    const response = await invoke<{
+      results: Array<{
+        op_id: string;
+        status: PatchResultStatus;
+        message: string;
+        current?: Record<string, unknown> | null;
+      }>;
+      applied: number;
+      failed: number;
+    }>('rules_patch_apply', {
+      projectId,
+      instruction: input.instruction,
+      operations: input.operations.map((operation) => ({
+        opId: operation.opId,
+        action: operation.action,
+        layer: operation.layer,
+        ruleId: operation.ruleId,
+        before: operation.before,
+        after: operation.after,
+        reason: operation.reason,
+        expectedUpdatedAt: operation.expectedUpdatedAt,
+      })),
+    });
+    return {
+      results: (response.results ?? []).map((item) => ({
+        opId: item.op_id,
+        status: item.status,
+        message: item.message ?? '',
+        current: item.current ?? null,
+      })),
+      applied: Number(response.applied ?? 0),
+      failed: Number(response.failed ?? 0),
     };
   },
 };

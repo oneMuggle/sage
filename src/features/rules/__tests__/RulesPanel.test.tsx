@@ -25,18 +25,21 @@ vi.mock('sonner', () => ({
   },
 }));
 
-const { list, effective, create, update, remove, raw, confirmDialog } = vi.hoisted(() => ({
-  list: vi.fn(),
-  effective: vi.fn(),
-  create: vi.fn(),
-  update: vi.fn(),
-  remove: vi.fn(),
-  raw: vi.fn(),
-  confirmDialog: vi.fn(),
-}));
+const { list, effective, create, update, remove, raw, previewPatch, applyPatch, confirmDialog } =
+  vi.hoisted(() => ({
+    list: vi.fn(),
+    effective: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+    raw: vi.fn(),
+    previewPatch: vi.fn(),
+    applyPatch: vi.fn(),
+    confirmDialog: vi.fn(),
+  }));
 
 vi.mock('../../../shared/api/rulesApi', () => ({
-  rulesApi: { list, effective, create, update, remove, raw },
+  rulesApi: { list, effective, create, update, remove, raw, previewPatch, applyPatch },
 }));
 
 vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
@@ -345,5 +348,26 @@ describe('RulesPanel', () => {
     fireEvent.click(await screen.findByTestId(`rule-menu-copy-${CONSTRAINT_ENTRY.id}`));
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(CONSTRAINT_ENTRY.content));
+  });
+
+  it('opens the AI drawer from the toolbar', async () => {
+    list.mockResolvedValue([CONSTRAINT_ENTRY]);
+    effective.mockResolvedValue({ entries: [], conflicts: [] });
+    renderPanel();
+    fireEvent.click(await screen.findByTestId('rules-ai-open'));
+    expect(await screen.findByTestId('ai-drawer')).toBeInTheDocument();
+    expect(screen.getByTestId('ai-instruction')).toHaveValue('');
+  });
+
+  it('opens the AI drawer focused on a rule from the row menu', async () => {
+    list.mockResolvedValue([CONSTRAINT_ENTRY]);
+    effective.mockResolvedValue({ entries: [], conflicts: [] });
+    renderPanel();
+    const trigger = await screen.findByTestId(`rule-menu-${CONSTRAINT_ENTRY.id}`);
+    fireEvent.pointerDown(trigger, { button: 0 });
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    fireEvent.click(await screen.findByTestId(`rule-menu-ai-${CONSTRAINT_ENTRY.id}`));
+    expect(await screen.findByTestId('ai-drawer')).toBeInTheDocument();
+    expect(screen.getByTestId('ai-instruction')).toHaveValue('改写这条规则：使用双引号');
   });
 });

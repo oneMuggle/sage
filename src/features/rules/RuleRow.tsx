@@ -14,7 +14,7 @@ import {
 
 import { layerLabelKey } from './rulesView';
 
-export type RuleAction = 'edit' | 'copy' | 'toggle' | 'delete';
+export type RuleAction = 'edit' | 'copy' | 'toggle' | 'delete' | 'ai';
 
 export interface RuleRowProps {
   entry: RuleEntry;
@@ -103,6 +103,19 @@ function CopyMenuItem({ entry, onAction }: RuleMenuProps) {
   );
 }
 
+/** 所有行都可进入；规程条目在抽屉里以只读卡片展示。 */
+function AiMenuItem({ entry, onAction }: RuleMenuProps) {
+  const { t } = useI18n();
+  return (
+    <DropdownMenuItem
+      onSelect={() => onAction('ai', entry)}
+      data-testid={`rule-menu-ai-${entry.id}`}
+    >
+      {t('rules.menu.ai')}
+    </DropdownMenuItem>
+  );
+}
+
 function ToggleMenuItem({ entry, onAction }: RuleMenuProps) {
   const { t } = useI18n();
   return (
@@ -149,6 +162,7 @@ function RuleMenu({ entry, onAction }: RuleMenuProps) {
       <DropdownMenuContent align="end">
         <EditMenuItem entry={entry} writable={writable} onAction={onAction} />
         <CopyMenuItem entry={entry} onAction={onAction} />
+        <AiMenuItem entry={entry} onAction={onAction} />
         {canToggle && <ToggleMenuItem entry={entry} onAction={onAction} />}
         {writable && (
           <>

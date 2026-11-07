@@ -49,6 +49,7 @@ interface RulesHeaderProps {
   onOpenDrawer: () => void;
   onRefresh: () => void;
   onCreate: () => void;
+  onOpenAi: () => void;
 }
 
 export function RulesHeader({
@@ -58,6 +59,7 @@ export function RulesHeader({
   onOpenDrawer,
   onRefresh,
   onCreate,
+  onOpenAi,
 }: RulesHeaderProps) {
   const { t } = useI18n();
   return (
@@ -70,6 +72,9 @@ export function RulesHeader({
         <RulesHealthBadge enabledCount={enabledCount} conflictCount={conflictCount} />
         <Button variant="secondary" size="sm" onClick={onCreate} data-testid="rules-create">
           {t('rules.action.create')}
+        </Button>
+        <Button variant="secondary" size="sm" onClick={onOpenAi} data-testid="rules-ai-open">
+          {t('rules.ai.open')}
         </Button>
         <Button
           variant="secondary"

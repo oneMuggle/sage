@@ -58,6 +58,12 @@ export { rulesApi } from './rulesApi';
 export type {
   CreatableRuleLayer,
   EffectiveRulesResponse,
+  PatchAction,
+  PatchApplyResponse,
+  PatchApplyResult,
+  PatchOperation,
+  PatchPreviewResponse,
+  PatchResultStatus,
   RawRulesResponse,
   RuleConflict,
   RuleCreateInput,
