@@ -41,7 +41,7 @@ export interface PatchCardProps {
   result?: PatchApplyResult | null;
   onToggle?: (opId: string, selected: boolean) => void;
   /** 只读层（规程）改动的跳转入口。 */
-  onOpenPlaybook?: () => void;
+  onOpenPlaybook?: (operation: PatchOperation) => void;
 }
 
 function readContent(value: Record<string, unknown>): string {
@@ -75,6 +75,11 @@ export function PatchCard({
   const errorMessage = errorKey
     ? t(errorKey).replace('{max}', String(MAX_RULE_CHARS))
     : operation.error;
+  // 每张卡片的勾选框都要能区分具体操作，而不是同名复选框。
+  const selectLabel =
+    [t(ACTION_KEYS[operation.action]), operation.ruleId || before || change]
+      .filter(Boolean)
+      .join(' · ') || t('rules.ai.select');
 
   return (
     <div
@@ -86,9 +91,9 @@ export function PatchCard({
           type="checkbox"
           className="mt-1"
           checked={selected}
-          disabled={disabled || isReadonly}
+          disabled={disabled || Boolean(operation.error)}
           onChange={(event) => onToggle?.(operation.opId, event.target.checked)}
-          aria-label={t('rules.ai.select')}
+          aria-label={selectLabel}
           data-testid={`patch-select-${operation.opId}`}
         />
         <div className="min-w-0 flex-1 space-y-1">
@@ -149,7 +154,7 @@ export function PatchCard({
           {isReadonly && onOpenPlaybook ? (
             <button
               type="button"
-              onClick={onOpenPlaybook}
+              onClick={() => onOpenPlaybook(operation)}
               className="text-xs text-accent underline"
               data-testid={`patch-open-playbook-${operation.opId}`}
             >

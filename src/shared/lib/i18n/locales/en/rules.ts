@@ -94,6 +94,7 @@ export const enRules: Record<RulesTranslationKey, string> = {
     'Describe the change in plain language; AI returns a diff you confirm item by item.',
   'rules.ai.instructionPlaceholder':
     'e.g. Unify code-style rules on ruff and remove duplicate formatting conventions',
+  'rules.ai.instructionLabel': 'Change instruction',
   'rules.ai.prefill': 'Rewrite this rule: {content}',
   'rules.ai.focusHint': 'Only generating changes for “{label}”',
   'rules.ai.generate': 'Generate changes',

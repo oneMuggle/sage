@@ -307,11 +307,11 @@ export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
         onApplied={state.reload}
         onOpenPlaybook={
           onOpenSource
-            ? () => {
+            ? (operation) => {
                 const target =
-                  state.aiTarget?.layer === 'playbook'
-                    ? state.aiTarget
-                    : state.rules.find((entry) => entry.layer === 'playbook');
+                  state.rules.find((entry) => entry.id === operation.ruleId) ??
+                  (state.aiTarget?.layer === operation.layer ? state.aiTarget : undefined) ??
+                  state.rules.find((entry) => entry.layer === operation.layer);
                 if (target) onOpenSource(target);
                 state.setAiOpen(false);
               }

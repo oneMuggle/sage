@@ -84,6 +84,7 @@ export const zhRules = {
   'rules.ai.title': 'AI 修改规则',
   'rules.ai.subtitle': '用自然语言描述修改，AI 会给出可逐条确认的 diff。',
   'rules.ai.instructionPlaceholder': '例如：把代码风格规则统一为 ruff，并去掉重复的格式约定',
+  'rules.ai.instructionLabel': '修改说明',
   'rules.ai.prefill': '改写这条规则：{content}',
   'rules.ai.focusHint': '仅针对「{label}」生成修改',
   'rules.ai.generate': '生成修改建议',

@@ -1,8 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { PatchOperation, PatchPreviewResponse } from '../../../shared/api/rulesApi';
+import type {
+  PatchApplyResponse,
+  PatchOperation,
+  PatchPreviewResponse,
+} from '../../../shared/api/rulesApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { AiRulePatchDrawer, initialSelection } from '../AiRulePatchDrawer';
 
@@ -130,6 +134,106 @@ describe('AiRulePatchDrawer', () => {
     expect(payload.operations.map((item: PatchOperation) => item.opId)).toEqual(['op-1']);
     expect(onApplied).toHaveBeenCalled();
     expect(await screen.findByTestId('patch-result-op-1')).toHaveTextContent('已应用');
+    expect(screen.getByTestId('ai-apply-summary')).toHaveTextContent('已应用 1 条修改');
+  });
+
+  it('discards an in-flight preview that resolves after the drawer was reopened', async () => {
+    let resolvePreview: (value: PatchPreviewResponse) => void = () => {};
+    previewPatch.mockReturnValue(
+      new Promise<PatchPreviewResponse>((resolve) => {
+        resolvePreview = resolve;
+      }),
+    );
+    const { rerender } = renderDrawer();
+    fireEvent.change(screen.getByTestId('ai-instruction'), { target: { value: '旧指令' } });
+    fireEvent.click(screen.getByTestId('ai-generate'));
+    expect(screen.getByTestId('ai-generate')).toBeDisabled();
+
+    const props = { onClose: () => {}, projectId: 'p1', onApplied: vi.fn() };
+    rerender(
+      <I18nProvider defaultLocale="zh">
+        <AiRulePatchDrawer isOpen={false} {...props} />
+      </I18nProvider>,
+    );
+    rerender(
+      <I18nProvider defaultLocale="zh">
+        <AiRulePatchDrawer isOpen {...props} />
+      </I18nProvider>,
+    );
+
+    await act(async () => {
+      resolvePreview(preview());
+    });
+
+    expect(screen.queryByTestId('patch-card-op-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('ai-apply')).not.toBeInTheDocument();
+    // 重开的会话没有被上一轮在途请求卡在“分析中”。
+    fireEvent.change(screen.getByTestId('ai-instruction'), { target: { value: '新指令' } });
+    expect(screen.getByTestId('ai-generate')).not.toBeDisabled();
+  });
+
+  it('prevents generating and applying at the same time', async () => {
+    let resolvePreview: (value: PatchPreviewResponse) => void = () => {};
+    previewPatch.mockReturnValue(
+      new Promise<PatchPreviewResponse>((resolve) => {
+        resolvePreview = resolve;
+      }),
+    );
+    renderDrawer();
+    fireEvent.change(screen.getByTestId('ai-instruction'), { target: { value: '改一下' } });
+    fireEvent.click(screen.getByTestId('ai-generate'));
+
+    expect(screen.getByTestId('ai-generate')).toBeDisabled();
+    // 生成期间旧卡片与旧的应用入口都不会残留。
+    expect(screen.queryByTestId('ai-apply')).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolvePreview(preview());
+    });
+    await screen.findByTestId('patch-card-op-1');
+
+    let resolveApply: (value: PatchApplyResponse) => void = () => {};
+    applyPatch.mockReturnValue(
+      new Promise<PatchApplyResponse>((resolve) => {
+        resolveApply = resolve;
+      }),
+    );
+    fireEvent.click(screen.getByTestId('ai-apply'));
+    expect(screen.getByTestId('ai-generate')).toBeDisabled();
+    expect(screen.getByTestId('ai-apply')).toBeDisabled();
+
+    await act(async () => {
+      resolveApply({
+        results: [{ opId: 'op-1', status: 'applied', message: '', current: null }],
+        applied: 1,
+        failed: 0,
+      });
+    });
+    expect(screen.getByTestId('ai-generate')).not.toBeDisabled();
+  });
+
+  it('reports a partial apply summary when some operations fail', async () => {
+    previewPatch.mockResolvedValue(
+      preview({ operations: [operation({ opId: 'op-1' }), operation({ opId: 'op-2' })] }),
+    );
+    applyPatch.mockResolvedValue({
+      results: [
+        { opId: 'op-1', status: 'applied', message: '', current: null },
+        { opId: 'op-2', status: 'invalid', message: '格式错误', current: null },
+      ],
+      applied: 1,
+      failed: 1,
+    });
+    renderDrawer();
+
+    fireEvent.change(screen.getByTestId('ai-instruction'), { target: { value: '改一下' } });
+    fireEvent.click(screen.getByTestId('ai-generate'));
+    await screen.findByTestId('patch-card-op-1');
+    fireEvent.click(screen.getByTestId('ai-apply'));
+
+    expect(await screen.findByTestId('ai-apply-summary')).toHaveTextContent(
+      '已应用 1 条，1 条未应用',
+    );
   });
 
   it('keeps conflicted operations visible with the current value', async () => {

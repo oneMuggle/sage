@@ -1,6 +1,6 @@
 import { Dialog, Transition } from '@headlessui/react';
 import { X } from 'lucide-react';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 
 import { rulesApi } from '../../shared/api/rulesApi';
 import type {
@@ -22,7 +22,7 @@ export interface AiRulePatchDrawerProps {
   /** 从单条规则「让 AI 改写这条」进入时的目标条目。 */
   focusEntry?: RuleEntry | null;
   onApplied: () => void;
-  onOpenPlaybook?: () => void;
+  onOpenPlaybook?: (operation: PatchOperation) => void;
 }
 
 /**
@@ -42,6 +42,13 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** IPC 会剥掉自定义错误码，message 文本是渲染侧唯一稳定的兜底信号。 */
+function isSchemaError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as { code?: unknown }).code;
+  return code === 'patch_schema_invalid' || error.message.includes('AI 返回格式不正确');
+}
+
 export function AiRulePatchDrawer({
   isOpen,
   onClose,
@@ -56,18 +63,45 @@ export function AiRulePatchDrawer({
   const [preview, setPreview] = useState<PatchPreviewResponse | null>(null);
   const [selection, setSelection] = useState<Record<string, boolean>>({});
   const [results, setResults] = useState<Record<string, PatchApplyResult>>({});
+  const [applySummary, setApplySummary] = useState<{ applied: number; failed: number } | null>(
+    null,
+  );
   const [generating, setGenerating] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 每次打开都从目标条目的预填文案开始，不残留上一轮对话。
+  // 会话纪元：关闭后重开 +1，所有在途请求据此丢弃过期结果。
+  const epochRef = useRef(0);
+  const sessionOpenedRef = useRef(false);
+  const prefillOpenedRef = useRef(false);
+
+  // 只在 isOpen 的关闭→打开跃迁时清空会话状态（语言切换不触发）。
   useEffect(() => {
-    if (!isOpen) return;
-    setInstruction(prefill);
+    if (!isOpen) {
+      sessionOpenedRef.current = false;
+      return;
+    }
+    if (sessionOpenedRef.current) return;
+    sessionOpenedRef.current = true;
+    epochRef.current += 1;
     setPreview(null);
     setSelection({});
     setResults({});
+    setApplySummary(null);
     setError(null);
+    setGenerating(false);
+    setApplying(false);
+  }, [isOpen]);
+
+  // 预填文案单独放在打开跃迁里，避免语言切换时覆盖用户正在编辑的指令。
+  useEffect(() => {
+    if (!isOpen) {
+      prefillOpenedRef.current = false;
+      return;
+    }
+    if (prefillOpenedRef.current) return;
+    prefillOpenedRef.current = true;
+    setInstruction(prefill);
   }, [isOpen, prefill]);
 
   const selectedOperations = useMemo(
@@ -76,39 +110,54 @@ export function AiRulePatchDrawer({
   );
 
   const handleGenerate = async () => {
-    if (generating || !instruction.trim()) return;
+    if (generating || applying || !instruction.trim()) return;
+    const epoch = epochRef.current;
     setGenerating(true);
-    setError(null);
+    // 新一轮生成前清空旧结果，避免在途期间误选/误提交上一轮的卡片。
+    setPreview(null);
+    setSelection({});
     setResults({});
+    setApplySummary(null);
+    setError(null);
     try {
       const response = await rulesApi.previewPatch(projectId, {
         instruction: instruction.trim(),
         ruleId: focusEntry?.id ?? null,
       });
+      if (epochRef.current !== epoch) return;
       setPreview(response);
       setSelection(initialSelection(response.operations));
     } catch (err) {
+      if (epochRef.current !== epoch) return;
       setPreview(null);
-      setError(t('rules.ai.failed').replace('{message}', errorMessage(err)));
+      setError(
+        isSchemaError(err)
+          ? t('rules.ai.schemaFailed')
+          : t('rules.ai.failed').replace('{message}', errorMessage(err)),
+      );
     } finally {
-      setGenerating(false);
+      if (epochRef.current === epoch) setGenerating(false);
     }
   };
 
   const handleApply = async () => {
-    if (applying || selectedOperations.length === 0) return;
+    if (applying || generating || selectedOperations.length === 0) return;
+    const epoch = epochRef.current;
     setApplying(true);
     setError(null);
+    setApplySummary(null);
     try {
       const response = await rulesApi.applyPatch(projectId, {
         instruction: instruction.trim(),
         operations: selectedOperations,
       });
+      if (epochRef.current !== epoch) return;
       const next: Record<string, PatchApplyResult> = {};
       response.results.forEach((item) => {
         next[item.opId] = item;
       });
       setResults(next);
+      setApplySummary({ applied: response.applied, failed: response.failed });
       if (response.applied > 0) {
         onApplied();
         // 已成功的条目退出可选集合，剩下的（冲突/未应用）留给用户再处理。
@@ -121,9 +170,10 @@ export function AiRulePatchDrawer({
         });
       }
     } catch (err) {
+      if (epochRef.current !== epoch) return;
       setError(t('rules.ai.applyFailed').replace('{message}', errorMessage(err)));
     } finally {
-      setApplying(false);
+      if (epochRef.current === epoch) setApplying(false);
     }
   };
 
@@ -188,6 +238,7 @@ export function AiRulePatchDrawer({
                   value={instruction}
                   onChange={(event) => setInstruction(event.target.value)}
                   placeholder={t('rules.ai.instructionPlaceholder')}
+                  aria-label={t('rules.ai.instructionLabel')}
                   rows={3}
                   data-testid="ai-instruction"
                 />
@@ -197,7 +248,7 @@ export function AiRulePatchDrawer({
                     variant="primary"
                     size="sm"
                     onClick={handleGenerate}
-                    disabled={generating || !instruction.trim()}
+                    disabled={generating || applying || !instruction.trim()}
                     data-testid="ai-generate"
                   >
                     {generating ? t('rules.ai.generating') : t('rules.ai.generate')}
@@ -207,7 +258,7 @@ export function AiRulePatchDrawer({
                       variant="secondary"
                       size="sm"
                       onClick={handleApply}
-                      disabled={applying}
+                      disabled={applying || generating}
                       data-testid="ai-apply"
                     >
                       {applying
@@ -218,14 +269,40 @@ export function AiRulePatchDrawer({
                 </div>
 
                 {error ? (
-                  <p className="text-sm text-error" data-testid="ai-error">
+                  <p className="text-sm text-error" role="alert" data-testid="ai-error">
                     {error}
                   </p>
                 ) : null}
 
-                {preview?.message ? (
-                  <p className="text-sm text-text-secondary" data-testid="ai-message">
+                {preview?.llmAvailable === false ? (
+                  <p
+                    className="text-sm text-text-secondary"
+                    aria-live="polite"
+                    data-testid="ai-message"
+                  >
+                    {t('rules.ai.unavailable')}
+                  </p>
+                ) : preview?.message ? (
+                  <p
+                    className="text-sm text-text-secondary"
+                    aria-live="polite"
+                    data-testid="ai-message"
+                  >
                     {preview.message}
+                  </p>
+                ) : null}
+
+                {applySummary && applySummary.applied > 0 ? (
+                  <p
+                    className="text-sm text-text-secondary"
+                    aria-live="polite"
+                    data-testid="ai-apply-summary"
+                  >
+                    {applySummary.failed > 0
+                      ? t('rules.ai.partial')
+                          .replace('{applied}', String(applySummary.applied))
+                          .replace('{failed}', String(applySummary.failed))
+                      : t('rules.ai.applied').replace('{count}', String(applySummary.applied))}
                   </p>
                 ) : null}
 
@@ -244,7 +321,7 @@ export function AiRulePatchDrawer({
                     key={operation.opId}
                     operation={operation}
                     selected={selection[operation.opId] ?? false}
-                    disabled={applying}
+                    disabled={applying || generating}
                     result={results[operation.opId] ?? null}
                     onToggle={(opId, next) => setSelection((prev) => ({ ...prev, [opId]: next }))}
                     onOpenPlaybook={onOpenPlaybook}
