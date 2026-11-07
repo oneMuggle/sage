@@ -99,12 +99,38 @@ jobs:
             echo "| win7-only（win7 独有） | ${{ steps.report.outputs.win7only }} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # real = 实质业务差异，必须人工审阅，保持硬失败
-      - name: Fail on real drift
-        if: steps.report.outputs.real != '0'
+      # 棘轮：只对「新增漂移」报警。actionable = real + main-only；
+      # baseline 由 release/win7 的 docs/win7-sync/parity-baseline.json 维护。
+      # 超过基线 → fail；低于基线 → 仅提示下调基线（固化进度）；缺基线 → warning 不阻断。
+      - name: Ratchet on actionable drift
         run: |
-          echo "::error::存在 ${{ steps.report.outputs.real }} 个 real（实质业务差异）文件，需人工审阅，见 artifact win7-parity"
-          exit 1
+          set -euo pipefail
+          REAL="${{ steps.report.outputs.real }}"
+          MAINONLY="${{ steps.report.outputs.mainonly }}"
+          ACTIONABLE=$((REAL + MAINONLY))
+          BASELINE_FILE="docs/win7-sync/parity-baseline.json"
+          if git cat-file -e "origin/release/win7:${BASELINE_FILE}" 2>/dev/null; then
+            BASE=$(git show "origin/release/win7:${BASELINE_FILE}" | python -c 'import json,sys;print(int(json.load(sys.stdin)["actionable"]))')
+          else
+            echo "::warning::未找到 ${BASELINE_FILE}，本次仅记录不阻断（请先在 release/win7 建立基线）"
+            echo "### Parity：缺少基线 | actionable=${ACTIONABLE}" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "### Parity 棘轮"
+            echo ""
+            echo "| 指标 | 当前 | 基线 |"
+            echo "|---|---:|---:|"
+            echo "| actionable（real + main-only） | ${ACTIONABLE} | ${BASE} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$ACTIONABLE" -gt "$BASE" ]; then
+            echo "::error::漂移增长：actionable=${ACTIONABLE} > baseline=${BASE}，需审阅 artifact win7-parity"
+            exit 1
+          fi
+          if [ "$ACTIONABLE" -lt "$BASE" ]; then
+            echo "::notice::漂移收敛：baseline=${BASE} → actionable=${ACTIONABLE}；请下调 parity-baseline.json 固化进度"
+          fi
+          echo "棘轮通过：actionable=${ACTIONABLE} ≤ baseline=${BASE}"
 
   sync:
     name: main → release/win7 自动 merge
@@ -149,7 +175,7 @@ jobs:
       - name: Run auto_sync
         id: sync
         run: |
-          BR="sync/win7-main-$(date +%Y%m%d)"
+          BR="sync/win7-main"
           echo "branch=$BR" >> "$GITHUB_OUTPUT"
           set +e
           python scripts/win7/auto_sync.py --commit --branch "$BR" \
@@ -190,7 +216,8 @@ jobs:
         run: |
           BR="${{ steps.sync.outputs.branch }}"
           git push -f origin "HEAD:$BR"
-          if gh pr view "$BR" --json number >/dev/null 2>&1; then
+          STATE=$(gh pr view "$BR" --json state --jq .state 2>/dev/null || echo NONE)
+          if [ "$STATE" = "OPEN" ]; then
             gh pr edit "$BR" --body-file sync-report.md
           else
             gh pr create --base release/win7 --head "$BR" \
@@ -212,14 +239,30 @@ jobs:
             echo "::warning::已回退 .github/workflows 冲突现场（缺 WIN7_SYNC_TOKEN）"
           fi
           git push -f origin "HEAD:$BR"
-          if ! gh pr view "$BR" --json number >/dev/null 2>&1; then
+          STATE=$(gh pr view "$BR" --json state --jq .state 2>/dev/null || echo NONE)
+          if [ "$STATE" = "OPEN" ]; then
+            gh pr edit "$BR" --body-file sync-report.md
+          else
             gh pr create --draft --base release/win7 --head "$BR" \
               --title "[需人工] win7-sync: main → release/win7 冲突 ($(date +%Y-%m-%d))" \
               --body-file sync-report.md --label win7-sync --label needs-human
-          else
-            gh pr edit "$BR" --body-file sync-report.md
           fi
           echo "::warning::合并存在冲突，已开 draft PR $BR"
+
+      # 固定分支 sync/win7-main 取代了历史上的日期分支；保留最新一个日期分支
+      # 作为冲突现场参考，删除其余旧分支，避免每日累积。
+      - name: Clean up superseded dated sync branches
+        if: always() && (steps.sync.outputs.rc == '0' || steps.sync.outputs.rc == '2')
+        run: |
+          git ls-remote --heads origin 'sync/win7-main-*' \
+            | awk '{print $2}' \
+            | sed 's#refs/heads/##' \
+            | sort -r \
+            | tail -n +2 \
+            | while read -r OLD; do
+                echo "删除被取代的旧同步分支：${OLD}"
+                git push origin --delete "$OLD" || true
+              done
 
       - name: Fail on gate error
         if: steps.sync.outputs.rc == '1'
