@@ -11,6 +11,7 @@
     "attachment_rag_search": { "method": "POST", "path": "/api/v1/chat/attachments/search" },
     "batch_agents": { "method": "POST", "path": "/api/v1/agents/batch" },
     "chat_steer": { "method": "POST", "path": "/api/v1/chat/steer" },
+    "chat_steer_cancel": { "method": "POST", "path": "/api/v1/chat/steer/cancel" },
     "chat_stream_active": { "method": "GET", "path": "/api/v1/chat/stream/active" },
     "create_agent": { "method": "POST", "path": "/api/v1/agents" },
     "create_project_profile": { "method": "POST", "path": "/api/v1/memory/project-profile" },

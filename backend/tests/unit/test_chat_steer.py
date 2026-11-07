@@ -1,10 +1,13 @@
-"""RT5 (round7) — 单 agent steering 测试。
+"""RT5 (round7) + 2026-11-07 steer-staging-panel — 单 agent steering 测试。
 
-覆盖两层：
+覆盖三层：
 - agent 层：inject_user_message 的运行窗口语义 + run_loop 迭代边界消费
   + 迭代边界上下文预算复核（插话计入高水位，反证对照）
-- 端点层：POST /api/v1/chat/steer 的 200/404/409/400 面 + 插话落库
-  （写入 ``subtype='steering'`` 行；落库失败不回滚已生效的注入）
+  + 新增：撤回未消费插话 / 队列形态（dict {id, text}） / STEER_CONSUMED 事件
+- 端点层：POST /api/v1/chat/steer 的 200/404/409/400 面
+  + 新增：响应带 message_id；消费回执（drain 触发落库）
+- 端点层：POST /api/v1/chat/steer/cancel —— 撤回未消费插话；已被消费/流已结束
+  时返回 removed=False
 """
 
 from __future__ import annotations
@@ -29,22 +32,61 @@ def _make_response(content: str = "", tool_calls: list = None) -> LLMResponse:
 # ---- agent 层 -----------------------------------------------------------------
 
 
-def test_inject_rejected_when_run_not_active():
+def test_inject_rejected_when_window_closed():
+    """窗口未打开 → 注入返回 None；deque 保持空。"""
     agent = SageAgent()
-    assert agent.inject_user_message("补充指示") is False
+    assert agent.inject_user_message("补充指示") is None
     assert len(agent._pending_user_messages) == 0
+
+
+def test_inject_returns_id_when_window_open():
+    agent = SageAgent()
+    agent.begin_accept_steer()
+    msg_id = agent.inject_user_message("请改用方法 B")
+    assert msg_id
+    assert isinstance(msg_id, str)
+    # deque 现在存 dict {id, text}
+    pending = list(agent._pending_user_messages)
+    assert len(pending) == 1
+    assert pending[0] == {"id": msg_id, "text": "请改用方法 B"}
 
 
 def test_inject_rejects_blank_content():
     agent = SageAgent()
-    agent._run_loop_active = True
-    assert agent.inject_user_message("   ") is False
+    agent.begin_accept_steer()
+    assert agent.inject_user_message("   ") is None
+
+
+def test_cancel_user_message_removes_from_deque():
+    agent = SageAgent()
+    agent.begin_accept_steer()
+    msg_id = agent.inject_user_message("待撤回")
+    assert agent.cancel_user_message(msg_id) is True
+    assert len(agent._pending_user_messages) == 0
+    # 二次撤回返回 False（已不在队列）
+    assert agent.cancel_user_message(msg_id) is False
+
+
+def test_cancel_user_message_false_for_unknown_id():
+    agent = SageAgent()
+    agent.begin_accept_steer()
+    agent.inject_user_message("别的")
+    assert agent.cancel_user_message("not-an-id") is False
+    # 原本那条还在
+    assert len(list(agent._pending_user_messages)) == 1
+
+
+def test_cancel_user_message_false_for_blank_id():
+    agent = SageAgent()
+    assert agent.cancel_user_message("") is False
 
 
 @pytest.mark.asyncio()
 async def test_steering_consumed_at_iteration_boundary():
-    """run 中注入的消息在下一迭代边界以【用户补充】前缀进入 LLM 上下文。"""
+    """run 中注入的消息在下一迭代边界以【用户补充】前缀进入 LLM 上下文，
+    并推送 STEER_CONSUMED 事件携带 ids；deque 在边界后被清空。"""
     agent = SageAgent()
+    agent.begin_accept_steer()
     agent.llm_client = MagicMock()
     tool_call = LLMToolCall(id="c1", name="list_dir", arguments="{}")
     calls = {"n": 0}
@@ -69,29 +111,51 @@ async def test_steering_consumed_at_iteration_boundary():
         events.append(evt)
 
     assert AgentState.DONE in [e.state for e in events]
+    # STEER_CONSUMED 事件推送并携带 ids
+    consumed = [e for e in events if e.state == AgentState.STEER_CONSUMED]
+    assert len(consumed) == 1
+    ids = consumed[0].steer_info["ids"]
+    assert len(ids) == 1
+    # 注入后的 messages 列表里能找到【用户补充】前缀
     injected = [
         m for m in messages if m.get("role") == "user" and "改用方法 B" in str(m.get("content"))
     ]
     assert len(injected) == 1
     assert injected[0]["content"].startswith("【用户补充】")
+    # 消费后 deque 被清空
+    assert len(list(agent._pending_user_messages)) == 0
 
 
 @pytest.mark.asyncio()
 async def test_steer_window_narrows_after_run():
-    """run 结束后 inject 拒绝；run 启动时清空残留（不跨 run 泄漏）。"""
+    """run 结束后注入拒绝；end_accept_steer 清空残留（不跨 run 泄漏）。"""
     agent = SageAgent()
+    agent.begin_accept_steer()
     agent.llm_client = MagicMock()
     agent.llm_client.chat = AsyncMock(return_value=_make_response(content="ok"))
 
-    agent._pending_user_messages.append("上一 run 的遗留")
     messages = [{"role": "user", "content": "hi"}]
     async for _ in agent.run_loop(messages):
         pass
 
+    # run_loop finally 关闭注入窗口 + 清空队列
     assert agent._run_loop_active is False
     assert len(agent._pending_user_messages) == 0
-    assert agent.inject_user_message("晚了") is False
+    # 注入已拒绝
+    assert agent.inject_user_message("晚了") is None
     assert not any("遗留" in str(m.get("content")) for m in messages)
+
+
+@pytest.mark.asyncio()
+async def test_end_accept_steer_clears_queue_before_run():
+    """end_accept_steer（run 未启动即失败的路径）清空队列、拒绝新注入。"""
+    agent = SageAgent()
+    agent.begin_accept_steer()
+    msg_id = agent.inject_user_message("缓存中的")
+    assert msg_id is not None
+    agent.end_accept_steer()
+    assert len(list(agent._pending_user_messages)) == 0
+    assert agent.inject_user_message("也拒绝") is None
 
 
 # ---- 端点层 --------------------------------------------------------------------
@@ -99,11 +163,12 @@ async def test_steer_window_narrows_after_run():
 
 @pytest.mark.asyncio()
 async def test_steer_endpoint_injects_into_registered_stream(monkeypatch):
+    """端点返回 message_id，消息入队，队列形态为 dict {id, text}。"""
     from backend.api import legacy_routes as lr
     from backend.main import app
 
     agent = SageAgent()
-    agent._run_loop_active = True
+    agent.begin_accept_steer()
     monkeypatch.setitem(lr._ACTIVE_STREAMS, "s1", {"agent": agent, "run_id": None})
 
     async with httpx.AsyncClient(
@@ -114,10 +179,15 @@ async def test_steer_endpoint_injects_into_registered_stream(monkeypatch):
         )
 
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True}
-    assert list(agent._pending_user_messages) == ["用方法 B"]
-    assert agent.inject_user_message("校验入队") is True  # 窗口仍开着
-    assert len(agent._pending_user_messages) == 2
+    body = resp.json()
+    assert body["ok"] is True
+    msg_id = body["message_id"]
+    assert msg_id
+    assert isinstance(msg_id, str)
+
+    pending = list(agent._pending_user_messages)
+    assert len(pending) == 1
+    assert pending[0] == {"id": msg_id, "text": "用方法 B"}
 
 
 @pytest.mark.asyncio()
@@ -135,11 +205,13 @@ async def test_steer_endpoint_404_for_unknown_stream():
 
 
 @pytest.mark.asyncio()
-async def test_steer_endpoint_409_when_not_running(monkeypatch):
+async def test_steer_endpoint_409_when_window_closed(monkeypatch):
+    """窗口未打开 → 409 not_running（新契约：_accepts_steer 标志位，
+    由 begin_accept_steer 打开）。"""
     from backend.api import legacy_routes as lr
     from backend.main import app
 
-    agent = SageAgent()  # 未在 run 窗口
+    agent = SageAgent()  # 未开注入窗口
     monkeypatch.setitem(lr._ACTIVE_STREAMS, "s2", {"agent": agent, "run_id": None})
 
     async with httpx.AsyncClient(
@@ -156,7 +228,7 @@ async def test_steer_endpoint_400_for_blank_and_oversize(monkeypatch):
     from backend.main import app
 
     agent = SageAgent()
-    agent._run_loop_active = True
+    agent.begin_accept_steer()
     monkeypatch.setitem(lr._ACTIVE_STREAMS, "s3", {"agent": agent, "run_id": None})
 
     async with httpx.AsyncClient(
@@ -173,10 +245,51 @@ async def test_steer_endpoint_400_for_blank_and_oversize(monkeypatch):
 
 
 @pytest.mark.asyncio()
-async def test_steer_endpoint_persists_steering_row(monkeypatch):
-    """插话必须落库 —— run 内注入只活在 agent 内存的 messages 列表，不落库
-    则下一轮从 DB 装配历史时这条更正凭空消失（前端气泡也会被对账抹掉）。"""
-    from backend.api import legacy_chat_routes as lcr
+async def test_steer_persists_on_consume_not_on_send(monkeypatch):
+    """2026-11-07: 插话在被消费（drain）时才落库 —— 撤回的插话不留痕。
+
+    端点返回后不应有任何 save 调用；等 run_loop 在迭代边界 drain 才写库。
+    """
+    from backend.api import legacy_routes as lr
+    from backend.main import app
+
+    saved = []
+
+    class _Repo:
+        def save(self, message):
+            saved.append(message)
+            return message
+
+    agent = SageAgent()
+    agent.begin_accept_steer()
+    agent.message_repo = _Repo()
+    monkeypatch.setitem(
+        lr._ACTIVE_STREAMS, "s5", {"agent": agent, "run_id": None, "session_id": "sess-1"}
+    )
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/api/v1/chat/steer", json={"stream_id": "s5", "content": "第二段太长了"}
+        )
+    assert resp.status_code == 200
+    # 发送时尚未落库
+    assert len(saved) == 0
+
+    # 现在 drain → 触发消费落库
+    items = agent._drain_pending_user_messages()
+    agent._persist_consumed_steers(items, "sess-1")
+    assert len(saved) == 1
+    row = saved[0]
+    assert (row.role, row.session_id, row.subtype) == ("user", "sess-1", "steering")
+    assert row.content == "第二段太长了"
+    assert row.id == items[0]["id"]
+
+
+@pytest.mark.asyncio()
+async def test_steer_cancellation_leaves_no_trace(monkeypatch):
+    """撤回的插话既不进 run 上下文、也不落库。"""
     from backend.api.chat_stream_state import _ACTIVE_STREAMS
     from backend.main import app
 
@@ -187,69 +300,86 @@ async def test_steer_endpoint_persists_steering_row(monkeypatch):
             saved.append(message)
             return message
 
-    monkeypatch.setattr(lcr, "MessageRepository", _Repo)
     agent = SageAgent()
-    agent._run_loop_active = True
+    agent.begin_accept_steer()
+    agent.message_repo = _Repo()
     monkeypatch.setitem(
-        _ACTIVE_STREAMS, "s5", {"agent": agent, "run_id": None, "session_id": "sess-1"}
+        _ACTIVE_STREAMS, "s7", {"agent": agent, "run_id": None, "session_id": "sess-2"}
     )
 
     async with httpx.AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/api/v1/chat/steer", json={"stream_id": "s5", "content": "第二段太长了"}
+            "/api/v1/chat/steer", json={"stream_id": "s7", "content": "待撤回"}
         )
-
     assert resp.status_code == 200
-    assert len(saved) == 1
-    row = saved[0]
-    assert (row.role, row.session_id, row.subtype) == ("user", "sess-1", "steering")
-    # 原文入库；【用户补充】前缀只是 run 内注入时的措辞，不该进历史
-    assert row.content == "第二段太长了"
+    msg_id = resp.json()["message_id"]
+
+    # 撤回 —— removed=True（单独 client 避免 ASGI 生命周期关闭上一 client）
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        cancel_resp = await client.post(
+            "/api/v1/chat/steer/cancel",
+            json={"stream_id": "s7", "message_id": msg_id},
+        )
+    assert cancel_resp.status_code == 200
+    assert cancel_resp.json() == {"removed": True}
+    assert len(list(agent._pending_user_messages)) == 0
+
+    # drain 时队列为空，落库也不触发
+    items = agent._drain_pending_user_messages()
+    agent._persist_consumed_steers(items, "sess-2")
+    assert len(saved) == 0
 
 
 @pytest.mark.asyncio()
-async def test_steer_endpoint_survives_persistence_failure(monkeypatch):
-    """落库失败不回滚已生效的注入：插话已在当前 run 排队，端点仍返回 200。"""
-    from backend.api import legacy_chat_routes as lcr
-    from backend.api.chat_stream_state import _ACTIVE_STREAMS
+async def test_steer_cancel_404_for_unknown_stream():
     from backend.main import app
-
-    class _BrokenRepo:
-        def save(self, message):
-            raise RuntimeError("db is locked")
-
-    monkeypatch.setattr(lcr, "MessageRepository", _BrokenRepo)
-    agent = SageAgent()
-    agent._run_loop_active = True
-    monkeypatch.setitem(
-        _ACTIVE_STREAMS, "s6", {"agent": agent, "run_id": None, "session_id": "sess-1"}
-    )
 
     async with httpx.AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/api/v1/chat/steer", json={"stream_id": "s6", "content": "照样生效"}
+            "/api/v1/chat/steer/cancel",
+            json={"stream_id": "missing", "message_id": "whatever"},
         )
+    assert resp.status_code == 404
 
+
+@pytest.mark.asyncio()
+async def test_steer_cancel_returns_false_when_already_consumed(monkeypatch):
+    """消费后再撤回：cancel 不报错，返回 removed=False。"""
+    from backend.api import legacy_routes as lr
+    from backend.main import app
+
+    agent = SageAgent()
+    agent.begin_accept_steer()
+    msg_id = agent.inject_user_message("先被消费")
+    assert msg_id is not None
+    # 模拟消费：drain 清空
+    agent._drain_pending_user_messages()
+    monkeypatch.setitem(lr._ACTIVE_STREAMS, "s8", {"agent": agent, "run_id": None})
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/api/v1/chat/steer/cancel",
+            json={"stream_id": "s8", "message_id": msg_id},
+        )
     assert resp.status_code == 200
-    assert list(agent._pending_user_messages) == ["照样生效"]
+    assert resp.json() == {"removed": False}
 
 
 @pytest.mark.asyncio()
 async def test_steering_injection_goes_through_ctx_budget_guard(monkeypatch):
-    """P1: 插话必须经上下文预算复核。
-
-    run_loop 迭代边界的契约顺序是 drain → estimate → compact → LLM 调用。
-    若预算检查发生在注入之前，插话内容就绕过了高水位治理：本次请求照样
-    按"注入后"的体积发给模型，却没人据此做过压缩。
-    """
-    # 预算 900：注入前 ~500 token（不触发），加上 2000 字符的插话后越线
+    """P1: 插话必须经上下文预算复核。"""
     monkeypatch.setenv("SAGE_RUN_CTX_BUDGET_TOKENS", "900")
 
     agent = SageAgent()
+    agent.begin_accept_steer()
     agent.llm_client = MagicMock()
     tool_call = LLMToolCall(id="c1", name="calculator", arguments="{}")
     calls = {"n": 0}
@@ -273,23 +403,17 @@ async def test_steering_injection_goes_through_ctx_budget_guard(monkeypatch):
         pass
 
     assert calls["n"] == 2
-    # 插话进了上下文（run 收尾还会追加终稿 assistant 行，故按内容找）
     steered = [m for m in messages if str(m.get("content", "")).startswith("【用户补充】")]
     assert len(steered) == 1
-    # 并且正是因为插话越线，早期长内容才被就地压缩
     assert "[已压缩：早期内容]" in messages[0]["content"]
 
 
 @pytest.mark.asyncio()
 async def test_no_compaction_without_steering_at_same_budget(monkeypatch):
-    """上一条的反证：同样的历史、同样的 900 预算，不插话就不会越线压缩。
-
-    没有这条对照，上一条测试可能只是"早期内容本来就该被压"，证明不了
-    插话参与了预算复核。
-    """
     monkeypatch.setenv("SAGE_RUN_CTX_BUDGET_TOKENS", "900")
 
     agent = SageAgent()
+    agent.begin_accept_steer()
     agent.llm_client = MagicMock()
     tool_call = LLMToolCall(id="c1", name="calculator", arguments="{}")
     calls = {"n": 0}

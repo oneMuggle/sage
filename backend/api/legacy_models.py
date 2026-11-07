@@ -345,6 +345,12 @@ class SteerRequest(BaseModel):
     content: str
 
 
+class CancelSteerRequest(BaseModel):
+    """/chat/steer/cancel 请求体 —— 撤回尚未被消费的插话（2026-11-07）。"""
+
+    stream_id: str
+    message_id: str
+
 
 class LearnRequest(BaseModel):
     """POST /learn 请求体。
