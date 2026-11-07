@@ -22,7 +22,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.data.database import get_database
 from backend.office.errors import OfficePathError
 from backend.office.storage import validate_workspace
-from backend.orchestration.llm_factory import build_llm_client_from_settings
+from backend.orchestration.llm_factory import (
+    build_llm_client_from_settings,
+    resolve_model_from_settings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -161,8 +164,7 @@ async def _complete(prompt: str) -> tuple:
     result = (text or "").strip()
     if not result:
         raise _error(502, "llm_empty", "LLM 返回了空结果")
-    model = getattr(client, "model", None)
-    return result, model if isinstance(model, str) else None
+    return result, resolve_model_from_settings()
 
 
 @router.post("/rewrite", response_model=RewriteResult)

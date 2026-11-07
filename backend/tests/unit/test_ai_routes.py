@@ -183,3 +183,44 @@ def test_rewrite_translate_uses_target_lang(client: TestClient, workspace: Path)
     assert resp.status_code == 200
     prompt = llm.complete.await_args.args[0]
     assert "翻译为英文" in prompt
+
+
+def test_rewrite_rejects_document_from_another_workspace(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """doc-1 登记在 wsA；用 wsB 请求 → 404 document_not_found（跨工作区隔离）。"""
+    ws_a = tmp_path / "wsA"
+    ws_a.mkdir()
+    ws_b = tmp_path / "wsB"
+    ws_b.mkdir()
+    _seed_document(ws_a)
+
+    resp = client.post(
+        "/api/v1/office/ai/rewrite",
+        json={
+            "workspace_path": str(ws_b),
+            "document_id": "doc-1",
+            "text": "x",
+            "instruction": "rewrite",
+        },
+    )
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "document_not_found"
+
+
+def test_rewrite_rejects_nonexistent_workspace(client: TestClient, tmp_path: Path) -> None:
+    """workspace_path 指向一个不存在的目录 → 404 workspace_not_found。"""
+    missing = tmp_path / "does-not-exist"
+    resp = client.post(
+        "/api/v1/office/ai/rewrite",
+        json={
+            "workspace_path": str(missing),
+            "document_id": "doc-1",
+            "text": "x",
+            "instruction": "rewrite",
+        },
+    )
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "workspace_not_found"
