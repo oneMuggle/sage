@@ -134,6 +134,7 @@ export type {
 } from './projectApi';
 export { officeApi } from './officeApi';
 export { officeGenerateApi } from './officeGenerateApi';
+export { officeRulesApi } from './officeRulesApi';
 export { sessionApi } from './sessionApi';
 export { skillDraftsApi } from './skillDraftsApi';
 export { skillsApi } from './skillsApi';
