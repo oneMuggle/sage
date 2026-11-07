@@ -57,9 +57,9 @@ from backend.chat.sources_extractor import extract_sources_from_tool, merge_sour
 from backend.chat.title_generator import (
     DEFAULT_TITLE,
     TitleGenerator,
-    TitleModelFactory,
     needs_title,
 )
+from backend.orchestration.title_model_factory import TitleModelFactory
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent, _retry_info_from_event
 from backend.core.legacy.llm_total_timeout import llm_total_timeout_or_none
