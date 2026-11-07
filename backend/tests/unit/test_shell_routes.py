@@ -82,6 +82,31 @@ def test_stream_unknown_shell_returns_404(client) -> None:
     assert resp.status_code == 404
 
 
+def test_kill_shell(client) -> None:
+    http, registry = client
+    # FakeRegistry needs a terminate method
+    registry.terminate = lambda shell_id, cap: {
+        "shell_id": shell_id,
+        "status": STATUS_EXITED,
+        "exit_code": 0,
+        "stdout": "final\n",
+        "stderr": "",
+        "killed": True,
+    }
+    resp = http.delete("/api/v1/shells/sh-1")
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["shell_id"] == "sh-1"
+    assert payload["killed"] is True
+
+
+def test_kill_unknown_shell_returns_404(client) -> None:
+    http, registry = client
+    registry.terminate = lambda shell_id, cap: None
+    resp = http.delete("/api/v1/shells/missing")
+    assert resp.status_code == 404
+
+
 def test_stream_outputs_then_exit(client) -> None:
     http, registry = client
     registry.chunks = [
