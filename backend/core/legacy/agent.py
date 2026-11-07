@@ -434,9 +434,13 @@ class SageAgent:
         self._interrupt_event: Optional[asyncio.Event] = None
         self._current_session_id: Optional[str] = None
         # RT5 (round7): 单 agent steering —— 运行中注入的用户补充消息。
-        # run_loop 每轮迭代顶部排空（迭代边界语义，与中断检查同位）；
-        # _run_loop_active 为 False 时 inject 拒绝（调用方回退排队语义）。
+        # run_loop 每轮迭代顶部排空（迭代边界语义，与中断检查同位）。
+        # 2026-11-07: 元素改为 {"id", "text"} 以支持撤回与消费回执；
+        # _accepts_steer 覆盖"流已注册但 run_loop 尚未启动"的分类窗口，
+        # 窗口内注入缓存进队列而不是拒绝（原 _run_loop_active 判据会在此
+        # 窗口返回 409，导致前端静默降级为排队）。
         self._pending_user_messages: deque = deque()
+        self._accepts_steer = False
         self._run_loop_active = False
         # L7: 每-run 工具调用数守卫的配置来源（register_all_tools 透传同一
         # policy;此处自留一份供 run_loop 读 max_tool_calls_per_run）。
@@ -1754,9 +1758,9 @@ class SageAgent:
         self._consecutive_unanswered = 0
         # L12-lite: 本轮 run 的中断事件 (fresh, 绑定当前事件循环)
         self._interrupt_event = asyncio.Event()
-        # RT5: run 活跃窗口 —— steering 注入仅在窗口内被接受；
-        # 残留的未消费消息（上一 run 中断遗留）在此丢弃，不跨 run 泄漏。
-        self._pending_user_messages.clear()
+        # RT5: run 活跃窗口 —— steering 注入仅在窗口内被接受。
+        # 2026-11-07: 这里不再清空队列 —— 编排分类窗口内已缓存的插话必须
+        # 带入本轮首个迭代边界；残留清理由 begin_accept_steer() 与 finally 负责。
         self._run_loop_active = True
         # L7: 每-run 工具调用计数（跨迭代累计,超 ToolPolicy.max_tool_calls_per_run 终止）
         tool_calls_used = 0
@@ -2138,11 +2142,23 @@ class SageAgent:
 
                 # RT5: 迭代边界排空 steering —— 用户运行中补充的指示以
                 # user 消息进入本轮 LLM 调用（与编排链 O1 边界投递同语义）。
-                _steer_messages = self._drain_pending_user_messages()
-                if _steer_messages:
-                    messages.extend(_steer_messages)
+                # 2026-11-07: 排空后落库并推送 STEER_CONSUMED，前端据此把
+                # 输入框上方的暂存 chip 移除（按 id 与撤回竞态去重）。
+                _steer_items = self._drain_pending_user_messages()
+                if _steer_items:
+                    messages.extend(
+                        {"role": "user", "content": f"【用户补充】{item['text']}"}
+                        for item in _steer_items
+                    )
+                    self._persist_consumed_steers(_steer_items, session_id)
+                    yield AgentEvent(
+                        state=AgentState.STEER_CONSUMED,
+                        iteration=i,
+                        agent_id=self.agent_id,
+                        steer_info={"ids": [item["id"] for item in _steer_items]},
+                    )
                     logger.info(
-                        "run_loop 迭代 %s 注入 %d 条用户补充消息", i, len(_steer_messages)
+                        "run_loop 迭代 %s 注入 %d 条用户补充消息", i, len(_steer_items)
                     )
 
                 # RT2 (round7) + 2026-09-28 双层压缩: 迭代边界高水位预防 ——
@@ -3092,7 +3108,10 @@ class SageAgent:
             )
         finally:
             # RT5: 收窄 steering 注入窗口；残留消息一并丢弃。
+            # 2026-11-07: _accepts_steer 与 _run_loop_active 同步收口，
+            # 防止流结束后仍接受注入。
             self._run_loop_active = False
+            self._accepts_steer = False
             self._pending_user_messages.clear()
             # 恢复 agent 实例的原始 LLM client / config(不污染跨请求状态);
             # 动态新建的 client 一并关闭, 防止 httpx 连接泄漏。
@@ -3637,33 +3656,91 @@ class SageAgent:
         """重置中断状态"""
         self._interrupted = False
 
-    def inject_user_message(self, content: str) -> bool:
+    def begin_accept_steer(self) -> None:
+        """2026-11-07: 打开 steering 注入窗口。
+
+        producer 在注册活跃流之后、编排模式分类之前调用 —— 覆盖分类（一次
+        独立 LLM 调用，1-3 秒）造成的时间窗口：此间注入的插话缓存进队列，
+        等 run_loop 首个迭代边界消费，而不是回 409 让前端静默降级为排队。
+        队列在此处清空，避免上一 run 的残留跨 run 泄漏。
+        """
+        self._pending_user_messages.clear()
+        self._accepts_steer = True
+
+    def end_accept_steer(self) -> None:
+        """关闭 steering 注入窗口（run 未启动即失败的路径调用）。"""
+        self._accepts_steer = False
+        self._pending_user_messages.clear()
+
+    def inject_user_message(
+        self, content: str, message_id: Optional[str] = None
+    ) -> Optional[str]:
         """RT5 (round7): 运行中向当前 run 注入用户补充消息（steering）。
 
         消息在**下一迭代边界**以 ``【用户补充】`` 前缀的 user 消息进入
-        LLM 上下文——与编排链 O1 的边界投递同语义。run 未活跃时返回
-        False（调用方回退排队语义）；队列排空发生在 run_loop 内，
-        ``deque.append`` 跨线程投递是 GIL 原子操作，尽力而为语义与
-        interrupt() 一致。
+        LLM 上下文——与编排链 O1 的边界投递同语义。注入窗口未打开时返回
+        None（调用方回退排队语义）；成功返回消息 id，供撤回与消费回执使用。
         """
         text = (content or "").strip()
-        if not text or not self._run_loop_active:
-            return False
-        self._pending_user_messages.append(text)
+        if not text or not self._accepts_steer:
+            return None
+        item_id = message_id or str(uuid.uuid4())
+        self._pending_user_messages.append({"id": item_id, "text": text})
         logger.info("steering: 已接收用户补充消息 (%d 字符)，下一迭代边界生效", len(text))
+        return item_id
+
+    def cancel_user_message(self, message_id: str) -> bool:
+        """2026-11-07: 撤回尚未被消费的插话；已消费/不存在返回 False。"""
+        if not message_id:
+            return False
+        kept = [
+            item
+            for item in self._pending_user_messages
+            if not (isinstance(item, dict) and item.get("id") == message_id)
+        ]
+        if len(kept) == len(self._pending_user_messages):
+            return False
+        # 原地替换内容而非换掉 deque 对象 —— 与 run_loop 的 drain 并发时
+        # 不会让 drain 在旧对象上继续 popleft 而丢失其余条目。
+        self._pending_user_messages.clear()
+        self._pending_user_messages.extend(kept)
+        logger.info("steering: 已撤回未消费的用户补充消息")
         return True
 
+    def _persist_consumed_steers(
+        self, items: List[Dict[str, Any]], session_id: Optional[str]
+    ) -> None:
+        """2026-11-07: 插话被消费时落库（撤回则不落，语义等同未送达）。"""
+        if not session_id:
+            return
+        for item in items:
+            try:
+                self.message_repo.save(
+                    DbMessage(
+                        id=item["id"],
+                        session_id=session_id,
+                        role="user",
+                        content=item["text"],
+                        subtype="steering",
+                        created_at=int(time.time()),
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001 — 落库失败不影响注入
+                logger.warning("steering 落库失败（注入仍生效）: %s", exc)
+
     def _drain_pending_user_messages(self) -> List[Dict[str, Any]]:
-        """排空待注入消息并组装为 user 消息列表（run_loop 迭代顶部调用）。"""
+        """排空待注入消息（run_loop 迭代顶部调用），返回 ``{"id", "text"}`` 列表。"""
         drained: List[Dict[str, Any]] = []
         try:
             while self._pending_user_messages:
-                drained.append(
-                    {
-                        "role": "user",
-                        "content": f"【用户补充】{self._pending_user_messages.popleft()}",
-                    }
-                )
+                item = self._pending_user_messages.popleft()
+                if isinstance(item, dict) and item.get("text"):
+                    drained.append(
+                        {"id": str(item.get("id") or uuid.uuid4()), "text": item["text"]}
+                    )
+                elif isinstance(item, str) and item:
+                    # 防御性兼容旧队列形态（正常流程不会出现纯字符串）
+                    drained.append({"id": str(uuid.uuid4()), "text": item})
         except Exception:  # noqa: BLE001 — steering 是增强，绝不杀死 run
             logger.warning("steering: 排空待注入消息失败", exc_info=True)
         return drained
