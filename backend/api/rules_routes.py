@@ -353,7 +353,7 @@ class ConflictListResponse(BaseModel):
 
 
 @router.post("/check-conflicts", response_model=ConflictListResponse)
-async def check_conflicts_endpoint(req: ConflictCheckRequest) -> ConflictListResponse:
+def check_conflicts_endpoint(req: ConflictCheckRequest) -> ConflictListResponse:
     conn = _db().get_connection()
     rule_ids = list(dict.fromkeys(req.rule_ids))
     if len(rule_ids) < 2:

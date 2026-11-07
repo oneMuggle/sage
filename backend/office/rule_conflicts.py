@@ -15,6 +15,7 @@ from typing import List, Optional
 from backend.office.rule_models import Rule
 
 _MIN_PROMPT_SIMILARITY = 0.6
+_MAX_SIMILARITY_CHARS = 2000
 
 
 @dataclass
@@ -25,100 +26,109 @@ class RuleConflict:
     severity: str = "warning"
 
 
+@dataclass
+class _PreparedRule:
+    """A rule normalized once, with its capped bigram set precomputed."""
+
+    rule: Rule
+    key: str
+    grams: set
+
+
 def _normalize(value: str) -> str:
     return re.sub(r"\s+", "", value or "")
 
 
-def _bigrams(text: str) -> set:
+def _bigram_set(text: str) -> set:
     return {text[i : i + 2] for i in range(len(text) - 1)}
 
 
-def _bigram_similarity(left: str, right: str) -> float:
-    left_grams = _bigrams(left)
-    right_grams = _bigrams(right)
+def _bigram_similarity(left_grams: set, right_grams: set) -> float:
     if not left_grams or not right_grams:
         return 0.0
     overlap = len(left_grams & right_grams)
     return overlap / float(len(left_grams | right_grams))
 
 
+def _prepare(rule: Rule) -> _PreparedRule:
+    if rule.check_mode == "regex":
+        key = _normalize(rule.pattern or "")
+    else:
+        key = _normalize(rule.ai_prompt or rule.description or rule.name)
+    return _PreparedRule(rule=rule, key=key, grams=_bigram_set(key[:_MAX_SIMILARITY_CHARS]))
+
+
 def _describe(rule: Rule) -> str:
     return f"{rule.name}（{rule.id}）"
 
 
-def _compare_regex(left: Rule, right: Rule) -> RuleConflict:
-    left_pattern = _normalize(left.pattern or "")
-    right_pattern = _normalize(right.pattern or "")
-    if left_pattern == right_pattern:
+def _compare_regex(left: _PreparedRule, right: _PreparedRule) -> RuleConflict:
+    if left.key == right.key:
         return RuleConflict(
-            rule_ids=[left.id, right.id],
-            message=f"规则 {_describe(left)} 与 {_describe(right)} 的正则表达式完全相同",
+            rule_ids=[left.rule.id, right.rule.id],
+            message=f"规则 {_describe(left.rule)} 与 {_describe(right.rule)} 的正则表达式完全相同",
             suggestion="合并为一条规则，或在其中一条上调整 scope",
             severity="error",
         )
     return RuleConflict(
-        rule_ids=[left.id, right.id],
-        message=f"规则 {_describe(left)} 与 {_describe(right)} 的正则范围重叠",
+        rule_ids=[left.rule.id, right.rule.id],
+        message=f"规则 {_describe(left.rule)} 与 {_describe(right.rule)} 的正则范围重叠",
         suggestion="确认两条规则的分工，必要时合并或收窄其中一条",
         severity="warning",
     )
 
 
-def _compare_ai(left: Rule, right: Rule) -> RuleConflict:
-    left_prompt = _normalize(left.ai_prompt or left.description or left.name)
-    right_prompt = _normalize(right.ai_prompt or right.description or right.name)
-    if left_prompt == right_prompt:
+def _compare_ai(left: _PreparedRule, right: _PreparedRule) -> RuleConflict:
+    if left.key == right.key:
         severity = "error"
-        message = f"规则 {_describe(left)} 与 {_describe(right)} 的 AI 提示词完全相同"
+        message = f"规则 {_describe(left.rule)} 与 {_describe(right.rule)} 的 AI 提示词完全相同"
     else:
         severity = "warning"
-        message = f"规则 {_describe(left)} 与 {_describe(right)} 的 AI 提示词高度相似"
+        message = f"规则 {_describe(left.rule)} 与 {_describe(right.rule)} 的 AI 提示词高度相似"
     return RuleConflict(
-        rule_ids=[left.id, right.id],
+        rule_ids=[left.rule.id, right.rule.id],
         message=message,
         suggestion="合并为一条规则，或改写其中一条的提示词以明确差异",
         severity=severity,
     )
 
 
-def _regex_pair(left: Rule, right: Rule) -> Optional[RuleConflict]:
-    left_pattern = _normalize(left.pattern or "")
-    right_pattern = _normalize(right.pattern or "")
-    if not left_pattern or not right_pattern:
+def _regex_pair(left: _PreparedRule, right: _PreparedRule) -> Optional[RuleConflict]:
+    if not left.key or not right.key:
         return None
-    if left_pattern in right_pattern or right_pattern in left_pattern:
+    if left.key in right.key or right.key in left.key:
         return _compare_regex(left, right)
     return None
 
 
-def _ai_pair(left: Rule, right: Rule) -> Optional[RuleConflict]:
-    left_prompt = _normalize(left.ai_prompt or left.description or left.name)
-    right_prompt = _normalize(right.ai_prompt or right.description or right.name)
-    if not left_prompt or not right_prompt:
+def _ai_pair(left: _PreparedRule, right: _PreparedRule) -> Optional[RuleConflict]:
+    if not left.key or not right.key:
         return None
-    if left_prompt == right_prompt:
+    if left.key == right.key:
         return _compare_ai(left, right)
-    if _bigram_similarity(left_prompt, right_prompt) >= _MIN_PROMPT_SIMILARITY:
+    if _bigram_similarity(left.grams, right.grams) >= _MIN_PROMPT_SIMILARITY:
         return _compare_ai(left, right)
     return None
 
 
-def _pair_conflicts(left: Rule, right: Rule) -> Optional[RuleConflict]:
-    if left.scope != right.scope or left.check_mode != right.check_mode:
+def _pair_conflicts(left: _PreparedRule, right: _PreparedRule) -> Optional[RuleConflict]:
+    left_rule = left.rule
+    right_rule = right.rule
+    if left_rule.scope != right_rule.scope or left_rule.check_mode != right_rule.check_mode:
         return None
-    if left.check_mode == "regex":
+    if left_rule.check_mode == "regex":
         return _regex_pair(left, right)
-    if left.check_mode == "ai":
+    if left_rule.check_mode == "ai":
         return _ai_pair(left, right)
     return None
 
 
 def detect_conflicts(rules: List[Rule]) -> List[RuleConflict]:
     """Return every conflicting pair among enabled rules (order-stable)."""
-    active = [rule for rule in rules if rule.enabled]
+    prepared = [_prepare(rule) for rule in rules if rule.enabled]
     conflicts: List[RuleConflict] = []
-    for index, left in enumerate(active):
-        for right in active[index + 1 :]:
+    for index, left in enumerate(prepared):
+        for right in prepared[index + 1 :]:
             conflict = _pair_conflicts(left, right)
             if conflict is not None:
                 conflicts.append(conflict)

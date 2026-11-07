@@ -46,6 +46,7 @@ def test_similar_ai_prompts_conflict() -> None:
     )
     assert len(conflicts) == 1
     assert conflicts[0].rule_ids == ["r1", "r2"]
+    assert conflicts[0].severity == "warning"
 
 
 def test_different_scope_or_mode_never_conflicts() -> None:
