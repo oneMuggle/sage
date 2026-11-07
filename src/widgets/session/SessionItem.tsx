@@ -34,6 +34,7 @@ import { fillTemplate } from '../../shared/lib/formatTemplate';
 import { useI18n } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
 import type { Session } from '../../shared/lib/store';
+import { useAgentDirectory } from '../../shared/lib/useAgentDirectory';
 import { formatRelativeTime } from '../../shared/lib/utils';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
@@ -41,7 +42,6 @@ import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 import { ForkTreeModal } from './ForkTreeModal';
 import { buildSessionContextMenuItems } from './sessionContextMenu';
-import { useAgentDirectory } from '../../shared/lib/useAgentDirectory';
 
 interface SessionItemProps {
   session: Session;
