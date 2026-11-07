@@ -37,6 +37,7 @@ import {
   OfficeDuplicateDialog,
   OfficeEditPreviewDialog,
   OfficeSnapshotPanel,
+  RulesWorkspace,
   useOfficeDocuments,
   type OfficeListView,
   type OfficeMultiImportResult,
@@ -49,6 +50,7 @@ import { WordBatchAuditPanel } from '../features/office/WordBatchAuditPanel';
 import { WordRuleExtractionPanel } from '../features/office/WordRuleExtractionPanel';
 import { DocumentCanvas } from '../features/office/canvas/DocumentCanvas';
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
+import { officeDocumentPath } from '../features/office/officeDocumentPath';
 import { OfficeAiSidebarHost } from '../features/office/sidebar/OfficeAiSidebarHost';
 import type { QuickActionTab } from '../features/office/sidebar/QuickActions';
 import { WorkspaceBindModal } from '../features/workspace';
@@ -529,6 +531,12 @@ export function Office() {
 
   const renderRulesTab = () => (
     <div className="space-y-4">
+      {/* P3: 规则工作台（分组 / 规则 CRUD / 冲突 / 导出导入 / 审校）。 */}
+      <RulesWorkspace
+        workspacePath={workspacePath ?? ''}
+        filePath={preview ? officeDocumentPath(preview.data.summary) : null}
+      />
+
       {/* M2.5: 格式规范书库（工作区默认 / 文档级绑定 / 从说明文件提取）。 */}
       <OfficeSpecLibrary workspacePath={workspacePath} />
 

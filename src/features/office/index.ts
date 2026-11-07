@@ -19,6 +19,7 @@ export { buildUpdateOps } from './OfficeEditPreviewDialog';
 export { OfficeDuplicateDialog } from './OfficeDuplicateDialog';
 export { OfficeGenerateForm } from './OfficeGenerateForm';
 export { GenerateWorkspace } from './GenerateWorkspace';
+export { RulesWorkspace } from './rules/RulesWorkspace';
 export { TemplateLibrary } from './TemplateLibrary';
 export { OfficeCapabilityBar } from './OfficeCapabilityBar';
 // Round B P3: structured sub-previews shared with the chat ArtifactViewer.
@@ -50,6 +51,7 @@ export function auditOfficeFeatureBarrel(): OfficeFeatureBarrelAuditReport {
     'PptPreview',
     'GenerateWorkspace',
     'TemplateLibrary',
+    'RulesWorkspace',
   ] as const;
   return {
     schemaVersion: '1.0',

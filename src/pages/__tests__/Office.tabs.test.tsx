@@ -58,6 +58,9 @@ vi.mock('../../features/office', () => ({
   GenerateWorkspace: ({ documents }: { documents: unknown[] }) => (
     <div data-testid="office-generate-workspace" data-doc-count={documents.length} />
   ),
+  RulesWorkspace: ({ workspacePath }: { workspacePath: string }) => (
+    <div data-testid="office-rules-workspace-stub" data-workspace-path={workspacePath} />
+  ),
   OfficePreviewPanel: () => <div data-testid="office-preview-panel" />,
   useOfficeDocuments: () => ({
     documents: [],
