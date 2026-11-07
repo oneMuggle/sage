@@ -15,7 +15,8 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   } as unknown as typeof ResizeObserver;
 }
 
-const { create, update, remove, raw } = vi.hoisted(() => ({
+const { list, create, update, remove, raw } = vi.hoisted(() => ({
+  list: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
@@ -23,7 +24,7 @@ const { create, update, remove, raw } = vi.hoisted(() => ({
 }));
 
 vi.mock('../../../shared/api/rulesApi', () => ({
-  rulesApi: { create, update, remove, raw },
+  rulesApi: { list, create, update, remove, raw },
 }));
 
 const CONSTRAINT: RuleEntry = {
@@ -64,6 +65,7 @@ function renderDialog(props: Partial<React.ComponentProps<typeof RuleEditorDialo
 }
 
 beforeEach(() => {
+  list.mockReset().mockResolvedValue([]);
   create.mockReset().mockResolvedValue(undefined);
   update.mockReset().mockResolvedValue(undefined);
   remove.mockReset().mockResolvedValue(undefined);
@@ -189,7 +191,50 @@ describe('RuleEditorDialog', () => {
     });
     fireEvent.click(screen.getByTestId('rule-editor-save'));
 
-    expect(await screen.findByTestId('rule-editor-error')).toHaveTextContent('不安全内容');
+    expect(await screen.findByTestId('rule-editor-error')).toHaveTextContent(
+      '保存失败：不安全内容',
+    );
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('shows the server copy on a 409 conflict and can adopt it', async () => {
+    renderDialog({ entry: CONSTRAINT });
+    const serverRule: RuleEntry = {
+      ...CONSTRAINT,
+      category: 'server_category',
+      content: '服务器上的最新内容',
+      trigger: 'when-server',
+      priority: 9,
+      enabled: false,
+      updatedAt: 1730000000999,
+    };
+    update.mockRejectedValueOnce(
+      Object.assign(new Error('规则已被修改（HTTP 409）'), { status_code: 409 }),
+    );
+    list.mockResolvedValueOnce([serverRule]);
+
+    fireEvent.change(screen.getByTestId('rule-editor-content'), {
+      target: { value: '我的草稿' },
+    });
+    fireEvent.click(screen.getByTestId('rule-editor-save'));
+
+    const block = await screen.findByTestId('rule-editor-conflict');
+    expect(block).toHaveTextContent('服务器上的最新内容');
+    expect(block).toHaveTextContent('server_category');
+    expect(list).toHaveBeenCalledWith('p-1');
+
+    fireEvent.click(screen.getByTestId('rule-editor-use-server'));
+    expect(screen.getByTestId('rule-editor-content')).toHaveValue('服务器上的最新内容');
+    expect(screen.getByTestId('rule-editor-category')).toHaveValue('server_category');
+    expect(screen.getByTestId('rule-editor-trigger')).toHaveValue('when-server');
+    expect(screen.queryByTestId('rule-editor-conflict')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('rule-editor-save'));
+    await waitFor(() =>
+      expect(update).toHaveBeenLastCalledWith(
+        'p-1',
+        expect.objectContaining({ expectedUpdatedAt: 1730000000999 }),
+      ),
+    );
   });
 });

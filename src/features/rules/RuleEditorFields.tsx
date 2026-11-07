@@ -7,7 +7,7 @@ import { Dialog, Transition } from '@headlessui/react';
 import { X } from 'lucide-react';
 import { Fragment, type ReactNode } from 'react';
 
-import type { CreatableRuleLayer, RawRulesResponse } from '../../shared/api/rulesApi';
+import type { CreatableRuleLayer, RawRulesResponse, RuleEntry } from '../../shared/api/rulesApi';
 import { useI18n } from '../../shared/lib/i18n';
 import { Button } from '../../shared/ui/Button';
 import { Input } from '../../shared/ui/Input';
@@ -30,55 +30,81 @@ interface ShellProps {
   footer: ReactNode;
 }
 
-export function RuleEditorShell({ isOpen, onClose, title, children, footer }: ShellProps) {
+function DialogBackdrop() {
+  return (
+    <Transition.Child
+      as={Fragment}
+      enter="ease-out duration-200"
+      enterFrom="opacity-0"
+      enterTo="opacity-100"
+      leave="ease-in duration-150"
+      leaveFrom="opacity-100"
+      leaveTo="opacity-0"
+    >
+      <div className="fixed inset-0 bg-overlay" />
+    </Transition.Child>
+  );
+}
+
+function DialogHeader({ title, onClose }: { title: string; onClose: () => void }) {
   const { t } = useI18n();
+  return (
+    <div className="flex items-center justify-between border-b border-border px-5 py-3">
+      <Dialog.Title as="h3" className="text-sm font-semibold text-foreground">
+        {title}
+      </Dialog.Title>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onClose}
+        aria-label={t('rules.action.close')}
+        data-testid="rule-editor-cancel-icon"
+      >
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
+interface DialogFrameProps {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  footer: ReactNode;
+}
+
+function DialogFrame({ title, onClose, children, footer }: DialogFrameProps) {
+  return (
+    <Transition.Child
+      as={Fragment}
+      enter="ease-out duration-200"
+      enterFrom="opacity-0 scale-95"
+      enterTo="opacity-100 scale-100"
+      leave="ease-in duration-150"
+      leaveFrom="opacity-100 scale-100"
+      leaveTo="opacity-0 scale-95"
+    >
+      <Dialog.Panel
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-surface-elevated shadow-xl dark:bg-surface"
+        data-testid="rule-editor"
+      >
+        <DialogHeader title={title} onClose={onClose} />
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">{children}</div>
+        {footer}
+      </Dialog.Panel>
+    </Transition.Child>
+  );
+}
+
+export function RuleEditorShell({ isOpen, onClose, title, children, footer }: ShellProps) {
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={onClose}>
-        <Transition.Child
-          as={Fragment}
-          enter="ease-out duration-200"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="ease-in duration-150"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <div className="fixed inset-0 bg-overlay" />
-        </Transition.Child>
-
+        <DialogBackdrop />
         <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Transition.Child
-            as={Fragment}
-            enter="ease-out duration-200"
-            enterFrom="opacity-0 scale-95"
-            enterTo="opacity-100 scale-100"
-            leave="ease-in duration-150"
-            leaveFrom="opacity-100 scale-100"
-            leaveTo="opacity-0 scale-95"
-          >
-            <Dialog.Panel
-              className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-surface-elevated shadow-xl dark:bg-surface"
-              data-testid="rule-editor"
-            >
-              <div className="flex items-center justify-between border-b border-border px-5 py-3">
-                <Dialog.Title as="h3" className="text-sm font-semibold text-foreground">
-                  {title}
-                </Dialog.Title>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onClose}
-                  aria-label={t('rules.action.close')}
-                  data-testid="rule-editor-cancel-icon"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">{children}</div>
-              {footer}
-            </Dialog.Panel>
-          </Transition.Child>
+          <DialogFrame title={title} onClose={onClose} footer={footer}>
+            {children}
+          </DialogFrame>
         </div>
       </Dialog>
     </Transition>
@@ -307,6 +333,48 @@ export function EditorFooter({
         data-testid="rule-editor-save"
       >
         {saving ? t('rules.editor.saving') : t('rules.editor.save')}
+      </Button>
+    </div>
+  );
+}
+
+interface ConflictNoticeProps {
+  current: RuleEntry;
+  onUseServer: () => void;
+}
+
+/** 409 时展示服务器上的当前版本，允许一键以其为准。 */
+export function ConflictNotice({ current, onUseServer }: ConflictNoticeProps) {
+  const { t } = useI18n();
+  const rows: Array<[string, string]> = [
+    [t('rules.editor.category'), current.category],
+    [t('rules.editor.content'), current.content],
+    [t('rules.editor.trigger'), current.trigger || t('rules.editor.triggerHint')],
+    [t('rules.editor.priority'), String(current.priority)],
+    [t('rules.editor.enabled'), current.enabled ? t('rules.row.enabled') : t('rules.row.disabled')],
+  ];
+  return (
+    <div
+      className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2"
+      data-testid="rule-editor-conflict"
+    >
+      <p className="text-xs font-medium text-foreground">{t('rules.conflict.title')}</p>
+      <p className="text-ui-2xs text-muted-foreground">{t('rules.conflict.hint')}</p>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-ui-2xs">
+        {rows.map(([label, value]) => (
+          <Fragment key={label}>
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="whitespace-pre-wrap text-foreground">{value}</dd>
+          </Fragment>
+        ))}
+      </dl>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={onUseServer}
+        data-testid="rule-editor-use-server"
+      >
+        {t('rules.conflict.useServer')}
       </Button>
     </div>
   );

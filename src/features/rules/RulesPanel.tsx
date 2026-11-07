@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { rulesApi, type RuleConflict, type RuleEntry } from '../../shared/api/rulesApi';
-import { useI18n } from '../../shared/lib/i18n';
+import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { Button } from '../../shared/ui/Button';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import { Input } from '../../shared/ui/Input';
@@ -15,6 +15,7 @@ import {
   conflictedRuleIds,
   countEnabled,
   filterRules,
+  isConflictError,
   layerLabelKey,
   type LayerFilter,
 } from './rulesView';
@@ -28,6 +29,16 @@ export interface RulesPanelProps {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+type Translate = (key: TranslationKey) => string;
+
+function failureMessage(t: Translate, key: TranslationKey, err: unknown): string {
+  return t(key).replace('{message}', errorMessage(err));
+}
+
+function reportConflict(t: Translate): void {
+  toast.error(t('rules.conflict.reload'));
 }
 
 interface RulesData {
@@ -81,9 +92,68 @@ function useRulesData(projectId: string): RulesData {
   return { rules, effectiveEntries, conflicts, loading, error, reload };
 }
 
-/** 新建 / 编辑 / 复制 / 停用 / 删除的状态与副作用。 */
-function useRuleWrites(projectId: string, reload: () => void) {
-  const { t } = useI18n();
+async function copyRuleContent(entry: RuleEntry, t: Translate): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(entry.content);
+    toast.success(t('rules.action.copied'));
+  } catch (err) {
+    toast.error(failureMessage(t, 'rules.action.copyFailed', err));
+  }
+}
+
+async function toggleRule(
+  projectId: string,
+  entry: RuleEntry,
+  reload: () => void,
+  t: Translate,
+): Promise<void> {
+  try {
+    await rulesApi.update(projectId, {
+      layer: 'constraint',
+      ruleId: entry.id,
+      patch: { enabled: !entry.enabled },
+      expectedUpdatedAt: entry.updatedAt,
+    });
+    reload();
+  } catch (err) {
+    if (isConflictError(err)) {
+      reload();
+      reportConflict(t);
+      return;
+    }
+    toast.error(failureMessage(t, 'rules.action.toggleFailed', err));
+  }
+}
+
+async function deleteRule(
+  projectId: string,
+  entry: RuleEntry,
+  reload: () => void,
+  t: Translate,
+): Promise<void> {
+  const confirmed = await confirmDialog({
+    title: t('rules.delete.title'),
+    message: t('rules.delete.message'),
+    confirmLabel: t('rules.delete.confirm'),
+    cancelLabel: t('rules.editor.cancel'),
+    danger: true,
+  });
+  if (!confirmed) return;
+  try {
+    await rulesApi.remove(projectId, entry.layer, entry.id);
+    toast.success(t('rules.action.deleted'));
+    reload();
+  } catch (err) {
+    if (isConflictError(err)) {
+      reload();
+      reportConflict(t);
+      return;
+    }
+    toast.error(failureMessage(t, 'rules.action.deleteFailed', err));
+  }
+}
+
+function useRuleEditor() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<RuleEntry | null>(null);
 
@@ -97,6 +167,15 @@ function useRuleWrites(projectId: string, reload: () => void) {
     setEditTarget(null);
   }, []);
 
+  return { editorOpen, editTarget, setEditTarget, setEditorOpen, openCreate, closeEditor };
+}
+
+/** 新建 / 编辑 / 复制 / 停用 / 删除的状态与副作用。 */
+function useRuleWrites(projectId: string, reload: () => void) {
+  const { t } = useI18n();
+  const { editorOpen, editTarget, setEditTarget, setEditorOpen, openCreate, closeEditor } =
+    useRuleEditor();
+
   const handleSaved = useCallback(async () => {
     toast.success(t('rules.action.saved'));
     reload();
@@ -107,48 +186,15 @@ function useRuleWrites(projectId: string, reload: () => void) {
       if (action === 'edit') {
         setEditTarget(entry);
         setEditorOpen(true);
-        return;
-      }
-      if (action === 'copy') {
-        try {
-          await navigator.clipboard.writeText(entry.content);
-          toast.success(t('rules.action.copied'));
-        } catch (err) {
-          toast.error(t('rules.action.copyFailed').replace('{message}', errorMessage(err)));
-        }
-        return;
-      }
-      if (action === 'toggle') {
-        try {
-          await rulesApi.update(projectId, {
-            layer: 'constraint',
-            ruleId: entry.id,
-            patch: { enabled: !entry.enabled },
-            expectedUpdatedAt: entry.updatedAt,
-          });
-          reload();
-        } catch (err) {
-          toast.error(t('rules.action.toggleFailed').replace('{message}', errorMessage(err)));
-        }
-        return;
-      }
-      const confirmed = await confirmDialog({
-        title: t('rules.delete.title'),
-        message: t('rules.delete.message'),
-        confirmLabel: t('rules.delete.confirm'),
-        cancelLabel: t('rules.editor.cancel'),
-        danger: true,
-      });
-      if (!confirmed) return;
-      try {
-        await rulesApi.remove(projectId, entry.layer, entry.id);
-        toast.success(t('rules.action.deleted'));
-        reload();
-      } catch (err) {
-        toast.error(t('rules.action.deleteFailed').replace('{message}', errorMessage(err)));
+      } else if (action === 'copy') {
+        await copyRuleContent(entry, t);
+      } else if (action === 'toggle') {
+        await toggleRule(projectId, entry, reload, t);
+      } else {
+        await deleteRule(projectId, entry, reload, t);
       }
     },
-    [projectId, reload, t],
+    [projectId, reload, setEditTarget, setEditorOpen, t],
   );
 
   return { editorOpen, editTarget, openCreate, closeEditor, handleSaved, handleAction };

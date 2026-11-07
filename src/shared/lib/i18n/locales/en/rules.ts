@@ -26,6 +26,11 @@ export const enRules: Record<RulesTranslationKey, string> = {
   'rules.action.deleteFailed': 'Failed to delete: {message}',
   'rules.action.toggleFailed': 'Failed to toggle: {message}',
   'rules.action.copyFailed': 'Failed to copy: {message}',
+  'rules.conflict.title': 'Rule changed elsewhere',
+  'rules.conflict.hint':
+    'The server version differs from your edit. Adopt the server version, or close and refresh to retry.',
+  'rules.conflict.useServer': 'Use server version',
+  'rules.conflict.reload': 'The rule was changed; the list has been refreshed — please try again',
   'rules.loading': 'Loading rules…',
   'rules.loadFailed': 'Failed to load rules: {message}',
   'rules.empty.title': 'No rules for this project yet',

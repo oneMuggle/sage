@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { RuleEntry } from '../../../shared/api/rulesApi';
@@ -120,6 +121,7 @@ function renderPanel(onOpenSource?: (entry: RuleEntry) => void) {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   list.mockReset().mockResolvedValue(RULES);
   effective.mockReset().mockResolvedValue({
     entries: RULES.filter((entry) => entry.enabled),
@@ -241,6 +243,9 @@ describe('RulesPanel', () => {
     );
     expect(screen.queryByTestId(`rule-menu-edit-${PLAYBOOK_ENTRY.id}`)).toBeNull();
     expect(screen.queryByTestId(`rule-menu-delete-${PLAYBOOK_ENTRY.id}`)).toBeNull();
+    const disabledEdit = screen.getByTestId(`rule-menu-edit-disabled-${PLAYBOOK_ENTRY.id}`);
+    expect(disabledEdit).toBeInTheDocument();
+    expect(disabledEdit).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('toggles a constraint rule and reloads the list', async () => {
@@ -261,6 +266,22 @@ describe('RulesPanel', () => {
       }),
     );
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+  });
+
+  it('reloads and reports a conflict instead of a generic toggle failure', async () => {
+    update.mockRejectedValueOnce(
+      Object.assign(new Error('规则已被修改（HTTP 409）'), { status_code: 409 }),
+    );
+    renderPanel();
+
+    const trigger = await screen.findByTestId(`rule-menu-${CONSTRAINT_ENTRY.id}`);
+    fireEvent.pointerDown(trigger, { button: 0 });
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    fireEvent.click(await screen.findByTestId(`rule-menu-toggle-${CONSTRAINT_ENTRY.id}`));
+
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    expect(toast.error).toHaveBeenCalledWith('规则已被修改，列表已刷新，请重试');
+    expect(toast.error).not.toHaveBeenCalledWith(expect.stringContaining('切换启用状态失败'));
   });
 
   it('skips deletion when the confirmation is declined', async () => {

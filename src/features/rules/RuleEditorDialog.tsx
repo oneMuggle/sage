@@ -11,6 +11,7 @@ import { useI18n } from '../../shared/lib/i18n';
 
 import {
   CategoryField,
+  ConflictNotice,
   ConstraintFields,
   ContentField,
   EditorFooter,
@@ -18,6 +19,7 @@ import {
   RawPreviewSection,
   RuleEditorShell,
 } from './RuleEditorFields';
+import { isConflictError } from './rulesView';
 
 /** 与后端 `markdown_rules.MAX_RULE_CHARS` 保持一致。 */
 export const MAX_RULE_CHARS = 2000;
@@ -46,6 +48,8 @@ interface PersistInput {
   trigger: string;
   priority: number;
   enabled: boolean;
+  /** 冲突后「使用服务器版本」时覆盖 `entry.updatedAt`。 */
+  expectedUpdatedAt?: number | null;
 }
 
 /** 新建 / 编辑的实际请求；编辑只提交该层支持的字段。 */
@@ -73,7 +77,7 @@ async function persistRule(input: PersistInput): Promise<void> {
         priority,
         enabled,
       },
-      expectedUpdatedAt: entry.updatedAt,
+      expectedUpdatedAt: input.expectedUpdatedAt ?? entry.updatedAt,
     });
     return;
   }
@@ -98,6 +102,8 @@ export function RuleEditorDialog({
   const [enabled, setEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conflictCurrent, setConflictCurrent] = useState<RuleEntry | null>(null);
+  const [expectedUpdatedAtOverride, setExpectedUpdatedAtOverride] = useState<number | undefined>();
   const [rawPreview, setRawPreview] = useState<RawRulesResponse | null>(null);
   const [rawLoading, setRawLoading] = useState(false);
 
@@ -116,6 +122,8 @@ export function RuleEditorDialog({
     setEnabled(entry?.enabled ?? true);
     setSaving(false);
     setError(null);
+    setConflictCurrent(null);
+    setExpectedUpdatedAtOverride(undefined);
     setRawPreview(null);
     setRawLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在打开/切换目标时重置
@@ -146,6 +154,32 @@ export function RuleEditorDialog({
     }
   };
 
+  const refreshConflict = async (target: RuleEntry) => {
+    try {
+      const list = await rulesApi.list(projectId);
+      setConflictCurrent(list.find((item) => item.id === target.id) ?? null);
+    } catch {
+      setConflictCurrent(null);
+    }
+  };
+
+  const handleSaveError = async (err: unknown) => {
+    setError(t('rules.action.saveFailed').replace('{message}', errorMessage(err)));
+    if (isConflictError(err) && entry) await refreshConflict(entry);
+  };
+
+  const handleUseServer = () => {
+    if (!conflictCurrent) return;
+    setCategory(conflictCurrent.category);
+    setContent(conflictCurrent.content);
+    setTrigger(conflictCurrent.trigger ?? '');
+    setPriority(conflictCurrent.priority);
+    setEnabled(conflictCurrent.enabled);
+    setExpectedUpdatedAtOverride(conflictCurrent.updatedAt ?? undefined);
+    setConflictCurrent(null);
+    setError(null);
+  };
+
   const handleSave = async () => {
     const text = content.trim();
     if (!text) {
@@ -168,11 +202,12 @@ export function RuleEditorDialog({
         trigger,
         priority,
         enabled,
+        expectedUpdatedAt: expectedUpdatedAtOverride,
       });
       await onSaved();
       onClose();
     } catch (err) {
-      setError(errorMessage(err));
+      await handleSaveError(err);
     } finally {
       setSaving(false);
     }
@@ -218,6 +253,9 @@ export function RuleEditorDialog({
           rawLoading={rawLoading}
           onToggle={() => void handleToggleRaw()}
         />
+      )}
+      {conflictCurrent && (
+        <ConflictNotice current={conflictCurrent} onUseServer={handleUseServer} />
       )}
       {error && (
         <p className="text-xs text-destructive" data-testid="rule-editor-error">

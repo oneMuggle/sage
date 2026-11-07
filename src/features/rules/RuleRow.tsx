@@ -99,7 +99,9 @@ function RuleMenu({ entry, onAction }: RuleMenuProps) {
             {t('rules.menu.edit')}
           </DropdownMenuItem>
         ) : (
-          <DropdownMenuItem disabled>{t('rules.menu.edit')}</DropdownMenuItem>
+          <DropdownMenuItem disabled data-testid={`rule-menu-edit-disabled-${entry.id}`}>
+            {t('rules.menu.edit')}
+          </DropdownMenuItem>
         )}
         <DropdownMenuItem
           onSelect={() => onAction('copy', entry)}

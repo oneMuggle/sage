@@ -68,6 +68,11 @@ export function conflictedRuleIds(conflicts: readonly RuleConflict[]): Set<strin
   return ids;
 }
 
+/** 409 `rule_conflict`；desktopInvoke 会把 HTTP 状态码附加到 Error 上。 */
+export function isConflictError(err: unknown): boolean {
+  return (err as { status_code?: number } | null)?.status_code === 409;
+}
+
 /** 注入顺序；同一层内「内容检查」（id 含 `:check:`）排在该阶段普通规则之后。 */
 export function sortEffectiveRules(entries: readonly RuleEntry[]): RuleEntry[] {
   return entries
