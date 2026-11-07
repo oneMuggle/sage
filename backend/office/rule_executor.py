@@ -40,9 +40,7 @@ def _classify_style(style: str) -> str:
     return "body"
 
 
-def extract_blocks(
-    file_path: Path, *, workspace_path: Optional[str] = None
-) -> List[DocumentBlock]:
+def extract_blocks(file_path: Path, *, workspace_path: Optional[str] = None) -> List[DocumentBlock]:
     """Flatten a .docx profile into scannable blocks (empty text skipped)."""
     profile = read_doc_profile(Path(file_path), workspace_path=workspace_path)
     paragraphs = profile.get("paragraphs") or []
@@ -62,9 +60,7 @@ def extract_blocks(
         )
     table_offset = len(paragraphs)
     for table_index, table in enumerate(profile.get("tables") or []):
-        text = " ".join(
-            str(cell.get("text") or "") for cell in (table.get("cells") or [])
-        ).strip()
+        text = " ".join(str(cell.get("text") or "") for cell in (table.get("cells") or [])).strip()
         if not text:
             continue
         blocks.append(
@@ -154,7 +150,8 @@ def _parse_ai_findings(
         if not isinstance(item, dict):
             continue
         rule = by_rule.get(str(item.get("rule_id")))
-        block = by_index.get(item.get("block_index"))
+        raw_index = item.get("block_index")
+        block = by_index.get(raw_index) if isinstance(raw_index, int) else None
         if rule is None or block is None:
             continue
         findings.append(
@@ -192,7 +189,7 @@ async def run_audit(
     llm_client: Any = None,
 ) -> AuditResult:
     """Audit a .docx against enabled rules; read-only."""
-    enabled = [rule for rule in rules if rule.enabled]
+    enabled = list({r.id: r for r in rules if r.enabled}.values())
     blocks = extract_blocks(file_path, workspace_path=workspace_path)
     findings: List[AuditFinding] = []
     for rule in enabled:

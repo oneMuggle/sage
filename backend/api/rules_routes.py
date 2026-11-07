@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -40,6 +40,8 @@ from backend.orchestration.llm_factory import build_llm_client_from_settings
 
 router = APIRouter(prefix="/rules", tags=["office"])
 
+_MAX_AUDIT_RULES = 50
+
 _CATEGORY_TO_TYPE = {
     "page": "format",
     "style": "format",
@@ -64,6 +66,20 @@ def _db() -> Database:
 
 def _not_found(exc: ValueError) -> HTTPException:
     return HTTPException(status_code=404, detail=str(exc))
+
+
+def _resolve_source(workspace_path: str, file_path: str, max_size_bytes: int) -> Tuple[Path, Path]:
+    """Resolve the workspace + file path and enforce the size cap."""
+    workspace = validate_workspace(Path(workspace_path))
+    source = resolve_within(workspace, Path(file_path))
+    if not source.is_file():
+        raise OfficePathError(f"file_path is not a regular file: {file_path}", file_path=source)
+    actual_size = source.stat().st_size
+    if actual_size > max_size_bytes:
+        raise OfficeSizeLimitError(
+            actual_size=actual_size, max_size=max_size_bytes, file_path=source
+        )
+    return workspace, source
 
 
 class GroupCreateRequest(BaseModel):
@@ -119,7 +135,7 @@ class ExtractRequest(BaseModel):
     file_path: str
     file_type: str = Field(default="spec", pattern="^(spec|template)$")
     use_llm: bool = False
-    max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
+    max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024, le=200 * 1024 * 1024)
 
 
 class ExtractWarning(BaseModel):
@@ -142,8 +158,8 @@ class AuditRequest(BaseModel):
 
     workspace_path: str
     file_path: str
-    rule_ids: List[str] = Field(..., min_length=1)
-    max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
+    rule_ids: List[str]
+    max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024, le=200 * 1024 * 1024)
 
 
 def _spec_to_rule(spec: WordRuleSpec) -> Rule:
@@ -214,9 +230,7 @@ def delete_group_endpoint(group_id: str) -> DeleteResponse:
     return DeleteResponse(deleted=True, id=group_id)
 
 
-@router.post(
-    "/groups/{group_id}/rules", response_model=Rule, status_code=status.HTTP_201_CREATED
-)
+@router.post("/groups/{group_id}/rules", response_model=Rule, status_code=status.HTTP_201_CREATED)
 def create_rule_endpoint(group_id: str, req: RuleCreateRequest) -> Rule:
     conn = _db().get_connection()
     try:
@@ -271,17 +285,7 @@ def delete_rule_endpoint(rule_id: str) -> DeleteResponse:
 
 @router.post("/extract", response_model=ExtractResponse)
 async def extract_endpoint(req: ExtractRequest) -> ExtractResponse:
-    workspace = validate_workspace(Path(req.workspace_path))
-    source = resolve_within(workspace, Path(req.file_path))
-    if not source.is_file():
-        raise OfficePathError(
-            f"file_path is not a regular file: {req.file_path}", file_path=source
-        )
-    actual_size = source.stat().st_size
-    if actual_size > req.max_size_bytes:
-        raise OfficeSizeLimitError(
-            actual_size=actual_size, max_size=req.max_size_bytes, file_path=source
-        )
+    workspace, source = _resolve_source(req.workspace_path, req.file_path, req.max_size_bytes)
     result = await extract_word_rules_async(
         source,
         file_type=req.file_type,
@@ -291,8 +295,7 @@ async def extract_endpoint(req: ExtractRequest) -> ExtractResponse:
     return ExtractResponse(
         rules=[_spec_to_rule(spec) for spec in result.pack.rules],
         warnings=[
-            ExtractWarning(code=item["code"], message=item["message"])
-            for item in result.warnings
+            ExtractWarning(code=item["code"], message=item["message"]) for item in result.warnings
         ],
     )
 
@@ -300,24 +303,22 @@ async def extract_endpoint(req: ExtractRequest) -> ExtractResponse:
 @router.post("/audit", response_model=AuditResult)
 async def audit_endpoint(req: AuditRequest) -> AuditResult:
     conn = _db().get_connection()
+    rule_ids = list(dict.fromkeys(req.rule_ids))
+    if not rule_ids:
+        raise HTTPException(status_code=422, detail="rule_ids cannot be empty")
+    if len(rule_ids) > _MAX_AUDIT_RULES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"rule_ids cannot exceed {_MAX_AUDIT_RULES}",
+        )
     rules: List[Rule] = []
-    for rule_id in req.rule_ids:
+    for rule_id in rule_ids:
         try:
             rules.append(get_rule(conn, rule_id))
         except ValueError as exc:
             raise _not_found(exc) from exc
 
-    workspace = validate_workspace(Path(req.workspace_path))
-    source = resolve_within(workspace, Path(req.file_path))
-    if not source.is_file():
-        raise OfficePathError(
-            f"file_path is not a regular file: {req.file_path}", file_path=source
-        )
-    actual_size = source.stat().st_size
-    if actual_size > req.max_size_bytes:
-        raise OfficeSizeLimitError(
-            actual_size=actual_size, max_size=req.max_size_bytes, file_path=source
-        )
+    workspace, source = _resolve_source(req.workspace_path, req.file_path, req.max_size_bytes)
 
     llm_client = None
     if any(rule.enabled and rule.check_mode == "ai" for rule in rules):
@@ -325,6 +326,4 @@ async def audit_endpoint(req: AuditRequest) -> AuditResult:
         if llm_client is None:
             raise HTTPException(status_code=503, detail="LLM 客户端未配置")
 
-    return await run_audit(
-        rules, source, workspace_path=str(workspace), llm_client=llm_client
-    )
+    return await run_audit(rules, source, workspace_path=str(workspace), llm_client=llm_client)

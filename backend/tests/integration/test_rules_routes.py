@@ -115,9 +115,7 @@ def test_rule_crud_roundtrip_persists_description(client: TestClient) -> None:
 def test_unknown_ids_return_404(client: TestClient) -> None:
     assert client.put("/api/v1/rules/groups/group-missing", json={"name": "x"}).status_code == 404
     assert client.delete("/api/v1/rules/groups/group-missing").status_code == 404
-    assert (
-        client.post("/api/v1/rules/groups/group-missing/rules", json=RULE).status_code == 404
-    )
+    assert client.post("/api/v1/rules/groups/group-missing/rules", json=RULE).status_code == 404
     assert client.put("/api/v1/rules/rules/rule-missing", json={"name": "x"}).status_code == 404
     assert client.delete("/api/v1/rules/rules/rule-missing").status_code == 404
 
@@ -270,3 +268,68 @@ def test_audit_unknown_rule_returns_404(client: TestClient, tmp_path: Path) -> N
         },
     )
     assert response.status_code == 404
+
+
+def test_audit_dedupes_rule_ids(client: TestClient, tmp_path: Path) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+    rule = client.post(f"/api/v1/rules/groups/{group['id']}/rules", json=RULE).json()
+    _write_text_docx(tmp_path / "dirty.docx", "这一行包含违禁词：待定。")
+    response = client.post(
+        "/api/v1/rules/audit",
+        json={
+            "workspace_path": str(tmp_path),
+            "file_path": str(tmp_path / "dirty.docx"),
+            "rule_ids": [rule["id"], rule["id"]],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["warning_count"] == 1
+
+
+def test_audit_rejects_empty_and_excessive_rule_ids(client: TestClient, tmp_path: Path) -> None:
+    _write_text_docx(tmp_path / "doc.docx", "正文")
+    payload = {
+        "workspace_path": str(tmp_path),
+        "file_path": str(tmp_path / "doc.docx"),
+    }
+    empty = client.post("/api/v1/rules/audit", json=dict(payload, rule_ids=[]))
+    assert empty.status_code == 422
+
+    too_many = client.post(
+        "/api/v1/rules/audit",
+        json=dict(payload, rule_ids=[f"rule-missing-{i}" for i in range(51)]),
+    )
+    assert too_many.status_code == 422
+
+
+def test_audit_rejects_absurd_size_cap(client: TestClient, tmp_path: Path) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+    rule = client.post(f"/api/v1/rules/groups/{group['id']}/rules", json=RULE).json()
+    _write_text_docx(tmp_path / "doc.docx", "正文")
+    response = client.post(
+        "/api/v1/rules/audit",
+        json={
+            "workspace_path": str(tmp_path),
+            "file_path": str(tmp_path / "doc.docx"),
+            "rule_ids": [rule["id"]],
+            "max_size_bytes": 10**10,
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_audit_rejects_oversized_file(client: TestClient, tmp_path: Path) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+    rule = client.post(f"/api/v1/rules/groups/{group['id']}/rules", json=RULE).json()
+    oversized = tmp_path / "big.docx"
+    oversized.write_bytes(b"x" * 2048)
+    response = client.post(
+        "/api/v1/rules/audit",
+        json={
+            "workspace_path": str(tmp_path),
+            "file_path": str(oversized),
+            "rule_ids": [rule["id"]],
+            "max_size_bytes": 1024,
+        },
+    )
+    assert response.status_code == 413

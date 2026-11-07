@@ -106,3 +106,10 @@ async def test_ai_rule_without_client_raises(docx_path: Path) -> None:
     rule = _rule(id="rule-ai", check_mode="ai", pattern=None)
     with pytest.raises(OfficeParseError):
         await run_audit([rule], docx_path)
+
+
+async def test_ai_rule_ignores_non_int_block_index(docx_path: Path) -> None:
+    client = _FakeClient('[{"rule_id":"rule-ai","block_index":[0],"message":"x"}]')
+    rule = _rule(id="rule-ai", check_mode="ai", pattern=None, scope="full")
+    result = await run_audit([rule], docx_path, llm_client=client)
+    assert result.findings == []
