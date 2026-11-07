@@ -275,6 +275,79 @@ describe('RulesWorkspace', () => {
     );
   });
 
+  it('selecting a rule in the group list shows it in the detail panel', async () => {
+    mockedApi.listGroups.mockResolvedValue([
+      {
+        ...GROUP,
+        rules: [
+          ...GROUP.rules,
+          {
+            ...GROUP.rules[0],
+            id: 'rule-2',
+            name: 'Second rule',
+          },
+        ],
+      },
+    ]);
+    renderWorkspace();
+
+    await waitFor(() => expect(screen.getByTestId('rule-item-rule-2')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('rule-item-rule-2'));
+
+    await waitFor(() => expect(screen.getByTestId('rule-detail-name')).toHaveValue('Second rule'));
+    expect(screen.getByTestId('rule-item-rule-2')).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('creating a rule from the group list opens an empty form and calls createRule', async () => {
+    mockedApi.createRule.mockResolvedValue({
+      ...GROUP.rules[0],
+      id: 'rule-new',
+      name: 'Brand new rule',
+    });
+    renderWorkspace();
+
+    await waitFor(() => expect(screen.getByTestId('rule-create-new')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('rule-create-new'));
+
+    expect(screen.getByTestId('rule-detail-name')).toHaveValue('');
+
+    fireEvent.change(screen.getByTestId('rule-detail-name'), {
+      target: { value: 'Brand new rule' },
+    });
+    fireEvent.change(screen.getByTestId('rule-detail-pattern'), {
+      target: { value: '\\bTODO\\b' },
+    });
+    fireEvent.click(screen.getByTestId('rule-detail-save'));
+
+    await waitFor(() =>
+      expect(mockedApi.createRule).toHaveBeenCalledWith(
+        'group-1',
+        expect.objectContaining({ name: 'Brand new rule' }),
+      ),
+    );
+  });
+
+  it('switching a rule to AI clears the regex pattern', async () => {
+    mockedApi.updateRule.mockResolvedValue({ ...GROUP.rules[0], check_mode: 'ai' });
+    renderWorkspace();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('rule-detail-name')).toHaveValue('No passive voice'),
+    );
+    fireEvent.change(screen.getByTestId('rule-detail-check-mode'), { target: { value: 'ai' } });
+    fireEvent.change(screen.getByTestId('rule-detail-ai-prompt'), {
+      target: { value: 'check tone' },
+    });
+    fireEvent.click(screen.getByTestId('rule-detail-save'));
+
+    await waitFor(() =>
+      expect(mockedApi.updateRule).toHaveBeenCalledWith(
+        'rule-1',
+        expect.objectContaining({ check_mode: 'ai', pattern: '' }),
+      ),
+    );
+  });
+
   it('extraction creates a new group with the extracted rules', async () => {
     mockedApi.extractRules.mockResolvedValue({
       rules: [

@@ -74,8 +74,8 @@ export function RuleDetailPanel({
       scope,
       description: description.trim(),
       checkMode,
-      pattern: checkMode === 'regex' ? pattern.trim() : undefined,
-      aiPrompt: checkMode === 'ai' ? aiPrompt.trim() : undefined,
+      pattern: checkMode === 'regex' ? pattern.trim() : '',
+      aiPrompt: checkMode === 'ai' ? aiPrompt.trim() : '',
       enabled,
     };
     if (rule) {

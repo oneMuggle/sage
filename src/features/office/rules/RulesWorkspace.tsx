@@ -49,6 +49,7 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
   const [auditing, setAuditing] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [conflicts, setConflicts] = useState<RuleConflict[] | null>(null);
   const [auditResult, setAuditResult] = useState<RuleAuditResult | null>(null);
 
@@ -75,10 +76,10 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
   // The detail form is only useful once a rule is in focus; fall back to the
   // first rule of the selected group so the panel is populated on first load.
   const selectedRule = useMemo(() => {
-    if (!selectedGroup) return null;
+    if (!selectedGroup || creating) return null;
     const explicit = selectedGroup.rules.find((rule) => rule.id === selectedRuleId);
     return explicit ?? selectedGroup.rules[0] ?? null;
-  }, [selectedGroup, selectedRuleId]);
+  }, [selectedGroup, selectedRuleId, creating]);
 
   const ruleNameById = useCallback(
     (id: string) => {
@@ -94,7 +95,18 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
   const handleSelectGroup = (id: string) => {
     setSelectedGroupId(id);
     setSelectedRuleId(null);
+    setCreating(false);
     setAuditResult(null);
+  };
+
+  const handleSelectRule = (id: string) => {
+    setSelectedRuleId(id);
+    setCreating(false);
+  };
+
+  const handleToggleCreateRule = () => {
+    setCreating((value) => !value);
+    setSelectedRuleId(null);
   };
 
   const handleCreateGroup = async (name: string, description: string, priority: number) => {
@@ -118,6 +130,7 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
       await load();
       setSelectedGroupId(null);
       setSelectedRuleId(null);
+      setCreating(false);
     } catch (error) {
       toast.error(`${t('office.rules.workspace.operationFailed')}: ${errorMessage(error)}`);
     } finally {
@@ -135,6 +148,7 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
       await load();
       setSelectedGroupId(selectedGroup.id);
       setSelectedRuleId(created.id);
+      setCreating(false);
       toast.success(t('office.rules.detail.saved'));
     } catch (error) {
       toast.error(`${t('office.rules.workspace.operationFailed')}: ${errorMessage(error)}`);
@@ -166,10 +180,10 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
         if (fields.checkMode !== undefined && fields.checkMode !== existing.checkMode) {
           changed.checkMode = fields.checkMode;
         }
-        if (fields.pattern !== undefined && fields.pattern !== existing.pattern) {
+        if (fields.pattern !== undefined && fields.pattern !== (existing.pattern ?? '')) {
           changed.pattern = fields.pattern;
         }
-        if (fields.aiPrompt !== undefined && fields.aiPrompt !== existing.aiPrompt) {
+        if (fields.aiPrompt !== undefined && fields.aiPrompt !== (existing.aiPrompt ?? '')) {
           changed.aiPrompt = fields.aiPrompt;
         }
         if (fields.enabled !== undefined && fields.enabled !== existing.enabled) {
@@ -306,6 +320,7 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
       await load();
       setSelectedGroupId(created.id);
       setSelectedRuleId(null);
+      setCreating(false);
       toast.success(`${t('office.rules.workspace.extractDone')} (${extracted.length})`);
     } catch (error) {
       toast.error(`${t('office.rules.workspace.operationFailed')}: ${errorMessage(error)}`);
@@ -408,9 +423,13 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
             <div className="lg:col-span-1">
               <RuleGroupList
                 groups={groups}
-                selectedGroupId={selectedGroupId}
+                selectedGroupId={selectedGroup?.id ?? null}
+                selectedRuleId={creating ? null : (selectedRule?.id ?? null)}
+                creatingRule={creating}
                 busy={busy}
                 onSelect={handleSelectGroup}
+                onSelectRule={handleSelectRule}
+                onCreateRule={handleToggleCreateRule}
                 onCreate={(name, description, priority) =>
                   void handleCreateGroup(name, description, priority)
                 }
@@ -419,7 +438,11 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
             </div>
             <div className="lg:col-span-2">
               <RuleDetailPanel
-                key={selectedRule?.id ?? `new-${selectedGroup?.id ?? 'none'}`}
+                key={
+                  creating
+                    ? `new-${selectedGroup?.id ?? 'none'}`
+                    : (selectedRule?.id ?? `new-${selectedGroup?.id ?? 'none'}`)
+                }
                 group={selectedGroup}
                 rule={selectedRule}
                 busy={busy}

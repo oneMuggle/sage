@@ -58,15 +58,15 @@ export function RuleAuditResults({ result, auditing }: RuleAuditResultsProps) {
         </span>
       </div>
       <ul className="space-y-2">
-        {result.findings.map((finding) => (
+        {result.findings.map((finding, index) => (
           <li
-            key={finding.ruleId}
+            key={`${finding.ruleId}-${index}`}
             data-testid={`rule-audit-finding-${finding.ruleId}`}
             className="rounded border border-border bg-bg-subtle p-3 text-xs text-text"
           >
             <p className="font-medium">{finding.ruleName}</p>
             <p className="text-text-secondary">
-              {finding.severity} · {finding.location}
+              {t(`office.rules.severity.${finding.severity}`)} · {finding.location}
             </p>
             <p className="mt-1">{finding.message}</p>
             {finding.suggestion ? (

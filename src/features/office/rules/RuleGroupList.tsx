@@ -8,8 +8,12 @@ import type { RuleGroup } from './ruleTypes';
 export interface RuleGroupListProps {
   groups: RuleGroup[];
   selectedGroupId: string | null;
+  selectedRuleId: string | null;
+  creatingRule: boolean;
   busy: boolean;
   onSelect: (groupId: string) => void;
+  onSelectRule: (ruleId: string) => void;
+  onCreateRule: () => void;
   onCreate: (name: string, description: string, priority: number) => void | Promise<void>;
   onDelete: (groupId: string) => void | Promise<void>;
 }
@@ -19,8 +23,12 @@ const inputClass = 'w-full px-3 py-1.5 text-sm border border-border rounded bg-s
 export function RuleGroupList({
   groups,
   selectedGroupId,
+  selectedRuleId,
+  creatingRule,
   busy,
   onSelect,
+  onSelectRule,
+  onCreateRule,
   onCreate,
   onDelete,
 }: RuleGroupListProps) {
@@ -119,35 +127,72 @@ export function RuleGroupList({
           {groups.map((group) => {
             const active = group.id === selectedGroupId;
             return (
-              <li key={group.id} className="flex items-center gap-1">
-                <button
-                  type="button"
-                  data-testid={`rules-group-item-${group.id}`}
-                  aria-current={active ? 'true' : undefined}
-                  className={`flex-1 rounded border px-2 py-1.5 text-left text-xs ${
-                    active
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border text-text-secondary hover:bg-bg-hover'
-                  }`}
-                  onClick={() => onSelect(group.id)}
-                >
-                  <span className="block font-medium text-text">{group.name}</span>
-                  <span className="block text-muted">
-                    {group.rules.length} {t('office.rules.workspace.rulesCount')}
-                    {group.builtin ? ` · ${t('office.rules.workspace.builtin')}` : ''}
-                  </span>
-                </button>
-                {group.builtin ? null : (
+              <li key={group.id} className="space-y-1">
+                <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    data-testid={`rules-group-delete-${group.id}`}
-                    aria-label={t('office.rules.group.delete')}
-                    className="rounded border border-border px-1.5 py-1 text-xs text-text-secondary hover:bg-bg-hover"
-                    onClick={() => void onDelete(group.id)}
+                    data-testid={`rules-group-item-${group.id}`}
+                    aria-current={active ? 'true' : undefined}
+                    className={`flex-1 rounded border px-2 py-1.5 text-left text-xs ${
+                      active
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-text-secondary hover:bg-bg-hover'
+                    }`}
+                    onClick={() => onSelect(group.id)}
                   >
-                    ×
+                    <span className="block font-medium text-text">{group.name}</span>
+                    <span className="block text-muted">
+                      {group.rules.length} {t('office.rules.workspace.rulesCount')}
+                      {group.builtin ? ` · ${t('office.rules.workspace.builtin')}` : ''}
+                    </span>
                   </button>
-                )}
+                  {group.builtin ? null : (
+                    <button
+                      type="button"
+                      data-testid={`rules-group-delete-${group.id}`}
+                      aria-label={t('office.rules.group.delete')}
+                      className="rounded border border-border px-1.5 py-1 text-xs text-text-secondary hover:bg-bg-hover"
+                      onClick={() => void onDelete(group.id)}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+                {active ? (
+                  <div className="ml-3 space-y-1">
+                    <ul className="space-y-1" data-testid={`rules-group-rules-${group.id}`}>
+                      {group.rules.map((rule) => (
+                        <li key={rule.id}>
+                          <button
+                            type="button"
+                            data-testid={`rule-item-${rule.id}`}
+                            aria-current={rule.id === selectedRuleId ? 'true' : undefined}
+                            className={`w-full rounded border border-border px-2 py-1 text-left text-xs text-text-secondary hover:bg-bg-hover ${
+                              rule.enabled ? '' : 'opacity-50'
+                            }`}
+                            onClick={() => onSelectRule(rule.id)}
+                          >
+                            <span className="block font-medium text-text">{rule.name}</span>
+                            <span className="block text-muted">
+                              {t(`office.rules.type.${rule.type}`)} ·{' '}
+                              {t(`office.rules.severity.${rule.severity}`)}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      data-testid="rule-create-new"
+                      className="rounded border border-border px-2 py-1 text-xs text-text-secondary hover:bg-bg-hover"
+                      onClick={onCreateRule}
+                    >
+                      {creatingRule
+                        ? t('office.rules.detail.cancel')
+                        : t('office.rules.detail.newRule')}
+                    </button>
+                  </div>
+                ) : null}
               </li>
             );
           })}
