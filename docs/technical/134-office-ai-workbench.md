@@ -391,7 +391,7 @@ Response: { reply: string }
 | POST | `/api/v1/rules/export` | 导出 `.sage-rules` 包 |
 | POST | `/api/v1/rules/import` | 导入包并落库 |
 
-两个 DELETE 返回 `200 {"deleted": true, "id": "<id>"}`，**不是 204** —— Electron 的通用转发 `backendRequest` 在成功分支上无条件 `response.json()`，空响应体会直接抛错。
+两个 DELETE 返回 `200 {"deleted": true, "id": "<id>"}`，**不是 204** —— Electron 的通用转发 `backendRequest` 默认按 JSON 解析响应体（只有显式传 `responseType: 'arraybuffer'` / `'text'` 的调用才走其他分支），空响应体会直接抛错。
 
 ### 12.3 增量的 PUT 语义
 
