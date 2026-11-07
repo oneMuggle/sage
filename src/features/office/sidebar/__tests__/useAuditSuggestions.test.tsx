@@ -414,4 +414,68 @@ describe('useAuditSuggestions', () => {
     expect(state.conversation[1].content).toContain('office.ai.sidebar.apply_failed');
     expect(state.conversation[0].attachments?.[0].applied).toBe('pending');
   });
+
+  it('matches cards to changes by order when two cards share the same suggestedText', async () => {
+    // Two cards with identical suggestedText. Backend applied one and skipped one.
+    seedConversation({
+      id: 'msg-dup',
+      role: 'assistant',
+      content: 'audit',
+      createdAt: 1,
+      attachments: [
+        {
+          id: 'au-first',
+          paraIndex: 0,
+          severity: 'warning',
+          originalText: 'old-first',
+          suggestedText: 'shared-replacement',
+          applied: 'pending',
+        },
+        {
+          id: 'au-second',
+          paraIndex: 1,
+          severity: 'warning',
+          originalText: 'old-second',
+          suggestedText: 'shared-replacement',
+          applied: 'pending',
+        },
+      ],
+    });
+    mockOfficeSpecApi.reviseAiIssues.mockResolvedValue(
+      reviseResult({
+        planned: 2,
+        applied: 1,
+        skipped: 1,
+        changes: [
+          {
+            rule_id: null,
+            find: 'old-first',
+            replace: 'shared-replacement',
+            comment: '',
+            applied: true,
+            reason: '',
+          },
+          {
+            rule_id: null,
+            find: 'old-second',
+            replace: 'shared-replacement',
+            comment: '',
+            applied: false,
+            reason: 'text not found',
+          },
+        ],
+      }),
+    );
+
+    const { result } = renderHook(() => useAuditSuggestions());
+
+    await act(async () => {
+      await result.current.applyAll('msg-dup');
+    });
+
+    const attachments = useOfficeWorkspaceStore.getState().conversation[0].attachments ?? [];
+    // Exactly one card is applied, one stays pending — not both applied.
+    expect(attachments[0].applied).toBe('applied');
+    expect(attachments[1].applied).toBe('pending');
+  });
 });

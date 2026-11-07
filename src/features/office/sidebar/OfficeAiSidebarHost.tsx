@@ -132,6 +132,7 @@ export function OfficeAiSidebarHost({
 
     if (kind === 'rewrite') {
       setPendingEdit(null);
+      setSidebarOpen(true);
       void runRewrite({
         instruction: 'polish',
         text: selection.text,

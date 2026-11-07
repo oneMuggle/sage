@@ -196,7 +196,7 @@ export function useAiCapabilities(deps: { rootRef: RefObject<HTMLElement> }): Ai
       appendMessage({
         id: nextMessageId(),
         role: 'system',
-        content: t('office.ai.sidebar.apply_disabled'),
+        content: t('office.ai.sidebar.apply_path_invalid'),
         createdAt: Date.now(),
       });
       return;

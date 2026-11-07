@@ -110,11 +110,16 @@ export function useAuditSuggestions(_deps: AuditSuggestionsDeps = {}): AuditSugg
       return;
     }
     // R24: only cards whose replacement actually landed may be marked applied.
-    const appliedReplaces = new Set(
-      result.changes.filter((change) => change.applied).map((change) => change.replace),
-    );
+    // Use ordered pairing to handle duplicate suggestedText correctly: each card
+    // consumes the earliest unmatched applied change with matching replace text.
+    const claimed = new Set<number>();
     for (const suggestion of pending) {
-      if (appliedReplaces.has(suggestion.suggestedText)) {
+      const matchIndex = result.changes.findIndex(
+        (change, index) =>
+          !claimed.has(index) && change.applied && change.replace === suggestion.suggestedText,
+      );
+      if (matchIndex >= 0) {
+        claimed.add(matchIndex);
         updateSuggestionStatus(messageId, suggestion.id, 'applied');
       }
     }
