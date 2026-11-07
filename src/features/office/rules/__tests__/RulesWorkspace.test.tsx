@@ -271,7 +271,7 @@ describe('RulesWorkspace', () => {
     fireEvent.click(screen.getByTestId('rules-audit'));
 
     await waitFor(() =>
-      expect(screen.getByTestId('rule-audit-finding-rule-1')).toBeInTheDocument(),
+      expect(screen.getByTestId('rule-audit-finding-rule-1-0')).toBeInTheDocument(),
     );
   });
 
@@ -346,6 +346,34 @@ describe('RulesWorkspace', () => {
         expect.objectContaining({ check_mode: 'ai', pattern: '' }),
       ),
     );
+  });
+
+  it('toggling enabled calls updateRule with the enabled change', async () => {
+    mockedApi.updateRule.mockResolvedValue({ ...GROUP.rules[0], enabled: false });
+    renderWorkspace();
+
+    await waitFor(() => expect(screen.getByTestId('rule-detail-enabled')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('rule-detail-enabled'));
+    fireEvent.click(screen.getByTestId('rule-detail-save'));
+
+    await waitFor(() =>
+      expect(mockedApi.updateRule).toHaveBeenCalledWith('rule-1', { enabled: false }),
+    );
+  });
+
+  it('deleting the selected rule clears the selection', async () => {
+    mockedApi.deleteRule.mockResolvedValue({ deleted: true, id: 'rule-1' });
+    mockedApi.listGroups
+      .mockResolvedValueOnce([GROUP])
+      .mockResolvedValueOnce([{ ...GROUP, rules: [] }]);
+    renderWorkspace();
+
+    await waitFor(() => expect(screen.getByTestId('rule-detail-delete')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('rule-detail-delete'));
+
+    await waitFor(() => expect(mockedApi.deleteRule).toHaveBeenCalledWith('rule-1'));
+    // After deletion, the detail panel shows an empty form (rule is null, but group still exists)
+    expect(screen.getByTestId('rule-detail-name')).toHaveValue('');
   });
 
   it('extraction creates a new group with the extracted rules', async () => {

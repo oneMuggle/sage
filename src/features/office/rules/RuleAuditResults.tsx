@@ -61,7 +61,7 @@ export function RuleAuditResults({ result, auditing }: RuleAuditResultsProps) {
         {result.findings.map((finding, index) => (
           <li
             key={`${finding.ruleId}-${index}`}
-            data-testid={`rule-audit-finding-${finding.ruleId}`}
+            data-testid={`rule-audit-finding-${finding.ruleId}-${index}`}
             className="rounded border border-border bg-bg-subtle p-3 text-xs text-text"
           >
             <p className="font-medium">{finding.ruleName}</p>
