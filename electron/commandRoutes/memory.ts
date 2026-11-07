@@ -88,6 +88,12 @@ export const memoryRoutes: Record<string, CommandRoute> = {
       reason: a?.reason as string | undefined,
     }),
   },
+  // M3 质量改进：批量删除（renderer 侧 memoryApi.batchDelete）
+  batch_delete_memories: {
+    method: 'POST',
+    path: () => '/api/v1/memory/batch-delete',
+    body: (a) => ({ items: a.items }),
+  },
   // 对标 S2 (2026-09-13): 记忆写入台账（内联"记住了"提示 + 撤销）
   get_recent_memory_writes: {
     method: 'GET',
