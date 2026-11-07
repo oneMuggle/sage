@@ -70,6 +70,7 @@ export const officeAiSidebarZh = {
   'office.ai.edit.title': '指令式修改',
   'office.ai.edit.hint': '描述要怎么改，AI 会定位段落',
   'office.ai.edit.no_match': '没有找到需要修改的段落',
+  'office.ai.edit.prefix': '把这段改成：',
 } as const;
 
 export const officeAiSidebarEn: Record<keyof typeof officeAiSidebarZh, string> = {
@@ -138,4 +139,5 @@ export const officeAiSidebarEn: Record<keyof typeof officeAiSidebarZh, string> =
   'office.ai.edit.title': 'Instruction edit',
   'office.ai.edit.hint': 'Describe the change; AI locates the paragraph',
   'office.ai.edit.no_match': 'No paragraph matched the instruction',
+  'office.ai.edit.prefix': 'Change this to: ',
 };

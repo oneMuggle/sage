@@ -28,6 +28,7 @@ export interface AiCapabilities {
     text: string;
     targetLang?: string;
     paraIndex?: number | null;
+    customInstruction?: string;
   }) => Promise<void>;
   runChat: (message: string) => Promise<void>;
   applySuggestion: (messageId: string, suggestion: SuggestionCardData) => Promise<void>;
@@ -49,6 +50,7 @@ export function useAiCapabilities(deps: { rootRef: RefObject<HTMLElement> }): Ai
     text: string;
     targetLang?: string;
     paraIndex?: number | null;
+    customInstruction?: string;
   }) => {
     if (!activeDocument) {
       appendMessage({
@@ -70,6 +72,7 @@ export function useAiCapabilities(deps: { rootRef: RefObject<HTMLElement> }): Ai
         text: params.text,
         instruction: params.instruction,
         ...(params.targetLang ? { targetLang: params.targetLang } : {}),
+        ...(params.customInstruction ? { customInstruction: params.customInstruction } : {}),
       });
 
       const paraIndex = params.paraIndex ?? -1;

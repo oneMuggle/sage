@@ -24,6 +24,8 @@ export interface AiSidebarProps {
   onSkip: (messageId: string, suggestionId: string) => void;
   onClose: () => void;
   floatingBar: React.ReactNode;
+  /** R18: forwarded to ConversationArea for the last pending-assistant message. */
+  onApplyAll?: (messageId: string) => void;
 }
 
 export function AiSidebar({
@@ -39,6 +41,7 @@ export function AiSidebar({
   onSkip,
   onClose,
   floatingBar,
+  onApplyAll,
 }: AiSidebarProps): JSX.Element {
   const { t } = useI18n();
   const activeDocument = useOfficeWorkspaceStore((s) => s.activeDocument);
@@ -74,7 +77,13 @@ export function AiSidebar({
       </div>
 
       {/* Conversation */}
-      <ConversationArea messages={messages} pending={pending} onApply={onApply} onSkip={onSkip} />
+      <ConversationArea
+        messages={messages}
+        pending={pending}
+        onApply={onApply}
+        onSkip={onSkip}
+        onApplyAll={onApplyAll}
+      />
 
       {/* Error */}
       {errorText && (

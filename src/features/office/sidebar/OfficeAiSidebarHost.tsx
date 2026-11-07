@@ -14,11 +14,19 @@ import { FloatingActionBar, type FloatingActionKind } from './FloatingActionBar'
 import type { QuickActionTab } from './QuickActions';
 import { collectDocumentParagraphs } from './selectionAnchor';
 import { nextMessageId, useAiCapabilities } from './useAiCapabilities';
+import { useAuditSuggestions } from './useAuditSuggestions';
 import { useSelectionCapture } from './useSelectionCapture';
 
 /** Prefilled command draft. `seq` bumps on every prefill so equal text still re-syncs. */
 interface InitialCommand {
   value: string;
+  seq: number;
+}
+
+/** Pending edit flow — carries the anchor para-index and paragraph text. */
+interface PendingEdit {
+  anchorParaIndex: number;
+  paragraphText: string;
   seq: number;
 }
 
@@ -34,8 +42,9 @@ export interface OfficeAiSidebarHostProps {
 /**
  * Page-level mount for the AI sidebar.
  *
- * Wires `useSelectionCapture` + `useAiCapabilities` into the floating
- * selection toolbar and the command input, and renders the sidebar shell.
+ * Wires `useSelectionCapture` + `useAiCapabilities` + `useAuditSuggestions`
+ * into the floating selection toolbar and the command input, and renders the
+ * sidebar shell.
  */
 export function OfficeAiSidebarHost({
   activeTab,
@@ -53,11 +62,22 @@ export function OfficeAiSidebarHost({
   const setSelection = useOfficeWorkspaceStore((s) => s.setSelection);
   const appendMessage = useOfficeWorkspaceStore((s) => s.appendMessage);
 
-  // Prefilled command draft (used by "就这段提问" in the floating bar).
+  // Prefilled command draft (used by "就这段提问" / "按指令修改" in the floating bar).
   const [initialCommand, setInitialCommand] = useState<InitialCommand | null>(null);
+  // Pending edit — cleared once the user submits the instruction.
+  const [pendingEdit, setPendingEdit] = useState<PendingEdit | null>(null);
 
   const prefillInitialCommand = (value: string) => {
     setInitialCommand((prev) => ({ value, seq: (prev?.seq ?? 0) + 1 }));
+  };
+
+  const startPendingEdit = (anchorParaIndex: number, paragraphText: string, draftTail: string) => {
+    setPendingEdit((prev) => ({
+      anchorParaIndex,
+      paragraphText,
+      seq: (prev?.seq ?? 0) + 1,
+    }));
+    prefillInitialCommand(`${t('office.ai.edit.prefix')}${draftTail}`);
   };
 
   // R10: derive the absolute path of the active document from the workspace
@@ -73,6 +93,7 @@ export function OfficeAiSidebarHost({
 
   const { pending, errorText, runRewrite, runChat, applySuggestion, markSkipped } =
     useAiCapabilities({ rootRef });
+  const { running: auditRunning, runAudit, applyAll } = useAuditSuggestions({ rootRef });
 
   // Anchor for the floating selection toolbar. Recomputed whenever the
   // normalized selection changes; the DOM rect is only meaningful while the
@@ -95,10 +116,19 @@ export function OfficeAiSidebarHost({
       .join('\n');
   };
 
+  const paragraphByIndex = (index: number): string | null => {
+    const root = rootRef.current;
+    if (!root) return null;
+    const found = collectDocumentParagraphs(root).find((p) => p.index === index);
+    return found ? found.text : null;
+  };
+
+  const busy = pending || auditRunning;
+
   const handleFloatingAction = (kind: FloatingActionKind) => {
     // Ignore floating-bar actions while an AI request is in flight so rapid
     // clicks cannot interleave awaits and desync `pending` / reply order.
-    if (!selection || pending) return;
+    if (!selection || busy) return;
 
     if (kind === 'rewrite') {
       void runRewrite({
@@ -115,20 +145,35 @@ export function OfficeAiSidebarHost({
       return;
     }
 
-    // Task 6: edit / audit flows are implemented in the next milestone.
-    // For now, prefill the selection for edit and drop a system placeholder
-    // for audit so the user sees where the capability will land.
-    setSidebarOpen(true);
     if (kind === 'edit') {
-      prefillInitialCommand(selection.rawContext);
-    } else {
-      appendMessage({
-        id: nextMessageId(),
-        role: 'system',
-        content: t('office.ai.sidebar.task6_placeholder'),
-        createdAt: Date.now(),
-      });
+      if (selection.anchorParaIndex == null) {
+        setSidebarOpen(true);
+        appendMessage({
+          id: nextMessageId(),
+          role: 'system',
+          content: t('office.ai.edit.no_match'),
+          createdAt: Date.now(),
+        });
+        return;
+      }
+      const paragraphText = paragraphByIndex(selection.anchorParaIndex);
+      if (!paragraphText) {
+        appendMessage({
+          id: nextMessageId(),
+          role: 'system',
+          content: t('office.ai.edit.no_match'),
+          createdAt: Date.now(),
+        });
+        return;
+      }
+      setSidebarOpen(true);
+      startPendingEdit(selection.anchorParaIndex, paragraphText, selection.text);
+      return;
     }
+
+    // kind === 'audit'
+    setSidebarOpen(true);
+    void runAudit();
   };
 
   const handleDismissFloating = () => {
@@ -136,6 +181,24 @@ export function OfficeAiSidebarHost({
   };
 
   const handleCommand = async (value: string) => {
+    // If an edit instruction is pending, this submission is the edit command —
+    // route it through runRewrite({instruction:'custom', customInstruction}).
+    if (pendingEdit) {
+      const prefix = t('office.ai.edit.prefix');
+      const stripped = value.startsWith(prefix) ? value.slice(prefix.length).trim() : value.trim();
+      const edit = pendingEdit;
+      setPendingEdit(null);
+      setInitialCommand(null);
+      if (!stripped) return;
+      await runRewrite({
+        instruction: 'custom',
+        customInstruction: stripped,
+        text: edit.paragraphText,
+        paraIndex: edit.anchorParaIndex,
+      });
+      return;
+    }
+
     // Drop the prefilled draft once a command is actually submitted so the
     // next chat action starts from a clean slate.
     setInitialCommand(null);
@@ -148,13 +211,7 @@ export function OfficeAiSidebarHost({
     const command = value.split(/\s+/)[0].toLowerCase();
 
     if (command === '/audit') {
-      // Task 6: full-document audit will replace this placeholder.
-      appendMessage({
-        id: nextMessageId(),
-        role: 'system',
-        content: t('office.ai.sidebar.task6_placeholder'),
-        createdAt: Date.now(),
-      });
+      void runAudit();
       return;
     }
 
@@ -189,6 +246,10 @@ export function OfficeAiSidebarHost({
     markSkipped(messageId, suggestionId);
   };
 
+  const handleApplyAll = (messageId: string) => {
+    void applyAll(messageId);
+  };
+
   return (
     <>
       {!sidebarOpen && (
@@ -207,7 +268,7 @@ export function OfficeAiSidebarHost({
         <AiSidebar
           activeTab={activeTab}
           messages={conversation}
-          pending={pending}
+          pending={busy}
           errorText={errorText}
           disabled={false}
           initialCommand={initialCommand?.value}
@@ -215,9 +276,11 @@ export function OfficeAiSidebarHost({
           onCommand={handleCommand}
           onApply={handleApply}
           onSkip={handleSkip}
+          onApplyAll={handleApplyAll}
           onClose={() => {
             setSidebarOpen(false);
             setInitialCommand(null);
+            setPendingEdit(null);
           }}
           floatingBar={null}
         />

@@ -4,21 +4,25 @@ import type {
   ConversationMessage,
   SuggestionCardData,
 } from '../../../entities/office/officeWorkspaceStore';
-import { fillTemplate } from '../../../shared/lib/fillTemplate';
-import { useI18n, type TranslationKey } from '../../../shared/lib/i18n';
+import { useI18n } from '../../../shared/lib/i18n';
+
+import { InstructionEditCard } from './InstructionEditCard';
 
 export interface ConversationAreaProps {
   messages: ConversationMessage[];
   pending: boolean;
   onApply: (messageId: string, suggestion: SuggestionCardData) => void;
   onSkip: (messageId: string, suggestionId: string) => void;
+  /** When provided, the last pending-assistant-message renders the apply-all button. */
+  onApplyAll?: (messageId: string) => void;
 }
 
 export function ConversationArea({
   messages,
-  pending: _pending,
+  pending,
   onApply,
   onSkip,
+  onApplyAll,
 }: ConversationAreaProps): JSX.Element {
   const { t } = useI18n();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -41,39 +45,80 @@ export function ConversationArea({
     );
   }
 
+  // R18: only the LAST assistant message whose attachments contain at least one
+  // `pending` card is allowed to render the apply-all button, so the testid
+  // `office-ai-audit-apply-all` is unique across the whole conversation.
+  const lastPendingAssistantId = findLastPendingAssistantId(messages);
+
   return (
     <div data-testid="office-ai-conversation" className="flex-1 space-y-3 overflow-y-auto p-3">
       {messages.map((msg) => (
-        <div key={msg.id} data-testid={`office-ai-message-${msg.id}`}>
-          <div className="mb-1 text-xs font-medium text-text-secondary">{msg.role}</div>
-          <div className="whitespace-pre-wrap text-sm text-text">{msg.content}</div>
-
-          {msg.role === 'assistant' && <CopyButton text={msg.content} t={t} />}
-
-          {msg.attachments?.map((suggestion) => (
-            <SuggestionCard
-              key={suggestion.id}
-              messageId={msg.id}
-              suggestion={suggestion}
-              onApply={onApply}
-              onSkip={onSkip}
-              t={t}
-            />
-          ))}
-        </div>
+        <MessageRow
+          key={msg.id}
+          msg={msg}
+          pending={pending}
+          isLastPendingAssistant={msg.id === lastPendingAssistantId}
+          onApply={onApply}
+          onApplyAll={onApplyAll}
+          onSkip={onSkip}
+        />
       ))}
       <div ref={bottomRef} />
     </div>
   );
 }
 
-function CopyButton({
-  text,
-  t,
+function MessageRow({
+  msg,
+  pending,
+  isLastPendingAssistant,
+  onApply,
+  onApplyAll,
+  onSkip,
 }: {
-  text: string;
-  t: (key: TranslationKey) => string;
+  msg: ConversationMessage;
+  pending: boolean;
+  isLastPendingAssistant: boolean;
+  onApply: (messageId: string, suggestion: SuggestionCardData) => void;
+  onApplyAll?: (messageId: string) => void;
+  onSkip: (messageId: string, suggestionId: string) => void;
 }): JSX.Element {
+  const attachments = msg.attachments ?? [];
+  const hasAttachments = attachments.length > 0;
+
+  return (
+    <div key={msg.id} data-testid={`office-ai-message-${msg.id}`}>
+      <div className="mb-1 text-xs font-medium text-text-secondary">{msg.role}</div>
+      <div className="whitespace-pre-wrap text-sm text-text">{msg.content}</div>
+
+      {msg.role === 'assistant' && <CopyButton text={msg.content} />}
+
+      {hasAttachments ? (
+        <InstructionEditCard
+          messageId={msg.id}
+          suggestions={attachments}
+          busy={pending}
+          onApply={onApply}
+          onSkip={onSkip}
+          onApplyAll={onApplyAll && isLastPendingAssistant ? () => onApplyAll(msg.id) : undefined}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function findLastPendingAssistantId(messages: ConversationMessage[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    if (msg.role !== 'assistant' || !msg.attachments || msg.attachments.length === 0) continue;
+    const hasPending = msg.attachments.some((a) => a.applied === 'pending');
+    if (hasPending) return msg.id;
+  }
+  return null;
+}
+
+function CopyButton({ text }: { text: string }): JSX.Element {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const timeoutRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
@@ -117,61 +162,5 @@ function CopyButton({
     >
       {copied ? t('office.ai.sidebar.copied') : t('office.ai.sidebar.copy')}
     </button>
-  );
-}
-
-function SuggestionCard({
-  messageId,
-  suggestion,
-  onApply,
-  onSkip,
-  t,
-}: {
-  messageId: string;
-  suggestion: SuggestionCardData;
-  onApply: (messageId: string, suggestion: SuggestionCardData) => void;
-  onSkip: (messageId: string, suggestionId: string) => void;
-  t: (key: TranslationKey) => string;
-}): JSX.Element {
-  const statusLabel =
-    suggestion.applied === 'applied'
-      ? t('office.ai.audit.applied')
-      : suggestion.applied === 'skipped'
-        ? t('office.ai.audit.skipped')
-        : null;
-
-  return (
-    <div
-      data-testid={`office-ai-suggestion-${suggestion.id}`}
-      className="mt-2 rounded border border-border bg-bg-subtle p-2 text-xs"
-    >
-      <div className="mb-1 font-medium text-text-secondary">
-        {fillTemplate(t('office.ai.audit.paragraph'), {
-          index: String(suggestion.paraIndex + 1),
-        })}
-      </div>
-      <div className="mb-1 text-text-muted line-through">{suggestion.originalText}</div>
-      <div className="mb-2 text-text">{suggestion.suggestedText}</div>
-      {statusLabel ? (
-        <span className="text-text-muted">{statusLabel}</span>
-      ) : (
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="rounded bg-accent px-2 py-0.5 text-accent-foreground"
-            onClick={() => onApply(messageId, suggestion)}
-          >
-            {t('office.ai.sidebar.apply')}
-          </button>
-          <button
-            type="button"
-            className="rounded px-2 py-0.5 text-text-muted hover:bg-surface-hover"
-            onClick={() => onSkip(messageId, suggestion.id)}
-          >
-            {t('office.ai.audit.skip')}
-          </button>
-        </div>
-      )}
-    </div>
   );
 }
