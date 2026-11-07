@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from backend.tools.bash_session import STATUS_EXITED, get_registry
+from backend.tools.subprocess_util import observe_process_exit_code
 
 router = APIRouter()
 
@@ -32,13 +33,21 @@ def list_shells() -> Dict[str, Any]:
     now = time.monotonic()
     items: List[Dict[str, Any]] = []
     for session in registry.list_sessions():
+        status = session.status()
+        if status == STATUS_EXITED:
+            exit_code = observe_process_exit_code(session.process, 0.0)
+            if exit_code is None:
+                exit_code = getattr(session.process, "returncode", None)
+        else:
+            exit_code = None
         items.append(
             {
                 "shell_id": session.shell_id,
                 "command": session.command,
-                "status": session.status(),
+                "status": status,
                 "pid": getattr(session.process, "pid", None),
                 "age_seconds": max(0, int(now - session.started_at)),
+                "exit_code": exit_code,
             }
         )
     return {"shells": items}
@@ -79,3 +88,14 @@ async def stream_shell(shell_id: str) -> StreamingResponse:
             await asyncio.sleep(STREAM_POLL_SECONDS)
 
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")
+
+
+@router.delete("/shells/{shell_id}", response_model=Dict[str, Any])
+async def kill_shell(shell_id: str) -> Dict[str, Any]:
+    """终止后台 shell 并返回最后一次输出快照（用于前端展示最终状态）。"""
+    registry = get_registry()
+    payload = registry.terminate(shell_id, cap=64 * 1024)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="unknown shell_id")
+    return payload
+
