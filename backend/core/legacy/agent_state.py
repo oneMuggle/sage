@@ -61,6 +61,10 @@ class AgentState(str, Enum):
     # （body: run_id / task_id / action: continue|skip|abort）。
     # 携带 step_confirm 字段（StepConfirmInfo 形态）。
     AWAITING_STEP_CONFIRM = "awaiting_step_confirm"
+    # 2026-11-07: 插话暂存区 —— run_loop 在迭代边界排空 steering 队列后推送,
+    # 携带被消费消息的 id 列表。前端据此把输入框上方的暂存 chip 移除并按 id
+    # 落入聊天历史（与撤回竞态的去重依据）。
+    STEER_CONSUMED = "steer_consumed"
     DONE = "done"
     FAILED = "failed"
 
@@ -143,6 +147,9 @@ class AgentEvent:
     # （level / previous_budget / next_budget / extensions / stuck_score /
     # progress_signals / reasons），前端据此提示"已自动延长 N 次"。
     budget_info: Optional[Dict[str, Any]] = None
+    # 2026-11-07: state=STEER_CONSUMED 时携带被消费的插话 id 列表,
+    # 形态 {"ids": [...]}; 前端据此移除输入框上方的暂存 chip。
+    steer_info: Optional[Dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         # finish_reason 只接受字符串: 测试替身 (MagicMock 响应) 等非 str 值归一为
@@ -208,4 +215,6 @@ class AgentEvent:
             d["step_confirm"] = self.step_confirm
         if self.budget_info is not None:
             d["budget_info"] = self.budget_info
+        if self.steer_info is not None:
+            d["steer_info"] = self.steer_info
         return d

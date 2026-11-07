@@ -142,6 +142,7 @@ export function useChat() {
     executionModeRecommendation,
     pendingQueue,
     queuePaused,
+    pendingSteer,
   } = useChatStreamStore((s) => selectSessionSlots(s, currentSessionId));
 
   // Phase 6: /btw 补充消息状态(component-local,与流式 chat 无关)
@@ -325,11 +326,18 @@ export function useChat() {
       }
 
       const activeStreamId = activeHandleRef.current.get(sid)?.streamId;
-      if (activeStreamId && (await chatApi.steer(activeStreamId, content))) {
-        // 后端同内容落一行 subtype='steering'，流结束对账时按 (role, content)
-        // 认领这条本地乐观副本。
-        echoSteering('已插话，将在下一迭代边界生效');
-        return 'handled';
+      if (activeStreamId) {
+        const injected = await chatApi.steer(activeStreamId, content);
+        if (injected) {
+          // 2026-11-07: 不再立刻落聊天区 —— 先进输入框上方暂存区（可撤回）。
+          // 后端在迭代边界真正注入时回推 steer_consumed，届时按 message_id
+          // 移除 chip 并落聊天区；撤回成功则后端不落库，等同未送达。
+          useChatStreamStore.getState().addSteer(sid, {
+            id: injected.messageId,
+            content,
+          });
+          return 'handled';
+        }
       }
       // steer 失败（流已结束 / 不在运行窗口）回退既有队列语义。
       enqueue();
@@ -678,6 +686,12 @@ export function useChat() {
         // 流结束后以服务端为准刷新一次，消除"开着会话看不到新消息"的窗口
         // （loadMessages 每次直查 get_messages，无缓存问题）。
         void useStore.getState().loadMessages(sid);
+        // 2026-11-07: 流结束时仍未消费的插话不能丢 —— 回退成排队消息。
+        // （消费路径已 removeSteer；有残留说明 run 在注入边界前结束。）
+        // 放在 flush 判定之前：自然结束时会按队列顺序立刻发出。
+        for (const item of useChatStreamStore.getState().takeAllSteers(sid)) {
+          useChatStreamStore.getState().enqueueChat(sid, { content: item.content });
+        }
         // U5 + S3: 流自然结束后发送**该会话**队列中的下一条(短暂让位,避免与
         // 收尾渲染竞争)。其它会话的队列不受影响。异常收尾则挂起队列,
         // 剩余消息留在面板上等用户"继续"或"清空"。
@@ -733,6 +747,34 @@ export function useChat() {
                   previousBudget: info?.previous_budget,
                   reasons: info?.reasons,
                 });
+                return;
+              }
+
+              // 2026-11-07: 插话消费回执 —— 后端在迭代边界把暂存插话注入上下文，
+              // 此刻才落库并回推 ids。前端据此把输入框上方的 chip 移除、按后端
+              // message_id 在聊天区插入 steering 行（撤回则无回执、不留痕）。
+              if (evt.state === 'steer_consumed') {
+                const ids = evt.steer_info?.ids ?? [];
+                if (ids.length > 0) {
+                  const store = useChatStreamStore.getState();
+                  const pending = selectSessionSlots(store, sid).pendingSteer;
+                  for (const id of ids) {
+                    const item = pending.find((m) => m.id === id);
+                    if (!item) continue; // 页面重载/竞态：流末 loadMessages 对账补齐
+                    addMessage(
+                      {
+                        id,
+                        session_id: sid,
+                        role: 'user',
+                        content: item.content,
+                        created_at: Date.now(),
+                        subtype: 'steering',
+                      },
+                      steeringAnchorId(useStore.getState().messages),
+                    );
+                    store.removeSteer(sid, id);
+                  }
+                }
                 return;
               }
 
@@ -990,6 +1032,27 @@ export function useChat() {
     if (currentSessionId) useChatStreamStore.getState().clearChatQueue(currentSessionId);
   }, [currentSessionId]);
 
+  /**
+   * 2026-11-07: 撤回暂存区里一条尚未被消费的插话（chip 上的 X）。
+   * 只有后端确认移除才撤下 chip —— 若已被消费（撤回/注入竞态），回执
+   * `steer_consumed` 会把它落进聊天区；若流已结束，finishStream 的兜底
+   * 已把它回退到排队队列。两条路径都不丢消息、也不重复。
+   */
+  const cancelSteer = useCallback(
+    async (id: string) => {
+      const sid = currentSessionId;
+      if (!sid) return;
+      const store = useChatStreamStore.getState();
+      const streamId = activeHandleRef.current.get(sid)?.streamId;
+      if (!streamId) {
+        store.removeSteer(sid, id);
+        return;
+      }
+      if (await chatApi.cancelSteer(streamId, id)) store.removeSteer(sid, id);
+    },
+    [currentSessionId],
+  );
+
   /** 取出并移除一条排队消息（供 UI 回填输入框改写后再发）。 */
   const editQueuedMessage = useCallback(
     (id: string): QueuedChatMessage | null =>
@@ -1099,6 +1162,10 @@ export function useChat() {
     editQueuedMessage,
     sendQueuedMessageNow,
     resumeQueuedMessages,
+    /** 2026-11-07: 当前会话的插话暂存区（未消费、可撤回） */
+    pendingSteer,
+    /** 2026-11-07: 撤回一条暂存插话（仅在未消费时真正移除） */
+    cancelSteer,
     reattachActiveStream,
   };
 }
