@@ -101,6 +101,25 @@ def _raise_validation(exc: RuleValidationError) -> NoReturn:
     raise _error(exc.status_code, exc.code, exc.message)
 
 
+def _validate_optional_text(value: Any) -> str:
+    """空值放行；非空文本走与正文相同的 strip + 长度 + 扫描校验。"""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        return validate_rule_text(text)
+    except RuleValidationError as exc:
+        _raise_validation(exc)
+
+
+def _patch_content(patch: Dict[str, Any]) -> str:
+    """PATCH 的 content 必须是字符串；``None`` 不能隐式变成字面量 "None"。"""
+    raw = patch.get("content")
+    if not isinstance(raw, str):
+        raise _error(422, "invalid_patch", "规则内容必须是字符串")
+    return raw
+
+
 def _user_constraints(project_id: str) -> List[Any]:
     return [
         row
@@ -196,17 +215,18 @@ def create_project_rule(project_id: str, body: RuleCreateBody) -> Dict[str, Any]
             )
         ProjectConstraintRepository().create(
             project_id=project_id,
-            category=(body.category or "general").strip() or "general",
+            category=_validate_optional_text(body.category) or "general",
             content=content,
-            trigger_pattern=body.trigger_pattern or None,
+            trigger_pattern=_validate_optional_text(body.trigger_pattern) or None,
             priority=body.priority,
             source=_USER_SOURCE,
         )
         return {"ok": True}
     path = _markdown_layer_path(project, body.layer)
+    heading = _validate_optional_text(body.category) or "规则"
     try:
         current = read_existing_text(path)
-        write_text_atomic(path, append_section(current, body.category or "规则", content))
+        write_text_atomic(path, append_section(current, heading, content))
     except RuleValidationError as exc:
         _raise_validation(exc)
     return {"ok": True}
@@ -222,16 +242,16 @@ def _constraint_updates(patch: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
     clear_trigger = False
     if "content" in patch:
         try:
-            updates["content"] = validate_rule_text(str(patch["content"]))
+            updates["content"] = validate_rule_text(_patch_content(patch))
         except RuleValidationError as exc:
             _raise_validation(exc)
     if "category" in patch:
-        category = str(patch["category"] or "").strip()
+        category = _validate_optional_text(patch["category"])
         if not category:
             raise _error(422, "invalid_category", "分类不能为空")
         updates["category"] = category
     if "trigger_pattern" in patch:
-        trigger = str(patch["trigger_pattern"] or "").strip()
+        trigger = _validate_optional_text(patch["trigger_pattern"])
         if trigger:
             updates["trigger_pattern"] = trigger
         else:
@@ -289,7 +309,7 @@ def _apply_markdown_patch(
         raise _error(422, "invalid_patch", "Markdown 规则只支持修改内容")
     path, index, current, section = _markdown_target(project, layer, rule_id)
     try:
-        content = validate_rule_text(str(patch["content"]))
+        content = validate_rule_text(_patch_content(patch))
         write_text_atomic(
             path, replace_section(current, index, _render_section(section, content))
         )
