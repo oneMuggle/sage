@@ -41,6 +41,7 @@ export function AiSidebar({
 
   return (
     <aside
+      id="office-ai-sidebar-panel"
       data-testid="office-ai-sidebar"
       className="fixed right-0 top-0 z-30 flex h-full w-[360px] flex-col border-l border-border bg-surface shadow-xl"
     >

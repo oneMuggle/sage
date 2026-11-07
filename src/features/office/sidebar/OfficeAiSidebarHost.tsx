@@ -50,15 +50,18 @@ export function OfficeAiSidebarHost({
 
   return (
     <>
-      <button
-        type="button"
-        data-testid="office-ai-sidebar-toggle"
-        aria-expanded={sidebarOpen}
-        className="fixed right-4 bottom-4 z-30 rounded-full bg-accent px-4 py-2 text-sm text-accent-foreground shadow-lg"
-        onClick={toggleSidebar}
-      >
-        {sidebarOpen ? t('office.ai.sidebar.close') : t('office.ai.sidebar.open')}
-      </button>
+      {!sidebarOpen && (
+        <button
+          type="button"
+          data-testid="office-ai-sidebar-toggle"
+          aria-expanded={sidebarOpen}
+          aria-controls="office-ai-sidebar-panel"
+          className="fixed right-4 bottom-4 z-30 rounded-full bg-accent px-4 py-2 text-sm text-accent-foreground shadow-lg"
+          onClick={toggleSidebar}
+        >
+          {t('office.ai.sidebar.open')}
+        </button>
+      )}
       {sidebarOpen ? (
         <AiSidebar
           activeTab={activeTab}

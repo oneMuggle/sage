@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type {
   ConversationMessage,
@@ -74,12 +74,39 @@ function CopyButton({
   text: string;
   t: (key: TranslationKey) => string;
 }): JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
       /* clipboard unavailable */
+      return;
     }
+    if (!mountedRef.current) {
+      return;
+    }
+    setCopied(true);
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = window.setTimeout(() => {
+      if (mountedRef.current) {
+        setCopied(false);
+      }
+    }, 2000);
   };
 
   return (
@@ -88,7 +115,7 @@ function CopyButton({
       className="mt-1 text-xs text-text-muted hover:text-text"
       onClick={handleCopy}
     >
-      {t('office.ai.sidebar.copy')}
+      {copied ? t('office.ai.sidebar.copied') : t('office.ai.sidebar.copy')}
     </button>
   );
 }

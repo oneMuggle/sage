@@ -1,7 +1,7 @@
 /**
  * AI 文档工作台侧栏文案（P2）。
  *
- * 独立成模块：locales/{en,zh}/workspaceAndTools.ts 已在 architecture-baseline.json
+ * 独立成模块：locales/{en,zh}/chatAndSider.ts 已在 architecture-baseline.json
  * 基线上（806/807 行），新文案放这里不让基线文件继续增长。
  */
 export const officeAiSidebarZh = {
