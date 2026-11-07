@@ -115,13 +115,6 @@ export function officeEditAiProps(
 
 const INSTRUCTIONS: OfficeEditAiInstruction[] = ['rewrite', 'polish', 'expand', 'condense'];
 
-const INSTRUCTION_LABELS: Record<OfficeEditAiInstruction, string> = {
-  rewrite: 'Rewrite',
-  polish: 'Polish',
-  expand: 'Expand',
-  condense: 'Condense',
-};
-
 export function OfficeEditAiActions({
   workspacePath,
   documentId,
@@ -164,7 +157,7 @@ export function OfficeEditAiActions({
             className="px-2.5 py-1 text-xs border border-border rounded bg-surface text-text hover:bg-bg-hover disabled:opacity-50"
             data-testid={`office-edit-ai-${instruction}`}
           >
-            {INSTRUCTION_LABELS[instruction]}
+            {t(`office.ai.edit.${instruction}`)}
           </button>
         ))}
         {busy && (
