@@ -71,6 +71,8 @@ class Session:
     # M0 (2026-11-03): 会话级专家绑定。指向 agents.id；'primary' = 主助手。
     # 存量会话迁移时回填为 'primary'，行为与引入前一致。
     specialist_id: str = "primary"
+    # 2026-11-07 M2: 会话类型 —— 'dm'（私聊，默认）| 'group'（群聊）。
+    conversation_type: str = "dm"
 
     @property
     def duration_minutes(self) -> Optional[int]:
@@ -86,6 +88,7 @@ class Session:
 
     @classmethod
     def from_row(cls, row) -> Session:
+        row_keys = set(row.keys())  # set() 避免 sqlite3.Row.keys() 触发 SIM118
         return cls(
             id=row["id"],
             title=row["title"],
@@ -109,6 +112,10 @@ class Session:
             title_attempts=row["title_attempts"] or 0,
             # M0 (2026-11-03): 专家绑定。存量行为 NULL（迁移前 DB）→ 兜底 primary
             specialist_id=row["specialist_id"] or "primary",
+            # 2026-11-07 M2: 会话类型（存量行/旧库 → dm）
+            conversation_type=(row["conversation_type"] or "dm")
+            if "conversation_type" in row_keys
+            else "dm",
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -134,6 +141,8 @@ class Session:
             "title_attempts": self.title_attempts,
             # M0 (2026-11-03): 会话绑定的专家 id（'primary' = 主助手）
             "specialist_id": self.specialist_id,
+            # 2026-11-07 M2: 会话类型（dm / group）
+            "conversation_type": self.conversation_type,
             # 2026-10-28: 性能统计 - 会话用时（分钟）
             "duration_minutes": self.duration_minutes,
         }
@@ -150,6 +159,7 @@ class SessionRepository:
         title: str = "新对话",
         parent_id: Optional[str] = None,
         specialist_id: Optional[str] = None,
+        conversation_type: str = "dm",
     ) -> Session:
         """创建新会话。
 
@@ -163,12 +173,14 @@ class SessionRepository:
         session_id = str(uuid.uuid4())
         bound_specialist = specialist_id or "primary"
 
+        normalized_type = "group" if conversation_type == "group" else "dm"
         cursor.execute(
             """
-            INSERT INTO sessions (id, title, created_at, updated_at, parent_id, specialist_id)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions
+                (id, title, created_at, updated_at, parent_id, specialist_id, conversation_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-            (session_id, title, now, now, parent_id, bound_specialist),
+            (session_id, title, now, now, parent_id, bound_specialist, normalized_type),
         )
 
         conn.commit()
@@ -180,6 +192,7 @@ class SessionRepository:
             updated_at=now,
             parent_id=parent_id,
             specialist_id=bound_specialist,
+            conversation_type=normalized_type,
         )
 
     def get(self, session_id: str) -> Optional[Session]:
@@ -430,6 +443,8 @@ class Message:
     # 2026-11-05 非破坏性压缩: 该消息已被压缩进摘要（epoch ms），仅保留用于
     # 会话页面完整展示；非空 = 不再进入 LLM 上下文。NULL = 正常消息。
     compacted_at: Optional[int] = None
+    # 2026-11-07 M2 群聊: assistant 行的实际发言专家（NULL = 用户/未标注）。
+    sender_agent_id: Optional[str] = None
 
     @classmethod
     def from_row(cls, row) -> Message:
@@ -463,6 +478,9 @@ class Message:
             ),
             client_meta=row["client_meta"] if "client_meta" in row_keys else None,
             compacted_at=row["compacted_at"] if "compacted_at" in row_keys else None,
+            sender_agent_id=(
+                row["sender_agent_id"] if "sender_agent_id" in row_keys else None
+            ),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -493,6 +511,8 @@ class Message:
             "client_meta": _parse_json_column(self.client_meta, dict),
             # 2026-11-05: 非空 = 已压缩的展示历史（不进入 LLM 上下文）。
             "compacted_at": self.compacted_at,
+            # 2026-11-07 M2: 群聊中该 assistant 消息的发言专家。
+            "sender_agent_id": self.sender_agent_id,
         }
 
 

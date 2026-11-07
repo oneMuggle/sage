@@ -4,6 +4,7 @@
 
 import { invoke } from './desktopInvoke';
 import type {
+  ConversationParticipant,
   Message,
   Session,
   SessionCompactResult,
@@ -14,11 +15,27 @@ import type {
 import { ApiException, handleApiError, isValidSessionId, withRetry } from './utils';
 
 export const sessionApi = {
-  async create(title: string = '新对话'): Promise<Session> {
+  async create(
+    title: string = '新对话',
+    options?: {
+      participantIds?: string[];
+      specialistId?: string;
+      conversationType?: 'dm' | 'group';
+    },
+  ): Promise<Session> {
     // 标题原文直传: React 渲染层负责转义, 此处转义会让标题以 HTML 实体形式落库
     return withRetry(async () => {
       try {
-        const session = await invoke<Session>('create_session', { title });
+        const session = await invoke<Session>('create_session', {
+          title,
+          ...(options?.participantIds?.length
+            ? { participant_ids: options.participantIds }
+            : {}),
+          ...(options?.specialistId ? { specialist_id: options.specialistId } : {}),
+          ...(options?.conversationType
+            ? { conversation_type: options.conversationType }
+            : {}),
+        });
         return session;
       } catch (error) {
         throw handleApiError(error);
@@ -254,6 +271,50 @@ export const sessionApi = {
     return withRetry(async () => {
       try {
         return await invoke<Session>('session_update', { sessionId, specialistId });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /** M2 (2026-11-07) 群聊：列出参与者（头像 / 名字 / host / 发言顺序）。 */
+  async listParticipants(sessionId: string): Promise<ConversationParticipant[]> {
+    return withRetry(async () => {
+      try {
+        const resp = await invoke<{ participants: ConversationParticipant[] }>(
+          'list_session_participants',
+          { sessionId },
+        );
+        return resp.participants ?? [];
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /** M2：拉专家进群（幂等；首个成员为 host）。 */
+  async addParticipants(
+    sessionId: string,
+    agentIds: string[],
+  ): Promise<ConversationParticipant[]> {
+    return withRetry(async () => {
+      try {
+        const resp = await invoke<{ participants: ConversationParticipant[] }>(
+          'add_session_participants',
+          { sessionId, agentIds },
+        );
+        return resp.participants ?? [];
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /** M2：移除群成员。 */
+  async removeParticipant(sessionId: string, agentId: string): Promise<void> {
+    return withRetry(async () => {
+      try {
+        await invoke('remove_session_participant', { sessionId, agentId });
       } catch (error) {
         throw handleApiError(error);
       }
