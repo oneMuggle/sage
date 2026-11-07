@@ -18,7 +18,7 @@ interface PendingSteerPanelProps {
  * 输入框上方：点 X 撤回（后端不会落库，等同未送达）；AI 消费后后端回推
  * steer_consumed，chip 自动消失并落入聊天区。
  */
-function PendingSteerPanelInner({ items, onCancel }: PendingSteerPanelProps) {
+function PendingSteerPanelInner({ items = [], onCancel }: PendingSteerPanelProps) {
   const { t } = useI18n();
 
   if (items.length === 0) return null;
