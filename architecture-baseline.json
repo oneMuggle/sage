@@ -4,7 +4,7 @@
     "backend/adapters/out/skill/inproc.py": 1178,
     "backend/agents/profiles.py": 1176,
     "backend/api/arena_routes.py": 878,
-    "backend/api/legacy_routes.py": 2952,
+    "backend/api/legacy_routes.py": 2962,
     "backend/api/llm_proxy_routes.py": 1216,
     "backend/api/office_routes.py": 852,
     "backend/api/orchestration_router.py": 807,
@@ -18,7 +18,7 @@
     "backend/core/legacy/agent.py": 3697,
     "backend/core/legacy/llm_client.py": 1457,
     "backend/data/database.py": 2515,
-    "backend/data/session_repo.py": 1197,
+    "backend/data/session_repo.py": 1217,
     "backend/data/settings_canonicalizer.py": 1072,
     "backend/main.py": 1451,
     "backend/mcp/pool.py": 915,
@@ -87,12 +87,12 @@
     "src/pages/settings/settingsSearchEntries.ts": 864,
     "src/shared/api/projectApi.ts": 1584,
     "src/shared/api/projectApiTypes.ts": 1762,
-    "src/shared/api/types/chatAndEventTypes.ts": 917,
+    "src/shared/api/types/chatAndEventTypes.ts": 936,
     "src/shared/lib/i18n/locales/en/chatAndSider.ts": 810,
     "src/shared/lib/i18n/locales/zh/chatAndSider.ts": 811,
     "src/shared/types/electron-api.d.ts": 932,
     "src/widgets/chat/ChatInput.tsx": 894,
-    "src/widgets/chat/Message.tsx": 854,
+    "src/widgets/chat/Message.tsx": 876,
     "tests/electron/test_stub_backend.py": 896
   }
 }

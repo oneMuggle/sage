@@ -41,6 +41,7 @@ import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 import { ForkTreeModal } from './ForkTreeModal';
 import { buildSessionContextMenuItems } from './sessionContextMenu';
+import { useAgentDirectory } from '../../shared/lib/useAgentDirectory';
 
 interface SessionItemProps {
   session: Session;
@@ -76,6 +77,16 @@ export function SessionItem({
   onUnarchive,
 }: SessionItemProps) {
   const { t } = useI18n();
+  // M1.2: 会话绑定的专家（非 primary 时在标题旁显示头像 + 名字徽标）
+  const agentDirectory = useAgentDirectory();
+  const boundAgent =
+    session.specialist_id && session.specialist_id !== 'primary'
+      ? agentDirectory.get(session.specialist_id)
+      : undefined;
+  const boundAgentAvatar =
+    typeof boundAgent?.persona_ui?.avatar === 'string' && boundAgent.persona_ui.avatar.trim()
+      ? boundAgent.persona_ui.avatar.trim()
+      : '🤖';
   const [exporting, setExporting] = useState(false);
   // W2: fork 徽标点击 → 家族树对话框（状态自含，仅打开时挂载）
   const [forkTreeOpen, setForkTreeOpen] = useState(false);
@@ -314,13 +325,25 @@ export function SessionItem({
                 className="flex-1 min-w-0 text-sm font-medium bg-bg-hover border border-primary rounded px-1 py-0 focus:outline-none"
               />
             ) : (
-              <span className="truncate flex-1 min-w-0" title={session.title}>
-                {session.title === '新对话' &&
-                session.message_count > 0 &&
-                (session.title_attempts ?? 0) === 0
-                  ? t('session.title_generating')
-                  : session.title}
-              </span>
+              <>
+                {boundAgent && (
+                  <span
+                    className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-ui-2xs text-primary"
+                    title={`专家：${boundAgent.name}`}
+                    data-testid={`session-specialist-${session.id}`}
+                  >
+                    <span aria-hidden="true">{boundAgentAvatar}</span>
+                    <span className="max-w-16 truncate">{boundAgent.name}</span>
+                  </span>
+                )}
+                <span className="truncate flex-1 min-w-0" title={session.title}>
+                  {session.title === '新对话' &&
+                  session.message_count > 0 &&
+                  (session.title_attempts ?? 0) === 0
+                    ? t('session.title_generating')
+                    : session.title}
+                </span>
+              </>
             )}
             {/* U4': 双击标题进入 inline 重命名 */}
             {onRename && !renaming && (
