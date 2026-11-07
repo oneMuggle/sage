@@ -113,3 +113,17 @@ def test_persist_generated_document_canonical_workspace(
     )
 
     assert summary.workspace_path == str(workspace.resolve())
+
+
+def test_persist_generated_document_missing_file(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    """A non-existent file path raises FileNotFoundError before any DB write."""
+    missing = tmp_path / "ws" / "docs" / "missing" / "nope.docx"
+    missing.parent.mkdir(parents=True)
+
+    with pytest.raises(FileNotFoundError, match="Generated file not found"):
+        persist_generated_document(
+            conn,
+            file_path=missing,
+            doc_type=OfficeDocType.WORD,
+            workspace_path=str(tmp_path / "ws"),
+        )
