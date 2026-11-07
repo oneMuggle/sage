@@ -31,21 +31,21 @@ def test_generate_nl_word_happy_path(tmp_path: Path) -> None:
     llm = AsyncMock()
     llm.complete.return_value = '{"title": "Test", "paragraphs": [{"text": "Hello"}]}'
 
-    with (
-        patch(
-            "backend.api.office_generate_routes.build_llm_client_from_settings",
-            return_value=llm,
-        ),
-        patch("backend.api.office_generate_routes.generate_docx", return_value=fake) as mock_gen,
+    with patch(  # noqa: SIM117 — py38 不支持括号多上下文 with
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
     ):
-        resp = _client().post(
-            "/api/v1/office/generate/nl",
-            json={
-                "workspace_path": str(workspace),
-                "instruction": "写一份测试文档",
-                "doc_type": "word",
-            },
-        )
+        with patch(
+            "backend.api.office_generate_routes.generate_docx", return_value=fake
+        ) as mock_gen:
+            resp = _client().post(
+                "/api/v1/office/generate/nl",
+                json={
+                    "workspace_path": str(workspace),
+                    "instruction": "写一份测试文档",
+                    "doc_type": "word",
+                },
+            )
 
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -77,21 +77,19 @@ def test_generate_nl_pdf_uses_result_output_path(tmp_path: Path) -> None:
         page_count=1,
     )
 
-    with (
-        patch(
-            "backend.api.office_generate_routes.build_llm_client_from_settings",
-            return_value=llm,
-        ),
-        patch("backend.api.office_generate_routes.generate_pdf", return_value=pdf_result),
+    with patch(  # noqa: SIM117 — py38 不支持括号多上下文 with
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
     ):
-        resp = _client().post(
-            "/api/v1/office/generate/nl",
-            json={
-                "workspace_path": str(workspace),
-                "instruction": "生成一页 PDF",
-                "doc_type": "pdf",
-            },
-        )
+        with patch("backend.api.office_generate_routes.generate_pdf", return_value=pdf_result):
+            resp = _client().post(
+                "/api/v1/office/generate/nl",
+                json={
+                    "workspace_path": str(workspace),
+                    "instruction": "生成一页 PDF",
+                    "doc_type": "pdf",
+                },
+            )
 
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -108,21 +106,21 @@ def test_generate_nl_sanitizes_unsafe_title(tmp_path: Path) -> None:
     llm = AsyncMock()
     llm.complete.return_value = '{"title": "../../etc/passwd", "paragraphs": [{"text": "b"}]}'
 
-    with (
-        patch(
-            "backend.api.office_generate_routes.build_llm_client_from_settings",
-            return_value=llm,
-        ),
-        patch("backend.api.office_generate_routes.generate_docx", return_value=fake) as mock_gen,
+    with patch(  # noqa: SIM117 — py38 不支持括号多上下文 with
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
     ):
-        resp = _client().post(
-            "/api/v1/office/generate/nl",
-            json={
-                "workspace_path": str(workspace),
-                "instruction": "x",
-                "doc_type": "word",
-            },
-        )
+        with patch(
+            "backend.api.office_generate_routes.generate_docx", return_value=fake
+        ) as mock_gen:
+            resp = _client().post(
+                "/api/v1/office/generate/nl",
+                json={
+                    "workspace_path": str(workspace),
+                    "instruction": "x",
+                    "doc_type": "word",
+                },
+            )
 
     assert resp.status_code == 200, resp.text
     filename = mock_gen.call_args.args[0].filename
@@ -146,22 +144,20 @@ def test_generate_nl_embeds_reference_text(tmp_path: Path) -> None:
     llm = AsyncMock()
     llm.complete.return_value = '{"title": "Test", "paragraphs": [{"text": "Hello"}]}'
 
-    with (
-        patch(
-            "backend.api.office_generate_routes.build_llm_client_from_settings",
-            return_value=llm,
-        ),
-        patch("backend.api.office_generate_routes.generate_docx", return_value=fake),
+    with patch(  # noqa: SIM117 — py38 不支持括号多上下文 with
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
     ):
-        resp = _client().post(
-            "/api/v1/office/generate/nl",
-            json={
-                "workspace_path": str(workspace),
-                "instruction": "根据参考资料写周报",
-                "doc_type": "word",
-                "reference_paths": [str(ref)],
-            },
-        )
+        with patch("backend.api.office_generate_routes.generate_docx", return_value=fake):
+            resp = _client().post(
+                "/api/v1/office/generate/nl",
+                json={
+                    "workspace_path": str(workspace),
+                    "instruction": "根据参考资料写周报",
+                    "doc_type": "word",
+                    "reference_paths": [str(ref)],
+                },
+            )
 
     assert resp.status_code == 200, resp.text
     prompt = llm.complete.call_args.args[0]
@@ -273,3 +269,29 @@ def test_generate_nl_unparseable_llm_output_returns_422(tmp_path: Path) -> None:
 
     assert resp.status_code == 422, resp.text
     assert resp.json()["error_type"] == "OfficeParseError"
+
+
+def test_generate_nl_unreadable_reference_returns_422(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    broken = workspace / "reference.docx"
+    broken.write_bytes(b"not a docx")
+
+    llm = AsyncMock()
+    with patch(
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        resp = _client().post(
+            "/api/v1/office/generate/nl",
+            json={
+                "workspace_path": str(workspace),
+                "instruction": "x",
+                "doc_type": "word",
+                "reference_paths": [str(broken)],
+            },
+        )
+
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["error_type"] == "OfficeParseError"
+    llm.complete.assert_not_called()

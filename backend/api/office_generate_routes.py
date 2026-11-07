@@ -19,7 +19,9 @@ import re
 import uuid
 from pathlib import Path
 from typing import List, Optional
+from zipfile import BadZipFile
 
+from docx.opc.exceptions import PackageNotFoundError
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -114,7 +116,13 @@ def _collect_reference_texts(workspace: Path, reference_paths: Optional[List[str
                 f"reference_paths only supports .docx files: {raw_path}",
                 file_path=candidate,
             )
-        texts.append(read_docx_text(candidate))
+        try:
+            texts.append(read_docx_text(candidate))
+        except (FileNotFoundError, PackageNotFoundError, BadZipFile) as exc:
+            raise OfficeParseError(
+                f"Failed to read reference .docx {raw_path}: {exc}",
+                file_path=candidate,
+            ) from exc
     return texts
 
 
