@@ -169,6 +169,8 @@ class AgentRepository:
             "permission_mode",
             "version",
             "source",
+            "last_used_at",
+            "sort_order",
         ):
             if col not in profile:
                 continue

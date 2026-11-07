@@ -322,6 +322,12 @@ def delete_agent(agent_id: str):
     - 404 + ``type: agent_not_found`` —— id 不存在
     - 500 + ``type: memory_purge_failed`` —— 私有记忆清理失败
     """
+    _delete_agent_internal(agent_id)
+    return {"ok": True, "id": agent_id}
+
+
+def _delete_agent_internal(agent_id: str) -> None:
+    """内部删除逻辑（供单删与批量共用）。失败抛 HTTPException。"""
     from backend.data.agent_repo import AgentRepository
 
     if agent_id == "primary":
@@ -387,7 +393,77 @@ def delete_agent(agent_id: str):
         logger.warning("级联删除专家评测记录失败 (agent=%s): %s", agent_id, exc)
 
     repo.delete(agent_id)
-    return {"ok": True, "id": agent_id}
+
+
+@router.post("/agents/batch")
+@with_db_lock
+def batch_agents(data: dict):
+    """批量操作专家（P2-a）。
+
+    - 200 + ``{succeeded: [id], failed: [{id, error}]}``
+    - ``action``: ``delete`` / ``enable`` / ``disable``
+    - ``ids``: 专家 id 列表
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    action = data.get("action")
+    ids = data.get("ids", [])
+    if action not in ("delete", "enable", "disable"):
+        raise HTTPException(
+            status_code=400,
+            detail={"type": "invalid_action", "message": f"action 必须为 delete/enable/disable，收到 {action!r}"},
+        )
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        raise HTTPException(
+            status_code=400,
+            detail={"type": "invalid_ids", "message": "ids 必须为字符串列表"},
+        )
+
+    repo = AgentRepository()
+    succeeded, failed = [], []
+    for agent_id in ids:
+        try:
+            if action == "delete":
+                _delete_agent_internal(agent_id)
+            elif action in ("enable", "disable") and not repo.update(
+                agent_id, {"enabled": action == "enable"}
+            ):
+                raise ValueError(f"agent {agent_id!r} 不存在或更新失败")
+            succeeded.append(agent_id)
+        except HTTPException as exc:
+            failed.append({"id": agent_id, "error": exc.detail.get("message", str(exc.detail))})
+        except Exception as exc:
+            failed.append({"id": agent_id, "error": str(exc)})
+    logger.info("批量操作专家 (action=%s, succeeded=%s, failed=%s)", action, len(succeeded), len(failed))
+    return {"succeeded": succeeded, "failed": failed}
+
+
+@router.post("/agents/reorder")
+@with_db_lock
+def reorder_agents(data: dict):
+    """批量更新专家排序（P2-d）。``data: {items: [{id, sort_order}]}``。
+
+    置顶 / 上移 / 下移由前端计算新序列后整体提交，后端只做幂等写入。
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    items = data.get("items", [])
+    if not isinstance(items, list) or not all(isinstance(i, dict) for i in items):
+        raise HTTPException(
+            status_code=400,
+            detail={"type": "invalid_items", "message": "items 必须为 {id, sort_order} 对象列表"},
+        )
+    repo = AgentRepository()
+    updated = 0
+    for item in items:
+        agent_id = item.get("id")
+        sort_order = item.get("sort_order")
+        if not isinstance(agent_id, str) or not isinstance(sort_order, int):
+            continue
+        if repo.update(agent_id, {"sort_order": sort_order}):
+            updated += 1
+    logger.info("批量更新专家排序 (updated=%s/%s)", updated, len(items))
+    return {"updated": updated}
 
 
 # ==================== M4-T3 (2026-11-05) 版本 diff / 回滚 ====================

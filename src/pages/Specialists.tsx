@@ -55,6 +55,10 @@ export function Specialists() {
   const [evalAgent, setEvalAgent] = useState<AgentProfile | null>(null);
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  // P2-a: 批量操作选择模式
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchBusy, setBatchBusy] = useState(false);
   const navigate = useNavigate();
 
   const loadAgents = useCallback(async () => {
@@ -76,11 +80,17 @@ export function Specialists() {
 
   const filteredAgents = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return agents.filter((agent) => {
-      if (sourceFilter !== 'all' && (agent.source ?? 'user') !== sourceFilter) return false;
-      if (!query) return true;
-      return specialistSearchText(agent).includes(query);
-    });
+    return agents
+      .filter((agent) => {
+        if (sourceFilter !== 'all' && (agent.source ?? 'user') !== sourceFilter) return false;
+        if (!query) return true;
+        return specialistSearchText(agent).includes(query);
+      })
+      .sort((a, b) => {
+        const orderDiff = (a.sort_order ?? 0) - (b.sort_order ?? 0);
+        if (orderDiff !== 0) return orderDiff;
+        return a.name.localeCompare(b.name, 'zh-Hans');
+      });
   }, [agents, sourceFilter, searchQuery]);
 
   const hasActiveFilters = sourceFilter !== 'all' || searchQuery.trim() !== '';
@@ -142,6 +152,67 @@ export function Specialists() {
 
   function handleEval(agent: AgentProfile) {
     setEvalAgent(agent);
+  }
+
+  // P2-a: 批量操作
+  function toggleSelectionMode() {
+    setSelectionMode((prev) => {
+      if (prev) setSelectedIds(new Set());
+      return !prev;
+    });
+  }
+
+  function toggleSelect(agentId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(agentId)) next.delete(agentId);
+      else next.add(agentId);
+      return next;
+    });
+  }
+
+  async function handleBatch(action: 'delete' | 'enable' | 'disable') {
+    if (selectedIds.size === 0) return;
+    if (action === 'delete') {
+      const confirmed = window.confirm(
+        `确定删除选中的 ${selectedIds.size} 位专家？此操作不可撤销。`,
+      );
+      if (!confirmed) return;
+    }
+    setBatchBusy(true);
+    try {
+      const result = await agentsApi.batch(action, Array.from(selectedIds));
+      const labels = { delete: '删除', enable: '启用', disable: '禁用' } as const;
+      if (result.failed.length === 0) {
+        toast.success(`已${labels[action]} ${result.succeeded.length} 位专家`);
+      } else {
+        toast.warning(
+          `已${labels[action]} ${result.succeeded.length} 位，${result.failed.length} 位失败`,
+        );
+      }
+      setSelectedIds(new Set());
+      setSelectionMode(false);
+      await loadAgents();
+    } catch (err) {
+      toast.error(`批量操作失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  // P2-d: 置顶（整序列重排后一次性提交）
+  async function handlePin(agent: AgentProfile) {
+    const orderedIds = [
+      agent.id,
+      ...filteredAgents.map((a) => a.id).filter((id) => id !== agent.id),
+    ];
+    try {
+      await agentsApi.reorder(orderedIds.map((id, index) => ({ id, sort_order: index })));
+      toast.success(`已将「${agent.name}」置顶`);
+      await loadAgents();
+    } catch (err) {
+      toast.error(`置顶失败：${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   async function handleStartChat(agent: AgentProfile) {
@@ -245,7 +316,53 @@ export function Specialists() {
                 aria-label="搜索专家"
                 className="min-w-0 flex-1 rounded-radius-md border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:border-primary sm:max-w-xs"
               />
+              <button
+                type="button"
+                onClick={toggleSelectionMode}
+                className="rounded-radius-md border border-border px-3 py-1.5 text-sm hover:bg-bg-hover"
+              >
+                {selectionMode ? '退出批量' : '批量管理'}
+              </button>
             </div>
+
+            {selectionMode && (
+              <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+                <span className="text-sm text-muted">已选 {selectedIds.size} 位</span>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={batchBusy || selectedIds.size === 0}
+                  onClick={() => void handleBatch('enable')}
+                >
+                  启用
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={batchBusy || selectedIds.size === 0}
+                  onClick={() => void handleBatch('disable')}
+                >
+                  禁用
+                </Button>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  disabled={batchBusy || selectedIds.size === 0}
+                  onClick={() => void handleBatch('delete')}
+                >
+                  删除
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto"
+                  disabled={batchBusy}
+                  onClick={toggleSelectionMode}
+                >
+                  取消
+                </Button>
+              </div>
+            )}
 
             {filteredAgents.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border bg-bg-subtle/40 p-8 text-center">
@@ -279,6 +396,11 @@ export function Specialists() {
                     onVersions={handleVersions}
                     onEval={handleEval}
                     exporting={exportingId === agent.id}
+                    selectable={selectionMode}
+                    selected={selectedIds.has(agent.id)}
+                    onSelectToggle={() => toggleSelect(agent.id)}
+                    onOpenDetail={(next) => navigate(`/specialists/${next.id}`)}
+                    onPin={(next) => void handlePin(next)}
                   />
                 ))}
               </div>

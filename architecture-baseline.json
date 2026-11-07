@@ -4,7 +4,7 @@
     "backend/adapters/out/skill/inproc.py": 1178,
     "backend/agents/profiles.py": 1165,
     "backend/api/arena_routes.py": 878,
-    "backend/api/legacy_routes.py": 2974,
+    "backend/api/legacy_routes.py": 2980,
     "backend/api/llm_proxy_routes.py": 1216,
     "backend/api/office_routes.py": 852,
     "backend/api/orchestration_router.py": 807,
@@ -14,7 +14,7 @@
     "backend/api/project_routes.py": 1296,
     "backend/api/project_schemas.py": 826,
     "backend/api/wiki_routes.py": 1764,
-    "backend/application/services/chat_service.py": 1567,
+    "backend/application/services/chat_service.py": 1578,
     "backend/core/legacy/agent.py": 3701,
     "backend/core/legacy/llm_client.py": 1457,
     "backend/data/database.py": 2547,
@@ -74,6 +74,7 @@
     "packages/drawio-mcp-server/src/xml-validation.ts": 950,
     "scripts/feedback_receiver.py": 1154,
     "src/entities/setting/settingsRegistry.ts": 812,
+    "src/features/office/OfficePreviewPanel.tsx": 846,
     "src/features/playbook/PlaybookCard.tsx": 825,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
     "src/features/project-type/PolymorphicArchetypeCards.tsx": 879,
@@ -88,11 +89,11 @@
     "src/shared/api/projectApi.ts": 1584,
     "src/shared/api/projectApiTypes.ts": 1766,
     "src/shared/api/types/chatAndEventTypes.ts": 921,
+    "src/shared/api/types/domainEntityTypes.ts": 804,
     "src/shared/types/electron-api.d.ts": 934,
     "src/widgets/chat/ChatInput.tsx": 894,
     "src/widgets/chat/Message.tsx": 873,
     "src/widgets/memory/MemoryBrowser.tsx": 1228,
-    "tests/electron/test_stub_backend.py": 896,
-    "src/features/office/OfficePreviewPanel.tsx": 846
+    "tests/electron/test_stub_backend.py": 896
   }
 }
