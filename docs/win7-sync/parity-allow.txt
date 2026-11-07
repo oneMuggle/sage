@@ -236,3 +236,18 @@ backend/tools/executor.py
 
 # win7 独有：记忆 SSE / by-turn / session-summary 异步端点
 backend/api/legacy_memory_list_routes.py
+
+# win7 browser CDP 双版本（launcher 独立模块 + 测试期望）
+backend/tools/browser_cdp.py
+backend/tools/browser_launcher.py
+backend/tests/unit/test_profiles_default_tools.py
+
+# win7 独有：memory delete 支持 memory_id 别名 + 渲染器桥
+backend/api/legacy_memory_routes.py
+
+# win7 独有测试期望 + wiki 生成器 fallback 行为
+backend/tests/unit/api/test_model_catalog_snapshots.py
+backend/tests/unit/test_env_memory.py
+backend/tests/unit/test_agent_tool.py
+backend/tests/test_preference_injection.py
+backend/services/project_wiki_generator.py

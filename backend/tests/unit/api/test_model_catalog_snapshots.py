@@ -198,5 +198,6 @@ def test_exception_classes_exist_for_api_mapping():
 def test_merge_output_is_frozen_value():
     # CatalogValue.frozen 契约：合并结果不可变（快照审计的完整性前提）
     merged = _merge(_candidate(), _candidate(native=7), ["native"])
-    with pytest.raises(ValidationError):
+    # pydantic v1: TypeError on attribute assignment; pydantic v2: ValidationError
+    with pytest.raises((ValidationError, TypeError)):
         merged.native = 1

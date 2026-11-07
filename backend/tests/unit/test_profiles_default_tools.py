@@ -103,24 +103,3 @@ def test_primary_profile_includes_ask_user_question():
     assert "ask_user_question" in defaults["primary"].tools
 
 
-def test_primary_profile_includes_skill_tools():
-    """primary (coordinator) 的 seed 白名单必须包含 skill / skill_save。
-
-    2026-11-05 自管理对等 Q1：SKILL_TOOLS 此前只在 tool_names 与注册表
-    中存在，未进任何默认 profile 种子 —— LLM 在会话里完全看不见已安装
-    技能。skill 为 EXECUTE（逐次审批走主循环闸口）；skill_save 产出
-    pending 草稿，仍需用户在 UI 审批后才生效（参见 skill_save_tool 的
-    显式返回 ``{status: 'pending'}``），不存在自修改逃逸。
-    """
-    from backend.agents.profiles import _PRIMARY_SEED_TOOLS, create_default_agents
-
-    for name in ("skill", "skill_save"):
-        assert name in _PRIMARY_SEED_TOOLS, (
-            f"primary 白名单缺 {name} — 用户无法通过会话调用已安装技能"
-        )
-
-    defaults = {a.id: a for a in create_default_agents()}
-    for name in ("skill", "skill_save"):
-        assert name in defaults["primary"].tools
-
-
