@@ -12,10 +12,12 @@ import type { AgentProfile } from '../../shared/api';
 import { Specialists } from '../Specialists';
 
 const mockList = vi.fn();
+const mockBatch = vi.fn();
 
 vi.mock('../../shared/api', () => ({
   agentsApi: {
     list: () => mockList(),
+    batch: (...args: unknown[]) => mockBatch(...args),
   },
   sessionApi: {
     setSpecialist: vi.fn(),
@@ -127,5 +129,22 @@ describe('Specialists 页面（P1）', () => {
     expect(screen.getAllByRole('button', { name: /从模板创建/ }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: /新建专家/ }).length).toBeGreaterThan(0);
     await waitFor(() => expect(mockList).toHaveBeenCalledTimes(1));
+  });
+
+  it('批量启用选中专家', async () => {
+    mockBatch.mockResolvedValue({ succeeded: ['a1', 'a2'], failed: [] });
+    renderPage();
+    await screen.findByText('写作专家');
+
+    fireEvent.click(screen.getByRole('button', { name: '批量管理' }));
+    fireEvent.click(screen.getByLabelText('选择 写作专家'));
+    fireEvent.click(screen.getByLabelText('选择 研究专家'));
+    expect(screen.getByText('已选 2 位')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '启用' }));
+
+    await waitFor(() =>
+      expect(mockBatch).toHaveBeenCalledWith('enable', expect.arrayContaining(['a1', 'a2'])),
+    );
   });
 });

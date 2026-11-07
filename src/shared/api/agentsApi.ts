@@ -112,6 +112,42 @@ export const agentsApi = {
   },
 
   /**
+   * P2-a: 批量操作专家（delete / enable / disable）。
+   *
+   * 后端 `POST /api/v1/agents/batch`：200 + `{succeeded, failed}`。
+   */
+  async batch(
+    action: 'delete' | 'enable' | 'disable',
+    ids: string[],
+  ): Promise<{ succeeded: string[]; failed: Array<{ id: string; error: string }> }> {
+    return withRetry(async () => {
+      try {
+        return await invoke<{ succeeded: string[]; failed: Array<{ id: string; error: string }> }>(
+          'batch_agents',
+          { action, ids },
+        );
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * P2-d: 批量更新专家排序（置顶 / 上移 / 下移）。
+   *
+   * 后端 `POST /api/v1/agents/reorder`：200 + `{updated}`。
+   */
+  async reorder(items: Array<{ id: string; sort_order: number }>): Promise<{ updated: number }> {
+    return withRetry(async () => {
+      try {
+        return await invoke<{ updated: number }>('reorder_agents', { items });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
    * M0 (2026-11-03): 复制一个 agent（含 system_prompt / tools / model_config 等）。
    *
    * 后端 `POST /api/v1/agents/{id}/duplicate`：200 + 完整新 profile

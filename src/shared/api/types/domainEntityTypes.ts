@@ -423,6 +423,10 @@ export interface AgentProfile {
   version?: number;
   /** M1 来源：builtin / user / imported */
   source?: 'builtin' | 'user' | 'imported';
+  /** P2-b: 专家最近使用时间（毫秒 Unix 时间戳；从未使用为 null/缺省） */
+  last_used_at?: number | null;
+  /** P2-d: 手动排序位（越小越靠前；置顶 = 最小） */
+  sort_order?: number;
 }
 
 /**
