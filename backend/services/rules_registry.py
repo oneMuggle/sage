@@ -229,6 +229,38 @@ def _safe_read(path: Path) -> Optional[str]:
         return None
 
 
+def _playbook_check_entries(
+    stage_id: str,
+    stage_label: str,
+    artifacts: Any,
+    *,
+    layer: str,
+) -> List[RuleEntry]:
+    """artifact 的 ``content_checks`` → RuleEntry（规程适配器的内层循环）。"""
+    entries: List[RuleEntry] = []
+    for artifact in artifacts or []:
+        artifact_id = str(artifact.get("id") or "")
+        for check in artifact.get("content_checks") or []:
+            label = str(check.get("label") or check.get("id") or "内容检查")
+            keywords = [str(item) for item in (check.get("keywords") or [])]
+            content = label
+            if keywords:
+                content = f"{label}（关键词：{'、'.join(keywords)}）"
+            entries.append(
+                RuleEntry(
+                    id=f"playbook:{stage_id}:check:{artifact_id}:{check.get('id')}",
+                    layer=layer,
+                    source_label=f"规程 · {stage_label} · 内容检查",
+                    scope=stage_label,
+                    category="content_check",
+                    content=content,
+                    editable="partial",
+                    origin=stage_id,
+                )
+            )
+    return entries
+
+
 class PlaybookAdapter:
     """活动规程快照 → RuleEntry（阶段规则 + artifact 内容检查）。"""
 
@@ -270,26 +302,11 @@ class PlaybookAdapter:
                         origin=stage_id,
                     )
                 )
-            for artifact in stage.get("artifacts") or []:
-                artifact_id = str(artifact.get("id") or "")
-                for check in artifact.get("content_checks") or []:
-                    label = str(check.get("label") or check.get("id") or "内容检查")
-                    keywords = [str(item) for item in (check.get("keywords") or [])]
-                    content = label
-                    if keywords:
-                        content = f"{label}（关键词：{'、'.join(keywords)}）"
-                    entries.append(
-                        RuleEntry(
-                            id=f"playbook:{stage_id}:check:{artifact_id}:{check.get('id')}",
-                            layer=self.layer,
-                            source_label=f"规程 · {stage_label} · 内容检查",
-                            scope=stage_label,
-                            category="content_check",
-                            content=content,
-                            editable="partial",
-                            origin=stage_id,
-                        )
-                    )
+            entries.extend(
+                _playbook_check_entries(
+                    stage_id, stage_label, stage.get("artifacts"), layer=self.layer
+                )
+            )
         return entries
 
 
