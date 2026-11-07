@@ -97,9 +97,7 @@ describe('RulesWorkspace', () => {
   it('loads groups on mount and renders the selected group and its rules', async () => {
     renderWorkspace();
 
-    await waitFor(() =>
-      expect(screen.getByTestId('rules-group-item-group-1')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByTestId('rules-group-item-group-1')).toBeInTheDocument());
     expect(screen.getByTestId('rule-detail-name')).toHaveValue('No passive voice');
   });
 

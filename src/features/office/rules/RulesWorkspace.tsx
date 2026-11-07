@@ -23,12 +23,7 @@ import {
   rulePackToWire,
 } from './ruleMapping';
 import { parseRulePack, rulePackFileName, serializeRulePack } from './rulePackSerialization';
-import type {
-  RuleAuditResult,
-  RuleConflict,
-  RuleFields,
-  RuleGroup,
-} from './ruleTypes';
+import type { RuleAuditResult, RuleConflict, RuleFields, RuleGroup } from './ruleTypes';
 
 export interface RulesWorkspaceProps {
   workspacePath: string;
@@ -161,9 +156,7 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
     setBusy(true);
     try {
       // PUT behaves as a PATCH: send only fields that actually changed.
-      const existing = groups
-        .flatMap((group) => group.rules)
-        .find((rule) => rule.id === ruleId);
+      const existing = groups.flatMap((group) => group.rules).find((rule) => rule.id === ruleId);
       const changed: Partial<RuleFields> = {};
       if (existing) {
         if (fields.name !== undefined && fields.name !== existing.name) changed.name = fields.name;
@@ -265,9 +258,7 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
     setBusy(true);
     try {
       const pack = parseRulePack(await file.text());
-      const result = importResultFromWire(
-        await officeRulesApi.importPack(rulePackToWire(pack)),
-      );
+      const result = importResultFromWire(await officeRulesApi.importPack(rulePackToWire(pack)));
       await load();
       toast.success(`${t('office.rules.workspace.imported')} (${result.importedRules})`);
     } catch (error) {
@@ -385,9 +376,7 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
             className="rounded bg-primary px-3 py-1.5 text-sm text-text-inverse hover:bg-primary-hover disabled:opacity-50"
             onClick={() => void handleAudit()}
           >
-            {auditing
-              ? t('office.rules.workspace.auditing')
-              : t('office.rules.workspace.audit')}
+            {auditing ? t('office.rules.workspace.auditing') : t('office.rules.workspace.audit')}
           </button>
         </div>
       </div>
