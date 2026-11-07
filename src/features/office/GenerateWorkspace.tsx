@@ -158,11 +158,9 @@ export function GenerateWorkspace({
       }),
     );
 
+    let res: OfficeGenerateResult | null = null;
     try {
-      const res = await callGenerate(taskId);
-      setResult(res);
-      toast.success(`${t('office.generate.success')} ${res.filename}`);
-      await onGenerated?.();
+      res = await callGenerate(taskId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.generate.failed')}: ${msg}`);
@@ -170,6 +168,15 @@ export function GenerateWorkspace({
       stopPoll();
       finishTask(TASK_ID);
       setBusy(false);
+    }
+
+    if (res) {
+      setResult(res);
+      toast.success(`${t('office.generate.success')} ${res.filename}`);
+      // Parent refresh failures must not be reported as a generation failure.
+      void Promise.resolve()
+        .then(() => onGenerated?.())
+        .catch(() => undefined);
     }
   };
 

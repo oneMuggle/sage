@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { officeApi } from '../../shared/api/officeApi';
 import type { OfficeTemplateMeta } from '../../shared/api/types';
@@ -21,14 +21,18 @@ export function TemplateLibrary({ workspacePath, selectedId, onSelect }: Templat
   const { t } = useI18n();
   const [templates, setTemplates] = useState<OfficeTemplateMeta[]>([]);
   const [state, setState] = useState<LoadState>('loading');
+  const requestIdRef = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = (requestIdRef.current += 1);
     setState('loading');
     try {
       const res = await officeApi.listTemplates(workspacePath);
+      if (requestId !== requestIdRef.current) return;
       setTemplates(res.templates);
       setState('ready');
     } catch {
+      if (requestId !== requestIdRef.current) return;
       setTemplates([]);
       setState('error');
     }
@@ -36,6 +40,10 @@ export function TemplateLibrary({ workspacePath, selectedId, onSelect }: Templat
 
   useEffect(() => {
     void load();
+    // Invalidate any in-flight load when the path changes or the panel unmounts.
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [load]);
 
   return (

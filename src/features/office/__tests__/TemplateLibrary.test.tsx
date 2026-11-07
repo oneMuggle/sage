@@ -74,4 +74,56 @@ describe('TemplateLibrary', () => {
     );
     expect(mockedListTemplates).toHaveBeenCalledTimes(2);
   });
+
+  it('ignores a stale response when the workspace changes mid-flight', async () => {
+    const OLD_TEMPLATE = {
+      id: 'old-template',
+      name: '旧模板',
+      doc_type: 'word' as const,
+      placeholders: [],
+      source: 'workspace' as const,
+      filename: 'old.docx',
+    };
+    const NEW_TEMPLATE = {
+      id: 'new-template',
+      name: '新模板',
+      doc_type: 'word' as const,
+      placeholders: [],
+      source: 'workspace' as const,
+      filename: 'new.docx',
+    };
+    type TemplatesResponse = Awaited<ReturnType<typeof officeApi.listTemplates>>;
+    let resolveOld: (value: TemplatesResponse) => void = () => {};
+    let resolveNew: (value: TemplatesResponse) => void = () => {};
+    const oldResponse = new Promise<TemplatesResponse>((resolve) => {
+      resolveOld = resolve;
+    });
+    const newResponse = new Promise<TemplatesResponse>((resolve) => {
+      resolveNew = resolve;
+    });
+    mockedListTemplates.mockReturnValueOnce(oldResponse).mockReturnValueOnce(newResponse);
+
+    const { rerender } = render(
+      <I18nProvider defaultLocale="zh">
+        <TemplateLibrary workspacePath="/ws-old" selectedId={null} onSelect={vi.fn()} />
+      </I18nProvider>,
+    );
+    rerender(
+      <I18nProvider defaultLocale="zh">
+        <TemplateLibrary workspacePath="/ws-new" selectedId={null} onSelect={vi.fn()} />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(mockedListTemplates).toHaveBeenCalledTimes(2));
+
+    // The newer request resolves first...
+    resolveNew({ templates: [NEW_TEMPLATE] });
+    await screen.findByTestId('office-template-library-item-new-template');
+
+    // ...then the stale request resolves last and must not overwrite it.
+    resolveOld({ templates: [OLD_TEMPLATE] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByTestId('office-template-library-item-old-template')).toBeNull();
+    expect(screen.getByTestId('office-template-library-item-new-template')).toBeInTheDocument();
+  });
 });

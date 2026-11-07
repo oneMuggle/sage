@@ -211,4 +211,28 @@ describe('GenerateWorkspace', () => {
 
     await waitFor(() => expect(onGenerated).toHaveBeenCalledTimes(1));
   });
+
+  it('does not report a generation failure when onGenerated rejects', async () => {
+    mockedNl.mockResolvedValue(RESULT);
+    const onGenerated = vi.fn().mockRejectedValue(new Error('refresh failed'));
+    render(
+      <I18nProvider defaultLocale="zh">
+        <GenerateWorkspace workspacePath="/ws" documents={[WORD_DOC]} onGenerated={onGenerated} />
+      </I18nProvider>,
+    );
+
+    fireEvent.change(screen.getByTestId('office-generate-workspace-instruction'), {
+      target: { value: 'x' },
+    });
+    fireEvent.click(screen.getByTestId('office-generate-workspace-submit'));
+
+    await waitFor(() => expect(onGenerated).toHaveBeenCalledTimes(1));
+    // Flush the rejection microtask: a leaked catch would have fired by now.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mockedToastError).not.toHaveBeenCalled();
+    expect(screen.getByTestId('office-generate-workspace-result-filename')).toHaveTextContent(
+      'out.docx',
+    );
+  });
 });
