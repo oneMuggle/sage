@@ -167,7 +167,7 @@ _DOC_FILENAMES: Tuple[str, ...] = ("SAGE.md", "CLAUDE.md", "AGENTS.md")
 _DOC_MAX_BYTES = 1024 * 1024
 
 
-def _global_rules_path() -> Path:
+def global_rules_path() -> Path:
     """与 ``backend/api/global_rules_routes._global_rules_path`` 同一路径。"""
     return Path.home() / ".sage" / "SAGE.md"
 
@@ -316,7 +316,7 @@ class GlobalRulesAdapter:
     layer = "global"
 
     def read(self, project: Project) -> List[RuleEntry]:
-        path = _global_rules_path()
+        path = global_rules_path()
         if path.is_symlink():
             logger.warning("rules: skip symlinked global rules %s", path)
             return []
