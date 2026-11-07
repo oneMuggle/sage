@@ -17,6 +17,7 @@ import type { TaskSummary } from '../../../shared/api/orchEvents';
 import { type Message, useStore } from '../../../shared/lib/store';
 import { selectSessionSlots, useChatStreamStore } from '../chatStreamStore';
 import { steeringAnchorId, useChat } from '../useChat';
+
 import { createFakeStream, streamEvent } from './fixtures/fakeStream';
 
 // 必须使用工厂函数，vitest 才能正确 hoist
