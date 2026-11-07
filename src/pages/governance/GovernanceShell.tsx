@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { ProjectTypeBadge } from '../../features/project-type';
 import { getArchetypeBlueprint } from '../../features/project-type/archetypeBlueprints';
+import { RulesPanel } from '../../features/rules/RulesPanel';
 import type { ProjectScaffoldResult, ProjectSummary } from '../../shared/api';
 import { useI18n } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
@@ -161,7 +162,14 @@ function GovernanceContent({
         {activeTab === 'overview' && (
           <OverviewSection data={data} onStartSession={onStartSession} onChangeTab={onChangeTab} />
         )}
-        {activeTab === 'rules' && <KnowledgeSection data={data} onStartSession={onStartSession} />}
+        {activeTab === 'rules' && (
+          <RulesPanel
+            projectId={projectId}
+            onOpenSource={(entry) => {
+              if (entry.layer === 'playbook') onChangeTab('overview');
+            }}
+          />
+        )}
         {activeTab === 'knowledge' && (
           <KnowledgeSection data={data} onStartSession={onStartSession} />
         )}

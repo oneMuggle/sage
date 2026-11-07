@@ -26,6 +26,11 @@ vi.mock('../sections/FilesSection', () => ({
 vi.mock('../sections/SettingsSection', () => ({
   SettingsSection: () => <div data-testid="section-settings" />,
 }));
+vi.mock('../../../features/rules/RulesPanel', () => ({
+  RulesPanel: ({ projectId }: { projectId: string }) => (
+    <div data-testid="section-rules">{projectId}</div>
+  ),
+}));
 
 import { GovernanceShell, auditProjectGovernancePageGovernance } from '../GovernanceShell';
 
@@ -109,6 +114,11 @@ describe('GovernanceShell', () => {
     renderAt('/projects/governance/p-1');
     fireEvent.click(screen.getByTestId('governance-tab-files'));
     expect(screen.getByTestId('section-files')).toBeInTheDocument();
+  });
+
+  it('renders the rules panel on the rules tab', () => {
+    renderAt('/projects/governance/p-1?tab=rules');
+    expect(screen.getByTestId('section-rules').textContent).toBe('p-1');
   });
 
   it('shows the empty state when the project is missing', () => {
