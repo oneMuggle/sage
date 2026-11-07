@@ -69,7 +69,7 @@
     "electron/preload.ts": 986,
     "electron/tests/updateIntegration.test.ts": 882,
     "electron/tests/updateManager.test.ts": 1839,
-    "electron/updateManager.ts": 1510,
+    "electron/updateManager.ts": 1519,
     "packages/drawio-mcp-server/src/xml-validation.ts": 950,
     "scripts/feedback_receiver.py": 1154,
     "src/entities/setting/settingsRegistry.ts": 812,
