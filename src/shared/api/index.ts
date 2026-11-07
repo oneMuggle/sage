@@ -54,6 +54,14 @@ export type {
   PlaybookVersion,
   PlaybookWikiExportResult,
 } from './playbookApi';
+export { rulesApi } from './rulesApi';
+export type {
+  RuleEntry,
+  RuleConflict,
+  EffectiveRulesResponse,
+  RuleLayer,
+  RuleEditable,
+} from './rulesApi';
 export type {
   ProjectOpenResult,
   ProjectSummary,
