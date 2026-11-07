@@ -1,6 +1,6 @@
 # 142 AI 文档工作台（文档库 / 规范书库 / AI 审校与修订）
 
-> 面向开发者。覆盖 `/office` 工作台 Phase 1 的三块能力：文档库搜索与重复清理、格式规范书库、AI 审校与「应用到文档」。AI 起草（Phase 2）尚未实现，不在本文范围。
+> 面向开发者。覆盖 `/office` 工作台 Phase 1–2 的三块能力：文档库搜索与重复清理、格式规范书库、AI 审校与修订 + P2 AI 侧栏（选区改写 / 对话 / 审校建议 / 指令式修改）。
 
 ## 1. 能力边界
 
@@ -12,6 +12,10 @@
 | AI 合并审校（规范书规则 + LLM） | ✅ | `POST /api/v1/office/ai/review` |
 | 审校历史 | ✅ | `GET /api/v1/office/doc/{doc_id}/ai-reviews` |
 | 将选中的问题应用为 Word 修订 | ✅ | `POST /api/v1/office/ai/revise` |
+| AI 侧栏（选区改写 / 对话 / 审校 / 指令式修改） | ✅ P2 | 前端 `src/features/office/sidebar/`；复用 review/revise 端点 |
+| AI 改写（自定义指令 / 翻译 / 摘要） | ✅ P2 | `POST /api/v1/office/ai/rewrite` |
+| AI 对话（上下文感知） | ✅ P2 | `POST /api/v1/office/ai/chat` |
+| 编辑预览对话框 AI 接入 | ✅ P2 | `OfficeEditAiActions.tsx` 复用 rewrite 端点 |
 
 所有端点挂在 `/api/v1/office` 下（`office_routes.router` 的 prefix），子路由通过 `router.include_router(...)` 合并，因此子模块自身不重复写 prefix。
 
@@ -262,10 +266,69 @@ POST /api/v1/office/ai/revise
 - 所有 pydantic 模型同时满足 v1 / v2（项目内 `pydantic_compat` 垫片）。
 - 前端功能不依赖 main 独有的能力；`OfficeAiAssistantPanel` 的 props 未改动，`Office.tsx` 无需同步修改。
 - 同步后重跑 `npm run ipc:manifest`，并核对 `backend/tests` 中的工作区路径断言。
+- **P2 新增**：`backend/api/ai_routes.py` 在 win7 需换 pydantic v1 垫片（`ConfigDict` → `class Config`、`Field(max_length=...)` → `_constrained_list`）。
 
-## 9. 后续路线图（Phase 2–4，未实现）
+## 9. AI 侧栏（P2）
 
-- **Phase 2 AI 起草**：`AiDraftWizard`（需求 → 规范书 → 参考资料 → 大纲 → 分节流式生成 → 组装导出 → 规范书交付检查）；后端 `office_ai_draft_routes.py`（`/office/ai/outline`、`/office/ai/draft/section` SSE、`/office/ai/assemble`、`/office/ai/fill-template`）；草稿会话持久化与任务中心集成。
+P2 在 Phase 1 的 AI 审校/修订链路上层，新增四类用户交互：选区浮出条（改写/提问/指令式修改/审校）、AI 侧栏抽屉（跨 tab 常驻）、指令式修改（定位段落 + diff 预览）、编辑预览对话框 AI 接入。所有写回复用 Phase 1 的 `review`/`revise` 端点，保留 pre-edit 快照与修订痕迹安全链路。
+
+### 9.1 前端组件清单
+
+| 组件 | 文件 | 职责 |
+|------|------|------|
+| `AiSidebar` | `sidebar/AiSidebar.tsx` | 侧栏外壳：标题/关闭/Tab 切换/CommandInput/ConversationArea |
+| `OfficeAiSidebarHost` | `sidebar/OfficeAiSidebarHost.tsx` | 页面级挂载：`fixed` 定位右侧、`workspacePath` 门控、`useAiCapabilities` + `useAuditSuggestions` 注入 |
+| `ConversationArea` | `sidebar/ConversationArea.tsx` | 消息流渲染：user/assistant/system + 卡片附件 + apply-all 按钮 |
+| `QuickActions` | `sidebar/QuickActions.tsx` | 按 `activeTab` 切换的快捷指令网格 |
+| `SuggestionCard` | `sidebar/SuggestionCard.tsx` | 审校/改写建议卡（段号 + 原文 + 建议文 + 应用/跳过） |
+| `InstructionEditCard` | `sidebar/InstructionEditCard.tsx` | 指令式修改结果卡（复用 SuggestionCard，`testIdPrefix` 区分） |
+| `FloatingActionBar` | `FloatingActionBar.tsx` | 选区浮出条（4 按钮：rewrite/chat/edit/audit） |
+| `OfficeEditAiActions` | `OfficeEditAiActions.tsx` | 编辑预览对话框 AI 按钮组（rewrite/polish/expand/condense） |
+
+### 9.2 Store 形状（`officeWorkspaceStore`）
+
+```ts
+interface OfficeWorkspaceState {
+  activeDocument: ParsedDocument | null;
+  conversation: ConversationMessage[];  // P2 新增
+  suggestions: SuggestionCardData[];     // P2 新增（按 messageId 分组）
+  // ...Phase 1 字段保留
+}
+```
+
+`appendMessage` / `updateSuggestionStatus` 为不可变更新（slice map/filter）。
+
+### 9.3 新增后端端点
+
+```
+POST /api/v1/office/ai/rewrite
+Body: { workspacePath, documentId, text, instruction, targetLang?, customInstruction? }
+Response: { result: string }
+
+POST /api/v1/office/ai/chat
+Body: { workspacePath, documentId, message, history[], documentContext }
+Response: { reply: string }
+```
+
+`instruction` 枚举：`rewrite | polish | expand | condense | translate | explain | summarize | custom`。`custom` 必须带 `customInstruction`，否则 422。
+
+### 9.4 段落锚点约定
+
+`DocxNativePreview` 渲染后注入 `data-paragraph-index`（0 基），跳过空段与 `table, header, footer, li` 内的 `<p>`，与后端 `_extract_paragraphs`（只数正文段落）对齐。`FloatingActionBar` 的 `edit` / `audit` 通过 `findParagraphIndex(anchorNode)` 取 `paraIndex`，传给 `runRewrite` / `runAudit`。
+
+### 9.5 复用 Phase 1 端点的理由
+
+- **审校**：`runAudit` 调 `POST /office/ai/review`（`use_llm: true`），返回 `AiReviewIssue[]`，前端包装成 `SuggestionCardData[]`。不新增 `/ai/audit` 端点。
+- **写回**：改写/审校的「应用」都走 `POST /office/ai/revise`，把 `SuggestionCardData` 转成 `AiReviewIssue`（`actual`=原文，`expected`=新文），保留 Phase 1 的 pre-edit 快照 + `_doc_in_workspace` 安全校验。
+- **理由**：避免第二套 LLM 审校/写回实现，缩小 win7 移植面与安全回归面。
+
+### 9.6 i18n
+
+所有用户可见文案进 `src/shared/lib/i18n/officeAiSidebar.ts`（zh/en 键集逐字一致，55 键）。`locales/{en,zh}/workspaceAndTools.ts` 已在基线（806/807 行），不再增长。
+
+## 10. 后续路线图（Phase 3–4，未实现）
+
+- **Phase 2 AI 起草（已部分完成）**：AI 侧栏（选区改写 / 对话 / 审校 / 指令式修改）已在 P2 落地；`AiDraftWizard`（需求 → 规范书 → 参考资料 → 大纲 → 分节流式生成 → 组装导出 → 规范书交付检查）仍未实现；后端 `office_ai_draft_routes.py`（`/office/ai/outline`、`/office/ai/draft/section` SSE、`/office/ai/assemble`、`/office/ai/fill-template`）；草稿会话持久化与任务中心集成。
 - **Phase 3 版式渲染与批量能力**：Excel SheetJS 网格预览、PPT 版式预览（前端库 vs 后端缩略图，需先 spike）、批量 AI 审校、包体积与架构基线评估。
 - **Phase 4 win7 同步**：cherry-pick + pydantic v1 / Python 3.8 适配；评估「审校与规范」「LaTeX」tab 的同步范围；双分支测试与安装包冒烟。
 - **Phase 0 遗留**：真机验证 Chromium 106 下 `data:` vs `blob:` PDF iframe 行为；Playwright 冒烟。
