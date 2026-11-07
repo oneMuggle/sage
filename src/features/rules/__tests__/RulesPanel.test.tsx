@@ -15,10 +15,31 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   } as unknown as typeof ResizeObserver;
 }
 
-const { list, effective } = vi.hoisted(() => ({ list: vi.fn(), effective: vi.fn() }));
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  },
+}));
+
+const { list, effective, create, update, remove, raw, confirmDialog } = vi.hoisted(() => ({
+  list: vi.fn(),
+  effective: vi.fn(),
+  create: vi.fn(),
+  update: vi.fn(),
+  remove: vi.fn(),
+  raw: vi.fn(),
+  confirmDialog: vi.fn(),
+}));
 
 vi.mock('../../../shared/api/rulesApi', () => ({
-  rulesApi: { list, effective },
+  rulesApi: { list, effective, create, update, remove, raw },
+}));
+
+vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
+  confirmDialog: (...args: unknown[]) => confirmDialog(...args),
 }));
 
 function rule(overrides: Partial<RuleEntry> & Pick<RuleEntry, 'id' | 'layer'>): RuleEntry {
@@ -37,6 +58,36 @@ function rule(overrides: Partial<RuleEntry> & Pick<RuleEntry, 'id' | 'layer'>): 
   };
 }
 
+const CONSTRAINT_ENTRY: RuleEntry = {
+  id: 'constraint:1',
+  layer: 'constraint',
+  sourceLabel: '项目规则',
+  scope: '全局',
+  category: 'coding_style',
+  content: '使用双引号',
+  enabled: true,
+  editable: 'full',
+  priority: 5,
+  trigger: null,
+  updatedAt: 1730000000000,
+  origin: null,
+};
+
+const PLAYBOOK_ENTRY: RuleEntry = {
+  id: 'playbook:s1:0',
+  layer: 'playbook',
+  sourceLabel: '规程 · 需求分析',
+  scope: '全局',
+  category: '需求',
+  content: '先写用户故事',
+  enabled: true,
+  editable: 'readonly',
+  priority: 5,
+  trigger: null,
+  updatedAt: null,
+  origin: null,
+};
+
 const RULES: RuleEntry[] = [
   rule({ id: 'global:#0', layer: 'global', sourceLabel: '全局规则', content: '回答用中文' }),
   rule({
@@ -45,7 +96,7 @@ const RULES: RuleEntry[] = [
     sourceLabel: '项目总纲 SAGE.md',
     content: '提交前跑 pytest',
   }),
-  rule({ id: 'constraint:1', layer: 'constraint', content: '使用双引号' }),
+  rule({ ...CONSTRAINT_ENTRY, id: 'constraint:1' }),
   rule({ id: 'constraint:2', layer: 'constraint', content: '使用 ruff', enabled: false }),
   rule({
     id: 'playbook:s1:0',
@@ -69,13 +120,16 @@ function renderPanel(onOpenSource?: (entry: RuleEntry) => void) {
 }
 
 beforeEach(() => {
-  list.mockReset();
-  effective.mockReset();
-  list.mockResolvedValue(RULES);
-  effective.mockResolvedValue({
+  list.mockReset().mockResolvedValue(RULES);
+  effective.mockReset().mockResolvedValue({
     entries: RULES.filter((entry) => entry.enabled),
     conflicts: CONFLICTS,
   });
+  create.mockReset().mockResolvedValue(undefined);
+  update.mockReset().mockResolvedValue(undefined);
+  remove.mockReset().mockResolvedValue(undefined);
+  raw.mockReset().mockResolvedValue({ path: '', content: '', truncated: false });
+  confirmDialog.mockReset().mockResolvedValue(true);
 });
 
 describe('RulesPanel', () => {
@@ -162,5 +216,95 @@ describe('RulesPanel', () => {
     fireEvent.click(screen.getByTestId('rule-source-playbook:s1:0'));
 
     expect(onOpenSource).toHaveBeenCalledWith(expect.objectContaining({ id: 'playbook:s1:0' }));
+  });
+
+  it('opens the editor from the create button', async () => {
+    renderPanel();
+    await screen.findByTestId('rules-panel');
+
+    fireEvent.click(screen.getByTestId('rules-create'));
+
+    expect(await screen.findByTestId('rule-editor')).toBeInTheDocument();
+  });
+
+  it('hides edit and delete actions for read-only playbook rows', async () => {
+    list.mockResolvedValue([PLAYBOOK_ENTRY]);
+    effective.mockResolvedValue({ entries: [], conflicts: [] });
+    renderPanel();
+
+    const trigger = await screen.findByTestId(`rule-menu-${PLAYBOOK_ENTRY.id}`);
+    fireEvent.pointerDown(trigger, { button: 0 });
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+
+    await waitFor(() =>
+      expect(screen.queryByTestId(`rule-menu-copy-${PLAYBOOK_ENTRY.id}`)).not.toBeNull(),
+    );
+    expect(screen.queryByTestId(`rule-menu-edit-${PLAYBOOK_ENTRY.id}`)).toBeNull();
+    expect(screen.queryByTestId(`rule-menu-delete-${PLAYBOOK_ENTRY.id}`)).toBeNull();
+  });
+
+  it('toggles a constraint rule and reloads the list', async () => {
+    renderPanel();
+
+    const trigger = await screen.findByTestId(`rule-menu-${CONSTRAINT_ENTRY.id}`);
+    fireEvent.pointerDown(trigger, { button: 0 });
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    const toggle = await screen.findByTestId(`rule-menu-toggle-${CONSTRAINT_ENTRY.id}`);
+    fireEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith('p-1', {
+        layer: 'constraint',
+        ruleId: CONSTRAINT_ENTRY.id,
+        patch: { enabled: false },
+        expectedUpdatedAt: CONSTRAINT_ENTRY.updatedAt,
+      }),
+    );
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+  });
+
+  it('skips deletion when the confirmation is declined', async () => {
+    confirmDialog.mockResolvedValue(false);
+    renderPanel();
+
+    const trigger = await screen.findByTestId(`rule-menu-${CONSTRAINT_ENTRY.id}`);
+    fireEvent.pointerDown(trigger, { button: 0 });
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    fireEvent.click(await screen.findByTestId(`rule-menu-delete-${CONSTRAINT_ENTRY.id}`));
+
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledOnce());
+    expect(confirmDialog.mock.calls[0][0]).toMatchObject({ danger: true });
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('deletes after confirmation and reloads', async () => {
+    confirmDialog.mockResolvedValue(true);
+    renderPanel();
+
+    const trigger = await screen.findByTestId(`rule-menu-${CONSTRAINT_ENTRY.id}`);
+    fireEvent.pointerDown(trigger, { button: 0 });
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    fireEvent.click(await screen.findByTestId(`rule-menu-delete-${CONSTRAINT_ENTRY.id}`));
+
+    await waitFor(() =>
+      expect(remove).toHaveBeenCalledWith('p-1', 'constraint', CONSTRAINT_ENTRY.id),
+    );
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+  });
+
+  it('copies rule content to the clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    renderPanel();
+
+    const trigger = await screen.findByTestId(`rule-menu-${CONSTRAINT_ENTRY.id}`);
+    fireEvent.pointerDown(trigger, { button: 0 });
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    fireEvent.click(await screen.findByTestId(`rule-menu-copy-${CONSTRAINT_ENTRY.id}`));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(CONSTRAINT_ENTRY.content));
   });
 });

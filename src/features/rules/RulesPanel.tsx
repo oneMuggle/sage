@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 
 import { rulesApi, type RuleConflict, type RuleEntry } from '../../shared/api/rulesApi';
 import { useI18n } from '../../shared/lib/i18n';
 import { Button } from '../../shared/ui/Button';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import { Input } from '../../shared/ui/Input';
 
 import { EffectiveRulesDrawer } from './EffectiveRulesDrawer';
-import { RuleRow } from './RuleRow';
+import { RuleEditorDialog } from './RuleEditorDialog';
+import { RuleRow, type RuleAction } from './RuleRow';
 import {
   buildRuleGroups,
   conflictedRuleIds,
@@ -21,6 +24,10 @@ const FILTERS: readonly LayerFilter[] = ['all', 'constraint', 'playbook', 'doc',
 export interface RulesPanelProps {
   projectId: string;
   onOpenSource?: (entry: RuleEntry) => void;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 interface RulesData {
@@ -74,6 +81,79 @@ function useRulesData(projectId: string): RulesData {
   return { rules, effectiveEntries, conflicts, loading, error, reload };
 }
 
+/** 新建 / 编辑 / 复制 / 停用 / 删除的状态与副作用。 */
+function useRuleWrites(projectId: string, reload: () => void) {
+  const { t } = useI18n();
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<RuleEntry | null>(null);
+
+  const openCreate = useCallback(() => {
+    setEditTarget(null);
+    setEditorOpen(true);
+  }, []);
+
+  const closeEditor = useCallback(() => {
+    setEditorOpen(false);
+    setEditTarget(null);
+  }, []);
+
+  const handleSaved = useCallback(async () => {
+    toast.success(t('rules.action.saved'));
+    reload();
+  }, [reload, t]);
+
+  const handleAction = useCallback(
+    async (action: RuleAction, entry: RuleEntry) => {
+      if (action === 'edit') {
+        setEditTarget(entry);
+        setEditorOpen(true);
+        return;
+      }
+      if (action === 'copy') {
+        try {
+          await navigator.clipboard.writeText(entry.content);
+          toast.success(t('rules.action.copied'));
+        } catch (err) {
+          toast.error(t('rules.action.copyFailed').replace('{message}', errorMessage(err)));
+        }
+        return;
+      }
+      if (action === 'toggle') {
+        try {
+          await rulesApi.update(projectId, {
+            layer: 'constraint',
+            ruleId: entry.id,
+            patch: { enabled: !entry.enabled },
+            expectedUpdatedAt: entry.updatedAt,
+          });
+          reload();
+        } catch (err) {
+          toast.error(t('rules.action.toggleFailed').replace('{message}', errorMessage(err)));
+        }
+        return;
+      }
+      const confirmed = await confirmDialog({
+        title: t('rules.delete.title'),
+        message: t('rules.delete.message'),
+        confirmLabel: t('rules.delete.confirm'),
+        cancelLabel: t('rules.editor.cancel'),
+        danger: true,
+      });
+      if (!confirmed) return;
+      try {
+        await rulesApi.remove(projectId, entry.layer, entry.id);
+        toast.success(t('rules.action.deleted'));
+        reload();
+      } catch (err) {
+        toast.error(t('rules.action.deleteFailed').replace('{message}', errorMessage(err)));
+      }
+    },
+    [projectId, reload, t],
+  );
+
+  return { editorOpen, editTarget, openCreate, closeEditor, handleSaved, handleAction };
+}
+
 function RulesHealthBadge({
   enabledCount,
   conflictCount,
@@ -109,6 +189,7 @@ interface RulesHeaderProps {
   loading: boolean;
   onOpenDrawer: () => void;
   onRefresh: () => void;
+  onCreate: () => void;
 }
 
 function RulesHeader({
@@ -117,6 +198,7 @@ function RulesHeader({
   loading,
   onOpenDrawer,
   onRefresh,
+  onCreate,
 }: RulesHeaderProps) {
   const { t } = useI18n();
   return (
@@ -127,6 +209,9 @@ function RulesHeader({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <RulesHealthBadge enabledCount={enabledCount} conflictCount={conflictCount} />
+        <Button variant="secondary" size="sm" onClick={onCreate} data-testid="rules-create">
+          {t('rules.action.create')}
+        </Button>
         <Button
           variant="secondary"
           size="sm"
@@ -231,9 +316,10 @@ interface RuleGroupListProps {
   groups: ReturnType<typeof buildRuleGroups>;
   conflicted: Set<string>;
   onOpenSource?: (entry: RuleEntry) => void;
+  onAction?: (action: RuleAction, entry: RuleEntry) => void;
 }
 
-function RuleGroupList({ groups, conflicted, onOpenSource }: RuleGroupListProps) {
+function RuleGroupList({ groups, conflicted, onOpenSource, onAction }: RuleGroupListProps) {
   const { t } = useI18n();
   return (
     <div className="space-y-3">
@@ -255,6 +341,7 @@ function RuleGroupList({ groups, conflicted, onOpenSource }: RuleGroupListProps)
                 entry={entry}
                 conflicted={conflicted.has(entry.id)}
                 onOpenSource={onOpenSource}
+                onAction={onAction}
               />
             ))}
           </div>
@@ -270,6 +357,8 @@ export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
   const [search, setSearch] = useState('');
   const [layer, setLayer] = useState<LayerFilter>('all');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { editorOpen, editTarget, openCreate, closeEditor, handleSaved, handleAction } =
+    useRuleWrites(projectId, reload);
   const conflicted = useMemo(() => conflictedRuleIds(conflicts), [conflicts]);
   const groups = useMemo(
     () => buildRuleGroups(filterRules(rules, { search, layer })),
@@ -286,6 +375,7 @@ export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
         loading={loading}
         onOpenDrawer={() => setDrawerOpen(true)}
         onRefresh={reload}
+        onCreate={openCreate}
       />
       <RulesFilterBar search={search} onSearch={setSearch} layer={layer} onLayer={setLayer} />
       {loading && (
@@ -296,7 +386,19 @@ export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
       {error && <RulesErrorNotice message={error} onRetry={reload} />}
       {!loading && !error && !hasRules && <RulesEmpty />}
       {!loading && !error && hasRules && groups.length === 0 && <RulesEmptyFiltered />}
-      <RuleGroupList groups={groups} conflicted={conflicted} onOpenSource={onOpenSource} />
+      <RuleGroupList
+        groups={groups}
+        conflicted={conflicted}
+        onOpenSource={onOpenSource}
+        onAction={(action, entry) => void handleAction(action, entry)}
+      />
+      <RuleEditorDialog
+        isOpen={editorOpen}
+        onClose={closeEditor}
+        projectId={projectId}
+        entry={editTarget}
+        onSaved={handleSaved}
+      />
       <EffectiveRulesDrawer
         isOpen={drawerOpen}
         onClose={() => setDrawerOpen(false)}

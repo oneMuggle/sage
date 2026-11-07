@@ -37,6 +37,43 @@ export interface EffectiveRulesResponse {
   conflicts: RuleConflict[];
 }
 
+/** 可写层；`playbook` 只能跳转规程编辑器，不在此列。 */
+export type CreatableRuleLayer = 'constraint' | 'doc' | 'global';
+
+export interface RuleCreateInput {
+  layer: CreatableRuleLayer;
+  /** constraint：分类；doc/global：新小节标题。留空用后端默认值。 */
+  category?: string;
+  content: string;
+  /** 仅 constraint 生效；`null` 表示始终生效。 */
+  triggerPattern?: string | null;
+  priority?: number;
+  enabled?: boolean;
+}
+
+export interface RulePatchPayload {
+  content?: string;
+  category?: string;
+  /** 传 `null` 或 `''` 都是「清空触发词」。 */
+  triggerPattern?: string | null;
+  priority?: number;
+  enabled?: boolean;
+}
+
+export interface RulePatchInput {
+  layer: RuleLayer;
+  ruleId: string;
+  patch: RulePatchPayload;
+  /** 仅 constraint 支持；与后端 `updated_at` 不符时 409 `rule_conflict`。 */
+  expectedUpdatedAt?: number | null;
+}
+
+export interface RawRulesResponse {
+  path: string;
+  content: string;
+  truncated: boolean;
+}
+
 interface RuleEntryWire {
   id: string;
   layer: RuleLayer;
@@ -83,6 +120,31 @@ export const rulesApi = {
     return {
       entries: (response.entries ?? []).map(mapRuleEntry),
       conflicts: response.conflicts ?? [],
+    };
+  },
+
+  async create(projectId: string, input: RuleCreateInput): Promise<void> {
+    await invoke<{ ok: boolean }>('rules_create', { projectId, ...input });
+  },
+
+  async update(projectId: string, input: RulePatchInput): Promise<void> {
+    await invoke<{ ok: boolean }>('rules_update', { projectId, ...input });
+  },
+
+  async remove(projectId: string, layer: RuleLayer, ruleId: string): Promise<void> {
+    await invoke<{ ok: boolean }>('rules_delete', { projectId, layer, ruleId });
+  },
+
+  async raw(projectId: string, layer: CreatableRuleLayer): Promise<RawRulesResponse> {
+    const response = await invoke<{
+      path: string;
+      content: string;
+      truncated: boolean;
+    }>('rules_raw', { projectId, layer });
+    return {
+      path: response.path ?? '',
+      content: response.content ?? '',
+      truncated: Boolean(response.truncated),
     };
   },
 };

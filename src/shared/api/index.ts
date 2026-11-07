@@ -56,11 +56,16 @@ export type {
 } from './playbookApi';
 export { rulesApi } from './rulesApi';
 export type {
-  RuleEntry,
-  RuleConflict,
+  CreatableRuleLayer,
   EffectiveRulesResponse,
-  RuleLayer,
+  RawRulesResponse,
+  RuleConflict,
+  RuleCreateInput,
   RuleEditable,
+  RuleEntry,
+  RuleLayer,
+  RulePatchInput,
+  RulePatchPayload,
 } from './rulesApi';
 export type {
   ProjectOpenResult,
