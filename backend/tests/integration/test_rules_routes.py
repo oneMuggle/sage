@@ -333,3 +333,51 @@ def test_audit_rejects_oversized_file(client: TestClient, tmp_path: Path) -> Non
         },
     )
     assert response.status_code == 413
+
+
+def test_check_conflicts_reports_duplicate_regex(client: TestClient) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+    first = client.post(f"/api/v1/rules/groups/{group['id']}/rules", json=RULE).json()
+    second = client.post(
+        f"/api/v1/rules/groups/{group['id']}/rules",
+        json=dict(RULE, name="重复待定"),
+    ).json()
+    response = client.post(
+        "/api/v1/rules/check-conflicts",
+        json={"rule_ids": [first["id"], second["id"]]},
+    )
+    assert response.status_code == 200
+    conflicts = response.json()["conflicts"]
+    assert len(conflicts) == 1
+    assert conflicts[0]["rule_ids"] == [first["id"], second["id"]]
+    assert conflicts[0]["severity"] == "error"
+
+
+def test_check_conflicts_unknown_rule_returns_404(client: TestClient) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+    rule = client.post(f"/api/v1/rules/groups/{group['id']}/rules", json=RULE).json()
+    response = client.post(
+        "/api/v1/rules/check-conflicts",
+        json={"rule_ids": [rule["id"], "rule-missing"]},
+    )
+    assert response.status_code == 404
+
+
+def test_check_conflicts_rejects_invalid_rule_id_lists(client: TestClient) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+    rule = client.post(f"/api/v1/rules/groups/{group['id']}/rules", json=RULE).json()
+
+    empty = client.post("/api/v1/rules/check-conflicts", json={"rule_ids": []})
+    assert empty.status_code == 422
+
+    duplicated = client.post(
+        "/api/v1/rules/check-conflicts",
+        json={"rule_ids": [rule["id"], rule["id"]]},
+    )
+    assert duplicated.status_code == 422
+
+    too_many = client.post(
+        "/api/v1/rules/check-conflicts",
+        json={"rule_ids": [f"rule-missing-{i}" for i in range(51)]},
+    )
+    assert too_many.status_code == 422

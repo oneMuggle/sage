@@ -1,4 +1,4 @@
-# ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容
+# ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容
 """Rules-management API routes (Office AI Workbench P3).
 
 CRUD for rule groups and rules, plus AI-assisted rule extraction from a
@@ -11,6 +11,7 @@ in ``rulePackSerialization.ts``.
 from __future__ import annotations
 
 import uuid
+from dataclasses import asdict
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -20,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.data.database import Database, get_database
 from backend.office.errors import OfficePathError, OfficeSizeLimitError
 from backend.office.path_safety import resolve_within
+from backend.office.rule_conflicts import detect_conflicts
 from backend.office.rule_executor import run_audit
 from backend.office.rule_models import AuditResult, Rule, RuleGroup
 from backend.office.rule_repo import (
@@ -327,3 +329,45 @@ async def audit_endpoint(req: AuditRequest) -> AuditResult:
             raise HTTPException(status_code=503, detail="LLM 客户端未配置")
 
     return await run_audit(rules, source, workspace_path=str(workspace), llm_client=llm_client)
+
+
+class ConflictCheckRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rule_ids: List[str]
+
+
+class ConflictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rule_ids: List[str]
+    message: str
+    suggestion: str
+    severity: str
+
+
+class ConflictListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    conflicts: List[ConflictModel]
+
+
+@router.post("/check-conflicts", response_model=ConflictListResponse)
+async def check_conflicts_endpoint(req: ConflictCheckRequest) -> ConflictListResponse:
+    conn = _db().get_connection()
+    rule_ids = list(dict.fromkeys(req.rule_ids))
+    if len(rule_ids) < 2:
+        raise HTTPException(status_code=422, detail="rule_ids requires at least 2 distinct ids")
+    if len(rule_ids) > _MAX_AUDIT_RULES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"rule_ids cannot exceed {_MAX_AUDIT_RULES}",
+        )
+    rules: List[Rule] = []
+    for rule_id in rule_ids:
+        try:
+            rules.append(get_rule(conn, rule_id))
+        except ValueError as exc:
+            raise _not_found(exc) from exc
+    conflicts = detect_conflicts(rules)
+    return ConflictListResponse(conflicts=[ConflictModel(**asdict(c)) for c in conflicts])
