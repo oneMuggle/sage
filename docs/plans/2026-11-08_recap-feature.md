@@ -140,6 +140,8 @@ async def generate_recap(session_id: str) -> RecapResult:
 
 ### M2：自动触发（后续迭代）
 
+> M1 已实现并归档：见 [technical/140-recap-feature.md](../technical/140-recap-feature.md) + [user-manual/41-recap.md](../user-manual/41-recap.md)。M2 尚未开始。
+
 - [ ] 步骤 8：Electron 端添加离开检测（blur/focus 事件）
 - [ ] 步骤 9：5分钟回归自动触发 recap
 - [ ] 步骤 10：compaction 触发时通知用户
