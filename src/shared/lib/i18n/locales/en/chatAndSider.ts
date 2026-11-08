@@ -272,6 +272,20 @@ export const enChatAndSider = {
   'chat.rewind_fork_failed': 'Fork failed: {message}',
   'chat.fork_success': 'Forked into a new session',
   'chat.fork_failed': 'Fork failed: {message}',
+
+  // ─── Recap (2026-11-08) ──────────────
+  'recap.title': 'Progress Summary',
+  'recap.dismiss': 'Dismiss summary',
+  'recap.progress': 'Progress',
+  'recap.decisions': 'Decisions',
+  'recap.next_steps': 'Next Steps',
+  'recap.open_questions': 'Open Questions',
+  'chat.recap_success': 'Progress summary generated',
+  'chat.recap_failed': 'Failed to generate progress summary: {message}',
+  'chat.recap_too_short': 'Conversation too short to generate a meaningful summary',
+  'chat.recap_no_llm': 'No LLM configuration available to generate the summary',
+  'chat.recap_throttled': 'Recap was generated recently, please try again in a few minutes',
+
   'session.fork_badge': 'Forked session',
   'session.fork_tree_open': 'View fork family tree',
   'session.fork_tree_title': 'Fork family tree',

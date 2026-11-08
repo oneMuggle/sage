@@ -38,6 +38,7 @@ import type {
   ScheduledTask,
   Session,
   SessionCompactResult,
+  RecapResponse,
   SessionExportResult,
   Skill,
   SkillExecuteResult,
@@ -165,6 +166,19 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
       removed: Math.max(0, before - after),
     };
     if (before > after) demoMessages.set(id, [list[0], list[list.length - 1]]);
+    return result;
+  },
+
+  session_recap: () => {
+    const result: RecapResponse = {
+      ok: true,
+      recap: {
+        progress: '已完成基础功能开发，正在编写单元测试。',
+        decisions: ['选择 React + TypeScript 技术栈', '采用组件化架构'],
+        nextSteps: ['完成测试覆盖', '进行代码审查', '准备发布候选版本'],
+        openQuestions: ['是否需要支持离线模式？'],
+      },
+    };
     return result;
   },
 
@@ -312,9 +326,30 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
     return {
       skill_name: name,
       entries: [
-        { id: 1, skill_name: name, action: 'create', actor: 'system', source: 'builtin', created_at: DEMO_AUDIT_T0 },
-        { id: 2, skill_name: name, action: 'consolidation_note', actor: 'system', source: 'consolidation_scan', created_at: DEMO_AUDIT_T1 },
-        { id: 3, skill_name: name, action: 'update', actor: 'user', source: 'editor', created_at: DEMO_AUDIT_T2 },
+        {
+          id: 1,
+          skill_name: name,
+          action: 'create',
+          actor: 'system',
+          source: 'builtin',
+          created_at: DEMO_AUDIT_T0,
+        },
+        {
+          id: 2,
+          skill_name: name,
+          action: 'consolidation_note',
+          actor: 'system',
+          source: 'consolidation_scan',
+          created_at: DEMO_AUDIT_T1,
+        },
+        {
+          id: 3,
+          skill_name: name,
+          action: 'update',
+          actor: 'user',
+          source: 'editor',
+          created_at: DEMO_AUDIT_T2,
+        },
       ],
     };
   },
@@ -575,6 +610,125 @@ export function demoInvoke(cmd: string, args: Record<string, unknown>): DemoInvo
   const handler = demoHandlers[cmd];
   if (!handler) return { hit: false };
   return { hit: true, value: handler(args) };
+}
+
+/**
+ * backendRequest 演示模式拦截 —— 匹配 FastAPI HTTP 路径 (非 IPC 通道).
+ *
+ * 新 Office generate API 走 `backendRequest` (HTTP relay) 而非 `invoke` (IPC).
+ * 演示模式下 main 进程的 `sage:backend-request` handler 直接抛异常,
+ * 因此在渲染层 backendRequest 调用前拦截, 复用既有 demoInvoke 桩.
+ */
+export function demoBackendRequest(request: {
+  method?: string;
+  path: string;
+  body?: unknown;
+}): DemoInvokeResult {
+  const method = (request.method ?? 'GET').toUpperCase();
+  if (method !== 'POST') return { hit: false };
+
+  const body = (request.body ?? {}) as Record<string, unknown>;
+  const workspacePath = asStr(body.workspace_path) || DEMO_WORKSPACE_PATH;
+
+  // POST /api/v1/office/generate/nl
+  if (request.path === '/api/v1/office/generate/nl') {
+    const docType = (asStr(body.doc_type) || 'word').toLowerCase();
+    const ipcCmd =
+      docType === 'excel'
+        ? 'office_excel_generate'
+        : docType === 'ppt'
+          ? 'office_ppt_generate'
+          : docType === 'pdf'
+            ? 'office_pdf_generate'
+            : 'office_word_generate';
+    const filename = generateFilename(docType);
+    const base = demoInvoke(ipcCmd, { filename, workspace_path: workspacePath });
+    if (!base.hit) return { hit: false };
+    const baseValue = base.value as Record<string, unknown>;
+    return {
+      hit: true,
+      value: {
+        ...baseValue,
+        summary: buildDemoSummary(workspacePath, filename, docType),
+      },
+    };
+  }
+
+  // POST /api/v1/office/generate/template-chat
+  if (request.path === '/api/v1/office/generate/template-chat') {
+    const filename = `${asStr(body.template_id) || '模板'}-生成.docx`;
+    const base = demoInvoke('office_word_generate', { filename, workspace_path: workspacePath });
+    if (!base.hit) return { hit: false };
+    const baseValue = base.value as Record<string, unknown>;
+    return {
+      hit: true,
+      value: {
+        ...baseValue,
+        summary: buildDemoSummary(workspacePath, filename, 'word'),
+      },
+    };
+  }
+
+  // POST /api/v1/office/generate/iterate
+  if (request.path === '/api/v1/office/generate/iterate') {
+    const sourcePath = asStr(body.source_path) || '迭代文档.docx';
+    const baseName = sourcePath.split('/').pop()?.replace('.docx', '') ?? '迭代文档';
+    const filename = `${baseName}-迭代.docx`;
+    const base = demoInvoke('office_word_generate', { filename, workspace_path: workspacePath });
+    if (!base.hit) return { hit: false };
+    const baseValue = base.value as Record<string, unknown>;
+    return {
+      hit: true,
+      value: {
+        ...baseValue,
+        summary: buildDemoSummary(workspacePath, filename, 'word'),
+      },
+    };
+  }
+
+  return { hit: false };
+}
+
+function generateFilename(docType: string): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  switch (docType) {
+    case 'excel':
+      return `demo-${stamp}.xlsx`;
+    case 'ppt':
+      return `demo-${stamp}.pptx`;
+    case 'pdf':
+      return `demo-${stamp}.pdf`;
+    default:
+      return `demo-${stamp}.docx`;
+  }
+}
+
+function buildDemoSummary(
+  workspacePath: string,
+  filename: string,
+  docType: string,
+): Record<string, unknown> {
+  const meta =
+    docType === 'excel'
+      ? { sheet_count: 1, file_size_bytes: 18432 }
+      : docType === 'ppt'
+        ? { page_count: 4, file_size_bytes: 1048576 }
+        : docType === 'pdf'
+          ? { page_count: 2, file_size_bytes: 88320 }
+          : { paragraph_count: 12, table_count: 1, file_size_bytes: 24576 };
+  return {
+    id: demoUUID(),
+    workspace_path: workspacePath,
+    doc_type: docType,
+    original_filename: null,
+    generated_filename: filename,
+    status: 'generated',
+    created_at: NOW_S,
+    updated_at: NOW_S,
+    metadata: meta,
+    derived_from: null,
+    archived_at: null,
+  };
 }
 
 export function searchDemoMemories(query: string, memoryType?: 'episodic' | 'semantic'): Memory[] {

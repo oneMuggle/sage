@@ -7,7 +7,7 @@ describe('shared/api/index P144 governance audit', () => {
     const res = auditSharedApiBarrelGovernance();
     expect(res.module).toBe('src/shared/api/index.ts');
     expect(res.phase).toBe('P144');
-    expect(res.exportedClientCount).toBe(12);
+    expect(res.exportedClientCount).toBe(13);
     expect(res.windowControlsReady).toBe(true);
     expect(res.healthy).toBe(true);
   });

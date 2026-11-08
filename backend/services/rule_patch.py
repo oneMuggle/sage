@@ -1,7 +1,7 @@
 """AI 辅助规则修改：上下文组装、schema 校验、diff 预览（无状态）。
 
 本模块只做纯计算与 LLM 调用，**不写库**；落库在
-``backend/api/rules_routes.apply_rule_patch`` 里复用写原语，避免 service
+``backend/api/project_rules_routes.apply_rule_patch`` 里复用写原语，避免 service
 反向依赖 API 层。patch 不落库：preview 与 apply 各自重新读取当前规则。
 """
 

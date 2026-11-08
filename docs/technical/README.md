@@ -1,6 +1,6 @@
 # 技术专题文档总览
 
-> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-147；本索引以目录中的实际文件为准。
+> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-148；本索引以目录中的实际文件为准。
 
 ---
 
@@ -111,14 +111,15 @@
 | 131 | [聊天附件链路](./131-attachment-pipeline.md) | MediaStore sidecar 元数据 + 后缀回退表与上传 allowlist 同口径；R37 注入带 name/type + 逐附件 `ok/skipped/error` 状态双出口（`attachments_processed` 事件 + `client_meta.attachments_status` 落库）；`useFileUpload` 预检状态机 + 气泡附件卡片 + 整页拖放共享 hook |
 | 132 | [会话标题生成机制](./132-session-title-generation.md) | 标题 LLM 生成流程 / `title_attempts` 计数器 / 启动回补调度器 / 专用标题模型配置 |
 | 133 | [专家（数字员工）系统](./133-specialist-persona.md) | M0–M4 全量：AgentProfile 运行时接线 / 技能作用域 fail-closed / 知识绑定 RRF / 记忆 agent_id 隔离 / 包格式 v2 + 模板库 + 版本回滚 + 黄金任务评测 |
-| 134 | [AI 文档工作台](./134-office-ai-workbench.md) | 文档库搜索/筛选/排序契约 + 内容哈希重复检测与清理 + 规范书库（提取/激活/绑定，优先级解析）+ AI 合并审校（规则包 → LLM，来源标注）+ 应用到 Word 修订痕迹 + pre-edit 快照 + 审校历史与成本记录 + P2 AI 侧栏（选区改写/对话/审校/指令式修改 + 编辑预览对话框 AI 接入） |
+| 134 | [AI 文档工作台](./134-office-ai-workbench.md) | 文档库搜索/筛选/排序契约 + 内容哈希重复检测与清理 + 规范书库（提取/激活/绑定，优先级解析）+ AI 合并审校（规则包 → LLM，来源标注）+ 应用到 Word 修订痕迹 + pre-edit 快照 + 审校历史与成本记录 + P2 AI 侧栏（选区改写/对话/审校/指令式修改 + 编辑预览对话框 AI 接入） + P3 文档生成工作台（自然语言 / 参考文档 / 模板对话 / 迭代改写，四种模式共用表单 + 结果卡）+ 规则管理（v17 分组/规则表、12 个 `/api/v1/rules/*` 端点、正则与 AI 规则、增量 PUT、冲突检查、`.sage-rules` 导出导入、规范书抽取、只读规则审校） |
 | 135 | [专家资产中心](./135-specialist-asset-hub.md) | 专家视角统一管理私有记忆 / 知识绑定 / 技能；手动追加私有记忆的 `agent_id` 全链路（save_memory → memorize）；提升共享与删除 |
 | 136 | [技能页面优化](./136-skills-page-optimization.md) | M1 草稿/待审列表 + 来源徽章 + 操作菜单；M2 详情抽屉 + 审查通过/拒绝；M3 搜索/筛选/排序 + 导出 zip + 打开目录；M4 i18n 全量 + 升级不丢 |
 | 137 | [定时任务自动执行](./137-scheduled-task-auto-execute.md) | `execute` / `deliver` 双模式 + APScheduler 线程桥接主事件循环 + `run_turn_tracked` 多轮 ReAct（`max_iterations=8`）+ 三字段幂等迁移 + 执行结果跳转高亮 + 异常脱敏与一次性任务失败禁用 |
 | 138 | [专家页面交互（P0–P2）](./138-specialist-page-ux.md) | 卡片主操作/色调/禁用态 + 来源筛选/搜索/空态 + 知识数/批量操作/最近使用 + 详情页 `/specialists/:id` + 排序置顶（migration v14/v15） |
 | 139 | [专家私聊与群聊（M1 + M2）](./139-specialist-dm-group-chat.md) | 专家升格为 IM 联系人（卡片点击即私聊、会话项显示专家徽标）+ 群聊 MVP（migration v16 参与者表 + 参与者 CRUD + @ 显式调度 + 气泡发送者） |
 | 140 | [插话暂存区](./140-steer-staging-panel.md) | AI 忙碌时发送的补充消息进暂存条（可撤回）+ 消费回执事件 `STEER_CONSUMED` + 409 窗口修复 + 流末未消费转排队 |
-| 147 | [项目工作台·规则中心](./147-project-workbench-rules-center.md) | 四层适配器（constraint/playbook/doc/global）+ 规则包信封（sage.rules JSON/Markdown/AGENTS.md）+ AI diff 修改 + 导入导出 + 规程库搜索与元数据编辑 |
+| 147 | [Recap 进度总结](./147-recap-feature.md) | `/recap` 斜杠命令手动触发 LLM 生成结构化总结（进度/决策/下一步/待确认问题）+ `POST /api/v1/chat/recap` 五分支契约 + 5 分钟节流 + 消息不足 3 条单独返回 `too_short` |
+| 148 | [项目工作台·规则中心](./148-project-workbench-rules-center.md) | 四层适配器（constraint/playbook/doc/global）+ 规则包信封（sage.rules JSON/Markdown/AGENTS.md）+ AI diff 修改 + 导入导出 + 规程库搜索与元数据编辑 |
 
 ---
 
@@ -127,7 +128,7 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 用户价值层 | [01 概述](../01-overview.md) — [12 实施计划](../12-plan.md) |
-| 横切关注点 | 本目录（15-147）                                            |
+| 横切关注点 | 本目录（15-148）                                            |
 
 ---
 

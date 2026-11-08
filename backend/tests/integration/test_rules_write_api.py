@@ -15,7 +15,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from backend.api import rules_routes
+from backend.api import project_rules_routes as rules_routes
 from backend.data import database as database_module
 from backend.data.database import Database
 from backend.main import app

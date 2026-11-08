@@ -325,6 +325,7 @@
     "session_get_model": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/model" },
     "session_lineage": { "method": "GET", "path": "/api/v1/sessions/{sessionId}/lineage" },
     "session_purge_archived": { "method": "POST", "path": "/api/v1/sessions/purge-archived" },
+    "session_recap": { "method": "POST", "path": "/api/v1/chat/recap" },
     "session_retreat_segment": { "method": "POST", "path": "/api/v1/sessions/{sessionId}/segments/retreat" },
     "session_set_model": { "method": "PUT", "path": "/api/v1/sessions/{sessionId}/model" },
     "session_update": { "method": "PATCH", "path": "/api/v1/sessions/{sessionId}" },
