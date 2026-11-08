@@ -15,6 +15,7 @@ import { join } from 'path';
 import { logger } from './logger';
 import { mainWindow } from './mainWindow';
 import { runDiagnosticExport } from './diagnosticExport';
+import { openRescueTool } from './rescueDialogs';
 import { getPetController } from './pet';
 
 let tray: Tray | null = null;
@@ -95,6 +96,13 @@ export function setupTrayAndGlobalShortcut(): void {
                 err: err instanceof Error ? err.message : String(err),
               });
             }
+          },
+        },
+        { type: 'separator' },
+        {
+          label: '运行修复工具…',
+          click: () => {
+            void openRescueTool();
           },
         },
         { type: 'separator' },

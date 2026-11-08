@@ -920,6 +920,12 @@ export interface ElectronAPI {
    * Returns the path if a project marker was found within 5 levels, else null.
    */
   getDetectedProjectRoot?: () => Promise<string | null>;
+  /**
+   * 2026-11-08: 启动看门狗 —— renderer 心跳与首帧上报。
+   * 主进程据此区分「前端崩溃」与「未崩溃但白屏」。
+   */
+  sendHeartbeat?: () => void;
+  notifyFirstPaint?: () => void;
 }
 
 declare global {
