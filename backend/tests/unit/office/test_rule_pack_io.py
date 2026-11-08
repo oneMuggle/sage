@@ -6,6 +6,7 @@ from typing import Any, List
 import pytest
 
 from backend.data.database import Database
+from backend.office import rule_pack_io
 from backend.office.errors import OfficeParseError
 from backend.office.rule_models import Rule, RuleGroup, RulePack
 from backend.office.rule_pack_io import build_rule_pack, import_rule_pack
@@ -108,3 +109,46 @@ def test_import_rejects_too_many_rules(db: Database) -> None:
     )
     with pytest.raises(OfficeParseError):
         import_rule_pack(db.get_connection(), pack)
+
+
+def test_import_mid_loop_failure_rolls_back_created_groups(
+    db: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn = db.get_connection()
+    original_create_rule = rule_pack_io.create_rule
+    calls = {"count": 0}
+
+    def flaky_create_rule(*args: Any, **kwargs: Any) -> Any:
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise RuntimeError("boom")
+        return original_create_rule(*args, **kwargs)
+
+    monkeypatch.setattr(rule_pack_io, "create_rule", flaky_create_rule)
+
+    rules = [
+        Rule(
+            id=f"rule-{index}",
+            name="规则",
+            type="custom",
+            severity="warning",
+            scope="body",
+            check_mode="regex",
+            pattern="x",
+            group_id="group-original",
+        )
+        for index in range(2)
+    ]
+    pack = RulePack(
+        name="包",
+        version="1.0",
+        groups=[RuleGroup(id="group-original", name="组", rules=rules)],
+        exported_at="2026-11-07T00:00:00+00:00",
+        exported_by="local",
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        import_rule_pack(conn, pack)
+
+    assert calls["count"] == 2
+    assert list_groups(conn) == []
