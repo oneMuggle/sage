@@ -736,6 +736,22 @@ def _export_content(
     )
 
 
+def _filter_export_entries(
+    entries: List[Any],
+    include_constraints: bool,
+    include_docs: bool,
+) -> List[Any]:
+    """md/agents 渲染前按 include_* 开关过滤，JSON 信封另行构建。"""
+    if include_constraints and include_docs:
+        return entries
+    return [
+        entry
+        for entry in entries
+        if (include_constraints or entry.layer != "constraint")
+        and (include_docs or entry.layer != "doc")
+    ]
+
+
 @router.get("/projects/{project_id}/rules/export")
 @with_db_lock
 def export_rules(
@@ -761,7 +777,12 @@ def export_rules(
         include_docs=include_docs,
         include_constraints=include_constraints,
     )
-    content = _export_content(project, entries, envelope, playbook_spec, format)
+    render_entries = _filter_export_entries(
+        entries, include_constraints, include_docs
+    )
+    content = _export_content(
+        project, render_entries, envelope, playbook_spec, format
+    )
     filename = _export_filename(project, format)
     record_playbook_event(
         project.id,
@@ -826,40 +847,64 @@ def preview_rules_import(body: RulesImportPreviewBody) -> Dict[str, Any]:
     return {"candidates": [_candidate_to_dict(c) for c in candidates]}
 
 
+def _validation_error_message(exc: Exception) -> str:
+    """校验失败尽量保留具体原因；非校验异常返回通用文案。"""
+    if isinstance(exc, RuleValidationError):
+        return exc.message
+    detail = getattr(exc, "detail", None)
+    if isinstance(detail, dict):
+        message = detail.get("message")
+        if isinstance(message, str) and message:
+            return message
+    return "导入失败，请重试"
+
+
 def _apply_constraint_candidate(
     project: Project,
     candidate: Any,
     item: Dict[str, Any],
     overwrite: bool,
     existing_count: int,
+    editable_by_id: Dict[str, str],
 ) -> Dict[str, Any]:
-    """约束候选落库；重复跳过，冲突+overwrite 替换，超限失败。"""
+    """约束候选落库：先校验后删旧；只读投影不可覆盖；替换不计入上限。"""
     cid = candidate.id
     if candidate.status == "duplicate":
-        return {"id": cid, "status": "skipped", "message": "已存在相同内容"}
+        return _result(cid, "skipped", "已存在相同内容")
     if candidate.status == "conflict" and not overwrite:
-        return {"id": cid, "status": "skipped", "message": "已存在冲突，未开启覆盖"}
-    if candidate.status == "conflict" and overwrite:
+        return _result(cid, "skipped", "已存在冲突，未开启覆盖")
+    target_id = ""
+    if candidate.status == "conflict":
         raw_id = candidate.duplicate_of or ""
-        prefix, _, rule_id = raw_id.partition(":")
-        if prefix == "constraint" and rule_id:
-            ProjectConstraintRepository().delete(rule_id)
-    if existing_count >= MAX_PROJECT_RULES:
-        return {
-            "id": cid,
-            "status": "failed",
-            "message": f"项目规则已达 {MAX_PROJECT_RULES} 条上限",
-        }
-    content = validate_rule_text(str(item.get("content") or ""))
-    ProjectConstraintRepository().create(
+        if editable_by_id.get(raw_id) == "full":
+            target_id = raw_id.partition(":")[2]
+        if not target_id:
+            return _result(cid, "failed", "只读规则不可覆盖")
+    try:
+        content = validate_rule_text(str(item.get("content") or ""))
+        category = _validate_optional_text(item.get("category")) or "general"
+        trigger = _validate_optional_text(item.get("trigger_pattern")) or None
+        priority = int(item.get("priority") or 5)
+    except (RuleValidationError, HTTPException) as exc:
+        return _result(cid, "failed", _validation_error_message(exc))
+    if not target_id and existing_count >= MAX_PROJECT_RULES:
+        return _result(
+            cid, "failed", f"项目规则已达 {MAX_PROJECT_RULES} 条上限"
+        )
+    repo = ProjectConstraintRepository()
+    if target_id:
+        repo.delete(target_id)
+    created = repo.create(
         project_id=project.id,
-        category=str(item.get("category") or "general").strip() or "general",
+        category=category,
         content=content,
-        trigger_pattern=item.get("trigger_pattern") or None,
-        priority=int(item.get("priority") or 5),
+        trigger_pattern=trigger,
+        priority=priority,
         source=_USER_SOURCE,
     )
-    return {"id": cid, "status": "applied", "message": "已导入"}
+    if item.get("enabled") is False:
+        repo.update(created.id, enabled=False)
+    return _result(cid, "applied", "已导入")
 
 
 def _result(candidate_id: str, status: str, message: str) -> Dict[str, Any]:
@@ -867,16 +912,16 @@ def _result(candidate_id: str, status: str, message: str) -> Dict[str, Any]:
 
 
 def _write_text_target(target: Path, text: str, overwrite: bool) -> str:
-    """新建 / 追加 / 整文件覆盖；返回结果消息。"""
+    """新建 / 追加 / 整文件覆盖；统一走原子写入，拒绝符号链接。"""
     if not target.exists():
-        target.write_text(text, encoding="utf-8")
+        write_text_atomic(target, text)
         return "已创建"
     if overwrite:
-        target.write_text(text, encoding="utf-8")
+        write_text_atomic(target, text)
         return "已覆盖"
     existing_text = target.read_text(encoding="utf-8")
     separator = "\n\n" if existing_text.strip() else ""
-    target.write_text(existing_text + separator + text, encoding="utf-8")
+    write_text_atomic(target, existing_text + separator + text)
     return "已追加"
 
 
@@ -893,7 +938,7 @@ def _apply_doc_candidate(
         return _result(cid, "failed", "仅支持导入项目根 SAGE.md")
     root = os.path.realpath(project.path)
     target = Path(root) / filename
-    if not os.path.realpath(str(target)).startswith(root):
+    if Path(os.path.realpath(str(target))).parent != Path(root):
         return _result(cid, "failed", "路径不合法")
     if candidate.status == "duplicate":
         return _result(cid, "skipped", "已存在相同内容")
@@ -912,12 +957,14 @@ def _apply_global_candidate(
     cid = candidate.id
     if candidate.status == "duplicate":
         return _result(cid, "skipped", "已存在相同内容")
+    target = global_rules_path()
+    expected_parent = (Path.home() / ".sage").resolve()
+    if target.resolve().parent != expected_parent:
+        return _result(cid, "failed", "全局规则路径不合法")
     scan_reason = _scan_text_or_raise(text)
     if scan_reason:
         return _result(cid, "failed", "安全扫描未通过：" + scan_reason)
-    return _result(
-        cid, "applied", _write_text_target(global_rules_path(), text, overwrite)
-    )
+    return _result(cid, "applied", _write_text_target(target, text, overwrite))
 
 
 def _apply_constraint_by_id(
@@ -927,6 +974,7 @@ def _apply_constraint_by_id(
     layers: Dict[str, Any],
     overwrite: bool,
     existing_count: int,
+    editable_by_id: Dict[str, str],
 ) -> Dict[str, Any]:
     index = int(candidate_id.rsplit("-", 1)[1])
     constraints = layers.get("constraints") or []
@@ -934,7 +982,7 @@ def _apply_constraint_by_id(
     if item is None:
         return _result(candidate_id, "failed", "候选不存在")
     return _apply_constraint_candidate(
-        project, candidate, item, overwrite, existing_count
+        project, candidate, item, overwrite, existing_count, editable_by_id
     )
 
 
@@ -968,8 +1016,8 @@ def _apply_import_candidate(
     candidate_id: str,
     envelope: Dict[str, Any],
     overwrite: bool,
-    status_by_id: Dict[str, str],
     candidate_by_id: Dict[str, Any],
+    editable_by_id: Dict[str, str],
     existing_count: int,
 ) -> Dict[str, Any]:
     """按 id 分发到对应的 apply 辅助函数。"""
@@ -979,7 +1027,13 @@ def _apply_import_candidate(
     layers = envelope.get("layers") or {}
     if candidate.kind == "constraint":
         return _apply_constraint_by_id(
-            project, candidate_id, candidate, layers, overwrite, existing_count
+            project,
+            candidate_id,
+            candidate,
+            layers,
+            overwrite,
+            existing_count,
+            editable_by_id,
         )
     if candidate.kind == "doc":
         return _apply_doc_by_id(project, candidate_id, candidate, layers, overwrite)
@@ -988,6 +1042,58 @@ def _apply_import_candidate(
     if candidate.kind == "playbook":
         return _result(candidate_id, "deferred", "请通过规程库绑定")
     return _result(candidate_id, "failed", "未知候选")
+
+
+def _consumes_limit(result: Dict[str, Any], candidate: Any) -> bool:
+    """只有新建的 constraint 才占用上限；替换是净零操作。"""
+    return (
+        result["status"] == "applied"
+        and candidate is not None
+        and candidate.kind == "constraint"
+        and candidate.status == "new"
+    )
+
+
+def _apply_selected_candidates(
+    project: Project,
+    envelope: Dict[str, Any],
+    selected: List[str],
+    overwrite: bool,
+    candidate_by_id: Dict[str, Any],
+    editable_by_id: Dict[str, str],
+    existing_count: int,
+) -> Tuple[List[Dict[str, Any]], int, int, int]:
+    """逐条落库；单条异常不阻断批次，仅记为 failed。"""
+    results: List[Dict[str, Any]] = []
+    applied = 0
+    failed = 0
+    for candidate_id in selected:
+        candidate = candidate_by_id.get(candidate_id)
+        try:
+            result = _apply_import_candidate(
+                project,
+                candidate_id,
+                envelope,
+                overwrite,
+                candidate_by_id,
+                editable_by_id,
+                existing_count,
+            )
+            if _consumes_limit(result, candidate):
+                existing_count += 1
+        except RuleValidationError as exc:
+            result = _result(candidate_id, "failed", exc.message)
+        except Exception:
+            logger.warning(
+                "rules import candidate %s failed", candidate_id, exc_info=True
+            )
+            result = _result(candidate_id, "failed", "导入失败，请重试")
+        results.append(result)
+        if result["status"] == "applied":
+            applied += 1
+        elif result["status"] == "failed":
+            failed += 1
+    return results, applied, failed, existing_count
 
 
 @router.post("/rules/import/apply")
@@ -1003,32 +1109,21 @@ def apply_rules_import(body: RulesImportApplyBody) -> Dict[str, Any]:
     project = _project_or_404(body.project_id)
     existing = RulesRegistry().list_rules(project)
     candidates = diff_rules_import(envelope, project, existing)
-    status_by_id = {c.id: c.status for c in candidates}
     candidate_by_id = {c.id: c for c in candidates}
-    existing_count = len(ProjectConstraintRepository().list_by_project(project.id))
-    results: List[Dict[str, Any]] = []
-    applied = 0
-    failed = 0
-    for candidate_id in body.selected:
-        try:
-            result = _apply_import_candidate(
-                project,
-                candidate_id,
-                envelope,
-                body.overwrite,
-                status_by_id,
-                candidate_by_id,
-                existing_count,
-            )
-            if result["status"] == "applied":
-                existing_count += 1
-        except (RuleValidationError, HTTPException, OSError, ValueError) as exc:
-            result = {"id": candidate_id, "status": "failed", "message": str(exc)}
-        results.append(result)
-        if result["status"] == "applied":
-            applied += 1
-        elif result["status"] == "failed":
-            failed += 1
+    editable_by_id = {
+        entry.id: entry.editable
+        for entry in existing
+        if entry.layer == "constraint"
+    }
+    results, applied, failed, _count = _apply_selected_candidates(
+        project,
+        envelope,
+        list(body.selected),
+        body.overwrite,
+        candidate_by_id,
+        editable_by_id,
+        len(_user_constraints(project.id)),
+    )
     record_playbook_event(
         project.id,
         "rules_import",
