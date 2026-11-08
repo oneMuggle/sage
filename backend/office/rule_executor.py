@@ -8,6 +8,7 @@ are batched into one LLM call per 40 blocks. The engine is read-only.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from dataclasses import dataclass
@@ -15,12 +16,16 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from backend.office.doc_profile import read_doc_profile
-from backend.office.errors import OfficeParseError
+from backend.office.errors import OfficeLLMError, OfficeParseError
 from backend.office.rule_models import AuditFinding, AuditResult, Rule
 
 _MAX_FINDINGS = 200
 _AI_BATCH_SIZE = 40
 _AI_MAX_CHARS = 8000
+# Cap the blocks fed to the LLM: beyond this the prompt either truncates or
+# exceeds model context, and the audit quality collapses. Caller gets a
+# deterministic (regex-only) result instead of a half-baked AI one.
+_MAX_AI_BLOCKS = 400
 
 
 @dataclass
@@ -174,10 +179,29 @@ async def _run_ai_rules(
         raise OfficeParseError("AI 规则需要 LLM 客户端")
     findings: List[AuditFinding] = []
     for start in range(0, len(blocks), _AI_BATCH_SIZE):
+        if len(findings) >= _MAX_FINDINGS:
+            break
         batch = blocks[start : start + _AI_BATCH_SIZE]
         prompt = _build_ai_prompt(rules, batch)
-        raw = await llm_client.complete(prompt)
+        try:
+            raw = await llm_client.complete(prompt)
+        except Exception as exc:  # noqa: BLE001 — re-raised as OfficeLLMError below
+            raise OfficeLLMError("LLM 调用失败，请稍后重试") from exc
         findings.extend(_parse_ai_findings(raw, rules, batch))
+    return findings
+
+
+def _run_regex_rules(
+    rules: List[Rule], blocks: List[DocumentBlock]
+) -> List[AuditFinding]:
+    """Hoisted regex sweep — CPU-bound, safe to run in an executor."""
+    findings: List[AuditFinding] = []
+    for rule in rules:
+        if rule.check_mode != "regex":
+            continue
+        findings.extend(_run_regex_rule(rule, blocks))
+        if len(findings) >= _MAX_FINDINGS:
+            break
     return findings
 
 
@@ -191,16 +215,15 @@ async def run_audit(
     """Audit a .docx against enabled rules; read-only."""
     enabled = list({r.id: r for r in rules if r.enabled}.values())
     blocks = extract_blocks(file_path, workspace_path=workspace_path)
-    findings: List[AuditFinding] = []
-    for rule in enabled:
-        if rule.check_mode != "regex":
-            continue
-        findings.extend(_run_regex_rule(rule, blocks))
-        if len(findings) >= _MAX_FINDINGS:
-            break
+    regex_rules = [rule for rule in enabled if rule.check_mode == "regex"]
+    loop = asyncio.get_running_loop()
+    findings: List[AuditFinding] = await loop.run_in_executor(
+        None, _run_regex_rules, regex_rules, blocks
+    )
     ai_rules = [rule for rule in enabled if rule.check_mode == "ai"]
     if ai_rules and len(findings) < _MAX_FINDINGS and blocks:
-        findings.extend(await _run_ai_rules(ai_rules, blocks, llm_client))
+        capped = blocks[:_MAX_AI_BLOCKS]
+        findings.extend(await _run_ai_rules(ai_rules, capped, llm_client))
     findings = findings[:_MAX_FINDINGS]
     return AuditResult(
         findings=findings,

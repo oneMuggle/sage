@@ -5,7 +5,7 @@ from typing import Any, List
 
 import pytest
 
-from backend.office.errors import OfficeParseError
+from backend.office.errors import OfficeLLMError, OfficeParseError
 from backend.office.rule_executor import (
     DocumentBlock,
     extract_blocks,
@@ -113,3 +113,32 @@ async def test_ai_rule_ignores_non_int_block_index(docx_path: Path) -> None:
     rule = _rule(id="rule-ai", check_mode="ai", pattern=None, scope="full")
     result = await run_audit([rule], docx_path, llm_client=client)
     assert result.findings == []
+
+
+async def test_ai_rule_with_provider_failure_raises_office_llm_error(docx_path: Path) -> None:
+    class _BrokenClient:
+        async def complete(self, prompt: str) -> str:
+            raise RuntimeError("provider down")
+
+    rule = _rule(id="rule-ai", check_mode="ai", pattern=None, scope="full")
+    with pytest.raises(OfficeLLMError, match="LLM 调用失败"):
+        await run_audit([rule], docx_path, llm_client=_BrokenClient())
+
+
+async def test_ai_audit_caps_blocks_and_llm_calls(tmp_path: Path) -> None:
+    from docx import Document as DocxDocument
+
+    document = DocxDocument()
+    for index in range(500):
+        document.add_paragraph(f"段落 {index}")
+    path = tmp_path / "long.docx"
+    document.save(str(path))
+
+    client = _FakeClient("[]")
+    rule = _rule(id="rule-ai", check_mode="ai", pattern=None, scope="full")
+    result = await run_audit([rule], path, llm_client=client)
+
+    assert result.findings == []
+    # 400-block cap / 40-block batches = 10 calls, never 500/40 + remainder.
+    assert len(client.prompts) == 10
+    assert len(client.prompts) <= 10
