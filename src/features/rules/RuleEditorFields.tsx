@@ -209,6 +209,30 @@ export function ContentField({
   );
 }
 
+function EnabledSwitch({
+  enabled,
+  onEnabledChange,
+}: {
+  enabled: boolean;
+  onEnabledChange: (value: boolean) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <label
+      htmlFor="rule-editor-enabled"
+      className="flex items-center gap-2 text-xs text-foreground"
+    >
+      <Switch
+        id="rule-editor-enabled"
+        checked={enabled}
+        onCheckedChange={onEnabledChange}
+        data-testid="rule-editor-enabled"
+      />
+      {t('rules.editor.enabled')}
+    </label>
+  );
+}
+
 export function ConstraintFields({
   trigger,
   priority,
@@ -250,18 +274,7 @@ export function ConstraintFields({
           />
         </label>
       </div>
-      <label
-        htmlFor="rule-editor-enabled"
-        className="flex items-center gap-2 text-xs text-foreground"
-      >
-        <Switch
-          id="rule-editor-enabled"
-          checked={enabled}
-          onCheckedChange={onEnabledChange}
-          data-testid="rule-editor-enabled"
-        />
-        {t('rules.editor.enabled')}
-      </label>
+      <EnabledSwitch enabled={enabled} onEnabledChange={onEnabledChange} />
     </>
   );
 }

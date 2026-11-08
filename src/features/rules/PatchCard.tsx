@@ -56,6 +56,144 @@ function describeChange(operation: PatchOperation): string | null {
   return operation.after.enabled === true ? 'toggle.on' : 'toggle.off';
 }
 
+function CardCheckbox({
+  operation,
+  selected,
+  disabled,
+  selectLabel,
+  onToggle,
+}: {
+  operation: PatchOperation;
+  selected: boolean;
+  disabled: boolean;
+  selectLabel: string;
+  onToggle?: (opId: string, next: boolean) => void;
+}) {
+  return (
+    <input
+      type="checkbox"
+      className="mt-1"
+      checked={selected}
+      disabled={disabled || Boolean(operation.error)}
+      onChange={(event) => onToggle?.(operation.opId, event.target.checked)}
+      aria-label={selectLabel}
+      data-testid={`patch-select-${operation.opId}`}
+    />
+  );
+}
+
+function CardBadges({
+  operation,
+  isReadonly,
+  result,
+}: {
+  operation: PatchOperation;
+  isReadonly: boolean;
+  result: PatchApplyResult | null | undefined;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Badge variant="secondary">{t(layerLabelKey(operation.layer))}</Badge>
+      <Badge variant="outline">{t(ACTION_KEYS[operation.action])}</Badge>
+      {isReadonly ? <Lock className="h-3.5 w-3.5 text-text-tertiary" aria-hidden="true" /> : null}
+      {result ? (
+        <Badge
+          variant={STATUS_VARIANTS[result.status]}
+          data-testid={`patch-result-${operation.opId}`}
+        >
+          {t(STATUS_KEYS[result.status])}
+        </Badge>
+      ) : null}
+    </div>
+  );
+}
+
+function CardTextSections({
+  before,
+  change,
+  operation,
+}: {
+  before: string;
+  change: string | null;
+  operation: PatchOperation;
+}) {
+  const { t } = useI18n();
+  return (
+    <>
+      {before && operation.action !== 'add' ? (
+        <p
+          className="break-words text-sm text-text-secondary line-through"
+          data-testid={`patch-before-${operation.opId}`}
+        >
+          {before}
+        </p>
+      ) : null}
+      {change && operation.action !== 'delete' ? (
+        <p className="break-words text-sm text-text" data-testid={`patch-after-${operation.opId}`}>
+          {change === 'toggle.on'
+            ? t('rules.ai.toggle.on')
+            : change === 'toggle.off'
+              ? t('rules.ai.toggle.off')
+              : change}
+        </p>
+      ) : null}
+      {operation.reason ? (
+        <p className="text-xs text-text-tertiary">
+          {t('rules.ai.reason')}: {operation.reason}
+        </p>
+      ) : null}
+      {operation.action === 'delete' ? (
+        <p className="text-xs text-warning">{t('rules.ai.deleteHint')}</p>
+      ) : null}
+    </>
+  );
+}
+
+function CardStatusSections({
+  errorMessage,
+  isReadonly,
+  onOpenPlaybook,
+  operation,
+  result,
+}: {
+  errorMessage: string | null | undefined;
+  isReadonly: boolean;
+  onOpenPlaybook?: (operation: PatchOperation) => void;
+  operation: PatchOperation;
+  result: PatchApplyResult | null | undefined;
+}) {
+  const { t } = useI18n();
+  return (
+    <>
+      {errorMessage ? (
+        <p className="text-xs text-error" data-testid={`patch-error-${operation.opId}`}>
+          {errorMessage}
+        </p>
+      ) : null}
+      {isReadonly && onOpenPlaybook ? (
+        <button
+          type="button"
+          onClick={() => onOpenPlaybook(operation)}
+          className="text-xs text-accent underline"
+          data-testid={`patch-open-playbook-${operation.opId}`}
+        >
+          {t('rules.ai.openPlaybook')}
+        </button>
+      ) : null}
+      {result?.status === 'conflict' && result.current ? (
+        <p
+          className="break-words text-xs text-error"
+          data-testid={`patch-current-${operation.opId}`}
+        >
+          {t('rules.ai.current')}:{' '}
+          {readContent(result.current) || JSON.stringify(result.current)}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 export function PatchCard({
   operation,
   selected,
@@ -75,102 +213,33 @@ export function PatchCard({
   const errorMessage = errorKey
     ? t(errorKey).replace('{max}', String(MAX_RULE_CHARS))
     : operation.error;
-  // 每张卡片的勾选框都要能区分具体操作，而不是同名复选框。
   const selectLabel =
     [t(ACTION_KEYS[operation.action]), operation.ruleId || before || change]
       .filter(Boolean)
       .join(' · ') || t('rules.ai.select');
-
   return (
     <div
       data-testid={`patch-card-${operation.opId}`}
       className="space-y-2 rounded-lg border border-border bg-surface p-3"
     >
       <div className="flex items-start gap-2">
-        <input
-          type="checkbox"
-          className="mt-1"
-          checked={selected}
-          disabled={disabled || Boolean(operation.error)}
-          onChange={(event) => onToggle?.(operation.opId, event.target.checked)}
-          aria-label={selectLabel}
-          data-testid={`patch-select-${operation.opId}`}
+        <CardCheckbox
+          operation={operation}
+          selected={selected}
+          disabled={disabled}
+          selectLabel={selectLabel}
+          onToggle={onToggle}
         />
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge variant="secondary">{t(layerLabelKey(operation.layer))}</Badge>
-            <Badge variant="outline">{t(ACTION_KEYS[operation.action])}</Badge>
-            {isReadonly ? (
-              <Lock className="h-3.5 w-3.5 text-text-tertiary" aria-hidden="true" />
-            ) : null}
-            {result ? (
-              <Badge
-                variant={STATUS_VARIANTS[result.status]}
-                data-testid={`patch-result-${operation.opId}`}
-              >
-                {t(STATUS_KEYS[result.status])}
-              </Badge>
-            ) : null}
-          </div>
-
-          {before && operation.action !== 'add' ? (
-            <p
-              className="break-words text-sm text-text-secondary line-through"
-              data-testid={`patch-before-${operation.opId}`}
-            >
-              {before}
-            </p>
-          ) : null}
-
-          {change && operation.action !== 'delete' ? (
-            <p
-              className="break-words text-sm text-text"
-              data-testid={`patch-after-${operation.opId}`}
-            >
-              {change === 'toggle.on'
-                ? t('rules.ai.toggle.on')
-                : change === 'toggle.off'
-                  ? t('rules.ai.toggle.off')
-                  : change}
-            </p>
-          ) : null}
-
-          {operation.reason ? (
-            <p className="text-xs text-text-tertiary">
-              {t('rules.ai.reason')}: {operation.reason}
-            </p>
-          ) : null}
-
-          {operation.action === 'delete' ? (
-            <p className="text-xs text-warning">{t('rules.ai.deleteHint')}</p>
-          ) : null}
-
-          {errorMessage ? (
-            <p className="text-xs text-error" data-testid={`patch-error-${operation.opId}`}>
-              {errorMessage}
-            </p>
-          ) : null}
-
-          {isReadonly && onOpenPlaybook ? (
-            <button
-              type="button"
-              onClick={() => onOpenPlaybook(operation)}
-              className="text-xs text-accent underline"
-              data-testid={`patch-open-playbook-${operation.opId}`}
-            >
-              {t('rules.ai.openPlaybook')}
-            </button>
-          ) : null}
-
-          {result?.status === 'conflict' && result.current ? (
-            <p
-              className="break-words text-xs text-error"
-              data-testid={`patch-current-${operation.opId}`}
-            >
-              {t('rules.ai.current')}:{' '}
-              {readContent(result.current) || JSON.stringify(result.current)}
-            </p>
-          ) : null}
+          <CardBadges operation={operation} isReadonly={isReadonly} result={result} />
+          <CardTextSections before={before} change={change} operation={operation} />
+          <CardStatusSections
+            errorMessage={errorMessage}
+            isReadonly={isReadonly}
+            onOpenPlaybook={onOpenPlaybook}
+            operation={operation}
+            result={result}
+          />
         </div>
       </div>
     </div>
