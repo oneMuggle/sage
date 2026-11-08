@@ -11,7 +11,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from backend.api import rules_routes  # noqa: F401 — 确保路由注册
+from backend.api import project_rules_routes  # noqa: F401 — 确保路由注册
 from backend.data import database as database_module
 from backend.data.database import Database
 from backend.data.playbook_event_repo import PlaybookEventRepository
