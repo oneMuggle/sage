@@ -25,6 +25,9 @@ const SOURCE_FILTERS: ReadonlyArray<{ key: SourceFilter; label: string }> = [
   { key: 'imported', label: '导入' },
 ];
 
+/** 与后端 legacy_agent_routes.PROTECTED_AGENT_IDS 一致：产品入口专家不可删除。 */
+const PROTECTED_AGENT_IDS = new Set(['primary', 'sage-guide']);
+
 /** 搜索匹配文本：名称 + 标语（persona_ui.tagline）+ 描述。 */
 function specialistSearchText(agent: AgentProfile): string {
   const ui = agent.persona_ui as Record<string, unknown> | undefined;
@@ -165,6 +168,7 @@ export function Specialists() {
   }
 
   function toggleSelect(agentId: string) {
+    if (PROTECTED_AGENT_IDS.has(agentId)) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(agentId)) next.delete(agentId);
@@ -401,7 +405,7 @@ export function Specialists() {
                     onVersions={handleVersions}
                     onEval={handleEval}
                     exporting={exportingId === agent.id}
-                    selectable={selectionMode}
+                    selectable={selectionMode && !PROTECTED_AGENT_IDS.has(agent.id)}
                     selected={selectedIds.has(agent.id)}
                     onSelectToggle={() => toggleSelect(agent.id)}
                     onOpenDetail={(next) => navigate(`/specialists/${next.id}`)}

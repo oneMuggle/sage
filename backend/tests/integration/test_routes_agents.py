@@ -2,10 +2,10 @@
 list_agents 路由集成测试 — 覆盖 GET /api/v1/agents 端点。
 
 对应 Tauri command `list_agents`（PR-3）:
-- 启动 lifespan 时若 agents 表空, 种子化 7 个默认 agent (primary / researcher /
-  coder / memory_manager / writer / ppt-maker / reviewer), 见
+- 启动 lifespan 时若 agents 表空, 种子化 8 个默认 agent (primary / researcher /
+  coder / memory_manager / writer / ppt-maker / reviewer / sage-guide), 见
   backend/agents/profiles.py:create_default_agents()
-- GET /agents → 200 + 7 个 agent profile
+- GET /agents → 200 + 8 个 agent profile
 - 字段完整保留: name / role / system_prompt / tools / memory_access /
   model_config / max_iterations / enabled / description
 - 已 disabled 的 agent 仍在列表中 (仅 enabled=false), 不被过滤
@@ -25,6 +25,7 @@ EXPECTED_DEFAULT_IDS = {
     "writer",
     "ppt-maker",
     "reviewer",
+    "sage-guide",
 }
 
 
@@ -37,7 +38,7 @@ async def test_list_agents_returns_four_defaults_after_lifespan(client):
     assert isinstance(agents, list)
 
     ids = {a["id"] for a in agents}
-    assert ids == EXPECTED_DEFAULT_IDS, f"期望默认 6 个 agent, 实际 {ids}"
+    assert ids == EXPECTED_DEFAULT_IDS, f"期望默认 8 个 agent, 实际 {ids}"
 
 
 @pytest.mark.asyncio()
@@ -89,13 +90,13 @@ async def test_list_agents_idempotent_across_lifespan(client):
 
     first = await client.get(f"{PREFIX}/agents")
     assert first.status_code == 200
-    assert len(first.json()) == 7
+    assert len(first.json()) == 8
 
     AgentRepository().seed_defaults_if_empty()
 
     second = await client.get(f"{PREFIX}/agents")
     assert second.status_code == 200
-    assert len(second.json()) == 7
+    assert len(second.json()) == 8
 
 
 @pytest.mark.asyncio()

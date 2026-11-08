@@ -633,6 +633,10 @@ function spawnBackend(): ChildProcess {
         'models',
         'rapidocr',
       ),
+      // Sage 内置文档目录（sage-guide 专家知识源）。打包态必须显式指向
+      // extraResources 里的 docs/；开发态不设，让后端按仓库布局
+      // (<repo>/docs) 自行推导，避免与工作区文档漂移。
+      ...(app.isPackaged ? { SAGE_DOCS_DIR: join(process.resourcesPath, 'docs') } : {}),
       ...(bundledTesseract ? { SAGE_TESSERACT_PATH: bundledTesseract } : {}),
       ...(agentBrowserHandle
         ? {
