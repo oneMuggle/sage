@@ -135,13 +135,17 @@ function SlotHost() {
   return <div data-testid="test-slot" ref={attach} />;
 }
 
-function renderOffice(options: { withSlot: boolean; initialEntries?: string[] }) {
-  const { withSlot, initialEntries = ['/office'] } = options;
+function renderOffice(options: {
+  withSlot: boolean;
+  initialEntries?: string[];
+  onSlotAction?: () => void;
+}) {
+  const { withSlot, initialEntries = ['/office'], onSlotAction } = options;
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <I18nProvider defaultLocale="zh">
         <SessionWorkspaceProvider>
-          <SidebarSlotProvider>
+          <SidebarSlotProvider onSlotAction={onSlotAction}>
             {withSlot && <SlotHost />}
             <Office />
             <LocationProbe />
@@ -167,6 +171,7 @@ describe('Office — 侧栏文档库 portal', () => {
     const slot = screen.getByTestId('test-slot');
     expect(slot).toContainElement(screen.getByTestId('office-sidebar-library'));
     expect(screen.queryByTestId('office-layout-left')).toBeNull();
+    expect(screen.queryByTestId('office-layout')).toBeNull();
     expect(screen.getByTestId('document-canvas-stub')).toBeInTheDocument();
   });
 
@@ -189,6 +194,17 @@ describe('Office — 侧栏文档库 portal', () => {
     expect(screen.getByTestId('office-layout-left')).toContainElement(
       screen.getByTestId('office-document-list'),
     );
+  });
+
+  it('在侧栏（移动端抽屉）点选文档会请求收起覆盖层', async () => {
+    const onSlotAction = vi.fn();
+    renderOffice({ withSlot: true, onSlotAction });
+    await waitForTabs();
+    await waitFor(() => expect(screen.getByTestId('office-sidebar-library')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('office-document-list'));
+
+    expect(onSlotAction).toHaveBeenCalled();
   });
 
   it('在 generate tab 点击侧栏文档会切回 documents', async () => {

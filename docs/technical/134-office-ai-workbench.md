@@ -446,9 +446,9 @@ AI 规则最多分析前 400 个文本块，且累计命中达到 200 条即停�
 
 ```text
 Layout
-└── SidebarSlotProvider          (slotEl: HTMLElement | null)
+└── SidebarSlotProvider          (slotEl: HTMLElement | null, dismissOverlay)
     ├── Sidebar
-    │   └── 内容列：/office ? <div ref={setSlotEl} data-testid="sidebar-office-slot" />
+    │   └── 内容列：/office ? <div ref={attachOfficeSlot} data-testid="sidebar-office-slot" />
     │                         : 会话 / 项目 / Git 分区
     └── <main><Outlet/> → Office</main>
                           └── createPortal(documentsLibrary, slotEl)
@@ -461,14 +461,14 @@ Layout
 
 ### 13.3 回退与边界
 
-- portal 条件为 `workspacePath && slotEl`；
+- portal 条件为 `slotEl`；无工作区时 portal 内渲染 `office.emptyState` 占位，避免内容列整块空白；
 - 桌面折叠侧栏时内容列整体卸载，ref cleanup 把 `slotEl` 置 `null`，页面自动回退到现有的 `OfficeLayout` 两栏（`office-layout-left`），文档库不会消失；
-- 无 `SidebarSlotProvider` 的单元测试环境使用 Context 默认值 `{ slotEl: null, setSlotEl: noop }`，同样走内联回退；
-- 移动端抽屉常驻 DOM（仅位移出屏），slot 始终存在；选中文档后 `handleOpen` / `handlePreviewDocument` 会切回 documents tab，`Layout` 因 `location.search` 变化关闭抽屉，用户直接回到画布。
+- 无 `SidebarSlotProvider` 的单元测试环境使用 Context 默认值 `{ slotEl: null, setSlotEl: noop, dismissOverlay: noop }`，同样走内联回退；
+- 移动端抽屉常驻 DOM（仅位移出屏），slot 始终存在。抽屉由 `Layout` 在 `location.pathname/search` 变化时关闭；但在 documents tab 内选中文档不会改 URL，因此 `SidebarSlotProvider` 额外暴露 `dismissOverlay()`（`Layout` 注入 `setMobileOpen(false)`），`handleOpen` / `handlePreviewDocument` 选中文档时显式调用，保证抽屉收起、露出画布；桌面端无抽屉，该回调为空操作。
 
 ### 13.4 测试
 
 | 文件 | 覆盖点 |
 |---|---|
-| `src/widgets/layout/__tests__/Sidebar.office-slot.test.tsx` | `/office` 渲染 slot 且无会话导航；`/chat` 不受影响；折叠后内容列卸载并清空 `slotEl` |
-| `src/pages/__tests__/Office.sidebarPortal.test.tsx` | portal 挂进 slot、generate 深链保留文档库、无 slot 回退两栏、在 generate tab 点文档切回 documents |
+| `src/widgets/layout/__tests__/Sidebar.office-slot.test.tsx` | `/office` 渲染 slot 且无会话导航；`/chat` 不受影响；折叠后内容列卸载并清空 `slotEl`；`/office` → `/chat` 路由切换后 `slotEl` 归 null 且导航恢复 |
+| `src/pages/__tests__/Office.sidebarPortal.test.tsx` | portal 挂进 slot 且不再渲染 `office-layout`、generate 深链保留文档库、无 slot 回退两栏、侧栏选中文档触发 `dismissOverlay`、在 generate tab 点文档切回 documents |

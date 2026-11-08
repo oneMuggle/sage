@@ -7,8 +7,8 @@
  *   - 折叠态内容列卸载后 slotEl 归 null（Office 据此回退内联两栏）。
  */
 
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
@@ -48,6 +48,15 @@ function SlotProbe() {
   return <span data-testid="slot-probe" data-has-slot={slotEl ? 'yes' : 'no'} />;
 }
 
+function NavProbe() {
+  const navigate = useNavigate();
+  return (
+    <button type="button" data-testid="nav-to-chat" onClick={() => navigate('/chat')}>
+      chat
+    </button>
+  );
+}
+
 function sidebarTree(path: string, collapsed = false) {
   return (
     <I18nProvider defaultLocale="zh">
@@ -55,6 +64,7 @@ function sidebarTree(path: string, collapsed = false) {
         <SidebarSlotProvider>
           <Sidebar width={300} collapsed={collapsed} />
           <SlotProbe />
+          <NavProbe />
         </SidebarSlotProvider>
       </MemoryRouter>
     </I18nProvider>
@@ -89,5 +99,18 @@ describe('Sidebar — /office 内容列插槽', () => {
     expect(screen.queryByTestId('sidebar-content')).toBeNull();
     expect(screen.queryByTestId('sidebar-office-slot')).toBeNull();
     expect(screen.getByTestId('slot-probe').getAttribute('data-has-slot')).toBe('no');
+  });
+
+  it('从 /office 切到其他路由后 slotEl 归 null，导航恢复', async () => {
+    render(sidebarTree('/office'));
+    expect(screen.getByTestId('slot-probe').getAttribute('data-has-slot')).toBe('yes');
+
+    fireEvent.click(screen.getByTestId('nav-to-chat'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('slot-probe').getAttribute('data-has-slot')).toBe('no'),
+    );
+    expect(screen.queryByTestId('sidebar-office-slot')).toBeNull();
+    expect(screen.getByTestId('sidebar-primary-actions')).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Suspense } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 
@@ -33,6 +33,10 @@ export function Layout() {
   // 右栏打开 + autoCollapse 设置开启 → 自动折叠左栏。
   // 右栏关闭时不自动恢复（用户可手动 Ctrl+B 展开）。
   // 右栏最大化时始终折叠左栏（不受设置开关影响）。
+  // 移动端抽屉里操作 /office 文档库（选中文档）时路由可能不变，
+  // 需要显式收起抽屉。
+  const closeMobileDrawer = useCallback(() => setMobileOpen(false), []);
+
   const rightPanelOpen = useRightPanelStore((s) => s.open);
   const rightPanelMaximized = useRightPanelStore((s) => s.maximized);
 
@@ -95,7 +99,7 @@ export function Layout() {
   }, []);
 
   return (
-    <SidebarSlotProvider>
+    <SidebarSlotProvider onSlotAction={closeMobileDrawer}>
       <div className="flex h-screen bg-bg">
         {/* 跳到主内容链接 (a11y) */}
         <a

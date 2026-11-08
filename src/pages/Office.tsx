@@ -92,7 +92,7 @@ export function Office() {
   const [searchParams, setSearchParams] = useSearchParams();
   // /office 路由下全局侧栏内容列交出给文档库（Sidebar 内的 slot 容器）。
   // 侧栏折叠 / 无 Layout 环境（单元测试）时为 null，走内联两栏回退。
-  const { slotEl } = useSidebarSlot();
+  const { slotEl, dismissOverlay } = useSidebarSlot();
 
   // URL search params 是 tab / 子 tab 的单一事实来源。缺失或非法值走默认，
   // 这样旧书签、手工编辑 URL 都能落到可用 tab 而不是空白面板。
@@ -309,6 +309,7 @@ export function Office() {
   };
 
   const handleOpen = async (docId: string) => {
+    dismissOverlay();
     if (activeTab !== 'documents') setTab('documents');
     try {
       await open(docId);
@@ -367,6 +368,8 @@ export function Office() {
   // 读取受管路径，与快照恢复/编辑应用同一 stale-read guard，避免切文档时
   // 旧结果覆盖新预览。
   const handlePreviewDocument = async (docId: string) => {
+    // 移动端：抽屉里的文档库选中文档时路由可能不变，需显式收起抽屉。
+    dismissOverlay();
     if (activeTab !== 'documents') setTab('documents');
     const doc = documents.find((d) => d.id === docId);
     if (!doc) return;
@@ -672,14 +675,19 @@ export function Office() {
 
       {/* 文档库 portal 挂在页面根节点（而非 documents TabContent 内），
           generate / rules / latex 深链与 keep-alive 切 tab 都不影响侧栏列表。 */}
-      {workspacePath &&
-        slotEl &&
+      {slotEl &&
         createPortal(
           <div
             data-testid="office-sidebar-library"
             className="flex-1 min-h-0 flex flex-col gap-3 px-3 pb-3 overflow-y-auto"
           >
-            {documentsLibrary}
+            {workspacePath ? (
+              documentsLibrary
+            ) : (
+              <div data-testid="office-sidebar-empty" className="px-1 py-6 text-sm text-muted">
+                {t('office.emptyState')}
+              </div>
+            )}
           </div>,
           slotEl,
         )}
