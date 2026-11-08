@@ -44,12 +44,24 @@ export interface RulesImportHookResult {
   applyDisabled: boolean;
 }
 
-export function useRulesImport(
-  projectId: string,
-  onApplied?: () => void,
-  onOpenChange?: (open: boolean) => void,
-): RulesImportHookResult {
-  const { t } = useI18n();
+interface ImportState {
+  stage: Stage;
+  setStage: React.Dispatch<React.SetStateAction<Stage>>;
+  candidates: ImportCandidate[];
+  setCandidates: React.Dispatch<React.SetStateAction<ImportCandidate[]>>;
+  selectedIds: Set<string>;
+  setSelectedIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+  overwrite: boolean;
+  setOverwrite: React.Dispatch<React.SetStateAction<boolean>>;
+  globalAck: boolean;
+  setGlobalAck: React.Dispatch<React.SetStateAction<boolean>>;
+  parseError: string | null;
+  setParseError: React.Dispatch<React.SetStateAction<string | null>>;
+  fileInputRef: React.RefObject<HTMLInputElement>;
+  envelopeRef: React.MutableRefObject<unknown>;
+}
+
+function useImportState(): ImportState {
   const [stage, setStage] = useState<Stage>('idle');
   const [candidates, setCandidates] = useState<ImportCandidate[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -58,38 +70,86 @@ export function useRulesImport(
   const [parseError, setParseError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const envelopeRef = useRef<unknown>(null);
-
-  const actionableCandidates = candidates.filter(isActionable);
-  const hasGlobal = actionableCandidates.some((candidate) => candidate.kind === 'global');
-  const hasPlaybook = candidates.some((candidate) => candidate.kind === 'playbook');
-
-  const handleFile = useFileHandler(projectId, setStage, setParseError, setCandidates, setSelectedIds, envelopeRef);
-  const handleApply = useApplyHandler(
-    stage, projectId, hasGlobal, globalAck, candidates, selectedIds, overwrite, t, onApplied, onOpenChange, envelopeRef, setStage,
-  );
-  const toggle = useToggle(setSelectedIds);
-  const selectAllNew = useSelectAllNew(actionableCandidates, setSelectedIds);
-
-  const applyDisabled =
-    stage !== 'ready' || !projectId || selectedIds.size === 0 || (hasGlobal && !globalAck);
-
   return {
     stage,
+    setStage,
     candidates,
+    setCandidates,
     selectedIds,
+    setSelectedIds,
     overwrite,
     setOverwrite,
     globalAck,
     setGlobalAck,
     parseError,
+    setParseError,
     fileInputRef,
-    actionableCandidates,
+    envelopeRef,
+  };
+}
+
+function useImportActions(
+  s: ImportState,
+  projectId: string,
+  t: (key: TranslationKey) => string,
+  onApplied?: () => void,
+  onOpenChange?: (open: boolean) => void,
+) {
+  const actionableCandidates = s.candidates.filter(isActionable);
+  const hasGlobal = actionableCandidates.some((c) => c.kind === 'global');
+  const handleFile = useFileHandler(
+    projectId,
+    s.setStage,
+    s.setParseError,
+    s.setCandidates,
+    s.setSelectedIds,
+    s.envelopeRef,
+  );
+  const handleApply = useApplyHandler(
+    s.stage,
+    projectId,
     hasGlobal,
+    s.globalAck,
+    s.candidates,
+    s.selectedIds,
+    s.overwrite,
+    t,
+    onApplied,
+    onOpenChange,
+    s.envelopeRef,
+    s.setStage,
+  );
+  const toggle = useToggle(s.setSelectedIds);
+  const selectAllNew = useSelectAllNew(actionableCandidates, s.setSelectedIds);
+  return { actionableCandidates, hasGlobal, handleFile, handleApply, toggle, selectAllNew };
+}
+
+export function useRulesImport(
+  projectId: string,
+  onApplied?: () => void,
+  onOpenChange?: (open: boolean) => void,
+): RulesImportHookResult {
+  const { t } = useI18n();
+  const s = useImportState();
+  const actions = useImportActions(s, projectId, t, onApplied, onOpenChange);
+  const hasPlaybook = s.candidates.some((c) => c.kind === 'playbook');
+  const applyDisabled =
+    s.stage !== 'ready' ||
+    !projectId ||
+    s.selectedIds.size === 0 ||
+    (actions.hasGlobal && !s.globalAck);
+  return {
+    stage: s.stage,
+    candidates: s.candidates,
+    selectedIds: s.selectedIds,
+    overwrite: s.overwrite,
+    setOverwrite: s.setOverwrite,
+    globalAck: s.globalAck,
+    setGlobalAck: s.setGlobalAck,
+    parseError: s.parseError,
+    fileInputRef: s.fileInputRef,
+    ...actions,
     hasPlaybook,
-    handleFile,
-    handleApply,
-    toggle,
-    selectAllNew,
     applyDisabled,
   };
 }
@@ -146,7 +206,12 @@ function useApplyHandler(
     if (selected.length === 0) return;
     setStage?.('applying');
     try {
-      const result = await rulesApi.applyImport(envelopeRef.current, projectId, selected, overwrite);
+      const result = await rulesApi.applyImport(
+        envelopeRef.current,
+        projectId,
+        selected,
+        overwrite,
+      );
       toast.success(t('rules.import.applied').replace('{applied}', String(result.applied)));
       onApplied?.();
       onOpenChange?.(false);
@@ -155,18 +220,34 @@ function useApplyHandler(
     } finally {
       setStage?.('ready');
     }
-  }, [stage, projectId, hasGlobal, globalAck, candidates, selectedIds, overwrite, t, onApplied, onOpenChange, envelopeRef, setStage]);
+  }, [
+    stage,
+    projectId,
+    hasGlobal,
+    globalAck,
+    candidates,
+    selectedIds,
+    overwrite,
+    t,
+    onApplied,
+    onOpenChange,
+    envelopeRef,
+    setStage,
+  ]);
 }
 
 function useToggle(setSelectedIds: React.Dispatch<React.SetStateAction<Set<string>>>) {
-  return useCallback((id: string, next: boolean) => {
-    setSelectedIds((prev) => {
-      const copy = new Set(prev);
-      if (next) copy.add(id);
-      else copy.delete(id);
-      return copy;
-    });
-  }, [setSelectedIds]);
+  return useCallback(
+    (id: string, next: boolean) => {
+      setSelectedIds((prev) => {
+        const copy = new Set(prev);
+        if (next) copy.add(id);
+        else copy.delete(id);
+        return copy;
+      });
+    },
+    [setSelectedIds],
+  );
 }
 
 function useSelectAllNew(

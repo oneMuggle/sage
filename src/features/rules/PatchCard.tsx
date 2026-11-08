@@ -1,7 +1,7 @@
 import { Lock } from 'lucide-react';
 
 import type { PatchApplyResult, PatchOperation } from '../../shared/api/rulesApi';
-import { useI18n } from '../../shared/lib/i18n';
+import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { Badge } from '../../shared/ui/Badge';
 
 import { MAX_RULE_CHARS } from './RuleEditorDialog';
@@ -186,8 +186,7 @@ function CardStatusSections({
           className="break-words text-xs text-error"
           data-testid={`patch-current-${operation.opId}`}
         >
-          {t('rules.ai.current')}:{' '}
-          {readContent(result.current) || JSON.stringify(result.current)}
+          {t('rules.ai.current')}: {readContent(result.current) || JSON.stringify(result.current)}
         </p>
       ) : null}
     </>
@@ -196,7 +195,7 @@ function CardStatusSections({
 
 function computePatchDisplay(
   operation: PatchOperation,
-  t: (key: string) => string,
+  t: (key: TranslationKey) => string,
 ): {
   before: string;
   change: string | null;

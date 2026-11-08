@@ -114,7 +114,9 @@ function CandidateList({
           />
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-text-tertiary">{t(LAYER_LABEL_KEY[candidate.kind])}</span>
+              <span className="text-xs text-text-tertiary">
+                {t(LAYER_LABEL_KEY[candidate.kind])}
+              </span>
               <span className={STATUS_STYLE[candidate.status]}>
                 {t(STATUS_LABEL_KEY[candidate.status])}
               </span>
@@ -183,7 +185,9 @@ function ImportBody({ hook, projectId }: { hook: RulesImportHookResult; projectI
   return (
     <div className="space-y-3 py-2">
       {!projectId ? (
-        <p role="alert" className="text-sm text-warning">{t('rules.import.no_project')}</p>
+        <p role="alert" className="text-sm text-warning">
+          {t('rules.import.no_project')}
+        </p>
       ) : null}
       <ImportHeader
         stage={hook.stage}

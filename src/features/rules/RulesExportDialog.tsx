@@ -70,13 +70,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function FormatSection({
-  format,
-  setFormat,
-}: {
-  format: Format;
-  setFormat: (v: Format) => void;
-}) {
+function FormatSection({ format, setFormat }: { format: Format; setFormat: (v: Format) => void }) {
   const { t } = useI18n();
   return (
     <div>
@@ -145,7 +139,11 @@ function ScopeSection({
   );
 }
 
-function useExportState(projectId: string, t: (key: TranslationKey) => string, onOpenChange: (open: boolean) => void) {
+function useExportState(
+  projectId: string,
+  t: (key: TranslationKey) => string,
+  onOpenChange: (open: boolean) => void,
+) {
   const [format, setFormat] = useState<Format>('json');
   const [scope, setScope] = useState<Scope>(DEFAULT_SCOPE);
   const [busy, setBusy] = useState(false);
@@ -156,8 +154,11 @@ function useExportState(projectId: string, t: (key: TranslationKey) => string, o
     setBusy(true);
     try {
       const options: RulesExportOptions = {
-        format, includeConstraints: scope.constraints, includeDocs: scope.docs,
-        includeGlobal: scope.global, includePlaybook: scope.playbook,
+        format,
+        includeConstraints: scope.constraints,
+        includeDocs: scope.docs,
+        includeGlobal: scope.global,
+        includePlaybook: scope.playbook,
       };
       const result = await rulesApi.exportRules(projectId, options);
       downloadRulesText(result.filename, result.content, FORMAT_MIME[format]);
@@ -179,8 +180,11 @@ export function RulesExportDialog({
   projectName,
 }: RulesExportDialogProps) {
   const { t } = useI18n();
-  const { format, setFormat, scope, toggleScope, busy, handleExport } =
-    useExportState(projectId, t, onOpenChange);
+  const { format, setFormat, scope, toggleScope, busy, handleExport } = useExportState(
+    projectId,
+    t,
+    onOpenChange,
+  );
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">

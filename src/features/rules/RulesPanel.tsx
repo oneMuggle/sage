@@ -2,7 +2,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { rulesApi, type PatchOperation, type RuleConflict, type RuleEntry } from '../../shared/api/rulesApi';
+import {
+  rulesApi,
+  type PatchOperation,
+  type RuleConflict,
+  type RuleEntry,
+} from '../../shared/api/rulesApi';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
@@ -343,7 +348,10 @@ export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
         state={state}
         projectId={projectId}
         buildPlaybookOpener={buildPlaybookOpener(
-          onOpenSource, state.rules, state.aiTarget, state.setAiOpen,
+          onOpenSource,
+          state.rules,
+          state.aiTarget,
+          state.setAiOpen,
         )}
       />
     </div>

@@ -91,7 +91,9 @@ function usePatchState(isOpen: boolean): PatchStateBag {
   const [preview, setPreview] = useState<PatchPreviewResponse | null>(null);
   const [selection, setSelection] = useState<Record<string, boolean>>({});
   const [results, setResults] = useState<Record<string, PatchApplyResult>>({});
-  const [applySummary, setApplySummary] = useState<{ applied: number; failed: number } | null>(null);
+  const [applySummary, setApplySummary] = useState<{ applied: number; failed: number } | null>(
+    null,
+  );
   const [generating, setGenerating] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,13 +101,36 @@ function usePatchState(isOpen: boolean): PatchStateBag {
   const sessionOpenedRef = useRef(false);
   const prefillOpenedRef = useRef(false);
   useSessionReset(isOpen, {
-    epochRef, sessionOpenedRef, setPreview, setSelection, setResults,
-    setApplySummary, setError, setGenerating, setApplying,
+    epochRef,
+    sessionOpenedRef,
+    setPreview,
+    setSelection,
+    setResults,
+    setApplySummary,
+    setError,
+    setGenerating,
+    setApplying,
   });
   return {
-    instruction, setInstruction, preview, setPreview, selection, setSelection,
-    results, setResults, applySummary, setApplySummary, generating, setGenerating,
-    applying, setApplying, error, setError, epochRef, sessionOpenedRef, prefillOpenedRef,
+    instruction,
+    setInstruction,
+    preview,
+    setPreview,
+    selection,
+    setSelection,
+    results,
+    setResults,
+    applySummary,
+    setApplySummary,
+    generating,
+    setGenerating,
+    applying,
+    setApplying,
+    error,
+    setError,
+    epochRef,
+    sessionOpenedRef,
+    prefillOpenedRef,
   };
 }
 
