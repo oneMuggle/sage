@@ -11,7 +11,11 @@ import { RULE_CHECK_MODES, RULE_SCOPES, RULE_SEVERITIES, RULE_TYPES } from './ru
 
 export const RULE_PACK_EXTENSION = '.sage-rules';
 
-export type RulePackParseErrorCode = 'invalid-json' | 'invalid-shape' | 'invalid-field';
+export type RulePackParseErrorCode =
+  | 'invalid-json'
+  | 'invalid-shape'
+  | 'invalid-field'
+  | 'too-many-rules';
 
 export class RulePackParseError extends Error {
   readonly code: RulePackParseErrorCode;
@@ -39,7 +43,15 @@ export function parseRulePack(text: string): RulePack {
   if (!isRecord(parsed)) {
     throw new RulePackParseError('invalid-shape', '规则包必须是 JSON 对象');
   }
-  return rulePackFromWire(parsePack(parsed));
+  const pack = rulePackFromWire(parsePack(parsed));
+  const totalRules = pack.groups.reduce((sum, group) => sum + group.rules.length, 0);
+  if (totalRules > 500) {
+    throw new RulePackParseError(
+      'too-many-rules',
+      `规则包规则数量超过 500 条（当前 ${totalRules} 条）`,
+    );
+  }
+  return pack;
 }
 
 export function rulePackFileName(name: string): string {

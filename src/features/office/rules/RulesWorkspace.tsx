@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { officeRulesApi } from '../../../shared/api/officeRulesApi';
 import type { WireRuleInput } from '../../../shared/api/types';
 import { useI18n } from '../../../shared/lib/i18n';
+import type { TranslationKey } from '../../../shared/lib/i18n';
 import { downloadPlaybookText } from '../../playbook/playbookDownload';
 
 import { ConflictDialog } from './ConflictDialog';
@@ -22,7 +23,13 @@ import {
   rulePackFromWire,
   rulePackToWire,
 } from './ruleMapping';
-import { parseRulePack, rulePackFileName, serializeRulePack } from './rulePackSerialization';
+import { rulePackToMarkdown } from './rulePackMarkdown';
+import {
+  RulePackParseError,
+  parseRulePack,
+  rulePackFileName,
+  serializeRulePack,
+} from './rulePackSerialization';
 import type { RuleAuditResult, RuleConflict, RuleFields, RuleGroup } from './ruleTypes';
 
 export interface RulesWorkspaceProps {
@@ -33,6 +40,21 @@ export interface RulesWorkspaceProps {
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
+
+function importErrorMessage(error: unknown, t: (key: TranslationKey) => string): string {
+  if (error instanceof RulePackParseError) {
+    if (error.code === 'invalid-json') return t('office.rules.importError.invalidJson');
+    if (error.code === 'invalid-shape') return t('office.rules.importError.invalidShape');
+    if (error.code === 'too-many-rules') return t('office.rules.importError.tooManyRules');
+    if (error.code === 'invalid-field') {
+      const fieldPart = error.field ? `: ${error.field}` : '';
+      return `${t('office.rules.importError.invalidField')}${fieldPart}`;
+    }
+  }
+  return errorMessage(error);
+}
+
+const MAX_IMPORT_PACK_BYTES = 5 * 1024 * 1024;
 
 export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps) {
   const { t } = useI18n();
@@ -113,6 +135,23 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
       setSelectedRuleId(null);
     } catch (error) {
       toast.error(`${t('office.rules.workspace.operationFailed')}: ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleUpdateGroup = async (
+    groupId: string,
+    patch: { name?: string; description?: string; priority?: number },
+  ) => {
+    setBusy(true);
+    try {
+      await officeRulesApi.updateGroup(groupId, patch);
+      await load();
+    } catch (error) {
+      toast.error(`${t('office.rules.group.saveFailed')}: ${errorMessage(error)}`);
+      throw error;
     } finally {
       setBusy(false);
     }
@@ -257,12 +296,16 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
   const handleImport = async (file: File) => {
     setBusy(true);
     try {
+      if (file.size > MAX_IMPORT_PACK_BYTES) {
+        toast.error(t('office.rules.workspace.importTooLarge'));
+        return;
+      }
       const pack = parseRulePack(await file.text());
       const result = importResultFromWire(await officeRulesApi.importPack(rulePackToWire(pack)));
       await load();
       toast.success(`${t('office.rules.workspace.imported')} (${result.importedRules})`);
     } catch (error) {
-      toast.error(`${t('office.rules.workspace.importFailed')}: ${errorMessage(error)}`);
+      toast.error(`${t('office.rules.workspace.importFailed')}: ${importErrorMessage(error, t)}`);
     } finally {
       setBusy(false);
     }
@@ -274,6 +317,9 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
       return;
     }
     setExtracting(true);
+    let created: { id: string } | null = null;
+    let createdCount = 0;
+    let extractedTotal = 0;
     try {
       const result = await officeRulesApi.extractRules({
         workspace_path: workspacePath,
@@ -281,6 +327,7 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
         use_llm: true,
       });
       const extracted = result.rules.map(ruleFromWire);
+      extractedTotal = extracted.length;
       result.warnings.slice(0, 3).forEach((warning) => {
         toast.warning(warning.message);
       });
@@ -289,24 +336,14 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
         return;
       }
       const baseName = filePath.split(/[\\/]/).pop() ?? '';
-      const created = await officeRulesApi.createGroup({
+      created = await officeRulesApi.createGroup({
         name: `${t('office.rules.workspace.extractGroupName')} · ${baseName}`,
         description: '',
         priority: 0,
       });
       for (const rule of extracted) {
-        const input = ruleFieldsToWire(rule);
-        await officeRulesApi.createRule(created.id, {
-          name: input.name ?? rule.name,
-          type: input.type ?? rule.type,
-          severity: input.severity ?? rule.severity,
-          scope: input.scope ?? rule.scope,
-          description: input.description ?? rule.description,
-          check_mode: input.check_mode ?? rule.checkMode,
-          pattern: input.pattern ?? rule.pattern ?? null,
-          ai_prompt: input.ai_prompt ?? rule.aiPrompt ?? null,
-          enabled: input.enabled ?? rule.enabled,
-        });
+        await officeRulesApi.createRule(created.id, ruleFieldsToWire(rule) as WireRuleInput);
+        createdCount += 1;
       }
       await load();
       setSelectedGroupId(created.id);
@@ -314,7 +351,17 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
       setCreating(false);
       toast.success(`${t('office.rules.workspace.extractDone')} (${extracted.length})`);
     } catch (error) {
-      toast.error(`${t('office.rules.workspace.operationFailed')}: ${errorMessage(error)}`);
+      if (created) {
+        await load();
+        setSelectedGroupId(created.id);
+        setSelectedRuleId(null);
+        setCreating(false);
+        toast.error(
+          `${t('office.rules.workspace.extractPartial')} (${createdCount}/${extractedTotal}): ${errorMessage(error)}`,
+        );
+      } else {
+        toast.error(`${t('office.rules.workspace.operationFailed')}: ${errorMessage(error)}`);
+      }
     } finally {
       setExtracting(false);
     }
@@ -351,6 +398,30 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
     }
   };
 
+  const handleExportMarkdown = async () => {
+    if (!selectedGroup) return;
+    setBusy(true);
+    try {
+      const wire = await officeRulesApi.exportPack({
+        group_ids: [selectedGroup.id],
+        name: selectedGroup.name,
+      });
+      const pack = rulePackFromWire(wire);
+      downloadPlaybookText(
+        rulePackFileName(selectedGroup.name).replace(/\.sage-rules$/, '.md'),
+        rulePackToMarkdown(pack),
+        'text/markdown',
+      );
+      toast.success(t('office.rules.workspace.exportedMarkdown'));
+    } catch (error) {
+      toast.error(`${t('office.rules.workspace.operationFailed')}: ${errorMessage(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const locked = busy || extracting || auditing;
+
   return (
     <section data-testid="office-rules-workspace" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -359,7 +430,7 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
           <button
             type="button"
             data-testid="rules-extract"
-            disabled={extracting || busy || !filePath}
+            disabled={locked || !filePath}
             title={filePath ? undefined : t('office.rules.workspace.extractNeedsFile')}
             className="rounded border border-border px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-50"
             onClick={() => void handleExtract()}
@@ -371,7 +442,7 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
           <button
             type="button"
             data-testid="rules-audit"
-            disabled={auditing || !filePath}
+            disabled={locked || !filePath}
             title={filePath ? undefined : t('office.rules.workspace.auditNeedsFile')}
             className="rounded bg-primary px-3 py-1.5 text-sm text-text-inverse hover:bg-primary-hover disabled:opacity-50"
             onClick={() => void handleAudit()}
@@ -415,13 +486,14 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
                 selectedGroupId={selectedGroup?.id ?? null}
                 selectedRuleId={creating ? null : (selectedRule?.id ?? null)}
                 creatingRule={creating}
-                busy={busy}
+                busy={locked}
                 onSelect={handleSelectGroup}
                 onSelectRule={handleSelectRule}
                 onCreateRule={handleToggleCreateRule}
                 onCreate={(name, description, priority) =>
-                  void handleCreateGroup(name, description, priority)
+                  handleCreateGroup(name, description, priority)
                 }
+                onUpdate={(groupId, patch) => handleUpdateGroup(groupId, patch)}
                 onDelete={(id) => void handleDeleteGroup(id)}
               />
             </div>
@@ -434,7 +506,7 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
                 }
                 group={selectedGroup}
                 rule={selectedRule}
-                busy={busy}
+                busy={locked}
                 onCreate={(fields) => void handleCreateRule(fields)}
                 onUpdate={(ruleId, fields) => void handleUpdateRule(ruleId, fields)}
                 onDelete={(ruleId) => void handleDeleteRule(ruleId)}
@@ -444,8 +516,9 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <RulePackBar
               group={selectedGroup}
-              busy={busy}
+              busy={locked}
               onExport={() => void handleExport()}
+              onExportMarkdown={() => void handleExportMarkdown()}
               onImport={(file) => void handleImport(file)}
               onCheckConflicts={() => void handleCheckConflicts()}
             />

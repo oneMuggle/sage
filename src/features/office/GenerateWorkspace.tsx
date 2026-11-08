@@ -227,7 +227,7 @@ export function GenerateWorkspace({
             >
               {DOC_TYPES.map((type) => (
                 <option key={type} value={type}>
-                  {type}
+                  {t(`office.generate.docType.${type}`)}
                 </option>
               ))}
             </select>

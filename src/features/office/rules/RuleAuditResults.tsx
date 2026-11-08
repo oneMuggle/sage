@@ -26,9 +26,9 @@ export function RuleAuditResults({ result, auditing }: RuleAuditResultsProps) {
     return (
       <section
         className="rounded border border-border bg-bg-subtle p-3 text-xs text-muted"
-        data-testid="rule-audit-empty"
+        data-testid="rule-audit-not-run"
       >
-        {t('office.rules.audit.empty')}
+        {t('office.rules.audit.notRun')}
       </section>
     );
   }

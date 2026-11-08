@@ -75,6 +75,7 @@ export interface WireExtractRequest {
   file_path: string;
   file_type?: string;
   use_llm?: boolean;
+  max_size_bytes?: number;
 }
 
 export interface WireExtractWarning {
@@ -114,6 +115,7 @@ export interface WireAuditRequest {
   workspace_path: string;
   file_path: string;
   rule_ids: string[];
+  max_size_bytes?: number;
 }
 
 export interface WireAuditFinding {

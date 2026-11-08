@@ -25,6 +25,20 @@ export interface RuleDetailPanelProps {
 
 const inputClass = 'w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text';
 
+function ruleToFields(rule: Rule | null): RuleFields {
+  return {
+    name: rule?.name ?? '',
+    type: rule?.type ?? 'custom',
+    severity: rule?.severity ?? 'warning',
+    scope: rule?.scope ?? 'full',
+    checkMode: rule?.checkMode ?? 'regex',
+    description: rule?.description ?? '',
+    pattern: rule?.pattern ?? '',
+    aiPrompt: rule?.aiPrompt ?? '',
+    enabled: rule?.enabled ?? true,
+  };
+}
+
 export function RuleDetailPanel({
   group,
   rule,
@@ -34,20 +48,24 @@ export function RuleDetailPanel({
   onDelete,
 }: RuleDetailPanelProps) {
   const { t } = useI18n();
-  const [name, setName] = useState(rule?.name ?? '');
-  const [type, setType] = useState<RuleType>(rule?.type ?? 'custom');
-  const [severity, setSeverity] = useState<RuleSeverity>(rule?.severity ?? 'warning');
-  const [scope, setScope] = useState<RuleScope>(rule?.scope ?? 'full');
-  const [checkMode, setCheckMode] = useState<RuleCheckMode>(rule?.checkMode ?? 'regex');
-  const [description, setDescription] = useState(rule?.description ?? '');
-  const [pattern, setPattern] = useState(rule?.pattern ?? '');
-  const [aiPrompt, setAiPrompt] = useState(rule?.aiPrompt ?? '');
-  const [enabled, setEnabled] = useState(rule?.enabled ?? true);
+  const initial = ruleToFields(rule);
+  const [name, setName] = useState(initial.name);
+  const [type, setType] = useState<RuleType>(initial.type);
+  const [severity, setSeverity] = useState<RuleSeverity>(initial.severity);
+  const [scope, setScope] = useState<RuleScope>(initial.scope);
+  const [checkMode, setCheckMode] = useState<RuleCheckMode>(initial.checkMode);
+  const [description, setDescription] = useState(initial.description);
+  const [pattern, setPattern] = useState(initial.pattern ?? '');
+  const [aiPrompt, setAiPrompt] = useState(initial.aiPrompt ?? '');
+  const [enabled, setEnabled] = useState(initial.enabled);
   const [error, setError] = useState<string | null>(null);
 
   if (!group) {
     return (
-      <section className="rounded border border-border bg-bg-subtle p-3" data-testid="rule-detail-panel">
+      <section
+        className="rounded border border-border bg-bg-subtle p-3"
+        data-testid="rule-detail-panel"
+      >
         <p className="text-xs text-muted">{t('office.rules.detail.noGroupHint')}</p>
       </section>
     );
@@ -88,14 +106,20 @@ export function RuleDetailPanel({
   return (
     <section className="space-y-3" data-testid="rule-detail-panel">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-medium text-text-secondary">{t('office.rules.detail.title')}</h3>
+        <h3 className="text-xs font-medium text-text-secondary">
+          {t('office.rules.detail.title')}
+        </h3>
         {rule ? (
           <button
             type="button"
             data-testid="rule-detail-delete"
             className="rounded border border-border px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-50"
             disabled={busy}
-            onClick={() => void onDelete(rule.id)}
+            onClick={() => {
+              if (!window.confirm(`${t('office.rules.detail.confirmDelete')} (${rule.name})`))
+                return;
+              void onDelete(rule.id);
+            }}
           >
             {t('office.rules.detail.delete')}
           </button>
@@ -163,7 +187,9 @@ export function RuleDetailPanel({
           </label>
 
           <label className="block space-y-1">
-            <span className="text-xs text-text-secondary">{t('office.rules.detail.checkMode')}</span>
+            <span className="text-xs text-text-secondary">
+              {t('office.rules.detail.checkMode')}
+            </span>
             <select
               className={inputClass}
               data-testid="rule-detail-check-mode"
@@ -180,7 +206,9 @@ export function RuleDetailPanel({
         </div>
 
         <label className="block space-y-1">
-          <span className="text-xs text-text-secondary">{t('office.rules.detail.description')}</span>
+          <span className="text-xs text-text-secondary">
+            {t('office.rules.detail.description')}
+          </span>
           <textarea
             className={`${inputClass} min-h-[80px]`}
             data-testid="rule-detail-description"
@@ -243,11 +271,17 @@ export function RuleDetailPanel({
               data-testid="rule-detail-cancel"
               className="rounded border border-border px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-hover"
               onClick={() => {
-                setName(rule.name);
-                setDescription(rule.description);
-                setPattern(rule.pattern ?? '');
-                setAiPrompt(rule.aiPrompt ?? '');
-                setEnabled(rule.enabled);
+                const reset = ruleToFields(rule);
+                setName(reset.name);
+                setType(reset.type);
+                setSeverity(reset.severity);
+                setScope(reset.scope);
+                setCheckMode(reset.checkMode);
+                setDescription(reset.description);
+                setPattern(reset.pattern ?? '');
+                setAiPrompt(reset.aiPrompt ?? '');
+                setEnabled(reset.enabled);
+                setError(null);
               }}
             >
               {t('office.rules.detail.cancel')}

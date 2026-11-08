@@ -15,10 +15,16 @@ export interface RuleGroupListProps {
   onSelectRule: (ruleId: string) => void;
   onCreateRule: () => void;
   onCreate: (name: string, description: string, priority: number) => void | Promise<void>;
+  onUpdate?: (
+    groupId: string,
+    patch: { name?: string; description?: string; priority?: number },
+  ) => void | Promise<void>;
   onDelete: (groupId: string) => void | Promise<void>;
 }
 
 const inputClass = 'w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text';
+
+type FormMode = { kind: 'closed' } | { kind: 'create' } | { kind: 'edit'; groupId: string };
 
 export function RuleGroupList({
   groups,
@@ -30,14 +36,40 @@ export function RuleGroupList({
   onSelectRule,
   onCreateRule,
   onCreate,
+  onUpdate,
   onDelete,
 }: RuleGroupListProps) {
   const { t } = useI18n();
-  const [creating, setCreating] = useState(false);
+  const [mode, setMode] = useState<FormMode>({ kind: 'closed' });
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('0');
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+
+  const openCreate = () => {
+    setMode({ kind: 'create' });
+    setName('');
+    setDescription('');
+    setPriority('0');
+    setError(null);
+  };
+
+  const openEdit = (group: RuleGroup) => {
+    setMode({ kind: 'edit', groupId: group.id });
+    setName(group.name);
+    setDescription(group.description);
+    setPriority(String(group.priority ?? 0));
+    setError(null);
+  };
+
+  const closeForm = () => {
+    setMode({ kind: 'closed' });
+    setName('');
+    setDescription('');
+    setPriority('0');
+    setError(null);
+  };
 
   const submit = () => {
     const trimmed = name.trim();
@@ -46,30 +78,66 @@ export function RuleGroupList({
       return;
     }
     setError(null);
-    void onCreate(trimmed, description.trim(), Number(priority) || 0);
-    setCreating(false);
-    setName('');
-    setDescription('');
-    setPriority('0');
+    const payload = {
+      name: trimmed,
+      description: description.trim(),
+      priority: Number(priority) || 0,
+    };
+    if (mode.kind === 'edit' && onUpdate) {
+      void Promise.resolve(onUpdate(mode.groupId, payload)).then(
+        () => closeForm(),
+        () => {
+          /* keep form open; parent already toasted */
+        },
+      );
+    } else {
+      void Promise.resolve(onCreate(payload.name, payload.description, payload.priority)).then(
+        () => closeForm(),
+        () => {
+          /* keep form open; parent already toasted */
+        },
+      );
+    }
   };
+
+  const searchQuery = search.trim().toLowerCase();
+  const activeGroup = groups.find((g) => g.id === selectedGroupId) ?? null;
+  const filteredRules =
+    activeGroup && searchQuery
+      ? activeGroup.rules.filter(
+          (rule) =>
+            rule.name.toLowerCase().includes(searchQuery) ||
+            rule.description.toLowerCase().includes(searchQuery),
+        )
+      : (activeGroup?.rules ?? []);
 
   return (
     <section className="space-y-2" data-testid="rules-group-list">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-medium text-text-secondary">
-          {t('office.rules.group.title')}
-        </h3>
+        <h3 className="text-xs font-medium text-text-secondary">{t('office.rules.group.title')}</h3>
         <button
           type="button"
           data-testid="rules-group-create"
           className="rounded border border-border px-2 py-1 text-xs text-text-secondary hover:bg-bg-hover"
-          onClick={() => setCreating((v) => !v)}
+          onClick={() => {
+            if (mode.kind === 'closed') openCreate();
+            else closeForm();
+          }}
         >
-          {t('office.rules.group.create')}
+          {mode.kind === 'closed' ? t('office.rules.group.create') : t('office.rules.group.cancel')}
         </button>
       </div>
 
-      {creating ? (
+      <input
+        type="text"
+        data-testid="rules-search-input"
+        placeholder={t('office.rules.search.placeholder')}
+        className={inputClass}
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
+      {mode.kind !== 'closed' ? (
         <div className="space-y-2 rounded border border-border bg-bg-subtle p-3">
           <input
             className={inputClass}
@@ -105,12 +173,12 @@ export function RuleGroupList({
               disabled={busy}
               onClick={submit}
             >
-              {t('office.rules.group.submit')}
+              {mode.kind === 'edit' ? t('office.rules.group.edit') : t('office.rules.group.submit')}
             </button>
             <button
               type="button"
               className="rounded border border-border px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-hover"
-              onClick={() => setCreating(false)}
+              onClick={closeForm}
             >
               {t('office.rules.group.cancel')}
             </button>
@@ -147,21 +215,48 @@ export function RuleGroupList({
                     </span>
                   </button>
                   {group.builtin ? null : (
-                    <button
-                      type="button"
-                      data-testid={`rules-group-delete-${group.id}`}
-                      aria-label={t('office.rules.group.delete')}
-                      className="rounded border border-border px-1.5 py-1 text-xs text-text-secondary hover:bg-bg-hover"
-                      onClick={() => void onDelete(group.id)}
-                    >
-                      ×
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        data-testid={`rules-group-edit-${group.id}`}
+                        aria-label={t('office.rules.group.edit')}
+                        className="rounded border border-border px-1.5 py-1 text-xs text-text-secondary hover:bg-bg-hover"
+                        onClick={() => openEdit(group)}
+                      >
+                        ✎
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`rules-group-delete-${group.id}`}
+                        aria-label={t('office.rules.group.delete')}
+                        className="rounded border border-border px-1.5 py-1 text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-50"
+                        disabled={busy}
+                        onClick={() => {
+                          if (
+                            !window.confirm(
+                              `${t('office.rules.group.confirmDelete')} (${group.name} · ${group.rules.length} ${t('office.rules.workspace.rulesCount')})`,
+                            )
+                          )
+                            return;
+                          void onDelete(group.id);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </>
                   )}
                 </div>
                 {active ? (
                   <div className="ml-3 space-y-1">
                     <ul className="space-y-1" data-testid={`rules-group-rules-${group.id}`}>
-                      {group.rules.map((rule) => (
+                      {searchQuery && filteredRules.length === 0 ? (
+                        <li>
+                          <p className="text-xs text-muted" data-testid="rules-search-empty">
+                            {t('office.rules.search.empty')}
+                          </p>
+                        </li>
+                      ) : null}
+                      {(searchQuery ? filteredRules : group.rules).map((rule) => (
                         <li key={rule.id}>
                           <button
                             type="button"
