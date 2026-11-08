@@ -251,11 +251,16 @@ def render_rules_agents_md(
 
 def _measure_payload_bytes(payload: Any) -> int:
     """str/bytes 按原始字节测长；dict 按重新序列化后的 UTF-8 长度测长。"""
-    if isinstance(payload, bytes):
-        return len(payload)
-    if isinstance(payload, str):
-        return len(payload.encode("utf-8"))
-    return len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+    try:
+        if isinstance(payload, bytes):
+            return len(payload)
+        if isinstance(payload, str):
+            return len(payload.encode("utf-8"))
+        return len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise RulesImportValidationError(
+            "导入内容包含非法字符", status_code=422
+        ) from exc
 
 
 def _decode_payload(payload: Any) -> Dict[str, Any]:
@@ -351,7 +356,7 @@ def _constraint_status(
 def _coerce_priority(value: Any) -> int:
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 5
 
 

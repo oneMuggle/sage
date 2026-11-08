@@ -2,7 +2,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { rulesApi, type RuleConflict, type RuleEntry } from '../../shared/api/rulesApi';
+import {
+  rulesApi,
+  type PatchOperation,
+  type RuleConflict,
+  type RuleEntry,
+} from '../../shared/api/rulesApi';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
@@ -253,9 +258,62 @@ function useRulesPanelState(projectId: string) {
   };
 }
 
+/** Resolve the rule entry to open when the user clicks "open playbook" on a patch. */
+function buildPlaybookOpener(
+  onOpenSource: ((entry: RuleEntry) => void) | undefined,
+  rules: RuleEntry[],
+  aiTarget: RuleEntry | null,
+  setAiOpen: (v: boolean) => void,
+): ((operation: PatchOperation) => void) | undefined {
+  if (!onOpenSource) return undefined;
+  return (operation: PatchOperation) => {
+    const target =
+      rules.find((entry) => entry.id === operation.ruleId) ??
+      (aiTarget?.layer === operation.layer ? aiTarget : undefined) ??
+      rules.find((entry) => entry.layer === operation.layer);
+    if (target) onOpenSource(target);
+    setAiOpen(false);
+  };
+}
+
+function RulesPanelDialogs({
+  state,
+  projectId,
+  buildPlaybookOpener,
+}: {
+  state: ReturnType<typeof useRulesPanelState>;
+  projectId: string;
+  buildPlaybookOpener: ((op: PatchOperation) => void) | undefined;
+}) {
+  return (
+    <>
+      <RuleEditorDialog
+        isOpen={state.editorOpen}
+        onClose={state.closeEditor}
+        projectId={projectId}
+        entry={state.editTarget}
+        onSaved={state.handleSaved}
+      />
+      <EffectiveRulesDrawer
+        isOpen={state.drawerOpen}
+        onClose={() => state.setDrawerOpen(false)}
+        entries={state.effectiveEntries}
+        conflicts={state.conflicts}
+      />
+      <AiRulePatchDrawer
+        isOpen={state.aiOpen}
+        onClose={() => state.setAiOpen(false)}
+        projectId={projectId}
+        focusEntry={state.aiTarget}
+        onApplied={state.reload}
+        onOpenPlaybook={buildPlaybookOpener}
+      />
+    </>
+  );
+}
+
 export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
   const state = useRulesPanelState(projectId);
-
   return (
     <div className="space-y-3" data-testid="rules-panel">
       <RulesHeader
@@ -286,37 +344,15 @@ export function RulesPanel({ projectId, onOpenSource }: RulesPanelProps) {
         onOpenSource={onOpenSource}
         onAction={(action, entry) => void state.handleAction(action, entry)}
       />
-      <RuleEditorDialog
-        isOpen={state.editorOpen}
-        onClose={state.closeEditor}
+      <RulesPanelDialogs
+        state={state}
         projectId={projectId}
-        entry={state.editTarget}
-        onSaved={state.handleSaved}
-      />
-      <EffectiveRulesDrawer
-        isOpen={state.drawerOpen}
-        onClose={() => state.setDrawerOpen(false)}
-        entries={state.effectiveEntries}
-        conflicts={state.conflicts}
-      />
-      <AiRulePatchDrawer
-        isOpen={state.aiOpen}
-        onClose={() => state.setAiOpen(false)}
-        projectId={projectId}
-        focusEntry={state.aiTarget}
-        onApplied={state.reload}
-        onOpenPlaybook={
-          onOpenSource
-            ? (operation) => {
-                const target =
-                  state.rules.find((entry) => entry.id === operation.ruleId) ??
-                  (state.aiTarget?.layer === operation.layer ? state.aiTarget : undefined) ??
-                  state.rules.find((entry) => entry.layer === operation.layer);
-                if (target) onOpenSource(target);
-                state.setAiOpen(false);
-              }
-            : undefined
-        }
+        buildPlaybookOpener={buildPlaybookOpener(
+          onOpenSource,
+          state.rules,
+          state.aiTarget,
+          state.setAiOpen,
+        )}
       />
     </div>
   );

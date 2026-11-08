@@ -1,11 +1,10 @@
 import clsx from 'clsx';
 import type { ButtonHTMLAttributes } from 'react';
 
-export interface CheckboxProps
-  extends Omit<
-    ButtonHTMLAttributes<HTMLButtonElement>,
-    'onChange' | 'type' | 'role' | 'aria-checked'
-  > {
+export interface CheckboxProps extends Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  'onChange' | 'type' | 'role' | 'aria-checked'
+> {
   checked: boolean;
   onCheckedChange?: (checked: boolean) => void;
 }

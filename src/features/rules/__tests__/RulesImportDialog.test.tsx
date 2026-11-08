@@ -71,12 +71,7 @@ function renderDialog() {
   const onApplied = vi.fn();
   render(
     <I18nProvider defaultLocale="zh">
-      <RulesImportDialog
-        open
-        onOpenChange={onOpenChange}
-        projectId="p1"
-        onApplied={onApplied}
-      />
+      <RulesImportDialog open onOpenChange={onOpenChange} projectId="p1" onApplied={onApplied} />
     </I18nProvider>,
   );
   return { onOpenChange, onApplied };

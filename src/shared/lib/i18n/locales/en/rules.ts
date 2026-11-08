@@ -131,7 +131,8 @@ export const enRules: Record<RulesTranslationKey, string> = {
   'rules.ai.status.conflict': 'Conflict',
   // ===== Export / import (Task 25) =====
   'rules.export.title': 'Export rules package',
-  'rules.export.description': 'Pick what to export; the file can be imported by other Sage projects.',
+  'rules.export.description':
+    'Pick what to export; the file can be imported by other Sage projects.',
   'rules.export.format.label': 'Format',
   'rules.export.format.json': 'Rules JSON (.sagerules.json, Sage round-trip)',
   'rules.export.format.md': 'Readable Markdown (.sagerules.md, sections per layer)',
