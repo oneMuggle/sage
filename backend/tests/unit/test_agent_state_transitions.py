@@ -23,10 +23,10 @@ pytestmark = pytest.mark.unit
 # ---------------------- 枚举值 & 字符串继承 ----------------------
 
 
-def test_agent_state_enum_has_sixteen_states():
-    """状态机应有 16 个状态:IDLE/THINKING/REASONING/REASONING_DELTA/ACTING/OBSERVING/
+def test_agent_state_enum_has_seventeen_states():
+    """状态机应有 17 个状态:IDLE/THINKING/REASONING/REASONING_DELTA/ACTING/OBSERVING/
     CONTENT_DELTA/RETRY/HEARTBEAT/PERMISSION_REQUEST/ASK_USER_QUESTION/STEP_DONE/
-    ITERATION_CHECKPOINT/AWAITING_STEP_CONFIRM/DONE/FAILED。
+    ITERATION_CHECKPOINT/AWAITING_STEP_CONFIRM/STEER_CONSUMED/DONE/FAILED。
 
     CONTENT_DELTA 由 I4 引入,用于流式 LLM 响应 — 每个 token chunk 推一个
     CONTENT_DELTA 事件,前端 appendContent 累积实现逐字渲染。
@@ -45,8 +45,10 @@ def test_agent_state_enum_has_sixteen_states():
     执行前暂停,等待用户 continue/skip/abort。
     REASONING_DELTA 由流式思考即时展示 (2026-11-02) 引入 — 适配器每吐一段
     reasoning_content 就即时下发,不再等流收尾汇总。
+    STEER_CONSUMED 由插话暂存区 (2026-11-07) 引入 — run_loop 迭代边界消费
+    待处理插话时下发,前端据此移除暂存 chip 并将消息落到聊天历史。
     """
-    assert len(AgentState) == 16
+    assert len(AgentState) == 17
 
 
 def test_agent_state_enum_string_inheritance():
@@ -94,6 +96,7 @@ def test_agent_state_iteration_order():
         "step_done",  # step-by-step ReAct: 每步完成信号
         "iteration_checkpoint",  # 2026-10-31: 动态迭代预算检查点
         "awaiting_step_confirm",  # 2026-10-28 Plan Mode 增强：步骤级确认
+        "steer_consumed",  # 2026-11-07: 插话暂存区消费回执
         "done",
         "failed",
     ]

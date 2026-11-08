@@ -24,20 +24,13 @@
 // OfficePreviewPanel — the row's 历史版本 panel (office_list_snapshots /
 // office_restore_snapshot are stubbed) whose restore re-reads the document
 // via readDocument → office_pdf_read.
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { launchElectronWithStub, type ElectronWithStub } from '../../../helpers/electron-launcher';
 
 const OFFICE_URL = 'http://localhost:1420/#/office';
 
 /** The PDF demo doc shipped in DEMO_OFFICE_DOCS (of-4). */
 const DEMO_PDF_ROW_TITLE = '检索策略与纳入排除标准.pdf';
-
-/** Field wrapper divs pair a <label> with its input/textarea as siblings. */
-function fieldByLabel(page: Page, labelText: string) {
-  return page.locator(
-    `xpath=//label[normalize-space()="${labelText}"]/following-sibling::*[self::input or self::textarea]`,
-  );
-}
 
 test.describe('office pdf generate + preview (demo stub mode)', () => {
   let app: ElectronWithStub['app'];
@@ -71,33 +64,32 @@ test.describe('office pdf generate + preview (demo stub mode)', () => {
     // "文档生成" top-level tab. Switch to it before looking for the PDF button.
     await page.getByTestId('office-tab-generate').click();
 
-    // Switch the generate form to the PDF tab (tab buttons read PPT/WORD/EXCEL/PDF).
-    await page.getByRole('button', { name: 'PDF', exact: true }).click();
+    // P3 generate workspace: doc type is a <select>, not separate buttons.
+    await page.getByTestId('office-generate-workspace-doc-type').selectOption('pdf');
 
-    await page.getByTestId('office-generate-filename').fill('demo-e2e-说明.pdf');
-    await fieldByLabel(page, '标题 (可选)').fill('智能体年度趋势');
-    await fieldByLabel(page, '段落 (每行一个)').fill(
-      '第一段：多智能体编排成为主流。\n第二段：记忆系统与办公自动化深度融合。',
-    );
+    // P3 generate workspace: single instruction textarea replaces filename/title/paragraphs.
+    await page
+      .getByTestId('office-generate-workspace-instruction')
+      .fill('生成一份关于智能体年度趋势的 PDF 文档，包含多智能体编排和记忆系统两个章节。');
 
-    await page.getByTestId('office-generate-submit').click();
+    await page.getByTestId('office-generate-workspace-submit').click();
 
-    // demoInterceptors.office_pdf_generate appends a pdf row and returns the
-    // output-path payload → the form toasts 已生成 <filename>.
+    // demoBackendRequest intercepts POST /api/v1/office/generate/nl and returns
+    // a synthetic payload → the workspace toasts 已生成 <filename>.
+    await expect(page.locator('[data-sonner-toast]', { hasText: '已生成' })).toBeVisible();
+
+    // P3 generate workspace: result panel shows the generated filename.
+    const resultPanel = page.getByTestId('office-generate-workspace-result');
     await expect(
-      page.locator('[data-sonner-toast]', { hasText: '已生成' }),
-    ).toBeVisible();
+      resultPanel.getByTestId('office-generate-workspace-result-filename'),
+    ).toContainText('.pdf');
 
-    // The generate form lives in the "文档生成" tab, but the document list is
-    // in the "文档处理" tab. Switch back so Playwright can see the list rows.
+    // The demo office_pdf_generate handler appends a row to the in-memory
+    // document list, and onGenerated refreshed it → 4 seeded + 1 new.
     await page.getByTestId('office-tab-documents').click();
-
-    // The list is the source of truth for "a row was persisted": the 4 demo
-    // rows + our new pdf row (top of the list, newest first).
-    await expect(page.getByTestId('office-document-list').locator('li')).toHaveCount(5);
-    await expect(
-      page.getByTestId('office-document-list').getByText('demo-e2e-说明.pdf'),
-    ).toHaveCount(1);
+    const list = page.getByTestId('office-document-list');
+    await expect(list.locator('li')).toHaveCount(5);
+    await expect(list.locator('li').first()).toContainText('.pdf');
   });
 
   test('02: demo PDF row restores into the preview panel with 2 page cards', async () => {

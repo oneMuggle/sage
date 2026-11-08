@@ -152,6 +152,8 @@ export type {
   ProjectReferenceScanResult,
 } from './projectApi';
 export { officeApi } from './officeApi';
+export { officeGenerateApi } from './officeGenerateApi';
+export { officeRulesApi } from './officeRulesApi';
 export { sessionApi } from './sessionApi';
 export { skillDraftsApi } from './skillDraftsApi';
 export { skillsApi } from './skillsApi';
@@ -214,6 +216,8 @@ export type {
   QuestionOption,
   Session,
   SessionCompactResult,
+  RecapResult,
+  RecapResponse,
   SessionLineage,
   LineageArchive,
   SessionWorkspaceBinding,
@@ -265,7 +269,7 @@ export function auditSharedApiBarrelGovernance(
   const exportedClientCount =
     typeof state.exportedClientCount === 'number' && Number.isFinite(state.exportedClientCount)
       ? Math.max(0, Math.trunc(state.exportedClientCount))
-      : 12;
+      : 13;
   const windowControlsReady = state.windowControlsReady !== false;
   return {
     module: 'src/shared/api/index.ts',

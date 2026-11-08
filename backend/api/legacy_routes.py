@@ -507,11 +507,20 @@ async def chat_stream_create(data: ChatRequest, request: Request):
         # set/reset around ``agent.run_loop`` via try/finally so the
         # ContextVar never leaks across producer invocations.
         # M3-Task 4: 解析会话绑定的专家身份，贯穿到工具上下文与记忆写入
-        from backend.chat.specialist_binding import resolve_bound_specialist
+        from backend.chat.specialist_binding import (
+            resolve_bound_specialist,
+            resolve_effective_agent_id_for_message,
+            touch_specialist_usage,
+        )
         from backend.tools.context import (
             ToolExecutionContext,
             reset_tool_context,
             set_tool_context,
+        )
+
+        # M2 (2026-11-07) 群聊：显式 agent_id > 消息内 @专家 > 会话绑定。
+        _effective_agent_id = resolve_effective_agent_id_for_message(
+            data.session_id, data.agent_id, data.message
         )
 
         _tool_ctx_token = None
@@ -607,18 +616,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             else:
                 # M0 修复: 请求未带端点配置时,从全局设置加载 + profile 模型覆盖
                 # (与 legacy_chat_routes.py /chat 端点对齐)
-                from backend.chat.specialist_binding import resolve_effective_agent_id
                 from backend.data.agent_repo import AgentRepository
                 from backend.orchestration.llm_factory import load_llm_config_for_chat
 
-                # 此时 SageAgent 尚未构造（下方 line ~761），直接按会话/请求
-                # 解析出的 agent_id 读 agents 表取 model_config。
-                _profile_row = (
-                    AgentRepository().get(
-                        resolve_effective_agent_id(data.session_id, data.agent_id)
-                    )
-                    or {}
-                )
+                # 此时 SageAgent 尚未构造，直接按已解析的 agent_id 读
+                # agents 表取 model_config（M2 群聊 @ 已包含在 _effective_agent_id）。
+                _profile_row = AgentRepository().get(_effective_agent_id) or {}
                 _profile_model_config = _profile_row.get("model_config")
                 _profile_model_config = (
                     _profile_model_config if isinstance(_profile_model_config, dict) else {}
@@ -784,12 +787,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     return
 
-            # M0 (2026-11-03): 会话级专家绑定 —— 请求未显式指定 agent_id 时
-            # 取会话绑定的专家（不存在/已禁用回落主助手）。
-            from backend.chat.specialist_binding import resolve_effective_agent_id
-
+            # M0/M2: 显式 agent_id > @专家 > 会话绑定（见 _effective_agent_id）
             agent = SageAgent(
-                agent_id=resolve_effective_agent_id(data.session_id, data.agent_id),
+                agent_id=_effective_agent_id,
                 scheduler_service_getter=get_scheduler_service,
             )
             # 2026-10-28: 输出长度 —— 请求自带端点配置时, 上方 llm_config 直接由
@@ -845,6 +845,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 "cancelled": False,
                 "session_id": data.session_id,
             }
+            # 2026-11-07: 注册即开启插话接收窗口 —— 编排模式分类是一次独立
+            # LLM 调用（1–3s），该窗口内 run_loop 尚未启动。此前 inject 判据
+            # 依赖 _run_loop_active，窗口内插话被 409 拒绝，前端静默降级为
+            # 排队（用户感知为"插话变成下一轮消息"）。
+            agent.begin_accept_steer()
 
             # Build system prompt with specialist persona support (M0)
             from backend.chat.specialist_prompt_composer import compose_system_prompt
@@ -2602,6 +2607,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         )
                     )
                     assistant_persisted = True
+                    # M2 群聊：标注实际发言专家（best-effort，失败不影响流）
+                    if _effective_agent_id and _effective_agent_id != "primary":
+                        try:
+                            _sender_conn = get_database().get_connection()
+                            _sender_conn.execute(
+                                "UPDATE messages SET sender_agent_id = ? WHERE id = ?",
+                                (_effective_agent_id, assistant_db_id),
+                            )
+                            _sender_conn.commit()
+                        except Exception as sender_err:  # noqa: BLE001
+                            logger.debug(
+                                f"[REQ {request_id}] sender_agent_id 写入失败: {sender_err}"
+                            )
                     if r38_memory_refs_json and not r38_memory_refs_written:
                         r38_memory_refs_written = True
                     if r81_rag_citations_json and not r81_rag_citations_written:
@@ -2648,12 +2666,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     data.session_id,
                                     data.message,
                                     done_content,
-                                    agent_id=resolve_bound_specialist(data.session_id),
+                                    agent_id=_effective_agent_id,
                                 )
                             except Exception as exc:
                                 logger.warning(
                                     f"[REQ {request_id}] legacy memory extraction failed: {exc}"
                                 )
+
+                    # P2-b: 记录专家最近使用时间（用实际发言者，群聊 @ 场景更准确）
+                    touch_specialist_usage(_effective_agent_id)
 
                     # 收尾工作移出 DONE 关键路径：钩子/记忆抽取是 best-effort，
                     # 让 done 立即入队，避免前端光标长时间不结束。
@@ -2897,6 +2918,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # run_id 为 None（single 路径）时跳过 —— 从未注册过。
             if run_id:
                 _ACTIVE_DISPATCHERS.pop(run_id, None)
+            # 2026-11-07: 关闭插话接收窗口 —— run_loop 未启动即失败的路径
+            # 不会走到自身的 finally，必须在此兜底清空未消费插话。
+            agent.end_accept_steer()
             # P0-2 (2026-08-20): 注销流注册表 —— stream 结束 / interrupt 不再命中陈旧实例。
             _ACTIVE_STREAMS.pop(stream_id, None)
             # P0-4 (2026-08-20): orch run 终态闭环 —— 让 run 离开 "running"。

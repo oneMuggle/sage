@@ -14,29 +14,31 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from backend.api.chat_session_lifecycle import _safe_log_field
+from backend.api.chat_session_lifecycle import _build_compaction_llm_callable, _safe_log_field
 from backend.api.chat_stream_registry import SENTINEL, StreamRegistry
 from backend.api.chat_stream_state import _ACTIVE_STREAMS, interrupt_stream
 from backend.api.chat_stream_support import _ndjson
+from backend.api.error_contract import error_json
 from backend.api.legacy_models import (
+    CancelSteerRequest,
     ChatRequest,
     ChatResponse,
     EvolutionLogResponse,
     InterruptRequest,
     LearnRequest,
+    RecapRequest,
     SteerRequest,
 )
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.data.database import get_database, make_with_db_lock
-from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
+from backend.data.session_repo import SessionRepository
 from backend.orchestration.llm_factory import (
     load_llm_config_for_chat,
     resolve_max_output_tokens,
@@ -253,9 +255,11 @@ def steer_agent(data: SteerRequest):
     消费，与编排链 O1 边界投递同语义）。纯内存注册表 + deque 操作，
     不走 DB 锁；失败面：
     - 404 stream_not_found：stream 不存在/已结束
-    - 409 not_running：stream 存在但 agent 不在 run 活跃窗口
-      （前端收到 409 回退排队语义——run 结束后作为新消息发送）
+    - 409 not_running：stream 存在但注入窗口已关闭
     - 400 msg_too_long：超过 8KB 额度
+
+    2026-11-07: 返回 ``message_id`` 供前端暂存区撤回与消费回执；
+    落库时机移到消费边界（撤回则不留痕，语义等同未送达）。
     """
     text = (data.content or "").strip()
     if not text:
@@ -266,26 +270,63 @@ def steer_agent(data: SteerRequest):
     if entry is None:
         raise HTTPException(status_code=404, detail={"code": "stream_not_found"})
     agent_obj: SageAgent = entry["agent"]
-    if not agent_obj.inject_user_message(text):
+    message_id = agent_obj.inject_user_message(text)
+    if message_id is None:
         raise HTTPException(status_code=409, detail={"code": "not_running"})
-    # P1 插话落库：写一行 subtype='steering' 供流末对账。
-    # 落库失败不回滚已生效的注入（agent 内存已排队，下一迭代边界消费）。
-    session_id = entry.get("session_id")
-    if session_id:
-        try:
-            MessageRepository().save(
-                DbMessage(
-                    id=str(uuid.uuid4()),
-                    session_id=session_id,
-                    role="user",
-                    content=text,
-                    subtype="steering",
-                    created_at=int(time.time()),
-                )
-            )
-        except Exception as exc:  # noqa: BLE001 — 落库失败不阻塞注入
-            logging.getLogger(__name__).warning("steering 落库失败（注入仍生效）: %s", exc)
-    return {"ok": True}
+    return {"ok": True, "message_id": message_id}
+
+
+@router.post("/chat/steer/cancel")
+def cancel_steer(data: CancelSteerRequest):
+    """2026-11-07: 撤回尚未被消费的插话（前端暂存区 X）。
+
+    - 404 stream_not_found：stream 不存在/已结束
+    - ``{"removed": false}``：消息已被消费或 id 不存在，前端按"已送达"处理
+    """
+    entry = _ACTIVE_STREAMS.get(data.stream_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail={"code": "stream_not_found"})
+    agent_obj: SageAgent = entry["agent"]
+    return {"removed": agent_obj.cancel_user_message(data.message_id)}
+
+
+@router.post("/chat/recap", response_model=dict)
+async def recap_session(data: RecapRequest):
+    """生成会话进度总结（对标 Claude Code /recap）。
+
+    - 200 + ``{"ok": true, "recap": {"progress", "decisions", "nextSteps", "openQuestions"}}``
+    - 404 — 会话不存在
+    - 200 + ``{"ok": false, "reason": "too_short"}`` — 消息不足 3 条
+    - 502 + ``{"ok": false, "error"}`` — 无 LLM 配置 / 生成失败
+    """
+    from backend.chat.recap import RecapError, RecapTooShortError, generate_recap
+
+    session_id = data.session_id
+    if SessionRepository().get(session_id) is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    llm_complete = _build_compaction_llm_callable()
+    if llm_complete is None:
+        return error_json(
+            502, "llm_not_configured", "没有可用的 LLM 配置，无法生成进度总结"
+        )
+
+    try:
+        recap = await generate_recap(session_id, llm_complete)
+    except RecapTooShortError as exc:
+        logger.info(
+            "[RECAP] session=%s 消息不足: %s", _safe_log_field(session_id), exc
+        )
+        return {"ok": False, "reason": "too_short", "message": str(exc)}
+    except RecapError as exc:
+        logger.warning(
+            "[RECAP] session=%s 失败: %s", _safe_log_field(session_id), exc
+        )
+        return error_json(502, "recap_failed", str(exc))
+
+    logger.info("[RECAP] session=%s 生成成功", _safe_log_field(session_id))
+    return {"ok": True, "recap": recap.to_dict()}
+
 
 # ==================== 进化系统 API ====================
 

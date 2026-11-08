@@ -41,10 +41,8 @@ from backend.office.models import (
     BibTeXParseRequest,
     BibTeXParseResponse,
     OfficeDeleteResponse,
-    OfficeDocStatus,
     OfficeDocType,
     OfficeDocumentListResponse,
-    OfficeDocumentMetadata,
     OfficeDocumentSummary,
     OfficeExcelGenerateRequest,
     OfficeExcelReadResult,
@@ -87,9 +85,6 @@ if TYPE_CHECKING:
     pass
 
 
-import time  # noqa: E402  (used by _build_summary_for_generated)
-
-
 def _validate_file_in_workspace(file_path_str: str, workspace_path_str: str) -> Path:
     """CRITICAL SECURITY: ensure file_path is inside workspace_path.
 
@@ -129,28 +124,15 @@ def _build_summary_for_generated(
     doc_type: OfficeDocType,
     workspace_path: str,
 ) -> OfficeDocumentSummary:
-    """Build a summary for a freshly-generated document and persist it.
+    """Delegate to generated_store.persist_generated_document."""
+    from backend.office.generated_store import persist_generated_document
 
-    CRITICAL FIX: previous version never called save_document, so the
-    office_documents table stayed empty in production.
-    """
-    now_ms = int(time.time() * 1000)
-    # Resolve workspace_path to canonical absolute form so list queries
-    # by the same path match later (prevents `/tmp/./foo` vs `/tmp/foo` mismatch).
-    canonical_workspace = str(Path(workspace_path).resolve())
-    summary = OfficeDocumentSummary(
-        id=file_path.parent.name,  # storage places <doc_id>/ next to the file
-        workspace_path=canonical_workspace,
+    return persist_generated_document(
+        _db().get_connection(),
+        file_path=file_path,
         doc_type=doc_type,
-        original_filename=None,
-        generated_filename=file_path.name,
-        status=OfficeDocStatus.GENERATED,
-        created_at=now_ms,
-        updated_at=now_ms,
-        metadata=OfficeDocumentMetadata(file_size_bytes=file_path.stat().st_size),
+        workspace_path=workspace_path,
     )
-    save_document(_db().get_connection(), summary, content_file_path=file_path)
-    return summary
 
 
 def _delete_office_doc_record_and_files(doc_id: str) -> bool:
@@ -786,6 +768,10 @@ from backend.api.office_ai_review_routes import (  # noqa: E402
 )
 
 router.include_router(_ai_review_router)
+
+from backend.api.ai_routes import router as _ai_router  # noqa: E402
+
+router.include_router(_ai_router, prefix="/ai")
 
 __all__ = [
     "router",

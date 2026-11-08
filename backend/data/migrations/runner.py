@@ -30,6 +30,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, List, Tuple
 
+from backend.data.migrations.v17_office_rules import _v17_office_rules
+
 logger = logging.getLogger(__name__)
 
 #: 迁移注册表：(版本号, 名称, 迁移函数)。**只追加，不改历史条目。**
@@ -39,9 +41,7 @@ MIGRATIONS: List[Tuple[int, str, Callable[[Any], None]]] = []
 def register_migration(version: int, name: str, fn: Callable[[Any], None]) -> None:
     """注册一个迁移（供本包内模块与测试使用；版本号必须严格递增）。"""
     if MIGRATIONS and version <= MIGRATIONS[-1][0]:
-        raise ValueError(
-            f"迁移版本号必须严格递增: {version} <= {MIGRATIONS[-1][0]}"
-        )
+        raise ValueError(f"迁移版本号必须严格递增: {version} <= {MIGRATIONS[-1][0]}")
     MIGRATIONS.append((version, name, fn))
 
 
@@ -68,9 +68,7 @@ def _v2_messages_columns(conn: Any) -> None:
         cursor.execute("ALTER TABLE messages ADD COLUMN step_index INTEGER")
         conn.commit()
     if "segment_id" not in columns:
-        cursor.execute(
-            "ALTER TABLE messages ADD COLUMN segment_id INTEGER DEFAULT 0"
-        )
+        cursor.execute("ALTER TABLE messages ADD COLUMN segment_id INTEGER DEFAULT 0")
         conn.commit()
     if "subtype" not in columns:
         cursor.execute("ALTER TABLE messages ADD COLUMN subtype TEXT")
@@ -96,9 +94,7 @@ def _v3_sessions_columns(conn: Any) -> None:
         cursor.execute("ALTER TABLE sessions ADD COLUMN forked_at_message_id TEXT")
         conn.commit()
     if "run_status" not in columns:
-        cursor.execute(
-            "ALTER TABLE sessions ADD COLUMN run_status TEXT DEFAULT 'idle'"
-        )
+        cursor.execute("ALTER TABLE sessions ADD COLUMN run_status TEXT DEFAULT 'idle'")
         conn.commit()
     if "last_error" not in columns:
         cursor.execute("ALTER TABLE sessions ADD COLUMN last_error TEXT")
@@ -122,9 +118,7 @@ def _v4_memories_episodic_columns(conn: Any) -> None:
     cursor.execute("PRAGMA table_info(memories_episodic)")
     columns = {row["name"] for row in cursor.fetchall()}
     if "scope" not in columns:
-        cursor.execute(
-            "ALTER TABLE memories_episodic ADD COLUMN scope TEXT DEFAULT 'user'"
-        )
+        cursor.execute("ALTER TABLE memories_episodic ADD COLUMN scope TEXT DEFAULT 'user'")
         conn.commit()
     if "project_key" not in columns:
         cursor.execute("ALTER TABLE memories_episodic ADD COLUMN project_key TEXT")
@@ -133,9 +127,7 @@ def _v4_memories_episodic_columns(conn: Any) -> None:
         cursor.execute("ALTER TABLE memories_episodic ADD COLUMN invalid_at INTEGER")
         conn.commit()
     if "supersedes_id" not in columns:
-        cursor.execute(
-            "ALTER TABLE memories_episodic ADD COLUMN supersedes_id TEXT"
-        )
+        cursor.execute("ALTER TABLE memories_episodic ADD COLUMN supersedes_id TEXT")
         conn.commit()
 
 
@@ -169,19 +161,14 @@ def _v6_project_milestones_hierarchy(conn: Any) -> None:
     cursor.execute("PRAGMA table_info(project_milestones)")
     columns = {row["name"] for row in cursor.fetchall()}
     if "parent_id" not in columns:
-        cursor.execute(
-            "ALTER TABLE project_milestones ADD COLUMN parent_id TEXT"
-        )
+        cursor.execute("ALTER TABLE project_milestones ADD COLUMN parent_id TEXT")
         conn.commit()
     if "estimated_days" not in columns:
-        cursor.execute(
-            "ALTER TABLE project_milestones ADD COLUMN estimated_days REAL"
-        )
+        cursor.execute("ALTER TABLE project_milestones ADD COLUMN estimated_days REAL")
         conn.commit()
     # parent_id 索引（get_tree 查询子节点用）
     cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_milestones_parent"
-        " ON project_milestones(parent_id)"
+        "CREATE INDEX IF NOT EXISTS idx_milestones_parent" " ON project_milestones(parent_id)"
     )
     conn.commit()
 
@@ -243,12 +230,10 @@ def _v8_add_design_tables(conn: Any) -> None:
         )
     """)
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_design_artifacts_project "
-        "ON design_artifacts(project_id)"
+        "CREATE INDEX IF NOT EXISTS idx_design_artifacts_project " "ON design_artifacts(project_id)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_design_projects_status "
-        "ON design_projects(status)"
+        "CREATE INDEX IF NOT EXISTS idx_design_projects_status " "ON design_projects(status)"
     )
 
 
@@ -325,15 +310,11 @@ def _v9_add_autonomous_goals_tables(conn: Any) -> None:
     )
 
     # 创建索引
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_goals_status ON autonomous_goals(status)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_goals_status ON autonomous_goals(status)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_goals_created_at ON autonomous_goals(created_at DESC)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_rounds_goal_id ON goal_execution_rounds(goal_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_rounds_goal_id ON goal_execution_rounds(goal_id)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_rounds_started_at ON goal_execution_rounds(started_at DESC)"
     )
@@ -382,9 +363,7 @@ def _v11_compacted_history_retention(conn: Any) -> None:
 
     existing_tables = {
         row[0]
-        for row in cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
+        for row in cursor.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     }
     if "messages" in existing_tables:
         cursor.execute("PRAGMA table_info(messages)")
@@ -402,19 +381,14 @@ def _v11_compacted_history_retention(conn: Any) -> None:
     # 回填 SQL 的 JOIN 会失败，交由 restore 内部 try/except 兜底（不抛）。
     ensure_lineage_schema(conn)
     conn.commit()
-    lineage_cols = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info(session_lineage)").fetchall()
-    }
+    lineage_cols = {row[1] for row in conn.execute("PRAGMA table_info(session_lineage)").fetchall()}
     if "needs_restore" not in lineage_cols:
         # fail-fast：列没补上就不能吞掉回填（否则 v11 会被记账为已应用）
         raise RuntimeError("session_lineage.needs_restore 迁移失败")
     restore_compacted_history(conn)
 
 
-register_migration(
-    11, "compacted_history_retention", _v11_compacted_history_retention
-)
+register_migration(11, "compacted_history_retention", _v11_compacted_history_retention)
 
 
 def _v12_memory_agent_columns(conn: Any) -> None:
@@ -439,8 +413,7 @@ def _v12_memory_agent_columns(conn: Any) -> None:
             cursor.execute(f"ALTER TABLE {table} ADD COLUMN agent_id TEXT")
             conn.commit()
         cursor.execute(
-            f"CREATE INDEX IF NOT EXISTS {index_name} "
-            f"ON {table}(agent_id, scope, project_key)"
+            f"CREATE INDEX IF NOT EXISTS {index_name} " f"ON {table}(agent_id, scope, project_key)"
         )
     conn.commit()
 
@@ -487,9 +460,95 @@ def _v13_agent_version_and_eval_tables(conn: Any) -> None:
     conn.commit()
 
 
-register_migration(
-    13, "agent_version_and_eval_tables", _v13_agent_version_and_eval_tables
-)
+register_migration(13, "agent_version_and_eval_tables", _v13_agent_version_and_eval_tables)
+
+
+def _v14_agents_last_used_at(conn: Any) -> None:
+    """v14：agents 增加最近使用时间（P2-b 专家卡片「N 天前使用」）。
+
+    毫秒 Unix 时间戳，与 sessions.updated_at 同口径；存量行保持 NULL
+    （视为从未使用）。由聊天路径在专家会话成功响应后 best-effort 更新。
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(agents)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if not columns:
+        # 极老库尚未建 agents 表 —— 交由 init_db DDL 负责，跳过。
+        return
+    if "last_used_at" not in columns:
+        cursor.execute("ALTER TABLE agents ADD COLUMN last_used_at INTEGER")
+        conn.commit()
+
+
+register_migration(14, "agents_last_used_at", _v14_agents_last_used_at)
+
+
+def _v15_agents_sort_order(conn: Any) -> None:
+    """v15：agents 增加手动排序位（P2-d 置顶 / 排序）。
+
+    存量回填：按 ``updated_at`` 倒序（最近更新的排在前面），与原有
+    ``ORDER BY id`` 的观感接近。置顶 = 取更小的 sort_order。
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(agents)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if not columns:
+        # 极老库尚未建 agents 表 —— 交由 init_db DDL 负责，跳过。
+        return
+    if "sort_order" not in columns:
+        cursor.execute("ALTER TABLE agents ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+        cursor.execute(
+            """
+            UPDATE agents SET sort_order = (
+                SELECT COUNT(*) FROM agents AS a2 WHERE a2.updated_at > agents.updated_at
+            )
+            """
+        )
+        conn.commit()
+
+
+register_migration(15, "agents_sort_order", _v15_agents_sort_order)
+
+
+def _v16_group_chat_support(conn: Any) -> None:
+    """v16：群聊支持（M2 私聊/群聊）。
+
+    - ``sessions.conversation_type``：``'dm'``（默认）| ``'group'``；
+    - ``conversation_participants``：群聊参与者（含 host/member 与发言顺序）；
+    - ``messages.sender_agent_id``：assistant 行的实际发言专家（NULL = 用户/未标注）。
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(sessions)")
+    session_cols = {row[1] for row in cursor.fetchall()}
+    if session_cols and "conversation_type" not in session_cols:
+        cursor.execute("ALTER TABLE sessions ADD COLUMN conversation_type TEXT DEFAULT 'dm'")
+        conn.commit()
+
+    cursor.execute("PRAGMA table_info(messages)")
+    message_cols = {row[1] for row in cursor.fetchall()}
+    if message_cols and "sender_agent_id" not in message_cols:
+        cursor.execute("ALTER TABLE messages ADD COLUMN sender_agent_id TEXT")
+        conn.commit()
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS conversation_participants (
+            conversation_id TEXT NOT NULL,
+            agent_id        TEXT NOT NULL,
+            role            TEXT NOT NULL DEFAULT 'member',
+            speak_order     INTEGER NOT NULL DEFAULT 0,
+            enabled         INTEGER NOT NULL DEFAULT 1,
+            added_at        INTEGER NOT NULL,
+            PRIMARY KEY (conversation_id, agent_id)
+        )
+        """
+    )
+    conn.commit()
+
+
+register_migration(16, "group_chat_support", _v16_group_chat_support)
+register_migration(17, "office_rules", _v17_office_rules)
 
 
 def ensure_version_table(conn: Any) -> None:

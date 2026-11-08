@@ -32,11 +32,12 @@ import { toast } from 'sonner';
 import { useWorkspaceContext } from '../app/providers/SessionWorkspaceProvider';
 import { JournalPanel } from '../features/journal';
 import {
+  GenerateWorkspace,
   OfficeDocumentList,
   OfficeDuplicateDialog,
   OfficeEditPreviewDialog,
-  OfficeGenerateForm,
   OfficeSnapshotPanel,
+  RulesWorkspace,
   useOfficeDocuments,
   type OfficeListView,
   type OfficeMultiImportResult,
@@ -49,6 +50,9 @@ import { WordBatchAuditPanel } from '../features/office/WordBatchAuditPanel';
 import { WordRuleExtractionPanel } from '../features/office/WordRuleExtractionPanel';
 import { DocumentCanvas } from '../features/office/canvas/DocumentCanvas';
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
+import { officeDocumentPath } from '../features/office/officeDocumentPath';
+import { OfficeAiSidebarHost } from '../features/office/sidebar/OfficeAiSidebarHost';
+import type { QuickActionTab } from '../features/office/sidebar/QuickActions';
 import { WorkspaceBindModal } from '../features/workspace';
 import type { OfficeCapabilities, OfficeDocType } from '../shared/api/types';
 import { fillTemplate } from '../shared/lib/fillTemplate';
@@ -130,6 +134,9 @@ export function Office() {
   // HIGH FIX: stale-read guard. Increments on every handleImportAndRead
   // invocation; setPreview checks the captured id before applying state.
   const readIdRef = useRef(0);
+  // R10: canvas root for the AI sidebar selection capture / paragraph
+  // collection. Attached to the wrapper around <DocumentCanvas>.
+  const canvasRootRef = useRef<HTMLDivElement>(null);
 
   const [isBindModalOpen, setIsBindModalOpen] = useState(false);
   // 浮层里的 OfficeCapabilityBar 通过回调把探测结果推到父组件，
@@ -465,18 +472,20 @@ export function Office() {
             <h2 className="text-sm font-medium text-text-secondary mb-3">
               {t('office.section.canvas')}
             </h2>
-            <DocumentCanvas
-              preview={preview}
-              workspacePath={workspacePath}
-              onPick={handleImportAndReadMulti}
-              onDropFiles={handleReadDroppedMulti}
-              onEditPreview={
-                preview && preview.docType !== 'pdf' ? () => setEditDialogOpen(true) : undefined
-              }
-              fidelityAvailable={pdfAvailableForDocument(capabilities, preview?.docType)}
-              onRefresh={() => void refresh()}
-              disabled={loading}
-            />
+            <div ref={canvasRootRef}>
+              <DocumentCanvas
+                preview={preview}
+                workspacePath={workspacePath}
+                onPick={handleImportAndReadMulti}
+                onDropFiles={handleReadDroppedMulti}
+                onEditPreview={
+                  preview && preview.docType !== 'pdf' ? () => setEditDialogOpen(true) : undefined
+                }
+                fidelityAvailable={pdfAvailableForDocument(capabilities, preview?.docType)}
+                onRefresh={() => void refresh()}
+                disabled={loading}
+              />
+            </div>
             {editDialogOpen && editDoc && preview?.docType !== 'pdf' && (
               <div className="mt-3">
                 <OfficeEditPreviewDialog
@@ -496,7 +505,12 @@ export function Office() {
 
   const renderGenerateTab = () => (
     <div className="space-y-6">
-      <OfficeGenerateForm workspacePath={workspacePath ?? ''} onGenerated={refresh} />
+      <GenerateWorkspace
+        workspacePath={workspacePath ?? ''}
+        documents={documents}
+        onGenerated={refresh}
+        onOpenDocument={open}
+      />
 
       {/* JournalPanel 从原来的顶层独立面板折叠到 <details> 内，
           与"生成新文档"共享同一个任务域但不再占用首屏空间。 */}
@@ -517,6 +531,12 @@ export function Office() {
 
   const renderRulesTab = () => (
     <div className="space-y-4">
+      {/* P3: 规则工作台（分组 / 规则 CRUD / 冲突 / 导出导入 / 审校）。 */}
+      <RulesWorkspace
+        workspacePath={workspacePath ?? ''}
+        filePath={preview ? officeDocumentPath(preview.data.summary) : null}
+      />
+
       {/* M2.5: 格式规范书库（工作区默认 / 文档级绑定 / 从说明文件提取）。 */}
       <OfficeSpecLibrary workspacePath={workspacePath} />
 
@@ -629,6 +649,15 @@ export function Office() {
         bind={bind}
         revoke={revoke}
       />
+
+      {workspacePath && (
+        <OfficeAiSidebarHost
+          activeTab={activeTab as QuickActionTab}
+          onNavigateTab={(tab) => setTab(tab as OfficeTabId)}
+          workspacePath={workspacePath}
+          rootRef={canvasRootRef}
+        />
+      )}
     </div>
   );
 }

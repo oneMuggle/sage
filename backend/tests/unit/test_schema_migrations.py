@@ -94,9 +94,7 @@ def test_failed_migration_not_recorded(setup_test_db, clean_registry):
 
 def test_migration_can_execute_ddl(setup_test_db, clean_registry):
     def _create_sentinel(conn):
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS _migration_sentinel (id INTEGER PRIMARY KEY)"
-        )
+        conn.execute("CREATE TABLE IF NOT EXISTS _migration_sentinel (id INTEGER PRIMARY KEY)")
         conn.commit()
 
     _add_migration(1, "sentinel", _create_sentinel)
@@ -117,7 +115,7 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
         db.init_db()  # v1-v13 自动注册（runner.py 模块级）
         versions = applied_versions(db.get_connection())
         # v1 基线 + v2-v13 迁移（v11 非破坏压缩回填；main 分支编号）
-        assert versions == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}
+        assert versions == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}
         # schema_version 表已建（账本就绪）
     finally:
         db.close()
@@ -135,22 +133,77 @@ def test_v10_adds_tag_column_to_legacy_feedback_table() -> None:
         conn.execute(
             "CREATE TABLE feedback_conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL)"
         )
-        conn.execute(
-            "INSERT INTO feedback_conversations (id, title) VALUES ('c1', '老会话')"
-        )
+        conn.execute("INSERT INTO feedback_conversations (id, title) VALUES ('c1', '老会话')")
         conn.commit()
 
         _v10_feedback_conversations_tag(conn)
-        columns = {
-            row["name"] for row in conn.execute("PRAGMA table_info(feedback_conversations)")
-        }
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(feedback_conversations)")}
         assert "tag" in columns
-        row = conn.execute(
-            "SELECT tag FROM feedback_conversations WHERE id = 'c1'"
-        ).fetchone()
+        row = conn.execute("SELECT tag FROM feedback_conversations WHERE id = 'c1'").fetchone()
         assert row["tag"] == "other"
 
         _v10_feedback_conversations_tag(conn)  # 幂等：不重复 ALTER
         assert conn.execute("SELECT tag FROM feedback_conversations").fetchone()["tag"] == "other"
+    finally:
+        conn.close()
+
+
+def test_v17_office_rules_tables() -> None:
+    """v17：建 office_rule_groups / office_rules 两表，重复执行幂等。"""
+    import sqlite3
+
+    from backend.data.migrations.runner import (
+        MIGRATIONS,
+        _v17_office_rules,
+    )
+
+    assert (17, "office_rules") in [(v, name) for v, name, _fn in MIGRATIONS]
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    try:
+        _v17_office_rules(conn)
+        _v17_office_rules(conn)  # idempotent
+
+        tables = {
+            row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert {"office_rule_groups", "office_rules"} <= tables
+
+        rule_columns = {row["name"] for row in conn.execute("PRAGMA table_info(office_rules)")}
+        assert {
+            "id",
+            "name",
+            "type",
+            "severity",
+            "scope",
+            "description",
+            "check_mode",
+            "pattern",
+            "ai_prompt",
+            "enabled",
+            "group_id",
+            "created_at",
+            "updated_at",
+        } == rule_columns
+
+        group_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(office_rule_groups)")
+        }
+        assert {
+            "id",
+            "name",
+            "description",
+            "priority",
+            "builtin",
+            "created_at",
+            "updated_at",
+        } == group_columns
+
+        fks = conn.execute("PRAGMA foreign_key_list(office_rules)").fetchall()
+        assert len(fks) == 1
+        assert fks[0]["table"] == "office_rule_groups"
+        assert fks[0]["from"] == "group_id"
+        assert fks[0]["on_delete"] == "CASCADE"
     finally:
         conn.close()

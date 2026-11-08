@@ -1,7 +1,7 @@
 # ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容
 """规则导出 / 导入端点（M6，2026-11-07）。
 
-从 ``rules_routes`` 拆出以守住单文件规模约束；路由前缀、参数与响应形状
+从 ``project_rules_routes`` 拆出以守住单文件规模约束；路由前缀、参数与响应形状
 与原模块完全一致。
 """
 
@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from backend.api.rules_routes import (
+from backend.api.project_rules_routes import (
     _USER_SOURCE,
     MAX_PROJECT_RULES,
     _error,

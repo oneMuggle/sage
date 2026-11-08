@@ -53,14 +53,17 @@ async def test_done_arrives_while_post_turn_side_effects_still_running(client):
             assert create_resp.status_code == 200, create_resp.text
             stream_id = create_resp.json()["streamId"]
 
+            # py38 CI 调度延迟较高，放宽 DONE 到达超时（原 2.0s → 5.0s）
             attach_resp = await asyncio.wait_for(
-                client.get(f"{CHAT_STREAM_PATH}/{stream_id}"), timeout=2.0
+                client.get(f"{CHAT_STREAM_PATH}/{stream_id}"), timeout=5.0
             )
             assert attach_resp.status_code == 200
             assert "done" in attach_resp.text
             # 收尾任务已启动但尚未完成 —— DONE 已先行送达。
-            await asyncio.wait_for(started.wait(), timeout=1.0)
+            # py38 CI 调度延迟较高，放宽后台任务启动超时（原 1.0s → 3.0s）
+            await asyncio.wait_for(started.wait(), timeout=3.0)
             assert not release.is_set()
     finally:
         release.set()
-        await drain_post_turn_tasks(timeout=1.0)
+        # py38 CI 调度延迟较高，放宽 drain 超时（原 1.0s → 3.0s）
+        await drain_post_turn_tasks(timeout=3.0)

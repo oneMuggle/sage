@@ -1,6 +1,6 @@
 # 134 AI 文档工作台（文档库 / 规范书库 / AI 审校与修订）
 
-> 面向开发者。覆盖 `/office` 工作台 Phase 1 的三块能力：文档库搜索与重复清理、格式规范书库、AI 审校与「应用到文档」。AI 起草（Phase 2）尚未实现，不在本文范围。
+> 面向开发者。覆盖 `/office` 工作台 Phase 1–2 的三块能力：文档库搜索与重复清理、格式规范书库、AI 审校与修订 + P2 AI 侧栏（选区改写 / 对话 / 审校建议 / 指令式修改）。
 
 ## 1. 能力边界
 
@@ -12,6 +12,10 @@
 | AI 合并审校（规范书规则 + LLM） | ✅ | `POST /api/v1/office/ai/review` |
 | 审校历史 | ✅ | `GET /api/v1/office/doc/{doc_id}/ai-reviews` |
 | 将选中的问题应用为 Word 修订 | ✅ | `POST /api/v1/office/ai/revise` |
+| AI 侧栏（选区改写 / 对话 / 审校 / 指令式修改） | ✅ P2 | 前端 `src/features/office/sidebar/`；复用 review/revise 端点 |
+| AI 改写（自定义指令 / 翻译 / 摘要） | ✅ P2 | `POST /api/v1/office/ai/rewrite` |
+| AI 对话（上下文感知） | ✅ P2 | `POST /api/v1/office/ai/chat` |
+| 编辑预览对话框 AI 接入 | ✅ P2 | `OfficeEditAiActions.tsx` 复用 rewrite 端点 |
 
 所有端点挂在 `/api/v1/office` 下（`office_routes.router` 的 prefix），子路由通过 `router.include_router(...)` 合并，因此子模块自身不重复写 prefix。
 
@@ -262,10 +266,167 @@ POST /api/v1/office/ai/revise
 - 所有 pydantic 模型同时满足 v1 / v2（项目内 `pydantic_compat` 垫片）。
 - 前端功能不依赖 main 独有的能力；`OfficeAiAssistantPanel` 的 props 未改动，`Office.tsx` 无需同步修改。
 - 同步后重跑 `npm run ipc:manifest`，并核对 `backend/tests` 中的工作区路径断言。
+- **P2 新增**：`backend/api/ai_routes.py` 在 win7 需换 pydantic v1 垫片（`ConfigDict` → `class Config`、`Field(max_length=...)` → `_constrained_list`）。
 
-## 9. 后续路线图（Phase 2–4，未实现）
+## 9. AI 侧栏（P2）
 
-- **Phase 2 AI 起草**：`AiDraftWizard`（需求 → 规范书 → 参考资料 → 大纲 → 分节流式生成 → 组装导出 → 规范书交付检查）；后端 `office_ai_draft_routes.py`（`/office/ai/outline`、`/office/ai/draft/section` SSE、`/office/ai/assemble`、`/office/ai/fill-template`）；草稿会话持久化与任务中心集成。
+P2 在 Phase 1 的 AI 审校/修订链路上层，新增四类用户交互：选区浮出条（改写/提问/指令式修改/审校）、AI 侧栏抽屉（跨 tab 常驻）、指令式修改（定位段落 + diff 预览）、编辑预览对话框 AI 接入。所有写回复用 Phase 1 的 `review`/`revise` 端点，保留 pre-edit 快照与修订痕迹安全链路。
+
+### 9.1 前端组件清单
+
+| 组件 | 文件 | 职责 |
+|------|------|------|
+| `AiSidebar` | `sidebar/AiSidebar.tsx` | 侧栏外壳：标题/关闭/Tab 切换/CommandInput/ConversationArea |
+| `OfficeAiSidebarHost` | `sidebar/OfficeAiSidebarHost.tsx` | 页面级挂载：`fixed` 定位右侧、`workspacePath` 门控、`useAiCapabilities` + `useAuditSuggestions` 注入 |
+| `ConversationArea` | `sidebar/ConversationArea.tsx` | 消息流渲染：user/assistant/system + 卡片附件 + apply-all 按钮 |
+| `QuickActions` | `sidebar/QuickActions.tsx` | 按 `activeTab` 切换的快捷指令网格 |
+| `SuggestionCard` | `sidebar/SuggestionCard.tsx` | 审校/改写建议卡（段号 + 原文 + 建议文 + 应用/跳过） |
+| `InstructionEditCard` | `sidebar/InstructionEditCard.tsx` | 指令式修改结果卡（复用 SuggestionCard，`testIdPrefix` 区分） |
+| `FloatingActionBar` | `FloatingActionBar.tsx` | 选区浮出条（4 按钮：rewrite/chat/edit/audit） |
+| `OfficeEditAiActions` | `OfficeEditAiActions.tsx` | 编辑预览对话框 AI 按钮组（rewrite/polish/expand/condense） |
+
+### 9.2 Store 形状（`officeWorkspaceStore`）
+
+```ts
+interface OfficeWorkspaceState {
+  activeDocument: ParsedDocument | null;
+  conversation: ConversationMessage[];  // P2 新增
+  suggestions: SuggestionCardData[];     // P2 新增（按 messageId 分组）
+  // ...Phase 1 字段保留
+}
+```
+
+`appendMessage` / `updateSuggestionStatus` 为不可变更新（slice map/filter）。
+
+### 9.3 新增后端端点
+
+```
+POST /api/v1/office/ai/rewrite
+Body: { workspacePath, documentId, text, instruction, targetLang?, customInstruction? }
+Response: { result: string }
+
+POST /api/v1/office/ai/chat
+Body: { workspacePath, documentId, message, history[], documentContext }
+Response: { reply: string }
+```
+
+`instruction` 枚举：`rewrite | polish | expand | condense | translate | explain | summarize | custom`。`custom` 必须带 `customInstruction`，否则 422。
+
+### 9.4 段落锚点约定
+
+`DocxNativePreview` 渲染后注入 `data-paragraph-index`（0 基），跳过空段与 `table, header, footer, li` 内的 `<p>`，与后端 `_extract_paragraphs`（只数正文段落）对齐。`FloatingActionBar` 的 `edit` / `audit` 通过 `findParagraphIndex(anchorNode)` 取 `paraIndex`，传给 `runRewrite` / `runAudit`。
+
+### 9.5 复用 Phase 1 端点的理由
+
+- **审校**：`runAudit` 调 `POST /office/ai/review`（`use_llm: true`），返回 `AiReviewIssue[]`，前端包装成 `SuggestionCardData[]`。不新增 `/ai/audit` 端点。
+- **写回**：改写/审校的「应用」都走 `POST /office/ai/revise`，把 `SuggestionCardData` 转成 `AiReviewIssue`（`actual`=原文，`expected`=新文），保留 Phase 1 的 pre-edit 快照 + `_doc_in_workspace` 安全校验。
+- **理由**：避免第二套 LLM 审校/写回实现，缩小 win7 移植面与安全回归面。
+
+### 9.6 i18n
+
+所有用户可见文案进 `src/shared/lib/i18n/officeAiSidebar.ts`（zh/en 键集逐字一致，55 键）。`locales/{en,zh}/workspaceAndTools.ts` 已在基线（806/807 行），不再增长。
+
+## 10. 后续路线图（Phase 3–4，未实现）
+
+- **Phase 2 AI 起草（已部分完成）**：AI 侧栏（选区改写 / 对话 / 审校 / 指令式修改）已在 P2 落地；`AiDraftWizard`（需求 → 规范书 → 参考资料 → 大纲 → 分节流式生成 → 组装导出 → 规范书交付检查）仍未实现；后端 `office_ai_draft_routes.py`（`/office/ai/outline`、`/office/ai/draft/section` SSE、`/office/ai/assemble`、`/office/ai/fill-template`）；草稿会话持久化与任务中心集成。
 - **Phase 3 版式渲染与批量能力**：Excel SheetJS 网格预览、PPT 版式预览（前端库 vs 后端缩略图，需先 spike）、批量 AI 审校、包体积与架构基线评估。
 - **Phase 4 win7 同步**：cherry-pick + pydantic v1 / Python 3.8 适配；评估「审校与规范」「LaTeX」tab 的同步范围；双分支测试与安装包冒烟。
 - **Phase 0 遗留**：真机验证 Chromium 106 下 `data:` vs `blob:` PDF iframe 行为；Playwright 冒烟。
+
+## 11. 文档生成工作台（P3）
+
+生成 tab 由 `GenerateWorkspace`（`src/features/office/GenerateWorkspace.tsx`）承载，四种模式共用左侧表单 + 右侧结果卡：
+
+| 模式 | 前端调用 | 后端端点 |
+|---|---|---|
+| 自然语言 | `officeGenerateApi.generateFromNl` | `POST /api/v1/office/generate/nl` |
+| 参考文档 | 同上，附带 `reference_paths`（仅 `.docx`） | 同上（`_collect_reference_texts`） |
+| 模板对话 | `officeGenerateApi.generateFromTemplateChat` | `POST /api/v1/office/generate/template-chat` |
+| 迭代改写 | `officeGenerateApi.iterateDocument` | `POST /api/v1/office/generate/iterate`（仅 `.docx`） |
+
+三个端点统一返回 `{output_path, filename, file_size_bytes, summary}`，生成结果经 `persist_generated_document` 登记进文档库。进度经 `backend/office/progress.track` 暴露，前端 `pollOfficeProgress` 轮询并写入任务中心（`office:generate`）。
+
+模板选择复用既有 `list_templates` / `instantiate_template`；`TemplateLibrary` 组件只消费 `officeApi.listTemplates`，不新增 IPC 命令。
+
+**与设计的差异（部分覆盖）**：设计稿要求右侧 60% 复用 `DocumentCanvas` 内联预览；当前实现为结果卡 +「在文档页打开」（走 `useOfficeDocuments().open`）。内联画布需要页面级预览数据装配，留待后续迭代。
+
+## 12. 规则管理（P3）
+
+「规则」tab 顶部是 `RulesWorkspace`（`src/features/office/rules/RulesWorkspace.tsx`），其下保留原有的 `OfficeSpecLibrary`、`OfficeAiAssistantPanel`、`WordRuleExtractionPanel`、`WordBatchAuditPanel`。工作台把规范书沉淀成可复用的「分组 + 规则」，并按规则审校当前打开的文档。
+
+### 12.1 数据模型（v17）
+
+`backend/data/migrations/v17_office_rules.py` 新建两张表：
+
+| 表 | 关键列 |
+|---|---|
+| `office_rule_groups` | `id` / `name` / `description` / `priority` / `builtin` / `created_at` / `updated_at` |
+| `office_rules` | `id` / `name` / `type` / `severity` / `scope` / `description` / `check_mode` / `pattern` / `ai_prompt` / `enabled` / `group_id` / 时间戳 |
+
+`type`、`severity`、`scope`、`check_mode` 均带 CHECK 约束，取值与 `src/features/office/rules/ruleTypes.ts` 的 `RULE_TYPES` / `RULE_SEVERITIES` / `RULE_SCOPES` / `RULE_CHECK_MODES` 一一对应。`group_id` 外键 `ON DELETE CASCADE`：删组即删组内规则。
+
+### 12.2 后端模块与端点
+
+| 模块 | 职责 |
+|---|---|
+| `backend/office/rule_models.py` | 传输层 pydantic 模型（snake_case） |
+| `backend/office/rule_repo.py` | 分组 / 规则 CRUD（参数化 SQL） |
+| `backend/office/rule_executor.py` | 审校执行：正则规则逐段匹配，AI 规则调 LLM |
+| `backend/office/rule_conflicts.py` | 组内规则冲突检测 |
+| `backend/office/rule_pack_io.py` | `.sage-rules` 包导出 / 导入 |
+| `backend/api/rules_routes.py` | `APIRouter(prefix="/rules")`，在 `backend/main.py` 以 `/api/v1` 前缀挂载 |
+
+| 方法 | 路径 | 作用 |
+|---|---|---|
+| GET | `/api/v1/rules/groups` | 列出全部分组（含规则） |
+| POST | `/api/v1/rules/groups` | 新建分组 |
+| PUT | `/api/v1/rules/groups/{group_id}` | 修改分组 |
+| DELETE | `/api/v1/rules/groups/{group_id}` | 删除分组（级联删规则） |
+| POST | `/api/v1/rules/groups/{group_id}/rules` | 组内新建规则 |
+| PUT | `/api/v1/rules/rules/{rule_id}` | 修改规则（增量补丁，见下） |
+| DELETE | `/api/v1/rules/rules/{rule_id}` | 删除规则 |
+| POST | `/api/v1/rules/extract` | 从文档抽取规则（LLM） |
+| POST | `/api/v1/rules/audit` | 按 `rule_ids` 审校文档 |
+| POST | `/api/v1/rules/check-conflicts` | 组内冲突检查（≥2 条规则） |
+| POST | `/api/v1/rules/export` | 导出 `.sage-rules` 包 |
+| POST | `/api/v1/rules/import` | 导入包并落库 |
+
+两个 DELETE 返回 `200 {"deleted": true, "id": "<id>"}`，**不是 204** —— Electron 的通用转发 `backendRequest` 默认按 JSON 解析响应体（只有显式传 `responseType: 'arraybuffer'` / `'text'` 的调用才走其他分支），空响应体会直接抛错。
+
+### 12.3 增量的 PUT 语义
+
+`PUT /rules/{rule_id}` 按**增量补丁**处理：`ruleFieldsToWire` 只为值非 `undefined` 的字段生成键，`rule_repo.update_rule` 只写 kwargs 中出现的键。因此显式传 `""` 会清空旧值（前端把正则规则切成 AI 规则时会显式发 `pattern: ""`，反之发 `ai_prompt: ""`），而不传的键保持原值。前端 `handleUpdateRule` 会先与当前规则比对，只提交真正变化的字段。
+
+### 12.4 审校执行
+
+`POST /rules/audit` 先按 `rule_ids` 取规则（去重、上限见 `_MAX_AUDIT_RULES`），再解析目标文件，然后交给 `run_audit`：
+
+- `enabled` 为假的规则不参与（前端也只提交已启用规则的 id）；
+- `check_mode = "regex"` 的规则按 `scope` 取段落文本做正则匹配；
+- `check_mode = "ai"` 的规则需要 LLM 客户端，未配置时端点返回 `503`；
+- 返回值 `{findings, error_count, warning_count, info_count}`，每条 finding 带 `rule_id` / `rule_name` / `severity` / `message` / `location` / `suggestion`。
+
+审校是**只读**的：它不写文档、不产生修订痕迹，也不登记快照。写入路径仍然只有「AI 审校 → 应用到文档」。
+
+AI 规则最多分析前 400 个文本块，且累计命中达到 200 条即停止继续调用模型（避免长文档放大调用次数）。
+
+### 12.5 前端与测试
+
+| 文件 | 职责 |
+|---|---|
+| `src/shared/api/officeRulesApi.ts` | 12 个端点的客户端（走既有通用转发，无新增 IPC 命令） |
+| `src/shared/api/types/officeRulesTypes.ts` | 传输层类型（snake_case） |
+| `ruleMapping.ts` | 唯一做 snake_case ↔ camelCase 转换的模块 |
+| `rulePackSerialization.ts` | `.sage-rules` 的序列化 / 解析 / 校验 |
+| `RulesWorkspace.tsx` | 状态容器：加载、选中、CRUD、抽取、导入导出、冲突、审校 |
+| `RuleGroupList.tsx` | 分组列表 + 选中组内的规则列表 + 新建入口 |
+| `RuleDetailPanel.tsx` | 新建 / 编辑表单（正则 / AI 两种检查方式） |
+| `RulePackBar.tsx` | 导出 / 导入 / 冲突检查 |
+| `ConflictDialog.tsx` | 冲突结果对话框 |
+| `RuleAuditResults.tsx` | 审校结果卡片 |
+
+**未实现（后续迭代）**：多分组规则包组合（拖入 / 移除、组合后导出）。当前导出以单个分组为单位；组间优先级可在分组编辑中调整。
+
+`RulesWorkspace` 在 `src/pages/Office.tsx` 的 `renderRulesTab` 中作为第一个子节点挂载，`workspacePath` 为空串兜底，`filePath` 由当前打开的文档（`preview`）推导；没有打开文档时「抽取」「审校」按钮禁用。
+
+`ruleI18nParity.test.ts` 守护 `office.rules.*` 命名空间：zh / en 键集合必须一致、每个键非空，并逐个校验由 `RULE_TYPES` 等枚举拼出的动态键（这些键在调用点用模板字面量构造，类型系统只保证它们是合法键，不保证有译文）。

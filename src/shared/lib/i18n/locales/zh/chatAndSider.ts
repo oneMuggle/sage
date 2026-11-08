@@ -14,6 +14,10 @@ export const zhChatAndSider = {
   'taskCenter.laneFallback': '编排任务',
   'taskCenter.finishedCount': '最近完成 {n} 项',
   'taskCenter.cancelFailed': '取消失败，请重试',
+  // 2026-11-07 Phase 5: 后台 shell 抽屉
+  'taskCenter.shellTerminate': '终止',
+  'taskCenter.shellTerminating': '终止中…',
+  'taskCenter.shellClose': '关闭',
   // ─── 侧边栏 ───────────────────────
   'sidebar.brand': 'Sage',
   'sidebar.nav.chat': '对话',
@@ -256,6 +260,20 @@ export const zhChatAndSider = {
   'chat.rewind_fork_failed': '分叉失败：{message}',
   'chat.fork_success': '已分叉为新会话',
   'chat.fork_failed': '分叉失败：{message}',
+
+  // ─── Recap (2026-11-08) ──────────────
+  'recap.title': '进度总结',
+  'recap.dismiss': '关闭总结',
+  'recap.progress': '进展',
+  'recap.decisions': '决策',
+  'recap.next_steps': '下一步',
+  'recap.open_questions': '待确认问题',
+  'chat.recap_success': '进度总结已生成',
+  'chat.recap_failed': '生成进度总结失败：{message}',
+  'chat.recap_too_short': '对话较短，无法生成有意义的进度总结',
+  'chat.recap_no_llm': '没有可用的 LLM 配置，无法生成进度总结',
+  'chat.recap_throttled': '5 分钟内已生成过总结，请稍后再试',
+
   'session.fork_badge': '分叉会话',
   'session.fork_tree_open': '查看分叉家族树',
   'session.fork_tree_title': '分叉家族树',

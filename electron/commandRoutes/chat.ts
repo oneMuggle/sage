@@ -37,6 +37,18 @@ export const chatRoutes: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/agents/${encodeURIComponent(String(a.id))}`,
   },
+  // P2-a: 批量操作专家（delete / enable / disable）
+  batch_agents: {
+    method: 'POST',
+    path: () => '/api/v1/agents/batch',
+    body: (a) => ({ action: a.action, ids: a.ids }),
+  },
+  // P2-d: 批量更新专家排序（置顶 / 上移 / 下移）
+  reorder_agents: {
+    method: 'POST',
+    path: () => '/api/v1/agents/reorder',
+    body: (a) => ({ items: a.items }),
+  },
   duplicate_agent: {
     method: 'POST',
     path: (a) => `/api/v1/agents/${encodeURIComponent(String(a.id))}/duplicate`,
@@ -87,6 +99,8 @@ export const chatRoutes: Record<string, CommandRoute> = {
   // RT5 (round7): 单 agent steering —— 运行中注入用户补充消息（body 经
   // relay camelToSnakeKeys 转成 { stream_id, content }）。
   chat_steer: { method: 'POST', path: () => '/api/v1/chat/steer' },
+  // 2026-11-07: 撤回尚未被消费的插话（body 经 relay 转成 { stream_id, message_id }）。
+  chat_steer_cancel: { method: 'POST', path: () => '/api/v1/chat/steer/cancel' },
 
   // R25-D4: 查询会话活跃 chat 流（renderer 重载后 reattach）。null = 无活跃流。
   chat_stream_active: {

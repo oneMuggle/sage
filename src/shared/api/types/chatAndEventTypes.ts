@@ -31,6 +31,23 @@ export interface Session {
   title_attempts?: number;
   /** M0 (2026-11-03): 会话绑定的专家（agents.id）；'primary' = 主助手。 */
   specialist_id?: string;
+  /** M2 (2026-11-07): 会话类型 —— 'dm'（私聊，默认）| 'group'（群聊）。 */
+  conversation_type?: 'dm' | 'group';
+}
+
+/** M2 (2026-11-07): 群聊参与者（GET /sessions/{id}/participants 单项）。 */
+export interface ConversationParticipant {
+  conversation_id: string;
+  agent_id: string;
+  /** 展示名（agents.name；缺失回退 agent_id） */
+  name: string;
+  /** 头像 emoji（persona_ui.avatar；缺失回退 🤖） */
+  avatar: string;
+  role: 'host' | 'member';
+  speak_order: number;
+  enabled: boolean;
+  /** 加入时间（毫秒 Unix 时间戳） */
+  added_at: number;
 }
 
 /** 2026-10-29 (feat/workspace-optimization): create_session 响应里的工作区信息。 */
@@ -79,6 +96,27 @@ export interface SessionLineage {
 export interface SessionRetreatResult {
   /** true = 成功删除了一个 separator 并 merge segments；false = 无可删的 separator */
   ok: boolean;
+}
+
+/** Recap (2026-11-08): POST /chat/recap 响应（对标 Claude Code /recap）。 */
+export interface RecapResult {
+  /** 当前进度总结 */
+  progress: string;
+  /** 关键决策列表 */
+  decisions: string[];
+  /** 建议的下一步 */
+  nextSteps: string[];
+  /** 未解决问题 */
+  openQuestions?: string[];
+}
+
+/** Recap API 响应信封 */
+export interface RecapResponse {
+  ok: boolean;
+  recap?: RecapResult;
+  reason?: string;
+  error?: string;
+  message?: string;
 }
 
 /** U18: POST /sessions/{id}/export 响应（JSON 信封，html 为自包含文档文本） */
@@ -231,6 +269,8 @@ export interface Message {
    */
   tool_calls?: ToolCall[] | string | null;
   tool_call_id?: string;
+  /** M2 (2026-11-07): assistant 行的实际发言专家（群聊）；NULL = 用户/未标注。 */
+  sender_agent_id?: string | null;
   /** 2026-09 step-by-step: assistant 行的步序号（0 起；多步 run 时每步一行）。 */
   step_index?: number | null;
   /** alpha.36 (Bug #4): 同一 message 行内携带的 LLM 推理过程（持久化在 DB）。 */
@@ -382,7 +422,10 @@ export type AgentState =
   // 2026-10-28 (Plan Mode 增强 Phase 3): 步骤确认卡点 ——
   // plan 执行到标记为 auto_confirm 的步骤时推送，载荷见 AgentEvent.step_confirm。
   // 前端弹出 StepConfirmDialog 等待用户操作（continue/skip/abort）。
-  | 'awaiting_step_confirm';
+  | 'awaiting_step_confirm'
+  // 2026-11-07: 插话消费回执 —— run_loop 在迭代边界排空 steering 队列后推送,
+  // 载荷见 AgentEvent.steer_info; 前端据此移除输入框上方的暂存 chip。
+  | 'steer_consumed';
 
 /**
  * TM2 (DSH 对标 R11): 上下文水位计量快照 —— 随 `state: 'context_pressure'`
@@ -739,6 +782,9 @@ export interface AgentEvent {
     progress_signals?: number;
     reasons?: string[];
   };
+  // 2026-11-07: state === 'steer_consumed' 时携带被消费的插话 id 列表。
+  // 前端据此移除暂存区 chip 并按 id 落聊天区（与撤回竞态的去重依据）。
+  steer_info?: { ids: string[] };
   // Multi-Agent Orchestration (2026-08-11): 宽松字段（与 llmStream.ts AgentEvent 同步）
   run_id?: string;
   plan?: TaskPlanItem[];

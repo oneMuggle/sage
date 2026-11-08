@@ -27,6 +27,9 @@ class SessionCreate(BaseModel):
     # 时，前端传 True 跳过工作区解析链，不绑定任何工作区。语义对齐主流 AI 应用
     # (Cursor / Cline / Windsurf) 的"显式选择 > 自动推断"原则。
     skip_workspace_binding: bool = False
+    # 2026-11-07 M2 群聊：'dm'（默认）/ 'group'。participant_ids 非空时自动升级为 group。
+    conversation_type: Optional[str] = None
+    participant_ids: Optional[List[str]] = None
 
 
 class SessionUpdate(BaseModel):
@@ -342,6 +345,12 @@ class SteerRequest(BaseModel):
     content: str
 
 
+class CancelSteerRequest(BaseModel):
+    """/chat/steer/cancel 请求体 —— 撤回尚未被消费的插话（2026-11-07）。"""
+
+    stream_id: str
+    message_id: str
+
 
 class LearnRequest(BaseModel):
     """POST /learn 请求体。
@@ -352,6 +361,12 @@ class LearnRequest(BaseModel):
 
     session_id: str
     prompt: str = ""
+
+
+class RecapRequest(BaseModel):
+    """POST /chat/recap 请求体 —— 生成会话进度总结。"""
+
+    session_id: str
 
 
 

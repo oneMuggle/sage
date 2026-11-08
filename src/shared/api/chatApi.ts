@@ -46,16 +46,36 @@ export const chatApi = {
 
   /**
    * RT5 (round7): 单 agent steering —— 向运行中的 run 转达用户补充指示。
-   * 返回 true 表示已注入（下一迭代边界生效）；false 表示后端拒绝
-   * （404 流不存在 / 409 不在运行窗口），调用方应回退排队语义。
+   * 返回 `{ messageId }` 表示已注入（下一迭代边界生效，可凭 id 撤回）；
+   * null 表示后端拒绝（404 流不存在 / 409 不在注入窗口），调用方应回退排队。
    * Electron relay camelToSnakeKeys 会把 body 转成 { stream_id, content }。
    */
-  async steer(streamId: string, content: string): Promise<boolean> {
+  async steer(streamId: string, content: string): Promise<{ messageId: string } | null> {
     try {
-      await invoke('chat_steer', { streamId, content });
-      return true;
+      const res = await invoke<{ message_id?: string; messageId?: string }>('chat_steer', {
+        streamId,
+        content,
+      });
+      const messageId = res?.message_id ?? res?.messageId;
+      return messageId ? { messageId } : null;
     } catch {
       // 404/409/400 都归入"未注入"——调用方回退排队
+      return null;
+    }
+  },
+
+  /**
+   * 2026-11-07: 撤回尚未被消费的插话。
+   * true = 已从后端队列移除；false = 已被消费/流已结束（按"已送达"处理）。
+   */
+  async cancelSteer(streamId: string, messageId: string): Promise<boolean> {
+    try {
+      const res = await invoke<{ removed?: boolean }>('chat_steer_cancel', {
+        streamId,
+        messageId,
+      });
+      return res?.removed === true;
+    } catch {
       return false;
     }
   },

@@ -4,9 +4,11 @@
 
 import { invoke } from './desktopInvoke';
 import type {
+  ConversationParticipant,
   Message,
   Session,
   SessionCompactResult,
+  RecapResponse,
   SessionExportResult,
   SessionLineage,
   SessionRetreatResult,
@@ -14,11 +16,23 @@ import type {
 import { ApiException, handleApiError, isValidSessionId, withRetry } from './utils';
 
 export const sessionApi = {
-  async create(title: string = '新对话'): Promise<Session> {
+  async create(
+    title: string = '新对话',
+    options?: {
+      participantIds?: string[];
+      specialistId?: string;
+      conversationType?: 'dm' | 'group';
+    },
+  ): Promise<Session> {
     // 标题原文直传: React 渲染层负责转义, 此处转义会让标题以 HTML 实体形式落库
     return withRetry(async () => {
       try {
-        const session = await invoke<Session>('create_session', { title });
+        const session = await invoke<Session>('create_session', {
+          title,
+          ...(options?.participantIds?.length ? { participant_ids: options.participantIds } : {}),
+          ...(options?.specialistId ? { specialist_id: options.specialistId } : {}),
+          ...(options?.conversationType ? { conversation_type: options.conversationType } : {}),
+        });
         return session;
       } catch (error) {
         throw handleApiError(error);
@@ -125,6 +139,27 @@ export const sessionApi = {
     }
     try {
       return await invoke<SessionCompactResult>('session_compact', { sessionId });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Recap (2026-11-08): 生成会话进度总结（对标 Claude Code /recap）。
+   *
+   * 刻意**不走 withRetry**：失败路径（502）意味着 LLM 摘要出错，
+   * 重试只会浪费 token。返回 {ok, recap?, reason?, error?, message?}。
+   */
+  async recap(sessionId: string): Promise<RecapResponse> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    try {
+      return await invoke<RecapResponse>('session_recap', { sessionId });
     } catch (error) {
       throw handleApiError(error);
     }
@@ -254,6 +289,47 @@ export const sessionApi = {
     return withRetry(async () => {
       try {
         return await invoke<Session>('session_update', { sessionId, specialistId });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /** M2 (2026-11-07) 群聊：列出参与者（头像 / 名字 / host / 发言顺序）。 */
+  async listParticipants(sessionId: string): Promise<ConversationParticipant[]> {
+    return withRetry(async () => {
+      try {
+        const resp = await invoke<{ participants: ConversationParticipant[] }>(
+          'list_session_participants',
+          { sessionId },
+        );
+        return resp.participants ?? [];
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /** M2：拉专家进群（幂等；首个成员为 host）。 */
+  async addParticipants(sessionId: string, agentIds: string[]): Promise<ConversationParticipant[]> {
+    return withRetry(async () => {
+      try {
+        const resp = await invoke<{ participants: ConversationParticipant[] }>(
+          'add_session_participants',
+          { sessionId, agentIds },
+        );
+        return resp.participants ?? [];
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /** M2：移除群成员。 */
+  async removeParticipant(sessionId: string, agentId: string): Promise<void> {
+    return withRetry(async () => {
+      try {
+        await invoke('remove_session_participant', { sessionId, agentId });
       } catch (error) {
         throw handleApiError(error);
       }

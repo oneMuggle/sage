@@ -29,6 +29,21 @@ export const sessionRoutes: Record<string, CommandRoute> = {
     },
   },
   create_session: { method: 'POST', path: () => '/api/v1/sessions' },
+  // M2 (2026-11-07) 群聊参与者
+  list_session_participants: {
+    method: 'GET',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/participants`,
+  },
+  add_session_participants: {
+    method: 'POST',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/participants`,
+    body: (a) => ({ agent_ids: a.agentIds }),
+  },
+  remove_session_participant: {
+    method: 'DELETE',
+    path: (a) =>
+      `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/participants/${encodeURIComponent(String(a.agentId))}`,
+  },
   get_session: {
     method: 'GET',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.id))}`,
@@ -41,6 +56,12 @@ export const sessionRoutes: Record<string, CommandRoute> = {
   session_compact: {
     method: 'POST',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/compact`,
+  },
+  // Recap (2026-11-08): 对标 Claude Code /recap —— 生成会话进度总结
+  session_recap: {
+    method: 'POST',
+    path: () => '/api/v1/chat/recap',
+    body: (a) => ({ session_id: a.sessionId }),
   },
   // Task 11 (2026-09-17): context-isolation — 撤回自动话题切换（删最后一个 separator）
   session_retreat_segment: {

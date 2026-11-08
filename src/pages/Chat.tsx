@@ -45,6 +45,8 @@ import { ChatSessionNotices } from '../widgets/chat/ChatSessionNotices';
 import { KeyboardShortcutsHelp } from '../widgets/chat/KeyboardShortcutsHelp';
 import { MemoryWriteHints } from '../widgets/chat/MemoryWriteHints';
 import { PendingQueuePanel } from '../widgets/chat/PendingQueuePanel';
+import { PendingSteerPanel } from '../widgets/chat/PendingSteerPanel';
+import { RecapCard } from '../widgets/chat/RecapCard';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { TerminalPanel } from '../widgets/chat/TerminalPanel';
 import { RewindDialog } from '../widgets/chat/rewind/RewindDialog';
@@ -92,6 +94,8 @@ export function Chat() {
     editQueuedMessage,
     sendQueuedMessageNow,
     resumeQueuedMessages,
+    pendingSteer, // 2026-11-07: 已注入 run、尚未被 AI 消费的插话（可撤回）
+    cancelSteer, // 2026-11-07: 撤回一条暂存插话
   } = useChat();
   // right-panel R1 批次 A: 开合上抬 rightPanelStore（自动唤起/内联卡片需要
   // 跨组件写面板状态）；localStorage 迁移进 store，此处只读订阅。
@@ -449,6 +453,9 @@ export function Chat() {
   const {
     handleCompact,
     handleLearn,
+    handleRecap,
+    recapResult,
+    dismissRecap,
     handleFork,
     rewindTarget,
     setRewindTarget,
@@ -748,11 +755,16 @@ export function Chat() {
             onClear={handleClearQueue}
             onResume={handleResumeQueue}
           />
+          {/* 2026-11-07: 插话暂存区 —— AI 消费前可撤回；消费后自动落聊天区。 */}
+          <PendingSteerPanel items={pendingSteer} onCancel={cancelSteer} />
+          {/* Recap (2026-11-08): 进度总结卡片，/recap 触发后展示，可关闭 */}
+          {recapResult && <RecapCard recap={recapResult} onDismiss={dismissRecap} />}
           <ChatInput
             onSend={handleSendMessageWithEditResend}
             onInterrupt={interrupt}
             onCompact={handleCompact}
             onLearn={handleLearn}
+            onRecap={handleRecap}
             isLoading={isLoading}
             disabled={!hasConfig}
             placeholder="输入消息..."
