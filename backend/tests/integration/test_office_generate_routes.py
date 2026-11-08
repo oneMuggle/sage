@@ -670,8 +670,9 @@ def test_template_chat_request_rejects_empty_messages() -> None:
 
 
 def test_template_chat_messages_use_a_constrained_list() -> None:
-    from backend.api.office_generate_routes import TemplateChatRequest
     import pydantic
+
+    from backend.api.office_generate_routes import TemplateChatRequest
 
     if int(pydantic.VERSION.split(".")[0]) >= 2:
         field = TemplateChatRequest.model_fields["messages"]

@@ -20,7 +20,6 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from backend.compat.win7.pydantic_compat import ConfigDict, field_validator
-
 from backend.data.database import Database, get_database
 from backend.office.errors import OfficePathError, OfficeSizeLimitError
 from backend.office.path_safety import resolve_within

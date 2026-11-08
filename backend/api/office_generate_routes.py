@@ -26,7 +26,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.compat.win7.pydantic_compat import ConfigDict
-
 from backend.data.database import Database, get_database
 from backend.office.docx_text import read_docx_text
 from backend.office.errors import (
