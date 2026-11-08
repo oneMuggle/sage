@@ -108,6 +108,7 @@ from backend.api.mcp_routes import router as mcp_router
 from backend.api.media_routes import router as media_router
 from backend.api.model_catalog_routes import build_router as build_model_catalog_router
 from backend.api.ocr_routes import router as ocr_router
+from backend.api.office_generate_routes import router as office_generate_router
 from backend.api.office_quarantine_routes import router as office_quarantine_router
 from backend.api.office_routes import (
     register_office_exception_handlers,
@@ -123,6 +124,7 @@ from backend.api.project_routes import router as project_router
 from backend.api.prompt_routes import router as prompt_router
 from backend.api.question_routes import router as question_router
 from backend.api.request_body_limit import MaxRequestBodyMiddleware
+from backend.api.rules_routes import router as rules_router
 from backend.api.runtime_routes import router as runtime_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.shell_routes import router as shell_router
@@ -1494,6 +1496,9 @@ API_MODE = os.environ.get("API_MODE", "legacy").lower()
 app.include_router(llm_proxy_router, prefix="/api/v1")
 app.include_router(theme_router, prefix="/api/v1/theme")
 app.include_router(office_router, prefix="/api/v1")
+app.include_router(office_generate_router, prefix="/api/v1")
+# 规则管理（P3）：/api/v1/rules/{groups,rules,extract,audit,check-conflicts,export,import}
+app.include_router(rules_router, prefix="/api/v1")
 # 本地 OCR：/api/v1/ocr/capabilities + /api/v1/ocr/image
 app.include_router(ocr_router, prefix="/api/v1")
 # Office 隔离式清理 (staging quarantine): plan/run/report/restore 四端点。
