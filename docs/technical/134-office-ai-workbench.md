@@ -408,6 +408,8 @@ Response: { reply: string }
 
 审校是**只读**的：它不写文档、不产生修订痕迹，也不登记快照。写入路径仍然只有「AI 审校 → 应用到文档」。
 
+AI 规则最多分析前 400 个文本块，且累计命中达到 200 条即停止继续调用模型（避免长文档放大调用次数）。
+
 ### 12.5 前端与测试
 
 | 文件 | 职责 |
@@ -422,6 +424,8 @@ Response: { reply: string }
 | `RulePackBar.tsx` | 导出 / 导入 / 冲突检查 |
 | `ConflictDialog.tsx` | 冲突结果对话框 |
 | `RuleAuditResults.tsx` | 审校结果卡片 |
+
+**未实现（后续迭代）**：多分组规则包组合（拖入 / 移除、组合后导出）。当前导出以单个分组为单位；组间优先级可在分组编辑中调整。
 
 `RulesWorkspace` 在 `src/pages/Office.tsx` 的 `renderRulesTab` 中作为第一个子节点挂载，`workspacePath` 为空串兜底，`filePath` 由当前打开的文档（`preview`）推导；没有打开文档时「抽取」「审校」按钮禁用。
 
