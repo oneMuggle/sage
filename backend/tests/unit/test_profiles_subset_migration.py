@@ -110,7 +110,7 @@ def test_writer_subset_gets_missing_appended(monkeypatch):
 
 
 def test_already_current_no_upsert(monkeypatch):
-    """三个 agent 都已是当前默认形状 → 0 次 upsert。"""
+    """所有默认 agent 都已是当前默认形状 → 0 次 upsert。"""
     # 把另 3 个默认 agent 也预置, 避开 ensure_default_agents 的"缺则补"段,
     # 让本测试只盯差集迁移的 0 触发。
     stored = {
@@ -138,6 +138,7 @@ def test_already_current_no_upsert(monkeypatch):
             "tools": list(profiles._PPT_MAKER_SEED_TOOLS),
         },
         "reviewer": {"id": "reviewer", "enabled": True, "tools": []},
+        "sage-guide": {"id": "sage-guide", "enabled": True, "tools": []},
     }
     repo = _seed_repo(monkeypatch, stored)
     profiles.ensure_default_agents()
