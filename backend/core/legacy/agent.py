@@ -395,8 +395,8 @@ _SPECIALIST_MODE_RANK = {
 
 
 def _apply_specialist_cap(
-    profile: Optional[Dict[str, Any]], base: "PermissionEnforcer"
-) -> "PermissionEnforcer":
+    profile: Optional[Dict[str, Any]], base: PermissionEnforcer
+) -> PermissionEnforcer:
     """specialist 角色的权限上限：profile 声明的 mode 只降不升。
 
     - profile 为 None / 非 specialist / permission_mode 不合法 → 原样返回
