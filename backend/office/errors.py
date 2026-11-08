@@ -181,6 +181,23 @@ class OfficePdfFormError(OfficePdfError):
         super().__init__(message, file_path=file_path)
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Rules errors (Phase 3 — rule engine)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class OfficeLLMError(OfficeError):
+    """An upstream LLM provider failed during rule audit or extraction.
+
+    Maps to HTTP 502 so the UI can distinguish provider-side outages from
+    bugs in the rule engine itself (which remain 500).
+    """
+
+    def __init__(self, message: str, *, provider: Optional[str] = None) -> None:
+        super().__init__(message)
+        self.provider = provider
+
+
 #: 写入类失败 → 500（元组常量避免 UP038 的 isinstance union 语法，保持 py38 兼容）
 _WRITE_FAILURE_ERRORS = (OfficeGenerateError, OfficeEditError)
 
@@ -225,6 +242,9 @@ def office_error_to_http_status(error: OfficeError) -> int:  # noqa: PLR0911 —
         return 500
     if isinstance(error, OfficePdfFormError):
         return 422
+    # Rules errors (Phase 3)
+    if isinstance(error, OfficeLLMError):
+        return 502
     if isinstance(error, _WRITE_FAILURE_ERRORS):
         return 500
     # JournalError 映射（保持与 OfficeError 一致的最优匹配）
