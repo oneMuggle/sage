@@ -51,8 +51,9 @@ vi.mock('../../features/office', () => ({
   ),
   OfficeDuplicateDialog: () => null,
   OfficeEditPreviewDialog: () => null,
-  OfficeGenerateForm: () => <div data-testid="office-generate-form" />,
   OfficeSnapshotPanel: () => null,
+  GenerateWorkspace: () => <div data-testid="office-generate-workspace" />,
+  RulesWorkspace: () => <div data-testid="office-rules-workspace" />,
   useOfficeDocuments: () => ({
     documents: [{ id: 'doc-1', doc_type: 'word', title: '示例文档' }],
     loading: false,
@@ -173,7 +174,7 @@ describe('Office — 侧栏文档库 portal', () => {
     renderOffice({ withSlot: true, initialEntries: ['/office?tab=generate'] });
     await waitForTabs();
 
-    expect(screen.getByTestId('office-generate-form')).toBeInTheDocument();
+    expect(screen.getByTestId('office-generate-workspace')).toBeInTheDocument();
     expect(screen.getByTestId('office-sidebar-library')).toBeInTheDocument();
     expect(screen.getByTestId('test-slot')).toContainElement(
       screen.getByTestId('office-sidebar-library'),
