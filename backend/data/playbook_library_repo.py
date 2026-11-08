@@ -104,7 +104,7 @@ class PlaybookLibraryRepository:
         ).fetchall()
         items = [_row_to_library(row) for row in rows]
         results = [item for item in items if item is not None]
-        tokens = [token.casefold() for token in q.split() if token.strip()]
+        tokens = [token.casefold() for token in q.split()]
         if not tokens:
             return results
         return [item for item in results if _matches_query(item, tokens)]

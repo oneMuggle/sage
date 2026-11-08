@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import json
+import time
 from typing import AsyncIterator, List, Optional
 
 import httpx
@@ -11,8 +13,9 @@ import pytest_asyncio
 
 from backend.api import playbook_routes  # noqa: F401 — 确保路由注册
 from backend.data import database as database_module
-from backend.data.database import Database
+from backend.data.database import Database, get_database
 from backend.data.playbook_event_repo import PlaybookEventRepository
+from backend.data.playbook_library_repo import PlaybookLibraryRepository
 from backend.main import app
 
 
@@ -69,6 +72,25 @@ async def _seed(
     )
     assert response.status_code == 200, response.text
     return response.json()["item"]
+
+
+def _insert_library_row(library_id: str, name: str, spec: dict) -> None:
+    """Insert a library row directly to simulate legacy / hand-edited data."""
+    conn = get_database().get_connection()
+    conn.execute(
+        "INSERT INTO playbook_library "
+        "(id, name, source, spec_json, spec_hash, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            library_id,
+            name,
+            "test",
+            json.dumps(spec, ensure_ascii=False),
+            "legacy-" + library_id,
+            int(time.time() * 1000),
+        ),
+    )
+    conn.commit()
 
 
 async def test_list_returns_description_and_tags(client: httpx.AsyncClient):
@@ -150,6 +172,19 @@ async def test_update_description_and_tags_persists(client: httpx.AsyncClient):
     match = next(i for i in refetch.json()["items"] if i["id"] == item["id"])
     assert match["description"] == "新描述"
     assert match["tags"] == ["audit", "v1"]
+    # 直接读原始行，确认存储位置（R46(b)）
+    row = (
+        get_database()
+        .get_connection()
+        .execute(
+            "SELECT spec_json FROM playbook_library WHERE id = ?", (item["id"],)
+        )
+        .fetchone()
+    )
+    spec = json.loads(row["spec_json"])
+    assert spec["description"] == "新描述"
+    assert spec["meta"]["tags"] == ["audit", "v1"]
+    assert "metadata" not in spec
 
 
 async def test_update_name(client: httpx.AsyncClient):
@@ -231,3 +266,71 @@ async def test_update_invalid_tags_returns_422(client: httpx.AsyncClient):
     )
     assert too_long.status_code == 422
     assert too_long.json()["detail"]["code"] == "invalid_tags"
+
+
+async def test_update_name_too_long_returns_422(client: httpx.AsyncClient):
+    item = await _seed(client)
+
+    response = await client.patch(
+        f"/api/v1/playbooks/library/{item['id']}",
+        json={"name": "x" * 201},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_name"
+
+
+async def test_update_does_not_recompute_spec_hash(client: httpx.AsyncClient):
+    item = await _seed(client, name="Hash Stable", description="before")
+    before = PlaybookLibraryRepository().get(item["id"]).spec_hash
+
+    response = await client.patch(
+        f"/api/v1/playbooks/library/{item['id']}",
+        json={"description": "after"},
+    )
+
+    assert response.status_code == 200
+    after = PlaybookLibraryRepository().get(item["id"]).spec_hash
+    assert after == before
+    assert after == item["spec_hash"]
+
+
+async def test_update_noop_does_not_record_event(client: httpx.AsyncClient):
+    item = await _seed(client, name="Noop Stable", description="keep")
+
+    response = await client.patch(
+        f"/api/v1/playbooks/library/{item['id']}",
+        json={},
+    )
+
+    assert response.status_code == 200
+    returned = response.json()["item"]
+    assert returned["name"] == "Noop Stable"
+    assert returned["description"] == "keep"
+    events = PlaybookEventRepository().list_recent("library:" + item["id"])
+    assert all(event.event != "library_update" for event in events)
+
+
+async def test_non_list_legacy_tags_do_not_break_list(client: httpx.AsyncClient):
+    legacy_spec = {
+        "schema_version": "1.0",
+        "id": "legacy-tags",
+        "name": "Legacy Tags",
+        "description": "",
+        "applies_to": {"project_types": [], "sub_types": []},
+        "directory_layout": [],
+        "stages": [{"id": "s1", "label": "阶段一"}],
+        "global_rules": [],
+        "todos": [],
+        "ai_guidance": {},
+        "meta": {"tags": "python"},
+    }
+    _insert_library_row("legacy-tags", "Legacy Tags", legacy_spec)
+
+    listed = await client.get("/api/v1/playbooks/library")
+    assert listed.status_code == 200
+    item = next(i for i in listed.json()["items"] if i["id"] == "legacy-tags")
+    assert item["tags"] == []
+
+    searched = await client.get("/api/v1/playbooks/library?q=python")
+    assert searched.status_code == 200
