@@ -6,7 +6,7 @@ import { regenerateInPlace } from '../../features/chat/answerVersions';
 import { useQuoteDraft } from '../../features/chat/useQuoteDraft';
 import { sessionApi, learnApi, messageApi, memoryApi } from '../../shared/api';
 import { orchRunClient } from '../../shared/api/orchRunClient';
-import type { MessageSource } from '../../shared/api/types/chatAndEventTypes';
+import type { MessageSource, RecapResult } from '../../shared/api/types/chatAndEventTypes';
 import {
   isHttpUrl,
   isLoginInProgressError,
@@ -104,6 +104,32 @@ export function useChatMessageActions({
       );
     }
   }, [currentSessionId, isLoading, navigate, t]);
+
+  // Recap (2026-11-08): 生成会话进度总结。成功后把结果存到 state 供 Chat 渲染
+  // RecapCard；失败/过短走 toast。对标 Claude Code /recap。
+  const [recapResult, setRecapResult] = useState<RecapResult | null>(null);
+  const dismissRecap = useCallback(() => setRecapResult(null), []);
+  const handleRecap = useCallback(async () => {
+    if (!currentSessionId || isLoading) return;
+    try {
+      const resp = await sessionApi.recap(currentSessionId);
+      if (resp.ok && resp.recap) {
+        setRecapResult(resp.recap);
+      } else if (resp.reason === 'too_short') {
+        toast.info(t('chat.recap_too_short'));
+      } else if (resp.error === 'llm_not_configured') {
+        toast.error(t('chat.recap_no_llm'));
+      } else {
+        toast.error(
+          fill(t('chat.recap_failed'), { message: resp.message ?? resp.error ?? '' }),
+        );
+      }
+    } catch (e) {
+      toast.error(
+        fill(t('chat.recap_failed'), { message: e instanceof Error ? e.message : String(e) }),
+      );
+    }
+  }, [currentSessionId, isLoading, t]);
 
   const handleFork = useCallback(
     async (messageId: string) => {
@@ -407,6 +433,9 @@ export function useChatMessageActions({
   return {
     handleCompact,
     handleLearn,
+    handleRecap,
+    recapResult,
+    dismissRecap,
     handleFork,
     rewindTarget,
     setRewindTarget,

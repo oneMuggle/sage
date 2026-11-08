@@ -98,6 +98,27 @@ export interface SessionRetreatResult {
   ok: boolean;
 }
 
+/** Recap (2026-11-08): POST /chat/recap 响应（对标 Claude Code /recap）。 */
+export interface RecapResult {
+  /** 当前进度总结 */
+  progress: string;
+  /** 关键决策列表 */
+  decisions: string[];
+  /** 建议的下一步 */
+  nextSteps: string[];
+  /** 未解决问题 */
+  openQuestions?: string[];
+}
+
+/** Recap API 响应信封 */
+export interface RecapResponse {
+  ok: boolean;
+  recap?: RecapResult;
+  reason?: string;
+  error?: string;
+  message?: string;
+}
+
 /** U18: POST /sessions/{id}/export 响应（JSON 信封，html 为自包含文档文本） */
 export interface SessionExportResult {
   /** 自包含导出 HTML 全文（内联 CSS/JS/marked/highlight.js，离线可开） */

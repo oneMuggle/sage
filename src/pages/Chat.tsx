@@ -45,6 +45,7 @@ import { ChatSessionNotices } from '../widgets/chat/ChatSessionNotices';
 import { KeyboardShortcutsHelp } from '../widgets/chat/KeyboardShortcutsHelp';
 import { MemoryWriteHints } from '../widgets/chat/MemoryWriteHints';
 import { PendingQueuePanel } from '../widgets/chat/PendingQueuePanel';
+import { RecapCard } from '../widgets/chat/RecapCard';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { TerminalPanel } from '../widgets/chat/TerminalPanel';
 import { RewindDialog } from '../widgets/chat/rewind/RewindDialog';
@@ -449,6 +450,9 @@ export function Chat() {
   const {
     handleCompact,
     handleLearn,
+    handleRecap,
+    recapResult,
+    dismissRecap,
     handleFork,
     rewindTarget,
     setRewindTarget,
@@ -748,11 +752,14 @@ export function Chat() {
             onClear={handleClearQueue}
             onResume={handleResumeQueue}
           />
+          {/* Recap (2026-11-08): 进度总结卡片，/recap 触发后展示，可关闭 */}
+          {recapResult && <RecapCard recap={recapResult} onDismiss={dismissRecap} />}
           <ChatInput
             onSend={handleSendMessageWithEditResend}
             onInterrupt={interrupt}
             onCompact={handleCompact}
             onLearn={handleLearn}
+            onRecap={handleRecap}
             isLoading={isLoading}
             disabled={!hasConfig}
             placeholder="输入消息..."

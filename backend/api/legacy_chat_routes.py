@@ -21,16 +21,18 @@ from typing import List, Optional
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from backend.api.chat_session_lifecycle import _safe_log_field
+from backend.api.chat_session_lifecycle import _build_compaction_llm_callable, _safe_log_field
 from backend.api.chat_stream_registry import SENTINEL, StreamRegistry
 from backend.api.chat_stream_state import _ACTIVE_STREAMS, interrupt_stream
 from backend.api.chat_stream_support import _ndjson
+from backend.api.error_contract import error_json
 from backend.api.legacy_models import (
     ChatRequest,
     ChatResponse,
     EvolutionLogResponse,
     InterruptRequest,
     LearnRequest,
+    RecapRequest,
     SteerRequest,
 )
 from backend.core.errors import LLMError
@@ -286,6 +288,44 @@ def steer_agent(data: SteerRequest):
         except Exception as exc:  # noqa: BLE001 — 落库失败不阻塞注入
             logging.getLogger(__name__).warning("steering 落库失败（注入仍生效）: %s", exc)
     return {"ok": True}
+
+@router.post("/chat/recap", response_model=dict)
+async def recap_session(data: RecapRequest):
+    """生成会话进度总结（对标 Claude Code /recap）。
+
+    - 200 + ``{"ok": true, "recap": {"progress", "decisions", "nextSteps", "openQuestions"}}``
+    - 404 — 会话不存在
+    - 200 + ``{"ok": false, "reason": "too_short"}`` — 消息不足 3 条
+    - 502 + ``{"ok": false, "error"}`` — 无 LLM 配置 / 生成失败
+    """
+    from backend.chat.recap import RecapError, RecapTooShortError, generate_recap
+
+    session_id = data.session_id
+    if SessionRepository().get(session_id) is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    llm_complete = _build_compaction_llm_callable()
+    if llm_complete is None:
+        return error_json(
+            502, "llm_not_configured", "没有可用的 LLM 配置，无法生成进度总结"
+        )
+
+    try:
+        recap = await generate_recap(session_id, llm_complete)
+    except RecapTooShortError as exc:
+        logger.info(
+            "[RECAP] session=%s 消息不足: %s", _safe_log_field(session_id), exc
+        )
+        return {"ok": False, "reason": "too_short", "message": str(exc)}
+    except RecapError as exc:
+        logger.warning(
+            "[RECAP] session=%s 失败: %s", _safe_log_field(session_id), exc
+        )
+        return error_json(502, "recap_failed", str(exc))
+
+    logger.info("[RECAP] session=%s 生成成功", _safe_log_field(session_id))
+    return {"ok": True, "recap": recap.to_dict()}
+
 
 # ==================== 进化系统 API ====================
 
