@@ -105,6 +105,7 @@ import {
   openSync,
   closeSync,
   writeSync,
+  writeFileSync,
   readFileSync,
   realpathSync,
   mkdirSync,
@@ -162,6 +163,25 @@ import { BackendNotReadyError, invokeBackend } from './invoke';
 import { runDoctorCheck } from './doctor';
 import { runRuntimeChecks, showRuntimeMissingDialog } from './runtime-check';
 import { resolveSageDbPath, resolveSageUserDataDir } from './userDataPaths';
+import { appendCrashEvent, buildCrashEvent } from './crashJournal';
+import {
+  bumpLevel,
+  effectiveAppFeatures,
+  effectiveFlags,
+  newProfile,
+  readCompatProfile,
+  writeCompatProfile,
+} from './compatProfile';
+import {
+  advanceStage,
+  classifyPrevious,
+  createRunState,
+  markEnded,
+  readLastRun,
+  writeLastRun,
+} from './lastRunState';
+import { createHeartbeatMonitor } from './heartbeat';
+import { openRescueTool, runRescueReport, showCrashRecoveryDialog } from './rescueDialogs';
 import { installDefaultWebContentsHardening } from './webContentsHardening';
 import { mainWindow, setMainWindow } from './mainWindow';
 import {
@@ -351,6 +371,165 @@ if (isLegacyWindows()) {
   app.commandLine.appendSwitch('disable-gpu-compositing');
   app.commandLine.appendSwitch('disable-gpu-sandbox');
   app.commandLine.appendSwitch('disable-dev-shm-usage');
+}
+
+// ── 2026-11-08: 启动看门狗 / 兼容档位 / 崩溃 journal ─────────────────────────
+// 任何写入失败都 fail-open：诊断是增强能力，绝不能反过来阻断启动。
+const DIAG_DIR = join(resolveSageUserDataDir(), 'diagnostics');
+const LAST_RUN_FILE = join(DIAG_DIR, 'last-run.json');
+const CRASH_JOURNAL_FILE = join(DIAG_DIR, 'crash-journal.jsonl');
+const COMPAT_PROFILE_FILE = join(DIAG_DIR, 'compat.json');
+const DOCTOR_LAST_FILE = join(DIAG_DIR, 'doctor-last.json');
+const BOOT_ID = `${new Date().toISOString()}-${randomUUID().slice(0, 8)}`;
+
+let compatProfile = readCompatProfile(COMPAT_PROFILE_FILE);
+const safeModeEnv = process.env.SAGE_SAFE_MODE ?? '';
+const forcedSafeModeActive = /^[0-3]$/.test(safeModeEnv);
+if (forcedSafeModeActive) {
+  compatProfile = newProfile(Number.parseInt(safeModeEnv, 10), 'env: SAGE_SAFE_MODE');
+}
+const previousRun = readLastRun(LAST_RUN_FILE);
+const previousKind = classifyPrevious(previousRun);
+const bootCrashCount = previousKind === 'unclean' ? 1 : 0;
+if (!forcedSafeModeActive && previousKind === 'clean' && compatProfile.level > 0) {
+  // 自愈：连续 3 次正常启动后自动降一档，避免一次误判导致永久降级。
+  const stable = (compatProfile.stableBoots ?? 0) + 1;
+  if (stable >= 3) {
+    compatProfile = newProfile(
+      Math.max(0, compatProfile.level - 1),
+      '3 stable boots: downgrade one level',
+    );
+    compatProfile.stableBoots = 0;
+  } else {
+    compatProfile = { ...compatProfile, stableBoots: stable };
+  }
+  try {
+    writeCompatProfile(COMPAT_PROFILE_FILE, compatProfile);
+  } catch (err) {
+    logger.warn('main: write compat stable counter failed', { err: String(err) });
+  }
+}
+if (!forcedSafeModeActive && previousKind === 'unclean' && compatProfile.level < 3) {
+  compatProfile = bumpLevel(
+    compatProfile,
+    `previous run unclean (${previousRun?.endReason ?? 'unknown'})`,
+    new Date().toISOString(),
+  );
+  compatProfile = { ...compatProfile, stableBoots: 0 };
+  try {
+    writeCompatProfile(COMPAT_PROFILE_FILE, compatProfile);
+  } catch (err) {
+    logger.warn('main: write compat profile failed', { err: String(err) });
+  }
+}
+for (const flag of effectiveFlags(compatProfile)) {
+  app.commandLine.appendSwitch(flag);
+}
+const compatAppFeatures = effectiveAppFeatures(compatProfile);
+
+let runState = createRunState({
+  bootId: BOOT_ID,
+  appVersion: app.getVersion(),
+  electron: process.versions.electron ?? 'unknown',
+  safeModeLevel: compatProfile.level,
+  nowIso: new Date().toISOString(),
+  nowMs: Date.now(),
+});
+
+function persistRunState(): void {
+  try {
+    writeLastRun(LAST_RUN_FILE, runState);
+  } catch (err) {
+    logger.warn('main: write last-run failed', { err: String(err) });
+  }
+}
+
+function markBootStage(stage: string): void {
+  runState = advanceStage(runState, stage, Date.now());
+  persistRunState();
+}
+
+persistRunState();
+
+const rendererHeartbeat = createHeartbeatMonitor({ timeoutMs: 60_000 });
+let recoveryDialogShown = false;
+
+async function handleRendererRecovery(reason: string): Promise<void> {
+  if (recoveryDialogShown) return;
+  recoveryDialogShown = true;
+  try {
+    const choice = await showCrashRecoveryDialog({
+      crashCount: Math.max(1, bootCrashCount),
+      reason,
+      safeModeLevel: compatProfile.level,
+    });
+    if (choice === 'safe-mode') {
+      try {
+        const next = bumpLevel(
+          compatProfile,
+          `user chose safe mode after ${reason}`,
+          new Date().toISOString(),
+        );
+        writeCompatProfile(COMPAT_PROFILE_FILE, next);
+      } catch (err) {
+        logger.warn('main: write compat profile failed before relaunch', { err: String(err) });
+      }
+      // 标记本次运行已处理：app.exit() 不触发 before-quit，若不标记，
+      // 下次启动会把本次 unclean 再升一档（双重升档）。
+      runState = markEnded(runState, 'clean', 'safe-mode-restart', new Date().toISOString());
+      persistRunState();
+      try {
+        await shutdownBackend();
+      } catch (err) {
+        logger.warn('main: shutdownBackend before relaunch failed', { err: String(err) });
+      }
+      app.relaunch();
+      app.exit(0);
+      return;
+    }
+    if (choice === 'repair-tool') {
+      await openRescueTool();
+      return;
+    }
+    if (choice === 'report') {
+      const result = await runRescueReport();
+      await dialog.showMessageBox({
+        type: result.ok ? 'info' : 'error',
+        title: '诊断包',
+        message: result.ok ? '诊断包已生成' : '诊断包生成失败',
+        detail: result.message,
+        buttons: ['确定'],
+        noLink: true,
+      });
+      return;
+    }
+    app.quit();
+  } catch (err) {
+    logger.warn('main: renderer recovery dialog failed', { err: String(err) });
+  }
+}
+
+function startHeartbeatWatchdog(): void {
+  // 首帧上报始终启用（诊断需要），心跳监控可单独关闭。
+  ipcMain.on('sage:boot:first-paint', () => markBootStage('first_paint'));
+  // CI stub / demo 模式 / 显式关闭：不启用心跳超时监控，避免误弹恢复对话框。
+  if (process.env.SAGE_HEARTBEAT_DISABLED === '1' || process.env.SAGE_SKIP_BACKEND === '1') {
+    return;
+  }
+  ipcMain.on('sage:heartbeat', () => rendererHeartbeat.beat());
+  const timer = setInterval(() => {
+    if (!rendererHeartbeat.check()) return;
+    runState = markEnded(runState, 'unclean', 'frontend-heartbeat-lost', new Date().toISOString());
+    persistRunState();
+    appendCrashEvent(CRASH_JOURNAL_FILE, {
+      ts: new Date().toISOString(),
+      bootId: BOOT_ID,
+      event: 'frontend-heartbeat-lost',
+      safeModeLevel: compatProfile.level,
+    });
+    void handleRendererRecovery('frontend heartbeat lost');
+  }, 15_000);
+  timer.unref?.();
 }
 
 // 2026-10-31: sage-pet:// serves imported pet packs from <userData>/pets/.
@@ -1031,6 +1210,9 @@ function openExternalSafely(url: string): void {
 }
 
 function ensurePetInitialized(): void {
+  // 2026-11-08: 兼容档位 L1+ 关闭桌宠窗口，减少 renderer/子窗口数量，
+  // 降低被管控软件拦截的面。
+  if (!compatAppFeatures.petWindow) return;
   if (getPetController()) return;
   initPet({
     backendUrl: BACKEND_URL,
@@ -1040,6 +1222,18 @@ function ensurePetInitialized(): void {
     isPackaged: app.isPackaged,
     userDataDir: resolveSageUserDataDir(),
   });
+}
+
+/** 2026-11-08: 兼容档位 L3 关闭更新启动健康检查（减少可选网络/子进程）。 */
+function runStartupHealthCheckIfEnabled(): void {
+  if (!compatAppFeatures.updateCheck) return;
+  void updateManager
+    ?.onAppStartup(
+      () => mainWindow,
+      BACKEND_URL,
+      () => backendAuthToken,
+    )
+    .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
 }
 
 function createMainWindow(): void {
@@ -1109,6 +1303,7 @@ function createMainWindow(): void {
       agentBrowserHandle = null;
     }
   });
+  markBootStage('window_created');
 
   // 2026-09-13: ready-to-show（首帧就绪）后再显示主窗口并关闭启动屏，
   // 消除「窗口已出现但页面尚未绘制」的白屏闪烁。
@@ -1120,6 +1315,7 @@ function createMainWindow(): void {
       win.show();
     }
     closeSplashWindow();
+    markBootStage('window_shown');
   };
   const showFallbackTimer = setTimeout(showMainWindow, 3000);
   win.once('ready-to-show', () => {
@@ -1237,12 +1433,39 @@ function createMainWindow(): void {
     });
     // Diagnostic: capture page crashes (using non-deprecated render-process-gone)
     win.webContents.on('render-process-gone', (_event, details) => {
+      // 正常退出流程中 renderer 被销毁也会触发 gone，不应算崩溃。
+      if (appIsQuitting) return;
       // 崩溃原因必须内联到 message 字符串里 —— electron-log 的 text formatter
       // 在 CI 默认丢弃 object payload, 只剩 message 就看不到 reason/exitCode,
       // 而这正是定位 renderer 终止原因的唯一线索。
       logger.error(
         `main: frontend render-process-gone [${details.reason}] exitCode=${details.exitCode}`,
       );
+      // 2026-11-08: 结构化崩溃 journal + 异常退出标记 + 原生恢复对话框。
+      try {
+        appendCrashEvent(
+          CRASH_JOURNAL_FILE,
+          buildCrashEvent(details, {
+            bootId: BOOT_ID,
+            appVersion: app.getVersion(),
+            electron: process.versions.electron ?? 'unknown',
+            safeModeLevel: compatProfile.level,
+            nowIso: new Date().toISOString(),
+            windowAgeMs: Math.max(0, Date.now() - runState.startedAtMs),
+            url: win.isDestroyed() ? undefined : win.webContents.getURL(),
+          }),
+        );
+      } catch (err) {
+        logger.warn('main: append crash journal failed', { err: String(err) });
+      }
+      runState = markEnded(
+        runState,
+        'unclean',
+        `render-process-gone:${details.reason}`,
+        new Date().toISOString(),
+      );
+      persistRunState();
+      void handleRendererRecovery(`render-process-gone:${details.reason}`);
     });
     win.webContents.on('unresponsive', () => {
       logger.error('main: frontend unresponsive');
@@ -2686,6 +2909,9 @@ async function isPortReleased(port: number, timeoutMs: number): Promise<void> {
 app
   .whenReady()
   .then(async () => {
+    // 2026-11-08: 启动看门狗 —— 记录 app_ready 阶段并启用心跳监控。
+    markBootStage('app_ready');
+    startHeartbeatWatchdog();
     // Step 3: prune log files older than 7 days on every cold start
     cleanupOlderThan(7);
     // 2026-11-04: 默认拒绝权限请求 —— 必须在任何 webContents 创建之前注册，
@@ -2700,15 +2926,18 @@ app
     registerPetPackProtocol(petPacksDir(resolveSageUserDataDir()));
     // 2026-11-04: sage-preview:// —— HTML 预览独立源。
     // 预览 IPC 限制到信任窗口（主窗口），与 pet/office 等敏感 IPC 同策略。
-    registerPreviewProtocol();
-    registerPreviewIpc((channel, handler) => {
-      ipcMain.handle(channel, (evt, ...args) => {
-        if (!isTrustedRenderer(evt.sender)) {
-          throw new Error('未授权的预览 IPC 请求');
-        }
-        return handler(evt, ...args);
+    // 2026-11-08: 兼容档位 L1+ 关闭预览宿主，减少 renderer/BrowserView 数量。
+    if (compatAppFeatures.previewHost) {
+      registerPreviewProtocol();
+      registerPreviewIpc((channel, handler) => {
+        ipcMain.handle(channel, (evt, ...args) => {
+          if (!isTrustedRenderer(evt.sender)) {
+            throw new Error('未授权的预览 IPC 请求');
+          }
+          return handler(evt, ...args);
+        });
       });
-    });
+    }
     ipcMain.handle('sage-file:register-root', (_evt, root: string) => {
       return registerWorkspaceRoot(String(root ?? ''));
     });
@@ -2863,6 +3092,17 @@ app
           doctorSummary = await runDoctorCheck(process.env.SAGE_PYTHON ?? 'python', process.cwd());
         }
         logger.info('main: doctor check complete', doctorSummary);
+        // 2026-11-08: 稳定落盘最近一次 doctor 报告，供救援工具/支持人员读取。
+        try {
+          mkdirSync(DIAG_DIR, { recursive: true });
+          writeFileSync(
+            DOCTOR_LAST_FILE,
+            JSON.stringify({ generatedAt: new Date().toISOString(), ...doctorSummary }, null, 2),
+            'utf-8',
+          );
+        } catch (err) {
+          logger.warn('main: write doctor-last failed', { err: String(err) });
+        }
         if (doctorSummary.status === 'critical') {
           logger.warn('main: doctor reported CRITICAL — user may see degraded experience', {
             summary: doctorSummary.summary,
@@ -3008,7 +3248,7 @@ app
     const embeddedBrowserEnabled =
       process.env.SAGE_FORCE_EMBEDDED_BROWSER === '1' ||
       (process.platform === 'win32' && osRelease().startsWith('6.1'));
-    if (embeddedBrowserEnabled) {
+    if (embeddedBrowserEnabled && compatAppFeatures.browserBridge) {
       updateSplashStage('正在准备内置浏览器…');
       agentBrowserHandle = await startAgentBrowserHost();
     }
@@ -3061,13 +3301,7 @@ app
         logger.info('main: backend ready after auto-retry');
         createMainWindow();
         buildApplicationMenu();
-        void updateManager
-          ?.onAppStartup(
-            () => mainWindow,
-            BACKEND_URL,
-            () => backendAuthToken,
-          )
-          .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
+        runStartupHealthCheckIfEnabled();
         return;
       }
 
@@ -3104,13 +3338,7 @@ app
         // LauncherHealthChecker can probe the renderer. Failures are logged
         // and drive the crash counter / auto-rollback path; they must not
         // block the UI from appearing.
-        void updateManager
-          ?.onAppStartup(
-            () => mainWindow,
-            BACKEND_URL,
-            () => backendAuthToken,
-          )
-          .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
+        runStartupHealthCheckIfEnabled();
         return;
       }
       // 'open-logs' or 'quit' — quit is handled inside showStartupFailureDialog
@@ -3124,13 +3352,7 @@ app
     // LauncherHealthChecker can probe renderer responsiveness. A failed check
     // increments the crash counter and may trigger auto-rollback; it must not
     // block the UI. Errors are logged for diagnostics.
-    void updateManager
-      ?.onAppStartup(
-        () => mainWindow,
-        BACKEND_URL,
-        () => backendAuthToken,
-      )
-      .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
+    runStartupHealthCheckIfEnabled();
   })
   // Any uncaught exception in the async chain (e.g. a TypeError in startup
   // code, IPC-handler init hitting an unreadable userData dir) would
@@ -3164,6 +3386,15 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  // 2026-11-08: 记录正常退出，避免下次启动被误判为异常退出而升级兼容档位。
+  // 但 renderer 崩溃后用户选择退出时，runState 已标记 unclean —— 不能覆盖。
+  if (
+    !runState.stages.some(([stage]) => stage === 'unclean_exit') &&
+    !runState.stages.some(([stage]) => stage === 'clean_exit')
+  ) {
+    runState = markEnded(runState, 'clean', 'quit', new Date().toISOString());
+    persistRunState();
+  }
   appIsQuitting = true;
   disposePet();
   globalShortcut.unregister(REMOTE_MCP_HOTKEY);

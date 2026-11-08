@@ -133,4 +133,15 @@
   ${Else}
     DetailPrint "VC++ Redistributable installer exited with code $0 (non-fatal, continuing)."
   ${EndIf}
+
+  ; 2026-11-08: 内网救援工具入口 —— 开始菜单「Sage 修复工具」。
+  ; 指向 SageDoctor.cmd（extraFiles 已复制到安装根目录），不依赖 Electron，
+  ; 前端闪退时用户仍可双击进入配置/体检/修复。
+  DetailPrint "Creating Sage Repair Tool shortcut..."
+  CreateShortCut "$SMPROGRAMS\Sage 修复工具.lnk" "$INSTDIR\SageDoctor.cmd" "" "$INSTDIR\Sage.exe" 0 SW_SHOWNORMAL
+!macroend
+
+!macro customUnInstall
+  ; 清理救援工具快捷方式（electron-builder 默认只清理自己创建的 Sage 快捷方式）
+  Delete "$SMPROGRAMS\Sage 修复工具.lnk"
 !macroend

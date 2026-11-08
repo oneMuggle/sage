@@ -77,7 +77,8 @@ def test_legal_top_keys_matches_appsettings_interface() -> None:
 
 def test_legal_endpoint_keys_is_stable() -> None:
     """LEGAL_ENDPOINT_KEYS 是 EndpointConfig 字段 (含 protocol / modelId /
-    localModelPath / quota, 以及 2026-11-03 新增的 reasoningEffort / thinkingBudget)."""
+    localModelPath / quota, 以及 2026-11-03 新增的 reasoningEffort / thinkingBudget,
+    以及 2026-11-08 新增的 apiKeyUpdatedAt —— 内网救援工具写入的时间戳)."""
     assert (
         frozenset(
             {
@@ -94,6 +95,8 @@ def test_legal_endpoint_keys_is_stable() -> None:
                 "reasoningEffort",
                 "thinkingBudget",
                 "quota",
+                # 2026-11-08: 内网救援工具写入时间戳
+                "apiKeyUpdatedAt",
             }
         )
         == LEGAL_ENDPOINT_KEYS

@@ -16,6 +16,7 @@ import { Menu, shell, clipboard, app } from 'electron';
 import { getLogDir } from './logPaths';
 import { logger } from './logger';
 import { mainWindow } from './mainWindow';
+import { openRescueTool } from './rescueDialogs';
 
 export function buildApplicationMenu(): void {
   const isMac = process.platform === 'darwin';
@@ -49,6 +50,13 @@ export function buildApplicationMenu(): void {
           },
         },
         { type: 'separator' },
+        {
+          label: '运行修复工具',
+          click: () => {
+            logger.info('main: user opened rescue tool via menu');
+            void openRescueTool();
+          },
+        },
         {
           label: '打开日志目录',
           click: () => {

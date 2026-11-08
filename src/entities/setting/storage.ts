@@ -82,6 +82,9 @@ const ENDPOINT_KEYS: ReadonlySet<keyof EndpointConfig> = new Set([
   // 前端配置永远到不了后端，上游模型不会进入思考模式。
   'reasoningEffort',
   'thinkingBudget',
+  // 2026-11-08: 内网救援工具写入时间戳 (ms epoch) —— 漏了会被 sanitizeForBackend
+  // 静默丢弃，导致后端已更新的 key 被旧本地缓存覆盖。
+  'apiKeyUpdatedAt',
   // 'localModelPath' 不在此白名单内 — UI 已隐藏, 后端白名单已收紧.
 ]);
 const SNAKE_KEYS_TO_DROP: ReadonlySet<string> = new Set([
@@ -183,7 +186,17 @@ export function restoreRedactedApiKeys(
     ) {
       const localEp = localById.get(r.id);
       if (localEp && typeof localEp.apiKey === 'string' && localEp.apiKey !== '') {
-        return { ...(r as EndpointConfig), apiKey: localEp.apiKey };
+        // 2026-11-08: 内网救援工具 (plan §136) 在直写 DB 时会同时更新
+        // apiKeyUpdatedAt 时间戳. 若远程时间戳比本地新, 旧本地 key 已被救援
+        // 工具替换, 不应回灌 (rescue 已加密落库, 远程 hasApiKey 标记的是新 key).
+        const remoteTs = typeof r.apiKeyUpdatedAt === 'number' ? r.apiKeyUpdatedAt : undefined;
+        const localTs =
+          typeof localEp.apiKeyUpdatedAt === 'number' ? localEp.apiKeyUpdatedAt : undefined;
+        const remoteIsNewer =
+          remoteTs !== undefined && (localTs === undefined || remoteTs > localTs);
+        if (!remoteIsNewer) {
+          return { ...(r as EndpointConfig), apiKey: localEp.apiKey };
+        }
       }
     }
     return re as EndpointConfig;
