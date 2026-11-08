@@ -135,7 +135,10 @@ try {
   crashReporter.start({
     productName: 'Sage',
     companyName: 'Sage',
-    submitURL: '',
+    // 2026-11-08: Electron 21 在 uploadToServer=true 且 submitURL='' 时
+    // 每次调用都抛 "submitURL must be specified" → Crashpad 从未真正启动。
+    // 显式关闭上传后，本地 minidump 才能正常产出。
+    uploadToServer: false,
     compress: true,
     ignoreSystemCrashHandler: false,
   });

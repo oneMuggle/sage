@@ -972,6 +972,17 @@ const electronAPI = {
   getDetectedProjectRoot(): Promise<string | null> {
     return ipcRenderer.invoke('sage:get-detected-project-root') as Promise<string | null>;
   },
+
+  /**
+   * 2026-11-08: 启动看门狗 —— renderer 心跳与首帧上报。
+   * 主进程据此区分「前端崩溃」与「未崩溃但白屏」，并写入诊断 journal。
+   */
+  sendHeartbeat(): void {
+    ipcRenderer.send('sage:heartbeat');
+  },
+  notifyFirstPaint(): void {
+    ipcRenderer.send('sage:boot:first-paint');
+  },
 };
 
 const isPetWindow = process.argv.includes('--sage-pet-window=1');

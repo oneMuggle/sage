@@ -23,3 +23,14 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </AppProviders>,
 );
+
+// 2026-11-08: 启动看门狗 —— 首帧上报 + 15s 心跳。
+// 主进程据此区分「renderer 崩溃」与「未崩溃但白屏」，写入诊断 journal。
+// Web 端无 electronAPI 时静默跳过（可选链）。
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => window.electronAPI?.notifyFirstPaint?.());
+});
+if (window.electronAPI?.sendHeartbeat) {
+  window.electronAPI.sendHeartbeat();
+  setInterval(() => window.electronAPI?.sendHeartbeat?.(), 15_000);
+}

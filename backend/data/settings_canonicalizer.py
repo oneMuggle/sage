@@ -42,6 +42,9 @@ ALIASES: Dict[str, str] = {
     # EndpointConfig 子层
     "base_url": "baseUrl",
     "api_key": "apiKey",
+    # 2026-11-08: 内网救援工具写入时间戳 (ms epoch). relay 会把它转
+    # snake_case, 缺别名时翻不回 camel, validate_settings_shape 400.
+    "api_key_updated_at": "apiKeyUpdatedAt",
     "discovered_models": "discoveredModels",
     "last_discovered_at": "lastDiscoveredAt",
     # 2026-11-03: 思考过程参数 —— relay 的 camelToSnakeKeys 会把 endpoint 内的
@@ -200,6 +203,11 @@ LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
         # 两者缺省 = 不发送该键 (上游不进入思考模式)。
         "reasoningEffort",
         "thinkingBudget",
+        # 2026-11-08: Rescue CLI 写入时间戳 —— 端点最后一次被救援工具修改 apiKey
+        # 的时间（毫秒 Unix epoch）。前端 ``restoreRedactedApiKeys`` 用它与 localStorage
+        # 缓存时间戳比较，避免远程已更新的 key 被旧本地缓存覆盖（§144 内网救援
+        # 工具）。非救援工具路径不写此字段，缺省为 null。
+        "apiKeyUpdatedAt",
         # 2026-09-18 (端点限额): 可选嵌套配额对象 {dailyTokens, monthlyBudgetUsd}.
         "quota",
     }
@@ -862,6 +870,23 @@ def validate_quota(value: Any) -> Any:
     return value
 
 
+def validate_api_key_updated_at(value: Any) -> Any:
+    """Endpoint.apiKeyUpdatedAt 校验 (2026-11-08 内网救援工具).
+
+    - ``None`` 视为"未设置" (默认), 直接返回。
+    - 必须是非负整数 (毫秒 Unix epoch)。bool 拒收。
+    """
+    if value is None:
+        return value
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(
+            f"apiKeyUpdatedAt must be an integer (ms epoch), got {type(value).__name__}"
+        )
+    if value < 0:
+        raise ValueError(f"apiKeyUpdatedAt must be >= 0, got {value}")
+    return value
+
+
 def validate_local_model_path(value: Any, platform: str | None = None) -> Any:
     """Endpoint.localModelPath 平台路径分隔符校验.
 
@@ -921,6 +946,8 @@ def validate_endpoint_payload(ep: Any, platform: str | None = None) -> Any:
     validate_reasoning_effort(ep.get("reasoningEffort"))
     validate_thinking_budget(ep.get("thinkingBudget"))
     validate_quota(ep.get("quota"))
+    # 2026-11-08: 内网救援工具写入时间戳 (ms epoch 或 null)
+    validate_api_key_updated_at(ep.get("apiKeyUpdatedAt"))
     return ep
 
 

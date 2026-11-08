@@ -201,4 +201,46 @@ describe('restoreRedactedApiKeys (2026-08-26)', () => {
     expect(remote).toEqual(beforeRemote);
     expect(local).toEqual(beforeLocal);
   });
+
+  // 2026-11-08: 内网救援工具 (plan §136) 在直写 DB 时同步更新 apiKeyUpdatedAt.
+  // 若远程时间戳比本地新, 本地缓存的旧 key 已被救援工具替换, 不应回灌.
+  it('远程 apiKeyUpdatedAt 比本地新 → 不回灌旧 key (救援工具场景)', () => {
+    const local: Partial<AppSettings> = {
+      ...DEFAULT_SETTINGS,
+      endpoints: [ep('e1', 'sk-LOCAL-OLD', { apiKeyUpdatedAt: 1000 })],
+    };
+    const remote: Partial<AppSettings> = {
+      ...DEFAULT_SETTINGS,
+      endpoints: [{ ...ep('e1', ''), hasApiKey: true, apiKeyUpdatedAt: 2000 }],
+    };
+    const result = restoreRedactedApiKeys(remote, local);
+    expect(result.endpoints?.[0].apiKey).toBe('');
+    expect(result.endpoints?.[0].hasApiKey).toBe(true);
+  });
+
+  it('远程 apiKeyUpdatedAt 比本地旧 → 仍按旧契约回灌本地 key', () => {
+    const local: Partial<AppSettings> = {
+      ...DEFAULT_SETTINGS,
+      endpoints: [ep('e1', 'sk-LOCAL-NEW', { apiKeyUpdatedAt: 5000 })],
+    };
+    const remote: Partial<AppSettings> = {
+      ...DEFAULT_SETTINGS,
+      endpoints: [{ ...ep('e1', ''), hasApiKey: true, apiKeyUpdatedAt: 1000 }],
+    };
+    const result = restoreRedactedApiKeys(remote, local);
+    expect(result.endpoints?.[0].apiKey).toBe('sk-LOCAL-NEW');
+  });
+
+  it('远程无 apiKeyUpdatedAt + 本地有 → 按旧契约回灌 (向后兼容)', () => {
+    const local: Partial<AppSettings> = {
+      ...DEFAULT_SETTINGS,
+      endpoints: [ep('e1', 'sk-LOCAL-REAL', { apiKeyUpdatedAt: 1000 })],
+    };
+    const remote: Partial<AppSettings> = {
+      ...DEFAULT_SETTINGS,
+      endpoints: [{ ...ep('e1', ''), hasApiKey: true }],
+    };
+    const result = restoreRedactedApiKeys(remote, local);
+    expect(result.endpoints?.[0].apiKey).toBe('sk-LOCAL-REAL');
+  });
 });

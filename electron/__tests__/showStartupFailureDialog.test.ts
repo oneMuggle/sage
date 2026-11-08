@@ -53,8 +53,15 @@ describe('showStartupFailureDialog', () => {
     expect(mockShellOpenPath).toHaveBeenCalled();
   });
 
-  it('returns "quit" and calls app.quit when third button chosen', async () => {
-    mockShowMessageBox.mockResolvedValue({ response: 2 });
+  it('returns "run-rescue" when second button chosen', async () => {
+    mockShowMessageBox.mockResolvedValue({ response: 1 });
+    const { showStartupFailureDialog } = await import('../showStartupFailureDialog');
+    const result = await showStartupFailureDialog({ reason: 'fail' });
+    expect(result).toBe('run-rescue');
+  });
+
+  it('returns "quit" and calls app.quit when fourth button chosen', async () => {
+    mockShowMessageBox.mockResolvedValue({ response: 3 });
     const { showStartupFailureDialog } = await import('../showStartupFailureDialog');
     const result = await showStartupFailureDialog({ reason: 'fail' });
     expect(result).toBe('quit');

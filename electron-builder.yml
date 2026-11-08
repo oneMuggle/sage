@@ -36,6 +36,13 @@ files:
   - "!**/*.test.{ts,tsx,js,jsx}"
   - "!**/*.map"
   - "!**/.DS_Store"
+extraFiles:
+  # 2026-11-08: 内网救援工具启动器 —— 复制到安装根目录，由开始菜单
+  # 「Sage 修复工具」快捷方式调用（见 build/installer.nsh customInstall）。
+  # 不依赖 Electron/Chromium，使用 resources/python 运行 backend.cli.rescue。
+  - from: "resources/SageDoctor.cmd"
+    to: "SageDoctor.cmd"
+
 extraResources:
   # Build provenance manifest — single source of truth for packaged Electron
   # to know its buildId/commit/branch/version/electronVersion/pythonVersion.

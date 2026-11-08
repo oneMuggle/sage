@@ -1,9 +1,9 @@
 // electron/showStartupFailureDialog.ts
 
 /**
- * Startup-failure dialog — shows a 3-button message box when Sage fails to launch.
+ * Startup-failure dialog — shows a 4-button message box when Sage fails to launch.
  *
- * Buttons (in order): 打开日志目录 / 重试 / 退出
+ * Buttons (in order): 打开日志目录 / 运行修复工具 / 重试 / 退出
  *
  * CRITICAL: `logger.error(...)` MUST be invoked BEFORE `dialog.showMessageBox`,
  * so that even if the dialog itself crashes, the failure is already on disk.
@@ -12,8 +12,9 @@
 import { dialog, shell, app } from 'electron';
 import { getLogDir } from './logPaths';
 import { logger } from './logger';
+import { openRescueTool } from './rescueDialogs';
 
-export type StartupFailureChoice = 'open-logs' | 'retry' | 'quit';
+export type StartupFailureChoice = 'open-logs' | 'run-rescue' | 'retry' | 'quit';
 
 export async function showStartupFailureDialog(opts: {
   reason: string;
@@ -27,7 +28,7 @@ export async function showStartupFailureDialog(opts: {
   });
 
   const logDir = getLogDir();
-  const buttons = ['打开日志目录', '重试', '退出'];
+  const buttons = ['打开日志目录', '运行修复工具', '重试', '退出'];
   const result = await dialog.showMessageBox({
     type: 'error',
     title: 'Sage 启动失败',
@@ -35,18 +36,27 @@ export async function showStartupFailureDialog(opts: {
     detail: `${opts.detail ?? ''}\n\n错误详情已写入日志，请点击下方按钮获取日志文件并附在反馈中。\n\n日志目录：${logDir}`,
     buttons,
     defaultId: 0,
-    cancelId: 2,
+    cancelId: 3,
     noLink: true,
   });
 
   const choice: StartupFailureChoice =
-    result.response === 0 ? 'open-logs' : result.response === 1 ? 'retry' : 'quit';
+    result.response === 0
+      ? 'open-logs'
+      : result.response === 1
+        ? 'run-rescue'
+        : result.response === 2
+          ? 'retry'
+          : 'quit';
 
   if (choice === 'open-logs') {
     logger.info('main: user chose open-logs after startup failure');
     Promise.resolve(shell.openPath(logDir)).catch((err) =>
-      logger.error('main: shell.openPath failed', { err: String(err) })
+      logger.error('main: shell.openPath failed', { err: String(err) }),
     );
+  } else if (choice === 'run-rescue') {
+    logger.info('main: user chose run-rescue after startup failure');
+    void openRescueTool();
   } else if (choice === 'retry') {
     logger.info('main: user chose retry after startup failure');
   } else {
