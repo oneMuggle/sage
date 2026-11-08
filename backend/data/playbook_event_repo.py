@@ -46,6 +46,8 @@ ALLOWED_EVENTS = frozenset(
         "undo_batch_move",
         "cleanup_rules",
         "rules_ai_apply",
+        "rules_export",
+        "rules_import",
         "exemption_grant",
         "exemption_revoke",
         "manual_complete",

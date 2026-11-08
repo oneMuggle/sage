@@ -390,22 +390,26 @@ def _diff_constraints(
 def _diff_docs(
     envelope_docs: Dict[str, str], project: Optional[Project]
 ) -> List[ImportCandidate]:
-    """整文件读盘比对：避免按小节聚合时多节文件被错判为 conflict。"""
+    """整文件读盘比对：避免按小节聚合时多节文件被错判为 conflict。
+
+    ``project is None`` 时所有 doc 候选视为 ``new``（无现有项目可读）。
+    """
     candidates: List[ImportCandidate] = []
-    if project is None:
-        return candidates
     for filename, text in (envelope_docs or {}).items():
         name = str(filename)
         body = str(text)
         if not name.strip() or not body.strip():
             continue
-        existing_text = safe_read(Path(project.path) / name)
-        if not existing_text or not existing_text.strip():
+        if project is None:
             status, duplicate_of = "new", None
-        elif _normalize_for_dedupe(existing_text) == _normalize_for_dedupe(body):
-            status, duplicate_of = "duplicate", f"doc:{name}"
         else:
-            status, duplicate_of = "conflict", f"doc:{name}"
+            existing_text = safe_read(Path(project.path) / name)
+            if not existing_text or not existing_text.strip():
+                status, duplicate_of = "new", None
+            elif _normalize_for_dedupe(existing_text) == _normalize_for_dedupe(body):
+                status, duplicate_of = "duplicate", f"doc:{name}"
+            else:
+                status, duplicate_of = "conflict", f"doc:{name}"
         candidates.append(
             ImportCandidate(
                 id=f"import-doc-{name}",

@@ -8,7 +8,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import time
 import uuid as uuid_module
 from pathlib import Path
@@ -19,8 +21,10 @@ from pydantic import BaseModel, Field
 
 from backend.data.database import make_with_db_lock
 from backend.data.playbook_event_repo import record_playbook_event
+from backend.data.playbook_repo import PlaybookRepository
 from backend.data.project_constraint_repo import ProjectConstraintRepository
 from backend.data.project_repo import Project, ProjectRepository
+from backend.memory.safety import get_scanner
 from backend.services.markdown_rules import (
     RuleValidationError,
     append_section,
@@ -29,6 +33,10 @@ from backend.services.markdown_rules import (
     replace_section,
     validate_rule_text,
     write_text_atomic,
+)
+from backend.services.playbook_library import (
+    render_agents_markdown as render_playbook_agents_md,
+    render_markdown_handbook as render_playbook_markdown,
 )
 from backend.services.rule_patch import (
     MAX_PATCH_OPERATIONS,
@@ -41,6 +49,14 @@ from backend.services.rules_registry import (
     RulesRegistry,
     global_rules_path,
     split_markdown_sections,
+)
+from backend.services.rules_transfer import (
+    RulesImportValidationError,
+    build_rules_export_envelope,
+    diff_rules_import,
+    parse_rules_import,
+    render_rules_agents_md,
+    render_rules_markdown,
 )
 
 logger = logging.getLogger(__name__)
@@ -648,3 +664,380 @@ def apply_rule_patch(project_id: str, body: PatchApplyBody) -> Dict[str, Any]:
             },
         )
     return {"results": results, "applied": applied, "failed": failed}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# M6: 规则导出 / 导入端点（2026-11-07）
+# ─────────────────────────────────────────────────────────────────────────────
+
+EXPORT_FORMATS = {"json", "md", "agents"}
+
+# 导入时 doc 层仅允许写入项目根 SAGE.md；CLAUDE.md / AGENTS.md 只读不写。
+_IMPORT_WRITABLE_DOCS = frozenset({"SAGE.md"})
+
+
+def _bound_playbook_spec(project: Project) -> Optional[Dict[str, Any]]:
+    """从 PlaybookRepository 读取项目绑定的活跃规程快照。"""
+    snapshot = PlaybookRepository().get_active(project.id)
+    if snapshot and isinstance(snapshot.spec, dict):
+        return snapshot.spec
+    return None
+
+
+def _format_response_format(fmt: str) -> str:
+    """将请求的 format 参数映射为信封级格式名。"""
+    if fmt == "json":
+        return "sage.rules"
+    if fmt == "md":
+        return "markdown"
+    return "agents"
+
+
+def _scan_text_or_raise(text: str) -> Optional[str]:
+    """安全扫描；返回 None 表示通过，否则返回原因字符串。"""
+    scan = get_scanner().scan(text, level="all")
+    if scan.blocked:
+        return scan.reason
+    return None
+
+
+def _export_filename(project: Project, fmt: str) -> str:
+    if fmt == "json":
+        return f"rules-{project.name or project.id}.sagerules.json"
+    if fmt == "md":
+        return f"rules-{project.name or project.id}.sagerules.md"
+    return "AGENTS.md"
+
+
+def _export_content(
+    project: Project,
+    entries: List[Any],
+    envelope: Dict[str, Any],
+    playbook_spec: Optional[Dict[str, Any]],
+    fmt: str,
+) -> str:
+    if fmt == "json":
+        return json.dumps(envelope, ensure_ascii=False, indent=2)
+    global_text = envelope["layers"].get("global_rules") or ""
+    if fmt == "md":
+        playbook_md = (
+            render_playbook_markdown(playbook_spec) if playbook_spec else ""
+        )
+        return render_rules_markdown(
+            project, entries, global_rules_text=global_text,
+            playbook_markdown=playbook_md,
+        )
+    playbook_md = (
+        render_playbook_agents_md(playbook_spec) if playbook_spec else ""
+    )
+    return render_rules_agents_md(
+        project, entries, global_rules_text=global_text,
+        playbook_agents_md=playbook_md,
+    )
+
+
+@router.get("/projects/{project_id}/rules/export")
+@with_db_lock
+def export_rules(
+    project_id: str,
+    format: str = "json",
+    include_constraints: bool = True,
+    include_playbook: bool = False,
+    include_global: bool = False,
+    include_docs: bool = True,
+) -> Dict[str, Any]:
+    """导出规则包。三种格式都以 JSON 返回（content 为字符串）。"""
+    if format not in EXPORT_FORMATS:
+        raise _error(400, "invalid_format", f"不支持的导出格式：{format}")
+    project = _project_or_404(project_id)
+    entries = RulesRegistry().list_rules(project)
+    playbook_spec = _bound_playbook_spec(project) if include_playbook else None
+    envelope = build_rules_export_envelope(
+        project,
+        entries,
+        include_playbook=include_playbook and playbook_spec is not None,
+        playbook_spec=playbook_spec,
+        include_global=include_global,
+        include_docs=include_docs,
+        include_constraints=include_constraints,
+    )
+    content = _export_content(project, entries, envelope, playbook_spec, format)
+    filename = _export_filename(project, format)
+    record_playbook_event(
+        project.id,
+        "rules_export",
+        payload={
+            "format": format,
+            "include_playbook": include_playbook,
+            "include_global": include_global,
+            "include_docs": include_docs,
+            "filename": filename,
+        },
+    )
+    return {
+        "format": _format_response_format(format),
+        "filename": filename,
+        "content": content,
+    }
+
+
+class RulesImportPreviewBody(BaseModel):
+    envelope: Any = None
+    project_id: Optional[str] = None
+
+
+class RulesImportApplyBody(BaseModel):
+    envelope: Any = None
+    project_id: Optional[str] = None
+    selected: List[str] = Field(default_factory=list)
+    overwrite: bool = False
+
+
+def _candidate_to_dict(candidate: Any) -> Dict[str, Any]:
+    return {
+        "id": candidate.id,
+        "kind": candidate.kind,
+        "status": candidate.status,
+        "content": candidate.content,
+        "duplicate_of": candidate.duplicate_of,
+        "layer": candidate.layer,
+        "category": candidate.category,
+        "trigger_pattern": candidate.trigger_pattern,
+        "priority": candidate.priority,
+        "enabled": candidate.enabled,
+        "filename": candidate.filename,
+    }
+
+
+@router.post("/rules/import/preview")
+@with_db_lock
+def preview_rules_import(body: RulesImportPreviewBody) -> Dict[str, Any]:
+    """解析信封 → 与当前状态比对 → 逐条返回 new/duplicate/conflict。"""
+    try:
+        envelope = parse_rules_import(body.envelope)
+    except RulesImportValidationError as exc:
+        raise _error(exc.status_code, "rules_import_invalid", exc.message)
+    if not body.project_id:
+        candidates = diff_rules_import(envelope, None, [])
+        return {"candidates": [_candidate_to_dict(c) for c in candidates]}
+    project = _project_or_404(body.project_id)
+    existing = RulesRegistry().list_rules(project)
+    candidates = diff_rules_import(envelope, project, existing)
+    return {"candidates": [_candidate_to_dict(c) for c in candidates]}
+
+
+def _apply_constraint_candidate(
+    project: Project,
+    candidate: Any,
+    item: Dict[str, Any],
+    overwrite: bool,
+    existing_count: int,
+) -> Dict[str, Any]:
+    """约束候选落库；重复跳过，冲突+overwrite 替换，超限失败。"""
+    cid = candidate.id
+    if candidate.status == "duplicate":
+        return {"id": cid, "status": "skipped", "message": "已存在相同内容"}
+    if candidate.status == "conflict" and not overwrite:
+        return {"id": cid, "status": "skipped", "message": "已存在冲突，未开启覆盖"}
+    if candidate.status == "conflict" and overwrite:
+        raw_id = candidate.duplicate_of or ""
+        prefix, _, rule_id = raw_id.partition(":")
+        if prefix == "constraint" and rule_id:
+            ProjectConstraintRepository().delete(rule_id)
+    if existing_count >= MAX_PROJECT_RULES:
+        return {
+            "id": cid,
+            "status": "failed",
+            "message": f"项目规则已达 {MAX_PROJECT_RULES} 条上限",
+        }
+    content = validate_rule_text(str(item.get("content") or ""))
+    ProjectConstraintRepository().create(
+        project_id=project.id,
+        category=str(item.get("category") or "general").strip() or "general",
+        content=content,
+        trigger_pattern=item.get("trigger_pattern") or None,
+        priority=int(item.get("priority") or 5),
+        source=_USER_SOURCE,
+    )
+    return {"id": cid, "status": "applied", "message": "已导入"}
+
+
+def _result(candidate_id: str, status: str, message: str) -> Dict[str, Any]:
+    return {"id": candidate_id, "status": status, "message": message}
+
+
+def _write_text_target(target: Path, text: str, overwrite: bool) -> str:
+    """新建 / 追加 / 整文件覆盖；返回结果消息。"""
+    if not target.exists():
+        target.write_text(text, encoding="utf-8")
+        return "已创建"
+    if overwrite:
+        target.write_text(text, encoding="utf-8")
+        return "已覆盖"
+    existing_text = target.read_text(encoding="utf-8")
+    separator = "\n\n" if existing_text.strip() else ""
+    target.write_text(existing_text + separator + text, encoding="utf-8")
+    return "已追加"
+
+
+def _apply_doc_candidate(
+    project: Project,
+    candidate: Any,
+    text: str,
+    overwrite: bool,
+) -> Dict[str, Any]:
+    """Doc 候选落盘：仅允许写入项目根 SAGE.md。"""
+    cid = candidate.id
+    filename = candidate.filename or ""
+    if filename not in _IMPORT_WRITABLE_DOCS:
+        return _result(cid, "failed", "仅支持导入项目根 SAGE.md")
+    root = os.path.realpath(project.path)
+    target = Path(root) / filename
+    if not os.path.realpath(str(target)).startswith(root):
+        return _result(cid, "failed", "路径不合法")
+    if candidate.status == "duplicate":
+        return _result(cid, "skipped", "已存在相同内容")
+    scan_reason = _scan_text_or_raise(text)
+    if scan_reason:
+        return _result(cid, "failed", "安全扫描未通过：" + scan_reason)
+    return _result(cid, "applied", _write_text_target(target, text, overwrite))
+
+
+def _apply_global_candidate(
+    candidate: Any,
+    text: str,
+    overwrite: bool,
+) -> Dict[str, Any]:
+    """全局规则候选落盘：写入 ~/.sage/SAGE.md。"""
+    cid = candidate.id
+    if candidate.status == "duplicate":
+        return _result(cid, "skipped", "已存在相同内容")
+    scan_reason = _scan_text_or_raise(text)
+    if scan_reason:
+        return _result(cid, "failed", "安全扫描未通过：" + scan_reason)
+    return _result(
+        cid, "applied", _write_text_target(global_rules_path(), text, overwrite)
+    )
+
+
+def _apply_constraint_by_id(
+    project: Project,
+    candidate_id: str,
+    candidate: Any,
+    layers: Dict[str, Any],
+    overwrite: bool,
+    existing_count: int,
+) -> Dict[str, Any]:
+    index = int(candidate_id.rsplit("-", 1)[1])
+    constraints = layers.get("constraints") or []
+    item = constraints[index] if 0 <= index < len(constraints) else None
+    if item is None:
+        return _result(candidate_id, "failed", "候选不存在")
+    return _apply_constraint_candidate(
+        project, candidate, item, overwrite, existing_count
+    )
+
+
+def _apply_doc_by_id(
+    project: Project,
+    candidate_id: str,
+    candidate: Any,
+    layers: Dict[str, Any],
+    overwrite: bool,
+) -> Dict[str, Any]:
+    text = (layers.get("project_docs") or {}).get(candidate.filename or "")
+    if not text:
+        return _result(candidate_id, "failed", "候选不存在")
+    return _apply_doc_candidate(project, candidate, str(text), overwrite)
+
+
+def _apply_global_by_id(
+    candidate_id: str,
+    candidate: Any,
+    layers: Dict[str, Any],
+    overwrite: bool,
+) -> Dict[str, Any]:
+    text = str(layers.get("global_rules") or "").strip()
+    if not text:
+        return _result(candidate_id, "failed", "候选不存在")
+    return _apply_global_candidate(candidate, text, overwrite)
+
+
+def _apply_import_candidate(
+    project: Project,
+    candidate_id: str,
+    envelope: Dict[str, Any],
+    overwrite: bool,
+    status_by_id: Dict[str, str],
+    candidate_by_id: Dict[str, Any],
+    existing_count: int,
+) -> Dict[str, Any]:
+    """按 id 分发到对应的 apply 辅助函数。"""
+    candidate = candidate_by_id.get(candidate_id)
+    if candidate is None:
+        return _result(candidate_id, "failed", "候选不存在")
+    layers = envelope.get("layers") or {}
+    if candidate.kind == "constraint":
+        return _apply_constraint_by_id(
+            project, candidate_id, candidate, layers, overwrite, existing_count
+        )
+    if candidate.kind == "doc":
+        return _apply_doc_by_id(project, candidate_id, candidate, layers, overwrite)
+    if candidate.kind == "global":
+        return _apply_global_by_id(candidate_id, candidate, layers, overwrite)
+    if candidate.kind == "playbook":
+        return _result(candidate_id, "deferred", "请通过规程库绑定")
+    return _result(candidate_id, "failed", "未知候选")
+
+
+@router.post("/rules/import/apply")
+@with_db_lock
+def apply_rules_import(body: RulesImportApplyBody) -> Dict[str, Any]:
+    """只提交勾选项，逐条落库，冲突项单独返回不阻断。"""
+    try:
+        envelope = parse_rules_import(body.envelope)
+    except RulesImportValidationError as exc:
+        raise _error(exc.status_code, "rules_import_invalid", exc.message)
+    if not body.project_id:
+        raise _error(400, "missing_project", "应用导入必须指定项目")
+    project = _project_or_404(body.project_id)
+    existing = RulesRegistry().list_rules(project)
+    candidates = diff_rules_import(envelope, project, existing)
+    status_by_id = {c.id: c.status for c in candidates}
+    candidate_by_id = {c.id: c for c in candidates}
+    existing_count = len(ProjectConstraintRepository().list_by_project(project.id))
+    results: List[Dict[str, Any]] = []
+    applied = 0
+    failed = 0
+    for candidate_id in body.selected:
+        try:
+            result = _apply_import_candidate(
+                project,
+                candidate_id,
+                envelope,
+                body.overwrite,
+                status_by_id,
+                candidate_by_id,
+                existing_count,
+            )
+            if result["status"] == "applied":
+                existing_count += 1
+        except (RuleValidationError, HTTPException, OSError, ValueError) as exc:
+            result = {"id": candidate_id, "status": "failed", "message": str(exc)}
+        results.append(result)
+        if result["status"] == "applied":
+            applied += 1
+        elif result["status"] == "failed":
+            failed += 1
+    record_playbook_event(
+        project.id,
+        "rules_import",
+        payload={
+            "applied": applied,
+            "failed": failed,
+            "selected": list(body.selected),
+            "overwrite": body.overwrite,
+        },
+    )
+    return {"applied": applied, "failed": failed, "results": results}
+
