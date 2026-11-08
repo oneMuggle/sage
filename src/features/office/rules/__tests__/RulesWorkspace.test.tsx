@@ -1,6 +1,8 @@
 // src/features/office/rules/__tests__/RulesWorkspace.test.tsx
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { toast } from 'sonner';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 
 import { officeRulesApi } from '../../../../shared/api/officeRulesApi';
 import type {
@@ -88,10 +90,20 @@ function renderWorkspace({
 }
 
 describe('RulesWorkspace', () => {
+  let confirmSpy: MockInstance<typeof window.confirm>;
+
   beforeEach(() => {
     Object.values(mockedApi).forEach((mock) => mock.mockReset());
     mockedDownload.mockReset();
+    vi.mocked(toast.success).mockReset();
+    vi.mocked(toast.error).mockReset();
+    vi.mocked(toast.warning).mockReset();
+    confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedApi.listGroups.mockResolvedValue([GROUP]);
+  });
+
+  afterEach(() => {
+    confirmSpy.mockRestore();
   });
 
   it('loads groups on mount and renders the selected group and its rules', async () => {
@@ -414,5 +426,153 @@ describe('RulesWorkspace', () => {
       'group-extract',
       expect.objectContaining({ check_mode: 'ai', ai_prompt: 'check tone' }),
     );
+  });
+
+  it('shows a load error and retries with a second request', async () => {
+    mockedApi.listGroups.mockRejectedValueOnce(new Error('boom')).mockResolvedValue([GROUP]);
+    renderWorkspace();
+
+    await waitFor(() => expect(screen.getByTestId('rules-load-error')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('rules-retry'));
+
+    await waitFor(() => expect(screen.getByTestId('rules-group-item-group-1')).toBeInTheDocument());
+    expect(mockedApi.listGroups).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancel restores all fields so a later save cannot persist the cancelled change', async () => {
+    mockedApi.updateRule.mockResolvedValue({ ...GROUP.rules[0], description: 'after cancel' });
+    renderWorkspace();
+
+    await waitFor(() => expect(screen.getByTestId('rule-detail-severity')).toHaveValue('warning'));
+
+    fireEvent.change(screen.getByTestId('rule-detail-severity'), { target: { value: 'error' } });
+    fireEvent.click(screen.getByTestId('rule-detail-cancel'));
+    expect(screen.getByTestId('rule-detail-severity')).toHaveValue('warning');
+
+    fireEvent.change(screen.getByTestId('rule-detail-description'), {
+      target: { value: 'after cancel' },
+    });
+    fireEvent.click(screen.getByTestId('rule-detail-save'));
+
+    await waitFor(() =>
+      expect(mockedApi.updateRule).toHaveBeenCalledWith('rule-1', {
+        description: 'after cancel',
+      }),
+    );
+    expect(mockedApi.updateRule.mock.calls[0][1]).not.toHaveProperty('severity');
+  });
+
+  it('keeps a partially extracted group visible and reloads when a rule fails', async () => {
+    mockedApi.extractRules.mockResolvedValue({
+      rules: [
+        {
+          id: '',
+          name: 'Extracted one',
+          type: 'format',
+          severity: 'warning',
+          scope: 'body',
+          description: '',
+          check_mode: 'ai',
+          pattern: null,
+          ai_prompt: 'check one',
+          enabled: true,
+          group_id: '',
+        },
+        {
+          id: '',
+          name: 'Extracted two',
+          type: 'format',
+          severity: 'warning',
+          scope: 'body',
+          description: '',
+          check_mode: 'ai',
+          pattern: null,
+          ai_prompt: 'check two',
+          enabled: true,
+          group_id: '',
+        },
+      ],
+      warnings: [],
+    } as WireExtractResult);
+    mockedApi.createGroup.mockResolvedValue({
+      ...GROUP,
+      id: 'group-extract',
+      name: '抽取规则 · spec.docx',
+    });
+    mockedApi.createRule
+      .mockResolvedValueOnce({ ...GROUP.rules[0], id: 'rule-new-1', group_id: 'group-extract' })
+      .mockRejectedValueOnce(new Error('boom'));
+    mockedApi.listGroups
+      .mockResolvedValueOnce([GROUP])
+      .mockResolvedValue([
+        GROUP,
+        { ...GROUP, id: 'group-extract', name: '抽取规则 · spec.docx', rules: [] },
+      ]);
+    renderWorkspace();
+
+    await waitFor(() => expect(screen.getByTestId('rules-extract')).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId('rules-extract'));
+
+    await waitFor(() => expect(mockedApi.listGroups).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.getByTestId('rules-group-item-group-extract')).toHaveAttribute(
+        'aria-current',
+        'true',
+      ),
+    );
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('已抽取部分规则'));
+  });
+
+  it('deleting a group confirms first and falls back to another group', async () => {
+    const otherGroup: WireRuleGroup = { ...GROUP, id: 'group-2', name: 'Other' };
+    mockedApi.deleteGroup.mockResolvedValue({ deleted: true, id: 'group-1' });
+    mockedApi.listGroups.mockResolvedValueOnce([GROUP, otherGroup]).mockResolvedValue([otherGroup]);
+    renderWorkspace();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('rules-group-delete-group-1')).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId('rules-group-delete-group-1'));
+
+    await waitFor(() => expect(mockedApi.deleteGroup).toHaveBeenCalledWith('group-1'));
+    await waitFor(() =>
+      expect(screen.getByTestId('rules-group-item-group-2')).toHaveAttribute(
+        'aria-current',
+        'true',
+      ),
+    );
+  });
+
+  it('does not delete a group when confirmation is cancelled', async () => {
+    confirmSpy.mockReturnValue(false);
+    renderWorkspace();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('rules-group-delete-group-1')).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId('rules-group-delete-group-1'));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(mockedApi.deleteGroup).not.toHaveBeenCalled();
+  });
+
+  it('refuses an oversized rule-pack file without calling importPack', async () => {
+    renderWorkspace();
+
+    await waitFor(() => expect(screen.getByTestId('rules-import-input')).toBeInTheDocument());
+    const file = new File(['{}'], 'huge.sage-rules', { type: 'application/json' });
+    Object.defineProperty(file, 'size', { value: 6 * 1024 * 1024 });
+    const text = vi.fn(() => Promise.resolve('{}'));
+    Object.defineProperty(file, 'text', { value: text });
+
+    fireEvent.change(screen.getByTestId('rules-import-input'), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('规则包文件过大')),
+    );
+    expect(text).not.toHaveBeenCalled();
+    expect(mockedApi.importPack).not.toHaveBeenCalled();
   });
 });
