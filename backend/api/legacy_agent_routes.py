@@ -53,6 +53,15 @@ _VALID_PERMISSION_MODES = {"read_only", "workspace_write", "prompt", "full_acces
 #: 触发专家版本号 +1 的人设/配置字段（spec §2.1：每次修改人设/知识绑定 +1）。
 _PERSONA_VERSIONED_FIELDS = ("system_prompt", "persona_ui", "knowledge_bindings", "skills")
 
+#: 不可删除的内置专家 id（产品入口，删除会破坏引导链路）
+PROTECTED_AGENT_IDS = frozenset({"primary", "sage-guide"})
+
+#: 删除受保护专家时的提示文案
+_PROTECTED_AGENT_LABELS = {
+    "primary": "主助手 (primary)",
+    "sage-guide": "Sage 向导 (sage-guide)",
+}
+
 
 
 # ==================== Agent API (PR-3) ====================
@@ -330,12 +339,13 @@ def _delete_agent_internal(agent_id: str) -> None:
     """内部删除逻辑（供单删与批量共用）。失败抛 HTTPException。"""
     from backend.data.agent_repo import AgentRepository
 
-    if agent_id == "primary":
+    if agent_id in PROTECTED_AGENT_IDS:
+        label = _PROTECTED_AGENT_LABELS.get(agent_id, agent_id)
         raise HTTPException(
             status_code=400,
             detail={
                 "type": "protected_agent",
-                "message": "主助手 (primary) 不可删除",
+                "message": f"{label} 不可删除",
             },
         )
 

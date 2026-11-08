@@ -19,8 +19,9 @@
 - **绑定去重**：同一 ``(source_type, source_id)``（specialist_private
   再加 ``agent_id``）只检索一次。
 
-当前实现覆盖三路源；``zotero_collection`` / ``workspace_fts`` 暂未
-接入（zotero 的 ``semantic_search`` 结果不带 collection 键，无法按绑定
+当前实现覆盖四路源（wiki_project / project_material /
+specialist_private / sage_docs）；``zotero_collection`` / ``workspace_fts``
+暂未接入（zotero 的 ``semantic_search`` 结果不带 collection 键，无法按绑定
 集合过滤），未知源类型静默跳过，见 M2 计划文档的跟进项。
 
 Python 3.8 兼容：``typing`` 泛型 + ``loop.run_in_executor``。
@@ -235,10 +236,36 @@ def _search_specialist_private(
     ]
 
 
+def _search_sage_docs(
+    binding: KnowledgeBinding,
+    query: str,
+    query_vector: Optional[List[float]],
+    limit: int,
+) -> List[SourceHit]:
+    """sage_docs → Sage 内置文档 FTS5 检索（忽略 query_vector）。"""
+    from backend.services.sage_docs.search import search_sage_docs
+
+    hits = search_sage_docs(query, limit=limit)
+    return [
+        SourceHit(
+            doc_id=f"{hit.rel_path}::{hit.chunk_index}",
+            content=hit.content,
+            loc={
+                "page_path": hit.rel_path,
+                "heading": hit.heading,
+                "start_line": hit.start_line,
+                "chunk_index": hit.chunk_index,
+            },
+        )
+        for hit in hits
+    ]
+
+
 _DEFAULT_SEARCHERS: Dict[str, Searcher] = {
     "wiki_project": _search_wiki_project,
     "project_material": _search_project_material,
     "specialist_private": _search_specialist_private,
+    "sage_docs": _search_sage_docs,
 }
 
 # =====================================================================

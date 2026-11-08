@@ -384,6 +384,53 @@ def _truncate_ocr_text(text: str, limit: int) -> str:
     return text[:limit] + _OCR_TEXT_TRUNCATION_MARKER
 
 
+#: M4（sage-guide）：specialist 权限模式的秩 —— 数值越大越宽松。
+#: 用于 ``_apply_specialist_cap`` 做"只降不升"的 min 比较。
+_SPECIALIST_MODE_RANK = {
+    "read_only": 0,
+    "prompt": 1,
+    "workspace_write": 2,
+    "full_access": 3,
+}
+
+
+def _apply_specialist_cap(
+    profile: Optional[Dict[str, Any]], base: PermissionEnforcer
+) -> PermissionEnforcer:
+    """specialist 角色的权限上限：profile 声明的 mode 只降不升。
+
+    - profile 为 None / 非 specialist / permission_mode 不合法 → 原样返回
+    - 全局 full_access + 专家 workspace_write → 实际 workspace_write
+    - 全局 read_only + 专家 full_access → 维持 read_only（已经更严）
+
+    作用于 base enforcer 实例，**不写回 settings**（``force_mode`` 只是实例覆盖）。
+    """
+    if not isinstance(profile, dict):
+        return base
+    if profile.get("role") != "specialist":
+        return base
+    profile_mode = profile.get("permission_mode")
+    if profile_mode not in _SPECIALIST_MODE_RANK:
+        return base
+    current_mode = getattr(base, "mode", None)
+    if current_mode is None:
+        return base
+    current_value = getattr(current_mode, "value", current_mode)
+    current_rank = _SPECIALIST_MODE_RANK.get(str(current_value), 0)
+    profile_rank = _SPECIALIST_MODE_RANK[str(profile_mode)]
+    if profile_rank < current_rank:
+        from backend.tools.permissions import PermissionMode
+
+        base.force_mode(PermissionMode(profile_mode))
+        logger.info(
+            "specialist 权限上限生效 agent=%s global=%s cap=%s",
+            profile.get("id"),
+            current_value,
+            profile_mode,
+        )
+    return base
+
+
 class SageAgent:
     """
     Sage 对话引擎
@@ -3169,6 +3216,10 @@ class SageAgent:
                 bash_validator=validate_bash,
                 path_boundary_validator=validator,
             )
+        # M4（sage-guide）：specialist 权限上限 —— profile 声明的 permission_mode
+        # 只降不升（min）。全局 full_access + 专家 workspace_write → 实际 workspace_write。
+        # 作用于 base enforcer，保证下游 trust wrapper 基于被限制后的 mode 判定。
+        base = _apply_specialist_cap(self.profile, base)
         try:
             from backend.services.trust_escalation import build_trust_enforcer
 

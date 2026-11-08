@@ -114,7 +114,7 @@ class KnowledgeBinding(BaseModel):
     agent_id: str
     source_type: Literal[
         "wiki_project", "zotero_collection", "project_material",
-        "workspace_fts", "specialist_private",
+        "workspace_fts", "specialist_private", "sage_docs",
     ]
     source_id: str        # project_id / collection_key / workspace_path
     name: str
@@ -136,6 +136,7 @@ query → 遍历 knowledge_bindings
   ├─ project_material   → ProjectMaterialIndexer.search(source_id, query)
   ├─ specialist_private → ~/.sage/specialists/<id>/vectors.json
   ├─ workspace_fts      → FTS5（待上游接入）
+  ├─ sage_docs          → backend/services/sage_docs/search.py (FTS5 + jieba 预分词)
   └─ zotero_collection  → 待上游返回集合元数据后接入
 → 每路 (doc, score) → reciprocal_rank_fusion(k=60) → top-k
 ```
@@ -227,7 +228,7 @@ zip 结构不变：`persona.md` + `avatar.png` + `skills/` + `knowledge/`。
 
 ### 7.2 内置模板库
 
-- 5 套模板：写作 `writing`、研究 `research`、编码 `coding`、演示 `presentation`、Office `office`。每套是一个目录（目录名 = `template_id`），内含与用户包同格式的 v2 `persona.md` + 私有技能——**单一真相源，不另立模板 DSL**。
+- 6 套模板：Sage 向导 `sage-guide`（首位、固定 id 幂等实例化）、写作 `writing`、研究 `research`、编码 `coding`、演示 `presentation`、Office `office`。每套是一个目录（目录名 = `template_id`），内含与用户包同格式的 v2 `persona.md` + 私有技能——**单一真相源，不另立模板 DSL**。
 - `backend/services/specialist_templates.py`：`list_templates()` 返回元数据（id/name/tagline/avatar/描述/技能数），不暴露完整提示词；`instantiate_template(template_id)` 复用导入管线物化函数，生成 `agent_id = specialist-<template_id>-<6hex>`、`source=builtin`，失败整体回滚（不写半成品 agents 行）。
 - `_TEMPLATES_DIR` 为模块相对路径，PyInstaller 打包需 `datas` 显式包含（见 §9）。
 
@@ -283,10 +284,13 @@ zip 结构不变：`persona.md` + `avatar.png` + `skills/` + `knowledge/`。
 datas = [
     (str(BACKEND_DIR / "services" / "specialist_templates"), "backend/services/specialist_templates"),
     (str(BACKEND_DIR / "services" / "golden_tasks.json"), "backend/services"),
-]
+    # sage-guide 知识源：docs/user-manual 全量 + 技术手册白名单 13 篇
+    # 白名单单一源头：backend/services/sage_docs/paths.py::TECHNICAL_WHITELIST
+    (str(DOCS_DIR / "user-manual"), "docs/user-manual"),
+] + [(str(DOCS_DIR / "technical" / name), "docs/technical") for name in TECHNICAL_WHITELIST]
 ```
 
-缺少这两项会导致发行包里 `list_templates()` / `run_golden_eval()` 启动即抛「文件缺失」。Windows 安装包走整目录复制，天然包含。
+缺少这三项会导致发行包里模板枚举/评测失败或向导"失明"。Windows 安装包走整目录复制，天然包含模板与 golden_tasks；docs 走 `extraResources` 同步策略（与 `electron-builder.yml` 的 `technical/*` 列表保持一致）。
 
 ---
 
