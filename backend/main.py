@@ -121,9 +121,11 @@ from backend.api.plugin_routes import router as plugin_router
 from backend.api.project_ai_routes import router as project_ai_router
 from backend.api.project_reference_routes import router as project_reference_router
 from backend.api.project_routes import router as project_router
+from backend.api.project_rules_routes import router as project_rules_router
 from backend.api.prompt_routes import router as prompt_router
 from backend.api.question_routes import router as question_router
 from backend.api.request_body_limit import MaxRequestBodyMiddleware
+from backend.api.rules_import_routes import router as rules_import_router
 from backend.api.rules_routes import router as rules_router
 from backend.api.runtime_routes import router as runtime_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
@@ -1523,6 +1525,10 @@ app.include_router(project_reference_router, prefix="/api/v1")
 app.include_router(project_ai_router, prefix="/api/v1")
 # 项目规程 (2026-10-31): /api/v1/playbooks/* 与 /api/v1/projects/{id}/playbook/*
 app.include_router(playbook_router, prefix="/api/v1")
+# 规则中心 M3 (2026-11-07): /api/v1/projects/{id}/rules[/effective]（只读聚合）
+app.include_router(project_rules_router, prefix="/api/v1")
+# 规则中心 M6 (2026-11-07): /api/v1/projects/{id}/rules/export 与 /api/v1/rules/import/*
+app.include_router(rules_import_router, prefix="/api/v1")
 # M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}
 app.include_router(permission_router, prefix="/api/v1")
 app.include_router(web_access_router, prefix="/api/v1")

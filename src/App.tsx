@@ -33,7 +33,9 @@ import { ShortcutHelpOverlay } from './widgets/system/ShortcutHelpOverlay';
 // R24-D6: 路由级代码分割 —— 首屏只加载 Chat/Welcome，低频页面
 // (设置/记忆/智能体/技能/Office/知识库/编排/定时任务) 按需加载。
 // Electron file:// 下同样减少首屏解析/执行量。
-const Projects = lazy(() => import('./pages/Projects').then((m) => ({ default: m.Projects })));
+const ProjectsOverview = lazy(() =>
+  import('./pages/ProjectsOverview').then((m) => ({ default: m.ProjectsOverview })),
+);
 const Settings = lazy(() => import('./pages/settings').then((m) => ({ default: m.Settings })));
 const Agents = lazy(() => import('./pages/Agents').then((m) => ({ default: m.Agents })));
 const Knowledge = lazy(() => import('./pages/Knowledge').then((m) => ({ default: m.Knowledge })));
@@ -70,9 +72,9 @@ const Arena = lazy(() => import('./pages/Arena').then((m) => ({ default: m.defau
 // Task 12 (2026-09-21): 待办子系统 - 完整管理页
 // 与 sidebar TodoSection（预览前 5 条）互补：列出全部待办、新建 / 完成 / 取消 / 删除。
 const TodoPage = lazy(() => import('./pages/TodoPage').then((m) => ({ default: m.TodoPage })));
-// Scheme 1 (2026-10-18): 项目治理页 — 分层渐进式披露，7 个治理 Tab 从工作台独立路由
+// Scheme 1 (2026-10-18): 项目治理页 — 分层渐进式披露，治理 Tab 从工作台独立路由
 const ProjectGovernance = lazy(() =>
-  import('./pages/ProjectGovernance').then((m) => ({ default: m.ProjectGovernance })),
+  import('./pages/governance/GovernanceShell').then((m) => ({ default: m.GovernanceShell })),
 );
 // 2026-11-03: 规程分享落地页 — 接收方打开分享链接后预览并导入
 const PlaybookSharePage = lazy(() =>
@@ -296,7 +298,7 @@ function App() {
             <Route path="skills" element={<Skills />} />
             <Route path="office" element={<Office />} />
             <Route path="projects/governance/:projectId" element={<ProjectGovernance />} />
-            <Route path="projects" element={<Projects />} />
+            <Route path="projects" element={<ProjectsOverview />} />
             <Route path="knowledge" element={<Knowledge />} />
             <Route path="scheduled" element={<ScheduledTasks />} />
             <Route path="orchestration" element={<Orchestration />} />

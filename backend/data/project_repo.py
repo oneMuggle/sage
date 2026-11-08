@@ -78,6 +78,8 @@ class Project:
     # discovery_source 标记子项目被发现的方式：'manual' | 'template' | 'context_file'。
     parent_id: Optional[str] = None
     discovery_source: Optional[str] = None
+    # 2026-11-07: 生命周期状态（"active" | "archived"）。
+    status: str = "active"
 
     def to_dict(self) -> dict:
         return {
@@ -98,6 +100,7 @@ class Project:
             "playbook_state": self.playbook_state,
             "parent_id": self.parent_id,
             "discovery_source": self.discovery_source,
+            "status": self.status,
         }
 
 
@@ -128,6 +131,7 @@ def _row_to_project(row) -> Project:  # noqa: ANN001 — sqlite3.Row
         playbook_state=row["playbook_state"] if "playbook_state" in row.keys() else None,  # noqa: SIM118
         parent_id=row["parent_id"] if "parent_id" in row.keys() else None,  # noqa: SIM118
         discovery_source=row["discovery_source"] if "discovery_source" in row.keys() else None,  # noqa: SIM118
+        status=row["status"] if "status" in row.keys() and row["status"] else "active",  # noqa: SIM118
     )
 
 
@@ -375,6 +379,17 @@ class ProjectRepository:
         cursor.execute(
             "UPDATE projects SET project_stage = ? WHERE id = ?",
             (project_stage, project_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def update_status(self, project_id: str, status: str) -> bool:
+        """更新项目生命周期状态（不存在返回 False）。"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET status = ? WHERE id = ?",
+            (status, project_id),
         )
         conn.commit()
         return cursor.rowcount > 0

@@ -8,7 +8,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { Projects } from '../../pages/Projects';
+import { ProjectsOverview } from '../../pages/ProjectsOverview';
 import { projectApi } from '../../shared/api';
 import { I18nProvider } from '../../shared/lib/i18n';
 import { GitStatusSection } from '../../widgets/sidebar/sections/GitStatusSection';
@@ -340,7 +340,9 @@ describe('ConstraintSummaryWidget', () => {
 
     await screen.findByTestId('constraint-summary-save-l3-btn');
     fireEvent.click(screen.getByTestId('constraint-summary-save-l3-btn'));
-    expect(screen.getByTestId('constraint-summary-save-l3-btn')).toHaveTextContent('已保存高优到项目记忆');
+    expect(screen.getByTestId('constraint-summary-save-l3-btn')).toHaveTextContent(
+      '已保存高优到项目记忆',
+    );
     fireEvent.click(screen.getByTestId('constraint-summary-save-l4-btn'));
     expect(screen.getByTestId('constraint-summary-save-l4-btn')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('constraint-summary-top-to-milestone-btn'));
@@ -373,9 +375,7 @@ describe('ConstraintSummaryWidget', () => {
     );
     fireEvent.click(screen.getByTestId('constraint-summary-copy-preview-btn'));
     fireEvent.click(screen.getByTestId('constraint-summary-rule-to-l3-c-p30-1'));
-    expect(screen.getByTestId('constraint-summary-rule-to-l3-c-p30-1')).toHaveTextContent(
-      '已保存',
-    );
+    expect(screen.getByTestId('constraint-summary-rule-to-l3-c-p30-1')).toHaveTextContent('已保存');
     fireEvent.click(screen.getByTestId('constraint-summary-rule-to-milestone-c-p30-1'));
     expect(screen.getByTestId('constraint-summary-rule-to-milestone-c-p30-1')).toHaveTextContent(
       '已转里程碑',
@@ -479,7 +479,9 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('git-widget-files-to-milestone-btn'));
     expect(screen.getByTestId('git-widget-files-to-milestone-btn')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('git-widget-files-to-l3-btn'));
-    expect(screen.getByTestId('git-widget-files-to-l3-btn')).toHaveTextContent('已存变更到项目记忆');
+    expect(screen.getByTestId('git-widget-files-to-l3-btn')).toHaveTextContent(
+      '已存变更到项目记忆',
+    );
     fireEvent.click(screen.getByTestId('git-widget-copy-branch-btn'));
     fireEvent.click(screen.getByTestId('git-widget-guard-all-btn'));
     fireEvent.click(screen.getByTestId('git-widget-copy-commits-md-btn'));
@@ -488,7 +490,9 @@ describe('ConstraintSummaryWidget', () => {
       '已转提交规则',
     );
     fireEvent.click(screen.getByTestId('git-widget-save-commits-l3-btn'));
-    expect(screen.getByTestId('git-widget-save-commits-l3-btn')).toHaveTextContent('已保存到 AI 记忆');
+    expect(screen.getByTestId('git-widget-save-commits-l3-btn')).toHaveTextContent(
+      '已保存到 AI 记忆',
+    );
     fireEvent.click(screen.getByTestId('git-widget-save-l4-btn'));
     expect(screen.getByTestId('git-widget-save-l4-btn')).toHaveTextContent('已提交存为资料');
     fireEvent.click(screen.getByTestId('git-widget-commit-to-milestone-abc1234567'));
@@ -523,7 +527,9 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('constraint-editor-clear-test-path-btn'));
     expect(screen.getByTestId('constraint-editor-test-path-input')).toHaveValue('');
     fireEvent.click(screen.getByTestId('constraint-editor-save-l3-btn'));
-    expect(screen.getByTestId('constraint-editor-save-l3-btn')).toHaveTextContent('已保存到 AI 记忆');
+    expect(screen.getByTestId('constraint-editor-save-l3-btn')).toHaveTextContent(
+      '已保存到 AI 记忆',
+    );
     fireEvent.click(screen.getByTestId('constraint-editor-to-milestone-btn'));
     expect(screen.getByTestId('constraint-editor-to-milestone-btn')).toHaveTextContent(
       '已转里程碑',
@@ -578,7 +584,9 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByText('高优禁止明文密钥提交')).toBeInTheDocument();
     expect(screen.queryByText('低优代码注释建议')).toBeNull();
     fireEvent.click(screen.getByTestId('constraint-batch-promote-l3-btn'));
-    expect(screen.getByTestId('constraint-batch-promote-l3-btn')).toHaveTextContent('已批量存项目记忆');
+    expect(screen.getByTestId('constraint-batch-promote-l3-btn')).toHaveTextContent(
+      '已批量存项目记忆',
+    );
     fireEvent.click(screen.getByTestId('constraint-batch-save-l4-btn'));
     expect(screen.getByTestId('constraint-batch-save-l4-btn')).toHaveTextContent('已批量存为资料');
     fireEvent.click(screen.getByTestId('constraint-batch-to-milestone-btn'));
@@ -608,7 +616,7 @@ describe('ConstraintSummaryWidget', () => {
       <MemoryRouter>
         <I18nProvider>
           <GitStatusSection collapsed={false} onToggleCollapsed={vi.fn()} />
-          <Projects />
+          <ProjectsOverview />
         </I18nProvider>
       </MemoryRouter>,
     );

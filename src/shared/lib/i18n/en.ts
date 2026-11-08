@@ -9,6 +9,7 @@ import { enChatSteerStaging } from './locales/en/chatSteerStaging';
 import { enContextMenu } from './locales/en/contextMenu';
 import { enPetPack } from './locales/en/petPack';
 import { enPlaybook } from './locales/en/playbook';
+import { enRules } from './locales/en/rules';
 import { enSettingsAndModels } from './locales/en/settingsAndModels';
 import { enSettingsUi } from './locales/en/settingsUi';
 import { enWorkspaceAndTools } from './locales/en/workspaceAndTools';
@@ -25,6 +26,7 @@ export const en: Record<TranslationKey, string> = {
   ...enContextMenu,
   ...enPetPack,
   ...enPlaybook,
+  ...enRules,
   ...enSettingsAndModels,
   ...enSettingsUi,
   ...enWorkspaceAndTools,

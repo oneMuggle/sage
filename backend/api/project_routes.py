@@ -513,6 +513,8 @@ def update_project(project_id: str, request: ProjectUpdateRequest) -> ProjectMod
             logging.getLogger(__name__).warning(
                 "failed to sync playbook stage for %s", project_id, exc_info=True
             )
+    if "status" in fields_set:
+        repo.update_status(project_id, request.status or "active")
     if "project_sub_type" in fields_set:
         repo.update_project_sub_type(project_id, request.project_sub_type)
     if "vcs_mode" in fields_set and request.vcs_mode:
