@@ -115,6 +115,7 @@
 | 135  | [专家资产中心](./135-specialist-asset-hub.md)                                          | 专家视角统一管理私有记忆 / 知识绑定 / 技能；手动追加私有记忆的 `agent_id` 全链路（save_memory → memorize）；提升共享与删除                                                                                                                                                                                    |
 | 136  | [技能页面优化](./136-skills-page-optimization.md)                                    | M1 草稿/待审列表 + 来源徽章 + 操作菜单；M2 详情抽屉 + 审查通过/拒绝；M3 搜索/筛选/排序 + 导出 zip + 打开目录；M4 i18n 全量 + 升级不丢                                                                                                                       |
 | 137  | [定时任务自动执行](./137-scheduled-task-auto-execute.md)                             | `execute` / `deliver` 双模式 + APScheduler 线程桥接主事件循环 + `run_turn_tracked` 多轮 ReAct（`max_iterations=8`）+ 三字段幂等迁移 + 执行结果跳转高亮 + 异常脱敏与一次性任务失败禁用                                                                                                                       |
+| 138  | [项目工作台·规则中心](./138-project-workbench-rules-center.md)                       | 四层适配器（constraint/playbook/doc/global）+ 规则包信封（sage.rules JSON/Markdown/AGENTS.md）+ AI diff 修改 + 导入导出 + 规程库搜索与元数据编辑                                                                                                                                                          |
 
 ---
 
@@ -123,7 +124,7 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 用户价值层 | [01 概述](../01-overview.md) — [12 实施计划](../12-plan.md) |
-| 横切关注点 | 本目录（15-137）                                            |
+| 横切关注点 | 本目录（15-138）                                            |
 
 ---
 
