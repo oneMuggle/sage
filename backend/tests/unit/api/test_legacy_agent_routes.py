@@ -79,6 +79,7 @@ def fake_memory_manager(monkeypatch):
 def fake_repo(monkeypatch, fake_memory_manager):
     agents = {
         "primary": {"id": "primary", "name": "Primary", "enabled": True},
+        "sage-guide": {"id": "sage-guide", "name": "Sage 向导", "enabled": True},
         "coder": {"id": "coder", "name": "Coder", "enabled": True},
     }
     repo = _FakeAgentRepo(agents)
@@ -98,7 +99,7 @@ def test_list_agents_returns_list(fake_repo):
 
     out = list_agents()
     assert isinstance(out, list)
-    assert len(out) == 2
+    assert len(out) == 3
 
 
 def test_get_agent_by_id_hit(fake_repo):
@@ -184,6 +185,14 @@ def test_delete_agent_primary_protected_400(fake_repo):
     assert excinfo.value.detail["type"] == "protected_agent"
     # primary 必须原样保留
     assert "primary" in fake_repo._agents
+
+
+def test_delete_agent_sage_guide_protected_400(fake_repo):
+    with pytest.raises(HTTPException) as excinfo:
+        delete_agent("sage-guide")
+    assert excinfo.value.status_code == 400
+    assert excinfo.value.detail["type"] == "protected_agent"
+    assert "sage-guide" in fake_repo._agents
 
 
 def test_delete_agent_not_found_404(fake_repo):

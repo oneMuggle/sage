@@ -4,7 +4,7 @@ POST /specialists/templates/{id}/instantiate）。
 
 使用真实临时库（conftest autouse ``setup_test_db``）与最小 FastAPI app，
 ``SAGE_SPECIALISTS_DIR`` 指向 tmp_path 避免污染用户目录。覆盖：
-- 列表返回 5 个模板，不含 system_prompt
+- 列表返回 6 个模板（sage-guide 首位），不含 system_prompt
 - 一键实例化 201 + 返回 id/name/template_id/dropped_bindings
 - 未知模板 404；非法 id 404
 """
@@ -30,11 +30,12 @@ def client(tmp_path, monkeypatch) -> TestClient:
     return TestClient(app)
 
 
-def test_list_templates_returns_five(client: TestClient) -> None:
+def test_list_templates_returns_six(client: TestClient) -> None:
     resp = client.get("/specialists/templates")
     assert resp.status_code == 200, resp.text
     templates = resp.json()["templates"]
     assert [t["id"] for t in templates] == [
+        "sage-guide",
         "writing",
         "research",
         "coding",

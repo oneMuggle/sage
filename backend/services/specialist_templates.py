@@ -1,8 +1,9 @@
 # ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容
 """内置专家模板库（M4-Task 2，spec §9 模板库）。
 
-5 套内置模板以目录形式存放于 ``specialist_templates/<template_id>/``，
+6 套内置模板以目录形式存放于 ``specialist_templates/<template_id>/``，
 每套即一个 v2 格式 ``persona.md``（与用户专家包同格式，单一真相源）。
+``sage-guide`` 是固定 id 的内置单例（见 ``_instantiate_sage_guide``）。
 
 公共 API：
 
@@ -33,7 +34,17 @@ _TEMPLATES_DIR = Path(__file__).resolve().parent / "specialist_templates"
 _TEMPLATE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 
 #: 展示顺序（与 spec §M4 模板清单一致），其余模板按 name 排序追加
-_TEMPLATE_ORDER = ("writing", "research", "coding", "presentation", "office")
+_TEMPLATE_ORDER = (
+    "sage-guide",
+    "writing",
+    "research",
+    "coding",
+    "presentation",
+    "office",
+)
+
+#: 「Sage 向导」固定 id —— 内置单例，模板物化时复用而不是复制
+_SAGE_GUIDE_ID = "sage-guide"
 
 #: 默认头像（模板未声明 persona_ui.avatar 时使用）
 _DEFAULT_AVATAR = "🧑‍💼"
@@ -158,12 +169,36 @@ def get_template_dir(template_id: str) -> Optional[Path]:
     return dir_
 
 
+def _instantiate_sage_guide(template_id: str) -> Dict[str, Any]:
+    """「Sage 向导」按固定 id 物化（幂等单例）。
+
+    导入管线会剔除 ``sage_docs`` 绑定且总是生成新 id，不适合内置单例：
+    向导必须始终只有一份，且保留默认种子里的 ``sage_docs`` 知识绑定。
+    """
+    from backend.agents.profiles import ensure_default_agents
+    from backend.data.agent_repo import AgentRepository
+
+    repo = AgentRepository()
+    existed = repo.get(_SAGE_GUIDE_ID) is not None
+    if not existed:
+        ensure_default_agents()
+    row = repo.get(_SAGE_GUIDE_ID) or {}
+    return {
+        "id": _SAGE_GUIDE_ID,
+        "name": row.get("name") or "Sage 向导",
+        "template_id": template_id,
+        "dropped_bindings": 0,
+        "existed": existed,
+    }
+
+
 def instantiate_template(template_id: str) -> Dict[str, Any]:
     """从内置模板一键创建专家。
 
     行为:
 
     - ``agent_id = specialist-<template_id>-<6hex>``（6 位随机 hex 防冲突）
+    - ``sage-guide`` 例外：固定 id 幂等单例，返回 ``existed`` 标记
     - ``source=builtin``（显式覆盖，不信任模板内部 source 字段）
     - 失败整体回滚（目录 + agents 行由 importer 处理）
     - 成功后返回 ``{"id", "name", "template_id", "dropped_bindings"}``
@@ -174,6 +209,9 @@ def instantiate_template(template_id: str) -> Dict[str, Any]:
     template_dir = get_template_dir(template_id)
     if template_dir is None:
         raise ValueError(f"模板不存在: {template_id}")
+
+    if template_id == _SAGE_GUIDE_ID:
+        return _instantiate_sage_guide(template_id)
 
     from backend.services.specialist_importer import install_specialist_from_dir
 
