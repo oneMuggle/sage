@@ -268,6 +268,7 @@ export const zhChatAndSider = {
   'chat.recap_failed': '生成进度总结失败：{message}',
   'chat.recap_too_short': '对话较短，无法生成有意义的进度总结',
   'chat.recap_no_llm': '没有可用的 LLM 配置，无法生成进度总结',
+  'chat.recap_throttled': '5 分钟内已生成过总结，请稍后再试',
 
   'session.fork_badge': '分叉会话',
   'session.fork_tree_open': '查看分叉家族树',

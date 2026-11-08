@@ -280,6 +280,7 @@ export const enChatAndSider = {
   'chat.recap_failed': 'Failed to generate progress summary: {message}',
   'chat.recap_too_short': 'Conversation too short to generate a meaningful summary',
   'chat.recap_no_llm': 'No LLM configuration available to generate the summary',
+  'chat.recap_throttled': 'Recap was generated recently, please try again in a few minutes',
 
   'session.fork_badge': 'Forked session',
   'session.fork_tree_open': 'View fork family tree',

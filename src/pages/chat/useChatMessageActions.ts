@@ -107,22 +107,29 @@ export function useChatMessageActions({
 
   // Recap (2026-11-08): 生成会话进度总结。成功后把结果存到 state 供 Chat 渲染
   // RecapCard；失败/过短走 toast。对标 Claude Code /recap。
+  // 5 分钟节流：避免重复点击浪费 token（计划风险表 §重复 recap）。
+  const RECAP_THROTTLE_MS = 5 * 60 * 1000;
   const [recapResult, setRecapResult] = useState<RecapResult | null>(null);
+  const lastRecapAtRef = useRef<number>(0);
   const dismissRecap = useCallback(() => setRecapResult(null), []);
   const handleRecap = useCallback(async () => {
     if (!currentSessionId || isLoading) return;
+    const now = Date.now();
+    if (now - lastRecapAtRef.current < RECAP_THROTTLE_MS) {
+      toast.info(t('chat.recap_throttled'));
+      return;
+    }
     try {
       const resp = await sessionApi.recap(currentSessionId);
       if (resp.ok && resp.recap) {
+        lastRecapAtRef.current = Date.now();
         setRecapResult(resp.recap);
       } else if (resp.reason === 'too_short') {
         toast.info(t('chat.recap_too_short'));
       } else if (resp.error === 'llm_not_configured') {
         toast.error(t('chat.recap_no_llm'));
       } else {
-        toast.error(
-          fill(t('chat.recap_failed'), { message: resp.message ?? resp.error ?? '' }),
-        );
+        toast.error(fill(t('chat.recap_failed'), { message: resp.message ?? resp.error ?? '' }));
       }
     } catch (e) {
       toast.error(
