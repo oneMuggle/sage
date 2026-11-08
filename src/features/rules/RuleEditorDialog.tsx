@@ -3,7 +3,8 @@ import type { CreatableRuleLayer, RuleEntry } from '../../shared/api/rulesApi';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { RuleEditorBody } from './RuleEditorBody';
-import { EditorFooter, RuleEditorShell } from './RuleEditorFields';
+import { EditorFooter } from './RuleEditorFields';
+import { RuleEditorShell } from './RuleEditorShell';
 import { useRuleEditorForm } from './useRuleEditorForm';
 
 /** 与后端 `markdown_rules.MAX_RULE_CHARS` 保持一致。 */

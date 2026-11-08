@@ -194,15 +194,16 @@ function CardStatusSections({
   );
 }
 
-export function PatchCard({
-  operation,
-  selected,
-  disabled = false,
-  result = null,
-  onToggle,
-  onOpenPlaybook,
-}: PatchCardProps) {
-  const { t } = useI18n();
+function computePatchDisplay(
+  operation: PatchOperation,
+  t: (key: string) => string,
+): {
+  before: string;
+  change: string | null;
+  isReadonly: boolean;
+  errorMessage: string | null;
+  selectLabel: string;
+} {
   const before = readContent(operation.before);
   const change = describeChange(operation);
   const isReadonly = operation.error === 'readonly_layer';
@@ -217,6 +218,22 @@ export function PatchCard({
     [t(ACTION_KEYS[operation.action]), operation.ruleId || before || change]
       .filter(Boolean)
       .join(' · ') || t('rules.ai.select');
+  return { before, change, isReadonly, errorMessage, selectLabel };
+}
+
+export function PatchCard({
+  operation,
+  selected,
+  disabled = false,
+  result = null,
+  onToggle,
+  onOpenPlaybook,
+}: PatchCardProps) {
+  const { t } = useI18n();
+  const { before, change, isReadonly, errorMessage, selectLabel } = computePatchDisplay(
+    operation,
+    t,
+  );
   return (
     <div
       data-testid={`patch-card-${operation.opId}`}

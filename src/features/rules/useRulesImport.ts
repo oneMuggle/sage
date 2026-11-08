@@ -68,9 +68,7 @@ export function useRulesImport(
     stage, projectId, hasGlobal, globalAck, candidates, selectedIds, overwrite, t, onApplied, onOpenChange, envelopeRef, setStage,
   );
   const toggle = useToggle(setSelectedIds);
-  const selectAllNew = useCallback(() => {
-    setSelectedIds(new Set(actionableCandidates.filter(isSelectableByDefault).map((c) => c.id)));
-  }, [actionableCandidates]);
+  const selectAllNew = useSelectAllNew(actionableCandidates, setSelectedIds);
 
   const applyDisabled =
     stage !== 'ready' || !projectId || selectedIds.size === 0 || (hasGlobal && !globalAck);
@@ -169,4 +167,13 @@ function useToggle(setSelectedIds: React.Dispatch<React.SetStateAction<Set<strin
       return copy;
     });
   }, [setSelectedIds]);
+}
+
+function useSelectAllNew(
+  actionableCandidates: ImportCandidate[],
+  setSelectedIds: React.Dispatch<React.SetStateAction<Set<string>>>,
+) {
+  return useCallback(() => {
+    setSelectedIds(new Set(actionableCandidates.filter(isSelectableByDefault).map((c) => c.id)));
+  }, [actionableCandidates, setSelectedIds]);
 }
