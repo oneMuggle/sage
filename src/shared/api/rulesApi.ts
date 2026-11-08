@@ -125,6 +125,62 @@ interface PatchOperationWire {
   error: string | null;
 }
 
+/* ===== 规则包导出 / 导入（Task 25）===== */
+
+export interface RulesExportOptions {
+  format?: 'json' | 'md' | 'agents';
+  includeConstraints?: boolean;
+  includePlaybook?: boolean;
+  includeGlobal?: boolean;
+  includeDocs?: boolean;
+}
+
+export interface RulesExportResult {
+  format: string;
+  filename: string;
+  content: string;
+}
+
+// These are backend documents passed through verbatim, not domain entities —
+// they stay snake_case (`duplicate_of`, `trigger_pattern`, `filename`).
+export interface ImportCandidate {
+  id: string;
+  kind: 'constraint' | 'doc' | 'global' | 'playbook';
+  status: 'new' | 'duplicate' | 'conflict';
+  content: string;
+  duplicate_of?: string | null;
+  layer?: string | null;
+  category?: string | null;
+  trigger_pattern?: string | null;
+  priority: number;
+  enabled: boolean;
+  filename?: string | null;
+}
+
+export interface ImportApplyResult {
+  applied: number;
+  failed: number;
+  results: Array<{ id: string; status: 'applied' | 'skipped' | 'failed'; message: string }>;
+}
+
+export interface PlaybookLibraryItem {
+  id: string;
+  name: string;
+  source: string;
+  spec_hash: string;
+  created_at: number;
+  stage_count: number;
+  directories: string[];
+  description: string;
+  tags: string[];
+}
+
+export interface PlaybookLibraryUpdateInput {
+  name?: string;
+  description?: string;
+  tags?: string[];
+}
+
 function mapPatchOperation(wire: PatchOperationWire): PatchOperation {
   return {
     opId: wire.op_id,
@@ -270,5 +326,49 @@ export const rulesApi = {
       applied: Number(response.applied ?? 0),
       failed: Number(response.failed ?? 0),
     };
+  },
+
+  exportRules(projectId: string, options: RulesExportOptions = {}): Promise<RulesExportResult> {
+    return invoke<RulesExportResult>('rules_export_rules', { projectId, ...options });
+  },
+
+  previewImport(
+    envelope: unknown,
+    projectId?: string,
+  ): Promise<{ candidates: ImportCandidate[] }> {
+    return invoke<{ candidates: ImportCandidate[] }>('rules_import_preview', {
+      envelope,
+      projectId,
+    });
+  },
+
+  applyImport(
+    envelope: unknown,
+    projectId: string,
+    selected: string[],
+    overwrite: boolean,
+  ): Promise<ImportApplyResult> {
+    return invoke<ImportApplyResult>('rules_import_apply', {
+      envelope,
+      projectId,
+      selected,
+      overwrite,
+    });
+  },
+
+  async listPlaybookLibrary(q?: string): Promise<PlaybookLibraryItem[]> {
+    const response = await invoke<{ items: PlaybookLibraryItem[] }>('playbook_library_list', { q });
+    return response.items ?? [];
+  },
+
+  async updatePlaybookLibrary(
+    libraryId: string,
+    patch: PlaybookLibraryUpdateInput,
+  ): Promise<PlaybookLibraryItem> {
+    const response = await invoke<{ item: PlaybookLibraryItem }>('playbook_library_update', {
+      libraryId,
+      ...patch,
+    });
+    return response.item;
   },
 };

@@ -90,4 +90,66 @@ export const rulesRoutes: Record<string, CommandRoute> = {
       operations: a.operations ?? [],
     }),
   },
+
+  // ===== 导出 / 导入（Task 25）=====
+  rules_export_rules: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      if (a.format) params.set('format', String(a.format));
+      if (a.includeConstraints !== undefined)
+        params.set('include_constraints', String(Boolean(a.includeConstraints)));
+      else if (a.include_constraints !== undefined)
+        params.set('include_constraints', String(Boolean(a.include_constraints)));
+      if (a.includePlaybook !== undefined)
+        params.set('include_playbook', String(Boolean(a.includePlaybook)));
+      if (a.includeGlobal !== undefined)
+        params.set('include_global', String(Boolean(a.includeGlobal)));
+      if (a.includeDocs !== undefined)
+        params.set('include_docs', String(Boolean(a.includeDocs)));
+      const qs = params.toString();
+      return `/api/v1/projects/${projectId(a)}/rules/export${qs ? `?${qs}` : ''}`;
+    },
+  },
+  // rawBody: 用户上传的 envelope 里是规则文档原样（snake_case），
+  // 若让 invoke.ts 递归转 camel→snake 会把包内字段一起改写。
+  rules_import_preview: {
+    method: 'POST',
+    path: () => '/api/v1/rules/import/preview',
+    body: (a) =>
+      pick(a, {
+        envelope: ['envelope'],
+        project_id: ['projectId', 'project_id'],
+      }),
+    rawBody: true,
+  },
+  rules_import_apply: {
+    method: 'POST',
+    path: () => '/api/v1/rules/import/apply',
+    body: (a) =>
+      pick(a, {
+        envelope: ['envelope'],
+        project_id: ['projectId', 'project_id'],
+        selected: ['selected'],
+        overwrite: ['overwrite'],
+      }),
+    rawBody: true,
+  },
+  playbook_library_list: {
+    method: 'GET',
+    path: (a) => {
+      const q = a.q ? `?q=${encodeURIComponent(String(a.q))}` : '';
+      return `/api/v1/playbooks/library${q}`;
+    },
+  },
+  playbook_library_update: {
+    method: 'PATCH',
+    path: (a) => `/api/v1/playbooks/library/${enc(a.libraryId ?? a.library_id)}`,
+    body: (a) =>
+      pick(a, {
+        name: ['name'],
+        description: ['description'],
+        tags: ['tags'],
+      }),
+  },
 };
