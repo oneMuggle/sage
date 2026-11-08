@@ -17,6 +17,7 @@ import { TaskCenterWidget } from '../task-center/TaskCenterWidget';
 
 import { ResizeDivider } from './ResizeDivider';
 import { Sidebar } from './Sidebar';
+import { SidebarSlotProvider } from './SidebarSlotProvider';
 import { Titlebar } from './Titlebar';
 
 export function Layout() {
@@ -94,120 +95,122 @@ export function Layout() {
   }, []);
 
   return (
-    <div className="flex h-screen bg-bg">
-      {/* 跳到主内容链接 (a11y) */}
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded"
-      >
-        跳到主内容
-      </a>
+    <SidebarSlotProvider>
+      <div className="flex h-screen bg-bg">
+        {/* 跳到主内容链接 (a11y) */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded"
+        >
+          跳到主内容
+        </a>
 
-      {isMobile ? (
-        <>
-          {/* 移动端遮罩 */}
-          {mobileOpen && (
+        {isMobile ? (
+          <>
+            {/* 移动端遮罩 */}
+            {mobileOpen && (
+              <div
+                className="fixed inset-0 z-30 bg-overlay transition-opacity"
+                onClick={() => setMobileOpen(false)}
+              />
+            )}
+            {/* 移动端侧边栏（覆盖层） */}
             <div
-              className="fixed inset-0 z-30 bg-overlay transition-opacity"
-              onClick={() => setMobileOpen(false)}
-            />
-          )}
-          {/* 移动端侧边栏（覆盖层） */}
-          <div
-            className={`fixed z-40 h-screen transition-transform duration-200 ${
-              mobileOpen ? 'translate-x-0' : '-translate-x-full'
-            }`}
-          >
-            <ErrorBoundary
-              fallback={(error, reset) => (
-                <div className="p-4 text-error">
-                  Sidebar 错误: {error.message}
-                  <button onClick={reset} className="ml-2 text-primary">
-                    重试
-                  </button>
-                </div>
-              )}
+              className={`fixed z-40 h-screen transition-transform duration-200 ${
+                mobileOpen ? 'translate-x-0' : '-translate-x-full'
+              }`}
             >
-              <Sidebar />
-            </ErrorBoundary>
-          </div>
-        </>
-      ) : (
-        <>
-          {/* P1-3.6 (UI 优化方案 2026-09-13): 折叠态 → 56px icon rail（Claude 风格）。
+              <ErrorBoundary
+                fallback={(error, reset) => (
+                  <div className="p-4 text-error">
+                    Sidebar 错误: {error.message}
+                    <button onClick={reset} className="ml-2 text-primary">
+                      重试
+                    </button>
+                  </div>
+                )}
+              >
+                <Sidebar />
+              </ErrorBoundary>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* P1-3.6 (UI 优化方案 2026-09-13): 折叠态 → 56px icon rail（Claude 风格）。
                不再 translate-x-full 隐藏，而是始终保留窄栏在流中，
                显示品牌 logo + 导航图标，会话列表/sections 隐藏。
                2026-09-13 P0: 折叠/展开宽度加 200ms 过渡；拖拽调宽时禁用
                过渡（isDragging），否则拖拽跟手性会被动画拖慢。 */}
-          <div
-            className={`flex-shrink-0 overflow-hidden ${isDragging ? '' : 'transition-[width] duration-200 ease-in-out'}`}
-            style={{ width: collapsed ? 56 : width }}
-          >
+            <div
+              className={`flex-shrink-0 overflow-hidden ${isDragging ? '' : 'transition-[width] duration-200 ease-in-out'}`}
+              style={{ width: collapsed ? 56 : width }}
+            >
+              <ErrorBoundary
+                fallback={(error, reset) => (
+                  <div className="w-64 p-4 text-error">
+                    Sidebar 错误: {error.message}
+                    <button onClick={reset} className="ml-2 text-primary">
+                      重试
+                    </button>
+                  </div>
+                )}
+              >
+                <Sidebar
+                  width={collapsed ? 56 : width}
+                  collapsed={collapsed}
+                  onToggleCollapse={() => setCollapsed((prev) => !prev)}
+                />
+              </ErrorBoundary>
+            </div>
+
+            {!collapsed && <ResizeDivider onMouseDown={onMouseDown} />}
+          </>
+        )}
+
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Titlebar
+            hideBrandLogo={!isMobile}
+            onToggleMobileSidebar={isMobile ? () => setMobileOpen((prev) => !prev) : undefined}
+            mobileSidebarOpen={mobileOpen}
+          />
+          {/* 第二轮 C3: 云端模型端点不可达 / 系统断网时的全局提示 */}
+          <EndpointStatusBanner />
+          <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden">
             <ErrorBoundary
               fallback={(error, reset) => (
-                <div className="w-64 p-4 text-error">
-                  Sidebar 错误: {error.message}
+                <div className="flex items-center justify-center h-full text-error">
+                  Page 错误: {error.message}
                   <button onClick={reset} className="ml-2 text-primary">
                     重试
                   </button>
                 </div>
               )}
             >
-              <Sidebar
-                width={collapsed ? 56 : width}
-                collapsed={collapsed}
-                onToggleCollapse={() => setCollapsed((prev) => !prev)}
-              />
-            </ErrorBoundary>
-          </div>
-
-          {!collapsed && <ResizeDivider onMouseDown={onMouseDown} />}
-        </>
-      )}
-
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Titlebar
-          hideBrandLogo={!isMobile}
-          onToggleMobileSidebar={isMobile ? () => setMobileOpen((prev) => !prev) : undefined}
-          mobileSidebarOpen={mobileOpen}
-        />
-        {/* 第二轮 C3: 云端模型端点不可达 / 系统断网时的全局提示 */}
-        <EndpointStatusBanner />
-        <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden">
-          <ErrorBoundary
-            fallback={(error, reset) => (
-              <div className="flex items-center justify-center h-full text-error">
-                Page 错误: {error.message}
-                <button onClick={reset} className="ml-2 text-primary">
-                  重试
-                </button>
-              </div>
-            )}
-          >
-            {/* 2026-09-13 P0: 路由切换过渡 — 按 pathname key 触发入场动画
+              {/* 2026-09-13 P0: 路由切换过渡 — 按 pathname key 触发入场动画
                 (fade + 6px 上移，进入式无退出动画)。search 变化不换 key，
                 /chat?session=x 深链不会重挂 Chat。 */}
-            {/* 内层 Suspense: lazy 页面 chunk 加载期间显示页面骨架，
+              {/* 内层 Suspense: lazy 页面 chunk 加载期间显示页面骨架，
                 Sidebar 保持不动；此前的空 div fallback 挂在 App.tsx 外层，
                 会把整个布局（含 Sidebar）替换成空白。 */}
-            <div
-              key={location.pathname}
-              className="flex-1 flex flex-col overflow-hidden animate-route-enter"
-            >
-              <Suspense fallback={<PageSkeleton />}>
-                <Outlet />
-              </Suspense>
-            </div>
-          </ErrorBoundary>
-        </main>
+              <div
+                key={location.pathname}
+                className="flex-1 flex flex-col overflow-hidden animate-route-enter"
+              >
+                <Suspense fallback={<PageSkeleton />}>
+                  <Outlet />
+                </Suspense>
+              </div>
+            </ErrorBoundary>
+          </main>
+        </div>
+        {/* P4: 全局任务中心胶囊 —— 跨页面聚合 office/wiki 等长任务与后台聊天流 */}
+        <TaskCenterWidget />
+        {/* 2026-11-05: 等待审批/提问 → 任务栏闪烁 / dock badge */}
+        <TaskbarAttentionBridge />
+        {/* A4: 全局交付抽屉（lane / office 验收） */}
+        <DeliveryDrawerHost />
       </div>
-      {/* P4: 全局任务中心胶囊 —— 跨页面聚合 office/wiki 等长任务与后台聊天流 */}
-      <TaskCenterWidget />
-      {/* 2026-11-05: 等待审批/提问 → 任务栏闪烁 / dock badge */}
-      <TaskbarAttentionBridge />
-      {/* A4: 全局交付抽屉（lane / office 验收） */}
-      <DeliveryDrawerHost />
-    </div>
+    </SidebarSlotProvider>
   );
 }
 
