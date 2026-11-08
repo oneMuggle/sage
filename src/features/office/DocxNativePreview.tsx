@@ -14,6 +14,8 @@ import { useEffect, useRef, useState } from 'react';
 import { officeApi } from '../../shared/api/officeApi';
 import { useI18n } from '../../shared/lib/i18n';
 
+import { annotateParagraphIndexes } from './sidebar/selectionAnchor';
+
 // eslint-disable-next-line react-refresh/only-export-components -- 消毒器与组件同文件便于内聚
 export function sanitizeRenderedDocx(container: HTMLElement): void {
   const dangerous = container.querySelectorAll('script, iframe, object, embed, link');
@@ -43,6 +45,8 @@ export interface DocxNativePreviewProps {
    * and part of the late-response guard below.
    */
   revision?: string | null;
+  /** Optional callback when docx-preview fails. Used by parent to fall back to structured view. */
+  onError?: () => void;
 }
 
 /**
@@ -74,6 +78,7 @@ export async function renderDocxDataUrl(container: HTMLElement, dataUrl: string)
     FORBID_ATTR: ['srcset'],
   });
   sanitizeRenderedDocx(container);
+  annotateParagraphIndexes(container);
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -117,6 +122,7 @@ export function DocxNativePreview({
   workspacePath,
   managedPath,
   revision,
+  onError,
 }: DocxNativePreviewProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -140,12 +146,18 @@ export function DocxNativePreview({
         await renderDocxDataUrl(container, res.data_url);
         if (!cancelled) setState('ok');
       } catch {
-        if (!cancelled) setState('error');
+        if (!cancelled) {
+          setState('error');
+          onError?.();
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
+    // `onError` is intentionally omitted: parents pass a fresh closure each
+    // render, so including it would re-run the docx render on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspacePath, managedPath, revision]);
 
   if (state === 'error') {
@@ -171,7 +183,7 @@ export function DocxNativePreview({
           />
         </div>
       )}
-      <div ref={containerRef} className="min-h-24 p-4" />
+      <div ref={containerRef} className="p-4" />
     </div>
   );
 }

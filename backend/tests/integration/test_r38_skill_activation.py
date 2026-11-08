@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-from typing import Optional
+from typing import List, Optional
 from unittest.mock import patch
 
 import pytest
@@ -61,7 +61,7 @@ def _mock_run_loop_done(reply: str, captured: Optional[dict] = None):
     return mock_run_loop
 
 
-async def _drive_stream(client, session_id: str, message: str) -> list[dict]:
+async def _drive_stream(client, session_id: str, message: str) -> List[dict]:
     """POST /chat/stream → attach → 等 producer 跑完 → 解析 NDJSON 事件。"""
     create = await client.post(
         CHAT_STREAM_PATH, json={"session_id": session_id, "message": message}

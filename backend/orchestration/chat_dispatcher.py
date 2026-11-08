@@ -2230,7 +2230,7 @@ class ChatDispatcher:
 
         # BU22 (round53): 最耗时子任务排行 —— conductor 快速识别瓶颈。
         # 仅统计有起止时间的终态任务，按耗时降序取前 3。
-        _terminal_durations: List[tuple[str, float]] = []
+        _terminal_durations: List[Tuple[str, float]] = []
         for state in states:
             if (
                 state.status in ("done", "failed")

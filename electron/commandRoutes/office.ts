@@ -194,9 +194,7 @@ export const officeRoutes: Record<string, CommandRoute> = {
       workspace_path: a.workspacePath ?? a.workspace_path,
       name: a.name,
       ...(a.pack ? { pack: a.pack } : {}),
-      ...((a.rulepackId ?? a.rulepack_id)
-        ? { rulepack_id: a.rulepackId ?? a.rulepack_id }
-        : {}),
+      ...((a.rulepackId ?? a.rulepack_id) ? { rulepack_id: a.rulepackId ?? a.rulepack_id } : {}),
       ...((a.sourceFilePath ?? a.source_file_path)
         ? { source_file_path: a.sourceFilePath ?? a.source_file_path }
         : {}),
@@ -208,8 +206,7 @@ export const officeRoutes: Record<string, CommandRoute> = {
   },
   office_specs_update: {
     method: 'PATCH',
-    path: (a) =>
-      `/api/v1/office/specs/${encodeURIComponent(String(a.specId ?? a.spec_id))}`,
+    path: (a) => `/api/v1/office/specs/${encodeURIComponent(String(a.specId ?? a.spec_id))}`,
     rawBody: true,
     body: (a) => ({
       workspace_path: a.workspacePath ?? a.workspace_path,
@@ -269,8 +266,7 @@ export const officeRoutes: Record<string, CommandRoute> = {
   },
   office_doc_spec_bind: {
     method: 'POST',
-    path: (a) =>
-      `/api/v1/office/doc/${encodeURIComponent(String(a.docId ?? a.doc_id))}/spec`,
+    path: (a) => `/api/v1/office/doc/${encodeURIComponent(String(a.docId ?? a.doc_id))}/spec`,
     body: (a) => ({
       workspace_path: a.workspacePath ?? a.workspace_path,
       spec_id: a.specId ?? a.spec_id ?? null,
@@ -288,9 +284,7 @@ export const officeRoutes: Record<string, CommandRoute> = {
       ...((a.specId ?? a.spec_id) ? { spec_id: a.specId ?? a.spec_id } : {}),
       ...(a.scope ? { scope: a.scope } : {}),
       use_llm: a.useLlm !== false,
-      ...((a.maxIssues ?? a.max_issues)
-        ? { max_issues: a.maxIssues ?? a.max_issues }
-        : {}),
+      ...((a.maxIssues ?? a.max_issues) ? { max_issues: a.maxIssues ?? a.max_issues } : {}),
       ...((a.maxSizeBytes ?? a.max_size_bytes)
         ? { max_size_bytes: a.maxSizeBytes ?? a.max_size_bytes }
         : {}),
@@ -306,6 +300,57 @@ export const officeRoutes: Record<string, CommandRoute> = {
       const qs = params.toString();
       return `/api/v1/office/doc/${encodeURIComponent(String(a.docId ?? a.doc_id))}/ai-reviews${qs ? `?${qs}` : ''}`;
     },
+  },
+  // T5 (2026-11-06): Apply selected AI review issues as tracked Word
+  // revisions. Pre-edit snapshot is taken by the backend automatically.
+  office_ai_revise: {
+    method: 'POST',
+    path: () => '/api/v1/office/ai/revise',
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      file_path: a.filePath ?? a.file_path,
+      ...((a.docId ?? a.doc_id) ? { doc_id: a.docId ?? a.doc_id } : {}),
+      issues: Array.isArray(a.issues) ? a.issues : [],
+      ...((a.outputFilename ?? a.output_filename)
+        ? { output_filename: a.outputFilename ?? a.output_filename }
+        : {}),
+      ...(a.author ? { author: a.author } : {}),
+      add_comments: a.addComments !== false,
+    }),
+  },
+  // P2 (2026-11-07): AI 侧栏改写 / 对话。纯文本进出，不写文件。
+  office_ai_rewrite: {
+    method: 'POST',
+    path: () => '/api/v1/office/ai/rewrite',
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      document_id: a.documentId ?? a.document_id,
+      text: a.text,
+      instruction: a.instruction,
+      ...((a.targetLang ?? a.target_lang) ? { target_lang: a.targetLang ?? a.target_lang } : {}),
+      ...((a.customInstruction ?? a.custom_instruction)
+        ? { custom_instruction: a.customInstruction ?? a.custom_instruction }
+        : {}),
+      ...((a.contextBefore ?? a.context_before)
+        ? { context_before: a.contextBefore ?? a.context_before }
+        : {}),
+      ...((a.contextAfter ?? a.context_after)
+        ? { context_after: a.contextAfter ?? a.context_after }
+        : {}),
+    }),
+  },
+  office_ai_chat: {
+    method: 'POST',
+    path: () => '/api/v1/office/ai/chat',
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      document_id: a.documentId ?? a.document_id,
+      message: a.message,
+      history: Array.isArray(a.history) ? a.history : [],
+      ...((a.documentContext ?? a.document_context)
+        ? { document_context: a.documentContext ?? a.document_context }
+        : {}),
+    }),
   },
   // M4c: native tracked revisions (w:ins/w:del + comments). rawBody keeps
   // explicit change payloads and nested rule-pack params untouched.
@@ -343,7 +388,7 @@ export const officeRoutes: Record<string, CommandRoute> = {
       ...((a.expectedSize ?? a.expected_size)
         ? { expected_size: a.expectedSize ?? a.expected_size }
         : {}),
-      ...(a.marginsCm ?? a.margins_cm ? { margins_cm: a.marginsCm ?? a.margins_cm } : {}),
+      ...((a.marginsCm ?? a.margins_cm) ? { margins_cm: a.marginsCm ?? a.margins_cm } : {}),
       ...(Array.isArray(a.allowedFonts ?? a.allowed_fonts)
         ? { allowed_fonts: a.allowedFonts ?? a.allowed_fonts }
         : {}),
@@ -372,7 +417,7 @@ export const officeRoutes: Record<string, CommandRoute> = {
         ? { file_paths: a.filePaths ?? a.file_paths }
         : {}),
       ...(a.pattern ? { pattern: a.pattern } : {}),
-      ...(a.maxFiles ?? a.max_files ? { max_files: a.maxFiles ?? a.max_files } : {}),
+      ...((a.maxFiles ?? a.max_files) ? { max_files: a.maxFiles ?? a.max_files } : {}),
       ...((a.rulepackId ?? a.rulepack_id) ? { rulepack_id: a.rulepackId ?? a.rulepack_id } : {}),
       ...(a.rulepack ? { rulepack: a.rulepack } : {}),
       include_report: a.includeReport ?? a.include_report ?? true,
@@ -394,8 +439,27 @@ export const officeRoutes: Record<string, CommandRoute> = {
     path: (a) => {
       let path = `/api/v1/office/documents?workspace_path=${encodeURIComponent(String(a.workspacePath))}`;
       if (a.includeArchived === true) path += '&include_archived=true';
+      // Phase 1 Item A: server-side search / type filter / sort. Optional
+      // string params are only appended when non-empty so the query string
+      // stays short for the default (unfiltered) call.
+      if (typeof a.q === 'string' && a.q.length > 0) {
+        path += `&q=${encodeURIComponent(a.q)}`;
+      }
+      if (typeof a.docType === 'string' && a.docType.length > 0) {
+        path += `&doc_type=${encodeURIComponent(a.docType)}`;
+      }
+      if (typeof a.sort === 'string' && a.sort.length > 0) {
+        path += `&sort=${encodeURIComponent(a.sort)}`;
+      }
       return path;
     },
+  },
+  // Phase 1 Item A: list live documents grouped by content hash (the
+  // "重复" badge + bulk cleanup in the document library).
+  office_list_duplicate_groups: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/office/documents/duplicate-groups?workspace_path=${encodeURIComponent(String(a.workspacePath))}`,
   },
   office_delete_document: {
     method: 'DELETE',

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import builtins
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -93,7 +94,7 @@ class ToolRegistry:
         """
         return [tool.schema for tool in self._tools.values()]
 
-    def list_names(self) -> List[str]:
+    def list_names(self) -> builtins.List[str]:
         """
         列出所有已注册工具的名称
 
@@ -106,7 +107,7 @@ class ToolRegistry:
         self,
         context: Optional[ToolExecutionContext] = None,
         allowed_tools: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> builtins.List[Dict[str, Any]]:
         """
         获取适合 LLM 调用的工具 Schema 列表
 

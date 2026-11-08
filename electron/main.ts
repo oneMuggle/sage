@@ -68,6 +68,19 @@ import {
 import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deepLink';
 import { loadFileWithRetry } from './loadFileRetry';
 import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
+import {
+  getNotificationPrefsPath,
+  readNotificationPrefs,
+  writeNotificationPrefs,
+  type NotificationPrefs,
+} from './notificationPrefs';
+import {
+  SCHEDULER_NOTIFICATION_POLL_MS,
+  startSchedulerNotificationPoller,
+  type PendingNotificationsPayload,
+} from './schedulerNotifications';
+import { createWebhookDeliver } from './webhookDelivery';
+import { applyTaskbarAttention, decideTaskbarAttention } from './notifyOverlay';
 import { readLogTimezone, writeLogTimezone } from './logTimezone';
 import { setLogTimezone } from './logger';
 import { detectProjectRoot } from './projectDetector';
@@ -105,16 +118,17 @@ import {
   relayChatStream,
   relayNdjsonToEvent,
   relayOrchEventsStream,
+  relayShellStream,
   relaySkillNotifications,
   WIKI_STREAM_ERROR,
 } from './relay';
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
 import { registerSpecialistIpc } from './specialistIpc';
-import { registerOfficeIpc } from './officeIpc';
-import { isPathWithinWorkspace } from './officePaths';
 import { registerRemoteMcpIpc, type RemoteMcpController } from './remoteMcpIpc';
 import { RemoteTunnel } from './remoteTunnel';
+import { registerOfficeIpc } from './officeIpc';
+import { isPathWithinWorkspace } from './officePaths';
 import { registerMediaIpc } from './mediaIpc';
 import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
@@ -142,7 +156,7 @@ import { resolveBackendLaunchCommand, resolveDoctorLaunchCommand } from './backe
 import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
 import { isCurrentGeneration, type BackendGeneration } from './backendSupervisor';
 import { parseOrchEventName } from './eventRouting';
-import { killOrphanedBackendOnPort, forceKillProcessTree } from './orphanBackendKiller';
+import { killOrphanedBackendOnPort } from './orphanBackendKiller';
 import { createIncrementalUtf8Decoder } from './incrementalUtf8Decoder';
 import { BackendNotReadyError, invokeBackend } from './invoke';
 import { runDoctorCheck } from './doctor';
@@ -155,19 +169,13 @@ import {
   runDiagnosticExport,
   runDiagnosticPreview,
 } from './diagnosticExport';
-import {
-  collectAndWriteDiagnostic,
-  recordBackendStderr,
-  recordLastPlan,
-  type BackendPlanSummary,
-  type BackendProcSummary,
-} from './backendDiagnostics';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const BACKEND_HEALTH = `${BACKEND_URL}/health/proof`;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
-const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
+const VITE_DEV_URL =
+  process.env.VITE_DEV_SERVER_URL ?? `http://localhost:${process.env.VITE_DEV_PORT ?? 1420}`;
 const buildManifest = loadBuildManifest(
   process.resourcesPath ? join(process.resourcesPath, 'build-manifest.json') : '',
   // CRITICAL: guard app.getVersion() for vitest environments where the
@@ -219,7 +227,13 @@ if (!gotSingleInstanceLock) {
 // 二次启动时聚焦/还原已有主窗口。没有这个处理器, 双击图标会静默退出,
 // 用户观感是"点了没反应"。
 app.on('second-instance', (_event, argv) => {
-  const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
+  const petController = getPetController();
+  // Prefer the real main window; the pet overlay (focusable:false) and the
+  // built-in browser are windows too, so never focus them as "the app".
+  const fallback = BrowserWindow.getAllWindows().find(
+    (candidate) => !petController?.isPetSender(candidate.webContents),
+  );
+  const win = mainWindow ?? fallback ?? null;
   // E-1: 第二实例可能携带 sage:// 深链 —— 聚焦窗口并跳转到目标会话
   const sageUrl = extractSageUrlFromArgv(Array.isArray(argv) ? argv : []);
   if (sageUrl) {
@@ -351,11 +365,6 @@ let backendProc: ChildProcess | null = null;
 let backendGeneration = 0;
 let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
-// T2026-09-24: flipped to true the first time a backend generation reaches
-// the 'ready' lifecycle. Used by proc.on('exit') to distinguish an early
-// startup crash (worth snapshotting) from a normal post-ready exit (already
-// captured by the in-app logger; no diagnostic needed).
-let startedSuccessfully = false;
 let backendAuthToken: string | null = null;
 
 /**
@@ -364,9 +373,6 @@ let backendAuthToken: string | null = null;
  */
 let agentBrowserHandle: AgentBrowserBridgeHandle | null = null;
 let updateManager: UpdateManager | null = null;
-// Workspace MCP Server (M4): cloudflared tunnel emergency-stop hotkey + controller.
-const REMOTE_MCP_HOTKEY = 'Control+Alt+Escape';
-let remoteMcp: RemoteMcpController | null = null;
 // P2 (2026-10-19): detected project root from startup cwd — used as fallback
 // auto-bind target for new sessions when no lastWorkspace is stored.
 let detectedProjectRoot: string | null = null;
@@ -438,6 +444,23 @@ try {
   closeToTrayEnabled = false;
 }
 
+// 2026-11-05: 通知偏好（主进程持有 JSON，同 closeToTray）。读取失败保持默认开启，
+// 升级用户不会被静默静音。发 OS 通知前统一读这个内存态。
+let notificationPrefs: NotificationPrefs = {
+  enabled: true,
+  backgroundTasks: true,
+  webhookUrl: '',
+  slackWebhookUrl: '',
+  webhookSecret: '',
+};
+try {
+  notificationPrefs = readNotificationPrefs(
+    getNotificationPrefsPath(app.isPackaged, app.getPath('userData'), process.cwd()),
+  );
+} catch {
+  // 保持 DEFAULT（全开）
+}
+
 let demoModeFromSettings = false;
 try {
   demoModeFromSettings = readDemoMode();
@@ -504,7 +527,6 @@ function resolveBundledTesseract(): string | null {
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 
-
 function spawnBackend(): ChildProcess {
   // Resolve SAGE_DB_PATH and SAGE_USER_DATA_DIR once so both packaged and
   // dev spawn paths share them. Backend prefers these env vars; falls back to:
@@ -544,32 +566,8 @@ function spawnBackend(): ChildProcess {
     // this, the user sees two stacked modal dialogs about the same problem.
     reportedBrokenInstaller = true;
     updateSplashStage('安装包不完整，无法启动后端');
-    const planSummary: BackendPlanSummary = {
-      kind: 'broken-installer',
-      reason: plan.reason,
-      title: plan.title,
-    };
-    recordLastPlan(planSummary);
-    // Kick off the diagnostic write in the background. spawnBackend() is
-    // sync (it must return a ChildProcess synchronously), so we cannot await
-    // here — instead we capture the Promise and resolve it inside the same
-    // fire-and-forget chain that calls showStartupFailureDialog. By the time
-    // the user clicks a button the file is on disk.
-    const diagPathPromise = collectAndWriteDiagnostic({
-      manifest: buildManifest,
-      plan: planSummary,
-      proc: null,
-      reason: 'broken-installer',
-      detail: `${plan.title}\n${plan.detail}`,
-    });
     void reportUpdateStartupFailure('broken-installer').then(async (rolledBack) => {
-      if (rolledBack) return;
-      const diagPath = await diagPathPromise;
-      await showStartupFailureDialog({
-        reason: plan.title,
-        detail: plan.detail,
-        diagnosticPath: diagPath || undefined,
-      });
+      if (!rolledBack) await showStartupFailureDialog({ reason: plan.title, detail: plan.detail });
     });
     // Return a no-op stub proc that exits immediately so the rest of the
     // startup flow (health probe → timeout) still works predictably.
@@ -585,14 +583,6 @@ function spawnBackend(): ChildProcess {
   backendAuthToken = process.env.SAGE_LOCAL_AUTH_TOKEN ?? randomBytes(32).toString('base64url');
   currentBackend = { generation, pid: -1, ownershipToken };
   backendLifecycle = 'starting';
-  // T2026-09-24: stash the resolved plan so the diagnostic writer can report
-  // which spawn reason was used when the backend later fails to come up.
-  recordLastPlan({
-    kind: 'spawn',
-    reason: plan.reason,
-    command: plan.cmd,
-    args: plan.args,
-  });
   // Task 0 review round 1, finding #6: tell the renderer the new lifecycle
   // state so BackendStatusBanner can show "starting…" before the first
   // health probe lands.
@@ -672,14 +662,9 @@ function spawnBackend(): ChildProcess {
   proc.stdout?.on('data', (b) =>
     logger.debug('backend: stdout', { line: stdoutDecoder.push(b).trim() }),
   );
-  proc.stderr?.on('data', (b) => {
-    const line = stderrDecoder.push(b).trim();
-    logger.error('backend: stderr', { line });
-    // T2026-09-24: feed into the rolling stderr buffer so the diagnostic
-    // collector has the most recent backend output to embed in
-    // `${userData}/diagnostic-*.log` when startup fails.
-    recordBackendStderr(line + '\n');
-  });
+  proc.stderr?.on('data', (b) =>
+    logger.error('backend: stderr', { line: stderrDecoder.push(b).trim() }),
+  );
   proc.on('exit', (code) => {
     if (!isCurrentGeneration({ generation, pid: proc.pid ?? -1, ownershipToken }, currentBackend)) {
       logger.debug('main: stale backend exit ignored', { generation, pid: proc.pid });
@@ -694,32 +679,6 @@ function spawnBackend(): ChildProcess {
     // would otherwise drop them silently.
     stdoutDecoder.close();
     stderrDecoder.close();
-    // T2026-09-24: capture a startup diagnostic on early non-zero exit so a
-    // crash before the health probe lands has a paper trail. We treat any
-    // exit BEFORE the health probe as a startup crash worth snapshotting.
-    // scheduleBackendRestart() below will replace the dead process; if the
-    // respawn succeeds the diagnostic still helps triage the original cause.
-    if (!appIsQuitting && code !== 0 && code !== null && !startedSuccessfully) {
-      const procSummary: BackendProcSummary = {
-        pid: proc.pid ?? null,
-        exitCode: code,
-        signalCode: proc.signalCode,
-        generation,
-        ownershipToken,
-      };
-      void collectAndWriteDiagnostic({
-        manifest: buildManifest,
-        plan: {
-          kind: 'spawn',
-          reason: plan.reason,
-          command: plan.cmd,
-          args: plan.args,
-        },
-        proc: procSummary,
-        reason: 'backend-exit-non-zero',
-        detail: `Backend exited with code=${code} signal=${proc.signalCode ?? 'null'} before becoming healthy.`,
-      });
-    }
     if (!appIsQuitting) {
       scheduleBackendRestart();
     }
@@ -862,30 +821,10 @@ export function scheduleBackendRestart(): void {
  */
 async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<boolean> {
   const expectedBackend = currentBackend;
-  if (!expectedBackend || backendLifecycle !== 'starting') {
-    logger.warn('main: waitForBackend early exit', {
-      hasExpectedBackend: !!expectedBackend,
-      lifecycle: backendLifecycle,
-    });
-    return false;
-  }
-  logger.info('main: waitForBackend starting health poll', {
-    expectedPid: expectedBackend.pid,
-    generation: expectedBackend.generation,
-    timeoutMs,
-    url: BACKEND_HEALTH,
-  });
+  if (!expectedBackend || backendLifecycle !== 'starting') return false;
   const deadline = Date.now() + timeoutMs;
-  let pollAttempts = 0;
   while (Date.now() < deadline) {
-    pollAttempts++;
-    if (!isCurrentGeneration(expectedBackend, currentBackend) || appIsQuitting) {
-      logger.warn('main: waitForBackend generation mismatch or quitting', {
-        pollAttempts,
-        appIsQuitting,
-      });
-      return false;
-    }
+    if (!isCurrentGeneration(expectedBackend, currentBackend) || appIsQuitting) return false;
     try {
       const health = await new Promise<unknown>((resolve) => {
         const req = http.get(
@@ -901,45 +840,25 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
             });
             res.on('end', () => {
               if (res.statusCode !== 200) {
-                logger.warn('main: health probe non-200', {
-                  statusCode: res.statusCode,
-                  pollAttempts,
-                });
                 resolve(null);
                 return;
               }
               try {
                 resolve(JSON.parse(body) as unknown);
               } catch {
-                logger.warn('main: health probe JSON parse failed', {
-                  bodyPreview: body.slice(0, 200),
-                  pollAttempts,
-                });
                 resolve(null);
               }
             });
             res.resume();
           },
         );
-        req.on('error', (err) => {
-          // Log first few errors to help diagnose connection issues
-          if (pollAttempts <= 3) {
-            logger.warn('main: health probe error', {
-              error: err.message,
-              code: (err as NodeJS.ErrnoException).code,
-              pollAttempts,
-            });
-          }
-          resolve(null);
-        });
+        req.on('error', () => resolve(null));
         req.setTimeout(HTTP_REQUEST_TIMEOUT_MS, () => {
           req.destroy();
           resolve(null);
         });
       });
-      if (
-        ownsBackend(health as Partial<BackendHealthEnvelope> | null, expectedBackend, buildManifest)
-      ) {
+      if (ownsBackend(health as Partial<BackendHealthEnvelope>, expectedBackend, buildManifest)) {
         // ── Race-fix recheck ─────────────────────────────────────────────
         // 1. Generation/PID/token still match the live supervisor state.
         // 2. The ChildProcess is still alive and not exited.
@@ -948,38 +867,14 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
         //    returning 200 and this recheck; the ownershipToken check above
         //    rules that out, but we still want a structural assertion that
         //    the socket we hit belongs to the expected PID).
-        if (!isCurrentGeneration(expectedBackend, currentBackend)) {
-          logger.warn('main: waitForBackend race-fix: generation changed after ownsBackend');
-          return false;
-        }
+        if (!isCurrentGeneration(expectedBackend, currentBackend)) return false;
         if (!backendProc || backendProc.exitCode !== null || backendProc.signalCode !== null) {
-          logger.warn('main: waitForBackend race-fix: backend process exited', {
-            exitCode: backendProc?.exitCode,
-            signalCode: backendProc?.signalCode,
-          });
           return false;
         }
-        logger.info('main: waitForBackend checking port binding', {
-          port: BACKEND_PORT,
-          expectedPid: expectedBackend.pid,
-          pollAttempts,
-        });
         if (!(await isPortStillBoundByPid(BACKEND_PORT, expectedBackend.pid, 200))) {
-          logger.warn('main: waitForBackend port not bound by expected PID', {
-            port: BACKEND_PORT,
-            expectedPid: expectedBackend.pid,
-            pollAttempts,
-          });
           return false;
         }
-        logger.info('main: waitForBackend all checks passed', { pollAttempts });
         backendLifecycle = 'ready';
-        // T2026-09-24: mark this generation as having reached 'ready'. Once
-        // set, proc.on('exit') skips the startup-crash diagnostic path
-        // because the backend was healthy at least once. SKIP_BACKEND and
-        // demo mode do NOT flip this flag — there's no real backend to
-        // crash, so any exit from those branches is a non-event.
-        startedSuccessfully = true;
         // 用户反馈 syncer 需要 backend 已就绪才能拉取/提交消息；
         // 未配置转发目标时 start() 内部会直接空转不跑。
         getGlobalSyncer()?.start();
@@ -991,31 +886,11 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
         });
         return true;
       }
-      // Log ownership validation failure for diagnostics
-      if (pollAttempts <= 5 || pollAttempts % 20 === 0) {
-        logger.warn('main: ownsBackend validation failed', {
-          pollAttempts,
-          healthStatus: (health as Record<string, unknown>)?.status,
-          healthPid: (health as Record<string, unknown>)?.pid,
-          expectedPid: expectedBackend.pid,
-          healthGeneration: (health as Record<string, unknown>)?.generation,
-          expectedGeneration: expectedBackend.generation,
-          healthBuildId: (health as Record<string, unknown>)?.buildId,
-          expectedBuildId: buildManifest.buildId,
-        });
-      }
-    } catch (err) {
-      // Log unexpected exceptions
-      if (pollAttempts <= 3) {
-        logger.warn('main: waitForBackend unexpected exception', {
-          error: err instanceof Error ? err.message : String(err),
-          pollAttempts,
-        });
-      }
+    } catch {
+      /* transient connection or malformed health payload */
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  logger.warn('main: waitForBackend timed out', { pollAttempts, timeoutMs });
   return false;
 }
 
@@ -1199,6 +1074,10 @@ function createMainWindow(): void {
       // (SUID 限制); 现代平台启用 Chromium sandbox —— preload 仅用
       // contextBridge/ipcRenderer, 满足 sandboxed preload 约束。
       sandbox: !NEEDS_NO_SANDBOX,
+      // 2026-11-05: 主窗口隐藏/最小化后不再被 Chromium 节流到 1/min,
+      // 否则后台 SSE 事件流、1s tick、重试倒计时全部被拖慢,导致"任务挂
+      // 后台后通知延迟/丢失"。仅影响隐藏期间 CPU 占用略升。
+      backgroundThrottling: false,
       // 演示模式 (2026-08-27): 同步把演示标志传给 renderer (preload 读 argv
       // 暴露)。首屏请求早于 loadSettings 完成, renderer 的 isDemoMode() 若
       // 只读 settings store 会竞态漏拦截 → 请求打到已跳过的后端报错。
@@ -1208,9 +1087,19 @@ function createMainWindow(): void {
   setMainWindow(win);
   ensurePetInitialized();
 
-  // 主窗口关闭时一并回收内置浏览器窗口：否则残留的可见/隐藏窗口会让
-  // window-all-closed 永不触发，进程在无 UI 状态下继续存活。
+  // 2026-11-05: 窗口重新聚焦 → 清除任务栏注意力信号（闪烁/dock badge）。
+  win.on('focus', () => {
+    applyTaskbarAttention(
+      { count: 0, kind: null },
+      { win, setDockBadge: (text) => app.dock?.setBadge(text) },
+    );
+  });
+
+  // 主窗口关闭时一并回收内置浏览器窗口与桌宠窗口：否则残留的可见/隐藏窗口
+  // 会让 window-all-closed 永不触发，进程在无 UI 状态下继续存活（桌宠是
+  // 独立 BrowserWindow，只回收 agentBrowser 不够）。
   win.on('closed', () => {
+    disposePet();
     if (agentBrowserHandle) {
       void agentBrowserHandle.close();
       agentBrowserHandle = null;
@@ -1291,7 +1180,17 @@ function createMainWindow(): void {
     } catch (e) {
       logger.error('main: failed to read index.html', { error: (e as Error).message });
     }
-    loadFileWithRetry((p) => win.loadFile(p), indexHtml).catch(async (e) => {
+    loadFileWithRetry(async (p) => {
+      try {
+        return await win.loadFile(p);
+      } catch (err) {
+        logger.warn('main: loadFile attempt failed', {
+          path: p,
+          error: (err as Error).message,
+        });
+        throw err;
+      }
+    }, indexHtml).catch(async (e) => {
       logger.error('main: loadFile failed', { path: indexHtml, err: e.message });
       closeSplashWindow();
       await showStartupFailureDialog({
@@ -1363,6 +1262,11 @@ function createMainWindow(): void {
     disposePet();
   });
 }
+
+// Workspace MCP Server (M4): tunnel + emergency-stop hotkey.
+// See docs/plans/2026-09-26-workspace-mcp-m4-ui.md
+const REMOTE_MCP_HOTKEY = 'Control+Alt+Escape';
+let remoteMcp: RemoteMcpController | null = null;
 
 async function registerIpcHandlers(): Promise<void> {
   // 开发期右键「检查元素」：渲染层自绘菜单无法交给 Chromium 默认处理，
@@ -1574,6 +1478,27 @@ async function registerIpcHandlers(): Promise<void> {
         return { ok: true, event };
       }
 
+      // shell-stream-{shellId}: 后台 shell 输出流（Phase 3）
+      const shellStreamMatch = event.match(/^shell-stream-(.+)$/);
+      if (shellStreamMatch) {
+        const shellId = shellStreamMatch[1];
+        const abort = new AbortController();
+        eventSubscriptions.set(event, abort);
+        relayShellStream(
+          senderWebContents,
+          event,
+          shellId,
+          BACKEND_URL,
+          abort.signal,
+          backendAuthToken ?? undefined,
+        ).catch((e) => {
+          if (e instanceof Error && e.name !== 'AbortError') {
+            logger.error('ipc: shell stream relay error', { event, err: e.message });
+          }
+        });
+        return { ok: true, event };
+      }
+
       // orch-events-{runId}-{afterSeq} dynamic events: relay orchestration run events
       // Format: orch-events-{runId} or orch-events-{runId}-seq-{afterSeq}
       const orchEventsMatch = parseOrchEventName(event);
@@ -1593,8 +1518,8 @@ async function registerIpcHandlers(): Promise<void> {
         ).catch((e) => {
           if (e instanceof Error && e.name !== 'AbortError') {
             logger.error('ipc: orch relay error', { event, err: e.message });
-            // 2026-09 修复 (同步 #957): relay 失败必须通知渲染端, 否则编排
-            // 订阅永久卡 connecting (渲染端监听 {event}-error 终结生成器)。
+            // 2026-09 修复: relay 失败必须通知渲染端, 否则编排订阅永久卡
+            // connecting(渲染端监听 {event}-error 通道终结生成器)。
             if (!senderWebContents.isDestroyed()) {
               senderWebContents.send(`sage:event:${event}-error`, {
                 message: e.message,
@@ -1627,7 +1552,11 @@ async function registerIpcHandlers(): Promise<void> {
       // S8: 主进程自主产生的事件（OS 通知点击回发）。无需后端 relay,
       // renderer 侧 listen() 注册的 ipcRenderer.on 直接收 webContents.send。
       // 反馈入口（Phase 1.11 帮助菜单）同理。
-      if (event === 'session-notify-click' || event === 'open-feedback') {
+      if (
+        event === 'session-notify-click' ||
+        event === 'open-feedback' ||
+        event === 'open-settings'
+      ) {
         return { ok: true, event };
       }
 
@@ -1697,6 +1626,37 @@ async function registerIpcHandlers(): Promise<void> {
     }
     return { ok: true, enabled: closeToTrayEnabled };
   });
+
+  // 2026-11-05: 通知偏好读写（设置页 → 主进程）。与 close-to-tray 同模式：
+  // 状态由主进程持有并落 JSON，renderer 只做 UI。
+  ipcMain.handle('sage:notification-prefs:get', () => ({ ...notificationPrefs }));
+
+  ipcMain.handle(
+    'sage:notification-prefs:set',
+    (evt, payload: Partial<NotificationPrefs> | undefined) => {
+      if (!isTrustedRenderer(evt.sender)) {
+        throw new Error('未授权的窗口请求');
+      }
+      notificationPrefs = {
+        enabled: payload?.enabled !== false,
+        backgroundTasks: payload?.backgroundTasks !== false,
+        webhookUrl: typeof payload?.webhookUrl === 'string' ? payload.webhookUrl.trim() : '',
+        slackWebhookUrl:
+          typeof payload?.slackWebhookUrl === 'string' ? payload.slackWebhookUrl.trim() : '',
+        webhookSecret:
+          typeof payload?.webhookSecret === 'string' ? payload.webhookSecret.trim() : '',
+      };
+      try {
+        writeNotificationPrefs(
+          getNotificationPrefsPath(app.isPackaged, app.getPath('userData'), process.cwd()),
+          notificationPrefs,
+        );
+      } catch (err) {
+        logger.warn('main: 写入通知偏好失败:', err);
+      }
+      return { ok: true, ...notificationPrefs };
+    },
+  );
 
   ipcMain.handle('sage:demo-mode:set', (evt, payload: { demoMode: boolean }) => {
     if (!isTrustedRenderer(evt.sender)) {
@@ -1853,6 +1813,7 @@ async function registerIpcHandlers(): Promise<void> {
     (evt, payload: { sessionId: string; title?: string; body?: string }) => {
       if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
       if (!Notification.isSupported()) return { shown: false };
+      if (!notificationPrefs.enabled) return { shown: false, reason: 'disabled' };
       const { sessionId } = payload;
       if (!sessionId) return { shown: false };
 
@@ -1892,6 +1853,7 @@ async function registerIpcHandlers(): Promise<void> {
   ipcMain.handle('sage:notify:approval', (evt, payload: { title?: string; body?: string }) => {
     if (!isTrustedRenderer(evt.sender)) return { ok: false, reason: 'untrusted' };
     if (!Notification.isSupported()) return { ok: false, reason: 'unsupported' };
+    if (!notificationPrefs.enabled) return { ok: false, reason: 'disabled' };
     const title = String(payload?.title ?? 'Sage 需要你的审批').slice(0, 120);
     const body = String(payload?.body ?? '').slice(0, 300);
     const notification = new Notification({ title, body, silent: false });
@@ -1905,6 +1867,25 @@ async function registerIpcHandlers(): Promise<void> {
     notification.show();
     return { ok: true };
   });
+
+  // 2026-11-05: 任务栏注意力（等待审批/失败的轻量信号）。窗口聚焦时自动清除。
+  ipcMain.handle(
+    'sage:notify:set-attention',
+    (
+      evt,
+      input: { awaitingApproval?: number; failed?: number; completed?: number } | undefined,
+    ) => {
+      if (!isTrustedRenderer(evt.sender)) return false;
+      if (!notificationPrefs.enabled) return false;
+      const state = decideTaskbarAttention(input ?? {});
+      const win = getSenderWindow(evt) ?? mainWindow;
+      applyTaskbarAttention(state, {
+        win,
+        setDockBadge: (text) => app.dock?.setBadge(text),
+      });
+      return true;
+    },
+  );
 
   ipcMain.handle('sage:window-controls:capture-page', async (evt) => {
     if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
@@ -2108,6 +2089,7 @@ async function registerIpcHandlers(): Promise<void> {
     // Win7/老系统 Notification 不可用时静默降级（isSupported 守卫）。
     onRepliesReceived: (info) => {
       if (!Notification.isSupported()) return;
+      if (!notificationPrefs.enabled) return;
       const notification = new Notification({
         title: `管理员回复了你的反馈 · ${info.title}`,
         body: info.lastBody.slice(0, 160),
@@ -2124,6 +2106,41 @@ async function registerIpcHandlers(): Promise<void> {
       notification.show();
     },
   });
+
+  // 2026-11-05: 后台任务通知轮询 —— 定时任务触发/待办提醒由后端内存队列
+  // 累积,主进程每 15s 排空一次。不依赖 renderer,关闭到托盘后仍可提醒。
+  if (!isDemoProcess()) {
+    startSchedulerNotificationPoller({
+      fetchPending: async () => {
+        const result = await invokeBackend(
+          'scheduled_pending_notifications',
+          {},
+          BACKEND_URL,
+          backendAuthToken ?? undefined,
+        );
+        return (result ?? {}) as PendingNotificationsPayload;
+      },
+      isEnabled: () => notificationPrefs.enabled && notificationPrefs.backgroundTasks,
+      notify: (title, body) => {
+        if (!Notification.isSupported()) return;
+        new Notification({
+          title: title.slice(0, 120),
+          body: body.slice(0, 200),
+          silent: false,
+        }).show();
+      },
+      // 2026-11-06 Phase 3/4: 每条通知额外投递 Webhook / Slack（fire-and-forget）
+      deliver: createWebhookDeliver(() => notificationPrefs, {
+        fetchImpl: fetch as unknown as NonNullable<
+          Parameters<typeof createWebhookDeliver>[1]
+        >['fetchImpl'],
+        log: (event, details) => logger.warn(event, details),
+      }),
+      intervalMs: SCHEDULER_NOTIFICATION_POLL_MS,
+      log: (event, details) => logger.warn(event, details),
+    });
+  }
+
   registerFeedbackIpc(
     (channel, handler) => {
       ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
@@ -2576,10 +2593,7 @@ async function shutdownBackend(): Promise<void> {
     return;
   }
   backendLifecycle = 'stopping';
-  const pid = proc.pid;
-  const isWin32 = process.platform === 'win32';
-  logger.info('main: killing backend subprocess', { pid });
-
+  logger.info('main: killing backend subprocess', { pid: proc.pid });
   const exited = new Promise<void>((resolve) => {
     let settled = false;
     const finish = () => {
@@ -2587,76 +2601,35 @@ async function shutdownBackend(): Promise<void> {
       settled = true;
       resolve();
     };
-
-    // Fix race condition: the process may have already exited between the
-    // null-check above and registering this listener. Without this guard,
-    // the 'exit' event has already fired, finish() is never called, and
-    // the Promise hangs forever — keeping Electron alive on Win7 after the
-    // user closes the window, which causes the NSIS installer to detect a
-    // still-running Sage.exe and show the "Sage cannot be closed" dialog.
-    if (proc.killed || proc.exitCode !== null || proc.signalCode !== null) {
-      finish();
-      return;
-    }
-
     proc.once('exit', finish);
-
-    // Send SIGTERM; on Win32 this maps to TerminateProcess via libuv.
+    // Send SIGTERM; on Win32 this maps to TerminateProcess.
     try {
       proc.kill('SIGTERM');
     } catch {
       // Already gone — `exit` will fire (or has fired) soon.
     }
-
     // Escalate to SIGKILL after the grace window if the child ignored
     // SIGTERM (Windows services / conda/python occasionally do).
     setTimeout(() => {
       if (proc.exitCode !== null || proc.signalCode !== null) return;
       logger.warn('main: backend did not exit on SIGTERM, escalating to SIGKILL', {
-        pid,
+        pid: proc.pid,
       });
-      if (isWin32 && pid !== undefined) {
-        // taskkill /F /T is more reliable than TerminateProcess on Win7 and
-        // also reaps grandchildren that python may have spawned.
-        forceKillProcessTree(pid);
-      } else {
-        try {
-          proc.kill('SIGKILL');
-        } catch {
-          /* process already gone */
-        }
+      try {
+        proc.kill('SIGKILL');
+      } catch {
+        /* process already gone */
       }
-      setTimeout(finish, 800).unref();
+      // Give SIGKILL a brief window; if it never resolves, finish() is
+      // still safe to call from the caller's timeout below.
+      setTimeout(finish, 500).unref();
     }, BACKEND_SHUTDOWN_TIMEOUT_MS).unref();
   });
-
-  // Hard cap: resolve after SHUTDOWN_TIMEOUT + 2.5s regardless of whether
-  // the 'exit' event fires. Without this, a hung exit event (observed on
-  // Win7 when Python's DLL unloading stalls TerminateProcess notification)
-  // would keep Electron alive indefinitely on window-all-closed, blocking
-  // the NSIS installer update and producing "Sage cannot be closed" even
-  // though the user already closed the window.
-  //
-  // `.unref()` is essential: `before-quit` calls this fire-and-forget, so a
-  // ref'd timer would itself hold the event loop open and delay the very
-  // exit we are trying to unblock.
-  let hardCapSettle: () => void = () => {};
-  const hardCap = new Promise<void>((resolve) => {
-    hardCapSettle = resolve;
-  });
-  const hardTimer = setTimeout(() => {
-    logger.warn('main: shutdownBackend hard timeout reached, giving up', { pid });
-    if (isWin32 && pid !== undefined) forceKillProcessTree(pid);
-    hardCapSettle();
-  }, BACKEND_SHUTDOWN_TIMEOUT_MS + 2_500).unref();
-
-  await Promise.race([exited, hardCap]);
-  clearTimeout(hardTimer);
-
+  await exited;
   // Wait briefly for the OS to release the listening port so the next
   // spawn doesn't hit EADDRINUSE. 500ms is empirical — typical Linux /
   // Windows TIME_WAIT cleanup is <100ms.
-  if (pid !== undefined && pid > 0) {
+  if (proc.pid !== undefined && proc.pid > 0) {
     await isPortReleased(BACKEND_PORT, 500);
   }
   backendProc = null;
@@ -2706,471 +2679,475 @@ async function isPortReleased(port: number, timeoutMs: number): Promise<void> {
   }
 }
 
-app.whenReady().then(async () => {
-  // Step 3: prune log files older than 7 days on every cold start
-  cleanupOlderThan(7);
-  // 2026-11-04: 默认拒绝权限请求 —— 必须在任何 webContents 创建之前注册，
-  // 否则主窗口/srcdoc iframe/BrowserView 会沿用 Electron 的"自动批准"默认。
-  installPermissionPolicy();
-  // P9/P13 (2026-09-14): sage-file:// 协议 —— 工作区本地图片经白名单
-  // 校验后安全渲染（MarkdownImage 生成 sage-file://p/<enc> URL）。
-  // 必须在窗口加载页面前注册。
-  registerSageFileProtocol();
-  // 2026-10-31: user-imported pet packs — serve <userData>/pets/<id>/ assets
-  // to both the overlay and the in-app pet via sage-pet://.
-  registerPetPackProtocol(petPacksDir(resolveSageUserDataDir()));
-  // 2026-11-04: sage-preview:// —— HTML 预览独立源。
-  // 预览 IPC 限制到信任窗口（主窗口），与 pet/office 等敏感 IPC 同策略。
-  registerPreviewProtocol();
-  registerPreviewIpc((channel, handler) => {
-    ipcMain.handle(channel, (evt, ...args) => {
-      if (!isTrustedRenderer(evt.sender)) {
-        throw new Error('未授权的预览 IPC 请求');
-      }
-      return handler(evt, ...args);
+app
+  .whenReady()
+  .then(async () => {
+    // Step 3: prune log files older than 7 days on every cold start
+    cleanupOlderThan(7);
+    // 2026-11-04: 默认拒绝权限请求 —— 必须在任何 webContents 创建之前注册，
+    // 否则主窗口/srcdoc iframe/BrowserView 会沿用 Electron 的"自动批准"默认。
+    installPermissionPolicy();
+    // P9/P13 (2026-09-14): sage-file:// 协议 —— 工作区本地图片经白名单
+    // 校验后安全渲染（MarkdownImage 生成 sage-file://p/<enc> URL）。
+    // 必须在窗口加载页面前注册。
+    registerSageFileProtocol();
+    // 2026-10-31: user-imported pet packs — serve <userData>/pets/<id>/ assets
+    // to both the overlay and the in-app pet via sage-pet://.
+    registerPetPackProtocol(petPacksDir(resolveSageUserDataDir()));
+    // 2026-11-04: sage-preview:// —— HTML 预览独立源。
+    // 预览 IPC 限制到信任窗口（主窗口），与 pet/office 等敏感 IPC 同策略。
+    registerPreviewProtocol();
+    registerPreviewIpc((channel, handler) => {
+      ipcMain.handle(channel, (evt, ...args) => {
+        if (!isTrustedRenderer(evt.sender)) {
+          throw new Error('未授权的预览 IPC 请求');
+        }
+        return handler(evt, ...args);
+      });
     });
-  });
-  ipcMain.handle('sage-file:register-root', (_evt, root: string) => {
-    return registerWorkspaceRoot(String(root ?? ''));
-  });
-  ipcMain.handle('sage-file:unregister-root', (_evt, root: string) => {
-    return unregisterWorkspaceRoot(String(root ?? ''));
-  });
-  // P22 (2026-09-17): 项目级 allowed_paths 注册 — 渲染端在
-  // 协议层 resolveSageFileUrl 会同时检查 workspace 根与各项目 allowed_paths。
-  ipcMain.handle('sage-file:register-allowed-paths', (_evt, projectId: string, paths: unknown) => {
-    const safePaths = Array.isArray(paths) ? paths.map((p) => String(p ?? '')) : [];
-    registerAllowedPaths(String(projectId ?? ''), safePaths);
-  });
-  ipcMain.handle('sage-file:unregister-allowed-paths', (_evt, projectId: string) => {
-    return unregisterAllowedPaths(String(projectId ?? ''));
-  });
-  // 2026-09-13: 启动屏 — 后端冷启动实测 50–65s（健康检查上限 90s），此前
-  // 窗口创建排在 waitForBackend() 之后，用户双击图标后近一分钟无任何反馈。
-  // CI 冒烟 (SAGE_SKIP_BACKEND) / 演示录屏 / SAGE_NO_SPLASH=1 时不显示。
-  if (
-    !isDemoProcess() &&
-    process.env.SAGE_SKIP_BACKEND !== '1' &&
-    process.env.SAGE_NO_SPLASH !== '1'
-  ) {
-    createSplashWindow();
-  }
-  // U12 (round4 批次 E): 系统托盘 + 全局快捷键唤起（Alt+Shift+S toggle）。
-  // 内部全量降级:托盘/快捷键不可用只记日志,绝不阻断启动。
-  setupTrayAndGlobalShortcut();
-  // T11: inject backend URL + auth token getter so both the IPC handler
-  // and the tray "导出诊断包…" menu can call the backend.
-  initDiagnosticExport({
-    backendUrl: BACKEND_URL,
-    getAuthToken: () => backendAuthToken,
-  });
-  // Phase 4: pre-launch self-check (skippable via SAGE_DOCTOR_ON_START=false for CI).
-  // fail-open by design: doctor never blocks the app from launching — its output
-  // is captured into the NDJSON startup log so the user can diagnose degraded
-  // experiences via Show Logs. Default 20s cap lives in doctor.ts and can be
-  // tuned per-build via SAGE_DOCTOR_TIMEOUT_MS (CI smoke paths tighten it).
-  updateSplashStage('正在检查运行环境…');
-  // 2026-09-17: Win7 内网闪退根因防御层 — 在 doctor 之前先做 Win32 运行时
-  // 检测 (VC++ Redist / KB3033929 / KB4474419 / KB4490628), 缺哪个弹对话框
-  // 告诉用户去装哪个 + 提供微软官方下载链接. fail-open: 用户选「仍要启动」
-  // 则继续走原 doctor 流程.
-  if (process.env.SAGE_RUNTIME_CHECK_ON_START !== 'false') {
-    try {
-      const runtimeResults = await runRuntimeChecks();
-      const missing = runtimeResults.filter((r) => r.severity === 'critical');
-      if (missing.length > 0) {
-        logger.error('main: runtime check reported CRITICAL', {
-          missing: missing.map((m) => m.name),
+    ipcMain.handle('sage-file:register-root', (_evt, root: string) => {
+      return registerWorkspaceRoot(String(root ?? ''));
+    });
+    ipcMain.handle('sage-file:unregister-root', (_evt, root: string) => {
+      return unregisterWorkspaceRoot(String(root ?? ''));
+    });
+    // P22 (2026-09-17): 项目级 allowed_paths 注册 — 渲染端在
+    // projectApi.updateAllowedPaths() 成功后调用此 IPC 同步主进程注册表。
+    // 协议层 resolveSageFileUrl 会同时检查 workspace 根与各项目 allowed_paths。
+    ipcMain.handle(
+      'sage-file:register-allowed-paths',
+      (_evt, projectId: string, paths: unknown) => {
+        const safePaths = Array.isArray(paths) ? paths.map((p) => String(p ?? '')) : [];
+        registerAllowedPaths(String(projectId ?? ''), safePaths);
+      },
+    );
+    ipcMain.handle('sage-file:unregister-allowed-paths', (_evt, projectId: string) => {
+      return unregisterAllowedPaths(String(projectId ?? ''));
+    });
+    // 2026-09-13: 启动屏 — 后端冷启动实测 50–65s（健康检查上限 90s），此前
+    // 窗口创建排在 waitForBackend() 之后，用户双击图标后近一分钟无任何反馈。
+    // CI 冒烟 (SAGE_SKIP_BACKEND) / 演示录屏 / SAGE_NO_SPLASH=1 时不显示。
+    if (
+      !isDemoProcess() &&
+      process.env.SAGE_SKIP_BACKEND !== '1' &&
+      process.env.SAGE_NO_SPLASH !== '1'
+    ) {
+      createSplashWindow();
+    }
+    // U12 (round4 批次 E): 系统托盘 + 全局快捷键唤起（Alt+Shift+S toggle）。
+    // 内部全量降级:托盘/快捷键不可用只记日志,绝不阻断启动。
+    setupTrayAndGlobalShortcut();
+    // T11: inject backend URL + auth token getter so both the IPC handler
+    // and the tray "导出诊断包…" menu can call the backend.
+    initDiagnosticExport({
+      backendUrl: BACKEND_URL,
+      getAuthToken: () => backendAuthToken,
+    });
+    // Phase 4: pre-launch self-check (skippable via SAGE_DOCTOR_ON_START=false for CI).
+    // fail-open by design: doctor never blocks the app from launching — its output
+    // is captured into the NDJSON startup log so the user can diagnose degraded
+    // experiences via Show Logs. Default 20s cap lives in doctor.ts and can be
+    // tuned per-build via SAGE_DOCTOR_TIMEOUT_MS (CI smoke paths tighten it).
+    updateSplashStage('正在检查运行环境…');
+    // 2026-09-17: Win7 内网闪退根因防御层 — 在 doctor 之前先做 Win32 运行时
+    // 检测 (VC++ Redist / KB3033929 / KB4474419 / KB4490628), 缺哪个弹对话框
+    // 告诉用户去装哪个 + 提供微软官方下载链接. fail-open: 用户选「仍要启动」
+    // 则继续走原 doctor 流程.
+    if (process.env.SAGE_RUNTIME_CHECK_ON_START !== 'false') {
+      try {
+        const runtimeResults = await runRuntimeChecks();
+        const missing = runtimeResults.filter((r) => r.severity === 'critical');
+        if (missing.length > 0) {
+          logger.error('main: runtime check reported CRITICAL', {
+            missing: missing.map((m) => m.name),
+          });
+          const choice = await showRuntimeMissingDialog(missing);
+          if (choice === 'quit') {
+            logger.info('main: user quit after runtime missing dialog');
+            // showRuntimeMissingDialog 内部已 app.quit(), 这里只需跳出启动
+            app.exit(0);
+            return;
+          }
+          logger.info('main: user chose to continue despite runtime missing', {
+            choice,
+          });
+        }
+      } catch (err) {
+        logger.warn('main: runtime check threw', { error: String(err) });
+      }
+    }
+    if (process.env.SAGE_DOCTOR_ON_START !== 'false') {
+      try {
+        // 2026-08-26: use `resolveDoctorLaunchCommand` so the doctor
+        // subprocess runs under the EXACT same argv/env the supervisor will
+        // use for the backend — replacing `backend.main` with
+        // `backend.cli.doctor --json` in the same chain. Without this, dev-conda
+        // produced `conda -m backend.cli.doctor --json` (conda has no `-m`
+        // subcommand), and packaged supervisors had their PYTHONPATH
+        // clobbered by `doctor.ts`'s `PYTHONPATH: packageRoot` default.
+        const supervisorPlan = resolveBackendLaunchCommand({
+          env: process.env,
+          resourcesPath: process.resourcesPath,
+          platform: process.platform,
+          isPackaged: app.isPackaged,
+          // 2026-09-08 (Win7 launch incident): go through the shared helper so
+          // the doctor subprocess targets `<userData>` on packaged Win installs
+          // (where cwd resolves to `C:\Program Files\Sage` — read-only for
+          // non-admins) instead of the install dir. See electron/userDataPaths.ts.
+          sageDbPath: resolveSageDbPath(),
+          sageUserDataDir: resolveSageUserDataDir(),
+          port: BACKEND_PORT,
         });
-        const choice = await showRuntimeMissingDialog(missing);
-        if (choice === 'quit') {
-          logger.info('main: user quit after runtime missing dialog');
-          // showRuntimeMissingDialog 内部已 app.quit(), 这里只需跳出启动
-          app.exit(0);
+        const doctorPlan =
+          supervisorPlan.kind === 'spawn'
+            ? resolveDoctorLaunchCommand({
+                env: process.env,
+                resourcesPath: process.resourcesPath,
+                platform: process.platform,
+                isPackaged: app.isPackaged,
+                // 2026-09-08: same helper as supervisor — packaged Win7
+                // doctor must probe %APPDATA%\Sage, not cwd/data.
+                sageDbPath: resolveSageDbPath(),
+                sageUserDataDir: resolveSageUserDataDir(),
+                port: BACKEND_PORT,
+              })
+            : undefined;
+
+        // Thread the supervisor's launcher context (command / cwd / env)
+        // into the doctor subprocess so `backend.cli.doctor._resolve_backend_context`
+        // can probe the same plan. `resolveDoctorLaunchCommand` already merged
+        // plan.env + plan.extraEnv into doctorPlan.env, so we only need to add
+        // the SAGE_BACKEND_* JSON-encoded context keys on top.
+        let doctorSummary: Awaited<ReturnType<typeof runDoctorCheck>>;
+        if (doctorPlan) {
+          const supervisorArgv = [
+            supervisorPlan.kind === 'spawn' ? supervisorPlan.command : '',
+            ...(supervisorPlan.kind === 'spawn' ? (supervisorPlan.args ?? []) : []),
+          ];
+          const supervisorEnv: Record<string, string> = {};
+          if (supervisorPlan.kind === 'spawn') {
+            for (const [k, v] of Object.entries({
+              ...supervisorPlan.env,
+              ...supervisorPlan.extraEnv,
+            })) {
+              if (typeof v === 'string') supervisorEnv[k] = v;
+            }
+          }
+          const doctorEnv: NodeJS.ProcessEnv = {
+            ...doctorPlan.env,
+            SAGE_BACKEND_CMD: JSON.stringify(supervisorArgv),
+            SAGE_BACKEND_CWD: supervisorPlan.kind === 'spawn' ? supervisorPlan.cwd : process.cwd(),
+            SAGE_BACKEND_ENV: JSON.stringify(supervisorEnv),
+            // alpha17 (2026-09-09): 标记 packaged 模式让 doctor 跳过
+            // conda_env / runtime_env 等仅对 dev 模式有意义的检查 — 这两项
+            // 在 packaged Win7 上 PATH 扫描看不到 bundled python, 会误报
+            // CRITICAL。详见 backend/cli/checks/{conda_env,runtime_env}.py。
+            // 仅 packaged 注入, dev 模式保持原路径扫描语义 (用户报告 conda
+            // 激活问题时仍能正常诊断)。
+            ...(app.isPackaged ? { SAGE_IS_PACKAGED: '1' } : {}),
+          };
+          doctorSummary = await runDoctorCheck({
+            pythonBin: doctorPlan.command,
+            args: doctorPlan.args,
+            cwd: doctorPlan.cwd,
+            env: doctorEnv,
+            packageRoot: app.isPackaged ? process.resourcesPath : process.cwd(),
+          });
+        } else {
+          // broken-installer (no bundled Python / unsupported platform) —
+          // fall back to bare `python` so doctor still runs in CI.
+          doctorSummary = await runDoctorCheck(process.env.SAGE_PYTHON ?? 'python', process.cwd());
+        }
+        logger.info('main: doctor check complete', doctorSummary);
+        if (doctorSummary.status === 'critical') {
+          logger.warn('main: doctor reported CRITICAL — user may see degraded experience', {
+            summary: doctorSummary.summary,
+          });
+        }
+      } catch (err) {
+        logger.warn('main: doctor check threw', { error: String(err) });
+      }
+    }
+    /**
+     * 启动期鉴权探针（仅 SAGE_SKIP_BACKEND=1 模式使用）。
+     *
+     * 背景：当 SKIP_BACKEND=1 时，后端由外部进程（开发者手启、CI fixture 等）
+     * 拥有，本 Electron 进程的 backendAuthToken 必须是它启动时也看到过的同一个
+     * SAGE_LOCAL_AUTH_TOKEN。如果开发者手启后端时漏传环境变量，后端会用
+     * `secrets.token_urlsafe(32)` 自己生成一个 → /health 仍然 200（白名单），
+     * 但受保护端点全部 401，三个页面（记忆面板/编排看板/技能）各自报错，没有
+     * 统一诊断 banner，用户只能挨个看 401 才拼出"凭据问题"。
+     *
+     * 修复：在 SKIP_BACKEND 分支结尾 fire-and-forget 启动一次轻量探针：
+     *   1. 等 /health ready（最多 6s, 后端可能刚冷启动）
+     *   2. 立刻打一个受保护端点（page_size=1 让响应体最小）
+     *   3. 仅 401 → 判定为 token 失配，发 backend:auth-failed 给前端 banner
+     *   4. 其他状态（5xx / ECONNREFUSED / 超时）→ 不是 token 问题，让正常
+     *      disconnected 路径处理，不污染 banner 语义
+     *
+     * 用户最终恢复手段是「重启 Sage 桌面端」（token 是 process-local 的，新
+     * 进程从同一 env 拿 → 匹配）。
+     */
+    async function probeBackendAuthForSkipBackend(): Promise<void> {
+      if (!backendAuthToken) {
+        // 已在 SKIP_BACKEND 分支 logger.warn；不再重复
+        return;
+      }
+      const HEALTH_DEADLINE_MS = 6000;
+      const HEALTH_RETRY_MS = 200;
+      const deadline = Date.now() + HEALTH_DEADLINE_MS;
+      let healthReady = false;
+      while (Date.now() < deadline) {
+        try {
+          const r = await fetch(`${BACKEND_URL}/health`);
+          if (r.ok) {
+            healthReady = true;
+            break;
+          }
+        } catch {
+          // 后端可能还没起 — 短暂退避后重试
+        }
+        await new Promise((res) => setTimeout(res, HEALTH_RETRY_MS));
+      }
+      if (!healthReady) {
+        logger.warn('main: auth probe skipped — backend /health never ready in 6s');
+        return;
+      }
+
+      // 选 /api/v1/memory/list — 用户报告现象的源头之一，且 page_size=1 让响应体最小。
+      // 路径提取为常量，未来如路由改名只改这一处。
+      const PROBE_PATH = '/api/v1/memory/list?page=1&page_size=1';
+      try {
+        const probe = await fetch(`${BACKEND_URL}${PROBE_PATH}`, {
+          headers: { Authorization: `Bearer ${backendAuthToken}` },
+        });
+        if (probe.status === 401) {
+          logger.error(
+            'main: backend rejected local auth token (HTTP 401) at ' +
+              PROBE_PATH +
+              ' — Electron 与后端 SAGE_LOCAL_AUTH_TOKEN 失配。请重启 Sage 桌面端恢复。',
+          );
+          mainWindow?.webContents.send('sage:event:backend:auth-failed', { status: 401 });
           return;
         }
-        logger.info('main: user chose to continue despite runtime missing', {
-          choice,
-        });
-      }
-    } catch (err) {
-      logger.warn('main: runtime check threw', { error: String(err) });
-    }
-  }
-  updateSplashStage('正在自检后端环境…');
-  if (process.env.SAGE_DOCTOR_ON_START !== 'false') {
-    try {
-      // 2026-08-26: use `resolveDoctorLaunchCommand` so the doctor
-      // subprocess runs under the EXACT same argv/env the supervisor will
-      // use for the backend — replacing `backend.main` with
-      // `backend.cli.doctor --json` in the same chain. Without this, dev-conda
-      // produced `conda -m backend.cli.doctor --json` (conda has no `-m`
-      // subcommand), and packaged supervisors had their PYTHONPATH
-      // clobbered by `doctor.ts`'s `PYTHONPATH: packageRoot` default.
-      const supervisorPlan = resolveBackendLaunchCommand({
-        env: process.env,
-        resourcesPath: process.resourcesPath,
-        platform: process.platform,
-        isPackaged: app.isPackaged,
-        // 2026-09-08 (Win7 launch incident): go through the shared helper so
-        // the doctor subprocess targets `<userData>` on packaged Win installs
-        // (where cwd resolves to `C:\Program Files\Sage` — read-only for
-        // non-admins) instead of the install dir. See electron/userDataPaths.ts.
-        sageDbPath: resolveSageDbPath(),
-        sageUserDataDir: resolveSageUserDataDir(),
-        port: BACKEND_PORT,
-      });
-      const doctorPlan =
-        supervisorPlan.kind === 'spawn'
-          ? resolveDoctorLaunchCommand({
-              env: process.env,
-              resourcesPath: process.resourcesPath,
-              platform: process.platform,
-              isPackaged: app.isPackaged,
-              // 2026-09-08: same helper as supervisor — packaged Win7
-              // doctor must probe %APPDATA%\Sage, not cwd/data.
-              sageDbPath: resolveSageDbPath(),
-              sageUserDataDir: resolveSageUserDataDir(),
-              port: BACKEND_PORT,
-            })
-          : undefined;
-
-      // Thread the supervisor's launcher context (command / cwd / env)
-      // into the doctor subprocess so `backend.cli.doctor._resolve_backend_context`
-      // can probe the same plan. `resolveDoctorLaunchCommand` already merged
-      // plan.env + plan.extraEnv into doctorPlan.env, so we only need to add
-      // the SAGE_BACKEND_* JSON-encoded context keys on top.
-      let doctorSummary: Awaited<ReturnType<typeof runDoctorCheck>>;
-      if (doctorPlan) {
-        const supervisorArgv = [
-          supervisorPlan.kind === 'spawn' ? supervisorPlan.command : '',
-          ...(supervisorPlan.kind === 'spawn' ? (supervisorPlan.args ?? []) : []),
-        ];
-        const supervisorEnv: Record<string, string> = {};
-        if (supervisorPlan.kind === 'spawn') {
-          for (const [k, v] of Object.entries({
-            ...supervisorPlan.env,
-            ...supervisorPlan.extraEnv,
-          })) {
-            if (typeof v === 'string') supervisorEnv[k] = v;
-          }
+        if (!probe.ok) {
+          // 其他非 2xx 不是 token 问题（5xx/404），让 disconnected 路径处理
+          logger.warn(
+            `main: auth probe returned HTTP ${probe.status} (not 401 — not a token mismatch)`,
+          );
         }
-        const doctorEnv: NodeJS.ProcessEnv = {
-          ...doctorPlan.env,
-          SAGE_BACKEND_CMD: JSON.stringify(supervisorArgv),
-          SAGE_BACKEND_CWD: supervisorPlan.kind === 'spawn' ? supervisorPlan.cwd : process.cwd(),
-          SAGE_BACKEND_ENV: JSON.stringify(supervisorEnv),
-          // alpha17 (2026-09-09): 标记 packaged 模式让 doctor 跳过
-          // conda_env / runtime_env 等仅对 dev 模式有意义的检查 — 这两项
-          // 在 packaged Win7 上 PATH 扫描看不到 bundled python, 会误报
-          // CRITICAL。详见 backend/cli/checks/{conda_env,runtime_env}.py。
-          // 仅 packaged 注入, dev 模式保持原路径扫描语义 (用户报告 conda
-          // 激活问题时仍能正常诊断)。
-          ...(app.isPackaged ? { SAGE_IS_PACKAGED: '1' } : {}),
-        };
-        doctorSummary = await runDoctorCheck({
-          pythonBin: doctorPlan.command,
-          args: doctorPlan.args,
-          cwd: doctorPlan.cwd,
-          env: doctorEnv,
-          packageRoot: app.isPackaged ? process.resourcesPath : process.cwd(),
-        });
-      } else {
-        // broken-installer (no bundled Python / unsupported platform) —
-        // fall back to bare `python` so doctor still runs in CI.
-        doctorSummary = await runDoctorCheck(process.env.SAGE_PYTHON ?? 'python', process.cwd());
+      } catch (err) {
+        // 网络层断 — 不是 token 问题
+        logger.warn('main: auth probe network error (not a token mismatch)', err);
       }
-      logger.info('main: doctor check complete', doctorSummary);
-      if (doctorSummary.status === 'critical') {
-        logger.warn('main: doctor reported CRITICAL — user may see degraded experience', {
-          summary: doctorSummary.summary,
-        });
-      }
-    } catch (err) {
-      logger.warn('main: doctor check threw', { error: String(err) });
-    }
-  }
-  /**
-   * 启动期鉴权探针（仅 SAGE_SKIP_BACKEND=1 模式使用）。
-   *
-   * 背景：当 SKIP_BACKEND=1 时，后端由外部进程（开发者手启、CI fixture 等）
-   * 拥有，本 Electron 进程的 backendAuthToken 必须是它启动时也看到过的同一个
-   * SAGE_LOCAL_AUTH_TOKEN。如果开发者手启后端时漏传环境变量，后端会用
-   * `secrets.token_urlsafe(32)` 自己生成一个 → /health 仍然 200（白名单），
-   * 但受保护端点全部 401，三个页面（记忆面板/编排看板/技能）各自报错，没有
-   * 统一诊断 banner，用户只能挨个看 401 才拼出"凭据问题"。
-   *
-   * 修复：在 SKIP_BACKEND 分支结尾 fire-and-forget 启动一次轻量探针：
-   *   1. 等 /health ready（最多 6s, 后端可能刚冷启动）
-   *   2. 立刻打一个受保护端点（page_size=1 让响应体最小）
-   *   3. 仅 401 → 判定为 token 失配，发 backend:auth-failed 给前端 banner
-   *   4. 其他状态（5xx / ECONNREFUSED / 超时）→ 不是 token 问题，让正常
-   *      disconnected 路径处理，不污染 banner 语义
-   *
-   * 用户最终恢复手段是「重启 Sage 桌面端」（token 是 process-local 的，新
-   * 进程从同一 env 拿 → 匹配）。
-   */
-  async function probeBackendAuthForSkipBackend(): Promise<void> {
-    if (!backendAuthToken) {
-      // 已在 SKIP_BACKEND 分支 logger.warn；不再重复
-      return;
-    }
-    const HEALTH_DEADLINE_MS = 6000;
-    const HEALTH_RETRY_MS = 200;
-    const deadline = Date.now() + HEALTH_DEADLINE_MS;
-    let healthReady = false;
-    while (Date.now() < deadline) {
-      try {
-        const r = await fetch(`${BACKEND_URL}/health`);
-        if (r.ok) {
-          healthReady = true;
-          break;
-        }
-      } catch {
-        // 后端可能还没起 — 短暂退避后重试
-      }
-      await new Promise((res) => setTimeout(res, HEALTH_RETRY_MS));
-    }
-    if (!healthReady) {
-      logger.warn('main: auth probe skipped — backend /health never ready in 6s');
-      return;
     }
 
-    // 选 /api/v1/memory/list — 用户报告现象的源头之一，且 page_size=1 让响应体最小。
-    // 路径提取为常量，未来如路由改名只改这一处。
-    const PROBE_PATH = '/api/v1/memory/list?page=1&page_size=1';
-    try {
-      const probe = await fetch(`${BACKEND_URL}${PROBE_PATH}`, {
-        headers: { Authorization: `Bearer ${backendAuthToken}` },
-      });
-      if (probe.status === 401) {
-        logger.error(
-          'main: backend rejected local auth token (HTTP 401) at ' +
-            PROBE_PATH +
-            ' — Electron 与后端 SAGE_LOCAL_AUTH_TOKEN 失配。请重启 Sage 桌面端恢复。',
-        );
-        mainWindow?.webContents.send('sage:event:backend:auth-failed', { status: 401 });
-        return;
-      }
-      if (!probe.ok) {
-        // 其他非 2xx 不是 token 问题（5xx/404），让 disconnected 路径处理
+    // 2026-10-29 (feat/workspace-optimization): 嗅探 cwd 项目根，仅作为后端
+    // DefaultWorkspaceResolver 的最低优先级参考输入（detected_root）。不再
+    // 触发任何 auto-bind，也不写入用户偏好。
+    detectedProjectRoot = detectProjectRoot(process.cwd());
+    if (detectedProjectRoot) {
+      logger.info(`main: detected project root at ${detectedProjectRoot} (low-priority hint only)`);
+    } else {
+      logger.info('main: no project root detected (decision chain will fall back)');
+    }
+
+    await registerIpcHandlers();
+    // Phase 4 lightweight smoke test path: skip backend spawn + health wait
+    // (CI doesn't have the sage-backend conda env; main renderer still loads
+    // and exposes window.electronAPI for IPC contract verification).
+    if (process.env.SAGE_SKIP_BACKEND === '1') {
+      logger.info('main: backend skipped (SAGE_SKIP_BACKEND=1)');
+      // SAGE_SKIP_BACKEND means any backend is owned by another process (for
+      // example, a CI smoke fixture or a developer's shell). Its capability
+      // token cannot be changed from this process, so it must be supplied before
+      // both processes start. Do not mint a token here that the backend cannot
+      // know; callers that need backend IPC must set SAGE_LOCAL_AUTH_TOKEN.
+      backendAuthToken = process.env.SAGE_LOCAL_AUTH_TOKEN ?? null;
+      if (!backendAuthToken) {
         logger.warn(
-          `main: auth probe returned HTTP ${probe.status} (not 401 — not a token mismatch)`,
+          'main: SAGE_SKIP_BACKEND=1 without SAGE_LOCAL_AUTH_TOKEN; backend IPC requires a shared token',
         );
       }
-    } catch (err) {
-      // 网络层断 — 不是 token 问题
-      logger.warn('main: auth probe network error (not a token mismatch)', err);
-    }
-  }
-
-  // 2026-10-29 (feat/workspace-optimization): 嗅探 cwd 项目根，仅作为后端
-  // DefaultWorkspaceResolver 的最低优先级参考输入（detected_root）。不再
-  // 触发任何 auto-bind，也不写入用户偏好。
-  detectedProjectRoot = detectProjectRoot(process.cwd());
-  if (detectedProjectRoot) {
-    logger.info(`main: detected project root at ${detectedProjectRoot} (low-priority hint only)`);
-  } else {
-    logger.info('main: no project root detected (decision chain will fall back)');
-  }
-
-  await registerIpcHandlers();
-  // Phase 4 lightweight smoke test path: skip backend spawn + health wait
-  // (CI doesn't have the sage-backend conda env; main renderer still loads
-  // and exposes window.electronAPI for IPC contract verification).
-  if (process.env.SAGE_SKIP_BACKEND === '1') {
-    logger.info('main: backend skipped (SAGE_SKIP_BACKEND=1)');
-    // SAGE_SKIP_BACKEND means any backend is owned by another process (for
-    // example, a CI smoke fixture or a developer's shell). Its capability
-    // token cannot be changed from this process, so it must be supplied before
-    // both processes start. Do not mint a token here that the backend cannot
-    // know; callers that need backend IPC must set SAGE_LOCAL_AUTH_TOKEN.
-    backendAuthToken = process.env.SAGE_LOCAL_AUTH_TOKEN ?? null;
-    if (!backendAuthToken) {
-      logger.warn(
-        'main: SAGE_SKIP_BACKEND=1 without SAGE_LOCAL_AUTH_TOKEN; backend IPC requires a shared token',
-      );
-    }
-    // The IPC readiness gate (BackendNotReadyError) is meaningless when the
-    // user (or CI) has explicitly opted out of the backend — without this,
-    // smoke.spec.ts's "unknown IPC cmd" probe gets blocked at the gate before
-    // reaching the dispatcher and fails the bridge round-trip assertion.
-    backendLifecycle = 'ready';
-    createMainWindow();
-    buildApplicationMenu();
-    // Probe a protected endpoint now that the renderer can receive the event;
-    // a 401 means the external backend holds a different SAGE_LOCAL_AUTH_TOKEN
-    // than this Electron process (e.g. dev hand-launched backend without the
-    // env var). backend:auth-failed triggers a unified diagnostic banner
-    // instead of letting each page report its own 401.
-    void probeBackendAuthForSkipBackend();
-    return;
-  }
-  // Demo mode (录屏演示): skip Python backend spawn entirely so the
-  // frontend-only /demo scenario can record without conda/uvicorn.
-  // Mirrors SAGE_SKIP_BACKEND: flips lifecycle to 'ready' so any stray IPC
-  // call resolves BackendNotReadyError cleanly instead of crashing the bridge.
-  // 触发条件 (2026-08-27):
-  //   1. 环境变量 SAGE_DEMO_MODE=1 (CI / 命令行)
-  //   2. 持久化设置 demoModeFromSettings (用户在 Settings → 通用 开关)
-  if (isDemoProcess()) {
-    if (!demoModeFromSettings) {
-      logger.info('main: demo mode active (SAGE_DEMO_MODE=1) — backend spawn suppressed');
-    }
-    backendLifecycle = 'ready';
-    createMainWindow();
-    buildApplicationMenu();
-    return;
-  }
-  // P1: Win7 无系统浏览器时使用 Sage 自带 Chromium（SAGE_FORCE_EMBEDDED_BROWSER=1 便于非 Win7 验证）。
-  const embeddedBrowserEnabled =
-    process.env.SAGE_FORCE_EMBEDDED_BROWSER === '1' ||
-    (process.platform === 'win32' && osRelease().startsWith('6.1'));
-  if (embeddedBrowserEnabled) {
-    updateSplashStage('正在准备内置浏览器…');
-    agentBrowserHandle = await startAgentBrowserHost();
-  }
-  updateSplashStage('正在启动后端服务…');
-  try {
-    backendProc = spawnBackend();
-  } catch (err) {
-    if (!(await reportUpdateStartupFailure('backend-spawn-failed'))) {
-      await showStartupFailureDialog({ reason: '后端进程启动失败', detail: String(err) });
-    }
-    return;
-  }
-  logger.info('main: backend spawn returned', {
-    pid: backendProc?.pid,
-    hasBackendProc: !!backendProc,
-    lifecycle: backendLifecycle,
-    currentBackendPid: currentBackend?.pid,
-  });
-  // If the resolver already fired the broken-installer dialog (because
-  // bundled Python is missing or the platform is unsupported), suppress the
-  // generic health-timeout dialog below so the user doesn't see two stacked
-  // modal dialogs describing the same problem from different angles.
-  if (reportedBrokenInstaller) {
-    logger.info('main: skipping health-timeout dialog (broken-installer dialog already shown)');
-    return;
-  }
-  const ready = await waitForBackend();
-  if (!ready) {
-    // ── Diagnostic: log backend process state at timeout ────────────────
-    // Differentiate "backend crashed" (exitCode != null) from "backend
-    // still running but slow" (exitCode === null). Carried over from
-    // alpha.19-win7 (PR #585) — universally useful on slow-startup machines.
-    const procState = backendProc
-      ? { pid: backendProc.pid, exitCode: backendProc.exitCode, signalCode: backendProc.signalCode }
-      : { pid: null, exitCode: null, signalCode: null };
-    const backendGenState = currentBackend
-      ? { pid: currentBackend.pid, generation: currentBackend.generation }
-      : null;
-    logger.error('main: backend health timeout', {
-      url: BACKEND_HEALTH,
-      timeoutMs: BACKEND_HEALTH_TIMEOUT_MS,
-      backendProc: procState,
-      currentBackend: backendGenState,
-    });
-
-    // ── Auto-retry once ─────────────────────────────────────────────────
-    // Some machines need >90s for the full module import chain. Give one
-    // more timeout period before showing the dialog.
-    logger.info('main: auto-retrying backend health check (slow-startup allowance)');
-    const autoRetryReady = await waitForBackend();
-    if (autoRetryReady) {
-      logger.info('main: backend ready after auto-retry');
+      // The IPC readiness gate (BackendNotReadyError) is meaningless when the
+      // user (or CI) has explicitly opted out of the backend — without this,
+      // smoke.spec.ts's "unknown IPC cmd" probe gets blocked at the gate before
+      // reaching the dispatcher and fails the bridge round-trip assertion.
+      backendLifecycle = 'ready';
       createMainWindow();
       buildApplicationMenu();
-      void updateManager
-        ?.onAppStartup(
-          () => mainWindow,
-          BACKEND_URL,
-          () => backendAuthToken,
-        )
-        .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
+      // Probe a protected endpoint now that the renderer can receive the event;
+      // a 401 means the external backend holds a different SAGE_LOCAL_AUTH_TOKEN
+      // than this Electron process (e.g. dev hand-launched backend without the
+      // env var). backend:auth-failed triggers a unified diagnostic banner
+      // instead of letting each page report its own 401.
+      void probeBackendAuthForSkipBackend();
       return;
     }
+    // Demo mode (录屏演示): skip Python backend spawn entirely so the
+    // frontend-only /demo scenario can record without conda/uvicorn.
+    // Mirrors SAGE_SKIP_BACKEND: flips lifecycle to 'ready' so any stray IPC
+    // call resolves BackendNotReadyError cleanly instead of crashing the bridge.
+    // 触发条件 (2026-08-27):
+    //   1. 环境变量 SAGE_DEMO_MODE=1 (CI / 命令行)
+    //   2. 持久化设置 demoModeFromSettings (用户在 Settings → 通用 开关)
+    if (isDemoProcess()) {
+      if (!demoModeFromSettings) {
+        logger.info('main: demo mode active (SAGE_DEMO_MODE=1) — backend spawn suppressed');
+      }
+      backendLifecycle = 'ready';
+      createMainWindow();
+      buildApplicationMenu();
+      return;
+    }
+    // P1: Win7 无系统浏览器时使用 Sage 自带 Chromium（SAGE_FORCE_EMBEDDED_BROWSER=1 便于非 Win7 验证）。
+    const embeddedBrowserEnabled =
+      process.env.SAGE_FORCE_EMBEDDED_BROWSER === '1' ||
+      (process.platform === 'win32' && osRelease().startsWith('6.1'));
+    if (embeddedBrowserEnabled) {
+      updateSplashStage('正在准备内置浏览器…');
+      agentBrowserHandle = await startAgentBrowserHost();
+    }
+    updateSplashStage('正在启动后端服务…');
+    try {
+      backendProc = spawnBackend();
+    } catch (err) {
+      if (!(await reportUpdateStartupFailure('backend-spawn-failed'))) {
+        await showStartupFailureDialog({ reason: '后端进程启动失败', detail: String(err) });
+      }
+      return;
+    }
+    // If the resolver already fired the broken-installer dialog (because
+    // bundled Python is missing or the platform is unsupported), suppress the
+    // generic health-timeout dialog below so the user doesn't see two stacked
+    // modal dialogs describing the same problem from different angles.
+    if (reportedBrokenInstaller) {
+      logger.info('main: skipping health-timeout dialog (broken-installer dialog already shown)');
+      return;
+    }
+    const ready = await waitForBackend();
+    if (!ready) {
+      // ── Diagnostic: log backend process state at timeout ────────────────
+      // Differentiate "backend crashed" (exitCode != null) from "backend
+      // still running but slow" (exitCode === null). Carried over from
+      // alpha.19-win7 (PR #585) — universally useful on slow-startup machines.
+      const procState = backendProc
+        ? {
+            pid: backendProc.pid,
+            exitCode: backendProc.exitCode,
+            signalCode: backendProc.signalCode,
+          }
+        : { pid: null, exitCode: null, signalCode: null };
+      const backendGenState = currentBackend
+        ? { pid: currentBackend.pid, generation: currentBackend.generation }
+        : null;
+      logger.error('main: backend health timeout', {
+        url: BACKEND_HEALTH,
+        timeoutMs: BACKEND_HEALTH_TIMEOUT_MS,
+        backendProc: procState,
+        currentBackend: backendGenState,
+      });
 
-    // A post-install failure must be counted BEFORE a dialog can quit the app.
-    if (await reportUpdateStartupFailure('backend-startup-timeout')) return;
-
-    // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
-    // User can open logs, retry the health check, or quit.
-    // Include backend process state so the user (and support logs) can
-    // differentiate crashed vs still-starting.
-    const procStateLine = backendProc
-      ? `\n\n后端进程状态: pid=${backendProc.pid}, exitCode=${backendProc.exitCode}, signalCode=${backendProc.signalCode}`
-      : '\n\n后端进程状态: 进程不存在 (backendProc=null)';
-    const baseDetail = `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。${procStateLine}`;
-    updateSplashStage('后端服务启动失败');
-    // T2026-09-24: snapshot the failure state BEFORE the dialog so the user
-    // can hit "打开诊断目录" and find a paper trail of the exact state we
-    // saw. The snapshot covers resources tree, env, process state, stderr
-    // tail (if any) and today's log tail.
-    const timeoutProc: BackendProcSummary = {
-      pid: backendProc?.pid ?? null,
-      exitCode: backendProc?.exitCode ?? null,
-      signalCode: backendProc?.signalCode ?? null,
-      generation: currentBackend?.generation ?? null,
-      ownershipToken: currentBackend?.ownershipToken ?? null,
-    };
-    const timeoutDiagPath = await collectAndWriteDiagnostic({
-      manifest: buildManifest,
-      plan: null,
-      proc: timeoutProc,
-      reason: 'backend-startup-timeout',
-      detail: baseDetail,
-    });
-    const choice = await showStartupFailureDialog({
-      reason: `后端服务在 ${Math.round(BACKEND_HEALTH_TIMEOUT_MS / 1000)} 秒内未响应 (已自动重试一次)`,
-      detail: baseDetail,
-      diagnosticPath: timeoutDiagPath || undefined,
-    });
-    if (choice === 'retry') {
-      updateSplashStage('正在重试启动后端服务…');
-      const ready2 = await waitForBackend();
-      if (!ready2) {
-        await showStartupFailureDialog({
-          reason: '后端服务在重试后仍未响应',
-          detail: '已重试一次,仍无法连接',
-        });
+      // ── Auto-retry once ─────────────────────────────────────────────────
+      // Some machines need >90s for the full module import chain. Give one
+      // more timeout period before showing the dialog.
+      logger.info('main: auto-retrying backend health check (slow-startup allowance)');
+      const autoRetryReady = await waitForBackend();
+      if (autoRetryReady) {
+        logger.info('main: backend ready after auto-retry');
+        createMainWindow();
+        buildApplicationMenu();
+        void updateManager
+          ?.onAppStartup(
+            () => mainWindow,
+            BACKEND_URL,
+            () => backendAuthToken,
+          )
+          .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
         return;
       }
-      logger.info('main: backend ready', { url: BACKEND_URL });
-      createMainWindow();
-      buildApplicationMenu();
-      // Fire-and-forget: startup health check runs post-window so the
-      // LauncherHealthChecker can probe the renderer. Failures are logged
-      // and drive the crash counter / auto-rollback path; they must not
-      // block the UI from appearing.
-      void updateManager
-        ?.onAppStartup(
-          () => mainWindow,
-          BACKEND_URL,
-          () => backendAuthToken,
-        )
-        .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
+
+      // A post-install failure must be counted BEFORE a dialog can quit the app.
+      if (await reportUpdateStartupFailure('backend-startup-timeout')) return;
+
+      // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
+      // User can open logs, retry the health check, or quit.
+      // Include backend process state so the user (and support logs) can
+      // differentiate crashed vs still-starting.
+      const procStateLine = backendProc
+        ? `\n\n后端进程状态: pid=${backendProc.pid}, exitCode=${backendProc.exitCode}, signalCode=${backendProc.signalCode}`
+        : '\n\n后端进程状态: 进程不存在 (backendProc=null)';
+      const baseDetail = `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。${procStateLine}`;
+      updateSplashStage('后端服务启动失败');
+      const choice = await showStartupFailureDialog({
+        reason: `后端服务在 ${Math.round(BACKEND_HEALTH_TIMEOUT_MS / 1000)} 秒内未响应 (已自动重试一次)`,
+        detail: baseDetail,
+      });
+      if (choice === 'retry') {
+        updateSplashStage('正在重试启动后端服务…');
+        const ready2 = await waitForBackend();
+        if (!ready2) {
+          await showStartupFailureDialog({
+            reason: '后端服务在重试后仍未响应',
+            detail: '已重试一次,仍无法连接',
+          });
+          return;
+        }
+        logger.info('main: backend ready', { url: BACKEND_URL });
+        createMainWindow();
+        buildApplicationMenu();
+        // Fire-and-forget: startup health check runs post-window so the
+        // LauncherHealthChecker can probe the renderer. Failures are logged
+        // and drive the crash counter / auto-rollback path; they must not
+        // block the UI from appearing.
+        void updateManager
+          ?.onAppStartup(
+            () => mainWindow,
+            BACKEND_URL,
+            () => backendAuthToken,
+          )
+          .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
+        return;
+      }
+      // 'open-logs' or 'quit' — quit is handled inside showStartupFailureDialog
       return;
     }
-    // 'open-logs' or 'quit' — quit is handled inside showStartupFailureDialog
-    return;
-  }
-  logger.info('main: backend ready', { url: BACKEND_URL });
-  createMainWindow();
-  // Step 6: build native application menu (File / Help with log dir shortcuts)
-  buildApplicationMenu();
-  // Fire-and-forget: startup health check runs AFTER the window exists so
-  // LauncherHealthChecker can probe renderer responsiveness. A failed check
-  // increments the crash counter and may trigger auto-rollback; it must not
-  // block the UI. Errors are logged for diagnostics.
-  void updateManager
-    ?.onAppStartup(
-      () => mainWindow,
-      BACKEND_URL,
-      () => backendAuthToken,
-    )
-    .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
-});
+    logger.info('main: backend ready', { url: BACKEND_URL });
+    createMainWindow();
+    // Step 6: build native application menu (File / Help with log dir shortcuts)
+    buildApplicationMenu();
+    // Fire-and-forget: startup health check runs AFTER the window exists so
+    // LauncherHealthChecker can probe renderer responsiveness. A failed check
+    // increments the crash counter and may trigger auto-rollback; it must not
+    // block the UI. Errors are logged for diagnostics.
+    void updateManager
+      ?.onAppStartup(
+        () => mainWindow,
+        BACKEND_URL,
+        () => backendAuthToken,
+      )
+      .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
+  })
+  // Any uncaught exception in the async chain (e.g. a TypeError in startup
+  // code, IPC-handler init hitting an unreadable userData dir) would
+  // otherwise be swallowed and leave the app at a blank splash forever.
+  // Surface it through the same startup-failure dialog so the user sees
+  // what happened and can open the log for the full traceback.
+  .catch(async (err) => {
+    logger.error('main: app.whenReady chain threw', {
+      error: String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    try {
+      updateSplashStage('启动过程发生异常');
+    } catch {
+      // splash may already be closed; the dialog below still must show
+    }
+    await showStartupFailureDialog({
+      reason: '启动过程发生未捕获异常',
+      detail: `启动时检测到未捕获异常:\n${err instanceof Error ? err.message : String(err)}\n\n详情请查看日志文件。`,
+    });
+  });
 
 app.on('window-all-closed', () => {
   // On all platforms (incl. macOS), quit when last window closes.

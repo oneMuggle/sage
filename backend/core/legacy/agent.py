@@ -73,7 +73,6 @@ from backend.memory import (
     SessionSummaryStore,
     WorkingMemory,
 )
-from backend.memory.embedder_factory import get_shared_embedder
 from backend.orchestration.complexity_classifier import estimate_budget_level
 from backend.services.permission_gate import (
     DEFAULT_APPROVAL_TIMEOUT_S,
@@ -91,11 +90,7 @@ from backend.services.todo_service import get_todo_service
 from backend.tools import ToolRegistry, register_all_tools
 from backend.tools.ask_user_tool import ASK_USER_QUESTION_TOOL_NAME, validate_ask_user_args
 from backend.tools.base import ToolResult
-from backend.tools.executor import (
-    TIMEOUT_EXCEPTIONS,
-    tool_timeout_message,
-    validate_required_args,
-)
+from backend.tools.executor import TIMEOUT_EXCEPTIONS, tool_timeout_message
 
 if TYPE_CHECKING:  # 仅类型标注用，避免 core → ports 的运行期导入边
     from backend.ports.llm import ModelCapabilities
@@ -439,9 +434,13 @@ class SageAgent:
         self._interrupt_event: Optional[asyncio.Event] = None
         self._current_session_id: Optional[str] = None
         # RT5 (round7): 单 agent steering —— 运行中注入的用户补充消息。
-        # run_loop 每轮迭代顶部排空（迭代边界语义，与中断检查同位）；
-        # _run_loop_active 为 False 时 inject 拒绝（调用方回退排队语义）。
+        # run_loop 每轮迭代顶部排空（迭代边界语义，与中断检查同位）。
+        # 2026-11-07: 元素改为 {"id", "text"} 以支持撤回与消费回执；
+        # _accepts_steer 覆盖"流已注册但 run_loop 尚未启动"的分类窗口，
+        # 窗口内注入缓存进队列而不是拒绝（原 _run_loop_active 判据会在此
+        # 窗口返回 409，导致前端静默降级为排队）。
         self._pending_user_messages: deque = deque()
+        self._accepts_steer = False
         self._run_loop_active = False
         # L7: 每-run 工具调用数守卫的配置来源（register_all_tools 透传同一
         # policy;此处自留一份供 run_loop 读 max_tool_calls_per_run）。
@@ -498,8 +497,6 @@ class SageAgent:
                 episodic,
                 semantic,
                 summary_store=SessionSummaryStore(db),
-                # 冲突消解的语义去重 —— 传工厂函数以便热切换嵌入模式
-                embedder=get_shared_embedder,
             )
             # M0 (2026-11-03): 专家记忆读权限 —— 把 profile.memory_access
             # 下发到记忆层闸门（read-layer filtering）。
@@ -1761,12 +1758,19 @@ class SageAgent:
         self._consecutive_unanswered = 0
         # L12-lite: 本轮 run 的中断事件 (fresh, 绑定当前事件循环)
         self._interrupt_event = asyncio.Event()
-        # RT5: run 活跃窗口 —— steering 注入仅在窗口内被接受；
-        # 残留的未消费消息（上一 run 中断遗留）在此丢弃，不跨 run 泄漏。
-        self._pending_user_messages.clear()
+        # RT5: run 活跃窗口 —— steering 注入仅在窗口内被接受。
+        # 2026-11-07: 这里不再清空队列 —— 编排分类窗口内已缓存的插话必须
+        # 带入本轮首个迭代边界；残留清理由 begin_accept_steer() 与 finally 负责。
         self._run_loop_active = True
         # L7: 每-run 工具调用计数（跨迭代累计,超 ToolPolicy.max_tool_calls_per_run 终止）
         tool_calls_used = 0
+        # M1 技能页草稿链路修复: Background Review 自动入队的辅助维度 ——
+        # 统计本次 run 用到的工具名集合，若整轮都只围绕技能/学习工具（skill /
+        # skill_save / learn）则跳过入队（类比 hex 路径的 activation_block 排除:
+        # 整轮被单一技能吸收,不值得再抽一个新技能草稿）。非技能工具只要出现
+        # 一个就视为复杂回合候选,最终是否成稿由 ReviewService LLM 初筛决定。
+        _tools_used_names: set = set()
+        _REVIEW_SKIP_TOOL_NAMES = frozenset({"skill", "skill_save", "learn"})
         # B1 空响应守卫配置（对标 hermes turn_empty_response）
         # 切片 B: env 解析收敛到共享件 backend.chat.empty_response_guard
         empty_response_max = empty_response_max_retries()
@@ -2138,11 +2142,23 @@ class SageAgent:
 
                 # RT5: 迭代边界排空 steering —— 用户运行中补充的指示以
                 # user 消息进入本轮 LLM 调用（与编排链 O1 边界投递同语义）。
-                _steer_messages = self._drain_pending_user_messages()
-                if _steer_messages:
-                    messages.extend(_steer_messages)
+                # 2026-11-07: 排空后落库并推送 STEER_CONSUMED，前端据此把
+                # 输入框上方的暂存 chip 移除（按 id 与撤回竞态去重）。
+                _steer_items = self._drain_pending_user_messages()
+                if _steer_items:
+                    messages.extend(
+                        {"role": "user", "content": f"【用户补充】{item['text']}"}
+                        for item in _steer_items
+                    )
+                    self._persist_consumed_steers(_steer_items, session_id)
+                    yield AgentEvent(
+                        state=AgentState.STEER_CONSUMED,
+                        iteration=i,
+                        agent_id=self.agent_id,
+                        steer_info={"ids": [item["id"] for item in _steer_items]},
+                    )
                     logger.info(
-                        "run_loop 迭代 %s 注入 %d 条用户补充消息", i, len(_steer_messages)
+                        "run_loop 迭代 %s 注入 %d 条用户补充消息", i, len(_steer_items)
                     )
 
                 # RT2 (round7) + 2026-09-28 双层压缩: 迭代边界高水位预防 ——
@@ -2370,6 +2386,38 @@ class SageAgent:
                             "content": response.content,
                         }
                     )
+                    # M1: Background Review 复杂回合入队（对齐 hex ChatService 行为）。
+                    # 阈值与 hex 一致:工具调用数 >= REVIEW_ENQUEUE_TOOL_CALL_THRESHOLD(2)
+                    # 且本轮未只围绕技能/学习工具;失败保持 best-effort 静默降级,
+                    # 绝不阻塞主对话 DONE 路径。ReviewQueue 自身 worker 调用
+                    # ReviewService 做 LLM 初筛,决定是否真正生成 SkillDraft。
+                    if (
+                        session_id
+                        and tool_calls_used >= 2
+                        and (_tools_used_names - _REVIEW_SKIP_TOOL_NAMES)
+                    ):
+                        try:
+                            from backend.skills.review_queue import get_review_queue
+
+                            _tool_calls_serialized = [
+                                {"name": tc.name, "args": tc.args}
+                                for tc in (response.tool_calls or [])
+                            ]
+                            get_review_queue().enqueue(
+                                trigger_type="complex_turn",
+                                session_id=session_id,
+                                context={
+                                    "tool_calls": _tool_calls_serialized,
+                                    "tool_call_count": tool_calls_used,
+                                    "threshold": 4,  # SKILL_NUDGE_TOOL_CALL_THRESHOLD 对齐
+                                    "needs_screening": tool_calls_used < 4,
+                                    "api_mode": "legacy",
+                                },
+                            )
+                        except Exception as exc:  # noqa: BLE001 — best-effort
+                            logger.debug(
+                                "Background Review 入队失败 (legacy 路径): %s", exc
+                            )
                     yield AgentEvent(
                         state=AgentState.DONE,
                         iteration=i,
@@ -2438,6 +2486,8 @@ class SageAgent:
                         # 耗时从串行叠加降为最慢单工具。事件与消息仍按原顺序产出,
                         # 对 LLM 与前端完全透明。不满足池条件即被规划器切成串行屏障。
                         tool_calls_used += len(group_tcs)
+                        with contextlib.suppress(Exception):
+                            _tools_used_names.update(tc.name for tc in group_tcs)
 
                         def _run_one(tc: Any) -> Tuple[str, bool]:
                             try:
@@ -2445,14 +2495,6 @@ class SageAgent:
                                 tool_p = self.tool_registry.get(tc.name)
                                 if tool_p is None:
                                     return f"[错误] 工具不存在: {tc.name}", True
-                                # alpha.36 (Bug #1): 并发池分发前先过 required 校验
-                                # （与 hex InprocToolAdapter / 串行路径同 helper——共用
-                                # backend.tools.executor.validate_required_args），
-                                # 缺 required 时不再让 execute() 抛 TypeError 把 Python
-                                # 内部错误文本泄漏到 LLM 输出。
-                                required_error = validate_required_args(tool_p, args_p)
-                                if required_error is not None:
-                                    return required_error, True
                                 result_p = tool_p.execute(**args_p)
                                 if hasattr(result_p, "success") and hasattr(result_p, "content"):
                                     if result_p.success:
@@ -2596,6 +2638,8 @@ class SageAgent:
                         # legacy run_loop 无刹车。超限时终止本次 run（与前端
                         # mapAgentErrorToText 的 "tool_budget_exceeded" 文案对齐）。
                         tool_calls_used += 1
+                        with contextlib.suppress(Exception):
+                            _tools_used_names.add(tc.name)
                         max_tool_calls = self._effective_max_tool_calls_per_run()
                         if tool_calls_used > max_tool_calls:
                             yield AgentEvent(
@@ -3064,7 +3108,10 @@ class SageAgent:
             )
         finally:
             # RT5: 收窄 steering 注入窗口；残留消息一并丢弃。
+            # 2026-11-07: _accepts_steer 与 _run_loop_active 同步收口，
+            # 防止流结束后仍接受注入。
             self._run_loop_active = False
+            self._accepts_steer = False
             self._pending_user_messages.clear()
             # 恢复 agent 实例的原始 LLM client / config(不污染跨请求状态);
             # 动态新建的 client 一并关闭, 防止 httpx 连接泄漏。
@@ -3483,15 +3530,26 @@ class SageAgent:
         LLM 拿到的是 Python 异常堆栈而非友好错误。现在分发前校验
         required 字段,缺失则返回明确错误消息。
 
-        alpha.36 (Bug #1)：实现下沉到 ``backend.tools.executor.validate_required_args``
-        公共 helper（hex InprocToolAdapter 与并行只读批次同样用），避免两份
-        校验逻辑漂移。SageAgent 内部调用路径（execute_tool / _await_tool_execution）
-        保留原方法签名，错误文案模板由公共 helper 统一。
-
         Returns:
             None 表示通过;否则返回错误消息字符串(调用方应直接返回失败)。
         """
-        return validate_required_args(tool, dict(parameters))
+        schema = getattr(tool, "schema", None)
+        if schema is None:
+            return None
+        params_schema = getattr(schema, "parameters", None)
+        if not isinstance(params_schema, dict):
+            return None
+        required = params_schema.get("required")
+        if not required:
+            return None
+        # required 应该是字符串列表
+        if not isinstance(required, (list, tuple)):  # noqa: UP038 — py38 运行时 isinstance 不支持 PEP604 union
+            return None
+        missing = [name for name in required if name not in parameters]
+        if not missing:
+            return None
+        names = ", ".join(missing)
+        return f"工具 {tool.name} 缺少必需参数: {names}"
 
     def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -3598,33 +3656,91 @@ class SageAgent:
         """重置中断状态"""
         self._interrupted = False
 
-    def inject_user_message(self, content: str) -> bool:
+    def begin_accept_steer(self) -> None:
+        """2026-11-07: 打开 steering 注入窗口。
+
+        producer 在注册活跃流之后、编排模式分类之前调用 —— 覆盖分类（一次
+        独立 LLM 调用，1-3 秒）造成的时间窗口：此间注入的插话缓存进队列，
+        等 run_loop 首个迭代边界消费，而不是回 409 让前端静默降级为排队。
+        队列在此处清空，避免上一 run 的残留跨 run 泄漏。
+        """
+        self._pending_user_messages.clear()
+        self._accepts_steer = True
+
+    def end_accept_steer(self) -> None:
+        """关闭 steering 注入窗口（run 未启动即失败的路径调用）。"""
+        self._accepts_steer = False
+        self._pending_user_messages.clear()
+
+    def inject_user_message(
+        self, content: str, message_id: Optional[str] = None
+    ) -> Optional[str]:
         """RT5 (round7): 运行中向当前 run 注入用户补充消息（steering）。
 
         消息在**下一迭代边界**以 ``【用户补充】`` 前缀的 user 消息进入
-        LLM 上下文——与编排链 O1 的边界投递同语义。run 未活跃时返回
-        False（调用方回退排队语义）；队列排空发生在 run_loop 内，
-        ``deque.append`` 跨线程投递是 GIL 原子操作，尽力而为语义与
-        interrupt() 一致。
+        LLM 上下文——与编排链 O1 的边界投递同语义。注入窗口未打开时返回
+        None（调用方回退排队语义）；成功返回消息 id，供撤回与消费回执使用。
         """
         text = (content or "").strip()
-        if not text or not self._run_loop_active:
-            return False
-        self._pending_user_messages.append(text)
+        if not text or not self._accepts_steer:
+            return None
+        item_id = message_id or str(uuid.uuid4())
+        self._pending_user_messages.append({"id": item_id, "text": text})
         logger.info("steering: 已接收用户补充消息 (%d 字符)，下一迭代边界生效", len(text))
+        return item_id
+
+    def cancel_user_message(self, message_id: str) -> bool:
+        """2026-11-07: 撤回尚未被消费的插话；已消费/不存在返回 False。"""
+        if not message_id:
+            return False
+        kept = [
+            item
+            for item in self._pending_user_messages
+            if not (isinstance(item, dict) and item.get("id") == message_id)
+        ]
+        if len(kept) == len(self._pending_user_messages):
+            return False
+        # 原地替换内容而非换掉 deque 对象 —— 与 run_loop 的 drain 并发时
+        # 不会让 drain 在旧对象上继续 popleft 而丢失其余条目。
+        self._pending_user_messages.clear()
+        self._pending_user_messages.extend(kept)
+        logger.info("steering: 已撤回未消费的用户补充消息")
         return True
 
+    def _persist_consumed_steers(
+        self, items: List[Dict[str, Any]], session_id: Optional[str]
+    ) -> None:
+        """2026-11-07: 插话被消费时落库（撤回则不落，语义等同未送达）。"""
+        if not session_id:
+            return
+        for item in items:
+            try:
+                self.message_repo.save(
+                    DbMessage(
+                        id=item["id"],
+                        session_id=session_id,
+                        role="user",
+                        content=item["text"],
+                        subtype="steering",
+                        created_at=int(time.time()),
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001 — 落库失败不影响注入
+                logger.warning("steering 落库失败（注入仍生效）: %s", exc)
+
     def _drain_pending_user_messages(self) -> List[Dict[str, Any]]:
-        """排空待注入消息并组装为 user 消息列表（run_loop 迭代顶部调用）。"""
+        """排空待注入消息（run_loop 迭代顶部调用），返回 ``{"id", "text"}`` 列表。"""
         drained: List[Dict[str, Any]] = []
         try:
             while self._pending_user_messages:
-                drained.append(
-                    {
-                        "role": "user",
-                        "content": f"【用户补充】{self._pending_user_messages.popleft()}",
-                    }
-                )
+                item = self._pending_user_messages.popleft()
+                if isinstance(item, dict) and item.get("text"):
+                    drained.append(
+                        {"id": str(item.get("id") or uuid.uuid4()), "text": item["text"]}
+                    )
+                elif isinstance(item, str) and item:
+                    # 防御性兼容旧队列形态（正常流程不会出现纯字符串）
+                    drained.append({"id": str(uuid.uuid4()), "text": item})
         except Exception:  # noqa: BLE001 — steering 是增强，绝不杀死 run
             logger.warning("steering: 排空待注入消息失败", exc_info=True)
         return drained

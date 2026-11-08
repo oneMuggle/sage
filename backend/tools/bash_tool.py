@@ -417,6 +417,17 @@ class BashTool(BaseTool):
             )
             return ToolResult(success=False, error=str(exc))
 
+        # 2026-11-06 Phase 1: 后台任务完成时推 OS 通知（用户切走后仍可感知）。
+        # 自动唤醒由 wake_on_background 工具按需追加。
+        try:
+            from backend.tools.context import current_tool_context
+
+            ctx = current_tool_context()
+            session_id = (ctx.session_id or None) if ctx is not None else None
+        except Exception:  # noqa: BLE001 — 上下文缺失不影响启动
+            session_id = None
+        registry.register_exit_notification(session.shell_id, session_id=session_id)
+
         return ToolResult(
             success=True,
             content=self._decorate(

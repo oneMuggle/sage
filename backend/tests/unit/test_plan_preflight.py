@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from typing import List
 from unittest.mock import MagicMock
 
 import pytest
@@ -32,7 +33,7 @@ class FakeLLM:
 
     def __init__(self, *responses: str):
         self._responses = list(responses)
-        self.prompts: list[str] = []
+        self.prompts: List[str] = []
 
     async def complete(self, prompt: str) -> str:
         self.prompts.append(prompt)

@@ -489,6 +489,95 @@ register_migration(
 )
 
 
+def _v14_agents_last_used_at(conn: Any) -> None:
+    """v14：agents 增加最近使用时间（P2-b 专家卡片「N 天前使用」）。
+
+    毫秒 Unix 时间戳，与 sessions.updated_at 同口径；存量行保持 NULL
+    （视为从未使用）。由聊天路径在专家会话成功响应后 best-effort 更新。
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(agents)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if not columns:
+        # 极老库尚未建 agents 表 —— 交由 init_db DDL 负责，跳过。
+        return
+    if "last_used_at" not in columns:
+        cursor.execute("ALTER TABLE agents ADD COLUMN last_used_at INTEGER")
+        conn.commit()
+
+
+register_migration(14, "agents_last_used_at", _v14_agents_last_used_at)
+
+
+def _v15_agents_sort_order(conn: Any) -> None:
+    """v15：agents 增加手动排序位（P2-d 置顶 / 排序）。
+
+    存量回填：按 ``updated_at`` 倒序（最近更新的排在前面），与原有
+    ``ORDER BY id`` 的观感接近。置顶 = 取更小的 sort_order。
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(agents)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if not columns:
+        # 极老库尚未建 agents 表 —— 交由 init_db DDL 负责，跳过。
+        return
+    if "sort_order" not in columns:
+        cursor.execute("ALTER TABLE agents ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+        cursor.execute(
+            """
+            UPDATE agents SET sort_order = (
+                SELECT COUNT(*) FROM agents AS a2 WHERE a2.updated_at > agents.updated_at
+            )
+            """
+        )
+        conn.commit()
+
+
+register_migration(15, "agents_sort_order", _v15_agents_sort_order)
+
+
+def _v16_group_chat_support(conn: Any) -> None:
+    """v16：群聊支持（M2 私聊/群聊）。
+
+    - ``sessions.conversation_type``：``'dm'``（默认）| ``'group'``；
+    - ``conversation_participants``：群聊参与者（含 host/member 与发言顺序）；
+    - ``messages.sender_agent_id``：assistant 行的实际发言专家（NULL = 用户/未标注）。
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(sessions)")
+    session_cols = {row[1] for row in cursor.fetchall()}
+    if session_cols and "conversation_type" not in session_cols:
+        cursor.execute(
+            "ALTER TABLE sessions ADD COLUMN conversation_type TEXT DEFAULT 'dm'"
+        )
+        conn.commit()
+
+    cursor.execute("PRAGMA table_info(messages)")
+    message_cols = {row[1] for row in cursor.fetchall()}
+    if message_cols and "sender_agent_id" not in message_cols:
+        cursor.execute("ALTER TABLE messages ADD COLUMN sender_agent_id TEXT")
+        conn.commit()
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS conversation_participants (
+            conversation_id TEXT NOT NULL,
+            agent_id        TEXT NOT NULL,
+            role            TEXT NOT NULL DEFAULT 'member',
+            speak_order     INTEGER NOT NULL DEFAULT 0,
+            enabled         INTEGER NOT NULL DEFAULT 1,
+            added_at        INTEGER NOT NULL,
+            PRIMARY KEY (conversation_id, agent_id)
+        )
+        """
+    )
+    conn.commit()
+
+
+register_migration(16, "group_chat_support", _v16_group_chat_support)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(

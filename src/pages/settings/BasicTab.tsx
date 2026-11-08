@@ -157,6 +157,159 @@ function CloseToTrayCard(): JSX.Element {
   );
 }
 
+/**
+ * 桌面通知偏好——状态由 Electron 主进程持有（sage-notification-prefs.json），
+ * 与 CloseToTrayCard 同模式：renderer 只做 UI，主进程负责门控 OS 通知。
+ */
+type NotificationPrefsState = {
+  enabled: boolean;
+  backgroundTasks: boolean;
+  webhookUrl: string;
+  slackWebhookUrl: string;
+  webhookSecret: string;
+};
+
+/** 桌面通知偏好——状态由 Electron 主进程持有（sage-notification-prefs.json），
+ * 与 CloseToTrayCard 同模式：renderer 只做 UI，主进程负责门控 OS 通知与 Webhook 外发。
+ */
+function NotificationPrefsCard(): JSX.Element {
+  const { t } = useI18n();
+  const [prefs, setPrefs] = useState<NotificationPrefsState | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    window.electronAPI
+      ?.getNotificationPrefs?.()
+      .then((resp) => {
+        if (mounted) {
+          setPrefs({
+            enabled: resp.enabled === true,
+            backgroundTasks: resp.backgroundTasks === true,
+            webhookUrl: resp.webhookUrl ?? '',
+            slackWebhookUrl: resp.slackWebhookUrl ?? '',
+            webhookSecret: resp.webhookSecret ?? '',
+          });
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setPrefs({
+            enabled: true,
+            backgroundTasks: true,
+            webhookUrl: '',
+            slackWebhookUrl: '',
+            webhookSecret: '',
+          });
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const update = (patch: Partial<NotificationPrefsState>): void => {
+    if (!prefs) return;
+    const next = { ...prefs, ...patch };
+    setPrefs(next);
+    window.electronAPI?.setNotificationPrefs?.(next).catch(() => undefined);
+  };
+
+  const urlInput = (
+    value: string,
+    onChange: (value: string) => void,
+    testId: string,
+    disabled = false,
+  ): JSX.Element => (
+    <input
+      type="url"
+      className="w-full rounded border border-border bg-bg px-2 py-1 text-xs text-text"
+      placeholder="https://"
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+      data-testid={testId}
+    />
+  );
+
+  return (
+    <section data-testid="notification-prefs-section">
+      <h3 className="text-sm font-semibold text-text mb-3">{t('settings.basic.notifications')}</h3>
+      <SettingRow
+        anchor="notifications_enabled"
+        label={t('settings.basic.notifications_enabled_label')}
+        desc={t('settings.basic.notifications_enabled_desc')}
+      >
+        {prefs === null ? (
+          <span className="text-xs text-muted">…</span>
+        ) : (
+          <Toggle value={prefs.enabled} onChange={(v) => update({ enabled: v })} />
+        )}
+      </SettingRow>
+      <SettingRow
+        anchor="notifications_background"
+        label={t('settings.basic.notifications_background_label')}
+        desc={t('settings.basic.notifications_background_desc')}
+      >
+        {prefs === null ? (
+          <span className="text-xs text-muted">…</span>
+        ) : (
+          <Toggle
+            value={prefs.enabled && prefs.backgroundTasks}
+            onChange={(v) => update({ backgroundTasks: v })}
+            disabled={!prefs.enabled}
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        anchor="notifications_webhook"
+        label={t('settings.basic.notifications_webhook_label')}
+        desc={t('settings.basic.notifications_webhook_desc')}
+      >
+        {prefs === null ? (
+          <span className="text-xs text-muted">…</span>
+        ) : (
+          <div className="space-y-2">
+            {urlInput(
+              prefs.webhookUrl,
+              (v) => update({ webhookUrl: v }),
+              'notification-webhook-url',
+              !prefs.enabled,
+            )}
+            <input
+              type="password"
+              className="w-full rounded border border-border bg-bg px-2 py-1 text-xs text-text"
+              placeholder={t('settings.basic.notifications_webhook_secret_placeholder')}
+              value={prefs.webhookSecret}
+              disabled={!prefs.enabled}
+              onChange={(e) => update({ webhookSecret: e.target.value })}
+              data-testid="notification-webhook-secret"
+            />
+            <span className="block text-ui-2xs text-text-tertiary">
+              {t('settings.basic.notifications_webhook_secret_desc')}
+            </span>
+          </div>
+        )}
+      </SettingRow>
+      <SettingRow
+        anchor="notifications_slack"
+        label={t('settings.basic.notifications_slack_label')}
+        desc={t('settings.basic.notifications_slack_desc')}
+      >
+        {prefs === null ? (
+          <span className="text-xs text-muted">…</span>
+        ) : (
+          urlInput(
+            prefs.slackWebhookUrl,
+            (v) => update({ slackWebhookUrl: v }),
+            'notification-slack-url',
+            !prefs.enabled,
+          )
+        )}
+      </SettingRow>
+    </section>
+  );
+}
+
 export function BasicTab() {
   const { t } = useI18n();
   const { settings, updateSettings } = useSettings();
@@ -418,6 +571,7 @@ export function BasicTab() {
         </SettingRow>
       </section>
       <CloseToTrayCard />
+      <NotificationPrefsCard />
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.basic.section.demo')}</h3>
         <DemoModeSection />

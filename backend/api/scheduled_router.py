@@ -41,6 +41,7 @@ class CreateTaskIn(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
     enabled: bool = True
     max_runs: Optional[int] = Field(default=None, ge=1)
+    mode: Literal["execute", "deliver"] = "execute"
 
 
 class UpdateTaskIn(BaseModel):
@@ -51,6 +52,7 @@ class UpdateTaskIn(BaseModel):
     session_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
     content: Optional[str] = Field(default=None, min_length=1, max_length=4000)
     max_runs: Optional[int] = Field(default=None, ge=1)
+    mode: Optional[Literal["execute", "deliver"]] = None
 
     class Config:
         extra = "forbid"
@@ -72,6 +74,9 @@ class TaskOut(BaseModel):
     last_error: Optional[str] = None
     run_count: int = 0
     max_runs: Optional[int] = None
+    mode: Literal["execute", "deliver"] = "deliver"
+    last_result_message_id: Optional[str] = None
+    last_duration_ms: Optional[int] = None
 
 
 def _task_to_dict(task: Any) -> Dict[str, Any]:
@@ -91,6 +96,9 @@ def _task_to_dict(task: Any) -> Dict[str, Any]:
         "last_error": getattr(task, "last_error", None),
         "run_count": getattr(task, "run_count", 0),
         "max_runs": getattr(task, "max_runs", None),
+        "mode": getattr(task, "mode", "deliver"),
+        "last_result_message_id": getattr(task, "last_result_message_id", None),
+        "last_duration_ms": getattr(task, "last_duration_ms", None),
     }
 
 
@@ -141,6 +149,7 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
                 content=payload.content,
                 enabled=payload.enabled,
                 max_runs=payload.max_runs,
+                mode=payload.mode,
             )
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -157,7 +166,7 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
             changes["name"] = payload.name
         if payload.enabled is not None:
             changes["enabled"] = payload.enabled
-        for field in ("type", "session_id", "content", "max_runs"):
+        for field in ("type", "session_id", "content", "max_runs", "mode"):
             value = getattr(payload, field)
             if value is not None:
                 changes[field] = value
@@ -219,5 +228,33 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
             )
         result = svc.run_evolution_task_now(name)
         return {"name": name, "ok": result is not None, "result": result or {}}
+
+    # ---------- desktop notifications (2026-11-05) ----------
+    # Electron 主进程每 15s 轮询本端点,把排空的通知转成 OS 通知。
+    # 两类来源共用同一个消费节奏:定时任务触发/失败 + 待办提醒。
+
+    @router.get("/scheduled/notifications/pending")
+    def drain_pending_notifications(
+        svc: SchedulerService = Depends(service_dep),
+    ) -> Dict[str, Any]:
+        # 局部导入:todo_reminder / background_notifications 依赖工具层,
+        # 避免模块加载顺序耦合。
+        from backend.scheduler.todo_reminder import get_todo_reminder_scheduler
+        from backend.services.background_notifications import (
+            get_background_notification_queue,
+        )
+
+        reminder_scheduler = get_todo_reminder_scheduler()
+        todo_items = (
+            reminder_scheduler.get_pending_notifications()
+            if reminder_scheduler is not None
+            else []
+        )
+        return {
+            "scheduled_tasks": svc.drain_pending_notifications(),
+            "todo_reminders": todo_items,
+            # 2026-11-06 Phase 1: 后台 Bash 任务完成通知
+            "background_tasks": get_background_notification_queue().drain(),
+        }
 
     return router

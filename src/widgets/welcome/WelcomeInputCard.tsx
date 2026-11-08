@@ -26,15 +26,15 @@ interface WelcomeInputCardProps {
   initialValue?: string;
   toolbar?: React.ReactNode;
   /**
-   * 外部回填的草稿（例如用户点击首屏 prompt chip）。
-   * 传入新的对象实例即视为一次新的回填请求 —— 同一个 chip 连点两次也会重新填充。
-   */
-  draft?: { text: string } | null;
-  /**
    * `@` 查询激活时触发 —— 新会话页借此懒创建草稿会话，使文件搜索能拿到
    * 会话绑定的工作区（AtFileMenu 依赖 sessionId 查询后端）。
    */
   onAtQueryActive?: () => void;
+  /**
+   * 外部回填的草稿（例如用户点击首屏 prompt chip）。
+   * 传入新的对象实例即视为一次新的回填请求 —— 同一个 chip 连点两次也会重新填充。
+   */
+  draft?: { text: string } | null;
 }
 
 export function formatWelcomeInputMarkdown(params: {
@@ -77,14 +77,14 @@ export function WelcomeInputCard({
   disabled = false,
   initialValue = '',
   toolbar,
-  draft = null,
   onAtQueryActive,
+  draft = null,
 }: WelcomeInputCardProps) {
   const { t } = useI18n();
   const [value, setValue] = useState(initialValue);
-  const [focusSeq, setFocusSeq] = useState(0);
   const [cursorPos, setCursorPos] = useState(initialValue.length);
   const [officeRefs, setOfficeRefs] = useState<readonly ChatOfficeRef[]>([]);
+  const [focusSeq, setFocusSeq] = useState(0);
   // 2026-11-01: 欢迎页 slash 菜单 —— 会话内由 ChatInput 提供，首屏此前完全没有。
   const [dynamicSlashCommands, setDynamicSlashCommands] = useState<DynamicSlashSkill[]>([]);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
@@ -179,6 +179,7 @@ export function WelcomeInputCard({
   useEffect(() => {
     if (!draft) return;
     setValue(draft.text);
+    setCursorPos(draft.text.length);
     setFocusSeq((seq) => seq + 1);
   }, [draft]);
 

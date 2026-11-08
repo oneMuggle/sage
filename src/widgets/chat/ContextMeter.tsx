@@ -58,6 +58,7 @@ export function ContextMeter({ sessionId, refreshKey = 0, placement = 'top' }: C
   const streamingMessageId = useChatStreamStore(
     (s) => selectSessionSlots(s, sessionId).streaming?.messageId ?? null,
   );
+  const isIdle = streamingMessageId === null;
   const prevStreamingIdRef = useRef<string | null>(null);
 
   const load = (sid: string | null): void => {
@@ -75,9 +76,12 @@ export function ContextMeter({ sessionId, refreshKey = 0, placement = 'top' }: C
   useEffect(() => {
     load(sessionId);
     if (!sessionId) return;
+    // 2026-11-05: 仅流式进行中才启用 60s 兜底轮询。流结束时下方 effect 已做
+    // 一次显式刷新;空闲会话不再持续产生无效请求。
+    if (isIdle) return;
     const timer = window.setInterval(() => load(sessionId), 60_000);
     return () => window.clearInterval(timer);
-  }, [sessionId, refreshKey]);
+  }, [sessionId, refreshKey, isIdle]);
 
   useEffect(() => {
     const prev = prevStreamingIdRef.current;

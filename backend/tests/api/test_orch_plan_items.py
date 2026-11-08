@@ -10,6 +10,7 @@ Round 2 (2026-09-19, docs/plans/2026-09-19_orch-plan-preflight-round2-plan.md):
 from __future__ import annotations
 
 import json
+from typing import List
 from unittest.mock import patch
 
 import httpx
@@ -149,7 +150,7 @@ async def test_plan_items_structures_approved_plan(monkeypatch):
 class RecordingLLM:
     def __init__(self, response: str):
         self._response = response
-        self.prompts: list[str] = []
+        self.prompts: List[str] = []
 
     async def complete(self, prompt: str) -> str:
         self.prompts.append(prompt)

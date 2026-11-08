@@ -10,6 +10,22 @@ export const enSettingsUi = {
   'settings.basic.close_to_tray_desc':
     'Hides to the system tray instead of quitting when the close button is clicked; restore from the tray icon or with Alt+Shift+S',
   'settings.basic.close_to_tray_label': 'Hide to tray on close',
+  'settings.basic.notifications': 'Notifications',
+  'settings.basic.notifications_enabled_label': 'Enable desktop notifications',
+  'settings.basic.notifications_enabled_desc':
+    'Show system notifications when a session completes, fails, or waits for approval (works while minimized or hidden to the tray)',
+  'settings.basic.notifications_background_label': 'Background task notifications',
+  'settings.basic.notifications_background_desc':
+    'Notify when scheduled tasks fire, todos become due, or background tasks finish',
+  'settings.basic.notifications_webhook_label': 'Generic webhook',
+  'settings.basic.notifications_webhook_desc':
+    'POST each notification as JSON to this URL (custom bots/automation platforms); leave empty to disable',
+  'settings.basic.notifications_webhook_secret_placeholder': 'Signing secret (optional)',
+  'settings.basic.notifications_webhook_secret_desc':
+    'When set, requests carry X-Sage-Signature (HMAC-SHA256) for receiver verification; leave empty to disable signing',
+  'settings.basic.notifications_slack_label': 'Slack webhook',
+  'settings.basic.notifications_slack_desc':
+    'Slack Incoming Webhook URL; notifications are sent as text messages. Leave empty to disable',
   'settings.basic.conversation': 'Conversation',
   'settings.basic.history_size_desc':
     'Number of recent inputs recallable with the up/down arrow keys in the composer (per session, 1-200)',
@@ -136,6 +152,15 @@ export const enSettingsUi = {
   'settings.endpoints.result.model': 'Model (advanced):',
   'settings.endpoints.result.protocol': 'Protocol:',
   'settings.endpoints.result.quantization': 'Quantization:',
+  'settings.endpoints.quota.aria_budget': 'Monthly budget amount',
+  'settings.endpoints.quota.aria_daily_tokens': 'Daily token quota value',
+  'settings.endpoints.quota.aria_daily_unit': 'Daily token quota unit',
+  'settings.endpoints.quota.daily_tokens': 'Daily token quota',
+  'settings.endpoints.quota.monthly_budget': 'Monthly budget (USD)',
+  'settings.endpoints.quota.section': 'Quota (optional, used for usage warnings)',
+  'settings.endpoints.quota.unlimited': 'Unlimited',
+  'settings.endpoints.result.quota_budget': 'Budget: ${usd}/month',
+  'settings.endpoints.result.quota_tokens': 'Quota: {tokens} tokens/day',
   'settings.endpoints.save': 'Save',
   'settings.endpoints.test_connection': 'Test connection',
   'settings.endpoints.testing': 'Testing...',
@@ -249,12 +274,20 @@ export const enSettingsUi = {
     'Not configured (switch back to manual to choose a chat endpoint)',
   'settings.models.chat_model': 'Chat model',
   'settings.models.chat_model_desc': 'Used for text conversations (required)',
+  'settings.models.context_length.aria_preset': 'Max context length preset',
+  'settings.models.context_length.aria_unit': 'Context length unit',
+  'settings.models.context_length.aria_value': 'Context length value',
+  'settings.models.context_length.custom': 'Custom…',
   'settings.models.embedding_model': 'Embedding model',
   'settings.models.embedding_model_desc': 'Used for vectorization and semantic search (optional)',
   'settings.models.endpoints_models_count': '{endpoints} endpoints, {models} models in total',
   'settings.models.fixed_use_above': 'Fixed (use value above)',
   'settings.models.image_gen_model': 'Image generation',
   'settings.models.image_gen_model_desc': 'Used for text-to-image (optional)',
+  'settings.models.title_model': 'Session title model',
+  'settings.models.title_model_desc':
+    'Model used when generating session titles (optional). Leave empty to reuse the chat model; a dedicated small model is usually faster and cheaper',
+  'settings.models.title_model_inherit': 'Use chat model',
   'settings.ocr.title': 'Local OCR',
   'settings.ocr.desc':
     'Recognize text from images on this device when no vision model is available; images are not uploaded',
@@ -326,10 +359,6 @@ export const enSettingsUi = {
   'settings.models.routing_tier': 'Tier',
   'settings.models.temperature_desc':
     'Controls output randomness: higher is more random; 0 is most stable, 2 most random. Actual behavior depends on the model implementation',
-  'settings.models.title_model': 'Session title model',
-  'settings.models.title_model_desc':
-    'Model used to generate session titles (optional). Leave empty to reuse the chat model; a dedicated small model is usually faster and cheaper',
-  'settings.models.title_model_inherit': '-- Inherit from chat model --',
   'settings.models.tts_model': 'Speech synthesis (TTS)',
   'settings.models.tts_model_desc': 'Used for text-to-speech (optional)',
   'settings.models.vision_model': 'Vision model',
@@ -366,7 +395,8 @@ export const enSettingsUi = {
   'settings.orch.budget_mode.auto_desc':
     'Initial budget tiered by task complexity, auto-extended after a progress audit at the limit',
   'settings.orch.budget_mode.fixed': 'Fixed ceiling',
-  'settings.orch.budget_mode.fixed_desc': 'Uses “Agent iteration limit” directly, no auto-extension',
+  'settings.orch.budget_mode.fixed_desc':
+    'Uses “Agent iteration limit” directly, no auto-extension',
   'settings.orch.budget_simple.label': 'Simple task initial budget (steps)',
   'settings.orch.budget_simple.desc': 'Initial steps for short, attachment-free simple tasks',
   'settings.orch.budget_medium.label': 'Medium task initial budget (steps)',

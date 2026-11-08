@@ -94,7 +94,7 @@ from backend.api.export_routes import router as export_router
 from backend.api.feedback_routes import router as feedback_router
 from backend.api.git_status_routes import router as git_status_router
 from backend.api.harness_routes import router as harness_router
-from backend.api.hex_routes import router as hex_router
+from backend.api.hex_routes import get_chat_service, router as hex_router
 from backend.api.hooks_routes import router as hooks_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
@@ -125,11 +125,13 @@ from backend.api.question_routes import router as question_router
 from backend.api.request_body_limit import MaxRequestBodyMiddleware
 from backend.api.runtime_routes import router as runtime_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
+from backend.api.shell_routes import router as shell_router
 from backend.api.system_routes import router as system_router
 from backend.api.theme_router import router as theme_router
 from backend.api.todo_router import build_router as build_todo_router
 from backend.api.usage_routes import router as usage_router
 from backend.api.v1 import updates as updates_router_module
+from backend.api.wake_router import build_router as build_wake_router
 from backend.api.web_access_routes import router as web_access_router
 from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_default_routes import router as workspace_default_router
@@ -354,6 +356,34 @@ def _build_lifecycle_extractor():
     return MemoryExtractor(llm_client=build_httpx_adapter_from_settings())
 
 
+def _wire_scheduler_executor(app: Any, main_loop: asyncio.AbstractEventLoop) -> bool:
+    """把 ChatService 暴露给 APScheduler 后台线程（execute 模式任务的入口）。
+
+    调用方需确保 ``app.state.scheduler`` 与 ``app.state.chat_service`` 已装配。
+    任一缺失 → 写 warning 并返回 ``False``，不抛异常（启动期不得因该装配
+    失败被阻塞；存量 ``deliver`` 模式任务仍不受影响）。
+    """
+    scheduler = getattr(app.state, "scheduler", None)
+    chat_service = getattr(app.state, "chat_service", None)
+    if scheduler is None or chat_service is None:
+        logger.warning(
+            "ScheduledTask executor 未装配：scheduler=%s chat_service=%s；"
+            "execute 模式任务将降级为 deliver",
+            scheduler is not None,
+            chat_service is not None,
+        )
+        return False
+    from backend.application.services.scheduled_task_executor import (
+        make_threadsafe_runner,
+    )
+
+    scheduler.set_executor(make_threadsafe_runner(chat_service, main_loop))
+    logger.info(
+        "ScheduledTask executor 已装配（execute 模式任务将运行真实对话）"
+    )
+    return True
+
+
 def _resolve_default_context_window() -> Optional[int]:
     """hex 路径的有效窗口：按已保存设置解析（与 legacy 同一实现）；失败返回 None。"""
     try:
@@ -371,6 +401,9 @@ async def lifespan(app: FastAPI):
     # The value is intentionally never logged or returned by the health endpoint.
     initialize_local_auth_token()
 
+    # 捕获主事件循环：_wire_scheduler_executor 需要它把协程调度到 lifespan 所在的
+    # 线程执行；APScheduler 后台线程通过 run_coroutine_threadsafe 跨过来。
+    main_loop = asyncio.get_running_loop()
     # R21-A: 应用待恢复备份（必须在 init_db 之前 —— 原子替换主库文件后
     # 再建连接，避免旧 WAL 污染恢复出的库）。fail-safe，不阻塞启动。
     try:
@@ -1108,6 +1141,9 @@ async def lifespan(app: FastAPI):
         # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
         # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
         app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
+        # M4: 定时任务 execute 模式装配 —— 把 ChatService 桥接到 APScheduler 后台线程。
+        # 任一依赖缺失会降级为 deliver（不阻塞启动）。
+        _wire_scheduler_executor(app, main_loop)
         # M7 (2026-10-21): Harness 自进化埋点装配——工具/技能每次调用写入
         # harness_components 累积 effectiveness 指标（usage_count / success_rate
         # / avg_latency_ms），供 GET /api/v1/harness/components 消费。
@@ -1558,6 +1594,13 @@ app.include_router(embedder_router, prefix="/api/v1")
 
 # Phase 8: scheduled tasks — mounted for both API modes (independent feature)
 app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v1")
+
+# 2026-11-06 Phase 3: 后台 shell 列表 + 输出流（NDJSON）
+app.include_router(shell_router, prefix="/api/v1")
+
+# 2026-11-05: 会话唤醒 REST（A4 Suspend-Resume 的非 LLM 入口）。
+# 与 LLM 工具 wake_session_at 共用 WakeStore 单一事实源。
+app.include_router(build_wake_router(get_chat_service), prefix="/api/v1")
 
 # Todo personal task management
 app.include_router(build_todo_router(get_todo_service), prefix="/api/v1")

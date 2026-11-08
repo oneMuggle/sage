@@ -92,18 +92,6 @@ export interface Memory {
   project_key?: string;
   /** M3 专家归属轴 (2026-11-04): NULL=共享 / 'primary'=默认助手私有 / 'specialist-x'=专家私有。 */
   agent_id?: string;
-  /**
-   * Task 4.4 质量评分 (0-1)。
-   * - episodic / semantic 行: 后端用 MemoryQualityScorer 算出,≥0.6 高分 / 0.3-0.6 中 / <0.3 低质量。
-   * - working / session_summary 行: 无 importance/recency 语义, 为 null。
-   */
-  quality_score?: number | null;
-  /**
-   * Task 4.5 用户反馈标记。
-   * - episodic / semantic 行: 用户已点过 👍/👎 时填对应值,未反馈填 null。
-   * - working / session_summary 行: 永远 null (不可反馈)。
-   */
-  user_feedback?: 'up' | 'down' | 'neutral' | null;
 }
 
 /**
@@ -169,29 +157,6 @@ export interface MemoryConsolidationResult {
   total: number;
 }
 
-/**
- * Task 4.3: 批量清理候选条目。
- * GET /memory/quality-candidates 返回的 items 元素。
- * 按 quality_score 升序排列 (最差优先)。
- */
-export interface MemoryQualityCandidate {
-  id: string;
-  content: string;
-  memory_type: 'episodic' | 'semantic';
-  importance: number;
-  /** 0-1, 低于阈值的记忆才进入候选 */
-  quality_score: number;
-  /** 毫秒时间戳 */
-  created_at_ms: number;
-  access_count: number;
-}
-
-/** Task 4.3: POST /memory/batch-delete 响应 */
-export interface BatchDeleteResponse {
-  deleted: number;
-  failed: Array<{ id: string; reason: string }>;
-}
-
 // ==================== Knowledge 类型定义 ====================
 
 export interface KnowledgeDoc {
@@ -234,7 +199,13 @@ export interface Skill {
   usage_count: number;
   // SKILL.md 适配层 (PR-8) 新增字段 — builtin 时不存在
   source?: 'builtin' | 'skillmd';
+  // M2 来源枚举: 让技能页按「内置 / 推荐模板 / 我的技能」分组。
+  // builtin=代码实现; shipped=随包只读模板; generated=AI 审批生成;
+  // imported=用户导入; user=历史/手工放置(无法区分导入与手写)。
+  origin?: 'builtin' | 'shipped' | 'generated' | 'imported' | 'user';
   body?: string;
+  // A16: SKILL.md frontmatter ``when_to_use`` 原文（自动激活触发场景）
+  when_to_use?: string;
   scripts?: string[];
   base_dir?: string;
   version?: string;
@@ -417,6 +388,10 @@ export interface AgentProfile {
   version?: number;
   /** M1 来源：builtin / user / imported */
   source?: 'builtin' | 'user' | 'imported';
+  /** P2-b: 专家最近使用时间（毫秒 Unix 时间戳；从未使用为 null/缺省） */
+  last_used_at?: number | null;
+  /** P2-d: 手动排序位（越小越靠前；置顶 = 最小） */
+  sort_order?: number;
 }
 
 /**
@@ -509,6 +484,14 @@ export interface AgentCreate {
 export type ScheduleKind = 'once' | 'recurring';
 
 export type Schedule = { kind: 'once'; at: number } | { kind: 'recurring'; cron: string };
+
+/**
+ * 定时任务执行模式（参见方案 docs/plans/2026-11-06_scheduled-task-auto-execute.md §2）：
+ * - `execute`：到点调用 ChatService 跑一轮真实对话，assistant 回复写入目标会话
+ * - `deliver`：保持旧行为，仅插入 `role="system"` 提醒消息
+ */
+export type ScheduledTaskMode = 'execute' | 'deliver';
+
 export interface ScheduledTask {
   id: string;
   name: string;
@@ -520,11 +503,17 @@ export interface ScheduledTask {
   last_run?: number | null;
   next_run?: number | null;
   last_attempt?: number | null;
-  last_status?: 'never' | 'succeeded' | 'failed';
+  last_status?: 'never' | 'running' | 'succeeded' | 'failed';
   last_error?: string | null;
   run_count?: number;
   max_runs?: number | null;
   created_at: number;
+  /** 执行模式（M2 新增）。缺省按 `deliver` 处理，兼容旧 API/旧行。 */
+  mode?: ScheduledTaskMode;
+  /** 最近一次 execute 模式产出的 assistant 消息 id，用于「查看结果」跳转。 */
+  last_result_message_id?: string | null;
+  /** 最近一次 execute 模式执行耗时（毫秒）。 */
+  last_duration_ms?: number | null;
 }
 
 export interface CreateTaskInput {
@@ -535,6 +524,8 @@ export interface CreateTaskInput {
   content: string;
   enabled?: boolean;
   max_runs?: number | null;
+  /** 执行模式，默认 `execute`（由后端 CreateTaskIn 决定）。 */
+  mode?: ScheduledTaskMode;
 }
 
 export interface UpdateTaskInput {
@@ -545,6 +536,7 @@ export interface UpdateTaskInput {
   session_id?: string;
   content?: string;
   max_runs?: number | null;
+  mode?: ScheduledTaskMode;
 }
 
 // Multi-agent orchestration types (Phase 4)

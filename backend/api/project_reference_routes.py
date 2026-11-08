@@ -15,9 +15,10 @@ import logging
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from backend.api.project_routes import _error, _get_project_or_404, _scan_and_sync
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import make_with_db_lock
 from backend.data.file_reference_repo import (
     FileReference,

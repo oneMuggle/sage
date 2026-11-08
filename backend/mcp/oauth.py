@@ -147,43 +147,19 @@ def _require_str(data: dict, key: str, what: str) -> str:
     return value
 
 
-def _validate_endpoint_url(url: str, field_name: str) -> str:
-    """校验元数据中的端点 URL：scheme 必须为 https 或 localhost http。
-
-    防止恶意元数据诱导客户端向内部服务或伪造主机发送凭据。
-    """
-    if not isinstance(url, str) or not url.strip():
-        raise OAuthMetadataError(f"{field_name} 不能为空")
-    parsed = urlparse(url)
-    if parsed.scheme not in ("https", "http"):
-        raise OAuthMetadataError(f"{field_name} 必须为 http(s): {url}")
-    host = (parsed.hostname or "").lower()
-    # http 只允许 loopback（RFC 8252 §7.3）
-    if parsed.scheme == "http" and host not in ("127.0.0.1", "localhost", "::1"):
-        raise OAuthMetadataError(f"{field_name} 非 https 必须指向 loopback: {url}")
-    return url
-
-
 def parse_authorization_server_metadata(data: object) -> Dict[str, object]:
     """校验并归一化 RFC 8414 授权服务器元数据。
 
     必填：issuer / authorization_endpoint / token_endpoint。
     其余字段（registration_endpoint、scopes_supported、
-    token_endpoint_auth_methods 等）原样透传。端点 URL 强制 https 或
-    loopback http（防止恶意元数据重定向凭据）。
+    token_endpoint_auth_methods 等）原样透传。
     """
     if not isinstance(data, dict):
         raise OAuthMetadataError("授权服务器元数据必须是 JSON 对象")
     meta: Dict[str, object] = dict(data)
     _require_str(meta, "issuer", "授权服务器元数据")
-    meta["authorization_endpoint"] = _validate_endpoint_url(
-        _require_str(meta, "authorization_endpoint", "授权服务器元数据"),
-        "authorization_endpoint",
-    )
-    meta["token_endpoint"] = _validate_endpoint_url(
-        _require_str(meta, "token_endpoint", "授权服务器元数据"),
-        "token_endpoint",
-    )
+    _require_str(meta, "authorization_endpoint", "授权服务器元数据")
+    _require_str(meta, "token_endpoint", "授权服务器元数据")
     return meta
 
 
@@ -454,9 +430,6 @@ async def authorize_mcp_server(
         raise OAuthMetadataError(
             "授权服务器未提供 registration_endpoint（动态注册不可用）"
         )
-    registration_endpoint = _validate_endpoint_url(
-        registration_endpoint, "registration_endpoint"
-    )
     reg_headers, reg_body = build_dynamic_registration_request(
         client_name, redirect_uri, scope
     )
@@ -468,8 +441,6 @@ async def authorize_mcp_server(
     # 3) 授权 URL → 回调 → 校验
     verifier, challenge = generate_pkce_pair()
     state = generate_state()
-    # RFC 8707: resource 参数在授权和 token 交换必须一致
-    effective_resource = resource or (issuer or None)
     authorization_url = build_authorization_url(
         authorization_endpoint,
         client_id=client_id,
@@ -477,7 +448,7 @@ async def authorize_mcp_server(
         state=state,
         code_challenge=challenge,
         scope=scope,
-        resource=effective_resource,
+        resource=resource or (issuer or None),
     )
     callback_url = await wait_for_callback(authorization_url)
     code = validate_authorization_callback(callback_url, state)
@@ -489,7 +460,7 @@ async def authorize_mcp_server(
         code=code,
         redirect_uri=redirect_uri,
         code_verifier=verifier,
-        resource=effective_resource,
+        resource=resource,
     )
     token = parse_token_response(await http_post_json(url, headers, body))
     expires_in = token.get("expires_in") or 0

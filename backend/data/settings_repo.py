@@ -41,6 +41,12 @@ class SettingsRepository:
             # M1 工具安全加固: 权限模式 + 用户规则（见 backend/tools/permissions.py）
             "permission_mode",
             "permission_rules",
+            # P2-5 渐进式授权开关（默认关闭）。读取口径见
+            # backend/services/trust_escalation.py:load_trust_policy()；写入口径见
+            # backend/api/permission_routes.py:POST /permissions/trust-policy。
+            # 未登记时 get() 返回 None、set() 抛 ValueError，功能会整体失效。
+            "trust_escalation_enabled",
+            "trust_escalation_threshold",
             # M4 会话压缩：token 阈值（env SAGE_COMPACT_THRESHOLD 优先级更高，
             # 读取口径见 backend/chat/compaction.py:get_compact_threshold）
             "compact_threshold_tokens",

@@ -1,6 +1,5 @@
 import type { LLMErrorResponse } from '../../lib/errorMapping';
-
-import type { OfficeDocType } from './officeDocTypes';
+import type { OfficeDocType } from '../types';
 
 /**
  * Sage API - 类型定义
@@ -23,15 +22,32 @@ export interface Session {
   forked_at_message_id?: string | null;
   /** P0-4 (UI 优化方案 2026-09-13): 最后一条 user/assistant 消息预览(截断 80 字符) */
   last_message_preview?: string | null;
-  /** 标题生成尝试次数 (后端 `sessions.title_attempts`)；用于侧栏显示"生成标题中…"过渡态 */
-  title_attempts?: number;
   /** 2026-10-28: 性能统计 - 会话总用时（分钟），从创建到最后一次消息 */
   duration_minutes?: number | null;
   /** 2026-10-29 (feat/workspace-optimization): create_session 响应里附带的工作区绑定信息。
    *  后端在创建会话时同步解析默认工作区并绑定，前端不再自行推导。null = 连 scratch 都失败。 */
   workspace_binding?: SessionWorkspaceInfo | null;
+  /** 标题生成尝试次数 (后端 `sessions.title_attempts`)；用于侧栏显示"生成标题中…"过渡态 */
+  title_attempts?: number;
   /** M0 (2026-11-03): 会话绑定的专家（agents.id）；'primary' = 主助手。 */
   specialist_id?: string;
+  /** M2 (2026-11-07): 会话类型 —— 'dm'（私聊，默认）| 'group'（群聊）。 */
+  conversation_type?: 'dm' | 'group';
+}
+
+/** M2 (2026-11-07): 群聊参与者（GET /sessions/{id}/participants 单项）。 */
+export interface ConversationParticipant {
+  conversation_id: string;
+  agent_id: string;
+  /** 展示名（agents.name；缺失回退 agent_id） */
+  name: string;
+  /** 头像 emoji（persona_ui.avatar；缺失回退 🤖） */
+  avatar: string;
+  role: 'host' | 'member';
+  speak_order: number;
+  enabled: boolean;
+  /** 加入时间（毫秒 Unix 时间戳） */
+  added_at: number;
 }
 
 /** 2026-10-29 (feat/workspace-optimization): create_session 响应里的工作区信息。 */
@@ -129,10 +145,8 @@ export type WorkspaceSearchKind =
   | 'office-word'
   | 'office-excel'
   | 'office-pdf'
-  // allowed_paths 搜索结果（与 main 对齐）：与上述 kind 同构但带 `allowed-` 前缀，
-  // 前端据此区分「workspace 内」与「allowed_paths 只读」。后端
-  // backend/api/workspace_routes.py 已按 kind="allowed-" + (doc_type or "file")
-  // 产出，本联合此前漏登。
+  // Phase 3.4 (2026-09-17): allowed_paths 搜索结果 —— 与上述 kind 同构但
+  // 带 `allowed-` 前缀，前端据此区分"workspace 内"与"allowed_paths 只读"。
   | 'allowed-file'
   | 'allowed-ppt'
   | 'allowed-word'
@@ -255,6 +269,8 @@ export interface Message {
    */
   tool_calls?: ToolCall[] | string | null;
   tool_call_id?: string;
+  /** M2 (2026-11-07): assistant 行的实际发言专家（群聊）；NULL = 用户/未标注。 */
+  sender_agent_id?: string | null;
   /** 2026-09 step-by-step: assistant 行的步序号（0 起；多步 run 时每步一行）。 */
   step_index?: number | null;
   /** alpha.36 (Bug #4): 同一 message 行内携带的 LLM 推理过程（持久化在 DB）。 */
@@ -345,7 +361,6 @@ export type AgentState =
   | 'failed'
   // 2026-09 step-by-step: 每次 ReAct 迭代结束（OBSERVING 之后）由后端产出,
   // 前端据此把当前 streaming 气泡快照为已完成 step + 准备下一步占位。
-  // win7: 后端已同步 main 的 step-by-step 落库(AgentState.STEP_DONE + 事件产出)。
   | 'step_done'
   // 2026-10-31: 动态迭代预算检查点 — 到达软预算且进度审计判定仍在推进时,
   // 后端自动提高上限并推送 budget_info（已延长次数 / 新上限 / 审计信号）。
@@ -383,15 +398,15 @@ export type AgentState =
   | 'context_pressure'
   // Task 10 (2026-09-17): 自动话题检测 — 切换 segment 时由 producer 推送。
   | 'topic_shifted'
+  // r71: 附件检索注入溯源（引用块在气泡内可展开）,
+  // 载荷见 AgentEvent.citations。
+  | 'attachment_rag_used'
   // P0 (2026-11-04): 附件处理结果 —— 每个 attachment_media_id 注入/跳过的状态,
   // 前端据此在消息气泡上渲染 per-file 状态(已读取/已跳过/失败),载荷见 AgentEvent.attachments_status。
   | 'attachments_processed'
   // Round 3 (2026-09-19): 编排拆解前置进度（需求澄清/事实侦察）,
   // 载荷见 AgentEvent.preflight_phase。先于 task_plan 到达。
   | 'orch_preflight'
-  // r71: 附件检索注入溯源（引用块在气泡内可展开）,
-  // 载荷见 AgentEvent.citations。
-  | 'attachment_rag_used'
   // right-panel R5 (2026-09-19): 写文件工具落盘后经活跃流推送的变更信号,
   // 前端据此防抖刷新右侧变更列表,载荷见 AgentEvent.change。
   | 'workspace_changed'
@@ -407,7 +422,10 @@ export type AgentState =
   // 2026-10-28 (Plan Mode 增强 Phase 3): 步骤确认卡点 ——
   // plan 执行到标记为 auto_confirm 的步骤时推送，载荷见 AgentEvent.step_confirm。
   // 前端弹出 StepConfirmDialog 等待用户操作（continue/skip/abort）。
-  | 'awaiting_step_confirm';
+  | 'awaiting_step_confirm'
+  // 2026-11-07: 插话消费回执 —— run_loop 在迭代边界排空 steering 队列后推送,
+  // 载荷见 AgentEvent.steer_info; 前端据此移除输入框上方的暂存 chip。
+  | 'steer_consumed';
 
 /**
  * TM2 (DSH 对标 R11): 上下文水位计量快照 —— 随 `state: 'context_pressure'`
@@ -462,7 +480,7 @@ export interface PermissionRequest {
   target_path?: string;
   /**
    * R95: 后端从 PluginToolBridge 已发布记录注入的权威插件名。
-   * 只有携带此字段的插件工具审批才提供"整个插件"记住范围；
+   * 只有携带此字段的插件工具审批才提供“整个插件”记住范围；
    * 前端不按工具名字符串自行猜测插件名。
    */
   plugin_name?: string;
@@ -718,9 +736,9 @@ export interface AgentEvent {
   tool_result?: AgentToolResult;
   /** producer 失败信封: LLMError.to_dict() 为 dict; 旧路径/限额拦截为 str */
   error?: string | { type?: string; message?: string; status_code?: number };
-  /** client_message_id 协议 (同步 #1155): DONE 附带 assistant 消息的服务端 id */
+  /** client_message_id 协议: DONE 附带 assistant 消息的服务端 id, 供前端替换占位 id */
   message_id?: string;
-  /** 首轮对话标记: 标题将在后台生成, 前端稍后补刷侧栏 (同步 #1196) */
+  /** 首轮对话标记: 标题将在后台生成, 前端稍后补刷侧栏 (2026-09) */
   title_pending?: boolean;
   /** 第二轮 B2: DONE 携带的 LLM 终止原因（length = 触达输出上限被截断） */
   finish_reason?: string;
@@ -764,6 +782,9 @@ export interface AgentEvent {
     progress_signals?: number;
     reasons?: string[];
   };
+  // 2026-11-07: state === 'steer_consumed' 时携带被消费的插话 id 列表。
+  // 前端据此移除暂存区 chip 并按 id 落聊天区（与撤回竞态的去重依据）。
+  steer_info?: { ids: string[] };
   // Multi-Agent Orchestration (2026-08-11): 宽松字段（与 llmStream.ts AgentEvent 同步）
   run_id?: string;
   plan?: TaskPlanItem[];

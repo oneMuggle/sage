@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import List
+from typing import List, Optional
 
 import pytest
 
@@ -35,7 +35,7 @@ def gate():
 
 
 def _pending_request(
-    tool_name: str = "bash", plugin_name: str | None = None
+    tool_name: str = "bash", plugin_name: Optional[str] = None
 ) -> ApprovalRequest:
     return ApprovalRequest.create(
         tool_name=tool_name,

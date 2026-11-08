@@ -229,7 +229,7 @@ export const enSettingsAndModels = {
 
   // ─── Scheduled Tasks (Phase 8) ─────
   'scheduled.title': 'Scheduled Tasks',
-  'scheduled.subtitle': 'Manage automated messages',
+  'scheduled.subtitle': 'Manage auto-executed conversations and reminders',
   'scheduled.empty': 'No scheduled tasks yet — create one below.',
   'scheduled.create': 'New Task',
   'scheduled.edit': 'Edit Task',
@@ -242,6 +242,13 @@ export const enSettingsAndModels = {
   'scheduled.field.session': 'Target session',
   'scheduled.field.content': 'Message content',
   'scheduled.field.enabled': 'Enabled',
+  'scheduled.field.mode': 'Execution mode',
+  'scheduled.field.mode.execute': 'Auto-execute (AI conversation)',
+  'scheduled.field.mode.execute.hint':
+    'Run an AI conversation at the scheduled time and append the reply to the target session',
+  'scheduled.field.mode.deliver': 'Reminder only',
+  'scheduled.field.mode.deliver.hint':
+    'Insert a system reminder message into the target session at the scheduled time',
   'scheduled.status.enabled': 'Enabled',
   'scheduled.status.disabled': 'Disabled',
   'scheduled.action.run_now': 'Run now',
@@ -250,10 +257,16 @@ export const enSettingsAndModels = {
   'scheduled.toast.delete_fail': 'Failed to delete task',
   'scheduled.session.required': 'Select a target session',
   'scheduled.session.empty': 'Create a conversation first, then return to schedule a task.',
-  'scheduled.run_failed': 'Delivery failed — review the target session before retrying',
-  'scheduled.run_succeeded': 'Last delivery succeeded',
+  'scheduled.mode.execute': 'Auto-execute',
+  'scheduled.mode.deliver': 'Reminder only',
+  'scheduled.run_failed': 'Execution failed — review the target session before retrying',
+  'scheduled.run_succeeded': 'Last execution succeeded',
+  'scheduled.executing': 'Running',
+  'scheduled.view_result': 'View result',
+  'scheduled.view_result_disabled': 'No execution result',
+  'scheduled.duration_ms': 'Duration {ms}ms',
   'scheduled.confirm.retry':
-    'Check the target conversation first: the previous delivery may have succeeded before the error. Retry now?',
+    'Check the target conversation first: the previous run may have succeeded before the error. Retry now?',
   'scheduled.confirm.delete': 'Delete this scheduled task?',
 
   // ─── Batch C: skill references (/skill-name inside the content) ─────
@@ -335,7 +348,6 @@ export const enSettingsAndModels = {
   'settings.font.saveError':
     'Font preferences could not be saved. Changes are visible now; retry or reopen the app later to sync.',
   'settings.font.loadError': 'Font preferences could not be loaded. Using defaults for now.',
-  'settings.density.label': 'Information Density',
   'font.option.inter': 'Inter',
   'font.option.system': 'System Default',
   'font.option.noto-sans-sc': 'Noto Sans SC',
@@ -452,7 +464,7 @@ export const enSettingsAndModels = {
   'office.staging.review': 'Old import with no live owner — manual review only',
   'office.staging.untracked': 'No trustworthy staging evidence — retain',
   'office.staging.unreadable': 'Evidence unavailable — retain',
-  'office.title': 'Documents and Review',
+  'office.title': 'Document Workbench',
   'office.selectWorkspace': 'Select Workspace',
   'office.emptyState': 'Select a workspace directory to get started',
   'office.section.pickFile': 'Select File',
@@ -518,10 +530,10 @@ export const enSettingsAndModels = {
   'office.generate.success': 'Generated',
 
   // ─── 2026-11 IA restructure: section tabs / LaTeX sub-tabs / env popover ─────
-  'office.tabs.label': 'Document workspace sections',
+  'office.tabs.label': 'Tabs for the document workbench',
   'office.tab.documents': 'Documents',
   'office.tab.generate': 'Generate',
-  'office.tab.rules': 'Review & Rules',
+  'office.tab.rules': 'Rules',
   'office.tab.latex': 'LaTeX',
   'office.latex.tabs.label': 'LaTeX sections',
   'office.latex.project': 'Project & Build',

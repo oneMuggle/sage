@@ -7,6 +7,7 @@ chat_attachment_routes 允许 .pdf/.docx/.xlsx 扩展后，提取文本注入聊
 from __future__ import annotations
 
 import io
+from typing import List
 
 import pytest
 from fastapi import FastAPI
@@ -118,7 +119,7 @@ class TestDocxExtraction:
         assert "roundtrip docx" in res.json()["text"]
 
 
-def _make_xlsx_bytes(rows: list[list[str]]) -> bytes:
+def _make_xlsx_bytes(rows: List[List[str]]) -> bytes:
     if not _HAS_OPENPYXL:
         pytest.skip("openpyxl not installed")
     wb = openpyxl.Workbook()

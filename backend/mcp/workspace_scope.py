@@ -68,7 +68,7 @@ class WorkspaceScopeManager:
         manager.set_server_enabled("/path/to/workspace", "server-name", True)
     """
 
-    def __init__(self, db_path: Optional[[Path, str]] = None) -> None:
+    def __init__(self, db_path: Optional[Union[Path, str]] = None) -> None:
         """
         Initialize workspace scope manager.
 

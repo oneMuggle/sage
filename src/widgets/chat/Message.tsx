@@ -22,6 +22,7 @@ import type {
   ToolCall,
 } from '../../shared/lib/store';
 import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
+import { useAgentDirectory } from '../../shared/lib/useAgentDirectory';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
 
@@ -112,6 +113,16 @@ function MessageComponent({
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
+  // M2 (2026-11-07) 群聊：assistant 气泡显示实际发言专家的头像与名字。
+  const agentDirectory = useAgentDirectory();
+  const senderAgent = message.sender_agent_id
+    ? agentDirectory.get(message.sender_agent_id)
+    : undefined;
+  const senderAvatar = (() => {
+    const ui = senderAgent?.persona_ui as Record<string, unknown> | undefined;
+    const avatar = ui?.avatar;
+    return typeof avatar === 'string' && avatar.trim() ? avatar.trim() : '🤖';
+  })();
   const isSystem = message.role === 'system';
   const isError = message.content?.startsWith('[错误') ?? false;
   // 2026-10-20: LLM 重试可视化 —— 从流式 store 读当前消息的重试信息。
@@ -309,10 +320,21 @@ function MessageComponent({
           isAssistant ? 'bg-primary/10 text-primary' : 'bg-bg text-muted border border-border'
         }`}
       >
-        {isAssistant ? 'S' : isSystem ? '⏰' : 'U'}
+        {senderAgent ? senderAvatar : isAssistant ? 'S' : isSystem ? '⏰' : 'U'}
       </div>
 
       <div className={`flex-1 ${isUser ? 'flex flex-col items-end' : ''}`}>
+        {/* M2: 群聊发言者标注（仅群聊消息有 sender_agent_id） */}
+        {senderAgent && (
+          <div
+            className="mb-1 flex items-center gap-1 text-ui-xs text-muted"
+            data-testid={`message-sender-${message.sender_agent_id}`}
+          >
+            <span aria-hidden="true">{senderAvatar}</span>
+            <span className="truncate">{senderAgent.name}</span>
+          </div>
+        )}
+
         {/* R38: 压缩续接行 —— 横幅置于气泡上方，摘要正文/Thinking/
             copy/regenerate/delete 等正文与 affordance 全部保留。 */}
         {message.compact_info && <CompactBanner info={message.compact_info} />}

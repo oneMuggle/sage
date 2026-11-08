@@ -80,6 +80,8 @@ class MemorySaveRequest(BaseModel):
     scope: Optional[str] = None
     # P3: true 时走 Mem0 风格冲突消解写入 (NOOP/UPDATE/ADD), 响应带 op 字段
     conflict_check: bool = False
+    # M3-Task 7: 资产中心手动追加 —— 给定时写入该专家私有层（None = 共享层）
+    agent_id: Optional[str] = None
 
 
 class MemoryDeleteRequest(BaseModel):
@@ -635,6 +637,7 @@ def save_memory(data: MemorySaveRequest):
                 tags=data.tags,
                 session_id=data.session_id,
                 scope=data.scope,
+                agent_id=data.agent_id,
             )
             return {"id": memory_id, "op": op, "status": "ok"}
         memory_id = mm.memorize(
@@ -644,6 +647,7 @@ def save_memory(data: MemorySaveRequest):
             tags=data.tags,
             session_id=data.session_id,
             scope=data.scope,
+            agent_id=data.agent_id,
         )
         if not memory_id:
             raise HTTPException(status_code=422, detail="记忆未写入")

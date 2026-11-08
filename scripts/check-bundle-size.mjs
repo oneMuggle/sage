@@ -1,0 +1,85 @@
+#!/usr/bin/env node
+// 渲染产物体积门禁（ZCode audit-bundle-size 思路的 sage 版）。
+//
+// 背景：#1401 把 dist/assets 从 18MB/450 chunk 砍到 10MB/178（shiki 全量
+// bundle → 细粒度），#1419 把 index 主 chunk 从 1528KB 砍到 1140KB
+// （CodeMirror lazy）。没有门禁时这类回潮无法察觉——shiki 换回全量
+// bundle 或大依赖被静态引入都会静默膨胀安装包。
+//
+// 预算（实测留 ~10% 余量，超限即失败）：
+//   - dist/assets 总体积   ≤ 12MB   （2026-09-24 实测 ~9.9MB）
+//   - 最大单个 .js chunk   ≤ 1.9MB  （2026-11-06 CI 实测 1895KB）
+//
+// 2026-10-30 棘轮上调：设置页 IA 收敛（#2657）把设置项 i18n 词典拆入
+// settingsUi.ts 并随默认语言包静态加载，主 chunk 由 1.45MB 增至 1.70MB，
+// 超过原 1.6MB 上限 66KB（总量仍在 11/12MB 内）。按棘轮协议仅上调该项。
+//
+// 2026-11-03 棘轮上调：端点思考参数 UI（reasoningEffort / thinkingBudget，
+// win7 #2831 / main #2834）在 settingsUi.ts 新增中英双语表单项文案与
+// EndpointsTab 表单 JSX，主 chunk 实测 1839KB、CI 实测 1843KB，卡在原
+// 1.8MB 边界（本地通过、CI 恰好超限）。按棘轮协议仅上调该项至 1.85MB。
+//
+// 2026-11-06 棘轮上调：定时任务自动执行（#2898）在 ScheduledTasks 列表
+// 新增模式徽章 / 状态 / 查看结果按钮（Zap + Bell 图标，lucide 树摇后
+// 仍带 1–2 KB 辅助函数），CreateTaskModal 增模式切换单选，i18n 新增
+// scheduled.mode.* / view_result* / executing / duration_ms 文案。CI
+// 实测 1895KB，卡在原 1.85MB（1894KB）边界 1KB。
+//
+// 2026-11-06 棘轮上调：AI 文档工作台（文档库搜索/去重、规范书库、AI 审校，
+// main #2896）及同期合入的功能累积，使主 chunk CI 实测 1895KB，超出
+// 1.85MB 预算 1KB。按棘轮协议仅上调该项至 1.9MB（保留 ~50KB 余量），
+// 已覆盖上述定时任务（#2898）的增长，无需再单独上调。
+//
+// 用法：npm run build 之后执行 `node scripts/check-bundle-size.mjs`。
+// 退出码：0 = 全部预算内；1 = 超限或 dist 不存在。
+// 若为有意的功能增长导致超限，更新本文件 BUDGETS 并在 PR 说明依据
+// （棘轮协议：只上调，不下调）。
+import { readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+
+const ASSETS = 'dist/assets';
+
+const BUDGETS = [
+  { name: 'dist/assets 总体积', max: 12 * 1024 * 1024 },
+  { name: '最大单个 .js chunk', max: 1.9 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
+];
+
+if (!readdirSync('.').includes('dist')) {
+  console.error('dist/ 不存在——先 `npm run build` 再跑门禁。');
+  process.exit(1);
+}
+
+const files = [];
+(function walk(dir) {
+  for (const f of readdirSync(dir)) {
+    const p = join(dir, f);
+    const st = statSync(p);
+    if (st.isDirectory()) walk(p);
+    else files.push({ path: p, size: st.size });
+  }
+})(ASSETS);
+
+const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+const largestJs = files
+  .filter((f) => f.path.endsWith('.js'))
+  .sort((a, b) => b.size - a.size)[0];
+
+function fmt(n) {
+  return `${(n / 1024 / 1024).toFixed(2)}MB (${(n / 1024).toFixed(0)}KB)`;
+}
+
+let failed = false;
+for (const budget of BUDGETS) {
+  const value = budget.filter
+    ? largestJs
+      ? largestJs.size
+      : 0
+    : totalSize;
+  const ok = value <= budget.max;
+  if (!ok) failed = true;
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${budget.name}: ${fmt(value)} / 预算 ${fmt(budget.max)}`);
+}
+console.log(`dist/assets: ${files.length} 个文件，共 ${fmt(totalSize)}`);
+if (largestJs) console.log(`最大 .js: ${largestJs.path} ${fmt(largestJs.size)}`);
+
+process.exit(failed ? 1 : 0);

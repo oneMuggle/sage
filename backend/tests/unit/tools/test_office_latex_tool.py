@@ -67,10 +67,14 @@ def test_read_latex_returns_structured_preview(tmp_path: Path) -> None:
     )
 
 
-def test_read_latex_rejects_path_outside_workspace(tmp_path: Path) -> None:
+def test_read_latex_accepts_path_outside_workspace(tmp_path: Path) -> None:
+    """READ 工具对齐 read_file：接受任意绝对路径，不再硬拒工作区外。"""
     workspace = _write_workspace(tmp_path)
     outside = tmp_path / "outside.tex"
-    outside.write_text("\\documentclass{article}", encoding="utf-8")
+    outside.write_text(
+        "\\documentclass{article}\n\\begin{document}\nHi\n\\end{document}",
+        encoding="utf-8",
+    )
     tool = OfficeReadLatexTool(policy=ToolPolicy(workspace_root=str(workspace)))
     token = set_tool_context(_context())
     try:
@@ -78,8 +82,7 @@ def test_read_latex_rejects_path_outside_workspace(tmp_path: Path) -> None:
     finally:
         reset_tool_context(token)
 
-    assert result.success is False
-    assert "path_outside_workspace" in (result.error or "")
+    assert result.success is True
 
 
 def test_read_latex_rejects_non_tex_suffix(tmp_path: Path) -> None:

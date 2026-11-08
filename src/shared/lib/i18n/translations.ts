@@ -9,16 +9,20 @@
 
 import { chatReadingEn, chatReadingZh } from './chatReading';
 import { en } from './en';
+import { officeAiSidebarEn, officeAiSidebarZh } from './officeAiSidebar';
 import { zh, type TranslationKey as CoreTranslationKey } from './zh';
 
 export type Locale = 'zh' | 'en';
 
 /** 核心词典（zh.ts）+ 按功能拆出的词典模块（见 chatReading.ts 的说明） */
-export type TranslationKey = CoreTranslationKey | keyof typeof chatReadingZh;
+export type TranslationKey =
+  | CoreTranslationKey
+  | keyof typeof chatReadingZh
+  | keyof typeof officeAiSidebarZh;
 
 export const translations: Record<Locale, Record<TranslationKey, string>> = {
-  zh: { ...zh, ...chatReadingZh },
-  en: { ...en, ...chatReadingEn },
+  zh: { ...zh, ...chatReadingZh, ...officeAiSidebarZh },
+  en: { ...en, ...chatReadingEn, ...officeAiSidebarEn },
 };
 
 /** U10 (批次 C): locale 持久化 —— localStorage 优先于默认值 */

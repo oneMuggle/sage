@@ -1,13 +1,14 @@
 """SQLite repository for design projects and artifacts."""
 
 from __future__ import annotations
+from typing import List
 
 import contextlib
 import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from backend.design.errors import DesignProjectNotFoundError
 from backend.design.models import DesignArtifact, DesignProject

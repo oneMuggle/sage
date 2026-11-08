@@ -8,6 +8,7 @@ from typing import Any, List, Optional
 
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
+from backend.tools.office_workspace_scope import workspace_for_policy
 
 
 class OfficeAuditLatexTool(BaseTool):
@@ -57,9 +58,6 @@ class OfficeAuditLatexTool(BaseTool):
             return ToolResult(success=False, error="file_path_required")
         if required_sections is not None and not isinstance(required_sections, list):
             return ToolResult(success=False, error="required_sections_invalid")
-        blocked = self._enforce_workspace(file_path)
-        if blocked is not None:
-            return blocked
         target = Path(file_path).expanduser()
         if not target.is_absolute():
             return ToolResult(success=False, error="file_path_absolute_required")
@@ -71,7 +69,7 @@ class OfficeAuditLatexTool(BaseTool):
         from backend.office.errors import OfficeError
         from backend.office.latex.service import audit_latex_file_service
 
-        root = Path(self._policy.workspace_root or str(target.parent))
+        root = workspace_for_policy(self._policy, target)
         try:
             result = audit_latex_file_service(
                 target,

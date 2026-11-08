@@ -5,8 +5,8 @@ import { enAttachmentStatus } from './locales/en/attachmentStatus';
 import { enChatAndSider } from './locales/en/chatAndSider';
 import { enChatDisplayMode } from './locales/en/chatDisplayMode';
 import { enChatPdfOcr } from './locales/en/chatPdfOcr';
+import { enChatSteerStaging } from './locales/en/chatSteerStaging';
 import { enContextMenu } from './locales/en/contextMenu';
-import { enPet } from './locales/en/pet';
 import { enPetPack } from './locales/en/petPack';
 import { enPlaybook } from './locales/en/playbook';
 import { enSettingsAndModels } from './locales/en/settingsAndModels';
@@ -21,8 +21,8 @@ export const en: Record<TranslationKey, string> = {
   ...enAttachmentStatus,
   ...enChatDisplayMode,
   ...enChatPdfOcr,
+  ...enChatSteerStaging,
   ...enContextMenu,
-  ...enPet,
   ...enPetPack,
   ...enPlaybook,
   ...enSettingsAndModels,

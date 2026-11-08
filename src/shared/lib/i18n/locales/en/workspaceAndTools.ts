@@ -32,6 +32,8 @@ export const enWorkspaceAndTools = {
   'office.doc.snapshots': 'Version History',
   'office.doc.archivedAt': 'Archived',
   'office.section.archived': 'Archived Documents',
+  'office.section.library': 'Document Library',
+  'office.section.canvas': 'Document Canvas',
   'office.view.live': 'All Documents',
   'office.view.archived': 'Archived',
   'office.toast.archived': 'Archived',
@@ -45,6 +47,8 @@ export const enWorkspaceAndTools = {
   'office.snapshot.restoreSuccess': 'Restored to selected version',
   'office.snapshot.restoreFailed': 'Failed to restore',
   'office.snapshot.close': 'Close',
+  // Document canvas: dropping a file onto the open document replaces it
+  'office.canvas.dropToReplace': 'Drop to replace the current document',
 
   // ─── Office parity batch 2: rich preview rendering (item 2.6) ─────
   'office.preview.headings': 'headings',
@@ -201,6 +205,7 @@ export const enWorkspaceAndTools = {
   'office.fidelity.toggle': 'High fidelity',
   'office.fidelity.loading': 'Converting…',
   'office.fidelity.failed': 'High-fidelity preview failed',
+  'office.fidelity.fallback': 'High-fidelity preview unavailable; switched to structured view',
   'office.fidelity.unavailable':
     'No local converter detected for this format (LibreOffice covers DOCX/XLSX/PPTX; MS Word covers DOCX only). Word uses the built-in native renderer and is unaffected. Click [Environment] at the top right to re-detect or see install hints',
   'office.caps.detected': 'Converter detected; runtime health not verified',
@@ -274,6 +279,25 @@ export const enWorkspaceAndTools = {
   'office.batch.selectAll': 'Select all',
   'office.batch.selectedCount': '{n} selected',
   'office.batch.selectRow': 'Select document',
+
+  // ─── Office doc library search/filter/sort/duplicate cleanup (Phase 1 Item A) ─────
+  'office.doclib.search': 'Search filename',
+  'office.doclib.searchClear': 'Clear search',
+  'office.doclib.filter.allTypes': 'All types',
+  'office.doclib.sort.updatedDesc': 'Recently updated',
+  'office.doclib.sort.updatedAsc': 'Least recently updated',
+  'office.doclib.sort.createdDesc': 'Recently created',
+  'office.doclib.sort.nameAsc': 'Name A→Z',
+  'office.doclib.sort.nameDesc': 'Name Z→A',
+  'office.doclib.sort.sizeDesc': 'Size: largest first',
+  'office.doclib.sort.sizeAsc': 'Size: smallest first',
+  'office.doclib.duplicateBadge': 'Duplicate',
+  'office.doclib.duplicateBanner': '{n} duplicate group(s) found',
+  'office.doclib.duplicateBannerHint':
+    'Identical content was imported more than once. Cleaning up archives the older copy in each group — archived rows can be restored at any time.',
+  'office.doclib.duplicateCleanup': 'Clean up (keep newest)',
+  'office.doclib.duplicateCleanupDone': 'Archived {n} duplicate(s)',
+  'office.doclib.duplicateCleanupFailed': 'Duplicate cleanup failed',
 
   // ─── A4b Office delivery acceptance ─────
   'office.delivery.title': 'Delivery acceptance',
@@ -407,6 +431,63 @@ export const enWorkspaceAndTools = {
   'skill_draft.rejected': 'Rejected {name}',
   'skill_draft.reject_failed': 'Reject failed: {error}',
   'skill_draft.preview': 'Preview',
+  // M1 skills page draft pipeline: tab/empty-state/guidance copy
+  'skills_page.tab_pending_drafts': 'Pending Drafts',
+  'skills_page.drafts_empty_title': 'No pending drafts',
+  'skills_page.drafts_empty_intro':
+    'Pending drafts are distilled automatically from your conversations with AI. There are three ways they are created:',
+  'skills_page.drafts_explainer_item_1':
+    'Complex turns — when AI calls multiple tools in one task, it may be worth saving as a skill',
+  'skills_page.drafts_explainer_item_2':
+    'Explicit save — tell AI "save this workflow as a skill", or type /learn',
+  'skills_page.drafts_explainer_item_3':
+    'Cold-skill scan — click "Scan cold skills" to consolidate or archive unused skills',
+  'skills_page.drafts_require_llm':
+    'Draft generation requires a default model. Configure one in Settings if you have not already.',
+  'skills_page.drafts_cta_generate_from_session': 'Generate from recent session',
+  'skills_page.drafts_cta_scan_cold': 'Scan cold skills',
+  // M2 skills page IA: origin badges / groups / views / filters / details
+  'skills_page.origin_builtin': 'Built-in',
+  'skills_page.origin_shipped': 'Template',
+  'skills_page.origin_generated': 'AI-generated',
+  'skills_page.origin_imported': 'Imported',
+  'skills_page.origin_user': 'Local',
+  'skills_page.group_builtin': 'Built-in skills',
+  'skills_page.group_shipped': 'Recommended templates',
+  'skills_page.group_mine': 'My skills',
+  'skills_page.view_compact': 'Compact list',
+  'skills_page.view_grid': 'Card view',
+  'skills_page.filter_origin_all': 'All sources',
+  'skills_page.filter_status_all': 'All statuses',
+  'skills_page.filter_enabled': 'Show enabled only',
+  'skills_page.filter_disabled': 'Show disabled only',
+  'skills_page.filter_archived': 'Show archived only',
+  'skills_page.lifecycle_archived': 'Archived',
+  'skills_page.lifecycle_stale': 'Cold',
+  'skills_page.more': 'More',
+  'skills_page.view_details': 'View details',
+  'skills_page.copy_snapshot': 'Copy snapshot',
+  'skills_page.copy_json': 'Copy JSON',
+  'skills_page.auto_refresh': 'Auto-refresh (10s)',
+  'skills_page.stats_total': 'Total skills',
+  'skills_page.stats_enabled': 'Enabled',
+  'skills_page.stats_mine': 'My skills',
+  'skills_page.stats_drafts': 'Pending drafts',
+  'skills_page.usage_count': 'Used {count} times',
+  'skills_page.section_description': 'Description',
+  'skills_page.section_triggers': 'Triggers',
+  'skills_page.section_when_to_use': 'When to use',
+  'skills_page.section_body': 'Prompt template',
+  'skills_page.section_version': 'Version',
+  'skills_page.section_actions': 'Actions',
+  'skills_page.enable_skill': 'Enable skill',
+  'skills_page.disable_skill': 'Disable skill',
+  'skills_page.open_directory': 'Open skills folder',
+  'skills_page.show_in_folder': 'Show in folder',
+  'skills_page.export_skill': 'Export skill',
+  'skills_page.export_mine': 'Export my skills',
+  'skills_page.storage_hint':
+    'Skills live in your user folder (~/.sage/skills by default) and survive app upgrades. Change it in Settings → Skills.',
 
   'chat.learn_reviewing': 'Reviewing...',
   'chat.learn_queued': 'Review queued — check Pending Drafts',
@@ -487,7 +568,13 @@ export const enWorkspaceAndTools = {
   'workspace.switcher.copyPath': 'Copy workspace path',
   'workspace.switcher.workbench': 'Workbench',
   'workspace.switcher.unusable': 'Current workspace is unusable',
-  'workspace.switcher.scratchHint': 'Using a scratch directory — files won\'t be saved to your project',
+  'workspace.switcher.scratchHint':
+    "Using a scratch directory — files won't be saved to your project",
+  'office.converter.guide.title': 'PDF export requires a converter',
+  'office.converter.guide.body':
+    'PDF export requires LibreOffice or Microsoft Word as a converter. Restart the app after installation to enable export.',
+  'office.converter.guide.download': 'Download LibreOffice',
+  'office.converter.guide.close': 'Close',
 };
 
 export function formatEnWorkspaceAndToolsSummary(): string {

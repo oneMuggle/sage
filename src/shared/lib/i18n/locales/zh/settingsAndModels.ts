@@ -221,7 +221,7 @@ export const zhSettingsAndModels = {
 
   // ─── Scheduled Tasks (Phase 8) ─────
   'scheduled.title': '定时任务',
-  'scheduled.subtitle': '管理自动发送的消息',
+  'scheduled.subtitle': '管理自动执行的对话与提醒',
   'scheduled.empty': '还没有定时任务，点击下方按钮创建一个。',
   'scheduled.create': '新建任务',
   'scheduled.edit': '编辑任务',
@@ -234,6 +234,11 @@ export const zhSettingsAndModels = {
   'scheduled.field.session': '目标会话',
   'scheduled.field.content': '发送内容',
   'scheduled.field.enabled': '启用',
+  'scheduled.field.mode': '执行模式',
+  'scheduled.field.mode.execute': '自动执行（AI 对话）',
+  'scheduled.field.mode.execute.hint': '到点调用 AI 跑一轮对话，把回复写入目标会话',
+  'scheduled.field.mode.deliver': '仅发送提醒',
+  'scheduled.field.mode.deliver.hint': '到点向目标会话插入一条系统提醒消息',
   'scheduled.status.enabled': '已启用',
   'scheduled.status.disabled': '已停用',
   'scheduled.action.run_now': '立即执行',
@@ -242,9 +247,15 @@ export const zhSettingsAndModels = {
   'scheduled.toast.delete_fail': '删除失败',
   'scheduled.session.required': '请选择目标会话',
   'scheduled.session.empty': '请先创建会话，再返回设置定时任务。',
-  'scheduled.run_failed': '投递失败，重试前请检查目标会话',
-  'scheduled.run_succeeded': '上次投递成功',
-  'scheduled.confirm.retry': '请先检查目标会话：上次投递可能在报错前已成功。确认再次投递？',
+  'scheduled.mode.execute': '自动执行',
+  'scheduled.mode.deliver': '仅提醒',
+  'scheduled.run_failed': '执行失败，重试前请检查目标会话',
+  'scheduled.run_succeeded': '上次执行成功',
+  'scheduled.executing': '执行中',
+  'scheduled.view_result': '查看结果',
+  'scheduled.view_result_disabled': '无执行结果',
+  'scheduled.duration_ms': '耗时 {ms}ms',
+  'scheduled.confirm.retry': '请先检查目标会话：上次执行可能在报错前已成功。确认再次执行？',
   'scheduled.confirm.delete': '确定要删除这个定时任务吗？',
   // ─── 批次 C：技能引用（正文里的 /技能名，不新增后端字段） ─────
   'scheduled.skill.title': '关联技能',
@@ -319,7 +330,6 @@ export const zhSettingsAndModels = {
   'settings.font.fallback': '未安装的字体会自动回退到系统可用字体，不会下载字体。',
   'settings.font.saveError': '字体偏好保存失败，当前界面已生效；请重试或稍后重新打开应用同步。',
   'settings.font.loadError': '字体偏好加载失败，暂时使用默认字体。',
-  'settings.density.label': '信息密度',
   'font.option.inter': 'Inter',
   'font.option.system': '系统默认',
   'font.option.noto-sans-sc': '思源黑体',
@@ -432,7 +442,7 @@ export const zhSettingsAndModels = {
   'office.staging.review': '过期暂存且归属进程不在运行 — 仅供人工核查',
   'office.staging.untracked': '无可信暂存记录 — 保留',
   'office.staging.unreadable': '无法读取暂存记录 — 保留',
-  'office.title': '文档与验收',
+  'office.title': '文档工作台',
   'office.selectWorkspace': '选择工作区',
   'office.emptyState': '请先选择工作区目录以开始使用',
   'office.section.pickFile': '选择文件',
@@ -502,10 +512,10 @@ export const zhSettingsAndModels = {
   'office.preview.empty': '选择一个文件以预览',
 
   // ─── 2026-11 信息架构整理: 分区 tab / LaTeX 子 tab / 环境浮层 ─────
-  'office.tabs.label': '文档与验收功能分区',
-  'office.tab.documents': '文档处理',
+  'office.tabs.label': '文档工作台功能分区',
+  'office.tab.documents': '文档',
   'office.tab.generate': '文档生成',
-  'office.tab.rules': '审校与规范',
+  'office.tab.rules': '规则',
   'office.tab.latex': 'LaTeX',
   'office.latex.tabs.label': 'LaTeX 功能分区',
   'office.latex.project': '项目与编译',
@@ -518,8 +528,8 @@ export const zhSettingsAndModels = {
   'office.generate.journal.hint': '选择 .docx 期刊模板 → 填写内容 → 一键生成或校验格式',
   'office.rules.guide.title': 'Word 文档审校入口',
   'office.rules.guide.body':
-    '导入文档后，在「文档处理」的预览面板里进行 Word 审校、修订与导出 PDF；此分区用于把规范 / 范本文档抽取为可复用的规则包。',
-  'office.rules.guide.action': '去文档处理',
+    '导入文档后，在「文档」的预览面板里进行 Word 审校、修订与导出 PDF；此分区用于把规范 / 范本文档抽取为可复用的规则包。',
+  'office.rules.guide.action': '去文档',
 } as const;
 
 export function formatZhSettingsAndModelsSummary(): string {

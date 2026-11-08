@@ -457,24 +457,26 @@ def test_session_allowlist_fails_closed_when_agent_row_unreadable(monkeypatch):
 
 async def test_execute_tool_calls_scoped_sets_and_restores_allowlist(monkeypatch):
     """执行器把本轮允许集写入 ContextVar，结束后恢复（hex 路径堵漏）。"""
-    from backend.tools import skill_tool
+    from backend.domain import skill_scope
 
     service = _make_chat_service()
     captured = {}
 
-    async def _fake_execute(session_id, tool_calls, run):
-        captured["value"] = skill_tool._TURN_SKILL_ALLOWLIST.get()
-        return False
+    async def _fake_execute(session_id, tool_calls, run, *, already_called=0):
+        captured["value"] = skill_scope.peek_turn_skill_allowlist()[1]
+        captured["already_called"] = already_called
+        return False, []
 
     monkeypatch.setattr(service, "_execute_tool_calls", _fake_execute)
 
     result = await service._execute_tool_calls_scoped(
-        "s1", [], None, {"zz-write-report"}
+        "s1", [], None, {"zz-write-report"}, already_called=2
     )
 
-    assert result is False
+    assert result == (False, [])
+    assert captured["already_called"] == 2
     assert captured["value"] == frozenset({"zz-write-report"})
-    assert skill_tool._TURN_SKILL_ALLOWLIST.get() is skill_tool._UNSET
+    assert skill_scope.peek_turn_skill_allowlist()[0] is False
 
 
 # =====================================================================

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.project_material_repo import MAX_MATERIAL_CONTENT_CHARS
 from backend.office.models import _constrained_list
 

@@ -18,8 +18,9 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.design import get_design_studio
 from backend.design.errors import (
     DesignError,

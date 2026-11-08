@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from typing import List, Tuple
+
 import pytest
 from sage_core import Message, Role, ToolCall
 from sage_core.repositories import StoragePort
@@ -203,7 +205,7 @@ from backend.utils import py_compat
 async def test_sqlite_adapter_uses_to_thread():
     """验证 SqliteStorageAdapter 7 个方法都通过 asyncio.to_thread 调度。"""
     adapter = SqliteStorageAdapter()
-    call_log: list[str] = []
+    call_log: List[str] = []
 
     # Monkey-patch asyncio.to_thread 记录调用
     original_to_thread = py_compat.to_thread
@@ -250,7 +252,7 @@ async def test_to_thread_actually_offloads_to_worker():
     """验证 adapter 方法真的在 worker 线程跑,不在主事件循环线程跑。"""
     main_thread_id = threading.get_ident()
     adapter = SqliteStorageAdapter()
-    observed_thread_ids: list[int] = []
+    observed_thread_ids: List[int] = []
 
     original_sync = adapter._sync_create_session
 
@@ -279,7 +281,7 @@ async def test_concurrent_writes_are_serialized_by_lock():
     """
     adapter = SqliteStorageAdapter()
     N = 20
-    execution_log: list[tuple[float, float]] = []
+    execution_log: List[Tuple[float, float]] = []
 
     original_create = adapter._sessions.create
 
@@ -350,7 +352,7 @@ def _make_message(role: str, content: str) -> Any:
 async def test_memory_adapter_uses_to_thread():
     """验证 MemoryStorageAdapter 7 个方法都通过 asyncio.to_thread(无锁)。"""
     adapter = MemoryStorageAdapter()
-    call_log: list[str] = []
+    call_log: List[str] = []
 
     original_to_thread = py_compat.to_thread
 
@@ -393,7 +395,7 @@ async def test_memory_adapter_offloads_to_worker_no_lock():
     """MemoryStorageAdapter 包 to_thread 但无锁,并发执行,所有 thread_id != 主线程。"""
     main_thread_id = threading.get_ident()
     adapter = MemoryStorageAdapter()
-    observed_thread_ids: list[int] = []
+    observed_thread_ids: List[int] = []
 
     original_sync = adapter._sync_create_session
 

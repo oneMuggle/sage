@@ -135,7 +135,7 @@ def _normalize_ids(raw: object, env_value: object = None) -> List[str]:
         raw = env_value
     if isinstance(raw, str):
         raw = raw.split(",")
-    if not isinstance(raw, (list, tuple)):
+    if not isinstance(raw, (list, tuple)):  # noqa: UP038 — 双分支 py3.8/py3.10 兼容写法
         return []
     return [str(c).strip() for c in raw if str(c).strip()]
 

@@ -125,7 +125,7 @@ class DesignTemplateRegistry:
                     and asset_file.suffix in (".css", ".js")
                 ):
                     # assets key 是模板逻辑路径（供 bundling 引用匹配），统一 POSIX 分隔符，
-                    # 否则 Windows 下 key 为 "assets\\..." 与模板内引用对不齐。
+                    # 否则 Windows 下 key 为 "assets\..." 与模板内引用对不齐。
                     rel_path = asset_file.relative_to(template_dir).as_posix()
                     assets[rel_path] = asset_file.read_text(
                         encoding="utf-8"

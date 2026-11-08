@@ -128,6 +128,14 @@ export interface SkillsElectronApiBridge {
    *  `pickedPath` 必须与上一次 pick 返回的路径一致（主进程会比对 recentPickedDirectory）；
    *  不一致 → 抛出「directory selection changed, please pick again」。 */
   importSkillDirectory: (pickedPath: string) => Promise<ImportResult>;
+  /** M3: open the effective writable skills directory in the OS file manager. */
+  openSkillDirectory: () => Promise<{ success: true }>;
+  /** M3: reveal a SKILL.md skill's real directory in the OS file manager. */
+  showSkillInFolder: (name: string) => Promise<{ success: true }>;
+  /** M4: export a single skill folder as a zip (save dialog). null = cancelled. */
+  exportSkill: (name: string) => Promise<{ ok: true; path: string } | null>;
+  /** M4: export all "my skills" as one zip (save dialog). null = cancelled. */
+  exportMySkills: () => Promise<{ ok: true; path: string } | null>;
 }
 
 /** M1-E: result of importing a `.sage` package (backend `import_specialist`). */
@@ -262,9 +270,7 @@ export interface OfficeElectronApiBridge {
    * reported in `skipped` rather than aborting the whole batch. Returns
    * empty `imported` when the user cancels the dialog.
    */
-  pickAndImportMultiOfficeFiles?: (
-    workspacePath: string,
-  ) => Promise<MultiOfficeImportResult>;
+  pickAndImportMultiOfficeFiles?: (workspacePath: string) => Promise<MultiOfficeImportResult>;
   /** Drag/drop variant — renderer already has sourcePath from DataTransfer. */
   importDroppedOfficeFile: (
     workspacePath: string,
@@ -855,6 +861,34 @@ export interface ElectronAPI {
   /** E-2 (round5 批次 E): 关闭即隐藏到托盘偏好读写 */
   getCloseToTray?: () => Promise<{ enabled: boolean }>;
   setCloseToTray?: (enabled: boolean) => Promise<{ ok: boolean; enabled: boolean }>;
+  /** 2026-11-05: 通知偏好（总开关 + 后台任务通知 + Webhook） */
+  getNotificationPrefs?: () => Promise<{
+    enabled: boolean;
+    backgroundTasks: boolean;
+    webhookUrl: string;
+    slackWebhookUrl: string;
+    webhookSecret: string;
+  }>;
+  setNotificationPrefs?: (prefs: {
+    enabled: boolean;
+    backgroundTasks: boolean;
+    webhookUrl?: string;
+    slackWebhookUrl?: string;
+    webhookSecret?: string;
+  }) => Promise<{
+    ok: boolean;
+    enabled: boolean;
+    backgroundTasks: boolean;
+    webhookUrl: string;
+    slackWebhookUrl: string;
+    webhookSecret: string;
+  }>;
+  /** 2026-11-05: 任务栏注意力提示（等待审批时闪烁 / macOS dock badge） */
+  setTaskbarAttention?: (input: {
+    awaitingApproval?: number;
+    failed?: number;
+    completed?: number;
+  }) => Promise<boolean>;
   /** 日志时区 (2026-09-17): 读写日志时间戳时区设置 */
   getLogTimezone?: () => Promise<{ logTimezone: string }>;
   setLogTimezone?: (logTimezone: string) => Promise<{ ok: boolean; error?: string }>;

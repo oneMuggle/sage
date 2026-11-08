@@ -42,7 +42,6 @@ function canSend(webContents: WebContentsLike): boolean {
   }
 }
 
-
 export type WebContentsLike = {
   send: (channel: string, payload: unknown) => void;
 };
@@ -162,12 +161,14 @@ export async function relayNdjsonToEvent(
     body,
     (rawEvent: unknown) => {
       if (typeof rawEvent !== 'object' || rawEvent === null) {
-        if (canSend(webContents)) webContents.send(`sage:event:${eventPrefix}-error`, WIKI_STREAM_ERROR);
+        if (canSend(webContents))
+          webContents.send(`sage:event:${eventPrefix}-error`, WIKI_STREAM_ERROR);
         return;
       }
       const ev = (rawEvent as { event?: unknown }).event;
       if (typeof ev !== 'string') {
-        if (canSend(webContents)) webContents.send(`sage:event:${eventPrefix}-error`, WIKI_STREAM_ERROR);
+        if (canSend(webContents))
+          webContents.send(`sage:event:${eventPrefix}-error`, WIKI_STREAM_ERROR);
         return;
       }
       let result: { suffix: string; data: unknown } | null;
@@ -182,7 +183,8 @@ export async function relayNdjsonToEvent(
         };
       }
       if (!result) return;
-      if (canSend(webContents)) webContents.send(`sage:event:${eventPrefix}${result.suffix}`, result.data);
+      if (canSend(webContents))
+        webContents.send(`sage:event:${eventPrefix}${result.suffix}`, result.data);
     },
     signal,
   );
@@ -209,6 +211,50 @@ export async function relayChatStream(
     // attach 端点也必须带前缀(否则 404)。PR #28 修了 invoke/commands.ts 路径,
     // 这里 relay 直接拼 URL 漏了 — 本 PR 修。
     res = await fetch(`${backendUrl}/api/v1/chat/stream/${encodeURIComponent(streamId)}`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/x-ndjson',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      signal,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') return;
+    // 其它网络错误静默吞掉,不要把 main 进程炸了
+    return;
+  }
+
+  if (!res.ok) return;
+
+  await parseNdjsonStream(
+    res.body,
+    (event) => {
+      if (canSend(webContents)) webContents.send(`sage:event:${eventName}`, event);
+    },
+    signal,
+  );
+}
+
+/**
+ * Subscribe to a background shell output stream and forward to renderer.
+ *
+ * Flow:
+ *   1. renderer calls listen('shell-stream-{shellId}', handler)
+ *   2. main process opens GET /api/v1/shells/{shellId}/stream (NDJSON)
+ *   3. Each NDJSON line ({type:'output'|'exit'}) is forwarded via webContents.send
+ *   4. renderer unsubscribes → abort signal → fetch destroyed
+ */
+export async function relayShellStream(
+  webContents: WebContentsLike,
+  eventName: string,
+  shellId: string,
+  backendUrl: string,
+  signal: AbortSignal,
+  authToken?: string,
+): Promise<void> {
+  let res: import('node-fetch').Response;
+  try {
+    res = await fetch(`${backendUrl}/api/v1/shells/${encodeURIComponent(shellId)}/stream`, {
       method: 'GET',
       headers: {
         Accept: 'application/x-ndjson',
@@ -327,7 +373,11 @@ export async function relaySkillNotifications(
     res.body,
     (event) => {
       // 心跳空行 → 跳过 (iter_ndjson 偶发 yield "{}\n")
-      if (typeof event === 'object' && event !== null && Object.keys(event as object).length === 0) {
+      if (
+        typeof event === 'object' &&
+        event !== null &&
+        Object.keys(event as object).length === 0
+      ) {
         return;
       }
       if (canSend(webContents)) webContents.send(`sage:event:${eventName}`, event);

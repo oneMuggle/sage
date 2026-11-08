@@ -12,8 +12,9 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import Database, get_database
 from backend.office import progress as office_progress, read_cache
 from backend.office.apply_update import (

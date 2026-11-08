@@ -6,8 +6,9 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.office.errors import OfficeFileNotFoundError
 from backend.office.path_safety import resolve_within
 from backend.office.storage import validate_workspace

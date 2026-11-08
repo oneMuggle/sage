@@ -12,8 +12,6 @@ export const chatRoutes: Record<string, CommandRoute> = {
   // /api/v1 下 —— 去掉前缀会全部 404。commands.test.ts 有 guard 测试
   // 防止漏前缀。
   agent_chat_stream: { method: 'POST', path: () => '/api/v1/chat/stream' },
-  // 2026-09 修复 (同步 #957): chatApi.chat() 调用 agent_chat 但映射表缺项。
-  agent_chat: { method: 'POST', path: () => '/api/v1/chat' },
   list_agents: { method: 'GET', path: () => '/api/v1/agents' },
   get_agent: {
     method: 'GET',
@@ -38,6 +36,18 @@ export const chatRoutes: Record<string, CommandRoute> = {
   delete_agent: {
     method: 'DELETE',
     path: (a) => `/api/v1/agents/${encodeURIComponent(String(a.id))}`,
+  },
+  // P2-a: 批量操作专家（delete / enable / disable）
+  batch_agents: {
+    method: 'POST',
+    path: () => '/api/v1/agents/batch',
+    body: (a) => ({ action: a.action, ids: a.ids }),
+  },
+  // P2-d: 批量更新专家排序（置顶 / 上移 / 下移）
+  reorder_agents: {
+    method: 'POST',
+    path: () => '/api/v1/agents/reorder',
+    body: (a) => ({ items: a.items }),
   },
   duplicate_agent: {
     method: 'POST',
@@ -89,6 +99,8 @@ export const chatRoutes: Record<string, CommandRoute> = {
   // RT5 (round7): 单 agent steering —— 运行中注入用户补充消息（body 经
   // relay camelToSnakeKeys 转成 { stream_id, content }）。
   chat_steer: { method: 'POST', path: () => '/api/v1/chat/steer' },
+  // 2026-11-07: 撤回尚未被消费的插话（body 经 relay 转成 { stream_id, message_id }）。
+  chat_steer_cancel: { method: 'POST', path: () => '/api/v1/chat/steer/cancel' },
 
   // R25-D4: 查询会话活跃 chat 流（renderer 重载后 reattach）。null = 无活跃流。
   chat_stream_active: {

@@ -13,6 +13,7 @@ from backend.tools.bash_validation import validate_bash
 from backend.tools.permissions import (
     DEFAULT_PERMISSION_MODE,
     DEFAULT_TOOL_CAPABILITY,
+    SELF_MODIFY_TOOLS,
     TOOL_CAPABILITIES,
     PermissionEnforcer,
     PermissionMode,
@@ -614,8 +615,9 @@ def test_path_boundary_resolver_exception_fails_closed(tmp_path):
 
 
 def test_office_update_delete_registered_as_write_capability():
+    # 2026-11-05 M0.3：office_delete 提级为 EXECUTE（不可逆删除必须逐次审批）。
     assert TOOL_CAPABILITIES["office_update"] is ToolCapability.WRITE
-    assert TOOL_CAPABILITIES["office_delete"] is ToolCapability.WRITE
+    assert TOOL_CAPABILITIES["office_delete"] is ToolCapability.EXECUTE
 
 
 def test_path_boundary_office_update_outside_workspace_asks(tmp_path, tmp_path_factory):
@@ -636,7 +638,9 @@ def test_path_boundary_office_update_outside_workspace_asks(tmp_path, tmp_path_f
 
 
 def test_path_boundary_office_delete_outside_workspace_asks(tmp_path, tmp_path_factory):
-    """office_delete 的 file_path 越界 → ask；工作区内放行。"""
+    """office_delete 归 EXECUTE：WORKSPACE_WRITE 下无论工作区内外都逐次审批
+    （不可逆删除不再依赖 path boundary 区分）。path boundary 仍登记此工具名
+    但 _mode_decision 已在上游返回 ask，本函数仅验证最终结论。"""
     workspace = tmp_path
     outside = tmp_path_factory.mktemp("outside")
     enforcer = PermissionEnforcer(
@@ -649,7 +653,8 @@ def test_path_boundary_office_delete_outside_workspace_asks(tmp_path, tmp_path_f
     assert decision.needs_approval is True
 
     inside = enforcer.check("office_delete", {"file_path": str(workspace / "a.xlsx")})
-    assert inside.allowed is True
+    assert inside.allowed is False
+    assert inside.needs_approval is True
 
 
 # ============================================================================
@@ -674,3 +679,56 @@ def test_force_mode_overrides_instance_without_touching_settings():
 
     read_decision = enforcer.check("read_file", {"path": "a.txt"})
     assert read_decision.allowed is True
+
+
+# ============================================================================
+# 2026-11-06（win7）：SELF_MODIFY 审批闸（对齐 main M0.5）
+# ============================================================================
+
+_SELF_MODIFY_NAMES = (
+    "update_sage_config",
+    "schedule_task",
+    "cancel_scheduled_task",
+    "wake_session_at",
+    "wake_on_background",
+)
+
+
+class TestSelfModifyGate:
+    def test_self_modify_set_matches_expected_tools(self):
+        assert set(_SELF_MODIFY_NAMES) <= SELF_MODIFY_TOOLS
+
+    @pytest.mark.parametrize(
+        ("mode", "expect_allowed", "expect_approval"),
+        [
+            (PermissionMode.READ_ONLY, False, False),
+            (PermissionMode.WORKSPACE_WRITE, False, True),
+            (PermissionMode.PROMPT, False, True),
+            (PermissionMode.FULL_ACCESS, True, False),
+        ],
+    )
+    @pytest.mark.parametrize("tool", _SELF_MODIFY_NAMES)
+    def test_mode_matrix(self, mode, tool, expect_allowed, expect_approval):
+        decision = _enforcer(mode).check(tool)
+        assert decision.allowed is expect_allowed
+        assert decision.needs_approval is expect_approval
+        assert decision.reason
+
+    @pytest.mark.parametrize("mode", [PermissionMode.READ_ONLY, PermissionMode.WORKSPACE_WRITE])
+    def test_explicit_allow_rule_still_permits(self, mode):
+        enforcer = _enforcer(mode, [PermissionRule("schedule_task", "allow")])
+        decision = enforcer.check("schedule_task")
+        assert decision.allowed is True
+
+    def test_deny_rule_still_wins(self):
+        enforcer = _enforcer(
+            PermissionMode.WORKSPACE_WRITE,
+            [PermissionRule("wake_session_at", "deny")],
+        )
+        decision = enforcer.check("wake_session_at")
+        assert decision.allowed is False
+        assert decision.needs_approval is False
+
+    def test_read_only_message_mentions_self_modify(self):
+        decision = _enforcer(PermissionMode.READ_ONLY).check("update_sage_config")
+        assert "自管理" in decision.reason

@@ -55,11 +55,197 @@ _WINDOWS_CREATE_NEW_PROCESS_GROUP = getattr(
     subprocess, "CREATE_NEW_PROCESS_GROUP", 0
 )
 
+#: 平台常量（模块级，便于单测 monkeypatch）。
+_IS_WINDOWS = os.name == "nt"
+
+#: Windows 存活探测缓存 TTL（秒）。
+_WINDOWS_ALIVE_CACHE_TTL = 2.0
+
+_windows_alive_cache: Dict[int, Tuple[float, bool]] = {}
+_windows_alive_cache_lock = threading.Lock()
+
+
+def _windows_process_alive(pid: int) -> bool:
+    """Windows 下用 ``tasklist`` 探测 PID 是否存活（带 2s TTL 缓存）。
+
+    tasklist 不可用/超时：fail-closed 视为已退出 —— 恢复路径宁可放弃
+    一条记录，也不留下无法管理的"幽灵"会话。
+    """
+    now = time.monotonic()
+    with _windows_alive_cache_lock:
+        cached = _windows_alive_cache.get(pid)
+        if cached is not None and now - cached[0] < _WINDOWS_ALIVE_CACHE_TTL:
+            return cached[1]
+    alive = False
+    try:
+        completed = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {int(pid)}", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=(
+                getattr(subprocess, "CREATE_NO_WINDOW", 0) if _IS_WINDOWS else 0
+            ), check=False,
+        )
+        output = (completed.stdout or "").lower()
+        alive = f'"{int(pid)}"' in output
+    except (OSError, subprocess.SubprocessError):
+        logger.debug("tasklist 探测失败: pid=%s", pid, exc_info=True)
+        alive = False
+    with _windows_alive_cache_lock:
+        _windows_alive_cache[pid] = (now, alive)
+        if len(_windows_alive_cache) > 256:
+            _windows_alive_cache.clear()
+    return alive
+
+
+def _read_linux_start_ticks(pid: int) -> Optional[str]:
+    """读取 /proc/<pid>/stat 的 starttime（字段 22）并附带 boot_id。"""
+    try:
+        with open("/proc/sys/kernel/random/boot_id", encoding="utf-8") as handle:
+            boot_id = handle.read().strip()
+    except OSError:
+        boot_id = ""
+    try:
+        with open(f"/proc/{int(pid)}/stat", encoding="utf-8") as handle:
+            stat_line = handle.read()
+    except OSError:
+        return None
+    # comm (字段 2) 可能含空格/括号：以最后一个 ')' 为界切出后续字段。
+    tail = stat_line.rpartition(")")[2].strip().split()
+    # tail[0] = 字段 3 (state)；starttime 是字段 22 → tail[19]
+    if len(tail) <= 19:
+        return None
+    return f"{boot_id}:{tail[19]}"
+
+
+def _ps_start_token(pid: int) -> Optional[str]:
+    """macOS/BSD 后备：ps -o lstart= 输出。"""
+    try:
+        completed = subprocess.run(
+            ["ps", "-o", "lstart=", "-p", str(int(pid))],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        token = (completed.stdout or "").strip()
+        return f"ps:{token}" if token else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _windows_start_token(pid: int) -> Optional[str]:
+    """Windows：wmic 读取进程 CreationDate（Win7 可用）。"""
+    try:
+        completed = subprocess.run(
+            [
+                "wmic",
+                "process",
+                "where",
+                f"ProcessId={int(pid)}",
+                "get",
+                "CreationDate",
+                "/value",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=(
+                getattr(subprocess, "CREATE_NO_WINDOW", 0) if _IS_WINDOWS else 0
+            ),
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in (completed.stdout or "").splitlines():
+        stripped = line.strip()
+        if stripped.lower().startswith("creationdate="):
+            value = stripped.split("=", 1)[1].strip()
+            return f"wmic:{value}" if value else None
+    return None
+
+
+def process_start_token(pid: int) -> Optional[str]:
+    """返回进程启动标识（用于跨重启校验 PID 复用）。
+
+    - Linux：``<boot_id>:<starttime ticks>``（/proc/<pid>/stat 第 22 字段）
+    - macOS/BSD：``ps:<lstart>``
+    - Windows：``wmic:<CreationDate>``
+    - 读取失败 → ``None``（恢复路径按 fail-closed 处理）
+    """
+    if _IS_WINDOWS:
+        return _windows_start_token(pid)
+    linux_token = _read_linux_start_ticks(pid)
+    if linux_token is not None:
+        return linux_token
+    return _ps_start_token(pid)
+
 
 @dataclass(frozen=True)
 class VerifiedProcess:
     process: Any
     process_group_id: int
+
+
+#: 重启后无法获得真实退出码时的哨兵值（Popen.returncode 语义：非 None = 已退出）。
+UNKNOWN_EXIT_CODE = -1
+
+
+@dataclass
+class ResurrectedProcess:
+    """后端重启后重新附着到存活后台进程的轻量句柄（Phase 2）。
+
+    与 ``subprocess.Popen`` 的 ``poll()`` / ``wait()`` 接口对齐，供
+    ``BashSession.status()`` / ``reap_process()`` 使用。由于重启后的进程
+    不再是本进程的子进程，``waitid`` 不可用，因此通过 ``os.getpgid(pid)``
+    校验进程组归属：
+
+    - pgid 匹配 → 仍存活（``poll()`` 返回 ``None``）；
+    - 进程不存在 / pgid 不匹配（PID 被复用）→ 视为已退出，
+      ``returncode`` 置为 ``UNKNOWN_EXIT_CODE``（无法得知真实退出码）。
+    """
+
+    pid: int
+    pgid: int
+    start_token: Optional[str] = None
+    returncode: Optional[int] = None
+
+    def _alive(self) -> bool:
+        if _IS_WINDOWS:
+            # Windows 无 os.getpgid：tasklist 探测存活即可。
+            return _windows_process_alive(self.pid)
+        try:
+            return os.getpgid(self.pid) == self.pgid
+        except (ProcessLookupError, OSError):
+            return False
+
+    def poll(self) -> Optional[int]:
+        if self.returncode is not None:
+            return self.returncode
+        if not self._alive():
+            # 进程不存在 / PID 被复用为其它进程组 —— 我们登记的进程已结束。
+            self.returncode = UNKNOWN_EXIT_CODE
+            return self.returncode
+        if self.start_token is not None:
+            # 2026-11-06 Phase 4：强校验进程启动标识，防 PID 复用误认。
+            # 读取失败或与登记值不符 → fail-closed 视为已退出。
+            current = process_start_token(self.pid)
+            if current is None or current != self.start_token:
+                self.returncode = UNKNOWN_EXIT_CODE
+                return self.returncode
+        return None
+
+    def wait(self, timeout: Optional[float] = None) -> int:
+        """仿 ``Popen.wait``：轮询到退出；超时抛 ``TimeoutExpired``。"""
+        deadline = None if timeout is None else time.monotonic() + max(timeout, 0.0)
+        while True:
+            code = self.poll()
+            if code is not None:
+                return code
+            if deadline is not None and time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(self.pid, timeout)
+            time.sleep(0.05)
 
 
 class ProcessGroupVerificationError(RuntimeError):  # noqa: N818

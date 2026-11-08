@@ -77,6 +77,52 @@ def resolve_effective_agent_id(session_id: str, requested_agent_id: Optional[str
     return resolve_bound_specialist(session_id)
 
 
+def resolve_effective_agent_id_for_message(
+    session_id: str,
+    requested_agent_id: Optional[str],
+    message: Optional[str],
+) -> str:
+    """M2 群聊：显式 agent_id > 消息内 @专家 > 会话绑定 > primary。
+
+    @ 解析仅在会话参与者中按名字精确匹配（最长优先）；任何解析异常都
+    回落到会话绑定，绝不阻塞聊天。
+    """
+    if requested_agent_id:
+        return _validated(requested_agent_id)
+    if message:
+        try:
+            from backend.data.database import get_database
+            from backend.data.participant_repo import resolve_mention_agent
+
+            mentioned = resolve_mention_agent(
+                get_database().get_connection(), session_id, message
+            )
+        except Exception as exc:  # noqa: BLE001 — @ 解析失败不阻塞对话
+            logger.debug("@ 解析失败（忽略）: %s", exc)
+            mentioned = None
+        if mentioned and _is_usable_agent(mentioned):
+            return mentioned
+    return resolve_bound_specialist(session_id)
+
+
+def touch_specialist_usage(agent_id: Optional[str]) -> None:
+    """P2-b：记录专家最近使用时间（``agents.last_used_at``，毫秒）。
+
+    best-effort：任何失败只 warning，绝不阻塞聊天。主助手（primary）与
+    空值不记录（主助手不是"专家卡片"的使用对象）。
+    """
+    if not agent_id or agent_id == PRIMARY_AGENT_ID:
+        return
+    try:
+        import time
+
+        from backend.data.agent_repo import AgentRepository
+
+        AgentRepository().update(agent_id, {"last_used_at": int(time.time() * 1000)})
+    except Exception as exc:  # noqa: BLE001 — 统计字段，失败不影响对话
+        logger.warning("更新专家最近使用时间失败 (agent=%s): %s", agent_id, exc)
+
+
 # --------------------------------------------------------------------------- #
 # 严格解析（技能作用域 fail-closed 专用）
 #

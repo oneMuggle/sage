@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from backend.api import legacy_memory_list_routes as list_routes
 
@@ -50,7 +50,7 @@ class TestFilterItemsByAgent:
 
 
 def _make_episodic_row(
-    mem_id: str, content: str, agent_id: str | None = None
+    mem_id: str, content: str, agent_id: Optional[str] = None
 ) -> Dict[str, Any]:
     row: Dict[str, Any] = {
         "id": mem_id,
@@ -78,10 +78,10 @@ class _FakeEpisodicStore:
         self._rows = rows
         self.db = _FakeDb()
 
-    def get_recent(self, *, limit: int, session_id: str | None = None) -> List[Dict[str, Any]]:
+    def get_recent(self, *, limit: int, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
         return self._rows[:limit]
 
-    def count(self, *, session_id: str | None = None) -> int:
+    def count(self, *, session_id: Optional[str] = None) -> int:
         return len(self._rows)
 
 
@@ -89,17 +89,17 @@ class _FakeSemanticStore:
     def __init__(self, rows: List[Dict[str, Any]]) -> None:
         self._rows = rows
 
-    def get_recent(self, *, limit: int, session_id: str | None = None) -> List[Dict[str, Any]]:
+    def get_recent(self, *, limit: int, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
         return self._rows[:limit]
 
-    def count(self, *, session_id: str | None = None) -> int:
+    def count(self, *, session_id: Optional[str] = None) -> int:
         return len(self._rows)
 
 
 class _FakeWorkingMemory:
     messages: List[Dict[str, Any]] = []
 
-    def get_context(self, *, session_id: str | None = None, limit: int = 100) -> List[Dict[str, Any]]:
+    def get_context(self, *, session_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
         return []
 
 
@@ -107,7 +107,7 @@ class _FakeMemoryManager:
     def __init__(
         self,
         episodic_rows: List[Dict[str, Any]],
-        semantic_rows: List[Dict[str, Any]] | None = None,
+        semantic_rows: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         self.episodic = _FakeEpisodicStore(episodic_rows)
         self.semantic = _FakeSemanticStore(semantic_rows or [])

@@ -159,6 +159,34 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'tray 托盘 关闭 最小化',
   },
   {
+    key: 'notifications_enabled',
+    tab: 'basic',
+    label: '启用桌面通知',
+    labelEn: 'Enable desktop notifications',
+    keywords: 'notification 通知 桌面 os 提醒 完成 失败 审批',
+  },
+  {
+    key: 'notifications_background',
+    tab: 'basic',
+    label: '后台任务通知',
+    labelEn: 'Background task notifications',
+    keywords: 'notification 通知 后台任务 定时任务 待办 提醒',
+  },
+  {
+    key: 'notifications_webhook',
+    tab: 'basic',
+    label: '通用 Webhook',
+    labelEn: 'Generic webhook',
+    keywords: 'webhook 通知 http post json 自动化 机器人',
+  },
+  {
+    key: 'notifications_slack',
+    tab: 'basic',
+    label: 'Slack Webhook',
+    labelEn: 'Slack webhook',
+    keywords: 'slack webhook 通知 incoming 外发 提醒',
+  },
+  {
     key: 'demoMode',
     tab: 'basic',
     label: '演示模式',
@@ -228,6 +256,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     labelEn: 'Reset settings',
     keywords: 'reset 恢复默认 重置 数据',
   },
+
   // ── 端点 ──
   {
     key: 'endpoints',
@@ -236,7 +265,15 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     labelEn: 'Endpoints',
     keywords: 'endpoint base url api key 端点 协议 模型探测',
   },
+
   // ── 模型 ──
+  {
+    key: 'routing.mode',
+    tab: 'models-services',
+    label: '智能模型路由',
+    labelEn: 'Smart model routing',
+    keywords: 'routing 路由 自动 手动 auto manual 任务类型 分档',
+  },
   {
     key: 'model_selections',
     tab: 'models-services',
@@ -286,14 +323,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     labelEn: 'Model catalog',
     keywords: 'catalog 模型目录 管理',
   },
-  // Task 9 (2026-10-28) 智能路由模式 —— Task 11 (ModelsTab) 实际控件在此 Tab。
-  {
-    key: 'routing.mode',
-    tab: 'models-services',
-    label: '智能模型路由',
-    labelEn: 'Smart model routing',
-    keywords: 'routing 智能路由 模型 自动 task_type 按任务选 model auto manual',
-  },
+
   // ── 编排 ──
   {
     key: 'orch.planPreflightEnabled',
@@ -826,6 +856,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     labelEn: 'Audit export',
     keywords: 'audit export 审计 导出 复制 摘要 json 诊断',
   },
+  // ── 桌宠 ──
   ...PET_SETTINGS_SEARCH_ENTRIES,
   ...BROWSER_EXTENSION_SETTINGS_SEARCH_ENTRIES,
   ...CHAT_SETTINGS_SEARCH_ENTRIES,

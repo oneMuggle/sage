@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Dict, List
 
 import pytest
 
@@ -20,7 +20,7 @@ class _FakeTool:
     def __init__(self, gate: threading.Event, fail: bool = False) -> None:
         self._gate = gate
         self._fail = fail
-        self.calls: list[dict[str, Any]] = []
+        self.calls: List[Dict[str, Any]] = []
 
     def execute(self, **kwargs: Any) -> SimpleNamespace:
         self.calls.append(dict(kwargs))

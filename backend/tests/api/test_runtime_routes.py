@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
 import pytest_asyncio
@@ -31,18 +31,18 @@ class _FakeSpec:
 class _FakeResult:
     success: bool
     output: Any = None
-    error: str | None = None
-    metadata: Dict[str, Any] | None = None
+    error: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class _FakeTools:
-    def __init__(self, *, specs: List[_FakeSpec] | None = None):
+    def __init__(self, *, specs: Optional[List[_FakeSpec]] = None):
         self._specs = specs if specs is not None else [
             _FakeSpec("runtime_probe"),
             _FakeSpec("project_diagnose"),
             _FakeSpec("runtime_exec"),
         ]
-        self.calls: List[tuple[str, Dict[str, Any]]] = []
+        self.calls: List[Tuple[str, Dict[str, Any]]] = []
         # tool name -> _FakeResult
         # probe/diagnose 返回 JSON 字符串（与实际工具行为一致）
         self.results: Dict[str, _FakeResult] = {
@@ -84,7 +84,7 @@ class _FakeTools:
 
 
 class _FakeChatService:
-    def __init__(self, tools: _FakeTools | None = None):
+    def __init__(self, tools: Optional[_FakeTools] = None):
         self.tools = tools or _FakeTools()
 
 

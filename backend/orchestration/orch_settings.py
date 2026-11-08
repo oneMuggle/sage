@@ -25,10 +25,6 @@ _RAW_KEYS = {
     "maxRetries": "max_retries",
     "maxLaneIterations": "max_lane_iterations",
     "maxSubagentIterations": "max_subagent_iterations",
-    "maxPrimaryIterations": "max_primary_iterations",
-    "maxCoderIterations": "max_coder_iterations",
-    "maxReviewerIterations": "max_reviewer_iterations",
-    "maxWriterIterations": "max_writer_iterations",
     # 键名必须与前端 OrchSettings.subagentTaskTimeoutS 逐字一致
     # (此前写成 taskTimeoutSeconds, 永远取不到值回落默认 900)。
     "subagentTaskTimeoutS": "subagent_task_timeout_s",
@@ -105,19 +101,10 @@ class OrchSettings:
     max_aggregate_chars: int = 120 * 1024
     max_subagent_result_chars: int = 50 * 1024
     max_retries: int = 2
-    max_lane_iterations: int = 12  # alpha.36 (Bug #2): 8 → 12, 减少"复杂度超上限"误报
-    #: 子代理（agent_tool）单次委派的 ReAct 迭代预算。默认 10 与原
+    max_lane_iterations: int = 8
+    #: 子代理（agent_tool）单次委派的 ReAct 迭代预算。默认 6 与原
     #: ``agent_tool.SUBAGENT_MAX_ITERATIONS`` 常量一致，仅开放可配。
-    max_subagent_iterations: int = 10  # alpha.36 (Bug #2): 6 → 10, 减少"复杂度超上限"误报
-    #: 主助手（primary profile）迭代上限。legacy_routes.py 调 run_loop 时读取。
-    #: 默认 15 与 profiles.py primary profile 对齐。
-    max_primary_iterations: int = 15
-    #: coder profile 迭代上限。默认 15 与 profiles.py 对齐。
-    max_coder_iterations: int = 15
-    #: reviewer profile 迭代上限。默认 8 与 profiles.py 对齐。
-    max_reviewer_iterations: int = 8
-    #: writer profile 迭代上限。默认 5 与 profiles.py 对齐。
-    max_writer_iterations: int = 5
+    max_subagent_iterations: int = 6
     scratch_root: str = "orch_scratch"
     worktree_isolation: bool = False
     #: live-events P1: 新 run 的子代理审批模式默认值 —— "ask"（逐次审批，
@@ -147,7 +134,6 @@ class OrchSettings:
     #: Primary agent 迭代次数上限（2026-10-20 新增）。覆盖 AgentProfile 的
     #: 硬编码 max_iterations，允许用户在 UI 中调整。默认 25（与 profiles.py
     #: primary profile 一致）。0 = 使用 profile 默认值。
-    #: 2026-11-01 win7 同步：此前默认 0 会关闭动态预算，改为与 main 一致的 25。
     max_iterations: int = 25
     #: 2026-11-01: 动态迭代预算总开关（P1 设置页暴露）。
     #: 关闭后 run_loop 回到固定 max_iterations 行为（仍可用 env 强制关闭）。

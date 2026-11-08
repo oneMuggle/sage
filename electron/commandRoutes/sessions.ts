@@ -29,6 +29,21 @@ export const sessionRoutes: Record<string, CommandRoute> = {
     },
   },
   create_session: { method: 'POST', path: () => '/api/v1/sessions' },
+  // M2 (2026-11-07) 群聊参与者
+  list_session_participants: {
+    method: 'GET',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/participants`,
+  },
+  add_session_participants: {
+    method: 'POST',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/participants`,
+    body: (a) => ({ agent_ids: a.agentIds }),
+  },
+  remove_session_participant: {
+    method: 'DELETE',
+    path: (a) =>
+      `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/participants/${encodeURIComponent(String(a.agentId))}`,
+  },
   get_session: {
     method: 'GET',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.id))}`,

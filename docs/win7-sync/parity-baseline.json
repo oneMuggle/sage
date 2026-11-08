@@ -1,0 +1,8 @@
+{
+  "real": 0,
+  "main_only": 0,
+  "actionable": 0,
+  "updated_at": "2026-11-07",
+  "updated_by": "P1 reconciliation merged (PR #2926); parity run 42369624795",
+  "note": "actionable = real + main-only。棘轮：超过该值 CI fail；收敛后请下调本文件。"
+}

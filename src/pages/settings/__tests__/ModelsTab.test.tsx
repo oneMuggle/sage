@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+/**
+ * P0-A (2026-09-18): 最大上下文长度编辑器 — 档位下拉 + 自定义(数值+K/M单位)。
+ * 回归钉: 旧版 number input 硬编码 max=128000, 512K/1M 无法输入。
+ */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -40,18 +44,18 @@ const settings = {
   temperature: 0.7,
 };
 
-function renderTab(updateSettings = vi.fn(), override = settings) {
+function renderTab(updateSettings = vi.fn(), settingsOverride: typeof settings = settings) {
   return render(
     <I18nProvider defaultLocale="zh">
-      <ModelsTab settings={override} updateSettings={updateSettings} />
+      <ModelsTab settings={settingsOverride} updateSettings={updateSettings} />
     </I18nProvider>,
   );
 }
 
 describe('ModelsTab context controls', () => {
-  it('disables the fixed context input in automatic mode', () => {
+  it('disables the context length control in automatic mode', () => {
     renderTab();
-    expect(screen.getByTestId('settings-max-context')).toBeDisabled();
+    expect(screen.getByLabelText('最大上下文长度档位')).toBeDisabled();
   });
 
   it('renders max output tokens and writes it back on change', () => {
@@ -112,6 +116,51 @@ describe('ModelsTab context controls', () => {
   });
 });
 
+describe('ModelsTab 上下文长度编辑器', () => {
+  const fixedContext = { ...settings, autoContext: false };
+
+  it('档位下拉包含 512K / 1M / 2M (回归钉: 旧 max=128000 拦死长上下文)', () => {
+    renderTab(vi.fn(), fixedContext);
+    const select = screen.getByLabelText('最大上下文长度档位');
+    const labels = Array.from((select as HTMLSelectElement).options).map((o) => o.text);
+    expect(labels).toEqual(expect.arrayContaining(['512K', '1M', '2M', '自定义…']));
+  });
+
+  it('值命中预设档时选中对应档位, 切换档位直接写回归一化 token 数', () => {
+    const updateSettings = vi.fn();
+    renderTab(updateSettings, { ...fixedContext, maxContext: 131072 });
+    const select = screen.getByLabelText('最大上下文长度档位') as HTMLSelectElement;
+    expect(select.value).toBe('131072');
+
+    fireEvent.change(select, { target: { value: '524288' } });
+    expect(updateSettings).toHaveBeenCalledWith({ maxContext: 524288 });
+  });
+
+  it('自定义模式: 数值 + 单位切换按乘数归一化写回', () => {
+    // 300000 非预设档 → 直接进自定义形态, 派生初值 300 + K
+    const updateSettings = vi.fn();
+    renderTab(updateSettings, { ...fixedContext, maxContext: 300000 });
+    expect(screen.getByLabelText('上下文长度数值')).toHaveValue(300);
+
+    fireEvent.change(screen.getByLabelText('上下文长度数值'), { target: { value: '512' } });
+    expect(updateSettings).toHaveBeenLastCalledWith({ maxContext: 512000 });
+
+    fireEvent.change(screen.getByLabelText('上下文长度数值'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('上下文长度单位'), { target: { value: 'M' } });
+    expect(updateSettings).toHaveBeenLastCalledWith({ maxContext: 1000000 });
+  });
+
+  it('旧数据非预设值 (8000) 自动进入自定义形态并回显', () => {
+    renderTab(vi.fn(), { ...fixedContext, maxContext: 8000 });
+    const select = screen.getByLabelText('最大上下文长度档位') as HTMLSelectElement;
+    expect(select.value).toBe('custom');
+    // 8000 派生为 8 + K 的自定义初值
+    expect(screen.getByLabelText('上下文长度数值')).toHaveValue(8);
+    expect((screen.getByLabelText('上下文长度单位') as HTMLSelectElement).value).toBe('K');
+    expect(screen.getByTestId('settings-context-length-resolved').textContent).toContain('8,000');
+  });
+});
+
 describe('ModelsTab routing mode (Task 11)', () => {
   const autoSettings = { ...settings, routing: { mode: 'auto' as const } };
 
@@ -146,12 +195,15 @@ describe('ModelsTab routing mode (Task 11)', () => {
     expect(screen.queryByText('用于文本对话（必填）')).toBeNull();
   });
 
-  it('auto mode keeps the other capability selectors (win7: 6 + title)', () => {
-    // win7 比 main 多一个 TitleModelSelector (PR #2604, 会话标题模型)。
-    // 手动模式: chat/vision/embedding/tts/asr/image_gen/title = 7
-    // 自动模式: 隐藏 chat, 剩 6 个；排除本地 OCR 的引擎/语言下拉。
+  it('auto mode keeps the other five capability selectors', () => {
+    // 6 个能力选择器 (手动: chat/vision/embedding/tts/asr/image_gen) → 自动模式
+    // 隐藏 chat 选择器剩 5 个；排除本地 OCR 的引擎/语言下拉与会话标题模型下拉
+    //（均非模型能力选择器）。
+    // 另加 P0-A 的上下文档位下拉（两种模式都渲染，仅自动模式禁用），故 +1。
     const capabilitySelects = (container: HTMLElement) =>
-      container.querySelectorAll('select:not([data-testid^="settings-ocr-"])');
+      container.querySelectorAll(
+        'select:not([data-testid^="settings-ocr-"]):not([data-testid="settings-title-model"])',
+      );
 
     const manual = renderTab();
     expect(capabilitySelects(manual.container)).toHaveLength(7);

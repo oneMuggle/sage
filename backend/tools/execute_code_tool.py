@@ -11,6 +11,10 @@ Agent 在子进程中执行一段 Python 代码；代码内通过 ``sage.call(to
   权限执行器审批。
 - RPC 协议: JSON 行（子进程 stdout 打 ``##RPC##`` 前缀行，用户 print
   重定向到 stderr）；父进程逐行响应，整体 deadline 到期 kill 子进程。
+- RPC 准入: 子进程桥没有交互式审批通道，凡需审批的能力面一律静态
+  拒绝（执行面 EXECUTE、自管理 SELF_MODIFY、ask_user_question），
+  错误信息引导 LLM 改在主循环直接调用 —— 那时才走
+  ``PermissionEnforcer`` 的审批闸口（M0.2）。
 - 单条 RPC 调用失败以 RuntimeError 抛回脚本内，由 agent 代码自行处理。
 """
 
@@ -27,6 +31,11 @@ from typing import Any, Dict, List, Optional
 
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
+from backend.tools.permissions import (
+    SELF_MODIFY_TOOLS,
+    ToolCapability,
+    classify_tool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +44,33 @@ MAX_CODE_TIMEOUT_SECONDS = 300.0
 MAX_CODE_BYTES = 64 * 1024
 RPC_PREFIX = "##RPC##"
 _MAX_OUTPUT_CHARS = 30000
+
+#: 子进程桥禁止调用的工具。RPC 在 executor 线程里同步执行，没有交互式
+#: 审批通道（execute_code 本身已在主循环获得一次审批），所以凡需要逐次
+#: 审批的能力面必须静态拒绝，由 LLM 改在主循环直接调用。
+RPC_FORBIDDEN_TOOLS = frozenset(
+    {
+        # 需要主循环的提问卡片 + 等待通道，子进程内无法完成。
+        "ask_user_question",
+    }
+)
+
+
+def _rpc_denial_reason(tool_name: str) -> Optional[str]:
+    """返回静态拒绝原因；``None`` 表示允许经 RPC 调用。"""
+    if tool_name in RPC_FORBIDDEN_TOOLS:
+        return f"execute_code RPC 禁止调用 {tool_name}（需要主循环交互通道）"
+    if tool_name in SELF_MODIFY_TOOLS:
+        return (
+            f"execute_code RPC 禁止调用自管理工具 {tool_name}；"
+            "请在主循环直接调用，以便经用户审批"
+        )
+    if classify_tool(tool_name) is ToolCapability.EXECUTE:
+        return (
+            f"execute_code RPC 禁止调用执行面工具 {tool_name}；"
+            "请在主循环直接调用，以便经用户审批"
+        )
+    return None
 
 
 def _bootstrap_script() -> str:
@@ -324,27 +360,39 @@ class ExecuteCodeTool(BaseTool):
         return ToolResult(success=ok, content=content, error=None if ok else str(final.get("error")))
 
     def _serve_rpc(self, registry: Any, process: subprocess.Popen, payload: Dict[str, Any]) -> None:
-        """执行子进程请求的工具调用并写回结果行"""
+        """执行子进程请求的工具调用并写回结果行。
+
+        2026-11-05 M0.2：执行面 / 自管理工具 / 需主循环交互的工具在 RPC
+        内被静态拒绝 —— 子进程桥没有审批通道，错误信息引导 LLM 改在
+        主循环直接调用。
+        """
         name = payload.get("name")
         arguments = payload.get("arguments") or {}
         try:
-            tool = registry.get(name)
-            if tool is None:
-                ok, value, error = False, None, f"工具不存在: {name}"
+            if not isinstance(name, str) or not name:
+                ok, value, error = False, None, f"工具名必须是非空字符串: {name!r}"
             else:
-                result = tool.execute(**arguments)
-                if hasattr(result, "success") and hasattr(result, "content"):
-                    if result.success:
-                        value_out = (
-                            result.output
-                            if getattr(result, "output", None) is not None
-                            else result.content
-                        )
-                        ok, value, error = True, value_out, None
-                    else:
-                        ok, value, error = False, None, result.error or "工具执行失败"
+                denial = _rpc_denial_reason(name)
+                if denial is not None:
+                    ok, value, error = False, None, denial
                 else:
-                    ok, value, error = True, result, None
+                    tool = registry.get(name)
+                    if tool is None:
+                        ok, value, error = False, None, f"工具不存在: {name}"
+                    else:
+                        result = tool.execute(**arguments)
+                        if hasattr(result, "success") and hasattr(result, "content"):
+                            if result.success:
+                                value_out = (
+                                    result.output
+                                    if getattr(result, "output", None) is not None
+                                    else result.content
+                                )
+                                ok, value, error = True, value_out, None
+                            else:
+                                ok, value, error = False, None, result.error or "工具执行失败"
+                        else:
+                            ok, value, error = True, result, None
         except Exception as exc:  # noqa: BLE001 — 异常回传脚本内处理
             ok, value, error = False, None, str(exc)
         try:

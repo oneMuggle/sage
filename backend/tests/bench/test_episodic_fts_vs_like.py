@@ -35,7 +35,7 @@ import json
 import random
 import statistics
 import time
-from typing import Any
+from typing import Any, Dict, List, Tuple
 
 import pytest
 
@@ -169,9 +169,9 @@ def episodic_with_corpus(tmp_path_factory):
     db.close()
 
 
-def _benchmark_fn(fn, n_runs: int = 11) -> tuple[float, list[float]]:
+def _benchmark_fn(fn, n_runs: int = 11) -> Tuple[float, List[float]]:
     """跑 n_runs 次，返回 (中位数 ms, 所有耗时 ms)。去首次 warm-up。"""
-    times: list[float] = []
+    times: List[float] = []
     for i in range(n_runs):
         t0 = time.perf_counter()
         fn()
@@ -194,9 +194,9 @@ class TestEpisodicFtsVsLike:
         """
         episodic, total = episodic_with_corpus
 
-        results: list[dict[str, Any]] = []
-        empty_speedups: list[float] = []
-        recall_violations: list[str] = []
+        results: List[Dict[str, Any]] = []
+        empty_speedups: List[float] = []
+        recall_violations: List[str] = []
 
         for label, query in QUERIES:
             fts_median, _ = _benchmark_fn(

@@ -3,7 +3,12 @@ import { toast } from 'sonner';
 
 import { useScheduledTaskStore } from '../../entities/scheduled/taskStore';
 import { skillsApi } from '../../shared/api/skillsApi';
-import type { CreateTaskInput, ScheduledTask, Skill } from '../../shared/api/types';
+import type {
+  CreateTaskInput,
+  ScheduledTask,
+  ScheduledTaskMode,
+  Skill,
+} from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { CronExpressionPicker } from './CronExpressionPicker';
@@ -104,6 +109,7 @@ export function CreateTaskModal({
   );
   const [content, setContent] = useState(task?.content ?? '');
   const [enabled, setEnabled] = useState(task?.enabled ?? true);
+  const [mode, setMode] = useState<ScheduledTaskMode>(task?.mode ?? 'execute');
   const [targetSession, setTargetSession] = useState(task?.session_id ?? sessionId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +140,7 @@ export function CreateTaskModal({
     );
     setContent(task?.content ?? '');
     setEnabled(task?.enabled ?? true);
+    setMode(task?.mode ?? 'execute');
     setTargetSession(task?.session_id ?? sessionId);
     setError(null);
     setSubmitting(false);
@@ -222,10 +229,19 @@ export function CreateTaskModal({
           schedule,
           content,
           session_id: targetSession,
+          mode,
         });
         toast.success(t('scheduled.edit'));
       } else {
-        await store.create({ name, type, schedule, session_id: targetSession, content, enabled });
+        await store.create({
+          name,
+          type,
+          schedule,
+          session_id: targetSession,
+          content,
+          enabled,
+          mode,
+        });
         toast.success(t('scheduled.create'));
       }
       onClose();
@@ -260,8 +276,7 @@ export function CreateTaskModal({
           <h2 className="text-base font-semibold text-text">
             {isEdit ? t('scheduled.edit') : t('scheduled.create')}
           </h2>
-          <div className="flex items-center gap-1 text-ui-2xs">
-          </div>
+          <div className="flex items-center gap-1 text-ui-2xs"></div>
         </div>
 
         <label className="flex flex-col gap-1 text-xs text-text-secondary">
@@ -319,6 +334,41 @@ export function CreateTaskModal({
           >
             {t('scheduled.field.type.recurring')}
           </button>
+        </div>
+
+        <div className="flex flex-col gap-1.5 text-xs text-text-secondary">
+          <span>{t('scheduled.field.mode')}</span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setMode('execute')}
+              className={`flex-1 py-1.5 rounded-radius-sm border ${
+                mode === 'execute'
+                  ? 'bg-primary/10 border-primary text-primary'
+                  : 'bg-surface border-border text-text-secondary'
+              }`}
+              data-testid="mode-execute-button"
+            >
+              {t('scheduled.field.mode.execute')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('deliver')}
+              className={`flex-1 py-1.5 rounded-radius-sm border ${
+                mode === 'deliver'
+                  ? 'bg-primary/10 border-primary text-primary'
+                  : 'bg-surface border-border text-text-secondary'
+              }`}
+              data-testid="mode-deliver-button"
+            >
+              {t('scheduled.field.mode.deliver')}
+            </button>
+          </div>
+          <span className="text-ui-2xs text-text-muted">
+            {mode === 'execute'
+              ? t('scheduled.field.mode.execute.hint')
+              : t('scheduled.field.mode.deliver.hint')}
+          </span>
         </div>
 
         {type === 'recurring' ? (

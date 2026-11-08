@@ -5,8 +5,8 @@ import { zhAttachmentStatus } from './locales/zh/attachmentStatus';
 import { zhChatAndSider } from './locales/zh/chatAndSider';
 import { zhChatDisplayMode } from './locales/zh/chatDisplayMode';
 import { zhChatPdfOcr } from './locales/zh/chatPdfOcr';
+import { zhChatSteerStaging } from './locales/zh/chatSteerStaging';
 import { zhContextMenu } from './locales/zh/contextMenu';
-import { zhPet } from './locales/zh/pet';
 import { zhPetPack } from './locales/zh/petPack';
 import { zhPlaybook } from './locales/zh/playbook';
 import { zhSettingsAndModels } from './locales/zh/settingsAndModels';
@@ -20,8 +20,8 @@ export const zh = {
   ...zhAttachmentStatus,
   ...zhChatDisplayMode,
   ...zhChatPdfOcr,
+  ...zhChatSteerStaging,
   ...zhContextMenu,
-  ...zhPet,
   ...zhPetPack,
   ...zhPlaybook,
   ...zhSettingsAndModels,

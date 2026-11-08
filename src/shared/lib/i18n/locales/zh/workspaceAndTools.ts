@@ -27,6 +27,8 @@ export const zhWorkspaceAndTools = {
   'office.doc.snapshots': '历史版本',
   'office.doc.archivedAt': '归档于',
   'office.section.archived': '归档文档',
+  'office.section.library': '文档库',
+  'office.section.canvas': '文档画布',
   'office.view.live': '全部文档',
   'office.view.archived': '归档文档',
   'office.toast.archived': '已归档',
@@ -40,6 +42,8 @@ export const zhWorkspaceAndTools = {
   'office.snapshot.restoreSuccess': '已恢复到此版本',
   'office.snapshot.restoreFailed': '恢复失败',
   'office.snapshot.close': '关闭',
+  // 文档画布：把文件拖到已打开的文档上 → 替换当前文档
+  'office.canvas.dropToReplace': '松开以替换当前文档',
 
   // ─── Office parity batch 2: 预览富渲染 (item 2.6) ─────
   'office.preview.headings': '标题',
@@ -193,6 +197,7 @@ export const zhWorkspaceAndTools = {
   'office.fidelity.toggle': '高保真',
   'office.fidelity.loading': '转换中…',
   'office.fidelity.failed': '高保真预览失败',
+  'office.fidelity.fallback': '高保真预览不可用，已切换到结构化视图',
   'office.fidelity.unavailable':
     '当前格式未检测到本机转换器（LibreOffice 支持 DOCX/XLSX/PPTX；MS Word 仅支持 DOCX）。Word 已内置原生渲染，不受影响；可点击右上角 [环境] 重新检测或查看安装指引',
   'office.caps.detected': '已发现转换组件，尚未验证运行',
@@ -265,6 +270,25 @@ export const zhWorkspaceAndTools = {
   'office.batch.selectAll': '全选',
   'office.batch.selectedCount': '已选 {n} 项',
   'office.batch.selectRow': '选择该文档',
+
+  // ─── Office 文档库搜索/筛选/排序/重复清理 (Phase 1 Item A) ─────
+  'office.doclib.search': '搜索文件名',
+  'office.doclib.searchClear': '清除搜索',
+  'office.doclib.filter.allTypes': '全部类型',
+  'office.doclib.sort.updatedDesc': '最近更新',
+  'office.doclib.sort.updatedAsc': '最早更新',
+  'office.doclib.sort.createdDesc': '最近创建',
+  'office.doclib.sort.nameAsc': '名称 A→Z',
+  'office.doclib.sort.nameDesc': '名称 Z→A',
+  'office.doclib.sort.sizeDesc': '从大到小',
+  'office.doclib.sort.sizeAsc': '从小到大',
+  'office.doclib.duplicateBadge': '重复',
+  'office.doclib.duplicateBanner': '发现 {n} 组重复文档',
+  'office.doclib.duplicateBannerHint':
+    '相同的文件内容被重复导入。清理会归档每组中较旧的副本，可随时恢复。',
+  'office.doclib.duplicateCleanup': '清理重复（保留最新）',
+  'office.doclib.duplicateCleanupDone': '已归档 {n} 个重复副本',
+  'office.doclib.duplicateCleanupFailed': '重复清理失败',
 
   // ─── A4b Office 交付包验收 ─────
   'office.delivery.title': '交付包验收',
@@ -396,6 +420,61 @@ export const zhWorkspaceAndTools = {
   'skill_draft.rejected': '已拒绝 {name}',
   'skill_draft.reject_failed': '拒绝失败: {error}',
   'skill_draft.preview': '预览',
+  // M1 技能页草稿链路修复: 页签/空态/引导文案
+  'skills_page.tab_pending_drafts': '待审草稿',
+  'skills_page.drafts_empty_title': '暂无待审草稿',
+  'skills_page.drafts_empty_intro': '待审草稿由系统在你与 AI 的对话中自动沉淀,产生方式有三种:',
+  'skills_page.drafts_explainer_item_1':
+    '复杂回合自动沉淀 — 当 AI 在一次任务里连续调用多个工具时,系统会自动判断是否值得沉淀为技能',
+  'skills_page.drafts_explainer_item_2':
+    '主动保存 — 你可以对 AI 说「把这个流程保存为技能」,或输入 /learn 触发',
+  'skills_page.drafts_explainer_item_3':
+    '扫描冷技能 — 点击「扫描冷技能」按钮,系统会检查长期未用的技能并给出合并/归档建议',
+  'skills_page.drafts_require_llm': '草稿生成需要默认模型已配置;若未配置,请在设置页完成模型接入',
+  'skills_page.drafts_cta_generate_from_session': '从最近会话生成',
+  'skills_page.drafts_cta_scan_cold': '扫描冷技能',
+  // M2 技能页 IA: 来源徽章 / 分组 / 视图 / 筛选 / 详情
+  'skills_page.origin_builtin': '内置',
+  'skills_page.origin_shipped': '模板',
+  'skills_page.origin_generated': 'AI 生成',
+  'skills_page.origin_imported': '已导入',
+  'skills_page.origin_user': '本地',
+  'skills_page.group_builtin': '内置技能',
+  'skills_page.group_shipped': '推荐模板',
+  'skills_page.group_mine': '我的技能',
+  'skills_page.view_compact': '紧凑列表',
+  'skills_page.view_grid': '卡片视图',
+  'skills_page.filter_origin_all': '全部来源',
+  'skills_page.filter_status_all': '全部状态',
+  'skills_page.filter_enabled': '仅看已启用',
+  'skills_page.filter_disabled': '仅看已停用',
+  'skills_page.filter_archived': '仅看已归档',
+  'skills_page.lifecycle_archived': '已归档',
+  'skills_page.lifecycle_stale': '已冷',
+  'skills_page.more': '更多',
+  'skills_page.view_details': '查看详情',
+  'skills_page.copy_snapshot': '复制快照',
+  'skills_page.copy_json': '复制 JSON',
+  'skills_page.auto_refresh': '自动刷新 (10s)',
+  'skills_page.stats_total': '技能总数',
+  'skills_page.stats_enabled': '已启用',
+  'skills_page.stats_mine': '我的技能',
+  'skills_page.stats_drafts': '待审草稿',
+  'skills_page.usage_count': '已使用 {count} 次',
+  'skills_page.section_description': '描述',
+  'skills_page.section_triggers': '触发词',
+  'skills_page.section_when_to_use': '何时使用',
+  'skills_page.section_body': '提示词模板',
+  'skills_page.section_version': '版本',
+  'skills_page.section_actions': '操作',
+  'skills_page.enable_skill': '启用技能',
+  'skills_page.disable_skill': '停用技能',
+  'skills_page.open_directory': '打开技能目录',
+  'skills_page.show_in_folder': '在文件夹中显示',
+  'skills_page.export_skill': '导出技能',
+  'skills_page.export_mine': '导出我的技能',
+  'skills_page.storage_hint':
+    '技能保存在用户目录（默认 ~/.sage/skills），应用升级不会删除；可在设置 → 技能中修改。',
 
   'chat.learn_reviewing': '正在生成技能草稿...',
   'chat.learn_queued': '已加入审核队列 — 查看待审草稿',
@@ -476,6 +555,11 @@ export const zhWorkspaceAndTools = {
   'workspace.switcher.workbench': '工作台',
   'workspace.switcher.unusable': '当前工作区不可用',
   'workspace.switcher.scratchHint': '当前使用的是草稿目录，文件不会保存到你的项目里',
+  'office.converter.guide.title': '导出 PDF 需要安装转换器',
+  'office.converter.guide.body':
+    '导出 PDF 需要安装 LibreOffice 或 Microsoft Word 作为转换器。安装后重启应用即可使用导出功能。',
+  'office.converter.guide.download': '下载 LibreOffice',
+  'office.converter.guide.close': '关闭',
 } as const;
 
 export function formatZhWorkspaceAndToolsSummary(): string {

@@ -33,12 +33,16 @@ import {
   type OfficeDeliveryRef,
   type TaskCenterStatus,
 } from '../../features/task-center/taskCenterStore';
+import { invoke } from '../../shared/api/desktopInvoke';
+import { listShells } from '../../shared/api/shellApi';
 import type { Lane, LaneStatus } from '../../shared/api/types';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { productMessages } from '../../shared/lib/productMessages';
 import { useStore } from '../../shared/lib/store';
 
-type EntrySource = 'registry' | 'chat' | 'lane';
+import { ShellStreamDrawer } from './ShellStreamDrawer';
+
+type EntrySource = 'registry' | 'chat' | 'lane' | 'shell';
 
 interface Entry {
   id: string;
@@ -53,6 +57,8 @@ interface Entry {
   cancellable: boolean;
   sessionId?: string;
   laneId?: string;
+  /** 2026-11-07 Phase 5: 后台 shell 条目对应的 shell_id。 */
+  shellId?: string;
   /** A4b: office 交付包坐标（awaiting 条目开抽屉用）。 */
   deliveryRef?: OfficeDeliveryRef | null;
   /** P11: 关联文档名（office 条目跳转后高亮文档行）。 */
@@ -157,13 +163,16 @@ function StatusIcon({ status }: { status: TaskCenterStatus }) {
   }
 }
 
+/** 2026-11-07 Phase 5: 后台 shell 列表轮询间隔（仅组件挂载期间）。 */
+export const SHELL_TASK_POLL_MS = 3_000;
+
 export function TaskCenterWidget() {
   const { t, locale } = useI18n();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const rightPanelMaximized = useRightPanelStore((s) => s.maximized && s.open);
-  const appPanelMaximized = usePanelStore(
-    (s) => Boolean(s.slots.right?.maximized || s.slots.bottom?.maximized),
+  const appPanelMaximized = usePanelStore((s) =>
+    Boolean(s.slots.right?.maximized || s.slots.bottom?.maximized),
   );
   const panelMaximized = rightPanelMaximized || appPanelMaximized;
 
@@ -177,6 +186,11 @@ export function TaskCenterWidget() {
   const clearFinished = useTaskCenterStore((s) => s.clearFinished);
   const openDelivery = useTaskCenterStore((s) => s.openDelivery);
   const setHighlight = useTaskCenterStore((s) => s.setHighlight);
+  // 2026-11-07 Phase 5: 后台 shell 聚合
+  const registerShell = useTaskCenterStore((s) => s.registerShell);
+  const removeMissingShells = useTaskCenterStore((s) => s.removeMissingShells);
+  const shellStream = useTaskCenterStore((s) => s.shellStream);
+  const openShellStream = useTaskCenterStore((s) => s.openShellStream);
   const streamSessions = useChatStreamStore((s) => s.sessions);
   const lanes = useLaneBoardStore((s) => s.lanes);
   const cancelLane = useLaneBoardStore((s) => s.cancel);
@@ -211,20 +225,54 @@ export function TaskCenterWidget() {
     }
   }, [activeStreamIds]);
 
+  // 2026-11-07 Phase 5: 轮询后台 shell 列表并入 TaskCenter。
+  useEffect(() => {
+    let cancelled = false;
+    const poll = (): void => {
+      listShells()
+        .then((shells) => {
+          if (cancelled) return;
+          for (const shell of shells) {
+            registerShell({
+              shell_id: shell.shell_id,
+              command: shell.command,
+              status: shell.status,
+              exit_code: shell.exit_code ?? null,
+              age_seconds: shell.age_seconds,
+            });
+          }
+          removeMissingShells(shells.map((shell) => shell.shell_id));
+        })
+        .catch(() => {
+          /* 静默：任务中心是增强信息 */
+        });
+    };
+    poll();
+    const timer = window.setInterval(poll, SHELL_TASK_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [registerShell, removeMissingShells]);
+
   const entries = useMemo<Entry[]>(() => {
-    const registryEntries: Entry[] = Object.values(registryTasks).map((task) => ({
-      id: task.id,
-      source: 'registry',
-      title: task.phase ? `${task.title} · ${task.phase}` : task.title,
-      status: task.status,
-      startedAt: task.startedAt,
-      route: task.kind === 'office' ? '/office' : task.kind === 'wiki' ? '/knowledge' : null,
-      percent: task.percent ?? null,
-      error: task.error ?? null,
-      cancellable: false,
-      deliveryRef: task.deliveryRef ?? null,
-      opensDelivery: task.status === 'awaiting_approval' && task.deliveryRef != null,
-    }));
+    const registryEntries: Entry[] = Object.values(registryTasks)
+      // 2026-11-07 Phase 5: shell 条目单独成组（source='shell'），
+      // 走打开输出抽屉而非 route 跳转。
+      .filter((task) => task.kind !== 'shell')
+      .map((task) => ({
+        id: task.id,
+        source: 'registry',
+        title: task.phase ? `${task.title} · ${task.phase}` : task.title,
+        status: task.status,
+        startedAt: task.startedAt,
+        route: task.kind === 'office' ? '/office' : task.kind === 'wiki' ? '/knowledge' : null,
+        percent: task.percent ?? null,
+        error: task.error ?? null,
+        cancellable: false,
+        deliveryRef: task.deliveryRef ?? null,
+        opensDelivery: task.status === 'awaiting_approval' && task.deliveryRef != null,
+      }));
     const chatEntries: Entry[] = activeStreamIds.map((id) => ({
       id: `chat:${id}`,
       source: 'chat',
@@ -253,7 +301,20 @@ export function TaskCenterWidget() {
         laneId: lane.lane_id,
         opensDelivery: isLaneAwaitingDecision(lane),
       }));
-    return sortEntries([...registryEntries, ...chatEntries, ...laneEntries]);
+    const shellEntries: Entry[] = Object.values(registryTasks)
+      .filter((task) => task.kind === 'shell')
+      .map((task) => ({
+        id: task.id,
+        source: 'shell',
+        title: task.title,
+        status: task.status,
+        startedAt: task.startedAt,
+        route: null,
+        error: task.exitCode != null ? `exit=${task.exitCode}` : null,
+        cancellable: task.status === 'running',
+        shellId: task.shellId ?? undefined,
+      }));
+    return sortEntries([...registryEntries, ...chatEntries, ...laneEntries, ...shellEntries]);
     // streamStartsRef is a ref and stays out of deps: entries read it after
     // the maintenance effect above, so first-seen times are already present.
   }, [registryTasks, activeStreamIds, lanes, sessions, t]);
@@ -281,6 +342,9 @@ export function TaskCenterWidget() {
         if (!ok) toast.error(t('taskCenter.cancelFailed'));
       } else if (entry.source === 'lane' && entry.laneId) {
         await cancelLane(entry.laneId);
+      } else if (entry.source === 'shell' && entry.shellId) {
+        // 2026-11-07 Phase 5: 终止后台 shell（轮询会在下一轮同步状态）。
+        await invoke('shell_kill', { id: entry.shellId });
       }
     } catch {
       toast.error(t('taskCenter.cancelFailed'));
@@ -295,6 +359,11 @@ export function TaskCenterWidget() {
 
   const handleNavigate = (entry: Entry): void => {
     setExpanded(false);
+    // 2026-11-07 Phase 5: 后台 shell 条目打开输出抽屉。
+    if (entry.source === 'shell' && entry.shellId) {
+      openShellStream(entry.shellId);
+      return;
+    }
     // A4: 交付待验收条目点击直达交付抽屉（其余仍走 route 跳转）。
     if (entry.opensDelivery) {
       if (entry.source === 'lane' && entry.laneId) {
@@ -330,77 +399,76 @@ export function TaskCenterWidget() {
           <div
             data-testid="task-center-toolbar"
             className="flex items-center justify-end gap-1 rounded-md border border-border bg-surface shadow-sm px-2 py-1"
+          ></div>
+          <div
+            data-testid="task-center-list"
+            className="max-h-72 min-w-56 overflow-y-auto rounded-lg border border-border bg-surface shadow-lg p-1.5 flex flex-col gap-1"
           >
-          </div>
-        <div
-          data-testid="task-center-list"
-          className="max-h-72 min-w-56 overflow-y-auto rounded-lg border border-border bg-surface shadow-lg p-1.5 flex flex-col gap-1"
-        >
-          {entries.map((entry) => {
-            const terminal = TERMINAL_TASK_STATUSES.has(entry.status);
-            const cancelling = cancellingIds.has(entry.id);
-            return (
-              <div
-                key={entry.id}
-                className="flex items-center gap-1 max-w-64 rounded text-left hover:bg-bg-hover transition-colors"
-              >
-                <button
-                  type="button"
-                  onClick={() => handleNavigate(entry)}
-                  title={
-                    entry.opensDelivery
-                      ? productMessages(locale).awaitingReview
-                      : t(STATUS_LABEL_KEYS[entry.status])
-                  }
-                  className="flex flex-1 items-center gap-2 px-2 py-1.5 text-xs text-text min-w-0"
+            {entries.map((entry) => {
+              const terminal = TERMINAL_TASK_STATUSES.has(entry.status);
+              const cancelling = cancellingIds.has(entry.id);
+              return (
+                <div
+                  key={entry.id}
+                  className="flex items-center gap-1 max-w-64 rounded text-left hover:bg-bg-hover transition-colors"
                 >
-                  <StatusIcon status={entry.status} />
-                  <span className="truncate flex-1">
-                    {entry.title}
-                    {entry.status === 'failed' && entry.error ? (
-                      <span className="block truncate text-ui-2xs text-error">{entry.error}</span>
-                    ) : null}
-                  </span>
-                  {entry.percent != null ? (
-                    <span className="text-ui-2xs text-primary tabular-nums shrink-0">
-                      {Math.round(entry.percent)}%
-                    </span>
-                  ) : entry.startedAt != null ? (
-                    <span className="text-ui-2xs text-muted tabular-nums shrink-0">
-                      {Math.max(0, Math.floor((now - entry.startedAt) / 1000))}s
-                    </span>
-                  ) : null}
-                </button>
-                {entry.cancellable && !terminal ? (
                   <button
                     type="button"
-                    aria-label={t('taskCenter.cancel')}
-                    data-testid={`task-center-cancel-${entry.id}`}
-                    disabled={cancelling}
-                    onClick={() => void handleCancel(entry)}
-                    className="p-1 rounded text-text-secondary hover:text-error disabled:opacity-50 shrink-0"
+                    onClick={() => handleNavigate(entry)}
+                    title={
+                      entry.opensDelivery
+                        ? productMessages(locale).awaitingReview
+                        : t(STATUS_LABEL_KEYS[entry.status])
+                    }
+                    className="flex flex-1 items-center gap-2 px-2 py-1.5 text-xs text-text min-w-0"
                   >
-                    {cancelling ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />
-                    ) : (
-                      <X className="w-3.5 h-3.5" aria-hidden />
-                    )}
+                    <StatusIcon status={entry.status} />
+                    <span className="truncate flex-1">
+                      {entry.title}
+                      {entry.status === 'failed' && entry.error ? (
+                        <span className="block truncate text-ui-2xs text-error">{entry.error}</span>
+                      ) : null}
+                    </span>
+                    {entry.percent != null ? (
+                      <span className="text-ui-2xs text-primary tabular-nums shrink-0">
+                        {Math.round(entry.percent)}%
+                      </span>
+                    ) : entry.startedAt != null ? (
+                      <span className="text-ui-2xs text-muted tabular-nums shrink-0">
+                        {Math.max(0, Math.floor((now - entry.startedAt) / 1000))}s
+                      </span>
+                    ) : null}
                   </button>
-                ) : null}
-              </div>
-            );
-          })}
-          {finishedCount > 0 ? (
-            <button
-              type="button"
-              data-testid="task-center-clear"
-              onClick={() => clearFinished()}
-              className="mt-1 px-2 py-1 rounded text-ui-2xs text-text-secondary hover:text-text hover:bg-bg-hover transition-colors"
-            >
-              {t('taskCenter.clearFinished')}
-            </button>
-          ) : null}
-        </div>
+                  {entry.cancellable && !terminal ? (
+                    <button
+                      type="button"
+                      aria-label={t('taskCenter.cancel')}
+                      data-testid={`task-center-cancel-${entry.id}`}
+                      disabled={cancelling}
+                      onClick={() => void handleCancel(entry)}
+                      className="p-1 rounded text-text-secondary hover:text-error disabled:opacity-50 shrink-0"
+                    >
+                      {cancelling ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />
+                      ) : (
+                        <X className="w-3.5 h-3.5" aria-hidden />
+                      )}
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+            {finishedCount > 0 ? (
+              <button
+                type="button"
+                data-testid="task-center-clear"
+                onClick={() => clearFinished()}
+                className="mt-1 px-2 py-1 rounded text-ui-2xs text-text-secondary hover:text-text hover:bg-bg-hover transition-colors"
+              >
+                {t('taskCenter.clearFinished')}
+              </button>
+            ) : null}
+          </div>
         </>
       )}
       <button
@@ -421,6 +489,8 @@ export function TaskCenterWidget() {
           .replace('{other}', String(otherCount))
           .replace('{finished}', String(finishedCount))}
       </button>
+      {/* 2026-11-07 Phase 5: 后台 shell 输出抽屉（抽屉互斥由 store 保证） */}
+      {shellStream && <ShellStreamDrawer shellId={shellStream} />}
     </div>
   );
 }

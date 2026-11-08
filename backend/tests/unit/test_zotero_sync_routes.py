@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import pytest
 from fastapi import FastAPI
@@ -29,7 +29,7 @@ pytestmark = pytest.mark.unit
 
 
 class _FakeSyncResult:
-    def __init__(self, mode: str, items: int = 3, errors: list | None = None):
+    def __init__(self, mode: str, items: int = 3, errors: Optional[list] = None):
         self.mode = mode
         self.items = items
         self.errors = errors or []

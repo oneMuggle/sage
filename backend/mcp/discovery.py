@@ -67,7 +67,7 @@ class McpServerDiscoveryService:
         "mcp.json",
     ]
 
-    def __init__(self, workspace_dir: Optional[[Path, str]] = None) -> None:
+    def __init__(self, workspace_dir: Optional[Union[Path, str]] = None) -> None:
         """
         Initialize discovery service.
 

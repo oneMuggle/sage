@@ -36,7 +36,7 @@ _LLM_RETRY_MAX_ATTEMPTS = RETRY_DEFAULTS["llmRetryMaxAttempts"]
 _LLM_RETRY_BASE_DELAY_S = RETRY_DEFAULTS["llmRetryBaseDelayS"]
 #: 单次退避上限
 _LLM_RETRY_MAX_DELAY_S = RETRY_DEFAULTS["llmRetryMaxDelayS"]
-#: 自动重试的总时长预算（秒）：从首次尝试起算，退避前的累计耗时超预算即停止。
+#: 自动重试的总时长预算（秒）：从首次尝试起算，含在途请求与退避的累计耗时。
 #: 0 表示不限制；env ``SAGE_LLM_RETRY_TOTAL_BUDGET_S`` 覆盖（调试/测试用）。
 _LLM_RETRY_TOTAL_BUDGET_S = RETRY_DEFAULTS["llmRetryTotalBudgetS"]
 #: 预算启用时，剩余预算低于该值就不再发起新的尝试（避免"必然超时"的空等）。

@@ -26,8 +26,9 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import get_database
 from backend.office.errors import OfficeFileNotFoundError, OfficePathError
 from backend.office.models import OfficeDocumentSummary
@@ -37,6 +38,7 @@ from backend.office.storage import (
     ensure_content_hash_table,
     find_documents_by_hash,
     get_document,
+    list_duplicate_groups,
     set_document_lineage,
     validate_workspace,
 )
@@ -86,6 +88,24 @@ class OfficeDuplicateCheckResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     files: List[OfficeDuplicateCheckEntry] = Field(default_factory=list)
+
+
+class OfficeDuplicateGroup(BaseModel):
+    """Live documents in one workspace that share identical bytes."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content_hash: str
+    documents: List[OfficeDocumentSummary] = Field(default_factory=list)
+
+
+class OfficeDuplicateGroupsResult(BaseModel):
+    """All duplicate groups in a workspace, newest group first."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    groups: List[OfficeDuplicateGroup] = Field(default_factory=list)
+    total: int = Field(default=0, ge=0)
 
 
 class OfficeDocumentLineageRequest(BaseModel):
@@ -148,6 +168,30 @@ def check_duplicates_endpoint(
             )
         )
     return OfficeDuplicateCheckResult(files=entries)
+
+
+@router.get("/duplicate-groups", response_model=OfficeDuplicateGroupsResult)
+def list_duplicate_groups_endpoint(
+    workspace_path: str,
+) -> OfficeDuplicateGroupsResult:
+    """List groups of live documents whose bytes are identical.
+
+    Powers the document library's duplicate badge + "keep newest, archive
+    the rest" cleanup action (Phase 1 Item A). Only groups with two or more
+    live documents are returned; documents imported before content hashing
+    existed are never reported as duplicates.
+    """
+    workspace = validate_workspace(workspace_path)
+    canonical_workspace = str(workspace.resolve())
+    conn = get_database().get_connection()
+    groups = list_duplicate_groups(conn, canonical_workspace)
+    return OfficeDuplicateGroupsResult(
+        groups=[
+            OfficeDuplicateGroup(content_hash=digest, documents=documents)
+            for digest, documents in groups
+        ],
+        total=len(groups),
+    )
 
 
 @router.post("/{doc_id}/lineage", response_model=OfficeDocumentLineageResponse)

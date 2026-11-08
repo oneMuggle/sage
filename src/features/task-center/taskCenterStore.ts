@@ -12,7 +12,7 @@ import { create } from 'zustand';
 
 import type { WordFormatSpec } from '../../shared/api/types';
 
-export type TaskKind = 'office' | 'wiki' | 'custom';
+export type TaskKind = 'office' | 'wiki' | 'custom' | 'shell';
 
 export type TaskCenterStatus =
   | 'queued'
@@ -72,6 +72,10 @@ export interface TaskCenterEntry {
   deliveryRef?: OfficeDeliveryRef | null;
   /** P11: 关联文档名（office 任务跳转 /office 后定位并高亮文档行）。 */
   docName?: string | null;
+  /** 2026-11-07 Phase 5: 后台 shell 的 shell_id（TaskCenter 聚合条目）。 */
+  shellId?: string | null;
+  /** Phase 5: shell 退出码（running 时为 null）。 */
+  exitCode?: number | null;
 }
 
 export interface TaskCenterPatch {
@@ -83,14 +87,20 @@ export interface TaskCenterPatch {
   sessionId?: string | null;
   runId?: string | null;
   deliveryRef?: OfficeDeliveryRef | null;
+  shellId?: string | null;
+  exitCode?: number | null;
 }
 
 interface TaskCenterState {
   tasks: Record<string, TaskCenterEntry>;
   /** A4: 当前打开的交付抽屉（null = 关闭）。 */
   delivery: DeliveryDrawerState;
+  /** Phase 5: 当前打开的后台 shell 输出抽屉（shell_id；null = 关闭）。 */
+  shellStream: string | null;
   openDelivery: (next: Exclude<DeliveryDrawerState, null>) => void;
   closeDelivery: () => void;
+  openShellStream: (shellId: string) => void;
+  closeShellStream: () => void;
   registerTask: (
     id: string,
     kind: TaskKind,
@@ -99,6 +109,10 @@ interface TaskCenterState {
     /** P11: 关联文档名（office 任务跳转后定位文档行）。 */
     docName?: string,
   ) => void;
+  /** Phase 5: 后台 shell 列表轮询的 upsert（按 shell_id 幂等）。 */
+  registerShell: (shell: ShellRegistration) => void;
+  /** Phase 5: 清理已消失的运行中 shell（被其它入口终止/清理）。 */
+  removeMissingShells: (activeShellIds: readonly string[]) => void;
   updateTask: (id: string, patch: TaskCenterPatch) => void;
   /** Legacy semantic: drop the entry (existing callers unchanged). */
   finishTask: (id: string) => void;
@@ -115,14 +129,27 @@ interface TaskCenterState {
   clearHighlight: () => void;
 }
 
+/** Phase 5: `listShells()` 条目的最小注册面。 */
+export interface ShellRegistration {
+  shell_id: string;
+  command: string;
+  status: 'running' | 'exited';
+  exit_code?: number | null;
+  age_seconds?: number;
+}
+
 export const useTaskCenterStore = create<TaskCenterState>((set) => ({
   tasks: {},
   delivery: null,
+  shellStream: null,
   pendingHighlight: null,
   setHighlight: (docName) => set({ pendingHighlight: { docName, at: Date.now() } }),
   clearHighlight: () => set({ pendingHighlight: null }),
-  openDelivery: (next) => set({ delivery: next }),
+  // 抽屉互斥：同时只开一个全局抽屉。
+  openDelivery: (next) => set({ delivery: next, shellStream: null }),
   closeDelivery: () => set({ delivery: null }),
+  openShellStream: (shellId) => set({ shellStream: shellId, delivery: null }),
+  closeShellStream: () => set({ shellStream: null }),
   registerTask: (id, kind, title, phase, docName) =>
     set((state) => {
       const existing = state.tasks[id];
@@ -160,6 +187,48 @@ export const useTaskCenterStore = create<TaskCenterState>((set) => ({
       const existing = state.tasks[id];
       if (!existing) return state;
       return { tasks: { ...state.tasks, [id]: { ...existing, ...patch } } };
+    }),
+  registerShell: (shell) =>
+    set((state) => {
+      const id = `shell:${shell.shell_id}`;
+      const existing = state.tasks[id];
+      const status: TaskCenterStatus =
+        shell.status === 'running' ? 'running' : shell.exit_code === 0 ? 'succeeded' : 'failed';
+      const startedAt =
+        existing?.startedAt ?? Date.now() - Math.max(0, (shell.age_seconds ?? 0) * 1000);
+      return {
+        tasks: {
+          ...state.tasks,
+          [id]: {
+            ...(existing ?? {}),
+            id,
+            kind: 'shell',
+            title: shell.command.trim().slice(0, 120) || shell.shell_id,
+            startedAt,
+            status,
+            shellId: shell.shell_id,
+            exitCode: shell.exit_code ?? null,
+            ...(status !== 'running' && existing?.finishedAt == null
+              ? { finishedAt: Date.now() }
+              : {}),
+          } as TaskCenterEntry,
+        },
+      };
+    }),
+  removeMissingShells: (activeShellIds) =>
+    set((state) => {
+      const active = new Set(activeShellIds.map((sid) => `shell:${sid}`));
+      const next: Record<string, TaskCenterEntry> = {};
+      let changed = false;
+      for (const [id, task] of Object.entries(state.tasks)) {
+        // 只清理"运行中但已从注册表消失"的条目；终态条目保留给用户查看。
+        if (task.kind === 'shell' && task.status === 'running' && !active.has(id)) {
+          changed = true;
+          continue;
+        }
+        next[id] = task;
+      }
+      return changed ? { tasks: next } : state;
     }),
   finishTask: (id) =>
     set((state) => {

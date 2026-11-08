@@ -128,7 +128,7 @@ class TestComplexTurnSignalDetection:
             with patch.object(
                 service, "_execute_tool_calls", new_callable=AsyncMock
             ) as mock_exec:
-                mock_exec.return_value = False
+                mock_exec.return_value = (False, [])
 
                 asyncio.run(
                     service._run_turn_inner(
@@ -189,7 +189,7 @@ class TestComplexTurnSignalDetection:
             with patch.object(
                 service, "_execute_tool_calls", new_callable=AsyncMock
             ) as mock_exec:
-                mock_exec.return_value = False
+                mock_exec.return_value = (False, [])
 
                 asyncio.run(
                     service._run_turn_inner(
@@ -245,7 +245,7 @@ class TestComplexTurnSignalDetection:
             with patch.object(
                 service, "_execute_tool_calls", new_callable=AsyncMock
             ) as mock_exec:
-                mock_exec.return_value = False
+                mock_exec.return_value = (False, [])
 
                 asyncio.run(
                     service._run_turn_inner(
@@ -310,7 +310,7 @@ class TestComplexTurnSignalDetection:
             with patch.object(
                 service, "_execute_tool_calls", new_callable=AsyncMock
             ) as mock_exec:
-                mock_exec.return_value = False
+                mock_exec.return_value = (False, [])
 
                 asyncio.run(
                     service._run_turn_inner(

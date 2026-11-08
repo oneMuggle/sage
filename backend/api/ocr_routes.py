@@ -12,8 +12,9 @@ from __future__ import annotations
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.services.ocr import (
     MAX_IMAGE_BYTES,
     get_ocr_service,

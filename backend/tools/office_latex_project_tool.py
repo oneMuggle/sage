@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
+from backend.tools.office_workspace_scope import workspace_for_policy
 
 
 def _require_context() -> Optional[ToolResult]:
@@ -73,7 +74,7 @@ class OfficeExtractLatexProjectTool(BaseTool):
         from backend.office.errors import OfficeError
         from backend.office.latex.service import extract_latex_project_service
 
-        root = Path(self._policy.workspace_root or str(target.parent))
+        root = workspace_for_policy(self._policy, target)
         try:
             result = extract_latex_project_service(
                 target,
