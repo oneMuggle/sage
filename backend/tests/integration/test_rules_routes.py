@@ -498,3 +498,136 @@ def test_import_rejects_empty_pack(client: TestClient) -> None:
         },
     )
     assert response.status_code == 422
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Final fix round — provider failures, unsafe patterns, group cap
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _pack_with_rules(rules: list) -> dict:
+    return {
+        "name": "导入包",
+        "version": "1.0",
+        "exported_at": "2026-11-07T00:00:00+00:00",
+        "exported_by": "other-machine",
+        "groups": [
+            {
+                "id": "group-original",
+                "name": "导入组",
+                "description": "",
+                "priority": 0,
+                "builtin": False,
+                "rules": rules,
+            }
+        ],
+    }
+
+
+def test_audit_ai_provider_failure_returns_502_json(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+    ai_rule = dict(RULE, name="AI 规则", check_mode="ai", pattern=None, ai_prompt="检查术语")
+    rule = client.post(f"/api/v1/rules/groups/{group['id']}/rules", json=ai_rule).json()
+    _write_text_docx(tmp_path / "doc.docx", "正文")
+
+    class _BrokenClient:
+        async def complete(self, prompt: str) -> str:
+            raise RuntimeError("provider down")
+
+    from backend.api import rules_routes
+
+    monkeypatch.setattr(rules_routes, "build_llm_client_from_settings", lambda: _BrokenClient())
+    response = client.post(
+        "/api/v1/rules/audit",
+        json={
+            "workspace_path": str(tmp_path),
+            "file_path": str(tmp_path / "doc.docx"),
+            "rule_ids": [rule["id"]],
+        },
+    )
+    assert response.status_code == 502, response.text
+    body = response.json()
+    assert body["error_type"] == "OfficeLLMError"
+    assert body["message"] == "LLM 调用失败，请稍后重试"
+
+
+def test_create_rejects_oversized_pattern(client: TestClient) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+    response = client.post(
+        f"/api/v1/rules/groups/{group['id']}/rules",
+        json=dict(RULE, pattern="a" * 1001),
+    )
+    assert response.status_code == 422, response.text
+
+
+def test_update_and_create_reject_nested_quantifier(client: TestClient) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+
+    create_rejected = client.post(
+        f"/api/v1/rules/groups/{group['id']}/rules",
+        json=dict(RULE, pattern="^(a+)+$"),
+    )
+    assert create_rejected.status_code == 422, create_rejected.text
+
+    rule = client.post(f"/api/v1/rules/groups/{group['id']}/rules", json=RULE).json()
+    update_rejected = client.put(f"/api/v1/rules/rules/{rule['id']}", json={"pattern": "^(a+)+$"})
+    assert update_rejected.status_code == 422, update_rejected.text
+
+
+def test_import_rejects_nested_quantifier_pattern(client: TestClient) -> None:
+    rule = {
+        "id": "rule-original",
+        "name": "危险正则",
+        "type": "custom",
+        "severity": "warning",
+        "scope": "body",
+        "description": "",
+        "check_mode": "regex",
+        "pattern": "^(a+)+$",
+        "ai_prompt": None,
+        "enabled": True,
+        "group_id": "group-original",
+    }
+    response = client.post("/api/v1/rules/import", json=_pack_with_rules([rule]))
+    assert response.status_code == 422, response.text
+
+
+def test_import_rejects_too_many_groups(client: TestClient) -> None:
+    groups = []
+    for index in range(101):
+        groups.append(
+            {
+                "id": f"group-{index}",
+                "name": f"组 {index}",
+                "description": "",
+                "priority": 0,
+                "builtin": False,
+                "rules": [
+                    {
+                        "id": f"rule-{index}",
+                        "name": "规则",
+                        "type": "custom",
+                        "severity": "warning",
+                        "scope": "body",
+                        "description": "",
+                        "check_mode": "regex",
+                        "pattern": "x",
+                        "ai_prompt": None,
+                        "enabled": True,
+                        "group_id": f"group-{index}",
+                    }
+                ],
+            }
+        )
+    payload = {
+        "name": "过大",
+        "version": "1.0",
+        "exported_at": "2026-11-07T00:00:00+00:00",
+        "exported_by": "local",
+        "groups": groups,
+    }
+    response = client.post("/api/v1/rules/import", json=payload)
+    assert response.status_code == 422, response.text
+    assert "分组" in response.json()["message"]

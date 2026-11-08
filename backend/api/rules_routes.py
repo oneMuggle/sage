@@ -5,7 +5,8 @@ CRUD for rule groups and rules, plus AI-assisted rule extraction from a
 .docx specification. Mounted under ``/api/v1/rules`` by ``backend/main.py``.
 
 All payloads are snake_case on the wire; the frontend converts to camelCase
-in ``rulePackSerialization.ts``.
+in ``ruleMapping.ts`` (``rulePackSerialization.ts`` consumes it for
+``.sage-rules`` files).
 """
 
 from __future__ import annotations
@@ -18,12 +19,20 @@ from typing import List, Optional, Tuple
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
+# Pydantic v1/v2 compatibility (matches backend/plugins/manifest.py idiom).
+try:
+    # Pydantic v2
+    from pydantic import field_validator
+except ImportError:  # pragma: no cover — release/win7 runs v1
+    # Pydantic v1 fallback
+    from pydantic import validator as field_validator  # type: ignore
+
 from backend.data.database import Database, get_database
 from backend.office.errors import OfficePathError, OfficeSizeLimitError
 from backend.office.path_safety import resolve_within
 from backend.office.rule_conflicts import detect_conflicts
 from backend.office.rule_executor import run_audit
-from backend.office.rule_models import AuditResult, Rule, RuleGroup, RulePack
+from backend.office.rule_models import AuditResult, Rule, RuleGroup, RulePack, _check_pattern
 from backend.office.rule_pack_io import build_rule_pack, import_rule_pack
 from backend.office.rule_repo import (
     create_group,
@@ -115,6 +124,11 @@ class RuleCreateRequest(BaseModel):
     ai_prompt: Optional[str] = None
     enabled: bool = True
 
+    @field_validator("pattern")
+    @classmethod
+    def _validate_pattern(cls, value: Optional[str]) -> Optional[str]:
+        return _check_pattern(value)
+
 
 class RuleUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -130,6 +144,11 @@ class RuleUpdateRequest(BaseModel):
     pattern: Optional[str] = None
     ai_prompt: Optional[str] = None
     enabled: Optional[bool] = None
+
+    @field_validator("pattern")
+    @classmethod
+    def _validate_pattern(cls, value: Optional[str]) -> Optional[str]:
+        return _check_pattern(value)
 
 
 class ExtractRequest(BaseModel):
