@@ -332,10 +332,7 @@ export const rulesApi = {
     return invoke<RulesExportResult>('rules_export_rules', { projectId, ...options });
   },
 
-  previewImport(
-    envelope: unknown,
-    projectId?: string,
-  ): Promise<{ candidates: ImportCandidate[] }> {
+  previewImport(envelope: unknown, projectId?: string): Promise<{ candidates: ImportCandidate[] }> {
     return invoke<{ candidates: ImportCandidate[] }>('rules_import_preview', {
       envelope,
       projectId,

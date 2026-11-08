@@ -17,7 +17,13 @@ export interface RadioGroupProps {
 }
 
 /** Minimal accessible radio group primitive (no third-party dependencies). */
-export function RadioGroup({ value, onValueChange, children, className, ...rest }: RadioGroupProps) {
+export function RadioGroup({
+  value,
+  onValueChange,
+  children,
+  className,
+  ...rest
+}: RadioGroupProps) {
   return (
     <RadioGroupContext.Provider value={{ value, onValueChange }}>
       <div role="radiogroup" className={clsx('space-y-1', className)} {...rest}>

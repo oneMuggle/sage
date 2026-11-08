@@ -26,12 +26,7 @@ function renderDialog() {
   const onOpenChange = vi.fn();
   render(
     <I18nProvider defaultLocale="zh">
-      <RulesExportDialog
-        open
-        onOpenChange={onOpenChange}
-        projectId="p1"
-        projectName="演示项目"
-      />
+      <RulesExportDialog open onOpenChange={onOpenChange} projectId="p1" projectName="演示项目" />
     </I18nProvider>,
   );
   return { onOpenChange };

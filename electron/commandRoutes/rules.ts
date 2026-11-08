@@ -105,8 +105,7 @@ export const rulesRoutes: Record<string, CommandRoute> = {
         params.set('include_playbook', String(Boolean(a.includePlaybook)));
       if (a.includeGlobal !== undefined)
         params.set('include_global', String(Boolean(a.includeGlobal)));
-      if (a.includeDocs !== undefined)
-        params.set('include_docs', String(Boolean(a.includeDocs)));
+      if (a.includeDocs !== undefined) params.set('include_docs', String(Boolean(a.includeDocs)));
       const qs = params.toString();
       return `/api/v1/projects/${projectId(a)}/rules/export${qs ? `?${qs}` : ''}`;
     },

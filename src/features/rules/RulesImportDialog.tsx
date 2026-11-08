@@ -250,9 +250,7 @@ export function RulesImportDialog({
                           {t(STATUS_LABEL_KEY[candidate.status])}
                         </span>
                         {candidate.category ? (
-                          <span className="text-xs text-text-tertiary">
-                            {candidate.category}
-                          </span>
+                          <span className="text-xs text-text-tertiary">{candidate.category}</span>
                         ) : null}
                       </div>
                       <p className="line-clamp-2 text-text">{candidate.content}</p>
