@@ -7,6 +7,7 @@ import type {
   Message,
   Session,
   SessionCompactResult,
+  RecapResponse,
   SessionExportResult,
   SessionLineage,
   SessionRetreatResult,
@@ -125,6 +126,27 @@ export const sessionApi = {
     }
     try {
       return await invoke<SessionCompactResult>('session_compact', { sessionId });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Recap (2026-11-08): 生成会话进度总结（对标 Claude Code /recap）。
+   *
+   * 刻意**不走 withRetry**：失败路径（502）意味着 LLM 摘要出错，
+   * 重试只会浪费 token。返回 {ok, recap?, reason?, error?, message?}。
+   */
+  async recap(sessionId: string): Promise<RecapResponse> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    try {
+      return await invoke<RecapResponse>('session_recap', { sessionId });
     } catch (error) {
       throw handleApiError(error);
     }

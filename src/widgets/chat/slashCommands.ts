@@ -15,6 +15,7 @@ import {
   FileSpreadsheet,
   BookText,
   GitBranch,
+  ClipboardList,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -36,6 +37,7 @@ export interface SlashCommand {
    * - 'skill': 作为 SKILL.md skill 执行,返回内容作为用户消息发送
    * - 'compact': 调用后端压缩当前会话上下文 (M4, 真实 action 而非提示词)
    * - 'learn': 触发 Background Review 当前会话,产生技能草案候选 (Task 12)
+   * - 'recap': Recap (2026-11-08) 生成会话进度总结（对标 Claude Code /recap）
    * - 'plan': PM2 (round8) 计划模式 —— 剩余文本以 planMode 发送
    * - 'template': R27-A Prompt 模板 —— 选中即填充输入框（不发送）
    * - 'navigate': 对标 S3 页面直达 —— 跳转到 `route`（/office /journal /schedule /wiki /memory）
@@ -48,6 +50,7 @@ export interface SlashCommand {
     | 'skill'
     | 'compact'
     | 'learn'
+    | 'recap'
     | 'plan'
     | 'template'
     | 'navigate'
@@ -127,6 +130,14 @@ export const slashCommands: SlashCommand[] = [
     description: '从当前对话中学习,生成技能草案候选',
     icon: GraduationCap,
     mode: 'learn',
+  },
+  {
+    // Recap (2026-11-08): 对标 Claude Code /recap —— 生成会话进度总结
+    name: 'recap',
+    label: '进度总结',
+    description: '总结当前会话的进展、决策与下一步',
+    icon: ClipboardList,
+    mode: 'recap',
   },
   {
     name: 'prompt-save',

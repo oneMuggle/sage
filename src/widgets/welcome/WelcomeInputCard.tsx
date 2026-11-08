@@ -249,7 +249,12 @@ export function WelcomeInputCard({
       setValue('');
       return;
     }
-    if (cmd.mode === 'compact' || cmd.mode === 'learn' || cmd.mode === 'worktree') {
+    if (
+      cmd.mode === 'compact' ||
+      cmd.mode === 'learn' ||
+      cmd.mode === 'recap' ||
+      cmd.mode === 'worktree'
+    ) {
       return;
     }
     onSend?.(commandToPrompt(cmd, args));

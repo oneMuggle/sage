@@ -354,4 +354,10 @@ class LearnRequest(BaseModel):
     prompt: str = ""
 
 
+class RecapRequest(BaseModel):
+    """POST /chat/recap 请求体 —— 生成会话进度总结。"""
+
+    session_id: str
+
+
 

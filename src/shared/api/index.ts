@@ -195,6 +195,8 @@ export type {
   QuestionOption,
   Session,
   SessionCompactResult,
+  RecapResult,
+  RecapResponse,
   SessionLineage,
   LineageArchive,
   SessionWorkspaceBinding,
