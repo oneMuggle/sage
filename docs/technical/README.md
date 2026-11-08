@@ -118,6 +118,7 @@
 | 138 | [专家页面交互（P0–P2）](./138-specialist-page-ux.md) | 卡片主操作/色调/禁用态 + 来源筛选/搜索/空态 + 知识数/批量操作/最近使用 + 详情页 `/specialists/:id` + 排序置顶（migration v14/v15） |
 | 139 | [专家私聊与群聊（M1 + M2）](./139-specialist-dm-group-chat.md) | 专家升格为 IM 联系人（卡片点击即私聊、会话项显示专家徽标）+ 群聊 MVP（migration v16 参与者表 + 参与者 CRUD + @ 显式调度 + 气泡发送者） |
 | 140 | [插话暂存区](./140-steer-staging-panel.md) | AI 忙碌时发送的补充消息进暂存条（可撤回）+ 消费回执事件 `STEER_CONSUMED` + 409 窗口修复 + 流末未消费转排队 |
+| 141 | [Recap 进度总结](./141-recap-feature.md) | `/recap` 斜杠命令手动触发 LLM 生成结构化总结（进度/决策/下一步/待确认问题）+ `POST /api/v1/chat/recap` 五分支契约 + 5 分钟节流 + 消息不足 3 条单独返回 `too_short` |
 
 ---
 

@@ -103,6 +103,6 @@ camelCase 字段名（与 `to_dict()` 输出一致），前端直接用，无需
 
 ## 7. 与 release/win7 同步
 
-PR #2948 从 `feat/recap-feature` cherry-pick 到 `release/win7`（通过 `cherry-pick/recap-to-win7` 分支）。冲突解决：`src/widgets/chat/slashCommands.ts` 中 `Activity`/`Stethoscope`/`Settings` 三个图标在 main 引入但 win7 未用，仅保留 `ClipboardList`（recap 命令使用）。
+PR #2948 从 `feat/recap-feature` cherry-pick 到 `release/win7`（通过 `cherry-pick/recap-to-win7` 分支）。冲突解决：`src/widgets/chat/slashCommands.ts` 中 `Activity`/`Stethoscope`/`Settings`（自透明对等命令）与 `ClipboardList`（recap 命令）四个图标全部保留，合并后命令列表同时包含两批命令。
 
 Python 3.8 兼容：`backend/chat/recap.py` 顶部 `# ruff: noqa: UP006, UP007, UP035, UP045` + `from __future__ import annotations`。
