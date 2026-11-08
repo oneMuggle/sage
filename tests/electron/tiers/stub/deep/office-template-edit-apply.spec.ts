@@ -9,8 +9,10 @@
 //
 // Demo stub responses the assertions rely on:
 //   - office_list_templates      → DEMO_OFFICE_TEMPLATES (builtin weekly_report first word entry)
-//   - office_templates_instantiate → persists a generated row (unshifted → first in list),
-//                                  returns filled_count / unfilled_placeholders
+//   - POST /api/v1/office/generate/template-chat → demoBackendRequest (HTTP relay
+//                                  intercept in demo mode) delegates to the
+//                                  office_word_generate stub, which unshifts a
+//                                  generated row and names it `<template_id>-生成.docx`
 //   - office_list_snapshots / office_restore_snapshot → 2 fake snapshots, restore ok
 //   - office_word_read           → DEMO_WORD_READ (summary stays of-1: the read
 //                                  stub ignores the path, so the preview panel /
@@ -26,9 +28,8 @@ import { launchElectronWithStub, type ElectronWithStub } from '../../../helpers/
 
 const OFFICE_URL = 'http://localhost:1420/#/office';
 
-const TEMPLATE_FILENAME = '周报-E2E-覆盖.docx';
-/** New doc row's filename in the list right after 创建. */
-const TEMPLATE_ROW_TITLE = TEMPLATE_FILENAME;
+/** P3 template-chat demo handler names the output `<template_id>-生成.docx`. */
+const TEMPLATE_ROW_TITLE = 'weekly_report-生成.docx';
 /** of-1 — the summary office_word_read always returns in demo mode. */
 const DEMO_WORD_ROW_TITLE = '文献综述报告-大模型医学应用.docx';
 
@@ -56,42 +57,29 @@ test.describe('office template create → edit preview → apply (demo stub mode
   });
 
   test('instantiate a builtin template, restore it into preview, apply a replace_text edit', async () => {
-    // ── 1. Word tab → 从模板创建 ──────────────────────────────────────
-    // 2026-11 IA restructure: the generate form (and its WORD/PPT/EXCEL/PDF
-    // format tabs) moved into the dedicated "文档生成" top-level tab. The
-    // beforeEach lands on the default "文档处理" tab, so we must switch first.
+    // ── 1. 生成页签 → 模板对话模式 ────────────────────────────────────
+    // 2026-11 IA restructure: the generate form moved into the dedicated
+    // "文档生成" top-level tab. The beforeEach lands on "文档处理", so switch first.
     await page.getByTestId('office-tab-generate').click();
-    await page.getByRole('button', { name: 'WORD', exact: true }).click();
-    await page.getByTestId('office-word-mode-template').click();
+    await page.getByTestId('office-generate-workspace-mode-template').click();
 
-    // The picker lazily fetches office_list_templates; the first builtin
-    // word template in the demo registry is weekly_report (周报模板).
-    const picker = page.getByTestId('office-template-picker');
-    await expect(picker).toBeVisible();
-    await page.getByTestId('office-template-option-weekly_report').click();
+    // P3: TemplateLibrary lazily fetches office_list_templates; the first
+    // builtin word template in the demo registry is weekly_report (周报模板).
+    const library = page.getByTestId('office-template-library');
+    await expect(library).toBeVisible();
+    await page.getByTestId('office-template-library-item-weekly_report').click();
 
-    // A picked template renders one field per placeholder (testid IS the
-    // input/textarea element): author is a text input, this_week a
-    // rich_text textarea.
-    await expect(page.getByTestId('office-template-fields')).toBeVisible();
-    await page.getByTestId('office-template-input-author').fill('E2E 测试员');
+    // P3: placeholder filling is now a chat turn — one instruction input.
     await page
-      .getByTestId('office-template-input-this_week')
-      .fill('- 完成 office e2e 覆盖\n- 修复评审意见');
+      .getByTestId('office-generate-workspace-chat-input')
+      .fill('作者：E2E 测试员。本周完成 office e2e 覆盖，并修复评审意见。');
 
-    await page.getByTestId('office-generate-filename').fill(TEMPLATE_FILENAME);
+    await page.getByTestId('office-generate-workspace-submit').click();
 
-    // ── 2. 创建 → success toast + list gains the doc ─────────────────
-    await page.getByTestId('office-generate-submit').click();
-    await expect(page.locator('[data-sonner-toast]', { hasText: '已从模板创建' })).toBeVisible();
+    // ── 2. 生成 → success toast + list gains the doc ─────────────────
+    await expect(page.locator('[data-sonner-toast]', { hasText: '已生成' })).toBeVisible();
 
-    // ── 2b. A4b: word 产物自动打开交付抽屉；断言出现后关闭 ────────
-    const deliveryDrawer = page.getByTestId('office-delivery-drawer');
-    await expect(deliveryDrawer).toBeVisible();
-    await deliveryDrawer.getByTestId('drawer-close').click();
-    await expect(deliveryDrawer).toBeHidden();
-
-    // ── 2c. The generate form lives in the "文档生成" tab, but the
+    // ── 2b. The generate workspace lives in the "文档生成" tab, but the
     // document list (and the new row's 历史版本 action) is in the
     // "文档处理" tab. Switch back so Playwright can see and click the list.
     await page.getByTestId('office-tab-documents').click();

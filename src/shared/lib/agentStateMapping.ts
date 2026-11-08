@@ -114,6 +114,7 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
     case 'plan_execution_mode': // 2026-10-28 Plan Mode 增强: 执行模式推荐进 store,不进气泡占位
     case 'research_complete': // 2026-10-28 Plan Mode 增强 Phase 2: 调研报告进 store,不进气泡占位
     case 'awaiting_step_confirm': // 2026-10-28 Plan Mode 增强 Phase 3: 步骤确认由 StepConfirmDialog 承载,不进气泡占位
+    case 'steer_consumed': // 2026-11-07: 插话消费回执 —— 暂存 chip 移除 + 落聊天区,不进气泡占位
       return null;
     default:
       return assertNever(state);
@@ -176,6 +177,7 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
     case 'plan_execution_mode': // 2026-10-28 Plan Mode 增强: 执行模式推荐进 store,无独立 UI 阶段
     case 'research_complete': // 2026-10-28 Plan Mode 增强 Phase 2: 调研报告进 store,无独立 UI 阶段
     case 'awaiting_step_confirm': // 2026-10-28 Plan Mode 增强 Phase 3: 步骤确认由 StepConfirmDialog 承载,无独立 UI 阶段
+    case 'steer_consumed': // 2026-11-07: 插话消费回执,暂存 chip 移除,无独立 UI 阶段
       return null;
     case 'retry': // 2026-10-20: LLM 重试 — 指示器显示"重试中"+ 旋转图标
     case 'heartbeat': // 2026-10-26: 退避心跳 — 指示器复用"重试中"(后端仍在重试退避等待)

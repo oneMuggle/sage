@@ -845,6 +845,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 "cancelled": False,
                 "session_id": data.session_id,
             }
+            # 2026-11-07: 注册即开启插话接收窗口 —— 编排模式分类是一次独立
+            # LLM 调用（1–3s），该窗口内 run_loop 尚未启动。此前 inject 判据
+            # 依赖 _run_loop_active，窗口内插话被 409 拒绝，前端静默降级为
+            # 排队（用户感知为"插话变成下一轮消息"）。
+            agent.begin_accept_steer()
 
             # Build system prompt with specialist persona support (M0)
             from backend.chat.specialist_prompt_composer import compose_system_prompt
@@ -2913,6 +2918,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # run_id 为 None（single 路径）时跳过 —— 从未注册过。
             if run_id:
                 _ACTIVE_DISPATCHERS.pop(run_id, None)
+            # 2026-11-07: 关闭插话接收窗口 —— run_loop 未启动即失败的路径
+            # 不会走到自身的 finally，必须在此兜底清空未消费插话。
+            agent.end_accept_steer()
             # P0-2 (2026-08-20): 注销流注册表 —— stream 结束 / interrupt 不再命中陈旧实例。
             _ACTIVE_STREAMS.pop(stream_id, None)
             # P0-4 (2026-08-20): orch run 终态闭环 —— 让 run 离开 "running"。

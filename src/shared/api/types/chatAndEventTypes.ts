@@ -422,7 +422,10 @@ export type AgentState =
   // 2026-10-28 (Plan Mode 增强 Phase 3): 步骤确认卡点 ——
   // plan 执行到标记为 auto_confirm 的步骤时推送，载荷见 AgentEvent.step_confirm。
   // 前端弹出 StepConfirmDialog 等待用户操作（continue/skip/abort）。
-  | 'awaiting_step_confirm';
+  | 'awaiting_step_confirm'
+  // 2026-11-07: 插话消费回执 —— run_loop 在迭代边界排空 steering 队列后推送,
+  // 载荷见 AgentEvent.steer_info; 前端据此移除输入框上方的暂存 chip。
+  | 'steer_consumed';
 
 /**
  * TM2 (DSH 对标 R11): 上下文水位计量快照 —— 随 `state: 'context_pressure'`
@@ -779,6 +782,9 @@ export interface AgentEvent {
     progress_signals?: number;
     reasons?: string[];
   };
+  // 2026-11-07: state === 'steer_consumed' 时携带被消费的插话 id 列表。
+  // 前端据此移除暂存区 chip 并按 id 落聊天区（与撤回竞态的去重依据）。
+  steer_info?: { ids: string[] };
   // Multi-Agent Orchestration (2026-08-11): 宽松字段（与 llmStream.ts AgentEvent 同步）
   run_id?: string;
   plan?: TaskPlanItem[];
