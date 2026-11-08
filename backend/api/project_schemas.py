@@ -68,6 +68,7 @@ class ProjectModel(BaseModel):
     playbook_state: Optional[str] = None
     parent_id: Optional[str] = None
     discovery_source: Optional[str] = None
+    status: str = "active"
     session_count: int = 0
     last_session_id: Optional[str] = None
 
@@ -95,6 +96,7 @@ class ProjectUpdateRequest(BaseModel):
         default=None,
         pattern="^(git|builtin)$",
     )
+    status: Optional[str] = Field(default=None, pattern="^(active|archived)$")
 
 
 class ProjectMaterialAddRequest(BaseModel):

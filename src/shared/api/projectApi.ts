@@ -34,6 +34,7 @@ import {
   type ProjectScaffoldOptions,
   type ProjectScaffoldResult,
   type ProjectSessionsWire,
+  type ProjectStatus,
   type ProjectSummary,
   type ProjectType,
   type ProjectTypeDetectionResult,
@@ -1094,6 +1095,16 @@ export const projectApi = {
         project_type: projectType,
       });
       return mapProject(project);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 工作台总览：切换项目生命周期状态（active / archived）。 */
+  async setProjectStatus(id: string, status: ProjectStatus): Promise<ProjectSummary> {
+    try {
+      const wire = await invoke<ProjectWire>('projects_update', { id, status });
+      return mapProject(wire);
     } catch (error) {
       throw handleApiError(error);
     }

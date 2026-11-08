@@ -8,7 +8,7 @@
 //
 // 预算（实测留 ~10% 余量，超限即失败）：
 //   - dist/assets 总体积   ≤ 12MB   （2026-09-24 实测 ~9.9MB）
-//   - 最大单个 .js chunk   ≤ 1.9MB  （2026-11-06 CI 实测 1895KB）
+//   - 最大单个 .js chunk   ≤ 1.95MB （2026-11-08 CI 实测 1960KB）
 //
 // 2026-10-30 棘轮上调：设置页 IA 收敛（#2657）把设置项 i18n 词典拆入
 // settingsUi.ts 并随默认语言包静态加载，主 chunk 由 1.45MB 增至 1.70MB，
@@ -30,6 +30,12 @@
 // 1.85MB 预算 1KB。按棘轮协议仅上调该项至 1.9MB（保留 ~50KB 余量），
 // 已覆盖上述定时任务（#2898）的增长，无需再单独上调。
 //
+// 2026-11-08 棘轮上调：项目工作台治理中心（规则中心 + 导入导出，PR #2952）
+// 在 i18n 词典新增四类规则编辑/校验/导入导出与规程库文案（约 900 行
+// 中英双语），并随默认语言包静态加载；RulesPanel 等 UI 本身走
+// GovernanceShell 懒加载，不进入主 chunk。CI 实测 1960KB，超 1.9MB
+// （1946KB）预算 14KB。按棘轮协议仅上调该项至 1.95MB（保留 ~37KB 余量）。
+//
 // 用法：npm run build 之后执行 `node scripts/check-bundle-size.mjs`。
 // 退出码：0 = 全部预算内；1 = 超限或 dist 不存在。
 // 若为有意的功能增长导致超限，更新本文件 BUDGETS 并在 PR 说明依据
@@ -41,7 +47,7 @@ const ASSETS = 'dist/assets';
 
 const BUDGETS = [
   { name: 'dist/assets 总体积', max: 12 * 1024 * 1024 },
-  { name: '最大单个 .js chunk', max: 1.9 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
+  { name: '最大单个 .js chunk', max: 1.95 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
 ];
 
 if (!readdirSync('.').includes('dist')) {

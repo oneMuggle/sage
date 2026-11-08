@@ -18,6 +18,17 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   } as unknown as typeof ResizeObserver;
 }
 
+/* ── Mock react-router-dom ─────────────────────────────────────────── */
+
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
+
 /* ── Mock API surface ─────────────────────────────────────────────── */
 
 const listMock = vi.fn();
@@ -144,6 +155,7 @@ describe('WorkbenchProjectList', () => {
     listMock.mockResolvedValue([]);
     listMaterialsMock.mockResolvedValue([]);
     onOpenSession.mockReset();
+    mockNavigate.mockReset();
     useStore.setState({ currentSessionId: null, sessions: [] });
   });
 
@@ -161,11 +173,14 @@ describe('WorkbenchProjectList', () => {
     listMock.mockResolvedValue(projects);
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
     await waitFor(() => {
-      expect(screen.getAllByTestId('project-row')).toHaveLength(2);
+      expect(screen.getByTestId('project-row-p1')).toBeInTheDocument();
+      expect(screen.getByTestId('project-row-p2')).toBeInTheDocument();
     });
     expect(screen.getByText('demo')).toBeInTheDocument();
     expect(screen.getByText('C:\\work\\demo')).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
+    // Session count appears in the project row
+    const sessionCountSpan = screen.getByTitle('2 个会话');
+    expect(sessionCountSpan).toHaveTextContent('2');
     expect(screen.queryByText('0')).not.toBeInTheDocument();
   });
 
@@ -175,10 +190,11 @@ describe('WorkbenchProjectList', () => {
     listMock.mockResolvedValue(projects);
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
-    await waitFor(() => screen.getAllByTestId('project-row'));
-    fireEvent.click(screen.getAllByTestId('project-row')[0]);
+    await waitFor(() => screen.getAllByTestId('project-row-p1'));
+    // Task 4: Row click now navigates to governance, expand is via button
+    fireEvent.click(screen.getAllByTestId('project-expand')[0]);
 
-    // Workbench: row click → expand, NOT openProject
+    // Workbench: expand button → expand, NOT openProject
     await waitFor(() => {
       expect(openMock).not.toHaveBeenCalled();
     });
@@ -188,6 +204,29 @@ describe('WorkbenchProjectList', () => {
     });
   });
 
+  it('navigates to governance when clicking the row and exposes one menu entry', async () => {
+    listMock.mockResolvedValue(projects);
+    renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
+    const row = await screen.findByTestId('project-row-p1');
+    fireEvent.click(row);
+    // Task 4: Row click navigates to governance
+    expect(mockNavigate).toHaveBeenCalledWith('/projects/governance/p1');
+
+    // Menu should not be visible by default
+    expect(screen.queryByTestId('project-context-menu-p1')).not.toBeInTheDocument();
+    // Open the dropdown menu
+    fireEvent.click(screen.getByTestId('workbench-row-menu-p1'));
+    expect(screen.getByText('项目设置')).toBeInTheDocument();
+    expect(screen.getByText('归档项目')).toBeInTheDocument();
+  });
+
+  it('shows an all-projects entry that routes to /projects', async () => {
+    listMock.mockResolvedValue(projects);
+    renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
+    fireEvent.click(await screen.findByTestId('sidebar-all-projects'));
+    expect(mockNavigate).toHaveBeenCalledWith('/projects');
+  });
+
   /* ── Hover "+" creates session ────────────────────────────────── */
 
   it('hover primary action creates a new bound session in the project', async () => {
@@ -195,7 +234,7 @@ describe('WorkbenchProjectList', () => {
     createSessionMock.mockResolvedValue({ project: projects[0], session });
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
-    await waitFor(() => screen.getAllByTestId('project-row'));
+    await waitFor(() => screen.getByTestId('project-row-p1'));
     fireEvent.click(screen.getAllByTestId('project-primary-action')[0]);
 
     await waitFor(() => {
@@ -211,9 +250,9 @@ describe('WorkbenchProjectList', () => {
     removeMock.mockResolvedValue(true);
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
-    await waitFor(() => screen.getAllByTestId('project-row'));
+    await waitFor(() => screen.getByTestId('project-row-p1'));
     // Hover to show menu button
-    fireEvent.mouseEnter(screen.getAllByTestId('project-row')[0]);
+    fireEvent.mouseEnter(screen.getByTestId('project-row-p1'));
     // Open menu
     const menuBtn = screen.getByTestId('workbench-row-menu-p1');
     fireEvent.click(menuBtn);
@@ -269,7 +308,7 @@ describe('WorkbenchProjectList', () => {
     createSessionMock.mockRejectedValue(Object.assign(new Error('gone'), { status_code: 410 }));
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
-    await waitFor(() => screen.getAllByTestId('project-row'));
+    await waitFor(() => screen.getAllByTestId('project-row-p1'));
     // In workbench: primary action calls handleNewChatInProject → createSession
     fireEvent.click(screen.getAllByTestId('project-primary-action')[0]);
 
@@ -288,7 +327,7 @@ describe('WorkbenchProjectList', () => {
     ]);
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
-    await waitFor(() => screen.getAllByTestId('project-row'));
+    await waitFor(() => screen.getAllByTestId('project-row-p1'));
     fireEvent.click(screen.getAllByTestId('project-expand')[0]);
     await waitFor(() => {
       expect(listSessionsMock).toHaveBeenCalledWith('p1');
@@ -306,7 +345,7 @@ describe('WorkbenchProjectList', () => {
     listSessionsMock.mockResolvedValue([]);
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
-    await waitFor(() => screen.getAllByTestId('project-row'));
+    await waitFor(() => screen.getAllByTestId('project-row-p1'));
     fireEvent.click(screen.getAllByTestId('project-expand')[1]);
 
     await waitFor(() => {
@@ -381,20 +420,21 @@ describe('WorkbenchProjectList', () => {
     }
   });
 
-  it('right-click opens the project context menu and calls openFolder', async () => {
-    const openFolder = vi.fn().mockResolvedValue({ success: true });
+  it('menu "在文件管理器中显示" calls revealFolder', async () => {
+    const revealFolder = vi.fn().mockResolvedValue({ success: true });
     (window as unknown as { electronAPI: unknown }).electronAPI = {
-      project: { openFolder, revealFolder: vi.fn() },
+      project: { openFolder: vi.fn(), revealFolder },
     };
     listMock.mockResolvedValue(projects);
     try {
       renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
-      const rows = await screen.findAllByTestId('project-row');
+      await screen.findByTestId('project-row-p1');
 
-      fireEvent.contextMenu(rows[0]);
-      fireEvent.click(await screen.findByText('打开项目文件夹'));
+      // Open dropdown menu
+      fireEvent.click(screen.getByTestId('workbench-row-menu-p1'));
+      fireEvent.click(await screen.findByText('在文件管理器中显示'));
 
-      await waitFor(() => expect(openFolder).toHaveBeenCalledWith('p1'));
+      await waitFor(() => expect(revealFolder).toHaveBeenCalledWith('p1'));
     } finally {
       delete (window as unknown as { electronAPI?: unknown }).electronAPI;
     }
@@ -434,7 +474,7 @@ describe('WorkbenchProjectList — M3 expanded panels', () => {
     listSessionsMock.mockResolvedValue([]);
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
-    await waitFor(() => screen.getAllByTestId('project-row'));
+    await waitFor(() => screen.getAllByTestId('project-row-p1'));
     // Panels only render when expanded
     expect(screen.queryByTestId('project-overview-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('project-materials-panel')).not.toBeInTheDocument();
@@ -455,7 +495,7 @@ describe('WorkbenchProjectList — M3 expanded panels', () => {
     listSessionsMock.mockResolvedValue([]);
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
-    await waitFor(() => screen.getAllByTestId('project-row'));
+    await waitFor(() => screen.getAllByTestId('project-row-p1'));
     fireEvent.click(screen.getAllByTestId('project-expand')[0]);
 
     await waitFor(() => {
@@ -477,7 +517,7 @@ describe('WorkbenchProjectList — M3 expanded panels', () => {
     listMaterialsMock.mockResolvedValue([]);
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
-    await waitFor(() => screen.getAllByTestId('project-row'));
+    await waitFor(() => screen.getAllByTestId('project-row-p1'));
     fireEvent.click(screen.getAllByTestId('project-expand')[0]);
 
     await waitFor(() => {
@@ -492,7 +532,7 @@ describe('WorkbenchProjectList — M3 expanded panels', () => {
     listMaterialsMock.mockResolvedValue(materialsFixture);
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
-    await waitFor(() => screen.getAllByTestId('project-row'));
+    await waitFor(() => screen.getAllByTestId('project-row-p1'));
     fireEvent.click(screen.getAllByTestId('project-expand')[0]);
 
     await waitFor(() => {
@@ -510,7 +550,7 @@ describe('WorkbenchProjectList — M3 expanded panels', () => {
     useStore.setState({ currentSessionId: 'active-session' });
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
-    await waitFor(() => screen.getAllByTestId('project-row'));
+    await waitFor(() => screen.getAllByTestId('project-row-p1'));
     fireEvent.click(screen.getAllByTestId('project-expand')[0]);
 
     await waitFor(() => {
@@ -525,7 +565,7 @@ describe('WorkbenchProjectList — M3 expanded panels', () => {
     useStore.setState({ currentSessionId: null });
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
-    await waitFor(() => screen.getAllByTestId('project-row'));
+    await waitFor(() => screen.getAllByTestId('project-row-p1'));
     fireEvent.click(screen.getAllByTestId('project-expand')[0]);
 
     await waitFor(() => {
@@ -541,7 +581,7 @@ describe('WorkbenchProjectList — M3 expanded panels', () => {
     useStore.setState({ currentSessionId: null });
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
-    await waitFor(() => screen.getAllByTestId('project-row'));
+    await waitFor(() => screen.getAllByTestId('project-row-p1'));
     fireEvent.click(screen.getAllByTestId('project-expand')[0]);
 
     await waitFor(() => {
