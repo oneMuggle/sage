@@ -12,6 +12,7 @@
     "batch_agents": { "method": "POST", "path": "/api/v1/agents/batch" },
     "batch_delete_memories": { "method": "POST", "path": "/api/v1/memory/batch-delete" },
     "chat_steer": { "method": "POST", "path": "/api/v1/chat/steer" },
+    "chat_steer_cancel": { "method": "POST", "path": "/api/v1/chat/steer/cancel" },
     "chat_stream_active": { "method": "GET", "path": "/api/v1/chat/stream/active" },
     "create_agent": { "method": "POST", "path": "/api/v1/agents" },
     "create_project_profile": { "method": "POST", "path": "/api/v1/memory/project-profile" },

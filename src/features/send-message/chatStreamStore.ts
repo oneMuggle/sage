@@ -94,6 +94,17 @@ export interface QueuedChatMessage {
   opts?: QueuedSendOptions;
 }
 
+/**
+ * 2026-11-07: 一条尚未被 AI 消费的插话（输入框上方暂存区）。
+ * id = 后端返回的 message_id —— 撤回调用与消费回执（steer_consumed）的键。
+ */
+export interface PendingSteerItem {
+  id: string;
+  sessionId: string;
+  content: string;
+  createdAt: number;
+}
+
 /** 流式消息的临时覆盖层（'🤔 思考中…' + LLM 累积的 content/reasoning） */
 export interface StreamingState {
   messageId: string;
@@ -281,6 +292,12 @@ export interface SessionStreamSlots {
    */
   queuePaused: boolean;
   /**
+   * 2026-11-07: 插话暂存区 —— 已注入运行中 run、尚未被 AI 消费的插话。
+   * 输入框上方渲染为可撤回的 chip；收到 `steer_consumed`（按 id 匹配）
+   * 时移除并落入聊天区。流结束时仍未消费的条目回退到 pendingQueue。
+   */
+  pendingSteer: PendingSteerItem[];
+  /**
    * Issue 3: ReAct 轮次累加偏移（跨 run 累积）。
    * 后端 `run_loop` 的 iteration 是局部计数器（for i in range(max_iterations)），
    * 每次新 run 都从 0 开始。前端在 clearStream 时把本次达到的最大轮次 +1 累加到此处，
@@ -304,6 +321,7 @@ const EMPTY_SLOTS: SessionStreamSlots = {
   budgetCheckpoint: null,
   pendingQueue: [],
   queuePaused: false,
+  pendingSteer: [],
   iterationOffset: 0,
 };
 
@@ -444,6 +462,15 @@ interface ChatStreamStoreState {
   setChatQueuePaused: (sessionId: string, paused: boolean) => void;
   /** 弹出队首（run 自然结束后 flush 用）；队列空返回 null。 */
   shiftChatQueue: (sessionId: string) => QueuedChatMessage | null;
+
+  // —— 2026-11-07: 插话暂存区（按会话隔离） ——
+  /** 记录一条已注入 run 的插话（id 由后端返回）；返回落库后的条目。 */
+  addSteer: (sessionId: string, item: { id: string; content: string }) => PendingSteerItem;
+  /** 移除一条暂存插话（撤回成功 / 已被消费）；不存在则 noop。 */
+  removeSteer: (sessionId: string, id: string) => void;
+  clearSteers: (sessionId: string) => void;
+  /** 取出全部暂存插话并清空（流结束时回退到 pendingQueue 用）。 */
+  takeAllSteers: (sessionId: string) => PendingSteerItem[];
 
   // —— 会话删除时清理槽位，防 Map 泄漏 / 迟到事件复活死会话 ——
   clearSession: (sessionId: string) => void;
@@ -800,6 +827,47 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
       }),
     }));
     return next;
+  },
+
+  // —— 2026-11-07: 插话暂存区 ——
+  addSteer: (sessionId, { id, content }) => {
+    const item: PendingSteerItem = { id, sessionId, content, createdAt: Date.now() };
+    set((prev) => ({
+      sessions: writeSlots(prev.sessions, sessionId, {
+        // 同一 id 重复上报（理论不可能，后端 uuid）时以后写为准，避免 chip 重复
+        pendingSteer: [
+          ...selectSessionSlots(prev, sessionId).pendingSteer.filter((m) => m.id !== id),
+          item,
+        ],
+      }),
+    }));
+    return item;
+  },
+
+  removeSteer: (sessionId, id) =>
+    set((prev) => {
+      const pending = selectSessionSlots(prev, sessionId).pendingSteer;
+      if (!pending.some((m) => m.id === id)) return prev;
+      return {
+        sessions: writeSlots(prev.sessions, sessionId, {
+          pendingSteer: pending.filter((m) => m.id !== id),
+        }),
+      };
+    }),
+
+  clearSteers: (sessionId) =>
+    set((prev) => {
+      if (selectSessionSlots(prev, sessionId).pendingSteer.length === 0) return prev;
+      return { sessions: writeSlots(prev.sessions, sessionId, { pendingSteer: [] }) };
+    }),
+
+  takeAllSteers: (sessionId) => {
+    const pending = selectSessionSlots(get(), sessionId).pendingSteer;
+    if (pending.length === 0) return [];
+    set((prev) => ({
+      sessions: writeSlots(prev.sessions, sessionId, { pendingSteer: [] }),
+    }));
+    return pending;
   },
 
   updateTaskBoard: (sessionId, _runId, updater) =>
