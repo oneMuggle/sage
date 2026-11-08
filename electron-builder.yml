@@ -85,6 +85,27 @@ extraResources:
     to: "extension/agent-bridge"
     filter:
       - "**/*"
+  # Sage 内置文档（sage-guide 专家知识源）。只带用户手册全量与白名单
+  # 技术章节，避免安装包膨胀与噪声召回。白名单必须与
+  # backend/services/sage_docs/paths.py::TECHNICAL_WHITELIST 保持一致；
+  # spawnBackend() 打包态注入 SAGE_DOCS_DIR=<resourcesPath>/docs。
+  - from: "docs"
+    to: "docs"
+    filter:
+      - "user-manual/**/*.md"
+      - "technical/README.md"
+      - "technical/15-state-ownership.md"
+      - "technical/18-hexagonal.md"
+      - "technical/20-electron.md"
+      - "technical/22-agents-crud.md"
+      - "technical/24-skills-system.md"
+      - "technical/32-settings-canonicalization.md"
+      - "technical/41-sage-doctor.md"
+      - "technical/47-git-worktree-workflow.md"
+      - "technical/133-specialist-persona.md"
+      - "technical/135-specialist-asset-hub.md"
+      - "technical/139-specialist-dm-group-chat.md"
+      - "technical/142-sage-guide-specialist.md"
 
 # Win7 + Win10/11 NSIS installer (electron-builder 24.x)
 win:

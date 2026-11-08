@@ -9,8 +9,8 @@
 
 锁定的契约:
 
-- ``source_type`` 为五选一的字面量（wiki_project / zotero_collection /
-  project_material / workspace_fts / specialist_private）。
+- ``source_type`` 为六选一的字面量（wiki_project / zotero_collection /
+  project_material / workspace_fts / specialist_private / sage_docs）。
 - 严格 ``extra='forbid'``，避免脏字段渗入 ``AgentProfile`` 持久化。
 - ``id`` 为 12 位十六进制短 hash（uuid4 截断），保证唯一性与稳定长度。
 - ``created_at`` 默认当前 Unix 秒时间戳。
@@ -37,6 +37,7 @@ KNOWLEDGE_SOURCE_TYPES: Tuple[str, ...] = (
     "project_material",
     "workspace_fts",
     "specialist_private",
+    "sage_docs",
 )
 
 #: 与 ``KNOWLEDGE_SOURCE_TYPES`` 一致，用于静态类型标注。
@@ -46,6 +47,7 @@ KnowledgeSourceType = Literal[
     "project_material",
     "workspace_fts",
     "specialist_private",
+    "sage_docs",
 ]
 
 #: 绑定 id 长度（uuid4 hex 截断为 12，与内部去重 / 日志展示权衡）。

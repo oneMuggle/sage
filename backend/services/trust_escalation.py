@@ -37,6 +37,7 @@ from typing import Any, Dict, Optional
 
 from backend.tools.bash_validation import BashRisk, validate_bash
 from backend.tools.permissions import (
+    SELF_MODIFY_TOOLS,
     PermissionDecision,
     PermissionEnforcer,
     ToolCapability,
@@ -97,6 +98,12 @@ class TrustEscalationEnforcer:
         # 边界类升级永不自动放行。
         reason = decision.reason or ""
         if any(marker in reason for marker in _BOUNDARY_REASON_MARKERS):
+            return decision
+
+        # M4（sage-guide）：自管理工具（update_sage_config / schedule_task 等）
+        # 必须逐次人工确认 —— 即便连续批准也不能自动放行。放在 EXECUTE 检查前，
+        # 因为 update_sage_config 是 CONFIG 类工具而非 EXECUTE，不会被 bash 安全网拦截。
+        if tool_name in SELF_MODIFY_TOOLS:
             return decision
 
         # 执行面工具：只有能验证为非危险命令才考虑自动放行。
