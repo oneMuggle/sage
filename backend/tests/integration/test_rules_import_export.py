@@ -487,6 +487,67 @@ async def test_apply_preserves_disabled_flag(
     assert created["enabled"] is False
 
 
+async def test_apply_overwrite_create_failure_keeps_original(
+    client: httpx.AsyncClient,
+    project_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """R1：覆盖时新建失败不得删旧（先 create 后 delete）。"""
+    project = await _register(client, project_dir)
+    await client.post(
+        f"/api/v1/projects/{project['id']}/rules",
+        json={"layer": "constraint", "category": "风格", "content": "统一使用 ruff"},
+    )
+
+    def failing_create(repo, *args, **kwargs):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(ProjectConstraintRepository, "create", failing_create)
+    envelope = _envelope([_constraint("风格", "新的规则")])
+
+    response = await client.post(
+        "/api/v1/rules/import/apply",
+        json={
+            "envelope": envelope,
+            "project_id": project["id"],
+            "selected": ["import-constraint-0"],
+            "overwrite": True,
+        },
+    )
+
+    body = response.json()
+    assert body["results"][0]["status"] == "failed"
+    rules = (
+        await client.get(f"/api/v1/projects/{project['id']}/rules")
+    ).json()["rules"]
+    contents = [rule["content"] for rule in rules if rule["layer"] == "constraint"]
+    assert contents == ["统一使用 ruff"]
+
+
+async def test_apply_rejects_non_integer_priority(
+    client: httpx.AsyncClient, project_dir: Path
+):
+    """R2：非整数 priority 返回具体校验原因而非通用文案。"""
+    project = await _register(client, project_dir)
+    item = _constraint("风格", "优先级非法")
+    item["priority"] = "abc"
+    envelope = _envelope([item])
+
+    response = await client.post(
+        "/api/v1/rules/import/apply",
+        json={
+            "envelope": envelope,
+            "project_id": project["id"],
+            "selected": ["import-constraint-0"],
+            "overwrite": False,
+        },
+    )
+
+    body = response.json()
+    assert body["results"][0]["status"] == "failed"
+    assert body["results"][0]["message"] == "priority 必须是整数"
+
+
 async def test_apply_continues_after_unexpected_exception(
     client: httpx.AsyncClient,
     project_dir: Path,

@@ -859,6 +859,13 @@ def _validation_error_message(exc: Exception) -> str:
     return "导入失败，请重试"
 
 
+def _parse_import_priority(value: Any) -> int:
+    try:
+        return int(value or 5)
+    except (TypeError, ValueError):
+        raise RuleValidationError("invalid_priority", "priority 必须是整数")
+
+
 def _apply_constraint_candidate(
     project: Project,
     candidate: Any,
@@ -884,7 +891,7 @@ def _apply_constraint_candidate(
         content = validate_rule_text(str(item.get("content") or ""))
         category = _validate_optional_text(item.get("category")) or "general"
         trigger = _validate_optional_text(item.get("trigger_pattern")) or None
-        priority = int(item.get("priority") or 5)
+        priority = _parse_import_priority(item.get("priority"))
     except (RuleValidationError, HTTPException) as exc:
         return _result(cid, "failed", _validation_error_message(exc))
     if not target_id and existing_count >= MAX_PROJECT_RULES:
@@ -892,8 +899,6 @@ def _apply_constraint_candidate(
             cid, "failed", f"项目规则已达 {MAX_PROJECT_RULES} 条上限"
         )
     repo = ProjectConstraintRepository()
-    if target_id:
-        repo.delete(target_id)
     created = repo.create(
         project_id=project.id,
         category=category,
@@ -902,6 +907,9 @@ def _apply_constraint_candidate(
         priority=priority,
         source=_USER_SOURCE,
     )
+    # 先建新再删旧：create 失败时旧规则仍完整；delete 失败只会多一条可恢复重复。
+    if target_id:
+        repo.delete(target_id)
     if item.get("enabled") is False:
         repo.update(created.id, enabled=False)
     return _result(cid, "applied", "已导入")
