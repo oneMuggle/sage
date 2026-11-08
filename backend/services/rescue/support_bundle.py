@@ -174,15 +174,15 @@ def _app_version() -> str:
 
         if __version__:
             return str(__version__)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("support_bundle: backend.__version__ unavailable: %s", exc)
     try:
         root = Path(__file__).resolve().parents[3]  # dev: backend/services/rescue → repo root
         pkg_json = root / "package.json"
         if pkg_json.is_file():
             return json.loads(pkg_json.read_text(encoding="utf-8")).get("version", "unknown")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("support_bundle: package.json version unavailable: %s", exc)
     return "unknown"
 
 
