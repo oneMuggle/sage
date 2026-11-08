@@ -13,6 +13,7 @@ from backend.services.rules_transfer import (
     SAGE_RULES_FORMAT,
     SAGE_RULES_VERSION,
     RulesImportValidationError,
+    _coerce_priority,
     build_rules_export_envelope,
     diff_rules_import,
     parse_rules_import,
@@ -306,6 +307,20 @@ def test_parse_accepts_minimal_envelope():
 
     assert envelope["format"] == SAGE_RULES_FORMAT
     assert envelope["layers"]["constraints"] == []
+
+
+def test_parse_rejects_lone_surrogate():
+    payload = {
+        "format": SAGE_RULES_FORMAT,
+        "version": SAGE_RULES_VERSION,
+        "layers": {"global_rules": "\ud800"},
+    }
+    with pytest.raises(RulesImportValidationError):
+        parse_rules_import(payload)
+
+
+def test_coerce_priority_falls_back_on_overflow():
+    assert _coerce_priority(1e309) == 5
 
 
 def test_diff_marks_new_constraints_as_new():
