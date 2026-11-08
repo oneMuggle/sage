@@ -246,6 +246,21 @@ def test_destructive_command_never_auto_released(base_enforcer, trust_env):
     assert trust_env["recorded"] == []
 
 
+def test_self_modify_tools_never_auto_released(base_enforcer, trust_env):
+    """M4（sage-guide）：update_sage_config / schedule_task 等自管理工具必须逐次人工
+    确认 —— 即便连续批准 99 次，trust escalation 也不能自动放行。"""
+    from backend.tools.permissions import SELF_MODIFY_TOOLS
+
+    trust_env["count"] = 99
+    enforcer = TrustEscalationEnforcer(base_enforcer, threshold=3)
+    for tool in SELF_MODIFY_TOOLS:
+        decision = enforcer.check(tool, {})
+        assert decision.needs_approval is True, (
+            f"{tool} 应被 SELF_MODIFY_TOOLS 保护不被自动放行"
+        )
+    assert trust_env["recorded"] == [], "自管理工具不应进入 trust 放行记录"
+
+
 def test_safe_command_can_be_released(base_enforcer, trust_env):
     trust_env["count"] = 99
     enforcer = TrustEscalationEnforcer(base_enforcer, threshold=3)

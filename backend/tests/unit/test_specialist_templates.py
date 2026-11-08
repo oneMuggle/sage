@@ -3,15 +3,16 @@
 
 覆盖:
 
-1. ``list_templates()`` — 返回 5 个模板，顺序写作→研究→编码→演示→Office；
+1. ``list_templates()`` — 返回 6 个模板，顺序 Sage 向导→写作→研究→编码→演示→Office；
    字段齐全（id/name/tagline/avatar/description/skill_count），不含 system_prompt
 2. ``get_template_dir()`` — 非法 id / 不存在模板返回 None；合法 id 返回目录
 3. ``instantiate_template()`` — 一键物化：id 前缀 ``specialist-<tpl>-<6hex>``；
    source 强制 ``builtin``；skills/memory_access/persona_ui/model_config 等
    字段正确落库；dropped_bindings=0；template_id 回填
-4. 模板物化失败（id 非法 / 模板不存在）抛 ValueError
-5. 同一模板物化两次，id 不重复（``<6hex>`` 防冲突）
-6. 模板物化后的专家通过 AgentRepository 可列出/检索，且 ``source`` 为 ``builtin``
+4. ``sage-guide`` 例外：固定 id 幂等单例，返回 ``existed`` 标记
+5. 模板物化失败（id 非法 / 模板不存在）抛 ValueError
+6. 同一模板物化两次，id 不重复（``<6hex>`` 防冲突）
+7. 模板物化后的专家通过 AgentRepository 可列出/检索，且 ``source`` 为 ``builtin``
 """
 
 from __future__ import annotations
@@ -51,12 +52,13 @@ def template_env(tmp_path, monkeypatch):
 
 
 class TestListTemplates:
-    def test_returns_five_templates_in_canonical_order(self):
+    def test_returns_six_templates_in_canonical_order(self):
         from backend.services.specialist_templates import list_templates
 
         templates = list_templates()
-        assert len(templates) == 5
+        assert len(templates) == 6
         assert [t["id"] for t in templates] == [
+            "sage-guide",
             "writing",
             "research",
             "coding",
@@ -191,7 +193,7 @@ class TestInstantiateTemplate:
             instantiate_template("../etc")
 
     def test_all_templates_instantiate(self, template_env):
-        """5 套模板全部物化成功，字段齐全。"""
+        """6 套模板全部物化成功，字段齐全。"""
         from backend.data.agent_repo import AgentRepository
         from backend.services.specialist_templates import (
             instantiate_template,
@@ -204,4 +206,51 @@ class TestInstantiateTemplate:
             assert agent is not None, f"模板 {t['id']} 物化后 agents 行缺失"
             assert agent["name"], f"模板 {t['id']} 缺少 name"
             assert agent["system_prompt"], f"模板 {t['id']} 缺少 system_prompt"
-            assert "# 身份" in agent["system_prompt"] or "身份" in agent["system_prompt"]
+            if t["id"] != "sage-guide":
+                assert (
+                    "# 身份" in agent["system_prompt"]
+                    or "身份" in agent["system_prompt"]
+                )
+
+
+# =====================================================================
+# sage-guide 单例
+# =====================================================================
+
+
+class TestSageGuideSingleton:
+    def test_instantiate_is_idempotent_fixed_id(self, template_env):
+        from backend.data.agent_repo import AgentRepository
+        from backend.services.specialist_templates import instantiate_template
+
+        first = instantiate_template("sage-guide")
+        second = instantiate_template("sage-guide")
+
+        assert first["id"] == "sage-guide"
+        assert second["id"] == "sage-guide"
+        assert first["existed"] is False
+        assert second["existed"] is True
+        assert second["template_id"] == "sage-guide"
+        assert AgentRepository().get("sage-guide") is not None
+
+    def test_keeps_sage_docs_binding(self, template_env):
+        from backend.data.agent_repo import AgentRepository
+        from backend.services.specialist_templates import instantiate_template
+
+        instantiate_template("sage-guide")
+        agent = AgentRepository().get("sage-guide")
+
+        bindings = agent["knowledge_bindings"]
+        assert bindings
+        assert bindings[0]["source_type"] == "sage_docs"
+        assert agent["source"] == "builtin"
+
+    def test_persona_body_matches_profile_prompt(self):
+        from backend.agents.profiles import _SAGE_GUIDE_SYSTEM_PROMPT
+        from backend.services.specialist_templates import get_template_dir
+
+        template_dir = get_template_dir("sage-guide")
+        text = (template_dir / "persona.md").read_text(encoding="utf-8")
+        body = text.split("---", 2)[2].strip()
+
+        assert body == _SAGE_GUIDE_SYSTEM_PROMPT
