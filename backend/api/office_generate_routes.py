@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 import uuid
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 from zipfile import BadZipFile
 
 from docx.opc.exceptions import PackageNotFoundError
@@ -27,7 +27,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.data.database import Database, get_database
 from backend.office.docx_text import read_docx_text
-from backend.office.errors import OfficeFileNotFoundError, OfficeParseError, OfficePathError
+from backend.office.errors import (
+    OfficeFileNotFoundError,
+    OfficeLLMError,
+    OfficeParseError,
+    OfficePathError,
+    OfficeSizeLimitError,
+)
 from backend.office.excel import generate_xlsx
 from backend.office.generate_service import (
     build_nl_prompt,
@@ -46,6 +52,7 @@ from backend.office.models import (
     PdfGenerateResult,
     TemplateLibraryEntry,
     WordTemplateFillResult,
+    _constrained_list,
 )
 from backend.office.path_safety import resolve_within, validate_supported_filename
 from backend.office.pdf import generate_pdf
@@ -54,7 +61,19 @@ from backend.office.progress import track
 from backend.office.storage import validate_workspace
 from backend.office.template_library import instantiate_template, list_templates
 from backend.office.word import generate_docx
-from backend.orchestration.llm_factory import build_llm_client_from_settings
+
+# Pydantic v1 trees (release/win7) keep the routing stack behind a lazy
+# re-import; on main (v2) this resolves eagerly as before. The module-level
+# name stays patchable for tests either way.
+try:
+    from backend.orchestration.llm_factory import build_llm_client_from_settings
+except ImportError:  # pragma: no cover — pydantic v1 without the v2 routing stack
+    def build_llm_client_from_settings():  # type: ignore[misc]
+        from backend.orchestration.llm_factory import (
+            build_llm_client_from_settings as _factory,
+        )
+
+        return _factory()
 
 # ruff: noqa: UP006, UP007, UP035
 
@@ -66,6 +85,12 @@ _DOC_TYPE_EXTENSIONS = {
     OfficeDocType.EXCEL: "xlsx",
     OfficeDocType.PDF: "pdf",
 }
+
+# B4 — hard caps so a single runaway request cannot exhaust memory or the
+# LLM context window. 50 MB keeps the source on disk; 100k chars keeps the
+# reference payload below the typical prompt budget.
+_MAX_SOURCE_BYTES = 50 * 1024 * 1024
+_MAX_REFERENCE_CHARS = 100_000
 
 _UNSAFE_FILENAME_CHARS = re.compile(r"[^\w \-]")
 _MAX_FILENAME_STEM = 60
@@ -125,14 +150,25 @@ def _collect_reference_texts(workspace: Path, reference_paths: Optional[List[str
                 f"reference_paths only supports .docx files: {raw_path}",
                 file_path=candidate,
             )
+        size = candidate.stat().st_size
+        if size > _MAX_SOURCE_BYTES:
+            raise OfficeSizeLimitError(size, _MAX_SOURCE_BYTES, file_path=candidate)
         try:
-            texts.append(read_docx_text(candidate))
+            texts.append(read_docx_text(candidate)[:_MAX_REFERENCE_CHARS])
         except (FileNotFoundError, PackageNotFoundError, BadZipFile) as exc:
             raise OfficeParseError(
                 f"Failed to read reference .docx {raw_path}: {exc}",
                 file_path=candidate,
             ) from exc
     return texts
+
+
+async def _complete_or_llm_error(client: Any, prompt: str) -> str:
+    """Call the LLM, translating any provider failure into OfficeLLMError (502)."""
+    try:
+        return await client.complete(prompt)
+    except Exception as exc:  # noqa: BLE001 — re-raised as OfficeLLMError below
+        raise OfficeLLMError("LLM 调用失败，请稍后重试") from exc
 
 
 def _generate_document(spec: dict, doc_type: OfficeDocType, workspace: Path, filename: str) -> Path:
@@ -173,7 +209,7 @@ async def generate_nl_endpoint(req: NlGenerateRequest) -> NlGenerateResponse:
     task_id = req.task_id or uuid.uuid4().hex
     with track(task_id, f"生成 {doc_type.value}") as prog:
         prog.report("调用 LLM 生成文档结构", 10)
-        llm_output = await client.complete(prompt)
+        llm_output = await _complete_or_llm_error(client, prompt)
 
         prog.report("解析文档结构", 50)
         try:
@@ -219,7 +255,7 @@ class TemplateChatRequest(BaseModel):
     workspace_path: str
     template_id: Optional[str] = None
     workspace_template: Optional[str] = None
-    messages: List[TemplateChatMessage] = Field(..., min_length=1)
+    messages: _constrained_list(TemplateChatMessage, min_length=1)
 
 
 def _resolve_template_entry(
@@ -285,7 +321,7 @@ async def template_chat_endpoint(req: TemplateChatRequest) -> NlGenerateResponse
     task_id = req.task_id or uuid.uuid4().hex
     with track(task_id, f"模板填充：{entry.name}") as prog:
         prog.report("调用 LLM 填充模板", 10)
-        llm_output = await client.complete(prompt)
+        llm_output = await _complete_or_llm_error(client, prompt)
 
         prog.report("解析填充内容", 50)
         try:
@@ -342,6 +378,9 @@ def _resolve_source_docx(workspace: Path, raw_path: str) -> Path:
         raise OfficePathError(
             f"source_path only supports .docx files: {raw_path}", file_path=source
         )
+    size = source.stat().st_size
+    if size > _MAX_SOURCE_BYTES:
+        raise OfficeSizeLimitError(size, _MAX_SOURCE_BYTES, file_path=source)
     return source
 
 
@@ -350,7 +389,13 @@ async def iterate_endpoint(req: IterateRequest) -> NlGenerateResponse:
     """Rewrite an existing .docx according to an instruction."""
     workspace = validate_workspace(Path(req.workspace_path))
     source = _resolve_source_docx(workspace, req.source_path)
-    source_text = read_docx_text(source)
+    try:
+        source_text = read_docx_text(source)[:_MAX_REFERENCE_CHARS]
+    except (FileNotFoundError, PackageNotFoundError, BadZipFile) as exc:
+        raise OfficeParseError(
+            f"Failed to read source .docx {req.source_path}: {exc}",
+            file_path=source,
+        ) from exc
 
     prompt = build_nl_prompt(
         instruction=("在原有文档基础上按修改要求输出完整的新版本。" f"修改要求：{req.instruction}"),
@@ -364,7 +409,7 @@ async def iterate_endpoint(req: IterateRequest) -> NlGenerateResponse:
     task_id = req.task_id or uuid.uuid4().hex
     with track(task_id, "迭代文档") as prog:
         prog.report("调用 LLM 改写文档", 10)
-        llm_output = await client.complete(prompt)
+        llm_output = await _complete_or_llm_error(client, prompt)
 
         prog.report("解析文档结构", 50)
         try:

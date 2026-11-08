@@ -3,7 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from backend.office.models import PdfGenerateResult, WordTemplateFillResult
 
@@ -627,3 +629,69 @@ def test_iterate_without_llm_returns_503(tmp_path: Path) -> None:
         )
 
     assert resp.status_code == 503, resp.text
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Final fix round — provider failures, constrained list, corrupt source
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_generate_nl_provider_failure_returns_502_json(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    llm = AsyncMock()
+    llm.complete.side_effect = RuntimeError("provider down")
+
+    with patch(
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        resp = _client().post(
+            "/api/v1/office/generate/nl",
+            json={
+                "workspace_path": str(workspace),
+                "instruction": "写一份测试文档",
+                "doc_type": "word",
+            },
+        )
+
+    assert resp.status_code == 502, resp.text
+    body = resp.json()
+    assert body["error_type"] == "OfficeLLMError"
+    assert body["message"] == "LLM 调用失败，请稍后重试"
+
+
+def test_template_chat_request_rejects_empty_messages() -> None:
+    from backend.api.office_generate_routes import TemplateChatRequest
+
+    with pytest.raises(ValidationError):
+        TemplateChatRequest(workspace_path="/ws", messages=[])
+
+
+def test_template_chat_messages_use_a_constrained_list() -> None:
+    from backend.api.office_generate_routes import TemplateChatRequest
+
+    field = TemplateChatRequest.model_fields["messages"]
+    assert any(getattr(meta, "min_length", None) == 1 for meta in field.metadata)
+
+
+def test_iterate_corrupt_docx_returns_422(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    broken = workspace / "broken.docx"
+    broken.write_bytes(b"not a real docx")
+
+    resp = _client().post(
+        "/api/v1/office/generate/iterate",
+        json={
+            "workspace_path": str(workspace),
+            "source_path": str(broken),
+            "instruction": "整理语气",
+        },
+    )
+
+    assert resp.status_code == 422, resp.text
+    body = resp.json()
+    assert body["error_type"] == "OfficeParseError"
+    assert "broken.docx" in body["message"]
