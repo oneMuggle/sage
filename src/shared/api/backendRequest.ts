@@ -1,5 +1,7 @@
 import type { BackendRequest } from '../types/electron-api';
 
+import { isDemoMode } from './demoFlag';
+
 export class BackendNotAvailableError extends Error {
   readonly code = 'BACKEND_NOT_AVAILABLE';
 
@@ -10,7 +12,10 @@ export class BackendNotAvailableError extends Error {
 }
 
 export class BackendRequestError extends Error {
-  constructor(readonly status: number, message: string) {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
     super(message);
     this.name = 'BackendRequestError';
   }
@@ -18,8 +23,17 @@ export class BackendRequestError extends Error {
 
 /** Use the Electron main relay when available; browser fallback is fail-closed. */
 export async function backendRequest<T>(request: BackendRequest): Promise<T> {
-  const bridge =
-    typeof window !== 'undefined' ? window.electronAPI?.backendRequest : undefined;
+  // 演示模式: HTTP relay 在 main 进程被拦截 (sage:backend-request 直接抛异常).
+  // 在渲染层提前匹配已知路径, 返回合成数据, 避免无后端时 E2E stub 失败.
+  if (isDemoMode()) {
+    const { demoBackendRequest } = await import('./demoInterceptors');
+    const demo = demoBackendRequest(request);
+    if (demo.hit) {
+      await new Promise((resolve) => setTimeout(resolve, 120 + Math.random() * 140));
+      return demo.value as T;
+    }
+  }
+  const bridge = typeof window !== 'undefined' ? window.electronAPI?.backendRequest : undefined;
   if (!bridge) throw new BackendNotAvailableError();
   return bridge<T>(request);
 }
@@ -36,8 +50,7 @@ export function formatBackendRequestJson(request: BackendRequest): string {
       method: request.method ?? 'GET',
       path: request.path,
       hasBody: request.body !== undefined,
-      bridgeAvailable:
-        typeof window !== 'undefined' && Boolean(window.electronAPI?.backendRequest),
+      bridgeAvailable: typeof window !== 'undefined' && Boolean(window.electronAPI?.backendRequest),
     },
     null,
     2,
