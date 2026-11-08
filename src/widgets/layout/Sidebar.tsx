@@ -55,6 +55,7 @@ import {
 
 import { NavGroup } from './NavGroup';
 import { SidebarNavItem, type SidebarNavItemData } from './SidebarNavItem';
+import { useSidebarSlot } from './SidebarSlotProvider';
 
 // UX-IA R1 A3（对标 ChatGPT / Claude Projects）：项目作为一级容器排在会话之上。
 // UX-IA R3 批次 0（2026-10-01）：分组从 6 个收敛到 3 个 ——
@@ -193,6 +194,13 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useI18n();
+  const { setSlotEl } = useSidebarSlot();
+  // /office 路由复用内容列承载文档库：使用文档工作台时不需要会话列表。
+  // 仅精确匹配 `/office`（及其子路径），其他路由行为不变。
+  const isOfficeRoute = location.pathname === '/office' || location.pathname.startsWith('/office/');
+  // ref 回调必须稳定，否则每次 render 都会 detach/attach，导致
+  // setSlotEl(null) → setSlotEl(el) 抖动。
+  const attachOfficeSlot = useCallback((el: HTMLDivElement | null) => setSlotEl(el), [setSlotEl]);
   const {
     sessions,
     currentSessionId,
@@ -596,52 +604,66 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
             <span className="font-semibold text-sm text-text">{t('sidebar.brand')}</span>
           </div>
 
-          {/* UX-IA R1 A1：顶部主操作条（对标 ChatGPT「新聊天 / 搜索聊天」） */}
-          <div className="px-2 pt-2 flex items-center gap-1" data-testid="sidebar-primary-actions">
-            <button
-              type="button"
-              onClick={handleNewSession}
-              aria-label="新建对话"
-              data-testid="sidebar-new-chat-primary"
-              title="新建对话 (Ctrl+N)"
-              className="flex-1 flex items-center gap-2.5 px-3 py-2 rounded-radius-sm border border-border text-sm font-medium text-text-primary hover:bg-bg-hover transition-colors"
-            >
-              <PenSquare className="w-4 h-4" />
-              <span>新建对话</span>
-            </button>
-            <Tooltip content="搜索 (Ctrl+K)" side="bottom">
-              <button
-                type="button"
-                onClick={handleOpenSearch}
-                aria-label="搜索"
-                data-testid="sidebar-search-button"
-                className="flex items-center justify-center w-9 h-9 rounded-radius-sm border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
+          {isOfficeRoute ? (
+            // 文档工作台：整条内容列交给 Office 页面 portal（文档库列表）。
+            <div
+              ref={attachOfficeSlot}
+              data-testid="sidebar-office-slot"
+              className="flex-1 min-h-0 min-w-0 flex flex-col"
+            />
+          ) : (
+            <>
+              {/* UX-IA R1 A1：顶部主操作条（对标 ChatGPT「新聊天 / 搜索聊天」） */}
+              <div
+                className="px-2 pt-2 flex items-center gap-1"
+                data-testid="sidebar-primary-actions"
               >
-                <Search className="w-4 h-4" />
-              </button>
-            </Tooltip>
-          </div>
+                <button
+                  type="button"
+                  onClick={handleNewSession}
+                  aria-label="新建对话"
+                  data-testid="sidebar-new-chat-primary"
+                  title="新建对话 (Ctrl+N)"
+                  className="flex-1 flex items-center gap-2.5 px-3 py-2 rounded-radius-sm border border-border text-sm font-medium text-text-primary hover:bg-bg-hover transition-colors"
+                >
+                  <PenSquare className="w-4 h-4" />
+                  <span>新建对话</span>
+                </button>
+                <Tooltip content="搜索 (Ctrl+K)" side="bottom">
+                  <button
+                    type="button"
+                    onClick={handleOpenSearch}
+                    aria-label="搜索"
+                    data-testid="sidebar-search-button"
+                    className="flex items-center justify-center w-9 h-9 rounded-radius-sm border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
+                  >
+                    <Search className="w-4 h-4" />
+                  </button>
+                </Tooltip>
+              </div>
 
-          {/* 内容列不再整列滚动：会话分区填充剩余高度并内部滚动（方案 B），
+              {/* 内容列不再整列滚动：会话分区填充剩余高度并内部滚动（方案 B），
               项目分区保留 30vh 上限 + 内层滚动；其他分区天然高度。
               overflow-y-auto 仅作为极端小窗口下的最后防线。 */}
-          <nav
-            className="flex-1 min-h-0 py-2 px-2 flex flex-col overflow-y-auto"
-            data-testid="sidebar-scroll"
-          >
-            {sectionOrder.map((key) => (
-              <div
-                key={key}
-                className={
-                  key === 'conversations' && !collapsedSections.has(key)
-                    ? 'flex-1 min-h-[120px] flex flex-col'
-                    : undefined
-                }
+              <nav
+                className="flex-1 min-h-0 py-2 px-2 flex flex-col overflow-y-auto"
+                data-testid="sidebar-scroll"
               >
-                {renderSection(key)}
-              </div>
-            ))}
-          </nav>
+                {sectionOrder.map((key) => (
+                  <div
+                    key={key}
+                    className={
+                      key === 'conversations' && !collapsedSections.has(key)
+                        ? 'flex-1 min-h-[120px] flex flex-col'
+                        : undefined
+                    }
+                  >
+                    {renderSection(key)}
+                  </div>
+                ))}
+              </nav>
+            </>
+          )}
 
           {/* 底部状态栏：连接状态文字 + 版本号 */}
           <div className="px-2 pt-2 border-t border-border flex-shrink-0">
