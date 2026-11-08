@@ -228,6 +228,8 @@ POST /api/v1/office/ai/revise
 | `useOfficeDocuments` | 持有 `q` / `docType` / `sort` 状态，驱动列表与重复组刷新 |
 | `OfficeSpecLibrary` | 规范书列表、提取、从规则包创建、设为默认、文档级绑定 |
 | `OfficeAiAssistantPanel` | 审校执行、来源徽章与过滤、历史、逐项勾选、「应用到文档」确认与结果展示 |
+| `SidebarSlotProvider` / `useSidebarSlot` | 侧栏内容列 portal 挂载点（`src/widgets/layout/SidebarSlotProvider.tsx`），见 §13 |
+| `Sidebar`（`/office` 分支） | 内容列为文档库提供 slot，不渲染会话/项目/Git 分区 |
 
 `OfficeAiAssistantPanel` 的可勾选条件与后端应用条件保持一致：`fixable && actual && (expected || suggestion)`。全选只选可修复项；应用成功后清空选择并展示快照路径。
 
@@ -430,3 +432,43 @@ AI 规则最多分析前 400 个文本块，且累计命中达到 200 条即停�
 `RulesWorkspace` 在 `src/pages/Office.tsx` 的 `renderRulesTab` 中作为第一个子节点挂载，`workspacePath` 为空串兜底，`filePath` 由当前打开的文档（`preview`）推导；没有打开文档时「抽取」「审校」按钮禁用。
 
 `ruleI18nParity.test.ts` 守护 `office.rules.*` 命名空间：zh / en 键集合必须一致、每个键非空，并逐个校验由 `RULE_TYPES` 等枚举拼出的动态键（这些键在调用点用模板字面量构造，类型系统只保证它们是合法键，不保证有译文）。
+
+## 13. 页面布局：文档库复用全局侧栏
+
+### 13.1 问题
+
+`/office` 早期采用「全局 Sidebar（300px）+ 页内 `OfficeLayout.left` 文档库（200–260px）+ 画布」三列结构。
+在 1280–1366px 宽度下，两列左侧栏加上内边距会把 `DocumentCanvas` 压到不足半数宽度；而使用文档/审校功能时并不会用到会话列表。
+
+### 13.2 结构
+
+侧栏在路由 `Outlet` 之外，页面无法直接渲染进去，因此用「Layout 级 Context + portal」：
+
+```text
+Layout
+└── SidebarSlotProvider          (slotEl: HTMLElement | null, dismissOverlay)
+    ├── Sidebar
+    │   └── 内容列：/office ? <div ref={attachOfficeSlot} data-testid="sidebar-office-slot" />
+    │                         : 会话 / 项目 / Git 分区
+    └── <main><Outlet/> → Office</main>
+                          └── createPortal(documentsLibrary, slotEl)
+```
+
+- `/office`（含 `/office/*`）路由下，侧栏内容列只保留品牌头 + 文档库 slot + 底部连接状态，不渲染 `sidebar-primary-actions` / `sidebar-scroll`；
+- `Office.tsx` 把原 `OfficeLayout.left` 的全部内容抽成 `documentsLibrary`，挂到页面根节点的 `createPortal` 中（`data-testid="office-sidebar-library"`，`overflow-y-auto` 负责列表滚动）；
+- portal 挂在页面根节点而非 tab 内容里，因此 `?tab=generate|rules|latex` 深链落地时侧栏文档库仍然存在；
+- portal 子树仍是 `Office` 的 React 子节点，state 与 handlers 直接通过 props 传递，`useOfficeDocuments` 不变。
+
+### 13.3 回退与边界
+
+- portal 条件为 `slotEl`；无工作区时 portal 内渲染 `office.emptyState` 占位，避免内容列整块空白；
+- 桌面折叠侧栏时内容列整体卸载，ref cleanup 把 `slotEl` 置 `null`，页面自动回退到现有的 `OfficeLayout` 两栏（`office-layout-left`），文档库不会消失；
+- 无 `SidebarSlotProvider` 的单元测试环境使用 Context 默认值 `{ slotEl: null, setSlotEl: noop, dismissOverlay: noop }`，同样走内联回退；
+- 移动端抽屉常驻 DOM（仅位移出屏），slot 始终存在。抽屉由 `Layout` 在 `location.pathname/search` 变化时关闭；但在 documents tab 内选中文档不会改 URL，因此 `SidebarSlotProvider` 额外暴露 `dismissOverlay()`（`Layout` 注入 `setMobileOpen(false)`），`handleOpen` / `handlePreviewDocument` 选中文档时显式调用，保证抽屉收起、露出画布；桌面端无抽屉，该回调为空操作。
+
+### 13.4 测试
+
+| 文件 | 覆盖点 |
+|---|---|
+| `src/widgets/layout/__tests__/Sidebar.office-slot.test.tsx` | `/office` 渲染 slot 且无会话导航；`/chat` 不受影响；折叠后内容列卸载并清空 `slotEl`；`/office` → `/chat` 路由切换后 `slotEl` 归 null 且导航恢复 |
+| `src/pages/__tests__/Office.sidebarPortal.test.tsx` | portal 挂进 slot 且不再渲染 `office-layout`、generate 深链保留文档库、无 slot 回退两栏、侧栏选中文档触发 `dismissOverlay`、在 generate tab 点文档切回 documents |

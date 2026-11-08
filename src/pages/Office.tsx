@@ -26,6 +26,7 @@
 
 import { FolderOpen } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -59,6 +60,7 @@ import { fillTemplate } from '../shared/lib/fillTemplate';
 import { useI18n, type TranslationKey } from '../shared/lib/i18n';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shared/ui/Tabs';
+import { useSidebarSlot } from '../widgets/layout/SidebarSlotProvider';
 
 import { OfficeEnvironmentButton } from './office/OfficeEnvironmentButton';
 import { OfficeLatexTab } from './office/OfficeLatexTab';
@@ -88,6 +90,9 @@ export function Office() {
   const workspacePath = useCurrentWorkspace() ?? null;
   const { bind, revoke, status: workspaceStatus, error: workspaceError } = useWorkspaceContext();
   const [searchParams, setSearchParams] = useSearchParams();
+  // /office 路由下全局侧栏内容列交出给文档库（Sidebar 内的 slot 容器）。
+  // 侧栏折叠 / 无 Layout 环境（单元测试）时为 null，走内联两栏回退。
+  const { slotEl, dismissOverlay } = useSidebarSlot();
 
   // URL search params 是 tab / 子 tab 的单一事实来源。缺失或非法值走默认，
   // 这样旧书签、手工编辑 URL 都能落到可用 tab 而不是空白面板。
@@ -304,6 +309,8 @@ export function Office() {
   };
 
   const handleOpen = async (docId: string) => {
+    dismissOverlay();
+    if (activeTab !== 'documents') setTab('documents');
     try {
       await open(docId);
     } catch (e) {
@@ -361,6 +368,9 @@ export function Office() {
   // 读取受管路径，与快照恢复/编辑应用同一 stale-read guard，避免切文档时
   // 旧结果覆盖新预览。
   const handlePreviewDocument = async (docId: string) => {
+    // 移动端：抽屉里的文档库选中文档时路由可能不变，需显式收起抽屉。
+    dismissOverlay();
+    if (activeTab !== 'documents') setTab('documents');
     const doc = documents.find((d) => d.id === docId);
     if (!doc) return;
     const myReadId = ++readIdRef.current;
@@ -393,7 +403,104 @@ export function Office() {
     }
   };
 
-  // 文档 tab：左侧文档库（列表 + 快照），中栏文档画布（导入 / 预览 + 编辑对话框）。
+  // 文档库（列表 + 快照）与画布（导入 / 预览 + 编辑对话框）分别抽成 JSX：
+  // 有侧栏 slot 时文档库 portal 进侧栏，页面只留画布；否则沿用两栏布局。
+  const documentsLibrary = (
+    <>
+      {/* Document list — live / archived toggle */}
+      <div className="flex items-center gap-3 mb-3">
+        <h2 className="text-sm font-medium text-text-secondary">
+          {t('office.section.library')} ({documents.length})
+        </h2>
+        <div className="ml-auto flex gap-2">
+          {(
+            [
+              ['live', t('office.view.live')],
+              ['archived', t('office.view.archived')],
+            ] as [OfficeListView, string][]
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setView(value)}
+              data-testid={`office-view-${value}`}
+              className={[
+                'px-3 py-1.5 rounded text-sm border',
+                view === value
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border text-text-secondary hover:bg-bg-hover',
+              ].join(' ')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <OfficeDocumentList
+        documents={documents}
+        loading={loading}
+        variant={view}
+        onSaveAs={handleSaveAs}
+        onOpen={handleOpen}
+        onShowInFolder={handleShowInFolder}
+        onArchive={handleArchive}
+        onRestore={handleRestore}
+        onViewSnapshots={(docId) => setSnapshotDocId(docId)}
+        onPreview={handlePreviewDocument}
+        onBatchArchive={batchArchive}
+        onBatchRestore={batchRestore}
+        q={q}
+        onQChange={setQ}
+        docType={docType}
+        onDocTypeChange={setDocType}
+        sort={sort}
+        onSortChange={setSort}
+        duplicateGroups={duplicateGroups}
+        onArchiveAllButNewest={archiveAllButNewest}
+      />
+      {snapshotDoc && (
+        <div className="mt-3">
+          <OfficeSnapshotPanel
+            doc={snapshotDoc}
+            onClose={() => setSnapshotDocId(null)}
+            onRestored={handleSnapshotRestored}
+          />
+        </div>
+      )}
+    </>
+  );
+
+  const documentsCanvas = (
+    <>
+      <h2 className="text-sm font-medium text-text-secondary mb-3">{t('office.section.canvas')}</h2>
+      <div ref={canvasRootRef}>
+        <DocumentCanvas
+          preview={preview}
+          workspacePath={workspacePath}
+          onPick={handleImportAndReadMulti}
+          onDropFiles={handleReadDroppedMulti}
+          onEditPreview={
+            preview && preview.docType !== 'pdf' ? () => setEditDialogOpen(true) : undefined
+          }
+          fidelityAvailable={pdfAvailableForDocument(capabilities, preview?.docType)}
+          onRefresh={() => void refresh()}
+          disabled={loading}
+        />
+      </div>
+      {editDialogOpen && editDoc && preview?.docType !== 'pdf' && (
+        <div className="mt-3">
+          <OfficeEditPreviewDialog
+            workspacePath={workspacePath ?? ''}
+            doc={editDoc}
+            sheetNames={editSheetNames}
+            onApplied={handleEditApplied}
+            onClose={() => setEditDialogOpen(false)}
+          />
+        </div>
+      )}
+    </>
+  );
+
   const renderDocumentsTab = () => (
     <div className="space-y-6">
       {error && (
@@ -402,104 +509,11 @@ export function Office() {
         </div>
       )}
 
-      <OfficeLayout
-        left={
-          <>
-            {/* Document list — live / archived toggle */}
-            <div className="flex items-center gap-3 mb-3">
-              <h2 className="text-sm font-medium text-text-secondary">
-                {t('office.section.library')} ({documents.length})
-              </h2>
-              <div className="ml-auto flex gap-2">
-                {(
-                  [
-                    ['live', t('office.view.live')],
-                    ['archived', t('office.view.archived')],
-                  ] as [OfficeListView, string][]
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setView(value)}
-                    data-testid={`office-view-${value}`}
-                    className={[
-                      'px-3 py-1.5 rounded text-sm border',
-                      view === value
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border text-text-secondary hover:bg-bg-hover',
-                    ].join(' ')}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <OfficeDocumentList
-              documents={documents}
-              loading={loading}
-              variant={view}
-              onSaveAs={handleSaveAs}
-              onOpen={handleOpen}
-              onShowInFolder={handleShowInFolder}
-              onArchive={handleArchive}
-              onRestore={handleRestore}
-              onViewSnapshots={(docId) => setSnapshotDocId(docId)}
-              onPreview={handlePreviewDocument}
-              onBatchArchive={batchArchive}
-              onBatchRestore={batchRestore}
-              q={q}
-              onQChange={setQ}
-              docType={docType}
-              onDocTypeChange={setDocType}
-              sort={sort}
-              onSortChange={setSort}
-              duplicateGroups={duplicateGroups}
-              onArchiveAllButNewest={archiveAllButNewest}
-            />
-            {snapshotDoc && (
-              <div className="mt-3">
-                <OfficeSnapshotPanel
-                  doc={snapshotDoc}
-                  onClose={() => setSnapshotDocId(null)}
-                  onRestored={handleSnapshotRestored}
-                />
-              </div>
-            )}
-          </>
-        }
-        center={
-          <>
-            <h2 className="text-sm font-medium text-text-secondary mb-3">
-              {t('office.section.canvas')}
-            </h2>
-            <div ref={canvasRootRef}>
-              <DocumentCanvas
-                preview={preview}
-                workspacePath={workspacePath}
-                onPick={handleImportAndReadMulti}
-                onDropFiles={handleReadDroppedMulti}
-                onEditPreview={
-                  preview && preview.docType !== 'pdf' ? () => setEditDialogOpen(true) : undefined
-                }
-                fidelityAvailable={pdfAvailableForDocument(capabilities, preview?.docType)}
-                onRefresh={() => void refresh()}
-                disabled={loading}
-              />
-            </div>
-            {editDialogOpen && editDoc && preview?.docType !== 'pdf' && (
-              <div className="mt-3">
-                <OfficeEditPreviewDialog
-                  workspacePath={workspacePath ?? ''}
-                  doc={editDoc}
-                  sheetNames={editSheetNames}
-                  onApplied={handleEditApplied}
-                  onClose={() => setEditDialogOpen(false)}
-                />
-              </div>
-            )}
-          </>
-        }
-      />
+      {slotEl ? (
+        <div className="flex flex-col gap-4 min-w-0">{documentsCanvas}</div>
+      ) : (
+        <OfficeLayout left={documentsLibrary} center={documentsCanvas} />
+      )}
     </div>
   );
 
@@ -658,6 +672,25 @@ export function Office() {
           rootRef={canvasRootRef}
         />
       )}
+
+      {/* 文档库 portal 挂在页面根节点（而非 documents TabContent 内），
+          generate / rules / latex 深链与 keep-alive 切 tab 都不影响侧栏列表。 */}
+      {slotEl &&
+        createPortal(
+          <div
+            data-testid="office-sidebar-library"
+            className="flex-1 min-h-0 flex flex-col gap-3 px-3 pb-3 overflow-y-auto"
+          >
+            {workspacePath ? (
+              documentsLibrary
+            ) : (
+              <div data-testid="office-sidebar-empty" className="px-1 py-6 text-sm text-muted">
+                {t('office.emptyState')}
+              </div>
+            )}
+          </div>,
+          slotEl,
+        )}
     </div>
   );
 }
