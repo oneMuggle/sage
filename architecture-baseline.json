@@ -86,6 +86,7 @@
     "src/pages/ProjectGovernance.tsx": 874,
     "src/pages/settings/PluginsTab.tsx": 687,
     "src/pages/settings/settingsSearchEntries.ts": 864,
+    "src/shared/api/demoInterceptors.ts": 814,
     "src/shared/api/memoryApi.ts": 918,
     "src/shared/api/projectApi.ts": 1584,
     "src/shared/api/projectApiTypes.ts": 1762,
