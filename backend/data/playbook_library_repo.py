@@ -32,6 +32,9 @@ class LibraryPlaybook:
     created_at: int
 
     def summary(self) -> Dict[str, Any]:
+        meta = _spec_meta(self.spec)
+        tags = meta.get("tags")
+        tags = tags if isinstance(tags, list) else []
         return {
             "id": self.id,
             "name": self.name,
@@ -42,7 +45,28 @@ class LibraryPlaybook:
             "directories": [
                 item.get("path") for item in self.spec.get("directory_layout") or []
             ],
+            "description": str(self.spec.get("description") or ""),
+            "tags": [str(tag) for tag in tags],
         }
+
+
+def _spec_meta(spec: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the spec's ``meta`` dict, tolerating legacy / hand-edited rows."""
+    meta = spec.get("meta")
+    return meta if isinstance(meta, dict) else {}
+
+
+def _matches_query(item: LibraryPlaybook, tokens: List[str]) -> bool:
+    """True when every casefolded token appears in name, description or tags."""
+    tags = _spec_meta(item.spec).get("tags")
+    tags = tags if isinstance(tags, list) else []
+    haystacks = [
+        item.name or "",
+        str(item.spec.get("description") or ""),
+        " ".join(str(tag) for tag in tags),
+    ]
+    folded = " ".join(haystacks).casefold()
+    return all(token in folded for token in tokens)
 
 
 def _row_to_library(row) -> Optional[LibraryPlaybook]:  # noqa: ANN001 — sqlite3.Row
@@ -65,14 +89,25 @@ class PlaybookLibraryRepository:
     def __init__(self) -> None:
         self.db = get_database()
 
-    def list(self, limit: int = MAX_LIBRARY_ITEMS) -> List[LibraryPlaybook]:
+    def list(
+        self, limit: int = MAX_LIBRARY_ITEMS, *, q: str = ""
+    ) -> List[LibraryPlaybook]:
+        """Return library items, optionally filtered by a search query.
+
+        The query matches name / description / tags (case-insensitive
+        substring); multi-word queries require every token to match.
+        """
         conn = self.db.get_connection()
         rows = conn.execute(
             "SELECT * FROM playbook_library ORDER BY created_at DESC LIMIT ?",
             (limit,),
         ).fetchall()
         items = [_row_to_library(row) for row in rows]
-        return [item for item in items if item is not None]
+        results = [item for item in items if item is not None]
+        tokens = [token.casefold() for token in q.split() if token.strip()]
+        if not tokens:
+            return results
+        return [item for item in results if _matches_query(item, tokens)]
 
     def get(self, library_id: str) -> Optional[LibraryPlaybook]:
         conn = self.db.get_connection()
@@ -130,6 +165,53 @@ class PlaybookLibraryRepository:
             ),
             True,
         )
+
+    def update_metadata(
+        self,
+        library_id: str,
+        *,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> Optional[LibraryPlaybook]:
+        """Update display metadata (name / description / tags) in place.
+
+        ``spec_hash`` is deliberately left untouched: it identifies the
+        imported source spec, so metadata edits must not change that identity
+        (otherwise re-importing the same source would create a duplicate).
+
+        Returns the updated entry, or None when it does not exist.
+        """
+        conn = self.db.get_connection()
+        row = conn.execute(
+            "SELECT * FROM playbook_library WHERE id = ?", (library_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            spec = json.loads(row["spec_json"])
+        except (TypeError, ValueError):
+            logger.warning("library playbook %s has invalid spec_json", library_id)
+            return None
+        if not isinstance(spec, dict):
+            return None
+        meta = _spec_meta(spec)
+        if description is not None:
+            spec["description"] = str(description).strip()
+        if tags is not None:
+            meta["tags"] = [str(tag).strip() for tag in tags if str(tag).strip()]
+        spec["meta"] = meta
+        new_name = str(name).strip() if name is not None else row["name"]
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE playbook_library SET name = ?, spec_json = ? WHERE id = ?",
+            (new_name, json.dumps(spec, ensure_ascii=False), library_id),
+        )
+        conn.commit()
+        updated = conn.execute(
+            "SELECT * FROM playbook_library WHERE id = ?", (library_id,)
+        ).fetchone()
+        return None if updated is None else _row_to_library(updated)
 
     def delete(self, library_id: str) -> bool:
         conn = self.db.get_connection()

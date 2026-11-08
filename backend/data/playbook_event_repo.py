@@ -41,6 +41,7 @@ ALLOWED_EVENTS = frozenset(
         "export_wiki",
         "library_save",
         "library_delete",
+        "library_update",
         "library_export",
         "batch_move",
         "undo_batch_move",
