@@ -1,6 +1,6 @@
 """P2-a: ``POST /agents/batch`` 批量操作契约测试。
 
-覆盖：enable/disable 透传、delete 走级联删除、primary 保护进入 failed、
+覆盖：enable/disable 透传、delete 走级联删除、primary / sage-guide 保护进入 failed、
 非法 action 返回 400。
 """
 from typing import Any, Dict, List
@@ -100,6 +100,19 @@ def test_batch_delete_protects_primary(monkeypatch) -> None:
     assert result["succeeded"] == ["a1"]
     assert result["failed"][0]["id"] == "primary"
     assert "primary" not in repo.deleted
+    assert repo.deleted == ["a1"]
+
+
+def test_batch_delete_protects_sage_guide(monkeypatch) -> None:
+    repo = _install_repo(monkeypatch, ["sage-guide", "a1"])
+
+    result = agent_routes.batch_agents(
+        {"action": "delete", "ids": ["sage-guide", "a1"]}
+    )
+
+    assert result["succeeded"] == ["a1"]
+    assert result["failed"][0]["id"] == "sage-guide"
+    assert "sage-guide" not in repo.deleted
     assert repo.deleted == ["a1"]
 
 
