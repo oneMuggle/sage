@@ -53,6 +53,8 @@ class PlaybookLibraryItemModel(BaseModel):
     created_at: int
     stage_count: int = 0
     directories: List[str] = Field(default_factory=list)
+    description: str = ""
+    tags: List[str] = Field(default_factory=list)
 
 
 class PlaybookLibraryResponse(BaseModel):
@@ -80,6 +82,20 @@ class PlaybookLibrarySaveResponse(BaseModel):
 
     item: PlaybookLibraryItemModel
     created: bool
+
+
+class PlaybookLibraryUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
+class PlaybookLibraryUpdateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item: PlaybookLibraryItemModel
 
 
 class PlaybookStateUpdateRequest(BaseModel):
@@ -308,6 +324,8 @@ __all__ = [
     "PlaybookLibraryResponse",
     "PlaybookLibrarySaveRequest",
     "PlaybookLibrarySaveResponse",
+    "PlaybookLibraryUpdateRequest",
+    "PlaybookLibraryUpdateResponse",
     "PlaybookRuleCleanupResponse",
     "PlaybookShareRequest",
     "PlaybookShareResponse",

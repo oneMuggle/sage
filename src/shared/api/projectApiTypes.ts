@@ -53,10 +53,15 @@ export interface ProjectSummary {
   parentId?: string | null;
   /** P2: 子项目发现方式 'manual' | 'template' | 'context_file' */
   discoverySource?: string | null;
+  /** 项目生命周期状态（P: 工作台总览）。旧数据缺失按 active 处理。 */
+  status?: ProjectStatus;
 }
 
 /** 项目类型枚举 */
 export type ProjectType = 'coding' | 'research' | 'business' | 'personal';
+
+/** 项目生命周期状态（工作台总览页筛选用）。 */
+export type ProjectStatus = 'active' | 'archived';
 
 /** 项目约束实体 (2026-09-24) */
 export interface ProjectConstraint {
@@ -314,6 +319,7 @@ export interface ProjectWire {
   // P2 (2026-11-05): 嵌套项目
   parent_id?: string | null;
   discovery_source?: string | null;
+  status?: string | null;
 }
 
 export interface ProjectListWire {
@@ -561,6 +567,7 @@ export function mapProject(p: ProjectWire): ProjectSummary {
     bootstrapState: parseBootstrapState(p.bootstrap_state),
     parentId: p.parent_id ?? null,
     discoverySource: p.discovery_source ?? null,
+    status: (p.status as ProjectStatus) ?? 'active',
   };
 }
 

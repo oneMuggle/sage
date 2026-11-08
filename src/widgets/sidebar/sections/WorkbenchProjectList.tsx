@@ -4,12 +4,15 @@
  * Used on the Projects page (/projects route). Differences from
  * SidebarProjectList:
  *  - No SiderSection wrapper, no maxHeight constraint
- *  - Click on project row → toggleExpand (not openProject)
+ *  - Click on project row → navigate to governance (not toggleExpand)
+ *  - Expand button separate from row click
  *  - Expanded row shows sub-sessions + overview + materials panels
  *
  * Data & handlers come from useProjectSectionData hook.
  *
  * Created 2026-10-18 as part of Scheme 3 (ProjectSection split).
+ * Updated 2026-11-07 (Task 4): Row click navigates to governance;
+ * expand moved to dedicated button; ProjectContextMenu merged into dropdown.
  */
 
 import {
@@ -29,11 +32,10 @@ import { useNavigate } from 'react-router-dom';
 
 import { ProjectTypeBadge } from '../../../features/project-type/ProjectTypeBadge';
 import { getArchetypeBlueprint } from '../../../features/project-type/archetypeBlueprints';
-import { projectApi, type ProjectSummary, type ProjectType } from '../../../shared/api/projectApi';
+import { projectApi, type ProjectSummary } from '../../../shared/api/projectApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import { useStore } from '../../../shared/lib/store';
 import { formatRelativeTime } from '../../../shared/lib/utils';
-import { ProjectContextMenu } from '../../project/ProjectContextMenu';
 import { TwoStepDelete } from '../TwoStepDelete';
 
 import { AddProjectDialog } from './AddProjectDialog';
@@ -80,7 +82,7 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
     addDialogOpen,
     handleDropRegister,
     toggleExpand,
-    openProject,
+    refresh,
     handleAddProject,
     closeAddDialog,
     handleRegisterProject,
@@ -167,12 +169,19 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
       >
         {/* Section header (no SiderSection wrapper in workbench) */}
         <div className="flex items-center justify-between px-3 py-2">
-          <div className="flex items-center gap-1.5">
-            <Folder className="w-3.5 h-3.5 text-muted" aria-hidden="true" />
-            <span className="text-ui-2xs font-semibold uppercase tracking-wide text-muted">
-              {t('sider.section.project')}
+          <button
+            data-testid="sidebar-all-projects"
+            className="flex flex-1 items-center justify-between rounded px-2 py-1 text-xs hover:bg-accent"
+            onClick={() => navigate('/projects')}
+          >
+            <span className="flex items-center gap-1.5">
+              <Folder className="w-3.5 h-3.5 text-muted" aria-hidden="true" />
+              <span className="font-semibold uppercase tracking-wide text-muted">
+                {t('sider.section.project')}
+              </span>
             </span>
-          </div>
+            <span className="text-muted-foreground">{projects.length}</span>
+          </button>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -210,236 +219,215 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
             const Chevron = expanded ? ChevronDown : ChevronRight;
             return (
               <div key={project.id} className="flex flex-col">
-                <ProjectContextMenu
-                  project={project}
-                  onOpen={() => void openProject(project)}
-                  onNewSession={() => void handleNewChatInProject(project)}
-                  onSettings={() => navigate(`/projects/governance/${project.id}`)}
-                  onCheckPlaybook={() =>
-                    navigate(`/projects/governance/${project.id}?focus=playbook`)
-                  }
-                  onRemove={() => void handleRemoveProject(project)}
+                <div
+                  data-testid={`project-row-${project.id}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/projects/governance/${project.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      navigate(`/projects/governance/${project.id}`);
+                    }
+                  }}
+                  className="group flex items-center gap-1 mx-1.5 px-1.5 py-1.5 rounded cursor-pointer hover:bg-bg-hover"
+                  title={`${project.name}\n${project.path}`}
                 >
-                  <div
-                    data-testid="project-row"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => toggleExpand(project)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        toggleExpand(project);
-                      }
+                  <button
+                    type="button"
+                    data-testid="project-expand"
+                    aria-label={expanded ? t('sider.collapse') : t('sider.expand')}
+                    aria-expanded={expanded}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleExpand(project);
                     }}
-                    className="group flex items-center gap-1 mx-1.5 px-1.5 py-1.5 rounded cursor-pointer hover:bg-bg-hover"
-                    title={`${project.name}\n${project.path}`}
+                    className="inline-flex items-center justify-center w-4 h-4 shrink-0 rounded text-muted hover:text-text hover:bg-bg-hover"
                   >
+                    <Chevron className="w-3 h-3" aria-hidden="true" />
+                  </button>
+                  <Folder className="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-ui-sm text-text truncate">{project.name}</span>
+                      <ProjectTypeBadge
+                        type={project.projectType ?? project.detectedType}
+                        detected={!project.projectType && Boolean(project.detectedType)}
+                      />
+                      {project.projectStage && (
+                        <span
+                          data-testid="project-row-stage-badge"
+                          className="shrink-0 rounded border border-border/60 bg-bg-muted px-1 py-0.5 text-ui-2xs text-text-secondary"
+                        >
+                          {getArchetypeBlueprint(
+                            project.projectType ?? project.detectedType ?? 'coding',
+                          ).stages.find((s) => s.id === project.projectStage)?.label ??
+                            project.projectStage}
+                        </span>
+                      )}
+                      {missing && (
+                        <AlertTriangle
+                          className="w-3 h-3 shrink-0 text-warning"
+                          aria-label={t('sider.project.missing')}
+                          data-testid="project-missing-badge"
+                        />
+                      )}
+                    </div>
+                    <div className="text-ui-2xs text-muted truncate">{project.path}</div>
+                  </div>
+                  {project.sessionCount > 0 && (
+                    <span
+                      className="shrink-0 text-ui-2xs text-muted tabular-nums"
+                      title={t('sider.project.session_count').replace(
+                        '{count}',
+                        String(project.sessionCount),
+                      )}
+                    >
+                      {project.sessionCount}
+                    </span>
+                  )}
+                  <div className="hidden group-hover:flex items-center gap-1">
+                    {/* Primary action: start or create session */}
                     <button
                       type="button"
-                      data-testid="project-expand"
-                      aria-label={expanded ? t('sider.collapse') : t('sider.expand')}
-                      aria-expanded={expanded}
+                      data-testid="project-primary-action"
+                      aria-label={
+                        project.sessionCount > 0
+                          ? t('sider.project.new_chat')
+                          : t('sider.project.new_chat')
+                      }
+                      title={project.sessionCount > 0 ? '开始会话' : '新建会话'}
+                      disabled={busy}
                       onClick={(e) => {
                         e.stopPropagation();
-                        toggleExpand(project);
-                      }}
-                      className="inline-flex items-center justify-center w-4 h-4 shrink-0 rounded text-muted hover:text-text hover:bg-bg-hover"
-                    >
-                      <Chevron className="w-3 h-3" aria-hidden="true" />
-                    </button>
-                    <Folder className="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-ui-sm text-text truncate">{project.name}</span>
-                        <ProjectTypeBadge
-                          type={project.projectType ?? project.detectedType}
-                          detected={!project.projectType && Boolean(project.detectedType)}
-                        />
-                        {project.projectStage && (
-                          <span
-                            data-testid="project-row-stage-badge"
-                            className="shrink-0 rounded border border-border/60 bg-bg-muted px-1 py-0.5 text-ui-2xs text-text-secondary"
-                          >
-                            {getArchetypeBlueprint(
-                              project.projectType ?? project.detectedType ?? 'coding',
-                            ).stages.find((s) => s.id === project.projectStage)?.label ??
-                              project.projectStage}
-                          </span>
-                        )}
-                        {missing && (
-                          <AlertTriangle
-                            className="w-3 h-3 shrink-0 text-warning"
-                            aria-label={t('sider.project.missing')}
-                            data-testid="project-missing-badge"
-                          />
-                        )}
-                      </div>
-                      <div className="text-ui-2xs text-muted truncate">{project.path}</div>
-                    </div>
-                    {project.sessionCount > 0 && (
-                      <span
-                        className="shrink-0 text-ui-2xs text-muted tabular-nums"
-                        title={t('sider.project.session_count').replace(
-                          '{count}',
-                          String(project.sessionCount),
-                        )}
-                      >
-                        {project.sessionCount}
-                      </span>
-                    )}
-                    <div className="hidden group-hover:flex items-center gap-1">
-                      {/* Primary action: start or create session */}
-                      <button
-                        type="button"
-                        data-testid="project-primary-action"
-                        aria-label={
-                          project.sessionCount > 0
-                            ? t('sider.project.new_chat')
-                            : t('sider.project.new_chat')
-                        }
-                        title={project.sessionCount > 0 ? '开始会话' : '新建会话'}
-                        disabled={busy}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (project.sessionCount > 0) {
-                            // Open most recent session
-                            const sessions = subSessions[project.id];
-                            if (sessions && sessions.length > 0) {
-                              onOpenSession(sessions[0].id);
-                            } else {
-                              void handleNewChatInProject(project);
-                            }
+                        if (project.sessionCount > 0) {
+                          // Open most recent session
+                          const sessions = subSessions[project.id];
+                          if (sessions && sessions.length > 0) {
+                            onOpenSession(sessions[0].id);
                           } else {
                             void handleNewChatInProject(project);
                           }
-                        }}
-                        className="inline-flex items-center gap-1 rounded bg-primary/10 border border-primary/30 px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/15 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <Play className="w-3 h-3" />
-                        {project.sessionCount > 0 ? '会话' : '新建'}
-                      </button>
+                        } else {
+                          void handleNewChatInProject(project);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded bg-primary/10 border border-primary/30 px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/15 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Play className="w-3 h-3" />
+                      {project.sessionCount > 0 ? '会话' : '新建'}
+                    </button>
 
-                      {/* ··· More actions menu */}
-                      <div className="relative" ref={menuOpenId === project.id ? menuRef : null}>
-                        <button
-                          type="button"
-                          data-testid={`workbench-row-menu-${project.id}`}
-                          aria-label="更多操作"
-                          aria-expanded={menuOpenId === project.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setMenuOpenId((prev) => (prev === project.id ? null : project.id));
-                          }}
-                          className="inline-flex items-center justify-center w-5 h-5 rounded text-muted hover:text-text hover:bg-bg-hover transition-colors"
-                        >
-                          <MoreHorizontal className="w-3.5 h-3.5" />
-                        </button>
-                        {menuOpenId === project.id && (
-                          <>
-                            {/* Backdrop to close menu on outside click */}
-                            <div
-                              className="fixed inset-0 z-10"
-                              onClick={() => setMenuOpenId(null)}
+                    {/* ··· More actions menu */}
+                    <div className="relative" ref={menuOpenId === project.id ? menuRef : null}>
+                      <button
+                        type="button"
+                        data-testid={`workbench-row-menu-${project.id}`}
+                        aria-label="更多操作"
+                        aria-expanded={menuOpenId === project.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuOpenId((prev) => (prev === project.id ? null : project.id));
+                        }}
+                        className="inline-flex items-center justify-center w-5 h-5 rounded text-muted hover:text-text hover:bg-bg-hover transition-colors"
+                      >
+                        <MoreHorizontal className="w-3.5 h-3.5" />
+                      </button>
+                      {menuOpenId === project.id && (
+                        <>
+                          {/* Backdrop to close menu on outside click */}
+                          <div className="fixed inset-0 z-10" onClick={() => setMenuOpenId(null)} />
+                          <div
+                            className="absolute right-0 top-full mt-0.5 z-20 min-w-[160px] rounded-md border border-border bg-card shadow-lg py-1"
+                            data-testid={`workbench-row-menu-dropdown-${project.id}`}
+                          >
+                            <MenuItem
+                              icon={<FolderOpen className="w-3.5 h-3.5" />}
+                              label="打开项目"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMenuOpenId(null);
+                                navigate(`/projects/governance/${project.id}`);
+                              }}
                             />
-                            <div
-                              className="absolute right-0 top-full mt-0.5 z-20 min-w-[160px] rounded-md border border-border bg-card shadow-lg py-1"
-                              data-testid={`workbench-row-menu-dropdown-${project.id}`}
-                            >
-                              <MenuItem
-                                icon={<FolderOpen className="w-3.5 h-3.5" />}
-                                label="项目设置"
-                                onClick={() => {
-                                  setMenuOpenId(null);
-                                  navigate(`/projects/governance/${project.id}`);
-                                }}
-                              />
-                              <MenuItem
-                                label="添加里程碑"
-                                onClick={async () => {
-                                  setMenuOpenId(null);
-                                  if (typeof projectApi?.createMilestone === 'function') {
-                                    try {
-                                      await projectApi.createMilestone(project.id, {
-                                        title: `[项目复核] ${project.name}`,
-                                        description: `工作区路径：${project.path}`,
-                                        status: 'pending',
-                                      });
-                                    } catch {
-                                      // ignore in test/offline mode
-                                    }
-                                  }
-                                }}
-                              />
-                              <MenuItem
-                                label="添加项目规则"
-                                onClick={async () => {
-                                  setMenuOpenId(null);
-                                  if (typeof projectApi?.createConstraint === 'function') {
-                                    try {
-                                      await projectApi.createConstraint(project.id, {
-                                        category: 'workspace_guard',
-                                        content: `[项目边界] ${project.name} (${project.path})`,
-                                        triggerPattern: 'always',
-                                        priority: 8,
-                                      });
-                                    } catch {
-                                      // ignore in test/offline mode
-                                    }
-                                  }
-                                }}
-                              />
-                              <MenuItem
-                                label="初始化项目目录"
-                                onClick={async () => {
-                                  setMenuOpenId(null);
-                                  if (typeof projectApi?.scaffold === 'function') {
-                                    try {
-                                      await projectApi.scaffold(project.id, {
-                                        projectType: (project.projectType ??
-                                          project.detectedType ??
-                                          'coding') as ProjectType,
-                                        createDirectories: true,
-                                        createSageMd: true,
-                                        importDefaultConstraints: true,
-                                        seedDefaultMilestones: true,
-                                      });
-                                    } catch {
-                                      // ignore in test/offline mode
-                                    }
-                                  }
-                                }}
-                              />
-                              <MenuItem
-                                icon={<Copy className="w-3.5 h-3.5" />}
-                                label={copiedPathId === project.id ? '已复制' : '复制路径'}
-                                onClick={async () => {
-                                  setMenuOpenId(null);
-                                  try {
-                                    await navigator.clipboard?.writeText(project.path);
-                                    setCopiedPathId(project.id);
-                                    setTimeout(() => setCopiedPathId(null), 1500);
-                                  } catch {
-                                    // ignore in test/offline mode
-                                  }
-                                }}
-                              />
-                              <div className="border-t border-border my-1" />
-                              <MenuItem
-                                icon={<FolderMinusIcon />}
-                                label="移除项目"
-                                destructive
-                                onClick={async () => {
-                                  setMenuOpenId(null);
-                                  await handleRemoveProject(project);
-                                }}
-                              />
-                            </div>
-                          </>
-                        )}
-                      </div>
+                            <MenuItem
+                              label="新建会话"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                setMenuOpenId(null);
+                                await handleNewChatInProject(project);
+                              }}
+                            />
+                            <MenuItem
+                              label="在文件管理器中显示"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                setMenuOpenId(null);
+                                try {
+                                  await window.electronAPI?.project?.revealFolder?.(project.id);
+                                } catch {
+                                  // ignore in test/offline mode
+                                }
+                              }}
+                            />
+                            <MenuItem
+                              icon={<Copy className="w-3.5 h-3.5" />}
+                              label={copiedPathId === project.id ? '已复制' : '复制路径'}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                setMenuOpenId(null);
+                                try {
+                                  await navigator.clipboard?.writeText(project.path);
+                                  setCopiedPathId(project.id);
+                                  setTimeout(() => setCopiedPathId(null), 1500);
+                                } catch {
+                                  // ignore in test/offline mode
+                                }
+                              }}
+                            />
+                            <MenuItem
+                              icon={<FolderOpen className="w-3.5 h-3.5" />}
+                              label="项目设置"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMenuOpenId(null);
+                                navigate(`/projects/governance/${project.id}`);
+                              }}
+                            />
+                            <MenuItem
+                              label="检查项目完整性"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMenuOpenId(null);
+                                navigate(`/projects/governance/${project.id}?tab=rules`);
+                              }}
+                            />
+                            <MenuItem
+                              label="归档项目"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                setMenuOpenId(null);
+                                await projectApi.setProjectStatus(project.id, 'archived');
+                                await refresh();
+                              }}
+                            />
+                            <div className="border-t border-border my-1" />
+                            <MenuItem
+                              icon={<FolderMinusIcon />}
+                              label="移除项目"
+                              destructive
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                setMenuOpenId(null);
+                                await handleRemoveProject(project);
+                              }}
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
-                </ProjectContextMenu>
+                </div>
                 {renderSubSessions(project)}
                 {expandedIds.has(project.id) && (
                   <>
@@ -488,7 +476,7 @@ interface MenuItemProps {
   label: string;
   icon?: ReactNode;
   destructive?: boolean;
-  onClick: () => void;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 function MenuItem({ label, icon, destructive, onClick }: MenuItemProps) {

@@ -50,6 +50,8 @@ from backend.api.playbook_schemas import (
     PlaybookLibraryResponse,
     PlaybookLibrarySaveRequest,
     PlaybookLibrarySaveResponse,
+    PlaybookLibraryUpdateRequest,
+    PlaybookLibraryUpdateResponse,
     PlaybookRuleCleanupResponse,
     PlaybookSharedResponse,
     PlaybookShareRequest,
@@ -108,6 +110,47 @@ def with_db_lock(func):  # noqa: ANN001 — 与 project_routes 相同的装饰�
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
     return HTTPException(status_code=status_code, detail={"code": code, "message": message})
+
+
+MAX_LIBRARY_NAME_LENGTH = 200
+MAX_LIBRARY_DESCRIPTION_LENGTH = 4000
+MAX_LIBRARY_TAGS = 32
+MAX_LIBRARY_TAG_LENGTH = 64
+
+
+def _clean_library_update(
+    request: PlaybookLibraryUpdateRequest,
+) -> Dict[str, Any]:
+    """Validate and normalize a library metadata update payload.
+
+    Raises 422 via ``_error`` on invalid input instead of truncating values.
+    Returns only the fields the caller actually provided.
+    """
+    cleaned: Dict[str, Any] = {}
+    if request.name is not None:
+        name = request.name.strip()
+        if not name:
+            raise _error(422, "invalid_name", "名称不能为空")
+        if len(name) > MAX_LIBRARY_NAME_LENGTH:
+            raise _error(422, "invalid_name", "名称过长")
+        cleaned["name"] = name
+    if request.description is not None:
+        if len(request.description) > MAX_LIBRARY_DESCRIPTION_LENGTH:
+            raise _error(422, "invalid_description", "描述过长")
+        cleaned["description"] = request.description
+    if request.tags is not None:
+        tags: List[str] = []
+        for raw in request.tags:
+            tag = raw.strip()
+            if not tag:
+                continue
+            if len(tag) > MAX_LIBRARY_TAG_LENGTH:
+                raise _error(422, "invalid_tags", "标签过多或过长")
+            tags.append(tag)
+        if len(tags) > MAX_LIBRARY_TAGS:
+            raise _error(422, "invalid_tags", "标签过多或过长")
+        cleaned["tags"] = tags
+    return cleaned
 
 
 def _project_or_404(project_id: str) -> Project:
@@ -232,8 +275,8 @@ def get_builtin_playbook(playbook_id: str) -> BuiltinPlaybookResponse:
 
 @router.get("/playbooks/library", response_model=PlaybookLibraryResponse)
 @with_db_lock
-def list_playbook_library() -> PlaybookLibraryResponse:
-    items = PlaybookLibraryRepository().list()
+def list_playbook_library(q: str = "") -> PlaybookLibraryResponse:
+    items = PlaybookLibraryRepository().list(q=q)
     return PlaybookLibraryResponse(
         items=[PlaybookLibraryItemModel(**item.summary()) for item in items]
     )
@@ -305,6 +348,36 @@ def export_playbook_library_item(
         content=build_export_envelope(
             spec, include_scaffold=include_scaffold, app_version="unknown"
         ),
+    )
+
+
+@router.patch(
+    "/playbooks/library/{library_id}", response_model=PlaybookLibraryUpdateResponse
+)
+@with_db_lock
+def update_playbook_library_item(
+    library_id: str, request: PlaybookLibraryUpdateRequest
+) -> PlaybookLibraryUpdateResponse:
+    """Update a library entry's display metadata (name / description / tags)."""
+    repo = PlaybookLibraryRepository()
+    existing = repo.get(library_id)
+    if existing is None:
+        raise _error(404, "playbook_not_found", "规程库条目不存在")
+    cleaned = _clean_library_update(request)
+    if not cleaned:
+        return PlaybookLibraryUpdateResponse(
+            item=PlaybookLibraryItemModel(**existing.summary())
+        )
+    updated = repo.update_metadata(library_id, **cleaned)
+    if updated is None:
+        raise _error(404, "playbook_not_found", "规程库条目不存在")
+    record_playbook_event(
+        f"library:{library_id}",
+        "library_update",
+        payload={"library_id": library_id, "changed": list(cleaned.keys())},
+    )
+    return PlaybookLibraryUpdateResponse(
+        item=PlaybookLibraryItemModel(**updated.summary())
     )
 
 

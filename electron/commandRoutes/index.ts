@@ -22,6 +22,7 @@ import { orchestrationRoutes } from './orchestration';
 import { projectRoutes } from './projects';
 import { playbookRoutes } from './playbooks';
 import { promptRoutes } from './prompts';
+import { rulesRoutes } from './rules';
 import { sessionRoutes } from './sessions';
 import { settingsRoutes } from './settings';
 import { skillRoutes } from './skills';
@@ -36,6 +37,7 @@ export const DOMAIN_ROUTES: Record<string, CommandRoute> = {
   ...officeRoutes,
   ...projectRoutes,
   ...playbookRoutes,
+  ...rulesRoutes,
   ...promptRoutes,
   ...integrationRoutes,
   ...feedbackRoutes,
