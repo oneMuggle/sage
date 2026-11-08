@@ -88,6 +88,8 @@ interface ChatInputProps extends Pick<InputCardProps, 'composerControls'> {
   onCompact?: () => void;
   /** Task 12 (2026-08-03): /learn slash action 回调。由 Chat 页面实现 （调用 learnApi + toast + 跳转到 Pending Drafts tab）。未提供时 /learn 静默无操作。 */
   onLearn?: () => void;
+  /** Recap (2026-11-08): /recap slash action 回调。由 Chat 页面实现（调用 sessionApi.recap + 展示 RecapCard）。未提供时 /recap 静默无操作。 */
+  onRecap?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
   placeholder?: string;
@@ -111,6 +113,7 @@ function ChatInputInner({
   onClear,
   onCompact,
   onLearn,
+  onRecap,
   isLoading = false,
   disabled = false,
   placeholder,
@@ -511,6 +514,15 @@ function ChatInputInner({
         return;
       }
 
+      // Recap (2026-11-08): /recap 生成会话进度总结，由 Chat 页面负责
+      // 调用 sessionApi.recap + 渲染 RecapCard。对齐 /compact 守卫。
+      if (cmd.mode === 'recap') {
+        if (isLoading || disabled) return;
+        setValue('');
+        onRecap?.();
+        return;
+      }
+
       if (cmd.mode === 'help') {
         const helpText = slashCommands.map((c) => `/${c.name} — ${c.description}`).join('\n');
         setValue('');
@@ -682,6 +694,7 @@ function ChatInputInner({
       onClear,
       onCompact,
       onLearn,
+      onRecap,
       slashCommands,
       isLoading,
       disabled,

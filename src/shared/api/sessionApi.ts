@@ -8,6 +8,7 @@ import type {
   Message,
   Session,
   SessionCompactResult,
+  RecapResponse,
   SessionExportResult,
   SessionLineage,
   SessionRetreatResult,
@@ -28,13 +29,9 @@ export const sessionApi = {
       try {
         const session = await invoke<Session>('create_session', {
           title,
-          ...(options?.participantIds?.length
-            ? { participant_ids: options.participantIds }
-            : {}),
+          ...(options?.participantIds?.length ? { participant_ids: options.participantIds } : {}),
           ...(options?.specialistId ? { specialist_id: options.specialistId } : {}),
-          ...(options?.conversationType
-            ? { conversation_type: options.conversationType }
-            : {}),
+          ...(options?.conversationType ? { conversation_type: options.conversationType } : {}),
         });
         return session;
       } catch (error) {
@@ -142,6 +139,27 @@ export const sessionApi = {
     }
     try {
       return await invoke<SessionCompactResult>('session_compact', { sessionId });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * Recap (2026-11-08): 生成会话进度总结（对标 Claude Code /recap）。
+   *
+   * 刻意**不走 withRetry**：失败路径（502）意味着 LLM 摘要出错，
+   * 重试只会浪费 token。返回 {ok, recap?, reason?, error?, message?}。
+   */
+  async recap(sessionId: string): Promise<RecapResponse> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    try {
+      return await invoke<RecapResponse>('session_recap', { sessionId });
     } catch (error) {
       throw handleApiError(error);
     }
@@ -293,10 +311,7 @@ export const sessionApi = {
   },
 
   /** M2：拉专家进群（幂等；首个成员为 host）。 */
-  async addParticipants(
-    sessionId: string,
-    agentIds: string[],
-  ): Promise<ConversationParticipant[]> {
+  async addParticipants(sessionId: string, agentIds: string[]): Promise<ConversationParticipant[]> {
     return withRetry(async () => {
       try {
         const resp = await invoke<{ participants: ConversationParticipant[] }>(

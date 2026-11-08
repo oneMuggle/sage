@@ -38,6 +38,7 @@ import type {
   ScheduledTask,
   Session,
   SessionCompactResult,
+  RecapResponse,
   SessionExportResult,
   Skill,
   SkillExecuteResult,
@@ -165,6 +166,19 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
       removed: Math.max(0, before - after),
     };
     if (before > after) demoMessages.set(id, [list[0], list[list.length - 1]]);
+    return result;
+  },
+
+  session_recap: () => {
+    const result: RecapResponse = {
+      ok: true,
+      recap: {
+        progress: '已完成基础功能开发，正在编写单元测试。',
+        decisions: ['选择 React + TypeScript 技术栈', '采用组件化架构'],
+        nextSteps: ['完成测试覆盖', '进行代码审查', '准备发布候选版本'],
+        openQuestions: ['是否需要支持离线模式？'],
+      },
+    };
     return result;
   },
 
