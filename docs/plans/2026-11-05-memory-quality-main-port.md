@@ -150,9 +150,9 @@ main **没有 lifecycle.py**，所以：
 - [x] S8 port `manager.py` 同步路径增强
 - [x] S9 port 4 个新路由 + 注册 + 集成测试（`test_memory_quality_pipeline.py` 跳过：依赖 win7-only `MemoryLifecycleManager`；同步路径覆盖已在 `test_memory_conflict_semantic.py` 中）
 - [x] S10 port `scheduler/evolution.py` 最小切（4 处 preference_labels 引用 + 2 处测试断言同步）
-- [ ] S11 port 前端
-- [ ] S12 architecture-baseline 同步
-- [ ] S13 PR + CI + 合并
+- [x] S11 port 前端
+- [x] S12 architecture-baseline 同步
+- [x] S13 PR + CI + 合并（PR #2967 已开）
 
 ### S1. 建立 main 侧 feature 分支
 
