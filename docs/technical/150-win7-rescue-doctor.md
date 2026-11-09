@@ -1,4 +1,4 @@
-# 144. Win7 内网救援工具（Rescue Doctor）与启动看门狗
+# 150. Win7 内网救援工具（Rescue Doctor）与启动看门狗
 
 **最后更新**: 2026-11-08
 **适用分支**: main + release/win7
@@ -6,7 +6,7 @@
 
 ---
 
-## 144.1 背景
+## 150.1 背景
 
 内网 Win7 现场常见问题：终端管控/EDR 软件拦截 Electron 前端（终止 renderer/GPU 子进程、注入 hook、阻断未签名可执行文件），导致 Sage 启动闪退；前端崩溃后用户没有任何入口配置端点/模型或查看原因。
 
@@ -19,7 +19,7 @@
 
 > 本工具默认只做应用侧降级与取证；主动处置遗留管控软件是显式选择的能力，不静默执行、不修改安全软件配置以外的系统状态。
 
-## 144.2 组成模块
+## 150.2 组成模块
 
 ### 后端（Python，stdlib + 项目内模块）
 
@@ -50,7 +50,7 @@
 | `resources/SageDoctor.cmd` + `build/installer.nsh` | 安装目录启动器 + 开始菜单「Sage 修复工具」 |
 | `electron-builder.yml` | `extraFiles` 打包 `SageDoctor.cmd` |
 
-## 144.3 数据文件
+## 150.3 数据文件
 
 均在 `<userData>/diagnostics/`（打包模式 = `%APPDATA%\Sage\diagnostics`）：
 
@@ -66,7 +66,7 @@
 
 备份：`<userData>/backups/sage-backup-*.db`（DB）、`<userData>/backups/security/service-*.json`（服务状态）、`<userData>/backups/logs/*.ndjson`（截断前日志）。
 
-## 144.4 CLI
+## 150.4 CLI
 
 ```text
 python -m backend.cli.rescue                 # REPL（默认）
@@ -88,7 +88,7 @@ python -m backend.cli.rescue allowlist [--output PATH]
 - `PYTHONPATH=<install>\resources\backend;<install>\resources\sage-core`
 - 运行 `<install>\resources\python\python.exe`
 
-## 144.5 端点/模型配置
+## 150.5 端点/模型配置
 
 - **唯一真相源**：SQLite `preferences.app_settings`（camelCase；白名单 `LEGAL_ENDPOINT_KEYS`）。
 - 写路径：`SettingsRepository.set_json` → SecretBox（Windows DPAPI）自动加密 `apiKey`。
@@ -98,7 +98,7 @@ python -m backend.cli.rescue allowlist [--output PATH]
 - **不要写空 apiKey 表示"保持"**：按 id 保留原 key。
 - 新增 `apiKeyUpdatedAt`（ms epoch）：前端 `restoreRedactedApiKeys` 在远程时间戳更新时不回灌 localStorage 旧 key。
 
-## 144.6 兼容档位（安全模式）
+## 150.6 兼容档位（安全模式）
 
 | 档位 | 追加 flags | 功能裁剪 |
 |---|---|---|
@@ -112,7 +112,7 @@ python -m backend.cli.rescue allowlist [--output PATH]
 - 恢复对话框：renderer gone / 心跳丢失时，主进程弹「安全模式重启 / 运行修复工具 / 生成诊断包 / 退出」。
 - 心跳：renderer 每 15s `sage:heartbeat`；60s 无心跳 → journal `frontend-heartbeat-lost` + 对话框（每 boot 一次）。`SAGE_HEARTBEAT_DISABLED=1` 可关闭。
 
-## 144.7 遗留管控软件处置（安全边界）
+## 150.7 遗留管控软件处置（安全边界）
 
 - 识别：`sc query` 已知服务名、`tasklist` 进程、`tasklist /m` 注入模块（仅 Windows；失败 fail-open）。
 - 动作（按风险）：结束进程 → 停止服务 → 禁用服务（备份原 start type）→ 禁用启动项/修改白名单配置（建议）→ 绕过启动链/环境隔离（建议）。
@@ -121,7 +121,7 @@ python -m backend.cli.rescue allowlist [--output PATH]
 - 不提供永久删除/卸载；不修改内核驱动（高风险，需单独评审）。
 - 审计：`rescue-actions.jsonl` + 每个 `ActionResult.rollback` 输出回滚命令。
 
-## 144.8 测试
+## 150.8 测试
 
 | 层 | 文件 |
 |---|---|
@@ -133,7 +133,7 @@ python -m backend.cli.rescue allowlist [--output PATH]
 | Electron 对话框 | `electron/__tests__/showStartupFailureDialog.test.ts`（4 按钮） |
 | 前端设置 | `src/entities/setting/__tests__/storage-restore-redacted.test.ts`（apiKeyUpdatedAt 回归） |
 
-## 144.9 已知限制 / 后续
+## 150.9 已知限制 / 后续
 
 - 浏览器回退模式（仅后端 + 系统浏览器）未实现，需安全评审。
 - 内核驱动禁用（动作 F）未实现。
