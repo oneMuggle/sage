@@ -1,176 +1,170 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { projectApi, type ProjectSummary, type ProjectType } from '../shared/api';
+import type { OverviewFilters } from '../features/project-type/projectFilters';
+import { projectApi, type ProjectType } from '../shared/api';
 import type { ProjectStatus } from '../shared/api/projectApiTypes';
 import { useStore } from '../shared/lib/store';
+import { Button } from '../shared/ui/Button';
 import { WorkbenchProjectList } from '../widgets/sidebar/sections/WorkbenchProjectList';
 
-import { filterAndSortProjects, type OverviewFilters } from './projects/projectOverviewUtils';
+const TYPES: Array<{ value: ProjectType | 'all'; label: string }> = [
+  { value: 'all', label: '全部类型' },
+  { value: 'coding', label: '编码' },
+  { value: 'research', label: '科研' },
+  { value: 'business', label: '商务' },
+  { value: 'personal', label: '个人' },
+];
 
-const TYPES: Array<ProjectType | 'all'> = ['all', 'coding', 'research', 'business', 'personal'];
 const DEFAULT_FILTERS: OverviewFilters = { q: '', type: 'all', status: 'active', sort: 'recent' };
 
-interface OverviewHeaderProps {
-  filters: OverviewFilters;
-  onFiltersChange: (update: (prev: OverviewFilters) => OverviewFilters) => void;
-  selectedCount: number;
-  onArchive: () => void;
-}
-
-function OverviewHeader({
-  filters,
-  onFiltersChange,
-  selectedCount,
-  onArchive,
-}: OverviewHeaderProps): JSX.Element {
-  return (
-    <header className="flex items-center gap-2 border-b px-4 py-3">
-      <input
-        data-testid="projects-overview-search"
-        className="input flex-1"
-        placeholder="搜索项目名称、路径或描述"
-        value={filters.q}
-        onChange={(e) => onFiltersChange((f) => ({ ...f, q: e.target.value }))}
-      />
-      <select
-        data-testid="projects-overview-type"
-        value={filters.type}
-        onChange={(e) =>
-          onFiltersChange((f) => ({ ...f, type: e.target.value as ProjectType | 'all' }))
-        }
-      >
-        {TYPES.map((t) => (
-          <option key={t} value={t}>
-            {t === 'all' ? '全部类型' : t}
-          </option>
-        ))}
-      </select>
-      <div className="flex gap-1">
-        {(['active', 'archived'] as ProjectStatus[]).map((s) => (
-          <button
-            key={s}
-            data-testid={`projects-overview-status-${s}`}
-            aria-pressed={filters.status === s}
-            onClick={() => onFiltersChange((f) => ({ ...f, status: s }))}
-          >
-            {s === 'active' ? '活跃' : '归档'}
-          </button>
-        ))}
-      </div>
-      <select
-        data-testid="projects-overview-sort"
-        value={filters.sort}
-        onChange={(e) =>
-          onFiltersChange((f) => ({ ...f, sort: e.target.value as OverviewFilters['sort'] }))
-        }
-      >
-        <option value="recent">最近活动</option>
-        <option value="name">名称</option>
-        <option value="stage">阶段</option>
-      </select>
-      <button
-        data-testid="projects-overview-archive"
-        disabled={selectedCount === 0}
-        onClick={onArchive}
-      >
-        归档所选（{selectedCount}）
-      </button>
-    </header>
-  );
-}
-
-interface OverviewRowsProps {
-  projects: ProjectSummary[];
-  selected: string[];
-  onToggle: (id: string) => void;
-  onOpen: (id: string) => void;
-}
-
-function OverviewRows({ projects, selected, onToggle, onOpen }: OverviewRowsProps): JSX.Element {
-  if (projects.length === 0) {
-    return (
-      <p data-testid="projects-overview-empty" className="text-sm text-muted-foreground">
-        没有匹配的项目。调整搜索或筛选条件试试。
-      </p>
-    );
-  }
-  return (
-    <ul data-testid="projects-overview-rows" className="space-y-1">
-      {projects.map((project) => (
-        <li
-          key={project.id}
-          className="flex items-center gap-2"
-          data-testid={`projects-overview-row-${project.id}`}
-        >
-          <input
-            type="checkbox"
-            data-testid={`projects-overview-select-${project.id}`}
-            checked={selected.includes(project.id)}
-            onChange={() => onToggle(project.id)}
-          />
-          <button className="flex-1 text-left" onClick={() => onOpen(project.id)}>
-            {project.name}
-          </button>
-          <span className="text-xs text-muted-foreground">{project.projectStage ?? '—'}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
+const SELECT_CLASS =
+  'rounded-md border border-input bg-background px-2 py-1.5 text-xs text-foreground';
 
 export function ProjectsOverview(): JSX.Element {
   const navigate = useNavigate();
   const setCurrentSessionId = useStore((s) => s.setCurrentSessionId);
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [filters, setFilters] = useState<OverviewFilters>(DEFAULT_FILTERS);
+  const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
-
-  const load = useCallback(async () => {
-    setProjects(await projectApi.list());
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const visible = useMemo(() => filterAndSortProjects(projects, filters), [projects, filters]);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [addSignal, setAddSignal] = useState(0);
 
   const toggleSelected = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelected([]);
+  };
+
   const archiveSelected = async () => {
     for (const id of selected) await projectApi.setProjectStatus(id, 'archived');
     setSelected([]);
-    await load();
+    setSelectMode(false);
+    setRefreshKey((key) => key + 1);
   };
 
   return (
     <div className="flex h-full flex-col overflow-hidden" data-testid="projects-overview">
-      <OverviewHeader
-        filters={filters}
-        onFiltersChange={setFilters}
-        selectedCount={selected.length}
-        onArchive={() => void archiveSelected()}
-      />
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[960px] px-6 py-6">
+          <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h1 className="text-lg font-semibold text-foreground">项目</h1>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                管理项目规则、资料与会话；点击项目进入工作台。
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setAddSignal((n) => n + 1)}
+              data-testid="projects-overview-new"
+            >
+              新建项目
+            </Button>
+          </header>
 
-      <div className="flex-1 overflow-auto px-4 py-3">
-        <OverviewRows
-          projects={visible}
-          selected={selected}
-          onToggle={toggleSelected}
-          onOpen={(id) => navigate(`/projects/governance/${id}`)}
-        />
+          <div className="mb-3 flex flex-wrap items-center gap-2" role="search">
+            <input
+              data-testid="projects-overview-search"
+              className="input min-w-[220px] flex-1"
+              placeholder="搜索项目名称、路径或描述"
+              value={filters.q}
+              onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
+            />
+            <select
+              data-testid="projects-overview-type"
+              className={SELECT_CLASS}
+              value={filters.type}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, type: e.target.value as ProjectType | 'all' }))
+              }
+            >
+              {TYPES.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+            <div className="flex overflow-hidden rounded-md border border-input">
+              {(['active', 'archived'] as ProjectStatus[]).map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  data-testid={`projects-overview-status-${status}`}
+                  aria-pressed={filters.status === status}
+                  onClick={() => setFilters((f) => ({ ...f, status }))}
+                  className={`px-2.5 py-1.5 text-xs transition-colors ${
+                    filters.status === status
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-background text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {status === 'active' ? '活跃' : '归档'}
+                </button>
+              ))}
+            </div>
+            <select
+              data-testid="projects-overview-sort"
+              className={SELECT_CLASS}
+              value={filters.sort}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, sort: e.target.value as OverviewFilters['sort'] }))
+              }
+            >
+              <option value="recent">最近活动</option>
+              <option value="name">名称</option>
+              <option value="stage">阶段</option>
+            </select>
+            {selectMode ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={exitSelectMode}
+                  data-testid="projects-overview-select-cancel"
+                >
+                  取消选择
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => void archiveSelected()}
+                  disabled={selected.length === 0}
+                  data-testid="projects-overview-archive"
+                >
+                  归档所选（{selected.length}）
+                </Button>
+              </>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelectMode(true)}
+                data-testid="projects-overview-select-mode"
+              >
+                批量管理
+              </Button>
+            )}
+          </div>
+
+          <div data-testid="projects-overview-rows">
+            <WorkbenchProjectList
+              showHeader={false}
+              filters={filters}
+              selectable={selectMode}
+              selectedIds={selected}
+              onToggleSelect={toggleSelected}
+              refreshKey={refreshKey}
+              addSignal={addSignal}
+              onOpenSession={(sessionId) => {
+                setCurrentSessionId(sessionId);
+                navigate('/chat');
+              }}
+            />
+          </div>
+        </div>
       </div>
-
-      <section className="border-t px-4 py-3">
-        <WorkbenchProjectList
-          onOpenSession={(sessionId) => {
-            setCurrentSessionId(sessionId);
-            navigate('/chat');
-          }}
-        />
-      </section>
     </div>
   );
 }
