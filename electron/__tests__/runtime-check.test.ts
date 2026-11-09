@@ -377,3 +377,99 @@ describe('showRuntimeMissingDialog', () => {
     expect(errorCallOrder).toBeLessThan(dialogCallOrder);
   });
 });
+
+// ── isLegacyWindows: 平台门控 (2026-11 从 main 同步) ──────────────────────
+
+describe('isLegacyWindows', () => {
+  const originalPlatform = process.platform;
+  const originalGetSystemVersion = process.getSystemVersion;
+
+  afterEach(() => {
+    vi.resetModules();
+    Object.defineProperty(process, 'platform', { value: originalPlatform });
+    (process as { getSystemVersion?: typeof process.getSystemVersion }).getSystemVersion =
+      originalGetSystemVersion;
+  });
+
+  function mockWindows(version: string): void {
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    (process as { getSystemVersion: () => string }).getSystemVersion = () => version;
+  }
+
+  function mockNonWindows(platform: NodeJS.Platform): void {
+    Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+  }
+
+  it('returns true for Win7 SP1 (6.1.7601)', async () => {
+    mockWindows('6.1.7601');
+    vi.resetModules();
+    const { isLegacyWindows } = await import('../runtime-check');
+    expect(isLegacyWindows()).toBe(true);
+  });
+
+  it('returns true for Win8 (6.2.9200)', async () => {
+    mockWindows('6.2.9200');
+    vi.resetModules();
+    const { isLegacyWindows } = await import('../runtime-check');
+    expect(isLegacyWindows()).toBe(true);
+  });
+
+  it('returns true for Win8.1 (6.3.9600)', async () => {
+    mockWindows('6.3.9600');
+    vi.resetModules();
+    const { isLegacyWindows } = await import('../runtime-check');
+    expect(isLegacyWindows()).toBe(true);
+  });
+
+  it('returns false for Win10 (10.0.19041)', async () => {
+    mockWindows('10.0.19041');
+    vi.resetModules();
+    const { isLegacyWindows } = await import('../runtime-check');
+    expect(isLegacyWindows()).toBe(false);
+  });
+
+  it('returns false for Win11 (10.0.22000)', async () => {
+    mockWindows('10.0.22000');
+    vi.resetModules();
+    const { isLegacyWindows } = await import('../runtime-check');
+    expect(isLegacyWindows()).toBe(false);
+  });
+
+  it('returns false for Server 2019 (10.0.17763)', async () => {
+    mockWindows('10.0.17763');
+    vi.resetModules();
+    const { isLegacyWindows } = await import('../runtime-check');
+    expect(isLegacyWindows()).toBe(false);
+  });
+
+  it('returns false for Server 2022 (10.0.20348)', async () => {
+    mockWindows('10.0.20348');
+    vi.resetModules();
+    const { isLegacyWindows } = await import('../runtime-check');
+    expect(isLegacyWindows()).toBe(false);
+  });
+
+  it('returns false on Linux', async () => {
+    mockNonWindows('linux');
+    vi.resetModules();
+    const { isLegacyWindows } = await import('../runtime-check');
+    expect(isLegacyWindows()).toBe(false);
+  });
+
+  it('returns false on macOS', async () => {
+    mockNonWindows('darwin');
+    vi.resetModules();
+    const { isLegacyWindows } = await import('../runtime-check');
+    expect(isLegacyWindows()).toBe(false);
+  });
+
+  it('returns false if getSystemVersion throws', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    (process as { getSystemVersion: () => string }).getSystemVersion = () => {
+      throw new Error('not supported');
+    };
+    vi.resetModules();
+    const { isLegacyWindows } = await import('../runtime-check');
+    expect(isLegacyWindows()).toBe(false);
+  });
+});

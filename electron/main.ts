@@ -161,7 +161,7 @@ import { killOrphanedBackendOnPort } from './orphanBackendKiller';
 import { createIncrementalUtf8Decoder } from './incrementalUtf8Decoder';
 import { BackendNotReadyError, invokeBackend } from './invoke';
 import { runDoctorCheck } from './doctor';
-import { runRuntimeChecks, showRuntimeMissingDialog } from './runtime-check';
+import { runRuntimeChecks, showRuntimeMissingDialog, isLegacyWindows } from './runtime-check';
 import { resolveSageDbPath, resolveSageUserDataDir } from './userDataPaths';
 import { appendCrashEvent, buildCrashEvent } from './crashJournal';
 import {
@@ -329,15 +329,6 @@ const V8_MAX_OLD_SPACE_SIZE_MB = 2048;
 // sandbox; 现代平台恢复 Chromium sandbox —— preload 只依赖 electron 运行
 // 时 API (contextBridge/ipcRenderer), 满足 sandboxed preload 约束。
 // GPU 系 flag 仍保留 (Electron 升级专项统一重审)。
-function isLegacyWindows(): boolean {
-  if (process.platform !== 'win32') return false;
-  try {
-    const major = Number(process.getSystemVersion().split('.')[0]);
-    return Number.isFinite(major) && major < 10;
-  } catch {
-    return false;
-  }
-}
 const NEEDS_NO_SANDBOX = isLegacyWindows() || process.env.SAGE_NO_SANDBOX === '1';
 installDefaultWebContentsHardening((url) => openExternalSafely(url)); // Electron 21 公告缓解，见模块注释
 app.disableHardwareAcceleration();
