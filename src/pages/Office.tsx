@@ -15,7 +15,8 @@
  *   - OfficeCapabilityBar / OfficeStagingInspector 收进页头 [环境] 浮层；
  *   - 7 个 LaTeX 面板收进 latex tab 内 3 个子 tab；
  *   - JournalPanel 收进 generate tab 的可折叠 <details>；
- *   - WordRuleExtractionPanel 移到 rules tab；
+ *   - rules tab 拆为 3 个二级子 tab (规则库 / AI 审校 / 批量工具)，
+ *     原 WordRuleExtractionPanel 的功能合并到规则库的"从本文档抽取"按钮；
  *   - 通过 URL search params 驱动 tab / 子 tab，支持深度链接。
  *
  * 保留不变：
@@ -31,6 +32,7 @@ import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { useWorkspaceContext } from '../app/providers/SessionWorkspaceProvider';
+import { useOfficeWorkspaceStore } from '../entities/office/officeWorkspaceStore';
 import { JournalPanel } from '../features/journal';
 import {
   GenerateWorkspace,
@@ -38,25 +40,21 @@ import {
   OfficeDuplicateDialog,
   OfficeEditPreviewDialog,
   OfficeSnapshotPanel,
-  RulesWorkspace,
   useOfficeDocuments,
   type OfficeListView,
   type OfficeMultiImportResult,
   type OfficePreviewData,
   type OfficeReadResult,
 } from '../features/office';
-import { OfficeAiAssistantPanel } from '../features/office/OfficeAiAssistantPanel';
-import { OfficeSpecLibrary } from '../features/office/OfficeSpecLibrary';
-import { WordBatchAuditPanel } from '../features/office/WordBatchAuditPanel';
-import { WordRuleExtractionPanel } from '../features/office/WordRuleExtractionPanel';
 import { DocumentCanvas } from '../features/office/canvas/DocumentCanvas';
 import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
-import { officeDocumentPath } from '../features/office/officeDocumentPath';
+import { RulesSubtabs } from '../features/office/rules/RulesSubtabs';
 import { OfficeAiSidebarHost } from '../features/office/sidebar/OfficeAiSidebarHost';
 import type { QuickActionTab } from '../features/office/sidebar/QuickActions';
 import { WorkspaceBindModal } from '../features/workspace';
 import type { OfficeCapabilities, OfficeDocType } from '../shared/api/types';
 import { fillTemplate } from '../shared/lib/fillTemplate';
+import { useKeepAliveTabs } from '../shared/lib/hooks/useKeepAliveTabs';
 import { useI18n, type TranslationKey } from '../shared/lib/i18n';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shared/ui/Tabs';
@@ -73,7 +71,6 @@ import {
   OFFICE_TAB_PARAM,
   parseOfficeLatexTab,
   parseOfficeTab,
-  useKeepAliveTabs,
   type OfficeLatexTabId,
   type OfficeTabId,
 } from './office/officeTabs';
@@ -219,7 +216,10 @@ export function Office() {
     }
 
     const first = result.imported[0];
-    if (first) setPreview(toPreview(first.docType, first.readResult));
+    if (first) {
+      setPreview(toPreview(first.docType, first.readResult));
+      useOfficeWorkspaceStore.getState().setActiveDocument(first.readResult.summary);
+    }
 
     await refresh();
     if (myReadId !== readIdRef.current) return;
@@ -387,6 +387,7 @@ export function Office() {
       const data = await readDocument(docId);
       if (myReadId !== readIdRef.current) return;
       setPreview(toPreview(doc.doc_type, data));
+      useOfficeWorkspaceStore.getState().setActiveDocument(doc);
     } catch (e) {
       if (myReadId !== readIdRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
@@ -404,6 +405,7 @@ export function Office() {
       const data = await readDocument(docId);
       if (myReadId !== readIdRef.current) return;
       setPreview(toPreview(doc.doc_type, data));
+      useOfficeWorkspaceStore.getState().setActiveDocument(doc);
     } catch (e) {
       if (myReadId !== readIdRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
@@ -553,40 +555,12 @@ export function Office() {
     </div>
   );
 
+  // 2026-11 IA: the rules tab used to stack six panels (rule CRUD / spec
+  // library / AI assistant / rule extraction / bulk audit / guide card),
+  // which read as one wall with three competing audit entry points. It is now
+  // three single-concept sub-tabs, each owning exactly one audit entry.
   const renderRulesTab = () => (
-    <div className="space-y-4">
-      {/* P3: 规则工作台（分组 / 规则 CRUD / 冲突 / 导出导入 / 审校）。 */}
-      <RulesWorkspace
-        workspacePath={workspacePath ?? ''}
-        filePath={preview ? officeDocumentPath(preview.data.summary) : null}
-      />
-
-      {/* M2.5: 格式规范书库（工作区默认 / 文档级绑定 / 从说明文件提取）。 */}
-      <OfficeSpecLibrary workspacePath={workspacePath} />
-
-      {/* M3: 规范书规则 + LLM 语义建议的合并审校。 */}
-      <OfficeAiAssistantPanel workspacePath={workspacePath} />
-
-      <WordRuleExtractionPanel workspacePath={workspacePath} />
-
-      {/* M5c: 工作区批量审校（glob + 规则包 → 汇总 + Markdown 报告）。 */}
-      <WordBatchAuditPanel workspacePath={workspacePath ?? ''} />
-
-      <article className="rounded-lg border border-border bg-bg-subtle p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-sm font-medium text-text">{t('office.rules.guide.title')}</h3>
-          <p className="text-xs text-muted mt-1">{t('office.rules.guide.body')}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setTab('documents')}
-          data-testid="office-rules-goto-documents"
-          className="shrink-0 px-3 py-1.5 rounded text-sm border border-border text-text-secondary hover:bg-bg-hover"
-        >
-          {t('office.rules.guide.action')}
-        </button>
-      </article>
-    </div>
+    <RulesSubtabs workspacePath={workspacePath ?? ''} onGoToDocuments={() => setTab('documents')} />
   );
 
   return (

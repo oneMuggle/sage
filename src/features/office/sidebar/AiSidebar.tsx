@@ -1,15 +1,23 @@
-import { X } from 'lucide-react';
+import { FileSpreadsheet, FileText, Presentation, X } from 'lucide-react';
 
 import type {
   ConversationMessage,
   SuggestionCardData,
 } from '../../../entities/office/officeWorkspaceStore';
 import { useOfficeWorkspaceStore } from '../../../entities/office/officeWorkspaceStore';
+import type { OfficeDocType } from '../../../shared/api/types';
 import { useI18n } from '../../../shared/lib/i18n';
 
 import { CommandInput } from './CommandInput';
 import { ConversationArea } from './ConversationArea';
 import { QuickActions, type QuickActionTab } from './QuickActions';
+
+const DOC_TYPE_ICONS: Record<OfficeDocType, React.ReactNode> = {
+  ppt: <Presentation className="h-3.5 w-3.5" />,
+  word: <FileText className="h-3.5 w-3.5" />,
+  excel: <FileSpreadsheet className="h-3.5 w-3.5" />,
+  pdf: <FileText className="h-3.5 w-3.5" />,
+};
 
 export interface AiSidebarProps {
   activeTab: QuickActionTab;
@@ -55,11 +63,27 @@ export function AiSidebar({
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <h2 className="flex-1 text-sm font-medium">{t('office.ai.sidebar.title')}</h2>
-        <span className="truncate text-xs text-text-muted">
-          {activeDocument
-            ? `${t('office.ai.sidebar.current_document')}: ${activeDocument.original_filename}`
-            : t('office.ai.sidebar.no_document')}
-        </span>
+        {activeDocument ? (
+          <div className="flex items-center gap-1.5 rounded-full border border-border bg-bg-subtle px-2 py-0.5 text-xs">
+            {DOC_TYPE_ICONS[activeDocument.doc_type]}
+            <span className="max-w-[180px] truncate text-text-secondary">
+              {activeDocument.original_filename}
+            </span>
+            <button
+              type="button"
+              data-testid="office-ai-sidebar-clear-doc"
+              aria-label={t('office.ai.sidebar.clear_document')}
+              className="rounded p-0.5 text-text-muted hover:bg-surface-hover hover:text-text"
+              onClick={() => useOfficeWorkspaceStore.getState().setActiveDocument(null)}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ) : (
+          <span className="truncate text-xs text-text-muted">
+            {t('office.ai.sidebar.hint_select_document')}
+          </span>
+        )}
         <button
           type="button"
           data-testid="office-ai-sidebar-close"
@@ -73,7 +97,7 @@ export function AiSidebar({
 
       {/* Quick actions */}
       <div className="border-b border-border px-3 py-2">
-        <QuickActions tab={activeTab} onCommand={onCommand} />
+        <QuickActions tab={activeTab} hasDocument={Boolean(activeDocument)} onCommand={onCommand} />
       </div>
 
       {/* Conversation */}

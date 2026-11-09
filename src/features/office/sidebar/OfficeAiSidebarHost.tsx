@@ -83,11 +83,14 @@ export function OfficeAiSidebarHost({
   // R10: derive the absolute path of the active document from the workspace
   // root + generated filename. Office.tsx does not drill this through
   // OfficePreviewPanel.
-  const filePath = useMemo(
-    () =>
-      activeDocument ? joinWorkspacePath(workspacePath, activeDocument.generated_filename) : null,
-    [activeDocument, workspacePath],
-  );
+  const filePath = useMemo(() => {
+    // A summary without a generated filename cannot address a file. Bail out
+    // instead of letting `joinWorkspacePath` dereference `undefined` — a throw
+    // during render would take the whole page down.
+    const generated = activeDocument?.generated_filename;
+    if (!activeDocument || !generated) return null;
+    return joinWorkspacePath(workspacePath, generated) || null;
+  }, [activeDocument, workspacePath]);
 
   useSelectionCapture(rootRef);
 
@@ -129,6 +132,10 @@ export function OfficeAiSidebarHost({
     // Ignore floating-bar actions while an AI request is in flight so rapid
     // clicks cannot interleave awaits and desync `pending` / reply order.
     if (!selection || busy) return;
+    // Every floating action operates on the active document. Without one the
+    // request would be rejected downstream — skip it instead of surfacing an
+    // error inside the conversation.
+    if (!activeDocument) return;
 
     if (kind === 'rewrite') {
       setPendingEdit(null);
