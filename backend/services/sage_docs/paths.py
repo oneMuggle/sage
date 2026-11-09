@@ -44,7 +44,7 @@ TECHNICAL_WHITELIST = (
     "133-specialist-persona.md",
     "135-specialist-asset-hub.md",
     "139-specialist-dm-group-chat.md",
-    "148-sage-guide-specialist.md",
+    "142-sage-guide-specialist.md",
 )
 
 
