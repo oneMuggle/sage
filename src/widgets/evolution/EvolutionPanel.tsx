@@ -27,19 +27,27 @@ const TASK_DISPLAY: Record<string, string> = {
   memory_consolidation: '记忆合并',
 };
 
+const STATUS_DISPLAY: Record<string, { label: string; className: string }> = {
+  success: { label: '成功', className: 'text-success' },
+  failed: { label: '失败', className: 'text-danger' },
+  skipped: { label: '跳过', className: 'text-warning' },
+};
+
 export const EvolutionPanel: React.FC = () => {
   const [logs, setLogs] = useState<EvolutionLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchLogs = async () => {
     try {
+      setError(null);
       const result = await invoke<EvolutionLog[]>('get_evolution_logs', {
         limit: 10,
         offset: 0,
       });
       setLogs(result);
-    } catch (error) {
-      console.error('获取进化日志失败:', error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载失败，请稍后重试');
     } finally {
       setLoading(false);
     }
@@ -55,6 +63,17 @@ export const EvolutionPanel: React.FC = () => {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="text-muted">加载中...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 p-8">
+        <div className="text-sm text-danger">加载进化日志失败：{error}</div>
+        <button onClick={fetchLogs} className="text-sm text-primary hover:text-primary-hover">
+          重试
+        </button>
       </div>
     );
   }
@@ -94,14 +113,10 @@ export const EvolutionPanel: React.FC = () => {
                   </span>
                   <span
                     className={
-                      log.status === 'completed'
-                        ? 'text-success'
-                        : log.status === 'failed'
-                          ? 'text-danger'
-                          : 'text-muted'
+                      STATUS_DISPLAY[log.status]?.className ?? 'text-text-secondary bg-bg-subtle'
                     }
                   >
-                    {log.status}
+                    {STATUS_DISPLAY[log.status]?.label ?? log.status}
                   </span>
                 </div>
                 <p className="text-xs text-muted mt-1">{log.description}</p>

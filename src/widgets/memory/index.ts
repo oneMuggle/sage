@@ -2,6 +2,7 @@
  * Memory Widgets - Memory system UI components
  */
 export { MemoryBrowser } from './MemoryBrowser';
+export { MemoryUsageHint } from './MemoryUsageHint';
 export { MemoryItem } from './MemoryItem';
 export { MemoryPromoteButton } from './MemoryPromoteButton';
 export { NewMemoryModal } from './NewMemoryModal';
