@@ -1,7 +1,7 @@
-// src/features/task-center/useUnifiedTasks.ts
-//
-// 纯读取 hook：六个 store → 一份归一列表。无副作用、无请求，
-// 侧边栏分区与 /tasks 页面同时挂载也只做一次 useMemo 计算。
+/**
+ * 订阅六个 Zustand store，归一合并为一份任务列表并按状态分组。
+ * 每个挂载点各自执行 memo 计算；另用 ref + useEffect 维护后台会话首见时间。
+ */
 import { useEffect, useMemo, useRef } from 'react';
 
 import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';

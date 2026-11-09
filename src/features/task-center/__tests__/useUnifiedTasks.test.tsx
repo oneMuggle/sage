@@ -159,4 +159,61 @@ describe('useUnifiedTasks', () => {
     expect(result.current.loading).toBe(true);
     expect(result.current.error).toBe('goal down');
   });
+
+  it('todo 进入列表、终态归入 finished、待决议 lane 映射为 awaiting_approval', () => {
+    useStore.setState({ currentSessionId: 's-other' } as never);
+    useUnifiedTaskStore.setState({
+      todos: [
+        {
+          id: 7,
+          title: '买菜',
+          status: 'in_progress',
+          priority: 'medium',
+          is_recurring: false,
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        } as never,
+      ],
+    });
+    useTaskCenterStore.setState({
+      tasks: {
+        'r-done': {
+          id: 'r-done',
+          kind: 'office',
+          title: '已完成',
+          startedAt: 1,
+          status: 'succeeded',
+        },
+      },
+    });
+    useLaneBoardStore.setState({
+      lanes: [
+        {
+          lane_id: 'l3',
+          task_id: 'T3',
+          agent_id: null,
+          status: 'succeeded',
+          created_at: 1,
+          started_at: 1,
+          completed_at: 2,
+          worktree: null,
+          heartbeat: null,
+          error: null,
+          permission_preset: 'default',
+          metadata: {},
+        } as never,
+      ],
+    });
+
+    const { result } = renderHook(() => useUnifiedTasks());
+
+    const todoEntry = result.current.all.find((e) => e.source === 'todo');
+    expect(todoEntry?.title).toBe('买菜');
+
+    expect(result.current.groups.finished.length).toBeGreaterThan(0);
+    expect(result.current.groups.finished.map((e) => e.id)).toContain('registry:r-done');
+
+    const laneEntry = result.current.all.find((e) => e.source === 'lane');
+    expect(laneEntry?.status).toBe('awaiting_approval');
+  });
 });
