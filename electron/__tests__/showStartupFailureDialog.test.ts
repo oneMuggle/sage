@@ -67,6 +67,7 @@ describe('showStartupFailureDialog', () => {
     expect(result).toBe('quit');
     expect(mockQuit).toHaveBeenCalled();
   });
+<<<<<<< HEAD
 
   it('adds "打开诊断目录" first and opens the diagnostic dir', async () => {
     mockShowMessageBox.mockResolvedValue({ response: 0 });
@@ -88,4 +89,6 @@ describe('showStartupFailureDialog', () => {
     });
     expect(result).toBe('run-rescue');
   });
+=======
+>>>>>>> origin/main
 });

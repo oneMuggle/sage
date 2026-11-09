@@ -191,7 +191,11 @@ class MemoryQualityScorer:
             return 0.0
         own_id = memory.get("id")
         best = 0.0
+<<<<<<< HEAD
         for row, bigrams in zip(self._corpus, self._corpus_bigrams):
+=======
+        for row, bigrams in zip(self._corpus, self._corpus_bigrams):  # noqa: B905 -- py3.8 兼容
+>>>>>>> origin/main
             if own_id is not None and row.get("id") == own_id:
                 continue
             best = max(best, _jaccard(own, bigrams))

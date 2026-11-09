@@ -887,7 +887,11 @@ def validate_api_key_updated_at(value: Any) -> Any:
     return value
 
 
+<<<<<<< HEAD
 def validate_local_model_path(value: Any, platform: Optional[str] = None) -> Any:
+=======
+def validate_local_model_path(value: Any, platform: str | None = None) -> Any:
+>>>>>>> origin/main
     """Endpoint.localModelPath 平台路径分隔符校验.
 
     - ``None`` / 空字符串视为"未设置", 直接返回.

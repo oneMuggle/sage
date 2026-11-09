@@ -63,7 +63,11 @@ def test_preference_learning_writes_user_profile(tmp_db):
     ).fetchall()
     assert len(rows) >= 1
     assert all(r["category"] == "preference" for r in rows)
+<<<<<<< HEAD
     # 内容里应含偏好维度名（中文标签）
+=======
+    # 内容里应含偏好维度名(翻译后: "回复长度" 而非机器键 "response_length")
+>>>>>>> origin/main
     assert any("回复长度" in r["content"] for r in rows)
 
 

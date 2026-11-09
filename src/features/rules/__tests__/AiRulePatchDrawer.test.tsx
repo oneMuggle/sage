@@ -19,15 +19,27 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   } as unknown as typeof ResizeObserver;
 }
 
+<<<<<<< HEAD
 const { previewPatch, applyPatch } = vi.hoisted(() => ({
   previewPatch: vi.fn(),
   applyPatch: vi.fn(),
+=======
+const { previewPatch, applyPatch, confirmDialog } = vi.hoisted(() => ({
+  previewPatch: vi.fn(),
+  applyPatch: vi.fn(),
+  confirmDialog: vi.fn(),
+>>>>>>> origin/main
 }));
 
 vi.mock('../../../shared/api/rulesApi', () => ({
   rulesApi: { previewPatch, applyPatch },
 }));
 
+<<<<<<< HEAD
+=======
+vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({ confirmDialog }));
+
+>>>>>>> origin/main
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const ENTRY = {
@@ -87,6 +99,11 @@ describe('AiRulePatchDrawer', () => {
   beforeEach(() => {
     previewPatch.mockReset();
     applyPatch.mockReset();
+<<<<<<< HEAD
+=======
+    confirmDialog.mockReset();
+    confirmDialog.mockResolvedValue(true);
+>>>>>>> origin/main
   });
 
   it('prefills the focused rule and sends its id', async () => {
@@ -276,6 +293,77 @@ describe('AiRulePatchDrawer', () => {
     expect(screen.queryByTestId('ai-apply')).not.toBeInTheDocument();
   });
 
+<<<<<<< HEAD
+=======
+  it('asks for confirmation before applying selected delete operations', async () => {
+    previewPatch.mockResolvedValue(
+      preview({
+        operations: [
+          operation({ opId: 'op-1' }),
+          operation({ opId: 'op-2', action: 'delete', after: {} }),
+        ],
+      }),
+    );
+    applyPatch.mockResolvedValue({
+      results: [{ opId: 'op-2', status: 'applied', message: '', current: null }],
+      applied: 1,
+      failed: 0,
+    });
+    renderDrawer();
+
+    fireEvent.change(screen.getByTestId('ai-instruction'), { target: { value: '去重' } });
+    fireEvent.click(screen.getByTestId('ai-generate'));
+    await screen.findByTestId('patch-card-op-1');
+    fireEvent.click(screen.getByTestId('patch-select-op-2'));
+    fireEvent.click(screen.getByTestId('ai-apply'));
+
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
+    expect(confirmDialog.mock.calls[0][0]).toMatchObject({ danger: true });
+    expect(confirmDialog.mock.calls[0][0].message).toContain('1');
+    await waitFor(() => expect(applyPatch).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not apply when the delete confirmation is cancelled', async () => {
+    previewPatch.mockResolvedValue(
+      preview({
+        operations: [
+          operation({ opId: 'op-1' }),
+          operation({ opId: 'op-2', action: 'delete', after: {} }),
+        ],
+      }),
+    );
+    confirmDialog.mockResolvedValue(false);
+    renderDrawer();
+
+    fireEvent.change(screen.getByTestId('ai-instruction'), { target: { value: '去重' } });
+    fireEvent.click(screen.getByTestId('ai-generate'));
+    await screen.findByTestId('patch-card-op-1');
+    fireEvent.click(screen.getByTestId('patch-select-op-2'));
+    fireEvent.click(screen.getByTestId('ai-apply'));
+
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
+    expect(applyPatch).not.toHaveBeenCalled();
+  });
+
+  it('does not ask for confirmation when no delete operation is selected', async () => {
+    previewPatch.mockResolvedValue(preview());
+    applyPatch.mockResolvedValue({
+      results: [{ opId: 'op-1', status: 'applied', message: '', current: null }],
+      applied: 1,
+      failed: 0,
+    });
+    renderDrawer();
+
+    fireEvent.change(screen.getByTestId('ai-instruction'), { target: { value: '改一下' } });
+    fireEvent.click(screen.getByTestId('ai-generate'));
+    await screen.findByTestId('patch-card-op-1');
+    fireEvent.click(screen.getByTestId('ai-apply'));
+
+    await waitFor(() => expect(applyPatch).toHaveBeenCalledTimes(1));
+    expect(confirmDialog).not.toHaveBeenCalled();
+  });
+
+>>>>>>> origin/main
   it('surfaces preview failures instead of silently showing an empty list', async () => {
     previewPatch.mockRejectedValue(new Error('AI 返回格式不正确，请重试或手动编辑'));
     renderDrawer();

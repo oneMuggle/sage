@@ -716,6 +716,7 @@ class PreferenceLearningTask(BaseEvolutionTask):
             return 0
 
         # 3. 保存到语义记忆
+<<<<<<< HEAD
         profile_lines = [format_preference(k, v) for k, v in preferences.items()]
         profile_lines.extend(
             f"用户偏好{item['category']}: {item['preference']}" for item in llm_free_text
@@ -724,14 +725,29 @@ class PreferenceLearningTask(BaseEvolutionTask):
         memory_id = str(uuid.uuid4())
         now_ts = int(time.time())
 
+=======
+        profile_text = "\n".join(
+            format_preference(k, v) for k, v in preferences.items()
+        )
+        memory_id = str(uuid.uuid4())
+        now_ts = int(time.time())
+
+        # 白名单从 PREFERENCE_VALUE_LABELS 派生 -- 维度与合法取值的
+        # 单一真相源在 backend/memory/preference_labels.py,
+        # 这里不再各写一份(曾因两处不同步漏掉新维度)。
+>>>>>>> origin/main
         summary_parts = [
             f"{PREFERENCE_DIMENSION_LABELS.get(key, key)}="
             f"{PREFERENCE_VALUE_LABELS.get(key, {}).get(value, value)}"
             for key, value in preferences.items()
         ]
+<<<<<<< HEAD
         summary_parts.extend(
             f"{item['category']}: {item['preference']}" for item in llm_free_text
         )
+=======
+        summary_text = ", ".join(summary_parts)
+>>>>>>> origin/main
 
         cursor.execute(
             """
@@ -742,7 +758,11 @@ class PreferenceLearningTask(BaseEvolutionTask):
             (
                 memory_id,
                 f"用户偏好总结:\n{profile_text}",
+<<<<<<< HEAD
                 "用户偏好: " + ", ".join(summary_parts),
+=======
+                "用户偏好: " + summary_text,
+>>>>>>> origin/main
                 '["user_preference", "evolution"]',
                 now_ts,
             ),
@@ -774,12 +794,15 @@ class PreferenceLearningTask(BaseEvolutionTask):
             for key, value in preferences.items():
                 profile_store.add(
                     content=format_preference(key, value),
+<<<<<<< HEAD
                     category="preference",
                     importance=6,
                 )
             for item in llm_free_text:
                 profile_store.add(
                     content=f"用户偏好{item['category']}: {item['preference']}",
+=======
+>>>>>>> origin/main
                     category="preference",
                     importance=6,
                 )
@@ -1032,6 +1055,7 @@ class PreferenceLearningTask(BaseEvolutionTask):
         except json.JSONDecodeError:
             return {}, []
         if not isinstance(data, dict):
+<<<<<<< HEAD
             return {}, []
 
         # 白名单从 PREFERENCE_VALUE_LABELS 派生 —— 维度与合法取值的
@@ -1045,6 +1069,13 @@ class PreferenceLearningTask(BaseEvolutionTask):
             raw_structured = data
 
         structured: Dict[str, str] = {}
+=======
+            return {}
+        allowed = {
+            key: set(values) for key, values in PREFERENCE_VALUE_LABELS.items()
+        }
+        result: Dict[str, str] = {}
+>>>>>>> origin/main
         for key, allowed_values in allowed.items():
             value = raw_structured.get(key)
             if isinstance(value, str) and value.lower() in allowed_values:

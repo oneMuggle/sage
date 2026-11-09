@@ -269,7 +269,12 @@ class TestRunAsyncEvidenceGate:
             "SELECT content FROM memories_semantic ORDER BY created_at DESC LIMIT 1"
         ).fetchone()
         assert sem is not None
+<<<<<<< HEAD
         assert "简短" in sem[0]  # 偏好值已翻译为中文标签
+=======
+        # 新输出格式使用 preference_labels 翻译: "short" -> "简短"
+        assert "简短" in sem[0]
+>>>>>>> origin/main
         pref = conn.execute(
             "SELECT value FROM preferences WHERE key = 'pref_response_length'"
         ).fetchone()

@@ -670,6 +670,7 @@ def test_template_chat_request_rejects_empty_messages() -> None:
 
 
 def test_template_chat_messages_use_a_constrained_list() -> None:
+<<<<<<< HEAD
     import pydantic
 
     from backend.api.office_generate_routes import TemplateChatRequest
@@ -685,6 +686,12 @@ def test_template_chat_messages_use_a_constrained_list() -> None:
 
         with pytest.raises(ValidationError):
             TemplateChatRequest(workspace_path="/ws", messages=[])
+=======
+    from backend.api.office_generate_routes import TemplateChatRequest
+
+    field = TemplateChatRequest.model_fields["messages"]
+    assert any(getattr(meta, "min_length", None) == 1 for meta in field.metadata)
+>>>>>>> origin/main
 
 
 def test_iterate_corrupt_docx_returns_422(tmp_path: Path) -> None:

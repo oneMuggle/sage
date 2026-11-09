@@ -8,6 +8,10 @@ import type {
   RuleEntry,
 } from '../../shared/api/rulesApi';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+<<<<<<< HEAD
+=======
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
+>>>>>>> origin/main
 
 /**
  * 可执行 = 无预览错误且不是删除。删除不可撤销，必须用户手动勾选。
@@ -244,6 +248,28 @@ function useGenerateHandler(
   };
 }
 
+<<<<<<< HEAD
+=======
+/**
+ * 删除操作不可撤销 —— 批量应用里只要含删除，就先要一次显式确认。
+ * 无删除时直接放行，不打扰常规的「改一条规则」流程。
+ */
+async function confirmDeleteOperations(
+  selectedOperations: PatchOperation[],
+  t: (key: TranslationKey) => string,
+): Promise<boolean> {
+  const deleteCount = selectedOperations.filter((op) => op.action === 'delete').length;
+  if (deleteCount === 0) return true;
+  return confirmDialog({
+    title: t('rules.delete.title'),
+    message: t('rules.ai.confirmDelete').replace('{count}', String(deleteCount)),
+    confirmLabel: t('rules.delete.confirm'),
+    cancelLabel: t('rules.editor.cancel'),
+    danger: true,
+  });
+}
+
+>>>>>>> origin/main
 function useApplyHandler(
   projectId: string,
   state: PatchStateBag,
@@ -254,10 +280,19 @@ function useApplyHandler(
   return async () => {
     if (state.applying || state.generating || selectedOperations.length === 0) return;
     const epoch = state.epochRef.current;
+<<<<<<< HEAD
     state.setApplying(true);
     state.setError(null);
     state.setApplySummary(null);
     try {
+=======
+    // 先同步置位再 await，否则确认弹窗的空档会让按钮重新可点。
+    state.setApplying(true);
+    try {
+      if (!(await confirmDeleteOperations(selectedOperations, t))) return;
+      state.setError(null);
+      state.setApplySummary(null);
+>>>>>>> origin/main
       const response = await rulesApi.applyPatch(projectId, {
         instruction: state.instruction.trim(),
         operations: selectedOperations,

@@ -29,13 +29,9 @@ export const sessionApi = {
       try {
         const session = await invoke<Session>('create_session', {
           title,
-          ...(options?.participantIds?.length
-            ? { participant_ids: options.participantIds }
-            : {}),
+          ...(options?.participantIds?.length ? { participant_ids: options.participantIds } : {}),
           ...(options?.specialistId ? { specialist_id: options.specialistId } : {}),
-          ...(options?.conversationType
-            ? { conversation_type: options.conversationType }
-            : {}),
+          ...(options?.conversationType ? { conversation_type: options.conversationType } : {}),
         });
         return session;
       } catch (error) {
@@ -315,10 +311,7 @@ export const sessionApi = {
   },
 
   /** M2：拉专家进群（幂等；首个成员为 host）。 */
-  async addParticipants(
-    sessionId: string,
-    agentIds: string[],
-  ): Promise<ConversationParticipant[]> {
+  async addParticipants(sessionId: string, agentIds: string[]): Promise<ConversationParticipant[]> {
     return withRetry(async () => {
       try {
         const resp = await invoke<{ participants: ConversationParticipant[] }>(

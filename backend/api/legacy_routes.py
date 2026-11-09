@@ -2993,7 +2993,13 @@ from backend.api.legacy_memory_feedback_routes import (
     router as legacy_memory_feedback_routes_router,
 )
 from backend.api.legacy_memory_list_routes import router as legacy_memory_list_routes_router
+<<<<<<< HEAD
 from backend.api.legacy_memory_quality_routes import router as legacy_memory_quality_routes_router
+=======
+from backend.api.legacy_memory_quality_routes import (
+    router as legacy_memory_quality_routes_router,
+)
+>>>>>>> origin/main
 from backend.api.legacy_memory_routes import router as legacy_memory_routes_router
 
 router.include_router(legacy_memory_routes_router)

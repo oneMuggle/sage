@@ -115,8 +115,16 @@ def test_fallback_summary_without_user_messages() -> None:
 
 
 def test_save_compressed_persists_summary(manager: MemoryManager) -> None:
+<<<<<<< HEAD
     """save_compressed 调用 episodic.save(summary=...)。EpisodicMemory.save 现在接受
     该 kwarg（F2 修复）— 摘要被持久化到 summary 列，而不是抛 TypeError。"""
+=======
+    """save_compressed 应按 EpisodicMemory 契约保存摘要及会话关联。
+
+    ``summary`` 列存调用方传入的原文摘要（不再被 content 二次压缩），
+    ``content`` 列保留 ``对话摘要: …`` 前缀。
+    """
+>>>>>>> origin/main
     pipe = ConsolidationPipeline()
     # §1.3a: FK enforcement — parent session row must exist.
     ensure_session(manager.episodic.db, "s1")
@@ -127,12 +135,22 @@ def test_save_compressed_persists_summary(manager: MemoryManager) -> None:
         importance=6,
         message_count=4,
     )
+<<<<<<< HEAD
     assert memory_id
     found = manager.episodic.get_by_id(memory_id)
     assert found is not None
     assert found["summary"] == "my summary"
     assert found["session_id"] == "s1"
     assert found["importance"] == 6
+=======
+
+    saved = manager.episodic.get_by_id(memory_id)
+    assert saved is not None
+    assert saved["content"] == "对话摘要: my summary"
+    assert saved["summary"] == "my summary"
+    assert saved["session_id"] == "s1"
+    assert saved["memory_type"] == "summary"
+>>>>>>> origin/main
 
 
 def test_consolidate_full_flow_persists_and_clears_session(

@@ -1,6 +1,7 @@
 // electron/showStartupFailureDialog.ts
 
 /**
+<<<<<<< HEAD
  * Startup-failure dialog — shows a 4- or 5-button message box when Sage fails to launch.
  *
  * Buttons (in order, when `diagnosticPath` is supplied):
@@ -20,6 +21,11 @@
  * the high-frequency "重试" action in the same relative position (second to
  * last) whether or not the diagnostic button is present, and always keep
  * "退出" as the last entry so `cancelId` maps to it.
+=======
+ * Startup-failure dialog — shows a 4-button message box when Sage fails to launch.
+ *
+ * Buttons (in order): 打开日志目录 / 运行修复工具 / 重试 / 退出
+>>>>>>> origin/main
  *
  * CRITICAL: `logger.error(...)` MUST be invoked BEFORE `dialog.showMessageBox`,
  * so that even if the dialog itself crashes, the failure is already on disk.
@@ -31,12 +37,16 @@ import { getLogDir } from './logPaths';
 import { logger } from './logger';
 import { openRescueTool } from './rescueDialogs';
 
+<<<<<<< HEAD
 export type StartupFailureChoice =
   | 'open-diagnostic'
   | 'open-logs'
   | 'run-rescue'
   | 'retry'
   | 'quit';
+=======
+export type StartupFailureChoice = 'open-logs' | 'run-rescue' | 'retry' | 'quit';
+>>>>>>> origin/main
 
 export async function showStartupFailureDialog(opts: {
   reason: string;
@@ -52,12 +62,16 @@ export async function showStartupFailureDialog(opts: {
   });
 
   const logDir = getLogDir();
+<<<<<<< HEAD
   const hasDiag = !!opts.diagnosticPath;
   const buttons = hasDiag
     ? ['打开诊断目录', '打开日志目录', '运行修复工具', '重试', '退出']
     : ['打开日志目录', '运行修复工具', '重试', '退出'];
   const defaultId = hasDiag ? 3 : 2; // 重试
   const cancelId = hasDiag ? 4 : 3; // 退出
+=======
+  const buttons = ['打开日志目录', '运行修复工具', '重试', '退出'];
+>>>>>>> origin/main
   const result = await dialog.showMessageBox({
     type: 'error',
     title: 'Sage 启动失败',
@@ -70,6 +84,7 @@ export async function showStartupFailureDialog(opts: {
       hasDiag ? `\n诊断文件：${opts.diagnosticPath}` : ''
     }`,
     buttons,
+<<<<<<< HEAD
     defaultId,
     cancelId,
     noLink: true,
@@ -97,6 +112,21 @@ export async function showStartupFailureDialog(opts: {
             ? 'retry'
             : 'quit';
   }
+=======
+    defaultId: 0,
+    cancelId: 3,
+    noLink: true,
+  });
+
+  const choice: StartupFailureChoice =
+    result.response === 0
+      ? 'open-logs'
+      : result.response === 1
+        ? 'run-rescue'
+        : result.response === 2
+          ? 'retry'
+          : 'quit';
+>>>>>>> origin/main
 
   if (choice === 'open-diagnostic' && opts.diagnosticPath) {
     logger.info('main: user chose open-diagnostic after startup failure');

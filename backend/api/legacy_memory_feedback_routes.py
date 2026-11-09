@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 # ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容
+=======
+>>>>>>> origin/main
 """Task 4.5 —— 记忆级用户反馈端点。
 
 ``POST /memory/{memory_id}/feedback``：用户对单条记忆标记 👍 / 👎 / 中性，
@@ -16,8 +19,17 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+<<<<<<< HEAD
 from pydantic import BaseModel, Field
 
+=======
+from pydantic import BaseModel, ConfigDict, Field
+
+from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由 with_db_lock 闭包解析
+    _SQLITE_LOCK,
+    make_with_db_lock,
+)
+>>>>>>> origin/main
 from backend.memory import get_memory_manager
 from backend.memory.feedback_store import (
     VALID_FEEDBACK,
@@ -27,11 +39,14 @@ from backend.memory.feedback_store import (
 
 logger = logging.getLogger(__name__)
 
+<<<<<<< HEAD
 from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由 with_db_lock 闭包解析
     _SQLITE_LOCK,
     make_with_db_lock,
 )
 
+=======
+>>>>>>> origin/main
 
 def with_db_lock(func):
     """串行化 SQLite 访问 (镜像 legacy_memory_quality_routes)。"""
@@ -49,8 +64,12 @@ _MEMORY_TABLE_BY_TYPE = {
 class MemoryFeedbackRequest(BaseModel):
     """记忆级反馈上报体。"""
 
+<<<<<<< HEAD
     class Config:
         extra = "forbid"
+=======
+    model_config = ConfigDict(extra="forbid")
+>>>>>>> origin/main
 
     feedback: str = Field(pattern="^(up|down|neutral)$")
     memory_type: str = Field(default="episodic", pattern="^(episodic|semantic)$")

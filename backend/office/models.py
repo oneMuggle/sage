@@ -13,9 +13,21 @@ import logging
 from enum import Enum
 from typing import Any, Dict, ForwardRef, List, Literal, Optional, Tuple, Union
 
+<<<<<<< HEAD
 from pydantic import BaseModel, Field, conlist
 
 from backend.compat.win7.pydantic_compat import ConfigDict, field_validator
+=======
+from pydantic import BaseModel, ConfigDict, Field, conlist
+
+# Pydantic v1/v2 compatibility (matches backend/plugins/manifest.py idiom).
+try:
+    # Pydantic v2
+    from pydantic import field_validator
+except ImportError:  # pragma: no cover — release/win7 runs v1
+    # Pydantic v1 fallback
+    from pydantic import validator as field_validator  # type: ignore
+>>>>>>> origin/main
 
 logger = logging.getLogger(__name__)
 
@@ -279,7 +291,11 @@ class WordImagePreview(BaseModel):
 
 if hasattr(OfficeWordReadResult, "model_rebuild"):
     OfficeWordReadResult.model_rebuild()
+<<<<<<< HEAD
 else:
+=======
+else:  # pragma: no cover — release/win7 runs pydantic v1
+>>>>>>> origin/main
     OfficeWordReadResult.update_forward_refs()
 
 

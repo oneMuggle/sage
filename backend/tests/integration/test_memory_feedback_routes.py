@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容
 """Task 4.5 —— /memory/{memory_id}/feedback 集成测试。
 
@@ -10,6 +11,19 @@
 - 405 范围外: 不存在的 memory_type（pydantic pattern）
 - 工作记忆 (working) 与 session_summary 行 list 不查反馈表、user_feedback=None
 - episodic 软删除后 is_valid=0 → 反馈写入应 404
+=======
+"""Task 4.5 ---- /memory/{memory_id}/feedback 集成测试。
+
+覆盖:
+- POST 成功写入 up / down / neutral 并可在 list 的 user_feedback 字段观察到
+- 重复提交覆盖(up -> down)
+- reason 持久化
+- 404: 不存在的记忆 id
+- 422: 非法 feedback 值(pydantic pattern)
+- 405 范围外: 不存在的 memory_type(pydantic pattern)
+- 工作记忆 (working) 与 session_summary 行 list 不查反馈表、user_feedback=None
+- episodic 软删除后 is_valid=0 -> 反馈写入应 404
+>>>>>>> origin/main
 """
 
 from __future__ import annotations

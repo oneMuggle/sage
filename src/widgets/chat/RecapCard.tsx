@@ -24,8 +24,12 @@ export function RecapCard({ recap, onDismiss }: RecapCardProps) {
     openQuestions: Boolean(recap.openQuestions?.length),
   });
 
+<<<<<<< HEAD
   const toggle = (key: string) =>
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+=======
+  const toggle = (key: string) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+>>>>>>> origin/main
 
   return (
     <div
@@ -35,9 +39,13 @@ export function RecapCard({ recap, onDismiss }: RecapCardProps) {
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 bg-bg-elevated border-b border-border">
         <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
+<<<<<<< HEAD
         <span className="text-sm font-medium text-text-primary">
           {t('recap.title')}
         </span>
+=======
+        <span className="text-sm font-medium text-text-primary">{t('recap.title')}</span>
+>>>>>>> origin/main
         <button
           type="button"
           data-testid="recap-card-dismiss"
@@ -89,7 +97,13 @@ export function RecapCard({ recap, onDismiss }: RecapCardProps) {
           >
             <ol className="space-y-1 list-decimal list-inside">
               {recap.nextSteps.map((s, i) => (
+<<<<<<< HEAD
                 <li key={i} className="text-sm text-text-primary">{s}</li>
+=======
+                <li key={i} className="text-sm text-text-primary">
+                  {s}
+                </li>
+>>>>>>> origin/main
               ))}
             </ol>
           </Section>

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 """Task 4.4 —— /memory/list 的 quality_score 集成测试。
+=======
+"""Task 4.4 ---- /memory/list 的 quality_score 集成测试。
+>>>>>>> origin/main
 
 验证每个层视图在 list 响应里是否带 quality_score:
 - episodic / semantic: 带(0-1 浮点数)
@@ -6,7 +10,11 @@
 - 'all' 合并视图: episodic + semantic 带, working/summary 不带
 
 scorer 在请求内构建, 语料范围是当前查询命中的 episodic+semantic
+<<<<<<< HEAD
 行 —— 不泄漏到其他层, 也不会因空库报错。
+=======
+行 -- 不泄漏到其他层, 也不会因空库报错。
+>>>>>>> origin/main
 """
 
 from __future__ import annotations
@@ -79,7 +87,11 @@ async def test_semantic_list_returns_quality_score(client):
 
 @pytest.mark.asyncio()
 async def test_working_list_has_no_quality_score(client):
+<<<<<<< HEAD
     """工作记忆没有 importance/recency 语义 —— 不打分。"""
+=======
+    """工作记忆没有 importance/recency 语义 -- 不打分。"""
+>>>>>>> origin/main
     # 直接写入工作记忆(走 manager)绕过 HTTP 路由
     from backend.memory import get_memory_manager
 
@@ -135,7 +147,11 @@ async def test_all_mode_mixed_quality_score(client):
 
 @pytest.mark.asyncio()
 async def test_quality_scorer_corpus_is_per_request(client):
+<<<<<<< HEAD
     """scorer 基于当前查询构建 —— 第二次查询不会因为上次语料污染。"""
+=======
+    """scorer 基于当前查询构建 -- 第二次查询不会因为上次语料污染。"""
+>>>>>>> origin/main
     # 第一轮: episodic 一条独特内容
     await client.post(
         f"{PREFIX}/memory/save",
@@ -162,7 +178,11 @@ async def test_quality_scorer_corpus_is_per_request(client):
     duplicates = [i for i in resp2.json()["items"] if "alpha" in i["content"]]
     assert len(duplicates) >= 2
     for dup in duplicates:
+<<<<<<< HEAD
         # 重复内容的独特性维度 ≤ 0.0 → 整体分数受影响
+=======
+        # 重复内容的独特性维度 <= 0.0 -> 整体分数受影响
+>>>>>>> origin/main
         assert dup["quality_score"] < score1 + 0.05, (
             f"重复内容不应仍得高分: {dup['quality_score']} vs baseline {score1}"
         )
@@ -173,7 +193,11 @@ async def test_quality_scorer_corpus_is_per_request(client):
 
 @pytest.mark.asyncio()
 async def test_empty_list_returns_quality_score_schema(client):
+<<<<<<< HEAD
     """空库里 list 返回空 items —— 不崩。"""
+=======
+    """空库里 list 返回空 items -- 不崩。"""
+>>>>>>> origin/main
     resp = await client.get(f"{PREFIX}/memory/list", params={"type": "episodic"})
     assert resp.status_code == 200
     body = resp.json()

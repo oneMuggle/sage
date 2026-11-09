@@ -23,9 +23,14 @@ from zipfile import BadZipFile
 
 from docx.opc.exceptions import PackageNotFoundError
 from fastapi import APIRouter, HTTPException
+<<<<<<< HEAD
 from pydantic import BaseModel, Field
 
 from backend.compat.win7.pydantic_compat import ConfigDict
+=======
+from pydantic import BaseModel, ConfigDict, Field
+
+>>>>>>> origin/main
 from backend.data.database import Database, get_database
 from backend.office.docx_text import read_docx_text
 from backend.office.errors import (

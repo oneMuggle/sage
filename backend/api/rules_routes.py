@@ -17,9 +17,22 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, status
+<<<<<<< HEAD
 from pydantic import BaseModel, Field
 
 from backend.compat.win7.pydantic_compat import ConfigDict, field_validator
+=======
+from pydantic import BaseModel, ConfigDict, Field
+
+# Pydantic v1/v2 compatibility (matches backend/plugins/manifest.py idiom).
+try:
+    # Pydantic v2
+    from pydantic import field_validator
+except ImportError:  # pragma: no cover — release/win7 runs v1
+    # Pydantic v1 fallback
+    from pydantic import validator as field_validator  # type: ignore
+
+>>>>>>> origin/main
 from backend.data.database import Database, get_database
 from backend.office.errors import OfficePathError, OfficeSizeLimitError
 from backend.office.path_safety import resolve_within
