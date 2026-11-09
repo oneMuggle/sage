@@ -533,30 +533,43 @@ async def _deferred_startup_init(
         _startup_mark("review-queue")
 
         # ── Arena 自动化装配 ──
+        # Win7 (2026-09-21 alpha.51): cryptography 47.0.0 在部分 Win7 SP1 机器
+        # 加载失败（KB3033929 缺失 / AV 拦截 Rust 扩展）。仅当用户显式启用 arena
+        # 时才探测 cryptography，探测失败降级为禁用，不阻塞启动。
         try:
-            from backend.api.arena_routes import (
-                init_arena_service,
-                init_registration_service,
-            )
             from backend.config.arena_automation import load_arena_automation_config
-            from backend.services.arena_accounts import get_or_create_master_key
 
             _arena_cfg = load_arena_automation_config()
             if _arena_cfg.enabled:
-                _arena_dir = os.environ.get("SAGE_USER_DATA_DIR") or "backend/data"
-                _arena_db = str(Path(_arena_dir) / "arena_accounts.sqlite")
-                _arena_service = init_arena_service(
-                    db_path=_arena_db,
-                    encryption_key=get_or_create_master_key(),
-                    config=_arena_cfg,
-                )
-                init_registration_service(
-                    config=_arena_cfg, account_service=_arena_service
-                )
-                logger.info(
-                    "[deferred] Arena 自动化已启用（db=%s）", _arena_db
-                )
-                _startup_mark("arena")
+                from backend.services.arena_accounts import crypto_available
+
+                if not crypto_available():
+                    logger.warning(
+                        "[deferred] Arena 自动化启用但 cryptography 不可用 —— "
+                        "功能降级为禁用（Arena 端点返回 403）"
+                    )
+                    _startup_mark("arena-skip-crypto-unavailable")
+                else:
+                    from backend.api.arena_routes import (
+                        init_arena_service,
+                        init_registration_service,
+                    )
+                    from backend.services.arena_accounts import get_or_create_master_key
+
+                    _arena_dir = os.environ.get("SAGE_USER_DATA_DIR") or "backend/data"
+                    _arena_db = str(Path(_arena_dir) / "arena_accounts.sqlite")
+                    _arena_service = init_arena_service(
+                        db_path=_arena_db,
+                        encryption_key=get_or_create_master_key(),
+                        config=_arena_cfg,
+                    )
+                    init_registration_service(
+                        config=_arena_cfg, account_service=_arena_service
+                    )
+                    logger.info(
+                        "[deferred] Arena 自动化已启用（db=%s）", _arena_db
+                    )
+                    _startup_mark("arena")
             else:
                 logger.info(
                     "[deferred] Arena 自动化未启用（enabled=false）"
