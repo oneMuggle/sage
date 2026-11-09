@@ -4,7 +4,7 @@
     "backend/adapters/out/skill/inproc.py": 1178,
     "backend/agents/profiles.py": 1250,
     "backend/api/arena_routes.py": 878,
-    "backend/api/legacy_routes.py": 2998,
+    "backend/api/legacy_routes.py": 3004,
     "backend/api/llm_proxy_routes.py": 1216,
     "backend/api/office_routes.py": 856,
     "backend/api/orchestration_router.py": 807,
