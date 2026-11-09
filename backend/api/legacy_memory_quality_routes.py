@@ -1,7 +1,4 @@
-<<<<<<< HEAD
 # ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容
-=======
->>>>>>> origin/main
 """Task 4.3 —— 批量清理低质量记忆的 API 端点。
 
 两个端点:
@@ -22,27 +19,17 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 
-<<<<<<< HEAD
-=======
-from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由 with_db_lock 闭包解析
-    _SQLITE_LOCK,
-    make_with_db_lock,
-)
->>>>>>> origin/main
 from backend.memory import get_memory_manager
 from backend.memory.quality_scorer import MemoryQualityScorer
 from backend.scheduler.evolution import _write_evolution_log
 
 logger = logging.getLogger(__name__)
 
-<<<<<<< HEAD
 from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由 with_db_lock 闭包解析
     _SQLITE_LOCK,
     make_with_db_lock,
 )
 
-=======
->>>>>>> origin/main
 
 def with_db_lock(func):
     """串行化 SQLite 访问 (镜像 legacy_memory_list_routes)。"""
@@ -88,13 +75,9 @@ def get_quality_candidates(
         semantic_items = mm.semantic.get_recent(limit=fetch_limit)
 
         # scorer 与 /memory/list 'all' 视图同源:episodic + semantic 一起构建
-<<<<<<< HEAD
         scorer = MemoryQualityScorer(
             corpus=list(episodic_items) + list(semantic_items)
         )
-=======
-        scorer = MemoryQualityScorer(corpus=list(episodic_items) + list(semantic_items))
->>>>>>> origin/main
 
         candidates: List[Dict[str, Any]] = []
         for record, memory_type in (
@@ -201,13 +184,9 @@ def batch_delete_memories(items: List[Dict[str, Any]]):
             continue
 
         if not ok:
-<<<<<<< HEAD
             failed.append(
                 {"id": memory_id, "reason": "store returned False (not found)"}
             )
-=======
-            failed.append({"id": memory_id, "reason": "store returned False (not found)"})
->>>>>>> origin/main
             continue
 
         # 审计日志: best-effort, 写失败不阻断删除

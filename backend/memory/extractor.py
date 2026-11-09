@@ -48,77 +48,6 @@ HIGH_VALUE_KEYWORDS: tuple = (
     "我习惯",
 )
 
-<<<<<<< HEAD
-=======
-# 已知事实注入 prompt 的字符预算——控制 LLM 输入成本，同时保证
-# 最相关的事实一定进 prompt（按输入顺序，越靠前越相关）。
-EXISTING_FACTS_CHAR_BUDGET = 1200
-
-# 判定"已知事实与本轮相关"所需的最小 token 交集数
-_MIN_TOKEN_OVERLAP = 1
-
-
-def _token_set(text: str) -> set:
-    """jieba 分词后的 token 集合（去空白、去单字符噪声）。"""
-    from backend.memory.chinese_tokenizer import tokenize
-
-    tokens = tokenize(text).split()
-    return {t for t in tokens if len(t) > 1}
-
-
-def _select_existing_facts(
-    query: str,
-    facts: List[str],
-    budget: int = EXISTING_FACTS_CHAR_BUDGET,
-) -> List[str]:
-    """按相关性 + 字符预算挑选要注入 prompt 的已知事实。
-
-    原来只是 ``existing_facts[:20]`` —— 前 20 条既可能与本轮无关，
-    又可能因为单条很长而把 prompt 撑爆。这里改成两步：
-
-    1. 相关性过滤：与本轮对话无 token 交集的事实直接丢弃
-       （FTS5 的 OR 匹配会捞回大量仅有一个泛化词命中的弱相关行）
-    2. 字符预算：按输入顺序（调用方已按相关性降序）累加，超预算即停；
-       单条超长时截断并加省略号，保证预算不被突破
-
-    Args:
-        query: 本轮对话文本（用户消息 + 助手消息），用于相关性判定
-        facts: 已知事实列表，越靠前越相关
-        budget: 注入 prompt 的字符预算
-
-    Returns:
-        选中的已知事实文本列表
-    """
-    if not facts:
-        return []
-
-    query_tokens = _token_set(query or "")
-    selected: List[str] = []
-    used = 0
-
-    for raw in facts:
-        text = (raw or "").strip()
-        if not text:
-            continue
-        if query_tokens:
-            fact_tokens = _token_set(text)
-            overlap = len(query_tokens & fact_tokens)
-            if overlap < _MIN_TOKEN_OVERLAP:
-                continue
-        remaining = budget - used
-        if remaining <= 0:
-            break
-        if len(text) > remaining:
-            # 预留 1 字符给省略号，保证单条也不突破预算
-            text = text[: max(remaining - 1, 0)].rstrip() + "…"
-        if not text:
-            break
-        selected.append(text)
-        used += len(text) + 1
-
-    return selected
-
->>>>>>> origin/main
 # 提取提示词（借鉴 Mem0 的 fact extraction prompt）
 EXTRACTION_PROMPT = """从以下对话中提取值得记住的关键事实。每个事实应该是：
 - 独立的、原子化的（一个事实一句话）
@@ -380,21 +309,13 @@ class MemoryExtractor:
         return facts[:3]
 
     # ------------------------------------------------------------------
-<<<<<<< HEAD
     # Task 2.1 / 提取门槛 —— 双向 gate
-=======
-    # 提取门槛 —— 双向 gate
->>>>>>> origin/main
     # ------------------------------------------------------------------
     #
     # 之前只看长度（太短就跳），结果是两类漏网：
     #   1) 长度刚过阈值的纯寒暄（"好的谢谢"、"收到"）仍被送入提取器，
     #      白白浪费 LLM token / 关键词匹配循环；
-<<<<<<< HEAD
     #   2) 很短但含高价值信号的消息（"我喜欢 ruff"）被原 20/50 阈值
-=======
-    #   2) 很短但含高价值信号的消息（"我喜欢 ruff"）会被原 20/50 阈值
->>>>>>> origin/main
     #      放过（恰好用户 15 字、助手 60 字），其实值得保留——这本身
     #      不是漏网，但如果我们上调阈值就会误伤。
     #
@@ -419,7 +340,6 @@ class MemoryExtractor:
         if not combined.strip():
             return False
         return any(kw in combined for kw in HIGH_VALUE_KEYWORDS)
-<<<<<<< HEAD
 
     # ------------------------------------------------------------------
     # Task 4 / Gap A — memory_category heuristic
@@ -485,5 +405,3 @@ class MemoryExtractor:
         if mapped in self._KNOWN_CATEGORIES:
             return mapped
         return self._categorize(content)
-=======
->>>>>>> origin/main

@@ -67,28 +67,4 @@ describe('showStartupFailureDialog', () => {
     expect(result).toBe('quit');
     expect(mockQuit).toHaveBeenCalled();
   });
-<<<<<<< HEAD
-
-  it('adds "打开诊断目录" first and opens the diagnostic dir', async () => {
-    mockShowMessageBox.mockResolvedValue({ response: 0 });
-    const { showStartupFailureDialog } = await import('../showStartupFailureDialog');
-    const result = await showStartupFailureDialog({
-      reason: 'fail',
-      diagnosticPath: '/tmp/diag/report.json',
-    });
-    expect(result).toBe('open-diagnostic');
-    expect(mockShellOpenPath).toHaveBeenCalledWith('/tmp/diag');
-  });
-
-  it('maps "运行修复工具" to index 2 when diagnosticPath is supplied', async () => {
-    mockShowMessageBox.mockResolvedValue({ response: 2 });
-    const { showStartupFailureDialog } = await import('../showStartupFailureDialog');
-    const result = await showStartupFailureDialog({
-      reason: 'fail',
-      diagnosticPath: '/tmp/diag/report.json',
-    });
-    expect(result).toBe('run-rescue');
-  });
-=======
->>>>>>> origin/main
 });

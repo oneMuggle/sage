@@ -134,19 +134,11 @@ export function Memory() {
           onSaved={() => setRefreshKey((k) => k + 1)}
         />
 
-<<<<<<< HEAD
-        {/* Task 4.1: 页首"如何使用"提示（可折叠，关闭后不再自动展示） */}
-        <MemoryUsageHint />
-
-        {/* 对标 S2 (2026-09-13): 可编辑的用户画像卡片 */}
-        <UserProfileCard />
-=======
       {/* Task 4.1: 页首"如何使用"提示（可折叠，关闭后不再自动展示） */}
       <MemoryUsageHint />
 
       {/* 对标 S2 (2026-09-13): 可编辑的用户画像卡片 */}
       <UserProfileCard />
->>>>>>> origin/main
 
         {/* P2 scope 轴: 项目级 MEMORY.md */}
         <ProjectProfileCard />

@@ -140,11 +140,8 @@ async def generate_recap(session_id: str) -> RecapResult:
 
 ### M2：自动触发（后续迭代）
 
-<<<<<<< HEAD
-=======
 > M1 已实现并归档：见 [technical/141-recap-feature.md](../technical/141-recap-feature.md) + [user-manual/42-recap.md](../user-manual/42-recap.md)。M2 已完成（2026-11-09）。
 
->>>>>>> origin/main
 - [x] 步骤 8：Electron 端添加离开检测（blur/focus 事件）
   - `electron/main.ts` 模块级 `lastBlurAtMs`，blur 写入、focus 清零并发送 `sage:event:app-focus { awayMs }`
 - [x] 步骤 9：5分钟回归自动触发 recap

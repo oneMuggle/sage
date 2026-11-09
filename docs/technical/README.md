@@ -1,10 +1,6 @@
 # 技术专题文档总览
 
-<<<<<<< HEAD
-> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-149；本索引以目录中的实际文件为准。
-=======
 > Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-143；本索引以目录中的实际文件为准。
->>>>>>> origin/main
 
 ---
 
@@ -122,18 +118,11 @@
 | 138 | [专家页面交互（P0–P2）](./138-specialist-page-ux.md) | 卡片主操作/色调/禁用态 + 来源筛选/搜索/空态 + 知识数/批量操作/最近使用 + 详情页 `/specialists/:id` + 排序置顶（migration v14/v15） |
 | 139 | [专家私聊与群聊（M1 + M2）](./139-specialist-dm-group-chat.md) | 专家升格为 IM 联系人（卡片点击即私聊、会话项显示专家徽标）+ 群聊 MVP（migration v16 参与者表 + 参与者 CRUD + @ 显式调度 + 气泡发送者） |
 | 140 | [插话暂存区](./140-steer-staging-panel.md) | AI 忙碌时发送的补充消息进暂存条（可撤回）+ 消费回执事件 `STEER_CONSUMED` + 409 窗口修复 + 流末未消费转排队 |
-<<<<<<< HEAD
-| 147 | [Recap 进度总结](./147-recap-feature.md) | `/recap` 斜杠命令手动触发 LLM 生成结构化总结（进度/决策/下一步/待确认问题）+ `POST /api/v1/chat/recap` 五分支契约 + 5 分钟节流 + 消息不足 3 条单独返回 `too_short` |
-| 148 | [Sage 向导专家](./148-sage-guide-specialist.md) | 内置 sage-guide agent（五段人设 + 文档 FTS5 检索 + 配置工具）+ 五步改配置工作流（逐次确认 + trust_escalation）+ 内置 agent 删除保护 + 打包白名单 |
-| 149 | [项目工作台·规则中心](./149-project-workbench-rules-center.md) | 四层适配器（constraint/playbook/doc/global）+ 规则包信封（sage.rules JSON/Markdown/AGENTS.md）+ AI diff 修改 + 导入导出 + 规程库搜索与元数据编辑 |
-| 150 | [Win7 内网救援工具（Rescue Doctor）](./150-win7-rescue-doctor.md) | 不依赖前端的 CLI（体检/端点配置/修复/诊断包/放行清单）+ 启动看门狗（last-run/崩溃 journal/心跳/原生恢复对话框）+ 兼容档位 L0–L3 + 遗留管控软件处置（备份/恢复/审计） |
-=======
 | 141 | [Recap 进度总结](./141-recap-feature.md) | `/recap` 斜杠命令手动触发 LLM 生成结构化总结（进度/决策/下一步/待确认问题）+ `POST /api/v1/chat/recap` 五分支契约 + 5 分钟节流 + 消息不足 3 条单独返回 `too_short` |
 | 142 | [Sage 向导专家](./142-sage-guide-specialist.md) | 内置 sage-guide agent（五段人设 + 文档 FTS5 检索 + 配置工具）+ 五步改配置工作流（逐次确认 + trust_escalation）+ 内置 agent 删除保护 + 打包白名单 |
 | 143 | [项目工作台·规则中心](./143-project-workbench-rules-center.md) | 四层适配器（constraint/playbook/doc/global）+ 规则包信封（sage.rules JSON/Markdown/AGENTS.md）+ AI diff 修改 + 导入导出 + 规程库搜索与元数据编辑 |
 | 144 | [Win7 内网救援工具（Rescue Doctor）](./144-win7-rescue-doctor.md) | 不依赖前端的 CLI（体检/端点配置/修复/诊断包/放行清单）+ 启动看门狗（last-run/崩溃 journal/心跳/原生恢复对话框）+ 兼容档位 L0–L3 + 遗留管控软件处置（备份/恢复/审计） |
 | 145 | [记忆质量优化（Phase 1–4）](./145-memory-quality-optimization.md) | 提取门槛升级 + 否定词 NOOP 修复 + 写入冲突消解（ADD/UPDATE/NOOP）+ 已知事实过滤 + 主题簇巩固 + 五维质量评分器 + 质量可视化/批量清理/来源会话追踪/记忆级反馈 |
->>>>>>> origin/main
 
 ---
 
@@ -142,11 +131,7 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 用户价值层 | [01 概述](../01-overview.md) — [12 实施计划](../12-plan.md) |
-<<<<<<< HEAD
-| 横切关注点 | 本目录（15-149）                                            |
-=======
 | 横切关注点 | 本目录（15-143）                                            |
->>>>>>> origin/main
 
 ---
 

@@ -88,9 +88,6 @@ export const memoryRoutes: Record<string, CommandRoute> = {
       reason: a?.reason as string | undefined,
     }),
   },
-<<<<<<< HEAD
-  // M3 质量改进：批量删除（renderer 侧 memoryApi.batchDelete）
-=======
   // Task 4.3: 批量清理低质量记忆
   get_quality_candidates: {
     method: 'GET',
@@ -102,7 +99,6 @@ export const memoryRoutes: Record<string, CommandRoute> = {
       return `/api/v1/memory/quality-candidates?${params.toString()}`;
     },
   },
->>>>>>> origin/main
   batch_delete_memories: {
     method: 'POST',
     path: () => '/api/v1/memory/batch-delete',

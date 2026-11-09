@@ -118,11 +118,8 @@ export const enRules: Record<RulesTranslationKey, string> = {
   'rules.ai.reason': 'Reason',
   'rules.ai.select': 'Select this change',
   'rules.ai.deleteHint': 'Deletion cannot be undone and is not selected by default.',
-<<<<<<< HEAD
-=======
   'rules.ai.confirmDelete':
     'Selected changes include {count} delete operation(s). Deletions cannot be undone. Continue?',
->>>>>>> origin/main
   'rules.ai.current': 'Current value',
   'rules.ai.readonly': 'Playbook rules are read-only; edit them in the playbook editor',
   'rules.ai.openPlaybook': 'Open playbook',

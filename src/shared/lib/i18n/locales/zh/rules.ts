@@ -108,10 +108,7 @@ export const zhRules = {
   'rules.ai.reason': '理由',
   'rules.ai.select': '选择这条修改',
   'rules.ai.deleteHint': '删除不可撤销，默认未选中。',
-<<<<<<< HEAD
-=======
   'rules.ai.confirmDelete': '选中的修改包含 {count} 条删除操作，删除不可撤销。确认继续？',
->>>>>>> origin/main
   'rules.ai.current': '当前值',
   'rules.ai.readonly': '规程规则只读，请到规程编辑器修改',
   'rules.ai.openPlaybook': '去规程里改',

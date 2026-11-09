@@ -19,27 +19,18 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   } as unknown as typeof ResizeObserver;
 }
 
-<<<<<<< HEAD
-const { previewPatch, applyPatch } = vi.hoisted(() => ({
-  previewPatch: vi.fn(),
-  applyPatch: vi.fn(),
-=======
 const { previewPatch, applyPatch, confirmDialog } = vi.hoisted(() => ({
   previewPatch: vi.fn(),
   applyPatch: vi.fn(),
   confirmDialog: vi.fn(),
->>>>>>> origin/main
 }));
 
 vi.mock('../../../shared/api/rulesApi', () => ({
   rulesApi: { previewPatch, applyPatch },
 }));
 
-<<<<<<< HEAD
-=======
 vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({ confirmDialog }));
 
->>>>>>> origin/main
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const ENTRY = {
@@ -99,11 +90,8 @@ describe('AiRulePatchDrawer', () => {
   beforeEach(() => {
     previewPatch.mockReset();
     applyPatch.mockReset();
-<<<<<<< HEAD
-=======
     confirmDialog.mockReset();
     confirmDialog.mockResolvedValue(true);
->>>>>>> origin/main
   });
 
   it('prefills the focused rule and sends its id', async () => {
@@ -293,8 +281,6 @@ describe('AiRulePatchDrawer', () => {
     expect(screen.queryByTestId('ai-apply')).not.toBeInTheDocument();
   });
 
-<<<<<<< HEAD
-=======
   it('asks for confirmation before applying selected delete operations', async () => {
     previewPatch.mockResolvedValue(
       preview({
@@ -363,7 +349,6 @@ describe('AiRulePatchDrawer', () => {
     expect(confirmDialog).not.toHaveBeenCalled();
   });
 
->>>>>>> origin/main
   it('surfaces preview failures instead of silently showing an empty list', async () => {
     previewPatch.mockRejectedValue(new Error('AI 返回格式不正确，请重试或手动编辑'));
     renderDrawer();

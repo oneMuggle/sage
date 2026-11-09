@@ -523,11 +523,7 @@ electron/lastRunState.ts
 electron/crashJournal.ts
 electron/rescueDialogs.ts
 resources/SageDoctor.cmd
-<<<<<<< HEAD
-docs/technical/150-win7-rescue-doctor.md   # 已完成归档
-=======
 docs/technical/144-win7-rescue-doctor.md   # 已完成归档
->>>>>>> origin/main
 docs/user-manual/45-win7-rescue-tool.md    # 已完成归档
 ```
 

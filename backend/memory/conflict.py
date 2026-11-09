@@ -87,11 +87,7 @@ def _cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
     dot = 0.0
     norm_a = 0.0
     norm_b = 0.0
-<<<<<<< HEAD
     for x, y in zip(a, b):
-=======
-    for x, y in zip(a, b):  # noqa: B905 -- py3.8 兼容，strict= 是 3.10+ 才支持的 kwarg
->>>>>>> origin/main
         dot += x * y
         norm_a += x * x
         norm_b += y * y
@@ -234,11 +230,7 @@ class MemoryConflictResolver:
         if not vectors or len(vectors) != len(texts):
             return
         base = vectors[0]
-<<<<<<< HEAD
         for cand, vec in zip(candidates, vectors[1:]):
-=======
-        for cand, vec in zip(candidates, vectors[1:]):  # noqa: B905 -- py3.8 兼容
->>>>>>> origin/main
             cand.semantic_similarity = _cosine_similarity(base, vec)
 
     # ---- 判定 --------------------------------------------------------------

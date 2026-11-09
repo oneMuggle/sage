@@ -177,7 +177,6 @@ class EpisodicMemory:
         project_key: Optional[str] = None,
         supersedes_id: Optional[str] = None,
         agent_id: Optional[str] = None,
-        summary: Optional[str] = None,
     ) -> str:
         """
         保存情景记忆
@@ -200,7 +199,6 @@ class EpisodicMemory:
             project_key: 项目目录（scope='project' 时生效）
             agent_id: M3 专家维度。None（默认）= 共享层，所有专家可见；
                 非空 = 该专家私有（读取过滤为「私有 ∪ 共享」）
-            summary: 预生成的摘要；None 时从 content 自动生成
 
         Returns:
             生成的记忆 ID
@@ -223,11 +221,7 @@ class EpisodicMemory:
             tag_list = derive_tags(content)
         tags = json.dumps(tag_list, ensure_ascii=False)
 
-<<<<<<< HEAD
         # 生成摘要（F2 — 允许调用方覆盖，如 ConsolidationPipeline）
-=======
-        # 生成摘要（调用方可传入预生成摘要，避免二次生成）
->>>>>>> origin/main
         if summary is None:
             summary = self._generate_summary(content)
 
