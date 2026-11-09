@@ -12,7 +12,7 @@ import os
 import time
 import uuid
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from backend.data.database import get_database
 from backend.memory.episodic import sync_fts_row_for_id
@@ -251,7 +251,7 @@ class DailySummaryTask(BaseEvolutionTask):
 
         return processed
 
-    async def _generate_summary(self, messages: List[dict]) -> str | None:
+    async def _generate_summary(self, messages: List[dict]) -> Optional[str]:
         """
         生成对话摘要
 

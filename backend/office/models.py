@@ -11,23 +11,21 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, ForwardRef, List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict, Field, conlist
+from pydantic import BaseModel, Field, conlist
 
-# Pydantic v1/v2 compatibility (matches backend/plugins/manifest.py idiom).
-try:
-    # Pydantic v2
-    from pydantic import field_validator
-except ImportError:  # pragma: no cover — release/win7 runs v1
-    # Pydantic v1 fallback
-    from pydantic import validator as field_validator  # type: ignore
+from backend.compat.win7.pydantic_compat import ConfigDict, field_validator
 
 logger = logging.getLogger(__name__)
 
 
 def _constrained_list(item_type, *, min_length=None, max_length=None):
     """Build a list constraint compatible with Pydantic v1 and v2."""
+    # pydantic v1 的 conlist 不接受字符串类型；包装成 ForwardRef 延迟解析，
+    # 由模块末尾的 model_rebuild()/update_forward_refs() 守卫收口。
+    if isinstance(item_type, str):
+        item_type = ForwardRef(item_type)
     kwargs = {}
     if min_length is not None:
         kwargs["min_length"] = min_length
@@ -281,7 +279,7 @@ class WordImagePreview(BaseModel):
 
 if hasattr(OfficeWordReadResult, "model_rebuild"):
     OfficeWordReadResult.model_rebuild()
-else:  # pragma: no cover — release/win7 runs pydantic v1
+else:
     OfficeWordReadResult.update_forward_refs()
 
 
@@ -1006,6 +1004,24 @@ class ExcelPrintMarginsSpec(BaseModel):
     bottom: Optional[float] = Field(default=None, ge=0.0, le=10.0)
     left: Optional[float] = Field(default=None, ge=0.0, le=10.0)
     right: Optional[float] = Field(default=None, ge=0.0, le=10.0)
+
+
+# pydantic v1 在类创建时解析注解；以下模型引用了后置定义的类，
+# 需在全部类定义后显式解析前向引用（v2 走 model_rebuild，v1 走 update_forward_refs）。
+if hasattr(WordFormatSpec, "model_rebuild"):
+    WordFormatSpec.model_rebuild()
+else:
+    WordFormatSpec.update_forward_refs()
+
+if hasattr(ExcelSheetSpec, "model_rebuild"):
+    ExcelSheetSpec.model_rebuild()
+else:
+    ExcelSheetSpec.update_forward_refs()
+
+if hasattr(ExcelPrintSetupSpec, "model_rebuild"):
+    ExcelPrintSetupSpec.model_rebuild()
+else:
+    ExcelPrintSetupSpec.update_forward_refs()
 
 
 class ExcelCellRange(BaseModel):
