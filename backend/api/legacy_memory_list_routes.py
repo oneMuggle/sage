@@ -23,6 +23,8 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 
 from backend.memory import get_memory_manager
+from backend.memory.feedback_store import attach_feedback
+from backend.memory.quality_scorer import MemoryQualityScorer
 from backend.memory.summary import (
     list_summaries_for_session as _list_summaries_for_session,
 )
@@ -139,9 +141,10 @@ def list_memories(
             episodic_items = mm.episodic.get_recent(
                 limit=fetch_limit, session_id=session_id
             )
+            scorer = _build_quality_scorer(episodic_items)
             items = _filter_items_by_agent(
                 _enrich_memory_records(
-                    episodic_items, layer="episodic", source="episodic"
+                    episodic_items, layer="episodic", source="episodic", scorer=scorer
                 ),
                 agent_id,
             )
@@ -163,9 +166,10 @@ def list_memories(
             semantic_items = mm.semantic.get_recent(
                 limit=fetch_limit, session_id=session_id
             )
+            scorer = _build_quality_scorer(semantic_items)
             items = _filter_items_by_agent(
                 _enrich_memory_records(
-                    semantic_items, layer="semantic", source="semantic"
+                    semantic_items, layer="semantic", source="semantic", scorer=scorer
                 ),
                 agent_id,
             )
@@ -247,11 +251,24 @@ def list_memories(
                 )
 
             merged: List[Dict] = []
+            # all 视图里 episodic 与 semantic 互为独特性语料 —— 两层的
+            # 重复内容都该被识别,否则同一事实在两层各存一份仍打满分
+            scorer = _build_quality_scorer(episodic_items, semantic_items)
             merged.extend(
-                _enrich_memory_records(episodic_items, layer="episodic", source="episodic")
+                _enrich_memory_records(
+                    episodic_items,
+                    layer="episodic",
+                    source="episodic",
+                    scorer=scorer,
+                )
             )
             merged.extend(
-                _enrich_memory_records(semantic_items, layer="semantic", source="semantic")
+                _enrich_memory_records(
+                    semantic_items,
+                    layer="semantic",
+                    source="semantic",
+                    scorer=scorer,
+                )
             )
             merged.extend(_enrich_working_records(working_items, session_id=session_id))
             merged.extend(_enrich_summary_records(summaries))
@@ -305,6 +322,8 @@ def list_memories(
 
         # 3. 分页 slice
         page_items = items[safe_offset : safe_offset + safe_page_size]
+        # Task 4.5: 批量补 user_feedback（一次 IN 查询，避免卡片逐条打库）
+        attach_feedback(mm.episodic.db, page_items)
 
         # 4. Envelope
         return {
@@ -323,14 +342,20 @@ def list_memories(
 
 
 def _enrich_memory_records(
-    records: List[Dict[str, Any]], layer: str, source: str
+    records: List[Dict[str, Any]],
+    layer: str,
+    source: str,
+    scorer: Optional[MemoryQualityScorer] = None,
 ) -> List[Dict[str, Any]]:
-    """给每条记忆记录补 ``source`` / ``layer`` / ``created_at_ms``。
+    """给每条记忆记录补 ``source`` / ``layer`` / ``created_at_ms`` / ``quality_score``。
 
     字段约定:
     - ``id`` / ``content`` / ``memory_type`` / ``source`` / ``session_id``
       / ``importance`` / ``created_at_ms`` / ``summary``
     - ``created_at`` 字段若存在,映射成 ``created_at_ms``(毫秒)。
+    - ``quality_score`` 可选:Phase 4 起,scorer 传入时为 0-1 浮点数;
+      缺失 scorer 或 working/session_summary 等无 importance/recency
+      语义的行不设该字段(前端按 null 处理)。
 
     ``source`` 强制覆盖(不用 setdefault):DB 里 ``source`` 列存的是
     'auto'/'manual'/'review' 之类的"写入来源",而这里我们要的是"层来源"
@@ -348,8 +373,28 @@ def _enrich_memory_records(
             # 数据库列存的就是毫秒（int(time.time() * 1000)），原样复制
             with contextlib.suppress(TypeError, ValueError):
                 item["created_at_ms"] = int(ts)
+        if scorer is not None:
+            try:
+                item["quality_score"] = round(scorer.calculate_quality_score(item), 3)
+            except Exception:
+                # 评分失败不应让整条记录丢失 —— 前端按 None 处理
+                item["quality_score"] = None
         enriched.append(item)
     return enriched
+
+
+def _build_quality_scorer(
+    *record_lists: List[Dict[str, Any]],
+) -> MemoryQualityScorer:
+    """把若干层记录拼成语料,构建一个 MemoryQualityScorer。
+
+    独特性是 O(N*M) 比较,语料太大时 scorer 内部已 cap 到 ``MAX_CORPUS``。
+    空输入返回空语料 scorer(独特性恒 1.0,其他维度仍正常计算)。
+    """
+    corpus: List[Dict[str, Any]] = []
+    for records in record_lists:
+        corpus.extend(records or [])
+    return MemoryQualityScorer(corpus=corpus)
 
 
 def _enrich_working_records(
