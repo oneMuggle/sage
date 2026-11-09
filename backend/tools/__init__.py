@@ -1,165 +1,169 @@
 """
 工具系统初始化
 
-提供所有内置工具的注册函数
+Phase 3 (startup perf): 顶层不再 eager import 全部 ~104 个 tool 子模块
+（≈1.9s）。改用 PEP 562 惰性 `__getattr__`：只在属性首次被访问时才导入
+对应子模块。`register_all_tools()` 内部已走 `.tool_bundles` 的显式导入，
+不依赖包 `__init__` 的 eager 导出。
 """
 
 import logging
 import os
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from backend.domain.network_policy import NetworkPolicy
 from backend.domain.scheduler import SchedulerServicePort
 from backend.domain.tool_policy import ToolPolicy
 from backend.services.todo_service import TodoService  # forward-ref for register_all_tools
 
-from .ask_user_tool import AskUserQuestionTool
-from .asr_tool import SpeechToTextTool
 from .base import BaseTool, ToolResult, ToolSchema
-from .bash_tool import BashOutputTool, BashTool, KillShellTool
-from .browser_tool import (
-    BrowserCloseTool,
-    BrowserCookiesTool,
-    BrowserDownloadsTool,
-    BrowserInteractTool,
-    BrowserLaunchTool,
-    BrowserLoginTool,
-    BrowserNavigateTool,
-    BrowserScreenshotTool,
-    BrowserSnapshotTool,
-)
-from .checkpoint_tool import CheckpointCreateTool, CheckpointListTool, CheckpointRestoreTool
-from .codebase_search_tool import CodebaseSearchTool
-from .commit_message_tool import GitCommitMessageTool
-from .config_tool import ReadSageConfigTool, UpdateSageConfigTool
-from .design_export_tool import DesignExportTool
-from .design_generate_tool import DesignGenerateTool
-from .design_iterate_tool import DesignIterateTool
-from .design_list_systems_tool import DesignListSystemsTool
-from .design_list_templates_tool import DesignListTemplatesTool
-from .download_status_tool import DownloadCancelTool, DownloadStatusTool
-from .download_tool import HttpDownloadTool
-from .edit_tool import EditTool
-from .execute_code_tool import ExecuteCodeTool
-from .file_summary_tool import FileSummaryTool
-from .file_tool import ListDirTool, ReadFileTool, WriteFileTool
-from .git_tool import (
-    GitBranchTool,
-    GitCheckoutTool,
-    GitCommitTool,
-    GitDiffTool,
-    GitLogTool,
-    GitStashTool,
-    GitStatusTool,
-)
-from .image_gen_tool import ImageGenerationTool
-from .memory_tool import MemorySaveTool, MemorySearchTool
 from .network_config import load_network_policy
-from .office_analyze_tool import OfficeAnalyzeTool
-from .office_archive_tool import OfficeArchiveTool
-from .office_bibtex_tool import OfficeBibTexTool
-from .office_create_tool import OfficeCreateTool
-from .office_delete_tool import OfficeDeleteTool
-from .office_journal_tool import (
-    OfficeJournalFillFromContentTool,
-    OfficeJournalGenerateArticleTool,
-    OfficeJournalParseTemplateTool,
-    OfficeJournalValidateTool,
-)
-from .office_latex_audit_tool import OfficeAuditLatexTool
-from .office_latex_build_tool import OfficeCompileLatexTool, OfficeLatexdiffTool
-from .office_latex_compliance_tool import OfficeCheckLatexComplianceTool
-from .office_latex_pdf_tool import OfficeAuditLatexPdfTool
-from .office_latex_project_tool import OfficeExtractLatexProjectTool
-from .office_latex_template_tool import (
-    OfficeAnalyzeLatexTemplateTool,
-    OfficeFillLatexTemplateTool,
-)
-from .office_latex_tool import OfficeReadLatexTool
-from .office_lint_tool import OfficeLintWordTool
-from .office_pdf_tool import (
-    OfficeFillPdfFormTool,
-    OfficeGeneratePdfTool,
-    OfficeReadPdfFormTool,
-    OfficeReadPdfTool,
-)
-from .office_ppt_template_tool import (
-    OfficeAnalyzePptTemplateTool,
-    OfficeFillPptTemplateTool,
-)
-from .office_repair_tool import OfficeRepairWordTool
-from .office_restore_tool import OfficeRestoreTool
-from .office_template_tool import (
-    OfficeAnalyzeWordTemplateTool,
-    OfficeFillWordTemplateTool,
-)
-from .office_toc_refresh_tool import OfficeRefreshTocTool
-from .office_tool import OfficeListTool, OfficeReadTool
-from .office_update_tool import OfficeUpdateTool
-from .office_word_intelligence_tools import (
-    OfficeAuditWordTool,
-    OfficeBatchAuditTool,
-    OfficeExtractRulesTool,
-    OfficeFixWordTool,
-    OfficeRenderAuditTool,
-    OfficeReviseWordTool,
-)
-from .patch_tool import ApplyPatchTool
-from .project_diagnose import ProjectDiagnoseTool
 from .registry import ToolRegistry
-from .repl_tool import ReplTool
-from .runtime_exec import RuntimeExecTool
-from .runtime_probe import RuntimeProbeTool
-from .schedule_tool import (
-    CancelScheduledTaskTool,
-    ListScheduledTasksTool,
-    ScheduleTaskTool,
-)
-from .search_tools import GlobSearchTool, GrepSearchTool
-from .session_search_tool import SessionSearchTool
-from .skill import SkillHotLoader
-from .skill_save_tool import SkillSaveTool
-from .skill_tool import SkillTool
-from .structured_output_tool import StructuredOutputTool
-from .symbol_search_tool import SymbolSearchTool
-from .todo_tool import TodoWriteTool
-from .tts_tool import TextToSpeechTool
-from .web_tool import WebFetchTool, WebSearchTool
+
+# Phase 3 (startup perf): tool 子模块惰性解析映射。
+# key: 导出名（类名）；value: 相对子模块路径（`.` 前缀表示 backend.tools.X）。
+_LAZY_TOOL_EXPORTS: Dict[str, str] = {
+    "ApplyPatchTool": ".patch_tool",
+    "AskUserQuestionTool": ".ask_user_tool",
+    "BashOutputTool": ".bash_tool",
+    "BashTool": ".bash_tool",
+    "BrowserCloseTool": ".browser_tool",
+    "BrowserCookiesTool": ".browser_tool",
+    "BrowserDownloadsTool": ".browser_tool",
+    "BrowserInteractTool": ".browser_tool",
+    "BrowserLaunchTool": ".browser_tool",
+    "BrowserLoginTool": ".browser_tool",
+    "BrowserNavigateTool": ".browser_tool",
+    "BrowserScreenshotTool": ".browser_tool",
+    "BrowserSnapshotTool": ".browser_tool",
+    "CancelScheduledTaskTool": ".schedule_tool",
+    "CheckpointCreateTool": ".checkpoint_tool",
+    "CheckpointListTool": ".checkpoint_tool",
+    "CheckpointRestoreTool": ".checkpoint_tool",
+    "CodebaseSearchTool": ".codebase_search_tool",
+    "DesignExportTool": ".design_export_tool",
+    "DesignGenerateTool": ".design_generate_tool",
+    "DesignIterateTool": ".design_iterate_tool",
+    "DesignListSystemsTool": ".design_list_systems_tool",
+    "DesignListTemplatesTool": ".design_list_templates_tool",
+    "DownloadCancelTool": ".download_status_tool",
+    "DownloadStatusTool": ".download_status_tool",
+    "EditTool": ".edit_tool",
+    "ExecuteCodeTool": ".execute_code_tool",
+    "FileSummaryTool": ".file_summary_tool",
+    "GitBranchTool": ".git_tool",
+    "GitCheckoutTool": ".git_tool",
+    "GitCommitMessageTool": ".commit_message_tool",
+    "GitCommitTool": ".git_tool",
+    "GitDiffTool": ".git_tool",
+    "GitLogTool": ".git_tool",
+    "GitStashTool": ".git_tool",
+    "GitStatusTool": ".git_tool",
+    "GlobSearchTool": ".search_tools",
+    "GrepSearchTool": ".search_tools",
+    "HttpDownloadTool": ".download_tool",
+    "ImageGenerationTool": ".image_gen_tool",
+    "KillShellTool": ".bash_tool",
+    "ListDirTool": ".file_tool",
+    "ListScheduledTasksTool": ".schedule_tool",
+    "MemorySaveTool": ".memory_tool",
+    "MemorySearchTool": ".memory_tool",
+    "OfficeAnalyzeLatexTemplateTool": ".office_latex_template_tool",
+    "OfficeAnalyzePptTemplateTool": ".office_ppt_template_tool",
+    "OfficeAnalyzeTool": ".office_analyze_tool",
+    "OfficeAnalyzeWordTemplateTool": ".office_template_tool",
+    "OfficeArchiveTool": ".office_archive_tool",
+    "OfficeAuditLatexPdfTool": ".office_latex_pdf_tool",
+    "OfficeAuditLatexTool": ".office_latex_audit_tool",
+    "OfficeAuditWordTool": ".office_word_intelligence_tools",
+    "OfficeBatchAuditTool": ".office_word_intelligence_tools",
+    "OfficeBibTexTool": ".office_bibtex_tool",
+    "OfficeCheckLatexComplianceTool": ".office_latex_compliance_tool",
+    "OfficeCompileLatexTool": ".office_latex_build_tool",
+    "OfficeCreateTool": ".office_create_tool",
+    "OfficeDeleteTool": ".office_delete_tool",
+    "OfficeExtractLatexProjectTool": ".office_latex_project_tool",
+    "OfficeExtractRulesTool": ".office_word_intelligence_tools",
+    "OfficeFillLatexTemplateTool": ".office_latex_template_tool",
+    "OfficeFillPdfFormTool": ".office_pdf_tool",
+    "OfficeFillPptTemplateTool": ".office_ppt_template_tool",
+    "OfficeFillWordTemplateTool": ".office_template_tool",
+    "OfficeFixWordTool": ".office_word_intelligence_tools",
+    "OfficeGeneratePdfTool": ".office_pdf_tool",
+    "OfficeJournalFillFromContentTool": ".office_journal_tool",
+    "OfficeJournalGenerateArticleTool": ".office_journal_tool",
+    "OfficeJournalParseTemplateTool": ".office_journal_tool",
+    "OfficeJournalValidateTool": ".office_journal_tool",
+    "OfficeLatexdiffTool": ".office_latex_build_tool",
+    "OfficeLintWordTool": ".office_lint_tool",
+    "OfficeListTool": ".office_tool",
+    "OfficeReadLatexTool": ".office_latex_tool",
+    "OfficeReadPdfFormTool": ".office_pdf_tool",
+    "OfficeReadPdfTool": ".office_pdf_tool",
+    "OfficeReadTool": ".office_tool",
+    "OfficeRefreshTocTool": ".office_toc_refresh_tool",
+    "OfficeRenderAuditTool": ".office_word_intelligence_tools",
+    "OfficeRepairWordTool": ".office_repair_tool",
+    "OfficeRestoreTool": ".office_restore_tool",
+    "OfficeReviseWordTool": ".office_word_intelligence_tools",
+    "OfficeUpdateTool": ".office_update_tool",
+    "ProjectDiagnoseTool": ".project_diagnose",
+    "ReadFileTool": ".file_tool",
+    "ReadSageConfigTool": ".config_tool",
+    "ReplTool": ".repl_tool",
+    "RuntimeExecTool": ".runtime_exec",
+    "RuntimeProbeTool": ".runtime_probe",
+    "ScheduleTaskTool": ".schedule_tool",
+    "SessionSearchTool": ".session_search_tool",
+    "SkillHotLoader": ".skill",
+    "SkillSaveTool": ".skill_save_tool",
+    "SkillTool": ".skill_tool",
+    "SpeechToTextTool": ".asr_tool",
+    "StructuredOutputTool": ".structured_output_tool",
+    "SymbolSearchTool": ".symbol_search_tool",
+    "TextToSpeechTool": ".tts_tool",
+    "TodoWriteTool": ".todo_tool",
+    "UpdateSageConfigTool": ".config_tool",
+    "WebFetchTool": ".web_tool",
+    "WebSearchTool": ".web_tool",
+    "WriteFileTool": ".file_tool",
+}
 
 
-def __getattr__(name):
+def __getattr__(name: str) -> Any:
     """Lazy attribute access — breaks the ``backend.tools`` circular import.
 
-    ``agent_tool`` is intentionally NOT eagerly imported above. Its module
-    pulls in ``backend.orchestration.subagent_events`` which transitively
-    reaches ``backend.core.legacy.agent.py:54`` (``from backend.tools
-    import ToolRegistry, register_all_tools``) — a back-edge into this
-    package before its ``__init__`` finishes binding ``ToolRegistry`` at
-    line 42. Python 3.10 silently tolerated the cycle (it returns the
-    partially-initialized module); Python 3.11 (used by CI per
-    ``.github/workflows/ci.yml`` line 82) raises
-    ``ImportError: cannot import name 'ToolRegistry' from partially
-    initialized module 'backend.tools'``. Issue #484.
-
-    By deferring ``agent_tool`` to first-attribute-access via PEP 562,
-    ``backend.tools.__init__`` finishes binding all public symbols BEFORE
-    the back-edge fires; then ``register_all_tools`` (called after the
-    package is fully initialised) can safely ``from .agent_tool import
-    AgentTool`` at its call site.
+    Phase 3 (startup perf): 104 个 tool 类名走惰性解析（见 _LAZY_TOOL_EXPORTS）。
+    AgentTool 因循环依赖保留特殊处理：先尝试普通 lazy 解析，失败则 fallback
+    到 `agent_tool` 子模块。
     """
+    # AgentTool 因循环依赖特殊处理
     if name == "AgentTool":
         from .agent_tool import AgentTool as _AgentTool
 
+        globals()["AgentTool"] = _AgentTool
         return _AgentTool
+
+    # Phase 3 (startup perf): 其他 tool 类名走惰性解析
+    if name in _LAZY_TOOL_EXPORTS:
+        from importlib import import_module
+
+        module_path = _LAZY_TOOL_EXPORTS[name]
+        # 相对导入：`.xxx_tool` → `backend.tools.xxx_tool`
+        full_path = f"backend.tools{module_path}" if module_path.startswith(".") else module_path
+        value = getattr(import_module(full_path), name)
+        globals()[name] = value
+        return value
+
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def __dir__():
-    """Make ``AgentTool`` discoverable via ``dir(backend.tools)`` and tab
+def __dir__() -> List[str]:
+    """Make tool classes discoverable via ``dir(backend.tools)`` and tab
     completion, matching the pre-fix public surface.
     """
-    return sorted({*globals().keys(), "AgentTool"})
+    return sorted(set(globals()) | set(__all__))
 
 
 def _load_harness_safely():
@@ -230,105 +234,119 @@ def register_all_tools(
 
 
 __all__ = [
-    "ToolRegistry",
-    "BaseTool",
-    "ToolSchema",
-    "ToolResult",
     "AgentTool",
-    "BashTool",
-    "BashOutputTool",
-    "KillShellTool",
-    "ReadFileTool",
-    "WriteFileTool",
-    "ListDirTool",
-    "WebSearchTool",
-    "WebFetchTool",
-    "HttpDownloadTool",
-    "MemorySearchTool",
-    "SessionSearchTool",
-    "ExecuteCodeTool",
-    "MemorySaveTool",
-    "OfficeListTool",
-    "OfficeReadTool",
-    "OfficeCreateTool",
-    "OfficeUpdateTool",
-    "OfficeDeleteTool",
-    "OfficeRestoreTool",
-    "OfficeArchiveTool",
-    "OfficeReadPdfTool",
-    "OfficeGeneratePdfTool",
-    "OfficeReadPdfFormTool",
-    "OfficeFillPdfFormTool",
-    "OfficeAnalyzeWordTemplateTool",
-    "OfficeFillWordTemplateTool",
-    "OfficeAnalyzePptTemplateTool",
-    "OfficeFillPptTemplateTool",
-    "OfficeAnalyzeTool",
-    "OfficeBibTexTool",
-    "OfficeLintWordTool",
-    "OfficeReadLatexTool",
-    "OfficeAnalyzeLatexTemplateTool",
-    "OfficeFillLatexTemplateTool",
-    "OfficeAuditLatexTool",
-    "OfficeAuditLatexPdfTool",
-    "OfficeCheckLatexComplianceTool",
-    "OfficeCompileLatexTool",
-    "OfficeLatexdiffTool",
-    "OfficeExtractLatexProjectTool",
-    "OfficeRepairWordTool",
-    "OfficeAuditWordTool",
-    "OfficeBatchAuditTool",
-    "OfficeFixWordTool",
-    "OfficeExtractRulesTool",
-    "OfficeRenderAuditTool",
-    "OfficeReviseWordTool",
-    "OfficeRefreshTocTool",
-    "OfficeJournalParseTemplateTool",
-    "OfficeJournalFillFromContentTool",
-    "OfficeJournalGenerateArticleTool",
-    "OfficeJournalValidateTool",
-    "EditTool",
-    "GlobSearchTool",
-    "CodebaseSearchTool",
-    "GrepSearchTool",
-    "TodoWriteTool",
-    "StructuredOutputTool",
-    "ReplTool",
-    "RuntimeProbeTool",
-    "RuntimeExecTool",
-    "ProjectDiagnoseTool",
-    "SkillTool",
+    "ApplyPatchTool",
     "AskUserQuestionTool",
-    "FileSummaryTool",
-    "GitStashTool",
-    "GitStatusTool",
-    "GitDiffTool",
-    "GitLogTool",
-    "GitCommitMessageTool",
-    "GitBranchTool",
-    "GitCheckoutTool",
-    "GitCommitTool",
+    "BashOutputTool",
+    "BashTool",
+    "BaseTool",
+    "BrowserCloseTool",
+    "BrowserCookiesTool",
+    "BrowserDownloadsTool",
+    "BrowserInteractTool",
+    "BrowserLaunchTool",
+    "BrowserLoginTool",
+    "BrowserNavigateTool",
+    "BrowserScreenshotTool",
+    "BrowserSnapshotTool",
+    "CancelScheduledTaskTool",
     "CheckpointCreateTool",
     "CheckpointListTool",
     "CheckpointRestoreTool",
-    "ApplyPatchTool",
-    "SymbolSearchTool",
-    "BrowserLaunchTool",
-    "BrowserNavigateTool",
-    "BrowserSnapshotTool",
-    "BrowserInteractTool",
-    "BrowserScreenshotTool",
-    "BrowserDownloadsTool",
-    "BrowserCloseTool",
+    "CodebaseSearchTool",
+    "DesignExportTool",
+    "DesignGenerateTool",
+    "DesignIterateTool",
+    "DesignListSystemsTool",
+    "DesignListTemplatesTool",
+    "DownloadCancelTool",
+    "DownloadStatusTool",
+    "EditTool",
+    "ExecuteCodeTool",
+    "FileSummaryTool",
+    "GitBranchTool",
+    "GitCheckoutTool",
+    "GitCommitMessageTool",
+    "GitCommitTool",
+    "GitDiffTool",
+    "GitLogTool",
+    "GitStashTool",
+    "GitStatusTool",
+    "GlobSearchTool",
+    "GrepSearchTool",
+    "HttpDownloadTool",
+    "ImageGenerationTool",
+    "KillShellTool",
+    "ListDirTool",
+    "ListScheduledTasksTool",
+    "MemorySaveTool",
+    "MemorySearchTool",
+    "NetworkPolicy",
+    "OfficeAnalyzeLatexTemplateTool",
+    "OfficeAnalyzePptTemplateTool",
+    "OfficeAnalyzeTool",
+    "OfficeAnalyzeWordTemplateTool",
+    "OfficeArchiveTool",
+    "OfficeAuditLatexPdfTool",
+    "OfficeAuditLatexTool",
+    "OfficeAuditWordTool",
+    "OfficeBatchAuditTool",
+    "OfficeBibTexTool",
+    "OfficeCheckLatexComplianceTool",
+    "OfficeCompileLatexTool",
+    "OfficeCreateTool",
+    "OfficeDeleteTool",
+    "OfficeExtractLatexProjectTool",
+    "OfficeExtractRulesTool",
+    "OfficeFillLatexTemplateTool",
+    "OfficeFillPdfFormTool",
+    "OfficeFillPptTemplateTool",
+    "OfficeFillWordTemplateTool",
+    "OfficeFixWordTool",
+    "OfficeGeneratePdfTool",
+    "OfficeJournalFillFromContentTool",
+    "OfficeJournalGenerateArticleTool",
+    "OfficeJournalParseTemplateTool",
+    "OfficeJournalValidateTool",
+    "OfficeLatexdiffTool",
+    "OfficeLintWordTool",
+    "OfficeListTool",
+    "OfficeReadLatexTool",
+    "OfficeReadPdfFormTool",
+    "OfficeReadPdfTool",
+    "OfficeReadTool",
+    "OfficeRefreshTocTool",
+    "OfficeRenderAuditTool",
+    "OfficeRepairWordTool",
+    "OfficeRestoreTool",
+    "OfficeReviseWordTool",
+    "OfficeUpdateTool",
+    "ProjectDiagnoseTool",
+    "ReadFileTool",
+    "ReadSageConfigTool",
+    "ReplTool",
+    "RuntimeExecTool",
+    "RuntimeProbeTool",
+    "ScheduleTaskTool",
+    "SchedulerServicePort",
+    "SessionSearchTool",
     "SkillHotLoader",
     "SkillSaveTool",
-    "TextToSpeechTool",
+    "SkillTool",
     "SpeechToTextTool",
-    "ImageGenerationTool",
-    "ReadSageConfigTool",
+    "StructuredOutputTool",
+    "SymbolSearchTool",
+    "TextToSpeechTool",
+    "TodoService",
+    "TodoWriteTool",
+    "ToolPolicy",
+    "ToolRegistry",
+    "ToolResult",
+    "ToolSchema",
     "UpdateSageConfigTool",
-    "ScheduleTaskTool",
-    "ListScheduledTasksTool",
-    "CancelScheduledTaskTool",
+    "WebFetchTool",
+    "WebSearchTool",
+    "WriteFileTool",
+    "load_network_policy",
     "register_all_tools",
 ]

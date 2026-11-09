@@ -3,6 +3,8 @@
 实现 LLM 驱动的知识库：Ingest、RAG Chat、知识图谱、级联删除、社区检测、图谱洞察、MCP Server、Deep Research、HNSW 向量索引、视觉描述。
 """
 
+from typing import Any, List
+
 from .chat import ChatConfig, chat_with_wiki, chat_with_wiki_stream
 from .community import CommunityInfo, detect_communities, get_communities_with_nodes
 from .deep_research import ResearchTask, deep_research
@@ -63,14 +65,13 @@ except ImportError:
     HNSWVectorStore = None  # type: ignore
     _HNSW_AVAILABLE = False
 
-# MCP Server 是可选的（需要额外安装 mcp 包）
-try:
-    from .mcp_server import run_wiki_mcp_server
-
-    _MCP_AVAILABLE = True
-except ImportError:
-    run_wiki_mcp_server = None  # type: ignore
-    _MCP_AVAILABLE = False
+# MCP Server 是可选的（需要额外安装 mcp 包）。
+# Phase 3 (startup perf): 启动期无消费者读 ``backend.wiki.run_wiki_mcp_server``
+# —— backend/main.py 的 deferred 段直接 ``from backend.wiki.mcp_server import
+# server``，而 run_wiki_mcp_server 仅由 mcp_server.py 自身的 ``__main__`` 调用。
+# 因此改为 PEP 562 惰性解析（见文末 ``__getattr__``）：mcp_server 会连带拉入
+# backend.api.wiki_routes 等模块（实测 `import backend.wiki` 736ms → 368ms），
+# 不再挂在启动关键路径上。
 
 __all__ = [
     # Config
@@ -140,3 +141,19 @@ __all__ = [
     "VectorStore",
     "HNSWVectorStore",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """PEP 562：惰性解析可选依赖导出（Phase 3 startup perf）。"""
+    if name != "run_wiki_mcp_server":
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    try:
+        from .mcp_server import run_wiki_mcp_server as value
+    except ImportError:
+        value = None  # type: ignore[assignment]
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> List[str]:
+    return sorted(set(globals()) | set(__all__))

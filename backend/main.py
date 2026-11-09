@@ -373,6 +373,18 @@ async def _deferred_startup_init(
     使 yield 提前 20-40s。各服务在后台初始化完成后立即可用。
     """
     try:
+        import threading as _threading
+
+        # ── jieba 词典预热（Phase 3：从模块导入期挪到后台线程） ──
+        def _warm_jieba_bg() -> None:
+            from backend.data.database import warm_jieba
+
+            warm_jieba()
+
+        _threading.Thread(
+            target=_warm_jieba_bg, name="jieba-warmup", daemon=True
+        ).start()
+
         # ── 记忆提取异步化 ──
         from backend.memory.async_extractor import get_memory_extraction_queue
 
@@ -409,8 +421,6 @@ async def _deferred_startup_init(
             logger.exception("daily backup job registration failed (ignored)")
 
         # ── 启动备份线程 ──
-        import threading as _threading
-
         def _startup_backup() -> None:
             from backend.services.backup_service import create_backup
 

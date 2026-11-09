@@ -32,14 +32,13 @@ from pathlib import Path
 from typing import FrozenSet, List, Optional, Tuple
 
 # Task 2: 真实 digest 格式化器 (复用 office 纯函数, 不触发 FastAPI endpoint)
+# Phase 3 (startup perf): excel/word/pdf/ppt 四个 reader 会拉入 pandas/openpyxl/
+# python-docx/pymupdf/python-pptx (~1.0s 导入成本)。它们只在实际解析 @ 提及的
+# 附件时才需要，故降级为各 `_digest_*` 函数内的延迟导入；轻量模块保持顶层导入。
 from backend.office.allowed_paths import is_allowed
 from backend.office.errors import OfficeError, OfficePathError, OfficeSizeLimitError
-from backend.office.excel import read_xlsx
 from backend.office.path_safety import is_within, resolve_within
-from backend.office.pdf import read_pdf
-from backend.office.ppt import read_ppt
 from backend.office.storage import validate_workspace
-from backend.office.word import read_docx
 
 # ──────────────────────────────────────────────────────────────────────
 # mention 跳过原因短码（稳定契约：前端/提示词按码展示文案）
@@ -61,6 +60,8 @@ SKIP_REASON_TEXT = {
 
 def _digest_ppt(file_path: str, workspace: str) -> str:
     """Return per-slide digest: '[title]\\n  - bullet' each."""
+    from backend.office.ppt import read_ppt
+
     result = read_ppt(
         file_path=Path(file_path),
         workspace_path=workspace,
@@ -163,6 +164,8 @@ def _digest_word(file_path: str, workspace: str) -> str:
     `comments: N 条` + 前 3 条 `[作者: 锚点 → 批注 ≤60字]`；
     无批注（或 read_docx 结果尚无 comments 字段）时不输出。
     """
+    from backend.office.word import read_docx
+
     result = read_docx(
         file_path=Path(file_path),
         workspace_path=workspace,
@@ -307,6 +310,8 @@ def _format_excel_digest(sheets) -> str:
 
 
 def _digest_excel(file_path: str, workspace: str) -> str:
+    from backend.office.excel import read_xlsx
+
     result = read_xlsx(
         file_path=Path(file_path),
         workspace_path=workspace,
@@ -333,6 +338,8 @@ def _digest_pdf(file_path: str, workspace: str) -> str:
     每页压掉换行/连续空白后取前 _PDF_PAGE_PREVIEW_CHARS 字符; 整体超
     MAX_ATTACHMENT_DIGEST_BYTES 时停止装载, 以 `[…已截断，共 N 页]` 标注。
     """
+    from backend.office.pdf import read_pdf
+
     result = read_pdf(
         file_path=Path(file_path),
         workspace_path=workspace,
