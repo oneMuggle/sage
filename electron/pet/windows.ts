@@ -11,6 +11,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { logger } from '../logger';
+import { isLegacyWindows } from '../runtime-check';
 import { shouldShowDesktop } from './display';
 import {
   clampToWorkArea,
