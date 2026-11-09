@@ -140,9 +140,13 @@ async def generate_recap(session_id: str) -> RecapResult:
 
 ### M2：自动触发（后续迭代）
 
-- [ ] 步骤 8：Electron 端添加离开检测（blur/focus 事件）
-- [ ] 步骤 9：5分钟回归自动触发 recap
-- [ ] 步骤 10：compaction 触发时通知用户
+- [x] 步骤 8：Electron 端添加离开检测（blur/focus 事件）
+  - `electron/main.ts` 模块级 `lastBlurAtMs`，blur 写入、focus 清零并发送 `sage:event:app-focus { awayMs }`
+- [x] 步骤 9：5分钟回归自动触发 recap
+  - `src/pages/chat/useRecapAutoTrigger.ts` 独立 hook，Chat.tsx 调用；`awayMs ≥ 5min && messages ≥ 6` 自动触发
+- [x] 步骤 10：compaction 触发时通知用户
+  - `handleCompact` 成功 toast 改为 `action: 进度总结` + `cancel: 查看归档`（双按钮，保留 M1 入口）
+  - `handleRecap` 声明提前至 `handleCompact` 前，避免 TDZ
 
 ## 风险评估
 

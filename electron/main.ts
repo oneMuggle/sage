@@ -403,6 +403,8 @@ let cleanupProviderIpc: (() => void) | null = null;
 let restartCount = 0;
 let restartTimer: NodeJS.Timeout | null = null;
 let appIsQuitting = false;
+// 2026-11-09: 窗口失去焦点的时间戳，M2 recap 自动触发（5 分钟回归检测）。null=当前聚焦。
+let lastBlurAtMs: number | null = null;
 const MAX_RESTART_ATTEMPTS = 3;
 const RESTART_BASE_DELAY_MS = 1000;
 const RESTART_MAX_DELAY_MS = 8000;
@@ -1092,11 +1094,20 @@ function createMainWindow(): void {
   ensurePetInitialized();
 
   // 2026-11-05: 窗口重新聚焦 → 清除任务栏注意力信号（闪烁/dock badge）。
+  // 2026-11-09: M2 recap 离开检测 —— 计算离开时长，回归时通知渲染端触发自动 recap。
+  win.on('blur', () => {
+    lastBlurAtMs = Date.now();
+    win.webContents.send('sage:event:app-blur', { at: lastBlurAtMs });
+  });
+
   win.on('focus', () => {
     applyTaskbarAttention(
       { count: 0, kind: null },
       { win, setDockBadge: (text) => app.dock?.setBadge(text) },
     );
+    const awayMs = lastBlurAtMs != null ? Date.now() - lastBlurAtMs : 0;
+    lastBlurAtMs = null;
+    if (awayMs > 0) win.webContents.send('sage:event:app-focus', { awayMs });
   });
 
   // 主窗口关闭时一并回收内置浏览器窗口与桌宠窗口：否则残留的可见/隐藏窗口
