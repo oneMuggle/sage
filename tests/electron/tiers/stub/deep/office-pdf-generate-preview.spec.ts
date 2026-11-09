@@ -93,15 +93,17 @@ test.describe('office pdf generate + preview (demo stub mode)', () => {
   });
 
   test('02: demo PDF row restores into the preview panel with 2 page cards', async () => {
-    // "Select" the demo PDF row via its 历史版本 action (aria-label) — the
-    // only in-demo path that fills the preview panel without the native
-    // file picker.
+    // "Select" the demo PDF row via its 历史版本 action — the only in-demo
+    // path that fills the preview panel without the native file picker.
+    // 2026-11 IA restructure: the secondary row actions moved into the ⋯
+    // overflow menu, so open the menu first, then pick 历史版本.
     const pdfRow = page
       .getByTestId('office-document-list')
       .locator('li')
       .filter({ hasText: DEMO_PDF_ROW_TITLE });
     await expect(pdfRow).toHaveCount(1);
-    await pdfRow.getByLabel('历史版本').click();
+    await pdfRow.getByRole('button', { name: '更多操作' }).click();
+    await page.getByRole('menuitem', { name: '历史版本' }).click();
 
     const snapshotPanel = page.getByTestId('office-snapshot-panel');
     await expect(snapshotPanel).toBeVisible();

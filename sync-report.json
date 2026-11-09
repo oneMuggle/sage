@@ -1,173 +1,21 @@
 {
-  "timestamp": "2026-11-09T08:39:26",
+  "timestamp": "2026-11-09T13:52:03",
   "source": "origin/main",
   "target": "origin/release/win7",
   "branch": "sync/win7-main",
-  "status": "CONFLICT（39 个文件需人工处理）",
+  "status": "CONFLICT（2 个文件需人工处理）",
   "conflicts": [
     {
       "path": "architecture-baseline.json",
       "cls": "A"
     },
     {
-      "path": "backend/api/legacy_memory_feedback_routes.py",
-      "cls": "B"
-    },
-    {
-      "path": "backend/api/legacy_memory_quality_routes.py",
-      "cls": "B"
-    },
-    {
-      "path": "backend/api/legacy_routes.py",
-      "cls": "B"
-    },
-    {
-      "path": "backend/api/office_generate_routes.py",
-      "cls": "B"
-    },
-    {
-      "path": "backend/api/rules_routes.py",
-      "cls": "B"
-    },
-    {
-      "path": "backend/data/migrations/runner.py",
-      "cls": "B"
-    },
-    {
-      "path": "backend/data/settings_canonicalizer.py",
-      "cls": "B"
-    },
-    {
-      "path": "backend/memory/conflict.py",
-      "cls": "B"
-    },
-    {
-      "path": "backend/memory/episodic.py",
-      "cls": "B"
-    },
-    {
-      "path": "backend/memory/extractor.py",
-      "cls": "B"
-    },
-    {
-      "path": "backend/memory/quality_scorer.py",
-      "cls": "B"
-    },
-    {
-      "path": "backend/office/models.py",
-      "cls": "A"
-    },
-    {
-      "path": "backend/scheduler/evolution.py",
-      "cls": "A"
-    },
-    {
-      "path": "backend/services/sage_docs/paths.py",
-      "cls": "A"
-    },
-    {
-      "path": "backend/tests/integration/test_memory_feedback_routes.py",
-      "cls": "A"
-    },
-    {
-      "path": "backend/tests/integration/test_memory_quality_enrichment.py",
-      "cls": "A"
-    },
-    {
-      "path": "backend/tests/integration/test_office_generate_routes.py",
-      "cls": "A"
-    },
-    {
-      "path": "backend/tests/test_preference_injection.py",
-      "cls": "A"
-    },
-    {
-      "path": "backend/tests/unit/test_legacy_routes_async_safety.py",
-      "cls": "A"
-    },
-    {
-      "path": "backend/tests/unit/test_memory_consolidation.py",
-      "cls": "A"
-    },
-    {
-      "path": "backend/tests/unit/test_preference_learning_llm.py",
-      "cls": "A"
-    },
-    {
-      "path": "backend/tests/unit/test_schema_migrations.py",
-      "cls": "A"
-    },
-    {
-      "path": "docs/plans/2026-11-06_win7-intranet-rescue-doctor.md",
-      "cls": "A"
-    },
-    {
-      "path": "docs/plans/2026-11-08_recap-feature.md",
-      "cls": "A"
-    },
-    {
-      "path": "docs/technical/README.md",
-      "cls": "A"
-    },
-    {
-      "path": "docs/user-manual/45-win7-rescue-tool.md",
-      "cls": "A"
-    },
-    {
-      "path": "docs/user-manual/README.md",
-      "cls": "A"
-    },
-    {
-      "path": "electron/__tests__/runtime-check.test.ts",
-      "cls": "A"
-    },
-    {
-      "path": "electron/__tests__/showStartupFailureDialog.test.ts",
-      "cls": "A"
-    },
-    {
-      "path": "electron/commandRoutes/memory.ts",
-      "cls": "A"
-    },
-    {
-      "path": "electron/runtime-check.ts",
-      "cls": "A"
-    },
-    {
-      "path": "electron/showStartupFailureDialog.ts",
-      "cls": "A"
-    },
-    {
-      "path": "src/features/rules/__tests__/AiRulePatchDrawer.test.tsx",
-      "cls": "A"
-    },
-    {
-      "path": "src/features/rules/useAiRulePatch.ts",
-      "cls": "A"
-    },
-    {
-      "path": "src/pages/Memory.tsx",
-      "cls": "A"
-    },
-    {
-      "path": "src/shared/lib/i18n/locales/en/rules.ts",
-      "cls": "A"
-    },
-    {
-      "path": "src/shared/lib/i18n/locales/zh/rules.ts",
-      "cls": "A"
-    },
-    {
-      "path": "src/widgets/chat/RecapCard.tsx",
+      "path": "backend/main.py",
       "cls": "A"
     }
   ],
-  "auto_resolved": [
-    "electron-builder.yml",
-    "package-lock.json",
-    "package.json"
-  ],
-  "source_sha": "802c01494",
-  "target_sha": "eefeae0ed",
-  "commits_behind": 19
+  "auto_resolved": [],
+  "source_sha": "6c0ab03d",
+  "target_sha": "afb537a5",
+  "commits_behind": 3
 }

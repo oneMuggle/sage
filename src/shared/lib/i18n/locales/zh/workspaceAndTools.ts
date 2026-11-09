@@ -26,6 +26,7 @@ export const zhWorkspaceAndTools = {
   'office.doc.restore': '恢复',
   'office.doc.snapshots': '历史版本',
   'office.doc.archivedAt': '归档于',
+  'office.doclib.moreActions': '更多操作',
   'office.section.archived': '归档文档',
   'office.section.library': '文档库',
   'office.section.canvas': '文档画布',
