@@ -79,6 +79,25 @@ GET /api/v1/office/documents?workspace_path=...&include_archived=false&q=...&doc
 
 同源关系（「作为新版本导入」）通过 `POST /api/v1/office/documents/{doc_id}/lineage` 写 `derived_from`，与重复清理是两条独立路径。
 
+### 2.5 工具栏上传入口
+
+文档库工具栏提供常驻的「上传文档」按钮，调用链与画布内的 `OfficeIntake` 完全一致：
+
+```
+按钮 onClick
+  → Office.handleImportAndReadMulti()
+    → useOfficeDocuments.importAndReadMulti()
+      → window.electronAPI.office.pickAndImportMultiOfficeFiles(workspacePath)   // IPC: office:pick-and-import-multi
+      → readStagedBatch(workspacePath, result.imported, skipped)
+```
+
+约束：
+
+- 仅 `variant === 'live'` 时渲染，归档视图不提供上传入口；
+- 导入进行中（`importing`）按钮禁用并显示「上传中…」，避免重复打开系统文件选择器；
+- 导入动作复用 `readIdRef` 的读序号守卫，与拖拽导入共用同一套并发保护；
+- 工具栏在窄侧栏下 `flex-wrap`，上传按钮不固定靠右，避免被裁切。
+
 ## 3. 格式规范书库（M2.5）
 
 一份规范书 = 说明文件（Word / PDF / Markdown）+ 提取出的规则包 + 出处/版本/绑定范围。
