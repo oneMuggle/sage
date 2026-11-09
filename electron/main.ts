@@ -86,6 +86,7 @@ import { setLogTimezone } from './logger';
 import { detectProjectRoot } from './projectDetector';
 import { registerProjectIpc } from './projectIpc';
 import { installPermissionPolicy } from './permissionPolicy';
+import { createBackendReadyQueue } from './backendReadyQueue';
 logger.info('main: process started', {
   pid: process.pid,
   electronVer: process.versions.electron,
@@ -560,6 +561,25 @@ let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 let backendAuthToken: string | null = null;
 
 /**
+ * PR #2976 让主窗口先于后端 ready 展示；窗口期（约 10s+）内渲染层的首屏
+ * IPC 请求若被 readiness gate 直接拒绝，组件没有重试路径（loadSessions、
+ * workspace bind 等一次性请求），导致侧边栏会话列表为空、文档工作台常驻
+ * "后端服务尚未就绪"横幅。这里的队列把窗口期请求暂存，lifecycle 变 ready
+ * 后 flush；仅在终止状态（退出 / 自动重启耗尽）rejectAll。
+ */
+const backendReadyQueue = createBackendReadyQueue({
+  logger: { warn: (message, meta) => logger.warn(message, meta) },
+});
+
+/**
+ * 后端已进入不可恢复的失败状态：自动重启次数耗尽且没有待执行的重启。
+ * 此时排队请求没有未来，应立即拒绝（与旧行为一致）。
+ */
+function isBackendTerminallyFailed(): boolean {
+  return restartCount >= MAX_RESTART_ATTEMPTS && !restartTimer;
+}
+
+/**
  * 内置 Agent 浏览器桥（P1）。仅 Win7 / SAGE_FORCE_EMBEDDED_BROWSER=1 时启动；
  * 端口与 token 通过 env 传给后端，后端 browser_* 工具据此使用 Sage 自带 Chromium。
  */
@@ -965,6 +985,7 @@ export function scheduleBackendRestart(): void {
   if (appIsQuitting || restartTimer) return;
   if (restartCount >= MAX_RESTART_ATTEMPTS) {
     logger.error('main: backend restart exhausted', { attempts: restartCount });
+    backendReadyQueue.rejectAll(new BackendNotReadyError());
     mainWindow?.webContents.send('sage:event:backend:disconnected', { attempt: -1 });
     return;
   }
@@ -1080,6 +1101,14 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
           continue;
         }
         backendLifecycle = 'ready';
+        // 冷启动窗口期入队的 IPC 请求现在可以下发了（含自动重启成功后的重连窗口）。
+        if (backendReadyQueue.size() > 0) {
+          logger.info('main: flushing queued ipc requests', {
+            count: backendReadyQueue.size(),
+            generation: expectedBackend.generation,
+          });
+        }
+        backendReadyQueue.flush();
         // 用户反馈 syncer 需要 backend 已就绪才能拉取/提交消息；
         // 未配置转发目标时 start() 内部会直接空转不跑。
         getGlobalSyncer()?.start();
@@ -1703,48 +1732,62 @@ async function registerIpcHandlers(): Promise<void> {
       // backend readiness. Without this, the renderer hits ECONNREFUSED
       // on cold start (backend takes ~2s to come up after Electron whenReady)
       // and the BackendStatusBanner shows "reconnecting" while the user is
-      // staring at a half-loaded UI. We throw BackendNotReadyError which
-      // desktopInvoke.ts surfaces verbatim; the banner listens to the
-      // 'backend:disconnected' event for the auto-reconnecting banner.
+      // staring at a half-loaded UI.
+      // PR #2976 regression: the window now shows before the backend is
+      // ready, so blocking here dropped the renderer's one-shot startup
+      // invokes (loadSessions / workspace bind) with no retry path. Queue
+      // them instead; waitForBackend() flushes once lifecycle === 'ready'.
+      const run = async () => {
+        if (payload.cmd === 'wiki_chat_stream') {
+          return startWikiChatStream(evt.sender, payload.args ?? {}, BACKEND_URL);
+        }
+        if (payload.cmd === 'wiki_chat_cancel') {
+          return cancelWikiChatStream(payload.args ?? {});
+        }
+        if (payload.cmd === 'wiki_ingest_stream') {
+          return startWikiIngestStream(evt.sender, payload.args ?? {}, BACKEND_URL);
+        }
+        try {
+          const result = await invokeBackend(
+            payload.cmd,
+            payload.args ?? {},
+            BACKEND_URL,
+            backendAuthToken ?? undefined,
+          );
+          if (payload.cmd === 'agent_chat_stream' && result && typeof result === 'object') {
+            const streamId = (result as { streamId?: unknown }).streamId;
+            const args = payload.args ?? {};
+            const sessionId = typeof args.sessionId === 'string' ? args.sessionId : null;
+            const rawMax = Number(args.maxContext);
+            const contextMax = Number.isFinite(rawMax) && rawMax > 0 ? rawMax : null;
+            if (typeof streamId === 'string') {
+              getPetController()?.trackStream(streamId, sessionId, contextMax);
+            }
+          }
+          return result;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          logger.error('ipc: invoke failed', { cmd: payload.cmd, err: msg });
+          throw new Error(msg);
+        }
+      };
       if (backendLifecycle !== 'ready') {
-        logger.warn('ipc: invoke blocked — backend not ready', {
+        // 'stopping' 也入队：它只出现在「自动重启前的优雅关闭」与「应用退出/重载」
+        // 两类路径中——前者随后必然回 ready，后者由退出路径 rejectAll 兜底。
+        if (appIsQuitting || isBackendTerminallyFailed()) {
+          logger.warn('ipc: invoke blocked — backend not ready', {
+            cmd: payload.cmd,
+            lifecycle: backendLifecycle,
+          });
+          throw new BackendNotReadyError();
+        }
+        logger.info('ipc: invoke queued until backend ready', {
           cmd: payload.cmd,
           lifecycle: backendLifecycle,
         });
-        throw new BackendNotReadyError();
+        return backendReadyQueue.enqueue(run, `invoke:${payload.cmd}`);
       }
-      if (payload.cmd === 'wiki_chat_stream') {
-        return startWikiChatStream(evt.sender, payload.args ?? {}, BACKEND_URL);
-      }
-      if (payload.cmd === 'wiki_chat_cancel') {
-        return cancelWikiChatStream(payload.args ?? {});
-      }
-      if (payload.cmd === 'wiki_ingest_stream') {
-        return startWikiIngestStream(evt.sender, payload.args ?? {}, BACKEND_URL);
-      }
-      try {
-        const result = await invokeBackend(
-          payload.cmd,
-          payload.args ?? {},
-          BACKEND_URL,
-          backendAuthToken ?? undefined,
-        );
-        if (payload.cmd === 'agent_chat_stream' && result && typeof result === 'object') {
-          const streamId = (result as { streamId?: unknown }).streamId;
-          const args = payload.args ?? {};
-          const sessionId = typeof args.sessionId === 'string' ? args.sessionId : null;
-          const rawMax = Number(args.maxContext);
-          const contextMax = Number.isFinite(rawMax) && rawMax > 0 ? rawMax : null;
-          if (typeof streamId === 'string') {
-            getPetController()?.trackStream(streamId, sessionId, contextMax);
-          }
-        }
-        return result;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        logger.error('ipc: invoke failed', { cmd: payload.cmd, err: msg });
-        throw new Error(msg);
-      }
+      return run();
     },
   );
 
@@ -1763,14 +1806,7 @@ async function registerIpcHandlers(): Promise<void> {
     ) => {
       if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
       if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
-      // Raw requests use the same lifecycle gate as sage:invoke. In particular,
-      // never probe a stale port with the previous generation's capability.
-      if (backendLifecycle !== 'ready') {
-        logger.warn('ipc: backend-request blocked — backend not ready', {
-          lifecycle: backendLifecycle,
-        });
-        throw new BackendNotReadyError();
-      }
+      // 校验先于入队：非法请求立即失败，不占用就绪队列。
       if (!request || typeof request.path !== 'string') {
         throw new Error('无效的后端请求路径');
       }
@@ -1791,40 +1827,62 @@ async function registerIpcHandlers(): Promise<void> {
       } catch {
         throw new Error('无效的后端请求路径');
       }
-      const headers: Record<string, string> = {
-        ...(request.headers ?? {}),
-        'X-Sage-Local-Authorization': `Bearer ${backendAuthToken ?? ''}`,
+      const run = async () => {
+        // Headers 在真正执行时构造：排队期间后端可能重启并换掉 generation
+        // 的 capability token，这里读到的始终是 flush 时刻的有效 token。
+        const headers: Record<string, string> = {
+          ...(request.headers ?? {}),
+          'X-Sage-Local-Authorization': `Bearer ${backendAuthToken ?? ''}`,
+        };
+        const controller = new AbortController();
+        const timeoutMs =
+          typeof request.timeoutMs === 'number' && Number.isFinite(request.timeoutMs)
+            ? Math.min(Math.max(request.timeoutMs, 1), 60_000)
+            : undefined;
+        const timeout =
+          timeoutMs === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const response = await fetch(`${BACKEND_URL}${backendPath}`, {
+            method: request.method ?? 'GET',
+            headers,
+            body: request.body === undefined ? undefined : JSON.stringify(request.body),
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            const text = await response.text().catch(() => '');
+            throw new Error(`Backend request failed: ${response.status} ${text}`);
+          }
+          // Support binary responses (e.g., media files) via responseType: 'arraybuffer'
+          if (request.responseType === 'arraybuffer') {
+            return response.arrayBuffer();
+          }
+          // 2026-09-19 P5: NDJSON 等文本端点（arena 任务事件回放）经 relay 原样返回
+          if (request.responseType === 'text') {
+            return response.text();
+          }
+          return response.json();
+        } finally {
+          if (timeout !== undefined) clearTimeout(timeout);
+        }
       };
-      const controller = new AbortController();
-      const timeoutMs =
-        typeof request.timeoutMs === 'number' && Number.isFinite(request.timeoutMs)
-          ? Math.min(Math.max(request.timeoutMs, 1), 60_000)
-          : undefined;
-      const timeout =
-        timeoutMs === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        const response = await fetch(`${BACKEND_URL}${backendPath}`, {
+      // Raw requests share the same readiness policy as sage:invoke — queue
+      // during the cold-start / reconnect window instead of failing one-shot
+      // callers (PR #2976 made the window visible before the backend).
+      if (backendLifecycle !== 'ready') {
+        if (appIsQuitting || isBackendTerminallyFailed()) {
+          logger.warn('ipc: backend-request blocked — backend not ready', {
+            lifecycle: backendLifecycle,
+          });
+          throw new BackendNotReadyError();
+        }
+        logger.info('ipc: backend-request queued until backend ready', {
           method: request.method ?? 'GET',
-          headers,
-          body: request.body === undefined ? undefined : JSON.stringify(request.body),
-          signal: controller.signal,
+          path: backendPath,
+          lifecycle: backendLifecycle,
         });
-        if (!response.ok) {
-          const text = await response.text().catch(() => '');
-          throw new Error(`Backend request failed: ${response.status} ${text}`);
-        }
-        // Support binary responses (e.g., media files) via responseType: 'arraybuffer'
-        if (request.responseType === 'arraybuffer') {
-          return response.arrayBuffer();
-        }
-        // 2026-09-19 P5: NDJSON 等文本端点（arena 任务事件回放）经 relay 原样返回
-        if (request.responseType === 'text') {
-          return response.text();
-        }
-        return response.json();
-      } finally {
-        if (timeout !== undefined) clearTimeout(timeout);
+        return backendReadyQueue.enqueue(run, `request:${request.method ?? 'GET'} ${backendPath}`);
       }
+      return run();
     },
   );
 
@@ -3293,6 +3351,7 @@ app
       // smoke.spec.ts's "unknown IPC cmd" probe gets blocked at the gate before
       // reaching the dispatcher and fails the bridge round-trip assertion.
       backendLifecycle = 'ready';
+      backendReadyQueue.flush();
       createMainWindow();
       buildApplicationMenu();
       // Probe a protected endpoint now that the renderer can receive the event;
@@ -3318,6 +3377,7 @@ app
         logger.info('main: demo mode active (SAGE_DEMO_MODE=1) — backend spawn suppressed');
       }
       backendLifecycle = 'ready';
+      backendReadyQueue.flush();
       createMainWindow();
       buildApplicationMenu();
       return;
@@ -3484,6 +3544,8 @@ app.on('before-quit', () => {
     persistRunState();
   }
   appIsQuitting = true;
+  // 退出后排队的请求永远不会被服务，立即拒绝避免悬挂。
+  backendReadyQueue.rejectAll(new BackendNotReadyError());
   disposePet();
   globalShortcut.unregister(REMOTE_MCP_HOTKEY);
   getGlobalSyncer()?.stop();
