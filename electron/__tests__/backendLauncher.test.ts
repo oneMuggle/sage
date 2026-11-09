@@ -251,14 +251,24 @@ describe('resolveBackendLaunchCommand', () => {
         // the dev branches, not only packaged. Without this assertion an
         // accidental drop in dev-conda-overridden's extraEnv would silently
         // regress dev installs to the bundled fallback path.
+        //
+        // 2026-11-09: PYTHONPATH must be present here (and ONLY here in the
+        // dev branch — dev-conda does NOT need it, see the conda branch
+        // assertions). SAGE_PYTHON spawns a bare `python -m backend.main`
+        // without a conda env's site-packages path, so the backend's
+        // `import backend.api…` chain would otherwise die with
+        // `ModuleNotFoundError` — Electron sees a 90s health timeout and
+        // pops the "后端服务在 90 秒内未响应" dialog. `process.cwd()` is the
+        // project root, which is what `python -m backend.main` needs on
+        // sys.path to resolve `backend.*` as a package.
         expect(plan.extraEnv).toEqual({
           SAGE_DB_PATH: '/mock/sage.db',
           SAGE_USER_DATA_DIR: '/mock/userData',
           SAGE_RUNTIME_PYTHON: 'python3',
           PYTHON_BACKEND_PORT: '8765',
           SAGE_LOG_TIMEZONE: 'local',
+          PYTHONPATH: process.cwd(),
         });
-        expect(plan.extraEnv).not.toHaveProperty('PYTHONPATH');
       }
     });
 
