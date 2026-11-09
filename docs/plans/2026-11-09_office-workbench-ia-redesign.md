@@ -157,13 +157,13 @@
 实施按依赖顺序推进，每个里程碑独立可验证：
 
 - [x] **M1 · 设计文档定稿**（本文档）
-- [ ] **M2 · Section 1 接线（基础，其他依赖它）**
-  - `Office.tsx` 3 处写回 `setActiveDocument`
-  - 在 AI 侧栏 header 增加文档 chip（`AiSidebar.tsx`）
-  - `QuickActions.tsx` 接收 activeDocument prop + disabled 态
-  - `FloatingActionBar.tsx` + `OfficeAiSidebarHost.tsx` guard
-  - `useAiCapabilities.ts` / `useAuditSuggestions.ts` guard 改为 toast
-  - 相关测试更新
+- [x] **M2 · Section 1 接线（基础，其他依赖它）**
+  - [x] `Office.tsx` 3 处写回 `setActiveDocument`
+  - [x] 在 AI 侧栏 header 增加文档 chip（`AiSidebar.tsx`）
+  - [x] `QuickActions.tsx` 接收 activeDocument prop + disabled 态
+  - [x] `FloatingActionBar.tsx` + `OfficeAiSidebarHost.tsx` guard
+  - [x] `useAiCapabilities.ts` / `useAuditSuggestions.ts` guard 改为 toast
+  - [x] 相关测试更新
 - [ ] **M3 · Section 2 左侧文档库 UI**
   - `OfficeDocumentList.tsx` row 重写
   - `Sidebar.tsx` 默认宽度 300→320

@@ -43,46 +43,63 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   } as unknown as typeof ResizeObserver;
 }
 
-vi.mock('../../features/office', () => ({
-  OfficeDocumentList: ({ onPreview }: { onPreview: (id: string) => void }) => (
-    <button data-testid="office-document-list" onClick={() => onPreview('doc-1')}>
-      doc
-    </button>
-  ),
-  OfficeDuplicateDialog: () => null,
-  OfficeEditPreviewDialog: () => null,
-  OfficeSnapshotPanel: () => null,
-  GenerateWorkspace: () => <div data-testid="office-generate-workspace" />,
-  RulesWorkspace: () => <div data-testid="office-rules-workspace" />,
-  useOfficeDocuments: () => ({
-    documents: [{ id: 'doc-1', doc_type: 'word', title: '示例文档' }],
-    loading: false,
-    error: null,
-    refresh: vi.fn(),
-    view: 'live',
-    setView: vi.fn(),
-    q: '',
-    setQ: vi.fn(),
-    docType: 'all',
-    setDocType: vi.fn(),
-    sort: 'updated_desc',
-    setSort: vi.fn(),
-    duplicateGroups: [],
-    archiveAllButNewest: vi.fn(),
-    importAndReadMulti: vi.fn(),
-    readDroppedMulti: vi.fn(),
-    saveAs: vi.fn(),
-    open: vi.fn(),
-    showInFolder: vi.fn(),
-    archiveDocument: vi.fn(),
-    restoreDocument: vi.fn(),
-    batchArchive: vi.fn(),
-    batchRestore: vi.fn(),
-    readDocument: vi.fn().mockResolvedValue({ summary: {} }),
-    pendingDuplicate: null,
-    resolvePendingDuplicate: vi.fn(),
-  }),
-}));
+vi.mock('../../features/office', () => {
+  // A complete summary — the page reads `generated_filename` / `workspace_path`
+  // off the active document when the AI sidebar derives its file path.
+  const summary = {
+    id: 'doc-1',
+    doc_type: 'word',
+    original_filename: '示例文档.docx',
+    generated_filename: '示例文档.docx',
+    workspace_path: '/tmp/ws',
+    status: 'parsed',
+    created_at: 0,
+    updated_at: 0,
+    metadata: { file_size_bytes: 0 },
+    derived_from: null,
+    archived_at: null,
+  };
+  return {
+    OfficeDocumentList: ({ onPreview }: { onPreview: (id: string) => void }) => (
+      <button data-testid="office-document-list" onClick={() => onPreview('doc-1')}>
+        doc
+      </button>
+    ),
+    OfficeDuplicateDialog: () => null,
+    OfficeEditPreviewDialog: () => null,
+    OfficeSnapshotPanel: () => null,
+    GenerateWorkspace: () => <div data-testid="office-generate-workspace" />,
+    RulesWorkspace: () => <div data-testid="office-rules-workspace" />,
+    useOfficeDocuments: () => ({
+      documents: [summary],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+      view: 'live',
+      setView: vi.fn(),
+      q: '',
+      setQ: vi.fn(),
+      docType: 'all',
+      setDocType: vi.fn(),
+      sort: 'updated_desc',
+      setSort: vi.fn(),
+      duplicateGroups: [],
+      archiveAllButNewest: vi.fn(),
+      importAndReadMulti: vi.fn(),
+      readDroppedMulti: vi.fn(),
+      saveAs: vi.fn(),
+      open: vi.fn(),
+      showInFolder: vi.fn(),
+      archiveDocument: vi.fn(),
+      restoreDocument: vi.fn(),
+      batchArchive: vi.fn(),
+      batchRestore: vi.fn(),
+      readDocument: vi.fn().mockResolvedValue({ summary }),
+      pendingDuplicate: null,
+      resolvePendingDuplicate: vi.fn(),
+    }),
+  };
+});
 
 vi.mock('../../features/office/canvas/DocumentCanvas', () => ({
   DocumentCanvas: () => <div data-testid="document-canvas-stub" />,

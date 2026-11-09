@@ -31,6 +31,7 @@ import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { useWorkspaceContext } from '../app/providers/SessionWorkspaceProvider';
+import { useOfficeWorkspaceStore } from '../entities/office/officeWorkspaceStore';
 import { JournalPanel } from '../features/journal';
 import {
   GenerateWorkspace,
@@ -217,7 +218,10 @@ export function Office() {
     }
 
     const first = result.imported[0];
-    if (first) setPreview(toPreview(first.docType, first.readResult));
+    if (first) {
+      setPreview(toPreview(first.docType, first.readResult));
+      useOfficeWorkspaceStore.getState().setActiveDocument(first.readResult.summary);
+    }
 
     await refresh();
     if (myReadId !== readIdRef.current) return;
@@ -379,6 +383,7 @@ export function Office() {
       const data = await readDocument(docId);
       if (myReadId !== readIdRef.current) return;
       setPreview(toPreview(doc.doc_type, data));
+      useOfficeWorkspaceStore.getState().setActiveDocument(doc);
     } catch (e) {
       if (myReadId !== readIdRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
@@ -396,6 +401,7 @@ export function Office() {
       const data = await readDocument(docId);
       if (myReadId !== readIdRef.current) return;
       setPreview(toPreview(doc.doc_type, data));
+      useOfficeWorkspaceStore.getState().setActiveDocument(doc);
     } catch (e) {
       if (myReadId !== readIdRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
