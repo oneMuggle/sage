@@ -167,7 +167,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'     # py38_compat_rewrite 本身用 PEP 604 语法，需 3.10+
-      - run: pip install libcst
+      # auto_sync.py 在合并干净（rc=0）后会跑 `python -m ruff` 门禁
+      # （--fix I001,F811,F401 + `ruff check backend/`），与 CI backend-py38 对齐。
+      # 只装 libcst 会让该步 `No module named ruff` 直接失败；版本沿用 CI 钉的 0.4.4，
+      # 避免新版规则差异造成误报。
+      - run: pip install libcst ruff==0.4.4
       - name: Configure git
         run: |
           git config user.name "win7-sync-bot"
