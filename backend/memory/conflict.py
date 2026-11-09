@@ -87,7 +87,7 @@ def _cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
     dot = 0.0
     norm_a = 0.0
     norm_b = 0.0
-    for x, y in zip(a, b, strict=False):
+    for x, y in zip(a, b):
         dot += x * y
         norm_a += x * x
         norm_b += y * y
@@ -230,7 +230,7 @@ class MemoryConflictResolver:
         if not vectors or len(vectors) != len(texts):
             return
         base = vectors[0]
-        for cand, vec in zip(candidates, vectors[1:], strict=False):
+        for cand, vec in zip(candidates, vectors[1:]):
             cand.semantic_similarity = _cosine_similarity(base, vec)
 
     # ---- 判定 --------------------------------------------------------------

@@ -20,9 +20,8 @@ import { memoryApi, Memory } from '../../shared/api';
 import { agentsApi } from '../../shared/api/agentsApi';
 import { formatDate, formatRelativeTime } from '../../shared/lib/timeFormatter';
 
-import { useSessionInfo } from './useSessionInfo';
-
 import { MemoryPromoteButton } from './MemoryPromoteButton';
+import { useSessionInfo } from './useSessionInfo';
 
 // Constants
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
