@@ -565,7 +565,7 @@ async def _deferred_startup_init(
             try:
                 get_database().get_connection().rollback()
             except Exception:
-                pass
+                logger.error("rollback failed after design studio error", exc_info=True)
 
         # ── Wake scheduler ──
         app.state.wake_store = get_wake_store()
@@ -835,7 +835,6 @@ async def lifespan(app: FastAPI):
     # PR-3: agents 表种子化 — 用 ensure_default_agents 替代 seed_defaults_if_empty:
     # 首次启动插全量默认集, 已存在的 DB 增量补 writer 等新增默认角色。
     from backend.agents.profiles import ensure_default_agents, validate_profile_tools
-    from backend.data.agent_repo import AgentRepository
 
     ensure_default_agents()
     # T3 (2026-09-04): 启动期白名单校验 —— profile 引用未注册工具名
