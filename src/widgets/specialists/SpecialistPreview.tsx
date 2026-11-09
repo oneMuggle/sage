@@ -3,6 +3,7 @@ import {
   serializePersonaSections,
   type PersonaSections,
 } from '../../entities/specialist/personaSections';
+import { describeToolSelection } from '../../entities/specialist/toolCapabilities';
 import type { AgentProfile } from '../../shared/api';
 
 import { PERMISSION_MODE_LABELS } from './SpecialistCard';
@@ -14,6 +15,8 @@ interface SpecialistPreviewProps {
   sections: PersonaSections;
   skills: string[];
   permissionMode: AgentProfile['permission_mode'];
+  /** 保存后写入 `tools` 的值；空数组即纯对话专家。 */
+  tools?: string[];
   /** 试聊/创建按钮（向导第 4 步注入）；编辑态可省略。 */
   footer?: React.ReactNode;
 }
@@ -31,12 +34,14 @@ export function SpecialistPreview({
   sections,
   skills,
   permissionMode,
+  tools,
   footer,
 }: SpecialistPreviewProps) {
   const markdown = serializePersonaSections(sections);
   const filledSections = PERSONA_SECTIONS.filter(
     (meta) => (sections[meta.key] ?? '').trim().length > 0,
   );
+  const toolSummary = tools ? describeToolSelection(tools) : null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -56,6 +61,47 @@ export function SpecialistPreview({
           </p>
         </div>
       </div>
+
+      {toolSummary && (
+        <div
+          className="rounded-xl border border-border bg-surface p-4"
+          data-testid="specialist-preview-tools"
+        >
+          <p className="text-sm font-medium">工具能力</p>
+          {tools!.length === 0 ? (
+            <p className="mt-1 text-ui-xs text-warning">
+              纯对话专家：不授权任何工具，运行时所有工具调用都会被拒绝。
+            </p>
+          ) : (
+            <>
+              <p className="mt-1 text-ui-xs text-faint">共 {tools!.length} 项工具</p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {toolSummary.covered.map((pack) => (
+                  <span
+                    key={pack.id}
+                    className="rounded-full bg-primary/10 px-2 py-0.5 text-ui-xs text-primary"
+                  >
+                    {pack.label}
+                  </span>
+                ))}
+                {toolSummary.partial.map((pack) => (
+                  <span
+                    key={pack.id}
+                    className="rounded-full border border-border px-2 py-0.5 text-ui-xs text-text-secondary"
+                  >
+                    {pack.label}（部分）
+                  </span>
+                ))}
+              </div>
+              {toolSummary.uncategorized.length > 0 && (
+                <p className="mt-1 break-all font-mono text-ui-xs text-faint">
+                  未归类：{toolSummary.uncategorized.join('、')}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">
         <p className="text-sm font-medium">人设摘要</p>
