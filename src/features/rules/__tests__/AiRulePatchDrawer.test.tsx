@@ -19,14 +19,17 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   } as unknown as typeof ResizeObserver;
 }
 
-const { previewPatch, applyPatch } = vi.hoisted(() => ({
+const { previewPatch, applyPatch, confirmDialog } = vi.hoisted(() => ({
   previewPatch: vi.fn(),
   applyPatch: vi.fn(),
+  confirmDialog: vi.fn(),
 }));
 
 vi.mock('../../../shared/api/rulesApi', () => ({
   rulesApi: { previewPatch, applyPatch },
 }));
+
+vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({ confirmDialog }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -87,6 +90,8 @@ describe('AiRulePatchDrawer', () => {
   beforeEach(() => {
     previewPatch.mockReset();
     applyPatch.mockReset();
+    confirmDialog.mockReset();
+    confirmDialog.mockResolvedValue(true);
   });
 
   it('prefills the focused rule and sends its id', async () => {
@@ -274,6 +279,74 @@ describe('AiRulePatchDrawer', () => {
 
     expect(await screen.findByTestId('ai-message')).toHaveTextContent('AI 暂不可用，可手动编辑');
     expect(screen.queryByTestId('ai-apply')).not.toBeInTheDocument();
+  });
+
+  it('asks for confirmation before applying selected delete operations', async () => {
+    previewPatch.mockResolvedValue(
+      preview({
+        operations: [
+          operation({ opId: 'op-1' }),
+          operation({ opId: 'op-2', action: 'delete', after: {} }),
+        ],
+      }),
+    );
+    applyPatch.mockResolvedValue({
+      results: [{ opId: 'op-2', status: 'applied', message: '', current: null }],
+      applied: 1,
+      failed: 0,
+    });
+    renderDrawer();
+
+    fireEvent.change(screen.getByTestId('ai-instruction'), { target: { value: '去重' } });
+    fireEvent.click(screen.getByTestId('ai-generate'));
+    await screen.findByTestId('patch-card-op-1');
+    fireEvent.click(screen.getByTestId('patch-select-op-2'));
+    fireEvent.click(screen.getByTestId('ai-apply'));
+
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
+    expect(confirmDialog.mock.calls[0][0]).toMatchObject({ danger: true });
+    expect(confirmDialog.mock.calls[0][0].message).toContain('1');
+    await waitFor(() => expect(applyPatch).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not apply when the delete confirmation is cancelled', async () => {
+    previewPatch.mockResolvedValue(
+      preview({
+        operations: [
+          operation({ opId: 'op-1' }),
+          operation({ opId: 'op-2', action: 'delete', after: {} }),
+        ],
+      }),
+    );
+    confirmDialog.mockResolvedValue(false);
+    renderDrawer();
+
+    fireEvent.change(screen.getByTestId('ai-instruction'), { target: { value: '去重' } });
+    fireEvent.click(screen.getByTestId('ai-generate'));
+    await screen.findByTestId('patch-card-op-1');
+    fireEvent.click(screen.getByTestId('patch-select-op-2'));
+    fireEvent.click(screen.getByTestId('ai-apply'));
+
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
+    expect(applyPatch).not.toHaveBeenCalled();
+  });
+
+  it('does not ask for confirmation when no delete operation is selected', async () => {
+    previewPatch.mockResolvedValue(preview());
+    applyPatch.mockResolvedValue({
+      results: [{ opId: 'op-1', status: 'applied', message: '', current: null }],
+      applied: 1,
+      failed: 0,
+    });
+    renderDrawer();
+
+    fireEvent.change(screen.getByTestId('ai-instruction'), { target: { value: '改一下' } });
+    fireEvent.click(screen.getByTestId('ai-generate'));
+    await screen.findByTestId('patch-card-op-1');
+    fireEvent.click(screen.getByTestId('ai-apply'));
+
+    await waitFor(() => expect(applyPatch).toHaveBeenCalledTimes(1));
+    expect(confirmDialog).not.toHaveBeenCalled();
   });
 
   it('surfaces preview failures instead of silently showing an empty list', async () => {
