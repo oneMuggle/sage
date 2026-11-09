@@ -653,6 +653,16 @@ export const zhSettingsAndModels = {
   'office.rules.importError.invalidShape': '规则包结构不正确',
   'office.rules.importError.invalidField': '规则包字段不合法',
   'office.rules.importError.tooManyRules': '规则包规则数量超过 500 条',
+  'office.rules.subtabs.label': '规则工作台子导航',
+  'office.rules.subtabs.rulesLibrary': '规则库',
+  'office.rules.subtabs.aiAudit': 'AI 审校',
+  'office.rules.subtabs.batchTools': '批量工具',
+  'office.rules.extractFromDoc': '从当前文档抽取规则',
+  'office.rules.extractFromDoc.hint': '请先在文档 tab 选择文档',
+  'office.rules.extractBusy': '抽取中…',
+  'office.rules.extractNoActiveDoc': '请先在左侧文档库选择文档',
+  'office.rules.extractSuccess': '已抽取 {n} 条规则到新组 "{name}"',
+  'office.rules.specLibraryToggle': '格式规范书库（外部规则来源）',
 } as const;
 
 export function formatZhSettingsAndModelsSummary(): string {

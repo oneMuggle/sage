@@ -8,7 +8,6 @@ import { officeRulesApi } from '../../../../shared/api/officeRulesApi';
 import type {
   WireAuditResult,
   WireConflictResult,
-  WireExtractResult,
   WireImportResult,
   WireRuleGroup,
   WireRulePack,
@@ -32,7 +31,6 @@ vi.mock('../../../../shared/api/officeRulesApi', () => ({
     createRule: vi.fn(),
     updateRule: vi.fn(),
     deleteRule: vi.fn(),
-    extractRules: vi.fn(),
     checkConflicts: vi.fn(),
     exportPack: vi.fn(),
     importPack: vi.fn(),
@@ -47,7 +45,6 @@ const mockedApi = {
   createRule: vi.mocked(officeRulesApi.createRule),
   updateRule: vi.mocked(officeRulesApi.updateRule),
   deleteRule: vi.mocked(officeRulesApi.deleteRule),
-  extractRules: vi.mocked(officeRulesApi.extractRules),
   checkConflicts: vi.mocked(officeRulesApi.checkConflicts),
   exportPack: vi.mocked(officeRulesApi.exportPack),
   importPack: vi.mocked(officeRulesApi.importPack),
@@ -386,48 +383,6 @@ describe('RulesWorkspace', () => {
     expect(screen.getByTestId('rule-detail-name')).toHaveValue('');
   });
 
-  it('extraction creates a new group with the extracted rules', async () => {
-    mockedApi.extractRules.mockResolvedValue({
-      rules: [
-        {
-          id: '',
-          name: 'Extracted rule',
-          type: 'format',
-          severity: 'warning',
-          scope: 'body',
-          description: '',
-          check_mode: 'ai',
-          pattern: null,
-          ai_prompt: 'check tone',
-          enabled: true,
-          group_id: '',
-        },
-      ],
-      warnings: [],
-    } as WireExtractResult);
-    mockedApi.createGroup.mockResolvedValue({ ...GROUP, id: 'group-extract', name: '抽取规则' });
-    mockedApi.createRule.mockResolvedValue({
-      ...GROUP.rules[0],
-      id: 'rule-new',
-      name: 'Extracted rule',
-      group_id: 'group-extract',
-    });
-    renderWorkspace();
-
-    await waitFor(() => expect(screen.getByTestId('rules-extract')).not.toBeDisabled());
-    fireEvent.click(screen.getByTestId('rules-extract'));
-
-    await waitFor(() =>
-      expect(mockedApi.createGroup).toHaveBeenCalledWith(
-        expect.objectContaining({ name: expect.stringContaining('抽取规则') }),
-      ),
-    );
-    expect(mockedApi.createRule).toHaveBeenCalledWith(
-      'group-extract',
-      expect.objectContaining({ check_mode: 'ai', ai_prompt: 'check tone' }),
-    );
-  });
-
   it('shows a load error and retries with a second request', async () => {
     mockedApi.listGroups.mockRejectedValueOnce(new Error('boom')).mockResolvedValue([GROUP]);
     renderWorkspace();
@@ -460,67 +415,6 @@ describe('RulesWorkspace', () => {
       }),
     );
     expect(mockedApi.updateRule.mock.calls[0][1]).not.toHaveProperty('severity');
-  });
-
-  it('keeps a partially extracted group visible and reloads when a rule fails', async () => {
-    mockedApi.extractRules.mockResolvedValue({
-      rules: [
-        {
-          id: '',
-          name: 'Extracted one',
-          type: 'format',
-          severity: 'warning',
-          scope: 'body',
-          description: '',
-          check_mode: 'ai',
-          pattern: null,
-          ai_prompt: 'check one',
-          enabled: true,
-          group_id: '',
-        },
-        {
-          id: '',
-          name: 'Extracted two',
-          type: 'format',
-          severity: 'warning',
-          scope: 'body',
-          description: '',
-          check_mode: 'ai',
-          pattern: null,
-          ai_prompt: 'check two',
-          enabled: true,
-          group_id: '',
-        },
-      ],
-      warnings: [],
-    } as WireExtractResult);
-    mockedApi.createGroup.mockResolvedValue({
-      ...GROUP,
-      id: 'group-extract',
-      name: '抽取规则 · spec.docx',
-    });
-    mockedApi.createRule
-      .mockResolvedValueOnce({ ...GROUP.rules[0], id: 'rule-new-1', group_id: 'group-extract' })
-      .mockRejectedValueOnce(new Error('boom'));
-    mockedApi.listGroups
-      .mockResolvedValueOnce([GROUP])
-      .mockResolvedValue([
-        GROUP,
-        { ...GROUP, id: 'group-extract', name: '抽取规则 · spec.docx', rules: [] },
-      ]);
-    renderWorkspace();
-
-    await waitFor(() => expect(screen.getByTestId('rules-extract')).not.toBeDisabled());
-    fireEvent.click(screen.getByTestId('rules-extract'));
-
-    await waitFor(() => expect(mockedApi.listGroups).toHaveBeenCalledTimes(2));
-    await waitFor(() =>
-      expect(screen.getByTestId('rules-group-item-group-extract')).toHaveAttribute(
-        'aria-current',
-        'true',
-      ),
-    );
-    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('已抽取部分规则'));
   });
 
   it('deleting a group confirms first and falls back to another group', async () => {

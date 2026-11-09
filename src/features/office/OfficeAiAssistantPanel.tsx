@@ -55,10 +55,19 @@ function sourceLabel(issue: AiReviewIssue): string {
 
 export interface OfficeAiAssistantPanelProps {
   workspacePath?: string | null;
+  /**
+   * Pre-fills the file path input. The rules tab's AI-audit sub-tab passes
+   * the current document's managed path so the user does not have to re-pick
+   * a file they already opened. Ignored when null/undefined.
+   */
+  initialFilePath?: string | null;
 }
 
-export function OfficeAiAssistantPanel({ workspacePath }: OfficeAiAssistantPanelProps) {
-  const [filePath, setFilePath] = useState('');
+export function OfficeAiAssistantPanel({
+  workspacePath,
+  initialFilePath,
+}: OfficeAiAssistantPanelProps) {
+  const [filePath, setFilePath] = useState(initialFilePath ?? '');
   const [docId, setDocId] = useState('');
   const [specId, setSpecId] = useState('');
   const [useLlm, setUseLlm] = useState(true);

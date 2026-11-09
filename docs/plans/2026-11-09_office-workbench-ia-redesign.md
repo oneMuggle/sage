@@ -169,12 +169,17 @@
   - [x] `Sidebar.tsx` 默认宽度 300→320
   - [x] i18n key `office.doclib.moreActions` (zh/en)
   - [x] 测试更新（row 布局断言 + ⋯ 菜单 `pointerDown` → `findByRole('menuitem')` 交互）
-- [ ] **M4 · Section 3 规则 tab 子 tab 分域**
-  - 新建 `RulesSubtabs.tsx` / `AiAuditTab.tsx` / `BatchToolsTab.tsx`
-  - 重写 `Office.tsx:renderRulesTab` 挂载 `RulesSubtabs`
-  - 删除 `OfficeAiAssistantPanel.tsx` / `WordRuleExtractionPanel.tsx` 及其测试
-  - 把"从文档抽取规则"逻辑搬到子 tab A 顶栏
-  - 测试覆盖新组件
+- [x] **M4 · Section 3 规则 tab 子 tab 分域**
+  - [x] 新建 `RulesSubtabs.tsx` / `AiAuditTab.tsx` / `BatchToolsTab.tsx`
+  - [x] 重写 `Office.tsx:renderRulesTab` 挂载 `RulesSubtabs`
+  - [x] 删除 `WordRuleExtractionPanel.tsx` 及其测试
+  - [x] 把"从文档抽取规则"逻辑搬到子 tab A 顶栏（`RulesSubtabs.handleExtractFromActiveDocument`）
+  - [x] 测试覆盖新组件（`RulesSubtabs.test.tsx` 3 例：成功建组 / 部分失败 / 无文档时禁用）
+  - **与计划的偏差**
+    - `OfficeAiAssistantPanel.tsx` **保留**（计划写"整体移除"）：其"审校全文 / 改写润色"是 AI 审校子 tab 的主体，直接内嵌在 `AiAuditTab` 中，未重写等价面板。
+    - "从文档抽取规则"逻辑从 `RulesWorkspace` **上移到 `RulesSubtabs`**（计划表述为"搬到子 tab A 顶栏"）：抽取需要 `activeDocument`，放在容器层可避免 `RulesWorkspace` 依赖全局 store。
+    - 新规则组命名采用 `${baseName} · 抽取规则`，与旧实现 `抽取规则 · ${baseName}` 顺序相反（按计划 §Section 3 的命名规则）。
+    - `useKeepAliveTabs` 从 `pages/office/officeTabs.ts` 下沉到 `src/shared/lib/hooks/useKeepAliveTabs.ts`，供 `features/` 与 `pages/` 共用（分层约束：features 不能 import pages）。
 - [ ] **M5 · 端到端 smoke**
   - 启动 Electron（正常模式）
   - 流程：文档 tab 点击文档 → 左侧库预览 → AI 侧栏显示 chip → 审校全文命令可用
@@ -208,10 +213,10 @@
 
 ## 验收标准
 
-- [ ] AI 侧栏在"未选文档"时不再出现 `system 未选择文档` 消息；所有依赖 activeDocument 的 quick action 显示为 disabled
-- [ ] AI 侧栏 header 显示当前文档 chip；清除按钮解除 AI 上下文（但不关闭预览）
-- [ ] 左侧文档列表在 300/320px 侧栏下图标不再覆盖文件名；⋯ 菜单包含所有 5 个次级动作
-- [ ] 规则 tab 拆为 3 个子 tab，每个子 tab 内部概念单一、无重复审校入口
-- [ ] 删除 `OfficeAiAssistantPanel.tsx` 与 `WordRuleExtractionPanel.tsx`，其功能在子 tab A / B 中保留
+- [x] AI 侧栏在"未选文档"时不再出现 `system 未选择文档` 消息；所有依赖 activeDocument 的 quick action 显示为 disabled
+- [x] AI 侧栏 header 显示当前文档 chip；清除按钮解除 AI 上下文（但不关闭预览）
+- [x] 左侧文档列表在 300/320px 侧栏下图标不再覆盖文件名；⋯ 菜单包含所有 5 个次级动作
+- [x] 规则 tab 拆为 3 个子 tab，每个子 tab 内部概念单一、无重复审校入口
+- [x] 删除 `WordRuleExtractionPanel.tsx`，功能在子 tab A 顶栏保留；`OfficeAiAssistantPanel.tsx` 保留并内嵌为子 tab B 主体
 - [ ] 测试全绿（vitest + 后端 pytest）
 - [ ] Code review 无 CRITICAL / HIGH issue

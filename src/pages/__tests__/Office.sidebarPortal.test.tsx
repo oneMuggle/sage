@@ -107,8 +107,8 @@ vi.mock('../../features/office/canvas/DocumentCanvas', () => ({
 vi.mock('../office/OfficeLatexTab', () => ({
   OfficeLatexTab: () => <div data-testid="office-latex-tab-stub" />,
 }));
-vi.mock('../../features/office/WordRuleExtractionPanel', () => ({
-  WordRuleExtractionPanel: () => <div data-testid="office-rules-stub" />,
+vi.mock('../../features/office/rules/RulesSubtabs', () => ({
+  RulesSubtabs: () => <div data-testid="office-rules-stub" />,
 }));
 vi.mock('../../features/journal', () => ({
   JournalPanel: () => <div data-testid="office-journal-stub" />,

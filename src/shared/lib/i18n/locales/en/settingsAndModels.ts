@@ -673,6 +673,16 @@ export const enSettingsAndModels = {
   'office.rules.importError.invalidShape': 'The rule pack has an invalid structure',
   'office.rules.importError.invalidField': 'The rule pack contains an invalid field',
   'office.rules.importError.tooManyRules': 'The rule pack has more than 500 rules',
+  'office.rules.subtabs.label': 'Rules workbench sub-navigation',
+  'office.rules.subtabs.rulesLibrary': 'Rules library',
+  'office.rules.subtabs.aiAudit': 'AI audit',
+  'office.rules.subtabs.batchTools': 'Batch tools',
+  'office.rules.extractFromDoc': 'Extract rules from current document',
+  'office.rules.extractFromDoc.hint': 'Please select a document in the Documents tab first',
+  'office.rules.extractBusy': 'Extracting…',
+  'office.rules.extractNoActiveDoc': 'Please select a document in the left document library first',
+  'office.rules.extractSuccess': 'Extracted {n} rules into new group "{name}"',
+  'office.rules.specLibraryToggle': 'Specification library (external rule source)',
 };
 
 export function formatEnSettingsAndModelsSummary(): string {
