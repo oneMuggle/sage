@@ -111,6 +111,27 @@ export function useProjectSectionData({ onOpenSession }: UseProjectSectionDataPr
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅首启加载一次
   }, []);
 
+  // 启动竞态：后端未就绪时首次 refresh 会失败且不会自动重试，
+  // 侧栏/工作台项目区会永久显示空态。后端就绪事件到达后补一次刷新。
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    const api = window.electronAPI;
+    if (!api?.listen) return;
+    void api
+      .listen('backend:ready', () => {
+        if (!cancelled) void refresh();
+      })
+      .then((off) => {
+        if (cancelled) off();
+        else unlisten = off;
+      });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [refresh]);
+
   const clearMissing = useCallback((id: string) => {
     setMissingIds((prev) => {
       if (!prev.has(id)) return prev;

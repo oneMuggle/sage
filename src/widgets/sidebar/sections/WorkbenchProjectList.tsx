@@ -27,15 +27,20 @@ import {
   Plus,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { ProjectTypeBadge } from '../../../features/project-type/ProjectTypeBadge';
 import { getArchetypeBlueprint } from '../../../features/project-type/archetypeBlueprints';
+import {
+  filterAndSortProjects,
+  type OverviewFilters,
+} from '../../../features/project-type/projectFilters';
 import { projectApi, type ProjectSummary } from '../../../shared/api/projectApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import { useStore } from '../../../shared/lib/store';
 import { formatRelativeTime } from '../../../shared/lib/utils';
+import { Button } from '../../../shared/ui/Button';
 import { TwoStepDelete } from '../TwoStepDelete';
 
 import { AddProjectDialog } from './AddProjectDialog';
@@ -47,11 +52,32 @@ import {
 } from './ProjectExpandedPanels';
 import { useProjectSectionData } from './useProjectSectionData';
 
-interface WorkbenchProjectListProps {
+export interface WorkbenchProjectListProps {
   onOpenSession: (sessionId: string) => void;
+  /** Page 形态：隐藏分区标题（页面自行提供标题与工具栏）。 */
+  showHeader?: boolean;
+  /** 可选筛选/排序；提供时只渲染匹配项。 */
+  filters?: OverviewFilters;
+  /** 批量选择模式。 */
+  selectable?: boolean;
+  selectedIds?: string[];
+  onToggleSelect?: (projectId: string) => void;
+  /** 外部批量操作（如批量归档）后自增，触发列表刷新。 */
+  refreshKey?: number;
+  /** 页面头部「新建项目」自增触发内部添加对话框。 */
+  addSignal?: number;
 }
 
-export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProps) {
+export function WorkbenchProjectList({
+  onOpenSession,
+  showHeader = true,
+  filters,
+  selectable = false,
+  selectedIds = [],
+  onToggleSelect,
+  refreshKey,
+  addSignal,
+}: WorkbenchProjectListProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const currentSessionId = useStore((s) => s.currentSessionId);
@@ -95,6 +121,20 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
     handleRemoveMaterial,
     handleSaveAnswerAsMaterial,
   } = data;
+
+  const visibleProjects = filters ? filterAndSortProjects(projects, filters) : projects;
+
+  // 外部批量操作后由页面自增 refreshKey，触发一次清单刷新。
+  useEffect(() => {
+    if (refreshKey !== undefined && refreshKey > 0) void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅由外部信号驱动
+  }, [refreshKey]);
+
+  // 页面头部「新建项目」按钮通过自增 addSignal 打开内部对话框。
+  useEffect(() => {
+    if (addSignal !== undefined && addSignal > 0) handleAddProject();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅由外部信号驱动
+  }, [addSignal]);
 
   const renderSubSessions = (project: ProjectSummary) => {
     if (!expandedIds.has(project.id)) return null;
@@ -153,8 +193,12 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
   return (
     <>
       <div
-        className={`flex flex-col rounded border ${
-          dropActive ? 'border-dashed border-primary bg-primary/5' : 'border-transparent'
+        className={`flex flex-col rounded-md border ${
+          dropActive
+            ? 'border-dashed border-primary bg-primary/5'
+            : showHeader
+              ? 'border-transparent'
+              : 'border-border bg-card/30'
         }`}
         data-testid="project-drop-zone"
         onDragOver={(e) => {
@@ -168,33 +212,35 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
         onDrop={(e) => void handleDropRegister(e)}
       >
         {/* Section header (no SiderSection wrapper in workbench) */}
-        <div className="flex items-center justify-between px-3 py-2">
-          <button
-            data-testid="sidebar-all-projects"
-            className="flex flex-1 items-center justify-between rounded px-2 py-1 text-xs hover:bg-accent"
-            onClick={() => navigate('/projects')}
-          >
-            <span className="flex items-center gap-1.5">
-              <Folder className="w-3.5 h-3.5 text-muted" aria-hidden="true" />
-              <span className="font-semibold uppercase tracking-wide text-muted">
-                {t('sider.section.project')}
-              </span>
-            </span>
-            <span className="text-muted-foreground">{projects.length}</span>
-          </button>
-          <div className="flex items-center gap-1">
+        {showHeader && (
+          <div className="flex items-center justify-between px-3 py-2">
             <button
-              type="button"
-              onClick={handleAddProject}
-              aria-label={t('sider.project.add')}
-              title={t('sider.project.add')}
-              data-testid="project-add-button"
-              className="inline-flex items-center justify-center w-5 h-5 rounded text-muted hover:text-text hover:bg-bg-hover"
+              data-testid="sidebar-all-projects"
+              className="flex flex-1 items-center justify-between rounded px-2 py-1 text-xs hover:bg-accent"
+              onClick={() => navigate('/projects')}
             >
-              <Plus className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-1.5">
+                <Folder className="w-3.5 h-3.5 text-muted" aria-hidden="true" />
+                <span className="font-semibold uppercase tracking-wide text-muted">
+                  {t('sider.section.project')}
+                </span>
+              </span>
+              <span className="text-muted-foreground">{visibleProjects.length}</span>
             </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleAddProject}
+                aria-label={t('sider.project.add')}
+                title={t('sider.project.add')}
+                data-testid="project-add-button"
+                className="inline-flex items-center justify-center w-5 h-5 rounded text-muted hover:text-text hover:bg-bg-hover"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {dropActive && (
           <div
@@ -204,15 +250,25 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
             {t('sider.project.drop_hint')}
           </div>
         )}
-        {projects.length === 0 ? (
+        {visibleProjects.length === 0 ? (
           <div
-            className="px-3 py-3 text-ui-sm text-text-muted text-center"
+            className="flex flex-col items-center gap-2 px-3 py-8 text-ui-sm text-text-muted"
             data-testid="project-empty"
           >
-            {t('sider.project.empty')}
+            <Folder className="h-7 w-7 opacity-40" aria-hidden="true" />
+            <p data-testid={filters ? 'projects-overview-empty' : undefined}>
+              {projects.length === 0
+                ? t('sider.project.empty')
+                : '没有匹配的项目。调整搜索或筛选条件试试。'}
+            </p>
+            {projects.length === 0 && !showHeader && (
+              <Button size="sm" onClick={handleAddProject} data-testid="project-empty-add">
+                新建项目
+              </Button>
+            )}
           </div>
         ) : (
-          projects.map((project) => {
+          visibleProjects.map((project) => {
             const missing = missingIds.has(project.id);
             const busy = busyId === project.id;
             const expanded = expandedIds.has(project.id);
@@ -230,9 +286,24 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
                       navigate(`/projects/governance/${project.id}`);
                     }
                   }}
-                  className="group flex items-center gap-1 mx-1.5 px-1.5 py-1.5 rounded cursor-pointer hover:bg-bg-hover"
+                  className={`group flex items-center gap-1 rounded cursor-pointer hover:bg-bg-hover ${
+                    showHeader
+                      ? 'mx-1.5 px-1.5 py-1.5'
+                      : 'border-b border-border/60 px-3 py-2.5 last:border-b-0'
+                  }`}
                   title={`${project.name}\n${project.path}`}
                 >
+                  {selectable && (
+                    <input
+                      type="checkbox"
+                      data-testid={`projects-overview-select-${project.id}`}
+                      checked={selectedIds.includes(project.id)}
+                      aria-label={`选择 ${project.name}`}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => onToggleSelect?.(project.id)}
+                      className="shrink-0"
+                    />
+                  )}
                   <button
                     type="button"
                     data-testid="project-expand"
