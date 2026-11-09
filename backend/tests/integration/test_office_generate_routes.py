@@ -670,10 +670,21 @@ def test_template_chat_request_rejects_empty_messages() -> None:
 
 
 def test_template_chat_messages_use_a_constrained_list() -> None:
+    import pydantic
+
     from backend.api.office_generate_routes import TemplateChatRequest
 
-    field = TemplateChatRequest.model_fields["messages"]
-    assert any(getattr(meta, "min_length", None) == 1 for meta in field.metadata)
+    if int(pydantic.VERSION.split(".")[0]) >= 2:
+        field = TemplateChatRequest.model_fields["messages"]
+        assert any(getattr(meta, "min_length", None) == 1 for meta in field.metadata)
+    else:
+        # pydantic v1: conlist(min_items=1) is baked into the field type;
+        # behavioral parity already covered by rejects_empty_messages; here
+        # just confirm the field rejects [] via ValidationError on v1 too.
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            TemplateChatRequest(workspace_path="/ws", messages=[])
 
 
 def test_iterate_corrupt_docx_returns_422(tmp_path: Path) -> None:

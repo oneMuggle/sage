@@ -766,6 +766,7 @@ async def lifespan(app: FastAPI):
     _evo_registered = _register_evolution_tasks(
         scheduler_service,
         config_path=Path(__file__).parent / "config.yaml",
+        hooks=hooks,
     )
     logger.info(
         "Evolution tasks scheduled: %d — %s",
