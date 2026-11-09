@@ -179,6 +179,7 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
           SAGE_RUNTIME_PYTHON: sagePythonOverride,
           PYTHON_BACKEND_PORT: String(opts.port),
           SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'local',
+          PYTHONPATH: process.cwd(),
         },
         extraEnv: {
           SAGE_DB_PATH: opts.sageDbPath,
@@ -186,6 +187,7 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
           SAGE_RUNTIME_PYTHON: sagePythonOverride,
           PYTHON_BACKEND_PORT: String(opts.port),
           SAGE_LOG_TIMEZONE: opts.env.SAGE_LOG_TIMEZONE ?? 'local',
+          PYTHONPATH: process.cwd(),
         },
         reason: 'dev-conda-overridden',
       };
