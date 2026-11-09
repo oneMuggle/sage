@@ -63,9 +63,11 @@ cd backend; conda run -n sage-backend-py38 pytest -n 4 --dist loadfile --ignore=
 
 | 脚本 | 作用 | CI 里谁在用 |
 |------|------|-------------|
-| `classify_diff.py` | 把异动文件分 A/B/C/D 四类；**D 类 = 发布/打包冻结件**，`auto_sync` 冲突时自动取 win7 侧 | `parity_report` / `auto_sync` 内部 import |
+| `classify_diff.py` | 把异动文件分 A/B/C/D 四类；**D 类 = 发布/打包冻结件**，`auto_sync` 冲突时自动取 win7 侧；**win7 平台扩展件（`symbols.WIN7_PLATFORM_FILES`）归 C 类** | `parity_report` / `auto_sync` 内部 import |
+| `symbols.py` | 「能力标识符」提取：`capability_symbols()` / `capability_loss()`；`WIN7_PLATFORM_FILES` 清单（win7 在 main 之上叠加平台增量的文件） | `classify_diff` / `auto_sync` / `verify_symbol_preservation` 内部 import |
+| `verify_symbol_preservation.py` | 合并结果能力保留硬门禁：清单内平台文件丢失 win7 能力标识符即 exit 1 | `ci.yml` → `frontend` job step「Verify win7 capability preservation」（仅 release/win7 PR） |
 | `parity_report.py` | 生成 `parity-auto.md`：残差分级 typing-only / frozen / intentional / win7-only / main-only / real；`--fail-on` 守门；`--write-allow` 登记 | `win7-sync.yml` → job `parity` |
-| `auto_sync.py` | `git merge --no-ff origin/main` → D 类 ours → `py38_compat_rewrite`（注解 + `with (` 改写）→ ruff --fix → `check_py38_compat`（注解 + 运行时 API 两层）→ `ruff check backend/` → 提交；冲突时输出分类报告 exit 2 | `win7-sync.yml` → job `sync` |
+| `auto_sync.py` | `git merge --no-ff origin/main` → D 类 ours → `py38_compat_rewrite`（注解 + `with (` 改写）→ ruff --fix → `check_py38_compat`（注解 + 运行时 API 两层）→ `ruff check backend/` → 提交；冲突时输出分类报告 exit 2（平台文件附「必须保留的 win7 侧能力标识符」清单） | `win7-sync.yml` → job `sync` |
 | `cp.ps1` | 本地 cherry-pick 辅助（B1/B2 时期） | — |
 
 ## 残差分级怎么算

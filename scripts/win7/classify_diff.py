@@ -8,13 +8,25 @@ import csv
 import pathlib
 import re
 import subprocess
+import sys
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from symbols import WIN7_PLATFORM_FILES  # noqa: E402
+
 C_PATTERNS = [
     r"^backend/requirements", r"^backend/environment\.yml", r"^electron-builder",
     r"^\.github/workflows/release-win7", r"^scripts/bundle-python\.ps1",
     r"^backend/compat/win7", r"^electron/platform",
 ]
+# Win7 平台扩展件: win7 侧在 main 版本之上叠加了平台专属逻辑, 文件本身是
+# 「main 共享语义 + win7 平台增量」的混合体。
+# 这些文件若按 A 类「直通」(整文件取 main) 会静默丢掉 win7 增量, 必须按 C 类
+# 「保留 ours 后补齐 main 新增接口」人工收敛。
+# 回归记录: 2026-11-09 win7-sync PR #2946 曾按 A 类整文件取 main, 连带回退
+# win7 #2963/#1333 的救援工具能力(TrustedInstaller/wuauserv 检测 + diagnosticPath
+# 对话框变体)。见 docs/win7-sync/parity.md。
+C_PATTERNS += [r"^" + re.escape(p) + r"$" for p in WIN7_PLATFORM_FILES]
 C_RE = re.compile("|".join(f"({p})" for p in C_PATTERNS))
 B_PATTERNS = [
     r"^backend/api/", r"^backend/memory/", r"^backend/orchestration/",

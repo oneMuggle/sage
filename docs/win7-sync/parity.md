@@ -78,3 +78,35 @@
   非 docs 文件的 (path, grade, raw_grade) 在两种口径下逐条相同
 
 口径变更后 M1/M2 需按 docs 排除后重新表述，详见 `docs/plans/2026-10-21_win7-parity-docs-exempt.md`。
+
+## 回归记录（2026-11-09）：#2946 静默回退 rescue-doctor 能力
+
+**症状**：`sync/win7-main` → `release/win7` 的 PR #2946 CI 全绿并合并，但
+`electron/runtime-check.ts`、`electron/showStartupFailureDialog.ts` 及其两个测试
+文件被按 **A 类「直通」整文件取 main**，win7 叠加在这些文件之上的平台能力全部丢失：
+
+- `checkTrustedInstallerService()` / `checkWuauservService()` / `checkWindowsService()`
+- `win7FixDir()` + `doc_path` / `fix_script_path`（指向打包的 `win7-fix/` 资源）
+- `showStartupFailureDialog` 的 `diagnosticPath` 选项 + 5 按钮变体 + `open-diagnostic`
+
+**根因**：`classify_diff.py` 只按目录模式分类（`electron/platform`、`backend/compat/win7` 等），
+这 4 个文件在 `electron/` 根目录下，落进默认 A 类，冲突解决者按分类报告整文件取 main。
+分类报告只写了「按 main 语义为底、win7 增量嫁接」——**没有给出可核对的具体增量清单**，
+所以丢失在评审中不可见。
+
+**修复**（PR #2977）：
+
+1. `scripts/win7/symbols.py` — `WIN7_PLATFORM_FILES` 清单 + `capability_symbols()` / `capability_loss()`，
+   把「win7 增量」变成可枚举、可自动比对的标识符集合。
+2. `scripts/win7/classify_diff.py` — 清单内文件改判 **C 类「平台层收敛」**，
+   冲突时保留 ours 后补齐 main 新增接口，不再整文件取 main。
+3. `scripts/win7/auto_sync.py` — CONFLICT 报告新增「必须保留的 win7 侧能力标识符」清单
+   （`git show :2:` vs `:3:` 集合差），解决者有具体对照项。
+4. `scripts/win7/verify_symbol_preservation.py` + `.github/workflows/ci.yml` — CI 门禁：
+   仅 `release/win7` PR 触发，挂在已分支保护要求的 `Frontend (TypeScript)` check 上
+   （无需改 `required_status_checks`），检测到平台文件能力标识符丢失即 exit 1。
+5. `backend/tests/contract/test_win7_sync_classification.py` — 契约测试防回归。
+
+**教训**：分类器覆盖不到的「main 共享语义 + win7 平台增量」混合文件，必须显式列清单 +
+自动校验，否则「按 main 语义为底」就会退化成「整文件取 main」。
+
