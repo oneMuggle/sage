@@ -66,8 +66,19 @@ describe('useRecapAutoTrigger', () => {
     const { unmount } = renderHook(() =>
       useRecapAutoTrigger({ messageCount: 10, onRecap: vi.fn() }),
     );
+    await act(async () => {});
     expect(unlistenFn).not.toHaveBeenCalled();
     unmount();
+    expect(unlistenFn).toHaveBeenCalled();
+  });
+
+  it('unsubscribes even when unmounted before listen() resolves', async () => {
+    const { unlistenFn } = installListenMock();
+    const { unmount } = renderHook(() =>
+      useRecapAutoTrigger({ messageCount: 10, onRecap: vi.fn() }),
+    );
+    unmount();
+    await act(async () => {});
     expect(unlistenFn).toHaveBeenCalled();
   });
 });

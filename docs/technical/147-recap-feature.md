@@ -128,4 +128,4 @@ M2 增加两种自动触发路径，复用 M1 的 `handleRecap` + `recapResult` 
 
 ### 8.3 测试
 
-`src/pages/chat/__tests__/useRecapAutoTrigger.test.ts`（4 条）：无 electronAPI 时 no-op；`awayMs ≥ 5min && count ≥ 6` 触发；`awayMs < 5min` 不触发；`count < 6` 不触发；卸载时调用 `unlisten`。用 `installListenMock()` 注入 `window.electronAPI.listen` 并暴露 `fireFocus()` 触发事件。
+`src/pages/chat/__tests__/useRecapAutoTrigger.test.ts`（6 条）：无 electronAPI 时 no-op；`awayMs ≥ 5min && count ≥ 6` 触发；`awayMs < 5min` 不触发；`count < 6` 不触发；卸载时调用 `unlisten`；`listen()` 未 resolve 即卸载时也会补调 `off()`（`disposed` 标志，避免监听器泄漏）。用 `installListenMock()` 注入 `window.electronAPI.listen` 并暴露 `fireFocus()` 触发事件。

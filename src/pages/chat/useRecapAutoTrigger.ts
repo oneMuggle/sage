@@ -20,6 +20,7 @@ export function useRecapAutoTrigger({
   useEffect(() => {
     const api = window.electronAPI;
     if (!api?.listen) return;
+    let disposed = false;
     let unlisten: (() => void) | undefined;
     api
       .listen<{ awayMs: number }>('app-focus', ({ awayMs }) => {
@@ -28,9 +29,15 @@ export function useRecapAutoTrigger({
         }
       })
       .then((off) => {
+        // listen() 是异步的：若组件在 promise settle 前卸载，立即退订，否则监听器泄漏。
+        if (disposed) {
+          off();
+          return;
+        }
         unlisten = off;
       });
     return () => {
+      disposed = true;
       unlisten?.();
     };
   }, [messageCount, onRecap]);
