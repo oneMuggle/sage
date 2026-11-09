@@ -2,7 +2,7 @@
 
 > 创建日期: 2026-11-09
 > 分支: `feat/startup-performance-optimization`
-> 状态: Phase 1-2 已完成，Phase 3-6 待实施
+> 状态: Phase 1-2 + 启动阻塞修复已完成，Phase 3-6 待实施
 
 ## 背景与目标
 
@@ -299,10 +299,39 @@ pyinstaller --onefile --name sage-backend backend/main.py
 
 **关键发现**：
 1. **Python 导入 34.5s 是当前最大瓶颈**（占后端启动的 67%）—— 独立烟雾测试仅 8.1s 因为磁盘已热；桌面端通过 Electron spawn 走冷路径，导入时间 4×。Phase 3 是下一优先级。
-2. **`startAgentBrowserHost()` 阻塞窗口创建 21.1s** —— `createMainWindow()` 在等待浏览器启动之后才调用。这是 Phase 1 之外的独立优化机会（可考虑把 `createMainWindow` 再往前挪到 `startAgentBrowserHost` 之前）。
+2. **`runDoctorCheck()` 阻塞窗口创建 21.1s** —— 它当时在 `registerIpcHandlers()` 里同步 await；doctor 自己还要再起两个 Python 冷启动，跑满 20s 上限仍是 `status: "timeout"`（`main: doctor check complete | {'status':'timeout','elapsed_ms':20107}`），把 `createMainWindow()` 一起拖到 21.1s。
+   > 更正：早前版本把这一项归因于 `startAgentBrowserHost()` 是错的 —— 内置浏览器 host 只在 Win7 启用，Linux 上 `embeddedBrowserEnabled` 为 false，不参与启动链路。
 3. **Phase 1 并行启动工作正常** —— 窗口在 24.1s 即出现，前端显示 "backend starting" 横幅，后端在 73.8s 时 ready。用户不再面对空白 80s。
 4. **Phase 2 延迟初始化工作正常** —— lifespan 关键路径 14.4s（vs 原始 50-90s 总启动），deferred init 在 yield 后 0.2s 内完成全部非关键服务。
 5. **首次请求重试** —— 窗口出现后（24.1s）后端尚未就绪，前端自动重试（"请求失败，第 1 次重试"…），后端 ready 后恢复。`BackendStatusBanner` 显示连接中状态，符合预期。
+
+### 启动阻塞修复与复测（2026-11-09 第二轮）
+
+第一轮实测暴露三个与 Phase 1 目标冲突的问题，均已修复并复测：
+
+| # | 问题 | 根因 | 修复 |
+| --- | --- | --- | --- |
+| 1 | `window_created` 要等 21.1s | `runDoctorCheck()` 在 `registerIpcHandlers()` 里同步 await，doctor 自己再起两个 Python 冷启动，跑满 20s 上限仍 `status: "timeout"` | 抽出 `runStartupDoctorCheck()`，在 `waitForBackend()` 之后 / SKIP_BACKEND 分支里 `kickStartupDoctorCheck()` 异步跑 |
+| 2 | 假的 `backend health timeout` + 整轮 auto-retry | `isPortStillBoundByPid()` 外层只给 200ms，内层 `execFileSync` 自带 500ms 超时；冷启动 IO 压力下必然超预算，旧代码 `return false` 直接判失败 | 预算 200ms → 1500ms，且失败降级为 `warn` + 500ms 后 `continue` 重试（ownershipToken 已证明后端归属） |
+| 3 | 主窗口出现后白屏 ~70s | 3s 兜底在 dev 模式必然先于 `ready-to-show` 触发；dev 下 Vite 要按需 transform 整个模块图（实测 70s+） | 主窗口改「有内容才显示」：`ready-to-show` 或渲染层 `first-paint` 任一满足才 `show()` + 关启动屏；兜底放宽到 dev 120s / 打包 15s。**不用 `dom-ready`**（实测早于首帧 2.6s，等于把白屏放回来） |
+
+**复测结果（同一 worktree，Linux，冷启动）**
+
+| 标记 | 修复前 | 修复后 | 说明 |
+| --- | --- | --- | --- |
+| `window_created` | 21.1s | **0.5s** | doctor 移出关键路径 |
+| `window_shown` | 24.1s（白屏） | **27.5s（有内容）** | 触发源 `ready-to-show`；白屏消失 |
+| `first_paint` | 61.0s | **28.2s** | 同机负载不同，仅作参考 |
+| `backend ready` | 73.8s | 28.7s | 同上 |
+| 假 `backend health timeout` | 1 次（紧接着 auto-retry 成功） | **0 次** | 端口重校验改为重试 |
+| doctor check | 阻塞启动 20.1s | 后端就绪后 20.1s 异步 | 不再影响启动 |
+
+两次运行都在同一台机器（另一 worktree 同时在跑 vitest，load average 21 → 8），绝对耗时不可跨轮比较；可比较的是**顺序与相对关系**：修复后 `window_created` 紧贴 `app_ready`，`window_shown` 与 `first_paint` 只差 0.7s（IPC/rAF 延迟），且窗口显示早于后端就绪（Phase 1 目标达成）。
+
+**遗留（不在本次范围）**：
+
+- doctor 的 20s 上限（`electron/doctor.ts: DEFAULT_TIMEOUT_MS = 20_000`）在冷缓存下必然超时 → `DOCTOR_LAST_FILE` 永远是 `status: "timeout"` 且无 summary，救援工具读不到有效报告。现在它已不阻塞启动，可以把上限提到 60s+ 让诊断真正产出结果。
+- dev 模式 Vite 冷 transform 整个模块图（实测 60-76s）是**仅开发环境**的耗时；打包版走静态资源不受影响。若要进一步优化开发体验，需要 Vite 预热（`optimizeDeps.entries` / 预构建）。
 
 ### 启动时间测量点
 
