@@ -2,8 +2,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import type { UnifiedTaskEntry } from '../unifiedTaskModel';
 import { TaskCenterCard } from '../TaskCenterCard';
+import type { UnifiedTaskEntry } from '../unifiedTaskModel';
 
 // useI18n() 在 <I18nProvider> 之外会直接 throw —— 所有组件测试必须包裹
 const wrap = (ui: React.ReactElement) => <I18nProvider>{ui}</I18nProvider>;
@@ -77,7 +77,10 @@ describe('TaskCenterCard', () => {
 
   it('failed 状态渲染错误文案', () => {
     renderCard(
-      <TaskCenterCard entry={makeEntry({ status: 'failed', error: '模型超时' })} actions={actions} />,
+      <TaskCenterCard
+        entry={makeEntry({ status: 'failed', error: '模型超时' })}
+        actions={actions}
+      />,
     );
     expect(screen.getByText('模型超时')).toBeTruthy();
   });

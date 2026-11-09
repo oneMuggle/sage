@@ -95,7 +95,11 @@ export function TaskCenterCard({ entry, actions, compact = false }: TaskCenterCa
           <SourceIcon className="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden />
           <span className="truncate text-ui-sm text-text">{entry.title}</span>
           <StatusIcon
-            className={clsx('w-3.5 h-3.5 shrink-0', tone, entry.status === 'running' && 'animate-spin')}
+            className={clsx(
+              'w-3.5 h-3.5 shrink-0',
+              tone,
+              entry.status === 'running' && 'animate-spin',
+            )}
             aria-hidden
           />
           <span className={clsx('text-ui-2xs shrink-0', tone)}>{statusLabel}</span>
