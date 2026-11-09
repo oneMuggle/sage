@@ -26,8 +26,18 @@ describe('unifiedTaskStore', () => {
   });
 
   it('refresh 同时拉三源并解包两种返回形状', async () => {
-    vi.mocked(listGoals).mockResolvedValue({ items: [goal], total: 1, limit: 200, offset: 0 } as never);
-    vi.mocked(todoClient.list).mockResolvedValue({ items: [todo], total: 1, limit: 200, offset: 0 } as never);
+    vi.mocked(listGoals).mockResolvedValue({
+      items: [goal],
+      total: 1,
+      limit: 200,
+      offset: 0,
+    } as never);
+    vi.mocked(todoClient.list).mockResolvedValue({
+      items: [todo],
+      total: 1,
+      limit: 200,
+      offset: 0,
+    } as never);
     vi.mocked(scheduledClient.list).mockResolvedValue([task] as never);
 
     await useUnifiedTaskStore.getState().refresh();
@@ -43,7 +53,12 @@ describe('unifiedTaskStore', () => {
 
   it('显式传 limit=200 与 include_completed=true（不依赖默认 limit=50）', async () => {
     vi.mocked(listGoals).mockResolvedValue({ items: [], total: 0, limit: 200, offset: 0 } as never);
-    vi.mocked(todoClient.list).mockResolvedValue({ items: [], total: 0, limit: 200, offset: 0 } as never);
+    vi.mocked(todoClient.list).mockResolvedValue({
+      items: [],
+      total: 0,
+      limit: 200,
+      offset: 0,
+    } as never);
     vi.mocked(scheduledClient.list).mockResolvedValue([] as never);
 
     await useUnifiedTaskStore.getState().refresh();
@@ -58,7 +73,12 @@ describe('unifiedTaskStore', () => {
 
   it('单源失败不阻断其余两源（部分失败语义）', async () => {
     vi.mocked(listGoals).mockRejectedValue(new Error('goal down'));
-    vi.mocked(todoClient.list).mockResolvedValue({ items: [todo], total: 1, limit: 200, offset: 0 } as never);
+    vi.mocked(todoClient.list).mockResolvedValue({
+      items: [todo],
+      total: 1,
+      limit: 200,
+      offset: 0,
+    } as never);
     vi.mocked(scheduledClient.list).mockResolvedValue([task] as never);
 
     await useUnifiedTaskStore.getState().refresh();
@@ -77,7 +97,12 @@ describe('unifiedTaskStore', () => {
         resolveGoals = resolve;
       }) as never,
     );
-    vi.mocked(todoClient.list).mockResolvedValue({ items: [], total: 0, limit: 200, offset: 0 } as never);
+    vi.mocked(todoClient.list).mockResolvedValue({
+      items: [],
+      total: 0,
+      limit: 200,
+      offset: 0,
+    } as never);
     vi.mocked(scheduledClient.list).mockResolvedValue([] as never);
 
     const first = useUnifiedTaskStore.getState().refresh();
