@@ -46,16 +46,6 @@ const PANEL_MIN_WIDTH = 320;
 const PANEL_MAX_WIDTH = 480;
 const PANEL_GAP = 8;
 
-function isLegacyWindows(): boolean {
-  if (process.platform !== 'win32') return false;
-  try {
-    const major = Number(process.getSystemVersion().split('.')[0]);
-    return Number.isFinite(major) && major < 10;
-  } catch {
-    return false;
-  }
-}
-
 function compatibilityEnabled(config: PetConfig): boolean {
   if (config.compatibilityMode === 'on') return true;
   if (config.compatibilityMode === 'off') return false;
