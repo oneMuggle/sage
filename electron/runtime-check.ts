@@ -39,12 +39,10 @@ import { getLogDir } from './logPaths';
 // 顶层求值会抛 TypeError("original must be of type function"). 放到函数内
 // 第一次调用时再 promisify, 让 mock 测试可以顺利 import 本模块而不报错.
 // 生产环境下 execFile 永远存在, 单次 promisify 开销可忽略.
-let execFilePCached: ((file: string, args: string[], opts: unknown) => Promise<{ stdout: string }>) | null = null;
-function execFileP(
-  file: string,
-  args: string[],
-  opts: unknown,
-): Promise<{ stdout: string }> {
+let execFilePCached:
+  | ((file: string, args: string[], opts: unknown) => Promise<{ stdout: string }>)
+  | null = null;
+function execFileP(file: string, args: string[], opts: unknown): Promise<{ stdout: string }> {
   if (!execFilePCached) execFilePCached = promisify(execFile);
   return execFilePCached(file, args, opts);
 }
@@ -127,6 +125,26 @@ async function tryPowerShell(script: string): Promise<string | null> {
     return stdout.trim();
   } catch {
     return null;
+  }
+}
+
+/**
+ * 判断当前 Windows 是否为 legacy（Win7/8/8.1, 即 NT major < 10）.
+ *
+ * - Win10+ / Server 2016+ 的 `process.getSystemVersion()` 返回 "10.x.y"
+ *   → major=10 → 非 legacy.
+ * - Win7 SP1 返回 "6.1.x" → major=6 → legacy.
+ * - 非 Win32 平台直接返回 false（不依赖此 helper）.
+ *
+ * 用于 sandbox / embedded-browser / 补丁检测 等 Win7-only 路径.
+ */
+export function isLegacyWindows(): boolean {
+  if (process.platform !== 'win32') return false;
+  try {
+    const major = Number(process.getSystemVersion().split('.')[0]);
+    return Number.isFinite(major) && major < 10;
+  } catch {
+    return false;
   }
 }
 
@@ -272,14 +290,15 @@ export async function runRuntimeChecks(): Promise<RuntimeCheckResult[]> {
     ];
   }
   const startedAt = Date.now();
-  const results = await Promise.all([
-    checkVCppRedistX64(),
-    checkVCppRedistX86(),
-    checkKB3033929(),
-    checkKB4474419(),
-    checkKB4490628(),
-    checkKB2670838(),
-  ]);
+  // VCRedist 检测在所有 Win32 平台都跑（Win10+/Server 2016+ 也依赖）.
+  // KB3033929/4474419/4490628/2670838 是 Win7 SP1 专属补丁 — 在 Win10+/Server 2016+
+  // 上 wmic qfe list 查不到这些 KB 编号（本来就没装、也不需要），会误报 critical
+  // 触发启动时的"缺失组件"对话框。用 isLegacyWindows() 门控：只在 legacy
+  // Windows (Win7/8/8.1, NT major<10) 上跑这些 KB 检测。
+  const legacyChecks: Promise<RuntimeCheckResult>[] = isLegacyWindows()
+    ? [checkKB3033929(), checkKB4474419(), checkKB4490628(), checkKB2670838()]
+    : [];
+  const results = await Promise.all([checkVCppRedistX64(), checkVCppRedistX86(), ...legacyChecks]);
   const elapsedMs = Date.now() - startedAt;
   for (const r of results) {
     logger.info(`runtime-check:${r.name}`, {
