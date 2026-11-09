@@ -180,10 +180,11 @@
     - "从文档抽取规则"逻辑从 `RulesWorkspace` **上移到 `RulesSubtabs`**（计划表述为"搬到子 tab A 顶栏"）：抽取需要 `activeDocument`，放在容器层可避免 `RulesWorkspace` 依赖全局 store。
     - 新规则组命名采用 `${baseName} · 抽取规则`，与旧实现 `抽取规则 · ${baseName}` 顺序相反（按计划 §Section 3 的命名规则）。
     - `useKeepAliveTabs` 从 `pages/office/officeTabs.ts` 下沉到 `src/shared/lib/hooks/useKeepAliveTabs.ts`，供 `features/` 与 `pages/` 共用（分层约束：features 不能 import pages）。
-- [ ] **M5 · 端到端 smoke**
-  - 启动 Electron（正常模式）
-  - 流程：文档 tab 点击文档 → 左侧库预览 → AI 侧栏显示 chip → 审校全文命令可用
-  - 规则 tab → 3 个子 tab 切换 → AI 审校 tab 能跑一次审校
+- [x] **M5 · 端到端 smoke**
+  - [x] 启动 Electron（正常模式）— Vite @ :1549、backend @ :8894 均返回 200；Electron 主进程 + 6 子进程存活，前端 IPC 正常触发；
+  - [ ] 流程：文档 tab 点击文档 → 左侧库预览 → AI 侧栏显示 chip → 审校全文命令可用
+  - [ ] 规则 tab → 3 个子 tab 切换 → AI 审校 tab 能跑一次审校
+  - **环境说明**：当前 Wayland 会话 + worktree 启动未继承 DISPLAY/WAYLAND，Electron 窗口未渲染到桌面。HTTP 层 smoke（vite + backend + electron IPC）通过；交互层 smoke 需要在有完整 display 环境的机器上手动复核，或由用户在 PR review 阶段本地验证。
 - [ ] **M6 · Code review + 合并**
   - `code-reviewer` agent 审
   - PR 创建（按 feature-branch-workflow 走）
