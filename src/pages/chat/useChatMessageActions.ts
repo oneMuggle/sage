@@ -63,51 +63,11 @@ export function useChatMessageActions({
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
-  const handleCompact = useCallback(async () => {
-    if (!currentSessionId || isLoading) return;
-    try {
-      const result = await sessionApi.compact(currentSessionId);
-      if (result.ok && result.compacted) {
-        toast.success(
-          fill(t('chat.compact_success'), {
-            before: result.before,
-            after: result.after,
-            removed: result.removed,
-          }),
-          { action: { label: '查看归档', onClick: () => setArchivesOpen(true) } },
-        );
-        await loadMessages(currentSessionId);
-      } else if (result.ok) {
-        toast.info(t('chat.compact_skipped'));
-      } else {
-        toast.error(
-          fill(t('chat.compact_failed'), { message: result.message ?? result.error ?? '' }),
-        );
-      }
-    } catch (e) {
-      toast.error(
-        fill(t('chat.compact_failed'), { message: e instanceof Error ? e.message : String(e) }),
-      );
-    }
-  }, [currentSessionId, isLoading, loadMessages, setArchivesOpen, t]);
-
-  const handleLearn = useCallback(async () => {
-    if (!currentSessionId || isLoading) return;
-    try {
-      toast.info(t('chat.learn_reviewing'));
-      await learnApi.trigger(currentSessionId);
-      toast.success(t('chat.learn_queued'));
-      navigate('/skills?tab=drafts');
-    } catch (e) {
-      toast.error(
-        fill(t('chat.learn_failed'), { error: e instanceof Error ? e.message : String(e) }),
-      );
-    }
-  }, [currentSessionId, isLoading, navigate, t]);
-
   // Recap (2026-11-08): 生成会话进度总结。成功后把结果存到 state 供 Chat 渲染
   // RecapCard；失败/过短走 toast。对标 Claude Code /recap。
   // 5 分钟节流：避免重复点击浪费 token（计划风险表 §重复 recap）。
+  // 2026-11-09: 声明提前至 handleCompact 之前，以便 compaction 成功 toast 能
+  // 以 action 按钮调用 handleRecap（M2 步骤 10）。
   const RECAP_THROTTLE_MS = 5 * 60 * 1000;
   const [recapResult, setRecapResult] = useState<RecapResult | null>(null);
   const lastRecapAtRef = useRef<number>(0);
@@ -137,6 +97,57 @@ export function useChatMessageActions({
       );
     }
   }, [currentSessionId, isLoading, t]);
+
+  const handleCompact = useCallback(async () => {
+    if (!currentSessionId || isLoading) return;
+    try {
+      const result = await sessionApi.compact(currentSessionId);
+      if (result.ok && result.compacted) {
+        toast.success(
+          fill(t('chat.compact_success'), {
+            before: result.before,
+            after: result.after,
+            removed: result.removed,
+          }),
+          {
+            // M2 (2026-11-09): compaction 完成后建议查看进度总结，帮助用户
+            // 在上下文大幅缩减后快速重建心智模型。原"查看归档"入口以 cancel
+            // 按钮保留，不破坏 M1 既有 UX。
+            action: { label: t('recap.title'), onClick: () => void handleRecap() },
+            cancel: {
+              label: t('chat.compact_view_archives'),
+              onClick: () => setArchivesOpen(true),
+            },
+          },
+        );
+        await loadMessages(currentSessionId);
+      } else if (result.ok) {
+        toast.info(t('chat.compact_skipped'));
+      } else {
+        toast.error(
+          fill(t('chat.compact_failed'), { message: result.message ?? result.error ?? '' }),
+        );
+      }
+    } catch (e) {
+      toast.error(
+        fill(t('chat.compact_failed'), { message: e instanceof Error ? e.message : String(e) }),
+      );
+    }
+  }, [currentSessionId, isLoading, loadMessages, setArchivesOpen, t, handleRecap]);
+
+  const handleLearn = useCallback(async () => {
+    if (!currentSessionId || isLoading) return;
+    try {
+      toast.info(t('chat.learn_reviewing'));
+      await learnApi.trigger(currentSessionId);
+      toast.success(t('chat.learn_queued'));
+      navigate('/skills?tab=drafts');
+    } catch (e) {
+      toast.error(
+        fill(t('chat.learn_failed'), { error: e instanceof Error ? e.message : String(e) }),
+      );
+    }
+  }, [currentSessionId, isLoading, navigate, t]);
 
   const handleFork = useCallback(
     async (messageId: string) => {

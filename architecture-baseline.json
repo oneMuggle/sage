@@ -81,7 +81,7 @@
     "src/features/send-message/__tests__/useChat.streamingAndGates.test.ts": 957,
     "src/features/send-message/chatStreamStore.ts": 936,
     "src/features/send-message/useChat.ts": 1179,
-    "src/pages/Chat.tsx": 872,
+    "src/pages/Chat.tsx": 876,
     "src/pages/ProjectGovernance.tsx": 874,
     "src/pages/settings/PluginsTab.tsx": 687,
     "src/pages/settings/settingsSearchEntries.ts": 864,
