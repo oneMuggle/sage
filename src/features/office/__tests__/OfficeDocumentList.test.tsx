@@ -26,7 +26,11 @@ vi.mock('sonner', () => ({
 
 import type { OfficeDocumentSummary } from '../../../shared/api/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { OfficeDocumentList, formatOfficeDocumentListJson, formatOfficeDocumentListMarkdown } from '../OfficeDocumentList';
+import {
+  OfficeDocumentList,
+  formatOfficeDocumentListJson,
+  formatOfficeDocumentListMarkdown,
+} from '../OfficeDocumentList';
 
 const sampleDocs: OfficeDocumentSummary[] = [
   {
@@ -178,7 +182,11 @@ describe('OfficeDocumentList — gateway action callbacks', () => {
     const onShowInFolder = vi.fn();
     render(
       <I18nProvider defaultLocale="zh">
-        <OfficeDocumentList documents={sampleDocs} loading={false} onShowInFolder={onShowInFolder} />
+        <OfficeDocumentList
+          documents={sampleDocs}
+          loading={false}
+          onShowInFolder={onShowInFolder}
+        />
       </I18nProvider>,
     );
     const buttons = screen.getAllByRole('button', { name: /show.*folder|显示.*文件夹/i });
@@ -302,7 +310,11 @@ describe('OfficeDocumentList — batch archive/restore (round-3 N5)', () => {
     });
     render(
       <I18nProvider defaultLocale="zh">
-        <OfficeDocumentList documents={sampleDocs} loading={false} onBatchArchive={onBatchArchive} />
+        <OfficeDocumentList
+          documents={sampleDocs}
+          loading={false}
+          onBatchArchive={onBatchArchive}
+        />
       </I18nProvider>,
     );
 
@@ -330,5 +342,71 @@ describe('OfficeDocumentList — batch archive/restore (round-3 N5)', () => {
     const parsed = JSON.parse(formatOfficeDocumentListJson(sampleDocs, 'live'));
     expect(parsed.total).toBe(2);
     expect(parsed.variant).toBe('live');
+  });
+});
+
+describe('OfficeDocumentList — 工具栏上传入口', () => {
+  it('renders the import button in the live view and calls onImport when clicked', () => {
+    const onImport = vi.fn();
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList
+          documents={sampleDocs}
+          loading={false}
+          variant="live"
+          onImport={onImport}
+        />
+      </I18nProvider>,
+    );
+
+    const button = screen.getByTestId('office-doclib-import');
+    expect(button).toBeInTheDocument();
+    expect(button).not.toBeDisabled();
+
+    fireEvent.click(button);
+    expect(onImport).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the import button in the archived view', () => {
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList
+          documents={sampleDocs}
+          loading={false}
+          variant="archived"
+          onImport={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.queryByTestId('office-doclib-import')).toBeNull();
+  });
+
+  it('disables the import button while an import is running', () => {
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList
+          documents={sampleDocs}
+          loading={false}
+          variant="live"
+          onImport={vi.fn()}
+          importing
+        />
+      </I18nProvider>,
+    );
+
+    const button = screen.getByTestId('office-doclib-import');
+    expect(button).toBeDisabled();
+    expect(button).toHaveTextContent('上传中');
+  });
+
+  it('omits the import button entirely when no onImport handler is wired', () => {
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList documents={sampleDocs} loading={false} variant="live" />
+      </I18nProvider>,
+    );
+
+    expect(screen.queryByTestId('office-doclib-import')).toBeNull();
   });
 });

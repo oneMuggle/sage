@@ -183,6 +183,8 @@ export function Office() {
 
   // Item 2.5: 编辑预览 dialog
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  // 导入进行中：文档库工具栏的上传按钮据此禁用，避免重复打开文件选择器。
+  const [importing, setImporting] = useState(false);
   const editDoc = preview ? preview.data.summary : null;
   const editSheetNames =
     preview?.docType === 'excel' ? preview.data.sheets.map((s) => s.name) : undefined;
@@ -268,6 +270,7 @@ export function Office() {
     }
     const myReadId = ++readIdRef.current;
     setEditDialogOpen(false);
+    setImporting(true);
     try {
       const result = await importAndReadMulti();
       if (!result) return;
@@ -277,6 +280,8 @@ export function Office() {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.toast.readFailed')}: ${msg}`);
       setPreview(null);
+    } finally {
+      if (myReadId === readIdRef.current) setImporting(false);
     }
   };
 
@@ -287,6 +292,7 @@ export function Office() {
     }
     const myReadId = ++readIdRef.current;
     setEditDialogOpen(false);
+    setImporting(true);
     try {
       const result = await readDroppedMulti(sourcePaths);
       await settleMultiImport(result, myReadId);
@@ -295,6 +301,8 @@ export function Office() {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`${t('office.toast.readFailed')}: ${msg}`);
       setPreview(null);
+    } finally {
+      if (myReadId === readIdRef.current) setImporting(false);
     }
   };
 
@@ -455,6 +463,8 @@ export function Office() {
         onDocTypeChange={setDocType}
         sort={sort}
         onSortChange={setSort}
+        onImport={handleImportAndReadMulti}
+        importing={importing}
         duplicateGroups={duplicateGroups}
         onArchiveAllButNewest={archiveAllButNewest}
       />
