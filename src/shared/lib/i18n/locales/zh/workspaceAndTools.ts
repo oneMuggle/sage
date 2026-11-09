@@ -274,6 +274,8 @@ export const zhWorkspaceAndTools = {
   // ─── Office 文档库搜索/筛选/排序/重复清理 (Phase 1 Item A) ─────
   'office.doclib.search': '搜索文件名',
   'office.doclib.searchClear': '清除搜索',
+  'office.doclib.import': '上传文档',
+  'office.doclib.importing': '上传中…',
   'office.doclib.filter.allTypes': '全部类型',
   'office.doclib.sort.updatedDesc': '最近更新',
   'office.doclib.sort.updatedAsc': '最早更新',

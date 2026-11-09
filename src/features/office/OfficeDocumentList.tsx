@@ -34,16 +34,14 @@ import {
   Presentation,
   Save,
   Search,
+  Upload,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { OfficeDuplicateGroup } from '../../shared/api/officeDuplicateTypes';
-import type {
-  OfficeDocType,
-  OfficeDocumentSummary,
-} from '../../shared/api/types';
+import type { OfficeDocType, OfficeDocumentSummary } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 import { useTaskCenterStore } from '../task-center/taskCenterStore';
 
@@ -117,6 +115,15 @@ export interface OfficeDocumentListProps {
   /** Called when the sort dropdown changes. */
   onSortChange?: (next: string) => void;
 
+  /**
+   * 打开系统文件选择器导入新文档。工具栏的常驻上传入口 ——
+   * 导入能力一直在（Phase 0 单一入口 importAndReadMulti），但空态
+   * 之外没有触发点，用户导入第一份后就没法再加了。
+   */
+  onImport?: () => void | Promise<void>;
+  /** 导入进行中：禁用上传按钮，避免重复打开文件选择器。 */
+  importing?: boolean;
+
   /** ── T4: 重复组 (Item A) ─────────────────────────────── */
   /** Duplicate groups loaded for the current workspace. */
   duplicateGroups?: ReadonlyArray<OfficeDuplicateGroup>;
@@ -185,6 +192,8 @@ export function OfficeDocumentList({
   onDocTypeChange,
   sort = '',
   onSortChange,
+  onImport,
+  importing = false,
   duplicateGroups = [],
   onArchiveAllButNewest,
 }: OfficeDocumentListProps) {
@@ -347,8 +356,8 @@ export function OfficeDocumentList({
     <div>
       {/* T3: search/filter/sort toolbar (Item A). Hidden entirely when no
           callbacks are wired — keeps tests and callers without filters clean. */}
-      {(onQChange || onDocTypeChange || onSortChange) && (
-        <div className="mb-2 flex items-center gap-2 text-ui-xs">
+      {(onQChange || onDocTypeChange || onSortChange || onImport) && (
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-ui-xs">
           {onQChange && (
             <div className="relative flex-1 max-w-xs">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
@@ -402,6 +411,18 @@ export function OfficeDocumentList({
               <option value="-size">{t('office.doclib.sort.sizeDesc')}</option>
               <option value="size">{t('office.doclib.sort.sizeAsc')}</option>
             </select>
+          )}
+          {onImport && variant === 'live' && (
+            <button
+              type="button"
+              onClick={() => void onImport()}
+              disabled={importing}
+              data-testid="office-doclib-import"
+              className="flex items-center gap-1.5 px-2 py-1.5 text-sm border border-border rounded bg-surface text-text hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              {importing ? t('office.doclib.importing') : t('office.doclib.import')}
+            </button>
           )}
         </div>
       )}
