@@ -8,6 +8,13 @@ import {
   serializePersonaSections,
   type PersonaSections,
 } from '../../entities/specialist/personaSections';
+import {
+  TOOL_CAPABILITY_PACKS,
+  defaultSpecialistTools,
+  describeModeGate,
+  packSelectionState,
+  togglePackInTools,
+} from '../../entities/specialist/toolCapabilities';
 import { agentsApi, skillsApi, type AgentProfile, type Skill } from '../../shared/api';
 import {
   Dialog,
@@ -17,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../shared/ui/Dialog';
+import { ToolAllowlistEditor } from '../agents/ToolAllowlistEditor';
 
 import { PersonaEditor } from './PersonaEditor';
 import { PERMISSION_MODE_LABELS } from './SpecialistCard';
@@ -42,7 +50,7 @@ interface SpecialistWizardProps {
 }
 
 type WizardStep = 0 | 1 | 2 | 3;
-const STEP_LABELS = ['基本信息', '人设六段', '技能与权限', '预览'] as const;
+const STEP_LABELS = ['基本信息', '人设六段', '能力与权限', '预览'] as const;
 
 function buildAutoId(): string {
   return `${AUTO_ID_PREFIX}${Date.now().toString(36)}`;
@@ -64,7 +72,7 @@ function extractAvatarAndTagline(ui: Record<string, unknown> | undefined): {
 }
 
 /**
- * M1-E 专家创建/编辑向导：4 步（基本信息 → 人设六段 → 技能与权限 → 预览）。
+ * M1-E 专家创建/编辑向导：4 步（基本信息 → 人设六段 → 能力与权限 → 预览）。
  *
  * - 创建模式自动生成 `specialist-<ts36>` id；编辑模式从 `editingAgent` 反填
  *   表单（含 `system_prompt` 的 Markdown 解析）。
@@ -89,6 +97,10 @@ export function SpecialistWizard({
   const [sections, setSections] = useState<PersonaSections>(emptyPersonaSections());
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('read_only');
+  const [tools, setTools] = useState<string[]>(() => defaultSpecialistTools());
+  // 纯对话专家显式不授权任何工具；默认开启，避免新专家「静默无工具」。
+  const [useTools, setUseTools] = useState(true);
+  const [advancedToolsOpen, setAdvancedToolsOpen] = useState(false);
 
   const isEdit = !!editingAgent;
 
@@ -106,6 +118,12 @@ export function SpecialistWizard({
       setSections(parsePersonaSections(editingAgent.system_prompt ?? ''));
       setSelectedSkills(editingAgent.skills ?? []);
       setPermissionMode(defaultPermissionMode(editingAgent.permission_mode));
+      // 已有专家严格回填：历史上 `[]` 的专家保持无工具，由用户显式勾选后再授权。
+      // 不能悄悄补默认值，否则一次编辑就会扩大该专家的工具权限。
+      const existingTools = editingAgent.tools ?? [];
+      setTools(existingTools);
+      setUseTools(existingTools.length > 0);
+      setAdvancedToolsOpen(false);
     } else {
       setId(buildAutoId());
       setName('');
@@ -114,6 +132,9 @@ export function SpecialistWizard({
       setSections(emptyPersonaSections());
       setSelectedSkills([]);
       setPermissionMode('read_only');
+      setTools(defaultSpecialistTools());
+      setUseTools(true);
+      setAdvancedToolsOpen(false);
     }
 
     skillsApi
@@ -137,6 +158,23 @@ export function SpecialistWizard({
       return '至少填写一段人设（身份 / 职责 / 工作方式 / 风格 / 行为边界 / 输出模板任意一项）';
     return '';
   }, [sections]);
+
+  // 门槛提示按「拒绝 / 逐次审批」分组，避免网格里每包一行小字。
+  const modeGateNotices = useMemo(() => {
+    const denied: string[] = [];
+    const approval: string[] = [];
+    if (useTools) {
+      for (const pack of TOOL_CAPABILITY_PACKS) {
+        if (packSelectionState(tools, pack) === 'none') continue;
+        const gate = describeModeGate(permissionMode, pack);
+        if (!gate) continue;
+        (gate.level === 'deny' ? denied : approval).push(pack.label);
+      }
+    }
+    return { denied, approval };
+  }, [tools, permissionMode, useTools]);
+
+  const effectiveTools = useTools ? tools : [];
 
   // 当前步骤的下一步可用条件；保存按钮需同时无 step1/step2 错误。
   const canAdvance = step === 0 ? !step1Error : step === 1 ? !step2Error : true;
@@ -165,6 +203,7 @@ export function SpecialistWizard({
           skills: selectedSkills,
           persona_ui: { avatar: avatar.trim(), tagline: tagline.trim() },
           permission_mode: permissionMode,
+          tools: effectiveTools,
         });
       } else {
         await agentsApi.create({
@@ -173,7 +212,7 @@ export function SpecialistWizard({
           role: 'specialist',
           description: tagline.trim(),
           system_prompt,
-          tools: [],
+          tools: effectiveTools,
           memory_access: [],
           modelConfigData: { model: '', temperature: 0.7, max_tokens: 0 },
           maxIterations: 20,
@@ -201,8 +240,8 @@ export function SpecialistWizard({
 
   const dialogTitle = isEdit ? `编辑专家 · ${editingAgent!.name}` : '新建专家';
   const dialogDescription = isEdit
-    ? '修改专家的名称、人设、技能与权限后点击保存。'
-    : '按四个步骤填写专家的身份、人设、技能与权限。';
+    ? '修改专家的名称、人设、工具能力、技能与权限后点击保存。'
+    : '按四个步骤填写专家的身份、人设、工具能力、技能与权限。';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -331,36 +370,6 @@ export function SpecialistWizard({
           {step === 2 && (
             <>
               <div className="flex flex-col gap-2">
-                <p className="text-sm font-medium">技能</p>
-                {skillsError ? (
-                  <p className="text-ui-xs text-warning">技能列表加载失败：{skillsError}</p>
-                ) : allSkills.length === 0 ? (
-                  <p className="text-ui-xs text-faint">当前工作区没有已启用的技能。</p>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {allSkills.map((s) => {
-                      const active = selectedSkills.includes(s.name);
-                      return (
-                        <button
-                          key={s.name}
-                          type="button"
-                          onClick={() => toggleSkill(s.name)}
-                          aria-pressed={active}
-                          className={`rounded-full border px-2.5 py-1 text-ui-xs transition-colors ${
-                            active
-                              ? 'border-primary bg-primary/10 text-primary'
-                              : 'border-border text-text-secondary hover:bg-bg-hover'
-                          }`}
-                        >
-                          {s.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-2">
                 <p className="text-sm font-medium">权限模式</p>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {PERMISSION_MODES.map((mode) => (
@@ -393,6 +402,168 @@ export function SpecialistWizard({
                   ))}
                 </div>
               </div>
+
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium">工具能力</p>
+                <p className="text-ui-xs text-faint">
+                  能力包决定专家能看到并调用哪些工具；实际执行仍由权限引擎逐次裁决。
+                </p>
+                <div
+                  role="group"
+                  aria-label="工具授权方式"
+                  className="flex flex-col gap-2 sm:flex-row"
+                >
+                  <button
+                    type="button"
+                    aria-pressed={useTools}
+                    data-testid="specialist-wizard-use-tools"
+                    onClick={() => setUseTools(true)}
+                    className={`flex-1 rounded-radius-md border p-2 text-left text-sm transition-colors ${
+                      useTools ? 'border-primary bg-primary/5' : 'border-border hover:bg-bg-hover'
+                    }`}
+                  >
+                    <span className="font-medium">使用下方能力</span>
+                    <span className="block text-ui-xs text-faint">
+                      勾选需要的能力包，可再展开高级白名单微调
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={!useTools}
+                    data-testid="specialist-wizard-no-tools"
+                    onClick={() => setUseTools(false)}
+                    className={`flex-1 rounded-radius-md border p-2 text-left text-sm transition-colors ${
+                      !useTools ? 'border-primary bg-primary/5' : 'border-border hover:bg-bg-hover'
+                    }`}
+                  >
+                    <span className="font-medium">不使用任何工具（纯对话）</span>
+                    <span className="block text-ui-xs text-faint">
+                      不能读写文件、检索记忆或调用外部能力
+                    </span>
+                  </button>
+                </div>
+
+                {useTools ? (
+                  <>
+                    <div
+                      className="grid grid-cols-1 gap-1.5 sm:grid-cols-2"
+                      data-testid="specialist-wizard-pack-grid"
+                    >
+                      {TOOL_CAPABILITY_PACKS.map((pack) => {
+                        const selection = packSelectionState(tools, pack);
+                        const partial = selection === 'partial';
+                        return (
+                          <label
+                            key={pack.id}
+                            className="flex items-start gap-2 rounded-radius-md border border-border p-2 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              data-testid={`specialist-wizard-pack-${pack.id}`}
+                              checked={selection === 'all'}
+                              ref={(el) => {
+                                if (el) el.indeterminate = partial;
+                              }}
+                              onChange={(e) =>
+                                setTools((prev) => togglePackInTools(prev, pack, e.target.checked))
+                              }
+                              className="mt-0.5"
+                            />
+                            <span className="flex min-w-0 flex-col">
+                              <span className="font-medium">
+                                {pack.label}
+                                {partial && (
+                                  <span className="ml-1 text-ui-xs text-warning">（部分）</span>
+                                )}
+                              </span>
+                              <span className="text-ui-xs text-faint">{pack.description}</span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    {modeGateNotices.denied.length > 0 && (
+                      <p
+                        className="text-ui-xs text-warning"
+                        data-testid="specialist-wizard-mode-gate-deny"
+                      >
+                        当前权限模式下，以下能力的写入/执行类工具会被拒绝：
+                        {modeGateNotices.denied.join('、')}。调高权限模式后才会生效。
+                      </p>
+                    )}
+                    {modeGateNotices.approval.length > 0 && (
+                      <p
+                        className="text-ui-xs text-warning"
+                        data-testid="specialist-wizard-mode-gate-approval"
+                      >
+                        以下能力的写入/执行类工具每次调用都需你确认：
+                        {modeGateNotices.approval.join('、')}。
+                      </p>
+                    )}
+                    {tools.length === 0 && (
+                      <p
+                        className="text-ui-xs text-destructive"
+                        data-testid="specialist-wizard-tools-empty"
+                      >
+                        未选择任何工具：专家运行时所有工具调用都会被拒绝（包括读取文件）。
+                      </p>
+                    )}
+
+                    <button
+                      type="button"
+                      aria-expanded={advancedToolsOpen}
+                      data-testid="specialist-wizard-advanced-toggle"
+                      onClick={() => setAdvancedToolsOpen((prev) => !prev)}
+                      className="self-start text-ui-xs text-primary hover:underline"
+                    >
+                      {advancedToolsOpen ? '收起高级工具白名单' : '高级：编辑工具白名单'}
+                    </button>
+                    {advancedToolsOpen && (
+                      <ToolAllowlistEditor
+                        idPrefix="specialist-wizard"
+                        label="工具白名单（高级）"
+                        value={tools}
+                        onChange={setTools}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <p className="text-ui-xs text-faint">
+                    纯对话专家不会暴露任何工具，也无法读取文件、检索记忆或调用外部能力。
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium">技能</p>
+                {skillsError ? (
+                  <p className="text-ui-xs text-warning">技能列表加载失败：{skillsError}</p>
+                ) : allSkills.length === 0 ? (
+                  <p className="text-ui-xs text-faint">当前工作区没有已启用的技能。</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {allSkills.map((s) => {
+                      const active = selectedSkills.includes(s.name);
+                      return (
+                        <button
+                          key={s.name}
+                          type="button"
+                          onClick={() => toggleSkill(s.name)}
+                          aria-pressed={active}
+                          className={`rounded-full border px-2.5 py-1 text-ui-xs transition-colors ${
+                            active
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-border text-text-secondary hover:bg-bg-hover'
+                          }`}
+                        >
+                          {s.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </>
           )}
 
@@ -404,6 +575,7 @@ export function SpecialistWizard({
               sections={sections}
               skills={selectedSkills}
               permissionMode={permissionMode}
+              tools={effectiveTools}
             />
           )}
         </div>
