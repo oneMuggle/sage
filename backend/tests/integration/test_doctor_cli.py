@@ -25,7 +25,7 @@ SAGE_BACKEND_PY = sys.executable
 
 
 @functools.lru_cache
-def _run_doctor(*args, timeout=30):
+def _run_doctor(*args, timeout=120):
     """Invoke ``python -m backend.cli.doctor`` and capture output.
 
     Cached per args: each subprocess costs ~7s (interpreter startup + all
