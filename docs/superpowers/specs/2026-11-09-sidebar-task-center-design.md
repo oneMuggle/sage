@@ -349,8 +349,7 @@ shell 任务在 `taskCenterStore.tasks` 里以 `kind === 'shell'` 存放（由 `
 | `src/widgets/task-center/DeliveryDrawerHost.tsx` | 接管 `ShellStreamDrawer` 挂载（原挂在 `TaskCenterWidget` 内部） |
 | `src/features/app-panels/panelRegistry.ts` | `task-center` 槽位 `floating` → `left-list`，`currentOwner` 改指新文件 |
 | `src/features/app-panels/__tests__/panelRegistry.test.ts` | 更新两处硬编码断言（见 §5.10） |
-| `src/App.tsx` | 新增 `/tasks` 路由（**lazy import**） |
-| `src/pages/index.ts` | **不改**（加导出会破坏 `pagesIndex.p142.test.ts` 的 `exportedPageCount === 5` 断言，见 §5.9） |
+| `src/App.tsx` | 新增 `/tasks` 路由 |
 | `src/shared/lib/i18n/locales/{zh,en}/taskCenter.ts` | 新建文案域文件 |
 | `src/shared/lib/i18n/{zh,en}.ts` | 各自加 1 行 import + 1 行 spread |
 | `electron/schedulerNotifications.ts` | `collectNotificationItems` 合并 `goal_notifications` |
@@ -391,7 +390,7 @@ export function useUnifiedTasks(): UnifiedTasksResult;
 
 实现要点：
 
-1. 响应式读取 3 个既有 store：`useTaskCenterStore(s => s.tasks)`（`src/features/task-center/taskCenterStore.ts`）、`useChatStreamStore(s => s.sessions)`（`src/features/send-message/chatStreamStore.ts`，形状是 `Record<sessionId, SessionStreamSlots>`）、`useLaneBoardStore(s => s.lanes)`（`src/entities/orchestration/laneBoardStore.ts`）；再读 `useStore(s => s.sessions)`、`useStore(s => s.currentSessionId)`（`src/shared/lib/store`）。
+1. 响应式读取 3 个既有 store：`useTaskCenterStore(s => s.tasks)`、`useChatStreamStore(s => s.sessions)`、`useLaneBoardStore(s => s.lanes)`；再读 `useStore(s => s.sessions)`、`useStore(s => s.currentSessionId)`。
 2. 读取 `useUnifiedTaskStore(s => s.goals / s.todos / s.scheduledTasks)`。
 3. `useMemo` 中依次调用 6 个归一函数拼装原始条目数组。
 4. **chat 排除当前会话**：沿用现有去重规则——当前会话的流由 Chat 页内指示表达，任务中心只列后台会话（`TaskCenterWidget.dedupe.test.tsx` 已验证该行为）。
@@ -418,20 +417,13 @@ interface UnifiedTaskState {
 - 三个页面 store 各自有独立的加载节奏与筛选态；任务中心需要"全量、无过滤、独立节奏"的数据视图。
 - 任务中心的数据**只读**；写操作（取消 / 暂停 / 立即运行）直接调 API 客户端并就地更新本 store，不触碰页面 store。
 
-数据来源（均为既有 API 客户端，无新增后端接口）。**注意三个客户端的返回形状并不一致**：
+数据来源（均为既有 API 客户端，无新增后端接口）：
 
-| 数据 | 客户端 | 调用 | 返回 | store 里存什么 |
-|---|---|---|---|---|
-| goals | `src/entities/autonomous-goals/goalApi.ts` | `listGoals(undefined, 200, 0)` | `GoalListResponse { items, total, limit, offset }` —— **包一层** | `resp.items` |
-| todos | `src/shared/api/todoClient.ts` | `todoClient.list({ limit: 200, offset: 0, include_completed: true })` | `TodoListResponse { items, total, limit, offset }` —— **包一层** | `resp.items` |
-| scheduled | `src/shared/api/scheduledClient.ts` | `scheduledClient.list()` | `ScheduledTask[]` —— **直接是数组** | 数组本身 |
-
-要点：
-
-- `listGoals` 的默认 `limit` 是 **50**，对"全量视图"不够，任务中心必须显式传更大的 limit（后端 `limit` 参数为可选）。
-- `TodoListParams` **没有** `page_size` 字段，用的是 `limit` / `offset`。
-- `include_completed: true` 是必需的：否则 completed 的 todo 拿不到，"已完成"分组会永远是空的。
-- `TodoListParams.status` 传 `undefined`（不过滤），任务中心要全量。
+| 数据 | 客户端 | 调用 |
+|---|---|---|
+| goals | `src/entities/autonomous-goals/goalApi.ts` | `listGoals(undefined)` |
+| todos | `src/shared/api/todoClient.ts` | `todoClient.list({ page_size: 100 })` |
+| scheduled | `src/shared/api/scheduledClient.ts` | `scheduledClient.list()` |
 
 ### 5.4 `TaskCenterRuntimeHost` —— 常驻轮询宿主
 
@@ -550,35 +542,13 @@ const SECTION_KEYS = ['project', 'conversations', 'git', 'tasks'] as const;
 - `renderSection` 增加 `case 'tasks'` → `<TaskCenterSection collapsed={isCollapsed} onToggleCollapsed={...} />`（约 8 行）。
 - `coreNavItems` 增加 `{ path: '/tasks', label: '任务', icon: ListTodo }`。
 - `toolsNavItems` 增加 `{ path: '/goals', label: '闲时目标', icon: Target }`。
-- rail 角标：`SidebarNavItem` 已支持 `trailing`（rail 变体渲染为图标右上角浮层），`/tasks` 传 `AttnBadge`。
-
-> ⚠️ **变量名冲突（实施时必读）**：`Sidebar.tsx` 已有一个**本地** `attentionCount` 变量，含义是 `pendingApprovals + pendingQuestions`（审批 + 提问），挂在 `/chat` 入口上（`Sidebar.tsx:236, 511`）。任务中心的计数语义完全不同（进行中 + 失败的任务），**必须使用不同变量名**，例如 `taskCenterBadgeCount`，避免遮蔽既有变量导致 `/chat` 角标显示错数。
->
-> 两个数字的语义区别：
->
-> | 位置 | 变量 | 语义 | 数据源 |
-> |---|---|---|---|
-> | `/chat` 入口角标 | `attentionCount`（既有） | "需要你做什么"——审批 + 提问 | `usePermissionState` + `useQuestionState` |
-> | `/tasks` 入口角标 | `taskCenterBadgeCount`（新增） | "此刻有多少任务在跑或挂了"——进行中 + 失败 | `useUnifiedTasks().attentionCount` |
-> | rail 底部统一总数 | `attention.total`（既有） | 各 attention 来源求和 | `useAttentionSnapshot` |
->
-> **本期不把任务中心接入 `useAttentionSnapshot`**：该 feature 的 `AttentionKind` 是固定联合 `approval | question | artifact | todo | git`，新增 `task` 种类会连带改 `ATTENTION_KINDS` 顺序、`KIND_LABELS` 与 rail 底部总数口径，超出本期范围（YAGNI）。**已知缺口**：rail 底部的统一总数**不包含**任务中心的失败数；两者并列展示，标题文案需能区分。后续可另开一个"接入 attention 聚合"的小任务。
+- rail 角标：`SidebarNavItem` 已支持 `trailing`（rail 变体渲染为图标右上角浮层），`/tasks` 传 `attentionCount` 的 `AttnBadge`。
 
 **折叠与排序复用既有机制**：`useSiderSections` 的存储键是 `sage:sider:sections:v1`，内容为 `{ order: string[], collapsed: string[] }`。新增 `'tasks'` 键后，`reconcileStoredSiderOrder`（`src/shared/lib/dnd/siderOrder.ts`）会**把新键追加到顺序末尾**，老用户的既有顺序与折叠状态不受影响；`collapsed` 会被过滤为 `defaultOrder` 中存在的键，因此 `'tasks'` 默认展开。
 
 > 不引入 `sage:sidebar:taskCenter:collapsed:v1` 之类的独立存储键——那会与既有的 `useSiderSections` 形成第二套折叠状态源。
 
 **`App.tsx`**：新增 `path="/tasks"` → `<TasksPage />`（`src/pages/TasksPage.tsx`）。
-
-必须沿用既有 **lazy 路由** 模式（`App.tsx` 中所有页面路由都是 `lazy()`），不得静态 import：
-
-```ts
-const TasksPage = lazy(() => import('./pages/TasksPage').then((m) => ({ default: m.TasksPage })));
-```
-
-> ⚠️ **不得**把 `TasksPage` 加进 `src/pages/index.ts` barrel。该 barrel 的治理函数 `auditPagesBarrelGovernance()` 默认返回 `exportedPageCount: 5`，且 `src/pages/Help/__tests__/pagesIndex.p142.test.ts:10` 断言 `expect(res.exportedPageCount).toBe(5)` —— 加入第 6 个导出会让该测试红。既有 `TodoPage` 与 `ScheduledTasks` 同样**没有**进 barrel，遵循同一做法。
-
-> `src/pages/README.md` 顶部有一句"Sage 当前页面：Chat / Knowledge / Skills / Agents / Memory / Settings"，本设计**不改**这一行（它本就不完整，`TodoPage` / `ScheduledTasks` 也没列）。
 
 ### 5.10 `panelRegistry` 与其测试
 
@@ -737,16 +707,7 @@ Layout 挂载
 
 **聚合**：`src/shared/lib/i18n/zh.ts`（58 行）与 `en.ts`（57 行）**未列入基线**，各加 1 行 import + 1 行 spread 即可。
 
-**键位（`taskCenter.*` 命名空间）**：
-
-既有 `taskCenter.*` 键的分布已核实（zh / en 对称）：
-
-| 所在文件 | 已有键 |
-|---|---|
-| `locales/{zh,en}/chatAndSider.ts` | `taskCenter.cancel`、`taskCenter.clearFinished`、`taskCenter.goto`、`taskCenter.status.*`（7 个）、`taskCenter.laneFallback`、`taskCenter.finishedCount`、`taskCenter.cancelFailed`、`taskCenter.shellTerminate` / `shellTerminating` / `shellClose` |
-| `locales/{zh,en}/settingsAndModels.ts` | `taskCenter.chatFallback` |
-
-> ⚠️ **新文件的键不得与上表任何键重名**。`zh.ts` / `en.ts` 用 spread 聚合，后展开的同名键会**静默覆盖**先前的（不报错、但文案丢失）。本设计新增的键全部落在 `taskCenter.section.*` / `taskCenter.source.*` / `taskCenter.group.*` / `taskCenter.action.*` / `taskCenter.filter.*` / `taskCenter.elapsed` / `tasks.page.*` 之下，与上表**无交集**。
+**键位（`taskCenter.*` 命名空间，与既有 `chatAndSider.ts` 中的 `taskCenter.*` 同命名空间、不同文件，不重叠）**：
 
 | 键 | zh | en |
 |---|---|---|
@@ -819,24 +780,20 @@ Layout 挂载
 
 ### 10.4 后端测试
 
-后端测试目录约定：`backend/tests/unit/`（服务/工具）、`backend/tests/api/`（路由）、`backend/tests/scheduler/`（调度器）。已有 `backend/tests/unit/test_goal_service.py`、`backend/tests/api/test_autonomous_goals_routes.py` 等先例。
-
 | 文件 | 覆盖点 |
 |---|---|
-| `backend/tests/unit/test_goal_notifications.py` | 目标完成后队列里出现通知；失败后出现失败通知；`drain` 后清空；队列只出 goal 项（不混入 shell 队列） |
-| `backend/tests/api/test_scheduled_router_notifications.py` | `/scheduled/notifications/pending` 返回体含 `goal_notifications` 键；既有三键不受影响 |
-| `backend/tests/unit/test_goal_service_notification.py` | `COMPLETED` / `FAILED` 两条路径都推通知；`cancel` 不推 |
-| `electron/__tests__/schedulerNotifications.test.ts` | `collectNotificationItems` 合并 `goal_notifications`；无 `goal_notifications` 字段时不崩溃；缺 title 的条目被丢弃（既有行为） |
+| `backend/tests/test_goal_notifications.py` | 目标完成后队列里出现通知；失败后出现失败通知；`drain` 后清空；队列只出 goal 项（不混入 shell 队列） |
+| `backend/tests/test_scheduled_router_notifications.py` | `/scheduled/notifications/pending` 返回体含 `goal_notifications` 键；既有三键不受影响 |
+| `backend/tests/test_goal_service_notification.py` | `COMPLETED` / `FAILED` 两条路径都推通知；`cancel` 不推 |
 
 ### 10.5 回归与门禁
 
 - `npm run lint`（含 FSD 分层规则）—— 新文件必须通过 zones 校验。
 - `node scripts/architecture-check.mjs` —— 新增文件均 < 800 行；`Sidebar.tsx` 增长 < 70 行；`chatAndSider.ts` **不得增长**；`zh.ts` / `en.ts` 增长 2 行（未基线，安全）。
-- `npx vitest run` —— 全绿（含 `src/pages/Help/__tests__/pagesIndex.p142.test.ts` 的 barrel 断言未被打破）。
+- `npx vitest run` —— 全绿。
 - `npm run build` —— 通过 Vite chunk 预算（总 ≤ 12MB，单 chunk ≤ 1.95MB）。
 - `npm run test:coverage` —— 新增文件覆盖率 ≥ 80%（全局规则）。
 - Playwright 冒烟：桌面端启动 → 侧边栏出现"任务"分区 → `/tasks` 页面可打开 → 卡片可取消。
-- 后端：`/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit backend/tests/api -q` 全绿。
 
 ### 10.6 双分支
 
@@ -889,8 +846,8 @@ Layout 挂载
 - 新增 `backend/services/goal_notifications.py`。
 - 改 `backend/services/goal_service.py`：`COMPLETED` / `FAILED` 推通知。
 - 改 `backend/api/scheduled_router.py`：返回体加 `goal_notifications`。
-- 改 `electron/schedulerNotifications.ts`：`PendingNotificationsPayload` 加 `goal_notifications?: PendingNotificationItem[]`，`collectNotificationItems` 合并新键。
-- 后端测试 3 个文件 + `electron/__tests__/schedulerNotifications.test.ts` 补 1 例。
+- 改 `electron/schedulerNotifications.ts`：`collectNotificationItems` 合并新键。
+- 后端测试 3 个文件。
 - **验收**：`/scheduled/notifications/pending` 返回四键；目标完成后 15s 内收到 OS 通知；`background_tasks` 语义不变。
 - **py3.8 兼容**：不用 PEP 604 / 内建泛型注解。
 
@@ -919,11 +876,6 @@ Layout 挂载
 | R9 | 内容列分区与会话分区争抢垂直空间 | 会话列表被压缩 | 分区 `maxHeight=320px` + 内部滚动；compact 模式每组最多 3 条；默认 `min-h-[120px]` 保护会话分区 |
 | R10 | 六源状态词表继续分化 | 归一表失真 | 归一表集中在一处 + 全枚举单测；新增来源必须补映射表（测试会提醒） |
 | R11 | `/tasks` 路由与既有路由冲突 | 导航异常 | 路由名与现有 `/todos` `/scheduled` `/goals` 无冲突（已核对 `App.tsx`） |
-| R12 | 把 `TasksPage` 加进 `src/pages/index.ts` barrel | `pagesIndex.p142.test.ts` 的 `exportedPageCount === 5` 断言失败 | **不加进 barrel**（§5.9）；既有 `TodoPage` / `ScheduledTasks` 同样未加 |
-| R13 | 三个 API 客户端返回形状不一致（两包一层、一包一层、直接数组），取错字段 | 任务列表空白 | §5.3 已逐条写明；`unifiedTaskStore` 单测覆盖三个源的解包 |
-| R14 | 新 i18n 键与既有 `taskCenter.*` 键同名，spread 聚合时静默覆盖 | 文案丢失且无报错 | §9 列出既有键全表；新键全部落在 `taskCenter.section/source/group/action/filter` 子树下；中英文键集对齐测试兜底 |
-| R15 | 在 `Sidebar.tsx` 里用 `attentionCount` 命名任务计数，遮蔽既有的审批+提问计数 | `/chat` 角标显示错数 | §5.9 明确变量名用 `taskCenterBadgeCount`；两处计数语义对照表已列出 |
-| R16 | 任务中心的失败数未接入 `useAttentionSnapshot`，rail 底部统一总数不含它 | 用户看到两个口径不同的数字 | §5.9 已列为**已知缺口**并写明不在本期范围；两处角标的 `title` 文案需能区分 |
 
 ---
 
@@ -991,29 +943,10 @@ cherry-pick 前先 `git diff origin/release/win7` 确认 win7 没有已存在的
 | `LaneStatus` 8 个取值 | ✅ `domainEntityTypes.ts:579-631` |
 | `eslint.config.js` FSD 分层全为 `error` | ✅ `:60-110` |
 | `shared` 不得导入 `features` | ✅ → 状态归一表必须放 `features` 层 |
-| `features → features` 允许 | ✅ 先例 `src/features/attention/useAttentionSnapshot.ts:20` → `../changes/changesListStore` |
+| `features → features` 允许 | ✅ 先例 `src/features/attention/useAttentionSnapshot.ts` |
 | `useGoalStore.load(status?)` 会读取 `statusFilter` | ✅ `goalStore.ts:48` |
 | Electron 轮询间隔 15s | ✅ `SCHEDULER_NOTIFICATION_POLL_MS = 15_000` |
 | shell 轮询间隔 3s | ✅ `SHELL_TASK_POLL_MS = 3_000` |
 | rail 有 `overflow-y-auto`，加 nav 项安全 | ✅ `Sidebar.tsx:482` |
 | 内容列 nav 容器有 `overflow-y-auto` 作为兜底 | ✅ `Sidebar.tsx:649` |
 | `/tasks` 与既有路由无冲突 | ✅ `App.tsx:272-320` |
-| chat 流 store 是 `useChatStreamStore`，形状 `Record<sessionId, SessionStreamSlots>` | ✅ `src/features/send-message/chatStreamStore.ts:338, 493` |
-| lane store 是 `useLaneBoardStore`，字段 `lanes` + `cancel` | ✅ `src/entities/orchestration/laneBoardStore.ts:24, 34` |
-| `AttnBadge` 在 `src/shared/ui/AttnBadge.tsx`，`Sidebar.tsx:511` 已有 `count` 用法可照抄 | ✅ |
-| `listGoals(status?, limit=50, offset=0)` 返回 `GoalListResponse{items,total,limit,offset}` | ✅ `goalApi.ts:21` / `types.ts:79-84` |
-| `todoClient.list(params?)` 返回 `TodoListResponse{items,total,limit,offset}` | ✅ `todoClient.ts:29` / `templateAndTaskTypes.ts:445-450` |
-| `TodoListParams` 用 `limit`/`offset`，**无** `page_size`；有 `include_completed` | ✅ `templateAndTaskTypes.ts:452-461` |
-| `scheduledClient.list()` 直接返回 `ScheduledTask[]` | ✅ `scheduledClient.ts:17-19` |
-| 既有 `taskCenter.*` i18n 键分布 | ✅ `chatAndSider.ts`（cancel / clearFinished / goto / status.* / laneFallback / finishedCount / cancelFailed / shell*）+ `settingsAndModels.ts:313`（chatFallback） |
-| `App.tsx` 页面路由全部走 `lazy()` | ✅ `App.tsx:47, 74, 86, 89` |
-| `src/pages/index.ts` 治理函数默认 `exportedPageCount = 5`，被测试硬断言 | ✅ `src/pages/index.ts` + `src/pages/Help/__tests__/pagesIndex.p142.test.ts:10` |
-| 后端测试目录约定 `unit/` `api/` `scheduler/` | ✅ 已有 `backend/tests/unit/test_goal_service.py`、`backend/tests/api/test_autonomous_goals_routes.py` |
-| `goal_service.py` COMPLETED / FAILED 赋值点 | ✅ `:230`（`_execute_loop`）、`:246`、`:634`（`_apply_degradation`，定义在 `:599`） |
-| `scheduled_router.py` 返回体三键 | ✅ `:254-257` |
-| `PendingNotificationsPayload` 三键 + `PendingNotificationItem` 形状 | ✅ `electron/schedulerNotifications.ts:12-28` |
-| `collectNotificationItems` 合并三数组并丢弃无 title 项 | ✅ `electron/schedulerNotifications.ts:43-49` |
-| `electron/__tests__/schedulerNotifications.test.ts` 已存在 | ✅ |
-| `src/features/autonomous-goals/GoalListPage.tsx` / `GoalDetailPage.tsx` 存在 | ✅ |
-| `src/pages/TodoPage.tsx` / `src/pages/ScheduledTasks.tsx` 存在且**未**进 barrel | ✅ |
-| 5 个 `TaskCenterWidget.*.test.tsx` + `DeliveryDrawerHost.p140.test.ts` + `ShellStreamDrawer.test.tsx` 均存在 | ✅ `src/widgets/task-center/__tests__/` |
