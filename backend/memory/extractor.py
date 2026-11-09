@@ -12,6 +12,110 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# 提取门槛 —— 高价值信号关键词
+# ---------------------------------------------------------------------------
+#
+# 短消息默认会被跳过（避免纯寒暄被当成事实抽取）；但如果命中任一关键词，
+# 即便很短也会放行，因为这类信息即使短也值得长期记忆（用户身份、强烈偏好、
+# 重要决策）。关键词按「类别 → 具体表达」组织，便于后续扩展。
+#
+# 注意：这里只用子串匹配（不用正则），性能更好，且对中文 LLM 输出足够
+# 鲁棒——正则里 ``\b`` 边界对中文分词不稳定，反而容易漏。
+HIGH_VALUE_KEYWORDS: tuple = (
+    # 用户身份（"我是后端工程师，专做 Python"）
+    "我是专家",
+    "我是工程师",
+    "我是开发者",
+    "我是研究员",
+    "我是设计师",
+    "我是产品经理",
+    "我是架构师",
+    # 强烈偏好 / 禁令（"永远不要用 class"）
+    "永远不",
+    "不要用",
+    "不要再",
+    "绝不做",
+    "禁止使用",
+    # 重要决策（"我们决定用 TypeScript"）
+    "我们决定",
+    "我们选择",
+    "我们采用",
+    "我们改用",
+    # 显式偏好（"我偏好函数式"）
+    "我喜欢",
+    "我偏好",
+    "我习惯",
+)
+
+# 已知事实注入 prompt 的字符预算——控制 LLM 输入成本，同时保证
+# 最相关的事实一定进 prompt（按输入顺序，越靠前越相关）。
+EXISTING_FACTS_CHAR_BUDGET = 1200
+
+# 判定"已知事实与本轮相关"所需的最小 token 交集数
+_MIN_TOKEN_OVERLAP = 1
+
+
+def _token_set(text: str) -> set:
+    """jieba 分词后的 token 集合（去空白、去单字符噪声）。"""
+    from backend.memory.chinese_tokenizer import tokenize
+
+    tokens = tokenize(text).split()
+    return {t for t in tokens if len(t) > 1}
+
+
+def _select_existing_facts(
+    query: str,
+    facts: List[str],
+    budget: int = EXISTING_FACTS_CHAR_BUDGET,
+) -> List[str]:
+    """按相关性 + 字符预算挑选要注入 prompt 的已知事实。
+
+    原来只是 ``existing_facts[:20]`` —— 前 20 条既可能与本轮无关，
+    又可能因为单条很长而把 prompt 撑爆。这里改成两步：
+
+    1. 相关性过滤：与本轮对话无 token 交集的事实直接丢弃
+       （FTS5 的 OR 匹配会捞回大量仅有一个泛化词命中的弱相关行）
+    2. 字符预算：按输入顺序（调用方已按相关性降序）累加，超预算即停；
+       单条超长时截断并加省略号，保证预算不被突破
+
+    Args:
+        query: 本轮对话文本（用户消息 + 助手消息），用于相关性判定
+        facts: 已知事实列表，越靠前越相关
+        budget: 注入 prompt 的字符预算
+
+    Returns:
+        选中的已知事实文本列表
+    """
+    if not facts:
+        return []
+
+    query_tokens = _token_set(query or "")
+    selected: List[str] = []
+    used = 0
+
+    for raw in facts:
+        text = (raw or "").strip()
+        if not text:
+            continue
+        if query_tokens:
+            fact_tokens = _token_set(text)
+            overlap = len(query_tokens & fact_tokens)
+            if overlap < _MIN_TOKEN_OVERLAP:
+                continue
+        remaining = budget - used
+        if remaining <= 0:
+            break
+        if len(text) > remaining:
+            # 预留 1 字符给省略号，保证单条也不突破预算
+            text = text[: max(remaining - 1, 0)].rstrip() + "…"
+        if not text:
+            break
+        selected.append(text)
+        used += len(text) + 1
+
+    return selected
+
 # 提取提示词（借鉴 Mem0 的 fact extraction prompt）
 # 注意：category 只允许 preference/goal/environment，与
 # extract_and_store_memory() 的 profile_categories 路由白名单完全对齐。
@@ -93,8 +197,9 @@ class MemoryExtractor:
         Returns:
             提取的事实列表，每项包含 content/importance/category/tags
         """
-        # 太短的对话不值得提取
-        if len(user_message) < 20 and len(assistant_message) < 50:
+        # 双向门槛：短消息默认跳过（避免纯寒暄被当成事实），但命中
+        # HIGH_VALUE_KEYWORDS 时仍放行（"我喜欢 ruff"、"我们决定用 TS" 等）
+        if not self._should_extract(user_message, assistant_message):
             return []
 
         if self._llm is not None:
@@ -119,10 +224,13 @@ class MemoryExtractor:
         tool_observations: str = "",
     ) -> List[Dict[str, Any]]:
         """使用 LLM 提取事实"""
+        selected_facts = _select_existing_facts(
+            f"{user_message} {assistant_message}", existing_facts
+        )
         prompt = EXTRACTION_PROMPT.format(
             user_message=user_message[:500],
             assistant_message=assistant_message[:500],
-            existing_facts="\n".join(existing_facts[:20]) if existing_facts else "（无）",
+            existing_facts="\n".join(selected_facts) if selected_facts else "（无）",
             tool_observations=tool_observations[:500].strip() or "（无）",
         )
 
@@ -197,3 +305,36 @@ class MemoryExtractor:
                 break
 
         return facts[:3]
+
+    # ------------------------------------------------------------------
+    # 提取门槛 —— 双向 gate
+    # ------------------------------------------------------------------
+    #
+    # 之前只看长度（太短就跳），结果是两类漏网：
+    #   1) 长度刚过阈值的纯寒暄（"好的谢谢"、"收到"）仍被送入提取器，
+    #      白白浪费 LLM token / 关键词匹配循环；
+    #   2) 很短但含高价值信号的消息（"我喜欢 ruff"）会被原 20/50 阈值
+    #      放过（恰好用户 15 字、助手 60 字），其实值得保留——这本身
+    #      不是漏网，但如果我们上调阈值就会误伤。
+    #
+    # 双向 gate 同时解决：默认按阈值跳过，但 HIGH_VALUE_KEYWORDS 命中
+    # 时强制放行。
+    _USER_MSG_THRESHOLD = 30
+    _ASSISTANT_MSG_THRESHOLD = 80
+
+    def _should_extract(self, user_message: str, assistant_message: str) -> bool:
+        """双向提取门槛：短消息默认跳过，高价值信号命中时放行。"""
+        if self._has_high_value_signal(user_message, assistant_message):
+            return True
+        return not (
+            len(user_message) < self._USER_MSG_THRESHOLD
+            and len(assistant_message) < self._ASSISTANT_MSG_THRESHOLD
+        )
+
+    @staticmethod
+    def _has_high_value_signal(user_message: str, assistant_message: str) -> bool:
+        """任一消息命中 HIGH_VALUE_KEYWORDS 即返回 True。"""
+        combined = f"{user_message or ''} {assistant_message or ''}"
+        if not combined.strip():
+            return False
+        return any(kw in combined for kw in HIGH_VALUE_KEYWORDS)

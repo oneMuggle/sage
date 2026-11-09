@@ -115,7 +115,11 @@ def test_fallback_summary_without_user_messages() -> None:
 
 
 def test_save_compressed_persists_summary(manager: MemoryManager) -> None:
-    """save_compressed 应按 EpisodicMemory 契约保存摘要及会话关联。"""
+    """save_compressed 应按 EpisodicMemory 契约保存摘要及会话关联。
+
+    ``summary`` 列存调用方传入的原文摘要（不再被 content 二次压缩），
+    ``content`` 列保留 ``对话摘要: …`` 前缀。
+    """
     pipe = ConsolidationPipeline()
     # §1.3a: FK enforcement — parent session row must exist.
     ensure_session(manager.episodic.db, "s1")
@@ -131,7 +135,7 @@ def test_save_compressed_persists_summary(manager: MemoryManager) -> None:
     saved = manager.episodic.get_by_id(memory_id)
     assert saved is not None
     assert saved["content"] == "对话摘要: my summary"
-    assert saved["summary"] == "对话摘要: my summary"
+    assert saved["summary"] == "my summary"
     assert saved["session_id"] == "s1"
     assert saved["memory_type"] == "summary"
 

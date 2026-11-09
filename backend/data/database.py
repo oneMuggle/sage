@@ -792,6 +792,25 @@ class Database:
             ON memories_episodic(memory_category)
         """)
 
+        # 记忆级反馈表（Phase 4）：每条记忆只保留最新一条反馈，id 由
+        # ``"{memory_type}:{memory_id}"`` 组成，写入走 INSERT OR REPLACE。
+        # memory_type 取值 episodic / semantic；feedback 取值 up / down /
+        # neutral；created_at 为毫秒级时间戳。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS memories_feedback (
+                id TEXT PRIMARY KEY,
+                memory_id TEXT NOT NULL,
+                memory_type TEXT NOT NULL,
+                feedback TEXT NOT NULL,
+                reason TEXT,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_mem_feedback_memory
+            ON memories_feedback(memory_id, memory_type)
+        """)
+
         # 技能定义不再由 SQLite ``skills`` 表承载。
         # 当前实现从 SkillRegistry / SKILL.md 文件加载；故新数据库不得创建
         # 孤儿 ``skills`` 表。已有数据库中的旧表不主动 DROP，以保留用户数据。

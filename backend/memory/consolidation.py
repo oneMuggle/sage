@@ -114,6 +114,7 @@ class ConsolidationPipeline:
         """
         return episodic_memory.save(
             content=f"对话摘要: {summary}",
+            summary=summary,
             importance=importance,
             metadata={
                 "source": "consolidation_pipeline",

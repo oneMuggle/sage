@@ -16,6 +16,11 @@ from typing import Dict, List
 
 from backend.data.database import get_database
 from backend.memory.episodic import sync_fts_row_for_id
+from backend.memory.preference_labels import (
+    PREFERENCE_DIMENSION_LABELS,
+    PREFERENCE_VALUE_LABELS,
+    format_preference,
+)
 from backend.memory.vector_store import prune_orphan_vectors
 from backend.scheduler.evolution_log import elapsed_ms, record_evolution_log
 
@@ -531,9 +536,21 @@ class PreferenceLearningTask(BaseEvolutionTask):
             return 0
 
         # 3. 保存到语义记忆
-        profile_text = "\n".join([f"{k}: {v}" for k, v in preferences.items()])
+        profile_text = "\n".join(
+            format_preference(k, v) for k, v in preferences.items()
+        )
         memory_id = str(uuid.uuid4())
         now_ts = int(time.time())
+
+        # 白名单从 PREFERENCE_VALUE_LABELS 派生 -- 维度与合法取值的
+        # 单一真相源在 backend/memory/preference_labels.py,
+        # 这里不再各写一份(曾因两处不同步漏掉新维度)。
+        summary_parts = [
+            f"{PREFERENCE_DIMENSION_LABELS.get(key, key)}="
+            f"{PREFERENCE_VALUE_LABELS.get(key, {}).get(value, value)}"
+            for key, value in preferences.items()
+        ]
+        summary_text = ", ".join(summary_parts)
 
         cursor.execute(
             """
@@ -543,10 +560,8 @@ class PreferenceLearningTask(BaseEvolutionTask):
         """,
             (
                 memory_id,
-                f"用户偏好总结: {profile_text}",
-                f"用户偏好: {preferences.get('response_length', 'medium')}, "
-                f"风格: {preferences.get('tone', 'friendly')}, "
-                f"详细度: {preferences.get('detail_level', 'medium')}",
+                f"用户偏好总结:\n{profile_text}",
+                "用户偏好: " + summary_text,
                 '["user_preference", "evolution"]',
                 now_ts,
             ),
@@ -577,7 +592,7 @@ class PreferenceLearningTask(BaseEvolutionTask):
             profile_store.load()
             for key, value in preferences.items():
                 profile_store.add(
-                    content=f"用户偏好 {key}: {value}",
+                    content=format_preference(key, value),
                     category="preference",
                     importance=6,
                 )
@@ -766,9 +781,7 @@ class PreferenceLearningTask(BaseEvolutionTask):
         if not isinstance(data, dict):
             return {}
         allowed = {
-            "response_length": {"short", "medium", "long", "detailed"},
-            "tone": {"friendly", "professional", "humorous", "formal"},
-            "detail_level": {"brief", "medium", "comprehensive"},
+            key: set(values) for key, values in PREFERENCE_VALUE_LABELS.items()
         }
         result: Dict[str, str] = {}
         for key, allowed_values in allowed.items():

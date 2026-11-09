@@ -506,7 +506,9 @@ class MemoryManager:
         if self._conflict_resolver is None:
             from backend.memory.conflict import MemoryConflictResolver
 
-            self._conflict_resolver = MemoryConflictResolver(self.episodic, self.semantic)
+            self._conflict_resolver = MemoryConflictResolver(
+                self.episodic, self.semantic, embedder=self.embedder
+            )
         return self._conflict_resolver
 
     def resolve_conflicts(
