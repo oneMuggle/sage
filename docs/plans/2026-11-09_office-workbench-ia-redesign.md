@@ -185,9 +185,9 @@
   - [ ] 流程：文档 tab 点击文档 → 左侧库预览 → AI 侧栏显示 chip → 审校全文命令可用
   - [ ] 规则 tab → 3 个子 tab 切换 → AI 审校 tab 能跑一次审校
   - **环境说明**：当前 Wayland 会话 + worktree 启动未继承 DISPLAY/WAYLAND，Electron 窗口未渲染到桌面。HTTP 层 smoke（vite + backend + electron IPC）通过；交互层 smoke 需要在有完整 display 环境的机器上手动复核，或由用户在 PR review 阶段本地验证。
-- [ ] **M6 · Code review + 合并**
-  - `code-reviewer` agent 审
-  - PR 创建（按 feature-branch-workflow 走）
+- [x] **M6 · Code review + 合并**
+  - [x] `code-reviewer` agent 审 — 发现 HIGH（i18n 硬编码）+ MEDIUM（`initialFilePath` 响应式），均已修复
+  - [x] PR 创建：https://github.com/oneMuggle/sage/pull/2975
 
 ## 风险评估与依赖
 
@@ -219,5 +219,5 @@
 - [x] 左侧文档列表在 300/320px 侧栏下图标不再覆盖文件名；⋯ 菜单包含所有 5 个次级动作
 - [x] 规则 tab 拆为 3 个子 tab，每个子 tab 内部概念单一、无重复审校入口
 - [x] 删除 `WordRuleExtractionPanel.tsx`，功能在子 tab A 顶栏保留；`OfficeAiAssistantPanel.tsx` 保留并内嵌为子 tab B 主体
-- [ ] 测试全绿（vitest + 后端 pytest）
-- [ ] Code review 无 CRITICAL / HIGH issue
+- [x] 测试全绿（vitest 7 files / 70 tests pass；后端 pytest 未涉及）
+- [x] Code review 无 CRITICAL / HIGH issue（HIGH i18n + MEDIUM initialFilePath 已修复）
