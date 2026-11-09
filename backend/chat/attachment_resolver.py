@@ -34,11 +34,29 @@ from typing import FrozenSet, List, Optional, Tuple
 # Task 2: 真实 digest 格式化器 (复用 office 纯函数, 不触发 FastAPI endpoint)
 # Phase 3 (startup perf): excel/word/pdf/ppt 四个 reader 会拉入 pandas/openpyxl/
 # python-docx/pymupdf/python-pptx (~1.0s 导入成本)。它们只在实际解析 @ 提及的
-# 附件时才需要，故降级为各 `_digest_*` 函数内的延迟导入；轻量模块保持顶层导入。
+# 附件时才需要，故降级为惰性解析（见文末 ``__getattr__``）；轻量模块保持顶层导入。
+from backend.core.lazy import load_attr, module_getattr
 from backend.office.allowed_paths import is_allowed
 from backend.office.errors import OfficeError, OfficePathError, OfficeSizeLimitError
 from backend.office.path_safety import is_within, resolve_within
 from backend.office.storage import validate_workspace
+
+# Phase 3: office reader 惰性导出映射。``read_ppt/read_docx/read_xlsx``
+# 在模块级保留名字以便 ``patch.object(attachment_resolver, "read_ppt", ...)``
+# 测试桩能落地；首次访问时从源模块按需导入并缓存回 ``globals()``。
+_LAZY_OFFICE_EXPORTS = {
+    "read_ppt": "backend.office.ppt",
+    "read_docx": "backend.office.word",
+    "read_xlsx": "backend.office.excel",
+}
+
+
+def __getattr__(name: str):
+    return module_getattr(name, _LAZY_OFFICE_EXPORTS, globals(), __name__)
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_LAZY_OFFICE_EXPORTS))
 
 # ──────────────────────────────────────────────────────────────────────
 # mention 跳过原因短码（稳定契约：前端/提示词按码展示文案）
@@ -60,8 +78,7 @@ SKIP_REASON_TEXT = {
 
 def _digest_ppt(file_path: str, workspace: str) -> str:
     """Return per-slide digest: '[title]\\n  - bullet' each."""
-    from backend.office.ppt import read_ppt
-
+    read_ppt = load_attr("backend.office.ppt", "read_ppt", globals())
     result = read_ppt(
         file_path=Path(file_path),
         workspace_path=workspace,
@@ -164,8 +181,7 @@ def _digest_word(file_path: str, workspace: str) -> str:
     `comments: N 条` + 前 3 条 `[作者: 锚点 → 批注 ≤60字]`；
     无批注（或 read_docx 结果尚无 comments 字段）时不输出。
     """
-    from backend.office.word import read_docx
-
+    read_docx = load_attr("backend.office.word", "read_docx", globals())
     result = read_docx(
         file_path=Path(file_path),
         workspace_path=workspace,
@@ -310,8 +326,7 @@ def _format_excel_digest(sheets) -> str:
 
 
 def _digest_excel(file_path: str, workspace: str) -> str:
-    from backend.office.excel import read_xlsx
-
+    read_xlsx = load_attr("backend.office.excel", "read_xlsx", globals())
     result = read_xlsx(
         file_path=Path(file_path),
         workspace_path=workspace,
