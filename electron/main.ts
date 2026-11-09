@@ -48,7 +48,6 @@ import './crashGuard';
 import { logger } from './logger';
 import { release as osRelease } from 'node:os';
 import { registerEditableContextMenu } from './contextMenu';
-import { isLegacyWindows } from './runtime-check';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { disposePet, getPetController, initPet } from './pet';
 import { registerPetPackProtocol, registerPetPackScheme } from './pet/packProtocol';
@@ -3255,6 +3254,13 @@ app
       updateSplashStage('正在准备内置浏览器…');
       agentBrowserHandle = await startAgentBrowserHost();
     }
+    // Phase 1 (startup perf): create window BEFORE waiting for backend.
+    // User sees UI immediately (with "starting..." banner) instead of staring
+    // at splash for 50-90s. Backend loads in background.
+    createMainWindow();
+    buildApplicationMenu();
+    // Tell renderer that backend is starting (shows BackendStatusBanner).
+    mainWindow?.webContents.send('sage:event:backend:starting', {});
     updateSplashStage('正在启动后端服务…');
     try {
       backendProc = spawnBackend();
@@ -3272,6 +3278,7 @@ app
       logger.info('main: skipping health-timeout dialog (broken-installer dialog already shown)');
       return;
     }
+    // Wait for backend in background (window already visible).
     const ready = await waitForBackend();
     if (!ready) {
       // ── Diagnostic: log backend process state at timeout ────────────────
@@ -3302,8 +3309,7 @@ app
       const autoRetryReady = await waitForBackend();
       if (autoRetryReady) {
         logger.info('main: backend ready after auto-retry');
-        createMainWindow();
-        buildApplicationMenu();
+        // backend:ready already sent by waitForBackend() → backendLifecycle = 'ready'
         runStartupHealthCheckIfEnabled();
         return;
       }
@@ -3335,12 +3341,7 @@ app
           return;
         }
         logger.info('main: backend ready', { url: BACKEND_URL });
-        createMainWindow();
-        buildApplicationMenu();
-        // Fire-and-forget: startup health check runs post-window so the
-        // LauncherHealthChecker can probe the renderer. Failures are logged
-        // and drive the crash counter / auto-rollback path; they must not
-        // block the UI from appearing.
+        // backend:ready already sent by waitForBackend()
         runStartupHealthCheckIfEnabled();
         return;
       }
@@ -3348,9 +3349,7 @@ app
       return;
     }
     logger.info('main: backend ready', { url: BACKEND_URL });
-    createMainWindow();
-    // Step 6: build native application menu (File / Help with log dir shortcuts)
-    buildApplicationMenu();
+    // backend:ready already sent by waitForBackend() → backendLifecycle = 'ready'
     // Fire-and-forget: startup health check runs AFTER the window exists so
     // LauncherHealthChecker can probe renderer responsiveness. A failed check
     // increments the crash counter and may trigger auto-rollback; it must not
