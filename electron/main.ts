@@ -48,6 +48,7 @@ import './crashGuard';
 import { logger } from './logger';
 import { release as osRelease } from 'node:os';
 import { registerEditableContextMenu } from './contextMenu';
+import { isLegacyWindows } from './runtime-check';
 import { setupTrayAndGlobalShortcut } from './tray';
 import { disposePet, getPetController, initPet } from './pet';
 import { registerPetPackProtocol, registerPetPackScheme } from './pet/packProtocol';
