@@ -5,16 +5,21 @@
  *
  * Buttons (in order, when `diagnosticPath` is supplied):
  *   1. 打开诊断目录 — shell.openPath() on the diagnostic directory
- *   2. 运行修复工具 — open SageDoctor.cmd (rescue tool)
- *   3. 打开日志目录 — shell.openPath() on the Sage log directory
+ *   2. 打开日志目录 — shell.openPath() on the Sage log directory
+ *   3. 运行修复工具 — open SageDoctor.cmd (rescue tool)
  *   4. 重试
  *   5. 退出
  *
  * Buttons (when no `diagnosticPath`):
- *   1. 运行修复工具 — open SageDoctor.cmd (rescue tool)
- *   2. 打开日志目录
+ *   1. 打开日志目录
+ *   2. 运行修复工具
  *   3. 重试
  *   4. 退出
+ *
+ * Button order is meaningful: Electron highlights index `defaultId`. We keep
+ * the high-frequency "重试" action in the same relative position (second to
+ * last) whether or not the diagnostic button is present, and always keep
+ * "退出" as the last entry so `cancelId` maps to it.
  *
  * CRITICAL: `logger.error(...)` MUST be invoked BEFORE `dialog.showMessageBox`,
  * so that even if the dialog itself crashes, the failure is already on disk.
@@ -49,10 +54,10 @@ export async function showStartupFailureDialog(opts: {
   const logDir = getLogDir();
   const hasDiag = !!opts.diagnosticPath;
   const buttons = hasDiag
-    ? ['打开诊断目录', '运行修复工具', '打开日志目录', '重试', '退出']
-    : ['运行修复工具', '打开日志目录', '重试', '退出'];
-  const defaultId = hasDiag ? 3 : 2; // retry
-  const cancelId = hasDiag ? 4 : 3; // quit
+    ? ['打开诊断目录', '打开日志目录', '运行修复工具', '重试', '退出']
+    : ['打开日志目录', '运行修复工具', '重试', '退出'];
+  const defaultId = hasDiag ? 3 : 2; // 重试
+  const cancelId = hasDiag ? 4 : 3; // 退出
   const result = await dialog.showMessageBox({
     type: 'error',
     title: 'Sage 启动失败',
@@ -76,18 +81,18 @@ export async function showStartupFailureDialog(opts: {
       result.response === 0
         ? 'open-diagnostic'
         : result.response === 1
-          ? 'run-rescue'
+          ? 'open-logs'
           : result.response === 2
-            ? 'open-logs'
+            ? 'run-rescue'
             : result.response === 3
               ? 'retry'
               : 'quit';
   } else {
     choice =
       result.response === 0
-        ? 'run-rescue'
+        ? 'open-logs'
         : result.response === 1
-          ? 'open-logs'
+          ? 'run-rescue'
           : result.response === 2
             ? 'retry'
             : 'quit';
