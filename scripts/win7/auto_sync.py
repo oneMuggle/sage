@@ -38,6 +38,7 @@ from typing import Dict, List, Optional
 REPO = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "scripts" / "win7"))
 from classify_diff import classify  # noqa: E402
+from symbols import WIN7_PLATFORM_FILES, capability_symbols  # noqa: E402
 
 PY38_TARGETS = ["backend", "packages/sage-core"]
 
@@ -68,6 +69,22 @@ def py(*args: str) -> subprocess.CompletedProcess:
 def conflicted_files() -> List[str]:
     out = git("diff", "--name-only", "--diff-filter=U")
     return [line for line in out.splitlines() if line.strip()]
+
+
+def conflict_win7_symbols(path: str) -> List[str]:
+    """冲突中 win7 侧(ours)独有、main 侧(theirs)没有的能力标识符。
+
+    冲突未解决时 git index 里有 :2:(ours=win7) / :3:(theirs=main) 两个 stage。
+    win7 增量 = capability(:2:) - capability(:3:), 也就是「整文件取 main 会丢掉
+    的东西」。这个清单用来让冲突解决者逐项核对, 而不是只看到一句「嫁接 win7 增量」。
+    """
+    ours = git("show", ":2:{}".format(path), check=False)
+    theirs = git("show", ":3:{}".format(path), check=False)
+    if not ours:
+        return []
+    if not theirs:
+        return sorted(capability_symbols(ours))
+    return sorted(capability_symbols(ours) - capability_symbols(theirs))
 
 
 def strip_cr(paths: List[str]) -> int:
@@ -115,9 +132,25 @@ def render_report(rep: Dict) -> str:
             "C": "平台层：win7 平台实现，保留 ours 后补齐 main 新增接口",
             "D": "冻结件：应已自动 ours，若出现说明分类规则需更新",
         }
+        platform_items: List[Dict] = []
         for item in rep["conflicts"]:
             lines.append("| `{}` | {} | {} |".format(item["path"], item["cls"], hint[item["cls"]]))
+            if item.get("win7_symbols"):
+                platform_items.append(item)
         lines.append("")
+        if platform_items:
+            lines.append("### 必须保留的 win7 侧能力标识符")
+            lines.append("")
+            lines.append("下面是每个 win7 平台文件「ours 独有、theirs 没有」的标识符清单。"
+                         " 整文件取 main 会丢掉它们，逐项核对后再解决冲突。")
+            lines.append("")
+            for item in platform_items:
+                lines.append("- `{}`:".format(item["path"]))
+                for sym in item["win7_symbols"][:12]:
+                    lines.append("  - `{}`".format(sym))
+                if len(item["win7_symbols"]) > 12:
+                    lines.append("  - _…另有 {} 个_".format(len(item["win7_symbols"]) - 12))
+            lines.append("")
         lines.append("处理步骤：`git checkout {}` → 解决冲突 → `python scripts/py38_compat_rewrite.py backend packages/sage-core` "
                      "→ `python scripts/check_py38_compat.py` → 提交。".format(rep["branch"]))
         lines.append("")
@@ -215,7 +248,12 @@ def main() -> int:
             git("add", "--", path)
             rep["auto_resolved"].append(path)
         else:
-            remaining.append({"path": path, "cls": cls})
+            item = {"path": path, "cls": cls}
+            if path in WIN7_PLATFORM_FILES:
+                syms = conflict_win7_symbols(path)
+                if syms:
+                    item["win7_symbols"] = syms
+            remaining.append(item)
     rep["conflicts"] = remaining
 
     if remaining:

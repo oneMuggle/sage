@@ -25,7 +25,7 @@ import argparse
 import pathlib
 import subprocess
 import sys
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Set
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -99,8 +99,8 @@ def main() -> int:
         return 2
 
     platform = set(WIN7_PLATFORM_FILES)
-    failures = []  # type: List[Tuple[str, List[str]]]
-    warnings = []  # type: List[Tuple[str, List[str]]]
+    failures: list[tuple[str, list[str]]] = []
+    warnings: list[tuple[str, list[str]]] = []
 
     for path in files:
         if not path.endswith(SOURCE_SUFFIXES):
@@ -138,6 +138,10 @@ def main() -> int:
         print("这些标识符是 win7 侧的平台增量(如 TrustedInstaller/wuauserv 检测、")
         print("diagnosticPath 对话框变体)。合并 main 时必须保留 win7 版本并补齐 main 新增接口,")
         print("不能整文件取 main。参考 docs/win7-sync/parity.md 的 C 类「平台层收敛」处理方式。")
+        print("")
+        print("若确实要移除某项能力, 请在同一个 PR 里把该文件从")
+        print("scripts/win7/symbols.py 的 WIN7_PLATFORM_FILES 中移除(评审可见), 而不是")
+        print("无声地让门禁变红后被绕过。")
         print("")
         print("本校验由 scripts/win7/verify_symbol_preservation.py 执行,")
         print("能力标识符清单由 symbols.capability_symbols() 计算。")
