@@ -106,3 +106,26 @@ camelCase 字段名（与 `to_dict()` 输出一致），前端直接用，无需
 PR #2948 从 `feat/recap-feature` cherry-pick 到 `release/win7`（通过 `cherry-pick/recap-to-win7` 分支）。冲突解决：`src/widgets/chat/slashCommands.ts` 中 `Activity`/`Stethoscope`/`Settings`（自透明对等命令）与 `ClipboardList`（recap 命令）四个图标全部保留，合并后命令列表同时包含两批命令。
 
 Python 3.8 兼容：`backend/chat/recap.py` 顶部 `# ruff: noqa: UP006, UP007, UP035, UP045` + `from __future__ import annotations`。
+
+## 8. M2 自动触发（2026-11-09）
+
+M2 增加两种自动触发路径，复用 M1 的 `handleRecap` + `recapResult` state：
+
+### 8.1 窗口回归自动 recap
+
+- **Electron 主进程**（`electron/main.ts`）：模块级 `lastBlurAtMs: number | null`。`win.on('blur')` 写入 `Date.now()`；`win.on('focus')` 计算 `awayMs = Date.now() - lastBlurAtMs`，清零后发送 `sage:event:app-focus { awayMs }`（单行 `if (awayMs > 0)` 节省 2 行）。
+- **渲染进程 hook**（`src/pages/chat/useRecapAutoTrigger.ts`，37 行）：订阅 `window.electronAPI.listen('app-focus')`，当 `awayMs ≥ 5*60*1000 && messageCount ≥ 6` 时自动调用 `onRecap`。卸载时调用返回的 `unlisten`。
+- **阈值依据**：5 分钟是"去倒杯水/接个电话"级别的离开；6 条消息过滤掉只有系统招呼的短对话。
+
+### 8.2 Compaction 成功 toast 双按钮
+
+`handleCompact` 的 `toast.success` 增加：
+
+- `action: { label: t('recap.title'), onClick: () => void handleRecap() }` — 上下文大幅缩减后建议重建心智模型
+- `cancel: { label: t('chat.compact_view_archives'), onClick: () => setArchivesOpen(true) }` — 保留 M1 入口
+
+`handleRecap` 在 `useChatMessageActions.ts` 内声明提前至 `handleCompact` 之前（避免 TDZ）；`handleCompact` 依赖数组补 `handleRecap`。
+
+### 8.3 测试
+
+`src/pages/chat/__tests__/useRecapAutoTrigger.test.ts`（6 条）：无 electronAPI 时 no-op；`awayMs ≥ 5min && count ≥ 6` 触发；`awayMs < 5min` 不触发；`count < 6` 不触发；卸载时调用 `unlisten`；`listen()` 未 resolve 即卸载时也会补调 `off()`（`disposed` 标志，避免监听器泄漏）。用 `installListenMock()` 注入 `window.electronAPI.listen` 并暴露 `fireFocus()` 触发事件。

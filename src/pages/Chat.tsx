@@ -56,6 +56,7 @@ import { ChatHeaderBar } from './chat/ChatHeaderBar';
 import { PlanApprovalBar } from './chat/PlanApprovalBar';
 import { useChatMessageActions } from './chat/useChatMessageActions';
 import { useChatStickyScroll } from './chat/useChatStickyScroll';
+import { useRecapAutoTrigger } from './chat/useRecapAutoTrigger';
 
 /** 稳定空数组: toolCalls 缺省时避免每次渲染产生新引用击穿 RightPanel memo (F1) */
 const EMPTY_TOOL_CALLS: readonly never[] = [];
@@ -493,6 +494,9 @@ export function Chat() {
     setArchivesOpen,
     navigate,
   });
+
+  // M2 (2026-11-09): 窗口回归自动 recap（离开 ≥5 分钟且消息 ≥6 条时触发）。
+  useRecapAutoTrigger({ messageCount: messages.length, onRecap: handleRecap });
 
   const handleToggleRightPanel = useCallback(() => {
     useRightPanelStore.getState().toggle();
