@@ -44,9 +44,9 @@ export function useTaskCenterActions(): TaskCenterActions {
           await invoke('shell_kill', { id: rawId });
         } else if (source === 'chat') {
           const { cancelSessionStream } = await import('../send-message/useChat');
-          cancelSessionStream(rawId);
+          await cancelSessionStream(rawId);
         } else if (source === 'lane') {
-          cancelLane(rawId);
+          await cancelLane(rawId);
         } else if (source === 'goal') {
           await cancelGoal(rawId);
         }

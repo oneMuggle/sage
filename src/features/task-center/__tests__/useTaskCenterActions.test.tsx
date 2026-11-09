@@ -1,7 +1,9 @@
 import { act, renderHook } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { cancelLaneMock } = vi.hoisted(() => ({ cancelLaneMock: vi.fn() }));
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock('../../../shared/api/desktopInvoke', () => ({ invoke: vi.fn() }));
@@ -9,6 +11,10 @@ vi.mock('../../../entities/autonomous-goals/goalApi', () => ({
   cancelGoal: vi.fn(),
   pauseGoal: vi.fn(),
   startGoal: vi.fn(),
+}));
+vi.mock('../../../entities/orchestration/laneBoardStore', () => ({
+  useLaneBoardStore: (selector: (state: { cancel: typeof cancelLaneMock }) => unknown) =>
+    selector({ cancel: cancelLaneMock }),
 }));
 vi.mock('../../../shared/api/scheduledClient', () => ({
   scheduledClient: { runNow: vi.fn() },
@@ -40,13 +46,25 @@ const entry = (over: Partial<UnifiedTaskEntry>): UnifiedTaskEntry => ({
   ...over,
 });
 
+let probedPath = '';
+
+const LocationProbe = () => {
+  const location = useLocation();
+  probedPath = `${location.pathname}${location.search}`;
+  return null;
+};
+
 const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <MemoryRouter>{children}</MemoryRouter>
+  <MemoryRouter>
+    <LocationProbe />
+    {children}
+  </MemoryRouter>
 );
 
 describe('useTaskCenterActions', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    probedPath = '';
     // open() 会写 taskCenterStore 的抽屉状态，跨用例清理避免顺序耦合
     useTaskCenterStore.setState({ shellStream: null, delivery: null });
   });
@@ -84,6 +102,20 @@ describe('useTaskCenterActions', () => {
     expect(invoke).toHaveBeenCalledWith('shell_kill', { id: 'sh-9' });
   });
 
+  it('lane cancel 调 laneBoardStore.cancel 并 await', async () => {
+    const { result } = renderHook(() => useTaskCenterActions(), { wrapper });
+    await act(() =>
+      result.current.cancel(
+        entry({
+          id: 'lane:l1',
+          source: 'lane',
+          cancelRef: { source: 'lane', rawId: 'l1' },
+        }),
+      ),
+    );
+    expect(cancelLaneMock).toHaveBeenCalledWith('l1');
+  });
+
   it('chat cancel 调 cancelSessionStream', async () => {
     const { result } = renderHook(() => useTaskCenterActions(), { wrapper });
     await act(() =>
@@ -118,6 +150,21 @@ describe('useTaskCenterActions', () => {
     const { result } = renderHook(() => useTaskCenterActions(), { wrapper });
     await act(() => result.current.cancel(entry({})));
     expect(toast.error).toHaveBeenCalledWith('网络错误');
+  });
+
+  it('runNow / pause / resume 失败时 toast.error 且不抛出', async () => {
+    vi.mocked(scheduledClient.runNow).mockRejectedValue(new Error('调度失败'));
+    vi.mocked(pauseGoal).mockRejectedValue(new Error('暂停失败'));
+    vi.mocked(startGoal).mockRejectedValue(new Error('恢复失败'));
+    const { result } = renderHook(() => useTaskCenterActions(), { wrapper });
+    await act(() =>
+      result.current.runNow(entry({ id: 'scheduled:s1', source: 'scheduled', cancelRef: null })),
+    );
+    await act(() => result.current.pause(entry({})));
+    await act(() => result.current.resume(entry({})));
+    expect(toast.error).toHaveBeenCalledWith('调度失败');
+    expect(toast.error).toHaveBeenCalledWith('暂停失败');
+    expect(toast.error).toHaveBeenCalledWith('恢复失败');
   });
 
   it('不可取消的条目是空操作', async () => {
@@ -178,6 +225,7 @@ describe('useTaskCenterActions', () => {
   it('open: 普通条目走 detailPath 路由跳转', () => {
     const { result } = renderHook(() => useTaskCenterActions(), { wrapper });
     act(() => result.current.open(entry({ detailPath: '/goals/g1', openTarget: null })));
+    expect(probedPath).toBe('/goals/g1');
     expect(useTaskCenterStore.getState().shellStream).toBeNull();
     expect(useTaskCenterStore.getState().delivery).toBeNull();
   });
