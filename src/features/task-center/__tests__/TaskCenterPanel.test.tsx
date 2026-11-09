@@ -62,8 +62,8 @@ describe('TaskCenterPanel', () => {
     });
     renderPanel('compact');
     expect(screen.queryByText('已完成')).toBeNull();
-    // '失败' 同时出现在分组标题和卡片状态标签中，故用 getAllByText
-    expect(screen.getAllByText('失败').length).toBeGreaterThan(0);
+    // '失败' 恰好出现两次：分组标题 + 卡片状态标签。计数断言可发现分组标题被移除。
+    expect(screen.getAllByText('失败')).toHaveLength(2);
   });
 
   it('full 模式显示已完成组与清除按钮', () => {
@@ -73,8 +73,8 @@ describe('TaskCenterPanel', () => {
       } as never,
     });
     renderPanel('full');
-    // '已完成' 同时出现在分组标题和卡片状态标签中，故用 getAllByText
-    expect(screen.getAllByText('已完成').length).toBeGreaterThan(0);
+    // '已完成' 恰好出现两次：分组标题 + 卡片状态标签（清除按钮文案是"清除已完成"，不精确匹配）。
+    expect(screen.getAllByText('已完成')).toHaveLength(2);
     expect(screen.getByRole('button', { name: /清除已完成/ })).toBeTruthy();
   });
 });
