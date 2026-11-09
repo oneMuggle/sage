@@ -102,8 +102,14 @@ def _spawn_post_turn_task(coro) -> None:
 
 
 async def drain_post_turn_tasks(timeout: float = 5.0) -> None:
-    """等待未完成的收尾任务（测试 / 关停用）。"""
-    pending = [t for t in _POST_TURN_TASKS if not t.done()]
+    """等待未完成的收尾任务（测试 / 关停用）。
+
+    ``_POST_TURN_TASKS`` 是模块级集合，跨测试事件循环会残留旧任务；
+    py3.8 的 ``asyncio.wait`` 拒绝其它 loop 的 Task（ValueError），
+    因此只等待当前运行 loop 上的任务。
+    """
+    loop = asyncio.get_running_loop()
+    pending = [t for t in _POST_TURN_TASKS if not t.done() and t.get_loop() is loop]
     if pending:
         await asyncio.wait(pending, timeout=timeout)
 
