@@ -300,7 +300,9 @@ datas = [
 | ----------------------------- | -------------------------- | ---------------------------------------------- |
 | `Specialists.tsx`             | `src/pages/`               | 画廊页；顶部「从模板创建」；空态内嵌模板网格   |
 | `SpecialistCard.tsx`          | `src/widgets/specialists/` | 专家卡 + 动作（编辑/知识/版本/评测/导出/删除） |
-| `SpecialistWizard.tsx`        | 同上                       | 创建向导（六段人设）                           |
+| `SpecialistWizard.tsx`        | 同上                       | 创建向导（六段人设 + 能力与权限）              |
+| `toolCapabilities.ts`         | `src/entities/specialist/` | 能力包定义与工具选择派生函数（§12）            |
+| `ToolAllowlistEditor.tsx`     | `src/widgets/agents/`      | 共享工具白名单编辑器（`/agents` 与向导复用）  |
 | `TemplateGalleryDialog.tsx`   | 同上                       | 模板画廊一键创建                               |
 | `VersionHistoryDialog.tsx`    | 同上                       | 版本列表 / diff / 回滚                         |
 | `SpecialistEvalDialog.tsx`    | 同上                       | 黄金任务集评测                                 |
@@ -324,5 +326,77 @@ API 层：`src/shared/api/specialistApi.ts`（模板/评测/导入导出）、`s
 | 验收 E2E | `backend/tests/e2e/test_m4_distribution_acceptance.py`                                                                    | 模板建写作专家；导出→另一目录导入全字段一致      |
 | 记忆 E2E | `backend/tests/e2e/test_m3_memory_isolation_acceptance.py`                                                                | 两专家互不可见、共享可见、删除级联               |
 | 前端     | `src/widgets/specialists/__tests__/*`                                                                                     | 三个 Dialog + KnowledgeBindingsEditor（24 测试） |
+| 工具选择 | `src/entities/specialist/__tests__/toolCapabilities.test.ts`、`src/widgets/agents/__tests__/toolAllowlist.test.ts`、`ToolAllowlistEditor.test.tsx`、`SpecialistWizard.test.tsx`、`src/pages/__tests__/SpecialistDetail.test.tsx` | 能力包推导、白名单编辑器、向导保存 payload、详情页展示 |
+| 防漂移   | `backend/tests/unit/test_specialist_tool_packs_drift.py`                                                                  | 能力包工具名 ⊆ 内置工具清单（117 项）            |
 
 双环境验证（py310 + py38）M4 相关 117 测试 × 2 全绿；py38 静态门禁 0 违规；`tsc` + `npm run build` 通过。
+
+---
+
+## 12. 工具白名单与能力包
+
+### 12.1 `tools` 的三态语义
+
+`profile.tools` 同时被**schema 暴露**（`backend/tools/registry.py` 的 `get_schemas_for_llm`）与**调用分发**（`backend/core/legacy/agent.py` 的「工具未对当前 Agent 开放」拒绝分支）使用，三种取值语义不同：
+
+| 取值    | 含义                                     |
+| ------- | ---------------------------------------- |
+| `None`  | 历史遗留：不限制（仅主助手等旧档案使用） |
+| `[]`    | **不授权任何工具**（纯对话专家）         |
+| `[...]` | 仅允许列表内的工具名                     |
+
+`[]` 是安全正向的显式语义，不会回落到「全部允许」。因此向导不能把 `[]` 当作未填写的默认值静默写入 —— 新建专家必须给出显式的工具集合，历史 `tools: []` 的专家在编辑时也保持纯对话，直到用户主动勾选能力包。
+
+### 12.2 能力包（前端静态映射）
+
+`src/entities/specialist/toolCapabilities.ts` 声明 14 个能力包：
+
+```ts
+interface ToolCapabilityPack {
+  id: string;                              // 'file-read'
+  label: string;                           // '文件读取与检索'
+  description: string;                     // 一句话说明
+  tools: readonly string[];                // 与后端工具名精确一致
+  requiresMode: SpecialistPermissionMode;  // 包内工具实际可用所需的最低模式
+}
+```
+
+| 能力包                                                                          | `requiresMode`    | 说明                           |
+| ------------------------------------------------------------------------------- | ----------------- | ------------------------------ |
+| 文件读取与检索 / 记忆与会话检索                                                 | `read_only`       | 只读工具，任意权限模式可用     |
+| 文件编辑 / 网络 / 办公 / Git / 多模态 / 设计                                    | `workspace_write` | 写入类，`read_only` 下被拒绝   |
+| 命令执行 / 浏览器 / Sage 配置 / 定时任务 / 技能·子代理·待办 / 插件              | `full_access`     | 执行或自改配置类，`prompt` 下逐次审批 |
+
+`plugins` 包以 `plugin__*` 通配表达。`office_delete` 归入「办公」但暂不打包（卸载类操作单独控制，避免整包勾选时被一并授权）。
+
+### 12.3 派生函数
+
+纯函数，供向导、预览与详情页复用：
+
+| 函数                                  | 用途                                            |
+| ------------------------------------- | ----------------------------------------------- |
+| `packSelectionState(tools, pack)`     | `'all' \| 'partial' \| 'none'`，驱动复选框中间态 |
+| `togglePackInTools(tools, pack, on)`  | 加入/移除**该包自己的**工具名，保留手工条目     |
+| `describeToolSelection(tools)`        | 完全覆盖的包 / 部分覆盖的包 / 未归类工具名      |
+| `describeModeGate(mode, pack)`        | 当前模式下的拒绝或审批提示；`null` 表示无门槛   |
+| `highestRequiredMode(packs)`          | 所选包中最高门槛，供汇总提示使用                |
+
+`defaultSpecialistTools()` = `file-read` + `network` + `memory` 三包并集，是新建专家的默认值（只读、开箱可用）。
+
+### 12.4 向导第 3 步与保存
+
+`SpecialistWizard` 的四步为：基本信息 → 人设六段 → 能力与权限 → 预览。第 3 步顺序是**权限模式 → 工具能力 → 技能**：
+
+- 显式二选一：「使用下方能力」/「不使用任何工具（纯对话）」。选择纯对话时能力包网格隐藏，保存 `tools: []`。
+- 能力包复选框网格：勾选加入整包工具，取消只移除该包工具名；部分覆盖显示中间态。
+- 权限模式门槛提示（`specialist-wizard-mode-gate-deny` / `-approval`）只是**提示**，不阻断选择 —— 最终是否放行由权限引擎（`backend/tools/permissions.py`）裁决，保持单一真相源。
+- 高级折叠区复用 `ToolAllowlistEditor`（与 `/agents` 页同一组件），支持逐项白名单、运行中插件工具与未发布条目。
+- 创建与更新 payload 都写 `tools`；编辑时若原来 `tools` 非空，按原列表回填，不追加默认包。
+
+### 12.5 只读展示
+
+详情页 Tab「能力」（原「技能」）在技能 chips 之下增加「工具能力」卡片：按能力包展示完全覆盖 / 部分覆盖状态，未归类工具名原样列出；`tools` 为空时显示「纯对话专家」警告。预览步骤的摘要卡片与详情页共用 `describeToolSelection`，文案一致。
+
+### 12.6 防漂移
+
+`backend/tests/unit/test_specialist_tool_packs_drift.py` 断言能力包内每个工具名都存在于后端内置工具清单（`_EXPECTED_ONLINE`，117 项）。工具重命名或删除时该测试变红，强制前端映射同步更新。

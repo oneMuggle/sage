@@ -3,7 +3,7 @@
  *
  * 路由：``/specialists/:id``。展示单个专家的完整信息：
  * - 头部：头像 / 名称 / 标语 / 徽标 + 试聊 / 编辑 / 返回
- * - Tab：概览（统计）/ 人设（六段只读）/ 技能 / 管理（知识·资产·版本·评测）
+ * - Tab：概览（统计）/ 人设（六段只读）/ 能力（技能 + 工具）/ 管理（知识·资产·版本·评测）
  *
  * 管理动作复用既有对话框组件（KnowledgeBindingsEditor / SpecialistAssetsDialog /
  * VersionHistoryDialog / SpecialistEvalDialog），避免重复实现。
@@ -14,6 +14,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { PERSONA_SECTIONS, parsePersonaSections } from '../entities/specialist/personaSections';
+import { describeToolSelection } from '../entities/specialist/toolCapabilities';
 import { agentsApi, sessionApi, type AgentProfile } from '../shared/api';
 import { useStore } from '../shared/lib/store';
 import { Button } from '../shared/ui';
@@ -26,12 +27,12 @@ import { SpecialistEvalDialog } from '../widgets/specialists/SpecialistEvalDialo
 import { SpecialistWizard } from '../widgets/specialists/SpecialistWizard';
 import { VersionHistoryDialog } from '../widgets/specialists/VersionHistoryDialog';
 
-type DetailTab = 'overview' | 'persona' | 'skills' | 'manage';
+type DetailTab = 'overview' | 'persona' | 'abilities' | 'manage';
 
 const TABS: ReadonlyArray<{ key: DetailTab; label: string }> = [
   { key: 'overview', label: '概览' },
   { key: 'persona', label: '人设' },
-  { key: 'skills', label: '技能' },
+  { key: 'abilities', label: '能力' },
   { key: 'manage', label: '管理' },
 ];
 
@@ -125,6 +126,8 @@ export function SpecialistDetail() {
   const avatar = readUiString(agent.persona_ui, 'avatar') || DEFAULT_AVATAR;
   const tagline = readUiString(agent.persona_ui, 'tagline') || agent.description;
   const skillCount = agent.skills?.length ?? 0;
+  const tools = agent.tools ?? [];
+  const toolSummary = describeToolSelection(tools);
   const lastUsedDaysAgo =
     typeof agent.last_used_at === 'number' && agent.last_used_at > 0
       ? Math.floor((Date.now() - agent.last_used_at) / (1000 * 60 * 60 * 24))
@@ -167,6 +170,7 @@ export function SpecialistDetail() {
                   : '用户创建'}
               {agent.permission_mode ? ` · ${PERMISSION_MODE_LABELS[agent.permission_mode]}` : ''}
               {` · ${skillCount} 项技能`}
+              {tools.length === 0 ? ' · 纯对话（无工具）' : ` · ${tools.length} 项工具`}
               {lastUsedDaysAgo !== null
                 ? ` · ${lastUsedDaysAgo === 0 ? '今天使用' : `${lastUsedDaysAgo} 天前使用`}`
                 : ' · 未使用过'}
@@ -256,22 +260,67 @@ export function SpecialistDetail() {
             </div>
           )}
 
-          {activeTab === 'skills' && (
-            <div className="rounded-lg border border-border bg-surface p-4">
-              {skillCount === 0 ? (
-                <p className="text-sm text-muted">未配置技能。点「编辑」在向导第 3 步勾选。</p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {(agent.skills ?? []).map((skill) => (
-                    <span
-                      key={skill}
-                      className="rounded-full border border-border px-2.5 py-1 text-ui-xs text-text-secondary"
-                    >
-                      {skill}
-                    </span>
-                  ))}
-                </div>
-              )}
+          {activeTab === 'abilities' && (
+            <div className="flex flex-col gap-3">
+              <div className="rounded-lg border border-border bg-surface p-4">
+                <h3 className="text-sm font-medium">技能</h3>
+                {skillCount === 0 ? (
+                  <p className="mt-1 text-sm text-muted">
+                    未配置技能。点「编辑」在向导第 3 步勾选。
+                  </p>
+                ) : (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {(agent.skills ?? []).map((skill) => (
+                      <span
+                        key={skill}
+                        className="rounded-full border border-border px-2.5 py-1 text-ui-xs text-text-secondary"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div
+                className="rounded-lg border border-border bg-surface p-4"
+                data-testid="specialist-detail-tools"
+              >
+                <h3 className="text-sm font-medium">工具能力</h3>
+                {tools.length === 0 ? (
+                  <p className="mt-1 text-sm text-warning">
+                    纯对话专家：未授权任何工具，运行时所有工具调用都会被拒绝（包括读取文件）。
+                    点「编辑」在向导第 3 步选择能力包。
+                  </p>
+                ) : (
+                  <>
+                    <p className="mt-1 text-ui-xs text-muted">共 {tools.length} 项工具</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {toolSummary.covered.map((pack) => (
+                        <span
+                          key={pack.id}
+                          className="rounded-full bg-primary/10 px-2.5 py-1 text-ui-xs text-primary"
+                        >
+                          {pack.label}
+                        </span>
+                      ))}
+                      {toolSummary.partial.map((pack) => (
+                        <span
+                          key={pack.id}
+                          className="rounded-full border border-border px-2.5 py-1 text-ui-xs text-text-secondary"
+                        >
+                          {pack.label}（部分）
+                        </span>
+                      ))}
+                    </div>
+                    {toolSummary.uncategorized.length > 0 && (
+                      <p className="mt-2 break-all font-mono text-ui-xs text-faint">
+                        未归类：{toolSummary.uncategorized.join('、')}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           )}
 
