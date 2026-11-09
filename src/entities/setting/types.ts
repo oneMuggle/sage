@@ -81,6 +81,13 @@ export interface EndpointConfig {
    * sanitizeForBackend 不在白名单里, 不会回写; 仅在 GET → loadSettings 路径消费.
    */
   hasApiKey?: boolean;
+  /**
+   * 2026-11-08: 内网救援工具写入时间戳 (毫秒 Unix epoch) —— 端点最后一次
+   * 被 rescue CLI 修改 apiKey 的时间。用于 ``restoreRedactedApiKeys`` 与
+   * localStorage 缓存比较，避免后端已更新的 key 被旧本地缓存覆盖
+   * (plan §136 内网救援工具). 缺省 undefined = 未由救援工具修改过。
+   */
+  apiKeyUpdatedAt?: number;
 }
 
 /** User's model selection — binds a model to its source endpoint */
@@ -410,7 +417,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
 // 单一真相源: BasicTab NumberInput 的 min/max 与后端写入侧校验都从此处派生,
 // 合同测试 ``test_retry_defaults_contract.py`` 强制前端此常量与后端同步。
 export const RETRY_LIMITS: {
-  readonly [K in 'llmRetryMaxAttempts' | 'llmRetryBaseDelayS' | 'llmRetryMaxDelayS' | 'llmRetryTotalBudgetS']: {
+  readonly [K in
+    | 'llmRetryMaxAttempts'
+    | 'llmRetryBaseDelayS'
+    | 'llmRetryMaxDelayS'
+    | 'llmRetryTotalBudgetS']: {
     readonly min: number;
     readonly max: number;
   };

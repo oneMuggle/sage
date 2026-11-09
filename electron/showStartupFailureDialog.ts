@@ -1,18 +1,25 @@
 // electron/showStartupFailureDialog.ts
 
 /**
- * Startup-failure dialog — shows a 3- or 4-button message box when Sage fails to launch.
+ * Startup-failure dialog — shows a 4- or 5-button message box when Sage fails to launch.
  *
  * Buttons (in order, when `diagnosticPath` is supplied):
  *   1. 打开诊断目录 — shell.openPath() on the diagnostic directory
  *   2. 打开日志目录 — shell.openPath() on the Sage log directory
- *   3. 重试
- *   4. 退出
+ *   3. 运行修复工具 — open SageDoctor.cmd (rescue tool)
+ *   4. 重试
+ *   5. 退出
  *
  * Buttons (when no `diagnosticPath`):
  *   1. 打开日志目录
- *   2. 重试
- *   3. 退出
+ *   2. 运行修复工具
+ *   3. 重试
+ *   4. 退出
+ *
+ * Button order is meaningful: Electron highlights index `defaultId`. We keep
+ * the high-frequency "重试" action in the same relative position (second to
+ * last) whether or not the diagnostic button is present, and always keep
+ * "退出" as the last entry so `cancelId` maps to it.
  *
  * CRITICAL: `logger.error(...)` MUST be invoked BEFORE `dialog.showMessageBox`,
  * so that even if the dialog itself crashes, the failure is already on disk.
@@ -22,8 +29,14 @@ import { dialog, shell, app } from 'electron';
 import { dirname } from 'node:path';
 import { getLogDir } from './logPaths';
 import { logger } from './logger';
+import { openRescueTool } from './rescueDialogs';
 
-export type StartupFailureChoice = 'open-diagnostic' | 'open-logs' | 'retry' | 'quit';
+export type StartupFailureChoice =
+  | 'open-diagnostic'
+  | 'open-logs'
+  | 'run-rescue'
+  | 'retry'
+  | 'quit';
 
 export async function showStartupFailureDialog(opts: {
   reason: string;
@@ -40,14 +53,11 @@ export async function showStartupFailureDialog(opts: {
 
   const logDir = getLogDir();
   const hasDiag = !!opts.diagnosticPath;
-  // Button order is meaningful: Electron highlights index `defaultId`. We keep
-  // the high-frequency "retry" action in the same physical position whether
-  // or not the diagnostic button is present (defaultId=1 with diag else 0).
   const buttons = hasDiag
-    ? ['打开诊断目录', '打开日志目录', '重试', '退出']
-    : ['打开日志目录', '重试', '退出'];
-  const defaultId = hasDiag ? 2 : 1;
-  const cancelId = hasDiag ? 3 : 2;
+    ? ['打开诊断目录', '打开日志目录', '运行修复工具', '重试', '退出']
+    : ['打开日志目录', '运行修复工具', '重试', '退出'];
+  const defaultId = hasDiag ? 3 : 2; // 重试
+  const cancelId = hasDiag ? 4 : 3; // 退出
   const result = await dialog.showMessageBox({
     type: 'error',
     title: 'Sage 启动失败',
@@ -73,10 +83,19 @@ export async function showStartupFailureDialog(opts: {
         : result.response === 1
           ? 'open-logs'
           : result.response === 2
+            ? 'run-rescue'
+            : result.response === 3
+              ? 'retry'
+              : 'quit';
+  } else {
+    choice =
+      result.response === 0
+        ? 'open-logs'
+        : result.response === 1
+          ? 'run-rescue'
+          : result.response === 2
             ? 'retry'
             : 'quit';
-  } else {
-    choice = result.response === 0 ? 'open-logs' : result.response === 1 ? 'retry' : 'quit';
   }
 
   if (choice === 'open-diagnostic' && opts.diagnosticPath) {
@@ -89,6 +108,9 @@ export async function showStartupFailureDialog(opts: {
     Promise.resolve(shell.openPath(logDir)).catch((err) =>
       logger.error('main: shell.openPath failed', { err: String(err) }),
     );
+  } else if (choice === 'run-rescue') {
+    logger.info('main: user chose run-rescue after startup failure');
+    void openRescueTool();
   } else if (choice === 'retry') {
     logger.info('main: user chose retry after startup failure');
   } else {

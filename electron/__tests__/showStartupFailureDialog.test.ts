@@ -53,11 +53,39 @@ describe('showStartupFailureDialog', () => {
     expect(mockShellOpenPath).toHaveBeenCalled();
   });
 
-  it('returns "quit" and calls app.quit when third button chosen', async () => {
-    mockShowMessageBox.mockResolvedValue({ response: 2 });
+  it('returns "run-rescue" when second button chosen', async () => {
+    mockShowMessageBox.mockResolvedValue({ response: 1 });
+    const { showStartupFailureDialog } = await import('../showStartupFailureDialog');
+    const result = await showStartupFailureDialog({ reason: 'fail' });
+    expect(result).toBe('run-rescue');
+  });
+
+  it('returns "quit" and calls app.quit when fourth button chosen', async () => {
+    mockShowMessageBox.mockResolvedValue({ response: 3 });
     const { showStartupFailureDialog } = await import('../showStartupFailureDialog');
     const result = await showStartupFailureDialog({ reason: 'fail' });
     expect(result).toBe('quit');
     expect(mockQuit).toHaveBeenCalled();
+  });
+
+  it('adds "打开诊断目录" first and opens the diagnostic dir', async () => {
+    mockShowMessageBox.mockResolvedValue({ response: 0 });
+    const { showStartupFailureDialog } = await import('../showStartupFailureDialog');
+    const result = await showStartupFailureDialog({
+      reason: 'fail',
+      diagnosticPath: '/tmp/diag/report.json',
+    });
+    expect(result).toBe('open-diagnostic');
+    expect(mockShellOpenPath).toHaveBeenCalledWith('/tmp/diag');
+  });
+
+  it('maps "运行修复工具" to index 2 when diagnosticPath is supplied', async () => {
+    mockShowMessageBox.mockResolvedValue({ response: 2 });
+    const { showStartupFailureDialog } = await import('../showStartupFailureDialog');
+    const result = await showStartupFailureDialog({
+      reason: 'fail',
+      diagnosticPath: '/tmp/diag/report.json',
+    });
+    expect(result).toBe('run-rescue');
   });
 });

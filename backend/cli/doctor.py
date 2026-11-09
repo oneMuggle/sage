@@ -398,6 +398,11 @@ def _import_all_checks() -> None:
         "secret_storage",
         # CA3(round9) — .sage/agents/*.md 档案文件结构体检。
         "agents_files",
+        # 2026-11-08: 内网救援工具新增的 6 项检查（DB 完整性/端点连通性/崩溃历史/
+        # 管控软件识别/端口归属/数据目录权限）。集中在 rescue_checks.py 一个模块内。
+        "rescue_checks",
+        # 2026-11-08: 打包模式 resources 完整性（python / backend / dist）。
+        "packaged_runtime",
     ):
         importlib.import_module(f"{pkg}.{mod_name}")
 
