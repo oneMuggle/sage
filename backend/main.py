@@ -398,6 +398,321 @@ def _resolve_default_context_window() -> Optional[int]:
         return None
 
 
+async def _deferred_startup_init(
+    app: FastAPI,
+    main_loop: asyncio.AbstractEventLoop,
+    scheduler_service: Any,
+    hooks: Any = None,
+) -> None:
+    """非关键服务延迟初始化——server 开始接受请求后在后台执行。
+
+    Phase 2 (startup perf): 将这些服务从 lifespan 关键路径移出，
+    使 yield 提前 20-40s。各服务在后台初始化完成后立即可用。
+    """
+    try:
+        # ── 记忆提取异步化 ──
+        from backend.memory.async_extractor import get_memory_extraction_queue
+
+        get_memory_extraction_queue().start()
+        logger.info("[deferred] MemoryExtractionQueue 已启动")
+
+        # ── Scheduler 启动 + evolution 任务 + 定时备份 ──
+        scheduler_service.start()
+        _startup_mark("scheduler")
+        from backend.services._evolution_register import _register_evolution_tasks
+
+        _evo_registered = _register_evolution_tasks(
+            scheduler_service,
+            config_path=Path(__file__).parent / "config.yaml",
+            hooks=hooks,
+        )
+        logger.info(
+            "[deferred] SchedulerService 已启动; Evolution tasks: %d — %s",
+            len(_evo_registered),
+            list(_evo_registered.keys()),
+        )
+
+        def _create_backup_daily() -> None:
+            from backend.services.backup_service import create_backup
+
+            try:
+                create_backup("daily")
+            except Exception:
+                logger.exception("daily backup failed (ignored)")
+
+        try:
+            scheduler_service.register_system_task(
+                "daily-backup", _create_backup_daily, "10 3 * * *"
+            )
+        except Exception:
+            logger.exception("daily backup job registration failed (ignored)")
+
+        # ── 启动备份线程 ──
+        import threading as _threading
+
+        def _startup_backup() -> None:
+            from backend.services.backup_service import create_backup
+
+            try:
+                create_backup("startup")
+            except Exception:
+                logger.exception("startup backup failed (ignored)")
+
+        _threading.Thread(
+            target=_startup_backup, name="startup-backup", daemon=True
+        ).start()
+
+        # ── Zotero 启动期后台增量同步 ──
+        try:
+            from backend.api.zotero_sync_routes import run_background_sync
+
+            app.state.zotero_sync_task = asyncio.create_task(run_background_sync())
+        except Exception:
+            logger.exception("zotero background sync task creation failed (ignored)")
+
+        # ── Wiki 摄入队列 daemon ──
+        try:
+            from backend.wiki.queue_daemon import run_queue_daemon
+
+            app.state.wiki_queue_task = asyncio.create_task(
+                run_queue_daemon(), name="wiki-queue-daemon"
+            )
+        except Exception:
+            logger.exception("wiki queue daemon task creation failed (ignored)")
+
+        # ── Todo service + reminder scheduler ──
+        todo_service = init_todo_service(get_database())
+        app.state.todo_service = todo_service
+        logger.info("[deferred] TodoService initialised")
+        _startup_mark("todo_service")
+
+        todo_reminder_scheduler = init_todo_reminder_scheduler(todo_service)
+        app.state.todo_reminder_scheduler = todo_reminder_scheduler
+        logger.info("[deferred] TodoReminderScheduler started")
+        _startup_mark("todo_reminder_scheduler")
+
+        # ── 标题回补 ──
+        from backend.scheduler.title_backfill import TitleBackfill
+
+        title_backfill = TitleBackfill(
+            session_repo=SessionRepository(),
+            message_repo=MessageRepository(),
+        )
+        title_backfill.schedule()
+        app.state.title_backfill = title_backfill
+        logger.info("[deferred] TitleBackfill 已调度（启动 30s 后回补未命名会话）")
+
+        # ── 闲时检测器 ──
+        try:
+            from backend.services.idle_detector import init_idle_detector
+
+            init_idle_detector()
+        except Exception:
+            logger.exception("idle detector initialization failed (ignored)")
+
+        # ── 闲时自主目标调度器 ──
+        try:
+            from backend.services.autonomous_goal_scheduler import (
+                get_autonomous_scheduler,
+            )
+
+            autonomous_scheduler = get_autonomous_scheduler()
+            autonomous_scheduler.register_to_scheduler(
+                scheduler_service, cron_expr="*/5 * * * *"
+            )
+        except Exception:
+            logger.exception("autonomous goal scheduler registration failed (ignored)")
+
+        # ── ReviewQueue ──
+        from backend.skills.review_bootstrap import bootstrap_review_collaborators
+        from backend.skills.review_queue import get_review_queue
+
+        bootstrap_review_collaborators()
+        get_review_queue().start()
+        logger.info("[deferred] ReviewQueue 协作对象已注入且 worker 已启动")
+        _startup_mark("review-queue")
+
+        # ── Arena 自动化装配 ──
+        try:
+            from backend.api.arena_routes import (
+                init_arena_service,
+                init_registration_service,
+            )
+            from backend.config.arena_automation import load_arena_automation_config
+            from backend.services.arena_accounts import get_or_create_master_key
+
+            _arena_cfg = load_arena_automation_config()
+            if _arena_cfg.enabled:
+                _arena_dir = os.environ.get("SAGE_USER_DATA_DIR") or "backend/data"
+                _arena_db = str(Path(_arena_dir) / "arena_accounts.sqlite")
+                _arena_service = init_arena_service(
+                    db_path=_arena_db,
+                    encryption_key=get_or_create_master_key(),
+                    config=_arena_cfg,
+                )
+                init_registration_service(
+                    config=_arena_cfg, account_service=_arena_service
+                )
+                logger.info(
+                    "[deferred] Arena 自动化已启用（db=%s）", _arena_db
+                )
+                _startup_mark("arena")
+            else:
+                logger.info(
+                    "[deferred] Arena 自动化未启用（enabled=false）"
+                )
+        except Exception:  # noqa: BLE001
+            logger.exception("Arena 自动化装配失败（忽略）")
+
+        # ── Design Studio ──
+        try:
+            from backend.data.design_repo import DesignRepo
+            from backend.design.design_studio import DesignStudio
+            from backend.design.generator import DesignGenerator
+            from backend.design.systems import DesignSystemRegistry
+            from backend.design.templates import DesignTemplateRegistry
+            from backend.orchestration.llm_factory import (
+                build_llm_client_from_settings,
+            )
+
+            _design_content_dir = Path(__file__).parent / "design" / "content"
+            _design_workspace = (
+                Path(os.environ.get("SAGE_USER_DATA_DIR") or "backend/data")
+                / "workspace"
+            )
+            _llm_client = build_llm_client_from_settings()
+            if _llm_client is None:
+                logger.warning(
+                    "[deferred] DesignStudio: LLM client not configured, skipping"
+                )
+                raise RuntimeError("LLM client not configured")
+            design_studio = DesignStudio(
+                repo=DesignRepo(get_database().get_connection()),
+                generator=DesignGenerator(llm_client=_llm_client),
+                systems=DesignSystemRegistry(_design_content_dir),
+                templates=DesignTemplateRegistry(_design_content_dir),
+                workspace_dir=_design_workspace,
+            )
+            app.state.design_studio = design_studio
+            from backend.design import init_design_studio
+
+            init_design_studio(design_studio)
+            _startup_mark("design_studio")
+            logger.info("[deferred] DesignStudio 装配完成")
+        except Exception:  # noqa: BLE001
+            logger.exception("DesignStudio 装配失败（ignored）")
+            try:
+                get_database().get_connection().rollback()
+            except Exception:
+                logger.error("rollback failed after design studio error", exc_info=True)
+
+        # ── Wake scheduler ──
+        app.state.wake_store = get_wake_store()
+
+        async def _resume_session_from_wake(wake: Wake) -> None:
+            chat_service = getattr(app.state, "chat_service", None)
+            if chat_service is None:
+                logger.warning(
+                    "wake %s (session=%s) 到期, 但 ChatService 未装配, 跳过恢复",
+                    wake.id,
+                    wake.session_id,
+                )
+                return
+            content = (
+                f"[系统唤醒: {wake.kind.value}] {wake.note or '继续之前挂起的任务。'}"
+            )
+            await chat_service.run_turn(
+                wake.session_id, Message(role=Role.USER, content=content)
+            )
+
+        app.state.wake_scheduler = WakeScheduler(
+            store=app.state.wake_store,
+            resumer=_resume_session_from_wake,
+            tick_seconds=15.0,
+        )
+        app.state.wake_scheduler.start()
+        logger.info("[deferred] WakeScheduler 已启动（A4 Suspend-Resume）")
+        _startup_mark("wake-scheduler")
+
+        # ── Gateway supervisor ──
+        try:
+            from backend.gateway.supervisor import get_gateway_supervisor
+
+            _gateway_supervisor = get_gateway_supervisor()
+            app.state.gateway_supervisor = _gateway_supervisor
+            _gateway_supervisor.start_enabled()
+            _startup_mark("gateways")
+            logger.info("[deferred] Gateway supervisor 已启动")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[deferred] 网关 supervisor 初始化失败: %s", exc)
+
+        # ── Wiki MCP Server ──
+        try:
+            from backend.wiki.mcp_server import server as wiki_mcp_server
+
+            app.state.wiki_mcp_server = wiki_mcp_server
+            logger.info("[deferred] Wiki MCP Server 模块已加载（7 个工具可用）")
+        except Exception as e:
+            logger.warning("[deferred] Wiki MCP Server 加载失败（非关键）: %s", e)
+            app.state.wiki_mcp_server = None
+
+        # ── Multi-agent core ──
+        from backend.data.agent_repo import AgentRepository
+        from backend.orchestration.agent_adapter import SeededAgentRegistry
+        from backend.orchestration.heartbeat import HeartbeatMonitor
+        from backend.orchestration.lane_registry import LaneRegistry
+        from backend.orchestration.planner import Planner
+        from backend.orchestration.router import DispatchStrategy, Router
+        from backend.orchestration.task_registry import TaskRegistry
+        from backend.orchestration.team_registry import TeamRegistry
+
+        app.state.task_registry = TaskRegistry()
+        app.state.lane_registry = LaneRegistry()
+        app.state.team_registry = TeamRegistry()
+        app.state.planner = Planner(
+            task_registry=app.state.task_registry,
+            team_registry=app.state.team_registry,
+        )
+        app.state.router = Router(
+            lane_registry=app.state.lane_registry,
+            agent_registry=SeededAgentRegistry(AgentRepository()),
+            strategy=DispatchStrategy.CAPABILITY_BASED,
+        )
+        app.state.heartbeat_monitor = HeartbeatMonitor(
+            lane_registry=app.state.lane_registry,
+            check_interval=30.0,
+            stalled_after=300.0,
+            dead_after=600.0,
+        )
+        await app.state.heartbeat_monitor.start()
+        logger.info(
+            "[deferred] Multi-agent core 已装配（Planner + Router + HeartbeatMonitor）"
+        )
+        _startup_mark("multi-agent")
+
+        # ── Tag graph 异步构建 ──
+        if getattr(app.state, "memory_adapter", None) is not None:
+            try:
+                from backend.memory.tag_graph import build_tag_graph_async
+
+                build_tag_graph_async(
+                    app.state.memory_adapter.memory_manager.episodic,
+                    app.state.memory_adapter.memory_manager.semantic,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "[deferred] tag_graph 异步构建触发失败: %s", exc
+                )
+
+        logger.info("[deferred] 所有非关键服务初始化完成")
+
+    except asyncio.CancelledError:
+        logger.warning("[deferred] 延迟初始化被取消（shutdown）")
+        raise
+    except Exception:
+        logger.exception("[deferred] 延迟初始化异常（不影响已运行的服务）")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理。"""
@@ -660,7 +975,6 @@ async def lifespan(app: FastAPI):
     # PR-3: agents 表种子化 — 用 ensure_default_agents 替代 seed_defaults_if_empty:
     # 首次启动插全量默认集, 已存在的 DB 增量补 writer 等新增默认角色。
     from backend.agents.profiles import ensure_default_agents, validate_profile_tools
-    from backend.data.agent_repo import AgentRepository
 
     ensure_default_agents()
     # T3 (2026-09-04): 启动期白名单校验 —— profile 引用未注册工具名
@@ -701,20 +1015,10 @@ async def lifespan(app: FastAPI):
     )
     logger.info("ChatStreamRegistry 已初始化(后台 sweeper 每 60s 清理孤儿流)")
 
-    # 记忆提取异步化：后台单 worker 消费提取队列，不阻塞聊天响应
-    from backend.memory.async_extractor import get_memory_extraction_queue
-
-    get_memory_extraction_queue().start()
-    logger.info("MemoryExtractionQueue 已启动（记忆提取后台 worker）")
-
-    # Phase 8: scheduled tasks service — load JSON, start APScheduler
+    # ── Phase 2 (startup perf): 关键路径 —— 只构建 ChatService 所需的依赖 ──
+    # Scheduler 仅构造（不 .start()），.start() 移至 _deferred_startup_init
     from pathlib import Path
 
-    # Persist scheduled tasks JSON under SAGE_USER_DATA_DIR (per-user writable)
-    # rather than the bundled resources/backend/data/, which is system-protected
-    # under C:\Program Files\Sage and raised PermissionError on first write.
-    # Falls back to <cwd>/backend/data/scheduled_tasks.json for `npm run
-    # electron:dev` where SAGE_USER_DATA_DIR isn't injected.
     user_data_dir = os.environ.get("SAGE_USER_DATA_DIR")
     if user_data_dir:
         store_path = Path(user_data_dir) / "scheduled_tasks.json"
@@ -726,264 +1030,8 @@ async def lifespan(app: FastAPI):
         session_repo=SessionRepository(),
         db=get_database(),
     )
-    scheduler_service.start()
     app.state.scheduler = scheduler_service
-    logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
-    _startup_mark("scheduler")
-    if __name__ == "__main__":
-        print(  # noqa: T201
-            f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s scheduler started",
-            file=sys.stderr,
-            flush=True,
-        )
-
-    # Zotero 启动期后台增量同步（方案 §3.8）：
-    # 仅在已有水位时跑增量；首次不同步（避免大库首索引卡启动 / 意外嵌入费用），
-    # 首次需用户在 设置 → Zotero 手动点「立即同步」。异常吞掉，不影响启动。
-    try:
-        from backend.api.zotero_sync_routes import run_background_sync
-
-        app.state.zotero_sync_task = asyncio.create_task(run_background_sync())
-    except Exception:
-        logger.exception("zotero background sync task creation failed (ignored)")
-
-    # Wiki 摄入队列 daemon：只消费用户显式入队的任务（60s 轮询）。
-    try:
-        from backend.wiki.queue_daemon import run_queue_daemon
-
-        app.state.wiki_queue_task = asyncio.create_task(
-            run_queue_daemon(), name="wiki-queue-daemon"
-        )
-    except Exception:
-        logger.exception("wiki queue daemon task creation failed (ignored)")
-
-    # PR-C §5.1: 把 5 个 evolution 任务挂到 lifespan,按 cron 自动跑
-    # (memory_pruning / memory_consolidation / daily_summary /
-    #  preference_learning / importance_reevaluation)。读 config.yaml
-    # evolution.tasks.<name>.time/day 作可选 override,默认 cron 兜底。
-    from backend.services._evolution_register import _register_evolution_tasks
-
-    _evo_registered = _register_evolution_tasks(
-        scheduler_service,
-        config_path=Path(__file__).parent / "config.yaml",
-        hooks=hooks,
-    )
-    logger.info(
-        "Evolution tasks scheduled: %d — %s",
-        len(_evo_registered),
-        list(_evo_registered.keys()),
-    )
-
-    # Todo service — personal task management
-    todo_service = init_todo_service(get_database())
-    app.state.todo_service = todo_service
-    logger.info("TodoService initialised")
-    _startup_mark("todo_service")
-
-    # Todo reminder scheduler — hybrid scan + precise triggers (spec §6)
-    todo_reminder_scheduler = init_todo_reminder_scheduler(todo_service)
-    app.state.todo_reminder_scheduler = todo_reminder_scheduler
-    logger.info("TodoReminderScheduler started")
-    _startup_mark("todo_reminder_scheduler")
-
-    # 标题回补：延迟 30s 后台补齐历史未命名会话（失败不影响启动）
-    from backend.scheduler.title_backfill import TitleBackfill
-
-    title_backfill = TitleBackfill(
-        session_repo=SessionRepository(),
-        message_repo=MessageRepository(),
-    )
-    title_backfill.schedule()
-    app.state.title_backfill = title_backfill
-    logger.info("TitleBackfill 已调度（启动 30s 后回补未命名会话）")
-
-    # R19-B: SQLite 自动备份 —— 启动时后台线程备份一次（fail-safe, 不阻塞
-    # 启动）+ 每日 03:10 定时备份（独立于 evolution 任务, 只做整库在线复制）。
-    def _startup_backup() -> None:
-        from backend.services.backup_service import create_backup
-
-        try:
-            create_backup("startup")
-        except Exception:
-            logger.exception("startup backup failed (ignored)")
-
-    def _create_backup_daily() -> None:
-        from backend.services.backup_service import create_backup
-
-        try:
-            create_backup("daily")
-        except Exception:
-            logger.exception("daily backup failed (ignored)")
-
-    import threading as _threading
-
-    _threading.Thread(target=_startup_backup, name="startup-backup", daemon=True).start()
-    try:
-        scheduler_service.register_system_task("daily-backup", _create_backup_daily, "10 3 * * *")
-    except Exception:
-        logger.exception("daily backup job registration failed (ignored)")
-
-    # 闲时检测器：初始化全局 IdleDetector 单例
-    try:
-        from backend.services.idle_detector import init_idle_detector
-
-        init_idle_detector()
-    except Exception:
-        logger.exception("idle detector initialization failed (ignored)")
-
-    # 闲时自主目标调度器：每 5 分钟扫描 pending 目标，符合条件则自动启动
-    try:
-        from backend.services.autonomous_goal_scheduler import get_autonomous_scheduler
-
-        autonomous_scheduler = get_autonomous_scheduler()
-        autonomous_scheduler.register_to_scheduler(scheduler_service, cron_expr="*/5 * * * *")
-    except Exception:
-        logger.exception("autonomous goal scheduler registration failed (ignored)")
-
-    # PR-C §5.2: 把 ReviewService + SkillDraftStore 注入到全局 ReviewQueue,
-    # 然后启动后台 worker。否则 hex/legacy 路径 enqueue 的 review_events
-    # 永远在 SQLite 里堆积、不出草稿。和 init_scheduler_service 同 pattern。
-    from backend.skills.review_bootstrap import bootstrap_review_collaborators
-    from backend.skills.review_queue import get_review_queue
-
-    bootstrap_review_collaborators()
-    get_review_queue().start()
-    logger.info("ReviewQueue 协作对象已注入且 worker 已启动")
-    _startup_mark("review-queue")
-    if __name__ == "__main__":
-        print(  # noqa: T201
-            f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s review-queue started",
-            file=sys.stderr,
-            flush=True,
-        )
-
-    # Arena 自动化装配（feature flag 默认关）：账号池 + 单账号注册辅助。
-    # 修复既有缺口：arena 路由早已挂载但 init_arena_service 从未被调用，
-    # 端点恒 503。enabled=false 时保持 403 语义（路由侧 _config 为 None）。
-    #
-    # 2026-09-21 Win7 alpha.51 启动崩溃修复：cryptography 47.0.0 在部分 Win7
-    # SP1 机器上加载失败（KB3033929 缺失 / AV 拦截 Rust 扩展），导致整个后端
-    # 无法启动。现在 arena 装配分三步惰性执行：
-    #   1. 读配置（纯 YAML，无 cryptography 依赖）
-    #   2. 仅当 enabled=true 时探测 cryptography 是否可加载
-    #   3. 探测通过才 import arena_accounts（触发 cryptography 实际加载）
-    # 任何一步失败都 log warning + 跳过 arena，不阻塞后端启动。
-    try:
-        from backend.config.arena_automation import load_arena_automation_config
-
-        _arena_cfg = load_arena_automation_config()
-        if _arena_cfg.enabled:
-            # 仅当用户显式启用 arena 时才探测 cryptography
-            from backend.services.arena_accounts import crypto_available
-
-            if not crypto_available():
-                logger.warning(
-                    "Arena 自动化启用但 cryptography 不可用 —— "
-                    "功能将被降级为禁用（Arena 端点返回 403）"
-                )
-                _startup_mark("arena-skip-crypto-unavailable")
-            else:
-                # cryptography 探测通过，安全导入 arena 相关模块
-                from backend.api.arena_routes import (
-                    init_arena_service,
-                    init_registration_service,
-                )
-                from backend.services.arena_accounts import get_or_create_master_key
-
-                _arena_dir = os.environ.get("SAGE_USER_DATA_DIR") or "backend/data"
-                _arena_db = str(Path(_arena_dir) / "arena_accounts.sqlite")
-                _arena_service = init_arena_service(
-                    db_path=_arena_db,
-                    encryption_key=get_or_create_master_key(),
-                    config=_arena_cfg,
-                )
-                init_registration_service(
-                    config=_arena_cfg, account_service=_arena_service
-                )
-                logger.info("Arena 自动化已启用（账号池 + 注册辅助，db=%s）", _arena_db)
-                _startup_mark("arena")
-        else:
-            logger.info("Arena 自动化未启用（arena_automation.yaml enabled=false）")
-    except Exception:  # noqa: BLE001 — 装配失败不阻塞启动
-        logger.exception("Arena 自动化装配失败（忽略）")
-
-    # Design Studio 装配（LLM 驱动的 HTML 原型 / 演示稿生成）。fail-safe：
-    # 失败只降级设计子系统，绝不拖垮聊天主链路。
-    try:
-        from backend.data.design_repo import DesignRepo
-        from backend.design.design_studio import DesignStudio
-        from backend.design.generator import DesignGenerator
-        from backend.design.systems import DesignSystemRegistry
-        from backend.design.templates import DesignTemplateRegistry
-        from backend.orchestration.llm_factory import build_llm_client_from_settings
-
-        # 同 scheduled_tasks / arena 的约定：优先写 SAGE_USER_DATA_DIR，
-        # 回退到 <cwd>/backend/data（打包后 Program Files 下不可写）。
-        _design_content_dir = Path(__file__).parent / "design" / "content"
-        _design_workspace = (
-            Path(os.environ.get("SAGE_USER_DATA_DIR") or "backend/data") / "workspace"
-        )
-        # H1: check for unconfigured LLM before constructing DesignStudio
-        _llm_client = build_llm_client_from_settings()
-        if _llm_client is None:
-            logger.warning("DesignStudio: LLM client not configured, skipping assembly")
-            raise RuntimeError("LLM client not configured")
-        design_studio = DesignStudio(
-            repo=DesignRepo(db.get_connection()),
-            generator=DesignGenerator(llm_client=_llm_client),
-            systems=DesignSystemRegistry(_design_content_dir),
-            templates=DesignTemplateRegistry(_design_content_dir),
-            workspace_dir=_design_workspace,
-        )
-        app.state.design_studio = design_studio
-        # Expose design_studio to tools via module-level getter
-        from backend.design import init_design_studio
-        init_design_studio(design_studio)
-        _startup_mark("design_studio")
-    except Exception:  # noqa: BLE001 — 装配失败不阻塞启动
-        logger.exception("DesignStudio 装配失败（ignored）")
-        try:
-            db.get_connection().rollback()
-        except Exception:
-            logger.error("rollback failed after design studio error", exc_info=True)
-
-    # A4 Suspend-Resume: wake 仓储 + 唤醒调度器 — tick 扫描到期 wake,
-    # 在对应 session 注入新一轮对话恢复挂起的 agent。resumer 走
-    # ChatService.run_turn（hex 模式装配后可用）；legacy 模式下记录并跳过。
-    app.state.wake_store = get_wake_store()
-
-    async def _resume_session_from_wake(wake: Wake) -> None:
-        chat_service = getattr(app.state, "chat_service", None)
-        if chat_service is None:
-            logger.warning(
-                "wake %s (session=%s) 到期, 但 ChatService 未装配, 跳过恢复",
-                wake.id,
-                wake.session_id,
-            )
-            return
-        content = f"[系统唤醒: {wake.kind.value}] {wake.note or '继续之前挂起的任务。'}"
-        await chat_service.run_turn(wake.session_id, Message(role=Role.USER, content=content))
-
-    app.state.wake_scheduler = WakeScheduler(
-        store=app.state.wake_store,
-        resumer=_resume_session_from_wake,
-        tick_seconds=15.0,
-    )
-    app.state.wake_scheduler.start()
-    logger.info("WakeScheduler 已初始化并启动（A4 Suspend-Resume，tick=15s）")
-    _startup_mark("wake-scheduler")
-
-    # Round 6 / Round 16: 网关懒启动 —— 只有 enabled && configured 的平台才
-    # 创建实例并启动轮询；未配置零开销。配置变更后由 gateway_routes 动态启停。
-    try:
-        from backend.gateway.supervisor import get_gateway_supervisor
-
-        _gateway_supervisor = get_gateway_supervisor()
-        app.state.gateway_supervisor = _gateway_supervisor
-        _gateway_supervisor.start_enabled()
-        _startup_mark("gateways")
-    except Exception as exc:  # noqa: BLE001 — 网关失败不阻塞后端启动
-        logger.warning("网关 supervisor 初始化失败（忽略）: %s", exc)
+    logger.info("SchedulerService 已构造（.start() 延迟到 deferred init）")
 
     # M1 工具安全加固: 全局审批闸口 — agent 循环 await 审批, 路由解析应答
     from backend.services.permission_gate import init_permission_gate
@@ -996,55 +1044,6 @@ async def lifespan(app: FastAPI):
 
     app.state.question_gate = init_question_gate()
     logger.info("QuestionGate 已初始化（AskUserQuestion 提问闸口）")
-
-    # Wiki MCP Server — 在后台启动 Wiki MCP Server
-    # 注意：MCP Server 通过 stdio 通信，这里只是验证模块可以导入
-    # 实际使用时，用户需要单独启动 MCP Server 进程
-    try:
-        from backend.wiki.mcp_server import server as wiki_mcp_server
-
-        app.state.wiki_mcp_server = wiki_mcp_server
-        logger.info("Wiki MCP Server 模块已加载（7 个工具可用）")
-    except Exception as e:
-        logger.warning(f"Wiki MCP Server 加载失败（非关键）: {e}")
-        app.state.wiki_mcp_server = None
-
-    # Phase 2 (multi-agent core): 初始化注册中心 + Planner + Router + HeartbeatMonitor
-    from backend.orchestration.agent_adapter import SeededAgentRegistry
-    from backend.orchestration.heartbeat import HeartbeatMonitor
-    from backend.orchestration.lane_registry import LaneRegistry
-    from backend.orchestration.planner import Planner
-    from backend.orchestration.router import DispatchStrategy, Router
-    from backend.orchestration.task_registry import TaskRegistry
-    from backend.orchestration.team_registry import TeamRegistry
-
-    app.state.task_registry = TaskRegistry()
-    app.state.lane_registry = LaneRegistry()
-    app.state.team_registry = TeamRegistry()
-    app.state.planner = Planner(
-        task_registry=app.state.task_registry,
-        team_registry=app.state.team_registry,
-    )
-    app.state.router = Router(
-        lane_registry=app.state.lane_registry,
-        agent_registry=SeededAgentRegistry(AgentRepository()),
-        strategy=DispatchStrategy.CAPABILITY_BASED,
-    )
-    app.state.heartbeat_monitor = HeartbeatMonitor(
-        lane_registry=app.state.lane_registry,
-        check_interval=30.0,
-        stalled_after=300.0,
-        dead_after=600.0,
-    )
-    await app.state.heartbeat_monitor.start()
-    logger.info("Multi-agent core 已装配（Planner + Router + HeartbeatMonitor 已启动）")
-    _startup_mark("multi-agent")
-    if __name__ == "__main__":
-        print(  # noqa: T201
-            f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s multi-agent core done",
-            file=sys.stderr,
-            flush=True,
-        )
 
     # Phase 1 observability: SnapshotStore + EventHub + REST endpoints
     # 2026-09-24 Win7 exit-code-3 诊断: 细粒度 try/except 包裹每一步,
@@ -1217,6 +1216,13 @@ async def lifespan(app: FastAPI):
     except Exception:  # noqa: BLE001 — 对账失败不得阻塞启动
         logger.warning("worktree 对账失败（忽略）", exc_info=True)
 
+    # ── Phase 2 (startup perf): 非关键服务延迟初始化 ──
+    # 启动后台任务：server 已开始接受请求后在后台完成剩余服务初始化
+    _deferred_task = asyncio.create_task(
+        _deferred_startup_init(app, main_loop, scheduler_service, hooks=hooks),
+        name="deferred-startup-init",
+    )
+
     if __name__ == "__main__":
         _elapsed_lifespan = time.monotonic() - _startup_t0
         print(  # noqa: T201
@@ -1226,6 +1232,11 @@ async def lifespan(app: FastAPI):
         )
 
     yield
+
+    # ── Phase 2 (startup perf): 取消延迟初始化任务 ──
+    _deferred_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await _deferred_task
 
     # 关闭时清理
     # Round 6 / Round 16: 统一停止网关轮询线程（daemon 兜底，显式停更干净）

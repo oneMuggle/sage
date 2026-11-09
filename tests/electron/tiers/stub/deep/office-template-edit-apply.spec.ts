@@ -91,7 +91,10 @@ test.describe('office template create → edit preview → apply (demo stub mode
     await expect(newRow).toContainText('已生成');
 
     // ── 3. Select → preview via the 历史版本 restore path ────────────
-    await newRow.getByLabel('历史版本').click();
+    // 2026-11 IA restructure: the secondary row actions moved into the ⋯
+    // overflow menu, so open the menu first, then pick 历史版本.
+    await newRow.getByRole('button', { name: '更多操作' }).click();
+    await page.getByRole('menuitem', { name: '历史版本' }).click();
     const snapshotPanel = page.getByTestId('office-snapshot-panel');
     await expect(snapshotPanel).toBeVisible();
     await snapshotPanel.getByRole('button', { name: '恢复到此版本' }).first().click();

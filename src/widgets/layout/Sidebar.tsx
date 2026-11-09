@@ -190,7 +190,7 @@ interface SidebarProps {
   onToggleCollapse?: () => void;
 }
 
-export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useI18n();

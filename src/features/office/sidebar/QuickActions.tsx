@@ -6,14 +6,31 @@ export interface QuickCommand {
   id: string;
   labelKey: TranslationKey;
   command: string;
+  /** The command operates on the active document and is disabled without one. */
+  requiresDocument?: boolean;
 }
 
 const COMMANDS: Record<QuickActionTab, QuickCommand[]> = {
   documents: [
-    { id: 'audit', labelKey: 'office.ai.quick.documents.audit', command: '/audit' },
+    {
+      id: 'audit',
+      labelKey: 'office.ai.quick.documents.audit',
+      command: '/audit',
+      requiresDocument: true,
+    },
     { id: 'rules', labelKey: 'office.ai.quick.documents.rules', command: '/rules' },
-    { id: 'summary', labelKey: 'office.ai.quick.documents.summary', command: '/summarize' },
-    { id: 'translate', labelKey: 'office.ai.quick.documents.translate', command: '/translate' },
+    {
+      id: 'summary',
+      labelKey: 'office.ai.quick.documents.summary',
+      command: '/summarize',
+      requiresDocument: true,
+    },
+    {
+      id: 'translate',
+      labelKey: 'office.ai.quick.documents.translate',
+      command: '/translate',
+      requiresDocument: true,
+    },
   ],
   generate: [
     { id: 'expand', labelKey: 'office.ai.quick.generate.expand', command: '/expand' },
@@ -26,7 +43,12 @@ const COMMANDS: Record<QuickActionTab, QuickCommand[]> = {
     },
   ],
   rules: [
-    { id: 'extract', labelKey: 'office.ai.quick.rules.extract', command: '/rules' },
+    {
+      id: 'extract',
+      labelKey: 'office.ai.quick.rules.extract',
+      command: '/rules',
+      requiresDocument: true,
+    },
     { id: 'conflicts', labelKey: 'office.ai.quick.rules.conflicts', command: '/conflicts' },
     { id: 'merge', labelKey: 'office.ai.quick.rules.merge', command: '/merge' },
   ],
@@ -44,24 +66,32 @@ export function quickCommandsForTab(tab: QuickActionTab): QuickCommand[] {
 
 export interface QuickActionsProps {
   tab: QuickActionTab;
+  /** True when a document is active in the workspace store. */
+  hasDocument: boolean;
   onCommand: (command: string) => void;
 }
 
-export function QuickActions({ tab, onCommand }: QuickActionsProps): JSX.Element {
+export function QuickActions({ tab, hasDocument, onCommand }: QuickActionsProps): JSX.Element {
   const { t } = useI18n();
+  const needDocumentHint = t('office.ai.quick.need_document');
   return (
     <div data-testid="office-ai-quick-actions" className="flex flex-wrap gap-1.5">
-      {quickCommandsForTab(tab).map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          data-testid={`office-ai-quick-${item.id}`}
-          className="rounded-full border border-border px-2.5 py-1 text-xs hover:bg-surface-hover"
-          onClick={() => onCommand(item.command)}
-        >
-          {t(item.labelKey)}
-        </button>
-      ))}
+      {quickCommandsForTab(tab).map((item) => {
+        const disabled = Boolean(item.requiresDocument) && !hasDocument;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            data-testid={`office-ai-quick-${item.id}`}
+            disabled={disabled}
+            title={disabled ? needDocumentHint : undefined}
+            className="rounded-full border border-border px-2.5 py-1 text-xs hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            onClick={() => onCommand(item.command)}
+          >
+            {t(item.labelKey)}
+          </button>
+        );
+      })}
     </div>
   );
 }

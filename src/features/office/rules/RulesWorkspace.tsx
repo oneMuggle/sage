@@ -18,7 +18,6 @@ import {
   conflictsFromWire,
   importResultFromWire,
   ruleFieldsToWire,
-  ruleFromWire,
   ruleGroupsFromWire,
   rulePackFromWire,
   rulePackToWire,
@@ -35,6 +34,13 @@ import type { RuleAuditResult, RuleConflict, RuleFields, RuleGroup } from './rul
 export interface RulesWorkspaceProps {
   workspacePath: string;
   filePath: string | null;
+  /**
+   * Bump to refetch the group list. The parent (`RulesSubtabs`) uses this
+   * after it extracts rules into a brand-new group.
+   */
+  reloadKey?: number;
+  /** Group to select once the list has been (re)loaded. */
+  focusGroupId?: string | null;
 }
 
 function errorMessage(error: unknown): string {
@@ -56,13 +62,17 @@ function importErrorMessage(error: unknown, t: (key: TranslationKey) => string):
 
 const MAX_IMPORT_PACK_BYTES = 5 * 1024 * 1024;
 
-export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps) {
+export function RulesWorkspace({
+  workspacePath,
+  filePath,
+  reloadKey,
+  focusGroupId,
+}: RulesWorkspaceProps) {
   const { t } = useI18n();
   const [groups, setGroups] = useState<RuleGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [extracting, setExtracting] = useState(false);
   const [auditing, setAuditing] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
@@ -84,7 +94,17 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, reloadKey]);
+
+  // Selecting the group the parent just created is safe before the list
+  // arrives: `selectedGroup` falls back to the first group and re-resolves
+  // once `groups` has been populated.
+  useEffect(() => {
+    if (!focusGroupId) return;
+    setSelectedGroupId(focusGroupId);
+    setSelectedRuleId(null);
+    setCreating(false);
+  }, [focusGroupId]);
 
   const selectedGroup = useMemo(
     () => groups.find((group) => group.id === selectedGroupId) ?? groups[0] ?? null,
@@ -311,62 +331,6 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
     }
   };
 
-  const handleExtract = async () => {
-    if (!workspacePath || !filePath) {
-      toast.error(t('office.rules.workspace.extractNeedsFile'));
-      return;
-    }
-    setExtracting(true);
-    let created: { id: string } | null = null;
-    let createdCount = 0;
-    let extractedTotal = 0;
-    try {
-      const result = await officeRulesApi.extractRules({
-        workspace_path: workspacePath,
-        file_path: filePath,
-        use_llm: true,
-      });
-      const extracted = result.rules.map(ruleFromWire);
-      extractedTotal = extracted.length;
-      result.warnings.slice(0, 3).forEach((warning) => {
-        toast.warning(warning.message);
-      });
-      if (extracted.length === 0) {
-        toast.error(t('office.rules.workspace.extractEmpty'));
-        return;
-      }
-      const baseName = filePath.split(/[\\/]/).pop() ?? '';
-      created = await officeRulesApi.createGroup({
-        name: `${t('office.rules.workspace.extractGroupName')} · ${baseName}`,
-        description: '',
-        priority: 0,
-      });
-      for (const rule of extracted) {
-        await officeRulesApi.createRule(created.id, ruleFieldsToWire(rule) as WireRuleInput);
-        createdCount += 1;
-      }
-      await load();
-      setSelectedGroupId(created.id);
-      setSelectedRuleId(null);
-      setCreating(false);
-      toast.success(`${t('office.rules.workspace.extractDone')} (${extracted.length})`);
-    } catch (error) {
-      if (created) {
-        await load();
-        setSelectedGroupId(created.id);
-        setSelectedRuleId(null);
-        setCreating(false);
-        toast.error(
-          `${t('office.rules.workspace.extractPartial')} (${createdCount}/${extractedTotal}): ${errorMessage(error)}`,
-        );
-      } else {
-        toast.error(`${t('office.rules.workspace.operationFailed')}: ${errorMessage(error)}`);
-      }
-    } finally {
-      setExtracting(false);
-    }
-  };
-
   const handleAudit = async () => {
     if (!workspacePath || !filePath) {
       toast.error(t('office.rules.workspace.auditNeedsFile'));
@@ -420,25 +384,13 @@ export function RulesWorkspace({ workspacePath, filePath }: RulesWorkspaceProps)
     }
   };
 
-  const locked = busy || extracting || auditing;
+  const locked = busy || auditing;
 
   return (
     <section data-testid="office-rules-workspace" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-medium text-text">{t('office.rules.workspace.title')}</h2>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            data-testid="rules-extract"
-            disabled={locked || !filePath}
-            title={filePath ? undefined : t('office.rules.workspace.extractNeedsFile')}
-            className="rounded border border-border px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-50"
-            onClick={() => void handleExtract()}
-          >
-            {extracting
-              ? t('office.rules.workspace.extracting')
-              : t('office.rules.workspace.extract')}
-          </button>
           <button
             type="button"
             data-testid="rules-audit"
