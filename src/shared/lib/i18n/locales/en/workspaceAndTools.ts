@@ -283,6 +283,8 @@ export const enWorkspaceAndTools = {
   // ─── Office doc library search/filter/sort/duplicate cleanup (Phase 1 Item A) ─────
   'office.doclib.search': 'Search filename',
   'office.doclib.searchClear': 'Clear search',
+  'office.doclib.import': 'Import documents',
+  'office.doclib.importing': 'Importing…',
   'office.doclib.filter.allTypes': 'All types',
   'office.doclib.sort.updatedDesc': 'Recently updated',
   'office.doclib.sort.updatedAsc': 'Least recently updated',
