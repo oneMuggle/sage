@@ -265,6 +265,45 @@ pyinstaller --onefile --name sage-backend backend/main.py
 
 **回归测试**：`backend/tests/` 中 scheduler/wake/arena/evolution/todo/review/design/gateway/orchestration/agent/permission_gate/question_gate/harness 相关子集 —— `2463 passed, 1 failed`。唯一失败 `test_curator_provenance.py::TestScheduleRegistration::test_factory_creates_task` 经 stash 对照确认为 **pre-existing 测试间污染**（原始 HEAD 代码同样 `1 failed, 2463 passed`）。
 
+### Electron 端到端实测（2026-11-09，Linux，worktree，冷启动）
+
+启动配置：Vite :1547，Electron 配 `SAGE_PYTHON`（绕开 conda wrapper pid mismatch）+ 独立 `SAGE_USER_DATA_DIR=/tmp/sage-measure/userdata`、`SAGE_LOG_DIR=/tmp/sage-measure`、`SAGE_DB_PATH=/tmp/sage-measure/db/sage.db`。
+
+**Electron 主进程阶段（自 T0=process_start）：**
+
+| 标记 | 自 T0 | 说明 |
+| --- | --- | --- |
+| `app_ready` | 0.7s | 主进程 ready |
+| `window_created` | 21.1s | `createMainWindow()` 调用 |
+| `window_shown` | **24.1s** | **用户首次看到主窗口**（含 "backend starting" 横幅） |
+| `first_paint` | 61.0s | 渲染层首帧 |
+| `main: backend ready` | **73.8s** | health 200，前端可交互 |
+
+**后端关键路径（自模块加载起）：**
+
+| 区间 | 耗时 | 说明 |
+| --- | --- | --- |
+| `t=0.0s` → `module load begin` | 0.0s | spawnBackend 启动 Python 子进程 |
+| `t=0.0s` → `all module imports complete` | **34.5s** | **Python 顶层导入（冷缓存，Phase 3 目标）** |
+| `t=34.5s` → `db.init_db() complete` | +1.9s | DB 初始化 |
+| `t=36.7s` → `lifespan startup complete (before yield)` | +14.4s | **Phase 2 优化后的关键路径** |
+| `t=51.1s` → `所有非关键服务初始化完成` | +0.2s | deferred init 完成（yield 后） |
+
+**关键对比（优化前后）：**
+
+| 指标 | 优化前（估算） | 优化后 | 变化 |
+| --- | --- | --- | --- |
+| 用户首次看到 UI | ~80s（等后端 ready 后才 createMainWindow） | **24.1s** | **3.3× 更快** |
+| 后端关键路径就绪 | 50-90s（串行初始化） | **51.1s** 自模块加载起 / **14.4s** 自 db.init_db | 关键路径压到 lifespan 内 14.4s |
+| 完全就绪（后端 ready） | ~90s | **73.8s** | 节省 ~16s |
+
+**关键发现**：
+1. **Python 导入 34.5s 是当前最大瓶颈**（占后端启动的 67%）—— 独立烟雾测试仅 8.1s 因为磁盘已热；桌面端通过 Electron spawn 走冷路径，导入时间 4×。Phase 3 是下一优先级。
+2. **`startAgentBrowserHost()` 阻塞窗口创建 21.1s** —— `createMainWindow()` 在等待浏览器启动之后才调用。这是 Phase 1 之外的独立优化机会（可考虑把 `createMainWindow` 再往前挪到 `startAgentBrowserHost` 之前）。
+3. **Phase 1 并行启动工作正常** —— 窗口在 24.1s 即出现，前端显示 "backend starting" 横幅，后端在 73.8s 时 ready。用户不再面对空白 80s。
+4. **Phase 2 延迟初始化工作正常** —— lifespan 关键路径 14.4s（vs 原始 50-90s 总启动），deferred init 在 yield 后 0.2s 内完成全部非关键服务。
+5. **首次请求重试** —— 窗口出现后（24.1s）后端尚未就绪，前端自动重试（"请求失败，第 1 次重试"…），后端 ready 后恢复。`BackendStatusBanner` 显示连接中状态，符合预期。
+
 ### 启动时间测量点
 
 1. **Electron 主进程**:`logger.info('main: process started', { pid })` (已有)
