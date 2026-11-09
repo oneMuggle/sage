@@ -31,6 +31,7 @@ export const enWorkspaceAndTools = {
   'office.doc.restore': 'Restore',
   'office.doc.snapshots': 'Version History',
   'office.doc.archivedAt': 'Archived',
+  'office.doclib.moreActions': 'More actions',
   'office.section.archived': 'Archived Documents',
   'office.section.library': 'Document Library',
   'office.section.canvas': 'Document Canvas',

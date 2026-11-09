@@ -164,10 +164,11 @@
   - [x] `FloatingActionBar.tsx` + `OfficeAiSidebarHost.tsx` guard
   - [x] `useAiCapabilities.ts` / `useAuditSuggestions.ts` guard 改为 toast
   - [x] 相关测试更新
-- [ ] **M3 · Section 2 左侧文档库 UI**
-  - `OfficeDocumentList.tsx` row 重写
-  - `Sidebar.tsx` 默认宽度 300→320
-  - 测试更新（row 布局断言 + ⋯ 菜单交互）
+- [x] **M3 · Section 2 左侧文档库 UI**
+  - [x] `OfficeDocumentList.tsx` row 重写（1 inline + ⋯ hover 菜单 + shrink-0 + Tooltip）
+  - [x] `Sidebar.tsx` 默认宽度 300→320
+  - [x] i18n key `office.doclib.moreActions` (zh/en)
+  - [x] 测试更新（row 布局断言 + ⋯ 菜单 `pointerDown` → `findByRole('menuitem')` 交互）
 - [ ] **M4 · Section 3 规则 tab 子 tab 分域**
   - 新建 `RulesSubtabs.tsx` / `AiAuditTab.tsx` / `BatchToolsTab.tsx`
   - 重写 `Office.tsx:renderRulesTab` 挂载 `RulesSubtabs`

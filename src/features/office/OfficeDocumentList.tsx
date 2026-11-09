@@ -27,10 +27,12 @@
 import {
   Archive,
   ArchiveRestore,
+  ExternalLink,
   FolderOpen,
   FileSpreadsheet,
   FileText,
   History,
+  MoreVertical,
   Presentation,
   Save,
   Search,
@@ -40,11 +42,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { OfficeDuplicateGroup } from '../../shared/api/officeDuplicateTypes';
-import type {
-  OfficeDocType,
-  OfficeDocumentSummary,
-} from '../../shared/api/types';
+import type { OfficeDocType, OfficeDocumentSummary } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../shared/ui/DropdownMenu/DropdownMenu';
+import { Tooltip } from '../../shared/ui/Tooltip/Tooltip';
 import { useTaskCenterStore } from '../task-center/taskCenterStore';
 
 const DOC_TYPE_ICONS: Record<OfficeDocType, React.ReactNode> = {
@@ -483,140 +489,177 @@ export function OfficeDocumentList({
           </button>
         </div>
       )}
-      <ul className="space-y-2" data-testid="office-document-list">
-        {documents.map((doc) => (
-          <li
-            key={doc.id}
-            ref={doc.id === highlightedId ? highlightRef : undefined}
-            onClick={onPreview ? () => void onPreview(doc.id) : undefined}
-            data-testid={doc.id === highlightedId ? 'office-doc-highlighted' : undefined}
-            className={`flex items-center gap-3 p-3 border border-border rounded-lg bg-surface ${
-              onPreview ? 'cursor-pointer hover:bg-bg-hover transition-colors' : ''
-            } ${doc.id === highlightedId ? 'ring-2 ring-primary bg-primary/5' : ''}`}
-          >
-            {batchAction && (
-              <input
-                type="checkbox"
-                checked={selected.has(doc.id)}
-                onChange={() => toggleDoc(doc.id)}
-                onClick={(event) => event.stopPropagation()}
-                disabled={batchBusy}
-                data-testid={`office-doc-select-${doc.id}`}
-                aria-label={t('office.batch.selectRow')}
-                className="w-4 h-4 shrink-0"
-              />
-            )}
-            <div className="text-muted">{DOC_TYPE_ICONS[doc.doc_type]}</div>
-            {/*
-              The filename block is the row's real control: a native
-              <button> so it is focusable, announces as a button, and
-              activates on Enter/Space without hand-rolled key handling.
-              The <li> keeps a plain click handler so the whole row stays
-              mouse-friendly, but carries no interactive role — a
-              role="button" <li> wrapping a checkbox and action buttons
-              nests interactive controls and breaks screen readers.
-            */}
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                void onPreview?.(doc.id);
-              }}
-              disabled={!onPreview}
-              className="flex-1 min-w-0 text-left disabled:cursor-default"
-              data-testid={`office-doc-open-${doc.id}`}
+      <ul className="space-y-1.5" data-testid="office-document-list">
+        {documents.map((doc) => {
+          const filename = doc.original_filename ?? doc.generated_filename ?? doc.id;
+          const isArchived = variant === 'archived';
+          // Live rows surface "open" (external) as the inline primary action;
+          // archived rows surface "restore". Everything else lives in the
+          // hover-revealed ⋯ menu — see plan §Section 2 for the layout spec.
+          // At least one menu entry will render — otherwise the ⋯ trigger has
+          // no purpose and we'd render an empty menu for no reason.
+          const menuEntries = [
+            !isArchived && onViewSnapshots && 'snapshots',
+            onShowInFolder && 'showInFolder',
+            !isArchived && onSaveAs && 'saveAs',
+            !isArchived && onOpen && 'open',
+            !isArchived && onArchive && 'archive',
+            isArchived && onOpen && 'open',
+          ].filter(Boolean) as string[];
+          const hasMenu = menuEntries.length > 0;
+
+          return (
+            <li
+              key={doc.id}
+              ref={doc.id === highlightedId ? highlightRef : undefined}
+              onClick={onPreview ? () => void onPreview(doc.id) : undefined}
+              data-testid={doc.id === highlightedId ? 'office-doc-highlighted' : undefined}
+              className={`group flex items-center gap-2 px-2 py-1.5 border border-border rounded-lg bg-surface ${
+                onPreview ? 'cursor-pointer hover:bg-bg-hover transition-colors' : ''
+              } ${doc.id === highlightedId ? 'ring-2 ring-primary bg-primary/5' : ''}`}
             >
-              <div className="text-sm font-medium text-text truncate">
-                {doc.original_filename ?? doc.generated_filename}
+              {batchAction && (
+                <input
+                  type="checkbox"
+                  checked={selected.has(doc.id)}
+                  onChange={() => toggleDoc(doc.id)}
+                  onClick={(event) => event.stopPropagation()}
+                  disabled={batchBusy}
+                  data-testid={`office-doc-select-${doc.id}`}
+                  aria-label={t('office.batch.selectRow')}
+                  className="w-4 h-4 shrink-0"
+                />
+              )}
+              <div className="shrink-0 text-muted pointer-events-none">
+                {DOC_TYPE_ICONS[doc.doc_type]}
               </div>
-              <div className="text-xs text-muted flex items-center gap-2">
-                <span>{DOC_TYPE_LABELS[doc.doc_type]}</span>
-                <span>·</span>
-                <span>{statusLabels[doc.status]}</span>
-                <span>·</span>
-                <span>{(doc.metadata.file_size_bytes / 1024).toFixed(1)} KB</span>
-                <span>·</span>
-                <span>{new Date(doc.created_at).toLocaleString()}</span>
-                {doc.archived_at != null && (
-                  <>
-                    <span>·</span>
-                    <span>
-                      {t('office.doc.archivedAt')} {new Date(doc.archived_at).toLocaleString()}
+              {/*
+                Filename control. `min-w-0` lets the inner truncate shrink;
+                the tooltip reveals the full name when the row is too narrow.
+              */}
+              <Tooltip content={filename}>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void onPreview?.(doc.id);
+                  }}
+                  disabled={!onPreview}
+                  className="flex-1 min-w-0 text-left disabled:cursor-default"
+                  data-testid={`office-doc-open-${doc.id}`}
+                >
+                  <div className="text-sm font-medium text-text truncate">{filename}</div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted min-w-0">
+                    <span className="shrink-0">{DOC_TYPE_LABELS[doc.doc_type]}</span>
+                    <span aria-hidden>·</span>
+                    <span className="shrink-0">{statusLabels[doc.status]}</span>
+                    <span aria-hidden>·</span>
+                    <span className="shrink-0">
+                      {(doc.metadata.file_size_bytes / 1024).toFixed(1)} KB
                     </span>
-                  </>
+                    <span aria-hidden>·</span>
+                    <span className="truncate">{new Date(doc.created_at).toLocaleString()}</span>
+                    {doc.archived_at != null && (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span className="shrink-0">
+                          {t('office.doc.archivedAt')} {new Date(doc.archived_at).toLocaleString()}
+                        </span>
+                      </>
+                    )}
+                    {/* T4: "重复" badge when this doc is the older copy in a duplicate group (Item A). */}
+                    {duplicateDocIds.has(doc.id) && (
+                      <span className="shrink-0 px-1 py-0.5 text-ui-xs rounded bg-amber-400/20 text-amber-700 dark:text-amber-300 border border-amber-400/40">
+                        {t('office.doclib.duplicateBadge')}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              </Tooltip>
+              {/*
+                Action cluster — `shrink-0` prevents the buttons from being
+                squeezed by the filename flex-1. Only the primary inline
+                action stays visible; the rest collapse behind ⋯.
+              */}
+              <div
+                className="flex items-center shrink-0"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {!isArchived && onOpen && (
+                  <button
+                    type="button"
+                    onClick={() => void onOpen(doc.id)}
+                    className="p-1 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                    aria-label={t('office.doc.open')}
+                    data-testid={`office-doc-inline-open-${doc.id}`}
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </button>
                 )}
-                {/* T4: "重复" badge when this doc is the older copy in a duplicate group (Item A). */}
-                {duplicateDocIds.has(doc.id) && (
-                  <span className="px-1 py-0.5 text-ui-xs rounded bg-amber-400/20 text-amber-700 dark:text-amber-300 border border-amber-400/40">
-                    {t('office.doclib.duplicateBadge')}
-                  </span>
+                {isArchived && onRestore && (
+                  <button
+                    type="button"
+                    onClick={() => void onRestore(doc.id)}
+                    className="p-1 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                    aria-label={t('office.doc.restore')}
+                    data-testid={`office-doc-inline-restore-${doc.id}`}
+                  >
+                    <ArchiveRestore className="w-4 h-4" />
+                  </button>
+                )}
+                {hasMenu && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={t('office.doclib.moreActions')}
+                        data-testid={`office-doc-more-${doc.id}`}
+                        className="p-1 rounded text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 hover:bg-surface-hover hover:text-text"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {variant === 'live' && onViewSnapshots && (
+                        <DropdownMenuItem onSelect={() => void onViewSnapshots(doc.id)}>
+                          <History className="mr-2 h-4 w-4" />
+                          {t('office.doc.snapshots')}
+                        </DropdownMenuItem>
+                      )}
+                      {onShowInFolder && (
+                        <DropdownMenuItem onSelect={() => void onShowInFolder(doc.id)}>
+                          <FolderOpen className="mr-2 h-4 w-4" />
+                          {t('office.doc.showInFolder')}
+                        </DropdownMenuItem>
+                      )}
+                      {variant === 'live' && onOpen && (
+                        <DropdownMenuItem onSelect={() => void onOpen(doc.id)}>
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          {t('office.doc.open')}
+                        </DropdownMenuItem>
+                      )}
+                      {variant === 'live' && onSaveAs && (
+                        <DropdownMenuItem onSelect={() => void onSaveAs(doc.id)}>
+                          <Save className="mr-2 h-4 w-4" />
+                          {t('office.doc.saveAs')}
+                        </DropdownMenuItem>
+                      )}
+                      {variant === 'live' && onArchive && (
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() => void onArchive(doc.id)}
+                        >
+                          <Archive className="mr-2 h-4 w-4" />
+                          {t('office.doc.archive')}
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
               </div>
-            </button>
-            <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
-              {variant === 'live' && onArchive && (
-                <button
-                  type="button"
-                  onClick={() => void onArchive(doc.id)}
-                  className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
-                  aria-label={t('office.doc.archive')}
-                >
-                  <Archive className="w-4 h-4" />
-                </button>
-              )}
-              {variant === 'archived' && onRestore && (
-                <button
-                  type="button"
-                  onClick={() => void onRestore(doc.id)}
-                  className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
-                  aria-label={t('office.doc.restore')}
-                >
-                  <ArchiveRestore className="w-4 h-4" />
-                </button>
-              )}
-              {onViewSnapshots && (
-                <button
-                  type="button"
-                  onClick={() => void onViewSnapshots(doc.id)}
-                  className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
-                  aria-label={t('office.doc.snapshots')}
-                >
-                  <History className="w-4 h-4" />
-                </button>
-              )}
-              {onSaveAs && (
-                <button
-                  type="button"
-                  onClick={() => void onSaveAs(doc.id)}
-                  className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
-                  aria-label={t('office.doc.saveAs')}
-                >
-                  <Save className="w-4 h-4" />
-                </button>
-              )}
-              {onOpen && (
-                <button
-                  type="button"
-                  onClick={() => void onOpen(doc.id)}
-                  className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
-                  aria-label={t('office.doc.open')}
-                >
-                  <FileText className="w-4 h-4" />
-                </button>
-              )}
-              {onShowInFolder && (
-                <button
-                  type="button"
-                  onClick={() => void onShowInFolder(doc.id)}
-                  className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
-                  aria-label={t('office.doc.showInFolder')}
-                >
-                  <FolderOpen className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
