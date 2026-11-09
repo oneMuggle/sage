@@ -14,6 +14,7 @@
  */
 
 import { useOfficeWorkspaceStore } from '../../../entities/office/officeWorkspaceStore';
+import { useI18n } from '../../../shared/lib/i18n';
 import { OfficeAiAssistantPanel } from '../OfficeAiAssistantPanel';
 import { officeDocumentPath } from '../officeDocumentPath';
 
@@ -29,6 +30,7 @@ interface AiAuditTabProps {
 }
 
 export function AiAuditTab({ workspacePath }: AiAuditTabProps) {
+  const { t } = useI18n();
   const activeDocument = useOfficeWorkspaceStore((state) => state.activeDocument);
   const documentPath = activeDocument ? officeDocumentPath(activeDocument) : null;
 
@@ -57,7 +59,9 @@ export function AiAuditTab({ workspacePath }: AiAuditTabProps) {
             )}
           </>
         ) : (
-          <span className="text-xs text-muted">请先在文档 tab 选择文档，再进行审校</span>
+          <span className="text-xs text-muted">
+            {t('office.rules.aiAudit.noDocument')}
+          </span>
         )}
       </div>
 

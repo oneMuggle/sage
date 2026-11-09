@@ -663,6 +663,7 @@ export const zhSettingsAndModels = {
   'office.rules.extractNoActiveDoc': '请先在左侧文档库选择文档',
   'office.rules.extractSuccess': '已抽取 {n} 条规则到新组 "{name}"',
   'office.rules.specLibraryToggle': '格式规范书库（外部规则来源）',
+  'office.rules.aiAudit.noDocument': '请先在「文档」tab 选择文档，再进行审校',
 } as const;
 
 export function formatZhSettingsAndModelsSummary(): string {

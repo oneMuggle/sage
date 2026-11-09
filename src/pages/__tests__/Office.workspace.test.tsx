@@ -36,7 +36,13 @@ vi.mock('../../shared/api/workspaceApi', () => ({
     getDefault: vi.fn().mockResolvedValue({ path: null, source: 'scratch', isFallback: true }),
     getHealth: vi
       .fn()
-      .mockResolvedValue({ path: '/tmp', health: 'healthy', detail: null, writable: true, isUsable: true }),
+      .mockResolvedValue({
+        path: '/tmp',
+        health: 'healthy',
+        detail: null,
+        writable: true,
+        isUsable: true,
+      }),
   },
 }));
 
@@ -92,7 +98,6 @@ vi.mock('../../features/journal', () => ({
   JournalPanel: () => <div data-testid="office-journal-stub" />,
 }));
 
-
 import { SessionWorkspaceProvider } from '../../app/providers/SessionWorkspaceProvider';
 import { I18nProvider } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
@@ -125,18 +130,14 @@ function renderWithProvider(initialEntries: string[] = ['/office']) {
 describe('Office — workspace lifecycle (Task 5)', () => {
   it('shows the pick button when there is no active binding', async () => {
     renderWithProvider();
-    await waitFor(() =>
-      expect(screen.getByTestId('office-workspace-pick')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByTestId('office-workspace-pick')).toBeInTheDocument());
   });
 
   it('opens the bind modal when the user clicks the pick button', async () => {
     renderWithProvider();
     await waitFor(() => screen.getByTestId('office-workspace-pick'));
     fireEvent.click(screen.getByTestId('office-workspace-pick'));
-    await waitFor(() =>
-      expect(screen.getByTestId('workspace-bind-button')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByTestId('workspace-bind-button')).toBeInTheDocument());
     expect(screen.getByTestId('workspace-revoke-button')).toBeInTheDocument();
   });
 
@@ -169,9 +170,7 @@ describe('Office — workspace lifecycle (Task 5)', () => {
     renderWithProvider();
     const chip = await screen.findByTestId('office-workspace-path');
     fireEvent.click(chip);
-    await waitFor(() =>
-      expect(screen.getByTestId('workspace-bind-button')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByTestId('workspace-bind-button')).toBeInTheDocument());
   });
 
   it('surfaces a workspace-level error with stable test id', async () => {
@@ -184,7 +183,9 @@ describe('Office — workspace lifecycle (Task 5)', () => {
 
   it('full bind flow: native selectDirectory → workspaceApi.bind → close', async () => {
     const selectDirectory = vi.fn().mockResolvedValue('/tmp/picked');
-    (window as unknown as { electronAPI?: { selectDirectory: typeof selectDirectory } }).electronAPI = {
+    (
+      window as unknown as { electronAPI?: { selectDirectory: typeof selectDirectory } }
+    ).electronAPI = {
       selectDirectory,
     };
     mockBind.mockResolvedValue({
@@ -234,7 +235,9 @@ describe('Office — workspace lifecycle (Task 5)', () => {
 
   it('keeps the modal open and surfaces a friendly error when selectDirectory rejects', async () => {
     const selectDirectory = vi.fn().mockRejectedValue(new Error('native dialog blew up'));
-    (window as unknown as { electronAPI?: { selectDirectory: typeof selectDirectory } }).electronAPI = {
+    (
+      window as unknown as { electronAPI?: { selectDirectory: typeof selectDirectory } }
+    ).electronAPI = {
       selectDirectory,
     };
 
@@ -254,7 +257,9 @@ describe('Office — workspace lifecycle (Task 5)', () => {
 describe('Office — workspace modal stale-read integration', () => {
   it('closes the modal after a successful bind; the provider holds the new path', async () => {
     const selectDirectory = vi.fn().mockResolvedValue('/tmp/picked-2');
-    (window as unknown as { electronAPI?: { selectDirectory: typeof selectDirectory } }).electronAPI = {
+    (
+      window as unknown as { electronAPI?: { selectDirectory: typeof selectDirectory } }
+    ).electronAPI = {
       selectDirectory,
     };
     mockBind.mockResolvedValue({

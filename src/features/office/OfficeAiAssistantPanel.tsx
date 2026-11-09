@@ -76,6 +76,14 @@ export function OfficeAiAssistantPanel({
   const [result, setResult] = useState<AiReviewResult | null>(null);
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
 
+  // Sync external prop → internal state when the user picks a different
+  // document in the document library while this panel stays mounted inside
+  // its keep-alive tab. Without this, the panel keeps the stale path from
+  // the first document opened after mount.
+  useEffect(() => {
+    if (initialFilePath != null) setFilePath(initialFilePath);
+  }, [initialFilePath]);
+
   const [specs, setSpecs] = useState<OfficeSpecDocument[]>([]);
   const [specListError, setSpecListError] = useState<string | null>(null);
 

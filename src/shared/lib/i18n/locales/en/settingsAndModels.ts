@@ -683,6 +683,7 @@ export const enSettingsAndModels = {
   'office.rules.extractNoActiveDoc': 'Please select a document in the left document library first',
   'office.rules.extractSuccess': 'Extracted {n} rules into new group "{name}"',
   'office.rules.specLibraryToggle': 'Specification library (external rule source)',
+  'office.rules.aiAudit.noDocument': 'Please select a document in the Documents tab before auditing',
 };
 
 export function formatEnSettingsAndModelsSummary(): string {
