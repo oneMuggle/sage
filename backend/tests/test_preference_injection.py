@@ -63,8 +63,8 @@ def test_preference_learning_writes_user_profile(tmp_db):
     ).fetchall()
     assert len(rows) >= 1
     assert all(r["category"] == "preference" for r in rows)
-    # 内容里应含偏好维度名
-    assert any("response_length" in r["content"] for r in rows)
+    # 内容里应含偏好维度名(翻译后: "回复长度" 而非机器键 "response_length")
+    assert any("回复长度" in r["content"] for r in rows)
 
 
 def test_preference_learning_does_not_invalidate_snapshot(tmp_db, monkeypatch):
