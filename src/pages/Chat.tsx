@@ -26,6 +26,7 @@ import { type ChatOfficeRef } from '../shared/api';
 import { maybeIndexAttachment } from '../shared/api/attachmentAutoIndex';
 import { loadAttachmentRagConfig } from '../shared/api/attachmentRagConfig';
 import { orchRunControlClient } from '../shared/api/orchRunControlClient';
+import { useBackendReadyTick } from '../shared/lib/backendReadySignal';
 // RD20 (round43): 历史 run → 任务板恢复映射。
 import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
 import { useGlobalFileDrop } from '../shared/lib/hooks/useGlobalFileDrop';
@@ -243,11 +244,13 @@ export function Chat() {
     Boolean(chatEndpoint?.baseUrl) && Boolean(settings.modelSelections.chatModel.modelId);
   const showConfigWarning = !hasConfig;
 
+  // B: 启动期拉取失败时,等后端就绪自动重放,避免聊天页静默为空。
+  const backendReadyTick = useBackendReadyTick();
   useEffect(() => {
     if (currentSessionId) {
       loadMessages(currentSessionId);
     }
-  }, [currentSessionId, loadMessages]);
+  }, [currentSessionId, loadMessages, backendReadyTick]);
 
   // Auto-send pending message passed from Welcome page via router state.
   // The effect lives below `handleSendMessage` so the first message reuses the
