@@ -76,9 +76,7 @@ export function ProjectBootstrapPanel({
         setLlmError(suggestResult.llmError);
         setAcceptSageMd(!suggestResult.suggestions.sageMd.exists);
         setAcceptRules(new Set(suggestResult.suggestions.rules.map((_, index) => index)));
-        setAcceptMilestones(
-          new Set(suggestResult.suggestions.milestones.map((_, index) => index)),
-        );
+        setAcceptMilestones(new Set(suggestResult.suggestions.milestones.map((_, index) => index)));
         setAcceptGitInit(suggestResult.suggestions.gitInit.recommended);
         setPhase('ready');
       } catch (err) {
@@ -183,11 +181,7 @@ export function ProjectBootstrapPanel({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              onClick={() => void load(true)}
-              data-testid="bootstrap-start-ai"
-            >
+            <Button size="sm" onClick={() => void load(true)} data-testid="bootstrap-start-ai">
               分析项目
             </Button>
             <Button
@@ -210,8 +204,7 @@ export function ProjectBootstrapPanel({
         className="flex items-center gap-2 rounded-lg border border-border bg-card p-4 text-xs text-muted-foreground"
         data-testid="project-bootstrap-loading"
       >
-        <Loader2 className="h-4 w-4 animate-spin" />
-        第 1 步 / 共 2 步 · 正在扫描项目文件…
+        <Loader2 className="h-4 w-4 animate-spin" />第 1 步 / 共 2 步 · 正在扫描项目文件…
       </div>
     );
   }
@@ -268,8 +261,8 @@ export function ProjectBootstrapPanel({
           className="flex items-center gap-2 rounded-md border border-border bg-card p-3 text-xs text-muted-foreground"
           data-testid="project-bootstrap-suggesting"
         >
-          <Loader2 className="h-4 w-4 animate-spin" />
-          第 2 步 / 共 2 步 · AI 正在分析项目并生成建议（已用时 {elapsedSec}s，通常 10–30 秒）
+          <Loader2 className="h-4 w-4 animate-spin" />第 2 步 / 共 2 步 · AI
+          正在分析项目并生成建议（已用时 {elapsedSec}s，通常 10–30 秒）
         </div>
       </div>
     );
@@ -459,7 +452,9 @@ export function ProjectBootstrapPanel({
                 <li key={`applied-${item.item}-${index}`} className="flex items-start gap-1.5">
                   <span className="text-emerald-600">✓</span>
                   <span className="font-medium text-foreground">{item.label || item.item}</span>
-                  {item.location && <span className="text-muted-foreground">· {item.location}</span>}
+                  {item.location && (
+                    <span className="text-muted-foreground">· {item.location}</span>
+                  )}
                   {item.contentPreview && (
                     <span className="truncate text-muted-foreground">· {item.contentPreview}</span>
                   )}

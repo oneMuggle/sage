@@ -673,11 +673,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
                 type="button"
                 onClick={() => {
                   if (isCurrent) return;
-                  if (
-                    window.confirm(
-                      tf('playbook.card.confirmSwitch', { stage: stage.label }),
-                    )
-                  ) {
+                  if (window.confirm(tf('playbook.card.confirmSwitch', { stage: stage.label }))) {
                     void handleConfirmStage(stage.id);
                   }
                 }}

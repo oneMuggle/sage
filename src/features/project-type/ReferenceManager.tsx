@@ -16,6 +16,13 @@ import { projectApi, type ProjectReference } from '../../shared/api';
 import { useI18n } from '../../shared/lib/i18n';
 import { Button } from '../../shared/ui/Button';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../shared/ui/Select/Select';
 
 export interface ReferenceManagerProps {
   projectId: string;
@@ -181,9 +188,7 @@ export function ReferenceManager({ projectId, className }: ReferenceManagerProps
         </div>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
           <label className="flex flex-col gap-1 text-xs">
-            <span className="text-muted-foreground">
-              {t('governance.files.create.relPath')}
-            </span>
+            <span className="text-muted-foreground">{t('governance.files.create.relPath')}</span>
             <input
               value={form.relPath}
               onChange={(e) => setForm((prev) => ({ ...prev, relPath: e.target.value }))}
@@ -193,9 +198,7 @@ export function ReferenceManager({ projectId, className }: ReferenceManagerProps
             />
           </label>
           <label className="flex flex-col gap-1 text-xs">
-            <span className="text-muted-foreground">
-              {t('governance.files.create.targetPath')}
-            </span>
+            <span className="text-muted-foreground">{t('governance.files.create.targetPath')}</span>
             <input
               value={form.targetPath}
               onChange={(e) => setForm((prev) => ({ ...prev, targetPath: e.target.value }))}
@@ -214,20 +217,33 @@ export function ReferenceManager({ projectId, className }: ReferenceManagerProps
               data-testid="reference-input-alias"
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs">
+          <div className="flex flex-col gap-1 text-xs">
             <span className="text-muted-foreground">{t('governance.files.create.kind')}</span>
-            <select
+            <Select
               value={form.kind}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, kind: e.target.value as ReferenceKind }))
+              onValueChange={(value) =>
+                setForm((prev) => ({ ...prev, kind: value as ReferenceKind }))
               }
-              className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-              data-testid="reference-input-kind"
             >
-              <option value="directory">{t('governance.files.create.kind.directory')}</option>
-              <option value="file">{t('governance.files.create.kind.file')}</option>
-            </select>
-          </label>
+              <SelectTrigger
+                aria-label={t('governance.files.create.kind')}
+                data-testid="reference-input-kind"
+                className="h-8 w-full px-2 text-sm"
+              >
+                <SelectValue>
+                  {form.kind === 'file'
+                    ? t('governance.files.create.kind.file')
+                    : t('governance.files.create.kind.directory')}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="directory">
+                  {t('governance.files.create.kind.directory')}
+                </SelectItem>
+                <SelectItem value="file">{t('governance.files.create.kind.file')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <div className="flex justify-end">
           <Button
@@ -246,9 +262,7 @@ export function ReferenceManager({ projectId, className }: ReferenceManagerProps
       {/* List */}
       <div className="space-y-1.5" data-testid="reference-list">
         {loading && references.length === 0 && (
-          <div className="text-xs text-muted-foreground">
-            {t('governance.files.list.loading')}
-          </div>
+          <div className="text-xs text-muted-foreground">{t('governance.files.list.loading')}</div>
         )}
         {!loading && references.length === 0 && (
           <div

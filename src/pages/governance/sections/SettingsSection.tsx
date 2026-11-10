@@ -20,6 +20,13 @@ import {
 import type { ProjectType } from '../../../shared/api';
 import { Button } from '../../../shared/ui/Button';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../../shared/ui/Select/Select';
+import {
   formatProjectGovernanceAuditJson,
   formatProjectGovernanceAuditSnapshot,
 } from '../governanceAudit';
@@ -27,8 +34,10 @@ import type { GovernanceData } from '../useGovernanceProject';
 
 type GovernanceProject = NonNullable<GovernanceData['project']>;
 
-const SELECT_CLASS =
-  'rounded-md border border-input bg-background px-2 py-1.5 text-xs text-foreground';
+/** Radix Select 不接受空字符串作为 item value，所以「未设置」用占位值替代。 */
+const NO_STAGE_VALUE = '__none__';
+
+const SELECT_TRIGGER_CLASS = 'h-8 w-auto min-w-[9rem] px-2 text-sm';
 
 export interface SettingsSectionProps {
   data: GovernanceData;
@@ -56,37 +65,49 @@ function ProjectControls({
   stages: ReadonlyArray<ArchetypeStageMeta>;
   nextStage: ArchetypeStageMeta | null;
 }) {
+  const stageLabel = stages.find((stage) => stage.id === project.projectStage)?.label ?? '未设置';
+
   return (
     <div
       className="rounded-lg border border-border bg-card p-3"
       data-testid="governance-settings-controls"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <select
+        <Select
           value={data.activeProjectType}
-          onChange={(e) => void data.changeProjectType(e.target.value as ProjectType)}
-          aria-label="切换项目类型"
-          className={SELECT_CLASS}
+          onValueChange={(value) => void data.changeProjectType(value as ProjectType)}
         >
-          {ARCHETYPE_ORDER.map((type) => (
-            <option key={type} value={type}>
-              项目类型：{ARCHETYPE_BLUEPRINTS[type].label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={project.projectStage ?? ''}
-          onChange={(e) => void data.changeProjectStage(e.target.value)}
-          aria-label="切换项目阶段"
-          className={SELECT_CLASS}
+          <SelectTrigger aria-label="切换项目类型" className={SELECT_TRIGGER_CLASS}>
+            <SelectValue>
+              项目类型：{ARCHETYPE_BLUEPRINTS[data.activeProjectType].label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {ARCHETYPE_ORDER.map((type) => (
+              <SelectItem key={type} value={type}>
+                项目类型：{ARCHETYPE_BLUEPRINTS[type].label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={project.projectStage ?? NO_STAGE_VALUE}
+          onValueChange={(value) =>
+            void data.changeProjectStage(value === NO_STAGE_VALUE ? '' : value)
+          }
         >
-          <option value="">阶段：未设置</option>
-          {stages.map((item) => (
-            <option key={item.id} value={item.id}>
-              阶段：{item.label}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger aria-label="切换项目阶段" className={SELECT_TRIGGER_CLASS}>
+            <SelectValue>阶段：{stageLabel}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_STAGE_VALUE}>阶段：未设置</SelectItem>
+            {stages.map((item) => (
+              <SelectItem key={item.id} value={item.id}>
+                阶段：{item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {nextStage && (
           <Button
             size="sm"
@@ -98,16 +119,24 @@ function ProjectControls({
             推进至「{nextStage.label}」→
           </Button>
         )}
-        <select
+        <Select
           value={project.vcsMode === 'git' ? 'git' : 'builtin'}
-          onChange={(e) => void data.changeVcsMode(e.target.value as 'git' | 'builtin')}
-          aria-label="切换版本控制模式"
-          data-testid="studio-vcs-mode-select"
-          className={SELECT_CLASS}
+          onValueChange={(value) => void data.changeVcsMode(value as 'git' | 'builtin')}
         >
-          <option value="git">版本控制：Git 仓库</option>
-          <option value="builtin">版本控制：内置快照</option>
-        </select>
+          <SelectTrigger
+            aria-label="切换版本控制模式"
+            data-testid="studio-vcs-mode-select"
+            className={SELECT_TRIGGER_CLASS}
+          >
+            <SelectValue>
+              版本控制：{project.vcsMode === 'git' ? 'Git 仓库' : '内置快照'}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="git">版本控制：Git 仓库</SelectItem>
+            <SelectItem value="builtin">版本控制：内置快照</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );
@@ -200,10 +229,7 @@ export function SettingsSection({ data, activeTab }: SettingsSectionProps) {
     <div className="space-y-5" data-testid="governance-settings">
       {/* 1. 基本信息（项目描述 + 会话指令） */}
       <section className="space-y-2">
-        <SettingsSectionHeading
-          title="基本信息"
-          hint="项目描述与会话指令会作为每次会话的背景"
-        />
+        <SettingsSectionHeading title="基本信息" hint="项目描述与会话指令会作为每次会话的背景" />
         <StudioMetadataPanel
           projectId={project.id}
           projectType={data.activeProjectType}
@@ -254,10 +280,7 @@ export function SettingsSection({ data, activeTab }: SettingsSectionProps) {
         </summary>
         <div className="space-y-3 px-3 pb-3">
           <div className="space-y-2">
-            <SettingsSectionHeading
-              title="目录初始化"
-              hint="按项目类型生成目录骨架与规范模板"
-            />
+            <SettingsSectionHeading title="目录初始化" hint="按项目类型生成目录骨架与规范模板" />
             <ScaffoldButton
               scaffolding={data.scaffolding}
               onScaffold={() => void data.scaffold()}

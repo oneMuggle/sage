@@ -141,9 +141,7 @@ describe('ProjectBootstrapPanel', () => {
     expect(screen.getByTestId('bootstrap-verification')).toHaveTextContent(
       '项目规则 1 条 · 里程碑 0 项',
     );
-    expect(screen.getByTestId('bootstrap-result-details')).toHaveTextContent(
-      '项目说明（SAGE.md）',
-    );
+    expect(screen.getByTestId('bootstrap-result-details')).toHaveTextContent('项目说明（SAGE.md）');
     // Applying refreshes the deterministic scan (existing counts).
     expect(scanMock).toHaveBeenCalledTimes(2);
   });

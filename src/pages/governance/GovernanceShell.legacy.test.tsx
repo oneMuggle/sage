@@ -1,10 +1,27 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ProjectSummary } from '../../shared/api';
 import { I18nProvider } from '../../shared/lib/i18n';
+
+/* ── jsdom polyfills ───────────────────────────────────────────────── */
+
+// 共享 Radix Select 依赖 jsdom 未实现的指针捕获与滚动 API。
+beforeAll(() => {
+  window.HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
+  window.HTMLElement.prototype.setPointerCapture = vi.fn();
+  window.HTMLElement.prototype.releasePointerCapture = vi.fn();
+  window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  if (typeof globalThis.ResizeObserver === 'undefined') {
+    globalThis.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+  }
+});
 
 /* ── Mock API ─────────────────────────────────────────────────────── */
 
@@ -228,7 +245,7 @@ describe('GovernanceShell (legacy)', () => {
     expect(screen.getByTestId('bootstrap-panel-stub')).toBeInTheDocument();
   });
 
-  it('starts a session from the home CTA when initialization is complete', async () => {
+  it('starts a session from the header CTA when initialization is complete', async () => {
     mockList.mockResolvedValue([
       {
         ...testProject,
@@ -245,9 +262,9 @@ describe('GovernanceShell (legacy)', () => {
     });
     renderAt('proj-1');
     await waitFor(() => {
-      expect(screen.getByTestId('project-home-cta')).toHaveTextContent('开始会话');
+      expect(screen.getByTestId('governance-header-cta')).toHaveTextContent('开始会话');
     });
-    fireEvent.click(screen.getByTestId('project-home-cta'));
+    fireEvent.click(screen.getByTestId('governance-header-cta'));
     await waitFor(() => expect(mockOpen).toHaveBeenCalledWith('proj-1'));
   });
 
@@ -300,7 +317,13 @@ describe('GovernanceShell (legacy)', () => {
 
     fireEvent.click(screen.getByTestId('governance-tab-settings'));
     const typeSelect = screen.getByLabelText('切换项目类型');
-    fireEvent.change(typeSelect, { target: { value: 'business' } });
+    fireEvent.pointerDown(typeSelect, { button: 0, pointerType: 'mouse' });
+
+    const businessOption = await screen.findByRole('option', { name: '项目类型：商务合同' });
+    const mouseAt = { button: 0, pointerType: 'mouse', clientX: 100, clientY: 100 };
+    fireEvent.pointerDown(businessOption, mouseAt);
+    fireEvent.pointerMove(businessOption, mouseAt);
+    fireEvent.pointerUp(businessOption, mouseAt);
 
     await waitFor(() => {
       expect(mockUpdate).toHaveBeenCalledWith(
