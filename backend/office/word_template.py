@@ -15,11 +15,11 @@ import zipfile
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from docx import Document
-from docxtpl import DocxTemplate, InlineImage
-from jinja2.sandbox import SandboxedEnvironment
+if TYPE_CHECKING:
+    from docx.document import Document  # noqa: F401
+    from docxtpl import DocxTemplate, InlineImage  # noqa: F401
 
 from .errors import (
     OfficeFileNotFoundError,
@@ -48,6 +48,22 @@ JINJA_CONTROL_RE = re.compile(r"\{%[^%]+%\}")
 MAX_DOCX_COMPRESSED_SIZE = 50 * 1024 * 1024
 MAX_DOCX_MEMBERS = 10_000
 MAX_DOCX_UNCOMPRESSED_SIZE = 250 * 1024 * 1024
+
+
+# Phase 3.5：docx/docxtpl 只在真正分析/填充 Word 模板时才用得上；启动路径
+# （会话列表 / 聊天）不触发 → 改为按需惰性导入。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_attr
+
+    if name == "Document":
+        return load_attr("docx", "Document", globals())
+    if name == "DocxTemplate":
+        return load_attr("docxtpl", "DocxTemplate", globals())
+    if name == "InlineImage":
+        return load_attr("docxtpl", "InlineImage", globals())
+    if name == "SandboxedEnvironment":
+        return load_attr("jinja2.sandbox", "SandboxedEnvironment", globals())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 _MAX_IMAGE_BYTES = 10 * 1024 * 1024
 _DANGEROUS_TEMPLATE_RE = re.compile(
     r"(?:\{%\s*(?:import|include)\b|__class__|__subclasses__|__mro__|__globals__|__builtins__)",
@@ -291,6 +307,9 @@ def analyze_word_template(
 
     _validate_docx_zip(file_path)
     try:
+        from backend.core.lazy import load_attr
+
+        Document = load_attr("docx", "Document", globals())
         doc = Document(str(file_path))
     except Exception as exc:
         raise OfficeTemplateParseError(
@@ -370,6 +389,9 @@ def _build_fill_context(
         for name in placeholder_names
     }
     for name, descriptor in (req.images or {}).items():
+        from backend.core.lazy import load_attr
+
+        InlineImage = load_attr("docxtpl", "InlineImage", globals())
         context[name] = InlineImage(template, _load_image_descriptor(descriptor, workspace))
     return context
 
@@ -400,6 +422,12 @@ def fill_word_template(req: WordTemplateFillRequest) -> WordTemplateFillResult:
     provided_names = set(req.data.keys()) | set((req.images or {}).keys())
     unfilled = sorted(placeholder_names - provided_names)
     try:
+        from backend.core.lazy import load_attr
+
+        DocxTemplate = load_attr("docxtpl", "DocxTemplate", globals())
+        SandboxedEnvironment = load_attr(
+            "jinja2.sandbox", "SandboxedEnvironment", globals()
+        )
         template = DocxTemplate(str(template_path))
         context = _build_fill_context(template, req, placeholder_names, workspace)
         template.render(context, jinja_env=SandboxedEnvironment(autoescape=False))

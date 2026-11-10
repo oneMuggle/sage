@@ -12,9 +12,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 
-from docx import Document
-from docx.oxml.ns import qn
-
+from ._docx_lazy import Document, qn
 from .doc_profile import read_doc_profile
 from .doc_profile_models import WordTextAnchor
 from .errors import OfficeFileNotFoundError, OfficeParseError

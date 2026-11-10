@@ -20,9 +20,10 @@ import contextlib
 import logging
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-import pymupdf
+if TYPE_CHECKING:
+    import pymupdf
 
 from .errors import (
     OfficeFileNotFoundError,
@@ -46,6 +47,17 @@ from .progress import report_current
 from .storage import validate_workspace
 
 logger = logging.getLogger(__name__)
+
+
+# Phase 3.5：pymupdf(~300ms) 只在实际读写 PDF 时才用得上；启动路径（会话列表
+# / 聊天）不碰 PDF → 改为按需惰性导入。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_module
+
+    if name == "pymupdf":
+        return load_module("pymupdf", "pymupdf", globals())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # PDF preflight limits — analogous to ``MAX_DOCX_*`` in ``word_template.py``.
 MAX_PDF_SIZE = 50 * 1024 * 1024  # 50 MiB
@@ -96,6 +108,9 @@ def _validate_pdf_file(file_path: Path) -> None:
         )
 
     try:
+        from backend.core.lazy import load_module
+
+        pymupdf = load_module("pymupdf", "pymupdf", globals())
         doc = pymupdf.open(str(file_path))
     except OfficeSizeLimitError:
         raise
@@ -218,6 +233,10 @@ def read_pdf(
     _validate_pdf_file(file_path)
 
     # Re-open for content extraction (preflight closed its own handle).
+    from backend.core.lazy import load_module
+
+    pymupdf = load_module("pymupdf", "pymupdf", globals())
+
     try:
         doc = pymupdf.open(str(file_path))
     except Exception as exc:

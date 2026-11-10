@@ -84,9 +84,10 @@ import tempfile
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tuple
 
-from docx import Document
+if TYPE_CHECKING:
+    from docx.document import Document  # noqa: F401
 
 from .errors import (
     OfficeError,
@@ -110,6 +111,16 @@ from .storage import generate_document_dir, validate_workspace
 from .word_template import PLACEHOLDER_RE, analyze_word_template, fill_word_template
 
 logger = logging.getLogger(__name__)
+
+
+# Phase 3.5：docx(~90-680ms) 只在真正生成 Word 文档时才用得上；启动路径不触发
+# → 改为按需惰性导入。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_attr
+
+    if name == "Document":
+        return load_attr("docx", "Document", globals())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 #: builtin 模板 id 严格格式（小写字母/数字/下划线，≤64 字符）。
 TEMPLATE_ID_RE = re.compile(r"^[a-z0-9_]{1,64}$")
@@ -251,6 +262,9 @@ def _tagged_table(doc: Document, headers: List[str], row_tags: List[str]) -> Non
 
 
 def _build_weekly_report() -> Path:
+    from backend.core.lazy import load_attr
+
+    Document = load_attr("docx", "Document", globals())
     doc = Document()
     doc.add_heading("{{title}}", level=0)
     _field_paragraph(doc, "作者", "{{author}}")
@@ -262,6 +276,9 @@ def _build_weekly_report() -> Path:
 
 
 def _build_meeting_minutes() -> Path:
+    from backend.core.lazy import load_attr
+
+    Document = load_attr("docx", "Document", globals())
     doc = Document()
     doc.add_heading("{{meeting_title}}", level=0)
     _field_paragraph(doc, "时间", "{{date}}")
@@ -274,6 +291,9 @@ def _build_meeting_minutes() -> Path:
 
 
 def _build_project_plan() -> Path:
+    from backend.core.lazy import load_attr
+
+    Document = load_attr("docx", "Document", globals())
     doc = Document()
     doc.add_heading("{{title}}", level=0)
     _field_paragraph(doc, "负责人", "{{owner}}")
@@ -286,6 +306,9 @@ def _build_project_plan() -> Path:
 
 
 def _build_daily_report() -> Path:
+    from backend.core.lazy import load_attr
+
+    Document = load_attr("docx", "Document", globals())
     doc = Document()
     doc.add_heading("{{title}}", level=0)
     _field_paragraph(doc, "日期", "{{date}}")
@@ -297,6 +320,9 @@ def _build_daily_report() -> Path:
 
 
 def _build_retrospective() -> Path:
+    from backend.core.lazy import load_attr
+
+    Document = load_attr("docx", "Document", globals())
     doc = Document()
     doc.add_heading("{{project_name}} 项目复盘", level=0)
     _field_paragraph(doc, "复盘时间", "{{review_date}}")
@@ -309,6 +335,9 @@ def _build_retrospective() -> Path:
 
 
 def _build_resume() -> Path:
+    from backend.core.lazy import load_attr
+
+    Document = load_attr("docx", "Document", globals())
     doc = Document()
     doc.add_heading("{{name}}", level=0)
     _field_paragraph(doc, "电话", "{{phone}}")

@@ -11,11 +11,20 @@ import re
 import struct
 from typing import Any, Dict, List, Optional
 
-import sqlite_vec
-
 from backend.memory.embedder import Embedder
 
 logger = logging.getLogger(__name__)
+
+
+# Phase 3.5：sqlite_vec(~400ms, 连带 numpy~380ms) 只在 VectorStore 第一次
+# 初始化时才真正启用扩展加载；绝大多数启动路径（会话列表 / 聊天）不触发 →
+# 改为按需惰性导入。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_module
+
+    if name == "sqlite_vec":
+        return load_module("sqlite_vec", "sqlite_vec", globals())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class VectorStore:
@@ -61,6 +70,10 @@ class VectorStore:
         重建后由 backfill_from_tables() 回填存量记忆向量。
         """
         conn = self._db.get_connection()
+
+        from backend.core.lazy import load_module
+
+        sqlite_vec = load_module("sqlite_vec", "sqlite_vec", globals())
 
         # 加载 sqlite-vec 扩展
         try:
