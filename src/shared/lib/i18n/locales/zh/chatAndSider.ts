@@ -2,8 +2,6 @@
 export const zhChatAndSider = {
   // --- Task center: A1 states & actions (parity-s4) ---
   'taskCenter.cancel': '取消',
-  'taskCenter.clearFinished': '清除已完成',
-  'taskCenter.goto': '前往处理',
   'taskCenter.status.queued': '排队中',
   'taskCenter.status.running': '运行中',
   'taskCenter.status.awaiting_approval': '等待审批',
@@ -11,9 +9,6 @@ export const zhChatAndSider = {
   'taskCenter.status.succeeded': '已完成',
   'taskCenter.status.failed': '失败',
   'taskCenter.status.cancelled': '已取消',
-  'taskCenter.laneFallback': '编排任务',
-  'taskCenter.finishedCount': '最近完成 {n} 项',
-  'taskCenter.cancelFailed': '取消失败，请重试',
   // 2026-11-07 Phase 5: 后台 shell 抽屉
   'taskCenter.shellTerminate': '终止',
   'taskCenter.shellTerminating': '终止中…',
