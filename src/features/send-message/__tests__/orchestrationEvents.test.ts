@@ -527,6 +527,10 @@ describe('restoreRunToBoard — 历史 run 恢复 (RD20)', () => {
     session_id: SID,
     status: 'failed',
     created_at: 1_000_000,
+    // 2026-11-10: 确认/派发时间戳由后端透传 —— 不再用 created_at 代理
+    // dispatchedAt（代理值会让"已确认但未派发"的 run 被误判为已派发）。
+    confirmed_at: 1_000_010,
+    dispatched_at: 1_000_050,
     plan: [
       { task_id: 'a', goal: 'GA', agent_id: 'primary', depends_on: [] },
       { task_id: 'b', goal: 'GB', agent_id: 'primary' },
@@ -564,7 +568,9 @@ describe('restoreRunToBoard — 历史 run 恢复 (RD20)', () => {
   it('映射 statuses/plan/progress 与 RT24 字段，endedAt 取最大 finished_at', () => {
     const restored = restoreRunToBoard(baseRun);
     expect(restored).not.toBeNull();
-    expect(restored!.dispatchedAt).toBe(1_000_000);
+    // 2026-11-10: dispatchedAt 取后端真实字段，不再是 created_at 的代理值。
+    expect(restored!.dispatchedAt).toBe(1_000_050);
+    expect(restored!.confirmedAt).toBe(1_000_010);
     expect(restored!.endedAt).toBe(1_000_900);
     const sa = restored!.statuses.a!;
     const sb = restored!.statuses.b!;
@@ -579,6 +585,32 @@ describe('restoreRunToBoard — 历史 run 恢复 (RD20)', () => {
 
   it('无任务的 run 返回 null', () => {
     expect(restoreRunToBoard({ ...baseRun, tasks: [], plan: [] })).toBeNull();
+  });
+
+  // 2026-11-10: 确认态恢复 —— 会话切回后必须能还原"已确认待派发"，
+  // 否则 PlanApprovalBar 会重新渲染出可编辑的"开始执行/取消"按钮。
+  it('已确认但未派发：confirmedAt 有值、dispatchedAt 为 null', () => {
+    const restored = restoreRunToBoard({
+      ...baseRun,
+      confirmed_at: 1_000_010,
+      dispatched_at: null,
+    });
+    expect(restored).not.toBeNull();
+    expect(restored!.confirmedAt).toBe(1_000_010);
+    expect(restored!.dispatchedAt).toBeNull();
+  });
+
+  // 2026-11-10: 旧库行没有 confirmed_at/dispatched_at 列值 —— 必须为 null
+  // （而不是回退到 created_at，否则未派发的 run 会被误判为已派发）。
+  it('旧库行缺列时 confirmedAt/dispatchedAt 均为 null（不回退 created_at）', () => {
+    const restored = restoreRunToBoard({
+      ...baseRun,
+      confirmed_at: null,
+      dispatched_at: null,
+    });
+    expect(restored).not.toBeNull();
+    expect(restored!.confirmedAt).toBeNull();
+    expect(restored!.dispatchedAt).toBeNull();
   });
 });
 
