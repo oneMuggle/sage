@@ -51,6 +51,9 @@ interface PlanCardProps {
   // 一直是原始计划，拿它当修订基线会把用户的 goal 编辑静默冲掉。
   onRevise?: (instruction: string, currentItems: TaskPlanItem[]) => Promise<void>;
   revising?: boolean;
+  // 2026-11-10: 用户确认后回传 confirmed_at,供上层写入 store 恢复锁定态。
+  // confirmRun 后端返回时间戳,由本组件透传给上层,上层负责写入 taskBoard。
+  onConfirmed?: (confirmedAt: number) => void;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -105,6 +108,7 @@ export function PlanCard({
   reasoning,
   onRevise,
   revising = false,
+  onConfirmed,
 }: PlanCardProps) {
   const [items, setItems] = useState(initialPlan);
   // 编排计划卡片 UX (2026-10-26): 修订结果经上层写回 store → 新 plan 数组
@@ -146,8 +150,11 @@ export function PlanCard({
       await orchRunClient.updatePlan(runId, items);
       // Fix #3 (2026-09-06): needConfirm 模式下,updatePlan 后调 confirmRun
       // 唤醒后端 producer（producer 在 task_plan 后暂停等待用户确认）。
+      // 2026-11-10: 捕获 confirmed_at 回传上层写入 store,
+      // 使会话切换后 PlanApprovalBar 能恢复 locked 态。
       if (needConfirm) {
-        await orchRunClient.confirmRun(runId);
+        const resp = await orchRunClient.confirmRun(runId);
+        onConfirmed?.(resp.confirmed_at);
       }
     } catch (err) {
       startingRef.current = false; // 失败后允许重试

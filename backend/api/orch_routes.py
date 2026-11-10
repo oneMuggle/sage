@@ -51,6 +51,11 @@ class OrchRunDetail(BaseModel):
     # RT27 (round62): run 级聚合统计 —— 历史回看一目了然。
     total_used_tokens: Optional[int] = None
     total_duration_ms: Optional[int] = None
+    # 2026-11-10: 确认/派发时间戳 —— 前端恢复锁定态的依据。
+    # confirmed_at 非 null 表示用户已确认（PlanCard locked）；
+    # dispatched_at 非 null 表示首个 task_status 已到达（PlanCard 消失）。
+    confirmed_at: Optional[int] = None
+    dispatched_at: Optional[int] = None
 
 
 class SessionRunsResponse(BaseModel):
@@ -116,6 +121,9 @@ def _run_detail(run: OrchRun) -> OrchRunDetail:
         # RT27 (round62): run 级聚合统计。
         total_used_tokens=total_used if total_used > 0 else None,
         total_duration_ms=total_dur if total_dur > 0 else None,
+        # 2026-11-10: 确认/派发时间戳透传 —— 前端恢复锁定态。
+        confirmed_at=run.confirmed_at,
+        dispatched_at=run.dispatched_at,
     )
 
 
@@ -449,6 +457,8 @@ def cancel_run_task(run_id: str, task_id: str) -> CancelTaskResponse:
 class ConfirmRunResponse(BaseModel):
     ok: bool
     run_id: str
+    # 2026-11-10: 前端据此把确认时间戳写入 store，恢复锁定态。
+    confirmed_at: int
 
 
 @router.post("/runs/{run_id}/confirm", response_model=ConfirmRunResponse)
@@ -487,7 +497,12 @@ def confirm_run(run_id: str) -> ConfirmRunResponse:
         logging.getLogger(__name__).warning(
             "confirm_run: failed to set confirm event for %s: %s", run_id, exc
         )
-    return ConfirmRunResponse(ok=True, run_id=run_id)
+    # 2026-11-10: 确认时间戳持久化（幂等）—— 会话切换/重启后恢复锁定态的依据。
+    import time as _time
+
+    confirmed_at = int(_time.time() * 1000)
+    repo.mark_confirmed(run_id, confirmed_at)
+    return ConfirmRunResponse(ok=True, run_id=run_id, confirmed_at=confirmed_at)
 
 
 # ---------------------------------------------------------------------------

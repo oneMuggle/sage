@@ -167,7 +167,7 @@ describe('PlanCard needConfirm (Fix #3)', () => {
 
   it('needConfirm=true: 开始执行 → updatePlan + confirmRun 依次调用', async () => {
     vi.mocked(orchRunClient.updatePlan).mockResolvedValue({ ok: true });
-    vi.mocked(orchRunClient.confirmRun).mockResolvedValue({ ok: true });
+    vi.mocked(orchRunClient.confirmRun).mockResolvedValue({ ok: true, confirmed_at: 1731234567000 });
     render(<PlanCard runId="r1" plan={plan} locked={false} onCancel={() => {}} needConfirm />);
     fireEvent.click(screen.getByTestId('plan-start'));
     await waitFor(() => expect(orchRunClient.updatePlan).toHaveBeenCalledWith('r1', plan));
@@ -241,7 +241,7 @@ describe('PlanCard 编排 UX (2026-10-26)', () => {
 
   it('开始执行成功 → 折叠成摘要；展开后回完整态（只读）', async () => {
     vi.mocked(orchRunClient.updatePlan).mockResolvedValue({ ok: true });
-    vi.mocked(orchRunClient.confirmRun).mockResolvedValue({ ok: true });
+    vi.mocked(orchRunClient.confirmRun).mockResolvedValue({ ok: true, confirmed_at: 1731234567000 });
     render(<PlanCard runId="r1" plan={plan} locked={false} onCancel={() => {}} needConfirm />);
     fireEvent.click(screen.getByTestId('plan-start'));
     await waitFor(() => expect(screen.getByTestId('plan-card-collapsed')).toBeInTheDocument());

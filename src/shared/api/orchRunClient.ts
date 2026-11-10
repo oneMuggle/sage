@@ -19,6 +19,9 @@ export interface OrchRunDetail {
   plan: Array<Record<string, unknown>>;
   tasks: Array<Record<string, unknown>>;
   original_request?: string | null;
+  // 2026-11-10: 确认/派发时间戳 —— 前端恢复锁定态的依据。
+  confirmed_at?: number | null;
+  dispatched_at?: number | null;
 }
 
 export interface SessionRunsResponse {
@@ -70,8 +73,9 @@ export const orchRunClient = {
     return invoke('orchestration_cancel_run_task', { run_id: runId, task_id: taskId });
   },
   // Fix #3 (2026-09-06): 用户确认 → 唤醒 producer 启动 conductor 执行。
-  confirmRun(runId: string): Promise<{ ok: boolean }> {
-    return invoke<{ ok: boolean }>('orchestration_confirm_run', { run_id: runId });
+  // 2026-11-10: 返回 confirmed_at 供前端写入 store 恢复锁定态。
+  confirmRun(runId: string): Promise<{ ok: boolean; confirmed_at: number }> {
+    return invoke<{ ok: boolean; confirmed_at: number }>('orchestration_confirm_run', { run_id: runId });
   },
   // RV2 (round8): 构造"只重跑失败任务"的计划覆盖 —— done 子任务带
   // preset_output（结果回放，不重新执行），失败子任务原样重建。
