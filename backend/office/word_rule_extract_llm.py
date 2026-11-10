@@ -32,16 +32,31 @@ _ALLOWED_KINDS = (
 _ALIGNMENTS = ("left", "center", "right", "justify", "distribute")
 _PAGE_NUMBER_FORMATS = ("decimal", "upperRoman", "lowerRoman")
 _HEX_COLOR_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
+_STYLE_NAME_RE = re.compile(r"^[A-Za-z0-9一-鿿_ \-]{1,40}$")
 
-_LLM_PROMPT = """你是 Word 规范文档的格式规则抽取器。只从给定条文中抽取可机械执行的规则。
+
+def _style_name(params: Any) -> Optional[str]:
+    """Extract a safe style name from params, defaulting to Normal."""
+    if "style" not in params:
+        return "Normal"
+    value = params["style"]
+    if not isinstance(value, str):
+        return None
+    name = value.strip()
+    if not _STYLE_NAME_RE.match(name):
+        return None
+    return name
+
+
+_LLM_PROMPT = """你是 Word 规范/模板文档的格式规则抽取器。只从给定条文中抽取可机械执行的规则。
 
 允许的 kind 与 params（不得输出其他 kind 或字段）：
 - page.size: {"size":"A4"|"Letter"}
 - page.orientation: {"orientation":"portrait"|"landscape"}
 - page.margins: {"top_cm"?:number,"bottom_cm"?:number,"left_cm"?:number,"right_cm"?:number}（单位 cm）
 - page.page_number: {"required"?:boolean,"format"?:"decimal"|"upperRoman"|"lowerRoman"}
-- style.font: {"style":"Normal","font_ascii"?:string,"font_east_asia"?:string,"size_pt"?:number}
-- style.paragraph: {"style":"Normal","line_spacing"?:number,"line_spacing_pt"?:number,"first_line_indent_cm"?:number,"alignment"?:"left"|"center"|"right"|"justify"|"distribute"}
+- style.font: {"style"?:string,"font_ascii"?:string,"font_east_asia"?:string,"size_pt"?:number}
+- style.paragraph: {"style"?:string,"line_spacing"?:number,"line_spacing_pt"?:number,"first_line_indent_cm"?:number,"alignment"?:"left"|"center"|"right"|"justify"|"distribute"}
 - structure.heading_sequence: {"levels":[1,2,...],"require_prefix":true}
 - structure.required_headings: {"headings":["摘要","引言"],"match":"contains"}
 - content.caption_sequence: {"labels":["图","表"]}
@@ -51,6 +66,11 @@ _LLM_PROMPT = """你是 Word 规范文档的格式规则抽取器。只从给定
 2. 每条必须包含 clause_id、kind、params、confidence（0-1）、reason。
 3. 不得编造条文中没有的数值；不确定时不要输出。
 4. 没有规则时输出 []。
+5. 条文中的 annotation 字段是该段落声明的格式（如"二号黑体"、"五号，楷体"），
+   style 字段是该段落使用的 Word 样式名（如"Heading 1"、"作者"）。
+   抽取样式字体规则时，style 取 style 字段的值，字体/字号取 annotation 中的值。
+   annotation 字号需换算为磅值（一号=26, 小一=24, 二号=22, 小二=18, 三号=16,
+   小三=15, 四号=14, 小四=12, 五号=10.5, 小五=9, 初号=42, 小初=36）。
 
 条文（JSON）：
 {clauses}
@@ -71,13 +91,18 @@ def build_clauses(paragraphs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if total + len(chunk) > MAX_TOTAL_CHARS:
             break
         index = paragraph.get("index")
-        clauses.append(
-            {
-                "clause_id": f"c{len(clauses) + 1}",
-                "paragraph_index": int(index) if index is not None else 0,
-                "text": chunk,
-            }
-        )
+        clause: Dict[str, Any] = {
+            "clause_id": f"c{len(clauses) + 1}",
+            "paragraph_index": int(index) if index is not None else 0,
+            "text": chunk,
+        }
+        annotation = paragraph.get("annotation")
+        if annotation:
+            clause["annotation"] = str(annotation)
+        style_label = paragraph.get("style_label")
+        if style_label:
+            clause["style"] = str(style_label)
+        clauses.append(clause)
         total += len(chunk)
     return clauses
 
@@ -148,7 +173,10 @@ def validate_llm_params(kind: str, params: Any) -> Optional[Dict[str, Any]]:  # 
             result["format"] = fmt
         return result or None
     if kind == "style.font":
-        result = {"style": "Normal"}
+        style = _style_name(params)
+        if style is None:
+            return None
+        result = {"style": style}
         for key in ("font_ascii", "font_east_asia"):
             if key in params:
                 value = params[key]
@@ -170,7 +198,10 @@ def validate_llm_params(kind: str, params: Any) -> Optional[Dict[str, Any]]:  # 
             result["color"] = color.upper()
         return result if len(result) > 1 else None
     if kind == "style.paragraph":
-        result = {"style": "Normal"}
+        style = _style_name(params)
+        if style is None:
+            return None
+        result = {"style": style}
         for key, minimum, maximum in (
             ("line_spacing", 0.5, 5.0),
             ("line_spacing_pt", 5.0, 100.0),
