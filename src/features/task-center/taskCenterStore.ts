@@ -2,8 +2,8 @@
  * 任务中心 store — P4 第一切片 (docs/plans/2026-09-13_ui-optimization-p4-task-center.md)。
  *
  * 聚合各页面局部 busy 态的长任务（office 生成/导出等），让用户切走页面后
- * 仍能在全局悬浮胶囊看到"还有什么在跑"。聊天流不进本 store——
- * TaskCenterWidget 直接读 chatStreamStore 的会话槽位（单一事实源）。
+ * 仍能在全局任务中心看到"还有什么在跑"。聊天流不进本 store——
+ * 会话槽位由 chatStreamStore 持有（单一事实源），任务中心按需订阅。
  *
  * 设计对齐 chatStreamStore：独立 module-singleton zustand，key 控制幂等
  * （重复 register 同 id 只刷新字段不重置 startedAt）。

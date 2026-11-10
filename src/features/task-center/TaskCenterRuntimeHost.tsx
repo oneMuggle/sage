@@ -10,7 +10,7 @@ import { listShells } from '../../shared/api/shellApi';
 import { useTaskCenterStore } from './taskCenterStore';
 import { useUnifiedTaskStore } from './unifiedTaskStore';
 
-const SHELL_TASK_POLL_MS = 3_000;
+export const SHELL_TASK_POLL_MS = 3_000;
 const GOAL_POLL_MS = 10_000;
 const SLOW_SOURCE_POLL_MS = 30_000;
 
@@ -20,7 +20,7 @@ export function TaskCenterRuntimeHost(): null {
   const registerShell = useTaskCenterStore((s) => s.registerShell);
   const removeMissingShells = useTaskCenterStore((s) => s.removeMissingShells);
 
-  // shell 3s 轮询（逻辑与 TaskCenterWidget:228-256 完全一致）
+  // shell 3s 轮询（沿用旧胶囊的同 cadence 轮询：列出现存 shell、注册新条目、清除已消失条目）
   useEffect(() => {
     let cancelled = false;
     const poll = (): void => {

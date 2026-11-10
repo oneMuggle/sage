@@ -174,7 +174,7 @@ describe('useTaskCenterActions', () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  // A4 / Phase 5 回归：旧的 TaskCenterWidget 有三条点击分支，删胶囊后必须保住
+  // A4 / Phase 5 回归：旧胶囊有三条点击分支，删胶囊后必须保住（现由侧边栏任务中心承接）
   it('open: shell 条目打开后台输出抽屉', () => {
     const { result } = renderHook(() => useTaskCenterActions(), { wrapper });
     act(() =>

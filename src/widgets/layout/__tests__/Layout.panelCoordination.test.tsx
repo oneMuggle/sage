@@ -12,7 +12,7 @@ vi.mock('../Sidebar', () => ({
 }));
 vi.mock('../Titlebar', () => ({ Titlebar: () => null }));
 vi.mock('../../system/EndpointStatusBanner', () => ({ EndpointStatusBanner: () => null }));
-vi.mock('../../task-center/TaskCenterWidget', () => ({ TaskCenterWidget: () => null }));
+vi.mock('../../../features/task-center/TaskCenterRuntimeHost', () => ({ TaskCenterRuntimeHost: () => null }));
 vi.mock('../../task-center/DeliveryDrawerHost', () => ({ DeliveryDrawerHost: () => null }));
 
 import { useRightPanelStore } from '../../../features/right-panel/rightPanelStore';

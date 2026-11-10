@@ -128,7 +128,7 @@ function nonEmpty(value: string | null | undefined, fallback: string): string {
 
 export function normalizeRegistryTask(entry: TaskCenterEntry): UnifiedTaskEntry {
   const isShell = entry.kind === 'shell';
-  // A4b: office 交付待验收 → 点击直达交付抽屉（旧 TaskCenterWidget 行为）
+  // A4b: office 交付待验收 → 点击直达交付抽屉（历史：旧胶囊的点击分支，现由侧边栏任务中心承接）
   const officeDelivery =
     !isShell && entry.status === 'awaiting_approval' && entry.deliveryRef != null;
   return {

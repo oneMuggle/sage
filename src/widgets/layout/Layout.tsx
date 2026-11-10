@@ -8,12 +8,12 @@ import {
   isAutoCollapseSidebarEnabled,
   useRightPanelStore,
 } from '../../features/right-panel/rightPanelStore';
+import { TaskCenterRuntimeHost } from '../../features/task-center/TaskCenterRuntimeHost';
 import { useResizableSidebar } from '../../shared/lib/useResizableSidebar';
 import { PageSkeleton } from '../../shared/ui';
 import { EndpointStatusBanner } from '../system/EndpointStatusBanner';
 import { TaskbarAttentionBridge } from '../system/TaskbarAttentionBridge';
 import { DeliveryDrawerHost } from '../task-center/DeliveryDrawerHost';
-import { TaskCenterWidget } from '../task-center/TaskCenterWidget';
 
 import { ResizeDivider } from './ResizeDivider';
 import { Sidebar } from './Sidebar';
@@ -207,8 +207,8 @@ export function Layout() {
             </ErrorBoundary>
           </main>
         </div>
-        {/* P4: 全局任务中心胶囊 —— 跨页面聚合 office/wiki 等长任务与后台聊天流 */}
-        <TaskCenterWidget />
+        {/* P4: 全局任务中心常驻轮询宿主（Task 11 起常驻，不受侧边栏折叠影响） */}
+        <TaskCenterRuntimeHost />
         {/* 2026-11-05: 等待审批/提问 → 任务栏闪烁 / dock badge */}
         <TaskbarAttentionBridge />
         {/* A4: 全局交付抽屉（lane / office 验收） */}

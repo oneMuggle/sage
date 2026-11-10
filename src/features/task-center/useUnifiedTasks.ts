@@ -54,7 +54,7 @@ export function useUnifiedTasks(): UnifiedTasksResult {
   const loading = useUnifiedTaskStore((s) => s.loading);
   const error = useUnifiedTaskStore((s) => s.error);
 
-  // chat 首见时间：沿用 TaskCenterWidget 的 streamStartsRef 约定
+  // chat 首见时间：沿用历史 streamStartsRef 约定（原胶囊 → 现侧边栏任务中心）
   const streamStartsRef = useRef<Map<string, number>>(new Map());
 
   const activeStreamIds = useMemo(
