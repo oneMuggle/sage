@@ -15,7 +15,7 @@ import { I18nProvider } from '../../../../shared/lib/i18n';
 import { RulesSubtabs } from '../RulesSubtabs';
 
 vi.mock('sonner', () => ({
-  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }));
 vi.mock('../../../../shared/api/officeRulesApi', () => ({
   officeRulesApi: {
@@ -235,5 +235,37 @@ describe('RulesSubtabs — extract from active document', () => {
     renderSubtabs();
 
     await waitFor(() => expect(screen.getByTestId('office-rules-extract-from-doc')).toBeDisabled());
+  });
+
+  it('shows a spinner, disables the button and notifies while extracting', async () => {
+    // Hold the extraction open so the loading state can be observed.
+    let releaseExtract: (() => void) | undefined;
+    mockedApi.extractRules.mockReturnValue(
+      new Promise((resolve) => {
+        releaseExtract = () => resolve({ rules: [], warnings: [] } as WireExtractResult);
+      }),
+    );
+    mockedApi.listGroups.mockResolvedValue([]);
+    renderSubtabs();
+
+    const button = screen.getByTestId('office-rules-extract-from-doc');
+    await waitFor(() => expect(button).not.toBeDisabled());
+    expect(screen.queryByTestId('office-rules-extract-spinner')).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('office-rules-extract-spinner')).toBeInTheDocument(),
+    );
+    expect(button).toBeDisabled();
+    expect(toast.info).toHaveBeenCalledWith('正在抽取规则，请稍候…');
+
+    await act(async () => {
+      releaseExtract?.();
+    });
+    await waitFor(() => expect(button).not.toBeDisabled());
+    expect(screen.queryByTestId('office-rules-extract-spinner')).toBeNull();
   });
 });
