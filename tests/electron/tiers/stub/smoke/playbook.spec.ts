@@ -19,6 +19,12 @@ test('playbook smoke: 归类批量移动后可撤销', async () => {
       window.location.hash = '#/projects/governance/p1';
     });
     await page.waitForSelector('[data-testid="playbook-card"]', { timeout: 20_000 });
+    // compact 模式（OverviewSection 默认）将 PlaybookChecklist 与
+    // PlaybookClassificationPanel 折叠在 <details> 内，需先展开才能断言内部 testid。
+    const details = page.locator('[data-testid="playbook-details"]');
+    if ((await details.count()) > 0) {
+      await details.locator('summary').click();
+    }
     await page.waitForSelector('[data-testid="playbook-unclassified"]', {
       timeout: 20_000,
     });

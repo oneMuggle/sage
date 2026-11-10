@@ -13,6 +13,7 @@ import { zhPlaybook } from './locales/zh/playbook';
 import { zhRules } from './locales/zh/rules';
 import { zhSettingsAndModels } from './locales/zh/settingsAndModels';
 import { zhSettingsUi } from './locales/zh/settingsUi';
+import { zhTaskCenter } from './locales/zh/taskCenter';
 import { zhWorkspaceAndTools } from './locales/zh/workspaceAndTools';
 import { pausedMemoryZh } from './pausedMemory';
 import { retryBannerZh } from './retryBanner';
@@ -30,6 +31,7 @@ export const zh = {
   ...zhRules,
   ...zhSettingsAndModels,
   ...zhSettingsUi,
+  ...zhTaskCenter,
   ...zhWorkspaceAndTools,
   ...pausedMemoryZh,
   ...retryBannerZh,

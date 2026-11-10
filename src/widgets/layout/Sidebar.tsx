@@ -12,10 +12,12 @@ import {
   Folder,
   HelpCircle,
   ListTodo,
+  ListChecks,
   UserCog,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  Target,
   PenSquare,
   Users,
   Wrench,
@@ -35,6 +37,7 @@ import { testEndpointConnection } from '../../features/manage-endpoints/api';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { deleteSessionCascade } from '../../features/send-message/useChat';
+import { useUnifiedTasks } from '../../features/task-center/useUnifiedTasks';
 import { sessionApi } from '../../shared/api/sessionApi';
 import { useBackendReadyTick } from '../../shared/lib/backendReadySignal';
 import { requestOpenCommandPalette } from '../../shared/lib/commandPaletteEvents';
@@ -51,6 +54,7 @@ import {
   ConversationsSection,
   GitStatusSection,
   SidebarProjectList,
+  TaskCenterSection,
   useSiderSections,
 } from '../sidebar';
 
@@ -66,7 +70,7 @@ import { useSidebarSlot } from './SidebarSlotProvider';
 //   - team 删除：占位实现（"占位 - 团队协作将在 Phase 6 接入"），无功能不占位。
 // useSiderSections 会用 defaultOrder 过滤存量 localStorage 里的旧 key，
 // 老用户残留的 todos/cron/team 会被自动丢弃，无需迁移脚本。
-const SECTION_KEYS = ['project', 'conversations', 'git'] as const;
+const SECTION_KEYS = ['project', 'conversations', 'tasks', 'git'] as const;
 const DEFAULT_COLLAPSED_SECTIONS = ['git'] as const;
 
 // UX-IA R3 批次 B：两段式布局 —— rail 常驻 + 内容列。
@@ -94,7 +98,7 @@ interface NavItem {
 }
 
 // Scheme 2 (P1): 侧栏 rail 导航分 3 组 ——
-//   核心（始终展开）：对话 / 项目工作台 / 待办 / 记忆
+//   核心（始终展开）：对话 / 任务 / 项目工作台 / 待办 / 闲时目标 / 记忆
 //   工具（可折叠）：文档工作台 / 知识库 / 定时任务 / 技能
 //   高级（可折叠，默认收起）：智能体 / 编排 / Arena / 帮助
 // 设置固定在底部，不属于任何组。
@@ -109,8 +113,10 @@ interface NavGroupDef {
 
 const coreNavItems: NavItem[] = [
   { path: '/chat', label: '对话', icon: MessageSquare },
+  { path: '/tasks', label: '任务', icon: ListChecks },
   { path: '/projects', label: '项目工作台', icon: Folder },
   { path: '/todos', label: '待办', icon: ListTodo },
+  { path: '/goals', label: '闲时目标', icon: Target },
   { path: '/memory', label: '记忆', icon: Brain },
 ];
 const toolsNavItems: NavItem[] = [
@@ -239,6 +245,11 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
   const pendingApprovals = usePermissionState((s) => (s.currentRequest != null ? 1 : 0));
   const pendingQuestions = useQuestionState((s) => (s.currentQuestion != null ? 1 : 0));
   const attentionCount = pendingApprovals + pendingQuestions;
+
+  // `/tasks` 角标 = 进行中 + 失败任务数（useUnifiedTasks 的 attentionCount 口径）。
+  // ⚠️ 变量名不得复用 attentionCount —— 它已被 /chat 角标占用（审批+提问）。
+  // 两个角标口径不同：/chat 是「需要你操作」，/tasks 是「任务在跑 / 已失败」。
+  const { attentionCount: taskCenterBadgeCount } = useUnifiedTasks();
 
   // UX-IA R3 批次 D（UI 接线）：rail 底部的**统一**待处理总数。
   // 此前只有「对话」入口的角标（审批+提问），其余来源（未读产物、待办、未提交
@@ -455,6 +466,13 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
             onToggleCollapsed={() => toggleCollapsed(key)}
           />
         );
+      case 'tasks':
+        return (
+          <TaskCenterSection
+            collapsed={collapsedSections.has('tasks')}
+            onToggleCollapsed={() => toggleCollapsed('tasks')}
+          />
+        );
       case 'project':
         return (
           <SidebarProjectList
@@ -516,7 +534,11 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
                       active={isActivePath(item.path)}
                       variant="rail"
                       trailing={
-                        item.path === '/chat' ? <AttnBadge count={attentionCount} /> : undefined
+                        item.path === '/chat' ? (
+                          <AttnBadge count={attentionCount} />
+                        ) : item.path === '/tasks' ? (
+                          <AttnBadge count={taskCenterBadgeCount} />
+                        ) : undefined
                       }
                       locked={
                         state === 'locked'

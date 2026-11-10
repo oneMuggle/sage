@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ProjectSummary } from '../../../shared/api/projectApiTypes';
 import { filterAndSortProjects, projectStatus } from '../../../features/project-type/projectFilters';
+import type { ProjectSummary } from '../../../shared/api/projectApiTypes';
 
 function p(over: Partial<ProjectSummary>): ProjectSummary {
   return {
