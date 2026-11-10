@@ -218,7 +218,10 @@
 | `src/features/project-type/StudioMaterialsAndProfilePanels.tsx` | 拆出 `SemanticSearchPanel`（785 行 → 各 < 400 行）；资料面板术语中文化 |
 | `src/features/project-type/GitStatusWidget.tsx` | 移入概览「项目结构」折叠区；跨域按钮改为跳转 |
 | `src/features/project-type/WikiGenerationPanel.tsx` | 移入设置章「高级」折叠区 |
-| `src/features/rules/RulesPanel.tsx` | 来源路径只显示文件名；冲突 tooltip；按钮文案口语化 |
+| `src/features/rules/rulesView.ts` | 新增 `sourceDetail()`：路径型 scope 只显示文件名，全路径进 `title` |
+| `src/features/rules/RuleRow.tsx` | 行内移除重复来源名，改用 `sourceDetail()` 显示来源细节 |
+| `src/features/rules/EffectiveRulesDrawer.tsx` | 生效顺序抽屉行内改用 `sourceDetail()` |
+| `src/features/rules/RulesPanelSections.tsx` | 冲突计数加 tooltip；「查看规则生效顺序」按钮文案 |
 | `src/features/playbook/PlaybookCard.tsx` | 操作收敛（如 UI 文案与按钮位于此组件） |
 | `src/features/project-type/ProjectOverviewWidgets.tsx` | 仅收敛入口展示，不改能力 |
 | `src/shared/lib/i18n/locales/zh/governance.ts` | 新增中文字典 |
@@ -245,6 +248,7 @@
 | `src/pages/governance/sections/__tests__/OverviewSection.test.tsx` | 下一步卡优先级（含阶段检测横幅）、里程碑折叠、Git 状态位于折叠区 |
 | `src/pages/governance/sections/__tests__/SettingsSection.test.tsx` | 默认不自动请求 bootstrap suggest；高级折叠 |
 | `src/pages/governance/sections/__tests__/KnowledgeSection.test.tsx` | 资料章只渲染入库/列表；语义检索默认折叠；Git 状态不在资料页 |
+| `src/features/rules/__tests__/rulesView.test.ts` | `sourceDetail()` 单元测试（路径/非路径/全局层） |
 | `src/features/rules/__tests__/RulesPanel.test.tsx`（新建或扩充） | 来源路径只显示文件名、冲突 tooltip、按钮文案 |
 
 ## 5. 实施步骤
@@ -265,7 +269,7 @@
 - [x] **M6 · 资料章重组 + 语义检索折叠**
   - 资料页只保留入库与列表；拆出 `SemanticSearchPanel` 并默认折叠；Git 状态移入概览折叠区；Wiki 生成移入设置高级区；术语中文化
   - 验收：资料页无 `M4`/`Embedder`/「语料池」等内部术语；Git 状态不在资料页；`StudioMaterialsAndProfilePanels.tsx` < 400 行
-- [ ] **M7 · 规则页文案收敛**
+- [x] **M7 · 规则页文案收敛**
   - 来源路径显示文件名（tooltip 全路径）；冲突 tooltip；「查看规则生效顺序」
   - 验收：规则页功能与数据不变，仅文案/显示层差异
 - [ ] **M5 · 壳层视觉统一 + 回归**（最后执行，覆盖 M1–M7 全部页面）
