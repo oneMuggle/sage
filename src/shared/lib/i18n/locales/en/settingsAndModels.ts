@@ -325,8 +325,6 @@ export const enSettingsAndModels = {
   'codeBlock.toggleWrap': 'Toggle word wrap',
   'codeBlock.expandLines': 'Expand all {n} lines',
   'codeBlock.collapseLines': 'Collapse',
-  'taskCenter.activeCount': '{n} running',
-  'taskCenter.chatFallback': 'Background session generating',
 
   // ─── M2 AskUserQuestion ───────────
   'question.title': 'The assistant needs your answer',

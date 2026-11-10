@@ -89,4 +89,44 @@ describe('TaskCenterCard', () => {
     renderCard(<TaskCenterCard entry={makeEntry()} actions={actions} compact />);
     expect(screen.queryByText('闲时目标')).toBeNull();
   });
+
+  it('goal 运行时渲染暂停按钮，点击调 actions.pause', () => {
+    renderCard(<TaskCenterCard entry={makeEntry()} actions={actions} />);
+    fireEvent.click(screen.getByRole('button', { name: '暂停' }));
+    expect(actions.pause).toHaveBeenCalledWith(expect.objectContaining({ id: 'goal:g1' }));
+  });
+
+  it('goal 暂停时渲染恢复按钮，点击调 actions.resume', () => {
+    renderCard(<TaskCenterCard entry={makeEntry({ status: 'paused' })} actions={actions} />);
+    fireEvent.click(screen.getByRole('button', { name: '恢复' }));
+    expect(actions.resume).toHaveBeenCalledWith(expect.objectContaining({ id: 'goal:g1' }));
+  });
+
+  it('scheduled 来源渲染立即运行按钮，点击调 actions.runNow', () => {
+    renderCard(
+      <TaskCenterCard
+        entry={makeEntry({
+          id: 'scheduled:s1',
+          source: 'scheduled',
+          cancellable: false,
+          cancelRef: null,
+          detailPath: '/scheduled',
+        })}
+        actions={actions}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '立即运行' }));
+    expect(actions.runNow).toHaveBeenCalledWith(expect.objectContaining({ id: 'scheduled:s1' }));
+  });
+
+  it('非 goal 来源不渲染暂停/恢复按钮', () => {
+    renderCard(
+      <TaskCenterCard
+        entry={makeEntry({ source: 'registry', status: 'running' })}
+        actions={actions}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: '暂停' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '恢复' })).toBeNull();
+  });
 });
