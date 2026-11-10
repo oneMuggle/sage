@@ -2,7 +2,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { ReactElement } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { ProjectReference } from '../../../shared/api';
 import { I18nProvider } from '../../../shared/lib/i18n';
+import { ReferenceManager } from '../ReferenceManager';
 
 const mockListReferences = vi.fn();
 const mockCreateReference = vi.fn();
@@ -22,9 +24,6 @@ vi.mock('../../../shared/api', () => ({
 vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
   confirmDialog: (...args: unknown[]) => mockConfirmDialog(...args),
 }));
-
-import type { ProjectReference } from '../../../shared/api';
-import { ReferenceManager } from '../ReferenceManager';
 
 const PROJECT_ID = 'project-abc';
 
