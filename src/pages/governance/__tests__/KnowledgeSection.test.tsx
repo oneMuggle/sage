@@ -2,10 +2,6 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../features/project-type', () => ({
-  GitStatusWidget: () => <div data-testid="git-widget" />,
-  WikiGenerationPanel: () => <div data-testid="wiki-panel" />,
-}));
 vi.mock('../../../features/project-type/StudioMaterialsAndProfilePanels', () => ({
   StudioMaterialsTabPanel: () => <div data-testid="materials-panel" />,
   StudioProfileTabPanel: ({ profileEntries }: { profileEntries: unknown[] }) => (
@@ -49,12 +45,12 @@ describe('KnowledgeSection', () => {
     expect(screen.getByTestId('materials-panel')).toBeInTheDocument();
   });
 
-  it('switches to materials and renders git + wiki for git projects', () => {
+  it('keeps git status and wiki generation out of the materials tab', () => {
     renderSection();
     fireEvent.click(screen.getByTestId('governance-knowledge-materials'));
     expect(screen.getByTestId('materials-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('git-widget')).toBeInTheDocument();
-    expect(screen.getByTestId('wiki-panel')).toBeInTheDocument();
+    expect(screen.queryByTestId('git-widget')).toBeNull();
+    expect(screen.queryByTestId('wiki-panel')).toBeNull();
   });
 
   it('switches to the profile sub-tab', () => {

@@ -1,7 +1,11 @@
 import { Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
-import { ProjectBootstrapPanel, ProjectOverviewWidgets } from '../../../features/project-type';
+import {
+  ProjectBootstrapPanel,
+  ProjectOverviewWidgets,
+  WikiGenerationPanel,
+} from '../../../features/project-type';
 import {
   StudioAllowedPathsTabPanel,
   StudioCharterTabPanel,
@@ -246,7 +250,7 @@ export function SettingsSection({ data, activeTab }: SettingsSectionProps) {
         data-testid="governance-settings-advanced"
       >
         <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
-          高级设置（目录初始化 · 外部文件夹 · 快照与导出台账）
+          高级设置（目录初始化 · 外部文件夹 · Wiki · 快照与导出台账）
         </summary>
         <div className="space-y-3 px-3 pb-3">
           <div className="space-y-2">
@@ -278,6 +282,13 @@ export function SettingsSection({ data, activeTab }: SettingsSectionProps) {
           </div>
           <div data-testid="governance-advanced-widgets">
             <ProjectOverviewWidgets project={project} />
+          </div>
+          <div className="space-y-2">
+            <SettingsSectionHeading
+              title="项目 Wiki"
+              hint="按需生成项目文档站；生成前会先给草稿预览，确认后才写入"
+            />
+            <WikiGenerationPanel projectId={project.id} projectType={data.activeProjectType} />
           </div>
           <AuditCopyRow data={data} project={project} activeTab={activeTab} />
         </div>
