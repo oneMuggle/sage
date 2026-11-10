@@ -100,7 +100,7 @@ describe('ProjectBootstrapPanel', () => {
   });
 
   it('renders scan summary and suggestions', async () => {
-    render(<ProjectBootstrapPanel projectId="p1" />);
+    render(<ProjectBootstrapPanel projectId="p1" autoStart />);
 
     expect(await screen.findByTestId('project-bootstrap-panel')).toBeInTheDocument();
     expect(screen.getByText(/技术栈：python、fastapi/)).toBeInTheDocument();
@@ -110,9 +110,20 @@ describe('ProjectBootstrapPanel', () => {
     expect(suggestMock).toHaveBeenCalledWith('p1', true);
   });
 
+  it('renders an idle state when autoStart is false and triggers scan on button click', async () => {
+    render(<ProjectBootstrapPanel projectId="p1" />);
+
+    expect(await screen.findByTestId('project-bootstrap-idle')).toBeInTheDocument();
+    expect(scanMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('bootstrap-start-ai'));
+    expect(await screen.findByTestId('project-bootstrap-panel')).toBeInTheDocument();
+    expect(suggestMock).toHaveBeenCalledWith('p1', true);
+  });
+
   it('applies selected suggestions including git init', async () => {
     const onApplied = vi.fn();
-    render(<ProjectBootstrapPanel projectId="p1" onApplied={onApplied} />);
+    render(<ProjectBootstrapPanel projectId="p1" autoStart onApplied={onApplied} />);
 
     await screen.findByTestId('project-bootstrap-panel');
     fireEvent.click(screen.getByText('应用选中的建议'));
@@ -144,7 +155,7 @@ describe('ProjectBootstrapPanel', () => {
       llmError: 'LLM 未配置或请求失败，已改用本地推荐模板',
       ruleSource: 'template',
     });
-    render(<ProjectBootstrapPanel projectId="p1" />);
+    render(<ProjectBootstrapPanel projectId="p1" autoStart />);
 
     await screen.findByTestId('project-bootstrap-panel');
     expect(screen.getByText('本地推荐模板')).toBeInTheDocument();
@@ -153,7 +164,7 @@ describe('ProjectBootstrapPanel', () => {
 
   it('shows an error and retry action when scan fails', async () => {
     scanMock.mockRejectedValueOnce(new Error('backend down'));
-    render(<ProjectBootstrapPanel projectId="p1" />);
+    render(<ProjectBootstrapPanel projectId="p1" autoStart />);
 
     expect(await screen.findByTestId('project-bootstrap-error')).toHaveTextContent('backend down');
     fireEvent.click(screen.getByText('仅扫描（不调用 AI）'));

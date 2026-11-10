@@ -24,19 +24,25 @@ import { Button } from '../../shared/ui/Button';
 export interface ProjectBootstrapPanelProps {
   projectId: string;
   onApplied?: (result: BootstrapApplyResult) => void;
+  /** 默认 false：只在用户点击「分析项目」后扫描，避免进入页面就触发 10–30s 的 LLM 请求。 */
+  autoStart?: boolean;
 }
 
-type BootstrapPhase = 'scanning' | 'suggesting' | 'ready' | 'error';
+type BootstrapPhase = 'idle' | 'scanning' | 'suggesting' | 'ready' | 'error';
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export function ProjectBootstrapPanel({ projectId, onApplied }: ProjectBootstrapPanelProps) {
+export function ProjectBootstrapPanel({
+  projectId,
+  onApplied,
+  autoStart = false,
+}: ProjectBootstrapPanelProps) {
   const [scan, setScan] = useState<BootstrapScanSection | null>(null);
   const [projectName, setProjectName] = useState('');
   const [suggestions, setSuggestions] = useState<BootstrapSuggestionSet | null>(null);
-  const [phase, setPhase] = useState<BootstrapPhase>('scanning');
+  const [phase, setPhase] = useState<BootstrapPhase>(autoStart ? 'scanning' : 'idle');
   const [llmAvailable, setLlmAvailable] = useState(false);
   const [llmError, setLlmError] = useState<string | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -84,8 +90,8 @@ export function ProjectBootstrapPanel({ projectId, onApplied }: ProjectBootstrap
   );
 
   useEffect(() => {
-    void load(true);
-  }, [load]);
+    if (autoStart) void load(true);
+  }, [autoStart, load]);
 
   // Elapsed timer for the AI suggestion step (a real wait, not a fake bar).
   useEffect(() => {
@@ -159,6 +165,44 @@ export function ProjectBootstrapPanel({ projectId, onApplied }: ProjectBootstrap
       setApplying(false);
     }
   };
+
+  if (phase === 'idle') {
+    return (
+      <div
+        className="rounded-lg border border-border bg-card p-4"
+        data-testid="project-bootstrap-idle"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <Sparkles className="h-4 w-4 text-primary" />
+              AI 初始化
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              扫描项目结构，让 AI 生成项目说明、规则与里程碑建议。不会自动修改任何文件。
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => void load(true)}
+              data-testid="bootstrap-start-ai"
+            >
+              分析项目
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void load(false)}
+              data-testid="bootstrap-start-scan"
+            >
+              仅扫描（不调用 AI）
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (phase === 'scanning' || (!scan && phase !== 'error')) {
     return (

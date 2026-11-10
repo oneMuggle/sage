@@ -29,35 +29,15 @@ const ARCHETYPE_INSTRUCTIONS_PRESETS: Record<ProjectType, string> = {
 export interface StudioCharterTabPanelProps {
   projectId: string;
   projectPath: string;
-  projectType?: ProjectType;
-  initialDescription?: string | null;
-  initialInstructions?: string | null;
-  onMetadataUpdated?: (patch: { description: string | null; instructions: string | null }) => void;
 }
 
-export function StudioCharterTabPanel({
-  projectId,
-  projectPath,
-  projectType = 'coding',
-  initialDescription,
-  initialInstructions,
-  onMetadataUpdated,
-}: StudioCharterTabPanelProps) {
+/** 项目总纲（SAGE.md）编辑区 — 只负责总纲本身；描述与指令见 StudioMetadataPanel。 */
+export function StudioCharterTabPanel({ projectId, projectPath }: StudioCharterTabPanelProps) {
   const [charter, setCharter] = useState<ProjectCharter | null>(null);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedHint, setSavedHint] = useState<string | null>(null);
   const [copiedCharter, setCopiedCharter] = useState(false);
-
-  const [descriptionDraft, setDescriptionDraft] = useState(initialDescription ?? '');
-  const [instructionsDraft, setInstructionsDraft] = useState(initialInstructions ?? '');
-  const [savingMeta, setSavingMeta] = useState(false);
-  const [metaSavedHint, setMetaSavedHint] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDescriptionDraft(initialDescription ?? '');
-    setInstructionsDraft(initialInstructions ?? '');
-  }, [projectId, initialDescription, initialInstructions]);
 
   const loadCharter = useCallback(async () => {
     if (!projectId || typeof projectApi?.getCharter !== 'function') return;
@@ -82,7 +62,7 @@ export function StudioCharterTabPanel({
   };
 
   const handleCopyCharterMarkdown = async () => {
-    const lines = [`# 项目总纲 (${projectPath}/SAGE.md)`, '', draft || '（未填写）', '', '## 项目目标与系统指令', `- **项目目标**: ${descriptionDraft || '（未设置）'}`, `- **系统指令**: ${instructionsDraft || '（未设置）'}`];
+    const lines = [`# 项目总纲 (${projectPath}/SAGE.md)`, '', draft || '（未填写）'];
     try {
       await navigator.clipboard?.writeText(lines.join('\n'));
       setCopiedCharter(true);
@@ -112,32 +92,6 @@ export function StudioCharterTabPanel({
     }
   };
 
-  const handleFillInstructionsPreset = () => {
-    const preset =
-      ARCHETYPE_INSTRUCTIONS_PRESETS[projectType] ?? ARCHETYPE_INSTRUCTIONS_PRESETS.coding;
-    setInstructionsDraft(preset);
-    setMetaSavedHint(null);
-  };
-
-  const handleSaveMetadata = async () => {
-    if (savingMeta || typeof projectApi?.update !== 'function') return;
-    setSavingMeta(true);
-    try {
-      const desc = descriptionDraft.trim() || null;
-      const inst = instructionsDraft.trim() || null;
-      await projectApi.update(projectId, {
-        description: desc,
-        instructions: inst,
-      });
-      onMetadataUpdated?.({ description: desc, instructions: inst });
-      setMetaSavedHint('已保存项目目标与系统指令');
-    } catch {
-      // ignore in test/offline mode
-    } finally {
-      setSavingMeta(false);
-    }
-  };
-
   return (
     <div className="space-y-4" data-testid="project-charter-studio-panel">
       <div className="space-y-2">
@@ -146,7 +100,7 @@ export function StudioCharterTabPanel({
             <div className="flex items-center gap-1.5 font-medium text-foreground">
               <FileText className="h-3.5 w-3.5 text-primary" />
               <span>
-                项目本地规范总纲（<code className="font-mono">{projectPath}/SAGE.md</code>）
+                项目总纲（<code className="font-mono">{projectPath}/SAGE.md</code>）
               </span>
               <span
                 className={`rounded px-1.5 py-0.5 text-ui-2xs ${
@@ -159,8 +113,7 @@ export function StudioCharterTabPanel({
               </span>
             </div>
             <p className="text-muted-foreground">
-              作为项目上下文注入体系的第 1
-              层（最高优先级），用于定义代码工程规范、一般档案封面元数据或科研课题总纲与符号表。
+              项目总纲是每次会话最重要的项目背景：写清这个项目的目标、约定与边界，AI 会优先遵守。
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -180,7 +133,7 @@ export function StudioCharterTabPanel({
               data-testid="studio-charter-copy-md-btn"
             >
               <Copy className="mr-1 h-3.5 w-3.5 text-primary" />
-              {copiedCharter ? '已复制宪章' : '复制宪章与指令'}
+              {copiedCharter ? '已复制' : '复制项目总纲'}
             </Button>
             <Button
               size="sm"
@@ -224,20 +177,73 @@ export function StudioCharterTabPanel({
           className="w-full rounded-lg border border-input bg-background p-3 font-mono text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
         />
       </div>
+    </div>
+  );
+}
 
-      {/* L2 项目目标与显式系统指令编辑区 */}
+export interface StudioMetadataPanelProps {
+  projectId: string;
+  projectType?: ProjectType;
+  initialDescription?: string | null;
+  initialInstructions?: string | null;
+  onMetadataUpdated?: (patch: { description: string | null; instructions: string | null }) => void;
+}
+
+/** 项目描述与会话指令 — 每次会话自动带给 AI 的项目背景。 */
+export function StudioMetadataPanel({
+  projectId,
+  projectType = 'coding',
+  initialDescription,
+  initialInstructions,
+  onMetadataUpdated,
+}: StudioMetadataPanelProps) {
+  const [descriptionDraft, setDescriptionDraft] = useState(initialDescription ?? '');
+  const [instructionsDraft, setInstructionsDraft] = useState(initialInstructions ?? '');
+  const [savingMeta, setSavingMeta] = useState(false);
+  const [metaSavedHint, setMetaSavedHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDescriptionDraft(initialDescription ?? '');
+    setInstructionsDraft(initialInstructions ?? '');
+  }, [projectId, initialDescription, initialInstructions]);
+
+  const handleFillInstructionsPreset = () => {
+    const preset =
+      ARCHETYPE_INSTRUCTIONS_PRESETS[projectType] ?? ARCHETYPE_INSTRUCTIONS_PRESETS.coding;
+    setInstructionsDraft(preset);
+    setMetaSavedHint(null);
+  };
+
+  const handleSaveMetadata = async () => {
+    if (savingMeta || typeof projectApi?.update !== 'function') return;
+    setSavingMeta(true);
+    try {
+      const desc = descriptionDraft.trim() || null;
+      const inst = instructionsDraft.trim() || null;
+      await projectApi.update(projectId, {
+        description: desc,
+        instructions: inst,
+      });
+      onMetadataUpdated?.({ description: desc, instructions: inst });
+      setMetaSavedHint('已保存');
+    } catch {
+      // ignore in test/offline mode
+    } finally {
+      setSavingMeta(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4" data-testid="project-metadata-studio-panel">
       <div
         className="rounded-lg border border-border bg-muted/15 p-3 space-y-2.5 text-xs"
         data-testid="studio-l2-metadata-section"
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div className="font-medium text-foreground">
-              项目目标与系统指令（Description & System Instructions）
-            </div>
+            <div className="font-medium text-foreground">项目描述与会话指令</div>
             <p className="text-ui-2xs text-muted-foreground">
-              注入项目上下文管线第 2
-              层，优先级高于全局风格偏好，适合定义本项目的角色定位、审校红线或答复体裁。
+              每次会话自动带给 AI 的项目背景，适合写清本项目的角色定位、审校红线或答复体裁。
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -257,7 +263,7 @@ export function StudioCharterTabPanel({
               data-testid="studio-instructions-fill-preset"
             >
               <Sparkles className="mr-1 h-3.5 w-3.5 text-primary" />
-              填入形态推荐指令
+              填入推荐指令
             </Button>
             <Button
               size="sm"
@@ -265,16 +271,14 @@ export function StudioCharterTabPanel({
               disabled={savingMeta}
               data-testid="studio-metadata-save-btn"
             >
-              {savingMeta ? '保存中...' : '保存目标与指令'}
+              {savingMeta ? '保存中...' : '保存'}
             </Button>
           </div>
         </div>
 
         <div className="grid gap-2 md:grid-cols-3">
           <div className="space-y-1">
-            <label className="text-ui-2xs font-medium text-muted-foreground">
-              项目目标 / 案卷摘要 (description)
-            </label>
+            <label className="text-ui-2xs font-medium text-muted-foreground">项目描述</label>
             <input
               type="text"
               value={descriptionDraft}
@@ -282,15 +286,13 @@ export function StudioCharterTabPanel({
                 setDescriptionDraft(e.target.value);
                 setMetaSavedHint(null);
               }}
-              placeholder="简述本项目核心目标、案卷编号或课题方向..."
+              placeholder="一句话说明这个项目要做什么..."
               data-testid="studio-description-input"
               className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs"
             />
           </div>
           <div className="space-y-1 md:col-span-2">
-            <label className="text-ui-2xs font-medium text-muted-foreground">
-              显式系统提示词指令 (instructions)
-            </label>
+            <label className="text-ui-2xs font-medium text-muted-foreground">会话指令</label>
             <textarea
               value={instructionsDraft}
               onChange={(e) => {
@@ -298,7 +300,7 @@ export function StudioCharterTabPanel({
                 setMetaSavedHint(null);
               }}
               rows={2}
-              placeholder="输入注入每次会话的显式系统指令..."
+              placeholder="每次会话都要遵守的约定..."
               data-testid="studio-instructions-textarea"
               className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs"
             />
