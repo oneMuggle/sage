@@ -288,7 +288,7 @@ def test_summarize_tool_args_redacts_secret_keys():
 
 
 def test_summarize_tool_args_truncates_long_values():
-    """长值截断到 200 字符 + 截断标记。"""
+    """长值截断到 ARG_VALUE_MAX_CHARS 字符 + 截断标记。"""
     # Arrange
     args = {"content": "x" * 5000}
 

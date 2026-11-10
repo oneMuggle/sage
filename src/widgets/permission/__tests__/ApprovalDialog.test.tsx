@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePermissionState } from '../../../entities/permission/permissionState';
 import type { PermissionRequest } from '../../../shared/api';
 import { I18nProvider } from '../../../shared/lib/i18n';
+import { useStore, type Session } from '../../../shared/lib/store';
 import { ApprovalDialog } from '../ApprovalDialog';
 
 const invokeMock = vi.fn();
@@ -46,10 +47,28 @@ function renderDialog(): void {
   );
 }
 
-function seedRequest(overrides: Partial<PermissionRequest> = {}): PermissionRequest {
+function seedRequest(
+  overrides: Partial<PermissionRequest> = {},
+  sessionId?: string,
+): PermissionRequest {
   const req = makeRequest(overrides);
-  usePermissionState.getState().setFromEvent(req);
+  usePermissionState.getState().setFromEvent(req, sessionId);
   return req;
+}
+
+function seedSession(overrides: Partial<Session> = {}): Session {
+  const session: Session = {
+    id: 'sess-abc',
+    title: '重构认证模块',
+    created_at: 1753718400000,
+    updated_at: 1753718400000,
+    last_message_at: null,
+    message_count: 0,
+    is_pinned: false,
+    ...overrides,
+  };
+  useStore.setState({ sessions: [session] });
+  return session;
 }
 
 beforeEach(() => {
@@ -57,6 +76,7 @@ beforeEach(() => {
   toastErrorMock.mockReset();
   invokeMock.mockResolvedValue({ ok: true });
   usePermissionState.setState({ currentRequest: null });
+  useStore.setState({ sessions: [] });
 });
 
 describe('ApprovalDialog', () => {
@@ -91,6 +111,40 @@ describe('ApprovalDialog', () => {
     renderDialog();
 
     expect(screen.queryByTestId('permission-plugin-context')).toBeNull();
+  });
+
+  it('shows the source session title when the request comes from a session', () => {
+    seedSession({ id: 'sess-abc', title: '重构认证模块' });
+    seedRequest({}, 'sess-abc');
+    renderDialog();
+
+    const ctx = screen.getByTestId('permission-session-context');
+    expect(ctx).toHaveTextContent('来自会话');
+    expect(ctx).toHaveTextContent('重构认证模块');
+  });
+
+  it('falls back to the session id prefix when the session title is unknown', () => {
+    seedRequest({}, 'sess-xyz');
+    renderDialog();
+
+    expect(screen.getByTestId('permission-session-context')).toHaveTextContent('sess-xyz');
+  });
+
+  it('omits the session banner for requests without a session (remote MCP)', () => {
+    seedRequest();
+    renderDialog();
+
+    expect(screen.queryByTestId('permission-session-context')).toBeNull();
+  });
+
+  it('renders long command arguments in full without CSS truncation', () => {
+    const longCommand = 'echo ' + 'a'.repeat(600);
+    seedRequest({ args_summary: JSON.stringify({ command: longCommand }) });
+    renderDialog();
+
+    const args = screen.getByTestId('permission-args');
+    expect(args).toHaveTextContent(longCommand);
+    expect(args.className).not.toContain('truncate');
   });
 
   it('renders neutral/amber badges for safe/suspicious risk levels', () => {
