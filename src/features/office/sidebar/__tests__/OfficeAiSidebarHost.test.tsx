@@ -95,7 +95,6 @@ function renderHost(): void {
     <OfficeAiSidebarHost
       activeTab="documents"
       onNavigateTab={vi.fn()}
-      workspacePath="/workspace"
       rootRef={{ current: makeRoot() }}
     />,
   );

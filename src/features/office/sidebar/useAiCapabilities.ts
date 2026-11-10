@@ -8,7 +8,7 @@ import { aiApi, type AiRewriteInstruction } from '../../../shared/api/aiApi';
 import { officeSpecApi } from '../../../shared/api/officeSpecApi';
 import { fillTemplate } from '../../../shared/lib/fillTemplate';
 import { useI18n } from '../../../shared/lib/i18n';
-import { joinWorkspacePath } from '../latexPath';
+import type { TranslationKey } from '../../../shared/lib/i18n';
 
 import { collectDocumentParagraphs } from './selectionAnchor';
 import { suggestionFromRewrite, toReviseIssue } from './suggestionFactory';
@@ -20,6 +20,18 @@ export function nextMessageId(prefix = 'msg'): string {
   messageSeq += 1;
   return `${prefix}-${Date.now()}-${messageSeq}`;
 }
+
+/** i18n key of the user bubble that echoes a rewrite action. */
+const REWRITE_ACTION_LABEL: Record<AiRewriteInstruction, TranslationKey> = {
+  rewrite: 'office.ai.selection.rewrite',
+  polish: 'office.ai.action.rewrite_polish',
+  expand: 'office.ai.edit.expand',
+  condense: 'office.ai.edit.condense',
+  translate: 'office.ai.action.rewrite_translate',
+  explain: 'office.ai.selection.rewrite',
+  summarize: 'office.ai.action.rewrite_summarize',
+  custom: 'office.ai.action.rewrite_custom',
+};
 
 export interface AiCapabilities {
   pending: boolean;
@@ -62,6 +74,15 @@ export function useAiCapabilities(deps: { rootRef: RefObject<HTMLElement> }): Ai
 
     setPending(true);
     setErrorText(null);
+
+    // Echo the action as a user bubble so the conversation is not blank while
+    // the LLM reply is still in flight.
+    appendMessage({
+      id: nextMessageId('msg-user'),
+      role: 'user',
+      content: t(REWRITE_ACTION_LABEL[params.instruction]),
+      createdAt: Date.now(),
+    });
 
     try {
       const result = await aiApi.rewrite({
@@ -179,29 +200,12 @@ export function useAiCapabilities(deps: { rootRef: RefObject<HTMLElement> }): Ai
       return;
     }
 
-    // Derive file_path from the same root as workspace_path so the two can
-    // never diverge; the host's filePath is only used for `canApply`.
-    const generated = activeDocument.generated_filename;
-    const filePath = generated
-      ? joinWorkspacePath(activeDocument.workspace_path ?? '', generated)
-      : '';
-    if (!filePath) {
-      appendMessage({
-        id: nextMessageId(),
-        role: 'system',
-        content: t('office.ai.sidebar.apply_path_invalid'),
-        createdAt: Date.now(),
-      });
-      return;
-    }
-
-    setPending(true);
+setPending(true);
     setErrorText(null);
 
     try {
       await officeSpecApi.reviseAiIssues({
         workspace_path: activeDocument.workspace_path ?? '',
-        file_path: filePath,
         doc_id: activeDocument.id,
         issues: [toReviseIssue(suggestion, t('office.ai.revise.default_message'))],
         add_comments: true,

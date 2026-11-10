@@ -178,7 +178,7 @@ describe('useAuditSuggestions', () => {
     expect(useOfficeWorkspaceStore.getState().conversation).toHaveLength(0);
   });
 
-  it('calls runAiReview with derived paths and appends an assistant message', async () => {
+  it('calls runAiReview with doc_id only and appends a user bubble plus an assistant message', async () => {
     useOfficeWorkspaceStore.setState({ activeDocument: baseDoc });
     mockOfficeSpecApi.runAiReview.mockResolvedValue(
       auditResult([
@@ -192,23 +192,25 @@ describe('useAuditSuggestions', () => {
       await result.current.runAudit();
     });
 
+    // No file_path: the backend derives the managed path from doc_id.
     expect(mockOfficeSpecApi.runAiReview).toHaveBeenCalledWith({
       workspace_path: '/workspace',
-      file_path: '/workspace/audit.docx',
       doc_id: 'doc-123',
       use_llm: true,
       max_issues: 50,
     });
 
     const messages = useOfficeWorkspaceStore.getState().conversation;
-    expect(messages).toHaveLength(1);
-    expect(messages[0].role).toBe('assistant');
-    expect(messages[0].content).toBe('office.ai.audit.title');
-    expect(messages[0].attachments).toHaveLength(1);
-    expect(messages[0].attachments?.[0].paraIndex).toBe(3);
-    expect(messages[0].attachments?.[0].originalText).toBe('Original');
-    expect(messages[0].attachments?.[0].suggestedText).toBe('Fixed');
-    expect(messages[0].attachments?.[0].applied).toBe('pending');
+    expect(messages).toHaveLength(2);
+    expect(messages[0].role).toBe('user');
+    expect(messages[0].content).toBe('office.ai.action.audit_full');
+    expect(messages[1].role).toBe('assistant');
+    expect(messages[1].content).toBe('office.ai.audit.title');
+    expect(messages[1].attachments).toHaveLength(1);
+    expect(messages[1].attachments?.[0].paraIndex).toBe(3);
+    expect(messages[1].attachments?.[0].originalText).toBe('Original');
+    expect(messages[1].attachments?.[0].suggestedText).toBe('Fixed');
+    expect(messages[1].attachments?.[0].applied).toBe('pending');
   });
 
   it('filters out issues that cannot be applied as literal replacements', async () => {
@@ -239,7 +241,7 @@ describe('useAuditSuggestions', () => {
       await result.current.runAudit();
     });
 
-    const attachments = useOfficeWorkspaceStore.getState().conversation[0].attachments ?? [];
+    const attachments = useOfficeWorkspaceStore.getState().conversation[1].attachments ?? [];
     expect(attachments).toHaveLength(1);
     expect(attachments[0].id).toBe('au-ok');
   });
@@ -255,9 +257,10 @@ describe('useAuditSuggestions', () => {
     });
 
     const messages = useOfficeWorkspaceStore.getState().conversation;
-    expect(messages).toHaveLength(1);
-    expect(messages[0].role).toBe('system');
-    expect(messages[0].content).toContain('office.ai.sidebar.request_failed');
+    expect(messages).toHaveLength(2);
+    expect(messages[0].role).toBe('user');
+    expect(messages[1].role).toBe('system');
+    expect(messages[1].content).toContain('office.ai.sidebar.request_failed');
   });
 
   it('ignores a second runAudit while one request is in flight', async () => {
@@ -288,8 +291,9 @@ describe('useAuditSuggestions', () => {
     );
   });
 
-  it('writes apply_disabled when generated_filename is empty', async () => {
+  it('targets the document by doc_id even when generated_filename is empty', async () => {
     useOfficeWorkspaceStore.setState({ activeDocument: { ...baseDoc, generated_filename: '' } });
+    mockOfficeSpecApi.runAiReview.mockResolvedValue(auditResult([]));
 
     const { result } = renderHook(() => useAuditSuggestions());
 
@@ -297,9 +301,12 @@ describe('useAuditSuggestions', () => {
       await result.current.runAudit();
     });
 
-    expect(mockOfficeSpecApi.runAiReview).not.toHaveBeenCalled();
+    // The managed path is derived from doc_id, so a missing filename is harmless.
+    expect(mockOfficeSpecApi.runAiReview).toHaveBeenCalledWith(
+      expect.objectContaining({ workspace_path: '/workspace', doc_id: 'doc-123' }),
+    );
     expect(useOfficeWorkspaceStore.getState().conversation[0].content).toBe(
-      'office.ai.sidebar.apply_disabled',
+      'office.ai.action.audit_full',
     );
   });
 
@@ -354,7 +361,7 @@ describe('useAuditSuggestions', () => {
     expect(mockOfficeSpecApi.reviseAiIssues).toHaveBeenCalledTimes(1);
     const call = mockOfficeSpecApi.reviseAiIssues.mock.calls[0][0];
     expect(call.workspace_path).toBe('/workspace');
-    expect(call.file_path).toBe('/workspace/audit.docx');
+    expect(call.file_path).toBeUndefined();
     expect(call.doc_id).toBe('doc-123');
     expect(call.issues).toHaveLength(2);
     expect(call.issues[0].message).toBe('office.ai.revise.default_message');
@@ -366,8 +373,10 @@ describe('useAuditSuggestions', () => {
     expect(attachments[1].applied).toBe('applied');
     expect(attachments[2].applied).toBe('skipped');
 
-    expect(state.conversation[1].role).toBe('system');
-    expect(state.conversation[1].content).toBe('office.ai.sidebar.apply_done');
+    expect(state.conversation[1].role).toBe('user');
+    expect(state.conversation[1].content).toBe('office.ai.action.apply_all');
+    expect(state.conversation[2].role).toBe('system');
+    expect(state.conversation[2].content).toBe('office.ai.sidebar.apply_done');
   });
 
   it('applyAll keeps skipped cards pending and reports the skipped count', async () => {
@@ -408,7 +417,7 @@ describe('useAuditSuggestions', () => {
     const attachments = state.conversation[0].attachments ?? [];
     expect(attachments[0].applied).toBe('applied');
     expect(attachments[1].applied).toBe('pending');
-    expect(state.conversation[1].content).toBe('office.ai.audit.apply_skipped:1');
+    expect(state.conversation[2].content).toBe('office.ai.audit.apply_skipped:1');
   });
 
   it('applyAll surfaces a system message on failure and leaves cards pending', async () => {
@@ -422,7 +431,7 @@ describe('useAuditSuggestions', () => {
     });
 
     const state = useOfficeWorkspaceStore.getState();
-    expect(state.conversation[1].content).toContain('office.ai.sidebar.apply_failed');
+    expect(state.conversation[2].content).toContain('office.ai.sidebar.apply_failed');
     expect(state.conversation[0].attachments?.[0].applied).toBe('pending');
   });
 

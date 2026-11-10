@@ -151,12 +151,51 @@ describe('useAiCapabilities', () => {
     });
 
     const messages = useOfficeWorkspaceStore.getState().conversation;
-    expect(messages).toHaveLength(1);
-    expect(messages[0].role).toBe('assistant');
-    expect(messages[0].content).toBe('Rewritten text');
-    expect(messages[0].attachments).toHaveLength(1);
-    expect(messages[0].attachments?.[0].paraIndex).toBe(2);
-    expect(messages[0].attachments?.[0].applied).toBe('pending');
+    expect(messages).toHaveLength(2);
+    // The action is echoed as a user turn so the sidebar is not blank while
+    // the LLM reply is still pending.
+    expect(messages[0].role).toBe('user');
+    expect(messages[0].content).toBe('office.ai.action.rewrite_polish');
+    expect(messages[1].role).toBe('assistant');
+    expect(messages[1].content).toBe('Rewritten text');
+    expect(messages[1].attachments).toHaveLength(1);
+    expect(messages[1].attachments?.[0].paraIndex).toBe(2);
+    expect(messages[1].attachments?.[0].applied).toBe('pending');
+  });
+
+  it('appends the user bubble before the rewrite request settles', async () => {
+    useOfficeWorkspaceStore.setState({ activeDocument: doc });
+    let resolveRewrite: (value: { ok: boolean; result: string; model: string }) => void = () => {};
+    mockAiApi.rewrite.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRewrite = resolve;
+      }),
+    );
+
+    const { result } = renderCapabilities(makeRoot());
+
+    let pendingRun: Promise<void> = Promise.resolve();
+    await act(async () => {
+      pendingRun = result.current.runRewrite({
+        instruction: 'polish',
+        text: 'original',
+        paraIndex: 2,
+      });
+    });
+
+    const duringRequest = useOfficeWorkspaceStore.getState().conversation;
+    expect(duringRequest).toHaveLength(1);
+    expect(duringRequest[0].role).toBe('user');
+    expect(duringRequest[0].content).toBe('office.ai.action.rewrite_polish');
+
+    await act(async () => {
+      resolveRewrite({ ok: true, result: 'Rewritten text', model: 'test-model' });
+      await pendingRun;
+    });
+
+    const messages = useOfficeWorkspaceStore.getState().conversation;
+    expect(messages).toHaveLength(2);
+    expect(messages[1].role).toBe('assistant');
   });
 
   it('does not attach a suggestion for whole-document rewrites', async () => {
@@ -176,8 +215,10 @@ describe('useAiCapabilities', () => {
       instruction: 'summarize',
     });
     const messages = useOfficeWorkspaceStore.getState().conversation;
-    expect(messages).toHaveLength(1);
-    expect(messages[0].attachments).toHaveLength(0);
+    expect(messages).toHaveLength(2);
+    expect(messages[0].role).toBe('user');
+    expect(messages[0].content).toBe('office.ai.action.rewrite_summarize');
+    expect(messages[1].attachments).toHaveLength(0);
   });
 
   it('forwards customInstruction to aiApi.rewrite for instruction-based edits', async () => {
@@ -219,9 +260,10 @@ describe('useAiCapabilities', () => {
     });
 
     const messages = useOfficeWorkspaceStore.getState().conversation;
-    expect(messages).toHaveLength(1);
-    expect(messages[0].role).toBe('system');
-    expect(messages[0].content).toContain('office.ai.sidebar.request_failed');
+    expect(messages).toHaveLength(2);
+    expect(messages[0].role).toBe('user');
+    expect(messages[1].role).toBe('system');
+    expect(messages[1].content).toContain('office.ai.sidebar.request_failed');
     expect(result.current.errorText).toContain('office.ai.sidebar.request_failed');
   });
 
@@ -312,7 +354,7 @@ describe('useAiCapabilities', () => {
     expect(messages[0].content).toBe('office.ai.sidebar.apply_disabled');
   });
 
-  it('derives file_path from the active document and marks the card applied', async () => {
+  it('sends doc_id without file_path and marks the card applied', async () => {
     const suggestion = {
       id: 'sg-1',
       paraIndex: 0,
@@ -346,13 +388,15 @@ describe('useAiCapabilities', () => {
     expect(mockOfficeSpecApi.reviseAiIssues).toHaveBeenCalledWith(
       expect.objectContaining({
         workspace_path: '/workspace',
-        file_path: '/workspace/test.docx',
         doc_id: 'doc-123',
         add_comments: true,
       }),
     );
 
+    // The backend derives the on-disk path from doc_id — the renderer must not
+    // send a path that misses the managed `office/<type>/<doc_id>/` segment.
     const call = mockOfficeSpecApi.reviseAiIssues.mock.calls[0][0];
+    expect(call.file_path).toBeUndefined();
     expect(call.issues[0].message).toBe('office.ai.revise.default_message');
 
     const messages = useOfficeWorkspaceStore.getState().conversation;

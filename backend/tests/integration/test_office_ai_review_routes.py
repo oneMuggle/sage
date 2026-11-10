@@ -87,7 +87,10 @@ def _seed_document(conn, *, doc_id="doc-1", workspace: str):
 
 
 async def test_review_rule_only_records_history(conn, workspace: Path):
-    docx = _write_docx(workspace / "draft.docx")
+    # doc_id 是权威路径来源 → 文件必须落在 managed 布局下。
+    managed_dir = workspace / "office" / "word" / "doc-1"
+    managed_dir.mkdir(parents=True)
+    docx = _write_docx(managed_dir / "draft.docx")
     _seed_document(conn, workspace=str(workspace))
 
     result = await ai_review_endpoint(
@@ -123,6 +126,55 @@ async def test_review_without_doc_id_skips_history(conn, workspace: Path):
     )
     count = conn.execute("SELECT COUNT(*) FROM office_ai_reviews").fetchone()[0]
     assert count == 0
+
+
+async def test_review_doc_id_only_derives_managed_path(conn, workspace: Path):
+    """只给 doc_id → 后端按 managed 布局派生路径，前端无需再拼 file_path."""
+    managed_dir = workspace / "office" / "word" / "doc-1"
+    managed_dir.mkdir(parents=True)
+    _write_docx(managed_dir / "draft.docx")
+    _seed_document(conn, workspace=str(workspace))
+
+    result = await ai_review_endpoint(
+        AiReviewRequest(
+            workspace_path=str(workspace),
+            doc_id="doc-1",
+            use_llm=False,
+        )
+    )
+
+    assert result.doc_id == "doc-1"
+    assert result.file_path == str(managed_dir / "draft.docx")
+
+
+async def test_review_unknown_doc_id_raises(conn, workspace: Path):
+    """doc_id 查不到 → OfficeParseError."""
+    from backend.office.errors import OfficeParseError
+
+    with pytest.raises(OfficeParseError):
+        await ai_review_endpoint(
+            AiReviewRequest(
+                workspace_path=str(workspace),
+                doc_id="no-such-doc",
+                use_llm=False,
+            )
+        )
+
+
+def test_review_request_requires_doc_id_or_file_path():
+    """两者都缺 → pydantic 校验失败（FastAPI 映射为 422）."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        AiReviewRequest(workspace_path="/workspace")
+
+    with pytest.raises(ValidationError):
+        AiReviseRequest(
+            workspace_path="/workspace",
+            issues=[
+                _make_issue(actual="占位符【待补充】", expected="已填写"),
+            ],
+        )
 
 
 async def test_review_scope_non_full_falls_back(conn, workspace: Path):
@@ -354,6 +406,31 @@ def test_revise_applies_tracked_changes_and_snapshots(
     assert "w:del" in xml
 
 
+def test_revise_doc_id_only_derives_managed_path(conn, workspace: Path):
+    """只给 doc_id → 修订写到 managed 路径下的文件，不需要 file_path."""
+    managed_dir = workspace / "office" / "word" / "doc-1"
+    managed_dir.mkdir(parents=True)
+    _write_docx(managed_dir / "draft.docx")
+    _seed_document(conn, workspace=str(workspace))
+
+    result = ai_revise_endpoint(
+        AiReviseRequest(
+            workspace_path=str(workspace),
+            doc_id="doc-1",
+            issues=[_make_issue(actual="占位符【待补充】", expected="已填写内容")],
+        )
+    )
+
+    assert result.ok is True
+    assert result.doc_id == "doc-1"
+    assert result.applied >= 1
+
+    from docx import Document
+
+    xml = Document(str(managed_dir / "draft.docx")).element.xml
+    assert "w:ins" in xml
+
+
 def test_revise_without_doc_id_skips_snapshot(conn, workspace: Path):
     """无 doc_id 时仍然应用修订，但不产生快照."""
     docx = _write_docx(workspace / "draft.docx")
@@ -394,7 +471,9 @@ def test_revise_no_fixable_issues_raises(conn, workspace: Path):
     """所有 issue 都无 actual/expected → OfficeParseError."""
     from backend.office.errors import OfficeParseError
 
-    docx = _write_docx(workspace / "draft.docx")
+    managed_dir = workspace / "office" / "word" / "doc-1"
+    managed_dir.mkdir(parents=True)
+    docx = _write_docx(managed_dir / "draft.docx")
     _seed_document(conn, workspace=str(workspace))
 
     with pytest.raises(OfficeParseError):
