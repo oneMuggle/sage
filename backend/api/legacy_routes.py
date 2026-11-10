@@ -27,7 +27,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -59,7 +59,7 @@ from backend.chat.title_generator import (
     needs_title,
 )
 from backend.core.errors import LLMError
-from backend.core.legacy.agent import SageAgent, _retry_info_from_event
+from backend.core.lazy import load_attr, module_getattr
 from backend.core.legacy.llm_total_timeout import llm_total_timeout_or_none
 from backend.data import answer_version_repo as answer_versions
 from backend.data.database import get_database
@@ -82,9 +82,23 @@ from backend.orchestration.title_model_factory import TitleModelFactory
 from backend.ports.llm import ModelCapabilities
 from backend.services.scheduler import get_scheduler_service
 
+if TYPE_CHECKING:
+    from backend.core.legacy.agent import SageAgent
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Phase 3 (startup perf): SageAgent 惰性解析的源模块（见 backend/core/lazy.py）
+_AGENT_MODULE = "backend.core.legacy.agent"
+
+# 保持 `patch("backend.api.legacy_routes.SageAgent")` 这类模块级属性契约：
+# 首次访问时按需从源模块解析，并把真实对象缓存回 globals。
+_LAZY_EXPORTS = {"SageAgent": _AGENT_MODULE}
+
+
+def __getattr__(name: str) -> Any:
+    return module_getattr(name, _LAZY_EXPORTS, globals(), __name__)
 
 # 收尾后台任务强引用集合：asyncio 只持弱引用，不保留强引用时任务可能被 GC。
 _POST_TURN_TASKS: Set[asyncio.Task] = set()
@@ -264,7 +278,8 @@ from backend.api.chat_stream_support import (  # noqa: F401 — 再导出面
 
 
 def get_agent() -> SageAgent:
-    return SageAgent(scheduler_service_getter=get_scheduler_service)
+    agent_cls = load_attr(_AGENT_MODULE, "SageAgent", globals())
+    return agent_cls(scheduler_service_getter=get_scheduler_service)
 
 
 # ==================== 会话 API ====================
@@ -794,7 +809,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     return
 
             # M0/M2: 显式 agent_id > @专家 > 会话绑定（见 _effective_agent_id）
-            agent = SageAgent(
+            agent_cls = load_attr(_AGENT_MODULE, "SageAgent", globals())
+            agent = agent_cls(
                 agent_id=_effective_agent_id,
                 scheduler_service_getter=get_scheduler_service,
             )
@@ -1739,6 +1755,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 # 2026-11-03: 压缩本身也走 LLM 重试；把重试状态透出到聊天流，
                 # 避免压缩期间（实测可达 2 分钟）用户只看到"思考中"。
                 def _compact_retry_cb(retry_evt: Any) -> None:
+                    from backend.core.legacy.agent import _retry_info_from_event
+
                     try:
                         retry_info = _retry_info_from_event(retry_evt)
                         retry_info["source"] = "compaction"
