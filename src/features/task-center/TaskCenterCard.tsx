@@ -14,6 +14,7 @@ import {
   MessageSquare,
   Network,
   PauseCircle,
+  Play,
   Target,
   X,
   XCircle,
@@ -83,12 +84,21 @@ export function TaskCenterCard({ entry, actions, compact = false }: TaskCenterCa
       ? formatElapsed(Date.now() - entry.startedAt)
       : null;
 
+  // Spec §5.7 动作矩阵：goal 显示 pause/resume 切换；scheduled 显示 runNow。
+  const showPauseResume =
+    entry.source === 'goal' &&
+    entry.cancelRef != null &&
+    (entry.status === 'running' || entry.status === 'paused');
+  const showRunNow = entry.source === 'scheduled';
+  const isGoalRunning = showPauseResume && entry.status === 'running';
+
   return (
     <div className="group flex items-start gap-2 px-3 py-1.5 rounded-md hover:bg-bg-hover transition-colors">
       <button
         type="button"
         onClick={() => actions.open(entry)}
         aria-label={`${entry.title} · ${statusLabel}`}
+        title={t('taskCenter.action.viewDetail')}
         className="flex-1 min-w-0 text-left"
       >
         <div className="flex items-center gap-1.5">
@@ -130,6 +140,41 @@ export function TaskCenterCard({ entry, actions, compact = false }: TaskCenterCa
           )}
         </div>
       </button>
+
+      {showPauseResume && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isGoalRunning) void actions.pause(entry);
+            else void actions.resume(entry);
+          }}
+          className="shrink-0 p-1 rounded text-muted hover:text-primary opacity-0 group-hover:opacity-100 focus:opacity-100"
+          aria-label={isGoalRunning ? t('taskCenter.action.pause') : t('taskCenter.action.resume')}
+          title={isGoalRunning ? t('taskCenter.action.pause') : t('taskCenter.action.resume')}
+        >
+          {isGoalRunning ? (
+            <PauseCircle className="w-3.5 h-3.5" aria-hidden />
+          ) : (
+            <Play className="w-3.5 h-3.5" aria-hidden />
+          )}
+        </button>
+      )}
+
+      {showRunNow && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            void actions.runNow(entry);
+          }}
+          className="shrink-0 p-1 rounded text-muted hover:text-primary opacity-0 group-hover:opacity-100 focus:opacity-100"
+          aria-label={t('taskCenter.action.runNow')}
+          title={t('taskCenter.action.runNow')}
+        >
+          <Play className="w-3.5 h-3.5" aria-hidden />
+        </button>
+      )}
 
       {entry.cancellable && (
         <button

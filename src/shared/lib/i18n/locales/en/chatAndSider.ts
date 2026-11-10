@@ -4,8 +4,6 @@ import { enChatAndSiderBrowserExtension } from './chatAndSiderBrowserExtension';
 export const enChatAndSider = {
   // --- Task center: A1 states & actions (parity-s4) ---
   'taskCenter.cancel': 'Cancel',
-  'taskCenter.clearFinished': 'Clear finished',
-  'taskCenter.goto': 'Open',
   'taskCenter.status.queued': 'Queued',
   'taskCenter.status.running': 'Running',
   'taskCenter.status.awaiting_approval': 'Awaiting approval',
@@ -13,9 +11,6 @@ export const enChatAndSider = {
   'taskCenter.status.succeeded': 'Done',
   'taskCenter.status.failed': 'Failed',
   'taskCenter.status.cancelled': 'Cancelled',
-  'taskCenter.laneFallback': 'Orchestration task',
-  'taskCenter.finishedCount': '{n} recently finished',
-  'taskCenter.cancelFailed': 'Cancel failed, please retry',
   // 2026-11-07 Phase 5: background shell drawer
   'taskCenter.shellTerminate': 'Terminate',
   'taskCenter.shellTerminating': 'Terminating…',

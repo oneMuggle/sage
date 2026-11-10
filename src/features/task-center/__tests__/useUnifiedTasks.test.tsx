@@ -24,7 +24,6 @@ describe('useUnifiedTasks', () => {
     expect(result.current.all).toEqual([]);
     expect(result.current.groups).toEqual({ active: [], failed: [], finished: [] });
     expect(result.current.attentionCount).toBe(0);
-    expect(result.current.runningCount).toBe(0);
   });
 
   it('registry + goal + scheduled 三源合并并按状态分组', () => {
@@ -67,7 +66,7 @@ describe('useUnifiedTasks', () => {
     expect(result.current.groups.finished).toEqual([]);
   });
 
-  it('attentionCount = 进行中 + 失败，runningCount 只数 running', () => {
+  it('attentionCount = 进行中 + 失败', () => {
     useTaskCenterStore.setState({
       tasks: {
         r1: { id: 'r1', kind: 'office', title: 'a', startedAt: 1, status: 'running' },
@@ -78,7 +77,6 @@ describe('useUnifiedTasks', () => {
     });
     const { result } = renderHook(() => useUnifiedTasks());
     expect(result.current.attentionCount).toBe(3); // running + failed + paused
-    expect(result.current.runningCount).toBe(1);
   });
 
   it('后台会话流进入列表，当前会话被排除', () => {

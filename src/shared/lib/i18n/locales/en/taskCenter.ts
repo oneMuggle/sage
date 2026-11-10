@@ -2,7 +2,6 @@ export const enTaskCenter = {
   'taskCenter.section.title': 'Tasks',
   'taskCenter.section.empty': 'No tasks running',
   'taskCenter.section.more': '{count} more',
-  'taskCenter.section.moreArrow': 'View all →',
 
   'taskCenter.source.registry': 'Page task',
   'taskCenter.source.chat': 'Background chat',
@@ -21,10 +20,7 @@ export const enTaskCenter = {
   'taskCenter.action.runNow': 'Run now',
   'taskCenter.action.clearFinished': 'Clear finished',
   'taskCenter.action.viewDetail': 'View details',
-  'taskCenter.action.openOutput': 'View output',
 
-  'taskCenter.filter.source': 'Source',
-  'taskCenter.filter.status': 'Status',
   'taskCenter.filter.all': 'All',
 
   'taskCenter.page.title': 'Task Center',
