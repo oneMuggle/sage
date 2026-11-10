@@ -9,6 +9,7 @@ from typing import List
 
 import pytest
 from docx import Document
+from docx.shared import Pt
 
 from backend.office.word_rule_extract import extract_word_rules_async
 from backend.office.word_rule_extract_llm import (
@@ -80,6 +81,19 @@ def test_validate_params_enforces_allowlists() -> None:
         "structure.required_headings", {"headings": ["摘要", "结论"]}
     ) == {"headings": ["摘要", "结论"], "match": "contains"}
     assert validate_llm_params("evil.kind", {}) is None
+
+
+def test_style_font_accepts_custom_style_name() -> None:
+    """Templates name specific styles (Heading 1, 作者) not just Normal."""
+    assert validate_llm_params(
+        "style.font", {"style": "Heading 1", "font_east_asia": "黑体", "size_pt": 22}
+    ) == {"style": "Heading 1", "font_east_asia": "黑体", "size_pt": 22.0}
+    assert validate_llm_params(
+        "style.paragraph", {"style": "作者", "alignment": "center"}
+    ) == {"style": "作者", "alignment": "center"}
+    # Rejects unsafe style names.
+    assert validate_llm_params("style.font", {"style": "a/b", "size_pt": 16}) is None
+    assert validate_llm_params("style.font", {"style": 123, "size_pt": 16}) is None
 
 
 def test_propose_candidates_accepts_valid_and_rejects_invalid() -> None:
@@ -188,12 +202,25 @@ def test_llm_failure_degrades(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     assert any(rule.kind == "style.font" for rule in result.pack.rules)
 
 
-def test_template_llm_is_unsupported(tmp_path: Path) -> None:
+def test_template_llm_is_supported(tmp_path: Path) -> None:
+    """Templates now support LLM enhancement (previously blocked)."""
     document = Document()
-    document.add_paragraph("正文")
+    document.add_paragraph("正文采用楷体五号。")
     path = tmp_path / "template.docx"
     document.save(str(path))
-    client = FakeClient("[]")
+    response = json.dumps(
+        [
+            {
+                "clause_id": "c1",
+                "kind": "structure.required_headings",
+                "params": {"headings": ["摘要", "结论"]},
+                "confidence": 0.8,
+                "reason": "条文要求",
+            }
+        ],
+        ensure_ascii=False,
+    )
+    client = FakeClient(response)
 
     result = asyncio.run(
         extract_word_rules_async(
@@ -205,8 +232,48 @@ def test_template_llm_is_unsupported(tmp_path: Path) -> None:
         )
     )
 
-    assert result.llm_used is False
-    assert not client.prompts
-    assert any(
-        warning["code"] == "llm_template_unsupported" for warning in result.warnings
+    assert result.llm_used is True
+    assert client.prompts
+    assert "clause_id" in client.prompts[0]
+
+
+def test_llm_style_font_for_custom_style_merges_with_deterministic(
+    tmp_path: Path,
+) -> None:
+    """LLM heading rules must coexist with deterministic heading rules."""
+    document = Document()
+    heading = document.styles["Heading 1"]
+    heading.font.size = Pt(22)
+    document.add_heading("一级标题", level=1)
+    path = tmp_path / "template.docx"
+    document.save(str(path))
+    response = json.dumps(
+        [
+            {
+                "clause_id": "c1",
+                "kind": "style.font",
+                "params": {"style": "Heading 1", "font_east_asia": "黑体", "size_pt": 22},
+                "confidence": 0.8,
+                "reason": "模板声明一级标题为二号黑体",
+            }
+        ],
+        ensure_ascii=False,
     )
+
+    result = asyncio.run(
+        extract_word_rules_async(
+            path,
+            file_type="template",
+            workspace_path=str(tmp_path),
+            use_llm=True,
+            llm_client=FakeClient(response),
+        )
+    )
+
+    heading_rules = [
+        rule
+        for rule in result.pack.rules
+        if rule.kind == "style.font" and rule.params.get("style") == "Heading 1"
+    ]
+    assert heading_rules
+    assert any(rule.params.get("font_east_asia") == "黑体" for rule in heading_rules)

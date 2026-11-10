@@ -224,6 +224,82 @@ def test_template_without_body_samples_warns(tmp_path: Path) -> None:
     )
 
 
+def _font_rules_by_style(pack) -> dict:
+    return {
+        rule.params["style"]: rule
+        for rule in pack.rules
+        if rule.kind == "style.font" and rule.params.get("style")
+    }
+
+
+def test_template_extracts_heading_styles(tmp_path: Path) -> None:
+    document = Document()
+    heading = document.styles["Heading 1"]
+    heading.font.size = Pt(22)
+    _set_east_asia(heading, "黑体")
+    document.add_heading("一级标题", level=1)
+    document.add_heading("二级标题", level=2)
+    path = tmp_path / "headings.docx"
+    document.save(str(path))
+
+    result = extract_word_rules(
+        path, file_type="template", workspace_path=str(tmp_path)
+    )
+
+    fonts = _font_rules_by_style(result.pack)
+    assert "Heading 1" in fonts
+    assert fonts["Heading 1"].params["font_east_asia"] == "黑体"
+    assert fonts["Heading 1"].params["size_pt"] == pytest.approx(22.0)
+    assert fonts["Heading 1"].title == "一级标题字体"
+    assert fonts["Heading 2"].title == "二级标题字体"
+
+    sequence = next(
+        rule for rule in result.pack.rules if rule.kind == "structure.heading_sequence"
+    )
+    assert 1 in sequence.params["levels"]
+    assert 2 in sequence.params["levels"]
+    assert sequence.params["require_prefix"] is True
+
+
+def test_template_extracts_special_styles(tmp_path: Path) -> None:
+    document = Document()
+    caption = document.styles.add_style("图题", 1)
+    caption.font.size = Pt(9)
+    _set_east_asia(caption, "宋体")
+    document.add_paragraph("图1 示意图")
+    path = tmp_path / "special.docx"
+    document.save(str(path))
+
+    result = extract_word_rules(
+        path, file_type="template", workspace_path=str(tmp_path)
+    )
+
+    fonts = _font_rules_by_style(result.pack)
+    assert "图题" in fonts
+    assert fonts["图题"].params["font_east_asia"] == "宋体"
+    assert fonts["图题"].title == "图题 字体"
+
+
+def test_dynamic_title_for_style_rules(tmp_path: Path) -> None:
+    document = Document()
+    normal = document.styles["Normal"]
+    normal.font.size = Pt(12)
+    _set_east_asia(normal, "宋体")
+    normal.paragraph_format.line_spacing = 1.5
+    document.add_paragraph("正文")
+    path = tmp_path / "plain.docx"
+    document.save(str(path))
+
+    result = extract_word_rules(
+        path, file_type="template", workspace_path=str(tmp_path)
+    )
+
+    fonts = _font_rules_by_style(result.pack)
+    assert fonts["Normal"].title == "正文字体"
+    paragraph = next(rule for rule in result.pack.rules if rule.kind == "style.paragraph")
+    assert paragraph.title == "正文段落格式"
+
+
 def test_extract_txt_spec(tmp_path: Path) -> None:
     path = tmp_path / "spec.txt"
     path.write_text(

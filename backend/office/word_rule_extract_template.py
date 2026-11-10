@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -198,7 +199,107 @@ def extract_template_candidates(
                     "message": "范本多节页面尺寸不一致，页面规则取第一节",
                 }
             )
+
+    _extract_heading_styles(profile, candidates, source, excerpt)
+    _extract_special_styles(profile, candidates, source, excerpt)
     return candidates
+
+
+_HEADING_RE = re.compile(r"^heading\s+(\d+)$", re.IGNORECASE)
+
+_SPECIAL_STYLE_KEYWORDS: Dict[str, str] = {
+    "作者": "作者",
+    "中文作者": "作者",
+    "英文作者": "作者(英文)",
+    "摘要": "摘要",
+    "中文摘要": "摘要",
+    "关键词": "关键词",
+    "图题": "图题",
+    "图说": "图题",
+    "表题": "表题",
+    "表文字": "表文字",
+    "参考文献": "参考文献",
+    "Header": "页眉",
+}
+
+
+def _extract_heading_styles(
+    profile: Dict[str, Any],
+    candidates: List[RawCandidate],
+    source: str,
+    excerpt: str,
+) -> None:
+    """为 Heading 1-9 样式生成独立的 style.font 规则。"""
+    styles = profile.get("styles", [])
+    heading_levels: List[Tuple[int, Dict[str, Any]]] = []
+
+    for style in styles:
+        name = str(style.get("name") or "")
+        match = _HEADING_RE.match(name)
+        if match:
+            level = int(match.group(1))
+            heading_levels.append((level, style))
+
+    heading_levels.sort(key=lambda item: item[0])
+    for level, style in heading_levels:
+        params: Dict[str, Any] = {"style": f"Heading {level}"}
+        for field_name in ("font_ascii", "font_east_asia", "size_pt", "bold", "italic"):
+            if style.get(field_name) is not None:
+                params[field_name] = style[field_name]
+        if len(params) > 1:
+            add_candidate(
+                candidates,
+                "style.font",
+                params,
+                0.85,
+                source,
+                f"Heading {level} 样式: {style.get('font_east_asia', '?')}, {style.get('size_pt', '?')}pt",
+            )
+
+    if heading_levels:
+        levels = [level for level, _ in heading_levels]
+        add_candidate(
+            candidates,
+            "structure.heading_sequence",
+            {"levels": levels, "require_prefix": True},
+            0.8,
+            source,
+            f"模板包含 {len(levels)} 个标题层级: {levels}",
+        )
+
+
+def _extract_special_styles(
+    profile: Dict[str, Any],
+    candidates: List[RawCandidate],
+    source: str,
+    excerpt: str,
+) -> None:
+    """为模板中的特殊样式（作者、摘要、图题、表题、参考文献等）生成 style.font 规则。"""
+    styles = profile.get("styles", [])
+    seen: set[str] = set()
+
+    for style in styles:
+        name = str(style.get("name") or "")
+        label = _SPECIAL_STYLE_KEYWORDS.get(name)
+        if label is None:
+            continue
+        if label in seen:
+            continue
+        seen.add(label)
+
+        params: Dict[str, Any] = {"style": label}
+        for field_name in ("font_ascii", "font_east_asia", "size_pt", "bold", "italic"):
+            if style.get(field_name) is not None:
+                params[field_name] = style[field_name]
+        if len(params) > 1:
+            add_candidate(
+                candidates,
+                "style.font",
+                params,
+                0.8,
+                source,
+                f"{label} 样式: {style.get('font_east_asia', '?')}, {style.get('size_pt', '?')}pt",
+            )
 
 
 __all__ = ["extract_template_candidates"]
