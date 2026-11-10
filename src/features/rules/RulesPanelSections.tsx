@@ -32,6 +32,7 @@ function RulesHealthBadge({
       <span className="mx-1">·</span>
       <span
         className={conflictCount > 0 ? 'text-amber-600' : undefined}
+        title={t('rules.health.conflictsHint')}
         data-testid="rules-count-conflicts"
       >
         {conflictCount > 0

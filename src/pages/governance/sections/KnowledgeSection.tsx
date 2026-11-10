@@ -1,6 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
 
-import { GitStatusWidget, WikiGenerationPanel } from '../../../features/project-type';
 import {
   StudioMaterialsTabPanel,
   StudioProfileTabPanel,
@@ -56,7 +55,6 @@ interface SubPanelProps {
 }
 
 function MaterialsSubPanel({ data, project }: SubPanelProps) {
-  const showGit = data.activeProjectType === 'coding' || project.vcsMode === 'git';
   return (
     <div className="space-y-3">
       <StudioMaterialsTabPanel
@@ -64,8 +62,6 @@ function MaterialsSubPanel({ data, project }: SubPanelProps) {
         projectPath={project.path}
         projectType={data.activeProjectType}
       />
-      {showGit && <GitStatusWidget projectId={project.id} />}
-      <WikiGenerationPanel projectId={project.id} projectType={data.activeProjectType} />
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { useI18n } from '../../shared/lib/i18n';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 
-import { conflictedRuleIds, layerLabelKey, sortEffectiveRules } from './rulesView';
+import { conflictedRuleIds, layerLabelKey, sortEffectiveRules, sourceDetail } from './rulesView';
 
 export interface EffectiveRulesDrawerProps {
   isOpen: boolean;
@@ -49,6 +49,7 @@ function EffectiveRuleRow({
   conflicted: boolean;
 }) {
   const { t } = useI18n();
+  const detail = sourceDetail(entry);
   return (
     <div
       className="flex items-start gap-3 rounded-lg border border-border px-3 py-2"
@@ -60,7 +61,18 @@ function EffectiveRuleRow({
       <div className="min-w-0 flex-1 space-y-0.5">
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant="outline">{t(layerLabelKey(entry.layer))}</Badge>
-          <span className="text-ui-2xs text-muted-foreground">{entry.sourceLabel}</span>
+          {detail && (
+            <span
+              className={
+                detail.title
+                  ? 'font-mono text-ui-2xs text-muted-foreground'
+                  : 'text-ui-2xs text-muted-foreground'
+              }
+              title={detail.title}
+            >
+              {detail.text}
+            </span>
+          )}
           {entry.id.includes(':check:') && (
             <span className="text-ui-2xs text-muted-foreground">
               {t('rules.drawer.checkLabel')}
