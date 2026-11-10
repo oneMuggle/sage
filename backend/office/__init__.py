@@ -1,7 +1,7 @@
 """Office document features (PPT/Word/Excel read + generate).
 
 Module map:
-- models.py  — Pydantic request/response models
+- models/    — Pydantic request/response models (package, domain-clustered)
 - errors.py  — exception hierarchy
 - ppt.py     — PPTX reader + generator (python-pptx)
 - word.py    — DOCX reader + generator (python-docx)
