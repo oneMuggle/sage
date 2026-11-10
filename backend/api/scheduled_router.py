@@ -243,6 +243,7 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
         from backend.services.background_notifications import (
             get_background_notification_queue,
         )
+        from backend.services.goal_notifications import get_goal_notification_queue
 
         reminder_scheduler = get_todo_reminder_scheduler()
         todo_items = (
@@ -255,6 +256,8 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
             "todo_reminders": todo_items,
             # 2026-11-06 Phase 1: 后台 Bash 任务完成通知
             "background_tasks": get_background_notification_queue().drain(),
+            # 2026-11-09: 闲时目标终态通知（独立队列，不混入 background_tasks）
+            "goal_notifications": get_goal_notification_queue().drain(),
         }
 
     return router

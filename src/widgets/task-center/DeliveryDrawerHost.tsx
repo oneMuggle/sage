@@ -1,42 +1,49 @@
 // src/widgets/task-center/DeliveryDrawerHost.tsx
 /**
- * A4: 全局交付抽屉宿主 —— 挂在 Layout（TaskCenterWidget 旁），按
- * taskCenterStore.delivery 渲染 lane / office 交付抽屉。
- * lane 行从 laneBoardStore 按 id 解析（决议后行更新自动透传）；
- * office 坐标从条目的 deliveryRef 解析（条目/坐标缺失则不渲染）。
+ * A4: 全局交付抽屉宿主 —— 挂在 Layout，按 taskCenterStore.delivery 渲染
+ * lane / office 交付抽屉；同时接管原 TaskCenterWidget 的后台 shell 输出抽屉。
+ * 交付抽屉与 shell 抽屉互斥（store 的 openDelivery/openShellStream 互相清空），
+ * 但**独立渲染** —— 不能用早退，否则其中一方的空状态会吞掉另一方。
  */
+import type { ReactNode } from 'react';
+
 import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
 import { OfficeDeliveryDrawer } from '../../features/office/OfficeDeliveryDrawer';
 import { useTaskCenterStore } from '../../features/task-center/taskCenterStore';
 import { LaneDetailDrawer } from '../orchestration/LaneDetailDrawer';
 
+import { ShellStreamDrawer } from './ShellStreamDrawer';
+
 export function DeliveryDrawerHost() {
   const delivery = useTaskCenterStore((s) => s.delivery);
   const closeDelivery = useTaskCenterStore((s) => s.closeDelivery);
+  const shellStream = useTaskCenterStore((s) => s.shellStream);
   const lanes = useLaneBoardStore((s) => s.lanes);
   const tasks = useTaskCenterStore((s) => s.tasks);
 
-  if (!delivery) {
-    return null;
-  }
-
-  if (delivery.kind === 'lane') {
+  let deliveryBlock: ReactNode = null;
+  if (delivery?.kind === 'lane') {
     const lane = lanes.find((l) => l.lane_id === delivery.laneId) ?? null;
-    if (!lane) return null;
-    return <LaneDetailDrawer lane={lane} open onClose={closeDelivery} />;
+    deliveryBlock = lane ? <LaneDetailDrawer lane={lane} open onClose={closeDelivery} /> : null;
+  } else if (delivery?.kind === 'office') {
+    const ref = delivery.ref ?? tasks[delivery.entryId]?.deliveryRef;
+    deliveryBlock = ref ? (
+      <OfficeDeliveryDrawer
+        entryId={delivery.entryId}
+        workspacePath={ref.workspacePath}
+        filePath={ref.filePath}
+        formatSpec={ref.formatSpec}
+        open
+        onClose={closeDelivery}
+      />
+    ) : null;
   }
 
-  const ref = delivery.ref ?? tasks[delivery.entryId]?.deliveryRef;
-  if (!ref) return null;
   return (
-    <OfficeDeliveryDrawer
-      entryId={delivery.entryId}
-      workspacePath={ref.workspacePath}
-      filePath={ref.filePath}
-      formatSpec={ref.formatSpec}
-      open
-      onClose={closeDelivery}
-    />
+    <>
+      {deliveryBlock}
+      {shellStream ? <ShellStreamDrawer shellId={shellStream} /> : null}
+    </>
   );
 }
 

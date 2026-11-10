@@ -13,6 +13,7 @@ import { enPlaybook } from './locales/en/playbook';
 import { enRules } from './locales/en/rules';
 import { enSettingsAndModels } from './locales/en/settingsAndModels';
 import { enSettingsUi } from './locales/en/settingsUi';
+import { enTaskCenter } from './locales/en/taskCenter';
 import { enWorkspaceAndTools } from './locales/en/workspaceAndTools';
 import { pausedMemoryEn } from './pausedMemory';
 import { retryBannerEn } from './retryBanner';
@@ -31,6 +32,7 @@ export const en: Record<TranslationKey, string> = {
   ...enRules,
   ...enSettingsAndModels,
   ...enSettingsUi,
+  ...enTaskCenter,
   ...enWorkspaceAndTools,
   ...pausedMemoryEn,
   ...retryBannerEn,

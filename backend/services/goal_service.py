@@ -25,6 +25,7 @@ from backend.domain.execution_conditions import (
     TriggerMode,
 )
 from backend.services.checkpoint_manager import CheckpointManager, CheckpointReport
+from backend.services.goal_notifications import get_goal_notification_queue
 from backend.services.time_window_manager import TimeWindowManager
 from backend.utils.timezones import ensure_utc, utc_now
 
@@ -228,6 +229,9 @@ class GoalService:
 
                 if is_complete:
                     goal.status = GoalStatus.COMPLETED
+                    # 2026-11-09: 目标完成通知（独立队列，Electron 经
+                    # notifications/pending 的 goal_notifications 键消费）
+                    get_goal_notification_queue().push(goal)
                     goal.completed_at = utc_now()
                     self.goal_repo.update(goal)
                     logger.info(f"Goal {goal_id} completed at round {goal.current_round}")
@@ -248,6 +252,10 @@ class GoalService:
                 goal.completed_at = utc_now()
                 await self._apply_degradation(goal, e)
                 self.goal_repo.update(goal)
+                # 2026-11-09: 目标失败通知。放在 last_error / 持久化之后，
+                # 这样通知正文能带上失败原因；_apply_degradation 内的守卫
+                # 保证同一次失败不会推两条。
+                get_goal_notification_queue().push(goal)
 
     async def _should_continue(self, goal: Goal) -> bool:
         """判断是否应该继续执行"""
@@ -631,8 +639,14 @@ class GoalService:
         else:
             # 第三次失败：停止
             goal.degradation_level = DegradationLevel.STOPPED
+            # 仅当本次调用真正把目标推入 FAILED 终态时才发通知；
+            # _execute_loop 的异常分支已先置 FAILED，那里由它负责推送，
+            # 此处再推会重复。
+            newly_failed = goal.status != GoalStatus.FAILED
             goal.status = GoalStatus.FAILED
             goal.completed_at = utc_now()
+            if newly_failed:
+                get_goal_notification_queue().push(goal)
             logger.warning(
                 f"Goal {goal.id}: {consecutive_failures} consecutive failures, stopping"
             )

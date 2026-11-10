@@ -89,6 +89,9 @@ const GoalDetailPage = lazy(() =>
   import('./features/autonomous-goals/GoalDetailPage').then((m) => ({ default: m.GoalDetailPage })),
 );
 
+// 2026-11-09: 任务中心独立页面（/tasks）
+const TasksPage = lazy(() => import('./pages/TasksPage').then((m) => ({ default: m.TasksPage })));
+
 // ChatRoute 内直接调用 hook 形式的 useStore setter 会引入条件调用问题,
 // 用 getState() 命令式写入更直白(与 App useEffect 里的用法一致)。
 const setCurrentSessionIdFromStore = (id: string) => useStore.getState().setCurrentSessionId(id);
@@ -313,6 +316,8 @@ function App() {
             <Route path="arena" element={<Arena />} />
             {/* Task 12 (2026-09-21): 待办完整管理页（侧边栏 Plus 按钮跳转入口） */}
             <Route path="todos" element={<TodoPage />} />
+            {/* 2026-11-09: 任务中心独立页面 */}
+            <Route path="tasks" element={<TasksPage />} />
             {/* 2026-10-17: 闲时自主目标执行系统 */}
             <Route path="goals" element={<GoalListPage />} />
             <Route path="goals/:goalId" element={<GoalDetailPage />} />

@@ -8,23 +8,33 @@ import {
 } from '../schedulerNotifications';
 
 describe('collectNotificationItems', () => {
-  it('合并定时任务、待办提醒与后台任务三路队列', () => {
+  it('合并定时任务、待办提醒、后台任务与闲时目标四路队列', () => {
     const payload: PendingNotificationsPayload = {
       scheduled_tasks: [{ title: '✅ 定时任务已完成：日报', body: '内容' }],
       todo_reminders: [{ title: '⏰ 待办紧急', body: '写周报' }],
       background_tasks: [{ title: '✅ 后台任务完成：pytest -q', body: 'exit=0' }],
+      goal_notifications: [{ title: '✅ 闲时目标完成：整理文献', status: 'succeeded' }],
     };
-    expect(collectNotificationItems(payload)).toHaveLength(3);
+    expect(collectNotificationItems(payload)).toHaveLength(4);
   });
 
   it('丢弃没有标题的条目，容忍空载荷', () => {
     const payload: PendingNotificationsPayload = {
       scheduled_tasks: [{ body: 'no title' }, { title: '' }],
       todo_reminders: [{ title: 'ok' }],
+      goal_notifications: [{ body: 'goal 也无 title' }],
     };
     expect(collectNotificationItems(payload)).toEqual([{ title: 'ok' }]);
     expect(collectNotificationItems(null)).toEqual([]);
     expect(collectNotificationItems(undefined)).toEqual([]);
+  });
+
+  it('闲时目标通知单独存在时也能被收集', () => {
+    const items = collectNotificationItems({
+      goal_notifications: [{ title: 'B', status: 'succeeded' }],
+    });
+    expect(items.map((i) => i.title)).toEqual(['B']);
+    expect(items[0].status).toBe('succeeded');
   });
 });
 
