@@ -259,9 +259,9 @@
 - [x] **M3 · 设置章重组 + 去自动 LLM**
   - 五分区；SAGE.md 对话框化；`ProjectBootstrapPanel` 默认手动触发；术语替换
   - 验收：打开设置页无网络/LLM 请求；每个分区单一保存动作；无英文与内部术语
-- [ ] **M4 · 文件章 i18n**
-  - 新增 `governance` 字典；`ReferenceManager` 全量替换；空态引导
-  - 验收：中文界面下无英文残留；英文界面正常回退
+- [x] **M4 · 文件章 i18n**
+  - 新增 `governanceFiles` 字典（zh + en 双文件 + 聚合器接入）；`ReferenceManager` 全量替换为 `t('governance.files.*')`；确认对话框同步本地化
+  - 验收：中文界面下无英文残留；英文界面正常回退；ReferenceManager 全部 data-testid 保留
 - [ ] **M6 · 资料章重组 + 语义检索折叠**
   - 资料页只保留入库与列表；拆出 `SemanticSearchPanel` 并默认折叠；Git 状态移入概览折叠区；Wiki 生成移入设置高级区；术语中文化
   - 验收：资料页无 `M4`/`Embedder`/「语料池」等内部术语；Git 状态不在资料页；`StudioMaterialsAndProfilePanels.tsx` < 400 行

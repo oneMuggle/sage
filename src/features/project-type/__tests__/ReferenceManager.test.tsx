@@ -1,5 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { I18nProvider } from '../../../shared/lib/i18n';
 
 const mockListReferences = vi.fn();
 const mockCreateReference = vi.fn();
@@ -24,6 +27,10 @@ import type { ProjectReference } from '../../../shared/api';
 import { ReferenceManager } from '../ReferenceManager';
 
 const PROJECT_ID = 'project-abc';
+
+function renderManager(ui: ReactElement) {
+  return render(<I18nProvider>{ui}</I18nProvider>);
+}
 
 function makeRef(overrides: Partial<ProjectReference> = {}): ProjectReference {
   return {
@@ -60,7 +67,7 @@ describe('ReferenceManager', () => {
   });
 
   it('renders the empty-state placeholder when no references exist', async () => {
-    render(<ReferenceManager projectId={PROJECT_ID} />);
+    renderManager(<ReferenceManager projectId={PROJECT_ID} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('reference-list-empty')).toBeInTheDocument();
@@ -73,7 +80,7 @@ describe('ReferenceManager', () => {
     const refB = makeRef({ id: 'ref-b', aliasName: 'beta', kind: 'file' });
     mockListReferences.mockResolvedValue([refA, refB]);
 
-    render(<ReferenceManager projectId={PROJECT_ID} />);
+    renderManager(<ReferenceManager projectId={PROJECT_ID} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('reference-row-ref-a')).toBeInTheDocument();
@@ -83,7 +90,7 @@ describe('ReferenceManager', () => {
   });
 
   it('disables the create button when required fields are empty', async () => {
-    render(<ReferenceManager projectId={PROJECT_ID} />);
+    renderManager(<ReferenceManager projectId={PROJECT_ID} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('reference-list-empty')).toBeInTheDocument();
@@ -98,7 +105,7 @@ describe('ReferenceManager', () => {
     mockCreateReference.mockResolvedValue(created);
     mockListReferences.mockResolvedValueOnce([]).mockResolvedValueOnce([created]);
 
-    render(<ReferenceManager projectId={PROJECT_ID} />);
+    renderManager(<ReferenceManager projectId={PROJECT_ID} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('reference-list-empty')).toBeInTheDocument();
@@ -136,7 +143,7 @@ describe('ReferenceManager', () => {
     const discovered = makeRef({ id: 'ref-disc', aliasName: 'discovered' });
     mockListReferences.mockResolvedValueOnce([]).mockResolvedValueOnce([discovered]);
 
-    render(<ReferenceManager projectId={PROJECT_ID} />);
+    renderManager(<ReferenceManager projectId={PROJECT_ID} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('reference-list-empty')).toBeInTheDocument();
@@ -157,7 +164,7 @@ describe('ReferenceManager', () => {
     const ref = makeRef({ id: 'ref-del', aliasName: 'deleteme' });
     mockListReferences.mockResolvedValueOnce([ref]).mockResolvedValueOnce([]);
 
-    render(<ReferenceManager projectId={PROJECT_ID} />);
+    renderManager(<ReferenceManager projectId={PROJECT_ID} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('reference-row-ref-del')).toBeInTheDocument();
@@ -180,7 +187,7 @@ describe('ReferenceManager', () => {
     const ref = makeRef({ id: 'ref-keep', aliasName: 'keepme' });
     mockListReferences.mockResolvedValue([ref]);
 
-    render(<ReferenceManager projectId={PROJECT_ID} />);
+    renderManager(<ReferenceManager projectId={PROJECT_ID} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('reference-row-ref-keep')).toBeInTheDocument();
@@ -198,7 +205,7 @@ describe('ReferenceManager', () => {
   it('renders an error banner when listReferences rejects', async () => {
     mockListReferences.mockRejectedValue(new Error('network down'));
 
-    render(<ReferenceManager projectId={PROJECT_ID} />);
+    renderManager(<ReferenceManager projectId={PROJECT_ID} />);
 
     await waitFor(() => {
       const banner = screen.getByTestId('reference-error');
