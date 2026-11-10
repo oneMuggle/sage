@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '../../shared/ui/DropdownMenu/DropdownMenu';
 
-import { layerLabelKey } from './rulesView';
+import { layerLabelKey, sourceDetail } from './rulesView';
 
 export type RuleAction = 'edit' | 'copy' | 'toggle' | 'delete' | 'ai';
 
@@ -28,7 +28,6 @@ function RuleChips({ entry, conflicted }: { entry: RuleEntry; conflicted: boolea
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <Badge variant="secondary">{t(layerLabelKey(entry.layer))}</Badge>
-      <span className="text-ui-2xs text-muted-foreground">{entry.sourceLabel}</span>
       <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-ui-2xs text-muted-foreground">
         {entry.category}
       </span>
@@ -55,9 +54,14 @@ function RuleChips({ entry, conflicted }: { entry: RuleEntry; conflicted: boolea
 
 function RuleMeta({ entry }: { entry: RuleEntry }) {
   const { t } = useI18n();
+  const detail = sourceDetail(entry);
   return (
     <div className="flex flex-wrap items-center gap-3 text-ui-2xs text-muted-foreground">
-      <span>{entry.scope}</span>
+      {detail && (
+        <span className={detail.title ? 'font-mono' : undefined} title={detail.title}>
+          {detail.text}
+        </span>
+      )}
       {entry.trigger && <span>{t('rules.row.trigger').replace('{trigger}', entry.trigger)}</span>}
       <span>{t('rules.row.priority').replace('{priority}', String(entry.priority))}</span>
       <span className={entry.enabled ? 'text-emerald-600' : undefined}>
