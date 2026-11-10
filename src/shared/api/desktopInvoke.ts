@@ -75,7 +75,13 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
     // readiness-gate message with a different Chinese text and the
     // BackendStatusBanner couldn't tell them apart.
     if (raw.includes(BACKEND_NOT_READY_MARKER)) {
-      throw new Error(raw);
+      // 剥离 Electron IPC 包装前缀,只保留业务文案。
+      // 原始形态: "Error invoking remote method 'sage:invoke': BackendNotReadyError: 后端服务尚未就绪..."
+      // 剥离后:  "后端服务尚未就绪,请稍候或重启 Sage"
+      const cleaned = raw
+        .replace(/^Error invoking remote method '[^']*':\s*/, '')
+        .replace(/^BackendNotReadyError:\s*/, '');
+      throw new Error(cleaned);
     }
     // PR-B (2026-08-18): 把后端断开的 ECONNREFUSED / fetch failed / network error
     // 翻译成中文友好提示，让上层（React Query / UI）拿到稳定的 Error 而非
