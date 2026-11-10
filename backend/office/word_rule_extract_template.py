@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .word_rule_extract_common import (
     PT_TO_CM,
@@ -276,7 +276,7 @@ def _extract_special_styles(
 ) -> None:
     """为模板中的特殊样式（作者、摘要、图题、表题、参考文献等）生成 style.font 规则。"""
     styles = profile.get("styles", [])
-    seen: set[str] = set()
+    seen: Set[str] = set()
 
     for style in styles:
         name = str(style.get("name") or "")
