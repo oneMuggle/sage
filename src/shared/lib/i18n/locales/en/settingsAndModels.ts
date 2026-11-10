@@ -285,6 +285,7 @@ export const enSettingsAndModels = {
   // ─── M1 tool approval ─────────────
   'permission.title': 'Tool approval required',
   'permission.tool': 'Tool',
+  'permission.from_session': 'From session',
   'permission.from_plugin': 'From plugin',
   'permission.args': 'Arguments',
   'permission.risk.safe': 'Safe',
@@ -683,7 +684,8 @@ export const enSettingsAndModels = {
   'office.rules.extractNoActiveDoc': 'Please select a document in the left document library first',
   'office.rules.extractSuccess': 'Extracted {n} rules into new group "{name}"',
   'office.rules.specLibraryToggle': 'Specification library (external rule source)',
-  'office.rules.aiAudit.noDocument': 'Please select a document in the Documents tab before auditing',
+  'office.rules.aiAudit.noDocument':
+    'Please select a document in the Documents tab before auditing',
 };
 
 export function formatEnSettingsAndModelsSummary(): string {
