@@ -90,7 +90,17 @@ KIND_META: Dict[str, Tuple[str, str, str, str, bool]] = {
 }
 MERGE_FIELDS = {
     "page.margins": ("top_cm", "bottom_cm", "left_cm", "right_cm", "tolerance_cm"),
-    "style.font": ("style", "font_ascii", "font_east_asia", "size_pt", "tolerance_pt"),
+    "style.font": (
+        "style",
+        "font_ascii",
+        "font_east_asia",
+        "size_pt",
+        "tolerance_pt",
+        "bold",
+        "italic",
+        "underline",
+        "color",
+    ),
     "style.paragraph": (
         "style",
         "line_spacing",
