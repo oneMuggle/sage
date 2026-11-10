@@ -51,6 +51,7 @@ vi.mock('../../features/project-type', () => ({
 
 vi.mock('../../features/project-type/StudioMaterialsAndProfilePanels', () => ({
   StudioCharterTabPanel: () => <div data-testid="charter-panel-stub" />,
+  StudioMetadataPanel: () => <div data-testid="metadata-panel-stub" />,
   StudioMaterialsTabPanel: () => <div data-testid="materials-panel-stub" />,
   StudioProfileTabPanel: () => <div data-testid="profile-panel-stub" />,
   StudioAllowedPathsTabPanel: () => <div data-testid="allowed-paths-stub" />,
@@ -298,7 +299,7 @@ describe('GovernanceShell (legacy)', () => {
     });
 
     fireEvent.click(screen.getByTestId('governance-tab-settings'));
-    const typeSelect = screen.getByLabelText('切换项目形态');
+    const typeSelect = screen.getByLabelText('切换项目类型');
     fireEvent.change(typeSelect, { target: { value: 'business' } });
 
     await waitFor(() => {
