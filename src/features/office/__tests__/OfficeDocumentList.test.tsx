@@ -92,7 +92,7 @@ describe('OfficeDocumentList — clickable history rows (open preview)', () => {
     expect(onPreview).toHaveBeenCalledWith('doc-2');
   });
 
-  it('does NOT open the preview when a row action button is clicked', () => {
+  it('does NOT open the preview when a ⋯ menu item is clicked', async () => {
     const onPreview = vi.fn();
     const onArchive = vi.fn();
     render(
@@ -106,7 +106,10 @@ describe('OfficeDocumentList — clickable history rows (open preview)', () => {
       </I18nProvider>,
     );
 
-    fireEvent.click(screen.getAllByRole('button', { name: /archive|归档/i })[0]);
+    // Archive now lives inside the ⋯ dropdown, not inline — open it first.
+    fireEvent.pointerDown(screen.getByTestId('office-doc-more-doc-1'), { button: 0 });
+    const item = await screen.findByRole('menuitem', { name: /archive|归档/i });
+    fireEvent.click(item);
 
     expect(onArchive).toHaveBeenCalledWith('doc-1');
     expect(onPreview).not.toHaveBeenCalled();
@@ -152,17 +155,17 @@ describe('OfficeDocumentList — clickable history rows (open preview)', () => {
 });
 
 describe('OfficeDocumentList — gateway action callbacks', () => {
-  it('forwards the document ID to the Save As callback', () => {
+  it('forwards the document ID to the Save As callback', async () => {
     const onSaveAs = vi.fn();
     render(
       <I18nProvider defaultLocale="zh">
         <OfficeDocumentList documents={sampleDocs} loading={false} onSaveAs={onSaveAs} />
       </I18nProvider>,
     );
-    // Use getAllByRole since each document row exposes its own Save As
-    // button — assert on the FIRST row to keep the assertion unambiguous.
-    const buttons = screen.getAllByRole('button', { name: /Save As|另存为/i });
-    fireEvent.click(buttons[0]);
+    // Save As lives inside the ⋯ dropdown — open the menu for doc-1, then click.
+    fireEvent.pointerDown(screen.getByTestId('office-doc-more-doc-1'), { button: 0 });
+    const item = await screen.findByRole('menuitem', { name: /Save As|另存为/i });
+    fireEvent.click(item);
     expect(onSaveAs).toHaveBeenCalledWith('doc-1');
   });
 
@@ -173,12 +176,14 @@ describe('OfficeDocumentList — gateway action callbacks', () => {
         <OfficeDocumentList documents={sampleDocs} loading={false} onOpen={onOpen} />
       </I18nProvider>,
     );
+    // Live variant surfaces "open" as an inline primary action (ExternalLink)
+    // — no menu interaction required.
     const buttons = screen.getAllByRole('button', { name: /open|打开/i });
     fireEvent.click(buttons[0]);
     expect(onOpen).toHaveBeenCalledWith('doc-1');
   });
 
-  it('forwards the document ID to the Show In Folder callback', () => {
+  it('forwards the document ID to the Show In Folder callback', async () => {
     const onShowInFolder = vi.fn();
     render(
       <I18nProvider defaultLocale="zh">
@@ -189,8 +194,10 @@ describe('OfficeDocumentList — gateway action callbacks', () => {
         />
       </I18nProvider>,
     );
-    const buttons = screen.getAllByRole('button', { name: /show.*folder|显示.*文件夹/i });
-    fireEvent.click(buttons[0]);
+    // Show In Folder lives inside the ⋯ dropdown.
+    fireEvent.pointerDown(screen.getByTestId('office-doc-more-doc-1'), { button: 0 });
+    const item = await screen.findByRole('menuitem', { name: /show.*folder|显示.*文件夹/i });
+    fireEvent.click(item);
     expect(onShowInFolder).toHaveBeenCalledWith('doc-1');
   });
 

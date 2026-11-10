@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import type { RefObject } from 'react';
+import { toast } from 'sonner';
 
 import { useOfficeWorkspaceStore } from '../../../entities/office/officeWorkspaceStore';
 import type { SuggestionCardData } from '../../../entities/office/officeWorkspaceStore';
@@ -58,7 +59,7 @@ export function useAuditSuggestions(_deps: AuditSuggestionsDeps = {}): AuditSugg
   const runAudit = async () => {
     if (inFlightRef.current) return;
     if (!activeDocument) {
-      appendSystem(t('office.ai.sidebar.no_document'));
+      toast.warning(t('office.ai.quick.need_document'));
       return;
     }
     const target = deriveTarget();

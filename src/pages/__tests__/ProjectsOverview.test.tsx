@@ -84,4 +84,25 @@ describe('ProjectsOverview', () => {
     fireEvent.click(screen.getByTestId('projects-overview-archive'));
     await waitFor(() => expect(setStatus).toHaveBeenCalledWith('p-1', 'archived'));
   });
+
+  it('加载失败时展示错误横幅而非静默空态', async () => {
+    list.mockRejectedValue(new Error('后端服务尚未就绪,请稍候或重启 Sage'));
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('projects-overview-error')).toBeInTheDocument());
+    expect(screen.getByText(/加载项目列表失败/)).toBeInTheDocument();
+  });
+
+  it('点击重试后重新拉取并清除错误横幅', async () => {
+    list.mockRejectedValueOnce(new Error('后端服务尚未就绪,请稍候或重启 Sage'));
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('projects-overview-error')).toBeInTheDocument());
+
+    list.mockResolvedValueOnce(ROWS);
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('projects-overview-error')).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText('Sage')).toBeInTheDocument();
+  });
 });

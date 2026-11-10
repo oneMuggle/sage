@@ -76,7 +76,7 @@ export function OfficeAiSidebarHost({
     prefillInitialCommand(`${t('office.ai.edit.prefix')}${draftTail}`);
   };
 
-  useSelectionCapture(rootRef);
+useSelectionCapture(rootRef);
 
   const { pending, errorText, runRewrite, runChat, applySuggestion, markSkipped } =
     useAiCapabilities({ rootRef });
@@ -116,6 +116,10 @@ export function OfficeAiSidebarHost({
     // Ignore floating-bar actions while an AI request is in flight so rapid
     // clicks cannot interleave awaits and desync `pending` / reply order.
     if (!selection || busy) return;
+    // Every floating action operates on the active document. Without one the
+    // request would be rejected downstream — skip it instead of surfacing an
+    // error inside the conversation.
+    if (!activeDocument) return;
 
     if (kind === 'rewrite') {
       setPendingEdit(null);

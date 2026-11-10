@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { RefObject } from 'react';
+import { toast } from 'sonner';
 
 import { useOfficeWorkspaceStore } from '../../../entities/office/officeWorkspaceStore';
 import type { SuggestionCardData } from '../../../entities/office/officeWorkspaceStore';
@@ -65,12 +66,9 @@ export function useAiCapabilities(deps: { rootRef: RefObject<HTMLElement> }): Ai
     customInstruction?: string;
   }) => {
     if (!activeDocument) {
-      appendMessage({
-        id: nextMessageId(),
-        role: 'system',
-        content: t('office.ai.sidebar.no_document'),
-        createdAt: Date.now(),
-      });
+      // A missing document is a transient UI state, not a conversation turn —
+      // a toast keeps it out of the message history.
+      toast.warning(t('office.ai.quick.need_document'));
       return;
     }
 
@@ -132,12 +130,7 @@ export function useAiCapabilities(deps: { rootRef: RefObject<HTMLElement> }): Ai
 
   const runChat = async (message: string) => {
     if (!activeDocument) {
-      appendMessage({
-        id: nextMessageId(),
-        role: 'system',
-        content: t('office.ai.sidebar.no_document'),
-        createdAt: Date.now(),
-      });
+      toast.warning(t('office.ai.quick.need_document'));
       return;
     }
 
@@ -207,7 +200,7 @@ export function useAiCapabilities(deps: { rootRef: RefObject<HTMLElement> }): Ai
       return;
     }
 
-    setPending(true);
+setPending(true);
     setErrorText(null);
 
     try {

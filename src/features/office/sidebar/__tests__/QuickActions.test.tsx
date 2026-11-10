@@ -29,11 +29,28 @@ describe('quickCommandsForTab', () => {
 describe('QuickActions', () => {
   it('renders one button per command and forwards clicks', () => {
     const onCommand = vi.fn();
-    render(<QuickActions tab="rules" onCommand={onCommand} />);
+    render(<QuickActions tab="rules" hasDocument onCommand={onCommand} />);
 
     const buttons = screen.getAllByRole('button');
     expect(buttons).toHaveLength(3);
     fireEvent.click(buttons[0]);
     expect(onCommand).toHaveBeenCalledWith('/rules');
+  });
+
+  it('disables document-scoped commands when no document is active', () => {
+    render(<QuickActions tab="documents" hasDocument={false} onCommand={vi.fn()} />);
+
+    expect(screen.getByTestId('office-ai-quick-audit')).toBeDisabled();
+    expect(screen.getByTestId('office-ai-quick-summary')).toBeDisabled();
+    expect(screen.getByTestId('office-ai-quick-translate')).toBeDisabled();
+    // Navigating to the rules tab needs no document.
+    expect(screen.getByTestId('office-ai-quick-rules')).not.toBeDisabled();
+  });
+
+  it('enables document-scoped commands once a document is active', () => {
+    render(<QuickActions tab="documents" hasDocument onCommand={vi.fn()} />);
+
+    expect(screen.getByTestId('office-ai-quick-audit')).not.toBeDisabled();
+    expect(screen.getByTestId('office-ai-quick-summary')).not.toBeDisabled();
   });
 });

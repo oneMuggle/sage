@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import type { RefObject } from 'react';
+import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useOfficeWorkspaceStore } from '../../../../entities/office/officeWorkspaceStore';
@@ -25,6 +26,16 @@ vi.mock('../../../../shared/lib/i18n', () => ({
     setLocale: vi.fn(),
   }),
 }));
+
+vi.mock('sonner', () => ({
+  toast: {
+    warning: vi.fn(),
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+const mockToastWarning = vi.mocked(toast.warning);
 
 const mockAiApi = vi.mocked(aiApi);
 const mockOfficeSpecApi = vi.mocked(officeSpecApi.officeSpecApi);
@@ -88,7 +99,7 @@ describe('useAiCapabilities', () => {
     });
   });
 
-  it('writes a system error when no activeDocument on runRewrite', async () => {
+  it('warns via toast when no activeDocument on runRewrite', async () => {
     const { result } = renderCapabilities(makeRoot());
 
     await act(async () => {
@@ -96,13 +107,13 @@ describe('useAiCapabilities', () => {
     });
 
     expect(mockAiApi.rewrite).not.toHaveBeenCalled();
-    const messages = useOfficeWorkspaceStore.getState().conversation;
-    expect(messages).toHaveLength(1);
-    expect(messages[0].role).toBe('system');
-    expect(messages[0].content).toBe('office.ai.sidebar.no_document');
+    // A missing document is transient UI state — it must not enter the
+    // conversation history as a system turn.
+    expect(mockToastWarning).toHaveBeenCalledWith('office.ai.quick.need_document');
+    expect(useOfficeWorkspaceStore.getState().conversation).toHaveLength(0);
   });
 
-  it('writes a system error when no activeDocument on runChat', async () => {
+  it('warns via toast when no activeDocument on runChat', async () => {
     const { result } = renderCapabilities(makeRoot());
 
     await act(async () => {
@@ -110,10 +121,8 @@ describe('useAiCapabilities', () => {
     });
 
     expect(mockAiApi.chat).not.toHaveBeenCalled();
-    const messages = useOfficeWorkspaceStore.getState().conversation;
-    expect(messages).toHaveLength(1);
-    expect(messages[0].role).toBe('system');
-    expect(messages[0].content).toBe('office.ai.sidebar.no_document');
+    expect(mockToastWarning).toHaveBeenCalledWith('office.ai.quick.need_document');
+    expect(useOfficeWorkspaceStore.getState().conversation).toHaveLength(0);
   });
 
   it('calls aiApi.rewrite and appends an assistant message with a suggestion card', async () => {

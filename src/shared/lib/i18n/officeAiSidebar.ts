@@ -10,8 +10,9 @@ export const officeAiSidebarZh = {
   'office.ai.sidebar.open': '打开 AI 助手',
   'office.ai.sidebar.close': '关闭 AI 助手',
   'office.ai.sidebar.empty': '选中文本或输入指令开始',
-  'office.ai.sidebar.no_document': '未选择文档',
   'office.ai.sidebar.current_document': '当前文档',
+  'office.ai.sidebar.clear_document': '解除当前文档',
+  'office.ai.sidebar.hint_select_document': '在左侧文档库点击任一文档开始',
   'office.ai.sidebar.placeholder': '输入指令，/ 唤起命令',
   'office.ai.sidebar.send': '发送',
   'office.ai.sidebar.thinking': '生成中…',
@@ -47,6 +48,7 @@ export const officeAiSidebarZh = {
 
   // Quick commands — documents
   'office.ai.quick.documents.audit': '审校全文',
+  'office.ai.quick.need_document': '请先在左侧文档库选择文档',
   'office.ai.quick.documents.rules': '提取规则',
   'office.ai.quick.documents.summary': '生成摘要',
   'office.ai.quick.documents.translate': '翻译',
@@ -93,8 +95,9 @@ export const officeAiSidebarEn: Record<keyof typeof officeAiSidebarZh, string> =
   'office.ai.sidebar.open': 'Open AI assistant',
   'office.ai.sidebar.close': 'Close AI assistant',
   'office.ai.sidebar.empty': 'Select text or type a command to start',
-  'office.ai.sidebar.no_document': 'No document selected',
   'office.ai.sidebar.current_document': 'Current document',
+  'office.ai.sidebar.clear_document': 'Clear current document',
+  'office.ai.sidebar.hint_select_document': 'Click a document in the library to start',
   'office.ai.sidebar.placeholder': 'Type an instruction, / for commands',
   'office.ai.sidebar.send': 'Send',
   'office.ai.sidebar.thinking': 'Generating…',
@@ -129,6 +132,7 @@ export const officeAiSidebarEn: Record<keyof typeof officeAiSidebarZh, string> =
 
   // Quick commands — documents
   'office.ai.quick.documents.audit': 'Audit document',
+  'office.ai.quick.need_document': 'Select a document in the library first',
   'office.ai.quick.documents.rules': 'Extract rules',
   'office.ai.quick.documents.summary': 'Summarize',
   'office.ai.quick.documents.translate': 'Translate',

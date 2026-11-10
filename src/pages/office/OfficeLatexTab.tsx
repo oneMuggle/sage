@@ -20,15 +20,11 @@ import { LatexPdfAuditPanel } from '../../features/office/LatexPdfAuditPanel';
 import { LatexProfileLibraryPanel } from '../../features/office/LatexProfileLibraryPanel';
 import { LatexProjectImportPanel } from '../../features/office/LatexProjectImportPanel';
 import { LatexTemplatePanel } from '../../features/office/LatexTemplatePanel';
+import { useKeepAliveTabs } from '../../shared/lib/hooks/useKeepAliveTabs';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../shared/ui/Tabs';
 
-import {
-  OFFICE_LATEX_TAB_IDS,
-  parseOfficeLatexTab,
-  useKeepAliveTabs,
-  type OfficeLatexTabId,
-} from './officeTabs';
+import { OFFICE_LATEX_TAB_IDS, parseOfficeLatexTab, type OfficeLatexTabId } from './officeTabs';
 
 export interface OfficeLatexTabProps {
   active: OfficeLatexTabId;
