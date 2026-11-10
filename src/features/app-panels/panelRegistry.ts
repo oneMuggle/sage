@@ -71,7 +71,7 @@ export const PANEL_SLOTS: Readonly<Record<PanelSlot, SlotGeometry>> = {
     defaultSize: 240,
     maximizable: true,
   },
-  // 浮层（TaskCenterWidget 当前的 fixed bottom-4 right-4 z-40 一类）。
+  // 浮层（保留槽位定义以备后续浮动面板接入；task-center 已于 2026-11 迁入 left-list）。
   // 不互斥：允许与任何槽位并存，但**必须**让位于其它槽位的最大化态（见 store）。
   floating: {
     exclusive: false,
@@ -159,13 +159,13 @@ export const PANEL_DEFINITIONS: readonly PanelDefinition[] = [
     migrationBatch: 'C',
     currentOwner: 'widgets/chat/TerminalPanel.tsx + features/terminal-panel',
   },
-  // ── 浮层（批次 C：收进注册表，不再以 z-40 压右栏） ──
+  // ── 浮层（批次 C 预留；当前无面板） ──
   {
     id: 'task-center',
-    slot: 'floating',
+    slot: 'left-list',
     label: '任务中心',
     migrationBatch: 'C',
-    currentOwner: 'widgets/task-center/TaskCenterWidget.tsx:305',
+    currentOwner: 'widgets/sidebar/sections/TaskCenterSection.tsx',
   },
 ];
 

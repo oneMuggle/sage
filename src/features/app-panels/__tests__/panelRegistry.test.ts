@@ -40,9 +40,9 @@ describe('panelRegistry', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('左栏三项内容列表共用 left-list 槽位（互斥的基础）', () => {
+  it('左栏四项内容列表共用 left-list 槽位（互斥的基础）', () => {
     const ids = panelsForSlot('left-list').map((p) => p.id);
-    expect(ids).toEqual(['sider-projects', 'sider-conversations', 'sider-git']);
+    expect(ids).toEqual(['sider-projects', 'sider-conversations', 'sider-git', 'task-center']);
     expect(slotGeometry('left-list').exclusive).toBe(true);
   });
 
@@ -52,15 +52,16 @@ describe('panelRegistry', () => {
     expect(slotGeometry('right').exclusive).toBe(true);
   });
 
-  it('floating 槽位不互斥（允许与其它面并存）', () => {
+  it('floating 槽位不互斥（保留几何定义供未来面板使用）', () => {
     expect(slotGeometry('floating').exclusive).toBe(false);
-    expect(getPanelDefinition('task-center')?.slot).toBe('floating');
+    expect(panelsForSlot('floating')).toEqual([]);
   });
 
   it('同槽位互斥、跨槽位不互斥', () => {
     expect(isExclusiveConflict('chat-inspector', 'wiki-inspector')).toBe(true);
     expect(isExclusiveConflict('sider-projects', 'sider-git')).toBe(true);
     expect(isExclusiveConflict('chat-inspector', 'terminal')).toBe(false);
+    expect(isExclusiveConflict('task-center', 'sider-git')).toBe(true);  // 同 left-list（迁移后新增）
     expect(isExclusiveConflict('task-center', 'chat-inspector')).toBe(false);
   });
 
