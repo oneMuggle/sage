@@ -26,7 +26,6 @@ interface StatusCardProps {
   blueprintLabel: string;
   stageLabel: string;
   bootstrapComplete: boolean;
-  onStartSession: () => void;
   onChangeTab: (tab: string) => void;
 }
 
@@ -35,11 +34,8 @@ function StatusCard({
   blueprintLabel,
   stageLabel,
   bootstrapComplete,
-  onStartSession,
   onChangeTab,
 }: StatusCardProps) {
-  const onPrimary = () => (bootstrapComplete ? onStartSession() : onChangeTab('settings'));
-
   return (
     <div
       className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3"
@@ -59,14 +55,17 @@ function StatusCard({
           </span>
         </span>
       </div>
-      <Button
-        size="sm"
-        onClick={onPrimary}
-        disabled={data.startingSession}
-        data-testid="project-home-cta"
-      >
-        {bootstrapComplete ? (data.startingSession ? '正在打开…' : '开始会话') : '继续初始化'}
-      </Button>
+      {/* 主 CTA 常驻页面头部；此处只在未初始化时给出上下文操作 */}
+      {bootstrapComplete ? null : (
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => onChangeTab('settings')}
+          data-testid="project-home-cta"
+        >
+          继续初始化
+        </Button>
+      )}
     </div>
   );
 }
@@ -91,7 +90,7 @@ function NextActionsCard({ actions, onStartSession }: NextActionsCardProps) {
       {actions.length === 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-muted-foreground">一切就绪，可以开始工作了。</span>
-          <Button size="sm" onClick={onStartSession}>
+          <Button size="sm" variant="secondary" onClick={onStartSession}>
             开始会话
           </Button>
         </div>
@@ -351,7 +350,6 @@ export function OverviewSection({ data, onStartSession, onChangeTab }: OverviewS
         blueprintLabel={blueprint.label}
         stageLabel={stageLabel}
         bootstrapComplete={bootstrapComplete}
-        onStartSession={onStartSession}
         onChangeTab={onChangeTab}
       />
       <NextActionsCard actions={actions.slice(0, 3)} onStartSession={onStartSession} />

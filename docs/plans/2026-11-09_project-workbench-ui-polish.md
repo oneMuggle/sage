@@ -1,7 +1,7 @@
 # 项目工作台 UI 优化方案（/projects + 概览 + 设置 + 资料 + 文件 + 规则）
 
 **日期**: 2026-11-09
-**状态**: 方案待确认，未实施
+**状态**: M1–M7 全部实施完毕，待归档
 **分支**: `feat/project-workbench-ui-polish`（main）
 **同步计划**: 全部为纯前端改动，实施后 cherry-pick 到 `release/win7`
 
@@ -202,54 +202,62 @@
 
 ### 前端（修改）
 
+> 下表按**实际落地**整理（`git diff --stat 30a47676c..HEAD`），与初稿方案有出入处已注明。
+
 | 文件 | 改动 |
 |---|---|
-| `src/pages/ProjectsOverview.tsx` | 重写为单列表布局；删除底部重复列表；新增批量模式与空态 |
-| `src/widgets/sidebar/sections/WorkbenchProjectList.tsx` | 行组件抽为可复用 `ProjectRow`（新页面与侧栏共用），或新增 `ProjectRow.tsx` |
-| `src/widgets/sidebar/sections/SidebarProjectList.tsx` | `/projects` 路由隐藏；启动竞态重试接线 |
-| `src/widgets/sidebar/sections/useProjectSectionData.ts` | 监听 `backend:ready`，失败退避重试一次 |
-| `src/pages/governance/GovernanceShell.tsx` | 头部 CTA、下划线 Tab、去外层 Card |
-| `src/pages/governance/sections/OverviewSection.tsx` | 重组为状态 / 下一步 / 里程碑 / 折叠项目结构 |
-| `src/pages/governance/sections/SettingsSection.tsx` | 五分区重组；高级折叠；术语替换 |
-| `src/pages/governance/sections/FilesSection.tsx` | 标题与说明 |
-| `src/features/project-type/ReferenceManager.tsx` | 全量 i18n 化 + 空态引导 |
+| `src/pages/ProjectsOverview.tsx` | 重写为单列表布局：删掉上方朴素 `<ul>`，改为居中容器 + 标题行 + 工具栏；列表复用 `WorkbenchProjectList`；新增批量模式与空态 |
+| `src/widgets/sidebar/sections/WorkbenchProjectList.tsx` | 承载 `/projects` 唯一列表；行内 hover 操作、批量选择条、类型/阶段徽章（**未**抽独立 `ProjectRow.tsx`） |
+| `src/widgets/layout/Sidebar.tsx` | `/projects` 路由隐藏左栏重复项目入口 |
+| `src/widgets/sidebar/sections/useProjectSectionData.ts` | 后端未就绪时退避重试，消除左栏永久空态 |
+| `src/pages/governance/GovernanceShell.tsx` | 头部主 CTA、下划线 Tab、去外层 Card、路径截断 |
+| `src/pages/governance/sections/OverviewSection.tsx` | 重组为状态 / 下一步 / 里程碑 / 折叠项目结构；`NextActionsCard` 内联在此文件（**未**独立成文件） |
+| `src/pages/governance/sections/SettingsSection.tsx` | 五分区重组；高级折叠；术语替换；三个原生 `<select>` 迁到共享 `Select` |
+| `src/pages/governance/sections/KnowledgeSection.tsx` | 重组：只保留资料入库 + 列表；语义检索折叠；Git 状态与 Wiki 生成移出 |
+| `src/features/project-type/ReferenceManager.tsx` | 全量 i18n 化 + 空态引导；类型选择器迁到共享 `Select` |
 | `src/features/project-type/ProjectBootstrapPanel.tsx` | 新增 `autoStart` 开关，默认不自动跑 LLM |
-| `src/pages/governance/sections/KnowledgeSection.tsx` | 重组：只保留资料入库 + 列表；Git 状态与 Wiki 生成移出 |
-| `src/features/project-type/StudioMaterialsAndProfilePanels.tsx` | 拆出 `SemanticSearchPanel`（785 行 → 各 < 400 行）；资料面板术语中文化 |
-| `src/features/project-type/GitStatusWidget.tsx` | 移入概览「项目结构」折叠区；跨域按钮改为跳转 |
-| `src/features/project-type/WikiGenerationPanel.tsx` | 移入设置章「高级」折叠区 |
+| `src/features/project-type/SemanticSearchPanel.tsx` | 术语中文化（`M4` / `Embedder` / 「语料池」等内部词） |
+| `src/features/project-type/StudioMaterialsAndProfilePanels.tsx` | 拆分主文件，资料面板与允许路径面板各自独立 |
+| `src/features/project-type/StudioMaterialsTabPanel.tsx` | **新增**：资料入库 + 资料列表 |
+| `src/features/project-type/StudioAllowedPathsTabPanel.tsx` | **新增**：外部文件夹（只读）面板 |
+| `src/features/project-type/projectFilters.ts` | **重命名**自 `src/pages/projects/projectOverviewUtils.ts`，复用归档到 features 层 |
+| `src/features/playbook/PlaybookCard.tsx` | 操作收敛 |
 | `src/features/rules/rulesView.ts` | 新增 `sourceDetail()`：路径型 scope 只显示文件名，全路径进 `title` |
 | `src/features/rules/RuleRow.tsx` | 行内移除重复来源名，改用 `sourceDetail()` 显示来源细节 |
 | `src/features/rules/EffectiveRulesDrawer.tsx` | 生效顺序抽屉行内改用 `sourceDetail()` |
-| `src/features/rules/RulesPanelSections.tsx` | 冲突计数加 tooltip；「查看规则生效顺序」按钮文案 |
-| `src/features/playbook/PlaybookCard.tsx` | 操作收敛（如 UI 文案与按钮位于此组件） |
-| `src/features/project-type/ProjectOverviewWidgets.tsx` | 仅收敛入口展示，不改能力 |
-| `src/shared/lib/i18n/locales/zh/governance.ts` | 新增中文字典 |
-| `src/shared/lib/i18n/locales/en/governance.ts` | 新增英文字典 |
+| `src/features/rules/RulesPanelSections.tsx` | 冲突计数加 tooltip |
+| `src/features/rules/locales/{zh,en}/rules.ts` | 冲突 tooltip 文案 |
+| `src/shared/lib/i18n/locales/zh/governanceFiles.ts` | **新增**中文字典（文件引用域） |
+| `src/shared/lib/i18n/locales/en/governanceFiles.ts` | **新增**英文字典（文件引用域） |
 | `src/shared/lib/i18n/zh.ts` / `en.ts` | 聚合新域 |
+| `src/shared/ui/Select/Select.tsx` | 复用（**未改动**）：治理页与文件页的下拉统一到该组件 |
+| `architecture-baseline.json` | PlaybookCard 行数基线 825 → 853 |
+
+> 初稿中列出的 `src/pages/governance/sections/FilesSection.tsx`、`GitStatusWidget.tsx`、
+> `WikiGenerationPanel.tsx`、`ProjectOverviewWidgets.tsx`、`src/shared/lib/i18n/locales/{zh,en}/governance.ts`
+> 最终**未改动**：文件引用页的 i18n 落在 `governanceFiles.ts` 域，
+> Git 状态与 Wiki 生成是**移动挂载点**而非改组件本体。
 
 ### 前端（新增）
 
 | 文件 | 说明 |
 |---|---|
-| `src/pages/projects/ProjectRow.tsx` | 统一的单行项目组件（名称/徽章/路径/会话数/最近活动/hover 操作） |
-| `src/pages/governance/sections/NextActionsCard.tsx` | 「下一步」聚合卡 |
-| `src/features/project-type/SemanticSearchPanel.tsx` | 从资料面板拆出的语义检索折叠区（术语中文化） |
-| `src/shared/lib/i18n/locales/zh/governance.ts` + `en` | 治理与文件引用文案 |
+| `src/features/project-type/StudioMaterialsTabPanel.tsx` | 资料入库 + 列表（从 `StudioMaterialsAndProfilePanels.tsx` 拆出） |
+| `src/features/project-type/StudioAllowedPathsTabPanel.tsx` | 外部文件夹（只读）面板（从 `StudioMaterialsAndProfilePanels.tsx` 拆出） |
+| `src/shared/lib/i18n/locales/zh/governanceFiles.ts` + `en` | 文件引用域文案 |
 
 ### 测试（修改/新增）
 
 | 文件 | 覆盖 |
 |---|---|
 | `src/pages/__tests__/ProjectsOverview.test.tsx` | 单列表渲染、搜索/筛选/排序、批量归档、空态；断言不再渲染两份列表 |
-| `src/pages/projects/__tests__/ProjectRow.test.tsx` | 行点击跳转、hover 菜单、阶段/类型徽章 |
-| `src/features/project-type/__tests__/ReferenceManager.test.tsx` | 保留 testid，补中文文案与空态按钮 |
-| `src/pages/governance/__tests__/GovernanceShell.test.tsx`（及 legacy） | Tab 标签、头部 CTA、章节渲染 |
-| `src/pages/governance/sections/__tests__/OverviewSection.test.tsx` | 下一步卡优先级（含阶段检测横幅）、里程碑折叠、Git 状态位于折叠区 |
-| `src/pages/governance/sections/__tests__/SettingsSection.test.tsx` | 默认不自动请求 bootstrap suggest；高级折叠 |
-| `src/pages/governance/sections/__tests__/KnowledgeSection.test.tsx` | 资料章只渲染入库/列表；语义检索默认折叠；Git 状态不在资料页 |
+| `src/pages/projects/__tests__/projectOverviewUtils.test.ts` | 跟随 `projectFilters.ts` 重命名改导入路径 |
+| `src/features/project-type/__tests__/ReferenceManager.test.tsx` | 保留 testid，补中文文案与空态按钮；M5 补共享 `Select` 类型切换用例（Radix 指针手势 + jsdom polyfill） |
+| `src/pages/governance/__tests__/GovernanceShell.test.tsx`（及 `GovernanceShell.legacy.test.tsx`） | Tab 标签、头部 CTA、章节渲染；M5 补 Tab 激活态断言改为下划线类名、项目类型下拉改 Radix 手势 |
+| `src/pages/governance/__tests__/KnowledgeSection.test.tsx` | 资料章只渲染入库/列表；语义检索默认折叠；Git 状态不在资料页 |
+| `src/features/project-type/__tests__/ProjectBootstrapPanel.test.tsx` | 默认不自动请求 bootstrap suggest；手动「分析项目」触发 |
 | `src/features/rules/__tests__/rulesView.test.ts` | `sourceDetail()` 单元测试（路径/非路径/全局层） |
-| `src/features/rules/__tests__/RulesPanel.test.tsx`（新建或扩充） | 来源路径只显示文件名、冲突 tooltip、按钮文案 |
+| `src/features/rules/__tests__/RulesPanel.test.tsx` | 来源路径只显示文件名、冲突 tooltip、按钮文案 |
 
 ## 5. 实施步骤
 
@@ -272,9 +280,14 @@
 - [x] **M7 · 规则页文案收敛**
   - 来源路径显示文件名（tooltip 全路径）；冲突 tooltip；「查看规则生效顺序」
   - 验收：规则页功能与数据不变，仅文案/显示层差异
-- [ ] **M5 · 壳层视觉统一 + 回归**（最后执行，覆盖 M1–M7 全部页面）
+- [x] **M5 · 壳层视觉统一 + 回归**（最后执行，覆盖 M1–M7 全部页面）
   - 下划线 Tab、去外层 Card、统一 Select/Button；跑 Vitest + `tsc` + 架构棘轮
-  - 验收：CI 全绿；`architecture-baseline.json` 行数棘轮不新增超限文件
+  - 落地：`GovernanceShell.tsx` 头部主 CTA（`governance-header-cta`）+ 下划线 Tab + 去掉外层 `Card`；
+    `OverviewSection.tsx` 空态按钮降级为 `secondary`；`SettingsSection.tsx` 与 `ReferenceManager.tsx`
+    的原生 `<select>` 全部迁到共享 Radix `Select`（`SelectValue` 显式传 children 以保证收起态标签确定；
+    阶段「未设置」用 `__none__` 占位值，因 Radix 拒绝空字符串 value）
+  - 验收：`tsc --noEmit` 通过；Vitest 全量 7162 通过 / 1 例 `ArenaAccounts` 并发超时偶发失败（单独复跑 8/8 通过，与本次改动无关）；
+    `node scripts/architecture-check.mjs` 通过（97 基线文件，无新增超限项）
 
 ## 6. 测试计划
 
@@ -305,14 +318,19 @@
 
 ## 8. 验收标准
 
-- [ ] `/projects` 页面只有一份项目列表，无异常空白；一屏完成查找与打开
-- [ ] 左栏不再出现与主区重复且状态不一致的项目入口
+自动化已覆盖（对应测试见 §4）：
+
+- [x] `/projects` 页面只有一份项目列表，无异常空白；一屏完成查找与打开 — `ProjectsOverview.test.tsx`
+- [x] 左栏不再出现与主区重复且状态不一致的项目入口 — `Sidebar.tsx` 路由隐藏 + `useProjectSectionData.p189.test.ts` 重试
+- [x] 设置页打开时不自动触发 LLM；术语全部口语化 — `ProjectBootstrapPanel.test.tsx`（`autoStart` 默认关）
+- [x] 文件章中文完整，无英文残留 — `ReferenceManager.test.tsx`
+- [x] 资料章只见「添加资料 + 资料列表」；语义检索默认折叠；Git 状态不在资料页；无 `M4`/`Embedder`/「语料池」等内部术语 — `KnowledgeSection.test.tsx`
+- [x] 规则章来源路径只显示文件名，按钮文案口语化，功能无回归 — `rulesView.test.ts` / `RulesPanel.test.tsx`
+- [x] Vitest / tsc / 架构棘轮全绿 — `tsc --noEmit` 通过；全量 Vitest 7162 通过（`ArenaAccounts` 一例并发超时偶发失败，单独复跑 8/8 通过）；`architecture-check.mjs` 通过（97 基线文件）
+
+真机手工验收（需 Electron 实跑）：
+
 - [ ] 概览页默认可见操作 ≤ 8 个，原能力均可通过渐进披露到达
-- [ ] 设置页打开时不自动触发 LLM；术语全部口语化
-- [ ] 文件章中文完整，无英文残留
-- [ ] 资料章只见「添加资料 + 资料列表」；语义检索默认折叠；Git 状态不在资料页；无 `M4`/`Embedder`/「语料池」等内部术语
-- [ ] 规则章来源路径只显示文件名，按钮文案口语化，功能无回归
-- [ ] Vitest / tsc / 架构棘轮全绿
 - [ ] release/win7 同步完成
 
 ## 9. 归档

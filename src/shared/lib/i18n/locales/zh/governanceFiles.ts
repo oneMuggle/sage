@@ -14,8 +14,7 @@ export const zhGovernanceFiles = {
   'governance.files.create.submitting': '添加中...',
   'governance.files.create.submit': '新增引用',
   'governance.files.list.loading': '正在加载引用...',
-  'governance.files.list.empty':
-    '暂无引用。可在上方新增，或点击「重新扫描」识别项目中的符号链接。',
+  'governance.files.list.empty': '暂无引用。可在上方新增，或点击「重新扫描」识别项目中的符号链接。',
   'governance.files.row.created': '创建于',
   'governance.files.confirm.title': '删除引用？',
   'governance.files.confirm.messageTail': '将被移除，源文件不会被删除。',

@@ -8,7 +8,18 @@
  * - 索引状态：随项目切换自动同步索引统计，支持手动刷新统计
  */
 
-import { Search, Loader2, FileText, AlertCircle, Copy, Check, RefreshCw, Sparkles, BookmarkPlus, ShieldPlus } from 'lucide-react';
+import {
+  Search,
+  Loader2,
+  FileText,
+  AlertCircle,
+  Copy,
+  Check,
+  RefreshCw,
+  Sparkles,
+  BookmarkPlus,
+  ShieldPlus,
+} from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 
 import { projectApi } from '../../shared/api';
@@ -146,9 +157,7 @@ export function SemanticSearchPanel({
     }
   };
 
-  const filteredResults = results
-    ? results.filter((hit) => hit.score * 100 >= minScorePct)
-    : null;
+  const filteredResults = results ? results.filter((hit) => hit.score * 100 >= minScorePct) : null;
 
   /** 复制全部检索命中结果为 Markdown */
   const handleCopyAllResults = async () => {
@@ -466,7 +475,8 @@ export function SemanticSearchPanel({
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                   >
                     <ShieldPlus className="h-3 w-3 text-primary" />
-                    批量转 项目规则 ({filteredResults.filter((_, idx) => !savedConstraintIndices.has(idx)).length})
+                    批量转 项目规则 (
+                    {filteredResults.filter((_, idx) => !savedConstraintIndices.has(idx)).length})
                   </button>
                   <button
                     type="button"
@@ -497,7 +507,8 @@ export function SemanticSearchPanel({
                     }}
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                   >
-                    批量转里程碑 ({filteredResults.filter((_, idx) => !savedMilestoneIndices.has(idx)).length})
+                    批量转里程碑 (
+                    {filteredResults.filter((_, idx) => !savedMilestoneIndices.has(idx)).length})
                   </button>
                   <button
                     type="button"
@@ -506,7 +517,10 @@ export function SemanticSearchPanel({
                       const unsaved = filteredResults
                         .map((hit, idx) => ({ hit, idx }))
                         .filter(({ idx }) => !savedProfileIndices.has(idx));
-                      if (unsaved.length === 0 || typeof projectApi?.confirmKnowledge !== 'function') {
+                      if (
+                        unsaved.length === 0 ||
+                        typeof projectApi?.confirmKnowledge !== 'function'
+                      ) {
                         return;
                       }
                       try {
@@ -531,7 +545,8 @@ export function SemanticSearchPanel({
                     className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
                   >
                     <BookmarkPlus className="h-3 w-3" />
-                    批量保存到项目记忆 ({filteredResults.filter((_, idx) => !savedProfileIndices.has(idx)).length})
+                    批量保存到项目记忆 (
+                    {filteredResults.filter((_, idx) => !savedProfileIndices.has(idx)).length})
                   </button>
                   <button
                     type="button"
@@ -570,23 +585,23 @@ export function SemanticSearchPanel({
                     清空结果
                   </button>
                   <button
-                  type="button"
-                  onClick={() => void handleCopyAllResults()}
-                  data-testid="semantic-copy-all-btn"
-                  className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-                >
-                  {copiedAll ? (
-                    <>
-                      <Check className="h-3 w-3 text-emerald-500" />
-                      已复制全部结果
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3 w-3 text-primary" />
-                      复制全部检索结果
-                    </>
-                  )}
-                </button>
+                    type="button"
+                    onClick={() => void handleCopyAllResults()}
+                    data-testid="semantic-copy-all-btn"
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                  >
+                    {copiedAll ? (
+                      <>
+                        <Check className="h-3 w-3 text-emerald-500" />
+                        已复制全部结果
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3 text-primary" />
+                        复制全部检索结果
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
             </div>

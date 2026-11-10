@@ -9,7 +9,6 @@ import type { ProjectScaffoldResult, ProjectSummary } from '../../shared/api';
 import { useI18n } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
 import { Button } from '../../shared/ui/Button';
-import { Card } from '../../shared/ui/Card';
 
 import {
   GOVERNANCE_TABS,
@@ -64,13 +63,21 @@ function DeadlineBadge({ deadline }: DeadlineBadgeProps) {
 interface GovernanceHeaderProps {
   project: ProjectSummary;
   deadline: GovernanceData['upcomingDeadline'];
+  startingSession: boolean;
   onBack: () => void;
+  onStartSession: () => void;
 }
 
-function GovernanceHeader({ project, deadline, onBack }: GovernanceHeaderProps) {
+function GovernanceHeader({
+  project,
+  deadline,
+  startingSession,
+  onBack,
+  onStartSession,
+}: GovernanceHeaderProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-      <div className="flex flex-wrap items-center gap-2.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         <button
           type="button"
           onClick={onBack}
@@ -84,9 +91,22 @@ function GovernanceHeader({ project, deadline, onBack }: GovernanceHeaderProps) 
           type={project.projectType ?? project.detectedType}
           detected={!project.projectType && Boolean(project.detectedType)}
         />
-        <span className="text-xs text-muted-foreground font-mono">{project.path}</span>
+        <span
+          className="max-w-[40ch] truncate font-mono text-xs text-muted-foreground"
+          title={project.path}
+        >
+          {project.path}
+        </span>
         {deadline && <DeadlineBadge deadline={deadline} />}
       </div>
+      <Button
+        size="sm"
+        onClick={onStartSession}
+        disabled={startingSession}
+        data-testid="governance-header-cta"
+      >
+        {startingSession ? '正在打开…' : '开始会话'}
+      </Button>
     </div>
   );
 }
@@ -120,7 +140,7 @@ interface GovernanceTabBarProps {
 
 function GovernanceTabBar({ activeTab, locale, onChangeTab }: GovernanceTabBarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2 px-4 pt-3" role="tablist">
+    <div className="flex flex-wrap items-center gap-1 border-b border-border px-4" role="tablist">
       {GOVERNANCE_TABS.map((tab) => (
         <button
           key={tab.id}
@@ -129,10 +149,10 @@ function GovernanceTabBar({ activeTab, locale, onChangeTab }: GovernanceTabBarPr
           aria-selected={activeTab === tab.id}
           onClick={() => onChangeTab(tab.id)}
           data-testid={`governance-tab-${tab.id}`}
-          className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`-mb-px border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
             activeTab === tab.id
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted text-muted-foreground hover:text-foreground'
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
           {locale === 'en' ? EN_TAB_LABELS[tab.id] : tab.label}
@@ -159,7 +179,7 @@ function GovernanceContent({
 }: GovernanceContentProps) {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
-      <Card className="p-4 space-y-4">
+      <div className="space-y-4">
         {activeTab === 'overview' && (
           <OverviewSection data={data} onStartSession={onStartSession} onChangeTab={onChangeTab} />
         )}
@@ -178,7 +198,7 @@ function GovernanceContent({
         {activeTab === 'settings' && (
           <SettingsSection data={data} activeTab={activeTab} onStartSession={onStartSession} />
         )}
-      </Card>
+      </div>
     </div>
   );
 }
@@ -245,7 +265,13 @@ export function GovernanceShell() {
       className="flex-1 flex flex-col min-h-0 overflow-hidden"
       data-testid="project-governance-page"
     >
-      <GovernanceHeader project={project} deadline={data.upcomingDeadline} onBack={goBack} />
+      <GovernanceHeader
+        project={project}
+        deadline={data.upcomingDeadline}
+        startingSession={data.startingSession}
+        onBack={goBack}
+        onStartSession={openChat}
+      />
       {data.scaffoldResult && (
         <ScaffoldFeedback
           result={data.scaffoldResult}
