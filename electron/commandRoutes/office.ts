@@ -279,7 +279,7 @@ export const officeRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/office/ai/review',
     body: (a) => ({
       workspace_path: a.workspacePath ?? a.workspace_path,
-      file_path: a.filePath ?? a.file_path,
+      ...((a.filePath ?? a.file_path) ? { file_path: a.filePath ?? a.file_path } : {}),
       ...((a.docId ?? a.doc_id) ? { doc_id: a.docId ?? a.doc_id } : {}),
       ...((a.specId ?? a.spec_id) ? { spec_id: a.specId ?? a.spec_id } : {}),
       ...(a.scope ? { scope: a.scope } : {}),
@@ -308,7 +308,7 @@ export const officeRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/office/ai/revise',
     body: (a) => ({
       workspace_path: a.workspacePath ?? a.workspace_path,
-      file_path: a.filePath ?? a.file_path,
+      ...((a.filePath ?? a.file_path) ? { file_path: a.filePath ?? a.file_path } : {}),
       ...((a.docId ?? a.doc_id) ? { doc_id: a.docId ?? a.doc_id } : {}),
       issues: Array.isArray(a.issues) ? a.issues : [],
       ...((a.outputFilename ?? a.output_filename)
