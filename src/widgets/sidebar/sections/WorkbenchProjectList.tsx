@@ -88,6 +88,7 @@ export function WorkbenchProjectList({
 
   const {
     projects,
+    error,
     busyId,
     missingIds,
     expandedIds,
@@ -250,6 +251,24 @@ export function WorkbenchProjectList({
             {t('sider.project.drop_hint')}
           </div>
         )}
+
+        {/* 清单拉取失败：给出可重试的横幅，而不是只 toast 后留下空列表。 */}
+        {error && (
+          <div
+            data-testid="projects-overview-error"
+            className="mx-3 my-2 flex items-center gap-2 rounded border border-error/30 bg-error/10 px-3 py-2 text-sm text-error"
+          >
+            <span>加载项目列表失败：{error}</span>
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="ml-auto rounded border border-error/40 px-2 py-0.5 text-xs hover:bg-error/20"
+            >
+              重试
+            </button>
+          </div>
+        )}
+
         {visibleProjects.length === 0 ? (
           <div
             className="flex flex-col items-center gap-2 px-3 py-8 text-ui-sm text-text-muted"

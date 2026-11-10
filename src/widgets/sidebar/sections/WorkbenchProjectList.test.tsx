@@ -184,6 +184,24 @@ describe('WorkbenchProjectList', () => {
     expect(screen.queryByText('0')).not.toBeInTheDocument();
   });
 
+  it('项目清单加载失败时展示错误横幅，点击重试后恢复', async () => {
+    listMock.mockRejectedValueOnce(new Error('后端服务尚未就绪,请稍候或重启 Sage'));
+    renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('projects-overview-error')).toBeInTheDocument();
+    });
+    expect(screen.getByText(/加载项目列表失败/)).toBeInTheDocument();
+
+    listMock.mockResolvedValueOnce(projects);
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('projects-overview-error')).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId('project-row-p1')).toBeInTheDocument();
+  });
+
   /* ── Click → toggleExpand (not openProject) ──────────────────── */
 
   it('clicking a project row toggles expand (not openProject)', async () => {
