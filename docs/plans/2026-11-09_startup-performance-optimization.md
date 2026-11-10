@@ -381,6 +381,48 @@ pyinstaller --onefile --name sage-backend backend/main.py
 **遗留**：热缓存下 5.0–5.2s 已达 Phase 3 目标区间（3–5s）上沿；冷缓存 Electron spawn
 路径（基线 34.5s）的端到端降幅需在 Phase 4/5 完成后整体复测。
 
+### Phase 3 win7 移植（2026-11-10，release/win7）
+
+main 的 Phase 3 squash 合并（`181bd5b7c`，PR #2981）已 cherry-pick 到 `release/win7`：
+分支 `cherry-pick/win7-python-import-optimize`，commit `89fbef0e3`，**PR #2985**。
+
+**cherry-pick 冲突（3 处）**：
+
+| 文件 | 解决方式 |
+| --- | --- |
+| `backend/data/database.py` | 保留 win7 独有的 `_migrate_memory_traceability`，同时接受 main 重命名的 `warm_jieba` 公开名 |
+| `backend/tools/__init__.py` | 取 main 完整字母序 `__all__`（104 个 tool 类名）；win7 侧冲突条目均为重复，已在 main 列表中 |
+| `architecture-baseline.json` | 取 win7 数字（3004/1814），Phase 3 后更新为 3022/1824（+18/+10，与 main 增长模式一致） |
+
+**py38 适配**：模块级注解改用 `typing.Dict`/`List`/`Optional`（py38 会在定义时求值注解，
+PEP 585 的 `dict[str, str]` 直接 TypeError）。
+
+**回归验证**：
+
+| 检查 | 结果 |
+| --- | --- |
+| `scripts/check_py38_compat.py` | 0 violations |
+| `ruff check backend/` | All checks passed |
+| 104 个 tool 导出逐一解析 | 全部可解析（`getattr(backend.tools, name)`） |
+| 单元 + 集成测试（py38） | 1884 + 134 + 130 = **2148 passed** |
+
+**效果**：win7 侧 `import backend` 完整链路 `sys.modules` **2485 → 2382（−103，−4%）**。
+
+**win7 侧 wall-clock 收益不可见**（与 main 不同）：三轮交替测量噪声区间 7.86s–21.78s
+（机器 load average 主导，绝对值不可跨窗口比较）；`-X importtime` 显示 win7 的导入链
+被路由层主导，而非 `backend.tools`：
+
+| win7 主导项 | 累计耗时 |
+| --- | --- |
+| `backend.api.office_routes` | 2.02s |
+| `backend.api.legacy_session_routes` | 1.48s |
+| `backend.api.legacy_routes` | 1.44s |
+| `backend.api.office_generate_routes` | 1.17s |
+| `backend.office.excel` → `pandas` | 698ms |
+
+`backend.tools` 惰性化收益被稀释在更重的 router 链里。**Phase 3 在 win7 上的价值定位为
+代码结构优化（惰性导入）+ 为 Phase 4（router 层惰性化）铺路**，端到端时间收益待 Phase 4 后复测。
+
 ### 启动时间测量点
 
 1. **Electron 主进程**:`logger.info('main: process started', { pid })` (已有)
