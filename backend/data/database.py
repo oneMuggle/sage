@@ -2166,6 +2166,12 @@ class Database:
             cursor.execute(
                 "ALTER TABLE orch_runs ADD COLUMN revision INTEGER NOT NULL DEFAULT 0"
             )
+        # 2026-11-10: confirmed_at 列 —— 用户确认时间（epoch ms）。
+        # confirmRun 端点持久化，会话切换/重启后可恢复锁定态（不依赖内存 Event）。
+        if "confirmed_at" not in _orch_cols:
+            cursor.execute(
+                "ALTER TABLE orch_runs ADD COLUMN confirmed_at INTEGER"
+            )
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS orch_tasks (
