@@ -95,6 +95,21 @@ describe('invoke 错误漏斗', () => {
     await expect(invoke('cmd_a')).rejects.toThrow(msg);
   });
 
+  it('后端未就绪时剥离 Electron IPC 包装前缀，只保留业务文案', async () => {
+    const wrapped =
+      "Error invoking remote method 'sage:invoke': BackendNotReadyError: 后端服务尚未就绪,请稍候或重启 Sage";
+    stubApi(() => Promise.reject(new Error(wrapped)));
+    const err = (await invoke('cmd_a').catch((e) => e)) as Error;
+    expect(err.message).toBe('后端服务尚未就绪,请稍候或重启 Sage');
+  });
+
+  it('无 IPC 包装前缀时后端未就绪文案保持原样', async () => {
+    const msg = '后端服务尚未就绪,请稍候或重启 Sage';
+    stubApi(() => Promise.reject(new Error(msg)));
+    const err = (await invoke('cmd_a').catch((e) => e)) as Error;
+    expect(err.message).toBe(msg);
+  });
+
   it('ECONNREFUSED 翻译为中文友好提示', async () => {
     stubApi(() => Promise.reject(new Error('connect ECONNREFUSED 127.0.0.1:8765')));
     await expect(invoke('cmd_a')).rejects.toThrow('后端服务未启动或已断开');

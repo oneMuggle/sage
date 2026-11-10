@@ -34,6 +34,7 @@ import {
 
 import type { SessionWorkspaceBinding } from '../../shared/api/types';
 import { workspaceApi } from '../../shared/api/workspaceApi';
+import { useBackendReadyTick } from '../../shared/lib/backendReadySignal';
 import { migrateLastWorkspaceToBackend } from '../../shared/lib/lastWorkspace';
 import { useStore } from '../../shared/lib/store';
 import { WorkspaceContext } from '../../shared/lib/workspaceContext';
@@ -211,6 +212,15 @@ export function SessionWorkspaceProvider({ children }: SessionWorkspaceProviderP
     }
   }, [sessionId, applyReady, applyError]);
 
+  // B: 启动期拉取失败后,等后端就绪自动重试一次。仅在 status='error' 时
+  // 触发,避免覆盖已成功加载的工作区绑定。
+  const backendReadyTick = useBackendReadyTick();
+  useEffect(() => {
+    if (backendReadyTick === 0) return; // 订阅初始化,不触发行
+    if (status !== 'error' || !sessionId) return;
+    void refresh().catch(() => undefined);
+  }, [backendReadyTick, status, sessionId, refresh]);
+
   const bind = useCallback(
     async (workspacePath: string): Promise<void> => {
       if (!sessionId) {
@@ -225,7 +235,10 @@ export function SessionWorkspaceProvider({ children }: SessionWorkspaceProviderP
         // 2026-10-29 (feat/workspace-optimization): 把显式选择的工作区同步写入
         // ``preferences``（最高优先级输入）。失败不阻塞 bind 主流程——会话绑定
         // 成功比"记住偏好"更重要，下次启动时用户重新选择即可。
-        queuePreferenceWrite(() => workspaceApi.setPreference(workspacePath), 'SessionWorkspaceProvider.bind');
+        queuePreferenceWrite(
+          () => workspaceApi.setPreference(workspacePath),
+          'SessionWorkspaceProvider.bind',
+        );
       } catch (err: unknown) {
         applyError(myRequestId, errorMessage(err));
         throw err;
@@ -359,9 +372,7 @@ export function auditSessionWorkspaceProviderGovernance(
   healthy: boolean;
 } {
   const status: WorkspaceStatus =
-    state.status === 'idle' ||
-    state.status === 'loading' ||
-    state.status === 'error'
+    state.status === 'idle' || state.status === 'loading' || state.status === 'error'
       ? state.status
       : 'ready';
   const hasActiveSession = state.hasActiveSession !== false;

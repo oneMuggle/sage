@@ -203,29 +203,28 @@ def _segment_for_index(text: Optional[str]) -> str:
     return " ".join(w.strip() for w in jieba.cut_for_search(text) if w.strip())
 
 
-def _warm_jieba() -> None:
-    """§1.2 修复：模块导入时预热 jieba 词典，避免首次 FTS 写入冷启动 500ms+。
+def warm_jieba() -> None:
+    """预热 jieba 词典，避免首次 FTS 写入冷启动 500ms+。
 
     触发场景：用户首次保存记忆时 `_segment_for_index` 调 `jieba.cut_for_search()`,
     jieba 首次执行需从磁盘加载主词典（~500ms 阻塞）。预热把这次开销从「用户请求路径」
-    转移到「后端启动路径」，聊天主链路不被拖累。
+    转移到「后台启动路径」，聊天主链路不被拖累。
 
-    fail-open：jieba 缺失 / 词典损坏 → 跳过预热，不阻塞 import（首次 FTS 写入会
+    Phase 3 (startup perf)：不再在模块导入时调用——那会把 ~0.8s 计入后端导入
+    关键路径。改由 backend/main.py 的 `_deferred_startup_init` 在工作线程中调用。
+    jieba 的 `Tokenizer.initialize` 自带锁，与并发首次写入不会冲突。
+
+    fail-open：jieba 缺失 / 词典损坏 → 跳过预热，不阻塞启动（首次 FTS 写入会
     触发自然加载，多花 500ms 但不影响功能）。
     """
     try:
         import jieba
 
         list(jieba.cut("__warmup__"))  # 触发主词典加载
-        logger.debug("database: jieba pre-warmed at import time")
+        logger.debug("database: jieba pre-warmed")
     except Exception as exc:  # noqa: BLE001
         # jieba 缺失 / import 失败 / 词典损坏 — 不阻塞 backend 启动
         logger.debug("database: jieba warmup skipped (non-fatal): %s", exc)
-
-
-# 副作用：模块导入即预热 jieba。这是 _segment_for_index 的"前辈路径"，
-# 把 ~500ms 冷启动成本从「首次用户请求」前移到「后端启动」窗口。
-_warm_jieba()
 
 
 def fts_row_texts(

@@ -169,7 +169,7 @@ export const officeSpecApi = {
     try {
       return await invoke<AiReviewResult>('office_ai_review', {
         workspacePath: req.workspace_path,
-        filePath: req.file_path,
+        ...(req.file_path ? { filePath: req.file_path } : {}),
         ...(req.doc_id ? { docId: req.doc_id } : {}),
         ...(req.spec_id ? { specId: req.spec_id } : {}),
         ...(req.scope ? { scope: req.scope } : {}),
@@ -203,7 +203,7 @@ export const officeSpecApi = {
     try {
       return await invoke<AiReviseResult>('office_ai_revise', {
         workspacePath: req.workspace_path,
-        filePath: req.file_path,
+        ...(req.file_path ? { filePath: req.file_path } : {}),
         ...(req.doc_id ? { docId: req.doc_id } : {}),
         issues: req.issues,
         ...(req.output_filename ? { outputFilename: req.output_filename } : {}),

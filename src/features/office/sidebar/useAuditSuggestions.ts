@@ -8,7 +8,6 @@ import { officeSpecApi } from '../../../shared/api/officeSpecApi';
 import type { AiReviewIssue, AiReviseResult } from '../../../shared/api/officeSpecTypes';
 import { fillTemplate } from '../../../shared/lib/fillTemplate';
 import { useI18n } from '../../../shared/lib/i18n';
-import { joinWorkspacePath } from '../latexPath';
 
 import { toReviseIssue } from './suggestionFactory';
 import { nextMessageId } from './useAiCapabilities';
@@ -50,13 +49,11 @@ export function useAuditSuggestions(_deps: AuditSuggestionsDeps = {}): AuditSugg
     appendMessage({ id: nextMessageId(), role: 'system', content, createdAt: Date.now() });
   };
 
-  const derivePaths = (): { workspacePath: string; filePath: string; docId: string } | null => {
+  const deriveTarget = (): { workspacePath: string; docId: string } | null => {
     if (!activeDocument) return null;
     const workspacePath = activeDocument.workspace_path ?? '';
-    // L5: an empty workspace root or generated filename cannot address a file.
-    if (!workspacePath.trim() || !activeDocument.generated_filename.trim()) return null;
-    const filePath = joinWorkspacePath(workspacePath, activeDocument.generated_filename);
-    return { workspacePath, filePath, docId: activeDocument.id };
+    if (!workspacePath.trim()) return null;
+    return { workspacePath, docId: activeDocument.id };
   };
 
   const runAudit = async () => {
@@ -65,19 +62,26 @@ export function useAuditSuggestions(_deps: AuditSuggestionsDeps = {}): AuditSugg
       toast.warning(t('office.ai.quick.need_document'));
       return;
     }
-    const paths = derivePaths();
-    if (!paths) {
+    const target = deriveTarget();
+    if (!target) {
       appendSystem(t('office.ai.sidebar.apply_disabled'));
       return;
     }
 
     inFlightRef.current = true;
     setRunning(true);
+    // Echo the action as a user bubble so the conversation shows the request
+    // immediately, not only once the audit result lands.
+    appendMessage({
+      id: nextMessageId('msg-user'),
+      role: 'user',
+      content: t('office.ai.action.audit_full'),
+      createdAt: Date.now(),
+    });
     try {
       const result = await officeSpecApi.runAiReview({
-        workspace_path: paths.workspacePath,
-        file_path: paths.filePath,
-        doc_id: paths.docId,
+        workspace_path: target.workspacePath,
+        doc_id: target.docId,
         use_llm: true,
         max_issues: MAX_AUDIT_ISSUES,
       });
@@ -131,8 +135,8 @@ export function useAuditSuggestions(_deps: AuditSuggestionsDeps = {}): AuditSugg
 
   const applyAll = async (messageId: string) => {
     if (inFlightRef.current) return;
-    const paths = derivePaths();
-    if (!paths) {
+    const target = deriveTarget();
+    if (!target) {
       appendSystem(t('office.ai.sidebar.apply_disabled'));
       return;
     }
@@ -143,11 +147,16 @@ export function useAuditSuggestions(_deps: AuditSuggestionsDeps = {}): AuditSugg
 
     inFlightRef.current = true;
     setRunning(true);
+    appendMessage({
+      id: nextMessageId('msg-user'),
+      role: 'user',
+      content: t('office.ai.action.apply_all'),
+      createdAt: Date.now(),
+    });
     try {
       const result = await officeSpecApi.reviseAiIssues({
-        workspace_path: paths.workspacePath,
-        file_path: paths.filePath,
-        doc_id: paths.docId,
+        workspace_path: target.workspacePath,
+        doc_id: target.docId,
         issues: pending.map((suggestion) =>
           toReviseIssue(suggestion, t('office.ai.revise.default_message')),
         ),

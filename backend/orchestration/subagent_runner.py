@@ -19,13 +19,26 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from backend.agents.profiles import get_enabled_agent
 from backend.chat.specialist_binding import PRIMARY_AGENT_ID, resolve_bound_specialist
 from backend.chat.specialist_prompt_composer import compose_system_prompt
-from backend.core.legacy.agent import SageAgent
+from backend.core.lazy import load_attr, module_getattr
 from backend.core.legacy.agent_state import AgentEvent
 from backend.domain.tool_policy import ToolPolicy
 from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.models import Lane
 from backend.orchestration.orch_settings import resolve_tool_call_budget
-from backend.tools.structured_output_tool import validate_against_schema
+
+# Phase 3 (startup perf): SageAgent / validate_against_schema 惰性解析的源模块
+_AGENT_MODULE = "backend.core.legacy.agent"
+_VALIDATOR_MODULE = "backend.tools.structured_output_tool"
+
+# 保持 `patch("backend.orchestration.subagent_runner.SageAgent")` 等模块级属性契约。
+_LAZY_EXPORTS = {
+    "SageAgent": _AGENT_MODULE,
+    "validate_against_schema": _VALIDATOR_MODULE,
+}
+
+
+def __getattr__(name: str) -> Any:
+    return module_getattr(name, _LAZY_EXPORTS, globals(), __name__)
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +235,8 @@ class SubagentRunner:
                 "请调整方法，避免重蹈覆辙。\n\n" + user_content
             )
 
-        child = SageAgent(agent_id=agent_id, policy=policy)
+        agent_cls = load_attr(_AGENT_MODULE, "SageAgent", globals())
+        child = agent_cls(agent_id=agent_id, policy=policy)
         # live-events P1: auto 模式注入自动批准包装 enforcer（非危险工具
         # 放行，破坏性/可疑/边界升级仍转人工）。构造失败 → None → 子代理
         # 走默认路径（从 settings 现读，逐次审批）。
@@ -434,7 +448,8 @@ class SubagentRunner:
             SubagentRunner._warn_structured_failure(task)
             return None
         try:
-            errors = validate_against_schema(payload, schema)
+            validator = load_attr(_VALIDATOR_MODULE, "validate_against_schema", globals())
+            errors = validator(payload, schema)
         except Exception as exc:  # noqa: BLE001 — validator 失败必须降级原文
             logger.warning(
                 "子任务 %s 结构化输出校验异常，降级原文: %s",
