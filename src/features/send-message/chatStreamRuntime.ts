@@ -415,7 +415,15 @@ export function useChatReattachAndBtw(params: {
           content: '',
           created_at: Date.now(),
         });
+        // 2026-11-10: startStream 会把 taskBoard 清空（新一轮流的语义）。重接路径
+        // 不是「新一轮」—— 后端那条流还在跑，任务板必须保留，否则确认态丢失
+        // （PlanCard 退回「待确认」）。先取出旧板，startStream 后再写回。
+        // 若重放的是另一个 run，task_plan 事件会按 runId 不匹配整体替换，不受影响。
+        const prevBoard = selectSessionSlots(useChatStreamStore.getState(), sid).taskBoard;
         useChatStreamStore.getState().startStream(sid, messageId, { initialContent: '' });
+        if (prevBoard) {
+          useChatStreamStore.getState().setTaskBoard(sid, prevBoard);
+        }
         const { cancel } = await chatApi.listenStream(
           streamId,
           {

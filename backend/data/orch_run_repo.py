@@ -26,6 +26,9 @@ class OrchRun:
     dispatched_at: Optional[int] = None
     # Wave 3 A9 (2026-08-14): resume 恢复流的原始请求（前端逐字重发）。
     original_request: Optional[str] = None
+    # 2026-11-10: 用户确认时间戳（epoch ms）。confirmRun 端点写入，
+    # 会话切换/重启后可恢复锁定态（不依赖内存 asyncio.Event）。
+    confirmed_at: Optional[int] = None
 
 
 class OrchRunRepository:
@@ -39,15 +42,16 @@ class OrchRunRepository:
         cursor = conn.cursor()
         cursor.execute(
             """
-            INSERT INTO orch_runs (run_id, session_id, status, created_at, plan_json, final_summary, dispatched_at, original_request)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO orch_runs (run_id, session_id, status, created_at, plan_json, final_summary, dispatched_at, original_request, confirmed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(run_id) DO UPDATE SET
                 session_id=excluded.session_id,
                 status=excluded.status,
                 plan_json=excluded.plan_json,
                 final_summary=excluded.final_summary,
                 dispatched_at=excluded.dispatched_at,
-                original_request=excluded.original_request
+                original_request=excluded.original_request,
+                confirmed_at=excluded.confirmed_at
             """,
             (
                 run.run_id,
@@ -58,6 +62,7 @@ class OrchRunRepository:
                 run.final_summary,
                 run.dispatched_at,
                 run.original_request,
+                run.confirmed_at,
             ),
         )
         conn.commit()
@@ -78,6 +83,7 @@ class OrchRunRepository:
             final_summary=row["final_summary"],
             dispatched_at=row["dispatched_at"],
             original_request=row["original_request"],
+            confirmed_at=row["confirmed_at"],
         )
 
     def list(self, limit: int = 50, offset: int = 0) -> List[OrchRun]:
@@ -97,6 +103,7 @@ class OrchRunRepository:
                 final_summary=row["final_summary"],
                 dispatched_at=row["dispatched_at"],
                 original_request=row["original_request"],
+                confirmed_at=row["confirmed_at"],
             )
             for row in cursor.fetchall()
         ]
@@ -124,9 +131,24 @@ class OrchRunRepository:
                 final_summary=row["final_summary"],
                 dispatched_at=row["dispatched_at"],
                 original_request=row["original_request"],
+                confirmed_at=row["confirmed_at"],
             )
             for row in cursor.fetchall()
         ]
+
+    def mark_confirmed(self, run_id: str, confirmed_at: int) -> None:
+        """2026-11-10: 用户确认时间戳落库（幂等,first-confirm-wins）。
+
+        ``confirm_run`` 端点在唤醒 producer 内存 Event 的同时调用本方法，
+        保证会话切换/重启后能从 DB 恢复锁定态（不依赖内存 ``asyncio.Event``）。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE orch_runs SET confirmed_at = ? WHERE run_id = ? AND confirmed_at IS NULL",
+            (confirmed_at, run_id),
+        )
+        conn.commit()
 
     def mark_dispatched(self, run_id: str, dispatched_at: int) -> None:
         """首次派发标记：仅当 run 尚未派发时写入（幂等,first-dispatch-wins）。

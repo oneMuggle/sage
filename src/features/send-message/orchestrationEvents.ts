@@ -249,7 +249,8 @@ export function restoreRunToBoard(run: OrchRunDetail): {
   plan: TaskBoardState['plan'];
   statuses: TaskBoardState['statuses'];
   progress: TaskBoardState['progress'];
-  dispatchedAt: number;
+  dispatchedAt: number | null;
+  confirmedAt: number | null;
   endedAt: number | null;
 } | null {
   if (run.tasks.length === 0) return null;
@@ -305,7 +306,10 @@ export function restoreRunToBoard(run: OrchRunDetail): {
     plan: effPlan,
     statuses,
     progress,
-    dispatchedAt: run.created_at,
+    // 2026-11-10: 使用后端返回的真实 dispatched_at（而非 created_at 代理）。
+    // DB 迁移后该字段持久化；旧库缺失时为 null（board 按未派发处理）。
+    dispatchedAt: run.dispatched_at ?? null,
+    confirmedAt: run.confirmed_at ?? null,
     endedAt,
   };
 }
