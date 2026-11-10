@@ -49,9 +49,7 @@ export function TaskCenterPanel({ variant }: TaskCenterPanelProps) {
   if (all.length === 0 && !loading) {
     return (
       <div className="px-3 py-2 text-ui-2xs text-muted">
-        {variant === 'compact'
-          ? t('taskCenter.section.empty')
-          : t('taskCenter.page.empty')}
+        {variant === 'compact' ? t('taskCenter.section.empty') : t('taskCenter.page.empty')}
       </div>
     );
   }
