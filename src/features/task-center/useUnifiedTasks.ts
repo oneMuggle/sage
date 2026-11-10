@@ -33,8 +33,6 @@ export interface UnifiedTasksResult {
   all: UnifiedTaskEntry[];
   /** 进行中 + 失败，用于 rail 角标 */
   attentionCount: number;
-  /** 纯 running 数 */
-  runningCount: number;
   loading: boolean;
   error: string | null;
 }
@@ -139,7 +137,6 @@ export function useUnifiedTasks(): UnifiedTasksResult {
     groups,
     all,
     attentionCount: groups.active.length + groups.failed.length,
-    runningCount: all.filter((e) => e.status === 'running').length,
     loading,
     error,
   };

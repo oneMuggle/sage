@@ -537,7 +537,13 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
                         item.path === '/chat' ? (
                           <AttnBadge count={attentionCount} />
                         ) : item.path === '/tasks' ? (
-                          <AttnBadge count={taskCenterBadgeCount} />
+                          <AttnBadge
+                            count={taskCenterBadgeCount}
+                            title={t('taskCenter.badge.title').replace(
+                              '{count}',
+                              String(taskCenterBadgeCount),
+                            )}
+                          />
                         ) : undefined
                       }
                       locked={

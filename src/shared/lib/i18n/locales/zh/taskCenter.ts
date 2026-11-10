@@ -5,7 +5,6 @@ export const zhTaskCenter = {
   'taskCenter.section.title': '任务',
   'taskCenter.section.empty': '暂无正在进行的任务',
   'taskCenter.section.more': '还有 {count} 条',
-  'taskCenter.section.moreArrow': '查看全部 →',
 
   // 来源
   'taskCenter.source.registry': '页面任务',
@@ -27,11 +26,8 @@ export const zhTaskCenter = {
   'taskCenter.action.runNow': '立即运行',
   'taskCenter.action.clearFinished': '清除已完成',
   'taskCenter.action.viewDetail': '查看详情',
-  'taskCenter.action.openOutput': '查看输出',
 
   // 筛选
-  'taskCenter.filter.source': '来源',
-  'taskCenter.filter.status': '状态',
   'taskCenter.filter.all': '全部',
 
   // 页面
