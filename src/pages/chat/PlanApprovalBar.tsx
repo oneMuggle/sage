@@ -341,12 +341,23 @@ export function PlanApprovalBar({
           <PlanCard
             runId={taskBoard.runId}
             plan={taskBoard.plan}
-            locked={false}
+            locked={Boolean(taskBoard.confirmedAt ?? taskBoard.dispatchedAt)}
             needConfirm={true}
             reasoning={taskBoard.reasoning}
             onRevise={(instruction, currentItems) => handleRevise(instruction, currentItems)}
             revising={revising}
             onCancel={() => void onCancelRun(taskBoard.runId)}
+            onConfirmed={(confirmedAt) => {
+              // 2026-11-10: 用户确认后把 confirmed_at 写入 store,
+              // 使会话切换/reattach 后 PlanCard 仍能恢复 locked 态。
+              if (currentSessionId) {
+                useChatStreamStore.getState().updateTaskBoard(
+                  currentSessionId,
+                  taskBoard.runId,
+                  (prev) => (prev ? { ...prev, confirmedAt } : prev),
+                );
+              }
+            }}
           />
         </div>
       )}

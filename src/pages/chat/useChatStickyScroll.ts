@@ -131,6 +131,7 @@ export function useChatStickyScroll({
           statuses: restored.statuses,
           progress: restored.progress,
           dispatchedAt: restored.dispatchedAt,
+          confirmedAt: restored.confirmedAt,
           endedAt: restored.endedAt,
         };
         useChatStreamStore.getState().setTaskBoard(currentSessionId, board);

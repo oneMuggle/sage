@@ -156,6 +156,10 @@ export interface TaskBoardState {
     skipped?: number;
   };
   dispatchedAt?: number | null;
+  // 2026-11-10: 用户确认时间戳（epoch ms）—— confirmRun 成功后由后端返回，
+  // 持久化到 DB。PlanApprovalBar 用 confirmedAt ?? dispatchedAt 作为锁定信号，
+  // 避免依赖组件局部 state（会话切换/重载后 PlanCard 不再退回「待确认」）。
+  confirmedAt?: number | null;
   // RD20 (round43): 历史 run 恢复时的终态时刻 —— BU16 时长在恢复态显示
   // 原始总时长（直播态为 null，由 tick 冻结逻辑覆盖）。
   endedAt?: number | null;
