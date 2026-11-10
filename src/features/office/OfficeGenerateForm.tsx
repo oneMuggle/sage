@@ -118,7 +118,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   const [busy, setBusy] = useState(false);
   // P2: busy 期已耗时（阶段文案 + 秒表，替代纯 disabled 反馈）
   const elapsed = useElapsedSeconds(busy);
-  // P4: 任务中心接线 —— 切走页面后全局胶囊仍可见
+  // P4: 任务中心接线 —— 切走页面后侧边栏任务中心仍可见
   const registerTask = useTaskCenterStore((s) => s.registerTask);
   const finishTask = useTaskCenterStore((s) => s.finishTask);
   // A4b: word 生成成功后交付抽屉验收（lint + 预览 + 接受/打回）。

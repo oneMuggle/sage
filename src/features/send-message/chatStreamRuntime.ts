@@ -81,7 +81,7 @@ export interface PendingChatMessage {
 export const activeStreamRegistry = new Map<string, ActiveStreamHandle>();
 
 /**
- * Cancel a session stream from outside useChat (e.g. the task-center capsule).
+ * Cancel a session stream from outside useChat (e.g. the sidebar task center).
  * Returns true when a live frontend handle was found and torn down; when no
  * handle exists (e.g. after a renderer reload) it still best-effort notifies
  * the backend and returns false. Never throws.

@@ -10,7 +10,7 @@ import { listShells } from '../../shared/api/shellApi';
 import { useTaskCenterStore } from './taskCenterStore';
 import { useUnifiedTaskStore } from './unifiedTaskStore';
 
-export const SHELL_TASK_POLL_MS = 3_000;
+const SHELL_TASK_POLL_MS = 3_000;
 const GOAL_POLL_MS = 10_000;
 const SLOW_SOURCE_POLL_MS = 30_000;
 
