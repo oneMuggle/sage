@@ -47,6 +47,8 @@ export function useProjectSectionData({ onOpenSession }: UseProjectSectionDataPr
   const messages = useStore((s) => s.messages);
 
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  /** 项目清单加载失败的错误信息；供页面显示「加载失败 + 重试」横幅。 */
+  const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   /** open 命中 410 的项目 id：行内显示"目录不存在"标记 */
   const [missingIds, setMissingIds] = useState<Set<string>>(new Set());
@@ -74,8 +76,11 @@ export function useProjectSectionData({ onOpenSession }: UseProjectSectionDataPr
   const refresh = useCallback(async () => {
     try {
       setProjects(await projectApi.list());
+      setError(null);
     } catch (err) {
-      toast.error(t('sider.project.open_failed').replace('{message}', errorMessage(err)));
+      const message = errorMessage(err);
+      setError(message);
+      toast.error(t('sider.project.open_failed').replace('{message}', message));
     }
   }, [t]);
 
@@ -510,6 +515,7 @@ export function useProjectSectionData({ onOpenSession }: UseProjectSectionDataPr
   return {
     // State
     projects,
+    error,
     busyId,
     missingIds,
     expandedIds,
