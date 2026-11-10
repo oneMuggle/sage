@@ -58,7 +58,7 @@ class AiReviewRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _require_target(self) -> "AiReviewRequest":
+    def _require_target(self) -> AiReviewRequest:
         if not (self.doc_id or (self.file_path or "").strip()):
             raise ValueError("doc_id 与 file_path 至少提供一个")
         return self
@@ -83,7 +83,7 @@ class AiReviseRequest(BaseModel):
     add_comments: bool = True
 
     @model_validator(mode="after")
-    def _require_target(self) -> "AiReviseRequest":
+    def _require_target(self) -> AiReviseRequest:
         if not (self.doc_id or (self.file_path or "").strip()):
             raise ValueError("doc_id 与 file_path 至少提供一个")
         return self
