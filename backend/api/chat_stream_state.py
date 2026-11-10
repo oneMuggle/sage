@@ -22,9 +22,10 @@ discard），不重绑名字——跨模块共享同一对象即语义正确。
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, Optional, Set
 
-from backend.core.legacy.agent import SageAgent
+if TYPE_CHECKING:
+    from backend.core.legacy.agent import SageAgent
 
 __all__ = [
     "_ACTIVE_STREAMS",

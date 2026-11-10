@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from typing import List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -36,7 +36,7 @@ from backend.api.legacy_models import (
     SteerRequest,
 )
 from backend.core.errors import LLMError
-from backend.core.legacy.agent import SageAgent
+from backend.core.lazy import load_attr, module_getattr
 from backend.data.database import get_database, make_with_db_lock
 from backend.data.session_repo import SessionRepository
 from backend.orchestration.llm_factory import (
@@ -47,6 +47,9 @@ from backend.scheduler import get_evolution_logs
 from backend.services.scheduler import get_scheduler_service
 from backend.skills.review_queue import get_review_queue
 
+if TYPE_CHECKING:
+    from backend.core.legacy.agent import SageAgent
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,6 +59,16 @@ def with_db_lock(func):
 
 
 router = APIRouter()
+
+# Phase 3 (startup perf): SageAgent 惰性解析的源模块（见 backend/core/lazy.py）
+_AGENT_MODULE = "backend.core.legacy.agent"
+
+# 保持 `patch("backend.api.legacy_chat_routes.SageAgent")` 这类模块级属性契约。
+_LAZY_EXPORTS = {"SageAgent": _AGENT_MODULE}
+
+
+def __getattr__(name: str) -> Any:
+    return module_getattr(name, _LAZY_EXPORTS, globals(), __name__)
 
 
 # ==================== 聊天 API ====================
@@ -101,7 +114,8 @@ async def chat(
         # 会话绑定的专家（不存在/已禁用回落主助手）。
         from backend.chat.specialist_binding import resolve_effective_agent_id
 
-        agent = SageAgent(
+        agent_cls = load_attr(_AGENT_MODULE, "SageAgent", globals())
+        agent = agent_cls(
             agent_id=resolve_effective_agent_id(data.session_id, data.agent_id),
             scheduler_service_getter=get_scheduler_service,
         )
