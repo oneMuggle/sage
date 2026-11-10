@@ -199,6 +199,8 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
   // /office 路由复用内容列承载文档库：使用文档工作台时不需要会话列表。
   // 仅精确匹配 `/office`（及其子路径），其他路由行为不变。
   const isOfficeRoute = location.pathname === '/office' || location.pathname.startsWith('/office/');
+  // /projects 本身即项目总览页：隐藏内容列的「项目」分区，避免同屏两份项目入口。
+  const isProjectsRoute = location.pathname === '/projects';
   // ref 回调必须稳定，否则每次 render 都会 detach/attach，导致
   // setSlotEl(null) → setSlotEl(el) 抖动。
   const attachOfficeSlot = useCallback((el: HTMLDivElement | null) => setSlotEl(el), [setSlotEl]);
@@ -224,6 +226,9 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
     collapsed: collapsedSections,
     toggleCollapsed,
   } = useSiderSections(SECTION_KEYS, DEFAULT_COLLAPSED_SECTIONS);
+  const visibleSectionOrder = isProjectsRoute
+    ? sectionOrder.filter((key) => key !== 'project')
+    : sectionOrder;
   // 会话排序完全交给后端 SQL (`SessionRepository.list()`):
   //   is_pinned DESC, run_status IN ('running','suspended') DESC, updated_at DESC
   // 前端不再持有 localStorage 拖拽顺序。
@@ -652,7 +657,7 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
                 className="flex-1 min-h-0 py-2 px-2 flex flex-col overflow-y-auto"
                 data-testid="sidebar-scroll"
               >
-                {sectionOrder.map((key) => (
+                {visibleSectionOrder.map((key) => (
                   <div
                     key={key}
                     className={

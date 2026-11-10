@@ -1,6 +1,6 @@
 # 技术专题文档总览
 
-> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-143；本索引以目录中的实际文件为准。
+> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-147；本索引以目录中的实际文件为准。
 
 ---
 
@@ -124,6 +124,7 @@
 | 144 | [Win7 内网救援工具（Rescue Doctor）](./144-win7-rescue-doctor.md) | 不依赖前端的 CLI（体检/端点配置/修复/诊断包/放行清单）+ 启动看门狗（last-run/崩溃 journal/心跳/原生恢复对话框）+ 兼容档位 L0–L3 + 遗留管控软件处置（备份/恢复/审计） |
 | 145 | [记忆质量优化（Phase 1–4）](./145-memory-quality-optimization.md) | 提取门槛升级 + 否定词 NOOP 修复 + 写入冲突消解（ADD/UPDATE/NOOP）+ 已知事实过滤 + 主题簇巩固 + 五维质量评分器 + 质量可视化/批量清理/来源会话追踪/记忆级反馈 |
 | 146 | [渲染层 BackendNotReadyError 自愈](./146-backend-ready-renderer-recovery.md) | 方案 A 队列之上的渲染层兜底：`backendReadySignal` 单例订阅 `backend:ready` 事件 + `useBackendReadyTick` 驱动 Chat/Sidebar/SessionWorkspaceProvider 启动期失败自动重放；`desktopInvoke` 剥离 IPC 包装前缀；`ProjectsOverview` 错误横幅 + 重试按钮 |
+| 147 | [项目工作台 IA 与交互](./147-project-workbench-ia.md) | 单列表 + 批量模式 + 治理壳层视觉统一 + 概览/设置/资料/文件/规则五章重组 + 文件章 i18n + 共享 Radix Select 迁移 |
 
 ---
 

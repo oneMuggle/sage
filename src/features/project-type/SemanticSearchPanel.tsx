@@ -1,14 +1,25 @@
 /**
- * M4: 语义检索面板 (2026-10-12 / Phase P22 跨项目同步 / Phase P25 四形态检索词预设与全量结果导出 / Phase P31 M4→项目记忆沉淀与相似度阈值过滤)
+ * 语义检索面板 (2026-10-12 / Phase P22 跨项目同步 / Phase P25 四形态检索词预设与全量结果导出 / Phase P31 项目记忆沉淀与相似度阈值过滤)
  *
  * 嵌入 StudioMaterialsTabPanel，提供语义检索入口：
  * - 四形态快捷检索词预设胶囊：一键触发当前形态高频语义查询
  * - 输入框 + 搜索按钮：调用后端语义检索 API
- * - 结果展示：显示匹配的 chunks（按相关性排序），支持相似度阈值过滤、单条复制、一键保存到项目记忆与全量结果 Markdown 导出
+ * - 结果展示：显示匹配的文本片段（按相关性排序），支持相似度阈值过滤、单条复制、一键保存到项目记忆与全量结果 Markdown 导出
  * - 索引状态：随项目切换自动同步索引统计，支持手动刷新统计
  */
 
-import { Search, Loader2, FileText, AlertCircle, Copy, Check, RefreshCw, Sparkles, BookmarkPlus, ShieldPlus } from 'lucide-react';
+import {
+  Search,
+  Loader2,
+  FileText,
+  AlertCircle,
+  Copy,
+  Check,
+  RefreshCw,
+  Sparkles,
+  BookmarkPlus,
+  ShieldPlus,
+} from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 
 import { projectApi } from '../../shared/api';
@@ -108,7 +119,7 @@ export function SemanticSearchPanel({
     }
   };
 
-  /** M4 -> L2: 将检索命中片段直接固化为 L2 行为约束 */
+  /** 将检索命中片段直接固化为 L2 行为约束 */
   const handleSaveHitToConstraint = async (hit: SemanticSearchHit, idx: number) => {
     if (savedConstraintIndices.has(idx) || typeof projectApi?.createConstraint !== 'function') {
       return;
@@ -125,7 +136,7 @@ export function SemanticSearchPanel({
     }
   };
 
-  /** M4 -> L3: 将高价值检索片段一键保存到项目记忆 */
+  /** 将高价值检索片段一键保存到项目记忆 */
   const handleSaveHitToProfile = async (hit: SemanticSearchHit, idx: number) => {
     if (savedProfileIndices.has(idx) || typeof projectApi?.confirmKnowledge !== 'function') return;
     try {
@@ -136,7 +147,7 @@ export function SemanticSearchPanel({
             content: hit.content.slice(0, 500),
             importance: 7,
             sourceMessageIds: [],
-            reasoning: 'M4 语义检索命中',
+            reasoning: '语义检索命中',
           },
         ],
       });
@@ -146,19 +157,17 @@ export function SemanticSearchPanel({
     }
   };
 
-  const filteredResults = results
-    ? results.filter((hit) => hit.score * 100 >= minScorePct)
-    : null;
+  const filteredResults = results ? results.filter((hit) => hit.score * 100 >= minScorePct) : null;
 
   /** 复制全部检索命中结果为 Markdown */
   const handleCopyAllResults = async () => {
     if (!filteredResults || filteredResults.length === 0) return;
     const lines = [
-      `# M4 语义检索结果（查询：${query}）`,
+      `# 语义检索结果（查询：${query}）`,
       '',
       ...filteredResults.map(
         (hit, i) =>
-          `### ${i + 1}. 材料 ${hit.materialId.slice(0, 8)} (chunk #${hit.chunkIndex} · 相似度 ${(hit.score * 100).toFixed(1)}%)\n${hit.content}`,
+          `### ${i + 1}. 材料 ${hit.materialId.slice(0, 8)} (片段 #${hit.chunkIndex} · 相似度 ${(hit.score * 100).toFixed(1)}%)\n${hit.content}`,
       ),
     ];
     try {
@@ -194,7 +203,6 @@ export function SemanticSearchPanel({
         <div className="flex items-center gap-2">
           <Search className="h-4 w-4 text-blue-500" />
           <span className="text-sm font-medium">语义检索</span>
-          <Badge variant="default">M4</Badge>
         </div>
         <button
           type="button"
@@ -233,7 +241,7 @@ export function SemanticSearchPanel({
               </span>
             )}
             <span>
-              总 chunks: <strong>{stats.totalChunks}</strong>
+              总片段数: <strong>{stats.totalChunks}</strong>
             </span>
             <button
               type="button"
@@ -247,10 +255,10 @@ export function SemanticSearchPanel({
                       entries: [
                         {
                           category: 'architecture',
-                          content: `项目资料向量索引统计：总材料 ${stats.totalMaterials}，已索引 ${stats.indexedMaterials}，总 chunks ${stats.totalChunks}`,
+                          content: `项目资料向量索引统计：总材料 ${stats.totalMaterials}，已索引 ${stats.indexedMaterials}，总片段数 ${stats.totalChunks}`,
                           importance: 6,
                           sourceMessageIds: [],
-                          reasoning: 'M4 语义检索索引状态保存到 AI 记忆',
+                          reasoning: '语义检索索引状态保存到 AI 记忆',
                         },
                       ],
                     });
@@ -272,7 +280,7 @@ export function SemanticSearchPanel({
                 if (typeof projectApi?.addMaterial === 'function') {
                   try {
                     await projectApi.addMaterial(projectId, {
-                      content: `# M4 语义索引健康度快照\n- 总材料: ${stats.totalMaterials}\n- 已索引: ${stats.indexedMaterials}\n- 待索引: ${stats.pendingMaterials}\n- 总 chunks: ${stats.totalChunks}`,
+                      content: `# 语义索引健康度快照\n- 总材料: ${stats.totalMaterials}\n- 已索引: ${stats.indexedMaterials}\n- 待索引: ${stats.pendingMaterials}\n- 总片段数: ${stats.totalChunks}`,
                     });
                   } catch {
                     // ignore in test/offline mode
@@ -286,7 +294,7 @@ export function SemanticSearchPanel({
           </div>
           {stats.embedderType && stats.embedderType !== 'unavailable' && (
             <div className="mt-1 text-xs text-muted-foreground">
-              Embedder: {stats.embedderType} ({stats.embedderDims} 维)
+              向量模型：{stats.embedderType}（{stats.embedderDims} 维）
             </div>
           )}
         </div>
@@ -467,7 +475,8 @@ export function SemanticSearchPanel({
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                   >
                     <ShieldPlus className="h-3 w-3 text-primary" />
-                    批量转 项目规则 ({filteredResults.filter((_, idx) => !savedConstraintIndices.has(idx)).length})
+                    批量转 项目规则 (
+                    {filteredResults.filter((_, idx) => !savedConstraintIndices.has(idx)).length})
                   </button>
                   <button
                     type="button"
@@ -487,7 +496,7 @@ export function SemanticSearchPanel({
                           try {
                             await projectApi.createMilestone(projectId, {
                               title: `[检索跟进] ${hit.content.slice(0, 60)}`,
-                              description: `来源材料 ${hit.materialId.slice(0, 8)} chunk #${hit.chunkIndex}`,
+                              description: `来源材料 ${hit.materialId.slice(0, 8)} 片段 #${hit.chunkIndex}`,
                               status: 'pending',
                             });
                           } catch {
@@ -498,7 +507,8 @@ export function SemanticSearchPanel({
                     }}
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                   >
-                    批量转里程碑 ({filteredResults.filter((_, idx) => !savedMilestoneIndices.has(idx)).length})
+                    批量转里程碑 (
+                    {filteredResults.filter((_, idx) => !savedMilestoneIndices.has(idx)).length})
                   </button>
                   <button
                     type="button"
@@ -507,7 +517,10 @@ export function SemanticSearchPanel({
                       const unsaved = filteredResults
                         .map((hit, idx) => ({ hit, idx }))
                         .filter(({ idx }) => !savedProfileIndices.has(idx));
-                      if (unsaved.length === 0 || typeof projectApi?.confirmKnowledge !== 'function') {
+                      if (
+                        unsaved.length === 0 ||
+                        typeof projectApi?.confirmKnowledge !== 'function'
+                      ) {
                         return;
                       }
                       try {
@@ -517,7 +530,7 @@ export function SemanticSearchPanel({
                             content: hit.content.slice(0, 500),
                             importance: 7,
                             sourceMessageIds: [],
-                            reasoning: 'M4 语义检索批量沉淀',
+                            reasoning: '语义检索批量沉淀',
                           })),
                         });
                         setSavedProfileIndices((prev) => {
@@ -532,7 +545,8 @@ export function SemanticSearchPanel({
                     className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
                   >
                     <BookmarkPlus className="h-3 w-3" />
-                    批量保存到项目记忆 ({filteredResults.filter((_, idx) => !savedProfileIndices.has(idx)).length})
+                    批量保存到项目记忆 (
+                    {filteredResults.filter((_, idx) => !savedProfileIndices.has(idx)).length})
                   </button>
                   <button
                     type="button"
@@ -542,7 +556,7 @@ export function SemanticSearchPanel({
                       setSavedBundleL4(true);
                       if (typeof projectApi?.addMaterial === 'function') {
                         const md = [
-                          `# M4 语义检索参考合集 (${query})`,
+                          `# 语义检索参考合集 (${query})`,
                           ...filteredResults.map((h, i) => `## #${i + 1}\n${h.content}`),
                         ].join('\n\n');
                         try {
@@ -571,23 +585,23 @@ export function SemanticSearchPanel({
                     清空结果
                   </button>
                   <button
-                  type="button"
-                  onClick={() => void handleCopyAllResults()}
-                  data-testid="semantic-copy-all-btn"
-                  className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-                >
-                  {copiedAll ? (
-                    <>
-                      <Check className="h-3 w-3 text-emerald-500" />
-                      已复制全部结果
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3 w-3 text-primary" />
-                      复制全部检索结果
-                    </>
-                  )}
-                </button>
+                    type="button"
+                    onClick={() => void handleCopyAllResults()}
+                    data-testid="semantic-copy-all-btn"
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                  >
+                    {copiedAll ? (
+                      <>
+                        <Check className="h-3 w-3 text-emerald-500" />
+                        已复制全部结果
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3 text-primary" />
+                        复制全部检索结果
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
             </div>
@@ -610,7 +624,7 @@ export function SemanticSearchPanel({
                       <div className="flex items-center gap-1.5">
                         <FileText className="h-3.5 w-3.5 text-blue-500" />
                         <span className="font-medium">
-                          材料 {hit.materialId.slice(0, 8)}... (chunk #{hit.chunkIndex})
+                          材料 {hit.materialId.slice(0, 8)}... (片段 #{hit.chunkIndex})
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -659,7 +673,7 @@ export function SemanticSearchPanel({
                               try {
                                 await projectApi.createMilestone(projectId, {
                                   title: `[检索跟进] ${hit.content.slice(0, 60)}`,
-                                  description: `来源材料 ${hit.materialId.slice(0, 8)} chunk #${hit.chunkIndex}`,
+                                  description: `来源材料 ${hit.materialId.slice(0, 8)} 片段 #${hit.chunkIndex}`,
                                   status: 'pending',
                                 });
                               } catch {

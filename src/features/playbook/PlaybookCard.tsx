@@ -673,11 +673,7 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
                 type="button"
                 onClick={() => {
                   if (isCurrent) return;
-                  if (
-                    window.confirm(
-                      tf('playbook.card.confirmSwitch', { stage: stage.label }),
-                    )
-                  ) {
+                  if (window.confirm(tf('playbook.card.confirmSwitch', { stage: stage.label }))) {
                     void handleConfirmStage(stage.id);
                   }
                 }}
@@ -750,7 +746,35 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
         </div>
       )}
 
-      {!compact && (
+      {compact ? (
+        <details
+          className="rounded-md border border-border/60 bg-card/50"
+          data-testid="playbook-details"
+        >
+          <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+            阶段清单与文件整理建议
+          </summary>
+          <div className="space-y-3 px-3 pb-3">
+            <PlaybookChecklist
+              stage={currentStage}
+              busy={busy}
+              playbookName={current.playbook?.name ?? ''}
+              onAction={(action) => void handleAction(action)}
+              onWaive={(stageId, artifactId) => void handleWaive(stageId, artifactId)}
+              onManualDone={(stageId, criterionId) => void handleManualDone(stageId, criterionId)}
+            />
+            <PlaybookClassificationPanel
+              classification={audit?.classification_suggestions ?? []}
+              unclassified={audit?.unclassified_files ?? []}
+              undoAvailable={audit?.undo_available ?? null}
+              busy={busy}
+              onAction={(action) => void handleAction(action)}
+              onBatchMove={(moves) => void handleBatchMove(moves)}
+              onUndo={() => void handleUndoBatch()}
+            />
+          </div>
+        </details>
+      ) : (
         <>
           <PlaybookChecklist
             stage={currentStage}

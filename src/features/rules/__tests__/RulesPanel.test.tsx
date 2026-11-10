@@ -194,6 +194,27 @@ describe('RulesPanel', () => {
     expect(screen.getByTestId('rules-effective-conflict-constraint:1')).toBeInTheDocument();
   });
 
+  it('shows the source file name with the full path as tooltip and drops the duplicated source name', async () => {
+    list.mockResolvedValue([
+      rule({
+        id: 'doc:SAGE.md#0',
+        layer: 'doc',
+        sourceLabel: '项目总纲 SAGE.md',
+        scope: '/home/fz/project/sage/SAGE.md',
+        content: '提交前跑 pytest',
+      }),
+    ]);
+    effective.mockResolvedValue({ entries: [], conflicts: [] });
+
+    renderPanel();
+    await screen.findByTestId('rules-group-doc');
+
+    const row = screen.getByTestId('rule-row-doc:SAGE.md#0');
+    expect(row.textContent).not.toContain('项目总纲 SAGE.md');
+    const detail = screen.getByTitle('/home/fz/project/sage/SAGE.md');
+    expect(detail.textContent).toBe('SAGE.md');
+  });
+
   it('renders the empty state when the project has no rules', async () => {
     list.mockResolvedValue([]);
     effective.mockResolvedValue({ entries: [], conflicts: [] });

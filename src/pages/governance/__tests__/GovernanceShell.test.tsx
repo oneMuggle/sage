@@ -107,7 +107,7 @@ describe('GovernanceShell', () => {
 
   it('maps legacy ?tab=playbook deep links to the rules tab', () => {
     renderAt('/projects/governance/p-1?tab=playbook');
-    expect(screen.getByTestId('governance-tab-rules').className).toContain('bg-primary');
+    expect(screen.getByTestId('governance-tab-rules').className).toContain('border-primary');
   });
 
   it('switches sections when a tab is clicked', () => {

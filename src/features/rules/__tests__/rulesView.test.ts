@@ -8,6 +8,7 @@ import {
   filterRules,
   layerLabelKey,
   sortEffectiveRules,
+  sourceDetail,
 } from '../rulesView';
 
 function rule(overrides: Partial<RuleEntry> & Pick<RuleEntry, 'id' | 'layer'>): RuleEntry {
@@ -83,5 +84,29 @@ describe('rulesView', () => {
   it('maps every layer filter to a translation key', () => {
     expect(layerLabelKey('all')).toBe('rules.filter.all');
     expect(layerLabelKey('playbook')).toBe('rules.layer.playbook');
+  });
+
+  it('shows only the file name for path-shaped scopes and keeps the full path as tooltip', () => {
+    expect(
+      sourceDetail(
+        rule({ id: 'doc:SAGE.md#0', layer: 'doc', scope: '/home/fz/project/sage/SAGE.md' }),
+      ),
+    ).toEqual({ text: 'SAGE.md', title: '/home/fz/project/sage/SAGE.md' });
+
+    expect(
+      sourceDetail(
+        rule({ id: 'doc:CLAUDE.md#1', layer: 'doc', scope: 'C:\\work\\sage\\CLAUDE.md' }),
+      ),
+    ).toEqual({ text: 'CLAUDE.md', title: 'C:\\work\\sage\\CLAUDE.md' });
+  });
+
+  it('keeps non-path scopes verbatim and omits the global layer', () => {
+    expect(
+      sourceDetail(rule({ id: 'playbook:s1:0', layer: 'playbook', scope: '需求分析' })),
+    ).toEqual({
+      text: '需求分析',
+    });
+    expect(sourceDetail(rule({ id: 'global:#0', layer: 'global', scope: '全局' }))).toBeNull();
+    expect(sourceDetail(rule({ id: 'constraint:1', layer: 'constraint', scope: '  ' }))).toBeNull();
   });
 });
