@@ -214,7 +214,9 @@ export interface PanelRegistryAuditSnapshot {
 export function buildPanelRegistryAuditSnapshot(
   definitions: readonly PanelDefinition[] = PANEL_DEFINITIONS,
 ): PanelRegistryAuditSnapshot {
-  const safeDefs: readonly PanelDefinition[] = Array.isArray(definitions) ? definitions : PANEL_DEFINITIONS;
+  const safeDefs: readonly PanelDefinition[] = Array.isArray(definitions)
+    ? definitions
+    : PANEL_DEFINITIONS;
   const slotIds = [...PANEL_SLOT_IDS];
   const slotCount = slotIds.length;
   const exclusiveSlotCount = slotIds.filter((s) => PANEL_SLOTS[s].exclusive).length;

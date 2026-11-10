@@ -19,17 +19,19 @@
  * template carries the doc-type extension (.docx/.xlsx/.pptx).
  */
 
-import { FileSpreadsheet, FileText, FileType, LayoutTemplate, Presentation, Sparkles } from 'lucide-react';
+import {
+  FileSpreadsheet,
+  FileText,
+  FileType,
+  LayoutTemplate,
+  Presentation,
+  Sparkles,
+} from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-
 import { officeApi } from '../../shared/api/officeApi';
-import type {
-  OfficeDocType,
-  OfficeTemplateMeta,
-  PdfPageSize,
-} from '../../shared/api/types';
+import type { OfficeDocType, OfficeTemplateMeta, PdfPageSize } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
 import { useTaskCenterStore } from '../task-center/taskCenterStore';
@@ -54,7 +56,6 @@ export interface OfficeGenerateFormProps {
 
 type GenerateMode = 'freeform' | 'template';
 /** Tabs that carry the free-form/template toggle (round-3 N2). */
-
 
 /** File extension per template doc_type (round-3 N2). */
 const TEMPLATE_EXT: Record<OfficeTemplateMeta['doc_type'], string> = {
@@ -124,8 +125,8 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   // A4b: word 生成成功后交付抽屉验收（lint + 预览 + 接受/打回）。
   const openDelivery = useTaskCenterStore((s) => s.openDelivery);
   // P15: 可视化进度条 —— 从任务中心读百分比，生成期间显示细进度条
-  const taskPercent = useTaskCenterStore(
-    (s) => (busy ? s.tasks['office:generate']?.percent ?? null : null),
+  const taskPercent = useTaskCenterStore((s) =>
+    busy ? (s.tasks['office:generate']?.percent ?? null) : null,
   );
   const [result, setResult] = useState<GenerateResult | null>(null);
   const [copiedSummary, setCopiedSummary] = useState(false);
@@ -433,8 +434,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
     }
   };
 
-  const inputClass =
-    'w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text';
+  const inputClass = 'w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text';
 
   /** Free-form structured fields for one OOXML tab (Phase 1.4 originals). */
   const renderFreeformFields = (type: TemplateModeType) => {
@@ -453,9 +453,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
             />
           </div>
           <div>
-            <label className="block text-xs text-muted mb-1">
-              {t('office.generate.wordBody')}
-            </label>
+            <label className="block text-xs text-muted mb-1">{t('office.generate.wordBody')}</label>
             <textarea
               value={wordBody}
               onChange={(e) => setWordBody(e.target.value)}
@@ -479,7 +477,9 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
             />
           </div>
           <div>
-            <label className="block text-xs text-muted mb-1">{t('office.generate.pptLayout')}</label>
+            <label className="block text-xs text-muted mb-1">
+              {t('office.generate.pptLayout')}
+            </label>
             <select
               value={pptLayout}
               onChange={(e) => setPptLayout(e.target.value as 'title_content' | 'title' | 'blank')}
@@ -517,7 +517,9 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
           />
         </div>
         <div>
-          <label className="block text-xs text-muted mb-1">{t('office.generate.sheetHeaders')}</label>
+          <label className="block text-xs text-muted mb-1">
+            {t('office.generate.sheetHeaders')}
+          </label>
           <input
             type="text"
             value={sheetHeaders}
@@ -764,7 +766,9 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       {result && (
         <div className="text-xs text-muted bg-surface border border-border rounded p-2 space-y-1">
           <div className="flex items-center gap-1.5 text-text">
-            <span className="text-green-500" aria-hidden>✓</span>
+            <span className="text-green-500" aria-hidden>
+              ✓
+            </span>
             <span className="font-medium">{result.path.split(/[\\/]/).pop() ?? result.path}</span>
           </div>
           <div className="flex items-center gap-1">

@@ -61,7 +61,7 @@ describe('panelRegistry', () => {
     expect(isExclusiveConflict('chat-inspector', 'wiki-inspector')).toBe(true);
     expect(isExclusiveConflict('sider-projects', 'sider-git')).toBe(true);
     expect(isExclusiveConflict('chat-inspector', 'terminal')).toBe(false);
-    expect(isExclusiveConflict('task-center', 'sider-git')).toBe(true);  // 同 left-list（迁移后新增）
+    expect(isExclusiveConflict('task-center', 'sider-git')).toBe(true); // 同 left-list（迁移后新增）
     expect(isExclusiveConflict('task-center', 'chat-inspector')).toBe(false);
   });
 
