@@ -2,7 +2,7 @@
 
 > 创建日期: 2026-11-09
 > 分支: `feat/startup-performance-optimization`
-> 状态: Phase 1-2 + 启动阻塞修复已完成，Phase 3-6 待实施
+> 状态: Phase 1-3 + 启动阻塞修复已完成，Phase 4-6 待实施
 
 ## 背景与目标
 
@@ -148,10 +148,10 @@ asyncio.create_task(mount_deferred_routers())
 - 对开发环境:**有效**(import 缓存,二次启动更快)
 
 **实施步骤**:
-- [ ] 3.1 用 `python -X importtime -m backend.main` 测量各模块导入耗时
-- [ ] 3.2 识别重模块:zotero / office / wiki / embedder
-- [ ] 3.3 对重模块改用延迟导入或延迟挂载
-- [ ] 3.4 测试:确保首屏不依赖的 API 延迟加载不影响核心功能
+- [x] 3.1 用 `python -X importtime -m backend.main` 测量各模块导入耗时
+- [x] 3.2 识别重模块:`backend.tools` 包（1.90s）、`backend.core.legacy.agent` 链、`backend.wiki.mcp_server`、office/pandas 链
+- [x] 3.3 对重模块改用延迟导入（PEP 562 惰性导出 + 调用点解析，见下方实测结果）
+- [x] 3.4 测试:确保首屏不依赖的 API 延迟加载不影响核心功能（回归 + 冒烟见下方）
 
 ---
 
@@ -332,6 +332,54 @@ pyinstaller --onefile --name sage-backend backend/main.py
 
 - doctor 的 20s 上限（`electron/doctor.ts: DEFAULT_TIMEOUT_MS = 20_000`）在冷缓存下必然超时 → `DOCTOR_LAST_FILE` 永远是 `status: "timeout"` 且无 summary，救援工具读不到有效报告。现在它已不阻塞启动，可以把上限提到 60s+ 让诊断真正产出结果。
 - dev 模式 Vite 冷 transform 整个模块图（实测 60-76s）是**仅开发环境**的耗时；打包版走静态资源不受影响。若要进一步优化开发体验，需要 Vite 预热（`optimizeDeps.entries` / 预构建）。
+
+### Phase 3 实测结果（2026-11-09，Linux / sage-backend conda 环境）
+
+同一台机器、同一解释器，`python -X importtime -c "import backend.main"` 热缓存对照
+（测量窗口内 load average 3.0–7.5，绝对值只可在同一窗口内比较）：
+
+| 指标 | 基线（origin/main 代码） | Phase 3 后 | 变化 |
+| --- | --- | --- | --- |
+| `import backend.main` 累计 | 6.54s / 7.47s | **5.00s / 5.22s** | **−25%** |
+| `sys.modules` 数量 | 2725 | **2471** | −254 个模块 |
+| 后端 `/health` 就绪（独立启动，load 7.5） | — | 11.2s | — |
+
+**移出导入关键路径的重模块**（导入完成后 `sys.modules` 探针）：
+
+| 模块 | 基线 | Phase 3 后 |
+| --- | --- | --- |
+| `backend.tools`（~104 个 tool 子模块） | eager | 惰性（包导入 1.90s → 0.02s） |
+| `backend.core.legacy.agent` | 加载 | **未加载**（首次聊天请求时解析） |
+| `backend.tools.browser_tool` / `office_tool` | 加载 | **未加载** |
+| `backend.wiki.mcp_server` | 加载 | **未加载**（`backend.wiki` 累计 736ms → 368ms） |
+
+**改动清单**：
+
+1. `backend/tools/__init__.py` — PEP 562 `__getattr__` + `_LAZY_TOOL_EXPORTS` 映射导出 104 个 tool 类；`register_all_tools()` 仍走 `tool_bundles` 显式导入。
+2. `backend/core/lazy.py`（新增）— `load_attr()`：调用点惰性解析并缓存回调用方 `globals()`（函数体内的 `LOAD_GLOBAL` 不触发模块 `__getattr__`）；`module_getattr()`：PEP 562 `__getattr__` 的共用实现。
+3. `backend/core/__init__.py` — 同样惰性导出，打断包初始化链。
+4. `backend/api/legacy_routes.py`、`backend/api/legacy_chat_routes.py`、`backend/orchestration/subagent_runner.py` — `SageAgent` / `validate_against_schema` 改为调用点解析；同时保留模块级 `__getattr__`，使既有 `patch("...SageAgent")` 测试桩继续生效。
+5. `backend/wiki/__init__.py` — 可选 MCP Server 导出惰性化。
+6. `backend/main.py`、`backend/api/chat_stream_state.py`、`backend/data/database.py`、`backend/chat/attachment_resolver.py` — deferred imports（P3-1 jieba 预热 / P3-2 office 重模块）。
+
+**回归验证**：
+
+| 检查 | 结果 |
+| --- | --- |
+| `ruff check backend/` | All checks passed |
+| `scripts/check_py38_compat.py` | 0 violations（win7 Python 3.8 兼容） |
+| 单元测试（subagent_runner / session / watcher / chat_dispatcher / retry_resilience / m3 memory attribution） | 86 passed, 1 failed（pre-existing，见下） |
+| 集成测试（patch `legacy_routes.SageAgent` 等）：sessions_crud / chat_agent_id / chat_errors / legacy_routes_execution_mode / auto_checkpoint | 25 passed, 7 skipped |
+| 集成测试：chat_stream / attachment_injection_legacy / legacy_routes_step_persistence / project_context_injection / skip_workspace_binding / chat_title_generation | 40 passed |
+| 冒烟：`/health`、`/api/v1/sessions`、`/api/v1/memory/list?page_size=1`、`/api/v1/todos` | 全部 200 |
+
+唯一失败 `test_retry_resilience.py::test_run_lane_accepts_backoff_penetrates_mock_patch_wrapper`
+在 origin/main 主 checkout 上同样失败（本环境 Python 3.10 下 `inspect.signature(AsyncMock)`
+抛 `TypeError: 'Mock' object is not subscriptable` → `func_accepts_kwarg` 返回 False），
+**pre-existing，与本 Phase 改动无关**。
+
+**遗留**：热缓存下 5.0–5.2s 已达 Phase 3 目标区间（3–5s）上沿；冷缓存 Electron spawn
+路径（基线 34.5s）的端到端降幅需在 Phase 4/5 完成后整体复测。
 
 ### 启动时间测量点
 

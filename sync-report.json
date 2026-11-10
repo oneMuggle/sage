@@ -1,21 +1,25 @@
 {
-  "timestamp": "2026-11-09T13:52:03",
+  "timestamp": "2026-11-10T01:32:02",
   "source": "origin/main",
   "target": "origin/release/win7",
   "branch": "sync/win7-main",
-  "status": "CONFLICT（2 个文件需人工处理）",
+  "status": "CONFLICT（3 个文件需人工处理）",
   "conflicts": [
     {
       "path": "architecture-baseline.json",
       "cls": "A"
     },
     {
-      "path": "backend/main.py",
+      "path": "backend/data/database.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/tools/__init__.py",
       "cls": "A"
     }
   ],
   "auto_resolved": [],
-  "source_sha": "6c0ab03d",
-  "target_sha": "afb537a5",
+  "source_sha": "d7b4be85",
+  "target_sha": "bcc35043",
   "commits_behind": 3
 }

@@ -125,9 +125,20 @@ export function ProjectsOverview(): JSX.Element {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [filters, setFilters] = useState<OverviewFilters>(DEFAULT_FILTERS);
   const [selected, setSelected] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
-    setProjects(await projectApi.list());
+    setLoading(true);
+    setError(null);
+    try {
+      setProjects(await projectApi.list());
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -153,6 +164,23 @@ export function ProjectsOverview(): JSX.Element {
         selectedCount={selected.length}
         onArchive={() => void archiveSelected()}
       />
+
+      {error && (
+        <div
+          data-testid="projects-overview-error"
+          className="mx-4 mt-3 flex items-center gap-2 px-3 py-2 bg-error/10 border border-error/30 rounded text-sm text-error"
+        >
+          <span>加载项目列表失败：{error}</span>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="ml-auto px-2 py-0.5 text-xs border border-error/40 rounded hover:bg-error/20 disabled:opacity-50"
+          >
+            {loading ? '重试中…' : '重试'}
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto px-4 py-3">
         <OverviewRows
