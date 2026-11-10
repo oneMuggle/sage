@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Any, List, Literal, Optional
 from zipfile import BadZipFile
 
-from docx.opc.exceptions import PackageNotFoundError
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -138,6 +137,12 @@ def _collect_reference_texts(workspace: Path, reference_paths: Optional[List[str
     """Read .docx reference files, refusing anything outside the workspace."""
     if not reference_paths:
         return []
+    # docx 顶层导入较重（~90ms）且只在真正读 .docx 时才需要 —— 惰性解析。
+    from backend.core.lazy import load_attr
+
+    PackageNotFoundError = load_attr(
+        "docx.opc.exceptions", "PackageNotFoundError", globals()
+    )
     texts: List[str] = []
     for raw_path in reference_paths:
         candidate = resolve_within(workspace, Path(raw_path))
@@ -390,6 +395,12 @@ async def iterate_endpoint(req: IterateRequest) -> NlGenerateResponse:
     """Rewrite an existing .docx according to an instruction."""
     workspace = validate_workspace(Path(req.workspace_path))
     source = _resolve_source_docx(workspace, req.source_path)
+    # docx 顶层导入较重（~90ms）且只在真正读 .docx 时才需要 —— 惰性解析。
+    from backend.core.lazy import load_attr
+
+    PackageNotFoundError = load_attr(
+        "docx.opc.exceptions", "PackageNotFoundError", globals()
+    )
     try:
         source_text = read_docx_text(source)[:_MAX_REFERENCE_CHARS]
     except (FileNotFoundError, PackageNotFoundError, BadZipFile) as exc:

@@ -9,12 +9,9 @@ from __future__ import annotations
 
 import io
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
-import openpyxl
-import pymupdf
-from docx import Document as _Docx
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -33,6 +30,21 @@ from backend.wiki.embeddings import EmbeddingConfig
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
+
+
+# Phase 3.5：openpyxl(~460ms) + pymupdf(~300ms) + python-docx(~90ms) 只在真的
+# 上传 pdf/docx/xlsx 附件时才用得上；绝大多数启动路径（会话列表 / 聊天）根本不碰
+# 附件解析，这三个包留在模块顶层就是纯启动税 → 改为按需惰性导入。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_attr, load_module
+
+    if name == "openpyxl":
+        return load_module("openpyxl", "openpyxl", globals())
+    if name == "pymupdf":
+        return load_module("pymupdf", "pymupdf", globals())
+    if name == "_Docx":
+        return load_attr("docx", "Document", globals(), alias="_Docx")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/wav", "audio/ogg", "audio/webm", "audio/mp4", "audio/x-m4a"}
 ALLOWED_AUDIO_EXTENSIONS = {"mp3", "wav", "ogg", "webm", "m4a", "flac"}
@@ -126,17 +138,22 @@ async def upload_chat_attachment(file: UploadFile = File(...)) -> dict:
 
 def _extract_document_text(content: bytes, ext: str) -> str:
     """R39: pdf/docx/xlsx 提取纯文本（零新增依赖，复用 office 模块库）。"""
+    from backend.core.lazy import load_attr, load_module
+
     ext = ext.lstrip(".").lower()
     if ext == "pdf":
+        pymupdf = load_module("pymupdf", "pymupdf", globals())
         doc = pymupdf.open(stream=content, filetype="pdf")
         try:
             return CH_NL.join(page.get_text() for page in doc)
         finally:
             doc.close()
     if ext == "docx":
+        _Docx = load_attr("docx", "Document", globals(), alias="_Docx")
         doc = _Docx(io.BytesIO(content))
         return CH_NL.join(para.text for para in doc.paragraphs if para.text.strip())
     if ext == "xlsx":
+        openpyxl = load_module("openpyxl", "openpyxl", globals())
         wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         try:
             sheets_text = []

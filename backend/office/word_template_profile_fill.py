@@ -6,12 +6,6 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from docx import Document
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from docxtpl import DocxTemplate, InlineImage
-from jinja2.sandbox import SandboxedEnvironment
-
 from .errors import (
     OfficeFileNotFoundError,
     OfficeParseError,
@@ -26,6 +20,26 @@ from .word_template_profile import (
     _walk_bookmarks,
     analyze_word_template_profile,
 )
+
+
+# Phase 3.5：docx/docxtpl 只在真正填充 Word 模板画像时才用得上；启动路径
+# （会话列表 / 聊天）不触发 → 改为按需惰性导入。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_attr
+
+    if name == "Document":
+        return load_attr("docx", "Document", globals())
+    if name == "OxmlElement":
+        return load_attr("docx.oxml", "OxmlElement", globals())
+    if name == "qn":
+        return load_attr("docx.oxml.ns", "qn", globals())
+    if name == "DocxTemplate":
+        return load_attr("docxtpl", "DocxTemplate", globals())
+    if name == "InlineImage":
+        return load_attr("docxtpl", "InlineImage", globals())
+    if name == "SandboxedEnvironment":
+        return load_attr("jinja2.sandbox", "SandboxedEnvironment", globals())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _value_text(value: Any) -> str:
@@ -48,6 +62,10 @@ def _check_output_name(name: str) -> str:
 
 
 def _set_sdt_text(sdt: Any, value: str) -> bool:
+    from backend.core.lazy import load_attr
+
+    OxmlElement = load_attr("docx.oxml", "OxmlElement", globals())
+    qn = load_attr("docx.oxml.ns", "qn", globals())
     content = sdt.find(qn("w:sdtContent"))
     if content is None:
         return False
@@ -169,6 +187,9 @@ def _iter_paragraphs(document: Any) -> List[Any]:
 
 
 def _fill_story_content_controls(document: Any, data: Dict[str, Any]) -> None:
+    from backend.core.lazy import load_attr
+
+    qn = load_attr("docx.oxml.ns", "qn", globals())
     for section in document.sections:
         for story in (section.header, section.footer):
             try:
@@ -253,10 +274,16 @@ def fill_word_template_profile(
         raise OfficeTemplateFillError("缺少必填槽位: " + ", ".join(missing))
 
     try:
+        from backend.core.lazy import load_attr
+
+        Document = load_attr("docx", "Document", globals())
         document = Document(str(resolved))
     except Exception as exc:  # noqa: BLE001
         raise OfficeParseError(f"Failed to parse DOCX template: {exc}") from exc
 
+    from backend.core.lazy import load_attr
+
+    qn = load_attr("docx.oxml.ns", "qn", globals())
     filled_names = set()
     for sdt in document.element.body.iter(qn("w:sdt")):
         name = _sdt_name(sdt)
@@ -286,6 +313,13 @@ def fill_word_template_profile(
         document.save(str(work_path))
         if needs_render:
             _validate_template_safety(work_path)
+            from backend.core.lazy import load_attr
+
+            DocxTemplate = load_attr("docxtpl", "DocxTemplate", globals())
+            InlineImage = load_attr("docxtpl", "InlineImage", globals())
+            SandboxedEnvironment = load_attr(
+                "jinja2.sandbox", "SandboxedEnvironment", globals()
+            )
             template = DocxTemplate(str(work_path))
             context = dict(data)
             for name, descriptor in image_data.items():

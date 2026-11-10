@@ -19,9 +19,7 @@ import re
 from pathlib import Path
 from typing import Any, List, Optional
 
-from docx import Document
-from docx.oxml.ns import qn
-
+from ._docx_lazy import Document, page_field_xpath, qn
 from .errors import OfficeParseError
 from .models import (
     WordBodyStyleSpec,
@@ -49,8 +47,8 @@ _FIGURE_CAPTION_RE = re.compile(r"^图(\d+)[　\s]")
 _TABLE_CAPTION_RE = re.compile(r"^表(\d+)[　\s]")
 _CITATION_MARKER_RE = re.compile(r"\[(\d+)(?:-(\d+))?\]")
 
-#: 页码域的 OOXML 形态（与 word_layout._apply_footer 写入一致）
-_PAGE_FIELD_XPATH = ".//" + qn("w:fldSimple")
+#: 页码域的 OOXML 形态（与 word_layout._apply_footer 写入一致）——惰性解析，
+# 启动期不再触发 docx 导入。使用时调用 ``page_field_xpath()``。
 
 
 def _issue(rule_id: str, severity: str, message: str, fix_hint: str = "") -> WordLintIssue:
@@ -252,7 +250,7 @@ def _check_header_footer(doc: Document, spec: WordFormatSpec, issues: List[WordL
         has_field = any(
             fld.get(qn("w:instr")) == "PAGE"
             for p in footer.paragraphs
-            for fld in p._p.findall(_PAGE_FIELD_XPATH)
+            for fld in p._p.findall(page_field_xpath())
         )
         if not has_field:
             issues.append(_issue(

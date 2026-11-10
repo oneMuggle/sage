@@ -20,10 +20,6 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from docx import Document
-from docx.enum.text import WD_LINE_SPACING
-from docx.oxml.ns import qn
-
 from backend.office.journal.errors import JournalPandocError, JournalParseError
 from backend.office.journal.models import (
     CitationStyle,
@@ -32,6 +28,8 @@ from backend.office.journal.models import (
     JournalSpec,
 )
 from backend.office.journal.pandoc_adapter import convert_doc_to_docx
+
+from .._docx_lazy import Document, qn
 
 _PT_TO_CN: Dict[float, str] = {
     42.0: "初号",
@@ -114,6 +112,8 @@ def _style_pt(style) -> float:
 
 
 def _style_line_spacing(style) -> float:
+    from docx.enum.text import WD_LINE_SPACING
+
     pf = style.paragraph_format
     if pf.line_spacing is None:
         return 0.0

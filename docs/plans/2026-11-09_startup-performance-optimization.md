@@ -420,6 +420,59 @@ win7 侧 wall-clock 收益不可见的原因：`-X importtime` 显示 win7 的�
 **win7 侧回归验证**：py38 gate 0 violations / ruff clean / 104 个 tool 导出逐一可解析 /
 1884 + 134 + 130 = **2148 passed**。
 
+### Phase 3.5: 惰性化 docx/lxml 导入（2026-11-10）
+
+Phase 3 完成后 `sys.modules` 探测显示 `docx` + `lxml`（约 30 个模块）仍在启动期加载。
+根因：11 个 office 模块在顶层 `from docx import Document / OxmlElement / qn / Cm / Pt …`
+——FastAPI router 层在启动期导入这些模块时连带拉入整个 python-docx 栈。
+
+**方案**：集中 shim `backend/office/_docx_lazy.py`（PEP 562 不适用于函数体内部 `LOAD_GLOBAL`），
+提供 7 个 delegating wrapper（`Document / OxmlElement / qn / Cm / Pt / Inches / Mm`）+
+4 个 helper 函数（`page_field_xpath / page_sizes / align_map / align_map_ltr`）。
+wrapper 首次调用时才真正 `import docx.*` 并缓存到 shim 自身 `globals()`。
+
+**关键设计决策**：
+
+| 问题 | 方案 |
+| --- | --- |
+| wrapper 函数名恰好等于目标属性 → `load_attr` 在 `scope_globals` 里找到 wrapper 自身 → 无限递归 | 统一传 `alias="_real_<name>"`，缓存到不同键 |
+| `docx.enum.*` 枚举 + `RGBColor` 需属性访问（`WD_ALIGN_PARAGRAPH.CENTER`）→ 无法用函数代理 | 调用点 `from docx.enum.text import WD_ALIGN_PARAGRAPH`（惰性局部导入） |
+| 原模块级常量（`_PAGE_SIZES` / `_ALIGN_MAP` / `_PAGE_FIELD_XPATH`）在加载时立刻求值 docx 真实对象 | 改为惰性函数，shim 暴露 helper |
+| `from __future__ import annotations` 使类型注解变字符串 | 注解 `doc: Document` 不触发导入 |
+
+**改动文件**（11 个）：
+
+| 文件 | 改动要点 |
+| --- | --- |
+| `backend/office/_docx_lazy.py` | 新建 shim（7 wrapper + 4 helper） |
+| `backend/office/word_rule_extract.py` | `Document` 走 shim |
+| `backend/office/word_revision_writer.py` | `Document / OxmlElement / qn` 走 shim |
+| `backend/office/word_repair.py` | `Document / qn` 走 shim |
+| `backend/office/word_audit.py` | `Document / qn` 走 shim |
+| `backend/office/word_lint.py` | `Document / qn / page_field_xpath` 走 shim；删除模块级 `_PAGE_FIELD_XPATH` |
+| `backend/office/word_fix.py` | 删除 `_PAGE_SIZES` / `_ALIGNMENTS`；改调 `page_sizes()` / `align_map()`；`_fix_page_orientation` 局部 `from docx.enum.section import WD_ORIENT`；`_fix_style_font` 局部 `from docx.shared import RGBColor` |
+| `backend/office/word_layout.py` | 删除 `_ALIGN_MAP`；改调 `align_map_ltr()`；`_hex_to_rgb` 局部 `RGBColor`；`_apply_page_setup_to_section` 局部 `WD_ORIENT`；`add_caption` / `insert_toc_field` / `insert_tof_field` 局部 `WD_ALIGN_PARAGRAPH` |
+| `backend/office/word_template_profile.py` | `Document / qn` 走 shim |
+| `backend/office/journal/generator.py` | `Cm / Document / OxmlElement / Pt / qn` 走 shim |
+| `backend/office/journal/parser.py` | `Document / qn` 走 shim；`_style_line_spacing` 局部 `WD_LINE_SPACING` |
+| `backend/office/journal/validator.py` | `Document / qn` 走 shim |
+
+**回归验证**：
+
+| 检查 | 结果 |
+| --- | --- |
+| `ruff check backend/office/` | All checks passed |
+| `scripts/check_py38_compat.py` | 0 violations |
+| `sys.modules` 探测（`docx` + `lxml` 前缀） | `残留: []` |
+| office 单元 + 集成测试 | **1224 passed**, 2 skipped |
+
+**启动性能**：
+
+| 指标 | Phase 3 后 | Phase 3.5 后 | 变化 |
+| --- | --- | --- | --- |
+| wall-clock（热缓存，3 次中位数） | 5.1s | **4.1s** | **−1.0s（−20%）** |
+| `-X importtime` docx/lxml 自时间 | ~48ms | 0（仅 shim 185μs） | **完全惰性** |
+
 ### 启动时间测量点
 
 1. **Electron 主进程**:`logger.info('main: process started', { pid })` (已有)

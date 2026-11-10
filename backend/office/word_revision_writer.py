@@ -15,10 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from docx import Document
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-
+from ._docx_lazy import Document, OxmlElement, qn
 from .edit import _apply_docx_add_comment, _docx_locate_paragraph_with_text
 from .errors import OfficeFileNotFoundError, OfficeParseError, OfficePathError
 from .path_safety import resolve_within

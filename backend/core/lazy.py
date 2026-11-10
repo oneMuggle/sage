@@ -6,17 +6,47 @@
 """
 
 from importlib import import_module
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 _MISSING = object()
 
 
-def load_attr(module_name: str, attr: str, scope_globals: Dict[str, Any]) -> Any:
-    value = scope_globals.get(attr, _MISSING)
+def load_attr(
+    module_name: str,
+    attr: str,
+    scope_globals: Dict[str, Any],
+    alias: Optional[str] = None,
+) -> Any:
+    """惰性取目标模块的具名属性，缓存回调用方 ``globals()``。
+
+    ``alias`` 用于"取的是 A.B 但在本模块里叫 C"的场景（如
+    ``from docx import Document as _Docx``）：缓存键取 ``alias``，
+    否则 ``patch("本模块._Docx")`` 会因为模块 ``__dict__`` 里没有该键
+    而落到 ``__getattr__``，patch 语义不完整。
+    """
+    cache_key = alias or attr
+    value = scope_globals.get(cache_key, _MISSING)
     if value is not _MISSING:
         return value
     value = getattr(import_module(module_name), attr)
-    scope_globals[attr] = value
+    scope_globals[cache_key] = value
+    return value
+
+
+def load_module(module_name: str, alias: str, scope_globals: Dict[str, Any]) -> Any:
+    """惰性导入整个模块并缓存回调用方 ``globals()``。
+
+    用于 ``import pandas as pd`` 这类"模块本身即导出值"的场景——
+    ``load_attr`` 只能取模块内的具名属性，取不到模块对象本身。
+
+    先查 ``scope_globals[alias]``（保持 ``patch("a.b.pd")`` 语义），
+    未命中再 ``import_module`` 并写回。第二次起只是一次字典查找。
+    """
+    value = scope_globals.get(alias, _MISSING)
+    if value is not _MISSING:
+        return value
+    value = import_module(module_name)
+    scope_globals[alias] = value
     return value
 
 

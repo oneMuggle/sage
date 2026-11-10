@@ -5,16 +5,39 @@ from __future__ import annotations
 import hashlib
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from docx import Document
-from docx.oxml.ns import qn
+if TYPE_CHECKING:
+    from docx.document import Document  # noqa: F401
 
 from backend.office.errors import OfficeFileNotFoundError, OfficeParseError
 
 from .style_resolver import StyleResolver
 
 _HEADING_RE = re.compile(r"^heading\s+(\d+)$", re.I)
+
+
+# Phase 3.5：python-docx(~76ms，连带 lxml)只在真正读 .docx 画像时才用得上；
+# 启动路径不触发 → 改为按需惰性导入。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_attr
+
+    if name == "Document":
+        return load_attr("docx", "Document", globals())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def qn(tag: str) -> str:
+    """把 ``w:p`` 形式的标签展开为 ``{namespace}p``。
+
+    真正的实现在 ``docx.oxml.ns``，而 ``docx.oxml`` 包在 import 时就会
+    拉进 lxml(~76ms)。模块级 ``__getattr__`` 不参与函数体内的
+    LOAD_GLOBAL，所以这里保留一个同名薄壳：首次调用时才导入并缓存，
+    调用语义与 docx 原生 ``qn`` 完全一致。
+    """
+    from backend.core.lazy import load_attr
+
+    return load_attr("docx.oxml.ns", "qn", globals(), alias="_docx_qn")(tag)
 
 
 def _hash(text: str) -> str:
@@ -415,6 +438,9 @@ def read_doc_profile(
     if path.suffix.lower() != ".docx":
         raise OfficeParseError("仅支持 .docx 文档画像")
     try:
+        from backend.core.lazy import load_attr
+
+        Document = load_attr("docx", "Document", globals())
         document = Document(str(path))
     except Exception as exc:  # noqa: BLE001 — map all parse failures
         raise OfficeParseError(f"Failed to parse DOCX: {exc}") from exc

@@ -19,11 +19,21 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-
 logger = logging.getLogger(__name__)
+
+
+# Phase 3.5：cryptography.fernet(~300ms) 只有在实际加密/解密账号凭据时才用得上；
+# 启动路径（会话列表 / 聊天）从不触发 → 改为按需惰性导入。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_attr
+
+    if name == "Fernet":
+        return load_attr("cryptography.fernet", "Fernet", globals())
+    if name == "hashes":
+        return load_attr("cryptography.hazmat.primitives", "hashes", globals())
+    if name == "PBKDF2HMAC":
+        return load_attr("cryptography.hazmat.primitives.kdf.pbkdf2", "PBKDF2HMAC", globals())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def derive_arena_key(token: str, machine_id: str) -> bytes:
@@ -33,6 +43,12 @@ def derive_arena_key(token: str, machine_id: str) -> bytes:
     producing a 32-byte key that is urlsafe-base64 encoded for Fernet consumption.
     """
     import base64
+
+    from backend.core.lazy import load_attr
+
+    PBKDF2HMAC = load_attr("cryptography.hazmat.primitives.kdf.pbkdf2", "PBKDF2HMAC", globals())
+    hashes = load_attr("cryptography.hazmat.primitives", "hashes", globals())
+
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -58,8 +74,11 @@ def get_or_create_master_key(settings_repo: Optional[Any] = None) -> bytes:
 
     ``settings_repo`` is injectable for tests; defaults to SettingsRepository.
     """
+    from backend.core.lazy import load_attr
     from backend.data.settings_repo import SettingsRepository
     from backend.services.secret_box import decrypt_secret, encrypt_secret
+
+    Fernet = load_attr("cryptography.fernet", "Fernet", globals())
 
     repo = settings_repo or SettingsRepository()
     stored = repo.get(MASTER_KEY_PREFERENCE)
@@ -165,6 +184,10 @@ class ArenaAccountService:
         encryption_key: bytes,
         failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
     ):
+        from backend.core.lazy import load_attr
+
+        Fernet = load_attr("cryptography.fernet", "Fernet", globals())
+
         self._db_path = db_path
         self._fernet = Fernet(encryption_key)
         self._failure_threshold = failure_threshold

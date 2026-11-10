@@ -32,9 +32,6 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import pandas as pd
-from openpyxl import load_workbook
-
 from .errors import OfficeFileNotFoundError, OfficeParseError, OfficeSizeLimitError
 from .models import (
     ExcelSheetContent,
@@ -46,6 +43,18 @@ from .models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# Phase 3.5：pandas(~490ms) + openpyxl(~200ms) 只在实际读写表格时才导入。
+# 绝大多数启动路径（会话列表 / 聊天）根本不碰表格，这两个包是纯启动税。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_attr, load_module
+
+    if name == "pd":
+        return load_module("pandas", "pd", globals())
+    if name == "load_workbook":
+        return load_attr("openpyxl", "load_workbook", globals())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 #: 公式单元格缺缓存值时附加在读取结果里的一行提示（openpyxl 不能计算公式，
 #: 缓存值要等 Excel/LibreOffice 打开后重算写入）。Round2 R5：缺缓存值时
@@ -430,6 +439,10 @@ def read_xlsx(
         OfficeFileNotFoundError: file doesn't exist.
         OfficeParseError: file exists but isn't a valid XLSX.
     """
+    from backend.core.lazy import load_attr
+
+    load_workbook = load_attr("openpyxl", "load_workbook", globals())
+
     file_path = Path(file_path)
 
     if not file_path.exists():
@@ -896,11 +909,15 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
 
     from openpyxl import Workbook
 
+    from backend.core.lazy import load_module
+
     from .errors import OfficeGenerateError
     from .models import OfficeDocType
     from .path_safety import managed_document_path, resolve_output_path
     from .progress import report_current
     from .storage import validate_workspace
+
+    pd = load_module("pandas", "pd", globals())
 
     if output_dir is not None:
         output_path = resolve_output_path(output_dir, OfficeDocType.EXCEL, req.filename)

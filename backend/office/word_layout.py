@@ -24,13 +24,16 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from docx import Document
-from docx.enum.section import WD_ORIENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from docx.shared import Cm, Inches, Mm, Pt, RGBColor
-
+from ._docx_lazy import (
+    Cm,
+    Document,
+    Inches,
+    Mm,
+    OxmlElement,
+    Pt,
+    align_map_ltr,
+    qn,
+)
 from .models import (
     WordBodyStyleSpec,
     WordFormatSpec,
@@ -39,13 +42,7 @@ from .models import (
     WordPageSetupSpec,
 )
 
-#: format_spec 的 align 取值 → python-docx 段落对齐枚举
-_ALIGN_MAP: Dict[str, int] = {
-    "left": WD_ALIGN_PARAGRAPH.LEFT,
-    "center": WD_ALIGN_PARAGRAPH.CENTER,
-    "right": WD_ALIGN_PARAGRAPH.RIGHT,
-    "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
-}
+#: format_spec 的 align 取值 → python-docx 段落对齐枚举（惰性解析）
 
 #: headings 键（h1-h5）→ Word 内置样式名（Round 20 扩展到 5 级）
 _HEADING_STYLE_NAMES: Dict[str, str] = {
@@ -80,8 +77,10 @@ def _clear_color_theme(style) -> None:
             del color.attrib[qualified]
 
 
-def _hex_to_rgb(color: str) -> RGBColor:
+def _hex_to_rgb(color: str) -> Any:
     """"#2F5496" / "2F5496" → RGBColor（pattern 校验已在模型层完成）。"""
+    from docx.shared import RGBColor
+
     return RGBColor.from_string(color.lstrip("#").upper())
 
 
@@ -96,6 +95,8 @@ def _apply_page_setup_to_section(section, page: WordPageSetupSpec) -> None:
     仅给 orientation 未给 size 时，若实际宽高方向与期望不符则交换
     （orientation 标志与宽高是独立属性，必须同步否则渲染仍为原方向）。
     """
+    from docx.enum.section import WD_ORIENT
+
     width = None
     height = None
     if page.size == "A4":
@@ -168,7 +169,7 @@ def _apply_body_style(doc: Document, body: WordBodyStyleSpec) -> None:
     if body.space_after_pt is not None:
         paragraph_format.space_after = Pt(body.space_after_pt)
     if body.align is not None:
-        paragraph_format.alignment = _ALIGN_MAP[body.align]
+        paragraph_format.alignment = align_map_ltr()[body.align]
 
 
 def _apply_heading_style(doc: Document, style_name: str, spec: WordHeadingStyleSpec) -> None:
@@ -188,7 +189,7 @@ def _apply_heading_style(doc: Document, style_name: str, spec: WordHeadingStyleS
     if spec.space_after_pt is not None:
         paragraph_format.space_after = Pt(spec.space_after_pt)
     if spec.align is not None:
-        paragraph_format.alignment = _ALIGN_MAP[spec.align]
+        paragraph_format.alignment = align_map_ltr()[spec.align]
 
 
 def _use_header_part(section, part_attr: str):
@@ -204,7 +205,7 @@ def _apply_header(doc: Document, header: WordHeaderFooterSpec) -> None:
     if header.text is not None:
         paragraph.text = header.text
     if header.align is not None:
-        paragraph.alignment = _ALIGN_MAP[header.align]
+        paragraph.alignment = align_map_ltr()[header.align]
 
 
 def _apply_footer(doc: Document, footer: WordHeaderFooterSpec) -> None:
@@ -212,7 +213,7 @@ def _apply_footer(doc: Document, footer: WordHeaderFooterSpec) -> None:
     if footer.text is not None:
         paragraph.text = footer.text
     if footer.align is not None:
-        paragraph.alignment = _ALIGN_MAP[footer.align]
+        paragraph.alignment = align_map_ltr()[footer.align]
     if footer.page_number:
         # w:fldSimple 携带占位 run，Word/WPS/LibreOffice 打开即显示页码，
         # 无需"打开后更新域"步骤（对比 fldChar 复杂域）。
@@ -352,6 +353,8 @@ def add_caption(doc: Document, text: str, *, kind: str, number: int) -> None:
     ``kind``: "figure"（图，题注在图下方）/ "table"（表，题注在表上方）——
     位置由调用方的插入顺序决定，本函数只负责段落样式与编号文本。
     """
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
     paragraph = doc.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     label = "图" if kind == "figure" else "表"
@@ -407,6 +410,8 @@ def insert_toc_field(doc: Document, toc: Any, headings: Any = None) -> None:
       更新域时计算）；headings 为空时退化为占位提示行；
     - 之后 add_page_break 使正文另起一页。
     """
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
     paragraph = doc.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = paragraph.add_run(str(toc.heading_text))
@@ -455,6 +460,8 @@ def insert_tof_field(doc: Document, spec: Any, label: str, entries: Any) -> None
       页码由渲染器/COM 更新域时计算）；entries 为空时退化为占位提示行；
     - 之后 add_page_break 使正文另起一页（图目录/表目录各自独占页）。
     """
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
     paragraph = doc.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = paragraph.add_run(str(spec.heading_text))

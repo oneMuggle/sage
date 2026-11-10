@@ -26,10 +26,7 @@ import contextlib
 import logging
 import time
 from pathlib import Path
-from typing import List, Optional
-
-from pptx import Presentation
-from pptx.enum.shapes import MSO_SHAPE_TYPE
+from typing import Any, List, Optional
 
 from .errors import OfficeFileNotFoundError, OfficeGenerateError, OfficeParseError, OfficePathError
 from .models import (
@@ -45,6 +42,18 @@ from .progress import report_current
 from .storage import validate_workspace
 
 logger = logging.getLogger(__name__)
+
+
+# Phase 3.5：python-pptx(~200ms) 只在真正读写 .pptx 时才用得上；启动路径
+# （会话列表 / 聊天）不触发 → 改为按需惰性导入。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_attr
+
+    if name == "Presentation":
+        return load_attr("pptx", "Presentation", globals())
+    if name == "MSO_SHAPE_TYPE":
+        return load_attr("pptx.enum.shapes", "MSO_SHAPE_TYPE", globals())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _extract_slide_title(slide) -> Optional[str]:
@@ -100,11 +109,17 @@ def _extract_text_blocks(slide) -> List[str]:
 
 def _count_tables(slide) -> int:
     """Number of GraphicFrame shapes containing tables on this slide."""
+    from backend.core.lazy import load_attr
+
+    MSO_SHAPE_TYPE = load_attr("pptx.enum.shapes", "MSO_SHAPE_TYPE", globals())
     return sum(1 for shape in slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.TABLE)
 
 
 def _count_images(slide) -> int:
     """Number of Picture shapes on this slide."""
+    from backend.core.lazy import load_attr
+
+    MSO_SHAPE_TYPE = load_attr("pptx.enum.shapes", "MSO_SHAPE_TYPE", globals())
     return sum(1 for shape in slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.PICTURE)
 
 
@@ -183,6 +198,9 @@ def read_ppt(
         raise OfficeParseError(f"Path is not a regular file: {file_path}", file_path=file_path)
 
     try:
+        from backend.core.lazy import load_attr
+
+        Presentation = load_attr("pptx", "Presentation", globals())
         prs = Presentation(str(file_path))
     except Exception as exc:
         # python-pptx raises various low-level exceptions (zipfile.BadZipFile,
@@ -350,6 +368,9 @@ def generate_ppt(req, output_dir: Optional[str] = None) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
+        from backend.core.lazy import load_attr
+
+        Presentation = load_attr("pptx", "Presentation", globals())
         prs = Presentation()
         # Round 52：文档核心属性（与 Word/Excel 对称）。仅显式传入才写，
         # 不臆造作者；python-pptx 属性名与 python-docx 一致。

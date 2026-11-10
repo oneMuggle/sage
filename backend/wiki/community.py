@@ -3,17 +3,30 @@
 使用 networkx 实现 Louvain 算法，检测知识图谱中的社区结构，
 并计算每个社区的凝聚度（intra-community edge density）。
 """
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
+from typing import TYPE_CHECKING, Any, List, Tuple
 
-import networkx as nx
+if TYPE_CHECKING:
+    import networkx as nx
 
 from .graph import build_graph
 from .models import GraphData, GraphSignal
 
 logger = logging.getLogger(__name__)
+
+
+# Phase 3.5：networkx(~560ms) 只有真正跑 Louvain 社区检测时才用得上；
+# 启动路径（会话列表 / 聊天）从不触发 → 改为按需惰性导入。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_module
+
+    if name == "nx":
+        return load_module("networkx", "nx", globals())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 @dataclass
@@ -37,6 +50,10 @@ def detect_communities(graph_data: GraphData) -> List[CommunityInfo]:
     Returns:
         List[CommunityInfo]: 社区信息列表，按凝聚度降序排序
     """
+    from backend.core.lazy import load_module
+
+    nx = load_module("networkx", "nx", globals())
+
     if not graph_data.nodes:
         return []
 
