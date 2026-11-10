@@ -88,7 +88,7 @@ export function RulesSubtabs({ workspacePath, onGoToDocuments }: RulesSubtabsPro
       const result = await officeRulesApi.extractRules({
         workspace_path: workspacePath,
         file_path: documentPath,
-        file_type: activeDocument.doc_type,
+        file_type: 'template',
         use_llm: true,
       });
       result.warnings.slice(0, 3).forEach((warning) => {
