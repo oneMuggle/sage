@@ -421,7 +421,7 @@ PEP 585 的 `dict[str, str]` 直接 TypeError）。
 | `backend.office.excel` → `pandas` | 698ms |
 
 `backend.tools` 惰性化收益被稀释在更重的 router 链里。**Phase 3 在 win7 上的价值定位为
-代码结构优化（惰性导入）+ 为 Phase 4（router 层惰性化）铺路**，端到端时间收益待 Phase 4 后复测。
+代码结构优化（惰性导入）+ 为 router 层惰性化铺路**，端到端时间收益待 router 层改造后复测。
 
 ### 启动时间测量点
 
