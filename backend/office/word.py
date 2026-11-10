@@ -35,14 +35,38 @@ import logging
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
-from docx import Document
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
+if TYPE_CHECKING:
+    from docx.document import Document  # noqa: F401
 
 DEFAULT_ASCII_FONT = "Times New Roman"
 DEFAULT_EA_FONT = "宋体"
+
+
+# Phase 3.5：python-docx(~76ms，连带 lxml)只在真正读写 .docx 时才用得上；
+# 启动路径（会话列表 / 聊天）不触发 → 改为按需惰性导入。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_attr
+
+    if name == "Document":
+        return load_attr("docx", "Document", globals())
+    if name == "OxmlElement":
+        return load_attr("docx.oxml", "OxmlElement", globals())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def qn(tag: str) -> str:
+    """把 ``w:p`` 形式的标签展开为 ``{namespace}p``。
+
+    真正的实现在 ``docx.oxml.ns``，而 ``docx.oxml`` 包在 import 时就会
+    拉进 lxml(~76ms)。模块级 ``__getattr__`` 不参与函数体内的
+    LOAD_GLOBAL，所以这里保留一个同名薄壳：首次调用时才导入并缓存，
+    调用语义与 docx 原生 ``qn`` 完全一致。
+    """
+    from backend.core.lazy import load_attr
+
+    return load_attr("docx.oxml.ns", "qn", globals(), alias="_docx_qn")(tag)
 
 
 _STYLES_TO_PATCH = (
@@ -420,6 +444,9 @@ def _patch_style_rfonts(style, ascii_name: str, ea_name: str) -> None:
     theme 引用优先级高于显式 ``w:eastAsia``——不删的话日语 Word 默认
     theme 会解析为 ＭＳ ゴシック，让标题仍然渲染成日文字体。
     """
+    from backend.core.lazy import load_attr
+
+    OxmlElement = load_attr("docx.oxml", "OxmlElement", globals())
     rPr = style.element.get_or_add_rPr()
     rFonts = rPr.find(qn("w:rFonts"))
     if rFonts is None:
@@ -839,6 +866,9 @@ def read_docx(
         raise OfficeParseError(f"Path is not a regular file: {file_path}", file_path=file_path)
 
     try:
+        from backend.core.lazy import load_attr
+
+        Document = load_attr("docx", "Document", globals())
         doc = Document(str(file_path))
     except Exception as exc:
         # python-docx raises zipfile.BadZipFile, lxml.etree.XMLSyntaxError, etc.
@@ -1044,6 +1074,9 @@ def read_docx_comments(file_path: Path) -> WordCommentsResult:
         raise OfficeParseError(f"Path is not a regular file: {file_path}", file_path=file_path)
 
     try:
+        from backend.core.lazy import load_attr
+
+        Document = load_attr("docx", "Document", globals())
         doc = Document(str(file_path))
     except Exception as exc:
         raise OfficeParseError(f"Failed to parse DOCX: {exc}", file_path=file_path) from exc

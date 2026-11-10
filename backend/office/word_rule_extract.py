@@ -11,8 +11,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from docx import Document
-
+from ._docx_lazy import Document
 from .doc_profile import read_doc_profile
 from .errors import OfficeFileNotFoundError, OfficeParseError
 from .word_rule_extract_common import (

@@ -27,9 +27,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from docx import Document
-from docx.oxml.ns import qn
-
+from ._docx_lazy import Document, qn
 from .errors import OfficeParseError
 from .models import WordFormatSpec, WordRepairResult
 from .word_layout import apply_format_spec
