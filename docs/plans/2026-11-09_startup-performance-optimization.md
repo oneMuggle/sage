@@ -381,6 +381,45 @@ pyinstaller --onefile --name sage-backend backend/main.py
 **遗留**：热缓存下 5.0–5.2s 已达 Phase 3 目标区间（3–5s）上沿；冷缓存 Electron spawn
 路径（基线 34.5s）的端到端降幅需在 Phase 4/5 完成后整体复测。
 
+### Phase 3 在 release/win7 的落地（2026-11-10）
+
+上节数据为 main 分支（Python 3.10 / pydantic 2.x）实测。Phase 3 已 cherry-pick 到
+`release/win7`（PR #2985，squash 合并 commit `79d22193`），win7 侧效果与 main **不同**：
+
+| 指标 | main | release/win7 |
+| --- | --- | --- |
+| `sys.modules` 数量 | 2725 → 2471（−254） | 2485 → 2382（**−103，−4%**） |
+| 导入 wall-clock | 6.54s → 5.0s（−25%） | **不可测**（噪声区间 7.86s–21.78s） |
+
+win7 侧 wall-clock 收益不可见的原因：`-X importtime` 显示 win7 的导入链被**路由层**
+主导，而非 `backend.tools`：
+
+| win7 主导项 | 累计耗时 |
+| --- | --- |
+| `backend.api.office_routes` | 2.02s |
+| `backend.api.legacy_session_routes` | 1.48s |
+| `backend.api.legacy_routes` | 1.44s |
+| `backend.api.office_generate_routes` | 1.17s |
+| `backend.office.excel` → `pandas` | 698ms |
+
+`backend.tools` 惰性化收益被稀释在更重的 router 链里。**Phase 3 在 win7 上的价值定位为
+代码结构优化（惰性导入）+ 为后续 router 层惰性化铺路**，端到端时间收益待 router 层
+改造后复测。
+
+**win7 侧 cherry-pick 冲突处理（3 处）**：
+
+| 文件 | 解决方式 |
+| --- | --- |
+| `backend/data/database.py` | 保留 win7 独有的 `_migrate_memory_traceability`，同时接受 main 重命名的 `warm_jieba` 公开名 |
+| `backend/tools/__init__.py` | 取 main 完整字母序 `__all__`（104 个 tool 类名）；win7 侧冲突条目均为重复，已在 main 列表中 |
+| `architecture-baseline.json` | 取 win7 数字（3004/1814），Phase 3 后更新为 3022/1824（+18/+10，与 main 增长模式一致） |
+
+**py38 适配**：模块级注解改用 `typing.Dict`/`List`/`Optional`（Python 3.8 会在定义时
+求值注解，PEP 585 的 `dict[str, str]` 直接 TypeError）。
+
+**win7 侧回归验证**：py38 gate 0 violations / ruff clean / 104 个 tool 导出逐一可解析 /
+1884 + 134 + 130 = **2148 passed**。
+
 ### 启动时间测量点
 
 1. **Electron 主进程**:`logger.info('main: process started', { pid })` (已有)
