@@ -1833,6 +1833,9 @@ async function registerIpcHandlers(): Promise<void> {
         const headers: Record<string, string> = {
           ...(request.headers ?? {}),
           'X-Sage-Local-Authorization': `Bearer ${backendAuthToken ?? ''}`,
+          // 明确声明 JSON，避免 Node fetch 默认 text/plain 导致 FastAPI 无法解析 body、
+          // Pydantic 以 model_attributes_type 掩盖真正的字段验证错误。
+          ...(request.body !== undefined && { 'Content-Type': 'application/json' }),
         };
         const controller = new AbortController();
         const timeoutMs =
