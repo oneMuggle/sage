@@ -245,19 +245,35 @@ export function InAppPet(): JSX.Element | null {
   useEffect(() => {
     if (!pet) return undefined;
     let alive = true;
-    void pet.getConfig().then((value) => {
-      if (alive) setConfig(value);
-    });
-    void pet.getState().then((value) => {
-      if (alive) setSnapshot(value);
-    });
+    // Compat L1+ disables pet IPC handlers; catch rejections gracefully
+    void pet
+      .getConfig()
+      .then((value) => {
+        if (alive) setConfig(value);
+      })
+      .catch(() => {
+        /* handler not registered */
+      });
+    void pet
+      .getState()
+      .then((value) => {
+        if (alive) setSnapshot(value);
+      })
+      .catch(() => {
+        /* handler not registered */
+      });
     const applyStates = (value: Record<string, PetSnapshotBridge>): void => {
       if (alive) setStates(value);
     };
     const maybeGetStates = pet.getStates as
       | (() => Promise<Record<string, PetSnapshotBridge>>)
       | undefined;
-    if (maybeGetStates) void maybeGetStates().then(applyStates);
+    if (maybeGetStates)
+      void maybeGetStates()
+        .then(applyStates)
+        .catch(() => {
+          /* handler not registered */
+        });
     const offState = pet.onState((value) => {
       if (alive) setSnapshot(value);
     });
