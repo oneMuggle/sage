@@ -3,7 +3,7 @@
 | 项 | 值 |
 |---|---|
 | 日期 | 2026-11-09 |
-| 状态 | 设计已批准，待实施 |
+| 状态 | 已实施 |
 | 起始分支 | `main` |
 | 同步分支 | `release/win7`（cherry-pick，非 merge） |
 | 关联计划 | 取代 `docs/plans/2026-10-28_idle-deferred-task-execution.md`（该文档实施后删除） |

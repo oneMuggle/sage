@@ -124,6 +124,7 @@
 | 144 | [Win7 内网救援工具（Rescue Doctor）](./144-win7-rescue-doctor.md) | 不依赖前端的 CLI（体检/端点配置/修复/诊断包/放行清单）+ 启动看门狗（last-run/崩溃 journal/心跳/原生恢复对话框）+ 兼容档位 L0–L3 + 遗留管控软件处置（备份/恢复/审计） |
 | 145 | [记忆质量优化（Phase 1–4）](./145-memory-quality-optimization.md) | 提取门槛升级 + 否定词 NOOP 修复 + 写入冲突消解（ADD/UPDATE/NOOP）+ 已知事实过滤 + 主题簇巩固 + 五维质量评分器 + 质量可视化/批量清理/来源会话追踪/记忆级反馈 |
 | 146 | [渲染层 BackendNotReadyError 自愈](./146-backend-ready-renderer-recovery.md) | 方案 A 队列之上的渲染层兜底：`backendReadySignal` 单例订阅 `backend:ready` 事件 + `useBackendReadyTick` 驱动 Chat/Sidebar/SessionWorkspaceProvider 启动期失败自动重放；`desktopInvoke` 剥离 IPC 包装前缀；`ProjectsOverview` 错误横幅 + 重试按钮 |
+| 147 | [侧边栏任务中心](./147-sidebar-task-center.md) | 六源任务归一（registry / chat / lane / goal / todo / scheduled）+ 侧边栏分区与 `/tasks` 页面 + 闲时目标终态通知队列 + panelRegistry 槽位迁移 |
 
 ---
 
