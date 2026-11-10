@@ -7,6 +7,7 @@ import { zhChatDisplayMode } from './locales/zh/chatDisplayMode';
 import { zhChatPdfOcr } from './locales/zh/chatPdfOcr';
 import { zhChatSteerStaging } from './locales/zh/chatSteerStaging';
 import { zhContextMenu } from './locales/zh/contextMenu';
+import { zhGovernanceFiles } from './locales/zh/governanceFiles';
 import { zhPetPack } from './locales/zh/petPack';
 import { zhPlaybook } from './locales/zh/playbook';
 import { zhRules } from './locales/zh/rules';
@@ -24,6 +25,7 @@ export const zh = {
   ...zhChatPdfOcr,
   ...zhChatSteerStaging,
   ...zhContextMenu,
+  ...zhGovernanceFiles,
   ...zhPetPack,
   ...zhPlaybook,
   ...zhRules,

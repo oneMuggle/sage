@@ -897,8 +897,8 @@ Layout 挂载
 ### M6 —— 文档归档与双分支同步
 
 - 删除 `docs/plans/2026-10-28_idle-deferred-task-execution.md`（功能已实现并归档）。
-- 新增 `docs/technical/146-sidebar-task-center.md`（main）/ 对应章节（win7）。
-- 新增 `docs/user-manual/46-task-center.md`（main）/ 对应章节（win7）。
+- 新增 `docs/technical/148-sidebar-task-center.md`（main）/ 对应章节（win7）。
+- 新增 `docs/user-manual/47-task-center.md`（main）/ 对应章节（win7）。
 - 在 `docs/superpowers/specs/README.md` 增加一行索引，状态标 `已实施`。
 - 提交 main → PR → cherry-pick 到 `release/win7` → py38 验证。
 
@@ -945,9 +945,9 @@ cherry-pick 前先 `git diff origin/release/win7` 确认 win7 没有已存在的
 | 文档 | 动作 |
 |---|---|
 | `docs/plans/2026-10-28_idle-deferred-task-execution.md` | **删除**（功能已实现并并入技术/用户手册） |
-| `docs/technical/146-sidebar-task-center.md` | 新建（main） |
+| `docs/technical/148-sidebar-task-center.md` | 新建（main） |
 | `docs/technical/<win7 编号>-sidebar-task-center.md` | 新建（win7） |
-| `docs/user-manual/46-task-center.md` | 新建（main） |
+| `docs/user-manual/47-task-center.md` | 新建（main） |
 | `docs/user-manual/<win7 编号>-task-center.md` | 新建（win7） |
 | `docs/superpowers/specs/README.md` | 增加索引行，状态 `已实施` |
 | `docs/superpowers/specs/2026-11-09-sidebar-task-center-design.md` | 保留（本文档） |

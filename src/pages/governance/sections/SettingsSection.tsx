@@ -1,10 +1,15 @@
 import { Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
-import { ProjectBootstrapPanel, ProjectOverviewWidgets } from '../../../features/project-type';
+import {
+  ProjectBootstrapPanel,
+  ProjectOverviewWidgets,
+  WikiGenerationPanel,
+} from '../../../features/project-type';
 import {
   StudioAllowedPathsTabPanel,
   StudioCharterTabPanel,
+  StudioMetadataPanel,
 } from '../../../features/project-type/StudioMaterialsAndProfilePanels';
 import {
   ARCHETYPE_BLUEPRINTS,
@@ -15,6 +20,13 @@ import {
 import type { ProjectType } from '../../../shared/api';
 import { Button } from '../../../shared/ui/Button';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../../shared/ui/Select/Select';
+import {
   formatProjectGovernanceAuditJson,
   formatProjectGovernanceAuditSnapshot,
 } from '../governanceAudit';
@@ -22,8 +34,10 @@ import type { GovernanceData } from '../useGovernanceProject';
 
 type GovernanceProject = NonNullable<GovernanceData['project']>;
 
-const SELECT_CLASS =
-  'rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground';
+/** Radix Select 不接受空字符串作为 item value，所以「未设置」用占位值替代。 */
+const NO_STAGE_VALUE = '__none__';
+
+const SELECT_TRIGGER_CLASS = 'h-8 w-auto min-w-[9rem] px-2 text-sm';
 
 export interface SettingsSectionProps {
   data: GovernanceData;
@@ -31,127 +45,110 @@ export interface SettingsSectionProps {
   onStartSession: () => void;
 }
 
-interface BootstrapBlockProps {
-  project: GovernanceProject;
-  projectType: ProjectType;
-  onReload: () => Promise<void>;
-}
-
-function BootstrapBlock({ project, projectType, onReload }: BootstrapBlockProps) {
+function SettingsSectionHeading({ title, hint }: { title: string; hint?: string }) {
   return (
-    <>
-      <ProjectBootstrapPanel projectId={project.id} />
-      <StudioCharterTabPanel
-        projectId={project.id}
-        projectPath={project.path}
-        projectType={projectType}
-        initialDescription={project.description}
-        initialInstructions={project.instructions}
-        onMetadataUpdated={(patch: { description: string | null; instructions: string | null }) => {
-          void onReload().then(() => patch);
-        }}
-      />
-    </>
-  );
-}
-
-function PlaybookNote() {
-  return (
-    <div
-      className="rounded-lg border border-border bg-card/50 p-3 text-xs text-muted-foreground"
-      data-testid="playbook-settings-note"
-    >
-      项目规程与阶段管理已移至「概览」页，避免重复扫描项目。
+    <div className="space-y-0.5">
+      <div className="text-sm font-semibold text-foreground">{title}</div>
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }
 
-interface TypeSelectProps {
-  value: ProjectType;
-  onChange: (next: ProjectType) => void;
-}
-
-function TypeSelect({ value, onChange }: TypeSelectProps) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value as ProjectType)}
-      aria-label="切换项目形态"
-      className={SELECT_CLASS}
-    >
-      {ARCHETYPE_ORDER.map((type) => (
-        <option key={type} value={type}>
-          形态：{ARCHETYPE_BLUEPRINTS[type].label}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-interface StageControlsProps {
-  stage: string;
+function ProjectControls({
+  data,
+  project,
+  stages,
+  nextStage,
+}: {
+  data: GovernanceData;
+  project: GovernanceProject;
   stages: ReadonlyArray<ArchetypeStageMeta>;
   nextStage: ArchetypeStageMeta | null;
-  onChangeStage: (next: string) => void;
-}
+}) {
+  const stageLabel = stages.find((stage) => stage.id === project.projectStage)?.label ?? '未设置';
 
-function StageControls({ stage, stages, nextStage, onChangeStage }: StageControlsProps) {
   return (
-    <>
-      <select
-        value={stage}
-        onChange={(e) => onChangeStage(e.target.value)}
-        aria-label="切换项目阶段"
-        className={SELECT_CLASS}
-      >
-        <option value="">阶段：未设置</option>
-        {stages.map((item) => (
-          <option key={item.id} value={item.id}>
-            阶段：{item.label}
-          </option>
-        ))}
-      </select>
-      {nextStage && (
-        <button
-          type="button"
-          onClick={() => onChangeStage(nextStage.id)}
-          data-testid="studio-advance-stage-btn"
-          title={`推进至下一阶段：${nextStage.label}`}
-          className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/15"
-        >
-          推进至「{nextStage.label}」→
-        </button>
-      )}
-    </>
-  );
-}
-
-interface VcsSelectProps {
-  value: 'git' | 'builtin';
-  onChange: (next: 'git' | 'builtin') => void;
-}
-
-function VcsSelect({ value, onChange }: VcsSelectProps) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value as 'git' | 'builtin')}
-      aria-label="切换版本控制模式"
-      data-testid="studio-vcs-mode-select"
-      className={SELECT_CLASS}
+    <div
+      className="rounded-lg border border-border bg-card p-3"
+      data-testid="governance-settings-controls"
     >
-      <option value="git">VCS：Git 仓库</option>
-      <option value="builtin">VCS：内置快照</option>
-    </select>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={data.activeProjectType}
+          onValueChange={(value) => void data.changeProjectType(value as ProjectType)}
+        >
+          <SelectTrigger aria-label="切换项目类型" className={SELECT_TRIGGER_CLASS}>
+            <SelectValue>
+              项目类型：{ARCHETYPE_BLUEPRINTS[data.activeProjectType].label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {ARCHETYPE_ORDER.map((type) => (
+              <SelectItem key={type} value={type}>
+                项目类型：{ARCHETYPE_BLUEPRINTS[type].label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={project.projectStage ?? NO_STAGE_VALUE}
+          onValueChange={(value) =>
+            void data.changeProjectStage(value === NO_STAGE_VALUE ? '' : value)
+          }
+        >
+          <SelectTrigger aria-label="切换项目阶段" className={SELECT_TRIGGER_CLASS}>
+            <SelectValue>阶段：{stageLabel}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_STAGE_VALUE}>阶段：未设置</SelectItem>
+            {stages.map((item) => (
+              <SelectItem key={item.id} value={item.id}>
+                阶段：{item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {nextStage && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void data.changeProjectStage(nextStage.id)}
+            data-testid="studio-advance-stage-btn"
+            title={`推进至下一阶段：${nextStage.label}`}
+          >
+            推进至「{nextStage.label}」→
+          </Button>
+        )}
+        <Select
+          value={project.vcsMode === 'git' ? 'git' : 'builtin'}
+          onValueChange={(value) => void data.changeVcsMode(value as 'git' | 'builtin')}
+        >
+          <SelectTrigger
+            aria-label="切换版本控制模式"
+            data-testid="studio-vcs-mode-select"
+            className={SELECT_TRIGGER_CLASS}
+          >
+            <SelectValue>
+              版本控制：{project.vcsMode === 'git' ? 'Git 仓库' : '内置快照'}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="git">版本控制：Git 仓库</SelectItem>
+            <SelectItem value="builtin">版本控制：内置快照</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
   );
 }
 
-interface ScaffoldButtonProps {
+function ScaffoldButton({
+  scaffolding,
+  onScaffold,
+}: {
   scaffolding: boolean;
   onScaffold: () => void;
-}
-
-function ScaffoldButton({ scaffolding, onScaffold }: ScaffoldButtonProps) {
+}) {
   return (
     <Button
       size="sm"
@@ -161,69 +158,20 @@ function ScaffoldButton({ scaffolding, onScaffold }: ScaffoldButtonProps) {
       data-testid="studio-scaffold-btn"
     >
       <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" />
-      {scaffolding ? '初始化中...' : '一键初始化目录与规范'}
+      {scaffolding ? '初始化中...' : '初始化目录与规范'}
     </Button>
   );
 }
 
-interface ProjectControlsProps {
-  data: GovernanceData;
-  project: GovernanceProject;
-  stages: ReadonlyArray<ArchetypeStageMeta>;
-  nextStage: ArchetypeStageMeta | null;
-}
-
-function ProjectControls({ data, project, stages, nextStage }: ProjectControlsProps) {
-  return (
-    <div
-      className="space-y-3 rounded-lg border border-border p-3"
-      data-testid="governance-settings-controls"
-    >
-      <div className="text-xs font-medium text-foreground">项目类型与版本控制</div>
-      <div className="flex flex-wrap items-center gap-2">
-        <TypeSelect
-          value={data.activeProjectType}
-          onChange={(next) => void data.changeProjectType(next)}
-        />
-        <StageControls
-          stage={project.projectStage ?? ''}
-          stages={stages}
-          nextStage={nextStage}
-          onChangeStage={(next) => void data.changeProjectStage(next)}
-        />
-        <VcsSelect
-          value={project.vcsMode === 'git' ? 'git' : 'builtin'}
-          onChange={(next) => void data.changeVcsMode(next)}
-        />
-        <ScaffoldButton scaffolding={data.scaffolding} onScaffold={() => void data.scaffold()} />
-      </div>
-    </div>
-  );
-}
-
-function AdvancedWidgets({ project }: { project: GovernanceProject }) {
-  return (
-    <details
-      className="rounded-lg border border-border bg-card/50"
-      data-testid="governance-advanced-widgets"
-    >
-      <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
-        高级项目操作（类型转换 / 快照 / 规则沉淀 / 任务拆解 / Git / Wiki）
-      </summary>
-      <div className="px-3 pb-3">
-        <ProjectOverviewWidgets project={project} />
-      </div>
-    </details>
-  );
-}
-
-interface AuditCopyRowProps {
+function AuditCopyRow({
+  data,
+  project,
+  activeTab,
+}: {
   data: GovernanceData;
   project: GovernanceProject;
   activeTab: string;
-}
-
-function AuditCopyRow({ data, project, activeTab }: AuditCopyRowProps) {
+}) {
   const [copiedSnapshot, setCopiedSnapshot] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
   const auditOptions = {
@@ -238,26 +186,28 @@ function AuditCopyRow({ data, project, activeTab }: AuditCopyRowProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span
+      <Button
+        size="sm"
+        variant="ghost"
         data-testid="project-governance-copy-snapshot"
         onClick={() => {
           setCopiedSnapshot(true);
           void navigator.clipboard?.writeText(formatProjectGovernanceAuditSnapshot(auditOptions));
         }}
-        className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground"
       >
-        {copiedSnapshot ? '已复制快照' : '复制治理快照'}
-      </span>
-      <span
+        {copiedSnapshot ? '已复制快照' : '复制项目状态摘要'}
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
         data-testid="project-governance-copy-json"
         onClick={() => {
           setCopiedJson(true);
           void navigator.clipboard?.writeText(formatProjectGovernanceAuditJson(auditOptions));
         }}
-        className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground"
       >
-        {copiedJson ? '已复制JSON' : '导出治理JSON'}
-      </span>
+        {copiedJson ? '已复制JSON' : '复制项目状态 JSON'}
+      </Button>
     </div>
   );
 }
@@ -276,33 +226,96 @@ export function SettingsSection({ data, activeTab }: SettingsSectionProps) {
         : null;
 
   return (
-    <div className="space-y-4">
-      <BootstrapBlock
-        project={project}
-        projectType={data.activeProjectType}
-        onReload={data.reload}
-      />
-      <PlaybookNote />
-      <ProjectControls data={data} project={project} stages={stages} nextStage={nextStage} />
-      <div
-        className="space-y-3 rounded-lg border border-border p-3"
-        data-testid="settings-allowed-paths"
-      >
-        <div className="text-xs font-medium text-foreground">跨目录只读白名单</div>
-        <StudioAllowedPathsTabPanel
-          projectPath={project.path}
+    <div className="space-y-5" data-testid="governance-settings">
+      {/* 1. 基本信息（项目描述 + 会话指令） */}
+      <section className="space-y-2">
+        <SettingsSectionHeading title="基本信息" hint="项目描述与会话指令会作为每次会话的背景" />
+        <StudioMetadataPanel
+          projectId={project.id}
           projectType={data.activeProjectType}
-          allowedPaths={project.allowedPaths ?? []}
-          newAllowedPath={data.newAllowedPath}
-          onNewAllowedPathChange={data.setNewAllowedPath}
-          savingPaths={data.savingPaths}
-          onAddAllowedPath={data.addAllowedPath}
-          onQuickAddPresetPath={data.quickAddPresetPath}
-          onRemoveAllowedPath={data.removeAllowedPath}
+          initialDescription={project.description}
+          initialInstructions={project.instructions}
+          onMetadataUpdated={() => void data.reload()}
         />
-      </div>
-      <AdvancedWidgets project={project} />
-      <AuditCopyRow data={data} project={project} activeTab={activeTab} />
+      </section>
+
+      {/* 2. 项目总纲（SAGE.md，折叠） */}
+      <section className="space-y-2">
+        <SettingsSectionHeading
+          title="项目总纲（SAGE.md）"
+          hint="项目最高优先级的背景说明，通常由 AI 初始化生成或手工维护"
+        />
+        <details className="rounded-lg border border-border bg-card">
+          <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+            编辑项目总纲（SAGE.md）
+          </summary>
+          <div className="px-3 pb-3">
+            <StudioCharterTabPanel projectId={project.id} projectPath={project.path} />
+          </div>
+        </details>
+      </section>
+
+      {/* 3. AI 初始化（默认不自动扫描） */}
+      <section className="space-y-2">
+        <SettingsSectionHeading
+          title="AI 初始化"
+          hint="按需分析项目并生成建议；应用前需逐条勾选，不会自动修改文件"
+        />
+        <ProjectBootstrapPanel projectId={project.id} />
+      </section>
+
+      {/* 4. 项目类型与版本控制 */}
+      <section className="space-y-2">
+        <SettingsSectionHeading title="项目类型与版本控制" />
+        <ProjectControls data={data} project={project} stages={stages} nextStage={nextStage} />
+      </section>
+
+      {/* 5. 高级（默认折叠） */}
+      <details
+        className="rounded-lg border border-border bg-card/50"
+        data-testid="governance-settings-advanced"
+      >
+        <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+          高级设置（目录初始化 · 外部文件夹 · Wiki · 快照与导出台账）
+        </summary>
+        <div className="space-y-3 px-3 pb-3">
+          <div className="space-y-2">
+            <SettingsSectionHeading title="目录初始化" hint="按项目类型生成目录骨架与规范模板" />
+            <ScaffoldButton
+              scaffolding={data.scaffolding}
+              onScaffold={() => void data.scaffold()}
+            />
+          </div>
+          <div className="space-y-2" data-testid="settings-allowed-paths">
+            <SettingsSectionHeading
+              title="外部文件夹（只读）"
+              hint="允许 AI 读取项目目录之外的文件，不会修改它们"
+            />
+            <StudioAllowedPathsTabPanel
+              projectPath={project.path}
+              projectType={data.activeProjectType}
+              allowedPaths={project.allowedPaths ?? []}
+              newAllowedPath={data.newAllowedPath}
+              onNewAllowedPathChange={data.setNewAllowedPath}
+              savingPaths={data.savingPaths}
+              onAddAllowedPath={data.addAllowedPath}
+              onQuickAddPresetPath={data.quickAddPresetPath}
+              onRemoveAllowedPath={data.removeAllowedPath}
+            />
+          </div>
+          <div data-testid="governance-advanced-widgets">
+            <ProjectOverviewWidgets project={project} />
+          </div>
+          <div className="space-y-2">
+            <SettingsSectionHeading
+              title="项目 Wiki"
+              hint="按需生成项目文档站；生成前会先给草稿预览，确认后才写入"
+            />
+            <WikiGenerationPanel projectId={project.id} projectType={data.activeProjectType} />
+          </div>
+          <AuditCopyRow data={data} project={project} activeTab={activeTab} />
+        </div>
+      </details>
     </div>
   );
 }

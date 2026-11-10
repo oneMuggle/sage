@@ -3763,8 +3763,8 @@ pending 端点第四键并入既有 15s 轮询；无 title 条目仍被丢弃。
 
 **Files:**
 - Delete: `docs/plans/2026-10-28_idle-deferred-task-execution.md`
-- Create: `docs/technical/146-sidebar-task-center.md`
-- Create: `docs/user-manual/46-task-center.md`
+- Create: `docs/technical/148-sidebar-task-center.md`
+- Create: `docs/user-manual/47-task-center.md`
 - Modify: `docs/technical/README.md`、`docs/user-manual/README.md`、`docs/superpowers/specs/README.md`
 
 - [ ] **Step 1: 确认技术/用户手册的下一可用编号**
@@ -3777,7 +3777,7 @@ Expected: 技术最大编号 145（→ 新文件 146）；用户最大编号 45�
 
 - [ ] **Step 2: 新建技术文档**
 
-Create `docs/technical/146-sidebar-task-center.md`（结构：总览 → 架构 → 六源归一 → 轮询与可见性 → 通知链路 → 双分支差异 → 排障）。开头一句话定位 + 章节目录。正文复用 spec §3–§8，改写为"实现说明"而非"设计论证"。
+Create `docs/technical/148-sidebar-task-center.md`（结构：总览 → 架构 → 六源归一 → 轮询与可见性 → 通知链路 → 双分支差异 → 排障）。开头一句话定位 + 章节目录。正文复用 spec §3–§8，改写为"实现说明"而非"设计论证"。
 
 最低必须包含的表格：
 
@@ -3794,7 +3794,7 @@ Create `docs/technical/146-sidebar-task-center.md`（结构：总览 → 架构 
 
 - [ ] **Step 3: 新建用户手册**
 
-Create `docs/user-manual/46-task-center.md`。内容：任务中心在哪（侧边栏「任务」导航 + 内容列分区 + `/tasks` 页面）、六种任务来源各代表什么、失败任务如何重试、如何取消、闲时目标完成会收到系统通知。
+Create `docs/user-manual/47-task-center.md`。内容：任务中心在哪（侧边栏「任务」导航 + 内容列分区 + `/tasks` 页面）、六种任务来源各代表什么、失败任务如何重试、如何取消、闲时目标完成会收到系统通知。
 
 - [ ] **Step 4: 更新两个 README 目录**
 

@@ -2,47 +2,36 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
-const { list, setStatus } = vi.hoisted(() => ({ list: vi.fn(), setStatus: vi.fn() }));
+const { setStatus } = vi.hoisted(() => ({ setStatus: vi.fn() }));
 
 vi.mock('../../shared/lib/i18n', () => ({
   useI18n: () => ({ locale: 'en', t: (key: string) => key }),
 }));
 vi.mock('../../widgets/sidebar/sections/WorkbenchProjectList', () => ({
-  WorkbenchProjectList: () => <div data-testid="overview-list" />,
+  WorkbenchProjectList: (props: {
+    filters?: { q: string; status: string };
+    selectable?: boolean;
+    selectedIds?: string[];
+    addSignal?: number;
+    onToggleSelect?: (id: string) => void;
+    onOpenSession?: (id: string) => void;
+  }) => (
+    <div data-testid="projects-list-mock">
+      <span data-testid="filters-q">{props.filters?.q ?? ''}</span>
+      <span data-testid="filters-status">{props.filters?.status ?? ''}</span>
+      <span data-testid="selectable">{String(Boolean(props.selectable))}</span>
+      <span data-testid="selected-count">{props.selectedIds?.length ?? 0}</span>
+      <span data-testid="add-signal">{props.addSignal ?? 0}</span>
+      <button data-testid="mock-toggle-p1" onClick={() => props.onToggleSelect?.('p-1')} />
+    </div>
+  ),
 }));
 vi.mock('../../shared/api', async () => {
   const actual = await vi.importActual<typeof import('../../shared/api')>('../../shared/api');
-  return { ...actual, projectApi: { ...actual.projectApi, list, setProjectStatus: setStatus } };
+  return { ...actual, projectApi: { ...actual.projectApi, setProjectStatus: setStatus } };
 });
 
 import { ProjectsOverview } from '../ProjectsOverview';
-
-const ROWS = [
-  {
-    id: 'p-1',
-    name: 'Sage',
-    path: '/w/sage',
-    projectType: 'coding',
-    lastOpenedAt: 30,
-    createdAt: 1,
-    sessionCount: 2,
-    lastSessionId: null,
-    allowedPaths: [],
-    status: 'active',
-  },
-  {
-    id: 'p-2',
-    name: 'Paper',
-    path: '/w/paper',
-    projectType: 'research',
-    lastOpenedAt: 10,
-    createdAt: 1,
-    sessionCount: 0,
-    lastSessionId: null,
-    allowedPaths: [],
-    status: 'archived',
-  },
-];
 
 function renderPage() {
   return render(
@@ -53,56 +42,47 @@ function renderPage() {
 }
 
 describe('ProjectsOverview', () => {
-  it('lists active projects by default and filters by query', async () => {
-    list.mockResolvedValue(ROWS);
+  it('renders the single project list with default active filter', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByTestId('projects-overview-rows')).toBeInTheDocument());
-    expect(screen.getByText('Sage')).toBeInTheDocument();
-    expect(screen.queryByText('Paper')).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByTestId('projects-overview-search'), { target: { value: 'sag' } });
-    expect(screen.getByText('Sage')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('projects-list-mock')).toBeInTheDocument());
+    expect(screen.getByTestId('filters-status')).toHaveTextContent('active');
+    expect(screen.getByTestId('filters-q')).toHaveTextContent('');
   });
 
-  it('switches to archived filter', async () => {
-    list.mockResolvedValue(ROWS);
+  it('filters by query and switches status', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByText('Sage')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('projects-list-mock')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByTestId('projects-overview-search'), {
+      target: { value: 'sag' },
+    });
+    expect(screen.getByTestId('filters-q')).toHaveTextContent('sag');
+
     fireEvent.click(screen.getByTestId('projects-overview-status-archived'));
-    expect(screen.getByText('Paper')).toBeInTheDocument();
-    expect(screen.queryByText('Sage')).not.toBeInTheDocument();
+    expect(screen.getByTestId('filters-status')).toHaveTextContent('archived');
   });
 
-  it('archives a selected project', async () => {
-    list.mockResolvedValue(ROWS);
-    setStatus.mockResolvedValue({ ...ROWS[0], status: 'archived' });
+  it('enters batch mode and archives selected projects', async () => {
+    setStatus.mockResolvedValue({});
     renderPage();
-    await waitFor(() =>
-      expect(screen.getByTestId('projects-overview-row-p-1')).toBeInTheDocument(),
-    );
-    fireEvent.click(screen.getByTestId('projects-overview-select-p-1'));
+    await waitFor(() => expect(screen.getByTestId('projects-list-mock')).toBeInTheDocument());
+
+    expect(screen.getByTestId('selectable')).toHaveTextContent('false');
+    fireEvent.click(screen.getByTestId('projects-overview-select-mode'));
+    expect(screen.getByTestId('selectable')).toHaveTextContent('true');
+
+    fireEvent.click(screen.getByTestId('mock-toggle-p1'));
+    expect(screen.getByTestId('selected-count')).toHaveTextContent('1');
+
     fireEvent.click(screen.getByTestId('projects-overview-archive'));
     await waitFor(() => expect(setStatus).toHaveBeenCalledWith('p-1', 'archived'));
   });
 
-  it('加载失败时展示错误横幅而非静默空态', async () => {
-    list.mockRejectedValue(new Error('后端服务尚未就绪,请稍候或重启 Sage'));
+  it('opens the add dialog signal from the page header', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByTestId('projects-overview-error')).toBeInTheDocument());
-    expect(screen.getByText(/加载项目列表失败/)).toBeInTheDocument();
-  });
-
-  it('点击重试后重新拉取并清除错误横幅', async () => {
-    list.mockRejectedValueOnce(new Error('后端服务尚未就绪,请稍候或重启 Sage'));
-    renderPage();
-    await waitFor(() => expect(screen.getByTestId('projects-overview-error')).toBeInTheDocument());
-
-    list.mockResolvedValueOnce(ROWS);
-    fireEvent.click(screen.getByRole('button', { name: '重试' }));
-
-    await waitFor(() =>
-      expect(screen.queryByTestId('projects-overview-error')).not.toBeInTheDocument(),
-    );
-    expect(screen.getByText('Sage')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('projects-list-mock')).toBeInTheDocument());
+    expect(screen.getByTestId('add-signal')).toHaveTextContent('0');
+    fireEvent.click(screen.getByTestId('projects-overview-new'));
+    expect(screen.getByTestId('add-signal')).toHaveTextContent('1');
   });
 });

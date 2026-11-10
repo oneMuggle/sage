@@ -28,6 +28,23 @@ export function layerLabelKey(layer: LayerFilter): TranslationKey {
   return LABEL_KEYS[layer];
 }
 
+/**
+ * 行内来源细节：分组标题已标明来源层级，行内只补充「具体来自哪个文件 / 哪个阶段」。
+ *
+ * - 路径型 scope（项目总纲层）只显示文件名，完整路径放进 `title` 供悬停查看；
+ * - 全局规则层只有唯一来源，无需再标注；
+ * - 其余 scope（阶段名 / 「全局」）原样展示。
+ */
+export function sourceDetail(entry: RuleEntry): { text: string; title?: string } | null {
+  if (entry.layer === 'global') return null;
+  const scope = entry.scope.trim();
+  if (!scope) return null;
+  const isPath = scope.includes('/') || scope.includes('\\');
+  if (!isPath) return { text: scope };
+  const name = scope.split(/[\\/]/).filter(Boolean).pop() ?? scope;
+  return { text: name, title: scope };
+}
+
 /** 按层级分组；空层不产生分组，组内保持后端顺序。 */
 export function buildRuleGroups(entries: readonly RuleEntry[]): RuleGroup[] {
   return LAYER_ORDER.map((layer) => ({
