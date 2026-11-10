@@ -1,4 +1,4 @@
-# 146. 项目工作台 IA 与交互（/projects + 治理五章）
+# 147. 项目工作台 IA 与交互（/projects + 治理五章）
 
 **最后更新**: 2026-11-10
 **适用分支**: main + release/win7
@@ -6,7 +6,7 @@
 
 ---
 
-## 146.1 背景
+## 147.1 背景
 
 项目工作台（`/projects` + `/projects/:id`）是用户管理「规则 / 资料 / 文件 / 设置」的主入口。2026-11-09 的真机走查发现两类问题：
 
@@ -17,7 +17,7 @@
 
 改造前实测确认的问题清单见 [用户手册 §46](../user-manual/46-project-workbench.md) 的「改造前的问题」一节；本文只讲实现结构。
 
-## 146.2 设计原则
+## 147.2 设计原则
 
 | 原则 | 落地方式 |
 | --- | --- |
@@ -28,7 +28,7 @@
 | 文案口语化 | 全面替换 L 层 / 审计 / 注入 / 语料池等内部术语 |
 | 克制的层级 | 去掉内容外层 `Card p-4`，改用「分区标题 + 间距」 |
 
-## 146.3 模块与职责
+## 147.3 模块与职责
 
 | 路径 | 职责 |
 | --- | --- |
@@ -50,9 +50,9 @@
 | `src/shared/lib/i18n/locales/{zh,en}/governanceFiles.ts` | 文件引用域词典（新增） |
 | `src/shared/ui/Select/Select.tsx` | 共享 Radix `Select`（**未改动**，治理页与文件页统一复用） |
 
-## 146.4 `/projects` 列表
+## 147.4 `/projects` 列表
 
-### 146.4.1 结构
+### 147.4.1 结构
 
 ```
 ┌ 项目                                   [+ 新建项目] ┐
@@ -66,7 +66,7 @@
 - 容器 `mx-auto w-full max-w-[960px] px-6 py-6`；此前页面外层为 `flex-1` 的朴素 `<ul>`，项目少时被拉满剩余高度，形成「列表上方大块空白」。该朴素列表与底部完整列表**同时存在**，本次删除朴素列表，只保留 `WorkbenchProjectList`。
 - 列表行为不变的部分：整行点击打开工作台、hover 出现「新建会话 / 开始会话」主操作与 `···` 菜单（新建会话 / 归档 / 移除 / 在文件夹中显示 / 复制路径等）、行内可展开会话子列表、拖放注册项目目录。
 
-### 146.4.2 批量模式
+### 147.4.2 批量模式
 
 复选框默认不渲染，避免干扰浏览。点「批量管理」进入选择模式：
 
@@ -75,7 +75,7 @@
 - 离开选择模式自动清空选择集；
 - 归档走 `projectApi.setProjectStatus(id, 'archived')`，完成后 `refreshKey` 自增触发列表刷新。
 
-### 146.4.3 启动竞态修复
+### 147.4.3 启动竞态修复
 
 `useProjectSectionData` 原来只在挂载时 `refresh()` 一次；后端未就绪时该请求失败且不再重试，导致侧栏与工作台项目区**永久显示空态**（主区却有数据）。修复方式：
 
@@ -86,7 +86,7 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 
 `api.listen` 不可用（非 Electron 环境）时直接跳过，不影响其他行为。
 
-## 146.5 治理页壳层
+## 147.5 治理页壳层
 
 `GovernanceShell` 由「外层 Card + pill Tab」改为「头部 + 下划线 Tab + 裸内容区」：
 
@@ -99,7 +99,7 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 
 `governanceTabs.ts` 的 `governanceHref` / `parseGovernanceTab` 与深链 `?tab=` 语义不变；旧深链 `?knowledge=rules` 仍重定向到 `?tab=rules`。
 
-## 146.6 概览章
+## 147.6 概览章
 
 按「项目现在什么状态 → 我下一步该做什么」重排：
 
@@ -113,7 +113,7 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 
 原跨页动作（`+规则` / `+记忆` / `+资料` / 「存为资料」）从概览移除，回到规则章与资料章执行；「文件整理建议」与工程概览下沉到折叠区。
 
-## 146.7 设置章
+## 147.7 设置章
 
 五个分区，**零自动耗时任务**：
 
@@ -125,7 +125,7 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 | 4 | 项目类型与版本控制 | 形态 / 阶段 / VCS 三个下拉 + 「推进至下一阶段」按钮 |
 | 5 | 高级设置（折叠） | 目录初始化 · 外部文件夹（只读）· 工程概览 · 项目 Wiki · 快照与导出台账 |
 
-### 146.7.1 `autoStart` 开关
+### 147.7.1 `autoStart` 开关
 
 `ProjectBootstrapPanel` 新增可选 prop `autoStart?: boolean`（默认 `false`）：
 
@@ -134,7 +134,7 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 
 设置页与概览页均使用默认关闭。
 
-### 146.7.2 术语替换
+### 147.7.2 术语替换
 
 | 旧文案 | 新文案 |
 | --- | --- |
@@ -143,7 +143,7 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 | 跨目录只读白名单 | 外部文件夹（只读） |
 | 一键初始化目录与规范 | 补齐项目目录与说明文件 |
 
-## 146.8 资料章
+## 147.8 资料章
 
 二级 Tab 由 `?knowledge=materials|profile` 驱动（`governance-knowledge-materials` / `governance-knowledge-profile`）：
 
@@ -154,7 +154,7 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 
 `StudioMaterialsAndProfilePanels.tsx` 拆分后各文件均 < 800 行上限；新拆出的两个面板文件分别为 346 / 173 行。
 
-## 146.9 文件章 i18n
+## 147.9 文件章 i18n
 
 新增词典域 `governance.files.*`（`src/shared/lib/i18n/locales/{zh,en}/governanceFiles.ts`，中文为类型源）：
 
@@ -176,7 +176,7 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 
 `ReferenceManager` 原有 `data-testid` 全部保留（`reference-input-kind` / `reference-input-rel-path` / `reference-input-target-path` / `reference-input-alias` / `reference-create-button` / `reference-scan-button` / `reference-row-<id>` / `reference-delete-<id>` / `reference-list-empty` / `reference-error`）。
 
-## 146.10 规则章文案收敛
+## 147.10 规则章文案收敛
 
 只改显示层，不动数据模型、API 与筛选逻辑：
 
@@ -188,7 +188,7 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 - 冲突计数加 tooltip，说明「同一分类下内容不一致的规则」。
 - 「查看最终生效规则」→「查看规则生效顺序」。
 
-## 146.11 共享 `Select` 迁移的三个坑
+## 147.11 共享 `Select` 迁移的三个坑
 
 治理页与文件页的原生 `<select>` 统一迁到 `src/shared/ui/Select/Select.tsx`（Radix 封装）。迁移中踩到的三个坑：
 
@@ -196,7 +196,7 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 2. **Radix 拒绝空字符串 `value`。** 「阶段：未设置」不能用 `value=""`，改用哨兵值 `NO_STAGE_VALUE = '__none__'`，在 `onValueChange` 里映射回 `''`。
 3. **jsdom 下的指针手势。** Radix Select 依赖 `hasPointerCapture` / `setPointerCapture` / `scrollIntoView` / `ResizeObserver`，jsdom 均未实现，测试里需要 polyfill；打开用 `pointerDown(trigger, { button: 0, pointerType: 'mouse' })`，选中需 `pointerDown` → `pointerMove` → `pointerUp` 且 `clientX/clientY` 偏移 > 10px（否则触发 Radix 的拖拽展开保护）。
 
-## 146.12 测试与门禁
+## 147.12 测试与门禁
 
 | 门禁 | 结果 |
 | --- | --- |
@@ -216,7 +216,7 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 | `src/features/project-type/__tests__/ProjectBootstrapPanel.test.tsx` | 默认不自动请求 suggest，手动「分析项目」触发 |
 | `src/features/rules/__tests__/rulesView.test.ts` | `sourceDetail()`（路径/非路径/全局层） |
 
-## 146.13 双分支同步
+## 147.13 双分支同步
 
 全部为纯前端改动。按里程碑逐个 cherry-pick 到 `release/win7`（**不合并 win7 到 main**）：
 
