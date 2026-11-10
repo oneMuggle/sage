@@ -51,10 +51,12 @@ from __future__ import annotations
 import logging
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-import pymupdf
-from docx import Document
+if TYPE_CHECKING:
+    import pymupdf
+    from docx.document import Document
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from .errors import OfficeError
@@ -71,6 +73,18 @@ __all__ = [
     "PdfToWordResult",
     "convert_pdf_to_word",
 ]
+
+
+# Phase 3.5：pymupdf(~300ms) + docx(~90ms) 只在真正做 PDF→Word 转换时才用得上；
+# 启动路径不触发 → 改为按需惰性导入。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_attr, load_module
+
+    if name == "pymupdf":
+        return load_module("pymupdf", "pymupdf", globals())
+    if name == "Document":
+        return load_attr("docx", "Document", globals())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 #: 標題启发式阈值（相对正文字号）：block 内最大字号 ≥ 正文×1.6 → Heading 1。
 HEADING1_SIZE_RATIO = 1.6
@@ -288,6 +302,9 @@ def _build_docx(
     duplicated as stray paragraphs (blocks are only dropped when the
     corresponding table actually made it into the document).
     """
+    from backend.core.lazy import load_attr
+
+    Document = load_attr("docx", "Document", globals())
     doc = Document()
     # 与 word.generate_docx 一致的中西文默认字体（宋体 / Times New Roman），
     # 避免转换产物在中文 Word 里回退到日文 theme 字体。
@@ -398,6 +415,9 @@ def _convert_inner(source: Path, workspace: Path, out_filename: str) -> PdfToWor
         )
 
     try:
+        from backend.core.lazy import load_module
+
+        pymupdf = load_module("pymupdf", "pymupdf", globals())
         pdf = pymupdf.open(str(resolved_source))
     except Exception as exc:
         logger.warning("Failed to open source PDF: %s", exc)

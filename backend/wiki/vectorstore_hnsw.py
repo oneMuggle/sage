@@ -8,10 +8,9 @@ import os
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import hnswlib
-import numpy as np
 
 from .files import (
     _require_posix_safety,
@@ -26,6 +25,16 @@ from .files import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# Phase 3.5：numpy(~380ms，由 sqlite_vec 之外 wiki 路径独立拉入) 只在真正
+# upsert / 搜索向量时才用到；启动路径不触发 → 改为按需惰性导入。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_module
+
+    if name == "np":
+        return load_module("numpy", "np", globals())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 @dataclass
@@ -175,6 +184,9 @@ class HNSWVectorStore:
 
         # 批量添加向量
         if vectors:
+            from backend.core.lazy import load_module
+
+            np = load_module("numpy", "np", globals())
             vectors_array = np.array(vectors, dtype=np.float32)
             labels_array = np.array(labels, dtype=np.int64)
             self.index.add_items(vectors_array, labels_array)
@@ -243,6 +255,9 @@ class HNSWVectorStore:
             return []
 
         # 执行搜索
+        from backend.core.lazy import load_module
+
+        np = load_module("numpy", "np", globals())
         query_array = np.array([query_vec], dtype=np.float32)
         if allowed_paths is None:
             labels, distances = self.index.knn_query(query_array, k=min(limit, len(self.records)))

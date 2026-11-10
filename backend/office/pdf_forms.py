@@ -13,9 +13,10 @@ Security posture mirrors ``pdf.py`` and ``word_template.py``:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List
 
-import pymupdf
+if TYPE_CHECKING:
+    import pymupdf
 
 from .errors import (
     OfficeFileNotFoundError,
@@ -33,6 +34,17 @@ from .models import (
 from .path_safety import resolve_within
 from .pdf import _validate_pdf_file
 from .storage import validate_workspace
+
+
+# Phase 3.5：pymupdf(~300ms) 只在真正读写 PDF 表单时才用得上；启动路径
+# （会话列表 / 聊天）不触发 → 改为按需惰性导入。
+def __getattr__(name: str) -> Any:
+    from backend.core.lazy import load_module
+
+    if name == "pymupdf":
+        return load_module("pymupdf", "pymupdf", globals())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # Widget field-type int -> human-readable name.
 # Values match PyMuPDF's PDF_WIDGET_TYPE_* constants (valid range 1-7).
@@ -76,6 +88,9 @@ def read_pdf_form(
     _validate_pdf_file(file_path)
 
     try:
+        from backend.core.lazy import load_module
+
+        pymupdf = load_module("pymupdf", "pymupdf", globals())
         doc = pymupdf.open(str(file_path))
     except OfficeSizeLimitError:
         raise
@@ -165,6 +180,9 @@ def fill_pdf_form(req: PdfFormFillRequest) -> PdfFormFillResult:
 
     # ── Open template ───────────────────────────────────────────────────
     try:
+        from backend.core.lazy import load_module
+
+        pymupdf = load_module("pymupdf", "pymupdf", globals())
         doc = pymupdf.open(str(template_path))
     except OfficeSizeLimitError:
         raise

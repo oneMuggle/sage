@@ -22,11 +22,6 @@ import uuid
 from pathlib import Path
 from typing import Any, List, Tuple
 
-from docx import Document
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from docx.shared import Cm, Pt
-
 from backend.office.journal.errors import (
     JournalContentShapeError,
     JournalGenerationError,
@@ -42,6 +37,8 @@ from backend.office.journal.persistence import (
     save_spec,
 )
 from backend.office.path_safety import resolve_within
+
+from .._docx_lazy import Cm, Document, OxmlElement, Pt, qn
 
 
 def _validate_content_shape(spec: JournalSpec, content: JournalContent) -> None:

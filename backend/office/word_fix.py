@@ -12,13 +12,15 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from docx import Document
-from docx.enum.section import WD_ORIENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from docx.shared import Cm, Inches, Pt, RGBColor
-
+from ._docx_lazy import (
+    Cm,
+    Document,
+    OxmlElement,
+    Pt,
+    align_map,
+    page_sizes,
+    qn,
+)
 from .errors import OfficeFileNotFoundError, OfficeParseError, OfficePathError
 from .path_safety import resolve_within
 from .word_audit import audit_word_document, validate_rulepack
@@ -29,23 +31,12 @@ from .word_rulepack_models import (
     WordRuleSpec,
 )
 
-_PAGE_SIZES = {
-    "A4": (Cm(21.0), Cm(29.7)),
-    "LETTER": (Inches(8.5), Inches(11)),
-}
 _MARGIN_ATTRS = (
     ("top", "top_margin"),
     ("bottom", "bottom_margin"),
     ("left", "left_margin"),
     ("right", "right_margin"),
 )
-_ALIGNMENTS = {
-    "left": WD_ALIGN_PARAGRAPH.LEFT,
-    "center": WD_ALIGN_PARAGRAPH.CENTER,
-    "right": WD_ALIGN_PARAGRAPH.RIGHT,
-    "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
-    "distribute": WD_ALIGN_PARAGRAPH.DISTRIBUTE,
-}
 _SAVE_RETRY_DELAYS = (0.0, 0.1, 0.25, 0.5, 1.0)
 
 
@@ -131,9 +122,10 @@ def _set_east_asia(style: Any, name: str) -> bool:
 
 def _fix_page_size(ctx: _FixContext, rule: WordRuleSpec) -> int:
     expected = str(rule.params.get("size", "A4")).strip().upper()
-    if expected not in _PAGE_SIZES:
+    sizes = page_sizes()
+    if expected not in sizes:
         raise OfficeParseError(f"规则 {rule.id} 不支持页面尺寸 {expected}")
-    width, height = _PAGE_SIZES[expected]
+    width, height = sizes[expected]
     changed = 0
     for section in ctx.document.sections:
         landscape = (
@@ -152,6 +144,8 @@ def _fix_page_size(ctx: _FixContext, rule: WordRuleSpec) -> int:
 
 
 def _fix_page_orientation(ctx: _FixContext, rule: WordRuleSpec) -> int:
+    from docx.enum.section import WD_ORIENT
+
     expected = str(rule.params.get("orientation", "portrait")).strip().lower()
     if expected not in ("portrait", "landscape"):
         raise OfficeParseError(f"规则 {rule.id} 不支持页面方向 {expected}")
@@ -218,6 +212,8 @@ def _fix_page_number(ctx: _FixContext, rule: WordRuleSpec) -> int:
 
 
 def _fix_style_font(ctx: _FixContext, rule: WordRuleSpec) -> int:
+    from docx.shared import RGBColor
+
     style_name = str(rule.params.get("style", "Normal"))
     style = _find_style(ctx.document, style_name)
     if style is None:
@@ -295,14 +291,15 @@ def _fix_style_paragraph(ctx: _FixContext, rule: WordRuleSpec) -> int:
             changed += 1
     if "alignment" in rule.params:
         expected_alignment = str(rule.params["alignment"]).strip().lower()
-        if expected_alignment not in _ALIGNMENTS:
+        alignments = align_map()
+        if expected_alignment not in alignments:
             raise OfficeParseError(
                 f"规则 {rule.id} 不支持对齐方式 {expected_alignment}"
             )
         alignment = fmt.alignment
         current_alignment = alignment.name.lower() if alignment is not None else "left"
         if current_alignment != expected_alignment:
-            fmt.alignment = _ALIGNMENTS[expected_alignment]
+            fmt.alignment = alignments[expected_alignment]
             changed += 1
     return changed
 

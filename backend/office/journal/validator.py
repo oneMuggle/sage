@@ -11,15 +11,14 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from docx import Document
-from docx.oxml.ns import qn
-
 from backend.office.journal.models import (
     CitationStyle,
     JournalSpec,
     JournalViolation,
     ViolationSeverity,
 )
+
+from .._docx_lazy import Document, qn
 
 _TOLERANCE_PT = 0.5
 _TOLERANCE_CM = 0.3

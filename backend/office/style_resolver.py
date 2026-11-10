@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from docx.oxml.ns import qn
-
 _DEFAULT_FORMAT: Dict[str, Any] = {
     "font_ascii": None,
     "font_east_asia": None,
@@ -15,6 +13,20 @@ _DEFAULT_FORMAT: Dict[str, Any] = {
     "underline": False,
     "color": None,
 }
+
+
+# Phase 3.5：``docx.oxml.ns`` 所在的 ``docx.oxml`` 包在 import 时会拉进
+# lxml(~76ms)。本模块只在真正解析 .docx 样式时才用得上 → 按需惰性导入。
+def qn(tag: str) -> str:
+    """把 ``w:p`` 形式的标签展开为 ``{namespace}p``。
+
+    真正的实现在 ``docx.oxml.ns``。模块级 ``__getattr__`` 不参与函数体内的
+    LOAD_GLOBAL，所以这里保留一个同名薄壳：首次调用时才导入并缓存，
+    调用语义与 docx 原生 ``qn`` 完全一致。
+    """
+    from backend.core.lazy import load_attr
+
+    return load_attr("docx.oxml.ns", "qn", globals(), alias="_docx_qn")(tag)
 
 
 def _bool_value(element: Any) -> bool:

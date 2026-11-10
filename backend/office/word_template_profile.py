@@ -7,9 +7,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from docx import Document
-from docx.oxml.ns import qn
-
+from ._docx_lazy import Document, qn
 from .errors import OfficeFileNotFoundError, OfficeParseError
 from .word_template import _validate_docx_zip
 
