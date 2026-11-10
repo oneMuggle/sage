@@ -1,6 +1,6 @@
 # 技术专题文档总览
 
-> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-151；本索引以目录中的实际文件为准。
+> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-152；本索引以目录中的实际文件为准。
 
 ---
 
@@ -126,6 +126,7 @@
 | 146 | [渲染层 BackendNotReadyError 自愈](./146-backend-ready-renderer-recovery.md) | 方案 A 队列之上的渲染层兜底：`backendReadySignal` 单例订阅 `backend:ready` 事件 + `useBackendReadyTick` 驱动 Chat/Sidebar/SessionWorkspaceProvider 启动期失败自动重放；`desktopInvoke` 剥离 IPC 包装前缀；`ProjectsOverview` 错误横幅 + 重试按钮 |
 | 147 | [项目工作台 IA 与交互](./147-project-workbench-ia.md) | 单列表 + 批量模式 + 治理壳层视觉统一 + 概览/设置/资料/文件/规则五章重组 + 文件章 i18n + 共享 Radix Select 迁移 |
 | 151 | [权限对话框 UX 优化](./151-permission-dialog-ux.md) | 来源会话标签（多会话并行辨识请求来源）+ 长命令完整展示（截断常量 1000→4000 / 对话框加宽） |
+| 152 | [侧边栏任务中心](./152-sidebar-task-center.md) | 六源任务归一（registry / chat / lane / goal / todo / scheduled）+ 侧边栏分区与 `/tasks` 页面 + 闲时目标终态通知队列 + panelRegistry 槽位迁移 |
 
 ---
 

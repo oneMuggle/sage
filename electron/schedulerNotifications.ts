@@ -2,7 +2,7 @@
 //
 // 后台任务完成通知轮询器（2026-11-05）。
 //
-// 后端把"定时任务触发/失败"与"待办提醒"累积在两个内存队列里；
+// 后端把"定时任务触发/失败"、"待办提醒"、"后台任务完成"与"闲时目标终态"累积在四个内存队列里；
 // GET /api/v1/scheduled/notifications/pending 原子排空它们。
 // 本模块在主进程每 15s 拉一次，转成 OS 通知——不依赖 renderer 是否
 // 在运行，因此最小化/关闭到托盘后仍能收到提醒。
@@ -25,6 +25,8 @@ export interface PendingNotificationsPayload {
   todo_reminders?: PendingNotificationItem[];
   /** 2026-11-06 Phase 1: 后台 Bash 任务完成通知 */
   background_tasks?: PendingNotificationItem[];
+  /** 2026-11-09: 闲时目标终态通知（独立队列，不混入 background_tasks） */
+  goal_notifications?: PendingNotificationItem[];
 }
 
 export interface SchedulerNotificationPollerDeps {
@@ -39,7 +41,7 @@ export interface SchedulerNotificationPollerDeps {
 
 export const SCHEDULER_NOTIFICATION_POLL_MS = 15_000;
 
-/** 合并两路队列并丢弃没有标题的条目。 */
+/** 合并四路队列并丢弃没有标题的条目。 */
 export function collectNotificationItems(
   payload: PendingNotificationsPayload | null | undefined,
 ): PendingNotificationItem[] {
@@ -47,6 +49,7 @@ export function collectNotificationItems(
     ...(payload?.scheduled_tasks ?? []),
     ...(payload?.todo_reminders ?? []),
     ...(payload?.background_tasks ?? []),
+    ...(payload?.goal_notifications ?? []),
   ];
   return items.filter((item) => typeof item.title === 'string' && item.title.length > 0);
 }

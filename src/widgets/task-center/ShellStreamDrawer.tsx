@@ -1,7 +1,7 @@
 // src/widgets/task-center/ShellStreamDrawer.tsx
 //
 // 2026-11-07 Phase 5: 后台 shell 输出抽屉。
-// 由 TaskCenterWidget 挂载（shellStream 非空时渲染），内部复用
+// 由 DeliveryDrawerHost 挂载（shellStream 非空时渲染），内部复用
 // ShellStreamPanel 的实时输出；running 状态提供「终止」按钮
 // （invoke shell_kill → 后端 DELETE /api/v1/shells/{id}）。
 

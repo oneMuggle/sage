@@ -75,13 +75,13 @@ export interface PendingChatMessage {
 // A1 (parity-s4): module-level registry of live stream handles.
 // Handles used to live only in the hook ref, so a background session stream
 // could be watched but never cancelled after leaving the Chat page.
-// markStreamActive/markStreamIdle keep this map in sync; TaskCenterWidget
+// markStreamActive/markStreamIdle keep this map in sync; the task center
 // cancels any session stream via cancelSessionStream (frontend unlisten +
 // finishStream cleanup + backend interrupt, same path as MEDIUM-1).
 export const activeStreamRegistry = new Map<string, ActiveStreamHandle>();
 
 /**
- * Cancel a session stream from outside useChat (e.g. the task-center capsule).
+ * Cancel a session stream from outside useChat (e.g. the sidebar task center).
  * Returns true when a live frontend handle was found and torn down; when no
  * handle exists (e.g. after a renderer reload) it still best-effort notifies
  * the backend and returns false. Never throws.

@@ -10,7 +10,8 @@ const SECTIONS_CONFIG_KEY = 'sage:sider:sections:v1';
 // UX-IA R3 批次 0：左栏分组从 6 个收敛到 3 个（todos/cron 降级为一级导航项，
 // team 占位删除）。这些断言按「分组 key 集合」而非标题文案编写——
 // 待办/定时任务仍是左栏可见入口，只是形态从分组变成导航项（用文案断言会歧义）。
-const EXPECTED_SECTION_KEYS = ['project', 'conversations', 'git'];
+// Task 8（任务中心 M3c）：内容列新增常驻「任务」分区（tasks）。
+const EXPECTED_SECTION_KEYS = ['project', 'conversations', 'tasks', 'git'];
 
 const mockSessions = [
   {
@@ -53,16 +54,26 @@ describe('Sidebar Sections Integration', () => {
     localStorage.clear();
     vi.resetModules();
 
-    vi.mock('../../../shared/lib/store', () => ({
-      useStore: () => ({
-        sessions: mockSessions,
+    vi.mock('../../../shared/lib/store', () => {
+      // 侧栏现在也渲染任务中心（useUnifiedTasks 会按 selector 读 sessions /
+      // currentSessionId），mock 必须尊重选择器，否则 hook 拿到整个 state 对象。
+      const state = {
+        // getter：mock 工厂会被 hoist 到文件顶部，此时 mockSessions 尚未初始化，
+        // 必须在渲染时（selector 调用）才读取。
+        get sessions() {
+          return mockSessions;
+        },
         currentSessionId: null,
         setCurrentSessionId: vi.fn(),
         createSession: vi.fn().mockResolvedValue('new-session'),
         loadSessions: vi.fn(),
         deleteSession: vi.fn(),
-      }),
-    }));
+      };
+      return {
+        useStore: <T,>(selector?: (s: typeof state) => T): T | typeof state =>
+          selector ? selector(state) : state,
+      };
+    });
 
     vi.mock('../../../features/manage-settings/useSettings', () => ({
       useSettings: () => ({
@@ -94,7 +105,7 @@ describe('Sidebar Sections Integration', () => {
     }));
   });
 
-  it('renders the three remaining sections in default order', () => {
+  it('renders the four remaining sections in default order', () => {
     const { container } = render(
       <I18nProvider>
         <MemoryRouter>
@@ -185,7 +196,7 @@ describe('Sidebar Sections Integration', () => {
     await waitFor(() => {
       // 存量顺序里 conversations 排第一，reconcile 保留该顺序并把缺失项追加到末尾；
       // 断言重点是「已删除的 todos/cron/team 不再出现在 order 里」。
-      expect(sectionKeys(container)).toEqual(['conversations', 'project', 'git']);
+      expect(sectionKeys(container)).toEqual(['conversations', 'project', 'tasks', 'git']);
     });
   });
 
@@ -225,7 +236,7 @@ describe('Sidebar Sections Integration', () => {
     );
 
     await waitFor(() => {
-      expect(sectionKeys(container)).toEqual(['conversations', 'project', 'git']);
+      expect(sectionKeys(container)).toEqual(['conversations', 'project', 'git', 'tasks']);
     });
   });
 
@@ -258,8 +269,8 @@ describe('Sidebar Sections Integration', () => {
     );
 
     await waitFor(() => {
-      // 存量只有 conversations：reconcile 保留它并补齐缺失的 project/git
-      expect(sectionKeys(container)).toEqual(['conversations', 'project', 'git']);
+      // 存量只有 conversations：reconcile 保留它并补齐缺失的 project/tasks/git
+      expect(sectionKeys(container)).toEqual(['conversations', 'project', 'tasks', 'git']);
     });
   });
 });
