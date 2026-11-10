@@ -37,6 +37,15 @@ export const officeAiSidebarZh = {
   'office.ai.selection.dismiss': '取消',
   'office.ai.selection.toolbarLabel': '选区操作',
 
+  // Action-echo user bubbles (rendered as role='user' so the conversation
+  // history immediately reflects the action while the LLM reply is pending).
+  'office.ai.action.rewrite_polish': '改写润色选中文本',
+  'office.ai.action.rewrite_summarize': '总结全文',
+  'office.ai.action.rewrite_translate': '翻译全文',
+  'office.ai.action.rewrite_custom': '按指令修改',
+  'office.ai.action.audit_full': '审校全文',
+  'office.ai.action.apply_all': '应用全部建议',
+
   // Quick commands — documents
   'office.ai.quick.documents.audit': '审校全文',
   'office.ai.quick.need_document': '请先在左侧文档库选择文档',
@@ -112,6 +121,14 @@ export const officeAiSidebarEn: Record<keyof typeof officeAiSidebarZh, string> =
   'office.ai.selection.audit': 'Audit',
   'office.ai.selection.dismiss': 'Dismiss',
   'office.ai.selection.toolbarLabel': 'Selection actions',
+
+  // Action-echo user bubbles
+  'office.ai.action.rewrite_polish': 'Rewrite the selected text',
+  'office.ai.action.rewrite_summarize': 'Summarize the document',
+  'office.ai.action.rewrite_translate': 'Translate the document',
+  'office.ai.action.rewrite_custom': 'Apply custom instruction',
+  'office.ai.action.audit_full': 'Audit the full document',
+  'office.ai.action.apply_all': 'Apply all suggestions',
 
   // Quick commands — documents
   'office.ai.quick.documents.audit': 'Audit document',
