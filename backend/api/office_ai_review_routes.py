@@ -18,7 +18,18 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 # win7 py38 钉 pydantic 1.10，v2 专有符号必须走兼容垫片（2.x 下为 no-op）。
-from backend.compat.win7.pydantic_compat import ConfigDict, model_validator
+from backend.compat.win7.pydantic_compat import ConfigDict
+
+try:
+    from pydantic import model_validator
+
+    PYDANTIC_V2 = True
+except ImportError:  # pragma: no cover — win7 py38 钉 pydantic 1.10
+    from pydantic import (  # type: ignore
+        root_validator as model_validator,
+    )
+
+    PYDANTIC_V2 = False
 from backend.data.database import get_database
 from backend.office.ai_review import run_review_async
 from backend.office.ai_review_history import list_for_document, record
@@ -60,11 +71,22 @@ class AiReviewRequest(BaseModel):
     max_issues: int = Field(default=100, ge=1, le=300)
     max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024, le=200 * 1024 * 1024)
 
-    @model_validator(mode="after")
-    def _require_target(self) -> AiReviewRequest:
-        if not (self.doc_id or (self.file_path or "").strip()):
-            raise ValueError("doc_id 与 file_path 至少提供一个")
-        return self
+    if PYDANTIC_V2:
+
+        @model_validator(mode="after")
+        def _require_target(self) -> AiReviewRequest:
+            if not (self.doc_id or (self.file_path or "").strip()):
+                raise ValueError("doc_id 与 file_path 至少提供一个")
+            return self
+
+    else:  # pragma: no cover — win7 py38 + pydantic 1.10
+
+        @model_validator
+        @classmethod
+        def _require_target(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+            if not (values.get("doc_id") or (values.get("file_path") or "").strip()):
+                raise ValueError("doc_id 与 file_path 至少提供一个")
+            return values
 
 
 class AiReviseRequest(BaseModel):
@@ -85,11 +107,22 @@ class AiReviseRequest(BaseModel):
     author: str = Field(default="Sage", max_length=80)
     add_comments: bool = True
 
-    @model_validator(mode="after")
-    def _require_target(self) -> AiReviseRequest:
-        if not (self.doc_id or (self.file_path or "").strip()):
-            raise ValueError("doc_id 与 file_path 至少提供一个")
-        return self
+    if PYDANTIC_V2:
+
+        @model_validator(mode="after")
+        def _require_target(self) -> AiReviseRequest:
+            if not (self.doc_id or (self.file_path or "").strip()):
+                raise ValueError("doc_id 与 file_path 至少提供一个")
+            return self
+
+    else:  # pragma: no cover — win7 py38 + pydantic 1.10
+
+        @model_validator
+        @classmethod
+        def _require_target(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+            if not (values.get("doc_id") or (values.get("file_path") or "").strip()):
+                raise ValueError("doc_id 与 file_path 至少提供一个")
+            return values
 
 
 class AiReviseResult(BaseModel):
