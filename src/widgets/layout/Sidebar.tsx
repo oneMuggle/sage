@@ -36,6 +36,7 @@ import { useSettings } from '../../features/manage-settings/useSettings';
 import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { deleteSessionCascade } from '../../features/send-message/useChat';
 import { sessionApi } from '../../shared/api/sessionApi';
+import { useBackendReadyTick } from '../../shared/lib/backendReadySignal';
 import { requestOpenCommandPalette } from '../../shared/lib/commandPaletteEvents';
 import {
   unlockFeature,
@@ -298,9 +299,11 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
     [navigate, t],
   );
 
+  // B: 启动期拉取失败时,等后端就绪自动重放,避免侧边栏静默为空。
+  const backendReadyTick = useBackendReadyTick();
   useEffect(() => {
     loadSessions();
-  }, [loadSessions]);
+  }, [loadSessions, backendReadyTick]);
 
   // 首次访问高级功能路由即永久解锁其 sidebar 入口（sticky unlock）。
   useEffect(() => {
