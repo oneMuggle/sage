@@ -163,7 +163,8 @@ export interface AiReviewHistoryResult {
 
 export interface AiReviewRequest {
   workspace_path: string;
-  file_path: string;
+  /** @deprecated prefer `doc_id`; backend derives path from doc_id. */
+  file_path?: string;
   doc_id?: string;
   spec_id?: string;
   scope?: AiReviewScope;
@@ -175,7 +176,8 @@ export interface AiReviewRequest {
 /** POST /office/ai/revise request — apply selected issues as tracked revisions. */
 export interface AiReviseRequest {
   workspace_path: string;
-  file_path: string;
+  /** @deprecated prefer `doc_id`; backend derives path from doc_id. */
+  file_path?: string;
   doc_id?: string;
   issues: AiReviewIssue[];
   output_filename?: string;

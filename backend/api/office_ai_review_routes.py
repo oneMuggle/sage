@@ -18,7 +18,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 # win7 py38 钉 pydantic 1.10，v2 专有符号必须走兼容垫片（2.x 下为 no-op）。
-from backend.compat.win7.pydantic_compat import ConfigDict
+from backend.compat.win7.pydantic_compat import ConfigDict, model_validator
 from backend.data.database import get_database
 from backend.office.ai_review import run_review_async
 from backend.office.ai_review_history import list_for_document, record
@@ -32,7 +32,12 @@ from backend.office.errors import OfficeParseError, OfficePathError
 # _constrained_list：pydantic v1/v2 双版本安全范式（v1 只认 min_items/max_items）。
 from backend.office.models import _constrained_list
 from backend.office.path_safety import resolve_within
-from backend.office.storage import get_document, snapshot_pre_edit, validate_workspace
+from backend.office.storage import (
+    document_path,
+    get_document,
+    snapshot_pre_edit,
+    validate_workspace,
+)
 from backend.office.word_revision_writer import apply_word_revisions
 
 router = APIRouter(tags=["office"])
@@ -47,13 +52,19 @@ class AiReviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     workspace_path: str
-    file_path: str = Field(min_length=1, max_length=2000)
+    file_path: Optional[str] = Field(default=None, max_length=2000)
     doc_id: Optional[str] = Field(default=None, max_length=80)
     spec_id: Optional[str] = Field(default=None, max_length=80)
     scope: str = Field(default="full", max_length=20)
     use_llm: bool = True
     max_issues: int = Field(default=100, ge=1, le=300)
     max_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024, le=200 * 1024 * 1024)
+
+    @model_validator(mode="after")
+    def _require_target(self) -> AiReviewRequest:
+        if not (self.doc_id or (self.file_path or "").strip()):
+            raise ValueError("doc_id 与 file_path 至少提供一个")
+        return self
 
 
 class AiReviseRequest(BaseModel):
@@ -67,12 +78,18 @@ class AiReviseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     workspace_path: str
-    file_path: str = Field(min_length=1, max_length=2000)
+    file_path: Optional[str] = Field(default=None, max_length=2000)
     doc_id: Optional[str] = Field(default=None, max_length=80)
     issues: _constrained_list(AiReviewIssue, min_length=1, max_length=200)
     output_filename: Optional[str] = Field(default=None, max_length=500)
     author: str = Field(default="Sage", max_length=80)
     add_comments: bool = True
+
+    @model_validator(mode="after")
+    def _require_target(self) -> AiReviseRequest:
+        if not (self.doc_id or (self.file_path or "").strip()):
+            raise ValueError("doc_id 与 file_path 至少提供一个")
+        return self
 
 
 class AiReviseResult(BaseModel):
@@ -108,6 +125,36 @@ def _doc_in_workspace(conn: sqlite3.Connection, doc_id: str, workspace: str) -> 
     return row is not None
 
 
+def _resolve_target(
+    conn: sqlite3.Connection,
+    workspace: Path,
+    doc_id: Optional[str],
+    file_path: Optional[str],
+) -> Path:
+    """Resolve the on-disk target for review/revise.
+
+    ``doc_id`` wins when given: the summary is looked up and the managed
+    layout path (``<workspace>/office/<doc_type>/<doc_id>/<filename>``)
+    is returned. This is authoritative — callers can never mis-spell the
+    intermediate ``office/<doc_type>/<doc_id>`` segment.
+
+    Falls back to ``resolve_within(workspace, file_path)`` for legacy
+    callers that still send a bare ``file_path``. Raises ``OfficeParseError``
+    when neither identifier is supplied, when the doc_id is unknown, or
+    when the document belongs to a different workspace.
+    """
+    if doc_id:
+        summary = get_document(conn, doc_id)
+        if summary is None:
+            raise OfficeParseError("文档不存在")
+        if summary.workspace_path != str(workspace):
+            raise OfficeParseError("文档不属于该工作区")
+        return document_path(summary)
+    if (file_path or "").strip():
+        return resolve_within(workspace, Path(file_path))
+    raise OfficeParseError("doc_id 与 file_path 至少提供一个")
+
+
 # ── endpoints ─────────────────────────────────────────────────────────
 
 
@@ -119,18 +166,17 @@ async def ai_review_endpoint(req: AiReviewRequest) -> AiReviewResult:
     已提供)。历史写入是 best-effort，失败不会打断响应。
     """
     workspace = validate_workspace(Path(req.workspace_path))
-    file_path = resolve_within(workspace, Path(req.file_path))
+    conn = get_database().get_connection()
+    file_path = _resolve_target(conn, workspace, req.doc_id, req.file_path)
     if not file_path.is_file():
         raise OfficePathError(
-            f"file_path is not a regular file: {req.file_path}",
+            f"file_path is not a regular file: {file_path}",
             file_path=file_path,
         )
     if file_path.stat().st_size > req.max_size_bytes:
-        raise OfficeParseError(f"文档超过大小上限 {req.max_size_bytes} 字节")
-    if req.doc_id and not _doc_in_workspace(
-        get_database().get_connection(), req.doc_id, str(workspace)
-    ):
-        raise OfficeParseError("文档不存在或不属于该工作区")
+        raise OfficeParseError(
+            f"文档超过大小上限 {req.max_size_bytes} 字节"
+        )
     result = await run_review_async(
         file_path,
         workspace=workspace,
@@ -200,17 +246,15 @@ def ai_revise_endpoint(req: AiReviseRequest) -> AiReviseResult:
     4. 调 :func:`apply_word_revisions` 写入修订痕迹(overwrite 或 output_filename).
     """
     workspace = validate_workspace(Path(req.workspace_path))
-    file_path = resolve_within(workspace, Path(req.file_path))
+    conn = get_database().get_connection()
+    file_path = _resolve_target(conn, workspace, req.doc_id, req.file_path)
     if not file_path.is_file():
         raise OfficePathError(
-            f"file_path is not a regular file: {req.file_path}",
+            f"file_path is not a regular file: {file_path}",
             file_path=file_path,
         )
-    conn = get_database().get_connection()
     summary = None
     if req.doc_id:
-        if not _doc_in_workspace(conn, req.doc_id, str(workspace)):
-            raise OfficeParseError("文档不存在或不属于该工作区")
         summary = get_document(conn, req.doc_id)
 
     # Pre-edit snapshot (best-effort).

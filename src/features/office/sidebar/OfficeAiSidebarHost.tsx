@@ -7,7 +7,6 @@ import {
 } from '../../../entities/office/officeWorkspaceStore';
 import { fillTemplate } from '../../../shared/lib/fillTemplate';
 import { useI18n } from '../../../shared/lib/i18n';
-import { joinWorkspacePath } from '../latexPath';
 
 import { AiSidebar } from './AiSidebar';
 import { FloatingActionBar, type FloatingActionKind } from './FloatingActionBar';
@@ -33,9 +32,7 @@ interface PendingEdit {
 export interface OfficeAiSidebarHostProps {
   activeTab: QuickActionTab;
   onNavigateTab: (tab: QuickActionTab) => void;
-  /** R10: canonical workspace directory (non-null — Office.tsx gates the mount). */
-  workspacePath: string;
-  /** R10: document canvas root used for selection capture and paragraph collection. */
+  /** Document canvas root used for selection capture and paragraph collection. */
   rootRef: RefObject<HTMLElement>;
 }
 
@@ -49,7 +46,6 @@ export interface OfficeAiSidebarHostProps {
 export function OfficeAiSidebarHost({
   activeTab,
   onNavigateTab,
-  workspacePath,
   rootRef,
 }: OfficeAiSidebarHostProps): JSX.Element {
   const { t } = useI18n();
@@ -80,15 +76,6 @@ export function OfficeAiSidebarHost({
     prefillInitialCommand(`${t('office.ai.edit.prefix')}${draftTail}`);
   };
 
-  // R10: derive the absolute path of the active document from the workspace
-  // root + generated filename. Office.tsx does not drill this through
-  // OfficePreviewPanel.
-  const filePath = useMemo(
-    () =>
-      activeDocument ? joinWorkspacePath(workspacePath, activeDocument.generated_filename) : null,
-    [activeDocument, workspacePath],
-  );
-
   useSelectionCapture(rootRef);
 
   const { pending, errorText, runRewrite, runChat, applySuggestion, markSkipped } =
@@ -106,7 +93,7 @@ export function OfficeAiSidebarHost({
     return { top: rect.top, left: rect.left, width: rect.width };
   }, [selection]);
 
-  const canApply = activeDocument?.doc_type === 'word' && Boolean(filePath);
+  const canApply = activeDocument?.doc_type === 'word';
 
   const documentText = (): string => {
     const root = rootRef.current;

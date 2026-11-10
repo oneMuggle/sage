@@ -678,7 +678,6 @@ export function Office() {
         <OfficeAiSidebarHost
           activeTab={activeTab as QuickActionTab}
           onNavigateTab={(tab) => setTab(tab as OfficeTabId)}
-          workspacePath={workspacePath}
           rootRef={canvasRootRef}
         />
       )}
