@@ -35,7 +35,10 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 #: 单个参数值的最大展示长度（超出截断）
-ARG_VALUE_MAX_CHARS = 200
+ARG_VALUE_MAX_CHARS = 500
+
+#: args_summary 整体最大字符数（超出尾部截断，防撑爆流事件）
+ARG_SUMMARY_MAX_CHARS = 4000
 
 #: 命中即脱敏的参数名模式（键名包含这些词的值一律替换为 ***）
 _SECRET_KEY_RE = re.compile(r"(key|token|password|secret|credential|auth)", re.IGNORECASE)
@@ -228,7 +231,8 @@ def summarize_tool_args(args: Dict[str, Any] | None) -> str:
       **递归进入嵌套 dict/list**（深度封顶 ``MAX_SCRUB_DEPTH``）——顶层
       脱敏挡不住 ``{"config": {"api_key": ...}}`` 这类嵌套泄漏。
     - 其余值字符串化后截断到 ``ARG_VALUE_MAX_CHARS``
-    - 整体再兜底截断到 1000 字符，防止极端参数撑爆流事件
+    - 整体再兜底截断到 ``ARG_SUMMARY_MAX_CHARS``，防止极端参数撑爆流事件
+      （上限调高是为让用户能读全中长命令，审批不该靠"猜被截断的部分"）
     """
     if not args:
         return "{}"
@@ -250,8 +254,8 @@ def summarize_tool_args(args: Dict[str, Any] | None) -> str:
             text = text[:ARG_VALUE_MAX_CHARS] + "…(已截断)"
         clean[key_str] = text
     summary = json.dumps(clean, ensure_ascii=False)
-    if len(summary) > 1000:
-        summary = summary[:1000] + "…(已截断)"
+    if len(summary) > ARG_SUMMARY_MAX_CHARS:
+        summary = summary[:ARG_SUMMARY_MAX_CHARS] + "…(已截断)"
     return summary
 
 
@@ -523,6 +527,7 @@ __all__ = [
     "ApprovalGate",
     "DEFAULT_APPROVAL_TIMEOUT_S",
     "ARG_VALUE_MAX_CHARS",
+    "ARG_SUMMARY_MAX_CHARS",
     "DIFF_PREVIEW_MAX_CHARS",
     "MAX_SCRUB_DEPTH",
     "summarize_tool_args",

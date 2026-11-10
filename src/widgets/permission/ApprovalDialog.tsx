@@ -15,7 +15,7 @@
  *
  * 错误通过 sonner toast 暴露（与项目其它 widget 一致）。
  */
-import { ShieldAlert } from 'lucide-react';
+import { MessageSquare, ShieldAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -24,6 +24,7 @@ import type { PermissionRequest } from '../../shared/api';
 import { invoke } from '../../shared/api/desktopInvoke';
 import { projectApi } from '../../shared/api/projectApi';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { useStore } from '../../shared/lib/store';
 import { useCurrentWorkspace } from '../../shared/lib/workspaceContext';
 import { ShikiCodeBlock } from '../chat/ShikiCodeBlock';
 
@@ -54,6 +55,11 @@ export function ApprovalDialog() {
   const currentRequest = usePermissionState((s) => s.currentRequest);
   const resolve = usePermissionState((s) => s.resolve);
   const workspacePath = useCurrentWorkspace();
+  const sessionTitle = useStore((s) =>
+    currentRequest?.session_id
+      ? s.sessions.find((sess) => sess.id === currentRequest.session_id)?.title
+      : undefined,
+  );
   const [remember, setRemember] = useState(false);
   const [rememberScope, setRememberScope] = useState<RememberScope>('tool');
   const [rememberDuration, setRememberDuration] = useState<RememberDuration>('permanent');
@@ -198,7 +204,7 @@ export function ApprovalDialog() {
         aria-modal="true"
         aria-label={t('permission.title')}
         data-testid="permission-approval-dialog"
-        className="bg-surface border border-border rounded-lg w-full max-w-md mx-4 p-5 shadow-xl"
+        className="bg-surface border border-border rounded-lg w-full max-w-2xl mx-4 p-5 shadow-xl"
       >
         <div className="flex items-center gap-2 mb-3">
           <ShieldAlert className="w-4 h-4 text-warning shrink-0" aria-hidden="true" />
@@ -212,6 +218,23 @@ export function ApprovalDialog() {
             </span>
           </div>
         </div>
+
+        {/* 多会话并行: 标明请求来自哪个会话 —— 用户不必靠侧边栏琥珀点反推 */}
+        {currentRequest.session_id ? (
+          <div
+            data-testid="permission-session-context"
+            className="mb-3 flex items-center gap-1.5 text-xs text-text-secondary"
+          >
+            <MessageSquare className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+            <span className="shrink-0">{t('permission.from_session')}:</span>
+            <span
+              className="truncate font-medium text-text"
+              title={sessionTitle ?? currentRequest.session_id}
+            >
+              {sessionTitle ?? currentRequest.session_id.slice(0, 8)}
+            </span>
+          </div>
+        ) : null}
 
         <div className="space-y-3">
           {/* live-events P1 (2026-09-06): 子代理审批上下文 —— 该请求来自编排
@@ -258,7 +281,7 @@ export function ApprovalDialog() {
             <span className="block text-xs text-text-secondary mb-1">{t('permission.args')}</span>
             <pre
               data-testid="permission-args"
-              className="text-xs font-mono bg-bg border border-border rounded p-2 max-h-40 overflow-auto whitespace-pre-wrap break-all text-text"
+              className="text-xs font-mono bg-bg border border-border rounded p-2 max-h-72 overflow-auto whitespace-pre-wrap break-all text-text"
             >
               {currentRequest.args_summary}
             </pre>
