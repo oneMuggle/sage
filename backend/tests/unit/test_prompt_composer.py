@@ -78,3 +78,46 @@ class TestPromptComposer:
             brief="test",
         )
         assert "landing-page" in prompt
+
+    def test_compose_with_craft_rules_injects_section(self, system, template):
+        from backend.design.craft_loader import CraftRule
+
+        rules = [
+            CraftRule(
+                id="anti-ai-slop",
+                name="Anti-AI-Slop",
+                description="No AI tells",
+                applies_to="both",
+                priority=0,
+                content="Never use default indigo accents.",
+            ),
+            CraftRule(
+                id="typography",
+                name="Typography",
+                description="Type scale",
+                applies_to="both",
+                priority=1,
+                content="Use a multiplicative type scale.",
+            ),
+        ]
+        prompt = PromptComposer.compose(
+            design_system=system,
+            template=template,
+            brief="Create a page",
+            craft_rules=rules,
+        )
+        assert "工艺规范" in prompt
+        assert "Anti-AI-Slop" in prompt
+        assert "Never use default indigo accents." in prompt
+        assert "Typography" in prompt
+        assert "Use a multiplicative type scale." in prompt
+
+    def test_compose_without_craft_rules_has_no_craft_section(
+        self, system, template,
+    ):
+        prompt = PromptComposer.compose(
+            design_system=system,
+            template=template,
+            brief="Create a page",
+        )
+        assert "工艺规范" not in prompt

@@ -1,0 +1,350 @@
+/*
+ * Academic Design System — CSS Custom Properties
+ *
+ * A conservative design system for theses, dissertations, journal articles,
+ * and research papers. Serif body typography, sans-serif headings, minimal
+ * colour palette, line-height-based spacing, zero shadows, zero transitions.
+ *
+ * Namespace: --academic-*
+ *
+ * Inspired by: Nature, Science, IEEE, Chicago Manual of Style, APA 7th
+ */
+
+/* ============================================================
+   1. COLORS
+   Pure white background, near-black text, dark blue accent.
+   No warm tones in the base palette.
+   ============================================================ */
+
+:root {
+  /* --- Core palette --- */
+  --academic-color-bg:             #ffffff;   /* Page background — pure white */
+  --academic-color-text:           #222222;   /* Body text — near-black, softer than pure black */
+  --academic-color-heading:        #1a1a1a;   /* Headings — slightly darker than body */
+  --academic-color-accent:         #1a3a5c;   /* Links, heading accents, figure rules — dark blue */
+  --academic-color-muted:          #666666;   /* Captions, footnotes, page numbers */
+  --academic-color-rule:           #cccccc;   /* Table borders, horizontal rules */
+  --academic-color-light-bg:       #f5f5f5;   /* Shaded table cells, box backgrounds */
+
+  /* --- Semantic colors (used sparingly) --- */
+  --academic-color-error:          #990000;   /* Correction marks, error states */
+  --academic-color-success:        #2e5e2e;   /* Verification indicators */
+  --academic-color-warning:        #7a5e00;   /* Caution markers */
+  --academic-color-info:           #1a3a5c;   /* Information — same as accent */
+
+  /* --- Interactive states --- */
+  --academic-color-link-hover:     #0d2240;   /* Darker blue for link hover */
+  --academic-color-focus-ring:     #1a3a5c;   /* Keyboard focus outline */
+  --academic-color-selection-bg:   #d4e4f7;   /* Text selection background */
+  --academic-color-selection-text: #1a1a1a;   /* Text selection foreground */
+}
+
+
+/* ============================================================
+   2. TYPOGRAPHY
+   Serif body (Times New Roman / Noto Serif), sans-serif headings
+   (Arial / Helvetica). 6-level type scale optimised for print-like
+   reading. Base size 16px (12pt). Line height 1.5 (academic std).
+   ============================================================ */
+
+:root {
+  /* --- Font families --- */
+  --academic-font-serif:           "Times New Roman", "Noto Serif", "Georgia", serif;
+  --academic-font-sans:            "Arial", "Helvetica", "Helvetica Neue", sans-serif;
+  --academic-font-mono:            "Courier New", "Consolas", monospace;
+
+  /* --- Font weights --- */
+  --academic-font-weight-regular:  400;
+  --academic-font-weight-bold:     700;
+
+  /* --- Base size & line height --- */
+  --academic-text-base-size:       16px;      /* 12pt — academic manuscript standard */
+  --academic-text-base-line-height: 1.5;      /* Academic standard line spacing */
+
+  /* --- Type scale (6 levels) --- */
+
+  /* Display — paper title, thesis title */
+  --academic-text-display-size:    28px;      /* 21pt */
+  --academic-text-display-weight:  700;
+  --academic-text-display-lh:      1.2;
+  --academic-text-display-ls:      -0.01em;   /* Slight tightening for large text */
+
+  /* H1 — major section (1. Introduction) */
+  --academic-text-h1-size:         22px;      /* 16.5pt */
+  --academic-text-h1-weight:       700;
+  --academic-text-h1-lh:           1.3;
+  --academic-text-h1-ls:           0;
+
+  /* H2 — subsection (1.1 Background) */
+  --academic-text-h2-size:         18px;      /* 13.5pt */
+  --academic-text-h2-weight:       700;
+  --academic-text-h2-lh:           1.3;
+  --academic-text-h2-ls:           0;
+
+  /* H3 — sub-subsection (1.1.1 Scope) */
+  --academic-text-h3-size:         16px;      /* 12pt */
+  --academic-text-h3-weight:       700;
+  --academic-text-h3-lh:           1.4;
+  --academic-text-h3-ls:           0;
+
+  /* Body — body text, abstract, bibliography */
+  --academic-text-body-size:       16px;      /* 12pt */
+  --academic-text-body-weight:     400;
+  --academic-text-body-lh:         1.5;
+  --academic-text-body-ls:         0;
+
+  /* Caption — figure/table captions, footnotes */
+  --academic-text-caption-size:    13px;      /* 9.75pt */
+  --academic-text-caption-weight:  400;
+  --academic-text-caption-lh:      1.4;
+  --academic-text-caption-ls:      0;
+
+  /* --- Special text tokens --- */
+  --academic-text-footnote-size:   13px;      /* Same as caption */
+  --academic-text-footnote-lh:     1.2;       /* Footnotes are single-spaced */
+  --academic-text-pagenum-size:    13px;
+  --academic-text-citation-size:   13px;
+
+  /* --- Paragraph formatting --- */
+  --academic-text-paragraph-indent: 0;         /* 2em if using indent mode */
+  --academic-text-paragraph-gap:   1.5em;      /* Space between paragraphs */
+  --academic-text-blockquote-indent: 2em;       /* Both sides */
+  --academic-text-hanging-indent:  2em;         /* For bibliography entries */
+}
+
+
+/* ============================================================
+   3. SPACING
+   Derived from the body line height (24px = 16px × 1.5).
+   All spacing values are multiples of 6px to maintain vertical
+   rhythm.
+   ============================================================ */
+
+:root {
+  /* --- Base unit --- */
+  --academic-space-base:           24px;      /* 1 line height (16px × 1.5) */
+
+  /* --- Scale --- */
+  --academic-space-xs:             6px;       /* 0.25× — tight internal padding */
+  --academic-space-sm:             12px;      /* 0.5×  — cell padding, compact gaps */
+  --academic-space-md:             24px;      /* 1×    — paragraph margins, list gaps */
+  --academic-space-lg:             36px;      /* 1.5×  — between sections */
+  --academic-space-xl:             48px;      /* 2×    — between major sections */
+  --academic-space-2xl:            72px;      /* 3×    — page-level, chapter breaks */
+
+  /* --- Component-specific spacing --- */
+  --academic-space-table-cell-v:   12px;      /* Table cell vertical padding */
+  --academic-space-table-cell-h:   24px;      /* Table cell horizontal padding */
+  --academic-space-figure-above:   24px;      /* Space above figure/equation */
+  --academic-space-figure-below:   24px;      /* Space below figure/equation */
+  --academic-space-caption-gap:    6px;       /* Gap between figure and caption */
+  --academic-space-list-item:      12px;      /* Between list items */
+  --academic-space-footnote-rule:  24px;      /* Space above footnote rule */
+  --academic-space-footnote-gap:   6px;       /* Between footnotes */
+}
+
+
+/* ============================================================
+   4. LAYOUT
+   Single column (720px) for papers. Two-column (2×560px) for
+   proceedings. Generous inner margins for binding (40mm).
+   ============================================================ */
+
+:root {
+  /* --- Content widths --- */
+  --academic-layout-paper-width:       720px;   /* Journal article / thesis */
+  --academic-layout-proceedings-width: 1200px;  /* Two-column conference paper */
+  --academic-layout-col-width:         560px;   /* Single column in proceedings */
+  --academic-layout-col-gap:           40px;    /* Gutter between columns */
+
+  /* --- Margins (for print / binding) --- */
+  --academic-layout-margin-inner:      40mm;    /* Binding side */
+  --academic-layout-margin-outer:      25mm;    /* Reading side */
+  --academic-layout-margin-top:        25mm;    /* Top */
+  --academic-layout-margin-bottom:     25mm;    /* Bottom */
+
+  /* --- Screen margins (auto-centred) --- */
+  --academic-layout-screen-margin-x:   auto;    /* Horizontal centring */
+  --academic-layout-screen-padding-x:  24px;    /* Side padding on narrow viewports */
+
+  /* --- Page number position --- */
+  --academic-layout-pagenum-bottom:    24px;    /* Distance from page bottom */
+}
+
+
+/* ============================================================
+   5. BORDERS
+   1px solid for tables and rules. No decorative borders. Minimal
+   border-radius (0–2px) for content containers.
+   ============================================================ */
+
+:root {
+  /* --- Widths --- */
+  --academic-border-width:           1px;
+  --academic-border-width-thick:     2px;       /* For emphasis (table header rules) */
+
+  /* --- Styles --- */
+  --academic-border-style:           solid;
+  --academic-border-style-rule:      solid;     /* Horizontal rules */
+
+  /* --- Colors (inherit from palette) --- */
+  --academic-border-color:           var(--academic-color-rule);
+  --academic-border-color-heading:   var(--academic-color-accent);
+
+  /* --- Border radius --- */
+  --academic-border-radius:          0px;       /* Default: sharp corners */
+  --academic-border-radius-sm:       2px;       /* Slight rounding for buttons */
+
+  /* --- Table borders --- */
+  --academic-border-table-header:    2px solid var(--academic-color-heading);
+  --academic-border-table-footer:    2px solid var(--academic-color-heading);
+  --academic-border-table-row:       1px solid var(--academic-color-rule);
+
+  /* --- Rule (horizontal divider) --- */
+  --academic-border-rule:            1px solid var(--academic-color-rule);
+  --academic-border-rule-short:      1px solid var(--academic-color-rule);  /* 33% width for footnotes */
+
+  /* --- Focus ring --- */
+  --academic-border-focus:           2px solid var(--academic-color-focus-ring);
+  --academic-border-focus-offset:    2px;
+}
+
+
+/* ============================================================
+   6. SHADOWS
+   NONE. Academic content is flat. Shadows suggest depth and
+   interactivity that do not belong in scholarly publishing.
+   ============================================================ */
+
+:root {
+  --academic-shadow-none:            none;
+
+  /*
+   * Intentionally empty.
+   *
+   * Academic design does not use shadows. If a shadow is absolutely
+   * required by a host application (e.g., modal overlay), use:
+   *
+   *   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+   *
+   * But this is NOT part of the academic system.
+   */
+}
+
+
+/* ============================================================
+   7. TRANSITIONS
+   NONE. Academic content is static and consumed at the reader's
+   pace. Motion is unnecessary and distracting.
+   ============================================================ */
+
+:root {
+  --academic-transition-none:        none;
+
+  /*
+   * Intentionally empty.
+   *
+   * Academic design does not animate. If a transition is absolutely
+   * required (e.g., focus ring appearance), use:
+   *
+   *   transition: outline-color 0.1s ease-in;
+   *
+   * But this is NOT part of the academic system.
+   */
+}
+
+
+/* ============================================================
+   8. COMPONENT TOKENS
+   Pre-composed tokens for common academic components.
+   ============================================================ */
+
+:root {
+  /* --- Links --- */
+  --academic-link-color:             var(--academic-color-accent);
+  --academic-link-color-hover:       var(--academic-color-link-hover);
+  --academic-link-decoration:        underline;
+  --academic-link-decoration-hover:  underline;
+  --academic-link-weight:            var(--academic-font-weight-regular);
+
+  /* --- Buttons (minimal) --- */
+  --academic-button-bg:              transparent;
+  --academic-button-border:          1px solid var(--academic-color-accent);
+  --academic-button-color:           var(--academic-color-accent);
+  --academic-button-radius:          var(--academic-border-radius-sm);
+  --academic-button-padding-v:       var(--academic-space-xs);
+  --academic-button-padding-h:       var(--academic-space-md);
+  --academic-button-font:            var(--academic-font-sans);
+  --academic-button-font-size:       var(--academic-text-caption-size);
+  --academic-button-font-weight:     var(--academic-font-weight-bold);
+
+  /* --- Tables --- */
+  --academic-table-bg:               var(--academic-color-bg);
+  --academic-table-header-bg:        var(--academic-color-bg);
+  --academic-table-alt-row-bg:       var(--academic-color-light-bg);
+  --academic-table-font:             var(--academic-font-serif);
+  --academic-table-font-size:        var(--academic-text-body-size);
+  --academic-table-caption-font:     var(--academic-font-sans);
+  --academic-table-caption-size:     var(--academic-text-caption-size);
+  --academic-table-caption-color:    var(--academic-color-muted);
+
+  /* --- Figures --- */
+  --academic-figure-rule:            var(--academic-border-rule);
+  --academic-figure-caption-font:    var(--academic-font-sans);
+  --academic-figure-caption-size:    var(--academic-text-caption-size);
+  --academic-figure-caption-color:   var(--academic-color-muted);
+  --academic-figure-caption-prefix-weight: var(--academic-font-weight-bold);
+
+  /* --- Equations --- */
+  --academic-equation-font:          var(--academic-font-serif);
+  --academic-equation-font-style:    italic;
+  --academic-equation-number-color:  var(--academic-color-muted);
+  --academic-equation-number-font:   var(--academic-font-sans);
+
+  /* --- Citations --- */
+  --academic-citation-font:          var(--academic-font-serif);
+  --academic-citation-size:          var(--academic-text-citation-size);
+  --academic-citation-color:         var(--academic-color-accent);
+
+  /* --- Footnotes --- */
+  --academic-footnote-font:          var(--academic-font-serif);
+  --academic-footnote-size:          var(--academic-text-footnote-size);
+  --academic-footnote-lh:            var(--academic-text-footnote-lh);
+  --academic-footnote-color:         var(--academic-color-muted);
+  --academic-footnote-rule-width:    33%;   /* Rule spans one-third of page */
+  --academic-footnote-superscript-size: 0.75em;
+
+  /* --- Block quotes --- */
+  --academic-blockquote-indent:      var(--academic-text-blockquote-indent);
+  --academic-blockquote-font:        var(--academic-font-serif);
+  --academic-blockquote-color:       var(--academic-color-text);
+  --academic-blockquote-border:      none;   /* No left border in academic style */
+}
+
+
+/* ============================================================
+   9. ACCESSIBILITY
+   Contrast ratios, focus indicators, and selection colors.
+   ============================================================ */
+
+:root {
+  /*
+   * Contrast ratios (on #ffffff background):
+   *   --academic-color-text (#222222):   15.4:1  — WCAG AAA
+   *   --academic-color-accent (#1a3a5c):  9.8:1  — WCAG AAA
+   *   --academic-color-muted (#666666):   5.7:1  — WCAG AA (for large text only)
+   *
+   * Note: --academic-color-muted should only be used for text ≥ 14px bold
+   * or ≥ 18px regular to meet AA. Do not use for small body text.
+   */
+
+  --academic-a11y-focus-outline:       var(--academic-border-focus);
+  --academic-a11y-focus-offset:        var(--academic-border-focus-offset);
+  --academic-a11y-selection-bg:        var(--academic-color-selection-bg);
+  --academic-a11y-selection-text:      var(--academic-color-selection-text);
+
+  /* Minimum contrast ratios */
+  --academic-a11y-contrast-body:       "AAA (15.4:1)";
+  --academic-a11y-contrast-accent:     "AAA (9.8:1)";
+  --academic-a11y-contrast-muted:      "AA-large (5.7:1)";
+}

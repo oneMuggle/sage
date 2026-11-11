@@ -1,0 +1,281 @@
+/*
+ * Tech Dark Design System — CSS Custom Properties
+ *
+ * A dark-mode-first design system for technical content.
+ * Inspired by Linear, Vercel, GitHub Dark, Raycast.
+ *
+ * Usage:
+ *   @import url('./tokens.css');
+ *   :root { color-scheme: dark; }
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ═══════════════════════════════════════════════
+     COLORS — Backgrounds (elevation layers)
+     ═══════════════════════════════════════════════ */
+
+  --bg-base: #0a0a0a;
+  --bg-subtle: #111111;
+  --bg-elevated: #1a1a1a;
+  --bg-surface: #161616;
+  --bg-sunken: #080808;
+  --bg-overlay: rgba(10, 10, 10, 0.85);
+
+  /* ═══════════════════════════════════════════════
+     COLORS — Foregrounds
+     ═══════════════════════════════════════════════ */
+
+  --fg-primary: #ededed;
+  --fg-secondary: #a1a1a1;
+  --fg-tertiary: #666666;
+  --fg-inverse: #0a0a0a;
+
+  /* ═══════════════════════════════════════════════
+     COLORS — Accent & Semantic
+     ═══════════════════════════════════════════════ */
+
+  --accent-primary: #06b6d4;
+  --accent-primary-hover: #22d3ee;
+  --accent-primary-active: #0891b2;
+  --accent-primary-subtle: rgba(6, 182, 212, 0.1);
+
+  --accent-secondary: #10b981;
+  --accent-secondary-hover: #34d399;
+  --accent-secondary-active: #059669;
+  --accent-secondary-subtle: rgba(16, 185, 129, 0.1);
+
+  --accent-warning: #f59e0b;
+  --accent-warning-hover: #fbbf24;
+  --accent-warning-active: #d97706;
+  --accent-warning-subtle: rgba(245, 158, 11, 0.1);
+
+  --accent-error: #ef4444;
+  --accent-error-hover: #f87171;
+  --accent-error-active: #dc2626;
+  --accent-error-subtle: rgba(239, 68, 68, 0.1);
+
+  --accent-info: #3b82f6;
+  --accent-info-hover: #60a5fa;
+  --accent-info-active: #2563eb;
+  --accent-info-subtle: rgba(59, 130, 246, 0.1);
+
+  /* ═══════════════════════════════════════════════
+     COLORS — Borders
+     ═══════════════════════════════════════════════ */
+
+  --border-subtle: #1e1e1e;
+  --border-default: #2a2a2a;
+  --border-strong: #3a3a3a;
+  --border-accent: #06b6d4;
+  --border-error: #ef4444;
+
+  /* ═══════════════════════════════════════════════
+     TYPOGRAPHY — Font Families
+     ═══════════════════════════════════════════════ */
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* ═══════════════════════════════════════════════
+     TYPOGRAPHY — Scale (8 levels)
+     ═══════════════════════════════════════════════ */
+
+  --text-xs: 0.75rem;      /* 12px */
+  --text-xs--lh: 1rem;     /* 16px */
+
+  --text-sm: 0.875rem;     /* 14px */
+  --text-sm--lh: 1.25rem;  /* 20px */
+
+  --text-base: 1rem;       /* 16px */
+  --text-base--lh: 1.5rem; /* 24px */
+
+  --text-md: 1.125rem;     /* 18px */
+  --text-md--lh: 1.75rem;  /* 28px */
+
+  --text-lg: 1.25rem;      /* 20px */
+  --text-lg--lh: 1.75rem;  /* 28px */
+
+  --text-xl: 1.5rem;       /* 24px */
+  --text-xl--lh: 2rem;     /* 32px */
+
+  --text-2xl: 1.875rem;    /* 30px */
+  --text-2xl--lh: 2.25rem; /* 36px */
+
+  --text-3xl: 2.25rem;     /* 36px */
+  --text-3xl--lh: 2.5rem;  /* 40px */
+
+  /* ═══════════════════════════════════════════════
+     TYPOGRAPHY — Weights
+     ═══════════════════════════════════════════════ */
+
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* ═══════════════════════════════════════════════
+     TYPOGRAPHY — Tracking (letter-spacing)
+     ═══════════════════════════════════════════════ */
+
+  --tracking-tight: -0.025em;
+  --tracking-tighter: -0.02em;
+  --tracking-tight-sm: -0.015em;
+  --tracking-tight-xs: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.025em;
+  --tracking-wider: 0.05em;
+
+  /* ═══════════════════════════════════════════════
+     SPACING — Dual grid (4px / 8px)
+     ═══════════════════════════════════════════════ */
+
+  --space-0: 0;
+  --space-px: 1px;
+  --space-0\.5: 0.125rem;  /* 2px */
+  --space-1: 0.25rem;      /* 4px */
+  --space-1\.5: 0.375rem;  /* 6px */
+  --space-2: 0.5rem;       /* 8px */
+  --space-2\.5: 0.625rem;  /* 10px */
+  --space-3: 0.75rem;      /* 12px */
+  --space-4: 1rem;         /* 16px */
+  --space-5: 1.25rem;      /* 20px */
+  --space-6: 1.5rem;       /* 24px */
+  --space-8: 2rem;         /* 32px */
+  --space-10: 2.5rem;      /* 40px */
+  --space-12: 3rem;        /* 48px */
+  --space-16: 4rem;        /* 64px */
+  --space-20: 5rem;        /* 80px */
+  --space-24: 6rem;        /* 96px */
+
+  /* ═══════════════════════════════════════════════
+     BORDERS — Widths
+     ═══════════════════════════════════════════════ */
+
+  --border-w-thin: 1px;
+  --border-w-medium: 2px;
+  --border-w-thick: 4px;
+
+  /* ═══════════════════════════════════════════════
+     BORDERS — Radius
+     ═══════════════════════════════════════════════ */
+
+  --radius-none: 0;
+  --radius-sm: 4px;
+  --radius-default: 6px;
+  --radius-md: 8px;
+  --radius-full: 9999px;
+
+  /* ═══════════════════════════════════════════════
+     SHADOWS — Elevation (dark-mode optimized)
+     ═══════════════════════════════════════════════ */
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-default: 0 2px 8px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.7);
+
+  /* Glow effects (accent-based, for interactive states) */
+  --shadow-glow-sm: 0 0 12px rgba(6, 182, 212, 0.08);
+  --shadow-glow: 0 0 20px rgba(6, 182, 212, 0.1);
+  --shadow-glow-lg: 0 0 40px rgba(6, 182, 212, 0.15);
+  --shadow-glow-error: 0 0 20px rgba(239, 68, 68, 0.1);
+  --shadow-glow-success: 0 0 20px rgba(16, 185, 129, 0.1);
+
+  /* ═══════════════════════════════════════════════
+     TRANSITIONS
+     ═══════════════════════════════════════════════ */
+
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
+
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --transition-fast: var(--duration-fast) var(--ease-default);
+  --transition-base: var(--duration-base) var(--ease-default);
+  --transition-slow: var(--duration-slow) var(--ease-default);
+
+  /* ═══════════════════════════════════════════════
+     LAYOUT — Content widths
+     ═══════════════════════════════════════════════ */
+
+  --layout-docs: 960px;
+  --layout-article: 720px;
+  --layout-code-ref: 1200px;
+  --layout-form: 640px;
+  --layout-sidebar: 240px;
+  --layout-sidebar-collapsed: 56px;
+
+  /* ═══════════════════════════════════════════════
+     LAYOUT — Breakpoints (reference, use in media queries)
+     ═══════════════════════════════════════════════ */
+
+  --bp-sm: 640px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+  --bp-2xl: 1536px;
+
+  /* ═══════════════════════════════════════════════
+     Z-INDEX — Layering scale
+     ═══════════════════════════════════════════════ */
+
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-popover: 500;
+  --z-tooltip: 600;
+  --z-toast: 700;
+
+  /* ═══════════════════════════════════════════════
+     FOCUS — Accessible focus ring
+     ═══════════════════════════════════════════════ */
+
+  --focus-ring: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--accent-primary);
+  --focus-ring-error: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--accent-error);
+  --focus-outline-offset: 2px;
+
+  /* ═══════════════════════════════════════════════
+     CODE BLOCK — Specialized tokens
+     ═══════════════════════════════════════════════ */
+
+  --code-bg: var(--bg-surface);
+  --code-border: var(--border-default);
+  --code-font: var(--font-mono);
+  --code-size: var(--text-sm);
+  --code-lh: 1.7;
+  --code-padding: var(--space-4);
+  --code-radius: var(--radius-default);
+  --code-gutter-w: 32px;
+  --code-gutter-color: var(--fg-tertiary);
+  --code-gutter-border: var(--border-subtle);
+  --code-inline-padding-x: 6px;
+  --code-inline-padding-y: 2px;
+  --code-inline-radius: var(--radius-sm);
+
+  /* ═══════════════════════════════════════════════
+     REDUCED MOTION — Accessibility override
+     ═══════════════════════════════════════════════ */
+
+  /*
+   * Usage in components:
+   *
+   *   .animated-element {
+   *     transition: var(--transition-base);
+   *   }
+   *   @media (prefers-reduced-motion: reduce) {
+   *     .animated-element {
+   *       transition: none;
+   *     }
+   *   }
+   */
+}
