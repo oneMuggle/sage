@@ -26,7 +26,6 @@
     "backend/memory/manager.py": 1424,
     "backend/office/edit.py": 1297,
     "backend/office/excel.py": 1020,
-    "backend/office/models.py": 1570,
     "backend/office/staging_quarantine.py": 1383,
     "backend/office/template_library.py": 1259,
     "backend/office/tool_service.py": 1017,
