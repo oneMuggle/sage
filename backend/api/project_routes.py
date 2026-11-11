@@ -1257,6 +1257,7 @@ def _get_git_sha(path: Path) -> Optional[str]:
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         return result.stdout.strip() if result.returncode == 0 else None
     except (subprocess.SubprocessError, OSError):
