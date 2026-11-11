@@ -452,7 +452,13 @@ function markBootStage(stage: string): void {
 
 persistRunState();
 
-const rendererHeartbeat = createHeartbeatMonitor({ timeoutMs: 60_000 });
+// 心跳超时阈值：默认 120s（原 60s 在内存压力下易误判）。
+// 可通过 SAGE_HEARTBEAT_TIMEOUT_MS 环境变量覆盖（便于测试）。
+const rendererHeartbeat = createHeartbeatMonitor({
+  timeoutMs: process.env.SAGE_HEARTBEAT_TIMEOUT_MS
+    ? parseInt(process.env.SAGE_HEARTBEAT_TIMEOUT_MS, 10)
+    : 120_000,
+});
 let recoveryDialogShown = false;
 
 async function handleRendererRecovery(reason: string): Promise<void> {
@@ -533,6 +539,21 @@ function startHeartbeatWatchdog(): void {
   ipcMain.on('sage:heartbeat', () => rendererHeartbeat.beat());
   const timer = setInterval(() => {
     if (!rendererHeartbeat.check()) return;
+    // 心跳超时 ≠ 渲染进程死亡。内存压力下 setInterval 会被 OS 节流，
+    // 渲染进程可能只是响应慢而非崩溃。先验证实际状态再决定是否标记 unclean，
+    // 避免误弹"前端进程异常退出"对话框。
+    const win = mainWindow;
+    if (win && !win.isDestroyed()) {
+      const wc = win.webContents;
+      if (!wc.isDestroyed() && !wc.isCrashed()) {
+        // 渲染进程仍存活 — 只是心跳慢，重置监视器，不标记 unclean
+        logger.info('heartbeat timeout but renderer alive, skipping unclean mark', {
+          pid: wc.getOSProcessId(),
+        });
+        rendererHeartbeat.reset();
+        return;
+      }
+    }
     runState = markEnded(runState, 'unclean', 'frontend-heartbeat-lost', new Date().toISOString());
     persistRunState();
     appendCrashEvent(CRASH_JOURNAL_FILE, {
@@ -1854,6 +1875,11 @@ async function registerIpcHandlers(): Promise<void> {
           if (!response.ok) {
             const text = await response.text().catch(() => '');
             throw new Error(`Backend request failed: ${response.status} ${text}`);
+          }
+          // 204 No Content: FastAPI 对纯副作用端点（如 POST /idle/activity）按
+          // 规范返回 204，body 为空。直接返回 null 避免 response.json() 解析空字符串。
+          if (response.status === 204) {
+            return null;
           }
           // Support binary responses (e.g., media files) via responseType: 'arraybuffer'
           if (request.responseType === 'arraybuffer') {
