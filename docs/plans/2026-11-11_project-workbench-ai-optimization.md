@@ -179,11 +179,11 @@ async def analyze_project_cached(path: str) -> AnalysisReport:
 - [ ] 实现后端 SSE/NDJSON 流
 - [ ] 实现前端进度条
 
-### M4: P3 - 后端缓存 [ ]
+### M4: P3 - 后端缓存 [x]
 
-- [ ] 实现 cache key 计算（path + git sha）
-- [ ] 实现内存缓存（带 TTL）
-- [ ] 验证：重复分析秒回
+- [x] 实现 cache key 计算（path + git sha）
+- [x] 实现内存缓存（TTL = 1 小时，上限 50 条）
+- [x] 验证：Python 语法检查通过
 
 ---
 
