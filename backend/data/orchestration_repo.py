@@ -208,6 +208,7 @@ class TaskRepository:
                 timeout_secs=packet_data.get("timeout_secs", 600),
                 recovery_policy=RecoveryPolicy(**packet_data.get("recovery_policy", {})),
                 escalation_policy=EscalationPolicy(**packet_data.get("escalation_policy", {})),
+                workflow_mode=packet_data.get("workflow_mode"),
             )
 
         return Task(

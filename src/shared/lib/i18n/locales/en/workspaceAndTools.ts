@@ -387,6 +387,20 @@ export const enWorkspaceAndTools = {
   'orchestration.drawer.diff': 'Change summary',
   'orchestration.drawer.diffEmpty': 'No change summary yet',
 
+  // ─── TDD evidence (lane.tdd.evidence event) ─────
+  'orchestration.drawer.tddEvidence': 'TDD evidence',
+  'orchestration.drawer.tddNoEvidence': 'No TDD run record',
+  'orchestration.drawer.tddMode': 'Mode',
+  'orchestration.drawer.tddModeTdd': 'TDD (red→green)',
+  'orchestration.drawer.tddModeFast': 'Fast mode',
+  'orchestration.drawer.tddRounds': 'Rounds',
+  'orchestration.drawer.tddRoundsCount': '{n} rounds',
+  'orchestration.drawer.tddRedSeen': 'Red seen',
+  'orchestration.drawer.tddGreenSeen': 'Green seen',
+  'orchestration.drawer.tddViolations': 'Violations',
+  'orchestration.drawer.tddViolationsCount': '{n} times',
+  'orchestration.drawer.tddTestRuns': 'Test runs',
+
   // ─── Session export (U18 HTML session export) ──────
   'session.export_failed': 'Export failed: {message}',
   'session.export_html': 'Export as HTML',

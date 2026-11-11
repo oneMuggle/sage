@@ -386,21 +386,25 @@ class EditTool(BaseTool):
         # G8 (2026-09-06): Python 文件编辑后语法诊断 —— 失败不影响编辑结果
         from .write_diagnostics import attach_diagnostics
 
+        payload: Dict[str, Any] = {
+            "path": str(target.resolve()),
+            "fuzzy_matched": fuzzy_result is not None,
+            # H-3 (round5 批次 H): 容错命中的起始行号（1-based）
+            "fuzzy_line": fuzzy_line,
+            "replacements": replacements,
+            "lines_removed": _count_logical_lines(old_string) * replacements,
+            "lines_added": _count_logical_lines(new_string) * replacements,
+            "bytes_written": len(updated_bytes),
+            # LocalBridge P0: 写后新版本，可直接用于下一次 expected_version
+            "version": compute_bytes_version(updated_bytes),
+        }
+
+        # TDD 审计:违规时返回一句非阻塞提醒,随 content 传给 LLM。
+        nudge = self._observe_write(payload["path"])
+        if nudge:
+            payload["tdd_nudge"] = nudge
+
         return ToolResult(
             success=True,
-            content=attach_diagnostics(
-                {
-                    "path": str(target.resolve()),
-                    "fuzzy_matched": fuzzy_result is not None,
-                    # H-3 (round5 批次 H): 容错命中的起始行号（1-based）
-                    "fuzzy_line": fuzzy_line,
-                    "replacements": replacements,
-                    "lines_removed": _count_logical_lines(old_string) * replacements,
-                    "lines_added": _count_logical_lines(new_string) * replacements,
-                    "bytes_written": len(updated_bytes),
-                    # LocalBridge P0: 写后新版本，可直接用于下一次 expected_version
-                    "version": compute_bytes_version(updated_bytes),
-                },
-                str(target),
-            ),
+            content=attach_diagnostics(payload, str(target)),
         )
