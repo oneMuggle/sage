@@ -45,23 +45,20 @@ from backend.orchestration.run_event_adapter import (
     RunEventSink,
     lane_event_to_run_event,
 )
+from backend.orchestration.workflow_mode import resolve_workflow_mode
 
 logger = logging.getLogger(__name__)
 
 
 def _resolve_lane_workflow_mode(lane: Lane, task: Any) -> str:
-    """解析 lane 的 workflow_mode：metadata > packet > parameters > 默认 "tdd"。"""
-    if lane.metadata and lane.metadata.get("workflow_mode") in ("tdd", "fast"):
-        return lane.metadata["workflow_mode"]
-    packet = getattr(task, "packet", None)
-    if packet is not None:
-        mode = getattr(packet, "workflow_mode", None)
-        if mode in ("tdd", "fast"):
-            return mode
-    params_mode = task.parameters.get("workflow_mode") if hasattr(task, "parameters") else None
-    if params_mode in ("tdd", "fast"):
-        return params_mode
-    return "tdd"
+    """解析 lane 的 workflow_mode：metadata > packet > parameters > env > 默认 "tdd"。"""
+    explicit = lane.metadata.get("workflow_mode") if lane.metadata else None
+    if explicit not in ("tdd", "fast"):
+        packet = getattr(task, "packet", None)
+        explicit = getattr(packet, "workflow_mode", None) if packet is not None else None
+    if explicit not in ("tdd", "fast"):
+        explicit = task.parameters.get("workflow_mode") if hasattr(task, "parameters") else None
+    return resolve_workflow_mode(explicit=explicit)
 
 
 class LaneExecutionError(Exception):
@@ -231,9 +228,11 @@ class LaneExecutor:
         try:
             result: Optional[Dict[str, Any]] = None
             acceptance_summary: Optional[Dict[str, Any]] = None
+            rounds_run = 0
 
             while tdd_loop.round < tdd_loop.max_rounds:
                 result = await self.agent_runner(task, lane.agent_id)
+                rounds_run += 1
 
                 # Cancel check — 每轮开始时检查
                 if self._is_cancelled(lane):
@@ -288,6 +287,7 @@ class LaneExecutor:
                     }
             else:
                 # while 循环未 break（round >= max_rounds）→ 判定失败
+                self._record_tdd_evidence(lane, guard, workflow_mode, rounds_run)
                 return await self._fail_lane(
                     lane,
                     tdd_loop.last_failure or "TDD 循环已达上限",
@@ -297,11 +297,12 @@ class LaneExecutor:
             # Step 6: 循环以 break 退出 → Mark succeeded
             if self._is_cancelled(lane):
                 return self._cancelled_result(lane)
+            self._record_tdd_evidence(lane, guard, workflow_mode, rounds_run)
             succeeded_metadata: Dict[str, Any] = {
                 "result_keys": list(result.keys()) if isinstance(result, dict) else None,
             }
             if guard is not None:
-                succeeded_metadata["tdd_loop_rounds"] = tdd_loop.round + 1
+                succeeded_metadata["tdd_loop_rounds"] = rounds_run
             self._record_event(
                 lane,
                 LaneEvent.SUCCEEDED,
@@ -365,6 +366,30 @@ class LaneExecutor:
             "checks": [c.to_dict() for c in report.checks],
             "gate": report.gate,
         }
+
+    def _record_tdd_evidence(
+        self,
+        lane: Lane,
+        guard: Any,
+        workflow_mode: str,
+        rounds: int,
+    ) -> None:
+        """落 ``lane.tdd.evidence`` 事件，供前端展示 red→green 证据链。
+
+        fast 模式无 guard → snapshot 为空 dict，仍记录 mode，使前端可区分
+        「未启用 TDD」与「TDD 但无证据」。落库失败不得破坏主流程。
+        """
+        try:
+            snapshot = guard.snapshot() if guard is not None else {}
+        except Exception:  # noqa: BLE001 — 证据快照绝不能炸主流程
+            logger.warning("TDD 证据快照失败 lane=%s", lane.lane_id, exc_info=True)
+            snapshot = {}
+        self._record_event(
+            lane,
+            LaneEvent.TDD_EVIDENCE,
+            EventProvenance.LIVE_LANE,
+            {"mode": workflow_mode, "rounds": rounds, "snapshot": snapshot},
+        )
 
     async def _validate_permissions(self, lane: Lane) -> bool:
         """

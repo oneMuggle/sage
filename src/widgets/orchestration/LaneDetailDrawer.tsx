@@ -32,6 +32,15 @@ interface MergeInfoView {
   filesChanged: string[];
 }
 
+interface TddEvidenceView {
+  mode: 'tdd' | 'fast' | string;
+  rounds: number;
+  redSeen: boolean;
+  greenSeen: boolean;
+  violations: number;
+  testCommands: string[];
+}
+
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((v): v is string => typeof v === 'string');
@@ -87,6 +96,32 @@ function parseDiffSummary(event: LaneEvent | undefined): string {
   return '';
 }
 
+function parseTddEvidence(events: LaneEvent[]): TddEvidenceView | null {
+  const evidence = [...events].reverse().find((e) => e.event_type === 'lane.tdd.evidence');
+  if (!evidence) return null;
+  const meta = evidence.metadata;
+  const snapshot =
+    typeof meta.snapshot === 'object' && meta.snapshot !== null
+      ? (meta.snapshot as Record<string, unknown>)
+      : {};
+  const redSeen = snapshot.red_seen === true;
+  const greenSeen = snapshot.green_seen === true;
+  const violationsRaw = snapshot.violations;
+  const violations = Array.isArray(violationsRaw) ? violationsRaw.length : 0;
+  const testCommandsRaw = snapshot.test_commands;
+  const testCommands = Array.isArray(testCommandsRaw)
+    ? testCommandsRaw.filter((v): v is string => typeof v === 'string')
+    : [];
+  return {
+    mode: typeof meta.mode === 'string' ? meta.mode : 'tdd',
+    rounds: typeof meta.rounds === 'number' ? meta.rounds : 0,
+    redSeen,
+    greenSeen,
+    violations,
+    testCommands,
+  };
+}
+
 interface LaneDetailDrawerProps {
   /** Lane to display (usually selected from laneBoardStore by the parent) */
   lane: Lane | null;
@@ -105,6 +140,8 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
   const [checks, setChecks] = useState<AcceptanceCheckView[] | null>(null);
   // null = 加载中；'' = 无产物摘要。
   const [diffSummary, setDiffSummary] = useState<string | null>(null);
+  // null = 未加载 / 无证据
+  const [tddEvidence, setTddEvidence] = useState<TddEvidenceView | null>(null);
 
   const laneId = lane?.lane_id;
 
@@ -113,6 +150,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
     let cancelled = false;
     setChecks(null);
     setDiffSummary(null);
+    setTddEvidence(null);
     orchestrationClient
       .listLaneEvents(laneId)
       .then((events) => {
@@ -122,11 +160,13 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
           .find((e) => e.event_type === 'lane.acceptance.completed');
         setChecks(parseChecks(acceptance) ?? []);
         setDiffSummary(parseDiffSummary(acceptance));
+        setTddEvidence(parseTddEvidence(events));
       })
       .catch(() => {
         if (!cancelled) {
           setChecks([]);
           setDiffSummary('');
+          setTddEvidence(null);
         }
       });
     return () => {
@@ -295,6 +335,101 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
                 </li>
               ))}
             </ul>
+          )}
+        </div>
+
+        {/* TDD evidence */}
+        <div className="px-4 py-3 border-b border-border">
+          <div className="text-xs text-text-tertiary mb-2">
+            {t('orchestration.drawer.tddEvidence')}
+          </div>
+          {tddEvidence === null ? (
+            <div className="text-xs text-text-tertiary" data-testid="tdd-evidence-empty">
+              {t('orchestration.drawer.tddNoEvidence')}
+            </div>
+          ) : (
+            <div className="space-y-2" data-testid="tdd-evidence">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={
+                    'text-xs px-2 py-0.5 rounded ' +
+                    (tddEvidence.mode === 'tdd'
+                      ? 'bg-primary/15 text-primary'
+                      : 'bg-bg-hover text-text-secondary')
+                  }
+                  data-testid="tdd-mode-badge"
+                >
+                  {tddEvidence.mode === 'tdd'
+                    ? t('orchestration.drawer.tddModeTdd')
+                    : t('orchestration.drawer.tddModeFast')}
+                </span>
+                <span
+                  className={
+                    'text-xs px-2 py-0.5 rounded ' +
+                    (tddEvidence.redSeen
+                      ? 'bg-error/15 text-error'
+                      : 'bg-bg-hover text-text-tertiary')
+                  }
+                  data-testid="tdd-red-badge"
+                >
+                  {t('orchestration.drawer.tddRedSeen')}
+                </span>
+                <span
+                  className={
+                    'text-xs px-2 py-0.5 rounded ' +
+                    (tddEvidence.greenSeen
+                      ? 'bg-success/15 text-success'
+                      : 'bg-bg-hover text-text-tertiary')
+                  }
+                  data-testid="tdd-green-badge"
+                >
+                  {t('orchestration.drawer.tddGreenSeen')}
+                </span>
+              </div>
+              <div className="flex items-center gap-4 text-xs text-text-secondary">
+                <span>
+                  {t('orchestration.drawer.tddRounds')}：
+                  <span className="font-medium" data-testid="tdd-rounds">
+                    {t('orchestration.drawer.tddRoundsCount').replace(
+                      '{n}',
+                      String(tddEvidence.rounds),
+                    )}
+                  </span>
+                </span>
+                <span>
+                  {t('orchestration.drawer.tddViolations')}：
+                  <span
+                    className={
+                      tddEvidence.violations > 0 ? 'font-medium text-warning' : 'font-medium'
+                    }
+                    data-testid="tdd-violations"
+                  >
+                    {t('orchestration.drawer.tddViolationsCount').replace(
+                      '{n}',
+                      String(tddEvidence.violations),
+                    )}
+                  </span>
+                </span>
+              </div>
+              {tddEvidence.testCommands.length > 0 && (
+                <div>
+                  <div className="text-text-tertiary text-xs mb-1">
+                    {t('orchestration.drawer.tddTestRuns')}
+                  </div>
+                  <ul className="space-y-0.5">
+                    {tddEvidence.testCommands.map((cmd, idx) => (
+                      <li
+                        key={`${cmd}-${idx}`}
+                        className="text-xs font-mono truncate bg-bg-subtle rounded px-1.5 py-0.5"
+                        title={cmd}
+                      >
+                        {cmd}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
         </div>
 

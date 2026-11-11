@@ -257,13 +257,13 @@
 
 ### 步骤
 
-- [ ] 4.1 写 `test_workflow_mode.py`（RED）
+- [x] 4.1 写 `test_workflow_mode.py`（RED）
   - `test_resolve_mode_default` — 无输入 → "tdd"
   - `test_resolve_mode_env_override` — `SAGE_TDD_MODE=fast` → "fast"
   - `test_resolve_mode_user_text_fast` — "跳过测试" → "fast"
   - `test_resolve_mode_explicit_wins` — 显式 mode > env > default
 
-- [ ] 4.2 实现 `workflow_mode.py`（GREEN）
+- [x] 4.2 实现 `workflow_mode.py`（GREEN）
   ```python
   import os
   from typing import Optional
@@ -285,16 +285,19 @@
       return "tdd"
   ```
 
-- [ ] 4.3 修改 `planner.py` 意图识别
+- [x] 4.3 修改 `planner.py` 意图识别
   - 在 `plan()` 方法里，从用户输入提取关键词调 `resolve_workflow_mode(user_text=...)`
   - 把 `workflow_mode` 写入 `TaskPacket.workflow_mode`
 
-- [ ] 4.4 修改 `LaneDetailDrawer.tsx` 展示 TDD 证据
+- [x] 4.4 修改 `LaneDetailDrawer.tsx` 展示 TDD 证据
   - 新增 "TDD 证据" 区（在 acceptance 区下方）
   - 展示：red_seen / green_seen 徽章 + 测试命令列表 + 违规时间线
   - 订阅 `lane.tdd.evidence` 事件
 
-- [ ] 4.5 运行测试验证
+- [x] 4.5 运行测试验证
+  - 后端 76 passed (workflow_mode 18 + tdd_guard 22 + tdd_guard_tools 11 + task_review 9 + integration 16)
+  - 前端 16 passed (LaneDetailDrawer.test.tsx +2 新增)
+  - ruff All checks passed
 
 ---
 

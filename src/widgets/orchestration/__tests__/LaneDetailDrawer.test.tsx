@@ -315,4 +315,62 @@ describe('LaneDetailDrawer (A4)', () => {
 
     await waitFor(() => expect(screen.getByTestId('diff-empty')).toBeTruthy());
   });
+
+  it('renders TDD evidence section with badges, rounds, and violations', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'orchestration_list_lane_events') {
+        return [
+          {
+            event_id: 'evt-tdd',
+            event_type: 'lane.tdd.evidence',
+            lane_id: 'lane-1',
+            task_id: 'task-1',
+            agent_id: 'coder',
+            timestamp: 1759000000500,
+            provenance: 'LiveLane',
+            metadata: {
+              mode: 'tdd',
+              rounds: 2,
+              snapshot: {
+                red_seen: true,
+                green_seen: true,
+                violations: [{ round: 1, kind: 'edit_without_test' }],
+                test_commands: ['pytest backend/tests/'],
+              },
+            },
+          },
+        ];
+      }
+      return [];
+    });
+    render(
+      <I18nProvider>
+        <LaneDetailDrawer lane={makeLane()} open onClose={() => {}} />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('tdd-evidence')).toBeTruthy());
+    expect(screen.getByTestId('tdd-mode-badge').textContent).toContain('TDD');
+    expect(screen.getByTestId('tdd-red-badge')).toBeTruthy();
+    expect(screen.getByTestId('tdd-green-badge')).toBeTruthy();
+    expect(screen.getByTestId('tdd-rounds').textContent).toContain('2');
+    expect(screen.getByTestId('tdd-violations').textContent).toContain('1');
+    expect(screen.getByText('pytest backend/tests/')).toBeTruthy();
+  });
+
+  it('shows TDD evidence empty state when no evidence event is present', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'orchestration_list_lane_events') {
+        return [makeAcceptanceEvent([])];
+      }
+      return [];
+    });
+    render(
+      <I18nProvider>
+        <LaneDetailDrawer lane={makeLane()} open onClose={() => {}} />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('tdd-evidence-empty')).toBeTruthy());
+  });
 });
