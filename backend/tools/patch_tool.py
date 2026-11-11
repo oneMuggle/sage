@@ -38,6 +38,7 @@ from .file_guard import (
 from .file_tool import (
     MAX_WRITE_SIZE_BYTES,
     _notify_workspace_changed_safely,
+    _record_artifact_safely,
     detect_bom_encoding,
 )
 
@@ -365,6 +366,12 @@ class ApplyPatchTool(BaseTool):
             )
             # right-panel R5: 逐文件广播 workspace_changed（失败静默）
             _notify_workspace_changed_safely(written[-1]["path"], "patch")
+
+            # R5 (artifact panel): 刷新 artifact 记录（去重由 record_artifact 保证）
+            _record_artifact_safely(
+                resolved_path=written[-1]["path"],
+                size=len(updated_bytes),
+            )
 
         # G8 (2026-09-06): Python 文件批量写后语法诊断 —— 逐文件收集，不失败
         from .write_diagnostics import _syntax_check

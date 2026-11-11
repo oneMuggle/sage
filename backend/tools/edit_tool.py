@@ -379,9 +379,15 @@ class EditTool(BaseTool):
             return failed
 
         # right-panel R5: 广播 workspace_changed（变更面板事件驱动刷新，失败静默）
-        from .file_tool import _notify_workspace_changed_safely
+        from .file_tool import _notify_workspace_changed_safely, _record_artifact_safely
 
         _notify_workspace_changed_safely(str(target.resolve()), "edit")
+
+        # R5 (artifact panel): 刷新 artifact 记录（去重由 record_artifact 保证）
+        _record_artifact_safely(
+            resolved_path=str(target.resolve()),
+            size=len(updated_bytes),
+        )
 
         # G8 (2026-09-06): Python 文件编辑后语法诊断 —— 失败不影响编辑结果
         from .write_diagnostics import attach_diagnostics
