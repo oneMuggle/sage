@@ -109,6 +109,7 @@ export function ProjectAnalysisWizard({
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
   const [analyzing, setAnalyzing] = useState(false);
+  const [cancelled, setCancelled] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<ProjectAnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
@@ -135,13 +136,29 @@ export function ProjectAnalysisWizard({
     };
   }, []);
 
-  // 触发分析
+  // 触发分析（带前端超时 + 取消，避免 Electron IPC 长阻塞）
+  const ANALYSIS_TIMEOUT_MS = 60_000; // 前端 60s 超时（后端 180s，缓存命中则秒回）
   const runAnalysis = useCallback(async () => {
     if (!path) return;
     setAnalyzing(true);
+    setCancelled(false);
     setAnalysisError(null);
     try {
-      const result = await projectApi.analyze(path);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
+
+      const analysisPromise = projectApi.analyze(path);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        controller.signal.addEventListener('abort', () =>
+          reject(new Error('分析超时（60s），请重试或检查网络连接'))
+        );
+      });
+
+      const result = await Promise.race([analysisPromise, timeoutPromise]);
+      clearTimeout(timeoutId);
+
+      if (cancelled) return;
+
       setAnalysisResult(result);
       setSelectedType(result.report.level1Type);
       setSelectedSubType(result.report.subType);
@@ -152,11 +169,14 @@ export function ProjectAnalysisWizard({
         setSkipAiMode(true);
       }
     } catch (err) {
+      if (cancelled) return;
       setAnalysisError(err instanceof Error ? err.message : '分析失败');
     } finally {
-      setAnalyzing(false);
+      if (!cancelled) {
+        setAnalyzing(false);
+      }
     }
-  }, [path]);
+  }, [path, cancelled]);
 
   useEffect(() => {
     if (path) {
@@ -353,24 +373,38 @@ export function ProjectAnalysisWizard({
           <ArrowLeft className="mr-1 h-4 w-4" />
           返回
         </Button>
-        <Button
-          type="button"
-          onClick={handleNext}
-          disabled={!canProceed || analyzing}
-          data-testid="analysis-next-btn"
-        >
-          {analyzing ? (
-            <>
-              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              分析中...
-            </>
-          ) : (
-            <>
-              下一步
-              <ArrowRight className="ml-1 h-4 w-4" />
-            </>
+        <div className="flex items-center gap-2">
+          {analyzing && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setCancelled(true);
+                setAnalyzing(false);
+              }}
+            >
+              取消
+            </Button>
           )}
-        </Button>
+          <Button
+            type="button"
+            onClick={handleNext}
+            disabled={!canProceed || analyzing}
+            data-testid="analysis-next-btn"
+          >
+            {analyzing ? (
+              <>
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                分析中...
+              </>
+            ) : (
+              <>
+                下一步
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
