@@ -65,7 +65,7 @@
     "backend/wiki/ingest.py": 828,
     "backend/zotero/client.py": 1195,
     "electron/__tests__/commands.test.ts": 1241,
-    "electron/main.ts": 3574,
+    "electron/main.ts": 3600,
     "electron/preload.ts": 997,
     "electron/tests/updateIntegration.test.ts": 875,
     "electron/tests/updateManager.test.ts": 1785,
