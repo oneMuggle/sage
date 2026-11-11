@@ -532,8 +532,8 @@ function RightPanelInner({
       <div
         className={
           tab === 'browser'
-            ? 'h-[calc(100%-2.5rem)] min-h-0 overflow-hidden'
-            : 'h-[calc(100%-2.5rem)] overflow-y-auto min-h-0'
+            ? 'h-[calc(100%-3rem)] min-h-0 overflow-hidden'
+            : 'h-[calc(100%-3rem)] overflow-y-auto min-h-0'
         }
       >
         {tab === 'browser' ? (
