@@ -1,0 +1,303 @@
+/**
+ * Data Report Design System - CSS Custom Properties
+ *
+ * A data-dense design system optimized for reports, dashboards, and analytics.
+ * Table-first, chart-friendly, high information density.
+ */
+
+:root {
+  /* ============================================
+   * COLORS - Backgrounds
+   * ============================================ */
+
+  /* Primary backgrounds */
+  --dr-bg-primary: #ffffff;
+  --dr-bg-secondary: #f8fafc;
+  --dr-bg-tertiary: #f1f5f9;
+  --dr-bg-muted: #e2e8f0;
+  --dr-bg-inverse: #0f172a;
+
+  /* ============================================
+   * COLORS - Text (Foreground)
+   * ============================================ */
+
+  /* Text hierarchy */
+  --dr-fg-primary: #0f172a;
+  --dr-fg-secondary: #475569;
+  --dr-fg-tertiary: #64748b;
+  --dr-fg-muted: #94a3b8;
+  --dr-fg-inverse: #ffffff;
+
+  /* ============================================
+   * COLORS - Categorical Palette (Chart Series)
+   *
+   * 8 distinct hues optimized for data visualization.
+   * Use in order for consistent series identification.
+   * Maximum 8 colors to avoid confusion.
+   * ============================================ */
+
+  --dr-cat-blue: #2563eb;
+  --dr-cat-teal: #0d9488;
+  --dr-cat-amber: #d97706;
+  --dr-cat-rose: #e11d48;
+  --dr-cat-violet: #7c3aed;
+  --dr-cat-emerald: #059669;
+  --dr-cat-orange: #ea580c;
+  --dr-cat-slate: #475569;
+
+  /* Categorical palette as ordered list for easy iteration */
+  --dr-cat-1: var(--dr-cat-blue);
+  --dr-cat-2: var(--dr-cat-teal);
+  --dr-cat-3: var(--dr-cat-amber);
+  --dr-cat-4: var(--dr-cat-rose);
+  --dr-cat-5: var(--dr-cat-violet);
+  --dr-cat-6: var(--dr-cat-emerald);
+  --dr-cat-7: var(--dr-cat-orange);
+  --dr-cat-8: var(--dr-cat-slate);
+
+  /* ============================================
+   * COLORS - Semantic Data Colors
+   *
+   * Colors that communicate meaning through association.
+   * Green = positive/up, Red = negative/down, Gray = neutral
+   * ============================================ */
+
+  --dr-semantic-up: #059669;
+  --dr-semantic-down: #dc2626;
+  --dr-semantic-neutral: #64748b;
+  --dr-semantic-warning: #d97706;
+  --dr-semantic-info: #2563eb;
+
+  /* Semantic with opacity for backgrounds */
+  --dr-semantic-up-bg: rgba(5, 150, 105, 0.1);
+  --dr-semantic-down-bg: rgba(220, 38, 38, 0.1);
+  --dr-semantic-neutral-bg: rgba(100, 116, 139, 0.1);
+  --dr-semantic-warning-bg: rgba(217, 119, 6, 0.1);
+  --dr-semantic-info-bg: rgba(37, 99, 235, 0.1);
+
+  /* ============================================
+   * TYPOGRAPHY - Font Families
+   * ============================================ */
+
+  /* UI font: Inter for labels, descriptions, headings */
+  --dr-font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+
+  /* Monospace font: JetBrains Mono for data values, numbers, codes */
+  --dr-font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+
+  /* Tabular numerals: Apply to all numeric data for vertical alignment */
+  --dr-font-numeric: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --dr-font-numeric-feature: tabular-nums;
+
+  /* ============================================
+   * TYPOGRAPHY - Font Sizes
+   *
+   * Compact scale optimized for data density (13px-16px range).
+   * All sizes in px for precise control.
+   * ============================================ */
+
+  --dr-text-xs: 11px;      /* Metadata, timestamps, footnotes */
+  --dr-text-sm: 13px;      /* Table cells, secondary data */
+  --dr-text-base: 14px;    /* Default body text, labels */
+  --dr-text-md: 15px;      /* Emphasized text, subheadings */
+  --dr-text-lg: 16px;      /* Section headings, KPI values */
+  --dr-text-xl: 18px;      /* Page titles, major KPIs */
+  --dr-text-2xl: 24px;     /* Hero metrics (use sparingly) */
+  --dr-text-3xl: 32px;     /* Very large KPIs (rare) */
+
+  /* Line heights */
+  --dr-leading-tight: 1.25;
+  --dr-leading-normal: 1.5;
+  --dr-leading-relaxed: 1.625;
+
+  /* ============================================
+   * TYPOGRAPHY - Font Weights
+   * ============================================ */
+
+  --dr-font-regular: 400;
+  --dr-font-medium: 500;
+  --dr-font-semibold: 600;
+  --dr-font-bold: 700;
+
+  /* ============================================
+   * SPACING - 4px Grid System
+   *
+   * Tight data layouts use 4px grid.
+   * All spacing values are multiples of 4px.
+   * ============================================ */
+
+  --dr-space-0: 0;
+  --dr-space-1: 4px;       /* Tight spacing, icon gaps */
+  --dr-space-2: 8px;       /* Cell padding, small gaps */
+  --dr-space-3: 12px;      /* Component internal spacing */
+  --dr-space-4: 16px;      /* Card padding, standard gaps */
+  --dr-space-5: 20px;      /* Section spacing */
+  --dr-space-6: 24px;      /* Large section spacing */
+  --dr-space-8: 32px;      /* Page margins, major sections */
+  --dr-space-10: 40px;     /* Extra large spacing */
+  --dr-space-12: 48px;     /* Page padding */
+
+  /* Component-specific spacing */
+  --dr-cell-padding-x: var(--dr-space-2);      /* 8px horizontal */
+  --dr-cell-padding-y: 6px;                     /* 6px vertical */
+  --dr-card-padding: var(--dr-space-4);         /* 16px all sides */
+  --dr-card-padding-compact: var(--dr-space-3); /* 12px for compact cards */
+  --dr-chart-padding: var(--dr-space-4);        /* 16px all sides */
+
+  /* ============================================
+   * BORDERS
+   *
+   * Subtle borders for tables and cards.
+   * 1px width, border-radius 4px for slight softness.
+   * ============================================ */
+
+  --dr-border-width: 1px;
+  --dr-border-radius-sm: 2px;
+  --dr-border-radius: 4px;
+  --dr-border-radius-md: 6px;
+  --dr-border-radius-lg: 8px;
+
+  /* Border colors */
+  --dr-border-subtle: #e2e8f0;
+  --dr-border-default: #cbd5e1;
+  --dr-border-strong: #94a3b8;
+
+  /* ============================================
+   * SHADOWS
+   *
+   * Minimal shadows for data views.
+   * Data doesn't need depth, just subtle elevation.
+   * ============================================ */
+
+  --dr-shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --dr-shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --dr-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+
+  /* Sticky header shadow (when scrolled) */
+  --dr-shadow-sticky: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+  /* ============================================
+   * TRANSITIONS
+   *
+   * Fast transitions for hover states on data rows.
+   * 100ms for instant feedback without distraction.
+   * ============================================ */
+
+  --dr-transition-fast: 100ms;
+  --dr-transition-normal: 150ms;
+  --dr-transition-slow: 200ms;
+
+  --dr-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dr-ease-out: cubic-bezier(0, 0, 0.2, 1);
+
+  /* ============================================
+   * LAYOUT
+   *
+   * Dashboard layout constraints.
+   * Full-width with max-width for readability.
+   * ============================================ */
+
+  --dr-max-width: 1400px;
+  --dr-sidebar-width: 240px;
+
+  /* Grid gaps */
+  --dr-grid-gap: var(--dr-space-4);              /* 16px default gap */
+  --dr-grid-gap-sm: var(--dr-space-2);           /* 8px tight gap */
+  --dr-grid-gap-lg: var(--dr-space-6);           /* 24px loose gap */
+
+  /* ============================================
+   * TABLES
+   *
+   * Table-specific dimensions and styling.
+   * ============================================ */
+
+  --dr-table-row-height: 32px;
+  --dr-table-row-height-comfortable: 40px;
+  --dr-table-header-height: 36px;
+
+  /* ============================================
+   * CHARTS
+   *
+   * Chart-specific dimensions.
+   * ============================================ */
+
+  --dr-chart-height-sm: 200px;
+  --dr-chart-height-md: 300px;
+  --dr-chart-height-lg: 400px;
+
+  --dr-chart-point-size: 4px;
+  --dr-chart-point-size-hover: 6px;
+  --dr-chart-line-width: 1.5px;
+
+  /* ============================================
+   * SPARKLINES
+   *
+   * Inline sparkline dimensions.
+   * ============================================ */
+
+  --dr-sparkline-height: 16px;
+  --dr-sparkline-width: 60px;
+  --dr-sparkline-stroke-width: 1.5px;
+
+  /* ============================================
+   * RESPONSIVE BREAKPOINTS
+   *
+   * Standard breakpoints for responsive layouts.
+   * ============================================ */
+
+  --dr-breakpoint-sm: 640px;
+  --dr-breakpoint-md: 768px;
+  --dr-breakpoint-lg: 1024px;
+  --dr-breakpoint-xl: 1400px;
+}
+
+/* ============================================
+ * UTILITY CLASSES
+ *
+ * Common utility classes for applying
+ * data report design system properties.
+ * ============================================ */
+
+/* Tabular numerals: Apply to all numeric data */
+.dr-numeric {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--dr-font-numeric);
+}
+
+/* Right-align numeric data */
+.dr-numeric-right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Semantic coloring for positive values */
+.dr-positive {
+  color: var(--dr-semantic-up);
+}
+
+/* Semantic coloring for negative values */
+.dr-negative {
+  color: var(--dr-semantic-down);
+}
+
+/* Semantic coloring for neutral values */
+.dr-neutral {
+  color: var(--dr-semantic-neutral);
+}
+
+/* Compact text size for data density */
+.dr-compact {
+  font-size: var(--dr-text-sm);
+}
+
+/* Monospace for codes and identifiers */
+.dr-mono {
+  font-family: var(--dr-font-mono);
+}
+
+/* Truncate long text with ellipsis */
+.dr-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
