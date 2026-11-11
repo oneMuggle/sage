@@ -159,6 +159,7 @@ from backend.tools.permissions import (
     load_enforcer_from_settings,
     make_office_path_boundary,
 )
+from backend.utils import py_compat
 
 logger = logging.getLogger(__name__)
 
@@ -1605,7 +1606,9 @@ class SageAgent:
             # 原生协程落在事件循环上：wait_for 超时/中断取消都能真正收口
             # （根修 L12 遗弃线程），子代理中间事件经 agent_event_bridge
             # 投影进聊天流。仅当工具未实现 execute_async（测试桩/旧扩展）
-            # 才回落 run_in_executor 同步通路（行为与历史一致）。
+            # 才回落同步执行通路（行为与历史一致）。走 py_compat.to_thread
+            # 而非裸 run_in_executor：后者在线程池里新建空 context，
+            # 会丢掉 ToolExecutionContext（current_tool_context() 返回 None）。
             afn = getattr(tool, "execute_async", None)
             if callable(afn):
                 agent_kwargs = dict(args)
@@ -1613,18 +1616,16 @@ class SageAgent:
                     agent_kwargs["_tool_call_id"] = tool_call_id
                 coro = afn(**agent_kwargs)
             else:
-                coro = asyncio.get_running_loop().run_in_executor(
-                    None, functools.partial(tool.execute, **args)
-                )
+                coro = py_compat.to_thread(tool.execute, **args)
         elif name == "dispatch_subagents":
             dispatch_kwargs = dict(args)
             if tool_call_id:
                 dispatch_kwargs["_tool_call_id"] = tool_call_id
             coro = tool.execute_async(**dispatch_kwargs)
         elif getattr(tool, "is_blocking", False):
-            coro = asyncio.get_running_loop().run_in_executor(
-                None, functools.partial(tool.execute, **args)
-            )
+            # 与上方 agent 分支同理：裸 run_in_executor 丢 ContextVar，
+            # 走 py_compat.to_thread 保持 current_tool_context() 可见。
+            coro = py_compat.to_thread(tool.execute, **args)
         else:
             return False, tool.execute(**args)
 
@@ -2594,9 +2595,7 @@ class SageAgent:
                         )
 
                         async def _run_one_with_timeout(tc_p, _timeout=parallel_timeout):
-                            fut = asyncio.get_running_loop().run_in_executor(
-                                None, functools.partial(_run_one, tc_p)
-                            )
+                            fut = py_compat.to_thread(_run_one, tc_p)
                             if _timeout and _timeout > 0:
                                 try:
                                     return await asyncio.wait_for(fut, timeout=_timeout)

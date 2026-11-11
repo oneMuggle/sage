@@ -123,13 +123,15 @@ def _contains_binary_marker(file_path: Path) -> bool:
     return b"\x00" in head
 
 
-def detect_artifact_kind(path: str) -> str:
+def detect_artifact_kind(path: str) -> str:  # noqa: PLR0911
     """根据文件扩展名检测产物类型。"""
     ext = Path(path).suffix.lower()
     if ext in (".md", ".markdown"):
         return "markdown"
-    if ext in (".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".css", ".html", ".sh"):
+    if ext in (".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".css", ".sh"):
         return "code"
+    if ext in (".html", ".htm"):
+        return "html"
     if ext in (".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"):
         return "image"
     if ext in (".pdf", ".docx", ".xlsx", ".pptx"):
@@ -151,11 +153,12 @@ def _record_artifact_safely(
     tool_call_id: Optional[str] = None,
     conn: Any = None,
 ) -> None:
-    """写入成功后记录产物;任何失败都静默,不影响写入结果。"""
+    """写入成功后记录产物;失败仅记 warning,不影响写入结果。"""
     try:
         ctx = current_tool_context()
         sid = session_id or (ctx.session_id if ctx is not None else None)
         if not sid:
+            logger.warning("_record_artifact_safely: session_id 缺失,跳过记录 path=%s", resolved_path)
             return
         p = Path(resolved_path)
         artifact_repo.record_artifact(
@@ -170,7 +173,7 @@ def _record_artifact_safely(
             conn=conn,
         )
     except Exception:  # noqa: BLE001 — 记录产物失败绝不阻断写入
-        logger.debug("write_file: 记录产物失败", exc_info=True)
+        logger.warning("_record_artifact_safely: 记录产物失败 path=%s", resolved_path, exc_info=True)
 
 
 def _notify_workspace_changed_safely(path: str, change_kind: str) -> None:

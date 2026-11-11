@@ -7,6 +7,7 @@ from backend.design import get_design_studio
 from backend.design.async_bridge import DEFAULT_TIMEOUT, run_sync
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
+from backend.tools.file_tool import _record_artifact_safely, current_tool_context
 
 
 class DesignGenerateTool(BaseTool):
@@ -92,6 +93,17 @@ class DesignGenerateTool(BaseTool):
             artifact = run_sync(
                 studio.generate(project.id), timeout=DEFAULT_TIMEOUT,
             )
+
+            # 桥接到 artifacts 表,使设计产物出现在产物面板
+            ctx = current_tool_context()
+            session_id = ctx.session_id if ctx is not None else None
+            if session_id:
+                _record_artifact_safely(
+                    resolved_path=artifact.file_path,
+                    size=len(artifact.html_content.encode("utf-8")),
+                    session_id=session_id,
+                    tool_call_id=kwargs.get("tool_call_id"),
+                )
 
             return ToolResult(
                 success=True,

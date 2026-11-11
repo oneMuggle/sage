@@ -7,6 +7,7 @@ import {
   FileSpreadsheet,
   FileText,
   FolderOpen,
+  Globe,
   ShieldCheck,
 } from 'lucide-react';
 
@@ -39,6 +40,7 @@ const KIND_ICONS: Record<ArtifactKind, typeof File> = {
   pptx: FileText,
   latex: FileCode,
   text: File,
+  html: Globe, // 2026-11-11: .html/.htm 统一为独立 kind
 };
 
 const OFFICE_DELIVERY_KINDS: ReadonlySet<ArtifactKind> = new Set(['docx', 'xlsx', 'pptx', 'pdf']);

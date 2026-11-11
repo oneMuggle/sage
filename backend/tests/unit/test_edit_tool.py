@@ -443,3 +443,38 @@ def test_edit_rejects_oversized_file_before_reading(tmp_path, tool):
     assert result.success is False
     assert "file_too_large" in result.error
     assert str(MAX_WRITE_SIZE_BYTES) in result.error
+
+
+# ---------------------------------------------------------------------------
+# Artifact panel bridge (R5)
+# ---------------------------------------------------------------------------
+
+
+def test_edit_tool_refreshes_artifact_after_successful_edit(tmp_path, tool):
+    """edit_tool 成功编辑后应调用 _record_artifact_safely 刷新 artifact 记录。"""
+    from unittest.mock import patch
+
+    path = _write(tmp_path, "app.py", "x = 1\n")
+    expected_size = len(b"x = 2\n")
+
+    with patch("backend.tools.file_tool._record_artifact_safely") as mock_record:
+        result = tool.execute(file_path=path, old_string="x = 1", new_string="x = 2")
+
+    assert result.success is True
+    mock_record.assert_called_once()
+    call_kwargs = mock_record.call_args.kwargs
+    assert call_kwargs["resolved_path"] == str((tmp_path / "app.py").resolve())
+    assert call_kwargs["size"] == expected_size
+
+
+def test_edit_tool_does_not_record_artifact_on_failure(tmp_path, tool):
+    """edit_tool 编辑失败时不应调用 _record_artifact_safely。"""
+    from unittest.mock import patch
+
+    path = _write(tmp_path, "app.py", "x = 1\n")
+
+    with patch("backend.tools.file_tool._record_artifact_safely") as mock_record:
+        result = tool.execute(file_path=path, old_string="NOT_FOUND", new_string="x = 2")
+
+    assert result.success is False
+    mock_record.assert_not_called()

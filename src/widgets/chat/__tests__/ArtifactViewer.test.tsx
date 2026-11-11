@@ -21,7 +21,7 @@ vi.mock('../../../features/office/DocxBlobPreview', () => ({
   ),
 }));
 
-import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
+import type { Artifact } from '../../../features/artifacts/artifactApi';
 import { useArtifactContent } from '../../../features/artifacts/useArtifactContent';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { ArtifactViewer } from '../artifacts/ArtifactViewer';
@@ -164,8 +164,7 @@ describe('ArtifactViewer — right-panel R2 批次 A: 预览升级', () => {
     });
     render(
       <ArtifactViewer
-        // ArtifactKind 类型漏列 'html'（运行时后端会返回），测试按实际形状断言
-        artifact={{ ...sample, kind: 'html' as unknown as ArtifactKind, name: 'page.html' }}
+        artifact={{ ...sample, kind: 'html', name: 'page.html' }}
         sessionId="sess_001"
         onBack={() => {}}
       />,

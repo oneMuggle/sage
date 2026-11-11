@@ -95,38 +95,55 @@ def record_artifact(
     format_spec: Optional[str] = None,
     conn: Any = None,
 ) -> str:
-    """记录一个新产物,返回 artifact id。落库成功后广播 artifact_created 事件（S7）。
+    """记录产物,返回 artifact id。按 (session_id, path) 去重:
+    已存在则 UPDATE size/tool_call_id/created_at,不存在则 INSERT。
+    落库成功后广播 artifact_created 事件（S7）。
 
     ``conn`` 可选：工具层已持有会话 DB 连接时传入，避免另开全局连接
     （单测里全局库可能是真实 data/sage.db）。
     """
-    artifact_id = f"art_{uuid.uuid4().hex[:12]}"
     created_at = int(time.time() * 1000)
     if conn is None:
         db = get_database()
         conn = db.get_connection()
-    conn.execute(
-        """
-        INSERT INTO artifacts (
-            id, session_id, tool_call_id, path, name, kind, size,
-            created_at, workspace_path, format_spec
+
+    # 按 (session_id, path) 查现有记录，命中则复用同一行，避免重复产物
+    existing = conn.execute(
+        "SELECT id FROM artifacts WHERE session_id = ? AND path = ?",
+        (session_id, path),
+    ).fetchone()
+
+    if existing is not None:
+        artifact_id = existing["id"]
+        conn.execute(
+            "UPDATE artifacts SET tool_call_id = ?, size = ?, created_at = ? WHERE id = ?",
+            (tool_call_id, size, created_at, artifact_id),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            artifact_id,
-            session_id,
-            tool_call_id,
-            path,
-            name,
-            kind,
-            size,
-            created_at,
-            workspace_path,
-            format_spec,
-        ),
-    )
-    conn.commit()
+        conn.commit()
+    else:
+        artifact_id = f"art_{uuid.uuid4().hex[:12]}"
+        conn.execute(
+            """
+            INSERT INTO artifacts (
+                id, session_id, tool_call_id, path, name, kind, size,
+                created_at, workspace_path, format_spec
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                artifact_id,
+                session_id,
+                tool_call_id,
+                path,
+                name,
+                kind,
+                size,
+                created_at,
+                workspace_path,
+                format_spec,
+            ),
+        )
+        conn.commit()
     _emit_artifact_event(
         {
             "state": "artifact_created",
