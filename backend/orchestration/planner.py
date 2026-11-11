@@ -23,6 +23,7 @@ from backend.orchestration.llm_factory import build_llm_client_from_settings
 from backend.orchestration.models import Task, Team
 from backend.orchestration.task_registry import TaskRegistry
 from backend.orchestration.team_registry import TeamRegistry
+from backend.orchestration.workflow_mode import resolve_workflow_mode
 
 logger = logging.getLogger(__name__)
 
@@ -311,15 +312,18 @@ class Planner:
 
         # Persist tasks first (real ids assigned here), then resolve the
         # positional dependency placeholders ("idx:N") to real task ids.
+        plan_workflow_mode = resolve_workflow_mode(user_text=request)
         created_tasks: List[Task] = []
         placeholders: List[str] = []
         for task_data in tasks:
+            parameters = dict(task_data.get("parameters", {}))
+            parameters.setdefault("workflow_mode", plan_workflow_mode)
             task = Task(
                 task_id=f"task-{uuid.uuid4().hex[:12]}",
                 name=task_data["name"],
                 description=task_data["description"],
                 task_type=task_data.get("task_type", "general"),
-                parameters=task_data.get("parameters", {}),
+                parameters=parameters,
                 blocked_by=[],
                 team_id=team.team_id,
             )
@@ -402,13 +406,14 @@ class Planner:
 
         created_tasks: List[Task] = []
         stage_to_task: Dict[str, str] = {}
+        plan_workflow_mode = resolve_workflow_mode(user_text=request)
         for stage in template.stages:
             goal = (
                 stage.goal.replace("{request}", request)
                 if "{request}" in stage.goal
                 else f"{stage.goal}\n目标: {request}"
             )
-            parameters: Dict[str, Any] = {}
+            parameters: Dict[str, Any] = {"workflow_mode": plan_workflow_mode}
             if _is_dispatchable_agent(stage.agent_id):
                 parameters["agent_hint"] = stage.agent_id
             task = Task(

@@ -89,7 +89,7 @@
     "src/shared/api/projectApi.ts": 1595,
     "src/shared/api/projectApiTypes.ts": 1769,
     "src/shared/api/types/chatAndEventTypes.ts": 963,
-    "src/shared/api/types/domainEntityTypes.ts": 805,
+    "src/shared/api/types/domainEntityTypes.ts": 806,
     "src/shared/lib/i18n/locales/en/chatAndSider.ts": 824,
     "src/shared/lib/i18n/locales/zh/chatAndSider.ts": 825,
     "src/shared/types/electron-api.d.ts": 938,

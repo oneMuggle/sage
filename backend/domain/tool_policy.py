@@ -51,6 +51,9 @@ class ToolPolicy:
     workspace_root: Optional[str] = None
     # Sub-agent-only restrictions; direct tool callers keep legacy behavior.
     subagent_only: bool = False
+    # TDD workflow guard — mutable stateful object per lane.
+    # None = TDD tracking disabled (default for non-orchestration callers).
+    tdd_guard: Optional[Any] = None
 
     @classmethod
     def from_config(cls, cfg: Dict[str, Any]) -> ToolPolicy:

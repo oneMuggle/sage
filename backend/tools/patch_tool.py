@@ -380,6 +380,12 @@ class ApplyPatchTool(BaseTool):
             content["diagnostics_note"] = (
                 f"{len(diagnostics)} 个文件存在语法问题 —— 请修正后重新 apply_patch"
             )
+        # TDD 审计:逐文件上报写入,取第一条违规提醒随 content 传给 LLM。
+        for entry in written:
+            nudge = self._observe_write(str(entry.get("path", "")))
+            if nudge:
+                content["tdd_nudge"] = nudge
+                break
         return ToolResult(success=True, content=content)
 
 

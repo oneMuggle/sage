@@ -554,6 +554,11 @@ class WriteFileTool(BaseTool):
             # G8 (2026-09-06): Python 文件写后语法诊断 —— 失败不影响写入结果
             from .write_diagnostics import attach_diagnostics
 
+            # TDD 审计:违规时返回一句非阻塞提醒,随 content 传给 LLM。
+            nudge = self._observe_write(result["path"])
+            if nudge:
+                result["tdd_nudge"] = nudge
+
             return ToolResult(
                 success=True,
                 content=attach_diagnostics(result, result.get("path", "")),

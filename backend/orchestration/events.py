@@ -61,6 +61,9 @@ class LaneEvent(str, Enum):
     # Acceptance (A4 — acceptance checks ran after success)
     ACCEPTANCE_COMPLETED = "lane.acceptance.completed"
 
+    # TDD evidence (2026-11-11 — red→green guard snapshot per lane)
+    TDD_EVIDENCE = "lane.tdd.evidence"
+
     # Decision (A4 — user verdict on the delivery package)
     ACCEPTED = "lane.accepted"
     REJECTED = "lane.rejected"
