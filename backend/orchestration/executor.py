@@ -7,11 +7,13 @@ Handles the complete execution flow for a Lane:
 - Event recording at each transition
 - Recovery policy application on failure
 - Integration with existing agent/task execution
+- TDD workflow loop (acceptance hard gate + task-level review)
 """
 import asyncio
 import contextlib
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from backend.orchestration.acceptance import (
@@ -47,12 +49,40 @@ from backend.orchestration.run_event_adapter import (
 logger = logging.getLogger(__name__)
 
 
+def _resolve_lane_workflow_mode(lane: Lane, task: Any) -> str:
+    """解析 lane 的 workflow_mode：metadata > packet > parameters > 默认 "tdd"。"""
+    if lane.metadata and lane.metadata.get("workflow_mode") in ("tdd", "fast"):
+        return lane.metadata["workflow_mode"]
+    packet = getattr(task, "packet", None)
+    if packet is not None:
+        mode = getattr(packet, "workflow_mode", None)
+        if mode in ("tdd", "fast"):
+            return mode
+    params_mode = task.parameters.get("workflow_mode") if hasattr(task, "parameters") else None
+    if params_mode in ("tdd", "fast"):
+        return params_mode
+    return "tdd"
+
+
 class LaneExecutionError(Exception):
     """Raised when Lane execution fails."""
 
     def __init__(self, message: str, error_code: str = "EXECUTION_ERROR") -> None:
         super().__init__(message)
         self.error_code = error_code
+
+
+@dataclass
+class TddLoopState:
+    """Per-lane TDD 循环状态。
+
+    独立于 ``RecoveryPolicy.max_retries``（lane 级 crash/timeout 重试）。
+    ``max_rounds`` 默认 3：实现者最多被重新调用 3 次。
+    """
+
+    max_rounds: int = 3
+    round: int = 0
+    last_failure: str = ""
 
 
 class LaneExecutor:
@@ -77,6 +107,7 @@ class LaneExecutor:
         run_event_sink: Optional[RunEventSink] = None,
         run_id: Optional[str] = None,
         acceptance_enabled: bool = True,
+        task_reviewer: Optional[Callable] = None,
     ) -> None:
         """
         Initialize LaneExecutor.
@@ -89,6 +120,11 @@ class LaneExecutor:
                 for actual task execution. If None, uses default runner.
             acceptance_enabled: Run A4 acceptance checks after success.
                 Advisory only — never flips the lane outcome.
+            task_reviewer: Optional async callable for TDD task-level review.
+                Signature: ``(goal, implementer_output, tdd_snapshot,
+                acceptance_report) -> {"verdict": "pass"|"fail",
+                "reason": str, "assertions": list}``. When None, TDD loop
+                short-circuits to acceptance-only.
         """
         self.lane_registry = lane_registry
         self.task_registry = task_registry
@@ -98,6 +134,7 @@ class LaneExecutor:
         self.run_event_sink = run_event_sink
         self.run_id = run_id
         self.acceptance_enabled = acceptance_enabled
+        self.task_reviewer = task_reviewer
 
     async def execute_lane(  # noqa: PLR0911 — 7 returns: cancel/perm/fail/succeed/retry/abort/default
         self,
@@ -178,16 +215,93 @@ class LaneExecutor:
                         "last_error": str(_last_error)[:2000],
                     }
 
-        # Step 5: Execute the task
-        try:
-            result = await self.agent_runner(task, lane.agent_id)
+        # Step 4.5 (TDD): 解析 workflow_mode，构造 TddGuard（跨轮共享）。
+        workflow_mode = _resolve_lane_workflow_mode(lane, task)
+        if workflow_mode == "tdd":
+            from backend.orchestration.tdd_guard import TddGuard
 
-            # Step 6: Mark succeeded only if cancellation did not win the race.
+            guard = TddGuard(mode="tdd")
+            with contextlib.suppress(AttributeError):
+                task.parameters["_tdd_guard"] = guard
+        else:
+            guard = None
+        tdd_loop = TddLoopState(max_rounds=3)
+
+        # Step 5 + Step 6.5 (TDD 循环): agent → acceptance → review → loop
+        try:
+            result: Optional[Dict[str, Any]] = None
+            acceptance_summary: Optional[Dict[str, Any]] = None
+
+            while tdd_loop.round < tdd_loop.max_rounds:
+                result = await self.agent_runner(task, lane.agent_id)
+
+                # Cancel check — 每轮开始时检查
+                if self._is_cancelled(lane):
+                    return self._cancelled_result(lane)
+
+                # Step 6.5: acceptance checks（每轮都跑）
+                acceptance_summary = None
+                if self.acceptance_enabled:
+                    with contextlib.suppress(Exception):
+                        acceptance_summary = await self._run_acceptance(
+                            lane, gate=(workflow_mode == "tdd")
+                        )
+
+                acceptance_passed = bool(
+                    acceptance_summary and acceptance_summary.get("all_passed")
+                )
+
+                # fast 模式或 acceptance 通过 → 跳出循环
+                if workflow_mode != "tdd" or acceptance_passed:
+                    break
+
+                # TDD 模式 + acceptance 未过 → task-level review
+                if self.task_reviewer is None:
+                    # 无 reviewer → 退化为仅记录 acceptance，跳出
+                    break
+
+                try:
+                    review_result = await self.task_reviewer(
+                        goal=task.parameters.get("goal", ""),
+                        implementer_output=str(
+                            (result or {}).get("output", "")
+                        ),
+                        tdd_snapshot=guard.snapshot() if guard is not None else {},
+                        acceptance_report=acceptance_summary,
+                    )
+                except Exception:
+                    logger.exception("task_reviewer 异常，跳过本轮 TDD 复核")
+                    break
+
+                if review_result.get("verdict") == "pass":
+                    break
+
+                # reviewer 判 fail → 准备下一轮
+                tdd_loop.round += 1
+                tdd_loop.last_failure = review_result.get(
+                    "reason", "reviewer 判定不通过"
+                )
+                with contextlib.suppress(AttributeError):
+                    task.parameters["retry_hint"] = {
+                        "attempt": tdd_loop.round,
+                        "last_error": tdd_loop.last_failure[:2000],
+                    }
+            else:
+                # while 循环未 break（round >= max_rounds）→ 判定失败
+                return await self._fail_lane(
+                    lane,
+                    tdd_loop.last_failure or "TDD 循环已达上限",
+                    "TDD_LOOP_EXHAUSTED",
+                )
+
+            # Step 6: 循环以 break 退出 → Mark succeeded
             if self._is_cancelled(lane):
                 return self._cancelled_result(lane)
-            succeeded_metadata = {
+            succeeded_metadata: Dict[str, Any] = {
                 "result_keys": list(result.keys()) if isinstance(result, dict) else None,
             }
+            if guard is not None:
+                succeeded_metadata["tdd_loop_rounds"] = tdd_loop.round + 1
             self._record_event(
                 lane,
                 LaneEvent.SUCCEEDED,
@@ -206,12 +320,6 @@ class LaneExecutor:
             # Update task status
             self.task_registry.mark_completed(task.task_id, result=result)
 
-            # Step 6.5 (A4): best-effort acceptance checks — advisory only.
-            # Never flips the lane outcome; failures are recorded, not raised.
-            acceptance_summary = None
-            with contextlib.suppress(Exception):
-                acceptance_summary = await self._run_acceptance(lane)
-
             # Round 4 (2026-09-19, orch-acceptance-review-plan): 验收摘要随
             # lane 结果回传（dispatcher 收集后注入 reviewer 输入）。
             return {
@@ -229,12 +337,14 @@ class LaneExecutor:
             error_code = exc.error_code if isinstance(exc, LaneExecutionError) else None
             return await self._handle_failure(lane, task, str(exc), error_code=error_code)
 
-    async def _run_acceptance(self, lane: Lane) -> Optional[Dict[str, Any]]:
-        """Run A4 acceptance checks and record the result event (best-effort).
+    async def _run_acceptance(
+        self, lane: Lane, *, gate: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """Run A4 acceptance checks and record the result event.
 
-        Round 4 (2026-09-19): 返回验收摘要（``{"all_passed": bool, "checks":
-        [CheckResult.to_dict()]}``），随 lane 结果回传供复核环消费；
-        disabled / reviewer lane 返回 None（语义不变：advisory，不翻转结论）。
+        ``gate=True`` 时返回的摘要包含 ``"gate": True``，通知调用方（TDD
+        循环）本轮 failure 是硬门而非仅记录；``gate=False``（默认）保持
+        原 advisory 语义。
         """
         if not self.acceptance_enabled:
             return None
@@ -246,12 +356,14 @@ class LaneExecutor:
             lambda: run_acceptance_checks(
                 lane.worktree,
                 configured=(lane.metadata or {}).get("acceptance_checks"),
+                gate=gate,
             ),
         )
         record_acceptance_event(self.event_recorder, lane, report)
         return {
             "all_passed": report.all_passed,
             "checks": [c.to_dict() for c in report.checks],
+            "gate": report.gate,
         }
 
     async def _validate_permissions(self, lane: Lane) -> bool:

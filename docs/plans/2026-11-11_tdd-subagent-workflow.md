@@ -162,7 +162,7 @@
 
 ### 步骤
 
-- [ ] 3.1 修改 `models.py` 加 `workflow_mode`
+- [x] 3.1 修改 `models.py` 加 `workflow_mode`
   ```python
   @dataclass
   class TaskPacket:
@@ -170,7 +170,7 @@
       workflow_mode: str = "tdd"  # "tdd" | "fast"
   ```
 
-- [ ] 3.2 修改 `acceptance.py` 加 `gate` 参数
+- [x] 3.2 修改 `acceptance.py` 加 `gate` 参数
   ```python
   def run_acceptance_checks(
       workdir: Optional[str],
@@ -183,7 +183,7 @@
   - `gate=True` 时 failure 记入 metadata 供 executor 判断
   - `gate=False` 保持原行为（best-effort）
 
-- [ ] 3.3 修改 `subagent_runner.py` 构造 TddGuard
+- [x] 3.3 修改 `subagent_runner.py` 构造 TddGuard
   ```python
   from backend.orchestration.tdd_guard import TddGuard
 
@@ -198,7 +198,7 @@
   )
   ```
 
-- [ ] 3.4 修改 `executor.py` 实现 TDD 循环
+- [x] 3.4 修改 `executor.py` 实现 TDD 循环
   ```python
   # Step 6.5 后新增 Step 6.6: TDD loop
   workflow_mode = lane.metadata.get("workflow_mode", "tdd")
@@ -226,13 +226,13 @@
       # 重新执行 lane（复用 run_lane_with_retry 逻辑）
   ```
 
-- [ ] 3.5 写集成测试 `test_tdd_gate_loop.py`（RED→GREEN）
+- [x] 3.5 写集成测试 `test_tdd_gate_loop.py`（RED→GREEN）
   - `test_acceptance_failure_triggers_tdd_loop` — acceptance 失败 → 循环
   - `test_acceptance_pass_exits_loop` — acceptance 通过 → 不循环
   - `test_tdd_loop_max_rounds_respected` — 最多 3 轮
   - `test_fast_mode_no_gate` — fast 模式 acceptance 失败不阻塞
 
-- [ ] 3.6 运行测试验证
+- [x] 3.6 运行测试验证
   ```bash
   /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/integration/test_tdd_gate_loop.py -v
   ```

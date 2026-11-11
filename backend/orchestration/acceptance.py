@@ -61,9 +61,14 @@ class CheckResult:
 
 @dataclass
 class AcceptanceReport:
-    """一轮验收汇总。全跳过视为通过（无失败项）。"""
+    """一轮验收汇总。全跳过视为通过（无失败项）。
+
+    ``gate=True`` 时调用方（executor）将 failure 视为硬门——进入 TDD 循环
+    下一轮而非仅记事件；``gate=False``（默认）保持建议性行为。
+    """
 
     checks: List[CheckResult] = dc_field(default_factory=list)
+    gate: bool = False
 
     @property
     def all_passed(self) -> bool:
@@ -73,6 +78,7 @@ class AcceptanceReport:
         return {
             "checks": [c.to_dict() for c in self.checks],
             "all_passed": self.all_passed,
+            "gate": self.gate,
         }
 
 
@@ -259,17 +265,24 @@ def run_acceptance_checks(
     configured: Any = None,
     *,
     check_timeout_s: int = CHECK_TIMEOUT_S,
+    gate: bool = False,
 ) -> AcceptanceReport:
-    """跑一轮验收，永不抛错（调用方仍建议包 suppress，双保险）。"""
+    """跑一轮验收，永不抛错（调用方仍建议包 suppress，双保险）。
+
+    ``gate=True`` 时返回的 ``AcceptanceReport.gate`` 同步置位，通知调用方
+    failure 是硬门（进入 TDD 循环）而非仅记录。
+    """
     report = AcceptanceReport()
     try:
-        return _run_acceptance_checks_inner(workdir, configured, check_timeout_s)
+        report = _run_acceptance_checks_inner(workdir, configured, check_timeout_s)
     except Exception as exc:  # noqa: BLE001 — 验收绝不能炸主流程
         logger.warning("acceptance 整轮异常，转失败条目: %s", exc)
+        report = AcceptanceReport()
         report.checks.append(
             CheckResult(name="acceptance-runner", passed=False, summary=f"验收器异常：{exc}")
         )
-        return report
+    report.gate = gate
+    return report
 
 
 def _run_acceptance_checks_inner(
