@@ -47,10 +47,22 @@ const PANEL_MIN_WIDTH = 320;
 const PANEL_MAX_WIDTH = 480;
 const PANEL_GAP = 8;
 
-function compatibilityEnabled(config: PetConfig): boolean {
+/**
+ * Whether to render the pet in an opaque "compatibility" window.
+ *
+ * Transparent Electron windows are unreliable on legacy Windows with the GPU
+ * flags we force there (disable-gpu / disable-gpu-compositing / no Skia or Viz
+ * compositor): the sprite renders into a black or invisible surface. So on
+ * legacy Windows we always take the opaque path, even for an explicit `off` —
+ * otherwise the pet silently disappears until compatibility is toggled back on.
+ */
+export function compatibilityEnabled(
+  config: PetConfig,
+  legacyWindows: boolean = isLegacyWindows(),
+): boolean {
   if (config.compatibilityMode === 'on') return true;
-  if (config.compatibilityMode === 'off') return false;
-  return isLegacyWindows();
+  if (legacyWindows) return true;
+  return false;
 }
 
 function readStoredPosition(file: string): StoredPosition | null {
