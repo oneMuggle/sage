@@ -361,6 +361,20 @@ class WordIndexSpec(BaseModel):
     )
 
 
+class WordImageSpec(ImageSourceSpec):
+    """Word 文档插图（Round 8）：在 ImageSourceSpec 基础上支持行内放置与题注。
+
+    ``after_paragraph`` 为 ``paragraphs`` 的 0-based 下标，图片插入到该段落
+    之后；None = 文末追加（Round 7 之前的既有行为）。越界在生成期钳到末尾。
+    ``caption`` 非空时生成居中题注（"图N　caption"），图号全文独立计数。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    caption: Optional[str] = Field(default=None, max_length=200)
+    after_paragraph: Optional[int] = Field(default=None, ge=0)
+
+
 class OfficeWordGenerateRequest(BaseModel):
     """POST /api/v1/office/word/generate."""
 
@@ -406,18 +420,6 @@ class OfficeWordGenerateRequest(BaseModel):
         default=None,
         description="西文字体名，默认 Times New Roman",
     )
-class WordImageSpec(ImageSourceSpec):
-    """Word 文档插图（Round 8）：在 ImageSourceSpec 基础上支持行内放置与题注。
-
-    ``after_paragraph`` 为 ``paragraphs`` 的 0-based 下标，图片插入到该段落
-    之后；None = 文末追加（Round 7 之前的既有行为）。越界在生成期钳到末尾。
-    ``caption`` 非空时生成居中题注（"图N　caption"），图号全文独立计数。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    caption: Optional[str] = Field(default=None, max_length=200)
-    after_paragraph: Optional[int] = Field(default=None, ge=0)
 
 
 # ──────────────────────────────────────────────────────────────────────
