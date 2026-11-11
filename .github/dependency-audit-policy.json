@@ -1653,6 +1653,20 @@
       "controls": "Pillow 10.4.0 is the ceiling on Python 3.8 (Pillow 11+ requires Python >=3.9); local document processing, no untrusted remote image ingestion; quarterly audit review through Win7 LTS EOL 2027-12-13",
       "exception": "temporary exception pending Win7 LTS EOL or upstream Pillow patch compatible with Python 3.8",
       "notes": "py38-ceiling: Pillow 10.4.0 is the ceiling on Python 3.8 for the Win7 LTS track."
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "pip",
+      "package": "pillow",
+      "package_version": "10.4.0",
+      "advisory": "PYSEC-2026-4363",
+      "advisory_url": "https://osv.dev/vulnerability/PYSEC-2026-4363",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "transitive dependency via document rendering (docxcompose/reportlab/python-pptx); TIFF-encoder metadata handling only, local-only file processing on Win7 LTS track; Sage does not re-save untrusted third-party TIFFs with attacker-controlled metadata",
+      "controls": "Pillow 10.4.0 is the ceiling on Python 3.8 (fix is Pillow 13.0.0, which requires Python >=3.11); local document processing, no untrusted remote image ingestion; quarterly audit review through Win7 LTS EOL 2027-12-13",
+      "exception": "temporary exception pending Win7 LTS EOL or upstream Pillow patch compatible with Python 3.8",
+      "notes": "py38-ceiling: PYSEC-2026-4363 (CVE-2026-112902 / GHSA-xvh5-g6gv-559v, libtiff TIFFSetField encoder memory disclosure/crash, published 2026-11-05) is fixed only in Pillow 13.0.0, whose pyproject.toml declares requires-python >=3.11. Pillow 10.4.0 remains the last release supporting Python 3.8 (Win7 LTS, EOL 2027-12-13), so no Py3.8-compatible fix exists on this track."
     }
   ]
 }
