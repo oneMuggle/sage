@@ -37,6 +37,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from backend.domain.risk import RiskClass
 
+from ._workspace_scan import (
+    record_workspace_changes,
+    resolve_workspace_root,
+    snapshot_workspace,
+)
 from .base import BaseTool, ToolPolicy, ToolResult, ToolSchema
 from .bash_config import BashConfig, load_bash_config
 from .bash_session import (
@@ -174,7 +179,16 @@ class BashTool(BaseTool):
         shell = resolve_shell()
         if run_in_background:
             return self._run_background(command, resolved_cwd, shell)
-        return self._run_foreground(command, resolved_cwd, shell, self._clamp_timeout(timeout))
+        # 命令可能直接写文件（不经过 write_file），执行前后 diff 工作区补记产物。
+        # 后台命令在 execute() 返回时尚未结束，无意义，故只扫前台。
+        workspace_root = resolve_workspace_root(self._policy)
+        before_snapshot = (
+            snapshot_workspace(workspace_root) if workspace_root is not None else None
+        )
+        result = self._run_foreground(command, resolved_cwd, shell, self._clamp_timeout(timeout))
+        if result.success:
+            record_workspace_changes(workspace_root, before_snapshot)
+        return result
 
     def _resolve_cwd(self, cwd: Optional[str]) -> Tuple[Optional[str], Optional[ToolResult]]:
         """确定工作目录；越界返回拒绝结果。
