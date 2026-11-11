@@ -150,9 +150,10 @@ class TaskPacket:
     recovery_policy: RecoveryPolicy = field(default_factory=RecoveryPolicy)
     escalation_policy: EscalationPolicy = field(default_factory=EscalationPolicy)
 
-    # TDD workflow mode: "tdd"（默认，强制 red→green 循环）| "fast"（best-effort）
+    # TDD workflow mode: "tdd"（强制 red→green 循环）| "fast"（best-effort）
+    # None = 未显式声明 → 解析时继续走环境变量 → 默认 "tdd"
     # 设计文档: docs/superpowers/specs/2026-11-11-tdd-subagent-workflow-design.md §3
-    workflow_mode: str = "tdd"
+    workflow_mode: Optional[str] = None
 
 
 # ============================================================================

@@ -26,6 +26,7 @@ from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.models import Lane
 from backend.orchestration.orch_settings import resolve_tool_call_budget
 from backend.orchestration.tdd_guard import TddGuard
+from backend.orchestration.workflow_mode import resolve_workflow_mode
 
 # Phase 3 (startup perf): SageAgent / validate_against_schema 惰性解析的源模块
 _AGENT_MODULE = "backend.core.legacy.agent"
@@ -101,22 +102,21 @@ def run_lane_accepts_backoff(fn: Any) -> bool:
 
 
 def _resolve_workflow_mode(task: Any) -> str:
-    """解析任务的 workflow_mode：packet > parameters > 默认 "tdd"。
+    """解析任务的 workflow_mode：packet > parameters > env > 默认 "tdd"。
 
     优先级：
     1. ``task.packet.workflow_mode``（显式声明）
     2. ``task.parameters["workflow_mode"]``（调用方透传）
-    3. 默认值 ``"tdd"``
+    3. 环境变量 ``SAGE_TDD_MODE``（全局兜底）
+    4. 默认值 ``"tdd"``
     """
+    explicit = None
     packet = getattr(task, "packet", None)
     if packet is not None:
-        mode = getattr(packet, "workflow_mode", None)
-        if mode in ("tdd", "fast"):
-            return mode
-    params_mode = task.parameters.get("workflow_mode") if hasattr(task, "parameters") else None
-    if params_mode in ("tdd", "fast"):
-        return params_mode
-    return "tdd"
+        explicit = getattr(packet, "workflow_mode", None)
+    if explicit not in ("tdd", "fast"):
+        explicit = task.parameters.get("workflow_mode") if hasattr(task, "parameters") else None
+    return resolve_workflow_mode(explicit=explicit)
 
 
 def extract_json_payload(text: str) -> Optional[Dict[str, Any]]:

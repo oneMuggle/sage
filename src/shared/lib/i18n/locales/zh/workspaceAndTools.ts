@@ -376,6 +376,20 @@ export const zhWorkspaceAndTools = {
   'orchestration.drawer.diff': '产物摘要',
   'orchestration.drawer.diffEmpty': '暂无产物摘要',
 
+  // ─── TDD 证据区（lane.tdd.evidence 事件）─────
+  'orchestration.drawer.tddEvidence': 'TDD 证据',
+  'orchestration.drawer.tddNoEvidence': '无 TDD 运行记录',
+  'orchestration.drawer.tddMode': '模式',
+  'orchestration.drawer.tddModeTdd': 'TDD（红→绿）',
+  'orchestration.drawer.tddModeFast': '快速模式',
+  'orchestration.drawer.tddRounds': '循环轮次',
+  'orchestration.drawer.tddRoundsCount': '{n} 轮',
+  'orchestration.drawer.tddRedSeen': '已见红',
+  'orchestration.drawer.tddGreenSeen': '已见绿',
+  'orchestration.drawer.tddViolations': '违规',
+  'orchestration.drawer.tddViolationsCount': '{n} 次',
+  'orchestration.drawer.tddTestRuns': '测试运行',
+
   // ─── 会话导出 (U18 HTML 会话导出) ──────
   'session.export_failed': '导出失败：{message}',
   'session.export_html': '导出为 HTML',
