@@ -240,3 +240,45 @@ def test_apply_patch_fuzzy_atomic_rollback_preserved(workspace):
     )
     assert result.success is False
     assert "alpha = 1" in (workspace / "a.py").read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Artifact panel bridge (R5)
+# ---------------------------------------------------------------------------
+
+
+def test_patch_tool_refreshes_artifact_for_each_written_file(workspace):
+    """apply_patch 成功写入后应对每个文件调用 _record_artifact_safely。"""
+    from unittest.mock import patch
+
+    tool = _tool(workspace)
+    patches = [
+        _patch("a.py", "alpha = 1", "alpha = 10"),
+        _patch("b.py", "print('b')", "print('bb')"),
+    ]
+
+    with patch("backend.tools.patch_tool._record_artifact_safely") as mock_record:
+        result = tool.execute(patches=patches)
+
+    assert result.success is True
+    assert mock_record.call_count == 2
+    recorded_paths = [call.kwargs["resolved_path"] for call in mock_record.call_args_list]
+    assert str((workspace / "a.py").resolve()) in recorded_paths
+    assert str((workspace / "b.py").resolve()) in recorded_paths
+
+
+def test_patch_tool_does_not_record_artifact_on_failure(workspace):
+    """apply_patch 原子失败时不应调用 _record_artifact_safely（整批不写）。"""
+    from unittest.mock import patch
+
+    tool = _tool(workspace)
+    patches = [
+        _patch("a.py", "alpha = 1", "alpha = 10"),
+        _patch("b.py", "NOT_FOUND", "x"),  # 第二条会失败
+    ]
+
+    with patch("backend.tools.patch_tool._record_artifact_safely") as mock_record:
+        result = tool.execute(patches=patches)
+
+    assert result.success is False
+    mock_record.assert_not_called()
