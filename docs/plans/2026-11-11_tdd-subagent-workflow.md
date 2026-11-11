@@ -118,13 +118,13 @@
 
 ### 步骤
 
-- [ ] 2.1 写 `test_task_review.py`（RED）
+- [x] 2.1 写 `test_task_review.py`（RED）
   - `test_build_task_review_prompt_includes_goal` — prompt 包含 task goal
   - `test_build_task_review_prompt_includes_tdd_evidence` — prompt 包含 TDD 快照
   - `test_parse_review_verdict_pass` — 解析 `VERDICT: PASS`
   - `test_parse_review_verdict_fail` — 解析 `VERDICT: FAIL` + reason
 
-- [ ] 2.2 实现 `task_review.py`（GREEN）
+- [x] 2.2 实现 `task_review.py`（GREEN）
   ```python
   def build_task_review_prompt(
       goal: str,
@@ -138,7 +138,7 @@
       """解析 reviewer 输出 → {"verdict": "pass"|"fail", "reason": str, "assertions": list}"""
   ```
 
-- [ ] 2.3 运行测试验证
+- [x] 2.3 运行测试验证
 
 ---
 
