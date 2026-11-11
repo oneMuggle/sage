@@ -14,6 +14,7 @@ Claude Code 项目 → 会话归属）。路由面涵盖：
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from pathlib import Path
@@ -1249,9 +1250,14 @@ async def analyze_project(request: ProjectAnalyzeRequest) -> ProjectAnalyzeRespo
     except OSError as exc:
         raise _error(400, "path_error", f"路径错误: {exc}") from exc
 
-    profile = profile_project(path)
+    # 将同步的 profile_project 放入线程池，避免阻塞事件循环
+    loop = asyncio.get_event_loop()
+    profile = await loop.run_in_executor(None, lambda: profile_project(path))
+
     agent = ProjectAnalysisAgent()
-    report = await agent.analyze(profile)
+    # 整体 3 分钟超时（LLM 分析 + 画像采集）
+    async with asyncio.timeout(180):
+        report = await agent.analyze(profile)
 
     profile_dict = profile.to_dict(include_source_content=False)
     report_dict = report.to_dict()

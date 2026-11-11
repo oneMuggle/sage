@@ -118,6 +118,10 @@ export function ProjectAnalysisWizard({
   const [adoptedRecommendations, setAdoptedRecommendations] = useState<Set<number>>(new Set());
 
   const [skipAiMode, setSkipAiMode] = useState(false);
+  const [cancelled, setCancelled] = useState(false);
+
+  // 分析超时时间（毫秒）
+  const ANALYSIS_TIMEOUT_MS = 60_000;
 
   // 拉两级类型目录（用于 L2 展示与回查）
   useEffect(() => {
@@ -135,13 +139,21 @@ export function ProjectAnalysisWizard({
     };
   }, []);
 
-  // 触发分析
+  // 触发分析（带超时与取消支持）
   const runAnalysis = useCallback(async () => {
     if (!path) return;
     setAnalyzing(true);
     setAnalysisError(null);
+    setCancelled(false);
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('ANALYSIS_TIMEOUT')), ANALYSIS_TIMEOUT_MS);
+    });
+
     try {
-      const result = await projectApi.analyze(path);
+      const result = await Promise.race([projectApi.analyze(path), timeoutPromise]);
+      // 如果已取消，丢弃结果
+      if (cancelled) return;
       setAnalysisResult(result);
       setSelectedType(result.report.level1Type);
       setSelectedSubType(result.report.subType);
@@ -152,11 +164,25 @@ export function ProjectAnalysisWizard({
         setSkipAiMode(true);
       }
     } catch (err) {
-      setAnalysisError(err instanceof Error ? err.message : '分析失败');
+      if (cancelled) return;
+      if (err instanceof Error && err.message === 'ANALYSIS_TIMEOUT') {
+        setAnalysisError('分析超时（60秒），请重试或跳过 AI 分析');
+      } else {
+        setAnalysisError(err instanceof Error ? err.message : '分析失败');
+      }
     } finally {
-      setAnalyzing(false);
+      if (!cancelled) {
+        setAnalyzing(false);
+      }
     }
-  }, [path]);
+  }, [path, cancelled]);
+
+  // 取消分析（软取消：前端不再等待，后端继续执行）
+  const cancelAnalysis = useCallback(() => {
+    setCancelled(true);
+    setAnalyzing(false);
+    setAnalysisError('已取消分析');
+  }, []);
 
   useEffect(() => {
     if (path) {
@@ -224,7 +250,17 @@ export function ProjectAnalysisWizard({
           {catalogError && <span className="text-xs text-destructive">类型目录加载失败</span>}
         </div>
         <div className="flex items-center gap-1.5">
-          {!skipAiMode && (
+          {analyzing && (
+            <button
+              type="button"
+              data-testid="analysis-cancel-btn"
+              onClick={cancelAnalysis}
+              className="rounded border border-destructive/50 bg-destructive/10 px-2 py-1 text-xs text-destructive hover:bg-destructive/20"
+            >
+              取消分析
+            </button>
+          )}
+          {!skipAiMode && !analyzing && (
             <button
               type="button"
               data-testid="analysis-skip-ai-btn"
