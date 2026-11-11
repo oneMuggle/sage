@@ -123,7 +123,7 @@ def _contains_binary_marker(file_path: Path) -> bool:
     return b"\x00" in head
 
 
-def detect_artifact_kind(path: str) -> str:
+def detect_artifact_kind(path: str) -> str:  # noqa: PLR0911
     """根据文件扩展名检测产物类型。"""
     ext = Path(path).suffix.lower()
     if ext in (".md", ".markdown"):
