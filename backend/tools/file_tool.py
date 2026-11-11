@@ -128,8 +128,10 @@ def detect_artifact_kind(path: str) -> str:
     ext = Path(path).suffix.lower()
     if ext in (".md", ".markdown"):
         return "markdown"
-    if ext in (".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".css", ".html", ".sh"):
+    if ext in (".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".css", ".sh"):
         return "code"
+    if ext in (".html", ".htm"):
+        return "html"
     if ext in (".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"):
         return "image"
     if ext in (".pdf", ".docx", ".xlsx", ".pptx"):

@@ -11,6 +11,8 @@ def test_detect_artifact_kind():
     assert file_tool.detect_artifact_kind("a.csv") == "csv"
     assert file_tool.detect_artifact_kind("a.json") == "code"
     assert file_tool.detect_artifact_kind("a.unknown") == "text"
+    assert file_tool.detect_artifact_kind("a.html") == "html"
+    assert file_tool.detect_artifact_kind("a.htm") == "html"
 
 
 def test_write_file_records_artifact(tmp_path):

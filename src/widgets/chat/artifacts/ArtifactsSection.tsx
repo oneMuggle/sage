@@ -49,7 +49,7 @@ const FILTER_GROUPS: ReadonlyArray<{ key: KindFilter; label: string; kinds: Read
   {
     key: 'doc',
     label: '文档',
-    kinds: new Set(['markdown', 'text', 'pdf', 'docx', 'pptx']),
+    kinds: new Set(['markdown', 'text', 'pdf', 'docx', 'pptx', 'html']),
   },
   {
     key: 'sheet',
