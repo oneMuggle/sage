@@ -351,6 +351,10 @@ class BashTool(BaseTool):
                 "duration_seconds": round(duration, 3),
                 "truncated": out_truncated or err_truncated,
             }
+            # TDD 审计：记录测试命令的运行结果（red/green 证据来源）。
+            self._observe_call(
+                "bash", {"command": command, "exit_code": process.returncode}
+            )
             # D-3 (round5 批次 D): 测试命令非零退出 → 解析失败用例清单回喂,
             # 让模型拿到确定性失败列表而不是在截断文本里盲找。
             if process.returncode not in (0, None):
@@ -515,6 +519,16 @@ class BashOutputTool(BaseTool):
             )
             if test_failures is not None:
                 payload["test_failures"] = test_failures
+        # TDD 审计：后台 shell 结束时补记测试命令结果（red/green 证据来源）。
+        session = get_registry().get(shell_id)
+        if session is not None:
+            self._observe_call(
+                "bash",
+                {
+                    "command": session.command,
+                    "exit_code": payload.get("exit_code"),
+                },
+            )
         return ToolResult(success=True, content=payload)
 
 
