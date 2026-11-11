@@ -185,6 +185,7 @@ async def test_executor_run_acceptance_returns_summary():
             {"name": "pytest", "passed": False, "skipped": False, "summary": "3 failed"},
             {"name": "worktree", "passed": True, "skipped": True, "summary": ""},
         ],
+        "gate": False,
     }
     mock_checks.assert_called_once()
     mock_record.assert_called_once()
