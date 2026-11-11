@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Dict, List
 
 from pydantic import BaseModel, ConfigDict
 
@@ -74,9 +75,9 @@ class CraftRuleRegistry:
     def __init__(self, content_dir: Path) -> None:
         self._content_dir = content_dir
         self._craft_dir = content_dir / "craft"
-        self._cache: dict[str, CraftRule] = {}
+        self._cache: Dict[str, CraftRule] = {}
 
-    def list_rules(self) -> list[CraftRule]:
+    def list_rules(self) -> List[CraftRule]:
         """List all available craft rules, sorted by priority.
 
         Unreadable or malformed files are skipped rather than raising, so a
@@ -84,7 +85,7 @@ class CraftRuleRegistry:
         """
         if not self._craft_dir.exists():
             return []
-        by_id: dict[str, CraftRule] = {}
+        by_id: Dict[str, CraftRule] = {}
         for md_file in sorted(self._craft_dir.glob("*.md")):
             rule_id = md_file.stem
             if rule_id not in self._cache:
@@ -97,7 +98,7 @@ class CraftRuleRegistry:
             by_id[rule.id or rule_id] = rule
         return sorted(by_id.values(), key=lambda r: r.priority)
 
-    def rules_for_kind(self, template_kind: str) -> list[CraftRule]:
+    def rules_for_kind(self, template_kind: str) -> List[CraftRule]:
         """Return rules applicable to a given template kind, sorted by priority."""
         return [
             r
