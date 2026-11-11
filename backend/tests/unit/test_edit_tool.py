@@ -455,7 +455,7 @@ def test_edit_tool_refreshes_artifact_after_successful_edit(tmp_path, tool):
     from unittest.mock import patch
 
     path = _write(tmp_path, "app.py", "x = 1\n")
-    expected_size = len("x = 2\n".encode())
+    expected_size = len(b"x = 2\n")
 
     with patch("backend.tools.file_tool._record_artifact_safely") as mock_record:
         result = tool.execute(file_path=path, old_string="x = 1", new_string="x = 2")
