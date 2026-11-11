@@ -153,7 +153,7 @@ def _record_artifact_safely(
     tool_call_id: Optional[str] = None,
     conn: Any = None,
 ) -> None:
-    """写入成功后记录产物;任何失败都静默,不影响写入结果。"""
+    """写入成功后记录产物;失败仅记 warning,不影响写入结果。"""
     try:
         ctx = current_tool_context()
         sid = session_id or (ctx.session_id if ctx is not None else None)
