@@ -9,6 +9,8 @@
  *   - 加载/失败状态上屏，失败时由父级回落结构化视图。
  */
 
+import { renderAsync } from 'docx-preview';
+import DOMPurify from 'dompurify';
 import { useEffect, useRef, useState } from 'react';
 
 import { officeApi } from '../../shared/api/officeApi';
@@ -58,10 +60,6 @@ export interface DocxNativePreviewProps {
  */
 // eslint-disable-next-line react-refresh/only-export-components -- 与消毒器同文件便于内聚
 export async function renderDocxDataUrl(container: HTMLElement, dataUrl: string): Promise<void> {
-  const [{ renderAsync }, dompurifyModule] = await Promise.all([
-    import('docx-preview'),
-    import('dompurify'),
-  ]);
   const response = await fetch(dataUrl);
   const blob = await response.blob();
   container.innerHTML = '';
@@ -72,7 +70,7 @@ export async function renderDocxDataUrl(container: HTMLElement, dataUrl: string)
   });
   // 渲染树消毒：docx-preview 产出受信度有限的 DOM，过一道白名单级
   // 清理再上屏（去脚本/iframe/javascript: 链接/内联事件）。
-  container.innerHTML = dompurifyModule.default.sanitize(container.innerHTML, {
+  container.innerHTML = DOMPurify.sanitize(container.innerHTML, {
     ADD_ATTR: ['target'],
     FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'link', 'meta'],
     FORBID_ATTR: ['srcset'],
@@ -145,7 +143,12 @@ export function DocxNativePreview({
         if (!container) return;
         await renderDocxDataUrl(container, res.data_url);
         if (!cancelled) setState('ok');
-      } catch {
+      } catch (err) {
+        console.error('[DocxNativePreview] render failed:', {
+          error: err instanceof Error ? err.message : String(err),
+          workspacePath,
+          managedPath,
+        });
         if (!cancelled) {
           setState('error');
           onError?.();
