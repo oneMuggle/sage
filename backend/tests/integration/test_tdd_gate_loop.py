@@ -310,6 +310,20 @@ class TestResolveLaneWorkflowMode:
         task = Task(task_id="t4", name="t", description="d")
         assert _resolve_lane_workflow_mode(lane, task) == "tdd"
 
+    def test_env_var_fallback(self, monkeypatch):
+        """所有显式路径为 None → 回退到 SAGE_TDD_MODE 环境变量。"""
+        monkeypatch.setenv("SAGE_TDD_MODE", "fast")
+        lane = Lane(lane_id="l5", task_id="t5")
+        task = Task(task_id="t5", name="t", description="d")
+        assert _resolve_lane_workflow_mode(lane, task) == "fast"
+
+    def test_env_var_invalid_ignored(self, monkeypatch):
+        """SAGE_TDD_MODE 非法值 → 忽略，回退到默认 tdd。"""
+        monkeypatch.setenv("SAGE_TDD_MODE", "bogus")
+        lane = Lane(lane_id="l6", task_id="t6")
+        task = Task(task_id="t6", name="t", description="d")
+        assert _resolve_lane_workflow_mode(lane, task) == "tdd"
+
 
 class TestTddLoopState:
     """TddLoopState 数据结构。"""
