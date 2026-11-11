@@ -501,18 +501,25 @@ export function PetTab(): JSX.Element {
           label={t('settings.pet.compatibility')}
           desc={t('settings.pet.compatibility_desc')}
         >
-          <Select
-            value={current.compatibilityMode}
-            testId="pet-compatibility-mode"
-            onChange={(value) =>
-              update({ compatibilityMode: value as PetConfigBridge['compatibilityMode'] })
-            }
-            options={[
-              { value: 'auto', label: t('settings.pet.compat.auto') },
-              { value: 'on', label: t('settings.pet.compat.on') },
-              { value: 'off', label: t('settings.pet.compat.off') },
-            ]}
-          />
+          <div className="flex flex-col gap-2">
+            <Select
+              value={current.compatibilityMode}
+              testId="pet-compatibility-mode"
+              onChange={(value) =>
+                update({ compatibilityMode: value as PetConfigBridge['compatibilityMode'] })
+              }
+              options={[
+                { value: 'auto', label: t('settings.pet.compat.auto') },
+                { value: 'on', label: t('settings.pet.compat.on') },
+                { value: 'off', label: t('settings.pet.compat.off') },
+              ]}
+            />
+            {typeof process !== 'undefined' && process.platform === 'win32' ? (
+              <span className="text-xs text-amber-400">
+                {t('settings.pet.compatibility_win7_hint')}
+              </span>
+            ) : null}
+          </div>
         </SettingRow>
 
         <SettingRow

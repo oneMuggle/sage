@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({
   BrowserWindow: class {},
@@ -20,6 +20,10 @@ function config(mode: PetConfig['compatibilityMode']): PetConfig {
   return { compatibilityMode: mode } as PetConfig;
 }
 
+afterEach(() => {
+  delete process.env.SAGE_PET_TRANSPARENCY_EXPERIMENT;
+});
+
 describe('compatibilityEnabled', () => {
   it('always uses the opaque window on legacy Windows', () => {
     expect(compatibilityEnabled(config('auto'), true)).toBe(true);
@@ -31,5 +35,12 @@ describe('compatibilityEnabled', () => {
     expect(compatibilityEnabled(config('on'), false)).toBe(true);
     expect(compatibilityEnabled(config('off'), false)).toBe(false);
     expect(compatibilityEnabled(config('auto'), false)).toBe(false);
+  });
+
+  it('honors the setting on legacy Windows only under the transparency experiment', () => {
+    process.env.SAGE_PET_TRANSPARENCY_EXPERIMENT = '1';
+    expect(compatibilityEnabled(config('on'), true)).toBe(true);
+    expect(compatibilityEnabled(config('off'), true)).toBe(false);
+    expect(compatibilityEnabled(config('auto'), true)).toBe(false);
   });
 });

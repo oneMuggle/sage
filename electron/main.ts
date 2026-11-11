@@ -353,10 +353,18 @@ app.commandLine.appendSwitch('in-process-gpu');
 // 后降级到软件渲染路径。注意 Chromium 的 appendSwitch('disable-features', ...)
 // 多次调用以最后一次为准, 所以 Win7 分支必须把全部禁用的 feature 写在同一
 // 个 appendSwitch 里, 否则会被后面的 switch 覆盖。
-app.commandLine.appendSwitch(
-  'disable-features',
-  'VizDisplayCompositor,Vulkan,UseSkiaRenderer,CalculateNativeWinOcclusion,UseChromeOSDirectVideoDecoder',
-);
+// 2026-11-11: Win7 桌宠透明实验 — 默认保留 VizDisplayCompositor（它是 Win7 启动
+// 稳定性的关键缓解项，关闭曾修复内网闪退）。仅当显式设置
+// SAGE_PET_TRANSPARENCY_EXPERIMENT=1 时才移除它，供真机验证透明窗口是否恢复；
+// 验证失败可直接取消该环境变量回滚，不影响普通用户的启动稳定性。
+const PET_DISABLE_FEATURES_BASE =
+  'Vulkan,UseSkiaRenderer,CalculateNativeWinOcclusion,UseChromeOSDirectVideoDecoder';
+const petTransparencyExperiment =
+  isLegacyWindows() && process.env.SAGE_PET_TRANSPARENCY_EXPERIMENT === '1';
+const disableFeaturesList = petTransparencyExperiment
+  ? PET_DISABLE_FEATURES_BASE
+  : `VizDisplayCompositor,${PET_DISABLE_FEATURES_BASE}`;
+app.commandLine.appendSwitch('disable-features', disableFeaturesList);
 app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${V8_MAX_OLD_SPACE_SIZE_MB}`);
 app.commandLine.appendSwitch('force-webrtc-ip-handling-policy', 'disable_non_proxied_udp');
 // P3 (plan §5.9): arena token 窗口反节流 —— 隐藏窗口被 Chromium 判为后台/
@@ -368,8 +376,12 @@ app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 // Win7 旧版 Windows 进一步降级: 关闭 GPU 合成 + GPU sandbox + /dev/shm
 // (Chromium 在 Win7 上 /dev/shm 不存在会 fallback 到 tmp, 提前关掉减少日志噪音)
+// 桌宠透明实验模式 (SAGE_PET_TRANSPARENCY_EXPERIMENT=1) 跳过 disable-gpu-compositing，
+// 否则窗口合成器无 per-pixel alpha，透明注定失败；sandbox/dev-shm 与透明无关，照常关闭。
 if (isLegacyWindows()) {
-  app.commandLine.appendSwitch('disable-gpu-compositing');
+  if (!petTransparencyExperiment) {
+    app.commandLine.appendSwitch('disable-gpu-compositing');
+  }
   app.commandLine.appendSwitch('disable-gpu-sandbox');
   app.commandLine.appendSwitch('disable-dev-shm-usage');
 }
