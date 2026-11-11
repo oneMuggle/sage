@@ -81,6 +81,7 @@ export function RulesSubtabs({ workspacePath, onGoToDocuments }: RulesSubtabsPro
       return;
     }
     setExtracting(true);
+    toast.info(t('office.rules.extractStarted'));
     let createdGroupId: string | null = null;
     let createdCount = 0;
     let extractedTotal = 0;
@@ -169,8 +170,15 @@ export function RulesSubtabs({ workspacePath, onGoToDocuments }: RulesSubtabsPro
                     disabled={!activeDocument || extracting}
                     title={activeDocument ? undefined : t('office.rules.extractFromDoc.hint')}
                     data-testid="office-rules-extract-from-doc"
-                    className="rounded border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs text-primary hover:bg-primary/20 disabled:opacity-50 disabled:hover:bg-primary/10"
+                    className="inline-flex items-center gap-1.5 rounded border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs text-primary hover:bg-primary/20 disabled:opacity-50 disabled:hover:bg-primary/10"
                   >
+                    {extracting && (
+                      <span
+                        className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"
+                        data-testid="office-rules-extract-spinner"
+                        aria-hidden="true"
+                      />
+                    )}
                     {extracting ? t('office.rules.extractBusy') : t('office.rules.extractFromDoc')}
                   </button>
                   {!activeDocument && (

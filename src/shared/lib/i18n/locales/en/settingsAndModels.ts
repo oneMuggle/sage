@@ -679,6 +679,7 @@ export const enSettingsAndModels = {
   'office.rules.extractFromDoc': 'Extract rules from current document',
   'office.rules.extractFromDoc.hint': 'Please select a document in the Documents tab first',
   'office.rules.extractBusy': 'Extracting…',
+  'office.rules.extractStarted': 'Extracting rules, please wait…',
   'office.rules.extractNoActiveDoc': 'Please select a document in the left document library first',
   'office.rules.extractSuccess': 'Extracted {n} rules into new group "{name}"',
   'office.rules.specLibraryToggle': 'Specification library (external rule source)',
