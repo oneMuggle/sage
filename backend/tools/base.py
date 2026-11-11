@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,6 +14,8 @@ from typing import Any, Dict, Optional, Tuple
 
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -125,6 +128,36 @@ class BaseTool(ABC):
     def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
         self._schema: Optional[ToolSchema] = None
         self._policy = policy or ToolPolicy()
+
+    def _observe_call(self, kind: str, payload: Dict[str, Any]) -> None:
+        """向 TDD guard 上报工具调用（无 guard 时零开销）。
+
+        kind: ``"write"``（payload 含 ``path``）/ ``"bash"``
+        （payload 含 ``command`` 与可选 ``exit_code``）。
+        """
+        guard = getattr(self._policy, "tdd_guard", None)
+        if guard is None:
+            return
+        try:
+            if kind == "write":
+                guard.observe_write(payload.get("path", ""))
+            elif kind == "bash":
+                guard.observe_test(
+                    payload.get("command", ""), payload.get("exit_code")
+                )
+        except Exception:  # noqa: BLE001 — 审计绝不能打断工具执行
+            logger.debug("tdd guard observe 失败 kind=%s", kind, exc_info=True)
+
+    def _observe_write(self, path: str) -> Optional[str]:
+        """上报文件写入；返回 nudge 文本（无违规时为 None）。"""
+        guard = getattr(self._policy, "tdd_guard", None)
+        if guard is None:
+            return None
+        try:
+            return guard.observe_write(path)
+        except Exception:  # noqa: BLE001 — 审计绝不能打断工具执行
+            logger.debug("tdd guard observe_write 失败 path=%s", path, exc_info=True)
+            return None
 
     def _enforce_workspace(self, path: str) -> ToolResult | None:
         """M3: 若 ``policy.workspace_root`` 非空则校验 ``path``。
