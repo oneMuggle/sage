@@ -73,6 +73,9 @@ data/
 # runtime SQLite files. The bare `data/` rule would otherwise shadow
 # `backend/data/*.py` for anyone adding a new repo module.
 !backend/data/
+# Re-include backend/tests/data/ — pytest package holding tmp-DB-backed
+# artifact_repo tests. The bare `data/` rule above would otherwise shadow it.
+!backend/tests/data/
 backend/data/*.db
 backend/data/*.sqlite
 backend/data/*.sqlite3

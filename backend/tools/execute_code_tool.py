@@ -30,6 +30,11 @@ import time
 from typing import Any, Dict, List, Optional
 
 from backend.domain.risk import RiskClass
+from backend.tools._workspace_scan import (
+    record_workspace_changes,
+    resolve_workspace_root,
+    snapshot_workspace,
+)
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.permissions import (
     SELF_MODIFY_TOOLS,
@@ -208,15 +213,22 @@ class ExecuteCodeTool(BaseTool):
         effective_timeout = self._clamp_timeout(timeout)
 
         registry = self._get_registry()
+        # 脚本可能直接写文件（不经过 write_file），执行前后 diff 工作区补记产物
+        workspace_root = resolve_workspace_root(self._policy)
+        before_snapshot = (
+            snapshot_workspace(workspace_root) if workspace_root is not None else None
+        )
         script = self._write_script(code)
         try:
-            return self._run(script, registry, effective_timeout)
+            result = self._run(script, registry, effective_timeout)
         finally:
-            import contextlib
             import os
 
             with contextlib.suppress(OSError):
                 os.unlink(script)
+        if result.success:
+            record_workspace_changes(workspace_root, before_snapshot)
+        return result
 
     def _write_script(self, user_code: str) -> str:
         """引导 + 用户代码（经 _runner_script 包裹出 done 行）写入临时脚本"""
