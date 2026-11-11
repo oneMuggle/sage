@@ -604,6 +604,7 @@ export type LaneEventType =
   | 'lane.pr.opened'
   | 'lane.merged'
   | 'lane.acceptance.completed'
+  | 'lane.tdd.evidence'
   | 'lane.accepted'
   | 'lane.rejected';
 
