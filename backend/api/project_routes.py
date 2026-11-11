@@ -14,7 +14,9 @@ Claude Code 项目 → 会话归属）。路由面涵盖：
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -1239,9 +1241,56 @@ def collect_project_profile(request: ProjectAnalyzeRequest) -> ProjectProfileRes
     )
 
 
+# 项目分析缓存：cache_key -> (timestamp, profile_dict, report_dict)
+# cache_key = path + git_sha，TTL = 1 小时
+_analysis_cache: Dict[str, Tuple[float, Dict[str, Any], Dict[str, Any]]] = {}
+_ANALYSIS_CACHE_TTL = 3600  # 1 小时
+_ANALYSIS_CACHE_MAX_SIZE = 50  # 最多缓存 50 个项目
+
+
+def _get_git_sha(path: Path) -> Optional[str]:
+    """获取目录的 git commit sha（非 git 仓库返回 None）"""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.stdout.strip() if result.returncode == 0 else None
+    except (subprocess.SubprocessError, OSError):
+        return None
+
+
+def _get_cache_key(path: Path) -> Optional[str]:
+    """计算缓存 key = path + git_sha，非 git 仓库返回 None（不缓存）"""
+    git_sha = _get_git_sha(path)
+    if git_sha is None:
+        return None
+    return f"{path}:{git_sha}"
+
+
+def _cleanup_cache() -> None:
+    """清理过期缓存，保持缓存大小在限制内"""
+    now = time.time()
+    expired = [k for k, (ts, _, _) in _analysis_cache.items() if now - ts > _ANALYSIS_CACHE_TTL]
+    for k in expired:
+        del _analysis_cache[k]
+    if len(_analysis_cache) > _ANALYSIS_CACHE_MAX_SIZE:
+        sorted_items = sorted(_analysis_cache.items(), key=lambda x: x[1][0])
+        to_remove = len(_analysis_cache) - _ANALYSIS_CACHE_MAX_SIZE
+        for k, _ in sorted_items[:to_remove]:
+            del _analysis_cache[k]
+
+
 @router.post("/analyze", response_model=ProjectAnalyzeResponse)
 async def analyze_project(request: ProjectAnalyzeRequest) -> ProjectAnalyzeResponse:
-    """采集画像 + LLM 深度分析 → 治理报告。LLM 缺失时返回确定性降级版本（200）。"""
+    """采集画像 + LLM 深度分析 → 治理报告。LLM 缺失时返回确定性降级版本（200）。
+
+    缓存策略（2026-11-11）：相同 path + git_sha 在 1 小时内直接返回缓存结果。
+    事件循环解耦：profile_project() 用 run_in_executor 避免阻塞。
+    """
     try:
         path = Path(request.path).expanduser().resolve()
         if not path.is_dir():
@@ -1249,12 +1298,33 @@ async def analyze_project(request: ProjectAnalyzeRequest) -> ProjectAnalyzeRespo
     except OSError as exc:
         raise _error(400, "path_error", f"路径错误: {exc}") from exc
 
-    profile = profile_project(path)
+    # 检查缓存（仅 git 仓库）
+    cache_key = _get_cache_key(path)
+    if cache_key and cache_key in _analysis_cache:
+        ts, profile_dict, report_dict = _analysis_cache[cache_key]
+        if time.time() - ts < _ANALYSIS_CACHE_TTL:
+            return ProjectAnalyzeResponse(
+                profile=CodebaseProfileModel(**profile_dict),
+                report=AnalysisReportModel(**report_dict),
+            )
+
+    # 将同步的 profile_project 放入线程池，避免阻塞事件循环
+    loop = asyncio.get_event_loop()
+    profile = await loop.run_in_executor(None, lambda: profile_project(path))
+
     agent = ProjectAnalysisAgent()
-    report = await agent.analyze(profile)
+    # 整体 3 分钟超时（LLM 分析 + 画像采集）
+    async with asyncio.timeout(180):
+        report = await agent.analyze(profile)
 
     profile_dict = profile.to_dict(include_source_content=False)
     report_dict = report.to_dict()
+
+    # 存入缓存
+    if cache_key:
+        _analysis_cache[cache_key] = (time.time(), profile_dict, report_dict)
+        _cleanup_cache()
+
     return ProjectAnalyzeResponse(
         profile=CodebaseProfileModel(**profile_dict),
         report=AnalysisReportModel(**report_dict),
