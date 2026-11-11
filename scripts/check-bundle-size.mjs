@@ -36,6 +36,12 @@
 // GovernanceShell 懒加载，不进入主 chunk。CI 实测 1960KB，超 1.9MB
 // （1946KB）预算 14KB。按棘轮协议仅上调该项至 1.95MB（保留 ~37KB 余量）。
 //
+// 2026-11-11 棘轮上调：Word 高保真预览修复（PR #3030）将 docx-preview
+// 和 dompurify 从动态 import() 改为静态 import，消除生产环境 asar 包中
+// 的代码分割加载问题。两个库（docx-preview ~200KB gzipped + dompurify
+// ~30KB）现在合入主 Office chunk，CI 实测 2176KB，超 1.95MB 预算
+// 约 176KB。按棘轮协议上调至 2.2MB（保留 ~24KB 余量）。
+//
 // 用法：npm run build 之后执行 `node scripts/check-bundle-size.mjs`。
 // 退出码：0 = 全部预算内；1 = 超限或 dist 不存在。
 // 若为有意的功能增长导致超限，更新本文件 BUDGETS 并在 PR 说明依据
@@ -47,7 +53,7 @@ const ASSETS = 'dist/assets';
 
 const BUDGETS = [
   { name: 'dist/assets 总体积', max: 12 * 1024 * 1024 },
-  { name: '最大单个 .js chunk', max: 1.95 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
+  { name: '最大单个 .js chunk', max: 2.2 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
 ];
 
 if (!readdirSync('.').includes('dist')) {
