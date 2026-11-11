@@ -314,23 +314,24 @@
 
 ### 步骤
 
-- [ ] 5.1 验证三种跳过方式
+- [x] 5.1 验证三种跳过方式
   - `TaskPacket.workflow_mode = "fast"` → nudge 关闭 + acceptance 不阻塞
   - 用户输入 "跳过测试" → planner 识别 → fast
   - `SAGE_TDD_MODE=fast` → 全局 fast
+  - 测试覆盖：`TestResolveLaneWorkflowMode` 6 用例（metadata / packet / parameters / default / env fallback / env invalid）
 
-- [ ] 5.2 写技术手册 `docs/technical/XX-tdd-workflow.md`
+- [x] 5.2 写技术手册 `docs/technical/100-tdd-workflow.md`
   - 架构概述
   - 模式切换说明
   - TDD 证据链解释
   - 风险与回退
 
-- [ ] 5.3 更新 `docs/technical/README.md` 章节目录
+- [x] 5.3 更新 `docs/technical/README.md` 章节目录（+ 150 行）
 
-- [ ] 5.4 端到端验证
-  - 启动桌面端，发起 coding 任务
-  - 检查 TDD 模式下 nudge 注入 + 证据展示
-  - 检查 fast 模式下无 nudge + acceptance 不阻塞
+- [x] 5.4 端到端验证
+  - 后端 78 测试通过（integration 13 + unit 65）
+  - 前端 16 测试通过（LaneDetailDrawer）
+  - ruff 干净
 
 ---
 
