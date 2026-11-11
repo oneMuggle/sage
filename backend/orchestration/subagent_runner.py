@@ -25,6 +25,7 @@ from backend.domain.tool_policy import ToolPolicy
 from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.models import Lane
 from backend.orchestration.orch_settings import resolve_tool_call_budget
+from backend.orchestration.tdd_guard import TddGuard
 
 # Phase 3 (startup perf): SageAgent / validate_against_schema 惰性解析的源模块
 _AGENT_MODULE = "backend.core.legacy.agent"
@@ -97,6 +98,25 @@ def run_lane_accepts_backoff(fn: Any) -> bool:
     probe = getattr(fn, "side_effect", None)
     target = probe if callable(probe) else fn
     return func_accepts_kwarg(target, "backoff_secs")
+
+
+def _resolve_workflow_mode(task: Any) -> str:
+    """解析任务的 workflow_mode：packet > parameters > 默认 "tdd"。
+
+    优先级：
+    1. ``task.packet.workflow_mode``（显式声明）
+    2. ``task.parameters["workflow_mode"]``（调用方透传）
+    3. 默认值 ``"tdd"``
+    """
+    packet = getattr(task, "packet", None)
+    if packet is not None:
+        mode = getattr(packet, "workflow_mode", None)
+        if mode in ("tdd", "fast"):
+            return mode
+    params_mode = task.parameters.get("workflow_mode") if hasattr(task, "parameters") else None
+    if params_mode in ("tdd", "fast"):
+        return params_mode
+    return "tdd"
 
 
 def extract_json_payload(text: str) -> Optional[Dict[str, Any]]:
@@ -200,16 +220,31 @@ class SubagentRunner:
         scratch_dir = task.parameters.get("scratch_dir")
         workspace_dir = task.parameters.get("workspace_dir")
         policy_root = workspace_dir or scratch_dir
+
+        # TDD guard: 复用 executor 注入的跨轮 guard（TDD 循环累计证据）；
+        # 否则按 workflow_mode 构造新 guard。fast 模式 guard=None（零开销）。
+        guard = task.parameters.get("_tdd_guard")
+        if guard is None and policy_root is not None:
+            workflow_mode = _resolve_workflow_mode(task)
+            if workflow_mode == "tdd":
+                guard = TddGuard(mode="tdd")
+
         policy = (
             ToolPolicy(
                 workspace_root=policy_root,
                 # 修复：子 agent 通道此前完全忽略 UI 设置，恒为默认 25 ——
                 # 即使主 agent 预算调到 100 子 agent 仍卡 25 次。
                 max_tool_calls_per_run=resolve_tool_call_budget(),
+                tdd_guard=guard,
             )
             if policy_root
             else None
         )
+
+        # 把 guard 写回 parameters，让 executor 在 agent_runner 返回后
+        # 读取累计的 TDD 证据快照（TddGuard.snapshot()）。
+        if guard is not None:
+            task.parameters["_tdd_guard"] = guard
 
         # P2 Task 1 (2026-08-23): 可选 output_schema —— 非 dict 视为未声明。
         schema = task.parameters.get("output_schema")
