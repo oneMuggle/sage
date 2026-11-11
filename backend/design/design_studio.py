@@ -11,6 +11,7 @@ from typing import List, Optional
 
 from backend.data.design_repo import DesignRepo
 from backend.design.async_bridge import run_sync
+from backend.design.craft_loader import CraftRuleRegistry
 from backend.design.errors import (
     DesignProjectNotFoundError,
     DesignTemplateKindMismatchError,
@@ -36,13 +37,21 @@ class DesignStudio:
         systems: DesignSystemRegistry,
         templates: DesignTemplateRegistry,
         workspace_dir: Path,
+        craft_rules: Optional[CraftRuleRegistry] = None,
     ) -> None:
         self._repo = repo
         self._generator = generator
         self._systems = systems
         self._templates = templates
         self._workspace = workspace_dir
+        self._craft_rules = craft_rules
         self._version_lock = threading.Lock()
+
+    def _craft_for(self, template: DesignTemplate) -> Optional[list]:
+        """Craft rules applicable to a template, or None when no registry."""
+        if self._craft_rules is None:
+            return None
+        return self._craft_rules.rules_for_kind(template.kind)
 
     def _resolve_template_for_kind(
         self, template_id: str, kind: str,
@@ -137,7 +146,10 @@ class DesignStudio:
             result = await caller_loop.run_in_executor(
                 None,
                 lambda: run_sync(
-                    self._generator.generate(system, template, use_brief),
+                    self._generator.generate(
+                        system, template, use_brief,
+                        craft_rules=self._craft_for(template),
+                    ),
                 ),
             )
 
@@ -210,6 +222,7 @@ class DesignStudio:
                             "current_html": latest.html_content,
                             "user_feedback": feedback,
                         },
+                        craft_rules=self._craft_for(template),
                     ),
                 ),
             )
