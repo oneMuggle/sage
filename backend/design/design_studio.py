@@ -92,6 +92,12 @@ class DesignStudio:
             project_id, {"stage": "idle", "message": ""},
         )
 
+    def _craft_for(self, template: DesignTemplate) -> Optional[list]:
+        """Craft rules applicable to a template, or None when no registry."""
+        if self._craft_rules is None:
+            return None
+        return self._craft_rules.rules_for_kind(template.kind)
+
     def _resolve_template_for_kind(
         self, template_id: str, kind: str,
     ) -> DesignTemplate:
@@ -454,7 +460,10 @@ class DesignStudio:
             result = await caller_loop.run_in_executor(
                 None,
                 lambda: run_sync(
-                    self._generator.generate(system, template, use_brief),
+                    self._generator.generate(
+                        system, template, use_brief,
+                        craft_rules=self._craft_for(template),
+                    ),
                 ),
             )
 
@@ -564,6 +573,7 @@ class DesignStudio:
                             "current_html": latest.html_content,
                             "user_feedback": feedback,
                         },
+                        craft_rules=self._craft_for(template),
                     ),
                 ),
             )

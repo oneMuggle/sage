@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weekly Report · Q4 2026 Week 12</title>
+  <style>
+    :root {
+      --ink: #1a1a2e;
+      --muted: #6b6f82;
+      --bg: #f7f7fb;
+      --card: #ffffff;
+      --track: #e6e7ef;
+      --accent: #4a4e8c;
+      --positive: #1f8a5e;
+      --negative: #b0413e;
+      --border: #e0e0ea;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-snap-type: y mandatory; }
+
+    body {
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    section {
+      min-height: 100vh;
+      scroll-snap-align: start;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 4rem 8vw;
+    }
+
+    /* L01 — Cover */
+    .cover {
+      background: var(--ink);
+      color: #fff;
+      align-items: flex-start;
+    }
+    .cover .eyebrow {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      opacity: 0.7;
+      margin-bottom: 1.5rem;
+    }
+    .cover h1 {
+      font-size: 3.5rem;
+      font-weight: 700;
+      line-height: 1.1;
+      margin-bottom: 1rem;
+    }
+    .cover .period {
+      font-size: 1.25rem;
+      opacity: 0.85;
+      margin-bottom: 0.5rem;
+    }
+    .cover .team {
+      font-size: 1rem;
+      opacity: 0.6;
+    }
+
+    /* Common slide heading */
+    .slide-eyebrow {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 0.75rem;
+    }
+    .slide-title {
+      font-size: 2rem;
+      font-weight: 600;
+      line-height: 1.2;
+      margin-bottom: 2.5rem;
+    }
+
+    /* L03 — KPI Dashboard */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1.25rem;
+    }
+    .kpi-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .kpi-card .kpi-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+    .kpi-card .kpi-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 1rem;
+    }
+    .kpi-card .kpi-value {
+      font-size: 2.75rem;
+      font-weight: 700;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+    .kpi-card .kpi-spark {
+      flex: 1;
+      max-width: 90px;
+      height: 28px;
+    }
+    .kpi-card .kpi-delta {
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+    .delta-positive { color: var(--positive); }
+    .delta-negative { color: var(--negative); }
+    .delta-neutral  { color: var(--muted); }
+
+    /* L04 — Progress Bars */
+    .progress-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      max-width: 720px;
+    }
+    .progress-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      column-gap: 1.25rem;
+      row-gap: 0.5rem;
+    }
+    .progress-row .progress-name {
+      font-size: 1rem;
+      font-weight: 500;
+      grid-column: 1;
+    }
+    .progress-row .progress-pct {
+      font-size: 1rem;
+      font-weight: 600;
+      grid-column: 2;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .progress-row .progress-track {
+      grid-column: 1 / -1;
+      height: 6px;
+      background: var(--track);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-row .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 999px;
+    }
+
+    @media (max-width: 820px) {
+      .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .cover h1 { font-size: 2.25rem; }
+      .slide-title { font-size: 1.5rem; }
+      .kpi-card .kpi-value { font-size: 2rem; }
+      section { padding: 2rem 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Slide 1: Cover -->
+  <section class="cover" id="slide-1">
+    <p class="eyebrow">Weekly Report</p>
+    <h1>Platform Team</h1>
+    <p class="period">Q4 2026 · Week 12</p>
+    <p class="team">November 11, 2026</p>
+  </section>
+
+  <!-- Slide 2: KPI Dashboard -->
+  <section id="slide-2">
+    <p class="slide-eyebrow">Key Metrics</p>
+    <h2 class="slide-title">Core metrics moved upward; latency is the one we missed.</h2>
+
+    <div class="kpi-grid">
+      <article class="kpi-card">
+        <span class="kpi-label">Active Users</span>
+        <div class="kpi-row">
+          <svg class="kpi-spark" viewBox="0 0 80 28" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M0,24 L11,20 L23,22 L34,16 L46,14 L57,10 L68,8 L80,4 L80,28 L0,28 Z" fill="#4a4e8c" fill-opacity="0.15"/>
+            <path d="M0,24 L11,20 L23,22 L34,16 L46,14 L57,10 L68,8 L80,4" stroke="#4a4e8c" stroke-width="1.5" fill="none"/>
+          </svg>
+          <span class="kpi-value">48.2K</span>
+        </div>
+        <span class="kpi-delta delta-positive">↑ 12.4% vs last week</span>
+      </article>
+
+      <article class="kpi-card">
+        <span class="kpi-label">Conversion</span>
+        <div class="kpi-row">
+          <svg class="kpi-spark" viewBox="0 0 80 28" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M0,18 L11,17 L23,15 L34,14 L46,13 L57,11 L68,10 L80,9 L80,28 L0,28 Z" fill="#4a4e8c" fill-opacity="0.15"/>
+            <path d="M0,18 L11,17 L23,15 L34,14 L46,13 L57,11 L68,10 L80,9" stroke="#4a4e8c" stroke-width="1.5" fill="none"/>
+          </svg>
+          <span class="kpi-value">4.3%</span>
+        </div>
+        <span class="kpi-delta delta-positive">↑ 0.6pp vs target</span>
+      </article>
+
+      <article class="kpi-card">
+        <span class="kpi-label">Revenue (MRR)</span>
+        <div class="kpi-row">
+          <svg class="kpi-spark" viewBox="0 0 80 28" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M0,22 L11,20 L23,18 L34,16 L46,14 L57,12 L68,10 L80,8 L80,28 L0,28 Z" fill="#4a4e8c" fill-opacity="0.15"/>
+            <path d="M0,22 L11,20 L23,18 L34,16 L46,14 L57,12 L68,10 L80,8" stroke="#4a4e8c" stroke-width="1.5" fill="none"/>
+          </svg>
+          <span class="kpi-value">$127K</span>
+        </div>
+        <span class="kpi-delta delta-positive">↑ 8.1% vs last month</span>
+      </article>
+
+      <article class="kpi-card">
+        <span class="kpi-label">P95 Latency</span>
+        <div class="kpi-row">
+          <svg class="kpi-spark" viewBox="0 0 80 28" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M0,6 L11,8 L23,7 L34,12 L46,14 L57,18 L68,20 L80,22 L80,28 L0,28 Z" fill="#b0413e" fill-opacity="0.15"/>
+            <path d="M0,6 L11,8 L23,7 L34,12 L46,14 L57,18 L68,20 L80,22" stroke="#b0413e" stroke-width="1.5" fill="none"/>
+          </svg>
+          <span class="kpi-value">412ms</span>
+        </div>
+        <span class="kpi-delta delta-negative">↑ 58ms vs 350ms target</span>
+      </article>
+
+      <article class="kpi-card">
+        <span class="kpi-label">Support Tickets</span>
+        <div class="kpi-row">
+          <svg class="kpi-spark" viewBox="0 0 80 28" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M0,10 L11,14 L23,18 L34,20 L46,22 L57,23 L68,24 L80,25 L80,28 L0,28 Z" fill="#1f8a5e" fill-opacity="0.15"/>
+            <path d="M0,10 L11,14 L23,18 L34,20 L46,22 L57,23 L68,24 L80,25" stroke="#1f8a5e" stroke-width="1.5" fill="none"/>
+          </svg>
+          <span class="kpi-value">34</span>
+        </div>
+        <span class="kpi-delta delta-positive">↓ 41% vs last week</span>
+      </article>
+
+      <article class="kpi-card">
+        <span class="kpi-label">On-Call Incidents</span>
+        <div class="kpi-row">
+          <span class="kpi-value">0</span>
+        </div>
+        <span class="kpi-delta delta-neutral">— flat vs last week</span>
+      </article>
+    </div>
+  </section>
+
+  <!-- Slide 3: Progress Bars -->
+  <section id="slide-3">
+    <p class="slide-eyebrow">Initiatives</p>
+    <h2 class="slide-title">Most workstreams are on track; the search migration slipped a week.</h2>
+
+    <div class="progress-list">
+      <div class="progress-row">
+        <span class="progress-name">Billing v2 rollout</span>
+        <span class="progress-pct">92%</span>
+        <div class="progress-track" role="progressbar" aria-valuenow="92" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-fill" style="width: 92%;"></div>
+        </div>
+      </div>
+
+      <div class="progress-row">
+        <span class="progress-name">Search index migration</span>
+        <span class="progress-pct">68%</span>
+        <div class="progress-track" role="progressbar" aria-valuenow="68" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-fill" style="width: 68%;"></div>
+        </div>
+      </div>
+
+      <div class="progress-row">
+        <span class="progress-name">SSO federation (Azure)</span>
+        <span class="progress-pct">54%</span>
+        <div class="progress-track" role="progressbar" aria-valuenow="54" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-fill" style="width: 54%;"></div>
+        </div>
+      </div>
+
+      <div class="progress-row">
+        <span class="progress-name">Usage-based pricing</span>
+        <span class="progress-pct">[NEEDS DATA]</span>
+        <div class="progress-track">
+          <div class="progress-fill" style="width: 0%;"></div>
+        </div>
+      </div>
+
+      <div class="progress-row">
+        <span class="progress-name">Mobile deep links</span>
+        <span class="progress-pct">100%</span>
+        <div class="progress-track" role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-fill" style="width: 100%;"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      var slides = document.querySelectorAll('section');
+
+      // Number each slide for hash sync.
+      for (var i = 0; i < slides.length; i++) {
+        slides[i].setAttribute('data-index', String(i));
+      }
+
+      function current() {
+        var vh = window.innerHeight;
+        return Math.round(window.scrollY / vh);
+      }
+
+      function goTo(i) {
+        var idx = Math.max(0, Math.min(slides.length - 1, i));
+        slides[idx].scrollIntoView({ behavior: 'smooth' });
+        if (window.history.replaceState) {
+          window.history.replaceState(null, '', '#' + idx);
+        }
+      }
+
+      // Open from hash on load (e.g. #3 -> slide 3).
+      var initial = parseInt((window.location.hash || '').replace('#', ''), 10);
+      if (!isNaN(initial) && initial >= 0 && initial < slides.length) {
+        requestAnimationFrame(function () { goTo(initial); });
+      }
+
+      // Update hash on scroll settle.
+      var settleTimer;
+      window.addEventListener('scroll', function () {
+        clearTimeout(settleTimer);
+        settleTimer = setTimeout(function () {
+          if (window.history.replaceState) {
+            window.history.replaceState(null, '', '#' + current());
+          }
+        }, 120);
+      }, { passive: true });
+
+      document.addEventListener('keydown', function (e) {
+        var i = current();
+        switch (e.key) {
+          case 'ArrowDown':
+          case 'ArrowRight':
+          case 'PageDown':
+            e.preventDefault();
+            goTo(i + 1);
+            break;
+          case 'ArrowUp':
+          case 'ArrowLeft':
+          case 'PageUp':
+            e.preventDefault();
+            goTo(i - 1);
+            break;
+          case 'Home':
+            e.preventDefault();
+            goTo(0);
+            break;
+          case 'End':
+            e.preventDefault();
+            goTo(slides.length - 1);
+            break;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

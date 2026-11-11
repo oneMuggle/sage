@@ -1,8 +1,9 @@
 """Compose system prompts for design generation."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
+from backend.design.craft_loader import CraftRule
 from backend.design.models import DesignSystem, DesignTemplate
 
 _BASE_INSTRUCTIONS = """\
@@ -50,6 +51,7 @@ class PromptComposer:
         template: DesignTemplate,
         brief: str,
         iteration_context: Optional[dict] = None,
+        craft_rules: Optional[List[CraftRule]] = None,
     ) -> str:
         """Compose a complete system prompt for design generation."""
         identifier = template.id
@@ -70,10 +72,17 @@ class PromptComposer:
             "",
             "## 模板生成指令",
             template.skill_md,
-            "",
-            "## 用户需求",
-            brief,
         ]
+
+        if craft_rules:
+            parts.append("")
+            parts.append("## 工艺规范（必须遵守）")
+            for rule in craft_rules:
+                parts.append("")
+                parts.append(f"### {rule.name}")
+                parts.append(rule.content)
+
+        parts.extend(["", "## 用户需求", brief])
 
         if iteration_context:
             parts.append(
