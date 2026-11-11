@@ -231,7 +231,9 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
       <div className="flex-1 overflow-y-auto">
         {/* Delivery package */}
         <div className="px-4 py-3 border-b border-border">
-          <div className="text-xs text-text-tertiary mb-2">{t('orchestration.drawer.delivery')}</div>
+          <div className="text-xs text-text-tertiary mb-2">
+            {t('orchestration.drawer.delivery')}
+          </div>
           <div className="flex items-center gap-2 mb-2" data-testid="acceptance-state">
             {acceptedAt !== null ? (
               <span className="text-xs px-2 py-0.5 rounded bg-success/15 text-success">
@@ -255,9 +257,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
               {lane.worktree}
             </div>
           ) : (
-            <div className="text-xs text-text-tertiary">
-              {t('orchestration.drawer.noWorktree')}
-            </div>
+            <div className="text-xs text-text-tertiary">{t('orchestration.drawer.noWorktree')}</div>
           )}
           {warning && (
             <div
