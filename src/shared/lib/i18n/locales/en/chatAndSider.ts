@@ -385,6 +385,8 @@ export const enChatAndSider = {
   'settings.pet.compat.auto': 'Auto',
   'settings.pet.compat.on': 'On',
   'settings.pet.compat.off': 'Off',
+  'settings.pet.compatibility_win7_hint':
+    'Note: Transparent windows may show black background on Windows 7. Consider enabling compatibility mode or using in-app mode.',
   'settings.pet.reset_position': 'Reset position',
   'settings.pet.asset_notice':
     'Assets are from dsh-pet (MIT); the full asset pack ships with the installer.',
