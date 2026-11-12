@@ -55,13 +55,19 @@ const PANEL_GAP = 8;
  * compositor): the sprite renders into a black or invisible surface. So on
  * legacy Windows we always take the opaque path, even for an explicit `off` —
  * otherwise the pet silently disappears until compatibility is toggled back on.
+ *
+ * Exception: the SAGE_PET_TRANSPARENCY_EXPERIMENT=1 opt-in (see electron/main.ts)
+ * drops the VizDisplayCompositor workaround so we can test on a real machine
+ * whether the legacy window can composite alpha again. In that mode legacy
+ * Windows honors the user's setting instead of forcing opaque.
  */
 export function compatibilityEnabled(
   config: PetConfig,
   legacyWindows: boolean = isLegacyWindows(),
 ): boolean {
   if (config.compatibilityMode === 'on') return true;
-  if (legacyWindows) return true;
+  const transparencyExperiment = process.env.SAGE_PET_TRANSPARENCY_EXPERIMENT === '1';
+  if (legacyWindows && !transparencyExperiment) return true;
   return false;
 }
 

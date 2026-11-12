@@ -4,6 +4,9 @@
  */
 import type { PetConfigBridge, PetSnapshotBridge } from '../shared/types/electron-api';
 
+const isWindows =
+  typeof process !== 'undefined' && process.platform === 'win32';
+
 export const EMPTY_SNAPSHOT: PetSnapshotBridge = {
   action: 'idle',
   detail: null,
@@ -39,7 +42,7 @@ export const EMPTY_SNAPSHOT: PetSnapshotBridge = {
 export const DEFAULT_CONFIG: PetConfigBridge = {
   version: 3,
   enabled: true,
-  displayMode: 'desktop',
+  displayMode: isWindows ? 'in-app' : 'desktop',
   tempo: 'standard',
   reduceMotion: false,
   bubbleMode: 'important',
