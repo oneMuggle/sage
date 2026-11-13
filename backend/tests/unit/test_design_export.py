@@ -135,10 +135,11 @@ class TestDesignExporter:
         """Test PDF export fallback when soffice is not installed."""
         exporter = DesignExporter()
 
-        with (
-            patch("backend.design.export._locate_soffice", return_value=None),
-            patch("backend.design.export.DesignExporter._convert_with_reportlab") as mock_reportlab,
-        ):
+        with patch(
+            "backend.design.export._locate_soffice", return_value=None
+        ), patch(
+            "backend.design.export.DesignExporter._convert_with_reportlab"
+        ) as mock_reportlab:
             mock_reportlab.return_value = DesignExportResult(
                 ok=True,
                 format="pdf",
@@ -161,11 +162,15 @@ class TestDesignExporter:
 
         exporter = DesignExporter()
 
-        with (
-            patch("backend.design.export._locate_soffice", return_value="/usr/bin/soffice"),
-            patch("subprocess.run", side_effect=subprocess.TimeoutExpired("soffice", 10)),
-            patch("backend.design.export.DesignExporter._convert_with_reportlab") as mock_reportlab,
-        ):
+        with patch(
+            "backend.design.export._locate_soffice",
+            return_value="/usr/bin/soffice",
+        ), patch(
+            "subprocess.run",
+            side_effect=subprocess.TimeoutExpired("soffice", 10),
+        ), patch(
+            "backend.design.export.DesignExporter._convert_with_reportlab"
+        ) as mock_reportlab:
             mock_reportlab.return_value = DesignExportResult(
                 ok=False,
                 format="pdf",
