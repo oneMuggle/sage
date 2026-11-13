@@ -251,6 +251,13 @@ export const enSettingsAndModels = {
   'scheduled.skill.acknowledge': 'I understand these references are invalid — save anyway',
   'scheduled.skill.list_unavailable': 'Skill list unavailable — references cannot be validated',
 
+  // ─── Execution mode (auto-execute) ─────────────
+  'scheduled.field.mode': 'Execution mode',
+  'scheduled.mode.deliver': 'Deliver directly',
+  'scheduled.mode.execute': 'Auto-execute',
+  'scheduled.mode.deliver_hint': 'Content is written to session without AI processing',
+  'scheduled.mode.execute_hint': 'Content is sent as user message, processed by AI',
+
   // ─── M1 tool approval ─────────────
   'permission.title': 'Tool approval required',
   'permission.tool': 'Tool',
@@ -369,8 +376,7 @@ export const enSettingsAndModels = {
     'Delete all rules with no plugin record?',
   'settings.permission.rules.delete_orphans_confirm_message':
     'Every remembered rule whose plugin has no lifecycle record will be deleted. Rules owned by known plugins and built-in tools are unaffected. This cannot be undone.',
-  'settings.permission.rules.delete_orphans_failed':
-    'Failed to delete orphan rules, please retry',
+  'settings.permission.rules.delete_orphans_failed': 'Failed to delete orphan rules, please retry',
 
   // ─── M6 生态扩展: 用量/成本面板 ─────
   'settings.section.usage': 'Usage',

@@ -393,6 +393,7 @@ export interface AgentCreate {
 // ─── Scheduled Tasks (Phase 8) ───────────────────────────────
 
 export type ScheduleKind = 'once' | 'recurring';
+export type TaskMode = 'execute' | 'deliver';
 
 export type Schedule = { kind: 'once'; at: number } | { kind: 'recurring'; cron: string };
 export interface ScheduledTask {
@@ -411,6 +412,7 @@ export interface ScheduledTask {
   run_count?: number;
   max_runs?: number | null;
   created_at: number;
+  mode?: TaskMode;
 }
 
 export interface CreateTaskInput {
@@ -421,6 +423,7 @@ export interface CreateTaskInput {
   content: string;
   enabled?: boolean;
   max_runs?: number | null;
+  mode?: TaskMode;
 }
 
 export interface UpdateTaskInput {
@@ -431,6 +434,7 @@ export interface UpdateTaskInput {
   session_id?: string;
   content?: string;
   max_runs?: number | null;
+  mode?: TaskMode;
 }
 
 // Multi-agent orchestration types (Phase 4)

@@ -837,6 +837,21 @@ async def lifespan(app: FastAPI):
     # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
     app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
 
+    # Scheduled task auto-execute mode: wire executor so mode="execute" tasks
+    # go through ChatService.run_turn() instead of direct message injection.
+    import asyncio as _asyncio
+
+    async def _execute_task_as_user_message(session_id: str, content: str) -> None:
+        chat_svc = app.state.chat_service
+        await chat_svc.run_turn(session_id, Message(role=Role.USER, content=content))
+
+    try:
+        _loop = _asyncio.get_running_loop()
+        scheduler_service.set_executor(_execute_task_as_user_message, _loop)
+        logger.info("SchedulerService executor 已注入（mode=execute 走 LLM 链路）")
+    except RuntimeError:
+        logger.warning("SchedulerService executor 注入失败：无运行中的事件循环")
+
     # M7 (2026-10-21): Harness 自进化埋点装配——工具/技能每次调用写入
     # harness_components 累积 effectiveness 指标（usage_count / success_rate
     # / avg_latency_ms），供 GET /api/v1/harness/components 消费。

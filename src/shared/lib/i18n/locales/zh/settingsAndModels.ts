@@ -240,6 +240,13 @@ export const zhSettingsAndModels = {
   'scheduled.skill.acknowledge': '我已知悉这些引用无效，仍然保存',
   'scheduled.skill.list_unavailable': '技能列表不可用，无法校验引用',
 
+  // ─── 执行模式（auto-execute）─────────────
+  'scheduled.field.mode': '执行模式',
+  'scheduled.mode.deliver': '直接发送',
+  'scheduled.mode.execute': '自动执行',
+  'scheduled.mode.deliver_hint': '内容直接写入会话，不经过 AI 处理',
+  'scheduled.mode.execute_hint': '内容作为用户消息，由 AI 处理后回复',
+
   // ─── M1 工具审批 ──────────────────
   'permission.title': '工具执行审批',
   'permission.tool': '工具',
@@ -252,8 +259,7 @@ export const zhSettingsAndModels = {
   'permission.remember_scope.legend': '记住范围',
   'permission.remember_scope.tool': '仅此工具',
   'permission.remember_scope.plugin': '整个插件（包含未来新增工具）',
-  'permission.remember_scope.plugin_warning':
-    '将对该插件的全部工具生效，请确认你信任这个插件。',
+  'permission.remember_scope.plugin_warning': '将对该插件的全部工具生效，请确认你信任这个插件。',
   'permission.remember_duration.legend': '记住时长',
   'permission.remember_duration.permanent': '永久记住',
   'permission.remember_duration.session': '仅本次会话',
@@ -267,7 +273,8 @@ export const zhSettingsAndModels = {
   // 高危操作失去唯一的本地审计锚点。这里如实回执「已离开待批队列」，
   // 但不猜测结果（批准/拒绝/超时在前端不可区分）。
   'permission.remote_resolved': '该审批已离开待批队列',
-  'permission.remote_resolved.desc': '{tool} · 风险 {risk} · 已等待 {wait} · 可能已在远程渠道处理或已超时',
+  'permission.remote_resolved.desc':
+    '{tool} · 风险 {risk} · 已等待 {wait} · 可能已在远程渠道处理或已超时',
   'permission.subagent_context': '编排子任务请求审批',
   'permission.diff': '将写入的变更',
   'permission.project_allow.button': '项目级允许',
@@ -483,4 +490,3 @@ export function auditZhSettingsAndModelsGovernance(): string {
     audited: true,
   });
 }
-

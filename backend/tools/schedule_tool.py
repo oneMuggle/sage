@@ -189,6 +189,14 @@ class ScheduleTaskTool(BaseTool):
                             "若填写则必须与当前会话一致，否则会被拒绝。"
                         ),
                     },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["execute", "deliver"],
+                        "description": (
+                            "执行模式：'execute'=内容作为用户消息经 LLM 处理后回复；"
+                            "'deliver'=内容直接写入会话不经过 AI（默认）。"
+                        ),
+                    },
                 },
                 "required": ["name", "prompt", "schedule_kind"],
             },
@@ -202,6 +210,7 @@ class ScheduleTaskTool(BaseTool):
         cron: Optional[str] = None,
         at: Any = None,
         session_id: Optional[str] = None,
+        mode: Optional[str] = None,
         **kwargs: Any,
     ) -> ToolResult:
         if not isinstance(name, str) or not name.strip():
@@ -215,6 +224,10 @@ class ScheduleTaskTool(BaseTool):
         if schedule_kind not in ("once", "recurring"):
             return ToolResult(
                 success=False, error="schedule_kind 必须是 'once' 或 'recurring'。"
+            )
+        if mode is not None and mode not in ("execute", "deliver"):
+            return ToolResult(
+                success=False, error="mode 必须是 'execute' 或 'deliver'。"
             )
 
         resolved_session, session_error = _resolve_session_id(session_id)
@@ -253,6 +266,7 @@ class ScheduleTaskTool(BaseTool):
                 schedule=schedule,
                 session_id=resolved_session,
                 content=prompt.strip(),
+                mode=mode or "deliver",  # type: ignore[arg-type]
             )
         except ScheduledTaskValidationError as exc:
             return ToolResult(success=False, error=f"创建定时任务失败：{exc}")

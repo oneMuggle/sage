@@ -13,6 +13,7 @@ scheduler loop, so a bad task cannot kill the scheduler.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import threading
@@ -22,7 +23,7 @@ from contextlib import suppress
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Literal, Optional
 
 if TYPE_CHECKING:
     from backend.scheduler.evolution import BaseEvolutionTask
@@ -77,6 +78,7 @@ class ScheduledTask:
     last_error: Optional[str] = None
     run_count: int = 0
     max_runs: Optional[int] = None
+    mode: Literal["execute", "deliver"] = "deliver"
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -99,6 +101,7 @@ class ScheduledTask:
             last_error=raw.get("last_error"),
             run_count=int(raw.get("run_count", 0) or 0),
             max_runs=int(raw["max_runs"]) if raw.get("max_runs") is not None else None,
+            mode=raw.get("mode") if raw.get("mode") in ("execute", "deliver") else "deliver",
         )
 
 
@@ -129,12 +132,29 @@ class SchedulerService:
         self._scheduler = BackgroundScheduler(daemon=True)
         self._evolution_tasks: Dict[str, "BaseEvolutionTask"] = {}  # noqa: UP037
         self._repository = ScheduledTaskRepository(db) if db is not None else None
+        self._executor: Optional[Callable[[str, str], Awaitable[None]]] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
         if self._repository is None:
             self._load_from_disk()
         else:
             self._migrate_from_json()
             self._load_from_repo()
         self._reschedule_all()
+
+    def set_executor(
+        self,
+        executor: Callable[[str, str], Awaitable[None]],
+        loop: Optional[asyncio.AbstractEventLoop] = None,
+    ) -> None:
+        """Inject an async callable that runs task content through the LLM.
+
+        ``executor(session_id, content)`` is invoked via
+        ``run_coroutine_threadsafe`` on ``loop`` (defaults to the running loop
+        at call time). Without an executor, ``mode="execute"`` tasks degrade to
+        ``"deliver"`` with a warning.
+        """
+        self._executor = executor
+        self._loop = loop
 
     # ---------- public API ----------
 
@@ -203,6 +223,7 @@ class SchedulerService:
         content: str,
         enabled: bool = True,
         max_runs: Optional[int] = None,
+        mode: Literal["execute", "deliver"] = "deliver",
     ) -> ScheduledTask:
         if not name or not name.strip():
             raise ValidationError("name must not be empty")
@@ -220,7 +241,7 @@ class SchedulerService:
             schedule=validated_schedule, session_id=session_id, content=content,
             enabled=enabled, created_at=int(time.time() * 1000),
             next_run=self._next_run_for(validated_schedule, enabled),
-            max_runs=max_runs,
+            max_runs=max_runs, mode=mode,
         )
         with self._lock:
             self._tasks[task.id] = task
@@ -236,7 +257,7 @@ class SchedulerService:
             if task_id in self._running:
                 raise ValidationError("task is running; retry editing after it finishes")
             current = self._tasks[task_id]
-            allowed = {"name", "enabled", "type", "schedule", "content", "session_id", "max_runs"}
+            allowed = {"name", "enabled", "type", "schedule", "content", "session_id", "max_runs", "mode"}
             if set(changes) - allowed:
                 raise ValidationError("unknown task field")
             new_name = changes.get("name", current.name)
@@ -268,6 +289,7 @@ class SchedulerService:
                 schedule=validated, content=new_content, session_id=new_session,
                 next_run=self._next_run_for(validated, new_enabled),
                 max_runs=new_max_runs,
+                mode=changes.get("mode", current.mode),
             )
             self._tasks[task_id] = updated
             self._persist(updated)
@@ -503,6 +525,30 @@ class SchedulerService:
         try:
             if not self._session_repo_exists(task.session_id):
                 error = "Target session no longer exists. Select a valid session before retrying."
+            elif task.mode == "execute":
+                if self._executor is None or self._loop is None:
+                    logger.warning(
+                        "task %s mode=execute but no executor set; falling back to deliver",
+                        task.id,
+                    )
+                    self._message_repo.insert(
+                        session_id=task.session_id, role="system", content=task.content,
+                        created_at=int(time.time() * 1000),
+                    )
+                else:
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._executor(task.session_id, task.content),
+                        self._loop,
+                    )
+                    # Do NOT block on completion: a real LLM turn routinely
+                    # exceeds any fixed timeout, and blocking an APScheduler
+                    # worker thread for minutes starves the pool. A failed
+                    # turn is logged by the callback; the fire itself is
+                    # recorded as dispatched.
+                    future.add_done_callback(
+                        lambda fut, tid=task.id: self._log_execute_result(tid, fut)
+                    )
+                logger.info("task %s executed via LLM in session %s", task.id, task.session_id)
             else:
                 self._message_repo.insert(
                     session_id=task.session_id, role="system", content=task.content,
@@ -518,6 +564,17 @@ class SchedulerService:
             finally:
                 with self._lock:
                     self._running.discard(task.id)
+
+    @staticmethod
+    def _log_execute_result(task_id: str, future: Any) -> None:
+        """Done-callback for execute-mode submissions (runs in the loop thread)."""
+        try:
+            exc = future.exception()
+        except Exception:  # noqa: BLE001 — cancelled/loop teardown
+            logger.warning("task %s execute future raised on inspection", task_id)
+            return
+        if exc is not None:
+            logger.error("task %s execute turn failed: %s", task_id, exc)
 
     def _record_run(self, task: ScheduledTask, error: Optional[str] = None) -> None:
         with self._lock:

@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 
 import { useScheduledTaskStore } from '../../entities/scheduled/taskStore';
 import { skillsApi } from '../../shared/api/skillsApi';
-import type { CreateTaskInput, ScheduledTask, Skill } from '../../shared/api/types';
+import type { CreateTaskInput, ScheduledTask, Skill, TaskMode } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { CronExpressionPicker } from './CronExpressionPicker';
@@ -109,6 +109,7 @@ export function CreateTaskModal({
   const [error, setError] = useState<string | null>(null);
   const [skills, setSkills] = useState<Skill[] | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [mode, setMode] = useState<TaskMode>(task?.mode ?? 'deliver');
   // 技能列表不可用时（IPC 失败/无权限）不假装校验通过：直接标为不可用。
   const skillsUnavailable = skills === null;
 
@@ -135,6 +136,7 @@ export function CreateTaskModal({
     setContent(task?.content ?? '');
     setEnabled(task?.enabled ?? true);
     setTargetSession(task?.session_id ?? sessionId);
+    setMode(task?.mode ?? 'deliver');
     setError(null);
     setSubmitting(false);
   }, [open, task, sessionId]);
@@ -222,10 +224,19 @@ export function CreateTaskModal({
           schedule,
           content,
           session_id: targetSession,
+          mode,
         });
         toast.success(t('scheduled.edit'));
       } else {
-        await store.create({ name, type, schedule, session_id: targetSession, content, enabled });
+        await store.create({
+          name,
+          type,
+          schedule,
+          session_id: targetSession,
+          content,
+          enabled,
+          mode,
+        });
         toast.success(t('scheduled.create'));
       }
       onClose();
@@ -260,8 +271,7 @@ export function CreateTaskModal({
           <h2 className="text-base font-semibold text-text">
             {isEdit ? t('scheduled.edit') : t('scheduled.create')}
           </h2>
-          <div className="flex items-center gap-1 text-ui-2xs">
-          </div>
+          <div className="flex items-center gap-1 text-ui-2xs"></div>
         </div>
 
         <label className="flex flex-col gap-1 text-xs text-text-secondary">
@@ -422,6 +432,37 @@ export function CreateTaskModal({
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
           <span>{t('scheduled.field.enabled')}</span>
         </label>
+
+        <div className="flex flex-col gap-1.5 text-xs text-text-secondary">
+          <span>{t('scheduled.field.mode')}</span>
+          <div className="flex gap-2">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name="task-mode"
+                value="deliver"
+                checked={mode === 'deliver'}
+                onChange={() => setMode('deliver')}
+              />
+              <span>{t('scheduled.mode.deliver')}</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name="task-mode"
+                value="execute"
+                checked={mode === 'execute'}
+                onChange={() => setMode('execute')}
+              />
+              <span>{t('scheduled.mode.execute')}</span>
+            </label>
+          </div>
+          <span className="text-ui-2xs text-text-muted">
+            {mode === 'execute'
+              ? t('scheduled.mode.execute_hint')
+              : t('scheduled.mode.deliver_hint')}
+          </span>
+        </div>
 
         {error && (
           <p className="text-xs text-error" role="alert">
