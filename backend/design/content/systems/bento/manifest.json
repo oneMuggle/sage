@@ -1,0 +1,11 @@
+{
+  "id": "bento",
+  "name": "Bento",
+  "category": "layout-structure",
+  "description": "Bundled OpenDesign package for Bento, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
+  "tags": [
+    "bento",
+    "layout"
+  ],
+  "source": "open-design (Apache 2.0)"
+}

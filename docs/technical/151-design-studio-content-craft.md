@@ -154,7 +154,58 @@ design_export(project_id="abc", format="pdf")
 
 覆盖：PDF/ZIP/HTML 三种格式、soffice 缺失降级、超时处理、Unicode 内容、大文件。
 
-## 9. 测试（Craft 相关）
+## 9. Design Lint 引擎（2026-11-13 新增）
+
+`DesignLinter` 检测生成产物中的 AI 设计"痕迹"（anti-patterns），分 P0（必须修）和 P1（建议修）两级。
+
+### 9.1 规则清单
+
+| 级别 | 规则 ID | 检测内容 |
+|------|---------|----------|
+| **P0** | `no_default_indigo` | AI 常用 indigo 色板（#6366f1, #4f46e5 等 8 色） |
+| **P0** | `no_trust_gradient` | 紫→蓝渐变（"trust gradient"） |
+| **P0** | `no_emoji_icons` | Emoji 用作图标（✨🚀🎯 等） |
+| **P0** | `no_invented_metrics` | 捏造指标（"10x faster", "99.9% uptime"） |
+| **P0** | `no_filler_copy` | 占位文案（"lorem ipsum", "feature one"） |
+| **P1** | `no_ai_card_shape` | AI 典型卡片（大圆角 + 彩色左边框） |
+| **P1** | `no_ai_buzzwords` | AI 流行语（"seamless", "cutting-edge"） |
+
+### 9.2 架构
+
+```
+DesignGenerator.generate()
+  └─ html_content = LLM 输出
+       └─ DesignLinter.lint(html_content)
+            ├─ LintReport.ok == True → 直接返回
+            └─ LintReport.ok == False → auto_fix() + generate_feedback()
+                 └─ 反馈注入到 iterate prompt → 重试一次
+```
+
+### 9.3 API
+
+```python
+from backend.design.lint import DesignLinter
+
+linter = DesignLinter()
+report = linter.lint(html_content)
+
+if not report.ok:
+    # 自动修复可修复的问题（如 indigo → slate）
+    fixed_html = linter.auto_fix(html_content, report.issues)
+    # 生成 LLM 可理解的反馈
+    feedback = linter.generate_feedback(report)
+```
+
+### 9.4 测试
+
+```bash
+/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest \
+  backend/tests/unit/test_design_lint.py -v
+```
+
+覆盖：7 条规则的正例/反例（34 个测试），`LintReport` 模型，`auto_fix` 颜色替换，`generate_feedback` 反馈生成。
+
+## 10. 测试（Craft 相关）
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest \
@@ -168,6 +219,6 @@ design_export(project_id="abc", format="pdf")
 
 `test_craft_loader.py` 覆盖：frontmatter 解析、缺省/空 frontmatter 回退、非法与带引号的 priority、H1 去重、按 priority 排序、缺失目录、按 kind 过滤、不可读文件跳过、id 去重、缓存行为。
 
-## 10. 来源说明
+## 11. 来源说明
 
 系统/模板/craft 内容为原创撰写，遵循 OpenDesign 的四平面架构模式，未逐字复制其文本，故未附加 Apache 2.0 NOTICE。

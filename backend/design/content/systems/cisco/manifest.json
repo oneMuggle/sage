@@ -1,0 +1,11 @@
+{
+  "id": "cisco",
+  "name": "Cisco",
+  "category": "backend-data",
+  "description": "Bundled OpenDesign package for Cisco, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
+  "tags": [
+    "cisco",
+    "backend"
+  ],
+  "source": "open-design (Apache 2.0)"
+}

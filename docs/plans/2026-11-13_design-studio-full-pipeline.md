@@ -369,19 +369,20 @@ class LiveArtifactEngine:
 
 ### M2：内容库扩容 + Design Lint（独立 PR）
 
-- [ ] **步骤 1**：从 open-design 精选 8-13 个设计系统导入
+- [x] **步骤 1**：从 open-design 精选 8-13 个设计系统导入
   - 每个系统：manifest.json + DESIGN.md + tokens.css
   - 保留 Apache 2.0 署名
-- [ ] **步骤 2**：导入 html-ppt 主题库 8-10 个
-  - 转换为 tokens.css 格式
-  - 验证与 PromptComposer 兼容
-- [ ] **步骤 3**：实现 `backend/design/lint.py`
-  - 7 条硬规则（P0）+ 2 条软规则（P1）
-  - 单元测试：每条规则的正例/反例
-- [ ] **步骤 4**：集成 lint 到生成链路
+- [x] **步骤 2**：导入 html-ppt 主题库 8-10 个
+  - 转换为 Sage 模板格式（SKILL.md + example.html + assets/）
+  - 8 个新主题：course-module, presenter-mode-reveal, product-launch, hermes-cyber-terminal, knowledge-arch-blueprint, graphify-dark-graph, xhs-white-editorial, obsidian-claude-gradient
+- [x] **步骤 3**：实现 `backend/design/lint.py`
+  - 5 条硬规则（P0）+ 2 条软规则（P1）
+  - 单元测试：每条规则的正例/反例（34 个测试全部通过）
+- [x] **步骤 4**：集成 lint 到生成链路
   - 生成后自动 lint → P0 问题 → 重试一次（注入 lint 反馈）
   - 产物附带 lint 报告（JSON）
-- [ ] **步骤 5**：新增 `ai-tell-detector.md` craft 规范
+  - 抽取 `_apply_lint()` 异步辅助方法，`generate()` 与 `iterate()` 统一调用
+- [x] **步骤 5**：文档更新（docs/technical/151 新增 §9 Design Lint 引擎）
 - [ ] **步骤 6**：本地 smoke test + 提交 PR
 
 **验证点**：生成 3 个不同系统的 deck → lint 通过率 > 80%。
