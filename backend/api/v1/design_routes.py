@@ -10,6 +10,11 @@ Endpoints:
 - POST /api/v1/design/projects/{id}/generate  — generate first artifact (SSE)
 - POST /api/v1/design/projects/{id}/iterate   — iterate on artifact (SSE)
 - POST /api/v1/design/projects/{id}/export    — export artifact (PDF/PPTX/ZIP/HTML)
+- POST /api/v1/design/outline                 — extract Word → markdown outline
+- POST /api/v1/design/projects/{id}/source    — bind a data source (xlsx/csv/json)
+- GET  /api/v1/design/projects/{id}/source    — read current source binding
+- DELETE /api/v1/design/projects/{id}/source  — remove source binding
+- POST /api/v1/design/projects/{id}/refresh   — regenerate with current source (SSE)
 """
 from __future__ import annotations
 
@@ -76,6 +81,24 @@ class ExportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     format: str = "html"
+
+
+class OutlineRequest(BaseModel):
+    """POST /design/outline body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    file_path: str
+
+
+class BindSourceRequest(BaseModel):
+    """POST /design/projects/{id}/source body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    file_path: str
+    kind: Optional[str] = None
+    name: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -437,3 +460,183 @@ async def export_artifact(  # noqa: PLR0911 — 每个校验门一个返回是�
             status_code=500,
             content={"detail": f"Export failed: {exc}"},
         )
+
+
+# ---------------------------------------------------------------------------
+# POST /design/outline — Word → markdown outline
+# ---------------------------------------------------------------------------
+
+
+@router.post("/outline")
+async def extract_outline(req: OutlineRequest):
+    """Extract a Word document into a slide-style markdown outline.
+
+    Returns the OutlineResult (title, slide_count, outline_md) so the
+    wizard step 4 can feed it into the project brief without a second
+    LLM round-trip.
+    """
+    from pathlib import Path
+
+    from backend.design.live_artifact import LiveArtifactEngine
+
+    path = Path(req.file_path)
+    if not path.exists():
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"File not found: {req.file_path}"},
+        )
+    if path.suffix.lower() not in (".docx",):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": (
+                    f"Unsupported extension {path.suffix!r}; only .docx is "
+                    "supported for outline extraction."
+                ),
+            },
+        )
+
+    try:
+        result = LiveArtifactEngine(Path.cwd()).extract_outline(req.file_path)
+        return result.model_dump()
+    except Exception as exc:
+        logger.exception("Outline extraction failed for %s", req.file_path)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Outline extraction failed: {exc}"},
+        )
+
+
+# ---------------------------------------------------------------------------
+# POST/GET/DELETE /design/projects/:project_id/source — data source binding
+# ---------------------------------------------------------------------------
+
+
+@router.post("/projects/{project_id}/source")
+async def bind_source(project_id: str, req: BindSourceRequest):
+    """Bind a data source (xlsx/csv/json) to a design project."""
+    from backend.design.live_artifact import LiveArtifactEngine
+
+    studio = _require_studio()
+    try:
+        studio.get_project(project_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+
+    engine = LiveArtifactEngine(studio._workspace)
+    try:
+        binding = engine.bind(
+            project_id,
+            req.file_path,
+            kind=req.kind,
+            name=req.name,
+        )
+        return binding.model_dump()
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+    except Exception as exc:
+        logger.exception("Source binding failed for %s", project_id)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Source binding failed: {exc}"},
+        )
+
+
+@router.get("/projects/{project_id}/source")
+async def get_source(project_id: str):
+    """Read the current data source binding (or 404 if none is bound)."""
+    from backend.design.live_artifact import LiveArtifactEngine
+
+    studio = _require_studio()
+    try:
+        studio.get_project(project_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+
+    engine = LiveArtifactEngine(studio._workspace)
+    binding = engine.get_binding(project_id)
+    if binding is None:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": "No source binding for this project"},
+        )
+    return binding.model_dump()
+
+
+@router.delete("/projects/{project_id}/source")
+async def unbind_source(project_id: str):
+    """Remove the data source binding for a project."""
+    from backend.design.live_artifact import LiveArtifactEngine
+
+    studio = _require_studio()
+    try:
+        studio.get_project(project_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+
+    engine = LiveArtifactEngine(studio._workspace)
+    removed = engine.unbind(project_id)
+    if not removed:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": "No source binding to remove"},
+        )
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# POST /design/projects/:project_id/refresh — SSE regenerate with source
+# ---------------------------------------------------------------------------
+
+
+@router.post("/projects/{project_id}/refresh")
+async def refresh_artifact(project_id: str):
+    """Regenerate the artifact with the bound source data (SSE stream).
+
+    Reuses the same SSE contract as ``/generate`` so the frontend can render
+    the same progress bar and completion handler.
+    """
+    from backend.design.live_artifact import LiveArtifactEngine
+
+    studio = _require_studio()
+    try:
+        studio.get_project(project_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+
+    engine = LiveArtifactEngine(studio._workspace)
+
+    async def event_stream():
+        try:
+            yield _sse_event("progress", {
+                "stage": "starting",
+                "message": "Re-reading source data",
+            })
+            artifact = await engine.refresh(studio, project_id)
+            yield _sse_event("progress", {
+                "stage": "complete",
+                "message": "Refresh finished",
+            })
+            yield _sse_event("complete", {
+                "artifact": artifact.model_dump(mode="json"),
+            })
+        except DesignProjectNotFoundError as exc:
+            yield _sse_event("error", {"detail": str(exc)})
+        except DesignGenerationError as exc:
+            yield _sse_event("error", {"detail": str(exc)})
+        except Exception as exc:
+            logger.exception("Design refresh failed for %s", project_id)
+            yield _sse_event("error", {
+                "detail": f"Refresh failed: {exc}",
+            })
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

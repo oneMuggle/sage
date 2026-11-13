@@ -234,6 +234,7 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "design_generate": ToolCapability.WRITE,
     "design_iterate": ToolCapability.WRITE,
     "design_export": ToolCapability.WRITE,
+    "design_embed_chart": ToolCapability.WRITE,
     # --- 自透明只读（M1）：只读运行时状态，不进 SELF_MODIFY_TOOLS ---
     "sage_self_status": ToolCapability.READ,
     "sage_doctor": ToolCapability.READ,

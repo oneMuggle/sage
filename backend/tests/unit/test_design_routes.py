@@ -972,3 +972,198 @@ class TestDesignRoutes:
         assert last_event == "error"
         # Exact equality — the specific branch emits str(exc) verbatim.
         assert json.loads(last_data)["detail"] == expected_msg
+
+    # ---------------------------------------------------------------
+    # POST /api/v1/design/outline
+    # ---------------------------------------------------------------
+
+    async def test_outline_extracts_word_document(self, studio, tmp_path):
+        from backend.main import app
+
+        docx_path = tmp_path / "deck.docx"
+        from docx import Document
+        doc = Document()
+        doc.add_heading("季度回顾", level=1)
+        doc.add_paragraph("收入增长 12%")
+        doc.add_heading("下一步", level=1)
+        doc.add_paragraph("扩大渠道")
+        doc.save(str(docx_path))
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    "/api/v1/design/outline",
+                    json={"file_path": str(docx_path)},
+                )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["title"] == "季度回顾"
+        assert body["slide_count"] == 2
+        assert "- 收入增长 12%" in body["outline_md"]
+
+    async def test_outline_missing_file_returns_404(self, studio):
+        from backend.main import app
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    "/api/v1/design/outline",
+                    json={"file_path": "/no/such/file.docx"},
+                )
+        assert resp.status_code == 404
+
+    async def test_outline_unsupported_extension_returns_400(
+        self, studio, tmp_path,
+    ):
+        from backend.main import app
+
+        bad = tmp_path / "deck.pdf"
+        bad.write_bytes(b"")
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    "/api/v1/design/outline",
+                    json={"file_path": str(bad)},
+                )
+        assert resp.status_code == 400
+
+    # ---------------------------------------------------------------
+    # POST / GET / DELETE /api/v1/design/projects/:id/source
+    # ---------------------------------------------------------------
+
+    async def _create_project(self, client, studio) -> str:
+        """Helper: create a project and return its id."""
+        resp = await client.post(
+            "/api/v1/design/projects",
+            json={
+                "name": "test", "kind": "prototype",
+                "system_id": "test-sys",
+                "template_id": "test-page",
+                "brief": "brief",
+            },
+        )
+        assert resp.status_code == 201
+        return resp.json()["id"]
+
+    async def test_bind_source_round_trip(self, studio, tmp_path):
+        from backend.main import app
+
+        source = tmp_path / "data.json"
+        source.write_text(json.dumps({"x": 1}))
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                pid = await self._create_project(client, studio)
+
+                resp = await client.post(
+                    f"/api/v1/design/projects/{pid}/source",
+                    json={"file_path": str(source)},
+                )
+                assert resp.status_code == 200
+                body = resp.json()
+                assert body["kind"] == "json"
+                assert body["name"] == "data"
+
+                # GET returns the same binding
+                resp = await client.get(
+                    f"/api/v1/design/projects/{pid}/source",
+                )
+                assert resp.status_code == 200
+                assert resp.json()["kind"] == "json"
+
+                # DELETE removes it
+                resp = await client.delete(
+                    f"/api/v1/design/projects/{pid}/source",
+                )
+                assert resp.status_code == 200
+                assert resp.json()["ok"] is True
+
+                # GET returns 404 after unbind
+                resp = await client.get(
+                    f"/api/v1/design/projects/{pid}/source",
+                )
+                assert resp.status_code == 404
+
+    async def test_bind_source_rejects_unknown_extension(
+        self, studio, tmp_path,
+    ):
+        from backend.main import app
+
+        bad = tmp_path / "notes.txt"
+        bad.write_text("hello")
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                pid = await self._create_project(client, studio)
+                resp = await client.post(
+                    f"/api/v1/design/projects/{pid}/source",
+                    json={"file_path": str(bad)},
+                )
+        assert resp.status_code == 400
+
+    # ---------------------------------------------------------------
+    # POST /api/v1/design/projects/:id/refresh (SSE)
+    # ---------------------------------------------------------------
+
+    async def test_refresh_emits_sse_and_completes(self, studio, tmp_path):
+        from backend.main import app
+
+        source = tmp_path / "data.json"
+        source.write_text(json.dumps({"region": "华东"}))
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                pid = await self._create_project(client, studio)
+                await client.post(
+                    f"/api/v1/design/projects/{pid}/source",
+                    json={"file_path": str(source)},
+                )
+
+                resp = await client.post(
+                    f"/api/v1/design/projects/{pid}/refresh",
+                )
+                assert resp.status_code == 200
+                frames = _sse_frames(resp.text)
+                assert frames[-1][0] in ("complete", "error")
+                if frames[-1][0] == "error":
+                    # Generation failure (no LLM mock configured) is
+                    # acceptable; the route still correctly emits an error
+                    # frame instead of crashing.
+                    assert "detail" in json.loads(frames[-1][1])

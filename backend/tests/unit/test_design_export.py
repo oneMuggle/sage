@@ -5,10 +5,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-from backend.design.export import DesignExportResult, DesignExporter
-
+from backend.design.export import DesignExporter, DesignExportResult
 
 SAMPLE_HTML = """<!DOCTYPE html>
 <html>
@@ -138,26 +135,25 @@ class TestDesignExporter:
         """Test PDF export fallback when soffice is not installed."""
         exporter = DesignExporter()
 
-        # Mock _locate_soffice to return None
-        with patch("backend.design.export._locate_soffice", return_value=None):
-            # Mock reportlab to avoid actual PDF generation
-            with patch("backend.design.export.DesignExporter._convert_with_reportlab") as mock_reportlab:
-                mock_reportlab.return_value = DesignExportResult(
-                    ok=True,
-                    format="pdf",
-                    file_path=str(tmp_path / "design.pdf"),
-                )
+        with (
+            patch("backend.design.export._locate_soffice", return_value=None),
+            patch("backend.design.export.DesignExporter._convert_with_reportlab") as mock_reportlab,
+        ):
+            mock_reportlab.return_value = DesignExportResult(
+                ok=True,
+                format="pdf",
+                file_path=str(tmp_path / "design.pdf"),
+            )
 
-                result = exporter.export(
-                    html=SAMPLE_HTML,
-                    output_dir=tmp_path,
-                    format="pdf",
-                )
+            result = exporter.export(
+                html=SAMPLE_HTML,
+                output_dir=tmp_path,
+                format="pdf",
+            )
 
-                # Should attempt reportlab fallback
-                mock_reportlab.assert_called_once()
-                assert result.ok is True
-                assert result.format == "pdf"
+            mock_reportlab.assert_called_once()
+            assert result.ok is True
+            assert result.format == "pdf"
 
     def test_export_pdf_soffice_timeout(self, tmp_path):
         """Test PDF export handles soffice timeout gracefully."""
@@ -165,29 +161,26 @@ class TestDesignExporter:
 
         exporter = DesignExporter()
 
-        # Mock _locate_soffice to return a path
-        with patch("backend.design.export._locate_soffice", return_value="/usr/bin/soffice"):
-            # Mock subprocess.run to raise TimeoutExpired
-            with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("soffice", 10)):
-                # Mock reportlab fallback
-                with patch("backend.design.export.DesignExporter._convert_with_reportlab") as mock_reportlab:
-                    mock_reportlab.return_value = DesignExportResult(
-                        ok=False,
-                        format="pdf",
-                        error="PDF 导出失败：未找到 LibreOffice 且 reportlab 未安装",
-                    )
+        with (
+            patch("backend.design.export._locate_soffice", return_value="/usr/bin/soffice"),
+            patch("subprocess.run", side_effect=subprocess.TimeoutExpired("soffice", 10)),
+            patch("backend.design.export.DesignExporter._convert_with_reportlab") as mock_reportlab,
+        ):
+            mock_reportlab.return_value = DesignExportResult(
+                ok=False,
+                format="pdf",
+                error="PDF 导出失败：未找到 LibreOffice 且 reportlab 未安装",
+            )
 
-                    result = exporter.export(
-                        html=SAMPLE_HTML,
-                        output_dir=tmp_path,
-                        format="pdf",
-                        timeout_seconds=10,
-                    )
+            result = exporter.export(
+                html=SAMPLE_HTML,
+                output_dir=tmp_path,
+                format="pdf",
+                timeout_seconds=10,
+            )
 
-                    # Should fall back to reportlab
-                    mock_reportlab.assert_called_once()
-                    # Result depends on reportlab mock
-                    assert result.format == "pdf"
+            mock_reportlab.assert_called_once()
+            assert result.format == "pdf"
 
 
 class TestDesignExporterZipContent:

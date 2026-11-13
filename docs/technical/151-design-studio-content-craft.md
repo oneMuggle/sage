@@ -235,7 +235,49 @@ if not report.ok:
 - 导出面板支持 PDF / PPTX / ZIP / HTML；HTML 走浏览器 Blob 下载，其余显示后端落盘路径
 - 版本历史暂以当前版本徽章呈现（后端尚未暴露产物列表端点）
 
-## 12. 测试（Craft 相关）
+## 12. Office 融合与 Live Artifact（2026-11-13 新增）
+
+Design Studio 与 Office 子系统的双向集成，由三个新模块承担：
+
+### 12.1 Word → 大纲提取
+
+`backend/design/outline_extractor.py` 的 `OutlineExtractor` 解析 `.docx` 为结构化 Markdown 大纲：
+
+- 按 `w:pStyle` 识别 heading 1–9（`Heading1` / `heading 1` 等变体均兼容）
+- 段落文本按样式分类：正文 → `正文`、列表项 → `*` / `-` 无序列表、编号列表 → `1.` 有序列表
+- 特殊样式独立归类：作者/摘要/关键词/图题/表题/参考文献/页眉页脚
+- 输出 `OutlineResult(slide_count, outline_md, sections)`，`outline_md` 可直接注入 brief
+
+REST 端点 `POST /api/v1/design/outline`，LLM 不直接调用以避免 prompt injection 触发的任意本地文件读取。
+
+### 12.2 图表嵌入
+
+`backend/design/chart_embedder.py` 的 `ChartEmbedder` 将 `ChartSpec`（type/title/labels/series）渲染为 base64 PNG 并注入到最新 artifact 的指定 slot：
+
+- `spec_to_data_url(spec)` 使用 matplotlib 渲染（无头 `Agg`），返回 `data:image/png;base64,...`
+- `embed(html, data_url, slot=...)` 在 HTML 中查找 `<figure class="chart" data-slot="...">` 并替换为 `<img>`
+- `DesignStudio.add_artifact()` 创建新版本（`version = latest + 1`），不经过 LLM
+
+LLM 工具 `design_embed_chart`（`backend/tools/design_embed_chart_tool.py`）接受 `{project_id, chart, slot?}` 参数，完成嵌入后返回新 artifact 的 id/version。注册进 `DESIGN_TOOLS` 六件套。
+
+### 12.3 Live Artifact 引擎
+
+`backend/design/live_artifact.py` 的 `LiveArtifactEngine` 将数据源（xlsx/csv/json）绑定到设计项目，refresh 时重新生成 artifact：
+
+- 绑定持久化为 `<workspace>/design/<project_id>/source.json`（`SourceBinding` Pydantic 模型）
+- `render_summary(binding)` 将数据源渲染为紧凑的 Markdown 表格（Excel/CSV 截断至 30 行，JSON 截断至 4000 字符）
+- `refresh(studio, project_id)` 拼接 `project.brief + 数据源摘要` 后调用 `studio.generate()`
+
+REST 端点：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/design/projects/{id}/source` | 绑定数据源 |
+| GET | `/design/projects/{id}/source` | 读取绑定 |
+| DELETE | `/design/projects/{id}/source` | 解绑 |
+| POST | `/design/projects/{id}/refresh` | SSE 流式重新生成 |
+
+## 13. 测试（Craft 相关）
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest \
@@ -249,6 +291,6 @@ if not report.ok:
 
 `test_craft_loader.py` 覆盖：frontmatter 解析、缺省/空 frontmatter 回退、非法与带引号的 priority、H1 去重、按 priority 排序、缺失目录、按 kind 过滤、不可读文件跳过、id 去重、缓存行为。
 
-## 13. 来源说明
+## 14. 来源说明
 
 系统/模板/craft 内容为原创撰写，遵循 OpenDesign 的四平面架构模式，未逐字复制其文本，故未附加 Apache 2.0 NOTICE。

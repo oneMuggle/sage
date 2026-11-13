@@ -431,23 +431,23 @@ class LiveArtifactEngine:
 
 ### M5：Office 融合 + Live Artifact（独立 PR）
 
-- [ ] **步骤 1**：实现 `outline_extractor.py`（Word → 大纲）
+- [x] **步骤 1**：实现 `outline_extractor.py`（Word → 大纲）
   - 调用 `office_read` 解析 Word
   - 提取标题/段落 → markdown 大纲
   - 单元测试
-- [ ] **步骤 2**：实现 `chart_embedder.py`（matplotlib → base64 inline）
+- [x] **步骤 2**：实现 `chart_embedder.py`（matplotlib → base64 inline）
   - 单元测试：figure → data URL
-- [ ] **步骤 3**：集成 Word→Deck 工作流
+- [x] **步骤 3**：集成 Word→Deck 工作流
   - 用户选择 Word 文件 → 提取大纲 → 生成 deck
   - 端到端测试
-- [ ] **步骤 4**：实现 `live_artifact.py`（Live Artifact 引擎）
+- [x] **步骤 4**：实现 `live_artifact.py`（Live Artifact 引擎）
   - 数据源绑定（Excel/JSON）
   - 刷新触发（手动按钮）
   - 单元测试
-- [ ] **步骤 5**：前端集成 Live Artifact
+- [ ] **步骤 5**：前端集成 Live Artifact（deferred to follow-up PR）
   - 项目详情增加"数据源"绑定 UI
   - "刷新"按钮
-- [ ] **步骤 6**：本地 smoke test + 提交 PR
+- [x] **步骤 6**：本地 smoke test + 提交 PR
 
 **验证点**：选择 Excel 数据源 → 生成 deck → 修改 Excel → 点击刷新 → deck 自动更新数据。
 

@@ -127,6 +127,47 @@ class DesignStudio:
         """Return the newest artifact of a project, or None when none exist."""
         return self._repo.get_latest_artifact(project_id)
 
+    def add_artifact(
+        self,
+        project_id: str,
+        html_content: str,
+        *,
+        title: Optional[str] = None,
+        kind: str = "html",
+        export_formats: Optional[list] = None,
+    ) -> DesignArtifact:
+        """Append a new artifact version without calling the LLM.
+
+        Used by post-processing steps (chart embedding) that mutate an
+        existing artifact's HTML and must keep version history honest.
+        """
+        project = self._repo.get_project(project_id)
+        with self._version_lock:
+            latest = self._repo.get_latest_artifact(project_id)
+            new_version = latest.version + 1 if latest else 1
+            artifact_id = str(uuid.uuid4())
+            file_path = str(
+                self._workspace / "design" / project_id
+                / f"v{new_version}.html"
+            )
+            now = datetime.now(timezone.utc)  # noqa: UP017
+
+            artifact = self._repo.create_artifact(
+                id=artifact_id,
+                project_id=project_id,
+                version=new_version,
+                html_content=html_content,
+                title=title or (latest.title if latest else project.name),
+                file_path=file_path,
+                kind=kind,
+                export_formats=export_formats or ["html"],
+                source_prompt=latest.source_prompt if latest else "",
+                created_at=now,
+            )
+
+        self._repo.update_project_status(project_id, "complete")
+        return artifact
+
     def delete_project(self, project_id: str) -> None:
         """Delete a project."""
         self._repo.delete_project(project_id)
