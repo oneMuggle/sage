@@ -477,7 +477,7 @@ async def extract_outline(req: OutlineRequest):
     """
     from pathlib import Path
 
-    from backend.design.live_artifact import LiveArtifactEngine
+    from backend.design.outline_extractor import OutlineExtractor
 
     path = Path(req.file_path)
     if not path.exists():
@@ -497,7 +497,7 @@ async def extract_outline(req: OutlineRequest):
         )
 
     try:
-        result = LiveArtifactEngine(Path.cwd()).extract_outline(req.file_path)
+        result = OutlineExtractor().extract(path)
         return result.model_dump()
     except Exception as exc:
         logger.exception("Outline extraction failed for %s", req.file_path)

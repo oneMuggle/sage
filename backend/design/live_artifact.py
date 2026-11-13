@@ -19,8 +19,6 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from backend.design.outline_extractor import OutlineExtractor
-
 logger = logging.getLogger(__name__)
 
 _SOURCE_FILE = "source.json"
@@ -187,10 +185,6 @@ class LiveArtifactEngine:
 
     def unbind(self, project_id: str) -> bool:
         return _delete_binding(self._workspace, project_id)
-
-    def extract_outline(self, docx_path: str) -> Any:
-        """Delegate to :class:`OutlineExtractor` for Word → markdown outline."""
-        return OutlineExtractor().extract(Path(docx_path))
 
     async def refresh(self, studio: Any, project_id: str) -> Any:
         """Re-generate the project's artifact with the source summary.
