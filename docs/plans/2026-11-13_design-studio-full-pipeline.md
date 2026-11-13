@@ -396,7 +396,8 @@ class LiveArtifactEngine:
 - [x] **步骤 2**：集成到 export.py
   - `_export_pptx()` 调用 pptx_mapper
   - python-pptx 不可用时回落 soffice --convert-to pptx
-- [ ] **步骤 3**：API + 工具补 format=pptx
+- [x] **步骤 3**：API + 工具补 format=pptx
+  - `design_routes.py` 校验放行 pptx，`design_export_tool.py` schema enum 补 pptx
 - [ ] **步骤 4**：本地 smoke test（生成 deck → 导出 PPTX → PowerPoint 打开验证）
 - [ ] **步骤 5**：提交 PR
 
@@ -404,24 +405,23 @@ class LiveArtifactEngine:
 
 ### M4：前端 /design 工作台（独立 PR）
 
-- [ ] **步骤 1**：创建 `src/entities/design/designApi.ts` + `designStore.ts`
-  - API client：list/create/generate/iterate/export
+- [x] **步骤 1**：创建 `src/entities/design/designApi.ts` + `designStore.ts`
+  - API client：list/create/generate/iterate/export（generate/iterate 走 SSE 文本解析）
   - Store：项目列表 + 当前项目 + 生成状态
-- [ ] **步骤 2**：实现 `src/pages/DesignStudio.tsx` + 布局
+- [x] **步骤 2**：实现 `src/pages/DesignStudio.tsx` + 布局
   - 项目列表（卡片网格）
   - 创建向导（4 步）
-- [ ] **步骤 3**：实现生成视图 + iframe 预览
+- [x] **步骤 3**：实现生成视图 + iframe 预览
   - 复用 `HtmlPreviewHost`
-  - SSE 流式生成进度
-- [ ] **步骤 4**：实现迭代聊天 + 版本历史
-  - 对话式 feedback 输入
-  - 版本时间线
-- [ ] **步骤 5**：实现导出面板
-  - 格式选择器（PDF / PPTX / ZIP）
-  - 下载按钮
-- [ ] **步骤 6**：路由注册 + i18n
-  - `src/App.tsx` 注册 `/design`
-  - i18n 文案
+  - 生成进度：IPC relay 以 text 返回完整 SSE 响应，完成后解析 `complete` 事件
+- [x] **步骤 4**：实现迭代聊天
+  - 对话式 feedback 输入（版本历史降级为当前版本徽章：后端暂无产物列表端点）
+- [x] **步骤 5**：实现导出面板
+  - 格式选择器（PDF / PPTX / ZIP / HTML）
+  - 导出结果 toast（PDF/PPTX/ZIP 返回文件路径；HTML 触发浏览器下载）
+- [x] **步骤 6**：路由注册 + i18n
+  - `src/App.tsx` 注册 `/design`，侧栏「工具」组新增「设计工作台」
+  - `locales/{zh,en}/design.ts` 文案域
 - [ ] **步骤 7**：本地 smoke test + 提交 PR
 
 **验证点**：用户可以从 `/design` 创建项目 → 生成 → 迭代 → 导出 PDF，全程无需 LLM 工具。

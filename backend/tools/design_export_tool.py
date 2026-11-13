@@ -10,7 +10,7 @@ from backend.tools.base import BaseTool, ToolResult, ToolSchema
 
 
 class DesignExportTool(BaseTool):
-    """Export a design artifact to PDF, ZIP, or HTML."""
+    """Export a design artifact to PDF, PPTX, ZIP, or HTML."""
 
     risk = RiskClass.WRITE_LOCAL
 
@@ -18,9 +18,10 @@ class DesignExportTool(BaseTool):
         return ToolSchema(
             name="design_export",
             description=(
-                "Export a design artifact to PDF, ZIP, or HTML format. "
-                "Returns the file path (for PDF/ZIP) or HTML content (for HTML format). "
-                "Use format='pdf' to generate a PDF file, format='zip' for a self-contained "
+                "Export a design artifact to PDF, PPTX, ZIP, or HTML format. "
+                "Returns the file path (for PDF/PPTX/ZIP) or HTML content (for HTML format). "
+                "Use format='pdf' to generate a PDF file, format='pptx' for an editable "
+                "PowerPoint deck, format='zip' for a self-contained "
                 "ZIP archive, or format='html' (default) to retrieve the raw HTML content."
             ),
             parameters={
@@ -32,10 +33,10 @@ class DesignExportTool(BaseTool):
                     },
                     "format": {
                         "type": "string",
-                        "enum": ["pdf", "zip", "html"],
+                        "enum": ["pdf", "pptx", "zip", "html"],
                         "description": (
-                            "Output format: 'pdf' (PDF file), 'zip' (ZIP archive), "
-                            "or 'html' (HTML content, default)"
+                            "Output format: 'pdf' (PDF file), 'pptx' (PowerPoint deck), "
+                            "'zip' (ZIP archive), or 'html' (HTML content, default)"
                         ),
                     },
                 },
@@ -43,7 +44,7 @@ class DesignExportTool(BaseTool):
             },
         )
 
-    def execute(
+    def execute(  # noqa: PLR0911 — 每个校验门一个返回是显式设计
         self,
         project_id: str = "",
         format: str = "html",
@@ -83,7 +84,7 @@ class DesignExportTool(BaseTool):
                     },
                 )
 
-            # Export to PDF or ZIP
+            # Export to PDF / PPTX / ZIP
             workspace = studio._workspace
             output_dir = workspace / "design" / project_id
             output_dir.mkdir(parents=True, exist_ok=True)

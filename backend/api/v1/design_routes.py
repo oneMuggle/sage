@@ -9,7 +9,7 @@ Endpoints:
 - DELETE /api/v1/design/projects/{id}      — delete a design project
 - POST /api/v1/design/projects/{id}/generate  — generate first artifact (SSE)
 - POST /api/v1/design/projects/{id}/iterate   — iterate on artifact (SSE)
-- POST /api/v1/design/projects/{id}/export    — export artifact (PDF/ZIP/HTML)
+- POST /api/v1/design/projects/{id}/export    — export artifact (PDF/PPTX/ZIP/HTML)
 """
 from __future__ import annotations
 
@@ -371,16 +371,18 @@ async def iterate_artifact(project_id: str, req: IterateRequest):
 
 
 @router.post("/projects/{project_id}/export")
-async def export_artifact(project_id: str, req: ExportRequest):
-    """Export the latest artifact to PDF, ZIP, or HTML.
+async def export_artifact(  # noqa: PLR0911 — 每个校验门一个返回是显式设计
+    project_id: str, req: ExportRequest,
+):
+    """Export the latest artifact to PDF, PPTX, ZIP, or HTML.
 
     Returns:
         - format=html: { ok, format, html_content }
-        - format=pdf/zip: { ok, format, file_path }
+        - format=pdf/pptx/zip: { ok, format, file_path }
     """
     studio = _require_studio()
     try:
-        project = studio.get_project(project_id)
+        studio.get_project(project_id)
         artifact = studio.get_latest_artifact(project_id)
     except DesignProjectNotFoundError as exc:
         return _map_design_error(exc)
@@ -396,13 +398,13 @@ async def export_artifact(project_id: str, req: ExportRequest):
             content={"detail": f"Project {project_id} has no artifacts yet"},
         )
 
-    if req.format not in ("pdf", "zip", "html"):
+    if req.format not in ("pdf", "zip", "pptx", "html"):
         return JSONResponse(
             status_code=400,
             content={
                 "detail": (
                     f"Invalid format {req.format!r}; "
-                    "must be 'pdf', 'zip', or 'html'"
+                    "must be 'pdf', 'pptx', 'zip', or 'html'"
                 ),
             },
         )

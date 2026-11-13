@@ -205,7 +205,37 @@ if not report.ok:
 
 覆盖：7 条规则的正例/反例（34 个测试），`LintReport` 模型，`auto_fix` 颜色替换，`generate_feedback` 反馈生成。
 
-## 10. 测试（Craft 相关）
+## 10. HTML → PPTX 结构化映射（2026-11-13 新增）
+
+`backend/design/pptx_mapper.py` 提供 `HtmlToPptxMapper`：
+
+- 解析 `<section class="slide">` → h1/h2（标题/副标题）→ p/ul/ol（正文与列表）→ img（仅记录 src）
+- 每个 section 映射为一张空白版式幻灯片（`slide_layouts[6]`），标题 36pt / 副标题 24pt / 正文 18pt
+- `PPTX_AVAILABLE=False` 时构造器抛错；`DesignExporter._export_pptx()` 捕获后回落到 `soffice --convert-to pptx`
+- 导出端点与 `design_export` 工具均接受 `format="pptx"`
+
+失败降级顺序：python-pptx 映射 → LibreOffice 转换 → 返回明确错误（两者皆不可用时）。
+
+## 11. 前端设计工作台（2026-11-13 新增）
+
+页面 `/design`（`src/pages/DesignStudio.tsx`），侧栏「工具」组入口：
+
+| 层 | 文件 | 职责 |
+|---|---|---|
+| 类型 | `src/entities/design/types.ts` | `DesignSystem` / `DesignTemplate` / `DesignProject` / `DesignArtifact` / `DesignProjectDetail` |
+| API | `src/entities/design/designApi.ts` | `backendRequest` 封装；generate/iterate 以 `responseType: 'text'` 读取 SSE 并解析 `complete` / `error` 事件 |
+| Store | `src/entities/design/designStore.ts` | 元数据、项目列表、当前项目/产物、生成与迭代状态 |
+| 页面 | `src/pages/DesignStudio.tsx` | 列表 / 向导 / 详情三视图切换 |
+| 特性 | `src/features/design/*` | 项目卡片网格、4 步创建向导、生成视图（`HtmlPreviewHost` 预览 + 迭代聊天）、导出面板 |
+
+要点：
+
+- 生成/迭代端点是 SSE，Electron IPC relay 会等响应完成后以 text 返回，前端一次性解析；UI 在等待期间显示生成中状态
+- 预览复用 `HtmlPreviewHost` 的 sandbox 隔离（桌面端 `sage-preview://`，Web/测试回落 `srcDoc`）
+- 导出面板支持 PDF / PPTX / ZIP / HTML；HTML 走浏览器 Blob 下载，其余显示后端落盘路径
+- 版本历史暂以当前版本徽章呈现（后端尚未暴露产物列表端点）
+
+## 12. 测试（Craft 相关）
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest \
@@ -219,6 +249,6 @@ if not report.ok:
 
 `test_craft_loader.py` 覆盖：frontmatter 解析、缺省/空 frontmatter 回退、非法与带引号的 priority、H1 去重、按 priority 排序、缺失目录、按 kind 过滤、不可读文件跳过、id 去重、缓存行为。
 
-## 11. 来源说明
+## 13. 来源说明
 
 系统/模板/craft 内容为原创撰写，遵循 OpenDesign 的四平面架构模式，未逐字复制其文本，故未附加 Apache 2.0 NOTICE。
