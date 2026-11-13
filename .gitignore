@@ -141,6 +141,7 @@ coverage/
 
 # Electron builder
 dist-electron/
+dist-web/
 release/
 # Allow scripts/release/ (Sage tier inference + changelog tooling)
 !scripts/release/
