@@ -8,6 +8,7 @@
     "dev": "vite",
     "predev": "npm run build:electron",
     "build": "tsc && vite build",
+    "build:web": "vite build --mode web",
     "prebuild": "npm run build:electron",
     "build:analyze": "vite build --mode production && npx vite-bundle-visualizer",
     "preview": "vite preview",

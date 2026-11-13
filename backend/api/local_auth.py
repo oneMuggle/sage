@@ -19,6 +19,8 @@ from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from backend.config import is_web_mode
+
 _TOKEN_ENV = "SAGE_LOCAL_AUTH_TOKEN"
 _OWNERSHIP_TOKEN_ENV = "SAGE_BACKEND_OWNERSHIP_TOKEN"
 _OWNERSHIP_HEADER = "x-sage-backend-ownership"
@@ -93,17 +95,31 @@ def is_local_auth_valid(request: Request) -> bool:
         authorization = compatibility
 
     scheme, separator, supplied = authorization.partition(" ")
-    return bool(
+    if (
         separator
         and scheme.lower() == "bearer"
         and supplied
         and hmac.compare_digest(supplied, expected)
-    )
+    ):
+        return True
+
+    # Web mode: accept ?token=<value> as Bearer-equivalent
+    if is_web_mode():
+        url_token = request.query_params.get("token")
+        if url_token and hmac.compare_digest(url_token, expected):
+            return True
+
+    return False
 
 
 def is_public_path(path: str) -> bool:
-    """Return whether a path is needed by a supervisor/extension before auth."""
-    return path in _PUBLIC_PATHS
+    """Return whether a path is needed by a supervisor before authentication."""
+    if path in _PUBLIC_PATHS:
+        return True
+    # Web mode: static assets are public (served by StaticFiles mount)
+    if is_web_mode() and (path == "/" or path.startswith("/assets/") or path == "/favicon.ico"):
+        return True
+    return False
 
 
 def require_local_auth(
