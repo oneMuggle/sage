@@ -1,0 +1,11 @@
+{
+  "id": "canva",
+  "name": "Canva",
+  "category": "design-creative",
+  "description": "Bundled OpenDesign package for Canva, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
+  "tags": [
+    "canva",
+    "design"
+  ],
+  "source": "open-design (Apache 2.0)"
+}
