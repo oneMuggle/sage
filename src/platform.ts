@@ -1,23 +1,37 @@
 // src/platform.ts
 export interface PlatformAdapter {
   isElectron(): boolean;
-  invoke<T>(channel: string, ...args: any[]): Promise<T>;
-  on(channel: string, callback: (...args: any[]) => void): () => void;
+  invoke<T>(channel: string, ...args: unknown[]): Promise<T>;
+  on(channel: string, callback: (...args: unknown[]) => void): () => void;
   getAuthHeaders(): Record<string, string>;
+}
+
+interface ElectronEventBridge {
+  on?: (channel: string, callback: (...args: unknown[]) => void) => void;
+  off?: (channel: string, callback: (...args: unknown[]) => void) => void;
+}
+
+function getElectronApi(): NonNullable<Window['electronAPI']> | undefined {
+  if (typeof window === 'undefined' || !window.electronAPI) return undefined;
+  return window.electronAPI;
 }
 
 class ElectronPlatform implements PlatformAdapter {
   isElectron(): boolean {
-    return typeof window !== 'undefined' && 'electronAPI' in window;
+    return getElectronApi() !== undefined;
   }
 
-  async invoke<T>(channel: string, ...args: any[]): Promise<T> {
-    return (window as any).electronAPI.invoke(channel, ...args);
+  async invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
+    const api = getElectronApi();
+    if (!api) throw new Error('electronAPI not available');
+    return api.invoke<T>(channel, args[0] as Record<string, unknown> | undefined);
   }
 
-  on(channel: string, callback: (...args: any[]) => void): () => void {
-    (window as any).electronAPI.on(channel, callback);
-    return () => (window as any).electronAPI.off(channel, callback);
+  on(channel: string, callback: (...args: unknown[]) => void): () => void {
+    const api = getElectronApi() as (NonNullable<Window['electronAPI']> & ElectronEventBridge) | undefined;
+    if (!api?.on) return () => {};
+    api.on(channel, callback);
+    return () => api.off?.(channel, callback);
   }
 
   getAuthHeaders(): Record<string, string> {
@@ -41,7 +55,7 @@ class WebPlatform implements PlatformAdapter {
     return false;
   }
 
-  async invoke<T>(channel: string, ...args: any[]): Promise<T> {
+  async invoke<T>(channel: string, ..._args: unknown[]): Promise<T> {
     const endpoint = this.mapChannelToEndpoint(channel);
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -49,7 +63,7 @@ class WebPlatform implements PlatformAdapter {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.token}`,
       },
-      body: JSON.stringify({ args }),
+      body: JSON.stringify({}),
     });
 
     if (!response.ok) {
@@ -59,8 +73,7 @@ class WebPlatform implements PlatformAdapter {
     return response.json();
   }
 
-  on(channel: string, _callback: (...args: any[]) => void): () => void {
-    console.warn(`Web mode does not support IPC: ${channel}`);
+  on(_channel: string, _callback: (...args: unknown[]) => void): () => void {
     return () => {};
   }
 

@@ -1,6 +1,6 @@
 // src/components/DesktopOnlyTooltip.tsx
-import { Tooltip } from '../shared/ui/Tooltip/Tooltip';
 import { usePlatform } from '../hooks/usePlatform';
+import { Tooltip } from '../shared/ui/Tooltip/Tooltip';
 
 interface DesktopOnlyTooltipProps {
   children: React.ReactNode;

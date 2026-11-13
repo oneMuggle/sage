@@ -1,6 +1,6 @@
 // src/components/DesktopOnlyTooltip.test.tsx
-import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 vi.mock('../hooks/usePlatform');
 

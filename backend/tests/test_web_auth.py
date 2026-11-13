@@ -8,7 +8,7 @@ import pytest
 from fastapi import Request
 
 
-@pytest.fixture
+@pytest.fixture()
 def web_mode(monkeypatch):
     """Activate web mode with a known token for the duration of the test."""
     monkeypatch.setenv("SAGE_WEB_MODE", "1")

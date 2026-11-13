@@ -117,9 +117,8 @@ def is_public_path(path: str) -> bool:
     if path in _PUBLIC_PATHS:
         return True
     # Web mode: static assets are public (served by StaticFiles mount)
-    if is_web_mode():
-        if path == "/" or path.startswith("/assets/") or path == "/favicon.ico":
-            return True
+    if is_web_mode() and (path == "/" or path.startswith("/assets/") or path == "/favicon.ico"):
+        return True
     return False
 
 

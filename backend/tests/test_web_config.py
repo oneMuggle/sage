@@ -1,4 +1,3 @@
-import pytest
 
 from backend.config import is_web_mode
 

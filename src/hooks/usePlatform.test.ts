@@ -1,16 +1,15 @@
-// src/hooks/usePlatform.test.ts
-import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 describe('usePlatform', () => {
   afterEach(() => {
     vi.resetModules();
-    delete (window as any).electronAPI;
+    delete window.electronAPI;
     localStorage.clear();
   });
 
   it('returns isElectron false in web mode', async () => {
-    delete (window as any).electronAPI;
+    delete window.electronAPI;
     vi.resetModules();
     const { usePlatform } = await import('./usePlatform');
     const { result } = renderHook(() => usePlatform());
@@ -18,7 +17,7 @@ describe('usePlatform', () => {
   });
 
   it('returns auth headers', async () => {
-    delete (window as any).electronAPI;
+    delete window.electronAPI;
     localStorage.setItem('sage_auth_token', 'test-token');
     vi.resetModules();
     const { usePlatform } = await import('./usePlatform');
@@ -27,7 +26,7 @@ describe('usePlatform', () => {
   });
 
   it('returns invoke function', async () => {
-    delete (window as any).electronAPI;
+    delete window.electronAPI;
     vi.resetModules();
     const { usePlatform } = await import('./usePlatform');
     const { result } = renderHook(() => usePlatform());

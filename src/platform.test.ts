@@ -1,28 +1,27 @@
-// src/platform.test.ts
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 describe('platform', () => {
   afterEach(() => {
     vi.resetModules();
-    delete (window as any).electronAPI;
+    delete window.electronAPI;
     localStorage.clear();
   });
 
   it('detects non-electron environment', async () => {
-    delete (window as any).electronAPI;
+    delete window.electronAPI;
     const { platform } = await import('./platform');
     expect(platform.isElectron()).toBe(false);
   });
 
   it('detects electron environment', async () => {
-    (window as any).electronAPI = { invoke: vi.fn(), on: vi.fn(), off: vi.fn() };
+    window.electronAPI = { invoke: vi.fn(), on: vi.fn(), off: vi.fn() } as unknown as NonNullable<Window['electronAPI']>;
     vi.resetModules();
     const { platform } = await import('./platform');
     expect(platform.isElectron()).toBe(true);
   });
 
   it('reads token from URL and stores in localStorage', async () => {
-    delete (window as any).electronAPI;
+    delete window.electronAPI;
     window.history.pushState({}, '', '/?token=test-123');
     vi.resetModules();
     await import('./platform');
@@ -30,7 +29,7 @@ describe('platform', () => {
   });
 
   it('clears token from URL after reading', async () => {
-    delete (window as any).electronAPI;
+    delete window.electronAPI;
     window.history.pushState({}, '', '/?token=test-123');
     vi.resetModules();
     await import('./platform');
@@ -38,7 +37,7 @@ describe('platform', () => {
   });
 
   it('returns auth headers with bearer token', async () => {
-    delete (window as any).electronAPI;
+    delete window.electronAPI;
     localStorage.setItem('sage_auth_token', 'stored-token');
     vi.resetModules();
     const { platform } = await import('./platform');

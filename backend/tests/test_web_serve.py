@@ -1,8 +1,7 @@
 """Tests for web mode static file serving (Task 2)."""
 
 import importlib
-import pytest
-from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 
