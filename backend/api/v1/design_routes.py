@@ -9,6 +9,7 @@ Endpoints:
 - DELETE /api/v1/design/projects/{id}      — delete a design project
 - POST /api/v1/design/projects/{id}/generate  — generate first artifact (SSE)
 - POST /api/v1/design/projects/{id}/iterate   — iterate on artifact (SSE)
+- POST /api/v1/design/projects/{id}/export    — export artifact (PDF/ZIP/HTML)
 """
 from __future__ import annotations
 
@@ -29,6 +30,7 @@ from backend.design.errors import (
     DesignTemplateKindMismatchError,
     DesignTemplateNotFoundError,
 )
+from backend.design.export import DesignExporter
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +68,14 @@ class IterateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     feedback: str
+
+
+class ExportRequest(BaseModel):
+    """POST /design/projects/{id}/export body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    format: str = "html"
 
 
 # ---------------------------------------------------------------------------
@@ -353,3 +363,75 @@ async def iterate_artifact(project_id: str, req: IterateRequest):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /design/projects/:project_id/export
+# ---------------------------------------------------------------------------
+
+
+@router.post("/projects/{project_id}/export")
+async def export_artifact(project_id: str, req: ExportRequest):
+    """Export the latest artifact to PDF, ZIP, or HTML.
+
+    Returns:
+        - format=html: { ok, format, html_content }
+        - format=pdf/zip: { ok, format, file_path }
+    """
+    studio = _require_studio()
+    try:
+        project = studio.get_project(project_id)
+        artifact = studio.get_latest_artifact(project_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+    except Exception as exc:
+        logger.exception("Failed to get design project %s", project_id)
+        return JSONResponse(
+            status_code=500, content={"detail": str(exc)},
+        )
+
+    if artifact is None:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"Project {project_id} has no artifacts yet"},
+        )
+
+    if req.format not in ("pdf", "zip", "html"):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": (
+                    f"Invalid format {req.format!r}; "
+                    "must be 'pdf', 'zip', or 'html'"
+                ),
+            },
+        )
+
+    try:
+        # Determine output directory: workspace/design/{project_id}/
+        workspace = studio._workspace
+        output_dir = workspace / "design" / project_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        exporter = DesignExporter()
+        result = exporter.export(
+            html=artifact.html_content,
+            output_dir=output_dir,
+            format=req.format,
+            filename=f"v{artifact.version}",
+        )
+
+        if not result.ok:
+            return JSONResponse(
+                status_code=500,
+                content={"detail": result.error or "Export failed"},
+            )
+
+        return result.model_dump()
+
+    except Exception as exc:
+        logger.exception("Design export failed for project %s", project_id)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Export failed: {exc}"},
+        )

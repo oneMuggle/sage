@@ -92,7 +92,69 @@ main.py (lifespan)
 - **新增模板**：在 `content/templates/<kind>/<id>/` 放置 `SKILL.md`（frontmatter 必含 `name/kind/description/design_system_required`），可选 `example.html` 与 `assets/*.css|*.js`。
 - **新增 craft 规则**：在 `content/craft/` 放置 `<id>.md`，frontmatter 必含 `id/name/applies_to/priority`。正文会整体进入 prompt，建议单文件 < 2KB；若某规则只适用于某类产物，用 `applies_to: deck|prototype` 缩小注入面。
 
-## 8. 测试
+## 8. 导出管道（2026-11-13 新增）
+
+Design Studio 支持将生成的 HTML 产物导出为可交付文件格式：
+
+| 格式 | 实现 | 降级策略 |
+|------|------|----------|
+| **PDF** | LibreOffice headless（`soffice --convert-to pdf`） | reportlab 直绘（纯文本，无复杂布局） |
+| **ZIP** | `zipfile` 打包 `index.html` | 无降级（ZIP 始终可用） |
+| **HTML** | 原样返回 bundled HTML | 无降级 |
+
+### 8.1 架构
+
+```
+POST /api/v1/design/projects/{id}/export
+Body: { "format": "pdf" | "zip" | "html" }
+  ↓
+design_routes.export_artifact()
+  ↓
+DesignExporter.export(html, output_dir, format)
+  ↓
+  ├─ PDF → _convert_with_libreoffice() → 失败 → _convert_with_reportlab()
+  ├─ ZIP → _export_zip() (zipfile)
+  └─ HTML → 直接返回 html_content
+```
+
+### 8.2 API
+
+```python
+POST /api/v1/design/projects/{project_id}/export
+Body: { "format": "pdf" | "zip" | "html" }
+Response:
+  - format=html: { ok, format, html_content }
+  - format=pdf/zip: { ok, format, file_path }
+```
+
+### 8.3 LLM 工具
+
+`design_export` 工具新增 `format` 参数（默认 `"html"`，向后兼容）：
+
+```python
+design_export(project_id="abc", format="pdf")
+# → { file_path: "/workspace/design/abc/v1.pdf", format: "pdf" }
+```
+
+### 8.4 LibreOffice 定位
+
+复用 `backend.office.export_pdf._locate_soffice()`，检测顺序：
+1. `SAGE_SOFFICE_PATH` 环境变量
+2. `shutil.which("soffice")`
+3. 平台特定安装路径（Windows/macOS/Linux）
+
+若未找到 soffice，自动降级到 reportlab（仅支持纯文本渲染）。
+
+### 8.5 测试
+
+```bash
+/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest \
+  backend/tests/unit/test_design_export.py -v
+```
+
+覆盖：PDF/ZIP/HTML 三种格式、soffice 缺失降级、超时处理、Unicode 内容、大文件。
+
+## 9. 测试（Craft 相关）
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest \
@@ -106,6 +168,6 @@ main.py (lifespan)
 
 `test_craft_loader.py` 覆盖：frontmatter 解析、缺省/空 frontmatter 回退、非法与带引号的 priority、H1 去重、按 priority 排序、缺失目录、按 kind 过滤、不可读文件跳过、id 去重、缓存行为。
 
-## 9. 来源说明
+## 10. 来源说明
 
 系统/模板/craft 内容为原创撰写，遵循 OpenDesign 的四平面架构模式，未逐字复制其文本，故未附加 Apache 2.0 NOTICE。
