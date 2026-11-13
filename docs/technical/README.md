@@ -128,7 +128,7 @@
 | 148 | [侧边栏任务中心](./148-sidebar-task-center.md) | 六源任务归一（registry / chat / lane / goal / todo / scheduled）+ 侧边栏分区与 `/tasks` 页面 + 闲时目标终态通知队列 + panelRegistry 槽位迁移 |
 | 149 | [权限对话框 UX 优化](./149-permission-dialog-ux.md) | 来源会话标签（多会话并行辨识请求来源）+ 长命令完整展示（截断常量 1000→4000 / 对话框加宽） |
 | 150 | [TDD Subagent Workflow](./100-tdd-workflow.md) | 借鉴 Claude Code：TddGuard 状态机 + workflow_mode 优先级链（explicit > text > env > default）+ TDD 循环（max=3）+ `lane.tdd.evidence` 事件 + LaneDetailDrawer 证据展示 |
-| 151 | [Design Studio 内容库与 Craft 工艺规范](./151-design-studio-content-craft.md) | 四平面架构（设计系统/模板/工艺规范/生成）+ 7 设计系统 / 5 Deck 模板 / 4 原型模板 / 5 条 Craft 规则 + `CraftRuleRegistry` 解析器（容错/去重/按 kind 过滤）+ Prompt 注入链路 |
+| 151 | [Design Studio 内容库与 Craft 工艺规范](./151-design-studio-content-craft.md) | 四平面架构（设计系统/模板/工艺规范/生成）+ 15 设计系统 / 13 Deck 模板 / 4 原型模板 / 5 条 Craft 规则 + `CraftRuleRegistry` 解析器 + Prompt 注入链路 + 导出管道（PDF/PPTX/ZIP）+ Design Lint + Office 融合（Word→大纲 / 图表嵌入 / Live Artifact） |
 | 152 | [Web Fallback 模式（Win7 兼容）](./152-web-fallback-mode.md) | Win7 管控环境下 Electron 被拦截时的浏览器降级方案：`SAGE_WEB_MODE` 环境变量 + FastAPI 静态文件服务 + URL param token 认证 + `sage-web.bat` 启动脚本 |
 
 ---

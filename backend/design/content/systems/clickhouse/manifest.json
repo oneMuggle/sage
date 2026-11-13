@@ -1,0 +1,11 @@
+{
+  "id": "clickhouse",
+  "name": "ClickHouse",
+  "category": "backend-data",
+  "description": "Bundled OpenDesign package for ClickHouse, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
+  "tags": [
+    "clickhouse",
+    "backend"
+  ],
+  "source": "open-design (Apache 2.0)"
+}

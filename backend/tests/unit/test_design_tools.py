@@ -14,6 +14,7 @@ from backend.design.design_studio import DesignStudio
 from backend.design.generator import DesignGenerator
 from backend.design.systems import DesignSystemRegistry
 from backend.design.templates import DesignTemplateRegistry
+from backend.tools.design_embed_chart_tool import DesignEmbedChartTool
 from backend.tools.design_export_tool import DesignExportTool
 from backend.tools.design_generate_tool import DesignGenerateTool
 from backend.tools.design_iterate_tool import DesignIterateTool
@@ -284,6 +285,108 @@ def test_design_export_missing_params(mock_design_studio):
     assert "missing_required_parameters" in result.error
 
 
+def test_design_embed_chart_schema():
+    """Test DesignEmbedChartTool schema."""
+    tool = DesignEmbedChartTool()
+    schema = tool.schema
+    assert schema.name == "design_embed_chart"
+    assert "chart" in schema.description.lower()
+    assert tool.risk.value == "write_local"
+    props = schema.parameters["properties"]
+    assert "project_id" in props
+    assert "chart" in props
+    assert "slot" in props
+    assert schema.parameters["required"] == ["project_id", "chart"]
+
+
+def test_design_embed_chart_execute(mock_design_studio, monkeypatch):
+    """Test DesignEmbedChartTool executes the embed → add_artifact flow."""
+    tool = DesignEmbedChartTool()
+
+    # Stub the matplotlib-bound renderer so the test doesn't import matplotlib.
+    from backend.design import chart_embedder as chart_mod
+
+    monkeypatch.setattr(
+        chart_mod.ChartEmbedder, "spec_to_data_url",
+        lambda self, spec, output_dir=None: "data:image/png;base64,STUB",
+    )
+
+    # Stub add_artifact to return a predictable new artifact without writing files.
+    from datetime import datetime, timezone
+
+    from backend.design.models import DesignArtifact
+
+    new_artifact = DesignArtifact(
+        id="new-artifact-id",
+        project_id="test-project-id",
+        version=2,
+        html_content='<html><body><figure class="chart"></figure></body></html>',
+        css_injected="",
+        title="Test Artifact",
+        file_path="/tmp/v2.html",
+        kind="html",
+        export_formats=["html"],
+        source_prompt="Test prompt",
+        created_at=datetime.now(timezone.utc),  # noqa: UP017
+    )
+    mock_design_studio.add_artifact = MagicMock(return_value=new_artifact)
+
+    result = tool.execute(
+        project_id="test-project-id",
+        chart={
+            "type": "bar",
+            "title": "Sales",
+            "labels": ["Q1", "Q2"],
+            "series": [{"name": "Revenue", "y": [10.0, 20.0]}],
+        },
+    )
+
+    assert result.success is True
+    assert result.content["project_id"] == "test-project-id"
+    assert result.content["artifact_id"] == "new-artifact-id"
+    assert result.content["artifact_version"] == 2
+    assert result.content["chart_type"] == "bar"
+
+
+def test_design_embed_chart_missing_params(mock_design_studio):
+    """Test DesignEmbedChartTool with missing parameters."""
+    tool = DesignEmbedChartTool()
+    result = tool.execute()
+    assert result.success is False
+    assert "missing_required_parameters" in result.error
+
+
+def test_design_embed_chart_no_artifacts(mock_design_studio):
+    """Test DesignEmbedChartTool when no artifact exists for the project."""
+    from backend.data.design_repo import DesignRepo
+
+    mock_repo = MagicMock(spec=DesignRepo)
+    mock_repo.get_latest_artifact.return_value = None
+
+    # Rebuild the studio with the empty-artifact repo for this test.
+    from backend.design.design_studio import DesignStudio
+    from backend.design.generator import DesignGenerator
+    from backend.design.systems import DesignSystemRegistry
+    from backend.design.templates import DesignTemplateRegistry
+
+    empty_studio = DesignStudio(
+        repo=mock_repo,
+        generator=MagicMock(spec=DesignGenerator),
+        systems=MagicMock(spec=DesignSystemRegistry),
+        templates=MagicMock(spec=DesignTemplateRegistry),
+        workspace_dir=mock_design_studio._workspace,
+    )
+    init_design_studio(empty_studio)
+
+    tool = DesignEmbedChartTool()
+    result = tool.execute(
+        project_id="missing-project",
+        chart={"type": "bar", "series": [{"name": "x", "y": [1.0]}]},
+    )
+    assert result.success is False
+    assert "no_artifacts_found" in result.error
+
+
 def test_tools_not_initialized():
     """Test tools handle uninitialized design studio gracefully."""
     # Reset the global studio
@@ -296,6 +399,14 @@ def test_tools_not_initialized():
 
     tool = DesignListTemplatesTool()
     result = tool.execute()
+    assert result.success is False
+    assert "design_studio_not_initialized" in result.error
+
+    tool = DesignEmbedChartTool()
+    result = tool.execute(
+        project_id="any",
+        chart={"type": "bar", "series": [{"name": "x", "y": [1.0]}]},
+    )
     assert result.success is False
     assert "design_studio_not_initialized" in result.error
 
@@ -312,10 +423,10 @@ def test_tools_not_initialized():
 @pytest.mark.parametrize(
     "tool_cls",
     [DesignGenerateTool, DesignIterateTool, DesignExportTool,
-     DesignListSystemsTool, DesignListTemplatesTool],
+     DesignListSystemsTool, DesignListTemplatesTool, DesignEmbedChartTool],
 )
 def test_execute_is_synchronous(tool_cls):
-    """All five design tools must expose a sync ``execute`` (never a coroutine fn)."""
+    """All six design tools must expose a sync ``execute`` (never a coroutine fn)."""
     assert not inspect.iscoroutinefunction(tool_cls().execute)
 
 

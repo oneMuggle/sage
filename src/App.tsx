@@ -92,6 +92,11 @@ const GoalDetailPage = lazy(() =>
 // 2026-11-09: 任务中心独立页面（/tasks）
 const TasksPage = lazy(() => import('./pages/TasksPage').then((m) => ({ default: m.TasksPage })));
 
+// M4 (2026-11-13): 设计工作台（项目列表 / 创建向导 / 预览迭代导出）
+const DesignStudio = lazy(() =>
+  import('./pages/DesignStudio').then((m) => ({ default: m.DesignStudio })),
+);
+
 // ChatRoute 内直接调用 hook 形式的 useStore setter 会引入条件调用问题,
 // 用 getState() 命令式写入更直白(与 App useEffect 里的用法一致)。
 const setCurrentSessionIdFromStore = (id: string) => useStore.getState().setCurrentSessionId(id);
@@ -300,6 +305,8 @@ function App() {
             <Route path="specialists/:id" element={<SpecialistDetail />} />
             <Route path="skills" element={<Skills />} />
             <Route path="office" element={<Office />} />
+            {/* M4 (2026-11-13): 设计工作台 */}
+            <Route path="design" element={<DesignStudio />} />
             <Route path="projects/governance/:projectId" element={<ProjectGovernance />} />
             <Route path="projects" element={<ProjectsOverview />} />
             <Route path="knowledge" element={<Knowledge />} />

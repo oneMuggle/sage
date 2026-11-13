@@ -13,6 +13,7 @@ import {
   HelpCircle,
   ListTodo,
   ListChecks,
+  Palette,
   UserCog,
   PanelLeftClose,
   PanelLeftOpen,
@@ -121,6 +122,7 @@ const coreNavItems: NavItem[] = [
 ];
 const toolsNavItems: NavItem[] = [
   { path: '/office', label: '文档工作台', icon: FileSpreadsheet },
+  { path: '/design', label: '设计工作台', icon: Palette },
   { path: '/knowledge', label: '知识库', icon: BookOpen },
   { path: '/scheduled', label: '定时任务', icon: CalendarClock },
   { path: '/skills', label: '技能', icon: Sparkles },

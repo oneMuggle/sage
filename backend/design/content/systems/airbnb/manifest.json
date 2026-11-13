@@ -1,0 +1,11 @@
+{
+  "id": "airbnb",
+  "name": "Airbnb",
+  "category": "e-commerce-retail",
+  "description": "Bundled OpenDesign package for Airbnb, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
+  "tags": [
+    "airbnb",
+    "e-commerce"
+  ],
+  "source": "open-design (Apache 2.0)"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "coinbase",
+  "name": "Coinbase",
+  "category": "fintech-crypto",
+  "description": "Bundled OpenDesign package for Coinbase, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
+  "tags": [
+    "coinbase",
+    "fintech"
+  ],
+  "source": "open-design (Apache 2.0)"
+}

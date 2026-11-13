@@ -1,0 +1,11 @@
+{
+  "id": "cafe",
+  "name": "Cafe",
+  "category": "creative-artistic",
+  "description": "Bundled OpenDesign package for Cafe, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
+  "tags": [
+    "cafe",
+    "creative"
+  ],
+  "source": "open-design (Apache 2.0)"
+}
