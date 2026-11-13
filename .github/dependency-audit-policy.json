@@ -1091,6 +1091,34 @@
       "affected_path": "node_modules/electron",
       "actual_reachability": "reachable; accepted risk",
       "controls": "Electron main-process isolation, contextIsolation, sandboxing, IPC validation, no arbitrary cwd execution; Win7 LTS long-term support decision (2026-09-15) pins electron@21.4.4 until Win7 LTS EOL (2027-12-13); quarterly npm audit review"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "pip",
+      "package": "pillow",
+      "package_version": "10.4.0",
+      "advisory": "GHSA-wqgw-9xfh-qf2g",
+      "advisory_url": "https://osv.dev/vulnerability/GHSA-wqgw-9xfh-qf2g",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "image decode reachable via user file uploads (attachment pipeline); crafted TIFF/EXIF IFD with overlapping tag data causes Image.open() to allocate thousands of times its own size (144 KB TIFF -> 1.6 GiB memory); no memory corruption, denial of service only",
+      "controls": "Pillow 10.4.0 is the ceiling on Python 3.8 (fix is Pillow 13.0.0, requires Python >=3.11); upload size limits, MIME type validation, image dimension caps, Pillow subprocess sandboxing for raw decode, and quarterly audit review through Win7 LTS EOL 2027-12-13",
+      "exception": "temporary exception pending Win7 LTS EOL or upstream Pillow patch compatible with Python 3.8",
+      "notes": "py38-ceiling: Pillow 10.4.0 is the ceiling on Python 3.8 for the Win7 LTS track. Memory DoS in TIFF/EXIF IFD parsing via overlapping tag data (ANT-2026-D7STJUWL / CWE-770 DoS), published 2026-11-13. Fixed only in Pillow 13.0.0 (requires Python >=3.11). No Py3.8-compatible fix exists."
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "pip",
+      "package": "pillow",
+      "package_version": "10.4.0",
+      "advisory": "GHSA-xcvg-w56q-r89m",
+      "advisory_url": "https://osv.dev/vulnerability/GHSA-xcvg-w56q-r89m",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "only reachable when writing/saving a compressed TIFF through libtiff with attacker-controlled size metadata (ImageFileDirectory_v2 with width/height tags); Sage's document rendering pipeline reads images for preview but does not re-save TIFFs with untrusted third-party metadata; no TIFF save path carries source metadata from user uploads",
+      "controls": "Pillow 10.4.0 is the ceiling on Python 3.8 (fix is Pillow 13.0.0, requires Python >=3.11); no TIFF re-save path with untrusted metadata in the production path; upload size limits, MIME type validation; quarterly audit review through Win7 LTS EOL 2027-12-13",
+      "exception": "temporary exception pending Win7 LTS EOL or upstream Pillow patch compatible with Python 3.8",
+      "notes": "py38-ceiling: Pillow 10.4.0 is the ceiling on Python 3.8 for the Win7 LTS track. Heap buffer overflow saving TIFF with libtiff when tags override image size (ANT-2026-CS7N494P / CWE-787 memory-safety, high severity), published 2026-11-13. Fixed only in Pillow 13.0.0 (requires Python >=3.11). No Py3.8-compatible fix exists; Sage does not re-save untrusted third-party TIFFs with attacker-controlled metadata."
     }
   ]
 }
