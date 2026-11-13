@@ -237,3 +237,51 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 | `8c21cc778` | arch baseline 补记 | `8c21cc778`（同 SHA） |
 
 冲突点：`ProjectsOverview.tsx` 与测试取 `--theirs`（feature 侧）；i18n 聚合文件按 win7 行号重应用；plan 文档在 win7 不存在需 `git rm` 后继续。
+
+## 147.14 AI 分析异步化与缓存（2026-11-11）
+
+项目工作台创建向导第一步触发 `POST /projects/analyze`（画像采集 + LLM 治理报告）。此前 `profile_project()` 在 FastAPI async handler 内同步运行，阻塞整个事件循环，导致分析期间其他页面（侧栏、聊天、内存浏览）的 API 请求无法处理，表现为"AI 分析卡住其他模块"。
+
+### 147.14.1 根因
+
+- `profile_project()` 为同步函数，调用链中遍历目录 + 读文件 + subprocess 跑 git，单次耗时数百 ms 到数秒。
+- 在 async handler 中直接 `await` 等于把事件循环卡住，其他请求的协程无法让出 CPU。
+- LLM 分析阶段 `agent.analyze(profile)` 是 async（HTTP I/O），但整体链路无超时保护，LLM 卡死会让请求永远挂起。
+
+### 147.14.2 后端修复（`backend/api/project_routes.py`）
+
+| 措施 | 实现 |
+| --- | --- |
+| 画像采集让出事件循环 | `loop.run_in_executor(None, lambda: profile_project(path))`，线程池执行 |
+| 结果缓存 | 进程内 dict，key = `path:git_sha`，TTL 1 小时，最多 50 项；非 git 目录不缓存 |
+| 硬超时 | `asyncio.timeout(180)` 包裹画像 + LLM 整段，避免 LLM 挂死请求永不返回 |
+| 缓存失效 | git commit 变化自动失效；TTL 过期自动淘汰；LRU 兜底 |
+
+缓存命中时 `POST /projects/analyze` 秒回，重复分析同一 git 状态的项目不再消耗 LLM token。
+
+### 147.14.3 前端修复（`src/features/project-type/ProjectAnalysisWizard.tsx`）
+
+- Electron IPC 不支持 AbortSignal，用 `Promise.race` 实现前端软超时（60s）。
+- 超时后显示错误横幅，用户可重试。
+- 分析进行中显示「取消」按钮，用户可主动中止等待（后端仍在跑，但前端不再阻塞）。
+
+### 147.14.4 测试与门禁
+
+| 门禁 | 结果 |
+| --- | --- |
+| ruff | 通过（新增 `check=False` 修 PLW1510） |
+| `node scripts/architecture-check.mjs` | 通过（`project_routes.py` 1298 → 1369，ratchet 补账） |
+| Backend (Python 3.10) | 通过 |
+| Backend (Python 3.8, Win7) | 通过（PEP 604/585 护栏 + py38 AST 扫描通过） |
+| Frontend (TypeScript) | 通过 |
+| Electron build + smoke | 通过 |
+
+### 147.14.5 双分支同步
+
+| 分支 | PR | 合并提交 |
+| --- | --- | --- |
+| main | #3037 | `b896d9191` |
+| release/win7 | #3039 | `2ac9da704`（cherry-pick，架构基线冲突手动解） |
+
+win7 侧的 cherry-pick 冲突集中在 `architecture-baseline.json`：保留 win7 的 `project_ai_routes.py: 861` / `project_schemas.py: 829`，仅更新 `project_routes.py` 到当前行数。
+
