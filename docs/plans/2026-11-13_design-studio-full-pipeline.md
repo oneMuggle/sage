@@ -399,7 +399,8 @@ class LiveArtifactEngine:
 - [x] **步骤 3**：API + 工具补 format=pptx
   - `design_routes.py` 校验放行 pptx，`design_export_tool.py` schema enum 补 pptx
 - [ ] **步骤 4**：本地 smoke test（生成 deck → 导出 PPTX → PowerPoint 打开验证）
-- [ ] **步骤 5**：提交 PR
+  - 单测已覆盖映射与降级链路（22 个用例全绿）；真实 PowerPoint/WPS 打开验证待人工执行
+- [x] **步骤 5**：提交 PR（随 PR #3043 一并提交，commit `acee4b553` + `a89bbbd34`）
 
 **验证点**：生成一个 pitch-deck → 导出 PPTX → PowerPoint/WPS 打开确认布局/字体/配色保留。
 
@@ -422,7 +423,9 @@ class LiveArtifactEngine:
 - [x] **步骤 6**：路由注册 + i18n
   - `src/App.tsx` 注册 `/design`，侧栏「工具」组新增「设计工作台」
   - `locales/{zh,en}/design.ts` 文案域
-- [ ] **步骤 7**：本地 smoke test + 提交 PR
+- [x] **步骤 7**：本地 smoke test + 提交 PR
+  - typecheck / eslint / vitest / `npm run build` / bundle 预算 / architecture-check 全部通过
+  - 桌面端真实 UI 冒烟（创建→生成→导出）待人工在 Electron 中验证，需后端 LLM 可用
 
 **验证点**：用户可以从 `/design` 创建项目 → 生成 → 迭代 → 导出 PDF，全程无需 LLM 工具。
 
