@@ -46,6 +46,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sage_core import Message, Role
 
+from backend.config import is_web_mode
+
 
 def configure_ssl_ca_bundle(where: Callable[[], str]) -> Optional[str]:
     """为 ``httpx`` / ``requests`` / ``curl`` 兜底注入 certifi 的 CA bundle。
@@ -1712,6 +1714,23 @@ async def health_proof(request: Request):
 async def health_check():
     """Return a machine-readable build and process ownership envelope."""
     return {"status": "ok", **_build_health_metadata()}
+
+
+# ── Web mode: serve static frontend files ────────────────────────────────────
+# When SAGE_WEB_MODE=1, mount dist-web/ at "/" so browsers can load the UI.
+# The path can be overridden via SAGE_WEB_DIST_PATH for testing / custom layouts.
+_WEB_DIST_PATH = Path(
+    os.environ.get("SAGE_WEB_DIST_PATH", str(Path(__file__).parent.parent / "dist-web"))
+)
+
+if is_web_mode():
+    if _WEB_DIST_PATH.exists():
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/", StaticFiles(directory=str(_WEB_DIST_PATH), html=True), name="web")
+        logger.info("Web mode: serving static files from %s", _WEB_DIST_PATH)
+    else:
+        logger.warning("Web mode enabled but dist-web not found: %s", _WEB_DIST_PATH)
 
 
 # ── Diagnostic: all module-level imports complete ─────────────────────────

@@ -128,6 +128,7 @@
 | 151 | [权限对话框 UX 优化](./151-permission-dialog-ux.md) | 来源会话标签（多会话并行辨识请求来源）+ 长命令完整展示（截断常量 1000→4000 / 对话框加宽） |
 | 152 | [侧边栏任务中心](./152-sidebar-task-center.md) | 六源任务归一（registry / chat / lane / goal / todo / scheduled）+ 侧边栏分区与 `/tasks` 页面 + 闲时目标终态通知队列 + panelRegistry 槽位迁移 |
 | 153 | [TDD Subagent Workflow](./100-tdd-workflow.md) | 借鉴 Claude Code：TddGuard 状态机 + workflow_mode 优先级链（explicit > text > env > default）+ TDD 循环（max=3）+ `lane.tdd.evidence` 事件 + LaneDetailDrawer 证据展示 |
+| 154 | [Web Fallback 模式（Win7 兼容）](./154-web-fallback-mode.md) | Win7 管控环境下 Electron 被拦截时的浏览器降级方案：`SAGE_WEB_MODE` 环境变量 + FastAPI 静态文件服务 + URL param token 认证 + `sage-web.bat` 启动脚本 |
 
 ---
 
