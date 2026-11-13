@@ -184,10 +184,17 @@ export const settingsRoutes: Record<string, CommandRoute> = {
   scheduled_create_task: {
     method: 'POST',
     path: () => '/api/v1/scheduled/tasks',
+    // 2026-11-13: scheduledClient 把 CreateTaskInput 包在 { input } 里，后端
+    // CreateTaskIn 是扁平模型。在此拆包，避免 422。
+    body: (a) => (a.input as Record<string, unknown>) ?? {},
   },
   scheduled_update_task: {
     method: 'PATCH',
     path: (a) => `/api/v1/scheduled/tasks/${encodeURIComponent(String(a.id))}`,
+    // 2026-11-13: 同上，scheduledClient.update 把变更包在 { id, changes }。
+    // id 已经通过 path 路由，body 只发 changes，避免触发 UpdateTaskIn 的
+    // extra="forbid" → 422。
+    body: (a) => (a.changes as Record<string, unknown>) ?? {},
   },
   scheduled_delete_task: {
     method: 'DELETE',
