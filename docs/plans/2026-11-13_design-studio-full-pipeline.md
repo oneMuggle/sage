@@ -389,13 +389,13 @@ class LiveArtifactEngine:
 
 ### M3：HTML → PPTX 结构化映射（独立 PR）
 
-- [ ] **步骤 1**：实现 `backend/design/pptx_mapper.py`
-  - BeautifulSoup 解析 HTML
-  - 映射 section → slide，h1/h2 → 标题，p/ul/ol → 内容，img → 图片
-  - 单元测试：简单 HTML → PPTX
-- [ ] **步骤 2**：集成到 export.py
-  - `to_pptx(html, output_path)` 调用 pptx_mapper
-  - 失败回落 soffice --convert-to pptx
+- [x] **步骤 1**：实现 `backend/design/pptx_mapper.py`
+  - Regex 解析 HTML（section.slide → h1/h2 → p/ul/ol → img）
+  - python-pptx 映射：标题/副标题/内容/列表
+  - 22 个单元测试全部通过
+- [x] **步骤 2**：集成到 export.py
+  - `_export_pptx()` 调用 pptx_mapper
+  - python-pptx 不可用时回落 soffice --convert-to pptx
 - [ ] **步骤 3**：API + 工具补 format=pptx
 - [ ] **步骤 4**：本地 smoke test（生成 deck → 导出 PPTX → PowerPoint 打开验证）
 - [ ] **步骤 5**：提交 PR

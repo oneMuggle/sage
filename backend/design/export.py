@@ -7,6 +7,8 @@ Exports design artifacts (HTML) to deliverable file formats:
   simple reportlab-based HTML→PDF renderer when soffice is unavailable.
 - **ZIP**: bundles self-contained HTML (with inlined CSS/JS) into a ZIP
   archive, suitable for sharing or offline viewing.
+- **PPTX**: parses HTML deck's ``<section class="slide">`` structure and
+  maps to python-pptx, preserving titles, content, and basic styling.
 - **HTML**: returns the bundled HTML as-is (for backward compatibility).
 
 Python 3.8-compatible syntax (typing.* generics, no PEP 604) so the
@@ -62,7 +64,7 @@ class DesignExportResult(BaseModel):
 
 
 class DesignExporter:
-    """Export design artifacts to PDF / ZIP / HTML.
+    """Export design artifacts to PDF / ZIP / PPTX / HTML.
 
     Usage::
 
@@ -86,7 +88,7 @@ class DesignExporter:
         Args:
             html: The HTML content to export.
             output_dir: Directory where the output file will be written.
-            format: Target format — "pdf", "zip", or "html".
+            format: Target format — "pdf", "zip", "pptx", or "html".
             filename: Optional output filename (without extension). Defaults
                 to "design_export".
             timeout_seconds: Wall-clock limit for the soffice subprocess.
@@ -119,11 +121,11 @@ class DesignExporter:
         timeout_seconds: int,
     ) -> DesignExportResult:
         """Inner export logic (called under lock)."""
-        if format not in ("pdf", "zip", "html"):
+        if format not in ("pdf", "zip", "html", "pptx"):
             return DesignExportResult(
                 ok=False,
                 format=format,
-                error=f"不支持的导出格式 {format!r}（仅支持 pdf / zip / html）",
+                error=f"不支持的导出格式 {format!r}（仅支持 pdf / zip / pptx / html）",
             )
 
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -139,7 +141,10 @@ class DesignExporter:
         if format == "zip":
             return self._export_zip(html, output_dir, base_name)
 
-        # format == "pdf"
+        if format == "pptx":
+            return self._export_pptx(html, output_dir, base_name)
+
+        # Default to PDF format
         return self._export_pdf(html, output_dir, base_name, timeout_seconds)
 
     def _export_zip(
@@ -167,6 +172,124 @@ class DesignExporter:
                 error=f"ZIP 导出失败: {exc}",
             )
 
+    def _export_pptx(
+        self,
+        html: str,
+        output_dir: Path,
+        base_name: str,
+    ) -> DesignExportResult:
+        """Convert HTML deck to PPTX via pptx_mapper.
+
+        Falls back to soffice --convert-to pptx when python-pptx is unavailable.
+        """
+        from backend.design.pptx_mapper import PPTX_AVAILABLE, HtmlToPptxMapper
+
+        pptx_path = output_dir / f"{base_name}.pptx"
+
+        if PPTX_AVAILABLE:
+            try:
+                mapper = HtmlToPptxMapper()
+                mapper.map(html, pptx_path)
+                logger.info("Design export to PPTX succeeded: %s", pptx_path)
+                return DesignExportResult(
+                    ok=True,
+                    format="pptx",
+                    file_path=str(pptx_path),
+                )
+            except Exception as exc:
+                logger.warning("python-pptx mapping failed: %s", exc)
+                # Fall through to soffice fallback
+
+        # Fallback: soffice --convert-to pptx
+        soffice_path = _locate_soffice()
+        if soffice_path is None:
+            return DesignExportResult(
+                ok=False,
+                format="pptx",
+                error="PPTX 导出失败：python-pptx 未安装且 LibreOffice 不可用",
+            )
+
+        return self._convert_to_pptx_with_libreoffice(
+            soffice_path, html, output_dir, base_name,
+        )
+
+    def _convert_to_pptx_with_libreoffice(
+        self,
+        soffice_path: str,
+        html: str,
+        output_dir: Path,
+        base_name: str,
+        timeout_seconds: int = 120,
+    ) -> DesignExportResult:
+        """Fallback: run soffice --headless --convert-to pptx."""
+        html_path = output_dir / f"{base_name}.html"
+        try:
+            html_path.write_text(html, encoding="utf-8")
+        except Exception as exc:
+            return DesignExportResult(
+                ok=False,
+                format="pptx",
+                error=f"无法写入临时 HTML 文件: {exc}",
+            )
+
+        cmd = [
+            soffice_path,
+            "--headless",
+            "--norestore",
+            "--convert-to",
+            "pptx",
+            "--outdir",
+            str(output_dir),
+            str(html_path),
+        ]
+        logger.info("Design export to PPTX via LibreOffice: %s", cmd)
+
+        try:
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                check=False,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired:
+            self._cleanup_temp_html(html_path)
+            return DesignExportResult(
+                ok=False,
+                format="pptx",
+                error=f"LibreOffice 转换超时（上限 {timeout_seconds}s）",
+            )
+        except OSError as exc:
+            self._cleanup_temp_html(html_path)
+            return DesignExportResult(
+                ok=False,
+                format="pptx",
+                error=f"无法启动 LibreOffice: {exc}",
+            )
+
+        self._cleanup_temp_html(html_path)
+
+        pptx_path = output_dir / f"{base_name}.pptx"
+        if proc.returncode != 0:
+            return DesignExportResult(
+                ok=False,
+                format="pptx",
+                error=f"LibreOffice PPTX 转换失败（exit code {proc.returncode}）",
+            )
+
+        if not pptx_path.exists():
+            return DesignExportResult(
+                ok=False,
+                format="pptx",
+                error="LibreOffice 报告成功，但未找到输出 PPTX 文件",
+            )
+
+        logger.info("Design export to PPTX via LibreOffice succeeded: %s", pptx_path)
+        return DesignExportResult(
+            ok=True,
+            format="pptx",
+            file_path=str(pptx_path),
+        )
+
     def _export_pdf(
         self,
         html: str,
@@ -192,7 +315,7 @@ class DesignExporter:
         else:
             logger.info("LibreOffice (soffice) not found — attempting reportlab fallback")
 
-        # Fallback: reportlab
+        # Use reportlab as fallback renderer
         return self._convert_with_reportlab(html, pdf_path)
 
     def _convert_with_libreoffice(
