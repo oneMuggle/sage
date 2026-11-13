@@ -156,31 +156,6 @@ export default defineConfig(({ mode }) => {
             'vendor-motion': ['framer-motion'],
             'vendor-xterm': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-web-links'],
           },
-        },
-      },
-        // CRITICAL: dedupe react/react-dom so ReactDOM reads the SAME React
-        // instance as React. Without this, ESM module resolution can produce
-        // two different module records for `react` and `react-dom`, and
-        // ReactDOM's __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED
-        // check fails (returns undefined) → TypeError → white screen.
-        // Symptom: `Cannot read properties of undefined (reading
-        // '__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED')` in
-        // vendor-react-*.js line ~17, with rootChildren=0 (React never
-        // initialized).
-        dedupe: ['react', 'react-dom', 'react-dom/client'],
-      },
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-query': ['@tanstack/react-query'],
-            'vendor-ui': ['@headlessui/react', 'sonner', 'lucide-react'],
-            'vendor-flow': ['@xyflow/react'],
-            'vendor-markdown': ['react-markdown', 'remark-gfm'],
-            'vendor-state': ['zustand'],
-            'vendor-motion': ['framer-motion'],
-            'vendor-xterm': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-web-links'],
-          },
           chunkFileNames: 'assets/[name]-[hash].js',
           entryFileNames: 'assets/[name]-[hash].js',
           assetFileNames: 'assets/[name]-[hash][extname]',

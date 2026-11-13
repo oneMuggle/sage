@@ -16,9 +16,7 @@ export function DesktopOnlyTooltip({ children, featureName }: DesktopOnlyTooltip
 
   return (
     <Tooltip content={`${featureName} 仅在桌面版可用`}>
-      <div style={{ opacity: 0.5, pointerEvents: 'none' }}>
-        {children}
-      </div>
+      <div style={{ opacity: 0.5, pointerEvents: 'none' }}>{children}</div>
     </Tooltip>
   );
 }

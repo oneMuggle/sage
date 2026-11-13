@@ -22,7 +22,7 @@ describe('DesktopOnlyTooltip', () => {
     render(
       <DesktopOnlyTooltip featureName="Test Feature">
         <button>Click me</button>
-      </DesktopOnlyTooltip>
+      </DesktopOnlyTooltip>,
     );
     expect(screen.getByText('Click me')).not.toBeDisabled();
   });
@@ -39,7 +39,7 @@ describe('DesktopOnlyTooltip', () => {
     render(
       <DesktopOnlyTooltip featureName="Test Feature">
         <button>Click me</button>
-      </DesktopOnlyTooltip>
+      </DesktopOnlyTooltip>,
     );
     const wrapper = screen.getByText('Click me').parentElement;
     expect(wrapper).toHaveStyle({ opacity: 0.5, pointerEvents: 'none' });
