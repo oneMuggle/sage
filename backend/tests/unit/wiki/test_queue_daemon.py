@@ -22,7 +22,7 @@ async def test_daemon_processes_pending_project(tmp_path, monkeypatch):
     monkeypatch.setattr(qw, "process_pending", fake_process)
     monkeypatch.setattr(qd, "_pending_projects", lambda: [root])
 
-    await qd.run_queue_daemon(poll_seconds=0, max_cycles=1)
+    await qd.run_queue_daemon(poll_seconds=0, max_cycles=1, watch_sources=False)
 
     assert calls == [(root, qd.BATCH_LIMIT)]
 
@@ -37,7 +37,7 @@ async def test_daemon_skips_when_no_pending(monkeypatch):
     monkeypatch.setattr(qw, "process_pending", fake_process)
     monkeypatch.setattr(qd, "_pending_projects", lambda: [])
 
-    await qd.run_queue_daemon(poll_seconds=0, max_cycles=1)
+    await qd.run_queue_daemon(poll_seconds=0, max_cycles=1, watch_sources=False)
 
     assert calls == []
 
@@ -59,6 +59,6 @@ async def test_daemon_skips_when_manual_processing_holds_lock(tmp_path, monkeypa
     monkeypatch.setattr(qw, "queue_process_lock", _HeldLock())
     monkeypatch.setattr(qd, "_pending_projects", lambda: [root])
 
-    await qd.run_queue_daemon(poll_seconds=0, max_cycles=1)
+    await qd.run_queue_daemon(poll_seconds=0, max_cycles=1, watch_sources=False)
 
     assert calls == []

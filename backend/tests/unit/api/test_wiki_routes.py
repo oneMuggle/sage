@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 
@@ -794,4 +795,80 @@ def test_route_vision_ok(client, patch_auth, monkeypatch, tmp_path) -> None:
     assert body["caption"] == "a cat"
     assert body["cached"] is False
     assert body["mode"] == "vision"
+
+
+# ---------------------------------------------------------------------------
+# Settings routes (GET/PUT /wiki/settings)
+# ---------------------------------------------------------------------------
+
+
+def test_route_settings_get_returns_defaults(client, patch_auth, tmp_path) -> None:
+    root = _make_wiki_project(tmp_path)
+    patch_auth(root)
+
+    resp = client.get("/wiki/settings", params={"project_path": str(root)})
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "task_routing": {"chat_model": None, "ingest_model": None, "research_model": None},
+        "reasoning": {"chat_mode": "auto", "ingest_mode": "off"},
+    }
+
+
+def test_route_settings_put_persists(client, patch_auth, tmp_path) -> None:
+    root = _make_wiki_project(tmp_path)
+    patch_auth(root)
+
+    payload = {
+        "project_path": str(root),
+        "task_routing": {
+            "chat_model": "m-chat",
+            "ingest_model": None,
+            "research_model": "m-res",
+        },
+        "reasoning": {"chat_mode": "high", "ingest_mode": "off"},
+    }
+    resp = client.put("/wiki/settings", json=payload)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["task_routing"]["chat_model"] == "m-chat"
+    assert body["reasoning"]["chat_mode"] == "high"
+
+    saved = json.loads(
+        (root / ".llm-wiki" / "settings.json").read_text(encoding="utf-8")
+    )
+    assert saved["task_routing"]["research_model"] == "m-res"
+
+
+def test_route_settings_put_rejects_invalid_mode(
+    client, patch_auth, tmp_path
+) -> None:
+    root = _make_wiki_project(tmp_path)
+    patch_auth(root)
+
+    resp = client.put(
+        "/wiki/settings",
+        json={
+            "project_path": str(root),
+            "reasoning": {"chat_mode": "turbo", "ingest_mode": "off"},
+        },
+    )
+    assert resp.status_code == 400
+
+
+def test_route_settings_get_after_put_reflects_update(
+    client, patch_auth, tmp_path
+) -> None:
+    root = _make_wiki_project(tmp_path)
+    patch_auth(root)
+
+    client.put(
+        "/wiki/settings",
+        json={
+            "project_path": str(root),
+            "reasoning": {"chat_mode": "max", "ingest_mode": "low"},
+        },
+    )
+    resp = client.get("/wiki/settings", params={"project_path": str(root)})
+    assert resp.status_code == 200
+    assert resp.json()["reasoning"] == {"chat_mode": "max", "ingest_mode": "low"}
 
