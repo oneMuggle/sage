@@ -40,6 +40,7 @@ from .models import (
 )
 from .review import ReviewItem, ReviewResult, ReviewType, WikiReview
 from .search import search_wiki
+from .settings import ReasoningConfig, TaskRoutingConfig, WikiSettings, load_settings, resolve_model_for_task, save_settings
 from .vectorstore import VectorStore
 from .vision import (
     ImageCaption,
@@ -118,6 +119,9 @@ __all__ = [
     "ReviewItem",
     "ReviewResult",
     "WikiReview",
+    "WikiSettings",
+    "TaskRoutingConfig",
+    "ReasoningConfig",
     # Functions
     "ingest_source",
     "ingest_source_stream",
@@ -137,6 +141,9 @@ __all__ = [
     "compute_image_hash",
     "encode_image_base64",
     "run_wiki_mcp_server",
+    "load_settings",
+    "save_settings",
+    "resolve_model_for_task",
     # Vector Stores
     "VectorStore",
     "HNSWVectorStore",

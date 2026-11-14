@@ -24,12 +24,17 @@ from backend.wiki import (
     IngestConfig,
     IngestQueue,
     QueueStatus,
+    ReasoningConfig,
     SearchResponse,
+    TaskRoutingConfig,
     WikiLint,
     WikiReview,
+    WikiSettings,
     chat_with_wiki_stream,
     get_graph_cached,
     ingest_source_stream,
+    load_settings,
+    save_settings,
     search_wiki,
 )
 from backend.wiki.extract import MAX_FILE_BYTES
@@ -47,7 +52,8 @@ from backend.wiki.files import (
     secure_write_temp_bytes,
     secure_write_temp_file,
 )
-from backend.wiki.llm_context import make_llm_context
+from backend.wiki.llm_context import make_task_llm_context
+from backend.wiki.operation_log import append_log
 from backend.wiki.project_authorization import (
     authorize_registered_project,
     authorize_registration,
@@ -364,6 +370,66 @@ async def list_projects(base_path: str = "") -> List[ProjectInfo]:
 
 
 # ============================================================================
+# Project settings (任务路由 / 推理模式)
+# ============================================================================
+
+
+class TaskRoutingPayload(BaseModel):
+    chat_model: Optional[str] = None
+    ingest_model: Optional[str] = None
+    research_model: Optional[str] = None
+
+
+class ReasoningPayload(BaseModel):
+    chat_mode: str = "auto"
+    ingest_mode: str = "off"
+
+
+class WikiSettingsPayload(BaseModel):
+    project_path: str
+    task_routing: TaskRoutingPayload = Field(default_factory=TaskRoutingPayload)
+    reasoning: ReasoningPayload = Field(default_factory=ReasoningPayload)
+
+
+VALID_REASONING_MODES = frozenset({"auto", "off", "low", "medium", "high", "max"})
+
+
+def _settings_dict(settings: WikiSettings) -> dict:
+    return settings.to_dict()
+
+
+@router.get("/settings")
+async def get_project_settings(project_path: str) -> dict:
+    """读取项目级 Wiki 设置（不存在时返回默认值）。"""
+    project_root = authorize_registered_project(project_path)
+    return _settings_dict(load_settings(project_root))
+
+
+@router.put("/settings")
+async def update_project_settings(req: WikiSettingsPayload) -> dict:
+    """保存项目级 Wiki 设置（任务路由模型 + 推理模式）。"""
+    project_root = authorize_registered_project(req.project_path)
+
+    for mode in (req.reasoning.chat_mode, req.reasoning.ingest_mode):
+        if mode not in VALID_REASONING_MODES:
+            raise HTTPException(status_code=400, detail=f"不支持的推理模式: {mode}")
+
+    settings = WikiSettings(
+        task_routing=TaskRoutingConfig(
+            chat_model=req.task_routing.chat_model,
+            ingest_model=req.task_routing.ingest_model,
+            research_model=req.task_routing.research_model,
+        ),
+        reasoning=ReasoningConfig(
+            chat_mode=req.reasoning.chat_mode,
+            ingest_mode=req.reasoning.ingest_mode,
+        ),
+    )
+    save_settings(project_root, settings)
+    return _settings_dict(settings)
+
+
+# ============================================================================
 # Request/Response Models
 # ============================================================================
 
@@ -670,6 +736,10 @@ async def rename_file(old_path: str, new_path: str, project_path: str) -> dict:
         logger.warning("Wiki 重命名拒绝: error_type=%s", type(exc).__name__)
         raise HTTPException(status_code=400, detail="文件重命名失败") from exc
 
+    old_rel = old_file.relative_to(project_root).as_posix()
+    new_rel = new_file.relative_to(project_root).as_posix()
+    append_log(project_root, "rename", f"{old_rel} -> {new_rel}")
+
     return {"success": True}
 
 
@@ -840,12 +910,15 @@ async def ingest_stream(req: IngestRequest) -> StreamingResponse:
         embed_model=req.embed_model,
     )
 
-    # LLM/HTTP 能力（PR-2/3 用 ctx.llm_stream_call 切换 NDJSON）
-    ctx = make_llm_context(
-        llm_base_url=req.llm_base_url,
-        llm_api_key=req.llm_api_key,
-        llm_model=req.llm_model,
+    # LLM/HTTP 能力（PR-2/3 用 ctx.llm_stream_call 切换 NDJSON；按任务路由模型）
+    ctx = make_task_llm_context(
+        req.llm_base_url,
+        req.llm_api_key,
+        req.llm_model,
+        project_root=project_root,
+        task="ingest",
     )
+    config.llm_model = ctx.model
 
     async def _stream_with_cleanup() -> AsyncIterator[bytes]:
         try:
@@ -1103,23 +1176,25 @@ async def chat_stream(req: ChatRequest) -> StreamingResponse:
         if not set(req.selected_paths).issubset(allowed):
             raise HTTPException(status_code=403, detail="来源不是可访问的 Wiki 页面")
 
+    # LLM/HTTP 能力（PR-2/3 用 ctx.llm_stream_call 切换 NDJSON；按任务路由模型）
+    ctx = make_task_llm_context(
+        req.llm_base_url,
+        req.llm_api_key,
+        req.llm_model,
+        project_root=project_root,
+        task="chat",
+    )
+
     # 配置
     config = ChatConfig(
         llm_base_url=req.llm_base_url,
         llm_api_key=req.llm_api_key,
-        llm_model=req.llm_model,
+        llm_model=ctx.model,
         embed_base_url=req.embed_base_url,
         embed_api_key=req.embed_api_key,
         embed_model=req.embed_model,
         max_tokens=req.max_tokens,
         selected_paths=req.selected_paths,
-    )
-
-    # LLM/HTTP 能力（PR-2/3 用 ctx.llm_stream_call 切换 NDJSON）
-    ctx = make_llm_context(
-        llm_base_url=req.llm_base_url,
-        llm_api_key=req.llm_api_key,
-        llm_model=req.llm_model,
     )
 
     return StreamingResponse(
@@ -1321,24 +1396,26 @@ async def start_research(req: ResearchRequest) -> dict:
         topic=req.topic,
     )
 
+    # LLM/HTTP 能力（按任务路由 research 模型）
+    ctx = make_task_llm_context(
+        req.llm_base_url,
+        req.llm_api_key,
+        req.llm_model,
+        project_root=project_root,
+        task="research",
+    )
+
     # 配置 Ingest（如果启用自动 Ingest）
     ingest_config = None
     if req.auto_ingest:
         ingest_config = IngestConfig(
             llm_base_url=req.llm_base_url,
             llm_api_key=req.llm_api_key,
-            llm_model=req.llm_model,
+            llm_model=ctx.model,
             embed_base_url=req.llm_base_url,  # 使用相同的 API
             embed_api_key=req.llm_api_key,
             embed_model=req.llm_model,
         )
-
-    # LLM/HTTP 能力
-    ctx = make_llm_context(
-        llm_base_url=req.llm_base_url,
-        llm_api_key=req.llm_api_key,
-        llm_model=req.llm_model,
-    )
 
     # 执行 Deep Research
     try:
@@ -1464,20 +1541,22 @@ async def clip_webpage(req: ClipRequest) -> dict:
             embed_api_key = os.environ.get("EMBED_API_KEY", llm_api_key)
             embed_model = os.environ.get("EMBED_MODEL", "text-embedding-3-small")
 
+            # LLM/HTTP 能力（从环境变量构造；按任务路由 ingest 模型）
+            ctx = make_task_llm_context(
+                llm_base_url,
+                llm_api_key,
+                llm_model,
+                project_root=project_root,
+                task="ingest",
+            )
+
             config = IngestConfig(
                 llm_base_url=llm_base_url,
                 llm_api_key=llm_api_key,
-                llm_model=llm_model,
+                llm_model=ctx.model,
                 embed_base_url=embed_base_url,
                 embed_api_key=embed_api_key,
                 embed_model=embed_model,
-            )
-
-            # LLM/HTTP 能力（从环境变量构造，因为 ClipRequest 不带 LLM 字段）
-            ctx = make_llm_context(
-                llm_base_url=llm_base_url,
-                llm_api_key=llm_api_key,
-                llm_model=llm_model,
             )
 
             ingest_result = await ingest_source(

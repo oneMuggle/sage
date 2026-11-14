@@ -193,21 +193,13 @@ export interface WebResult {
   snippet: string;
 }
 
-export type GraphSignal =
-  | 'DirectLink'
-  | 'SourceOverlap'
-  | 'TypeAffinity'
-  | 'AdamicAdar';
+export type GraphSignal = 'DirectLink' | 'SourceOverlap' | 'TypeAffinity' | 'AdamicAdar';
 
 /**
  * 后端 `GraphEdge.to_dict()` 输出的是枚举值（snake_case）；
  * 前端展示用 canonical PascalCase。两种形状都接受，展示前统一归一。
  */
-export type GraphSignalWire =
-  | 'direct_link'
-  | 'source_overlap'
-  | 'type_affinity'
-  | 'adamic_adar';
+export type GraphSignalWire = 'direct_link' | 'source_overlap' | 'type_affinity' | 'adamic_adar';
 
 export interface GraphNode {
   id: string;
@@ -257,6 +249,31 @@ export interface SelectDirectoryOpts {
   intent: 'create' | 'open';
   defaultPath?: string;
 }
+
+// --- Added 2026-11-14: 项目级 Wiki 设置（任务路由 + 推理模式） ---
+
+export type ReasoningMode = 'auto' | 'off' | 'low' | 'medium' | 'high' | 'max';
+
+export interface WikiTaskRouting {
+  chat_model: string | null;
+  ingest_model: string | null;
+  research_model: string | null;
+}
+
+export interface WikiReasoningSettings {
+  chat_mode: ReasoningMode;
+  ingest_mode: ReasoningMode;
+}
+
+export interface WikiProjectSettings {
+  task_routing: WikiTaskRouting;
+  reasoning: WikiReasoningSettings;
+}
+
+export const DEFAULT_WIKI_SETTINGS: WikiProjectSettings = {
+  task_routing: { chat_model: null, ingest_model: null, research_model: null },
+  reasoning: { chat_mode: 'auto', ingest_mode: 'off' },
+};
 
 export function formatWikiProjectSummary(
   project: WikiProject | null | undefined,
