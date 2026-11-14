@@ -8,13 +8,37 @@ dependency wiring.
 
 import json
 from dataclasses import dataclass
-from typing import AsyncIterator, Awaitable, Callable, Dict, List
+from pathlib import Path
+from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
 import httpx
+
+from .reasoning import apply_reasoning_to_request
+from .settings import WikiSettings, load_settings, resolve_model_for_task
 
 LlmCall = Callable[[List[Dict], float], Awaitable[str]]
 LlmStreamCall = Callable[[List[Dict], float], AsyncIterator[str]]
 HttpPost = Callable[[str, Dict[str, str], dict], Awaitable[str]]
+
+# 由 base_url 推断 provider 的关键字（顺序敏感，先匹配到的优先）。
+_PROVIDER_HINTS = (
+    ("anthropic", "anthropic"),
+    ("generativelanguage", "google"),
+    ("googleapis", "google"),
+    ("deepseek", "deepseek"),
+    ("ollama", "ollama"),
+    ("11434", "ollama"),
+    ("openai", "openai"),
+)
+
+
+def infer_provider(base_url: str) -> str:
+    """从 OpenAI 兼容端点 URL 推断 provider，无法识别时返回空串。"""
+    lowered = (base_url or "").lower()
+    for token, provider in _PROVIDER_HINTS:
+        if token in lowered:
+            return provider
+    return ""
 
 
 @dataclass
@@ -25,11 +49,13 @@ class LLMContext:
         llm_call: Non-streaming chat completion (returns full content).
         llm_stream_call: Streaming chat completion (yields delta tokens).
         http_post: Generic JSON POST (e.g. for embedding endpoints).
+        model: Resolved model name (after task routing); empty when unknown.
     """
 
     llm_call: LlmCall
     llm_stream_call: LlmStreamCall
     http_post: HttpPost
+    model: str = ""
 
 
 def make_llm_context(
@@ -37,29 +63,41 @@ def make_llm_context(
     llm_api_key: str,
     llm_model: str,
     timeout_seconds: int = 1800,
+    provider: str = "",
+    reasoning_mode: str = "",
 ) -> LLMContext:
     """Build LLMContext for a given provider + model + key.
 
     ``llm_base_url`` is the OpenAI-compatible ``/chat/completions`` root
     (e.g. ``https://api.openai.com/v1``).
+
+    ``reasoning_mode`` (auto/off/low/medium/high/max) is translated to
+    provider-specific request fields; empty/off/auto leaves the body untouched.
     """
     chat_url = f"{llm_base_url.rstrip('/')}/chat/completions"
     auth_headers = {
         "Authorization": f"Bearer {llm_api_key}",
         "Content-Type": "application/json",
     }
+    resolved_provider = provider or infer_provider(llm_base_url)
+
+    def _chat_body(messages: List[Dict], temperature: float, stream: bool) -> Dict:
+        body: Dict = {
+            "model": llm_model,
+            "messages": messages,
+            "temperature": temperature,
+            "stream": stream,
+        }
+        if reasoning_mode:
+            apply_reasoning_to_request(body, resolved_provider, reasoning_mode)
+        return body
 
     async def llm_call(messages: List[Dict], temperature: float) -> str:
         async with httpx.AsyncClient(timeout=timeout_seconds) as client:
             r = await client.post(
                 chat_url,
                 headers=auth_headers,
-                json={
-                    "model": llm_model,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "stream": False,
-                },
+                json=_chat_body(messages, temperature, stream=False),
             )
             r.raise_for_status()
             return r.json()["choices"][0]["message"]["content"]
@@ -73,12 +111,7 @@ def make_llm_context(
                 "POST",
                 chat_url,
                 headers=auth_headers,
-                json={
-                    "model": llm_model,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "stream": True,
-                },
+                json=_chat_body(messages, temperature, stream=True),
             ) as r:
                 async for line in r.aiter_lines():
                     if not line.startswith("data: "):
@@ -99,4 +132,30 @@ def make_llm_context(
             r.raise_for_status()
             return r.text
 
-    return LLMContext(llm_call, llm_stream_call, http_post)
+    return LLMContext(llm_call, llm_stream_call, http_post, model=llm_model)
+
+
+def make_task_llm_context(
+    llm_base_url: str,
+    llm_api_key: str,
+    default_model: str,
+    project_root: Optional[Path] = None,
+    task: str = "chat",
+    provider: str = "",
+    timeout_seconds: int = 1800,
+) -> LLMContext:
+    """按项目设置解析任务模型与推理模式，再构建 LLMContext。
+
+    ``project_root`` 为空或未配置设置时退化为 ``default_model`` 与默认推理模式。
+    """
+    settings = load_settings(project_root) if project_root is not None else WikiSettings()
+    model = resolve_model_for_task(settings, task, default_model)
+    mode = settings.reasoning.ingest_mode if task == "ingest" else settings.reasoning.chat_mode
+    return make_llm_context(
+        llm_base_url,
+        llm_api_key,
+        model,
+        timeout_seconds=timeout_seconds,
+        provider=provider,
+        reasoning_mode=mode,
+    )

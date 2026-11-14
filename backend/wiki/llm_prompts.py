@@ -3,8 +3,10 @@
 定义 Ingest 和 RAG Chat 的 prompt 模板。
 """
 
+from typing import Tuple
+
 # Step 1: 分析源文档
-STEP1_ANALYZE = """分析以下源文档，提取关键实体、概念、标签和相关主题。
+STEP1_ANALYZE = """分析以下源文档，提取关键实体、概念、标签和相关主题。{purpose_section}{schema_section}
 
 输出严格 JSON 格式:
 {{
@@ -26,7 +28,7 @@ STEP1_ANALYZE = """分析以下源文档，提取关键实体、概念、标签�
 
 
 # Step 2: 写入 Wiki 页面
-STEP2_WRITE = """基于分析结果，写入完整的 Wiki 页面（Markdown + YAML frontmatter）。
+STEP2_WRITE = """基于分析结果，写入完整的 Wiki 页面（Markdown + YAML frontmatter）。{purpose_section}{schema_section}
 
 输出格式:
 ---
@@ -88,9 +90,24 @@ RAG_USER_TEMPLATE = """请基于以上 wiki 内容回答以下问题:
 {query}"""
 
 
-def format_step1_prompt(source_content: str) -> str:
+def _context_sections(purpose: str = "", schema: str = "") -> Tuple[str, str]:
+    """构建 purpose/schema 提示片段。
+
+    值通过 str.format 内插，内容中的花括号不会被当作模板解析。
+    """
+    purpose_section = f"\n\n项目目的:\n{purpose.strip()}" if purpose and purpose.strip() else ""
+    schema_section = f"\n\n页面结构规范:\n{schema.strip()}" if schema and schema.strip() else ""
+    return purpose_section, schema_section
+
+
+def format_step1_prompt(source_content: str, purpose: str = "", schema: str = "") -> str:
     """格式化 Step 1 prompt。"""
-    return STEP1_ANALYZE.format(source_content=source_content)
+    purpose_section, schema_section = _context_sections(purpose, schema)
+    return STEP1_ANALYZE.format(
+        source_content=source_content,
+        purpose_section=purpose_section,
+        schema_section=schema_section,
+    )
 
 
 def format_step2_prompt(
@@ -100,8 +117,11 @@ def format_step2_prompt(
     tags_csv: str,
     related_links: str,
     today: str,
+    purpose: str = "",
+    schema: str = "",
 ) -> str:
     """格式化 Step 2 prompt。"""
+    purpose_section, schema_section = _context_sections(purpose, schema)
     return STEP2_WRITE.format(
         filename=filename,
         content=content,
@@ -109,6 +129,8 @@ def format_step2_prompt(
         tags_csv=tags_csv,
         related_links=related_links,
         today=today,
+        purpose_section=purpose_section,
+        schema_section=schema_section,
     )
 
 

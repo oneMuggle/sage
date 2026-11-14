@@ -40,6 +40,7 @@ from .files import (
 )
 from .llm_context import LLMContext
 from .models import Analysis, AnalysisConcept, AnalysisEntity, IngestProgress, IngestResult
+from .operation_log import append_log
 from .vectorstore_factory import open_vector_store
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ INGEST_STREAM_ERROR_MESSAGE = "Wiki 导入失败"
 # 常量
 MAX_CONTENT_CHARS = 50_000  # 50KB
 DEFAULT_EMBED_DIM = 1536
+MAX_CONTEXT_CHARS = 4_000  # purpose.md / schema.md 注入 prompt 的字符上限
 
 
 def _validated_logical_filename(filename: str) -> str:
@@ -176,6 +178,7 @@ async def ingest_source(
         source_name=source_name,
         source_content=source_content,
     )
+    append_log(project_root, "ingest", f"{source_path} -> {wiki_page_path}")
 
     _report("completed", 100, "完成")
 
@@ -472,6 +475,27 @@ def cache_get(
     return None
 
 
+def _read_wiki_context(project_root: Optional[Path]) -> Tuple[str, str]:
+    """读取 ``wiki/purpose.md`` 与 ``wiki/schema.md``，供 ingest prompt 注入。
+
+    文件缺失、越界或读取失败时返回空串，不影响 ingest 主流程。
+    """
+    if project_root is None:
+        return "", ""
+
+    def _read(relative: str) -> str:
+        path = project_root / relative
+        try:
+            if not path.is_file():
+                return ""
+            payload = secure_read_file_bounded(project_root, path, MAX_CONTEXT_CHARS * 4)
+            return payload.decode("utf-8", errors="replace")[:MAX_CONTEXT_CHARS]
+        except (OSError, ValueError):
+            return ""
+
+    return _read("purpose.md"), _read("wiki/schema.md")
+
+
 async def analyze_source(
     target: Path,
     llm_call: Callable[[List[dict], float], Any],
@@ -492,7 +516,8 @@ async def analyze_source(
         content = _read_source_content(
             project_root, target, source_content=source_content
         )[:MAX_CONTENT_CHARS]
-    step1_prompt = llm_prompts.format_step1_prompt(content)
+    purpose, schema = _read_wiki_context(project_root)
+    step1_prompt = llm_prompts.format_step1_prompt(content, purpose=purpose, schema=schema)
     messages = [
         {"role": "system", "content": "You are a JSON-only assistant. Output strict JSON."},
         {"role": "user", "content": step1_prompt},
@@ -525,6 +550,7 @@ async def generate_pages(
     today = datetime.now(tz=timezone.utc).date().isoformat()  # noqa: DTZ011, UP017
     tags_csv = ", ".join(analysis.tags)
     related_links = " ".join(f"[[{topic}]]" for topic in analysis.related_topics[:8])
+    purpose, schema = _read_wiki_context(project_root)
 
     step2_prompt = llm_prompts.format_step2_prompt(
         filename=filename,
@@ -545,6 +571,8 @@ async def generate_pages(
         tags_csv=tags_csv,
         related_links=related_links,
         today=today,
+        purpose=purpose,
+        schema=schema,
     )
 
     messages = [{"role": "user", "content": step2_prompt}]
@@ -714,6 +742,9 @@ async def ingest_source_stream(
             page_type,
             source_name=source_name,
             source_content=source_content,
+        )
+        append_log(
+            project_root, "ingest", f"raw/sources/{source_name} -> {wiki_page_path}"
         )
         yield emit("completed", 100, f"导入完成: {wiki_file.name}")
     except Exception as e:

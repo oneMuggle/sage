@@ -13,6 +13,7 @@ from .files import (
     secure_read_text,
     secure_write_file,
 )
+from .operation_log import append_log
 from .vectorstore import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -144,6 +145,8 @@ def cascade_delete_source(project_root: Path, source_path: str) -> dict:
         f"级联删除完成: 删除 {len(stats['deleted_wiki_pages'])} 个页面, "
         f"{stats['deleted_vectors']} 个向量, 清理 {stats['cleaned_deadlinks']} 个死链"
     )
+    pages = ", ".join(stats["deleted_wiki_pages"]) or "no pages"
+    append_log(project_root, "delete", f"{source_path} -> {pages}")
 
     return stats
 
