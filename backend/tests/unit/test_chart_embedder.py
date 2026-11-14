@@ -9,6 +9,12 @@ from backend.design.chart_embedder import (
     bytes_to_data_url,
 )
 
+try:
+    import matplotlib  # noqa: F401
+    _has_matplotlib = True
+except ImportError:
+    _has_matplotlib = False
+
 PNG_STUB = b"\x89PNG\r\n\x1a\n" + b"payload"
 
 
@@ -68,6 +74,9 @@ class TestEmbed:
 
 
 class TestSpecToDataUrl:
+    @pytest.mark.skipif(
+        not _has_matplotlib, reason="matplotlib not installed"
+    )
     def test_renders_chart_spec(self):
         from backend.office.models import ChartSeriesSpec, ChartSpec
 
