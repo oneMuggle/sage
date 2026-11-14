@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { getEffective } from '../../entities/model-catalog/api';
+import type { EffectiveModel } from '../../entities/model-catalog/types';
 import { usePermissionState } from '../../entities/permission/permissionState';
 import { useQuestionState } from '../../entities/question/questionState';
 import { getRoutingTaskType } from '../../entities/routing/taskType';
@@ -20,6 +22,7 @@ import { logger } from '../../shared/lib/logger';
 // Task 5: modelWindows imports removed — frontend no longer computes history budget.
 // Backend now resolves effective window from catalog and computes budget.
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
+import { resolveVisionSupport, toRequestCapabilities } from '../../shared/lib/visionCapability';
 import { useSettings } from '../manage-settings/useSettings';
 
 import {
@@ -67,6 +70,28 @@ export function steeringAnchorId(messages: readonly Message[]): string | undefin
     if (messages[i].role === 'assistant') return messages[i].id;
   }
   return undefined;
+}
+
+/** catalog 查询保护上限：本地后端通常 <10ms，超时按「未知」处理，绝不阻塞发送。 */
+const CATALOG_LOOKUP_TIMEOUT_MS = 1_500;
+
+async function fetchEffectiveCatalog(
+  endpointId: string,
+  modelId: string,
+): Promise<EffectiveModel | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      getEffective(endpointId, modelId),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), CATALOG_LOOKUP_TIMEOUT_MS);
+      }),
+    ]);
+  } catch {
+    return null;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 export function useChat() {
@@ -459,11 +484,17 @@ export function useChat() {
         initialContent: THINKING_PLACEHOLDER,
       });
 
-      // 从 discoveredModels 查找当前模型的 capabilities(设计:ModelSelection 只是指针,
-      // capabilities 存在 DiscoveredModel 中)
-      const chatModelCapabilities = chatEndpoint?.discoveredModels?.find(
-        (m) => m.id === settings.modelSelections.chatModel.modelId,
-      )?.capabilities ?? ['chat', 'vision'];
+      // 视觉能力分层解析：catalog 权威 > discoveredModels 启发式 > 未知。
+      // 仅明确 unsupported 才剔除 'vision'；unknown 与 supported 同等放行，
+      // 对齐后端 agent.py「unknown → vision-supported」fail-safe。
+      const chatModelId = settings.modelSelections.chatModel.modelId;
+      const effectiveCatalog =
+        chatModelId && chatEndpoint?.id
+          ? await fetchEffectiveCatalog(chatEndpoint.id, chatModelId)
+          : null;
+      const chatModelCapabilities = toRequestCapabilities(
+        resolveVisionSupport(chatEndpoint, chatModelId, effectiveCatalog),
+      );
 
       const config: ChatConfig = {
         apiKey: chatEndpoint.apiKey,
