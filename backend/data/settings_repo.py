@@ -119,6 +119,9 @@ class SettingsRepository:
             # 思考展示档位 ("detail" / "trace" / "result")。
             # 读取口径见 src/features/chat/displayMode/useDisplayMode.ts
             "chat_display_mode",
+            # 浏览器路径配置（用户手动指定 Chrome/Edge 路径，空 = 自动发现）。
+            # 读取口径见 backend/tools/browser_cdp.py:discover_browser_executable
+            "browser_path",
         }
     )
 

@@ -226,3 +226,167 @@ def _probe_chrome_major_safe() -> Optional[int]:
         return _probe_chrome_major()
     except Exception:  # noqa: BLE001
         return None
+
+
+# ---------------------------------------------------------------------------
+# 浏览器发现列表 API（设置页浏览器选择用）
+# ---------------------------------------------------------------------------
+
+
+class DiscoveredBrowser(BaseModel):
+    """发现的浏览器信息。"""
+
+    name: str  # 显示名称（如 "Google Chrome"）
+    path: str  # 可执行文件路径
+    version: Optional[str] = None  # 版本号（如果有）
+    isDefault: bool = False  # noqa: N815 — 是否当前选中
+
+
+class BrowserListResponse(BaseModel):
+    """浏览器列表响应。"""
+
+    browsers: List[DiscoveredBrowser]
+    userConfigured: Optional[str] = None  # noqa: N815 — 用户配置的路径
+    embeddedAvailable: bool = False  # noqa: N815 — 嵌入式浏览器是否可用
+
+
+def _discover_all_browsers() -> List[DiscoveredBrowser]:
+    """扫描系统中所有可用的 Chromium 系浏览器。"""
+    import os
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    from backend.tools.browser_cdp import (
+        _LINUX_CANDIDATES,
+        _windows_candidates,
+    )
+
+    found: List[DiscoveredBrowser] = []
+    seen_paths: set = set()
+
+    def _get_version(exe_path: str) -> Optional[str]:
+        """通过 --version 命令获取浏览器版本。"""
+        try:
+            result = subprocess.run(
+                [exe_path, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5, check=False,
+            )
+            output = result.stdout.strip()
+            # 提取版本号（如 "Google Chrome 120.0.6099.109" -> "120"）
+            import re
+
+            match = re.search(r"(\d+)\.\d+\.\d+\.\d+", output)
+            if match:
+                return match.group(1)
+        except (OSError, subprocess.SubprocessError) as exc:
+            logger.debug("读取浏览器版本失败 %s: %s", exe_path, exc)
+        return None
+
+    def _add_browser(path: str, name: str) -> None:
+        if path in seen_paths:
+            return
+        if not Path(path).is_file():
+            return
+        seen_paths.add(path)
+        version = _get_version(path)
+        found.append(DiscoveredBrowser(name=name, path=path, version=version))
+
+    # Windows
+    if os.name == "nt":
+        for candidate in _windows_candidates():
+            path_str = str(candidate)
+            if "edge" in path_str.lower():
+                _add_browser(path_str, "Microsoft Edge")
+            else:
+                _add_browser(path_str, "Google Chrome")
+        return found
+
+    # Linux
+    for name in _LINUX_CANDIDATES:
+        path = shutil.which(name)
+        if path:
+            display_name = {
+                "google-chrome": "Google Chrome",
+                "google-chrome-stable": "Google Chrome",
+                "chromium": "Chromium",
+                "chromium-browser": "Chromium",
+                "microsoft-edge": "Microsoft Edge",
+                "microsoft-edge-stable": "Microsoft Edge",
+            }.get(name, name)
+            _add_browser(path, display_name)
+
+    # macOS
+    import platform
+
+    if platform.system() == "Darwin":
+        for app in ("Google Chrome", "Microsoft Edge", "Chromium"):
+            candidate = Path("/Applications") / f"{app}.app" / "Contents" / "MacOS" / app
+            if candidate.is_file():
+                _add_browser(str(candidate), app)
+
+    return found
+
+
+@router.get("/browser/list", response_model=BrowserListResponse)
+def get_browser_list() -> BrowserListResponse:
+    """获取系统中所有可用的浏览器列表（设置页浏览器选择用）。"""
+    from backend.data.settings_repo import SettingsRepository
+    from backend.tools.browser_cdp import (
+        _discover_embedded_env,
+        discover_browser_executable,
+    )
+
+    # 获取所有发现的浏览器
+    browsers = _discover_all_browsers()
+
+    # 标记当前默认
+    try:
+        current = discover_browser_executable() or ""
+    except Exception:  # noqa: BLE001
+        current = ""
+
+    for browser in browsers:
+        browser.isDefault = browser.path == current
+
+    # 获取用户配置
+    user_configured = SettingsRepository().get("browser_path")
+
+    # 检查嵌入式浏览器
+    embedded_available = _discover_embedded_env() is not None
+
+    return BrowserListResponse(
+        browsers=browsers,
+        userConfigured=user_configured,
+        embeddedAvailable=embedded_available,
+    )
+
+
+class SetBrowserPathRequest(BaseModel):
+    """设置浏览器路径请求。"""
+
+    path: str  # 浏览器路径，空字符串表示清除配置使用自动发现
+
+
+@router.put("/browser/path")
+def set_browser_path(req: SetBrowserPathRequest) -> dict:
+    """设置用户首选浏览器路径。"""
+    from pathlib import Path
+
+    from backend.data.settings_repo import SettingsRepository
+
+    path = req.path.strip()
+
+    # 验证路径（如果非空）
+    if path and not Path(path).is_file():
+        return {"success": False, "error": f"文件不存在: {path}"}
+
+    repo = SettingsRepository()
+    if path:
+        repo.set("browser_path", path)
+    else:
+        repo.delete("browser_path")
+
+    return {"success": True, "path": path or None}
