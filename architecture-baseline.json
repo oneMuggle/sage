@@ -80,7 +80,7 @@
     "src/features/project-type/PolymorphicArchetypeCards.tsx": 879,
     "src/features/send-message/__tests__/useChat.streamingAndGates.test.ts": 957,
     "src/features/send-message/chatStreamStore.ts": 937,
-    "src/features/send-message/useChat.ts": 1179,
+    "src/features/send-message/useChat.ts": 1210,
     "src/pages/Chat.tsx": 879,
     "src/pages/ProjectGovernance.tsx": 874,
     "src/pages/settings/PluginsTab.tsx": 687,
@@ -94,7 +94,7 @@
     "src/shared/lib/i18n/locales/en/chatAndSider.ts": 824,
     "src/shared/lib/i18n/locales/zh/chatAndSider.ts": 836,
     "src/shared/types/electron-api.d.ts": 942,
-    "src/widgets/chat/ChatInput.tsx": 907,
+    "src/widgets/chat/ChatInput.tsx": 929,
     "src/widgets/chat/Message.tsx": 876,
     "src/widgets/memory/MemoryBrowser.tsx": 1227,
     "tests/electron/test_stub_backend.py": 896
