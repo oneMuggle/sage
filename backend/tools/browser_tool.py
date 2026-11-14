@@ -1211,7 +1211,12 @@ class BrowserLoginTool(BaseTool):
     登录完成检测（轮询）：
     - 当前 URL 不再是登录页（``looks_like_login_url()`` 返回 False）
     - 页面没有密码输入框（``looks_like_login_html()`` 返回 False）
-    - 浏览器有目标域的 cookie（``Network.getCookies`` 返回列表）
+    - 浏览器有目标域的非 WAF cookie（``Network.getCookies`` 当前页可见集合）
+
+    凭据导出：使用 ``Storage.getCookies``（浏览器级，全量 cookie，含
+    host-only 跨子域认证 cookie）；导出结果按 domain 分组保存到加密档案，
+    返回内容包含 ``export_summary``（总数/跨域数/候选认证 cookie 数）供 LLM
+    诊断。
 
     风险分级 EXTERNAL：导航到外部 URL 拉取内容；is_blocking=True 因为需要
     等待用户完成登录（可能几分钟）。
@@ -1338,13 +1343,14 @@ class BrowserLoginTool(BaseTool):
                     pass
 
             # 导出并保存 cookie（同域 localStorage 一并保存）
-            saved_domains = self._export_cookies(session, target_host, target_id or "")
+            saved_domains, export_summary = self._export_cookies(session, target_host, target_id or "")
 
             if saved_domains:
                 return ToolResult(
                     success=True,
                     content={
                         "saved_domains": saved_domains,
+                        "export_summary": export_summary,
                         "note": (
                             f"登录成功！站点 {target_host} 的登录凭据已加密保存到本地。"
                             f"后续 web_fetch 访问该站点会自动携带登录态。"
@@ -1369,12 +1375,13 @@ class BrowserLoginTool(BaseTool):
         except BrowserCDPError as exc:
             # 容错：若用户手动关闭了窗口/标签页，尝试检查是否已有保存的 cookies
             try:
-                saved_domains = self._export_cookies(session, target_host, target_id or "")
+                saved_domains, export_summary = self._export_cookies(session, target_host, target_id or "")
                 if saved_domains:
                     return ToolResult(
                         success=True,
                         content={
                             "saved_domains": saved_domains,
+                            "export_summary": export_summary,
                             "note": (
                                 f"登录窗口已关闭，检测并成功保存了 {target_host} 的登录态。"
                             ),
@@ -1400,10 +1407,21 @@ class BrowserLoginTool(BaseTool):
 
     def _export_cookies(
         self, session: BrowserSession, target_host: str, target_id: str = ""
-    ) -> list:
-        """从浏览器获取 cookie 并按 domain 分组保存。返回已保存的 domain 列表。
+    ) -> tuple:
+        """浏览器级导出 cookie 并按 domain 分组保存。
+
+        使用 ``Storage.getCookies``（浏览器级 CDP，不 attach 页面）而不是
+        ``Network.getCookies``（页面级，只返回当前 frame URL 可见的 cookie）：
+        后者会漏掉 host-only 的跨子域认证 cookie（典型例子：登录流程产生
+        ``www.example.cn/_token`` + ``account.example.cn/_sid``，而当前页
+        是 ``app.example.cn/console``，页面级 CDP 完全看不到这两条，导致
+        web_fetch 后续注入的凭据档案只有 WAF/UI cookie，永远登录墙）。
 
         同域 localStorage 一并保存为 storage_state（知网等双 token 站点）。
+
+        Returns:
+            ``(saved_domains, summary)`` —— ``summary`` 包含总数 / 跨域数 /
+            候选认证 cookie 数（httpOnly+secure）用于 LLM 诊断输出。
         """
         from .credential_vault import (
             cookie_domain_matches,
@@ -1412,13 +1430,13 @@ class BrowserLoginTool(BaseTool):
         )
 
         try:
-            result = cdp_command(session, "Network.getCookies", {})
+            result = cdp_command(session, "Storage.getCookies", {})
         except BrowserCDPError:
-            return []
+            return [], {}
 
         raw_cookies = result.get("cookies") or []
         if not raw_cookies:
-            return []
+            return [], {}
 
         origins = _capture_local_storage(session, target_id)
         page_hosts: List[str] = []
@@ -1473,7 +1491,35 @@ class BrowserLoginTool(BaseTool):
                 # 单个 domain 保存失败不影响其他
                 pass
 
-        return saved
+        # P1 跨域认证 cookie 兜底：把全量 cookie（含 host-only 跨子域认证
+        # cookie）也存一份到 target_host 档案下，保留每个 cookie 的原始
+        # domain 字段。这样 web_fetch(credential_domain=target_host) 注入
+        # 渲染浏览器时，跨子域的认证 cookie 能在 OAuth 跳转中被浏览器
+        # 按原始 domain 自动携带（典型场景：platform.example.cn 控制台依
+        # 赖 www.example.cn/_token + account.example.cn/_sid）。
+        if target_host:
+            try:
+                save_credential(
+                    target_host,
+                    raw_cookies,
+                    source_profile=str(profile_name),
+                )
+                if target_host not in saved:
+                    saved.append(target_host)
+            except Exception:
+                pass
+
+        summary = {
+            "total_cookies": len(raw_cookies),
+            "domain_count": len(by_domain),
+            "domains": sorted(by_domain.keys()),
+            "auth_candidates": sum(
+                1
+                for item in raw_cookies
+                if isinstance(item, dict) and item.get("httpOnly") and item.get("secure")
+            ),
+        }
+        return saved, summary
 
 
 def _wait_for_page_load(
@@ -1527,17 +1573,41 @@ def _check_login_status(
 
         # 2. 自动判定：当前 URL 离开了登录页且没有密码框
         if not looks_like_login_url(current_url) and not has_password:
-            # 额外验证：有目标域 cookie 才算真正登录
+            # 额外验证：有目标域的认证 cookie 才算真正登录
+            # 排除 WAF/CDN/反爬虫 cookie（这些不代表登录状态）
+            _WAF_COOKIE_NAMES = frozenset({
+                # 阿里云 WAF
+                "acw_tc", "acw_sc__v2", "acw_sc__v3", "aliyungf_tmd",
+                # Cloudflare
+                "cf_clearance", "cfduid", "__cfduid", "cf_clearance_2",
+                # 腾讯云 WAF
+                "tencent_waf_cookie", "twaf_tc",
+                # 通用 CDN/WAF
+                "cdn_sec_tc", "waf_cookie", "waf_tc", "rancher_id",
+                # 防御性 cookie（非认证）
+                "__jsl_clearance_s", "__jsluid_s", "sl-session",
+            })
             try:
                 cookies_result = cdp_command(session, "Network.getCookies", {})
                 cookies = cookies_result.get("cookies") or []
+                auth_cookie_count = 0
                 for c in cookies:
                     if isinstance(c, dict):
                         cdomain = str(c.get("domain") or "").lower().lstrip(".")
+                        cname = str(c.get("name") or "").lower()
+                        # 跳过 WAF/CDN cookie
+                        if cname in _WAF_COOKIE_NAMES:
+                            continue
+                        # 跳过以 __cf/ __ac_ 开头的 Cloudflare/Akamai cookie
+                        if cname.startswith(("__cf", "__ac_", "_cfuvid")):
+                            continue
                         if cdomain and (
                             target_host == cdomain or target_host.endswith("." + cdomain)
                         ):
-                            return "logged_in"
+                            auth_cookie_count += 1
+                # 至少有 1 个非 WAF cookie 才算登录成功
+                if auth_cookie_count > 0:
+                    return "logged_in"
             except BrowserCDPError:
                 pass
             return "loading"
