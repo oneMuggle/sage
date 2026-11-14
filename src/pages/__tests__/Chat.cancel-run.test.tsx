@@ -127,8 +127,10 @@ function baseChat(overrides: Record<string, unknown> = {}) {
 }
 
 function board(dispatchedAt: number | null) {
+  // runId 必须带 orch- 前缀：PlanApprovalBar 只对真实编排 run 渲染 PlanCard，
+  // agent-task-* 是子代理进度的临时合成板，不可被当作编排计划确认。
   return {
-    runId: 'run-1',
+    runId: 'orch-run-1',
     plan: [{ task_id: 't1', agent_id: 'researcher', goal: 'G' }],
     statuses: {},
     dispatchedAt,
@@ -164,7 +166,7 @@ describe('Chat — handleCancelRun 统一取消 (Wave 3 C4+H1)', () => {
     useStore.setState({ messages: [], currentSessionId: 'session-ws', sessions: [] });
     clearTaskBoardMock.mockClear();
     cancelRunMock.mockReset();
-    cancelRunMock.mockResolvedValue({ ok: true, run_id: 'run-1', status: 'cancelled' });
+    cancelRunMock.mockResolvedValue({ ok: true, run_id: 'orch-run-1', status: 'cancelled' });
   });
 
   it('未派发：点 plan-cancel → cancelRun(runId) + clearTaskBoard (H1)', async () => {
@@ -172,7 +174,7 @@ describe('Chat — handleCancelRun 统一取消 (Wave 3 C4+H1)', () => {
     renderChat();
     expect(screen.getByTestId('plan-cancel')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('plan-cancel'));
-    await waitFor(() => expect(cancelRunMock).toHaveBeenCalledWith('run-1'));
+    await waitFor(() => expect(cancelRunMock).toHaveBeenCalledWith('orch-run-1'));
     expect(clearTaskBoardMock).toHaveBeenCalled();
   });
 
@@ -181,7 +183,7 @@ describe('Chat — handleCancelRun 统一取消 (Wave 3 C4+H1)', () => {
     renderChat();
     expect(screen.getByTestId('task-tree-cancel')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('task-tree-cancel'));
-    await waitFor(() => expect(cancelRunMock).toHaveBeenCalledWith('run-1'));
+    await waitFor(() => expect(cancelRunMock).toHaveBeenCalledWith('orch-run-1'));
     expect(clearTaskBoardMock).toHaveBeenCalled();
   });
 
@@ -191,5 +193,20 @@ describe('Chat — handleCancelRun 统一取消 (Wave 3 C4+H1)', () => {
     renderChat();
     fireEvent.click(screen.getByTestId('plan-cancel'));
     await waitFor(() => expect(clearTaskBoardMock).toHaveBeenCalled());
+  });
+
+  it('agent-task-* 临时合成板不渲染 PlanCard（子代理进度，非编排计划）', () => {
+    useChatMock.mockReturnValue(
+      baseChat({
+        taskBoard: {
+          runId: 'agent-task-abc123',
+          plan: [{ task_id: 't1', agent_id: 'subagent', goal: 'G' }],
+          statuses: {},
+          dispatchedAt: null,
+        },
+      }),
+    );
+    renderChat();
+    expect(screen.queryByTestId('plan-cancel')).not.toBeInTheDocument();
   });
 });
