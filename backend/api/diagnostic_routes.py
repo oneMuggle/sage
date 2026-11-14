@@ -245,12 +245,12 @@ class DiscoveredBrowser(BaseModel):
 class BrowserListResponse(BaseModel):
     """浏览器列表响应。"""
 
-    browsers: list[DiscoveredBrowser]
+    browsers: List[DiscoveredBrowser]
     userConfigured: Optional[str] = None  # noqa: N815 — 用户配置的路径
     embeddedAvailable: bool = False  # noqa: N815 — 嵌入式浏览器是否可用
 
 
-def _discover_all_browsers() -> list[DiscoveredBrowser]:
+def _discover_all_browsers() -> List[DiscoveredBrowser]:
     """扫描系统中所有可用的 Chromium 系浏览器。"""
     import os
     import shutil
@@ -262,8 +262,8 @@ def _discover_all_browsers() -> list[DiscoveredBrowser]:
         _windows_candidates,
     )
 
-    found: list[DiscoveredBrowser] = []
-    seen_paths: set[str] = set()
+    found: List[DiscoveredBrowser] = []
+    seen_paths: set = set()
 
     def _get_version(exe_path: str) -> Optional[str]:
         """通过 --version 命令获取浏览器版本。"""

@@ -28,9 +28,7 @@ export async function fetchBrowserList(): Promise<BrowserListResponse> {
   return res.json();
 }
 
-export async function setBrowserPath(
-  path: string
-): Promise<{ success: boolean; error?: string }> {
+export async function setBrowserPath(path: string): Promise<{ success: boolean; error?: string }> {
   const res = await fetch(webAccessApiUrl('/api/v1/diagnostic/browser/path'), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
