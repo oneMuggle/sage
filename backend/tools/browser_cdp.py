@@ -109,7 +109,6 @@ def _windows_candidates() -> List[Path]:
     return [Path(base) / rel for base in bases if base for rel in (chrome_rel, edge_rel)]
 
 
-<<<<<<< HEAD
 def _discover_embedded_env() -> Optional[Dict[str, Any]]:
     """读取 Electron 注入的内置浏览器环境（端口/token）；不完整返回 None。"""
     if os.environ.get("SAGE_EMBEDDED_BROWSER", "").strip() != "1":
@@ -127,15 +126,6 @@ def _discover_embedded_env() -> Optional[Dict[str, Any]]:
     return {"port": port, "token": token}
 
 
-def discover_browser_executable() -> Optional[str]:
-    """按 环境变量 → 平台路径 → PATH 顺序找 Chromium / Firefox 系浏览器。"""
-    if _discover_embedded_env():
-        return EMBEDDED_EXECUTABLE
-    cap = discover_and_select()
-    if cap:
-        return cap.executable
-    return None
-=======
 def _get_user_browser_path() -> Optional[str]:
     """从设置中读取用户配置的浏览器路径。"""
     try:
@@ -149,8 +139,8 @@ def _get_user_browser_path() -> Optional[str]:
     return None
 
 
-def discover_browser_executable() -> Optional[str]:  # noqa: PLR0911 — 浏览器发现逻辑需要多级 fallback
-    """按 环境变量 → 用户设置 → 平台路径 → PATH 顺序找 Chromium 系浏览器。"""
+def discover_browser_executable() -> Optional[str]:
+    """按 环境变量 → 用户设置 → 平台路径 → PATH 顺序找 Chromium / Firefox 系浏览器。"""
     if _discover_embedded_env():
         return EMBEDDED_EXECUTABLE
     # 环境变量覆盖
@@ -161,20 +151,10 @@ def discover_browser_executable() -> Optional[str]:  # noqa: PLR0911 — 浏览�
     user_override = _get_user_browser_path()
     if user_override:
         return user_override
-    # Windows 平台路径
-    if os.name == "nt":
-        for candidate in _windows_candidates():
-            if candidate.is_file():
-                return str(candidate)
-        return None
-    # POSIX：Linux/WSL 走 PATH
-    for name in _LINUX_CANDIDATES:
-        found = shutil.which(name)
-        if found:
-            return found
-    # macOS 应用包路径
-    return _darwin_candidates()
->>>>>>> origin/main
+    cap = discover_and_select()
+    if cap:
+        return cap.executable
+    return None
 
 
 def _darwin_candidates() -> Optional[str]:

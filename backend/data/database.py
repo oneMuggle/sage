@@ -203,7 +203,6 @@ def _segment_for_index(text: Optional[str]) -> str:
     return " ".join(w.strip() for w in jieba.cut_for_search(text) if w.strip())
 
 
-<<<<<<< HEAD
 def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
     """Add source_turn_id / source_message_id / memory_category columns and
     supporting indexes to ``memories_episodic``.
@@ -234,8 +233,6 @@ def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
     db.commit()
 
 
-=======
->>>>>>> origin/main
 def warm_jieba() -> None:
     """预热 jieba 词典，避免首次 FTS 写入冷启动 500ms+。
 

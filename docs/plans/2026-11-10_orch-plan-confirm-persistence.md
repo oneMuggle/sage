@@ -56,7 +56,6 @@
 
 ## 实施步骤
 
-<<<<<<< HEAD
 - [ ] M1: 后端 DB 迁移 — `orch_runs` 加 `confirmed_at` 列
 - [ ] M2: 后端 repo — `OrchRun` 加字段 + `mark_confirmed()` + 所有 SELECT 映射
 - [ ] M3: 后端 API — `OrchRunDetail` 加 `confirmed_at`/`dispatched_at` + `confirm_run` 写库
@@ -67,18 +66,6 @@
 - [ ] M8: 前端 PlanApprovalBar — 动态 `locked` prop
 - [ ] M9: 测试 — 更新/补充相关测试
 - [ ] M10: 移植到 release/win7
-=======
-- [x] M1: 后端 DB 迁移 — `orch_runs` 加 `confirmed_at` 列
-- [x] M2: 后端 repo — `OrchRun` 加字段 + `mark_confirmed()` + 所有 SELECT 映射
-- [x] M3: 后端 API — `OrchRunDetail` 加 `confirmed_at`/`dispatched_at` + `confirm_run` 写库
-- [x] M4: 前端 type — `orchRunClient.OrchRunDetail` 加字段
-- [x] M5: 前端 store — `TaskBoardState` 加 `confirmedAt`
-- [x] M6: 前端 restore — `restoreRunToBoard` 映射真实 `confirmedAt`/`dispatchedAt`
-- [x] M7: 前端 reattach — 保留已有 board（不清空）
-- [x] M8: 前端 PlanApprovalBar — 动态 `locked` prop
-- [x] M9: 测试 — 更新/补充相关测试
-- [x] M10: 移植到 release/win7
->>>>>>> origin/main
 
 ## 风险评估
 

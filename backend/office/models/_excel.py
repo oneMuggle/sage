@@ -301,7 +301,6 @@ class ChartSpec(BaseModel):
         description="类别标签（bar/hbar/pie 或 line 分类轴）；series 无 x 时必选",
     )
 
-<<<<<<< HEAD
 # pydantic v1 在类创建时解析注解；以下模型引用了后置定义的类，
 # 需在全部类定义后显式解析前向引用（v2 走 model_rebuild，v1 走 update_forward_refs）。
 if hasattr(ExcelSheetSpec, "model_rebuild"):
@@ -313,6 +312,3 @@ if hasattr(ExcelPrintSetupSpec, "model_rebuild"):
     ExcelPrintSetupSpec.model_rebuild()
 else:
     ExcelPrintSetupSpec.update_forward_refs()
-=======
-
->>>>>>> origin/main

@@ -497,7 +497,6 @@ class WordRepairRequest(BaseModel):
     max_size_bytes: int = Field(
         default=50 * 1024 * 1024, ge=1024, description="Reject files larger than this"
     )
-<<<<<<< HEAD
 
 # pydantic v1 在类创建时解析注解；以下模型引用了后置定义的类，
 # 需在全部类定义后显式解析前向引用（v2 走 model_rebuild，v1 走 update_forward_refs）。
@@ -505,5 +504,3 @@ if hasattr(WordFormatSpec, "model_rebuild"):
     WordFormatSpec.model_rebuild()
 else:
     WordFormatSpec.update_forward_refs()
-=======
->>>>>>> origin/main

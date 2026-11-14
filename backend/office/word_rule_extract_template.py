@@ -276,11 +276,7 @@ def _extract_special_styles(
 ) -> None:
     """为模板中的特殊样式（作者、摘要、图题、表题、参考文献等）生成 style.font 规则。"""
     styles = profile.get("styles", [])
-<<<<<<< HEAD
     seen: Set[str] = set()
-=======
-    seen: set[str] = set()
->>>>>>> origin/main
 
     for style in styles:
         name = str(style.get("name") or "")

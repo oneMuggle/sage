@@ -200,11 +200,7 @@ export function useAiCapabilities(deps: { rootRef: RefObject<HTMLElement> }): Ai
       return;
     }
 
-<<<<<<< HEAD
 setPending(true);
-=======
-    setPending(true);
->>>>>>> origin/main
     setErrorText(null);
 
     try {

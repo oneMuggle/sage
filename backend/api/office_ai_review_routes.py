@@ -15,11 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter
-<<<<<<< HEAD
 from pydantic import BaseModel, Field
-=======
-from pydantic import BaseModel, ConfigDict, Field, model_validator
->>>>>>> origin/main
 
 # win7 py38 钉 pydantic 1.10，v2 专有符号必须走兼容垫片（2.x 下为 no-op）。
 from backend.compat.win7.pydantic_compat import ConfigDict
@@ -117,7 +113,6 @@ class AiReviseRequest(BaseModel):
     author: str = Field(default="Sage", max_length=80)
     add_comments: bool = True
 
-<<<<<<< HEAD
     if PYDANTIC_V2:
 
         @model_validator(mode="after")
@@ -134,13 +129,6 @@ class AiReviseRequest(BaseModel):
             if not (values.get("doc_id") or (values.get("file_path") or "").strip()):
                 raise ValueError("doc_id 与 file_path 至少提供一个")
             return values
-=======
-    @model_validator(mode="after")
-    def _require_target(self) -> AiReviseRequest:
-        if not (self.doc_id or (self.file_path or "").strip()):
-            raise ValueError("doc_id 与 file_path 至少提供一个")
-        return self
->>>>>>> origin/main
 
 
 class AiReviseResult(BaseModel):

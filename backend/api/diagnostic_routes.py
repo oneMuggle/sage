@@ -228,7 +228,6 @@ def _probe_chrome_major_safe() -> Optional[int]:
         return None
 
 
-<<<<<<< HEAD
 # ==================== 浏览器环境诊断（Phase D） ====================
 
 
@@ -253,7 +252,6 @@ def browser_check() -> dict:
     from backend.tools.browser_diagnostics import run_all_checks
 
     return run_all_checks()
-=======
 # ---------------------------------------------------------------------------
 # 浏览器发现列表 API（设置页浏览器选择用）
 # ---------------------------------------------------------------------------
@@ -416,4 +414,3 @@ def set_browser_path(req: SetBrowserPathRequest) -> dict:
         repo.delete("browser_path")
 
     return {"success": True, "path": path or None}
->>>>>>> origin/main

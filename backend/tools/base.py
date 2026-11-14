@@ -159,11 +159,7 @@ class BaseTool(ABC):
             logger.debug("tdd guard observe_write 失败 path=%s", path, exc_info=True)
             return None
 
-<<<<<<< HEAD
     def _enforce_workspace(self, path: str) -> Optional[ToolResult]:
-=======
-    def _enforce_workspace(self, path: str) -> ToolResult | None:
->>>>>>> origin/main
         """M3: 若 ``policy.workspace_root`` 非空则校验 ``path``。
 
         返回 ``ToolResult(success=False, ...)`` 表示拒绝（调用方应直接
