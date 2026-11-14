@@ -219,6 +219,10 @@ export const enSettingsUi = {
   'settings.memory.download_failed': 'Model download failed: {error}',
   'settings.memory.download_model': 'Download semantic model (about 90 MB)',
   'settings.memory.download_unsupported': 'Model download is not supported in this environment',
+  'settings.memory.model_import_local': 'Import from local',
+  'settings.memory.model_import_complete':
+    'Semantic model imported from local; semantic embedding can now be enabled',
+  'settings.memory.model_import_failed': 'Model import failed: {error}',
   'settings.memory.embedder_loading': 'Loading embedder status…',
   'settings.memory.embedder_status':
     'Current embedder: {type} · {dimensions}-dim · {mode} · table {table}',
@@ -325,6 +329,10 @@ export const enSettingsUi = {
   'settings.ocr.model_reset_done': 'Default model restored',
   'settings.ocr.model_failed': 'Model operation failed: {error}',
   'settings.ocr.model_unsupported': 'Model download is not supported in this environment',
+  'settings.ocr.model_import_local': 'Import from local',
+  'settings.ocr.model_importing': 'Importing…',
+  'settings.ocr.model_import_done': 'Model imported from local',
+  'settings.ocr.model_import_failed': 'Import failed: {error}',
   'settings.ocr.saving': 'Saving…',
   'settings.ocr.test': 'Test recognition',
   'settings.ocr.testing': 'Recognizing…',

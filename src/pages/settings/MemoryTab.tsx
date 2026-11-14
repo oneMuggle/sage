@@ -170,6 +170,39 @@ export function MemoryTab() {
     }
   }, [loadEmbedderStatus, t]);
 
+  // 从本地磁盘导入嵌入模型（内网环境无外网时使用）
+  const handleImportLocalModel = useCallback(async () => {
+    const api = window.electronAPI?.modelDownload;
+    if (!api?.importLocal) {
+      toast.error(t('settings.memory.download_unsupported'));
+      return;
+    }
+    setDownloadingModel(true);
+    try {
+      const res = await api.importLocal();
+      if (res.ok) {
+        toast.success(t('settings.memory.model_import_complete'));
+        await loadEmbedderStatus();
+      } else if (res.error !== 'cancelled') {
+        toast.error(
+          t('settings.memory.model_import_failed').replace(
+            '{error}',
+            String(res.error ?? t('settings.memory.unknown_error')),
+          ),
+        );
+      }
+    } catch (err) {
+      toast.error(
+        t('settings.memory.model_import_failed').replace(
+          '{error}',
+          String(err instanceof Error ? err.message : String(err)),
+        ),
+      );
+    } finally {
+      setDownloadingModel(false);
+    }
+  }, [loadEmbedderStatus, t]);
+
   // R19: 数据安全 —— 备份清单/手动备份/记忆导出
   const [backups, setBackups] = useState<
     { name: string; size_bytes: number; created_at: number }[]
@@ -320,6 +353,15 @@ export function MemoryTab() {
                   {downloadingModel
                     ? t('settings.common.loading')
                     : t('settings.memory.download_model')}
+                </button>
+                <button
+                  type="button"
+                  data-testid="embedder-model-import-local"
+                  disabled={downloadingModel}
+                  onClick={() => void handleImportLocalModel()}
+                  className="px-3 py-1.5 rounded-radius-sm border border-border text-text text-xs hover:bg-bg-hover disabled:opacity-50"
+                >
+                  {t('settings.memory.model_import_local')}
                 </button>
                 {downloadingModel && modelDownload?.file && (
                   <span className="text-ui-xs text-muted tabular-nums">{modelDownload.file}</span>

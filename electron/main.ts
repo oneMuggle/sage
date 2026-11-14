@@ -874,12 +874,26 @@ function spawnBackend(): ChildProcess {
       SAGE_BACKEND_GENERATION: String(generation),
       SAGE_BACKEND_OWNERSHIP_TOKEN: ownershipToken,
       SAGE_LOCAL_AUTH_TOKEN: backendAuthToken,
-      // 本地 OCR 可选模型目录：存在 det.onnx/rec.onnx 时优先于包内默认模型
-      SAGE_OCR_MODEL_DIR: join(
-        process.env.SAGE_USER_DATA_DIR || process.cwd(),
-        'models',
-        'rapidocr',
-      ),
+      // 本地 AI 模型路径解析：
+      // 1. SAGE_OCR_MODEL_DIR / SAGE_EMBEDDING_MODEL_DIR — 用户显式覆盖（最高优先）
+      // 2. SAGE_BUNDLED_MODELS_DIR — 安装包内置模型目录（打包态）
+      // 3. 后端自行推导（userData > repo > 包内默认）
+      // 用户如在 userData/models/ 放置了更新版本，后端会优先使用。
+      ...(() => {
+        const userDataDir = process.env.SAGE_USER_DATA_DIR || process.cwd();
+        const userOcrDir = join(userDataDir, 'models', 'rapidocr');
+        const bundledModelsDir = app.isPackaged ? join(process.resourcesPath, 'models') : null;
+        const bundledOcrDir = bundledModelsDir ? join(bundledModelsDir, 'rapidocr') : null;
+        const ocrModelDir = existsSync(userOcrDir)
+          ? userOcrDir
+          : bundledOcrDir && existsSync(bundledOcrDir)
+            ? bundledOcrDir
+            : undefined;
+        return {
+          ...(ocrModelDir ? { SAGE_OCR_MODEL_DIR: ocrModelDir } : {}),
+          ...(bundledModelsDir ? { SAGE_BUNDLED_MODELS_DIR: bundledModelsDir } : {}),
+        };
+      })(),
       // Sage 内置文档目录（sage-guide 专家知识源）。打包态必须显式指向
       // extraResources 里的 docs/；开发态不设，让后端按仓库布局
       // (<repo>/docs) 自行推导，避免与工作区文档漂移。

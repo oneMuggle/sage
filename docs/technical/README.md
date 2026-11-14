@@ -130,6 +130,7 @@
 | 153 | [TDD Subagent Workflow](./100-tdd-workflow.md) | 借鉴 Claude Code：TddGuard 状态机 + workflow_mode 优先级链（explicit > text > env > default）+ TDD 循环（max=3）+ `lane.tdd.evidence` 事件 + LaneDetailDrawer 证据展示 |
 | 154 | [Web Fallback 模式（Win7 兼容）](./154-web-fallback-mode.md) | Win7 管控环境下 Electron 被拦截时的浏览器降级方案：`SAGE_WEB_MODE` 环境变量 + FastAPI 静态文件服务 + URL param token 认证 + `sage-web.bat` 启动脚本 |
 | 155 | [Design Studio 内容库与 Craft 工艺规范](./155-design-studio-content-craft.md) | 四平面架构（设计系统/模板/工艺规范/生成）+ 15 设计系统 / 13 Deck 模板 / 4 原型模板 / 5 条 Craft 规则 + `CraftRuleRegistry` 解析器 + Prompt 注入链路 + 导出管道（PDF/PPTX/ZIP）+ Design Lint + Office 融合（Word→大纲 / 图表嵌入 / Live Artifact） |
+| 156 | [本地 AI 模型内置与离线导入](./156-local-ai-models.md) | OCR（6MB）+ Embedding（91MB）随安装包内置：`extraResources` 打包 `resources/models/` + 路径优先级链（userData > bundled > repo）+ 本地导入 IPC（目录选择 + SHA-256 校验）+ CI 缓存下载 |
 
 ---
 

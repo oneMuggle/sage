@@ -64,6 +64,7 @@ export function LocalOcrCard() {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [downloadingModel, setDownloadingModel] = useState(false);
   const [modelStatus, setModelStatus] = useState<string | null>(null);
+  const [importingModel, setImportingModel] = useState(false);
   const [cleaningJobs, setCleaningJobs] = useState(false);
   const [cleanupStatus, setCleanupStatus] = useState<string | null>(null);
 
@@ -186,14 +187,47 @@ export function LocalOcrCard() {
     }
   };
 
+  const importLocalModel = async () => {
+    const api = window.electronAPI?.modelDownload;
+    if (!api?.importLocalOcr) {
+      setModelStatus(t('settings.ocr.model_unsupported'));
+      return;
+    }
+    setImportingModel(true);
+    setModelStatus(null);
+    try {
+      const result = await api.importLocalOcr();
+      if (!result.ok) {
+        if (result.error === 'cancelled') {
+          setModelStatus(t('settings.ocr.model_cancelled'));
+        } else {
+          setModelStatus(
+            t('settings.ocr.model_import_failed').replace('{error}', result.error ?? ''),
+          );
+        }
+        return;
+      }
+      await ocrApi.reload();
+      await refreshCaps();
+      setModelStatus(t('settings.ocr.model_import_done'));
+    } catch (err) {
+      setModelStatus(
+        t('settings.ocr.model_import_failed').replace(
+          '{error}',
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+    } finally {
+      setImportingModel(false);
+    }
+  };
+
   const cleanupBatchJobs = async () => {
     setCleaningJobs(true);
     setCleanupStatus(null);
     try {
       const result = await ocrApi.batchCleanup(0);
-      setCleanupStatus(
-        t('settings.ocr.jobs_cleaned').replace('{count}', String(result.removed)),
-      );
+      setCleanupStatus(t('settings.ocr.jobs_cleaned').replace('{count}', String(result.removed)));
     } catch (err) {
       setCleanupStatus(
         t('settings.ocr.jobs_cleanup_failed').replace(
@@ -355,6 +389,17 @@ export function LocalOcrCard() {
             >
               {t('settings.ocr.model_reset')}
             </button>
+            <button
+              type="button"
+              data-testid="settings-ocr-import-local"
+              disabled={importingModel}
+              onClick={importLocalModel}
+              className="rounded-radius-sm border border-border bg-surface px-2 py-1 text-xs text-text disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {importingModel
+                ? t('settings.ocr.model_importing')
+                : t('settings.ocr.model_import_local')}
+            </button>
             {modelStatus && (
               <span data-testid="settings-ocr-model-status" className="text-muted">
                 {modelStatus}
@@ -385,9 +430,7 @@ export function LocalOcrCard() {
           onClick={cleanupBatchJobs}
           className="rounded-radius-sm border border-border bg-surface px-2 py-1 text-xs text-text disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {cleaningJobs
-            ? t('settings.ocr.jobs_cleaning')
-            : t('settings.ocr.jobs_cleanup')}
+          {cleaningJobs ? t('settings.ocr.jobs_cleaning') : t('settings.ocr.jobs_cleanup')}
         </button>
         {cleanupStatus && (
           <span data-testid="settings-ocr-cleanup-status" className="text-muted">

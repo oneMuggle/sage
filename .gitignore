@@ -157,6 +157,10 @@ tests/electron/screenshots/
 # VCRedist runtime bundled at build time (fetched by scripts/fetch-vcredist.ps1)
 resources/vc_redist.x64.exe
 
+# Local AI models downloaded by scripts/download-models.sh for packaging.
+# Not version-controlled — CI downloads before electron-builder; dev runs optional.
+resources/models/
+
 # Build artifacts and release packages
 release-artifacts/
 
