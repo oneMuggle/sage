@@ -2,11 +2,11 @@ import { getProviderDefinition } from '../../entities/endpoint/providerRegistry'
 import {
   DEMO_ENDPOINT_MODELS,
   type DiscoveredModel,
-  type ModelCapability,
 } from '../../entities/setting/types';
 import type { EndpointProtocol } from '../../entities/setting/types';
 import { backendRequest } from '../../shared/api/backendRequest';
 import { isDemoMode } from '../../shared/api/demoFlag';
+import { inferCapabilities, isEmbeddingModelId } from '../../shared/lib/modelCapabilities';
 
 interface OpenAIModelInfo {
   id: string;
@@ -260,7 +260,7 @@ export async function testEndpointConnection(
     if (protocol !== 'openai-compatible') {
       let chatTestModel = chatModel;
       if (!chatTestModel || !models.some((m) => m.id === chatTestModel)) {
-        chatTestModel = models.find((m) => !isEmbeddingModel(m.id))?.id;
+        chatTestModel = models.find((m) => !isEmbeddingModelId(m.id))?.id;
       }
       if (chatTestModel) {
         const chatResult = await testChatCompletionByProtocol(
@@ -299,7 +299,7 @@ export async function testEndpointConnection(
     // 拿纯 embedding 模型打 /chat/completions 触发假失败。
     let chatTestModel = chatModel;
     if (!chatTestModel || !models.some((m) => m.id === chatTestModel)) {
-      chatTestModel = models.find((m) => !isEmbeddingModel(m.id))?.id;
+      chatTestModel = models.find((m) => !isEmbeddingModelId(m.id))?.id;
     }
 
     // Step 3: Test /chat/completions if a chat model is available
@@ -351,105 +351,6 @@ async function testChatCompletionByProtocol(
   const provider = getProviderDefinition(protocol);
   if (!provider) return { success: false, message: `未知协议: ${protocol}` };
   return provider.testChat(baseUrl, apiKey, model, backendRequest);
-}
-
-/**
- * 判断模型 id 是否为 embedding 模型 (不适合作 chat 连通性测试)。
- *
- * 注意: ``inferCapabilities`` 无条件给所有模型标 ``'chat'``, 所以 fallback 选
- * 测试模型时不能依赖 capabilities 过滤, 需单独按 id 排除 embedding 模型, 避免
- * 拿纯 embedding 模型打 ``/chat/completions`` 触发假失败。
- */
-function isEmbeddingModel(modelId: string): boolean {
-  const lower = modelId.toLowerCase();
-  return lower.includes('embed') || lower.includes('text-embedding') || lower.includes('vector');
-}
-
-/**
- * Infer model capabilities from the model ID string.
- */
-function inferCapabilities(modelId: string): ModelCapability[] {
-  const lower = modelId.toLowerCase();
-  const caps: ModelCapability[] = ['chat'];
-
-  // ---- vision ----
-  // 非对话 / 非视觉模型(必须先于 vision 关键词判定,否则 embedding/whisper 误判)
-  const nonVisionMarkers = [
-    'embedding',
-    'moderation',
-    'dall-e',
-    'whisper',
-    'tts',
-    'asr',
-    'gpt-3.5',
-    'gpt-3',
-    'text-davinci',
-    'text-curie',
-    'text-babbage',
-    'text-ada',
-    'rerank',
-    'minilm',
-    'imagen',
-    'veo',
-    'claude-2',
-    'claude-instant', // Anthropic legacy
-  ];
-  const isNonVision = nonVisionMarkers.some((m) => lower.includes(m));
-
-  // 视觉模型族(所有 provider 的 vision markers 并集)
-  const visionMarkers = [
-    // OpenAI / OpenAI-compatible
-    'gpt-4',
-    'gpt-5',
-    'o1',
-    'o3',
-    'o4',
-    'vl',
-    '4v',
-    'internvl',
-    'llava',
-    'minicpm-v',
-    'gemma3',
-    'phi4',
-    // Anthropic (claude-3+ supports vision)
-    'claude-3',
-    'claude-sonnet-4',
-    'claude-opus-4',
-    'claude-haiku-4',
-    // Gemini (generative models)
-    'gemini',
-    // Ollama-specific
-    'moondream',
-    'bakllava',
-    // Generic
-    'vision',
-    'image',
-  ];
-  if (!isNonVision && visionMarkers.some((m) => lower.includes(m))) {
-    caps.push('vision');
-  }
-
-  // ---- embedding ----
-  if (lower.includes('embed') || lower.includes('text-embedding') || lower.includes('vector')) {
-    caps.push('embedding');
-  }
-
-  // ---- tts ----
-  if (/tts|speech-|voice-/.test(lower)) {
-    caps.push('tts');
-  }
-
-  // ---- asr ----
-  if (/whisper|asr|transcri/.test(lower)) {
-    caps.push('asr');
-  }
-
-  // ---- image_gen ----
-  if (/dall|image-gen|stable-diffusion|sdxl|flux/.test(lower)) {
-    caps.push('image_gen');
-  }
-
-  return caps;
 }
 
 /**
