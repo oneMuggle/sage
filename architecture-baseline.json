@@ -4,23 +4,40 @@
     "backend/adapters/out/skill/inproc.py": 1178,
     "backend/agents/profiles.py": 1250,
     "backend/api/arena_routes.py": 878,
+<<<<<<< HEAD
     "backend/api/legacy_routes.py": 3022,
+=======
+    "backend/api/legacy_routes.py": 3002,
+>>>>>>> origin/main
     "backend/api/llm_proxy_routes.py": 1216,
     "backend/api/office_routes.py": 856,
     "backend/api/orchestration_router.py": 807,
     "backend/api/permission_routes.py": 855,
     "backend/api/playbook_routes.py": 1007,
+<<<<<<< HEAD
     "backend/api/project_ai_routes.py": 861,
     "backend/api/project_routes.py": 1369,
     "backend/api/project_schemas.py": 829,
+=======
+    "backend/api/project_ai_routes.py": 859,
+    "backend/api/project_routes.py": 1369,
+    "backend/api/project_schemas.py": 828,
+>>>>>>> origin/main
     "backend/api/wiki_routes.py": 1764,
     "backend/application/services/chat_service.py": 1578,
     "backend/core/legacy/agent.py": 3825,
     "backend/core/legacy/llm_client.py": 1457,
+<<<<<<< HEAD
     "backend/data/database.py": 2577,
     "backend/data/session_repo.py": 1218,
     "backend/data/settings_canonicalizer.py": 1100,
     "backend/main.py": 1843,
+=======
+    "backend/data/database.py": 2545,
+    "backend/data/session_repo.py": 1217,
+    "backend/data/settings_canonicalizer.py": 1100,
+    "backend/main.py": 1527,
+>>>>>>> origin/main
     "backend/mcp/pool.py": 915,
     "backend/memory/episodic.py": 841,
     "backend/memory/manager.py": 1424,
@@ -45,13 +62,18 @@
     "backend/tests/unit/test_chat_dispatcher.py": 1065,
     "backend/tests/unit/test_chat_dispatcher_budget.py": 969,
     "backend/tests/unit/test_credential_vault.py": 1506,
+<<<<<<< HEAD
     "backend/tests/unit/test_design_routes.py": 1171,
+=======
+    "backend/tests/unit/test_design_routes.py": 1170,
+>>>>>>> origin/main
     "backend/tests/unit/test_settings_canonicalizer.py": 910,
     "backend/tests/unit/test_skill_md_importer.py": 806,
     "backend/tests/unit/test_skill_md_script_runner.py": 824,
+    "backend/tests/unit/test_browser_tool.py": 918,
     "backend/tests/unit/test_web_tool.py": 1833,
-    "backend/tools/browser_cdp.py": 1180,
-    "backend/tools/browser_tool.py": 1579,
+    "backend/tools/browser_cdp.py": 1200,
+    "backend/tools/browser_tool.py": 1653,
     "backend/tools/config_tool.py": 1115,
     "backend/tools/credential_vault.py": 1202,
     "backend/tools/download_tool.py": 1116,
@@ -66,11 +88,19 @@
     "backend/wiki/ingest.py": 828,
     "backend/zotero/client.py": 1195,
     "electron/__tests__/commands.test.ts": 1241,
+<<<<<<< HEAD
     "electron/main.ts": 3612,
     "electron/preload.ts": 997,
     "electron/tests/updateIntegration.test.ts": 882,
     "electron/tests/updateManager.test.ts": 1839,
     "electron/updateManager.ts": 1519,
+=======
+    "electron/main.ts": 3630,
+    "electron/preload.ts": 1001,
+    "electron/tests/updateIntegration.test.ts": 875,
+    "electron/tests/updateManager.test.ts": 1785,
+    "electron/updateManager.ts": 1510,
+>>>>>>> origin/main
     "packages/drawio-mcp-server/src/xml-validation.ts": 950,
     "scripts/feedback_receiver.py": 1154,
     "src/entities/setting/settingsRegistry.ts": 812,
@@ -92,8 +122,13 @@
     "src/shared/api/types/chatAndEventTypes.ts": 963,
     "src/shared/api/types/domainEntityTypes.ts": 806,
     "src/shared/lib/i18n/locales/en/chatAndSider.ts": 824,
+<<<<<<< HEAD
     "src/shared/lib/i18n/locales/zh/chatAndSider.ts": 825,
     "src/shared/types/electron-api.d.ts": 940,
+=======
+    "src/shared/lib/i18n/locales/zh/chatAndSider.ts": 836,
+    "src/shared/types/electron-api.d.ts": 942,
+>>>>>>> origin/main
     "src/widgets/chat/ChatInput.tsx": 907,
     "src/widgets/chat/Message.tsx": 895,
     "src/widgets/memory/MemoryBrowser.tsx": 1227,

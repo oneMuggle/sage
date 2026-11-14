@@ -797,6 +797,20 @@ export const zhChatAndSider = {
   'settings.zotero.wiki_project.hint':
     '同步时把带 Wiki 标签的文献沉淀到该项目的 wiki/zotero/ 目录。',
 
+  // ─── 设置页 · 浏览器选择 ────────────────
+  'settings.network.browser.title': '浏览器',
+  'settings.network.browser.hint':
+    '选择用于 browser_login 的浏览器。未选择时自动使用系统默认浏览器。',
+  'settings.network.browser.loading': '正在扫描可用浏览器…',
+  'settings.network.browser.none_found':
+    '未发现可用浏览器。请安装 Chrome/Edge 或使用 SAGE_BROWSER_PATH 环境变量指定路径。',
+  'settings.network.browser.embedded': 'Sage 内置浏览器',
+  'settings.network.browser.embedded_hint': 'Electron 自带的 Chromium 内核（部分站点可能不兼容）',
+  'settings.network.browser.system_default': '系统默认',
+  'settings.network.browser.saved': '浏览器选择已保存',
+  'settings.network.browser.save_failed': '保存失败',
+  'settings.network.browser.reset': '重置为自动发现',
+
   // ─── 设置页 · 更新 ────────────────
 } as const;
 

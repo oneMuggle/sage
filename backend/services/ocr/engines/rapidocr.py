@@ -141,7 +141,11 @@ def _apply_runtime_options(engine: Any, opts: OcrOptions) -> None:
 
 
 def resolve_model_dir() -> Optional[Path]:
-    """显式/已存在的模型目录；都没有时返回 None（使用包内默认模型）。"""
+    """显式/已存在的模型目录；都没有时返回 None（使用包内默认模型）。
+
+    优先级：SAGE_OCR_MODEL_DIR > SAGE_USER_DATA_DIR/models/rapidocr >
+    SAGE_BUNDLED_MODELS_DIR/rapidocr（安装包内置）> <repo>/data/models/rapidocr。
+    """
     explicit = os.environ.get(_MODEL_DIR_ENV, "").strip()
     if explicit:
         path = Path(explicit)
@@ -150,7 +154,13 @@ def resolve_model_dir() -> Optional[Path]:
     user_data = os.environ.get("SAGE_USER_DATA_DIR", "").strip()
     if user_data:
         candidate = Path(user_data) / "models" / "rapidocr"
-        return candidate if candidate.is_dir() else None
+        if candidate.is_dir():
+            return candidate
+    bundled = os.environ.get("SAGE_BUNDLED_MODELS_DIR", "").strip()
+    if bundled:
+        candidate = Path(bundled) / "rapidocr"
+        if candidate.is_dir():
+            return candidate
     repo_dir = Path(__file__).resolve().parents[3] / "data" / "models" / "rapidocr"
     return repo_dir if repo_dir.is_dir() else None
 

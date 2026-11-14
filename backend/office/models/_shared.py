@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
+<<<<<<< HEAD
 from typing import ForwardRef, List, Optional
 
 from pydantic import BaseModel, Field, conlist
@@ -12,16 +13,32 @@ from backend.compat.win7.pydantic_compat import (
     ConfigDict,
     field_validator,  # noqa: F401
 )
+=======
+from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, conlist
+
+# Pydantic v1/v2 compatibility (matches backend/plugins/manifest.py idiom).
+try:
+    # Pydantic v2
+    from pydantic import field_validator
+except ImportError:  # pragma: no cover — release/win7 runs v1
+    # Pydantic v1 fallback
+    from pydantic import validator as field_validator  # type: ignore  # noqa: F401
+>>>>>>> origin/main
 
 logger = logging.getLogger(__name__)
 
 
 def _constrained_list(item_type, *, min_length=None, max_length=None):
     """Build a list constraint compatible with Pydantic v1 and v2."""
+<<<<<<< HEAD
     # pydantic v1 的 conlist 不接受字符串类型；包装成 ForwardRef 延迟解析，
     # 由模块末尾的 model_rebuild()/update_forward_refs() 守卫收口。
     if isinstance(item_type, str):
         item_type = ForwardRef(item_type)
+=======
+>>>>>>> origin/main
     kwargs = {}
     if min_length is not None:
         kwargs["min_length"] = min_length

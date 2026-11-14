@@ -592,6 +592,7 @@ async def _deferred_startup_init(
         # ── Design Studio ──
         try:
             from backend.data.design_repo import DesignRepo
+            from backend.design.craft_loader import CraftRuleRegistry
             from backend.design.design_studio import DesignStudio
             from backend.design.generator import DesignGenerator
             from backend.design.systems import DesignSystemRegistry
@@ -617,6 +618,7 @@ async def _deferred_startup_init(
                 systems=DesignSystemRegistry(_design_content_dir),
                 templates=DesignTemplateRegistry(_design_content_dir),
                 workspace_dir=_design_workspace,
+                craft_rules=CraftRuleRegistry(_design_content_dir),
             )
             app.state.design_studio = design_studio
             from backend.design import init_design_studio

@@ -1,6 +1,10 @@
 # 技术专题文档总览
 
+<<<<<<< HEAD
 > Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-152；本索引以目录中的实际文件为准。
+=======
+> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-149；本索引以目录中的实际文件为准。
+>>>>>>> origin/main
 
 ---
 
@@ -124,12 +128,22 @@
 | 144 | [Win7 内网救援工具（Rescue Doctor）](./144-win7-rescue-doctor.md) | 不依赖前端的 CLI（体检/端点配置/修复/诊断包/放行清单）+ 启动看门狗（last-run/崩溃 journal/心跳/原生恢复对话框）+ 兼容档位 L0–L3 + 遗留管控软件处置（备份/恢复/审计） |
 | 145 | [记忆质量优化（Phase 1–4）](./145-memory-quality-optimization.md) | 提取门槛升级 + 否定词 NOOP 修复 + 写入冲突消解（ADD/UPDATE/NOOP）+ 已知事实过滤 + 主题簇巩固 + 五维质量评分器 + 质量可视化/批量清理/来源会话追踪/记忆级反馈 |
 | 146 | [渲染层 BackendNotReadyError 自愈](./146-backend-ready-renderer-recovery.md) | 方案 A 队列之上的渲染层兜底：`backendReadySignal` 单例订阅 `backend:ready` 事件 + `useBackendReadyTick` 驱动 Chat/Sidebar/SessionWorkspaceProvider 启动期失败自动重放；`desktopInvoke` 剥离 IPC 包装前缀；`ProjectsOverview` 错误横幅 + 重试按钮 |
+<<<<<<< HEAD
 | 147 | [项目工作台 IA 与交互](./147-project-workbench-ia.md) | 单列表 + 批量模式 + 治理壳层视觉统一 + 概览/设置/资料/文件/规则五章重组 + 文件章 i18n + 共享 Radix Select 迁移 |
 | 151 | [权限对话框 UX 优化](./151-permission-dialog-ux.md) | 来源会话标签（多会话并行辨识请求来源）+ 长命令完整展示（截断常量 1000→4000 / 对话框加宽） |
 | 152 | [侧边栏任务中心](./152-sidebar-task-center.md) | 六源任务归一（registry / chat / lane / goal / todo / scheduled）+ 侧边栏分区与 `/tasks` 页面 + 闲时目标终态通知队列 + panelRegistry 槽位迁移 |
 | 153 | [TDD Subagent Workflow](./100-tdd-workflow.md) | 借鉴 Claude Code：TddGuard 状态机 + workflow_mode 优先级链（explicit > text > env > default）+ TDD 循环（max=3）+ `lane.tdd.evidence` 事件 + LaneDetailDrawer 证据展示 |
 | 154 | [Web Fallback 模式（Win7 兼容）](./154-web-fallback-mode.md) | Win7 管控环境下 Electron 被拦截时的浏览器降级方案：`SAGE_WEB_MODE` 环境变量 + FastAPI 静态文件服务 + URL param token 认证 + `sage-web.bat` 启动脚本 |
 | 155 | [Design Studio 内容库与 Craft 工艺规范](./155-design-studio-content-craft.md) | 四平面架构（设计系统/模板/工艺规范/生成）+ 15 设计系统 / 13 Deck 模板 / 4 原型模板 / 5 条 Craft 规则 + `CraftRuleRegistry` 解析器 + Prompt 注入链路 + 导出管道（PDF/PPTX/ZIP）+ Design Lint + Office 融合（Word→大纲 / 图表嵌入 / Live Artifact） |
+=======
+| 147 | [项目工作台 IA 与交互](./147-project-workbench-ia.md) | `/projects` 单列表重做 + 治理页五章 IA（概览下一步 / 设置去自动 LLM / 资料语义检索折叠 / 文件章 i18n）+ 共享 Radix `Select` 迁移 + 规则页文案收敛 |
+| 148 | [侧边栏任务中心](./148-sidebar-task-center.md) | 六源任务归一（registry / chat / lane / goal / todo / scheduled）+ 侧边栏分区与 `/tasks` 页面 + 闲时目标终态通知队列 + panelRegistry 槽位迁移 |
+| 149 | [权限对话框 UX 优化](./149-permission-dialog-ux.md) | 来源会话标签（多会话并行辨识请求来源）+ 长命令完整展示（截断常量 1000→4000 / 对话框加宽） |
+| 150 | [TDD Subagent Workflow](./100-tdd-workflow.md) | 借鉴 Claude Code：TddGuard 状态机 + workflow_mode 优先级链（explicit > text > env > default）+ TDD 循环（max=3）+ `lane.tdd.evidence` 事件 + LaneDetailDrawer 证据展示 |
+| 151 | [Design Studio 内容库与 Craft 工艺规范](./151-design-studio-content-craft.md) | 四平面架构（设计系统/模板/工艺规范/生成）+ 15 设计系统 / 13 Deck 模板 / 4 原型模板 / 5 条 Craft 规则 + `CraftRuleRegistry` 解析器 + Prompt 注入链路 + 导出管道（PDF/PPTX/ZIP）+ Design Lint + Office 融合（Word→大纲 / 图表嵌入 / Live Artifact） |
+| 152 | [Web Fallback 模式（Win7 兼容）](./152-web-fallback-mode.md) | Win7 管控环境下 Electron 被拦截时的浏览器降级方案：`SAGE_WEB_MODE` 环境变量 + FastAPI 静态文件服务 + URL param token 认证 + `sage-web.bat` 启动脚本 |
+| 153 | [本地 AI 模型内置与离线导入](./153-local-ai-models.md) | OCR（6MB）+ Embedding（91MB）随安装包内置：`extraResources` 打包 `resources/models/` + 路径优先级链（userData > bundled > repo）+ 本地导入 IPC（目录选择 + SHA-256 校验）+ CI 缓存下载 |
+>>>>>>> origin/main
 
 ---
 
@@ -138,7 +152,11 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 用户价值层 | [01 概述](../01-overview.md) — [12 实施计划](../12-plan.md) |
+<<<<<<< HEAD
 | 横切关注点 | 本目录（15-151）                                            |
+=======
+| 横切关注点 | 本目录（15-149）                                            |
+>>>>>>> origin/main
 
 ---
 
