@@ -255,7 +255,7 @@ class DesignLinter:
 
         return report
 
-    def auto_fix(self, html: str, issues: list[LintIssue] | None = None) -> str:
+    def auto_fix(self, html: str, issues: Optional[List[LintIssue]] = None) -> str:
         """Apply safe automatic fixes.
 
         Currently fixes:
