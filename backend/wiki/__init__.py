@@ -40,7 +40,14 @@ from .models import (
 )
 from .review import ReviewItem, ReviewResult, ReviewType, WikiReview
 from .search import search_wiki
-from .settings import ReasoningConfig, TaskRoutingConfig, WikiSettings, load_settings, resolve_model_for_task, save_settings
+from .settings import (
+    ReasoningConfig,
+    TaskRoutingConfig,
+    WikiSettings,
+    load_settings,
+    resolve_model_for_task,
+    save_settings,
+)
 from .vectorstore import VectorStore
 from .vision import (
     ImageCaption,
