@@ -1343,9 +1343,12 @@ export const projectApi = {
     projectId: string,
   ): Promise<import('./projectApiTypes').ProjectHealthSummary> {
     try {
-      return await invoke<import('./projectApiTypes').ProjectHealthSummary>('projects_health_check', {
-        projectId,
-      });
+      return await invoke<import('./projectApiTypes').ProjectHealthSummary>(
+        'projects_health_check',
+        {
+          projectId,
+        },
+      );
     } catch (error) {
       throw handleApiError(error);
     }

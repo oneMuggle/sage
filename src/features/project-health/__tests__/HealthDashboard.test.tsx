@@ -42,11 +42,7 @@ function result(): ProjectsHealthCheckResult {
   return {
     checked: 3,
     severities: { critical: 1, warning: 1, ok: 1 },
-    summaries: [
-      summary('p1', 'critical', 2),
-      summary('p2', 'warning'),
-      summary('p3', 'ok'),
-    ],
+    summaries: [summary('p1', 'critical', 2), summary('p2', 'warning'), summary('p3', 'ok')],
   };
 }
 

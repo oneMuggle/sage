@@ -134,7 +134,9 @@ export function HealthDashboard() {
               className="flex items-center justify-between gap-3 rounded-md bg-black/10 px-3 py-2"
             >
               <div className="flex min-w-0 items-center gap-2">
-                <span className={`h-2 w-2 shrink-0 rounded-full ${SEVERITY_DOT[summary.severity]}`} />
+                <span
+                  className={`h-2 w-2 shrink-0 rounded-full ${SEVERITY_DOT[summary.severity]}`}
+                />
                 <span className="truncate text-xs text-slate-200">{summary.project_name}</span>
                 {summary.project_stage && (
                   <span className="shrink-0 text-xs text-slate-500">{summary.project_stage}</span>

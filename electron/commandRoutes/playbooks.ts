@@ -32,9 +32,7 @@ export const playbookRoutes: Record<string, CommandRoute> = {
   playbook_get_current: {
     method: 'GET',
     path: (a) =>
-      `/api/v1/projects/${projectId(a)}/playbook?with_audit=${
-        a.withAudit ?? a.with_audit ?? true
-      }`,
+      `/api/v1/projects/${projectId(a)}/playbook?with_audit=${a.withAudit ?? a.with_audit ?? true}`,
   },
   playbook_bind: {
     method: 'PUT',
