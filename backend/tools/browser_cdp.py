@@ -126,10 +126,29 @@ def _discover_embedded_env() -> Optional[Dict[str, Any]]:
     return {"port": port, "token": token}
 
 
+def _get_user_browser_path() -> Optional[str]:
+    """从设置中读取用户配置的浏览器路径。"""
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        path = SettingsRepository().get("browser_path")
+        if path and Path(path).is_file():
+            return path
+    except Exception as exc:  # noqa: BLE001 — 设置读取失败时回退到平台发现
+        logger.debug("读取用户浏览器路径设置失败: %s", exc)
+    return None
+
+
 def discover_browser_executable() -> Optional[str]:
-    """按 环境变量 → 平台路径 → PATH 顺序找 Chromium / Firefox 系浏览器。"""
+    """按 环境变量 → 用户设置 → 平台能力发现 顺序找 Chromium / Firefox 系浏览器。"""
     if _discover_embedded_env():
         return EMBEDDED_EXECUTABLE
+    env_override = os.environ.get("SAGE_BROWSER_PATH")
+    if env_override and Path(env_override).is_file():
+        return env_override
+    user_override = _get_user_browser_path()
+    if user_override:
+        return user_override
     cap = discover_and_select()
     if cap:
         return cap.executable
