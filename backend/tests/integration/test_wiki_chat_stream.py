@@ -124,12 +124,14 @@ def wiki_project(tmp_path):
 
 @pytest.fixture()
 def patch_wiki_chat(monkeypatch):
-    """统一桩化 make_llm_context + _build_chat_context 的 fixture."""
+    """统一桩化 make_task_llm_context + _build_chat_context 的 fixture."""
     from backend.api import wiki_routes
     from backend.wiki import chat as wiki_chat
 
     def _setup(stub_ctx: LLMContext, citations: List[str] = None):
-        monkeypatch.setattr(wiki_routes, "make_llm_context", lambda **kwargs: stub_ctx)
+        monkeypatch.setattr(
+            wiki_routes, "make_task_llm_context", lambda *a, **kw: stub_ctx
+        )
         monkeypatch.setattr(
             wiki_chat,
             "_build_chat_context",
