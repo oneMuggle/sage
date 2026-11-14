@@ -643,6 +643,78 @@ def test_browser_login_check_status_confirmed():
         assert status == "logged_in"
 
 
+def test_browser_login_check_status_waf_cookie_not_logged_in():
+    """WAF/CDN cookie 不应被误判为登录态（GitHub #3039 修复）。"""
+    session = _fake_session("b-waf")
+
+    def _fake_cdp(sess, method, params=None, target_id=None):
+        if method == "Runtime.evaluate":
+            return {"result": {"value": {
+                "url": "https://platform.minimax.cn/console/plan",
+                "hasPassword": False,
+                "confirmed": False,
+            }}}
+        elif method == "Network.getCookies":
+            return {"cookies": [
+                {"name": "acw_tc", "domain": ".minimax.cn", "value": "xxx"},
+                {"name": "aliyungf_tmd", "domain": ".minimax.cn", "value": "yyy"},
+            ]}
+        return {}
+
+    from unittest.mock import patch
+    with patch.object(browser_tool, "cdp_command", side_effect=_fake_cdp):
+        status = browser_tool._check_login_status(session, "t1", "platform.minimax.cn")
+        assert status == "loading", "WAF-only cookies should not be treated as logged in"
+
+
+def test_browser_login_check_status_cloudflare_waf_not_logged_in():
+    """Cloudflare WAF cookie 不应被误判为登录态。"""
+    session = _fake_session("b-cf")
+
+    def _fake_cdp(sess, method, params=None, target_id=None):
+        if method == "Runtime.evaluate":
+            return {"result": {"value": {
+                "url": "https://example.com/dashboard",
+                "hasPassword": False,
+                "confirmed": False,
+            }}}
+        elif method == "Network.getCookies":
+            return {"cookies": [
+                {"name": "cf_clearance", "domain": ".example.com", "value": "xxx"},
+                {"name": "__cfduid", "domain": ".example.com", "value": "yyy"},
+            ]}
+        return {}
+
+    from unittest.mock import patch
+    with patch.object(browser_tool, "cdp_command", side_effect=_fake_cdp):
+        status = browser_tool._check_login_status(session, "t1", "example.com")
+        assert status == "loading", "Cloudflare WAF cookies should not be treated as logged in"
+
+
+def test_browser_login_check_status_real_cookie_logged_in():
+    """真正的 session cookie 应被判定为已登录。"""
+    session = _fake_session("b-real")
+
+    def _fake_cdp(sess, method, params=None, target_id=None):
+        if method == "Runtime.evaluate":
+            return {"result": {"value": {
+                "url": "https://platform.minimax.cn/console/plan",
+                "hasPassword": False,
+                "confirmed": False,
+            }}}
+        elif method == "Network.getCookies":
+            return {"cookies": [
+                {"name": "acw_tc", "domain": ".minimax.cn", "value": "xxx"},
+                {"name": "session_id", "domain": ".minimax.cn", "value": "abc123"},
+            ]}
+        return {}
+
+    from unittest.mock import patch
+    with patch.object(browser_tool, "cdp_command", side_effect=_fake_cdp):
+        status = browser_tool._check_login_status(session, "t1", "platform.minimax.cn")
+        assert status == "logged_in", "Real session cookie should be logged in"
+
+
 def test_browser_login_execute_success_returns_instruction(monkeypatch):
     """测试 browser_login 成功完成后返回给 LLM 的指令。"""
     tool = browser_tool.BrowserLoginTool()
@@ -653,7 +725,7 @@ def test_browser_login_execute_success_returns_instruction(monkeypatch):
     monkeypatch.setattr(browser_tool, "_wait_for_page_load", lambda *a, **kw: None)
     monkeypatch.setattr(browser_tool, "_check_login_status", lambda *a, **kw: "logged_in")
     monkeypatch.setattr(browser_tool, "cdp_command", lambda *a, **kw: {"targetId": "t-1"})
-    monkeypatch.setattr(tool, "_export_cookies", lambda sess, host, target_id="": ["example.com"])
+    monkeypatch.setattr(tool, "_export_cookies", lambda sess, host, target_id="": (["example.com"], {"total_cookies": 5, "domain_count": 1, "domains": ["example.com"], "auth_candidates": 1}))
 
     result = tool.execute(url="https://example.com/settings")
     assert result.success is True
@@ -721,7 +793,7 @@ def test_export_cookies_saves_storage_state(monkeypatch):
     )
 
     def fake_cdp(session, method, params=None, target_id=None):
-        if method == "Network.getCookies":
+        if method == "Storage.getCookies":
             return {"cookies": [{"name": "SID", "value": "v", "domain": ".example.com", "path": "/"}]}
         if method == "Runtime.evaluate":
             return {"result": {"value": storage}}
@@ -729,8 +801,8 @@ def test_export_cookies_saves_storage_state(monkeypatch):
 
     monkeypatch.setattr(browser_tool, "cdp_command", fake_cdp)
     tool = BrowserLoginTool()
-    saved = tool._export_cookies(_fake_session("login-default"), "www.example.com", "t-1")
-    assert saved == [".example.com"]
+    saved, _summary = tool._export_cookies(_fake_session("login-default"), "www.example.com", "t-1")
+    assert saved == [".example.com", "www.example.com"]
     assert calls
     storage_calls = [c for c in calls if c[0] == "storage"]
     assert storage_calls, "应有 storage_state 调用"
@@ -747,14 +819,14 @@ def test_export_cookies_without_storage_uses_plain_cookie(monkeypatch):
     monkeypatch.setattr(credential_vault, "save_storage_state", lambda *a, **kw: calls.append("storage"))
 
     def fake_cdp(session, method, params=None, target_id=None):
-        if method == "Network.getCookies":
+        if method == "Storage.getCookies":
             return {"cookies": [{"name": "SID", "value": "v", "domain": ".example.com", "path": "/"}]}
         return {"result": {"value": ""}}
 
     monkeypatch.setattr(browser_tool, "cdp_command", fake_cdp)
-    saved = BrowserLoginTool()._export_cookies(_fake_session("login-default"), "www.example.com", "t-1")
-    assert saved == [".example.com"]
-    assert calls == ["cookie"]
+    saved, _summary = BrowserLoginTool()._export_cookies(_fake_session("login-default"), "www.example.com", "t-1")
+    assert saved == [".example.com", "www.example.com"]
+    assert "cookie" in calls
 
 
 def test_export_cookies_filters_other_domains(monkeypatch):
@@ -769,7 +841,7 @@ def test_export_cookies_filters_other_domains(monkeypatch):
     )
 
     def fake_cdp(session, method, params=None, target_id=None):
-        if method == "Network.getCookies":
+        if method == "Storage.getCookies":
             return {
                 "cookies": [
                     {"name": "SID", "value": "v", "domain": ".example.com", "path": "/"},
@@ -779,9 +851,9 @@ def test_export_cookies_filters_other_domains(monkeypatch):
         return {"result": {"value": ""}}
 
     monkeypatch.setattr(browser_tool, "cdp_command", fake_cdp)
-    saved = BrowserLoginTool()._export_cookies(_fake_session("login-default"), "www.example.com", "t-1")
-    assert saved == [".example.com"]
-    assert saved_args == [".example.com"]
+    saved, _summary = BrowserLoginTool()._export_cookies(_fake_session("login-default"), "www.example.com", "t-1")
+    assert saved == [".example.com", "www.example.com"]
+    assert ".example.com" in saved_args
 
 
 def test_browser_login_respects_network_policy(monkeypatch):
@@ -793,4 +865,54 @@ def test_browser_login_respects_network_policy(monkeypatch):
     result = BrowserLoginTool().execute(url="https://example.com/login")
     assert result.success is False
     assert "offline" in result.error
+
+
+def test_browser_login_export_uses_storage_get_cookies(monkeypatch):
+    """P0 回归：_export_cookies 使用浏览器级 Storage.getCookies（不 attach 页面），
+    确保 host-only 跨子域认证 cookie（如 www.example.cn/_token、
+    account.example.cn/_sid）不被漏捕；P1：target_host 档案存全量 cookie 兜底，
+    便于 web_fetch 用 credential_domain=target_host 时注入跨子域认证。
+    """
+    tool = browser_tool.BrowserLoginTool()
+    session = _fake_session("b-export")
+    calls = []
+    saved_per_domain = {}
+
+    def fake_cdp(sess, method, params=None, target_id=None):
+        calls.append(method)
+        if method == "Storage.getCookies":
+            return {
+                "cookies": [
+                    {"name": "acw_tc", "domain": "example.cn", "value": "x",
+                     "path": "/", "httpOnly": True, "secure": False},
+                    {"name": "_token", "domain": "www.example.cn", "value": "y",
+                     "path": "/", "httpOnly": True, "secure": True},
+                    {"name": "_sid", "domain": "account.example.cn", "value": "z",
+                     "path": "/", "httpOnly": True, "secure": True},
+                ]
+            }
+        return {}
+
+    def fake_save(domain, cookies, source_profile="", repo=None):
+        saved_per_domain[domain] = [c.get("name") for c in cookies if isinstance(c, dict)]
+
+    monkeypatch.setattr(browser_tool, "cdp_command", fake_cdp)
+    import backend.tools.credential_vault as _cv
+    monkeypatch.setattr(_cv, "save_credential", fake_save)
+
+    saved, summary = tool._export_cookies(session, "example.cn")
+    # P0 断言：Storage.getCookies 浏览器级，所有域都被捕获
+    assert "Storage.getCookies" in calls, "P0 必须使用浏览器级 Storage.getCookies"
+    assert "Network.getCookies" not in calls, "P0 禁止使用页面级 Network.getCookies"
+    assert "example.cn" in saved
+    assert "www.example.cn" in saved
+    assert "account.example.cn" in saved
+    # P1 断言：target_host 档案存全量 cookie（含跨子域）
+    assert "example.cn" in saved_per_domain
+    assert "_token" in saved_per_domain["example.cn"], "P1: target_host 必须包含 _token"
+    assert "_sid" in saved_per_domain["example.cn"], "P1: target_host 必须包含 _sid"
+    # summary 字段
+    assert summary["total_cookies"] == 3
+    assert summary["domain_count"] == 3
+    assert summary["auth_candidates"] == 2  # _token + _sid
 
