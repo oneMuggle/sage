@@ -1,11 +1,19 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { ChatInput } from '../ChatInput';
 
-const { ocrState } = vi.hoisted(() => ({
+const { ocrState, settingsState, catalogState } = vi.hoisted(() => ({
   ocrState: { available: true, enabled: true },
+  settingsState: {
+    chatModel: { endpointId: 'e1', modelId: 'text-only' },
+    discoveredModels: [{ id: 'text-only', capabilities: ['chat'] }] as {
+      id: string;
+      capabilities: string[];
+    }[],
+  },
+  catalogState: { effective: null as unknown },
 }));
 
 vi.mock('../../../shared/lib/hooks/useFileUpload', () => ({
@@ -23,17 +31,21 @@ vi.mock('../../../shared/lib/hooks/useFileUpload', () => ({
   }),
 }));
 
+vi.mock('../../../entities/model-catalog/api', () => ({
+  getEffective: vi.fn(() => Promise.resolve(catalogState.effective)),
+}));
+
 vi.mock('../../../features/manage-settings/useSettings', () => ({
   useSettings: () => ({
     settings: {
       modelSelections: {
-        chatModel: { endpointId: 'e1', modelId: 'text-only' },
+        chatModel: settingsState.chatModel,
         visionModel: { endpointId: '', modelId: '' },
       },
       endpoints: [
         {
           id: 'e1',
-          discoveredModels: [{ id: 'text-only', capabilities: ['chat'] }],
+          discoveredModels: settingsState.discoveredModels,
         },
       ],
     },
@@ -65,10 +77,16 @@ const renderWithI18n = () =>
     </I18nProvider>,
   );
 
+beforeEach(() => {
+  ocrState.available = true;
+  ocrState.enabled = true;
+  settingsState.chatModel = { endpointId: 'e1', modelId: 'text-only' };
+  settingsState.discoveredModels = [{ id: 'text-only', capabilities: ['chat'] }];
+  catalogState.effective = null;
+});
+
 describe('ChatInput — local OCR fallback', () => {
   it('keeps image upload enabled and shows OCR notice when OCR is available', async () => {
-    ocrState.available = true;
-    ocrState.enabled = true;
     renderWithI18n();
 
     await waitFor(() => {
@@ -79,12 +97,43 @@ describe('ChatInput — local OCR fallback', () => {
 
   it('still warns and disables upload when no OCR is available', async () => {
     ocrState.available = false;
-    ocrState.enabled = true;
     renderWithI18n();
 
     await waitFor(() => {
       expect(screen.getByText(/请配置视觉理解模型/)).toBeInTheDocument();
     });
     expect(screen.queryByTestId('chat-ocr-fallback-banner')).not.toBeInTheDocument();
+  });
+});
+
+describe('ChatInput — vision capability resolution', () => {
+  it('treats catalog-supported model as vision-capable even when discovery missed it', async () => {
+    catalogState.effective = { capabilities: { vision: true } };
+    renderWithI18n();
+
+    await waitFor(() => {
+      expect(screen.queryByText(/请配置视觉理解模型/)).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('chat-ocr-fallback-banner')).not.toBeInTheDocument();
+  });
+
+  it('treats discovery-reported vision as supported', async () => {
+    settingsState.discoveredModels = [{ id: 'text-only', capabilities: ['chat', 'vision'] }];
+    renderWithI18n();
+
+    await waitFor(() => {
+      expect(screen.queryByText(/请配置视觉理解模型/)).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('chat-ocr-fallback-banner')).not.toBeInTheDocument();
+  });
+
+  it('fails open when the model is unknown to both catalog and discovery', async () => {
+    ocrState.available = false;
+    settingsState.discoveredModels = [];
+    renderWithI18n();
+
+    await waitFor(() => {
+      expect(screen.queryByText(/请配置视觉理解模型/)).not.toBeInTheDocument();
+    });
   });
 });
