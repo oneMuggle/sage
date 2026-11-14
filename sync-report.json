@@ -1,21 +1,109 @@
 {
-  "timestamp": "2026-11-09T13:52:03",
+  "timestamp": "2026-11-14T11:34:12",
   "source": "origin/main",
   "target": "origin/release/win7",
   "branch": "sync/win7-main",
-  "status": "CONFLICT（2 个文件需人工处理）",
+  "status": "CONFLICT（23 个文件需人工处理）",
   "conflicts": [
+    {
+      "path": ".github/dependency-audit-policy.json",
+      "cls": "A"
+    },
     {
       "path": "architecture-baseline.json",
       "cls": "A"
     },
     {
-      "path": "backend/main.py",
+      "path": "backend/api/diagnostic_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/office_ai_review_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/data/database.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/design/craft_loader.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/design/lint.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/design/pptx_mapper.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/office/models/_excel.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/office/models/_shared.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/office/models/_word_gen.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/office/pdf_to_word.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/office/word_rule_extract_template.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_chart_embedder.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/base.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/browser_cdp.py",
+      "cls": "A"
+    },
+    {
+      "path": "docs/plans/2026-11-09_startup-performance-optimization.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/plans/2026-11-10_orch-plan-confirm-persistence.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/technical/147-project-workbench-ia.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/technical/README.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/user-manual/README.md",
+      "cls": "A"
+    },
+    {
+      "path": "src/features/office/sidebar/OfficeAiSidebarHost.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/features/office/sidebar/useAiCapabilities.ts",
       "cls": "A"
     }
   ],
-  "auto_resolved": [],
-  "source_sha": "6c0ab03d",
-  "target_sha": "afb537a5",
-  "commits_behind": 3
+  "auto_resolved": [
+    "electron-builder.yml",
+    "package-lock.json",
+    "package.json"
+  ],
+  "source_sha": "5ae7e6b95",
+  "target_sha": "48dd5711f",
+  "commits_behind": 40
 }

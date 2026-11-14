@@ -208,6 +208,18 @@ jobs:
           }
           Write-Host ($manifest | ConvertTo-Json -Compress)
 
+      # 本地 AI 模型（OCR + Embedding）必须在 electron-builder 前就位，
+      # 否则 extraResources 的 resources/models 为空，安装包缺失模型。
+      - name: Restore local AI models cache
+        uses: actions/cache@v4
+        with:
+          path: resources/models
+          key: ${{ runner.os }}-sage-models-${{ hashFiles('scripts/download-models.sh') }}
+
+      - name: Fetch local AI models
+        shell: bash
+        run: bash scripts/download-models.sh
+
       - name: Build frontend + Electron
         run: npm run electron:build
 

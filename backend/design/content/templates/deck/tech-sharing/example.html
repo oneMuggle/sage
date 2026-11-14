@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Building Resilient Microservices</title>
+  <style>
+    /* --- Reset & Base --- */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-snap-type: y mandatory; }
+
+    body {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #e8e8f0;
+      background: #1a1a2e;
+    }
+
+    /* --- Light mode override --- */
+    body.mode-light {
+      color: #1a1a2e;
+      background: #ffffff;
+    }
+    body.mode-light .code-block { background: #f5f5fa; }
+    body.mode-light .line-num { color: #9999aa; }
+
+    /* --- Slide Base --- */
+    section {
+      min-height: 100vh;
+      scroll-snap-align: start;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 4rem 8vw;
+      position: relative;
+    }
+
+    /* --- Typography --- */
+    code, pre {
+      font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    }
+
+    /* --- L01 Title Slide --- */
+    .slide-title {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      text-align: center;
+    }
+    .slide-title h1 {
+      font-size: 3rem;
+      line-height: 1.15;
+      margin-bottom: 1.5rem;
+      max-width: 18ch;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .slide-title .speaker {
+      font-size: 1.35rem;
+      margin-bottom: 0.5rem;
+      color: #a0a0c0;
+    }
+    .slide-title .speaker strong {
+      color: #e8e8f0;
+    }
+    .slide-title .event {
+      font-size: 1rem;
+      color: #6a6a8a;
+    }
+
+    /* --- L04 Code Block Slide --- */
+    .slide-code h2 {
+      font-size: 2rem;
+      margin-bottom: 1.5rem;
+      max-width: 20ch;
+    }
+    .code-block {
+      background: #161616;
+      border-radius: 8px;
+      padding: 1.5rem;
+      overflow: hidden;
+      position: relative;
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    .code-lang {
+      position: absolute;
+      top: 0.75rem;
+      right: 1rem;
+      font-size: 0.75rem;
+      color: #6a6a8a;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .code-block pre {
+      counter-reset: line;
+      overflow-x: auto;
+    }
+    .code-block .line {
+      display: block;
+    }
+    .code-block .line::before {
+      counter-increment: line;
+      content: counter(line);
+      display: inline-block;
+      width: 2.5em;
+      text-align: right;
+      margin-right: 1.25em;
+      color: #6a6a8a;
+      user-select: none;
+    }
+    /* Highlighted line */
+    .code-block .line.hl {
+      background: rgba(97, 175, 239, 0.08);
+      margin: 0 -1.5rem;
+      padding: 0 1.5rem;
+    }
+
+    /* --- Syntax Colors --- */
+    .tok-kw { color: #c678dd; }
+    .tok-str { color: #98c379; }
+    .tok-cmt { color: #5c6370; font-style: italic; }
+    .tok-fn { color: #61afef; }
+    .tok-num { color: #d19a66; }
+    .tok-op { color: #56b6c2; }
+    .tok-punc { color: #abb2bf; }
+
+    /* --- L06 Architecture Slide --- */
+    .slide-arch h2 {
+      font-size: 2rem;
+      margin-bottom: 2rem;
+      max-width: 20ch;
+    }
+    .arch-diagram {
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+      align-items: center;
+    }
+    .arch-layer {
+      display: flex;
+      gap: 1.5rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .arch-box {
+      border: 2px solid #4a4e8c;
+      border-radius: 8px;
+      padding: 1rem 1.5rem;
+      min-width: 140px;
+      text-align: center;
+      background: rgba(74, 78, 140, 0.08);
+    }
+    .arch-box .label {
+      font-weight: 600;
+      font-size: 1rem;
+      margin-bottom: 0.25rem;
+    }
+    .arch-box .sub {
+      font-size: 0.8rem;
+      color: #8888aa;
+    }
+    .arch-arrow {
+      width: 2px;
+      height: 2rem;
+      background: #4a4e8c;
+      position: relative;
+    }
+    .arch-arrow::after {
+      content: "";
+      position: absolute;
+      bottom: -4px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 8px solid #4a4e8c;
+    }
+    .arch-arrow-horiz {
+      width: 3rem;
+      height: 2px;
+      background: #4a4e8c;
+      align-self: center;
+      position: relative;
+    }
+    .arch-arrow-horiz::after {
+      content: "";
+      position: absolute;
+      right: -4px;
+      top: 50%;
+      transform: translateY(-50%);
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      border-left: 8px solid #4a4e8c;
+    }
+
+    /* --- Slide Number --- */
+    .slide-num {
+      position: absolute;
+      bottom: 1.5rem;
+      right: 2rem;
+      font-size: 0.85rem;
+      color: #6a6a8a;
+    }
+
+    /* --- Responsive --- */
+    @media (max-width: 640px) {
+      section { padding: 2rem 1.5rem; }
+      .slide-title h1 { font-size: 2rem; }
+      .slide-code h2,
+      .slide-arch h2 { font-size: 1.5rem; }
+      .code-block { font-size: 0.8rem; padding: 1rem; }
+      .code-block .line::before { width: 2em; margin-right: 0.75em; }
+    }
+
+    /* --- Print --- */
+    @media print {
+      html { scroll-snap-type: none; }
+      section {
+        min-height: auto;
+        page-break-after: always;
+        border: 1px solid #ccc;
+      }
+    }
+  </style>
+</head>
+<body class="mode-dark">
+
+  <!-- 1. Title Slide (L01) -->
+  <section class="slide-title">
+    <h1>Building Resilient Microservices with Circuit Breakers</h1>
+    <p class="speaker"><strong>Ada Chen</strong> &middot; Platform Engineering</p>
+    <p class="event">Internal Tech Sharing &middot; November 2026</p>
+    <span class="slide-num">1 / 3</span>
+  </section>
+
+  <!-- 2. Code Block Slide (L04) -->
+  <section class="slide-code">
+    <h2>Circuit breaker in 30 lines</h2>
+    <div class="code-block">
+      <span class="code-lang">Python</span>
+      <pre><span class="line"><span class="tok-kw">class</span> <span class="tok-fn">CircuitBreaker</span><span class="tok-punc">:</span></span>
+<span class="line">    <span class="tok-str">"""Simple circuit breaker with three states."""</span></span>
+<span class="line">    CLOSED<span class="tok-op"> = </span><span class="tok-str">"closed"</span>      <span class="tok-cmt"># normal operation</span></span>
+<span class="line">    OPEN<span class="tok-op"> = </span><span class="tok-str">"open"</span>          <span class="tok-cmt"># failing, reject calls</span></span>
+<span class="line">    HALF_OPEN<span class="tok-op"> = </span><span class="tok-str">"half_open"</span> <span class="tok-cmt"># probing for recovery</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tok-kw">def</span> <span class="tok-fn">__init__</span><span class="tok-punc">(</span>self<span class="tok-punc">,</span> threshold<span class="tok-op">=</span><span class="tok-num">5</span><span class="tok-punc">,</span> timeout<span class="tok-op">=</span><span class="tok-num">60</span><span class="tok-punc">)</span><span class="tok-punc">:</span></span>
+<span class="line">        self<span class="tok-punc">.</span>state<span class="tok-op"> = </span>self<span class="tok-punc">.</span>CLOSED</span>
+<span class="line">        self<span class="tok-punc">.</span>failure_count<span class="tok-op"> = </span><span class="tok-num">0</span></span>
+<span class="line hl">        self<span class="tok-punc">.</span>threshold<span class="tok-op"> = </span>threshold  <span class="tok-cmt"># failures before open</span></span>
+<span class="line hl">        self<span class="tok-punc">.</span>timeout<span class="tok-op"> = </span>timeout      <span class="tok-cmt"># seconds before retry</span></span>
+<span class="line"></span>
+<span class="line">    <span class="tok-kw">def</span> <span class="tok-fn">call</span><span class="tok-punc">(</span>self<span class="tok-punc">,</span> func<span class="tok-punc">,</span> <span class="tok-op">*</span>args<span class="tok-punc">,</span> <span class="tok-op">**</span>kwargs<span class="tok-punc">)</span><span class="tok-punc">:</span></span>
+<span class="line">        <span class="tok-kw">if</span> self<span class="tok-punc">.</span>state<span class="tok-op"> == </span>self<span class="tok-punc">.</span>OPEN<span class="tok-punc">:</span></span>
+<span class="line">            <span class="tok-kw">raise</span> <span class="tok-fn">CircuitOpenError</span><span class="tok-punc">()</span></span>
+<span class="line">        <span class="tok-kw">try</span><span class="tok-punc">:</span></span>
+<span class="line">            <span class="tok-kw">return</span> <span class="tok-fn">func</span><span class="tok-punc">(</span><span class="tok-op">*</span>args<span class="tok-punc">,</span> <span class="tok-op">**</span>kwargs<span class="tok-punc">)</span></span>
+<span class="line">        <span class="tok-kw">except</span> <span class="tok-fn">Exception</span> <span class="tok-kw">as</span> e<span class="tok-punc">:</span></span>
+<span class="line">            self<span class="tok-punc">.</span><span class="tok-fn">_record_failure</span><span class="tok-punc">()</span></span>
+<span class="line">            <span class="tok-kw">raise</span></span></pre>
+    </div>
+    <span class="slide-num">2 / 3</span>
+  </section>
+
+  <!-- 3. Architecture Diagram Slide (L06) -->
+  <section class="slide-arch">
+    <h2>Where the circuit breaker sits</h2>
+    <div class="arch-diagram">
+      <!-- Client Layer -->
+      <div class="arch-layer">
+        <div class="arch-box">
+          <div class="label">API Gateway</div>
+          <div class="sub">Kong / Nginx</div>
+        </div>
+      </div>
+
+      <div class="arch-arrow"></div>
+
+      <!-- Service Layer -->
+      <div class="arch-layer">
+        <div class="arch-box">
+          <div class="label">Order Service</div>
+          <div class="sub">with breaker</div>
+        </div>
+        <div class="arch-arrow-horiz"></div>
+        <div class="arch-box">
+          <div class="label">Payment Service</div>
+          <div class="sub">with breaker</div>
+        </div>
+        <div class="arch-arrow-horiz"></div>
+        <div class="arch-box">
+          <div class="label">Inventory Service</div>
+          <div class="sub">with breaker</div>
+        </div>
+      </div>
+
+      <div class="arch-arrow"></div>
+
+      <!-- Storage Layer -->
+      <div class="arch-layer">
+        <div class="arch-box">
+          <div class="label">PostgreSQL</div>
+          <div class="sub">Primary + Replica</div>
+        </div>
+        <div class="arch-box">
+          <div class="label">Redis</div>
+          <div class="sub">Cache / Pub-Sub</div>
+        </div>
+      </div>
+    </div>
+    <span class="slide-num">3 / 3</span>
+  </section>
+
+  <script>
+    (function () {
+      var slides = document.querySelectorAll('section');
+      var total = slides.length;
+      var current = 0;
+
+      function goTo(index) {
+        if (index < 0 || index >= total) return;
+        current = index;
+        slides[current].scrollIntoView({ behavior: 'smooth' });
+        if (history.replaceState) {
+          history.replaceState(null, '', '#slide-' + (current + 1));
+        }
+      }
+
+      // Keyboard navigation
+      document.addEventListener('keydown', function (e) {
+        switch (e.key) {
+          case 'ArrowDown':
+          case 'ArrowRight':
+          case 'PageDown':
+          case ' ':
+            e.preventDefault();
+            goTo(current + 1);
+            break;
+          case 'ArrowUp':
+          case 'ArrowLeft':
+          case 'PageUp':
+            e.preventDefault();
+            goTo(current - 1);
+            break;
+          case 'Home':
+            e.preventDefault();
+            goTo(0);
+            break;
+          case 'End':
+            e.preventDefault();
+            goTo(total - 1);
+            break;
+        }
+      });
+
+      // Hash sync on load
+      var hash = window.location.hash;
+      if (hash && hash.indexOf('#slide-') === 0) {
+        var n = parseInt(hash.replace('#slide-', ''), 10);
+        if (n >= 1 && n <= total) {
+          current = n - 1;
+          slides[current].scrollIntoView();
+        }
+      }
+
+      // Update current index on scroll
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            var idx = Array.prototype.indexOf.call(slides, entry.target);
+            if (idx >= 0) {
+              current = idx;
+              if (history.replaceState) {
+                history.replaceState(null, '', '#slide-' + (current + 1));
+              }
+            }
+          }
+        });
+      }, { threshold: 0.5 });
+
+      slides.forEach(function (s) { observer.observe(s); });
+    })();
+  </script>
+</body>
+</html>
