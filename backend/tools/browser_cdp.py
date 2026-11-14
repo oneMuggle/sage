@@ -142,26 +142,30 @@ def _get_user_browser_path() -> Optional[str]:
     return None
 
 
-def discover_browser_executable() -> Optional[str]:
+def discover_browser_executable() -> Optional[str]:  # noqa: PLR0911 — 浏览器发现逻辑需要多级 fallback
     """按 环境变量 → 用户设置 → 平台路径 → PATH 顺序找 Chromium 系浏览器。"""
     if _discover_embedded_env():
         return EMBEDDED_EXECUTABLE
+    # 环境变量覆盖
     env_override = os.environ.get("SAGE_BROWSER_PATH")
     if env_override and Path(env_override).is_file():
         return env_override
+    # 用户设置覆盖
     user_override = _get_user_browser_path()
     if user_override:
         return user_override
+    # Windows 平台路径
     if os.name == "nt":
         for candidate in _windows_candidates():
             if candidate.is_file():
                 return str(candidate)
         return None
-    # POSIX：Linux/WSL 走 PATH，macOS 走应用包路径
+    # POSIX：Linux/WSL 走 PATH
     for name in _LINUX_CANDIDATES:
         found = shutil.which(name)
         if found:
             return found
+    # macOS 应用包路径
     return _darwin_candidates()
 
 

@@ -260,7 +260,6 @@ def _discover_all_browsers() -> list[DiscoveredBrowser]:
     from backend.tools.browser_cdp import (
         _LINUX_CANDIDATES,
         _windows_candidates,
-        _darwin_candidates,
     )
 
     found: list[DiscoveredBrowser] = []
@@ -273,7 +272,7 @@ def _discover_all_browsers() -> list[DiscoveredBrowser]:
                 [exe_path, "--version"],
                 capture_output=True,
                 text=True,
-                timeout=5,
+                timeout=5, check=False,
             )
             output = result.stdout.strip()
             # 提取版本号（如 "Google Chrome 120.0.6099.109" -> "120"）
@@ -334,11 +333,11 @@ def _discover_all_browsers() -> list[DiscoveredBrowser]:
 @router.get("/browser/list", response_model=BrowserListResponse)
 def get_browser_list() -> BrowserListResponse:
     """获取系统中所有可用的浏览器列表（设置页浏览器选择用）。"""
+    from backend.data.settings_repo import SettingsRepository
     from backend.tools.browser_cdp import (
         _discover_embedded_env,
         discover_browser_executable,
     )
-    from backend.data.settings_repo import SettingsRepository
 
     # 获取所有发现的浏览器
     browsers = _discover_all_browsers()
@@ -374,8 +373,9 @@ class SetBrowserPathRequest(BaseModel):
 @router.put("/browser/path")
 def set_browser_path(req: SetBrowserPathRequest) -> dict:
     """设置用户首选浏览器路径。"""
-    from backend.data.settings_repo import SettingsRepository
     from pathlib import Path
+
+    from backend.data.settings_repo import SettingsRepository
 
     path = req.path.strip()
 
