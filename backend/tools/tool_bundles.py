@@ -45,6 +45,7 @@ from .checkpoint_tool import CheckpointCreateTool, CheckpointListTool, Checkpoin
 from .codebase_search_tool import CodebaseSearchTool
 from .commit_message_tool import GitCommitMessageTool
 from .config_tool import DiagnoseSageConfigTool, ReadSageConfigTool, UpdateSageConfigTool
+from .design_embed_chart_tool import DesignEmbedChartTool
 from .design_export_tool import DesignExportTool
 from .design_generate_tool import DesignGenerateTool
 from .design_iterate_tool import DesignIterateTool
@@ -455,6 +456,7 @@ def _install_design(ctx: ToolInstallContext) -> None:
     ctx.registry.register(DesignGenerateTool(policy=policy))
     ctx.registry.register(DesignIterateTool(policy=policy))
     ctx.registry.register(DesignExportTool(policy=policy))
+    ctx.registry.register(DesignEmbedChartTool(policy=policy))
 
 
 #: 内置工具的完整清单。**顺序即注册顺序**，与 R80 之前的平铺实现逐项对齐。

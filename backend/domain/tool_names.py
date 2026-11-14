@@ -236,7 +236,7 @@ BACKGROUND_TASK_TOOLS = ("wake_on_background", "wait_background")
 # （完成/删除同样改 SQLite）。ToolPolicy 层会按风险分级处理。
 TODO_TOOLS = ("add_todo", "list_todos", "update_todo", "complete_todo", "delete_todo")
 
-# Design Studio 工具面（2026-10-13 OpenDesign 集成 Task 13）：五件套。
+# Design Studio 工具面（2026-10-13 OpenDesign 集成 Task 13）：六件套。
 # 两个目录查询件（list_systems / list_templates）为 READ；三个产件
 # （generate / iterate / export）为 WRITE_LOCAL —— generate/iterate 写
 # design_projects + design_artifacts 两张 SQLite 表并在工作区落 HTML；
@@ -251,6 +251,7 @@ DESIGN_TOOLS = (
     "design_generate",
     "design_iterate",
     "design_export",
+    "design_embed_chart",
 )
 
 # 自透明三件套（2026-11-05 feat/agent-self-transparency M1）：

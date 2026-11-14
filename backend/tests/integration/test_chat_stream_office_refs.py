@@ -85,6 +85,19 @@ def _registry_size() -> int:
     return len(app.state.streams._entries) if hasattr(app.state, "streams") else 0
 
 
+def _clear_registry() -> None:
+    if hasattr(app.state, "streams"):
+        app.state.streams._entries.clear()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_stream_registry():
+    """Clear StreamRegistry before each test for isolation."""
+    _clear_registry()
+    yield
+    _clear_registry()
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Tests
 # ──────────────────────────────────────────────────────────────────────

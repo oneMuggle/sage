@@ -1463,6 +1463,20 @@
     {
       "owner": "Sage maintainers",
       "review_by": "2027-01-01",
+      "source": "pip",
+      "package": "opentelemetry-api",
+      "package_version": "1.27.0",
+      "advisory": "GHSA-mf5v-w3w3-f6cg",
+      "advisory_url": "https://osv.dev/vulnerability/GHSA-mf5v-w3w3-f6cg",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "telemetry context propagation only; no untrusted external trace headers accepted on loopback local IPC",
+      "controls": "opentelemetry-api 1.27.0 is the last Python 3.8-compatible release on PyPI; fixes require Python >=3.9; local loopback-only backend bindings and quarterly review through Win7 LTS EOL 2027-12-13",
+      "exception": "temporary exception pending Win7 LTS EOL or upstream backport to a Py3.8-compatible release",
+      "notes": "py38-ceiling: second CVE for opentelemetry-api 1.27.0; same mitigation as GHSA-xcq7-p3pf-p88h."
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
       "source": "npm",
       "package": "dompurify",
       "package_version": "3.4.15",

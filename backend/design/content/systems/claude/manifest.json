@@ -1,0 +1,11 @@
+{
+  "id": "claude",
+  "name": "Claude (Anthropic)",
+  "category": "ai-llm",
+  "description": "Bundled OpenDesign package for Claude (Anthropic), derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
+  "tags": [
+    "claude",
+    "ai"
+  ],
+  "source": "open-design (Apache 2.0)"
+}

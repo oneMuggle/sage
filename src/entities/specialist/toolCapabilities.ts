@@ -185,6 +185,7 @@ export const TOOL_CAPABILITY_PACKS: readonly ToolCapabilityPack[] = [
       'design_generate',
       'design_iterate',
       'design_export',
+      'design_embed_chart',
     ],
     requiresMode: 'workspace_write',
   },
