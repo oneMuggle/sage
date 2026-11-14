@@ -12,6 +12,7 @@ from typing import List, Optional
 
 from backend.data.design_repo import DesignRepo
 from backend.design.async_bridge import run_sync
+from backend.design.craft_loader import CraftRuleRegistry
 from backend.design.errors import (
     DesignProjectNotFoundError,
     DesignTemplateKindMismatchError,
