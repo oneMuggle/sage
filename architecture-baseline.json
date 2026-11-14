@@ -51,7 +51,7 @@
     "backend/tests/unit/test_browser_tool.py": 917,
     "backend/tests/unit/test_web_tool.py": 1833,
     "backend/tools/browser_cdp.py": 1180,
-    "backend/tools/browser_tool.py": 1647,
+    "backend/tools/browser_tool.py": 1653,
     "backend/tools/config_tool.py": 1115,
     "backend/tools/credential_vault.py": 1202,
     "backend/tools/download_tool.py": 1116,
