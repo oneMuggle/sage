@@ -732,8 +732,9 @@ def test_export_cookies_saves_storage_state(monkeypatch):
     saved = tool._export_cookies(_fake_session("login-default"), "www.example.com", "t-1")
     assert saved == [".example.com"]
     assert calls
-    assert calls[-1][0] == "storage"
-    assert calls[-1][1][2] == [
+    storage_calls = [c for c in calls if c[0] == "storage"]
+    assert storage_calls, "应有 storage_state 调用"
+    assert storage_calls[0][1][2] == [
         {"origin": "https://www.example.com", "localStorage": {"cnki_user_token": "tok"}}
     ]
 

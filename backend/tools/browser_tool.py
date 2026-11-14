@@ -1432,11 +1432,17 @@ class BrowserLoginTool(BaseTool):
         allowed_hosts = [target_host] + [h for h in page_hosts if h]
 
         def _allowed(cookie_domain: str) -> bool:
-            return any(
-                cookie_domain_matches(host, cookie_domain)
-                for host in allowed_hosts
-                if host
-            )
+            bare = (cookie_domain or "").strip().lower().lstrip(".")
+            for host in allowed_hosts:
+                if not host:
+                    continue
+                # 标准 RFC 6265：cookie 域覆盖 host（如 .example.com 覆盖 www.example.com）
+                if cookie_domain_matches(host, cookie_domain):
+                    return True
+                # 跨子域认证：cookie 域是 host 的子域（如 www.example.cn 属于 example.cn 站点）
+                if bare and (bare == host or bare.endswith("." + host)):
+                    return True
+            return False
 
         # 按 domain 分组（只保留归属目标站的 cookie，避免把持久 profile 里
         # 其他站点的登录态一并导出）

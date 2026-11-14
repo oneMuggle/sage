@@ -114,6 +114,14 @@ extraResources:
       - "technical/139-specialist-dm-group-chat.md"
       - "technical/148-sage-guide-specialist.md"
 
+  # 本地 AI 模型（OCR + Embedding）—— 由 scripts/download-models.sh 下载。
+  # 打包态后端通过 SAGE_BUNDLED_MODELS_DIR 环境变量定位；用户如在
+  # userData/models/ 放置了更新版本则优先使用用户版本。
+  - from: "resources/models"
+    to: "models"
+    filter:
+      - "**/*"
+
   # MSYS2 bash runtime for Win7 (bundled by scripts/bundle-git-bash.ps1).
   # shell_resolver._find_windows_bash() third-priority candidate falls back
   # to this path when system Git bash is absent (Win7 default).
@@ -141,8 +149,6 @@ extraResources:
   # UI displays this path.  No build step: plain JS + manifest.
   - from: "extension/agent-bridge"
     to: "extension/agent-bridge"
-    filter:
-      - "**/*"
 
 # Win7 + Win10/11 NSIS installer (electron-builder 24.x)
 win:
