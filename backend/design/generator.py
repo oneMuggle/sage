@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from sage_core import Message, Role
 
 from backend.design.artifact_parser import ArtifactParser, ParsedArtifact
+from backend.design.craft_loader import CraftRule
 from backend.design.errors import DesignGenerationError
 from backend.design.models import DesignSystem, DesignTemplate
 from backend.design.prompt_composer import PromptComposer
@@ -35,6 +36,7 @@ class DesignGenerator:
         template: DesignTemplate,
         brief: str,
         iteration_context: Optional[dict] = None,
+        craft_rules: Optional[List[CraftRule]] = None,
     ) -> GenerationResult:
         """Generate a design artifact.
 
@@ -45,6 +47,7 @@ class DesignGenerator:
             template=template,
             brief=brief,
             iteration_context=iteration_context,
+            craft_rules=craft_rules,
         )
 
         messages = [Message(role=Role.USER, content=prompt)]

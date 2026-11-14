@@ -8,7 +8,11 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+<<<<<<< HEAD
 from typing import TYPE_CHECKING, List, Optional
+=======
+from typing import TYPE_CHECKING, Optional
+>>>>>>> origin/main
 
 if TYPE_CHECKING:
     from pptx.presentation import Presentation
@@ -75,8 +79,13 @@ class SlideContent:
     def __init__(self) -> None:
         self.title: Optional[str] = None
         self.subtitle: Optional[str] = None
+<<<<<<< HEAD
         self.content_lines: List[str] = []
         self.image_paths: List[str] = []
+=======
+        self.content_lines: list[str] = []
+        self.image_paths: list[str] = []
+>>>>>>> origin/main
 
     def to_dict(self) -> dict:
         return {
@@ -97,9 +106,15 @@ class HtmlToPptxMapper:
                 "Install with: pip install python-pptx"
             )
 
+<<<<<<< HEAD
     def parse_html(self, html: str) -> List[SlideContent]:
         """Parse HTML and extract slide content."""
         slides: List[SlideContent] = []
+=======
+    def parse_html(self, html: str) -> list[SlideContent]:
+        """Parse HTML and extract slide content."""
+        slides: list[SlideContent] = []
+>>>>>>> origin/main
 
         for match in _SLIDE_SECTION_PATTERN.finditer(html):
             section_html = match.group(1)

@@ -3,6 +3,8 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useInRouterContext, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { getEffective } from '../../entities/model-catalog/api';
+import type { EffectiveModel } from '../../entities/model-catalog/types';
 import { resolveEndpoint } from '../../entities/setting/types';
 import { useBtwCommand } from '../../features/chat';
 // 对标 S3: 直接从源文件导入（而非 barrel），既有 Chat 页面测试整体 mock 了
@@ -22,6 +24,7 @@ import { COMPOSER_DROP_EVENT } from '../../shared/lib/hooks/useGlobalFileDrop';
 import { useInputHistory } from '../../shared/lib/hooks/useInputHistory';
 import { useSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { useI18n } from '../../shared/lib/i18n';
+import { resolveVisionSupport } from '../../shared/lib/visionCapability';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 
 import { ImageOcrPreview } from './ImageOcrPreview';
@@ -153,14 +156,33 @@ function ChatInputInner({
   }, []);
 
   // Task 9 (2026-10-15): vision 可用性检测
-  // 从 discoveredModels 查找当前 chatModel 的 capabilities。
-  // 端点未探测时 capabilities 未知 —— fail-safe 取「支持 vision」，与后端
-  // 「unknown → vision-supported」策略一致，避免能力探测失败就禁掉图片上传。
+  // 分层权威源：model-catalog getEffective > discoveredModels 启发式 > 未知。
+  // 「未知」与「支持」同等放行（对齐后端 agent.py「unknown → vision-supported」
+  // fail-safe），只有明确的 unsupported 才显示警告 / 禁用上传。
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
-  const chatModelCaps = chatEndpoint?.discoveredModels?.find(
-    (m) => m.id === settings.modelSelections.chatModel.modelId,
-  )?.capabilities ?? ['chat', 'vision'];
-  const supportsVision = chatModelCaps.includes('vision');
+  const chatModelId = settings.modelSelections.chatModel.modelId;
+  const catalogKey = `${chatEndpoint?.id ?? ''}:${chatModelId ?? ''}`;
+  const [catalogEntry, setCatalogEntry] = useState<{
+    key: string;
+    model: EffectiveModel | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!chatEndpoint?.id || !chatModelId) return;
+    let cancelled = false;
+    getEffective(chatEndpoint.id, chatModelId)
+      .then((model) => {
+        if (!cancelled) setCatalogEntry({ key: catalogKey, model });
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogEntry({ key: catalogKey, model: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [catalogKey, chatEndpoint?.id, chatModelId]);
+  const effectiveCatalog = catalogEntry?.key === catalogKey ? catalogEntry.model : null;
+  const supportsVision =
+    resolveVisionSupport(chatEndpoint, chatModelId, effectiveCatalog) !== 'unsupported';
   const visionModelConfigured = Boolean(settings.modelSelections.visionModel?.modelId);
   const ocrAvailable = Boolean(ocrCaps?.enabled && ocrCaps?.available);
   const preferLocalOcr = Boolean(ocrCaps?.prefer_local_for_images);

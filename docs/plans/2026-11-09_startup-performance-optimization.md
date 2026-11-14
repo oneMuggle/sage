@@ -381,6 +381,7 @@ pyinstaller --onefile --name sage-backend backend/main.py
 **遗留**：热缓存下 5.0–5.2s 已达 Phase 3 目标区间（3–5s）上沿；冷缓存 Electron spawn
 路径（基线 34.5s）的端到端降幅需在 Phase 4/5 完成后整体复测。
 
+<<<<<<< HEAD
 ### Phase 3 在 release/win7 的落地（2026-11-10）
 
 上节数据为 main 分支（Python 3.10 / pydantic 2.x）实测。Phase 3 已 cherry-pick 到
@@ -393,6 +394,38 @@ pyinstaller --onefile --name sage-backend backend/main.py
 
 win7 侧 wall-clock 收益不可见的原因：`-X importtime` 显示 win7 的导入链被**路由层**
 主导，而非 `backend.tools`：
+=======
+### Phase 3 win7 移植（2026-11-10，release/win7）
+
+main 的 Phase 3 squash 合并（`181bd5b7c`，PR #2981）已 cherry-pick 到 `release/win7`：
+分支 `cherry-pick/win7-python-import-optimize`，commit `89fbef0e3`，**PR #2985**。
+
+**cherry-pick 冲突（3 处）**：
+
+| 文件 | 解决方式 |
+| --- | --- |
+| `backend/data/database.py` | 保留 win7 独有的 `_migrate_memory_traceability`，同时接受 main 重命名的 `warm_jieba` 公开名 |
+| `backend/tools/__init__.py` | 取 main 完整字母序 `__all__`（104 个 tool 类名）；win7 侧冲突条目均为重复，已在 main 列表中 |
+| `architecture-baseline.json` | 取 win7 数字（3004/1814），Phase 3 后更新为 3022/1824（+18/+10，与 main 增长模式一致） |
+
+**py38 适配**：模块级注解改用 `typing.Dict`/`List`/`Optional`（py38 会在定义时求值注解，
+PEP 585 的 `dict[str, str]` 直接 TypeError）。
+
+**回归验证**：
+
+| 检查 | 结果 |
+| --- | --- |
+| `scripts/check_py38_compat.py` | 0 violations |
+| `ruff check backend/` | All checks passed |
+| 104 个 tool 导出逐一解析 | 全部可解析（`getattr(backend.tools, name)`） |
+| 单元 + 集成测试（py38） | 1884 + 134 + 130 = **2148 passed** |
+
+**效果**：win7 侧 `import backend` 完整链路 `sys.modules` **2485 → 2382（−103，−4%）**。
+
+**win7 侧 wall-clock 收益不可见**（与 main 不同）：三轮交替测量噪声区间 7.86s–21.78s
+（机器 load average 主导，绝对值不可跨窗口比较）；`-X importtime` 显示 win7 的导入链
+被路由层主导，而非 `backend.tools`：
+>>>>>>> origin/main
 
 | win7 主导项 | 累计耗时 |
 | --- | --- |
@@ -403,6 +436,7 @@ win7 侧 wall-clock 收益不可见的原因：`-X importtime` 显示 win7 的�
 | `backend.office.excel` → `pandas` | 698ms |
 
 `backend.tools` 惰性化收益被稀释在更重的 router 链里。**Phase 3 在 win7 上的价值定位为
+<<<<<<< HEAD
 代码结构优化（惰性导入）+ 为后续 router 层惰性化铺路**，端到端时间收益待 router 层
 改造后复测。
 
@@ -419,6 +453,9 @@ win7 侧 wall-clock 收益不可见的原因：`-X importtime` 显示 win7 的�
 
 **win7 侧回归验证**：py38 gate 0 violations / ruff clean / 104 个 tool 导出逐一可解析 /
 1884 + 134 + 130 = **2148 passed**。
+=======
+代码结构优化（惰性导入）+ 为 router 层惰性化铺路**，端到端时间收益待 router 层改造后复测。
+>>>>>>> origin/main
 
 ### Phase 3.5: 惰性化 docx/lxml 导入（2026-11-10）
 
