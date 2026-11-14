@@ -1041,6 +1041,20 @@
     {
         "owner": "Sage maintainers",
         "review_by": "2027-01-01",
+        "source": "pip",
+        "package": "opentelemetry-api",
+        "package_version": "1.27.0",
+        "advisory": "GHSA-mf5v-w3w3-f6cg",
+        "advisory_url": "https://osv.dev/vulnerability/GHSA-mf5v-w3w3-f6cg",
+        "affected_path": "main Python 3.11 production path",
+        "actual_reachability": "transitive dependency via chromadb telemetry instrumentation; Sage disables anonymized telemetry and does not expose untrusted OpenTelemetry context propagation headers",
+        "controls": "Chroma telemetry disabled in local embedded client; no external OTLP collector or untrusted W3C traceparent/baggage ingestion exposed; scheduled lockfile bump in next dependency maintenance window",
+        "exception": "temporary exception pending transitive opentelemetry-api pin bump in requirements.lock",
+        "notes": "main-py311: GHSA-mf5v-w3w3-f6cg 与 GHSA-xcq7-p3pf-p88h 同属 opentelemetry-api 1.27.0 的并列告警，修复需协同升级 OTel 四件套（api/sdk/exporter/proto），与 PYSEC-2026-1805 (protobuf) 一并追踪，待 OTel 单独升级时一并修复。"
+    },
+    {
+        "owner": "Sage maintainers",
+        "review_by": "2027-01-01",
         "source": "npm",
         "package": "dompurify",
         "package_version": "3.4.15",

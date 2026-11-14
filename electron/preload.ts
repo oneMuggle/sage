@@ -255,6 +255,10 @@ const electronAPI = {
     downloadOcr: () => ipcRenderer.invoke('models:ocr:download', {}),
     cancelOcr: () => ipcRenderer.invoke('models:ocr:cancel', 'rapidocr'),
     resetOcr: () => ipcRenderer.invoke('models:ocr:reset'),
+    /** 从本地磁盘导入嵌入模型（打开目录选择对话框）。 */
+    importLocal: () => ipcRenderer.invoke('models:embedder:import-local'),
+    /** 从本地磁盘导入 OCR 模型（打开目录选择对话框）。 */
+    importLocalOcr: () => ipcRenderer.invoke('models:ocr:import-local'),
   },
 
   /**
