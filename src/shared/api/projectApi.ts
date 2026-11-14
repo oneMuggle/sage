@@ -480,6 +480,13 @@ export type {
   GitInitResult,
 };
 
+// M1 (2026-11-14): 项目健康检查类型 re-export
+export type {
+  OverdueMilestone,
+  ProjectHealthSummary,
+  ProjectsHealthCheckResult,
+} from './projectApiTypes';
+
 export const projectApi = {
   /** 最近项目清单（按 last_opened_at 新→旧）。
    *
@@ -1324,6 +1331,33 @@ export const projectApi = {
         milestoneId,
       });
       return response.removed;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  // ── 项目健康检查 M1 (2026-11-14) ────────────────────────────────────────
+
+  /** 单项目健康摘要（同时向通知队列推一条告警，便于桌面通知消费）。 */
+  async checkProjectHealth(
+    projectId: string,
+  ): Promise<import('./projectApiTypes').ProjectHealthSummary> {
+    try {
+      return await invoke<import('./projectApiTypes').ProjectHealthSummary>('projects_health_check', {
+        projectId,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 全量活跃项目健康检查（不推通知，仅返回摘要列表）。 */
+  async listProjectsHealth(): Promise<import('./projectApiTypes').ProjectsHealthCheckResult> {
+    try {
+      return await invoke<import('./projectApiTypes').ProjectsHealthCheckResult>(
+        'projects_list_health_check',
+        {},
+      );
     } catch (error) {
       throw handleApiError(error);
     }

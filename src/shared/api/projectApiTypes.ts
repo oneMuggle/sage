@@ -138,6 +138,36 @@ export interface UpdateMilestonePayload {
   sortOrder?: number;
 }
 
+/** 2026-11-14 M1: 逾期里程碑（项目健康检查返回） */
+export interface OverdueMilestone {
+  milestone_id: string;
+  title: string;
+  due_date: string;
+  days_overdue: number;
+  status: string;
+}
+
+/** 2026-11-14 M1: 单项目健康摘要 */
+export interface ProjectHealthSummary {
+  project_id: string;
+  project_name: string;
+  severity: 'ok' | 'warning' | 'critical';
+  project_stage: string;
+  total_milestones: number;
+  completed_milestones: number;
+  in_progress_milestones: number;
+  pending_milestones: number;
+  blocked_milestones: number;
+  overdue: OverdueMilestone[];
+}
+
+/** 2026-11-14 M1: 全量项目健康检查响应 */
+export interface ProjectsHealthCheckResult {
+  checked: number;
+  severities: { critical: number; warning: number; ok: number };
+  summaries: ProjectHealthSummary[];
+}
+
 /** AI 任务分解：预览里程碑节点（可嵌套） */
 export interface PreviewMilestoneNode {
   title: string;

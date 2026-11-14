@@ -286,6 +286,74 @@ export interface PlaybookAuthorPreview {
   source: string;
 }
 
+export type PlaybookConversationRole = 'user' | 'assistant' | 'system';
+
+export type PlaybookConversationStatus = 'active' | 'committed' | 'archived';
+
+export interface PlaybookConversationMessage {
+  role: PlaybookConversationRole;
+  content: string;
+  turn_index: number;
+  playbook_snapshot: PlaybookSpec | null;
+  created_at: number;
+}
+
+export interface PlaybookConversation {
+  id: string;
+  project_id: string;
+  messages: PlaybookConversationMessage[];
+  current_spec: PlaybookSpec | null;
+  status: PlaybookConversationStatus;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface PlaybookConversationTurn {
+  conversation: PlaybookConversation;
+  reply: string;
+  playbook: PlaybookSpec | null;
+  llm_available: boolean;
+  source: string;
+  turn_index: number;
+}
+
+export interface PlaybookConversationRollback {
+  conversation: PlaybookConversation;
+  playbook: PlaybookSpec | null;
+}
+
+export interface PlaybookBoundSnapshot {
+  id: string;
+  project_id: string;
+  version: number;
+  source: string;
+  parent_id: string | null;
+  spec: PlaybookSpec;
+  spec_hash: string;
+  created_at: number;
+  active: boolean;
+}
+
+export interface PlaybookConversationCommit {
+  snapshot: PlaybookBoundSnapshot;
+  conversation: PlaybookConversation;
+}
+
+export interface PlaybookInferredStage {
+  label: string;
+  source: string;
+  confidence: number;
+  artifacts: string[];
+}
+
+export interface PlaybookStageInference {
+  stages: PlaybookInferredStage[];
+  confidence: number;
+  source: string;
+  rationale: string;
+  playbook: PlaybookSpec | null;
+}
+
 export interface PlaybookDocumentImportResult {
   playbook: PlaybookSpec;
   source_doc: string;
@@ -378,6 +446,65 @@ export const playbookApi = {
       answers,
       useLlm,
     });
+  },
+
+  async startAuthorConversation(projectId: string): Promise<PlaybookConversation> {
+    const response = await invoke<{ conversation: PlaybookConversation }>(
+      'playbook_author_conversation_start',
+      { projectId },
+    );
+    return response.conversation;
+  },
+
+  async getAuthorConversation(
+    projectId: string,
+    conversationId: string,
+  ): Promise<PlaybookConversation> {
+    const response = await invoke<{ conversation: PlaybookConversation }>(
+      'playbook_author_conversation_get',
+      { projectId, conversationId },
+    );
+    return response.conversation;
+  },
+
+  async sendAuthorMessage(
+    projectId: string,
+    conversationId: string,
+    message: string,
+    useLlm = true,
+  ): Promise<PlaybookConversationTurn> {
+    return invoke<PlaybookConversationTurn>('playbook_author_conversation_message', {
+      projectId,
+      conversationId,
+      message,
+      useLlm,
+    });
+  },
+
+  async rollbackAuthorConversation(
+    projectId: string,
+    conversationId: string,
+    turnIndex: number,
+  ): Promise<PlaybookConversationRollback> {
+    return invoke<PlaybookConversationRollback>('playbook_author_conversation_rollback', {
+      projectId,
+      conversationId,
+      turnIndex,
+    });
+  },
+
+  async commitAuthorConversation(
+    projectId: string,
+    conversationId: string,
+  ): Promise<PlaybookConversationCommit> {
+    return invoke<PlaybookConversationCommit>('playbook_author_conversation_commit', {
+      projectId,
+      conversationId,
+    });
+  },
+
+  async inferStages(projectId: string): Promise<PlaybookStageInference> {
+    return invoke<PlaybookStageInference>('playbook_infer_stages', { projectId });
   },
 
   async confirmStage(projectId: string, stageId: string): Promise<PlaybookCurrent> {

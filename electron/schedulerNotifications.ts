@@ -27,6 +27,8 @@ export interface PendingNotificationsPayload {
   background_tasks?: PendingNotificationItem[];
   /** 2026-11-09: 闲时目标终态通知（独立队列，不混入 background_tasks） */
   goal_notifications?: PendingNotificationItem[];
+  /** 2026-11-14 M1: 项目健康告警（逾期 / 阻塞） */
+  project_health?: PendingNotificationItem[];
 }
 
 export interface SchedulerNotificationPollerDeps {
@@ -50,6 +52,7 @@ export function collectNotificationItems(
     ...(payload?.todo_reminders ?? []),
     ...(payload?.background_tasks ?? []),
     ...(payload?.goal_notifications ?? []),
+    ...(payload?.project_health ?? []),
   ];
   return items.filter((item) => typeof item.title === 'string' && item.title.length > 0);
 }

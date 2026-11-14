@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { HealthDashboard } from '../features/project-health/HealthDashboard';
 import type { OverviewFilters } from '../features/project-type/projectFilters';
 import { projectApi, type ProjectType } from '../shared/api';
 import type { ProjectStatus } from '../shared/api/projectApiTypes';
@@ -147,6 +148,8 @@ export function ProjectsOverview(): JSX.Element {
               </Button>
             )}
           </div>
+
+          <HealthDashboard />
 
           <div data-testid="projects-overview-rows">
             <WorkbenchProjectList
