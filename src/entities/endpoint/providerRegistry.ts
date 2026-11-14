@@ -13,7 +13,8 @@
  * - **可扩展**：新增 provider 只需 ``registerProvider()``，不修改现有代码。
  */
 
-import type { DiscoveredModel, EndpointProtocol, ModelCapability } from '../setting/types';
+import { inferCapabilities } from '../../shared/lib/modelCapabilities';
+import type { DiscoveredModel, EndpointProtocol } from '../setting/types';
 
 // ============================================================================
 // ProviderDefinition 接口
@@ -105,25 +106,6 @@ export function getProtocolOptions(): ReadonlyArray<{
 // ============================================================================
 
 const LLM_PROXY_BASE = '/api/v1/llm';
-
-// ============================================================================
-// 辅助函数
-// ============================================================================
-
-/**
- * 推断模型能力（与 api.ts 现有 inferCapabilities 对齐）。
- */
-function inferCapabilities(id: string): ModelCapability[] {
-  const lower = id.toLowerCase();
-  const caps: ModelCapability[] = ['chat'];
-  if (lower.includes('embedding')) {
-    return ['embedding'];
-  }
-  if (lower.includes('vision') || lower.includes('4o')) {
-    caps.push('vision');
-  }
-  return caps;
-}
 
 // ============================================================================
 // 内置 Provider 定义
