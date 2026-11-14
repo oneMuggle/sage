@@ -72,10 +72,10 @@ class TestGetDirectories:
 class TestGetPages:
     """get_pages 测试"""
 
-    def test_returns_three_pages_per_type(self) -> None:
+    def test_returns_four_pages_per_type(self) -> None:
         for ptype in TEMPLATES:
             pages = get_pages(ptype)
-            assert len(pages) == 3
+            assert len(pages) == 4
 
     def test_replaces_project_name_variable(self) -> None:
         pages = get_pages("coding", "My Project")
@@ -114,8 +114,9 @@ class TestCreateWikiStructure:
         assert any("wiki/api-docs" in d for d in created_dirs)
 
         # 验证页面写入
-        assert write_mock.call_count == 3  # schema, overview, index
+        assert write_mock.call_count == 4  # purpose, schema, overview, index
         written_files = [str(call.args[1]) for call in write_mock.call_args_list]
+        assert any("purpose.md" in f for f in written_files)
         assert any("schema.md" in f for f in written_files)
         assert any("overview.md" in f for f in written_files)
         assert any("index.md" in f for f in written_files)
@@ -133,4 +134,4 @@ class TestCreateWikiStructure:
             )
 
             assert ensure_mock.call_count >= 3  # at least common dirs
-            assert write_mock.call_count == 3  # always 3 pages
+            assert write_mock.call_count == 4  # always 4 pages

@@ -17,9 +17,20 @@ from typing import Any, Dict, List
 import pytest
 import pytest_asyncio
 
-from backend.main import app
+import backend.main
 
 pytestmark = pytest.mark.unit
+
+
+def _app():
+    """晚绑定 backend.main.app。
+
+    tests/test_web_serve.py 会 importlib.reload(backend.main) 重建 app；
+    模块级 from backend.main import app 会指向 reload 前的旧实例，而
+    conftest 的 client fixture 每次重新 import 得到新实例，导致
+    app.state.chat_service 注入到旧 app、请求打到新 app → 误报 503。
+    """
+    return backend.main.app
 
 
 @dataclass
@@ -92,11 +103,11 @@ class _FakeChatService:
 async def chat_service_injected():
     """注入 mock chat_service 到 app.state,测试后清理。"""
     service = _FakeChatService()
-    app.state.chat_service = service
+    _app().state.chat_service = service
     yield service
     # teardown — 避免污染其他测试文件
-    if hasattr(app.state, "chat_service"):
-        delattr(app.state, "chat_service")
+    if hasattr(_app().state, "chat_service"):
+        delattr(_app().state, "chat_service")
 
 
 # --- 200 路径 ---
@@ -168,8 +179,8 @@ async def test_exec_without_workspace_root_omits_key(client, chat_service_inject
 
 @pytest.mark.asyncio()
 async def test_probe_503_when_chat_service_missing(client):
-    if hasattr(app.state, "chat_service"):
-        delattr(app.state, "chat_service")
+    if hasattr(_app().state, "chat_service"):
+        delattr(_app().state, "chat_service")
     resp = await client.post("/api/v1/runtime/probe", json={})
     assert resp.status_code == 503
     assert "chat_service" in resp.json()["detail"]
@@ -179,13 +190,13 @@ async def test_probe_503_when_chat_service_missing(client):
 async def test_probe_503_when_tool_unregistered(client):
     """tools 列表里缺 runtime_probe -> 503。"""
     service = _FakeChatService(tools=_FakeTools(specs=[]))
-    app.state.chat_service = service
+    _app().state.chat_service = service
     try:
         resp = await client.post("/api/v1/runtime/probe", json={})
         assert resp.status_code == 503
         assert "runtime_probe" in resp.json()["detail"]
     finally:
-        delattr(app.state, "chat_service")
+        delattr(_app().state, "chat_service")
 
 
 # --- ToolResult 字段映射 ---

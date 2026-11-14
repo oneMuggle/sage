@@ -43,7 +43,21 @@ _COMMON_DIRECTORIES = [
     ".llm-wiki",
 ]
 
-_COMMON_PAGES: List[WikiPageTemplate] = []
+_COMMON_PAGES: List[WikiPageTemplate] = [
+    WikiPageTemplate(
+        relative_path="purpose.md",
+        title="Purpose",
+        content=(
+            "# 项目目的\n\n"
+            "## 目标\n\n"
+            "_描述这个 Wiki 要解决的问题或达成的目标。_\n\n"
+            "## 关键问题\n\n"
+            "- \n\n"
+            "## 范围\n\n"
+            "_说明包含与不包含的内容。_\n"
+        ),
+    ),
+]
 
 
 # ---------- Coding 项目 ----------

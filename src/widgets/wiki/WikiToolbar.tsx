@@ -1,14 +1,18 @@
 // Wiki Toolbar - top navigation and actions
-import { FileText, Search, MessageSquare, Network } from 'lucide-react';
+import { FileText, Search, MessageSquare, Network, Settings } from 'lucide-react';
+import { useState } from 'react';
 
 import { useWikiStore } from '../../entities/wiki/store';
 import type { WikiView } from '../../shared/types/wiki';
+
+import { WikiSettingsDialog } from './WikiSettingsDialog';
 
 export function WikiToolbar() {
   const project = useWikiStore((s) => s.project);
   const activeView = useWikiStore((s) => s.activeView);
   const setActiveView = useWikiStore((s) => s.setActiveView);
   const selectedFile = useWikiStore((s) => s.selectedFile);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   if (!project) return null;
 
@@ -44,7 +48,17 @@ export function WikiToolbar() {
             {selectedFile.split('/').pop()}
           </span>
         )}
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="知识库设置"
+          title="知识库设置"
+          className="flex items-center justify-center h-7 w-7 rounded-radius-sm text-muted hover:text-text hover:bg-bg-muted transition-colors"
+        >
+          <Settings className="h-4 w-4" />
+        </button>
       </div>
+      <WikiSettingsDialog isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

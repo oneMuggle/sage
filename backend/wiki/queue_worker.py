@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 from backend.orchestration._lazy_lock import LazyLock
 from backend.wiki.ingest import IngestConfig, ingest_source
 from backend.wiki.ingest_queue import IngestQueue
-from backend.wiki.llm_context import make_llm_context
+from backend.wiki.llm_context import make_task_llm_context
 
 logger = logging.getLogger(__name__)
 
@@ -59,15 +59,22 @@ async def process_pending(project_root: Path, limit: int = 1) -> Dict[str, Any]:
             "error": "LLM 或 embedding 模型未配置",
         }
 
+    # 按项目设置路由 ingest 模型与推理模式
+    ctx = make_task_llm_context(
+        llm["base_url"],
+        llm["api_key"],
+        llm["model"],
+        project_root=project_root,
+        task="ingest",
+    )
     config = IngestConfig(
         llm_base_url=llm["base_url"],
         llm_api_key=llm["api_key"],
-        llm_model=llm["model"],
+        llm_model=ctx.model,
         embed_base_url=embedding["base_url"],
         embed_api_key=embedding["api_key"],
         embed_model=embedding["model"],
     )
-    ctx = make_llm_context(llm["base_url"], llm["api_key"], llm["model"])
     processed: List[Dict[str, Any]] = []
 
     for _ in range(max(1, min(int(limit), 20))):
