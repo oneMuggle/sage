@@ -736,6 +736,10 @@ export interface ElectronAPI {
     cancelOcr: () => Promise<{ ok: boolean }>;
     /** 删除受管的 userData/models/rapidocr，恢复包内默认模型 */
     resetOcr: () => Promise<{ ok: boolean; error?: string }>;
+    /** 从本地磁盘导入嵌入模型（目录选择对话框 → 复制 + SHA-256 校验）。 */
+    importLocal: () => Promise<{ ok: boolean; totalBytes?: number; error?: string }>;
+    /** 从本地磁盘导入 OCR 模型（目录选择对话框 → 复制 + SHA-256 校验）。 */
+    importLocalOcr: () => Promise<{ ok: boolean; totalBytes?: number; error?: string }>;
   };
   /** P13/P17: sage-file 工作区注册表 —— 渲染端绑定工作区时登记/注销到主进程白名单。 */
   sageFile?: {

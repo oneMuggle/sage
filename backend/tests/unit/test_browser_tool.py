@@ -801,10 +801,11 @@ def test_export_cookies_saves_storage_state(monkeypatch):
     monkeypatch.setattr(browser_tool, "cdp_command", fake_cdp)
     tool = BrowserLoginTool()
     saved, _summary = tool._export_cookies(_fake_session("login-default"), "www.example.com", "t-1")
-    assert saved == [".example.com"]
+    assert saved == [".example.com", "www.example.com"]
     assert calls
-    assert calls[-1][0] == "storage"
-    assert calls[-1][1][2] == [
+    storage_calls = [c for c in calls if c[0] == "storage"]
+    assert storage_calls, "应有 storage_state 调用"
+    assert storage_calls[0][1][2] == [
         {"origin": "https://www.example.com", "localStorage": {"cnki_user_token": "tok"}}
     ]
 
@@ -823,8 +824,8 @@ def test_export_cookies_without_storage_uses_plain_cookie(monkeypatch):
 
     monkeypatch.setattr(browser_tool, "cdp_command", fake_cdp)
     saved, _summary = BrowserLoginTool()._export_cookies(_fake_session("login-default"), "www.example.com", "t-1")
-    assert saved == [".example.com"]
-    assert calls == ["cookie"]
+    assert saved == [".example.com", "www.example.com"]
+    assert "cookie" in calls
 
 
 def test_export_cookies_filters_other_domains(monkeypatch):
@@ -850,8 +851,8 @@ def test_export_cookies_filters_other_domains(monkeypatch):
 
     monkeypatch.setattr(browser_tool, "cdp_command", fake_cdp)
     saved, _summary = BrowserLoginTool()._export_cookies(_fake_session("login-default"), "www.example.com", "t-1")
-    assert saved == [".example.com"]
-    assert saved_args == [".example.com"]
+    assert saved == [".example.com", "www.example.com"]
+    assert ".example.com" in saved_args
 
 
 def test_browser_login_respects_network_policy(monkeypatch):

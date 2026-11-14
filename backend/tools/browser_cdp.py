@@ -137,8 +137,8 @@ def _get_user_browser_path() -> Optional[str]:
         path = SettingsRepository().get("browser_path")
         if path and Path(path).is_file():
             return path
-    except Exception:  # noqa: BLE001 — 设置读取失败时静默回退
-        pass
+    except Exception as exc:  # noqa: BLE001 — 设置读取失败时回退到平台发现
+        logger.debug("读取用户浏览器路径设置失败: %s", exc)
     return None
 
 

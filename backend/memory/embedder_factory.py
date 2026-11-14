@@ -42,13 +42,24 @@ HASH_VEC_TABLE = "memories_vec"
 
 
 def onnx_model_dir() -> str:
-    """解析语义模型目录: SAGE_EMBEDDING_MODEL_DIR > SAGE_USER_DATA_DIR/models > bundled。"""
+    """解析语义模型目录。
+
+    优先级：SAGE_EMBEDDING_MODEL_DIR > SAGE_USER_DATA_DIR/models >
+    SAGE_BUNDLED_MODELS_DIR（安装包内置）> <repo>/data/models。
+    """
     explicit = os.environ.get("SAGE_EMBEDDING_MODEL_DIR")
     if explicit:
         return explicit
     user_data_dir = os.environ.get("SAGE_USER_DATA_DIR")
     if user_data_dir:
-        return os.path.join(user_data_dir, "models", DEFAULT_ONNX_MODEL_DIR_NAME)
+        candidate = os.path.join(user_data_dir, "models", DEFAULT_ONNX_MODEL_DIR_NAME)
+        if Path(candidate).is_dir():
+            return candidate
+    bundled_dir = os.environ.get("SAGE_BUNDLED_MODELS_DIR")
+    if bundled_dir:
+        candidate = os.path.join(bundled_dir, DEFAULT_ONNX_MODEL_DIR_NAME)
+        if Path(candidate).is_dir():
+            return candidate
     # 与 theme_storage 同模式: dev/tests 无 SAGE_USER_DATA_DIR 时用
     # 仓库内可写路径 (backend/data/models)。
     return str(Path(__file__).resolve().parent.parent / "data" / "models" / DEFAULT_ONNX_MODEL_DIR_NAME)

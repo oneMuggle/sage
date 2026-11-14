@@ -281,8 +281,8 @@ def _discover_all_browsers() -> List[DiscoveredBrowser]:
             match = re.search(r"(\d+)\.\d+\.\d+\.\d+", output)
             if match:
                 return match.group(1)
-        except Exception:  # noqa: BLE001
-            pass
+        except (OSError, subprocess.SubprocessError) as exc:
+            logger.debug("读取浏览器版本失败 %s: %s", exe_path, exc)
         return None
 
     def _add_browser(path: str, name: str) -> None:
