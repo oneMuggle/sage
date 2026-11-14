@@ -10,18 +10,20 @@
  */
 import { createHash } from 'crypto';
 import {
+  copyFileSync,
   createReadStream,
   createWriteStream,
   existsSync,
   mkdirSync,
+  readdirSync,
   renameSync,
   rmSync,
   statSync,
   unlinkSync,
 } from 'fs';
 import { join } from 'path';
-import type { IpcMain } from 'electron';
-import type { BrowserWindow } from 'electron';
+import type { IpcMain, BrowserWindow } from 'electron';
+import { dialog } from 'electron';
 
 import { logger } from './logger';
 import { fetchCompat } from './fetchCompat';
@@ -73,8 +75,7 @@ export const EMBEDDER_MODEL_MANIFEST: ModelManifest = {
  */
 export const OCR_MODEL_MANIFEST: ModelManifest = {
   dirName: 'rapidocr',
-  baseUrl:
-    'https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv6/',
+  baseUrl: 'https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv6/',
   files: [
     {
       name: 'det/PP-OCRv6_det_tiny.onnx',
@@ -167,9 +168,7 @@ async function downloadVerified(
   const actual = await sha256File(tmpPath);
   if (actual !== file.sha256.toLowerCase()) {
     unlinkSync(tmpPath);
-    throw new Error(
-      `sha256 mismatch for ${file.name}: got ${actual}, expected ${file.sha256}`,
-    );
+    throw new Error(`sha256 mismatch for ${file.name}: got ${actual}, expected ${file.sha256}`);
   }
 
   if (existsSync(finalPath)) unlinkSync(finalPath);
@@ -200,9 +199,7 @@ function registerDownloadHandler(
     if (!dirName || /[\\/]/.test(dirName) || dirName.includes('..')) {
       return { ok: false, error: 'invalid dirName' };
     }
-    const files: ModelFile[] = Array.isArray(payload?.files)
-      ? payload.files
-      : [...manifest.files];
+    const files: ModelFile[] = Array.isArray(payload?.files) ? payload.files : [...manifest.files];
     const baseUrl = String(payload?.baseUrl ?? manifest.baseUrl);
     if (files.length === 0) return { ok: false, error: 'no files' };
     const key = `${channel}:${dirName}`;
@@ -283,6 +280,102 @@ export function registerModelDownloadIpc(
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  // 本地导入：用户从磁盘选择模型文件目录，复制到 userData/models/。
+  // 内网环境无法联网下载时，IT 管理员可将模型文件通过 U 盘/内网文件服务器分发，
+  // 用户在设置页面点击"从本地导入"即可激活。
+  registerImportLocalHandler(
+    ipcMain,
+    opts,
+    'models:embedder:import-local',
+    EMBEDDER_MODEL_MANIFEST,
+  );
+  registerImportLocalHandler(ipcMain, opts, 'models:ocr:import-local', OCR_MODEL_MANIFEST);
+}
+
+function registerImportLocalHandler(
+  ipcMain: IpcMain,
+  opts: {
+    modelsBaseDir: () => string;
+    getWindow: () => BrowserWindow | null;
+  },
+  channel: string,
+  manifest: ModelManifest,
+): void {
+  ipcMain.handle(channel, async () => {
+    const win = opts.getWindow();
+    const parentWindow = win && !win.isDestroyed() ? win : undefined;
+
+    const result = await dialog.showOpenDialog({
+      ...(parentWindow ? { browserWindow: parentWindow } : {}),
+      title: `选择包含 ${manifest.dirName} 模型文件的目录`,
+      properties: ['openDirectory'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { ok: false, error: 'cancelled' };
+    }
+
+    const sourceDir = result.filePaths[0];
+
+    // 文件可能在根层或一层子目录（如 onnx/model.onnx），逐个定位。
+    const findFile = (name: string): string | null => {
+      const direct = join(sourceDir, name);
+      if (existsSync(direct)) return direct;
+      // 搜索子目录（最多一层）
+      try {
+        for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
+          if (entry.isDirectory()) {
+            const nested = join(sourceDir, entry.name, name);
+            if (existsSync(nested)) return nested;
+          }
+        }
+      } catch {
+        // ignore
+      }
+      return null;
+    };
+
+    const targetDir = join(opts.modelsBaseDir(), manifest.dirName);
+    mkdirSync(targetDir, { recursive: true });
+
+    let totalBytes = 0;
+    try {
+      for (const file of manifest.files) {
+        const saveName = file.saveAs ?? file.name.split('/').pop() ?? file.name;
+        const sourcePath = findFile(saveName) ?? findFile(file.name);
+        if (!sourcePath) {
+          return {
+            ok: false,
+            error: `找不到文件: ${saveName}`,
+          };
+        }
+
+        const destPath = join(targetDir, saveName);
+        copyFileSync(sourcePath, destPath);
+
+        // SHA-256 校验
+        const actual = await sha256File(destPath);
+        if (actual !== file.sha256.toLowerCase()) {
+          unlinkSync(destPath);
+          return {
+            ok: false,
+            error: `sha256 不匹配: ${saveName}（期望 ${file.sha256.slice(0, 8)}..., 实际 ${actual.slice(0, 8)}...）`,
+          };
+        }
+
+        totalBytes += statSync(destPath).size;
+      }
+
+      logger.info('model import: complete', { dirName: manifest.dirName, totalBytes });
+      return { ok: true, totalBytes };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
     }
   });
 }
