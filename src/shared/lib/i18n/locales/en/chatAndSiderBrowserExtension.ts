@@ -37,4 +37,19 @@ export const enChatAndSiderBrowserExtension = {
   'settings.network.extension.error': 'Failed to read extension status: {error}',
   'settings.network.extension.generate_failed': 'Failed to generate pairing code: {error}',
   'settings.network.extension.revoke_failed': 'Failed to revoke device: {error}',
+
+  // ─── Settings · Browser Selection ────────────────
+  'settings.network.browser.title': 'Browser',
+  'settings.network.browser.hint':
+    'Select browser for browser_login. Uses system default when not selected.',
+  'settings.network.browser.loading': 'Scanning available browsers…',
+  'settings.network.browser.none_found':
+    'No browser found. Install Chrome/Edge or set SAGE_BROWSER_PATH environment variable.',
+  'settings.network.browser.embedded': 'Sage Embedded Browser',
+  'settings.network.browser.embedded_hint':
+    'Chromium bundled with Electron (some sites may be incompatible)',
+  'settings.network.browser.system_default': 'System Default',
+  'settings.network.browser.saved': 'Browser selection saved',
+  'settings.network.browser.save_failed': 'Save failed',
+  'settings.network.browser.reset': 'Reset to auto-detection',
 };
