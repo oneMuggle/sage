@@ -75,6 +75,10 @@ pyyaml==6.0.1
 croniter==2.0.1
 networkx>=3.2.0
 
+# Wiki source 目录自动监听（backend/wiki/source_watcher.py）
+# py3-none-win_amd64 轮子可直接内嵌；缺失时 source_watcher 优雅降级。
+watchdog==4.0.2
+
 # numpy is required as a build-time dep by:
 #   - networkx (transitive runtime dep)
 # Pinned here to match the bundled Python 3.11 (see scripts/bundle-python-main.ps1).
