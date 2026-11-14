@@ -14,6 +14,7 @@ import type {
   ReviewResponse,
   WikiCitation,
   WikiCitationLocation,
+  WikiProjectSettings,
 } from '../types/wiki';
 
 // Backend API base URL
@@ -53,6 +54,16 @@ async function httpDelete<T>(endpoint: string, body: unknown): Promise<T> {
   return backendRequest<T>({
     path: `${API_BASE}${endpoint}`,
     method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  });
+}
+
+async function httpPut<T>(endpoint: string, body: unknown): Promise<T> {
+  ensureBackendAccess();
+  return backendRequest<T>({
+    path: `${API_BASE}${endpoint}`,
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body,
   });
@@ -576,6 +587,23 @@ export async function queueProcess(projectPath: string, limit = 1): Promise<Queu
   return httpPost<QueueProcessResult>('/wiki/ingest/queue/process', {
     project_path: projectPath,
     limit,
+  });
+}
+
+// ==================== Settings API ====================
+
+export async function getWikiSettings(projectPath: string): Promise<WikiProjectSettings> {
+  return httpGet<WikiProjectSettings>('/wiki/settings', { project_path: projectPath });
+}
+
+export async function updateWikiSettings(
+  projectPath: string,
+  settings: Pick<WikiProjectSettings, 'task_routing' | 'reasoning'>,
+): Promise<WikiProjectSettings> {
+  return httpPut<WikiProjectSettings>('/wiki/settings', {
+    project_path: projectPath,
+    task_routing: settings.task_routing,
+    reasoning: settings.reasoning,
   });
 }
 

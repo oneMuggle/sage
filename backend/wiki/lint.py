@@ -55,6 +55,9 @@ REQUIRED_FILES = [
 # 被排除在孤立检查之外的页面
 ORPHAN_EXEMPT = {"wiki/schema.md", "wiki/overview.md"}
 
+# 非知识页（操作日志），不参与 frontmatter/wikilink/orphan 检查
+LINT_EXEMPT_PAGES = {"wiki/log.md"}
+
 WIKILINK_PATTERN = re.compile(r"\[\[([^\]#|]+?)(?:\|[^\]]+)?\]\]")
 
 
@@ -181,6 +184,8 @@ class WikiLint:
                 continue
 
             rel_path = self._rel_path(md_file)
+            if rel_path in LINT_EXEMPT_PAGES:
+                continue
 
             if not content.startswith("---"):
                 issues.append(
@@ -250,6 +255,8 @@ class WikiLint:
                 continue
 
             rel_path = self._rel_path(md_file)
+            if rel_path in LINT_EXEMPT_PAGES:
+                continue
 
             for match in WIKILINK_PATTERN.finditer(content):
                 link_target = match.group(1).strip()
@@ -297,7 +304,7 @@ class WikiLint:
             rel_path = self._rel_path(md_file)
 
             # 排除豁免名单
-            if rel_path in ORPHAN_EXEMPT:
+            if rel_path in ORPHAN_EXEMPT or rel_path in LINT_EXEMPT_PAGES:
                 continue
 
             # 页面文件名（无扩展名）是否被引用
