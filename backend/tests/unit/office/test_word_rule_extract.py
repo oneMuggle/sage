@@ -339,3 +339,26 @@ def test_extract_rejects_invalid_types(tmp_path: Path) -> None:
         extract_word_rules(
             text_path, file_type="template", workspace_path=str(tmp_path)
         )
+
+
+def test_template_extracts_caption_sequence(tmp_path: Path) -> None:
+    document = Document()
+    section = document.sections[0]
+    section.page_width = Cm(21.0)
+    section.page_height = Cm(29.7)
+    normal = document.styles["Normal"]
+    normal.font.name = "仿宋_GB2312"
+    normal.font.size = Pt(12)
+    _set_east_asia(normal, "仿宋_GB2312")
+    document.add_paragraph("图1 技术路线示意")
+    document.add_paragraph("表1 变量定义")
+    path = tmp_path / "captions.docx"
+    document.save(str(path))
+
+    result = extract_word_rules(
+        path, file_type="template", workspace_path=str(tmp_path)
+    )
+
+    caption_rule = _rules(result.pack).get("content.caption_sequence")
+    assert caption_rule is not None, "content.caption_sequence 规则未生成"
+    assert caption_rule.params["labels"] == ["图", "表"]
