@@ -124,9 +124,14 @@ async def _build_chat_context(
         )
 
         embed_response = await http_post(embed_req.url, embed_req.headers, embed_req.body)
-        query_vec = parse_embed_response(embed_response, config.embed_dim)[0]
+        vectors = parse_embed_response(embed_response, 0)
+        if not vectors:
+            raise ValueError("empty embedding response")
+        query_vec = vectors[0]
 
-        vector_store = open_vector_store(project_root, config.embed_dim)
+        # 维度以响应为准（自适应，支持非 1536 维模型）；与既有向量库维度不一致
+        # 时 open 抛错，外层 try/except 降级为 token 搜索。
+        vector_store = open_vector_store(project_root, len(query_vec))
         vector_hits = vector_store.search(
             query_vec, limit=RETRIEVAL_LIMIT, allowed_paths=allowed_paths
         )

@@ -443,9 +443,10 @@ class IngestRequest(BaseModel):
     llm_base_url: str
     llm_api_key: str
     llm_model: str
-    embed_base_url: str
-    embed_api_key: str
-    embed_model: str
+    # 2026-11-15: 嵌入可选 — 省略/空串视为关闭向量化（导入照常完成）
+    embed_base_url: str = ""
+    embed_api_key: str = ""
+    embed_model: str = ""
 
 
 class ChatRequest(BaseModel):
@@ -456,9 +457,10 @@ class ChatRequest(BaseModel):
     llm_base_url: str
     llm_api_key: str
     llm_model: str
-    embed_base_url: str
-    embed_api_key: str
-    embed_model: str
+    # 2026-11-15: 嵌入可选 — 空配置时检索降级为 token 搜索
+    embed_base_url: str = ""
+    embed_api_key: str = ""
+    embed_model: str = ""
     max_tokens: int = 4096
     selected_paths: Optional[List[str]] = Field(default=None, max_length=500)
 
