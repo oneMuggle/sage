@@ -74,7 +74,7 @@ async def test_process_pending_marks_failed_on_error(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio()
-async def test_process_pending_requires_llm_and_embedding_config(tmp_path, monkeypatch):
+async def test_process_pending_requires_llm_config(tmp_path, monkeypatch):
     task_id = _seed_task(tmp_path)
     monkeypatch.setattr(qw, "_load_llm_config", lambda: None)
     monkeypatch.setattr(qw, "_load_embedding_config", lambda: None)
@@ -82,8 +82,36 @@ async def test_process_pending_requires_llm_and_embedding_config(tmp_path, monke
     out = await qw.process_pending(tmp_path, limit=1)
 
     assert out["processed"] == []
-    assert "未配置" in out["error"]
+    assert "LLM" in out["error"]
     assert IngestQueue(tmp_path).get(task_id).status is QueueStatus.PENDING
+
+
+@pytest.mark.asyncio()
+async def test_process_pending_allows_missing_embedding_config(tmp_path, monkeypatch):
+    """2026-11-15: 嵌入可选 — 缺 embedding 配置时队列照常处理（跳过向量化）。"""
+    task_id = _seed_task(tmp_path)
+    monkeypatch.setattr(
+        qw,
+        "_load_llm_config",
+        lambda: {"base_url": "https://example.test", "api_key": "k", "model": "m"},
+    )
+    monkeypatch.setattr(qw, "_load_embedding_config", lambda: None)
+
+    captured = {}
+
+    async def fake_ingest(config, *args, **kwargs):
+        captured["config"] = config
+        return _Result()
+
+    monkeypatch.setattr(qw, "ingest_source", fake_ingest)
+
+    out = await qw.process_pending(tmp_path, limit=1)
+
+    assert out["processed"][0]["status"] == "completed"
+    assert captured["config"].embed_base_url == ""
+    assert captured["config"].embed_api_key == ""
+    assert captured["config"].embed_model == ""
+    assert IngestQueue(tmp_path).get(task_id).status is QueueStatus.COMPLETED
 
 
 @pytest.mark.asyncio()

@@ -512,3 +512,119 @@ async def test_ingest_stream_failed_event_includes_http_status(tmp_path):
     assert last["data"]["code"] == "wiki_ingest_failed"
     # 不泄露响应体/请求细节
     assert "Authorization" not in json.dumps(last, ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
+# 嵌入可选（2026-11-15，对齐 llm_wiki：未配置/失败不阻断导入）
+# ---------------------------------------------------------------------------
+
+
+async def _run_stream(config, project, source, ctx) -> List[dict]:
+    events: List[dict] = []
+    async for line_bytes in ingest_source_stream(config, project, source, ctx):
+        events.append(json.loads(line_bytes.decode("utf-8")))
+    return events
+
+
+@pytest.mark.asyncio()
+async def test_ingest_stream_skips_embedding_when_unconfigured(tmp_path):
+    """未配置嵌入模型：导入照常 completed，embedding 阶段给出跳过提示。"""
+    project, source = _make_wiki_project(tmp_path)
+    config = IngestConfig(
+        llm_base_url="http://api.test",
+        llm_api_key="sk-test",
+        llm_model="gpt-4",
+        embed_base_url="",
+        embed_api_key="",
+        embed_model="",
+    )
+
+    events = await _run_stream(config, project, source, _stub_llm_context())
+
+    stages = [e["data"]["stage"] for e in events]
+    assert stages[-1] == "completed"
+    embedding = next(e for e in events if e["data"]["stage"] == "embedding")
+    assert "跳过嵌入" in embedding["data"]["message"]
+    assert not (project / ".llm-wiki" / "vectors.json").exists()
+
+
+@pytest.mark.asyncio()
+async def test_ingest_stream_survives_embedding_failure(tmp_path):
+    """已配置但嵌入调用失败：记录跳过提示，导入仍 completed。"""
+    project, source = _make_wiki_project(tmp_path)
+    config = _make_ingest_config()
+    ctx = _stub_llm_context()
+
+    async def failing_post(url, headers, body):
+        raise RuntimeError("embedding down")
+
+    ctx.http_post = failing_post  # type: ignore[misc] — dataclass 可变
+    events = await _run_stream(config, project, source, ctx)
+
+    stages = [e["data"]["stage"] for e in events]
+    assert stages[-1] == "completed"
+    messages = [
+        e["data"]["message"]
+        for e in events
+        if e["data"]["stage"] == "embedding" and isinstance(e["data"]["message"], str)
+    ]
+    assert any("嵌入失败" in message for message in messages)
+
+
+@pytest.mark.asyncio()
+async def test_ingest_stream_adapts_to_embedding_dimension(tmp_path):
+    """向量维度以响应为准：1024 维模型也能写入（不再硬编码 1536）。"""
+    project, source = _make_wiki_project(tmp_path)
+    config = _make_ingest_config()
+    ctx = _stub_llm_context()
+
+    async def post_1024(url, headers, body):
+        n_chunks = len(body.get("input", []))
+        return json.dumps({"data": [{"embedding": [0.0] * 1024} for _ in range(n_chunks)]})
+
+    ctx.http_post = post_1024  # type: ignore[misc] — dataclass 可变
+    events = await _run_stream(config, project, source, ctx)
+
+    assert events[-1]["data"]["stage"] == "completed"
+    store = json.loads((project / ".llm-wiki" / "vectors.json").read_text(encoding="utf-8"))
+    assert store["dim"] == 1024
+    assert store["records"]
+
+
+@pytest.mark.asyncio()
+async def test_ingest_stream_resets_store_when_dimension_changes(tmp_path):
+    """切换嵌入模型导致维度变化：重置派生向量库并写入新维度。"""
+    project, source = _make_wiki_project(tmp_path)
+    store_path = project / ".llm-wiki" / "vectors.json"
+    store_path.parent.mkdir(parents=True, exist_ok=True)
+    store_path.write_text(
+        json.dumps(
+            {
+                "dim": 1536,
+                "records": [
+                    {
+                        "id": "wiki/sources/old.md::0",
+                        "page_path": "wiki/sources/old.md",
+                        "chunk_index": 0,
+                        "content": "old",
+                        "vector": [0.0] * 1536,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = _make_ingest_config()
+    ctx = _stub_llm_context()
+
+    async def post_1024(url, headers, body):
+        n_chunks = len(body.get("input", []))
+        return json.dumps({"data": [{"embedding": [0.0] * 1024} for _ in range(n_chunks)]})
+
+    ctx.http_post = post_1024  # type: ignore[misc] — dataclass 可变
+    events = await _run_stream(config, project, source, ctx)
+
+    assert events[-1]["data"]["stage"] == "completed"
+    store = json.loads(store_path.read_text(encoding="utf-8"))
+    assert store["dim"] == 1024
+    assert all(record["page_path"] != "wiki/sources/old.md" for record in store["records"])
