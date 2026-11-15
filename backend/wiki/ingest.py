@@ -48,6 +48,18 @@ logger = logging.getLogger(__name__)
 INGEST_STREAM_ERROR_CODE = "wiki_ingest_failed"
 INGEST_STREAM_ERROR_MESSAGE = "Wiki 导入失败"
 
+
+def _stream_failure_message(exc: Exception) -> str:
+    """失败事件的用户可见文案。
+
+    带上上游 HTTP 状态码便于定位（如 401 凭据失效），不包含响应体、URL query
+    或任何凭据；非 HTTP 异常统一回落到通用文案。
+    """
+    status_code = getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(status_code, int):
+        return f"{INGEST_STREAM_ERROR_MESSAGE}（LLM 请求返回 HTTP {status_code}）"
+    return INGEST_STREAM_ERROR_MESSAGE
+
 # 常量
 MAX_CONTENT_CHARS = 50_000  # 50KB
 DEFAULT_EMBED_DIM = 1536
@@ -675,20 +687,21 @@ async def ingest_source_stream(
 
         started → copy_source → step1_analyze → step2_write → embedding → completed
 
-    ``failed`` 阶段在异常路径发出(``percent=0``),随后 ``raise`` 让上层 FastAPI
-    关闭流。
+    ``failed`` 阶段在异常路径发出(``percent=0``,``message`` 为字符串、错误码
+    放独立 ``code`` 字段),随后 ``raise`` 让上层 FastAPI 关闭流:
+
+    .. code-block:: json
+
+        {"event":"progress","data":{"stage":"failed","percent":0,"message":"...","code":"wiki_ingest_failed"}}
     """
 
-    def emit(stage: str, percent: int, message: Optional[object] = None) -> bytes:
+    def emit(
+        stage: str, percent: int, message: Optional[str] = None, **extra: object
+    ) -> bytes:
+        data: Dict[str, object] = {"stage": stage, "percent": percent, "message": message}
+        data.update(extra)
         return (
-            json.dumps(
-                {
-                    "event": "progress",
-                    "data": {"stage": stage, "percent": percent, "message": message},
-                },
-                ensure_ascii=False,
-            )
-            + "\n"
+            json.dumps({"event": "progress", "data": data}, ensure_ascii=False) + "\n"
         ).encode("utf-8")
 
     try:
@@ -752,7 +765,8 @@ async def ingest_source_stream(
         yield emit(
             "failed",
             0,
-            {"code": INGEST_STREAM_ERROR_CODE, "message": INGEST_STREAM_ERROR_MESSAGE},
+            _stream_failure_message(e),
+            code=INGEST_STREAM_ERROR_CODE,
         )
         raise
 

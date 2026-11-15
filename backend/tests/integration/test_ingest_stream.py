@@ -19,6 +19,7 @@ import json
 from pathlib import Path
 from typing import List, Tuple
 
+import httpx
 import pytest
 
 from backend.wiki.ingest import IngestConfig, copy_to_raw, ingest_source_stream
@@ -464,11 +465,50 @@ async def test_ingest_stream_exception_yields_failed_then_reraises(tmp_path):
     assert last["event"] == "progress"
     assert last["data"]["stage"] == "failed"
     assert last["data"]["percent"] == 0
-    assert last["data"]["message"] == {
-        "code": "wiki_ingest_failed",
-        "message": "Wiki 导入失败",
-    }
+    # 2026-11-15: message 恒为字符串，错误码走独立 code 字段（此前后端把
+    # {code, message} 对象塞进 message，前端渲染时崩溃）。
+    assert last["data"]["message"] == "Wiki 导入失败"
+    assert last["data"]["code"] == "wiki_ingest_failed"
     assert "LLM exploded" not in json.dumps(last, ensure_ascii=False)
 
     # 之前必须至少 emit 过 started
     assert collected[0]["data"]["stage"] == "started"
+
+
+@pytest.mark.asyncio()
+async def test_ingest_stream_failed_event_includes_http_status(tmp_path):
+    """HTTP 异常路径: failed 事件文案带上上游状态码,便于用户定位 401/429 等。"""
+    project, source = _make_wiki_project(tmp_path)
+    config = _make_ingest_config()
+
+    async def http_401_llm(messages, temperature):
+        request = httpx.Request("POST", "https://api.example.test/v1/chat/completions")
+        response = httpx.Response(401, request=request)
+        raise httpx.HTTPStatusError("401 Unauthorized", request=request, response=response)
+
+    async def noop_stream(messages, temperature):
+        if False:  # pragma: no cover
+            yield ""
+            return
+        return
+
+    async def noop_post(url, headers, body):
+        return "{}"
+
+    ctx = LLMContext(
+        llm_call=http_401_llm,
+        llm_stream_call=noop_stream,
+        http_post=noop_post,
+    )
+
+    collected: List[dict] = []
+    with pytest.raises(httpx.HTTPStatusError):  # noqa: PT012  (async-for 收集事件)
+        async for line_bytes in ingest_source_stream(config, project, source, ctx):
+            collected.append(json.loads(line_bytes.decode("utf-8")))
+
+    last = collected[-1]
+    assert last["data"]["stage"] == "failed"
+    assert last["data"]["message"] == "Wiki 导入失败（LLM 请求返回 HTTP 401）"
+    assert last["data"]["code"] == "wiki_ingest_failed"
+    # 不泄露响应体/请求细节
+    assert "Authorization" not in json.dumps(last, ensure_ascii=False)
