@@ -5,7 +5,11 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-type ProgressPayload = { stage: string; percent: number; message?: string | null };
+type ProgressPayload = {
+  stage: string;
+  percent: number;
+  message?: string | { code?: string; message?: string } | null;
+};
 /** 与真实 preload shim 一致：handler 收到的是事件包装对象 { payload } */
 type Handler = (e: { payload: ProgressPayload }) => void;
 
@@ -88,4 +92,27 @@ describe('Wiki failure terminal cleanup (audit #6)', () => {
       expect(unlistenCalls).toBe(before + 1);
     },
   );
+});
+
+describe('legacy object error payload (2026-11-15)', () => {
+  it('normalizes legacy {code, message} object to a renderable string', async () => {
+    const id = 'legacy-object';
+    const { result } = renderHook(() => useWikiIngest(id));
+    await waitFor(() => expect(handlers.has(`wiki-ingest-${id}-progress`)).toBe(true));
+    await act(async () => {});
+    act(() =>
+      handlers.get(`wiki-ingest-${id}-progress`)!({
+        payload: {
+          stage: 'failed',
+          percent: 0,
+          message: { code: 'wiki_ingest_failed', message: 'Wiki 导入失败' },
+        },
+      }),
+    );
+    // 必须收敛为字符串：直接渲染对象会抛
+    // "Objects are not valid as a React child"。
+    expect(result.current.error).toBe('Wiki 导入失败');
+    expect(result.current.progress?.message).toBe('Wiki 导入失败');
+    expect(typeof result.current.progress?.message).toBe('string');
+  });
 });

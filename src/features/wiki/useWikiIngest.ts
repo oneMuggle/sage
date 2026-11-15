@@ -24,6 +24,47 @@ export interface IngestState {
   error: string | null;
 }
 
+interface RawIngestProgress {
+  stage?: unknown;
+  percent?: unknown;
+  message?: unknown;
+  code?: unknown;
+}
+
+/**
+ * 归一化 ingest 进度 payload。
+ *
+ * 历史协议里 failed 事件把结构化错误塞进 message：
+ * `{"stage":"failed","message":{"code":...,"message":...}}`。
+ * 该对象被组件直接渲染会触发 React
+ * "Objects are not valid as a React child" 崩溃。新协议已改为字符串
+ * message + 独立 code；这里同时兼容旧后端，保证 message 恒为字符串。
+ */
+export function normalizeIngestProgress(raw: unknown): IngestProgress {
+  const payload: RawIngestProgress =
+    raw !== null && typeof raw === 'object' ? (raw as RawIngestProgress) : {};
+  const nested =
+    payload.message !== null && typeof payload.message === 'object'
+      ? (payload.message as { code?: unknown; message?: unknown })
+      : null;
+  const message =
+    typeof payload.message === 'string'
+      ? payload.message
+      : typeof nested?.message === 'string'
+        ? nested.message
+        : null;
+  const code =
+    typeof payload.code === 'string'
+      ? payload.code
+      : typeof nested?.code === 'string'
+        ? nested.code
+        : undefined;
+  const stage = typeof payload.stage === 'string' ? payload.stage : 'unknown';
+  const percent =
+    typeof payload.percent === 'number' && Number.isFinite(payload.percent) ? payload.percent : 0;
+  return { stage, percent, message, ...(code ? { code } : {}) };
+}
+
 /** 组件级订阅（每组件一份，只做 setState） */
 const componentListeners = new Map<string, Set<(p: IngestProgress) => void>>();
 /** 模块级真实 IPC 订阅（每 ingestId 一份，completed 后拆除） */
@@ -57,9 +98,9 @@ function ensureModuleListener(ingestId: string): void {
   useTaskCenterStore
     .getState()
     .registerTask(`wiki:ingest:${ingestId}`, 'wiki', 'Wiki 导入', '导入中…');
-  listen<IngestProgress>(
+  listen<unknown>(
     `wiki-ingest-${ingestId}-progress`,
-    (e) => broadcast(ingestId, e.payload),
+    (e) => broadcast(ingestId, normalizeIngestProgress(e.payload)),
     // 保留 streamId：仅用于 main 侧 streamControllers 关联；completed 后
     // 模块级主动 unlisten，正常结束不会泄漏
     { streamId: ingestId },
@@ -132,7 +173,8 @@ export function formatWikiIngestSummary(
 ): string {
   const id = ingestId && ingestId.trim().length > 0 ? ingestId.trim() : 'none';
   const stage = state?.progress?.stage ?? 'idle';
-  const percent = typeof state?.progress?.percent === 'number' ? Math.round(state.progress.percent) : 0;
+  const percent =
+    typeof state?.progress?.percent === 'number' ? Math.round(state.progress.percent) : 0;
   const done = Boolean(state?.done);
   return `ingest=${id} · stage=${stage} · percent=${percent}% · done=${done}`;
 }
@@ -143,7 +185,8 @@ export function formatWikiIngestJson(
 ): string {
   const id = ingestId && ingestId.trim().length > 0 ? ingestId.trim() : null;
   const stage = state?.progress?.stage ?? 'idle';
-  const percent = typeof state?.progress?.percent === 'number' ? Math.round(state.progress.percent) : 0;
+  const percent =
+    typeof state?.progress?.percent === 'number' ? Math.round(state.progress.percent) : 0;
   return JSON.stringify({
     ingestId: id,
     stage,
