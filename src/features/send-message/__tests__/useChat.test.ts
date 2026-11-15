@@ -310,8 +310,9 @@ describe('useChat', () => {
     });
 
     // useSettings 异步加载先调 get_settings (mock.calls[0])，
-    // 第二个 invoke 才是 agent_chat_stream
-    const [, args] = invokeMock.mock.calls[1];
+    // session_get_model 在 calls[1]，
+    // 第三个 invoke 才是 agent_chat_stream
+    const [, args] = invokeMock.mock.calls[2];
     // api.ts 用 `config?.provider ?? null` 转 null,后端收到 null
     // 在 ChatRequest Optional 校验下走默认 "custom"
     expect(args.provider).toBeNull();
