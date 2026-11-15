@@ -121,6 +121,7 @@ class WordSectionProfile(BaseModel):
     header_text: str = ""
     footer_text: str = ""
     has_page_number_field: bool = False
+    page_number_format: Optional[str] = None
 
 
 class WordBookmarkProfile(BaseModel):
