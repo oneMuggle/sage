@@ -243,13 +243,14 @@ def _extract_paragraph_format(
     params: Dict[str, Any] = {"style": style_label}
     for field_name in _PARAGRAPH_FIELDS:
         value = style.get(field_name)
-        if value is not None:
-            if field_name.endswith("_pt"):
-                params[field_name] = round(float(value), 1)
-            elif field_name == "first_line_indent_pt" or field_name == "left_indent_pt":
-                params[field_name.replace("_pt", "_cm")] = round(float(value) * PT_TO_CM, 2)
-            else:
-                params[field_name] = value
+        if value is None:
+            continue
+        if field_name in ("first_line_indent_pt", "left_indent_pt"):
+            params[field_name.replace("_pt", "_cm")] = round(float(value) * PT_TO_CM, 2)
+        elif field_name.endswith("_pt"):
+            params[field_name] = round(float(value), 1)
+        else:
+            params[field_name] = value
 
     if len(params) > 1:
         details = []
