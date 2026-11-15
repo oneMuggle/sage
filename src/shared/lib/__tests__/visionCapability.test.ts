@@ -41,9 +41,20 @@ describe('resolveVisionSupport', () => {
 
   it('falls back to discoveredModels when catalog capabilities are null', () => {
     const supported = makeEndpoint([{ id: 'm1', capabilities: ['chat', 'vision'] }]);
-    const unsupported = makeEndpoint([{ id: 'm1', capabilities: ['chat'] }]);
+    const heuristicMiss = makeEndpoint([{ id: 'm1', capabilities: ['chat'] }]);
     expect(resolveVisionSupport(supported, 'm1', makeCatalog(null))).toBe('supported');
-    expect(resolveVisionSupport(unsupported, 'm1', makeCatalog(null))).toBe('unsupported');
+    // discovered capabilities 只是名字启发式——未命中 vision ≠ 模型不支持。
+    expect(resolveVisionSupport(heuristicMiss, 'm1', makeCatalog(null))).toBe('unknown');
+  });
+
+  it('returns unknown for a discovered model whose heuristic did not infer vision', () => {
+    const endpoint = makeEndpoint([{ id: 'deepseek-flash', capabilities: ['chat'] }]);
+    expect(resolveVisionSupport(endpoint, 'deepseek-flash', null)).toBe('unknown');
+  });
+
+  it('only returns unsupported when catalog explicitly says vision is false', () => {
+    const endpoint = makeEndpoint([{ id: 'm1', capabilities: ['chat'] }]);
+    expect(resolveVisionSupport(endpoint, 'm1', makeCatalog(false))).toBe('unsupported');
   });
 
   it('falls back to discoveredModels when catalog is unavailable', () => {

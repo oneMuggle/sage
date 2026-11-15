@@ -60,6 +60,9 @@ class LayerValues(CatalogValue):
     # Routing tier carried by this layer.  None means "this layer says nothing
     # about the tier", so the next layer in the stack may supply it.
     tier: Optional[NonblankString] = None
+    # Capability metadata carried by this layer.  Merged per-key with the same
+    # first-layer-wins priority as the other fields; None = layer says nothing.
+    capabilities: Optional[Dict[str, bool]] = None
 
 
 def _utc_timestamp(value: str) -> str:
