@@ -177,10 +177,16 @@ def extract_template_candidates(
                 )
 
     if any(section.get("has_page_number_field") for section in sections):
+        page_number_params: Dict[str, Any] = {"required": True}
+        for section in sections:
+            fmt = section.get("page_number_format")
+            if fmt:
+                page_number_params["format"] = fmt
+                break
         add_candidate(
             candidates,
             "page.page_number",
-            {"required": True},
+            page_number_params,
             0.9,
             source,
             excerpt,
@@ -202,10 +208,12 @@ def extract_template_candidates(
 
     _extract_heading_styles(profile, candidates, source, excerpt)
     _extract_special_styles(profile, candidates, source, excerpt)
+    _extract_caption_sequence(profile, candidates, source, excerpt)
     return candidates
 
 
 _HEADING_RE = re.compile(r"^heading\s+(\d+)$", re.IGNORECASE)
+_CAPTION_RE = re.compile(r"^(图|表)(\d+)")
 
 _SPECIAL_STYLE_KEYWORDS: Dict[str, str] = {
     "作者": "作者",
@@ -353,6 +361,36 @@ def _extract_special_styles(
                 f"{label} 样式: {style.get('font_east_asia', '?')}, {style.get('size_pt', '?')}pt",
             )
         _extract_paragraph_format(style, label, candidates, source)
+
+
+def _extract_caption_sequence(
+    profile: Dict[str, Any],
+    candidates: List[RawCandidate],
+    source: str,
+    excerpt: str,
+) -> None:
+    """从模板段落中检测图/表题注编号，产出 content.caption_sequence 规则。"""
+    found_labels: Set[str] = set()
+    for paragraph in profile.get("paragraphs", []):
+        text = str(paragraph.get("text") or "").strip()
+        if not text:
+            continue
+        match = _CAPTION_RE.match(text)
+        if match:
+            found_labels.add(match.group(1))
+
+    if not found_labels:
+        return
+
+    ordered = [label for label in ("图", "表") if label in found_labels]
+    add_candidate(
+        candidates,
+        "content.caption_sequence",
+        {"labels": ordered},
+        0.9,
+        source,
+        f"模板中检测到题注标签: {', '.join(ordered)}",
+    )
 
 
 __all__ = ["extract_template_candidates"]
