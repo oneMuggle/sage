@@ -333,6 +333,48 @@ def load_session_model_overrides() -> Dict[str, str]:
     }
 
 
+def find_endpoint_for_model(model_id: str) -> Optional[Dict[str, Any]]:
+    """在 ``app_settings.endpoints`` 中查找拥有指定模型的端点。
+
+    返回端点 dict（camelCase 键），或 ``None``（找不到 / 设置不可用）。
+    同一模型出现在多个端点时，优先选择有 apiKey 的端点。
+
+    2026-11-15: 修复会话模型覆盖路由失配 —— 当会话切换到不同端点的模型时，
+    必须同时切换端点凭据，否则请求会打到错误的上游（HTTP 502）。
+    """
+    try:
+        from backend.data.settings_canonicalizer import to_camel
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get_json("app_settings")
+    except Exception as exc:
+        logger.debug("find_endpoint_for_model: settings unavailable: %s", exc)
+        return None
+    if not isinstance(raw, dict):
+        return None
+    settings = to_camel(raw)
+    endpoints = settings.get("endpoints") or []
+    if not isinstance(endpoints, list):
+        return None
+    candidates: List[Dict[str, Any]] = []
+    for ep in endpoints:
+        if not isinstance(ep, dict):
+            continue
+        discovered = ep.get("discoveredModels") or []
+        if not isinstance(discovered, list):
+            continue
+        for m in discovered:
+            if isinstance(m, dict) and m.get("id") == model_id:
+                candidates.append(ep)
+                break
+    if not candidates:
+        return None
+    for ep in candidates:
+        if ep.get("apiKey"):
+            return ep
+    return candidates[0]
+
+
 def resolve_chat_model(
     session_id: Optional[str], profile_model: Optional[str] = None
 ) -> Optional[str]:
@@ -433,8 +475,9 @@ def load_llm_config_for_chat(
 ) -> Optional[Dict[str, Any]]:
     """全局端点配置 + 会话/profile 模型覆盖 → LLMConfig 兼容 dict。
 
-    端点（api_key/base_url/provider）恒取全局选择 —— 会话级只覆盖模型名，
-    不换端点（换端点属全局设置页职责）。无可用端点 → None（调用方降级）。
+    端点（api_key/base_url/provider）默认取全局选择。当会话/ profile 覆盖的
+    模型属于不同端点时，自动切换到该端点的凭据（2026-11-15 修复）。无可用端点
+    → None（调用方降级）。
 
     2026-10-28: 新增 ``profile_max_tokens`` 兜底 —— 当 agent profile 显式设置了
     ``model_config.max_tokens``（且非默认 4096）时，用它覆盖全局设置值。优先级：
@@ -446,7 +489,31 @@ def load_llm_config_for_chat(
         return None
     merged = dict(base)
     override = resolve_chat_model(session_id, profile_model)
-    if override:
+    if override and override != merged.get("model"):
+        # 2026-11-15: 会话覆盖的模型可能属于不同端点。必须切换凭据，
+        # 否则请求会打到错误的上游（HTTP 502）。
+        owning_endpoint = find_endpoint_for_model(override)
+        if owning_endpoint is not None:
+            current_ep_id = merged.get("endpoint_id")
+            new_ep_id = owning_endpoint.get("id")
+            if new_ep_id and new_ep_id != current_ep_id:
+                logger.info(
+                    "llm_factory: session model '%s' belongs to endpoint '%s' "
+                    "(was '%s'); switching credentials",
+                    override,
+                    new_ep_id[:8] if new_ep_id else "?",
+                    current_ep_id[:8] if current_ep_id else "?",
+                )
+                merged["api_key"] = owning_endpoint.get("apiKey") or ""
+                merged["base_url"] = owning_endpoint["baseUrl"]
+                merged["endpoint_id"] = new_ep_id
+                protocol = owning_endpoint.get("protocol") or "openai-compatible"
+                merged["provider"] = (
+                    "ollama" if protocol == "ollama"
+                    else "anthropic" if protocol == "anthropic"
+                    else "gemini" if protocol == "gemini"
+                    else "custom"
+                )
         merged["model"] = override
     # profile max_tokens 作为次高优先级（在 ChatRequest 之上、全局设置之下）。
     # base 已带全局 maxOutputTokens，仅在 profile 有「非占位」显式值时覆盖。

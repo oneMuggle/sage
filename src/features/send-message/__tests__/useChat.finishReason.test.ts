@@ -56,7 +56,9 @@ function seedActiveEndpoint(): void {
 beforeEach(() => {
   invokeMock.mockReset();
   listenMock.mockReset();
-  invokeMock.mockResolvedValueOnce({ data: null });
+  invokeMock.mockResolvedValueOnce({ data: null }); // get_settings
+  // 2026-11-15: useChat 现在会调 session_get_model 读取会话模型覆盖
+  invokeMock.mockResolvedValueOnce({ session_id: SESSION_ID, model: null }); // session_get_model
   localStorage.clear();
   useSettingsStore.setState({ settings: { ...DEFAULT_SETTINGS }, isLoading: true });
   useStore.setState({
