@@ -87,6 +87,7 @@ beforeEach(() => {
     if (cmd === 'agent_chat_stream') return { streamId: 'stream-1' };
     if (cmd === 'get_messages') return serverMessages;
     if (cmd === 'list_sessions') return [];
+    if (cmd === 'session_get_model') return { session_id: SESSION_ID, model: null };
     return undefined;
   });
   listenMock.mockImplementation(
