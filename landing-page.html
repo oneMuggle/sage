@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sage - 本地优先的记忆型 AI 桌面助手</title>
+  <meta name="description" content="Sage 是本地优先的记忆型 AI 桌面助手，能按格式要求直接交稿的 Office 写作代理。支持 Win10+/macOS/Linux + Windows 7 LTS。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- 异步加载，离线时回退到系统字体，不阻塞渲染 -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
+  <style>
+    :root {
+      --color-bg: #0a0a0f;
+      --color-bg-elevated: #12121a;
+      --color-bg-card: #1a1a25;
+      --color-bg-card-hover: #22222f;
+      --color-text: #f5f5f7;
+      --color-text-secondary: #a1a1aa;
+      --color-text-muted: #71717a;
+      --color-border: #27272a;
+      --color-border-subtle: #1f1f23;
+      --color-accent: #3b82f6;
+      --color-accent-glow: rgba(59, 130, 246, 0.15);
+      --color-green: #22c55e;
+      --color-purple: #a855f7;
+      --color-cyan: #06b6d4;
+      --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #06b6d4 100%);
+      --gradient-mesh: radial-gradient(ellipse at 20% 30%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
+                       radial-gradient(ellipse at 80% 70%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
+                       radial-gradient(ellipse at 50% 50%, rgba(6, 182, 212, 0.04) 0%, transparent 70%);
+      --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.3);
+      --shadow-glow: 0 0 40px rgba(59, 130, 246, 0.2);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 24px;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    section[id] {
+      scroll-margin-top: 88px;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Background mesh effect */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--gradient-mesh);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Header */
+    header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 16px 0;
+      background: rgba(10, 10, 15, 0.8);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--color-border-subtle);
+    }
+
+    header .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--color-text);
+      text-decoration: none;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--gradient-primary);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+    }
+
+    nav a {
+      color: var(--color-text-secondary);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    nav a:hover {
+      color: var(--color-text);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: var(--radius-md);
+      font-size: 0.9rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--gradient-primary);
+      color: white;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 60px rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-secondary {
+      background: var(--color-bg-card);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--color-bg-card-hover);
+      border-color: var(--color-text-muted);
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 180px 0 120px;
+      text-align: center;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: var(--color-bg-card);
+      border: 1px solid var(--color-border);
+      border-radius: 100px;
+      font-size: 0.85rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 32px;
+    }
+
+    .hero-badge .dot {
+      width: 8px;
+      height: 8px;
+      background: var(--color-green);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4.5rem);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      margin-bottom: 24px;
+      background: linear-gradient(180deg, var(--color-text) 0%, var(--color-text-secondary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero h1 .gradient-text {
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-subtitle {
+      font-size: clamp(1.1rem, 2vw, 1.35rem);
+      color: var(--color-text-secondary);
+      max-width: 700px;
+      margin: 0 auto 48px;
+      line-height: 1.7;
+    }
+
+    .hero-cta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .hero-platforms {
+      margin-top: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      color: var(--color-text-muted);
+      font-size: 0.85rem;
+    }
+
+    .hero-platforms span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Features Section */
+    .features {
+      padding: 80px 0;
+    }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 64px;
+    }
+
+    .section-header h2 {
+      font-size: clamp(1.75rem, 4vw, 2.5rem);
+      font-weight: 700;
+      margin-bottom: 16px;
+      letter-spacing: -0.01em;
+    }
+
+    .section-header p {
+      color: var(--color-text-secondary);
+      font-size: 1.1rem;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+    }
+
+    .feature-card {
+      background: var(--color-bg-card);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      transition: all 0.3s;
+    }
+
+    .feature-card:hover {
+      background: var(--color-bg-card-hover);
+      border-color: var(--color-text-muted);
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      background: var(--color-accent-glow);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      margin-bottom: 20px;
+    }
+
+    .feature-card h3 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .feature-card p {
+      color: var(--color-text-secondary);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    /* Architecture Section */
+    .architecture {
+      padding: 100px 0;
+    }
+
+    .arch-visual {
+      background: var(--color-bg-card);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-xl);
+      padding: 48px;
+      margin-top: 48px;
+    }
+
+    .arch-layers {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .arch-layer {
+      background: var(--color-bg-elevated);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .arch-layer-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--color-accent);
+      min-width: 100px;
+    }
+
+    .arch-layer-content {
+      font-size: 0.9rem;
+      color: var(--color-text-secondary);
+      line-height: 1.5;
+    }
+
+    .arch-layer-content code {
+      background: var(--color-bg);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--color-cyan);
+    }
+
+    /* Principles Section */
+    .principles {
+      padding: 100px 0;
+    }
+
+    .principles-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 32px;
+      margin-top: 64px;
+    }
+
+    .principle {
+      text-align: center;
+    }
+
+    .principle-number {
+      font-size: 3rem;
+      font-weight: 800;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 16px;
+    }
+
+    .principle h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .principle p {
+      color: var(--color-text-secondary);
+      font-size: 0.9rem;
+    }
+
+    /* CTA Section */
+    .cta-section {
+      padding: 100px 0;
+      text-align: center;
+    }
+
+    .cta-box {
+      background: var(--color-bg-card);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-xl);
+      padding: 80px 48px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cta-box::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: var(--gradient-primary);
+    }
+
+    .cta-box h2 {
+      font-size: clamp(1.75rem, 4vw, 2.5rem);
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .cta-box p {
+      color: var(--color-text-secondary);
+      font-size: 1.1rem;
+      margin-bottom: 32px;
+    }
+
+    .cta-buttons {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    /* Footer */
+    footer {
+      padding: 48px 0;
+      border-top: 1px solid var(--color-border-subtle);
+    }
+
+    .footer-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 24px;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 32px;
+    }
+
+    .footer-links a {
+      color: var(--color-text-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover {
+      color: var(--color-text);
+    }
+
+    .footer-copyright {
+      color: var(--color-text-muted);
+      font-size: 0.85rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      header {
+        padding: 12px 0;
+      }
+
+      nav {
+        display: none;
+      }
+
+      .hero {
+        padding: 140px 0 80px;
+      }
+
+      .hero-cta {
+        flex-direction: column;
+      }
+
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .arch-layer {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .principles-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .footer-content {
+        flex-direction: column;
+        text-align: center;
+      }
+    }
+
+    /* Animations */
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-in {
+      animation: fadeInUp 0.6s ease-out forwards;
+    }
+
+    .delay-1 { animation-delay: 0.1s; }
+    .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.3s; }
+    .delay-4 { animation-delay: 0.4s; }
+
+    /* Slideshow */
+    .slideshow { padding: 100px 0; }
+
+    .slide-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 40px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .slide-tab {
+      padding: 10px 20px;
+      background: var(--color-bg-card);
+      border: 1px solid var(--color-border);
+      border-radius: 100px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: var(--color-text-secondary);
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+
+    .slide-tab:hover {
+      background: var(--color-bg-card-hover);
+      border-color: var(--color-text-muted);
+    }
+
+    .slide-tab.active {
+      background: var(--color-accent);
+      border-color: var(--color-accent);
+      color: #fff;
+    }
+
+    .slide-viewport {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slides {
+      display: flex;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      gap: 0;
+    }
+
+    .slides::-webkit-scrollbar { display: none; }
+
+    .slide {
+      flex: 0 0 100%;
+      min-width: 100%;
+      scroll-snap-align: start;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+      padding: 20px 0;
+    }
+
+    .slide.reverse { direction: rtl; }
+    .slide.reverse > * { direction: ltr; }
+    .slide.reverse .slide-copy { order: 2; }
+    .slide.reverse .slide-visual { order: 1; }
+
+    .slide-eyebrow {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--color-accent);
+      margin-bottom: 14px;
+    }
+
+    .slide-copy h3 {
+      font-size: clamp(1.6rem, 3.2vw, 2.1rem);
+      font-weight: 700;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+      margin-bottom: 18px;
+    }
+
+    .slide-copy p {
+      color: var(--color-text-secondary);
+      font-size: 1rem;
+      line-height: 1.75;
+      margin-bottom: 24px;
+    }
+
+    .slide-tags { display: flex; flex-wrap: wrap; gap: 10px; }
+
+    .slide-tag {
+      padding: 6px 14px;
+      background: var(--color-bg-card);
+      border: 1px solid var(--color-border);
+      border-radius: 100px;
+      font-size: 0.8rem;
+      color: var(--color-text-secondary);
+    }
+
+    .slide-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 40px;
+    }
+
+    .slide-dots {
+      display: flex;
+      gap: 8px;
+    }
+
+    .slide-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-border);
+      cursor: pointer;
+      transition: all 0.3s;
+      border: none;
+      padding: 0;
+    }
+
+    .slide-dot:hover {
+      background: var(--color-text-muted);
+    }
+
+    .slide-dot.active {
+      width: 28px;
+      border-radius: 4px;
+      background: var(--color-accent);
+    }
+
+    .slide-arrows {
+      display: flex;
+      gap: 12px;
+    }
+
+    .slide-arrow {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-card);
+      color: var(--color-text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .slide-arrow:hover {
+      background: var(--color-bg-card-hover);
+      border-color: var(--color-text-muted);
+    }
+
+    .slide-arrow:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .slide-arrow:disabled:hover {
+      background: var(--color-bg-card);
+      border-color: var(--color-border);
+    }
+
+    .slide-arrow svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* Mock UI */
+    .mock {
+      background: var(--color-bg-card);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .mock-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--color-bg-elevated);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .mock-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .mock-dot.red { background: #ef4444; }
+    .mock-dot.yellow { background: #f59e0b; }
+    .mock-dot.green { background: #22c55e; }
+
+    .mock-title {
+      margin-left: 8px;
+      font-size: 0.72rem;
+      color: var(--color-text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .mock-body {
+      padding: 20px;
+      display: grid;
+      grid-template-columns: 1.15fr 1fr;
+      gap: 16px;
+      min-height: 268px;
+    }
+
+    .mock-body.single { grid-template-columns: 1fr; }
+
+    .mock-chat { display: flex; flex-direction: column; gap: 12px; }
+
+    .mock-bubble {
+      padding: 12px 14px;
+      border-radius: var(--radius-md);
+      font-size: 0.78rem;
+      line-height: 1.55;
+    }
+
+    .mock-bubble.user {
+      background: var(--color-bg-elevated);
+      border: 1px solid var(--color-border);
+      color: var(--color-text-secondary);
+    }
+
+    .mock-bubble.bot {
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      color: var(--color-text);
+    }
+
+    .mock-check {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 7px;
+      font-size: 0.72rem;
+      color: var(--color-green);
+    }
+
+    .mock-preview {
+      background: var(--color-bg-elevated);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      align-self: start;
+    }
+
+    .mock-preview-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+      margin-bottom: 16px;
+    }
+
+    .mock-line {
+      height: 7px;
+      background: var(--color-border);
+      border-radius: 4px;
+      margin-bottom: 9px;
+    }
+
+    .mock-line.w-90 { width: 90%; }
+    .mock-line.w-75 { width: 75%; }
+    .mock-line.w-60 { width: 60%; }
+    .mock-line.w-40 { width: 40%; }
+    .mock-line.accent { background: rgba(59, 130, 246, 0.35); }
+
+    .mock-memory { display: flex; flex-direction: column; gap: 12px; }
+
+    .memory-block {
+      background: var(--color-bg-elevated);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+    }
+
+    .memory-block-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: var(--color-accent);
+      margin-bottom: 10px;
+    }
+
+    .memory-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.76rem;
+      color: var(--color-text-secondary);
+      padding: 4px 0;
+    }
+
+    .memory-item::before {
+      content: '';
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--color-text-muted);
+      flex-shrink: 0;
+    }
+
+    .approval-card {
+      background: var(--color-bg-elevated);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: var(--radius-md);
+      padding: 22px;
+    }
+
+    .approval-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #f59e0b;
+      margin-bottom: 16px;
+    }
+
+    .approval-action {
+      font-size: 0.78rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 12px;
+    }
+
+    .approval-file {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.76rem;
+      color: var(--color-text);
+      padding: 5px 0;
+      font-family: var(--font-mono);
+    }
+
+    .approval-actions { display: flex; gap: 12px; margin-top: 20px; }
+
+    .approval-btn {
+      flex: 1;
+      padding: 10px;
+      text-align: center;
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      font-weight: 500;
+      background: var(--color-bg-card);
+      border: 1px solid var(--color-border);
+      color: var(--color-text-secondary);
+    }
+
+    .approval-btn.primary {
+      background: var(--gradient-primary);
+      border: none;
+      color: #fff;
+    }
+
+    /* Demo video (used inside slide) */
+    .video-frame {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      border: 1px solid var(--color-border);
+      background: linear-gradient(135deg, #101019 0%, #1a1a28 100%);
+      cursor: pointer;
+    }
+
+    .video-cover {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+      background:
+        radial-gradient(ellipse at 50% 40%, rgba(59, 130, 246, 0.12), transparent 60%),
+        linear-gradient(135deg, #101019 0%, #1a1a28 100%);
+      transition: opacity 0.4s;
+      z-index: 2;
+    }
+
+    .video-cover::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      background-size: 44px 44px;
+      pointer-events: none;
+    }
+
+    .video-frame.playing .video-cover { opacity: 0; pointer-events: none; }
+
+    .video-play {
+      position: relative;
+      width: 88px;
+      height: 88px;
+      border: none;
+      border-radius: 50%;
+      background: var(--gradient-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 60px rgba(59, 130, 246, 0.45);
+      transition: transform 0.3s, box-shadow 0.3s;
+      cursor: pointer;
+    }
+
+    .video-frame:hover .video-play {
+      transform: scale(1.08);
+      box-shadow: 0 0 90px rgba(59, 130, 246, 0.6);
+    }
+
+    .video-play svg { width: 30px; height: 30px; fill: #fff; margin-left: 4px; }
+
+    .video-label { position: relative; font-size: 1.15rem; font-weight: 600; }
+    .video-sub { position: relative; font-size: 0.85rem; color: var(--color-text-muted); }
+
+    .video-el {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #000;
+      z-index: 1;
+    }
+
+    .video-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 32px;
+      transform: translate(-50%, 20px);
+      background: var(--color-bg-card);
+      border: 1px solid var(--color-border);
+      color: var(--color-text);
+      font-size: 0.85rem;
+      padding: 12px 20px;
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-soft);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s;
+      z-index: 200;
+    }
+
+    .video-toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .video-toast code {
+      font-family: var(--font-mono);
+      color: var(--color-cyan);
+      font-size: 0.8rem;
+    }
+
+    @media (max-width: 900px) {
+      .slide {
+        grid-template-columns: 1fr;
+        gap: 36px;
+      }
+      .slide.reverse .slide-copy { order: 1; }
+      .slide.reverse .slide-visual { order: 2; }
+      .slide-tabs { gap: 6px; }
+      .slide-tab { padding: 8px 14px; font-size: 0.82rem; }
+    }
+
+    @media (max-width: 768px) {
+      .mock-body { grid-template-columns: 1fr; min-height: 0; }
+      .video-label { font-size: 1rem; }
+      .video-play { width: 68px; height: 68px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="#" class="logo">
+        <span class="logo-icon">S</span>
+        <span>Sage</span>
+      </a>
+      <nav>
+        <a href="#features">功能</a>
+        <a href="#showcase">亮点</a>
+        <a href="#demo">演示</a>
+        <a href="#architecture">架构</a>
+        <a href="https://github.com/oneMuggle/sage" target="_blank">GitHub</a>
+        <a href="https://github.com/oneMuggle/sage/releases" class="btn btn-primary" target="_blank">下载</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container">
+        <div class="hero-badge animate-in">
+          <span class="dot"></span>
+          <span>Beta 版本 · 持续迭代中</span>
+        </div>
+        <h1 class="animate-in delay-1">
+          本地优先的<br>
+          <span class="gradient-text">记忆型 AI 桌面助手</span>
+        </h1>
+        <p class="hero-subtitle animate-in delay-2">
+          能按格式要求直接交稿的 Office 写作代理<br>
+          三层记忆 · 渐进式自演化 · 完全本地存储 · 透明可控
+        </p>
+        <div class="hero-cta animate-in delay-3">
+          <a href="https://github.com/oneMuggle/sage/releases" class="btn btn-primary" target="_blank">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            立即下载
+          </a>
+          <a href="https://github.com/oneMuggle/sage" class="btn btn-secondary" target="_blank">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+            </svg>
+            GitHub
+          </a>
+        </div>
+        <div class="hero-platforms animate-in delay-4">
+          <span>Windows 10+</span>
+          <span>macOS</span>
+          <span>Linux</span>
+          <span>Windows 7 LTS</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" id="features">
+      <div class="container">
+        <div class="section-header">
+          <h2>核心能力</h2>
+          <p>从对话到交稿，一站式 AI 办公体验</p>
+        </div>
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">📝</div>
+            <h3>Office 全链路</h3>
+            <p>对话生成/修订 Word、Excel、PPT、PDF；版式即配置、格式 Linter 一键修复、GB/T 7714 引用体系、期刊模板。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🧠</div>
+            <h3>持久记忆系统</h3>
+            <p>工作/情景/语义三层记忆 + 用户画像，跨会话记住偏好与上下文；所有记忆本地存储、可查看可删除。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🛠️</div>
+            <h3>编码与本地代理</h3>
+            <p>文件读写 / patch / bash / git / LSP 符号搜索 / 浏览器 / 子代理并行编排；危险操作需人工审批。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🧩</div>
+            <h3>技能与 MCP</h3>
+            <p>SKILL.md 技能系统、多 MCP 服务器接入、Prompt 模板库与斜杠命令，可扩展、可共享。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📚</div>
+            <h3>本地知识库</h3>
+            <p>本地 Wiki + RAG 服务 + 浏览器剪藏扩展，@ 引用文件/文档/表格进入对话，数据不出本机。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📱</div>
+            <h3>远程网关</h3>
+            <p>Telegram 远程对话与审批：手机上批准桌面代理的操作，随时随地掌控工作进度。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🔄</div>
+            <h3>人类在环的自演化</h3>
+            <p>代理可从错误中提出改进，但必须经人审批后生效，全程可审计、可回滚。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🔌</div>
+            <h3>可插拔更新源</h3>
+            <p>GitHub / Gitee / GitLab / 通用 HTTP 更新源，token 经系统钥匙串加密。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slideshow" id="showcase">
+      <div class="container">
+        <div class="section-header">
+          <h2>亮点与特点</h2>
+          <p>不只是聊天，而是一个能交付成果的工作伙伴</p>
+        </div>
+
+        <div class="slide-tabs" role="tablist">
+          <button class="slide-tab active" data-slide="0" role="tab" aria-selected="true">Office 全链路</button>
+          <button class="slide-tab" data-slide="1" role="tab" aria-selected="false">持久记忆</button>
+          <button class="slide-tab" data-slide="2" role="tab" aria-selected="false">透明可控</button>
+          <button class="slide-tab" data-slide="3" role="tab" aria-selected="false">产品演示</button>
+        </div>
+
+        <div class="slide-viewport">
+          <div class="slides" id="slides">
+            <div class="slide" data-index="0">
+              <div class="slide-copy">
+                <div class="slide-eyebrow">Office 全链路</div>
+                <h3>你说格式，它来交稿</h3>
+                <p>从起草到定稿，Sage 直接操作 Word、Excel、PPT、PDF。版式即配置，格式 Linter 自动校验并一键修复，GB/T 7714 与 APA 引用体系开箱即用，改前快照可随时回滚。</p>
+                <div class="slide-tags">
+                  <span class="slide-tag">FormatSpec 版式配置</span>
+                  <span class="slide-tag">格式 Linter 一键修复</span>
+                  <span class="slide-tag">GB/T 7714 引用</span>
+                  <span class="slide-tag">改前快照回滚</span>
+                </div>
+              </div>
+              <div class="slide-visual">
+                <div class="mock">
+                  <div class="mock-bar">
+                    <span class="mock-dot red"></span>
+                    <span class="mock-dot yellow"></span>
+                    <span class="mock-dot green"></span>
+                    <span class="mock-title">Sage — 项目周报</span>
+                  </div>
+                  <div class="mock-body">
+                    <div class="mock-chat">
+                      <div class="mock-bubble user">帮我写一份项目周报，引用格式用 GB/T 7714，目录自动生成</div>
+                      <div class="mock-bubble bot">
+                        已生成「项目周报.docx」
+                        <div class="mock-check">✓ 格式检查通过</div>
+                        <div class="mock-check">✓ 引用格式 GB/T 7714</div>
+                        <div class="mock-check">✓ 目录域已更新</div>
+                      </div>
+                    </div>
+                    <div class="mock-preview">
+                      <div class="mock-preview-title">📄 项目周报.docx</div>
+                      <div class="mock-line accent w-60"></div>
+                      <div class="mock-line w-90"></div>
+                      <div class="mock-line w-75"></div>
+                      <div class="mock-line w-90"></div>
+                      <div class="mock-line w-40"></div>
+                      <div class="mock-line accent w-60"></div>
+                      <div class="mock-line w-90"></div>
+                      <div class="mock-line w-75"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="slide reverse" data-index="1">
+              <div class="slide-copy">
+                <div class="slide-eyebrow">持久记忆</div>
+                <h3>越用越懂你</h3>
+                <p>工作、情景、语义三层记忆加用户画像，跨会话记住你的偏好、项目上下文与历史决策。所有记忆本地存储，随时可以查看、编辑、删除。</p>
+                <div class="slide-tags">
+                  <span class="slide-tag">三层记忆架构</span>
+                  <span class="slide-tag">用户画像</span>
+                  <span class="slide-tag">本地向量检索</span>
+                  <span class="slide-tag">可查看可删除</span>
+                </div>
+              </div>
+              <div class="slide-visual">
+                <div class="mock">
+                  <div class="mock-bar">
+                    <span class="mock-dot red"></span>
+                    <span class="mock-dot yellow"></span>
+                    <span class="mock-dot green"></span>
+                    <span class="mock-title">Sage — 记忆中心</span>
+                  </div>
+                  <div class="mock-body single">
+                    <div class="mock-memory">
+                      <div class="memory-block">
+                        <div class="memory-block-title">🧠 工作记忆</div>
+                        <div class="memory-item">当前项目：智慧城市方案</div>
+                        <div class="memory-item">输出格式：中文正式公文</div>
+                      </div>
+                      <div class="memory-block">
+                        <div class="memory-block-title">📖 情景记忆</div>
+                        <div class="memory-item">上次讨论：10 月 28 日评审会</div>
+                        <div class="memory-item">待办事项：补充数据附录</div>
+                      </div>
+                      <div class="memory-block">
+                        <div class="memory-block-title">👤 用户画像</div>
+                        <div class="memory-item">偏好：简洁表达、图表优先</div>
+                        <div class="memory-item">身份：项目经理</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="slide" data-index="2">
+              <div class="slide-copy">
+                <div class="slide-eyebrow">透明可控</div>
+                <h3>每一步都在你的掌控中</h3>
+                <p>Sage 可以读写文件、执行命令、操作浏览器，但所有危险操作都需要你审批。每一步决策可审计、可回滚，代理提出的自我改进也必须经人批准后才会生效。</p>
+                <div class="slide-tags">
+                  <span class="slide-tag">危险操作审批</span>
+                  <span class="slide-tag">完整审计日志</span>
+                  <span class="slide-tag">人类在环</span>
+                  <span class="slide-tag">可回滚</span>
+                </div>
+              </div>
+              <div class="slide-visual">
+                <div class="mock">
+                  <div class="mock-bar">
+                    <span class="mock-dot red"></span>
+                    <span class="mock-dot yellow"></span>
+                    <span class="mock-dot green"></span>
+                    <span class="mock-title">Sage — 操作审批</span>
+                  </div>
+                  <div class="mock-body single">
+                    <div class="approval-card">
+                      <div class="approval-header">⚠️ 需要你的审批</div>
+                      <div class="approval-action">即将执行：删除 3 个文件</div>
+                      <div class="approval-file">📁 report_old.docx</div>
+                      <div class="approval-file">📁 data_backup.xlsx</div>
+                      <div class="approval-file">📁 draft_v1.pptx</div>
+                      <div class="approval-actions">
+                        <div class="approval-btn">拒绝</div>
+                        <div class="approval-btn primary">确认执行</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="slide" data-index="3" id="demo">
+              <div class="slide-copy">
+                <div class="slide-eyebrow">产品演示</div>
+                <h3>从对话到交稿，一气呵成</h3>
+                <p>看看 Sage 如何将你的需求直接转化为专业文档。Office 写作全流程，格式自动校验，引用规范严谨，让你专注于内容本身。</p>
+                <div class="slide-tags">
+                  <span class="slide-tag">实时预览</span>
+                  <span class="slide-tag">格式自动校验</span>
+                  <span class="slide-tag">一键导出</span>
+                  <span class="slide-tag">专业排版</span>
+                </div>
+              </div>
+              <div class="slide-visual">
+                <div class="video-frame" id="demoVideo">
+                  <video class="video-el" playsinline controls preload="none">
+                    <source src="assets/sage-demo.mp4" type="video/mp4">
+                  </video>
+                  <div class="video-cover">
+                    <button class="video-play" aria-label="播放产品演示">
+                      <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                    <div class="video-label">观看 Sage 产品演示</div>
+                    <div class="video-sub">从对话到交稿 · Office 写作全流程</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="slide-controls">
+          <div class="slide-dots" id="slideDots">
+            <button class="slide-dot active" data-slide="0" aria-label="第 1 页"></button>
+            <button class="slide-dot" data-slide="1" aria-label="第 2 页"></button>
+            <button class="slide-dot" data-slide="2" aria-label="第 3 页"></button>
+            <button class="slide-dot" data-slide="3" aria-label="第 4 页"></button>
+          </div>
+          <div class="slide-arrows">
+            <button class="slide-arrow" id="slidePrev" aria-label="上一页">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+            </button>
+            <button class="slide-arrow" id="slideNext" aria-label="下一页">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="video-toast" id="videoToast"></div>
+
+    <section class="architecture" id="architecture">
+      <div class="container">
+        <div class="section-header">
+          <h2>本地优先架构</h2>
+          <p>数据完全本地存储，隐私零妥协</p>
+        </div>
+        <div class="arch-visual">
+          <div class="arch-layers">
+            <div class="arch-layer">
+              <span class="arch-layer-label">桌面客户端</span>
+              <span class="arch-layer-content">
+                <code>Electron 21</code> + <code>React 18</code> + <code>Vite 5</code> · FSD 分层 · preload IPC 白名单 · 自动更新 · 托盘
+              </span>
+            </div>
+            <div class="arch-layer">
+              <span class="arch-layer-label">Python 后端</span>
+              <span class="arch-layer-content">
+                <code>FastAPI</code> 六边形架构 · Agent 编排 · 工具注册表 · 技能系统 · 记忆系统 · Office 引擎 · MCP 客户端 · 网关 · 调度器
+              </span>
+            </div>
+            <div class="arch-layer">
+              <span class="arch-layer-label">数据层</span>
+              <span class="arch-layer-content">
+                <code>SQLite</code> 会话/记忆/审计 + <code>ChromaDB</code> 向量检索 —— 全部本地，无云端依赖
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="principles">
+      <div class="container">
+        <div class="section-header">
+          <h2>设计原则</h2>
+          <p>简单、可控、透明</p>
+        </div>
+        <div class="principles-grid">
+          <div class="principle">
+            <div class="principle-number">01</div>
+            <h3>记忆优先</h3>
+            <p>跨会话记住上下文与偏好，无需重复沟通</p>
+          </div>
+          <div class="principle">
+            <div class="principle-number">02</div>
+            <h3>渐进演化</h3>
+            <p>代理提出改进建议，人类审批后生效</p>
+          </div>
+          <div class="principle">
+            <div class="principle-number">03</div>
+            <h3>透明可控</h3>
+            <p>所有操作可审计，关键步骤需人工确认</p>
+          </div>
+          <div class="principle">
+            <div class="principle-number">04</div>
+            <h3>简单优先</h3>
+            <p>简单胜于复杂，实用胜于花哨</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-section">
+      <div class="container">
+        <div class="cta-box">
+          <h2>开始使用 Sage</h2>
+          <p>本地优先的 AI 办公体验，从下载开始</p>
+          <div class="cta-buttons">
+            <a href="https://github.com/oneMuggle/sage/releases" class="btn btn-primary" target="_blank">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              下载最新版本
+            </a>
+            <a href="https://github.com/oneMuggle/sage/releases?q=tag%3Av*-lts" class="btn btn-secondary" target="_blank">
+              Windows 7 LTS
+            </a>
+            <a href="https://github.com/oneMuggle/sage" class="btn btn-secondary" target="_blank">
+              在 GitHub 上查看
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-copyright">
+          MIT License · Sage Project
+        </div>
+        <div class="footer-links">
+          <a href="https://github.com/oneMuggle/sage" target="_blank">GitHub</a>
+          <a href="https://github.com/oneMuggle/sage/releases" target="_blank">Releases</a>
+          <a href="https://github.com/oneMuggle/sage/blob/main/docs/README.md" target="_blank">文档</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Scroll reveal
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.style.opacity = '1';
+          entry.target.style.transform = 'translateY(0)';
+        }
+      });
+    }, observerOptions);
+
+    document.querySelectorAll('.feature-card, .arch-layer, .principle, .slide-copy, .slide-visual').forEach(el => {
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(20px)';
+      el.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+      observer.observe(el);
+    });
+
+    // Slideshow controls
+    const slidesContainer = document.getElementById('slides');
+    const slideTabs = document.querySelectorAll('.slide-tab');
+    const slideDots = document.querySelectorAll('.slide-dot');
+    const prevBtn = document.getElementById('slidePrev');
+    const nextBtn = document.getElementById('slideNext');
+    const totalSlides = 4;
+    let currentSlide = 0;
+
+    function goToSlide(idx) {
+      const targetIdx = Math.max(0, Math.min(totalSlides - 1, idx));
+      currentSlide = targetIdx;
+      slidesContainer.scrollTo({ left: targetIdx * slidesContainer.clientWidth, behavior: 'smooth' });
+      updateSlideState();
+    }
+
+    function updateSlideState() {
+      slideTabs.forEach((tab, i) => {
+        const isActive = i === currentSlide;
+        tab.classList.toggle('active', isActive);
+        tab.setAttribute('aria-selected', isActive);
+      });
+      slideDots.forEach((dot, i) => dot.classList.toggle('active', i === currentSlide));
+      prevBtn.disabled = currentSlide === 0;
+      nextBtn.disabled = currentSlide === totalSlides - 1;
+
+      // Re-trigger observer for the new slide's elements
+      const activeSlide = slidesContainer.querySelectorAll('.slide')[currentSlide];
+      if (activeSlide) {
+        activeSlide.querySelectorAll('.slide-copy, .slide-visual').forEach(el => {
+          el.style.opacity = '0';
+          el.style.transform = 'translateY(20px)';
+          requestAnimationFrame(() => observer.observe(el));
+        });
+      }
+    }
+
+    slideTabs.forEach(tab => {
+      tab.addEventListener('click', () => goToSlide(parseInt(tab.dataset.slide)));
+    });
+
+    slideDots.forEach(dot => {
+      dot.addEventListener('click', () => goToSlide(parseInt(dot.dataset.slide)));
+    });
+
+    prevBtn.addEventListener('click', () => goToSlide(currentSlide - 1));
+    nextBtn.addEventListener('click', () => goToSlide(currentSlide + 1));
+
+    // Sync on manual scroll (touch swipe / scrollbar)
+    let scrollSyncTimer;
+    slidesContainer.addEventListener('scroll', () => {
+      clearTimeout(scrollSyncTimer);
+      scrollSyncTimer = setTimeout(() => {
+        const idx = Math.round(slidesContainer.scrollLeft / slidesContainer.clientWidth);
+        if (idx !== currentSlide && idx >= 0 && idx < totalSlides) {
+          currentSlide = idx;
+          updateSlideState();
+        }
+      }, 80);
+    });
+
+    // Keyboard navigation (arrow keys when slideshow is in view)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goToSlide(currentSlide - 1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        goToSlide(currentSlide + 1);
+      }
+    });
+
+    // Demo video: play when a source is present, otherwise surface a hint
+    const frame = document.getElementById('demoVideo');
+    const demoVideo = frame.querySelector('video');
+    const toast = document.getElementById('videoToast');
+    const VIDEO_FILE = 'assets/sage-demo.mp4';
+    let toastTimer;
+    let hintTimer;
+
+    function showVideoToast(fileName) {
+      toast.innerHTML = '演示视频尚未就绪 — 将 <code>' + fileName + '</code> 放入项目后即可播放';
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 4000);
+    }
+
+    frame.addEventListener('click', (event) => {
+      if (frame.classList.contains('playing')) return;
+      if (!event.target.closest('.video-cover')) return;
+      // Prevent click from triggering slide navigation
+      event.stopPropagation();
+      const attempt = demoVideo.play();
+      if (attempt && typeof attempt.catch === 'function') {
+        attempt.catch(() => showVideoToast(VIDEO_FILE));
+      }
+      // play() 的 promise 在源缺失时可能长时间不 settle，加一层状态兜底
+      clearTimeout(hintTimer);
+      hintTimer = setTimeout(() => {
+        if (!frame.classList.contains('playing')) showVideoToast(VIDEO_FILE);
+      }, 1200);
+    });
+
+    demoVideo.addEventListener('playing', () => {
+      clearTimeout(hintTimer);
+      frame.classList.add('playing');
+    });
+  </script>
+</body>
+</html>

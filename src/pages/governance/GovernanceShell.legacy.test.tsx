@@ -34,6 +34,7 @@ const mockGetProjectProfile = vi.fn();
 const mockCreateProjectProfile = vi.fn();
 const mockDeleteProjectProfile = vi.fn();
 const mockOpen = vi.fn();
+const mockCheckProjectHealth = vi.fn();
 
 vi.mock('../../shared/api', () => ({
   projectApi: {
@@ -43,6 +44,7 @@ vi.mock('../../shared/api', () => ({
     updateAllowedPaths: (...args: unknown[]) => mockUpdateAllowedPaths(...args),
     listMilestones: (...args: unknown[]) => mockListMilestones(...args),
     open: (...args: unknown[]) => mockOpen(...args),
+    checkProjectHealth: (...args: unknown[]) => mockCheckProjectHealth(...args),
   },
   memoryApi: {
     getProjectProfile: (...args: unknown[]) => mockGetProjectProfile(...args),
@@ -168,10 +170,23 @@ describe('GovernanceShell (legacy)', () => {
       mockCreateProjectProfile,
       mockDeleteProjectProfile,
       mockOpen,
+      mockCheckProjectHealth,
     ].forEach((m) => m.mockReset());
     mockList.mockResolvedValue([testProject]);
     mockListMilestones.mockResolvedValue([]);
     mockGetProjectProfile.mockResolvedValue({ items: [] });
+    mockCheckProjectHealth.mockResolvedValue({
+      project_id: 'proj-1',
+      project_name: 'my-project',
+      severity: 'ok',
+      project_stage: '',
+      total_milestones: 0,
+      completed_milestones: 0,
+      in_progress_milestones: 0,
+      pending_milestones: 0,
+      blocked_milestones: 0,
+      overdue: [],
+    });
   });
 
   it('shows loading state when project not found', async () => {

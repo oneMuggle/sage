@@ -198,6 +198,32 @@ export const zhPlaybook = {
   'playbook.author.bind': '绑定生成的规程',
   'playbook.author.binding': '绑定中…',
 
+  'playbook.conversation.toggle': 'AI 对话式定制',
+  'playbook.conversation.toggleClose': '收起对话',
+  'playbook.conversation.hint':
+    '通过多轮对话描述项目阶段，AI 每轮更新规程草案；确认后才绑定，可随时回退。',
+  'playbook.conversation.start': '开始对话',
+  'playbook.conversation.starting': '正在开始…',
+  'playbook.conversation.inputPlaceholder':
+    '例如：这是一个科研项目，分开题、实施、结题三个阶段，每个阶段提交不同文档',
+  'playbook.conversation.send': '发送',
+  'playbook.conversation.sending': '思考中…',
+  'playbook.conversation.rollback': '撤销上一步',
+  'playbook.conversation.commit': '确认绑定',
+  'playbook.conversation.committing': '绑定中…',
+  'playbook.conversation.committed': '已绑定第 {version} 版规程',
+  'playbook.conversation.fallback': '（未配置 LLM，已降级为规则草案）',
+  'playbook.conversation.emptyStages': '草案还没有阶段',
+  'playbook.conversation.stageMeta': '{count} 个产物',
+
+  'playbook.infer.button': '从项目目录推断阶段',
+  'playbook.infer.running': '推断中…',
+  'playbook.infer.title': '推断结果（置信度 {confidence}%）',
+  'playbook.infer.empty': '未能从目录或 git 历史中识别出阶段',
+  'playbook.infer.bind': '以推断结果绑定规程',
+  'playbook.infer.binding': '绑定中…',
+  'playbook.infer.bound': '已按推断结果绑定规程',
+
   'playbook.versions.title': '版本历史',
   'playbook.versions.empty': '暂无版本记录',
   'playbook.versions.current': '当前',

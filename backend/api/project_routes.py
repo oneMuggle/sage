@@ -51,11 +51,13 @@ from backend.api.project_schemas import (
     MilestoneModel,
     MilestonesResponse,
     MilestoneUpdateRequest,
+    OverdueMilestoneModel,
     ProjectAllowedPathsRequest,
     ProjectAllowedPathsResponse,
     ProjectCharterResponse,
     ProjectContextBudgetResponse,
     ProjectDiagnoseResponse,
+    ProjectHealthSummaryModel,
     ProjectListResponse,
     ProjectLocationResponse,
     ProjectMaterialAddRequest,
@@ -69,6 +71,7 @@ from backend.api.project_schemas import (
     ProjectScaffoldRequest,
     ProjectScaffoldResponse,
     ProjectSessionsResponse,
+    ProjectsHealthCheckResponse,
     ProjectTemplateListResponse,
     ProjectTemplateSummary,
     ProjectTreeResponse,
@@ -123,6 +126,7 @@ from backend.services.project_bootstrap import (
     build_bootstrap_suggestions,
 )
 from backend.services.project_git_init import init_project_git
+from backend.services.project_health_monitor import ProjectHealthMonitor
 from backend.services.project_template import (
     get_built_in_templates,
     load_global_templates,
@@ -256,6 +260,53 @@ def list_project_templates() -> ProjectTemplateListResponse:
         )
 
     return ProjectTemplateListResponse(templates=summaries)
+
+
+# ── 项目健康检查（M1, 2026-11-14）───────────────────────────────────────
+# 确定性扫描活跃项目的里程碑逾期 / 阻塞情况；发现问题时推入
+# ProjectHealthNotificationQueue，由 Electron 15s 轮询转 OS 通知。
+
+
+def _summary_to_model(summary: Any) -> ProjectHealthSummaryModel:
+    data = summary.to_dict()
+    return ProjectHealthSummaryModel(
+        project_id=data["project_id"],
+        project_name=data["project_name"],
+        severity=data["severity"],
+        project_stage=data["project_stage"],
+        total_milestones=data["total_milestones"],
+        completed_milestones=data["completed_milestones"],
+        in_progress_milestones=data["in_progress_milestones"],
+        pending_milestones=data["pending_milestones"],
+        blocked_milestones=data["blocked_milestones"],
+        overdue=[OverdueMilestoneModel(**o) for o in data["overdue"]],
+    )
+
+
+@router.get("/health-check", response_model=ProjectsHealthCheckResponse)
+def list_projects_health() -> ProjectsHealthCheckResponse:
+    """返回所有活跃项目的健康摘要（只读，不推送通知）。"""
+    summaries = ProjectHealthMonitor().scan_all()
+    return ProjectsHealthCheckResponse(
+        checked=len(summaries),
+        severities={
+            "critical": sum(1 for s in summaries if s.severity == "critical"),
+            "warning": sum(1 for s in summaries if s.severity == "warning"),
+            "ok": sum(1 for s in summaries if s.severity == "ok"),
+        },
+        summaries=[_summary_to_model(s) for s in summaries],
+    )
+
+
+@router.post("/{project_id}/health-check", response_model=ProjectHealthSummaryModel)
+def check_project_health(project_id: str) -> ProjectHealthSummaryModel:
+    """扫描单个项目并把告警推入通知队列（如有 warning / critical）。"""
+    monitor = ProjectHealthMonitor()
+    summary = monitor.summarize(project_id)
+    if summary is None:
+        raise _error(404, "project_not_found", "项目不存在")
+    monitor.push_alerts([summary])
+    return _summary_to_model(summary)
 
 
 @router.get("/{project_id}/tree", response_model=ProjectTreeResponse)

@@ -1,8 +1,7 @@
 # 技术专题文档总览
 
-> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-152；本索引以目录中的实际文件为准。
+> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-158；本索引以目录中的实际文件为准。
 
----
 
 ## 章节目录
 
@@ -132,7 +131,7 @@
 | 155 | [Design Studio 内容库与 Craft 工艺规范](./155-design-studio-content-craft.md) | 四平面架构（设计系统/模板/工艺规范/生成）+ 15 设计系统 / 13 Deck 模板 / 4 原型模板 / 5 条 Craft 规则 + `CraftRuleRegistry` 解析器 + Prompt 注入链路 + 导出管道（PDF/PPTX/ZIP）+ Design Lint + Office 融合（Word→大纲 / 图表嵌入 / Live Artifact） |
 | 156 | [本地 AI 模型内置与离线导入](./156-local-ai-models.md) | OCR（6MB）+ Embedding（91MB）随安装包内置：`extraResources` 打包 `resources/models/` + 路径优先级链（userData > bundled > repo）+ 本地导入 IPC（目录选择 + SHA-256 校验）+ CI 缓存下载 |
 | 157 | [MinerU 内网独立部署](./157-mineru-deployment.md) | A6000 服务器独立部署 MinerU 4.1（Python 3.12 + vLLM，`--tier standard`）：模型离线搬运三段式 + `source: local` 零外网依赖 + V1 异步 API 契约（create→PUT→poll→download）+ Sage 工具接入（`mineru_parse_document`）+ systemd 托管与验证清单 |
-
+| 158 | [项目健康监控与 AI 辅助规程定制](./158-project-health-ai-stages.md) | M1 主动告警（桌面通知 + 24h 节流）+ M2 对话式规程定制（多轮迭代 / 目录推断 / git 推断 / LLM 降级）+ M3 定时健康检查（每天 09:00 cron + HealthReport） |
 ---
 
 ## 与核心章节的关系
@@ -140,8 +139,7 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 用户价值层 | [01 概述](../01-overview.md) — [12 实施计划](../12-plan.md) |
-| 横切关注点 | 本目录（15-151）                                            |
-
+| 横切关注点 | 本目录（15-158）                                            |
 ---
 
 _本目录文档命名规则：`XX-topic-name.md`（XX 为两位数字，topic-name 为 kebab-case）。_
