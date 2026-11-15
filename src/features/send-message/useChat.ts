@@ -6,7 +6,7 @@ import type { EffectiveModel } from '../../entities/model-catalog/types';
 import { usePermissionState } from '../../entities/permission/permissionState';
 import { useQuestionState } from '../../entities/question/questionState';
 import { getRoutingTaskType } from '../../entities/routing/taskType';
-import { resolveEndpoint, type EndpointConfig } from '../../entities/setting/types';
+import { resolveEndpoint } from '../../entities/setting/types';
 import { ApiException, type ChatConfig, type ChatOfficeRef } from '../../shared/api';
 import { sessionApi } from '../../shared/api/sessionApi';
 import type { GenerationStats } from '../../shared/api/types';
@@ -14,6 +14,7 @@ import {
   agentStateToText,
   isIntermediatePlaceholderText,
 } from '../../shared/lib/agentStateMapping';
+import { resolveEffectiveChatModel } from '../../shared/lib/effectiveChatModel';
 import {
   mapAgentErrorToText,
   mapLLMErrorToText,
@@ -93,28 +94,6 @@ async function fetchEffectiveCatalog(
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }
-}
-
-/**
- * 2026-11-15: 在所有端点中查找拥有指定模型的端点。
- * 同一模型出现在多个端点时，优先选择有 apiKey 的端点。
- * 找不到返回 undefined（调用方沿用全局选择）。
- */
-function findEndpointForModel(
-  modelId: string,
-  endpoints: readonly EndpointConfig[],
-): EndpointConfig | undefined {
-  if (!modelId || !endpoints?.length) return undefined;
-  const candidates: EndpointConfig[] = [];
-  for (const ep of endpoints) {
-    const discovered = ep.discoveredModels ?? [];
-    if (discovered.some((m) => m.id === modelId)) {
-      candidates.push(ep);
-    }
-  }
-  if (candidates.length === 0) return undefined;
-  // 优先选择有 apiKey 的端点
-  return candidates.find((ep) => ep.apiKey) ?? candidates[0];
 }
 
 export function useChat() {
@@ -510,27 +489,23 @@ export function useChat() {
       // 视觉能力分层解析：catalog 权威 > discoveredModels 启发式 > 未知。
       // 仅明确 unsupported 才剔除 'vision'；unknown 与 supported 同等放行，
       // 对齐后端 agent.py「unknown → vision-supported」fail-safe。
-      // 2026-11-15: 会话模型覆盖路由修复 —— 若会话切换到不同端点的模型，
-      // 必须用该端点的凭据，否则请求打到错误上游（HTTP 502）。
-      const globalModelId = settings.modelSelections.chatModel.modelId;
-      let effectiveEndpoint = chatEndpoint;
-      let effectiveModelId = globalModelId;
+      // 2026-11-15: 会话模型覆盖路由修复 —— 实际生效模型必须同时决定
+      // 端点凭据与视觉能力；同端点覆盖也要替换 model id。
+      let sessionModelOverride: string | null = null;
       try {
-        const sessionModelOverride = await sessionApi.getModelOverride(sid);
-        if (sessionModelOverride && sessionModelOverride !== globalModelId) {
-          const owningEndpoint = findEndpointForModel(
-            sessionModelOverride,
-            settings.endpoints,
-          );
-          if (owningEndpoint && owningEndpoint.id !== chatEndpoint?.id) {
-            effectiveEndpoint = owningEndpoint;
-            effectiveModelId = sessionModelOverride;
-          }
-        }
+        sessionModelOverride = await sessionApi.getModelOverride(sid);
       } catch {
         // fail-open: 读取覆盖失败沿用全局选择（后端有双保险修复）
       }
-      const chatModelId = effectiveModelId;
+      const { endpoint: effectiveEndpoint, modelId: chatModelId } =
+        resolveEffectiveChatModel(
+          settings.modelSelections.chatModel,
+          settings.endpoints,
+          sessionModelOverride,
+        );
+      // 发送前已校验全局端点存在；会话覆盖解析失败时回退全局端点。
+      const sendEndpoint = effectiveEndpoint ?? chatEndpoint;
+      if (!sendEndpoint) return;
       const effectiveCatalog =
         chatModelId && effectiveEndpoint?.id
           ? await fetchEffectiveCatalog(effectiveEndpoint.id, chatModelId)
@@ -540,9 +515,9 @@ export function useChat() {
       );
 
       const config: ChatConfig = {
-        apiKey: effectiveEndpoint.apiKey,
-        apiUrl: effectiveEndpoint.baseUrl,
-        model: effectiveModelId ?? undefined,
+        apiKey: sendEndpoint.apiKey,
+        apiUrl: sendEndpoint.baseUrl,
+        model: chatModelId || undefined,
         // Task 7 (2026-10-28): 自动路由的任务类型。手动模式下不发送，
         // 保持既有 invoke body 逐字节不变。
         taskType: settings.routing?.mode === 'auto' ? getRoutingTaskType() : undefined,
@@ -556,11 +531,11 @@ export function useChat() {
         // 从 baseUrl 推导 provider,后端不再硬写 "custom"。
         // TODO(PR-7a+): 给 EndpointConfig 加 provider 字段,这里直接读,
         // 不再靠 URL 启发式。详见 docs/plans/2026-06-17_thinking-passthrough.md
-        provider: inferProviderFromBaseUrl(effectiveEndpoint.baseUrl),
+        provider: inferProviderFromBaseUrl(sendEndpoint.baseUrl),
         // 2026-11-03: 思考过程参数 —— 端点级配置,透传到上游 LLM 请求体。
         // undefined → chatApi 发 null → 后端不下发该键 → 上游不进入思考模式。
-        reasoningEffort: effectiveEndpoint.reasoningEffort ?? undefined,
-        thinkingBudget: effectiveEndpoint.thinkingBudget ?? undefined,
+        reasoningEffort: sendEndpoint.reasoningEffort ?? undefined,
+        thinkingBudget: sendEndpoint.thinkingBudget ?? undefined,
         // 由 /orchestrate /single 斜杠命令传入;普通消息 undefined → 后端 auto
         orchestrationMode,
         // Wave 3: resume 恢复流透传

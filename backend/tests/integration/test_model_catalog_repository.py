@@ -108,6 +108,50 @@ def test_init_idempotent_restart_and_scoped_prices(repo):
     assert repo.resolve(endpoint("unbound")).limits.native is None
 
 
+def test_override_capabilities_reach_effective(repo):
+    """用户 override 的 capabilities 必须进入 getEffective（此前被丢弃）。"""
+    record = candidate(capabilities={"vision": False, "tools": True})
+    snap = repo.stage([record], record.source)
+    item = repo.diff(snap)[0]
+    repo.apply(snap, item.id, ["native", "price", "capabilities"], item.base_revision)
+    repo.bind(endpoint(), record.model_key, "openrouter")
+
+    repo.set_override(endpoint(), {"capabilities": {"vision": True}}, 0)
+
+    effective = repo.resolve(endpoint())
+    assert effective.capabilities == {"vision": True, "tools": True}
+
+
+def test_capabilities_merge_keeps_lower_layer_keys(repo):
+    """按 key 首层优先：override 只写 vision 时，builtin 的其它能力保留。"""
+    record = candidate(capabilities={"vision": False, "tools": True, "reasoning": True})
+    snap = repo.stage([record], record.source)
+    item = repo.diff(snap)[0]
+    repo.apply(snap, item.id, ["native", "price", "capabilities"], item.base_revision)
+    repo.bind(endpoint(), record.model_key, "openrouter")
+
+    repo.set_override(endpoint(), {"capabilities": {"vision": True}}, 0)
+
+    effective = repo.resolve(endpoint())
+    assert effective.capabilities == {
+        "vision": True,
+        "tools": True,
+        "reasoning": True,
+    }
+    assert effective.provenance["capabilities.vision"] == "user_override"
+    assert effective.provenance["capabilities.tools"] == "custom_json"
+
+
+def test_override_capabilities_work_for_unbound_model(repo):
+    """未绑定 catalog entry 的模型（如私有代理模型）也能被用户标记。"""
+    repo.set_override(endpoint("unbound-model"), {"capabilities": {"vision": True}}, 0)
+
+    effective = repo.resolve(endpoint("unbound-model"))
+
+    assert effective.model_key is None
+    assert effective.capabilities == {"vision": True}
+
+
 def test_stale_review_rejected(repo):
     from backend.model_catalog.repository import CatalogConflict
 

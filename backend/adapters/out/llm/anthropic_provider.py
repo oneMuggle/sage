@@ -60,12 +60,14 @@ def model_capabilities(model: str) -> ModelCapabilities:
         ModelCapabilities：``vision`` 为启发式判定，非厂商权威声明。
     """
     lower = (model or "").lower()
+    is_claude = "claude" in lower
     is_legacy = any(marker in lower for marker in _ANTHROPIC_LEGACY_NON_VISION_MARKERS)
-    vision = "claude" in lower and not is_legacy
+    vision = is_claude and not is_legacy
     reasoning = "claude-3-7" in lower or "claude-4" in lower
     return ModelCapabilities(
         tools=True,
         vision=vision,
+        vision_known=is_claude,
         streaming=True,
         parallel_tool_calls=True,
         reasoning=reasoning,

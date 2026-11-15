@@ -113,6 +113,38 @@ function seedActiveEndpointWithUrl(baseUrl: string): void {
   localStorage.setItem('sage-settings.migrated_to_backend', new Date().toISOString());
 }
 
+/** 会话覆盖场景：同一端点提供两个模型（全局模型 + 覆盖模型）。 */
+function seedSameEndpointModels(): void {
+  const payload = {
+    streaming: true,
+    autoMemory: true,
+    confirmDelete: true,
+    endpoints: [
+      {
+        id: 'ep-1',
+        name: 'Test',
+        baseUrl: 'https://api.example.test/v1',
+        apiKey: 'sk-test',
+        discoveredModels: [
+          { id: 'gpt-test', capabilities: ['chat'], endpointId: 'ep-1' },
+          { id: 'vision-model', capabilities: ['chat', 'vision'], endpointId: 'ep-1' },
+        ],
+        lastDiscoveredAt: null,
+      },
+    ],
+    modelSelections: {
+      chatModel: { endpointId: 'ep-1', modelId: 'gpt-test' },
+      visionModel: { endpointId: null, modelId: null },
+      embeddingModel: { endpointId: null, modelId: null },
+    },
+    maxContext: 4096,
+    temperature: 0.7,
+    version: SETTINGS_VERSION,
+  };
+  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+  localStorage.setItem('sage-settings.migrated_to_backend', new Date().toISOString());
+}
+
 beforeEach(() => {
   invokeMock.mockReset();
   listenMock.mockReset();
@@ -205,6 +237,39 @@ describe('useChat', () => {
         model: 'gpt-test',
       }),
     );
+  });
+
+  it('uses a same-endpoint session model override in the outgoing chat config', async () => {
+    seedSameEndpointModels();
+    invokeMock.mockReset();
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_settings') return Promise.resolve({ data: null });
+      if (command === 'session_get_model') {
+        return Promise.resolve({ session_id: VALID_SESSION_ID, model: 'vision-model' });
+      }
+      if (command === 'agent_chat_stream') {
+        return Promise.resolve({ streamId: 'stream-override' });
+      }
+      return Promise.resolve(undefined);
+    });
+    listenMock.mockImplementationOnce(createFakeStream([done('ok', 1)]).listen);
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    await act(async () => {
+      await result.current.sendMessage('hi');
+    });
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith(
+        'agent_chat_stream',
+        expect.objectContaining({
+          model: 'vision-model',
+          apiUrl: 'https://api.example.test/v1',
+        }),
+      );
+    });
   });
 
   it('attaches display meta to the optimistic user message and forwards message_meta', async () => {

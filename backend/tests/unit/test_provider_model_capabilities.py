@@ -84,6 +84,52 @@ def test_empty_model_is_not_vision_capable(caps_fn):
     assert caps_fn("").vision is False
 
 
+@pytest.mark.parametrize(
+    ("caps_fn", "known_model", "unknown_model"),
+    [
+        (openai_caps, "gpt-4o", "deepseek-flash"),
+        (anthropic_caps, "claude-sonnet-4-5", "my-proxy-model"),
+        (gemini_caps, "gemini-2.5-pro", "my-proxy-model"),
+        (ollama_caps, "qwen2.5-vl:7b", "my-local-model"),
+    ],
+)
+def test_marker_miss_reports_unknown_not_confirmed_false(caps_fn, known_model, unknown_model):
+    """名字未命中任何 marker 时 vision_known=False —— 调用方据此 fail-open。
+
+    启发式没认出模型名，不等于厂商声明该模型不支持图片输入。
+    """
+    assert caps_fn(known_model).vision_known is True
+    unknown = caps_fn(unknown_model)
+    assert unknown.vision is False
+    assert unknown.vision_known is False
+
+
+@pytest.mark.parametrize(
+    ("caps_fn", "model"),
+    [
+        (openai_caps, "gpt-3.5-turbo"),  # 负向 marker → 明确不支持
+        (anthropic_caps, "claude-2.1"),
+        (gemini_caps, "gemini-embedding-001"),
+        (ollama_caps, "nomic-embed-text"),
+    ],
+)
+def test_negative_marker_reports_confirmed_false(caps_fn, model):
+    """命中负向 marker 时 vision_known=True 且 vision=False。"""
+    caps = caps_fn(model)
+    assert caps.vision is False
+    assert caps.vision_known is True
+
+
+class TestRegistryUnknownModelSemantics:
+    def test_registry_preserves_unknown_for_marker_miss(self):
+        """OpenAI 兼容端点上未识别的模型必须保持「未知」，不能伪装成确认不支持。"""
+        resolved = get_model_capabilities("deepseek", "deepseek-flash")
+
+        assert resolved is not None
+        assert resolved.vision is False
+        assert resolved.vision_known is False
+
+
 @pytest.mark.parametrize("caps_fn", [openai_caps, anthropic_caps, gemini_caps, ollama_caps])
 def test_capabilities_is_case_insensitive(caps_fn):
     assert caps_fn("GPT-4O").vision == caps_fn("gpt-4o").vision
