@@ -3,19 +3,24 @@
  *
  * 优先级（自上而下，首次命中即返回）：
  *
- *   1. model-catalog `user_override` / `service_probe` / `imported_snapshot` / `builtin`
+ *   1. model-catalog `user_override` / `probe` / `imported_snapshot` / `builtin`
  *      合并后的 `EffectiveModel.capabilities.vision`
  *      - `true`  → `'supported'`
  *      - `false` → `'unsupported'`
  *      - `null` / `undefined` / 字段缺失 → 进入 2.
  *   2. `endpoint.discoveredModels.find(m => m.id === modelId)?.capabilities`
+ *      该字段本身只是端点发现阶段 `inferCapabilities` 的**字符串 marker 启发式**，
+ *      不是厂商权威声明。因此：
  *      - 命中 + 含 `'vision'` → `'supported'`
- *      - 命中 + 不含 `'vision'` → `'unsupported'`（启发式窄推断的遗留）
+ *      - 命中 + 不含 `'vision'` → `'unknown'`（启发式未识别 ≠ 确定不支持）
  *      - 未命中 → `'unknown'`
+ *
+ * 只有权威源（model-catalog 的 user_override / probe / snapshot /
+ * builtin）明确给出 `vision: false` 时才返回 `'unsupported'`。
  *
  * 消费方（`ChatInput.tsx` / `useChat.ts`）语义：
  * - `'unsupported'` → 显示警告 / 剔除 `'vision'`
- * - `'supported' | 'unknown'` → 不显示警告 / 保留 `'vision'`
+ * - `'supported' | 'unknown'` → 不显示警告 / 保留 `'vision'`（乐观放行）
  *
  * 这与后端 `backend/core/legacy/agent.py:960-964` 的 fail-safe
  * "未知视为支持 vision" 完全对齐，消除当前"前端禁用、后端其实能处理"的割裂。
@@ -58,7 +63,10 @@ export function resolveVisionSupport(
     return 'unknown';
   }
   const caps = discovered.capabilities ?? [];
-  return caps.includes('vision') ? 'supported' : 'unsupported';
+  if (caps.includes('vision')) return 'supported';
+  // 启发式未命中 `vision` 只说明"推断器不认识这个模型名"，不等于厂商声明
+  // 该模型不支持图片输入。按未知处理，交给发送时的上游裁决与失败降级。
+  return 'unknown';
 }
 
 /**

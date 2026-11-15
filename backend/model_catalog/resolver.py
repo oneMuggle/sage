@@ -33,6 +33,16 @@ def resolve_layers(layers: List[LayerValues]) -> EffectiveModel:
                 values[field] = value
                 provenance[f"{group}.{field}"] = layer.source
                 break
+    # Capabilities merge per key with the same first-layer-wins priority:
+    # an override that only sets ``vision`` must not drop lower-layer keys
+    # such as ``tools`` / ``reasoning``.
+    capabilities = {}
+    for layer in layers:
+        for key, value in (layer.capabilities or {}).items():
+            if key in capabilities:
+                continue
+            capabilities[key] = value
+            provenance[f"capabilities.{key}"] = layer.source
     revision = next(
         (layer.revision for layer in layers if layer.source == "user_override"),
         0,
@@ -43,6 +53,7 @@ def resolve_layers(layers: List[LayerValues]) -> EffectiveModel:
     tier = next((layer.tier for layer in layers if layer.tier is not None), "balanced")
     return EffectiveModel(
         tier=tier,
+        capabilities=capabilities or None,
         limits=ContextLimits(native=values.get("native"), service=values.get("service")),
         price=Price(
             input_per_million=values.get("input_per_million"),

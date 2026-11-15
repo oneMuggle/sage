@@ -184,6 +184,10 @@ class ModelCapabilities:
 
     tools: bool = True
     vision: bool = False
+    # ``vision`` 的判定是否来自已知信息。``False`` 表示启发式未命中模型名，
+    # 既不能确认支持也不能确认不支持——调用方必须按「未知」处理（fail-open），
+    # 不能把它当成确认不支持。旧构造方不传该字段时沿用 True 保持兼容。
+    vision_known: bool = True
     streaming: bool = True
     parallel_tool_calls: bool = True
     reasoning: bool = False

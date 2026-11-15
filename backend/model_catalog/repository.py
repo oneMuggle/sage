@@ -253,6 +253,7 @@ class CatalogRepository:
             source=source,
             revision=revision,
             tier=tier,
+            capabilities=getattr(patch, "capabilities", None),
         )
 
     def resolve(self, endpoint: EndpointKey) -> EffectiveModel:
@@ -272,7 +273,6 @@ class CatalogRepository:
                 (endpoint.endpoint_id, endpoint.model_id),
             ).fetchone()
             model_key = None
-            capabilities = None
             if binding:
                 model_key = ModelKey(
                     provider=binding["provider"],
@@ -291,14 +291,8 @@ class CatalogRepository:
                         else Price()
                     )
                     layers.append(self._layer(record, record.source, row["revision"], price))
-                    # First catalog record carrying capability metadata wins,
-                    # mirroring the first-wins rule used for the other fields.
-                    if capabilities is None and record.capabilities is not None:
-                        capabilities = record.capabilities
             effective = resolve_layers(layers)
-            return effective.model_copy(
-                update={"model_key": model_key, "capabilities": capabilities}
-            )
+            return effective.model_copy(update={"model_key": model_key})
 
     def list_effective_models(self, endpoint_id: Optional[str] = None) -> List[EffectiveModel]:
         """Resolve bound endpoints into EffectiveModel instances.
