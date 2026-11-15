@@ -574,7 +574,10 @@ pub async fn chat_with_wiki(config, http, project_root, query) -> Result<WikiCha
 2. **Token 预算 50/30/5/15**: 与 llm_wiki 一致,pages 50% / history+system 30% / index 5% / reserve 15%
 3. **per_page_cap = total/8**: 防止一坨内容压垮 context
 4. **极简 token 计数 (chars/3)**: MVP 简化,精度足够,可后续换 `tiktoken-rs`
-5. **MVP embedding 复用 chat 端点**: Settings 暂未单独配 embedding,先用 chat 端点 + text-embedding-3-small
+5. **embedding 可选 + 维度自适应** (2026-11-15,对齐 llm_wiki): `embed_pages` 在未配置 embed
+   端点/模型时跳过;嵌入调用/解析/写库失败非致命(日志告警后继续导入);向量维度以响应为准,
+   与既有 `vectors.json` 维度不一致时重置该派生库(同 `backend/zotero/ingest.py` 模式)。
+   聊天检索同样按响应维度打开向量库,不匹配自动降级 token 检索。旧版"维度固定 1536"已废弃。
 6. **融合降序 + 跳过空 hits**: 任意一边为空时另一边仍参与,空 result 直接返回 "未找到"
 
 ### 单元测试覆盖(18/18 通过)
