@@ -128,11 +128,6 @@ export interface InputCardProps {
     apiUrl: string;
   }) => void;
 
-  // Drag & drop
-  onDrop?: (e: React.DragEvent) => void;
-  onDragOver?: (e: React.DragEvent) => void;
-  isDragOver?: boolean;
-
   // U13: 剪贴板粘贴图片
   onPaste?: (e: React.ClipboardEvent) => void;
 
@@ -206,10 +201,7 @@ function InputCardInner({
   onImageSelect,
   onFileSelect,
   onAudioAttachment,
-  onDrop,
-  onDragOver,
   onPaste,
-  isDragOver = false,
   showSlashMenu = false,
   slashCommands = [],
   slashSelectedIndex = 0,
@@ -435,17 +427,7 @@ function InputCardInner({
   };
 
   return (
-    <div
-      className="px-4 py-2.5 border-t border-border bg-surface relative"
-      onDrop={onDrop}
-      onDragOver={onDragOver}
-    >
-      {isDragOver && (
-        <div className="absolute inset-0 bg-primary/10 border-2 border-dashed border-primary rounded-radius-md flex items-center justify-center z-10">
-          <p className="text-primary font-medium">{t('chat.drop_files')}</p>
-        </div>
-      )}
-
+    <div className="px-4 py-2.5 border-t border-border bg-surface relative">
       {orchModeBar}
 
       {images.length > 0 && (

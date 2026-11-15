@@ -114,22 +114,11 @@ export function WelcomeInputCard({
     };
   }, []);
 
-  const {
-    files,
-    images,
-    addFile,
-    addImage,
-    removeFile,
-    removeImage,
-    clearAll,
-    handleDrop,
-    handleDragOver,
-    handlePaste,
-    isDragOver,
-  } = useFileUpload();
+  const { files, images, addFile, addImage, removeFile, removeImage, clearAll, handlePaste } =
+    useFileUpload();
 
-  // P2 (2026-11-04): 监听 Welcome 页全局拖放派发的 sage:composer-drop 事件 ——
-  // 把落在输入卡之外的文件转给 useFileUpload，与输入卡内 drop 行为一致。
+  // 2026-11-15: 所有含文件的 drop（composer 内/外）都由 useGlobalFileDrop
+  // 统一派发 sage:composer-drop —— 把文件交给 useFileUpload。
   useEffect(() => {
     const onComposerDrop = (e: Event) => {
       const detail = (e as CustomEvent<{ files: File[] }>).detail;
@@ -336,10 +325,7 @@ export function WelcomeInputCard({
           onRemoveOfficeRef={removeOfficeRef}
           onImageSelect={handleImageSelect}
           onFileSelect={handleFileSelect}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
           onPaste={handlePaste}
-          isDragOver={isDragOver}
           atFileMenu={atFileMenu}
           showSlashMenu={slashMenuOpen}
           slashCommands={slashCommands}
