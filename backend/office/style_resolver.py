@@ -105,7 +105,7 @@ def _read_ppr(style: Any) -> Dict[str, Any]:
 
     alignment = getattr(pf, "alignment", None)
     if alignment is not None:
-        result["alignment"] = _enum_name(alignment)
+        result["alignment"] = _enum_name(alignment).lower()
 
     line_spacing = getattr(pf, "line_spacing", None)
     line_spacing_rule = getattr(pf, "line_spacing_rule", None)
