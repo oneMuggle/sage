@@ -462,7 +462,7 @@ export const sessionApi = {
     return withRetry(async () => {
       try {
         const resp = await invoke<SessionModelWire>('session_get_model', { sessionId });
-        return resp.model ?? null;
+        return resp?.model ?? null;
       } catch (error) {
         throw handleApiError(error);
       }
