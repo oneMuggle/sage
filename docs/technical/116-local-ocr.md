@@ -139,6 +139,21 @@ RapidOCR/onnxruntime 未进默认安装包；缺依赖时能力位降级，不�
 - 设置页「本地 OCR」卡片：状态、引擎、语言、测试识别、优先策略；RapidOCR 模型下载
   支持进度、取消与恢复默认；支持清理批处理记录（TTL 默认 7 天）；持久化 `ocr_config`。
 
+### 视觉能力判定（前端）
+
+`src/shared/lib/visionCapability.ts` 的 `resolveVisionSupport(endpoint, modelId, catalog)` 是前端唯一
+视觉能力判定入口，按权威度分层：
+
+1. model-catalog `getEffective().capabilities.vision`：`true` → `supported`，`false` → `unsupported`；
+2. 回退 `endpoint.discoveredModels` 中该模型 `capabilities` 是否含 `'vision'`；
+3. 两边都未知 → `unknown`。
+
+`unknown` 与 `supported` 同等对待（fail-open），与后端 `agent.py` 的「未知=支持」语义一致；
+`ChatInput` 仅在 `unsupported` 时禁用图片上传，`useChat` 仅在 `unsupported` 时把
+`ChatRequest.capabilities` 置为 `['chat']`。模型 id 的粗粒度推断统一收敛到
+`src/shared/lib/modelCapabilities.ts` 的 `inferCapabilities`（端点测试连接时写入 `discoveredModels`）。
+catalog 请求有 1.5s 超时，失败按 `unknown` 处理。
+
 ## 8. 性能
 
 在开发机（Python 3.10 + RapidOCR 3.x + ORT 1.19.2，PP-OCRv6 small）实测：
