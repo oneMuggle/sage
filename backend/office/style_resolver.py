@@ -83,6 +83,71 @@ def _style_type(style: Any) -> str:
     return name.lower()
 
 
+def _pt_to_emu(pt_value: Any) -> Optional[int]:
+    """Convert python-docx Pt value to EMU (English Metric Units)."""
+    if pt_value is None:
+        return None
+    try:
+        return int(pt_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _read_ppr(style: Any) -> Dict[str, Any]:
+    """Read paragraph properties from a style object.
+
+    Returns alignment, line_spacing, spacing (before/after), and indent values.
+    """
+    pf = getattr(style, "paragraph_format", None)
+    if pf is None:
+        return {}
+    result: Dict[str, Any] = {}
+
+    alignment = getattr(pf, "alignment", None)
+    if alignment is not None:
+        result["alignment"] = _enum_name(alignment)
+
+    line_spacing = getattr(pf, "line_spacing", None)
+    line_spacing_rule = getattr(pf, "line_spacing_rule", None)
+    if line_spacing is not None:
+        rule_name = _enum_name(line_spacing_rule) if line_spacing_rule else ""
+        if isinstance(line_spacing, (int, float)):
+            if "EXACT" in rule_name or "AT_LEAST" in rule_name:
+                result["line_spacing_pt"] = round(line_spacing / 12700, 1)
+            else:
+                result["line_spacing"] = float(line_spacing)
+        elif isinstance(line_spacing, str):
+            result["line_spacing"] = float(line_spacing)
+
+    space_before = _pt_to_emu(getattr(pf, "space_before", None))
+    if space_before is not None:
+        result["space_before_pt"] = round(space_before / 12700, 1)
+
+    space_after = _pt_to_emu(getattr(pf, "space_after", None))
+    if space_after is not None:
+        result["space_after_pt"] = round(space_after / 12700, 1)
+
+    first_line_indent = _pt_to_emu(getattr(pf, "first_line_indent", None))
+    if first_line_indent is not None:
+        result["first_line_indent_pt"] = round(first_line_indent / 12700, 2)
+
+    left_indent = _pt_to_emu(getattr(pf, "left_indent", None))
+    if left_indent is not None:
+        result["left_indent_pt"] = round(left_indent / 12700, 2)
+
+    return result
+
+
+def _enum_name(value: Any) -> str:
+    """Extract name from an enum or convert to string."""
+    if value is None:
+        return ""
+    name = getattr(value, "name", None)
+    if name:
+        return name.upper()
+    return str(value).upper()
+
+
 class StyleResolver:
     """Resolve effective run formatting for a python-docx document."""
 
@@ -114,6 +179,7 @@ class StyleResolver:
                 "type": _style_type(style),
                 "based_on": based_on,
                 "format": read_rpr(rpr),
+                "paragraph_format": _read_ppr(style),
             }
 
     def chain(self, style_id: Optional[str]) -> List[str]:
@@ -150,6 +216,7 @@ class StyleResolver:
         items: List[Dict[str, Any]] = []
         for style_id, entry in self._styles.items():
             fmt = self.resolve_style(style_id)
+            para_fmt = entry.get("paragraph_format", {})
             items.append(
                 {
                     "style_id": style_id,
@@ -163,6 +230,13 @@ class StyleResolver:
                     "italic": bool(fmt.get("italic")),
                     "underline": bool(fmt.get("underline")),
                     "color": fmt.get("color"),
+                    "alignment": para_fmt.get("alignment"),
+                    "line_spacing": para_fmt.get("line_spacing"),
+                    "line_spacing_pt": para_fmt.get("line_spacing_pt"),
+                    "space_before_pt": para_fmt.get("space_before_pt"),
+                    "space_after_pt": para_fmt.get("space_after_pt"),
+                    "first_line_indent_pt": para_fmt.get("first_line_indent_pt"),
+                    "left_indent_pt": para_fmt.get("left_indent_pt"),
                 }
             )
         return items

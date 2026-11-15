@@ -65,6 +65,14 @@ def _rules(pack) -> dict:
     return {rule.kind: rule for rule in pack.rules}
 
 
+def _rules_by_style(pack, kind: str, style: str):
+    """Find a rule by kind and style param."""
+    for rule in pack.rules:
+        if rule.kind == kind and rule.params.get("style") == style:
+            return rule
+    return None
+
+
 def _spec_paragraphs() -> list[str]:
     return [
         "本规范适用于 A4 纸张，页边距上 3.7 厘米、下 3.5 厘米、左 2.8 厘米、右 2.6 厘米。",
@@ -201,7 +209,9 @@ def test_extract_template_dominant_values(tmp_path: Path) -> None:
     assert rules["page.margins"].params["right_cm"] == pytest.approx(2.6)
     assert rules["style.font"].params["font_east_asia"] == "仿宋_GB2312"
     assert rules["style.font"].params["size_pt"] == pytest.approx(16.0)
-    paragraph = rules["style.paragraph"].params
+    normal_para = _rules_by_style(result.pack, "style.paragraph", "Normal")
+    assert normal_para is not None, "Normal 段落格式规则未找到"
+    paragraph = normal_para.params
     assert paragraph["line_spacing"] == pytest.approx(1.5)
     assert paragraph["first_line_indent_cm"] == pytest.approx(1.0)
     assert rules["page.page_number"].params == {"required": True}
