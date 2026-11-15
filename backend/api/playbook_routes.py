@@ -35,6 +35,12 @@ from backend.api.playbook_schemas import (
     PlaybookAuthorPreviewRequest,
     PlaybookAuthorPreviewResponse,
     PlaybookBindRequest,
+    PlaybookConversationCommitResponse,
+    PlaybookConversationMessageRequest,
+    PlaybookConversationMessageResponse,
+    PlaybookConversationResponse,
+    PlaybookConversationRollbackResponse,
+    PlaybookConversationStartResponse,
     PlaybookCurrentResponse,
     PlaybookDocumentImportRequest,
     PlaybookDocumentImportResponse,
@@ -45,6 +51,7 @@ from backend.api.playbook_schemas import (
     PlaybookImportPreviewRequest,
     PlaybookImportPreviewResponse,
     PlaybookImportRequest,
+    PlaybookInferenceResponse,
     PlaybookLibraryDetailResponse,
     PlaybookLibraryItemModel,
     PlaybookLibraryResponse,
@@ -63,6 +70,9 @@ from backend.api.playbook_schemas import (
     PlaybookWikiExportResponse,
 )
 from backend.data.database import make_with_db_lock
+from backend.data.playbook_author_conversation_repo import (
+    PlaybookAuthorConversationRepository,
+)
 from backend.data.playbook_event_repo import (
     PlaybookEventRepository,
     record_playbook_event,
@@ -75,8 +85,10 @@ from backend.services.playbook_actions import apply_playbook_actions, project_pl
 from backend.services.playbook_ai import audit_with_llm
 from backend.services.playbook_auditor import audit_playbook
 from backend.services.playbook_author import build_author_preview
+from backend.services.playbook_conversation_author import PlaybookConversationAuthor
 from backend.services.playbook_diff import diff_playbooks
 from backend.services.playbook_document_import import import_playbook_from_document
+from backend.services.playbook_inference import infer_project_stages, inferred_spec
 from backend.services.playbook_library import (
     build_export_envelope,
     get_builtin,
@@ -160,6 +172,15 @@ def _project_or_404(project_id: str) -> Project:
     if not Path(project.path).is_dir():
         raise _error(410, "project_path_missing", "项目目录不存在或已被移动")
     return project
+
+
+def _conversation_or_404(project_id: str, conversation_id: str):
+    conversation = PlaybookAuthorConversationRepository().get_for_project(
+        project_id, conversation_id
+    )
+    if conversation is None:
+        raise _error(404, "conversation_not_found", "规程定制对话不存在")
+    return conversation
 
 
 def _ensure_state(project_id: str, spec: Dict[str, Any]) -> Dict[str, Any]:
@@ -681,6 +702,139 @@ async def author_project_playbook(
         },
     )
     return PlaybookAuthorPreviewResponse(**result.to_dict())
+
+
+@router.post(
+    "/projects/{project_id}/playbook/author/conversation",
+    response_model=PlaybookConversationStartResponse,
+)
+async def start_playbook_author_conversation(
+    project_id: str,
+) -> PlaybookConversationStartResponse:
+    """Open a conversational playbook-authoring session seeded with a draft."""
+    project = _project_or_404(project_id)
+    conversation = await PlaybookConversationAuthor().start(project)
+    record_playbook_event(project.id, "author_conversation_start")
+    return PlaybookConversationStartResponse(conversation=conversation.to_dict())
+
+
+@router.get(
+    "/projects/{project_id}/playbook/author/conversation/{conversation_id}",
+    response_model=PlaybookConversationResponse,
+)
+def get_playbook_author_conversation(
+    project_id: str, conversation_id: str
+) -> PlaybookConversationResponse:
+    project = _project_or_404(project_id)
+    conversation = _conversation_or_404(project.id, conversation_id)
+    return PlaybookConversationResponse(conversation=conversation.to_dict())
+
+
+@router.post(
+    "/projects/{project_id}/playbook/author/conversation/{conversation_id}/message",
+    response_model=PlaybookConversationMessageResponse,
+)
+async def send_playbook_author_message(
+    project_id: str,
+    conversation_id: str,
+    request: PlaybookConversationMessageRequest,
+) -> PlaybookConversationMessageResponse:
+    """Send one user turn; returns the AI reply and the updated draft."""
+    project = _project_or_404(project_id)
+    conversation = _conversation_or_404(project.id, conversation_id)
+    try:
+        result = await PlaybookConversationAuthor().send_message(
+            project, conversation, request.message, use_llm=request.use_llm
+        )
+    except ValueError as exc:
+        raise _error(400, "invalid_message", str(exc)) from exc
+    record_playbook_event(
+        project.id,
+        "author_conversation_message",
+        payload={
+            "turn_index": result.turn_index,
+            "llm_available": bool(result.llm_available),
+            "use_llm": bool(request.use_llm),
+            "source": str(result.source or "")[:120],
+        },
+    )
+    return PlaybookConversationMessageResponse(**result.to_dict())
+
+
+@router.post(
+    "/projects/{project_id}/playbook/author/conversation/"
+    "{conversation_id}/rollback/{turn_index}",
+    response_model=PlaybookConversationRollbackResponse,
+)
+def rollback_playbook_author_conversation(
+    project_id: str, conversation_id: str, turn_index: int
+) -> PlaybookConversationRollbackResponse:
+    """Restore the draft captured at the given turn and drop later messages."""
+    project = _project_or_404(project_id)
+    conversation = _conversation_or_404(project.id, conversation_id)
+    try:
+        conversation, playbook = PlaybookConversationAuthor().rollback(
+            conversation, turn_index
+        )
+    except ValueError as exc:
+        raise _error(400, "invalid_rollback", str(exc)) from exc
+    record_playbook_event(
+        project.id,
+        "author_conversation_rollback",
+        payload={"turn_index": turn_index},
+    )
+    return PlaybookConversationRollbackResponse(
+        conversation=conversation.to_dict(), playbook=playbook
+    )
+
+
+@router.post(
+    "/projects/{project_id}/playbook/author/conversation/{conversation_id}/commit",
+    response_model=PlaybookConversationCommitResponse,
+)
+def commit_playbook_author_conversation(
+    project_id: str, conversation_id: str
+) -> PlaybookConversationCommitResponse:
+    """Bind the current draft as the project's active playbook snapshot."""
+    project = _project_or_404(project_id)
+    conversation = _conversation_or_404(project.id, conversation_id)
+    try:
+        result = PlaybookConversationAuthor().commit(project.id, conversation)
+    except ValueError as exc:
+        raise _error(400, "invalid_commit", str(exc)) from exc
+    record_playbook_event(
+        project.id,
+        "author_conversation_commit",
+        payload={"version": int(result["snapshot"].get("version") or 0)},
+    )
+    return PlaybookConversationCommitResponse(**result)
+
+
+@router.post(
+    "/projects/{project_id}/playbook/infer",
+    response_model=PlaybookInferenceResponse,
+)
+def infer_project_playbook(project_id: str) -> PlaybookInferenceResponse:
+    """Advisory stage inference from the project directory and git history."""
+    project = _project_or_404(project_id)
+    result = infer_project_stages(project)
+    spec = inferred_spec(project, result)
+    record_playbook_event(
+        project.id,
+        "infer",
+        payload={
+            "stages": len(result.stages),
+            "source": str(result.source or "")[:120],
+            "confidence": result.confidence,
+        },
+    )
+    return PlaybookInferenceResponse(
+        stages=[stage.to_dict() for stage in result.stages],
+        confidence=result.confidence,
+        source=result.source,
+        rationale=result.rationale,
+        playbook=spec,
+    )
 
 
 @router.post(

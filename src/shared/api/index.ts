@@ -150,6 +150,10 @@ export type {
   ProjectReference,
   ProjectReferenceKind,
   ProjectReferenceScanResult,
+  // M1 (2026-11-14): 项目健康检查
+  OverdueMilestone,
+  ProjectHealthSummary,
+  ProjectsHealthCheckResult,
 } from './projectApi';
 export { officeApi } from './officeApi';
 export { officeGenerateApi } from './officeGenerateApi';

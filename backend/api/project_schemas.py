@@ -809,6 +809,45 @@ class GitInitResponse(BaseModel):
     error: Optional[str] = None
 
 
+class OverdueMilestoneModel(BaseModel):
+    """项目健康检查中的逾期里程碑（M1, 2026-11-14）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    milestone_id: str
+    title: str
+    due_date: str
+    days_overdue: int
+    status: str
+
+
+class ProjectHealthSummaryModel(BaseModel):
+    """单项目健康摘要（M1, 2026-11-14）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    project_name: str
+    severity: str
+    project_stage: str
+    total_milestones: int
+    completed_milestones: int
+    in_progress_milestones: int
+    pending_milestones: int
+    blocked_milestones: int
+    overdue: List[OverdueMilestoneModel] = Field(default_factory=list)
+
+
+class ProjectsHealthCheckResponse(BaseModel):
+    """GET /projects/health-check 的响应（M1, 2026-11-14）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    checked: int
+    severities: Dict[str, int]
+    summaries: List[ProjectHealthSummaryModel] = Field(default_factory=list)
+
+
 class ProjectTreeResponse(BaseModel):
     """GET /projects/{id}/tree 的响应。
 

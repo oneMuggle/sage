@@ -227,6 +227,60 @@ class PlaybookAuthorPreviewResponse(BaseModel):
     source: str
 
 
+class PlaybookConversationStartResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    conversation: Dict[str, Any]
+
+
+class PlaybookConversationMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(min_length=1, max_length=2000)
+    use_llm: bool = True
+
+
+class PlaybookConversationMessageResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    conversation: Dict[str, Any]
+    reply: str
+    playbook: Optional[Dict[str, Any]] = None
+    llm_available: bool
+    source: str
+    turn_index: int
+
+
+class PlaybookConversationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    conversation: Dict[str, Any]
+
+
+class PlaybookConversationRollbackResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    conversation: Dict[str, Any]
+    playbook: Optional[Dict[str, Any]] = None
+
+
+class PlaybookConversationCommitResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot: Dict[str, Any]
+    conversation: Dict[str, Any]
+
+
+class PlaybookInferenceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stages: List[Dict[str, Any]] = Field(default_factory=list)
+    confidence: float
+    source: str
+    rationale: str
+    playbook: Optional[Dict[str, Any]] = None
+
+
 class PlaybookEventModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -309,6 +363,12 @@ __all__ = [
     "PlaybookAuthorPreviewRequest",
     "PlaybookAuthorPreviewResponse",
     "PlaybookBindRequest",
+    "PlaybookConversationCommitResponse",
+    "PlaybookConversationMessageRequest",
+    "PlaybookConversationMessageResponse",
+    "PlaybookConversationResponse",
+    "PlaybookConversationRollbackResponse",
+    "PlaybookConversationStartResponse",
     "PlaybookCurrentResponse",
     "PlaybookDocumentImportRequest",
     "PlaybookDocumentImportResponse",
@@ -319,6 +379,7 @@ __all__ = [
     "PlaybookImportPreviewRequest",
     "PlaybookImportPreviewResponse",
     "PlaybookImportRequest",
+    "PlaybookInferenceResponse",
     "PlaybookLibraryItemModel",
     "PlaybookLibraryDetailResponse",
     "PlaybookLibraryResponse",

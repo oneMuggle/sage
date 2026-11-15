@@ -28,6 +28,7 @@ import { PlaybookActivityPanel } from './PlaybookActivityPanel';
 import { PlaybookAuthorPanel } from './PlaybookAuthorPanel';
 import { PlaybookChecklist } from './PlaybookChecklist';
 import { PlaybookClassificationPanel } from './PlaybookClassificationPanel';
+import { PlaybookConversationAuthor } from './PlaybookConversationAuthor';
 import { PlaybookDocumentImportDialog } from './PlaybookDocumentImportDialog';
 import { PlaybookImportPreviewCard } from './PlaybookImportPreviewCard';
 import { PlaybookLibraryPanel } from './PlaybookLibraryPanel';
@@ -542,6 +543,12 @@ export function PlaybookCard({ projectId, compact = false }: PlaybookCardProps) 
           authorResult={authorResult}
           onBindAuthored={() => void handleBindAuthored()}
           bindingAuthored={busy === 'bind-authored'}
+        />
+        <PlaybookConversationAuthor
+          projectId={projectId}
+          onBound={() => void refresh()}
+          onNotice={setNotice}
+          onError={setError}
         />
         {importPreview && (
           <PlaybookImportPreviewCard

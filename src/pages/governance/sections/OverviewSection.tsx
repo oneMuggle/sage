@@ -15,6 +15,8 @@ import { Button } from '../../../shared/ui/Button';
 import { Progress } from '../../../shared/ui/Progress';
 import type { GovernanceData } from '../useGovernanceProject';
 
+import { HealthSummaryCard } from './HealthSummaryCard';
+
 export interface OverviewSectionProps {
   data: GovernanceData;
   onStartSession: () => void;
@@ -358,6 +360,7 @@ export function OverviewSection({ data, onStartSession, onChangeTab }: OverviewS
         projectId={project.id}
         projectType={data.activeProjectType}
       />
+      <HealthSummaryCard projectId={project.id} />
       <StageSection projectId={project.id} onDecompose={openDecompose} />
       <ProjectStructure project={project} projectType={data.activeProjectType} />
       <TaskDecomposeDialog

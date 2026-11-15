@@ -1179,6 +1179,25 @@ class Database:
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_playbook_shares_token "
             "ON playbook_shares(token)"
         )
+
+        # Playbook author conversations (2026-11-14): 对话式规程定制。用户通过
+        # 多轮对话让 AI 生成/调整项目阶段，每轮同时保存当时的规程草案快照，
+        # 以便回退。status: active | committed | archived。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS playbook_author_conversations (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                messages_json TEXT NOT NULL DEFAULT '[]',
+                current_spec_json TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_playbook_author_conversations_project "
+            "ON playbook_author_conversations(project_id, updated_at DESC)"
+        )
         # Project nesting (2026-11-05): 父项目缓存 + 发现来源。parent_id 是
         # 派生缓存（真相源永远是文件系统路径），扫描时由 workspace_scanner 重新
         # 计算并写入。discovery_source 标记子项目被发现的方式（manual/template/
