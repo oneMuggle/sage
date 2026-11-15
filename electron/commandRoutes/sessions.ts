@@ -156,7 +156,8 @@ export const sessionRoutes: Record<string, CommandRoute> = {
     path: (a) => {
       const sessionId = encodeURIComponent(String(a.sessionId));
       const path = encodeURIComponent(String(a.path ?? ''));
-      return `/api/v1/sessions/${sessionId}/workspace/preview?path=${path}`;
+      const entry = a.entry ? `&entry=${encodeURIComponent(String(a.entry))}` : '';
+      return `/api/v1/sessions/${sessionId}/workspace/preview?path=${path}${entry}`;
     },
   },
   workspace_resolve_files: {

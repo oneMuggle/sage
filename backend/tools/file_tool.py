@@ -74,6 +74,23 @@ _BOM_ENCODINGS: Tuple[Tuple[bytes, str], ...] = (
     (b"\xfe\xff", "utf-16"),  # UTF-16 BE BOM
 )
 
+#: 压缩包扩展名（list_dir 摘要展示用，feat/archive-preview）
+_ARCHIVE_EXTS = frozenset({".zip", ".jar", ".tar", ".gz", ".tgz", ".bz2", ".xz"})
+
+
+def _get_archive_summary(path: Path) -> Optional[dict]:
+    """获取压缩包摘要（条目数 + 解压大小）。失败返回 None（不阻断目录列表）。"""
+    try:
+        from backend.data import archive_reader
+        info = archive_reader.read_archive_listing(path)
+        return {
+            "format": info.format,
+            "entry_count": info.entry_count,
+            "total_uncompressed": info.total_uncompressed,
+        }
+    except Exception:  # noqa: BLE001 — 摘要失败不应阻断 list_dir
+        return None
+
 
 def detect_bom_encoding(file_path: Path) -> Optional[str]:
     """嗅探文件头 BOM；命中返回对应 Python 编码名，否则 ``None``。"""
@@ -303,7 +320,7 @@ class ReadFileTool(BaseTool):
         读取文件
 
         Args:
-            path: 文件路径
+            path: 文件路径。压缩包内条目用 ``archive.zip::internal/path`` 语法。
             offset: 起始行号
             limit: 读取行数
 
@@ -315,9 +332,14 @@ class ReadFileTool(BaseTool):
             **流式**读取（先于行切片）并标记 ``truncated=True``。
         2026-09-17: ``enforce_workspace`` 模式下，路径不在 workspace 内时
             检查当前项目的 ``allowed_paths`` 规则。
+        2026-11-15: 压缩包内条目读取（feat/archive-preview）。
         """
         # P5 文件引用：权限检查前先把项目内虚拟路径翻译成真实目标
         path, via_reference = self._translate_virtual_path(path)
+
+        # 压缩包内条目语法: archive.zip::internal/path (feat/archive-preview)
+        if "::" in path:
+            return self._read_archive_entry(path, offset, limit)
 
         # allowed_paths 扩展：使用统一的读取权限检查
         blocked = (
@@ -399,6 +421,75 @@ class ReadFileTool(BaseTool):
 
         except Exception as e:
             return ToolResult(success=False, error=str(e))
+
+    def _read_archive_entry(  # noqa: PLR0911 — 每个 return 对应一种错误分支
+        self, path: str, offset: int, limit: int
+    ) -> ToolResult:
+        """读取压缩包内条目（feat/archive-preview）。
+
+        路径语法: ``/path/to/archive.zip::internal/entry/path``
+        安全约束复用 ``archive_reader``（路径穿越防护 + 大小限额）。
+        """
+        from backend.data import archive_reader
+
+        parts = path.split("::", 1)
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            return ToolResult(
+                success=False,
+                error="archive_path_invalid: 压缩包路径格式错误，应为 archive.zip::entry/path",
+            )
+
+        archive_path, entry_name = parts
+        archive_file = Path(archive_path).expanduser()
+
+        if not archive_file.exists():
+            return ToolResult(success=False, error=f"文件不存在: {archive_path}")
+        if not archive_file.is_file():
+            return ToolResult(success=False, error=f"不是文件: {archive_path}")
+
+        try:
+            data = archive_reader.read_archive_entry(archive_file, entry_name)
+        except ValueError as exc:
+            return ToolResult(success=False, error=f"archive_read_error: {exc}")
+
+        # 二进制检测（与常规文件同口径）
+        if b"\x00" in data[:BINARY_SNIFF_BYTES]:
+            return ToolResult(
+                success=False,
+                error=f"binary_file: 压缩包内条目 {entry_name} 是二进制文件",
+            )
+
+        # 大小限额
+        if len(data) > MAX_READ_SIZE_BYTES:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"file_too_large: 条目 {entry_name} 大小 {len(data)} 字节超过"
+                    f"读取上限 {MAX_READ_SIZE_BYTES} 字节 (5 MiB)"
+                ),
+            )
+
+        try:
+            content = data.decode("utf-8", errors="replace")
+        except Exception as exc:
+            return ToolResult(success=False, error=f"decode_error: {exc}")
+
+        lines = content.split("\n")
+        start = max(0, offset - 1)
+        end = min(len(lines), start + limit)
+        selected = "\n".join(lines[start:end])
+
+        return ToolResult(
+            success=True,
+            content={
+                "total_lines": len(lines),
+                "content": selected,
+                "path": entry_name,
+                "archive_source": str(archive_file.resolve()),
+                "truncated": False,
+                "original_bytes": len(data),
+            },
+        )
 
 
 class WriteFileTool(BaseTool):
@@ -639,13 +730,18 @@ class ListDirTool(BaseTool):
             for item in dir_path.iterdir():
                 if not all and item.name.startswith("."):
                     continue
-                items.append(
-                    {
-                        "name": item.name,
-                        "type": "dir" if item.is_dir() else "file",
-                        "size": item.stat().st_size if item.is_file() else None,
-                    }
-                )
+                entry = {
+                    "name": item.name,
+                    "type": "dir" if item.is_dir() else "file",
+                    "size": item.stat().st_size if item.is_file() else None,
+                }
+                # 压缩包摘要（feat/archive-preview）：列出条目数 + 解压大小
+                # 便于文件清理场景快速判断压缩包内容
+                if item.is_file() and item.suffix.lower() in _ARCHIVE_EXTS:
+                    summary = _get_archive_summary(item)
+                    if summary:
+                        entry["archive_summary"] = summary
+                items.append(entry)
 
             total_items = len(items)
             max_items = self._policy.max_result_items
