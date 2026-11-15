@@ -4,10 +4,8 @@
 // 的按类型分发逻辑：图片 / PDF / HTML / Office 三件套 / 代码 / Markdown / CSV /
 // 纯文本。产物预览（ArtifactViewer）与消息内文件预览（FilePreviewPanel）
 // 共用同一套渲染，保证两端视觉与行为同源。
-import { ClipboardCopy } from 'lucide-react';
+import { ClipboardCopy, FileArchive, FileIcon, FolderIcon } from 'lucide-react';
 import { useCallback, useState } from 'react';
-
-import { FileArchive, FileIcon, FolderIcon } from 'lucide-react';
 
 import { ExcelPreview, PptPreview, WordPreview } from '../../../features/office';
 // 2026-10-29（基线同步）: Word 产物默认走 docx-preview 原生渲染，结构化段落
