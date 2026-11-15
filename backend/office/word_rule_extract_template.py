@@ -222,6 +222,56 @@ _SPECIAL_STYLE_KEYWORDS: Dict[str, str] = {
     "Header": "页眉",
 }
 
+_PARAGRAPH_FIELDS = (
+    "alignment",
+    "line_spacing",
+    "line_spacing_pt",
+    "space_before_pt",
+    "space_after_pt",
+    "first_line_indent_pt",
+    "left_indent_pt",
+)
+
+
+def _extract_paragraph_format(
+    style: Dict[str, Any],
+    style_label: str,
+    candidates: List[RawCandidate],
+    source: str,
+) -> None:
+    """从样式数据中提取段落格式并生成 style.paragraph 规则。"""
+    params: Dict[str, Any] = {"style": style_label}
+    for field_name in _PARAGRAPH_FIELDS:
+        value = style.get(field_name)
+        if value is not None:
+            if field_name.endswith("_pt"):
+                params[field_name] = round(float(value), 1)
+            elif field_name == "first_line_indent_pt" or field_name == "left_indent_pt":
+                params[field_name.replace("_pt", "_cm")] = round(float(value) * PT_TO_CM, 2)
+            else:
+                params[field_name] = value
+
+    if len(params) > 1:
+        details = []
+        if params.get("alignment"):
+            details.append(f"对齐={params['alignment']}")
+        if params.get("line_spacing"):
+            details.append(f"行距={params['line_spacing']}倍")
+        if params.get("line_spacing_pt"):
+            details.append(f"行距={params['line_spacing_pt']}pt")
+        if params.get("space_before_pt"):
+            details.append(f"段前={params['space_before_pt']}pt")
+        if params.get("space_after_pt"):
+            details.append(f"段后={params['space_after_pt']}pt")
+        add_candidate(
+            candidates,
+            "style.paragraph",
+            params,
+            0.85,
+            source,
+            f"{style_label} 段落格式: {', '.join(details)}",
+        )
+
 
 def _extract_heading_styles(
     profile: Dict[str, Any],
@@ -229,7 +279,7 @@ def _extract_heading_styles(
     source: str,
     excerpt: str,
 ) -> None:
-    """为 Heading 1-9 样式生成独立的 style.font 规则。"""
+    """为 Heading 1-9 样式生成 style.font 和 style.paragraph 规则。"""
     styles = profile.get("styles", [])
     heading_levels: List[Tuple[int, Dict[str, Any]]] = []
 
@@ -255,6 +305,7 @@ def _extract_heading_styles(
                 source,
                 f"Heading {level} 样式: {style.get('font_east_asia', '?')}, {style.get('size_pt', '?')}pt",
             )
+        _extract_paragraph_format(style, f"Heading {level}", candidates, source)
 
     if heading_levels:
         levels = [level for level, _ in heading_levels]
@@ -274,7 +325,7 @@ def _extract_special_styles(
     source: str,
     excerpt: str,
 ) -> None:
-    """为模板中的特殊样式（作者、摘要、图题、表题、参考文献等）生成 style.font 规则。"""
+    """为模板中的特殊样式（作者、摘要、图题、表题、参考文献等）生成 style.font 和 style.paragraph 规则。"""
     styles = profile.get("styles", [])
     seen: Set[str] = set()
 
@@ -300,6 +351,7 @@ def _extract_special_styles(
                 source,
                 f"{label} 样式: {style.get('font_east_asia', '?')}, {style.get('size_pt', '?')}pt",
             )
+        _extract_paragraph_format(style, label, candidates, source)
 
 
 __all__ = ["extract_template_candidates"]
