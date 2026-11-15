@@ -90,7 +90,7 @@ chat_stream_create → R37 注入段
 - 脚本/构建 `.sh .bash .bat .ps1 .sql .makefile .cmake .gradle`
 - 特殊命名 `.dockerfile .gitignore .properties`
 - 日志 `.log`
-- 二进制文档 `.pdf .docx .xlsx`
+- 二进制文档 `.pdf .docx .xlsx .pptx`
 
 图片后缀独立成表 `FALLBACK_IMAGE_SUFFIXES`（`.png .jpg .jpeg .webp .gif .bmp .svg`）；
 两者都不命中时回退 `AUDIO`（与历史行为一致）。
@@ -136,9 +136,31 @@ chat_stream_create → R37 注入段
 | `load_failed` | 附件不存在或读取抛错 |
 | `not_document(got=...)` | 类型不是 DOCUMENT（历史媒体被误判为 AUDIO 时可见） |
 | `not_utf8` | 内容不是有效 UTF-8 |
-| `extract_failed:<ExcType>` | pdf/docx/xlsx 解析抛错 |
+| `extract_failed:<ExcType>` | pdf/docx/xlsx/pptx 解析抛错 |
 | `empty_text` | 提取结果为空 |
 | `context_build_failed` | 上下文构建返回 None |
+
+#### 发送侧与上传侧共用同一分发表（2026-11-15）
+
+`chat_attachment_routes.extract_attachment_text(content, ext)` 现在是唯一的
+“扩展名 → 文本”入口：`pdf/docx/xlsx/pptx` 走对应二进制解析器，其余按 UTF-8 解码。
+`/chat/attachments` 上传接口、`/chat/attachments/{id}/text`、附件索引与
+`legacy_routes` 发送侧注入循环全部调用它；发送侧使用
+`extract_attachment_text_async`（线程池 + 30s `wait_for`），超时状态为
+`parse_timeout`。
+
+历史回归：发送侧曾只对 `pdf/docx` 调提取器，`xlsx` 落入 `bytes.decode("utf-8")`
+分支 → `UnicodeDecodeError` → 附件状态 `not_utf8`。本次修复后上传白名单
+`ALLOWED_DOC_EXTENSIONS` 与提取集合 `EXTRACTABLE_DOC_EXTENSIONS` 共用同一
+`frozenset`，新增格式只改一处。
+
+PPTX 提取按页输出：`[第N页] 标题`、正文段落、表格单元格（制表符分隔）与
+`[备注]`；纯图片幻灯片没有文字层时返回空文本，前端显示 `empty_text`。
+
+解析安全边界：docx/xlsx/pptx 解析前检查 zip 中央目录（成员数 ≤10,000、
+单成员与解压后总量均 ≤100MB，且拒绝负 size），上传/读取端点的解析在线程池
+执行并设 30s 墙钟上限；解析异常只回传通用文案，细节仅以 `error_type`
+记录到服务端日志。
 
 ### 4.3 状态的两个出口
 
@@ -259,7 +281,8 @@ interface AttachedFile {
 
 | 层次 | 文件 | 覆盖 |
 | --- | --- | --- |
-| 后端单测 | `backend/tests/unit/test_media_store.py` | sidecar 读写往返、扩展名参数化、删除清理 |
+| 后端单测 | `backend/tests/unit/test_media_store.py` | sidecar 读写往返、扩展名参数化（含 .pptx）、删除清理 |
+| 后端单测 | `backend/tests/unit/test_r39_pdf_docx_extract.py` | pdf/docx/xlsx/pptx 上传与读取、统一分发表、zip 解压预算 |
 | 后端单测 | `backend/tests/unit/test_chat_attachment_text.py` | 真实 MediaStore 上传 → 读取链路（csv/py/json/ts/html/sql） |
 | 前端单测 | `src/features/send-message/__tests__/attachmentsProcessed.test.ts` | `attachments_processed` 事件消费 |
 | 前端单测 | `src/widgets/chat/__tests__/Message.clientMeta.test.tsx` | 气泡状态 chip 渲染 |

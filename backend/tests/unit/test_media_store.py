@@ -140,6 +140,7 @@ def test_load_legacy_media_without_sidecar_uses_expanded_fallback(tmp_path):
         "abc126.json": MediaKind.DOCUMENT,
         "abc127.mp3": MediaKind.AUDIO,
         "abc128.png": MediaKind.IMAGE,
+        "abc129.pptx": MediaKind.DOCUMENT,
     }
     for filename in cases:
         (root / "2026" / "10" / "01" / filename).write_bytes(b"hello")
@@ -197,3 +198,25 @@ def test_delete_removes_media_and_sidecar(tmp_path):
     assert not media_path.exists()
     assert not sidecar.exists()
     assert store.load(ref.id) is None
+
+
+def test_load_rejects_glob_media_id(tmp_path):
+    """media_id 会拼进 rglob 模式；glob 元字符必须被拒绝，防止越权读取。"""
+    from backend.services.multimodal.media_store import MediaKind, MediaStore
+
+    store = MediaStore(root=tmp_path)
+    ref = store.save(content=b"hello", kind=MediaKind.DOCUMENT, source="chat_upload", ext="txt")
+    assert store.load("*") is None
+    assert store.load("../*") is None
+    assert store.load("[*]") is None
+    assert store.load(ref.id) is not None
+
+
+def test_delete_rejects_glob_media_id(tmp_path):
+    """非法 media_id 不能借 delete() 的 glob 匹配删除其它附件。"""
+    from backend.services.multimodal.media_store import MediaKind, MediaStore
+
+    store = MediaStore(root=tmp_path)
+    ref = store.save(content=b"hello", kind=MediaKind.DOCUMENT, source="chat_upload", ext="txt")
+    assert store.delete("*") is False
+    assert (tmp_path / ref.file_path).exists()

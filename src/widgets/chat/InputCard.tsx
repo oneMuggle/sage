@@ -16,6 +16,7 @@ import type React from 'react';
 import { AttachmentUpload } from '../../features/send-message/AttachmentUpload';
 import { deliveryModeFromKey } from '../../features/send-message/deliveryMode';
 import type { DeliveryMode } from '../../features/send-message/deliveryMode';
+import { CHAT_DOCUMENT_ACCEPT, CHAT_IMAGE_ACCEPT } from '../../shared/lib/chatAttachmentFormats';
 import { useEmacsKeybindings } from '../../shared/lib/hooks/useEmacsKeybindings';
 import { useI18n } from '../../shared/lib/i18n';
 
@@ -670,7 +671,7 @@ function InputCardInner({
         <input
           type="file"
           id="chat-input-image"
-          accept="image/*"
+          accept={CHAT_IMAGE_ACCEPT}
           multiple
           className="hidden"
           onChange={onImageSelect}
@@ -680,7 +681,7 @@ function InputCardInner({
         <input
           type="file"
           id="chat-input-file"
-          accept=".txt,.md,.csv,.pdf,.docx,.xlsx,.json,.yaml,.yml,.xml,.html,.css,.py,.js,.ts,.jsx,.tsx,.java,.go,.rs,.sh,.bash,.bat,.sql,.log,.ini,.cfg,.conf,.toml"
+          accept={CHAT_DOCUMENT_ACCEPT}
           multiple
           className="hidden"
           onChange={onFileSelect}

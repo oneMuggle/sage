@@ -7,7 +7,9 @@ import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  CHAT_DOCUMENT_ACCEPT,
   CHAT_DOCUMENT_EXTENSIONS,
+  CHAT_IMAGE_MIME_TYPES,
   MAX_ATTACHMENT_COUNT,
   MAX_ATTACHMENT_SIZE,
   formatFileUploadJson,
@@ -312,6 +314,21 @@ describe('preflightAttachment', () => {
     });
     expect(preflightAttachment(dup, [], 'file', 0)).toEqual({ ok: true });
   });
+
+  it('接受 pptx，并按 MIME 白名单拒绝不支持的图片格式', () => {
+    const pptx = makeFile(
+      'deck.pptx',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    );
+    expect(preflightAttachment(pptx, [], 'file', 0)).toEqual({ ok: true });
+    expect(preflightAttachment(makeFile('pic.png', 'image/png'), [], 'image', 0)).toEqual({
+      ok: true,
+    });
+    expect(preflightAttachment(makeFile('pic.bmp', 'image/bmp'), [], 'image', 0)).toMatchObject({
+      ok: false,
+      reason: 'unsupported',
+    });
+  });
 });
 
 describe('CHAT_DOCUMENT_EXTENSIONS', () => {
@@ -328,9 +345,25 @@ describe('CHAT_DOCUMENT_EXTENSIONS', () => {
   });
 
   it('包含二进制文档格式', () => {
-    for (const ext of ['pdf', 'docx', 'xlsx']) {
+    for (const ext of ['pdf', 'docx', 'xlsx', 'pptx']) {
       expect(CHAT_DOCUMENT_EXTENSIONS.has(ext)).toBe(true);
     }
+  });
+
+  it('文件选择器 accept 覆盖全部支持扩展名', () => {
+    const accepted = new Set(CHAT_DOCUMENT_ACCEPT.split(','));
+    for (const ext of CHAT_DOCUMENT_EXTENSIONS) {
+      expect(accepted.has(`.${ext}`)).toBe(true);
+    }
+  });
+
+  it('图片 MIME 白名单与后端同口径', () => {
+    expect(Array.from(CHAT_IMAGE_MIME_TYPES).sort()).toEqual([
+      'image/gif',
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+    ]);
   });
 
   it('不包含图片格式（图片走 images 通道）', () => {

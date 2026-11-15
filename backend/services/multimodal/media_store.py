@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import mimetypes
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -15,6 +16,15 @@ from typing import FrozenSet, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 MEDIA_ROOT = Path("data/media")
+
+#: Media id 由 save() 生成的 12 位十六进制；这里放宽到 path_safety 同款字符集，
+#: 兼容历史数据，同时挡住 glob 元字符（* ? [ ]）与路径分隔符 —— load/delete
+#: 会把 id 拼进 rglob 模式，未校验时 "*" 可读出媒体根下任意附件。
+_MEDIA_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _is_valid_media_id(media_id: str) -> bool:
+    return bool(media_id) and bool(_MEDIA_ID_RE.fullmatch(media_id))
 
 # P0 修复(2026-11-04): MediaStore.load() 在丢失 sidecar 的情况下回退到后缀推断;
 # 回退表必须与 chat_attachment_routes 的 ALLOWED_TEXT_EXTENSIONS | ALLOWED_DOC_EXTENSIONS
@@ -38,7 +48,7 @@ FALLBACK_DOCUMENT_SUFFIXES: FrozenSet[str] = frozenset(
         ".dockerfile", ".gitignore", ".properties",
         # 日志
         ".log",
-        ".pdf", ".docx", ".xlsx",
+        ".pdf", ".docx", ".xlsx", ".pptx",
     }
 )
 
@@ -199,6 +209,8 @@ class MediaStore:
         优先读 sidecar(<id>.meta.json)恢复完整 MediaRef;
         sidecar 缺失(历史数据)时回退到后缀推断,后缀表与上传端 allowlist 同口径。
         """
+        if not _is_valid_media_id(media_id):
+            return None
         for f in self.root.rglob(f"{media_id}.*"):
             # 跳过 sidecar 自身,不要把 <id>.meta.json 当作媒体文件
             if f.name.endswith(".meta.json"):
@@ -245,6 +257,8 @@ class MediaStore:
 
     def delete(self, media_id: str) -> bool:
         """删除媒体文件及其 sidecar。"""
+        if not _is_valid_media_id(media_id):
+            return False
         deleted_any = False
         # 同时清理 <id>.<ext> 与 <id>.meta.json —— rglob 返回的迭代顺序不确定,
         # 旧实现 `return True` 会在第一遍后退出,可能漏删另一个。
