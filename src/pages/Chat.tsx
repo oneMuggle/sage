@@ -116,11 +116,9 @@ export function Chat() {
   const [tempChatSessions, setTempChatSessions] = useSessionMemoryPause(currentSessionId);
   const { t } = useI18n();
   const [orchMode, setOrchMode] = useState<string>('auto');
-  // P2 (2026-11-04): 全局拖放 —— 用户在页面任意位置拖入文件都触发 overlay，
-  // drop 后派发到当前 composer（ChatInput 监听 sage:composer-drop）。
-  const { isDragOver } = useGlobalFileDrop({
-    composerSelector: '[data-testid="chat-input"]',
-  });
+  // 2026-11-15: 全局拖放唯一入口 —— 任意位置拖入文件都触发整页遮罩，
+  // drop 后统一派发 sage:composer-drop（ChatInput 消费）。
+  const { isDragOver } = useGlobalFileDrop();
 
   // 崩溃恢复）后长任务输出不再丢失。内部有会话级去重守卫。
   useEffect(() => {

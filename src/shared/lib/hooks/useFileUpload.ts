@@ -164,17 +164,13 @@ interface UseFileUploadReturn {
   removeFile: (index: number) => void;
   removeImage: (index: number) => void;
   clearAll: () => void;
-  handleDrop: (e: React.DragEvent) => void;
-  handleDragOver: (e: React.DragEvent) => void;
   /** U13: 剪贴板粘贴图片（无图片时放行为默认粘贴文本） */
   handlePaste: (e: React.ClipboardEvent) => void;
-  isDragOver: boolean;
 }
 
 export function useFileUpload(): UseFileUploadReturn {
   const [files, setFiles] = useState<AttachedFile[]>([]);
   const [images, setImages] = useState<AttachedFile[]>([]);
-  const [isDragOver, setIsDragOver] = useState(false);
 
   // P2 (2026-11-04): preflight 需要在 addFile/addImage 内读取"当前"条数,
   // 而 setState 是异步的, 直接读 state 会拿到闭包里的陈旧值 ——
@@ -344,31 +340,7 @@ export function useFileUpload(): UseFileUploadReturn {
     setImages([]);
   }, []);
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragOver(false);
-
-      const droppedFiles = Array.from(e.dataTransfer.files);
-      droppedFiles.forEach((file) => {
-        if (file.type.startsWith('image/')) {
-          addImage(file);
-        } else {
-          addFile(file);
-        }
-      });
-    },
-    [addFile, addImage],
-  );
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
-  }, []);
-
-  // U13 (对标增强第二轮批次 B): 剪贴板粘贴图片 — 与拖放/按钮上传同管道
+  // U13 (对标增强第二轮批次 B): 剪贴板粘贴图片 — 与按钮上传同管道
   // (G6 images 附件)。剪贴板无文件时不 preventDefault,保持默认文本粘贴。
   // P2 (2026-11-04): 扩展为粘贴任意文件（非图片走 addFile 文档通道）。
   const handlePaste = useCallback(
@@ -396,10 +368,7 @@ export function useFileUpload(): UseFileUploadReturn {
     removeFile,
     removeImage,
     clearAll,
-    handleDrop,
-    handleDragOver,
     handlePaste,
-    isDragOver,
   };
 }
 
