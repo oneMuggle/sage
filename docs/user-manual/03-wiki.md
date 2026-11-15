@@ -166,7 +166,8 @@ MVP 复用 chat 端点作 embedding 端点(需要端点支持 `/v1/embeddings`)�
 Wiki 用 sage 已配置的端点。Settings → 模型选择:
 
 - Chat 模型:用于 Step 1 分析 + Step 2 写作 + RAG 综合
-- Embedding 模型:用于向量化(需在「模型选择」中显式选择,当前向量维度固定 1536,可用 `text-embedding-3-small` 等 1536 维模型)
+- Embedding 模型(**可选**):用于向量化/向量检索。未配置时导入照常完成(跳过向量化),
+  Wiki 问答自动降级为关键词检索;配置后向量维度按模型返回自适应(不再固定 1536)
 
 支持的 4 个 provider:
 
@@ -187,15 +188,18 @@ Wiki 用 sage 已配置的端点。Settings → 模型选择:
 
 ### Q3. RAG 回答无关
 
-向量库可能没被正确填充。检查 `.llm-wiki/vectors.json` 是否存在且 `dim` 字段为 1536。
+向量库可能没被正确填充。检查 `.llm-wiki/vectors.json` 是否存在且 `dim` 与当前嵌入模型一致。
+未配置嵌入模型时只有关键词检索,没有向量库属预期行为。
 
 ### Q4. 切换 embedding 模型后检索错乱
 
-`.llm-wiki/vectors.json` 缓存了原 embedding 维度的向量。切换后需要删除该文件,触发重建。
+向量维度以模型返回为准。切换模型后,下一次导入会自动重置 `.llm-wiki/vectors.json`(旧向量清空),
+旧页面需要重新导入一次才能恢复向量检索。
 
 ### Q5. 导入失败提示「导入失败: Wiki 导入失败（LLM 请求返回 HTTP 401）」
 
-说明当前 Chat 端点返回 401：API Key 失效或未配置。到 Settings → 端点 更新 Key(或切换到可用端点/模型)后重试。若提示「请先在设置中配置嵌入模型」,则需先在 Settings → 模型选择 中配置一个 1536 维的 Embedding 模型,再导入。
+说明当前 Chat 端点返回 401：API Key 失效或未配置。到 Settings → 端点 更新 Key(或切换到可用端点/模型)后重试。
+嵌入模型缺失或调用失败不再中断导入,进度条会提示「跳过嵌入」或「嵌入失败,已跳过」,Wiki 页面照常生成。
 
 ## 相关文档
 
