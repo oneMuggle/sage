@@ -19,31 +19,31 @@ export interface ProjectAdvisorCardProps {
   onDecomposeTask?: (action?: string, reason?: string | null) => void;
 }
 
-/** 健康分数 → 颜色 */
+/** 健康分数 → 颜色（与 SEVERITY_TOKENS 调色对齐：emerald / amber / orange / rose） */
 function scoreColor(score: number): string {
-  if (score >= 80) return 'text-green-500';
-  if (score >= 60) return 'text-yellow-500';
+  if (score >= 80) return 'text-emerald-500';
+  if (score >= 60) return 'text-amber-500';
   if (score >= 40) return 'text-orange-500';
-  return 'text-red-500';
+  return 'text-rose-500';
 }
 
 /** 健康分数 → 进度条颜色 */
 function progressColor(score: number): string {
-  if (score >= 80) return 'bg-green-500';
-  if (score >= 60) return 'bg-yellow-500';
+  if (score >= 80) return 'bg-emerald-500';
+  if (score >= 60) return 'bg-amber-500';
   if (score >= 40) return 'bg-orange-500';
-  return 'bg-red-500';
+  return 'bg-rose-500';
 }
 
 /** 严重度 → badge 样式 */
 function severityBadge(severity: string): string {
   switch (severity) {
     case 'high':
-      return 'bg-red-500/20 text-red-400 border-red-500/30';
+      return 'bg-rose-500/15 text-rose-500 border-rose-500/25';
     case 'medium':
-      return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      return 'bg-amber-500/15 text-amber-500 border-amber-500/25';
     default:
-      return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      return 'bg-bg-muted text-text-muted border-border';
   }
 }
 
@@ -51,11 +51,11 @@ function severityBadge(severity: string): string {
 function priorityBadge(priority: string): string {
   switch (priority) {
     case 'high':
-      return 'bg-red-500/20 text-red-400';
+      return 'bg-rose-500/15 text-rose-500';
     case 'medium':
-      return 'bg-yellow-500/20 text-yellow-400';
+      return 'bg-amber-500/15 text-amber-500';
     default:
-      return 'bg-slate-500/20 text-slate-400';
+      return 'bg-bg-muted text-text-muted';
   }
 }
 
@@ -158,7 +158,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-xs text-muted">分析中…</div>
+          <div className="text-xs text-text-muted">分析中…</div>
         </CardContent>
       </Card>
     );
@@ -218,7 +218,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                   }
                 }
               }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted hover:bg-bg-hover hover:text-text"
+              className="inline-flex items-center gap-1 rounded-full bg-bg-muted px-2 py-0.5 text-ui-2xs text-text-muted hover:text-text"
             >
               {savedL3Report ? '已保存' : '保存到 AI 记忆'}
             </button>
@@ -238,7 +238,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                   }
                 }
               }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted hover:bg-bg-hover hover:text-text"
+              className="inline-flex items-center gap-1 rounded-full bg-bg-muted px-2 py-0.5 text-ui-2xs text-text-muted hover:text-text"
             >
               {savedL4Report ? '已保存' : '保存为项目资料'}
             </button>
@@ -261,7 +261,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
         <div className="flex items-center gap-3 mb-2">
           <div className="flex-1">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-muted">健康度</span>
+              <span className="text-xs text-text-muted">健康度</span>
               <span className={`text-sm font-semibold ${scoreColor(healthScore)}`}>
                 {healthScore}
               </span>
@@ -303,10 +303,10 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                       type="button"
                       data-testid="advisor-risk-filter-all"
                       onClick={() => setHighRiskOnly(false)}
-                      className={`rounded border px-1.5 py-0.5 text-ui-2xs ${
+                      className={`rounded-full px-2 py-0.5 text-ui-2xs transition-colors ${
                         !highRiskOnly
-                          ? 'border-primary bg-primary/10 text-primary'
-                          : 'border-border/60 text-muted'
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-bg-muted text-text-muted hover:text-text'
                       }`}
                     >
                       全部
@@ -315,10 +315,10 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                       type="button"
                       data-testid="advisor-risk-filter-high"
                       onClick={() => setHighRiskOnly(true)}
-                      className={`rounded border px-1.5 py-0.5 text-ui-2xs ${
+                      className={`rounded-full px-2 py-0.5 text-ui-2xs transition-colors ${
                         highRiskOnly
-                          ? 'border-primary bg-primary/10 text-primary'
-                          : 'border-border/60 text-muted'
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-bg-muted text-text-muted hover:text-text'
                       }`}
                     >
                       仅高危
@@ -333,7 +333,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                           }
                         }
                       }}
-                      className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-emerald-500"
+                      className="rounded px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-emerald-500 hover:bg-bg-muted"
                     >
                       全部风险转为规则
                     </button>
@@ -359,7 +359,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                           }
                         }
                       }}
-                      className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-primary"
+                      className="rounded px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-primary hover:bg-bg-muted"
                     >
                       {batchRisksMilestoned ? '已全部风险转里程碑' : '全部风险转里程碑'}
                     </button>
@@ -386,7 +386,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                           }
                         }
                       }}
-                      className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-primary"
+                      className="rounded px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-primary hover:bg-bg-muted"
                     >
                       {batchRisksSavedL3 ? '已全部保存到 AI 记忆' : '全部风险存 AI 记忆'}
                     </button>
@@ -409,7 +409,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                           disabled={isGuarded || guardingIdx === idx}
                           onClick={() => void handleCreateRiskConstraint(risk, idx)}
                           data-testid={`advisor-risk-to-constraint-${idx}`}
-                          className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-emerald-500 disabled:opacity-60"
+                          className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-ui-2xs text-text-muted hover:bg-bg-muted hover:text-emerald-500 disabled:opacity-60"
                           title="将此风险保存为项目规则"
                         >
                           {isGuarded ? (
@@ -442,7 +442,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                               }
                             }
                           }}
-                          className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
+                          className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-ui-2xs text-text-muted hover:bg-bg-muted hover:text-primary"
                         >
                           <span>{milestoneRiskIndices.has(idx) ? '已建里程碑' : '+里程碑'}</span>
                         </button>
@@ -470,7 +470,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                               }
                             }
                           }}
-                          className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
+                          className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-ui-2xs text-text-muted hover:bg-bg-muted hover:text-primary"
                         >
                           <span>{l3RiskIndices.has(idx) ? '已保存' : '+记忆'}</span>
                         </button>
@@ -490,12 +490,12 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                               }
                             }
                           }}
-                          className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
+                          className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-ui-2xs text-text-muted hover:bg-bg-muted hover:text-primary"
                         >
                           <span>{l4RiskIndices.has(idx) ? '已保存' : '+资料'}</span>
                         </button>
                         {risk.suggestion && (
-                          <div className="text-ui-2xs text-muted ml-6 mt-0.5 w-full">
+                          <div className="text-ui-2xs text-text-muted ml-6 mt-0.5 w-full">
                             → {risk.suggestion}
                           </div>
                         )}
@@ -537,7 +537,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                           }
                         }
                       }}
-                      className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-emerald-500"
+                      className="rounded px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-emerald-500 hover:bg-bg-muted"
                     >
                       {batchSuggestionsConstrained ? '已全部转为规则' : '全部建议转为规则'}
                     </button>
@@ -563,7 +563,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                           }
                         }
                       }}
-                      className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-primary"
+                      className="rounded px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-primary hover:bg-bg-muted"
                     >
                       {batchSuggestionsMilestoned ? '已全部转里程碑' : '全部建议转里程碑'}
                     </button>
@@ -590,7 +590,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                           }
                         }
                       }}
-                      className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-primary"
+                      className="rounded px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-primary hover:bg-bg-muted"
                     >
                       {batchSuggestionsSavedL3 ? '已全部保存到 AI 记忆' : '全部建议存 AI 记忆'}
                     </button>
@@ -607,7 +607,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                       <div className="flex-1 space-y-0.5">
                         <span>{sug.action}</span>
                         {sug.reason && (
-                          <div className="text-ui-2xs text-muted-foreground">{sug.reason}</div>
+                          <div className="text-ui-2xs text-text-muted">{sug.reason}</div>
                         )}
                         {sug.evidence && sug.evidence.length > 0 && (
                           <div
@@ -617,7 +617,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                             {sug.evidence.map((item, evidenceIdx) => (
                               <span
                                 key={evidenceIdx}
-                                className="rounded bg-muted px-1 py-0.5 text-ui-2xs text-muted-foreground"
+                                className="rounded bg-bg-muted px-1 py-0.5 text-ui-2xs text-text-muted"
                               >
                                 {item}
                               </span>
@@ -647,7 +647,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                           }
                         }}
                         data-testid={`advisor-suggestion-to-constraint-${idx}`}
-                        className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-emerald-500 disabled:opacity-60"
+                        className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-ui-2xs text-text-muted hover:bg-bg-muted hover:text-emerald-500 disabled:opacity-60"
                         title="将此改进建议保存为项目规则"
                       >
                         <Shield className="h-3 w-3" />
@@ -671,7 +671,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                             }
                           }
                         }}
-                        className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
+                        className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-ui-2xs text-text-muted hover:bg-bg-muted hover:text-primary"
                       >
                         <span>
                           {milestoneSuggestionIndices.has(idx) ? '已转里程碑' : '+里程碑'}
@@ -701,7 +701,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                             }
                           }
                         }}
-                        className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
+                        className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-ui-2xs text-text-muted hover:bg-bg-muted hover:text-primary"
                       >
                         <span>{l3SuggestionIndices.has(idx) ? '已保存' : '+记忆'}</span>
                       </button>
@@ -721,7 +721,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                             }
                           }
                         }}
-                        className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
+                        className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-ui-2xs text-text-muted hover:bg-bg-muted hover:text-primary"
                       >
                         <span>{l4SuggestionIndices.has(idx) ? '已保存' : '+资料'}</span>
                       </button>
@@ -730,7 +730,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                           type="button"
                           onClick={() => onDecomposeTask(sug.action, sug.reason)}
                           data-testid={`advisor-decompose-suggestion-${idx}`}
-                          className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-blue-400"
+                          className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-ui-2xs text-text-muted hover:bg-bg-muted hover:text-blue-400"
                           title="将此建议分解为任务"
                           aria-label="分解为任务"
                         >
@@ -739,7 +739,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                         </button>
                       )}
                       {sug.reason && (
-                        <div className="text-ui-2xs text-muted ml-6 mt-0.5 w-full">
+                        <div className="text-ui-2xs text-text-muted ml-6 mt-0.5 w-full">
                           原因: {sug.reason}
                         </div>
                       )}
@@ -753,7 +753,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
 
         {/* 缓存时间 */}
         {advice.cachedAt && (
-          <div className="text-ui-2xs text-muted mt-2">
+          <div className="text-ui-2xs text-text-muted mt-2">
             更新于 {new Date(advice.cachedAt * 1000).toLocaleTimeString()}
           </div>
         )}
