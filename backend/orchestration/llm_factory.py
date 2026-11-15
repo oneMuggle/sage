@@ -356,7 +356,7 @@ def find_endpoint_for_model(model_id: str) -> Optional[Dict[str, Any]]:
     endpoints = settings.get("endpoints") or []
     if not isinstance(endpoints, list):
         return None
-    candidates: list[Dict[str, Any]] = []
+    candidates: List[Dict[str, Any]] = []
     for ep in endpoints:
         if not isinstance(ep, dict):
             continue
