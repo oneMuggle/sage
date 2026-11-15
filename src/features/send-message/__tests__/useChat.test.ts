@@ -118,7 +118,9 @@ beforeEach(() => {
   listenMock.mockReset();
   // useSettings 异步加载会先调 get_settings；提前 mock 避免它消费测试的
   // mockResolvedValueOnce（后者针对 agent_chat_stream 等具体 cmd）
-  invokeMock.mockResolvedValueOnce({ data: null });
+  invokeMock.mockResolvedValueOnce({ data: null }); // get_settings
+  // 2026-11-15: useChat 现在会调 session_get_model 读取会话模型覆盖
+  invokeMock.mockResolvedValueOnce({ session_id: VALID_SESSION_ID, model: null }); // session_get_model
   localStorage.clear();
   // 2026-08-26: 重置 settings store,避免用例间串扰
   useSettingsStore.setState({ settings: { ...DEFAULT_SETTINGS }, isLoading: true });
