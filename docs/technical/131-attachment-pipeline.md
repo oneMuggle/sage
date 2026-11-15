@@ -213,17 +213,18 @@ interface AttachedFile {
 
 ## 7. P2：整页拖放
 
-### 7.1 共享 hook
+### 7.1 共享 hook（2026-11-15 起为唯一入口）
 
-新增 `src/shared/lib/hooks/useGlobalFileDrop.ts`，Chat 页与新对话页（Welcome）共用：
+`src/shared/lib/hooks/useGlobalFileDrop.ts`，Chat 页与新对话页（Welcome）共用：
 
 - 在 **document 捕获阶段**监听 `dragenter` / `dragleave` / `dragover` / `drop`，
-  使"把文件拖到页面任意位置"都能被接收（对标 ChatGPT / Claude 的整页拖放）；
-- 落在 `composerSelector` 内的 drop **不拦截**，交给 composer 自己的 React `onDrop`
-  （保留输入卡原有高亮反馈）；
-- 容器外的 drop 派发 `sage:composer-drop` CustomEvent，composer 消费后交给各自的
-  `useFileUpload`，与输入卡内 drop 行为完全一致；
-- `isDragOver` 驱动整页遮罩。
+  任何含文件的 drop 一律 `preventDefault()` 后派发 `sage:composer-drop`
+  CustomEvent，composer（`ChatInput` / `WelcomeInputCard`）消费后交给各自的
+  `useFileUpload` —— **不再区分 composer 内/外**，也不再有第二套 composer
+  局部拖放状态；
+- `isDragOver` 驱动整页遮罩（`pointer-events-none`，永不阻断输入）；
+- 复位路径：`drop` / `dragend` / 拖出窗口（`dragleave` 且 `relatedTarget` 为
+  `null`）一律清零。
 
 ### 7.2 两个容易踩的点
 
@@ -235,7 +236,19 @@ interface AttachedFile {
 ### 7.3 拖拽计数去抖
 
 `dragenter` / `dragleave` 在嵌套元素间成对冒泡，用计数器抵消子元素带来的误增误减，
-避免遮罩闪烁。
+避免遮罩闪烁。会话标志（dragenter 时置位）取代"每次现查 `dataTransfer.types`"——
+部分 Chromium 版本在 dragleave 时 `dataTransfer` 不可靠，现查会漏减计数。
+
+### 7.4 拖放遮罩卡死回归（2026-11-15）
+
+旧实现按 `composerSelector` 分流：卡外 drop 被捕获阶段 `stopPropagation` 拦截，
+卡内依赖 `InputCard` 自己的 React `onDrop` 复位局部 `isDragOver`。但卡内覆盖层
+（`absolute inset-0 z-10`）本身不在 textarea 内，drop 目标落在覆盖层时会被判为
+"卡外" → 全局拦截 + `stopPropagation` → 局部状态无人复位 → 遮罩永久停留且
+（覆盖层无 `pointer-events-none`）阻断输入。
+
+修复：删除 composer 局部拖放状态与遮罩（单一入口 + 单一状态），补 `dragend` /
+离开窗口复位；回归测试见 `ChatInput.globalDrop.test.tsx`。
 
 ## 8. 音频附件暂时隐藏
 
@@ -251,7 +264,8 @@ interface AttachedFile {
 | 前端单测 | `src/features/send-message/__tests__/attachmentsProcessed.test.ts` | `attachments_processed` 事件消费 |
 | 前端单测 | `src/widgets/chat/__tests__/Message.clientMeta.test.tsx` | 气泡状态 chip 渲染 |
 | 前端单测 | `src/shared/lib/hooks/__tests__/useFileUpload.test.ts` | 预检各分支 + 状态流转 |
-| 前端单测 | `src/shared/lib/hooks/__tests__/useGlobalFileDrop.test.ts` | 整页拖放分发 / composer 内放行 / 遮罩状态 / 文本拖放忽略 / 卸载清理 |
+| 前端单测 | `src/shared/lib/hooks/__tests__/useGlobalFileDrop.test.ts` | 拖放唯一入口（含 composer 内）/ preventDefault / drop·dragend·离开窗口复位 / 文本拖放忽略 / 卸载清理 |
+| 前端单测 | `src/widgets/chat/__tests__/ChatInput.globalDrop.test.tsx` | 遮罩随 drop/取消消失、drop 落覆盖层与 textarea 均入列、指针穿透 |
 | 前端单测 | `src/widgets/chat/__tests__/ChatInput.composerDrop.test.tsx` | composer 消费 `sage:composer-drop` 的图片/文档分流 |
 
 ## 10. Win7 适配说明

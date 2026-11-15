@@ -1,5 +1,7 @@
 /**
- * r112: useFileUpload 单元测试——图片/文件分流、删除、粘贴与拖放。
+ * r112: useFileUpload 单元测试——图片/文件分流、删除、粘贴。
+ * 2026-11-15: 拖放入口统一到 useGlobalFileDrop，本 hook 不再持有拖放状态，
+ * handleDrop / handleDragOver 用例随之移除（事件分流由 ChatInput.globalDrop 覆盖）。
  */
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -83,25 +85,6 @@ describe('useFileUpload', () => {
     expect(result.current.images).toHaveLength(0);
   });
 
-  it('handleDrop 按类型分流图片与文件', async () => {
-    const flush = mockFileReader();
-    const { result } = renderHook(() => useFileUpload());
-    const dt = {
-      preventDefault: vi.fn(),
-      stopPropagation: vi.fn(),
-      dataTransfer: { files: [makeFile('b.png', 'image/png'), makeFile('c.md', 'text/markdown')] },
-    } as unknown as React.DragEvent;
-    act(() => {
-      result.current.handleDrop(dt);
-    });
-    act(() => {
-      flush();
-    });
-    expect(result.current.images.map((f) => f.name)).toEqual(['b.png']);
-    expect(result.current.files.map((f) => f.name)).toEqual(['c.md']);
-    expect(dt.preventDefault).toHaveBeenCalled();
-  });
-
   it('handlePaste 同时接收图片与文档文件', async () => {
     const flush = mockFileReader();
     const { result } = renderHook(() => useFileUpload());
@@ -163,16 +146,6 @@ describe('useFileUpload', () => {
     });
     expect(result.current.files).toHaveLength(0);
     expect(result.current.images).toHaveLength(0);
-  });
-
-  it('handleDragOver 置 isDragOver 且不触发默认行为', () => {
-    const { result } = renderHook(() => useFileUpload());
-    const evt = { preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as React.DragEvent;
-    act(() => {
-      result.current.handleDragOver(evt);
-    });
-    expect(result.current.isDragOver).toBe(true);
-    expect(evt.preventDefault).toHaveBeenCalled();
   });
 
   // ── P2 (2026-11-04): 预检 ──────────────────────────────────────────────
