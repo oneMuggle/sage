@@ -2,6 +2,7 @@
 import {
   Copy,
   File,
+  FileArchive,
   FileCode,
   FileImage,
   FileSpreadsheet,
@@ -39,6 +40,7 @@ const KIND_ICONS: Record<ArtifactKind, typeof File> = {
   xlsx: FileSpreadsheet,
   pptx: FileText,
   latex: FileCode,
+  archive: FileArchive, // 2026-11-15: 压缩包预览 (feat/archive-preview)
   text: File,
   html: Globe, // 2026-11-11: .html/.htm 统一为独立 kind
 };

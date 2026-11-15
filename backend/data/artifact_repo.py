@@ -283,6 +283,16 @@ _EXT_KIND_MAP = {
     ".pptx": "pptx",
     ".tex": "latex",
     ".ltx": "latex",
+    # 压缩包扩展名 —— feat/archive-preview
+    ".zip": "archive",
+    ".jar": "archive",
+    ".tar": "archive",
+    ".gz": "archive",
+    ".tgz": "archive",
+    ".bz2": "archive",
+    ".xz": "archive",
+    ".7z": "archive",
+    ".rar": "archive",
 }
 
 

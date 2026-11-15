@@ -4,7 +4,7 @@
 // 的按类型分发逻辑：图片 / PDF / HTML / Office 三件套 / 代码 / Markdown / CSV /
 // 纯文本。产物预览（ArtifactViewer）与消息内文件预览（FilePreviewPanel）
 // 共用同一套渲染，保证两端视觉与行为同源。
-import { ClipboardCopy } from 'lucide-react';
+import { ClipboardCopy, FileArchive, FileIcon, FolderIcon } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
 import { ExcelPreview, PptPreview, WordPreview } from '../../../features/office';
@@ -34,6 +34,22 @@ export interface PreviewContentPayload {
   html?: string;
   structured?: unknown;
   truncated?: boolean;
+  // 压缩包预览字段 (feat/archive-preview)
+  format?: string;
+  entry_count?: number;
+  total_uncompressed?: number;
+  encrypted?: boolean;
+  entries?: ArchiveEntryInline[];
+}
+
+/** 压缩包内条目信息（清单展示用） */
+export interface ArchiveEntryInline {
+  name: string;
+  size: number;
+  compressed_size: number;
+  is_dir: boolean;
+  mtime: number | null;
+  is_archive: boolean;
 }
 
 interface FileContentRendererProps {
@@ -134,6 +150,60 @@ function CsvPreview({ text }: { text: string }) {
   );
 }
 
+function formatArchiveSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function ArchiveListingInline({ content, name }: { content: PreviewContentPayload; name: string }) {
+  const entries = content.entries ?? [];
+  const displayEntries = entries.slice(0, 200);
+  const truncated = entries.length > 200;
+
+  return (
+    <div className="text-sm" data-testid="archive-listing">
+      <div className="flex items-center gap-2 mb-2 text-text-secondary">
+        <FileArchive className="w-4 h-4 text-amber-500" />
+        <span className="font-medium">{name}</span>
+        <span className="text-xs">
+          {content.format?.toUpperCase()} · {content.entry_count} 条目 ·{' '}
+          {formatArchiveSize(content.total_uncompressed ?? 0)}
+        </span>
+      </div>
+      {content.encrypted && <div className="text-xs text-amber-600 mb-2">压缩包已加密</div>}
+      <div className="max-h-64 overflow-auto border border-border rounded bg-bg-subtle">
+        {displayEntries.map((entry) => {
+          const fileName = entry.name.split('/').pop() || entry.name;
+          const indent = (entry.name.match(/\//g)?.length ?? 0) * 12;
+          return (
+            <div
+              key={entry.name}
+              className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-bg-hover text-xs"
+              style={{ paddingLeft: `${indent + 8}px` }}
+            >
+              {entry.is_dir ? (
+                <FolderIcon className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+              ) : entry.is_archive ? (
+                <FileArchive className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              ) : (
+                <FileIcon className="w-3.5 h-3.5 text-muted shrink-0" />
+              )}
+              <span className="truncate flex-1">{fileName}</span>
+              {!entry.is_dir && (
+                <span className="text-muted shrink-0">{formatArchiveSize(entry.size)}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {truncated && (
+        <div className="text-xs text-muted mt-1">仅显示前 200 条，共 {entries.length} 条</div>
+      )}
+    </div>
+  );
+}
+
 export function FileContentRenderer({
   content,
   name,
@@ -230,6 +300,11 @@ export function FileContentRenderer({
       return <LatexPreview data={structured} source={content.content} name={name} />;
     }
     return <ShikiCodeBlock language="latex">{content.content ?? ''}</ShikiCodeBlock>;
+  }
+  // 压缩包目录列表（feat/archive-preview）—— 完整交互浏览需 sessionId，
+  // FilePreviewPanel 层可升级为 ArchivePreview；此处展示静态清单。
+  if (content.kind === 'archive') {
+    return <ArchiveListingInline content={content} name={name} />;
   }
   return <pre className="whitespace-pre-wrap text-sm">{content.content}</pre>;
 }
