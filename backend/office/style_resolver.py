@@ -111,7 +111,7 @@ def _read_ppr(style: Any) -> Dict[str, Any]:
     line_spacing_rule = getattr(pf, "line_spacing_rule", None)
     if line_spacing is not None:
         rule_name = _enum_name(line_spacing_rule) if line_spacing_rule else ""
-        if isinstance(line_spacing, (int, float)):
+        if isinstance(line_spacing, (int, float)):  # noqa: UP038
             if "EXACT" in rule_name or "AT_LEAST" in rule_name:
                 result["line_spacing_pt"] = round(line_spacing / 12700, 1)
             else:
