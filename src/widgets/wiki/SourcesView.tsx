@@ -81,6 +81,18 @@ export function SourcesView() {
       toast.error('请先在设置中配置聊天模型');
       return;
     }
+    // 2026-11-15: 导入的「嵌入」步骤必须用 embeddingModel 选中的端点/模型，
+    // 不能复用聊天端点（如 DeepSeek 无 /embeddings，导入会在最后一步失败）。
+    const embeddingSelection = settings?.settings.modelSelections.embeddingModel;
+    const embedEndpoint =
+      settings && embeddingSelection
+        ? resolveEndpoint(embeddingSelection, settings.settings.endpoints)
+        : undefined;
+    const embedModelId = embeddingSelection?.modelId ?? '';
+    if (!embedEndpoint || !embedModelId) {
+      toast.error('请先在设置中配置嵌入模型（用于导入后的向量化）');
+      return;
+    }
     try {
       const { streamId } = await wikiIngestStream({
         sourceFile: path,
@@ -88,9 +100,9 @@ export function SourcesView() {
         llmBaseUrl: endpoint.baseUrl,
         llmApiKey: endpoint.apiKey,
         llmModel: modelId,
-        embedBaseUrl: endpoint.baseUrl,
-        embedApiKey: endpoint.apiKey,
-        embedModel: modelId,
+        embedBaseUrl: embedEndpoint.baseUrl,
+        embedApiKey: embedEndpoint.apiKey,
+        embedModel: embedModelId,
       });
       setIngestId(streamId);
     } catch (error) {
