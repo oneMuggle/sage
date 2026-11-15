@@ -145,11 +145,9 @@ export function Welcome() {
     return localStorage.getItem(STORAGE_KEY_WORKTREE_ID);
   });
 
-  // P2 (2026-11-04): 新对话页整页拖放 —— 拖到页面任意位置都被接收，
-  // drop 后由 WelcomeInputCard 消费 sage:composer-drop 事件。
-  const { isDragOver } = useGlobalFileDrop({
-    composerSelector: '[data-testid="welcome-input-card"]',
-  });
+  // 2026-11-15: 新对话页整页拖放 —— drop 后由 WelcomeInputCard 消费
+  // sage:composer-drop 事件。
+  const { isDragOver } = useGlobalFileDrop();
 
   // Data loading state
   const [projects, setProjects] = useState<ProjectOption[]>([]);
