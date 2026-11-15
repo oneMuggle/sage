@@ -398,6 +398,12 @@ def _section_profile(section: Any, index: int) -> Dict[str, Any]:
         header_text = ""
         footer_text = ""
         has_page = False
+    page_number_format = None
+    sect_pr = getattr(section, "_sectPr", None)
+    if sect_pr is not None:
+        pg_num = sect_pr.find(qn("w:pgNumType"))
+        if pg_num is not None:
+            page_number_format = pg_num.get(qn("w:fmt"))
     return {
         "index": index,
         "start_type": _enum_name(section.start_type),
@@ -413,6 +419,7 @@ def _section_profile(section: Any, index: int) -> Dict[str, Any]:
         "header_text": header_text,
         "footer_text": footer_text,
         "has_page_number_field": has_page,
+        "page_number_format": page_number_format,
     }
 
 
