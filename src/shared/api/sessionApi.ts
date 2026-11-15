@@ -2,6 +2,8 @@
  * Sage API - Session API
  */
 
+import { emitSessionModelOverrideChanged } from '../lib/effectiveChatModel';
+
 import { invoke } from './desktopInvoke';
 import type {
   ConversationParticipant,
@@ -484,7 +486,11 @@ export const sessionApi = {
           sessionId,
           model,
         });
-        return resp.model ?? null;
+        const applied = resp.model ?? null;
+        // ChatInput 等只读消费方需要立即刷新视觉能力判定，避免会话内
+        // 切换模型后输入框仍按旧模型显示。
+        emitSessionModelOverrideChanged({ sessionId, modelId: applied });
+        return applied;
       } catch (error) {
         throw handleApiError(error);
       }

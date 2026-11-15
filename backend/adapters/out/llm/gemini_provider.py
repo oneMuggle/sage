@@ -59,13 +59,15 @@ def model_capabilities(model: str) -> ModelCapabilities:
         ModelCapabilities：``vision`` 为启发式判定，非厂商权威声明。
     """
     lower = (model or "").lower()
+    is_gemini = "gemini" in lower
     is_non_generative = any(marker in lower for marker in _GEMINI_NON_VISION_MARKERS)
     # 生成式 Gemini 模型（pro / flash）全部支持 vision
-    vision = "gemini" in lower and not is_non_generative
+    vision = is_gemini and not is_non_generative
     reasoning = "2.5" in lower or "flash-thinking" in lower
     return ModelCapabilities(
         tools=True,
         vision=vision,
+        vision_known=is_gemini,
         streaming=True,
         parallel_tool_calls=True,
         reasoning=reasoning,

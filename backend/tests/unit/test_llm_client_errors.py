@@ -267,6 +267,36 @@ async def test_bad_request_without_overflow_markers_stays_unknown(client):
 
 
 @pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    ("status_code", "body"),
+    [
+        (400, '{"error": {"message": "unknown variant `image_url`, expected `text`"}}'),
+        (422, '{"detail": "This model does not support image input"}'),
+        (400, "vision is not supported by this model"),
+    ],
+)
+async def test_image_unsupported_error_is_actionable(client, status_code, body):
+    """模型拒绝图片输入时，错误文案要指向视觉模型 / 本地 OCR 的恢复路径。"""
+    mock_response = _http_error_response(status_code, body)
+    mock_response.raise_for_status = Mock(
+        side_effect=httpx.HTTPStatusError(
+            f"{status_code}", request=AsyncMock(), response=mock_response
+        )
+    )
+    with patch.object(client, "_get_client") as mock_get_client:
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(return_value=mock_response)
+        mock_get_client.return_value = mock_http
+
+        with pytest.raises(LLMError) as exc_info:
+            await client.chat([{"role": "user", "content": "hi"}])
+        assert exc_info.value.type == LLMErrorType.UNKNOWN
+        assert exc_info.value.status_code == status_code
+        assert "视觉理解模型" in exc_info.value.message
+        assert "OCR" in exc_info.value.message
+
+
+@pytest.mark.asyncio()
 async def test_proxy_upstream_timeout_504_classified_as_timeout(client):
     """Sage 代理的 upstream_timeout 504 → TIMEOUT + 可操作提示。"""
     mock_response = _http_error_response(

@@ -139,6 +139,37 @@ RapidOCR/onnxruntime 未进默认安装包；缺依赖时能力位降级，不�
 - 设置页「本地 OCR」卡片：状态、引擎、语言、测试识别、优先策略；RapidOCR 模型下载
   支持进度、取消与恢复默认；支持清理批处理记录（TTL 默认 7 天）；持久化 `ocr_config`。
 
+### 视觉能力判定（前端与后端）
+
+`src/shared/lib/visionCapability.ts` 的 `resolveVisionSupport(endpoint, modelId, catalog)` 是前端唯一
+视觉能力判定入口，按权威度分层：
+
+1. model-catalog `getEffective().capabilities.vision`：`true` → `supported`，`false` → `unsupported`。
+   catalog 的 capabilities 按 `user_override > probe > imported_snapshot > builtin`
+   逐 key 合并，用户可在「模型目录」或聊天页警告条中把某个模型手动标记为支持/不支持；
+2. 回退 `endpoint.discoveredModels` 中该模型 `capabilities` 是否含 `'vision'`：含 → `supported`，
+   不含或未命中该模型 → **`unknown`**。discovered capabilities 只是模型名字符串 marker 的
+   启发式推断（`src/shared/lib/modelCapabilities.ts` 的 `inferCapabilities`），未识别不等于
+   厂商声明不支持；
+3. **只有 catalog 明确 `vision: false` 才是 `unsupported`**。
+
+`unknown` 与 `supported` 同等对待（fail-open），与后端 `agent.py` 的「未知=支持」语义一致；
+`ChatInput` 仅在 `unsupported` 时禁用图片上传，并提供「误判了？标记为支持图片」按钮写入
+catalog override；「设置 → 模型 → 视觉能力」另提供 自动 / 支持 / 不支持 三态覆盖。
+会话内用 `SessionModelPicker` 切换模型时，`sessionApi.setModelOverride` 会广播
+`session-model-override-changed` 事件，`ChatInput` 据此立即刷新判定。
+`useChat` 仅在 `unsupported` 时把 `ChatRequest.capabilities` 置为 `['chat']`。
+视觉判定与请求凭据都使用 `src/shared/lib/effectiveChatModel.ts` 的
+`resolveEffectiveChatModel` —— 会话级模型覆盖优先于全局 `chatModel`，同端点覆盖也会替换模型 id。
+catalog 请求有 1.5s 超时，失败按 `unknown` 处理。
+
+后端 `ModelCapabilities.vision_known` 区分「确认不支持」与「名字未识别」：
+OpenAI 兼容 / Anthropic / Gemini / Ollama 的 `model_capabilities` 在正负 marker 都未命中时返回
+`vision_known=False`，`agent._get_model_capabilities` 将其与 `resolver is None` 一样按未知放行。
+若上游对带图请求返回 400/422 且响应体命中 image/vision 特征串，`llm_client` 会给出
+「更换支持视觉的对话模型，或在设置页把当前模型标记为不支持图片，以启用视觉理解模型 / OCR 回退」
+的可操作错误文案。
+
 ## 8. 性能
 
 在开发机（Python 3.10 + RapidOCR 3.x + ORT 1.19.2，PP-OCRv6 small）实测：

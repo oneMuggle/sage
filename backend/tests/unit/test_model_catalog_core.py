@@ -41,8 +41,32 @@ def test_empty_layers_have_unknown_values_and_no_sources():
     result = resolve_layers([])
     assert result.limits == ContextLimits()
     assert result.price == Price()
+    assert result.capabilities is None
     assert result.provenance == {}
     assert result.revision == 0
+
+
+def test_capabilities_merge_per_key_with_first_layer_winning():
+    user = LayerValues(
+        limits=ContextLimits(),
+        price=Price(),
+        capabilities={"vision": True},
+        source="user_override",
+        revision=1,
+    )
+    builtin = LayerValues(
+        limits=ContextLimits(),
+        price=Price(),
+        capabilities={"vision": False, "tools": True},
+        source="builtin",
+        revision=0,
+    )
+
+    result = resolve_layers([user, builtin])
+
+    assert result.capabilities == {"vision": True, "tools": True}
+    assert result.provenance["capabilities.vision"] == "user_override"
+    assert result.provenance["capabilities.tools"] == "builtin"
 
 
 def test_identity_and_aliases_are_exact_not_fuzzy():
