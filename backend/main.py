@@ -496,6 +496,16 @@ async def _deferred_startup_init(
         except Exception:
             logger.exception("autonomous goal scheduler registration failed (ignored)")
 
+        # ── 项目健康定时检查（每天 09:00） ──
+        try:
+            from backend.services.project_health_scheduler import (
+                get_project_health_scheduler,
+            )
+
+            get_project_health_scheduler().register_to_scheduler(scheduler_service)
+        except Exception:
+            logger.exception("project health scheduler registration failed (ignored)")
+
         # ── ReviewQueue ──
         from backend.skills.review_bootstrap import bootstrap_review_collaborators
         from backend.skills.review_queue import get_review_queue

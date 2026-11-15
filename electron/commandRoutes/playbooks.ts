@@ -32,9 +32,7 @@ export const playbookRoutes: Record<string, CommandRoute> = {
   playbook_get_current: {
     method: 'GET',
     path: (a) =>
-      `/api/v1/projects/${projectId(a)}/playbook?with_audit=${
-        a.withAudit ?? a.with_audit ?? true
-      }`,
+      `/api/v1/projects/${projectId(a)}/playbook?with_audit=${a.withAudit ?? a.with_audit ?? true}`,
   },
   playbook_bind: {
     method: 'PUT',
@@ -63,6 +61,46 @@ export const playbookRoutes: Record<string, CommandRoute> = {
       answers: a.answers ?? {},
       use_llm: a.useLlm ?? a.use_llm ?? true,
     }),
+  },
+  playbook_author_conversation_start: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/playbook/author/conversation`,
+  },
+  playbook_author_conversation_get: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/projects/${projectId(a)}/playbook/author/conversation/${enc(
+        a.conversationId ?? a.conversation_id,
+      )}`,
+  },
+  playbook_author_conversation_message: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/projects/${projectId(a)}/playbook/author/conversation/${enc(
+        a.conversationId ?? a.conversation_id,
+      )}/message`,
+    body: (a) => ({
+      message: a.message,
+      use_llm: a.useLlm ?? a.use_llm ?? true,
+    }),
+  },
+  playbook_author_conversation_rollback: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/projects/${projectId(a)}/playbook/author/conversation/${enc(
+        a.conversationId ?? a.conversation_id,
+      )}/rollback/${enc(a.turnIndex ?? a.turn_index ?? 0)}`,
+  },
+  playbook_author_conversation_commit: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/projects/${projectId(a)}/playbook/author/conversation/${enc(
+        a.conversationId ?? a.conversation_id,
+      )}/commit`,
+  },
+  playbook_infer_stages: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/playbook/infer`,
   },
   playbook_stage_confirm: {
     method: 'POST',

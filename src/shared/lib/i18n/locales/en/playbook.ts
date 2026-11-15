@@ -206,6 +206,32 @@ export const enPlaybook: Record<PlaybookTranslationKey, string> = {
   'playbook.author.bind': 'Bind generated playbook',
   'playbook.author.binding': 'Binding…',
 
+  'playbook.conversation.toggle': 'AI conversation authoring',
+  'playbook.conversation.toggleClose': 'Collapse conversation',
+  'playbook.conversation.hint':
+    'Describe the project stages across several turns; AI updates the draft each turn. Nothing is bound until you confirm, and you can roll back anytime.',
+  'playbook.conversation.start': 'Start conversation',
+  'playbook.conversation.starting': 'Starting…',
+  'playbook.conversation.inputPlaceholder':
+    'e.g. A research project with proposal, implementation and wrap-up stages, each requiring different documents',
+  'playbook.conversation.send': 'Send',
+  'playbook.conversation.sending': 'Thinking…',
+  'playbook.conversation.rollback': 'Undo last step',
+  'playbook.conversation.commit': 'Confirm and bind',
+  'playbook.conversation.committing': 'Binding…',
+  'playbook.conversation.committed': 'Bound playbook version {version}',
+  'playbook.conversation.fallback': '(No LLM configured; deterministic draft used)',
+  'playbook.conversation.emptyStages': 'The draft has no stages yet',
+  'playbook.conversation.stageMeta': '{count} artifacts',
+
+  'playbook.infer.button': 'Infer stages from project folder',
+  'playbook.infer.running': 'Inferring…',
+  'playbook.infer.title': 'Inference result (confidence {confidence}%)',
+  'playbook.infer.empty': 'No stages recognized from folders or git history',
+  'playbook.infer.bind': 'Bind inferred playbook',
+  'playbook.infer.binding': 'Binding…',
+  'playbook.infer.bound': 'Playbook bound from inference result',
+
   'playbook.versions.title': 'Version history',
   'playbook.versions.empty': 'No versions yet',
   'playbook.versions.current': 'Current',
