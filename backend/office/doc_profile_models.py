@@ -161,6 +161,13 @@ class WordStyleProfile(BaseModel):
     italic: bool = False
     underline: bool = False
     color: Optional[str] = None
+    alignment: Optional[str] = None
+    line_spacing: Optional[float] = None
+    line_spacing_pt: Optional[float] = None
+    space_before_pt: Optional[float] = None
+    space_after_pt: Optional[float] = None
+    first_line_indent_pt: Optional[float] = None
+    left_indent_pt: Optional[float] = None
 
 
 class WordDocumentProfileSummary(BaseModel):
