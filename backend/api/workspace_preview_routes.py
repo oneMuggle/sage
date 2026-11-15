@@ -19,7 +19,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.compat.win7.pydantic_compat import ConfigDict
-from backend.data import artifact_reader, artifact_repo
+from backend.data import archive_reader, artifact_reader, artifact_repo
 from backend.data.database import get_database
 from backend.office.models import _constrained_list
 from backend.office.session_workspace import get_workspace_binding
@@ -79,6 +79,10 @@ _IMAGE_PREVIEW_SUFFIXES = frozenset({"png", "jpg", "jpeg", "gif", "webp", "svg",
 _OFFICE_PREVIEW_SUFFIXES = frozenset({"docx", "xlsx", "pptx"})
 #: LaTeX 源文件 → 结构化 blocks（前端 KaTeX 渲染）
 _LATEX_PREVIEW_SUFFIXES = frozenset({"tex", "ltx"})
+#: 压缩包 → 目录列表 / 条目读取（feat/archive-preview）
+_ARCHIVE_PREVIEW_SUFFIXES = frozenset({
+    "zip", "jar", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar",
+})
 
 
 def _resolve_workspace_target(root: str, raw_path: str) -> Path:
@@ -117,10 +121,63 @@ def _raise_preview_failure(result: dict) -> None:
     raise _error(502, "file_read_error", message)
 
 
+def _preview_archive(path: Path, entry: Optional[str]) -> dict:
+    """压缩包预览：无 entry 返回目录列表，有 entry 返回条目内容。"""
+    try:
+        if entry is None:
+            info = archive_reader.read_archive_listing(path)
+            return {
+                "ok": True,
+                "kind": "archive",
+                "format": info.format,
+                "entry_count": info.entry_count,
+                "total_uncompressed": info.total_uncompressed,
+                "encrypted": info.encrypted,
+                "truncated": info.truncated,
+                "entries": [
+                    {
+                        "name": e.name,
+                        "size": e.size,
+                        "compressed_size": e.compressed_size,
+                        "is_dir": e.is_dir,
+                        "mtime": e.mtime,
+                        "is_archive": e.is_archive,
+                    }
+                    for e in info.entries
+                ],
+            }
+        # 读取压缩包内条目
+        data = archive_reader.read_archive_entry(path, entry)
+        # 按条目扩展名推断类型
+        entry_suffix = Path(entry).suffix.lower().lstrip(".")
+        if entry_suffix in _IMAGE_PREVIEW_SUFFIXES:
+            import base64
+            mime = {
+                "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                "gif": "image/gif", "webp": "image/webp", "svg": "image/svg+xml",
+                "bmp": "image/bmp",
+            }.get(entry_suffix, "application/octet-stream")
+            encoded = base64.b64encode(data).decode("ascii")
+            return {"ok": True, "kind": "image", "data_url": f"data:{mime};base64,{encoded}"}
+        # 文本类条目
+        try:
+            text = data.decode("utf-8")
+            kind = artifact_repo.classify_artifact(entry)
+            truncated = len(text) > artifact_reader.WORKSPACE_PREVIEW_CONTENT_CAP
+            if truncated:
+                text = text[:artifact_reader.WORKSPACE_PREVIEW_CONTENT_CAP]
+            return {"ok": True, "kind": kind, "content": text, "truncated": truncated}
+        except UnicodeDecodeError:
+            return {"ok": False, "code": "binary_file", "error": "二进制文件不支持预览"}
+    except ValueError as exc:
+        return {"ok": False, "code": "archive_error", "error": str(exc)}
+
+
 @router.get("/preview")
 def preview_workspace_file(
     session_id: str,
     path: str = Query(min_length=1, max_length=1024),
+    entry: Optional[str] = Query(default=None, max_length=1024),
 ) -> dict:
     """工作区文件预览（消息内文件引用 → 右栏，只读）。
 
@@ -128,6 +185,9 @@ def preview_workspace_file(
     文本 ``{ok, kind, content, truncated}``、图片/PDF ``data_url``、
     docx/xlsx/pptx ``html`` + ``structured``（docx 另附 ``data_url`` 供
     docx-preview 版式渲染）。
+
+    压缩包：无 ``entry`` 时返回目录列表 ``{kind: "archive", ...}``；
+    有 ``entry`` 时读取条目内容并按其类型返回（代码/图片/文本等）。
     """
     root = _bound_workspace_or_raise(_connection(), session_id)
     resolved = _resolve_workspace_target(root, path)
@@ -146,6 +206,8 @@ def preview_workspace_file(
         if not result.get("ok"):
             _raise_preview_failure(result)
         return result
+    if suffix in _ARCHIVE_PREVIEW_SUFFIXES:
+        return _preview_archive(resolved, entry)
 
     result = artifact_reader.read_text_path(resolved, kind=_kind_for_preview(resolved))
     if not result.get("ok"):

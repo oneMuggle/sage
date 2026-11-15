@@ -107,6 +107,22 @@ export interface WorkspacePreviewContent {
   /** read_* 结果的结构化 JSON（Office 结构化预览组件消费） */
   structured?: unknown;
   truncated?: boolean;
+  // 压缩包预览字段 (feat/archive-preview)
+  format?: string;
+  entry_count?: number;
+  total_uncompressed?: number;
+  encrypted?: boolean;
+  entries?: ArchiveEntryInfo[];
+}
+
+/** 压缩包内条目信息 */
+export interface ArchiveEntryInfo {
+  name: string;
+  size: number;
+  compressed_size: number;
+  is_dir: boolean;
+  mtime: number | null;
+  is_archive: boolean;
 }
 
 export interface WorkspaceResolveEntry {
@@ -327,6 +343,23 @@ export const workspaceApi = {
     }
   },
 
+  /** 压缩包内条目预览（feat/archive-preview）。 */
+  async previewArchiveEntry(
+    sessionId: string,
+    path: string,
+    entry: string,
+  ): Promise<WorkspacePreviewContent> {
+    try {
+      return await invoke<WorkspacePreviewContent>('workspace_preview_file', {
+        sessionId,
+        path,
+        entry,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
   /** 批量判定路径是否为工作区内存在的文件（消息文本兜底识别，≤50 条）。 */
   async resolveFiles(sessionId: string, paths: string[]): Promise<WorkspaceResolveResult> {
     try {
@@ -472,9 +505,7 @@ export const workspaceApi = {
   /** 清除用户偏好，下一次 resolve 走 detected/scratch 兜底。 */
   async forgetPreference(): Promise<{ path: string | null; stored: boolean }> {
     try {
-      return await invoke<{ path: string | null; stored: boolean }>(
-        'workspace_forget_preference',
-      );
+      return await invoke<{ path: string | null; stored: boolean }>('workspace_forget_preference');
     } catch (error) {
       throw handleApiError(error);
     }

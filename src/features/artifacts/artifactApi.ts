@@ -14,6 +14,7 @@ export type ArtifactKind =
   | 'xlsx'
   | 'pptx'
   | 'latex' // 2026-10-31: .tex 结构化预览（blocks + KaTeX）
+  | 'archive' // 2026-11-15: 压缩包预览（feat/archive-preview）
   | 'text'
   | 'html'; // 2026-11-11: .html/.htm 统一为独立 kind，前端用 HTML viewer 渲染
 
