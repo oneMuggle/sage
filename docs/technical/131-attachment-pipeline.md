@@ -278,6 +278,6 @@ interface AttachedFile {
 
 | 项 | 内容 |
 | --- | --- |
-| PDF 视觉通道 | 视觉模型下把 PDF 每页渲染成图片与文本提取并行发送；扫描件自动走本地 OCR |
+| PDF 视觉通道 | 已完成「页标记文本 + 图表抽取 + 内联引用」（见 §159）；剩余：视觉模型逐页读图与命中页低 DPI 复核 |
 | 上下文计量 | `ContextMeter` 显示附件占 token，超 100k 截断时给 inline 提示 |
 | 编排 / 插话路径 | planner 提示词注入附件概要；插话请求支持 `attachment_media_ids` 或明确告知不含附件 |

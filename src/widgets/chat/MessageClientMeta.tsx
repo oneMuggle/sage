@@ -25,6 +25,7 @@ import { Lightbox } from '../../shared/ui';
 import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
 import type { ContextMenuItemSpec } from '../../shared/ui/ContextMenu/types';
 
+import { MediaPdfPreview } from './MediaPdfPreview';
 import { OfficeRefChip } from './OfficeRefChip';
 
 interface MessageClientMetaProps {
@@ -56,6 +57,10 @@ export function MessageClientMeta({
 }: MessageClientMetaProps) {
   const { t } = useI18n();
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{
+    mediaId: string;
+    filename: string;
+  } | null>(null);
   const meta = message.client_meta ?? null;
   const effectiveKnowledge = knowledgeRefs ?? meta?.knowledge_refs ?? [];
   const effectiveAttachments = attachments ?? [
@@ -210,6 +215,20 @@ export function MessageClientMeta({
         ))}
         {effectiveAttachments.map((file, idx) => {
           const fileStatus = statusByName.get(file.name);
+          const previewMediaId = fileStatus?.media_id;
+          const canPreviewPdf = file.type === 'application/pdf' && Boolean(previewMediaId);
+          const metaSuffix = fileStatus
+            ? [
+                fileStatus.pages
+                  ? t('chat.attachment_status.pages').replace('{n}', String(fileStatus.pages))
+                  : '',
+                fileStatus.figures
+                  ? t('chat.attachment_status.figures').replace('{n}', String(fileStatus.figures))
+                  : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            : '';
           const statusTitle = fileStatus
             ? fileStatus.status === 'ok'
               ? t('chat.attachment_status.ok')
@@ -221,17 +240,44 @@ export function MessageClientMeta({
                     fileStatus.reason ? `：${reasonText(fileStatus.reason)}` : ''
                   }`
             : undefined;
+          const composedTitle = statusTitle
+            ? `${file.name} — ${statusTitle}${metaSuffix ? ` · ${metaSuffix}` : ''}`
+            : file.name;
           return (
             <ContextMenu key={`attachment-${file.name}-${idx}`} items={() => attachmentMenu(file)}>
               <span
                 data-testid="message-attachment-ref"
                 data-attachment-status={fileStatus?.status}
-                title={statusTitle ? `${file.name} — ${statusTitle}` : file.name}
+                title={composedTitle}
+                onClick={
+                  canPreviewPdf
+                    ? () =>
+                        setPdfPreview({
+                          mediaId: previewMediaId ?? '',
+                          filename: file.name,
+                        })
+                    : undefined
+                }
+                role={canPreviewPdf ? 'button' : undefined}
+                tabIndex={canPreviewPdf ? 0 : undefined}
+                onKeyDown={
+                  canPreviewPdf
+                    ? (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setPdfPreview({
+                            mediaId: previewMediaId ?? '',
+                            filename: file.name,
+                          });
+                        }
+                      }
+                    : undefined
+                }
                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-ui-2xs border ${
                   isUser
                     ? 'bg-text-inverse/15 border-text-inverse/20 text-text-inverse'
                     : 'bg-bg-subtle border-border text-text-secondary'
-                }`}
+                }${canPreviewPdf ? ' cursor-pointer hover:border-primary/40 hover:text-text' : ''}`}
               >
                 {file.type.startsWith('image/') && file.dataUrl ? (
                   <img src={file.dataUrl} alt="" className="w-4 h-4 rounded object-cover" />
@@ -296,6 +342,13 @@ export function MessageClientMeta({
             ))}
           </div>
         </details>
+      )}
+      {pdfPreview && (
+        <MediaPdfPreview
+          mediaId={pdfPreview.mediaId}
+          filename={pdfPreview.filename}
+          onClose={() => setPdfPreview(null)}
+        />
       )}
     </>
   );

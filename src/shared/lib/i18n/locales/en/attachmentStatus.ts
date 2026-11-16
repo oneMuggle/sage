@@ -7,6 +7,13 @@ export const enAttachmentStatus = {
   'chat.attachment_status.error': 'Failed',
   'chat.attachment_status.truncated': 'Content too long, truncated',
   'chat.attachment_status.rag': 'Injected by relevance',
+  // 2026-11-15: PDF page / figure counts (attachment card tooltip & summary)
+  'chat.attachment_status.pages': '{n} pages',
+  'chat.attachment_status.figures': '{n} figures',
+  'chat.attachment_status.preview_close': 'Close',
+  'chat.attachment_status.preview_failed': 'Failed to preview PDF',
+  'chat.attachment_status.preview_loading': 'Loading PDF…',
+  'chat.attachment_status.open_pdf': 'Open PDF',
   'chat.attachment_status.reason.not_document': 'Unrecognized file type, please re-upload',
   'chat.attachment_status.reason.not_utf8': 'File is not valid UTF-8 text',
   'chat.attachment_status.reason.empty_text': 'File is empty',

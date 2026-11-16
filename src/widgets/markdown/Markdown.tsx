@@ -24,6 +24,7 @@ import {
   useMarkdownHeadings,
   type MarkdownTier,
 } from './components';
+import { safeUrlTransform } from './links';
 import { MD_REHYPE_PLUGINS, MD_REMARK_PLUGINS } from './plugins';
 import './markdown.css';
 
@@ -79,15 +80,17 @@ export function Markdown({
         plainFences,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [...markdownComponentsDeps({
-      tier,
-      headings,
-      headingAnchorPrefix,
-      tableMaxHeight,
-      onLocalFileClick,
-      onHeadingClick,
-      plainFences,
-    })],
+    [
+      ...markdownComponentsDeps({
+        tier,
+        headings,
+        headingAnchorPrefix,
+        tableMaxHeight,
+        onLocalFileClick,
+        onHeadingClick,
+        plainFences,
+      }),
+    ],
   );
 
   const containerClass = className ? `md-content ${className}` : 'md-content';
@@ -97,6 +100,7 @@ export function Markdown({
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
+        urlTransform={safeUrlTransform}
         components={components}
       >
         {content}
