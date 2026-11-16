@@ -611,7 +611,11 @@ export const zhSettingsUi = {
   'settings.theme.delete_tooltip': '删除主题',
   'settings.theme.empty': '尚未创建自定义主题',
   'settings.theme.light': '浅色',
+  'settings.theme.mode_desc': '选择浅色或深色外观，也可以跟随系统设置',
+  'settings.theme.mode_desc_system': '跟随系统设置（当前系统为{resolved}）',
+  'settings.theme.mode_label': '主题模式',
   'settings.theme.new_button': '新建自定义',
+  'settings.theme.system': '跟随系统',
   'settings.tools.fallback.desc':
     '主模型重试耗尽（限流/服务端错误/超时）后自动切换到此模型；留空 = 不降级。只有保存确认后生效。',
   'settings.tools.fallback.label': '降级模型 (fallback)',
