@@ -88,6 +88,7 @@ export function MessageClientMeta({
       'empty_text',
       'load_failed',
       'context_build_failed',
+      'parse_timeout',
       'oversize',
       'unsupported',
       'count_exceeded',

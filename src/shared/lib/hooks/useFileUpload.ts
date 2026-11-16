@@ -1,108 +1,20 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
-/** r75/r76: 聊天文档附件支持的扩展名（Chat.tsx 上传白名单与 ChatInput
- * 提示条件共用，避免两处口径漂移）。
- * 2026-10-13: 扩展覆盖常见编程语言、配置、数据格式，与后端
- * ALLOWED_TEXT_EXTENSIONS + ALLOWED_DOC_EXTENSIONS 同口径。 */
-export const CHAT_DOCUMENT_EXTENSIONS = new Set([
-  // 基础文本
-  'txt',
-  'md',
-  'csv',
-  // 编程语言
-  'py',
-  'js',
-  'ts',
-  'jsx',
-  'tsx',
-  'java',
-  'go',
-  'rs',
-  'rb',
-  'php',
-  'c',
-  'cpp',
-  'h',
-  'hpp',
-  'cs',
-  'swift',
-  'kt',
-  'scala',
-  'r',
-  // 前端
-  'html',
-  'css',
-  'scss',
-  'less',
-  'vue',
-  'svelte',
-  // 数据/配置
-  'json',
-  'yaml',
-  'yml',
-  'xml',
-  'toml',
-  'ini',
-  'cfg',
-  'conf',
-  // 脚本/构建
-  'sh',
-  'bash',
-  'bat',
-  'ps1',
-  'sql',
-  'makefile',
-  'cmake',
-  'gradle',
-  // 特殊命名
-  'dockerfile',
-  'gitignore',
-  'properties',
-  // 日志
-  'log',
-  // 二进制文档（需后端解析）
-  'pdf',
-  'docx',
-  'xlsx',
-]);
-/** r78: 文件选择器 accept 提示（与 CHAT_DOCUMENT_EXTENSIONS 同口径）。
- * 仅列最常见的扩展名以保持对话框简洁，实际验证由后端完成。 */
-export const CHAT_DOCUMENT_ACCEPT = [
-  '.txt',
-  '.md',
-  '.csv',
-  '.pdf',
-  '.docx',
-  '.xlsx',
-  '.json',
-  '.yaml',
-  '.yml',
-  '.xml',
-  '.html',
-  '.css',
-  '.py',
-  '.js',
-  '.ts',
-  '.jsx',
-  '.tsx',
-  '.java',
-  '.go',
-  '.rs',
-  '.sh',
-  '.bash',
-  '.bat',
-  '.sql',
-  '.log',
-  '.ini',
-  '.cfg',
-  '.conf',
-  '.toml',
-].join(',');
+import {
+  CHAT_DOCUMENT_EXTENSIONS,
+  CHAT_IMAGE_MIME_TYPES,
+  MAX_ATTACHMENT_COUNT,
+  MAX_ATTACHMENT_SIZE,
+} from '../chatAttachmentFormats';
 
-// P2 (2026-11-04): 前端预检硬限制 —— 与后端 `MAX_ATTACHMENT_SIZE` / 注入循环
-// `[:10]` 同口径；在 selection 阶段就拒绝，而不是上传后才 toast。
-export const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024; // 25 MB
-export const MAX_ATTACHMENT_COUNT = 10;
+export {
+  CHAT_DOCUMENT_ACCEPT,
+  CHAT_DOCUMENT_EXTENSIONS,
+  CHAT_IMAGE_ACCEPT,
+  CHAT_IMAGE_MIME_TYPES,
+  MAX_ATTACHMENT_COUNT,
+  MAX_ATTACHMENT_SIZE,
+} from '../chatAttachmentFormats';
 
 /**
  * P2: 预检单个文件是否可加入附件列表。
@@ -129,7 +41,7 @@ export function preflightAttachment(
     if (!ext || !CHAT_DOCUMENT_EXTENSIONS.has(ext)) {
       return { ok: false, reason: 'unsupported' };
     }
-  } else if (!file.type.startsWith('image/')) {
+  } else if (!CHAT_IMAGE_MIME_TYPES.has(file.type)) {
     return { ok: false, reason: 'unsupported' };
   }
   if (existing.some((e) => e.name === file.name)) {
