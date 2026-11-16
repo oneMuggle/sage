@@ -1516,8 +1516,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             r81_rag_citations: list = []
             r81_rag_citations_written = False
             r_attachments_status: list = []
+            r37_figures_total = 0
             try:
                 from backend.api import chat_attachment_routes as _r66_car
+                from backend.services import attachment_pdf as _attachment_pdf
                 from backend.services.attachment_context import (
                     AttachmentRagOptions,
                     build_attachment_context,
@@ -1617,11 +1619,33 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         )
                         r_attachments_status.append(r37_status_entry)
                         continue
+                    # 2026-11-15: PDF 图表清单（裁图 + 图注 + 页码），供模型内联引用。
+                    # 首次构建会裁图落盘，之后读媒体旁 manifest 缓存。
+                    r37_figures: list = []
+                    if _r37_ext == "pdf":
+                        try:
+                            r37_figures = await asyncio.get_running_loop().run_in_executor(
+                                None,
+                                _r66_car.load_pdf_figure_manifest,
+                                r37_store,
+                                _r37_ref,
+                                r37_bytes,
+                            )
+                        except Exception as r37_fig_err:  # noqa: BLE001 — fail-safe
+                            logger.debug(
+                                f"[REQ {request_id}] attachment %s figure manifest failed: %s",
+                                r37_mid,
+                                r37_fig_err,
+                            )
+                            r37_figures = []
                     if not r37_text.strip():
-                        r37_status_entry["status"] = "skipped"
-                        r37_status_entry["reason"] = "empty_text"
-                        r_attachments_status.append(r37_status_entry)
-                        continue
+                        if not r37_figures:
+                            r37_status_entry["status"] = "skipped"
+                            r37_status_entry["reason"] = "empty_text"
+                            r_attachments_status.append(r37_status_entry)
+                            continue
+                        # 无文本层但有图：仍注入图清单，让模型能引用扫描页插图。
+                        r37_text = "（该 PDF 未提取到文本层，请参考下方图片清单。）"
                     # r66: 注入决策（全文 ≤100k 现状注入；超长且配置 rag →
                     # 检索 top_k；否则截断前 100k）。fail-safe。
                     r37_ctx = await build_attachment_context(
@@ -1639,14 +1663,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         continue
                     # r71: RAG 检索注入发生 → 推引用溯源事件（气泡内展示）
                     if r37_ctx.mode == "rag":
+                        r81_chunks = []
+                        for c in r37_ctx.chunks:
+                            chunk_payload = {"index": c.index, "score": round(c.score, 2)}
+                            if c.page_start:
+                                chunk_payload["page_start"] = c.page_start
+                            if c.page_end:
+                                chunk_payload["page_end"] = c.page_end
+                            r81_chunks.append(chunk_payload)
                         r81_citation = {
                             "media_id": r37_mid,
                             "filename": r37_filename,
                             "mode": "rag",
-                            "chunks": [
-                                {"index": c.index, "score": round(c.score, 2)}
-                                for c in r37_ctx.chunks
-                            ],
+                            "chunks": r81_chunks,
                         }
                         r81_rag_citations.append(r81_citation)
                         try:
@@ -1660,20 +1689,40 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         except Exception:
                             logger.debug(f"[REQ {request_id}] rag_used event push failed, ignored")
                     # P0: 注入块带 filename/type,模型能识别附件身份
-                    dynamic_context_parts.append(
-                        "<attached_document"
-                        + f" id={repr(r37_mid)}"
+                    # 2026-11-15: PDF 带 pages 属性与 <attached_figures> 清单
+                    if r37_figures:
+                        r37_figures_total += len(r37_figures)
+                    r37_pages = _attachment_pdf.count_page_markers(r37_text)
+                    r37_doc_attrs = (
+                        f" id={repr(r37_mid)}"
                         + f" name={repr(r37_filename)}"
                         + f" type={repr(r37_mime)}"
+                    )
+                    if r37_pages:
+                        r37_doc_attrs += f' pages="{r37_pages}"'
+                    r37_figure_xml = _attachment_pdf.render_figure_manifest_xml(
+                        r37_filename, r37_figures
+                    )
+                    dynamic_context_parts.append(
+                        "<attached_document"
+                        + r37_doc_attrs
                         + ">" + chr(10)
-                        + r37_ctx.text + chr(10)
+                        + r37_ctx.text
+                        + (chr(10) + r37_figure_xml if r37_figure_xml else "")
+                        + chr(10)
                         + "</attached_document>"
                     )
                     r37_status_entry["status"] = "ok"
                     r37_status_entry["mode"] = r37_ctx.mode
                     r37_status_entry["chars"] = len(r37_ctx.text)
+                    if r37_pages:
+                        r37_status_entry["pages"] = r37_pages
+                    if r37_figures:
+                        r37_status_entry["figures"] = len(r37_figures)
                     r37_status_entry.pop("reason", None)
                     r_attachments_status.append(r37_status_entry)
+                if r37_figures_total > 0:
+                    dynamic_context_parts.append(_attachment_pdf.FIGURE_REFERENCE_HINT)
                 # P0: 推 attachments_processed 事件,前端据此渲染 per-file 状态
                 if r_attachments_status:
                     try:

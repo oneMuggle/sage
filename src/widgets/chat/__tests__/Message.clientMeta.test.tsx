@@ -2,12 +2,22 @@
  * 用户消息引用信息回显 —— 附件 / @ 文件引用 / office 引用 / 知识库引用。
  * client_meta 由后端 get_messages 回读，刷新会话后仍应渲染。
  */
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
 import type { Message as MessageType } from '../../../shared/lib/store';
 import { Message } from '../Message';
+
+// 附件卡片点击预览 PDF 时经 IPC 拉媒体 blob；测试内返回合成 blob URL。
+vi.mock('../../../shared/api/mediaApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../shared/api/mediaApi')>();
+  return {
+    ...actual,
+    fetchMediaBlobUrl: vi.fn().mockResolvedValue('blob:pdf-1'),
+    revokeMediaBlobUrl: vi.fn(),
+  };
+});
 
 const renderWithI18n = (ui: React.ReactElement) =>
   render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
@@ -118,5 +128,32 @@ describe('Message — user client_meta refs', () => {
       />,
     );
     expect(screen.getByTestId('attachment-status-error')).toBeInTheDocument();
+  });
+
+  it('opens the PDF preview when a PDF attachment chip is clicked', async () => {
+    renderWithI18n(
+      <Message
+        message={makeUserMsg({
+          client_meta: {
+            attachments: [{ name: 'paper.pdf', size: 100, type: 'application/pdf' }],
+            attachments_status: [
+              {
+                media_id: 'pdf1',
+                filename: 'paper.pdf',
+                mime_type: 'application/pdf',
+                status: 'ok',
+                pages: 20,
+                figures: 3,
+              },
+            ],
+          },
+        })}
+      />,
+    );
+    const chip = screen.getByTestId('message-attachment-ref');
+    expect(chip).toHaveAttribute('title', expect.stringContaining('20 页 · 3 图'));
+    fireEvent.click(chip);
+    const iframe = await screen.findByTestId('media-pdf-iframe');
+    expect(iframe).toHaveAttribute('src', 'blob:pdf-1');
   });
 });

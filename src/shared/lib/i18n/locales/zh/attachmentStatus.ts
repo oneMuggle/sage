@@ -8,6 +8,13 @@ export const zhAttachmentStatus = {
   'chat.attachment_status.error': '读取失败',
   'chat.attachment_status.truncated': '内容过长，已截断',
   'chat.attachment_status.rag': '按相关度检索注入',
+  // 2026-11-15: PDF 页码 / 插图计数（附件卡片 tooltip / 汇总行）
+  'chat.attachment_status.pages': '{n} 页',
+  'chat.attachment_status.figures': '{n} 图',
+  'chat.attachment_status.preview_close': '关闭',
+  'chat.attachment_status.preview_failed': 'PDF 预览失败',
+  'chat.attachment_status.preview_loading': '正在加载 PDF…',
+  'chat.attachment_status.open_pdf': '查看 PDF 原文',
   'chat.attachment_status.reason.not_document': '文件类型未被识别，请重新上传',
   'chat.attachment_status.reason.not_utf8': '文件不是有效的 UTF-8 文本',
   'chat.attachment_status.reason.empty_text': '文件内容为空',
