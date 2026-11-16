@@ -189,19 +189,20 @@ async def extract_attachment_text_async(content: bytes, ext: str) -> str:
 
 
 def _extract_document_text(content: bytes, ext: str) -> str:
-    """R39: pdf/docx/xlsx/pptx 提取纯文本（零新增依赖，复用 office 模块库）。"""
+    """R39: pdf/docx/xlsx/pptx 提取纯文本（零新增依赖，复用 office 模块库）。
+
+    2026-11-15: PDF 改为逐页抽取并保留 ``--- page N ---`` 页标记（模型可标注
+    页码），纯图页走 office OCR 兜底（SAGE_OCR 门控）。
+    """
     from backend.core.lazy import load_attr, load_module
 
     ext = ext.lstrip(".").lower()
     if ext in ("docx", "xlsx", "pptx"):
         _guard_office_zip_budget(content)
     if ext == "pdf":
-        pymupdf = load_module("pymupdf", "pymupdf", globals())
-        doc = pymupdf.open(stream=content, filetype="pdf")
-        try:
-            return CH_NL.join(page.get_text() for page in doc)
-        finally:
-            doc.close()
+        from backend.services.attachment_pdf import extract_pdf_pages, render_page_marked_text
+
+        return render_page_marked_text(extract_pdf_pages(content))
     if ext == "docx":
         _Docx = load_attr("docx", "Document", globals(), alias="_Docx")
         doc = _Docx(io.BytesIO(content))
@@ -305,6 +306,21 @@ def _guard_office_zip_budget(content: bytes) -> None:
                 raise ValueError(
                     f"文档解压后过大: {total} bytes（上限 {MAX_OFFICE_UNCOMPRESSED_BYTES}）"
                 )
+
+
+def load_pdf_figure_manifest(store, media_ref, content):
+    """发送侧门面：读取/构建 PDF 图表清单（调用方在线程池执行）。
+
+    清单缓存到媒体同目录 ``<id>.figures.json``；裁图经 MediaStore 落盘。
+    失败返回空列表，不阻断附件注入。
+    """
+    from backend.services.attachment_pdf import get_or_build_figure_manifest
+
+    try:
+        return get_or_build_figure_manifest(store, media_ref, content)
+    except Exception:  # noqa: BLE001 — fail-safe：图清单不影响文本注入
+        logger.exception("PDF 图表清单构建失败，跳过")
+        return []
 
 
 @router.get("/chat/attachments/{media_id}/text")

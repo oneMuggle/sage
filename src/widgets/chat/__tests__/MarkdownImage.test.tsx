@@ -84,4 +84,14 @@ describe('MarkdownImage', () => {
     fireEvent.click(jsonBtn);
     expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
+
+  it('title 渲染为图注（页码 / 图号）', async () => {
+    renderImage(
+      <MarkdownImage src="https://example.com/fig.png" alt="图 3 系统架构" title="第12页 · 图3" />,
+    );
+    fireEvent.load(screen.getByTestId('markdown-image'));
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-image-caption')).toHaveTextContent('第12页 · 图3');
+    });
+  });
 });

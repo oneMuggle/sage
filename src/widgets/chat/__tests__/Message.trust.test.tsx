@@ -26,6 +26,16 @@ vi.mock('../../../shared/api/settingsClient', async (importOriginal) => {
   };
 });
 
+// PDF 页码点击会经 IPC 拉媒体 blob；单测内直接返回合成 blob URL。
+vi.mock('../../../shared/api/mediaApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../shared/api/mediaApi')>();
+  return {
+    ...actual,
+    fetchMediaBlobUrl: vi.fn().mockResolvedValue('blob:pdf-1'),
+    revokeMediaBlobUrl: vi.fn(),
+  };
+});
+
 const renderWithI18n = (ui: React.ReactElement) =>
   render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
 
@@ -126,6 +136,31 @@ describe('Message — R17 信任感交互', () => {
     // 条目内容
     expect(list).toHaveTextContent('spec.pdf');
     expect(list).toHaveTextContent('3 issues');
+  });
+
+  it('R81+: 附件检索引用展示页码并支持点击跳页', async () => {
+    const msg = makeMsg({
+      rag_citations: [
+        {
+          media_id: 'doc1',
+          filename: 'paper.pdf',
+          mode: 'rag',
+          chunks: [
+            { index: 0, score: 0.91, page_start: 12, page_end: 13 },
+            { index: 1, score: 0.88, page_start: 5, page_end: 5 },
+          ],
+        },
+      ],
+    });
+    renderWithI18n(<Message message={msg} />);
+    fireEvent.click(screen.getByTestId('message-sources-toggle'));
+    const list = screen.getByTestId('message-sources-list');
+    expect(list).toHaveTextContent('#0 (0.91) · 第12-13页');
+    expect(list).toHaveTextContent('#1 (0.88) · 第5页');
+
+    fireEvent.click(screen.getByTestId('rag-chunk-page-doc1-0'));
+    const iframe = await screen.findByTestId('media-pdf-iframe');
+    expect(iframe).toHaveAttribute('src', 'blob:pdf-1#page=12');
   });
 
   it('R81: 网页来源渲染为可点击外链', () => {
