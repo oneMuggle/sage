@@ -247,6 +247,10 @@ export interface MessageDisplayMeta {
     reason?: string;
     mode?: string;
     chars?: number;
+    /** 2026-11-15: PDF 页数（按注入文本页标记计数） */
+    pages?: number;
+    /** 2026-11-15: PDF 已抽取并落盘的插图数量 */
+    figures?: number;
   }[];
 }
 
@@ -317,7 +321,13 @@ export interface RagCitation {
   media_id: string;
   filename?: string;
   mode: string;
-  chunks?: { index: number; score: number }[];
+  chunks?: {
+    index: number;
+    score: number;
+    /** 2026-11-15: 命中片段对应 PDF 页码范围（反查页标记得到） */
+    page_start?: number;
+    page_end?: number;
+  }[];
 }
 
 export interface ToolCall {
@@ -860,6 +870,10 @@ export interface AgentEvent {
     reason?: string;
     mode?: string;
     chars?: number;
+    /** 2026-11-15: PDF 页数（按注入文本页标记计数） */
+    pages?: number;
+    /** 2026-11-15: PDF 已抽取并落盘的插图数量 */
+    figures?: number;
   }[];
   // right-panel R5 (2026-09-19): workspace_changed 事件载荷（写文件工具
   // 落盘后经活跃流推送；path 为工具视角路径，刷新语义以 git status 为准）。

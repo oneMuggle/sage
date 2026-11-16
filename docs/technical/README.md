@@ -133,7 +133,7 @@
 | 153 | [本地 AI 模型内置与离线导入](./153-local-ai-models.md) | OCR（6MB）+ Embedding（91MB）随安装包内置：`extraResources` 打包 `resources/models/` + 路径优先级链（userData > bundled > repo）+ 本地导入 IPC（目录选择 + SHA-256 校验）+ CI 缓存下载 |
 | 154 | [MinerU 内网独立部署](./154-mineru-deployment.md) | A6000 服务器独立部署 MinerU 4.1（Python 3.12 + vLLM，`--tier standard`）：模型离线搬运三段式 + `source: local` 零外网依赖 + V1 异步 API 契约（create→PUT→poll→download）+ Sage 工具接入（`mineru_parse_document`）+ systemd 托管与验证清单 |
 | 155 | [项目健康监控与 AI 辅助规程定制](./155-project-health-ai-stages.md) | M1 主动告警（桌面通知 + 24h 节流）+ M2 对话式规程定制（多轮迭代 / 目录推断 / git 推断 / LLM 降级）+ M3 定时健康检查（每天 09:00 cron + HealthReport） |
-
+| 156 | [PDF 页码引用与图表内联引用](./156-pdf-figure-citation.md) | 页标记文本（`--- page N ---`）+ 图表抽取/图注/清单缓存 + `<attached_figures>` 注入 + RAG 页码反查 + Markdown 图片白名单 + 工具结果 dataclass 序列化修复 |
 ---
 
 ## 与核心章节的关系
@@ -141,7 +141,7 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 用户价值层 | [01 概述](../01-overview.md) — [12 实施计划](../12-plan.md) |
-| 横切关注点 | 本目录（15-155）                                            |
+| 横切关注点 | 本目录（15-156）                                            |
 
 ---
 

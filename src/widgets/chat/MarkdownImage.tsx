@@ -49,7 +49,7 @@ export function formatMarkdownImageAuditJson(opts: {
   });
 }
 
-export function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
+export function MarkdownImage({ src, alt, title }: { src?: string; alt?: string; title?: string }) {
   const { t } = useI18n();
   const [status, setStatus] = useState<LoadStatus>('loading');
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -141,6 +141,11 @@ export function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
         )}
         {lightboxOpen && status === 'loaded' && (
           <Lightbox src={resolved} alt={alt} onClose={() => setLightboxOpen(false)} />
+        )}
+        {title && status === 'loaded' && (
+          <span data-testid="markdown-image-caption" className="mt-1 block text-ui-2xs text-muted">
+            {title}
+          </span>
         )}
         <span
           data-testid="markdown-image-copy-snapshot"

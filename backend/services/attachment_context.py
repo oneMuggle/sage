@@ -12,8 +12,9 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from backend.services.attachment_rag import search_attachments
 
@@ -26,13 +27,50 @@ _DEFAULT_TOP_K = 6
 #: 查询文本嵌入时的截断（嵌入端点上下文有限）
 _QUERY_EMBED_CHARS = 2_000
 
+_PAGE_MARKER_RE = re.compile(r"^--- page (\d+) ---$", re.MULTILINE)
+
+
+def locate_chunk_pages(
+    full_text: str, chunk_text: str
+) -> Tuple[Optional[int], Optional[int]]:
+    """反查 chunk 在带页标记全文中的页码范围（2026-11-15）。
+
+    检索层只存 chunk 文本，不存页码；注入时用 chunk 文本在全文中的偏移
+    数页标记。定位失败（chunk 被归一化/重复文本）返回 (None, None)，
+    调用方不展示页码即可。
+    """
+    if not full_text or not chunk_text:
+        return None, None
+    offset = full_text.find(chunk_text)
+    if offset < 0:
+        snippet = chunk_text[:120]
+        offset = full_text.find(snippet) if snippet else -1
+    if offset < 0:
+        return None, None
+
+    prefix_pages = list(_PAGE_MARKER_RE.finditer(full_text, 0, offset))
+    chunk_pages = list(
+        _PAGE_MARKER_RE.finditer(full_text, offset, min(len(full_text), offset + len(chunk_text)))
+    )
+    start = int(prefix_pages[-1].group(1)) if prefix_pages else None
+    if chunk_pages:
+        first = int(chunk_pages[0].group(1))
+        last = int(chunk_pages[-1].group(1))
+        start = first if start is None else start
+        return start, max(last, start)
+    if start is None:
+        return None, None
+    return start, start
+
 
 @dataclass
 class ChunkCitation:
-    """检索命中片段的溯源信息（r73 引用明细）。"""
+    """检索命中片段的溯源信息（r73 引用明细；2026-11-15 增页码）。"""
 
     index: int  # chunk_index + 1（1 起始，与注入块内标注一致）
     score: float  # 余弦相似度
+    page_start: Optional[int] = None
+    page_end: Optional[int] = None
 
 
 @dataclass
@@ -144,12 +182,23 @@ async def _rag_injection(
             len(full_text),
             len(hits),
         )
+        citations: List[ChunkCitation] = []
+        for hit in hits:
+            page_start, page_end = locate_chunk_pages(full_text, hit.content)
+            citations.append(
+                ChunkCitation(
+                    index=hit.chunk_index + 1,
+                    score=hit.score,
+                    page_start=page_start,
+                    page_end=page_end,
+                )
+            )
         return AttachmentContextResult(
             f"<attached_document id={media_id!r} mode=rag>\n"
             + "\n\n".join(parts)
             + "\n</attached_document>",
             "rag",
-            [ChunkCitation(index=hit.chunk_index + 1, score=hit.score) for hit in hits],
+            citations,
         )
     except Exception as rag_exc:  # noqa: BLE001 — 检索失败回退截断注入
         logger.debug("附件检索失败，回退截断注入 %s: %s", media_id, rag_exc)

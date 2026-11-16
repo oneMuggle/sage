@@ -28,6 +28,7 @@ import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
 
 import { BlockedCard } from './BlockedCard';
 import { CompactBanner } from './CompactBanner';
+import { MediaPdfPreview } from './MediaPdfPreview';
 import { MessageActionBar } from './MessageActionBar';
 import { MessageClientMeta } from './MessageClientMeta';
 import {
@@ -200,6 +201,11 @@ function MessageComponent({
   // R81: 统一参考来源 —— 记忆召回 + 附件检索溯源 + 工具命中(web/wiki/MCP)
   // 收编为一个折叠区块（类文章引用列表），N=0 时整个 chip 不渲染。
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  const [pdfPreview, setPdfPreview] = useState<{
+    mediaId: string;
+    filename: string;
+    page?: number;
+  } | null>(null);
   // 思考展示档位（detail / trace / result）→ 渲染契约
   // （工具分组阈值 / 折叠默认态 / 是否展示思考面板）
   const { mode } = useDisplayMode(message.session_id, message.id);
@@ -664,10 +670,37 @@ function MessageComponent({
                       </span>
                     </div>
                     {(c.chunks ?? []).length > 0 && (
-                      <div className="pl-5 text-muted font-mono">
-                        {(c.chunks ?? [])
-                          .map((ch) => `#${ch.index} (${ch.score.toFixed(2)})`)
-                          .join(' ')}
+                      <div className="pl-5 text-muted font-mono flex flex-wrap gap-x-2 gap-y-0.5">
+                        {(c.chunks ?? []).map((ch) => {
+                          const pageEnd = ch.page_end ?? ch.page_start;
+                          const pageLabel = ch.page_start
+                            ? pageEnd && pageEnd !== ch.page_start
+                              ? ` · 第${ch.page_start}-${pageEnd}页`
+                              : ` · 第${ch.page_start}页`
+                            : '';
+                          const chunkText = `#${ch.index} (${ch.score.toFixed(2)})${pageLabel}`;
+                          if (!ch.page_start) {
+                            return <span key={ch.index}>{chunkText}</span>;
+                          }
+                          return (
+                            <button
+                              key={ch.index}
+                              type="button"
+                              data-testid={`rag-chunk-page-${c.media_id}-${ch.index}`}
+                              title={t('chat.attachment_status.open_pdf')}
+                              onClick={() =>
+                                setPdfPreview({
+                                  mediaId: c.media_id,
+                                  filename: c.filename || c.media_id,
+                                  page: ch.page_start,
+                                })
+                              }
+                              className="hover:text-primary hover:underline transition-colors"
+                            >
+                              {chunkText}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -845,6 +878,14 @@ function MessageComponent({
           onSaveToMemory={onSaveToMemory}
           onAnswerVersionChange={onAnswerVersionChange}
         />
+        {pdfPreview && (
+          <MediaPdfPreview
+            mediaId={pdfPreview.mediaId}
+            filename={pdfPreview.filename}
+            page={pdfPreview.page}
+            onClose={() => setPdfPreview(null)}
+          />
+        )}
       </div>
     </div>
   );
