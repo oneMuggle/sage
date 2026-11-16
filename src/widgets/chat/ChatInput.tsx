@@ -18,12 +18,12 @@ import { ocrApi, type OcrCapabilities } from '../../shared/api/ocrApi';
 import { sessionApi } from '../../shared/api/sessionApi';
 import type { ChatOfficeRef } from '../../shared/api/types';
 import { worktreeApi } from '../../shared/api/worktreeApi';
+import { CHAT_DOCUMENT_EXTENSIONS } from '../../shared/lib/chatAttachmentFormats';
 import {
   resolveEffectiveChatModel,
   subscribeSessionModelOverrideChanged,
 } from '../../shared/lib/effectiveChatModel';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
-import { CHAT_DOCUMENT_EXTENSIONS } from '../../shared/lib/hooks/useFileUpload';
 import { COMPOSER_DROP_EVENT } from '../../shared/lib/hooks/useGlobalFileDrop';
 import { useInputHistory } from '../../shared/lib/hooks/useInputHistory';
 import { useSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
