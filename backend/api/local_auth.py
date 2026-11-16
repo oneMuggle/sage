@@ -29,6 +29,9 @@ _PUBLIC_PATHS = frozenset(
     {
         "/health",
         "/health/proof",
+        # Progressive readiness snapshot (memory-only, no IO) — polled by the
+        # Electron supervisor during cold start, same trust level as /health.
+        "/health/ready",
         "/api/v1/scheduled/health",
         # Browser-extension I/O cannot carry the Electron-injected capability
         # (the extension lives in the user's daily browser).  These exact

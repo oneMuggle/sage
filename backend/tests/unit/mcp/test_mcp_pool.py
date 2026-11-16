@@ -592,3 +592,43 @@ class TestTimeoutPatchRediscovery:
         pool.discover_all()
         pool.update_server("s", timeout_seconds=30.0)  # no-op value
         assert len(factory.created) == 1  # healthy server untouched
+
+
+class TestBackgroundDiscovery:
+    """Progressive readiness: startup must not block on MCP handshakes."""
+
+    def test_returns_immediately_then_fans_out_when_ready(self, monkeypatch):
+        config = validate_server_config(name="s", command="c", timeout_seconds=5.0)
+        # background 路径会经 ensure_synced 重新读配置；固定为测试配置，
+        # 避免真实配置文件覆盖掉本测试的 record。
+        monkeypatch.setattr(pool_mod, "load_server_configs", lambda: [config])
+        gate = threading.Event()
+        factory = FakeFactory({"s": {"tools": make_tools("t"), "start_gate": gate}})
+        pool = build_pool(factory, [config])
+        registry = ToolRegistry()
+        pool.track_registry(registry)
+
+        started = time.monotonic()
+        assert pool.start_background_discovery() is True
+        # 立即返回：握手被 gate 挂住也不阻塞调用方
+        assert time.monotonic() - started < 1.0
+        assert not registry.exists(namespaced_tool_name("s", "t"))
+
+        gate.set()
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            record = pool.get_record("s")
+            if record is not None and record.state == ServerState.READY:
+                break
+            time.sleep(0.02)
+        assert pool.get_record("s").state == ServerState.READY
+        # READY 后工具扇出到已跟踪 registry（无需重启/二次注册）
+        assert registry.exists(namespaced_tool_name("s", "t"))
+
+    def test_second_call_is_a_noop(self, monkeypatch):
+        config = validate_server_config(name="s", command="c", timeout_seconds=5.0)
+        monkeypatch.setattr(pool_mod, "load_server_configs", lambda: [config])
+        factory = FakeFactory({"s": {"tools": make_tools("t")}})
+        pool = build_pool(factory, [config])
+        assert pool.start_background_discovery() is True
+        assert pool.start_background_discovery() is False

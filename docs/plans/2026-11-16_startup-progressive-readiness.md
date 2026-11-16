@@ -177,26 +177,26 @@ L3 完成 = 所有已声明模块均为终态（ready/degraded/failed 都算终�
 
 ### M1 感知修复（P0）
 
-- [ ] `store.loadSessions` 单飞 + `sessionsLoading` / `sessionsError` + 首次成功埋点
-- [ ] `ConversationsSection` loading 骨架（防闪烁）/ 错误重试 / 空态三态
-- [ ] `Sidebar` 透传三态
-- [ ] `AppStartupRestore` 恢复后从 `/welcome` 回跳 `/chat`
-- [ ] Electron `sage:backend-lifecycle` + preload + 类型 + Banner 挂载查询
-- [ ] 前端测试：store 三态/单飞、会话区骨架与错误、Banner 快照
+- [x] `store.loadSessions` 单飞 + `sessionsLoading` / `sessionsError` + 首次成功埋点
+- [x] `ConversationsSection` loading 骨架（防闪烁）/ 错误重试 / 空态三态
+- [x] `Sidebar` 透传三态
+- [x] `AppStartupRestore` 恢复后从 `/welcome` 回跳 `/chat`
+- [x] Electron `sage:backend-lifecycle` + preload + 类型 + Banner 挂载查询
+- [x] 前端测试：store 三态/单飞、会话区骨架与错误、Banner 快照
 
 ### M2 分层就绪（P1）
 
-- [ ] `startup_status.py` + 单元测试（状态机/分层判定/快照）
-- [ ] `/health/ready` + `local_auth` 白名单 + 端点测试
-- [ ] 关键路径 mark（database/memory/sessions/chat_service/llm）
-- [ ] deferred 各服务的 mark 与 degraded 语义
-- [ ] MCP 后台发现（pool + tool.py）+ 单元测试（不阻塞、扇出）
-- [ ] `_watch_mcp_discovery` + 磁盘 `storage` 检查
-- [ ] `_build_chat_service(memory_port=...)` 复用，消除双构造
-- [ ] Electron `/health/ready` 轮询 + `backend:startup-status` + 快照 getter
-- [ ] 阶段标记 `backend_spawned` / `backend_ready` / `sage:boot:stage`
-- [ ] 前端 `startupStatus` + `StartupStatusIndicator` + 测试
-- [ ] `messages_loaded` / `settings_loaded` 埋点
+- [x] `startup_status.py` + 单元测试（状态机/分层判定/快照）
+- [x] `/health/ready` + `local_auth` 白名单 + 端点测试
+- [x] 关键路径 mark（database/memory/sessions/chat_service/llm）
+- [x] deferred 各服务的 mark 与 degraded 语义
+- [x] MCP 后台发现（pool + tool.py）+ 单元测试（不阻塞、扇出）
+- [x] `_watch_mcp_discovery` + 磁盘 `storage` 检查
+- [x] `_build_chat_service(memory_port=...)` 复用，消除双构造
+- [x] Electron `/health/ready` 轮询 + `backend:startup-status` + 快照 getter
+- [x] 阶段标记 `backend_spawned` / `backend_ready` / `sage:boot:stage`
+- [x] 前端 `startupStatus` + `StartupStatusIndicator` + 测试
+- [x] `messages_loaded` / `settings_loaded` 埋点
 
 ### M3 文档与收尾
 

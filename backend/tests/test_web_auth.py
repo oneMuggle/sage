@@ -96,3 +96,4 @@ def test_bearer_still_works_in_web_mode(web_mode):
 def test_health_always_public(web_mode):
     assert web_mode.is_public_path("/health") is True
     assert web_mode.is_public_path("/health/proof") is True
+    assert web_mode.is_public_path("/health/ready") is True

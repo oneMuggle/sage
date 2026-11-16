@@ -28,6 +28,24 @@ async def test_health_exposes_only_non_sensitive_supervisor_fields(client):
     assert "ownershipToken" not in resp.json()
 
 
+@pytest.mark.asyncio()
+async def test_health_ready_snapshot(client):
+    """Progressive readiness snapshot: layering + per-module warmup state."""
+    resp = await client.get("/health/ready")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert {"status", "phase", "boot_ms", "modules", "warmup"} <= set(data)
+    assert data["status"] in {"warming", "ready", "degraded"}
+    assert data["phase"] in {"L0", "L1", "L2", "L3"}
+    assert isinstance(data["boot_ms"], int)
+    assert set(data["warmup"]) == {"done", "total"}
+    # 模块状态形状（为空时也成立）
+    for entry in data["modules"].values():
+        assert entry["state"] in {"pending", "warming", "ready", "degraded", "failed"}
+        assert entry["layer"] in {1, 2, 3}
+
+
 async def test_health_proof_requires_supervisor_token(client, monkeypatch):
     monkeypatch.setenv("SAGE_BACKEND_OWNERSHIP_TOKEN", "owner-token")
     public = await client.get("/health/proof")

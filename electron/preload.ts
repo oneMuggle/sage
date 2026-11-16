@@ -1004,6 +1004,13 @@ const electronAPI = {
   reportBootStage(stage: 'sessions_loaded' | 'messages_loaded' | 'settings_loaded'): void {
     ipcRenderer.send('sage:boot:stage', stage);
   },
+  /**
+   * Progressive readiness：最近一次 /health/ready 快照（事件先于订阅时兜底）。
+   * 事件通道为 `backend:startup-status`。
+   */
+  getBackendStartupStatus(): Promise<unknown | null> {
+    return ipcRenderer.invoke('sage:backend-startup-status') as Promise<unknown | null>;
+  },
 };
 
 const isPetWindow = process.argv.includes('--sage-pet-window=1');

@@ -951,6 +951,28 @@ export interface ElectronAPI {
    * 白名单：sessions_loaded / messages_loaded / settings_loaded。
    */
   reportBootStage?: (stage: 'sessions_loaded' | 'messages_loaded' | 'settings_loaded') => void;
+  /**
+   * Progressive readiness：最近一次 /health/ready 快照（事件先于订阅时兜底）。
+   * 事件通道为 `backend:startup-status`。
+   */
+  getBackendStartupStatus?: () => Promise<StartupStatusSnapshot | null>;
+}
+
+/** `/health/ready` 单模块状态（后端 backend/services/startup_status.py 的输出）。 */
+export interface StartupStatusModule {
+  state: 'pending' | 'warming' | 'ready' | 'degraded' | 'failed';
+  layer: number;
+  elapsed_ms: number | null;
+  detail: Record<string, unknown> | null;
+}
+
+/** `/health/ready` 快照：L0–L3 分层 + 逐模块 warmup 状态。 */
+export interface StartupStatusSnapshot {
+  status: 'warming' | 'ready' | 'degraded';
+  phase: 'L0' | 'L1' | 'L2' | 'L3';
+  boot_ms: number;
+  modules: Record<string, StartupStatusModule>;
+  warmup: { done: number; total: number };
 }
 
 declare global {
