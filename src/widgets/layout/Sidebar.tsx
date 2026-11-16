@@ -220,6 +220,8 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
     loadMoreSessions,
     sessionsHasMore,
     sessionsLoadingMore,
+    sessionsLoading,
+    sessionsError,
     updateSession,
   } = useStore();
   const { settings } = useSettings();
@@ -459,6 +461,9 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
             onLoadMoreSessions={() => void loadMoreSessions()}
             sessionsHasMore={sessionsHasMore}
             sessionsLoadingMore={sessionsLoadingMore}
+            sessionsLoading={sessionsLoading}
+            sessionsError={sessionsError}
+            onRetrySessions={() => void loadSessions()}
           />
         );
       case 'git':

@@ -923,6 +923,9 @@ function spawnBackend(): ChildProcess {
     cmd: plan.cmd,
     args: plan.args,
   });
+  // 启动瀑布：spawn 时点（此前只有 window_created/first_paint，无法分离
+  // 「界面加载」与「后端就绪」两段耗时）。
+  markBootStage('backend_spawned');
 
   proc.stdout?.on('data', (b) =>
     logger.debug('backend: stdout', { line: stdoutDecoder.push(b).trim() }),
@@ -1148,6 +1151,7 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
           continue;
         }
         backendLifecycle = 'ready';
+        markBootStage('backend_ready');
         // 冷启动窗口期入队的 IPC 请求现在可以下发了（含自动重启成功后的重连窗口）。
         if (backendReadyQueue.size() > 0) {
           logger.info('main: flushing queued ipc requests', {
@@ -2123,6 +2127,26 @@ async function registerIpcHandlers(): Promise<void> {
   // E-2 (round5 批次 E): 关闭即隐藏到托盘偏好读写（JSON 文件,主进程持有）
   ipcMain.handle('sage:close-to-tray:get', () => {
     return { enabled: closeToTrayEnabled };
+  });
+
+  // 启动竞态修复：backend:starting 事件通常在 renderer 订阅之前发出，
+  // 冷启动时横幅会丢失。提供 lifecycle 快照查询，与事件订阅互补。
+  ipcMain.handle('sage:backend-lifecycle', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) {
+      throw new Error('未授权的窗口请求');
+    }
+    return {
+      lifecycle: backendLifecycle,
+      generation: currentBackend?.generation ?? null,
+    };
+  });
+
+  // 渲染层业务阶段埋点 → last-run.json 启动瀑布（白名单防注入）。
+  const BOOT_STAGE_ALLOWLIST = new Set(['sessions_loaded', 'messages_loaded', 'settings_loaded']);
+  ipcMain.on('sage:boot:stage', (evt, stage: unknown) => {
+    if (!isTrustedRenderer(evt.sender)) return;
+    if (typeof stage !== 'string' || !BOOT_STAGE_ALLOWLIST.has(stage)) return;
+    markBootStage(stage);
   });
 
   ipcMain.handle('sage:close-to-tray:set', (evt, payload: { enabled: boolean }) => {

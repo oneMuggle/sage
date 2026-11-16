@@ -396,3 +396,44 @@ describe('ConversationsSection', () => {
     expect(writeText).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('首屏会话加载三态（loading / error / empty）', () => {
+  it('加载中显示骨架而不是「尚无会话」', async () => {
+    renderWithI18n(<ConversationsSection {...baseProps} sessions={[]} sessionsLoading={true} />);
+    // 防闪烁：前 160ms 既不渲染骨架也不渲染空态
+    expect(screen.queryByTestId('sessions-empty')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('sessions-loading')).toBeInTheDocument());
+    expect(screen.queryByTestId('sessions-empty')).not.toBeInTheDocument();
+  });
+
+  it('快速返回时不闪骨架，直接进入空态', async () => {
+    const view = renderWithI18n(
+      <ConversationsSection {...baseProps} sessions={[]} sessionsLoading={true} />,
+    );
+    view.rerender(
+      <I18nProvider>
+        <ConversationsSection {...baseProps} sessions={[]} sessionsLoading={false} />
+      </I18nProvider>,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 220));
+    expect(screen.queryByTestId('sessions-loading')).not.toBeInTheDocument();
+    expect(screen.getByTestId('sessions-empty')).toBeInTheDocument();
+  });
+
+  it('加载失败显示错误与重试，而不是空态', () => {
+    const onRetry = vi.fn();
+    renderWithI18n(
+      <ConversationsSection
+        {...baseProps}
+        sessions={[]}
+        sessionsLoading={false}
+        sessionsError="后端服务尚未就绪"
+        onRetrySessions={onRetry}
+      />,
+    );
+    expect(screen.getByTestId('sessions-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('sessions-empty')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('sessions-error-retry'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});

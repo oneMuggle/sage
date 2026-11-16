@@ -18,6 +18,7 @@ import { useSettingsStore } from './features/manage-settings/settingsStore';
 import { onSessionNotifyClick } from './features/send-message/sessionNotify';
 import { Chat } from './pages/Chat';
 import { Welcome } from './pages/Welcome';
+import { markBootStageOnce } from './shared/lib/bootStages';
 import { OPEN_COMMAND_PALETTE_EVENT } from './shared/lib/commandPaletteEvents';
 import { useStore } from './shared/lib/store';
 import { CommandPalette } from './widgets/command';
@@ -117,6 +118,12 @@ function useRequestedSessionId(): string | null {
 
 function AppStartupRestore() {
   const requestedSessionId = useRequestedSessionId();
+  const navigate = useNavigate();
+  const location = useLocation();
+  // 异步恢复期间用户可能已主动导航 —— 解析完成时读最新位置，
+  // 避免把用户正在看的页面拽走。
+  const locationRef = useRef(location);
+  locationRef.current = location;
   useEffect(() => {
     // 深链优先 — 持久化恢复会让位,避免 App 启动异步读到的"上次会话"
     // 覆盖用户明确要打开的目标会话(Memory 页来源跳转 / 摘要视图)。
@@ -126,12 +133,18 @@ function AppStartupRestore() {
       if (cancelled) return;
       if (id) {
         useStore.getState().setCurrentSessionId(id);
+        // 冷启动首帧因 currentSessionId 为空会被 ChatRoute 重定向到
+        // /welcome；恢复出上次会话后回跳 /chat，避免用户还要手点一次会话。
+        const { pathname, search } = locationRef.current;
+        if ((pathname === '/' || pathname === '/welcome') && !search) {
+          navigate('/chat', { replace: true });
+        }
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [requestedSessionId]);
+  }, [requestedSessionId, navigate]);
   return null;
 }
 
@@ -140,7 +153,12 @@ function AppStartupRestore() {
 // Sidebar 永远显示首次 mount 时的 "未配置".
 function AppStartupSettings() {
   useEffect(() => {
-    void useSettingsStore.getState().loadSettings();
+    void useSettingsStore
+      .getState()
+      .loadSettings()
+      .finally(() => {
+        markBootStageOnce('settings_loaded');
+      });
   }, []);
   return null;
 }

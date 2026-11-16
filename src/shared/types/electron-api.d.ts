@@ -941,6 +941,16 @@ export interface ElectronAPI {
    */
   sendHeartbeat?: () => void;
   notifyFirstPaint?: () => void;
+  /**
+   * 启动竞态修复：查询后端 lifecycle 快照。
+   * `backend:starting` 事件可能早于 renderer 订阅，挂载时用快照兜底。
+   */
+  getBackendLifecycle?: () => Promise<{ lifecycle: string; generation: number | null }>;
+  /**
+   * 启动阶段埋点（渲染层 → 主进程 last-run.json 启动瀑布）。
+   * 白名单：sessions_loaded / messages_loaded / settings_loaded。
+   */
+  reportBootStage?: (stage: 'sessions_loaded' | 'messages_loaded' | 'settings_loaded') => void;
 }
 
 declare global {
