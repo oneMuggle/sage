@@ -43,7 +43,7 @@ Sage 的主题模式默认是 `system`（`ThemeProvider` 的 `defaultMode`），
 - [x] 步骤 3：补充 zh/en i18n 文案
 - [x] 步骤 4：新增组件测试（渲染、三态切换、system 描述）
 - [x] 步骤 5：运行 lint / typecheck / 相关 vitest
-- [ ] 步骤 6：提交并开 PR（release/win7），后续 cherry-pick 到 main
+- [x] 步骤 6：提交并开 PR（release/win7 #3094）；main 待 cherry-pick
 
 ## 风险评估与依赖
 
