@@ -87,10 +87,12 @@ def model_capabilities(model: str) -> ModelCapabilities:
     lower = (model or "").lower()
     is_non_vision = any(marker in lower for marker in _OLLAMA_NON_VISION_MARKERS)
     supports_tools = any(marker in lower for marker in _OLLAMA_TOOL_MARKERS)
-    vision = not is_non_vision and any(marker in lower for marker in _OLLAMA_VISION_MARKERS)
+    is_vision = any(marker in lower for marker in _OLLAMA_VISION_MARKERS)
+    vision = not is_non_vision and is_vision
     return ModelCapabilities(
         tools=supports_tools,
         vision=vision,
+        vision_known=bool(is_non_vision or is_vision),
         streaming=True,
         parallel_tool_calls=supports_tools,
         reasoning=False,  # Ollama 暂不支持原生 reasoning

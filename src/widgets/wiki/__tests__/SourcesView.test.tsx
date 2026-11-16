@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
     },
     endpoints: [],
   },
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
   list: vi.fn(),
   importSource: vi.fn(),
   deleteSource: vi.fn(),
@@ -116,7 +116,7 @@ it('imports a picked file then ingests the returned relative path', async () => 
   });
 });
 
-it('blocks ingest with an actionable hint when no embedding model is configured', async () => {
+it('imports without an embedding model by skipping vectorization', async () => {
   mocks.settings.modelSelections.embeddingModel = { endpointId: null, modelId: null };
   window.electronAPI = {
     ...(window.electronAPI ?? {}),
@@ -129,13 +129,19 @@ it('blocks ingest with an actionable hint when no embedding model is configured'
   fireEvent.click(screen.getByRole('button', { name: /导入文件/ }));
 
   await waitFor(() => {
-    expect(mocks.toast.error).toHaveBeenCalledWith(
-      '请先在设置中配置嵌入模型（用于导入后的向量化）',
+    expect(mocks.ingestStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceFile: 'raw/sources/x.md',
+        embedBaseUrl: '',
+        embedApiKey: '',
+        embedModel: '',
+      }),
     );
   });
-  // 文件仍被导入 raw/sources，但不会启动 ingest（避免跑到嵌入步骤才失败）
-  expect(mocks.importSource).toHaveBeenCalledWith('/tmp/x.md', '/proj');
-  expect(mocks.ingestStream).not.toHaveBeenCalled();
+  expect(mocks.toast.info).toHaveBeenCalledWith(
+    expect.stringContaining('未配置嵌入模型，本次导入将跳过向量化'),
+  );
+  expect(mocks.toast.error).not.toHaveBeenCalled();
 });
 
 it('deletes through the cascade endpoint and refreshes', async () => {

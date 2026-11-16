@@ -951,6 +951,9 @@ class SageAgent:
         开关一开就让现有用户的图片请求中途失败（设计文档 §1.2「优先使用
         对话模型的原生多模态能力」）。
 
+        ``ModelCapabilities.vision_known=False`` 表示 provider 只是没认出模型名，
+        既不能确认支持也不能确认不支持——同样按未知处理（fail-open）。
+
         Args:
             model_id: chatModel 的模型 id。
 
@@ -959,7 +962,11 @@ class SageAgent:
         """
         caps = ["chat"]
         resolved = self._resolve_model_capabilities(model_id)
-        if resolved is None or resolved.vision:
+        if (
+            resolved is None
+            or resolved.vision
+            or not getattr(resolved, "vision_known", True)
+        ):
             caps.append("vision")
         return caps
 

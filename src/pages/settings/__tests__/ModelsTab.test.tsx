@@ -195,22 +195,21 @@ describe('ModelsTab routing mode (Task 11)', () => {
     expect(screen.queryByText('用于文本对话（必填）')).toBeNull();
   });
 
-  it('auto mode keeps the other five capability selectors', () => {
-    // 6 个能力选择器 (手动: chat/vision/embedding/tts/asr/image_gen) → 自动模式
-    // 隐藏 chat 选择器剩 5 个；排除本地 OCR 的引擎/语言下拉与会话标题模型下拉
-    //（均非模型能力选择器）。
-    // 另加 P0-A 的上下文档位下拉（两种模式都渲染，仅自动模式禁用），故 +1。
+  it('auto mode keeps the other capability selectors', () => {
+    // 手动: chat/vision/embedding/tts/asr/image_gen + 视觉能力三态 = 7 个，
+    // 再加 P0-A 的上下文档位下拉 = 8；自动模式隐藏 chat 选择器剩 7。
+    // 排除本地 OCR 的引擎/语言下拉与会话标题模型下拉（均非模型能力选择器）。
     const capabilitySelects = (container: HTMLElement) =>
       container.querySelectorAll(
         'select:not([data-testid^="settings-ocr-"]):not([data-testid="settings-title-model"])',
       );
 
     const manual = renderTab();
-    expect(capabilitySelects(manual.container)).toHaveLength(7);
+    expect(capabilitySelects(manual.container)).toHaveLength(8);
     manual.unmount();
 
     const auto = renderTab(vi.fn(), autoSettings);
-    expect(capabilitySelects(auto.container)).toHaveLength(6);
+    expect(capabilitySelects(auto.container)).toHaveLength(7);
   });
 
   it('keeps the routing switch reachable when no endpoint has models (R31a)', () => {

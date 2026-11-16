@@ -3,9 +3,8 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useInRouterContext, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-import { getEffective } from '../../entities/model-catalog/api';
+import { getEffective, setOverride } from '../../entities/model-catalog/api';
 import type { EffectiveModel } from '../../entities/model-catalog/types';
-import { resolveEndpoint } from '../../entities/setting/types';
 import { useBtwCommand } from '../../features/chat';
 // 对标 S3: 直接从源文件导入（而非 barrel），既有 Chat 页面测试整体 mock 了
 // '../../features/chat'，走 barrel 会拿到 undefined。
@@ -16,9 +15,14 @@ import type { DeliveryMode } from '../../features/send-message/deliveryMode';
 import { knowledgeApi, promptApi, skillsApi } from '../../shared/api';
 import { listen as desktopListen } from '../../shared/api/desktopEvent';
 import { ocrApi, type OcrCapabilities } from '../../shared/api/ocrApi';
+import { sessionApi } from '../../shared/api/sessionApi';
 import type { ChatOfficeRef } from '../../shared/api/types';
 import { worktreeApi } from '../../shared/api/worktreeApi';
 import { CHAT_DOCUMENT_EXTENSIONS } from '../../shared/lib/chatAttachmentFormats';
+import {
+  resolveEffectiveChatModel,
+  subscribeSessionModelOverrideChanged,
+} from '../../shared/lib/effectiveChatModel';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
 import { COMPOSER_DROP_EVENT } from '../../shared/lib/hooks/useGlobalFileDrop';
 import { useInputHistory } from '../../shared/lib/hooks/useInputHistory';
@@ -155,17 +159,66 @@ function ChatInputInner({
     };
   }, []);
 
+  // Workspace context — provides sessionId + binding for the @ menu.
+  // Falls back to the legacy `workspacePath` prop for callers that don't
+  // mount the provider (e.g. some legacy tests). Use the optional variant
+  // so legacy tests that don't mount the provider don't throw.
+  const workspaceContext = useOptionalWorkspaceContext();
+  const effectiveWorkspacePath = workspaceContext?.binding?.workspacePath ?? workspacePath;
+  // sessionId is used by the AtFileMenu itself (via useOptionalWorkspaceContext);
+  // expose on the closure so future tests can assert on it.
+  const effectiveSessionId = workspaceContext?.sessionId ?? null;
+
+  // 会话级模型覆盖可能把对话模型切到多模态/不同端点的模型；视觉能力
+  // 判定必须跟随实际生效模型，否则会按全局模型误报「不支持视觉」。
+  const [sessionModelOverride, setSessionModelOverride] = useState<string | null>(null);
+  useEffect(() => {
+    if (!effectiveSessionId) {
+      setSessionModelOverride(null);
+      return;
+    }
+    let cancelled = false;
+    sessionApi
+      .getModelOverride(effectiveSessionId)
+      .then((override) => {
+        if (!cancelled) setSessionModelOverride(override);
+      })
+      .catch(() => {
+        // fail-open: 读取失败按跟随全局处理
+        if (!cancelled) setSessionModelOverride(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveSessionId]);
+
+  // 会话内用 SessionModelPicker 切换模型时，ChatInput 不会重新挂载；
+  // 订阅覆盖变更事件，保证视觉能力判定立即跟随新模型。
+  useEffect(
+    () =>
+      subscribeSessionModelOverrideChanged((detail) => {
+        if (detail.sessionId === effectiveSessionId) {
+          setSessionModelOverride(detail.modelId);
+        }
+      }),
+    [effectiveSessionId],
+  );
+
   // Task 9 (2026-10-15): vision 可用性检测
   // 分层权威源：model-catalog getEffective > discoveredModels 启发式 > 未知。
   // 「未知」与「支持」同等放行（对齐后端 agent.py「unknown → vision-supported」
   // fail-safe），只有明确的 unsupported 才显示警告 / 禁用上传。
-  const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
-  const chatModelId = settings.modelSelections.chatModel.modelId;
+  const { endpoint: chatEndpoint, modelId: chatModelId } = resolveEffectiveChatModel(
+    settings.modelSelections.chatModel,
+    settings.endpoints,
+    sessionModelOverride,
+  );
   const catalogKey = `${chatEndpoint?.id ?? ''}:${chatModelId ?? ''}`;
   const [catalogEntry, setCatalogEntry] = useState<{
     key: string;
     model: EffectiveModel | null;
   } | null>(null);
+  const [catalogRefreshTick, setCatalogRefreshTick] = useState(0);
   useEffect(() => {
     if (!chatEndpoint?.id || !chatModelId) return;
     let cancelled = false;
@@ -179,7 +232,7 @@ function ChatInputInner({
     return () => {
       cancelled = true;
     };
-  }, [catalogKey, chatEndpoint?.id, chatModelId]);
+  }, [catalogKey, chatEndpoint?.id, chatModelId, catalogRefreshTick]);
   const effectiveCatalog = catalogEntry?.key === catalogKey ? catalogEntry.model : null;
   const supportsVision =
     resolveVisionSupport(chatEndpoint, chatModelId, effectiveCatalog) !== 'unsupported';
@@ -191,15 +244,27 @@ function ChatInputInner({
   const visionFallbackMode = !supportsVision && visionModelConfigured;
   const ocrPreviewEnabled = ocrAvailable && (ocrFallbackMode || preferLocalOcr);
 
-  // Workspace context — provides sessionId + binding for the @ menu.
-  // Falls back to the legacy `workspacePath` prop for callers that don't
-  // mount the provider (e.g. some legacy tests). Use the optional variant
-  // so legacy tests that don't mount the provider don't throw.
-  const workspaceContext = useOptionalWorkspaceContext();
-  const effectiveWorkspacePath = workspaceContext?.binding?.workspacePath ?? workspacePath;
-  // sessionId is used by the AtFileMenu itself (via useOptionalWorkspaceContext);
-  // expose on the closure so future tests can assert on it.
-  const effectiveSessionId = workspaceContext?.sessionId ?? null;
+  // 用户纠正：启发式/旧数据可能把实际支持图片的模型判为不支持；
+  // 写入 catalog override（capabilities.vision=true）后刷新 effective。
+  const [markingVisionSupported, setMarkingVisionSupported] = useState(false);
+  const handleMarkVisionSupported = useCallback(async () => {
+    if (!chatEndpoint?.id || !chatModelId) return;
+    setMarkingVisionSupported(true);
+    try {
+      await setOverride(
+        chatEndpoint.id,
+        chatModelId,
+        { capabilities: { vision: true } },
+        effectiveCatalog?.revision ?? 0,
+      );
+      setCatalogRefreshTick((tick) => tick + 1);
+      toast.success(t('chat.vision_mark_supported_success'));
+    } catch {
+      toast.error(t('chat.vision_mark_supported_failed'));
+    } finally {
+      setMarkingVisionSupported(false);
+    }
+  }, [chatEndpoint?.id, chatModelId, effectiveCatalog?.revision, t]);
 
   // Per-session draft persistence (U13 from OpenWorker)
   const [value, setValue] = useSessionDraft(effectiveSessionId);
@@ -808,7 +873,15 @@ function ChatInputInner({
       {visionUploadDisabled && (
         <div className="mx-3 mb-1 px-3 py-1.5 rounded-md bg-warning/10 text-warning text-xs flex items-center gap-1.5">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-          <span>{t('chat.vision_not_available')}</span>
+          <span className="flex-1">{t('chat.vision_not_available')}</span>
+          <button
+            type="button"
+            onClick={handleMarkVisionSupported}
+            disabled={markingVisionSupported}
+            className="shrink-0 px-2 py-0.5 rounded border border-warning/40 hover:bg-warning/20 disabled:opacity-50 transition-colors"
+          >
+            {t('chat.vision_mark_supported')}
+          </button>
         </div>
       )}
       {visionFallbackMode && (

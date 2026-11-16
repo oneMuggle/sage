@@ -219,6 +219,9 @@ export const zhChatAndSider = {
   // Task 9 (2026-10-15): vision model fallback UI
   'chat.vision_not_available':
     '当前对话模型不支持视觉识别，请配置视觉理解模型或更换支持视觉的对话模型',
+  'chat.vision_mark_supported': '误判了？标记为支持图片',
+  'chat.vision_mark_supported_success': '已标记为支持图片，可重新上传',
+  'chat.vision_mark_supported_failed': '标记失败，请稍后重试',
   'chat.vision_fallback_info': '图片将通过视觉理解模型识别后转为文本描述',
   'chat.ocr_fallback_info': '图片将通过本地 OCR 识别为文本（仅在本机处理，不上传图片）',
   'chat.image_ocr_title': '图片文字（本地 OCR）',

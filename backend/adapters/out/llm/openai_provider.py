@@ -96,13 +96,18 @@ def model_capabilities(model: str) -> ModelCapabilities:
     lower = (model or "").lower()
     reasoning = lower.startswith(("o1", "o3", "o5", "o-"))
     is_non_vision = any(marker in lower for marker in _OPENAI_NON_VISION_MARKERS)
-    vision = not is_non_vision and any(
+    is_vision = any(
         marker in lower
         for marker in _OPENAI_VISION_MARKERS + _OPENAI_COMPAT_VL_MARKERS
     )
+    # 正负 marker 都未命中 → 不认识的模型名。此时 vision=False 只代表
+    # 「启发式没认出来」，必须通过 vision_known=False 告诉调用方按未知处理。
+    vision_known = bool(is_non_vision or is_vision)
+    vision = not is_non_vision and is_vision
     return ModelCapabilities(
         tools=True,
         vision=vision,
+        vision_known=vision_known,
         streaming=True,
         parallel_tool_calls=not reasoning,  # o-系列不支持 parallel
         reasoning=reasoning,
