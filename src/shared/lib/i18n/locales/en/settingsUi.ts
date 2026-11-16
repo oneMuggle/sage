@@ -648,7 +648,11 @@ export const enSettingsUi = {
   'settings.theme.delete_tooltip': 'Delete theme',
   'settings.theme.empty': 'No custom themes yet',
   'settings.theme.light': 'Light',
+  'settings.theme.mode_desc': 'Choose a light or dark appearance, or follow your system setting',
+  'settings.theme.mode_desc_system': 'Following system setting (currently {resolved})',
+  'settings.theme.mode_label': 'Theme mode',
   'settings.theme.new_button': 'New custom',
+  'settings.theme.system': 'System',
   'settings.tools.fallback.desc':
     'Automatically switches to this model when the primary model exhausts retries (rate limit / server error / timeout); empty = no fallback. Takes effect only after saving.',
   'settings.tools.fallback.label': 'Fallback model',
