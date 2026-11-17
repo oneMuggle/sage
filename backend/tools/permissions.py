@@ -185,6 +185,7 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "browser_interact": ToolCapability.WRITE,
     "browser_cookies": ToolCapability.WRITE,
     "browser_close": ToolCapability.WRITE,
+    "browser_tabs": ToolCapability.WRITE,
     # --- 技能 ---
     # skill 可编排任意工具调用, SKILL.md 脚本更直接跑子进程(script_runner
     # 沙箱内), 语义上是"执行任意动作"——按最严格能力对待。

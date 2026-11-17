@@ -165,8 +165,11 @@ SYMBOL_TOOLS = ("symbol_search",)
 
 # 浏览器自动化（2026-09-06 对标增强 G7）：CDP 驱动本机 Chrome/Edge。
 # launch=EXEC / navigate=EXTERNAL（逐次审批）/ snapshot+screenshot=READ /
-# interact+close+cookies=WRITE_LOCAL / downloads=READ / login=EXTERNAL（blocking）。
-# v1 只给 coder（executor 边界）。
+# interact+close+cookies+tabs=WRITE_LOCAL / downloads=READ /
+# login=EXTERNAL（blocking）。tabs 的 list 只读，但与 create/switch/close
+# 共用同一入口，故整体按 WRITE_LOCAL。
+# 注册面：tool_bundles._install_browser（bundle 装配）+ 专家能力包 browser
+# （src/entities/specialist/toolCapabilities.ts）。
 BROWSER_TOOLS = (
     "browser_launch",
     "browser_navigate",
@@ -177,6 +180,7 @@ BROWSER_TOOLS = (
     "browser_downloads",
     "browser_close",
     "browser_login",
+    "browser_tabs",
 )
 
 # 技能类（2026-09 academic-search M1）：``skill`` 是循环内调用已有 skill

@@ -59,6 +59,26 @@ export function setArtifactAutoOpenEnabled(enabled: boolean): void {
 }
 
 /**
+ * M3 受控浏览器：AI 发起 browser_* 操作时是否自动打开右栏「浏览器」Tab
+ * （缺省 = 开；BrowserPanel 顶部开关与 RightPanel 监听同源读写此键）。
+ */
+export function isBrowserPanelAutoOpenEnabled(): boolean {
+  try {
+    return localStorage.getItem('sage.browser-panel-auto-open') !== '0';
+  } catch {
+    return true;
+  }
+}
+
+export function setBrowserPanelAutoOpenEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem('sage.browser-panel-auto-open', enabled ? '1' : '0');
+  } catch {
+    // localStorage 不可用
+  }
+}
+
+/**
  * UI 优化 2026-10-14: 右栏打开时是否自动折叠左栏（Layout.tsx 消费）。
  * 默认关闭 —— 用户可手动开启。右栏最大化时始终折叠（不受此开关影响）。
  */

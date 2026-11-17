@@ -194,6 +194,9 @@ class BrowserSession:
     #: External：用户共享标签页的 Chrome tabId（仅内存持有）
     external_tab_id: str = ""
 
+    #: 当前活动标签页（browser_tabs switch/create 设置；None = 解析为第一个页面）
+    active_target_id: Optional[str] = None
+
     def is_alive(self) -> bool:
         return self.process.poll() is None
 
@@ -282,16 +285,18 @@ class BrowserSessionManager:
         便利解析（R24）。
         """
         if browser_id:
-            return self._sessions.get(browser_id)
-        external = self._sessions.get(EXTENSION_BROWSER_ID)
-        if external is not None:
-            return external
-        user_sessions = [
-            session
-            for session_id, session in self._sessions.items()
-            if session_id != RESERVED_BROWSER_ID
-            and not session_id.startswith(RESERVED_BROWSER_ID + "-")
-        ]
+            with self._lock:
+                return self._sessions.get(browser_id)
+        with self._lock:
+            external = self._sessions.get(EXTENSION_BROWSER_ID)
+            if external is not None:
+                return external
+            user_sessions = [
+                session
+                for session_id, session in self._sessions.items()
+                if session_id != RESERVED_BROWSER_ID
+                and not session_id.startswith(RESERVED_BROWSER_ID + "-")
+            ]
         if len(user_sessions) == 1:
             return user_sessions[0]
         return None
@@ -305,7 +310,8 @@ class BrowserSessionManager:
                 "没有运行中的浏览器实例（可多实例时必须传 browser_id）——先调用 browser_launch"
             )
         if not session.is_alive():
-            self._sessions.pop(session.browser_id, None)
+            with self._lock:
+                self._sessions.pop(session.browser_id, None)
             # 进程已自行退出（崩溃/用户关窗）：terminate 部分幂等跳过，
             # 重点是回收其一次性目录，否则永久遗留。
             _terminate_session(session)
@@ -313,19 +319,26 @@ class BrowserSessionManager:
         return session
 
     def remove(self, browser_id: str) -> Optional[BrowserSession]:
-        return self._sessions.pop(browser_id, None)
+        with self._lock:
+            return self._sessions.pop(browser_id, None)
 
     def count(self) -> int:
-        return len(self._sessions)
+        with self._lock:
+            return len(self._sessions)
+
+    def all_sessions(self) -> List[BrowserSession]:
+        """返回全部会话的副本列表（控制面列举用，遍历期间持锁）。"""
+        with self._lock:
+            return list(self._sessions.values())
 
     def close_all(self) -> int:
         """关闭全部实例（后端退出钩子）；返回关闭数。"""
-        count = 0
-        for browser_id in list(self._sessions):
-            session = self._sessions.pop(browser_id)
+        with self._lock:
+            sessions = list(self._sessions.values())
+            self._sessions.clear()
+        for session in sessions:
             _terminate_session(session)
-            count += 1
-        return count
+        return len(sessions)
 
 
 def _terminate_session(session: BrowserSession) -> None:
@@ -777,12 +790,24 @@ def _list_page_targets(session: BrowserSession) -> List[Dict[str, Any]]:
 
 
 def ensure_page_target(session: BrowserSession, target_id: Optional[str] = None) -> str:
-    """解析可用页面目标；无页面 / 指定目标不存在时新建 about:blank 页。"""
+    """解析可用页面目标；无页面 / 指定目标不存在时新建 about:blank 页。
+
+    ``target_id`` 缺省时优先沿用 ``session.active_target_id``（由
+    ``browser_tabs`` 的 switch/create 维护）；该目标已消失则清空跟踪并
+    回退到第一个页面。不使用 ``Target.activateTarget`` —— Electron 内置
+    浏览器桥不实现该方法。
+    """
     pages = _list_page_targets(session)
     if target_id:
         if any(info.get("targetId") == target_id for info in pages):
             return target_id
         raise BrowserCDPError(f"未知 target_id: {target_id}")
+    active_target_id = getattr(session, "active_target_id", None)
+    if active_target_id:
+        if any(info.get("targetId") == active_target_id for info in pages):
+            return active_target_id
+        # 跟踪的标签页已被关闭：清空并回退到默认解析
+        session.active_target_id = None
     if pages:
         return pages[0]["targetId"]
     if getattr(session, "browser_type", None) == BrowserType.EXTERNAL:
