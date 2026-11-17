@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
+import enum
 import functools
 import hashlib
 import json
@@ -162,6 +164,19 @@ from backend.tools.permissions import (
 from backend.utils import py_compat
 
 logger = logging.getLogger(__name__)
+
+
+def _json_default(value: Any) -> Any:
+    """JSON 序列化兜底：dataclass → dict、Enum → value（2026-11-15）。
+
+    工具返回值里常见 `MediaRef` 等 dataclass；原先按 `str` 兜底会把它们
+    变成 Python repr 字符串，前端拿不到 `id/mime_type`，图片工具无法内联渲染。
+    """
+    if isinstance(value, enum.Enum):
+        return value.value
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return dataclasses.asdict(value)
+    return str(value)
 
 #: 单张图片 OCR 文本注入上限（防止编辑结果/异常长文本挤爆上下文）
 _OCR_TEXT_MAX_CHARS_PER_IMAGE = 20_000
@@ -2569,12 +2584,12 @@ class SageAgent:
                                             "工具执行失败"
                                             if err_value is None
                                             else json.dumps(
-                                                err_value, ensure_ascii=False, default=str
+                                                err_value, ensure_ascii=False, default=_json_default
                                             )
                                         )
                                     )
                                     return (normalized or "工具执行失败"), True
-                                return json.dumps(result_p, ensure_ascii=False, default=str), False
+                                return json.dumps(result_p, ensure_ascii=False, default=_json_default), False
                             except Exception as exc:  # noqa: BLE001
                                 logger.error(f"并行工具执行失败: {tc.name}, error: {exc}")
                                 return f"[工具错误] {exc}", True
@@ -3032,7 +3047,7 @@ class SageAgent:
                                                 else:
                                                     output_value = result.content
                                                 result_content = json.dumps(
-                                                    output_value, ensure_ascii=False, default=str
+                                                    output_value, ensure_ascii=False, default=_json_default
                                                 )
                                             else:
                                                 # R19-W1：web_fetch 反爬/登录墙拦截时
@@ -3068,7 +3083,7 @@ class SageAgent:
                                                             },
                                                         },
                                                         ensure_ascii=False,
-                                                        default=str,
+                                                        default=_json_default,
                                                     )
                                                 else:
                                                     err_value = result.error
@@ -3078,12 +3093,12 @@ class SageAgent:
                                                         result_content = "工具执行失败"
                                                     else:
                                                         result_content = json.dumps(
-                                                            err_value, ensure_ascii=False, default=str
+                                                            err_value, ensure_ascii=False, default=_json_default
                                                         )
                                         else:
                                             is_error = False
                                             result_content = json.dumps(
-                                                result, ensure_ascii=False, default=str
+                                                result, ensure_ascii=False, default=_json_default
                                             )
                                 except Exception as e:
                                     logger.error(f"工具执行失败: {tc.name}, error: {str(e)}")
