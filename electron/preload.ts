@@ -34,6 +34,7 @@ import type {
   PickedOfficeFile,
   PetConfigBridge,
   PetApiInfoBridge,
+  PetCompatStatusBridge,
   PetElectronApiBridge,
   PetPackDeleteResultBridge,
   PetPackExportResultBridge,
@@ -872,6 +873,8 @@ const electronAPI = {
   pet: {
     getConfig: () => ipcRenderer.invoke('pet:get-config') as Promise<PetConfigBridge>,
     setConfig: (patch) => ipcRenderer.invoke('pet:set-config', patch) as Promise<PetConfigBridge>,
+    getCompatStatus: () =>
+      ipcRenderer.invoke('pet:get-compat-status') as Promise<PetCompatStatusBridge>,
     getState: () => ipcRenderer.invoke('pet:get-state') as Promise<PetSnapshotBridge>,
     getStates: () =>
       ipcRenderer.invoke('pet:get-states') as Promise<Record<string, PetSnapshotBridge>>,

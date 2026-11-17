@@ -132,7 +132,7 @@ FastAPI chat stream (NDJSON)
 - 拖拽：渲染层 pointer 事件 → 主进程按全局光标位移窗口；松手保存到
   `userData/pet-window-<petId>.json`（默认宠物仍用旧 `pet-window.json`；只保存收起状态的覆盖窗位置）。
 - 位置：启动时按当前显示器工作区夹取；支持多屏/DPI。
-- Win7：`compatibilityMode=auto` 时检测到 Windows 6.x 使用不透明窗口、关闭穿透。
+- Win7：`auto` 在 Windows 6.x（Win7/8/8.1）上使用不透明窗口并关闭穿透；`off` 使用透明窗口，但系统未开启 DWM/Aero 桌面合成（Basic 主题、远程桌面）时自动回退为不透明窗口。
 
 ### 4.1 多宠物（1–3 只）
 
@@ -231,18 +231,18 @@ my-pet.zip
 
 ```jsonc
 {
-  "id": "my-pet",                 // ^[a-z0-9][a-z0-9-]{1,31}$，不能是 dafeiyu
+  "id": "my-pet", // ^[a-z0-9][a-z0-9-]{1,31}$，不能是 dafeiyu
   "name": "小叶灵",
   "version": "1.0.0",
-  "license": "CC-BY-4.0",         // 必填，便于署名
+  "license": "CC-BY-4.0", // 必填，便于署名
   "source": "https://example.com", // 可选，仅 http(s)
-  "canvas": { "width": 256, "height": 256 },  // 64–2048
-  "anchor": { "x": 128, "y": 236 },           // 位于 canvas 内
+  "canvas": { "width": 256, "height": 256 }, // 64–2048
+  "anchor": { "x": 128, "y": 236 }, // 位于 canvas 内
   "actions": {
-    "idle": ["frames/idle-0.webp"],           // 必填，1–64 个文件
+    "idle": ["frames/idle-0.webp"], // 必填，1–64 个文件
     "thinking": ["frames/think.webm"],
-    "acting_edit": ["frames/coding.webm"]
-  }
+    "acting_edit": ["frames/coding.webm"],
+  },
 }
 ```
 
@@ -283,7 +283,7 @@ my-pet.zip
 ## 8. 已知限制 / 下一步
 
 - P0 仅实现「桌面」形态；`displayMode=in-app/both` 由主窗口内的 `InAppPet` 承担，不再回退到桌面窗。
-- 未在 Win7 真机验证透明/穿透；兼容模式已写好但需真机回归。
+- Win7 透明窗口依赖 DWM 桌面合成（Aero）；无合成时自动强制不透明。透明/穿透仍需覆盖多种 Win7 主题与远程桌面场景的真机回归。
 - 提示音为 WebAudio 合成短音，不是角色语音；需一次用户手势解锁 AudioContext。
 - 面板已能列出最近/活跃会话，但「每个会话一只宠物」未实现。
 - 多宠物已支持 1–3 只（独立动画包/大小/位置）；应用内模式横向排列且只有第一只显示气泡，尚未按会话分配不同宠物。
