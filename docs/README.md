@@ -8,18 +8,18 @@
 
 ## 目录
 
-1. [项目概述](./01-overview.md)
-2. [系统架构](./02-architecture.md)
-3. [数据库设计](./03-database.md)
-4. [记忆系统](./04-memory.md)
-5. [Agent 引擎](./05-agent.md)
-6. [工具系统](./06-tools.md)
+1. [项目概述](./technical/01-overview.md)
+2. [系统架构](./technical/02-architecture.md)
+3. [数据库设计](./technical/03-database.md)
+4. [记忆系统](./technical/04-memory.md)
+5. [Agent 引擎](./technical/05-agent.md)
+6. [工具系统](./technical/06-tools.md)
 7. [技能系统](./technical/24-skills-system.md)
-8. [进化系统](./08-evolution.md)
-9. [前端设计](./09-frontend.md)
-10. [API 接口](./10-api.md)
-11. [目录结构](./11-structure.md)
-12. [实施计划](./12-plan.md)
+8. [进化系统](./technical/08-evolution.md)
+9. [前端设计](./technical/09-frontend.md)
+10. [API 接口](./technical/10-api.md)
+11. [目录结构](./technical/11-structure.md)
+12. [实施计划](./technical/12-plan.md)
 
 ## 🪟 双轨分支（main + release/win7）
 
@@ -45,9 +45,8 @@ Sage 维护两条独立分支：
 
 | 子目录 | 定位 | 维护规则 |
 |---|---|---|
-| `01-14.md`(根) | 核心技术章节(架构/数据库/记忆/Agent/工具等) | 稳定文档,功能完成后更新对应章节 |
-| [`technical/`](./technical/) | 15-40 横切关注点(质量门禁/可观测性/六边形等) | 新功能模块加章节,编号顺延 |
-| [`user-manual/`](./user-manual/) | 终端用户操作指南(01-08) | 用户可见功能完成后加章节 |
+| [`technical/`](./technical/) | 核心技术文档(01-14 基础架构 + 15-157 横切关注点) | 新功能模块加章节,编号顺延 |
+| [`user-manual/`](./user-manual/) | 终端用户操作指南 | 用户可见功能完成后加章节 |
 | [`plans/`](./plans/) | **仅进行中的实施计划** | 功能完成后并入技术手册/用户手册并删除 |
 | [`memory/`](./memory/) | 已完成特性的 mini-archive(frontmatter + 简短回顾) | 仅落档,新功能往 technical/user-manual 不归此 |
 | [`superpowers/ideas/`](./superpowers/ideas/) | 暂不做的零散想法 | 不进 roadmap,不进 specs/ |
