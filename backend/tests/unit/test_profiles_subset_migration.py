@@ -94,6 +94,8 @@ def test_researcher_subset_gets_missing_appended(monkeypatch):
     assert "web_search" in stored["researcher"]["tools"]
     assert stored["researcher"]["tools"] == [
         "web_fetch", "http_download", "memory_search", "web_search",
+        # 2026-11-17 (M1 收尾): researcher 取证三件（截屏/下载/标签）同步进兜底集。
+        "browser_screenshot", "browser_downloads", "browser_tabs",
     ]
 
 
