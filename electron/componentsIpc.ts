@@ -146,7 +146,11 @@ export function runComponentCli(
     });
   }
 
-  const env: Record<string, string> = { ...process.env, ...plan.env } as Record<string, string>;
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value === 'string') env[key] = value;
+  }
+  Object.assign(env, plan.env);
   if (snapshot.isPackaged && snapshot.resourcesPath) {
     env.SAGE_IS_PACKAGED = '1';
     env.SAGE_RESOURCES_DIR = snapshot.resourcesPath;

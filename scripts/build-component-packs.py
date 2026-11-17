@@ -122,7 +122,12 @@ def build_pack(
                 date_time=FIXED_ZIP_TIME,
             )
             info.compress_type = zipfile.ZIP_DEFLATED
-            archive.writestr(info, absolute.read_bytes())
+            with archive.open(info, "w") as target, absolute.open("rb") as source:
+                while True:
+                    chunk = source.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    target.write(chunk)
     return output_path
 
 
