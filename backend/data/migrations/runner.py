@@ -31,6 +31,7 @@ import logging
 from typing import Any, Callable, List, Tuple
 
 from backend.data.migrations.v17_office_rules import _v17_office_rules
+from backend.data.migrations.v18_browser_actions import _v18_browser_actions
 
 logger = logging.getLogger(__name__)
 
@@ -555,6 +556,7 @@ def _v16_group_chat_support(conn: Any) -> None:
 
 register_migration(16, "group_chat_support", _v16_group_chat_support)
 register_migration(17, "office_rules", _v17_office_rules)
+register_migration(18, "browser_actions", _v18_browser_actions)
 
 
 def ensure_version_table(conn: Any) -> None:

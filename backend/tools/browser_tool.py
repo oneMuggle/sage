@@ -26,7 +26,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
+from backend.data import browser_action_repo
 from backend.domain.risk import RiskClass
+from backend.services import browser_safety
 from backend.services.browser_control import (
     BrowserControlState,
     get_browser_control,
@@ -311,6 +313,108 @@ def _capture_step_thumbnail(session: BrowserSession) -> Optional[str]:
             "browser step thumbnail 失败: session=%s", session.browser_id, exc_info=True
         )
         return None
+
+
+# ---------------------------------------------------------------------------
+# 安全层接线（M4）：站点授权 / 敏感动作 / 元素元数据 / 审计
+# ---------------------------------------------------------------------------
+
+
+def _safety_check_site(session_id: str, url: str) -> str:
+    """站点判定薄包装（allow/confirm/block）；单测可替换为固定值。"""
+    return browser_safety.check_site(session_id, url)
+
+
+def _read_target_metadata(
+    session: BrowserSession, ref: str = "", selector: str = ""
+) -> Optional[Dict[str, Any]]:
+    """只读读取交互目标元数据（tag/role/name/type/placeholder）。
+
+    ref 优先、selector 回退；失败或元素不存在返回 None（调用方用 text
+    参数兜底），不抛错、不产生页面副作用。
+    """
+    if not ref and not selector:
+        return None
+    locator = (
+        f"(window.__SAGE_REFS__||{{}})[{json.dumps(str(ref))}]"
+        if ref
+        else f"document.querySelector({json.dumps(str(selector))})"
+    )
+    expression = (
+        "(function(){var el=" + locator + ";if(!el)return null;"
+        "var name=(el.getAttribute&&(el.getAttribute('aria-label')||''))||'';"
+        "if(!name&&el.labels&&el.labels.length){name=el.labels[0].textContent||'';}"
+        "if(!name){name=el.innerText||el.textContent||'';}"
+        "return{tag:(el.tagName||'').toLowerCase(),"
+        "role:(el.getAttribute&&el.getAttribute('role'))||'',"
+        "name:String(name).trim().slice(0,120),"
+        "type:String((el.getAttribute&&el.getAttribute('type'))||'').toLowerCase(),"
+        "placeholder:String((el.getAttribute&&el.getAttribute('placeholder'))||'').slice(0,120)};"
+        "})()"
+    )
+    try:
+        value = _evaluate_json(session, expression, None)
+    except BrowserCDPError:
+        logger.debug("交互目标元数据读取失败", exc_info=True)
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _elapsed_ms(started: float) -> int:
+    """自 started（time.monotonic）以来的毫秒数；异常按 0。"""
+    try:
+        return max(0, int((time.monotonic() - started) * 1000))
+    except Exception:  # noqa: BLE001 — 审计耗时统计不得影响工具
+        return 0
+
+
+def _record_browser_audit(
+    session: Optional[BrowserSession],
+    tool: str,
+    action: str,
+    result: str,
+    *,
+    approval: str = "auto",
+    target_ref: str = "",
+    target_desc: str = "",
+    domain: str = "",
+    duration_ms: int = 0,
+) -> None:
+    """写一条动作审计；不落页面正文 / 输入值 / 凭据，失败静默。"""
+    try:
+        resolved_domain = domain
+        if not resolved_domain and session is not None:
+            resolved_domain = browser_safety.domain_of(_cached_page(session)[0])
+        browser_action_repo.record(
+            {
+                "session_id": session.browser_id if session is not None else "unknown",
+                "conversation_id": None,
+                "ts": int(time.time() * 1000),
+                "domain": resolved_domain,
+                "tool": tool,
+                "action": action,
+                "target_ref": target_ref or "",
+                "target_desc": (target_desc or "")[: browser_action_repo.MAX_TARGET_DESC],
+                "result": result,
+                "approval": approval,
+                "duration_ms": int(duration_ms),
+            }
+        )
+    except Exception:  # noqa: BLE001 — 审计失败不得影响工具结果
+        logger.debug("browser audit 记录失败", exc_info=True)
+
+
+def _snapshot_untrusted_text(content: Dict[str, Any]) -> str:
+    """从快照结果提取可扫描文本（text 正文优先，其次元素可访问名）。"""
+    text = content.get("text")
+    if isinstance(text, str) and text:
+        return text
+    elements = content.get("elements")
+    if isinstance(elements, list):
+        return " ".join(
+            str(item.get("name") or "") for item in elements if isinstance(item, dict)
+        )
+    return ""
 
 
 def validate_url(url: str) -> Optional[str]:
@@ -896,11 +1000,88 @@ class BrowserNavigateTool(BaseTool):
             except BrowserCDPError as exc:
                 return _error(exc)
         session: Optional[BrowserSession] = None
+        started = time.monotonic()
         try:
             session = _resolve_session(browser_id or None)
             blocked = _blocked_by_control(session, "browser_navigate")
             if blocked is not None:
                 return blocked
+            # M4 站点授权：拒绝指纹优先（避免同一站点反复弹确认），
+            # 其次持久/会话策略；未知站点 → 待用户确认。
+            domain = browser_safety.domain_of(url)
+            site_fingerprint = browser_safety.action_fingerprint(
+                "browser_navigate", "site_access", domain
+            )
+            registry = browser_safety.get_confirmation_registry()
+            if registry.is_denied(site_fingerprint):
+                _record_browser_audit(
+                    session,
+                    "browser_navigate",
+                    "navigate",
+                    "blocked",
+                    approval="denied",
+                    domain=domain,
+                    duration_ms=_elapsed_ms(started),
+                )
+                return _meta_result(
+                    ToolResult(
+                        success=False,
+                        error="denied_by_user: 用户拒绝了访问该站点，请换一种方式或询问用户",
+                    ),
+                    session,
+                    "navigate",
+                    url=url,
+                )
+            site_verdict = _safety_check_site(session.browser_id, url)
+            if site_verdict == "block":
+                _record_browser_audit(
+                    session,
+                    "browser_navigate",
+                    "navigate",
+                    "blocked",
+                    approval="none",
+                    domain=domain,
+                    duration_ms=_elapsed_ms(started),
+                )
+                return _meta_result(
+                    ToolResult(success=False, error=f"site_blocked: 用户已禁止该站点 {domain}"),
+                    session,
+                    "navigate",
+                    url=url,
+                )
+            if site_verdict == "confirm":
+                pending = registry.create(
+                    session.browser_id,
+                    "site_access",
+                    code="site_access",
+                    domain=domain,
+                    description=f"访问站点 {domain}：{url}",
+                    options=list(browser_safety.SITE_ACCESS_OPTIONS),
+                    screenshot_path=_capture_step_thumbnail(session) or "",
+                    fingerprint=site_fingerprint,
+                )
+                get_browser_control().set_state(session.browser_id, BrowserControlState.PAUSED)
+                _record_browser_audit(
+                    session,
+                    "browser_navigate",
+                    "navigate",
+                    "confirm_required",
+                    approval="none",
+                    domain=domain,
+                    duration_ms=_elapsed_ms(started),
+                )
+                return _meta_result(
+                    ToolResult(
+                        success=False,
+                        error=(
+                            f"needs_confirmation: {pending.id} 访问站点 {domain}"
+                            "（请在右栏浏览器面板确认）"
+                        ),
+                    ),
+                    session,
+                    "navigate",
+                    url=url,
+                )
             if new_tab:
                 created = cdp_command(session, "Target.createTarget", {"url": url.strip()}).get(
                     "targetId"
@@ -943,6 +1124,14 @@ class BrowserNavigateTool(BaseTool):
         page_title = str(page.get("title") or "")
         _remember_page(session, page_url, page_title)
         thumbnail = _capture_step_thumbnail(session)
+        _record_browser_audit(
+            session,
+            "browser_navigate",
+            "navigate",
+            "ok",
+            domain=browser_safety.domain_of(page_url),
+            duration_ms=_elapsed_ms(started),
+        )
         return _meta_result(
             ToolResult(
                 success=True,
@@ -1047,12 +1236,27 @@ class BrowserSnapshotTool(BaseTool):
             return _meta_result(
                 ToolResult(success=False, error=str(content["error"])), session, "snapshot"
             )
+        # M4 注入告警：命中只标注 trust/injection_warning，保留原有字段，不阻断
+        injection_warning = browser_safety.scan_untrusted_text(
+            _snapshot_untrusted_text(content)
+        )
+        if injection_warning:
+            content["trust"] = "untrusted"
+            content["injection_warning"] = injection_warning
         page_url = str(content.get("url") or "")
         page_title = str(content.get("title") or "")
         _remember_page(session, page_url, page_title)
         # mode=text 不带元素列表 —— 保留上一次快照的登录墙判定，不误清
         if "elements" in content:
             _LAST_LOGIN_WALL[session.browser_id] = _detect_login_wall(content.get("elements"))
+        _record_browser_audit(
+            session,
+            "browser_snapshot",
+            mode,
+            "ok",
+            domain=browser_safety.domain_of(page_url),
+            target_desc=page_title,
+        )
         return _meta_result(
             ToolResult(success=True, content=content),
             session,
@@ -1142,16 +1346,128 @@ class BrowserInteractTool(BaseTool):
             action, selector, text, value, key, bool(clear), ref
         )
         session: Optional[BrowserSession] = None
+        started = time.monotonic()
         try:
             session = _resolve_session(browser_id or None)
             blocked = _blocked_by_control(session, "browser_interact")
             if blocked is not None:
                 return blocked
+            target_fields = {"target_ref": ref or selector, "target_name": text}
+            # M4 敏感动作：先取目标元数据再分类；hard_block 不允许用户放行。
+            target_meta = _read_target_metadata(session, ref=ref, selector=selector)
+            if not target_meta and text:
+                target_meta = {"name": text}
+            verdict = browser_safety.classify_interact(
+                action, target=target_meta, value=value, selector=selector
+            )
+            cached_url, cached_title = _cached_page(session)
+            domain = browser_safety.domain_of(cached_url)
+            target_name = (
+                str(target_meta.get("name") or "") if isinstance(target_meta, dict) else ""
+            ) or text
+            fingerprint = browser_safety.action_fingerprint(
+                "browser_interact", action, domain, ref, selector, target_name
+            )
+            registry = browser_safety.get_confirmation_registry()
+            audit_target = {
+                "target_ref": ref or selector,
+                "target_desc": target_name or cached_title,
+                "domain": domain,
+            }
+            approval = "auto"
+            if verdict.kind == "hard_block":
+                _record_browser_audit(
+                    session,
+                    "browser_interact",
+                    action,
+                    "blocked",
+                    approval="none",
+                    duration_ms=_elapsed_ms(started),
+                    **audit_target,
+                )
+                return _meta_result(
+                    ToolResult(
+                        success=False,
+                        error=(
+                            f"hard_blocked: {verdict.description}；请用户接管完成"
+                            "（browser_login 或控制面板接管）"
+                        ),
+                    ),
+                    session,
+                    "interact",
+                    **target_fields,
+                )
+            if verdict.kind == "confirm":
+                if not registry.consume_approval(fingerprint):
+                    if registry.is_denied(fingerprint):
+                        _record_browser_audit(
+                            session,
+                            "browser_interact",
+                            action,
+                            "blocked",
+                            approval="denied",
+                            duration_ms=_elapsed_ms(started),
+                            **audit_target,
+                        )
+                        return _meta_result(
+                            ToolResult(
+                                success=False,
+                                error="denied_by_user: 用户拒绝了该操作，请换一种方式或询问用户",
+                            ),
+                            session,
+                            "interact",
+                            **target_fields,
+                        )
+                    pending = registry.create(
+                        session.browser_id,
+                        "sensitive_action",
+                        code=verdict.code,
+                        domain=domain,
+                        description=(
+                            f"{verdict.description}（{target_name or action} @ {cached_url}）"
+                        ),
+                        options=list(browser_safety.SENSITIVE_ACTION_OPTIONS),
+                        screenshot_path=_capture_step_thumbnail(session) or "",
+                        fingerprint=fingerprint,
+                    )
+                    get_browser_control().set_state(
+                        session.browser_id, BrowserControlState.PAUSED
+                    )
+                    _record_browser_audit(
+                        session,
+                        "browser_interact",
+                        action,
+                        "confirm_required",
+                        approval="none",
+                        duration_ms=_elapsed_ms(started),
+                        **audit_target,
+                    )
+                    return _meta_result(
+                        ToolResult(
+                            success=False,
+                            error=(
+                                f"needs_confirmation: {pending.id} {pending.description}"
+                                "（请在右栏浏览器面板确认）"
+                            ),
+                        ),
+                        session,
+                        "interact",
+                        **target_fields,
+                    )
+                approval = "approved"
             outcome = _evaluate_json(session, expression, None)
         except BrowserCDPError as exc:
             return _meta_error(exc, session, "interact")
-        target_fields = {"target_ref": ref or selector, "target_name": text}
         if not isinstance(outcome, dict):
+            _record_browser_audit(
+                session,
+                "browser_interact",
+                action,
+                "error",
+                approval=approval,
+                duration_ms=_elapsed_ms(started),
+                **audit_target,
+            )
             return _meta_result(
                 ToolResult(success=False, error="交互结果异常（非 JSON）"),
                 session,
@@ -1164,6 +1480,15 @@ class BrowserInteractTool(BaseTool):
             _remember_page(session, page_url, page_title)
         info = outcome.get("info", "")
         if info == STALE_REF_INFO:
+            _record_browser_audit(
+                session,
+                "browser_interact",
+                action,
+                "error",
+                approval=approval,
+                duration_ms=_elapsed_ms(started),
+                **audit_target,
+            )
             return _meta_result(
                 ToolResult(success=False, error=STALE_REF_ERROR),
                 session,
@@ -1173,6 +1498,17 @@ class BrowserInteractTool(BaseTool):
                 **target_fields,
             )
         if not outcome.get("ok"):
+            _record_browser_audit(
+                session,
+                "browser_interact",
+                action,
+                "error",
+                approval=approval,
+                duration_ms=_elapsed_ms(started),
+                domain=domain or browser_safety.domain_of(page_url),
+                target_ref=ref or selector,
+                target_desc=target_name or page_title,
+            )
             return _meta_result(
                 ToolResult(
                     success=False,
@@ -1185,6 +1521,17 @@ class BrowserInteractTool(BaseTool):
                 **target_fields,
             )
         thumbnail = _capture_step_thumbnail(session)
+        _record_browser_audit(
+            session,
+            "browser_interact",
+            action,
+            "ok",
+            approval=approval,
+            duration_ms=_elapsed_ms(started),
+            domain=domain or browser_safety.domain_of(page_url),
+            target_ref=ref or selector,
+            target_desc=target_name or page_title,
+        )
         return _meta_result(
             ToolResult(success=True, content={"action": action, "info": info}),
             session,
@@ -1326,6 +1673,7 @@ class BrowserCloseTool(BaseTool):
                 has_remaining_pages = True
             if not has_remaining_pages:
                 get_browser_control().reset(session.browser_id)
+                browser_safety.reset_session(session.browser_id)
             return ToolResult(success=True, content={"closed": "target", "target_id": target_id})
 
         if getattr(session, "browser_type", None) == "external":
@@ -1340,6 +1688,7 @@ class BrowserCloseTool(BaseTool):
         _terminate_session(session)
         # 控制面复位：关闭后不残留 paused/takeover，元数据缓存一并清理
         get_browser_control().reset(session.browser_id)
+        browser_safety.reset_session(session.browser_id)
         _LAST_PAGE.pop(session.browser_id, None)
         _LAST_LOGIN_WALL.pop(session.browser_id, None)
         return ToolResult(

@@ -8,6 +8,8 @@ from typing import List
 import pytest
 
 import backend.api.browser_use_routes as routes
+from backend.data import browser_action_repo
+from backend.services import browser_safety
 from backend.services.browser_control import (
     BrowserControlState,
     get_browser_control,
@@ -161,3 +163,246 @@ async def test_origin_guard_rejects_foreign_origin(client, control_env):
     posted = await client.post(f"{BASE}/s1", json={"action": "pause"}, headers=headers)
     assert posted.status_code == 403
     assert get_browser_control().get_state("s1") is BrowserControlState.AGENT
+
+
+# ---------------------------------------------------------------------------
+# M4：使用偏好 / 站点策略 / 待确认 / 审计
+# ---------------------------------------------------------------------------
+
+BASE_M4 = "/api/v1/browser"
+
+
+@pytest.fixture()
+def safety_env():
+    browser_safety.reset_confirmations_for_tests()
+    browser_safety.reset_site_policies_for_tests()
+    reset_browser_control_for_tests()
+    yield browser_safety.get_confirmation_registry()
+    browser_safety.reset_confirmations_for_tests()
+    browser_safety.reset_site_policies_for_tests()
+    reset_browser_control_for_tests()
+
+
+def _create_site_confirmation(session_id="s1", domain="example.com", fingerprint="fp-site"):
+    return browser_safety.get_confirmation_registry().create(
+        session_id,
+        "site_access",
+        code="site_access",
+        domain=domain,
+        description=f"访问站点 {domain}",
+        options=list(browser_safety.SITE_ACCESS_OPTIONS),
+        fingerprint=fingerprint,
+    )
+
+
+def _create_action_confirmation(session_id="s1", fingerprint="fp-action"):
+    return browser_safety.get_confirmation_registry().create(
+        session_id,
+        "sensitive_action",
+        code="sensitive_submit",
+        domain="example.com",
+        description="提交订单",
+        options=list(browser_safety.SENSITIVE_ACTION_OPTIONS),
+        fingerprint=fingerprint,
+    )
+
+
+async def test_use_config_defaults_and_put_persists(client, safety_env):
+    initial = await client.get(f"{BASE_M4}/use-config")
+    assert initial.status_code == 200
+    assert initial.json() == {"default_visible": True, "step_thumbnails": True}
+
+    updated = await client.put(
+        f"{BASE_M4}/use-config", json={"step_thumbnails": False}
+    )
+    assert updated.status_code == 200
+    assert updated.json() == {"default_visible": True, "step_thumbnails": False}
+
+    reread = await client.get(f"{BASE_M4}/use-config")
+    assert reread.json() == {"default_visible": True, "step_thumbnails": False}
+
+    # 空 body 不改变任何字段
+    noop = await client.put(f"{BASE_M4}/use-config", json={})
+    assert noop.status_code == 200
+    assert noop.json() == {"default_visible": True, "step_thumbnails": False}
+
+
+async def test_use_config_rejects_unknown_fields(client, safety_env):
+    resp = await client.put(f"{BASE_M4}/use-config", json={"surprise": True})
+    assert resp.status_code == 422
+
+
+async def test_site_policies_list_put_delete(client, safety_env):
+    empty = await client.get(f"{BASE_M4}/site-policies")
+    assert empty.status_code == 200
+    assert empty.json() == {"policies": []}
+
+    put = await client.put(
+        f"{BASE_M4}/site-policies/Example.com", json={"mode": "allow"}
+    )
+    assert put.status_code == 200
+    body = put.json()
+    assert body["domain"] == "example.com"
+    assert body["mode"] == "allow"
+    assert body["updated_at"] > 0
+
+    listed = await client.get(f"{BASE_M4}/site-policies")
+    assert [item["domain"] for item in listed.json()["policies"]] == ["example.com"]
+
+    deleted = await client.delete(f"{BASE_M4}/site-policies/example.com")
+    assert deleted.status_code == 200
+    assert deleted.json() == {"ok": True, "domain": "example.com"}
+
+    again = await client.delete(f"{BASE_M4}/site-policies/example.com")
+    assert again.status_code == 404
+    assert again.json() == {"ok": False, "error": "policy_not_found"}
+
+
+async def test_site_policy_put_rejects_invalid_mode(client, safety_env):
+    resp = await client.put(f"{BASE_M4}/site-policies/example.com", json={"mode": "maybe"})
+    assert resp.status_code == 400
+    assert resp.json()["ok"] is False
+
+
+async def test_confirmations_list_and_approve(client, control_env, safety_env):
+    pending = _create_action_confirmation()
+    get_browser_control().set_state("s1", BrowserControlState.PAUSED)
+
+    listed = await client.get(f"{BASE_M4}/confirmations", params={"session_id": "s1"})
+    assert listed.status_code == 200
+    items = listed.json()["confirmations"]
+    assert [item["id"] for item in items] == [pending.id]
+    assert "fingerprint" not in items[0]
+    assert items[0]["options"] == ["approve", "deny"]
+
+    approved = await client.post(
+        f"{BASE_M4}/confirmations/{pending.id}", json={"decision": "approve"}
+    )
+    assert approved.status_code == 200
+    assert approved.json() == {
+        "confirmation_id": pending.id,
+        "kind": "sensitive_action",
+        "decision": "approve",
+        "control_state": "agent",
+    }
+    assert get_browser_control().get_state("s1") is BrowserControlState.AGENT
+    assert browser_safety.get_confirmation_registry().consume_approval(
+        "fp-action"
+    ) is True
+    # 重复裁决：待确认项已被移除
+    again = await client.post(
+        f"{BASE_M4}/confirmations/{pending.id}", json={"decision": "approve"}
+    )
+    assert again.status_code == 404
+
+
+async def test_confirmation_deny_registers_denial(client, control_env, safety_env):
+    pending = _create_action_confirmation()
+
+    denied = await client.post(
+        f"{BASE_M4}/confirmations/{pending.id}", json={"decision": "deny"}
+    )
+    assert denied.status_code == 200
+    assert denied.json()["decision"] == "deny"
+    assert browser_safety.get_confirmation_registry().is_denied("fp-action") is True
+
+
+async def test_site_confirmation_always_grants_persistent_allow(
+    client, control_env, safety_env
+):
+    pending = _create_site_confirmation()
+
+    resp = await client.post(
+        f"{BASE_M4}/confirmations/{pending.id}", json={"decision": "always"}
+    )
+    assert resp.status_code == 200
+    assert browser_safety.check_site("other-session", "https://example.com/") == "allow"
+
+
+async def test_site_confirmation_session_grants_only_that_session(
+    client, control_env, safety_env
+):
+    pending = _create_site_confirmation(session_id="s1")
+
+    resp = await client.post(
+        f"{BASE_M4}/confirmations/{pending.id}", json={"decision": "session"}
+    )
+    assert resp.status_code == 200
+    assert browser_safety.check_site("s1", "https://example.com/") == "allow"
+    assert browser_safety.check_site("s2", "https://example.com/") == "confirm"
+
+
+async def test_confirmation_validation_errors(client, control_env, safety_env):
+    action_pending = _create_action_confirmation()
+
+    invalid_decision = await client.post(
+        f"{BASE_M4}/confirmations/{action_pending.id}", json={"decision": "maybe"}
+    )
+    assert invalid_decision.status_code == 400
+    assert "maybe" in invalid_decision.json()["error"]
+
+    # approve 不适用于 site_access（合法值为 session|always|deny）
+    site_pending = _create_site_confirmation()
+    wrong_kind = await client.post(
+        f"{BASE_M4}/confirmations/{site_pending.id}", json={"decision": "approve"}
+    )
+    assert wrong_kind.status_code == 400
+
+    unknown = await client.post(
+        f"{BASE_M4}/confirmations/ghost", json={"decision": "approve"}
+    )
+    assert unknown.status_code == 404
+    assert unknown.json() == {"ok": False, "error": "confirmation_not_found"}
+
+
+async def test_audit_lists_recent_filtered_by_session(client, safety_env):
+    browser_action_repo.record(
+        {
+            "session_id": "s1",
+            "ts": 1737000000000,
+            "domain": "example.com",
+            "tool": "browser_navigate",
+            "action": "navigate",
+            "result": "ok",
+            "approval": "auto",
+            "duration_ms": 5,
+        }
+    )
+    browser_action_repo.record(
+        {
+            "session_id": "s2",
+            "ts": 1737000001000,
+            "domain": "other.example",
+            "tool": "browser_interact",
+            "action": "click",
+            "result": "blocked",
+            "approval": "none",
+            "duration_ms": 1,
+        }
+    )
+
+    mine = await client.get(f"{BASE_M4}/audit", params={"session_id": "s1"})
+    assert mine.status_code == 200
+    entries = mine.json()["entries"]
+    assert len(entries) == 1
+    assert entries[0]["tool"] == "browser_navigate"
+    assert entries[0]["domain"] == "example.com"
+
+    everything = await client.get(f"{BASE_M4}/audit", params={"limit": 10})
+    assert len(everything.json()["entries"]) == 2
+
+
+async def test_m4_origin_guard(client, control_env, safety_env):
+    headers = {"Origin": "https://evil.example"}
+
+    config = await client.get(f"{BASE_M4}/use-config", headers=headers)
+    assert config.status_code == 403
+    assert config.json() == {"ok": False, "error": "forbidden_origin"}
+
+    policy = await client.put(
+        f"{BASE_M4}/site-policies/example.com", json={"mode": "allow"}, headers=headers
+    )
+    assert policy.status_code == 403
+
+    audit = await client.get(f"{BASE_M4}/audit", headers=headers)
+    assert audit.status_code == 403

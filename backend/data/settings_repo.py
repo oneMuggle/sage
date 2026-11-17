@@ -140,6 +140,10 @@ class SettingsRepository:
             # 受控浏览器默认可见（"1" 可见 / "0" 无头，缺省按可见）。
             # 读取口径见 backend/tools/browser_tool.py:_browser_default_visible
             "browser_use_default_visible",
+            # 受控浏览器站点授权持久策略（JSON:
+            # {"example.com": {"mode": "allow"|"block", "updated_at": <ms>}}）。
+            # 读取/写入口径见 backend/services/browser_safety.py
+            "browser_site_policies",
         }
     )
 
