@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import {
   resolveBackendLaunchCommand,
   resolveDoctorLaunchCommand,
+  resolveModuleLaunchCommand,
   type ResolveOpts,
 } from '../backendLauncher';
 
@@ -633,5 +634,35 @@ describe('resolveBackendLaunchCommand', () => {
         expect(doctorPlan.env.PYTHON_BACKEND_PORT).toBe('8765');
       }
     });
+  });
+});
+
+describe('resolveModuleLaunchCommand', () => {
+  it('swaps backend.main for an arbitrary module while keeping conda prefix', () => {
+    const plan = resolveModuleLaunchCommand(
+      makeOpts({ isPackaged: false }),
+      'backend.cli.components',
+      ['list', '--json'],
+    );
+    expect(plan?.args).toEqual([
+      'run',
+      '-n',
+      'sage-backend',
+      'python',
+      '-m',
+      'backend.cli.components',
+      'list',
+      '--json',
+    ]);
+    expect(plan?.env.SAGE_USER_DATA_DIR).toBe('/mock/userData');
+  });
+
+  it('returns undefined for a broken installer', () => {
+    const plan = resolveModuleLaunchCommand(
+      makeOpts({ isPackaged: true, resourcesPath: undefined }),
+      'backend.cli.components',
+      ['list'],
+    );
+    expect(plan).toBeUndefined();
   });
 });

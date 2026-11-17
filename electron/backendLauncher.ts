@@ -412,34 +412,67 @@ function packagedEnv(
  *   threads the full argv through so conda runs as
  *   `conda run -n sage-backend python -m backend.cli.doctor --json`.
  */
-export function resolveDoctorLaunchCommand(opts: ResolveOpts): DoctorLaunchPlan | undefined {
+export type CliLaunchPlan = DoctorLaunchPlan;
+
+/**
+ * Derive a Python `-m <module>` invocation from the same decision tree the
+ * backend supervisor uses. Keeps conda's `run -n ... python` prefix intact
+ * while swapping only the trailing module entry.
+ */
+export function resolveModuleLaunchCommand(
+  opts: ResolveOpts,
+  moduleName: string,
+  moduleArgs: readonly string[],
+): CliLaunchPlan | undefined {
   const plan = resolveBackendLaunchCommand(opts);
   if (plan.kind === 'broken-installer') return undefined;
 
-  // Swap the trailing `-m backend.main` for the doctor entry. All four
-  // spawn reasons end with `-m <module>`; replacing the last token
-  // preserves any conda/argv prefix verbatim.
   const args = [...plan.args];
   const mainIdx = args.lastIndexOf('backend.main');
   if (mainIdx >= 0) {
-    args.splice(mainIdx, 1, 'backend.cli.doctor', '--json');
+    args.splice(mainIdx, 1, moduleName, ...moduleArgs);
   } else {
-    // Defensive: if for any reason the parent plan doesn't end with
-    // `-m backend.main` (future refactor), append the doctor entry so
-    // we still produce a runnable command rather than spawning the
-    // backend by mistake.
-    args.push('-m', 'backend.cli.doctor', '--json');
+    // Defensive: future launch plans may not end with backend.main.
+    args.push('-m', moduleName, ...moduleArgs);
   }
-
-  // Merge supervisor env so the doctor subprocess probes the exact
-  // context the real backend will see.
-  const env: Record<string, string> = { ...plan.env, ...plan.extraEnv };
 
   return {
     command: plan.command,
     args,
     cwd: plan.cwd,
-    env,
+    env: { ...plan.env, ...plan.extraEnv },
     reason: plan.reason,
   };
+}
+
+/**
+ * Derive doctor argv/env from the same ResolveOpts the supervisor uses.
+ *
+ * Behaviour:
+ *   - Wraps `resolveBackendLaunchCommand(opts)` so the launch decision
+ *     tree (dev-conda / SAGE_PYTHON override / packaged bundles) stays
+ *     in one place.
+ *   - Replaces the trailing `-m backend.main` argv entry with
+ *     `-m backend.cli.doctor --json`. Conda- and packaged-launched Python
+ *     both consume `-m <module>` identically, so the swap is safe across
+ *     all four spawn reasons.
+ *   - Merges `plan.env` + `plan.extraEnv` so the doctor subprocess sees
+ *     the same SAGE_DB_PATH / SAGE_USER_DATA_DIR / PYTHON_BACKEND_PORT
+ *     the backend supervisor will set on the real spawn. Without the
+ *     merge the doctor would probe against host defaults and miss the
+ *     user-data-dir / port / db-path the production backend uses.
+ *   - Returns `undefined` for broken-installer (caller falls back to a
+ *     bare `python` invocation so doctor remains fail-open in CI).
+ *
+ * Critical regression (2026-08-26):
+ *   Previously main.ts passed `pythonBin=doctorPlan.command` to
+ *   `runDoctorCheck`, which then hard-coded `['-m', 'backend.cli.doctor',
+ *   '--json']`. When `doctorPlan.command === 'conda'` (the dev-conda
+ *   branch) this produced the invalid `conda -m backend.cli.doctor
+ *   --json` invocation — conda has no `-m` subcommand. This helper
+ *   threads the full argv through so conda runs as
+ *   `conda run -n sage-backend python -m backend.cli.doctor --json`.
+ */
+export function resolveDoctorLaunchCommand(opts: ResolveOpts): DoctorLaunchPlan | undefined {
+  return resolveModuleLaunchCommand(opts, 'backend.cli.doctor', ['--json']);
 }
