@@ -17,6 +17,38 @@ from backend.tools.browser_launcher import (
 )
 
 
+def test_discover_and_select_user_path_beats_embedded(monkeypatch, tmp_path):
+    """设置页选择真实浏览器后，优先于 Win7 内置兜底内核。"""
+    fake = tmp_path / "chrome.exe"
+    fake.write_text("bin")
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER", "1")
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER_PORT", "9411")
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER_TOKEN", "tok")
+    monkeypatch.delenv("SAGE_BROWSER_PATH", raising=False)
+    monkeypatch.delenv("SAGE_FIREFOX_PATH", raising=False)
+
+    cap = discover_and_select(str(fake))
+    assert cap is not None
+    assert cap.browser_type == BrowserType.CHROME
+    assert cap.executable == str(fake)
+
+    embedded = discover_and_select("(embedded)")
+    assert embedded is not None
+    assert embedded.browser_type == BrowserType.EMBEDDED
+
+
+def test_discover_and_select_env_path_beats_user_path(monkeypatch, tmp_path):
+    env_exe = tmp_path / "env-chrome"
+    env_exe.write_text("bin")
+    user_exe = tmp_path / "user-chrome"
+    user_exe.write_text("bin")
+    monkeypatch.setenv("SAGE_BROWSER_PATH", str(env_exe))
+    monkeypatch.delenv("SAGE_EMBEDDED_BROWSER", raising=False)
+
+    cap = discover_and_select(str(user_exe))
+    assert cap.executable == str(env_exe)
+
+
 def test_infer_browser_type():
     assert _infer_browser_type("/usr/bin/google-chrome") == BrowserType.CHROME
     assert _infer_browser_type(r"C:\Program Files\Google\Chrome\Application\chrome.exe") == BrowserType.CHROME

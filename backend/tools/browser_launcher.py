@@ -337,7 +337,8 @@ def _discover_embedded() -> Optional[BrowserCapability]:
     )
 
 
-def _discover_from_env() -> Optional[BrowserCapability]:
+def _discover_env_browser_path() -> Optional[BrowserCapability]:
+    """显式环境变量指定的浏览器（优先级最高：运维/CI/排障覆盖用）。"""
     env_browser = os.environ.get("SAGE_BROWSER_PATH")
     if env_browser and Path(env_browser).is_file():
         return _create_capability(_infer_browser_type(env_browser), env_browser)
@@ -345,9 +346,18 @@ def _discover_from_env() -> Optional[BrowserCapability]:
     env_firefox = os.environ.get("SAGE_FIREFOX_PATH")
     if env_firefox and Path(env_firefox).is_file():
         return _create_capability(BrowserType.FIREFOX, env_firefox)
+    return None
 
-    # 显式路径优先；否则使用 Electron 内置浏览器（仅 Win7 / 强制开关时注入）
-    return _discover_embedded()
+
+def _discover_user_path(user_path: Optional[str]) -> Optional[BrowserCapability]:
+    """设置页选择的浏览器；`(embedded)` 哨兵解析为内置内核（环境可用时）。"""
+    if not user_path:
+        return None
+    if user_path == EMBEDDED_EXECUTABLE:
+        return _discover_embedded()
+    if Path(user_path).is_file():
+        return _create_capability(_infer_browser_type(user_path), user_path)
+    return None
 
 
 def _discover_windows() -> Optional[BrowserCapability]:
@@ -391,10 +401,12 @@ def _discover_path_browsers() -> Optional[BrowserCapability]:
     return None
 
 
-def discover_and_select() -> Optional[BrowserCapability]:
-    """按优先级顺序发现并选择首选浏览器。"""
+def discover_and_select(user_path: Optional[str] = None) -> Optional[BrowserCapability]:
+    """按优先级发现浏览器：显式 env → 用户选择 → Win7 内置兜底 → 平台扫描。"""
     return (
-        _discover_from_env()
+        _discover_env_browser_path()
+        or _discover_user_path(user_path)
+        or _discover_embedded()
         or _discover_windows()
         or _discover_darwin()
         or _discover_path_browsers()

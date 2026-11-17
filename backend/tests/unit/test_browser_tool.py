@@ -450,7 +450,8 @@ def test_unknown_browser_id_maps_to_error():
 
 def test_launch_tool_reports_discovery_failure(monkeypatch):
     monkeypatch.setattr(browser_cdp, "discover_browser_executable", lambda: None)
-    monkeypatch.setattr(browser_cdp, "discover_and_select", lambda: None)
+    # discover_and_select 自 2026-11 起接受可选 user_path（设置页选择优先）
+    monkeypatch.setattr(browser_cdp, "discover_and_select", lambda *_args, **_kwargs: None)
     result = _tool(BrowserLaunchTool).execute()
     assert result.success is False
     assert "SAGE_BROWSER_PATH" in result.error

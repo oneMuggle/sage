@@ -146,19 +146,9 @@ def _get_user_browser_path() -> Optional[str]:
 
 
 def discover_browser_executable() -> Optional[str]:
-    """按 环境变量 → 用户设置 → 平台能力发现 顺序找 Chromium / Firefox 系浏览器。"""
-    if _discover_embedded_env():
-        return EMBEDDED_EXECUTABLE
-    env_override = os.environ.get("SAGE_BROWSER_PATH")
-    if env_override and Path(env_override).is_file():
-        return env_override
-    user_override = _get_user_browser_path()
-    if user_override:
-        return user_override
-    cap = discover_and_select()
-    if cap:
-        return cap.executable
-    return None
+    """按 环境变量 → 用户设置 → 内置兜底 → 平台能力发现 顺序找浏览器。"""
+    cap = discover_and_select(_get_user_browser_path())
+    return cap.executable if cap else None
 
 
 def _darwin_candidates() -> Optional[str]:
@@ -591,7 +581,8 @@ def launch_browser(
     Raises:
         BrowserCDPError: 找不到浏览器 / 启动超时 / 实例数超限。
     """
-    cap = discover_and_select()
+    # 设置页选择的浏览器优先于 Win7 内置兜底；显式环境变量仍最高（见 discover_and_select）
+    cap = discover_and_select(_get_user_browser_path())
     if not cap:
         raise BrowserCDPError(
             "未找到 Chrome/Edge/Firefox 浏览器：请安装或用环境变量 SAGE_BROWSER_PATH / SAGE_FIREFOX_PATH 指定可执行文件路径"
