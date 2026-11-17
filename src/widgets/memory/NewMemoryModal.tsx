@@ -44,6 +44,8 @@ export function formatNewMemoryDraftJson(params: NewMemoryDraftSnapshot): string
 
 export function NewMemoryModal({ isOpen, onClose, onSaved }: NewMemoryModalProps) {
   const [content, setContent] = useState('');
+  // 2026-11-17 记忆详情化：标题可选，留空由后端按内容确定性生成。
+  const [title, setTitle] = useState('');
   const [memoryType, setMemoryType] = useState<'episodic' | 'semantic'>('episodic');
   const [importance, setImportance] = useState(5);
   const [saving, setSaving] = useState(false);
@@ -51,6 +53,7 @@ export function NewMemoryModal({ isOpen, onClose, onSaved }: NewMemoryModalProps
 
   const resetForm = () => {
     setContent('');
+    setTitle('');
     setMemoryType('episodic');
     setImportance(5);
     setError(null);
@@ -67,7 +70,15 @@ export function NewMemoryModal({ isOpen, onClose, onSaved }: NewMemoryModalProps
     setSaving(true);
     setError(null);
     try {
-      await memoryApi.saveMemory(content.trim(), memoryType, importance);
+      await memoryApi.saveMemory(
+        content.trim(),
+        memoryType,
+        importance,
+        undefined,
+        undefined,
+        undefined,
+        title.trim() || undefined,
+      );
       resetForm();
       onSaved?.();
       onClose();
@@ -82,10 +93,23 @@ export function NewMemoryModal({ isOpen, onClose, onSaved }: NewMemoryModalProps
     <Modal isOpen={isOpen} onClose={handleClose} title="新建记忆">
       <div className="space-y-3">
         <div>
-          <label
-            htmlFor="new-memory-content"
-            className="block text-xs text-text-secondary mb-1"
-          >
+          <label htmlFor="new-memory-title" className="block text-xs text-text-secondary mb-1">
+            标题（可选）
+          </label>
+          <input
+            id="new-memory-title"
+            data-testid="memory-title-input"
+            type="text"
+            value={title}
+            maxLength={60}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full px-3 py-2 border border-border rounded text-sm bg-bg text-text focus:outline-none focus:border-primary"
+            placeholder="留空则按内容自动生成"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="new-memory-content" className="block text-xs text-text-secondary mb-1">
             内容
           </label>
           <textarea
@@ -132,10 +156,7 @@ export function NewMemoryModal({ isOpen, onClose, onSaved }: NewMemoryModalProps
         </div>
 
         <div>
-          <label
-            htmlFor="new-memory-importance"
-            className="block text-xs text-text-secondary mb-1"
-          >
+          <label htmlFor="new-memory-importance" className="block text-xs text-text-secondary mb-1">
             重要性: {importance}/10
           </label>
           <input

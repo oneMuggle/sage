@@ -21,6 +21,13 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
+# Windows consoles/CI runners default to cp1252; the progress output below uses
+# ✓ and Chinese text, which would otherwise raise UnicodeEncodeError.
+for _stream in (sys.stdout, sys.stderr):
+    _reconfigure = getattr(_stream, "reconfigure", None)
+    if _reconfigure is not None:
+        _reconfigure(encoding="utf-8", errors="replace")
+
 FIXED_ZIP_TIME = (1980, 1, 1, 0, 0, 0)
 SKIP_DIRS = {"__pycache__", ".git", ".pytest_cache"}
 

@@ -803,6 +803,7 @@ class Database:
                 id TEXT PRIMARY KEY,
                 session_id TEXT,
                 content TEXT NOT NULL,
+                title TEXT,
                 summary TEXT,
                 memory_type TEXT DEFAULT 'conversation',
                 importance INTEGER DEFAULT 5 CHECK (importance BETWEEN 1 AND 10),
@@ -849,6 +850,12 @@ class Database:
         if "agent_id" not in _episodic_columns:
             cursor.execute(
                 "ALTER TABLE memories_episodic ADD COLUMN agent_id TEXT"
+            )
+        # 2026-11-17 记忆详情化：结构化标题（写入时确定性生成/LLM 提取/用户手填）。
+        # 存量行为 NULL —— 读取路径（_enrich_memory_records）按 content 兜底推导。
+        if "title" not in _episodic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_episodic ADD COLUMN title TEXT"
             )
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_episodic_scope_project
@@ -1832,6 +1839,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS memories_semantic (
                 id TEXT PRIMARY KEY,
                 content TEXT NOT NULL,
+                title TEXT,
                 summary TEXT,
                 tags TEXT DEFAULT '[]',
                 created_at INTEGER NOT NULL,
@@ -1865,6 +1873,11 @@ class Database:
         if "agent_id" not in _semantic_columns:
             cursor.execute(
                 "ALTER TABLE memories_semantic ADD COLUMN agent_id TEXT"
+            )
+        # 2026-11-17 记忆详情化：结构化标题，同 memories_episodic。
+        if "title" not in _semantic_columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN title TEXT"
             )
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_semantic_scope_project

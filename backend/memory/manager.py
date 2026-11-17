@@ -429,6 +429,7 @@ class MemoryManager:
         project_key: Optional[str] = None,
         supersedes_id: Optional[str] = None,
         agent_id: Optional[str] = None,
+        title: Optional[str] = None,
     ) -> Optional[str]:
         """
         通用记忆存储接口
@@ -450,6 +451,8 @@ class MemoryManager:
                 （旧条由调用方先行 invalidate()）
             agent_id: M3 归属专家。``None``（默认）= 共享层；
                 给定时按 ``memory_policy.write_scope`` 决定私有/共享。
+            title: 2026-11-17 记忆详情化——可读标题；缺省由存储层按内容
+                确定性生成（``derive_title``）。
 
         Returns:
             记忆 ID：
@@ -488,6 +491,7 @@ class MemoryManager:
                 project_key=project_key,
                 supersedes_id=supersedes_id,
                 agent_id=write_agent_id,
+                title=title or meta.get("title"),
             )
 
         elif resolved == "semantic":
@@ -501,6 +505,7 @@ class MemoryManager:
                 project_key=project_key,
                 supersedes_id=supersedes_id,
                 agent_id=write_agent_id,
+                title=title or meta.get("title"),
             )
 
         else:
@@ -552,6 +557,7 @@ class MemoryManager:
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
         agent_id: Optional[str] = None,
+        title: Optional[str] = None,
     ) -> Tuple[str, str]:
         """带 P3 冲突消解的记忆写入。
 
@@ -577,6 +583,7 @@ class MemoryManager:
                 scope=scope,
                 project_key=project_key,
                 agent_id=agent_id,
+                title=title,
             )
             return mid or "", OP_ADD
 
@@ -600,6 +607,7 @@ class MemoryManager:
                 metadata=metadata,
                 session_id=session_id,
                 agent_id=agent_id,
+                title=title,
             )
             return new_id or "", op
 
@@ -613,6 +621,7 @@ class MemoryManager:
             scope=scope,
             project_key=project_key,
             agent_id=agent_id,
+            title=title,
         )
         return mid or "", OP_ADD
 

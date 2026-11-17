@@ -234,6 +234,47 @@ async def test_bare_port_falls_back_gracefully():
     assert extractor.received["tool_observations"] == ""
 
 
+class TitleAwarePort(BarePort):
+    """显式接受 title 参数的 port（MemoryAdapter 形态）。"""
+
+    def __init__(self):
+        super().__init__()
+        self.titles = []
+
+    async def store(
+        self, content, session_id=None, importance=5, tags=None, agent_id=None, title=None
+    ):
+        self.titles.append(title)
+        return await super().store(content, session_id, importance, tags, agent_id)
+
+
+@pytest.mark.asyncio()
+async def test_title_forwarded_when_port_supports_it():
+    """2026-11-17：端口接受 title 时，提取器产出的短标题要透传落库。"""
+    port = TitleAwarePort()
+    extractor = FakeExtractor(
+        [
+            {
+                "content": "用户偏好函数式编程",
+                "title": "函数式编程偏好",
+                "importance": 6,
+                "category": "fact",
+                "tags": [],
+            }
+        ]
+    )
+    stored = await extract_and_store_memory(
+        memory_port=port,
+        extractor=extractor,
+        user_text="u" * 30,
+        assistant_text="a" * 60,
+        session_id=None,
+        enabled=True,
+    )
+    assert stored == 1
+    assert port.titles == ["函数式编程偏好"]
+
+
 # ---- UserProfileStore environment ------------------------------------------ #
 
 
