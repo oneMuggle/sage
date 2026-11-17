@@ -35,6 +35,7 @@ from backend.tools.browser_tool import (
     BrowserNavigateTool,
     BrowserScreenshotTool,
     BrowserSnapshotTool,
+    BrowserTabsTool,
     _capture_local_storage,
     _js_click,
     _js_type,
@@ -439,6 +440,137 @@ def test_close_target_vs_browser(stubbed, monkeypatch):
     assert result.success is True
     assert result.content["closed"] == "browser"
     assert removed.get("b1") is True
+
+
+# ---------------------------------------------------------------------------
+# browser_tabs：标签页管理
+# ---------------------------------------------------------------------------
+
+
+def _page(target_id: str, url: str = "https://x/", title: str = "X") -> Dict[str, Any]:
+    return {"targetId": target_id, "url": url, "title": title, "type": "page"}
+
+
+def _stub_tabs(monkeypatch, pages):
+    """browser_tool 与 browser_cdp 两处同名引用都对齐同一页列表。"""
+    monkeypatch.setattr(browser_tool, "_list_page_targets", lambda session: pages)
+    monkeypatch.setattr(browser_cdp, "_list_page_targets", lambda session: pages)
+
+
+def test_tabs_list_marks_active_without_creating(stubbed, monkeypatch):
+    pages = [_page("t1"), _page("t2", "https://b/", "B")]
+    _stub_tabs(monkeypatch, pages)
+
+    # 未跟踪 active → 标记第一个页面，且不得创建标签页
+    result = _tool(BrowserTabsTool).execute(action="list", browser_id="b1")
+    assert result.success is True
+    assert result.content["count"] == 2
+    assert [tab["tab_id"] for tab in result.content["tabs"]] == ["t1", "t2"]
+    assert [tab["active"] for tab in result.content["tabs"]] == [True, False]
+    assert stubbed.calls == []
+
+    # 跟踪的 active 有效 → 标记它
+    stubbed.session.active_target_id = "t2"
+    result = _tool(BrowserTabsTool).execute(action="list", browser_id="b1")
+    assert [tab["active"] for tab in result.content["tabs"]] == [False, True]
+    assert stubbed.calls == []
+
+
+def test_tabs_create_sets_active_and_passes_url(stubbed):
+    stubbed.results.append({"targetId": "t-new"})
+    result = _tool(BrowserTabsTool).execute(
+        action="create", url="https://example.com/a", browser_id="b1"
+    )
+    assert result.success is True
+    assert result.content["tab_id"] == "t-new"
+    assert stubbed.calls[0]["method"] == "Target.createTarget"
+    assert stubbed.calls[0]["params"] == {"url": "https://example.com/a"}
+    assert stubbed.session.active_target_id == "t-new"
+
+
+def test_tabs_create_defaults_to_about_blank(stubbed):
+    stubbed.results.append({"targetId": "t-blank"})
+    result = _tool(BrowserTabsTool).execute(action="create", browser_id="b1")
+    assert result.success is True
+    assert stubbed.calls[0]["params"] == {"url": "about:blank"}
+
+
+def test_tabs_create_rejects_file_scheme(stubbed):
+    result = _tool(BrowserTabsTool).execute(action="create", url="file:///etc/passwd")
+    assert result.success is False
+    assert "file" in result.error
+    assert stubbed.calls == []
+
+
+def test_tabs_switch_by_tab_id_and_ensure_prefers_active(stubbed, monkeypatch):
+    pages = [_page("t1"), _page("t2", "https://b/", "B")]
+    _stub_tabs(monkeypatch, pages)
+    stubbed.results.append(
+        {"result": {"value": json.dumps({"url": "https://b/", "title": "B"})}}
+    )
+
+    result = _tool(BrowserTabsTool).execute(action="switch", tab_id="t2", browser_id="b1")
+    assert result.success is True
+    assert result.content == {"tab_id": "t2", "url": "https://b/", "title": "B"}
+    assert stubbed.session.active_target_id == "t2"
+    # 后续无 target_id 的调用（snapshot/interact）落到新 active
+    assert browser_cdp.ensure_page_target(stubbed.session, None) == "t2"
+
+
+def test_tabs_switch_by_index(stubbed, monkeypatch):
+    pages = [_page("t1"), _page("t2")]
+    _stub_tabs(monkeypatch, pages)
+    stubbed.results.append(
+        {"result": {"value": json.dumps({"url": "https://x/", "title": "X"})}}
+    )
+    result = _tool(BrowserTabsTool).execute(action="switch", index=1, browser_id="b1")
+    assert result.success is True
+    assert stubbed.session.active_target_id == "t1"
+
+
+def test_tabs_switch_index_out_of_range(stubbed, monkeypatch):
+    _stub_tabs(monkeypatch, [_page("t1")])
+    result = _tool(BrowserTabsTool).execute(action="switch", index=2, browser_id="b1")
+    assert result.success is False
+    assert "index 超出范围" in result.error
+    assert "1 个标签页" in result.error
+
+
+def test_tabs_close_active_clears_tracking(stubbed, monkeypatch):
+    pages = [_page("t1"), _page("t2")]
+    _stub_tabs(monkeypatch, pages)
+    stubbed.session.active_target_id = "t2"
+    stubbed.results.append({})
+
+    result = _tool(BrowserTabsTool).execute(action="close", tab_id="t2", browser_id="b1")
+    assert result.success is True
+    assert result.content == {"closed": "t2", "was_active": True, "remaining": 1}
+    assert stubbed.calls[0]["method"] == "Target.closeTarget"
+    assert stubbed.calls[0]["params"] == {"targetId": "t2"}
+    assert stubbed.session.active_target_id is None
+
+
+def test_tabs_close_nonexistent_tab_errors(stubbed, monkeypatch):
+    _stub_tabs(monkeypatch, [_page("t1")])
+    result = _tool(BrowserTabsTool).execute(
+        action="close", tab_id="ghost", browser_id="b1"
+    )
+    assert result.success is False
+    assert "未知 tab_id" in result.error
+    assert stubbed.calls == []
+
+
+def test_tabs_argument_validation():
+    tool = _tool(BrowserTabsTool)
+    assert tool.execute(action="dance").success is False
+    assert tool.execute(action="switch").success is False
+    conflict = tool.execute(action="switch", tab_id="t1", index=1)
+    assert conflict.success is False
+    assert "二选一" in conflict.error
+    assert tool.execute(action="switch", index="abc").success is False
+    unknown = tool.execute(action="list", bogus=1)
+    assert unknown.success is False
+    assert "bogus" in unknown.error
 
 
 def test_unknown_browser_id_maps_to_error():

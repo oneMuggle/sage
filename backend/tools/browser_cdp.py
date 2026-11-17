@@ -197,6 +197,9 @@ class BrowserSession:
     #: External：用户共享标签页的 Chrome tabId（仅内存持有）
     external_tab_id: str = ""
 
+    #: 当前活动标签页（browser_tabs switch/create 设置；None = 解析为第一个页面）
+    active_target_id: Optional[str] = None
+
     def is_alive(self) -> bool:
         return self.process.poll() is None
 
@@ -733,12 +736,24 @@ def _list_page_targets(session: BrowserSession) -> List[Dict[str, Any]]:
 
 
 def ensure_page_target(session: BrowserSession, target_id: Optional[str] = None) -> str:
-    """解析可用页面目标；无页面 / 指定目标不存在时新建 about:blank 页。"""
+    """解析可用页面目标；无页面 / 指定目标不存在时新建 about:blank 页。
+
+    ``target_id`` 缺省时优先沿用 ``session.active_target_id``（由
+    ``browser_tabs`` 的 switch/create 维护）；该目标已消失则清空跟踪并
+    回退到第一个页面。不使用 ``Target.activateTarget`` —— Electron 内置
+    浏览器桥不实现该方法。
+    """
     pages = _list_page_targets(session)
     if target_id:
         if any(info.get("targetId") == target_id for info in pages):
             return target_id
         raise BrowserCDPError(f"未知 target_id: {target_id}")
+    active_target_id = getattr(session, "active_target_id", None)
+    if active_target_id:
+        if any(info.get("targetId") == active_target_id for info in pages):
+            return active_target_id
+        # 跟踪的标签页已被关闭：清空并回退到默认解析
+        session.active_target_id = None
     if pages:
         return pages[0]["targetId"]
     if getattr(session, "browser_type", None) == BrowserType.EXTERNAL:

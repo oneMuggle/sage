@@ -9,7 +9,7 @@ browser_ws）—— 不经 Playwright（Win7 兼容 + 零新依赖）。
 - ``browser_launch`` EXEC（启动子进程，INTERACTIVE 先审批）；
 - ``browser_navigate`` EXTERNAL（拉取网络内容，最严门禁、逐次审批）；
 - ``browser_snapshot`` / ``browser_screenshot`` READ；
-- ``browser_interact`` / ``browser_close`` WRITE_LOCAL。
+- ``browser_interact`` / ``browser_close`` / ``browser_tabs`` WRITE_LOCAL。
 
 全部工具 ``is_blocking=True``：CDP 走阻塞 socket I/O，必须卸载到
 executor 线程执行（同时规避在事件循环线程内做同步 socket 的死锁面）。
@@ -32,6 +32,7 @@ from .base import BaseTool, ToolResult, ToolSchema
 from .browser_cdp import (
     BrowserCDPError,
     BrowserSession,
+    _list_page_targets,
     browser_downloads_root,
     cdp_command,
     get_browser_manager,
@@ -60,6 +61,8 @@ LOCAL_STORAGE_CAP = 512 * 1024
 _ALLOWED_SCHEMES = frozenset({"http", "https", "about", "data"})
 
 _VALID_ACTIONS = ("click", "type", "press", "scroll")
+
+_VALID_TAB_ACTIONS = ("list", "create", "switch", "close")
 
 
 def _error(exc: BrowserCDPError) -> ToolResult:
@@ -168,6 +171,24 @@ def _evaluate_json(session: BrowserSession, expression: str, target_id: Optional
     if details:
         raise BrowserCDPError(f"页面脚本执行失败: {json.dumps(details)[:300]}")
     return (result.get("result") or {}).get("value")
+
+
+def _locate_tab(
+    pages: List[Dict[str, Any]], tab_id: str, index: Optional[int]
+) -> Dict[str, Any]:
+    """在 ``_list_page_targets`` 结果中定位标签页（tab_id 优先，其次 1-based index）。"""
+    if tab_id:
+        for info in pages:
+            if info.get("targetId") == tab_id:
+                return info
+        raise BrowserCDPError(f"未知 tab_id: {tab_id}")
+    if index is not None:
+        if index < 1 or index > len(pages):
+            raise BrowserCDPError(
+                f"index 超出范围: {index}（当前 {len(pages)} 个标签页）"
+            )
+        return pages[index - 1]
+    raise BrowserCDPError("需要 tab_id 或 index")
 
 
 def _validate_interact_args(
@@ -688,6 +709,170 @@ class BrowserCloseTool(BaseTool):
             success=True,
             content={"closed": "browser", "browser_id": session.browser_id},
         )
+
+
+class BrowserTabsTool(BaseTool):
+    """标签页管理：列出 / 新建 / 切换 / 关闭受控浏览器的标签页。"""
+
+    risk = RiskClass.WRITE_LOCAL
+    is_blocking = True
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="browser_tabs",
+            description=(
+                "管理受控浏览器的标签页。action=list 列出所有标签页（active "
+                "标记当前页）；create 新建标签页（url 可选，默认 about:blank）；"
+                "switch 按 tab_id 或 index（1-based）切换活动标签页；close 关闭"
+                "指定标签页。switch/create 之后，browser_snapshot / "
+                "browser_interact 等工具默认作用于活动标签页。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "description": "list | create | switch | close",
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "create 时的目标 URL（默认 about:blank）",
+                    },
+                    "tab_id": {
+                        "type": "string",
+                        "description": "switch/close 的目标标签页 id",
+                    },
+                    "index": {
+                        "type": "integer",
+                        "description": "switch/close 备用：1-based 序号（与 tab_id 二选一）",
+                    },
+                    "browser_id": {"type": "string", "description": "单实例可省略"},
+                },
+                "required": ["action"],
+            },
+        )
+
+    def execute(  # noqa: PLR0911 — 每个拒绝路径独立 return，扁平更直读
+        self,
+        action: str = "",
+        url: str = "",
+        tab_id: str = "",
+        index: Optional[int] = None,
+        browser_id: str = "",
+        **kwargs: Any,
+    ) -> ToolResult:
+        if kwargs:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"未知参数: {', '.join(sorted(kwargs))}"
+                    "（合法参数: action, url, tab_id, index, browser_id）"
+                ),
+            )
+        if action not in _VALID_TAB_ACTIONS:
+            return ToolResult(
+                success=False,
+                error=f"action 必须是 {', '.join(_VALID_TAB_ACTIONS)}",
+            )
+        if index is not None:
+            try:
+                index = int(index)
+            except (TypeError, ValueError):
+                return ToolResult(success=False, error="index 必须是正整数")
+        if action in ("switch", "close"):
+            if tab_id and index is not None:
+                return ToolResult(success=False, error="tab_id 与 index 只能二选一")
+            if not tab_id and index is None:
+                return ToolResult(success=False, error=f"{action} 需要 tab_id 或 index")
+        target_url = ""
+        if action == "create":
+            target_url = (url or "").strip() or "about:blank"
+            scheme_error = validate_url(target_url)
+            if scheme_error is not None:
+                return ToolResult(success=False, error=scheme_error)
+            # 与 browser_navigate 同口径：http/https 出网受网络模式门禁约束，
+            # 否则 create 可绕过离线/白名单模式。
+            if (urlsplit(target_url).scheme or "").lower() in ("http", "https"):
+                network_rejection = load_network_policy().check_host(target_url)
+                if network_rejection:
+                    return ToolResult(success=False, error=network_rejection)
+
+        try:
+            session = _resolve_session(browser_id or None)
+            if action == "list":
+                return self._list_tabs(session)
+            if action == "create":
+                created = cdp_command(
+                    session, "Target.createTarget", {"url": target_url}
+                ).get("targetId")
+                if not created:
+                    return ToolResult(success=False, error="新标签页创建失败")
+                session.active_target_id = created
+                return ToolResult(
+                    success=True,
+                    content={"tab_id": created, "url": target_url, "active": True},
+                )
+
+            pages = _list_page_targets(session)
+            info = _locate_tab(pages, tab_id, index)
+            target = str(info.get("targetId") or "")
+            if action == "switch":
+                session.active_target_id = target
+                page_info = _evaluate_json(
+                    session,
+                    "JSON.stringify({url:location.href,title:document.title})",
+                    target,
+                )
+                if not isinstance(page_info, str):
+                    return ToolResult(success=False, error="页面信息返回异常（非 JSON）")
+                page = json.loads(page_info)
+                return ToolResult(
+                    success=True,
+                    content={
+                        "tab_id": target,
+                        "url": page.get("url", ""),
+                        "title": page.get("title", ""),
+                    },
+                )
+
+            cdp_command(session, "Target.closeTarget", {"targetId": target})
+            was_active = session.active_target_id == target
+            if was_active:
+                session.active_target_id = None
+            return ToolResult(
+                success=True,
+                content={
+                    "closed": target,
+                    "was_active": was_active,
+                    "remaining": max(len(pages) - 1, 0),
+                },
+            )
+        except BrowserCDPError as exc:
+            return _error(exc)
+
+    @staticmethod
+    def _list_tabs(session: BrowserSession) -> ToolResult:
+        pages = _list_page_targets(session)
+        active_target_id = getattr(session, "active_target_id", None)
+        if active_target_id and any(
+            info.get("targetId") == active_target_id for info in pages
+        ):
+            active = active_target_id
+        else:
+            if active_target_id:
+                # 与 ensure_page_target 一致：跟踪的标签页已消失 → 清空跟踪
+                session.active_target_id = None
+            active = str(pages[0]["targetId"]) if pages else ""
+        tabs = [
+            {
+                "tab_id": info.get("targetId", ""),
+                "url": info.get("url", ""),
+                "title": info.get("title", ""),
+                "active": info.get("targetId") == active,
+            }
+            for info in pages
+        ]
+        return ToolResult(success=True, content={"tabs": tabs, "count": len(tabs)})
 
 
 class BrowserDownloadsTool(BaseTool):
@@ -1635,6 +1820,7 @@ __all__ = [
     "BrowserNavigateTool",
     "BrowserScreenshotTool",
     "BrowserSnapshotTool",
+    "BrowserTabsTool",
     "validate_url",
 ]
 
@@ -1649,4 +1835,5 @@ BROWSER_TOOL_NAMES = (
     "browser_downloads",
     "browser_close",
     "browser_login",
+    "browser_tabs",
 )
