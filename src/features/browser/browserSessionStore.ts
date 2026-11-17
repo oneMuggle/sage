@@ -63,9 +63,7 @@ export function rememberBrowserSession(
 }
 
 /** 读取某对话记住的浏览器会话。 */
-export function rememberedBrowserSession(
-  conversationId: string | null | undefined,
-): string | null {
+export function rememberedBrowserSession(conversationId: string | null | undefined): string | null {
   if (!conversationId) return null;
   return useBrowserSessionStore.getState().byConversation[conversationId] ?? null;
 }
