@@ -89,6 +89,11 @@
 CoW 推迟到真正出现存储压力时再评估。`fork_root` / `forked_at_message_id` 两列的语义
 对两种实现都兼容，届时**不需要再次迁移 schema**。
 
+**产物随分叉继承（2026-11-17）**：fork 在同一事务内复制源会话的 `artifacts` 行
+（分配新 artifact id —— id 是全局主键且产物 content 端点按 `session_id` 校验）与
+`artifact_versions` 行（重映射到新 id；快照文件按路径共享）。否则「编辑重发 /
+回溯」这类透明切会话的 fork 会让产物面板只剩 fork 之后新生成的产物。
+
 ### schema 迁移
 
 `sessions` 表幂等追加两列（沿用 `messages.reasoning_content` 的既有
@@ -162,7 +167,7 @@ body `{"at_message_id"?: str, "title"?: str}`
 | --- | --- | --- |
 | 单元 | `backend/tests/unit/chat/test_compaction.py` | 15 例：估算 / 阈值 / 提示构造 / 续接 / 失败路径 |
 | API | `backend/tests/api/test_session_compact_api.py` | 6 例：成功 / 双跳过原因 / 404 / 502 双分支 |
-| API | `backend/tests/api/test_session_fork_api.py` | 7 例：全量复制 / 分叉点 / 结构化 404 |
+| API | `backend/tests/api/test_session_fork_api.py` | 13 例：全量复制 / 分叉点 / 结构化 404 / 工作区绑定继承 / 产物与版本继承 |
 | 集成 | `backend/tests/integration/test_chat_auto_compaction.py` | 成功压缩（保留完整历史）+ 失败不阻塞聊天 |
 | 单元 | `backend/tests/unit/test_session_history_retention.py` | 非破坏保留 / 上下文过滤 / 事件投影 / 迁移列 / 归档回填幂等 |
 | 前端 | `Chat.compact-fork.test.tsx`、`ChatInput.compact.test.tsx`、`Message.fork.test.tsx`、`SessionItem.fork-badge.test.tsx` | slash action / fork payload+导航 / 徽标渲染 / toast |

@@ -365,3 +365,195 @@ Inline $x^2$.
     types = [block["type"] for block in payload["structured"]["blocks"]]
     assert "heading" in types
     assert "paragraph" in types
+
+
+# ---------------------------------------------------------------------------
+# F2 (2026-11-17): 消息蓝链 404 —— file:// 形态与产物文件名回退
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_preview_accepts_file_scheme_path(
+    client: httpx.AsyncClient, bound_session: str, workspace: Path
+) -> None:
+    """file:///abs/path 形态（模型/历史消息常见）应剥离 scheme 后正常预览。"""
+    target = workspace / "报告 final.md"
+    target.write_text("# hi", encoding="utf-8")
+
+    response = await client.get(
+        f"/api/v1/sessions/{bound_session}/workspace/preview",
+        params={"path": f"file://{target}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+
+@pytest.mark.asyncio()
+async def test_preview_falls_back_to_session_artifact_by_name(
+    client: httpx.AsyncClient,
+    conn: sqlite3.Connection,
+    session_id: str,
+    workspace: Path,
+) -> None:
+    """裸文件名（受管 Office 文档场景）按会话产物表回退解析真实路径。
+
+    受管文档落在 ``office/<doc_type>/<doc_id>/<文件名>``，而真实路径从不
+    回显给模型 —— 模型给出的 ``[文件名](文件名)`` 链接按工作区根解析必然
+    404。预览端点应回退到本会话登记的 artifact 路径。
+    """
+    from backend.data import artifact_repo
+
+    managed_dir = workspace / "office" / "word" / "doc123"
+    managed_dir.mkdir(parents=True)
+    report = managed_dir / "季度报告.md"
+    report.write_text("# 季度汇报\n", encoding="utf-8")
+    artifact_repo.record_artifact(
+        session_id, str(report), report.name, "markdown", report.stat().st_size
+    )
+    bind_session_workspace(conn, session_id, str(workspace))
+
+    response = await client.get(
+        f"/api/v1/sessions/{session_id}/workspace/preview",
+        params={"path": "季度报告.md"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["content"] == "# 季度汇报\n"
+
+
+@pytest.mark.asyncio()
+async def test_preview_tilde_path_expands_then_falls_back_to_artifact(
+    client: httpx.AsyncClient,
+    conn: sqlite3.Connection,
+    session_id: str,
+    workspace: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """~/x 形态：先展开家目录（超出工作区 → 403 路径），再按会话产物回退。"""
+    from backend.data import artifact_repo
+
+    home = tmp_path / "home"
+    home.mkdir()
+    target = home / "导出报告.md"
+    target.write_text("# 导出", encoding="utf-8")
+    # Path.expanduser 在 POSIX 读 HOME、Windows 读 USERPROFILE —— 两者都设
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    artifact_repo.record_artifact(
+        session_id, str(target), target.name, "markdown", target.stat().st_size
+    )
+    bind_session_workspace(conn, session_id, str(workspace))
+
+    response = await client.get(
+        f"/api/v1/sessions/{session_id}/workspace/preview",
+        params={"path": f"~/{target.name}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["content"] == "# 导出"
+
+
+@pytest.mark.asyncio()
+async def test_preview_artifact_fallback_scoped_to_session(
+    client: httpx.AsyncClient,
+    conn: sqlite3.Connection,
+    session_id: str,
+    workspace: Path,
+    tmp_path: Path,
+) -> None:
+    """回退只查本会话产物 —— 其他会话同名产物不可预览（防跨会话泄露）。"""
+    from backend.data import artifact_repo
+
+    other_dir = tmp_path / "other"
+    other_dir.mkdir()
+    other_file = other_dir / "机密.md"
+    other_file.write_text("# secret", encoding="utf-8")
+    artifact_repo.record_artifact(
+        "another-session", str(other_file), other_file.name, "markdown", 8
+    )
+    bind_session_workspace(conn, session_id, str(workspace))
+
+    response = await client.get(
+        f"/api/v1/sessions/{session_id}/workspace/preview",
+        params={"path": "机密.md"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "file_not_found"
+
+
+@pytest.mark.asyncio()
+async def test_preview_no_fallback_for_relative_path_with_dirs(
+    client: httpx.AsyncClient,
+    conn: sqlite3.Connection,
+    session_id: str,
+    workspace: Path,
+) -> None:
+    """带目录的相对路径 404 时不按同名产物回退（避免张冠李戴）。"""
+    from backend.data import artifact_repo
+
+    real = workspace / "office" / "report.md"
+    real.parent.mkdir(parents=True)
+    real.write_text("# real", encoding="utf-8")
+    artifact_repo.record_artifact(session_id, str(real), real.name, "markdown", 6)
+    bind_session_workspace(conn, session_id, str(workspace))
+
+    response = await client.get(
+        f"/api/v1/sessions/{session_id}/workspace/preview",
+        params={"path": "output/report.md"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "file_not_found"
+
+
+@pytest.mark.asyncio()
+async def test_preview_accepts_file_scheme_localhost_form(
+    client: httpx.AsyncClient, bound_session: str, workspace: Path
+) -> None:
+    """file://localhost/abs/path（RFC 8089 同义写法）同样归一化。"""
+    target = workspace / "note.md"
+    target.write_text("# note", encoding="utf-8")
+
+    response = await client.get(
+        f"/api/v1/sessions/{bound_session}/workspace/preview",
+        params={"path": f"file://localhost{target}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["content"] == "# note"
+
+
+@pytest.mark.asyncio()
+async def test_resolve_confirms_bare_artifact_name(
+    client: httpx.AsyncClient,
+    conn: sqlite3.Connection,
+    session_id: str,
+    workspace: Path,
+) -> None:
+    """resolve 与 preview 同口径：受管 Office 裸文件名按会话产物确认存在。"""
+    from backend.data import artifact_repo
+
+    managed_dir = workspace / "office" / "word" / "doc999"
+    managed_dir.mkdir(parents=True)
+    report = managed_dir / "会议纪要.md"
+    report.write_text("# 纪要\n", encoding="utf-8")
+    artifact_repo.record_artifact(
+        session_id, str(report), report.name, "markdown", report.stat().st_size
+    )
+    bind_session_workspace(conn, session_id, str(workspace))
+
+    response = await client.post(
+        f"/api/v1/sessions/{session_id}/workspace/resolve",
+        json={"paths": ["会议纪要.md", "不存在的.docx", "sub/会议纪要.md"]},
+    )
+
+    assert response.status_code == 200
+    by_path = {r["path"]: r for r in response.json()["results"]}
+    assert by_path["会议纪要.md"]["exists"] is True
+    assert by_path["会议纪要.md"]["kind"] == "markdown"
+    assert by_path["不存在的.docx"]["exists"] is False
+    # 带目录的相对路径不走产物回退（避免张冠李戴）
+    assert by_path["sub/会议纪要.md"]["exists"] is False
