@@ -45,14 +45,21 @@ from .browser_events import (
     list_download_dir,
     start_download_tracking,
 )
+from .browser_observe import (
+    SNAPSHOT_HARD_COLLECT_CAP,
+    SNAPSHOT_INTERACTIVE_MAX_DEFAULT,
+    STALE_REF_ERROR,
+    STALE_REF_INFO,
+    build_ref_expression,
+    build_snapshot_expression,
+    parse_key_combo,
+    parse_snapshot_payload,
+)
 from .file_tool import _record_artifact_safely
 from .network_config import load_network_policy
 from .web_render import wait_page_ready
 
 logger = logging.getLogger(__name__)
-
-#: 页面文本快照上限（字节，超出截断）
-SNAPSHOT_TEXT_CAP = 30 * 1024
 
 #: localStorage 快照 JSON 上限（字节；超限视为异常页面，不保存）
 LOCAL_STORAGE_CAP = 512 * 1024
@@ -60,7 +67,28 @@ LOCAL_STORAGE_CAP = 512 * 1024
 #: 允许的 URL scheme（file:// 可读本地文件 → 坚决拒绝；javascript: 注入面）
 _ALLOWED_SCHEMES = frozenset({"http", "https", "about", "data"})
 
-_VALID_ACTIONS = ("click", "type", "press", "scroll")
+_VALID_ACTIONS = ("click", "type", "press", "scroll", "select", "hover", "check", "uncheck")
+
+_VALID_SNAPSHOT_MODES = ("interactive", "text", "full")
+
+#: 合成 KeyboardEvent 的 keyCode 映射（按主键查表；单字母/数字走 ord）。
+_KEY_CODES = {
+    "Enter": 13,
+    "Escape": 27,
+    "Tab": 9,
+    "Space": 32,
+    " ": 32,
+    "Backspace": 8,
+    "Delete": 46,
+    "Home": 36,
+    "End": 35,
+    "PageUp": 33,
+    "PageDown": 34,
+    "ArrowUp": 38,
+    "ArrowDown": 40,
+    "ArrowLeft": 37,
+    "ArrowRight": 39,
+}
 
 _VALID_TAB_ACTIONS = ("list", "create", "switch", "close")
 
@@ -128,8 +156,9 @@ def _js_type(selector: str, value: str, clear: bool) -> str:
         "el.focus();"
         "const isContenteditable=el.isContentEditable;"
         "const proto=isContenteditable?HTMLElement.prototype:(el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype);"
-        "const setter=Object.getOwnPropertyDescriptor(proto,'value').set;"
-        f"setter.call(el,{json.dumps(value)});"
+        "const desc=isContenteditable?null:Object.getOwnPropertyDescriptor(proto,'value');"
+        "if(desc&&desc.set){desc.set.call(el," + json.dumps(value) + ");}"
+        "else{el.textContent=" + json.dumps(value) + ";}"
         "el.dispatchEvent(new Event('input',{bubbles:true}));"
         "el.dispatchEvent(new Event('change',{bubbles:true}));"
         f"return{{ok:true,info:'typed '+(el.value||el.textContent||'').length+' chars'+({json.dumps(' cleared-first' if clear else '')})}};"
@@ -137,15 +166,44 @@ def _js_type(selector: str, value: str, clear: bool) -> str:
     )
 
 
+def _key_event_options(key: str) -> str:
+    """构造 KeyboardEvent 初始化对象字面量（含组合键 modifier 标志）。"""
+    modifiers, main = parse_key_combo(key)
+    code = _KEY_CODES.get(main)
+    if code is None and len(main) == 1:
+        upper = main.upper()
+        if ("A" <= upper <= "Z") or ("0" <= upper <= "9"):
+            code = ord(upper)
+    key_code = code or 0
+    return (
+        "{key:"
+        + json.dumps(main)
+        + ",keyCode:"
+        + str(key_code)
+        + ",which:"
+        + str(key_code)
+        + ",ctrlKey:"
+        + ("true" if modifiers["ctrlKey"] else "false")
+        + ",shiftKey:"
+        + ("true" if modifiers["shiftKey"] else "false")
+        + ",altKey:"
+        + ("true" if modifiers["altKey"] else "false")
+        + ",metaKey:"
+        + ("true" if modifiers["metaKey"] else "false")
+        + ",bubbles:true,cancelable:true}"
+    )
+
+
 def _js_press(key: str) -> str:
+    """无定位目标时的按键：作用于当前焦点元素。"""
+    options = _key_event_options(key)
     return (
         "(function(){"
-        f"const k={json.dumps(key)};"
         "const el=document.activeElement||document.body;"
-        "const opts={key:k,keyCode:(k==='Enter'?13:k==='Escape'?27:k==='Tab'?9:0),bubbles:true};"
+        f"const opts={options};"
         "el.dispatchEvent(new KeyboardEvent('keydown',opts));"
         "el.dispatchEvent(new KeyboardEvent('keyup',opts));"
-        "return{ok:true,info:'pressed '+k};"
+        f"return{{ok:true,info:'pressed '+{json.dumps(key)}}};"
         "})()"
     )
 
@@ -155,6 +213,129 @@ def _js_scroll(amount: int) -> str:
         "(function(){"
         f"window.scrollBy(0,{int(amount)});"
         f"return{{ok:true,info:'scrolled to y='+window.scrollY}};"
+        "})()"
+    )
+
+
+#: 元素描述片段：调用方已把元素绑定为 ``el``，此处拼出 "TAG 可访问名"。
+_DESCRIBE_JS = (
+    "var __sageLabel=(el.getAttribute&&el.getAttribute('data-sage-ref-name'))"
+    "||(el.getAttribute&&el.getAttribute('aria-label'))"
+    "||(el.innerText||el.value||'');"
+    "var __sageDesc=String((el.tagName||'')+' '+String(__sageLabel).trim()).slice(0,120);"
+)
+
+
+def _js_on_selector(selector: str, action_js: str) -> str:
+    """把元素级片段包装成"按 CSS selector 定位后执行"。"""
+    return (
+        "(function(){"
+        f"const el=document.querySelector({json.dumps(selector)});"
+        "if(!el)return{ok:false,info:'not-found'};"
+        f"return {action_js};"
+        "})()"
+    )
+
+
+def _js_click_element() -> str:
+    return (
+        "(function(){"
+        "el.scrollIntoView({block:'center'});"
+        "if(el.click){el.click();}else{el.dispatchEvent(new MouseEvent('click',{bubbles:true}));}"
+        + _DESCRIBE_JS
+        + "return{ok:true,info:'clicked '+__sageDesc};"
+        "})()"
+    )
+
+
+def _js_type_element(value: str, clear: bool) -> str:
+    cleared = json.dumps(" cleared-first" if clear else "")
+    return (
+        "(function(){"
+        "el.scrollIntoView({block:'center'});"
+        "if(el.focus){el.focus();}"
+        f"const next={json.dumps(value)};"
+        "if(el.isContentEditable){el.textContent=next;}"
+        "else{"
+        "const proto=(el.tagName==='TEXTAREA')?HTMLTextAreaElement.prototype:(el.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype);"
+        "const desc=Object.getOwnPropertyDescriptor(proto,'value');"
+        "if(desc&&desc.set){desc.set.call(el,next);}else{el.value=next;}"
+        "}"
+        "el.dispatchEvent(new Event('input',{bubbles:true}));"
+        "el.dispatchEvent(new Event('change',{bubbles:true}));"
+        f"return{{ok:true,info:'typed '+(el.value||el.textContent||'').length+' chars'+{cleared}}};"
+        "})()"
+    )
+
+
+def _js_select_element(value: str) -> str:
+    """选择 <select> 的 option（value 或可见文本匹配），派发 input/change。"""
+    return (
+        "(function(){"
+        "el.scrollIntoView({block:'center'});"
+        f"const want={json.dumps(value)};"
+        "let matched=false;"
+        "if((el.tagName||'').toUpperCase()==='SELECT'&&el.options){"
+        "for(let i=0;i<el.options.length;i++){"
+        "const option=el.options[i];"
+        "if(option.value===want||String(option.text||'').trim()===want){"
+        "el.value=option.value;matched=true;break;"
+        "}"
+        "}"
+        "}"
+        "if(!matched&&'value' in el){try{el.value=want;matched=true;}catch(err){}}"
+        "if(!matched)return{ok:false,info:'option-not-found'};"
+        "el.dispatchEvent(new Event('input',{bubbles:true}));"
+        "el.dispatchEvent(new Event('change',{bubbles:true}));"
+        "return{ok:true,info:'selected '+String(el.value)};"
+        "})()"
+    )
+
+
+def _js_hover_element() -> str:
+    return (
+        "(function(){"
+        "el.scrollIntoView({block:'center'});"
+        "const rect=el.getBoundingClientRect();"
+        "const x=rect.left+rect.width/2;"
+        "const y=rect.top+rect.height/2;"
+        "el.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,cancelable:true,clientX:x,clientY:y}));"
+        "el.dispatchEvent(new MouseEvent('mouseenter',{bubbles:false,cancelable:true,clientX:x,clientY:y}));"
+        "el.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,cancelable:true,clientX:x,clientY:y}));"
+        + _DESCRIBE_JS
+        + "return{ok:true,info:'hover '+__sageDesc};"
+        "})()"
+    )
+
+
+def _js_set_checked_element(checked: bool) -> str:
+    flag = "true" if checked else "false"
+    label = "checked" if checked else "unchecked"
+    return (
+        "(function(){"
+        "el.scrollIntoView({block:'center'});"
+        f"const want={flag};"
+        "if('checked' in el){el.checked=want;}"
+        "else if(el.setAttribute){el.setAttribute('aria-checked',want?'true':'false');}"
+        "el.dispatchEvent(new Event('input',{bubbles:true}));"
+        "el.dispatchEvent(new Event('change',{bubbles:true}));"
+        + _DESCRIBE_JS
+        + f"return{{ok:true,info:'{label} '+__sageDesc}};"
+        "})()"
+    )
+
+
+def _js_press_element(key: str) -> str:
+    """聚焦元素后派发组合键（先 focus，再 keydown/keyup）。"""
+    options = _key_event_options(key)
+    return (
+        "(function(){"
+        "el.scrollIntoView({block:'center'});"
+        "if(el.focus){el.focus();}"
+        f"const opts={options};"
+        "el.dispatchEvent(new KeyboardEvent('keydown',opts));"
+        "el.dispatchEvent(new KeyboardEvent('keyup',opts));"
+        f"return{{ok:true,info:'pressed '+{json.dumps(key)}}};"
         "})()"
     )
 
@@ -191,6 +372,46 @@ def _locate_tab(
     raise BrowserCDPError("需要 tab_id 或 index")
 
 
+def _interact_arg_error(
+    action: str,
+    selector: str,
+    text: str,
+    value: str,
+    key: str,
+    ref: str,
+) -> Optional[str]:
+    """按动作返回参数错误文案；None 表示放行。"""
+    located = bool(ref or selector)
+    error: Optional[str] = None
+    if action not in _VALID_ACTIONS:
+        error = f"action 必须是 {', '.join(_VALID_ACTIONS)}"
+    elif action == "click":
+        if not located and not text:
+            error = "click 需要 ref、selector 或 text 之一"
+    elif action == "type":
+        if not located:
+            error = "type 需要 ref 或 selector"
+        elif not isinstance(value, str) or value == "":
+            error = "type 需要 value（输入内容）"
+    elif action == "select":
+        if not located:
+            error = "select 需要 ref 或 selector"
+        elif not isinstance(value, str) or value == "":
+            error = "select 需要 value（option 的 value 或文本）"
+    elif action in ("hover", "check", "uncheck"):
+        if not located:
+            error = f"{action} 需要 ref 或 selector"
+    elif action == "press":
+        if not isinstance(key, str) or not key:
+            error = "press 需要 key"
+    elif action == "scroll":
+        try:
+            int(value)
+        except (TypeError, ValueError):
+            error = "scroll 的 value 必须是整数像素"
+    return error
+
+
 def _validate_interact_args(
     kwargs: Dict[str, Any],
     action: str,
@@ -198,44 +419,60 @@ def _validate_interact_args(
     text: str,
     value: str,
     key: str,
+    ref: str,
 ) -> Optional[ToolResult]:
-    """browser_interact 参数校验；返回拒绝结果或 None（放行）。"""
+    """browser_interact 参数校验；返回拒绝结果或 None（放行）。
+
+    定位优先级 ref > selector > text：三者同时给出不报错（按优先级取用），
+    但 click/type/select/hover/check/uncheck 至少要有 ref 或 selector
+    （click 也可用 text）。
+    """
     if kwargs:
         return ToolResult(
             success=False,
             error=f"未知参数: {', '.join(sorted(kwargs))}",
         )
-    if action not in _VALID_ACTIONS:
-        return ToolResult(
-            success=False,
-            error=f"action 必须是 {', '.join(_VALID_ACTIONS)}",
-        )
-    if action in ("click", "type"):
-        return _validate_action_args(action, selector, text, value)
-    if action == "press" and not key:
-        return ToolResult(success=False, error="press 需要 key")
-    if action == "scroll":
-        try:
-            int(value)
-        except (TypeError, ValueError):
-            return ToolResult(success=False, error="scroll 的 value 必须是整数像素")
-    return None
+    error = _interact_arg_error(action, selector, text, value, key, ref)
+    return None if error is None else ToolResult(success=False, error=error)
 
 
-def _validate_action_args(
-    action: str, selector: str, text: str, value: str
-) -> Optional[ToolResult]:
-    """click / type 两个依赖定位参数的 action 的专项校验。"""
+def _build_interact_expression(
+    action: str,
+    selector: str,
+    text: str,
+    value: str,
+    key: str,
+    clear: bool,
+    ref: str,
+) -> str:
+    """按定位优先级构造交互 JS（ref > selector > text，scroll 无定位）。"""
     if action == "click":
-        if not selector and not text:
-            return ToolResult(success=False, error="click 需要 selector 或 text 之一")
-        return None
-    if not selector:
-        return ToolResult(success=False, error="type 需要 selector")
-    if not isinstance(value, str):
-        return ToolResult(success=False, error="type 的 value 必须是字符串")
-    return None
-    return None
+        return (
+            build_ref_expression(_js_click_element(), ref)
+            if ref
+            else _js_click(selector=selector, text=text)
+        )
+    if action == "scroll":
+        return _js_scroll(int(value))
+    if action == "press" and not ref and not selector:
+        return _js_press(key)
+
+    if action == "type":
+        snippet = _js_type_element(value, bool(clear))
+    elif action == "select":
+        snippet = _js_select_element(value)
+    elif action == "hover":
+        snippet = _js_hover_element()
+    elif action == "check":
+        snippet = _js_set_checked_element(True)
+    elif action == "uncheck":
+        snippet = _js_set_checked_element(False)
+    else:  # press（有 ref 或 selector）
+        snippet = _js_press_element(key)
+
+    if ref:
+        return build_ref_expression(snippet, ref)
+    return _js_on_selector(selector, snippet)
 
 
 def _wait_page_settled(
@@ -458,7 +695,7 @@ class BrowserNavigateTool(BaseTool):
 
 
 class BrowserSnapshotTool(BaseTool):
-    """读取当前页面：URL / 标题 / 可见文本（截断）。"""
+    """读取当前页面：无障碍树交互元素（带 ref）/ 文本正文。"""
 
     risk = RiskClass.READ
     is_blocking = True
@@ -467,50 +704,86 @@ class BrowserSnapshotTool(BaseTool):
         return ToolSchema(
             name="browser_snapshot",
             description=(
-                "读取当前页面的 URL、标题与可见文本（上限 30KiB，超出标记"
-                " truncated）。这是浏览器'看页面'的主入口。"
+                "看页面主入口。默认 mode=interactive：返回当前页面可交互元素的"
+                "无障碍树列表（每个元素带 ref、role、可访问名与状态），交互工具"
+                "应优先用 ref 定位；动作后页面可能变化，应重新快照确认。"
+                "mode=text 只返回正文文本（上限 30KiB，超出标记 truncated）；"
+                "mode=full 同时返回元素与文本。可用 query 按 role/名称过滤，"
+                "max_nodes 限制返回节点数（1-500），include_offscreen 是否包含"
+                "视口外元素。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
+                    "mode": {
+                        "type": "string",
+                        "enum": ["interactive", "text", "full"],
+                        "description": "interactive（默认，带 ref 的元素列表）| text | full",
+                    },
+                    "max_nodes": {
+                        "type": "integer",
+                        "description": "最多返回节点数（默认 120，钳位 1-500）",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "按 role / 可访问名小写子串过滤",
+                    },
+                    "include_offscreen": {
+                        "type": "boolean",
+                        "description": "包含视口外元素（默认 false）",
+                    },
                     "browser_id": {"type": "string", "description": "单实例可省略"},
                 },
                 "required": [],
             },
         )
 
-    def execute(self, browser_id: str = "", **kwargs: Any) -> ToolResult:
+    def execute(
+        self,
+        mode: str = "interactive",
+        max_nodes: int = SNAPSHOT_INTERACTIVE_MAX_DEFAULT,
+        query: str = "",
+        include_offscreen: bool = False,
+        browser_id: str = "",
+        **kwargs: Any,
+    ) -> ToolResult:
         if kwargs:
             return ToolResult(
                 success=False,
-                error=f"未知参数: {', '.join(sorted(kwargs))}（合法参数: browser_id）",
+                error=(
+                    f"未知参数: {', '.join(sorted(kwargs))}"
+                    "（合法参数: mode, max_nodes, query, include_offscreen, browser_id）"
+                ),
+            )
+        if mode not in _VALID_SNAPSHOT_MODES:
+            return ToolResult(
+                success=False,
+                error=f"mode 必须是 {', '.join(_VALID_SNAPSHOT_MODES)}",
             )
         try:
             session = _resolve_session(browser_id or None)
-            expression = (
-                "JSON.stringify({url:location.href,title:document.title,"
-                f"text:(document.body&&document.body.innerText||'').slice(0,{SNAPSHOT_TEXT_CAP})}})"
+            expression = build_snapshot_expression(
+                mode=mode,
+                max_collect=SNAPSHOT_HARD_COLLECT_CAP,
+                include_offscreen=bool(include_offscreen),
             )
-            info = _evaluate_json(session, expression, None)
+            payload = _evaluate_json(session, expression, None)
         except BrowserCDPError as exc:
             return _error(exc)
-        if not isinstance(info, str):
-            return ToolResult(success=False, error="页面快照返回异常（非 JSON）")
-        page = json.loads(info)
-        text = page.get("text") or ""
-        return ToolResult(
-            success=True,
-            content={
-                "url": page.get("url", ""),
-                "title": page.get("title", ""),
-                "text": text,
-                "truncated": len(text) >= SNAPSHOT_TEXT_CAP,
-            },
+        content = parse_snapshot_payload(
+            payload,
+            mode=mode,
+            max_nodes=max_nodes,
+            query=query,
+            include_offscreen=bool(include_offscreen),
         )
+        if content.get("error"):
+            return ToolResult(success=False, error=str(content["error"]))
+        return ToolResult(success=True, content=content)
 
 
 class BrowserInteractTool(BaseTool):
-    """点击 / 输入 / 按键 / 滚动（selector 或可见文本定位）。"""
+    """点击 / 输入 / 按键 / 滚动 / 选择 / 悬停 / 勾选（ref 优先）。"""
 
     risk = RiskClass.WRITE_LOCAL
     is_blocking = True
@@ -519,23 +792,49 @@ class BrowserInteractTool(BaseTool):
         return ToolSchema(
             name="browser_interact",
             description=(
-                "与当前页面交互。action=click：selector 或 text（可见文本"
-                "精确匹配）；action=type：selector + value（React 兼容，可"
-                " clear=true 先清空）；action=press：key（Enter/Escape/Tab…"
-                "）；action=scroll：value 为像素（正下负上）。操作后建议 "
-                "browser_snapshot 确认效果。"
+                "与当前页面交互。首选 ref（browser_snapshot 返回的元素引用）；"
+                "也可用 selector（CSS）或 text（可见文本精确匹配）定位，优先级 "
+                "ref > selector > text。action=click | type | press | scroll | "
+                "select | hover | check | uncheck。type 需 value（React 兼容，"
+                "clear=true 先清空）；press 支持组合键（Control+A / Shift+Tab / "
+                "Meta+Enter）；select 的 value 为 option 的 value 或文本；"
+                "scroll 的 value 为像素（正下负上）。操作后请重新 browser_snapshot "
+                "确认效果（页面变化会使旧 ref 失效）。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
-                    "action": {"type": "string", "description": "click | type | press | scroll"},
-                    "selector": {"type": "string", "description": "CSS 选择器（click/type 用）"},
+                    "action": {
+                        "type": "string",
+                        "enum": [
+                            "click",
+                            "type",
+                            "press",
+                            "scroll",
+                            "select",
+                            "hover",
+                            "check",
+                            "uncheck",
+                        ],
+                        "description": "要执行的动作",
+                    },
+                    "ref": {
+                        "type": "string",
+                        "description": "browser_snapshot 返回的元素引用（优先于 selector/text）",
+                    },
+                    "selector": {"type": "string", "description": "CSS 选择器（回退定位）"},
                     "text": {
                         "type": "string",
-                        "description": "按可见文本定位（click 用，selector 缺省时生效）",
+                        "description": "按可见文本定位（click 用，ref/selector 缺省时生效）",
                     },
-                    "value": {"type": "string", "description": "type 的输入内容 / scroll 的像素"},
-                    "key": {"type": "string", "description": "press 的键名"},
+                    "value": {
+                        "type": "string",
+                        "description": "type/select 的目标值 / scroll 的像素",
+                    },
+                    "key": {
+                        "type": "string",
+                        "description": "press 的键名，支持组合键（如 Control+A）",
+                    },
                     "clear": {"type": "boolean", "description": "type 前先清空（默认 false）"},
                     "browser_id": {"type": "string", "description": "单实例可省略"},
                 },
@@ -551,22 +850,17 @@ class BrowserInteractTool(BaseTool):
         value: str = "",
         key: str = "",
         clear: bool = False,
+        ref: str = "",
         browser_id: str = "",
         **kwargs: Any,
     ) -> ToolResult:
-        rejection = _validate_interact_args(kwargs, action, selector, text, value, key)
+        rejection = _validate_interact_args(kwargs, action, selector, text, value, key, ref)
         if rejection is not None:
             return rejection
 
-        if action == "click":
-            expression = _js_click(selector=selector, text=text)
-        elif action == "type":
-            expression = _js_type(selector, value, bool(clear))
-        elif action == "press":
-            expression = _js_press(key)
-        else:
-            expression = _js_scroll(int(value))
-
+        expression = _build_interact_expression(
+            action, selector, text, value, key, bool(clear), ref
+        )
         try:
             session = _resolve_session(browser_id or None)
             outcome = _evaluate_json(session, expression, None)
@@ -574,12 +868,15 @@ class BrowserInteractTool(BaseTool):
             return _error(exc)
         if not isinstance(outcome, dict):
             return ToolResult(success=False, error="交互结果异常（非 JSON）")
+        info = outcome.get("info", "")
+        if info == STALE_REF_INFO:
+            return ToolResult(success=False, error=STALE_REF_ERROR)
         if not outcome.get("ok"):
             return ToolResult(
                 success=False,
-                error=f"交互未生效: {outcome.get('info', 'unknown')}（可用 browser_snapshot 查看页面结构）",
+                error=f"交互未生效: {info or 'unknown'}（可用 browser_snapshot 查看页面结构）",
             )
-        return ToolResult(success=True, content={"action": action, "info": outcome.get("info", "")})
+        return ToolResult(success=True, content={"action": action, "info": info})
 
 
 class BrowserScreenshotTool(BaseTool):

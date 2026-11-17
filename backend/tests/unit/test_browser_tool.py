@@ -24,7 +24,7 @@ import pytest
 
 from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
-from backend.tools import browser_cdp, browser_tool, web_render
+from backend.tools import browser_cdp, browser_observe, browser_tool, web_render
 from backend.tools.browser_cdp import BrowserSession, BrowserSessionManager
 from backend.tools.browser_tool import (
     BrowserCloseTool,
@@ -360,16 +360,80 @@ def test_navigate_rejects_bad_scheme_and_reports_error_text(stubbed):
     assert "ERR_NAME_NOT_RESOLVED" in result.error
 
 
-def test_snapshot_caps_text(stubbed, monkeypatch):
-    monkeypatch.setattr(browser_tool, "SNAPSHOT_TEXT_CAP", 8)
+def test_snapshot_text_mode_caps_text_and_keeps_legacy_shape(stubbed, monkeypatch):
+    monkeypatch.setattr(browser_observe, "SNAPSHOT_TEXT_CAP", 8)
     stubbed.results.append(
         {"result": {"value": json.dumps({"url": "u", "title": "t", "text": "x"})}}
     )
-    result = _tool(BrowserSnapshotTool).execute(browser_id="b1")
+    result = _tool(BrowserSnapshotTool).execute(mode="text", browser_id="b1")
     assert result.success is True
-    # 截断发生在页面侧（JS slice）—— 锁定表达式包含上限
+    assert result.content == {"url": "u", "title": "t", "text": "x", "truncated": False}
+    # 截断发生在页面侧（JS slice）—— 锁定表达式包含上限，且 text 模式不注入 ref
     expression = stubbed.calls[0]["params"]["expression"]
     assert "slice(0,8)" in expression.replace(" ", "")
+    assert "__SAGE_REFS__" not in expression
+
+
+def _snapshot_payload(elements, text="x" * 400) -> str:
+    return json.dumps(
+        {
+            "url": "https://x/",
+            "title": "X",
+            "viewport": {"width": 800, "height": 600, "scroll_y": 0},
+            "elements": elements,
+            "elements_total": len(elements),
+            "text": text,
+        }
+    )
+
+
+def _snapshot_element(ref: str, role: str = "button", name: str = "Go"):
+    return {
+        "ref": ref,
+        "role": role,
+        "name": name,
+        "disabled": False,
+        "in_viewport": True,
+    }
+
+
+def test_snapshot_default_mode_is_interactive_with_ref_protocol(stubbed):
+    stubbed.results.append({"result": {"value": _snapshot_payload([_snapshot_element("e1")])}})
+    result = _tool(BrowserSnapshotTool).execute(browser_id="b1")
+    assert result.success is True
+    assert result.content["mode"] == "interactive"
+    assert result.content["elements"][0]["ref"] == "e1"
+    assert result.content["elements_total"] == 1
+    expression = stubbed.calls[0]["params"]["expression"]
+    assert "window.__SAGE_REFS__" in expression
+    assert "data-sage-ref-name" in expression
+
+
+def test_snapshot_rejects_invalid_mode_without_cdp_call(stubbed):
+    result = _tool(BrowserSnapshotTool).execute(mode="dance", browser_id="b1")
+    assert result.success is False
+    for word in ("interactive", "text", "full"):
+        assert word in result.error
+    assert stubbed.calls == []
+
+
+def test_snapshot_max_nodes_clamped_to_hard_cap(stubbed):
+    elements = [_snapshot_element(f"e{index}") for index in range(1, 502)]
+    stubbed.results.append({"result": {"value": _snapshot_payload(elements)}})
+    result = _tool(BrowserSnapshotTool).execute(max_nodes=9999, browser_id="b1")
+    assert result.success is True
+    assert len(result.content["elements"]) == 500
+    assert result.content["elements_total"] == 501
+    assert result.content["truncated"] is True
+    assert "500" in result.content["hint"]
+
+
+def test_snapshot_non_json_payload_returns_failure(stubbed):
+    stubbed.results.append({"result": {"value": "not json"}})
+    result = _tool(BrowserSnapshotTool).execute(browser_id="b1")
+    assert result.success is False
+    assert "页面快照返回异常" in result.error
+
 
 
 def test_interact_maps_not_found_to_failure(stubbed):
@@ -400,6 +464,95 @@ def test_interact_happy_paths(stubbed):
     )
     stubbed.results.append({"result": {"value": {"ok": True, "info": "scrolled to y=800"}}})
     assert tool.execute(action="scroll", value=800, browser_id="b1").success is True
+
+
+def test_interact_ref_click_expression_carries_stale_guards(stubbed):
+    stubbed.results.append({"result": {"value": {"ok": True, "info": "clicked BUTTON Go"}}})
+    result = _tool(BrowserInteractTool).execute(action="click", ref="e1", browser_id="b1")
+    assert result.success is True
+    assert result.content == {"action": "click", "info": "clicked BUTTON Go"}
+    expression = stubbed.calls[0]["params"]["expression"]
+    assert "window.__SAGE_REFS__" in expression
+    assert "isConnected" in expression
+    assert "stale-ref" in expression
+    assert "data-sage-ref-name" in expression
+
+
+def test_interact_stale_ref_maps_to_actionable_error(stubbed):
+    stubbed.results.append({"result": {"value": {"ok": False, "info": "stale-ref"}}})
+    result = _tool(BrowserInteractTool).execute(action="click", ref="e9", browser_id="b1")
+    assert result.success is False
+    assert result.error == "ref 已失效（页面已变化），请先调用 browser_snapshot 重新观察"
+
+
+def test_interact_select_dispatches_input_and_change(stubbed):
+    stubbed.results.append({"result": {"value": {"ok": True, "info": "selected cn"}}})
+    result = _tool(BrowserInteractTool).execute(
+        action="select", selector="#lang", value="cn", browser_id="b1"
+    )
+    assert result.success is True
+    expression = stubbed.calls[0]["params"]["expression"]
+    assert "el.value=option.value" in expression
+    assert "'input'" in expression
+    assert "'change'" in expression
+
+
+def test_interact_hover_dispatches_mouse_sequence(stubbed):
+    stubbed.results.append({"result": {"value": {"ok": True, "info": "hover BUTTON More"}}})
+    result = _tool(BrowserInteractTool).execute(action="hover", ref="e3", browser_id="b1")
+    assert result.success is True
+    expression = stubbed.calls[0]["params"]["expression"]
+    for event in ("mouseover", "mouseenter", "mousemove"):
+        assert event in expression
+
+
+def test_interact_check_and_uncheck_set_checked(stubbed):
+    tool = _tool(BrowserInteractTool)
+    stubbed.results.append({"result": {"value": {"ok": True, "info": "checked INPUT x"}}})
+    assert tool.execute(action="check", ref="e2", browser_id="b1").success is True
+    stubbed.results.append({"result": {"value": {"ok": True, "info": "unchecked INPUT x"}}})
+    assert tool.execute(action="uncheck", ref="e2", browser_id="b1").success is True
+    check_expression = stubbed.calls[0]["params"]["expression"]
+    uncheck_expression = stubbed.calls[1]["params"]["expression"]
+    assert "el.checked=want" in check_expression
+    assert "const want=true" in check_expression
+    assert "const want=false" in uncheck_expression
+
+
+def test_interact_press_combo_sets_modifier_flags(stubbed):
+    stubbed.results.append({"result": {"value": {"ok": True, "info": "pressed Control+A"}}})
+    result = _tool(BrowserInteractTool).execute(action="press", key="Control+A", browser_id="b1")
+    assert result.success is True
+    expression = stubbed.calls[0]["params"]["expression"]
+    assert "ctrlKey:true" in expression
+    assert 'key:"A",keyCode:65' in expression  # 主键及其 keyCode
+    assert "cancelable:true" in expression
+    assert "keydown" in expression
+    assert "keyup" in expression
+    assert "document.activeElement" in expression
+
+
+def test_interact_press_on_selector_focuses_target(stubbed):
+    stubbed.results.append({"result": {"value": {"ok": True, "info": "pressed Shift+Tab"}}})
+    result = _tool(BrowserInteractTool).execute(
+        action="press", selector="#q", key="Shift+Tab", browser_id="b1"
+    )
+    assert result.success is True
+    expression = stubbed.calls[0]["params"]["expression"]
+    assert "querySelector" in expression
+    assert "el.focus" in expression
+    assert "shiftKey:true" in expression
+
+
+def test_interact_extended_validation_blocks_before_cdp(stubbed):
+    tool = _tool(BrowserInteractTool)
+    assert tool.execute(action="select", value="cn").success is False  # 无 ref/selector
+    assert tool.execute(action="select", selector="#s").success is False  # 无 value
+    assert tool.execute(action="hover").success is False
+    assert tool.execute(action="check", text="x").success is False  # text 非 check 定位
+    assert tool.execute(action="uncheck").success is False
+    assert tool.execute(action="type", ref="e1").success is False  # 无 value
+    assert stubbed.calls == []
 
 
 def test_screenshot_writes_workspace_file(stubbed, tmp_path):
