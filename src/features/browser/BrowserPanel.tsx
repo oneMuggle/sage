@@ -12,11 +12,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
+  fetchBrowserAudit,
   fetchBrowserControl,
+  fetchPendingConfirmations,
+  resolveConfirmation,
   setBrowserControl,
+  type BrowserAuditEntry,
   type BrowserControlState,
+  type BrowserPendingConfirmation,
+  type ConfirmationDecision,
 } from '../../shared/api/browserControlClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { buildLocalImageSrc } from '../../shared/lib/localImageSrc';
 import type { ToolCall } from '../../shared/lib/store';
 import {
   isBrowserPanelAutoOpenEnabled,
@@ -52,13 +59,29 @@ const EMPTY_ENVELOPE: StepEnvelope = { meta: null, success: null, error: '' };
 /** 后端控制门禁的错误前缀（backend/services/browser_control.py）。 */
 const USER_PAUSED_PREFIX = 'user_paused: ';
 const USER_TAKEOVER_PREFIX = 'user_takeover: ';
+/** 安全门禁的失败前缀（backend/tools/browser_tool.py，M4）。 */
+const NEEDS_CONFIRMATION_PREFIX = 'needs_confirmation: ';
+const HARD_BLOCKED_PREFIX = 'hard_blocked: ';
+const SITE_BLOCKED_PREFIX = 'site_blocked: ';
+const DENIED_BY_USER_PREFIX = 'denied_by_user: ';
 
 /** 时间线最多展示的最近步骤数。 */
 const MAX_STEPS = 8;
-/** 控制状态轮询间隔（毫秒）。 */
+/** 控制状态 / 待确认项轮询间隔（毫秒）。 */
 const POLL_INTERVAL_MS = 2000;
+/** 审计默认拉取条数。 */
+const AUDIT_LIMIT = 50;
 
-type StepStatus = 'pending' | 'success' | 'failed' | 'paused' | 'takeover';
+type StepStatus =
+  | 'pending'
+  | 'success'
+  | 'failed'
+  | 'paused'
+  | 'takeover'
+  | 'waiting_confirmation'
+  | 'blocked'
+  | 'site_blocked'
+  | 'denied';
 
 const STEP_STATUS_LABEL: Record<StepStatus, TranslationKey> = {
   pending: 'browser.panel.steps.pending',
@@ -66,6 +89,10 @@ const STEP_STATUS_LABEL: Record<StepStatus, TranslationKey> = {
   failed: 'browser.panel.steps.failed',
   paused: 'browser.panel.steps.paused',
   takeover: 'browser.panel.steps.takeover',
+  waiting_confirmation: 'browser.panel.steps.waiting_confirmation',
+  blocked: 'browser.panel.steps.blocked',
+  site_blocked: 'browser.panel.steps.site_blocked',
+  denied: 'browser.panel.steps.denied',
 };
 
 const STEP_STATUS_CLASS: Record<StepStatus, string> = {
@@ -74,6 +101,18 @@ const STEP_STATUS_CLASS: Record<StepStatus, string> = {
   failed: 'text-error',
   paused: 'text-warning',
   takeover: 'text-primary',
+  waiting_confirmation: 'text-warning',
+  blocked: 'text-error',
+  site_blocked: 'text-error',
+  denied: 'text-error',
+};
+
+/** 确认条按钮文案（按后端返回的 options 逐项渲染）。 */
+const CONFIRM_OPTION_LABEL: Record<ConfirmationDecision, TranslationKey> = {
+  session: 'browser.panel.confirm.option.session',
+  always: 'browser.panel.confirm.option.always',
+  approve: 'browser.panel.confirm.option.approve',
+  deny: 'browser.panel.confirm.option.deny',
 };
 
 const CONTROL_LABEL: Record<BrowserControlState, TranslationKey> = {
@@ -132,6 +171,10 @@ function parseEnvelope(call: ToolCall): StepEnvelope {
 function stepStatus(envelope: StepEnvelope): StepStatus {
   if (envelope.error.startsWith(USER_PAUSED_PREFIX)) return 'paused';
   if (envelope.error.startsWith(USER_TAKEOVER_PREFIX)) return 'takeover';
+  if (envelope.error.startsWith(NEEDS_CONFIRMATION_PREFIX)) return 'waiting_confirmation';
+  if (envelope.error.startsWith(HARD_BLOCKED_PREFIX)) return 'blocked';
+  if (envelope.error.startsWith(SITE_BLOCKED_PREFIX)) return 'site_blocked';
+  if (envelope.error.startsWith(DENIED_BY_USER_PREFIX)) return 'denied';
   if (envelope.success === null) return 'pending';
   return envelope.success === true ? 'success' : 'failed';
 }
@@ -139,6 +182,14 @@ function stepStatus(envelope: StepEnvelope): StepStatus {
 function baseName(path: string): string {
   const parts = path.split(/[\\/]/);
   return parts[parts.length - 1] || path;
+}
+
+/** 审计时间：本地时区 HH:mm:ss。 */
+function formatAuditTime(ts: number): string {
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return '—';
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function stepAction(call: ToolCall, meta: BrowserStepMeta | null): string {
@@ -174,6 +225,12 @@ export function BrowserPanel({ toolCalls = [] }: { toolCalls?: ToolCall[] } = {}
   const [controlState, setControlState] = useState<BrowserControlState>('agent');
   const [controlBusy, setControlBusy] = useState(false);
   const [autoOpen, setAutoOpen] = useState(() => isBrowserPanelAutoOpenEnabled());
+  const [pending, setPending] = useState<BrowserPendingConfirmation | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [shotFailed, setShotFailed] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditEntries, setAuditEntries] = useState<BrowserAuditEntry[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   const reportBounds = useCallback(() => {
     const apiRef = panelApi();
@@ -231,18 +288,25 @@ export function BrowserPanel({ toolCalls = [] }: { toolCalls?: ToolCall[] } = {}
     if (element) element.scrollTop = element.scrollHeight;
   }, [browserCalls.length]);
 
-  // 控制状态轮询：失败静默（后端未就绪/会话已回收都不该刷 toast）。
+  // 控制状态 + 待确认项轮询（同一 2s 节奏、单个定时器）：失败静默
+  // （后端未就绪/会话已回收都不该刷 toast）。
   useEffect(() => {
     const target = sessionId;
     if (!target) {
       setControlState('agent');
+      setPending(null);
       return;
     }
     let cancelled = false;
-    const load = () => {
+    const load = (): void => {
       void fetchBrowserControl(target)
         .then((state) => {
           if (!cancelled && state?.state) setControlState(state.state);
+        })
+        .catch(() => undefined);
+      void fetchPendingConfirmations(target)
+        .then((items) => {
+          if (!cancelled) setPending(items[0] ?? null);
         })
         .catch(() => undefined);
     };
@@ -253,6 +317,31 @@ export function BrowserPanel({ toolCalls = [] }: { toolCalls?: ToolCall[] } = {}
       window.clearInterval(timer);
     };
   }, [sessionId]);
+
+  // 截图加载失败时回退展示路径（截图位于数据目录，可能不在 sage-file 白名单内）。
+  useEffect(() => {
+    setShotFailed(false);
+  }, [pending?.id]);
+
+  // 审计按需加载：仅在用户展开 <details> 时拉取。
+  useEffect(() => {
+    if (!auditOpen || !sessionId) return;
+    let cancelled = false;
+    setAuditLoading(true);
+    void fetchBrowserAudit(sessionId, AUDIT_LIMIT)
+      .then((entries) => {
+        if (!cancelled) setAuditEntries(entries);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error(t('browser.panel.audit.load_failed'));
+      })
+      .finally(() => {
+        if (!cancelled) setAuditLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [auditOpen, sessionId, t]);
 
   const runControl = useCallback(
     async (
@@ -301,6 +390,32 @@ export function BrowserPanel({ toolCalls = [] }: { toolCalls?: ToolCall[] } = {}
       })();
     },
     [focusWindow, runControl, sessionId],
+  );
+
+  /** 提交确认裁决；成功后立即刷新控制状态与剩余待确认项。 */
+  const handleResolve = useCallback(
+    async (decision: ConfirmationDecision): Promise<void> => {
+      if (!pending || !sessionId) return;
+      setConfirmBusy(true);
+      try {
+        const result = await resolveConfirmation(pending.id, decision);
+        if (result?.control_state) setControlState(result.control_state);
+        setPending(null);
+        void fetchBrowserControl(sessionId)
+          .then((state) => {
+            if (state?.state) setControlState(state.state);
+          })
+          .catch(() => undefined);
+        void fetchPendingConfirmations(sessionId)
+          .then((items) => setPending(items[0] ?? null))
+          .catch(() => undefined);
+      } catch {
+        toast.error(t('browser.panel.confirm.resolve_failed'));
+      } finally {
+        setConfirmBusy(false);
+      }
+    },
+    [pending, sessionId, t],
   );
 
   const handleAutoOpenToggle = (checked: boolean): void => {
@@ -387,6 +502,58 @@ export function BrowserPanel({ toolCalls = [] }: { toolCalls?: ToolCall[] } = {}
             {t('browser.panel.controls.focus')}
           </button>
         </div>
+        {pending && (
+          <div
+            role="alertdialog"
+            aria-labelledby="browser-confirm-title"
+            data-testid="browser-confirm-bar"
+            className="mx-2 mb-1.5 px-2 py-1.5 rounded-radius-sm border border-warning/40 bg-warning/5"
+          >
+            <p id="browser-confirm-title" className="text-ui-2xs font-medium text-text">
+              {pending.kind === 'site_access'
+                ? t('browser.panel.confirm.site_title').replace('{domain}', pending.domain || '—')
+                : t('browser.panel.confirm.action_title').replace(
+                    '{description}',
+                    pending.description || '—',
+                  )}
+            </p>
+            {pending.description && pending.kind === 'site_access' && (
+              <p className="mt-0.5 text-ui-2xs text-text-secondary">{pending.description}</p>
+            )}
+            {pending.screenshot_path &&
+              (shotFailed ? (
+                <p
+                  data-testid="browser-confirm-shot-path"
+                  className="mt-0.5 truncate font-mono text-ui-2xs text-muted"
+                  title={pending.screenshot_path}
+                >
+                  {pending.screenshot_path}
+                </p>
+              ) : (
+                <img
+                  data-testid="browser-confirm-shot"
+                  src={buildLocalImageSrc(pending.screenshot_path)}
+                  alt={t('browser.panel.confirm.screenshot_alt')}
+                  onError={() => setShotFailed(true)}
+                  className="mt-1 max-h-24 rounded-radius-sm border border-border object-contain"
+                />
+              ))}
+            <div className="mt-1 flex flex-wrap gap-1">
+              {pending.options.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  data-testid={`browser-confirm-option-${option}`}
+                  disabled={confirmBusy}
+                  onClick={() => void handleResolve(option)}
+                  className="px-1.5 py-0.5 text-ui-2xs rounded-radius-sm border border-border hover:bg-bg-hover disabled:opacity-40"
+                >
+                  {t(CONFIRM_OPTION_LABEL[option])}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div
           ref={stepsRef}
           data-testid="browser-ai-steps"
@@ -451,6 +618,48 @@ export function BrowserPanel({ toolCalls = [] }: { toolCalls?: ToolCall[] } = {}
             })
           )}
         </div>
+        <details
+          data-testid="browser-ai-audit"
+          className="px-2 pb-1.5"
+          onToggle={(event) => setAuditOpen(event.currentTarget.open)}
+        >
+          <summary className="cursor-pointer select-none text-ui-2xs text-text-secondary">
+            {t('browser.panel.audit.title')}
+          </summary>
+          {auditLoading ? (
+            <p className="py-1 text-ui-2xs text-muted">{t('browser.panel.audit.loading')}</p>
+          ) : auditEntries.length === 0 ? (
+            <p className="py-1 text-ui-2xs text-muted">{t('browser.panel.audit.empty')}</p>
+          ) : (
+            <table className="mt-1 w-full text-ui-2xs">
+              <thead>
+                <tr className="text-left text-muted">
+                  <th className="py-0.5 pr-1 font-normal">{t('browser.panel.audit.time')}</th>
+                  <th className="py-0.5 pr-1 font-normal">{t('browser.panel.audit.action')}</th>
+                  <th className="py-0.5 pr-1 font-normal">{t('browser.panel.audit.target')}</th>
+                  <th className="py-0.5 pr-1 font-normal">{t('browser.panel.audit.result')}</th>
+                  <th className="py-0.5 font-normal">{t('browser.panel.audit.approval')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditEntries.map((entry) => (
+                  <tr key={entry.id} data-testid={`browser-audit-row-${entry.id}`}>
+                    <td className="whitespace-nowrap py-0.5 pr-1">{formatAuditTime(entry.ts)}</td>
+                    <td className="py-0.5 pr-1">{entry.action || '—'}</td>
+                    <td
+                      className="max-w-[10rem] truncate py-0.5 pr-1"
+                      title={entry.target_desc || entry.target_ref || entry.domain}
+                    >
+                      {entry.target_desc || entry.target_ref || entry.domain || '—'}
+                    </td>
+                    <td className="py-0.5 pr-1">{entry.result || '—'}</td>
+                    <td className="py-0.5">{entry.approval || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </details>
       </section>
       <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border">
         <button

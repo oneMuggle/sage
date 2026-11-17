@@ -9,11 +9,17 @@ import { BrowserPanel } from '../BrowserPanel';
 const controlMocks = vi.hoisted(() => ({
   fetchBrowserControl: vi.fn(),
   setBrowserControl: vi.fn(),
+  fetchPendingConfirmations: vi.fn(),
+  resolveConfirmation: vi.fn(),
+  fetchBrowserAudit: vi.fn(),
 }));
 
 vi.mock('../../../shared/api/browserControlClient', () => ({
   fetchBrowserControl: controlMocks.fetchBrowserControl,
   setBrowserControl: controlMocks.setBrowserControl,
+  fetchPendingConfirmations: controlMocks.fetchPendingConfirmations,
+  resolveConfirmation: controlMocks.resolveConfirmation,
+  fetchBrowserAudit: controlMocks.fetchBrowserAudit,
 }));
 
 const panel = {
@@ -70,6 +76,36 @@ function browserToolCall(
   };
 }
 
+/** 构造带顶层 error 的失败工具调用（安全门禁前缀走这里）。 */
+function browserErrorCall(name: string, error: string, id: string): ToolCall {
+  return {
+    id,
+    name,
+    args: {},
+    result: JSON.stringify({
+      success: false,
+      error,
+      content: { browser_meta: { session_id: 's1', action: 'navigate' } },
+    }),
+  };
+}
+
+/** 待确认项（M4）：字段与 BrowserPendingConfirmation 一致，可按需覆盖。 */
+function pendingConfirmation(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'c1',
+    session_id: 's1',
+    kind: 'site_access',
+    code: 'site_access',
+    domain: 'example.com',
+    description: '首次访问该站点',
+    options: ['session', 'always', 'deny'],
+    screenshot_path: '',
+    created_at: 1,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', ResizeObserverStub);
   Object.values(panel).forEach((fn) => fn.mockClear());
@@ -85,6 +121,17 @@ beforeEach(() => {
     session_id: id,
     state: action === 'pause' ? 'paused' : action === 'takeover' ? 'user_takeover' : 'agent',
   }));
+  controlMocks.fetchPendingConfirmations.mockReset();
+  controlMocks.fetchPendingConfirmations.mockResolvedValue([]);
+  controlMocks.resolveConfirmation.mockReset();
+  controlMocks.resolveConfirmation.mockResolvedValue({
+    confirmation_id: 'c1',
+    kind: 'site_access',
+    decision: 'always',
+    control_state: 'agent',
+  });
+  controlMocks.fetchBrowserAudit.mockReset();
+  controlMocks.fetchBrowserAudit.mockResolvedValue([]);
   panel.current.mockImplementation(async () => ({
     url: 'https://kns.cnki.net/',
     title: '知网',
@@ -222,5 +269,70 @@ describe('BrowserPanel M3 AI 操作区', () => {
     await waitFor(() =>
       expect(screen.getByTestId('browser-ai-status').textContent).toBe('用户接管'),
     );
+  });
+});
+
+describe('BrowserPanel M4 安全确认', () => {
+  it('site_access 待确认项渲染 alertdialog、标题与三个选项', async () => {
+    controlMocks.fetchPendingConfirmations.mockResolvedValue([pendingConfirmation()]);
+    installElectronApi(panel);
+    renderPanel([
+      browserToolCall('browser_navigate', {}, { action: 'navigate', url: 'https://example.com/' }),
+    ]);
+    const bar = await screen.findByTestId('browser-confirm-bar');
+    expect(bar.getAttribute('role')).toBe('alertdialog');
+    expect(bar.textContent).toContain('允许 Sage 访问 example.com？');
+    expect(bar.textContent).toContain('首次访问该站点');
+    expect(screen.getByTestId('browser-confirm-option-session').textContent).toBe('仅本次会话');
+    expect(screen.getByTestId('browser-confirm-option-always').textContent).toBe('始终允许');
+    expect(screen.getByTestId('browser-confirm-option-deny').textContent).toBe('拒绝');
+    expect(screen.queryByTestId('browser-confirm-option-approve')).toBeNull();
+  });
+
+  it('sensitive_action 待确认项渲染敏感操作标题与两选项', async () => {
+    controlMocks.fetchPendingConfirmations.mockResolvedValue([
+      pendingConfirmation({
+        id: 'c2',
+        kind: 'sensitive_action',
+        code: 'submit_form',
+        domain: '',
+        description: '提交表单',
+        options: ['approve', 'deny'],
+      }),
+    ]);
+    installElectronApi(panel);
+    renderPanel([
+      browserToolCall('browser_navigate', {}, { action: 'navigate', url: 'https://example.com/' }),
+    ]);
+    const bar = await screen.findByTestId('browser-confirm-bar');
+    expect(bar.textContent).toContain('确认执行敏感操作：提交表单');
+    expect(screen.getByTestId('browser-confirm-option-approve').textContent).toBe('批准一次');
+    expect(screen.getByTestId('browser-confirm-option-deny').textContent).toBe('拒绝');
+    expect(screen.queryByTestId('browser-confirm-option-session')).toBeNull();
+    expect(screen.queryByTestId('browser-confirm-option-always')).toBeNull();
+  });
+
+  it('点击「始终允许」调用 resolveConfirmation(always)', async () => {
+    controlMocks.fetchPendingConfirmations.mockResolvedValue([pendingConfirmation()]);
+    installElectronApi(panel);
+    renderPanel([
+      browserToolCall('browser_navigate', {}, { action: 'navigate', url: 'https://example.com/' }),
+    ]);
+    fireEvent.click(await screen.findByTestId('browser-confirm-option-always'));
+    await waitFor(() =>
+      expect(controlMocks.resolveConfirmation).toHaveBeenCalledWith('c1', 'always'),
+    );
+  });
+
+  it('时间线按安全门禁前缀渲染等待确认 / 已拦截 / 用户已拒绝徽章', () => {
+    installElectronApi(panel);
+    renderPanel([
+      browserErrorCall('browser_navigate', 'needs_confirmation: https://a.com/', 'e1'),
+      browserErrorCall('browser_navigate', 'hard_blocked: javascript:alert(1)', 'e2'),
+      browserErrorCall('browser_navigate', 'denied_by_user: site_access', 'e3'),
+    ]);
+    expect(screen.getByText('等待确认')).toBeTruthy();
+    expect(screen.getByText('已拦截（需接管）')).toBeTruthy();
+    expect(screen.getByText('用户已拒绝')).toBeTruthy();
   });
 });
