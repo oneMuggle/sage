@@ -82,6 +82,7 @@ src/widgets/markdown/
 
 - `isLocalFilePathHref` 迁到 `widgets/markdown/links.ts` 并从 `index.ts` 再导出，聊天与预览共用。
 - 本地文件链接：有 `onLocalFileClick` 时拦截并打开预览；无回调时降级为纯文本。外部链接统带 `target="_blank" rel="noopener noreferrer"`。
+- 预览端点（`GET /sessions/{id}/workspace/preview`，2026-11-17）：路径入参先归一化——剥离 `file://` scheme（含 `file://localhost/`）、展开 `~`；裸文件名 404 时按**本会话** `artifacts` 表回退解析真实路径（受管 Office 文档真实路径不回显给模型，链接只能是裸文件名）。带目录的相对路径不做回退（避免张冠李戴）。
 - 不开 `rehype-raw`，原始 HTML / `on*` 属性默认被剥。
 
 ## 9. 迁移与清理

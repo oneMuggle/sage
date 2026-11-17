@@ -85,11 +85,69 @@ _ARCHIVE_PREVIEW_SUFFIXES = frozenset({
 })
 
 
+def _normalize_link_path(raw_path: str) -> str:
+    """消息链接形态归一化：剥离 ``file://`` scheme、展开 ``~``。
+
+    模型和历史消息常用 ``file:///abs/path``、``~/x`` 写法（系统提示虽要求
+    相对路径，但历史数据不可控）。不归一化直接按字面拼工作区路径必然
+    404 —— 点击产物蓝链即报「文件不存在」。
+    """
+    raw = raw_path.strip()
+    if raw.lower().startswith("file://"):
+        raw = raw[len("file://") :]
+        # file://localhost/path → /path（RFC 8089 同义写法）
+        if raw.lower().startswith("localhost/"):
+            raw = raw[len("localhost") :]
+    if not raw:
+        return raw
+    return str(Path(raw).expanduser())
+
+
+def _link_allows_artifact_fallback(raw_path: str, normalized: str) -> bool:
+    """何时允许按会话产物回退：裸文件名 / ``file://`` / ``~`` 形态。
+
+    带目录的相对/绝对路径解析失败属于「链接本身写错了目录」，按同名产物
+    猜一把会张冠李戴；而显式 ``file://`` 与 ``~`` 是历史消息的常见形态，
+    文件名匹配是唯一可用的线索。
+    """
+    raw = raw_path.strip()
+    if not raw:
+        return False
+    if raw.lower().startswith("file://") or raw.startswith("~"):
+        return True
+    return bool(normalized) and Path(normalized).name == normalized
+
+
+def _artifact_path_fallback(
+    conn: sqlite3.Connection, session_id: str, raw_path: str
+) -> Optional[Path]:
+    """路径解析失败时按会话产物表回退。
+
+    受管 Office 文档落在 ``office/<doc_type>/<doc_id>/<文件名>``，且真实
+    路径刻意不回显给模型 —— 消息里的链接往往是裸文件名，按工作区根解析
+    必然 404。回退只查**本会话**登记的产物（跨会话同名产物不可见，防泄露）。
+    产物路径可以合法落在工作区外（如 http_download 落到 ~/Downloads）：
+    它们由本会话工具写入并登记，允许预览；仍走 realpath 归一防 symlink 混淆。
+    """
+    name = Path(raw_path.replace("\\", "/")).name
+    if not name:
+        return None
+    row = conn.execute(
+        "SELECT path FROM artifacts WHERE session_id = ? AND name = ? "
+        "ORDER BY created_at DESC, rowid DESC LIMIT 1",
+        (session_id, name),
+    ).fetchone()
+    if row is None:
+        return None
+    candidate = Path(os.path.realpath(row["path"]))
+    return candidate if candidate.is_file() else None
+
+
 def _resolve_workspace_target(root: str, raw_path: str) -> Path:
     """把消息里的路径解析为工作区内真实路径（相对/绝对均可）。"""
     from backend.tools.file_tool import _path_within_workspace
 
-    raw = raw_path.strip()
+    raw = _normalize_link_path(raw_path)
     if not raw:
         raise _error(400, "invalid_path", "路径不能为空")
     target = raw if Path(raw).is_absolute() else str(Path(root) / raw)
@@ -189,10 +247,30 @@ def preview_workspace_file(
     压缩包：无 ``entry`` 时返回目录列表 ``{kind: "archive", ...}``；
     有 ``entry`` 时读取条目内容并按其类型返回（代码/图片/文本等）。
     """
-    root = _bound_workspace_or_raise(_connection(), session_id)
-    resolved = _resolve_workspace_target(root, path)
+    conn = _connection()
+    root = _bound_workspace_or_raise(conn, session_id)
+    # 裸文件名 / file:// / ~ 形态才允许按会话产物回退；带目录的路径解析失败
+    # 属于「链接写错了目录」，按同名产物猜一把会张冠李戴。
+    allow_fallback = _link_allows_artifact_fallback(path, _normalize_link_path(path))
+    try:
+        resolved = _resolve_workspace_target(root, path)
+    except HTTPException:
+        # 越界（403）/空路径（400）同样可能是 file:// / ~ 形态展开的结果 ——
+        # 形态门控通过时先按本会话产物回退，失败再原样抛状态码。
+        fallback = (
+            _artifact_path_fallback(conn, session_id, path) if allow_fallback else None
+        )
+        if fallback is None:
+            raise
+        resolved = fallback
     if not resolved.is_file():
-        raise _error(404, "file_not_found", "文件不存在")
+        # F2 (2026-11-17): 裸文件名（受管 Office 文档）等按会话产物回退。
+        fallback = (
+            _artifact_path_fallback(conn, session_id, path) if allow_fallback else None
+        )
+        if fallback is None:
+            raise _error(404, "file_not_found", "文件不存在")
+        resolved = fallback
 
     suffix = resolved.suffix.lower().lstrip(".")
     if suffix == "pdf":
@@ -224,15 +302,24 @@ def resolve_workspace_files(
     越界/不存在的路径一律返回 ``exists=False``（不抛错，便于前端批量标注）；
     单次最多 50 条（请求模型约束）。
     """
-    root = _bound_workspace_or_raise(_connection(), session_id)
+    conn = _connection()
+    root = _bound_workspace_or_raise(conn, session_id)
     results: List[WorkspaceResolveResultModel] = []
     for raw in request.paths:
+        resolved: Optional[Path]
         try:
             resolved = _resolve_workspace_target(root, raw)
         except HTTPException:
-            results.append(WorkspaceResolveResultModel(path=raw, exists=False))
-            continue
-        if resolved.is_file():
+            resolved = None
+        # 与 preview 同口径：裸文件名 / file:// / ~ 形态允许按会话产物回退，
+        # 否则正文里的受管 Office 裸文件名永远不会被确认为可点击链接。
+        if (resolved is None or not resolved.is_file()) and _link_allows_artifact_fallback(
+            raw, _normalize_link_path(raw)
+        ):
+            fallback = _artifact_path_fallback(conn, session_id, raw)
+            if fallback is not None:
+                resolved = fallback
+        if resolved is not None and resolved.is_file():
             results.append(
                 WorkspaceResolveResultModel(
                     path=raw, exists=True, kind=_kind_for_preview(resolved)

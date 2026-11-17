@@ -209,6 +209,137 @@ async def test_fork_inherits_active_workspace_binding(client, tmp_path):
     assert source_binding["generation"] == source_generation
 
 
+def _record_source_artifacts(session_id: str, tmp_path, n: int = 2):
+    """在源会话登记 n 个产物（返回 artifact id 列表）。"""
+    from backend.data import artifact_repo
+
+    ids = []
+    for i in range(n):
+        path = tmp_path / f"产物{i}.md"
+        path.write_text(f"# content {i}\n", encoding="utf-8")
+        ids.append(
+            artifact_repo.record_artifact(
+                session_id, str(path), path.name, "markdown", path.stat().st_size
+            )
+        )
+    return ids
+
+
+@pytest.mark.asyncio()
+async def test_fork_copies_artifacts(client, tmp_path):
+    """F1: fork 继承源会话的产物 —— 历史消息里的产物链接与面板应延续。
+
+    产物 id 是全局主键且 content 端点按 session 校验，复制必须分配新 id；
+    源会话的产物行不受影响。
+    """
+    create = await client.post(f"{PREFIX}/sessions", json={"title": "产物继承"})
+    source_id = create.json()["id"]
+    _seed_messages(source_id, n=2)
+    source_artifact_ids = _record_source_artifacts(source_id, tmp_path)
+
+    forked = (await client.post(f"{PREFIX}/sessions/{source_id}/fork", json={})).json()
+
+    items = (
+        await client.get(f"{PREFIX}/sessions/{forked['id']}/artifacts")
+    ).json()["artifacts"]
+    assert {i["name"] for i in items} == {"产物0.md", "产物1.md"}
+    assert all(i["id"] not in source_artifact_ids for i in items)
+
+    # 源会话产物原样保留；fork 复制行共享源产物路径（同一工作区文件）
+    source_items = (
+        await client.get(f"{PREFIX}/sessions/{source_id}/artifacts")
+    ).json()["artifacts"]
+    assert {i["id"] for i in source_items} == set(source_artifact_ids)
+    source_paths = {i["name"]: i["path"] for i in source_items}
+    forked_paths = {i["name"]: i["path"] for i in items}
+    assert forked_paths == source_paths
+
+    # fork 的产物可按新 id 正常读取内容
+    target = next(i for i in items if i["name"] == "产物0.md")
+    content = (
+        await client.get(
+            f"{PREFIX}/sessions/{forked['id']}/artifacts/{target['id']}/content"
+        )
+    ).json()
+    assert content["ok"] is True
+    assert content["content"] == "# content 0\n"
+
+
+@pytest.mark.asyncio()
+async def test_fork_copies_artifact_versions(client, tmp_path):
+    """F1: fork 复制产物的版本历史（重映射到新 artifact id）。"""
+    import hashlib
+
+    from backend.data import artifact_version_repo
+
+    create = await client.post(f"{PREFIX}/sessions", json={"title": "版本继承"})
+    source_id = create.json()["id"]
+    _seed_messages(source_id, n=2)
+    (artifact_id,) = _record_source_artifacts(source_id, tmp_path, n=1)
+
+    content = "# content 0\n"
+    artifact_version_repo.create_version(
+        artifact_id=artifact_id,
+        content=content,
+        content_hash=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        snapshot_dir=str(tmp_path / ".snapshots"),
+        note="v1",
+    )
+
+    forked = (await client.post(f"{PREFIX}/sessions/{source_id}/fork", json={})).json()
+    items = (
+        await client.get(f"{PREFIX}/sessions/{forked['id']}/artifacts")
+    ).json()["artifacts"]
+    assert len(items) == 1
+    versions = (
+        await client.get(
+            f"{PREFIX}/sessions/{forked['id']}/artifacts/{items[0]['id']}/versions"
+        )
+    ).json()["versions"]
+    assert [v["note"] for v in versions] == ["v1"]
+
+
+@pytest.mark.asyncio()
+async def test_fork_cuts_artifacts_at_fork_point(client, tmp_path):
+    """显式分叉点只复制分叉点之前的产物，被丢弃未来的产物不进入新分支。"""
+    from backend.data import artifact_repo
+    from backend.data.database import get_database
+
+    create = await client.post(f"{PREFIX}/sessions", json={"title": "截断"})
+    source_id = create.json()["id"]
+    ids = _seed_messages(source_id, n=4)  # created_at = base + i*100（base 固定）
+
+    old = tmp_path / "旧产物.md"
+    old.write_text("old", encoding="utf-8")
+    old_id = artifact_repo.record_artifact(
+        source_id, str(old), old.name, "markdown", 3
+    )
+    new = tmp_path / "新产物.md"
+    new.write_text("new", encoding="utf-8")
+    new_id = artifact_repo.record_artifact(
+        source_id, str(new), new.name, "markdown", 3
+    )
+    base = 1_750_000_000_000
+    conn = get_database().get_connection()
+    conn.execute("UPDATE artifacts SET created_at = ? WHERE id = ?", (base + 50, old_id))
+    conn.execute(
+        "UPDATE artifacts SET created_at = ? WHERE id = ?", (base + 2500, new_id)
+    )
+    conn.commit()
+
+    # 分叉点 ids[2]（created_at=base+200）→ 只带 base+50 的旧产物
+    forked = (
+        await client.post(
+            f"{PREFIX}/sessions/{source_id}/fork",
+            json={"at_message_id": ids[2], "before_message": True},
+        )
+    ).json()
+    items = (
+        await client.get(f"{PREFIX}/sessions/{forked['id']}/artifacts")
+    ).json()["artifacts"]
+    assert [i["name"] for i in items] == ["旧产物.md"]
+
+
 @pytest.mark.asyncio()
 async def test_fork_without_binding_leaves_fork_unbound(client):
     """B1 边界: 源会话无活跃绑定 → fork 会话同样无绑定(binding 为 null)。
