@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import platform
@@ -42,6 +43,17 @@ def _normalise_arch(value: str) -> str:
     if lowered in ("aarch64", "arm64"):
         return "arm64"
     return lowered
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _resolve_user_data_dir(env: Mapping[str, str]) -> Path:
@@ -293,6 +305,8 @@ class ComponentService:
             return False
         for item, destination in resolved:
             if not destination.is_file() or destination.stat().st_size != item.size:
+                return False
+            if _sha256_file(destination) != item.sha256:
                 return False
         return True
 

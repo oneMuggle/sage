@@ -70,8 +70,10 @@ def stage_payload(
         infos = archive.infolist()
         total = len(infos)
         for index, info in enumerate(infos, 1):
+            if info.is_dir():
+                continue
             name = safe_member_name(info.filename)
-            if info.is_dir() or name in ("component.json", "signature.bin"):
+            if name in ("component.json", "signature.bin"):
                 continue
             prefix = manifest.payload_dir + "/"
             if not name.startswith(prefix):
