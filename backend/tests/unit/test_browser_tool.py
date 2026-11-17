@@ -1692,7 +1692,7 @@ def test_navigate_blocked_site_returns_site_blocked(stubbed, monkeypatch):
 
 def test_navigate_denied_site_returns_denied_by_user(stubbed, monkeypatch):
     fingerprint = browser_safety.action_fingerprint(
-        "browser_navigate", "site_access", "denied.example"
+        "browser_navigate", "site_access", "denied.example", session_id="b1"
     )
     browser_safety.get_confirmation_registry().resolve(
         browser_safety.get_confirmation_registry()
@@ -2282,3 +2282,223 @@ def test_interact_upload_sets_file_input_files(stubbed, tmp_path):
         "files": [str(target.resolve())],
         "objectId": "obj-42",
     }
+
+
+# ---------------------------------------------------------------------------
+# 最终修复波：I1 站点门禁补漏 / I2 指纹作用域 / I3 元数据正文泄漏
+# ---------------------------------------------------------------------------
+
+
+def test_tabs_create_blocked_site_is_stopped(stubbed, monkeypatch):
+    """I1：browser_tabs create 也是导航，禁止站点必须在 createTarget 前拦截。"""
+    monkeypatch.setattr(
+        browser_tool,
+        "_safety_check_site",
+        lambda sid, url: "block" if "blocked.example" in url else "allow",
+    )
+
+    result = _tool(BrowserTabsTool).execute(
+        action="create", url="https://blocked.example/", browser_id="b1"
+    )
+
+    assert result.success is False
+    assert result.error.startswith("site_blocked: ")
+    assert "blocked.example" in result.error
+    assert "Target.createTarget" not in [call["method"] for call in stubbed.calls]
+
+
+def test_interact_click_navigation_to_blocked_site_is_stopped(stubbed, monkeypatch):
+    """I1：点击链接跳到禁止域名时，交互成功后必须复检最终 URL。"""
+    monkeypatch.setattr(
+        browser_tool,
+        "_safety_check_site",
+        lambda sid, url: "block" if "blocked.example" in url else "allow",
+    )
+    browser_tool._remember_page(stubbed.session, "https://allow.example/", "Allow")
+    stubbed.results.append(
+        {
+            "result": {
+                "value": {
+                    "ok": True,
+                    "info": "clicked A",
+                    "url": "https://blocked.example/landing",
+                    "title": "Blocked",
+                }
+            }
+        }
+    )
+
+    result = _tool(BrowserInteractTool).execute(action="click", text="链接", browser_id="b1")
+
+    assert result.success is False
+    assert result.error.startswith("site_blocked: ")
+    assert "blocked.example" in result.error
+    assert "Page.navigate" not in [call["method"] for call in stubbed.calls]
+
+
+def test_snapshot_on_blocked_current_page_is_stopped(stubbed, monkeypatch):
+    """I1：当前页面域名被禁止时 snapshot 不得读取页面内容。"""
+    browser_tool._remember_page(stubbed.session, "https://blocked.example/", "Blocked")
+    monkeypatch.setattr(browser_tool, "_safety_check_site", lambda sid, url: "block")
+
+    result = _tool(BrowserSnapshotTool).execute(browser_id="b1")
+
+    assert result.success is False
+    assert result.error.startswith("site_blocked: ")
+    assert result.content["browser_meta"]["action"] == "snapshot"
+    assert stubbed.calls == []
+
+
+def test_interact_on_blocked_current_page_is_stopped(stubbed, monkeypatch):
+    """I1：当前页面被禁止时 interact 必须在动作前短路。"""
+    browser_tool._remember_page(stubbed.session, "https://blocked.example/", "Blocked")
+    monkeypatch.setattr(browser_tool, "_safety_check_site", lambda sid, url: "block")
+
+    result = _tool(BrowserInteractTool).execute(action="click", selector="#x", browser_id="b1")
+
+    assert result.success is False
+    assert result.error.startswith("site_blocked: ")
+    assert stubbed.calls == []
+
+
+def test_browser_login_to_blocked_domain_is_refused(monkeypatch):
+    """I1：browser_login 只应用站点策略的 block 部分。"""
+    monkeypatch.setattr(browser_tool, "_safety_check_site", lambda sid, url: "block")
+    monkeypatch.setattr(
+        browser_tool,
+        "launch_browser",
+        lambda *a, **k: pytest.fail("blocked 站点不应启动浏览器"),
+    )
+
+    result = BrowserLoginTool().execute(url="https://blocked.example/login")
+
+    assert result.success is False
+    assert result.error.startswith("site_blocked: ")
+    assert "blocked.example" in result.error
+
+
+def test_browser_login_unknown_site_stays_allowed(monkeypatch):
+    """I1：未知站点的用户主动登录保持允许（不做 confirm）。"""
+    launched = {}
+
+    def _fake_launch(**kwargs):
+        launched.update(kwargs)
+        return _fake_session(browser_tool._LOGIN_PROFILE_NAME)
+
+    monkeypatch.setattr(browser_tool, "_safety_check_site", lambda sid, url: "confirm")
+    monkeypatch.setattr(browser_tool, "launch_browser", _fake_launch)
+    monkeypatch.setattr(
+        browser_tool, "cdp_command", lambda *a, **k: {"targetId": "t-login"}
+    )
+    # 启动后立刻让登录检测结束轮询（抛错走容错分支）：只验证站点门禁未拦截
+    monkeypatch.setattr(browser_tool, "_wait_for_page_load", lambda *a, **k: None)
+    monkeypatch.setattr(
+        browser_tool,
+        "_check_login_status",
+        lambda *a, **k: (_ for _ in ()).throw(browser_tool.BrowserCDPError("stop")),
+    )
+    monkeypatch.setattr(
+        browser_tool.BrowserLoginTool,
+        "_export_cookies",
+        lambda self, session, host, target_id="": ([], {}),
+    )
+
+    result = BrowserLoginTool().execute(url="https://new.example/login", timeout_seconds=1)
+
+    assert launched.get("browser_id") == browser_tool._LOGIN_PROFILE_NAME
+    assert not (result.error or "").startswith("site_blocked: ")
+
+
+def test_upload_approval_is_bound_to_resolved_file(stubbed, tmp_path, monkeypatch):
+    """I2：批准上传 A 不能被重放为上传 B；描述须包含解析后的文件名。"""
+    (tmp_path / "upload.txt").write_text("hi", encoding="utf-8")
+    (tmp_path / "other.txt").write_text("other", encoding="utf-8")
+    tool = BrowserInteractTool(policy=ToolPolicy(workspace_root=str(tmp_path)))
+
+    first = tool.execute(
+        action="upload",
+        selector="input[type=file]",
+        path="upload.txt",
+        browser_id="b1",
+    )
+    assert first.error.startswith("needs_confirmation: ")
+    pending = browser_safety.get_confirmation_registry().list("b1")
+    assert "upload.txt" in pending[0].description
+    browser_safety.get_confirmation_registry().resolve(pending[0].id, "approve")
+    get_browser_control().set_state("b1", BrowserControlState.AGENT)
+
+    # 换一个文件：旧批准不适用，必须重新确认
+    replay = tool.execute(
+        action="upload",
+        selector="input[type=file]",
+        path="other.txt",
+        browser_id="b1",
+    )
+    assert replay.error.startswith("needs_confirmation: ")
+    assert "other.txt" in browser_safety.get_confirmation_registry().list("b1")[-1].description
+
+    # 原文件的批准仍有效：可正常执行（replay 曾把会话暂停，先恢复）
+    get_browser_control().set_state("b1", BrowserControlState.AGENT)
+    stubbed.results.extend(
+        [
+            {"result": {"value": {"ok": True}}},
+            {"result": {"objectId": "obj-upload"}},
+            {},
+        ]
+    )
+    ok = tool.execute(
+        action="upload",
+        selector="input[type=file]",
+        path="upload.txt",
+        browser_id="b1",
+    )
+    assert ok.success is True
+
+
+def test_selector_body_metadata_never_reads_page_text(monkeypatch):
+    """I3：selector=body 的元数据读取同样受 body/宽容器守卫约束。"""
+    session = _fake_session("b1")
+    captured: Dict[str, str] = {}
+
+    def _fake_cdp(session_, method, params=None, target_id=None):
+        captured["expression"] = params["expression"]
+        return {
+            "result": {
+                "value": {"tag": "body", "role": "", "name": "", "type": "", "placeholder": ""}
+            }
+        }
+
+    monkeypatch.setattr(browser_tool, "cdp_command", _fake_cdp)
+
+    meta = browser_tool._read_target_metadata(session, selector="body")
+
+    assert meta is not None
+    assert meta["name"] == ""
+    expression = captured["expression"]
+    assert "isBody" in expression
+    assert "isBroad" in expression
+    assert expression.index("isBody") < expression.index("el.innerText")
+
+
+def test_selector_body_interact_keeps_audit_target_desc_empty(stubbed, monkeypatch):
+    """I3：selector=body 时审计 target_desc 必须为空（不落页面正文）。"""
+    records: List[tuple] = []
+
+    def _capture(session, tool_name, action, outcome, **fields):
+        records.append((tool_name, action, outcome, fields))
+
+    monkeypatch.setattr(browser_tool, "_record_browser_audit", _capture)
+    monkeypatch.setattr(
+        browser_tool,
+        "_read_target_metadata",
+        lambda *a, **k: {"tag": "body", "role": "", "name": "", "type": "", "placeholder": ""},
+    )
+    stubbed.results.append({"result": {"value": {"ok": True, "info": "clicked BODY"}}})
+
+    result = _tool(BrowserInteractTool).execute(
+        action="click", selector="body", browser_id="b1"
+    )
+
+    assert result.success is True
+    assert records[-1][1:3] == ("click", "ok")
+    assert records[-1][3]["target_desc"] == ""

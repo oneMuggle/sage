@@ -473,3 +473,82 @@ def test_action_fingerprint_stable_and_locator_priority():
     assert base == browser_safety.action_fingerprint(
         "browser_interact", "click", "a.com", "e1", "", "Go"
     )
+
+
+def test_action_fingerprint_binds_session_and_scope():
+    """I2：指纹必须区分会话与动作参数（upload 路径 / select 值）。"""
+    base = browser_safety.action_fingerprint(
+        "browser_interact", "upload", "a.com", "e1", "", "上传", session_id="s1", scope="/w/a.txt"
+    )
+    assert base != browser_safety.action_fingerprint(
+        "browser_interact", "upload", "a.com", "e1", "", "上传", session_id="s2", scope="/w/a.txt"
+    )
+    assert base != browser_safety.action_fingerprint(
+        "browser_interact", "upload", "a.com", "e1", "", "上传", session_id="s1", scope="/w/b.txt"
+    )
+
+
+def test_approval_and_denial_enforce_session(registry):
+    """I2：批准/拒绝必须按会话匹配，跨会话不可复用。"""
+    pending = _create(registry, "fp-session", session="s1")
+    registry.resolve(pending.id, "approve")
+
+    assert registry.consume_approval("fp-session", "s2") is False
+    assert registry.consume_approval("fp-session", "s1") is True
+
+    denied = _create(registry, "fp-deny", session="s1")
+    registry.resolve(denied.id, "deny")
+    assert registry.is_denied("fp-deny", "s2") is False
+    assert registry.is_denied("fp-deny", "s1") is True
+
+
+def test_to_public_dict_inlines_bounded_thumbnail(tmp_path):
+    """I4：确认项内联小截图 data URL；无法压到上限时标记不可用。"""
+    import base64
+
+    tiny_png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk"
+        "+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    )
+    shot = tmp_path / "shot.png"
+    shot.write_bytes(tiny_png)
+    pending = browser_safety.PendingConfirmation(
+        id="c1",
+        session_id="s1",
+        kind="sensitive_action",
+        code="file_upload",
+        domain="example.com",
+        description="上传文件",
+        screenshot_path=str(shot),
+    )
+    public = pending.to_public_dict()
+    assert public["thumbnail_data_url"].startswith("data:image/")
+    assert "thumbnail_unavailable" not in public
+
+    big = tmp_path / "big.bin"
+    big.write_bytes(b"\x00" * (browser_safety.THUMBNAIL_MAX_BYTES + 1))
+    pending_big = browser_safety.PendingConfirmation(
+        id="c2",
+        session_id="s1",
+        kind="sensitive_action",
+        code="file_upload",
+        domain="example.com",
+        description="上传文件",
+        screenshot_path=str(big),
+    )
+    public_big = pending_big.to_public_dict()
+    assert "thumbnail_data_url" not in public_big
+    assert public_big["thumbnail_unavailable"] is True
+
+    missing = browser_safety.PendingConfirmation(
+        id="c3",
+        session_id="s1",
+        kind="sensitive_action",
+        code="file_upload",
+        domain="example.com",
+        description="上传文件",
+        screenshot_path=str(tmp_path / "missing.png"),
+    )
+    public_missing = missing.to_public_dict()
+    assert "thumbnail_data_url" not in public_missing
+    assert public_missing["thumbnail_unavailable"] is True

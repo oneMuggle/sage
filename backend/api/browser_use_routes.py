@@ -320,12 +320,17 @@ def resolve_browser_confirmation(  # noqa: PLR0911 — 每个校验门一个返�
             browser_safety.grant_site(pending.session_id, pending.domain, decision)
         except ValueError as exc:
             return JSONResponse(status_code=400, content={"ok": False, "error": str(exc)})
-    get_browser_control().set_state(pending.session_id, BrowserControlState.AGENT)
+    # 只把 PAUSED 恢复为 AGENT：迟到的裁决（例如确认期间用户点了接管）
+    # 不得把 active 的 user_takeover 抢回 agent。
+    control = get_browser_control()
+    if control.get_state(pending.session_id) is BrowserControlState.PAUSED:
+        control.set_state(pending.session_id, BrowserControlState.AGENT)
+    current_state = control.get_state(pending.session_id)
     return {
         "confirmation_id": resolved.id,
         "kind": resolved.kind,
         "decision": decision,
-        "control_state": BrowserControlState.AGENT.value,
+        "control_state": current_state.value,
     }
 
 

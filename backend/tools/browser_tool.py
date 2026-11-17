@@ -351,10 +351,15 @@ def _site_access_gate(
     if not domain:
         return None
     site_fingerprint = browser_safety.action_fingerprint(
-        "browser_navigate", "site_access", domain
+        "browser_navigate",
+        "site_access",
+        domain,
+        session_id=session.browser_id,
     )
     registry = browser_safety.get_confirmation_registry()
-    if registry.is_denied(site_fingerprint):
+    if registry.is_denied(site_fingerprint, session.browser_id):
+        # 用户拒绝后暂停会话：禁止页面继续被 snapshot/interact 读取。
+        get_browser_control().set_state(session.browser_id, BrowserControlState.PAUSED)
         _record_browser_audit(
             session,
             "browser_navigate",
@@ -426,6 +431,37 @@ def _site_access_gate(
     return None
 
 
+def _blocked_current_page(session: BrowserSession) -> Optional[Tuple[str, str]]:
+    """当前页面域名被持久策略禁止时返回 ``(domain, url)``，否则 None。
+
+    用于 snapshot/interact 的前置短路：即使导航门禁曾放行（例如策略在
+    会话中途被改写成 block），也不允许继续读取/操作被禁止的站点。
+    """
+    url, _title = _cached_page(session)
+    if not url:
+        return None
+    domain = browser_safety.domain_of(url)
+    if not domain:
+        return None
+    if _safety_check_site(session.browser_id, url) != "block":
+        return None
+    return domain, url
+
+
+def _site_blocked_result(session: BrowserSession, action: str) -> Optional[ToolResult]:
+    """当前页面被禁止时的统一 ``site_blocked:`` 结果（附带 browser_meta）。"""
+    blocked = _blocked_current_page(session)
+    if blocked is None:
+        return None
+    domain, url = blocked
+    return _meta_result(
+        ToolResult(success=False, error=f"site_blocked: 用户已禁止该站点 {domain}"),
+        session,
+        action,
+        url=url,
+    )
+
+
 def _read_target_metadata(
     session: BrowserSession,
     ref: str = "",
@@ -447,24 +483,33 @@ def _read_target_metadata(
         locator = f"document.querySelector({json.dumps(str(selector))})"
     else:
         locator = "(document.activeElement||document.body)"
-    if use_focused:
-        # 无真实焦点时 activeElement 即 body：绝不对 body/documentElement
-        # 取 innerText（否则页面正文会进入 name → 审计/确认描述）。
-        name_source = (
-            "var name='';"
-            "var isBody=(el===document.body||el===document.documentElement);"
-            "if(!isBody){"
-            "name=(el.getAttribute&&(el.getAttribute('aria-label')||''))||'';"
-            "if(!name&&el.labels&&el.labels.length){name=el.labels[0].textContent||'';}"
-            "if(!name){name=el.innerText||el.textContent||'';}"
-            "}"
-        )
-    else:
-        name_source = (
-            "var name=(el.getAttribute&&(el.getAttribute('aria-label')||''))||'';"
-            "if(!name&&el.labels&&el.labels.length){name=el.labels[0].textContent||'';}"
-            "if(!name){name=el.innerText||el.textContent||'';}"
-        )
+    # body/documentElement 永不取正文；宽泛容器（div/main/section… 且没有
+    # 交互角色）只取直接文本节点，避免整页/整块 innerText 进入 name →
+    # 审计/确认描述（I3）。focused 与非 focused 路径共用同一守卫。
+    name_source = (
+        "var name='';"
+        "var isBody=(el===document.body||el===document.documentElement);"
+        "var role=(el.getAttribute&&el.getAttribute('role'))||'';"
+        "var tag=(el.tagName||'').toUpperCase();"
+        "var broadRoles={generic:1,presentation:1,none:1,main:1,region:1,"
+        "document:1,group:1,list:1};"
+        "var broadTags={DIV:1,MAIN:1,SECTION:1,ARTICLE:1,NAV:1,FORM:1,"
+        "ASIDE:1,HEADER:1,FOOTER:1,UL:1,OL:1,TABLE:1,TBODY:1,TR:1,"
+        "BODY:1,HTML:1};"
+        "var isBroad=!!broadTags[tag]&&(!role||broadRoles[role]===1);"
+        "if(!isBody){"
+        "name=(el.getAttribute&&(el.getAttribute('aria-label')||''))||'';"
+        "if(!name){name=(el.getAttribute&&(el.getAttribute('title')||''))||'';}"
+        "if(!name&&el.labels&&el.labels.length){name=el.labels[0].textContent||'';}"
+        "if(!name){"
+        "if(!isBroad){name=el.innerText||el.textContent||'';}"
+        "else{var tn='';var kids=el.childNodes||[];"
+        "for(var i=0;i<kids.length&&tn.length<120;i++){"
+        "if(kids[i].nodeType===3){tn+=kids[i].nodeValue;}}"
+        "name=tn;}"
+        "}"
+        "}"
+    )
     expression = (
         "(function(){var el=" + locator + ";if(!el)return null;"
         + name_source
@@ -1436,7 +1481,7 @@ class BrowserSnapshotTool(BaseTool):
             },
         )
 
-    def execute(
+    def execute(  # noqa: PLR0911 — 门禁/校验各走独立早退分支，扁平更直读
         self,
         mode: str = "interactive",
         max_nodes: int = SNAPSHOT_INTERACTIVE_MAX_DEFAULT,
@@ -1464,6 +1509,10 @@ class BrowserSnapshotTool(BaseTool):
             blocked = _blocked_by_control(session, "browser_snapshot")
             if blocked is not None:
                 return blocked
+            # I1：当前页面域名被持久策略禁止时，snapshot 不得读取页面内容
+            site_blocked = _site_blocked_result(session, "snapshot")
+            if site_blocked is not None:
+                return site_blocked
             expression = build_snapshot_expression(
                 mode=mode,
                 max_collect=SNAPSHOT_HARD_COLLECT_CAP,
@@ -1630,6 +1679,10 @@ class BrowserInteractTool(BaseTool):
             blocked = _blocked_by_control(session, "browser_interact")
             if blocked is not None:
                 return blocked
+            # I1：当前页面域名被持久策略禁止时，交互不得作用于该页面
+            site_blocked = _site_blocked_result(session, "interact")
+            if site_blocked is not None:
+                return site_blocked
             target_fields = {"target_ref": ref or selector, "target_name": text}
             # M4 敏感动作：先取目标元数据再分类；hard_block 不允许用户放行。
             # 仅 press Enter/Return 需要读焦点元素（触发默认提交/点击语义），
@@ -1656,8 +1709,22 @@ class BrowserInteractTool(BaseTool):
             target_name = (
                 str(target_meta.get("name") or "") if isinstance(target_meta, dict) else ""
             ) or text
+            # I2：批准指纹绑定会话；upload/select 额外绑定解析后的路径/目标值，
+            # 防止「批准上传 A」被重放为上传 B 或替换选项值。
+            approval_scope = ""
+            if action == "upload" and upload_file is not None:
+                approval_scope = str(upload_file)
+            elif action == "select":
+                approval_scope = str(value or "")
             fingerprint = browser_safety.action_fingerprint(
-                "browser_interact", action, domain, ref, selector, target_name
+                "browser_interact",
+                action,
+                domain,
+                ref,
+                selector,
+                target_name,
+                session_id=session.browser_id,
+                scope=approval_scope,
             )
             registry = browser_safety.get_confirmation_registry()
             audit_target = {
@@ -1689,8 +1756,12 @@ class BrowserInteractTool(BaseTool):
                     **target_fields,
                 )
             if verdict.kind == "confirm":
-                if not registry.consume_approval(fingerprint):
-                    if registry.is_denied(fingerprint):
+                if not registry.consume_approval(fingerprint, session.browser_id):
+                    if registry.is_denied(fingerprint, session.browser_id):
+                        # 用户拒绝后暂停会话：被拒绝的页面/动作不得继续被读取。
+                        get_browser_control().set_state(
+                            session.browser_id, BrowserControlState.PAUSED
+                        )
                         _record_browser_audit(
                             session,
                             "browser_interact",
@@ -1709,14 +1780,22 @@ class BrowserInteractTool(BaseTool):
                             "interact",
                             **target_fields,
                         )
+                    if action == "upload" and upload_file is not None:
+                        # 描述里带解析后的文件名，用户才能确认「传的是哪个文件」。
+                        description = (
+                            f"上传文件 {upload_file.name}"
+                            f"（{target_name or '文件输入框'} @ {cached_url}）"
+                        )
+                    else:
+                        description = (
+                            f"{verdict.description}（{target_name or action} @ {cached_url}）"
+                        )
                     pending = registry.create(
                         session.browser_id,
                         "sensitive_action",
                         code=verdict.code,
                         domain=domain,
-                        description=(
-                            f"{verdict.description}（{target_name or action} @ {cached_url}）"
-                        ),
+                        description=description,
                         options=list(browser_safety.SENSITIVE_ACTION_OPTIONS),
                         screenshot_path=_capture_step_thumbnail(session) or "",
                         fingerprint=fingerprint,
@@ -1747,7 +1826,9 @@ class BrowserInteractTool(BaseTool):
                     )
                 approval = "approved"
             if action == "upload":
-                assert upload_file is not None  # 参数校验已保证
+                if upload_file is None:
+                    # 参数层已解析；-O 下 assert 会被移除，这里显式兜底。
+                    return ToolResult(success=False, error="upload_file_not_found: 未解析到上传文件")
                 info_text = _upload_file_to_input(session, ref, selector, upload_file)
                 page_url, page_title = _cached_page(session)
                 outcome = {
@@ -1822,6 +1903,13 @@ class BrowserInteractTool(BaseTool):
                 title=page_title,
                 **target_fields,
             )
+        # I1：点击链接 / JS 跳转可能把页面带到新域名；交互成功后按最终 URL
+        # 重跑站点门禁，避免「在允许站点点一个链接」绕过站点策略。
+        final_domain = browser_safety.domain_of(page_url)
+        if page_url and final_domain and final_domain != domain:
+            navigation_gate = _site_access_gate(session, page_url, final_domain, started)
+            if navigation_gate is not None:
+                return navigation_gate
         thumbnail = _capture_step_thumbnail(session)
         _record_browser_audit(
             session,
@@ -2131,6 +2219,7 @@ class BrowserTabsTool(BaseTool):
                     return ToolResult(success=False, error=network_rejection)
 
         session: Optional[BrowserSession] = None
+        started = time.monotonic()
         try:
             session = _resolve_session(browser_id or None)
             blocked = _blocked_by_control(session, "browser_tabs")
@@ -2139,6 +2228,12 @@ class BrowserTabsTool(BaseTool):
             if action == "list":
                 return _meta_result(self._list_tabs(session), session, "tabs")
             if action == "create":
+                # I1：新建标签页同样是导航，必须先过站点授权门禁
+                # （block → site_blocked；confirm → 站点确认 + paused）。
+                create_domain = browser_safety.domain_of(target_url)
+                create_gate = _site_access_gate(session, target_url, create_domain, started)
+                if create_gate is not None:
+                    return create_gate
                 created = cdp_command(
                     session, "Target.createTarget", {"url": target_url}
                 ).get("targetId")
@@ -2180,7 +2275,20 @@ class BrowserTabsTool(BaseTool):
                         session,
                         "tabs",
                     )
-                page = json.loads(page_info)
+                try:
+                    page = json.loads(page_info)
+                except ValueError:
+                    return _meta_result(
+                        ToolResult(success=False, error="页面信息不是合法 JSON"),
+                        session,
+                        "tabs",
+                    )
+                if not isinstance(page, dict):
+                    return _meta_result(
+                        ToolResult(success=False, error="页面信息返回异常（非对象）"),
+                        session,
+                        "tabs",
+                    )
                 page_url = str(page.get("url") or "")
                 page_title = str(page.get("title") or "")
                 _remember_page(session, page_url, page_title)
@@ -2861,6 +2969,13 @@ class BrowserLoginTool(BaseTool):
         target_host = (parsed.hostname or "").lower()
         if not target_host:
             return ToolResult(success=False, error="无法从 url 解析出域名")
+        # I1：登录同样是导航；只应用站点策略的 block 部分（用户主动登录
+        # 未知站点保持允许，不做 confirm，避免登录流程被站点确认卡住）。
+        if _safety_check_site("", url) == "block":
+            return ToolResult(
+                success=False,
+                error=f"site_blocked: 用户已禁止该站点 {browser_safety.domain_of(url)}",
+            )
 
         # 检查是否已有活跃的登录浏览器（避免重复启动）
         manager = get_browser_manager()

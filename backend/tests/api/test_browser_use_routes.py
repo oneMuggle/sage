@@ -406,3 +406,19 @@ async def test_m4_origin_guard(client, control_env, safety_env):
 
     audit = await client.get(f"{BASE_M4}/audit", headers=headers)
     assert audit.status_code == 403
+
+
+async def test_confirmation_resolve_does_not_steal_active_takeover(
+    client, control_env, safety_env
+):
+    """最终修复：迟到的确认裁决只在 PAUSED 时恢复 AGENT，不得夺回用户接管。"""
+    pending = _create_action_confirmation()
+    get_browser_control().set_state("s1", BrowserControlState.USER_TAKEOVER)
+
+    resp = await client.post(
+        f"{BASE_M4}/confirmations/{pending.id}", json={"decision": "approve"}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["control_state"] == "user_takeover"
+    assert get_browser_control().get_state("s1") is BrowserControlState.USER_TAKEOVER

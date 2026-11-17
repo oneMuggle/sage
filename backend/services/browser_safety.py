@@ -17,13 +17,17 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import io
 import logging
 import re
 import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlsplit
 
@@ -414,6 +418,89 @@ def scan_untrusted_text(text: str) -> Optional[str]:
 # 待确认登记（线程安全）
 # ---------------------------------------------------------------------------
 
+#: 确认条内嵌缩略图上限（字节）与最长边（像素）。缩略图位于数据目录，
+#: 不在 sage-file:// 白名单内，因此由后端直接内联为 data URL。
+THUMBNAIL_MAX_BYTES = 100 * 1024
+THUMBNAIL_MAX_EDGE = 320
+#: 不尝试读取超过该大小的源截图（异常大的文件不值得内联）
+_THUMBNAIL_SOURCE_MAX_BYTES = 8 * 1024 * 1024
+
+
+def _encode_thumbnail(data: bytes) -> str:
+    """把截图字节压成 ≤``THUMBNAIL_MAX_BYTES`` 的 data URL；不可行返回空串。
+
+    Pillow 是可选依赖（随 OCR 引擎附带，不做硬依赖）：可用时降采样到
+    ``THUMBNAIL_MAX_EDGE`` 并按 PNG→JPEG 质量阶梯压缩；不可用时只在原文件
+    本身 ≤100KB 时直接 base64。
+    """
+    try:
+        from PIL import Image  # type: ignore
+    except Exception:  # noqa: BLE001 — Pillow 缺失按无缩放路径处理
+        Image = None  # type: ignore[assignment]
+    if Image is not None:
+        try:
+            with Image.open(io.BytesIO(data)) as source:
+                img = source.convert("RGB") if source.mode not in ("RGB", "RGBA", "L") else source
+                width, height = img.size
+                long_edge = max(width, height)
+                if long_edge > THUMBNAIL_MAX_EDGE:
+                    scale = THUMBNAIL_MAX_EDGE / float(long_edge)
+                    img = img.resize(
+                        (max(1, int(width * scale)), max(1, int(height * scale)))
+                    )
+                buf = io.BytesIO()
+                img.save(buf, format="PNG", optimize=True)
+                thumb = buf.getvalue()
+                mime = "image/png"
+                if len(thumb) > THUMBNAIL_MAX_BYTES:
+                    for quality in (70, 55, 40):
+                        buf = io.BytesIO()
+                        img.save(buf, format="JPEG", quality=quality, optimize=True)
+                        thumb = buf.getvalue()
+                        mime = "image/jpeg"
+                        if len(thumb) <= THUMBNAIL_MAX_BYTES:
+                            break
+                if len(thumb) <= THUMBNAIL_MAX_BYTES:
+                    encoded = base64.b64encode(thumb).decode("ascii")
+                    return f"data:{mime};base64,{encoded}"
+        except Exception:  # noqa: BLE001 — 解码失败退回原文件判断
+            logger.debug("确认缩略图压缩失败", exc_info=True)
+    if len(data) <= THUMBNAIL_MAX_BYTES:
+        if data[:8] == b"\x89PNG\r\n\x1a\n":
+            mime = "image/png"
+        elif data[:3] == b"\xff\xd8\xff":
+            mime = "image/jpeg"
+        else:
+            mime = "application/octet-stream"
+        encoded = base64.b64encode(data).decode("ascii")
+        return f"data:{mime};base64,{encoded}"
+    return ""
+
+
+@lru_cache(maxsize=32)
+def _thumbnail_data_url(path: str, mtime_ns: int, size: int) -> str:
+    """按 (path, mtime, size) 缓存的缩略图 data URL；读取失败返回空串。"""
+    del mtime_ns, size  # 仅作为缓存键
+    try:
+        with open(path, "rb") as handle:
+            data = handle.read(_THUMBNAIL_SOURCE_MAX_BYTES + 1)
+    except OSError:
+        return ""
+    if not data or len(data) > _THUMBNAIL_SOURCE_MAX_BYTES:
+        return ""
+    return _encode_thumbnail(data)
+
+
+def _thumbnail_for_path(path: str) -> str:
+    """读取截图路径对应的内联缩略图；文件不存在/不可读返回空串。"""
+    if not path:
+        return ""
+    try:
+        stat = Path(path).stat()
+    except OSError:
+        return ""
+    return _thumbnail_data_url(path, int(stat.st_mtime_ns), int(stat.st_size))
+
 
 @dataclass
 class PendingConfirmation:
@@ -431,8 +518,8 @@ class PendingConfirmation:
     created_at: float = 0.0
 
     def to_public_dict(self) -> Dict[str, Any]:
-        """REST 序列化：不暴露内部指纹。"""
-        return {
+        """REST 序列化：不暴露内部指纹；截图以有界 data URL 内联。"""
+        public: Dict[str, Any] = {
             "id": self.id,
             "session_id": self.session_id,
             "kind": self.kind,
@@ -443,6 +530,12 @@ class PendingConfirmation:
             "screenshot_path": self.screenshot_path,
             "created_at": self.created_at,
         }
+        thumbnail = _thumbnail_for_path(self.screenshot_path)
+        if thumbnail:
+            public["thumbnail_data_url"] = thumbnail
+        elif self.screenshot_path:
+            public["thumbnail_unavailable"] = True
+        return public
 
 
 class ConfirmationRegistry:
@@ -534,24 +627,38 @@ class ConfirmationRegistry:
                     )
         return pending
 
-    def consume_approval(self, fingerprint: str) -> bool:
-        """消费一次性批准（命中即删除）；过期/缺失返回 False。"""
-        if not fingerprint:
-            return False
-        now = _now()
-        with self._lock:
-            self._purge(now)
-            entry = self._approvals.pop(fingerprint, None)
-            return entry is not None
+    def consume_approval(self, fingerprint: str, session_id: Optional[str] = None) -> bool:
+        """消费一次性批准（命中即删除）；过期/缺失/会话不匹配返回 False。
 
-    def is_denied(self, fingerprint: str) -> bool:
-        """该指纹是否处于用户拒绝的有效期内。"""
+        ``session_id`` 提供时强校验批准所属会话：指纹本身已包含会话，
+        这里再做一次防御性比对，避免调用方手工构造指纹时跨会话复用。
+        """
         if not fingerprint:
             return False
         now = _now()
         with self._lock:
             self._purge(now)
-            return fingerprint in self._denials
+            entry = self._approvals.get(fingerprint)
+            if entry is None:
+                return False
+            if session_id is not None and entry[1] != session_id:
+                return False
+            self._approvals.pop(fingerprint, None)
+            return True
+
+    def is_denied(self, fingerprint: str, session_id: Optional[str] = None) -> bool:
+        """该指纹是否处于用户拒绝的有效期内（可选按会话强校验）。"""
+        if not fingerprint:
+            return False
+        now = _now()
+        with self._lock:
+            self._purge(now)
+            entry = self._denials.get(fingerprint)
+            if entry is None:
+                return False
+            if session_id is not None and entry[1] != session_id:
+                return False
+            return True
 
     def reset_session(self, session_id: str) -> None:
         """清理某会话的待确认项、批准与拒绝指纹。"""
@@ -609,10 +716,26 @@ def action_fingerprint(
     ref: str = "",
     selector: str = "",
     target_name: str = "",
+    session_id: str = "",
+    scope: str = "",
 ) -> str:
-    """操作指纹：``sha256(tool|action|domain|ref 或 selector|target_name)``。"""
+    """操作指纹：
+    ``sha256(tool|action|domain|ref 或 selector|target_name|session_id|scope)``。
+
+    - ``session_id`` 把批准/拒绝绑定到具体浏览器会话，防止跨会话复用；
+    - ``scope`` 承载动作参数（upload 的解析后路径 / select 的目标值），
+      防止「批准上传 A 文件」被重放为上传 B 文件。
+    """
     locator = ref or selector or ""
     raw = "|".join(
-        [str(tool or ""), str(action or ""), str(domain or ""), str(locator), str(target_name or "")]
+        [
+            str(tool or ""),
+            str(action or ""),
+            str(domain or ""),
+            str(locator),
+            str(target_name or ""),
+            str(session_id or ""),
+            str(scope or ""),
+        ]
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
