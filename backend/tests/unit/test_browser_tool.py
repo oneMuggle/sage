@@ -599,12 +599,21 @@ def test_screenshot_rejects_path_outside_workspace(stubbed, tmp_path):
 
 def test_close_target_vs_browser(stubbed, monkeypatch):
     tool = _tool(BrowserCloseTool)
-    # browser_close 豁免门禁，且成功后复位控制面状态
+    # browser_close 豁免门禁：单标签关闭时若仍有其它页面，暂停状态必须保留
+    # （否则 Agent 可借关无关标签页间接解除用户暂停）
     get_browser_control().set_state("b1", BrowserControlState.PAUSED)
+    _stub_tabs(monkeypatch, [_page("t1")])
     stubbed.results.append({})
     result = tool.execute(browser_id="b1", target_id="t9")
     assert result.success is True
     assert result.content["closed"] == "target"
+    assert get_browser_control().get_state("b1") is BrowserControlState.PAUSED
+
+    # 关掉最后一个页面目标 → 复位控制面
+    _stub_tabs(monkeypatch, [])
+    stubbed.results.append({})
+    result = tool.execute(browser_id="b1", target_id="t9")
+    assert result.success is True
     assert get_browser_control().get_state("b1") is BrowserControlState.AGENT
 
     removed = {}
@@ -1251,24 +1260,66 @@ def test_paused_blocks_gated_tools_but_close_still_works(stubbed, monkeypatch):
     navigate = _tool(BrowserNavigateTool).execute(url="https://x/", browser_id="b1")
     assert navigate.success is False
     assert navigate.error.startswith("user_paused: ")
+    assert navigate.content["browser_meta"]["action"] == "navigate"
+    assert navigate.content["browser_meta"]["session_id"] == "b1"
 
     snapshot = _tool(BrowserSnapshotTool).execute(browser_id="b1")
     assert snapshot.success is False
     assert snapshot.error.startswith("user_paused: ")
+    assert snapshot.content["browser_meta"]["action"] == "snapshot"
 
     interact = _tool(BrowserInteractTool).execute(
         action="click", text="登录", browser_id="b1"
     )
     assert interact.success is False
     assert interact.error.startswith("user_paused: ")
+    assert interact.content["browser_meta"]["action"] == "interact"
     # 门禁在 CDP 之前拦截
     assert stubbed.calls == []
 
+    # browser_close 不要求会话有关联页面解构，需 stub 掉目标列举
     monkeypatch.setattr(browser_cdp, "_terminate_session", lambda s: None)
     closed = _tool(BrowserCloseTool).execute(browser_id="b1")
     assert closed.success is True
     # 关闭成功 → 控制状态复位
     assert get_browser_control().get_state("b1") is BrowserControlState.AGENT
+
+
+def test_gated_tool_cdp_error_carries_browser_meta(stubbed):
+    stubbed.results.append({"exceptionDetails": {"text": "boom"}})
+    failed = _tool(BrowserSnapshotTool).execute(browser_id="b1")
+    assert failed.success is False
+    assert "页面脚本执行失败" in failed.error
+    assert failed.content["result"] is None
+    assert failed.content["browser_meta"]["action"] == "snapshot"
+    assert failed.content["browser_meta"]["session_id"] == "b1"
+
+    # 会话解析失败（无会话上下文）维持裸错误，不附 meta
+    unresolved = _tool(BrowserSnapshotTool).execute(browser_id="ghost")
+    assert unresolved.success is False
+    assert unresolved.content is None
+
+
+def test_navigate_new_tab_marks_active_target(stubbed, monkeypatch):
+    _stub_tabs(monkeypatch, [_page("t-old"), _page("t-new")])
+    stubbed.results.extend(
+        [
+            {"targetId": "t-new"},  # Target.createTarget
+            {"result": {"value": "complete"}},
+            {"result": {"value": 0}},
+            {"result": {"value": 0}},
+            {"result": {"value": 0}},
+            {"result": {"value": json.dumps({"url": "https://x/", "title": "X"})}},
+        ]
+    )
+    result = _tool(BrowserNavigateTool).execute(
+        url="https://x/", new_tab=True, browser_id="b1"
+    )
+    assert result.success is True
+    assert stubbed.calls[0]["method"] == "Target.createTarget"
+    assert stubbed.session.active_target_id == "t-new"
+    # 后续无 target_id 的 snapshot/interact 必须落回新标签页
+    assert browser_cdp.ensure_page_target(stubbed.session, None) == "t-new"
 
 
 def test_user_takeover_prefix_and_resume_unblocks(stubbed):

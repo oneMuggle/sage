@@ -139,20 +139,26 @@ def _control_state(session: BrowserSession) -> BrowserControlState:
 def _blocked_by_control(
     session: BrowserSession, tool_name: str
 ) -> Optional[ToolResult]:
-    """控制门禁：paused / user_takeover 时返回拦截结果；agent 放行。"""
+    """控制门禁：paused / user_takeover 时返回带 browser_meta 的拦截结果；agent 放行。"""
     state = _control_state(session)
+    # 失败结果同样附步骤元数据：前端时间线需要展示“在哪一步被拦”
+    action = tool_name.replace("browser_", "", 1)
     if state is BrowserControlState.PAUSED:
         logger.info(
             "%s 被控制门禁拦截: session=%s state=paused", tool_name, session.browser_id
         )
-        return ToolResult(success=False, error=_CONTROL_PAUSED_ERROR)
+        return _meta_result(
+            ToolResult(success=False, error=_CONTROL_PAUSED_ERROR), session, action
+        )
     if state is BrowserControlState.USER_TAKEOVER:
         logger.info(
             "%s 被控制门禁拦截: session=%s state=user_takeover",
             tool_name,
             session.browser_id,
         )
-        return ToolResult(success=False, error=_CONTROL_TAKEOVER_ERROR)
+        return _meta_result(
+            ToolResult(success=False, error=_CONTROL_TAKEOVER_ERROR), session, action
+        )
     return None
 
 
@@ -221,6 +227,16 @@ def _meta_result(result: ToolResult, session: BrowserSession, action: str, **fie
         error=result.error,
         output=result.output,
     )
+
+
+def _meta_error(
+    exc: BrowserCDPError, session: Optional[BrowserSession], action: str
+) -> ToolResult:
+    """CDP 错误附 browser_meta；会话尚未解析（解析失败）时保持裸错误。"""
+    result = _error(exc)
+    if session is None:
+        return result
+    return _meta_result(result, session, action)
 
 
 def _step_thumbnails_enabled() -> bool:
@@ -828,6 +844,7 @@ class BrowserNavigateTool(BaseTool):
             network_rejection = load_network_policy().check_host(url)
             if network_rejection:
                 return ToolResult(success=False, error=network_rejection)
+        session: Optional[BrowserSession] = None
         try:
             session = _resolve_session(browser_id or None)
             blocked = _blocked_by_control(session, "browser_navigate")
@@ -844,6 +861,9 @@ class BrowserNavigateTool(BaseTool):
                         "navigate",
                         url=url,
                     )
+                # 与 browser_tabs create 对齐：新标签成为当前活动目标，
+                # 否则后续 ensure_page_target(None) 会落回旧标签页
+                session.active_target_id = created
                 _wait_page_settled(session, created, wait_for)
                 info = _evaluate_json(
                     session,
@@ -867,7 +887,7 @@ class BrowserNavigateTool(BaseTool):
                 )
             page = json.loads(info) if isinstance(info, str) else {}
         except BrowserCDPError as exc:
-            return _error(exc)
+            return _meta_error(exc, session, "navigate")
         page_url = str(page.get("url") or url)
         page_title = str(page.get("title") or "")
         _remember_page(session, page_url, page_title)
@@ -951,6 +971,7 @@ class BrowserSnapshotTool(BaseTool):
                 success=False,
                 error=f"mode 必须是 {', '.join(_VALID_SNAPSHOT_MODES)}",
             )
+        session: Optional[BrowserSession] = None
         try:
             session = _resolve_session(browser_id or None)
             blocked = _blocked_by_control(session, "browser_snapshot")
@@ -963,7 +984,7 @@ class BrowserSnapshotTool(BaseTool):
             )
             payload = _evaluate_json(session, expression, None)
         except BrowserCDPError as exc:
-            return _error(exc)
+            return _meta_error(exc, session, "snapshot")
         content = parse_snapshot_payload(
             payload,
             mode=mode,
@@ -1069,6 +1090,7 @@ class BrowserInteractTool(BaseTool):
         expression = _build_interact_expression(
             action, selector, text, value, key, bool(clear), ref
         )
+        session: Optional[BrowserSession] = None
         try:
             session = _resolve_session(browser_id or None)
             blocked = _blocked_by_control(session, "browser_interact")
@@ -1076,7 +1098,7 @@ class BrowserInteractTool(BaseTool):
                 return blocked
             outcome = _evaluate_json(session, expression, None)
         except BrowserCDPError as exc:
-            return _error(exc)
+            return _meta_error(exc, session, "interact")
         target_fields = {"target_ref": ref or selector, "target_name": text}
         if not isinstance(outcome, dict):
             return _meta_result(
@@ -1166,6 +1188,7 @@ class BrowserScreenshotTool(BaseTool):
         if blocked is not None:
             return blocked
 
+        session: Optional[BrowserSession] = None
         try:
             session = _resolve_session(browser_id or None)
             blocked = _blocked_by_control(session, "browser_screenshot")
@@ -1174,7 +1197,7 @@ class BrowserScreenshotTool(BaseTool):
             result = cdp_command(session, "Page.captureScreenshot", {"format": "png"})
             png_bytes = base64.b64decode(result.get("data") or "")
         except BrowserCDPError as exc:
-            return _error(exc)
+            return _meta_error(exc, session, "screenshot")
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(png_bytes)
@@ -1242,8 +1265,16 @@ class BrowserCloseTool(BaseTool):
                 cdp_command(session, "Target.closeTarget", {"targetId": target_id})
             except BrowserCDPError as exc:
                 return _error(exc)
-            # browser_close 成功即复位控制面（paused/takeover 不残留）
-            get_browser_control().reset(session.browser_id)
+            # 控制器裁定：browser_close 保持门禁豁免，但单标签关闭不得让
+            # Agent 借“关掉无关标签页”间接解除用户暂停/接管。因此仅当该
+            # 会话已无剩余页面目标时才复位控制面；整机关闭始终复位。
+            try:
+                has_remaining_pages = bool(_list_page_targets(session))
+            except BrowserCDPError:
+                # 无法确认剩余页面时保守保留控制状态（宁可不复位）
+                has_remaining_pages = True
+            if not has_remaining_pages:
+                get_browser_control().reset(session.browser_id)
             return ToolResult(success=True, content={"closed": "target", "target_id": target_id})
 
         if getattr(session, "browser_type", None) == "external":
@@ -1352,6 +1383,7 @@ class BrowserTabsTool(BaseTool):
                 if network_rejection:
                     return ToolResult(success=False, error=network_rejection)
 
+        session: Optional[BrowserSession] = None
         try:
             session = _resolve_session(browser_id or None)
             blocked = _blocked_by_control(session, "browser_tabs")
@@ -1441,7 +1473,7 @@ class BrowserTabsTool(BaseTool):
                 screenshot_path=thumbnail,
             )
         except BrowserCDPError as exc:
-            return _error(exc)
+            return _meta_error(exc, session, "tabs")
 
     @staticmethod
     def _list_tabs(session: BrowserSession) -> ToolResult:
@@ -1522,13 +1554,14 @@ class BrowserDownloadsTool(BaseTool):
                     "（合法参数: browser_id, wait_for_complete, timeout）"
                 ),
             )
+        session: Optional[BrowserSession] = None
         try:
             session = _resolve_session(browser_id or None)
             blocked = _blocked_by_control(session, "browser_downloads")
             if blocked is not None:
                 return blocked
         except BrowserCDPError as exc:
-            return _error(exc)
+            return _meta_error(exc, session, "downloads")
         try:
             wait_seconds = float(timeout)
         except (TypeError, ValueError):
