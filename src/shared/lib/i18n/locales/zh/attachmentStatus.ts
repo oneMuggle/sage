@@ -14,6 +14,7 @@ export const zhAttachmentStatus = {
   'chat.attachment_status.reason.load_failed': '附件不存在或读取失败',
   'chat.attachment_status.reason.context_build_failed': '上下文构建失败',
   'chat.attachment_status.reason.extract_failed': '文档解析失败',
+  'chat.attachment_status.reason.parse_timeout': '文档解析超时',
   // P2 预检失败原因
   'chat.attachment_status.reason.oversize': '文件超过 25MB 上限',
   'chat.attachment_status.reason.unsupported': '不支持的文件类型',

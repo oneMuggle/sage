@@ -28,7 +28,7 @@ import { loadAttachmentRagConfig } from '../shared/api/attachmentRagConfig';
 import { orchRunControlClient } from '../shared/api/orchRunControlClient';
 import { useBackendReadyTick } from '../shared/lib/backendReadySignal';
 // RD20 (round43): 历史 run → 任务板恢复映射。
-import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
+import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/chatAttachmentFormats';
 import { useGlobalFileDrop } from '../shared/lib/hooks/useGlobalFileDrop';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
@@ -309,6 +309,7 @@ export function Chat() {
         pdf: 'application/pdf',
         docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       };
       const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
       const imageEntries = (options?.images ?? [])

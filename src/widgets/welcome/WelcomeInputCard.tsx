@@ -6,7 +6,8 @@ import type { PendingComposerOptions } from '../../features/send-message/pending
 import { useTypewriterPlaceholder } from '../../features/welcome/useTypewriterPlaceholder';
 import { skillsApi } from '../../shared/api';
 import type { ChatOfficeRef } from '../../shared/api/types';
-import { CHAT_DOCUMENT_EXTENSIONS, useFileUpload } from '../../shared/lib/hooks/useFileUpload';
+import { CHAT_DOCUMENT_EXTENSIONS } from '../../shared/lib/chatAttachmentFormats';
+import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
 import { COMPOSER_DROP_EVENT } from '../../shared/lib/hooks/useGlobalFileDrop';
 import { useI18n } from '../../shared/lib/i18n';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';

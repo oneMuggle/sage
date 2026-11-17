@@ -1579,23 +1579,28 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         )
                         r_attachments_status.append(r37_status_entry)
                         continue
-                    # 全文提取（txt 直读；pdf/docx 复用 r39 提取器），不在此截断。
-                    # pdf/docx 提取是秒级同步 CPU 活，放线程池避免卡事件循环（r68）。
+                    # 全文提取（txt 直读；pdf/docx/xlsx/pptx 走统一二进制提取器）。
+                    # 提取是秒级同步 CPU 活，放线程池避免卡事件循环（r68）。
+                    # 2026-11-15: 发送侧与上传侧共用 extract_attachment_text，
+                    # 修复 xlsx 曾被当 UTF-8 文本解码 → not_utf8 的回归。
                     try:
                         _r37_ext = (
                             (_r37_ref.file_path or "").rsplit(".", 1)[-1].lower()
                             if "." in (_r37_ref.file_path or "")
                             else "txt"
                         )
-                        if _r37_ext in ("pdf", "docx"):
-                            r37_text = await asyncio.get_running_loop().run_in_executor(
-                                None,
-                                _r66_car._extract_document_text,
-                                r37_bytes,
-                                _r37_ext,
-                            )
-                        else:
-                            r37_text = r37_bytes.decode("utf-8")
+                        r37_text = await _r66_car.extract_attachment_text_async(
+                            r37_bytes,
+                            _r37_ext,
+                        )
+                    except asyncio.TimeoutError:  # noqa: UP041 — py3.8 上不是 builtin TimeoutError 别名
+                        r37_status_entry["status"] = "error"
+                        r37_status_entry["reason"] = "parse_timeout"
+                        logger.debug(
+                            f"[REQ {request_id}] attachment %s parse timed out", r37_mid
+                        )
+                        r_attachments_status.append(r37_status_entry)
+                        continue
                     except UnicodeDecodeError as r37_ud_err:
                         r37_status_entry["status"] = "skipped"
                         r37_status_entry["reason"] = "not_utf8"

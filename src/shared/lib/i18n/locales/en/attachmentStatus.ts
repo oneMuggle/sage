@@ -13,6 +13,7 @@ export const enAttachmentStatus = {
   'chat.attachment_status.reason.load_failed': 'Attachment missing or unreadable',
   'chat.attachment_status.reason.context_build_failed': 'Could not build context',
   'chat.attachment_status.reason.extract_failed': 'Document parsing failed',
+  'chat.attachment_status.reason.parse_timeout': 'Document parsing timed out',
   // P2 preflight rejection reasons
   'chat.attachment_status.reason.oversize': 'File exceeds 25MB limit',
   'chat.attachment_status.reason.unsupported': 'Unsupported file type',
