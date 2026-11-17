@@ -719,6 +719,57 @@ export interface PreviewElectronApiBridge {
   revoke: (id: string) => Promise<boolean>;
 }
 
+export interface InstalledComponentSummary {
+  id: string;
+  name: string;
+  version: string;
+  target: string;
+  installedAt: string;
+  fileCount: number;
+  totalBytes: number;
+  sourcePackage: string;
+  signatureVerified: boolean;
+}
+
+export interface ComponentPackageSummary {
+  path: string;
+  id: string;
+  name: string;
+  version: string;
+  size: number;
+  error?: string;
+}
+
+export interface ComponentsListResult {
+  ok: boolean;
+  installed: InstalledComponentSummary[];
+  discovered: ComponentPackageSummary[];
+  error?: string;
+}
+
+export interface ComponentsScanResult {
+  ok: boolean;
+  discovered: ComponentPackageSummary[];
+  error?: string;
+}
+
+export interface ComponentActionResult {
+  ok: boolean;
+  component?: InstalledComponentSummary;
+  componentId?: string;
+  error?: string;
+  code?: string;
+}
+
+/** 离线组件包（.sagepkg）管理桥；Web 模式下为 undefined。 */
+export interface ComponentsElectronApiBridge {
+  list: () => Promise<ComponentsListResult>;
+  scan: () => Promise<ComponentsScanResult>;
+  pickAndImport: () => Promise<ComponentActionResult>;
+  importPath: (path: string) => Promise<ComponentActionResult>;
+  remove: (id: string) => Promise<ComponentActionResult>;
+}
+
 export interface ElectronAPI {
   /** Authenticated renderer-to-backend request; main injects the local capability. */
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
@@ -730,6 +781,8 @@ export interface ElectronAPI {
   devtools?: {
     inspectAt: (x: number, y: number) => void;
   };
+  /** 离线组件包（.sagepkg）管理桥；进度经 components:progress 事件订阅。 */
+  components?: ComponentsElectronApiBridge;
   /**
    * P8 (2026-09-14): 嵌入模型下载桥 —— models:embedder:download / cancel
    * 原生 IPC；进度经 api.listen('models:embedder:progress') 订阅。

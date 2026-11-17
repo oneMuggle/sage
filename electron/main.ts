@@ -137,6 +137,7 @@ import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
 import { registerModelDownloadIpc } from './modelDownloadIpc';
+import { registerComponentsIpc } from './componentsIpc';
 import { registerArenaTokenWindow } from './arenaTokenWindow';
 import type { AgentBrowserBridgeHandle } from './agentBrowserBridge';
 import { startAgentBrowserHost } from './agentBrowserHost';
@@ -2687,6 +2688,22 @@ async function registerIpcHandlers(): Promise<void> {
       return join(base, 'models');
     },
     getWindow: () => mainWindow,
+  });
+
+  // 离线组件包（.sagepkg）IPC —— 核心校验/安装在 backend.cli.components，
+  // 本进程只负责解析 Python 命令、转发 JSON 进度并暴露 IPC。
+  registerComponentsIpc(ipcMain, {
+    getWindow: () => mainWindow,
+    resolveOpts: () => ({
+      env: process.env,
+      resourcesPath: process.resourcesPath,
+      platform: process.platform,
+      isPackaged: app.isPackaged,
+      sageDbPath: resolveSageDbPath(),
+      sageUserDataDir: resolveSageUserDataDir(),
+      port: BACKEND_PORT,
+    }),
+    branch: buildManifest.branch,
   });
 
   // P3 (plan §5.9): arena token 窗口 —— 隐藏 BrowserWindow 出 reCAPTCHA V3
