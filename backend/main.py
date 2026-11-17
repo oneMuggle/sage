@@ -1416,6 +1416,13 @@ async def lifespan(app: FastAPI):
     _deferred_task.cancel()
     with suppress(asyncio.CancelledError):
         await _deferred_task
+    # Progressive readiness：deferred 内创建的 MCP 状态观察任务独立于
+    # deferred 本身，shutdown 时显式取消（避免遗留轮询）。
+    _mcp_status_task = getattr(app.state, "mcp_status_task", None)
+    if _mcp_status_task is not None:
+        _mcp_status_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await _mcp_status_task
 
     # 关闭时清理
     # Round 6 / Round 16: 统一停止网关轮询线程（daemon 兜底，显式停更干净）
