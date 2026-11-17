@@ -107,6 +107,9 @@ _CONTROL_TAKEOVER_ERROR = (
 #: 步骤缩略图开关的 settings key（缺省按开启）
 _SETTINGS_KEY_STEP_THUMBNAILS = "browser_step_thumbnails"
 
+#: 默认可见性开关的 settings key（缺省按可见）
+_SETTINGS_KEY_DEFAULT_VISIBLE = "browser_use_default_visible"
+
 #: 会截步骤缩略图的动作（snapshot/screenshot 不截：降开销、防递归）
 _THUMBNAIL_ACTIONS = ("navigate", "interact", "tabs")
 
@@ -250,6 +253,22 @@ def _step_thumbnails_enabled() -> bool:
     if raw is None:
         return True
     return str(raw).strip().lower() not in ("0", "false", "off", "no")
+
+
+def _browser_default_visible() -> bool:
+    """受控浏览器默认是否可见；读取失败 / 缺省按可见（"1"）处理。
+
+    仅显式 ``"0"`` 才切到无头（与设置页语义一致）；其它值一律按可见。
+    """
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get(_SETTINGS_KEY_DEFAULT_VISIBLE)
+    except Exception:  # noqa: BLE001 — 设置读取失败不阻断浏览器动作
+        return True
+    if raw is None:
+        return True
+    return str(raw).strip() != "0"
 
 
 def _capture_step_thumbnail(session: BrowserSession) -> Optional[str]:
@@ -844,6 +863,18 @@ class BrowserNavigateTool(BaseTool):
             network_rejection = load_network_policy().check_host(url)
             if network_rejection:
                 return ToolResult(success=False, error=network_rejection)
+        # 可见受控浏览器（M3）：门禁全部通过且当前无默认会话时自动拉起。
+        # 自动拉起的会话即后续 _resolve_session 拿到的默认会话；显式
+        # browser_id 的解析失败保持原有报错语义。
+        if not browser_id and get_browser_manager().get(None) is None:
+            try:
+                launch_browser(
+                    headless=not _browser_default_visible(),
+                    persistent=False,
+                    profile_name="",
+                )
+            except BrowserCDPError as exc:
+                return _error(exc)
         session: Optional[BrowserSession] = None
         try:
             session = _resolve_session(browser_id or None)

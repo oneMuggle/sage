@@ -1445,3 +1445,126 @@ def test_close_browser_clears_meta_caches(stubbed, monkeypatch):
     assert "b1" not in browser_tool._LAST_LOGIN_WALL
     assert get_browser_control().get_state("b1") is BrowserControlState.AGENT
 
+
+# ---------------------------------------------------------------------------
+# M3：browser_navigate 无会话时自动拉起可见浏览器
+# ---------------------------------------------------------------------------
+
+
+def _patch_default_visible(monkeypatch, value: Optional[str]) -> None:
+    """只覆盖 browser_use_default_visible 的读取，其余 key 走真实仓储。"""
+    from backend.data.settings_repo import SettingsRepository
+
+    original_get = SettingsRepository.get
+
+    def _get(self, key):
+        if key == browser_tool._SETTINGS_KEY_DEFAULT_VISIBLE:
+            return value
+        return original_get(self, key)
+
+    monkeypatch.setattr(SettingsRepository, "get", _get)
+
+
+@pytest.fixture()
+def autolaunch(monkeypatch):
+    """空会话管理器 + 可编程 CDP 假体 + 记录参数的 launch_browser 假体。"""
+    manager = BrowserSessionManager()
+    monkeypatch.setattr(browser_cdp, "_manager", manager)
+    reset_browser_control_for_tests()
+    browser_tool._LAST_PAGE.clear()
+    browser_tool._LAST_LOGIN_WALL.clear()
+    monkeypatch.setattr(browser_tool, "_step_thumbnails_enabled", lambda: False)
+    calls: List[Dict[str, Any]] = []
+
+    def _fake_cdp(session_, method, params=None, target_id=None):
+        calls.append({"method": method, "params": params or {}, "target": target_id})
+        return _fake_cdp.results.pop(0)
+
+    _fake_cdp.results = []  # type: ignore[attr-defined]
+    monkeypatch.setattr(browser_tool, "cdp_command", _fake_cdp)
+    monkeypatch.setattr(web_render, "cdp_command", _fake_cdp)
+
+    class _FakeClock:
+        def __init__(self) -> None:
+            self.now = 0.0
+
+        def monotonic(self) -> float:
+            return self.now
+
+        def sleep(self, seconds: float) -> None:
+            self.now += seconds
+
+    monkeypatch.setattr(web_render, "time", _FakeClock())
+
+    launches: List[Dict[str, Any]] = []
+
+    def _fake_launch(**kwargs):
+        launches.append(kwargs)
+        session = _fake_session("b-auto")
+        manager.register(session)
+        return session
+
+    monkeypatch.setattr(browser_tool, "launch_browser", _fake_launch)
+    return SimpleNamespace(calls=calls, results=_fake_cdp.results, launches=launches)
+
+
+def test_navigate_auto_launches_visible_by_default(autolaunch, monkeypatch):
+    _patch_default_visible(monkeypatch, None)  # 缺省 → 可见
+    autolaunch.results.extend(_NAV_RESULTS)
+
+    result = _tool(BrowserNavigateTool).execute(url="https://x/")
+
+    assert result.success is True
+    assert len(autolaunch.launches) == 1
+    assert autolaunch.launches[0] == {
+        "headless": False,
+        "persistent": False,
+        "profile_name": "",
+    }
+    # meta 的 session_id 来自自动拉起的新会话
+    assert result.content["browser_meta"]["session_id"] == "b-auto"
+
+
+def test_navigate_auto_launch_headless_when_setting_off(autolaunch, monkeypatch):
+    _patch_default_visible(monkeypatch, "0")
+    autolaunch.results.extend(_NAV_RESULTS)
+
+    result = _tool(BrowserNavigateTool).execute(url="https://x/")
+
+    assert result.success is True
+    assert autolaunch.launches[0]["headless"] is True
+
+
+def test_navigate_skips_launch_when_session_exists(stubbed, monkeypatch):
+    launches: List[Dict[str, Any]] = []
+    monkeypatch.setattr(
+        browser_tool, "launch_browser", lambda **kw: launches.append(kw) or stubbed.session
+    )
+    stubbed.results.extend(_NAV_RESULTS)
+
+    result = _tool(BrowserNavigateTool).execute(url="https://x/")
+
+    assert result.success is True
+    assert launches == []
+    assert result.content["browser_meta"]["session_id"] == "b1"
+
+
+def test_navigate_gate_rejection_does_not_launch(autolaunch, monkeypatch):
+    monkeypatch.setattr(
+        browser_tool,
+        "load_network_policy",
+        lambda: SimpleNamespace(check_host=lambda _url: "offline: 网络策略阻止访问"),
+    )
+
+    rejected = _tool(BrowserNavigateTool).execute(url="https://x/")
+
+    assert rejected.success is False
+    assert "offline" in rejected.error
+    assert autolaunch.launches == []
+
+    # scheme 门禁同样在拉起之前
+    blocked = _tool(BrowserNavigateTool).execute(url="file:///etc/passwd")
+    assert blocked.success is False
+    assert autolaunch.launches == []
+    assert autolaunch.calls == []
+

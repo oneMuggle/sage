@@ -366,6 +366,29 @@ export class AgentBrowserBridge {
     }
   }
 
+  /**
+   * 聚焦指定会话的可见窗口（best-effort）。
+   *
+   * 只遍历 ``visible|session`` 作用域：headless 会话没有可聚焦窗口，返回
+   * false 由调用方提示。任一未销毁窗口 show/focus 成功即返回 true。
+   */
+  focus(session: string): boolean {
+    const scope = this.targets.get(`visible|${session || 'default'}`);
+    if (!scope) return false;
+    let focused = false;
+    for (const entry of scope.values()) {
+      try {
+        if (entry.win.isDestroyed()) continue;
+        entry.win.show();
+        entry.win.focus?.();
+        focused = true;
+      } catch {
+        /* best effort：单个窗口失败不影响其他窗口 */
+      }
+    }
+    return focused;
+  }
+
   private getTargets(scope: Map<string, TargetEntry>): {
     targetInfos: Array<Record<string, unknown>>;
   } {
@@ -506,6 +529,8 @@ export interface AgentBrowserBridgeHandle {
   port: number;
   token: string;
   close(): Promise<void>;
+  /** 聚焦指定会话的 agent 可见浏览器窗口；无可见窗口时返回 false。 */
+  focus(session: string): boolean;
 }
 
 export interface StartBridgeOptions {
@@ -592,6 +617,7 @@ export function startAgentBrowserBridge(
       resolve({
         port: address.port,
         token,
+        focus: (session: string) => bridge.focus(session),
         close: () =>
           new Promise<void>((done) => {
             bridge.closeAll();

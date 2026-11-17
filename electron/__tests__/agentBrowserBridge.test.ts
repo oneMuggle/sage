@@ -13,6 +13,7 @@ interface FakeWindow extends BridgeWindow {
   visible: boolean;
   debuggerCommands: Array<{ method: string; params?: Record<string, unknown> }>;
   url: string;
+  focus: ReturnType<typeof vi.fn>;
 }
 
 function makeWindow(visible: boolean): FakeWindow {
@@ -22,6 +23,7 @@ function makeWindow(visible: boolean): FakeWindow {
     debuggerCommands: [],
     url: 'about:blank',
     show: vi.fn(),
+    focus: vi.fn(),
     close() {
       state.destroyed = true;
     },
@@ -367,6 +369,60 @@ describe('AgentBrowserBridge', () => {
     expect(sent[0]).toMatchObject({ id: 7, result: { method: 'Page.navigate' } });
     expect(deps.windows[0].debuggerCommands.at(-1)?.method).toBe('Page.navigate');
   });
+
+  it('focuses visible targets of the requested session only', async () => {
+    const deps = makeDeps();
+    const bridge = new AgentBrowserBridge(deps);
+    await bridge.dispatch({
+      method: 'Target.createTarget',
+      params: { url: 'https://visible.example/' },
+      headless: false,
+      session: 's1',
+    });
+    await bridge.dispatch({
+      method: 'Target.createTarget',
+      params: { url: 'https://hidden.example/' },
+      headless: true,
+      session: 's1',
+    });
+    await bridge.dispatch({
+      method: 'Target.createTarget',
+      params: { url: 'https://other.example/' },
+      headless: false,
+      session: 's2',
+    });
+
+    const [visible, hidden, other] = deps.windows;
+    expect(bridge.focus('s1')).toBe(true);
+    expect(visible.visible).toBe(true);
+    expect(visible.show).toHaveBeenCalledTimes(1);
+    expect(visible.focus).toHaveBeenCalledTimes(1);
+    // headless / 其它会话的窗口不聚焦
+    expect(hidden.show).not.toHaveBeenCalled();
+    expect(hidden.focus).not.toHaveBeenCalled();
+    expect(other.show).not.toHaveBeenCalled();
+    expect(other.focus).not.toHaveBeenCalled();
+
+    // 未知会话 / 无 visible 窗口 → false
+    expect(bridge.focus('missing')).toBe(false);
+    expect(bridge.focus('')).toBe(false);
+  });
+
+  it('skips destroyed windows when focusing', async () => {
+    const deps = makeDeps();
+    const bridge = new AgentBrowserBridge(deps);
+    await bridge.dispatch({
+      method: 'Target.createTarget',
+      params: { url: 'about:blank' },
+      headless: false,
+      session: 's1',
+    });
+    deps.windows[0].destroyed = true;
+
+    expect(bridge.focus('s1')).toBe(false);
+    expect(deps.windows[0].show).not.toHaveBeenCalled();
+    expect(deps.windows[0].focus).not.toHaveBeenCalled();
+  });
 });
 
 describe('startAgentBrowserBridge', () => {
@@ -400,6 +456,34 @@ describe('startAgentBrowserBridge', () => {
     }
   });
 
+  it('exposes focus on the handle and returns false without visible windows', async () => {
+    const deps = makeDeps();
+    const handle = await startAgentBrowserBridge(deps, { token: 'focus-token' });
+    try {
+      expect(handle.focus('s1')).toBe(false);
+
+      const base = `http://127.0.0.1:${handle.port}/command`;
+      const created = await fetch(base, {
+        method: 'POST',
+        headers: { 'x-sage-bridge-token': 'focus-token' },
+        body: JSON.stringify({
+          method: 'Target.createTarget',
+          params: { url: 'https://visible.example/' },
+          headless: false,
+          session: 's1',
+        }),
+      });
+      expect(created.status).toBe(200);
+
+      expect(handle.focus('s1')).toBe(true);
+      expect(deps.windows[0].show).toHaveBeenCalledTimes(1);
+      expect(deps.windows[0].focus).toHaveBeenCalledTimes(1);
+      expect(handle.focus('s2')).toBe(false);
+    } finally {
+      await handle.close();
+    }
+  });
+
   it('accepts WS only with the token and dispatches commands', async () => {
     const handle = await startAgentBrowserBridge(makeDeps(), { token: 'ws-token' });
     const ws = new WebSocket(
@@ -421,9 +505,7 @@ describe('startAgentBrowserBridge', () => {
 
   it('rejects WS without the token', async () => {
     const handle = await startAgentBrowserBridge(makeDeps(), { token: 'ws-token' });
-    const ws = new WebSocket(
-      `ws://127.0.0.1:${handle.port}/devtools/browser/embedded?session=s1`,
-    );
+    const ws = new WebSocket(`ws://127.0.0.1:${handle.port}/devtools/browser/embedded?session=s1`);
     try {
       const outcome = await new Promise<string>((resolve) => {
         ws.once('open', () => resolve('open'));

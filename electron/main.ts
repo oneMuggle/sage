@@ -1766,6 +1766,13 @@ async function registerIpcHandlers(): Promise<void> {
         // 面板只依赖 Electron 自身与共享分区，不经过后端/演示模式门禁。
         return handleBrowserPanelCommand(evt.sender, payload.args ?? {});
       }
+      if (payload.cmd === 'agent_browser_focus') {
+        // 聚焦 agent 可见浏览器窗口：纯 Electron 侧 best-effort，不依赖后端，
+        // 也不受演示模式门禁影响（同 browser_panel）。桥未初始化或无可见窗口
+        // 时返回 {ok:false}，由前端提示无头模式说明。
+        const session = String(payload.args?.session ?? '');
+        return { ok: agentBrowserHandle ? agentBrowserHandle.focus(session) : false };
+      }
       if (isDemoProcess()) {
         throw new Error('演示模式不支持该后端操作');
       }

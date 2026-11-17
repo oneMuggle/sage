@@ -137,6 +137,9 @@ class SettingsRepository:
             # 受控浏览器步骤缩略图开关（"1" 开 / "0" 关，缺省按开启）。
             # 读取口径见 backend/tools/browser_tool.py:_step_thumbnails_enabled
             "browser_step_thumbnails",
+            # 受控浏览器默认可见（"1" 可见 / "0" 无头，缺省按可见）。
+            # 读取口径见 backend/tools/browser_tool.py:_browser_default_visible
+            "browser_use_default_visible",
         }
     )
 

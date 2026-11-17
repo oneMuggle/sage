@@ -16,6 +16,7 @@ import { useConversationTurns, type TurnItem } from '../../features/chat/useConv
 import {
   isArtifactAutoOpenEnabled,
   isAutoCollapseSidebarEnabled,
+  isBrowserPanelAutoOpenEnabled,
   setArtifactAutoOpenEnabled,
   setAutoCollapseSidebarEnabled,
   useRightPanelStore,
@@ -465,6 +466,20 @@ function RightPanelInner({
     return () => window.removeEventListener('keydown', onKey);
   }, [isPush, open]);
 
+  // M3 受控浏览器：AI 发起新的 browser_* 调用时，按用户偏好自动切到「浏览器」
+  // Tab 并打开右栏。基线记录上次观测的会话与浏览器步骤数：会话切换只重建
+  // 基线（历史回看不误弹），同一会话内步骤数增长才算新操作。
+  const browserStepBaselineRef = useRef<{ sessionId: string | null; count: number } | null>(null);
+  useEffect(() => {
+    const count = toolCalls.filter((call) => call.name.startsWith('browser_')).length;
+    const prev = browserStepBaselineRef.current;
+    browserStepBaselineRef.current = { sessionId, count };
+    if (!prev || prev.sessionId !== sessionId || count <= prev.count) return;
+    if (!isBrowserPanelAutoOpenEnabled()) return;
+    useRightPanelStore.getState().setTab('browser');
+    useRightPanelStore.getState().setOpen(true);
+  }, [sessionId, toolCalls]);
+
   const selected = selectedArtifactId
     ? (artifacts.find((a) => a.id === selectedArtifactId) ?? null)
     : null;
@@ -537,7 +552,7 @@ function RightPanelInner({
         }
       >
         {tab === 'browser' ? (
-          <BrowserPanel />
+          <BrowserPanel toolCalls={toolCalls} />
         ) : selectedFilePath && sessionId ? (
           <Suspense fallback={<div className="p-3 text-sm text-muted">加载中...</div>}>
             <FilePreviewPanel
